@@ -1,10 +1,10 @@
 # Project Charter — Tanpopo
 
-> **Tài liệu nguồn (Canonical Context Artifact — Updated at Phase A01)**
-> - **Phiên bản:** `0.2.0-a01`
+> **Tài liệu nguồn (Canonical Context Artifact — Updated at Phase A02)**
+> - **Phiên bản:** `0.3.0-a02-draft`
 > - **Ngày cập nhật:** `2026-11-11`
 > - **Vai trò biên soạn:** Product Intelligence Lead & Principal Solution Architect
-> - **Trạng thái tài liệu:** Baseline chuẩn hóa bối cảnh kết hợp kết quả Product Discovery (Cổng **Gate G1: `READY_FOR_REVIEW`** — chưa phải PRD đã duyệt, chưa khóa kiến trúc/stack/UI/scope chi tiết)
+> - **Trạng thái tài liệu:** Baseline chuẩn hóa bối cảnh kết hợp kết quả Discovery & Phân tích Nghiệp vụ nháp (**Gate G1: `READY_FOR_REVIEW`**, **Gate G2: `DRAFT / READY_FOR_REVIEW`** — chưa khóa scope/stack/kiến trúc chi tiết)
 
 ---
 
@@ -153,7 +153,9 @@ flowchart TD
 
 ---
 
-## 9. Bảng thuật ngữ chuẩn (Canonical Glossary)
+## 9. Bảng thuật ngữ chuẩn (Canonical Glossary Summary)
+
+> **Nguồn từ điển đầy đủ:** Bản từ điển nghiệp vụ & sản phẩm mở rộng toàn diện (gồm đủ 12 tác nhân, chuỗi thực thể `Provider Adapter` → `Connection` → `Model` → `Deployment`, vòng đời tài chính và tuân thủ) được duy trì tập trung tại [`docs/product/glossary.md`](../product/glossary.md).
 
 | Thuật ngữ | Định nghĩa chuẩn trong dự án Tanpopo |
 |---|---|
@@ -161,7 +163,7 @@ flowchart TD
 | **Control Plane** | Hệ thống cấu hình, quản lý vòng đời plugin, cấp phát khóa truy cập nội bộ, cấu hình route/policy và cung cấp API cho Web Console / CLI. |
 | **Data Plane** | Đường xử lý lưu lượng thời gian thực (LLM inference requests, streaming chunks, MCP tool calls, A2A messages) yêu cầu hiệu năng cao, độ trễ thấp và chịu lỗi tốt. |
 | **Provider** | Dịch vụ đích cung cấp mô hình AI (đám mây thương mại, đám mây nội bộ doanh nghiệp hoặc máy chủ suy luận tự vận hành). |
-| **Provider Adapter** | Một loại Extension chuyên biệt thực thi hợp đồng chuyển đổi giao thức, xác thực, danh mục model, chuẩn hóa lỗi và định량 token/chi phí giữa Tanpopo Core và một Provider cụ thể. |
+| **Provider Adapter** | Một loại Extension chuyên biệt thực thi hợp đồng chuyển đổi giao thức, xác thực, danh mục model, chuẩn hóa lỗi và định lượng token/chi phí giữa Tanpopo Core và một Provider cụ thể. |
 | **Extension (Plugin)** | Đơn vị phần mềm đóng gói độc lập kèm manifest khai báo quyền hạn, phiên bản hợp đồng và điểm ghép nối (extension points) để mở rộng Tanpopo mà không cần biên dịch/phát hành lại Core. |
 | **Official Adapter** | Adapter do dự án Tanpopo trực tiếp kiểm định, ký xác nhận và duy trì dựa trên API và phương thức xác thực chính thức của nhà cung cấp. |
 | **Community / Private Adapter** | Adapter do cá nhân/tổ chức thứ ba tự phát triển và phân phối bên ngoài phạm vi bảo chứng của Tanpopo. |

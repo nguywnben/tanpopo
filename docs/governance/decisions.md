@@ -1,6 +1,6 @@
 # Decision Register & Blocking Open Questions — Tanpopo
 
-> **Tài liệu nguồn (Canonical Decision Log — Updated at Phase A01)**
+> **Tài liệu nguồn (Canonical Decision Log — Updated at Phase A02)**
 > - **Ngày cập nhật:** `2026-11-11`
 > - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Các thành phần kiến trúc, tech stack, UI chi tiết và scope phát hành hiện đều ở trạng thái `OPEN` / `PROPOSED`.
 
@@ -11,7 +11,8 @@
 | Cổng (Gate) | Pha tương ứng | Nội dung kiểm định | Trạng thái hiện tại | Ghi chú quản trị |
 |---|---|---|---|---|
 | **Gate G0** | **ASTRA A00** — Tiếp nhận & Chuẩn hóa Bối cảnh | Kiểm kê hiện trạng repo, xác minh 3 nhiệm vụ setup, tách bạch quyết định thật và giả định. | `COMPLETED` | Đã thiết lập baseline bối cảnh tại `docs/governance/*` và `docs/README.md`. |
-| **Gate G1** | **ASTRA A01** — Product Discovery | Định vị sản phẩm, phân khúc người dùng ưu tiên, đối thủ, cơ hội/khả thi, rủi ro pháp lý/TOS, thước đo thành công, phạm vi release và 5 quyết định chiến lược (`SD-G1-01`..`SD-G1-05`). | **`READY_FOR_REVIEW`** | **Chờ Product Owner xem xét và phê duyệt.** Agent tuyệt đối không tự đánh dấu `APPROVED`. |
+| **Gate G1** | **ASTRA A01** — Product Discovery | Định vị sản phẩm, phân khúc người dùng ưu tiên, đối thủ, cơ hội/khả thi, rủi ro pháp lý/TOS, thước đo thành công, phạm vi release và 5 quyết định chiến lược (`SD-G1-01`..`SD-G1-05`). | **`READY_FOR_REVIEW`** | **Product Owner chưa phê duyệt.** Giữ nguyên trạng thái chờ duyệt, không tự động nâng lên `APPROVED`. |
+| **Gate G2** | **ASTRA A02** — Phân tích Nghiệp vụ | Tác nhân, bản đồ thực thể, 8 máy trạng thái, 13 hành trình đầu-cuối, bộ quy tắc `TP-BR-xxxx`, yêu cầu vận hành, từ điển chuẩn và 5 điểm mơ hồ nghiệp vụ (`BA-OQ-001`..`BA-OQ-005`). | **`DRAFT / READY_FOR_REVIEW`** | **Bản nháp chưa khóa scope** (do `Gate G1` chưa được Owner duyệt). Chờ Owner duyệt đồng thời `Gate G1` và `Gate G2` trước khi khóa PRD ở bước A03. |
 
 ---
 
@@ -218,3 +219,17 @@
   1. **Phương án A:** Xác nhận **Apache-2.0** là giấy phép chính thức duy nhất của dự án Tanpopo; giữ nguyên cấu hình Astryx + theme `neutral` hiện tại và dời gọn phần Web Console vào thư mục con chuyên biệt (ví dụ `web/` hoặc `apps/console/`) kèm trình đóng gói chuẩn (như Vite + StyleX plugin theo tài liệu Astryx) **sau khi chốt OQ-001**.
   2. **Phương án B:** Đổi giấy phép dự án sang MIT/ISC hoặc giữ cấu trúc phẳng tại thư mục gốc.
 - **Khuyến nghị của Principal Architect (`PROPOSED`):** Chọn **Phương án A**.
+
+---
+
+## Phần E — Các Quyết định Nghiệp vụ Bổ sung Cần Làm rõ từ Pha A02 (`BA-OQ-001`..`BA-OQ-005`)
+
+> Chi tiết phân tích nằm tại [`docs/requirements/workflow-requirement-candidates.md`](../requirements/workflow-requirement-candidates.md). Toàn bộ đang ở trạng thái `OPEN` / `PROPOSED` chờ Product Owner quyết định trước khi khóa PRD ở bước A03:
+
+| Mã | Vấn đề nghiệp vụ cần chốt | Phương án Khuyến nghị (`PROPOSED`) | Đánh đổi nếu chọn khác |
+|---|---|---|---|
+| **BA-OQ-001** | **Đa Tổ chức (`Multi-Organization`) trên cùng một máy chủ tự vận hành** | Giữ thực thể `Organization` trong mô hình gốc, nhưng giai đoạn `0.x` mặc định tối ưu UX cho **1 Organization chứa nhiều Projects & Environments**; mở quản trị nhiều Organizations trên 1 Instance ở `v0.3`/`v1.0`. | Mở đa tổ chức đầy đủ ngay `v0.1` làm phức tạp giao diện quản trị ban đầu cho 95% nhóm tự host đơn vị. |
+| **BA-OQ-002** | **Xử lý khi chi phí quyết toán cuối luồng vượt mức giữ chỗ ước tính (`Over-Reservation Overage`)** | Cho phép hoàn tất luồng đang chạy, ghi nhận trung thực số dư âm nhẹ vào sổ cái (`Negative Balance Carryover`) và chặn cứng ngay từ yêu cầu kế tiếp cho tới khi được cấp thêm hạn mức. | Cắt ngang luồng đang truyền ở từ cuối cùng gây trải nghiệm tệ và vẫn bị nhà cung cấp đích tính tiền phần đã sinh. |
+| **BA-OQ-003** | **Hành vi đối với các luồng đang mở khi thu hồi `Virtual Key`** | Tách 2 chế độ: *Xoay vòng/Hết hạn chuẩn* cho phép luồng đang dở kết thúc êm trong giới hạn ngắn; *Thu hồi Khẩn cấp An ninh (`Emergency Security Revoke`)* cắt đứt ngay lập tức cả các luồng đang truyền dở. | Nếu chỉ có 1 chế độ duy nhất thì hoặc kém an toàn khi bị tấn công, hoặc gây lỗi oan khi xoay khóa định kỳ. |
+| **BA-OQ-004** | **Cơ chế tương tác chờ con người phê duyệt cho công cụ MCP `destructive`** | Hỗ trợ song song: (1) *Chờ đồng bộ ngắn hạn (`<= 60 giây`)* cho tác nhân tương tác trực tiếp, và (2) *Từ chối tạm thời kèm Mã Yêu cầu Phê duyệt trước (`Pre-Approval Token`)* để tác nhân gọi lại sau khi `Reviewer` duyệt qua Console/Webhook. | Nếu chỉ giữ kết nối mạng chờ hàng giờ sẽ làm treo và đứt phiên giao thức của hầu hết MCP Clients hiện tại. |
+| **BA-OQ-005** | **Thời hạn bảo toàn tương thích ngược cho Hợp đồng Phần mở rộng (`Deprecation Policy`)** | Giai đoạn `0.x` giữ tương thích tối thiểu 1 bản phụ liền trước (`N-1 minor`); từ `v1.0` trở đi cam kết tương thích ngược tối thiểu **12 tháng (hoặc trọn nhánh `1.x`)** trước khi ngưng hỗ trợ trường hợp đồng cũ. | Thiếu cam kết rõ ràng khiến cộng đồng và đối tác ngại đầu tư viết và duy trì Adapter lâu dài. |
