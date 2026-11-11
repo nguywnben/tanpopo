@@ -1,10 +1,10 @@
 # Yêu cầu Vận hành, Ứng viên Yêu cầu Nghiệp vụ & Tự Kiểm tra (Operational Requirements & Workflow-to-Requirement Candidates) — Tanpopo
 
-> **Tài liệu Phân tích Nghiệp vụ (Phase ASTRA A02 — `DRAFT / UNLOCKED SCOPE`)**
-> - **Phiên bản:** `0.1.0-a02-draft`
+> **Tài liệu Phân tích Nghiệp vụ (Phase ASTRA A02 → Đã chuyển hóa sang SRS ở A03 — `DRAFT / UNLOCKED SCOPE`)**
+> - **Phiên bản:** `0.1.0-step03-aligned`
 > - **Ngày cập nhật:** `2026-11-11`
 > - **Vai trò biên soạn:** Lead Business Analyst & Product Architect
-> - **Trạng thái quản trị:** **Bản nháp chưa khóa phạm vi (`DRAFT — UNLOCKED SCOPE`)**. Do Product Owner chưa chính thức duyệt **Gate G1** (`READY_FOR_REVIEW`), toàn bộ danh mục ứng viên yêu cầu dưới đây đóng vai trò đầu vào phân tích cho bước lập PRD tiếp theo (**A03**), chưa khóa cứng phạm vi từng bản phát hành.
+> - **Quy tắc Nguồn chân lý (SSOT):** Kể từ bước **ASTRA A03**, danh mục ứng viên `CAND-001`..`017` tại Mục 2 đã được nâng cấp chính thức thành các yêu cầu kiểm chứng được `TP-FR-0101`..`1005` và `TP-NFR-0101`..`1002` tại [`docs/requirements/srs.md`](./srs.md) cùng ma trận truy vết tại [`docs/requirements/traceability.md`](./traceability.md). Trong trường hợp cần tra cứu đặc tả yêu cầu hệ thống, [`srs.md`](./srs.md) là nguồn chân lý duy nhất; tài liệu này tiếp tục là nguồn chuẩn cho **9 Yêu cầu Vận hành (`OPS-01`..`09`)** và lịch sử bắc cầu phân tích từ A02 sang A03.
 
 ---
 

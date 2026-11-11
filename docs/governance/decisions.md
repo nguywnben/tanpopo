@@ -1,18 +1,19 @@
 # Decision Register & Blocking Open Questions — Tanpopo
 
-> **Tài liệu nguồn (Canonical Decision Log — Updated at Phase A02)**
+> **Tài liệu nguồn (Canonical Decision Log — Updated at Phase A03)**
 > - **Ngày cập nhật:** `2026-11-11`
-> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Các thành phần kiến trúc, tech stack, UI chi tiết và scope phát hành hiện đều ở trạng thái `OPEN` / `PROPOSED`.
+> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Các thành phần kiến trúc, tech stack, UI chi tiết và scope phát hành hiện đều ở trạng thái `OPEN` / `PROPOSED` (`DRAFT — UNLOCKED SCOPE`).
 
 ---
 
 ## Bảng Theo dõi Cổng Phê duyệt Giai đoạn (Stage-Gate Status Tracker)
 
-| Cổng (Gate) | Pha tương ứng | Nội dung kiểm định | Trạng thái hiện tại | Ghi chú quản trị |
+| Cổng / Pha | Pha tương ứng | Nội dung kiểm định | Trạng thái hiện tại | Ghi chú quản trị |
 |---|---|---|---|---|
 | **Gate G0** | **ASTRA A00** — Tiếp nhận & Chuẩn hóa Bối cảnh | Kiểm kê hiện trạng repo, xác minh 3 nhiệm vụ setup, tách bạch quyết định thật và giả định. | `COMPLETED` | Đã thiết lập baseline bối cảnh tại `docs/governance/*` và `docs/README.md`. |
 | **Gate G1** | **ASTRA A01** — Product Discovery | Định vị sản phẩm, phân khúc người dùng ưu tiên, đối thủ, cơ hội/khả thi, rủi ro pháp lý/TOS, thước đo thành công, phạm vi release và 5 quyết định chiến lược (`SD-G1-01`..`SD-G1-05`). | **`READY_FOR_REVIEW`** | **Product Owner chưa phê duyệt.** Giữ nguyên trạng thái chờ duyệt, không tự động nâng lên `APPROVED`. |
-| **Gate G2** | **ASTRA A02** — Phân tích Nghiệp vụ | Tác nhân, bản đồ thực thể, 8 máy trạng thái, 13 hành trình đầu-cuối, bộ quy tắc `TP-BR-xxxx`, yêu cầu vận hành, từ điển chuẩn và 5 điểm mơ hồ nghiệp vụ (`BA-OQ-001`..`BA-OQ-005`). | **`DRAFT / READY_FOR_REVIEW`** | **Bản nháp chưa khóa scope** (do `Gate G1` chưa được Owner duyệt). Chờ Owner duyệt đồng thời `Gate G1` và `Gate G2` trước khi khóa PRD ở bước A03. |
+| **Baseline A02** | **ASTRA A02** — Phân tích Nghiệp vụ | 12 tác nhân, bản đồ thực thể, 8 máy trạng thái (`SM-01`..`08`), 13 hành trình (`WF-01`..`13`), 30 quy tắc `TP-BR-0101`..`0803`, `OPS-01`..`09`, từ điển chuẩn và `BA-OQ-001`..`005`. | `DRAFT_COMPLETED` | Đã tích hợp và truy vết 100% sang bộ PRD/SRS ở bước A03. |
+| **Gate G2** | **ASTRA A03** — Product Definition, PRD/SRS & Đặc tả Tính năng | Bộ PRD, Danh mục 16 tính năng theo 10 miền (`FT-01`..`16`), Phạm vi phát hành (`MVP v0.1` → `v1.0` → `Post-v1`), SRS (`TP-FR-0101`..`1005`, `TP-NFR-0101`..`1002`), Tiêu chí nghiệm thu (`TP-AC-*`), Ma trận truy vết và 6 đánh đổi (`TD-G2-01`..`06`). | **`READY_FOR_REVIEW`** | **Bản nháp `DRAFT — UNLOCKED SCOPE`** (do Owner chưa duyệt `Gate G1`). Đã vượt qua toàn bộ tự kiểm tra Gate G2; tuyệt đối không tự đánh dấu `APPROVED` trước khi Product Owner xác nhận. |
 
 ---
 
@@ -233,3 +234,19 @@
 | **BA-OQ-003** | **Hành vi đối với các luồng đang mở khi thu hồi `Virtual Key`** | Tách 2 chế độ: *Xoay vòng/Hết hạn chuẩn* cho phép luồng đang dở kết thúc êm trong giới hạn ngắn; *Thu hồi Khẩn cấp An ninh (`Emergency Security Revoke`)* cắt đứt ngay lập tức cả các luồng đang truyền dở. | Nếu chỉ có 1 chế độ duy nhất thì hoặc kém an toàn khi bị tấn công, hoặc gây lỗi oan khi xoay khóa định kỳ. |
 | **BA-OQ-004** | **Cơ chế tương tác chờ con người phê duyệt cho công cụ MCP `destructive`** | Hỗ trợ song song: (1) *Chờ đồng bộ ngắn hạn (`<= 60 giây`)* cho tác nhân tương tác trực tiếp, và (2) *Từ chối tạm thời kèm Mã Yêu cầu Phê duyệt trước (`Pre-Approval Token`)* để tác nhân gọi lại sau khi `Reviewer` duyệt qua Console/Webhook. | Nếu chỉ giữ kết nối mạng chờ hàng giờ sẽ làm treo và đứt phiên giao thức của hầu hết MCP Clients hiện tại. |
 | **BA-OQ-005** | **Thời hạn bảo toàn tương thích ngược cho Hợp đồng Phần mở rộng (`Deprecation Policy`)** | Giai đoạn `0.x` giữ tương thích tối thiểu 1 bản phụ liền trước (`N-1 minor`); từ `v1.0` trở đi cam kết tương thích ngược tối thiểu **12 tháng (hoặc trọn nhánh `1.x`)** trước khi ngưng hỗ trợ trường hợp đồng cũ. | Thiếu cam kết rõ ràng khiến cộng đồng và đối tác ngại đầu tư viết và duy trì Adapter lâu dài. |
+
+---
+
+## Phần F — Sáu Đánh đổi Trọng yếu Trình Phê duyệt tại Gate G2 (`TD-G2-01`..`TD-G2-06`)
+
+> Phân tích chi tiết nằm duy nhất tại Mục 5 của [`docs/product/release-scope.md`](../product/release-scope.md). Toàn bộ ở trạng thái `OPEN` / `PROPOSED` chờ Product Owner phê duyệt để khóa phạm vi trước khi sang pha Thiết kế Kiến trúc (**A04**):
+
+| Mã | Chủ đề đánh đổi | Đề xuất hiện tại trong PRD/SRS (`PROPOSED`) | Trạng thái |
+|---|---|---|---|
+| **TD-G2-01** | Ranh giới `MVP (v0.1)` đối với Mặt phẳng MCP | Đặt mặt phẳng lưu lượng MCP (`FT-07`) ở `v0.2` (`Should`), giữ `v0.1` tinh gọn để chốt chất lượng Core + Plugin Engine + LLM Gateway + Console/CLI. | `OPEN` (`PROPOSED`) |
+| **TD-G2-02** | Giao diện Suy luận: Dịch chuẩn chung vs Phương ngữ gốc | Kết hợp Unified OpenAI-Compatible (`Must`) + Lossless Native Dialect Passthrough (`Should` ngay `v0.1`) + kiểm tra năng lực nghiêm ngặt trả `400` thay vì cắt tham số ngầm. | `OPEN` (`PROPOSED`) |
+| **TD-G2-03** | Kiểm soát Ngân sách Song song vs Trải nghiệm Cuối luồng | Giữ chỗ hạn mức trước khi mở luồng (`Pre-Request Hold`) kết hợp kết chuyển số dư âm nhẹ (`Negative Balance Carryover`) thay vì cắt ngang luồng đang truyền ở vài từ cuối. | `OPEN` (`PROPOSED`) |
+| **TD-G2-04** | Mô hình Thực thi Phần mở rộng & Bảo vệ Khóa gốc | Hai tầng kết hợp (`Declarative Pack` + `Default-Deny Sandbox`) đi kèm `Blind Host Credential Broker` ngay từ `v0.1`. | `OPEN` (`PROPOSED`) |
+| **TD-G2-05** | Tương tác Phê duyệt Con người cho Công cụ MCP `destructive` | Hỗ trợ chế độ kép: chờ đồng bộ ngắn hạn (`<= 60s`) và cấp `Pre-Approval Token` gắn băm tham số cho phê duyệt bất đồng bộ. | `OPEN` (`PROPOSED`) |
+| **TD-G2-06** | Khởi chạy Đơn nút Ngày đầu vs Mở rộng Cụm Đa Bản sao | Mặc định `v0.1` đơn nút kho nhúng (tối ưu 1 `Org` đa `Project`), trừu tượng hóa tầng lưu trữ để mở rộng sang cụm PostgreSQL + Redis & đa `Org` ở `v0.3`/`v1.0`. | `OPEN` (`PROPOSED`) |
+
