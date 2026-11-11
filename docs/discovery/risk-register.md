@@ -1,9 +1,9 @@
 # Sổ Đăng ký Rủi ro Sản phẩm, Pháp lý, Kỹ thuật & Hệ sinh thái (Risk Register) — Tanpopo
 
-> **Tài liệu Quản trị Rủi ro Liên tục (Updated through Phase ASTRA A05 — Gate G1/G3: `READY_FOR_REVIEW`)**
-> - **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Product Intelligence Lead & Principal Security/SRE Architect
-> - **Phương pháp chấm điểm:** `Điểm Rủi ro = Khả năng xảy ra (1–5) × Mức độ tác động (1–5)`. Đã cập nhật biện pháp kiểm soát kiến trúc cụ thể từ bước **A05 (`ADR-0001`..`0006`, `ARCH-SYS-01`, `ARCH-DATA-01`, `ARCH-OPS-01`)** và bổ sung 3 rủi ro kỹ thuật tầng sâu (`RSK-013`..`RSK-015`).
+> **Tài liệu Quản trị Rủi ro Liên tục (Updated through Phase ASTRA A07 — Gate G1/G3: `READY_FOR_REVIEW`)**
+> - **Ngày cập nhật:** `2026-11-12`
+> - **Vai trò biên soạn:** Product Intelligence Lead, Principal Security Engineer & QA/SRE Architect
+> - **Phương pháp chấm điểm:** `Điểm Rủi ro = Khả năng xảy ra (1–5) × Mức độ tác động (1–5)`. Đã cập nhật biện pháp kiểm soát kiến trúc/bảo mật cụ thể từ bước **A05–A07 (`ADR-0001`..`0006`, `SPEC-SEC-01`..`03`, `SPEC-QA-01`..`04`)**, bổ sung rủi ro rò rỉ bộ nhớ đệm đa thuê bao (`RSK-016`) và gắn bài kiểm thử nghiệm thu `P0` cho toàn bộ 16 rủi ro.
 
 ---
 
@@ -31,5 +31,19 @@
 | **RSK-011** | **Hệ thống Phân tán (Cluster Sync Lag)** | Độ trễ truyền tin thu hồi khóa khẩn cấp hoặc lệch bộ đếm tốc độ giữa các node khi chạy chế độ mở rộng nhiều bản sao (`UC-07`). | **8** (`2 × 4`) | Thiết kế `ADR-0006` & `ARCH-OPS-01`: `Copy-on-Write ConfigSnapshot` + truyền tin 3 lớp (`Valkey Pub/Sub` + `PostgreSQL LISTEN/NOTIFY` + đối chiếu `config_epoch` mỗi `2s`) và ngắt mạch nút mù `> 10s`. |
 | **RSK-012** | **Bản quyền & Chuỗi cung ứng (`ISS-002`)** | Xung đột khai báo giấy phép trong repo (như `Apache-2.0` vs `ISC` hiện tại) hoặc kéo nhầm thư viện phụ thuộc có giấy phép copyleft nghiêm ngặt (`GPL`/`AGPL`) làm cản trở doanh nghiệp tự host. | **6** (`2 × 3`) | Quy hoạch tại `ADR-0004`: đồng bộ toàn bộ dự án về **Apache-2.0**, dùng nhị phân Go thuần `CGO_ENABLED=0` (`wazero`) và tích hợp quét giấy phép/SBOM tự động trong CI. |
 | **RSK-013** | **Lưu trữ Hai Chế độ (`Dual-DB Dialect Drift`)** | Sai lệch hành vi giao dịch, kiểu thời gian hoặc khóa ngoại giữa `SQLite WAL` (đơn nút) và `PostgreSQL 16+` (cụm HA) gây lỗi chỉ xuất hiện khi người dùng nâng cấp quy mô (`ADR-0003`). | **9** (`3 × 3`) | Áp dụng 6 quy tắc khả chuyển tại `ARCH-DATA-01` (`UUIDv7 TEXT`, tiền tệ `BIGINT micro-USD`, kiểm soát lạc quan `version`), cách ly sau `storage/port` và bắt buộc chạy toàn bộ bộ test tích hợp trên **cả SQLite lẫn PostgreSQL** trong mỗi PR. |
-| **RSK-014** | **An ninh Mạng Biên (`DNS Rebinding & SSRF`)** | Kẻ tấn công cấu hình URL nhà cung cấp/MCP/ảnh đa phương thức trỏ tới tên miền có `TTL = 0` đổi IP về `169.254.169.254` hoặc mạng nội bộ ngay lúc mở kết nối (`TP-FR-0702`). | **10** (`2 × 5`) | Thiết kế `SSRFGuard` tại `ARCH-SYS-01` Mục 5: kiểm tra trực tiếp địa chỉ IP đã phân giải ngay trong móc `net.Dialer.Control` (lúc `connect()`) và tắt tự động đuổi theo HTTP Redirect chéo miền. |
-| **RSK-015** | **Quan sát Vận hành (`Telemetry Cardinality & Backpressure`)** | Nhãn metric chứa trường không giới hạn (`request_id`, `key_id`) làm sập Prometheus/OTel, hoặc bộ thu OTLP ngoài bị treo làm nghẽn ngược bộ nhớ Data Plane (`TP-FR-0805`). | **8** (`2 × 4`) | Khóa chặt tập nhãn cố định tại `SPEC-CORE-02` Mục 3.2 (`0` nhãn cardinality cao) và giới hạn cứng vòng đệm OTLP (`32 MB`, chế độ `Drop-Oldest` + bộ đếm `tanpopo_telemetry_dropped_total`). |
+| **RSK-014** | **An ninh Mạng Biên (`DNS Rebinding & SSRF`)** | Kẻ tấn công cấu hình URL nhà cung cấp/MCP/ảnh đa phương thức trỏ tới tên miền có `TTL = 0` đổi IP về `169.254.169.254` hoặc mạng nội bộ ngay lúc mở kết nối (`TP-FR-0702`). | **10** (`2 × 5`) | Thiết kế `SSRFGuard` tại `ARCH-SYS-01` Mục 5 & `SPEC-SEC-01` (`TM-06`): kiểm tra trực tiếp địa chỉ IP đã phân giải ngay trong móc `net.Dialer.Control` (lúc `connect()`) và tắt tự động đuổi theo HTTP Redirect chéo miền (`CT-15`, `CT-26`). |
+| **RSK-015** | **Quan sát Vận hành (`Telemetry Cardinality & Backpressure`)** | Nhãn metric chứa trường không giới hạn (`request_id`, `key_id`) làm sập Prometheus/OTel, hoặc bộ thu OTLP ngoài bị treo làm nghẽn ngược bộ nhớ Data Plane (`TP-FR-0805`). | **8** (`2 × 4`) | Khóa chặt tập nhãn cố định tại `SPEC-CORE-02` Mục 3.2 (`0` nhãn cardinality cao) và giới hạn cứng vòng đệm OTLP (`32 MiB`, chế độ `Drop-Oldest` + bộ đếm `tanpopo_telemetry_dropped_total` — `SPEC-QA-03`). |
+| **RSK-016** | **Quyền Riêng tư Đa Thuê bao (`Response Cache Bleed & Poisoning`)** | Trả nhầm câu trả lời đã lưu đệm chứa dữ liệu nhạy cảm của `Org/Project A` cho `Org/Project B` hoặc lưu đệm câu trả lời đứt dở/chứa PII (`FMEA-03`). | **10** (`2 × 5`) | Thiết kế tại [`secrets-and-tenant-isolation.md`](../security/secrets-and-tenant-isolation.md) (`SPEC-SEC-03`) & [`nonfunctional-slo.md`](../quality/nonfunctional-slo.md) (`FMEA-03`): mặc định tắt cache phản hồi; khi bật bắt buộc khóa băm `HMAC(org_id || project_id || env_id || deployment_id || policy_hash || tool_acl_hash)` mã hóa bằng `Org DEK` (`CT-28`). |
+
+---
+
+## 3. Liên kết Kiểm chứng Cổng Phát hành: Rủi ro → Đặc tả Bảo mật → Bài Kiểm thử Nghiệm thu Tự động (`A07 Verification Linkage`)
+
+| Nhóm Rủi ro | Mã Rủi ro | Tài liệu Kiểm soát Bảo mật / Độ tin cậy | Bài Kiểm thử Nghiệm thu Bắt buộc (`SPEC-QA-01..04`) |
+|---|---|---|---|
+| **Cô lập Sandbox, Khóa Gốc & Chuỗi Cung ứng** | `RSK-001`, `RSK-005`, `RSK-012` | [`threat-model.md`](../security/threat-model.md), [`plugin-sandbox-and-supply-chain.md`](../security/plugin-sandbox-and-supply-chain.md) | `CT-01`..`05`, `CT-14`, `CT-16`..`18`, `CT-25`, `CT-31`, `FZ-01`, `FZ-02`, `FZ-05`, `OPS-AC-10`, `GATE-REL-04` |
+| **Tuân thủ Pháp lý `DEC-004` & Khán giả `OAuth`** | `RSK-003` | [`secrets-and-tenant-isolation.md`](../security/secrets-and-tenant-isolation.md) (Mục 3.3) | `CT-19`, `CT-20`, `AUTH-09`, `AUTH-10`, `AUTH-16`, `FMEA-08` |
+| **An toàn Mặt phẳng `MCP` & `A2A`** | `RSK-006` | [`threat-model.md`](../security/threat-model.md) (`TM-07`), [`nonfunctional-slo.md`](../quality/nonfunctional-slo.md) (`FMEA-02`) | `CT-21`..`23`, `CT-27`, `AUTH-12`, `FZ-04` |
+| **Toàn vẹn Sổ cái `FinOps` & Truyền luồng `SSE`** | `RSK-004`, `RSK-007`, `RSK-009` | [`nonfunctional-slo.md`](../quality/nonfunctional-slo.md) (`FMEA-01`, `FMEA-04`) | `CT-06`..`13`, `CT-29`, `FZ-03`, `FZ-06`, `SPIKE-02`, `SPIKE-03` |
+| **Đa Thuê bao, Mạng Biên, Lưu trữ Kép & Cụm HA** | `RSK-011`, `RSK-013`..`016` | [`secrets-and-tenant-isolation.md`](../security/secrets-and-tenant-isolation.md), [`nonfunctional-slo.md`](../quality/nonfunctional-slo.md) (`FMEA-03`, `06`, `07`) | `CT-15`, `CT-26`, `CT-28`, `CT-30`, `CT-32`, `AUTH-06`, `AUTH-13`..`15`, `OPS-AC-03`..`09` |
+| **Phạm vi, Tương thích Hợp đồng & Bền vững** | `RSK-002`, `RSK-008`, `RSK-010` | [`release-readiness.md`](../quality/release-readiness.md) (`SPEC-QA-04`) | `CT-24`, `EXT-ACCEPT-01`, `SPIKE-01`, `GATE-REL-01`..`07` |

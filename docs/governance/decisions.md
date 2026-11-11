@@ -1,8 +1,8 @@
 # Decision Register & Blocking Open Questions — Tanpopo
 
-> **Tài liệu nguồn (Canonical Decision Log — Updated through Phase A06)**
-> - **Ngày cập nhật:** `2026-11-11`
-> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER`, `ACCEPTED` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Toàn bộ phạm vi sản phẩm (`G1`/`G2`), đặc tả hợp đồng (`Baseline A04`), kiến trúc kỹ thuật/ADRs (`Gate G3 — ADR-0001..0006`) và thiết kế UX/UI, DX & Vận hành (`Baseline A06`) hiện đều ở trạng thái **`READY_FOR_REVIEW` / `PROPOSED`**.
+> **Tài liệu nguồn (Canonical Decision Log — Updated through Phase A07)**
+> - **Ngày cập nhật:** `2026-11-12`
+> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER`, `ACCEPTED` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Toàn bộ phạm vi sản phẩm (`G1`/`G2`), đặc tả hợp đồng (`Baseline A04`), kiến trúc kỹ thuật/ADRs (`Gate G3 — ADR-0001..0006`), thiết kế UX/UI, DX & Vận hành (`Baseline A06`) và chiến lược Bảo mật, Độ tin cậy & Cổng Kiểm định Xuất xưởng (`Baseline A07 — Gate G3 Consolidation`) hiện đều ở trạng thái **`READY_FOR_REVIEW` / `PROPOSED`**.
 
 ---
 
@@ -17,6 +17,7 @@
 | **Baseline A04** | **ASTRA A04** — Đặc tả Sâu Extension Platform & Connectivity | Bộ 6 đặc tả `SPEC-EXT-01`..`06` (`docs/specifications/*`) và Ma trận kiểm thử hợp đồng `SPEC-QA-01` (`CT-01`..`24`, `EXT-ACCEPT-01`): 3 tầng thực thi, kho khóa mù, Marketplace, MCP Hub/A2A và tương thích giao thức. | **`READY_FOR_REVIEW`** | **Đặc tả ứng viên minh họa (`ILLUSTRATIVE — PRE-ADR & PRE-POC`)**; gắn liền với các điểm chờ PoC/chính sách hãng (`POC-01`..`03`, `POL-01`..`02`). |
 | **Gate G3** | **ASTRA A05** — Solution Architecture & Technical Design | Kiến trúc tổng thể `ARCH-SYS-01`, Lược đồ vật lý hai chế độ `ARCH-DATA-01`, Topo cụm HA `ARCH-OPS-01`, Đặc tả định tuyến/chính sách `SPEC-CORE-01`, Sổ cái `micro-USD`/OTel `SPEC-CORE-02`, Hợp đồng OpenAPI/JSON Schema/Protobuf `SPEC-API-01`, giao thức PoC `SPIKE-01`..`04` và bộ **6 ADRs (`ADR-0001`..`0006`)**. | **`READY_FOR_REVIEW`** | **Thiết kế Đề xuất (`PROPOSED — PRE-APPROVAL`)**. Đã vượt qua toàn bộ 6 mục tự kiểm tra kiến trúc A05; **chưa viết code ứng dụng hay code PoC** chờ Product Owner phê duyệt. |
 | **Baseline A06** | **ASTRA A06** — UX/UI, Developer Experience & Vận hành SRE | Bộ 4 đặc tả UX/UI `SPEC-UX-01`..`04` (`docs/ux/*`: 11 phân khu IA, 8 hành trình `UJ-01`..`08` đủ 5 trạng thái, 16 màn hình `SCR-01`..`16`, 6 rào chắn `UX-GR`, tích hợp Astryx `neutral` & `UX-AC-01`..`12`) và 4 đặc tả DX/Vận hành `SPEC-OPS-01`..`04` (`docs/operations/*`: cài đặt đa nền tảng/Air-Gap, sao lưu/DR `RTO < 15m`, giám sát/7 sổ tay sự cố `INC-01`..`07`, `tanpopo` CLI/SDK & `OPS-AC-01`..`12`). | **`READY_FOR_REVIEW`** | **Thiết kế Trải nghiệm & Vận hành Đề xuất (`PROPOSED — NO CODE`)**. Giữ nguyên `neutral` mặc định (`DEC-007`), **không khóa theme chưa duyệt, không chạy `theme eject` và chưa lập trình frontend/backend**. |
+| **Gate G3 (Tổng hợp A05–A07)** | **ASTRA A07** — Security, Reliability & Verification Strategy | Bộ 3 đặc tả bảo mật `SPEC-SEC-01`..`03` (`docs/security/*`: Threat Model 13 mối đe dọa `TM-01`..`13`, Sandbox/Supply-Chain & Mã hóa phong bì `AEAD AAD` + cô lập 4 lớp + ranh giới `DEC-004`) và 4 đặc tả chất lượng/độ tin cậy `SPEC-QA-01`..`04` (`docs/quality/*`: `CT-01`..`32`, `AUTH-01`..`16`, `FZ-01`..`06`, CI khép kín `0` gọi AI ngoài, `SLO-01`..`08` `TARGET / UNVERIFIED`, 8 ca `FMEA-01`..`08`, 7 cổng xuất xưởng `GATE-REL-01`..`07` và Gói Trình Duyệt Gate G3). | **`READY_FOR_REVIEW`** | **Chiến lược Bảo mật, Độ tin cậy & Kiểm định Đề xuất (`PROPOSED — NO CODE`)**. **Không tự nâng Gate G3 lên `APPROVED`**; xin phép tường minh Product Owner tại [`release-readiness.md`](../quality/release-readiness.md) Mục 4 trước khi viết bất kỳ dòng mã PoC hay mã ứng dụng nào. |
 
 ---
 
