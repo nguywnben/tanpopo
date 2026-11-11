@@ -1,8 +1,8 @@
 # Decision Register & Blocking Open Questions — Tanpopo
 
-> **Tài liệu nguồn (Canonical Decision Log — Updated at Phase A03)**
+> **Tài liệu nguồn (Canonical Decision Log — Updated at Phase A04)**
 > - **Ngày cập nhật:** `2026-11-11`
-> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Các thành phần kiến trúc, tech stack, UI chi tiết và scope phát hành hiện đều ở trạng thái `OPEN` / `PROPOSED` (`DRAFT — UNLOCKED SCOPE`).
+> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Các thành phần kiến trúc, tech stack, lược đồ `Manifest`, UI chi tiết và scope phát hành hiện đều ở trạng thái `OPEN` / `PROPOSED` (`DRAFT — UNLOCKED SCOPE / PRE-ADR`).
 
 ---
 
@@ -13,7 +13,8 @@
 | **Gate G0** | **ASTRA A00** — Tiếp nhận & Chuẩn hóa Bối cảnh | Kiểm kê hiện trạng repo, xác minh 3 nhiệm vụ setup, tách bạch quyết định thật và giả định. | `COMPLETED` | Đã thiết lập baseline bối cảnh tại `docs/governance/*` và `docs/README.md`. |
 | **Gate G1** | **ASTRA A01** — Product Discovery | Định vị sản phẩm, phân khúc người dùng ưu tiên, đối thủ, cơ hội/khả thi, rủi ro pháp lý/TOS, thước đo thành công, phạm vi release và 5 quyết định chiến lược (`SD-G1-01`..`SD-G1-05`). | **`READY_FOR_REVIEW`** | **Product Owner chưa phê duyệt.** Giữ nguyên trạng thái chờ duyệt, không tự động nâng lên `APPROVED`. |
 | **Baseline A02** | **ASTRA A02** — Phân tích Nghiệp vụ | 12 tác nhân, bản đồ thực thể, 8 máy trạng thái (`SM-01`..`08`), 13 hành trình (`WF-01`..`13`), 30 quy tắc `TP-BR-0101`..`0803`, `OPS-01`..`09`, từ điển chuẩn và `BA-OQ-001`..`005`. | `DRAFT_COMPLETED` | Đã tích hợp và truy vết 100% sang bộ PRD/SRS ở bước A03. |
-| **Gate G2** | **ASTRA A03** — Product Definition, PRD/SRS & Đặc tả Tính năng | Bộ PRD, Danh mục 16 tính năng theo 10 miền (`FT-01`..`16`), Phạm vi phát hành (`MVP v0.1` → `v1.0` → `Post-v1`), SRS (`TP-FR-0101`..`1005`, `TP-NFR-0101`..`1002`), Tiêu chí nghiệm thu (`TP-AC-*`), Ma trận truy vết và 6 đánh đổi (`TD-G2-01`..`06`). | **`READY_FOR_REVIEW`** | **Bản nháp `DRAFT — UNLOCKED SCOPE`** (do Owner chưa duyệt `Gate G1`). Đã vượt qua toàn bộ tự kiểm tra Gate G2; tuyệt đối không tự đánh dấu `APPROVED` trước khi Product Owner xác nhận. |
+| **Gate G2** | **ASTRA A03** — Product Definition, PRD/SRS & Đặc tả Tính năng | Bộ PRD, Danh mục 16 tính năng theo 10 miền (`FT-01`..`16`), Phạm vi phát hành (`MVP v0.1` → `v1.0` → `Post-v1`), SRS (`TP-FR-0101`..`1005`, `TP-NFR-0101`..`1002`), Tiêu chí nghiệm thu (`TP-AC-*`), Ma trận truy vết và 6 đánh đổi (`TD-G2-01`..`06`). | **`READY_FOR_REVIEW`** | **Bản nháp `DRAFT — UNLOCKED SCOPE`** (do Owner chưa duyệt `Gate G1`). Đã vượt qua toàn bộ tự kiểm tra Gate G2; không tự đánh dấu `APPROVED`. |
+| **Baseline A04** | **ASTRA A04** — Đặc tả Sâu Extension Platform & Connectivity | Bộ 6 đặc tả `SPEC-EXT-01`..`06` (`docs/specifications/*`) và Ma trận kiểm thử hợp đồng `SPEC-QA-01` (`CT-01`..`24`, `EXT-ACCEPT-01`): 3 tầng thực thi (`Declarative`, `Sandboxed Wasm`, `Isolated Sidecar`), kho khóa mù, Marketplace, MCP Hub/A2A và tương thích giao thức. | **`READY_FOR_REVIEW`** | **Đặc tả ứng viên minh họa (`ILLUSTRATIVE — PRE-ADR & PRE-POC`)**; chưa tự nhận lược đồ `Manifest` đã đóng băng và đã ghi nhận rõ các điểm chờ PoC/chính sách hãng (`POC-01`..`03`, `POL-01`..`02`). |
 
 ---
 
@@ -249,4 +250,19 @@
 | **TD-G2-04** | Mô hình Thực thi Phần mở rộng & Bảo vệ Khóa gốc | Hai tầng kết hợp (`Declarative Pack` + `Default-Deny Sandbox`) đi kèm `Blind Host Credential Broker` ngay từ `v0.1`. | `OPEN` (`PROPOSED`) |
 | **TD-G2-05** | Tương tác Phê duyệt Con người cho Công cụ MCP `destructive` | Hỗ trợ chế độ kép: chờ đồng bộ ngắn hạn (`<= 60s`) và cấp `Pre-Approval Token` gắn băm tham số cho phê duyệt bất đồng bộ. | `OPEN` (`PROPOSED`) |
 | **TD-G2-06** | Khởi chạy Đơn nút Ngày đầu vs Mở rộng Cụm Đa Bản sao | Mặc định `v0.1` đơn nút kho nhúng (tối ưu 1 `Org` đa `Project`), trừu tượng hóa tầng lưu trữ để mở rộng sang cụm PostgreSQL + Redis & đa `Org` ở `v0.3`/`v1.0`. | `OPEN` (`PROPOSED`) |
+
+---
+
+## Phần G — Các Điểm Kỹ thuật & Chính sách Chưa Thể Kết luận Trước Khi Chạy PoC / Chốt ADR (Từ Pha A04)
+
+> Chi tiết kỹ thuật nằm tại [`extension-contract.md`](../specifications/extension-contract.md) và [`authentication-connections.md`](../specifications/authentication-connections.md). Các mục dưới đây cần được kiểm chứng thực nghiệm trước khi đóng băng chuẩn `Manifest` và `ABI`:
+
+| Mã | Lĩnh vực chưa kết luận | Nguyên nhân phụ thuộc thực tế | Cách giải quyết ở bước tiếp theo |
+|---|---|---|---|
+| **POC-01** | Chuẩn giao diện nhị phân Wasm cụ thể (`WASI Preview 2 WIT` vs `Extism/Linear-Memory ABI`) | Phụ thuộc hiệu năng truyền luồng SSE tần suất cao (`< 5 ms p95`, `< 1 ms/chunk`) và độ ổn định trình biên dịch TS/Python sang Wasm. | Đo tải thực nghiệm qua PoC `EXP-01` và chốt bằng ADR ở pha Kiến trúc Hệ thống. |
+| **POC-02** | Ngôn ngữ ánh xạ an toàn cho Gói Khai báo (Tầng 1) | Cần xác định tập toán tử JSON/template nhỏ nhất vẫn phủ được `>= 75%` nhà cung cấp mà không biến YAML thành ngôn ngữ lập trình rườm rà. | Đối chiếu trên 10 nhà cung cấp mẫu trong `EXP-02` & `EXP-03`. |
+| **POC-03** | Giao thức IPC chuẩn cho `Isolated Sidecar` (Tầng 3) | Lựa chọn giữa `gRPC / ConnectRPC` và `HTTP/2 JSON + SSE` qua Unix Domain Socket / mTLS gắn liền với ngôn ngữ nhân Core (`OQ-001`). | Chốt đồng thời cùng ADR chọn ngôn ngữ Core (`OQ-001`). |
+| **POL-01** | Danh sách hãng AI thương mại cho phép `Authorized OAuth` / `Device Flow` bên thứ ba | Chính sách cấp phép OAuth thay đổi riêng theo từng hãng; không thể giả định phổ quát. | Chỉ bật trên `Official Adapter` khi có tài liệu điều khoản công khai hợp lệ của chính hãng đó. |
+| **POL-02** | Chi tiết đăng ký ứng dụng động trong đặc tả Ủy quyền MCP (`DCR` vs `Client Metadata`) | Chuẩn ủy quyền của hệ sinh thái MCP đang cập nhật nhanh trong năm 2025–2026. | Giữ mô-đun cấu hình máy chủ ủy quyền MCP tách rời để chốt chuẩn mới nhất khi làm `v0.2`. |
+
 
