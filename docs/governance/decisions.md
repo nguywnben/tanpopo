@@ -1,8 +1,8 @@
 # Decision Register & Blocking Open Questions — Tanpopo
 
-> **Tài liệu nguồn (Canonical Decision Log — Updated at Phase A04)**
+> **Tài liệu nguồn (Canonical Decision Log — Updated through Phase A05)**
 > - **Ngày cập nhật:** `2026-11-11`
-> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Các thành phần kiến trúc, tech stack, lược đồ `Manifest`, UI chi tiết và scope phát hành hiện đều ở trạng thái `OPEN` / `PROPOSED` (`DRAFT — UNLOCKED SCOPE / PRE-ADR`).
+> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER`, `ACCEPTED` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Toàn bộ phạm vi sản phẩm (`G1`/`G2`), đặc tả hợp đồng (`Baseline A04`) và kiến trúc kỹ thuật/ADRs (`Gate G3 — ADR-0001..0006`) hiện đều ở trạng thái **`READY_FOR_REVIEW` / `PROPOSED`**.
 
 ---
 
@@ -12,9 +12,10 @@
 |---|---|---|---|---|
 | **Gate G0** | **ASTRA A00** — Tiếp nhận & Chuẩn hóa Bối cảnh | Kiểm kê hiện trạng repo, xác minh 3 nhiệm vụ setup, tách bạch quyết định thật và giả định. | `COMPLETED` | Đã thiết lập baseline bối cảnh tại `docs/governance/*` và `docs/README.md`. |
 | **Gate G1** | **ASTRA A01** — Product Discovery | Định vị sản phẩm, phân khúc người dùng ưu tiên, đối thủ, cơ hội/khả thi, rủi ro pháp lý/TOS, thước đo thành công, phạm vi release và 5 quyết định chiến lược (`SD-G1-01`..`SD-G1-05`). | **`READY_FOR_REVIEW`** | **Product Owner chưa phê duyệt.** Giữ nguyên trạng thái chờ duyệt, không tự động nâng lên `APPROVED`. |
-| **Baseline A02** | **ASTRA A02** — Phân tích Nghiệp vụ | 12 tác nhân, bản đồ thực thể, 8 máy trạng thái (`SM-01`..`08`), 13 hành trình (`WF-01`..`13`), 30 quy tắc `TP-BR-0101`..`0803`, `OPS-01`..`09`, từ điển chuẩn và `BA-OQ-001`..`005`. | `DRAFT_COMPLETED` | Đã tích hợp và truy vết 100% sang bộ PRD/SRS ở bước A03. |
-| **Gate G2** | **ASTRA A03** — Product Definition, PRD/SRS & Đặc tả Tính năng | Bộ PRD, Danh mục 16 tính năng theo 10 miền (`FT-01`..`16`), Phạm vi phát hành (`MVP v0.1` → `v1.0` → `Post-v1`), SRS (`TP-FR-0101`..`1005`, `TP-NFR-0101`..`1002`), Tiêu chí nghiệm thu (`TP-AC-*`), Ma trận truy vết và 6 đánh đổi (`TD-G2-01`..`06`). | **`READY_FOR_REVIEW`** | **Bản nháp `DRAFT — UNLOCKED SCOPE`** (do Owner chưa duyệt `Gate G1`). Đã vượt qua toàn bộ tự kiểm tra Gate G2; không tự đánh dấu `APPROVED`. |
-| **Baseline A04** | **ASTRA A04** — Đặc tả Sâu Extension Platform & Connectivity | Bộ 6 đặc tả `SPEC-EXT-01`..`06` (`docs/specifications/*`) và Ma trận kiểm thử hợp đồng `SPEC-QA-01` (`CT-01`..`24`, `EXT-ACCEPT-01`): 3 tầng thực thi (`Declarative`, `Sandboxed Wasm`, `Isolated Sidecar`), kho khóa mù, Marketplace, MCP Hub/A2A và tương thích giao thức. | **`READY_FOR_REVIEW`** | **Đặc tả ứng viên minh họa (`ILLUSTRATIVE — PRE-ADR & PRE-POC`)**; chưa tự nhận lược đồ `Manifest` đã đóng băng và đã ghi nhận rõ các điểm chờ PoC/chính sách hãng (`POC-01`..`03`, `POL-01`..`02`). |
+| **Baseline A02** | **ASTRA A02** — Phân tích Nghiệp vụ | 12 tác nhân, bản đồ thực thể, 8 máy trạng thái (`SM-01`..`08`), 13 hành trình (`WF-01`..`13`), 30 quy tắc `TP-BR-0101`..`0803`, `OPS-01`..`09`, từ điển chuẩn và `BA-OQ-001`..`005`. | `DRAFT_COMPLETED` | Đã tích hợp và truy vết 100% sang bộ PRD/SRS và Kiến trúc Hệ thống. |
+| **Gate G2** | **ASTRA A03** — Product Definition, PRD/SRS & Đặc tả Tính năng | Bộ PRD, Danh mục 16 tính năng theo 10 miền (`FT-01`..`16`), Phạm vi phát hành (`MVP v0.1` → `v1.0` → `Post-v1`), SRS (`TP-FR-0101`..`1005`, `TP-NFR-0101`..`1002`), Tiêu chí nghiệm thu (`TP-AC-*`), Ma trận truy vết và 6 đánh đổi (`TD-G2-01`..`06`). | **`READY_FOR_REVIEW`** | **Bản nháp `DRAFT — UNLOCKED SCOPE`**; đã vượt qua toàn bộ tự kiểm tra Gate G2; chờ Product Owner phê duyệt. |
+| **Baseline A04** | **ASTRA A04** — Đặc tả Sâu Extension Platform & Connectivity | Bộ 6 đặc tả `SPEC-EXT-01`..`06` (`docs/specifications/*`) và Ma trận kiểm thử hợp đồng `SPEC-QA-01` (`CT-01`..`24`, `EXT-ACCEPT-01`): 3 tầng thực thi, kho khóa mù, Marketplace, MCP Hub/A2A và tương thích giao thức. | **`READY_FOR_REVIEW`** | **Đặc tả ứng viên minh họa (`ILLUSTRATIVE — PRE-ADR & PRE-POC`)**; gắn liền với các điểm chờ PoC/chính sách hãng (`POC-01`..`03`, `POL-01`..`02`). |
+| **Gate G3** | **ASTRA A05** — Solution Architecture & Technical Design | Kiến trúc tổng thể `ARCH-SYS-01`, Lược đồ vật lý hai chế độ `ARCH-DATA-01`, Topo cụm HA `ARCH-OPS-01`, Đặc tả định tuyến/chính sách `SPEC-CORE-01`, Sổ cái `micro-USD`/OTel `SPEC-CORE-02`, Hợp đồng OpenAPI/JSON Schema/Protobuf `SPEC-API-01`, giao thức PoC `SPIKE-01`..`04` và bộ **6 ADRs (`ADR-0001`..`0006`)**. | **`READY_FOR_REVIEW`** | **Thiết kế Đề xuất (`PROPOSED — PRE-APPROVAL`)**. Đã vượt qua toàn bộ 6 mục tự kiểm tra kiến trúc A05; **chưa viết code ứng dụng hay code PoC** chờ Product Owner phê duyệt. |
 
 ---
 
@@ -264,5 +265,21 @@
 | **POC-03** | Giao thức IPC chuẩn cho `Isolated Sidecar` (Tầng 3) | Lựa chọn giữa `gRPC / ConnectRPC` và `HTTP/2 JSON + SSE` qua Unix Domain Socket / mTLS gắn liền với ngôn ngữ nhân Core (`OQ-001`). | Chốt đồng thời cùng ADR chọn ngôn ngữ Core (`OQ-001`). |
 | **POL-01** | Danh sách hãng AI thương mại cho phép `Authorized OAuth` / `Device Flow` bên thứ ba | Chính sách cấp phép OAuth thay đổi riêng theo từng hãng; không thể giả định phổ quát. | Chỉ bật trên `Official Adapter` khi có tài liệu điều khoản công khai hợp lệ của chính hãng đó. |
 | **POL-02** | Chi tiết đăng ký ứng dụng động trong đặc tả Ủy quyền MCP (`DCR` vs `Client Metadata`) | Chuẩn ủy quyền của hệ sinh thái MCP đang cập nhật nhanh trong năm 2025–2026. | Giữ mô-đun cấu hình máy chủ ủy quyền MCP tách rời để chốt chuẩn mới nhất khi làm `v0.2`. |
+
+---
+
+## Phần H — Sáu Quyết định Kiến trúc Hệ thống (`ADR-0001`..`0006`) & Bốn Giao thức Thử nghiệm (`SPIKE-01`..`04`) Trình Duyệt Tại Gate G3 (Từ Pha A05)
+
+> Toàn bộ tài liệu kiến trúc chi tiết nằm tại [`docs/architecture/adr/`](../architecture/adr/README.md) và [`docs/architecture/system-design.md`](../architecture/system-design.md). Giữ nguyên trạng thái **`PROPOSED`** chờ Product Owner phê duyệt rõ ràng trước khi chuyển sang viết code hoặc chạy PoC thực nghiệm:
+
+| Mã ADR | Quyết định kiến trúc đề xuất (`PROPOSED`) | Câu hỏi mở được giải quyết | Trạng thái & Điều kiện mở khóa |
+|---|---|---|---|
+| [**`ADR-0001`**](../architecture/adr/0001-core-runtime-and-modular-monolith.md) | Chọn **Go (`1.24+`, `CGO_ENABLED=0`) Modular Monolith** có cờ tách vai trò `--role=all \| data-plane \| control-plane` cho Tanpopo Core & CLI. | `OQ-001` | `PROPOSED` — Cần Owner phê duyệt. |
+| [**`ADR-0002`**](../architecture/adr/0002-three-tier-extension-sandbox-and-blind-broker.md) | Thực thi phần mở rộng 3 tầng cô lập (`Declarative` + `Pure-Go Wazero Wasm Sandbox` + `ConnectRPC Isolated Sidecar`) + `Blind Host Credential Broker`; `0` mã không tin cậy chạy in-process. | `OQ-002`, `SD-G1-02`, `POC-01`..`03` | `PROPOSED` — Cần Owner duyệt & cho phép chạy `SPIKE-01`, `SPIKE-02`. |
+| [**`ADR-0003`**](../architecture/adr/0003-dual-mode-persistence-and-cluster-state.md) | Lưu trữ hai chế độ sau `storage/port`: **SQLite WAL** (đơn nút) & **PostgreSQL `16+` + Valkey/Redis** (cụm HA, phân vùng bảng theo tháng + `RLS`). | `OQ-004`, `SD-G1-01`, `TD-G2-06` | `PROPOSED` — Cần Owner phê duyệt. |
+| [**`ADR-0004`**](../architecture/adr/0004-web-console-stack-astryx-evaluation-and-repo-layout.md) | Phê chuẩn qua đánh giá độc lập stack **SPA tĩnh `TypeScript + React 19 + Vite + StyleX + Astryx v0.7.13 (neutral)`** nhúng vào binary Go (`embed.FS`), dời về `web/console/` và đồng bộ giấy phép **Apache-2.0**. | `OQ-007`, `ASM-003`, `ASM-008`, `ISS-001`..`005` | `PROPOSED` — Cần Owner phê duyệt trước khi dời thư mục gốc. |
+| [**`ADR-0005`**](../architecture/adr/0005-two-phase-budget-ledger-and-commercial-billing-separation.md) | Sổ cái ngân sách hai pha số nguyên `BIGINT micro-USD`, gắn nhãn độ chính xác `EXACT / ESTIMATED / UNMETERED_FLAGGED`, tách biệt cứng thanh toán API thương mại khỏi thuê bao cá nhân. | `BA-OQ-002`, `TD-G2-03`, `DEC-004` | `PROPOSED` — Cần Owner duyệt & kiểm chứng `SPIKE-03`. |
+| [**`ADR-0006`**](../architecture/adr/0006-immutable-config-snapshots-and-fast-revocation.md) | Ảnh chụp cấu hình bất biến `Copy-on-Write ConfigSnapshot` + truyền tin thu hồi 3 lớp (`Valkey Pub/Sub` + `PG LISTEN/NOTIFY` + nhịp `2s`) đạt SLA `< 1s` / `< 5s` + chế độ lỗi phân tầng. | `BA-OQ-003`, `TP-NFR-0404`, `RSK-011` | `PROPOSED` — Cần Owner phê duyệt. |
+
 
 

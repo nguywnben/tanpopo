@@ -1,9 +1,9 @@
 # Sổ Đăng ký Rủi ro Sản phẩm, Pháp lý, Kỹ thuật & Hệ sinh thái (Risk Register) — Tanpopo
 
-> **Tài liệu Discovery (Phase ASTRA A01 — Gate G1: `READY_FOR_REVIEW`)**
+> **Tài liệu Quản trị Rủi ro Liên tục (Updated through Phase ASTRA A05 — Gate G1/G3: `READY_FOR_REVIEW`)**
 > - **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Product Intelligence Lead
-> - **Phương pháp chấm điểm:** `Điểm Rủi ro = Khả năng xảy ra (1–5) × Mức độ tác động (1–5)`. Các rủi ro được xếp hạng từ cao xuống thấp để ưu tiên kiểm soát ngay từ giai đoạn chốt kiến trúc và lập PRD.
+> - **Vai trò biên soạn:** Product Intelligence Lead & Principal Security/SRE Architect
+> - **Phương pháp chấm điểm:** `Điểm Rủi ro = Khả năng xảy ra (1–5) × Mức độ tác động (1–5)`. Đã cập nhật biện pháp kiểm soát kiến trúc cụ thể từ bước **A05 (`ADR-0001`..`0006`, `ARCH-SYS-01`, `ARCH-DATA-01`, `ARCH-OPS-01`)** và bổ sung 3 rủi ro kỹ thuật tầng sâu (`RSK-013`..`RSK-015`).
 
 ---
 
@@ -28,5 +28,8 @@
 
 | Mã | Nhóm rủi ro | Mô tả ngắn gọn | Điểm (L×I) | Hướng kiểm soát |
 |---|---|---|---|---|
-| **RSK-011** | **Hệ thống Phân tán (Cluster Sync Lag)** | Độ trễ truyền tin thu hồi khóa khẩn cấp hoặc lệch bộ đếm tốc độ giữa các node khi chạy chế độ mở rộng nhiều bản sao (`UC-07`). | **8** (`2 × 4`) | Dùng cơ chế phát sự kiện thu hồi tức thì (Redis/Valkey Pub/Sub kết hợp TTL bộ nhớ đệm cục bộ rất ngắn `<= 2–5 giây`) và chế độ an toàn khi mất kết nối cụm. |
-| **RSK-012** | **Bản quyền & Chuỗi cung ứng (`ISS-002`)** | Xung đột khai báo giấy phép trong repo (như `Apache-2.0` vs `ISC` hiện tại) hoặc kéo nhầm thư viện phụ thuộc có giấy phép copyleft nghiêm ngặt (`GPL`/`AGPL`) làm cản trở doanh nghiệp tự host. | **6** (`2 × 3`) | Đồng bộ toàn bộ dự án về **Apache-2.0** ngay khi chốt `OQ-007` và tích hợp bước quét giấy phép phụ thuộc tự động trong CI. |
+| **RSK-011** | **Hệ thống Phân tán (Cluster Sync Lag)** | Độ trễ truyền tin thu hồi khóa khẩn cấp hoặc lệch bộ đếm tốc độ giữa các node khi chạy chế độ mở rộng nhiều bản sao (`UC-07`). | **8** (`2 × 4`) | Thiết kế `ADR-0006` & `ARCH-OPS-01`: `Copy-on-Write ConfigSnapshot` + truyền tin 3 lớp (`Valkey Pub/Sub` + `PostgreSQL LISTEN/NOTIFY` + đối chiếu `config_epoch` mỗi `2s`) và ngắt mạch nút mù `> 10s`. |
+| **RSK-012** | **Bản quyền & Chuỗi cung ứng (`ISS-002`)** | Xung đột khai báo giấy phép trong repo (như `Apache-2.0` vs `ISC` hiện tại) hoặc kéo nhầm thư viện phụ thuộc có giấy phép copyleft nghiêm ngặt (`GPL`/`AGPL`) làm cản trở doanh nghiệp tự host. | **6** (`2 × 3`) | Quy hoạch tại `ADR-0004`: đồng bộ toàn bộ dự án về **Apache-2.0**, dùng nhị phân Go thuần `CGO_ENABLED=0` (`wazero`) và tích hợp quét giấy phép/SBOM tự động trong CI. |
+| **RSK-013** | **Lưu trữ Hai Chế độ (`Dual-DB Dialect Drift`)** | Sai lệch hành vi giao dịch, kiểu thời gian hoặc khóa ngoại giữa `SQLite WAL` (đơn nút) và `PostgreSQL 16+` (cụm HA) gây lỗi chỉ xuất hiện khi người dùng nâng cấp quy mô (`ADR-0003`). | **9** (`3 × 3`) | Áp dụng 6 quy tắc khả chuyển tại `ARCH-DATA-01` (`UUIDv7 TEXT`, tiền tệ `BIGINT micro-USD`, kiểm soát lạc quan `version`), cách ly sau `storage/port` và bắt buộc chạy toàn bộ bộ test tích hợp trên **cả SQLite lẫn PostgreSQL** trong mỗi PR. |
+| **RSK-014** | **An ninh Mạng Biên (`DNS Rebinding & SSRF`)** | Kẻ tấn công cấu hình URL nhà cung cấp/MCP/ảnh đa phương thức trỏ tới tên miền có `TTL = 0` đổi IP về `169.254.169.254` hoặc mạng nội bộ ngay lúc mở kết nối (`TP-FR-0702`). | **10** (`2 × 5`) | Thiết kế `SSRFGuard` tại `ARCH-SYS-01` Mục 5: kiểm tra trực tiếp địa chỉ IP đã phân giải ngay trong móc `net.Dialer.Control` (lúc `connect()`) và tắt tự động đuổi theo HTTP Redirect chéo miền. |
+| **RSK-015** | **Quan sát Vận hành (`Telemetry Cardinality & Backpressure`)** | Nhãn metric chứa trường không giới hạn (`request_id`, `key_id`) làm sập Prometheus/OTel, hoặc bộ thu OTLP ngoài bị treo làm nghẽn ngược bộ nhớ Data Plane (`TP-FR-0805`). | **8** (`2 × 4`) | Khóa chặt tập nhãn cố định tại `SPEC-CORE-02` Mục 3.2 (`0` nhãn cardinality cao) và giới hạn cứng vòng đệm OTLP (`32 MB`, chế độ `Drop-Oldest` + bộ đếm `tanpopo_telemetry_dropped_total`). |
