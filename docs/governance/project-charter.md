@@ -1,10 +1,10 @@
 # Project Charter — Tanpopo
 
-> **Tài liệu nguồn (Canonical Context Artifact — Phase A00)**
-> - **Phiên bản:** `0.1.0-a00`
+> **Tài liệu nguồn (Canonical Context Artifact — Updated at Phase A01)**
+> - **Phiên bản:** `0.2.0-a01`
 > - **Ngày cập nhật:** `2026-11-11`
 > - **Vai trò biên soạn:** Product Intelligence Lead & Principal Solution Architect
-> - **Trạng thái tài liệu:** Baseline chuẩn hóa bối cảnh (chưa phải PRD, chưa khóa kiến trúc/stack/UI/scope chi tiết)
+> - **Trạng thái tài liệu:** Baseline chuẩn hóa bối cảnh kết hợp kết quả Product Discovery (Cổng **Gate G1: `READY_FOR_REVIEW`** — chưa phải PRD đã duyệt, chưa khóa kiến trúc/stack/UI/scope chi tiết)
 
 ---
 
@@ -118,23 +118,26 @@ flowchart TD
 - **NG3 [`REJECTED`]:** Duy trì, quảng bá hoặc hợp thức hóa các connector lách điều khoản để biến consumer subscriptions (ChatGPT Plus/Pro, Codex, Antigravity...) thành general-purpose API.
 - **NG4 [`REJECTED`]:** Trộn lẫn khái niệm Provider, Plugin, MCP và A2A thành một mô hình dữ liệu hoặc giao thức nhập nhằng.
 
-### 6.3. Giới hạn phạm vi đề xuất cho giai đoạn đầu (`PROPOSED` — Chờ Owner duyệt ở bước lập PRD)
+### 6.3. Giới hạn phạm vi đề xuất cho giai đoạn đầu (`PROPOSED` — Chờ Owner duyệt tại Gate G1 / PRD)
 - **NG-P1 [`PROPOSED`]:** Không xây dựng nền tảng huấn luyện/fine-tuning mô hình hoặc lưu trữ trọng số mô hình (model weights hosting — như Ollama/vLLM), mà chỉ đóng vai trò Gateway kết nối tới chúng.
 - **NG-P2 [`PROPOSED`]:** Không tự vận hành dịch vụ đám mây thu phí trung gian (managed SaaS billing clearinghouse) trong phạm vi cốt lõi mã nguồn mở ban đầu; ưu tiên trọn vẹn cho mô hình self-hosted.
 - **NG-P3 [`PROPOSED`]:** Không xây dựng framework viết kịch bản ứng dụng AI (như LangChain/LlamaIndex) bên trong Gateway Core.
+- **NG-P4 [`PROPOSED`]:** Không ôm đồm nền tảng đánh giá chấm điểm mô hình quy mô lớn (LLM-as-a-Judge / Live Shadow Traffic Evals) ngay trong nhân Core để tránh phình to phạm vi và rủi ro dữ liệu nhạy cảm (chi tiết tại [`docs/discovery/positioning-and-success-metrics.md`](../discovery/positioning-and-success-metrics.md)).
 
 ---
 
-## 7. Giả thuyết về Đối tượng sử dụng & Quy mô mục tiêu (`ASSUMED` — Chưa phê duyệt)
+## 7. Giả thuyết về Đối tượng sử dụng, Vai trò & Quy mô mục tiêu (`PROPOSED` / `ASSUMED` — Chờ duyệt tại Gate G1)
 
-> Các mục dưới đây là giả thuyết phân tích (`ASSUMED`) để định hướng câu hỏi kiến trúc, chi tiết theo dõi tại [`docs/governance/assumptions.md`](./assumptions.md).
+> Các mục dưới đây đã được phân tích sâu và xếp hạng ở pha Product Discovery (xem [`docs/discovery/users-jobs-use-cases.md`](../discovery/users-jobs-use-cases.md) và [`docs/governance/assumptions.md`](./assumptions.md)), đang trình Product Owner xem xét tại **Gate G1 (`SD-G1-01`)**.
 
-1. **Nhóm người dùng mục tiêu (`ASSUMED` — `ASM-001`):**
-   - *Nhóm A — Kỹ sư độc lập & Nhóm sản phẩm nhỏ:* Cần một cổng AI tự host gọn nhẹ (1 lệnh chạy / 1 Docker container) để thống nhất nhiều provider, kiểm soát ngân sách và nối MCP tools vào công cụ làm việc.
-   - *Nhóm B — Đội ngũ Platform / AI Engineering trong doanh nghiệp:* Cần cổng kiểm soát tập trung có private plugin registry, custom corporate auth, chính sách bảo mật, phân tách ngân sách theo phòng ban/dự án và khả năng mở rộng ngang (horizontal scaling).
-   - *Nhóm C — Tác giả phát triển Extension (Plugin Authors):* Cần SDK rõ ràng, bộ công cụ test hợp đồng (contract test harness) để xuất bản adapter lên Git/marketplace mà không phải fork Tanpopo Core.
-2. **Đặc tính tải vận hành (`ASSUMED` — `ASM-002`):**
-   - Đường dữ liệu (Data Plane) chủ yếu xử lý kết nối giữ lâu (long-lived streaming SSE / WebSockets / HTTP chunked) đòi hỏi độ trễ cộng thêm tại Gateway thấp và bộ nhớ trên mỗi kết nối nhỏ.
+1. **Thứ tự ưu tiên phân khúc người dùng (`PROPOSED` — `SD-G1-01`):**
+   - **Ưu tiên #1 (Beachhead):** *Dev Teams (5–50 kỹ sư)* — nối đa mô hình + MCP vào sản phẩm/coding agents, tốc độ quyết định áp dụng cao nhất.
+   - **Ưu tiên #2 (Đồng mũi nhọn mở rộng):** *AI Platform Teams (50–500 kỹ sư)* — cần tích hợp dịch vụ nội bộ, custom auth, ngân sách phòng ban và là lực lượng chính phát triển Provider Adapters / Private Extensions.
+   - **Ưu tiên #3 (Phễu lan tỏa tự nhiên):** *AI Power Users & Solo Developers chính thống (BYOK & Local Models)*.
+   - **Ưu tiên #4 (Mục tiêu `v1.0+`):** *Regulated Enterprise (>1.000 nhân sự)* — hoãn các yêu cầu tuân thủ chuyên sâu (FIPS/HSM/SLA thương mại) sang giai đoạn nền tảng đã chín muồi.
+2. **Bốn vai trò chức năng độc lập (`PROPOSED`):** `R1 — Gateway Operator`, `R2 — API Consumer Developer`, `R3 — Plugin/Adapter Publisher`, và `R4 — Security & FinOps Admin`.
+3. **Đặc tính tải vận hành (`ASSUMED` — `ASM-002`):**
+   - Đường dữ liệu (Data Plane) chủ yếu xử lý kết nối giữ lâu (long-lived streaming SSE / WebSockets / HTTP chunked) đòi hỏi độ trễ cộng thêm tại Gateway thấp (`< 2–5 ms p95`) và bộ nhớ trên mỗi kết nối nhỏ.
 
 ---
 
@@ -158,7 +161,7 @@ flowchart TD
 | **Control Plane** | Hệ thống cấu hình, quản lý vòng đời plugin, cấp phát khóa truy cập nội bộ, cấu hình route/policy và cung cấp API cho Web Console / CLI. |
 | **Data Plane** | Đường xử lý lưu lượng thời gian thực (LLM inference requests, streaming chunks, MCP tool calls, A2A messages) yêu cầu hiệu năng cao, độ trễ thấp và chịu lỗi tốt. |
 | **Provider** | Dịch vụ đích cung cấp mô hình AI (đám mây thương mại, đám mây nội bộ doanh nghiệp hoặc máy chủ suy luận tự vận hành). |
-| **Provider Adapter** | Một loại Extension chuyên biệt thực thi hợp đồng chuyển đổi giao thức, xác thực, danh mục model, chuẩn hóa lỗi và định lượng token/chi phí giữa Tanpopo Core và một Provider cụ thể. |
+| **Provider Adapter** | Một loại Extension chuyên biệt thực thi hợp đồng chuyển đổi giao thức, xác thực, danh mục model, chuẩn hóa lỗi và định량 token/chi phí giữa Tanpopo Core và một Provider cụ thể. |
 | **Extension (Plugin)** | Đơn vị phần mềm đóng gói độc lập kèm manifest khai báo quyền hạn, phiên bản hợp đồng và điểm ghép nối (extension points) để mở rộng Tanpopo mà không cần biên dịch/phát hành lại Core. |
 | **Official Adapter** | Adapter do dự án Tanpopo trực tiếp kiểm định, ký xác nhận và duy trì dựa trên API và phương thức xác thực chính thức của nhà cung cấp. |
 | **Community / Private Adapter** | Adapter do cá nhân/tổ chức thứ ba tự phát triển và phân phối bên ngoài phạm vi bảo chứng của Tanpopo. |

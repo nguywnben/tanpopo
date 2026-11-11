@@ -1,8 +1,17 @@
 # Decision Register & Blocking Open Questions — Tanpopo
 
-> **Tài liệu nguồn (Canonical Decision Log — Phase A00)**
+> **Tài liệu nguồn (Canonical Decision Log — Updated at Phase A01)**
 > - **Ngày cập nhật:** `2026-11-11`
-> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER` nếu Product Owner chưa trực tiếp phê duyệt. Các thành phần kiến trúc, tech stack, UI chi tiết và scope phát hành hiện đều ở trạng thái `OPEN` / `PROPOSED`.
+> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Các thành phần kiến trúc, tech stack, UI chi tiết và scope phát hành hiện đều ở trạng thái `OPEN` / `PROPOSED`.
+
+---
+
+## Bảng Theo dõi Cổng Phê duyệt Giai đoạn (Stage-Gate Status Tracker)
+
+| Cổng (Gate) | Pha tương ứng | Nội dung kiểm định | Trạng thái hiện tại | Ghi chú quản trị |
+|---|---|---|---|---|
+| **Gate G0** | **ASTRA A00** — Tiếp nhận & Chuẩn hóa Bối cảnh | Kiểm kê hiện trạng repo, xác minh 3 nhiệm vụ setup, tách bạch quyết định thật và giả định. | `COMPLETED` | Đã thiết lập baseline bối cảnh tại `docs/governance/*` và `docs/README.md`. |
+| **Gate G1** | **ASTRA A01** — Product Discovery | Định vị sản phẩm, phân khúc người dùng ưu tiên, đối thủ, cơ hội/khả thi, rủi ro pháp lý/TOS, thước đo thành công, phạm vi release và 5 quyết định chiến lược (`SD-G1-01`..`SD-G1-05`). | **`READY_FOR_REVIEW`** | **Chờ Product Owner xem xét và phê duyệt.** Agent tuyệt đối không tự đánh dấu `APPROVED`. |
 
 ---
 
@@ -17,6 +26,7 @@
 | **DEC-005** | Kho mã nguồn & Định danh Git | Làm việc trên repository chính thức `https://github.com/nguywnben/tanpopo` (nhánh `main`), cấu hình Git author `Nguyễn Công Ben <nben940665@gmail.com>`. | `CONFIRMED_BY_OWNER` & `VERIFIED_IN_REPO` | Git remote, commit `0a35b74`, `6b73bcd` |
 | **DEC-006** | Công cụ quy trình phát triển cho Agent | Cài đặt cục bộ bộ 25 kỹ năng kỹ thuật phần mềm từ `addyosmani/agent-skills` (`https://skills.addy.ie/`) vào `.agents/skills/` kèm tài liệu tham chiếu `.agents/references/` và personas `.agents/agents/`. | `CONFIRMED_BY_OWNER` & `VERIFIED_IN_REPO` | `skills-lock.json`, `.agents/`, commit `6b73bcd` |
 | **DEC-007** | Khởi tạo Design System & Cảm quan màu sắc mặc định | Đã cài đặt `@astryxdesign/core`, `@stylexjs/stylex`, `@astryxdesign/theme-neutral`, `@astryxdesign/cli`, chạy `astryx init` (`AGENTS.md`, `GEMINI.md`) và chọn gói cảm quan giao diện mặc định là **`neutral`** (`astryx-themes.js`). **Lưu ý phạm vi:** Quyết định này chỉ thiết lập thư viện/theme nền cho phần UI sử dụng Astryx, **chưa khóa** kiến trúc hệ thống tổng thể, ngôn ngữ lập trình Core hay cấu trúc thư mục dự án. | `CONFIRMED_BY_OWNER` & `VERIFIED_IN_REPO` | `package.json`, `astryx-themes.js`, `AGENTS.md`, phiên hỏi đáp look-and-feel |
+| **DEC-008** | Kỷ luật Git Commit theo từng bước | Thực hiện commit nguyên tử (atomic commit) riêng biệt ngay sau khi hoàn thành và kiểm chứng xong mỗi bước/pha (`A00`, `A01`, ...) để bảo toàn mốc lịch sử rõ ràng, dễ kiểm tra diff và khôi phục khi cần. | `CONFIRMED_BY_OWNER` | Yêu cầu trực tiếp của Product Owner ("Nhớ commit mỗi bước") |
 
 ---
 
@@ -31,9 +41,71 @@
 
 ---
 
-## Phần C — Danh mục Câu hỏi Mở có tính chất Chặn (Blocking Open Questions)
+## Phần C — Năm Quyết định Chiến lược Cần Product Owner Phê duyệt tại Gate G1 (`SD-G1-01`..`SD-G1-05`)
 
-> Các câu hỏi dưới đây có tác động kiến trúc sâu rộng (chi phí đảo ngược cao nếu đoán sai). Agent **không tự suy diễn** và trình bày rõ phương án đề xuất (`PROPOSED`) kèm đánh đổi để Product Owner chốt ở bước tiếp theo.
+> **Trạng thái Gate G1:** `READY_FOR_REVIEW` (Chưa `APPROVED`). Product Owner chỉ cần chốt 5 quyết định chiến lược cấp sản phẩm dưới đây để mở khóa pha Đặc tả Yêu cầu Sản phẩm (PRD) tiếp theo.
+
+### SD-G1-01: Chọn Phân khúc Người dùng Mũi nhọn (Beachhead Persona) & Mô hình Khởi chạy Tự vận hành
+- **Trạng thái:** `OPEN` (Đề xuất: `PROPOSED` — **Option 1**)
+- **Liên kết phân tích:** [`users-jobs-use-cases.md`](../discovery/users-jobs-use-cases.md), `ASM-001`, `OQ-004`.
+- **Các lựa chọn:**
+  1. **Option 1 (Khuyến nghị):** **Mũi nhọn kép vào Dev Teams (5–50 kỹ sư) & AI Platform Teams (50–500 kỹ sư)** thông qua kiến trúc hai chế độ lưu trữ: mặc định chạy ngay trong 1 lệnh không phụ thuộc ngoài (SQLite nhúng + sẵn Web Console/CLI — thu hút cả nhóm nhỏ lẫn Solo Dev chính thống), và mở rộng ngang liền mạch sang PostgreSQL + Redis khi lên quy mô lớn; hoãn phân khúc Ngân hàng/Chính phủ quy mô >1.000 người đòi hỏi chứng chỉ chuyên biệt sang `v1.0+`.
+  2. **Option 2:** **Nhắm thẳng vào Tập đoàn Lớn chịu quản lý chặt (Regulated Enterprise) ngay từ `v0.1`** — bắt buộc cụm PostgreSQL + Redis + Kubernetes + HSM/Vault ngay từ bản cài tối thiểu (hy sinh tốc độ lan tỏa cộng đồng và độ dễ dùng).
+  3. **Option 3:** **Chỉ tối ưu cho Cá nhân / Solo Developer chạy cục bộ** — lược bỏ thiết kế phân quyền nhiều nhóm, ngân sách phòng ban và chế độ chạy cụm phân tán (dễ làm nhanh nhưng sớm kịch trần quy mô).
+- **Recommendation:** Chọn **Option 1** để vừa đạt tốc độ áp dụng tự nhiên từ dưới lên (`TTFGR < 3 phút`), vừa giữ đúng cam kết *"dùng được thực tế và có thể mở rộng quy mô"*.
+
+---
+
+### SD-G1-02: Mô hình Thực thi Plugin Cô lập & Hạ tầng Phân phối Marketplace
+- **Trạng thái:** `OPEN` (Đề xuất: `PROPOSED` — **Option 1**)
+- **Liên kết phân tích:** [`opportunity-and-feasibility.md`](../discovery/opportunity-and-feasibility.md), `OQ-002`, `RSK-001`, `RSK-004`, `RSK-005`.
+- **Các lựa chọn:**
+  1. **Option 1 (Khuyến nghị):** **Động cơ Hai Tầng Kết hợp (Declarative Pack cho ~75–80% hãng chuẩn + Wasm Capability Sandbox cho giao thức/xác thực phức tạp) đi kèm Blind Credential Broker và Danh mục Marketplace Tĩnh (Git/OCI/URL + Private Registry)**.
+  2. **Option 2:** **Bắt buộc biên dịch mã (Wasm hoặc tiến trình con Subprocess) cho mọi Adapter** và tự vận hành máy chủ Marketplace SaaS động tập trung (rào cản viết adapter mới cao hơn và phát sinh chi phí nuôi máy chủ chợ hàng tháng).
+  3. **Option 3:** **Chỉ hỗ trợ cấu hình Khai báo YAML/JSON thuần túy** mà không có môi trường lập trình sandbox (an toàn và nhẹ nhất nhưng bất lực trước các luồng ký số/xác thực nội bộ đặc thù của doanh nghiệp).
+- **Recommendation:** Chọn **Option 1** (kiểm chứng kỹ thuật sớm qua `EXP-01` và `EXP-02`) vì giải quyết đồng thời bài toán bảo mật khóa gốc, tốc độ tạo adapter dưới 30 phút và chi phí vận hành hạ tầng gần bằng 0.
+
+---
+
+### SD-G1-03: Phân kỳ Phạm vi Phát hành từ `v0.1` đến `v1.0` (Release Scope & Phasing)
+- **Trạng thái:** `OPEN` (Đề xuất: `PROPOSED` — **Option 1**)
+- **Liên kết phân tích:** [`positioning-and-success-metrics.md`](../discovery/positioning-and-success-metrics.md), `OQ-006`, `RSK-002`.
+- **Các lựa chọn:**
+  1. **Option 1 (Khuyến nghị):** **Thiết kế Khung Miền 4 Lớp Ngay từ Đầu, Giao hàng Cuốn chiếu 3 Nhịp:**
+     - `v0.1`: Core + Unified/Passthrough LLM API + Plugin Engine + 5–6 Official Adapters + Routing/Budget/Telemetry cơ bản + Web Console & CLI cốt lõi.
+     - `v0.2`: Mặt phẳng quản trị **MCP Plane** (lọc quyền tool, ghim `schema_hash`, OAuth 2.1 được cấp phép) + Chỉ mục Registry & công cụ replay test.
+     - `v0.3`: Mặt phẳng kết nối **A2A Plane** + Chế độ cụm **Scale-out HA** (Postgres/Redis) → tiến tới đóng băng hợp đồng ở `v1.0`.
+  2. **Option 2:** **Đưa cả Mặt phẳng MCP vào ngay bản `v0.1` đầu tiên**, chỉ lùi A2A và HA sang `v0.2` (có điểm nhấn MCP sớm ngay ngày ra mắt đầu tiên nhưng kéo dài thời gian phát triển `v0.1` thêm khoảng 40–50%).
+  3. **Option 3:** **Làm đồng loạt cả 4 mặt phẳng (`Provider + Plugin + MCP + A2A + HA`) ngay trước khi phát hành bản đầu tiên** (rủi ro trễ tiến độ và loãng chất lượng rất cao — `RSK-002`).
+- **Recommendation:** Chọn **Option 1** để sớm có sản phẩm chạy thật kiểm chứng hệ thống Plugin, trong khi kiến trúc nền đã chừa sẵn khớp nối chuẩn cho MCP ở ngay nhịp kế tiếp `v0.2`.
+
+---
+
+### SD-G1-04: Quản trị Hệ sinh thái Extension Bên ngoài & Thực thi Ranh giới Pháp lý/TOS
+- **Trạng thái:** `OPEN` (Đề xuất: `PROPOSED` — **Option 1**)
+- **Liên kết phân tích:** [`opportunity-and-feasibility.md`](../discovery/opportunity-and-feasibility.md), `DEC-004`, `OQ-005`, `RSK-003`.
+- **Các lựa chọn:**
+  1. **Option 1 (Khuyến nghị):** **Kiểm duyệt Nghiêm ngặt trên Kênh Chính thức + Runtime Tự vận hành Minh bạch Quyền & Nguồn gốc:** Chỉ cấp nhãn `official` / `verified` và liệt kê trên danh mục của Tanpopo các gói tuân thủ API/OAuth hợp lệ (Vùng 1 & Vùng 2); với gói do quản trị viên tự cài từ URL/kho nội bộ, Runtime yêu cầu duyệt quyền mạng/bí mật tường minh, đóng dấu `unverified-external` trong nhật ký kiểm toán, bảo vệ nhãn hiệu chống mạo danh và hỗ trợ danh sách cảnh báo thu hồi (`revocation feed`).
+  2. **Option 2:** **Khóa cứng Runtime chỉ cho chạy các gói đã có chữ ký số phê duyệt của dự án Tanpopo** (loại trừ rủi ro plugin lạ nhưng phá vỡ tính tự chủ của doanh nghiệp muốn chạy cổng nội bộ riêng tư không công bố ra ngoài).
+  3. **Option 3:** **Nhúng danh sách chặn cứng (Hardcoded Blocklist) tên miền/header vào mã nguồn Core** (dễ bị sửa/fork trong phần mềm nguồn mở và có nguy cơ chặn nhầm tích hợp doanh nghiệp hợp pháp).
+- **Recommendation:** Chọn **Option 1** vì bảo vệ vững chắc uy tín pháp lý của dự án Tanpopo theo đúng `DEC-004` mà vẫn giữ trọn giá trị tự chủ cho doanh nghiệp self-hosted.
+
+---
+
+### SD-G1-05: Chiến lược Giấy phép Mã nguồn Mở & Ranh giới Tính năng Tự vận hành
+- **Trạng thái:** `OPEN` (Đề xuất: `PROPOSED` — **Option 1**)
+- **Liên kết phân tích:** [`market-and-competitors.md`](../discovery/market-and-competitors.md), `C-01`, `ASM-008`, `OQ-007`, `ISS-002`.
+- **Các lựa chọn:**
+  1. **Option 1 (Khuyến nghị):** **Thuần Apache License 2.0 trên toàn bộ dự án** (Core, CLI, SDK, Official Adapters và Web Console quản trị bao gồm RBAC, ngân sách, audit log, MCP/A2A governance tự host), đồng bộ lại trường `"license": "ISC"` hiện có trong `package.json` về `"Apache-2.0"`.
+  2. **Option 2:** **Mô hình Open-Core Hai Giấy phép** — giữ nhân proxy là Apache-2.0 nhưng tách các tính năng RBAC, SSO, Audit Log, Private Registry sang thư mục thương mại đóng giống LiteLLM / Bifrost / Portkey.
+  3. **Option 3:** **Giấy phép Source-Available có điều kiện hạn chế thương mại** (kiểu Modified Apache-2.0 như Dify hoặc BSL/AGPLv3).
+- **Recommendation:** Chọn **Option 1** để tạo lợi thế cạnh tranh đối kháng trực diện (*counter-positioning*) trước các đối thủ Open-Core đang khóa tính năng quản trị bảo mật tự host sau tường phí Enterprise, giúp xóa bỏ mọi rào cản pháp lý khi các đội kỹ thuật đưa Tanpopo vào doanh nghiệp.
+
+---
+
+## Phần D — Danh mục Câu hỏi Kiến trúc Kỹ thuật Chi tiết (`OQ-001`..`OQ-007`)
+
+> Các câu hỏi kiến trúc thiết lập từ bước A00 dưới đây tiếp tục giữ trạng thái `OPEN` / `PROPOSED` và sẽ được chốt chi tiết cùng bước Kiến trúc Hệ thống sau khi Product Owner duyệt 5 quyết định chiến lược ở Phần C.
 
 ---
 
