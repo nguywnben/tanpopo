@@ -1,8 +1,8 @@
 # Decision Register & Blocking Open Questions — Tanpopo
 
-> **Tài liệu nguồn (Canonical Decision Log — Updated through Phase A05)**
+> **Tài liệu nguồn (Canonical Decision Log — Updated through Phase A06)**
 > - **Ngày cập nhật:** `2026-11-11`
-> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER`, `ACCEPTED` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Toàn bộ phạm vi sản phẩm (`G1`/`G2`), đặc tả hợp đồng (`Baseline A04`) và kiến trúc kỹ thuật/ADRs (`Gate G3 — ADR-0001..0006`) hiện đều ở trạng thái **`READY_FOR_REVIEW` / `PROPOSED`**.
+> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER`, `ACCEPTED` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Toàn bộ phạm vi sản phẩm (`G1`/`G2`), đặc tả hợp đồng (`Baseline A04`), kiến trúc kỹ thuật/ADRs (`Gate G3 — ADR-0001..0006`) và thiết kế UX/UI, DX & Vận hành (`Baseline A06`) hiện đều ở trạng thái **`READY_FOR_REVIEW` / `PROPOSED`**.
 
 ---
 
@@ -12,10 +12,11 @@
 |---|---|---|---|---|
 | **Gate G0** | **ASTRA A00** — Tiếp nhận & Chuẩn hóa Bối cảnh | Kiểm kê hiện trạng repo, xác minh 3 nhiệm vụ setup, tách bạch quyết định thật và giả định. | `COMPLETED` | Đã thiết lập baseline bối cảnh tại `docs/governance/*` và `docs/README.md`. |
 | **Gate G1** | **ASTRA A01** — Product Discovery | Định vị sản phẩm, phân khúc người dùng ưu tiên, đối thủ, cơ hội/khả thi, rủi ro pháp lý/TOS, thước đo thành công, phạm vi release và 5 quyết định chiến lược (`SD-G1-01`..`SD-G1-05`). | **`READY_FOR_REVIEW`** | **Product Owner chưa phê duyệt.** Giữ nguyên trạng thái chờ duyệt, không tự động nâng lên `APPROVED`. |
-| **Baseline A02** | **ASTRA A02** — Phân tích Nghiệp vụ | 12 tác nhân, bản đồ thực thể, 8 máy trạng thái (`SM-01`..`08`), 13 hành trình (`WF-01`..`13`), 30 quy tắc `TP-BR-0101`..`0803`, `OPS-01`..`09`, từ điển chuẩn và `BA-OQ-001`..`005`. | `DRAFT_COMPLETED` | Đã tích hợp và truy vết 100% sang bộ PRD/SRS và Kiến trúc Hệ thống. |
+| **Baseline A02** | **ASTRA A02** — Phân tích Nghiệp vụ | 12 tác nhân, bản đồ thực thể, 8 máy trạng thái (`SM-01`..`08`), 13 hành trình (`WF-01`..`13`), 30 quy tắc `TP-BR-0101`..`0803`, `OPS-01`..`09`, từ điển chuẩn và `BA-OQ-001`..`005`. | `DRAFT_COMPLETED` | Đã tích hợp và truy vết 100% sang bộ PRD/SRS, Kiến trúc Hệ thống và UX/Ops. |
 | **Gate G2** | **ASTRA A03** — Product Definition, PRD/SRS & Đặc tả Tính năng | Bộ PRD, Danh mục 16 tính năng theo 10 miền (`FT-01`..`16`), Phạm vi phát hành (`MVP v0.1` → `v1.0` → `Post-v1`), SRS (`TP-FR-0101`..`1005`, `TP-NFR-0101`..`1002`), Tiêu chí nghiệm thu (`TP-AC-*`), Ma trận truy vết và 6 đánh đổi (`TD-G2-01`..`06`). | **`READY_FOR_REVIEW`** | **Bản nháp `DRAFT — UNLOCKED SCOPE`**; đã vượt qua toàn bộ tự kiểm tra Gate G2; chờ Product Owner phê duyệt. |
 | **Baseline A04** | **ASTRA A04** — Đặc tả Sâu Extension Platform & Connectivity | Bộ 6 đặc tả `SPEC-EXT-01`..`06` (`docs/specifications/*`) và Ma trận kiểm thử hợp đồng `SPEC-QA-01` (`CT-01`..`24`, `EXT-ACCEPT-01`): 3 tầng thực thi, kho khóa mù, Marketplace, MCP Hub/A2A và tương thích giao thức. | **`READY_FOR_REVIEW`** | **Đặc tả ứng viên minh họa (`ILLUSTRATIVE — PRE-ADR & PRE-POC`)**; gắn liền với các điểm chờ PoC/chính sách hãng (`POC-01`..`03`, `POL-01`..`02`). |
 | **Gate G3** | **ASTRA A05** — Solution Architecture & Technical Design | Kiến trúc tổng thể `ARCH-SYS-01`, Lược đồ vật lý hai chế độ `ARCH-DATA-01`, Topo cụm HA `ARCH-OPS-01`, Đặc tả định tuyến/chính sách `SPEC-CORE-01`, Sổ cái `micro-USD`/OTel `SPEC-CORE-02`, Hợp đồng OpenAPI/JSON Schema/Protobuf `SPEC-API-01`, giao thức PoC `SPIKE-01`..`04` và bộ **6 ADRs (`ADR-0001`..`0006`)**. | **`READY_FOR_REVIEW`** | **Thiết kế Đề xuất (`PROPOSED — PRE-APPROVAL`)**. Đã vượt qua toàn bộ 6 mục tự kiểm tra kiến trúc A05; **chưa viết code ứng dụng hay code PoC** chờ Product Owner phê duyệt. |
+| **Baseline A06** | **ASTRA A06** — UX/UI, Developer Experience & Vận hành SRE | Bộ 4 đặc tả UX/UI `SPEC-UX-01`..`04` (`docs/ux/*`: 11 phân khu IA, 8 hành trình `UJ-01`..`08` đủ 5 trạng thái, 16 màn hình `SCR-01`..`16`, 6 rào chắn `UX-GR`, tích hợp Astryx `neutral` & `UX-AC-01`..`12`) và 4 đặc tả DX/Vận hành `SPEC-OPS-01`..`04` (`docs/operations/*`: cài đặt đa nền tảng/Air-Gap, sao lưu/DR `RTO < 15m`, giám sát/7 sổ tay sự cố `INC-01`..`07`, `tanpopo` CLI/SDK & `OPS-AC-01`..`12`). | **`READY_FOR_REVIEW`** | **Thiết kế Trải nghiệm & Vận hành Đề xuất (`PROPOSED — NO CODE`)**. Giữ nguyên `neutral` mặc định (`DEC-007`), **không khóa theme chưa duyệt, không chạy `theme eject` và chưa lập trình frontend/backend**. |
 
 ---
 
