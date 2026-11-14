@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0010` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-018`: upstream `TP-IMP-0004` & `TP-IMP-0008` are `DONE`)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented `2026-11-15`; locally verified under `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1`; fresh `security-auditor` & `code-reviewer` `PASS`; `-race` and GitHub Actions CI pending post-push verification & Product Owner acceptance under `REQUIRES_STRONG_REVIEW`)* |
 | **Size** | `M` (`internal/security/egress/*`, `internal/security/broker/*`, `internal/extension/port/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Outbound network trust boundaries `TB-3/TB-4` & raw-secret isolation from Plugins)* |
 | **Technical Owner** | `Principal Security / Networking Engineer` |

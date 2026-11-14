@@ -1,10 +1,10 @@
 # Final Delivery Readiness Audit (`ASTRA A10` — Gate G4 Stage 2 Handoff Approved) — Tanpopo
 
 > **Independent Governance Verdict Document (ASTRA A10 + `M0` + `0005..0009` [`DEC-011`..`DEC-019`])**
-> - **Report ID:** `REV-RDY-01` | **Version:** `2.9.0-tp-imp-0009-done` | **Audit Date:** `2026-11-14`
+> - **Report ID:** `REV-RDY-01` | **Version:** `2.10.0-tp-imp-0010-ready-for-review` | **Audit Date:** `2026-11-15`
 > - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
-> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005`..`0009` accepted via `DEC-011`..`DEC-019`; **[`TP-IMP-0010`](../planning/units/TP-IMP-0010.md) & [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md) = `READY`**)*
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`9 / 47` units `DONE` [`0001..0009`] · `0 / 47` `READY_FOR_REVIEW` · `2 / 47` `READY` [`TP-IMP-0010`, `TP-IMP-0011`] · `36 / 47` `BLOCKED` behind upstream dependencies & review gates)**
+> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005`..`0009` accepted via `DEC-011`..`DEC-019`; **[`TP-IMP-0010`](../planning/units/TP-IMP-0010.md) = `READY_FOR_REVIEW`**; **[`TP-IMP-0011`](../planning/units/TP-IMP-0011.md) = `READY`**)*
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`9 / 47` units `DONE` [`0001..0009`] · `1 / 47` `READY_FOR_REVIEW` [`TP-IMP-0010`] · `1 / 47` `READY` [`TP-IMP-0011`] · `36 / 47` `BLOCKED` behind upstream dependencies & review gates)**
 
 ---
 
@@ -55,11 +55,12 @@ Every check below strictly separates **what has been verified locally in `M0`** 
 
 ---
 
-## 4. `TP-IMP-0005`..`0009` Acceptance (`DEC-011`..`DEC-019`) & Active `READY` Queue (`TP-IMP-0010`, `TP-IMP-0011`)
+## 4. `TP-IMP-0005`..`0009` Acceptance (`DEC-011`..`DEC-019`) & Active Queue (`TP-IMP-0010` `READY_FOR_REVIEW`, `TP-IMP-0011` `READY`)
 
 | Verification Check | Status | Concrete Evidence |
 |---|---|---|
 | **Governance Gate (`HANDOFF_VERDICT`)** | **`GO`** | Approved in `DEC-010`..`DEC-019` ([`decisions.md`](../governance/decisions.md)). |
 | **`TP-IMP-0005`..`0009` Acceptance Status** | **`DONE` *(Accepted `DEC-011`, `DEC-013`, `DEC-015`, `DEC-017`/`DEC-018`, `DEC-019`)* ** | `TP-IMP-0005` (`1f4f5a1`, CI `43584413913`); `CR-11` / `TP-IMP-0006` (`b929deb`, CI `43590868455`); `TP-IMP-0007` (`4cc8b6ad`, CI `43595815734`); `CR-12` Option A (`DEC-017`) & `TP-IMP-0008` (`14238799`, CI `43606876169`); **`TP-IMP-0009` (`REQUIRES_STRONG_REVIEW`, standalone single-node scope) accepted (`DEC-019`) at `c3e3dd93c3c67994746c1dfaa43cffc2150de5cb` (`43615717101` `completed / success` across Stage 0 + Stage 1 Linux `unshare --net` + `-race`, macOS `-race`, Windows `CGO_ENABLED=0`, `0 allocs/op` `BenchmarkSnapshotLookup`, fresh `security-auditor` [`4950bfaa`] & `code-reviewer` [`70332f5d`] `PASS`)**. |
-| **Active Queue (`TP-IMP-0010`, `TP-IMP-0011` `READY`)** | **`2 / 47` `READY`** | **[`TP-IMP-0010`](../planning/units/TP-IMP-0010.md)** (`READY`, `REQUIRES_STRONG_REVIEW`, Deps: `0004, 0008` `DONE`) and **[`TP-IMP-0011`](../planning/units/TP-IMP-0011.md)** (`READY` via `DEC-019`, `REQUIRES_STRONG_REVIEW`, Deps: `0007, 0009` `DONE`). `TP-IMP-0012..0047` (`36` units) remain `BLOCKED`. |
-| **Luna Dispatch Verdict** | **`READY_FOR_EXECUTION (TP-IMP-0010, TP-IMP-0011)`** | Both `0010` and `0011` have `100%` satisfied dependencies; downstream Data Plane units (`TP-IMP-0015`+) MUST enforce `Manager` `CheckServingReady()` APIs rather than bypassing via `Current().AuthenticateKey(...)`; `0012`..`0047` stay `BLOCKED` and all `UNVERIFIED` downstream Data Plane/revocation SLA/replica-lag/PostgreSQL 16/Stage 2–4/macOS-Windows OS isolation limits stay intact. |
+| **`TP-IMP-0010` Review Queue (`READY_FOR_REVIEW`)** | **`1 / 47` `READY_FOR_REVIEW`** | **[`TP-IMP-0010`](../planning/units/TP-IMP-0010.md)** (`internal/extension/port/*`, `internal/security/egress/*`, `internal/security/broker/*` implemented & locally verified under `CGO_ENABLED=0`, fresh `security-auditor` & `code-reviewer` `PASS`; awaiting remote `-race` CI & Product Owner acceptance under `REQUIRES_STRONG_REVIEW`). |
+| **Active `READY` Queue (`TP-IMP-0011`)** | **`1 / 47` `READY`** | **[`TP-IMP-0011`](../planning/units/TP-IMP-0011.md)** (`READY` via `DEC-019`, `REQUIRES_STRONG_REVIEW`, Deps: `0007, 0009` `DONE`). `TP-IMP-0012..0047` (`36` units) remain `BLOCKED`. |
+| **Luna Dispatch Verdict** | **`READY_FOR_EXECUTION (TP-IMP-0011)`** | `0011` has `100%` satisfied dependencies; `0010` is `READY_FOR_REVIEW` awaiting Product Owner sign-off; downstream Data Plane units (`TP-IMP-0015`+) MUST enforce `Manager` `CheckServingReady()` APIs rather than bypassing via `Current().AuthenticateKey(...)`; `0012`..`0047` stay `BLOCKED` and all `UNVERIFIED` downstream Data Plane/revocation SLA/replica-lag/PostgreSQL 16/Stage 2–4/macOS-Windows OS isolation limits stay intact. |

@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0009: DONE` | `READY: TP-IMP-0010, TP-IMP-0011`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.10.0-tp-imp-0009-done-unlock-0011` | **Date:** `2026-11-14`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0009: DONE` | `READY_FOR_REVIEW: TP-IMP-0010` | `READY: TP-IMP-0011`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.11.0-tp-imp-0010-ready-for-review` | **Date:** `2026-11-15`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0009` = **`DONE`** (`TP-IMP-0005`..`0009` accepted via `DEC-011`..`DEC-019`; `TP-IMP-0009` at commit `c3e3dd93` & CI Run `43615717101`); **`TP-IMP-0010` & `TP-IMP-0011` = `READY` (`2 / 47` units)**; `TP-IMP-0012`..`0047` (`36 / 47`) = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
+> - **Live DAG Frontier:** `TP-IMP-0001`..`0009` = **`DONE`** (`TP-IMP-0005`..`0009` accepted via `DEC-011`..`DEC-019`; `TP-IMP-0009` at commit `c3e3dd93` & CI Run `43615717101`); **`TP-IMP-0010` = `READY_FOR_REVIEW` (`1 / 47` unit)**; **`TP-IMP-0011` = `READY` (`1 / 47` unit)**; `TP-IMP-0012`..`0047` (`36 / 47`) = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
