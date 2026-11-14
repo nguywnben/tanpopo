@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0007: DONE` | `READY_FOR_REVIEW: TP-IMP-0008`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.7.0-tp-imp-0008-ready-for-review` | **Date:** `2026-11-14`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0008: DONE` | `READY: TP-IMP-0009, TP-IMP-0010`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.8.0-tp-imp-0008-done-unlock-0009-0010` | **Date:** `2026-11-14`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0007` = **`DONE`** (`TP-IMP-0005` via `DEC-011`; `CR-11` / `TP-IMP-0006` via `DEC-012`/`DEC-013`; `TP-IMP-0007` via `DEC-015` at commit `4cc8b6ad` & CI Run `43595815734`); **`TP-IMP-0008` = `READY_FOR_REVIEW` (`1 / 47` units)** (`0 / 47` `READY`); `TP-IMP-0009`..`0047` (`39 / 47`) = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates (`TP-IMP-0014` still awaits `TP-IMP-0012` & `0013`).
+> - **Live DAG Frontier:** `TP-IMP-0001`..`0008` = **`DONE`** (`TP-IMP-0005` via `DEC-011`; `CR-11` / `TP-IMP-0006` via `DEC-012`/`DEC-013`; `TP-IMP-0007` via `DEC-015`; `CR-12` Option A via `DEC-017` & `TP-IMP-0008` via `DEC-018` at commit `14238799` & CI Run `43606876169`); **`TP-IMP-0009` & `TP-IMP-0010` = `READY` (`2 / 47` units)**; `TP-IMP-0011`..`0047` (`37 / 47`) = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier Today (`TP-IMP-0008` `READY_FOR_REVIEW`):** **`TP-IMP-0001..0007` are `DONE`**, **`TP-IMP-0008` (`1 / 47`) is `READY_FOR_REVIEW`** (`0` `READY` until Product Owner acceptance), and `TP-IMP-0009..0047` (`39 / 47`) remain `BLOCKED` pending upstream completion and review gates.
+> **Live Queue Frontier Today (`TP-IMP-0009` & `TP-IMP-0010` `READY`):** **`TP-IMP-0001..0008` are `DONE` (`8 / 47`)**, **`TP-IMP-0009` & `TP-IMP-0010` (`2 / 47`) are `READY`** (`DEC-018`), and `TP-IMP-0011..0047` (`37 / 47`) remain `BLOCKED` pending upstream completion and review gates.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.

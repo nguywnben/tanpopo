@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0009` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0007`, `TP-IMP-0008` — `GAP-01, 08, 09`)* |
+| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-018`: upstream `TP-IMP-0007` & `TP-IMP-0008` are `DONE`)* |
 | **Size** | `L` (`go.mod`, `internal/iam/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0003_iam_keys.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Authentication, multi-tenant authorization, `< 1s` key revocation & uniform `404` anti-oracle)* |
 | **Technical Owner** | `Principal Security / IAM Engineer` |
