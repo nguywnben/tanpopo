@@ -103,6 +103,13 @@ jobs:
           cache: npm
           cache-dependency-path: web/console/package-lock.json
 
+      - name: Download & Verify Go Module Dependencies (Before Offline Hermetic Tests)
+        shell: bash
+        run: |
+          set -euo pipefail
+          go mod download
+          go mod verify
+
       - name: Run Hermetic Go Quality Gates, Pure-Go & Race Tests Inside OS Network Namespace (ubuntu-24.04)
         if: matrix.os == 'ubuntu-24.04'
         shell: bash
@@ -134,6 +141,7 @@ jobs:
             "GEMINI_API_KEY=${{ env.GEMINI_API_KEY }}" \
             "TANPOPO_TEST_HERMETIC=1" \
             "TANPOPO_OS_NETNS_ISOLATED=1" \
+            "GOPROXY=off" \
             "GITHUB_ACTIONS=${GITHUB_ACTIONS:-false}" \
             unshare --net -- bash -euo pipefail -c '
               ip link set lo up
@@ -160,6 +168,10 @@ jobs:
           TOTAL_COV=$(go tool cover -func=/tmp/testkit-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
           echo "Linux -race -count=3 ./internal/testkit/... statement coverage: ${TOTAL_COV}%"
           awk -v cov="$TOTAL_COV" 'BEGIN { if (cov + 0 < 90.0) { printf "Coverage %.1f%% < 90.0%% DoD threshold\n", cov; exit 1 } }'
+          go test -v -race -count=1 -coverprofile=/tmp/storage-linux.cov ./internal/storage/...
+          STORAGE_COV=$(go tool cover -func=/tmp/storage-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
+          echo "Linux -race ./internal/storage/... statement coverage: ${STORAGE_COV}%"
+          awk -v cov="$STORAGE_COV" 'BEGIN { if (cov + 0 < 85.0) { printf "Storage coverage %.1f%% < 85.0%% TP-IMP-0007 DoD threshold\n", cov; exit 1 } }'
           USER_EOF
 
       - name: Run All Go Quality Gates & Pure-Go Build (CGO_ENABLED=0 — macOS & Windows In-Process netguard)
@@ -191,6 +203,10 @@ jobs:
           TOTAL_COV=$(go tool cover -func=/tmp/testkit-macos.cov | awk '/^total:/ {print $NF}' | tr -d '%')
           echo "macOS -race -count=3 ./internal/testkit/... statement coverage: ${TOTAL_COV}%"
           awk -v cov="$TOTAL_COV" 'BEGIN { if (cov + 0 < 90.0) { printf "Coverage %.1f%% < 90.0%% DoD threshold\n", cov; exit 1 } }'
+          go test -v -race -count=1 -coverprofile=/tmp/storage-macos.cov ./internal/storage/...
+          STORAGE_COV=$(go tool cover -func=/tmp/storage-macos.cov | awk '/^total:/ {print $NF}' | tr -d '%')
+          echo "macOS -race ./internal/storage/... statement coverage: ${STORAGE_COV}%"
+          awk -v cov="$STORAGE_COV" 'BEGIN { if (cov + 0 < 85.0) { printf "Storage coverage %.1f%% < 85.0%% TP-IMP-0007 DoD threshold\n", cov; exit 1 } }'
 
       - name: Run Web Console npm ci --ignore-scripts & Astryx Doctor Across All OS Runners
         working-directory: web/console
