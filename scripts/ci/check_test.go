@@ -375,6 +375,44 @@ func TestLicenseLockfilesUILayoutAndCanary(t *testing.T) {
 	})
 }
 
+func TestUnsealCapabilityMintASTGuard(t *testing.T) {
+	t.Run("allows one call in cmd/tanpopo and rejects outside or multiple calls", func(t *testing.T) {
+		root := seedCleanRepo(t)
+		writeTestFile(t, root, "cmd/tanpopo/wire.go", "package main\nimport \"github.com/nguywnben/tanpopo/internal/security/vault\"\nfunc wire() any { return vault.MintUnsealCapabilityFor"+"Broker() }\n")
+		violations, err := runChecks(checkOptions{rootDir: root, floorGuard: true})
+		if err != nil || len(violations) != 0 {
+			t.Fatalf("expected 0 violations for single call in cmd/tanpopo, got err=%v violations=%v", err, violations)
+		}
+
+		// Second call in cmd/tanpopo triggers multiple-unseal-capability-mints.
+		writeTestFile(t, root, "cmd/tanpopo/wire2.go", "package main\nimport \"github.com/nguywnben/tanpopo/internal/security/vault\"\nfunc wire2() any { return vault.MintUnsealCapabilityFor"+"Broker() }\n")
+		assertViolationsContainRule(t, root, checkOptions{floorGuard: true}, "multiple-unseal-capability-mints")
+
+		// Any production call outside cmd/tanpopo triggers ban-unseal-capability-mint-outside-cmd.
+		root2 := seedCleanRepo(t)
+		writeTestFile(t, root2, "internal/iam/steal.go", "package iam\nimport \"github.com/nguywnben/tanpopo/internal/security/vault\"\nfunc steal() any { return vault.MintUnsealCapabilityFor"+"Broker() }\n")
+		assertViolationsContainRule(t, root2, checkOptions{floorGuard: true}, "ban-unseal-capability-mint-outside-cmd")
+
+		// Function-value aliasing and parenthesized calls outside cmd/tanpopo are also rejected.
+		root3 := seedCleanRepo(t)
+		writeTestFile(t, root3, "internal/iam/alias.go", "package iam\nimport \"github.com/nguywnben/tanpopo/internal/security/vault\"\nvar fn = vault.MintUnsealCapabilityFor"+"Broker\n")
+		assertViolationsContainRule(t, root3, checkOptions{floorGuard: true}, "ban-unseal-capability-mint-outside-cmd")
+
+		root4 := seedCleanRepo(t)
+		writeTestFile(t, root4, "internal/iam/paren.go", "package iam\nimport \"github.com/nguywnben/tanpopo/internal/security/vault\"\nfunc steal() any { return (vault.MintUnsealCapabilityFor"+"Broker)() }\n")
+		assertViolationsContainRule(t, root4, checkOptions{floorGuard: true}, "ban-unseal-capability-mint-outside-cmd")
+
+		// go:linkname bypass and root package bypass (pkg/...) are rejected.
+		root5 := seedCleanRepo(t)
+		writeTestFile(t, root5, "internal/iam/link.go", "package iam\n//go:"+"linkname bad runtime.nanotime\nfunc bad() int64\n")
+		assertViolationsContainRule(t, root5, checkOptions{floorGuard: true}, "no-go-linkname")
+
+		root6 := seedCleanRepo(t)
+		writeTestFile(t, root6, "pkg/sneaky/sneaky.go", "package sneaky\nimport \"github.com/nguywnben/tanpopo/internal/security/vault\"\nfunc cap() any { return vault.MintUnsealCapabilityFor"+"Broker() }\n")
+		assertViolationsContainRule(t, root6, checkOptions{floorGuard: true}, "ban-unseal-capability-mint-outside-cmd")
+	})
+}
+
 func TestActualWorkspacePassesAllChecks(t *testing.T) {
 	repoRoot := filepath.Join("..", "..")
 	var out, errBuf bytes.Buffer

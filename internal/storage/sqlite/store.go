@@ -152,6 +152,7 @@ func buildWALDSN(absPath string) string {
 	q.Add("_pragma", "busy_timeout(5000)")
 	q.Add("_pragma", "synchronous(NORMAL)")
 	q.Add("_pragma", "foreign_keys(1)")
+	q.Add("_pragma", "secure_delete(1)")
 	q.Set("_txlock", "immediate")
 	u.RawQuery = q.Encode()
 	return u.String()
@@ -181,6 +182,14 @@ func verifyWALPragmas(ctx context.Context, db *sql.DB) error {
 	if busyMs < 5000 {
 		return fmt.Errorf("sqlite: expected PRAGMA busy_timeout>=5000, got %d", busyMs)
 	}
+
+	var secDel int
+	if err := db.QueryRowContext(ctx, "PRAGMA secure_delete").Scan(&secDel); err != nil {
+		return fmt.Errorf("sqlite: read PRAGMA secure_delete: %w", err)
+	}
+	if secDel != 1 {
+		return fmt.Errorf("sqlite: expected PRAGMA secure_delete=1, got %d", secDel)
+	}
 	return nil
 }
 
@@ -188,6 +197,15 @@ func verifyWALPragmas(ctx context.Context, db *sql.DB) error {
 // and integration tests verifying database-level triggers and constraints.
 func (s *Store) RawDB() *sql.DB {
 	return s.db
+}
+
+// CheckpointWAL checkpoints and truncates the SQLite WAL file so deleted rows/keys
+// overwritten by PRAGMA secure_delete=ON do not linger in pre-shred WAL frames.
+func (s *Store) CheckpointWAL(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		return fmt.Errorf("sqlite: PRAGMA wal_checkpoint(TRUNCATE): %w", err)
+	}
+	return nil
 }
 
 // Ping verifies database connectivity.

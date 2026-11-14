@@ -487,6 +487,11 @@ var (
 			pattern: regexp.MustCompile(`throw\s+new\s+Error\(\s*["']not implemented["']\s*\)|panic\(\s*["']not implemented["']\s*\)|catch\s*(?:\([^)]*\))?\s*\{\s*\}`),
 			message: "Unimplemented stub or empty catch block is forbidden by CONSTRAINTS.md",
 		},
+		{
+			name:    "no-go-linkname",
+			pattern: regexp.MustCompile(`(?m)^//go:` + `linkname\b`),
+			message: "go:linkname directive bypasses package encapsulation and Floor Guard verification",
+		},
 	}
 
 	rawHTMLTagRe = regexp.MustCompile(`<\s*(?:div|span)\b`)
@@ -504,82 +509,175 @@ func lineNumberAt(text string, offset int) int {
 
 func checkFloorGuard(rootDir string) ([]Violation, error) {
 	var violations []Violation
+	var cmdCapabilityMints []Violation
 
-	codeRoots := []string{"cmd", "internal", "scripts", "tests", filepath.Join("web", "console", "src")}
-	for _, relRoot := range codeRoots {
-		fullRoot := filepath.Join(rootDir, relRoot)
-		if _, err := os.Stat(fullRoot); os.IsNotExist(err) {
-			continue
+	// Scan all root Go packages as well as cmd/, internal/, scripts/, tests/, and web/console/src
+	// so top-level packages (e.g., pkg/...) cannot evade Floor Guard or MintUnsealCapabilityForBroker rules.
+	err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
-		err := filepath.WalkDir(fullRoot, func(path string, d fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
+		if d.IsDir() {
+			name := d.Name()
+			if name == ".git" || name == "node_modules" || name == ".worktrees" || name == "testdata" || name == "dist" || name == "tools" {
+				return filepath.SkipDir
 			}
-			if d.IsDir() {
-				if d.Name() == "node_modules" || d.Name() == "dist" || d.Name() == ".git" || d.Name() == "testdata" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-
-			ext := strings.ToLower(filepath.Ext(d.Name()))
-			switch ext {
-			case ".go", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".yml", ".yaml":
-			default:
-				return nil
-			}
-
-			relFile, relErr := filepath.Rel(rootDir, path)
+			relDir, relErr := filepath.Rel(rootDir, path)
 			if relErr != nil {
 				return relErr
 			}
-			relFile = filepath.ToSlash(relFile)
-
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			norm := strings.ReplaceAll(string(raw), "\r\n", "\n")
-
-			for _, rule := range floorRules {
-				for _, loc := range rule.pattern.FindAllStringIndex(norm, -1) {
-					violations = append(violations, Violation{
-						Check:   "floor-guard",
-						Rule:    rule.name,
-						File:    relFile,
-						Line:    lineNumberAt(norm, loc[0]),
-						Message: rule.message,
-					})
-				}
-			}
-
-			if strings.HasPrefix(relFile, "web/console/src/") && ext != ".css" {
-				for _, loc := range rawHTMLTagRe.FindAllStringIndex(norm, -1) {
-					violations = append(violations, Violation{
-						Check:   "floor-guard",
-						Rule:    "no-raw-div-span",
-						File:    relFile,
-						Line:    lineNumberAt(norm, loc[0]),
-						Message: "raw HTML div/span elements are forbidden in web/console/src (use Astryx layout primitives)",
-					})
-				}
-			}
-
-			if ext == ".go" && (strings.HasPrefix(relFile, "cmd/") || strings.HasPrefix(relFile, "internal/") || strings.HasPrefix(relFile, "tests/")) {
-				v, astErr := checkBannedGoStdlibHTTP(relFile, raw)
-				if astErr != nil {
-					return astErr
-				}
-				violations = append(violations, v...)
+			relDir = filepath.ToSlash(relDir)
+			if relDir == "web/console" {
+				// Only walk web/console/src for UI Floor Guard rules below.
+				return nil
 			}
 			return nil
-		})
+		}
+
+		ext := strings.ToLower(filepath.Ext(d.Name()))
+		relFile, relErr := filepath.Rel(rootDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		relFile = filepath.ToSlash(relFile)
+
+		inCodeTree := strings.HasPrefix(relFile, "cmd/") ||
+			strings.HasPrefix(relFile, "internal/") ||
+			strings.HasPrefix(relFile, "scripts/") ||
+			strings.HasPrefix(relFile, "tests/") ||
+			strings.HasPrefix(relFile, "web/console/src/")
+		if !inCodeTree && ext != ".go" {
+			return nil
+		}
+		if strings.HasPrefix(relFile, "web/") && !strings.HasPrefix(relFile, "web/console/src/") {
+			return nil
+		}
+
+		switch ext {
+		case ".go", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".yml", ".yaml":
+		default:
+			return nil
+		}
+
+		raw, err := os.ReadFile(path)
 		if err != nil {
-			return nil, err
+			return err
+		}
+		norm := strings.ReplaceAll(string(raw), "\r\n", "\n")
+
+		for _, rule := range floorRules {
+			if rule.name == "no-go-linkname" && ext != ".go" {
+				continue
+			}
+			for _, loc := range rule.pattern.FindAllStringIndex(norm, -1) {
+				violations = append(violations, Violation{
+					Check:   "floor-guard",
+					Rule:    rule.name,
+					File:    relFile,
+					Line:    lineNumberAt(norm, loc[0]),
+					Message: rule.message,
+				})
+			}
+		}
+
+		if strings.HasPrefix(relFile, "web/console/src/") && ext != ".css" {
+			for _, loc := range rawHTMLTagRe.FindAllStringIndex(norm, -1) {
+				violations = append(violations, Violation{
+					Check:   "floor-guard",
+					Rule:    "no-raw-div-span",
+					File:    relFile,
+					Line:    lineNumberAt(norm, loc[0]),
+					Message: "raw HTML div/span elements are forbidden in web/console/src (use Astryx layout primitives)",
+				})
+			}
+		}
+
+		if ext == ".go" && !strings.HasPrefix(relFile, "scripts/") {
+			v, astErr := checkBannedGoStdlibHTTP(relFile, raw)
+			if astErr != nil {
+				return astErr
+			}
+			violations = append(violations, v...)
+
+			if !strings.HasSuffix(relFile, "_test.go") {
+				outsideV, cmdSites, capErr := checkUnsealCapabilityMintAST(relFile, raw)
+				if capErr != nil {
+					return capErr
+				}
+				violations = append(violations, outsideV...)
+				cmdCapabilityMints = append(cmdCapabilityMints, cmdSites...)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(cmdCapabilityMints) > 1 {
+		for _, site := range cmdCapabilityMints[1:] {
+			violations = append(violations, site)
 		}
 	}
 
 	return violations, nil
+}
+
+const mintCapabilityIdent = "MintUnsealCapability" + "ForBroker"
+
+func checkUnsealCapabilityMintAST(relFile string, src []byte) (outsideViolations, cmdSites []Violation, err error) {
+	fset := token.NewFileSet()
+	fileAST, parseErr := parser.ParseFile(fset, relFile, src, 0)
+	if parseErr != nil {
+		return nil, nil, nil
+	}
+
+	isVaultDefPkg := strings.HasPrefix(relFile, "internal/security/vault/")
+	isCmdTanpopo := strings.HasPrefix(relFile, "cmd/tanpopo/")
+
+	// Track Sel nodes owned by SelectorExpr so vault.MintUnsealCapabilityForBroker is reported once.
+	selectorIdents := make(map[*ast.Ident]bool)
+	recordSite := func(pos token.Pos) {
+		line := fset.Position(pos).Line
+		if isCmdTanpopo {
+			cmdSites = append(cmdSites, Violation{
+				Check:   "floor-guard",
+				Rule:    "multiple-unseal-capability-mints",
+				File:    relFile,
+				Line:    line,
+				Message: "vault.MintUnsealCapabilityForBroker() may be invoked or referenced at most once inside cmd/tanpopo (TP-IMP-0008)",
+			})
+		} else {
+			outsideViolations = append(outsideViolations, Violation{
+				Check:   "floor-guard",
+				Rule:    "ban-unseal-capability-mint-outside-cmd",
+				File:    relFile,
+				Line:    line,
+				Message: "vault.MintUnsealCapabilityForBroker() may only be referenced inside cmd/tanpopo (TP-IMP-0008)",
+			})
+		}
+	}
+
+	ast.Inspect(fileAST, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.FuncDecl:
+			if isVaultDefPkg && node.Recv == nil && node.Name != nil && node.Name.Name == mintCapabilityIdent {
+				selectorIdents[node.Name] = true
+			}
+		case *ast.SelectorExpr:
+			if node.Sel != nil && node.Sel.Name == mintCapabilityIdent {
+				selectorIdents[node.Sel] = true
+				recordSite(node.Pos())
+			}
+		case *ast.Ident:
+			if node.Name == mintCapabilityIdent && !selectorIdents[node] {
+				recordSite(node.Pos())
+			}
+		}
+		return true
+	})
+
+	return outsideViolations, cmdSites, nil
 }
 
 func checkBannedGoStdlibHTTP(relFile string, src []byte) ([]Violation, error) {

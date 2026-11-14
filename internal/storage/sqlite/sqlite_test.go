@@ -78,6 +78,10 @@ func TestSQLiteOpenWALPragmasMigrationAndChangelogAC1(t *testing.T) {
 	if err := st.RawDB().QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk); err != nil || fk != 1 {
 		t.Fatalf("expected foreign_keys=1, got %d (err=%v)", fk, err)
 	}
+	var secDel int
+	if err := st.RawDB().QueryRowContext(ctx, "PRAGMA secure_delete").Scan(&secDel); err != nil || secDel != 1 {
+		t.Fatalf("expected secure_delete=1, got %d (err=%v)", secDel, err)
+	}
 
 	// Create Org -> Project -> Env and confirm config_epoch increments atomically.
 	reg := "EU"

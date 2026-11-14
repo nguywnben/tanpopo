@@ -172,6 +172,10 @@ jobs:
           STORAGE_COV=$(go tool cover -func=/tmp/storage-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
           echo "Linux -race ./internal/storage/... statement coverage: ${STORAGE_COV}%"
           awk -v cov="$STORAGE_COV" 'BEGIN { if (cov + 0 < 85.0) { printf "Storage coverage %.1f%% < 85.0%% TP-IMP-0007 DoD threshold\n", cov; exit 1 } }'
+          go test -v -race -count=1 -coverprofile=/tmp/vault-linux.cov ./internal/security/vault/...
+          VAULT_COV=$(go tool cover -func=/tmp/vault-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
+          echo "Linux -race ./internal/security/vault/... statement coverage: ${VAULT_COV}%"
+          awk -v cov="$VAULT_COV" 'BEGIN { if (cov + 0 < 90.0) { printf "Vault coverage %.1f%% < 90.0%% TP-IMP-0008 DoD threshold\n", cov; exit 1 } }'
           USER_EOF
 
       - name: Run All Go Quality Gates & Pure-Go Build (CGO_ENABLED=0 — macOS & Windows In-Process netguard)
@@ -207,6 +211,10 @@ jobs:
           STORAGE_COV=$(go tool cover -func=/tmp/storage-macos.cov | awk '/^total:/ {print $NF}' | tr -d '%')
           echo "macOS -race ./internal/storage/... statement coverage: ${STORAGE_COV}%"
           awk -v cov="$STORAGE_COV" 'BEGIN { if (cov + 0 < 85.0) { printf "Storage coverage %.1f%% < 85.0%% TP-IMP-0007 DoD threshold\n", cov; exit 1 } }'
+          go test -v -race -count=1 -coverprofile=/tmp/vault-macos.cov ./internal/security/vault/...
+          VAULT_COV=$(go tool cover -func=/tmp/vault-macos.cov | awk '/^total:/ {print $NF}' | tr -d '%')
+          echo "macOS -race ./internal/security/vault/... statement coverage: ${VAULT_COV}%"
+          awk -v cov="$VAULT_COV" 'BEGIN { if (cov + 0 < 90.0) { printf "Vault coverage %.1f%% < 90.0%% TP-IMP-0008 DoD threshold\n", cov; exit 1 } }'
 
       - name: Run Web Console npm ci --ignore-scripts & Astryx Doctor Across All OS Runners
         working-directory: web/console

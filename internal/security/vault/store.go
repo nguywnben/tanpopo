@@ -1,0 +1,1144 @@
+// Copyright 2026 The Tanpopo Authors.
+// Licensed under the Apache License, Version 2.0.
+
+package vault
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
+)
+
+// Supported secret_kind constants matching sqlite_schema.sql and postgres_schema.sql CHECK constraints.
+const (
+	SecretKindAPIKey           = "API_KEY"
+	SecretKindOAuth2TokenSet   = "OAUTH2_TOKEN_SET"
+	SecretKindHMACSecret       = "HMAC_SECRET"
+	SecretKindAWSSigV4Key      = "AWS_SIGV4_KEY"
+	SecretKindMTLSClientCert   = "MTLS_CLIENT_CERT"
+	SecretKindWebhookHMAC      = "WEBHOOK_HMAC_SECRET"
+	SecretKindOCIRegistryAuth  = "OCI_REGISTRY_AUTH"
+)
+
+func isValidSecretKind(kind string) bool {
+	switch kind {
+	case SecretKindAPIKey,
+		SecretKindOAuth2TokenSet,
+		SecretKindHMACSecret,
+		SecretKindAWSSigV4Key,
+		SecretKindMTLSClientCert,
+		SecretKindWebhookHMAC,
+		SecretKindOCIRegistryAuth:
+		return true
+	default:
+		return false
+	}
+}
+
+// UnsealCapability is an unexported-field capability token authorizing UnsealWithCapability.
+// A zero-value UnsealCapability{} fails closed inside UnsealWithCapability (NEG-2).
+type UnsealCapability struct {
+	granted bool
+}
+
+// MintUnsealCapabilityForBroker mints the sole production UnsealCapability intended exclusively
+// for cmd/tanpopo wiring into BlindHostCredentialBroker. Production calls outside cmd/tanpopo
+// are rejected by scripts/ci/check.go AST verification.
+func MintUnsealCapabilityForBroker() UnsealCapability {
+	return UnsealCapability{granted: true}
+}
+
+// SecretMetadata is the Control-Plane DTO returned on create, rotate, get, and list calls.
+// It contains zero plaintext or ciphertext secret bytes (SPEC-SEC-03).
+type SecretMetadata struct {
+	ID             string  `json:"id"`
+	OrgID          string  `json:"org_id"`
+	OwnerProjectID *string `json:"owner_project_id,omitempty"`
+	Name           string  `json:"name"`
+	SecretKind     string  `json:"secret_kind"`
+	BoundAudience  *string `json:"bound_audience,omitempty"`
+	KeyFingerprint string  `json:"key_fingerprint"`
+	Version        int64   `json:"version"`
+	CreatedAtMs    int64   `json:"created_at_ms"`
+	UpdatedAtMs    int64   `json:"updated_at_ms"`
+}
+
+// UnsealedSecret carries decrypted secret material exclusively to capability-authorized callers.
+// Callers must invoke Zeroize() immediately when outbound header construction finishes.
+type UnsealedSecret struct {
+	ID             string
+	OrgID          string
+	OwnerProjectID *string
+	SecretKind     string
+	BoundAudience  *string
+	Version        int64
+	Plaintext      []byte
+}
+
+// Zeroize overwrites the unsealed plaintext buffer in RAM.
+func (u *UnsealedSecret) Zeroize() {
+	if u != nil && u.Plaintext != nil {
+		clear(u.Plaintext)
+		u.Plaintext = nil
+	}
+}
+
+// SealSecretParams specifies parameters for sealing a new write-only secret.
+type SealSecretParams struct {
+	ID             string
+	OrgID          string
+	OwnerProjectID *string
+	Name           string
+	SecretKind     string
+	BoundAudience  *string
+	Plaintext      []byte
+}
+
+// RotateSecretParams specifies parameters for replacing plaintext under an optimistic lock.
+type RotateSecretParams struct {
+	Plaintext          []byte
+	BoundAudience      *string
+	ClearBoundAudience bool
+}
+
+// RewrapSummary reports how many organization DEKs were re-wrapped during Master KEK rotation.
+type RewrapSummary struct {
+	OldKEKID    string
+	NewKEKID    string
+	Rewrapped   int
+	ConfigEpoch int64
+}
+
+// Config configures the envelope encryption Vault Store.
+type Config struct {
+	DB            *sql.DB
+	KEK           KEKProvider
+	CacheTTL      time.Duration
+	NowMs         func() int64
+	PostShredHook func(ctx context.Context) error
+}
+
+// Store implements three-tier AES-256-GCM envelope encryption, write-only metadata APIs,
+// online KEK re-wrapping, and Project/Org Crypto-Shredding.
+type Store struct {
+	db        *sql.DB
+	kek       KEKProvider
+	cache     *dekCache
+	nowMs     func() int64
+	postShred func(ctx context.Context) error
+}
+
+// NewStore validates dependencies and constructs a Vault Store.
+func NewStore(cfg Config) (*Store, error) {
+	if cfg.DB == nil {
+		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", ErrInvalidInput)
+	}
+	if cfg.KEK == nil {
+		return nil, fmt.Errorf("%w: non-nil KEKProvider is required", ErrInvalidInput)
+	}
+	cache, err := newDEKCache(cfg.CacheTTL)
+	if err != nil {
+		return nil, err
+	}
+	nowFn := cfg.NowMs
+	if nowFn == nil {
+		nowFn = func() int64 { return time.Now().UTC().UnixMilli() }
+	}
+	return &Store{
+		db:        cfg.DB,
+		kek:       cfg.KEK,
+		cache:     cache,
+		nowMs:     nowFn,
+		postShred: cfg.PostShredHook,
+	}, nil
+}
+
+// Close scrubs all cached DEKs in RAM without closing the shared SQL pool.
+func (s *Store) Close() {
+	if s.cache != nil {
+		s.cache.clearAll()
+	}
+}
+
+// EvictAllDEKs immediately zeroizes all in-memory cached DEKs.
+func (s *Store) EvictAllDEKs() {
+	if s.cache != nil {
+		s.cache.clearAll()
+	}
+}
+
+// SealSecret envelopes plaintext using AES-256-GCM under the Org DEK (when OwnerProjectID == nil)
+// or the Project DEK (when OwnerProjectID != nil), binding the canonical AEAD AAD formula.
+func (s *Store) SealSecret(ctx context.Context, params SealSecretParams) (*SecretMetadata, error) {
+	if strings.TrimSpace(params.OrgID) == "" || strings.TrimSpace(params.Name) == "" {
+		return nil, fmt.Errorf("%w: org_id and name are required", ErrInvalidInput)
+	}
+	if !isValidSecretKind(params.SecretKind) {
+		return nil, fmt.Errorf("%w: invalid secret_kind %q", ErrInvalidInput, params.SecretKind)
+	}
+	if len(params.Plaintext) == 0 {
+		return nil, fmt.Errorf("%w: secret plaintext cannot be empty", ErrInvalidInput)
+	}
+
+	id := params.ID
+	if id == "" {
+		var err error
+		id, err = idgen.New(idgen.PrefixSecret)
+		if err != nil {
+			return nil, err
+		}
+	} else if err := validateAADSegment("secret_id", id); err != nil || !strings.HasPrefix(id, idgen.PrefixSecret+"_") || len(id) > 40 {
+		return nil, fmt.Errorf("%w: invalid caller-supplied secret id %q", ErrInvalidInput, id)
+	}
+
+	// Copy caller buffer so vault zeroizes its own transient slice reliably.
+	pt := make([]byte, len(params.Plaintext))
+	copy(pt, params.Plaintext)
+	defer clear(pt)
+
+	var ownerProj *string
+	if params.OwnerProjectID != nil {
+		trimmed := strings.TrimSpace(*params.OwnerProjectID)
+		if trimmed == "" {
+			return nil, fmt.Errorf("%w: owner_project_id cannot be blank when provided", ErrInvalidInput)
+		}
+		ownerProj = &trimmed
+	}
+
+	var aad []byte
+	var err error
+	if ownerProj == nil {
+		aad, err = OrgSecretAAD(params.OrgID, id, params.SecretKind)
+	} else {
+		aad, err = ProjectRecordAAD(params.OrgID, *ownerProj, RecordKindCred, id)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	now := s.nowMs()
+	fingerprint := computeKeyFingerprint(params.OrgID, id, pt)
+	gen := s.cache.generation()
+	var stage dekCacheStage
+	defer stage.clear()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vault: begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var dek []byte
+	if ownerProj == nil {
+		_, dek, err = s.ensureOrgDEKTx(ctx, tx, params.OrgID, now, &stage)
+	} else {
+		_, _, dek, err = s.ensureProjectDEKTx(ctx, tx, params.OrgID, *ownerProj, now, &stage)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer clear(dek)
+
+	nonce, ciphertext, err := sealAESGCM(dek, aad, pt)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO secret_credentials (
+			id, org_id, owner_project_id, name, secret_kind, aead_alg,
+			nonce, ciphertext, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
+		) VALUES (?, ?, ?, ?, ?, 'AES-256-GCM', ?, ?, ?, ?, 1, ?, ?)`,
+		id, params.OrgID, nullStringPtr(ownerProj), params.Name, params.SecretKind,
+		nonce, ciphertext, nullStringPtr(params.BoundAudience), fingerprint, now, now,
+	); err != nil {
+		return nil, mapVaultSQLiteError(err, false)
+	}
+
+	if err := appendVaultChangelogTx(ctx, tx, params.OrgID, "secret_credential", id, port.MutationUpsert, false, now); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("vault: commit SealSecret: %w", err)
+	}
+	committed = true
+	stage.commit(s.cache, now, gen)
+
+	return &SecretMetadata{
+		ID:             id,
+		OrgID:          params.OrgID,
+		OwnerProjectID: cloneStringPtr(ownerProj),
+		Name:           params.Name,
+		SecretKind:     params.SecretKind,
+		BoundAudience:  cloneStringPtr(params.BoundAudience),
+		KeyFingerprint: fingerprint,
+		Version:        1,
+		CreatedAtMs:    now,
+		UpdatedAtMs:    now,
+	}, nil
+}
+
+// RotateSecret replaces ciphertext using a fresh 96-bit CSPRNG nonce under optimistic concurrency control.
+func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expectedVersion int64, params RotateSecretParams) (*SecretMetadata, error) {
+	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(secretID) == "" || expectedVersion < 1 {
+		return nil, fmt.Errorf("%w: org_id, secret_id, and expected_version >= 1 required", ErrInvalidInput)
+	}
+	if len(params.Plaintext) == 0 {
+		return nil, fmt.Errorf("%w: new plaintext cannot be empty", ErrInvalidInput)
+	}
+
+	pt := make([]byte, len(params.Plaintext))
+	copy(pt, params.Plaintext)
+	defer clear(pt)
+
+	now := s.nowMs()
+	fingerprint := computeKeyFingerprint(orgID, secretID, pt)
+	gen := s.cache.generation()
+	var stage dekCacheStage
+	defer stage.clear()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vault: begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var (
+		name        string
+		kind        string
+		curVersion  int64
+		createdAtMs int64
+		projNull    sql.NullString
+		audNull     sql.NullString
+	)
+	if err := tx.QueryRowContext(ctx, `
+		SELECT owner_project_id, name, secret_kind, bound_audience, version, created_at_ms
+		FROM secret_credentials
+		WHERE org_id = ? AND id = ?`,
+		orgID, secretID,
+	).Scan(&projNull, &name, &kind, &audNull, &curVersion, &createdAtMs); err != nil {
+		return nil, mapVaultSQLiteError(err, false)
+	}
+	if curVersion != expectedVersion {
+		return nil, port.ErrVersionConflict
+	}
+
+	var ownerProj *string
+	if projNull.Valid {
+		v := projNull.String
+		ownerProj = &v
+	}
+	var nextAudience *string
+	if audNull.Valid {
+		v := audNull.String
+		nextAudience = &v
+	}
+	if params.ClearBoundAudience {
+		nextAudience = nil
+	} else if params.BoundAudience != nil {
+		nextAudience = cloneStringPtr(params.BoundAudience)
+	}
+
+	var aad []byte
+	if ownerProj == nil {
+		aad, err = OrgSecretAAD(orgID, secretID, kind)
+	} else {
+		aad, err = ProjectRecordAAD(orgID, *ownerProj, RecordKindCred, secretID)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var dek []byte
+	if ownerProj == nil {
+		_, dek, err = s.ensureOrgDEKTx(ctx, tx, orgID, now, &stage)
+	} else {
+		_, _, dek, err = s.ensureProjectDEKTx(ctx, tx, orgID, *ownerProj, now, &stage)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer clear(dek)
+
+	nonce, ciphertext, err := sealAESGCM(dek, aad, pt)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE secret_credentials
+		SET nonce = ?, ciphertext = ?, bound_audience = ?, key_fingerprint = ?, version = version + 1, updated_at_ms = ?
+		WHERE org_id = ? AND id = ? AND version = ?`,
+		nonce, ciphertext, nullStringPtr(nextAudience), fingerprint, now, orgID, secretID, expectedVersion,
+	)
+	if err != nil {
+		return nil, mapVaultSQLiteError(err, false)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if affected == 0 {
+		return nil, port.ErrVersionConflict
+	}
+
+	if err := appendVaultChangelogTx(ctx, tx, orgID, "secret_credential", secretID, port.MutationUpsert, false, now); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("vault: commit RotateSecret: %w", err)
+	}
+	committed = true
+	stage.commit(s.cache, now, gen)
+
+	return &SecretMetadata{
+		ID:             secretID,
+		OrgID:          orgID,
+		OwnerProjectID: cloneStringPtr(ownerProj),
+		Name:           name,
+		SecretKind:     kind,
+		BoundAudience:  cloneStringPtr(nextAudience),
+		KeyFingerprint: fingerprint,
+		Version:        curVersion + 1,
+		CreatedAtMs:    createdAtMs,
+		UpdatedAtMs:    now,
+	}, nil
+}
+
+// GetSecretMetadata fetches write-only secret metadata strictly scoped to orgID.
+func (s *Store) GetSecretMetadata(ctx context.Context, orgID, secretID string) (*SecretMetadata, error) {
+	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(secretID) == "" {
+		return nil, fmt.Errorf("%w: org_id and secret_id required", ErrInvalidInput)
+	}
+	return scanSecretMetadata(s.db.QueryRowContext(ctx, `
+		SELECT id, org_id, owner_project_id, name, secret_kind, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
+		FROM secret_credentials
+		WHERE org_id = ? AND id = ?`, orgID, secretID))
+}
+
+// ListSecrets returns write-only metadata for all secrets belonging to orgID (optionally filtered to projectID).
+func (s *Store) ListSecrets(ctx context.Context, orgID string, projectID *string) ([]SecretMetadata, error) {
+	if strings.TrimSpace(orgID) == "" {
+		return nil, fmt.Errorf("%w: org_id required", ErrInvalidInput)
+	}
+	if projectID != nil && strings.TrimSpace(*projectID) == "" {
+		return nil, fmt.Errorf("%w: project_id cannot be blank when provided", ErrInvalidInput)
+	}
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if projectID == nil {
+		rows, err = s.db.QueryContext(ctx, `
+			SELECT id, org_id, owner_project_id, name, secret_kind, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
+			FROM secret_credentials
+			WHERE org_id = ?
+			ORDER BY id ASC`, orgID)
+	} else {
+		rows, err = s.db.QueryContext(ctx, `
+			SELECT id, org_id, owner_project_id, name, secret_kind, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
+			FROM secret_credentials
+			WHERE org_id = ? AND owner_project_id = ?
+			ORDER BY id ASC`, orgID, *projectID)
+	}
+	if err != nil {
+		return nil, mapVaultSQLiteError(err, false)
+	}
+	defer rows.Close()
+
+	var out []SecretMetadata
+	for rows.Next() {
+		item, serr := scanSecretMetadata(rows)
+		if serr != nil {
+			return nil, serr
+		}
+		out = append(out, *item)
+	}
+	return out, rows.Err()
+}
+
+// UnsealWithCapability decrypts a stored secret strictly when presented a validly minted UnsealCapability.
+// Callers MUST invoke returned.Zeroize() immediately after outbound header construction.
+func (s *Store) UnsealWithCapability(ctx context.Context, cap UnsealCapability, orgID, secretID string) (*UnsealedSecret, error) {
+	if !cap.granted {
+		return nil, ErrMissingUnsealCapability
+	}
+	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(secretID) == "" {
+		return nil, fmt.Errorf("%w: org_id and secret_id required", ErrInvalidInput)
+	}
+
+	var (
+		projNull   sql.NullString
+		kind       string
+		aeadAlg    string
+		nonce      []byte
+		ciphertext []byte
+		audNull    sql.NullString
+		version    int64
+	)
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT owner_project_id, secret_kind, aead_alg, nonce, ciphertext, bound_audience, version
+		FROM secret_credentials
+		WHERE org_id = ? AND id = ?`,
+		orgID, secretID,
+	).Scan(&projNull, &kind, &aeadAlg, &nonce, &ciphertext, &audNull, &version); err != nil {
+		return nil, mapVaultSQLiteError(err, false)
+	}
+	if aeadAlg != "AES-256-GCM" {
+		return nil, fmt.Errorf("%w: unsupported algorithm %q", ErrDecryptionFailed, aeadAlg)
+	}
+
+	var ownerProj *string
+	if projNull.Valid {
+		v := projNull.String
+		ownerProj = &v
+	}
+	var boundAud *string
+	if audNull.Valid {
+		v := audNull.String
+		boundAud = &v
+	}
+
+	var (
+		aad []byte
+		dek []byte
+		err error
+	)
+	if ownerProj == nil {
+		aad, err = OrgSecretAAD(orgID, secretID, kind)
+		if err != nil {
+			return nil, err
+		}
+		_, dek, err = s.loadOrgDEKReadOnly(ctx, orgID)
+	} else {
+		aad, err = ProjectRecordAAD(orgID, *ownerProj, RecordKindCred, secretID)
+		if err != nil {
+			return nil, err
+		}
+		_, _, dek, err = s.loadProjectDEKReadOnly(ctx, orgID, *ownerProj)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer clear(dek)
+
+	plaintext, err := openAESGCM(dek, aad, nonce, ciphertext)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UnsealedSecret{
+		ID:             secretID,
+		OrgID:          orgID,
+		OwnerProjectID: ownerProj,
+		SecretKind:     kind,
+		BoundAudience:  boundAud,
+		Version:        version,
+		Plaintext:      plaintext,
+	}, nil
+}
+
+// RewrapAllOrgDEKs performs online Master KEK rotation from oldKEKID to newKEKID by atomically
+// re-wrapping org_encryption_keys rows without touching project_encryption_keys or secret_credentials,
+// appending KEY_ROTATE to config_changelog, and evicting old-KEK cached Org DEKs from RAM (DR-03 / AC-2).
+func (s *Store) RewrapAllOrgDEKs(ctx context.Context, oldKEKID, newKEKID string) (RewrapSummary, error) {
+	summary := RewrapSummary{OldKEKID: oldKEKID, NewKEKID: newKEKID}
+	if err := validateValidKeyID(oldKEKID); err != nil {
+		return summary, err
+	}
+	if err := validateValidKeyID(newKEKID); err != nil {
+		return summary, err
+	}
+	if oldKEKID == newKEKID {
+		return summary, fmt.Errorf("%w: newKEKID must differ from oldKEKID", ErrInvalidInput)
+	}
+
+	now := s.nowMs()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return summary, fmt.Errorf("vault: begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	type orgKeyRow struct {
+		orgID      string
+		dekVersion int64
+		nonce      []byte
+		wrapped    []byte
+	}
+	rows, err := tx.QueryContext(ctx, `
+		SELECT org_id, dek_version, nonce, wrapped_org_dek
+		FROM org_encryption_keys
+		WHERE kek_key_id = ?
+		ORDER BY org_id ASC`, oldKEKID)
+	if err != nil {
+		return summary, mapVaultSQLiteError(err, false)
+	}
+	var pending []orgKeyRow
+	for rows.Next() {
+		var r orgKeyRow
+		if scanErr := rows.Scan(&r.orgID, &r.dekVersion, &r.nonce, &r.wrapped); scanErr != nil {
+			_ = rows.Close()
+			return summary, scanErr
+		}
+		pending = append(pending, r)
+	}
+	if rerr := rows.Err(); rerr != nil {
+		_ = rows.Close()
+		return summary, rerr
+	}
+	_ = rows.Close()
+
+	for _, r := range pending {
+		if err := s.rewrapSingleOrgTx(ctx, tx, oldKEKID, newKEKID, r.orgID, r.dekVersion, r.nonce, r.wrapped, now); err != nil {
+			return summary, err
+		}
+		summary.Rewrapped++
+	}
+
+	if summary.Rewrapped > 0 {
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (NULL, 'master_kek', ?, ?, 0, ?)`,
+			newKEKID, port.MutationKeyRotate, now,
+		)
+		if err != nil {
+			return summary, mapVaultSQLiteError(err, false)
+		}
+		epoch, err := res.LastInsertId()
+		if err != nil {
+			return summary, err
+		}
+		summary.ConfigEpoch = epoch
+	}
+
+	if err := tx.Commit(); err != nil {
+		return summary, fmt.Errorf("vault: commit RewrapAllOrgDEKs: %w", err)
+	}
+	committed = true
+
+	// Pre-retirement RAM cache eviction for oldKEKID so subsequent unseals re-verify against newKEKID (DR-03).
+	s.cache.evictByKEKID(oldKEKID)
+	return summary, nil
+}
+
+func (s *Store) rewrapSingleOrgTx(ctx context.Context, tx *sql.Tx, oldKEKID, newKEKID, orgID string, dekVersion int64, oldNonce, oldWrapped []byte, now int64) error {
+	orgDEK, err := s.kek.UnwrapDEK(ctx, oldKEKID, orgID, dekVersion, oldNonce, oldWrapped)
+	if err != nil {
+		return err
+	}
+	defer clear(orgDEK)
+
+	newNonce, newWrapped, err := s.kek.WrapDEK(ctx, newKEKID, orgID, dekVersion, orgDEK)
+	if err != nil {
+		return err
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE org_encryption_keys
+		SET kek_key_id = ?, nonce = ?, wrapped_org_dek = ?, rotated_at_ms = ?
+		WHERE org_id = ? AND kek_key_id = ? AND dek_version = ?`,
+		newKEKID, newNonce, newWrapped, now, orgID, oldKEKID, dekVersion,
+	)
+	if err != nil {
+		return mapVaultSQLiteError(err, false)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return port.ErrVersionConflict
+	}
+	return nil
+}
+
+// ShredProjectDEK cryptographically erases a single project's DEK and cascades its project-owned secrets,
+// immediately zeroizing cached DEK bytes in RAM and emitting an emergency SHRED changelog epoch while
+// leaving sibling projects and parent Org-shared secrets untouched (AC-3 / COND-PO-02).
+func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string) error {
+	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(projectID) == "" {
+		return fmt.Errorf("%w: org_id and project_id required", ErrInvalidInput)
+	}
+
+	// Zeroize cache immediately before and after DB deletion.
+	s.cache.evictProject(orgID, projectID)
+
+	now := s.nowMs()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("vault: begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM project_encryption_keys WHERE org_id = ? AND project_id = ?`, orgID, projectID)
+	if err != nil {
+		return mapVaultSQLiteError(err, true)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return port.ErrNotFound
+	}
+
+	if err := appendVaultChangelogTx(ctx, tx, orgID, "project_encryption_key", projectID, port.MutationShred, true, now); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("vault: commit ShredProjectDEK: %w", err)
+	}
+	committed = true
+
+	s.cache.evictProject(orgID, projectID)
+	if s.postShred != nil {
+		if herr := s.postShred(ctx); herr != nil {
+			return fmt.Errorf("vault: post-shred hook: %w", herr)
+		}
+	}
+	return nil
+}
+
+// ShredOrgDEK cryptographically erases an organization's root Org DEK, cascades all child Project DEKs,
+// deletes all org-owned and project-owned secret_credentials rows, zeroizes all cached Org/Project DEKs
+// in RAM, and records an emergency SHRED epoch in config_changelog.
+func (s *Store) ShredOrgDEK(ctx context.Context, orgID string) error {
+	if strings.TrimSpace(orgID) == "" {
+		return fmt.Errorf("%w: org_id required", ErrInvalidInput)
+	}
+
+	s.cache.evictOrg(orgID)
+
+	now := s.nowMs()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("vault: begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM secret_credentials WHERE org_id = ?`, orgID); err != nil {
+		return mapVaultSQLiteError(err, true)
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM org_encryption_keys WHERE org_id = ?`, orgID)
+	if err != nil {
+		return mapVaultSQLiteError(err, true)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return port.ErrNotFound
+	}
+
+	if err := appendVaultChangelogTx(ctx, tx, orgID, "org_encryption_key", orgID, port.MutationShred, true, now); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("vault: commit ShredOrgDEK: %w", err)
+	}
+	committed = true
+
+	s.cache.evictOrg(orgID)
+	if s.postShred != nil {
+		if herr := s.postShred(ctx); herr != nil {
+			return fmt.Errorf("vault: post-shred hook: %w", herr)
+		}
+	}
+	return nil
+}
+
+type stagedOrgDEK struct {
+	orgID      string
+	kekKeyID   string
+	dekVersion int64
+	dek        []byte
+}
+
+type stagedProjDEK struct {
+	orgID             string
+	projectID         string
+	orgDEKVersion     int64
+	projectDEKVersion int64
+	dek               []byte
+}
+
+type dekCacheStage struct {
+	orgs  []stagedOrgDEK
+	projs []stagedProjDEK
+}
+
+func (st *dekCacheStage) addOrg(orgID, kekKeyID string, dekVersion int64, dek []byte) {
+	cp := make([]byte, len(dek))
+	copy(cp, dek)
+	st.orgs = append(st.orgs, stagedOrgDEK{orgID: orgID, kekKeyID: kekKeyID, dekVersion: dekVersion, dek: cp})
+}
+
+func (st *dekCacheStage) addProj(orgID, projectID string, orgDEKVersion, projectDEKVersion int64, dek []byte) {
+	cp := make([]byte, len(dek))
+	copy(cp, dek)
+	st.projs = append(st.projs, stagedProjDEK{orgID: orgID, projectID: projectID, orgDEKVersion: orgDEKVersion, projectDEKVersion: projectDEKVersion, dek: cp})
+}
+
+func (st *dekCacheStage) commit(cache *dekCache, nowMs int64, gen uint64) {
+	for _, o := range st.orgs {
+		cache.putOrgDEKIfGen(o.orgID, o.kekKeyID, o.dekVersion, o.dek, nowMs, gen)
+	}
+	for _, p := range st.projs {
+		cache.putProjectDEKIfGen(p.orgID, p.projectID, p.orgDEKVersion, p.projectDEKVersion, p.dek, nowMs, gen)
+	}
+}
+
+func (st *dekCacheStage) clear() {
+	for _, o := range st.orgs {
+		clear(o.dek)
+	}
+	for _, p := range st.projs {
+		clear(p.dek)
+	}
+	st.orgs = nil
+	st.projs = nil
+}
+
+func (s *Store) ensureOrgDEKTx(ctx context.Context, tx *sql.Tx, orgID string, now int64, stage *dekCacheStage) (int64, []byte, error) {
+	var (
+		kekKeyID   string
+		nonce      []byte
+		wrapped    []byte
+		dekVersion int64
+	)
+	err := tx.QueryRowContext(ctx, `
+		SELECT kek_key_id, nonce, wrapped_org_dek, dek_version
+		FROM org_encryption_keys
+		WHERE org_id = ?`, orgID).Scan(&kekKeyID, &nonce, &wrapped, &dekVersion)
+	if errors.Is(err, sql.ErrNoRows) {
+		activeKEKID, kerr := s.kek.ActiveKeyID(ctx)
+		if kerr != nil {
+			return 0, nil, kerr
+		}
+		freshDEK, derr := generate256BitDEK()
+		if derr != nil {
+			return 0, nil, derr
+		}
+		wrapNonce, wrapCT, werr := s.kek.WrapDEK(ctx, activeKEKID, orgID, 1, freshDEK)
+		if werr != nil {
+			clear(freshDEK)
+			return 0, nil, werr
+		}
+		res, ierr := tx.ExecContext(ctx, `
+			INSERT INTO org_encryption_keys (
+				org_id, kek_key_id, aead_alg, nonce, wrapped_org_dek, dek_version, created_at_ms, rotated_at_ms
+			) VALUES (?, ?, 'AES-256-GCM', ?, ?, 1, ?, ?)
+			ON CONFLICT(org_id) DO NOTHING`,
+			orgID, activeKEKID, wrapNonce, wrapCT, now, now,
+		)
+		if ierr != nil {
+			clear(freshDEK)
+			return 0, nil, mapVaultSQLiteError(ierr, false)
+		}
+		if affected, aerr := res.RowsAffected(); aerr == nil && affected > 0 {
+			if stage != nil {
+				stage.addOrg(orgID, activeKEKID, 1, freshDEK)
+			}
+			return 1, freshDEK, nil
+		}
+		clear(freshDEK)
+		if rerr := tx.QueryRowContext(ctx, `
+			SELECT kek_key_id, nonce, wrapped_org_dek, dek_version
+			FROM org_encryption_keys
+			WHERE org_id = ?`, orgID).Scan(&kekKeyID, &nonce, &wrapped, &dekVersion); rerr != nil {
+			return 0, nil, mapVaultSQLiteError(rerr, false)
+		}
+	} else if err != nil {
+		return 0, nil, mapVaultSQLiteError(err, false)
+	}
+
+	// Verify cache against persisted (kekKeyID, dekVersion) to reject stale cached KEKs.
+	if cachedKEK, cachedVer, cp, ok := s.cache.getOrgDEK(orgID, now); ok {
+		if cachedKEK == kekKeyID && cachedVer == dekVersion {
+			return dekVersion, cp, nil
+		}
+		clear(cp)
+	}
+
+	unwrapped, uerr := s.kek.UnwrapDEK(ctx, kekKeyID, orgID, dekVersion, nonce, wrapped)
+	if uerr != nil {
+		return 0, nil, uerr
+	}
+	if stage != nil {
+		stage.addOrg(orgID, kekKeyID, dekVersion, unwrapped)
+	}
+	return dekVersion, unwrapped, nil
+}
+
+func (s *Store) ensureProjectDEKTx(ctx context.Context, tx *sql.Tx, orgID, projectID string, now int64, stage *dekCacheStage) (int64, int64, []byte, error) {
+	orgDEKVer, orgDEK, err := s.ensureOrgDEKTx(ctx, tx, orgID, now, stage)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	defer clear(orgDEK)
+
+	var (
+		rowOrgDEKVer int64
+		nonce        []byte
+		wrapped      []byte
+		projDEKVer   int64
+	)
+	err = tx.QueryRowContext(ctx, `
+		SELECT org_dek_version, nonce, wrapped_project_dek, dek_version
+		FROM project_encryption_keys
+		WHERE org_id = ? AND project_id = ?`, orgID, projectID).Scan(&rowOrgDEKVer, &nonce, &wrapped, &projDEKVer)
+	if errors.Is(err, sql.ErrNoRows) {
+		freshPDEK, derr := generate256BitDEK()
+		if derr != nil {
+			return 0, 0, nil, derr
+		}
+		aad, aerr := projectDEKWrapAAD(orgID, projectID, orgDEKVer, 1)
+		if aerr != nil {
+			clear(freshPDEK)
+			return 0, 0, nil, aerr
+		}
+		wrapNonce, wrapCT, werr := sealAESGCM(orgDEK, aad, freshPDEK)
+		if werr != nil {
+			clear(freshPDEK)
+			return 0, 0, nil, werr
+		}
+		res, ierr := tx.ExecContext(ctx, `
+			INSERT INTO project_encryption_keys (
+				org_id, project_id, org_dek_version, aead_alg, nonce, wrapped_project_dek, dek_version, created_at_ms, rotated_at_ms
+			) VALUES (?, ?, ?, 'AES-256-GCM', ?, ?, 1, ?, ?)
+			ON CONFLICT(org_id, project_id) DO NOTHING`,
+			orgID, projectID, orgDEKVer, wrapNonce, wrapCT, now, now,
+		)
+		if ierr != nil {
+			clear(freshPDEK)
+			return 0, 0, nil, mapVaultSQLiteError(ierr, false)
+		}
+		if affected, aerr := res.RowsAffected(); aerr == nil && affected > 0 {
+			if stage != nil {
+				stage.addProj(orgID, projectID, orgDEKVer, 1, freshPDEK)
+			}
+			return orgDEKVer, 1, freshPDEK, nil
+		}
+		clear(freshPDEK)
+		if rerr := tx.QueryRowContext(ctx, `
+			SELECT org_dek_version, nonce, wrapped_project_dek, dek_version
+			FROM project_encryption_keys
+			WHERE org_id = ? AND project_id = ?`, orgID, projectID).Scan(&rowOrgDEKVer, &nonce, &wrapped, &projDEKVer); rerr != nil {
+			return 0, 0, nil, mapVaultSQLiteError(rerr, false)
+		}
+	} else if err != nil {
+		return 0, 0, nil, mapVaultSQLiteError(err, false)
+	}
+
+	if cachedOrgV, cachedProjV, cp, ok := s.cache.getProjectDEK(orgID, projectID, now); ok {
+		if cachedOrgV == rowOrgDEKVer && cachedProjV == projDEKVer {
+			return cachedOrgV, cachedProjV, cp, nil
+		}
+		clear(cp)
+	}
+
+	aad, err := projectDEKWrapAAD(orgID, projectID, rowOrgDEKVer, projDEKVer)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	unwrapped, err := openAESGCM(orgDEK, aad, nonce, wrapped)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	if err := validate256BitKey(unwrapped); err != nil {
+		clear(unwrapped)
+		return 0, 0, nil, err
+	}
+	if stage != nil {
+		stage.addProj(orgID, projectID, rowOrgDEKVer, projDEKVer, unwrapped)
+	}
+	return rowOrgDEKVer, projDEKVer, unwrapped, nil
+}
+
+func (s *Store) loadOrgDEKReadOnly(ctx context.Context, orgID string) (int64, []byte, error) {
+	now := s.nowMs()
+	gen := s.cache.generation()
+	var (
+		kekKeyID   string
+		nonce      []byte
+		wrapped    []byte
+		dekVersion int64
+	)
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT kek_key_id, nonce, wrapped_org_dek, dek_version
+		FROM org_encryption_keys
+		WHERE org_id = ?`, orgID).Scan(&kekKeyID, &nonce, &wrapped, &dekVersion); err != nil {
+		return 0, nil, mapVaultSQLiteError(err, false)
+	}
+	if cachedKEK, cachedVer, cp, ok := s.cache.getOrgDEK(orgID, now); ok {
+		if cachedKEK == kekKeyID && cachedVer == dekVersion {
+			return dekVersion, cp, nil
+		}
+		clear(cp)
+	}
+	unwrapped, err := s.kek.UnwrapDEK(ctx, kekKeyID, orgID, dekVersion, nonce, wrapped)
+	if err != nil {
+		return 0, nil, err
+	}
+	s.cache.putOrgDEKIfGen(orgID, kekKeyID, dekVersion, unwrapped, now, gen)
+	return dekVersion, unwrapped, nil
+}
+
+func (s *Store) loadProjectDEKReadOnly(ctx context.Context, orgID, projectID string) (int64, int64, []byte, error) {
+	now := s.nowMs()
+	gen := s.cache.generation()
+	var (
+		rowOrgDEKVer int64
+		nonce        []byte
+		wrapped      []byte
+		projDEKVer   int64
+	)
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT org_dek_version, nonce, wrapped_project_dek, dek_version
+		FROM project_encryption_keys
+		WHERE org_id = ? AND project_id = ?`, orgID, projectID).Scan(&rowOrgDEKVer, &nonce, &wrapped, &projDEKVer); err != nil {
+		return 0, 0, nil, mapVaultSQLiteError(err, false)
+	}
+	if cachedOrgV, cachedProjV, cp, ok := s.cache.getProjectDEK(orgID, projectID, now); ok {
+		if cachedOrgV == rowOrgDEKVer && cachedProjV == projDEKVer {
+			return cachedOrgV, cachedProjV, cp, nil
+		}
+		clear(cp)
+	}
+
+	_, orgDEK, err := s.loadOrgDEKReadOnly(ctx, orgID)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	defer clear(orgDEK)
+
+	aad, err := projectDEKWrapAAD(orgID, projectID, rowOrgDEKVer, projDEKVer)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	unwrapped, err := openAESGCM(orgDEK, aad, nonce, wrapped)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	if err := validate256BitKey(unwrapped); err != nil {
+		clear(unwrapped)
+		return 0, 0, nil, err
+	}
+	s.cache.putProjectDEKIfGen(orgID, projectID, rowOrgDEKVer, projDEKVer, unwrapped, now, gen)
+	return rowOrgDEKVer, projDEKVer, unwrapped, nil
+}
+
+func appendVaultChangelogTx(ctx context.Context, tx *sql.Tx, orgID, entityKind, entityID, mutationType string, emergency bool, now int64) error {
+	emInt := 0
+	if emergency {
+		emInt = 1
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)`,
+		orgID, entityKind, entityID, mutationType, emInt, now,
+	); err != nil {
+		return mapVaultSQLiteError(err, false)
+	}
+	return nil
+}
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanSecretMetadata(row rowScanner) (*SecretMetadata, error) {
+	var (
+		m        SecretMetadata
+		projNull sql.NullString
+		audNull  sql.NullString
+	)
+	if err := row.Scan(
+		&m.ID, &m.OrgID, &projNull, &m.Name, &m.SecretKind,
+		&audNull, &m.KeyFingerprint, &m.Version, &m.CreatedAtMs, &m.UpdatedAtMs,
+	); err != nil {
+		return nil, mapVaultSQLiteError(err, false)
+	}
+	if projNull.Valid {
+		v := projNull.String
+		m.OwnerProjectID = &v
+	}
+	if audNull.Valid {
+		v := audNull.String
+		m.BoundAudience = &v
+	}
+	return &m, nil
+}
+
+func nullStringPtr(s *string) any {
+	if s == nil {
+		return nil
+	}
+	return *s
+}
+
+func cloneStringPtr(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	cp := *s
+	return &cp
+}
+
+func mapVaultSQLiteError(err error, isDelete bool) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return port.ErrNotFound
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "UNIQUE constraint failed"):
+		return fmt.Errorf("%w: %v", port.ErrAlreadyExists, err)
+	case strings.Contains(msg, "FOREIGN KEY constraint failed"):
+		if isDelete {
+			return fmt.Errorf("%w: %v", port.ErrResourceInUse, err)
+		}
+		return fmt.Errorf("%w: %v", port.ErrNotFound, err)
+	case strings.Contains(msg, "CHECK constraint failed"):
+		return fmt.Errorf("%w: %w: %v", port.ErrInvalidInput, ErrInvalidInput, err)
+	default:
+		return err
+	}
+}
