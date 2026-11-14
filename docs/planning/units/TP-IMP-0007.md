@@ -30,6 +30,7 @@ Implement the dialect-neutral `internal/storage/port` persistence interfaces and
 
 ## 4. API, Wire & Data Contracts
 - **Hard Portability Rules:** Persist all timestamps as UTC `BIGINT epoch_ms`; enforce composite `(org_id, id)` primary/foreign keys on `projects` and `environments`; every mutating repository call accepts `expectedVersion int64` and executes `WHERE org_id = ? AND id = ? AND version = ?` (returning `port.ErrVersionConflict` → HTTP `409` when `rows == 0`).
+- **Lease Fencing & Expiration Semantics (`LeaseRepository`):** `Release(ctx, leaseName, holderNodeID, fencingToken)` verifies matching `(holder_node_id, fencing_token)` inside a transaction (`port.ErrVersionConflict` on stale/superseded tokens or conflicting active holders; `port.ErrNotFound` when absent or already released) while preserving monotonic `fencing_token` values across release/re-acquire cycles; `Get` returns un-released rows (including expired un-released rows so callers must verify `!lease.IsExpired(nowMs)`).
 - **Atomic `config_epoch` Advancement via the Single `config_changelog` Table:** Every configuration-mutating transaction atomically appends one row to `config_changelog` to notify `ConfigSnapshot` watchers (the single canonical configuration changelog table across the system).
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases

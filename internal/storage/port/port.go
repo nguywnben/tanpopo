@@ -118,6 +118,11 @@ type DistributedLease struct {
 	ExpiresAtMs  int64
 }
 
+// IsExpired reports whether the lease has reached or passed its expiry timestamp at nowMs.
+func (l *DistributedLease) IsExpired(nowMs int64) bool {
+	return l == nil || nowMs >= l.ExpiresAtMs
+}
+
 // AuditEvent represents an immutable JCS-hashed audit entry for AuditSink callers.
 type AuditEvent struct {
 	ID           string
@@ -236,9 +241,19 @@ type ChangelogRepository interface {
 }
 
 // LeaseRepository manages distributed_leases singleton fencing locks.
+//
+// Fencing & Expiration Semantics:
+//   - AcquireOrRenew acquires an unheld/released/expired lease or renews the caller's lease,
+//     always monotonically incrementing FencingToken across acquisitions, renewals, and releases.
+//   - Release requires matching (leaseName, holderNodeID, fencingToken) so a stalled caller
+//     holding a superseded token cannot release a newer lease owned by the same or another node
+//     (returning ErrVersionConflict). Already-released or nonexistent leases return ErrNotFound.
+//   - Get returns the current un-released DistributedLease record (or ErrNotFound if absent or
+//     released). Because expiration depends on caller time nowMs (and SQL remains vendor-neutral),
+//     Get does NOT suppress expired un-released rows; callers must check lease.IsExpired(nowMs).
 type LeaseRepository interface {
 	AcquireOrRenew(ctx context.Context, leaseName, holderNodeID string, nowMs, ttlMs int64) (*DistributedLease, bool, error)
-	Release(ctx context.Context, leaseName, holderNodeID string) error
+	Release(ctx context.Context, leaseName, holderNodeID string, fencingToken int64) error
 	Get(ctx context.Context, leaseName string) (*DistributedLease, error)
 }
 

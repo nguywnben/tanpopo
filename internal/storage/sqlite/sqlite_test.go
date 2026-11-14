@@ -446,7 +446,7 @@ func TestSQLiteNetworkFSRejectionBackupToCrashReopenLeasesAndCRUD(t *testing.T) 
 	if err != nil || !acquiredB2 || leaseExp.FencingToken != 2 {
 		t.Fatalf("node-b acquire after expiry failed: lease=%+v acq=%v err=%v", leaseExp, acquiredB2, err)
 	}
-	if err := st.Leases().Release(ctx, "orphan_reaper", "node-b"); err != nil {
+	if err := st.Leases().Release(ctx, "orphan_reaper", "node-b", leaseExp.FencingToken); err != nil {
 		t.Fatalf("lease release: %v", err)
 	}
 
@@ -622,19 +622,22 @@ func TestSQLiteEdgeCasesTransactionsValidationAndErrorMapping(t *testing.T) {
 		t.Fatalf("expected ErrNotFound deleting nonexistent env in same org, got %v", err)
 	}
 
-	// Same-node lease renewal + wrong-holder release + monotonic fencing_token across Release -> Get -> Reacquire.
+	// Same-node lease renewal + wrong-holder / stale-token release + monotonic fencing_token across Release -> Get -> Reacquire.
 	renewed, ok, err := st.Leases().AcquireOrRenew(ctx, "tx-lease", "node-1", 2000, 5000)
 	if err != nil || !ok || renewed.FencingToken != 2 {
 		t.Fatalf("expected same-node renewal fencing_token=2, got %+v ok=%v err=%v", renewed, ok, err)
 	}
-	if err := st.Leases().Release(ctx, "tx-lease", "wrong-node"); !errors.Is(err, port.ErrNotFound) {
-		t.Fatalf("expected ErrNotFound releasing lease by wrong holder, got %v", err)
+	if err := st.Leases().Release(ctx, "tx-lease", "wrong-node", renewed.FencingToken); !errors.Is(err, port.ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict releasing lease by wrong holder, got %v", err)
 	}
-	if err := st.Leases().Release(ctx, "tx-lease", "node-1"); err != nil {
+	if err := st.Leases().Release(ctx, "tx-lease", "node-1", renewed.FencingToken); err != nil {
 		t.Fatalf("release lease: %v", err)
 	}
 	if _, err := st.Leases().Get(ctx, "tx-lease"); !errors.Is(err, port.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound after lease release, got %v", err)
+	}
+	if err := st.Leases().Release(ctx, "tx-lease", "node-1", renewed.FencingToken); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on double-release with same token, got %v", err)
 	}
 	reacquired, ok, err := st.Leases().AcquireOrRenew(ctx, "tx-lease", "node-2", 2500, 5000)
 	if err != nil || !ok || reacquired.FencingToken != 3 {
@@ -795,10 +798,84 @@ func TestSQLiteEdgeCasesTransactionsValidationAndErrorMapping(t *testing.T) {
 	if _, _, err := st.Leases().AcquireOrRenew(ctx, "", "h", 1, 0); !errors.Is(err, port.ErrInvalidInput) {
 		t.Fatalf("AcquireOrRenew invalid: got %v", err)
 	}
-	if err := st.Leases().Release(ctx, "", "h"); !errors.Is(err, port.ErrInvalidInput) {
+	if err := st.Leases().Release(ctx, "", "h", 1); !errors.Is(err, port.ErrInvalidInput) {
 		t.Fatalf("Release invalid: got %v", err)
+	}
+	if err := st.Leases().Release(ctx, "tx-lease", "h", 0); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("Release invalid token 0: got %v", err)
 	}
 	if _, err := st.Leases().Get(ctx, ""); !errors.Is(err, port.ErrInvalidInput) {
 		t.Fatalf("Leases.Get invalid: got %v", err)
+	}
+}
+
+func TestSQLiteLeaseStaleReleaseAndExpiredGetSemantics(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st := openTempStore(t, nil)
+
+	// 1. Acquire lease on node-1 (fencing_token = 1), then same node renews (fencing_token = 2).
+	l1, ok, err := st.Leases().AcquireOrRenew(ctx, "singleton_worker", "node-1", 1000, 5000)
+	if err != nil || !ok || l1.FencingToken != 1 {
+		t.Fatalf("acquire l1: lease=%+v ok=%v err=%v", l1, ok, err)
+	}
+	l2, ok, err := st.Leases().AcquireOrRenew(ctx, "singleton_worker", "node-1", 2000, 5000)
+	if err != nil || !ok || l2.FencingToken != 2 {
+		t.Fatalf("renew l2: lease=%+v ok=%v err=%v", l2, ok, err)
+	}
+
+	// Regression: stalled worker on the SAME holderNodeID holding stale token=1 MUST NOT release token=2.
+	if err := st.Leases().Release(ctx, "singleton_worker", "node-1", l1.FencingToken); !errors.Is(err, port.ErrVersionConflict) {
+		t.Fatalf("stale release same holder after renew expected ErrVersionConflict, got %v", err)
+	}
+	cur, err := st.Leases().Get(ctx, "singleton_worker")
+	if err != nil || cur.HolderNodeID != "node-1" || cur.FencingToken != 2 {
+		t.Fatalf("active lease should remain intact after stale release: cur=%+v err=%v", cur, err)
+	}
+
+	// 2. Lease expires (nowMs=7000 == l2.ExpiresAtMs), node-2 steals (token=3), then expires (nowMs=12000),
+	// and SAME holderNodeID node-1 reacquires (token=4). Stale token=1 MUST STILL NOT release token=4.
+	l3, ok, err := st.Leases().AcquireOrRenew(ctx, "singleton_worker", "node-2", 7000, 5000)
+	if err != nil || !ok || l3.FencingToken != 3 {
+		t.Fatalf("steal l3 after expiry: lease=%+v ok=%v err=%v", l3, ok, err)
+	}
+	l4, ok, err := st.Leases().AcquireOrRenew(ctx, "singleton_worker", "node-1", 12000, 5000)
+	if err != nil || !ok || l4.FencingToken != 4 {
+		t.Fatalf("reacquire l4 on node-1: lease=%+v ok=%v err=%v", l4, ok, err)
+	}
+	if err := st.Leases().Release(ctx, "singleton_worker", "node-1", l1.FencingToken); !errors.Is(err, port.ErrVersionConflict) {
+		t.Fatalf("stale release same holder after reacquire expected ErrVersionConflict, got %v", err)
+	}
+	cur2, err := st.Leases().Get(ctx, "singleton_worker")
+	if err != nil || cur2.HolderNodeID != "node-1" || cur2.FencingToken != 4 {
+		t.Fatalf("reacquired lease must remain intact after stale token release: cur=%+v err=%v", cur2, err)
+	}
+
+	// 3. Expired lease Get() semantics: Get returns the un-released record (so liveness is checked via IsExpired(nowMs)).
+	if cur2.IsExpired(16999) {
+		t.Fatalf("expected lease not expired at 16999 (expiresAt=%d)", cur2.ExpiresAtMs)
+	}
+	if !cur2.IsExpired(17000) || !cur2.IsExpired(20000) {
+		t.Fatalf("expected IsExpired=true at >= expiresAt (%d)", cur2.ExpiresAtMs)
+	}
+
+	// 4. Missing lease Release -> ErrNotFound.
+	if err := st.Leases().Release(ctx, "never_created", "node-1", 1); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound releasing nonexistent lease, got %v", err)
+	}
+
+	// 5. Release with active matching token=4 succeeds -> Get returns ErrNotFound -> stale token=1 rejected -> next acquire=5.
+	if err := st.Leases().Release(ctx, "singleton_worker", "node-1", l4.FencingToken); err != nil {
+		t.Fatalf("release current token l4: %v", err)
+	}
+	if _, err := st.Leases().Get(ctx, "singleton_worker"); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after matching release, got %v", err)
+	}
+	if err := st.Leases().Release(ctx, "singleton_worker", "node-1", l1.FencingToken); !errors.Is(err, port.ErrVersionConflict) {
+		t.Fatalf("stale token=1 on released token=4 row expected ErrVersionConflict, got %v", err)
+	}
+	l5, ok, err := st.Leases().AcquireOrRenew(ctx, "singleton_worker", "node-3", 20000, 5000)
+	if err != nil || !ok || l5.FencingToken != 5 {
+		t.Fatalf("expected monotonic token=5 on next acquire, got %+v ok=%v err=%v", l5, ok, err)
 	}
 }

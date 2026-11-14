@@ -72,3 +72,18 @@ func TestPortErrorSentinelsDistinct(t *testing.T) {
 		}
 	}
 }
+
+func TestDistributedLeaseIsExpired(t *testing.T) {
+	t.Parallel()
+	var nilLease *DistributedLease
+	if !nilLease.IsExpired(1000) {
+		t.Fatalf("expected nil lease IsExpired=true")
+	}
+	lease := &DistributedLease{LeaseName: "l", HolderNodeID: "h", FencingToken: 1, AcquiredAtMs: 1000, ExpiresAtMs: 5000}
+	if lease.IsExpired(4999) {
+		t.Fatalf("expected not expired at 4999")
+	}
+	if !lease.IsExpired(5000) || !lease.IsExpired(6000) {
+		t.Fatalf("expected expired at >= 5000")
+	}
+}

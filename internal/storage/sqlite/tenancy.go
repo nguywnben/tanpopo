@@ -720,27 +720,47 @@ func (l *leaseRepo) AcquireOrRenew(ctx context.Context, leaseName, holderNodeID 
 	return out, acquired, nil
 }
 
-func (l *leaseRepo) Release(ctx context.Context, leaseName, holderNodeID string) error {
-	if strings.TrimSpace(leaseName) == "" || strings.TrimSpace(holderNodeID) == "" {
-		return fmt.Errorf("%w: lease_name and holder_node_id required", port.ErrInvalidInput)
+func (l *leaseRepo) Release(ctx context.Context, leaseName, holderNodeID string, fencingToken int64) error {
+	if strings.TrimSpace(leaseName) == "" || strings.TrimSpace(holderNodeID) == "" || fencingToken < 1 {
+		return fmt.Errorf("%w: lease_name, holder_node_id, and fencing_token >= 1 required", port.ErrInvalidInput)
 	}
 	// Preserve the row and its monotonically incremented fencing_token while marking it released
 	// (holder_node_id = '' and expires_at_ms > acquired_at_ms satisfying CHECK constraint).
-	res, err := l.exec.ExecContext(ctx,
-		`UPDATE distributed_leases SET holder_node_id = '', acquired_at_ms = 0, expires_at_ms = 1 WHERE lease_name = ? AND holder_node_id = ? AND holder_node_id <> ''`,
-		leaseName, holderNodeID,
-	)
-	if err != nil {
-		return mapSQLiteErrorForDelete(err)
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
-		return port.ErrNotFound
-	}
-	return nil
+	return l.withWriteTx(ctx, func(exec sqlExecQuery) error {
+		res, err := exec.ExecContext(ctx,
+			`UPDATE distributed_leases SET holder_node_id = '', acquired_at_ms = 0, expires_at_ms = 1 WHERE lease_name = ? AND holder_node_id = ? AND fencing_token = ? AND holder_node_id <> ''`,
+			leaseName, holderNodeID, fencingToken,
+		)
+		if err != nil {
+			return mapSQLiteErrorForDelete(err)
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected > 0 {
+			return nil
+		}
+
+		var (
+			curHolder string
+			curToken  int64
+		)
+		checkErr := exec.QueryRowContext(ctx,
+			`SELECT holder_node_id, fencing_token FROM distributed_leases WHERE lease_name = ?`,
+			leaseName,
+		).Scan(&curHolder, &curToken)
+		if errors.Is(checkErr, sql.ErrNoRows) {
+			return port.ErrNotFound
+		}
+		if checkErr != nil {
+			return mapSQLiteError(checkErr)
+		}
+		if curHolder == "" && curToken == fencingToken {
+			return port.ErrNotFound
+		}
+		return port.ErrVersionConflict
+	})
 }
 
 func (l *leaseRepo) Get(ctx context.Context, leaseName string) (*port.DistributedLease, error) {
