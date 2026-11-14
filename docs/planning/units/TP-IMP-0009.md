@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0009` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | **`READY_FOR_REVIEW`** *(Implemented & hardened `2026-11-14`; `CGO_ENABLED=0` tests + `check.go --all` + `BenchmarkSnapshotLookup` `0 allocs/op` + fresh `security-auditor` [`d98bfc91`, `4950bfaa`] & `code-reviewer` [`ab0a518a`, `70332f5d`] `PASS`; awaiting remote CI `-race` run & Product Owner `REQUIRES_STRONG_REVIEW` acceptance — downstream `0011+` stay `BLOCKED`)* |
+| **Status** | **`DONE`** *(Product Owner accepted `REQUIRES_STRONG_REVIEW` [`DEC-019`, standalone single-node scope] at commit `c3e3dd93c3c67994746c1dfaa43cffc2150de5cb`, GitHub Actions Run `43615717101` `completed / success` across `ubuntu-24.04` `unshare --net` + `-race`, `macos-15` `-race`, `windows-2022` `CGO_ENABLED=0`, `0 allocs/op` `BenchmarkSnapshotLookup`, fresh `security-auditor` [`4950bfaa`] & `code-reviewer` [`70332f5d`] `PASS`; downstream Data Plane wiring, revocation SLAs, replica lag, live `PostgreSQL 16`, Stage 2–4 CI, and macOS/Windows OS isolation remain `UNVERIFIED`)* |
 | **Size** | `L` (`go.mod`, `internal/iam/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0005_iam_keys.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Authentication, multi-tenant authorization, `< 1s` key revocation & uniform `404` anti-oracle)* |
 | **Technical Owner** | `Principal Security / IAM Engineer` |

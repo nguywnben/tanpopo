@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0008: DONE` | `READY_FOR_REVIEW: TP-IMP-0009` | `READY: TP-IMP-0010`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.9.0-tp-imp-0009-ready-for-review` | **Date:** `2026-11-14`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0009: DONE` | `READY: TP-IMP-0010, TP-IMP-0011`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.10.0-tp-imp-0009-done-unlock-0011` | **Date:** `2026-11-14`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) plus `TP-IMP-0005` (`DEC-011`), `TP-IMP-0006` (`DEC-012`/`DEC-013`, `b929deb`, CI `43590868455`), `TP-IMP-0007` (`DEC-015`, `4cc8b6ad`, CI `43595815734`), **`CR-12` Option A (`DEC-017`)**, and **`TP-IMP-0008`** (`DEC-018`, `14238799`, CI `43606876169` `SUCCESS`, Stage 0 + Stage 1 Linux/macOS `-race >= 90%`, Windows `CGO_ENABLED=0`) are **`DONE` (`8 / 47`)**; **`TP-IMP-0009` (`1 / 47`) is `READY_FOR_REVIEW`** (awaiting remote CI `-race` & Owner acceptance); **`TP-IMP-0010` (`1 / 47`) is `READY`**; `37` downstream units `0011`..`0047` remain `BLOCKED` behind their dependency, review, and `COND-PO-01`..`05` verification gates.
+> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) plus `TP-IMP-0005` (`DEC-011`), `TP-IMP-0006` (`DEC-012`/`DEC-013`), `TP-IMP-0007` (`DEC-015`), **`CR-12` Option A (`DEC-017`) & `TP-IMP-0008`** (`DEC-018`), and **`TP-IMP-0009`** (`DEC-019`, `c3e3dd93`, CI `43615717101` `SUCCESS`) are **`DONE` (`9 / 47`)**; **`TP-IMP-0010` and `TP-IMP-0011` (`2 / 47`) are `READY`**; `36` downstream units `0012`..`0047` remain `BLOCKED` behind their dependency, review, and `COND-PO-01`..`05` verification gates.
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---
