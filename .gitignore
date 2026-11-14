@@ -3,6 +3,19 @@ node_modules/
 .pnp
 .pnp.js
 
+# Compiled binaries & Go build artifacts
+/tanpopo
+/tanpopo.exe
+cmd/tanpopo/tanpopo
+cmd/tanpopo/tanpopo.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
 # Testing & Coverage
 coverage/
 
@@ -11,12 +24,30 @@ dist/
 build/
 out/
 
+# Database, WAL, Secret Vault, Key & Backup artifacts
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite3-journal
+*.key
+*.pem
+*.p12
+*.pfx
+*.tpop.enc
+*.tpbundle
+
 # Environment files
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
 # Logs
 npm-debug.log*
@@ -24,6 +55,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.log
+
+# Git worktrees & local scratch directories
+.worktrees/
+.tmp/
 
 # Editor & OS files
 .DS_Store

@@ -1,0 +1,21 @@
+{
+  "name": "tanpopo-console",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tanpopo Web Console SPA (Astryx Design System v0.7.13)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "doctor": "astryx doctor"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "^0.7.13",
+    "@astryxdesign/theme-neutral": "^0.7.13",
+    "@stylexjs/stylex": "^0.19.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@astryxdesign/cli": "^0.7.13"
+  }
+}

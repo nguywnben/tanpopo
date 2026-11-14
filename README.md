@@ -9,7 +9,7 @@
 >
 > Tanpopo has completed its end-to-end discovery, requirements, architecture, UX/SRE, security, and 47-unit planning framework (`ASTRA A00–A10`) **plus Milestone `M0` (`TP-IMP-0001`..`0004` = `DONE`)**: locally compiled Protobuf ([`proto/`](./proto)), OpenAPI 3.1 ([`openapi/`](./openapi)), live-executed SQLite DDL + static-parity PostgreSQL 16 reference DDL ([`db/spec-check/`](./db/spec-check)), and isolated pure-Go feasibility spikes ([`tools/spikes/`](./tools/spikes) & [`docs/architecture/spike-results.md`](./docs/architecture/spike-results.md)).
 >
-> **No `M1+` production gateway, CLI, plugin runtime, GitHub Actions CI, or production Web Console code has been implemented yet** (only the initial Astryx UI setup in [`src/`](./src) and isolated `M0` spikes in [`tools/spikes/`](./tools/spikes) exist on disk). Under Product Owner approval `DEC-010`, **[`TP-IMP-0005`](./docs/planning/units/TP-IMP-0005.md) is now unlocked as the sole `READY` unit** to begin `M1`, while `TP-IMP-0006`..`0047` remain gated behind their dependencies, security reviews, and `COND-PO-01`..`05` verification conditions (all unmeasured Gateway SLOs remain `TARGET / UNVERIFIED`).
+> **No `M1+` production gateway, CLI runtime, or production Web Console screens have been implemented yet** (the initial monorepo bootstrap, Astryx `web/console/` setup, `CONSTRAINTS.md`, and Stage 0/1 CI gates from [`TP-IMP-0005`](./docs/planning/units/TP-IMP-0005.md) are locally implemented and `READY_FOR_REVIEW`, alongside isolated `M0` spikes in [`tools/spikes/`](./tools/spikes); upstream units `TP-IMP-0006`..`0047` remain `BLOCKED` pending `TP-IMP-0005` review/CI acceptance and their own dependencies, with all unmeasured Gateway SLOs remaining `TARGET / UNVERIFIED`).
 
 ---
 
@@ -58,16 +58,20 @@ Start here based on your role:
 
 ```text
 .
-├── AGENTS.md / GEMINI.md        # Astryx v0.7.13 UI rules + Cold-start Engineering Agent handoff gate
+├── AGENTS.md / GEMINI.md        # Astryx v0.7.13 UI rules, CONSTRAINTS.md contract & Cold-start Agent gate
+├── CONSTRAINTS.md               # Repository quality bar & Floor Guard enforcement rules
 ├── LICENSE                      # Apache License 2.0
-├── README.md                    # Project overview & pre-build status (this file)
+├── README.md                    # Project overview & M1 bootstrap status (this file)
+├── go.mod                       # Root Go module (github.com/nguywnben/tanpopo, Go 1.24.0)
+├── cmd/tanpopo/                 # Unified tanpopo CLI bootstrap entrypoint
+├── internal/                    # Canonical 19-package Go DAG skeleton (doc.go boundaries)
+├── scripts/ci/check.go          # Pure-Go cross-OS Floor Guard, DAG, license & lockfile gate
+├── .github/workflows/ci.yml     # Stage 0/1 Hermetic GitHub Actions CI workflow
 ├── buf.yaml / proto/            # Canonical Extension Runtime Protobuf v1 contract (compiled in M0)
 ├── openapi/                     # Canonical OpenAPI 3.1.0 Data Plane & Admin Control Plane specs
 ├── db/spec-check/               # Canonical 26-group SQLite WAL & PostgreSQL 16 (FORCE RLS) reference DDL
 ├── tools/spikes/                # Isolated pure-Go (CGO_ENABLED=0) M0 feasibility spikes (SPIKE-01..04)
-├── package.json                 # Initial Astryx v0.7.13 + StyleX setup (relocates to web/console/ in TP-IMP-0005)
-├── astryx-themes.js             # Generated Astryx 'neutral' theme module (do not edit manually)
-├── src/                         # Unbundled UI placeholder (replaced by template-scaffolded pages in M2)
+├── web/console/                 # Relocated Apache-2.0 Astryx v0.7.13 Web Console (package.json, astryx-themes.js, src/)
 ├── .agents/                     # 25 curated SDLC engineering skills, checklists & reviewer personas
 └── docs/                        # Complete English engineering specifications & 47-unit execution plan
     ├── governance/              # Charter, Decision Register, Assumptions, Execution Baseline & Owner Approval Sheet

@@ -45,3 +45,9 @@ If you are starting a fresh session with no prior chat context (e.g., executing 
 3. **Contracts & Spike Evidence (`M0`):** [`proto/tanpopo/extension/v1/runtime.proto`](./proto/tanpopo/extension/v1/runtime.proto), [`openapi/`](./openapi), [`db/spec-check/`](./db/spec-check), and [`docs/architecture/spike-results.md`](./docs/architecture/spike-results.md).
 4. **Audit, Gap & Documentation Hubs:** [`docs/reviews/execution-readiness.md`](./docs/reviews/execution-readiness.md), [`docs/reviews/unresolved-gaps.md`](./docs/reviews/unresolved-gaps.md), [`README.md`](./README.md) & [`docs/README.md`](./docs/README.md).
 <!-- TANPOPO-HANDOFF:END -->
+
+## Repository Workspace Paths & Quality Contract (`TP-IMP-0005`)
+
+- Read [`CONSTRAINTS.md`](./CONSTRAINTS.md) before writing code. Do not weaken it to make a change pass.
+- Web Console package root: [`web/console/`](./web/console/) (`package.json`, `package-lock.json`, `astryx-themes.js`, `src/`). Run Node/Astryx commands inside `web/console/` using `npm ci --ignore-scripts` and `npx @astryxdesign/cli doctor` (on Windows PowerShell: `cmd /c npx @astryxdesign/cli doctor`).
+- Cross-platform quality gate: run `go run ./scripts/ci/check.go --all` and `go test -v ./...` (`CGO_ENABLED=0`), plus `go test -v -race ./...` in environments with a C toolchain (`ubuntu-24.04`, `macos-14`).

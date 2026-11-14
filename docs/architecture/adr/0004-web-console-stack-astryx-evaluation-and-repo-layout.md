@@ -7,9 +7,9 @@
 `2026-11-11`
 
 ## Context
-The repository currently contains pre-existing [`package.json`](../../../package.json), [`astryx-themes.js`](../../../astryx-themes.js), [`src/App.tsx`](../../../src/App.tsx), and [`src/main.tsx`](../../../src/main.tsx) configured with `@astryxdesign/core@^0.7.13`, `@astryxdesign/theme-neutral`, `@astryxdesign/cli`, and `@stylexjs/stylex` (`DEC-007`). However:
+The repository contains the relocated [`web/console/package.json`](../../../web/console/package.json), [`web/console/astryx-themes.js`](../../../web/console/astryx-themes.js), [`web/console/src/App.tsx`](../../../web/console/src/App.tsx), and [`web/console/src/main.tsx`](../../../web/console/src/main.tsx) configured with `@astryxdesign/core@^0.7.13`, `@astryxdesign/theme-neutral`, `@astryxdesign/cli`, and `@stylexjs/stylex` (`DEC-007`), relocated under `web/console/` with `Apache-2.0` and English placeholder copy in `TP-IMP-0005`. However:
 1. Architectural discipline requires **never treating pre-installed packages as a fait accompli**; the stack must be evaluated objectively across bundle footprint, self-hosted operational cost, `WCAG 2.2 AA` accessibility, and long-term maintainability.
-2. Concrete baseline discrepancies exist in the repo (`ISS-001`..`005`): no bundler is configured yet, root `package.json` declares `"license": "ISC"` conflicting with the root [`LICENSE`](../../../LICENSE) (`Apache-2.0`), and `src/App.tsx` is a handwritten placeholder rather than an Astryx-scaffolded template.
+2. Concrete baseline discrepancies existed pre-`M1` (`ISS-001`..`005`, `008`): `ISS-002..004, 008` were closed in `web/console/` during `TP-IMP-0005`, while Vite bundling, StyleX compilation, and template-scaffolded screens (`ISS-001`, `ISS-005`) are scheduled in `TP-IMP-0026`.
 
 ## Decision
 1. **Approve upon independent technical evaluation (`PROPOSED`) the `TypeScript + React 19 + Vite + StyleX + Astryx v0.7.13 (theme neutral)` stack for the administrative Web Console**, compiled into static assets (`SPA Static Assets`) and **embedded directly into the Go binary (`embed.FS`)** so it is served from the Control Plane's admin listener with zero Node.js server runtime in production.

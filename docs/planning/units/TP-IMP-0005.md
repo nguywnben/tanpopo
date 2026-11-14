@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0005` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | **`READY`** *(Unlocked by Product Owner Gate G4 Stage 2 Approval `DEC-010` on `2026-11-14` — sole `READY` unit to begin `M1`; all upstream `M0` prerequisites `TP-IMP-0001..0004`, `ADR-0001`, `ADR-0004`, `SD-G1-05` are `DONE` / `ACCEPTED`)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified under `DEC-010` (`CGO_ENABLED=0`), passed fresh-context `security-auditor` & `code-reviewer` adversarial reviews; awaiting GitHub Actions Stage 0/1 CI run and Lead Engineer / Product Owner acceptance before marking `DONE` and unlocking `TP-IMP-0006`)* |
 | **Size** | `M` (`go.mod`, `.gitignore`, `web/console/`, `CONSTRAINTS.md`, `scripts/ci/check.go` & GitHub Actions) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Establishes `Floor Guard` quality gates, root Go module path & repository layout)* |
 | **Technical Owner** | `Staff Platform Engineer + CI/Security Engineer` |

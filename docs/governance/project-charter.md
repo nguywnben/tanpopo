@@ -144,7 +144,7 @@ This legal, ethical, and product governance boundary MUST be enforced across eve
 
 | ID | Constraint Category | Description | Status |
 |---|---|---|---|
-| **C-01** | Open-Source Licensing | Root [`LICENSE`](../../LICENSE) is **Apache License 2.0** (requires synchronizing `"license": "ISC"` in [`package.json`](../../package.json) per `ISS-002`). | `VERIFIED_IN_REPO` / `OPEN` |
+| **C-01** | Open-Source Licensing | Root [`LICENSE`](../../LICENSE) and relocated [`web/console/package.json`](../../web/console/package.json) both specify **Apache License 2.0** (`ISS-002` implemented in `TP-IMP-0005`). | `VERIFIED_IN_REPO` / `READY_FOR_REVIEW` |
 | **C-02** | Extension Security | External extensions are untrusted by default and MUST run under capability-isolated execution boundaries without raw vault access. | `CONFIRMED_BY_OWNER` |
 | **C-03** | Legal & Provider TOS | Zero tolerance for TOS-violating consumer subscription connectors; strict provenance separation between `official` and `community`/`external` packages. | `CONFIRMED_BY_OWNER` |
 | **C-04** | UI Design System Baseline | Repository has `@astryxdesign/core` (`0.7.13`), `@astryxdesign/theme-neutral` (`0.7.13`), `@astryxdesign/cli` (`0.7.13`), and `@stylexjs/stylex` (`0.19.1`) configured with default theme `neutral`; preserve this UI baseline intact without assuming the entire backend Core must be Node.js/React. | `CONFIRMED_BY_OWNER` & `VERIFIED_IN_REPO` |

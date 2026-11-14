@@ -4,8 +4,8 @@
 > - **Baseline ID:** `EXEC-BL-001-APPROVED`
 > - **Version:** `1.1.0-stage2-go` | **Last Updated:** `2026-11-14` | **M0 Reference Commit:** `eb01661`
 > - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved by Product Owner via `DEC-010` — **solely `TP-IMP-0005` is unlocked as `READY`** to start Milestone `M1`!)*
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`DEC-009` & `DEC-010`)** *(Milestone `M0` units `TP-IMP-0001`..`0004` = `DONE`; `TP-IMP-0005` = `READY`; `TP-IMP-0006`..`0047` = `BLOCKED` behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.)*
-> - **CURRENT READY UNITS (`READY_UNITS`):** **[`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) ONLY (`1 / 47` `READY`, `4 / 47` `DONE`, `42 / 47` `BLOCKED`)**
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`DEC-009` & `DEC-010`)** *(Milestone `M0` units `TP-IMP-0001`..`0004` = `DONE`; `TP-IMP-0005` = **`READY_FOR_REVIEW`**; `TP-IMP-0006`..`0047` = `BLOCKED` behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.)*
+> - **CURRENT UNIT STATE (`UNIT_STATES`):** **`4 / 47` `DONE` (`TP-IMP-0001`..`0004`), `1 / 47` `READY_FOR_REVIEW` ([`TP-IMP-0005`](../planning/units/TP-IMP-0005.md)), `0 / 47` `READY`, `42 / 47` `BLOCKED` (`TP-IMP-0006`..`0047`)**
 
 ---
 
@@ -37,7 +37,7 @@ All strategic, scope, and architectural decisions below are formally confirmed b
 - **`DEC-004` (`Absolute Legal & Compliance Boundary`):** Official Adapters strictly target official commercial Provider APIs and provider-authorized access flows; **Tanpopo never builds, bundles, documents, or legitimizes converting personal consumer subscriptions (`ChatGPT Plus/Pro`, `Claude Pro/Max`, `Codex`, `Antigravity`, etc.) into general-purpose APIs, nor uses "accept-risk" disclaimers to excuse TOS violations (`REJ-003`)**.
 - **`DEC-005`:** Canonical repository `https://github.com/nguywnben/tanpopo` (`main` branch), Git author `Nguyễn Công Ben <nben940665@gmail.com>`.
 - **`DEC-006`:** Local installation and use of all 25 software engineering skills in [`.agents/skills/`](../../.agents/skills) (`skills-lock.json`).
-- **`DEC-007`:** Web Console baseline uses `@astryxdesign/core@^0.7.13` + `@stylexjs/stylex@^0.19.1` with default theme **`neutral`** ([`astryx-themes.js`](../../astryx-themes.js)) — **never run `astryx theme eject`, never emit raw `div`/`span` HTML elements, reserve `Badge` strictly for numeric counts, and keep 100% English UI copy (`ISS-008`)**.
+- **`DEC-007`:** Web Console baseline uses `@astryxdesign/core@^0.7.13` + `@stylexjs/stylex@^0.19.1` with default theme **`neutral`** ([`web/console/astryx-themes.js`](../../web/console/astryx-themes.js)) — **never run `astryx theme eject`, never emit raw `div`/`span` HTML elements, reserve `Badge` strictly for numeric counts, and keep 100% English UI copy (`ISS-008`)**.
 - **`DEC-008`:** Atomic Conventional Commits formatted as `<type>: step <NN> - <description>` (or `<type>(<module>): step <NN> - <description>`); no `a`-prefixed step numbers and no force-pushes on `main`.
 - **`DEC-009` & `COND-PO-01`..`05` (`GOV-OAS-01` Ruling — `2026-11-14`):** Approved Track A (`18` items) and Track B (`15` items: `Apache-2.0`, `SD-G1-01..05`, `BA-OQ-001..05`, `TD-G2-01..06`, `ADR-0001..0006`, `CR-01..10`) subject to **5 mandatory binding conditions**:
   1. **`COND-PO-01`:** Keep every unmeasured SLO/latency/memory/throughput claim explicitly labeled **`TARGET` / `UNVERIFIED`**.
@@ -98,7 +98,7 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 | Wave | Unit ID(s) | Execution Mode | Status / Mandatory Checkpoint Before Next Wave |
 |---|---|---|---|
 | **Wave 0.1–0.4 (`M0`)** | [`TP-IMP-0001`](../planning/units/TP-IMP-0001.md) → [`0002`](../planning/units/TP-IMP-0002.md) → [`0003`](../planning/units/TP-IMP-0003.md) → [`0004`](../planning/units/TP-IMP-0004.md) | Completed in `M0` | **`DONE` (`GATE-M0` Closed):** Closed `GAP-01..13`; compiled `runtime.proto` & `openapi/*.yaml`; executed `sqlite_schema.sql` live (static parity on `postgres_schema.sql`); locked `POC-01` & `POC-02` in `spike-results.md`. |
-| **Wave 1.1 *(ACTIVE `READY`)* ** | [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) | Sequential (`1` branch) | **`READY` (`REQUIRES_STRONG_REVIEW`)** — Monorepo `go.mod`, `web/console/`, `Apache-2.0`, `ISS-008` English UI copy, `CONSTRAINTS.md`, `check.go` & `.github/workflows/ci.yml`. |
+| **Wave 1.1 *(ACTIVE REVIEW)* ** | [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) | Sequential (`1` branch) | **`READY_FOR_REVIEW` (`REQUIRES_STRONG_REVIEW`)** — Implemented & locally verified (`go.mod`, `cmd/tanpopo`, 19 `internal/*/doc.go`, `web/console/`, `Apache-2.0`, `ISS-008`, `CONSTRAINTS.md`, `check.go`, `.github/workflows/ci.yml`); passed fresh-context `security-auditor` & `code-reviewer`; awaiting human acceptance & Stage 0/1 CI run. |
 | **Wave 1.2** | [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) **\|\|** [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) | **Parallel (`2` `git worktree`s)** | Hermetic `netguard` (`0006`) + `SQLite WAL` migration runner (`0007`). |
 | **Wave 1.3** | [`TP-IMP-0008`](../planning/units/TP-IMP-0008.md) → [`TP-IMP-0009`](../planning/units/TP-IMP-0009.md) | Sequential | `REQUIRES_STRONG_REVIEW` — 3-tier Envelope Vault + `RBAC` / `Virtual Key` / `ConfigSnapshot`. |
 | **Wave 1.4** | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md) **\|\|** [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md) | **Parallel (`2` `git worktree`s)** | `REQUIRES_STRONG_REVIEW` — `SSRFGuard` + `BlindBroker` + `.tpkg` Installer `SM-01`. |

@@ -8,7 +8,7 @@
 > - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`APPROVED_WITH_CONDITIONS`** *(`runtime.proto` & `POC-01/02` verified locally in `TP-IMP-0002, 0004`; `COND-PO-01, 04, 05`).*
 > - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`APPROVED_WITH_CONDITIONS`** *(`ADR-0001..0006` `ACCEPTED`, `openapi/*.yaml` & `sqlite_schema.sql` verified locally, `postgres_schema.sql` static parity checked with live PG 16 DDL gated in `TP-IMP-0039`, `SPIKE-01..04` documented in [`spike-results.md`](./architecture/spike-results.md); bound to `COND-PO-01..05`).*
 > - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`REMEDIATED_IN_M0` *(`13 / 13` Gaps Closed)*** — See [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md).
-> - **Gate G4 & Engineering Handoff (`DEC-009` & `DEC-010`):** **`APPROVED` | `DELIVERY HANDOFF VERDICT = GO`** — `TP-IMP-0001`..`0004` (`4 / 47` `M0` units) = **`DONE`**; **solely [`TP-IMP-0005`](./planning/units/TP-IMP-0005.md) (`1 / 47`) = `READY`**; `TP-IMP-0006`..`0047` (`42 / 47`) remain **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
+> - **Gate G4 & Engineering Handoff (`DEC-009` & `DEC-010`):** **`APPROVED` | `DELIVERY HANDOFF VERDICT = GO`** — `TP-IMP-0001`..`0004` (`4 / 47` `M0` units) = **`DONE`**; **[`TP-IMP-0005`](./planning/units/TP-IMP-0005.md) (`1 / 47`) = `READY_FOR_REVIEW`** *(implemented & locally verified, passed `security-auditor` & `code-reviewer` adversarial checks; awaiting Lead Engineer / Product Owner acceptance and Stage 0/1 GitHub Actions CI run)*; `TP-IMP-0006`..`0047` (`42 / 47`) remain **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 
 ---
 
@@ -26,11 +26,11 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | **0D** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`Historical A08`):** Independent A08 horizontal + 8 vertical-slice adversarial audit (`AUD-001`..`030`) whose blocking items were closed in `M0`. | Historical audit provenance for `CR-01`..`10`. |
 | **0E** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01` (`13 / 13 CLOSED`):** Change Requests **`CR-01`..`CR-10`** and `M0` closure evidence for **`GAP-01`..`GAP-13`**. | Verifying how each A08 specification gap was resolved. |
 
-### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `4 DONE, 1 READY [TP-IMP-0005], 42 BLOCKED`)
+### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `4 DONE, 1 READY_FOR_REVIEW [TP-IMP-0005], 42 BLOCKED`)
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
-| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all **47 execution units (`TP-IMP-0001`..`0047`)** (`0001..0004 = DONE`, **`0005 = READY`**, `0006..0047 = BLOCKED`), `REQUIRES_STRONG_REVIEW` flags (`37/47`), and links to [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | When checking unit readiness, dependencies, or locating a `UNIT_ID` spec. |
+| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all **47 execution units (`TP-IMP-0001`..`0047`)** (`0001..0004 = DONE`, **`0005 = READY_FOR_REVIEW`**, `0006..0047 = BLOCKED`), `REQUIRES_STRONG_REVIEW` flags (`37/47`), and links to [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | When checking unit readiness, dependencies, or locating a `UNIT_ID` spec. |
 | **0G** | [`docs/planning/roadmap.md`](./planning/roadmap.md) & [`docs/planning/milestone-map.md`](./planning/milestone-map.md) | **`PLAN-RM-01` & `PLAN-MS-01`:** 9 dependency-driven phases (`EP-00`..`09`), program blockers, trunk/worktree/canary rollout strategy, capacity & uncertainty ranges, and milestone gates `GATE-M0`..`GATE-M5`. | Program coordination, milestone gate checks, and capacity planning. |
 | **0H** | [`docs/planning/dependency-graph.md`](./planning/dependency-graph.md) | **`PLAN-DAG-01`:** Verified acyclic 47-node Mermaid DAG ($u < v$), critical path, 4 parallel `git worktree` expansion points, conditional First 5 Units, and hermetic cross-OS build/test procedures. | Parallel worktree scheduling and build/test environment setup. |
 
@@ -127,25 +127,26 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 
 ## 2. Explicit Separation: Existing Code on Disk vs. Specification & Planning Artifacts
 
-> **Verified Repository Fact (`VERIFIED_IN_REPO`):** Through Milestone `M0` Closure & Gate G4 Stage 2 Approval, the repository **contains zero `M1+` production AI Gateway runtime code, zero GitHub Actions CI workflows, and zero production Web Console screen implementations** (no root `go.mod`, no production HTTP server, and no Vite bundler yet — only the pre-existing Astryx placeholder in `src/`, the machine-readable contracts in `proto/`, `openapi/`, and `db/spec-check/`, and the isolated `M0` feasibility test suite in `tools/spikes/`). Under Product Owner approval `DEC-010`, **`HANDOFF_VERDICT = GO`** with **solely [`TP-IMP-0005`](./planning/units/TP-IMP-0005.md) marked `READY`** to start `M1`.
+> **Verified Repository Fact (`VERIFIED_IN_REPO`):** Through `TP-IMP-0005` (`M1` Monorepo Bootstrap), the repository contains the root Go module (`go.mod`), `cmd/tanpopo/main.go`, 19 `internal/*/doc.go` package boundary declarations, [`CONSTRAINTS.md`](../CONSTRAINTS.md), `scripts/ci/check.go`, `.github/workflows/ci.yml`, relocated Apache-2.0 Astryx setup in `web/console/`, `M0` contracts (`proto/`, `openapi/`, `db/spec-check/`), and isolated `M0` spikes (`tools/spikes/`). Zero `M1+` gateway runtime servers or Vite/template-scaffolded screens exist yet. Under `DEC-010`, **[`TP-IMP-0005`](./planning/units/TP-IMP-0005.md) is `READY_FOR_REVIEW`** awaiting Product Owner / Lead Engineer acceptance and GitHub CI run before promoting `TP-IMP-0006`+ from `BLOCKED`.
 
 ### 2.1. Complete Repository Inventory (`VERIFIED_IN_REPO`)
 
 | Repository Path | Artifact Class | Verified State (`VERIFIED_IN_REPO`) |
 |---|---|---|
-| [`README.md`](../README.md) | **Root Repository Entrypoint** | English project overview, `GO` (`TP-IMP-0005 READY`) status banner, 4-plane architecture summary, `DEC-004` compliance notice, and navigation links into `docs/`. |
+| [`README.md`](../README.md), [`CONSTRAINTS.md`](../CONSTRAINTS.md) & [`go.mod`](../go.mod) | **Root Entrypoint, Constraints & Go Module** | English project overview, `CONSTRAINTS.md` quality bar, and root Go `1.24.0` module `github.com/nguywnben/tanpopo` (`0` external deps). |
+| `cmd/tanpopo/`, `internal/*/doc.go`, `scripts/ci/`, `.github/workflows/ci.yml` | **`M1` Foundation (`TP-IMP-0005`)** | Minimal CLI `--version` stub, 19 canonical package boundaries, pure-Go Floor Guard/DAG/license checks (`check.go`), and Stage 0/1 CI workflow. |
 | [`LICENSE`](../LICENSE) | **Root Legal License** | **Apache License 2.0** (201 lines, initial commit `0a35b74`). |
-| [`.gitignore`](../.gitignore) | **Git Ignore Rules** | Excludes `node_modules/`, `dist/`, `build/`, `out/`, `coverage/`, `.env*`, logs, and IDE temp files (Go/SQLite/Vault patterns scheduled for `TP-IMP-0005`). |
+| [`.gitignore`](../.gitignore) | **Git Ignore Rules** | Excludes `node_modules/`, Go binaries/DLLs, SQLite/WAL artifacts, secret/key/backup files (`.key`, `.pem`, `.tpop.enc`), `.env*`, and `.worktrees/`. |
 | [`skills-lock.json`](../skills-lock.json) | **Agent Skills Lockfile** | Pins versions and SHA-256 hashes of all 25 skills installed from `addyosmani/agent-skills`. |
 | [`.agents/skills/*`](../.agents/skills) | **Agent Workflow Skills (25)** | 25 workspace skill directories (`SKILL.md` + scripts/resources). Preserved unmodified. |
 | [`.agents/references/*`](../.agents/references) | **Engineering Checklists (7)** | Shared review checklists (`security`, `performance`, `accessibility`, `observability`, `testing-patterns`, `orchestration-patterns`, `definition-of-done`). |
 | [`.agents/agents/*`](../.agents/agents) | **Subagent Personas (4)** | Specialized reviewers: `code-reviewer`, `security-auditor`, `test-engineer`, `web-performance-auditor`. |
-| [`.agents/plugin.json`](../.agents/plugin.json) | **Upstream Skill Metadata** | Original `agent-skills` manifest (`v0.6.15`, `MIT` license). |
+| [`.agents/plugin.json`](../.agents/plugin.json) | **Upstream Skill Metadata** | Original `agent-skills` manifest (`v0.6.15`, `MIT` license — allowlisted in `CONSTRAINTS.md`). |
 | [`.gemini/commands/*.toml`](../.gemini/commands) | **Gemini CLI Shortcuts** | 9 TOML slash-command definitions. Preserved unmodified. |
-| [`AGENTS.md`](../AGENTS.md) & [`GEMINI.md`](../GEMINI.md) | **Agent UI & Cold-Start Rules** | Generated Astryx v0.7.13 rules block (preserved 100% verbatim) + `TANPOPO-HANDOFF` cold-start navigation block. |
-| [`package.json`](../package.json) & [`package-lock.json`](../package-lock.json) | **Initial Node.js Manifest** | 4 direct packages: `@astryxdesign/core@^0.7.13`, `@astryxdesign/theme-neutral@^0.7.13`, `@astryxdesign/cli@^0.7.13`, `@stylexjs/stylex@^0.19.1` (`"license": "ISC"`, unbundled — `ISS-001..004`, `GATE-REL-04`). Preserved unmodified. |
-| [`astryx-themes.js`](../astryx-themes.js) | **Generated Theme Module** | Generated by `npx astryx theme add neutral`, exporting `defaultThemeSlug = "neutral"`. **Preserved 100% unmodified; never run `theme eject`.** |
-| [`src/App.tsx`](../src/App.tsx) & [`src/main.tsx`](../src/main.tsx) | **Unbundled UI Placeholder** | 2 placeholder React/TSX files (34 and 13 lines) wiring `Theme` `neutral`. **Preserved 100% unmodified per pre-build source-freeze rule.** |
+| [`AGENTS.md`](../AGENTS.md) & [`GEMINI.md`](../GEMINI.md) | **Agent UI & Cold-Start Rules** | Preserved Astryx v0.7.13 rules block + `TANPOPO-HANDOFF` navigation block + `web/console/` & `CONSTRAINTS.md` path notes. |
+| [`web/console/package.json`](../web/console/package.json) & [`web/console/package-lock.json`](../web/console/package-lock.json) | **Web Console Manifest (`Apache-2.0`)** | Aligned to `Apache-2.0`, `type: module`, explicit `react`/`react-dom` `^19.3.1`, `@astryxdesign/cli` in `devDependencies` (`ISS-002..004` implemented). |
+| [`web/console/astryx-themes.js`](../web/console/astryx-themes.js) | **Generated Theme Module** | Generated by `npx astryx theme add neutral`, exporting `defaultThemeSlug = "neutral"`. **Preserved 100% unmodified; never run `theme eject`.** |
+| [`web/console/src/App.tsx`](../web/console/src/App.tsx) & [`web/console/src/main.tsx`](../web/console/src/main.tsx) | **English Placeholder UI** | Placeholder React/TSX files relocated under `web/console/src/` with English demo copy (`ISS-008` implemented; replaced by template screens in `M2`). |
 | `docs/governance/*` (`5` files) & `docs/README.md` | **Governance & Handoff Layer** | `project-charter.md`, `decisions.md`, `assumptions.md`, `execution-baseline.md`, `owner-approval-sheet.md`, and `docs/README.md`. |
 | `docs/discovery/*` (`5` files) | **Product Discovery & Risks** | `market-and-competitors.md`, `users-jobs-use-cases.md`, `opportunity-and-feasibility.md`, `positioning-and-success-metrics.md`, `risk-register.md`. |
 | `docs/product/*` (`4` files) | **Product Definition (`APPROVED`)** | `glossary.md`, `prd.md`, `feature-catalog.md`, `release-scope.md`. |
@@ -157,7 +158,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | `docs/security/*` (`3` files) | **Security & Tenant Isolation** | `threat-model.md`, `plugin-sandbox-and-supply-chain.md`, `secrets-and-tenant-isolation.md`. |
 | `docs/quality/*` (`4` files) | **QA, Hermetic CI, SLOs & Gates** | `contract-test-matrix.md`, `test-strategy.md`, `nonfunctional-slo.md`, `release-readiness.md`. |
 | `docs/reviews/*` (`3` files) | **Independent Audits & Readiness** | `integrated-audit.md` (`Historical A08`), `unresolved-gaps.md` (`13/13 CLOSED`), `execution-readiness.md` (`Stage 2: GO`). |
-| `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and `units/TP-IMP-0001.md`..`TP-IMP-0047.md` (`0001..0004 = DONE`, `0005 = READY`). |
+| `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and `units/TP-IMP-0001.md`..`TP-IMP-0047.md` (`0001..0004 = DONE`, `0005 = READY_FOR_REVIEW`, `0006..0047 = BLOCKED`). |
 | `buf.yaml`, `proto/`, `openapi/`, `db/spec-check/`, `tools/spikes/` | **`M0` Contracts & Isolated Spikes** | Machine-verified `runtime.proto`, `dataplane-v1.yaml`, `admin-v1.yaml`, `sqlite_schema.sql` (live), `postgres_schema.sql` (static parity), and pure-Go `SPIKE-01..04`. |
 
 ---

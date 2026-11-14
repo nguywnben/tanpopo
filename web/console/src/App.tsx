@@ -15,14 +15,14 @@ export function App() {
     <Theme theme={themes[defaultThemeSlug]}>
       <VStack gap={6} padding={6}>
         <Heading level={1}>Tanpopo App</Heading>
-        <Text>Giao diện khởi tạo với Astryx Design System và theme Neutral.</Text>
+        <Text>Starter interface built with Astryx Design System and the Neutral theme.</Text>
         <Card>
           <VStack gap={4} padding={4}>
-            <Heading level={2}>Chào mừng bạn!</Heading>
-            <Text>Theme Neutral mang lại cảm giác tối giản, gam màu xám ấm tinh tế giúp người dùng tập trung vào nội dung.</Text>
+            <Heading level={2}>Welcome!</Heading>
+            <Text>The Neutral theme provides a minimalist, subtle warm-gray palette designed to keep focus on your workspace.</Text>
             <HStack gap={3}>
-              <Button label="Khám phá ngay" variant="primary" />
-              <Button label="Tùy chỉnh" variant="secondary" />
+              <Button label="Explore" variant="primary" />
+              <Button label="Customize" variant="secondary" />
             </HStack>
           </VStack>
         </Card>

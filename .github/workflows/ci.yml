@@ -1,0 +1,131 @@
+# Copyright 2026 The Tanpopo Authors.
+# Licensed under the Apache License, Version 2.0.
+#
+# Hermetic Stage 0 & Stage 1 CI Pipeline (TP-IMP-0005 / SPEC-QA-02).
+# Zero external Internet AI API calls; pre-seeded with CANARY_FORBIDDEN_CI_KEY traps.
+# All third-party Actions are pinned to immutable 40-char commit SHAs.
+
+name: CI (Stage 0-1 Contract, Floor, Supply-Chain & Small Tests)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  TANPOPO_TEST_HERMETIC: "1"
+  OPENAI_API_KEY: CANARY_FORBIDDEN_CI_KEY
+  ANTHROPIC_API_KEY: CANARY_FORBIDDEN_CI_KEY
+  GEMINI_API_KEY: CANARY_FORBIDDEN_CI_KEY
+
+jobs:
+  stage0-contract-floor-supply-chain:
+    name: Stage 0 — Contract, Floor Guard, Astryx & License Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Go 1.24
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: |
+            go.mod
+            tools/spikes/go.mod
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: web/console/package-lock.json
+
+      - name: Verify Floor Guard, DAG, License, Lockfiles, UI Layout & Canary Hygiene
+        run: go run ./scripts/ci/check.go --dag --floor-guard --license --lockfiles --ui-layout --canary
+
+      - name: Verify M0 Machine-Readable Contracts (runtime.proto, OpenAPI 3.1, SQLite DDL)
+        working-directory: tools/spikes
+        run: CGO_ENABLED=0 go test -count=1 -v -run 'Test(ContractProtoCompilesCleanly|OpenAPISpecsParseAndResolveAllInternalRefs|PhysicalSQLiteAndPostgresSchemaParityAndConstraints|HermeticGuardBlocksExternalEgress)' ./...
+
+      - name: Install Web Console dependencies (Default-Deny lifecycle scripts)
+        working-directory: web/console
+        run: npm ci --ignore-scripts
+
+      - name: Audit Production Web Console Dependencies
+        working-directory: web/console
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Run Astryx Doctor & Conditional TypeScript Check
+        working-directory: web/console
+        run: |
+          npx --no -- @astryxdesign/cli doctor
+          if [ -f tsconfig.json ]; then
+            npm run typecheck
+          fi
+
+      - name: Setup Buf & Lint Protobuf Contracts
+        uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1.50.0
+
+      - name: Run buf lint on proto/
+        run: buf lint
+
+  stage1-static-build-and-small-tests:
+    name: Stage 1 — Pure-Go Build & Small Tests (${{ matrix.os }})
+    needs: stage0-contract-floor-supply-chain
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Go 1.24
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: go.mod
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: web/console/package-lock.json
+
+      - name: Run All Go Quality Gates & Pure-Go Build (CGO_ENABLED=0)
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED = '0'
+          go run ./scripts/ci/check.go --all
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test -v -short ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify tanpopo CLI Version Stub Under CGO_ENABLED=0
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED = '0'
+          go run ./cmd/tanpopo --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run Race Detector Tests (Linux & macOS C Toolchain)
+        if: matrix.os != 'windows-2022'
+        run: go test -v -race -short ./...
+
+      - name: Run Web Console npm ci --ignore-scripts & Astryx Doctor Across All OS Runners
+        working-directory: web/console
+        shell: pwsh
+        run: |
+          npm ci --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx --no -- @astryxdesign/cli doctor
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
