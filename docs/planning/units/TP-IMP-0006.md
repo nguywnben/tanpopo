@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0006` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified under `CGO_ENABLED=0` & `TANPOPO_TEST_HERMETIC=1` (`93.5%` total statement coverage across `./internal/testkit/...` via `go test -count=3 -coverprofile=...`, `0` `time.Sleep`); `CR-11` Option A (`DEC-012`) implemented across `scripts/ci/check.go`, `CONSTRAINTS.md`, `netguard`, `netguard_default_test.go`, and fail-closed Linux `unshare --net` + `-race -count=3` in `.github/workflows/ci.yml`; awaiting final GitHub Actions run and acceptance before marking `DONE`)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-14` by Product Owner via `DEC-013` at commit `b929debc815bda251b9bf5e882e2cf595d30e4f0` following `CR-11` Option A (`DEC-012`), GitHub Actions run `43590868455` `completed / success` across Stage 0 + Stage 1 `ubuntu-24.04` [live `unshare --net` + `-race -count=3`], `macos-15` [`-race -count=3`], and `windows-2022` [`CGO_ENABLED=0 -count=3`], `93.5%` local `CGO_ENABLED=0` and `>= 90.0%` CI `-race` statement coverage, and `0` blocking findings from independent `code-reviewer` & `security-auditor` passes; OS-level isolation on macOS/Windows remains `UNVERIFIED`)* |
 | **Size** | `M` (`5` internal packages under `internal/testkit/*`) |
 | **Review Tier** | `STANDARD_REVIEW` |
 | **Technical Owner** | `QA Architect + Test Systems Engineer` |

@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0014` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0006`, `TP-IMP-0012`, `TP-IMP-0013` — `GAP-01, 02`)* |
+| **Status** | `BLOCKED` *(Waiting on `TP-IMP-0012`, `TP-IMP-0013` — upstream `TP-IMP-0006` = `DONE`)* |
 | **Size** | `M` (`cmd/tanpopo/main.go`, `sdk/*`, `internal/cli/plugin/*`, `internal/extension/testharness/*`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Contract verification toolchain for extension authors)* |
 | **Technical Owner** | `Developer Experience & Extension SDK Lead` |
