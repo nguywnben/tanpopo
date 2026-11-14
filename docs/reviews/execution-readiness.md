@@ -1,10 +1,10 @@
 # Final Delivery Readiness Audit (`ASTRA A10` — Gate G4 Stage 2 Handoff Approved) — Tanpopo
 
 > **Independent Governance Verdict Document (ASTRA A10 + `M0` + `TP-IMP-0005` [`DEC-011`] + `TP-IMP-0006` [`DEC-013`])**
-> - **Report ID:** `REV-RDY-01` | **Version:** `2.3.0-tp-imp-0006-done` | **Audit Date:** `2026-11-14`
+> - **Report ID:** `REV-RDY-01` | **Version:** `2.4.0-tp-imp-0007-ready-for-review` | **Audit Date:** `2026-11-14`
 > - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
-> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005` accepted via `DEC-011`; `CR-11` Option A & [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) Product-Owner-accepted as **`DONE`** via `DEC-012`/`DEC-013` at commit `b929deb` & CI Run `43590868455` `SUCCESS`)*
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`6 / 47` units `DONE` [`0001..0006`] · `1 / 47` `READY` [`TP-IMP-0007`] · `40 / 47` `BLOCKED` behind upstream dependencies & review gates)**
+> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005` accepted via `DEC-011`; `CR-11` Option A & [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) accepted as **`DONE`** via `DEC-012`/`DEC-013` at commit `b929deb` & CI Run `43590868455` `SUCCESS`; [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) = **`READY_FOR_REVIEW`**)*
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`6 / 47` units `DONE` [`0001..0006`] · `1 / 47` `READY_FOR_REVIEW` [`TP-IMP-0007`] · `0 / 47` `READY` · `40 / 47` `BLOCKED` behind upstream dependencies & review gates)**
 
 ---
 
@@ -61,5 +61,5 @@ Every check below strictly separates **what has been verified locally in `M0`** 
 |---|---|---|
 | **Governance Gate (`HANDOFF_VERDICT`)** | **`GO`** | Approved in `DEC-010`, `DEC-011`, `DEC-012`, and `DEC-013` ([`decisions.md`](../governance/decisions.md)). |
 | **`TP-IMP-0005` & `TP-IMP-0006` Acceptance Status** | **`DONE` *(Accepted `DEC-011`, `DEC-013`)* ** | `TP-IMP-0005` accepted at `1f4f5a1` (`43584413913`); `CR-11` Option A & `TP-IMP-0006` accepted at `b929debc815bda251b9bf5e882e2cf595d30e4f0` (`43590868455` `completed / success`: Linux `unshare --net` + `-race -count=3`, macOS `-race -count=3`, Windows `CGO_ENABLED=0 -count=3`, `93.5%` local coverage, `code-reviewer` + `security-auditor` `PASS`; macOS/Windows OS isolation remains `UNVERIFIED`). |
-| **Active `Wave 1.2` Queue (`TP-IMP-0007` Only `READY`)** | **`1 / 47` `READY`** | **[`TP-IMP-0007`](../planning/units/TP-IMP-0007.md)** (**`READY`**, `REQUIRES_STRONG_REVIEW`, Deps: `0003, 0005` `DONE`). `TP-IMP-0008..0047` (`40` units, including `TP-IMP-0014` still awaiting `0012` & `0013`) remain `BLOCKED`. |
+| **Active `Wave 1.2` Queue (`TP-IMP-0007` `READY_FOR_REVIEW`)** | **`1 / 47` `READY_FOR_REVIEW`** | **[`TP-IMP-0007`](../planning/units/TP-IMP-0007.md)** (**`READY_FOR_REVIEW`**, `REQUIRES_STRONG_REVIEW`, Deps: `0003, 0005` `DONE`; local `CGO_ENABLED=0` + cross-OS builds + `idgen 96.1%` / `storage/... 85.8%` + `security-auditor` & `code-reviewer` `PASS`; `-race` CI & Owner sign-off pending). `TP-IMP-0008..0047` (`40` units, including `TP-IMP-0014` still awaiting `0012` & `0013`) remain `BLOCKED`. |
 | **Luna Dispatch Verdict** | **`READY_FOR_DISPATCH (TP-IMP-0007)`** | An Engineering Agent can execute [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) in isolation via [`AGENTS.md`](../../AGENTS.md) → [`execution-baseline.md`](../governance/execution-baseline.md). |

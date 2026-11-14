@@ -5,11 +5,11 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 > [!IMPORTANT]
-> **Current Project Status — Gate G4 Approved (`HANDOFF_VERDICT: GO` · `TP-IMP-0001..0006` `DONE` · `TP-IMP-0007` `READY`)**
+> **Current Project Status — Gate G4 Approved (`HANDOFF_VERDICT: GO` · `TP-IMP-0001..0006` `DONE` · `TP-IMP-0007` `READY_FOR_REVIEW`)**
 >
 > Tanpopo has completed its end-to-end discovery, requirements, architecture, UX/SRE, security, and 47-unit planning framework (`ASTRA A00–A10`), Milestone `M0` (`TP-IMP-0001`..`0004` = `DONE`: locally compiled Protobuf [`proto/`](./proto), OpenAPI 3.1 [`openapi/`](./openapi), live-executed SQLite DDL + static-parity PostgreSQL 16 reference DDL [`db/spec-check/`](./db/spec-check), and isolated pure-Go feasibility spikes [`tools/spikes/`](./tools/spikes) / [`docs/architecture/spike-results.md`](./docs/architecture/spike-results.md)), **`TP-IMP-0005` (`DONE` — `DEC-011`)**, and **shared hermetic test harness [`TP-IMP-0006`](./docs/planning/units/TP-IMP-0006.md) ([`internal/testkit/*`](./internal/testkit/doc.go), `DONE` — Product Owner accepted via `DEC-012`/`DEC-013` at commit `b929deb` and GitHub Actions Run `43590868455` `SUCCESS` with Linux `unshare --net` + `-race -count=3` & `>= 90%` coverage on `ubuntu-24.04` and `macos-15`)**.
 >
-> **[`TP-IMP-0007`](./docs/planning/units/TP-IMP-0007.md) is the sole `READY` unit; no `M1` storage/gateway servers or production Web Console screens exist yet:** `TP-IMP-0008`..`0047` remain **`BLOCKED`** behind upstream dependencies and `REQUIRES_STRONG_REVIEW` gates, OS-level network isolation on macOS/Windows remains `UNVERIFIED`, and all unmeasured Gateway SLOs remain `TARGET / UNVERIFIED`.
+> **[`TP-IMP-0007`](./docs/planning/units/TP-IMP-0007.md) (`storage/port`, `idgen`, `migrate`, pure-Go `SQLite WAL` driver & `0001_foundation.sql`) is `READY_FOR_REVIEW`** (implemented and locally verified under `CGO_ENABLED=0` + cross-OS builds + independent `security-auditor` and `code-reviewer` `PASS`; `-race` on C-toolchain CI runners & Product Owner `REQUIRES_STRONG_REVIEW` acceptance pending). **`TP-IMP-0008`..`0047` remain `BLOCKED`** behind upstream dependencies and `REQUIRES_STRONG_REVIEW` gates, no gateway HTTP servers or production Web Console screens exist yet, OS-level network isolation on macOS/Windows remains `UNVERIFIED`, and all unmeasured Gateway SLOs remain `TARGET / UNVERIFIED`.
 
 ---
 

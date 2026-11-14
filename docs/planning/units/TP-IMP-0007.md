@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0007` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-011`; upstream `TP-IMP-0003` and `TP-IMP-0005` are `DONE`)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified `2026-11-14`; `idgen` `96.1%`, `storage/migrate` `88.5%`, `storage/sqlite` `85.2%` [total `85.8%`], `CGO_ENABLED=0` + cross-OS builds + `scripts/ci/check.go --all` `PASS`; fresh-context `security-auditor` & `code-reviewer` `PASS`; awaiting `-race` CI verification on Linux/macOS & Product Owner acceptance)* |
 | **Size** | `M` (`go.mod`, `internal/pkg/idgen`, `internal/storage/*`, `db/migrations/sqlite/0001_foundation.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Establishes root multi-tenant isolation invariants & schema migration mechanics)* |
 | **Technical Owner** | `Staff Backend / Storage Engineer` |

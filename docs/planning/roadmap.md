@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0006: DONE` | `READY: TP-IMP-0007`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `1.4.0-tp-imp-0006-done` | **Date:** `2026-11-14`
+> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0006: DONE` | `READY_FOR_REVIEW: TP-IMP-0007`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.5.0-tp-imp-0007-ready-for-review` | **Date:** `2026-11-14`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **MANDATORY GOVERNANCE NOTICE (`TP-IMP-0005 & TP-IMP-0006 ACCEPTED — TP-IMP-0007 READY`):**
+> - **MANDATORY GOVERNANCE NOTICE (`TP-IMP-0005 & TP-IMP-0006 ACCEPTED — TP-IMP-0007 READY_FOR_REVIEW`):**
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
 >   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Following Product Owner acceptance of **`TP-IMP-0005`** (`DEC-011`, commit `1f4f5a1`, CI Run `43584413913`) and **`CR-11` / `TP-IMP-0006`** (`DEC-012`/`DEC-013`, commit `b929deb`, CI Run `43590868455` `SUCCESS`), **`TP-IMP-0005` & `TP-IMP-0006` are `DONE`**, **`TP-IMP-0007` is the sole `READY` unit**, and `TP-IMP-0008`..`0047` remain **`BLOCKED`** behind upstream dependency, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
+>   3. Following Product Owner acceptance of **`TP-IMP-0005`** (`DEC-011`, commit `1f4f5a1`, CI Run `43584413913`) and **`CR-11` / `TP-IMP-0006`** (`DEC-012`/`DEC-013`, commit `b929deb`, CI Run `43590868455` `SUCCESS`), **`TP-IMP-0005` & `TP-IMP-0006` are `DONE`**, **`TP-IMP-0007` (`1 / 47`) is `READY_FOR_REVIEW`** (`0` `READY` until Product Owner acceptance), and `TP-IMP-0008`..`0047` remain **`BLOCKED`** behind upstream dependency, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 
 ---
 

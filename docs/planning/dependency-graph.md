@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0006: DONE` | `READY: TP-IMP-0007`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.4.0-tp-imp-0006-done` | **Date:** `2026-11-14`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0006: DONE` | `READY_FOR_REVIEW: TP-IMP-0007`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.5.0-tp-imp-0007-ready-for-review` | **Date:** `2026-11-14`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0006` = **`DONE`** (`TP-IMP-0005` accepted via `DEC-011`; `CR-11` Option A & `TP-IMP-0006` accepted via `DEC-012`/`DEC-013` at commit `b929deb` & CI Run `43590868455`); **`TP-IMP-0007` = `READY` (`1 / 47` units)**; `TP-IMP-0008`..`0047` = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates (`TP-IMP-0014` still awaits `TP-IMP-0012` & `0013`).
+> - **Live DAG Frontier:** `TP-IMP-0001`..`0006` = **`DONE`** (`TP-IMP-0005` accepted via `DEC-011`; `CR-11` Option A & `TP-IMP-0006` accepted via `DEC-012`/`DEC-013` at commit `b929deb` & CI Run `43590868455`); **`TP-IMP-0007` = `READY_FOR_REVIEW` (`1 / 47` units)** (`0 / 47` `READY`); `TP-IMP-0008`..`0047` = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates (`TP-IMP-0014` still awaits `TP-IMP-0012` & `0013`).
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier Today (`DEC-013`):** **`TP-IMP-0001..0006` are `DONE`**, **`TP-IMP-0007` (`1 / 47`) is `READY`**, and `TP-IMP-0008..0047` remain `BLOCKED` pending upstream completion and review gates.
+> **Live Queue Frontier Today (`TP-IMP-0007` `READY_FOR_REVIEW`):** **`TP-IMP-0001..0006` are `DONE`**, **`TP-IMP-0007` (`1 / 47`) is `READY_FOR_REVIEW`** (`0` `READY` until Product Owner acceptance), and `TP-IMP-0008..0047` remain `BLOCKED` pending upstream completion and review gates.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.
