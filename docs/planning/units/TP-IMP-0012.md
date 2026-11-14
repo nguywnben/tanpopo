@@ -32,6 +32,7 @@ Implement:
 
 ## 4. API, Wire & Data Contracts
 - **Hard Billing-Mode Boundary (`DEC-004` & `ADR-0005`):** `provider_connections.billing_mode` accepts exclusively `'COMMERCIAL_API'` or `'SELF_HOSTED_INFRA'`, rejecting any consumer-subscription mode at both JSON Schema and SQL `CHECK` layers.
+- **Explicit `Config.PolicyResolver` Wiring (`DEC-020`):** Provider catalog resolvers implementing `broker.CredentialBindingResolver` + `broker.ConnectionPolicyResolver` MUST be wired into **both** `broker.Config.Resolver` and `broker.Config.PolicyResolver` explicitly so Connection-level egress policies fence credentialed slots (`len(CredentialInjections) > 0`) as well as zero-slot (`auth_mode = NONE`) connections.
 - **Three Capability Assurance Tiers (`Capability Assurance Tier`):** Every capability flag (`streaming`, `tool_calling`, `vision`, `audio_input`, `document_input`, `strict_json_schema`, `reasoning`) carries an explicit tier badge: `DECLARED`, `TESTED`, or `VERIFIED`.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases

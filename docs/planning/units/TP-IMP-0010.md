@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0010` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`READY_FOR_REVIEW`** *(Implemented `2026-11-15`; locally verified under `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1`; fresh `security-auditor` & `code-reviewer` `PASS`; `-race` and GitHub Actions CI pending post-push verification & Product Owner acceptance under `REQUIRES_STRONG_REVIEW`)* |
+| **Status** | **`DONE`** *(Verified & Accepted `2026-11-15` via `DEC-020`: Commit `c11d23f1631045f0f570c833d7b229d472b6ba4a`, GitHub Actions Run `43622524885` `completed / success` across `ubuntu-24.04` `unshare --net` + `-race`, `macos-15` `-race`, and `windows-2022` `CGO_ENABLED=0`; fresh `security-auditor` [`6c93c9a7`] & `code-reviewer` [`c40e066b`] `PASS`. Downstream `cmd/tanpopo` & Data Plane wiring MUST explicitly set `Config.PolicyResolver` alongside `Config.Resolver`.)* |
 | **Size** | `M` (`internal/security/egress/*`, `internal/security/broker/*`, `internal/extension/port/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Outbound network trust boundaries `TB-3/TB-4` & raw-secret isolation from Plugins)* |
 | **Technical Owner** | `Principal Security / Networking Engineer` |

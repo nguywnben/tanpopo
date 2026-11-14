@@ -30,6 +30,7 @@ Close the **Core Extensibility Vertical-Slice Proof of `Milestone M1` (`EXT-SLIC
 
 ## 4. API, Wire & Data Contracts
 - **Default `M1` Target Selection Rule:** Prior to `route_policies` landing, `ConfigSnapshot.ResolveDefaultDeployment(orgID, envID, modelSlug)` selects the highest-priority `ACTIVE_HEALTHY` (`SM-04`) `ModelDeployment` bound to an `ACTIVE` (`SM-02`) `ProviderConnection`; if none exists, returns `503 no_compliant_deployment_available`.
+- **Mandatory Control-Plane Guards (`DEC-019` & `DEC-020`):** Authenticate strictly via `snapshot.Manager` APIs enforcing `CheckServingReady()` (never bypass via `Current().AuthenticateKey(...)`), and wire `BlindHostCredentialBroker` with **explicit `Config.PolicyResolver`** alongside `Config.Resolver` so Connection egress policies fence credentialed connections as well as zero-slot (`auth_mode = NONE`) calls.
 - **Anti-Mid-Stream-Splicing Invariant (`FMEA-01`):** The instant the first SSE byte is flushed to `ResponseWriter` (`streamStarted == true`), retries and failovers are `100%` locked out; if the upstream drops mid-stream, emit exactly 1 canonical `mid_stream_abort` error event and close the stream — never emit a synthetic `data: [DONE]`.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
