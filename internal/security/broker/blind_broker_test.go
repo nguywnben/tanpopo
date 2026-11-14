@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -549,11 +550,6 @@ func TestBlindBrokerNEG3_CT16_Scrubs401EchoedSecretStripsSetCookieAndBansCookieI
 		Method:       http.MethodGet,
 		TargetURL:    srv.URL() + "/v1/models",
 		SafeHeaders:  map[string]string{"Cookie": "session=hijack"},
-		ConnectionPolicy: &egress.Policy{
-			AllowedHosts:   []string{srv.Addr()},
-			AllowPrivateIP: true,
-			AllowedCIDRs:   []string{"127.0.0.1/32"},
-		},
 	})
 	if !errors.Is(safeCookieErr, ErrProhibitedCookieInjection) {
 		t.Fatalf("expected ErrProhibitedCookieInjection on SafeHeaders Cookie, got %v", safeCookieErr)
@@ -1282,5 +1278,249 @@ func TestBlindBrokerSecurityHardeningRegressions(t *testing.T) {
 			t.Fatalf("%s: expected %v, got %v", tc.name, tc.want, rerr)
 		}
 	}
+}
+
+type slotOnlyResolver struct{}
+
+func (slotOnlyResolver) ResolveSlot(_ context.Context, _, _, _ string) (*ResolvedSlot, error) {
+	return nil, port.ErrNotFound
+}
+
+type nilPolicyResolver struct{}
+
+func (nilPolicyResolver) ResolveSlot(_ context.Context, _, _, _ string) (*ResolvedSlot, error) {
+	return nil, port.ErrNotFound
+}
+
+func (nilPolicyResolver) ResolveConnectionPolicy(_ context.Context, _, _ string) (*egress.Policy, error) {
+	return nil, nil
+}
+
+func TestBlindBrokerZeroSlotTrustBoundaryAndNoSelfDeclaredPolicyBypass(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// 1. Provenance invariant: EgressRequest MUST carry zero *egress.Policy / egress.Policy fields
+	// so adapter-produced request envelopes can never self-declare egress permissions.
+	reqType := reflect.TypeOf(EgressRequest{})
+	policyType := reflect.TypeOf(egress.Policy{})
+	policyPtrType := reflect.TypeOf(&egress.Policy{})
+	for i := 0; i < reqType.NumField(); i++ {
+		f := reqType.Field(i)
+		if f.Type == policyType || f.Type == policyPtrType {
+			t.Fatalf("security boundary violation: EgressRequest exposes policy field %q (%v)", f.Name, f.Type)
+		}
+	}
+
+	dnsRes := &mockHostResolver{
+		fn: func(_ int64, _ string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+		},
+	}
+	h := newBrokerHarness(t, dnsRes)
+	srv := fakellm.NewServer(t)
+
+	// 2. Zero CredentialInjections WITHOUT any ConnectionPolicyResolver implementation -> fail closed pre-DNS.
+	noPolicyBroker, err := NewBlindBroker(Config{
+		Resolver:     slotOnlyResolver{},
+		Vault:        h.vs,
+		UnsealCap:    vault.MintUnsealCapabilityForBroker(),
+		Audit:        h.audit,
+		HostResolver: dnsRes,
+		ControlHook:  netguard.Control,
+	})
+	if err != nil {
+		t.Fatalf("NewBlindBroker(slotOnly): %v", err)
+	}
+	forgedWider := HostEgressConstraint{
+		NarrowPolicy: &egress.Policy{
+			AllowedHosts:   []string{"evil.attacker.invalid", srv.Addr()},
+			AllowPrivateIP: true,
+			AllowedCIDRs:   []string{"127.0.0.1/32"},
+		},
+	}
+	_, noResErr := noPolicyBroker.ExecuteWithHostConstraint(ctx, EgressRequest{
+		OrgID:        h.orgID,
+		ConnectionID: h.connID,
+		Method:       http.MethodPost,
+		TargetURL:    "https://evil.attacker.invalid/exfil",
+	}, forgedWider)
+	if !errors.Is(noResErr, egress.ErrHostDenied) {
+		t.Fatalf("expected ErrHostDenied when no ConnectionPolicyResolver exists, got %v", noResErr)
+	}
+	if dnsRes.calls.Load() != 0 {
+		t.Fatalf("expected 0 DNS lookups when ConnectionPolicyResolver is absent, got %d", dnsRes.calls.Load())
+	}
+
+	// 3. Zero CredentialInjections when ConnectionPolicyResolver returns nil policy -> fail closed pre-DNS.
+	nilPolBroker, err := NewBlindBroker(Config{
+		Resolver:     nilPolicyResolver{},
+		Vault:        h.vs,
+		UnsealCap:    vault.MintUnsealCapabilityForBroker(),
+		Audit:        h.audit,
+		HostResolver: dnsRes,
+		ControlHook:  netguard.Control,
+	})
+	if err != nil {
+		t.Fatalf("NewBlindBroker(nilPolicyResolver): %v", err)
+	}
+	_, nilPolErr := nilPolBroker.ExecuteWithHostConstraint(ctx, EgressRequest{
+		OrgID:        h.orgID,
+		ConnectionID: h.connID,
+		Method:       http.MethodGet,
+		TargetURL:    srv.URL() + "/v1/models",
+	}, forgedWider)
+	if !errors.Is(nilPolErr, egress.ErrHostDenied) {
+		t.Fatalf("expected ErrHostDenied when resolved ConnectionPolicy is nil, got %v", nilPolErr)
+	}
+	if len(srv.Requests()) != 0 || dnsRes.calls.Load() != 0 {
+		t.Fatalf("expected 0 upstream hits and 0 DNS lookups on nil ConnectionPolicy")
+	}
+
+	// 4. Authoritative ConnectionPolicy vs forged/wider HostEgressConstraint:
+	// Authoritative Connection only permits TLS https://approved.example.com (port 443).
+	// Forged constraint tries to add evil.attacker.invalid, AllowPrivateIP=true, 10.0.0.0/8, port 6379, RequireTLS=false.
+	h.resolver.conns[h.orgID+"|"+h.connID] = &egress.Policy{
+		AllowedHosts: []string{"approved.example.com"},
+		RequireTLS:   true,
+	}
+	dnsBefore := dnsRes.calls.Load()
+	for _, attempt := range []struct {
+		name      string
+		targetURL string
+		wantErr   error
+	}{
+		{name: "extra_evil_domain", targetURL: "https://evil.attacker.invalid/steal", wantErr: egress.ErrHostDenied},
+		{name: "private_lan_escape", targetURL: "http://10.20.0.5:6379/", wantErr: egress.ErrTLSRequired},
+		{name: "loopback_fake_server", targetURL: srv.URL() + "/v1/models", wantErr: egress.ErrTLSRequired},
+		{name: "http_downgrade_on_approved_host", targetURL: "http://approved.example.com/v1/models", wantErr: egress.ErrTLSRequired},
+		{name: "unapproved_port_on_approved_host", targetURL: "https://approved.example.com:6379/v1", wantErr: egress.ErrPortDenied},
+	} {
+		t.Run(attempt.name, func(t *testing.T) {
+			_, perr := h.broker.ExecuteWithHostConstraint(ctx, EgressRequest{
+				OrgID:        h.orgID,
+				ConnectionID: h.connID,
+				Method:       http.MethodGet,
+				TargetURL:    attempt.targetURL,
+			}, HostEgressConstraint{
+				NarrowPolicy: &egress.Policy{
+					AllowedHosts:   []string{"evil.attacker.invalid", "approved.example.com", "approved.example.com:6379", srv.Addr(), "10.20.0.5:6379"},
+					AllowPrivateIP: true,
+					AllowedCIDRs:   []string{"10.0.0.0/8", "127.0.0.1/32"},
+					AllowedPorts:   []int{80, 443, 6379},
+					RequireTLS:     false,
+				},
+			})
+			if !errors.Is(perr, attempt.wantErr) {
+				t.Fatalf("%s: expected %v, got %v", attempt.name, attempt.wantErr, perr)
+			}
+		})
+	}
+	if dnsRes.calls.Load() != dnsBefore {
+		t.Fatalf("expected 0 DNS lookups across all forged-constraint rejections, got %d", dnsRes.calls.Load()-dnsBefore)
+	}
+
+	// 5. Redirect widening defense: authoritative Connection allows only approvedSrv, while forged constraint
+	// tries to also allow unapprovedRedirectTarget -> 302 redirect MUST still fail with ErrRedirectBlocked.
+	var redirectHits atomic.Int64
+	redirectTargetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		redirectHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer redirectTargetSrv.Close()
+
+	redirectingApprovedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, redirectTargetSrv.URL+"/exfil", http.StatusFound)
+	}))
+	defer redirectingApprovedSrv.Close()
+
+	approvedAddr := strings.TrimPrefix(redirectingApprovedSrv.URL, "http://")
+	targetAddr := strings.TrimPrefix(redirectTargetSrv.URL, "http://")
+	h.resolver.conns[h.orgID+"|"+h.connID] = &egress.Policy{
+		AllowedHosts:   []string{approvedAddr},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+	}
+	_, redirErr := h.broker.ExecuteWithHostConstraint(ctx, EgressRequest{
+		OrgID:        h.orgID,
+		ConnectionID: h.connID,
+		Method:       http.MethodGet,
+		TargetURL:    redirectingApprovedSrv.URL + "/probe",
+	}, HostEgressConstraint{
+		NarrowPolicy: &egress.Policy{
+			AllowedHosts:   []string{approvedAddr, targetAddr},
+			AllowPrivateIP: true,
+			AllowedCIDRs:   []string{"127.0.0.1/32"},
+		},
+	})
+	if !errors.Is(redirErr, egress.ErrRedirectBlocked) {
+		t.Fatalf("expected ErrRedirectBlocked when redirect leaves authoritative host despite forged constraint, got %v", redirErr)
+	}
+	if redirectHits.Load() != 0 {
+		t.Fatalf("expected 0 hits on unapproved redirect target, got %d", redirectHits.Load())
+	}
+
+	// 6. Valid self-hosted LAN auth_mode=NONE request (zero CredentialInjections) backed by authoritative ConnectionPolicyResolver.
+	lanConnID := idgen.MustNew(idgen.PrefixConnection)
+	h.resolver.conns[h.orgID+"|"+lanConnID] = &egress.Policy{
+		AllowedHosts:   []string{srv.Addr()},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+	}
+	lanResp, err := h.broker.Execute(ctx, EgressRequest{
+		OrgID:        h.orgID,
+		ConnectionID: lanConnID,
+		Method:       http.MethodPost,
+		TargetURL:    srv.URL() + "/v1/chat/completions",
+		BodyBytes:    []byte(`{"model":"llama3","stream":false}`),
+	})
+	if err != nil || lanResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected valid auth_mode=NONE LAN request via ConnectionPolicyResolver to succeed, got resp=%v err=%v", lanResp, err)
+	}
+
+	// 7. Explicit Config.PolicyResolver also bounds credentialed calls (slot cannot widen past Connection policy).
+	explicitBroker, err := NewBlindBroker(Config{
+		Resolver:       h.resolver,
+		PolicyResolver: h.resolver,
+		Vault:          h.vs,
+		UnsealCap:      vault.MintUnsealCapabilityForBroker(),
+		Audit:          h.audit,
+		HostResolver:   dnsRes,
+		ControlHook:    netguard.Control,
+	})
+	if err != nil {
+		t.Fatalf("NewBlindBroker(explicit PolicyResolver): %v", err)
+	}
+	meta := h.sealCanarySecret(t, "scoped-slot-sec", nil, []byte(canary.DefaultCanarySecret()))
+	broadSlotConn := idgen.MustNew(idgen.PrefixConnection)
+	// Connection policy ONLY allows srv.Addr(); slot erroneously includes evil.attacker.invalid too.
+	h.resolver.conns[h.orgID+"|"+broadSlotConn] = &egress.Policy{
+		AllowedHosts:   []string{srv.Addr()},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+	}
+	h.resolver.put(&ResolvedSlot{
+		OrgID:          h.orgID,
+		ConnectionID:   broadSlotConn,
+		SlotName:       "api_key",
+		SecretID:       meta.ID,
+		AllowedHosts:   []string{srv.Addr(), "evil.attacker.invalid"},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+	})
+	_, connFenceErr := explicitBroker.Execute(ctx, EgressRequest{
+		OrgID:        h.orgID,
+		ConnectionID: broadSlotConn,
+		Method:       http.MethodPost,
+		TargetURL:    "https://evil.attacker.invalid/steal",
+		CredentialInjections: []CredentialInjection{
+			{SecretSlotName: "api_key", Location: TargetBearer, FieldName: "Authorization"},
+		},
+	})
+	if !errors.Is(connFenceErr, egress.ErrHostDenied) {
+		t.Fatalf("expected explicit Config.PolicyResolver to fence slot away from unapproved domain, got %v", connFenceErr)
+	}
+	assertNoCanaryInEvents(t, h.scanner, h.audit.snapshot())
 }
 

@@ -173,6 +173,11 @@ type VaultUnsealer interface {
 // Config configures BlindHostCredentialBroker fail-closed.
 type Config struct {
 	Resolver                  CredentialBindingResolver
+	// PolicyResolver optionally provides an explicit Host-authoritative connection
+	// egress policy lookup for zero-slot connections (auth_mode=NONE). When nil,
+	// BlindHostCredentialBroker falls back to Resolver.(ConnectionPolicyResolver)
+	// and fails closed if neither resolves an authoritative policy.
+	PolicyResolver            ConnectionPolicyResolver
 	Vault                     VaultUnsealer
 	UnsealCap                 vault.UnsealCapability
 	Audit                     port.AuditSink
@@ -185,7 +190,9 @@ type Config struct {
 	ControlHook               func(network, address string, c syscall.RawConn) error
 }
 
-// EgressRequest represents an adapter-produced intermediate HTTP request carrying zero raw secrets.
+// EgressRequest represents an adapter-produced intermediate HTTP request carrying zero
+// raw secrets and zero self-declared egress permissions (strictly non-authoritative).
+// Egress allowlists are always resolved from Host-authoritative Control Plane state.
 type EgressRequest struct {
 	OrgID                string
 	ConnectionID         string
@@ -195,11 +202,18 @@ type EgressRequest struct {
 	BodyBytes            []byte
 	CredentialInjections []CredentialInjection
 	TimeoutOverride      time.Duration
-	ConnectionPolicy     *egress.Policy // optional fallback strictly when CredentialInjections is empty
 	ActorKind            string
 	ActorID              string
 	EntryPoint           string
 	RequestID            string
+}
+
+// HostEgressConstraint allows trusted Host Control/Data Plane callers to apply an
+// additional monotonic narrowing constraint on top of the approved Connection policy.
+// It can only tighten egress (never grant or widen permissions) and is intentionally
+// excluded from EgressRequest so adapter/guest specs cannot map into it.
+type HostEgressConstraint struct {
+	NarrowPolicy *egress.Policy
 }
 
 // EgressResponse returns upstream HTTP status, Cookie/credential-stripped headers, and scrubbed body.
@@ -213,6 +227,8 @@ type EgressResponse struct {
 // audience-bound credential unsealing, edge injection, and bidirectional secret redaction.
 type BlindHostCredentialBroker struct {
 	resolver                  CredentialBindingResolver
+	policyResolver            ConnectionPolicyResolver
+	hasExplicitPolicyResolver bool
 	vault                     VaultUnsealer
 	unsealCap                 vault.UnsealCapability
 	audit                     port.AuditSink
@@ -236,6 +252,13 @@ func NewBlindBroker(cfg Config) (*BlindHostCredentialBroker, error) {
 	if cfg.Audit == nil {
 		return nil, fmt.Errorf("%w: non-nil port.AuditSink is required", ErrInvalidBrokerConfig)
 	}
+	policyResolver := cfg.PolicyResolver
+	explicitPolicyResolver := policyResolver != nil
+	if policyResolver == nil {
+		if cpr, ok := cfg.Resolver.(ConnectionPolicyResolver); ok {
+			policyResolver = cpr
+		}
+	}
 	nowFn := cfg.NowMs
 	if nowFn == nil {
 		nowFn = func() int64 { return time.Now().UTC().UnixMilli() }
@@ -257,6 +280,8 @@ func NewBlindBroker(cfg Config) (*BlindHostCredentialBroker, error) {
 	}
 	return &BlindHostCredentialBroker{
 		resolver:                  cfg.Resolver,
+		policyResolver:            policyResolver,
+		hasExplicitPolicyResolver: explicitPolicyResolver,
 		vault:                     cfg.Vault,
 		unsealCap:                 cfg.UnsealCap,
 		audit:                     cfg.Audit,
@@ -408,6 +433,16 @@ func urlPortOrDefault(u *url.URL, scheme string) int {
 // strictly via UnsealCapability, injects credentials at the network edge, executes via SSRFGuard,
 // strips Set-Cookie/Cookie/credential headers, and redacts any echoed secret substrings before returning.
 func (b *BlindHostCredentialBroker) Execute(ctx context.Context, req EgressRequest) (*EgressResponse, error) {
+	return b.execute(ctx, req, HostEgressConstraint{})
+}
+
+// ExecuteWithHostConstraint behaves identically to Execute while allowing a trusted Host caller
+// to apply an optional monotonic narrowing policy constraint (never granting or widening egress).
+func (b *BlindHostCredentialBroker) ExecuteWithHostConstraint(ctx context.Context, req EgressRequest, constraint HostEgressConstraint) (*EgressResponse, error) {
+	return b.execute(ctx, req, constraint)
+}
+
+func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressRequest, constraint HostEgressConstraint) (*EgressResponse, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("%w: context is required", ErrInvalidEgressRequest)
 	}
@@ -509,33 +544,30 @@ func (b *BlindHostCredentialBroker) Execute(ctx context.Context, req EgressReque
 			plans = append(plans, slotPlan{inj: inj, slot: slot})
 			policies = append(policies, pol)
 		}
-	} else {
-		var connPolicy egress.Policy
-		switch {
-		case req.ConnectionPolicy != nil:
-			connPolicy = *req.ConnectionPolicy
-		default:
-			if cpr, ok := b.resolver.(ConnectionPolicyResolver); ok {
-				resolved, rerr := cpr.ResolveConnectionPolicy(ctx, req.OrgID, req.ConnectionID)
-				if rerr != nil {
-					b.recordAudit(ctx, req, "broker.policy_resolution_failed", map[string]any{
-						"target_host": parsedURL.Host,
-					})
-					return nil, rerr
-				}
-				if resolved != nil {
-					connPolicy = *resolved
-				}
+		if b.hasExplicitPolicyResolver {
+			connPolicy, cerr := b.resolveAuthoritativeConnectionPolicy(ctx, req, parsedURL, rawURL)
+			if cerr != nil {
+				return nil, cerr
 			}
+			policies = append(policies, connPolicy)
 		}
-		if _, verr := connPolicy.ValidateTargetURL(rawURL); verr != nil {
-			b.recordAudit(ctx, req, "broker.egress_host_denied", map[string]any{
-				"target_host": parsedURL.Host,
-				"reason":      verr.Error(),
-			})
-			return nil, verr
+	} else {
+		connPolicy, cerr := b.resolveAuthoritativeConnectionPolicy(ctx, req, parsedURL, rawURL)
+		if cerr != nil {
+			return nil, cerr
 		}
 		policies = append(policies, connPolicy)
+	}
+
+	if constraint.NarrowPolicy != nil {
+		if _, cerr := constraint.NarrowPolicy.ValidateTargetURL(rawURL); cerr != nil {
+			_ = b.recordAudit(ctx, req, "broker.egress_host_denied", map[string]any{
+				"target_host": parsedURL.Host,
+				"reason":      cerr.Error(),
+			})
+			return nil, cerr
+		}
+		policies = append(policies, *constraint.NarrowPolicy)
 	}
 
 	mergedPolicy, err := intersectPolicies(policies)
@@ -692,6 +724,53 @@ func (b *BlindHostCredentialBroker) Execute(ctx context.Context, req EgressReque
 		SanitizedHeaders: sanitizedHeaders,
 		Body:             scrubbedBody,
 	}, nil
+}
+
+func (b *BlindHostCredentialBroker) resolveAuthoritativeConnectionPolicy(
+	ctx context.Context,
+	req EgressRequest,
+	parsedURL *url.URL,
+	rawURL string,
+) (egress.Policy, error) {
+	if b.policyResolver == nil {
+		_ = b.recordAudit(ctx, req, "broker.egress_policy_missing", map[string]any{
+			"target_host": parsedURL.Host,
+			"reason":      "missing authoritative ConnectionPolicyResolver",
+		})
+		return egress.Policy{}, &egress.Error{
+			HTTPStatus: http.StatusForbidden,
+			Code:       "egress_host_denied",
+			Message:    "unauthenticated egress requires an authoritative ConnectionPolicyResolver",
+			Err:        egress.ErrHostDenied,
+		}
+	}
+	resolved, rerr := b.policyResolver.ResolveConnectionPolicy(ctx, req.OrgID, req.ConnectionID)
+	if rerr != nil {
+		_ = b.recordAudit(ctx, req, "broker.policy_resolution_failed", map[string]any{
+			"target_host": parsedURL.Host,
+		})
+		return egress.Policy{}, rerr
+	}
+	if resolved == nil {
+		_ = b.recordAudit(ctx, req, "broker.egress_policy_missing", map[string]any{
+			"target_host": parsedURL.Host,
+			"reason":      "resolved ConnectionPolicy is nil",
+		})
+		return egress.Policy{}, &egress.Error{
+			HTTPStatus: http.StatusForbidden,
+			Code:       "egress_host_denied",
+			Message:    "authoritative ConnectionPolicy is nil",
+			Err:        egress.ErrHostDenied,
+		}
+	}
+	if _, verr := resolved.ValidateTargetURL(rawURL); verr != nil {
+		_ = b.recordAudit(ctx, req, "broker.egress_host_denied", map[string]any{
+			"target_host": parsedURL.Host,
+			"reason":      verr.Error(),
+		})
+		return egress.Policy{}, verr
+	}
+	return *resolved, nil
 }
 
 func isValidHTTPToken(s string) bool {
