@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | **Unit ID** | `TP-IMP-0019` |
-| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
+| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
 | **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0009`, `TP-IMP-0015` — `GAP-01, 11`)* |
 | **Quy mô (`Size`)** | `M` (`internal/policy/engine/*`, `internal/ratelimit/*`, `db/migrations/sqlite/0006_policies.sql`) |
 | **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Cổng kiểm soát truy cập `Fail-Closed` & chống nới lỏng chính sách cấp dưới)* |
@@ -34,11 +34,12 @@ Hiện thực hóa động cơ hợp nhất chính sách phân cấp 4 tầng (`
 ## 5. Acceptance Criteria & Mandatory Negative Cases
 - **`AC-1`:** Given `Org` đặt `RPM = 100`, `Project` đặt `RPM = 30`, `VirtualKey` đặt `RPM = 10`, When bắn 11 yêu cầu trong cùng 1 giây (dùng `FakeClock`), Then 10 yêu cầu đầu qua lọt và yêu cầu thứ 11 bị chặn đúng `429 rate_limit_exceeded` kèm `Retry-After` > 0.
 - **`AC-2`:** Given `MaxConcurrentStreams = 2` trên một `VirtualKey`, When mở đồng thời 2 luồng SSE đang treo và gửi luồng thứ 3, Then luồng thứ 3 nhận `429 concurrency_limit_exceeded`; ngay khi đóng 1 trong 2 luồng đầu, luồng tiếp theo được chấp nhận ngay lập tức (`0` rò rỉ slot ngay cả khi client ngắt kết nối đột ngột).
-- **`NEG-1` (`GAP-11` Relaxation Attempt):** `project_admin` gửi cấu hình chính sách cố bật lại một `ProviderAdapter` hoặc mô hình đã bị `org_admin` đưa vào danh sách cấm của `Org` → nhận `422 policy_relaxation_forbidden`.
+- **`NEG-1` (`GAP-11` Relaxation Attempt):** `TEAM_ADMIN` gửi cấu hình chính sách cố bật lại một `ProviderAdapter` hoặc mô hình đã bị `ORG_OWNER` đưa vào danh sách cấm của `Org` → nhận `422 policy_relaxation_forbidden`.
 - **`NEG-2` (`TPM Burst Abuse`):** Gửi một yêu cầu đơn lẻ có `max_tokens` + độ dài ngữ cảnh ước tính vượt quá hạn ngạch `TPM` của khóa → bị chặn trước khi gọi lên nhà cung cấp.
 
 ## 6. Test Commands & Required Evidence
-- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v -race ./internal/policy/... ./internal/ratelimit/...`
+- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/policy/... ./internal/ratelimit/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/policy/... ./internal/ratelimit/...`)*
+- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/policy/... ./internal/ratelimit/...`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Bộ giải phóng slot đồng thời (`ReleaseConcurrencySlot`) luôn gắn với `sync.Once` trong `defer` của vòng đời HTTP handler để không thể xảy ra lỗi giải phóng kép (âm bộ đếm) hoặc kẹt slot vĩnh viễn.

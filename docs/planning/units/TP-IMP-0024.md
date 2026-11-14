@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | **Unit ID** | `TP-IMP-0024` |
-| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-06` |
+| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
 | **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0009`, `TP-IMP-0023` — `GAP-01, 07, 11`)* |
 | **Quy mô (`Size`)** | `L` (`internal/admin/http/server.go`, `bootstrap.go`, `auth.go`, `tenancy.go`, `vkeys.go`, `pagination.go`) |
 | **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Mặt phẳng quản trị `/admin/v1/*`, kiểm soát tranh chấp `ETag/409`, phân trang con trỏ & ủy quyền từng hành động)* |
@@ -32,14 +32,15 @@ Hiện thực hóa khung máy chủ HTTP của **Admin Control Plane (`/admin/v1
 - **Kiểm soát Ghi Tranh chấp (`Optimistic Concurrency Control`):** Hai quản trị viên cùng đọc phiên bản `ETag: "v3"` và cùng gửi cập nhật → người gửi thứ hai bắt buộc nhận `409 optimistic_lock_conflict` kèm bản chụp hiện tại để hợp nhất, không bao giờ ghi đè âm thầm.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1`:** Given máy chủ mới khởi động, When kiểm tra `GET /admin/v1/bootstrap/status` (`initialized: false`), gửi `POST /admin/v1/bootstrap/complete` kèm `Bootstrap Token` hợp lệ, tạo `Project`, `Environment` và `Virtual Key`, Then mọi bước ghi đầy đủ vào `audit_events` (`TP-IMP-0023`) và cập nhật `ConfigSnapshot` tức thì.
+- **`AC-1`:** Given máy chủ mới khởi động, When kiểm tra `GET /admin/v1/bootstrap/status` (`initialized: false`), gửi `POST /admin/v1/bootstrap/complete` kèm `Bootstrap Token` hợp lệ tạo `ORG_OWNER` (`AUTH-02`), tạo `Project`, `Environment` và `Virtual Key` (`vk_tp_...`), Then mọi bước ghi đầy đủ vào `audit_events` (`TP-IMP-0023`) và cập nhật `ConfigSnapshot` tức thì.
 - **`AC-2` (`GAP-11` Cursor Pagination Determinism):** Given 125 `Virtual Keys`, When duyệt tuần tự với `limit=50` qua 3 trang bằng `next_cursor`, Then nhận đủ đúng 125 bản ghi không trùng, không sót ngay cả khi có bản ghi mới chèn vào trang đầu.
-- **`NEG-1` (`Cross-Tenant Cursor Tampering`):** Dùng `next_cursor` hợp lệ sinh ra từ phiên của `Org A` truyền vào phiên của `Org B` → từ chối `400 invalid_pagination_cursor`.
+- **`NEG-1` (`AUTH-03`, `AUTH-07`, `AUTH-13` & `AUTH-15`):** Thiếu `X-CSRF-Token` trả `403`; dùng `vk_tp_...` trên `/admin/v1/*` trả `401 invalid_credential_plane` (`AUTH-07`); truyền `org_id` giả mạo trong thân JSON bị chặn (`AUTH-13`); dùng `next_cursor` hoặc ID của `Org A` từ phiên của `Org B` trả `400 invalid_pagination_cursor` / `404 resource_not_found` (`AUTH-15`).
 - **`NEG-2` (`Stale If-Match`):** Gửi `PATCH` với `If-Match: "v1"` lên tài nguyên đang ở `"v2"` → trả `409 optimistic_lock_conflict`.
 - **`NEG-3` (`Brute-Force Login Rate Limit`):** Gửi quá 10 lần sai mật khẩu liên tiếp từ cùng địa chỉ IP → trả `429 auth_rate_limited` kèm bản ghi kiểm toán bảo mật.
 
 ## 6. Test Commands & Required Evidence
-- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v -race ./internal/admin/http/...`
+- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/admin/http/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/admin/http/...`)*
+- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/admin/http/...`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Bài kiểm thử phản xạ route (`TestAllAdminRoutesHaveExplicitPermission`) quét bảng định tuyến HTTP và đánh trượt CI nếu có bất kỳ route `/admin/v1/*` nào (ngoài `/bootstrap/status` và `/auth/login`) không gắn rõ hằng số quyền `RBAC`.

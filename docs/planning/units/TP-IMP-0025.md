@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | **Unit ID** | `TP-IMP-0025` |
-| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-06` |
+| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
 | **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0012`, `TP-IMP-0020`, `TP-IMP-0021`, `TP-IMP-0024` — `GAP-01, 07`)* |
 | **Quy mô (`Size`)** | `L` (`internal/admin/http/extensions.go`, `connections.go`, `models.go`, `routes.go`, `policies.go`, `finops.go`, `traces.go`, `ops.go`) |
 | **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Ghi bí mật một chiều, duyệt quyền phần mở rộng, xuất báo cáo đối soát tài chính & kích hoạt Kill-Switch)* |
@@ -36,10 +36,11 @@ Hoàn thiện toàn bộ các nhóm điểm cuối còn lại của `/admin/v1/*
 - **`AC-1`:** Given bộ kiểm thử tích hợp Admin API, When thực thi trọn vẹn luồng cấu hình từ nạp khóa mật → tạo kết nối → cài gói mở rộng → xem `permission-diff` → duyệt quyền → tạo mô hình/tuyến/chính sách/ngân sách → xuất đối soát CSV → bật/tắt Kill-Switch, Then `100%` phản hồi khớp lược đồ `openapi/admin-v1.yaml` và mọi thao tác ghi đều sinh bản ghi kiểm toán hợp lệ.
 - **`NEG-1` (`Write-Only Secret Verification`):** Gọi mọi điểm cuối `GET /admin/v1/secrets*` và `GET /admin/v1/connections*` → quét `CanaryScanner` trên toàn bộ thân JSON trả về xác nhận `0` vết khóa mật.
 - **`NEG-2` (`CSV Formula Injection`):** Đặt tên dự án là `=HYPERLINK("http://evil.test","click")` rồi xuất CSV → ô CSV được bọc thoát an toàn, không thể tự thực thi công thức.
-- **`NEG-3` (`Role Separation`):** `billing_viewer` đọc được `/admin/v1/usage/summary` nhưng nhận `403` khi cố gọi `/admin/v1/secrets` hoặc `/admin/v1/kill-switches`.
+- **`NEG-3` (`Role Separation`):** Vai trò `FINOPS_VIEWER` đọc được `/admin/v1/usage/summary` nhưng nhận `403` khi cố gọi `/admin/v1/secrets` hoặc `/admin/v1/kill-switches`.
 
 ## 6. Test Commands & Required Evidence
-- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v -race ./internal/admin/http/...`
+- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/admin/http/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/admin/http/...`)*
+- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/admin/http/...`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Điểm cuối `POST /admin/v1/connections/test` cũng đi qua chính `SSRFGuardDialer` và giới hạn tốc độ chặt chẽ để ngăn kẻ có tài khoản cấp thấp biến tính năng "Test Connection" thành công cụ quét mạng nội bộ (`SSRF Oracle`).

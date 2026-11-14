@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | **Unit ID** | `TP-IMP-0029` |
-| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-06` |
+| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
 | **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0025`, `TP-IMP-0026` — `GAP-01, 12`)* |
 | **Quy mô (`Size`)** | `M` (`web/console/src/pages/routes/*`, `policies/*`, `access/*`) |
 | **Cấp độ Review** | `STANDARD_REVIEW` *(Rào chắn xác nhận hành động phá hủy `UX-GR-06` & hiển thị kế thừa chính sách đơn điệu)* |
@@ -13,9 +13,9 @@
 
 ## 1. Intent (Mục tiêu Đơn vị Thực thi)
 Xây dựng cụm 3 màn hình quản trị định tuyến, chính sách và danh tính truy cập cốt lõi của `v0.1` bằng Astryx Design System (`neutral`):
-1. **Trình Quản lý Tuyến & Dự phòng (`SCR-08 Routes`):** Tạo/sửa `RoutePolicy` (`PRIORITY_FAILOVER`, `WEIGHTED_ROUND_ROBIN`, `LOWEST_COST`, `LOWEST_LATENCY_EWMA`), hiển thị trực quan trạng thái cầu dao `SM-04` (`CLOSED`/`OPEN`/`HALF_OPEN`) trên từng đích và cảnh báo ngay trên biểu mẫu nếu đích dự phòng lệch năng lực hoặc lệch vùng cư trú dữ liệu (`UX-AC-11`).
+1. **Trình Quản lý Tuyến & Dự phòng (`SCR-08 Routes`):** Tạo/sửa `RoutePolicy` (`PRIORITY_FAILOVER`, `WEIGHTED_ROUND_ROBIN`, `LOWEST_COST`, `LOWEST_LATENCY_EWMA`), hiển thị trực quan trạng thái cầu dao `SM-04` (`ACTIVE_HEALTHY`/`THROTTLED_COOLDOWN`/`CIRCUIT_OPEN_UNHEALTHY`/`HALF_OPEN_PROBING`) trên từng đích và cảnh báo ngay trên biểu mẫu nếu đích dự phòng lệch năng lực hoặc lệch vùng cư trú dữ liệu.
 2. **Trình Quản lý Cây Chính sách Phân cấp (`SCR-09 Policies`):** Hiển thị rõ ràng phần chính sách kế thừa không thể nới lỏng từ cấp cha (`Org -> Project -> Env`) so với phần giới hạn siết thêm ở cấp hiện tại (`RPM`, `TPM`, `MaxConcurrentStreams`, `Data Residency`, danh sách mô hình).
-3. **Trình Quản lý `Virtual Keys` & `RBAC` 6 Vai trò (`SCR-13 Access`):** Tạo khóa ảo hiển thị 1 lần, xoay vòng có thời gian ân hạn `ROTATING_GRACE`, phân biệt rõ hai hành động *Xoay vòng êm* vs *Thu hồi Khẩn cấp Cắt Luồng (`Emergency Security Revoke`)* kèm hộp xác nhận nhập tên khóa (`UX-GR-06`), và gán 6 vai trò chuẩn cho thành viên.
+3. **Trình Quản lý `Virtual Keys` & `RBAC` 6 Vai trò (`SCR-13 Access`):** Tạo khóa ảo `vk_tp_...` hiển thị 1 lần, xoay vòng có thời gian ân hạn `ROTATING_DUAL_VALID`, phân biệt rõ hai hành động *Xoay vòng êm* vs *Thu hồi Khẩn cấp Cắt Luồng (`Emergency Security Revoke`)* kèm hộp xác nhận nhập tên khóa (`UX-GR-06`), và gán 6 vai trò chuẩn cho thành viên.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
@@ -34,8 +34,8 @@ Xây dựng cụm 3 màn hình quản trị định tuyến, chính sách và da
 - **Đồng bộ `ETag`:** Mọi biểu mẫu chỉnh sửa trên `SCR-08`, `SCR-09`, `SCR-13` truyền `If-Match` và xử lý êm `409 Conflict`.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`UX-AC-11` Route Guardrails):** Khi người dùng cấu hình tuyến có tổng trọng số khác `100` hoặc chọn đích dự phòng thiếu năng lực `tools` đã yêu cầu, biểu mẫu cảnh báo ngay lập tức tại chỗ trước khi lưu.
-- **`AC-2`:** Khi `project_admin` mở `SCR-09`, các miền địa lý/mô hình đã bị `Org` khóa xuất hiện ở trạng thái khóa kế thừa (kèm chú giải nguồn khóa từ `Org Policy`) và không thể bật lại.
+- **`AC-1` (`Route Guardrails` & `UX-AC-11` `409 Conflict` Draft-Preserving Diff Modal):** Khi cấu hình tuyến có tổng trọng số khác `100` hoặc chọn đích dự phòng thiếu năng lực `tool_calling`, biểu mẫu cảnh báo tại chỗ; khi lưu biểu mẫu trên `SCR-08`/`SCR-09` gặp lỗi `409 optimistic_lock_conflict` do quản trị viên khác vừa sửa, giao diện mở hộp đối chiếu 2 phiên bản giữ nguyên bản nháp người dùng đang gõ (`UX-AC-11`), tuyệt đối không làm mất dữ liệu nhập.
+- **`AC-2`:** Khi `TEAM_ADMIN` mở `SCR-09`, các miền địa lý/mô hình đã bị `Org` khóa xuất hiện ở trạng thái khóa kế thừa (kèm chú giải nguồn khóa từ `Org Policy`) và không thể bật lại.
 - **`NEG-1`:** Kiểm định `npx astryx doctor --built dist` đạt `0 fail` (`0` thẻ `div`/`span` thô, dùng `Table` cho danh sách khóa ảo và thành viên, `Badge` chỉ dùng cho con số đếm).
 
 ## 6. Test Commands & Required Evidence

@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | **Unit ID** | `TP-IMP-0030` |
-| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-06` |
+| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
 | **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0025`, `TP-IMP-0026` — `GAP-01, 12`)* |
 | **Quy mô (`Size`)** | `L` (`web/console/src/pages/traces/*`, `finops/*`, `security/*`, `operations/*`) |
 | **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Chống Stored XSS từ dữ liệu vết/nhật ký `CT-27`, tách bạch 3 nhãn độ chính xác chi phí `UX-GR-05` & giao diện Công tắc Khẩn cấp)* |
@@ -36,16 +36,16 @@ Hoàn thiện bộ 4 màn hình quan sát, tài chính và ứng cứu sự cố
 - **Hiển thị Số Tiền Chuẩn:** Chuyển đổi từ số nguyên `micro_usd` sang chuỗi hiển thị tiền tệ bằng phép chia nguyên/chuỗi thập phân chính xác ở phía giao diện, không dùng phép cộng dấu phẩy động gây sai số hiển thị.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`UX-AC-06` Honest FinOps Accuracy Breakdown):** Given dữ liệu sổ cái gồm cả bút toán `EXACT`, `ESTIMATED` và `UNMETERED_FLAGGED`, When mở `SCR-12`, Then cả 3 nhóm được hiển thị rõ ràng kèm biểu ngữ nhắc quản trị viên cấu hình bảng giá cho các mô hình `UNMETERED_FLAGGED`.
-- **`AC-2` (`UX-AC-02` Emergency Kill-Switch UX):** Trên `SCR-14`, quản trị viên tra cứu `Blast-Radius` của một Plugin nghi vấn và kích hoạt công tắc ngắt khẩn cấp trong `<= 3` thao tác có xác nhận rõ ràng.
+- **`AC-1` (`UX-GR-05` & `UX-AC-06` Honest FinOps Accuracy + Non-Color-Only Tokens):** Given dữ liệu sổ cái gồm cả bút toán `EXACT`, `ESTIMATED` và `UNMETERED_FLAGGED`, When mở `SCR-12`, Then cả 3 nhóm được hiển thị tách biệt rõ ràng bằng `Token` có `icon + label` (không dựa riêng vào màu sắc — `UX-AC-06`).
+- **`AC-2` (`UX-AC-02` Mobile Emergency Kill-Switch `375px` & `UX-AC-09` `200`-Row `< 100ms INP`):** Trên `SCR-14` ở cả màn hình máy tính (`1280px`) lẫn điện thoại trực chiến (`375px` — `UX-AC-02`), quản trị viên tra cứu `Blast-Radius` và bấm công tắc ngắt khẩn cấp trọn vẹn không khuất nút; bảng vết 200 dòng trên `SCR-11` đạt phản hồi tương tác `INP < 100 ms` (`UX-AC-09`).
 - **`NEG-1` (`CT-27` Stored XSS Payload in Trace/Audit):** Bơm chuỗi kịch bản độc hại vào trường `error_message` / `user_agent` của bản ghi truy vết → hiển thị thuần chữ vô hại trên `SCR-11`/`SCR-14`.
-- **`NEG-2`:** Kiểm định `npx astryx doctor --built dist` đạt `0 fail` (`0` thẻ `div`/`span` thô, dùng `Table` cho bảng vết/kiểm toán lớn có phân trang con trỏ).
+- **`NEG-2` (`UX-AC-05`):** Kiểm định `npx @astryxdesign/cli doctor --built dist` đạt `0 fail` và `axe-core` sạch lỗi ở cả hai chế độ Sáng/Tối.
 
 ## 6. Test Commands & Required Evidence
 - `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Vai trò `billing_viewer` chỉ xem được `SCR-12` (không xem được nội dung gỡ lỗi trên `SCR-11` hay thao tác `Kill-Switch` trên `SCR-14`).
+- **Security Invariant:** Vai trò `FINOPS_VIEWER` chỉ xem được `SCR-12` (không xem được nội dung gỡ lỗi trên `SCR-11` hay thao tác `Kill-Switch` trên `SCR-14`).
 - **Rollback:** Cụm 4 màn hình quan sát/vận hành độc lập.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)

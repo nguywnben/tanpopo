@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | **Unit ID** | `TP-IMP-0027` |
-| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-06` |
+| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
 | **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0025`, `TP-IMP-0026` — `GAP-01, 10, 12`)* |
 | **Quy mô (`Size`)** | `M` (`web/console/src/pages/setup/*`, `login/*`, `overview/*`) |
 | **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Hành trình thiết lập quản trị viên đầu tiên, xác nhận bảo mật mở cổng GPU cục bộ `CR-10` & hiển thị khóa 1 lần)* |
@@ -13,7 +13,7 @@
 
 ## 1. Intent (Mục tiêu Đơn vị Thực thi)
 Hiện thực hóa hành trình **Từ Con Số Không Đến Yêu Cầu Thành Công Đầu Tiên Dưới 3 Phút (`UJ-01` — `TTFGR < 3m`)** qua 3 màn hình đầu tiên sử dụng đúng template chuẩn của Astryx:
-1. **Màn hình Đăng nhập & Cổng `Bootstrap` (`SCR-01`):** Đổi `Bootstrap Token` lấy tài khoản `org_owner` đầu tiên, dẫn qua trình hướng dẫn 4 bước gọn nhẹ (Tạo Kết nối Nhà cung cấp đầu tiên → Khai báo Mô hình → Sinh `Virtual Key` hiển thị đúng 1 lần kèm nút sao chép đoạn lệnh `curl` / Python / TS SDK → Bắn yêu cầu kiểm tra đầu tiên). Đặc biệt giải quyết `GAP-10` / `CR-10`: khi người dùng chọn `Ollama` / `vLLM` nội bộ, Wizard hiển thị hộp kiểm xác nhận bảo mật tường minh để cấp quyền `allow_private_endpoints` cho đúng cổng đích (ví dụ `127.0.0.1:11434`) mà không phá vỡ `SSRFGuard` mặc định.
+1. **Màn hình Đăng nhập & Cổng `Bootstrap` (`SCR-01`):** Đổi `Bootstrap Token` lấy tài khoản `ORG_OWNER` đầu tiên, dẫn qua trình hướng dẫn 4 bước gọn nhẹ (Tạo Kết nối Nhà cung cấp đầu tiên → Khai báo Mô hình → Sinh `Virtual Key` hiển thị đúng 1 lần kèm nút sao chép đoạn lệnh `curl` / Python / TS SDK → Bắn yêu cầu kiểm tra đầu tiên). Đặc biệt giải quyết `GAP-10` / `CR-10`: khi người dùng chọn `Ollama` / `vLLM` nội bộ, Wizard hiển thị hộp kiểm xác nhận bảo mật tường minh để cấp quyền `allow_private_ip = true` cho đúng cổng đích (ví dụ `127.0.0.1:11434`) mà không phá vỡ `SSRFGuard` mặc định.
 2. **Bảng Điều khiển Tổng quan (`SCR-02 Overview`):** Hiển thị sức khỏe lưu lượng, độ trễ `p50/p95`, tỷ lệ lỗi, mức tiêu thụ ngân sách và cảnh báo phần mở rộng/sự cố nổi bật với đủ 5 trạng thái (`Happy`, `Loading`, `Empty`, `Error`, `Offline`).
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
@@ -35,7 +35,7 @@ Hiện thực hóa hành trình **Từ Con Số Không Đến Yêu Cầu Thành 
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
 - **`AC-1` (`UX-AC-01` Zero-to-First-Request Flow):** Given máy chủ trống chạy cục bộ cùng `FakeLLMServer` (cả chế độ API đám mây giả lập lẫn chế độ `Ollama` loopback có bật hộp xác nhận), When chạy kịch bản Playwright hoàn tất `SCR-01` và chuyển sang `SCR-02`, Then toàn bộ luồng hoàn tất mượt mà dưới `< 60 giây` tự động (tương đương `< 3 phút` thao tác người thật).
-- **`AC-2` (`UX-AC-04` Show-Once Enforcement):** Sau khi đóng `ShowOnceSecretDialog` và tải lại trang, không còn bất kỳ phần tử DOM hay gói JSON mạng nào chứa chuỗi khóa rõ `tpk_live_...`.
+- **`AC-2` (`UX-AC-04` Show-Once Enforcement):** Sau khi đóng `ShowOnceSecretDialog` và tải lại trang, không còn bất kỳ phần tử DOM hay gói JSON mạng nào chứa chuỗi khóa rõ `vk_tp_live_...`.
 - **`NEG-1`:** Chọn `Ollama (http://127.0.0.1:11434)` nhưng **không** tích hộp xác nhận cho phép kết nối địa chỉ nội bộ → nút tiếp tục bị khóa kèm giải thích bảo mật chống SSRF rõ ràng.
 - **`NEG-2`:** Kiểm tra đáp ứng ở 3 độ rộng màn hình (`1280`, `768`, `375`) và kiểm tra `axe-core` → `0` lỗi tràn ngang, `0` lỗi tiếp cận nghiêm trọng.
 

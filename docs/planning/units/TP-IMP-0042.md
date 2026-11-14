@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | **Unit ID** | `TP-IMP-0042` |
-| **Milestone / Epic** | `M4` (`v0.3 Clustered HA, Enterprise Security & A2A` — **Cổng `GATE-M4`**) · `EP-02` / `EP-04` |
+| **Milestone / Epic** | `M4` (`v0.3 Clustered HA, Enterprise Security & A2A` — **Cổng `GATE-M4`**) · `EP-08` |
 | **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0013`, `TP-IMP-0021`, `TP-IMP-0039` — `GAP-01, 08, 09`)* |
-| **Quy mô (`Size`)** | `L` (`internal/extension/sidecar/*`, `internal/a2a/*`, `db/migrations/postgres/0002_a2a_sidecar.sql`) |
+| **Quy mô (`Size`)** | `L` (`go.mod`, `internal/extension/sidecar/*`, `internal/ingress/a2a/*`, `db/migrations/postgres/0002_a2a_sidecar.sql`) |
 | **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Ranh giới tiến trình phụ xác thực hai chiều `mTLS`, chống vòng lặp gọi đệ quy vô tận giữa các Agent `hop_count <= 5` & chống leo thang quyền qua Agent trung gian)* |
 | **Chủ sở hữu Kỹ thuật** | `Principal Platform & Agent Systems Architect` |
 
@@ -20,28 +20,30 @@ Hoàn thiện mảnh ghép kiến trúc cuối cùng của nhịp `v0.3` — kh�
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `internal/extension/sidecar/client.go` & `mtls_creds.go` (trình khách `ExtensionRuntimeService` Protobuf đã chốt ở `TP-IMP-0002`, xác thực chứng chỉ hai chiều `mTLS`, ngắt mạch riêng nếu Sidecar sập hoặc quá hạn).
-  - `internal/a2a/registry.go` & `task_coordinator.go` (điểm cuối `/a2a/*` JSON-RPC + SSE cập nhật tiến trình tác vụ `SM-09`, kiểm tra `hop_count <= 5`, chống chu trình `A -> B -> A` và phân bổ trần ngân sách con từ `finops/ledger`).
+  - `go.mod`, `go.sum` (thêm `connectrpc.com/connect` & `google.golang.org/protobuf`).
+  - `internal/extension/sidecar/client.go` & `mtls_creds.go` (trình khách `ExtensionRuntimeService` Protobuf triển khai `extension/port.ProviderRuntime`, xác thực chứng chỉ hai chiều `mTLS`, ngắt mạch riêng nếu Sidecar sập hoặc quá hạn).
+  - `internal/ingress/a2a/registry.go` & `task_coordinator.go` (điểm cuối `/a2a/*` JSON-RPC + SSE cập nhật tiến trình tác vụ `SM-09` vào bảng chuẩn `a2a_tasks`, kiểm tra `hop_count <= 5`, chống chu trình `A -> B -> A` và phân bổ trần ngân sách con từ `finops/ledger`).
   - Bổ sung thẻ hiển thị danh mục `A2A Agents & Active Tasks` vào màn hình `SCR-10` trên `web/console/`.
 - **Out-of-Scope:** Giao thức tự thương lượng kinh tế đa tổ chức bên ngoài (ngoài phạm vi `v1.0`).
 
 ## 3. Requirements, Dependencies & Design References
-- **Requirements Refs:** `TP-FR-0405`, `TP-FR-0406`, `DEC-003`, `TP-BR-0604`, `SM-09`, `CR-02`, `CR-08`, `CT-23`, `AUTH-08`.
+- **Requirements Refs:** `TP-FR-0308` *(bổ sung ở `TP-IMP-0001`)*, `TP-FR-0405`, `TP-FR-0406`, `DEC-003`, `TP-BR-0604`, `SM-09`, `CR-02`, `CR-08`, `CT-23`, `AUTH-08`.
 - **Dependencies:** `TP-IMP-0013`, `TP-IMP-0021`, `TP-IMP-0039`.
 - **Design Refs:** [`ADR-0002`](../../architecture/adr/0002-three-tier-extension-sandbox-and-blind-broker.md), [`mcp-a2a-boundaries.md`](../../specifications/mcp-a2a-boundaries.md) (`SPEC-EXT-05` Mục 6), [`contract-test-matrix.md`](../../quality/contract-test-matrix.md) (`CT-23`, `AUTH-08`), [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-02`, `CR-08`).
 
 ## 4. API, Wire & Data Contracts
-- **Bất biến Không Khuếch đại Quyền Qua Tác nhân (`No Confused-Deputy Escalation` — `CT-23`):** Một người dùng/khóa ảo chỉ có quyền gọi mô hình `gpt-4o-mini` không thể nhờ một `A2A Agent` nội bộ gọi hộ mô hình cấm hoặc công cụ MCP mà chính người gọi gốc không có quyền (trừ khi chính sách ủy quyền dịch vụ được `security_reviewer` ký duyệt tường minh kèm trần ngân sách riêng).
-- **Chống Vòng lặp Vô tận (`Anti-Loop Invariant`):** Nếu `hop_count > 5` hoặc `target_agent_id` đã xuất hiện trong mảng `call_chain` của cùng vết phân tán → từ chối ngay lập tức `4loop / 422 a2a_recursion_or_hop_limit_exceeded`.
+- **Bất biến Không Khuếch đại Quyền Qua Tác nhân (`No Confused-Deputy Escalation` — `CT-23`):** Một người dùng/khóa ảo chỉ có quyền gọi mô hình `gpt-4o-mini` không thể nhờ một `A2A Agent` nội bộ gọi hộ mô hình cấm hoặc công cụ MCP mà chính người gọi gốc không có quyền (trừ khi chính sách ủy quyền dịch vụ được `SECURITY_REVIEWER` ký duyệt tường minh kèm trần ngân sách riêng).
+- **Chống Vòng lặp Vô tận (`Anti-Loop Invariant` — `CT-23`):** Nếu `hop_count > 5` hoặc `target_agent_id` đã xuất hiện trong mảng `call_chain` của cùng vết phân tán → từ chối ngay lập tức với mã chuẩn **`400 delegation_depth_exceeded`**.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
 - **`AC-1` (`AUTH-08` Mutual-TLS Sidecar Isolation):** Sidecar hợp lệ có chứng chỉ do CA nội bộ của phiên Tanpopo cấp kết nối và xử lý hook thành công; khi Sidecar sập đột ngột (`SIGKILL`), cầu dao ngắt mạch cô lập Sidecar đó mà tiến trình Core không bị ảnh hưởng.
-- **`AC-2` (`SM-09` Full Async A2A Task Lifecycle):** Thực thi trọn vẹn vòng đời tác vụ liên tác nhân `SUBMITTED -> WORKING -> INPUT_REQUIRED -> WORKING -> COMPLETED` qua luồng sự kiện SSE và quyết toán đúng phần chi phí vào ngân sách con đã cấp.
-- **`NEG-1` (`CT-23` Infinite Agent Ping-Pong Loop & Hop > 5):** Cấu hình `Agent A` gọi `Agent B` và `Agent B` gọi ngược `Agent A` (hoặc chuỗi `A1 -> A2 -> ... -> A6`) → bị chặn đứng ngay ở bước lặp đầu tiên / bước thứ 6, tiêu tốn `0` token dư thừa.
+- **`AC-2` (`SM-09` Full Async A2A Task Lifecycle):** Thực thi trọn vẹn vòng đời tác vụ liên tác nhân `submitted -> working -> input-required -> working -> completed` qua luồng sự kiện SSE và quyết toán đúng phần chi phí vào ngân sách con đã cấp.
+- **`NEG-1` (`CT-23` Infinite Agent Ping-Pong Loop & Hop > 5):** Cấu hình `Agent A` gọi `Agent B` và `Agent B` gọi ngược `Agent A` (hoặc chuỗi `A1 -> A2 -> ... -> A6`) → bị chặn đứng với **`400 delegation_depth_exceeded`**, tiêu tốn `0` token dư thừa.
 - **`NEG-2` (`AUTH-08` Unauthenticated / Expired Cert Sidecar):** Tiến trình giả mạo cố kết nối vào cổng RPC Sidecar mà không có chứng chỉ `mTLS` hợp lệ → bị từ chối bắt tay TLS ngay lập tức.
 
 ## 6. Test Commands & Required Evidence
-- `TANPOPO_TEST_HERMETIC=1 go test -v -race ./internal/extension/sidecar/... ./internal/a2a/...`
+- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/extension/sidecar/... ./internal/ingress/a2a/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/extension/sidecar/... ./internal/ingress/a2a/...`)*
+- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/extension/sidecar/... ./internal/ingress/a2a/...`
 - `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan

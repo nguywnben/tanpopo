@@ -17,14 +17,14 @@ Hoàn thiện bộ tài liệu hướng dẫn người dùng cuối, tác giả 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
   - `README.md` gốc (giới thiệu súc tích Tanpopo, khởi chạy nhanh `< 3 phút`, kiến trúc 4 mặt phẳng, bảng cam kết tuân thủ `Official Commercial API / Self-Hosted Infra Only — DEC-004`), `SECURITY.md` (quy trình báo cáo lỗ hổng bảo mật có trách nhiệm), `CONTRIBUTING.md`, `CHANGELOG.md` và `NOTICE`.
-  - `docs/guides/quickstart.md` (Hành trình 1: Người dùng ứng dụng & khởi chạy nhanh), `docs/guides/plugin-authoring-sdk.md` (Hành trình 2: Tự viết & kiểm thử băng ghi cho Provider Adapter trong `< 30 phút`), `docs/guides/production-ha-and-airgap.md` (Hành trình 3: Vận hành SRE, Sao lưu, DR, HA & Air-Gap), `docs/guides/security-and-mcp-governance.md` (Hành trình 4: Bảo mật kho khóa, OAuth 2.1, MCP & A2A).
-  - `scripts/docs/check-drift.sh` (so khớp đầu ra `tanpopo --help` đệ quy với tài liệu CLI, kiểm định cú pháp `openapi/*.yaml`, kiểm tra toàn bộ liên kết Markdown nội bộ `0` đứt gãy và chạy thử các đoạn mã `Quickstart` trên máy chủ giả lập).
+  - `docs/guides/quickstart.md` (Hành trình 1: Người dùng ứng dụng & khởi chạy nhanh), `docs/guides/plugin-authoring-sdk.md` (Hành trình 2: Tự viết & kiểm thử băng ghi cho Provider Adapter trong `< 30 phút`), `docs/guides/production-ha-and-airgap.md` (Hành trình 3: Vận hành SRE, Sao lưu, DR `DR-01..04`, 7 sổ tay sự cố `INC-01..07`, HA & Air-Gap), `docs/guides/security-and-mcp-governance.md` (Hành trình 4: Bảo mật kho khóa, OAuth 2.1, MCP & A2A).
+  - `scripts/docs/check_drift.go` (trình kiểm tra đa nền tảng so khớp đầu ra `tanpopo --help` đệ quy với tài liệu CLI, kiểm định `openapi/*.yaml`, kiểm tra liên kết từ `deploy/monitoring/alerts.yaml` tới đủ `INC-01`..`07`, kiểm tra toàn bộ liên kết Markdown nội bộ `0` đứt gãy và chạy thử các đoạn mã `Quickstart` trên máy chủ giả lập).
 - **Out-of-Scope:** Bấm nút phát hành công khai (chỉ được phép thực hiện tại `TP-IMP-0047` sau khi Product Owner ký duyệt).
 
 ## 3. Requirements, Dependencies & Design References
-- **Requirements Refs:** `TP-NFR-0902`, `TP-NFR-1001`, `TP-NFR-1002`, `DEC-001`..`005`, `GATE-REL-04`, `GATE-REL-05`.
+- **Requirements Refs:** `TP-NFR-0902`, `TP-NFR-1001`, `TP-NFR-1002`, `DEC-001`..`005`, `INC-01`..`07`, `GATE-REL-04`, `GATE-REL-05`, `GATE-REL-06`.
 - **Dependencies:** `TP-IMP-0043`, `TP-IMP-0044`, `TP-IMP-0045`.
-- **Design Refs:** [`developer-experience.md`](../../operations/developer-experience.md) (`SPEC-OPS-04`), [`release-readiness.md`](../../quality/release-readiness.md) (`GATE-REL-04`, `GATE-REL-05`).
+- **Design Refs:** [`developer-experience.md`](../../operations/developer-experience.md) (`SPEC-OPS-04`), [`release-readiness.md`](../../quality/release-readiness.md) (`GATE-REL-04`, `GATE-REL-05`, `GATE-REL-06`).
 
 ## 4. API, Wire & Data Contracts
 - **Tính Trung thực Của Số liệu & Tuân thủ Pháp lý:**
@@ -32,15 +32,15 @@ Hoàn thiện bộ tài liệu hướng dẫn người dùng cuối, tác giả 
   2. Tuyệt đối không có bất kỳ đoạn hướng dẫn, ví dụ hay gợi ý nào biến gói thuê bao cá nhân (`Plus/Pro/Max/Codex/Antigravity...`) thành API (`DEC-004`).
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`GATE-REL-05` Executable Docs & Zero Link Rot):** Chạy `bash scripts/docs/check-drift.sh` xác nhận `0` liên kết gãy trên toàn kho mã nguồn, `0` cờ dòng lệnh sai lệch giữa `tanpopo --help` và tài liệu, và kịch bản `Quickstart` chạy tự động từ đầu đến cuối thành công dưới `< 60 giây`.
-- **`AC-2` (`GATE-REL-04` Clean Apache-2.0 Licensing):** Kiểm tra đồng bộ `LICENSE`, `NOTICE`, `package.json`, `web/console/package.json` và báo cáo quét giấy phép phụ thuộc của cả Go lẫn npm đạt `100%` tương thích `Apache-2.0`.
-- **`NEG-1`:** Thử đổi tên một cờ CLI trong code mà không cập nhật tài liệu → `check-drift.sh` phát hiện và đánh trượt CI ngay lập tức.
+- **`AC-1` (`GATE-REL-05 & 06` Executable Docs, Runbook Links & Zero Link Rot):** Chạy `go run ./scripts/docs/check_drift.go` xác nhận `0` liên kết gãy trên toàn kho mã nguồn, `100%` cảnh báo gắn đúng sổ tay `INC-01`..`07`, `0` cờ dòng lệnh sai lệch giữa `tanpopo --help` và tài liệu, và kịch bản `Quickstart` chạy tự động dưới `< 60 giây`.
+- **`AC-2` (`GATE-REL-04` Clean Apache-2.0 Licensing):** Kiểm tra đồng bộ `LICENSE`, `NOTICE`, `go.mod`, `web/console/package.json` và báo cáo quét giấy phép phụ thuộc của cả Go lẫn npm đạt `100%` tương thích `Apache-2.0`.
+- **`NEG-1`:** Thử đổi tên một cờ CLI trong code mà không cập nhật tài liệu → `check_drift.go` phát hiện và đánh trượt CI ngay lập tức.
 
 ## 6. Test Commands & Required Evidence
-- `bash scripts/docs/check-drift.sh`
+- `go run ./scripts/docs/check_drift.go`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Quét toàn bộ tệp ví dụ trong `docs/guides/*` đảm bảo chỉ dùng khóa giả quy ước (`tpk_test_example...`, `sk-example-placeholder`), không bao giờ chứa khóa thật.
+- **Security Invariant:** Quét toàn bộ tệp ví dụ trong `docs/guides/*` đảm bảo chỉ dùng khóa giả quy ước (`vk_tp_test_example...`, `sk-example-placeholder`), không bao giờ chứa khóa thật.
 - **Rollback:** Các tệp tài liệu và kịch bản kiểm tra tĩnh dễ dàng cập nhật nguyên tử.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)

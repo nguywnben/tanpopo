@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | **Unit ID** | `TP-IMP-0035` |
-| **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-02` / `EP-03` |
+| **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
 | **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0011`, `TP-IMP-0018`, `TP-IMP-0034` — `GAP-01, 04, 09`)* |
-| **Quy mô (`Size`)** | `L` (`internal/extension/registry/*`, `internal/gateway/http/rerank.go`, `extensions/official/aws-bedrock/*`, `azure-openai/*`) |
+| **Quy mô (`Size`)** | `L` (`internal/extension/registry/*`, `internal/ingress/http/rerank.go`, `extensions/official/aws-bedrock/*`, `azure-openai/*`) |
 | **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Xác minh chữ ký chỉ mục từ xa, tự động cách ly gói dính CVE qua `revocations.json` & ký `AWS SigV4` trong `BlindBroker`)* |
 | **Chủ sở hữu Kỹ thuật** | `Platform Ecosystem & Supply-Chain Lead` |
 
@@ -20,14 +20,14 @@ Mở rộng hệ sinh thái phân phối phần mở rộng và danh mục hãng
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
   - `internal/extension/registry/index_sync.go` (xác minh chữ ký `index.json` + chống tấn công hạ cấp phiên bản `Freeze / Rollback Attack` bằng kiểm tra số `serial` và `expires_at` đơn điệu tăng!).
-  - `internal/extension/registry/oci_client.go` (kéo artifact `.tppkg` theo digest `sha256:...` bất biến từ OCI Registry qua `SSRFGuardDialer`).
+  - `internal/extension/registry/oci_client.go` (kéo artifact `.tpkg` theo digest `sha256:...` bất biến từ OCI Registry qua `SSRFGuardDialer`).
   - `internal/extension/registry/revocation_watcher.go` (xác minh chữ ký `revocations.json` và kích hoạt cách ly tự động).
-  - `internal/gateway/http/rerank.go` (`POST /v1/rerank` chuẩn hóa tài liệu xếp hạng lại).
+  - `internal/ingress/http/rerank.go` (`POST /v1/rerank` chuẩn hóa tài liệu xếp hạng lại) & bổ sung hỗ trợ ký `AWS_SIGV4` trên `BlindBroker`.
   - `extensions/official/aws-bedrock/*` & `extensions/official/azure-openai/*` kèm băng ghi kiểm thử ngoại tuyến.
 - **Out-of-Scope:** Xác thực vai trò đám mây không khóa tĩnh `AWS IRSA / GCP Workload Identity` (thuộc `TP-IMP-0041` ở `v0.3` — ở `v0.2` `@tanpopo/aws-bedrock` dùng cặp khóa IAM có phạm vi hẹp lưu trong `vault` được `BlindBroker` ký `SigV4`).
 
 ## 3. Requirements, Dependencies & Design References
-- **Requirements Refs:** `TP-FR-0307`, `TP-NFR-0602`, `SPEC-EXT-04`, `CR-01`.
+- **Requirements Refs:** `TP-FR-0307`, `TP-NFR-0602`, `SPEC-EXT-04`, `CT-20`, `CR-01`.
 - **Dependencies:** `TP-IMP-0011`, `TP-IMP-0018`, `TP-IMP-0034`.
 - **Design Refs:** [`marketplace-lifecycle.md`](../../specifications/marketplace-lifecycle.md) (`SPEC-EXT-04`), [`plugin-sandbox-and-supply-chain.md`](../../security/plugin-sandbox-and-supply-chain.md) Mục 4, [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-01`).
 
@@ -43,7 +43,8 @@ Mở rộng hệ sinh thái phân phối phần mở rộng và danh mục hãng
 - **`NEG-2` (`Mutable OCI Tag Without Digest`):** Kéo từ OCI chỉ bằng thẻ `:latest` mà không khóa `sha256` digest khi chính sách ghim chặt bật → bị từ chối `422 unpinned_oci_digest`.
 
 ## 6. Test Commands & Required Evidence
-- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v -race ./internal/extension/registry/... ./internal/gateway/... ./extensions/official/...`
+- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/extension/registry/... ./internal/ingress/... ./extensions/official/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/extension/registry/... ./internal/ingress/... ./extensions/official/...`)*
+- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/extension/registry/... ./internal/ingress/... ./extensions/official/...`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Thông tin đăng nhập kéo kho `Private OCI Registry` cũng được bảo vệ trong `vault` có `AEAD AAD` và chỉ tiêm cho đúng tên miền kho OCI đó.

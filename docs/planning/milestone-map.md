@@ -19,8 +19,8 @@ Không một cột mốc tiếp theo nào được phép mở rộng quy mô n�
 - **Độ phủ Yêu cầu / Khoảng trống:** Đóng `GAP-01` .. `GAP-13`; xác thực giả thuyết `ASM-002`, `ASM-004`, `ASM-005`, `ASM-006`.
 - **Sản phẩm Bàn giao Đo được (`Measurable Deliverables`):**
   1. Máy trạng thái `SM-01`..`09` không còn điểm chết; `srs.md` và `acceptance-criteria.md` đủ `100%` `AC` cho `TP-FR-0701`, `0702`, `0901`.
-  2. Tệp `runtime.proto` và `openapi.yaml` trích xuất kiểm tra qua `buf lint` / `redocly lint` đạt `0 errors`.
-  3. Lược đồ `data-model.md` đủ `23` bảng, khóa tổ hợp `(org_id, id)` + `FORCE RLS`, `Project DEK` và lược đồ khóa `tp:v1:{org_id}:*`.
+  2. Tệp `proto/tanpopo/extension/v1/runtime.proto` và `openapi/{admin-v1,dataplane-v1}.yaml` trích xuất kiểm tra cú pháp đạt `0 errors`.
+  3. Lược đồ `data-model.md` đủ toàn bộ các bảng còn thiếu (`26` bảng chuẩn), khóa tổ hợp `(org_id, id)` + `FORCE RLS`, `Project DEK` và lược đồ khóa `tp:v1:{org_id}:*`.
   4. Báo cáo kết quả đo `SPIKE-01`..`04` cập nhật vào `ADR-0002` và `ADR-0005`.
 - **Rủi ro chính:** Biên bộ nhớ Wasm trong `SPIKE-02` vượt trần `5 ms p95` khi gọi từng mảnh SSE → kích hoạt phương án dự phòng chỉ gọi Wasm đầu/cuối luồng và dùng bộ tách khung gốc của Host ở giữa.
 - **Cổng Tích hợp `GATE-M0` (`Spec & Spike Gate`):**
@@ -37,10 +37,10 @@ Không một cột mốc tiếp theo nào được phép mở rộng quy mô n�
   1. Cấu trúc monorepo sạch (`cmd/tanpopo`, `internal/*`, `sdk/*`, `web/console/`), `Stage 0..2 CI` chạy `testkit/netguard` chặn `100%` IP ngoài `127.0.0.1/::1`.
   2. Kho `SQLite WAL` + `Envelope Vault` (`Master KEK -> Org DEK -> Project DEK`) + xác thực `Virtual Key` `O(1)` trên `ConfigSnapshot`.
   3. Công cụ `tanpopo plugin init / validate / test / pack` và trình nạp nóng `Declarative` + `wazero` Sandbox + `Blind Broker`.
-  4. Bài kiểm thử tự động `EXT-ACCEPT-01` vượt qua trọn 10 bước với `sha256sum(tanpopo)` và `PID` bất biến.
+  4. Bài kiểm thử tự động lát cắt dọc cốt lõi `EXT-SLICE-M1` (các bước nền tảng của `EXT-ACCEPT-01`: cài nóng `.tpkg` → duyệt quyền → tiêm khóa mù → gọi `/v1/chat/completions` đồng bộ & SSE thành công không đổi mã băm nhị phân Core; trọn vẹn 10 bước bao gồm Định tuyến `EU`, Sổ cái `\$1.00` và `Blast-Radius` được khóa hoàn chỉnh tại `TP-IMP-0032` / `GATE-M2`).
 - **Rủi ro chính:** Rò rỉ goroutine khi khách hủy luồng SSE đột ngột hoặc kẹt phiên `wazero` khi gặp vòng lặp vô hạn (`RSK-001`, `RSK-004`).
 - **Cổng Tích hợp `GATE-M1` (`Vertical Slice Proof Gate`):**
-  - Tự động: Vượt qua `CT-01`..`07`, `CT-10`..`11`, `CT-14`..`18`, `CT-24`..`26`, `FZ-01`..`03`, `FZ-05`, `EXT-ACCEPT-01`, `go test -race ./...` xanh `100%` và quét `CanaryScanner` đạt `0` rò rỉ khóa.
+  - Tự động: Vượt qua `CT-01`..`07`, `CT-10`..`11`, `CT-14`..`18`, `CT-24`..`26`, `FZ-01`..`03`, `FZ-05`, `EXT-SLICE-M1`, `go test -race ./...` xanh `100%` và quét `CanaryScanner` đạt `0` rò rỉ khóa.
   - Con người: `Security Lead + Platform Architect` rà soát sâu (`REQUIRES_STRONG_REVIEW`) toàn bộ ranh giới `wazero`, `Blind Broker` và `SSRFGuard`.
 
 ---
@@ -55,7 +55,7 @@ Không một cột mốc tiếp theo nào được phép mở rộng quy mô n�
   3. Toàn bộ `/admin/v1/*` (`ETag`/`409`), ứng dụng SPA Astryx `neutral` nhúng tĩnh trong binary `tanpopo` (14 màn hình `v0.1`, phông `Figtree` đóng gói nội bộ), và bộ tạo gói/ảnh container cho Linux, macOS, Windows kèm `CycloneDX SBOM` + chữ ký `Cosign`.
 - **Rủi ro chính:** Ôm đồm chi tiết giao diện làm trễ mốc ra mắt (`RSK-002`) hoặc vi phạm quy tắc thẻ thô của Astryx.
 - **Cổng Tích hợp `GATE-M2` (`MVP v0.1 Release Candidate Gate`):**
-  - Tự động: Xanh `100%` trên `Stage 0..4 CI` phạm vi `v0.1`; `npx @astryxdesign/cli doctor --built web/console/dist` đạt `0 fail`; `@axe-core/playwright` đạt `0` lỗi `critical/serious`; kịch bản `UJ-01` hoàn tất `< 180s`; sao lưu/khôi phục và `Crypto-Shredding < 60s` đạt chuẩn.
+  - Tự động: Xanh `100%` trên `Stage 0..4 CI` phạm vi `v0.1` **bao gồm trọn vẹn 10/10 bước của `EXT-ACCEPT-01` với `PID` và `sha256sum(tanpopo)` bất biến**; `npx @astryxdesign/cli doctor --built web/console/dist` đạt `0 fail`; `@axe-core/playwright` đạt `0` lỗi `critical/serious`; kịch bản `UJ-01` hoàn tất `< 180s`; sao lưu/khôi phục (`.tpop.enc`) và `Crypto-Shredding < 60s` đạt chuẩn.
   - Con người: **Product Owner** nghiệm thu trực tiếp `GATE-REL-01`..`07` trước khi cho phép gắn thẻ `v0.1.0`.
 
 ---

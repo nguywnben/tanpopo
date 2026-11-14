@@ -5,7 +5,7 @@
 | **Unit ID** | `TP-IMP-0016` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-03` |
 | **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0015` — `GAP-01, 03`)* |
-| **Quy mô (`Size`)** | `L` (`internal/gateway/http/responses.go`, `embeddings.go`, `models.go`, `internal/gateway/idempotency/*`, `internal/gateway/blob/*`) |
+| **Quy mô (`Size`)** | `L` (`internal/ingress/http/responses.go`, `embeddings.go`, `models.go`, `internal/ingress/idempotency/*`, `internal/ingress/blob/*`) |
 | **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Xử lý tệp đính kèm đa phương thức `<= 32 MiB` chống SSRF/OOM & cô lập khóa chống trùng theo `Org/Project`)* |
 | **Chủ sở hữu Kỹ thuật** | `Staff Gateway / Protocol Engineer` |
 
@@ -16,11 +16,11 @@ Hoàn thiện bề mặt **Unified OpenAI-Compatible API** cho `MVP (v0.1)` gồ
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `internal/gateway/http/responses.go` (`POST /v1/responses` đồng bộ & sự kiện luồng chuẩn hóa).
-  - `internal/gateway/http/embeddings.go` (`POST /v1/embeddings` kiểm tra khớp kiểu đầu vào mảng chuỗi/token và chiều véc-tơ).
-  - `internal/gateway/http/models.go` (`GET /v1/models` trả danh mục `LogicalModel` được cấp quyền kèm siêu dữ liệu cờ năng lực mở rộng `x_tanpopo_capabilities`).
-  - `internal/gateway/blob/store.go` (tách các phần tử `image_url` / `input_audio` / `file` `base64` lớn thành `blob_ref` lưu bộ đệm luồng có giới hạn `<= 32 MiB` tổng mỗi yêu cầu; mặc định **tắt** tự tải URL ảnh từ xa để chống SSRF, hoặc bắt buộc đi qua `SSRFGuardDialer` + giới hạn MIME/kích thước nếu chính sách dự án bật tường minh).
-  - `internal/gateway/idempotency/guard.go` (lưu trạng thái `IN_FLIGHT` / phản hồi hoàn tất ngắn hạn cho yêu cầu không truyền luồng có gắn `Idempotency-Key`).
+  - `internal/ingress/http/responses.go` (`POST /v1/responses` đồng bộ & sự kiện luồng chuẩn hóa).
+  - `internal/ingress/http/embeddings.go` (`POST /v1/embeddings` kiểm tra khớp kiểu đầu vào mảng chuỗi/token và chiều véc-tơ).
+  - `internal/ingress/http/models.go` (`GET /v1/models` trả danh mục `LogicalModel` được cấp quyền kèm siêu dữ liệu cờ năng lực mở rộng `x_tanpopo_capabilities`).
+  - `internal/ingress/blob/store.go` (tách các phần tử `image_url` / `input_audio` / `file` `base64` lớn thành `blob_ref` lưu bộ đệm luồng có giới hạn `<= 32 MiB` tổng mỗi yêu cầu; mặc định **tắt** tự tải URL ảnh từ xa để chống SSRF, hoặc bắt buộc đi qua `SSRFGuardDialer` + giới hạn MIME/kích thước nếu chính sách dự án bật tường minh).
+  - `internal/ingress/idempotency/guard.go` (lưu trạng thái `IN_FLIGHT` / phản hồi hoàn tất ngắn hạn cho yêu cầu không truyền luồng có gắn `Idempotency-Key`).
 - **Out-of-Scope:** Điểm cuối `/v1/rerank` (thuộc `TP-IMP-0035` ở `v0.2` theo `CR-01`); luồng âm thanh thời gian thực hai chiều WebRTC/WebSocket (`TP-FR-0106` — `Later / Post-v1.0`).
 
 ## 3. Requirements, Dependencies & Design References
@@ -42,7 +42,8 @@ Hoàn thiện bề mặt **Unified OpenAI-Compatible API** cho `MVP (v0.1)` gồ
 - **`NEG-3` (`Cross-Tenant Idempotency Isolation`):** `Org A` và `Org B` tình cờ gửi trùng chuỗi `Idempotency-Key: req-123` → hoàn toàn độc lập, `0` rò rỉ phản hồi chéo tổ chức.
 
 ## 6. Test Commands & Required Evidence
-- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v -race ./internal/gateway/...`
+- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/ingress/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/ingress/...`)*
+- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/ingress/...`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Vùng đệm `blob_ref` chỉ tồn tại trong vòng đời yêu cầu (xóa tức thì trong `defer`), không ghi tệp tạm không mã hóa xuống đĩa trừ khi vượt ngưỡng tràn cấu hình có mã hóa tạm thời, và không bao giờ chia sẻ khóa `Idempotency-Key` chéo `Virtual Key`.

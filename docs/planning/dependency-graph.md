@@ -119,7 +119,7 @@ Mọi sự chậm trễ trên chuỗi **22 chặng liên tiếp cho `MVP v0.1`**
 
 ### 2.2. Các Cửa sổ Chạy Song song Hiệu suất Cao Qua `git worktree`
 Khi dùng nhiều AI Agents thực thi đồng thời (mỗi Agent một thư mục `git worktree` riêng), có **4 điểm nở rộng song song lớn** không đụng độ tệp:
-1. **Ngay sau `TP-IMP-0003`:** Chạy song song `TP-IMP-0004` (`spikes/*`) và `TP-IMP-0005` (`go.mod`, `web/console`, `.github/workflows`).
+1. **Ngay sau `TP-IMP-0003`:** Chạy song song `TP-IMP-0004` (`tools/spikes/*` có `tools/spikes/go.mod` cô lập riêng biệt) và `TP-IMP-0005` (`go.mod` gốc, `web/console`, `.github/workflows`, `.gitignore`).
 2. **Ngay sau `TP-IMP-0011` + `0010`:** Chạy song song `TP-IMP-0012` (`internal/extension/declarative`) và `TP-IMP-0013` (`internal/extension/wasm`).
 3. **Ngay sau `TP-IMP-0015`:** Chạy song song 3 làn: Làn Giao thức & Official Adapters (`0016`, `0017`, `0018`), Làn Chính sách/Định tuyến/Sổ cái (`0019` → `0023`), và (từ `0024`) Làn Khung Giao diện Astryx (`0026`).
 4. **Ngay sau `TP-IMP-0025` + `0026`:** Chạy **song song 4 làn giao diện độc lập** (`0027`, `0028`, `0029`, `0030` — mỗi đơn vị sở hữu tập trang màn hình riêng trong `web/console/src/pages/*`), đồng thời ở backend có thể tách nhánh sớm cho `0034` (`OAuth 2.1`) và `0039` (`PostgreSQL Driver`)!
@@ -140,10 +140,10 @@ Khi dùng nhiều AI Agents thực thi đồng thời (mỗi Agent một thư m�
 ## 3. Điều kiện Tiền đề Môi trường, Dữ liệu Kiểm thử Khép kín & Quy trình Dựng / Đóng gói (`Env, Test Data & Packaging Procedures`)
 
 1. **Điều kiện Tiền đề Máy Trạm Kỹ sư & CI Runner (`Environmental Prerequisites`):**
-   - **Go Toolchain:** `Go >= 1.24` (`CGO_ENABLED=0` bắt buộc trên mọi lệnh `go build` / `go test` ngoại trừ khi chạy `-race` trong kiểm thử đơn vị).
+   - **Go Toolchain:** `Go >= 1.24` (`module github.com/nguywnben/tanpopo`). **Lưu ý cờ biên dịch bắt buộc:** Trình phát hiện tranh chấp `-race` của Go yêu cầu `CGO_ENABLED=1` (cần trình biên dịch C trên máy trạm/CI), do đó **tuyệt đối không bao giờ gộp `CGO_ENABLED=0` và `-race` trên cùng một dòng lệnh** — luôn tách làm 2 bước: (a) kiểm tra thuần Go không C: `CGO_ENABLED=0 go test ./...` (PowerShell: `$env:CGO_ENABLED='0'; go test ./...`), và (b) kiểm tra tranh chấp dữ liệu: `go test -race ./...` (hoặc gọi trình chạy đa nền tảng `go run ./scripts/ci/check.go`).
    - **Node.js & UI Toolchain:** `Node.js >= 22.13.0`, `npm` (luôn cài bằng `npm ci --ignore-scripts`), gọi Astryx CLI qua `npx @astryxdesign/cli ...` (trên Windows PowerShell dùng `cmd /c npx @astryxdesign/cli ...` theo `ISS-006`).
    - **Công cụ Hợp đồng & Bảo mật:** `buf` / `protoc`, `golangci-lint`, `govulncheck`, `osv-scanner`, `gitleaks`, `cosign`, `syft`/`cyclonedx-gomod`, và Docker/Compose cục bộ (chỉ cần cho kiểm thử tích hợp `PostgreSQL 16` + `Valkey 8` ở `Stage 2 CI` và `TP-IMP-0039+`).
-   - **Trình biên dịch Mẫu Wasm Kiểm thử:** `TinyGo` (hoặc `Rust wasm32-unknown-unknown` / `Javy`) để biên dịch các mô-đun `.wasm` mẫu và độc hại (`infinite_loop.wasm`, `oom_alloc.wasm`, `exfil_attempt.wasm`) trong `testkit/fixtures/wasm/`.
+   - **Mẫu Wasm Kiểm thử Đóng Sẵn (`Zero Host TinyGo Requirement for Unit Tests`):** Các mô-đun `.wasm` nhỏ phục vụ kiểm thử đối kháng (`infinite_loop.wasm`, `oom_alloc.wasm`, `unreachable_trap.wasm`, `unapproved_wasi.wasm`, `echo_transform.wasm`) được dựng sẵn từ mã nguồn `.wat` minh bạch lưu trong `internal/testkit/wasmfixtures/` để `go test` chạy được ngay trên mọi máy Windows/macOS/Linux mà không bắt buộc cài trước `TinyGo`; `TinyGo` / `Rust wasm32` chỉ cần khi tác giả biên dịch gói mẫu SDK mới.
 2. **Quy trình Dữ liệu Kiểm thử Khép kín (`Hermetic Test Data & Zero External AI Cost`):**
    - Mọi gói kiểm thử bắt buộc đặt `TANPOPO_TEST_HERMETIC=1` ngay trong `TestMain`, kích hoạt `testkit/netguard` đánh trượt tức thì mọi kết nối socket ra ngoài `127.0.0.0/8` / `::1`.
    - Mọi thông tin xác thực trong bộ kiểm thử dùng chuỗi mồi nhử chuẩn `sk-tp-canary-DO-NOT-LEAK-9f8e7d6c` để `CanaryScanner` quét hậu kiểm trên toàn bộ nhật ký, DB, OTel spans và `support-bundle`.

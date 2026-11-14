@@ -40,13 +40,15 @@ Xây dựng và đóng gói bộ **5 `Official Reference Adapters` đầu tiên 
 - **`NEG-2`:** Gói `@tanpopo/gemini` không bao giờ tạo chuỗi URL chứa `?key=`.
 
 ## 6. Test Commands & Required Evidence
-- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v -race ./extensions/official/...`
-- Chạy vòng lặp kiểm định gói: `for p in openai anthropic gemini openai-compatible ollama; do tanpopo plugin validate extensions/official/$p && tanpopo plugin test extensions/official/$p; done`
+- Thuần Go (`CGO_ENABLED=0`, chạy bộ kiểm định gói & băng ghi cho cả 5 hãng trên mọi hệ điều hành):
+  - POSIX: `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./extensions/official/...`
+  - PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./extensions/official/...`
+- Tranh chấp dữ liệu (`-race`): `go test -v -race ./extensions/official/...`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Chỉ sử dụng tài liệu API thương mại/máy chủ tự host chính thống của từng hãng (`DEC-004`); mỗi gói có `allowed_hosts` tối thiểu riêng biệt.
-- **Rollback:** Từng gói `.tppkg` độc lập nhau, có thể hạ cấp hoặc tắt riêng lẻ mà không cần biên dịch lại Core.
+- **Rollback:** Từng gói `.tpkg` độc lập nhau, có thể hạ cấp hoặc tắt riêng lẻ mà không cần biên dịch lại Core.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** Product Owner chốt danh sách 5 gói tại `CR-01`; `TP-IMP-0014`, `TP-IMP-0016` và `TP-IMP-0017` đã hoàn tất.
-- **DoD:** Cả 5 gói đóng gói `.tppkg` thành công, đạt chứng nhận `VERIFIED` trên bộ băng ghi chuẩn.
+- **DoD:** Cả 5 gói đóng gói `.tpkg` thành công, đạt chứng nhận `VERIFIED` trên bộ băng ghi chuẩn.

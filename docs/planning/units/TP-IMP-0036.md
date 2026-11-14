@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | **Unit ID** | `TP-IMP-0036` |
-| **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-04` |
+| **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
 | **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0010`, `TP-IMP-0019`, `TP-IMP-0034` — `GAP-01`)* |
-| **Quy mô (`Size`)** | `L` (`internal/mcp/hub/*`, `internal/mcp/schema_pin/*`, `db/migrations/sqlite/0012_mcp_hub.sql`) |
+| **Quy mô (`Size`)** | `L` (`internal/ingress/mcp/hub/*`, `internal/ingress/mcp/schema_pin/*`, `db/migrations/sqlite/0012_mcp_hub.sql`) |
 | **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Ranh giới mặt phẳng công cụ `TB-6`, chống tấn công đánh tráo mô tả công cụ `Rug-Pull / Tool Poisoning TM-07` & cô lập quyền từng công cụ)* |
 | **Chủ sở hữu Kỹ thuật** | `Principal Agentic & MCP Security Architect` |
 
@@ -19,14 +19,14 @@ Hiện thực hóa mặt phẳng lưu lượng độc lập **MCP Governance Hub
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `internal/mcp/hub/server.go` (điểm cuối `/mcp` xử lý `initialize`, `tools/list` có phân trang con trỏ chuẩn MCP, `tools/call`, hủy yêu cầu `notifications/cancelled`).
-  - `internal/mcp/hub/upstream_client.go` (gọi máy chủ MCP từ xa qua `SSRFGuardDialer` + `BlindHostCredentialBroker` gắn chặt `RFC 8707 audience`, giới hạn cứng kích thước phản hồi công cụ `<= 4 MiB` để chống ngập ngữ cảnh LLM).
-  - `internal/mcp/schema_pin/verifier.go` (chuẩn hóa `JCS` và đối chiếu `approved_schema_hash` trước khi hiển thị/gọi công cụ).
+  - `internal/ingress/mcp/hub/server.go` (điểm cuối `/mcp` xử lý `initialize`, `tools/list` có phân trang con trỏ chuẩn MCP, `tools/call`, hủy yêu cầu `notifications/cancelled`; kèm `internal/testkit/fakemcp/`).
+  - `internal/ingress/mcp/hub/upstream_client.go` (gọi máy chủ MCP từ xa qua `SSRFGuardDialer` + `BlindHostCredentialBroker` gắn chặt `RFC 8707 audience`, giới hạn cứng kích thước phản hồi công cụ `<= 4 MiB` để chống ngập ngữ cảnh LLM).
+  - `internal/ingress/mcp/schema_pin/verifier.go` (chuẩn hóa `JCS`, đối chiếu `approved_schema_hash` và xuất thông tin `Schema Diff` phục vụ sổ tay sự cố `INC-06`).
   - `db/migrations/sqlite/0012_mcp_hub.sql` (`mcp_servers`, `mcp_tools`, `mcp_tool_grants`).
 - **Out-of-Scope:** Tường lửa phân loại rủi ro `destructive` & luồng phê duyệt con người (thuộc đơn vị kế tiếp `TP-IMP-0037`).
 
 ## 3. Requirements, Dependencies & Design References
-- **Requirements Refs:** `TP-FR-0401`, `TP-FR-0402`, `DEC-003`, `TP-BR-0601`, `TP-BR-0602`, `CT-21`, `FZ-04`.
+- **Requirements Refs:** `TP-FR-0401`, `TP-FR-0402`, `DEC-003`, `TP-BR-0601`, `TP-BR-0602`, `CT-21`, `FZ-04`, `INC-06`.
 - **Dependencies:** `TP-IMP-0010`, `TP-IMP-0019`, `TP-IMP-0034`.
 - **Design Refs:** [`mcp-a2a-boundaries.md`](../../specifications/mcp-a2a-boundaries.md) (`SPEC-EXT-05`), [`threat-model.md`](../../security/threat-model.md) (`TM-07`), [`contract-test-matrix.md`](../../quality/contract-test-matrix.md) (`CT-21`, `FZ-04`).
 
@@ -41,8 +41,10 @@ Hiện thực hóa mặt phẳng lưu lượng độc lập **MCP Governance Hub
 - **`NEG-3` (`Token Relay Block`):** Token của máy chủ MCP `github` không bao giờ được gắn vào yêu cầu gọi máy chủ MCP `jira`.
 
 ## 6. Test Commands & Required Evidence
-- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v -race ./internal/mcp/...`
-- Fuzzing bộ giải mã JSON-RPC & kiểm định schema công cụ: `go test -fuzz=FuzzMCPProtocol -fuzztime=30s ./internal/mcp/hub/...` (`FZ-04`).
+- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/ingress/mcp/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/ingress/mcp/...`)*
+- Tranh chấp dữ liệu (`-race`) & Fuzzing (`FZ-04`):
+  - `go test -v -race ./internal/ingress/mcp/...`
+  - `go test -fuzz=FuzzMCPProtocol -fuzztime=30s ./internal/ingress/mcp/hub/...`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Mặc định `0` công cụ nào của máy chủ MCP mới được phép gọi (`Default-Deny`); nội dung `arguments` và `result` của công cụ tuân thủ cùng quy tắc quyền riêng tư `0 byte` mặc định trên vết OTel (`TP-IMP-0022`).
