@@ -33,8 +33,12 @@ var (
 	// ErrMissingUnsealCapability indicates UnsealWithCapability was called with an unminted/zero-value capability.
 	ErrMissingUnsealCapability = errors.New("vault: unseal capability required")
 	// ErrPostShredCleanupFailed indicates the DEK row was deleted and cached RAM zeroized,
-	// but the post-shred WAL/disk cleanup failed (e.g. busy reader); callers must retry shred.
+	// but the post-shred WAL/disk cleanup failed (e.g. busy reader) or has not yet completed;
+	// callers must retry shred / FlushPendingShredCleanups to complete physical erasure.
 	ErrPostShredCleanupFailed = errors.New("vault: post-shred cleanup failed; retry shred to complete physical erasure")
+	// ErrPendingShredCleanup indicates an earlier committed shred for the target scope has not yet
+	// completed verified WAL/disk cleanup (pending crash recovery or retry).
+	ErrPendingShredCleanup = errors.New("vault: prior shred WAL cleanup is still pending")
 )
 
 func validateAADSegment(label, val string) error {

@@ -130,6 +130,19 @@ CREATE TABLE project_encryption_keys (
     FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id) ON DELETE CASCADE
 );
 
+-- Durable crash-recovery outbox tracking DEK shreds awaiting verified post-commit cleanup (TP-IMP-0008)
+CREATE TABLE vault_pending_shred_cleanups (
+    scope_key     VARCHAR(160) PRIMARY KEY, -- 'org:<org_id>' or 'proj:<org_id>:<project_id>'
+    org_id        VARCHAR(40) NOT NULL,
+    project_id    VARCHAR(40),
+    shred_epoch   BIGINT NOT NULL CHECK (shred_epoch >= 1),
+    created_at_ms BIGINT NOT NULL,
+    updated_at_ms BIGINT NOT NULL
+);
+
+CREATE INDEX idx_vault_pending_shred_cleanups_org
+    ON vault_pending_shred_cleanups (org_id, shred_epoch);
+
 -- -----------------------------------------------------------------------------
 -- 6. Administrative Principals (Nullable org_id for Instance OPERATOR — CR-06)
 -- -----------------------------------------------------------------------------
@@ -1231,6 +1244,18 @@ ALTER TABLE project_encryption_keys FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON project_encryption_keys
     USING (org_id = current_setting('app.current_org_id', true))
     WITH CHECK (org_id = current_setting('app.current_org_id', true));
+
+ALTER TABLE vault_pending_shred_cleanups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vault_pending_shred_cleanups FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON vault_pending_shred_cleanups
+    USING (
+        org_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.is_instance_operator', true) = 'true'
+    )
+    WITH CHECK (
+        org_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.is_instance_operator', true) = 'true'
+    );
 
 ALTER TABLE virtual_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE virtual_keys FORCE ROW LEVEL SECURITY;

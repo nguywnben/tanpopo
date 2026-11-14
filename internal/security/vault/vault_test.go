@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1477,5 +1478,504 @@ func TestVaultShredBusyReaderCleanupFailureAndRetryRecovery(t *testing.T) {
 				t.Fatalf("residual deleted wrapped_project_dek bytes persisted in %s after retry recovery", env.dbPath+suffix)
 			}
 		}
+	}
+}
+
+func TestVaultCrashRecoveryAcrossStoreRestartAndDEKRecreationBlock(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "crashrec", "tanpopo.db")
+	fc := clock.NewFakeClock(time.Date(2026, 11, 14, 21, 0, 0, 0, time.UTC))
+
+	st1, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: dbPath,
+		NowMs:  func() int64 { return fc.Now().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open st1: %v", err)
+	}
+	kek, err := NewStaticKEKProvider("kek_v1", random32Key(t))
+	if err != nil {
+		_ = st1.Close()
+		t.Fatalf("NewStaticKEKProvider: %v", err)
+	}
+	defer kek.Close()
+
+	store1, err := NewStore(Config{
+		DB:            st1.RawDB(),
+		KEK:           kek,
+		CacheTTL:      5 * time.Minute,
+		NowMs:         func() int64 { return fc.Now().UnixMilli() },
+		PostShredHook: st1.CheckpointWAL,
+	})
+	if err != nil {
+		_ = st1.Close()
+		t.Fatalf("NewStore store1: %v", err)
+	}
+	capToken := MintUnsealCapabilityForBroker()
+
+	orgA, err := st1.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "cr-a", DisplayName: "CR A"})
+	if err != nil {
+		t.Fatalf("CreateOrg A: %v", err)
+	}
+	p1, err := st1.Tenancy().CreateProject(ctx, orgA.ID, port.CreateProjectParams{Slug: "p1", DisplayName: "P1"})
+	if err != nil {
+		t.Fatalf("CreateProj P1: %v", err)
+	}
+	p2, err := st1.Tenancy().CreateProject(ctx, orgA.ID, port.CreateProjectParams{Slug: "p2", DisplayName: "P2"})
+	if err != nil {
+		t.Fatalf("CreateProj P2: %v", err)
+	}
+	secP1, err := store1.SealSecret(ctx, SealSecretParams{
+		OrgID: orgA.ID, OwnerProjectID: &p1.ID, Name: "p1-sec", SecretKind: SecretKindAPIKey, Plaintext: []byte("p1-secret-val"),
+	})
+	if err != nil {
+		t.Fatalf("Seal P1: %v", err)
+	}
+	secP2, err := store1.SealSecret(ctx, SealSecretParams{
+		OrgID: orgA.ID, OwnerProjectID: &p2.ID, Name: "p2-sec", SecretKind: SecretKindAPIKey, Plaintext: []byte("p2-secret-val"),
+	})
+	if err != nil {
+		t.Fatalf("Seal P2: %v", err)
+	}
+
+	var p1WrappedBytes []byte
+	if err := st1.RawDB().QueryRowContext(ctx,
+		`SELECT wrapped_project_dek FROM project_encryption_keys WHERE org_id = ? AND project_id = ?`,
+		orgA.ID, p1.ID).Scan(&p1WrappedBytes); err != nil {
+		t.Fatalf("scan p1 wrapped_project_dek: %v", err)
+	}
+
+	// Keep an external WAL snapshot reader active across Store 1 close -> Store 2 open!
+	readerDSN := "file:" + filepath.ToSlash(dbPath) + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(25)"
+	readerDB, err := sql.Open("sqlite", readerDSN)
+	if err != nil {
+		t.Fatalf("open readerDB: %v", err)
+	}
+	defer readerDB.Close()
+	rtx, err := readerDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatalf("reader BeginTx: %v", err)
+	}
+	var snapCount int
+	if err := rtx.QueryRowContext(ctx, `SELECT count(*) FROM project_encryption_keys`).Scan(&snapCount); err != nil {
+		t.Fatalf("reader snapshot select: %v", err)
+	}
+	if _, err := st1.RawDB().ExecContext(ctx, "PRAGMA busy_timeout = 25"); err != nil {
+		t.Fatalf("set short busy_timeout st1: %v", err)
+	}
+
+	// 1. PostShredHook fails after DEK commit -> Store 1 fails closed.
+	if err := store1.ShredProjectDEK(ctx, orgA.ID, p1.ID); !errors.Is(err, ErrPostShredCleanupFailed) || !errors.Is(err, sqlite.ErrWALCheckpointBusy) {
+		t.Fatalf("expected ErrPostShredCleanupFailed wrapping ErrWALCheckpointBusy, got %v", err)
+	}
+	if store1.PendingShredCleanups() != 1 {
+		t.Fatalf("expected PendingShredCleanups=1 on store1, got %d", store1.PendingShredCleanups())
+	}
+
+	// 2. Attempting to re-create Project P1 DEK while WAL cleanup is pending MUST fail closed!
+	if _, err := store1.SealSecret(ctx, SealSecretParams{
+		OrgID: orgA.ID, OwnerProjectID: &p1.ID, Name: "p1-recreate-premature", SecretKind: SecretKindAPIKey, Plaintext: []byte("nope"),
+	}); !errors.Is(err, ErrPostShredCleanupFailed) || !errors.Is(err, ErrPendingShredCleanup) {
+		t.Fatalf("expected SealSecret on pending-cleanup project to fail closed with ErrPendingShredCleanup, got %v", err)
+	}
+	// Sibling Project P2 continues operating 100% normally.
+	if u2, err := store1.UnsealWithCapability(ctx, capToken, orgA.ID, secP2.ID); err != nil || string(u2.Plaintext) != "p2-secret-val" {
+		t.Fatalf("expected sibling P2 unseal to succeed, err=%v", err)
+	} else {
+		u2.Zeroize()
+	}
+
+	// 3. Simulate process restart: close Store 1 completely and instantiate brand-new Store 2!
+	store1.Close()
+	if err := st1.Close(); err != nil {
+		t.Fatalf("close st1: %v", err)
+	}
+
+	st2, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: dbPath,
+		NowMs:  func() int64 { return fc.Now().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open st2: %v", err)
+	}
+	defer st2.Close()
+	if _, err := st2.RawDB().ExecContext(ctx, "PRAGMA busy_timeout = 25"); err != nil {
+		t.Fatalf("set short busy_timeout st2: %v", err)
+	}
+	store2, err := NewStore(Config{
+		DB:            st2.RawDB(),
+		KEK:           kek,
+		CacheTTL:      5 * time.Minute,
+		NowMs:         func() int64 { return fc.Now().UnixMilli() },
+		PostShredHook: st2.CheckpointWAL,
+	})
+	if err != nil {
+		t.Fatalf("NewStore store2: %v", err)
+	}
+	defer store2.Close()
+
+	// Store 2 immediately recovers durable pending cleanup state upon restart.
+	if got := store2.PendingShredCleanups(); got != 1 {
+		t.Fatalf("expected store2.PendingShredCleanups()=1 after restart, got %d", got)
+	}
+
+	// Retry on Store 2 MUST still fail closed (NOT ErrNotFound, NOT nil) while WAL reader stays open!
+	if err := store2.ShredProjectDEK(ctx, orgA.ID, p1.ID); !errors.Is(err, ErrPostShredCleanupFailed) {
+		t.Fatalf("retry ShredProjectDEK on store2 while WAL busy expected ErrPostShredCleanupFailed, got %v", err)
+	}
+	if err := store2.FlushPendingShredCleanups(ctx); !errors.Is(err, ErrPostShredCleanupFailed) {
+		t.Fatalf("FlushPendingShredCleanups while WAL busy expected ErrPostShredCleanupFailed, got %v", err)
+	}
+	if _, err := store2.SealSecret(ctx, SealSecretParams{
+		OrgID: orgA.ID, OwnerProjectID: &p1.ID, Name: "p1-recreate-after-restart", SecretKind: SecretKindAPIKey, Plaintext: []byte("still-nope"),
+	}); !errors.Is(err, ErrPendingShredCleanup) {
+		t.Fatalf("expected SealSecret after restart to block P1 re-creation while pending, got %v", err)
+	}
+
+	// 4. Close WAL snapshot reader -> retry on Store 2 completes physical WAL erasure!
+	_ = rtx.Rollback()
+	_ = readerDB.Close()
+
+	if err := store2.ShredProjectDEK(ctx, orgA.ID, p1.ID); err != nil {
+		t.Fatalf("retry ShredProjectDEK on store2 after WAL reader closed: %v", err)
+	}
+	if got := store2.PendingShredCleanups(); got != 0 {
+		t.Fatalf("expected 0 pending cleanups after store2 recovery, got %d", got)
+	}
+	if err := store2.ShredProjectDEK(ctx, orgA.ID, p1.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on completed duplicate ShredProjectDEK, got %v", err)
+	}
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		if rawDisk, rerr := os.ReadFile(dbPath + suffix); rerr == nil {
+			if bytes.Contains(rawDisk, p1WrappedBytes) {
+				t.Fatalf("residual deleted wrapped_project_dek persisted in %s after restarted Store 2 cleanup", dbPath+suffix)
+			}
+		}
+	}
+
+	// 5. Once cleanup is verified complete, P1 can cleanly create a brand-new Project DEK,
+	// while old shredded secret remains permanently unrecoverable (ErrNotFound).
+	if _, err := store2.UnsealWithCapability(ctx, capToken, orgA.ID, secP1.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("old secP1 must remain ErrNotFound after recovery, got %v", err)
+	}
+	secP1New, err := store2.SealSecret(ctx, SealSecretParams{
+		OrgID: orgA.ID, OwnerProjectID: &p1.ID, Name: "p1-sec-new", SecretKind: SecretKindAPIKey, Plaintext: []byte("new-p1-secret"),
+	})
+	if err != nil {
+		t.Fatalf("post-cleanup SealSecret on P1 failed: %v", err)
+	}
+	if uNew, err := store2.UnsealWithCapability(ctx, capToken, orgA.ID, secP1New.ID); err != nil || string(uNew.Plaintext) != "new-p1-secret" {
+		t.Fatalf("expected post-cleanup new P1 secret to unseal cleanly, err=%v", err)
+	} else {
+		uNew.Zeroize()
+	}
+
+	// 6. Simulate hard crash between DB commit and PostShredHook return on ShredOrgDEK (Org B)
+	// and verify Store restart + FlushPendingShredCleanups + Org DEK recreation block.
+	orgB, _ := st2.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "cr-b", DisplayName: "CR B"})
+	prjB, _ := st2.Tenancy().CreateProject(ctx, orgB.ID, port.CreateProjectParams{Slug: "pb", DisplayName: "PB"})
+	secOrgB, err := store2.SealSecret(ctx, SealSecretParams{
+		OrgID: orgB.ID, OwnerProjectID: &prjB.ID, Name: "orgb-sec", SecretKind: SecretKindAPIKey, Plaintext: []byte("orgb-val"),
+	})
+	if err != nil {
+		t.Fatalf("Seal orgB: %v", err)
+	}
+	var orgBWrapped []byte
+	if err := st2.RawDB().QueryRowContext(ctx, `SELECT wrapped_org_dek FROM org_encryption_keys WHERE org_id = ?`, orgB.ID).Scan(&orgBWrapped); err != nil {
+		t.Fatalf("scan orgB wrapped_org_dek: %v", err)
+	}
+
+	var crashErr = errors.New("simulated hard process abort right after commit")
+	panicStore, err := NewStore(Config{
+		DB:  st2.RawDB(),
+		KEK: kek,
+		PostShredHook: func(context.Context) error {
+			return crashErr
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewStore panicStore: %v", err)
+	}
+	if err := panicStore.ShredOrgDEK(ctx, orgB.ID); !errors.Is(err, ErrPostShredCleanupFailed) {
+		t.Fatalf("expected ErrPostShredCleanupFailed on aborted ShredOrgDEK, got %v", err)
+	}
+	panicStore.Close() // Discard crashed store instance immediately.
+
+	// Re-check from store2 (fresh store relative to panicStore) while simulated PostShredHook still fails.
+	failingRecoverStore, _ := NewStore(Config{
+		DB:  st2.RawDB(),
+		KEK: kek,
+		PostShredHook: func(context.Context) error {
+			return errors.New("recovery wal failure")
+		},
+	})
+	defer failingRecoverStore.Close()
+	if failingRecoverStore.PendingShredCleanups() != 1 {
+		t.Fatalf("expected 1 pending org shred cleanup on new store, got %d", failingRecoverStore.PendingShredCleanups())
+	}
+	// Attempting to seal an Org-scoped or Project-scoped secret under pending Org B shred must fail closed.
+	if _, err := failingRecoverStore.SealSecret(ctx, SealSecretParams{
+		OrgID: orgB.ID, Name: "orgb-recreate", SecretKind: SecretKindAPIKey, Plaintext: []byte("blocked"),
+	}); !errors.Is(err, ErrPendingShredCleanup) {
+		t.Fatalf("expected Org DEK recreation to fail closed with ErrPendingShredCleanup, got %v", err)
+	}
+	if _, err := failingRecoverStore.SealSecret(ctx, SealSecretParams{
+		OrgID: orgB.ID, OwnerProjectID: &prjB.ID, Name: "prjb-recreate", SecretKind: SecretKindAPIKey, Plaintext: []byte("blocked"),
+	}); !errors.Is(err, ErrPendingShredCleanup) {
+		t.Fatalf("expected child Project DEK creation under pending Org shred to fail closed, got %v", err)
+	}
+	// Child project shred call while parent org WAL cleanup fails must NOT return ErrNotFound.
+	if err := failingRecoverStore.ShredProjectDEK(ctx, orgB.ID, prjB.ID); !errors.Is(err, ErrPostShredCleanupFailed) {
+		t.Fatalf("expected child ShredProjectDEK while parent org WAL pending to return ErrPostShredCleanupFailed, got %v", err)
+	}
+	if err := failingRecoverStore.ShredOrgDEK(ctx, orgB.ID); !errors.Is(err, ErrPostShredCleanupFailed) {
+		t.Fatalf("expected failing retry ShredOrgDEK to return ErrPostShredCleanupFailed, got %v", err)
+	}
+
+	// Healthy restarted store2 verifies child ShredProjectDEK returns ErrNotFound once WAL passes
+	// while keeping org:orgB for ShredOrgDEK retry, and FlushPendingShredCleanups completes cleanly!
+	if err := store2.ShredProjectDEK(ctx, orgB.ID, prjB.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for child project when parent org WAL checkpoint succeeds, got %v", err)
+	}
+	if store2.PendingShredCleanups() != 1 {
+		t.Fatalf("expected org:orgB pending entry preserved for ShredOrgDEK retry, got %d", store2.PendingShredCleanups())
+	}
+	if err := store2.ShredOrgDEK(ctx, orgB.ID); err != nil {
+		t.Fatalf("retry ShredOrgDEK on store2: %v", err)
+	}
+	if store2.PendingShredCleanups() != 0 {
+		t.Fatalf("expected PendingShredCleanups=0 after ShredOrgDEK recovery, got %d", store2.PendingShredCleanups())
+	}
+	if err := store2.ShredOrgDEK(ctx, orgB.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on completed duplicate ShredOrgDEK, got %v", err)
+	}
+	if err := store2.FlushPendingShredCleanups(ctx); err != nil {
+		t.Fatalf("idempotent FlushPendingShredCleanups on empty outbox failed: %v", err)
+	}
+	if _, err := store2.UnsealWithCapability(ctx, capToken, orgB.ID, secOrgB.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on shredded Org B secret, got %v", err)
+	}
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		if rawDisk, rerr := os.ReadFile(dbPath + suffix); rerr == nil {
+			if bytes.Contains(rawDisk, orgBWrapped) {
+				t.Fatalf("residual deleted wrapped_org_dek persisted in %s after Org B recovery", dbPath+suffix)
+			}
+		}
+	}
+}
+
+func TestVaultConcurrentShredRetryIdempotencyAndRecreateRace(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 5*time.Minute)
+
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "conc-shred", DisplayName: "Conc"})
+	if err != nil {
+		t.Fatalf("CreateOrg: %v", err)
+	}
+	prj1, _ := env.sqlite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "p1", DisplayName: "P1"})
+	prj2, _ := env.sqlite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "p2", DisplayName: "P2"})
+	prj3, _ := env.sqlite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "p3", DisplayName: "P3"})
+
+	for _, pid := range []string{prj1.ID, prj2.ID, prj3.ID} {
+		p := pid
+		if _, err := env.vault.SealSecret(ctx, SealSecretParams{
+			OrgID: org.ID, OwnerProjectID: &p, Name: "k", SecretKind: SecretKindAPIKey, Plaintext: []byte("sec-" + pid),
+		}); err != nil {
+			t.Fatalf("SealSecret %s: %v", pid, err)
+		}
+	}
+
+	// 1. Concurrent callers on two independent *Store handles racing on flaky PostShredHook (first 3 fail).
+	var attempts atomic.Int64
+	flakyHook := func(ctx context.Context) error {
+		if attempts.Add(1) <= 3 {
+			return errors.New("transient wal busy")
+		}
+		return env.sqlite.CheckpointWAL(ctx)
+	}
+	storeA, err := NewStore(Config{DB: env.sqlite.RawDB(), KEK: env.kek, PostShredHook: flakyHook})
+	if err != nil {
+		t.Fatalf("storeA: %v", err)
+	}
+	defer storeA.Close()
+	storeB, err := NewStore(Config{DB: env.sqlite.RawDB(), KEK: env.kek, PostShredHook: flakyHook})
+	if err != nil {
+		t.Fatalf("storeB: %v", err)
+	}
+	defer storeB.Close()
+
+	const workers = 10
+	errs := make([]error, workers)
+	var wg sync.WaitGroup
+	barrier := make(chan struct{})
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			<-barrier
+			st := storeA
+			if idx%2 == 1 {
+				st = storeB
+			}
+			errs[idx] = st.ShredProjectDEK(ctx, org.ID, prj1.ID)
+		}(i)
+	}
+	close(barrier)
+	wg.Wait()
+
+	var okCount, errFailCount, notFoundCount int
+	for i, e := range errs {
+		switch {
+		case e == nil:
+			okCount++
+		case errors.Is(e, ErrPostShredCleanupFailed):
+			errFailCount++
+		case errors.Is(e, port.ErrNotFound):
+			notFoundCount++
+		default:
+			t.Fatalf("unexpected concurrent shred error[%d]: %v", i, e)
+		}
+	}
+	if okCount < 1 || errFailCount < 1 {
+		t.Fatalf("expected >=1 nil and >=1 ErrPostShredCleanupFailed under transient failures, got nil=%d fail=%d notFound=%d",
+			okCount, errFailCount, notFoundCount)
+	}
+	if got := env.vault.PendingShredCleanups(); got != 0 {
+		t.Fatalf("expected 0 pending cleanups after concurrent recovery, got %d", got)
+	}
+
+	// 2. Concurrent healthy shred on prj2 -> strictly 1 succeeds, remaining 9 observe ErrNotFound.
+	wg = sync.WaitGroup{}
+	errs2 := make([]error, workers)
+	barrier2 := make(chan struct{})
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			<-barrier2
+			errs2[idx] = env.vault.ShredProjectDEK(ctx, org.ID, prj2.ID)
+		}(i)
+	}
+	close(barrier2)
+	wg.Wait()
+
+	var s2OK, s2NF int
+	for i, e := range errs2 {
+		switch {
+		case e == nil:
+			s2OK++
+		case errors.Is(e, port.ErrNotFound):
+			s2NF++
+		default:
+			t.Fatalf("unexpected concurrent healthy shred error[%d]: %v", i, e)
+		}
+	}
+	if s2OK != 1 || s2NF != workers-1 {
+		t.Fatalf("expected exactly 1 nil and %d ErrNotFound, got ok=%d nf=%d", workers-1, s2OK, s2NF)
+	}
+
+	// 3. Pending cleanup FlushPendingShredCleanups + SealSecret recreation race on prj3:
+	// First force prj3 into pending state using storeFail, then race FlushPendingShredCleanups
+	// against SealSecret(org, prj3) to ensure recreation is either rejected fail-closed or happens
+	// cleanly post-cleanup without being wiped by recovery.
+	storeFail, _ := NewStore(Config{
+		DB:            env.sqlite.RawDB(),
+		KEK:           env.kek,
+		PostShredHook: func(context.Context) error { return errors.New("busy") },
+	})
+	defer storeFail.Close()
+	if err := storeFail.ShredProjectDEK(ctx, org.ID, prj3.ID); !errors.Is(err, ErrPostShredCleanupFailed) {
+		t.Fatalf("expected ErrPostShredCleanupFailed on prj3, got %v", err)
+	}
+
+	var flushErr error
+	var sealErr error
+	var sealMeta *SecretMetadata
+	var wgRace sync.WaitGroup
+	startRace := make(chan struct{})
+	wgRace.Add(2)
+	go func() {
+		defer wgRace.Done()
+		<-startRace
+		flushErr = env.vault.FlushPendingShredCleanups(ctx)
+	}()
+	go func() {
+		defer wgRace.Done()
+		<-startRace
+		sealMeta, sealErr = env.vault.SealSecret(ctx, SealSecretParams{
+			OrgID: org.ID, OwnerProjectID: &prj3.ID, Name: "race-recreate", SecretKind: SecretKindAPIKey, Plaintext: []byte("recreated"),
+		})
+	}()
+	close(startRace)
+	wgRace.Wait()
+
+	if flushErr != nil {
+		t.Fatalf("FlushPendingShredCleanups failed unexpectedly: %v", flushErr)
+	}
+	if env.vault.PendingShredCleanups() != 0 {
+		t.Fatalf("expected 0 pending cleanups after flush, got %d", env.vault.PendingShredCleanups())
+	}
+	if sealErr == nil {
+		// If SealSecret ran after flush cleared pending state, the newly sealed secret MUST be intact!
+		u, uerr := env.vault.UnsealWithCapability(ctx, env.cap, org.ID, sealMeta.ID)
+		if uerr != nil || string(u.Plaintext) != "recreated" {
+			t.Fatalf("post-cleanup recreated secret must be unsealable, err=%v", uerr)
+		}
+		u.Zeroize()
+	} else if !errors.Is(sealErr, ErrPendingShredCleanup) {
+		t.Fatalf("unexpected concurrent SealSecret error during pending flush: %v", sealErr)
+	}
+
+	// 4. Context cancellation (both fast-path & contended shred slot) and closed-DB error branches.
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := env.vault.ShredProjectDEK(cctx, org.ID, prj3.ID); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled on canceled ShredProjectDEK, got %v", err)
+	}
+	if err := env.vault.ShredOrgDEK(cctx, org.ID); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled on canceled ShredOrgDEK, got %v", err)
+	}
+	if err := env.vault.FlushPendingShredCleanups(cctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled on canceled FlushPendingShredCleanups, got %v", err)
+	}
+	// Contended shredSem select cancellation path:
+	env.vault.shredSem <- struct{}{}
+	wctx, wcancel := context.WithTimeout(ctx, 10*time.Millisecond)
+	if err := env.vault.FlushPendingShredCleanups(wctx); !errors.Is(err, context.DeadlineExceeded) {
+		wcancel()
+		<-env.vault.shredSem
+		t.Fatalf("expected context.DeadlineExceeded waiting on held shredSem, got %v", err)
+	}
+	wcancel()
+	<-env.vault.shredSem
+
+	// Post-PostShredHook DB clear failure path:
+	prj4, _ := env.sqlite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "p4", DisplayName: "P4"})
+	if _, err := env.vault.SealSecret(ctx, SealSecretParams{
+		OrgID: org.ID, OwnerProjectID: &prj4.ID, Name: "p4", SecretKind: SecretKindAPIKey, Plaintext: []byte("p4"),
+	}); err != nil {
+		t.Fatalf("SealSecret p4: %v", err)
+	}
+	closeOnShredStore, _ := NewStore(Config{
+		DB:  env.sqlite.RawDB(),
+		KEK: env.kek,
+		PostShredHook: func(ctx context.Context) error {
+			return env.sqlite.Close()
+		},
+	})
+	if err := closeOnShredStore.ShredProjectDEK(ctx, org.ID, prj4.ID); err == nil {
+		t.Fatalf("expected error clearing pending cleanup after DB closed during PostShredHook")
+	}
+
+	_ = env.sqlite.Close()
+	if got := env.vault.PendingShredCleanups(); got != -1 {
+		t.Fatalf("expected PendingShredCleanups()=-1 when DB is closed, got %d", got)
+	}
+	if err := env.vault.FlushPendingShredCleanups(ctx); err == nil {
+		t.Fatalf("expected error on FlushPendingShredCleanups after DB close")
 	}
 }

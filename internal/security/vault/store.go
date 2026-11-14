@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
@@ -128,13 +127,12 @@ type Config struct {
 // Store implements three-tier AES-256-GCM envelope encryption, write-only metadata APIs,
 // online KEK re-wrapping, and Project/Org Crypto-Shredding.
 type Store struct {
-	db            *sql.DB
-	kek           KEKProvider
-	cache         *dekCache
-	nowMs         func() int64
-	postShred     func(ctx context.Context) error
-	pendingMu     sync.Mutex
-	pendingShreds map[string]bool
+	db        *sql.DB
+	kek       KEKProvider
+	cache     *dekCache
+	nowMs     func() int64
+	postShred func(ctx context.Context) error
+	shredSem  chan struct{}
 }
 
 // NewStore validates dependencies and constructs a Vault Store fail-closed.
@@ -159,50 +157,107 @@ func NewStore(cfg Config) (*Store, error) {
 		nowFn = func() int64 { return time.Now().UTC().UnixMilli() }
 	}
 	return &Store{
-		db:            cfg.DB,
-		kek:           cfg.KEK,
-		cache:         cache,
-		nowMs:         nowFn,
-		postShred:     cfg.PostShredHook,
-		pendingShreds: make(map[string]bool),
+		db:        cfg.DB,
+		kek:       cfg.KEK,
+		cache:     cache,
+		nowMs:     nowFn,
+		postShred: cfg.PostShredHook,
+		shredSem:  make(chan struct{}, 1),
 	}, nil
 }
 
-// PendingShredCleanups reports how many committed shreds still await successful PostShredHook completion.
+func orgPendingShredKey(orgID string) string {
+	return "org:" + orgID
+}
+
+func projectPendingShredKey(orgID, projectID string) string {
+	return "proj:" + orgID + ":" + projectID
+}
+
+func (s *Store) acquireShredSlot(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case s.shredSem <- struct{}{}:
+		return nil
+	}
+}
+
+func (s *Store) releaseShredSlot() {
+	<-s.shredSem
+}
+
+// PendingShredCleanups reports how many durably committed shreds still await verified
+// PostShredHook completion across process restarts. Returns -1 if the backing DB query fails.
 func (s *Store) PendingShredCleanups() int {
-	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
-	return len(s.pendingShreds)
+	n, err := s.PendingShredCleanupsContext(context.Background())
+	if err != nil {
+		return -1
+	}
+	return n
 }
 
-func (s *Store) markPendingShred(key string) {
-	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
-	s.pendingShreds[key] = true
+// PendingShredCleanupsContext returns the count of durably persisted pending shred WAL cleanups.
+func (s *Store) PendingShredCleanupsContext(ctx context.Context) (int, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM vault_pending_shred_cleanups`).Scan(&count); err != nil {
+		return 0, fmt.Errorf("vault: count pending shred cleanups: %w", err)
+	}
+	return count, nil
 }
 
-func (s *Store) isPendingShred(key string) bool {
-	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
-	return s.pendingShreds[key]
-}
+// FlushPendingShredCleanups executes PostShredHook to verify WAL truncation for any durably
+// persisted pending shred cleanups recovered after a crash or previous PostShredHook failure.
+func (s *Store) FlushPendingShredCleanups(ctx context.Context) error {
+	if err := s.acquireShredSlot(ctx); err != nil {
+		return err
+	}
+	defer s.releaseShredSlot()
 
-func (s *Store) clearPendingShred(key string) {
-	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
-	delete(s.pendingShreds, key)
-}
+	type pendingTuple struct {
+		scopeKey string
+		epoch    int64
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT scope_key, shred_epoch FROM vault_pending_shred_cleanups ORDER BY shred_epoch ASC`,
+	)
+	if err != nil {
+		return fmt.Errorf("vault: inspect pending shred cleanups: %w", err)
+	}
+	var observed []pendingTuple
+	for rows.Next() {
+		var pt pendingTuple
+		if serr := rows.Scan(&pt.scopeKey, &pt.epoch); serr != nil {
+			_ = rows.Close()
+			return fmt.Errorf("vault: scan pending shred cleanups: %w", serr)
+		}
+		observed = append(observed, pt)
+	}
+	if rerr := rows.Err(); rerr != nil {
+		_ = rows.Close()
+		return fmt.Errorf("vault: iterate pending shred cleanups: %w", rerr)
+	}
+	_ = rows.Close()
+	if len(observed) == 0 {
+		return nil
+	}
 
-func (s *Store) clearPendingOrgShreds(orgID string) {
-	s.pendingMu.Lock()
-	defer s.pendingMu.Unlock()
-	delete(s.pendingShreds, "org:"+orgID)
-	projPrefix := "proj:" + orgID + ":"
-	for k := range s.pendingShreds {
-		if strings.HasPrefix(k, projPrefix) {
-			delete(s.pendingShreds, k)
+	s.cache.clearAll()
+	if herr := s.postShred(ctx); herr != nil {
+		return fmt.Errorf("%w: %w", ErrPostShredCleanupFailed, herr)
+	}
+	for _, pt := range observed {
+		if _, err := s.db.ExecContext(ctx,
+			`DELETE FROM vault_pending_shred_cleanups WHERE scope_key = ? AND shred_epoch = ?`,
+			pt.scopeKey, pt.epoch,
+		); err != nil {
+			return fmt.Errorf("vault: clear pending shred cleanup %q: %w", pt.scopeKey, err)
 		}
 	}
+	return nil
 }
 
 // Close scrubs all cached DEKs in RAM without closing the shared SQL pool.
@@ -312,7 +367,7 @@ func (s *Store) SealSecret(ctx context.Context, params SealSecretParams) (*Secre
 		return nil, mapVaultSQLiteError(err, false)
 	}
 
-	if err := appendVaultChangelogTx(ctx, tx, params.OrgID, "secret_credential", id, port.MutationUpsert, false, now); err != nil {
+	if _, err := appendVaultChangelogTx(ctx, tx, params.OrgID, "secret_credential", id, port.MutationUpsert, false, now); err != nil {
 		return nil, err
 	}
 
@@ -445,7 +500,7 @@ func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expect
 		return nil, port.ErrVersionConflict
 	}
 
-	if err := appendVaultChangelogTx(ctx, tx, orgID, "secret_credential", secretID, port.MutationUpsert, false, now); err != nil {
+	if _, err := appendVaultChangelogTx(ctx, tx, orgID, "secret_credential", secretID, port.MutationUpsert, false, now); err != nil {
 		return nil, err
 	}
 
@@ -723,15 +778,22 @@ func (s *Store) rewrapSingleOrgTx(ctx context.Context, tx *sql.Tx, oldKEKID, new
 
 // ShredProjectDEK cryptographically erases a single project's DEK and cascades its project-owned secrets,
 // immediately zeroizing cached DEK bytes in RAM, emitting an emergency SHRED changelog epoch,
+// durably persisting a crash-safe pending cleanup record inside the same DB transaction,
 // and invoking the mandatory PostShredHook (e.g. sqlite WAL checkpoint truncation) fail-closed.
-// If PostShredHook fails after DB commit (e.g. busy WAL reader), ErrPostShredCleanupFailed is returned
-// and a subsequent retry of ShredProjectDEK completes the pending cleanup idempotently.
+// If PostShredHook fails or crashes after DB commit, ErrPostShredCleanupFailed is returned
+// and a subsequent retry of ShredProjectDEK (or FlushPendingShredCleanups, even after restart)
+// recovers and completes the pending WAL cleanup idempotently.
 func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string) error {
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(projectID) == "" {
 		return fmt.Errorf("%w: org_id and project_id required", ErrInvalidInput)
 	}
+	if err := s.acquireShredSlot(ctx); err != nil {
+		return err
+	}
+	defer s.releaseShredSlot()
 
-	pendingKey := "proj:" + orgID + ":" + projectID
+	projKey := projectPendingShredKey(orgID, projectID)
+	orgKey := orgPendingShredKey(orgID)
 
 	// Zeroize cache immediately before and after DB deletion.
 	s.cache.evictProject(orgID, projectID)
@@ -756,40 +818,91 @@ func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string) er
 	if err != nil {
 		return err
 	}
-	if affected == 0 {
-		if !s.isPendingShred(pendingKey) {
-			return port.ErrNotFound
+
+	var (
+		clearEpoch     int64
+		clearProjEntry bool
+	)
+	if affected > 0 {
+		shredEpoch, cerr := appendVaultChangelogTx(ctx, tx, orgID, "project_encryption_key", projectID, port.MutationShred, true, now)
+		if cerr != nil {
+			return cerr
 		}
-		_ = tx.Rollback()
-		committed = true // prevent double rollback in defer; execute pending PostShredHook retry below.
-	} else {
-		if err := appendVaultChangelogTx(ctx, tx, orgID, "project_encryption_key", projectID, port.MutationShred, true, now); err != nil {
-			return err
+		if perr := recordPendingShredTx(ctx, tx, projKey, orgID, &projectID, shredEpoch, now); perr != nil {
+			return perr
 		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("vault: commit ShredProjectDEK: %w", err)
+		if cerr := tx.Commit(); cerr != nil {
+			return fmt.Errorf("vault: commit ShredProjectDEK: %w", cerr)
 		}
 		committed = true
-		s.markPendingShred(pendingKey)
+		clearEpoch = shredEpoch
+		clearProjEntry = true
+	} else {
+		var projEpoch int64
+		qerr := tx.QueryRowContext(ctx,
+			`SELECT shred_epoch FROM vault_pending_shred_cleanups WHERE scope_key = ?`,
+			projKey,
+		).Scan(&projEpoch)
+		switch {
+		case qerr == nil:
+			_ = tx.Rollback()
+			committed = true // prevent double rollback in defer; complete pending WAL cleanup below.
+			clearEpoch = projEpoch
+			clearProjEntry = true
+		case !errors.Is(qerr, sql.ErrNoRows):
+			return mapVaultSQLiteError(qerr, false)
+		default:
+			var orgEpoch int64
+			oerr := tx.QueryRowContext(ctx,
+				`SELECT shred_epoch FROM vault_pending_shred_cleanups WHERE scope_key = ?`,
+				orgKey,
+			).Scan(&orgEpoch)
+			switch {
+			case oerr == nil:
+				_ = tx.Rollback()
+				committed = true
+				s.cache.evictProject(orgID, projectID)
+				if herr := s.postShred(ctx); herr != nil {
+					return fmt.Errorf("%w: %w", ErrPostShredCleanupFailed, herr)
+				}
+				return port.ErrNotFound
+			case !errors.Is(oerr, sql.ErrNoRows):
+				return mapVaultSQLiteError(oerr, false)
+			default:
+				return port.ErrNotFound
+			}
+		}
 	}
 
 	s.cache.evictProject(orgID, projectID)
 	if herr := s.postShred(ctx); herr != nil {
 		return fmt.Errorf("%w: %w", ErrPostShredCleanupFailed, herr)
 	}
-	s.clearPendingShred(pendingKey)
+	if clearProjEntry {
+		if _, cerr := s.db.ExecContext(ctx,
+			`DELETE FROM vault_pending_shred_cleanups WHERE scope_key = ? AND shred_epoch = ?`,
+			projKey, clearEpoch,
+		); cerr != nil {
+			return fmt.Errorf("vault: clear pending shred cleanup: %w", cerr)
+		}
+	}
 	return nil
 }
 
 // ShredOrgDEK cryptographically erases an organization's root Org DEK, cascades all child Project DEKs,
 // deletes all org-owned and project-owned secret_credentials rows, zeroizes all cached Org/Project DEKs
-// in RAM, records an emergency SHRED epoch in config_changelog, and executes PostShredHook fail-closed.
+// in RAM, records an emergency SHRED epoch and durable pending cleanup marker atomically in DB,
+// and executes PostShredHook fail-closed.
 func (s *Store) ShredOrgDEK(ctx context.Context, orgID string) error {
 	if strings.TrimSpace(orgID) == "" {
 		return fmt.Errorf("%w: org_id required", ErrInvalidInput)
 	}
+	if err := s.acquireShredSlot(ctx); err != nil {
+		return err
+	}
+	defer s.releaseShredSlot()
 
-	pendingKey := "org:" + orgID
+	orgKey := orgPendingShredKey(orgID)
 	s.cache.evictOrg(orgID)
 
 	now := s.nowMs()
@@ -815,28 +928,48 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string) error {
 	if err != nil {
 		return err
 	}
-	if affected == 0 {
-		if !s.isPendingShred(pendingKey) {
+
+	var clearMaxEpoch int64
+	if affected > 0 {
+		shredEpoch, cerr := appendVaultChangelogTx(ctx, tx, orgID, "org_encryption_key", orgID, port.MutationShred, true, now)
+		if cerr != nil {
+			return cerr
+		}
+		if perr := recordPendingShredTx(ctx, tx, orgKey, orgID, nil, shredEpoch, now); perr != nil {
+			return perr
+		}
+		if cerr := tx.Commit(); cerr != nil {
+			return fmt.Errorf("vault: commit ShredOrgDEK: %w", cerr)
+		}
+		committed = true
+		clearMaxEpoch = shredEpoch
+	} else {
+		var maxEpoch sql.NullInt64
+		qerr := tx.QueryRowContext(ctx,
+			`SELECT MAX(shred_epoch) FROM vault_pending_shred_cleanups WHERE org_id = ?`,
+			orgID,
+		).Scan(&maxEpoch)
+		if qerr != nil {
+			return mapVaultSQLiteError(qerr, false)
+		}
+		if !maxEpoch.Valid {
 			return port.ErrNotFound
 		}
 		_ = tx.Rollback()
 		committed = true
-	} else {
-		if err := appendVaultChangelogTx(ctx, tx, orgID, "org_encryption_key", orgID, port.MutationShred, true, now); err != nil {
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("vault: commit ShredOrgDEK: %w", err)
-		}
-		committed = true
-		s.markPendingShred(pendingKey)
+		clearMaxEpoch = maxEpoch.Int64
 	}
 
 	s.cache.evictOrg(orgID)
 	if herr := s.postShred(ctx); herr != nil {
 		return fmt.Errorf("%w: %w", ErrPostShredCleanupFailed, herr)
 	}
-	s.clearPendingOrgShreds(orgID)
+	if _, cerr := s.db.ExecContext(ctx,
+		`DELETE FROM vault_pending_shred_cleanups WHERE org_id = ? AND shred_epoch <= ?`,
+		orgID, clearMaxEpoch,
+	); cerr != nil {
+		return fmt.Errorf("vault: clear pending org shred cleanups: %w", cerr)
+	}
 	return nil
 }
 
@@ -904,6 +1037,18 @@ func (s *Store) ensureOrgDEKTx(ctx context.Context, tx *sql.Tx, orgID string, no
 		FROM org_encryption_keys
 		WHERE org_id = ?`, orgID).Scan(&kekKeyID, &nonce, &wrapped, &dekVersion)
 	if errors.Is(err, sql.ErrNoRows) {
+		var pendingMarker int
+		perr := tx.QueryRowContext(ctx,
+			`SELECT 1 FROM vault_pending_shred_cleanups WHERE org_id = ? LIMIT 1`,
+			orgID,
+		).Scan(&pendingMarker)
+		if perr == nil {
+			return 0, nil, fmt.Errorf("%w: %w (org_id=%s)", ErrPostShredCleanupFailed, ErrPendingShredCleanup, orgID)
+		}
+		if !errors.Is(perr, sql.ErrNoRows) {
+			return 0, nil, mapVaultSQLiteError(perr, false)
+		}
+
 		activeKEKID, kerr := s.kek.ActiveKeyID(ctx)
 		if kerr != nil {
 			return 0, nil, kerr
@@ -981,6 +1126,19 @@ func (s *Store) ensureProjectDEKTx(ctx context.Context, tx *sql.Tx, orgID, proje
 		FROM project_encryption_keys
 		WHERE org_id = ? AND project_id = ?`, orgID, projectID).Scan(&rowOrgDEKVer, &nonce, &wrapped, &projDEKVer)
 	if errors.Is(err, sql.ErrNoRows) {
+		var pendingMarker int
+		perr := tx.QueryRowContext(ctx,
+			`SELECT 1 FROM vault_pending_shred_cleanups WHERE scope_key IN (?, ?) LIMIT 1`,
+			projectPendingShredKey(orgID, projectID),
+			orgPendingShredKey(orgID),
+		).Scan(&pendingMarker)
+		if perr == nil {
+			return 0, 0, nil, fmt.Errorf("%w: %w (org_id=%s project_id=%s)", ErrPostShredCleanupFailed, ErrPendingShredCleanup, orgID, projectID)
+		}
+		if !errors.Is(perr, sql.ErrNoRows) {
+			return 0, 0, nil, mapVaultSQLiteError(perr, false)
+		}
+
 		freshPDEK, derr := generate256BitDEK()
 		if derr != nil {
 			return 0, 0, nil, derr
@@ -1121,15 +1279,37 @@ func (s *Store) loadProjectDEKReadOnly(ctx context.Context, orgID, projectID str
 	return rowOrgDEKVer, projDEKVer, unwrapped, nil
 }
 
-func appendVaultChangelogTx(ctx context.Context, tx *sql.Tx, orgID, entityKind, entityID, mutationType string, emergency bool, now int64) error {
+func appendVaultChangelogTx(ctx context.Context, tx *sql.Tx, orgID, entityKind, entityID, mutationType string, emergency bool, now int64) (int64, error) {
 	emInt := 0
 	if emergency {
 		emInt = 1
 	}
-	if _, err := tx.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		`INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)`,
 		orgID, entityKind, entityID, mutationType, emInt, now,
-	); err != nil {
+	)
+	if err != nil {
+		return 0, mapVaultSQLiteError(err, false)
+	}
+	epoch, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("vault: read config_changelog epoch: %w", err)
+	}
+	return epoch, nil
+}
+
+func recordPendingShredTx(ctx context.Context, tx *sql.Tx, scopeKey, orgID string, projectID *string, shredEpoch, now int64) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO vault_pending_shred_cleanups (
+			scope_key, org_id, project_id, shred_epoch, created_at_ms, updated_at_ms
+		) VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(scope_key) DO UPDATE SET
+			shred_epoch   = excluded.shred_epoch,
+			updated_at_ms = excluded.updated_at_ms
+		WHERE excluded.shred_epoch > vault_pending_shred_cleanups.shred_epoch`,
+		scopeKey, orgID, nullStringPtr(projectID), shredEpoch, now, now,
+	)
+	if err != nil {
 		return mapVaultSQLiteError(err, false)
 	}
 	return nil

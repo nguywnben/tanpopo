@@ -116,6 +116,19 @@ CREATE TABLE project_encryption_keys (
     FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id) ON DELETE CASCADE
 );
 
+-- Durable crash-recovery outbox tracking DEK shreds awaiting verified WAL cleanup (TP-IMP-0008)
+CREATE TABLE vault_pending_shred_cleanups (
+    scope_key     VARCHAR(160) PRIMARY KEY, -- 'org:<org_id>' or 'proj:<org_id>:<project_id>'
+    org_id        VARCHAR(40) NOT NULL,
+    project_id    VARCHAR(40),
+    shred_epoch   BIGINT NOT NULL CHECK (shred_epoch >= 1),
+    created_at_ms BIGINT NOT NULL,
+    updated_at_ms BIGINT NOT NULL
+);
+
+CREATE INDEX idx_vault_pending_shred_cleanups_org
+    ON vault_pending_shred_cleanups (org_id, shred_epoch);
+
 -- -----------------------------------------------------------------------------
 -- 6. Administrative Principals (Nullable org_id for Instance OPERATOR — CR-06)
 -- -----------------------------------------------------------------------------
