@@ -44,10 +44,12 @@ func (e *BlockedEgressError) Error() string {
 }
 
 var (
-	guardMu          sync.Mutex
-	guardRefCount    int
-	mainGuardActive  bool
-	savedDefaultRes  *net.Resolver
+	guardMu               sync.Mutex
+	guardRefCount         int
+	mainGuardActive       bool
+	savedDefaultRes       *net.Resolver
+	savedDefaultTransport http.RoundTripper
+	savedDefaultClientTr  http.RoundTripper
 )
 
 // IsHermeticEnabled reports whether TANPOPO_TEST_HERMETIC is set to "1".
@@ -149,14 +151,32 @@ func NewDialer() *net.Dialer {
 	}
 }
 
+func verifyConnLoopback(conn net.Conn, err error) (net.Conn, error) {
+	if err != nil {
+		return nil, err
+	}
+	if conn != nil && conn.RemoteAddr() != nil {
+		if cerr := CheckLoopbackIPAddr(conn.RemoteAddr().String()); cerr != nil {
+			_ = conn.Close()
+			if be, ok := cerr.(*BlockedEgressError); ok {
+				be.Network = conn.RemoteAddr().Network()
+			}
+			return nil, cerr
+		}
+	}
+	return conn, nil
+}
+
 // WrapTransport clones base (or allocates a fresh *http.Transport) and enforces
-// loopback-only pre-dial and connect-time Control checks.
+// loopback-only pre-dial, post-dial RemoteAddr(), and proxy checks across all
+// context and deprecated Transport dial hooks (DialContext, Dial, DialTLSContext, DialTLS).
 func WrapTransport(base *http.Transport) *http.Transport {
 	var tr *http.Transport
 	if base != nil {
 		tr = base.Clone()
 	} else {
 		tr = &http.Transport{
+			DialContext:         NewDialer().DialContext,
 			MaxIdleConns:        128,
 			MaxIdleConnsPerHost: 64,
 			IdleConnTimeout:     30 * time.Second,
@@ -173,7 +193,19 @@ func WrapTransport(base *http.Transport) *http.Transport {
 			}
 			return nil, err
 		}
-		return origDial(ctx, network, addr)
+		return verifyConnLoopback(origDial(ctx, network, addr))
+	}
+	if tr.Dial != nil {
+		origLegacyDial := tr.Dial
+		tr.Dial = func(network, addr string) (net.Conn, error) {
+			if err := CheckLoopbackAddr(addr); err != nil {
+				if be, ok := err.(*BlockedEgressError); ok {
+					be.Network = network
+				}
+				return nil, err
+			}
+			return verifyConnLoopback(origLegacyDial(network, addr))
+		}
 	}
 	if tr.Proxy != nil {
 		origProxy := tr.Proxy
@@ -208,10 +240,54 @@ func WrapTransport(base *http.Transport) *http.Transport {
 				}
 				return nil, err
 			}
-			return origDialTLS(ctx, network, addr)
+			return verifyConnLoopback(origDialTLS(ctx, network, addr))
+		}
+	}
+	if tr.DialTLS != nil {
+		origLegacyDialTLS := tr.DialTLS
+		tr.DialTLS = func(network, addr string) (net.Conn, error) {
+			if err := CheckLoopbackAddr(addr); err != nil {
+				if be, ok := err.(*BlockedEgressError); ok {
+					be.Network = network
+				}
+				return nil, err
+			}
+			return verifyConnLoopback(origLegacyDialTLS(network, addr))
 		}
 	}
 	return tr
+}
+
+// WrapRoundTripper wraps an arbitrary http.RoundTripper (e.g. a custom transport or
+// *http.Transport) so any outbound HTTP request targeting a non-loopback host is
+// rejected before dialing.
+func WrapRoundTripper(rt http.RoundTripper) http.RoundTripper {
+	if rt == nil {
+		return NewHTTPTransport()
+	}
+	if tr, ok := rt.(*http.Transport); ok {
+		return WrapTransport(tr)
+	}
+	if grt, ok := rt.(*guardedRoundTripper); ok {
+		return grt
+	}
+	return &guardedRoundTripper{base: rt}
+}
+
+type guardedRoundTripper struct {
+	base http.RoundTripper
+}
+
+func (g *guardedRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req != nil && req.URL != nil {
+		if err := CheckLoopbackAddr(req.URL.Host); err != nil {
+			if be, ok := err.(*BlockedEgressError); ok {
+				be.Network = "http"
+			}
+			return nil, err
+		}
+	}
+	return g.base.RoundTrip(req)
 }
 
 // NewHTTPTransport returns a fresh *http.Transport guarded against non-loopback egress.
@@ -230,7 +306,7 @@ func hermeticResolverDial(_ context.Context, network, address string) (net.Conn,
 	return nil, newBlockedErr(network, address, "external DNS resolver queries are forbidden under hermetic test guard")
 }
 
-func activateResolverLocked() {
+func activateGuardsLocked() {
 	if savedDefaultRes == nil {
 		savedDefaultRes = net.DefaultResolver
 	}
@@ -238,18 +314,62 @@ func activateResolverLocked() {
 		PreferGo: true,
 		Dial:     hermeticResolverDial,
 	}
+
+	if savedDefaultTransport == nil {
+		savedDefaultTransport = http.DefaultTransport
+	}
+	if defTr, ok := savedDefaultTransport.(*http.Transport); ok {
+		// Replace stdlib DefaultTransport's unguarded Dialer with a Control-guarded
+		// Dialer so even /etc/hosts overrides for localhost fail at connect() time.
+		defClone := defTr.Clone()
+		guardedDialer := &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			Control:   Control,
+		}
+		defClone.DialContext = guardedDialer.DialContext
+		http.DefaultTransport = WrapTransport(defClone)
+	} else {
+		http.DefaultTransport = WrapRoundTripper(savedDefaultTransport)
+	}
+
+	if http.DefaultClient.Transport != nil {
+		if savedDefaultClientTr == nil {
+			savedDefaultClientTr = http.DefaultClient.Transport
+		}
+		http.DefaultClient.Transport = WrapRoundTripper(savedDefaultClientTr)
+	}
 }
 
-// InstallHermeticGuard activates the hermetic DNS resolver guard for the lifetime of t
-// and restores net.DefaultResolver when the last active guard cleans up.
-// When MustRunHermeticMain or an earlier active guard already installed the resolver,
-// net.DefaultResolver is left untouched to remain race-free across t.Parallel() tests.
+func restoreGuardsLocked() {
+	if savedDefaultRes != nil {
+		net.DefaultResolver = savedDefaultRes
+		savedDefaultRes = nil
+	}
+	if savedDefaultTransport != nil {
+		http.DefaultTransport = savedDefaultTransport
+		savedDefaultTransport = nil
+	}
+	if savedDefaultClientTr != nil {
+		http.DefaultClient.Transport = savedDefaultClientTr
+		savedDefaultClientTr = nil
+	}
+}
+
+// InstallHermeticGuard activates hermetic DNS, http.DefaultTransport, and
+// http.DefaultClient isolation for the lifetime of t, restoring previous globals
+// when the last active guard cleans up.
+//
+// Concurrency contract: packages running tests with t.Parallel() alongside stdlib
+// net/http or net.DefaultResolver calls MUST install MustRunHermeticMain in TestMain
+// so globals are initialized once before any parallel test goroutines spawn;
+// InstallHermeticGuard leaves globals untouched whenever mainGuardActive or guardRefCount > 0.
 func InstallHermeticGuard(t testing.TB) {
 	t.Helper()
 
 	guardMu.Lock()
 	if !mainGuardActive && guardRefCount == 0 {
-		activateResolverLocked()
+		activateGuardsLocked()
 	}
 	guardRefCount++
 	guardMu.Unlock()
@@ -260,14 +380,13 @@ func InstallHermeticGuard(t testing.TB) {
 		if guardRefCount > 0 {
 			guardRefCount--
 		}
-		if guardRefCount == 0 && !mainGuardActive && savedDefaultRes != nil {
-			net.DefaultResolver = savedDefaultRes
-			savedDefaultRes = nil
+		if guardRefCount == 0 && !mainGuardActive {
+			restoreGuardsLocked()
 		}
 	})
 }
 
-// InstallIfHermetic activates the hermetic DNS guard when TANPOPO_TEST_HERMETIC=1.
+// InstallIfHermetic activates the hermetic guards when TANPOPO_TEST_HERMETIC=1.
 func InstallIfHermetic(t testing.TB) {
 	t.Helper()
 	if IsHermeticEnabled() {
@@ -275,16 +394,64 @@ func InstallIfHermetic(t testing.TB) {
 	}
 }
 
-// MustRunHermeticMain sets TANPOPO_TEST_HERMETIC=1 if unset, activates the global
-// DNS resolver guard, and runs m. It returns m.Run()'s exit code for os.Exit.
+// MustRunHermeticMain sets TANPOPO_TEST_HERMETIC=1 if unset, activates process-wide
+// DNS and default HTTP transport isolation before spawning tests, and returns m.Run().
 func MustRunHermeticMain(m *testing.M) int {
 	if os.Getenv(EnvHermetic) == "" {
 		_ = os.Setenv(EnvHermetic, "1")
 	}
 	guardMu.Lock()
-	mainGuardActive = true
-	activateResolverLocked()
+	if !mainGuardActive {
+		mainGuardActive = true
+		activateGuardsLocked()
+	}
 	guardMu.Unlock()
 
 	return m.Run()
+}
+
+// runIsolatedGuardStateTest temporarily suspends global guard state to verify
+// non-main install/restore semantics in unit tests and restores exact prior globals.
+func runIsolatedGuardStateTest(customClientTr http.RoundTripper, fn func()) (restoredDefTr, restoredClientTr, origDefTr http.RoundTripper, restoredResSame bool) {
+	guardMu.Lock()
+	origMain := mainGuardActive
+	origRes := net.DefaultResolver
+	origDefTr = http.DefaultTransport
+	origClientTr := http.DefaultClient.Transport
+	origSavedRes := savedDefaultRes
+	origSavedTr := savedDefaultTransport
+	origSavedClientTr := savedDefaultClientTr
+	origCount := guardRefCount
+
+	mainGuardActive = false
+	guardRefCount = 0
+	savedDefaultRes = nil
+	savedDefaultTransport = nil
+	savedDefaultClientTr = nil
+	if customClientTr != nil {
+		http.DefaultClient.Transport = customClientTr
+	}
+	guardMu.Unlock()
+
+	defer func() {
+		guardMu.Lock()
+		mainGuardActive = origMain
+		guardRefCount = origCount
+		net.DefaultResolver = origRes
+		http.DefaultTransport = origDefTr
+		http.DefaultClient.Transport = origClientTr
+		savedDefaultRes = origSavedRes
+		savedDefaultTransport = origSavedTr
+		savedDefaultClientTr = origSavedClientTr
+		guardMu.Unlock()
+	}()
+
+	fn()
+
+	guardMu.Lock()
+	restoredDefTr = http.DefaultTransport
+	restoredClientTr = http.DefaultClient.Transport
+	restoredResSame = net.DefaultResolver == origRes
+	guardMu.Unlock()
+	return restoredDefTr, restoredClientTr, origDefTr, restoredResSame
 }

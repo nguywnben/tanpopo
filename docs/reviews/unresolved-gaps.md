@@ -140,10 +140,10 @@
 
 ---
 
-## Part C — Implementation-Phase Change Requests (`Pending Product Owner Decision`)
+## Part C — Implementation-Phase Change Requests (`Approved Under Conditions — DEC-012`)
 
 ### `CR-11` — Align `internal/testkit/netguard`, Floor Guard (`scripts/ci/check.go`), and Stage 1 CI Isolation (`unshare -n` & `-race -count=3`) for `TP-IMP-0006`
-- **Status:** **`PROPOSED_PENDING_OWNER_APPROVAL`** *(Raised during `TP-IMP-0006` Final Review Remediation under `execution-baseline.md` Section 5; zero unilateral edits made to `CONSTRAINTS.md`, `scripts/ci/check.go`, or `.github/workflows/ci.yml`.)*
+- **Status:** **`APPROVED_WITH_CONDITIONS` (`Option A` via `DEC-012` — `2026-11-14`)** *(Product Owner approved Option A subject to 9 mandatory conditions in [`decisions.md`](../governance/decisions.md); `TP-IMP-0006` remains `READY_FOR_REVIEW` pending final acceptance.)*
 - **Impacted Artifacts & Units:** [`CONSTRAINTS.md`](../../CONSTRAINTS.md), [`scripts/ci/check.go`](../../scripts/ci/check.go), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`internal/testkit/netguard`](../../internal/testkit/netguard/netguard.go), [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md), [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md).
 - **Empirical Evidence:**
   1. **`http.DefaultTransport` & `http.Get` Spec vs. AST Floor Guard Collision:** `TP-IMP-0006.md` Section 2 & `NEG-1` require `internal/testkit/netguard/` to override `http.DefaultTransport` and test `http.Get("https://api.openai.com/v1/models")` under hermetic guard, whereas `scripts/ci/check.go` (`checkBannedGoStdlibHTTP`, `TP-IMP-0005` `DONE`) unconditionally bans `DefaultClient`, `DefaultTransport`, `Get`, `Post`, `PostForm`, `Head`, and bare `&http.Client{}` across every `.go` file inside `internal/` with zero scope carve-out for `internal/testkit/netguard/`. Consequently, a third-party dependency or out-of-`internal/` test calling raw-IP `http.Get("https://1.1.1.1/")` bypasses `net.DefaultResolver` because `http.DefaultTransport` is not yet overridden.

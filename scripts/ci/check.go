@@ -505,7 +505,7 @@ func lineNumberAt(text string, offset int) int {
 func checkFloorGuard(rootDir string) ([]Violation, error) {
 	var violations []Violation
 
-	codeRoots := []string{"cmd", "internal", "scripts", filepath.Join("web", "console", "src")}
+	codeRoots := []string{"cmd", "internal", "scripts", "tests", filepath.Join("web", "console", "src")}
 	for _, relRoot := range codeRoots {
 		fullRoot := filepath.Join(rootDir, relRoot)
 		if _, err := os.Stat(fullRoot); os.IsNotExist(err) {
@@ -565,7 +565,7 @@ func checkFloorGuard(rootDir string) ([]Violation, error) {
 				}
 			}
 
-			if ext == ".go" && (strings.HasPrefix(relFile, "cmd/") || strings.HasPrefix(relFile, "internal/")) {
+			if ext == ".go" && (strings.HasPrefix(relFile, "cmd/") || strings.HasPrefix(relFile, "internal/") || strings.HasPrefix(relFile, "tests/")) {
 				v, astErr := checkBannedGoStdlibHTTP(relFile, raw)
 				if astErr != nil {
 					return astErr
@@ -594,17 +594,24 @@ func checkBannedGoStdlibHTTP(relFile string, src []byte) ([]Violation, error) {
 		}}, nil
 	}
 
+	isNetguardImpl := relFile == "internal/testkit/netguard/netguard.go"         // CONSTRAINTS.md E3
+	isNetguardDefTests := relFile == "internal/testkit/netguard/netguard_default_test.go" // CONSTRAINTS.md E4
+
 	var violations []Violation
 	var netHTTPLocalNames []string
+	var netLocalNames []string
+	var tlsLocalNames []string
 	for _, imp := range fileAST.Imports {
-		if strings.Trim(imp.Path.Value, `"`) == "net/http" {
+		impPath := strings.Trim(imp.Path.Value, `"`)
+		switch impPath {
+		case "net/http":
 			if imp.Name != nil && imp.Name.Name == "." {
 				violations = append(violations, Violation{
 					Check:   "floor-guard",
 					Rule:    "ban-http-dot-import",
 					File:    relFile,
 					Line:    fset.Position(imp.Pos()).Line,
-					Message: "dot-import of net/http is forbidden in cmd/ and internal/",
+					Message: "dot-import of net/http is forbidden in cmd/, internal/, and tests/",
 				})
 				continue
 			}
@@ -615,14 +622,50 @@ func checkBannedGoStdlibHTTP(relFile string, src []byte) ([]Violation, error) {
 			if imp.Name == nil || imp.Name.Name != "_" {
 				netHTTPLocalNames = append(netHTTPLocalNames, name)
 			}
+		case "net":
+			if imp.Name != nil && imp.Name.Name == "." {
+				violations = append(violations, Violation{
+					Check:   "floor-guard",
+					Rule:    "ban-net-dot-import",
+					File:    relFile,
+					Line:    fset.Position(imp.Pos()).Line,
+					Message: "dot-import of net is forbidden in cmd/, internal/, and tests/",
+				})
+				continue
+			}
+			name := "net"
+			if imp.Name != nil && imp.Name.Name != "_" {
+				name = imp.Name.Name
+			}
+			if imp.Name == nil || imp.Name.Name != "_" {
+				netLocalNames = append(netLocalNames, name)
+			}
+		case "crypto/tls":
+			if imp.Name != nil && imp.Name.Name == "." {
+				violations = append(violations, Violation{
+					Check:   "floor-guard",
+					Rule:    "ban-tls-dot-import",
+					File:    relFile,
+					Line:    fset.Position(imp.Pos()).Line,
+					Message: "dot-import of crypto/tls is forbidden in cmd/, internal/, and tests/",
+				})
+				continue
+			}
+			name := "tls"
+			if imp.Name != nil && imp.Name.Name != "_" {
+				name = imp.Name.Name
+			}
+			if imp.Name == nil || imp.Name.Name != "_" {
+				tlsLocalNames = append(tlsLocalNames, name)
+			}
 		}
 	}
-	if len(netHTTPLocalNames) == 0 {
+	if len(netHTTPLocalNames) == 0 && len(netLocalNames) == 0 && len(tlsLocalNames) == 0 {
 		return violations, nil
 	}
 
-	isHTTPIdent := func(name string) bool {
-		for _, n := range netHTTPLocalNames {
+	containsName := func(list []string, name string) bool {
+		for _, n := range list {
 			if n == name {
 				return true
 			}
@@ -630,51 +673,244 @@ func checkBannedGoStdlibHTTP(relFile string, src []byte) ([]Violation, error) {
 		return false
 	}
 
+	isNilExpr := func(expr ast.Expr) bool {
+		if id, ok := expr.(*ast.Ident); ok && id.Name == "nil" {
+			return true
+		}
+		// Catch typed nil conversions such as (*http.Transport)(nil).
+		if call, ok := expr.(*ast.CallExpr); ok && len(call.Args) == 1 {
+			if argID, ok := call.Args[0].(*ast.Ident); ok && argID.Name == "nil" {
+				return true
+			}
+		}
+		return false
+	}
+
+	hasCompositeKey := func(lit *ast.CompositeLit, keyName string) bool {
+		for _, elt := range lit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			if keyIdent, ok := kv.Key.(*ast.Ident); ok && keyIdent.Name == keyName {
+				return !isNilExpr(kv.Value)
+			}
+		}
+		return false
+	}
+
+	unwrapSelector := func(expr ast.Expr) (pkgName, symName string, ok bool) {
+		for {
+			if se, isStar := expr.(*ast.StarExpr); isStar {
+				expr = se.X
+				continue
+			}
+			break
+		}
+		sel, ok := expr.(*ast.SelectorExpr)
+		if !ok {
+			return "", "", false
+		}
+		ident, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return "", "", false
+		}
+		return ident.Name, sel.Sel.Name, true
+	}
+
+	checkTypedCompositeLit := func(typeExpr ast.Expr, lit *ast.CompositeLit) {
+		pkg, sym, ok := unwrapSelector(typeExpr)
+		if !ok {
+			return
+		}
+		line := fset.Position(lit.Pos()).Line
+		if containsName(netHTTPLocalNames, pkg) {
+			switch sym {
+			case "Client":
+				if !isNetguardDefTests && !hasCompositeKey(lit, "Transport") {
+					violations = append(violations, Violation{
+						Check:   "floor-guard",
+						Rule:    "ban-http-client-nil-transport",
+						File:    relFile,
+						Line:    line,
+						Message: "http.Client composite literals must set a non-nil SSRF-guarded or netguard Transport",
+					})
+				}
+			case "Transport":
+				if !hasCompositeKey(lit, "DialContext") {
+					violations = append(violations, Violation{
+						Check:   "floor-guard",
+						Rule:    "ban-http-transport-nil-dial",
+						File:    relFile,
+						Line:    line,
+						Message: "http.Transport composite literals must set a non-nil DialContext (SSRFGuard / netguard)",
+					})
+				}
+			}
+		}
+		if containsName(netLocalNames, pkg) && sym == "Dialer" {
+			if !hasCompositeKey(lit, "Control") {
+				violations = append(violations, Violation{
+					Check:   "floor-guard",
+					Rule:    "ban-net-dialer-nil-control",
+					File:    relFile,
+					Line:    line,
+					Message: "net.Dialer composite literals must set a non-nil Control hook (SSRFGuard / netguard.Control)",
+				})
+			}
+		}
+		if containsName(tlsLocalNames, pkg) && sym == "Dialer" {
+			if !hasCompositeKey(lit, "NetDialer") {
+				violations = append(violations, Violation{
+					Check:   "floor-guard",
+					Rule:    "ban-tls-dialer-nil-netdialer",
+					File:    relFile,
+					Line:    line,
+					Message: "tls.Dialer composite literals must set a non-nil NetDialer (SSRFGuard / netguard.NewDialer)",
+				})
+			}
+		}
+	}
+
+	isGuardedValueType := func(expr ast.Expr) (string, bool) {
+		// Pointer variable declaration (`var tr *http.Transport`) initializes to nil until assigned;
+		// value struct declarations (`var d net.Dialer`) allocate unguarded zero-value instances.
+		sel, ok := expr.(*ast.SelectorExpr)
+		if !ok {
+			return "", false
+		}
+		ident, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return "", false
+		}
+		if containsName(netHTTPLocalNames, ident.Name) && (sel.Sel.Name == "Client" || sel.Sel.Name == "Transport") {
+			return "net/http." + sel.Sel.Name, true
+		}
+		if containsName(netLocalNames, ident.Name) && sel.Sel.Name == "Dialer" {
+			return "net.Dialer", true
+		}
+		if containsName(tlsLocalNames, ident.Name) && sel.Sel.Name == "Dialer" {
+			return "crypto/tls.Dialer", true
+		}
+		return "", false
+	}
+
 	ast.Inspect(fileAST, func(n ast.Node) bool {
 		switch node := n.(type) {
 		case *ast.SelectorExpr:
 			ident, ok := node.X.(*ast.Ident)
-			if !ok || !isHTTPIdent(ident.Name) {
-				return true
-			}
-			switch node.Sel.Name {
-			case "DefaultClient", "DefaultTransport", "Get", "Post", "PostForm", "Head":
-				violations = append(violations, Violation{
-					Check:   "floor-guard",
-					Rule:    "ban-http-default-client",
-					File:    relFile,
-					Line:    fset.Position(node.Pos()).Line,
-					Message: fmt.Sprintf("net/http.%s is forbidden in cmd/ and internal/ (use injected SSRFGuard HTTP client)", node.Sel.Name),
-				})
-			}
-		case *ast.CompositeLit:
-			sel, ok := node.Type.(*ast.SelectorExpr)
 			if !ok {
 				return true
 			}
-			ident, ok := sel.X.(*ast.Ident)
-			if !ok || !isHTTPIdent(ident.Name) || sel.Sel.Name != "Client" {
-				return true
-			}
-			hasTransport := false
-			for _, elt := range node.Elts {
-				kv, ok := elt.(*ast.KeyValueExpr)
-				if !ok {
-					continue
+			if containsName(netHTTPLocalNames, ident.Name) {
+				switch node.Sel.Name {
+				case "DefaultClient", "DefaultTransport":
+					if isNetguardImpl || isNetguardDefTests {
+						return true
+					}
+					violations = append(violations, Violation{
+						Check:   "floor-guard",
+						Rule:    "ban-http-default-client",
+						File:    relFile,
+						Line:    fset.Position(node.Pos()).Line,
+						Message: fmt.Sprintf("net/http.%s is forbidden outside scoped netguard E3/E4 allowlist (use injected SSRFGuard HTTP client)", node.Sel.Name),
+					})
+				case "Get", "Post", "PostForm", "Head":
+					if isNetguardDefTests {
+						return true
+					}
+					violations = append(violations, Violation{
+						Check:   "floor-guard",
+						Rule:    "ban-http-default-client",
+						File:    relFile,
+						Line:    fset.Position(node.Pos()).Line,
+						Message: fmt.Sprintf("net/http.%s is forbidden in cmd/, internal/, and tests/ outside E4 negative test (use injected SSRFGuard HTTP client)", node.Sel.Name),
+					})
 				}
-				if keyIdent, ok := kv.Key.(*ast.Ident); ok && keyIdent.Name == "Transport" {
-					hasTransport = true
-					break
+			}
+			if containsName(netLocalNames, ident.Name) {
+				switch node.Sel.Name {
+				case "Dial", "DialTimeout", "DialTCP", "DialUDP", "DialIP":
+					if isNetguardDefTests {
+						return true
+					}
+					violations = append(violations, Violation{
+						Check:   "floor-guard",
+						Rule:    "ban-unguarded-net-dial",
+						File:    relFile,
+						Line:    fset.Position(node.Pos()).Line,
+						Message: fmt.Sprintf("net.%s is forbidden outside scoped netguard E4 negative test (use net.Dialer with Control / SSRFGuard)", node.Sel.Name),
+					})
+				case "DefaultResolver":
+					if isNetguardImpl {
+						return true
+					}
+					violations = append(violations, Violation{
+						Check:   "floor-guard",
+						Rule:    "ban-net-default-resolver",
+						File:    relFile,
+						Line:    fset.Position(node.Pos()).Line,
+						Message: "net.DefaultResolver mutation/bypass is forbidden outside internal/testkit/netguard/netguard.go (E3)",
+					})
 				}
 			}
-			if !hasTransport {
-				violations = append(violations, Violation{
-					Check:   "floor-guard",
-					Rule:    "ban-http-client-nil-transport",
-					File:    relFile,
-					Line:    fset.Position(node.Pos()).Line,
-					Message: "http.Client composite literals in cmd/ and internal/ must set an explicit SSRF-guarded Transport",
-				})
+			if containsName(tlsLocalNames, ident.Name) {
+				switch node.Sel.Name {
+				case "Dial", "DialWithDialer":
+					violations = append(violations, Violation{
+						Check:   "floor-guard",
+						Rule:    "ban-tls-unguarded-dial",
+						File:    relFile,
+						Line:    fset.Position(node.Pos()).Line,
+						Message: fmt.Sprintf("crypto/tls.%s is forbidden (use tls.Dialer with SSRFGuard / netguard NetDialer)", node.Sel.Name),
+					})
+				}
+			}
+		case *ast.ValueSpec:
+			if len(node.Values) == 0 && node.Type != nil {
+				if desc, bad := isGuardedValueType(node.Type); bad {
+					violations = append(violations, Violation{
+						Check:   "floor-guard",
+						Rule:    "ban-unguarded-var-decl",
+						File:    relFile,
+						Line:    fset.Position(node.Pos()).Line,
+						Message: fmt.Sprintf("zero-value var declaration of %s bypasses Transport/Control/DialContext floor guard", desc),
+					})
+				}
+			}
+		case *ast.CallExpr:
+			if fnIdent, ok := node.Fun.(*ast.Ident); ok && fnIdent.Name == "new" && len(node.Args) == 1 {
+				if desc, bad := isGuardedValueType(node.Args[0]); bad {
+					violations = append(violations, Violation{
+						Check:   "floor-guard",
+						Rule:    "ban-unguarded-new-alloc",
+						File:    relFile,
+						Line:    fset.Position(node.Pos()).Line,
+						Message: fmt.Sprintf("new(%s) bypasses Transport/Control/DialContext floor guard", desc),
+					})
+				}
+			}
+		case *ast.CompositeLit:
+			if node.Type != nil {
+				checkTypedCompositeLit(node.Type, node)
+				var elemType ast.Expr
+				switch t := node.Type.(type) {
+				case *ast.ArrayType:
+					elemType = t.Elt
+				case *ast.MapType:
+					elemType = t.Value
+				}
+				if elemType != nil {
+					for _, elt := range node.Elts {
+						val := elt
+						if kv, ok := elt.(*ast.KeyValueExpr); ok {
+							val = kv.Value
+						}
+						if innerLit, ok := val.(*ast.CompositeLit); ok && innerLit.Type == nil {
+							checkTypedCompositeLit(elemType, innerLit)
+						}
+					}
+				}
 			}
 		}
 		return true

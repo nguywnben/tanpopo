@@ -103,7 +103,67 @@ jobs:
           cache: npm
           cache-dependency-path: web/console/package-lock.json
 
-      - name: Run All Go Quality Gates & Pure-Go Build (CGO_ENABLED=0)
+      - name: Run Hermetic Go Quality Gates, Pure-Go & Race Tests Inside OS Network Namespace (ubuntu-24.04)
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v unshare >/dev/null 2>&1 || ! command -v ip >/dev/null 2>&1 || ! command -v setpriv >/dev/null 2>&1; then
+            echo "ERROR: required OS isolation tools (unshare/ip/setpriv) unavailable; failing closed" >&2
+            exit 1
+          fi
+          if ! sudo -n true 2>/dev/null; then
+            echo "ERROR: passwordless sudo required for unshare --net on Ubuntu 24.04; failing closed" >&2
+            exit 1
+          fi
+          TARGET_UID="$(id -u)"
+          TARGET_GID="$(id -g)"
+          GO_GOPATH="$(go env GOPATH)"
+          GO_CACHE="$(go env GOCACHE)"
+          GO_MODCACHE="$(go env GOMODCACHE)"
+          sudo -n env \
+            "PATH=$PATH" \
+            "HOME=$HOME" \
+            "GOPATH=$GO_GOPATH" \
+            "GOCACHE=$GO_CACHE" \
+            "GOMODCACHE=$GO_MODCACHE" \
+            "TARGET_UID=$TARGET_UID" \
+            "TARGET_GID=$TARGET_GID" \
+            "OPENAI_API_KEY=${{ env.OPENAI_API_KEY }}" \
+            "ANTHROPIC_API_KEY=${{ env.ANTHROPIC_API_KEY }}" \
+            "GEMINI_API_KEY=${{ env.GEMINI_API_KEY }}" \
+            "TANPOPO_TEST_HERMETIC=1" \
+            "TANPOPO_OS_NETNS_ISOLATED=1" \
+            "GITHUB_ACTIONS=${GITHUB_ACTIONS:-false}" \
+            unshare --net -- bash -euo pipefail -c '
+              ip link set lo up
+              NON_LO=$(ip -o link show | cut -d: -f2 | tr -d " " | cut -d@ -f1 | grep -vx "lo" || true)
+              if [ -n "$NON_LO" ]; then
+                echo "ERROR: unexpected non-loopback network interface in isolated namespace: $NON_LO" >&2
+                exit 1
+              fi
+              if ip route show | grep -q .; then
+                echo "ERROR: unexpected routing entry in isolated namespace" >&2
+                ip route show >&2
+                exit 1
+              fi
+              exec setpriv --reuid="$TARGET_UID" --regid="$TARGET_GID" --init-groups bash -euo pipefail -s
+            ' <<'USER_EOF'
+          set -euo pipefail
+          echo "Verified non-root uid=$(id -u) gid=$(id -g) inside loopback-only Linux netns (TANPOPO_OS_NETNS_ISOLATED=$TANPOPO_OS_NETNS_ISOLATED)"
+          CGO_ENABLED=0 go run ./scripts/ci/check.go --all
+          CGO_ENABLED=0 go test -v -short ./...
+          CGO_ENABLED=0 go test -v -count=3 ./internal/testkit/...
+          CGO_ENABLED=0 go run ./cmd/tanpopo --version
+          go test -v -race -short ./...
+          go test -v -race -count=3 -coverprofile=/tmp/testkit-linux.cov ./internal/testkit/...
+          TOTAL_COV=$(go tool cover -func=/tmp/testkit-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
+          echo "Linux -race -count=3 ./internal/testkit/... statement coverage: ${TOTAL_COV}%"
+          awk -v cov="$TOTAL_COV" 'BEGIN { if (cov + 0 < 90.0) { printf "Coverage %.1f%% < 90.0%% DoD threshold\n", cov; exit 1 } }'
+          USER_EOF
+
+      - name: Run All Go Quality Gates & Pure-Go Build (CGO_ENABLED=0 — macOS & Windows In-Process netguard)
+        if: matrix.os != 'ubuntu-24.04'
         shell: pwsh
         run: |
           $env:CGO_ENABLED = '0'
@@ -111,17 +171,26 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           go test -v -short ./...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test -v -count=3 ./internal/testkit/...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify tanpopo CLI Version Stub Under CGO_ENABLED=0
+      - name: Verify tanpopo CLI Version Stub Under CGO_ENABLED=0 (macOS & Windows)
+        if: matrix.os != 'ubuntu-24.04'
         shell: pwsh
         run: |
           $env:CGO_ENABLED = '0'
           go run ./cmd/tanpopo --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Run Race Detector Tests (Linux & macOS C Toolchain)
-        if: matrix.os != 'windows-2022'
-        run: go test -v -race -short ./...
+      - name: Run Race Detector Tests & Coverage (-race -count=3 on macOS C Toolchain)
+        if: matrix.os == 'macos-15'
+        run: |
+          set -euo pipefail
+          go test -v -race -short ./...
+          go test -v -race -count=3 -coverprofile=/tmp/testkit-macos.cov ./internal/testkit/...
+          TOTAL_COV=$(go tool cover -func=/tmp/testkit-macos.cov | awk '/^total:/ {print $NF}' | tr -d '%')
+          echo "macOS -race -count=3 ./internal/testkit/... statement coverage: ${TOTAL_COV}%"
+          awk -v cov="$TOTAL_COV" 'BEGIN { if (cov + 0 < 90.0) { printf "Coverage %.1f%% < 90.0%% DoD threshold\n", cov; exit 1 } }'
 
       - name: Run Web Console npm ci --ignore-scripts & Astryx Doctor Across All OS Runners
         working-directory: web/console

@@ -142,6 +142,96 @@ func TestFloorGuardRejectsAllNegativeFixtures(t *testing.T) {
 			wantRule: "ban-http-client-nil-transport",
 		},
 		{
+			name:     "http.Transport literal without DialContext",
+			relPath:  "internal/provider/tr.go",
+			content:  "package provider\nimport \"net/http\"\nfunc tr() *http.Transport { return &http.Transport{} }\n",
+			wantRule: "ban-http-transport-nil-dial",
+		},
+		{
+			name:     "bare net.Dial call in internal",
+			relPath:  "internal/provider/rawdial.go",
+			content:  "package provider\nimport \"net\"\nfunc d() { _, _ = net.Dial(\"udp\", \"8.8.8.8:53\") }\n",
+			wantRule: "ban-unguarded-net-dial",
+		},
+		{
+			name:     "dot import net",
+			relPath:  "internal/provider/dotnet.go",
+			content:  "package provider\nimport . \"net\"\nfunc d() { _, _ = Dial(\"tcp\", \"1.1.1.1:443\") }\n",
+			wantRule: "ban-net-dot-import",
+		},
+		{
+			name:     "net.Dialer literal without Control",
+			relPath:  "internal/extension/dialer.go",
+			content:  "package extension\nimport \"net\"\nfunc d() *net.Dialer { return &net.Dialer{} }\n",
+			wantRule: "ban-net-dialer-nil-control",
+		},
+		{
+			name:     "net.DefaultResolver mutation outside netguard.go",
+			relPath:  "internal/testkit/fakellm/bad.go",
+			content:  "package fakellm\nimport \"net\"\nfunc r() { net.DefaultResolver = &net.Resolver{} }\n",
+			wantRule: "ban-net-default-resolver",
+		},
+		{
+			name:     "http.Get forbidden inside netguard.go",
+			relPath:  "internal/testkit/netguard/netguard.go",
+			content:  "package netguard\nimport \"net/http\"\nfunc bad() { _, _ = http.Ge" + "t(\"https://example.com\") }\n",
+			wantRule: "ban-http-default-client",
+		},
+		{
+			name:     "http.DefaultTransport forbidden in tests/ package",
+			relPath:  "tests/hermetic/leak_test.go",
+			content:  "package hermetic_test\nimport \"net/http\"\nvar _ = http.Default" + "Transport\n",
+			wantRule: "ban-http-default-client",
+		},
+		{
+			name:     "explicit nil Transport in http.Client",
+			relPath:  "internal/provider/niltr.go",
+			content:  "package provider\nimport \"net/http\"\nfunc c() *http.Client { return &http.Client{Transport: nil} }\n",
+			wantRule: "ban-http-client-nil-transport",
+		},
+		{
+			name:     "explicit typed nil Control in net.Dialer",
+			relPath:  "internal/provider/nildial.go",
+			content:  "package provider\nimport \"net\"\nfunc d() *net.Dialer { return &net.Dialer{Control: (func(string, string, any) error)(nil)} }\n",
+			wantRule: "ban-net-dialer-nil-control",
+		},
+		{
+			name:     "zero-value var net.Dialer declaration",
+			relPath:  "internal/provider/vardial.go",
+			content:  "package provider\nimport \"net\"\nfunc d() { var x net.Dialer; _ = x }\n",
+			wantRule: "ban-unguarded-var-decl",
+		},
+		{
+			name:     "new(http.Client) allocation",
+			relPath:  "internal/provider/newcli.go",
+			content:  "package provider\nimport \"net/http\"\nfunc c() *http.Client { return new(http.Client) }\n",
+			wantRule: "ban-unguarded-new-alloc",
+		},
+		{
+			name:     "elided slice element literal []net.Dialer{{}}",
+			relPath:  "internal/provider/slicedial.go",
+			content:  "package provider\nimport \"net\"\nvar ds = []net.Dialer{{}}\n",
+			wantRule: "ban-net-dialer-nil-control",
+		},
+		{
+			name:     "elided map element literal map[string]*http.Transport",
+			relPath:  "internal/provider/maptr.go",
+			content:  "package provider\nimport \"net/http\"\nvar ts = map[string]*http.Transport{\"a\": {}}\n",
+			wantRule: "ban-http-transport-nil-dial",
+		},
+		{
+			name:     "crypto/tls.Dial call forbidden",
+			relPath:  "internal/provider/tlsdial.go",
+			content:  "package provider\nimport \"crypto/tls\"\nfunc d() { _, _ = tls.Dial(\"tcp\", \"1.1.1.1:443\", nil) }\n",
+			wantRule: "ban-tls-unguarded-dial",
+		},
+		{
+			name:     "crypto/tls.Dialer without NetDialer",
+			relPath:  "internal/provider/tlsdialer.go",
+			content:  "package provider\nimport \"crypto/tls\"\nvar d = &tls.Dialer{}\n",
+			wantRule: "ban-tls-dialer-nil-netdialer",
+		},
+		{
 			name:     "multiline raw div tag in console src (LF)",
 			relPath:  "web/console/src/Card.tsx",
 			content:  "export function Bad() { return (\n  <" + "div\n    id=\"x\">raw</" + "div>\n); }\n",
@@ -162,6 +252,21 @@ func TestFloorGuardRejectsAllNegativeFixtures(t *testing.T) {
 			assertViolationsContainRule(t, root, checkOptions{floorGuard: true}, tc.wantRule)
 		})
 	}
+
+	t.Run("allows strictly scoped netguard E3/E4 exceptions only", func(t *testing.T) {
+		root := seedCleanRepo(t)
+		writeTestFile(t, root, "internal/testkit/netguard/netguard.go",
+			"package netguard\nimport (\n\t\"net\"\n\t\"net/http\"\n)\nfunc initGuard() {\n\t_ = http.Default"+"Transport\n\t_ = http.Default"+"Client\n\t_ = net.DefaultResolver\n}\n")
+		writeTestFile(t, root, "internal/testkit/netguard/netguard_default_test.go",
+			"package netguard\nimport (\n\t\"net\"\n\t\"net/http\"\n\t\"testing\"\n)\nfunc TestNeg(t *testing.T) {\n\t_, _ = http.Ge"+"t(\"https://api.openai.com/v1/models\")\n\t_, _ = (&http.Client{}).Do(nil)\n\t_, _ = net.Dial(\"udp\", \"8.8.8.8:53\")\n}\n")
+		violations, err := runChecks(checkOptions{rootDir: root, floorGuard: true})
+		if err != nil {
+			t.Fatalf("unexpected check error: %v", err)
+		}
+		if len(violations) != 0 {
+			t.Fatalf("expected 0 floor-guard violations on scoped E3/E4 files, got %v", violations)
+		}
+	})
 }
 
 func TestDAGRejectsCyclesLayerInversionsAndBannedImports(t *testing.T) {

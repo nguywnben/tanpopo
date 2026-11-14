@@ -46,9 +46,11 @@ Tanpopo allocates verification coverage by execution resource footprint so defec
    - **`FakeOAuthIdP`:** Loopback OIDC / OAuth 2.1 server (`PKCE S256`, `RFC 8707` audience checks, rotating refresh tokens, `400 invalid_grant`).
    - **`FakeMCPServer`:** Loopback `MCP 2025-03-26 Streamable HTTP` server (`300` paginated tools, live *Rug-Pull* description mutation, `mutating` read-timeout injection).
    - **`FakeRegistryAndGitServer`:** Loopback smart Git HTTP + `OCI v2` registry with ephemeral `Cosign` / `Ed25519` test keys.
-2. **Dual-Layer Outbound Socket Guard:**
-   - **In-Process (`testkit/netguard`):** Active whenever `TANPOPO_TEST_HERMETIC=1`, failing immediately with a stack trace on any dial outside `127.0.0.0/8` or `::1`.
-   - **OS Network Isolation & Canary Env Traps:** CI test steps run inside loopback-only network namespaces (`unshare --net` / `--internal`) with `OPENAI_API_KEY=CANARY_FORBIDDEN_CI_KEY`, etc.
+2. **Dual-Layer Outbound Socket Guard (`DEC-012` / `CR-11`):**
+   - **In-Process (`testkit/netguard` + AST Floor Guard):** Active whenever `TANPOPO_TEST_HERMETIC=1`, overrides `http.DefaultTransport`, `http.DefaultClient`, and `net.DefaultResolver`, enforces loopback-only `CheckLoopbackAddr` / `Control` hooks across wrapped transports & proxies, and is paired with `scripts/ci/check.go` AST Floor Guard banning unguarded `net/http` defaults, `&http.Transport{}` without `DialContext`, bare `net.Dial*`, and `&net.Dialer{}` without `Control` across `cmd/`, `internal/`, and `tests/` outside `E3`/`E4`.
+   - **OS Network Isolation & Canary Env Traps (Per-OS Boundary):**
+     - **`ubuntu-24.04` (Linux):** Stage 1+ CI steps execute Go tests inside an empirically verified loopback-only Linux network namespace (`unshare --net` with only `lo` up and `0` external routes; fails closed if unavailable) with `TANPOPO_OS_NETNS_ISOLATED=1` and `OPENAI_API_KEY=CANARY_FORBIDDEN_CI_KEY`.
+     - **`macos-15` & `windows-2022`:** Enforce AST Floor Guard + in-process `netguard` (`net.DefaultResolver`, `http.DefaultTransport`, `Control`), **without OS-kernel network-namespace isolation** (OS-level raw-IP isolation on macOS and Windows runners remains explicitly **`UNVERIFIED / NOT_CONFIGURED`**).
 
 ---
 
