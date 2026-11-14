@@ -1,6 +1,6 @@
 # Tanpopo Documentation & Context Hub (`English-First Canonical Edition`)
 
-> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | GATE G4: APPROVED | READY_FOR_REVIEW: TP-IMP-0005 ONLY`)**
+> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | GATE G4: APPROVED | TP-IMP-0005: DONE | READY: TP-IMP-0006, TP-IMP-0007`)**
 > - **Gate G0 (ASTRA A00 — Context Intake & Baseline):** `COMPLETED`
 > - **Gate G1 (ASTRA A01 — Product Discovery):** **`APPROVED` *(`CONFIRMED_BY_OWNER` — `DEC-009`)* **
 > - **Baseline A02 (ASTRA A02 — Business Analysis):** **`APPROVED` *(`SM-01..09` & `BA-OQ-001..05` closed in `TP-IMP-0001`)* **
@@ -8,7 +8,7 @@
 > - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`APPROVED_WITH_CONDITIONS`** *(`runtime.proto` & `POC-01/02` verified locally in `TP-IMP-0002, 0004`; `COND-PO-01, 04, 05`).*
 > - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`APPROVED_WITH_CONDITIONS`** *(`ADR-0001..0006` `ACCEPTED`, `openapi/*.yaml` & `sqlite_schema.sql` verified locally, `postgres_schema.sql` static parity checked with live PG 16 DDL gated in `TP-IMP-0039`, `SPIKE-01..04` documented in [`spike-results.md`](./architecture/spike-results.md); bound to `COND-PO-01..05`).*
 > - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`REMEDIATED_IN_M0` *(`13 / 13` Gaps Closed)*** — See [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md).
-> - **Gate G4 & Engineering Handoff (`DEC-009` & `DEC-010`):** **`APPROVED` | `DELIVERY HANDOFF VERDICT = GO`** — `TP-IMP-0001`..`0004` (`4 / 47` `M0` units) = **`DONE`**; **[`TP-IMP-0005`](./planning/units/TP-IMP-0005.md) (`1 / 47`) = `READY_FOR_REVIEW`** *(implemented & locally verified, passed `security-auditor` & `code-reviewer` adversarial checks; awaiting Lead Engineer / Product Owner acceptance and Stage 0/1 GitHub Actions CI run)*; `TP-IMP-0006`..`0047` (`42 / 47`) remain **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
+> - **Gate G4 & Engineering Handoff (`DEC-009`, `DEC-010` & `DEC-011`):** **`APPROVED` | `DELIVERY HANDOFF VERDICT = GO`** — `TP-IMP-0001`..`0005` (`5 / 47`: `M0` + `Wave 1.1`) = **`DONE`** (`TP-IMP-0005` accepted by Product Owner at commit `1f4f5a1` & GitHub Actions Run `43584413913` `SUCCESS` with `REQUIRES_STRONG_REVIEW` approved); **[`TP-IMP-0006`](./planning/units/TP-IMP-0006.md) & [`TP-IMP-0007`](./planning/units/TP-IMP-0007.md) (`2 / 47`) = `READY`**; `TP-IMP-0008`..`0047` (`40 / 47`) remain **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 
 ---
 
@@ -20,17 +20,17 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
-| **0A** | [`docs/governance/execution-baseline.md`](./governance/execution-baseline.md) | **`EXEC-BL-001-APPROVED` (`HANDOFF: GO` · `TP-IMP-0005: READY_FOR_REVIEW`):** Mandatory cold-start entrypoint (`Zero Prior Chat Context Required`); locks the global technical dictionary, source-of-truth precedence, post-handoff verification conditions (`COND-PO-01..05`), `CR` protocol, and 7-part completion report contract. | **Read first in every new engineering/agent session.** |
+| **0A** | [`docs/governance/execution-baseline.md`](./governance/execution-baseline.md) | **`EXEC-BL-001-APPROVED` (`HANDOFF: GO` · `TP-IMP-0005: DONE` · `READY: TP-IMP-0006, 0007`):** Mandatory cold-start entrypoint (`Zero Prior Chat Context Required`); locks the global technical dictionary, source-of-truth precedence, post-handoff verification conditions (`COND-PO-01..05`), `CR` protocol, and 7-part completion report contract. | **Read first in every new engineering/agent session.** |
 | **0B** | [`docs/governance/owner-approval-sheet.md`](./governance/owner-approval-sheet.md) | **`GOV-OAS-01` (`STAGES 1 & 2 APPROVED`):** Consolidated Product Owner Approval Sheet recording Track A (`18` items), Track B (`15` items + `COND-PO-01..05`), Stage 1 `M0` (`DEC-009`), and Stage 2 Handoff (`DEC-010`). | Reference for Product Owner gate rulings and conditions. |
 | **0C** | [`docs/reviews/execution-readiness.md`](./reviews/execution-readiness.md) | **`REV-RDY-01` (`STAGE 2: GO`):** Calibrated Delivery Readiness Audit distinguishing local `M0` verification (`SQLite`, `protocompile`, `wazero` spikes) from `UNVERIFIED` downstream gates (`PostgreSQL 16`, GitHub CI, full Gateway SLOs). | Auditing `Gate G4` evidence boundaries and `TP-IMP-0005` dispatch readiness. |
 | **0D** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`Historical A08`):** Independent A08 horizontal + 8 vertical-slice adversarial audit (`AUD-001`..`030`) whose blocking items were closed in `M0`. | Historical audit provenance for `CR-01`..`10`. |
 | **0E** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01` (`13 / 13 CLOSED`):** Change Requests **`CR-01`..`CR-10`** and `M0` closure evidence for **`GAP-01`..`GAP-13`**. | Verifying how each A08 specification gap was resolved. |
 
-### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `4 DONE, 1 READY_FOR_REVIEW [TP-IMP-0005], 42 BLOCKED`)
+### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `5 DONE, 2 READY [TP-IMP-0006, 0007], 40 BLOCKED`)
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
-| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all **47 execution units (`TP-IMP-0001`..`0047`)** (`0001..0004 = DONE`, **`0005 = READY_FOR_REVIEW`**, `0006..0047 = BLOCKED`), `REQUIRES_STRONG_REVIEW` flags (`37/47`), and links to [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | When checking unit readiness, dependencies, or locating a `UNIT_ID` spec. |
+| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all **47 execution units (`TP-IMP-0001`..`0047`)** (`0001..0005 = DONE`, **`0006, 0007 = READY`**, `0008..0047 = BLOCKED`), `REQUIRES_STRONG_REVIEW` flags (`37/47`), and links to [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | When checking unit readiness, dependencies, or locating a `UNIT_ID` spec. |
 | **0G** | [`docs/planning/roadmap.md`](./planning/roadmap.md) & [`docs/planning/milestone-map.md`](./planning/milestone-map.md) | **`PLAN-RM-01` & `PLAN-MS-01`:** 9 dependency-driven phases (`EP-00`..`09`), program blockers, trunk/worktree/canary rollout strategy, capacity & uncertainty ranges, and milestone gates `GATE-M0`..`GATE-M5`. | Program coordination, milestone gate checks, and capacity planning. |
 | **0H** | [`docs/planning/dependency-graph.md`](./planning/dependency-graph.md) | **`PLAN-DAG-01`:** Verified acyclic 47-node Mermaid DAG ($u < v$), critical path, 4 parallel `git worktree` expansion points, conditional First 5 Units, and hermetic cross-OS build/test procedures. | Parallel worktree scheduling and build/test environment setup. |
 
@@ -127,7 +127,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 
 ## 2. Explicit Separation: Existing Code on Disk vs. Specification & Planning Artifacts
 
-> **Verified Repository Fact (`VERIFIED_IN_REPO`):** Through `TP-IMP-0005` (`M1` Monorepo Bootstrap), the repository contains the root Go module (`go.mod`), `cmd/tanpopo/main.go`, 19 `internal/*/doc.go` package boundary declarations, [`CONSTRAINTS.md`](../CONSTRAINTS.md), `scripts/ci/check.go`, `.github/workflows/ci.yml`, relocated Apache-2.0 Astryx setup in `web/console/`, `M0` contracts (`proto/`, `openapi/`, `db/spec-check/`), and isolated `M0` spikes (`tools/spikes/`). Zero `M1+` gateway runtime servers or Vite/template-scaffolded screens exist yet. Under `DEC-010`, **[`TP-IMP-0005`](./planning/units/TP-IMP-0005.md) is `READY_FOR_REVIEW`** awaiting Product Owner / Lead Engineer acceptance and GitHub CI run before promoting `TP-IMP-0006`+ from `BLOCKED`.
+> **Verified Repository Fact (`VERIFIED_IN_REPO`):** Through `TP-IMP-0005` (`M1` Monorepo Bootstrap — **`DONE` via `DEC-011` at commit `1f4f5a1` & CI Run `43584413913`**), the repository contains the root Go module (`go.mod`), `cmd/tanpopo/main.go`, 19 `internal/*/doc.go` package boundary declarations, [`.gitattributes`](../.gitattributes), [`CONSTRAINTS.md`](../CONSTRAINTS.md), `scripts/ci/check.go`, `.github/workflows/ci.yml`, relocated Apache-2.0 Astryx setup in `web/console/`, `M0` contracts (`proto/`, `openapi/`, `db/spec-check/`), and isolated `M0` spikes (`tools/spikes/`). Zero `M1+` gateway runtime servers or Vite/template-scaffolded screens exist yet. Currently, **[`TP-IMP-0006`](./planning/units/TP-IMP-0006.md) and [`TP-IMP-0007`](./planning/units/TP-IMP-0007.md) are `READY`**, while `TP-IMP-0008`..`0047` remain `BLOCKED`.
 
 ### 2.1. Complete Repository Inventory (`VERIFIED_IN_REPO`)
 
@@ -158,7 +158,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | `docs/security/*` (`3` files) | **Security & Tenant Isolation** | `threat-model.md`, `plugin-sandbox-and-supply-chain.md`, `secrets-and-tenant-isolation.md`. |
 | `docs/quality/*` (`4` files) | **QA, Hermetic CI, SLOs & Gates** | `contract-test-matrix.md`, `test-strategy.md`, `nonfunctional-slo.md`, `release-readiness.md`. |
 | `docs/reviews/*` (`3` files) | **Independent Audits & Readiness** | `integrated-audit.md` (`Historical A08`), `unresolved-gaps.md` (`13/13 CLOSED`), `execution-readiness.md` (`Stage 2: GO`). |
-| `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and `units/TP-IMP-0001.md`..`TP-IMP-0047.md` (`0001..0004 = DONE`, `0005 = READY_FOR_REVIEW`, `0006..0047 = BLOCKED`). |
+| `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and `units/TP-IMP-0001.md`..`TP-IMP-0047.md` (`0001..0005 = DONE`, `0006..0007 = READY`, `0008..0047 = BLOCKED`). |
 | `buf.yaml`, `proto/`, `openapi/`, `db/spec-check/`, `tools/spikes/` | **`M0` Contracts & Isolated Spikes** | Machine-verified `runtime.proto`, `dataplane-v1.yaml`, `admin-v1.yaml`, `sqlite_schema.sql` (live), `postgres_schema.sql` (static parity), and pure-Go `SPIKE-01..04`. |
 
 ---
@@ -168,12 +168,12 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | Pre-A00 Setup Task | Verification Verdict | Empirical Evidence (`VERIFIED_IN_REPO`) | Governance Handling |
 |---|---|---|---|
 | **Setup 1:** Install Agent Skills from `https://skills.addy.ie/` | **100% COMPLETE** | `25/25` skills verified in `.agents/skills/` matching `skills-lock.json`, plus `.agents/references/` and `.agents/agents/`. | Preserved untouched for all downstream implementation phases. |
-| **Setup 2:** Install `@astryxdesign/core`, `@stylexjs/stylex`, `@astryxdesign/theme-neutral`, `@astryxdesign/cli` & run `init` | **COMPLETE (With Tracked Minor Discrepancies `ISS-002..004, 008`)** | `npm ls --depth=0` confirms all 4 packages; `AGENTS.md`/`GEMINI.md` contain `ASTRYX:START..END`; `npx @astryxdesign/cli doctor` passes **`18 pass, 0 fail, 3 warn`**. | Relocation to `web/console/`, `"license": "Apache-2.0"`, and English UI strings (`ISS-008`) execute in `TP-IMP-0005` (`READY`). |
+| **Setup 2:** Install `@astryxdesign/core`, `@stylexjs/stylex`, `@astryxdesign/theme-neutral`, `@astryxdesign/cli` & run `init` | **COMPLETE (`ISS-002..004, 008` Closed in `TP-IMP-0005`)** | `npm ls --depth=0` confirms all 4 packages; `AGENTS.md`/`GEMINI.md` contain `ASTRYX:START..END`; `npx @astryxdesign/cli doctor` passes **`17 pass, 0 fail, 3 warn`** in `web/console/` across Linux, macOS 15, and Windows (`43584413913`). | Relocated to `web/console/`, `"license": "Apache-2.0"`, and English UI strings (`ISS-008`) completed & accepted in **`TP-IMP-0005` (`DONE`)**. |
 | **Setup 3:** Select look-and-feel (`neutral`), wire `Theme`, and preview | **CONFIG & PLACEHOLDER COMPLETE — NO LIVE BUNDLER YET (`ISS-001`)** | `neutral` is added and set as default (`maintained: yes`); `src/App.tsx` passes static `astryx doctor`, but Vite/`index.html` is not yet installed. | Keep `neutral` untouched (never `theme eject`); scaffold real screens via `npx astryx template` in `TP-IMP-0026..0030`. |
 
 ---
 
-## 4. Current Git Posture (`STAGE 2 ENGINEERING HANDOFF = GO | TP-IMP-0005 = READY`)
+## 4. Current Git Posture (`HANDOFF = GO | TP-IMP-0005 = DONE | READY = TP-IMP-0006, 0007`)
 
 - **Active Branch:** `main` (tracked against `origin/main`).
 - **Official Tanpopo Artifacts:** `111` English Markdown files in `docs/`, root [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md), `buf.yaml`, `proto/`, `openapi/`, `db/spec-check/`, and isolated `tools/spikes/` — **zero modifications to `src/*`, `package.json`, `package-lock.json`, `astryx-themes.js`, or third-party `.agents/*` files prior to `TP-IMP-0005`**.

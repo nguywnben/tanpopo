@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0007` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0003, 0005` — `GAP-01, 04`)* |
+| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-011`; upstream `TP-IMP-0003` and `TP-IMP-0005` are `DONE`)* |
 | **Size** | `M` (`go.mod`, `internal/pkg/idgen`, `internal/storage/*`, `db/migrations/sqlite/0001_foundation.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Establishes root multi-tenant isolation invariants & schema migration mechanics)* |
 | **Technical Owner** | `Staff Backend / Storage Engineer` |

@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0026` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0005`, `TP-IMP-0024` — `GAP-01, 12`)* |
+| **Status** | `BLOCKED` *(Waiting on `TP-IMP-0024`; upstream `TP-IMP-0005` = `DONE`)* |
 | **Size** | `M` (`web/console/*`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Strict adherence to Astryx Design System v0.7.13 & zero-external-request air-gapped operation)* |
 | **Technical Owner** | `Lead Frontend / Design System Engineer` |

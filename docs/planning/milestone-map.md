@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (Gate G4 Stage 2 Approved — `HANDOFF_VERDICT: GO` | `READY: TP-IMP-0005`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.1.0-stage2-go` | **Date:** `2026-11-14`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0005: DONE` | `READY: TP-IMP-0006, TP-IMP-0007`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.2.0-tp-imp-0005-done` | **Date:** `2026-11-14`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) is **`DONE`** ([`spike-results.md`](../architecture/spike-results.md) published); **Gate G4 Stage 2 is `APPROVED` (`DEC-010`)**, unlocking **`TP-IMP-0005` as the sole `READY` unit** (`42` downstream units `0006`..`0047` remain `BLOCKED` behind their dependency, review, and `COND-PO-01`..`05` verification gates).
+> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) and `M1` Wave 1.1 (`TP-IMP-0005`) are **`DONE`** (`DEC-011` at commit `1f4f5a1` & CI Run `43584413913`); **`TP-IMP-0006` and `TP-IMP-0007` are unlocked as `READY`** (`40` downstream units `0008`..`0047` remain `BLOCKED` behind their dependency, review, and `COND-PO-01`..`05` verification gates).
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---
@@ -26,7 +26,7 @@ No downstream milestone may scale execution until the preceding milestone's **In
 - **Primary Risk:** Wasm linear-memory boundary in `SPIKE-02` exceeding the `5 ms p95` ceiling on per-chunk SSE transforms → triggers the fallback architecture invoking Wasm only on stream setup/teardown while using a native Host frame splitter mid-stream.
 - **Integration Gate `GATE-M0` (`Spec & Spike Gate` — `COMPLETED`):**
   - Automated (Local Pre-CI): `0` compile/ref errors across `runtime.proto` (`protocompile`) and `openapi/*.yaml` (`yaml.v3`), live in-memory DDL execution on `SQLite` (`modernc.org/sqlite`), and static `48`-table / `FORCE RLS` parity checks on `postgres_schema.sql` *(live PostgreSQL 16 DDL execution remains `UNVERIFIED` and gated in `TP-IMP-0039`)*.
-  - Human: **Product Owner** approved Stage 1 (`DEC-009`) and Stage 2 (`DEC-010`), unlocking **`TP-IMP-0005` (`READY`)** to begin `M1`.
+  - Human: **Product Owner** approved Stage 1 (`DEC-009`), Stage 2 (`DEC-010`), and **`TP-IMP-0005` Acceptance (`DEC-011`)** at commit `1f4f5a1` & CI Run `43584413913` (`SUCCESS`), promoting **`TP-IMP-0005` (`DONE`)** and unlocking **`TP-IMP-0006` & `TP-IMP-0007` (`READY`)**.
 
 ---
 

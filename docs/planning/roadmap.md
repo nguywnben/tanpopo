@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (Gate G4 Stage 2 Approved — `HANDOFF_VERDICT: GO` | `READY: TP-IMP-0005`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `1.1.0-stage2-go` | **Date:** `2026-11-14`
+> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0005: DONE` | `READY: TP-IMP-0006, TP-IMP-0007`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.2.0-tp-imp-0005-done` | **Date:** `2026-11-14`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **MANDATORY GOVERNANCE NOTICE (`STAGE 2 HANDOFF APPROVED — SINGLE-UNIT ENTRY`):**
+> - **MANDATORY GOVERNANCE NOTICE (`WAVE 1.1 ACCEPTED — WAVE 1.2 READY`):**
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
 >   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Following pre-handoff evidence reconciliation (`DEC-010`), the Product Owner **approved Gate G4 Stage 2 (`HANDOFF_VERDICT = GO`)**, **unlocking solely [`TP-IMP-0005`](./units/TP-IMP-0005.md) as `READY`** to start `M1` while retaining all dependency, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates on `TP-IMP-0006`..`0047`.
+>   3. Following Gate G4 Stage 2 (`DEC-010`) and Product Owner acceptance of **`TP-IMP-0005`** (`DEC-011`, commit `1f4f5a1`, CI Run `43584413913` `SUCCESS`), **`TP-IMP-0005` is `DONE`**, **`TP-IMP-0006` and `TP-IMP-0007` are unlocked as `READY`**, and `TP-IMP-0008`..`0047` remain **`BLOCKED`** behind upstream dependency, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 
 ---
 

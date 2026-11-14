@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0006` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0005` — `GAP-01`)* |
+| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-011`; upstream `TP-IMP-0005` is `DONE`)* |
 | **Size** | `M` (`5` internal packages under `internal/testkit/*`) |
 | **Review Tier** | `STANDARD_REVIEW` |
 | **Technical Owner** | `QA Architect + Test Systems Engineer` |

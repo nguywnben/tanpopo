@@ -1,10 +1,10 @@
 # End-to-End Traceability Matrix & A08 Gate Audit Results — Tanpopo
 
-> **Traceability Verification Specification (Updated through Gate G4 Stage 2 Approval — `HANDOFF VERDICT: GO | READY: TP-IMP-0005`)**
-> - **Version:** `1.1.0-stage2-go`
+> **Traceability Verification Specification (`HANDOFF VERDICT: GO | TP-IMP-0001..0005: DONE | READY: TP-IMP-0006, TP-IMP-0007`)**
+> - **Version:** `1.2.0-tp-imp-0005-done`
 > - **Last Updated:** `2026-11-14`
 > - **Authoring Role:** Principal Requirements Engineer, Principal Architect, Independent Auditor (A08), TPM/QA Lead (A09) & Independent Delivery Readiness Reviewer (A10/M0)
-> - **Governance Status:** **`M0` Spec Closure & Spikes Complete (`TP-IMP-0001..0004 = DONE | GAP-01..13 = CLOSED`); Gate G4 Stage 2 Approved (`HANDOFF_VERDICT = GO | TP-IMP-0005 = READY` per `DEC-010`, bound to `COND-PO-01..05`)**. Provides end-to-end bidirectional traceability from Discovery (`UC`, `RSK`) and Business Analysis (`WF`, `OPS`, `SM-01..09`, `TP-BR`) through `SRS` (`56` `TP-FR-*`, `22` `TP-NFR-*`), `AC` (`59` `TP-AC-*`, `UX-AC`, `OPS-AC`), Machine-Readable Contracts (`runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`), Spikes (`spike-results.md`), **all 47 Implementation Units in [`implementation-index.md`](../planning/implementation-index.md)**, and **Delivery Handoff Artifacts [`execution-baseline.md`](../governance/execution-baseline.md) / [`execution-readiness.md`](../reviews/execution-readiness.md)**.
+> - **Governance Status:** **`M0` + `TP-IMP-0005` Complete (`TP-IMP-0001..0005 = DONE | GAP-01..13 = CLOSED`); `TP-IMP-0006 & TP-IMP-0007 = READY` per `DEC-010, DEC-011` (`1f4f5a1`, CI Run `43584413913` `SUCCESS`), bound to `COND-PO-01..05`**. Provides end-to-end bidirectional traceability from Discovery (`UC`, `RSK`) and Business Analysis (`WF`, `OPS`, `SM-01..09`, `TP-BR`) through `SRS` (`56` `TP-FR-*`, `22` `TP-NFR-*`), `AC` (`59` `TP-AC-*`, `UX-AC`, `OPS-AC`), Machine-Readable Contracts (`runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`), Spikes (`spike-results.md`), **all 47 Implementation Units in [`implementation-index.md`](../planning/implementation-index.md)**, and **Delivery Handoff Artifacts [`execution-baseline.md`](../governance/execution-baseline.md) / [`execution-readiness.md`](../reviews/execution-readiness.md)**.
 
 ---
 
@@ -114,13 +114,13 @@
 |---|---|---|
 | **`Specification Completeness` Verdict** | `FAIL` *(at A08)* | **`CLOSED_IN_M0`:** All `10` Change Requests (`CR-01`..`10`) approved by Product Owner (`DEC-009`) and all `13 / 13` specification/contract/spike gaps (`GAP-01`..`13`) closed (`runtime.proto`, `openapi/*.yaml`, live `sqlite_schema.sql` + static-parity `postgres_schema.sql` with live PG 16 DDL gated in `TP-IMP-0039`, and isolated `wazero` spikes). |
 | **Readiness of `54/54` `Must` (`P0`) Requirements** | `BLOCKED` *(at A08)* | **`SPEC_READY` (`HANDOFF_VERDICT = GO`):** `100%` of `P0` requirements have approved ADRs, machine-readable contracts, `TP-AC-*`, and `CT-*`/`AUTH-*` test IDs (`COND-PO-01..05`). |
-| **Stage 2 Production Halting Boundary** | `PASS` | **`PASS`:** Only Product-Owner-authorized `M0` (`TP-IMP-0001`..`0004`) was executed prior to handoff; `TP-IMP-0005` is now unlocked as `READY` for the Engineering Agent ("Luna") while `TP-IMP-0006`..`0047` remain `BLOCKED` behind their dependencies. |
+| **Stage 2 Production Halting & Acceptance Boundary** | `PASS` | **`PASS`:** Prior to `DEC-010`, only `M0` (`0001..0004`) ran; `TP-IMP-0005` was implemented, verified in CI (`43584413913`), and accepted (`DEC-011`, `1f4f5a1`), unlocking **`TP-IMP-0006` & `TP-IMP-0007` as `READY`** while `TP-IMP-0008..0047` remain `BLOCKED`. |
 
 ---
 
 ## 9. 1-to-1 Traceability Matrix from System Requirements (`54 Must P0` + `22 Should/Could`) to Implementation Units `TP-IMP-xxxx` & Release Evidence (Reconciled Through Stage 2 `GO`)
 
-> **Stage 2 Handoff Coverage Summary:** **`54 / 54` `Must` (`P0`) requirements** (`36 FR` + `18 NFR`), **`22 / 22` `Should/Could` requirements** (`18 FR` + `4 NFR`), and **`117 / 117` verification identifiers (`CT-01..36`, `AUTH-01..16`, `FZ-01..06`, `EXT-ACCEPT-01`, `SLO-01..08`, `FMEA-01..08`, `UX-AC-01..12`, `OPS-AC-01..12`, `INC-01..07`, `DR-01..04`, `GATE-REL-01..07`)** map 1-to-1 to concrete `TP-IMP-xxxx` units (**`0` orphaned `P0` requirements, `0` orphaned test IDs**). The `2` `Later` items (`TP-FR-0106`, `TP-FR-0804`) remain explicitly outside `v1.0` scope (`Post-v1.0`). Milestone `M0` (`TP-IMP-0001`..`0004`) is **`DONE` (`4 / 47`)**, **[`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) is the sole `READY` unit (`1 / 47`)** under `DEC-010`, and `TP-IMP-0006`..`0047` (`42 / 47`) remain **`BLOCKED`** behind their upstream dependencies and `COND-PO-01`..`05` gates.
+> **Live Coverage & Readiness Summary (`DEC-011`):** **`54 / 54` `Must` (`P0`) requirements** (`36 FR` + `18 NFR`), **`22 / 22` `Should/Could` requirements** (`18 FR` + `4 NFR`), and **`117 / 117` verification identifiers (`CT-01..36`, `AUTH-01..16`, `FZ-01..06`, `EXT-ACCEPT-01`, `SLO-01..08`, `FMEA-01..08`, `UX-AC-01..12`, `OPS-AC-01..12`, `INC-01..07`, `DR-01..04`, `GATE-REL-01..07`)** map 1-to-1 to concrete `TP-IMP-xxxx` units (**`0` orphaned `P0` requirements, `0` orphaned test IDs**). The `2` `Later` items (`TP-FR-0106`, `TP-FR-0804`) remain explicitly outside `v1.0` scope (`Post-v1.0`). Units **`TP-IMP-0001`..`0005` (`5 / 47`) are `DONE`** (`TP-IMP-0005` Product-Owner-accepted via `DEC-011` at commit `1f4f5a1` & CI Run `43584413913`), **[`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) and [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) (`2 / 47`) are `READY`**, and `TP-IMP-0008`..`0047` (`40 / 47`) remain **`BLOCKED`** behind their upstream dependencies and `COND-PO-01`..`05` gates.
 
 ### 9.1. All 56 Functional Requirements (`36 Must P0` + `12 Should` + `6 Could` + `2 Later`)
 

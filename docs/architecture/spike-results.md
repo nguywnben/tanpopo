@@ -12,7 +12,7 @@
 
 | Attribute | Exact Verified Value |
 |---|---|
-| **Execution Surface** | Local developer workstation (`windows/amd64`) — **pre-CI local verification** (`.github/workflows/ci.yml` is not yet configured on disk and lands in `TP-IMP-0005`) |
+| **Execution Surface** | Local developer workstation (`windows/amd64`) — **pre-CI `M0` local verification** (`.github/workflows/ci.yml` subsequently landed in `TP-IMP-0005`, `DONE` via `DEC-011`) |
 | **CPU** | `12th Gen Intel(R) Core(TM) i5-12450H` (`12` logical threads) |
 | **Go Toolchain** | `Go 1.27.4 windows/amd64` with `CGO_ENABLED=0` (`100%` pure Go, zero C/C++ FFI) |
 | **Pinned Libraries** | `github.com/tetratelabs/wazero v1.9.0`, `modernc.org/sqlite v1.34.5`, `github.com/bufbuild/protocompile v0.14.1`, `gopkg.in/yaml.v3 v3.0.1` |
@@ -67,4 +67,4 @@ Passing `M0` local spikes and static/SQLite contract checks does **NOT** establi
 - **`Crypto-Shredding` & Cold Backup Non-Recoverability (`COND-PO-02` — `TARGET / UNVERIFIED`):** Full `Master KEK -> Org DEK -> Project DEK` lifecycle, multi-node RAM cache eviction, and live `.tpop.enc` / PITR backup-restore non-recoverability tests are gated in **[`TP-IMP-0008`](../planning/units/TP-IMP-0008.md)** and **[`TP-IMP-0032`](../planning/units/TP-IMP-0032.md)** (plus timed HA DR drills in **[`TP-IMP-0043`](../planning/units/TP-IMP-0043.md)**).
 - **`Valkey / PostgreSQL` HA Ledger Failover Consistency (`COND-PO-03` — `TARGET / UNVERIFIED`):** Concurrent contention, Valkey primary kill, network partition, and crash recovery (`tanpopo admin verify-state`) are gated in **[`TP-IMP-0021`](../planning/units/TP-IMP-0021.md)**, **[`TP-IMP-0040`](../planning/units/TP-IMP-0040.md)**, and **[`TP-IMP-0043`](../planning/units/TP-IMP-0043.md)**.
 - **`MCP 2025-03-26` Real Client Interoperability (`COND-PO-04` — `UNVERIFIED`):** Empirical compatibility tests (`CT-36`) against standard MCP reference/IDE client behavior are gated in **[`TP-IMP-0036`](../planning/units/TP-IMP-0036.md)** and **[`TP-IMP-0037`](../planning/units/TP-IMP-0037.md)**.
-- **Live GitHub Actions CI Pipeline (`UNVERIFIED` Locally in `M0`):** All `M0` checks executed locally on Windows PowerShell; `.github/workflows/ci.yml` and `scripts/ci/check.go` are bootstrapped and verified first in **[`TP-IMP-0005`](../planning/units/TP-IMP-0005.md)**.
+- **Live GitHub Actions CI Pipeline (`Stage 0/1 Verified in TP-IMP-0005`, `Stage 2–4 UNVERIFIED`):** All `M0` checks executed locally on Windows PowerShell; `.github/workflows/ci.yml` and `scripts/ci/check.go` were subsequently bootstrapped in **[`TP-IMP-0005`](../planning/units/TP-IMP-0005.md)** and verified `SUCCESS` across `Stage 0` and `Stage 1` (`ubuntu-24.04`, `macos-15`, `windows-2022`) in run `43584413913` (accepted via `DEC-011`). `Stage 2–4` integration/load/security workflows remain `UNVERIFIED` pending downstream units.
