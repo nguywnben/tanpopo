@@ -1,10 +1,10 @@
 # End-to-End Traceability Matrix & A08 Gate Audit Results — Tanpopo
 
-> **Traceability Verification Specification (Updated through Milestone `M0` Spec Closure & Spikes — `HANDOFF VERDICT: NO_GO | GATE G4: STAGE_1_DONE / STAGE_2_AWAITING_OWNER_GO`)**
-> - **Version:** `1.0.0-m0-reconciled`
+> **Traceability Verification Specification (Updated through Gate G4 Stage 2 Approval — `HANDOFF VERDICT: GO | READY: TP-IMP-0005`)**
+> - **Version:** `1.1.0-stage2-go`
 > - **Last Updated:** `2026-11-14`
 > - **Authoring Role:** Principal Requirements Engineer, Principal Architect, Independent Auditor (A08), TPM/QA Lead (A09) & Independent Delivery Readiness Reviewer (A10/M0)
-> - **Governance Status:** **`M0` Spec Closure & Spikes Complete (`TP-IMP-0001..0004 = DONE | GAP-01..13 = CLOSED`); Stage 2 Production Handoff Held at `HANDOFF_VERDICT = NO_GO` Pending Final Owner Sign-Off (`DEC-009`, `COND-PO-01..05`)**. Provides end-to-end bidirectional traceability from Discovery (`UC`, `RSK`) and Business Analysis (`WF`, `OPS`, `SM-01..09`, `TP-BR`) through `SRS` (`56` `TP-FR-*`, `22` `TP-NFR-*`), `AC` (`59` `TP-AC-*`, `UX-AC`, `OPS-AC`), Machine-Readable Contracts (`runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`), Spikes (`spike-results.md`), **all 47 Implementation Units in [`implementation-index.md`](../planning/implementation-index.md)**, and **Delivery Handoff Artifacts [`execution-baseline.md`](../governance/execution-baseline.md) / [`execution-readiness.md`](../reviews/execution-readiness.md)**.
+> - **Governance Status:** **`M0` Spec Closure & Spikes Complete (`TP-IMP-0001..0004 = DONE | GAP-01..13 = CLOSED`); Gate G4 Stage 2 Approved (`HANDOFF_VERDICT = GO | TP-IMP-0005 = READY` per `DEC-010`, bound to `COND-PO-01..05`)**. Provides end-to-end bidirectional traceability from Discovery (`UC`, `RSK`) and Business Analysis (`WF`, `OPS`, `SM-01..09`, `TP-BR`) through `SRS` (`56` `TP-FR-*`, `22` `TP-NFR-*`), `AC` (`59` `TP-AC-*`, `UX-AC`, `OPS-AC`), Machine-Readable Contracts (`runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`), Spikes (`spike-results.md`), **all 47 Implementation Units in [`implementation-index.md`](../planning/implementation-index.md)**, and **Delivery Handoff Artifacts [`execution-baseline.md`](../governance/execution-baseline.md) / [`execution-readiness.md`](../reviews/execution-readiness.md)**.
 
 ---
 
@@ -63,7 +63,7 @@
 | **2. Zero blanket "full support" claims lacking a Protocol / Capability Matrix?** | **`PASS`** | Section 1 of [`srs.md`](./srs.md) defines a 14-row matrix explicitly distinguishing translated endpoints, lossless native passthrough, dedicated planes (`MCP 2025-03-26`, `COND-PO-04`), and policy-prohibited mechanisms. |
 | **3. Zero ambiguous pricing/token-metering scenarios claiming `100%` exact billing?** | **`PASS`** | `TP-BR-0703`, `TP-FR-0802`, `SPEC-CORE-02`, `ADR-0005`, `SCR-12`, and `FMEA-04` enforce `EXACT`, `ESTIMATED`, or `UNMETERED_FLAGGED` classification with segregated `Chargeback` report columns. |
 | **4. Zero claims of universal consumer subscription OAuth support?** | **`PASS`** | `NG-03` & `PC-03` in [`prd.md`](../product/prd.md), `SPEC-EXT-03`, `ADR-0005`, `UX-GR-03`, and `SPEC-SEC-03` Section 3.3 restrict OAuth strictly to legitimate `Authorized OAuth 2.1` integrations and forbid consumer subscription arbitrage. |
-| **5. Governance posture & Gate approval authority strictly respected?** | **`PASS`** | **Gate G1–G3** and **Gate G4 Stage 1 (`M0`)** were elevated only after explicit Product Owner sign-off (`DEC-009`), while **Gate G4 Stage 2 (`M1+` Handoff)** remains **`NO_GO`** pending final Owner approval. |
+| **5. Governance posture & Gate approval authority strictly respected?** | **`PASS`** | **Gate G1–G3** (`DEC-009`) and **Gate G4 Stages 1 & 2** (`DEC-010`) were elevated only after explicit Product Owner sign-off, unlocking solely `TP-IMP-0005` as `READY` while preserving all downstream dependency/review/`COND-PO-01..05` gates. |
 
 ---
 
@@ -112,15 +112,15 @@
 
 | A08 Audit Dimension | Historical A08 Verdict | Post-M0 Closure Status (`TP-IMP-0001..0004`) |
 |---|---|---|
-| **`Specification Completeness` Verdict** | `FAIL` *(at A08)* | **`PASS` *(Remediated in M0)*:** All `10` Change Requests (`CR-01`..`10`) approved by Product Owner (`DEC-009`) and all `13 / 13` blocking specification/contract/spike gaps (`GAP-01`..`13`) closed with machine-verifiable `.proto`, OpenAPI, SQL, and `wazero` spike artifacts. |
-| **Readiness of `54/54` `Must` (`P0`) Requirements** | `BLOCKED` *(at A08)* | **`SPEC_READY` *(Subject to Stage 2 Owner `GO`)*:** `100%` of `P0` requirements have approved ADRs, compiled schemas, `TP-AC-*`, and `CT-*`/`AUTH-*` test IDs (`COND-PO-01..05`). |
-| **Stage 2 Production Halting Boundary** | `PASS` | **`PASS`:** Only Product-Owner-authorized `M0` (`TP-IMP-0001`..`0004` + isolated `tools/spikes/`) was executed; `M1+` production units (`TP-IMP-0005`..`0047`) remain strictly untouched and `BLOCKED` pending Gate G4 Stage 2 Owner `GO`. |
+| **`Specification Completeness` Verdict** | `FAIL` *(at A08)* | **`CLOSED_IN_M0`:** All `10` Change Requests (`CR-01`..`10`) approved by Product Owner (`DEC-009`) and all `13 / 13` specification/contract/spike gaps (`GAP-01`..`13`) closed (`runtime.proto`, `openapi/*.yaml`, live `sqlite_schema.sql` + static-parity `postgres_schema.sql` with live PG 16 DDL gated in `TP-IMP-0039`, and isolated `wazero` spikes). |
+| **Readiness of `54/54` `Must` (`P0`) Requirements** | `BLOCKED` *(at A08)* | **`SPEC_READY` (`HANDOFF_VERDICT = GO`):** `100%` of `P0` requirements have approved ADRs, machine-readable contracts, `TP-AC-*`, and `CT-*`/`AUTH-*` test IDs (`COND-PO-01..05`). |
+| **Stage 2 Production Halting Boundary** | `PASS` | **`PASS`:** Only Product-Owner-authorized `M0` (`TP-IMP-0001`..`0004`) was executed prior to handoff; `TP-IMP-0005` is now unlocked as `READY` for the Engineering Agent ("Luna") while `TP-IMP-0006`..`0047` remain `BLOCKED` behind their dependencies. |
 
 ---
 
-## 9. 1-to-1 Traceability Matrix from System Requirements (`54 Must P0` + `22 Should/Could`) to Implementation Units `TP-IMP-xxxx` & Release Evidence (Reconciled Through `M0`)
+## 9. 1-to-1 Traceability Matrix from System Requirements (`54 Must P0` + `22 Should/Could`) to Implementation Units `TP-IMP-xxxx` & Release Evidence (Reconciled Through Stage 2 `GO`)
 
-> **M0 Coverage Audit Summary:** **`54 / 54` `Must` (`P0`) requirements** (`36 FR` + `18 NFR`), **`22 / 22` `Should/Could` requirements** (`18 FR` + `4 NFR`), and **`117 / 117` verification identifiers (`CT-01..36`, `AUTH-01..16`, `FZ-01..06`, `EXT-ACCEPT-01`, `SLO-01..08`, `FMEA-01..08`, `UX-AC-01..12`, `OPS-AC-01..12`, `INC-01..07`, `DR-01..04`, `GATE-REL-01..07`)** map 1-to-1 to concrete `TP-IMP-xxxx` units (**`0` orphaned `P0` requirements, `0` orphaned test IDs**). The `2` `Later` items (`TP-FR-0106`, `TP-FR-0804`) remain explicitly outside `v1.0` scope (`Post-v1.0`). Milestone `M0` (`TP-IMP-0001`..`0004`) is **`DONE` (`4 / 47`)**, while `TP-IMP-0005`..`0047` (`43 / 47`) remain **`BLOCKED` (`HANDOFF_VERDICT = NO_GO`)** awaiting Gate G4 Stage 2 Final Owner Handoff Approval (`TP-IMP-0005` is the first eligible `READY` unit upon Stage 2 `GO`).
+> **Stage 2 Handoff Coverage Summary:** **`54 / 54` `Must` (`P0`) requirements** (`36 FR` + `18 NFR`), **`22 / 22` `Should/Could` requirements** (`18 FR` + `4 NFR`), and **`117 / 117` verification identifiers (`CT-01..36`, `AUTH-01..16`, `FZ-01..06`, `EXT-ACCEPT-01`, `SLO-01..08`, `FMEA-01..08`, `UX-AC-01..12`, `OPS-AC-01..12`, `INC-01..07`, `DR-01..04`, `GATE-REL-01..07`)** map 1-to-1 to concrete `TP-IMP-xxxx` units (**`0` orphaned `P0` requirements, `0` orphaned test IDs**). The `2` `Later` items (`TP-FR-0106`, `TP-FR-0804`) remain explicitly outside `v1.0` scope (`Post-v1.0`). Milestone `M0` (`TP-IMP-0001`..`0004`) is **`DONE` (`4 / 47`)**, **[`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) is the sole `READY` unit (`1 / 47`)** under `DEC-010`, and `TP-IMP-0006`..`0047` (`42 / 47`) remain **`BLOCKED`** behind their upstream dependencies and `COND-PO-01`..`05` gates.
 
 ### 9.1. All 56 Functional Requirements (`36 Must P0` + `12 Should` + `6 Could` + `2 Later`)
 

@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (Reconciled Post-`M0` — Gate G4: `STAGE_1_DONE / STAGE_2_AWAITING_OWNER_GO` | `HANDOFF_VERDICT: NO_GO`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.0.0-m0-done` | **Date:** `2026-11-14`
+> **Dependency Orchestration & Build Infrastructure Plan (Gate G4 Stage 2 Approved — `HANDOFF_VERDICT: GO` | `READY: TP-IMP-0005`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.1.0-stage2-go` | **Date:** `2026-11-14`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0004` (`M0`) = **`DONE`**; `TP-IMP-0005`..`0047` = **`BLOCKED`** pending Product Owner Gate G4 Stage 2 `GO` (`TP-IMP-0005` is the first topological root of `M1` ready to unlock on `GO`).
+> - **Live DAG Frontier:** `TP-IMP-0001`..`0004` (`M0`) = **`DONE`**; **`TP-IMP-0005` = `READY` (sole `READY` unit per `DEC-010`)**; `TP-IMP-0006`..`0047` = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---

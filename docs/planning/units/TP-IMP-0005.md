@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0005` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | `BLOCKED` *(Awaiting Gate G4 Stage 2 Final Owner Handoff Approval — all M0 upstream prerequisites `TP-IMP-0001..0004`, `ADR-0001`, `ADR-0004`, `SD-G1-05` are complete; first `READY` candidate upon Stage 2 `GO`)* |
+| **Status** | **`READY`** *(Unlocked by Product Owner Gate G4 Stage 2 Approval `DEC-010` on `2026-11-14` — sole `READY` unit to begin `M1`; all upstream `M0` prerequisites `TP-IMP-0001..0004`, `ADR-0001`, `ADR-0004`, `SD-G1-05` are `DONE` / `ACCEPTED`)* |
 | **Size** | `M` (`go.mod`, `.gitignore`, `web/console/`, `CONSTRAINTS.md`, `scripts/ci/check.go` & GitHub Actions) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Establishes `Floor Guard` quality gates, root Go module path & repository layout)* |
 | **Technical Owner** | `Staff Platform Engineer + CI/Security Engineer` |
@@ -23,7 +23,7 @@ Establish a clean physical repository foundation that executes identically acros
   - Canonical package directory skeleton with `doc.go` boundary declarations: `internal/{pkg,testkit,storage,config,security,iam,extension,provider,policy,ratelimit,routing,finops,telemetry,webhook,ingress,admin,webui,cli,ops}`.
   - `.gitignore` (complete exclusion rules for Go binaries, SQLite WAL files, secret/backup artifacts, and `git worktree` directories).
   - Relocate `package.json`, `package-lock.json`, `astryx-themes.js`, `src/*` into `web/console/`, standardize all placeholder demo UI copy in `web/console/src/App.tsx` to English (`ISS-008` — preserving Astryx layout/theme and zero raw `div`/`span`), and update path notes in `AGENTS.md` (preserving `100%` of the `<!-- ASTRYX:START -->..<!-- ASTRYX:END -->` and `<!-- TANPOPO-HANDOFF:START -->..<!-- TANPOPO-HANDOFF:END -->` blocks).
-  - `CONSTRAINTS.md`, `scripts/ci/check.go` (runnable via `go run ./scripts/ci/check.go` across Windows/macOS/Linux), and `.github/workflows/ci.yml` (`Stage 0` & `Stage 1`, pre-seeded with `OPENAI_API_KEY=CANARY_FORBIDDEN_CI_KEY`).
+  - `CONSTRAINTS.md`, `scripts/ci/check.go` (runnable via `go run ./scripts/ci/check.go` across Windows/macOS/Linux; recognizes `tools/spikes/go.mod` as an isolated `M0` spike module while forbidding any `cmd/` or `internal/` import from `tools/spikes/`), and `.github/workflows/ci.yml` (`Stage 0` & `Stage 1`, pre-seeded with `OPENAI_API_KEY=CANARY_FORBIDDEN_CI_KEY`).
 - **Out-of-Scope:** Vite/TypeScript configuration (`tsconfig.json`, `tsc --noEmit`) and production UI screen scaffolding belong to `TP-IMP-0026` (`Stage 1` conditionally activates `npm run typecheck` once `web/console/tsconfig.json` lands in `TP-IMP-0026`); zero storage or networking logic (owned by `TP-IMP-0006`+).
 
 ## 3. Requirements, Dependencies & Design References

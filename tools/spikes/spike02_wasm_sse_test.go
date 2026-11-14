@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -29,10 +30,40 @@ const canarySecret = "sk-tp-canary-DO-NOT-LEAK-9f8e7d6c"
 func buildTransformWasm() []byte {
 	// Hand-assembled exact Wasm v1 binary:
 	// Type 0: (i32, i32) -> i64
-	// Func 0: type 0:
-	//   local.get 0, i32.const 65536, local.get 1 -> memory.copy(dst=65536, src=ptr, n=len)
-	//   return ((65536 << 32) | uint64(len))
-	return []byte{
+	// Func 0 ("transform"):
+	//   if ptr == -1: infinite loop (`loop br 0 end`) to test in-flight cancellation & timeout inside pool!
+	//   if ptr == -2: `unreachable` trap to test guest trap recovery inside pool!
+	//   else: memory.copy(dst=65536, src=ptr, n=len); return ((65536 << 32) | uint64(len))
+	body := []byte{
+		0x00,       // 0 locals
+		0x20, 0x00, // local.get 0 (ptr)
+		0x41, 0x7f, // i32.const -1
+		0x46,       // i32.eq
+		0x04, 0x40, // if (void)
+		0x03, 0x40, //   loop (void)
+		0x0c, 0x00, //     br 0
+		0x0b,       //   end loop
+		0x0b,       // end if
+		0x20, 0x00, // local.get 0 (ptr)
+		0x41, 0x7e, // i32.const -2
+		0x46,       // i32.eq
+		0x04, 0x40, // if (void)
+		0x00,       //   unreachable
+		0x0b,       // end if
+		0x41, 0x80, 0x80, 0x04, // i32.const 65536 (dst)
+		0x20, 0x00, // local.get 0 (src)
+		0x20, 0x01, // local.get 1 (len)
+		0xfc, 0x0a, 0x00, 0x00, // memory.copy 0 0
+		0x42, 0x80, 0x80, 0x04, // i64.const 65536
+		0x42, 0x20, // i64.const 32
+		0x86,       // i64.shl (65536 << 32)
+		0x20, 0x01, // local.get 1 (len)
+		0xad, // i64.extend_i32_u
+		0x84, // i64.or
+		0x0b, // end func
+	}
+	codeSecPayload := append([]byte{0x01, byte(len(body))}, body...)
+	out := []byte{
 		0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // magic + version
 		// Section 1: Type (1 func type: (i32, i32) -> i64)
 		0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7e,
@@ -45,18 +76,9 @@ func buildTransformWasm() []byte {
 		0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00,
 		0x09, 't', 'r', 'a', 'n', 's', 'f', 'o', 'r', 'm', 0x00, 0x00,
 		// Section 10: Code
-		0x0a, 0x1b, 0x01,
-		0x19, 0x00, // body size 25, 0 locals
-		0x41, 0x80, 0x80, 0x04, // i32.const 65536 (dst)
-		0x20, 0x00, // local.get 0 (src)
-		0x20, 0x01, // local.get 1 (len)
-		0xfc, 0x0a, 0x00, 0x00, // memory.copy 0 0
-		0x42, 0x80, 0x80, 0x80, 0x80, 0x80, 0x02, // i64.const 281474976710656 (65536 << 32)
-		0x20, 0x01, // local.get 1 (len)
-		0xad, // i64.extend_i32_u
-		0x84, // i64.or
-		0x0b, // end
+		0x0a, byte(len(codeSecPayload)),
 	}
+	return append(out, codeSecPayload...)
 }
 
 // buildInfiniteLoopWasm builds a valid Wasm module exporting "spin" () -> () containing `loop br 0 end`.
@@ -198,26 +220,71 @@ func (p *wasmSandboxPool) Transform(parentCtx context.Context, execTimeout time.
 		if !mem.Write(0, payload) {
 			return nil, fmt.Errorf("wasm_input_too_large")
 		}
-		// Arm zero-allocation atomic watchdog slot AFTER pool acquisition; pass context.Background() so wazero spawns 0 goroutines per chunk!
-		p.deadlines[h.slotIdx].Store(time.Now().Add(execTimeout).UnixNano())
-		res, err := h.transform.Call(context.Background(), 0, uint64(len(payload)))
-		p.deadlines[h.slotIdx].Store(0)
-		if err != nil {
-			callErr = err
-			return nil, err
-		}
-		outPtr := uint32(res[0] >> 32)
-		outLen := uint32(res[0] & 0xffffffff)
-		raw, ok := mem.Read(outPtr, outLen)
-		if !ok {
-			callErr = fmt.Errorf("wasm_invalid_return_slice")
-			return nil, callErr
-		}
-		out := make([]byte, len(raw))
-		copy(out, raw)
-		return out, nil
+		return p.execOnSlot(parentCtx, h, execTimeout, 0, uint64(len(payload)), &callErr)
 	case <-parentCtx.Done():
 		return nil, parentCtx.Err()
+	}
+}
+
+func (p *wasmSandboxPool) execOnSlot(parentCtx context.Context, h *wasmInstanceHandle, execTimeout time.Duration, ptr uint64, length uint64, callErr *error) ([]byte, error) {
+	mem := h.mod.Memory()
+	// Propagate in-flight caller cancellation (e.g. HTTP client disconnect) with 0 goroutines on steady-state calls via context.AfterFunc!
+	var stopCancel func() bool
+	if parentCtx.Done() != nil {
+		targetMod := h.mod
+		stopCancel = context.AfterFunc(parentCtx, func() {
+			_ = targetMod.CloseWithExitCode(context.Background(), 2)
+		})
+	}
+	p.deadlines[h.slotIdx].Store(time.Now().Add(execTimeout).UnixNano())
+	res, err := h.transform.Call(context.Background(), ptr, length)
+	p.deadlines[h.slotIdx].Store(0)
+	if stopCancel != nil {
+		stopCancel()
+	}
+	if err != nil {
+		if parentCtx.Err() != nil {
+			*callErr = parentCtx.Err()
+			return nil, *callErr
+		}
+		*callErr = err
+		return nil, err
+	}
+	outPtr := uint32(res[0] >> 32)
+	outLen := uint32(res[0] & 0xffffffff)
+	raw, ok := mem.Read(outPtr, outLen)
+	if !ok {
+		*callErr = fmt.Errorf("wasm_invalid_return_slice")
+		return nil, *callErr
+	}
+	out := make([]byte, len(raw))
+	copy(out, raw)
+	return out, nil
+}
+
+// invokeRawPtrForFaultTest exercises in-flight cancellation (ptr = ^uint32(0) -> -1) and traps (ptr = ^uint32(1) -> -2) inside the real pool!
+func (p *wasmSandboxPool) invokeRawPtrForFaultTest(parentCtx context.Context, execTimeout time.Duration, rawPtr int32) error {
+	select {
+	case h := <-p.ch:
+		var callErr error
+		defer func() {
+			p.deadlines[h.slotIdx].Store(0)
+			if callErr != nil {
+				_ = h.mod.Close(context.Background())
+				if freshMod, err := p.rt.InstantiateModule(context.Background(), p.compiled, wazero.NewModuleConfig().WithName("")); err == nil {
+					p.slotsMu.Lock()
+					p.slots[h.slotIdx] = freshMod
+					p.slotsMu.Unlock()
+					p.ch <- &wasmInstanceHandle{slotIdx: h.slotIdx, mod: freshMod, transform: freshMod.ExportedFunction("transform")}
+					return
+				}
+			}
+			p.ch <- h
+		}()
+		_, err := p.execOnSlot(parentCtx, h, execTimeout, uint64(uint32(rawPtr)), 0, &callErr)
+		return err
+	case <-parentCtx.Done():
+		return parentCtx.Err()
 	}
 }
 
@@ -399,6 +466,8 @@ func TestSpike02Wasm1000ConcurrentSSEAndSandboxSafety(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+	client.CloseIdleConnections()
+	_ = srv.Close()
 
 	var memAfter runtime.MemStats
 	runtime.ReadMemStats(&memAfter)
@@ -479,6 +548,93 @@ func TestSpike02Wasm1000ConcurrentSSEAndSandboxSafety(t *testing.T) {
 		t.Fatal("unreachable")
 	}
 	t.Logf("SPIKE-02 NEG-1b PASS: 64 MiB memory.grow denied cleanly with return code %d (mem size remained %d bytes)", int32(growRes[0]), oomMod.Memory().Size())
+
+	// Explicit Pool Lifecycle Verification (In-Flight Cancellation, Timeout, Tainted-Module Replacement, Full Pool Recovery & Bounded Resources):
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	goroutinesBaseline := runtime.NumGoroutine()
+
+	const recoveryPoolSize = 16
+	faultPool, err := newWasmSandboxPool(ctx, buildTransformWasm(), recoveryPoolSize)
+	if err != nil {
+		t.Fatalf("init faultPool: %v", err)
+	}
+
+	// 1. In-flight cancellation of a running Wasm call (5s watchdog, cancelled at 10ms -> must abort immediately with context.Canceled, NOT wait 5s!)
+	cancelCtx, cancelFn := context.WithCancel(ctx)
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancelFn()
+	}()
+	cancelStart := time.Now()
+	cErr := faultPool.invokeRawPtrForFaultTest(cancelCtx, 5*time.Second, -1)
+	cancelElapsed := time.Since(cancelStart)
+	if !errors.Is(cErr, context.Canceled) {
+		t.Fatalf("expected context.Canceled on in-flight Wasm cancellation, got: %v", cErr)
+	}
+	if cancelElapsed > 250*time.Millisecond {
+		t.Fatalf("in-flight Wasm cancellation took too long (%v > 250ms); parentCtx cancel failed to interrupt running Wasm!", cancelElapsed)
+	}
+
+	// 2. Per-hook watchdog timeout inside pool (un-cancelled parentCtx, 20ms watchdog -> must abort cleanly)
+	toStart := time.Now()
+	toErr := faultPool.invokeRawPtrForFaultTest(ctx, 20*time.Millisecond, -1)
+	toElapsed := time.Since(toStart)
+	if toErr == nil {
+		t.Fatalf("expected watchdog timeout error on infinite loop inside pool")
+	}
+
+	// 3. Tainted-module replacement & Full Pool Recovery across 48 faults (3x poolSize: mix of cancels, timeouts, and unreachable traps!)
+	var faultWG sync.WaitGroup
+	const totalFaults = 48
+	faultWG.Add(totalFaults)
+	for f := 0; f < totalFaults; f++ {
+		mode := f % 3
+		go func(m int) {
+			defer faultWG.Done()
+			switch m {
+			case 0: // in-flight cancel
+				fCtx, fCancel := context.WithCancel(ctx)
+				time.AfterFunc(8*time.Millisecond, fCancel)
+				_ = faultPool.invokeRawPtrForFaultTest(fCtx, 2*time.Second, -1)
+			case 1: // watchdog timeout
+				_ = faultPool.invokeRawPtrForFaultTest(ctx, 12*time.Millisecond, -1)
+			default: // guest unreachable trap
+				_ = faultPool.invokeRawPtrForFaultTest(ctx, 200*time.Millisecond, -2)
+			}
+		}(mode)
+	}
+	faultWG.Wait()
+
+	if gotSlots := len(faultPool.ch); gotSlots != recoveryPoolSize {
+		t.Fatalf("pool failed to recover full capacity after %d faults: got %d/%d slots", totalFaults, gotSlots, recoveryPoolSize)
+	}
+	// Verify all 16 recovered slots process healthy payloads accurately with <= 16 MiB memory per module!
+	for s := 0; s < recoveryPoolSize*2; s++ {
+		msg := []byte(fmt.Sprintf(`{"probe_slot":%d}`, s))
+		echo, hErr := faultPool.Transform(ctx, 200*time.Millisecond, msg)
+		if hErr != nil || !bytes.Equal(echo, msg) {
+			t.Fatalf("healthy call #%d after pool fault storm failed: err=%v, got=%q", s, hErr, echo)
+		}
+	}
+	for i := 0; i < recoveryPoolSize; i++ {
+		h := <-faultPool.ch
+		memBytes := h.mod.Memory().Size()
+		faultPool.ch <- h
+		if memBytes > 16*1024*1024 {
+			t.Fatalf("slot %d exceeded 16 MiB linear memory ceiling: %d bytes", i, memBytes)
+		}
+	}
+	if err := faultPool.Close(ctx); err != nil {
+		t.Fatalf("close faultPool: %v", err)
+	}
+	time.Sleep(25 * time.Millisecond)
+	goroutinesAfter := runtime.NumGoroutine()
+	if goroutinesAfter > goroutinesBaseline+4 {
+		t.Fatalf("goroutine leak detected after closing faultPool: baseline=%d, after=%d", goroutinesBaseline, goroutinesAfter)
+	}
+	t.Logf("SPIKE-02 POOL RECOVERY & BOUNDED RESOURCES PASS: in-flight cancel=%v, watchdog timeout=%v, %d/16 slots recovered after %d mixed faults, goroutines baseline=%d after=%d",
+		cancelElapsed, toElapsed, recoveryPoolSize, totalFaults, goroutinesBaseline, goroutinesAfter)
 }
 
 func BenchmarkSpike02WasmLinearMemoryTransform(b *testing.B) {

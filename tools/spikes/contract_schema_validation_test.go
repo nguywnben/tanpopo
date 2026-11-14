@@ -252,5 +252,5 @@ func TestPhysicalSQLiteAndPostgresSchemaParityAndConstraints(t *testing.T) {
 		t.Fatalf("CRITICAL TENANT ISOLATION BUG: cross-org composite FK allowed org_a environment to bind to org_b project!")
 	}
 
-	t.Logf("SQL SCHEMA VERIFIED: sqlite_schema.sql executed cleanly on pure-Go modernc.org/sqlite, all %d required canonical tables present in both SQLite & PostgreSQL 16 DDL, and cross-org composite FK rejected mismatched tenant writes", len(requiredTables))
+	t.Logf("SQL SCHEMA CHECK: sqlite_schema.sql executed live on pure-Go modernc.org/sqlite (cross-org composite FK verified); postgres_schema.sql passed static table-name & FORCE RLS text checks across %d canonical tables (NOTE: live PostgreSQL 16 DDL parsing, partitioning & RLS execution remain UNVERIFIED until TP-IMP-0039)", len(requiredTables))
 }

@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (Reconciled Post-`M0` — Gate G4: `STAGE_1_DONE / STAGE_2_AWAITING_OWNER_GO` | `HANDOFF_VERDICT: NO_GO`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.0.0-m0-done` | **Date:** `2026-11-14`
+> **Milestone Plan (Gate G4 Stage 2 Approved — `HANDOFF_VERDICT: GO` | `READY: TP-IMP-0005`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.1.0-stage2-go` | **Date:** `2026-11-14`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) is **`DONE`** (automated `GATE-M0` checks green; [`spike-results.md`](../architecture/spike-results.md) published); Milestones `M1`..`M5` (`TP-IMP-0005`..`0047`) remain **`BLOCKED`** awaiting Product Owner **Gate G4 Stage 2** `GO` (`DEC-009`, `COND-PO-01`..`05`).
+> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) is **`DONE`** ([`spike-results.md`](../architecture/spike-results.md) published); **Gate G4 Stage 2 is `APPROVED` (`DEC-010`)**, unlocking **`TP-IMP-0005` as the sole `READY` unit** (`42` downstream units `0006`..`0047` remain `BLOCKED` behind their dependency, review, and `COND-PO-01`..`05` verification gates).
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---
@@ -24,9 +24,9 @@ No downstream milestone may scale execution until the preceding milestone's **In
   3. Schema in `data-model.md` completed across all missing tables (`26` canonical tables), composite `(org_id, id)` keys + `FORCE RLS`, `Project DEK` hierarchy, and Valkey `tp:v1:{org_id}:*` hash-tag key schema.
   4. Empirical benchmark report for `SPIKE-01`..`04` recorded in `ADR-0002` and `ADR-0005`.
 - **Primary Risk:** Wasm linear-memory boundary in `SPIKE-02` exceeding the `5 ms p95` ceiling on per-chunk SSE transforms → triggers the fallback architecture invoking Wasm only on stream setup/teardown while using a native Host frame splitter mid-stream.
-- **Integration Gate `GATE-M0` (`Spec & Spike Gate`):**
-  - Automated: `0` syntax/validation errors across `.proto`, `OpenAPI 3.1`, and dry-run SQL DDL on both SQLite and PostgreSQL 16.
-  - Human: **Product Owner + Principal Architect** sign off to close `Audit A08` (`FAIL -> PASS`) and unlock **Gate G4** for `M1`.
+- **Integration Gate `GATE-M0` (`Spec & Spike Gate` — `COMPLETED`):**
+  - Automated (Local Pre-CI): `0` compile/ref errors across `runtime.proto` (`protocompile`) and `openapi/*.yaml` (`yaml.v3`), live in-memory DDL execution on `SQLite` (`modernc.org/sqlite`), and static `48`-table / `FORCE RLS` parity checks on `postgres_schema.sql` *(live PostgreSQL 16 DDL execution remains `UNVERIFIED` and gated in `TP-IMP-0039`)*.
+  - Human: **Product Owner** approved Stage 1 (`DEC-009`) and Stage 2 (`DEC-010`), unlocking **`TP-IMP-0005` (`READY`)** to begin `M1`.
 
 ---
 

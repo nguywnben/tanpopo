@@ -1,14 +1,14 @@
 # Tanpopo Documentation & Context Hub (`English-First Canonical Edition`)
 
-> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: NO_GO | GATE G4: STAGE_1_DONE / STAGE_2_AWAITING_OWNER_GO`)**
+> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | GATE G4: APPROVED | READY: TP-IMP-0005 ONLY`)**
 > - **Gate G0 (ASTRA A00 — Context Intake & Baseline):** `COMPLETED`
 > - **Gate G1 (ASTRA A01 — Product Discovery):** **`APPROVED` *(`CONFIRMED_BY_OWNER` — `DEC-009`)* **
 > - **Baseline A02 (ASTRA A02 — Business Analysis):** **`APPROVED` *(`SM-01..09` & `BA-OQ-001..05` closed in `TP-IMP-0001`)* **
 > - **Gate G2 (ASTRA A03 — Product Definition, PRD/SRS & Feature Specs):** **`APPROVED` *(`TD-G2-01..06` & `CR-01..04, 09` closed in `TP-IMP-0001`)* **
-> - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`APPROVED_WITH_CONDITIONS`** *(`runtime.proto` & `POC-01/02` verified in `TP-IMP-0002, 0004`; `COND-PO-01, 04, 05`).*
-> - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`APPROVED_WITH_CONDITIONS`** *(`ADR-0001..0006` `ACCEPTED`, `openapi/*.yaml` & `db/spec-check/*.sql` verified, `SPIKE-01..04` completed in [`spike-results.md`](./architecture/spike-results.md); bound to `COND-PO-01..05`).*
-> - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`REMEDIATED_IN_M0` *(`PASS` — `13 / 13` Gaps Closed)*** — See [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md).
-> - **Gate G4 & Pre-Build Closure (ASTRA A09–A10 + `M0`):** **`STAGE_1_DONE` (`TP-IMP-0001..0004 = DONE`) / `STAGE_2_AWAITING_OWNER_GO` | `DELIVERY HANDOFF VERDICT = NO_GO`** — Per Product Owner ruling (`DEC-009`), `TP-IMP-0005`..`0047` (`43 / 47` units) remain **`BLOCKED` (`0 / 47` `READY`)** pending final Stage 2 Owner sign-off (`TP-IMP-0005` is 1st eligible `READY` unit on `GO`).
+> - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`APPROVED_WITH_CONDITIONS`** *(`runtime.proto` & `POC-01/02` verified locally in `TP-IMP-0002, 0004`; `COND-PO-01, 04, 05`).*
+> - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`APPROVED_WITH_CONDITIONS`** *(`ADR-0001..0006` `ACCEPTED`, `openapi/*.yaml` & `sqlite_schema.sql` verified locally, `postgres_schema.sql` static parity checked with live PG 16 DDL gated in `TP-IMP-0039`, `SPIKE-01..04` documented in [`spike-results.md`](./architecture/spike-results.md); bound to `COND-PO-01..05`).*
+> - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`REMEDIATED_IN_M0` *(`13 / 13` Gaps Closed)*** — See [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md).
+> - **Gate G4 & Engineering Handoff (`DEC-009` & `DEC-010`):** **`APPROVED` | `DELIVERY HANDOFF VERDICT = GO`** — `TP-IMP-0001`..`0004` (`4 / 47` `M0` units) = **`DONE`**; **solely [`TP-IMP-0005`](./planning/units/TP-IMP-0005.md) (`1 / 47`) = `READY`**; `TP-IMP-0006`..`0047` (`42 / 47`) remain **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 
 ---
 
@@ -20,17 +20,17 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
-| **0A** | [`docs/governance/execution-baseline.md`](./governance/execution-baseline.md) | **`EXEC-BL-001-DRAFT` (`HANDOFF: NO_GO`):** Mandatory cold-start entrypoint (`Zero Prior Chat Context Required`); locks the global zero-guesswork technical dictionary, source-of-truth precedence, initial wave queue, `CR` protocol, single-unit prompt template, and 7-part completion report contract. | **Read first in every new engineering/agent session.** |
-| **0B** | [`docs/governance/owner-approval-sheet.md`](./governance/owner-approval-sheet.md) | **`GOV-OAS-01` (`AWAITING_OWNER_SIGN_OFF`):** Consolidated Product Owner Approval Sheet partitioning all 33 pending items (`G1`, `G2`, `G3`, `SPIKE-01..04`, `CR-01..10`, `G4`) into Track A (Batch) and Track B (High-Impact Individual Review) with trade-offs and impact maps. | **Read first for Product Owner gate closure** and unlocking `TP-IMP-0001..0004`. |
-| **0C** | [`docs/reviews/execution-readiness.md`](./reviews/execution-readiness.md) | **`REV-RDY-01` (`NO_GO`):** Independent A10 Delivery Readiness Audit verifying true approval status, `113/113` verification ID mappings, `M0–M1` cold-start simulation, and 10 core architectural pillars. | When auditing `Gate G4` readiness or transitioning `NO_GO` → `GO`. |
-| **0D** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`FAIL`):** Independent A08 horizontal + 8 vertical-slice adversarial audit (`AUD-001`..`030`: `11 CRITICAL`, `14 MAJOR`, `5 MINOR`) and 54 `P0` readiness check. | Before relying on raw A02–A07 contracts prior to `M0` (`TP-IMP-0001..0003`) completion. |
-| **0E** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01`:** Detailed Change Requests **`CR-01`..`CR-10`** and verifiable closure criteria for **`GAP-01`..`GAP-13`**. | During Product Owner decision closure and `M0` spec-closure execution. |
+| **0A** | [`docs/governance/execution-baseline.md`](./governance/execution-baseline.md) | **`EXEC-BL-001-APPROVED` (`HANDOFF: GO` · `READY: TP-IMP-0005`):** Mandatory cold-start entrypoint (`Zero Prior Chat Context Required`); locks the global technical dictionary, source-of-truth precedence, post-handoff verification conditions (`COND-PO-01..05`), `CR` protocol, and 7-part completion report contract. | **Read first in every new engineering/agent session.** |
+| **0B** | [`docs/governance/owner-approval-sheet.md`](./governance/owner-approval-sheet.md) | **`GOV-OAS-01` (`STAGES 1 & 2 APPROVED`):** Consolidated Product Owner Approval Sheet recording Track A (`18` items), Track B (`15` items + `COND-PO-01..05`), Stage 1 `M0` (`DEC-009`), and Stage 2 Handoff (`DEC-010`). | Reference for Product Owner gate rulings and conditions. |
+| **0C** | [`docs/reviews/execution-readiness.md`](./reviews/execution-readiness.md) | **`REV-RDY-01` (`STAGE 2: GO`):** Calibrated Delivery Readiness Audit distinguishing local `M0` verification (`SQLite`, `protocompile`, `wazero` spikes) from `UNVERIFIED` downstream gates (`PostgreSQL 16`, GitHub CI, full Gateway SLOs). | Auditing `Gate G4` evidence boundaries and `TP-IMP-0005` dispatch readiness. |
+| **0D** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`Historical A08`):** Independent A08 horizontal + 8 vertical-slice adversarial audit (`AUD-001`..`030`) whose blocking items were closed in `M0`. | Historical audit provenance for `CR-01`..`10`. |
+| **0E** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01` (`13 / 13 CLOSED`):** Change Requests **`CR-01`..`CR-10`** and `M0` closure evidence for **`GAP-01`..`GAP-13`**. | Verifying how each A08 specification gap was resolved. |
 
-### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `BLOCKED_ON_OWNER_APPROVAL`)
+### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `4 DONE, 1 READY [TP-IMP-0005], 42 BLOCKED`)
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
-| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all **47 execution units (`TP-IMP-0001`..`0047`)** with milestones, Epics (`EP-00`..`09`), dependencies, `REQUIRES_STRONG_REVIEW` flags (`37/47`), live `BLOCKED` status, and links to [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | When checking unit readiness, dependencies, or locating a `UNIT_ID` spec. |
+| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all **47 execution units (`TP-IMP-0001`..`0047`)** (`0001..0004 = DONE`, **`0005 = READY`**, `0006..0047 = BLOCKED`), `REQUIRES_STRONG_REVIEW` flags (`37/47`), and links to [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | When checking unit readiness, dependencies, or locating a `UNIT_ID` spec. |
 | **0G** | [`docs/planning/roadmap.md`](./planning/roadmap.md) & [`docs/planning/milestone-map.md`](./planning/milestone-map.md) | **`PLAN-RM-01` & `PLAN-MS-01`:** 9 dependency-driven phases (`EP-00`..`09`), program blockers, trunk/worktree/canary rollout strategy, capacity & uncertainty ranges, and milestone gates `GATE-M0`..`GATE-M5`. | Program coordination, milestone gate checks, and capacity planning. |
 | **0H** | [`docs/planning/dependency-graph.md`](./planning/dependency-graph.md) | **`PLAN-DAG-01`:** Verified acyclic 47-node Mermaid DAG ($u < v$), critical path, 4 parallel `git worktree` expansion points, conditional First 5 Units, and hermetic cross-OS build/test procedures. | Parallel worktree scheduling and build/test environment setup. |
 
@@ -43,7 +43,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | **3** | [`docs/product/glossary.md`](./product/glossary.md) | Project-wide canonical terminology: 12 actors, `Adapter → Connection → LogicalModel → Deployment` chain, provenance tiers, and technical capability vs. legal authorization boundaries. | Naming APIs, database columns, and UI labels. |
 | **4** | [`docs/governance/assumptions.md`](./governance/assumptions.md) | Unvalidated working hypotheses (`ASM-001`..`ASM-010`) linked to `SPIKE-01`..`SPIKE-04` and verified repository setup issues (`ISS-001`..`ISS-007`). | Validating assumptions and reconciling pre-existing workspace files. |
 
-### 1.2. Security, Reliability, Quality Assurance & Release Gates (`docs/security/` & `docs/quality/` — `PROPOSED`)
+### 1.2. Security, Reliability, Quality Assurance & Release Gates (`docs/security/` & `docs/quality/` — `APPROVED_WITH_CONDITIONS`)
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
@@ -51,11 +51,11 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | **6** | [`docs/security/threat-model.md`](./security/threat-model.md) | **`SPEC-SEC-01`:** 7 crown-jewel assets (`AST-01`..`07`), 7 trust boundaries (`TB-1`..`7`), `STRIDE` + `OWASP LLM` analysis for **13 threat vectors (`TM-01`..`13`)**, and 6 security invariants. | Security design and code review of any module. |
 | **7** | [`docs/security/plugin-sandbox-and-supply-chain.md`](./security/plugin-sandbox-and-supply-chain.md) | **`SPEC-SEC-02`:** Dual supply-chain security (`npm ci --ignore-scripts`, `CycloneDX SBOM`, `SLSA`, `Cosign`, `40-hex` Git SHA pinning, `revocations.json`), 3-tier sandbox (`wazero <= 16 MiB`), $\Delta P$ escalation gate, and `EvalSymlinks` safe deletion. | Implementing extension installer, Wasm/Sidecar sandboxes, and CI packaging. |
 | **8** | [`docs/security/secrets-and-tenant-isolation.md`](./security/secrets-and-tenant-isolation.md) | **`SPEC-SEC-03`:** Context-bound `AEAD AAD` envelope encryption, write-only secrets, 4-layer tenant isolation (`FORCE RLS` + no cross-org cache + `Anti-Oracle 404`), `Four-Eyes`, `RFC 8707`, and `DEC-004` compliance boundaries. | Implementing `vault`, `iam`, `admin/http`, `oauth`, and caching. |
-| **9** | [`docs/quality/contract-test-matrix.md`](./quality/contract-test-matrix.md) | **`SPEC-QA-01`:** Offline cassette replay harness, **32 contract & adversarial tests (`CT-01`..`32`)**, **16 AuthN/AuthZ tests (`AUTH-01`..`16`)**, **6 fuzz targets (`FZ-01`..`06`)**, and 10-step **`EXT-ACCEPT-01`**. | Writing contract, security, fuzzing, and `tanpopo plugin test` suites. |
+| **9** | [`docs/quality/contract-test-matrix.md`](./quality/contract-test-matrix.md) | **`SPEC-QA-01`:** Offline cassette replay harness, **36 contract & adversarial tests (`CT-01`..`36`)**, **16 AuthN/AuthZ tests (`AUTH-01`..`16`)**, **6 fuzz targets (`FZ-01`..`06`)**, and 10-step **`EXT-ACCEPT-01`**. | Writing contract, security, fuzzing, and `tanpopo plugin test` suites. |
 | **10** | [`docs/quality/test-strategy.md`](./quality/test-strategy.md) | **`SPEC-QA-02`:** Test pyramid, 9-domain test matrix, 4 local `Fake*` servers, **dual-layer hermetic network lock (`0` paid external AI calls in CI)**, `CanaryScanner`, and 5-stage CI pipeline. | Implementing `internal/testkit/*` and GitHub Actions CI. |
 | **11** | [`docs/quality/nonfunctional-slo.md`](./quality/nonfunctional-slo.md) | **`SPEC-QA-03`:** `SLO-01`..`08` (`TARGET / UNVERIFIED`), `503` overload shedding, HA chaos drills, and **8 deep failure-mode analyses (`FMEA-01`..`08`)**. | Implementing streaming edge cases, tool retries, ledger, DB migrations, and revocation. |
 
-### 1.3. Solution Architecture, Physical Data Model, HA Topology & ADRs (`docs/architecture/` — `PROPOSED`)
+### 1.3. Solution Architecture, Physical Data Model, HA Topology & ADRs (`docs/architecture/` — `APPROVED_WITH_CONDITIONS`)
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
@@ -64,7 +64,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | **14** | [`docs/architecture/deployment-topology.md`](./architecture/deployment-topology.md) | **`ARCH-OPS-01`:** Standalone, Compose, and Multi-AZ K8s HA topologies, `Copy-on-Write ConfigSnapshot` + 3-layer revocation (`< 1s` / `< 5s`), cache matrix, distributed Lua rate limiting, and zero-drop rolling upgrades. | Designing Docker/Helm, SSE load balancing, Valkey Lua scripts, and HA drills. |
 | **15** | [`docs/architecture/adr/README.md`](./architecture/adr/README.md) & [`docs/architecture/spike-results.md`](./architecture/spike-results.md) | **Index of `ADR-0001` .. `ADR-0006` (`ACCEPTED` under `COND-PO-01..05`) & `ARCH-SPIKE-01`:** Architectural decisions plus empirical `M0` benchmark results (`SPIKE-01`..`04`, `POC-01` Linear-Memory Wasm ABI & `POC-02`). | Before proposing changes to any foundational architectural choice or Wasm sandbox pool. |
 
-### 1.4. User Experience (UX/UI) & Astryx Design System Integration (`docs/ux/` — `PROPOSED`)
+### 1.4. User Experience (UX/UI) & Astryx Design System Integration (`docs/ux/` — `APPROVED_WITH_CONDITIONS`)
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
@@ -73,7 +73,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | **18** | [`docs/ux/screen-specifications.md`](./ux/screen-specifications.md) | **`SPEC-UX-03`:** **6 UX guardrails (`UX-GR-01`..`06`)**, `WCAG 2.2 AA` / responsive (`1280px` / `768px` / `375px`) contracts, and detailed specs for all **16 screens (`SCR-01`..`16`)**. | Building Console pages, forms, confirmation modals, and `/admin/v1/*` bindings. |
 | **19** | [`docs/ux/design-system-integration.md`](./ux/design-system-integration.md) | **`SPEC-UX-04`:** Honest audit of pre-existing Astryx v0.7.13 `neutral` setup vs. `ADR-0004` (no `theme eject`), `Badge` (counts only) vs. `Token` (`icon + label`), 16-screen Astryx template mapping, and `UX-AC-01`..`12`. | Scaffolding Astryx templates, configuring Vite + StyleX, and running `astryx doctor --built`. |
 
-### 1.5. Self-Hosted SRE Operations & Developer Experience (`docs/operations/` — `PROPOSED`)
+### 1.5. Self-Hosted SRE Operations & Developer Experience (`docs/operations/` — `APPROVED_WITH_CONDITIONS`)
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
@@ -103,10 +103,10 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | **33** | [`docs/product/prd.md`](./product/prd.md) | Problem statement, personas, value proposition, `PG-01`..`05`, `NG-01`..`08`, target outcomes `MO-01`..`06`, acyclic 10-module capability map, and product constraints `PC-01`..`06`. | Checking product goals and non-goal boundaries. |
 | **34** | [`docs/product/release-scope.md`](./product/release-scope.md) | Release milestones (`MVP v0.1` → `v0.2` → `v0.3` → `v1.0` → `Post-v1.0`), per-release exit criteria, and 6 trade-offs (`TD-G2-01`..`06`). | Enforcing milestone scope discipline. |
 | **35** | [`docs/product/feature-catalog.md`](./product/feature-catalog.md) | 16 structured features (`FT-01`..`16`) across 10 business domains with 14 verifiable attributes per feature. | Checking detailed module preconditions, error flows, and limits. |
-| **36** | [`docs/requirements/srs.md`](./requirements/srs.md) | **System Requirements Source of Truth:** 14-row Protocol/Capability Matrix, `53` functional requirements (`TP-FR-0101`..`1005`), and `22` non-functional requirements (`TP-NFR-0101`..`1002`). | Checking normative `Must`/`Should`/`Could` requirements and NFR targets. |
-| **37** | [`docs/requirements/acceptance-criteria.md`](./requirements/acceptance-criteria.md) | Testable `Given/When/Then` scenarios across functional (`TP-AC-F*`), security/compliance (`TP-AC-SEC-01`..`08`), and non-functional (`TP-AC-N01`..`10`) requirements. | Designing automated tests and verifying acceptance gates. |
+| **36** | [`docs/requirements/srs.md`](./requirements/srs.md) | **System Requirements Source of Truth:** 14-row Protocol/Capability Matrix, `56` functional requirements (`TP-FR-0101`..`1005`), and `22` non-functional requirements (`TP-NFR-0101`..`1002` — `TARGET / UNVERIFIED`). | Checking normative `Must`/`Should`/`Could` requirements and NFR targets. |
+| **37** | [`docs/requirements/acceptance-criteria.md`](./requirements/acceptance-criteria.md) | Testable `Given/When/Then` scenarios across functional (`TP-AC-F*`), security/compliance (`TP-AC-SEC-01`..`09`), and non-functional (`TP-AC-N01`..`10`) requirements. | Designing automated tests and verifying acceptance gates. |
 | **38** | [`docs/requirements/traceability.md`](./requirements/traceability.md) | End-to-end bidirectional traceability matrix mapping `UC/WF/RSK/TM` → `TP-FR/NFR` → `ARCH/ADR/SPEC` → `TP-IMP-0001..0047` → `CT/AUTH/FZ/SLO/FMEA/GATE-REL`. | Auditing requirement-to-unit-to-test coverage. |
-| **39** | [`docs/requirements/business-entity-map.md`](./requirements/business-entity-map.md) | 12-actor matrix, ER diagram, ownership/sharing rules, and **lifecycle state machines (`SM-01`..`08`)**. | Implementing RBAC ownership and entity state machines. |
+| **39** | [`docs/requirements/business-entity-map.md`](./requirements/business-entity-map.md) | 12-actor matrix, ER diagram, ownership/sharing rules, and **lifecycle state machines (`SM-01`..`09`)**. | Implementing RBAC ownership and entity state machines. |
 | **40** | [`docs/requirements/workflows.md`](./requirements/workflows.md) | **13 end-to-end business workflows (`WF-01`..`WF-13`)**, sequence diagrams, and failure/recovery flows. | Implementing cross-module orchestration and failure recovery. |
 | **41** | [`docs/requirements/business-rules.md`](./requirements/business-rules.md) | **30 technology-agnostic business rules (`TP-BR-0101`..`0803`)** with owners and exception policies. | Implementing policy evaluation, security guards, and ledger rules. |
 | **42** | [`docs/requirements/workflow-requirement-candidates.md`](./requirements/workflow-requirement-candidates.md) | **9 operational requirement groups (`OPS-01`..`OPS-09`)**, candidate mapping log, and `BA-OQ-001`..`005`. | Tracing operational requirements to business origins. |
@@ -127,13 +127,13 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 
 ## 2. Explicit Separation: Existing Code on Disk vs. Specification & Planning Artifacts
 
-> **Verified Repository Fact (`VERIFIED_IN_REPO`):** Through Milestone `M0` Closure, the repository **contains zero `M1+` production AI Gateway runtime code and zero production Web Console screen implementations** (no root `go.mod`, no production HTTP server, and no Vite bundler yet — only the pre-existing Astryx placeholder in `src/`, the machine-readable contracts in `proto/`, `openapi/`, and `db/spec-check/`, and the isolated `M0` feasibility test suite in `tools/spikes/`). Execution of `TP-IMP-0005`..`0047` remains at **`HANDOFF_VERDICT: NO_GO`** awaiting Product Owner Gate G4 Stage 2 sign-off.
+> **Verified Repository Fact (`VERIFIED_IN_REPO`):** Through Milestone `M0` Closure & Gate G4 Stage 2 Approval, the repository **contains zero `M1+` production AI Gateway runtime code, zero GitHub Actions CI workflows, and zero production Web Console screen implementations** (no root `go.mod`, no production HTTP server, and no Vite bundler yet — only the pre-existing Astryx placeholder in `src/`, the machine-readable contracts in `proto/`, `openapi/`, and `db/spec-check/`, and the isolated `M0` feasibility test suite in `tools/spikes/`). Under Product Owner approval `DEC-010`, **`HANDOFF_VERDICT = GO`** with **solely [`TP-IMP-0005`](./planning/units/TP-IMP-0005.md) marked `READY`** to start `M1`.
 
 ### 2.1. Complete Repository Inventory (`VERIFIED_IN_REPO`)
 
 | Repository Path | Artifact Class | Verified State (`VERIFIED_IN_REPO`) |
 |---|---|---|
-| [`README.md`](../README.md) | **Root Repository Entrypoint** | English project overview, honest `NO_GO` pre-build status banner, 4-plane architecture summary, `DEC-004` compliance notice, and navigation links into `docs/`. |
+| [`README.md`](../README.md) | **Root Repository Entrypoint** | English project overview, `GO` (`TP-IMP-0005 READY`) status banner, 4-plane architecture summary, `DEC-004` compliance notice, and navigation links into `docs/`. |
 | [`LICENSE`](../LICENSE) | **Root Legal License** | **Apache License 2.0** (201 lines, initial commit `0a35b74`). |
 | [`.gitignore`](../.gitignore) | **Git Ignore Rules** | Excludes `node_modules/`, `dist/`, `build/`, `out/`, `coverage/`, `.env*`, logs, and IDE temp files (Go/SQLite/Vault patterns scheduled for `TP-IMP-0005`). |
 | [`skills-lock.json`](../skills-lock.json) | **Agent Skills Lockfile** | Pins versions and SHA-256 hashes of all 25 skills installed from `addyosmani/agent-skills`. |
@@ -148,16 +148,17 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | [`src/App.tsx`](../src/App.tsx) & [`src/main.tsx`](../src/main.tsx) | **Unbundled UI Placeholder** | 2 placeholder React/TSX files (34 and 13 lines) wiring `Theme` `neutral`. **Preserved 100% unmodified per pre-build source-freeze rule.** |
 | `docs/governance/*` (`5` files) & `docs/README.md` | **Governance & Handoff Layer** | `project-charter.md`, `decisions.md`, `assumptions.md`, `execution-baseline.md`, `owner-approval-sheet.md`, and `docs/README.md`. |
 | `docs/discovery/*` (`5` files) | **Product Discovery & Risks** | `market-and-competitors.md`, `users-jobs-use-cases.md`, `opportunity-and-feasibility.md`, `positioning-and-success-metrics.md`, `risk-register.md`. |
-| `docs/product/*` (`4` files) | **Product Definition (`DRAFT`)** | `glossary.md`, `prd.md`, `feature-catalog.md`, `release-scope.md`. |
+| `docs/product/*` (`4` files) | **Product Definition (`APPROVED`)** | `glossary.md`, `prd.md`, `feature-catalog.md`, `release-scope.md`. |
 | `docs/requirements/*` (`7` files) | **Business Analysis, SRS & Traceability** | `business-entity-map.md`, `workflows.md`, `business-rules.md`, `workflow-requirement-candidates.md`, `srs.md`, `acceptance-criteria.md`, `traceability.md`. |
 | `docs/specifications/*` (`9` files) | **Deep Platform & API Specs** | `extension-contract.md`, `provider-adapter.md`, `authentication-connections.md`, `marketplace-lifecycle.md`, `mcp-a2a-boundaries.md`, `api-protocol-compatibility.md`, `routing-and-policy.md`, `usage-billing-observability.md`, `api-contracts.md`. |
-| `docs/architecture/*` (`10` files) | **Architecture, SQL DDL & ADRs** | `system-design.md`, `data-model.md`, `deployment-topology.md`, `adr/README.md`, and `ADR-0001`..`ADR-0006`. |
+| `docs/architecture/*` (`11` files) | **Architecture, SQL DDL, Spikes & ADRs** | `system-design.md`, `data-model.md`, `deployment-topology.md`, `spike-results.md`, `adr/README.md`, and `ADR-0001`..`ADR-0006`. |
 | `docs/ux/*` (`4` files) | **UX/UI & Astryx Integration** | `information-architecture.md`, `user-flows.md`, `screen-specifications.md`, `design-system-integration.md`. |
 | `docs/operations/*` (`4` files) | **SRE Operations & CLI DX** | `installer-upgrades.md`, `backups-recovery.md`, `monitoring-incidents.md`, `developer-experience.md`. |
 | `docs/security/*` (`3` files) | **Security & Tenant Isolation** | `threat-model.md`, `plugin-sandbox-and-supply-chain.md`, `secrets-and-tenant-isolation.md`. |
 | `docs/quality/*` (`4` files) | **QA, Hermetic CI, SLOs & Gates** | `contract-test-matrix.md`, `test-strategy.md`, `nonfunctional-slo.md`, `release-readiness.md`. |
-| `docs/reviews/*` (`3` files) | **Independent Audits & Readiness** | `integrated-audit.md` (`FAIL`), `unresolved-gaps.md` (`CR-01`..`10`), `execution-readiness.md` (`NO_GO`). |
-| `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and `units/TP-IMP-0001.md`..`TP-IMP-0047.md`. |
+| `docs/reviews/*` (`3` files) | **Independent Audits & Readiness** | `integrated-audit.md` (`Historical A08`), `unresolved-gaps.md` (`13/13 CLOSED`), `execution-readiness.md` (`Stage 2: GO`). |
+| `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and `units/TP-IMP-0001.md`..`TP-IMP-0047.md` (`0001..0004 = DONE`, `0005 = READY`). |
+| `buf.yaml`, `proto/`, `openapi/`, `db/spec-check/`, `tools/spikes/` | **`M0` Contracts & Isolated Spikes** | Machine-verified `runtime.proto`, `dataplane-v1.yaml`, `admin-v1.yaml`, `sqlite_schema.sql` (live), `postgres_schema.sql` (static parity), and pure-Go `SPIKE-01..04`. |
 
 ---
 
@@ -166,12 +167,12 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | Pre-A00 Setup Task | Verification Verdict | Empirical Evidence (`VERIFIED_IN_REPO`) | Governance Handling |
 |---|---|---|---|
 | **Setup 1:** Install Agent Skills from `https://skills.addy.ie/` | **100% COMPLETE** | `25/25` skills verified in `.agents/skills/` matching `skills-lock.json`, plus `.agents/references/` and `.agents/agents/`. | Preserved untouched for all downstream implementation phases. |
-| **Setup 2:** Install `@astryxdesign/core`, `@stylexjs/stylex`, `@astryxdesign/theme-neutral`, `@astryxdesign/cli` & run `init` | **COMPLETE (With Tracked Minor Discrepancies `ISS-002..004`)** | `npm ls --depth=0` confirms all 4 packages; `AGENTS.md`/`GEMINI.md` contain `ASTRYX:START..END`; `npx @astryxdesign/cli doctor` passes **`18 pass, 0 fail, 3 warn`**. | Relocation to `web/console/` and `"license": "Apache-2.0"` sync are gated behind `ADR-0004` (`TP-IMP-0005`). |
-| **Setup 3:** Select look-and-feel (`neutral`), wire `Theme`, and preview | **CONFIG & PLACEHOLDER COMPLETE — NO LIVE BUNDLER YET (`ISS-001`)** | `neutral` is added and set as default (`maintained: yes`); `src/App.tsx` passes static `astryx doctor`, but Vite/`index.html` is not yet installed. | Keep `neutral` untouched (never `theme eject`); scaffold real screens via `npx astryx template` in `TP-IMP-0026..0030` after Gate G4 approval. |
+| **Setup 2:** Install `@astryxdesign/core`, `@stylexjs/stylex`, `@astryxdesign/theme-neutral`, `@astryxdesign/cli` & run `init` | **COMPLETE (With Tracked Minor Discrepancies `ISS-002..004, 008`)** | `npm ls --depth=0` confirms all 4 packages; `AGENTS.md`/`GEMINI.md` contain `ASTRYX:START..END`; `npx @astryxdesign/cli doctor` passes **`18 pass, 0 fail, 3 warn`**. | Relocation to `web/console/`, `"license": "Apache-2.0"`, and English UI strings (`ISS-008`) execute in `TP-IMP-0005` (`READY`). |
+| **Setup 3:** Select look-and-feel (`neutral`), wire `Theme`, and preview | **CONFIG & PLACEHOLDER COMPLETE — NO LIVE BUNDLER YET (`ISS-001`)** | `neutral` is added and set as default (`maintained: yes`); `src/App.tsx` passes static `astryx doctor`, but Vite/`index.html` is not yet installed. | Keep `neutral` untouched (never `theme eject`); scaffold real screens via `npx astryx template` in `TP-IMP-0026..0030`. |
 
 ---
 
-## 4. Current Git Posture (`ENGLISH-FIRST DOCUMENTATION LOCKED | AWAITING OWNER GATE APPROVAL`)
+## 4. Current Git Posture (`STAGE 2 ENGINEERING HANDOFF = GO | TP-IMP-0005 = READY`)
 
 - **Active Branch:** `main` (tracked against `origin/main`).
-- **Official Tanpopo Artifacts:** `110` English Markdown files in `docs/`, root [`README.md`](../README.md), and [`AGENTS.md`](../AGENTS.md) — **zero modifications to `src/*`, `package.json`, `package-lock.json`, `astryx-themes.js`, or third-party `.agents/*` files**.
+- **Official Tanpopo Artifacts:** `111` English Markdown files in `docs/`, root [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md), `buf.yaml`, `proto/`, `openapi/`, `db/spec-check/`, and isolated `tools/spikes/` — **zero modifications to `src/*`, `package.json`, `package-lock.json`, `astryx-themes.js`, or third-party `.agents/*` files prior to `TP-IMP-0005`**.

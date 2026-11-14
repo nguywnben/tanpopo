@@ -35,12 +35,12 @@ RULES:
 <!-- ASTRYX:END -->
 
 <!-- TANPOPO-HANDOFF:START -->
-## Tanpopo Cold-Start Agent Navigation & Governance Gate (Post-M0 Stage 1)
+## Tanpopo Cold-Start Agent Navigation & Governance Gate (Gate G4 Stage 2 Approved)
 
 If you are starting a fresh session with no prior chat context (e.g., executing a `TP-IMP-xxxx` unit):
-1. **Read [`docs/governance/execution-baseline.md`](./docs/governance/execution-baseline.md) FIRST** (`EXEC-BL-001-STAGE1`).
-   - Current Delivery Handoff Verdict: **`NO_GO`** (`Milestone M0` units `TP-IMP-0001..0004` are `DONE` under Owner Stage 1 approval `DEC-009`, while **Gate G4 Stage 2 (`M1+` Production Implementation)** awaits explicit final Product Owner `GO`; `0 / 47` units are `READY`, with `TP-IMP-0005` queued as 1st `READY` unit upon Stage 2 `GO`).
-   - Do **NOT** write `M1+` application code, infer Stage 2 approval from document existence, or publish/tag releases while `HANDOFF_VERDICT` is `NO_GO`.
+1. **Read [`docs/governance/execution-baseline.md`](./docs/governance/execution-baseline.md) FIRST** (`EXEC-BL-001-APPROVED`).
+   - Current Delivery Handoff Verdict: **`GO`** (`Milestone M0` units `TP-IMP-0001..0004` = `DONE`; **solely [`TP-IMP-0005`](./docs/planning/units/TP-IMP-0005.md) is `READY`** under Owner approval `DEC-010`; `TP-IMP-0006..0047` remain `BLOCKED` behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01..05` gates).
+   - Execute **only** a unit explicitly marked **`READY`** in [`docs/planning/implementation-index.md`](./docs/planning/implementation-index.md); never self-accept units on the Product Owner's behalf and never tag/publish releases (`GATE-REL-07`).
 2. **Master Unit Index & Specs:** [`docs/planning/implementation-index.md`](./docs/planning/implementation-index.md) → `docs/planning/units/TP-IMP-xxxx.md`.
 3. **Contracts & Spike Evidence (`M0`):** [`proto/tanpopo/extension/v1/runtime.proto`](./proto/tanpopo/extension/v1/runtime.proto), [`openapi/`](./openapi), [`db/spec-check/`](./db/spec-check), and [`docs/architecture/spike-results.md`](./docs/architecture/spike-results.md).
 4. **Audit, Gap & Documentation Hubs:** [`docs/reviews/execution-readiness.md`](./docs/reviews/execution-readiness.md), [`docs/reviews/unresolved-gaps.md`](./docs/reviews/unresolved-gaps.md), [`README.md`](./README.md) & [`docs/README.md`](./docs/README.md).

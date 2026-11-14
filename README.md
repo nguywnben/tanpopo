@@ -5,11 +5,11 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 > [!IMPORTANT]
-> **Current Project Status — Milestone `M0` Spec Closure & Spikes Complete (`HANDOFF_VERDICT: NO_GO` Pending Gate G4 Stage 2)**
+> **Current Project Status — Gate G4 Stage 2 Approved (`HANDOFF_VERDICT: GO` · `TP-IMP-0005` `READY`)**
 >
-> Tanpopo has completed its end-to-end discovery, requirements, architecture, UX/SRE, security, and 47-unit planning framework (`ASTRA A00–A10`) **plus Milestone `M0` (`TP-IMP-0001`..`0004` = `DONE`)** under Product Owner Stage 1 approval (`DEC-009` in [`docs/governance/decisions.md`](./docs/governance/decisions.md)): machine-verified Protobuf (`proto/`), OpenAPI 3.1 (`openapi/`), dual-dialect SQL schemas (`db/spec-check/`), and isolated pure-Go feasibility spikes (`tools/spikes/` & [`docs/architecture/spike-results.md`](./docs/architecture/spike-results.md)).
+> Tanpopo has completed its end-to-end discovery, requirements, architecture, UX/SRE, security, and 47-unit planning framework (`ASTRA A00–A10`) **plus Milestone `M0` (`TP-IMP-0001`..`0004` = `DONE`)**: locally compiled Protobuf ([`proto/`](./proto)), OpenAPI 3.1 ([`openapi/`](./openapi)), live-executed SQLite DDL + static-parity PostgreSQL 16 reference DDL ([`db/spec-check/`](./db/spec-check)), and isolated pure-Go feasibility spikes ([`tools/spikes/`](./tools/spikes) & [`docs/architecture/spike-results.md`](./docs/architecture/spike-results.md)).
 >
-> **No `M1+` production gateway, CLI, plugin runtime, or production Web Console code has been implemented yet** (only the initial Astryx UI setup in [`src/`](./src) and isolated `M0` spikes in [`tools/spikes/`](./tools/spikes) exist on disk). Production implementation units (`TP-IMP-0005`..`0047`) remain **`BLOCKED` (`0 / 47` `READY`; `TP-IMP-0005` queued first)** awaiting final Product Owner **Gate G4 Stage 2** sign-off (`COND-PO-01`..`05`: all unmeasured Gateway SLOs remain `TARGET / UNVERIFIED`).
+> **No `M1+` production gateway, CLI, plugin runtime, GitHub Actions CI, or production Web Console code has been implemented yet** (only the initial Astryx UI setup in [`src/`](./src) and isolated `M0` spikes in [`tools/spikes/`](./tools/spikes) exist on disk). Under Product Owner approval `DEC-010`, **[`TP-IMP-0005`](./docs/planning/units/TP-IMP-0005.md) is now unlocked as the sole `READY` unit** to begin `M1`, while `TP-IMP-0006`..`0047` remain gated behind their dependencies, security reviews, and `COND-PO-01`..`05` verification conditions (all unmeasured Gateway SLOs remain `TARGET / UNVERIFIED`).
 
 ---
 
@@ -49,7 +49,7 @@ Start here based on your role:
 | **Product Owner (Pre-Build Gate Sign-Off)** | **[`docs/governance/owner-approval-sheet.md`](./docs/governance/owner-approval-sheet.md)** & [`docs/governance/decisions.md`](./docs/governance/decisions.md) |
 | **Cold-Start Engineering Agent ("Luna")** | **[`AGENTS.md`](./AGENTS.md)** → **[`docs/governance/execution-baseline.md`](./docs/governance/execution-baseline.md)** → **[`docs/planning/implementation-index.md`](./docs/planning/implementation-index.md)** |
 | **Full Documentation Index (`110` Docs)** | **[`docs/README.md`](./docs/README.md)** |
-| **Independent Readiness & Spec Audits** | [`docs/reviews/execution-readiness.md`](./docs/reviews/execution-readiness.md) (`A10: NO_GO`), [`docs/reviews/integrated-audit.md`](./docs/reviews/integrated-audit.md) (`A08: FAIL`), [`docs/reviews/unresolved-gaps.md`](./docs/reviews/unresolved-gaps.md) (`CR-01..10`) |
+| **Independent Readiness & Spec Audits** | [`docs/reviews/execution-readiness.md`](./docs/reviews/execution-readiness.md) (`Stage 2: GO`), [`docs/reviews/integrated-audit.md`](./docs/reviews/integrated-audit.md) (`Historical A08`), [`docs/reviews/unresolved-gaps.md`](./docs/reviews/unresolved-gaps.md) (`13/13 CLOSED`) |
 | **Requirements, Architecture & Security** | [`docs/requirements/srs.md`](./docs/requirements/srs.md), [`docs/architecture/system-design.md`](./docs/architecture/system-design.md), [`docs/security/threat-model.md`](./docs/security/threat-model.md), [`docs/quality/release-readiness.md`](./docs/quality/release-readiness.md) |
 
 ---
@@ -80,7 +80,7 @@ Start here based on your role:
     ├── operations/              # Multi-OS/Air-Gap installers, backups/DR, monitoring/runbooks & CLI DX
     ├── security/                # STRIDE/OWASP threat model, sandbox/supply-chain & envelope encryption/RLS
     ├── quality/                 # Contract/auth/fuzz matrix, hermetic CI strategy, SLO/FMEA & release gates
-    ├── reviews/                 # A08 Specification Audit (FAIL), Unresolved Gaps (CR-01..10) & A10 Readiness (NO_GO)
+    ├── reviews/                 # Historical A08 Audit, Closed Gap Register (13/13) & Stage 2 Readiness (GO)
     └── planning/                # Roadmap, Milestone Map, DAG, Master Index & units/TP-IMP-0001..0047.md
 ```
 

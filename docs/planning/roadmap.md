@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (Reconciled Post-`M0` — Gate G4: `STAGE_1_DONE / STAGE_2_AWAITING_OWNER_GO` | `HANDOFF_VERDICT: NO_GO`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `1.0.0-m0-done` | **Date:** `2026-11-14`
+> **Technical Program Plan (Gate G4 Stage 2 Approved — `HANDOFF_VERDICT: GO` | `READY: TP-IMP-0005`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.1.0-stage2-go` | **Date:** `2026-11-14`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **MANDATORY GOVERNANCE NOTICE (`STAGE 2 HANDOFF GATE HELD AT NO_GO`):**
+> - **MANDATORY GOVERNANCE NOTICE (`STAGE 2 HANDOFF APPROVED — SINGLE-UNIT ENTRY`):**
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
->   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are now **`DONE`**, closing all `13 / 13` gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Per the Product Owner's Stage-Split Ruling (`DEC-009`), **Gate G4 Stage 2 (`M1+` Production Implementation Handoff) remains `NOT YET APPROVED` (`HANDOFF_VERDICT = NO_GO`)**: `TP-IMP-0005`..`0047` (`43 / 47` units) stay **`BLOCKED`** until final Owner Stage 2 `GO` (`TP-IMP-0005` promotes first to `READY`).
+>   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
+>   3. Following pre-handoff evidence reconciliation (`DEC-010`), the Product Owner **approved Gate G4 Stage 2 (`HANDOFF_VERDICT = GO`)**, **unlocking solely [`TP-IMP-0005`](./units/TP-IMP-0005.md) as `READY`** to start `M1` while retaining all dependency, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates on `TP-IMP-0006`..`0047`.
 
 ---
 

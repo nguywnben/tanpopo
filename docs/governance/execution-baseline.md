@@ -1,25 +1,29 @@
 # Execution Baseline & Agent Handoff Contract — Tanpopo
 
 > **MANDATORY COLD-START ENTRYPOINT FOR EVERY NEW EXECUTION SESSION (`ZERO PRIOR CHAT MEMORY REQUIRED`)**
-> - **Baseline ID:** `EXEC-BL-001-STAGE1`
-> - **Version:** `1.0.0-m0-done` | **Last Updated:** `2026-11-14` | **Pre-M0 Reference Commit:** `5147497`
-> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`NO_GO`** *(`M1+` production code execution is NOT yet unlocked — awaiting Gate G4 Stage 2 Final Owner Handoff Approval per `DEC-009`!)*
-> - **CURRENT `GATE G4` STATUS:** **`STAGE_1_DONE` (`M0`: `TP-IMP-0001`..`0004` `DONE`) / `STAGE_2_AWAITING_OWNER_GO`** *(Product Owner approved `Gate G1`, `Gate G2`, `Gate G3`, `CR-01`..`10` + `COND-PO-01`..`05`, and `M0` via [`owner-approval-sheet.md`](./owner-approval-sheet.md); Stage 2 `M1+` Engineering Handoff awaits final Owner `GO`.)*
-> - **CURRENT UNIT COUNTS (`UNIT_STATUS`):** **`4 / 47` `DONE` (`TP-IMP-0001`..`0004`), `0 / 47` `READY`, `43 / 47` `BLOCKED` (`TP-IMP-0005`..`0047`; `TP-IMP-0005` is 1st eligible `READY` unit upon Stage 2 `GO`)**
+> - **Baseline ID:** `EXEC-BL-001-APPROVED`
+> - **Version:** `1.1.0-stage2-go` | **Last Updated:** `2026-11-14` | **M0 Reference Commit:** `eb01661`
+> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved by Product Owner via `DEC-010` — **solely `TP-IMP-0005` is unlocked as `READY`** to start Milestone `M1`!)*
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`DEC-009` & `DEC-010`)** *(Milestone `M0` units `TP-IMP-0001`..`0004` = `DONE`; `TP-IMP-0005` = `READY`; `TP-IMP-0006`..`0047` = `BLOCKED` behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.)*
+> - **CURRENT READY UNITS (`READY_UNITS`):** **[`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) ONLY (`1 / 47` `READY`, `4 / 47` `DONE`, `42 / 47` `BLOCKED`)**
 
 ---
 
 ## 0. Mandatory Start-of-Session Gate Check for the Engineering Agent ("Luna")
 
-If you are an Engineering Coding Agent (e.g., **Luna**) starting a fresh session with **zero prior conversation history** and instructed to *"Implement `TP-IMP-xxxx`"*, you **MUST** execute these 4 gate checks before creating or modifying any file:
+If you are an Engineering Coding Agent (e.g., **Luna**) starting a fresh session with **zero prior conversation history** and instructed to *"Implement `TP-IMP-xxxx`"*, you **MUST** execute these 5 gate checks before creating or modifying any file:
 
 1. **Verify `HANDOFF_VERDICT` at the top of this file and the Stage-Gate table in [`docs/governance/decisions.md`](./decisions.md):**
-   - While `HANDOFF_VERDICT` is **`NO_GO`** or `Gate G4` is not explicitly marked **`APPROVED`** by the Product Owner: **STOP IMMEDIATELY (`ABORT SAFELY`)**, report that the unit is `BLOCKED` by human governance gates, and point the caller to [`docs/governance/owner-approval-sheet.md`](./owner-approval-sheet.md). **Never infer approval from the mere existence of specification or planning files!**
+   - If `HANDOFF_VERDICT` is **`NO_GO`** or `Gate G4` is not marked **`APPROVED`** by the Product Owner: **STOP IMMEDIATELY (`ABORT SAFELY`)**. **Never infer approval from the mere existence of specification or planning files!**
 2. **Verify the unit's own status and upstream `Dependencies` in [`docs/planning/implementation-index.md`](../planning/implementation-index.md):**
-   - Execute `TP-IMP-xxxx` ONLY when its status in `implementation-index.md` is **`READY`** and `100%` of the units listed in its `Dependencies` field in [`docs/planning/units/TP-IMP-xxxx.md`](../planning/units/TP-IMP-0001.md) are marked `DONE`.
+   - Execute `TP-IMP-xxxx` **ONLY** when its status in `implementation-index.md` is explicitly **`READY`** (currently **only `TP-IMP-0005`**) and `100%` of the units listed in its `Dependencies` field are marked `DONE`. Never skip ahead or unlock multiple downstream waves without passing required review gates!
 3. **Load Selective, Focused Context Only (Prevent Context Window Flooding):**
-   - Read in strict order: (a) [`AGENTS.md`](../../AGENTS.md) → (b) this `execution-baseline.md` → (c) the target unit spec [`docs/planning/units/TP-IMP-xxxx.md`](../planning/units/TP-IMP-0001.md) → (d) **only** the specific sections cited under Section 3 (`Design Refs`) of that unit.
-4. **Hard Public-Release Boundary:** No AI Agent may ever run `git tag`, `git push --tags`, `gh release create`, public `docker push`, or `npm publish` without explicit written sign-off from the Product Owner at [`TP-IMP-0047`](../planning/units/TP-IMP-0047.md) (`GATE-REL-07`).
+   - Read in strict order: (a) [`AGENTS.md`](../../AGENTS.md) → (b) this `execution-baseline.md` → (c) the target unit spec [`docs/planning/units/TP-IMP-xxxx.md`](../planning/units/TP-IMP-0005.md) → (d) **only** the specific sections cited under Section 3 (`Design Refs`) of that unit.
+4. **Hard Public-Release & Owner-Acceptance Boundary (`DEC-010`):**
+   - No AI Agent may **ever** run `git tag`, `git push --tags`, `gh release create`, public `docker push`, or `npm publish` without explicit written sign-off from the Product Owner at [`TP-IMP-0047`](../planning/units/TP-IMP-0047.md) (`GATE-REL-07`).
+   - No AI Agent may **ever** sign off or accept completed units on behalf of the Product Owner.
+5. **Distinguish Local Verification from GitHub Actions CI & Live Infrastructure (`COND-PO-01`..`05`):**
+   - Always report local command execution (`go test`, `astryx doctor`) separately from remote GitHub Actions CI workflow runs (`.github/workflows/ci.yml` does not exist prior to `TP-IMP-0005`), and never claim unmeasured Gateway `SLO`s, live `PostgreSQL 16` DDL/`FORCE RLS` (`TP-IMP-0039`), cold-backup `Crypto-Shredding` (`TP-IMP-0008`, `0032`), HA `Valkey` failover (`TP-IMP-0021`, `0040`, `0043`), or real `MCP 2025-03-26` client compatibility (`CT-36` in `TP-IMP-0036`, `0037`) as proven until their dedicated verification units pass!
 
 ---
 
@@ -41,9 +45,16 @@ All strategic, scope, and architectural decisions below are formally confirmed b
   3. **`COND-PO-03`:** Prove Valkey/PostgreSQL budget ledger consistency across concurrency, Valkey failover, network disconnect, and recovery (`TP-IMP-0021`, `TP-IMP-0040`, `TP-IMP-0043`); a `1s` checkpoint alone is insufficient proof.
   4. **`COND-PO-04`:** Align `/mcp` strictly with **`MCP Specification 2025-03-26 (Streamable HTTP)`** and execute empirical client compatibility suite `CT-36` (`TP-IMP-0036`, `0037`).
   5. **`COND-PO-05`:** If any spike or quality gate disproves an approved assumption, **stop and file a `CR`** rather than forcing a flawed design.
+- **`DEC-010` (`Gate G4 Stage 2 Final Engineering Handoff Approval — 2026-11-14`):** Approved `HANDOFF_VERDICT = GO`, promoted **solely [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) to `READY`** to start `M1`, retained all dependency, security review (`REQUIRES_STRONG_REVIEW`), and `DoD` gates on `TP-IMP-0006`..`0047`, and prohibited AI self-acceptance of units or autonomous release creation.
 
-### 1.2. Single Remaining Gate Required to Flip `NO_GO` → `GO` (`Gate G4 Stage 2`)
-Milestone `M0` (`TP-IMP-0001`..`0004`, closing `GAP-01`..`13` and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md)) is **100% complete**. The **sole remaining gate** before unlocking `M1+` implementation is **Product Owner Stage 2 Handoff Sign-Off (`Gate G4 Stage 2`)** flipping `HANDOFF_VERDICT` from `NO_GO` to `GO` and promoting **`TP-IMP-0005`** to `READY`.
+### 1.2. Active Post-Handoff Verification Gates (`Do NOT Claim Proven Prematurely`)
+While `M0` (`TP-IMP-0001`..`0004`) closed specification gaps and validated isolated spikes locally, the following items **remain `UNVERIFIED` in production** and MUST be proven in their designated `M1`–`M5` units:
+1. **GitHub Actions CI Execution:** Verified locally only so far; `.github/workflows/ci.yml` and `scripts/ci/check.go` land in **`TP-IMP-0005`**.
+2. **Live `PostgreSQL 16` DDL, Partitioning & `FORCE RLS`:** `db/spec-check/postgres_schema.sql` underwent static text/table parity checks in `M0`; live PostgreSQL 16 DDL execution and `FORCE RLS` proofs are gated in **`TP-IMP-0039`**.
+3. **Full Gateway `SLO-01`..`SLO-08` & Web Console CWV (`COND-PO-01`):** Isolated `wazero` microbenchmarks are not Gateway SLO proof; end-to-end load/chaos verification is gated in **`TP-IMP-0043`** (and CWV in **`TP-IMP-0044`**).
+4. **`Crypto-Shredding` Backup Non-Recoverability (`COND-PO-02`):** Gated in **`TP-IMP-0008`** and **`TP-IMP-0032`**.
+5. **`Valkey / PostgreSQL` Failover Ledger Consistency (`COND-PO-03`):** Gated in **`TP-IMP-0021`**, **`TP-IMP-0040`**, and **`TP-IMP-0043`**.
+6. **Real `MCP 2025-03-26` Client Interoperability (`COND-PO-04`):** Gated on `CT-36` in **`TP-IMP-0036`** and **`TP-IMP-0037`**.
 
 ---
 
@@ -80,14 +91,14 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 
 ---
 
-## 4. Dependency-Ordered Initial Execution Queue (`M0` Complete; `M1` Ready Upon Stage 2 `GO`)
+## 4. Dependency-Ordered Initial Execution Queue (`HANDOFF_VERDICT: GO` — `TP-IMP-0005` `READY`)
 
-> **Live Status Today:** `TP-IMP-0001`..`0004` (`M0`) are **`DONE`**. `HANDOFF_VERDICT` remains **`NO_GO`** (`0` units `READY`) pending Product Owner Stage 2 `GO`. Immediately upon Stage 2 `GO`, **`TP-IMP-0005` promotes to `READY`** as the entry wave of `M1`:
+> **Live Status Today:** `TP-IMP-0001`..`0004` (`M0`) are **`DONE`**. **`TP-IMP-0005` is the sole `READY` unit** (`DEC-010`). Downstream waves unlock strictly as upstream `Dependencies` and `REQUIRES_STRONG_REVIEW` gates complete:
 
 | Wave | Unit ID(s) | Execution Mode | Status / Mandatory Checkpoint Before Next Wave |
 |---|---|---|---|
-| **Wave 0.1–0.4 (`M0`)** | [`TP-IMP-0001`](../planning/units/TP-IMP-0001.md) → [`0002`](../planning/units/TP-IMP-0002.md) → [`0003`](../planning/units/TP-IMP-0003.md) → [`0004`](../planning/units/TP-IMP-0004.md) | Completed in `M0` | **`DONE` (`GATE-M0` Verified):** Closed `GAP-01..13`; compiled `runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`; locked `POC-01` & `POC-02` in `spike-results.md`. |
-| **Wave 1.1 *(Next on `GO`)* ** | [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) | Sequential (`1` branch) | **1st `READY` unit upon Stage 2 `GO`** (`REQUIRES_STRONG_REVIEW` — Monorepo `go.mod`, `web/console/`, `Apache-2.0`, `ISS-008` English UI copy, `CONSTRAINTS.md` & `check.go`). |
+| **Wave 0.1–0.4 (`M0`)** | [`TP-IMP-0001`](../planning/units/TP-IMP-0001.md) → [`0002`](../planning/units/TP-IMP-0002.md) → [`0003`](../planning/units/TP-IMP-0003.md) → [`0004`](../planning/units/TP-IMP-0004.md) | Completed in `M0` | **`DONE` (`GATE-M0` Closed):** Closed `GAP-01..13`; compiled `runtime.proto` & `openapi/*.yaml`; executed `sqlite_schema.sql` live (static parity on `postgres_schema.sql`); locked `POC-01` & `POC-02` in `spike-results.md`. |
+| **Wave 1.1 *(ACTIVE `READY`)* ** | [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) | Sequential (`1` branch) | **`READY` (`REQUIRES_STRONG_REVIEW`)** — Monorepo `go.mod`, `web/console/`, `Apache-2.0`, `ISS-008` English UI copy, `CONSTRAINTS.md`, `check.go` & `.github/workflows/ci.yml`. |
 | **Wave 1.2** | [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) **\|\|** [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) | **Parallel (`2` `git worktree`s)** | Hermetic `netguard` (`0006`) + `SQLite WAL` migration runner (`0007`). |
 | **Wave 1.3** | [`TP-IMP-0008`](../planning/units/TP-IMP-0008.md) → [`TP-IMP-0009`](../planning/units/TP-IMP-0009.md) | Sequential | `REQUIRES_STRONG_REVIEW` — 3-tier Envelope Vault + `RBAC` / `Virtual Key` / `ConfigSnapshot`. |
 | **Wave 1.4** | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md) **\|\|** [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md) | **Parallel (`2` `git worktree`s)** | `REQUIRES_STRONG_REVIEW` — `SSRFGuard` + `BlindBroker` + `.tpkg` Installer `SM-01`. |
