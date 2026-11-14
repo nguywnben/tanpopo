@@ -5,11 +5,11 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 > [!IMPORTANT]
-> **Current Project Status — Gate G4 Approved (`HANDOFF_VERDICT: GO` · `TP-IMP-0001..0005` `DONE` · `TP-IMP-0006, 0007` `READY`)**
+> **Current Project Status — Gate G4 Approved (`HANDOFF_VERDICT: GO` · `TP-IMP-0001..0005` `DONE` · `TP-IMP-0006` `READY_FOR_REVIEW` · `TP-IMP-0007` `READY`)**
 >
 > Tanpopo has completed its end-to-end discovery, requirements, architecture, UX/SRE, security, and 47-unit planning framework (`ASTRA A00–A10`), Milestone `M0` (`TP-IMP-0001`..`0004` = `DONE`: locally compiled Protobuf [`proto/`](./proto), OpenAPI 3.1 [`openapi/`](./openapi), live-executed SQLite DDL + static-parity PostgreSQL 16 reference DDL [`db/spec-check/`](./db/spec-check), and isolated pure-Go feasibility spikes [`tools/spikes/`](./tools/spikes) / [`docs/architecture/spike-results.md`](./docs/architecture/spike-results.md)), and **Milestone `M1` Wave 1.1 [`TP-IMP-0005`](./docs/planning/units/TP-IMP-0005.md) (`DONE` — Product Owner accepted via `DEC-011` at commit `1f4f5a1`, GitHub Actions Run `43584413913` `SUCCESS` across Stage 0 and Stage 1 `ubuntu-24.04`, `macos-15`, `windows-2022`)**.
 >
-> **No `M1` runtime packages (`TP-IMP-0006+`), gateway servers, or production Web Console screens have been implemented yet:** [`TP-IMP-0006`](./docs/planning/units/TP-IMP-0006.md) and [`TP-IMP-0007`](./docs/planning/units/TP-IMP-0007.md) are **`READY`**, while `TP-IMP-0008`..`0047` remain **`BLOCKED`** behind upstream dependencies and `REQUIRES_STRONG_REVIEW` gates, with all unmeasured Gateway SLOs remaining `TARGET / UNVERIFIED`.
+> **Shared hermetic test harness [`TP-IMP-0006`](./docs/planning/units/TP-IMP-0006.md) ([`internal/testkit/*`](./internal/testkit/doc.go)) is `READY_FOR_REVIEW` (locally verified, awaiting CI `-race` & acceptance); [`TP-IMP-0007`](./docs/planning/units/TP-IMP-0007.md) is `READY`; no `M1` runtime gateway servers or production Web Console screens exist yet:** `TP-IMP-0008`..`0047` remain **`BLOCKED`** behind upstream dependencies and `REQUIRES_STRONG_REVIEW` gates, with all unmeasured Gateway SLOs remaining `TARGET / UNVERIFIED`.
 
 ---
 

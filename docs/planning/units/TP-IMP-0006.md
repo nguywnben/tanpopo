@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0006` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-011`; upstream `TP-IMP-0005` is `DONE`)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified under `CGO_ENABLED=0` & `TANPOPO_TEST_HERMETIC=1` (`94.2%` statement coverage across `internal/testkit/...`, `-count=3` green, `0` `time.Sleep`); awaiting GitHub Actions Stage 0/1 CI (`-race`) and Lead Engineer acceptance before marking `DONE`)* |
 | **Size** | `M` (`5` internal packages under `internal/testkit/*`) |
 | **Review Tier** | `STANDARD_REVIEW` |
 | **Technical Owner** | `QA Architect + Test Systems Engineer` |

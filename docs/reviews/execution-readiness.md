@@ -4,7 +4,7 @@
 > - **Report ID:** `REV-RDY-01` | **Version:** `2.2.0-tp-imp-0005-done` | **Audit Date:** `2026-11-14`
 > - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
 > - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`, and [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) Product-Owner-accepted as **`DONE`** via `DEC-011` at commit `1f4f5a1` & GitHub Actions Run `43584413913` `SUCCESS`)*
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`5 / 47` units `DONE` [`0001..0005`] · `2 / 47` `READY` [`TP-IMP-0006`, `TP-IMP-0007`] · `40 / 47` `BLOCKED` behind upstream dependencies & review gates)**
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`5 / 47` units `DONE` [`0001..0005`] · `1 / 47` `READY_FOR_REVIEW` [`TP-IMP-0006`] · `1 / 47` `READY` [`TP-IMP-0007`] · `40 / 47` `BLOCKED` behind upstream dependencies & review gates)**
 
 ---
 
@@ -61,5 +61,5 @@ Every check below strictly separates **what has been verified locally in `M0`** 
 |---|---|---|
 | **Governance Gate (`HANDOFF_VERDICT`)** | **`GO`** | Approved in `DEC-010` and `DEC-011` ([`decisions.md`](../governance/decisions.md)). |
 | **`TP-IMP-0005` Acceptance Status** | **`DONE` *(Accepted `DEC-011`)* ** | Accepted by Product Owner at commit `1f4f5a19a9ab8b53b82342e048970ea565500161`; GitHub Actions Run `43584413913` `SUCCESS` (`Stage 0` + `Stage 1` `ubuntu-24.04`, `macos-15`, `windows-2022`); `REQUIRES_STRONG_REVIEW` approved. |
-| **Active `READY` Units (`Wave 1.2`)** | **`2 / 47` `READY`** | **[`TP-IMP-0006`](../planning/units/TP-IMP-0006.md)** (`STANDARD_REVIEW`, Deps: `0005` `DONE`) and **[`TP-IMP-0007`](../planning/units/TP-IMP-0007.md)** (`REQUIRES_STRONG_REVIEW`, Deps: `0003, 0005` `DONE`); `TP-IMP-0008..0047` (`40` units) remain `BLOCKED`. |
-| **Luna Dispatch Verdict** | **`READY_FOR_PARALLEL_DISPATCH`** | Two Engineering Agents can execute [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) and [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) concurrently in isolated `git worktree`s via [`AGENTS.md`](../../AGENTS.md) → [`execution-baseline.md`](../governance/execution-baseline.md). |
+| **Active `Wave 1.2` Queue (`TP-IMP-0006`, `TP-IMP-0007`)** | **`1 READY_FOR_REVIEW` · `1 READY`** | **[`TP-IMP-0006`](../planning/units/TP-IMP-0006.md)** (`STANDARD_REVIEW` — `internal/testkit/*` `READY_FOR_REVIEW` pending CI `-race` & acceptance) and **[`TP-IMP-0007`](../planning/units/TP-IMP-0007.md)** (**`READY`**, `REQUIRES_STRONG_REVIEW`, Deps: `0003, 0005` `DONE`); `TP-IMP-0008..0047` (`40` units) remain `BLOCKED`. |
+| **Luna Dispatch Verdict** | **`READY_FOR_DISPATCH (TP-IMP-0007)`** | An Engineering Agent can execute [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) in isolation via [`AGENTS.md`](../../AGENTS.md) → [`execution-baseline.md`](../governance/execution-baseline.md) while [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) awaits review/CI acceptance. |

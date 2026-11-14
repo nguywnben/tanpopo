@@ -4,8 +4,8 @@
 > - **Baseline ID:** `EXEC-BL-001-APPROVED`
 > - **Version:** `1.2.0-tp-imp-0005-accepted` | **Last Updated:** `2026-11-14` | **Accepted Implementation Baseline:** `1f4f5a1` (`CI Run 43584413913`)
 > - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved by Product Owner via `DEC-010`, and [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) accepted as **`DONE`** on `2026-11-14` via `DEC-011` at commit `1f4f5a1` with GitHub Actions run `43584413913` `SUCCESS`!)*
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`DEC-009`, `DEC-010` & `DEC-011`)** *(Completed units `TP-IMP-0001`..`0005` = **`DONE`**; **`TP-IMP-0006` & `TP-IMP-0007` = `READY`**; `TP-IMP-0008`..`0047` = **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.)*
-> - **CURRENT UNIT STATE (`UNIT_STATES`):** **`5 / 47` `DONE` (`TP-IMP-0001`..`0005`), `2 / 47` `READY` ([`TP-IMP-0006`](../planning/units/TP-IMP-0006.md), [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md)), `0 / 47` `READY_FOR_REVIEW`, `40 / 47` `BLOCKED` (`TP-IMP-0008`..`0047`)**
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`DEC-009`, `DEC-010` & `DEC-011`)** *(Completed units `TP-IMP-0001`..`0005` = **`DONE`**; **`TP-IMP-0006` = `READY_FOR_REVIEW`**; **`TP-IMP-0007` = `READY`**; `TP-IMP-0008`..`0047` = **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.)*
+> - **CURRENT UNIT STATE (`UNIT_STATES`):** **`5 / 47` `DONE` (`TP-IMP-0001`..`0005`), `1 / 47` `READY_FOR_REVIEW` ([`TP-IMP-0006`](../planning/units/TP-IMP-0006.md)), `1 / 47` `READY` ([`TP-IMP-0007`](../planning/units/TP-IMP-0007.md)), `40 / 47` `BLOCKED` (`TP-IMP-0008`..`0047`)**
 
 ---
 
@@ -16,7 +16,7 @@ If you are an Engineering Coding Agent (e.g., **Luna**) starting a fresh session
 1. **Verify `HANDOFF_VERDICT` at the top of this file and the Stage-Gate table in [`docs/governance/decisions.md`](./decisions.md):**
    - If `HANDOFF_VERDICT` is **`NO_GO`** or `Gate G4` is not marked **`APPROVED`** by the Product Owner: **STOP IMMEDIATELY (`ABORT SAFELY`)**. **Never infer approval from the mere existence of specification or planning files!**
 2. **Verify the unit's own status and upstream `Dependencies` in [`docs/planning/implementation-index.md`](../planning/implementation-index.md):**
-   - Execute a new `TP-IMP-xxxx` unit **ONLY** when its status in `implementation-index.md` is explicitly **`READY`** (currently **`2 / 47` `READY`**: [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) and [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md)) and `100%` of the units listed in its `Dependencies` field are marked `DONE`. Never skip ahead or unlock multiple downstream waves without passing required review gates!
+   - Execute a new `TP-IMP-xxxx` unit **ONLY** when its status in `implementation-index.md` is explicitly **`READY`** (currently **`1 / 47` `READY`**: [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md), while [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) is **`READY_FOR_REVIEW`**) and `100%` of the units listed in its `Dependencies` field are marked `DONE`. Never skip ahead or unlock multiple downstream waves without passing required review gates!
 3. **Load Selective, Focused Context Only (Prevent Context Window Flooding):**
    - Read in strict order: (a) [`AGENTS.md`](../../AGENTS.md) → (b) this `execution-baseline.md` → (c) the target unit spec [`docs/planning/units/TP-IMP-xxxx.md`](../planning/units/TP-IMP-0006.md) → (d) **only** the specific sections cited under Section 3 (`Design Refs`) of that unit.
 4. **Hard Public-Release & Owner-Acceptance Boundary (`DEC-010`):**
@@ -92,15 +92,15 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 
 ---
 
-## 4. Dependency-Ordered Initial Execution Queue (`HANDOFF_VERDICT: GO` — `TP-IMP-0006` & `TP-IMP-0007` `READY`)
+## 4. Dependency-Ordered Initial Execution Queue (`HANDOFF_VERDICT: GO` — `TP-IMP-0006` `READY_FOR_REVIEW` · `TP-IMP-0007` `READY`)
 
-> **Live Status Today:** `TP-IMP-0001`..`0005` are **`DONE`** (`TP-IMP-0005` accepted at `1f4f5a1`, CI run `43584413913` `SUCCESS`, `DEC-011`). **[`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) and [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) are now **`READY`** (`2` units `READY`)**. All downstream units (`TP-IMP-0008`..`0047`) remain **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates:
+> **Live Status Today:** `TP-IMP-0001`..`0005` are **`DONE`** (`TP-IMP-0005` accepted at `1f4f5a1`, CI run `43584413913` `SUCCESS`, `DEC-011`). **[`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) is **`READY_FOR_REVIEW`** (`1` unit `READY_FOR_REVIEW`)** and **[`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) is **`READY`** (`1` unit `READY`)**. All downstream units (`TP-IMP-0008`..`0047`) remain **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates:
 
 | Wave | Unit ID(s) | Execution Mode | Status / Mandatory Checkpoint Before Next Wave |
 |---|---|---|---|
 | **Wave 0.1–0.4 (`M0`)** | [`TP-IMP-0001`](../planning/units/TP-IMP-0001.md) → [`0002`](../planning/units/TP-IMP-0002.md) → [`0003`](../planning/units/TP-IMP-0003.md) → [`0004`](../planning/units/TP-IMP-0004.md) | Completed in `M0` | **`DONE` (`GATE-M0` Closed):** Closed `GAP-01..13`; compiled `runtime.proto` & `openapi/*.yaml`; executed `sqlite_schema.sql` live (static parity on `postgres_schema.sql`); locked `POC-01` & `POC-02` in `spike-results.md`. |
 | **Wave 1.1** | [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) | Completed in `M1` | **`DONE` (`DEC-011` Accepted `2026-11-14`):** Commit `1f4f5a1`; GitHub Actions Run `43584413913` `SUCCESS` (`Stage 0` + `Stage 1` `ubuntu-24.04`, `macos-15`, `windows-2022`); `REQUIRES_STRONG_REVIEW` approved by Product Owner; closed `ISS-002..004, 008`. |
-| **Wave 1.2 *(ACTIVE `READY`)* ** | [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) **\|\|** [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) | **Parallel (`2` `git worktree`s)** | **`READY`** — Hermetic `netguard` + `FakeLLMServer` (`0006`, `STANDARD_REVIEW`) and `storage/port` + `SQLite WAL` migration runner (`0007`, **`REQUIRES_STRONG_REVIEW`**). |
+| **Wave 1.2 *(ACTIVE)* ** | [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) **\|\|** [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) | **Parallel (`2` `git worktree`s)** | **`0006` = `READY_FOR_REVIEW`** (`STANDARD_REVIEW` — `internal/testkit/*` `94.2%` coverage local PASS, awaiting CI `-race` & acceptance) · **`0007` = `READY`** (**`REQUIRES_STRONG_REVIEW`** — `storage/port` + `SQLite WAL` migration runner). |
 | **Wave 1.3** | [`TP-IMP-0008`](../planning/units/TP-IMP-0008.md) → [`TP-IMP-0009`](../planning/units/TP-IMP-0009.md) | Sequential | **`BLOCKED`** (Waiting on `0007`) · `REQUIRES_STRONG_REVIEW` — 3-tier Envelope Vault + `RBAC` / `Virtual Key` / `ConfigSnapshot`. |
 | **Wave 1.4** | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md) **\|\|** [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md) | **Parallel (`2` `git worktree`s)** | `REQUIRES_STRONG_REVIEW` — `SSRFGuard` + `BlindBroker` + `.tpkg` Installer `SM-01`. |
 | **Wave 1.5** | [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md) **\|\|** [`TP-IMP-0013`](../planning/units/TP-IMP-0013.md) → [`TP-IMP-0014`](../planning/units/TP-IMP-0014.md) → [`TP-IMP-0015`](../planning/units/TP-IMP-0015.md) | Parallel `0012\|\|0013`, then `0014 -> 0015` | **`GATE-M1` (`Vertical Slice Security & Architecture Gate`)** — Proves `EXT-SLICE-M1`. |
