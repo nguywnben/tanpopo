@@ -122,6 +122,18 @@ func TestFakeClockOperationsAndCoverage(t *testing.T) {
 	}
 	<-tm.C()
 
+	afReset := fc.AfterFunc(10*time.Second, func() {})
+	if !afReset.Reset(5 * time.Second) {
+		t.Fatalf("expected Reset on active AfterFunc to return true")
+	}
+	afZeroCh := make(chan struct{})
+	afResetZero := fc.AfterFunc(10*time.Second, func() { close(afZeroCh) })
+	if !afResetZero.Reset(0) {
+		t.Fatalf("expected Reset(0) on active AfterFunc to return true")
+	}
+	<-afZeroCh
+	afReset.Stop()
+
 	// Mixed ticker + earlier timer must fire in chronological order with monotonic clock.
 	mixedTimerFired := make(chan time.Time, 1)
 	fc.AfterFunc(3*time.Second, func() { mixedTimerFired <- fc.Now() })

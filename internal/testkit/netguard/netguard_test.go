@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -54,9 +55,18 @@ func TestNetguardBlocksExternalEgressWithStackTraceNEG1(t *testing.T) {
 	}
 	assertBlockedWithStackTrace(t, err, "https://api.openai.com/v1/models")
 
-	// 2. Blocked external DNS lookup via net.DefaultResolver.
+	// 2. Blocked external DNS lookup via net.DefaultResolver (and unguarded hostname net.Dial).
 	_, dnsErr := net.LookupHost("api.openai.com")
 	assertBlockedWithStackTrace(t, dnsErr, "net.LookupHost(api.openai.com)")
+	_, lookupIPErr := net.LookupIP("api.openai.com")
+	assertBlockedWithStackTrace(t, lookupIPErr, "net.LookupIP(api.openai.com)")
+	_, lookupAddrErr := net.LookupAddr("8.8.8.8")
+	assertBlockedWithStackTrace(t, lookupAddrErr, "net.LookupAddr(8.8.8.8)")
+	rawHostConn, rawHostErr := net.Dial("tcp", "api.openai.com:443")
+	if rawHostConn != nil {
+		_ = rawHostConn.Close()
+	}
+	assertBlockedWithStackTrace(t, rawHostErr, "unguarded hostname net.Dial(api.openai.com:443)")
 
 	// 3. Blocked UDP socket dial to 8.8.8.8:53 via Dialer Control.
 	d := NewDialer()
@@ -66,7 +76,7 @@ func TestNetguardBlocksExternalEgressWithStackTraceNEG1(t *testing.T) {
 	}
 	assertBlockedWithStackTrace(t, udpErr, "UDP 8.8.8.8:53")
 
-	// 4. Blocked metadata / RFC1918 / wildcard / IPv6 addresses.
+	// 4. Blocked metadata / RFC1918 / wildcard / spoofed / IPv4-mapped IPv6 addresses.
 	for _, forbidden := range []string{
 		"",
 		"0.0.0.0:80",
@@ -76,6 +86,10 @@ func TestNetguardBlocksExternalEgressWithStackTraceNEG1(t *testing.T) {
 		"[fe80::1%eth0]:443",
 		"[2001:4860:4860::8888]:443",
 		"::ffff:169.254.169.254",
+		"[::ffff:8.8.8.8]:443",
+		"localhost.",
+		"127.0.0.1.nip.io:80",
+		"127.0.0.1:badport",
 		"exfil.attacker.example:443",
 	} {
 		assertBlockedWithStackTrace(t, CheckLoopbackAddr(forbidden), "CheckLoopbackAddr("+forbidden+")")
@@ -157,6 +171,57 @@ func TestNetguardAllowsLoopbackServersAndCustomTransport(t *testing.T) {
 		_ = tlsResp.Body.Close()
 	}
 	assertBlockedWithStackTrace(t, tlsErr, "WrapTransport DialTLSContext 1.1.1.1")
+}
+
+func TestNetguardBlocksRedirectAndProxyBypassAttempts(t *testing.T) {
+	InstallHermeticGuard(t)
+
+	// 1. Loopback server redirecting 302 to external API or cloud IMDS must be intercepted.
+	redirSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/imds" {
+			http.Redirect(w, r, "http://169.254.169.254/latest/meta-data/", http.StatusFound)
+			return
+		}
+		http.Redirect(w, r, "https://api.openai.com/v1/models", http.StatusFound)
+	}))
+	defer redirSrv.Close()
+
+	client := NewHTTPClient()
+	for _, path := range []string{"/openai", "/imds"} {
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, redirSrv.URL+path, nil)
+		if err != nil {
+			t.Fatalf("new redirect request: %v", err)
+		}
+		resp, doErr := client.Do(req)
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		assertBlockedWithStackTrace(t, doErr, "redirect bypass "+path)
+	}
+
+	// 2. Proxy bypass attempts (both external proxy host AND local proxy forwarding external URL).
+	t.Setenv("HTTP_PROXY", "http://exfil.attacker.example:8888")
+	t.Setenv("HTTPS_PROXY", "http://exfil.attacker.example:8888")
+	envProxyClient := &http.Client{
+		Transport: WrapTransport(&http.Transport{Proxy: http.ProxyFromEnvironment}),
+	}
+	reqExtProxy, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, redirSrv.URL+"/ok", nil)
+	respExtProxy, errExtProxy := envProxyClient.Do(reqExtProxy)
+	if respExtProxy != nil {
+		_ = respExtProxy.Body.Close()
+	}
+	assertBlockedWithStackTrace(t, errExtProxy, "HTTP_PROXY external proxy host")
+
+	localProxyURL, _ := url.Parse("http://127.0.0.1:8888")
+	localProxyClient := &http.Client{
+		Transport: WrapTransport(&http.Transport{Proxy: http.ProxyURL(localProxyURL)}),
+	}
+	reqExtTarget, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.openai.com/v1/models", nil)
+	respExtTarget, errExtTarget := localProxyClient.Do(reqExtTarget)
+	if respExtTarget != nil {
+		_ = respExtTarget.Body.Close()
+	}
+	assertBlockedWithStackTrace(t, errExtTarget, "local HTTP proxy forwarding external URL")
 }
 
 func TestNetguardCleanupRestoresResolverWhenNotMain(t *testing.T) {

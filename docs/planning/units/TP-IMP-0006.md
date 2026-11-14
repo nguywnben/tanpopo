@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0006` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified under `CGO_ENABLED=0` & `TANPOPO_TEST_HERMETIC=1` (`94.2%` statement coverage across `internal/testkit/...`, `-count=3` green, `0` `time.Sleep`); awaiting GitHub Actions Stage 0/1 CI (`-race`) and Lead Engineer acceptance before marking `DONE`)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified under `CGO_ENABLED=0` & `TANPOPO_TEST_HERMETIC=1` (`94.1%` total statement coverage across `./internal/testkit/...` via `go test -count=3 -coverprofile=...`, `0` `time.Sleep`, enhanced redirect/proxy/IPv4-mapped/DNS bypass tests); **blocked from `DONE` pending Product Owner decision on [`CR-11`](../../reviews/unresolved-gaps.md#part-c--implementation-phase-change-requests-pending-product-owner-decision)** regarding `http.DefaultTransport`/`http.Get` Floor Guard alignment, OS `unshare -n` isolation, and Stage 1 CI `-race -count=3` execution)* |
 | **Size** | `M` (`5` internal packages under `internal/testkit/*`) |
 | **Review Tier** | `STANDARD_REVIEW` |
 | **Technical Owner** | `QA Architect + Test Systems Engineer` |

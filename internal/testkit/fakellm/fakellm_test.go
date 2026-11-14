@@ -283,6 +283,43 @@ func TestFakeLLMServerFaultsDialectsAndClientCancel(t *testing.T) {
 		}
 	}
 
+	// Verify mid-stream client disconnect telemetry across OpenAI Chat, Responses, Anthropic, and Gemini.
+	for _, tc := range []struct {
+		path string
+		body string
+	}{
+		{"/v1/chat/completions?chunks=50000", `{"stream":true}`},
+		{"/v1/responses?chunks=50000", `{"stream":true}`},
+		{"/v1/messages?chunks=50000", `{"stream":true}`},
+		{"/v1beta/models/gemini-2.5-flash:streamGenerateContent?chunks=50000", `{"stream":true}`},
+	} {
+	drainDisconnects:
+		for {
+			select {
+			case <-srv.DisconnectEvents():
+			default:
+				break drainDisconnects
+			}
+		}
+		srv.ResetRequests()
+		streamCtx, cancelStream := context.WithCancel(context.Background())
+		req, _ := http.NewRequestWithContext(streamCtx, http.MethodPost, srv.URL()+tc.path, strings.NewReader(tc.body))
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("start long stream %s: %v", tc.path, err)
+		}
+		buf := make([]byte, 64)
+		_, _ = resp.Body.Read(buf)
+		cancelStream()
+		_ = resp.Body.Close()
+
+		select {
+		case <-srv.DisconnectEvents():
+		case <-time.After(2 * time.Second):
+			t.Fatalf("expected DisconnectEvents signal after mid-stream cancel on %s", tc.path)
+		}
+	}
+
 	srv.SetDefaultFault("")
 	srv.ResetRequests()
 	if len(srv.Requests()) != 0 {

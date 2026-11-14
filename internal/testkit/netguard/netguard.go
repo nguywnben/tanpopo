@@ -16,8 +16,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -67,7 +69,13 @@ func extractHost(addr string) (string, error) {
 	if trimmed == "" {
 		return "", fmt.Errorf("empty address")
 	}
-	if host, _, err := net.SplitHostPort(trimmed); err == nil {
+	if host, port, err := net.SplitHostPort(trimmed); err == nil {
+		if port != "" {
+			p, perr := strconv.Atoi(port)
+			if perr != nil || p < 0 || p > 65535 {
+				return "", fmt.Errorf("invalid port %q", port)
+			}
+		}
 		return host, nil
 	}
 	// Strip brackets from bare IPv6 literals such as "[::1]".
@@ -166,6 +174,30 @@ func WrapTransport(base *http.Transport) *http.Transport {
 			return nil, err
 		}
 		return origDial(ctx, network, addr)
+	}
+	if tr.Proxy != nil {
+		origProxy := tr.Proxy
+		tr.Proxy = func(req *http.Request) (*url.URL, error) {
+			if req != nil && req.URL != nil {
+				if err := CheckLoopbackAddr(req.URL.Host); err != nil {
+					if be, ok := err.(*BlockedEgressError); ok {
+						be.Network = "http-proxy-target"
+					}
+					return nil, err
+				}
+			}
+			proxyURL, err := origProxy(req)
+			if err != nil || proxyURL == nil {
+				return proxyURL, err
+			}
+			if perr := CheckLoopbackAddr(proxyURL.Host); perr != nil {
+				if be, ok := perr.(*BlockedEgressError); ok {
+					be.Network = "http-proxy"
+				}
+				return nil, perr
+			}
+			return proxyURL, nil
+		}
 	}
 	if tr.DialTLSContext != nil {
 		origDialTLS := tr.DialTLSContext
