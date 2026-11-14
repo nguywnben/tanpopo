@@ -422,6 +422,160 @@ func TestRegisterAuthenticatedStreamZeroTOCTOU(t *testing.T) {
 	}
 }
 
+func TestSnapshotStalenessWatcherStopAndLocalRevokeFenceFailClosed(t *testing.T) {
+	t.Parallel()
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	st := openTestSQLite(t, fk)
+	ctx := context.Background()
+
+	rawKey := "vk_tp_prod_0123456789abcdefABCDEF01234572"
+	_, _, envID, keyID := seedTenantAndKey(t, st, fk, rawKey, "prod", KeyStateCreatedActive)
+	mgr, err := NewManager(ctx, ManagerConfig{
+		DB:         st.RawDB(),
+		NowMs:      func() int64 { return fk.Now().UTC().UnixMilli() },
+		MaxStaleMs: 5_000,
+	})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	// 1. Healthy fresh snapshot admits stream & authenticates key.
+	sctx1, scancel1 := context.WithCancel(ctx)
+	defer scancel1()
+	if _, hid, err := mgr.RegisterAuthenticatedStream(rawKey, envID, scancel1); err != nil || hid == 0 {
+		t.Fatalf("healthy RegisterAuthenticatedStream failed: hid=%d err=%v", hid, err)
+	}
+
+	// 2. Advance clock past MaxStaleMs without poll -> Manager.AuthenticateKey & RegisterAuthenticatedStream fail closed (ErrSnapshotStale).
+	fk.Advance(6 * time.Second)
+	if !mgr.IsStale() {
+		t.Fatalf("expected IsStale=true after advancing past MaxStaleMs")
+	}
+	if _, err := mgr.AuthenticateKey(rawKey, envID); !errors.Is(err, ErrSnapshotStale) {
+		t.Fatalf("stale Manager.AuthenticateKey expected ErrSnapshotStale, got %v", err)
+	}
+	_, scancelStale := context.WithCancel(ctx)
+	defer scancelStale()
+	if _, _, err := mgr.RegisterAuthenticatedStream(rawKey, envID, scancelStale); !errors.Is(err, ErrSnapshotStale) {
+		t.Fatalf("stale RegisterAuthenticatedStream expected ErrSnapshotStale, got %v", err)
+	}
+	if got := mgr.Streams().ActiveCount(); got != 1 {
+		t.Fatalf("expected stale registration not to leak stream handle (want 1, got %d)", got)
+	}
+
+	// Refresh restores freshness before testing watcher stop.
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatalf("Refresh restore: %v", err)
+	}
+	if mgr.IsStale() {
+		t.Fatalf("expected IsStale=false after Refresh")
+	}
+
+	// 3. Starting and stopping StartWatcher causes immediate fail closed (ErrSnapshotWatcherStopped) even before 5s elapses.
+	watchCtx, cancelWatch := context.WithCancel(ctx)
+	var watchWG sync.WaitGroup
+	watchWG.Add(1)
+	go func() {
+		defer watchWG.Done()
+		mgr.StartWatcher(watchCtx, 25*time.Millisecond)
+	}()
+	// Wait briefly for watcher to mark started, then cancel it.
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for !mgr.watcherStarted.Load() && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+	cancelWatch()
+	watchWG.Wait()
+
+	if !mgr.IsWatcherStopped() {
+		t.Fatalf("expected IsWatcherStopped=true after watcher context canceled")
+	}
+	if _, err := mgr.AuthenticateKey(rawKey, envID); !errors.Is(err, ErrSnapshotWatcherStopped) {
+		t.Fatalf("stopped watcher AuthenticateKey expected ErrSnapshotWatcherStopped, got %v", err)
+	}
+	_, scancelStopped := context.WithCancel(ctx)
+	defer scancelStopped()
+	if _, _, err := mgr.RegisterAuthenticatedStream(rawKey, envID, scancelStopped); !errors.Is(err, ErrSnapshotWatcherStopped) {
+		t.Fatalf("stopped watcher RegisterAuthenticatedStream expected ErrSnapshotWatcherStopped, got %v", err)
+	}
+
+	// 4. Local FenceKeyRevocation aborts active stream immediately, blocks rawKey on Current(),
+	// refuses downgrade to SUSPENDED, and survives lagged Refresh where Epoch < minEpoch.
+	mgr2, err := NewManager(ctx, ManagerConfig{
+		DB:         st.RawDB(),
+		NowMs:      func() int64 { return fk.Now().UTC().UnixMilli() },
+		MaxStaleMs: 10_000,
+	})
+	if err != nil {
+		t.Fatalf("NewManager 2: %v", err)
+	}
+	sctx2, scancel2 := context.WithCancel(ctx)
+	defer scancel2()
+	if _, _, err := mgr2.RegisterAuthenticatedStream(rawKey, envID, scancel2); err != nil {
+		t.Fatalf("mgr2 RegisterAuthenticatedStream failed: %v", err)
+	}
+
+	curEpoch := mgr2.Current().Epoch
+	nowMs := fk.Now().UTC().UnixMilli()
+	mgr2.FenceKeyRevocation(keyID, "EMERGENCY_SECURITY", nowMs, curEpoch+10)
+
+	if sctx1.Err() != nil {
+		// sctx1 belonged to mgr (not mgr2), verify isolation; sctx2 on mgr2 must be aborted!
+		t.Fatalf("unrelated manager stream should remain untouched")
+	}
+	if sctx2.Err() == nil {
+		t.Fatalf("expected FenceKeyRevocation to abort existing active stream on mgr2")
+	}
+	if _, err := mgr2.Current().AuthenticateKey(rawKey, envID, nowMs); !errors.Is(err, ErrKeyRevoked) {
+		t.Fatalf("expected Current().AuthenticateKey ErrKeyRevoked after FenceKeyRevocation, got %v", err)
+	}
+	if _, _, err := mgr2.RegisterAuthenticatedStream(rawKey, envID, scancel2); !errors.Is(err, ErrKeyRevoked) {
+		t.Fatalf("post-fence RegisterAuthenticatedStream expected ErrKeyRevoked, got %v", err)
+	}
+
+	// Non-downgrade invariant: FenceKeyRestrictiveState cannot weaken REVOKED -> SUSPENDED.
+	mgr2.FenceKeyRestrictiveState(keyID, KeyStateSuspended, nowMs, curEpoch+11)
+	if _, err := mgr2.Current().AuthenticateKey(rawKey, envID, nowMs); !errors.Is(err, ErrKeyRevoked) {
+		t.Fatalf("expected REVOKED fence not to downgrade to SUSPENDED, got %v", err)
+	}
+
+	// Simulate lagged Refresh (force rebuild at Epoch < curEpoch+10 by bumping changelog once without updating key row):
+	// monotonicity must preserve REVOKED state on rebuilt snapshot!
+	if _, err := st.RawDB().ExecContext(ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) SELECT org_id, 'virtual_key', id, 'UPSERT', 0, ? FROM virtual_keys WHERE id = ?`, nowMs, keyID); err != nil {
+		t.Fatalf("insert synthetic lagging changelog: %v", err)
+	}
+	if err := mgr2.Refresh(ctx); err != nil {
+		t.Fatalf("lagging Refresh: %v", err)
+	}
+	if _, err := mgr2.Current().AuthenticateKey(rawKey, envID, nowMs); !errors.Is(err, ErrKeyRevoked) {
+		t.Fatalf("expected lagged Refresh (Epoch < minEpoch) to preserve REVOKED fence, got %v", err)
+	}
+
+	// Concurrent race coverage across RegisterAuthenticatedStream, AuthenticateKey, Refresh, and FenceKeyRevocation.
+	var raceWG sync.WaitGroup
+	for g := 0; g < 6; g++ {
+		raceWG.Add(1)
+		go func(id int) {
+			defer raceWG.Done()
+			for i := 0; i < 15; i++ {
+				_, cFn := context.WithCancel(ctx)
+				_, hid, _ := mgr2.RegisterAuthenticatedStream(rawKey, envID, cFn)
+				if hid != 0 {
+					mgr2.Streams().Unregister(keyID, hid)
+				}
+				cFn()
+				_, _ = mgr2.AuthenticateKey(rawKey, envID)
+				if id%2 == 0 {
+					_ = mgr2.Refresh(ctx)
+				} else {
+					mgr2.FenceKeyRevocation(keyID, "EMERGENCY_SECURITY", nowMs, curEpoch+10)
+				}
+			}
+		}(g)
+	}
+	raceWG.Wait()
+}
+
 func BenchmarkSnapshotLookup(b *testing.B) {
 	fk := clock.NewFakeClock(clock.DefaultFakeStart())
 	dbPath := filepath.Join(b.TempDir(), "bench.db")

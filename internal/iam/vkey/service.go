@@ -40,6 +40,7 @@ const (
 var (
 	ErrInvalidStateTransition = errors.New("vkey: invalid SM-05 state transition")
 	ErrAlreadyRevoked         = errors.New("vkey: key already revoked")
+	ErrSnapshotSyncFailed     = errors.New("vkey: database mutation committed but snapshot refresh failed")
 )
 
 // CreateParams configures creation of a new Environment-bound Virtual Key (TP-BR-0103).
@@ -112,11 +113,15 @@ type CreatedVirtualKey struct {
 }
 
 // ServiceConfig configures Virtual Key lifecycle management.
+// Snapshots is REQUIRED by default to uphold ADR-0006 standalone emergency revocation (< 1s)
+// and fail-closed CoW fencing. Set AllowDetachedControlPlane=true ONLY for split control-plane
+// deployments where separate cluster propagation handles Data Plane node invalidation (TP-IMP-0040).
 type ServiceConfig struct {
-	DB        *sql.DB
-	NowMs     func() int64
-	Snapshots *snapshot.Manager
-	AuditSink port.AuditSink
+	DB                        *sql.DB
+	NowMs                     func() int64
+	Snapshots                 *snapshot.Manager
+	AllowDetachedControlPlane bool
+	AuditSink                 port.AuditSink
 }
 
 // Service manages SM-05 Virtual Key persistence, hashing, rotation, and revocation.
@@ -131,6 +136,9 @@ type Service struct {
 func NewService(cfg ServiceConfig) (*Service, error) {
 	if cfg.DB == nil {
 		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", port.ErrInvalidInput)
+	}
+	if cfg.Snapshots == nil && !cfg.AllowDetachedControlPlane {
+		return nil, fmt.Errorf("%w: non-nil snapshot.Manager is required unless AllowDetachedControlPlane is explicitly enabled", port.ErrInvalidInput)
 	}
 	nowFn := cfg.NowMs
 	if nowFn == nil {
@@ -278,9 +286,9 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (*CreatedVirt
 		return nil, err
 	}
 
-	s.syncSnapshot(ctx)
+	syncErr := s.syncSnapshot(ctx)
 
-	return &CreatedVirtualKey{
+	created := &CreatedVirtualKey{
 		Summary: VirtualKeySummary{
 			ID:                    keyID,
 			OrgID:                 params.OrgID,
@@ -305,7 +313,11 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (*CreatedVirt
 			UpdatedAtMs:           now,
 		},
 		SecretKey: rawSecret,
-	}, nil
+	}
+	if syncErr != nil {
+		return created, syncErr
+	}
+	return created, nil
 }
 
 // Get fetches read-safe Virtual Key metadata scoped strictly to orgID (AUTH-15).
@@ -407,13 +419,15 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 		return nil, port.ErrVersionConflict
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	resEpoch, err := tx.ExecContext(ctx, `
 		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
 		VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
 		params.OrgID, params.KeyID, port.MutationUpsert, now,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
+	committedEpoch := latestTxEpoch(ctx, tx, resEpoch)
 
 	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, `
 		SELECT
@@ -431,12 +445,22 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 		return nil, err
 	}
 
-	s.syncSnapshot(ctx)
-
-	return &CreatedVirtualKey{
+	rotated := &CreatedVirtualKey{
 		Summary:   *summary,
 		SecretKey: rawSecret,
-	}, nil
+	}
+	if syncErr := s.syncSnapshot(ctx); syncErr != nil {
+		if s.snapshots != nil {
+			if params.GraceSeconds == 0 {
+				s.snapshots.FenceInvalidateKeyDigest(params.KeyID, now, committedEpoch)
+			} else if curState == snapshot.KeyStateRotatingDualValid {
+				s.snapshots.FenceExpirePreviousKeyGrace(params.KeyID, now, committedEpoch)
+			}
+		}
+		return rotated, syncErr
+	}
+
+	return rotated, nil
 }
 
 // MarkQuotaPaused transitions an active or rotating key into QUOTA_PAUSED (SM-05).
@@ -544,13 +568,15 @@ func (s *Service) transitionState(ctx context.Context, orgID, keyID string, expe
 		return nil, port.ErrVersionConflict
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	resEpoch, err := tx.ExecContext(ctx, `
 		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
 		VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
 		orgID, keyID, port.MutationUpsert, now,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
+	committedEpoch := latestTxEpoch(ctx, tx, resEpoch)
 
 	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, `
 		SELECT
@@ -568,7 +594,12 @@ func (s *Service) transitionState(ctx context.Context, orgID, keyID string, expe
 		return nil, err
 	}
 
-	s.syncSnapshot(ctx)
+	if syncErr := s.syncSnapshot(ctx); syncErr != nil {
+		if (nextState == snapshot.KeyStateSuspended || nextState == snapshot.KeyStateQuotaPaused) && s.snapshots != nil {
+			s.snapshots.FenceKeyRestrictiveState(keyID, nextState, now, committedEpoch)
+		}
+		return summary, syncErr
+	}
 	return summary, nil
 }
 
@@ -642,13 +673,15 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 	if emergency {
 		emInt = 1
 	}
-	if _, err := tx.ExecContext(ctx, `
+	resEpoch, err := tx.ExecContext(ctx, `
 		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
 		VALUES (?, 'virtual_key', ?, ?, ?, ?)`,
 		params.OrgID, params.KeyID, port.MutationRevoke, emInt, now,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
+	committedEpoch := latestTxEpoch(ctx, tx, resEpoch)
 
 	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, `
 		SELECT
@@ -666,18 +699,28 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 		return nil, err
 	}
 
-	s.syncSnapshot(ctx)
-	if emergency && s.snapshots != nil && s.snapshots.Streams() != nil {
+	syncErr := s.syncSnapshot(ctx)
+	if syncErr != nil && s.snapshots != nil {
+		// Fail closed in local RAM immediately and preserve active stream cancellation
+		// without falsely claiming Refresh succeeded.
+		s.snapshots.FenceKeyRevocation(params.KeyID, mode, now, committedEpoch)
+	}
+	if (emergency || syncErr != nil) && s.snapshots != nil && s.snapshots.Streams() != nil {
 		s.snapshots.Streams().AbortKey(params.KeyID)
 	}
 
 	if s.auditSink != nil {
+		auditCtx := context.WithoutCancel(ctx)
 		if audID, idErr := idgen.New(idgen.PrefixAudit); idErr == nil {
 			actor := strings.TrimSpace(params.ActorID)
 			if actor == "" {
 				actor = "system"
 			}
-			_ = s.auditSink.Append(ctx, port.AuditEvent{
+			meta := fmt.Sprintf(`{"mode":%q}`, mode)
+			if syncErr != nil {
+				meta = fmt.Sprintf(`{"mode":%q,"snapshot_sync_pending":true}`, mode)
+			}
+			_ = s.auditSink.Append(auditCtx, port.AuditEvent{
 				ID:           audID,
 				CreatedAtMs:  now,
 				OrgID:        &params.OrgID,
@@ -687,11 +730,14 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 				EventType:    "virtual_key.revoked",
 				TargetType:   "virtual_key",
 				TargetID:     params.KeyID,
-				MetadataJSON: fmt.Sprintf(`{"mode":%q}`, mode),
+				MetadataJSON: meta,
 			})
 		}
 	}
 
+	if syncErr != nil {
+		return summary, syncErr
+	}
 	return summary, nil
 }
 
@@ -731,38 +777,79 @@ func (s *Service) FinalizeExpiredRotations(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 
+	var (
+		committedEpoch int64
+		finalized      []keyRef
+	)
 	for _, r := range due {
-		if _, err := tx.ExecContext(ctx, `
+		updRes, err := tx.ExecContext(ctx, `
 			UPDATE virtual_keys
 			SET state = 'CREATED_ACTIVE', previous_key_hash = NULL, grace_expires_at_ms = NULL,
 			    version = version + 1, updated_at_ms = ?
 			WHERE org_id = ? AND id = ? AND state = 'ROTATING_DUAL_VALID' AND grace_expires_at_ms IS NOT NULL AND grace_expires_at_ms <= ?`,
 			now, r.orgID, r.id, now,
-		); err != nil {
+		)
+		if err != nil {
 			return 0, fmt.Errorf("vkey: finalize expired rotation %s: %w", r.id, err)
 		}
-		if _, err := tx.ExecContext(ctx, `
+		affected, err := updRes.RowsAffected()
+		if err != nil {
+			return 0, fmt.Errorf("vkey: rows affected finalizing %s: %w", r.id, err)
+		}
+		if affected == 0 {
+			continue
+		}
+		resEpoch, err := tx.ExecContext(ctx, `
 			INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
 			VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
 			r.orgID, r.id, port.MutationUpsert, now,
-		); err != nil {
+		)
+		if err != nil {
 			return 0, err
 		}
+		committedEpoch = latestTxEpoch(ctx, tx, resEpoch)
+		finalized = append(finalized, r)
 	}
 
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
-	s.syncSnapshot(ctx)
-	return len(due), nil
+	if len(finalized) == 0 {
+		return 0, nil
+	}
+	if syncErr := s.syncSnapshot(ctx); syncErr != nil {
+		if s.snapshots != nil {
+			for _, r := range finalized {
+				s.snapshots.FenceExpirePreviousKeyGrace(r.id, now, committedEpoch)
+			}
+		}
+		return len(finalized), syncErr
+	}
+	return len(finalized), nil
 }
 
-func (s *Service) syncSnapshot(ctx context.Context) {
+func (s *Service) syncSnapshot(ctx context.Context) error {
 	if s.snapshots == nil {
-		return
+		return nil
 	}
-	_ = s.snapshots.Refresh(ctx)
 	s.snapshots.Notify()
+	if err := s.snapshots.Refresh(ctx); err != nil {
+		return fmt.Errorf("%w: %w", ErrSnapshotSyncFailed, err)
+	}
+	return nil
+}
+
+func latestTxEpoch(ctx context.Context, tx *sql.Tx, insertRes sql.Result) int64 {
+	if insertRes != nil {
+		if id, err := insertRes.LastInsertId(); err == nil && id > 0 {
+			return id
+		}
+	}
+	var epoch sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT MAX(config_epoch) FROM config_changelog`).Scan(&epoch); err == nil && epoch.Valid {
+		return epoch.Int64
+	}
+	return 0
 }
 
 func generateVirtualKey(envSlug string) (rawSecret, keyPrefix, lastFour string, digest [32]byte, err error) {

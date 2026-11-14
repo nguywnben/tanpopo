@@ -43,6 +43,8 @@ const (
 // Hot-path Virtual Key authentication error sentinels mapped to canonical HTTP codes.
 var (
 	ErrSnapshotNotLoaded      = errors.New("snapshot: configuration snapshot not yet initialized")
+	ErrSnapshotStale          = errors.New("snapshot: configuration snapshot is stale")
+	ErrSnapshotWatcherStopped = errors.New("snapshot: configuration snapshot watcher stopped")
 	ErrKeyNotFound            = errors.New("snapshot: invalid virtual key")
 	ErrKeyRevoked             = errors.New("snapshot: virtual_key_revoked")
 	ErrKeyExpired             = errors.New("snapshot: virtual_key_expired")
@@ -406,6 +408,22 @@ type ManagerConfig struct {
 	Streams    *ActiveStreamRegistry
 }
 
+type fenceAction uint8
+
+const (
+	fenceRestrictState fenceAction = iota + 1
+	fenceInvalidateDigest
+	fenceExpirePrevGrace
+)
+
+type localKeyFence struct {
+	action         fenceAction
+	state          string
+	revocationMode *string
+	updatedAtMs    int64
+	minEpoch       int64
+}
+
 // Manager atomically publishes immutable ConfigSnapshot updates by tailing config_changelog
 // and aborts active SSE streams immediately on emergency revocations/shreds.
 type Manager struct {
@@ -415,9 +433,12 @@ type Manager struct {
 	streams           *ActiveStreamRegistry
 	snap              atomic.Pointer[ConfigSnapshot]
 	lastPollSuccessMs atomic.Int64
+	watcherStarted    atomic.Bool
+	watcherStopped    atomic.Bool
 	lastRefreshErrMu  sync.Mutex
 	lastRefreshErr    error
 	refreshMu         sync.Mutex
+	pendingFences     map[string]localKeyFence
 	wakeCh            chan struct{}
 }
 
@@ -439,11 +460,12 @@ func NewManager(ctx context.Context, cfg ManagerConfig) (*Manager, error) {
 		streams = NewActiveStreamRegistry()
 	}
 	m := &Manager{
-		db:         cfg.DB,
-		nowMs:      nowFn,
-		maxStaleMs: maxStale,
-		streams:    streams,
-		wakeCh:     make(chan struct{}, 1),
+		db:            cfg.DB,
+		nowMs:         nowFn,
+		maxStaleMs:    maxStale,
+		streams:       streams,
+		pendingFences: make(map[string]localKeyFence),
+		wakeCh:        make(chan struct{}, 1),
 	}
 	if err := m.Refresh(ctx); err != nil {
 		return nil, err
@@ -490,6 +512,45 @@ func (m *Manager) IsStale() bool {
 	return (m.nowMs() - last) > m.maxStaleMs
 }
 
+// IsWatcherStopped reports whether a previously started background watcher has exited.
+func (m *Manager) IsWatcherStopped() bool {
+	if m == nil {
+		return false
+	}
+	return m.watcherStarted.Load() && m.watcherStopped.Load()
+}
+
+// CheckServingReady enforces ADR-0006 fail-closed circuit-breaker invariants for Data Plane traffic:
+// fails closed when no snapshot is loaded, an active watcher has stopped, or staleness exceeds MaxStaleMs.
+func (m *Manager) CheckServingReady() error {
+	if m == nil || m.snap.Load() == nil {
+		return ErrSnapshotNotLoaded
+	}
+	if m.IsWatcherStopped() {
+		return ErrSnapshotWatcherStopped
+	}
+	if m.IsStale() {
+		return ErrSnapshotStale
+	}
+	return nil
+}
+
+// AuthenticateKey validates rawKey using the latest snapshot after enforcing fail-closed readiness/staleness checks.
+func (m *Manager) AuthenticateKey(rawKey, targetEnvID string) (KeyMatchResult, error) {
+	if err := m.CheckServingReady(); err != nil {
+		return KeyMatchResult{}, err
+	}
+	return m.snap.Load().AuthenticateKey(rawKey, targetEnvID, m.nowMs())
+}
+
+// AuthenticateDigest validates digest using the latest snapshot after enforcing fail-closed readiness/staleness checks.
+func (m *Manager) AuthenticateDigest(digest [32]byte, targetEnvID string) (KeyMatchResult, error) {
+	if err := m.CheckServingReady(); err != nil {
+		return KeyMatchResult{}, err
+	}
+	return m.snap.Load().AuthenticateDigest(digest, targetEnvID, m.nowMs())
+}
+
 // LastError returns the most recent poll/refresh error, if any.
 func (m *Manager) LastError() error {
 	if m == nil {
@@ -505,6 +566,10 @@ func (m *Manager) StartWatcher(ctx context.Context, interval time.Duration) {
 	if m == nil {
 		return
 	}
+	m.watcherStopped.Store(false)
+	m.watcherStarted.Store(true)
+	defer m.watcherStopped.Store(true)
+
 	if interval <= 0 {
 		interval = DefaultPollInterval
 	}
@@ -523,15 +588,15 @@ func (m *Manager) StartWatcher(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// RegisterAuthenticatedStream atomically authenticates rawKey, registers cancel in
-// ActiveStreamRegistry, and re-verifies the latest snapshot post-registration so a
-// concurrent emergency revocation can never miss an in-flight stream (zero TOCTOU — AUTH-06).
+// RegisterAuthenticatedStream enforces staleness/watcher circuit breaking, atomically authenticates rawKey,
+// registers cancel in ActiveStreamRegistry, and re-verifies readiness and the latest snapshot post-registration
+// so a concurrent emergency revocation or staleness rollover can never admit a new stream (zero TOCTOU — AUTH-06).
 func (m *Manager) RegisterAuthenticatedStream(rawKey, targetEnvID string, cancel context.CancelFunc) (KeyMatchResult, uint64, error) {
-	if m == nil {
-		return KeyMatchResult{}, 0, ErrSnapshotNotLoaded
-	}
 	if cancel == nil {
 		return KeyMatchResult{}, 0, fmt.Errorf("%w: non-nil cancel function required", port.ErrInvalidInput)
+	}
+	if err := m.CheckServingReady(); err != nil {
+		return KeyMatchResult{}, 0, err
 	}
 	nowMs := m.nowMs()
 	res, err := m.snap.Load().AuthenticateKey(rawKey, targetEnvID, nowMs)
@@ -541,8 +606,12 @@ func (m *Manager) RegisterAuthenticatedStream(rawKey, targetEnvID string, cancel
 
 	handleID := m.streams.Register(res.Key.OrgID, res.Key.ProjectID, res.Key.ID, cancel)
 
-	// Re-check against the latest atomic snapshot after Register() so if Refresh() stored a
-	// revoked snapshot and already called AbortKey() concurrently, we still fail closed.
+	// Re-check readiness and the latest atomic snapshot after Register() so if Refresh()/FenceKey* stored
+	// a revoked snapshot or the manager went stale concurrently, we still unregister and fail closed.
+	if err := m.CheckServingReady(); err != nil {
+		m.streams.Unregister(res.Key.ID, handleID)
+		return KeyMatchResult{}, 0, err
+	}
 	res2, err2 := m.snap.Load().AuthenticateKey(rawKey, targetEnvID, m.nowMs())
 	if err2 != nil {
 		m.streams.Unregister(res.Key.ID, handleID)
@@ -584,8 +653,9 @@ func (m *Manager) Refresh(ctx context.Context) error {
 		targetEpoch = latestEpoch.Int64
 	}
 
-	// Fast-path heartbeat when config_changelog has not advanced since last snapshot build.
-	if cur != nil && targetEpoch == prevEpoch {
+	// Fast-path heartbeat when config_changelog has not advanced since last snapshot build,
+	// unless a local fence requires a newer minEpoch not yet visible to this reader.
+	if cur != nil && targetEpoch == prevEpoch && !m.hasPendingFenceAheadOfLocked(targetEpoch) {
 		_ = tx.Commit()
 		m.lastPollSuccessMs.Store(m.nowMs())
 		m.setLastErr(nil)
@@ -625,6 +695,8 @@ func (m *Manager) Refresh(ctx context.Context) error {
 		effectiveConfigs: effective,
 	}
 
+	m.applyAndPruneFencesLocked(next, targetEpoch)
+
 	m.snap.Store(next)
 	m.lastPollSuccessMs.Store(next.LoadedAtMs)
 	m.setLastErr(nil)
@@ -640,6 +712,205 @@ func (m *Manager) Refresh(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// FenceKeyRevocation immediately applies a local Copy-on-Write REVOKED state fence in RAM
+// and aborts matching active streams when DB revocation committed but Refresh failed.
+// It preserves current Epoch, staleness tracking, and LastError so background polling must still catch up.
+func (m *Manager) FenceKeyRevocation(keyID, mode string, nowMs, minEpoch int64) {
+	if m == nil || strings.TrimSpace(keyID) == "" {
+		return
+	}
+	var modeCopy *string
+	if strings.TrimSpace(mode) != "" {
+		v := mode
+		modeCopy = &v
+	}
+	f := localKeyFence{
+		action:         fenceRestrictState,
+		state:          KeyStateRevoked,
+		revocationMode: modeCopy,
+		updatedAtMs:    nowMs,
+		minEpoch:       minEpoch,
+	}
+	m.applyLocalFence(keyID, f, true)
+}
+
+// FenceKeyRestrictiveState immediately applies a local CoW restrictive state (SUSPENDED or QUOTA_PAUSED)
+// in RAM when a DB state transition committed cleanly but snapshot Refresh failed.
+func (m *Manager) FenceKeyRestrictiveState(keyID, state string, nowMs, minEpoch int64) {
+	if m == nil || strings.TrimSpace(keyID) == "" {
+		return
+	}
+	if state != KeyStateSuspended && state != KeyStateQuotaPaused && state != KeyStateRevoked {
+		return
+	}
+	f := localKeyFence{
+		action:      fenceRestrictState,
+		state:       state,
+		updatedAtMs: nowMs,
+		minEpoch:    minEpoch,
+	}
+	m.applyLocalFence(keyID, f, state == KeyStateRevoked)
+}
+
+// FenceInvalidateKeyDigest immediately removes key digests for keyID from the live in-RAM snapshot
+// when a zero-grace rotation committed in DB but Refresh failed, preventing old-secret reuse.
+func (m *Manager) FenceInvalidateKeyDigest(keyID string, nowMs, minEpoch int64) {
+	if m == nil || strings.TrimSpace(keyID) == "" {
+		return
+	}
+	f := localKeyFence{
+		action:      fenceInvalidateDigest,
+		updatedAtMs: nowMs,
+		minEpoch:    minEpoch,
+	}
+	m.applyLocalFence(keyID, f, false)
+}
+
+// FenceExpirePreviousKeyGrace immediately strips the previous grace key digest for keyID from
+// the live in-RAM snapshot when grace finalization committed in DB but Refresh failed.
+func (m *Manager) FenceExpirePreviousKeyGrace(keyID string, nowMs, minEpoch int64) {
+	if m == nil || strings.TrimSpace(keyID) == "" {
+		return
+	}
+	f := localKeyFence{
+		action:      fenceExpirePrevGrace,
+		updatedAtMs: nowMs,
+		minEpoch:    minEpoch,
+	}
+	m.applyLocalFence(keyID, f, false)
+}
+
+func (m *Manager) applyLocalFence(keyID string, f localKeyFence, abortStreams bool) {
+	m.refreshMu.Lock()
+	if m.pendingFences == nil {
+		m.pendingFences = make(map[string]localKeyFence)
+	}
+	// Never downgrade an already-committed local REVOKED fence (SM-05 terminal invariant).
+	if prev, ok := m.pendingFences[keyID]; ok && prev.state == KeyStateRevoked && f.state != KeyStateRevoked {
+		m.refreshMu.Unlock()
+		return
+	}
+	if prev, ok := m.pendingFences[keyID]; ok && prev.minEpoch > f.minEpoch {
+		f.minEpoch = prev.minEpoch
+	}
+	m.pendingFences[keyID] = f
+
+	if cur := m.snap.Load(); cur != nil {
+		patched := cloneSnapshotWithSingleFence(cur, keyID, f)
+		m.snap.Store(patched)
+	}
+	m.refreshMu.Unlock()
+
+	if abortStreams && m.streams != nil {
+		m.streams.AbortKey(keyID)
+	}
+}
+
+func (m *Manager) hasPendingFenceAheadOfLocked(targetEpoch int64) bool {
+	for _, f := range m.pendingFences {
+		if f.minEpoch > 0 && targetEpoch < f.minEpoch {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) applyAndPruneFencesLocked(next *ConfigSnapshot, targetEpoch int64) {
+	for keyID, f := range m.pendingFences {
+		caughtUp := f.minEpoch == 0 || targetEpoch >= f.minEpoch
+		if caughtUp {
+			if f.action == fenceRestrictState && f.state == KeyStateRevoked {
+				if v, ok := next.byKeyID[keyID]; ok && v.State != KeyStateRevoked && v.State != KeyStatePurgedMetadataRetained {
+					// Defensive monotonicity: never un-revoke even if a stale read snapshot lagged behind commit.
+					applyFenceToSnapshotMaps(next, keyID, f)
+					continue
+				}
+			}
+			delete(m.pendingFences, keyID)
+			continue
+		}
+		applyFenceToSnapshotMaps(next, keyID, f)
+	}
+}
+
+func cloneSnapshotWithSingleFence(src *ConfigSnapshot, keyID string, f localKeyFence) *ConfigSnapshot {
+	dst := &ConfigSnapshot{
+		Epoch:            src.Epoch,
+		LoadedAtMs:       src.LoadedAtMs,
+		byActiveHash:     make(map[[32]byte]*VirtualKeyView, len(src.byActiveHash)),
+		byPrevHash:       make(map[[32]byte]*VirtualKeyView, len(src.byPrevHash)),
+		byKeyID:          make(map[string]*VirtualKeyView, len(src.byKeyID)),
+		effectiveConfigs: src.effectiveConfigs,
+	}
+	for k, v := range src.byActiveHash {
+		dst.byActiveHash[k] = v
+	}
+	for k, v := range src.byPrevHash {
+		dst.byPrevHash[k] = v
+	}
+	for k, v := range src.byKeyID {
+		dst.byKeyID[k] = v
+	}
+	applyFenceToSnapshotMaps(dst, keyID, f)
+	return dst
+}
+
+func applyFenceToSnapshotMaps(snap *ConfigSnapshot, keyID string, f localKeyFence) {
+	orig, ok := snap.byKeyID[keyID]
+	if !ok || orig == nil {
+		return
+	}
+	switch f.action {
+	case fenceRestrictState:
+		if orig.State == KeyStateRevoked || orig.State == KeyStatePurgedMetadataRetained {
+			return
+		}
+		cloned := *orig
+		cloned.State = f.state
+		if f.state == KeyStateRevoked {
+			now := f.updatedAtMs
+			cloned.RevokedAtMs = &now
+			cloned.RevocationMode = f.revocationMode
+			cloned.GraceExpiresAtMs = nil
+		}
+		snap.byKeyID[keyID] = &cloned
+		if cur := snap.byActiveHash[cloned.ActiveKeyHash]; cur != nil && cur.ID == keyID {
+			snap.byActiveHash[cloned.ActiveKeyHash] = &cloned
+		}
+		if cloned.HasPreviousKeyHash {
+			if cur := snap.byPrevHash[cloned.PreviousKeyHash]; cur != nil && cur.ID == keyID {
+				snap.byPrevHash[cloned.PreviousKeyHash] = &cloned
+			}
+		}
+	case fenceInvalidateDigest:
+		if cur := snap.byActiveHash[orig.ActiveKeyHash]; cur != nil && cur.ID == keyID {
+			delete(snap.byActiveHash, orig.ActiveKeyHash)
+		}
+		if orig.HasPreviousKeyHash {
+			if cur := snap.byPrevHash[orig.PreviousKeyHash]; cur != nil && cur.ID == keyID {
+				delete(snap.byPrevHash, orig.PreviousKeyHash)
+			}
+		}
+	case fenceExpirePrevGrace:
+		cloned := *orig
+		if cloned.HasPreviousKeyHash {
+			if cur := snap.byPrevHash[cloned.PreviousKeyHash]; cur != nil && cur.ID == keyID {
+				delete(snap.byPrevHash, cloned.PreviousKeyHash)
+			}
+			cloned.HasPreviousKeyHash = false
+			cloned.PreviousKeyHash = [32]byte{}
+			cloned.GraceExpiresAtMs = nil
+			if cloned.State == KeyStateRotatingDualValid {
+				cloned.State = KeyStateCreatedActive
+			}
+			snap.byKeyID[keyID] = &cloned
+			if cur := snap.byActiveHash[cloned.ActiveKeyHash]; cur != nil && cur.ID == keyID {
+				snap.byActiveHash[cloned.ActiveKeyHash] = &cloned
+			}
+		}
+	}
 }
 
 func (m *Manager) setLastErr(err error) {

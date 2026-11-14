@@ -522,6 +522,298 @@ func TestVirtualKeySuspendReactivateTTLExpiryAndCanaryHygiene(t *testing.T) {
 	}
 }
 
+func TestNewServiceRequiresSnapshotsUnlessDetachedOptIn(t *testing.T) {
+	t.Parallel()
+	h := newVKeyTestHarness(t)
+
+	if _, err := NewService(ServiceConfig{DB: h.st.RawDB()}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("NewService with nil Snapshots and default config expected ErrInvalidInput, got %v", err)
+	}
+	detached, err := NewService(ServiceConfig{
+		DB:                        h.st.RawDB(),
+		AllowDetachedControlPlane: true,
+	})
+	if err != nil || detached == nil {
+		t.Fatalf("NewService with explicit AllowDetachedControlPlane=true failed: %v", err)
+	}
+}
+
+type syncedAuditRecorder struct {
+	mu     sync.Mutex
+	events []port.AuditEvent
+}
+
+func (r *syncedAuditRecorder) Append(_ context.Context, ev port.AuditEvent) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, ev)
+	return nil
+}
+
+func (r *syncedAuditRecorder) Count(eventType string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, ev := range r.events {
+		if ev.EventType == eventType {
+			n++
+		}
+	}
+	return n
+}
+
+func TestRevokeAndTransitionsRefreshFailureFailClosedWithoutRollbackOrLostAudit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	dbPath := filepath.Join(t.TempDir(), "split-sync.db")
+
+	dbWrite, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: dbPath,
+		NowMs:  func() int64 { return fk.Now().UTC().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open write: %v", err)
+	}
+	t.Cleanup(func() { _ = dbWrite.Close() })
+
+	// Separate reader pool modeling Control/Data snapshot reader connection so we can trigger a real
+	// post-commit Refresh failure without mocks and without rolling back dbWrite.
+	dbRead, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath:      dbPath,
+		NowMs:       func() int64 { return fk.Now().UTC().UnixMilli() },
+		SkipMigrate: true,
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open read: %v", err)
+	}
+	defer func() { _ = dbRead.Close() }()
+
+	org, err := dbWrite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "sync-org", DisplayName: "Sync Org"})
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+	proj, err := dbWrite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "sync-proj", DisplayName: "Sync Proj"})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	envProd, err := dbWrite.Tenancy().CreateEnvironment(ctx, org.ID, proj.ID, port.CreateEnvironmentParams{Slug: "prod"})
+	if err != nil {
+		t.Fatalf("CreateEnvironment: %v", err)
+	}
+
+	mgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{
+		DB:         dbRead.RawDB(),
+		NowMs:      func() int64 { return fk.Now().UTC().UnixMilli() },
+		MaxStaleMs: 10_000,
+	})
+	if err != nil {
+		t.Fatalf("snapshot.NewManager: %v", err)
+	}
+	auditRec := &syncedAuditRecorder{}
+	svc, err := NewService(ServiceConfig{
+		DB:        dbWrite.RawDB(),
+		NowMs:     func() int64 { return fk.Now().UTC().UnixMilli() },
+		Snapshots: mgr,
+		AuditSink: auditRec,
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	kRev, err := svc.Create(ctx, CreateParams{OrgID: org.ID, ProjectID: proj.ID, EnvID: envProd.ID, Name: "revoke-fail-sync"})
+	if err != nil {
+		t.Fatalf("Create kRev: %v", err)
+	}
+	kSusp, err := svc.Create(ctx, CreateParams{OrgID: org.ID, ProjectID: proj.ID, EnvID: envProd.ID, Name: "suspend-fail-sync"})
+	if err != nil {
+		t.Fatalf("Create kSusp: %v", err)
+	}
+	kZeroRot, err := svc.Create(ctx, CreateParams{OrgID: org.ID, ProjectID: proj.ID, EnvID: envProd.ID, Name: "zerorot-fail-sync"})
+	if err != nil {
+		t.Fatalf("Create kZeroRot: %v", err)
+	}
+
+	// Register 2 active SSE streams for kRev prior to failure.
+	streamCtx1, cancelStream1 := context.WithCancel(ctx)
+	defer cancelStream1()
+	if _, _, err := mgr.RegisterAuthenticatedStream(kRev.SecretKey, envProd.ID, cancelStream1); err != nil {
+		t.Fatalf("RegisterAuthenticatedStream 1: %v", err)
+	}
+	streamCtx2, cancelStream2 := context.WithCancel(ctx)
+	defer cancelStream2()
+	if _, _, err := mgr.RegisterAuthenticatedStream(kRev.SecretKey, envProd.ID, cancelStream2); err != nil {
+		t.Fatalf("RegisterAuthenticatedStream 2: %v", err)
+	}
+
+	// Inject real snapshot Refresh failure by closing dbRead before DB write commit mutations run.
+	_ = dbRead.Close()
+
+	// 1. Emergency Revoke commits REVOKED in dbWrite, Refresh fails:
+	// - returns committed summary + ErrSnapshotSyncFailed (never false nil success)
+	// - aborts all existing active SSE streams (no broken stream cancellation)
+	// - preserves audit event in AuditSink
+	// - enforces fail-closed ErrKeyRevoked on mgr.Current() and RegisterAuthenticatedStream
+	revSummary, revErr := svc.Revoke(ctx, RevokeParams{
+		OrgID:           org.ID,
+		KeyID:           kRev.Summary.ID,
+		ExpectedVersion: kRev.Summary.Version,
+		Mode:            RevokeModeEmergency,
+		ActorID:         "prc_sec_lead",
+	})
+	if !errors.Is(revErr, ErrSnapshotSyncFailed) {
+		t.Fatalf("Revoke with failing Refresh expected ErrSnapshotSyncFailed, got %v", revErr)
+	}
+	if revSummary == nil || revSummary.State != snapshot.KeyStateRevoked {
+		t.Fatalf("Revoke must still return committed REVOKED summary without false rollback, got %+v", revSummary)
+	}
+	var dbState string
+	if err := dbWrite.RawDB().QueryRowContext(ctx, `SELECT state FROM virtual_keys WHERE id = ?`, kRev.Summary.ID).Scan(&dbState); err != nil || dbState != snapshot.KeyStateRevoked {
+		t.Fatalf("expected DB state REVOKED committed without rollback, got state=%q err=%v", dbState, err)
+	}
+	if auditRec.Count("virtual_key.revoked") != 1 {
+		t.Fatalf("expected audit event virtual_key.revoked preserved, got count=%d", auditRec.Count("virtual_key.revoked"))
+	}
+	if streamCtx1.Err() == nil || streamCtx2.Err() == nil {
+		t.Fatalf("expected all existing SSE streams aborted despite Refresh failure (s1=%v, s2=%v)", streamCtx1.Err(), streamCtx2.Err())
+	}
+	nowMs := fk.Now().UTC().UnixMilli()
+	if _, err := mgr.Current().AuthenticateKey(kRev.SecretKey, envProd.ID, nowMs); !errors.Is(err, snapshot.ErrKeyRevoked) {
+		t.Fatalf("revoked key MUST NOT authenticate from stale snapshot after Refresh failure, got %v", err)
+	}
+	_, cancelStream3 := context.WithCancel(ctx)
+	defer cancelStream3()
+	if _, _, err := mgr.RegisterAuthenticatedStream(kRev.SecretKey, envProd.ID, cancelStream3); !errors.Is(err, snapshot.ErrKeyRevoked) {
+		t.Fatalf("post-revoke stream registration expected ErrKeyRevoked, got %v", err)
+	}
+	if mgr.LastError() == nil {
+		t.Fatalf("expected mgr.LastError() to record the Refresh failure")
+	}
+
+	// 2. Suspend commits in dbWrite while Refresh fails -> returns ErrSnapshotSyncFailed AND locally fences key as SUSPENDED.
+	suspSummary, suspErr := svc.Suspend(ctx, org.ID, kSusp.Summary.ID, kSusp.Summary.Version)
+	if !errors.Is(suspErr, ErrSnapshotSyncFailed) || suspSummary == nil || suspSummary.State != snapshot.KeyStateSuspended {
+		t.Fatalf("Suspend with failing Refresh expected summary SUSPENDED + ErrSnapshotSyncFailed, got summary=%+v err=%v", suspSummary, suspErr)
+	}
+	if _, err := mgr.Current().AuthenticateKey(kSusp.SecretKey, envProd.ID, nowMs); !errors.Is(err, snapshot.ErrKeySuspended) {
+		t.Fatalf("expected suspended key blocked on local snapshot immediately, got %v", err)
+	}
+
+	// 3. Zero-grace Rotate commits in dbWrite while Refresh fails -> old secret invalidated immediately in local snapshot.
+	rotRes, rotErr := svc.Rotate(ctx, RotateParams{
+		OrgID:           org.ID,
+		KeyID:           kZeroRot.Summary.ID,
+		ExpectedVersion: kZeroRot.Summary.Version,
+		GraceSeconds:    0,
+	})
+	if !errors.Is(rotErr, ErrSnapshotSyncFailed) || rotRes == nil || rotRes.SecretKey == "" {
+		t.Fatalf("zero-grace Rotate expected new key + ErrSnapshotSyncFailed, got res=%+v err=%v", rotRes, rotErr)
+	}
+	if _, err := mgr.Current().AuthenticateKey(kZeroRot.SecretKey, envProd.ID, nowMs); !errors.Is(err, snapshot.ErrKeyNotFound) {
+		t.Fatalf("old secret after failed-refresh zero-grace Rotate MUST NOT authenticate, got %v", err)
+	}
+
+	// Verify FakeClock advance past MaxStaleMs still trips IsStale (local fences do NOT forge heartbeat freshness).
+	fk.Advance(11 * time.Second)
+	if !mgr.IsStale() {
+		t.Fatalf("expected IsStale=true when clock advances without real DB refresh")
+	}
+	if _, _, err := mgr.RegisterAuthenticatedStream(kRev.SecretKey, envProd.ID, cancelStream3); !errors.Is(err, snapshot.ErrSnapshotStale) {
+		t.Fatalf("stale snapshot expected ErrSnapshotStale, got %v", err)
+	}
+
+	// Verify audit metadata explicitly flagged snapshot_sync_pending:true while preserving event.
+	auditRec.mu.Lock()
+	lastMeta := ""
+	for _, ev := range auditRec.events {
+		if ev.EventType == "virtual_key.revoked" && ev.TargetID == kRev.Summary.ID {
+			lastMeta = ev.MetadataJSON
+		}
+	}
+	auditRec.mu.Unlock()
+	if !strings.Contains(lastMeta, `"snapshot_sync_pending":true`) {
+		t.Fatalf("expected audit metadata to record snapshot_sync_pending:true, got %q", lastMeta)
+	}
+
+	// 4. FinalizeExpiredRotations commits in dbWrite while Refresh fails -> old grace secret invalidated immediately on RAM.
+	// Setup separate live pair so we rotate with GraceSeconds=60, advance clock, close reader DB, then FinalizeExpiredRotations.
+	dbPath2 := filepath.Join(t.TempDir(), "split-finalize.db")
+	dbW2, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath2, NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }})
+	if err != nil {
+		t.Fatalf("sqlite.Open w2: %v", err)
+	}
+	t.Cleanup(func() { _ = dbW2.Close() })
+	dbR2, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath2, NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }, SkipMigrate: true})
+	if err != nil {
+		t.Fatalf("sqlite.Open r2: %v", err)
+	}
+	defer func() { _ = dbR2.Close() }()
+	org2, _ := dbW2.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "fin-org", DisplayName: "Fin Org"})
+	proj2, _ := dbW2.Tenancy().CreateProject(ctx, org2.ID, port.CreateProjectParams{Slug: "fin-proj", DisplayName: "Fin Proj"})
+	env2, _ := dbW2.Tenancy().CreateEnvironment(ctx, org2.ID, proj2.ID, port.CreateEnvironmentParams{Slug: "prod"})
+	mgrFin, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: dbR2.RawDB(), NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }})
+	if err != nil {
+		t.Fatalf("NewManager fin: %v", err)
+	}
+	svcFin, err := NewService(ServiceConfig{DB: dbW2.RawDB(), NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }, Snapshots: mgrFin})
+	if err != nil {
+		t.Fatalf("NewService fin: %v", err)
+	}
+	kFin, err := svcFin.Create(ctx, CreateParams{OrgID: org2.ID, ProjectID: proj2.ID, EnvID: env2.ID, Name: "fin-key"})
+	if err != nil {
+		t.Fatalf("Create kFin: %v", err)
+	}
+	if _, err := svcFin.Rotate(ctx, RotateParams{OrgID: org2.ID, KeyID: kFin.Summary.ID, ExpectedVersion: 1, GraceSeconds: 60}); err != nil {
+		t.Fatalf("Rotate kFin: %v", err)
+	}
+	fk.Advance(61 * time.Second)
+	_ = dbR2.Close()
+	if nFin, err := svcFin.FinalizeExpiredRotations(ctx); !errors.Is(err, ErrSnapshotSyncFailed) || nFin != 1 {
+		t.Fatalf("FinalizeExpiredRotations expected n=1 + ErrSnapshotSyncFailed, got n=%d err=%v", nFin, err)
+	}
+	if _, err := mgrFin.Current().AuthenticateKey(kFin.SecretKey, env2.ID, fk.Now().UTC().UnixMilli()); !errors.Is(err, snapshot.ErrKeyNotFound) {
+		t.Fatalf("expected old grace key stripped cleanly from local snapshot, got %v", err)
+	}
+
+	// 5. Consecutive Rotate(GraceSeconds > 0) from ROTATING_DUAL_VALID on Refresh failure immediately evicts oldest K1 digest.
+	kSeq, err := svcFin.Create(ctx, CreateParams{OrgID: org2.ID, ProjectID: proj2.ID, EnvID: env2.ID, Name: "seq-rot-key"})
+	if !errors.Is(err, ErrSnapshotSyncFailed) || kSeq == nil {
+		t.Fatalf("Create under closed reader expected secret + ErrSnapshotSyncFailed, got %v", err)
+	}
+	// Re-verify using a live manager that rotates once (K1 -> K2), closes reader, then rotates (K2 -> K3) with GraceSeconds=120.
+	dbPath3 := filepath.Join(t.TempDir(), "split-seqrot.db")
+	dbW3, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath3, NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }})
+	if err != nil {
+		t.Fatalf("sqlite.Open w3: %v", err)
+	}
+	t.Cleanup(func() { _ = dbW3.Close() })
+	dbR3, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath3, NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }, SkipMigrate: true})
+	if err != nil {
+		t.Fatalf("sqlite.Open r3: %v", err)
+	}
+	defer func() { _ = dbR3.Close() }()
+	org3, _ := dbW3.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "seq-org", DisplayName: "Seq Org"})
+	proj3, _ := dbW3.Tenancy().CreateProject(ctx, org3.ID, port.CreateProjectParams{Slug: "seq-proj", DisplayName: "Seq Proj"})
+	env3, _ := dbW3.Tenancy().CreateEnvironment(ctx, org3.ID, proj3.ID, port.CreateEnvironmentParams{Slug: "prod"})
+	mgrSeq, _ := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: dbR3.RawDB(), NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }})
+	svcSeq, _ := NewService(ServiceConfig{DB: dbW3.RawDB(), NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }, Snapshots: mgrSeq})
+	kSeq1, err := svcSeq.Create(ctx, CreateParams{OrgID: org3.ID, ProjectID: proj3.ID, EnvID: env3.ID, Name: "k-seq"})
+	if err != nil {
+		t.Fatalf("Create kSeq1: %v", err)
+	}
+	kSeq2, err := svcSeq.Rotate(ctx, RotateParams{OrgID: org3.ID, KeyID: kSeq1.Summary.ID, ExpectedVersion: 1, GraceSeconds: 120})
+	if err != nil {
+		t.Fatalf("Rotate kSeq1->kSeq2: %v", err)
+	}
+	_ = dbR3.Close()
+	if _, err := svcSeq.Rotate(ctx, RotateParams{OrgID: org3.ID, KeyID: kSeq1.Summary.ID, ExpectedVersion: kSeq2.Summary.Version, GraceSeconds: 120}); !errors.Is(err, ErrSnapshotSyncFailed) {
+		t.Fatalf("second Rotate expected ErrSnapshotSyncFailed, got %v", err)
+	}
+	if _, err := mgrSeq.Current().AuthenticateKey(kSeq1.SecretKey, env3.ID, fk.Now().UTC().UnixMilli()); !errors.Is(err, snapshot.ErrKeyNotFound) {
+		t.Fatalf("oldest rotated K1 digest must be evicted immediately on second Rotate failure, got %v", err)
+	}
+}
+
 type auditRecorderFunc func(ctx context.Context, ev port.AuditEvent) error
 
 func (f auditRecorderFunc) Append(ctx context.Context, ev port.AuditEvent) error { return f(ctx, ev) }

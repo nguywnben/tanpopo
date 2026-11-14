@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0009` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | **`READY_FOR_REVIEW`** *(Implemented `2026-11-14`; `CGO_ENABLED=0` tests + `check.go --all` + `BenchmarkSnapshotLookup` `0 allocs/op` + fresh `security-auditor` [`d98bfc91`] & `code-reviewer` [`ab0a518a`] `PASS`; awaiting remote CI `-race` run & Product Owner `REQUIRES_STRONG_REVIEW` acceptance — downstream `0011+` stay `BLOCKED`)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented & hardened `2026-11-14`; `CGO_ENABLED=0` tests + `check.go --all` + `BenchmarkSnapshotLookup` `0 allocs/op` + fresh `security-auditor` [`d98bfc91`, `4950bfaa`] & `code-reviewer` [`ab0a518a`, `70332f5d`] `PASS`; awaiting remote CI `-race` run & Product Owner `REQUIRES_STRONG_REVIEW` acceptance — downstream `0011+` stay `BLOCKED`)* |
 | **Size** | `L` (`go.mod`, `internal/iam/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0005_iam_keys.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Authentication, multi-tenant authorization, `< 1s` key revocation & uniform `404` anti-oracle)* |
 | **Technical Owner** | `Principal Security / IAM Engineer` |
@@ -32,7 +32,9 @@ Implement core identity authentication, **6-role canonical RBAC (`OPERATOR`, `OR
 
 ## 4. API, Wire & Data Contracts
 - **Canonical `Virtual Key` Format (`CR-06`):** `vk_tp_<env>_<32_base62_chars>`; persist `active_key_hash = SHA-256(rawKey)` (`32 bytes`) and on rotation move the prior digest into `previous_key_hash` alongside `grace_expires_at_ms`; store only `key_prefix` + `last_four` for audit display. Compare digests using `subtle.ConstantTimeCompare`.
-- **`ConfigSnapshot` Contract:** Read-only immutable struct exposing `O(1)` lookup maps from `sha256_hash -> VirtualKeyView` and `(org_id, project_id, env_id) -> EffectiveConfig` with `0` `Mutex` locks on the read path.
+- **`ConfigSnapshot` Contract & Downstream Integration Boundaries (`ADR-0006`):** Read-only immutable struct exposing `O(1)` lookup maps from `sha256_hash -> VirtualKeyView` and `(org_id, project_id, env_id) -> EffectiveConfig` with `0` `Mutex` locks on the read path.
+  - *Single-Node Fail-Closed Guarantees (`TP-IMP-0009` Verified):* `vkey.NewService` requires non-nil `Snapshots` by default (`AllowDetachedControlPlane` is opt-in solely for split multi-node control-plane pods); `vkey.Service` write operations return `ErrSnapshotSyncFailed` if `Refresh` fails after DB commit while applying local CoW revocation/restrictive fences, running `Streams().AbortKey`, and preserving audit evidence (`context.WithoutCancel`); `snapshot.Manager.CheckServingReady()` and `RegisterAuthenticatedStream` fail closed on `ErrSnapshotNotLoaded`, `ErrSnapshotWatcherStopped`, and `ErrSnapshotStale`.
+  - *Downstream Integration Boundaries (`TARGET / UNVERIFIED` Until Downstream Units Pass):* Data Plane ingress handlers (`TP-IMP-0015`) MUST call `Manager.AuthenticateKey`/`Manager.RegisterAuthenticatedStream` (never bypass `CheckServingReady()` by calling `Current().AuthenticateKey` directly) and map `ErrSnapshotStale`/`ErrSnapshotWatcherStopped` to `503`; `/readyz` (`TP-IMP-0032`) MUST check `CheckServingReady()`; `/admin/v1/*` (`TP-IMP-0024`) MUST handle `vkey.ErrSnapshotSyncFailed` cleanly without false `409` retries; multi-node `Valkey Pub/Sub` + `PG LISTEN/NOTIFY` `< 5s` propagation (`TP-IMP-0040`) and load SLOs (`TP-IMP-0043`) remain `UNVERIFIED`.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
 - **`AC-1` (`AUTH-02`):** Given an unbootstrapped server, When consuming the `Bootstrap Token` to create the initial `ORG_OWNER`, Then a second call presenting the same `Bootstrap Token` is hard-rejected with `410 bootstrap_already_completed`.
