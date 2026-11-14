@@ -3,7 +3,7 @@
 > **MANDATORY COLD-START ENTRYPOINT FOR EVERY NEW EXECUTION SESSION (`ZERO PRIOR CHAT MEMORY REQUIRED`)**
 > - **Baseline ID:** `EXEC-BL-001-APPROVED`
 > - **Version:** `1.1.0-stage2-go` | **Last Updated:** `2026-11-14` | **M0 Reference Commit:** `eb01661`
-> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved by Product Owner via `DEC-010` — **solely `TP-IMP-0005` is unlocked as `READY`** to start Milestone `M1`!)*
+> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved by Product Owner via `DEC-010` — [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) was unlocked as the sole `M1` entry unit and is currently **`READY_FOR_REVIEW`**!)*
 > - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`DEC-009` & `DEC-010`)** *(Milestone `M0` units `TP-IMP-0001`..`0004` = `DONE`; `TP-IMP-0005` = **`READY_FOR_REVIEW`**; `TP-IMP-0006`..`0047` = `BLOCKED` behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.)*
 > - **CURRENT UNIT STATE (`UNIT_STATES`):** **`4 / 47` `DONE` (`TP-IMP-0001`..`0004`), `1 / 47` `READY_FOR_REVIEW` ([`TP-IMP-0005`](../planning/units/TP-IMP-0005.md)), `0 / 47` `READY`, `42 / 47` `BLOCKED` (`TP-IMP-0006`..`0047`)**
 
@@ -16,7 +16,7 @@ If you are an Engineering Coding Agent (e.g., **Luna**) starting a fresh session
 1. **Verify `HANDOFF_VERDICT` at the top of this file and the Stage-Gate table in [`docs/governance/decisions.md`](./decisions.md):**
    - If `HANDOFF_VERDICT` is **`NO_GO`** or `Gate G4` is not marked **`APPROVED`** by the Product Owner: **STOP IMMEDIATELY (`ABORT SAFELY`)**. **Never infer approval from the mere existence of specification or planning files!**
 2. **Verify the unit's own status and upstream `Dependencies` in [`docs/planning/implementation-index.md`](../planning/implementation-index.md):**
-   - Execute `TP-IMP-xxxx` **ONLY** when its status in `implementation-index.md` is explicitly **`READY`** (currently **only `TP-IMP-0005`**) and `100%` of the units listed in its `Dependencies` field are marked `DONE`. Never skip ahead or unlock multiple downstream waves without passing required review gates!
+   - Execute a new `TP-IMP-xxxx` unit **ONLY** when its status in `implementation-index.md` is explicitly **`READY`** (currently **`0 / 47` `READY`** while `TP-IMP-0005` is **`READY_FOR_REVIEW`**) and `100%` of the units listed in its `Dependencies` field are marked `DONE`. Never skip ahead or unlock multiple downstream waves without passing required review gates!
 3. **Load Selective, Focused Context Only (Prevent Context Window Flooding):**
    - Read in strict order: (a) [`AGENTS.md`](../../AGENTS.md) → (b) this `execution-baseline.md` → (c) the target unit spec [`docs/planning/units/TP-IMP-xxxx.md`](../planning/units/TP-IMP-0005.md) → (d) **only** the specific sections cited under Section 3 (`Design Refs`) of that unit.
 4. **Hard Public-Release & Owner-Acceptance Boundary (`DEC-010`):**
@@ -91,9 +91,9 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 
 ---
 
-## 4. Dependency-Ordered Initial Execution Queue (`HANDOFF_VERDICT: GO` — `TP-IMP-0005` `READY`)
+## 4. Dependency-Ordered Initial Execution Queue (`HANDOFF_VERDICT: GO` — `TP-IMP-0005` `READY_FOR_REVIEW`)
 
-> **Live Status Today:** `TP-IMP-0001`..`0004` (`M0`) are **`DONE`**. **`TP-IMP-0005` is the sole `READY` unit** (`DEC-010`). Downstream waves unlock strictly as upstream `Dependencies` and `REQUIRES_STRONG_REVIEW` gates complete:
+> **Live Status Today:** `TP-IMP-0001`..`0004` (`M0`) are **`DONE`**. **[`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) is **`READY_FOR_REVIEW`** (`0` units `READY`)**. Downstream waves (`TP-IMP-0006`+) unlock strictly after `TP-IMP-0005` CI verification and human acceptance (`DONE`):
 
 | Wave | Unit ID(s) | Execution Mode | Status / Mandatory Checkpoint Before Next Wave |
 |---|---|---|---|

@@ -39,7 +39,7 @@ RULES:
 
 If you are starting a fresh session with no prior chat context (e.g., executing a `TP-IMP-xxxx` unit):
 1. **Read [`docs/governance/execution-baseline.md`](./docs/governance/execution-baseline.md) FIRST** (`EXEC-BL-001-APPROVED`).
-   - Current Delivery Handoff Verdict: **`GO`** (`Milestone M0` units `TP-IMP-0001..0004` = `DONE`; **solely [`TP-IMP-0005`](./docs/planning/units/TP-IMP-0005.md) is `READY`** under Owner approval `DEC-010`; `TP-IMP-0006..0047` remain `BLOCKED` behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01..05` gates).
+   - Current Delivery Handoff Verdict: **`GO`** (`Milestone M0` units `TP-IMP-0001..0004` = `DONE`; [`TP-IMP-0005`](./docs/planning/units/TP-IMP-0005.md) = **`READY_FOR_REVIEW`** awaiting Product Owner / Lead Engineer acceptance and green CI under `DEC-010`; `0 / 47` units are `READY`; `TP-IMP-0006..0047` remain `BLOCKED` behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01..05` gates).
    - Execute **only** a unit explicitly marked **`READY`** in [`docs/planning/implementation-index.md`](./docs/planning/implementation-index.md); never self-accept units on the Product Owner's behalf and never tag/publish releases (`GATE-REL-07`).
 2. **Master Unit Index & Specs:** [`docs/planning/implementation-index.md`](./docs/planning/implementation-index.md) → `docs/planning/units/TP-IMP-xxxx.md`.
 3. **Contracts & Spike Evidence (`M0`):** [`proto/tanpopo/extension/v1/runtime.proto`](./proto/tanpopo/extension/v1/runtime.proto), [`openapi/`](./openapi), [`db/spec-check/`](./db/spec-check), and [`docs/architecture/spike-results.md`](./docs/architecture/spike-results.md).
@@ -50,4 +50,4 @@ If you are starting a fresh session with no prior chat context (e.g., executing 
 
 - Read [`CONSTRAINTS.md`](./CONSTRAINTS.md) before writing code. Do not weaken it to make a change pass.
 - Web Console package root: [`web/console/`](./web/console/) (`package.json`, `package-lock.json`, `astryx-themes.js`, `src/`). Run Node/Astryx commands inside `web/console/` using `npm ci --ignore-scripts` and `npx @astryxdesign/cli doctor` (on Windows PowerShell: `cmd /c npx @astryxdesign/cli doctor`).
-- Cross-platform quality gate: run `go run ./scripts/ci/check.go --all` and `go test -v ./...` (`CGO_ENABLED=0`), plus `go test -v -race ./...` in environments with a C toolchain (`ubuntu-24.04`, `macos-14`).
+- Cross-platform quality gate: run `go run ./scripts/ci/check.go --all` and `go test -v ./...` (`CGO_ENABLED=0`), plus `go test -v -race ./...` in environments with a C toolchain (`ubuntu-24.04`, `macos-15`).

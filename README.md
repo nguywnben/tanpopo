@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 > [!IMPORTANT]
-> **Current Project Status — Gate G4 Stage 2 Approved (`HANDOFF_VERDICT: GO` · `TP-IMP-0005` `READY`)**
+> **Current Project Status — Gate G4 Stage 2 Approved (`HANDOFF_VERDICT: GO` · `TP-IMP-0005` `READY_FOR_REVIEW`)**
 >
 > Tanpopo has completed its end-to-end discovery, requirements, architecture, UX/SRE, security, and 47-unit planning framework (`ASTRA A00–A10`) **plus Milestone `M0` (`TP-IMP-0001`..`0004` = `DONE`)**: locally compiled Protobuf ([`proto/`](./proto)), OpenAPI 3.1 ([`openapi/`](./openapi)), live-executed SQLite DDL + static-parity PostgreSQL 16 reference DDL ([`db/spec-check/`](./db/spec-check)), and isolated pure-Go feasibility spikes ([`tools/spikes/`](./tools/spikes) & [`docs/architecture/spike-results.md`](./docs/architecture/spike-results.md)).
 >

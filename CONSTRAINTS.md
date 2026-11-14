@@ -27,7 +27,7 @@
 | Astryx UI baseline | `defaultThemeSlug = "neutral"` unmodified; `0` failures in doctor check; English UI strings | `go run ./scripts/ci/check.go --ui-layout` and `cd web/console && npx @astryxdesign/cli doctor` | every UI edit, Stage 0/1 CI |
 | Canary & secret hygiene | `0` unredacted secret or canary leaks in `cmd/`, `internal/`, `scripts/`, `web/console/` | `go run ./scripts/ci/check.go --canary` | every edit, Stage 0 CI |
 | Go unit tests (pure-Go) | `100%` pass rate with `CGO_ENABLED=0` and `TANPOPO_TEST_HERMETIC=1` | `go test -v ./...` | every task end, Stage 1 CI |
-| Go race detector | `100%` pass rate with `-race` on C-toolchain environments (`ubuntu-24.04`, `macos-14`) | `go test -v -race ./...` | Stage 1 CI (Linux/macOS) |
+| Go race detector | `100%` pass rate with `-race` on C-toolchain environments (`ubuntu-24.04`, `macos-15`) | `go test -v -race ./...` | Stage 1 CI (Linux/macOS) |
 | Machine-readable contracts | `runtime.proto` compiles (`0` errors); OpenAPI 3.1 `$ref`s resolve; SQLite DDL executes cleanly | `cd tools/spikes && go test -count=1 -run TestContract\|OpenAPI\|SQLite ./...` | Stage 0 CI |
 
 ## Targets (`TARGET / UNVERIFIED` — enforced progressively in `M1`–`M5` per `COND-PO-01`)

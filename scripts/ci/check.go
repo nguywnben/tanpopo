@@ -996,6 +996,14 @@ func checkUILayout(rootDir string) ([]Violation, error) {
 				Message: ":root CSS overrides are forbidden by AGENTS.md Astryx rules",
 			})
 		}
+		if strings.Contains(s, "\r\n") {
+			violations = append(violations, Violation{
+				Check:   "ui-layout",
+				Rule:    "theme-module-must-be-lf",
+				File:    "web/console/astryx-themes.js",
+				Message: "web/console/astryx-themes.js must use LF line endings (required for Astryx doctor theme-module check on Windows; enforce via .gitattributes)",
+			})
+		}
 	}
 
 	srcDir := filepath.Join(rootDir, "web", "console", "src")

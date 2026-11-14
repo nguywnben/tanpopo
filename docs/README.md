@@ -1,6 +1,6 @@
 # Tanpopo Documentation & Context Hub (`English-First Canonical Edition`)
 
-> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | GATE G4: APPROVED | READY: TP-IMP-0005 ONLY`)**
+> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | GATE G4: APPROVED | READY_FOR_REVIEW: TP-IMP-0005 ONLY`)**
 > - **Gate G0 (ASTRA A00 — Context Intake & Baseline):** `COMPLETED`
 > - **Gate G1 (ASTRA A01 — Product Discovery):** **`APPROVED` *(`CONFIRMED_BY_OWNER` — `DEC-009`)* **
 > - **Baseline A02 (ASTRA A02 — Business Analysis):** **`APPROVED` *(`SM-01..09` & `BA-OQ-001..05` closed in `TP-IMP-0001`)* **
@@ -20,7 +20,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
-| **0A** | [`docs/governance/execution-baseline.md`](./governance/execution-baseline.md) | **`EXEC-BL-001-APPROVED` (`HANDOFF: GO` · `READY: TP-IMP-0005`):** Mandatory cold-start entrypoint (`Zero Prior Chat Context Required`); locks the global technical dictionary, source-of-truth precedence, post-handoff verification conditions (`COND-PO-01..05`), `CR` protocol, and 7-part completion report contract. | **Read first in every new engineering/agent session.** |
+| **0A** | [`docs/governance/execution-baseline.md`](./governance/execution-baseline.md) | **`EXEC-BL-001-APPROVED` (`HANDOFF: GO` · `TP-IMP-0005: READY_FOR_REVIEW`):** Mandatory cold-start entrypoint (`Zero Prior Chat Context Required`); locks the global technical dictionary, source-of-truth precedence, post-handoff verification conditions (`COND-PO-01..05`), `CR` protocol, and 7-part completion report contract. | **Read first in every new engineering/agent session.** |
 | **0B** | [`docs/governance/owner-approval-sheet.md`](./governance/owner-approval-sheet.md) | **`GOV-OAS-01` (`STAGES 1 & 2 APPROVED`):** Consolidated Product Owner Approval Sheet recording Track A (`18` items), Track B (`15` items + `COND-PO-01..05`), Stage 1 `M0` (`DEC-009`), and Stage 2 Handoff (`DEC-010`). | Reference for Product Owner gate rulings and conditions. |
 | **0C** | [`docs/reviews/execution-readiness.md`](./reviews/execution-readiness.md) | **`REV-RDY-01` (`STAGE 2: GO`):** Calibrated Delivery Readiness Audit distinguishing local `M0` verification (`SQLite`, `protocompile`, `wazero` spikes) from `UNVERIFIED` downstream gates (`PostgreSQL 16`, GitHub CI, full Gateway SLOs). | Auditing `Gate G4` evidence boundaries and `TP-IMP-0005` dispatch readiness. |
 | **0D** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`Historical A08`):** Independent A08 horizontal + 8 vertical-slice adversarial audit (`AUD-001`..`030`) whose blocking items were closed in `M0`. | Historical audit provenance for `CR-01`..`10`. |

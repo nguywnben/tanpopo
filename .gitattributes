@@ -1,0 +1,36 @@
+# Enforce consistent LF line endings across Linux, macOS, and Windows clean checkouts.
+# Required so byte-exact generated files (e.g., web/console/astryx-themes.js checked by
+# `@astryxdesign/cli doctor` `theme-module`) are never mutated to CRLF by `core.autocrlf=true`.
+* text=auto eol=lf
+
+*.go text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.mts text eol=lf
+*.cts text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.proto text eol=lf
+*.sql text eol=lf
+*.md text eol=lf
+*.css text eol=lf
+*.sh text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff2 binary
+*.wasm binary
+*.zip binary
+*.gz binary
+*.tpkg binary
+*.tpbundle binary
+*.tpop.enc binary
