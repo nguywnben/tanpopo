@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0009` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-018`: upstream `TP-IMP-0007` & `TP-IMP-0008` are `DONE`)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented `2026-11-14`; `CGO_ENABLED=0` tests + `check.go --all` + `BenchmarkSnapshotLookup` `0 allocs/op` + fresh `security-auditor` [`d98bfc91`] & `code-reviewer` [`ab0a518a`] `PASS`; awaiting remote CI `-race` run & Product Owner `REQUIRES_STRONG_REVIEW` acceptance — downstream `0011+` stay `BLOCKED`)* |
 | **Size** | `L` (`go.mod`, `internal/iam/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0005_iam_keys.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Authentication, multi-tenant authorization, `< 1s` key revocation & uniform `404` anti-oracle)* |
 | **Technical Owner** | `Principal Security / IAM Engineer` |
