@@ -4,8 +4,8 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0011` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-019`: upstream `TP-IMP-0007` & `TP-IMP-0009` are `DONE` — Note: `db/migrations/sqlite/0002`–`0005` are occupied by Vault and IAM migrations, so check next free migration index at execution start)* |
-| **Size** | `L` (`go.mod`, `internal/extension/installer/*`, `internal/extension/lockfile/*`, `db/migrations/sqlite/0004_extensions.sql`) |
+| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-019`: upstream `TP-IMP-0007` & `TP-IMP-0009` are `DONE` — Note: `db/migrations/sqlite/0001`–`0005` are already occupied, so this unit uses `0006_extensions.sql`)* |
+| **Size** | `L` (`go.mod`, `internal/extension/installer/*`, `internal/extension/lockfile/*`, `db/migrations/sqlite/0006_extensions.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Extension supply chain `TB-5`, Zip-Slip/Archive-Bomb defense & privilege-escalation guard)* |
 | **Technical Owner** | `Platform Supply-Chain & Security Engineer` |
 
@@ -22,7 +22,7 @@ Build the installation, upgrade, rollback, and quarantine (`QUARANTINED`) pipeli
   - `internal/extension/installer/provenance.go` (verify `SHA-256` archive digest parity against `tanpopo.lock` — `CT-03` + offline `Ed25519` signature verification; classify `official`, `verified`, or `unverified-external` and enforce `org_extension_policies` allowlists — `CT-20`).
   - `internal/extension/installer/lifecycle.go` (drive canonical `SM-01` transitions: `DISCOVERED -> VERIFYING -> PENDING_PERMISSION_APPROVAL -> INSTALLED_DISABLED | ENABLED_ACTIVE -> UPDATING_PENDING_RECONSENT | DRAINING | ROLLED_BACK | QUARANTINED`, export `QuarantineInstallation` for `fault_guard` in `0013`, and retain at least 1 known-good prior version for `< 5s` rollback).
   - `internal/extension/lockfile/lockfile.go` (atomic `tanpopo.lock` reader/writer).
-  - `db/migrations/sqlite/0004_extensions.sql` (`extension_packages`, `extension_versions`, `extension_installations` with nullable `active_version_id` while awaiting approval, `org_extension_policies`, `extension_revocations`).
+  - `db/migrations/sqlite/0006_extensions.sql` (`extension_packages`, `extension_versions`, `extension_installations` with nullable `active_version_id` while awaiting approval, `org_extension_policies`, `extension_revocations`).
 - **Out-of-Scope:** Remote Marketplace index synchronization & `Private OCI Registry` pulls (owned by `TP-IMP-0035`); offline `Air-Gap Bundle` export/import (owned by `TP-IMP-0045`).
 
 ## 3. Requirements, Dependencies & Design References
