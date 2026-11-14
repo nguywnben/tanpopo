@@ -1,19 +1,19 @@
 # Sao lưu Mã hóa, Lưu giữ/Xóa Dữ liệu, Phục hồi Thảm họa & Ma trận Bảo trì (Backups, Retention, Disaster Recovery & Support Matrix) — Tanpopo
 
-> **Tài liệu Kỹ thuật SRE & Bảo toàn Dữ liệu (Phase ASTRA A06 — `DRAFT / READY_FOR_REVIEW`)**
-> - **Mã tài liệu:** `SPEC-OPS-02` | **Phiên bản:** `0.1.0-step06-draft` | **Ngày cập nhật:** `2026-11-11`
+> **Tài liệu Kỹ thuật SRE & Bảo toàn Dữ liệu (Phase ASTRA A06 — Updated in A08 Audit | `DRAFT / READY_FOR_REVIEW`)**
+> - **Mã tài liệu:** `SPEC-OPS-02` | **Phiên bản:** `0.1.1-step08-audit` | **Ngày cập nhật:** `2026-11-14`
 > - **Vai trò biên soạn:** Principal SRE & Security Architect
-> - **Trạng thái quản trị:** **Đặc tả Vận hành Đề xuất (`PROPOSED — NO CODE`)** — gắn kết trực tiếp với lược đồ vật lý tại [`data-model.md`](../architecture/data-model.md) (`ARCH-DATA-01`), topo [`deployment-topology.md`](../architecture/deployment-topology.md) (`ARCH-OPS-01`) và rủi ro [`risk-register.md`](../discovery/risk-register.md) (`RSK-013`).
-> - **Truy vết Yêu cầu:** `WF-12`, `WF-13`, `OPS-05`, `OPS-06`, `OPS-09`, `TP-FR-1003`, `TP-NFR-0501`, `TP-NFR-0502`, `TP-NFR-0601`, `TP-NFR-0602`, `TP-NFR-0801`, `TP-NFR-0901`, `TP-NFR-0902`.
+> - **Trạng thái quản trị:** **Đặc tả Vận hành Đề xuất (`PROPOSED — NO CODE`)** — gắn kết trực tiếp với lược đồ vật lý tại [`data-model.md`](../architecture/data-model.md) (`ARCH-DATA-01`) và topo [`deployment-topology.md`](../architecture/deployment-topology.md) (`ARCH-OPS-01`). **Mọi con số thời gian `RTO`, `RPO` và cửa sổ xóa `< 60 giây` trong tài liệu này đều mang nhãn `TARGET / UNVERIFIED` (chưa đo thực nghiệm).**
+> - **Truy vết Yêu cầu:** `WF-12`, `WF-13`, `OPS-05`, `OPS-06`, `OPS-09`, `TP-FR-1003`, `TP-NFR-0501`, `TP-NFR-0502`, `TP-NFR-0601`, `TP-NFR-0602`, `TP-NFR-0701`, `TP-NFR-0901`, `TP-NFR-0902`.
 
 ---
 
-## 1. Kiến trúc Sao lưu Tách Khóa Chủ (`Zero-Plaintext Backup Architecture` — `OPS-05`, `RSK-013`)
+## 1. Kiến trúc Sao lưu Tách Khóa Chủ (`Zero-Plaintext Backup Architecture` — `OPS-05`)
 
 ### 1.1. Quy tắc Vàng: Tách Biệt Tuyệt đối Giữa Bản Sao lưu Dữ liệu và `Master KEK`
 Mọi thông tin xác thực nhạy cảm trong Tanpopo (`API Keys` nhà cung cấp, cặp `OAuth Tokens`, khóa ký Webhook) đều được mã hóa phong bì (`Envelope Encryption`: `AES-256-GCM` bằng khóa riêng từng tổ chức `Org DEK`, còn `Org DEK` được bọc bởi khóa bảo vệ chủ `Master KEK`). Do đó:
 - **Bản sao lưu cơ sở dữ liệu KHÔNG BAO GIỜ chứa `Master KEK`:** Nếu tệp sao lưu lưu trên S3/NAS vô tình bị lộ, kẻ tấn công không thể giải mã bất kỳ khóa API nhà cung cấp nào.
-- **Cảnh báo Mất Khả năng Khôi phục (`RSK-013`):** Ngược lại, nếu quản trị viên làm mất cả máy chủ gốc lẫn `Master KEK` (và không dùng Cloud KMS có sao lưu tự động), các cấu hình tuyến, chính sách và sổ cái chi phí vẫn khôi phục được `100%`, nhưng toàn bộ `Provider Connections` sẽ phải nhập lại khóa mới. Vì vậy `SCR-01` và `SCR-16` luôn hiển thị `Banner` nhắc xác nhận lưu trữ `Master KEK` ở kho mật khẩu/Vault độc lập (`UX-GR-05`).
+- **Cảnh báo Mất Khả năng Khôi phục Khi Mất Khóa Chủ (`Master KEK Loss Hazard`):** Ngược lại, nếu quản trị viên làm mất cả máy chủ gốc lẫn `Master KEK` (và không dùng Cloud KMS có sao lưu tự động), các cấu hình tuyến, chính sách và sổ cái chi phí vẫn khôi phục được `100%`, nhưng toàn bộ `Provider Connections` sẽ phải nhập lại khóa mới. Vì vậy `SCR-01` và `SCR-16` luôn hiển thị `Banner` nhắc xác nhận lưu trữ `Master KEK` ở kho mật khẩu/Vault độc lập (`UX-GR-05`).
 
 ### 1.2. Phạm vi & Phương thức Sao lưu Theo Từng Chế độ Triển khai
 
@@ -98,8 +98,8 @@ Mọi kịch bản dưới đây đều tuân thủ nguyên tắc an toàn: **lu
 
 | Hạng mục Hỗ trợ | Phạm vi Hỗ trợ Chính thức (`Tier-1 Supported`) | Hỗ trợ Nỗ lực Tốt nhất (`Best-Effort`) | Chính sách Ngưng Hỗ trợ & Vòng đời Bảo trì (`Deprecation Policy`) |
 |---|---|---|---|
-| **Hệ điều hành & CPU Máy chủ** (`TP-NFR-0901`) | Linux `x86_64` & `arm64` (kernel `>= 5.15`), 컨테이너 OCI chuẩn, macOS `14+` (`arm64`), Windows Server `2022+` / Windows `11` (`x86_64`). | FreeBSD, kiến trúc `riscv64`, Windows `arm64`. | Theo chu kỳ hỗ trợ dài hạn (`LTS`) của hệ điều hành gốc. |
+| **Hệ điều hành & CPU Máy chủ** (`TP-NFR-0901`) | Linux `x86_64` & `arm64` (kernel `>= 5.15`), Container OCI chuẩn, macOS `14+` (`arm64`), Windows Server `2022+` / Windows `11` (`x86_64`). | FreeBSD, kiến trúc `riscv64`, Windows `arm64`. | Theo chu kỳ hỗ trợ dài hạn (`LTS`) của hệ điều hành gốc. |
 | **Cơ sở Dữ liệu & Bộ nhớ Đệm** | SQLite nhúng (tích hợp sẵn trong nhị phân), **PostgreSQL `16`, `17`**, **Valkey `7.2`, `8.x`** / Redis `7.2`. | Các dịch vụ tương thích giao thức PostgreSQL/Redis đám mây đã kiểm chứng Lua & `LISTEN/NOTIFY`. | Duy trì hỗ trợ tối thiểu 2 phiên bản chính gần nhất của PostgreSQL; thông báo trước `6 tháng` trước khi nâng mức tối thiểu. |
-| **Trình duyệt Web Console** (`TP-NFR-0801`) | `2` phiên bản ổn định gần nhất của **Chromium / Chrome / Edge**, **Firefox** và **Safari** (macOS & iOS `>= 17`). | Các trình duyệt nhân Chromium doanh nghiệp khác. | Không hỗ trợ Internet Explorer hoặc trình duyệt tắt hoàn toàn ES2022 / CSS Cascade Layers (`@layer`). |
+| **Trình duyệt Web Console** (`TP-NFR-0701`) | `2` phiên bản ổn định gần nhất của **Chromium / Chrome / Edge**, **Firefox** và **Safari** (macOS & iOS `>= 17`). | Các trình duyệt nhân Chromium doanh nghiệp khác. | Không hỗ trợ Internet Explorer hoặc trình duyệt tắt hoàn toàn ES2022 / CSS Cascade Layers (`@layer`). |
 | **Hợp đồng Phần mở rộng & SDK** (`TP-NFR-0902`, `BA-OQ-005`) | Giao thức `tanpopo.extension.v1` và `Manifest Schema` phiên bản hiện hành. | Phiên bản liền trước trong cửa sổ chuyển tiếp. | - Giai đoạn `0.x`: Giữ tương thích tối thiểu **`N-1` phiên bản phụ** (`minor`).<br/>- Từ cột mốc `v1.0` trở đi: Cam kết bảo toàn tương thích ngược tối thiểu **`12 tháng` (hoặc trọn nhánh `1.x`)**, hiển thị cảnh báo sớm trên Console/CLI trước ít nhất `2` bản phát hành trước khi loại bỏ bất kỳ trường cũ nào. |
 | **Bản vá An ninh (`Security Patches`)** | Nhánh phát hành ổn định hiện tại (`Current Minor`) và nhánh liền trước (`N-1 Minor` sau mốc `v1.0`). | Hướng dẫn giảm thiểu rủi ro qua `Policy` / `Quarantine` cho bản cũ hơn. | Lỗ hổng mức `Critical` (thoát khỏi Sandbox, lộ khóa gốc, vượt quyền chéo tổ chức) phát hành bản vá khẩn cấp và bản tin thu hồi trong mục tiêu `< 48 giờ` kể từ khi xác minh. |

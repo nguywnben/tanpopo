@@ -37,7 +37,7 @@ flowchart TD
 4. **Băm Một Chiều Cho Khóa Ảo Đường Dữ liệu (`Virtual Key Hashing`):**
    - Khóa ảo cấp cho ứng dụng khách (`vk_tp_<env>_<random_256bit>`) không dùng mã hóa hai chiều mà chỉ lưu mã băm `SHA-256` kèm `key_prefix` nhận diện. Lúc xác thực truy vấn suy luận, hệ thống băm khóa gửi lên và so sánh bằng `crypto/subtle.ConstantTimeCompare` trên bảng chỉ mục bộ nhớ của `ConfigSnapshot` (chống hoàn toàn tấn công đo thời gian `Timing Side-Channel`).
 5. **Xoay `Master KEK` Trực tuyến Không Gián đoạn (`Online KEK Re-Wrapping`):**
-   - Lệnh `tanpopo vault rotate-kek` chỉ cần giải bọc và bọc lại các khóa trung gian `Org DEK` (số lượng nhỏ) sang `KEK` thế hệ mới trong giao dịch nguyên tử mà không phải giải mã hàng vạn bản ghi thông tin xác thực hay làm rớt các luồng SSE đang mở (`DR-04`).
+   - Lệnh `tanpopo vault rotate-kek` chỉ cần giải bọc và bọc lại các khóa trung gian `Org DEK` (số lượng nhỏ) sang `KEK` thế hệ mới trong giao dịch nguyên tử mà không phải giải mã hàng vạn bản ghi thông tin xác thực hay làm rớt các luồng SSE đang mở (`DR-03`).
 
 ---
 
@@ -64,7 +64,7 @@ flowchart TD
    - Mọi handler trong `/admin/v1/*` bắt buộc khai báo cặp `(Resource, Permission)` tường minh trong bảng định tuyến trung tâm (khởi tạo máy chủ sẽ `panic` ngay lúc kiểm thử nếu có một route `/admin/v1/*` nào chưa gắn bộ kiểm tra quyền).
    - Các phiên trình duyệt dùng cookie bắt buộc cờ `HttpOnly; Secure; SameSite=Strict` kết hợp kiểm tra tiêu đề `Origin` và mã chống giả mạo yêu cầu chéo trang (`CSRF Token`) trên mọi phương thức `POST / PUT / PATCH / DELETE`.
    - Mọi thao tác cập nhật cấu hình bắt buộc gửi kèm `If-Match: "<etag>"` để chống ghi đè mù giữa hai quản trị viên (`409 conflict_version_mismatch`).
-3. **Nguyên tắc Bốn Mắt (`Four-Eyes Separation of Duties` — `TP-BR-0404`):**
+3. **Nguyên tắc Bốn Mắt (`Four-Eyes Separation of Duties` — `OPS-02`, `TP-FR-0504`):**
    - Khi chính sách tổ chức bật `require_four_eyes_approval = true`, hệ thống kiểm tra bất biến `approver.principal_id != requester.principal_id` ở tầng giao dịch DB đối với 4 nhóm thao tác nhạy cảm: (a) kích hoạt gói `unverified-external` hoặc nâng quyền $\Delta P$, (b) bật chế độ ngoại lệ `scoped_secret_unseal`, (c) phê duyệt lệnh gọi công cụ MCP cấp `destructive`, và (d) bật ghi mẫu gỡ lỗi văn bản tạm thời (`TTL <= 72h`).
 
 ### 3.2. Tín nhiệm Liên Dịch vụ (`Service-to-Service`) & Cấm Chuyển tiếp Token Trái phép (`RFC 8707`)
@@ -81,7 +81,7 @@ Một yêu cầu cốt lõi của chiến lược xác minh Tanpopo là **tách 
 | Tình huống Xác thực | Khả năng Kỹ thuật Ở Tầng Giao thức | Tính Hợp lệ Chính sách & Pháp lý (`DEC-004`) | Hành vi Cưỡng chế Của Tanpopo & Kiểm thử |
 |---|---|---|---|
 | **1. `API Key` / `Cloud IAM` thương mại chính thức (OpenAI Platform, Anthropic Console, Vertex AI, Bedrock)** | Hỗ trợ đầy đủ (`Bearer`, `x-api-key`, `SigV4`, `Workload Identity`). | **Được phép đầy đủ (`COMMERCIAL_API`).** | Hỗ trợ chính thức trong `Official Adapters`, tính toán sổ cái `micro-USD` đầy đủ (`AUTH-04`, `CT-06`). |
-| **2. `OAuth 2.1` cho Cổng AI Nội bộ Doanh nghiệp (Okta / Entra ID / Keycloak bọc trước vLLM / Azure / Gateway công ty)** | Chuẩn `Authorization Code + PKCE` hoặc `Client Credentials` với `client_id` do chính doanh nghiệp sở hữu. | **Được phép đầy đủ (`SELF_HOSTED_INFRA` / `COMMERCIAL_API`).** | Hỗ trợ chính thức qua trình điều khiển `Authorized OAuth 2.1` chuẩn (`AUTH-08`, `CT-19`). |
+| **2. `OAuth 2.1` cho Cổng AI Nội bộ Doanh nghiệp (Okta / Entra ID / Keycloak bọc trước vLLM / Azure / Gateway công ty)** | Chuẩn `Authorization Code + PKCE` hoặc `Client Credentials` với `client_id` do chính doanh nghiệp sở hữu. | **Được phép đầy đủ (`SELF_HOSTED_INFRA` / `COMMERCIAL_API`).** | Hỗ trợ chính thức qua trình điều khiển `Authorized OAuth 2.1` chuẩn (`AUTH-09`, `CT-19`). |
 | **3. `OAuth 2.1` chính thức của hãng AI/MCP có công bố chương trình đối tác cấp `client_id` hợp lệ** | Chuẩn `OAuth 2.1 + PKCE` / `Device Code` với `scope` công khai. | **Chỉ được phép khi hãng đó có điều khoản công khai cho phép ứng dụng bên thứ ba gọi API (`POL-01`).** | Chỉ bật trên `Official/Verified Adapter` sau khi đính kèm bằng chứng tài liệu điều khoản của hãng (`AUTH-09`). |
 | **4. Chiếm dụng phiên đăng nhập web / `session cookie` / `client_id` nội bộ đóng của gói thuê bao cá nhân (`ChatGPT Plus/Pro`, `Codex`, `Claude Pro/Max`, `Google Antigravity`, `Copilot Individual`...)** | Dù về mặt HTTP thô đều là gửi chuỗi ký tự trong tiêu đề `Cookie` hoặc `Authorization`... | **BỊ CẤM TUYỆT ĐỐI (`REJ-003` / `DEC-004`) — Vi phạm điều khoản dịch vụ nhà cung cấp.** | Core **không cung cấp** trình thu thập cookie trình duyệt; lược đồ DB khóa cứng `billing_mode`; cổng kiểm định Marketplace đánh trượt tự động (`CT-20`, `AUTH-16`); giao diện cấm gắn nhãn chính thức (`UX-GR-03`). |
 

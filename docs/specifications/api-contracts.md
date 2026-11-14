@@ -224,7 +224,7 @@ paths:
   /admin/v1/kill-switches:trigger:
     post:
       security: [{ AdminSessionOrToken: [] }]
-      summary: Emergency 4-level kill-switch (VIRTUAL_KEY | PROJECT | CONNECTION | EXTENSION_QUARANTINE)
+      summary: Emergency 4-level kill-switch (VIRTUAL_KEY | PROJECT | PROVIDER_CONNECTION | EXTENSION)
       requestBody:
         required: true
         content:

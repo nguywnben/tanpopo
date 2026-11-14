@@ -35,7 +35,7 @@ flowchart TB
             UserMenu["Hồ sơ Tác nhân, Vai trò RBAC hiện hành & Trạng thái Phiên"]
         end
         subgraph BodyArea["Vùng Nội dung Chính (Main Landmark)"]
-            SideRail["SideNav (width=256, collapsible, label='Điều hướng phân hệ Tanpopo')"]
+            SideRail["SideNav (resizable defaultWidth=256, collapsible, aria-label='Điều hướng phân hệ Tanpopo')"]
             Workspace["LayoutContent (fill cho Bảng/Biểu đồ | contentWidth=640..960 cho Biểu mẫu)"]
             Inspector["LayoutPanel (width=380, hasDivider): Ngăn Chi tiết / Kiểm tra Quyền / Waterfall (ẩn thành Dialog khi <= 1024px)"]
         end

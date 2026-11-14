@@ -1,20 +1,28 @@
-# Tanpopo Documentation & Context Hub (Updated through Phase A07 — `GATE G3: READY_FOR_REVIEW | PROPOSED — NO CODE`)
+# Tanpopo Documentation & Context Hub (Updated through Phase A08 Audit — `SPECIFICATION COMPLETENESS: FAIL | BLOCKING GAPS TRACKED`)
 
-Chào mừng đến với trung tâm tài liệu chuẩn hóa bối cảnh, khám phá sản phẩm, phân tích nghiệp vụ, đặc tả yêu cầu, nền tảng mở rộng, kiến trúc giải pháp, trải nghiệm người dùng/nhà phát triển, vận hành SRE và chiến lược bảo mật/độ tin cậy/kiểm định xuất xưởng của dự án **Tanpopo** (`https://github.com/nguywnben/tanpopo`). Bộ tài liệu này được thiết lập qua các bước **ASTRA A00 → A07** nhằm tạo dựng nguồn sự thật duy nhất (Single Source of Truth) cho Product Owner xem xét phê duyệt tại **Gate G3** trước khi cho phép chạy PoC hoặc lập kế hoạch triển khai mã nguồn.
+Chào mừng đến với trung tâm tài liệu chuẩn hóa bối cảnh, khám phá sản phẩm, phân tích nghiệp vụ, đặc tả yêu cầu, nền tảng mở rộng, kiến trúc giải pháp, trải nghiệm người dùng/nhà phát triển, vận hành SRE, chiến lược bảo mật/kiểm định và **kiểm toán độc lập toàn diện (`ASTRA A08`)** của dự án **Tanpopo** (`https://github.com/nguywnben/tanpopo`). Bộ tài liệu được thiết lập qua các bước **ASTRA A00 → A08** nhằm bảo đảm không một AI Agent hay kỹ sư nào bước vào viết mã nguồn khi vẫn còn các mâu thuẫn hợp đồng, lỗ hổng lược đồ dữ liệu hoặc quyết định chưa được Product Owner phê duyệt.
 
 > **Trạng thái Cổng Giai đoạn Hiện tại:**
 > - **Gate G0 (ASTRA A00 — Chuẩn hóa bối cảnh):** `COMPLETED`
 > - **Gate G1 (ASTRA A01 — Product Discovery):** **`READY_FOR_REVIEW`** *(Product Owner chưa duyệt `SD-G1-01`..`SD-G1-05`; không tự đánh dấu `APPROVED`).*
-> - **Baseline A02 (ASTRA A02 — Phân tích nghiệp vụ):** `DRAFT_COMPLETED` *(Đã tích hợp và truy vết 100% sang A03–A07).*
-> - **Gate G2 (ASTRA A03 — Product Definition, PRD/SRS & Feature Specs):** **`READY_FOR_REVIEW`** *(Bộ đặc tả `DRAFT — UNLOCKED SCOPE` kèm 6 đánh đổi `TD-G2-01`..`06`; chờ Product Owner phê duyệt).*
-> - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`READY_FOR_REVIEW`** *(Bộ đặc tả `ILLUSTRATIVE CANDIDATE — PRE-ADR & PRE-POC` cho Extension Platform, Auth/Connections, Marketplace, MCP/A2A và API Protocols).*
-> - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`READY_FOR_REVIEW`** *(Bộ thiết kế đề xuất `PROPOSED — NO CODE` gồm kiến trúc hệ thống, lược đồ dữ liệu, topo HA, 6 ADRs `ADR-0001`..`0006`, 8 tài liệu UX/Ops, 3 tài liệu Bảo mật `SPEC-SEC-01`..`03` và 4 tài liệu Kiểm thử/SLO/Cổng xuất xưởng `SPEC-QA-01`..`04` — xem gói tổng hợp trình duyệt Gate G3 tại [`docs/quality/release-readiness.md`](./quality/release-readiness.md) Mục 4).*
+> - **Baseline A02 (ASTRA A02 — Phân tích nghiệp vụ):** `DRAFT_COMPLETED` *(Cần vá các điểm chết máy trạng thái `SM-01..08` theo `GAP-08`).*
+> - **Gate G2 (ASTRA A03 — Product Definition, PRD/SRS & Feature Specs):** **`READY_FOR_REVIEW`** *(Bộ đặc tả `DRAFT — UNLOCKED SCOPE`; chờ Product Owner duyệt `TD-G2-01`..`06` + `CR-01`..`04`, `CR-09` và bổ sung `AC` theo `GAP-11`).*
+> - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`READY_FOR_REVIEW`** *(Cần hoàn thiện hợp đồng `TransformResponse` / đa phương thức / MCP JSON-RPC theo `CR-05`, `CR-08`).*
+> - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`READY_FOR_REVIEW`** *(Bộ thiết kế đề xuất `PROPOSED — NO CODE` chờ Product Owner duyệt `ADR-0001`..`0006` và cho phép chạy `SPIKE-01`..`04`).*
+> - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`FAIL` *(11 `CRITICAL` Blockers + 14 `MAJOR` Gaps Open)*** — Xem báo cáo kiểm toán đầy đủ tại [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) và 10 đề xuất thay đổi `CR-01`..`10` + tiêu chí đóng tại [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md). **Dừng trước giai đoạn lập kế hoạch đơn vị mã nguồn (`STOP — NO UNIT IMPLEMENTATION`).**
 
 ---
 
 ## 1. Bản đồ đọc tài liệu cho các phiên / Prompt tiếp theo (Reading Guide)
 
-Trước khi thực hiện bất kỳ bước lập kế hoạch triển khai chi tiết, thử nghiệm PoC hay viết code nào cho Tanpopo, hãy đọc theo đúng thứ tự sau:
+Trước khi thực hiện bất kỳ bước đóng lỗ hổng đặc tả, thử nghiệm PoC hay lập kế hoạch triển khai nào cho Tanpopo, **bắt buộc đọc 2 tệp kiểm toán độc lập A08 cùng tầng quản trị đầu tiên**:
+
+### 1.0. Tầng Kiểm toán Độc lập & Quản lý Khoảng trống Chặn (`docs/reviews/` — **ĐỌC ĐẦU TIÊN**)
+
+| Thứ tự | Đường dẫn thực tế | Nội dung cốt lõi | Khi nào bắt buộc đọc |
+|---|---|---|---|
+| **0A** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`FAIL`):** Phản biện độc lập theo chiều ngang & 8 lát cắt dọc; danh mục 30 phát hiện (`AUD-001`..`030`: `11 CRITICAL`, `14 MAJOR`, `5 MINOR`), kiểm toán sẵn sàng 54 yêu cầu `P0`, nhật ký sửa lỗi phi quyết định và lộ trình quay lại `A02–A07`. | **Luôn đọc đầu tiên** trước khi tin tưởng bất kỳ chi tiết hợp đồng/lược đồ nào ở các tệp A02–A07. |
+| **0B** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01`:** Chi tiết **10 Yêu cầu Thay đổi (`CR-01`..`CR-10`)** trình Product Owner phê duyệt và bảng theo dõi tiêu chí đóng kiểm chứng được cho `GAP-01`..`13`. | Khi Product Owner ra quyết định mở khóa cổng hoặc khi kỹ sư thực hiện vòng vá đặc tả. |
 
 ### 1.1. Tầng Quản trị & Từ điển Chuẩn (`docs/governance/` & `docs/product/glossary.md`)
 
@@ -93,7 +101,7 @@ Trước khi thực hiện bất kỳ bước lập kế hoạch triển khai ch
 | **41** | [`docs/requirements/business-rules.md`](./requirements/business-rules.md) | Bộ **30 quy tắc nghiệp vụ `TP-BR-0101`..`0803`** độc lập công nghệ kèm chủ sở hữu và ngoại lệ. | Khi cài đặt động cơ chính sách, kiểm toán bảo mật và sổ cái ngân sách. |
 | **42** | [`docs/requirements/workflow-requirement-candidates.md`](./requirements/workflow-requirement-candidates.md) | **9 nhóm yêu cầu vận hành (`OPS-01`..`OPS-09`)**, lịch sử ánh xạ ứng viên và 5 điểm mơ hồ nghiệp vụ (`BA-OQ-001`..`005`). | Khi đối chiếu yêu cầu vận hành gốc. |
 | **43** | [`docs/discovery/positioning-and-success-metrics.md`](./discovery/positioning-and-success-metrics.md) | Định vị sản phẩm đề xuất, North Star Metric (`WGMR`), ranh giới sản phẩm và các thử nghiệm `EXP-01`..`06`. | Khi đối chiếu định vị chiến lược và thiết kế thử nghiệm PoC. |
-| **44** | [`docs/discovery/users-jobs-use-cases.md`](./discovery/users-jobs-use-cases.md) | Xếp hạng 5 phân khúc khách hàng, nhóm Anti-Personas, 4 vai trò chức năng và 9 Use Cases khám phá (`UC-01`..`UC-09`). | Khi đối chiếu ngữ cảnh người dùng thực tế. |
+| **44** | [`docs/discovery/users-jobs-use-cases.md`](./discovery/users-jobs-use-cases.md) | Xếp hạng 4 nhóm phân khúc tổ chức (gộp từ 5 đối tượng khách hàng), nhóm Anti-Personas, 4 vai trò chức năng và 9 Use Cases khám phá (`UC-01`..`UC-09`). | Khi đối chiếu ngữ cảnh người dùng thực tế. |
 | **45** | [`docs/discovery/market-and-competitors.md`](./discovery/market-and-competitors.md) | Đối chiếu chi tiết 4 nhóm đối thủ thị trường 2025–2026 kèm nguồn dẫn chiếu. | Khi đối chiếu tính năng cạnh tranh. |
 | **46** | [`docs/discovery/opportunity-and-feasibility.md`](./discovery/opportunity-and-feasibility.md) | Phân tầng Parity/Differentiators/Moats, phân vùng pháp lý/TOS và 7 ý tưởng giá trị cao (`IDEA-01`..`07`). | Khi đối chiếu lợi thế cạnh tranh và ranh giới tuân thủ. |
 | **47** | [`docs/discovery/risk-register.md`](./discovery/risk-register.md) | Xếp hạng 16 rủi ro chiến lược, bảo mật & kỹ thuật (`RSK-001`..`RSK-016`) kèm liên kết kiểm thử nghiệm thu `P0` từ A07. | Khi lập kế hoạch kiểm soát rủi ro kỹ thuật và kiểm thử an ninh. |
@@ -109,7 +117,7 @@ Trước khi thực hiện bất kỳ bước lập kế hoạch triển khai ch
 
 ## 2. Phân biệt rạch ròi: Đã tồn tại trong Code vs Chỉ có trong Thiết kế Tài liệu
 
-> **Kết luận cốt lõi (`VERIFIED_IN_REPO`):** Tính đến hết bước **A07**, repository **vẫn chưa có bất kỳ dòng mã thực thi nghiệp vụ AI Gateway, mã giao diện màn hình mới, mã kiểm thử thực thi hay mã PoC nào** (chưa có server, chưa có Unified API, chưa có routing/policy/cost engine, chưa có plugin runtime/SDK, chưa có MCP/A2A, chưa có CLI và chưa thêm bundler). Toàn bộ hệ thống hiện được định nghĩa đầy đủ ở tầng **kiến trúc giải pháp, lược đồ dữ liệu, hợp đồng giao thức, thiết kế UX/UI Astryx, vận hành SRE, mô hình mối đe dọa bảo mật, chiến lược kiểm thử khép kín và cổng chất lượng xuất xưởng (`PROPOSED — PRE-APPROVAL`)** chờ Product Owner phê duyệt tại **Gate G3** trước khi cho phép viết mã PoC hay mã sản phẩm.
+> **Kết luận cốt lõi (`VERIFIED_IN_REPO`):** Tính đến hết bước **A08**, repository **vẫn chưa có bất kỳ dòng mã thực thi nghiệp vụ AI Gateway, mã giao diện màn hình mới, mã kiểm thử thực thi hay mã PoC nào** (chưa có server, chưa có Unified API, chưa có routing/policy/cost engine, chưa có plugin runtime/SDK, chưa có MCP/A2A, chưa có CLI và chưa thêm bundler). Bộ đặc tả A00–A07 đã được kiểm toán đối kháng toàn diện tại **A08 (`FAIL` — còn `11 CRITICAL` blockers cần Product Owner chốt `CR-01`..`10` và vòng vá đặc tả trước khi lập kế hoạch đơn vị mã nguồn)**.
 
 ### 2.1. Kiểm kê toàn bộ hiện trạng Repository (`Repository Inventory`)
 
@@ -136,7 +144,8 @@ Trước khi thực hiện bất kỳ bước lập kế hoạch triển khai ch
 | `docs/ux/*` | **Tài liệu Thiết kế UX/UI & Tích hợp Astryx (A06 — `PROPOSED`)** | Bao gồm 4 tệp: `information-architecture.md`, `user-flows.md`, `screen-specifications.md`, `design-system-integration.md`. |
 | `docs/operations/*` | **Tài liệu Vận hành SRE, Cài đặt & Developer Experience (A06 — `PROPOSED`)** | Bao gồm 4 tệp: `installer-upgrades.md`, `backups-recovery.md`, `monitoring-incidents.md`, `developer-experience.md`. |
 | `docs/security/*` | **Tài liệu Mô hình Mối đe dọa, Sandbox & Cô lập Bí mật/Thuê bao (A07 — `PROPOSED`)** | Bao gồm 3 tệp: `threat-model.md` (`SPEC-SEC-01`), `plugin-sandbox-and-supply-chain.md` (`SPEC-SEC-02`), `secrets-and-tenant-isolation.md` (`SPEC-SEC-03`). |
-| `docs/quality/*` | **Tài liệu Ma trận Kiểm thử, CI Khép kín, SLO/FMEA & Cổng Xuất xưởng (A04 → A07 — `PROPOSED`)** | Bao gồm 4 tệp: `contract-test-matrix.md` (`SPEC-QA-01`), `test-strategy.md` (`SPEC-QA-02`), `nonfunctional-slo.md` (`SPEC-QA-03`), `release-readiness.md` (`SPEC-QA-04`). |
+| `docs/quality/*` | **Tài liệu Ma trận Kiểm thử, CI Khép kín, SLO/FMEA & Cổng Xuất xưởng (A04 → A08 — `PROPOSED`)** | Bao gồm 4 tệp: `contract-test-matrix.md` (`SPEC-QA-01`), `test-strategy.md` (`SPEC-QA-02`), `nonfunctional-slo.md` (`SPEC-QA-03`), `release-readiness.md` (`SPEC-QA-04`). |
+| `docs/reviews/*` | **Tài liệu Kiểm toán Độc lập & Sổ Khoảng trống Chưa Đóng (A08 — `AUDIT GATE`)** | Bao gồm 2 tệp: `integrated-audit.md` (`REV-AUD-01`) và `unresolved-gaps.md` (`REV-GAP-01` — `CR-01`..`10`, `GAP-01`..`13`). |
 
 ---
 
@@ -150,7 +159,7 @@ Trước khi thực hiện bất kỳ bước lập kế hoạch triển khai ch
 
 ---
 
-## 4. Trạng thái Git hiện tại sau bước A07 (`GATE G3: READY_FOR_REVIEW | PROPOSED — NO CODE`)
+## 4. Trạng thái Git hiện tại sau bước A08 (`AUDIT VERDICT: FAIL | STOP BEFORE IMPLEMENTATION`)
 
 - **Nhánh làm việc:** `main` (đồng bộ với `origin/main`).
-- **Tệp thay đổi/tạo mới qua A00 → A07:** Chỉ làm việc trong thư mục `docs/` (tổng cộng **54 tệp Markdown** gồm `docs/README.md`, 3 tệp `docs/governance/*`, 5 tệp `docs/discovery/*`, 4 tệp `docs/product/*`, 7 tệp `docs/requirements/*`, 9 tệp `docs/specifications/*`, 10 tệp `docs/architecture/*`, 4 tệp `docs/ux/*`, 4 tệp `docs/operations/*`, 3 tệp `docs/security/*` và 4 tệp `docs/quality/*`), **không chỉnh sửa bất kỳ tệp cấu hình, theme hay mã nguồn nào đã có trước đó**. Mỗi bước được lưu mốc bằng một atomic Git commit riêng biệt theo quy ước `DEC-008` (`docs: step <NN> - ...`).
+- **Tệp thay đổi/tạo mới qua A00 → A08:** Chỉ làm việc trong thư mục `docs/` (tổng cộng **56 tệp Markdown** gồm `docs/README.md`, 3 tệp `docs/governance/*`, 5 tệp `docs/discovery/*`, 4 tệp `docs/product/*`, 7 tệp `docs/requirements/*`, 9 tệp `docs/specifications/*`, 10 tệp `docs/architecture/*`, 4 tệp `docs/ux/*`, 4 tệp `docs/operations/*`, 3 tệp `docs/security/*`, 4 tệp `docs/quality/*` và 2 tệp `docs/reviews/*`), **không chỉnh sửa bất kỳ tệp cấu hình, theme hay mã nguồn nào đã có trước đó**. Mỗi bước được lưu mốc bằng một atomic Git commit riêng biệt theo quy ước `DEC-008` (`docs: step <NN> - ...`).

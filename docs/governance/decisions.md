@@ -1,8 +1,8 @@
 # Decision Register & Blocking Open Questions — Tanpopo
 
-> **Tài liệu nguồn (Canonical Decision Log — Updated through Phase A07)**
-> - **Ngày cập nhật:** `2026-11-12`
-> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER`, `ACCEPTED` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Toàn bộ phạm vi sản phẩm (`G1`/`G2`), đặc tả hợp đồng (`Baseline A04`), kiến trúc kỹ thuật/ADRs (`Gate G3 — ADR-0001..0006`), thiết kế UX/UI, DX & Vận hành (`Baseline A06`) và chiến lược Bảo mật, Độ tin cậy & Cổng Kiểm định Xuất xưởng (`Baseline A07 — Gate G3 Consolidation`) hiện đều ở trạng thái **`READY_FOR_REVIEW` / `PROPOSED`**.
+> **Tài liệu nguồn (Canonical Decision Log — Updated through Phase A08 Independent Audit)**
+> - **Ngày cập nhật:** `2026-11-14`
+> - **Nguyên tắc quản trị:** Không một gợi ý nào từ AI Agent/Assistant được phép nâng trạng thái lên `CONFIRMED_BY_OWNER`, `ACCEPTED` hoặc `APPROVED` nếu Product Owner chưa trực tiếp phê duyệt. Toàn bộ phạm vi sản phẩm (`G1`/`G2`), đặc tả hợp đồng (`Baseline A04`), kiến trúc kỹ thuật/ADRs (`Gate G3 — ADR-0001..0006`), thiết kế UX/Ops (`Baseline A06`) và chiến lược Bảo mật/Kiểm thử (`Baseline A07`) hiện đều ở trạng thái **`READY_FOR_REVIEW` / `PROPOSED`**; kết quả kiểm toán độc lập **ASTRA A08** đánh giá **`Specification Completeness = FAIL`** do còn các lỗ hổng chặn (`GAP-01`..`13`) và **10 Yêu cầu Thay đổi (`CR-01`..`CR-10`)** chờ Product Owner quyết định tại [`unresolved-gaps.md`](../reviews/unresolved-gaps.md).
 
 ---
 
@@ -18,6 +18,7 @@
 | **Gate G3** | **ASTRA A05** — Solution Architecture & Technical Design | Kiến trúc tổng thể `ARCH-SYS-01`, Lược đồ vật lý hai chế độ `ARCH-DATA-01`, Topo cụm HA `ARCH-OPS-01`, Đặc tả định tuyến/chính sách `SPEC-CORE-01`, Sổ cái `micro-USD`/OTel `SPEC-CORE-02`, Hợp đồng OpenAPI/JSON Schema/Protobuf `SPEC-API-01`, giao thức PoC `SPIKE-01`..`04` và bộ **6 ADRs (`ADR-0001`..`0006`)**. | **`READY_FOR_REVIEW`** | **Thiết kế Đề xuất (`PROPOSED — PRE-APPROVAL`)**. Đã vượt qua toàn bộ 6 mục tự kiểm tra kiến trúc A05; **chưa viết code ứng dụng hay code PoC** chờ Product Owner phê duyệt. |
 | **Baseline A06** | **ASTRA A06** — UX/UI, Developer Experience & Vận hành SRE | Bộ 4 đặc tả UX/UI `SPEC-UX-01`..`04` (`docs/ux/*`: 11 phân khu IA, 8 hành trình `UJ-01`..`08` đủ 5 trạng thái, 16 màn hình `SCR-01`..`16`, 6 rào chắn `UX-GR`, tích hợp Astryx `neutral` & `UX-AC-01`..`12`) và 4 đặc tả DX/Vận hành `SPEC-OPS-01`..`04` (`docs/operations/*`: cài đặt đa nền tảng/Air-Gap, sao lưu/DR `RTO < 15m`, giám sát/7 sổ tay sự cố `INC-01`..`07`, `tanpopo` CLI/SDK & `OPS-AC-01`..`12`). | **`READY_FOR_REVIEW`** | **Thiết kế Trải nghiệm & Vận hành Đề xuất (`PROPOSED — NO CODE`)**. Giữ nguyên `neutral` mặc định (`DEC-007`), **không khóa theme chưa duyệt, không chạy `theme eject` và chưa lập trình frontend/backend**. |
 | **Gate G3 (Tổng hợp A05–A07)** | **ASTRA A07** — Security, Reliability & Verification Strategy | Bộ 3 đặc tả bảo mật `SPEC-SEC-01`..`03` (`docs/security/*`: Threat Model 13 mối đe dọa `TM-01`..`13`, Sandbox/Supply-Chain & Mã hóa phong bì `AEAD AAD` + cô lập 4 lớp + ranh giới `DEC-004`) và 4 đặc tả chất lượng/độ tin cậy `SPEC-QA-01`..`04` (`docs/quality/*`: `CT-01`..`32`, `AUTH-01`..`16`, `FZ-01`..`06`, CI khép kín `0` gọi AI ngoài, `SLO-01`..`08` `TARGET / UNVERIFIED`, 8 ca `FMEA-01`..`08`, 7 cổng xuất xưởng `GATE-REL-01`..`07` và Gói Trình Duyệt Gate G3). | **`READY_FOR_REVIEW`** | **Chiến lược Bảo mật, Độ tin cậy & Kiểm định Đề xuất (`PROPOSED — NO CODE`)**. **Không tự nâng Gate G3 lên `APPROVED`**; xin phép tường minh Product Owner tại [`release-readiness.md`](../quality/release-readiness.md) Mục 4 trước khi viết bất kỳ dòng mã PoC hay mã ứng dụng nào. |
+| **Audit Gate A08** | **ASTRA A08** — Independent Specification & Architecture Audit | Phản biện độc lập ngang + 8 lát cắt dọc trên toàn bộ 54 tài liệu A00–A07 ([`integrated-audit.md`](../reviews/integrated-audit.md) — `AUD-001`..`030`: `11 CRITICAL`, `14 MAJOR`, `5 MINOR`; [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) — `CR-01`..`10` & `GAP-01`..`13`). | **`FAIL` *(Blocking Gaps Open)*** | **Chặn chuyển sang lập kế hoạch đơn vị mã nguồn (`STOP — NO IMPLEMENTATION`)**. Yêu cầu Product Owner chốt `Gate G1–G3` + `CR-01`..`10` và hoàn tất vòng quay lại vá có mục tiêu trên `A02–A07`. |
 
 ---
 
@@ -282,6 +283,25 @@
 | [**`ADR-0004`**](../architecture/adr/0004-web-console-stack-astryx-evaluation-and-repo-layout.md) | Phê chuẩn qua đánh giá độc lập stack **SPA tĩnh `TypeScript + React 19 + Vite + StyleX + Astryx v0.7.13 (neutral)`** nhúng vào binary Go (`embed.FS`), dời về `web/console/` và đồng bộ giấy phép **Apache-2.0**. | `OQ-007`, `ASM-003`, `ASM-008`, `ISS-001`..`005` | `PROPOSED` — Cần Owner phê duyệt trước khi dời thư mục gốc. |
 | [**`ADR-0005`**](../architecture/adr/0005-two-phase-budget-ledger-and-commercial-billing-separation.md) | Sổ cái ngân sách hai pha số nguyên `BIGINT micro-USD`, gắn nhãn độ chính xác `EXACT / ESTIMATED / UNMETERED_FLAGGED`, tách biệt cứng thanh toán API thương mại khỏi thuê bao cá nhân. | `BA-OQ-002`, `TD-G2-03`, `DEC-004` | `PROPOSED` — Cần Owner duyệt & kiểm chứng `SPIKE-03`. |
 | [**`ADR-0006`**](../architecture/adr/0006-immutable-config-snapshots-and-fast-revocation.md) | Ảnh chụp cấu hình bất biến `Copy-on-Write ConfigSnapshot` + truyền tin thu hồi 3 lớp (`Valkey Pub/Sub` + `PG LISTEN/NOTIFY` + nhịp `2s`) đạt SLA `< 1s` / `< 5s` + chế độ lỗi phân tầng. | `BA-OQ-003`, `TP-NFR-0404`, `RSK-011` | `PROPOSED` — Cần Owner phê duyệt. |
+
+---
+
+## Phần I — Mười Đề xuất Thay đổi (`CR-01`..`CR-10`) Từ Kiểm toán Độc lập Bước A08 Trình Product Owner Quyết định
+
+> Phân tích chi tiết các phương án đánh đổi và tiêu chí đóng nằm tại [`docs/reviews/unresolved-gaps.md`](../reviews/unresolved-gaps.md). Kiểm toán viên **không tự ý quyết định** bất kỳ mục nào dưới đây:
+
+| Mã CR | Vấn đề Mâu thuẫn / Lỗ hổng Kiến trúc Cần Chốt | Khuyến nghị Của Kiểm toán viên (`PROPOSED`) | Trạng thái |
+|---|---|---|---|
+| **`CR-01`** | Danh sách chính xác `Official Reference Adapters` trong `MVP (v0.1)` (`Bedrock` vướng IAM `v0.3`) & điểm cuối `/v1/rerank`. | Khóa `5` hãng ở `v0.1` (`OpenAI`, `Anthropic`, `Gemini`, `OpenAI-Compatible`, `Ollama`); đưa `Bedrock`, `Azure` và `/v1/rerank` sang `v0.2`. | `OPEN` |
+| **`CR-02`** | Phân liệt `2-Tier` (`G1/G2/SRS`) vs `3-Tier Isolated Sidecar` (`ADR-0002` thiếu mã `TP-FR-*`). | Giữ đích `3-Tier`, nhưng `v0.1` chỉ xây `Tier-1 + Tier-2`; thêm `TP-FR-0308 (Could — v0.3)` cho `Tier-3 Sidecar`. | `OPEN` |
+| **`CR-03`** | Xung đột `3` vs `4` nhãn `Trust Tier` (`PRIVATE_ENTERPRISE`) & tiền tố không gian tên `@tanpopo/*` vs `@tanpopo-official/*`. | Giữ `3` nhãn gốc + cột `enterprise_signed BOOLEAN` (hoặc nâng chính thức `TP-BR-0201` lên `4` nhãn); khóa cả `^@tanpopo(-[a-z0-9]+)?/`. | `OPEN` |
+| **`CR-04`** | Lệch `5` vs `6` vai trò `RBAC`, thiếu bảng bật/tắt Plugin cấp `Org` & nghịch lý cổng thoát `v0.1` (`Multi-Org`, `Air-Gap`). | Chốt `6` vai trò RBAC, thêm `org_extension_policies` và hiệu chỉnh cổng thoát `v0.1` khớp phạm vi đơn nút. | `OPEN` |
+| **`CR-05`** | `runtime.proto` lỗi biên dịch, thiếu `TransformResponse`, thiếu móc `/native/*`, `32 MB` đa phương thức làm tràn `16 MiB` Wasm & đóng `scoped_secret_unseal`. | Hoàn thiện `runtime.proto`, tách luồng `blob_ref` ngoài bộ nhớ Wasm, cấm tiêm `Cookie` và bỏ `scoped_secret_unseal` khỏi Wasm Tầng 2. | `OPEN` |
+| **`CR-06`** | Thiếu `8` bảng SQL, `3` công thức `AEAD AAD` lệch nhau, thiếu `Project DEK` cho `Crypto-Shredding` & đứt chuỗi băm `audit_events` khi ghi HA. | Bổ sung đủ `8` bảng, khóa tổ hợp `(org_id, id)` + `FORCE RLS`, `project_encryption_keys`, `SHA-256` cho khóa ảo và băm `audit_events` theo `org_id` + `JCS`. | `OPEN` |
+| **`CR-07`** | Split-brain giữ chỗ ngân sách giữa `Valkey` và `PostgreSQL` + lỗi `CROSSSLOT` trên `Valkey Cluster`. | Khóa lược đồ khóa `tp:v1:{<org_id>}:...` dùng hash-tag `{<org_id>}` và nhịp đồng bộ mức giữ chỗ xuống PostgreSQL. | `OPEN` |
+| **`CR-08`** | HTTP `202` + `X-Tanpopo-Approval-Token` phá vỡ trình khách MCP chuẩn (`Claude Code`/`Cursor`) & gộp chung `SM-06` với `A2A Task`. | Dùng phản hồi JSON-RPC chuẩn của MCP cho phê duyệt bất đồng bộ và tách máy trạng thái `SM-09` riêng cho `A2A`. | `OPEN` |
+| **`CR-09`** | Thiếu lệnh cứu hộ khi quên mật khẩu quản trị (`Break-Glass`), thiếu `stream_options.include_usage`, chưa định nghĩa `Webhooks` & `Response Cache`. | Thêm `tanpopo admin reset-local-owner` + `include_usage` vào `v0.1`; xếp `Webhooks` vào `v0.2` và `Response Cache` vào `v0.3+`. | `OPEN` |
+| **`CR-10`** | Thiếu `51/57` endpoint OpenAPI quản trị, xung đột `Playground`, `SSRFGuard` chặn `Ollama` ở `UJ-01`, 2 tên nhị phân CLI & phông chữ `Air-Gap` Astryx. | Hoàn thiện `SPEC-API-01`, cấp khóa phiên thử nghiệm `Playground`, mở xác nhận loopback trên Wizard, chuẩn hóa 1 nhị phân `tanpopo` và Vite alias phông `Figtree`. | `OPEN` |
 
 
 

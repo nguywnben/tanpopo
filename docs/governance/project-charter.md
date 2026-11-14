@@ -1,10 +1,10 @@
 # Project Charter — Tanpopo
 
-> **Tài liệu nguồn (Canonical Context Artifact — Updated at Phase A02)**
-> - **Phiên bản:** `0.3.0-a02-draft`
-> - **Ngày cập nhật:** `2026-11-11`
+> **Tài liệu nguồn (Canonical Context Artifact — Baseline A00–A02, Audited at Phase A08)**
+> - **Phiên bản:** `0.3.1-step08-audit`
+> - **Ngày cập nhật:** `2026-11-14`
 > - **Vai trò biên soạn:** Product Intelligence Lead & Principal Solution Architect
-> - **Trạng thái tài liệu:** Baseline chuẩn hóa bối cảnh kết hợp kết quả Discovery & Phân tích Nghiệp vụ nháp (**Gate G1: `READY_FOR_REVIEW`**, **Gate G2: `DRAFT / READY_FOR_REVIEW`** — chưa khóa scope/stack/kiến trúc chi tiết)
+> - **Trạng thái tài liệu:** Baseline chuẩn hóa bối cảnh gốc (`CONFIRMED_BY_OWNER`); các cổng **Gate G1, Gate G2 và Gate G3 (A05–A07)** hiện đều ở trạng thái **`READY_FOR_REVIEW`** (chưa khóa scope/stack/kiến trúc chi tiết; xem kết quả kiểm toán độc lập tại [`docs/reviews/integrated-audit.md`](../reviews/integrated-audit.md)).
 
 ---
 

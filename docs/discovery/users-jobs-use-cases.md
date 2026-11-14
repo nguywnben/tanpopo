@@ -9,7 +9,7 @@
 
 ## 1. Phân khúc Tổ chức & Xếp hạng Ưu tiên Tiếp cận (Target Segments Ranking)
 
-Để tránh sai lầm phổ biến của các dự án hạ tầng mã nguồn mở là *"thiết kế cho ngân hàng 10.000 người ngay ngày đầu nên quá nặng với developer, nhưng lại thiếu chứng chỉ bảo mật để bán cho ngân hàng"*, chúng ta chấm điểm và xếp hạng 5 phân khúc theo 4 trục (thang 1–5): **Cường độ nỗi đau (Pain)**, **Khả năng chấp nhận sớm / ít rào cản mua sắm (Adoption Speed)**, **Giá trị lan tỏa hệ sinh thái Plugin (Ecosystem Flywheel)** và **Độ phù hợp năng lực đội ngũ giai đoạn 0.x (Fit)**.
+Để tránh sai lầm phổ biến của các dự án hạ tầng mã nguồn mở là *"thiết kế cho ngân hàng 10.000 người ngay ngày đầu nên quá nặng với developer, nhưng lại thiếu chứng chỉ bảo mật để bán cho ngân hàng"*, chúng ta gom 5 nhóm đối tượng mục tiêu thành **4 phân khúc tổ chức** (gộp `Solo Dev` & `AI Power User` vào chung nhóm cá nhân chính thống) và xếp hạng theo 4 trục (thang 1–5): **Cường độ nỗi đau (Pain)**, **Khả năng chấp nhận sớm / ít rào cản mua sắm (Adoption Speed)**, **Giá trị lan tỏa hệ sinh thái Plugin (Ecosystem Flywheel)** và **Độ phù hợp năng lực đội ngũ giai đoạn 0.x (Fit)**.
 
 | Hạng ưu tiên | Phân khúc người dùng | Pain (1–5) | Adoption Speed (1–5) | Ecosystem Flywheel (1–5) | Fit 0.x (1–5) | Tổng điểm | Vai trò chiến lược với Tanpopo (`PROPOSED`) |
 |---|---|---|---|---|---|---|---|

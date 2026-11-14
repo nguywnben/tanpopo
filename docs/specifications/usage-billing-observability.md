@@ -103,7 +103,7 @@ Mọi dòng nhật ký xuất ra `stdout` (hoặc OTLP Logs) là một đối t�
 
 ### 3.4. Quy tắc Cảnh báo Theo Triệu chứng & Khung Runbook Tối thiểu (`Symptom Alerts & Runbooks`)
 
-Chỉ sử dụng 2 mức độ cảnh báo hành động (**`PAGE`** gọi trực chiến ngay và **`TICKET`** xử lý trong tuần), mỗi cảnh báo gắn cứng liên kết tới `docs/runbooks/<alert-slug>.md`:
+Chỉ sử dụng 2 mức độ cảnh báo hành động (**`PAGE`** gọi trực chiến ngay và **`TICKET`** xử lý trong tuần), mỗi cảnh báo gắn cứng liên kết tới sổ tay trực chiến tại [`docs/operations/monitoring-incidents.md`](../operations/monitoring-incidents.md) (`INC-01`..`07`):
 
 1. **`PAGE — TanpopoInternalHighErrorBurn`:** Tỷ lệ lỗi nội bộ `5xx` của Tanpopo đốt ngân sách `>= 14.4x` trong `5m/1h`.
    - *Runbook tóm tắt:* **Ý nghĩa:** Tầng lưu trữ hoặc bản triển khai mới của Tanpopo gặp lỗi nội bộ. **Kiểm tra đầu tiên:** Xem `tanpopo_http_requests_total{status_class="5xx"}` nhóm theo `error_code` và kiểm tra kết nối `PgBouncer/PostgreSQL`. **Leo thang:** Đội trực Hạ tầng Gateway (`Operator`) để thực hiện `Rolling Rollback`.

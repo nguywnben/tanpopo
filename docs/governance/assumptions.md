@@ -1,9 +1,9 @@
 # Assumptions, Hypotheses & Open Repository Issues — Tanpopo
 
-> **Tài liệu nguồn (Canonical Assumptions & Issues Log — Updated through Phase A05)**
-> - **Ngày cập nhật:** `2026-11-11`
-> - **Trạng thái cổng hiện tại:** **Gate G1, Gate G2 & Gate G3: `READY_FOR_REVIEW`** (`PROPOSED — PRE-APPROVAL`)
-> - **Mục đích:** Tách bạch minh bạch giữa **giả thuyết làm việc chưa xác thực thực nghiệm (`ASSUMED — UNVALIDATED HYPOTHESIS`)** và **sự thật đã kiểm chứng (`VERIFIED_IN_REPO` / `CONFIRMED_BY_OWNER`)**, đồng thời gắn kết từng giả thuyết với các giao thức thử nghiệm PoC (`SPIKE-01`..`04` tại [`system-design.md`](../architecture/system-design.md)), bộ ADR (`ADR-0001`..`0006`) và các điểm lệch thực tế trong repository.
+> **Tài liệu nguồn (Canonical Assumptions & Issues Log — Updated through Phase A08 Audit)**
+> - **Ngày cập nhật:** `2026-11-14`
+> - **Trạng thái cổng hiện tại:** **Gate G1, Gate G2 & Gate G3: `READY_FOR_REVIEW`** | **Audit A08: `FAIL` (Blocking Gaps Documented at [`unresolved-gaps.md`](../reviews/unresolved-gaps.md))**
+> - **Mục đích:** Tách bạch minh bạch giữa **giả thuyết làm việc chưa xác thực thực nghiệm (`ASSUMED — UNVALIDATED HYPOTHESIS`)** và **sự thật đã kiểm chứng (`VERIFIED_IN_REPO` / `CONFIRMED_BY_OWNER`)**, đồng thời gắn kết từng giả thuyết với các giao thức thử nghiệm PoC (`SPIKE-01`..`04` tại [`system-design.md`](../architecture/system-design.md)), bộ ADR (`ADR-0001`..`0006`), chiến lược kiểm định A07 (`SPEC-SEC-*`, `SPEC-QA-*`) và các điểm lệch thực tế trong repository.
 
 ---
 

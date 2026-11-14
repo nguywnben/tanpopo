@@ -100,6 +100,8 @@ flowchart LR
 
 ## 4. Mười Hai Tiêu chí Nghiệm thu Sẵn sàng Vận hành Có Thể Kiểm thử (`OPS-AC-01` .. `OPS-AC-12`)
 
+> **Lưu ý trung thực đo lường (`TARGET / UNVERIFIED`):** Toàn bộ các ngưỡng thời gian, bộ nhớ và độ trễ trong bảng dưới đây (`< 3.0s`, `< 128 MiB`, `< 1.0s`/`< 5.0s`, `RTO < 15m`, `< 60s`) hiện đều là **mục tiêu thiết kế chưa qua đo thực nghiệm (`TARGET / UNVERIFIED`)** do dự án chưa viết mã thực thi.
+
 Toàn bộ năng lực vận hành và SRE của Tanpopo được nghiệm thu qua **12 bài kiểm thử thực tế có ngưỡng đậu/trượt rõ ràng**:
 
 | Mã Tiêu chí | Hạng mục Vận hành Kiểm chứng | Ngưỡng Đậu Định lượng (`Testable Pass Criteria`) | Cách Thức Chạy Kiểm thử Tự động / Diễn tập |
