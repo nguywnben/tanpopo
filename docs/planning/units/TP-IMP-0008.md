@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0008` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified `2026-11-14`; `internal/security/vault/...` `90.7%` local `CGO_ENABLED=0` coverage + cross-OS builds + `scripts/ci/check.go --all` `PASS`; fresh-context `security-auditor` & `code-reviewer` `PASS`; `-race` CI & Product Owner acceptance pending)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified `2026-11-14`; `internal/security/vault/...` `90.8%` local `CGO_ENABLED=0` coverage + cross-OS builds + fail-closed `PostShredHook`/`CheckpointWAL` + `scripts/ci/check.go --all` `PASS`; **`CR-12` OPEN** on `AC-3` pre-shred intact-KEK backup scope; `-race` CI & Product Owner ruling/acceptance pending)* |
 | **Size** | `M` (`internal/security/vault/*`, `db/migrations/sqlite/0002_vault.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Cryptographic protection for crown-jewel assets `AST-01`, `AST-02`)* |
 | **Technical Owner** | `Principal Security / Cryptography Engineer` |
@@ -39,7 +39,7 @@ Build the write-only secret vault (`Write-Only Secret Vault`) using three-tier `
 ## 5. Acceptance Criteria & Mandatory Negative Cases
 - **`AC-1`:** Given canary secret `sk-tp-canary-DO-NOT-LEAK-9f8e7d6c`, When calling `SealSecret`, Then on-disk SQLite bytes contain only high-entropy ciphertext (scanning the raw `.db` file for the canary string yields `0` hits) and `GetSecretMetadata` returns only an irreversible fingerprint.
 - **`AC-2`:** Given `KEK_v1` wrapping 10 `Org DEKs`, When invoking `RewrapAllOrgDEKs(KEK_v1 -> KEK_v2)`, Then all 10 organizations continue unsealing `SecretCredential` records seamlessly under `KEK_v2` without rewriting `secret_credentials`.
-- **`AC-3`:** Given `Project P1` and `Project P2` inside `Org A`, When invoking `ShredProjectDEK(Org_A, P1)`, Then `P1`'s cached RAM `DEK` is zeroized immediately and all `P1`-scoped secrets become permanently undecryptable (even from SQLite backups captured prior to shredding), while `P2` continues operating `100%` normally.
+- **`AC-3`:** Given `Project P1` and `Project P2` inside `Org A`, When invoking `ShredProjectDEK(Org_A, P1)`, Then `P1`'s cached RAM `DEK` is zeroized immediately and all `P1`-scoped secrets become permanently undecryptable (even from SQLite backups captured prior to shredding), while `P2` continues operating `100%` normally. *(Note — [`CR-12` Pending Owner Ruling](../../reviews/unresolved-gaps.md): Under the `v0.1` single shared local `Master KEK`, adversarial testing `TestVaultAdversarialPreShredBackupRestoreWithIntactKEK` proves `P1` secrets are permanently undecryptable on the live shredded DB, on re-injected pre-shred ciphertexts, and on backups missing `Master KEK`, with `0` `.db`/`-wal`/`-shm` residue; however, restoring an immutable pre-shred snapshot alongside the still-valid shared `kek_v1` can decrypt `P1` unless `kek_v1` itself is rotated & retired or per-project external KMS keys are used.)*
 - **`NEG-1` (`AUTH-14` Ciphertext Transplant):** Using raw SQL to copy `nonce` + `ciphertext` from `Org A` to `Org B` (or from `Project P1` to `Project P2`) → `UnsealWithCapability` fails immediately with a `GCM` authentication tag error (`cipher: message authentication failed`).
 - **`NEG-2`:** Invoking `UnsealWithCapability` with a zero-value forged `UnsealCapability{}` or starting in production mode with `TANPOPO_MASTER_KEY` shorter than `32 bytes` / all-zero bytes → rejected immediately (`Fail-Closed`).
 - **`NEG-3`:** Never reuse a `(DEK, nonce)` pair or include raw key bytes inside decryption error messages or logs.
@@ -51,7 +51,7 @@ Build the write-only secret vault (`Write-Only Secret Vault`) using three-tier `
 - Data-race verification (`-race`, `CGO_ENABLED=1`): `go test -v -race ./internal/security/vault/...`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** `scripts/ci/check.go` performs AST verification ensuring `vault.MintUnsealCapabilityForBroker()` is invoked at exactly one call site inside `cmd/tanpopo`; transient plaintext byte slices are scrubbed via `defer clear(plaintext)` immediately after use.
+- **Security Invariant:** `scripts/ci/check.go` performs AST verification ensuring `vault.MintUnsealCapabilityForBroker()` is invoked at most once inside `cmd/tanpopo` (`0` references permitted in any other production package, closing aliasing, parenthesized calls, `//go:linkname`, and top-level packages); tightening from `at-most-one (<= 1)` to `exactly-one (== 1)` along with wiring the single production `BlindHostCredentialBroker` consumer inside `cmd/tanpopo` is deferred to [`TP-IMP-0010`](./TP-IMP-0010.md) / [`TP-IMP-0015`](./TP-IMP-0015.md). `NewStore` enforces a mandatory non-nil `PostShredHook` (fail-closed; e.g., `sqlite.Store.CheckpointWAL` checking `PRAGMA wal_checkpoint(TRUNCATE)` `(busy, log, checkpointed)` + `PRAGMA secure_delete=1`), and transient plaintext/DEK/KEK byte slices are scrubbed via `clear(...)` immediately after use.
 - **Rollback:** Purely additive schema (`0002_vault.sql`), fully compatible with hot SQLite backups.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
