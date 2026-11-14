@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 const (
@@ -39,6 +41,9 @@ var (
 	// ErrPendingShredCleanup indicates an earlier committed shred for the target scope has not yet
 	// completed verified WAL/disk cleanup (pending crash recovery or retry).
 	ErrPendingShredCleanup = errors.New("vault: prior shred WAL cleanup is still pending")
+	// ErrStaleShredGeneration indicates a shred retry or stale request targeted an older DEK
+	// generation than the active key currently persisted in the database.
+	ErrStaleShredGeneration = fmt.Errorf("%w: stale DEK generation or superseded shred request", port.ErrVersionConflict)
 )
 
 func validateAADSegment(label, val string) error {
@@ -119,10 +124,11 @@ func computeKeyFingerprint(orgID, secretID string, plaintext []byte) string {
 }
 
 type orgDEKCacheEntry struct {
-	kekKeyID    string
-	dekVersion  int64
-	dek         []byte
-	expiresAtMs int64
+	kekKeyID      string
+	dekVersion    int64
+	keyGeneration int64
+	dek           []byte
+	expiresAtMs   int64
 }
 
 type projectDEKCacheKey struct {
@@ -133,6 +139,7 @@ type projectDEKCacheKey struct {
 type projectDEKCacheEntry struct {
 	orgDEKVersion     int64
 	projectDEKVersion int64
+	keyGeneration     int64
 	dek               []byte
 	expiresAtMs       int64
 }
@@ -169,24 +176,25 @@ func (c *dekCache) generation() uint64 {
 	return c.evictGen
 }
 
-func (c *dekCache) getOrgDEK(orgID string, nowMs int64) (kekKeyID string, dekVersion int64, dekCopy []byte, ok bool) {
+func (c *dekCache) getOrgDEK(orgID string, nowMs int64) (kekKeyID string, dekVersion, keyGeneration int64, dekCopy []byte, ok bool) {
 	c.mu.RLock()
 	entry := c.orgDEKs[orgID]
 	if entry == nil {
 		c.mu.RUnlock()
-		return "", 0, nil, false
+		return "", 0, 0, nil, false
 	}
 	if nowMs >= entry.expiresAtMs {
 		c.mu.RUnlock()
 		c.evictExpiredOrg(orgID, nowMs)
-		return "", 0, nil, false
+		return "", 0, 0, nil, false
 	}
 	cp := make([]byte, len(entry.dek))
 	copy(cp, entry.dek)
 	kekKeyID = entry.kekKeyID
 	dekVersion = entry.dekVersion
+	keyGeneration = entry.keyGeneration
 	c.mu.RUnlock()
-	return kekKeyID, dekVersion, cp, true
+	return kekKeyID, dekVersion, keyGeneration, cp, true
 }
 
 func (c *dekCache) evictExpiredOrg(orgID string, nowMs int64) {
@@ -198,7 +206,7 @@ func (c *dekCache) evictExpiredOrg(orgID string, nowMs int64) {
 	}
 }
 
-func (c *dekCache) putOrgDEKIfGen(orgID, kekKeyID string, dekVersion int64, dek []byte, nowMs int64, expectedGen uint64) bool {
+func (c *dekCache) putOrgDEKIfGen(orgID, kekKeyID string, dekVersion, keyGeneration int64, dek []byte, nowMs int64, expectedGen uint64) bool {
 	cp := make([]byte, len(dek))
 	copy(cp, dek)
 
@@ -212,33 +220,35 @@ func (c *dekCache) putOrgDEKIfGen(orgID, kekKeyID string, dekVersion int64, dek 
 		clear(old.dek)
 	}
 	c.orgDEKs[orgID] = &orgDEKCacheEntry{
-		kekKeyID:    kekKeyID,
-		dekVersion:  dekVersion,
-		dek:         cp,
-		expiresAtMs: nowMs + c.ttlMs,
+		kekKeyID:      kekKeyID,
+		dekVersion:    dekVersion,
+		keyGeneration: keyGeneration,
+		dek:           cp,
+		expiresAtMs:   nowMs + c.ttlMs,
 	}
 	return true
 }
 
-func (c *dekCache) getProjectDEK(orgID, projectID string, nowMs int64) (orgDEKVersion, projectDEKVersion int64, dekCopy []byte, ok bool) {
+func (c *dekCache) getProjectDEK(orgID, projectID string, nowMs int64) (orgDEKVersion, projectDEKVersion, keyGeneration int64, dekCopy []byte, ok bool) {
 	key := projectDEKCacheKey{orgID: orgID, projectID: projectID}
 	c.mu.RLock()
 	entry := c.projDEKs[key]
 	if entry == nil {
 		c.mu.RUnlock()
-		return 0, 0, nil, false
+		return 0, 0, 0, nil, false
 	}
 	if nowMs >= entry.expiresAtMs {
 		c.mu.RUnlock()
 		c.evictExpiredProject(key, nowMs)
-		return 0, 0, nil, false
+		return 0, 0, 0, nil, false
 	}
 	cp := make([]byte, len(entry.dek))
 	copy(cp, entry.dek)
 	orgV := entry.orgDEKVersion
 	projV := entry.projectDEKVersion
+	keyGeneration = entry.keyGeneration
 	c.mu.RUnlock()
-	return orgV, projV, cp, true
+	return orgV, projV, keyGeneration, cp, true
 }
 
 func (c *dekCache) evictExpiredProject(key projectDEKCacheKey, nowMs int64) {
@@ -250,7 +260,7 @@ func (c *dekCache) evictExpiredProject(key projectDEKCacheKey, nowMs int64) {
 	}
 }
 
-func (c *dekCache) putProjectDEKIfGen(orgID, projectID string, orgDEKVersion, projectDEKVersion int64, dek []byte, nowMs int64, expectedGen uint64) bool {
+func (c *dekCache) putProjectDEKIfGen(orgID, projectID string, orgDEKVersion, projectDEKVersion, keyGeneration int64, dek []byte, nowMs int64, expectedGen uint64) bool {
 	cp := make([]byte, len(dek))
 	copy(cp, dek)
 	key := projectDEKCacheKey{orgID: orgID, projectID: projectID}
@@ -267,6 +277,7 @@ func (c *dekCache) putProjectDEKIfGen(orgID, projectID string, orgDEKVersion, pr
 	c.projDEKs[key] = &projectDEKCacheEntry{
 		orgDEKVersion:     orgDEKVersion,
 		projectDEKVersion: projectDEKVersion,
+		keyGeneration:     keyGeneration,
 		dek:               cp,
 		expiresAtMs:       nowMs + c.ttlMs,
 	}

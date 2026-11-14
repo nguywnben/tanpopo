@@ -108,6 +108,7 @@ CREATE TABLE org_encryption_keys (
     nonce           BYTEA NOT NULL, -- 96-bit CSPRNG nonce
     wrapped_org_dek BYTEA NOT NULL, -- 256-bit Org DEK AEAD-sealed under Master KEK
     dek_version     BIGINT NOT NULL DEFAULT 1 CHECK (dek_version >= 1),
+    key_generation  BIGINT NOT NULL DEFAULT 1 CHECK (key_generation >= 1),
     created_at_ms   BIGINT NOT NULL,
     rotated_at_ms   BIGINT NOT NULL
 );
@@ -123,6 +124,7 @@ CREATE TABLE project_encryption_keys (
     nonce               BYTEA NOT NULL, -- 96-bit CSPRNG nonce
     wrapped_project_dek BYTEA NOT NULL, -- 256-bit Project DEK AEAD-sealed under Org DEK
     dek_version         BIGINT NOT NULL DEFAULT 1 CHECK (dek_version >= 1),
+    key_generation      BIGINT NOT NULL DEFAULT 1 CHECK (key_generation >= 1),
     created_at_ms       BIGINT NOT NULL,
     rotated_at_ms       BIGINT NOT NULL,
     PRIMARY KEY (org_id, project_id),
@@ -130,18 +132,42 @@ CREATE TABLE project_encryption_keys (
     FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id) ON DELETE CASCADE
 );
 
--- Durable crash-recovery outbox tracking DEK shreds awaiting verified post-commit cleanup (TP-IMP-0008)
+-- Durable crash-recovery outbox & generation fencing for DEK crypto-shredding (TP-IMP-0008)
 CREATE TABLE vault_pending_shred_cleanups (
-    scope_key     VARCHAR(160) PRIMARY KEY, -- 'org:<org_id>' or 'proj:<org_id>:<project_id>'
-    org_id        VARCHAR(40) NOT NULL,
-    project_id    VARCHAR(40),
-    shred_epoch   BIGINT NOT NULL CHECK (shred_epoch >= 1),
-    created_at_ms BIGINT NOT NULL,
-    updated_at_ms BIGINT NOT NULL
+    scope_key         VARCHAR(160) PRIMARY KEY, -- 'org:<org_id>' or 'proj:<org_id>:<project_id>'
+    org_id            VARCHAR(40) NOT NULL,
+    project_id        VARCHAR(40),
+    shred_epoch       BIGINT NOT NULL CHECK (shred_epoch >= 1),
+    target_generation BIGINT NOT NULL DEFAULT 1 CHECK (target_generation >= 1),
+    created_at_ms     BIGINT NOT NULL,
+    updated_at_ms     BIGINT NOT NULL
 );
 
 CREATE INDEX idx_vault_pending_shred_cleanups_org
     ON vault_pending_shred_cleanups (org_id, shred_epoch);
+
+CREATE TABLE vault_key_generations (
+    scope_key       VARCHAR(160) PRIMARY KEY,
+    org_id          VARCHAR(40) NOT NULL,
+    project_id      VARCHAR(40),
+    last_generation BIGINT NOT NULL CHECK (last_generation >= 1),
+    updated_at_ms   BIGINT NOT NULL
+);
+
+CREATE TABLE vault_shred_requests (
+    org_id            VARCHAR(40) NOT NULL,
+    request_id        VARCHAR(128) NOT NULL,
+    scope_key         VARCHAR(160) NOT NULL,
+    project_id        VARCHAR(40),
+    target_generation BIGINT NOT NULL CHECK (target_generation >= 1),
+    status            VARCHAR(24) NOT NULL CHECK (status IN ('PENDING_CLEANUP', 'COMPLETED')),
+    created_at_ms     BIGINT NOT NULL,
+    updated_at_ms     BIGINT NOT NULL,
+    PRIMARY KEY (org_id, request_id)
+);
+
+CREATE INDEX idx_vault_shred_requests_scope
+    ON vault_shred_requests (org_id, scope_key, status);
 
 -- -----------------------------------------------------------------------------
 -- 6. Administrative Principals (Nullable org_id for Instance OPERATOR — CR-06)
@@ -1248,6 +1274,30 @@ CREATE POLICY tenant_isolation ON project_encryption_keys
 ALTER TABLE vault_pending_shred_cleanups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vault_pending_shred_cleanups FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON vault_pending_shred_cleanups
+    USING (
+        org_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.is_instance_operator', true) = 'true'
+    )
+    WITH CHECK (
+        org_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.is_instance_operator', true) = 'true'
+    );
+
+ALTER TABLE vault_key_generations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vault_key_generations FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON vault_key_generations
+    USING (
+        org_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.is_instance_operator', true) = 'true'
+    )
+    WITH CHECK (
+        org_id = current_setting('app.current_org_id', true)
+        OR current_setting('app.is_instance_operator', true) = 'true'
+    );
+
+ALTER TABLE vault_shred_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vault_shred_requests FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON vault_shred_requests
     USING (
         org_id = current_setting('app.current_org_id', true)
         OR current_setting('app.is_instance_operator', true) = 'true'
