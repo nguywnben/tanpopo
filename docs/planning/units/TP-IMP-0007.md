@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0007` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified `2026-11-14`; `idgen` `96.1%`, `storage/migrate` `88.5%`, `storage/sqlite` `85.2%` [total `85.8%`], `CGO_ENABLED=0` + cross-OS builds + `scripts/ci/check.go --all` `PASS`; fresh-context `security-auditor` & `code-reviewer` `PASS`; awaiting `-race` CI verification on Linux/macOS & Product Owner acceptance)* |
+| **Status** | **`DONE`** *(Verified `2026-11-14`; Commit `4cc8b6ad0cde760a04cf1918ef80c031efa5b63b`, CI Run [`43595815734`](https://github.com/nguywnben/tanpopo/actions/runs/43595815734) `SUCCESS` across Stage 0 + Stage 1 `ubuntu-24.04` [-race storage `86.2%`], `macos-15` [-race `87.0%`], `windows-2022`; `code-reviewer` & `security-auditor` `PASS`; Product Owner accepted via `DEC-015`)* |
 | **Size** | `M` (`go.mod`, `internal/pkg/idgen`, `internal/storage/*`, `db/migrations/sqlite/0001_foundation.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Establishes root multi-tenant isolation invariants & schema migration mechanics)* |
 | **Technical Owner** | `Staff Backend / Storage Engineer` |

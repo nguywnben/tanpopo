@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0006: DONE` | `READY_FOR_REVIEW: TP-IMP-0007`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.5.0-tp-imp-0007-ready-for-review` | **Date:** `2026-11-14`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0007: DONE` | `READY: TP-IMP-0008`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.6.0-tp-imp-0007-done` | **Date:** `2026-11-14`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) plus `TP-IMP-0005` (`DEC-011`) and `TP-IMP-0006` (`CR-11` / `DEC-012` / `DEC-013` at commit `b929deb` & CI Run `43590868455`) are **`DONE` (`6 / 47`)**; **`TP-IMP-0007` (`1 / 47`) is `READY_FOR_REVIEW`** (`0` `READY` until Product Owner acceptance; `40` downstream units `0008`..`0047` remain `BLOCKED` behind their dependency, review, and `COND-PO-01`..`05` verification gates).
+> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) plus `TP-IMP-0005` (`DEC-011`), `TP-IMP-0006` (`DEC-012`/`DEC-013`, `b929deb`, CI `43590868455`), and `TP-IMP-0007` (`DEC-015`, `4cc8b6ad`, CI `43595815734` `SUCCESS`, Linux `-race` storage `86.2%` / macOS `87.0%`) are **`DONE` (`7 / 47`)**; **`TP-IMP-0008` (`1 / 47`) is the sole `READY` unit** (`39` downstream units `0009`..`0047` remain `BLOCKED` behind their dependency, review, and `COND-PO-01`..`05` verification gates).
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---

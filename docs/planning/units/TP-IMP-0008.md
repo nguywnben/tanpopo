@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0008` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0007` — `GAP-01, 05`)* |
+| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-015`; upstream `TP-IMP-0003` and `TP-IMP-0007` are `DONE`)* |
 | **Size** | `M` (`internal/security/vault/*`, `db/migrations/sqlite/0002_vault.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Cryptographic protection for crown-jewel assets `AST-01`, `AST-02`)* |
 | **Technical Owner** | `Principal Security / Cryptography Engineer` |
