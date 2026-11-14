@@ -1,22 +1,22 @@
-# `TP-IMP-0030` — Giao diện Quan sát, FinOps & Trực chiến: Thác nước Truy vết (`SCR-11`), Ngân sách (`SCR-12`), Kill-Switch/Audit (`SCR-14`) & Vận hành (`SCR-16`)
+# `TP-IMP-0030` — Observability, FinOps & Incident Response UI: Trace Waterfall (`SCR-11`), Budgets (`SCR-12`), Kill-Switch/Audit (`SCR-14`) & Operations (`SCR-16`)
 
-| Thuộc tính | Giá trị |
+| Attribute | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0030` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0025`, `TP-IMP-0026` — `GAP-01, 12`)* |
-| **Quy mô (`Size`)** | `L` (`web/console/src/pages/traces/*`, `finops/*`, `security/*`, `operations/*`) |
-| **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Chống Stored XSS từ dữ liệu vết/nhật ký `CT-27`, tách bạch 3 nhãn độ chính xác chi phí `UX-GR-05` & giao diện Công tắc Khẩn cấp)* |
-| **Chủ sở hữu Kỹ thuật** | `Lead Frontend / SRE UX Engineer` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0025`, `TP-IMP-0026` — `GAP-01, 12`)* |
+| **Size** | `L` (`web/console/src/pages/traces/*`, `finops/*`, `security/*`, `operations/*`) |
+| **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Stored XSS prevention on trace/audit payloads `CT-27`, strict separation of 3 cost-accuracy labels `UX-GR-05` & Emergency Kill-Switch UX)* |
+| **Technical Owner** | `Lead Frontend / SRE UX Engineer` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Hoàn thiện bộ 4 màn hình quan sát, tài chính và ứng cứu sự cố của `MVP (v0.1)` theo [`screen-specifications.md`](../../ux/screen-specifications.md) (`SPEC-UX-03`):
-1. **Trình Khám phá Vết & Thác nước Gỡ lỗi (`SCR-11 Traces`):** Tra cứu theo `request_id` / mã lỗi / mô hình, hiển thị dòng thời gian từng chặng (`Policy -> Route Attempt 1 (503) -> Failover Attempt 2 (200)`), minh bạch trạng thái quyền riêng tư `Metadata-Only (0 prompt bytes stored)` (`UX-AC-09`).
-2. **Bảng Ngân sách & Đối soát FinOps (`SCR-12 Budgets & Chargeback`):** Thực thi nghiêm ngặt rào chắn **`UX-GR-05`** — hiển thị tách rời 3 thành phần `EXACT`, `ESTIMATED` và cảnh báo rõ số lượng yêu cầu `UNMETERED_FLAGGED` (không bao giờ cộng gộp mập mờ thành một con số "chi phí chính xác tuyệt đối"), hiển thị phần giữ chỗ đang treo (`Active Hold`) và nút tải báo cáo `CSV/JSON` (`UX-AC-06`).
-3. **Trung tâm An ninh, Công tắc Khẩn cấp 4 Cấp & Nhật ký Kiểm toán (`SCR-14 Security & Audit`):** Kích hoạt/gỡ bỏ Kill-Switch 4 cấp với cảnh báo phạm vi ảnh hưởng (`Blast-Radius`), tra cứu nhật ký kiểm toán và nút kiểm chứng tính toàn vẹn chuỗi băm `Verify Hash Chain` trực tiếp (`UX-AC-02`).
-4. **Màn hình Sức khỏe Hệ thống, Sao lưu & Nâng cấp (`SCR-16 Operations`):** Hiển thị trạng thái `/readyz`, dung lượng WAL, lịch sử sao lưu, khóa `tanpopo.lock` và kiểm tra tiền nâng cấp (`UX-AC-05`).
+## 1. Intent
+Deliver the 4 observability, FinOps, and incident-response views of `MVP (v0.1)` per [`screen-specifications.md`](../../ux/screen-specifications.md) (`SPEC-UX-03`):
+1. **Trace Explorer & Debug Waterfall (`SCR-11 Traces`):** Filter by `request_id` / error code / model, render a per-hop execution waterfall (`Policy -> Route Attempt 1 (503) -> Failover Attempt 2 (200)`), and surface explicit privacy posture badges such as `Metadata-Only (0 prompt bytes stored)` (`UX-AC-09`).
+2. **Budgets & FinOps Chargeback View (`SCR-12 Budgets & Chargeback`):** Strictly enforce **`UX-GR-05`** — render `EXACT`, `ESTIMATED`, and `UNMETERED_FLAGGED` request counts distinctly (never blending them ambiguously into a single "exact cost" figure), display pending reservations (`Active Hold`), and expose `CSV/JSON` chargeback export actions (`UX-AC-06`).
+3. **Security Center, 4-Tier Emergency Kill-Switches & Audit Log (`SCR-14 Security & Audit`):** Activate/clear 4-tier Kill-Switches with live `Blast-Radius` impact previews, inspect immutable audit records, and run interactive `Verify Hash Chain` integrity checks (`UX-AC-02`).
+4. **System Health, Backups & Upgrade Readiness (`SCR-16 Operations`):** Display `/readyz` probe health, WAL disk footprint, backup history, `tanpopo.lock` package pins, and upgrade preflight status (`UX-AC-05`).
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
@@ -24,7 +24,7 @@ Hoàn thiện bộ 4 màn hình quan sát, tài chính và ứng cứu sự cố
   - `web/console/src/pages/finops/FinOpsBudgetsPage.tsx` (`SCR-12`).
   - `web/console/src/pages/security/SecurityAuditAndKillSwitchPage.tsx` (`SCR-14`).
   - `web/console/src/pages/operations/OperationsSettingsPage.tsx` (`SCR-16`).
-- **Out-of-Scope:** Thẻ hàng đợi phê duyệt công cụ MCP `destructive` trên `SCR-14` (sẽ được gắn thêm ở `TP-IMP-0038` tại `M3 / v0.2`).
+- **Out-of-Scope:** `destructive` MCP tool approval queue tab on `SCR-14` (added in `TP-IMP-0038` during `M3 / v0.2`).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0704`, `TP-FR-0705`, `TP-FR-0802`, `TP-FR-0803`, `TP-FR-0902`, `UJ-08`, `SCR-11`, `SCR-12`, `SCR-14`, `SCR-16`, `CT-27`, `UX-GR-05`, `UX-GR-06`, `UX-AC-02`, `UX-AC-05`, `UX-AC-06`, `UX-AC-09`.
@@ -32,22 +32,22 @@ Hoàn thiện bộ 4 màn hình quan sát, tài chính và ứng cứu sự cố
 - **Design Refs:** [`user-flows.md`](../../ux/user-flows.md) (`UJ-08`), [`screen-specifications.md`](../../ux/screen-specifications.md) (`SCR-11`, `12`, `14`, `16`), [`contract-test-matrix.md`](../../quality/contract-test-matrix.md) (`CT-27`).
 
 ## 4. API, Wire & Data Contracts
-- **Chống Thực thi Mã Độc Qua Vết & Kiểm toán (`CT-27` Stored XSS Prevention):** Mọi chuỗi tên mô hình, thông báo lỗi thượng nguồn, `User-Agent`, nhãn khóa hoặc thân gỡ lỗi hiển thị trên `SCR-11` và `SCR-14` đều được thoát ký tự an toàn 100% — bài kiểm thử tự động bơm chuỗi tải trọng XSS vào vết và xác nhận trình duyệt không thực thi bất kỳ đoạn kịch bản nào.
-- **Hiển thị Số Tiền Chuẩn:** Chuyển đổi từ số nguyên `micro_usd` sang chuỗi hiển thị tiền tệ bằng phép chia nguyên/chuỗi thập phân chính xác ở phía giao diện, không dùng phép cộng dấu phẩy động gây sai số hiển thị.
+- **Trace & Audit Stored XSS Prevention (`CT-27` Stored XSS Prevention):** Every model identifier, upstream error message, `User-Agent`, key label, or debug payload rendered on `SCR-11` and `SCR-14` MUST be 100% safely escaped — automated security tests inject XSS payloads into trace metadata and verify zero script execution in the browser.
+- **Exact Currency Formatting:** Convert integer `micro_usd` values to formatted currency strings using exact integer/decimal string division on the frontend rather than IEEE-754 floating-point summation.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`UX-GR-05` & `UX-AC-06` Honest FinOps Accuracy + Non-Color-Only Tokens):** Given dữ liệu sổ cái gồm cả bút toán `EXACT`, `ESTIMATED` và `UNMETERED_FLAGGED`, When mở `SCR-12`, Then cả 3 nhóm được hiển thị tách biệt rõ ràng bằng `Token` có `icon + label` (không dựa riêng vào màu sắc — `UX-AC-06`).
-- **`AC-2` (`UX-AC-02` Mobile Emergency Kill-Switch `375px` & `UX-AC-09` `200`-Row `< 100ms INP`):** Trên `SCR-14` ở cả màn hình máy tính (`1280px`) lẫn điện thoại trực chiến (`375px` — `UX-AC-02`), quản trị viên tra cứu `Blast-Radius` và bấm công tắc ngắt khẩn cấp trọn vẹn không khuất nút; bảng vết 200 dòng trên `SCR-11` đạt phản hồi tương tác `INP < 100 ms` (`UX-AC-09`).
-- **`NEG-1` (`CT-27` Stored XSS Payload in Trace/Audit):** Bơm chuỗi kịch bản độc hại vào trường `error_message` / `user_agent` của bản ghi truy vết → hiển thị thuần chữ vô hại trên `SCR-11`/`SCR-14`.
-- **`NEG-2` (`UX-AC-05`):** Kiểm định `npx @astryxdesign/cli doctor --built dist` đạt `0 fail` và `axe-core` sạch lỗi ở cả hai chế độ Sáng/Tối.
+- **`AC-1` (`UX-GR-05` & `UX-AC-06` Honest FinOps Accuracy + Non-Color-Only Tokens):** Given ledger entries spanning `EXACT`, `ESTIMATED`, and `UNMETERED_FLAGGED` settlement states, When opening `SCR-12`, Then all 3 categories are displayed distinctly using `Token` components pairing `icon + label` (never relying on color alone — `UX-AC-06`).
+- **`AC-2` (`UX-AC-02` Mobile Emergency Kill-Switch `375px` & `UX-AC-09` `200`-Row `< 100ms INP`):** On `SCR-14` across both desktop (`1280px`) and on-call mobile (`375px` — `UX-AC-02`) viewports, an operator can inspect `Blast-Radius` and trigger an emergency Kill-Switch without clipped controls; a 200-row trace table on `SCR-11` maintains interaction responsiveness at `INP < 100 ms` (`UX-AC-09`).
+- **`NEG-1` (`CT-27` Stored XSS Payload in Trace/Audit):** Injecting malicious script payloads into `error_message` / `user_agent` trace fields renders strictly as inert plain text on `SCR-11`/`SCR-14`.
+- **`NEG-2` (`UX-AC-05`):** `npx @astryxdesign/cli doctor --built dist` passes with `0 fail`, and `axe-core` passes cleanly across both Light and Dark themes.
 
 ## 6. Test Commands & Required Evidence
 - `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Vai trò `FINOPS_VIEWER` chỉ xem được `SCR-12` (không xem được nội dung gỡ lỗi trên `SCR-11` hay thao tác `Kill-Switch` trên `SCR-14`).
-- **Rollback:** Cụm 4 màn hình quan sát/vận hành độc lập.
+- **Security Invariant:** Principals with the `FINOPS_VIEWER` role can access `SCR-12` only (with zero access to debug payloads on `SCR-11` or `Kill-Switch` controls on `SCR-14`).
+- **Rollback:** Independent 4-screen observability/operations module group.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0025` và `TP-IMP-0026` đã hoàn tất.
-- **DoD:** Xanh toàn bộ ca `CT-27`, `UJ-08`, `UX-AC-02, 05, 06, 09`, `astryx doctor --built dist` đạt `0 fail`, vượt qua `REQUIRES_STRONG_REVIEW`.
+- **DoR:** `TP-IMP-0025` and `TP-IMP-0026` are complete.
+- **DoD:** `CT-27`, `UJ-08`, and `UX-AC-02, 05, 06, 09` passing, `astryx doctor --built dist` at `0 fail`, and `REQUIRES_STRONG_REVIEW` sign-off achieved.

@@ -1,26 +1,26 @@
-# `TP-IMP-0024` — Admin Control Plane REST API (Phần 1): Khởi tạo Bootstrap, Phiên/CSRF, Tổ chức/Dự án/Môi trường, RBAC & `Virtual Keys` (`ETag`/`409`)
+# `TP-IMP-0024` — Admin Control Plane REST API (Part 1): Bootstrap, Session/CSRF, Organization/Project/Environment, RBAC & `Virtual Keys` (`ETag`/`409`)
 
-| Thuộc tính | Giá trị |
+| Attribute | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0024` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0009`, `TP-IMP-0023` — `GAP-01, 07, 11`)* |
-| **Quy mô (`Size`)** | `L` (`internal/admin/http/server.go`, `bootstrap.go`, `auth.go`, `tenancy.go`, `vkeys.go`, `pagination.go`) |
-| **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Mặt phẳng quản trị `/admin/v1/*`, kiểm soát tranh chấp `ETag/409`, phân trang con trỏ & ủy quyền từng hành động)* |
-| **Chủ sở hữu Kỹ thuật** | `Staff Control-Plane / Security Engineer` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0009`, `TP-IMP-0023` — `GAP-01, 07, 11`)* |
+| **Size** | `L` (`internal/admin/http/server.go`, `bootstrap.go`, `auth.go`, `tenancy.go`, `vkeys.go`, `pagination.go`) |
+| **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Control-plane `/admin/v1/*` surface, `ETag/409` optimistic concurrency control, cursor pagination & per-action authorization)* |
+| **Technical Owner** | `Staff Control-Plane / Security Engineer` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Hiện thực hóa khung máy chủ HTTP của **Admin Control Plane (`/admin/v1/*`)** cùng nhóm điểm cuối nền tảng (Khởi tạo lần đầu `Bootstrap`, Đăng nhập/Phiên/CSRF, Quản lý `Organizations` / `Projects` / `Environments`, Gán quyền `RBAC` 6 vai trò và Quản lý vòng đời `Virtual Keys`), tuân thủ nghiêm ngặt đặc tả `OpenAPI 3.1` đã khóa ở `TP-IMP-0002`, kiểm soát đồng thời lạc quan bằng `ETag` + `If-Match` trả `409 optimistic_lock_conflict` (`TP-FR-0901`), và phân trang con trỏ mờ có ký HMAC theo `org_id` (`GAP-11`).
+## 1. Intent
+Implement the HTTP server framework for the **Admin Control Plane (`/admin/v1/*`)** together with its foundational endpoint groups (first-run `Bootstrap`, Login/Session/CSRF, `Organizations` / `Projects` / `Environments` management, 6-role `RBAC` assignment, and `Virtual Keys` lifecycle management), strictly adhering to the `OpenAPI 3.1` specification locked in `TP-IMP-0002`, optimistic concurrency control via `ETag` + `If-Match` returning `409 optimistic_lock_conflict` (`TP-FR-0901`), and `org_id`-bound HMAC-signed opaque cursor pagination (`GAP-11`).
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `internal/admin/http/server.go` (middleware bắt buộc đính kèm `ActionPermission` cho mọi route `/admin/v1/*`, kiểm tra `CSRF`, giới hạn tốc độ chống dò mật khẩu trên `/admin/v1/auth/login`, chuẩn hóa lỗi `CanonicalError`).
-  - `internal/admin/http/etag.go` (sinh `ETag: "v<revision>"` trên mọi tài nguyên cấu hình; từ chối `PUT/PATCH/DELETE` thiếu hoặc lệch `If-Match` với `428 Precondition Required` / `409 Conflict`).
-  - `internal/admin/http/pagination.go` (con trỏ `cursor` mã hóa `base64url` + chữ ký HMAC gắn `org_id` và bộ lọc truy vấn để chặn giả mạo con trỏ nhảy trang sang tổ chức khác; `limit` mặc định `50`, tối đa `200`).
+  - `internal/admin/http/server.go` (middleware mandating explicit `ActionPermission` binding on every `/admin/v1/*` route, `CSRF` verification, brute-force login rate limiting on `/admin/v1/auth/login`, and `CanonicalError` normalization).
+  - `internal/admin/http/etag.go` (emitting `ETag: "v<revision>"` across all configuration resources; rejecting `PUT/PATCH/DELETE` requests with missing or mismatched `If-Match` headers via `428 Precondition Required` / `409 Conflict`).
+  - `internal/admin/http/pagination.go` (`base64url`-encoded `cursor` + HMAC signature bound to `org_id` and query filters to block cross-organization cursor tampering; default `limit` `50`, maximum `200`).
   - `internal/admin/http/bootstrap.go`, `auth.go`, `tenancy.go`, `rbac.go`, `vkeys.go`.
-- **Out-of-Scope:** Các điểm cuối quản lý Phần mở rộng, Kết nối, Tuyến, Ngân sách, Vết (thuộc `TP-IMP-0025`).
+- **Out-of-Scope:** Endpoints for managing Extensions, Connections, Routes, Budgets, and Traces (covered in `TP-IMP-0025`).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0501`, `TP-FR-0502`, `TP-FR-0503`, `TP-FR-0901`, `AUTH-02`..`AUTH-07`, `AUTH-11`, `AUTH-13`, `AUTH-15`, `GAP-07`, `GAP-11`.
@@ -28,24 +28,24 @@ Hiện thực hóa khung máy chủ HTTP của **Admin Control Plane (`/admin/v1
 - **Design Refs:** [`api-contracts.md`](../../specifications/api-contracts.md) (`SPEC-API-01`), [`developer-experience.md`](../../operations/developer-experience.md) (`SPEC-OPS-04`), [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md).
 
 ## 4. API, Wire & Data Contracts
-- **Quy tắc Hiển thị Khóa 1 Lần Duy Nhất (`Show-Once Plaintext Key`):** Chỉ phản hồi `201 Created` của `POST /admin/v1/projects/{projectId}/virtual-keys` và `POST .../rotate` mới chứa trường `secret_key` một lần duy nhất; mọi lệnh `GET` danh sách hoặc chi tiết sau đó chỉ trả `{ id, name, key_prefix, last_four, state, expires_at }`.
-- **Kiểm soát Ghi Tranh chấp (`Optimistic Concurrency Control`):** Hai quản trị viên cùng đọc phiên bản `ETag: "v3"` và cùng gửi cập nhật → người gửi thứ hai bắt buộc nhận `409 optimistic_lock_conflict` kèm bản chụp hiện tại để hợp nhất, không bao giờ ghi đè âm thầm.
+- **Show-Once Plaintext Key Rule (`Show-Once Plaintext Key`):** Only the `201 Created` response of `POST /admin/v1/projects/{projectId}/virtual-keys` and `POST .../rotate` ever includes the `secret_key` field once; every subsequent list or detail `GET` request returns only `{ id, name, key_prefix, last_four, state, expires_at }`.
+- **Optimistic Concurrency Control (`Optimistic Concurrency Control`):** When two administrators concurrently read `ETag: "v3"` and submit updates, the second writer MUST receive `409 optimistic_lock_conflict` along with the current resource snapshot for reconciliation, never silently overwriting concurrent changes.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1`:** Given máy chủ mới khởi động, When kiểm tra `GET /admin/v1/bootstrap/status` (`initialized: false`), gửi `POST /admin/v1/bootstrap/complete` kèm `Bootstrap Token` hợp lệ tạo `ORG_OWNER` (`AUTH-02`), tạo `Project`, `Environment` và `Virtual Key` (`vk_tp_...`), Then mọi bước ghi đầy đủ vào `audit_events` (`TP-IMP-0023`) và cập nhật `ConfigSnapshot` tức thì.
-- **`AC-2` (`GAP-11` Cursor Pagination Determinism):** Given 125 `Virtual Keys`, When duyệt tuần tự với `limit=50` qua 3 trang bằng `next_cursor`, Then nhận đủ đúng 125 bản ghi không trùng, không sót ngay cả khi có bản ghi mới chèn vào trang đầu.
-- **`NEG-1` (`AUTH-03`, `AUTH-07`, `AUTH-13` & `AUTH-15`):** Thiếu `X-CSRF-Token` trả `403`; dùng `vk_tp_...` trên `/admin/v1/*` trả `401 invalid_credential_plane` (`AUTH-07`); truyền `org_id` giả mạo trong thân JSON bị chặn (`AUTH-13`); dùng `next_cursor` hoặc ID của `Org A` từ phiên của `Org B` trả `400 invalid_pagination_cursor` / `404 resource_not_found` (`AUTH-15`).
-- **`NEG-2` (`Stale If-Match`):** Gửi `PATCH` với `If-Match: "v1"` lên tài nguyên đang ở `"v2"` → trả `409 optimistic_lock_conflict`.
-- **`NEG-3` (`Brute-Force Login Rate Limit`):** Gửi quá 10 lần sai mật khẩu liên tiếp từ cùng địa chỉ IP → trả `429 auth_rate_limited` kèm bản ghi kiểm toán bảo mật.
+- **`AC-1`:** Given a freshly started server, When querying `GET /admin/v1/bootstrap/status` (`initialized: false`), submitting `POST /admin/v1/bootstrap/complete` with a valid `Bootstrap Token` to create `ORG_OWNER` (`AUTH-02`), and provisioning a `Project`, `Environment`, and `Virtual Key` (`vk_tp_...`), Then every mutation records a complete entry in `audit_events` (`TP-IMP-0023`) and updates `ConfigSnapshot` immediately.
+- **`AC-2` (`GAP-11` Cursor Pagination Determinism):** Given 125 `Virtual Keys`, When iterating sequentially with `limit=50` across 3 pages via `next_cursor`, Then exactly all 125 distinct records are returned without duplicates or omissions even when a new record is inserted into the first page concurrently.
+- **`NEG-1` (`AUTH-03`, `AUTH-07`, `AUTH-13` & `AUTH-15`):** Missing `X-CSRF-Token` returns `403`; presenting `vk_tp_...` on `/admin/v1/*` returns `401 invalid_credential_plane` (`AUTH-07`); supplying a forged `org_id` in a JSON body is blocked (`AUTH-13`); using `Org A`'s `next_cursor` or resource ID from an `Org B` session returns `400 invalid_pagination_cursor` / `404 resource_not_found` (`AUTH-15`).
+- **`NEG-2` (`Stale If-Match`):** Submitting `PATCH` with `If-Match: "v1"` against a resource currently at `"v2"` returns `409 optimistic_lock_conflict`.
+- **`NEG-3` (`Brute-Force Login Rate Limit`):** Submitting more than 10 consecutive failed password attempts from the same IP address returns `429 auth_rate_limited` and records a security audit event.
 
 ## 6. Test Commands & Required Evidence
-- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/admin/http/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/admin/http/...`)*
-- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/admin/http/...`
+- Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/admin/http/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/admin/http/...`)*
+- Race detector (`-race`): `go test -v -race ./internal/admin/http/...`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Bài kiểm thử phản xạ route (`TestAllAdminRoutesHaveExplicitPermission`) quét bảng định tuyến HTTP và đánh trượt CI nếu có bất kỳ route `/admin/v1/*` nào (ngoài `/bootstrap/status` và `/auth/login`) không gắn rõ hằng số quyền `RBAC`.
-- **Rollback:** Lớp HTTP tách rời bên trên tầng dịch vụ `iam` và `audit`.
+- **Security Invariant:** A route-reflection test (`TestAllAdminRoutesHaveExplicitPermission`) inspects the HTTP routing table and fails CI if any `/admin/v1/*` route (other than `/bootstrap/status` and `/auth/login`) lacks an explicit `RBAC` permission constant.
+- **Rollback:** Decoupled HTTP transport layer sitting cleanly above the `iam` and `audit` domain services.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0002` (hoàn thiện đặc tả `OpenAPI 3.1` cho `GAP-07`), `TP-IMP-0009` và `TP-IMP-0023` đã hoàn tất.
-- **DoD:** Khớp 100% lược đồ `OpenAPI 3.1`, xanh toàn bộ ca `AUTH-02..07, 11, 13, 15`, vượt qua `REQUIRES_STRONG_REVIEW`.
+- **DoR:** `TP-IMP-0002` (finalized `OpenAPI 3.1` specification closing `GAP-07`), `TP-IMP-0009`, and `TP-IMP-0023` are complete.
+- **DoD:** 100% conformance against the `OpenAPI 3.1` schema, all `AUTH-02..07, 11, 13, 15` cases passing, and `REQUIRES_STRONG_REVIEW` sign-off achieved.

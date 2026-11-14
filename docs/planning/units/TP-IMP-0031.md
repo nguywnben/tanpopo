@@ -1,30 +1,30 @@
-# `TP-IMP-0031` — Công cụ Dòng lệnh Hợp nhất `tanpopo` CLI, Nhúng SPA Tĩnh `embed.FS`, Cứu hộ `reset-local-owner` & Gói Chẩn đoán `support-bundle`
+# `TP-IMP-0031` — Unified `tanpopo` CLI, Embedded Static SPA (`embed.FS`), Break-Glass `reset-local-owner` & Redacted `support-bundle`
 
-| Thuộc tính | Giá trị |
+| Attribute | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0031` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0014`, `TP-IMP-0025`, `TP-IMP-0027`, `TP-IMP-0028`, `TP-IMP-0029`, `TP-IMP-0030` — `GAP-01, 13`)* |
-| **Quy mô (`Size`)** | `M` (`cmd/tanpopo/*`, `internal/cli/*`, `internal/webui/embed.go`) |
-| **Cấp độ Review** | `STANDARD_REVIEW` *(Một nhị phân duy nhất `tanpopo`, cứu hộ ngoại tuyến & lọc sạch bí mật gói chẩn đoán `OPS-AC-10`)* |
-| **Chủ sở hữu Kỹ thuật** | `Developer Experience & Systems Lead` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0014`, `TP-IMP-0025`, `TP-IMP-0027`, `TP-IMP-0028`, `TP-IMP-0029`, `TP-IMP-0030` — `GAP-01, 13`)* |
+| **Size** | `M` (`cmd/tanpopo/*`, `internal/cli/*`, `internal/webui/embed.go`) |
+| **Review Tier** | `STANDARD_REVIEW` *(Unified single binary `tanpopo`, offline break-glass recovery & zero-leak diagnostic `support-bundle` `OPS-AC-10`)* |
+| **Technical Owner** | `Developer Experience & Systems Lead` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Hợp nhất toàn bộ sản phẩm vào **một tệp thực thi duy nhất `tanpopo`** (`ADR-0001`, `CR-10` — xóa bỏ hoàn toàn sự phân mảnh tên gọi `tanpopoctl`):
-1. Nhúng bản dựng tĩnh `web/console/dist` vào nhị phân Go qua `embed.FS` để lệnh `tanpopo serve` phục vụ ngay cả Data Plane, Admin API lẫn Web Console mà không cần cài Node.js hay Nginx lúc chạy (`TP-FR-1001`).
-2. Hoàn thiện cây lệnh quản trị từ dòng lệnh (`tanpopo serve`, `config`, `provider`, `model`, `route`, `key`, `plugin`, `budget inspect` phục vụ sổ tay `INC-01`, `audit`, `killswitch`) hỗ trợ cờ `--output json|table|yaml`, bảng mã thoát chuẩn `0 / 2 / 10 / 14 / 22 / 30` của `SPEC-OPS-04` và **bộ lọc loại bỏ ký tự điều khiển đầu cuối nguy hiểm `ANSI / OSC-52 clipboard escape` (`\x1b]52;...`) trên mọi bảng in ra màn hình (`CT-27`)**.
-3. Bổ sung lệnh cứu hộ khẩn cấp truy cập trực tiếp ổ đĩa cục bộ **`tanpopo admin reset-local-owner`** khi quản trị viên quên mật khẩu trong chế độ đơn nút không có SMTP (`CR-09`) và lệnh đóng gói chẩn đoán tự che sạch bí mật **`tanpopo support-bundle`** (`OPS-AC-10`).
+## 1. Intent
+Unify the entire product into **a single executable binary `tanpopo`** (`ADR-0001`, `CR-10` — eliminating any split `tanpopoctl` naming fragmentation):
+1. Embed the compiled `web/console/dist` static bundle directly into the Go binary via `embed.FS` so `tanpopo serve` serves the Data Plane, Admin API, and Web Console out of the box without requiring Node.js or Nginx at runtime (`TP-FR-1001`).
+2. Complete the administrative CLI command tree (`tanpopo serve`, `config`, `provider`, `model`, `route`, `key`, `plugin`, `budget inspect` for `INC-01` runbooks, `audit`, `killswitch`) supporting `--output json|table|yaml`, the canonical exit-code table `0 / 2 / 10 / 14 / 22 / 30` defined in `SPEC-OPS-04`, and **strict terminal escape sanitization stripping hazardous `ANSI / OSC-52 clipboard escape` sequences (`\x1b]52;...`) across all human-readable table outputs (`CT-27`)**.
+3. Deliver the local-disk break-glass recovery command **`tanpopo admin reset-local-owner`** for single-node deployments without SMTP when an administrator loses their password (`CR-09`), alongside the secret-scrubbed diagnostic bundler **`tanpopo support-bundle`** (`OPS-AC-10`).
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `cmd/tanpopo/main.go` (điểm vào duy nhất hỗ trợ `--role=all|data-plane|control-plane`).
-  - `internal/webui/embed.go` (phục vụ tài nguyên tĩnh nén sẵn với `Cache-Control: immutable` cho tệp băm và fallback SPA cho các đường dẫn giao diện + tiêu đề bảo mật `CSP`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` — đáp ứng đo Lighthouse CI `LCP <= 2.0s`, `INP <= 150ms`, `CLS <= 0.05` theo `UX-AC-08`).
-  - `internal/cli/root.go`, `internal/cli/sanitize/ansi.go` (`CT-27` lọc sạch chuỗi thoát ANSI/OSC-52) & các nhóm lệnh con quản trị từ xa/cục bộ (bao gồm `tanpopo budget inspect`).
-  - `internal/cli/admin/reset_owner.go` (`tanpopo admin reset-local-owner`: bắt buộc chứng minh quyền sở hữu máy chủ cục bộ bằng cách kiểm tra quyền đọc tệp `Master KEK` và ghi sự kiện kiểm toán `LOCAL_BREAK_GLASS_OWNER_RESET` vào chuỗi `"SYSTEM"`, thu hồi toàn bộ phiên trình duyệt cũ).
-  - `internal/cli/support/bundle.go` (`tanpopo support-bundle`: thu thập cấu hình đã che mật, trạng thái sức khỏe, danh sách gói `tanpopo.lock`, chỉ số Prometheus và nhật ký gần nhất đi qua `privacy.Redactor` + kiểm tra tự động `CanaryScanner` ngay trước khi xuất tệp `.tar.gz`).
-- **Out-of-Scope:** Các lệnh `tanpopo bundle export/verify/import` cho kho gói mạng kín quy mô lớn (thuộc `TP-IMP-0045`).
+  - `cmd/tanpopo/main.go` (single unified entrypoint supporting `--role=all|data-plane|control-plane`).
+  - `internal/webui/embed.go` (serving pre-compressed static assets with `Cache-Control: immutable` for hashed bundles, SPA history fallback for UI routes, and security headers `CSP`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` — meeting Lighthouse CI budgets `LCP <= 2.0s`, `INP <= 150ms`, `CLS <= 0.05` per `UX-AC-08`).
+  - `internal/cli/root.go`, `internal/cli/sanitize/ansi.go` (`CT-27` ANSI/OSC-52 control-sequence stripper) & remote/local administrative subcommands (including `tanpopo budget inspect`).
+  - `internal/cli/admin/reset_owner.go` (`tanpopo admin reset-local-owner`: requires proof of local host ownership by verifying read access to the `Master KEK` file, appends a `LOCAL_BREAK_GLASS_OWNER_RESET` event to the `"SYSTEM"` audit hash chain, and revokes all active browser sessions).
+  - `internal/cli/support/bundle.go` (`tanpopo support-bundle`: collects redacted configuration, health probes, `tanpopo.lock` inventory, Prometheus metrics, and recent logs routed through `privacy.Redactor` + automated `CanaryScanner` self-verification prior to writing the `.tar.gz` archive).
+- **Out-of-Scope:** `tanpopo bundle export/verify/import` air-gapped supply-chain commands for enterprise fleet distribution (covered in `TP-IMP-0045`).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0903`, `TP-FR-1001`, `TP-NFR-1002`, `ADR-0001`, `ADR-0004`, `CT-27`, `UX-AC-08`, `OPS-AC-10`, `INC-01`, `CR-09`, `CR-10`, `GAP-13`.
@@ -32,24 +32,24 @@ Hợp nhất toàn bộ sản phẩm vào **một tệp thực thi duy nhất `t
 - **Design Refs:** [`developer-experience.md`](../../operations/developer-experience.md) (`SPEC-OPS-04`), [`ADR-0001`](../../architecture/adr/0001-core-runtime-and-modular-monolith.md), [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-09`, `CR-10`).
 
 ## 4. API, Wire & Data Contracts
-- **Chuẩn Đầu Ra Tự động hóa:** Khi truyền `--output json`, `stdout` chỉ chứa đúng 1 đối tượng/mảng JSON hợp lệ (mọi dòng tiến trình/cảnh báo đẩy sang `stderr`) để kịch bản `jq` không bao giờ vỡ cú pháp.
-- **Bảo vệ Lệnh Cứu hộ `reset-local-owner`:** Chỉ hoạt động trực tiếp qua dòng lệnh nội bộ trên máy chủ nắm giữ tệp khóa/CSDL — **tuyệt đối không mở thành điểm cuối HTTP từ xa trên `/admin/v1/*`**.
+- **Automation-Safe Output Contract:** When `--output json` is specified, `stdout` emits strictly a single valid JSON object/array (routing all progress/warning messages to `stderr`) so downstream `jq` pipelines never break.
+- **Local-Only Guard on `reset-local-owner`:** Executes exclusively via direct local CLI access on the host holding the KEK/database files — **never exposed as a remote HTTP endpoint under `/admin/v1/*`**.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`Single Binary Self-Host`):** Sao chép duy nhất 1 tệp nhị phân `tanpopo` sang một thư mục trống hoàn toàn (không có `node_modules`, không có thư mục `web/`), chạy `tanpopo serve` → cả `/v1/*`, `/admin/v1/*` và giao diện Web Console hoạt động đầy đủ `100%`.
-- **`AC-2` (`CR-09` Break-Glass Password Recovery):** Khi quên mật khẩu `ORG_OWNER`, chạy `tanpopo admin reset-local-owner --db ...` sinh mật khẩu khôi phục một lần, vô hiệu hóa toàn bộ phiên cũ và ghi rõ bút toán `LOCAL_BREAK_GLASS_OWNER_RESET` vào chuỗi băm kiểm toán `"SYSTEM"`.
-- **`AC-3` (`OPS-AC-10` Zero-Leak Support Bundle):** Nạp các khóa mồi `sk-tp-canary-...`, `TANPOPO_MASTER_KEY` và `vk_tp_live_...`, chạy `tanpopo support-bundle -o diag.tar.gz` → giải nén và quét toàn bộ tệp bên trong xác nhận **`0` byte bí mật rò rỉ**.
-- **`NEG-1` (`CT-27` CLI Terminal Escape Injection & Unauthorized Reset):** Dữ liệu tên gói/nhật ký chứa chuỗi độc hại `\x1b]52;c;...` khi in qua `tanpopo` CLI ở chế độ bảng bị lột sạch ký tự điều khiển `ESC`; gọi `tanpopo admin reset-local-owner` từ tài khoản không có quyền đọc tệp `Master KEK` bị từ chối mã thoát `14`.
+- **`AC-1` (`Single Binary Self-Host`):** Copying only the single `tanpopo` binary into a completely empty directory (no `node_modules`, no `web/` directory) and executing `tanpopo serve` brings up `/v1/*`, `/admin/v1/*`, and the embedded Web Console at `100%` functionality.
+- **`AC-2` (`CR-09` Break-Glass Password Recovery):** When the `ORG_OWNER` password is lost, running `tanpopo admin reset-local-owner --db ...` mints a one-time recovery password, invalidates all existing sessions, and appends a verifiable `LOCAL_BREAK_GLASS_OWNER_RESET` entry to the `"SYSTEM"` audit hash chain.
+- **`AC-3` (`OPS-AC-10` Zero-Leak Support Bundle):** After seeding canary secrets `sk-tp-canary-...`, `TANPOPO_MASTER_KEY`, and `vk_tp_live_...`, running `tanpopo support-bundle -o diag.tar.gz` and scanning every extracted file confirms **`0` leaked secret bytes**.
+- **`NEG-1` (`CT-27` CLI Terminal Escape Injection & Unauthorized Reset):** Package names or log entries containing malicious `\x1b]52;c;...` sequences have all `ESC` control bytes stripped before rendering in CLI table mode; invoking `tanpopo admin reset-local-owner` from an OS user lacking read permission on the `Master KEK` file fails with exit code `14`.
 
 ## 6. Test Commands & Required Evidence
-- Dựng SPA tĩnh: `cd web/console && npm run build`
-- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./cmd/tanpopo/... ./internal/cli/... ./internal/webui/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./cmd/tanpopo/... ./internal/cli/... ./internal/webui/...`)*
-- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/cli/... ./internal/webui/...`
+- Build static SPA: `cd web/console && npm run build`
+- Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./cmd/tanpopo/... ./internal/cli/... ./internal/webui/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./cmd/tanpopo/... ./internal/cli/... ./internal/webui/...`)*
+- Race detector (`-race`): `go test -v -race ./internal/cli/... ./internal/webui/...`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Tệp `diag.tar.gz` được tạo với quyền `0600` (chỉ chủ sở hữu đọc được) và tự kiểm tra lại bằng bộ dò mẫu bí mật trước khi báo thành công.
-- **Rollback:** Lùi phiên bản nhị phân `tanpopo` đơn giản trong 1 thao tác thay tệp.
+- **Security Invariant:** Generated `diag.tar.gz` archives are created with `0600` owner-only permissions and self-scanned against secret-pattern detectors before reporting completion.
+- **Rollback:** Atomic single-file binary swap back to the prior `tanpopo` executable.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0014`, `TP-IMP-0025` và toàn bộ các gói giao diện `M2` (`0027`..`0030`) đã hoàn tất.
-- **DoD:** Nhị phân tĩnh chạy độc lập sạch lỗi, xanh ca `OPS-AC-10` và cứu hộ `reset-local-owner`.
+- **DoR:** `TP-IMP-0014`, `TP-IMP-0025`, and all `M2` Web Console units (`0027`..`0030`) are complete.
+- **DoD:** Standalone static binary runs cleanly, and both `OPS-AC-10` and `reset-local-owner` recovery tests pass.

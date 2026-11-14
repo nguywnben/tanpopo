@@ -1,53 +1,54 @@
-# `TP-IMP-0039` — Trình điều khiển `PostgreSQL 16+` (Phân vùng Tháng, Khóa `(org_id, id)`, `FORCE RLS`), Kiểm thử Kép `Dual-DB` & Di trú `SQLite -> Postgres`
+# `TP-IMP-0039` — `PostgreSQL 16+` Driver (Monthly Partitioning, Composite `(org_id, id)` Keys, `FORCE RLS`), `Dual-DB` Parity Suite & `SQLite -> Postgres` Migration
 
-| Thuộc tính | Giá trị |
+| Attribute | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0039` |
 | **Milestone / Epic** | `M4` (`v0.3 Clustered HA, Enterprise Security & A2A`) · `EP-08` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0007`, `TP-IMP-0021`, `TP-IMP-0023` — `GAP-01, 04, 05`)* |
-| **Quy mô (`Size`)** | `L` (`go.mod`, `internal/storage/postgres/*`, `db/migrations/postgres/*`, `internal/ops/migrate/sqlite_to_pg.go`) |
-| **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Cô lập đa người thuê cấp CSDL `FORCE ROW LEVEL SECURITY`, nối chuỗi kiểm toán đồng thời trên HA & di trú dữ liệu không thất thoát `CT-32`)* |
-| **Chủ sở hữu Kỹ thuật** | `Principal Database & Storage Architect` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0007`, `TP-IMP-0021`, `TP-IMP-0023` — `GAP-01, 04, 05`)* |
+| **Size** | `L` (`go.mod`, `internal/storage/postgres/*`, `db/migrations/postgres/*`, `internal/ops/migrate/sqlite_to_pg.go`) |
+| **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Database-engine multi-tenant isolation via `FORCE ROW LEVEL SECURITY`, concurrent HA audit hash-chain serialization & lossless `CT-32` migration)* |
+| **Technical Owner** | `Principal Database & Storage Architect` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Mở rộng tầng lưu trữ `storage/port` sang **`PostgreSQL 16+`** (`pgx/v5`) phục vụ chế độ cụm chịu tải cao (`TP-FR-1005`, `ADR-0003`, `ARCH-DATA-01`, `CR-06`):
-1. **Cô lập Cứng Ở Tầng Động cơ CSDL (`ENABLE + FORCE ROW LEVEL SECURITY`):** Tài khoản ứng dụng chạy dưới vai trò không có quyền `BYPASSRLS`; mọi giao dịch kết nối bắt buộc đặt biến phiên cục bộ `SET LOCAL app.current_org_id = '<uuid>'` (nếu quên đặt biến này, chính sách RLS từ chối trả về `0` dòng thay vì làm lộ toàn bộ bảng!).
-2. **Phân vùng Theo Tháng Tự động & Khóa Tổ hợp `(org_id, id)`:** Phân vùng `RANGE (created_at)` theo tháng cho 3 bảng lưu lượng lớn (`usage_settlements`, `request_traces_meta`, `audit_events`) kèm trình tạo phân vùng trước 3 tháng và khóa tuần tự theo `chain_key` (`org_id` hoặc `"SYSTEM"`, dùng `pg_advisory_xact_lock`) khi nối chuỗi băm `audit_events` từ nhiều nút đồng thời (`CR-06`).
-3. **Bộ Kiểm thử Đối xứng Kép (`Dual-DB Contract Suite`) & Công cụ Di trú Chuẩn `tanpopo db migrate-engine` (`SQLite -> PostgreSQL` — `CT-32`, `DR-02`):** Chạy cùng một bộ bài kiểm thử hợp đồng lưu trữ trên cả `SQLite WAL` lẫn `PostgreSQL 16+` để chứng minh tương đương hành vi 100%, và cung cấp lệnh chuẩn `tanpopo db migrate-engine` có kiểm chứng tổng kiểm (`row counts`, `sum(settled_micro_usd)`, `VerifyAuditChain`, giải mã thử `vault`).
+## 1. Intent
+Extend the `storage/port` persistence abstraction to **`PostgreSQL 16+`** (`pgx/v5`) for high-availability clustered deployments (`TP-FR-1005`, `ADR-0003`, `ARCH-DATA-01`, `CR-06`):
+1. **Engine-Level Multi-Tenant Hard Isolation (`ENABLE + FORCE ROW LEVEL SECURITY`):** The application connects under a non-`BYPASSRLS` database role; every transaction MUST set `SET LOCAL app.current_org_id = '<uuid>'` (if omitted, RLS policies fail closed and return `0` rows rather than exposing table contents).
+2. **Automated Monthly Partitioning & Composite `(org_id, id)` Keys:** Partition high-volume append tables (`usage_settlements`, `request_traces_meta`, `audit_events`) via monthly `RANGE (created_at)` partitions with 3-month lookahead pre-creation, and serialize per-`chain_key` (`org_id` or `"SYSTEM"`, via `pg_advisory_xact_lock`) `audit_events` hash-chain appends across concurrent HA nodes (`CR-06`).
+3. **Symmetric `Dual-DB Contract Suite` & Canonical `tanpopo db migrate-engine` Tool (`SQLite -> PostgreSQL` — `CT-32`, `DR-02`):** Execute the identical storage contract test suite against both `SQLite WAL` and `PostgreSQL 16+` to prove 100% behavioral parity, and ship `tanpopo db migrate-engine` with end-to-end cryptographic & financial verification (`row counts`, `sum(settled_micro_usd)`, `VerifyAuditChain`, and `vault` trial decryption).
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `go.mod`, `go.sum` (thêm trình điều khiển thuần Go `github.com/jackc/pgx/v5`).
-  - `internal/storage/postgres/driver.go` (hồ kết nối `pgxpool`, hook bắt buộc `SET LOCAL app.current_org_id`, trình chạy migration có `pg_advisory_lock` toàn cụm chống đua khi khởi động 10 pod cùng lúc — `FMEA-06`).
-  - `db/migrations/postgres/0001_full_schema_rls_partitions.sql` (đầy đủ `26` bảng chuẩn đã khóa ở `TP-IMP-0003`, `FORCE RLS`, khóa ngoại tổ hợp `(org_id, ...)` và trigger cấm `UPDATE/DELETE` trên `usage_settlements` & `audit_events`).
-  - `internal/storage/postgres/partition_manager.go` (tự động tạo trước phân vùng tháng kế tiếp và tách phân vùng cũ phục vụ lưu trữ).
+  - `go.mod`, `go.sum` (adding pure-Go `github.com/jackc/pgx/v5`).
+  - `internal/storage/postgres/driver.go` (`pgxpool` connection pool, mandatory `SET LOCAL app.current_org_id` acquisition hook, and cluster-wide `pg_advisory_lock` migration runner preventing DDL races when 10 pods boot simultaneously — `FMEA-06`).
+  - `db/migrations/postgres/0001_full_schema_rls_partitions.sql` (all `26` canonical tables locked in `TP-IMP-0003`, `FORCE RLS`, composite `(org_id, ...)` foreign keys, and triggers blocking `UPDATE/DELETE` on `usage_settlements` & `audit_events`).
+  - `internal/storage/postgres/partition_manager.go` (automated pre-creation of upcoming monthly partitions and detachment of expired partitions for archival).
   - `internal/ops/migrate/sqlite_to_pg.go` (`tanpopo db migrate-engine --from sqlite://... --to postgres://... --verify`).
-- **Out-of-Scope:** Đồng bộ bộ đếm tốc độ và thu hồi khóa qua `Valkey` (thuộc đơn vị kế tiếp `TP-IMP-0040`).
+- **Out-of-Scope:** Distributed rate-limit counters and fast revocation fan-out over `Valkey` (covered in `TP-IMP-0040`).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-1005`, `ADR-0003`, `ARCH-DATA-01`, `CR-06`, `CT-32`, `AUTH-14`, `FMEA-06`, `DR-02`, `GATE-REL-02`.
 - **Dependencies:** `TP-IMP-0007`, `TP-IMP-0021`, `TP-IMP-0023`.
-- **Design Refs:** [`ADR-0003`](../../architecture/adr/0003-dual-mode-persistence-and-cluster-state.md), [`data-model.md`](../../architecture/data-model.md) (`ARCH-DATA-01`), [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md) Mục 2, [`nonfunctional-slo.md`](../../quality/nonfunctional-slo.md) (`FMEA-06`).
+- **Design Refs:** [`ADR-0003`](../../architecture/adr/0003-dual-mode-persistence-and-cluster-state.md), [`data-model.md`](../../architecture/data-model.md) (`ARCH-DATA-01`), [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md) Section 2, [`nonfunctional-slo.md`](../../quality/nonfunctional-slo.md) (`FMEA-06`).
 
 ## 4. API, Wire & Data Contracts
-- **Bất biến Chống Đứt Chuỗi Băm Khi Ghi Từ Nhiều Nút (`HA Per-Org Audit Serialization`):** Khi 4 nút Control Plane cùng ghi `audit_events` cho `Org A`, giao dịch lấy khóa `pg_advisory_xact_lock(hashtextextended('audit:' || org_id::text, 0))` trong vài mili-giây để đảm bảo `seq_no` và `prev_hash` của `Org A` tuyến tính tuyệt đối mà không làm nghẽn `Org B`.
-- **Kiểm chứng Di trú Không Mất Mát (`CT-32`):** Nếu bất kỳ bảng nào lệch dù chỉ 1 dòng, lệch `1 micro-USD` tổng sổ cái, hoặc đứt chuỗi băm kiểm toán sau khi chép từ SQLite sang PostgreSQL, lệnh `tanpopo db migrate-engine` hủy bỏ giao dịch đích và trả mã thoát lỗi `22`.
+- **HA Per-Org Audit Hash-Chain Serialization Invariant (`HA Per-Org Audit Serialization`):** When 4 Control Plane nodes concurrently append `audit_events` for `Org A`, each transaction acquires `pg_advisory_xact_lock(hashtextextended('audit:' || org_id::text, 0))` for milliseconds to guarantee strictly linear `seq_no` and `prev_hash` chaining for `Org A` without blocking `Org B`.
+- **Lossless Migration Verification (`CT-32`):** If any table differs by even 1 row, diverges by `1 micro-USD` in ledger totals, or fails audit hash-chain verification after copying from SQLite to PostgreSQL, `tanpopo db migrate-engine` rolls back the target state and exits with code `22`.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`Dual-DB Behavioral Parity`):** Toàn bộ bộ kiểm thử `storage/port`, `finops/ledger` (`CT-29`) và `security/audit` (`CT-30` dưới 8 nút ghi song song) chạy xanh `100%` trên cả `SQLite WAL` lẫn `PostgreSQL 16`.
-- **`AC-2` (`CT-32` Lossless SQLite-to-PostgreSQL Migration):** Nạp dữ liệu hỗn hợp đa dự án, khóa mật `AEAD AAD`, 1.000 bút toán `usage_settlements` và 500 sự kiện kiểm toán trên SQLite → chạy `tanpopo db migrate-engine --verify` sang PostgreSQL → tổng số dòng, tổng chi phí `micro-USD`, giải mã `SecretCredential` và `VerifyAuditChain` khớp tuyệt đối `100%`.
-- **`NEG-1` (`RLS Enforcement Proof`):** Trong bài kiểm thử đối kháng, thực thi trực tiếp câu lệnh `SELECT * FROM secret_credentials` bằng kết nối ứng dụng khi chưa đặt `app.current_org_id` hoặc đặt `Org A` để tìm dòng của `Org B` → PostgreSQL RLS trả về **đúng `0` dòng**.
-- **`NEG-2` (`FMEA-06` Concurrent Pod Migration):** Khởi chạy đồng thời 8 tiến trình chạy migration trên cùng cơ sở dữ liệu trống → đúng 1 tiến trình thực thi DDL, 7 tiến trình chờ khóa êm ái và không xảy ra lỗi tranh chấp bảng.
+- **`AC-1` (`Dual-DB Behavioral Parity`):** The complete `storage/port`, `finops/ledger` (`CT-29`), and `security/audit` (`CT-30` under 8 concurrent writer nodes) contract test suites pass at `100%` on both `SQLite WAL` and `PostgreSQL 16`.
+- **`AC-2` (`CT-32` Lossless SQLite-to-PostgreSQL Migration):** Seeding multi-project fixtures, `AEAD AAD` secrets, 1,000 `usage_settlements` entries, and 500 audit events in SQLite and running `tanpopo db migrate-engine --verify` into PostgreSQL yields `100%` exact parity across row counts, `micro-USD` totals, `SecretCredential` decryption, and `VerifyAuditChain`.
+- **`NEG-1` (`RLS Enforcement Proof`):** In an adversarial test executing raw `SELECT * FROM secret_credentials` over the application connection pool without setting `app.current_org_id` (or with `Org A` set while querying `Org B` rows), PostgreSQL RLS returns **strictly `0` rows**.
+- **`NEG-2` (`FMEA-06` Concurrent Pod Migration):** Launching 8 concurrent migration processes against an empty database results in exactly 1 process applying DDL while the remaining 7 wait cleanly on the advisory lock with zero table-contention errors.
 
 ## 6. Test Commands & Required Evidence
-- `TANPOPO_TEST_HERMETIC=1 go test -v -race ./internal/storage/postgres/... ./internal/ops/migrate/...` *(chạy với PostgreSQL 16 cục bộ trong container cô lập mạng)*.
+- Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/storage/postgres/... ./internal/ops/migrate/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/storage/postgres/... ./internal/ops/migrate/...`; run against a local PostgreSQL 16 instance in a network-isolated container)*
+- Race detector (`-race`): `TANPOPO_TEST_HERMETIC=1 go test -v -race ./internal/storage/postgres/... ./internal/ops/migrate/...` *(PowerShell: `$env:TANPOPO_TEST_HERMETIC='1'; go test -v -race ./internal/storage/postgres/... ./internal/ops/migrate/...`)*
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Từ chối khởi động ở chế độ sản xuất nếu tài khoản PostgreSQL được cấp quyền `SUPERUSER` hoặc `BYPASSRLS` (`tanpopo doctor` kiểm tra trực tiếp `pg_roles`).
-- **Rollback:** Tệp SQLite gốc được mở ở chế độ chỉ đọc khi di trú sang PostgreSQL nên luôn giữ nguyên vẹn 100% để quay lui tức thì nếu cần.
+- **Security Invariant:** Production startup refuses to proceed if the configured PostgreSQL role possesses `SUPERUSER` or `BYPASSRLS` privileges (`tanpopo doctor` queries `pg_roles` directly).
+- **Rollback:** The source SQLite database is opened strictly read-only during PostgreSQL migration, remaining 100% intact for immediate rollback if required.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0003` (hoàn thiện DDL 8 bảng thiếu + khóa phân vùng `CR-06`), `TP-IMP-0007`, `TP-IMP-0021` và `TP-IMP-0023` đã hoàn tất.
-- **DoD:** Xanh toàn bộ kiểm thử kép `Dual-DB`, `CT-32`, `FMEA-06`, kiểm chứng `FORCE RLS`, vượt qua `REQUIRES_STRONG_REVIEW`.
+- **DoR:** `TP-IMP-0003` (completing the 8 missing table DDLs + partition key alignment per `CR-06`), `TP-IMP-0007`, `TP-IMP-0021`, and `TP-IMP-0023` are complete.
+- **DoD:** `Dual-DB` parity tests, `CT-32`, `FMEA-06`, and `FORCE RLS` proofs passing, with `REQUIRES_STRONG_REVIEW` sign-off achieved.

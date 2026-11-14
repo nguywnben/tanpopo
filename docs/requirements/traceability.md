@@ -1,27 +1,27 @@
-# Ma trận Truy vết Đầu-Cuối & Kết quả Kiểm toán Cổng A08 (End-to-End Traceability Matrix) — Tanpopo
+# End-to-End Traceability Matrix & A08 Gate Audit Results — Tanpopo
 
-> **Tài liệu Kiểm chứng Truy vết (Updated through Phase ASTRA A10 Final Readiness Audit — `HANDOFF VERDICT: NO_GO | GATE G4: BLOCKED_ON_OWNER_APPROVAL`)**
-> - **Phiên bản:** `0.4.0-step10-readiness`
-> - **Ngày cập nhật:** `2026-11-14`
-> - **Vai trò biên soạn:** Principal Requirements Engineer, Principal Architect, Independent Auditor (A08), TPM/QA Lead (A09) & Independent Delivery Readiness Reviewer (A10)
-> - **Trạng thái quản trị:** **Chưa khóa Baseline Thực thi (`HANDOFF: NO_GO — GATE G1/G2/G3/G4: READY_FOR_REVIEW / BLOCKED | AUDIT A08: FAIL`)**. Kết nối truy vết đầy đủ từ Khám phá (`UC`, `RSK`) & Nghiệp vụ (`WF`, `OPS`, `SM`, `TP-BR`) sang `SRS` (`TP-FR`, `TP-NFR`), `AC` (`TP-AC`, `UX-AC`, `OPS-AC`), Kiến trúc/UX/Ops/Security/QA (`A04–A07`), Kiểm toán A08 (`CR-01`..`10`, `GAP-01`..`13`), **47 Đơn vị Thực thi đã đồng bộ chuẩn hóa tại [`implementation-index.md`](../planning/implementation-index.md)** và **Hồ sơ Bàn giao [`execution-baseline.md`](../governance/execution-baseline.md) / [`execution-readiness.md`](../reviews/execution-readiness.md)**.
-
----
-
-## 1. Quy ước Liên kết Đặc tả A04, Kiến trúc A05, UX/DX/Ops A06, Bảo mật/Kiểm thử A07 & Khung Giữ chỗ Hạ nguồn
-
-- **`SPEC-EXT-01` .. `SPEC-EXT-06` (Bước A04):** Bộ 6 đặc tả nền tảng phần mở rộng, kết nối, Marketplace, MCP/A2A và tương thích giao thức.
-- **`ARCH-SYS-01`, `ARCH-DATA-01`, `ARCH-OPS-01`, `SPEC-CORE-01`..`02`, `SPEC-API-01` & `ADR-0001`..`0006` (Bước A05):** Thiết kế kiến trúc hệ thống tổng thể, lược đồ dữ liệu hai chế độ (`SQLite WAL` / `PostgreSQL 16+`), topo triển khai HA, định tuyến/chính sách, sổ cái `micro-USD`/OTel, hợp đồng `OpenAPI 3.1`/`JSON Schema`/`Protobuf` và 6 ADRs.
-- **`SPEC-UX-01` .. `SPEC-UX-04` & `SPEC-OPS-01` .. `SPEC-OPS-04` (Bước A06):** Kiến trúc thông tin 11 phân khu, 8 hành trình `UJ-01`..`08`, 16 màn hình `SCR-01`..`16`, tích hợp Astryx `neutral` (`UX-AC-01`..`12`), cài đặt đa nền tảng/`Air-Gap`, sao lưu/phục hồi `DR-01`..`04`, giám sát/7 sổ tay sự cố `INC-01`..`07` (`OPS-AC-01`..`12`) và `tanpopo` CLI/SDK.
-- **`SPEC-SEC-01` .. `SPEC-SEC-03` (`docs/security/*.md` — Bước A07):** Mô hình mối đe dọa 7 ranh giới tin cậy & 13 véc-tơ tấn công (`threat-model.md` — `TM-01`..`13`), cô lập Sandbox 3 tầng & chuỗi cung ứng (`plugin-sandbox-and-supply-chain.md`), mã hóa phong bì `AEAD AAD`, cô lập thuê bao 4 lớp & ranh giới kỹ thuật vs chính sách hãng `DEC-004` (`secrets-and-tenant-isolation.md`).
-- **`SPEC-QA-01` .. `SPEC-QA-04` (`docs/quality/*.md` — Bước A07):** Ma trận kiểm thử hợp đồng/xác thực/fuzzing (`contract-test-matrix.md` — `CT-01`..`32`, `AUTH-01`..`16`, `FZ-01`..`06`, `EXT-ACCEPT-01`), chiến lược kiểm thử & CI khép kín `0` gọi AI trả phí (`test-strategy.md`), chỉ tiêu `SLO-01`..`08` (`TARGET / UNVERIFIED`) & 8 ca hỏng hóc sâu (`nonfunctional-slo.md` — `FMEA-01`..`08`), cùng 7 cổng xuất xưởng & gói tổng hợp trình duyệt Gate G3 (`release-readiness.md` — `GATE-REL-01`..`07`).
-- **`PLAN-RM-01`, `PLAN-MS-01`, `PLAN-DAG-01`, `PLAN-IDX-01` & `TP-IMP-0001` .. `TP-IMP-0047` (`docs/planning/` — Bước A09):** Kế hoạch triển khai đa tầng nháp từ `M0` (đóng toàn bộ lỗ hổng đặc tả A08 & chạy `SPIKE-01..04`), `M1` (lát cắt dọc `EXT-ACCEPT-01`), `M2` (`MVP v0.1`), `M3` (`v0.2`), `M4` (`v0.3`) tới `M5` (`v1.0 GA` & cổng chữ ký con người `GATE-REL-07`). Toàn bộ `47/47` đơn vị đang ở trạng thái trung thực `BLOCKED` chờ Product Owner phê duyệt `Gate G1–G4` và `CR-01`..`10`.
+> **Traceability Verification Specification (Updated through Phase ASTRA A10 Final Readiness Audit — `HANDOFF VERDICT: NO_GO | GATE G4: BLOCKED_ON_OWNER_APPROVAL`)**
+> - **Version:** `0.4.0-step10-readiness`
+> - **Last Updated:** `2026-11-14`
+> - **Authoring Role:** Principal Requirements Engineer, Principal Architect, Independent Auditor (A08), TPM/QA Lead (A09) & Independent Delivery Readiness Reviewer (A10)
+> - **Governance Status:** **Unlocked Execution Baseline (`HANDOFF: NO_GO — GATE G1/G2/G3/G4: READY_FOR_REVIEW / BLOCKED | AUDIT A08: FAIL`)**. Provides end-to-end bidirectional traceability from Discovery (`UC`, `RSK`) and Business Analysis (`WF`, `OPS`, `SM`, `TP-BR`) through `SRS` (`TP-FR`, `TP-NFR`), `AC` (`TP-AC`, `UX-AC`, `OPS-AC`), Architecture/UX/Ops/Security/QA (`A04–A07`), Independent Audit A08 (`CR-01`..`10`, `GAP-01`..`13`), **all 47 normalized Implementation Units in [`implementation-index.md`](../planning/implementation-index.md)**, and **Delivery Handoff Artifacts [`execution-baseline.md`](../governance/execution-baseline.md) / [`execution-readiness.md`](../reviews/execution-readiness.md)**.
 
 ---
 
-## 2. Ma trận Truy vết Chiều Thuận: `Use Case / Workflow → Rule → Feature → FR/NFR → AC → Arch, UX, Ops & Security Specs → Unit → Test Suite (A07)`
+## 1. Cross-Phase Linking Conventions Across A04 Specs, A05 Architecture, A06 UX/DX/Ops, A07 Security/QA & Downstream Units
 
-| Use Case / Hành trình (`UC` / `WF` / `OPS` / `CAND`) | Quy tắc Nghiệp vụ & Máy trạng thái (`TP-BR` / `SM`) | Tính năng (`FT`) | Yêu cầu Hệ thống (`TP-FR` / `TP-NFR` & Ưu tiên) | Tiêu chí Nghiệm thu (`TP-AC` / `UX-AC` / `OPS-AC`) | Kiến trúc A05, UX/Ops A06 & Bảo mật A07 (`ARCH` / `ADR` / `SPEC`) | Đơn vị Thực thi A09 (`TP-IMP-xxxx`) | Bộ Kiểm thử & FMEA Đã Khóa Ở A07 (`CT` / `AUTH` / `FZ` / `FMEA`) |
+- **`SPEC-EXT-01` .. `SPEC-EXT-06` (Phase A04):** Six foundational specifications governing extensions, connections, Marketplace distribution, MCP/A2A planes, and wire-protocol compatibility.
+- **`ARCH-SYS-01`, `ARCH-DATA-01`, `ARCH-OPS-01`, `SPEC-CORE-01`..`02`, `SPEC-API-01` & `ADR-0001`..`0006` (Phase A05):** Overall system architecture, dual-mode data schema (`SQLite WAL` / `PostgreSQL 16+`), HA deployment topology, routing/policy engine, `micro-USD` budget ledger & OTel export, `OpenAPI 3.1`/`JSON Schema`/`Protobuf` contracts, and 6 ADRs.
+- **`SPEC-UX-01` .. `SPEC-UX-04` & `SPEC-OPS-01` .. `SPEC-OPS-04` (Phase A06):** 11-section Information Architecture, 8 end-to-end journeys `UJ-01`..`08`, 16 screen specifications `SCR-01`..`16`, Astryx `neutral` integration (`UX-AC-01`..`12`), multi-platform/`Air-Gap` installers, backup/disaster recovery `DR-01`..`04`, observability & 7 incident runbooks `INC-01`..`07` (`OPS-AC-01`..`12`), and `tanpopo` CLI/SDK reference.
+- **`SPEC-SEC-01` .. `SPEC-SEC-03` (`docs/security/*.md` — Phase A07):** Threat model spanning 7 trust boundaries & 13 attack vectors (`threat-model.md` — `TM-01`..`13`), 3-tier Sandbox containment & supply-chain integrity (`plugin-sandbox-and-supply-chain.md`), `AEAD AAD` envelope encryption, 4-layer tenant isolation, and technical-vs-provider-entitlement boundaries under `DEC-004` (`secrets-and-tenant-isolation.md`).
+- **`SPEC-QA-01` .. `SPEC-QA-04` (`docs/quality/*.md` — Phase A07):** Contract, auth, and fuzz test matrices (`contract-test-matrix.md` — `CT-01`..`32`, `AUTH-01`..`16`, `FZ-01`..`06`, `EXT-ACCEPT-01`), hermetic CI test strategy with `0` paid live AI calls (`test-strategy.md`), `SLO-01`..`08` (`TARGET / UNVERIFIED`) & 8 deep failure-mode analyses (`nonfunctional-slo.md` — `FMEA-01`..`08`), plus 7 release gates & the Gate G3 review packet (`release-readiness.md` — `GATE-REL-01`..`07`).
+- **`PLAN-RM-01`, `PLAN-MS-01`, `PLAN-DAG-01`, `PLAN-IDX-01` & `TP-IMP-0001` .. `TP-IMP-0047` (`docs/planning/` — Phase A09):** Draft multi-milestone implementation plan spanning `M0` (remediating all A08 specification gaps & executing `SPIKE-01..04`), `M1` (vertical slice `EXT-ACCEPT-01`), `M2` (`MVP v0.1`), `M3` (`v0.2`), `M4` (`v0.3`), through `M5` (`v1.0 GA` & human sign-off gate `GATE-REL-07`). All `47/47` units honestly remain `BLOCKED` pending Product Owner approval of `Gate G1–G4` and `CR-01`..`10`.
+
+---
+
+## 2. Forward Traceability Matrix: `Use Case / Workflow → Rule → Feature → FR/NFR → AC → Arch, UX, Ops & Security Specs → Unit → Test Suite (A07)`
+
+| Use Case / Journey (`UC` / `WF` / `OPS` / `CAND`) | Business Rules & State Machines (`TP-BR` / `SM`) | Feature (`FT`) | System Requirements (`TP-FR` / `TP-NFR` & Priority) | Acceptance Criteria (`TP-AC` / `UX-AC` / `OPS-AC`) | A05 Arch, A06 UX/Ops & A07 Security (`ARCH` / `ADR` / `SPEC`) | A09 Implementation Units (`TP-IMP-xxxx`) | A07 Locked Test Suites & FMEA (`CT` / `AUTH` / `FZ` / `FMEA`) |
 |---|---|---|---|---|---|---|---|
 | **`UC-01`**, **`WF-06`**, `CAND-011`<br/>*(Unified Inference, Multimodal, Partial Stream, Cancel)* | `TP-BR-0101`, `0103`, `0503`, `0504`, `0505`<br/>`SM-04`, `SM-07` | `FT-01` | `TP-FR-0101`..`0104` (`Must`)<br/>`TP-FR-0106` (`Later`)<br/>`TP-NFR-0101`, `0102` (`Must`) | `TP-AC-F0101`..`F0104`, `TP-AC-N01`<br/>`UX-AC-09`, `UX-AC-12` | `ARCH-SYS-01`, `SPEC-API-01`, `SPEC-EXT-06`, `ADR-0001`, `SPEC-UX-02` (`UJ-01`, `UJ-08`), `SPEC-OPS-04`, `SPEC-QA-03` (`SLO-02`, `SLO-03`) | `TP-IMP-0015`, `0016` | `CT-06`..`CT-11`, `FZ-03`, `FMEA-01`, `SPIKE-02`, `SPIKE-03` |
 | **`UC-01`**, **`WF-06`**, `CAND-011`<br/>*(Lossless Native Dialect Passthrough)* | `TP-BR-0101`, `0304`, `0501`, `0503`, `0702`<br/>`SM-04`, `SM-07` | `FT-02` | `TP-FR-0105` (`Should`)<br/>`TP-NFR-0102` (`Must`) | `TP-AC-F0105`, `TP-AC-SEC-04`<br/>`UX-AC-12` | `ARCH-SYS-01`, `SPEC-API-01`, `SPEC-EXT-02`, `SPEC-EXT-06`, `SPEC-UX-03` (`UX-GR-02`, `SCR-15`), `SPEC-SEC-01` (`TM-06`) | `TP-IMP-0017`, `0018` | `CT-13`, `CT-15`, `CT-26` |
@@ -42,96 +42,96 @@
 
 ---
 
-## 3. Thống kê Độ phủ Kiểm chứng Hai chiều (`Bidirectional Coverage Audit — Reconciled at A08`)
+## 3. Bidirectional Coverage Audit (`Reconciled at A08`)
 
-| Chiều kiểm tra | Tổng số phần tử | Số phần tử đã ánh xạ đầy đủ | Khoảng trống Phát hiện Tại Audit A08 (`GAP-*`) | Kết luận Sau Kiểm toán Độc lập A08 |
+| Verification Dimension | Total Elements | Fully Mapped Elements | Gaps Detected at A08 Audit (`GAP-*`) | Post-Audit A08 Determination |
 |---|---|---|---|---|
-| **Use Cases Khám phá (`UC-01` .. `UC-09`) & Hành trình Nghiệp vụ (`WF-01` .. `WF-13`)** | `9` + `13` | `22 / 22` nối tới `UJ-01`..`08` & `INC/DR` | Thiếu hành trình `UC/WF` gốc riêng cho `A2A` (`AUD-006`) | Cần bổ sung khi mở nhịp `v0.3` |
-| **Yêu cầu Vận hành (`OPS-01` .. `OPS-09`) & Ứng viên (`CAND-001` .. `017`)** | `9` + `17` | `26 / 26` nối tới `SPEC-OPS-01`..`04` | Thiếu quy trình khôi phục khóa quản trị cục bộ (`AUD-023` / `CR-09`) | Cần vá tại `GAP-13` |
-| **Máy Trạng thái (`SM-01` .. `SM-08`) & Quy tắc Nghiệp vụ (`TP-BR-0101` .. `0803`)** | `8` + `30` | `38 / 38` có mặt trên `SCR` & `UX-GR` | Có điểm chết chuyển tiếp ở `SM-01, 02, 04, 05, 07, 08` & gộp `SM-06` (`AUD-006`) | **Chặn (`GAP-08`)** — phải vá ở A02 |
-| **Yêu cầu Chức năng (`TP-FR-*`) & Phi Chức năng (`TP-NFR-*`)** | `53` (`51 Active + 2 Later`) + `22` = **`75`** | `70 / 73 Active` (`+ 2 Later` giữ chỗ Post-v1) | **`3` yêu cầu `Must` thiếu một phần `AC`/Test cụ thể:** `TP-FR-0701` (narrowing), `TP-FR-0702` (`RPM/TPM/Concurrency`), `TP-FR-0901` (cursor pagination); `Tier-3 Sidecar` & `Response Cache` chưa có `TP-FR-*` (`AUD-008`, `011`, `024`) | **Chặn (`GAP-09`, `GAP-11`)** — phải tách bảng `1-1` & bổ sung `AC`/Test ở A03/A07 |
-| **Danh mục Màn hình (`SCR-01` .. `SCR-16`) & Tiêu chí Khả dụng/Vận hành (`UX-AC`, `OPS-AC`)** | `16` + `24` | `40 / 40` ánh xạ tới `SRS` & Astryx Template | **`51 / 57` endpoint `/admin/v1/*` của `SCR-01..16` chưa có schema trong `SPEC-API-01`**; xung đột phông chữ `Air-Gap` (`AUD-005`, `017`) | **Chặn (`GAP-07`, `GAP-12`)** — phải hoàn thiện ở A05/A06 |
-| **Mối đe dọa (`TM-01` .. `13`), Rủi ro (`RSK-001` .. `016`) & Chế độ Hỏng hóc Sâu (`FMEA-01` .. `08`)** | `13` + `16` + `8` | `37 / 37` gắn với `CT-*`, `AUTH-*`, `FZ-*`, `GATE-REL-*` | Còn lỗ hổng biên dịch `runtime.proto`, tràn RAM Wasm đa phương thức, thiếu `8` bảng SQL & xung đột `AEAD AAD` (`AUD-001`..`004`, `010`) | **Chặn (`GAP-02`..`06`)** — phải vá ở A04/A05 |
+| **Discovery Use Cases (`UC-01` .. `UC-09`) & Business Workflows (`WF-01` .. `WF-13`)** | `9` + `13` | `22 / 22` linked to `UJ-01`..`08` & `INC/DR` | Missing dedicated root `UC/WF` journey for `A2A` (`AUD-006`) | Add upon opening `v0.3` horizon |
+| **Operational Requirements (`OPS-01` .. `OPS-09`) & Candidates (`CAND-001` .. `017`)** | `9` + `17` | `26 / 26` linked to `SPEC-OPS-01`..`04` | Missing local break-glass admin lockout recovery workflow (`AUD-023` / `CR-09`) | Remediate under `GAP-13` |
+| **State Machines (`SM-01` .. `SM-08`) & Business Rules (`TP-BR-0101` .. `0803`)** | `8` + `30` | `38 / 38` surfaced across `SCR` & `UX-GR` | Transition dead-ends in `SM-01, 02, 04, 05, 07, 08` & conflated `SM-06` (`AUD-006`) | **Blocking (`GAP-08`)** — remediate in A02 |
+| **Functional (`TP-FR-*`) & Non-Functional (`TP-NFR-*`) Requirements** | `53` (`51 Active + 2 Later`) + `22` = **`75`** | `70 / 73 Active` (`+ 2 Later` Post-v1 placeholders) | **`3` `Must` requirements missing partial `AC`/Test clauses:** `TP-FR-0701` (narrowing), `TP-FR-0702` (`RPM/TPM/Concurrency`), `TP-FR-0901` (cursor pagination); `Tier-3 Sidecar` & `Response Cache` lack dedicated `TP-FR-*` IDs (`AUD-008`, `011`, `024`) | **Blocking (`GAP-09`, `GAP-11`)** — expand `1-1` tables & add `AC`/Tests in A03/A07 |
+| **Screen Catalog (`SCR-01` .. `SCR-16`) & Usability/Ops Criteria (`UX-AC`, `OPS-AC`)** | `16` + `24` | `40 / 40` mapped to `SRS` & Astryx Templates | **`51 / 57` `/admin/v1/*` endpoints referenced by `SCR-01..16` lack schemas in `SPEC-API-01`**; `Air-Gap` font bundle discrepancy (`AUD-005`, `017`) | **Blocking (`GAP-07`, `GAP-12`)** — remediate in A05/A06 |
+| **Threats (`TM-01` .. `13`), Risks (`RSK-001` .. `016`) & Deep Failure Modes (`FMEA-01` .. `08`)** | `13` + `16` + `8` | `37 / 37` bound to `CT-*`, `AUTH-*`, `FZ-*`, `GATE-REL-*` | `runtime.proto` compilation flaw, multimodal Wasm RAM exhaustion, `8` missing SQL tables & `AEAD AAD` mismatch (`AUD-001`..`004`, `010`) | **Blocking (`GAP-02`..`06`)** — remediate in A04/A05 |
 
 ---
 
-## 4. Bảng Tự Kiểm tra Bắt buộc Cổng Gate G2 (`Mandatory Gate G2 Self-Check — Audited at A08`)
+## 4. Mandatory Gate G2 Self-Check (`Audited at A08`)
 
-| Tiêu chí tự kiểm tra bắt buộc của Gate G2 (Prompt ASTRA A03) | Kết quả Hậu Kiểm toán A08 | Bằng chứng kiểm chứng cụ thể trong bộ tài liệu |
+| Mandatory Gate G2 Self-Check Criterion (ASTRA A03 Prompt) | Post-A08 Audit Verdict | Concrete Verification Evidence in Repository |
 |---|---|---|
-| **1. Không có tính năng `P0` (`Must`) nào thiếu Tiêu chí Nghiệm thu (`AC`)?** | **CẦN BỔ SUNG (`PARTIAL — GAP-11`)** | Kiểm toán độc lập A08 (`AUD-011`) phát hiện `3/36` mục `Must` đang thiếu một vế kịch bản `AC`/`CT`: `TP-FR-0702` mới kiểm tra SSRF chưa kiểm tra `RPM/TPM/Concurrency`, `TP-FR-0701` chưa kiểm tra `422 policy_relaxation_forbidden`, và `TP-FR-0901` chưa kiểm tra phân trang con trỏ; danh mục `Official Adapters` `v0.1` (`TP-FR-0301`) cần chốt tại `CR-01`. |
-| **2. Không có tuyên bố "hỗ trợ đầy đủ" chung chung mà thiếu Ma trận Giao thức / Năng lực?** | **ĐẠT (`PASS`)** | Mục 1 của [`srs.md`](./srs.md) thiết lập bảng 14 dòng phân định rạch ròi các chế độ dịch, giữ nguyên phương ngữ gốc, mặt phẳng riêng và mục bị cấm. |
-| **3. Không có kịch bản giá/mức tiêu thụ mô hình không xác định nào lại hứa hẹn tính đúng tuyệt đối `100%`?** | **ĐẠT (`PASS`)** | `TP-BR-0703`, `TP-FR-0802`, `SPEC-CORE-02`, `ADR-0005`, `SCR-12` và `FMEA-04` bắt buộc phân loại `EXACT`, `ESTIMATED` hoặc `UNMETERED_FLAGGED`, tách cột riêng trên báo cáo `Chargeback`. |
-| **4. Không có tuyên bố hỗ trợ OAuth cho thuê bao tiêu dùng phổ quát?** | **ĐẠT (`PASS`)** | `NG-03` & `PC-03` trong [`prd.md`](../product/prd.md), `SPEC-EXT-03`, `ADR-0005`, `UX-GR-03` và `SPEC-SEC-03` Mục 3.3 khẳng định rõ chỉ hỗ trợ `Authorized OAuth 2.1` hợp lệ, không hợp thức hóa thuê bao cá nhân. |
-| **5. Trạng thái bản nháp & thẩm quyền phê duyệt các Cổng được giữ đúng kỷ luật?** | **ĐẠT (`PASS`)** | **Gate G1**, **Gate G2**, **Baseline A04**, **Gate G3 (A05–A07)** và **Baseline A06** đều giữ nguyên **`READY_FOR_REVIEW`** tại [`decisions.md`](../governance/decisions.md), không tự nâng lên `APPROVED`. |
+| **1. Zero `P0` (`Must`) features lacking Acceptance Criteria (`AC`)?** | **NEEDS REMEDIATION (`PARTIAL — GAP-11`)** | Independent Audit A08 (`AUD-011`) identified `3/36` `Must` items missing one sub-clause `AC`/`CT` scenario: `TP-FR-0702` verifies SSRF but not `RPM/TPM/Concurrency`, `TP-FR-0701` lacks `422 policy_relaxation_forbidden`, and `TP-FR-0901` lacks cursor pagination verification; the `v0.1` `Official Adapters` roster (`TP-FR-0301`) awaits sign-off under `CR-01`. |
+| **2. Zero blanket "full support" claims lacking a Protocol / Capability Matrix?** | **`PASS`** | Section 1 of [`srs.md`](./srs.md) defines a 14-row matrix explicitly distinguishing translated endpoints, lossless native passthrough, dedicated planes, and policy-prohibited mechanisms. |
+| **3. Zero ambiguous pricing/token-metering scenarios claiming `100%` exact billing?** | **`PASS`** | `TP-BR-0703`, `TP-FR-0802`, `SPEC-CORE-02`, `ADR-0005`, `SCR-12`, and `FMEA-04` enforce `EXACT`, `ESTIMATED`, or `UNMETERED_FLAGGED` classification with segregated `Chargeback` report columns. |
+| **4. Zero claims of universal consumer subscription OAuth support?** | **`PASS`** | `NG-03` & `PC-03` in [`prd.md`](../product/prd.md), `SPEC-EXT-03`, `ADR-0005`, `UX-GR-03`, and `SPEC-SEC-03` Section 3.3 restrict OAuth strictly to legitimate `Authorized OAuth 2.1` integrations and forbid consumer subscription arbitrage. |
+| **5. Draft governance posture & Gate approval authority strictly respected?** | **`PASS`** | **Gate G1**, **Gate G2**, **Baseline A04**, **Gate G3 (A05–A07)**, and **Baseline A06** remain **`READY_FOR_REVIEW`** in [`decisions.md`](../governance/decisions.md) and are never self-promoted to `APPROVED`. |
 
 ---
 
-## 5. Bảng Tự Kiểm tra Kiến trúc Bắt buộc Bước A05 (`Mandatory Gate G3 Architectural Self-Check`)
+## 5. Mandatory Gate G3 Architectural Self-Check (`Phase A05`)
 
-| Tiêu chí tự kiểm tra bắt buộc của ASTRA A05 | Kết quả | Bằng chứng kiểm chứng cụ thể trong kiến trúc A05 |
+| Mandatory ASTRA A05 Self-Check Criterion | Verdict | Concrete Verification Evidence in A05 Architecture |
 |---|---|---|
-| **1. Không nạp mã phần mở rộng không tin cậy chạy chung tiến trình?** | **ĐẠT (`PASS`)** | [`ADR-0002`](../architecture/adr/0002-three-tier-extension-sandbox-and-blind-broker.md) và [`system-design.md`](../architecture/system-design.md) cấm cứng thực thi in-process; cô lập hoàn toàn qua `Declarative` / `Wasm Sandbox` / `Isolated Sidecar`. |
-| **2. Không ép chọn framework chỉ vì thuận tiện trước mắt / đã cài sẵn?** | **ĐẠT (`PASS`)** | [`system-design.md`](../architecture/system-design.md) và [`ADR-0004`](../architecture/adr/0004-web-console-stack-astryx-evaluation-and-repo-layout.md) đánh giá độc lập bằng ma trận tiêu chí. |
-| **3. Không hứa hẹn `0 ms` độ trễ cộng thêm hoặc tương thích `100%` mọi giao thức?** | **ĐẠT (`PASS`)** | Phân bổ ngân sách độ trễ trung thực (`< 2 ms` p95 Tầng 1, `< 5 ms` p95 Tầng 2 — `TARGET / UNVERIFIED`) và trả `400 capability_not_supported` rõ ràng khi lệch năng lực. |
-| **4. Không gộp thanh toán API Key thương mại với thuê bao người dùng cá nhân?** | **ĐẠT (`PASS`)** | Khóa cứng `CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA'))` trong lược đồ dữ liệu và `ADR-0005`. |
-| **5. Đã xác minh trọn vẹn cả hai đường đi đầu-cuối (`Request -> Provider` & `Plugin Installation`)?** | **ĐẠT (`PASS`)** | Mục 4.1 & 4.2 của [`system-design.md`](../architecture/system-design.md). |
-| **6. Không viết code ứng dụng / không tự chạy code PoC khi chưa có phép của Owner?** | **ĐẠT (`PASS`)** | `0` tệp mã nguồn thực thi nào được thêm/sửa. |
+| **1. Zero untrusted extension code loaded in-process?** | **`PASS`** | [`ADR-0002`](../architecture/adr/0002-three-tier-extension-sandbox-and-blind-broker.md) and [`system-design.md`](../architecture/system-design.md) hard-ban in-process untrusted execution, enforcing isolation via `Declarative` / `Wasm Sandbox` / `Isolated Sidecar`. |
+| **2. Zero framework selections driven purely by convenience or pre-installation bias?** | **`PASS`** | [`system-design.md`](../architecture/system-design.md) and [`ADR-0004`](../architecture/adr/0004-web-console-stack-astryx-evaluation-and-repo-layout.md) evaluate candidates via weighted engineering trade-off matrices. |
+| **3. Zero promises of `0 ms` proxy overhead or `100%` universal protocol parity?** | **`PASS`** | Honest latency budgets (`< 2 ms` p95 Tier 1, `< 5 ms` p95 Tier 2 — `TARGET / UNVERIFIED`) paired with explicit `400 capability_not_supported` rejections on capability mismatch. |
+| **4. Zero conflation of commercial API key billing with personal consumer subscriptions?** | **`PASS`** | Enforced via `CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA'))` in the relational schema and `ADR-0005`. |
+| **5. Both end-to-end architectural paths (`Request -> Provider` & `Plugin Installation`) verified?** | **`PASS`** | Sections 4.1 & 4.2 of [`system-design.md`](../architecture/system-design.md). |
+| **6. Zero application or PoC code written prior to explicit Owner authorization?** | **`PASS`** | `0` runtime source files created or modified. |
 
 ---
 
-## 6. Bảng Tự Kiểm tra UX/UI, DX & Vận hành Bắt buộc Bước A06 (`Mandatory A06 Self-Check`)
+## 6. Mandatory UX/UI, DX & Operations Self-Check (`Phase A06`)
 
-| Tiêu chí tự kiểm tra bắt buộc của ASTRA A06 | Kết quả | Bằng chứng kiểm chứng cụ thể trong bộ đặc tả A06 |
+| Mandatory ASTRA A06 Self-Check Criterion | Verdict | Concrete Verification Evidence in A06 Specifications |
 |---|---|---|
-| **1. Đủ 11 miền IA & 8 hành trình đầu-cuối kèm cả 5 trạng thái (`Happy / Error / Empty / Loading / Offline`)?** | **ĐẠT (`PASS`)** | [`information-architecture.md`](../ux/information-architecture.md) quy hoạch đủ 11 phân khu IA; [`user-flows.md`](../ux/user-flows.md) đặc tả đầy đủ `UJ-01`..`UJ-08` với bảng 5 trạng thái tường minh. |
-| **2. Mỗi màn hình có đủ mục tiêu, quyền, hợp đồng dữ liệu, hành động, kiểm tra, lỗi, xác nhận, kiểm toán, phản hồi, `WCAG 2.2 AA` & đáp ứng di động?** | **ĐẠT (`PASS`)** | [`screen-specifications.md`](../ux/screen-specifications.md) đặc tả toàn diện 16 màn hình chuẩn (`SCR-01`..`SCR-16`). |
-| **3. Tách bạch rõ setup Astryx đã chạy với quyết định chờ duyệt; giữ `neutral` mặc định, không khóa theme lạ và không `theme eject`?** | **ĐẠT (`PASS`)** | Mục 1 của [`design-system-integration.md`](../ux/design-system-integration.md) giữ nguyên [`astryx-themes.js`](../../astryx-themes.js) (`neutral`), `0` lệnh `theme eject`, `0` thay đổi mã nguồn. |
-| **4. Thống nhất thuật ngữ, không giấu rủi ro cộng đồng sau 1 nút cài đặt, không hiện khóa nhạy cảm mặc định và không gán nhãn chính thức cho kết nối thuê bao cá nhân?** | **ĐẠT (`PASS`)** | Mục 5 của [`information-architecture.md`](../ux/information-architecture.md) và 6 rào chắn `UX-GR-01`..`UX-GR-06`. |
-| **5. Đầy đủ cài đặt đa nền tảng (Linux/macOS/Windows), mạng kín `Air-Gap`, CLI/SDK/chẩn đoán, xử lý sự cố SRE và tiêu chí khả dụng/vận hành kiểm thử được?** | **ĐẠT (`PASS`)** | Bộ 4 tài liệu [`docs/operations/*`](../operations/installer-upgrades.md) cùng 24 tiêu chí định lượng `UX-AC-01`..`12` và `OPS-AC-01`..`12`. |
-| **6. Dừng đúng sau A06, không viết code frontend/backend?** | **ĐẠT (`PASS`)** | `0` thay đổi ngoài `docs/`. |
+| **1. All 11 IA domains & 8 end-to-end journeys specified across all 5 states (`Happy / Error / Empty / Loading / Offline`)?** | **`PASS`** | [`information-architecture.md`](../ux/information-architecture.md) defines all 11 IA sections; [`user-flows.md`](../ux/user-flows.md) specifies `UJ-01`..`UJ-08` across explicit 5-state tables. |
+| **2. Every screen specifies purpose, RBAC, data contracts, actions, validations, errors, confirmations, audit events, feedback, `WCAG 2.2 AA` & mobile responsiveness?** | **`PASS`** | [`screen-specifications.md`](../ux/screen-specifications.md) specifies all 16 canonical screens (`SCR-01`..`SCR-16`). |
+| **3. Existing Astryx setup separated from pending decisions; default `neutral` preserved with zero custom theme lock-in and zero `theme eject`?** | **`PASS`** | Section 1 of [`design-system-integration.md`](../ux/design-system-integration.md) preserves [`astryx-themes.js`](../../astryx-themes.js) (`neutral`), `0` `theme eject` calls, and `0` source-code mutations. |
+| **4. Consistent terminology, zero single-click hiding of community plugin risks, zero default secret exposure, and zero official badges for consumer subscription connectors?** | **`PASS`** | Section 5 of [`information-architecture.md`](../ux/information-architecture.md) and guardrails `UX-GR-01`..`UX-GR-06`. |
+| **5. Complete multi-platform installation (Linux/macOS/Windows), `Air-Gap` bundles, CLI/SDK/diagnostics, SRE runbooks, and testable UX/Ops criteria?** | **`PASS`** | Four [`docs/operations/*`](../operations/installer-upgrades.md) runbooks plus 24 quantitative criteria `UX-AC-01`..`12` and `OPS-AC-01`..`12`. |
+| **6. Halted cleanly after A06 with zero frontend/backend code written?** | **`PASS`** | `0` changes outside `docs/`. |
 
 ---
 
-## 7. Bảng Tự Kiểm tra Bảo mật, Độ tin cậy & Chiến lược Kiểm thử Bước A07 (`Mandatory Gate G3 / A07 Security & QA Self-Check`)
+## 7. Mandatory Security, Reliability & Test Strategy Self-Check (`Phase A07 / Gate G3`)
 
-| Tiêu chí tự kiểm tra bắt buộc của ASTRA A07 | Kết quả | Bằng chứng kiểm chứng cụ thể trong bộ đặc tả A07 |
+| Mandatory ASTRA A07 Self-Check Criterion | Verdict | Concrete Verification Evidence in A07 Specifications |
 |---|---|---|
-| **1. Mô hình mối đe dọa bao phủ trọn vẹn 13 véc-tơ tấn công theo ranh giới tin cậy & đủ 12 nhóm chốt kiểm soát bảo mật?** | **ĐẠT (`PASS`)** | [`threat-model.md`](../security/threat-model.md) (`TM-01`..`13` trên 7 ranh giới `TB-1`..`7`), [`plugin-sandbox-and-supply-chain.md`](../security/plugin-sandbox-and-supply-chain.md) và [`secrets-and-tenant-isolation.md`](../security/secrets-and-tenant-isolation.md). |
-| **2. Ma trận AuthN/AuthZ đầy đủ và phân biệt rạch ròi khả năng kỹ thuật giao thức với quyền hợp pháp theo chính sách hãng (`DEC-004`)?** | **ĐẠT (`PASS`)** | Mục 3 của [`contract-test-matrix.md`](../quality/contract-test-matrix.md) (`AUTH-01`..`16`) và Mục 3.3 của [`secrets-and-tenant-isolation.md`](../security/secrets-and-tenant-isolation.md). |
-| **3. Mọi chỉ số NFR / độ trễ / `MTTR` / `SLO` chưa đo thực tế đều mang nhãn `TARGET / UNVERIFIED`?** | **ĐẠT (`PASS`)** | Mục 1 của [`nonfunctional-slo.md`](../quality/nonfunctional-slo.md) gắn nhãn tường minh **`TARGET / UNVERIFIED`** cho toàn bộ `SLO-01`..`08` và các con số mục tiêu. |
-| **4. Đã phân tích sâu đủ 8 ca hỏng hóc bắt buộc (`Partial Stream + Fallback`, `Tool Side-Effect Retry`, `Cache Privacy`, `Missing Usage`, `Plugin Crash/CPU/OOM`, `Migration Failure`, `Revocation Failure`, `OAuth Stampede`)?** | **ĐẠT (`PASS`)** | Mục 3 của [`nonfunctional-slo.md`](../quality/nonfunctional-slo.md) đặc tả đầy đủ `FMEA-01`..`FMEA-08` gắn thẳng tới bài kiểm thử tự động. |
-| **5. Môi trường CI khóa cứng cơ học đảm bảo các bài kiểm thử KHÔNG BAO GIỜ vô tình gọi dịch vụ AI trả phí ngoài đời?** | **ĐẠT (`PASS`)** | Mục 3 của [`test-strategy.md`](../quality/test-strategy.md) thiết kế hệ 4 máy chủ `Fake*` cục bộ + 2 lớp khóa mạng (`testkit/netguard` chặn mọi IP ngoài `127.0.0.1/::1` + cô lập `unshare --net` trong CI). |
-| **6. Tổng kết đầy đủ Gate G3 (`READY_FOR_REVIEW`), gắn bài kiểm thử nghiệm thu `P0` cho từng rủi ro `P0`, làm rõ mức chứng minh của PoC và xin phép Owner trước khi viết bất kỳ dòng code nào?** | **ĐẠT (`PASS`)** | Mục 4 của [`release-readiness.md`](../quality/release-readiness.md) trình bày trọn vẹn gói Gate G3 (`CHƯA APPROVED`), ánh xạ đủ `16/16` `RSK -> Test`, bảng phạm vi `SPIKE-01`..`04` và dừng ngay sau A07 với `0` dòng mã nguồn được viết. |
+| **1. Threat model covers all 13 attack vectors across trust boundaries & all 12 security control pillars?** | **`PASS`** | [`threat-model.md`](../security/threat-model.md) (`TM-01`..`13` across `TB-1`..`7`), [`plugin-sandbox-and-supply-chain.md`](../security/plugin-sandbox-and-supply-chain.md), and [`secrets-and-tenant-isolation.md`](../security/secrets-and-tenant-isolation.md). |
+| **2. Complete AuthN/AuthZ matrix cleanly separating wire-protocol capability from provider-granted entitlement (`DEC-004`)?** | **`PASS`** | Section 3 of [`contract-test-matrix.md`](../quality/contract-test-matrix.md) (`AUTH-01`..`16`) and Section 3.3 of [`secrets-and-tenant-isolation.md`](../security/secrets-and-tenant-isolation.md). |
+| **3. Every unbenchmarked NFR / latency / `MTTR` / `SLO` metric explicitly labeled `TARGET / UNVERIFIED`?** | **`PASS`** | Section 1 of [`nonfunctional-slo.md`](../quality/nonfunctional-slo.md) explicitly labels all `SLO-01`..`08` and numerical thresholds **`TARGET / UNVERIFIED`**. |
+| **4. Deep FMEA completed for all 8 mandatory failure modes (`Partial Stream + Fallback`, `Tool Side-Effect Retry`, `Cache Privacy`, `Missing Usage`, `Plugin Crash/CPU/OOM`, `Migration Failure`, `Revocation Failure`, `OAuth Stampede`)?** | **`PASS`** | Section 3 of [`nonfunctional-slo.md`](../quality/nonfunctional-slo.md) specifies `FMEA-01`..`FMEA-08` bound directly to automated test suites. |
+| **5. CI mechanically locked so automated tests NEVER accidentally call paid external AI services?** | **`PASS`** | Section 3 of [`test-strategy.md`](../quality/test-strategy.md) pairs 4 local `Fake*` servers with dual network guards (`testkit/netguard` blocking non-`127.0.0.1/::1` egress + `unshare --net` namespace isolation in CI). |
+| **6. Complete Gate G3 review packet (`READY_FOR_REVIEW`), `P0` acceptance tests mapped to every `P0` risk, PoC proof boundaries stated, and Owner sign-off requested prior to writing code?** | **`PASS`** | Section 4 of [`release-readiness.md`](../quality/release-readiness.md) presents the full Gate G3 packet (`NOT APPROVED`), maps `16/16` `RSK -> Test` pairs, scopes `SPIKE-01`..`04`, and halts after A07 with `0` lines of source code written. |
 
 ---
 
-## 8. Kết quả Kiểm toán Độc lập Bước A08 (`Independent Specification Completeness Audit — FAIL`)
+## 8. Independent Specification Completeness Audit (`Phase A08 — FAIL`)
 
-> Chi tiết bằng chứng từng dòng và lộ trình quay lại sửa các bước `A02–A07` được lưu tại [`docs/reviews/integrated-audit.md`](../reviews/integrated-audit.md) (`REV-AUD-01`) và [`docs/reviews/unresolved-gaps.md`](../reviews/unresolved-gaps.md) (`REV-GAP-01`):
+> Line-level evidence and targeted remediation instructions across phases `A02–A07` are recorded in [`docs/reviews/integrated-audit.md`](../reviews/integrated-audit.md) (`REV-AUD-01`) and [`docs/reviews/unresolved-gaps.md`](../reviews/unresolved-gaps.md) (`REV-GAP-01`):
 
-| Hạng mục Kiểm toán A08 | Kết luận Độc lập | Ghi chú Khóa Chặn Trước Khi Lập Kế hoạch Unit Implementation |
+| A08 Audit Dimension | Independent Verdict | Pre-Implementation Blocking Notes |
 |---|---|---|
-| **Phán quyết `Specification Completeness`** | **`FAIL`** | Phát hiện **`11 CRITICAL`**, **`14 MAJOR`** và **`5 MINOR`** (`AUD-001`..`030`); đã dọn ngay `14` lỗi chính tả/tham chiếu phi quyết định, giữ nguyên toàn bộ các xung đột phạm vi/kiến trúc thành `CR-01`..`10` trình Owner duyệt. |
-| **Trạng thái Sẵn sàng Của `54/54` Yêu cầu `Must` (`P0`)** | **`BLOCKED (`GAP-01`..`13`)`** | Chờ Product Owner phê duyệt `Gate G1–G3` + `CR-01`..`10`, cho phép chạy `SPIKE-01`..`04` và hoàn tất vòng quay lại sửa có mục tiêu trên `A02`, `A03`, `A04`, `A05`, `A06`, `A07`. |
-| **Ranh giới Dừng Sau Kiểm toán (`No Unit Implementation`)** | **ĐẠT (`PASS`)** | Đã dừng viết mã sau A08; bước A09 chỉ thiết lập kế hoạch nháp `DRAFT — EXECUTION BASELINE UNLOCKED` có đặt cụm đóng đặc tả `M0` (`TP-IMP-0001`..`0004`) đứng chặn trước toàn bộ các đơn vị viết code `TP-IMP-0005`..`0047`. |
+| **`Specification Completeness` Verdict** | **`FAIL`** | Identified **`11 CRITICAL`**, **`14 MAJOR`**, and **`5 MINOR`** findings (`AUD-001`..`030`); resolved `14` non-policy clerical/cross-reference typos immediately while escalating all architectural/scope conflicts as `CR-01`..`10` for Owner decision. |
+| **Readiness of `54/54` `Must` (`P0`) Requirements** | **`BLOCKED (`GAP-01`..`13`)`** | Awaiting Product Owner approval of `Gate G1–G3` + `CR-01`..`10`, authorization to run `SPIKE-01`..`04`, and targeted specification remediation passes across `A02`, `A03`, `A04`, `A05`, `A06`, and `A07`. |
+| **Post-Audit Halting Boundary (`No Unit Implementation`)** | **`PASS`** | Zero application code written after A08; Phase A09 establishes only an unlocked `DRAFT — EXECUTION BASELINE UNLOCKED` plan placing `M0` spec-closure units (`TP-IMP-0001`..`0004`) as hard prerequisites ahead of all coding units `TP-IMP-0005`..`0047`. |
 
 ---
 
-## 9. Ma trận Truy vết 1-1 Từ Yêu cầu Hệ thống (`54 Must P0` + `19 Should/Could`) Sang Đơn vị Thực thi `TP-IMP-xxxx` & Bằng chứng Xuất xưởng (Đã Chuẩn hóa tại Bước A10)
+## 9. 1-to-1 Traceability Matrix from System Requirements (`54 Must P0` + `19 Should/Could`) to Implementation Units `TP-IMP-xxxx` & Release Evidence (Reconciled at Phase A10)
 
-> **Kết quả kiểm toán độ phủ A10:** **`54 / 54` yêu cầu `Must` (`P0`)** (`36 FR` + `18 NFR`), **`19 / 19` yêu cầu `Should/Could`** (`15 FR` + `4 NFR`) và **`113 / 113` định danh kiểm định (`CT-01..32`, `AUTH-01..16`, `FZ-01..06`, `EXT-ACCEPT-01`, `SLO-01..08`, `FMEA-01..08`, `UX-AC-01..12`, `OPS-AC-01..12`, `INC-01..07`, `DR-01..04`, `GATE-REL-01..07`)** đều gắn 1-1 tới đơn vị thực thi `TP-IMP-xxxx` cụ thể (**`0` yêu cầu `P0` mồ côi, `0` bài kiểm thử mồ côi**). `2` mục `Later` (`TP-FR-0106`, `TP-FR-0804`) giữ ngoài phạm vi `v1.0` (`Post-v1.0`). Toàn bộ `47` đơn vị đang ở trạng thái **`BLOCKED` (`READY = 0`, `PLANNED = 0`, `BLOCKED = 47`, Handoff = `NO_GO`)** cho tới khi Product Owner phê duyệt `Gate G1–G4` + `CR-01`..`10`.
+> **A10 Coverage Audit Summary:** **`54 / 54` `Must` (`P0`) requirements** (`36 FR` + `18 NFR`), **`19 / 19` `Should/Could` requirements** (`15 FR` + `4 NFR`), and **`113 / 113` verification identifiers (`CT-01..32`, `AUTH-01..16`, `FZ-01..06`, `EXT-ACCEPT-01`, `SLO-01..08`, `FMEA-01..08`, `UX-AC-01..12`, `OPS-AC-01..12`, `INC-01..07`, `DR-01..04`, `GATE-REL-01..07`)** map 1-to-1 to concrete `TP-IMP-xxxx` units (**`0` orphaned `P0` requirements, `0` orphaned test IDs**). The `2` `Later` items (`TP-FR-0106`, `TP-FR-0804`) remain explicitly outside `v1.0` scope (`Post-v1.0`). All `47` units remain **`BLOCKED` (`READY = 0`, `PLANNED = 0`, `BLOCKED = 47`, Handoff = `NO_GO`)** until Product Owner approval of `Gate G1–G4` + `CR-01`..`10`.
 
-### 9.1. Toàn bộ 53 Yêu cầu Chức năng (`36 Must P0` + `11 Should` + `4 Could` + `2 Later`)
+### 9.1. All 53 Functional Requirements (`36 Must P0` + `11 Should` + `4 Could` + `2 Later`)
 
-| Mã FR | Mức Ưu tiên | Đơn vị Đóng Đặc tả (`M0`) | Đơn vị Thực thi Chính (`TP-IMP-xxxx`) | Cột mốc Đích | Bằng chứng Kiểm thử & Cổng Xuất xưởng Chuẩn (`release-readiness.md`) |
+| FR ID | Priority | Spec-Closure Unit (`M0`) | Primary Implementation Units (`TP-IMP-xxxx`) | Target Milestone | Verification Evidence & Release Gates (`release-readiness.md`) |
 |---|---|---|---|---|---|
 | `TP-FR-0101` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0015`](../planning/units/TP-IMP-0015.md), [`TP-IMP-0016`](../planning/units/TP-IMP-0016.md) | `M1` → `M2` | `TP-AC-F0101`, `CT-06`, `CT-07`, `CT-09`, `EXT-ACCEPT-01`, `GATE-REL-01` |
 | `TP-FR-0102` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0016`](../planning/units/TP-IMP-0016.md), [`TP-IMP-0020`](../planning/units/TP-IMP-0020.md) | `M2` | `TP-AC-F0102`, `CT-08`, `GATE-REL-01` |
 | `TP-FR-0103` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0015`](../planning/units/TP-IMP-0015.md) | `M1` | `TP-AC-F0103`, `CT-10`, `FMEA-01`, `GATE-REL-01`, `GATE-REL-03` |
 | `TP-FR-0104` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0015`](../planning/units/TP-IMP-0015.md) | `M1` | `TP-AC-F0104`, `CT-11`, `FZ-03`, `SLO-03`, `GATE-REL-01` |
 | `TP-FR-0105` | `Should` | `TP-IMP-0002` | [`TP-IMP-0017`](../planning/units/TP-IMP-0017.md), [`TP-IMP-0018`](../planning/units/TP-IMP-0018.md) | `M2` | `TP-AC-F0105`, `CT-13`, `GATE-REL-01` |
-| `TP-FR-0106` | `Later` | — *(Post-v1.0)* | *(Ngoài phạm vi `v1.0` — từ chối rõ ràng trên REST tại `TP-IMP-0015`)* | `Post-v1.0` | Kiểm tra từ chối nâng cấp giao thức lạ tại `TP-IMP-0015` |
+| `TP-FR-0106` | `Later` | — *(Post-v1.0)* | *(Out of `v1.0` scope — unsupported protocol upgrades cleanly rejected in `TP-IMP-0015`)* | `Post-v1.0` | Unsupported protocol upgrade rejection test in `TP-IMP-0015` |
 | `TP-FR-0201` | **`Must` (`P0`)** | `TP-IMP-0001`, `0003` | [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md) | `M1` → `M2` | `TP-AC-F0201`, `EXT-ACCEPT-01`, `UX-AC-12`, `GATE-REL-01` |
 | `TP-FR-0202` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md), [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md), [`TP-IMP-0018`](../planning/units/TP-IMP-0018.md), [`TP-IMP-0027`](../planning/units/TP-IMP-0027.md) | `M1` → `M2` | `TP-AC-F0202`, `CT-26`, `UX-AC-01`, `GATE-REL-01` |
 | `TP-FR-0203` | **`Must` (`P0`)** | `TP-IMP-0003` | [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md) | `M1` → `M2` | `TP-AC-F0201`, `AUTH-13`, `AUTH-15`, `GATE-REL-01` |
@@ -159,7 +159,7 @@
 | `TP-FR-0602` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0020`](../planning/units/TP-IMP-0020.md) | `M2` | `TP-AC-F0602`, `CT-08`, `INC-04`, `GATE-REL-03` |
 | `TP-FR-0603` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0020`](../planning/units/TP-IMP-0020.md) | `M2` | `TP-AC-F0601`, `CT-12`, `FMEA-01`, `GATE-REL-03` |
 | `TP-FR-0604` | `Should` | `TP-IMP-0002` | [`TP-IMP-0038`](../planning/units/TP-IMP-0038.md) | `M3` | `TP-AC-F0603`, `CT-08`, `GATE-REL-01` |
-| `TP-FR-0701` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0019`](../planning/units/TP-IMP-0019.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md), [`TP-IMP-0029`](../planning/units/TP-IMP-0029.md) | `M2` | `TP-AC-SEC-05` *(+ `AC`/`CT` bổ sung tại `TP-IMP-0001`)*, `GATE-REL-03` |
+| `TP-FR-0701` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0019`](../planning/units/TP-IMP-0019.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md), [`TP-IMP-0029`](../planning/units/TP-IMP-0029.md) | `M2` | `TP-AC-SEC-05` *(+ supplemental `AC`/`CT` in `TP-IMP-0001`)*, `GATE-REL-03` |
 | `TP-FR-0702` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md), [`TP-IMP-0019`](../planning/units/TP-IMP-0019.md) | `M1` → `M2` | `TP-AC-SEC-04`, `CT-14`..`16`, `CT-26`, `GATE-REL-03` |
 | `TP-FR-0703` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md), [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md), [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md), [`TP-IMP-0028`](../planning/units/TP-IMP-0028.md) | `M1` → `M2` | `TP-AC-SEC-06`, `CT-20`, `AUTH-16`, `GATE-REL-04` |
 | `TP-FR-0704` | **`Must` (`P0`)** | `TP-IMP-0003` | [`TP-IMP-0023`](../planning/units/TP-IMP-0023.md), [`TP-IMP-0030`](../planning/units/TP-IMP-0030.md) | `M2` | `TP-AC-F0701`, `CT-30`, `OPS-AC-08`, `GATE-REL-03` |
@@ -167,7 +167,7 @@
 | `TP-FR-0801` | **`Must` (`P0`)** | `TP-IMP-0001`, `0003`, `0004` | [`TP-IMP-0021`](../planning/units/TP-IMP-0021.md) | `M2` | `TP-AC-F0801`, `CT-29`, `FZ-06`, `GATE-REL-01` |
 | `TP-FR-0802` | **`Must` (`P0`)** | `TP-IMP-0001`, `0003` | [`TP-IMP-0021`](../planning/units/TP-IMP-0021.md), [`TP-IMP-0030`](../planning/units/TP-IMP-0030.md) | `M2` | `TP-AC-F0802`, `FMEA-04`, `UX-AC-06`, `INC-01`, `GATE-REL-01` |
 | `TP-FR-0803` | `Should` | `TP-IMP-0002` | [`TP-IMP-0021`](../planning/units/TP-IMP-0021.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md), [`TP-IMP-0037`](../planning/units/TP-IMP-0037.md) | `M2` → `M3` | `TP-AC-F0803`, `UX-AC-06`, `INC-01`, `GATE-REL-01` |
-| `TP-FR-0804` | `Later` | — *(Post-v1.0)* | *(Ngoài phạm vi `v1.0`)* | `Post-v1.0` | — |
+| `TP-FR-0804` | `Later` | — *(Post-v1.0)* | *(Out of `v1.0` scope)* | `Post-v1.0` | — |
 | `TP-FR-0805` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0022`](../planning/units/TP-IMP-0022.md) | `M2` | `TP-AC-F0804`, `OPS-AC-12`, `GATE-REL-03` |
 | `TP-FR-0806` | **`Must` (`P0`)** | `TP-IMP-0003` | [`TP-IMP-0022`](../planning/units/TP-IMP-0022.md), [`TP-IMP-0030`](../planning/units/TP-IMP-0030.md) | `M2` | `TP-AC-SEC-01`, `OPS-AC-10`, `GATE-REL-03` |
 | `TP-FR-0901` | **`Must` (`P0`)** | `TP-IMP-0001`, `0002` | [`TP-IMP-0024`](../planning/units/TP-IMP-0024.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md) | `M2` | `TP-AC-F0901`, `AUTH-02`..`15`, `UX-AC-11`, `GATE-REL-01` |
@@ -180,21 +180,21 @@
 | `TP-FR-1004` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md), [`TP-IMP-0032`](../planning/units/TP-IMP-0032.md) | `M1` → `M2` | `TP-AC-F1002`, `CT-24`, `OPS-AC-05`, `GATE-REL-06` |
 | `TP-FR-1005` | `Could` | `TP-IMP-0003` | [`TP-IMP-0039`](../planning/units/TP-IMP-0039.md), [`TP-IMP-0040`](../planning/units/TP-IMP-0040.md) | `M4` | `TP-AC-F1003`, `CT-32`, `OPS-AC-06`, `FMEA-06`, `FMEA-07`, `INC-07`, `GATE-REL-02`, `GATE-REL-06` |
 
-### 9.2. Toàn bộ 22 Yêu cầu Phi Chức năng (`18 Must P0` + `2 Should` + `2 Could`)
+### 9.2. All 22 Non-Functional Requirements (`18 Must P0` + `2 Should` + `2 Could`)
 
-| Mã NFR | Mức Ưu tiên | Đơn vị Thực thi & Kiểm chứng Chính (`TP-IMP-xxxx`) | Cột mốc Đích | Bằng chứng Kiểm thử & Cổng Xuất xưởng Chuẩn (`release-readiness.md`) |
+| NFR ID | Priority | Primary Implementation & Verification Units (`TP-IMP-xxxx`) | Target Milestone | Verification Evidence & Release Gates (`release-readiness.md`) |
 |---|---|---|---|---|
-| `TP-NFR-0101` | **`Must` (`P0`)** | [`TP-IMP-0004`](../planning/units/TP-IMP-0004.md), [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md), [`TP-IMP-0013`](../planning/units/TP-IMP-0013.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M0` → `M5` | `TP-AC-N01`, `SLO-02` (`< 2ms` Tầng 1, `< 5ms` Tầng 2 `p95`), `GATE-REL-03` |
-| `TP-NFR-0102` | **`Must` (`P0`)** | [`TP-IMP-0004`](../planning/units/TP-IMP-0004.md), [`TP-IMP-0015`](../planning/units/TP-IMP-0015.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M0` → `M5` | `TP-AC-N01`, `SLO-03` (`< 1ms/chunk` SSE, `< 500ms` hủy), `CT-11`, `GATE-REL-03` |
-| `TP-NFR-0103` | **`Must` (`P0`)** | [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md), [`TP-IMP-0033`](../planning/units/TP-IMP-0033.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M1` → `M5` | `TP-AC-N01`, `SLO-05` (`< 3s` khởi động, `< 128 MiB` RSS), `GATE-REL-03` |
-| `TP-NFR-0201` | `Could` | [`TP-IMP-0040`](../planning/units/TP-IMP-0040.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M4` → `M5` | `TP-AC-N02`, `SLO-01` (`>= 99.9%`), `SLO-04` (`< 0.05%` lỗi nội bộ), `OPS-AC-06`, `GATE-REL-03` |
+| `TP-NFR-0101` | **`Must` (`P0`)** | [`TP-IMP-0004`](../planning/units/TP-IMP-0004.md), [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md), [`TP-IMP-0013`](../planning/units/TP-IMP-0013.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M0` → `M5` | `TP-AC-N01`, `SLO-02` (`< 2ms` Tier 1, `< 5ms` Tier 2 `p95`), `GATE-REL-03` |
+| `TP-NFR-0102` | **`Must` (`P0`)** | [`TP-IMP-0004`](../planning/units/TP-IMP-0004.md), [`TP-IMP-0015`](../planning/units/TP-IMP-0015.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M0` → `M5` | `TP-AC-N01`, `SLO-03` (`< 1ms/chunk` SSE, `< 500ms` cancel), `CT-11`, `GATE-REL-03` |
+| `TP-NFR-0103` | **`Must` (`P0`)** | [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md), [`TP-IMP-0033`](../planning/units/TP-IMP-0033.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M1` → `M5` | `TP-AC-N01`, `SLO-05` (`< 3s` startup, `< 128 MiB` RSS), `GATE-REL-03` |
+| `TP-NFR-0201` | `Could` | [`TP-IMP-0040`](../planning/units/TP-IMP-0040.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M4` → `M5` | `TP-AC-N02`, `SLO-01` (`>= 99.9%`), `SLO-04` (`< 0.05%` internal error), `OPS-AC-06`, `GATE-REL-03` |
 | `TP-NFR-0202` | **`Must` (`P0`)** | [`TP-IMP-0013`](../planning/units/TP-IMP-0013.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M1` → `M5` | `TP-AC-N02`, `CT-17`, `FMEA-05`, `GATE-REL-03` |
-| `TP-NFR-0301` | `Should` | [`TP-IMP-0040`](../planning/units/TP-IMP-0040.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M4` → `M5` | `TP-AC-N03`, `SLO-06` (`1.000` luồng SSE trên `2 vCPU / 2 GiB RAM`), `GATE-REL-03` |
+| `TP-NFR-0301` | `Should` | [`TP-IMP-0040`](../planning/units/TP-IMP-0040.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M4` → `M5` | `TP-AC-N03`, `SLO-06` (`1,000` SSE streams on `2 vCPU / 2 GiB RAM`), `GATE-REL-03` |
 | `TP-NFR-0302` | `Could` | [`TP-IMP-0040`](../planning/units/TP-IMP-0040.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M4` → `M5` | `TP-AC-N03`, `OPS-AC-06`, `SLO-06`, `GATE-REL-03` |
 | `TP-NFR-0401` | **`Must` (`P0`)** | [`TP-IMP-0013`](../planning/units/TP-IMP-0013.md), [`TP-IMP-0044`](../planning/units/TP-IMP-0044.md) | `M1` → `M5` | `TP-AC-SEC-02`, `CT-17`, `FZ-05`, `GATE-REL-03` |
 | `TP-NFR-0402` | **`Must` (`P0`)** | [`TP-IMP-0008`](../planning/units/TP-IMP-0008.md), [`TP-IMP-0009`](../planning/units/TP-IMP-0009.md), [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md), [`TP-IMP-0044`](../planning/units/TP-IMP-0044.md) | `M1` → `M5` | `TP-AC-SEC-01`, `AUTH-14`, `CT-14`..`16`, `GATE-REL-03` |
 | `TP-NFR-0403` | **`Must` (`P0`)** | [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md), [`TP-IMP-0033`](../planning/units/TP-IMP-0033.md), [`TP-IMP-0044`](../planning/units/TP-IMP-0044.md) | `M1` → `M5` | `TP-AC-SEC-02`, `CT-01`..`05`, `GATE-REL-03`, `GATE-REL-04` |
-| `TP-NFR-0404` | **`Must` (`P0`)** | [`TP-IMP-0009`](../planning/units/TP-IMP-0009.md), [`TP-IMP-0023`](../planning/units/TP-IMP-0023.md), [`TP-IMP-0040`](../planning/units/TP-IMP-0040.md), [`TP-IMP-0044`](../planning/units/TP-IMP-0044.md) | `M1` → `M5` | `TP-AC-N04`, `SLO-07` (`< 1s` đơn nút / `< 5s` cụm), `AUTH-06`, `FMEA-07`, `GATE-REL-03` |
+| `TP-NFR-0404` | **`Must` (`P0`)** | [`TP-IMP-0009`](../planning/units/TP-IMP-0009.md), [`TP-IMP-0023`](../planning/units/TP-IMP-0023.md), [`TP-IMP-0040`](../planning/units/TP-IMP-0040.md), [`TP-IMP-0044`](../planning/units/TP-IMP-0044.md) | `M1` → `M5` | `TP-AC-N04`, `SLO-07` (`< 1s` single-node / `< 5s` cluster), `AUTH-06`, `FMEA-07`, `GATE-REL-03` |
 | `TP-NFR-0501` | **`Must` (`P0`)** | [`TP-IMP-0022`](../planning/units/TP-IMP-0022.md), [`TP-IMP-0023`](../planning/units/TP-IMP-0023.md), [`TP-IMP-0032`](../planning/units/TP-IMP-0032.md) | `M2` | `TP-AC-N05`, `OPS-AC-08`, `OPS-AC-10`, `GATE-REL-06` |
 | `TP-NFR-0502` | **`Must` (`P0`)** | [`TP-IMP-0008`](../planning/units/TP-IMP-0008.md), [`TP-IMP-0032`](../planning/units/TP-IMP-0032.md) | `M1` → `M2` | `TP-AC-N05`, `OPS-AC-09` (`< 60s` *Crypto-Shredding*), `DR-03`, `GATE-REL-06` |
 | `TP-NFR-0601` | **`Must` (`P0`)** | [`TP-IMP-0032`](../planning/units/TP-IMP-0032.md), [`TP-IMP-0043`](../planning/units/TP-IMP-0043.md) | `M2` → `M5` | `TP-AC-N06`, `SLO-08` (`RTO < 15m`), `OPS-AC-07`, `DR-01`..`04`, `GATE-REL-06` |

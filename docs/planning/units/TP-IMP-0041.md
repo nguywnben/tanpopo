@@ -1,57 +1,57 @@
-# `TP-IMP-0041` — Liên kết `Enterprise OIDC SSO`, Quy tắc Bốn Mắt (`Four-Eyes`), Kho Khóa Ngoài (`Cloud KMS / Vault`), `Workload Identity` & `Response Cache` Tùy chọn
+# `TP-IMP-0041` — `Enterprise OIDC SSO` Federation, `Four-Eyes` Dual Control, External `Cloud KMS / Vault`, `Workload Identity` & Opt-In `Response Cache`
 
-| Thuộc tính | Giá trị |
+| Attribute | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0041` |
 | **Milestone / Epic** | `M4` (`v0.3 Clustered HA, Enterprise Security & A2A`) · `EP-08` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0034`, `TP-IMP-0039` — `GAP-01, 09`)* |
-| **Quy mô (`Size`)** | `L` (`go.mod`, `internal/iam/oidc/*`, `internal/security/foureyes/*`, `internal/security/vault/kms/*`, `internal/ingress/cache/*`) |
-| **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Xác thực `OIDC JWT/JWKS`, quy tắc phê duyệt hai người `Four-Eyes`, tích hợp KMS ngoài & cô lập tuyệt đối bộ nhớ đệm phản hồi `FMEA-03`)* |
-| **Chủ sở hữu Kỹ thuật** | `Principal Enterprise Security Architect` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0034`, `TP-IMP-0039` — `GAP-01, 09`)* |
+| **Size** | `L` (`go.mod`, `internal/iam/oidc/*`, `internal/security/foureyes/*`, `internal/security/vault/kms/*`, `internal/ingress/cache/*`) |
+| **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(`OIDC JWT/JWKS` verification, `Four-Eyes` dual-control approvals, external KMS integration & strict cross-tenant `Response Cache` isolation `FMEA-03`)* |
+| **Technical Owner** | `Principal Enterprise Security Architect` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Hoàn thiện bộ tính năng bảo mật cấp doanh nghiệp (vẫn giữ **100% mã nguồn mở `Apache-2.0`** theo lợi thế cạnh tranh của Tanpopo, không khóa sau tường phí đóng — `SD-G1-05`):
-1. **Đăng nhập Một lần `Enterprise OIDC SSO` & Ánh xạ Nhóm sang 6 Vai trò `RBAC` (`TP-FR-0504`, `AUTH-01`):** Xác thực chữ ký `ID Token` qua `JWKS` có xoay khóa, kiểm tra chặt `iss`, `aud`, `exp`, `nonce`, ánh xạ tuyên bố nhóm (`groups` claim) vào đúng `(org_id, role)` mà không cho phép leo thang chéo tổ chức.
-2. **Quy tắc Phê duyệt Bốn Mắt (`Four-Eyes Dual Control` — `AUTH-12`):** Khi tổ chức bật chính sách kiểm soát kép, các hành động nhạy cảm bậc cao (bật Plugin `unverified-external` ở môi trường `prod`, xoay/hủy khóa gốc, gỡ bỏ Kill-Switch sự cố) đòi hỏi 2 quản trị viên độc lập (`initiator_id != approver_id`).
-3. **Nền tảng Khóa Ngoài (`AWS KMS`, `GCP KMS`, `HashiCorp Vault Transit`) & Xác thực Không Khóa Tĩnh (`Cloud Workload Identity / IRSA` — `TP-FR-0206`).**
-4. **Bộ nhớ đệm Phản hồi Chính xác Tùy chọn Mặc định Tắt (`Opt-In Exact-Match Response Cache` — `CR-09`, `CT-28`, `FMEA-03`):** Mặc định **tắt (`disabled`)**; khi dự án bật tường minh cho yêu cầu tất định (`temperature == 0`, không truyền luồng hoặc tái phát có kiểm soát), khóa băm bộ đệm bắt buộc bao hàm **`SHA-256(JCS({ org_id, project_id, env_id, policy_revision, model_deployment_id, tools_schema_hash, canonical_request }))`** và được mã hóa bằng `Project DEK` để **cấm tuyệt đối** rò rỉ câu trả lời giữa hai tổ chức/dự án!
+## 1. Intent
+Deliver the enterprise security capability suite (**100% open-source under `Apache-2.0`** per Tanpopo's core strategic differentiator, with zero proprietary SSO/RBAC paywalls — `SD-G1-05`):
+1. **`Enterprise OIDC SSO` Login & Group-to-6-Role `RBAC` Mapping (`TP-FR-0504`, `AUTH-01`):** Verify `ID Token` signatures against key-rotating `JWKS` endpoints, strictly validate `iss`, `aud`, `exp`, and `nonce`, and map IdP `groups` claims deterministically to `(org_id, role)` bindings with zero cross-organization privilege escalation.
+2. **`Four-Eyes Dual Control` Governance (`AUTH-12`):** When dual-control policy is enabled for an organization, high-impact administrative mutations (activating an `unverified-external` plugin in `prod`, rotating/destroying root keys, clearing an incident Kill-Switch) require 2 distinct administrators (`initiator_id != approver_id`).
+3. **External Root Key Providers (`AWS KMS`, `GCP KMS`, `HashiCorp Vault Transit`) & Keyless Cloud Federation (`Cloud Workload Identity / IRSA` — `TP-FR-0206`).**
+4. **Default-Disabled `Opt-In Exact-Match Response Cache` (`CR-09`, `CT-28`, `FMEA-03`):** Disabled by default (`disabled`); when explicitly enabled by a project for deterministic requests (`temperature == 0`, non-streaming or controlled replay), cache keys MUST compute **`SHA-256(JCS({ org_id, project_id, env_id, policy_revision, model_deployment_id, tools_schema_hash, canonical_request }))`** and seal cached entries under the `Project DEK`, **categorically preventing** cross-organization or cross-project response leakage.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `go.mod`, `go.sum` (thêm thư viện OIDC/JWKS & SDK KMS tối giản).
-  - `internal/iam/oidc/provider.go` (luồng `OIDC Authorization Code + PKCE + Nonce`, bộ đệm `JWKS` qua `SSRFGuardDialer`).
-  - `internal/security/foureyes/service.go` (hàng đợi phê duyệt hành động quản trị hai người `admin_change_requests`).
-  - `internal/security/vault/kms/*.go` (triển khai `KEKProvider` cho KMS/Vault ngoài để bọc `Org DEKs`).
-  - `internal/security/broker/workload_identity.go` (đổi mã thông báo OIDC của môi trường sang chứng chỉ ngắn hạn cho `Bedrock` / `Vertex AI` có kiểm soát chặt danh sách cho phép ở mức cấu hình Host).
-  - `internal/ingress/cache/exact_cache.go` (bộ nhớ đệm phản hồi cô lập cứng theo `(org_id, project_id)` + mã hóa `Project DEK`).
-- **Out-of-Scope:** Bộ nhớ đệm tương đồng ngữ nghĩa véc-tơ mờ (`Semantic Similarity Cache`) — chủ đích loại khỏi `v1.0` do rủi ro trả nhầm dữ liệu nhạy cảm giữa các ngữ cảnh người dùng.
+  - `go.mod`, `go.sum` (adding minimal OIDC/JWKS & external KMS client dependencies).
+  - `internal/iam/oidc/provider.go` (`OIDC Authorization Code + PKCE + Nonce` flow, `JWKS` caching routed through `SSRFGuardDialer`).
+  - `internal/security/foureyes/service.go` (dual-administrator change-request queue `admin_change_requests`).
+  - `internal/security/vault/kms/*.go` (`KEKProvider` implementations for external KMS/Vault wrapping `Org DEKs`).
+  - `internal/security/broker/workload_identity.go` (exchanging ambient workload OIDC tokens for short-lived `Bedrock` / `Vertex AI` credentials governed by explicit Host-level allowlists).
+  - `internal/ingress/cache/exact_cache.go` (response cache strictly isolated by `(org_id, project_id)` + encrypted under `Project DEK`).
+- **Out-of-Scope:** Fuzzy vector-based `Semantic Similarity Cache` — intentionally excluded from `v1.0` due to cross-context sensitive-data leakage risks.
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0206`, `TP-FR-0504`, `AUTH-01`, `AUTH-02`, `AUTH-12`, `CT-28`, `FMEA-03`, `CR-09`.
 - **Dependencies:** `TP-IMP-0034`, `TP-IMP-0039`.
-- **Design Refs:** [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md) Mục 2.3 & 4, [`nonfunctional-slo.md`](../../quality/nonfunctional-slo.md) (`FMEA-03`), [`contract-test-matrix.md`](../../quality/contract-test-matrix.md) (`AUTH-01`, `AUTH-12`, `CT-28`).
+- **Design Refs:** [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md) Sections 2.3 & 4, [`nonfunctional-slo.md`](../../quality/nonfunctional-slo.md) (`FMEA-03`), [`contract-test-matrix.md`](../../quality/contract-test-matrix.md) (`AUTH-01`, `AUTH-12`, `CT-28`).
 
 ## 4. API, Wire & Data Contracts
-- **Bất biến Chống Đầu độc & Rò rỉ Bộ nhớ đệm (`FMEA-03` & `CT-28`):**
-  - Không bao giờ lưu vào bộ nhớ đệm các phản hồi lỗi, phản hồi bị cắt cụt, phản hồi có chứa lệnh gọi công cụ có tác động phụ, hoặc yêu cầu mang header `Cache-Control: no-store`.
-  - Hai dự án `P1` và `P2` gửi hai câu hỏi giống hệt nhau từng ký tự vẫn sinh ra 2 khóa bộ đệm hoàn toàn khác nhau và bọc bằng 2 `Project DEK` khác nhau — `0%` khả năng đọc chéo!
+- **Anti-Cache-Poisoning & Zero-Leakage Invariants (`FMEA-03` & `CT-28`):**
+  - Error responses, truncated streams, responses containing side-effecting tool calls, and requests carrying `Cache-Control: no-store` are never cached.
+  - Two projects `P1` and `P2` submitting byte-identical prompts produce 2 completely distinct cache keys encrypted under 2 distinct `Project DEK` keys — guaranteeing `0%` cross-read capability.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`AUTH-01` OIDC Login & Group-to-Role Sync):** Đăng nhập qua `FakeOAuthIdP` (chế độ OIDC), kiểm tra xác minh chữ ký `RS256/ES256`, ánh xạ nhóm `tanpopo-sec-reviewers` vào đúng vai trò chuẩn `SECURITY_REVIEWER` và tự thu hồi quyền khi nhóm bị gỡ ở lần làm mới phiên.
-- **`AC-2` (`AUTH-12` Four-Eyes Enforcement):** Khi bật `Four-Eyes`, quản trị viên `Admin 1` bấm bật một Plugin bên ngoài → yêu cầu dừng ở `PENDING_SECOND_APPROVER`; nếu chính `Admin 1` cố tự duyệt yêu cầu đó → bị từ chối `403 self_approval_forbidden`; chỉ khi `Admin 2` duyệt thì Plugin mới kích hoạt.
-- **`AC-3` (`CT-28` & `FMEA-03` Zero Cross-Tenant / Cross-Project Cache Hit):** `Org A / Project 1` bật cache và gửi câu hỏi `Q`; khi `Org B` hoặc `Org A / Project 2` gửi câu hỏi `Q` giống hệt 100%, bộ đệm báo **`CACHE MISS`** tuyệt đối; khi hủy `Project DEK` của `Project 1`, mọi mục cache của `Project 1` lập tức trở thành rác không thể giải mã.
-- **`NEG-1` (`OIDC Token Forgery`):** Gửi `ID Token` có `alg: "none"`, sai `aud`, sai `nonce`, hoặc ký bằng khóa lạ không nằm trong `JWKS` → bị từ chối cứng `401 invalid_oidc_token`.
+- **`AC-1` (`AUTH-01` OIDC Login & Group-to-Role Sync):** Authenticating via `FakeOAuthIdP` (OIDC mode) verifies `RS256/ES256` signatures, maps the `tanpopo-sec-reviewers` group to the canonical `SECURITY_REVIEWER` role, and automatically revokes privileges when group membership is removed on session refresh.
+- **`AC-2` (`AUTH-12` Four-Eyes Enforcement):** With `Four-Eyes` enabled, when `Admin 1` initiates activation of an external plugin, the mutation pauses in `PENDING_SECOND_APPROVER`; if `Admin 1` attempts self-approval, it fails with `403 self_approval_forbidden`; activation succeeds only once `Admin 2` approves.
+- **`AC-3` (`CT-28` & `FMEA-03` Zero Cross-Tenant / Cross-Project Cache Hit):** When `Org A / Project 1` enables caching and submits prompt `Q`, a subsequent byte-identical prompt `Q` from `Org B` or `Org A / Project 2` results in a deterministic **`CACHE MISS`**; shredding `Project 1`'s `Project DEK` immediately renders all `Project 1` cache entries cryptographically undecryptable.
+- **`NEG-1` (`OIDC Token Forgery`):** Presenting an `ID Token` with `alg: "none"`, mismatched `aud`, mismatched `nonce`, or an unknown signing key absent from `JWKS` is hard-rejected with `401 invalid_oidc_token`.
 
 ## 6. Test Commands & Required Evidence
-- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/iam/oidc/... ./internal/security/foureyes/... ./internal/security/vault/... ./internal/ingress/cache/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/iam/oidc/... ./internal/security/foureyes/... ./internal/security/vault/... ./internal/ingress/cache/...`)*
-- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/iam/oidc/... ./internal/security/foureyes/... ./internal/security/vault/... ./internal/ingress/cache/...`
+- Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/iam/oidc/... ./internal/security/foureyes/... ./internal/security/vault/... ./internal/ingress/cache/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/iam/oidc/... ./internal/security/foureyes/... ./internal/security/vault/... ./internal/ingress/cache/...`)*
+- Race detector (`-race`): `go test -v -race ./internal/iam/oidc/... ./internal/security/foureyes/... ./internal/security/vault/... ./internal/ingress/cache/...`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** `Response Cache` mặc định `enabled = false` ở mọi cấp; chế độ `Bootstrap Token` ban đầu vẫn luôn bị khóa vĩnh viễn sau khi đã thiết lập tổ chức (`AUTH-02`).
-- **Rollback:** Tắt cờ `cache.enabled` hoặc `foureyes.enabled` về hành vi tiêu chuẩn không làm mất dữ liệu.
+- **Security Invariant:** `Response Cache` defaults to `enabled = false` at every scope; initial `Bootstrap Token` exchange remains permanently disabled once organization bootstrap completes (`AUTH-02`).
+- **Rollback:** Toggling `cache.enabled` or `foureyes.enabled` off reverts cleanly to baseline behavior without data loss.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0001` (bổ sung mã yêu cầu cho `Response Cache` theo `CR-09`), `TP-IMP-0034` và `TP-IMP-0039` đã hoàn tất.
-- **DoD:** Xanh toàn bộ ca `AUTH-01, 02, 12`, `CT-28` và `FMEA-03` dưới `-race`, vượt qua `REQUIRES_STRONG_REVIEW`.
+- **DoR:** `TP-IMP-0001` (adding the formal `Response Cache` requirement ID per `CR-09`), `TP-IMP-0034`, and `TP-IMP-0039` are complete.
+- **DoD:** `AUTH-01, 02, 12`, `CT-28`, and `FMEA-03` suites passing under `-race`, with `REQUIRES_STRONG_REVIEW` sign-off achieved.

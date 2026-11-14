@@ -1,149 +1,149 @@
-# Phân tích Người dùng, Jobs-to-be-Done & Use Cases Thực tế — Tanpopo
+# User Segments, Jobs-to-be-Done & Operational Use Cases — Tanpopo
 
-> **Tài liệu Discovery (Phase ASTRA A01 — Gate G1: `READY_FOR_REVIEW`)**
-> - **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Product Intelligence Lead
-> - **Trạng thái:** Phân tích khám phá (`PROPOSED` / `ASSUMED`), chưa phải đặc tả yêu cầu đã khóa.
+> **Discovery Document (Phase ASTRA A01 — Gate G1: `READY_FOR_REVIEW`)**
+> - **Last Updated:** `2026-11-11`
+> - **Authored By:** Product Intelligence Lead
+> - **Status:** Discovery analysis (`PROPOSED` / `ASSUMED`), not yet a locked requirements specification.
 
 ---
 
-## 1. Phân khúc Tổ chức & Xếp hạng Ưu tiên Tiếp cận (Target Segments Ranking)
+## 1. Organizational Segments & Go-to-Market Priority Ranking (Target Segments Ranking)
 
-Để tránh sai lầm phổ biến của các dự án hạ tầng mã nguồn mở là *"thiết kế cho ngân hàng 10.000 người ngay ngày đầu nên quá nặng với developer, nhưng lại thiếu chứng chỉ bảo mật để bán cho ngân hàng"*, chúng ta gom 5 nhóm đối tượng mục tiêu thành **4 phân khúc tổ chức** (gộp `Solo Dev` & `AI Power User` vào chung nhóm cá nhân chính thống) và xếp hạng theo 4 trục (thang 1–5): **Cường độ nỗi đau (Pain)**, **Khả năng chấp nhận sớm / ít rào cản mua sắm (Adoption Speed)**, **Giá trị lan tỏa hệ sinh thái Plugin (Ecosystem Flywheel)** và **Độ phù hợp năng lực đội ngũ giai đoạn 0.x (Fit)**.
+To avoid the classic open-source infrastructure failure mode — *"designing for a 10,000-employee bank on Day 1 so it feels bloated to developers, while lacking the compliance certifications required to actually sell to banks"* — we consolidate the 5 user profiles into **4 organizational segments** (combining legitimate `Solo Dev` & `AI Power User` workflows into one individual tier) and score them across 4 axes (1–5 scale): **Pain Intensity (Pain)**, **Early Adoption Speed / Low Procurement Friction (Adoption Speed)**, **Plugin Ecosystem Flywheel Value (Ecosystem Flywheel)**, and **0.x Execution Fit (Fit)**.
 
-| Hạng ưu tiên | Phân khúc người dùng | Pain (1–5) | Adoption Speed (1–5) | Ecosystem Flywheel (1–5) | Fit 0.x (1–5) | Tổng điểm | Vai trò chiến lược với Tanpopo (`PROPOSED`) |
+| Priority Rank | User Segment | Pain (1–5) | Adoption Speed (1–5) | Ecosystem Flywheel (1–5) | Fit 0.x (1–5) | Total Score | Strategic Role for Tanpopo (`PROPOSED`) |
 |---|---|---|---|---|---|---|---|
-| **#1 (Mũi nhọn / Beachhead)** | **Dev Teams (Nhóm sản phẩm / Startup AI 5–50 kỹ sư)** | **5** | **5** | **4** | **5** | **19/20** | **Người dùng mục tiêu số 1 giai đoạn đầu:** Đang kết nối 3–6 model providers + MCP servers vào sản phẩm thật & coding agents nội bộ; đau đầu vì chi phí vọt bất ngờ, lỗi đứt quãng hãng AI và rào cản tường phí Open-Core; có quyền quyết định cài thử ngay trong 1 buổi chiều. |
-| **#2 (Đồng mũi nhọn mở rộng)** | **AI Platform Teams (Đội hạ tầng AI tại công ty công nghệ 50–500 kỹ sư)** | **5** | **4** | **5** | **4** | **18/20** | **Động cơ tạo Plugin chất lượng cao:** Cần tích hợp cổng nội bộ, mô hình tự host trên GPU (vLLM), AWS Bedrock/Vertex IAM và MCP nội bộ mà không muốn chờ PR vào repo upstream; chính là lực lượng viết và đóng góp **Provider Adapters / Private Extensions** mạnh nhất. |
-| **#3 (Lan tỏa cộng đồng)** | **AI Power Users & Solo Developers (Chính thống — BYOK & Local Models)** | **3.5** | **5** | **4** | **5** | **17.5/20** | **Phễu lan tỏa tự nhiên (Bottom-up Adoption):** Dùng nhiều công cụ code/agent (Claude Code, Codex, Cursor, OpenCode...) kết hợp Ollama/vLLM tại nhà và hàng chục MCP tools; cần 1 cổng gọn nhẹ quản lý khóa, đặt trần chi tiêu tháng và theo dõi token. |
-| **#4 (Mục tiêu v1.0+)** | **Enterprise truyền thống / Ngành chịu quản lý chặt (Tài chính, Y tế, Chính phủ >1.000 nhân sự)** | **5** | **1.5** | **2** | **2** | **10.5/20** | **Không làm mục tiêu v0.1–v0.2:** Chu kỳ thẩm định bảo mật 6–12 tháng, đòi hỏi FIPS, HSM/Vault chuyên sâu, SLA thương mại 24/7 và kiểm toán chuỗi cung ứng air-gapped. Chỉ phục vụ khi nền tảng đã chín muồi ở mốc `v1.0+`. |
+| **#1 (Beachhead)** | **Dev Teams (Product Teams / AI Startups, 5–50 engineers)** | **5** | **5** | **4** | **5** | **19/20** | **Primary early-adopter beachhead:** Actively wiring 3–6 model providers + MCP servers into production apps & internal coding agents; suffering from surprise spend spikes, upstream outages, and Open-Core paywalls; empowered to trial and deploy in a single afternoon. |
+| **#2 (Co-Beachhead Expansion)** | **AI Platform Teams (Platform groups at tech companies, 50–500 engineers)** | **5** | **4** | **5** | **4** | **18/20** | **High-quality Plugin creation engine:** Need to connect internal gateways, GPU self-hosted models (vLLM), AWS Bedrock/Vertex IAM, and internal MCP tools without waiting on upstream PR merges; represent the strongest contributors of **Provider Adapters / Private Extensions**. |
+| **#3 (Community Flywheel)** | **Legitimate AI Power Users & Solo Developers (BYOK & Local Models)** | **3.5** | **5** | **4** | **5** | **17.5/20** | **Organic bottom-up adoption funnel:** Run multiple coding/agent tools (Claude Code, Codex, Cursor, OpenCode, etc.) alongside local Ollama/vLLM and dozens of MCP tools; want a lightweight gateway to manage keys, cap monthly spend, and inspect token usage. |
+| **#4 (v1.0+ Target)** | **Traditional / Regulated Enterprise (Finance, Healthcare, Government, >1,000 employees)** | **5** | **1.5** | **2** | **2** | **10.5/20** | **Explicitly deferred past v0.1–v0.2:** Involves 6–12-month security procurement cycles, FIPS, dedicated HSM/Vault, 24/7 commercial SLAs, and air-gapped supply-chain audits. Targeted only once the platform matures at `v1.0+`. |
 
-### Chân dung Loại trừ (Explicit Anti-Personas — `CONFIRMED_BY_OWNER` / `REJECTED`)
-1. **Người săn lùng công cụ "biến thuê bao chat cá nhân thành API miễn phí" (Subscription Arbitrage Seekers):** Nhóm người dùng chỉ muốn cắm cookie/OAuth của gói ChatGPT Plus, Claude Pro/Max hay Google Antigravity cá nhân để chạy vòng lặp tác nhân hàng loạt trái điều khoản. Phục vụ nhóm này mang lại rủi ro pháp lý trực diện và làm mất uy tín hoàn toàn trước các đội ngũ kỹ thuật nghiêm túc.
-2. **Chợ đen bán lại API Key lậu (Grey-Market Key Resellers):** Cần hệ thống nạp thẻ cào, chia hoa hồng đại lý nhiều cấp thay vì một cổng kỹ thuật quản trị an toàn.
+### Explicit Anti-Personas (`CONFIRMED_BY_OWNER` / `REJECTED`)
+1. **Consumer Subscription Arbitrage Seekers ("Turn personal chat subscriptions into free APIs"):** Users solely looking to stuff browser cookies or OAuth tokens from personal ChatGPT Plus, Claude Pro/Max, or Google Antigravity plans into automated multi-agent loops in violation of provider terms. Serving this cohort invites direct legal liability and destroys credibility with serious engineering teams.
+2. **Grey-Market Key Resellers:** Operators seeking prepaid voucher top-ups and multi-tier affiliate commission ledgers rather than a security-governed engineering gateway.
 
 ---
 
-## 2. Phân biệt 4 Vai trò Chức năng & Jobs-to-be-Done (Functional Roles)
+## 2. Four Functional Roles & Jobs-to-be-Done
 
-Trong thực tế, ở nhóm Solo Dev cả 4 vai trò nằm trong một người; ở Dev Team 20 người thường chia làm 2 người; còn ở AI Platform Team/Enterprise là 4 bộ phận độc lập. Thiết kế quyền hạn và UX của Tanpopo phải tách bạch rõ 4 vai trò này:
+In practice, a Solo Dev wears all 4 hats; a 20-person Dev Team typically splits them across 2 engineers; and an AI Platform Team/Enterprise separates them into 4 distinct functions. Tanpopo's RBAC and UX cleanly decouple all 4 roles:
 
-| Mã | Vai trò chức năng | Job-to-be-Done cốt lõi ("Khi..., tôi muốn..., để...") | Giao diện sử dụng chính | Nỗi sợ lớn nhất |
+| ID | Functional Role | Core Job-to-be-Done ("When..., I want to..., so I can...") | Primary Surfaces | Top Fear |
 |---|---|---|---|---|
-| **R1** | **Người vận hành (`Gateway Operator / Infra Admin`)** | *"Khi triển khai và duy trì cổng AI cho hệ thống, tôi muốn khởi chạy nhanh bằng cấu hình khai báo rõ ràng, cài thêm adapter mới không cần dừng dịch vụ hay nâng cấp nhân Core, để hệ thống đạt uptime cao và tốn ít công bảo trì."* | CLI (`tanpopo`), tệp cấu hình GitOps, Docker/Helm, trang Health trên Web Console | Nâng cấp cổng làm gãy ứng dụng đang chạy; plugin lỗi làm sập toàn bộ tiến trình Gateway. |
-| **R2** | **Lập trình viên dùng API (`API Consumer / App & Agent Dev`)** | *"Khi viết tính năng AI hoặc cấu hình tác nhân, tôi muốn gọi một điểm cuối chuẩn với khóa ảo được cấp sẵn, giữ nguyên được các tính năng nâng cao của model và xem ngay log lỗi/trace khi gọi hỏng, để giao sản phẩm nhanh mà không phải quản lý 10 bộ SDK khác nhau."* | Unified API / Native Passthrough / MCP & A2A Endpoints, trang Playground & Trace Logs | Cổng trung gian làm mất tham số đặc thù (như thinking/caching), làm tăng độ trễ streaming hoặc trả về mã lỗi mù mờ khó gỡ lỗi. |
-| **R3** | **Nhà phát triển phần mở rộng (`Plugin / Adapter Publisher`)** | *"Khi một nhà cung cấp AI mới ra mắt hoặc công ty tôi có dịch vụ mô hình nội bộ, tôi muốn khởi tạo khung adapter từ SDK, kiểm thử tự động với bộ contract test và phát hành ngay qua Git/Registry, để mọi người dùng được ngay trong ngày mà không phải chờ đội ngũ Tanpopo duyệt gộp code vào Core."* | Plugin SDK, CLI kiểm thử (`plugin init/test/pack`), Tài liệu hợp đồng (Contract Docs), Registry | Tài liệu hợp đồng mập mờ; Core đổi giao diện nội bộ làm hỏng plugin; quy trình biên dịch/đóng gói quá rắc rối. |
-| **R4** | **Quản trị Bảo mật & Chi phí (`Security, Governance & FinOps Admin`)** | *"Khi hàng chục kỹ sư và tác nhân tự động gọi mô hình cùng công cụ MCP mỗi ngày, tôi muốn kiểm duyệt quyền hạn của từng plugin, khóa danh sách công cụ MCP được phép chạy, đặt trần ngân sách cứng theo nhóm và thu hồi khóa/plugin tức thì khi có sự cố, để không bị rò rỉ dữ liệu hay cháy ngân sách."* | Web Console (Policies, Budgets, Audit Logs, Plugin Permissions), Cảnh báo OTel/Webhook | Một plugin bên thứ ba âm thầm gửi trộm API key gốc ra ngoài; một vòng lặp agent lỗi đốt hàng nghìn USD trong đêm; MCP tool xóa nhầm dữ liệu thật. |
+| **R1** | **Gateway Operator (`Gateway Operator / Infra Admin`)** | *"When deploying and maintaining our AI gateway, I want fast declarative startup and zero-downtime adapter installation without upgrading Core, so the platform achieves high uptime with minimal maintenance toil."* | CLI (`tanpopo`), GitOps config files, Docker/Helm, Web Console Health views | Gateway upgrades breaking live apps; a buggy plugin crashing the entire Gateway process. |
+| **R2** | **API Consumer (`API Consumer / App & Agent Dev`)** | *"When building AI features or configuring agents, I want to call a standard endpoint using an issued virtual key, preserve frontier model capabilities, and immediately inspect error/trace logs on failure, so I ship faster without juggling 10 vendor SDKs."* | Unified API / Native Passthrough / MCP & A2A Endpoints, Playground & Trace Logs | An intermediary proxy stripping frontier parameters (thinking/caching), inflating streaming latency, or returning opaque error codes. |
+| **R3** | **Extension Publisher (`Plugin / Adapter Publisher`)** | *"When a new AI provider launches or my company builds an internal model service, I want to scaffold an adapter from an SDK, validate it against automated contract tests, and publish via Git/Registry, so teams can adopt it same-day without waiting on Core maintainers."* | Plugin SDK, Test CLI (`plugin init/test/pack`), Contract Docs, Registry | Ambiguous contract specs; Core breaking internal hooks across minor releases; convoluted build/packaging toolchains. |
+| **R4** | **Security, Governance & FinOps Admin** | *"When dozens of engineers and autonomous agents invoke models and MCP tools daily, I want to audit plugin permissions, lock down allowed MCP tools, enforce hard team budget ceilings, and revoke keys/plugins instantaneously during incidents, preventing data leaks and runaway spend."* | Web Console (Policies, Budgets, Audit Logs, Plugin Permissions), OTel/Webhook Alerts | A third-party plugin covertly exfiltrating master API keys; a runaway agent loop burning thousands of USD overnight; an MCP tool deleting production records. |
 
 ---
 
-## 3. Chín Use Cases Vận hành Thực tế (Happy Path & Failure Path)
+## 3. Nine Real-World Operational Use Cases (Happy Path & Failure Path)
 
-Mỗi tình huống dưới đây mô tả luồng thành công chuẩn (**Happy Path**), các kịch bản lỗi thực tế khắc nghiệt (**Failure / Edge Paths**) và hệ quả thiết kế rút ra cho Tanpopo.
+Each scenario below details the canonical **Happy Path**, harsh real-world **Failure / Edge Paths**, and resulting architectural invariants for Tanpopo.
 
 ---
 
-### UC-01: Gọi Đa Nhà cung cấp qua Unified API & Bảo toàn Năng lực Gốc
-- **Tác nhân:** `R2 (Developer)` gọi qua Gateway do `R1 (Operator)` cấu hình.
-- **Tiền điều kiện:** Đã kích hoạt Official Adapters cho OpenAI, Anthropic và Google Gemini; `R2` được cấp một Virtual Key có quyền gọi nhóm mô hình được phép.
+### UC-01: Multi-Provider Invocation via Unified API & Lossless Native Capability Preservation
+- **Actors:** `R2 (Developer)` calling through a Gateway configured by `R1 (Operator)`.
+- **Preconditions:** Official Adapters enabled for OpenAI, Anthropic, and Google Gemini; `R2` holds a Virtual Key authorized for target models.
 - **Happy Path:**
-  1. Ứng dụng gửi request chuẩn `/v1/chat/completions` (hoặc `/v1/responses`) kèm Virtual Key tới Tanpopo.
-  2. Tanpopo xác thực khóa, tra cứu adapter đích dựa trên định danh mô hình, chuyển đổi định dạng chuẩn xác, mở luồng SSE streaming về ứng dụng với độ trễ cộng thêm tối thiểu và ghi nhận chính xác số token tiêu thụ vào sổ cái khi luồng kết thúc.
-  3. Với tác vụ chuyên sâu cần tính năng đặc thù của riêng Anthropic (ví dụ cấu trúc prompt cache chi tiết trên `/v1/messages`), `R2` gọi đường dẫn phương ngữ gốc qua Tanpopo; cổng giữ nguyên payload gốc mà vẫn áp dụng đầy đủ xác thực, ngân sách và giám sát.
+  1. Application sends a standard `/v1/chat/completions` (or `/v1/responses`) request bearing a Virtual Key to Tanpopo.
+  2. Tanpopo authenticates the key, resolves the target adapter by model identifier, translates the request payload accurately, streams SSE chunks back with minimal added latency, and settles exact token consumption into the ledger upon completion.
+  3. For specialized workloads requiring vendor-exclusive features (e.g., multi-breakpoint `cache_control` directives on Anthropic `/v1/messages`), `R2` calls the native dialect passthrough route; Tanpopo forwards the native payload intact while still enforcing full authentication, budgets, and observability.
 - **Failure / Edge Paths:**
-  - *Lỗi 1 — Đứt luồng giữa chừng (Mid-stream Upstream Disconnect):* Nhà cung cấp trả về `200 OK`, truyền được 40% câu trả lời qua SSE rồi ngắt kết nối đột ngột hoặc gửi sự kiện lỗi nội bộ. Gateway **không thể** âm thầm nối tiếp sang model dự phòng từ đầu vì client đã nhận một nửa văn bản! Gateway phải đóng luồng sạch bằng khung báo lỗi chuẩn SSE, hạch toán phần token ước tính/đã phát sinh và gắn cờ lỗi `mid_stream_abort` trong trace.
-  - *Lỗi 2 — Lệch năng lực tham số (Unsupported Capability):* `R2` gửi yêu cầu ép định dạng `json_schema` nghiêm ngặt hoặc đính kèm tệp âm thanh tới một mô hình không hỗ trợ. Thay vì âm thầm cắt bỏ tham số khiến mô hình trả lời sai định dạng, Adapter kiểm tra ma trận năng lực (Capability Matrix) và trả về ngay lỗi `400 capability_not_supported` tường minh trước khi tốn tiền gọi ra ngoài.
+  - *Failure 1 — Mid-Stream Upstream Disconnect:* Upstream returns `200 OK`, streams 40% of the SSE response, and abruptly drops the connection or emits an internal error event. The Gateway **must never** silently fail over and replay against a backup model mid-stream because the client has already consumed partial output! Instead, the Gateway cleanly terminates the SSE stream with a structured error event, settles accrued/estimated tokens, and flags `mid_stream_abort` in the trace.
+  - *Failure 2 — Unsupported Parameter Capability:* `R2` requests strict `json_schema` enforcement or attaches audio input targeting a model lacking that capability. Rather than silently stripping parameters and producing malformed outputs, the Adapter checks its Capability Matrix and immediately returns an explicit `400 capability_not_supported` error before incurring upstream spend.
 
 ---
 
-### UC-02: Kết nối Mô hình Tự vận hành / Cục bộ (Self-Hosted / Local Models)
-- **Tác nhân:** `R1 (Operator)` hoặc `R2 (Solo/Team Dev)`.
-- **Tiền điều kiện:** Có máy chủ GPU trong mạng nội bộ chạy `vLLM`, `SGLang` hoặc máy trạm chạy `Ollama` / `llama.cpp`.
+### UC-02: Connecting Self-Hosted / Local Inference Engines
+- **Actors:** `R1 (Operator)` or `R2 (Solo/Team Dev)`.
+- **Preconditions:** Internal GPU server running `vLLM` or `SGLang`, or workstation running `Ollama` / `llama.cpp`.
 - **Happy Path:**
-  1. `R1` cấu hình kết nối tới điểm cuối nội bộ (ví dụ `http://gpu-node.internal:8000/v1`) thông qua Adapter chuẩn tương thích OpenAI/Ollama, khai báo bảng chi phí nội bộ (ví dụ `$0` hoặc chi phí khấu hao GPU ước tính trên mỗi triệu token).
-  2. Các ứng dụng và công cụ lập trình dùng chung một Virtual Key của Tanpopo để gọi cả mô hình cục bộ lẫn mô hình đám mây mà không cần mở cổng máy chủ GPU trực tiếp ra ngoài.
+  1. `R1` configures an internal endpoint (e.g., `http://gpu-node.internal:8000/v1`) via the standard OpenAI-compatible/Ollama Adapter, declaring an internal cost schedule (e.g., `$0` or estimated GPU amortization per million tokens).
+  2. Applications and coding agents use a single Tanpopo Virtual Key across both local and cloud models without exposing raw GPU server ports externally.
 - **Failure / Edge Paths:**
-  - *Lỗi 1 — Trễ nạp mô hình vào VRAM (Cold-Start Timeout):* `Ollama` mất 25–60 giây để nạp mô hình 32B từ ổ cứng lên GPU ở lần gọi đầu tiên. Nếu Gateway đặt timeout kết nối cứng như với API đám mây (5 giây) sẽ báo lỗi giả. Adapter cho mô hình cục bộ phải hỗ trợ cấu hình `first_byte_timeout` riêng biệt và kiểm tra trạng thái nạp mô hình.
-  - *Lỗi 2 — Tràn bộ nhớ ngữ cảnh hoặc hỏng cú pháp Tool Call:* Mô hình lượng tử hóa (quantized model) trả về chuỗi JSON gọi công cụ bị thiếu dấu ngoặc hoặc máy chủ GPU trả lỗi `CUDA out of memory`. Gateway ghi nhận đúng phân loại lỗi hạ tầng nội bộ để kích hoạt điều hướng dự phòng (nếu chính sách cho phép chuyển ra đám mây) hoặc dừng an toàn (nếu dữ liệu thuộc diện cấm rời mạng nội bộ).
+  - *Failure 1 — VRAM Model Cold-Start Timeout:* `Ollama` takes 25–60 seconds to load a 32B model from disk into VRAM on initial invocation. Applying a rigid cloud-style 5-second connect timeout triggers false failures. Local-engine Adapters must support dedicated `first_byte_timeout` / cold-start budgets and readiness probes.
+  - *Failure 2 — Context Overflow or Malformed Tool-Call Syntax:* A quantized model emits truncated JSON tool arguments or the GPU engine returns `CUDA out of memory`. The Gateway classifies internal infrastructure errors accurately to either trigger policy-permitted cloud failover or fail closed when data residency forbids leaving the private network.
 
 ---
 
-### UC-03: Cài đặt Provider Adapter từ Nguồn Ngoài mà Không Cần Nâng cấp Core
-- **Tác nhân:** `R3 (Publisher)` xuất bản; `R4 (Security Admin)` duyệt quyền; `R1 (Operator)` cài đặt.
-- **Tiền điều kiện:** Một nhà cung cấp AI khu vực mới (hoặc cổng AI riêng của tập đoàn) vừa ra mắt API riêng chưa từng có trong bản phát hành của Tanpopo Core.
+### UC-03: Installing an External Provider Adapter Without Upgrading Core
+- **Actors:** `R3 (Publisher)` publishes; `R4 (Security Admin)` approves permissions; `R1 (Operator)` installs.
+- **Preconditions:** A regional AI vendor (or internal corporate AI gateway) launches a bespoke API absent from the shipped Tanpopo Core binary.
 - **Happy Path:**
-  1. `R3` dùng bộ khung mẫu của Tanpopo tạo gói adapter, khai báo rõ trong manifest: phiên bản hợp đồng `v1`, chỉ xin quyền gọi HTTPS tới `api.new-provider.example` và nhận khóa xác thực qua cơ chế tiêm header của Host. `R3` chạy bộ kiểm thử tương thích tự động đạt chuẩn rồi đẩy lên Git release / Private Registry.
-  2. `R1` chạy lệnh cài đặt từ URL/Registry. Tanpopo hiển thị bảng kê quyền hạn (permissions diff) để `R4` hoặc `R1` xác nhận, kiểm tra mã băm SHA-256 / chữ ký số, nạp plugin vào môi trường cô lập (sandbox) và kích hoạt ngay mà không cần khởi động lại hay biên dịch lại Core.
+  1. `R3` scaffolds an adapter package using Tanpopo templates, declaring in its manifest: contract version `v1`, outbound HTTPS permission solely to `api.new-provider.example`, and Host-brokered header credential injection. `R3` passes automated contract tests and publishes to a Git release / Private Registry.
+  2. `R1` runs installation from the URL/Registry. Tanpopo displays a permissions diff for `R4` or `R1` approval, verifies SHA-256 digests / signatures, loads the plugin inside its sandbox, and activates routing immediately with zero Core restart or recompilation.
 - **Failure / Edge Paths:**
-  - *Lỗi 1 — Vượt quyền truy cập mạng (Sandbox Egress Violation):* Mã bên trong plugin cố tình mở kết nối ngầm tới `evil-collector.example` để tuồn nội dung prompt ra ngoài. Lớp cô lập của Tanpopo chặn đứng yêu cầu mạng không nằm trong danh sách `allowed_hosts` đã duyệt, hủy lệnh gọi, ghi cảnh báo bảo mật mức nghiêm trọng và có thể tự động cách ly plugin.
-  - *Lỗi 2 — Lệch phiên bản hợp đồng hoặc treo vòng lặp vô hạn:* Gói cài yêu cầu hợp đồng Core `v2` trên máy chủ đang chạy `v1`, hoặc mã plugin rơi vào vòng lặp vô tận khi phân tích phản hồi lạ. Hệ thống từ chối cài đặt ngay từ bước kiểm tra manifest (với lỗi lệch phiên bản), hoặc ngắt cưỡng bức lần thực thi vượt giới hạn CPU/thời gian (fuel/timeout limit) mà không làm ảnh hưởng các luồng khác trên Gateway.
+  - *Failure 1 — Sandbox Egress Violation:* Compromised plugin code attempts a covert connection to `evil-collector.example` to exfiltrate prompt payloads. Tanpopo's sandbox blocks any host absent from approved `allowed_hosts`, aborts the call, emits a critical security audit event, and optionally quarantines the plugin automatically.
+  - *Failure 2 — Contract Version Mismatch or Infinite Loop:* Package requires Core contract `v2` on a `v1` host, or plugin code enters an infinite loop parsing malformed upstream JSON. Tanpopo rejects installation at manifest preflight (on version mismatch) or forcibly terminates the single execution exceeding CPU fuel/timeout quotas without impacting sibling Gateway streams.
 
 ---
 
-### UC-04: Kết nối qua OAuth Được Cấp phép & Định danh Doanh nghiệp (Authorized OAuth & Enterprise Identity)
-- **Tác nhân:** `R1 (Operator)` / `R4 (Security Admin)`.
-- **Tiền điều kiện:** Nhà cung cấp mô hình hoặc dịch vụ đám mây hỗ trợ chính thức cơ chế OAuth 2.1 (PKCE / Client Credentials) hoặc liên kết định danh đám mây (Workload Identity / OIDC / IAM Role) cho ứng dụng tích hợp.
+### UC-04: Connecting via Authorized OAuth & Enterprise Identity
+- **Actors:** `R1 (Operator)` / `R4 (Security Admin)`.
+- **Preconditions:** Target model provider or cloud platform officially documents OAuth 2.1 (PKCE / Client Credentials) or cloud identity federation (Workload Identity / OIDC / IAM Role) for third-party integrations.
 - **Happy Path:**
-  1. `R1` chọn phương thức xác thực `Authorized OAuth / Federated Identity` do Adapter khai báo hợp lệ, thực hiện luồng cấp quyền chuẩn trên trình duyệt hoặc gắn Service Account / OIDC role.
-  2. Tanpopo lưu trữ mã làm mới (refresh token) ở dạng mã hóa trong kho bí mật, tự động làm mới access token trước khi hết hạn hoàn toàn trong suốt đối với `R2 (Developer)`, và chỉ tiêm token vào đúng miền đích được cấp phép.
+  1. `R1` selects an Adapter's legitimately declared `Authorized OAuth / Federated Identity` auth mode and completes standard browser consent or binds a Service Account / OIDC role.
+  2. Tanpopo stores refresh tokens encrypted in its secret vault, refreshes access tokens transparently ahead of expiry for `R2 (Developer)`, and injects tokens exclusively into authorized upstream hosts.
 - **Failure / Edge Paths:**
-  - *Lỗi 1 — Thu hồi quyền hoặc hết hạn phiên làm mới (Token Revocation / Rotation Race):* Quản trị viên phía đám mây thu hồi quyền ứng dụng, hoặc 50 request đồng thời cùng phát hiện access token hết hạn và cùng gọi làm mới gây lỗi xung đột (refresh token reuse detection). Kho bí mật của Tanpopo phải có khóa đồng bộ hóa (single-flight token refresh) khi làm mới token, và khi nhận lỗi `invalid_grant` phải chuyển trạng thái kết nối sang `AUTH_REQUIRES_RECONSENT` đồng thời bắn cảnh báo vận hành ngay lập tức.
-  - *Lỗi 2 — Cố tình cấu hình trái phép phiên thuê bao tiêu dùng:* Người dùng tìm cách nhét cookie phiên trình duyệt cá nhân hoặc yêu cầu Tanpopo cung cấp trình đăng nhập giả lập cho gói thuê bao cá nhân bị cấm. Kho Official Adapters và tài liệu chính thức hoàn toàn không cung cấp cơ chế này (`CONFIRMED_BY_OWNER` / `DEC-004`).
+  - *Failure 1 — Token Revocation / Concurrent Refresh Rotation Race:* Cloud admin revokes app consent, or 50 concurrent requests simultaneously detect an expired access token and race to refresh (triggering upstream refresh-token reuse detection). Tanpopo's secret vault enforces single-flight token refresh locking, transitions the connection to `AUTH_REQUIRES_RECONSENT` upon receiving `invalid_grant`, and dispatches an immediate operational alert.
+  - *Failure 2 — Attempted Misuse of Consumer Subscription Sessions:* A user attempts to stuff personal browser session cookies or demands a spoofed login flow for restricted consumer plans. Official Adapters and official documentation provide zero support for such mechanisms (`CONFIRMED_BY_OWNER` / `DEC-004`).
 
 ---
 
-### UC-05: Định tuyến Thông minh Nhận thức Năng lực & Chuyển mạch Dự phòng (Capability-Aware Routing & Failover)
-- **Tác nhân:** `R1 (Operator)` thiết lập quy tắc; `R2 (Developer)` gửi truy vấn.
-- **Tiền điều kiện:** Cấu hình một nhóm định tuyến ảo (ví dụ `smart-production`) gồm nhà cung cấp chính (như Anthropic trên Vertex AI) và dự phòng (như Anthropic trực tiếp hoặc AWS Bedrock).
+### UC-05: Capability-Aware Smart Routing & Pre-Stream Failover
+- **Actors:** `R1 (Operator)` authors routing rules; `R2 (Developer)` invokes routes.
+- **Preconditions:** A virtual route (e.g., `smart-production`) fronts a primary deployment (e.g., Anthropic on Vertex AI) and secondary fallbacks (e.g., direct Anthropic or AWS Bedrock).
 - **Happy Path:**
-  1. Request yêu cầu `context = 150k tokens` + `tool_calling = true` + ràng buộc chính sách `data_region = EU`.
-  2. Bộ định tuyến lọc bỏ các đích không đủ cửa sổ ngữ cảnh 150k hoặc nằm ngoài vùng EU, chọn đích tối ưu nhất đang khỏe mạnh; nếu đích số 1 trả lỗi `429 Rate Limit` hoặc `503 Overloaded` trước khi phát sinh dữ liệu trả về, Gateway tự động chuyển sang đích dự phòng hợp lệ số 2 trong vài mili-giây.
+  1. Request requires `context = 150k tokens` + `tool_calling = true` + policy constraint `data_region = EU`.
+  2. Router disqualifies deployments lacking a 150k context window or located outside the EU, selecting the highest-priority healthy target; if target #1 returns `429 Rate Limit` or `503 Overloaded` prior to emitting response bytes, the Gateway fails over to compliant target #2 within milliseconds.
 - **Failure / Edge Paths:**
-  - *Lỗi 1 — Không có đích nào thỏa mãn giao điểm năng lực & chính sách:* Đích dự phòng duy nhất còn sống lại nằm ở vùng US trong khi chính sách bắt buộc giữ dữ liệu tại EU. Bộ định tuyến **tuyệt đối không được tự ý phá rào chính sách bảo mật để cứu uptime** (fail-closed đối với ràng buộc bảo mật/vùng dữ liệu), trả về lỗi `503 no_compliant_upstream_available` ghi rõ lý do chặn.
-  - *Lỗi 2 — Bão thử lại dây chuyền (Retry Storm):* Khi mạng ra ngoài gặp sự cố diện rộng, việc thử lại liên tiếp làm nghẽn toàn bộ hàng đợi. Bộ ngắt mạch (Circuit Breaker) của từng đích phải tự mở tạm thời để giải phóng tài nguyên ngay lập tức.
+  - *Failure 1 — Empty Intersection of Capability & Policy Constraints:* The sole surviving fallback resides in a US region while policy mandates EU data residency. The router **must never violate security/residency policy to salvage uptime** (strictly fail-closed on security/residency rules), returning `503 no_compliant_upstream_available` with an explicit block reason.
+  - *Failure 2 — Cascading Retry Storm:* During widespread egress degradation, naive retries saturate connection pools. Per-deployment Circuit Breakers trip open immediately to shed load and preserve Gateway stability.
 
 ---
 
-### UC-06: Quản trị Công cụ MCP (MCP Tool Governance, Scoping & Credential Masking)
-- **Tác nhân:** `R4 (Security Admin)` phân quyền; `R2 (Developer / Coding Agent)` sử dụng công cụ.
-- **Tiền điều kiện:** Tanpopo kết nối tới các MCP server nội bộ (ví dụ: cơ sở dữ liệu đọc-chỉ-định, hệ thống quản lý ticket, kho tài liệu).
+### UC-06: MCP Tool Governance, Scoping & Credential Masking
+- **Actors:** `R4 (Security Admin)` defines ACLs; `R2 (Developer / Coding Agent)` invokes tools.
+- **Preconditions:** Tanpopo fronts internal MCP servers (e.g., read-replica databases, issue trackers, documentation stores).
 - **Happy Path:**
-  1. Agent kết nối vào điểm cuối MCP Plane của Tanpopo bằng Virtual Key của nhóm phát triển.
-  2. Tanpopo chỉ hiển thị danh sách công cụ đã được lọc theo quyền của khóa đó (ví dụ chỉ thấy `read_ticket`, `search_docs`; ẩn hoàn toàn `delete_project`, `exec_sql_write`), hỗ trợ phân trang chuẩn xác không giới hạn cứng số lượng công cụ, tự động tiêm thông tin xác thực dịch vụ đích ở phía sau và ghi nhật ký chi tiết mọi lần gọi tool.
+  1. Agent connects to Tanpopo's MCP Plane endpoint using a team Virtual Key.
+  2. Tanpopo exposes only the filtered subset of tools permitted for that key (e.g., `read_ticket`, `search_docs`; completely hiding `delete_project`, `exec_sql_write`), supports standards-compliant cursor pagination without arbitrary 100-tool truncation, injects upstream service credentials transparently at egress, and writes granular tool-call audit records.
 - **Failure / Edge Paths:**
-  - *Lỗi 1 — Tấn công thay đổi mô tả công cụ ("MCP Rug-Pull" / Tool Poisoning):* Một MCP server bên ngoài cập nhật ngầm phần mô tả văn bản của công cụ để chèn chỉ thị độc hại (prompt injection) dụ Agent đọc tệp nhạy cảm. Tanpopo phát hiện mã băm schema của công cụ (`tool_schema_hash`) bị thay đổi so với phiên bản đã được `R4` phê duyệt và tạm khóa công cụ đó chờ xác nhận lại.
-  - *Lỗi 2 — Gọi trái phép hoặc treo công cụ:* Agent cố gọi trực tiếp tên công cụ bị ẩn hoặc MCP server đích bị treo không phản hồi. Tanpopo từ chối ngay với lỗi phân quyền (ghi vào nhật ký bảo mật) hoặc ngắt kết nối đúng hạn thời gian (timeout) để không làm treo phiên làm việc của Agent.
+  - *Failure 1 — Upstream Tool Poisoning ("MCP Rug-Pull"):* An external MCP server silently alters a tool's description text to embed prompt-injection instructions tricking the Agent into exfiltrating local files. Tanpopo detects drift against the `R4`-approved `tool_schema_hash` and immediately suspends the mutated tool pending re-approval.
+  - *Failure 2 — Unauthorized Tool Call or Hung MCP Server:* Agent directly invokes a hidden tool name or the upstream MCP server hangs indefinitely. Tanpopo immediately rejects unauthorized calls (`403` security audit event) and enforces strict per-tool execution timeouts so Agent sessions never deadlock.
 
 ---
 
-### UC-07: Ứng phó Sự cố Khẩn cấp (Security & Runaway Incident Response)
-- **Tác nhân:** `R4 (Security Admin)` & `R1 (Operator)`.
-- **Tiền điều kiện:** Phát hiện một Virtual Key bị lộ lên kho Git công khai hoặc một kịch bản tác nhân bị lỗi lặp vô hạn đang gửi 500 request/phút.
+### UC-07: Emergency Security & Runaway Spend Incident Response
+- **Actors:** `R4 (Security Admin)` & `R1 (Operator)`.
+- **Preconditions:** A Virtual Key leaks to a public Git repository, or a buggy agent enters an infinite loop firing 500 requests/minute.
 - **Happy Path:**
-  1. Hệ thống phát hiện tốc độ tiêu thụ bất thường (anomaly/velocity limit) hoặc `R4` bấm nút thu hồi khóa / kích hoạt công tắc ngắt khẩn cấp (Kill-Switch) qua CLI/Web Console.
-  2. Khóa bị vô hiệu hóa tức thì trên toàn bộ mặt phẳng dữ liệu; khóa kết nối với nhà cung cấp đích có thể được xoay vòng (rotate) tại một nơi duy nhất trên Tanpopo mà không cần sửa cấu hình của 20 ứng dụng nội bộ khác không liên quan.
+  1. Velocity anomaly detection triggers or `R4` invokes key revocation / emergency Kill-Switch via CLI or Web Console.
+  2. The Virtual Key is invalidated across the entire data plane immediately; if an upstream provider key must be rotated, `R1` rotates it once inside Tanpopo without reconfiguring 20 unrelated internal applications.
 - **Failure / Edge Paths:**
-  - *Lỗi — Độ trễ đồng bộ trạng thái thu hồi trong mô hình chạy nhiều bản sao (Cluster Propagation Lag) hoặc mất kết nối kho dữ liệu trung tâm:* Nếu bộ nhớ đệm cục bộ giữ quyền khóa quá lâu (ví dụ 15 phút), kẻ tấn công vẫn tiếp tục khai thác được sau khi khóa đã bị thu hồi. Thiết kế phải đảm bảo kênh thông báo thu hồi tức thì (pub/sub hoặc TTL ngắn tính bằng giây cho trạng thái khóa) và chế độ `fail-closed` an toàn cho các khóa bị đánh dấu nghi vấn.
+  - *Failure — Cluster Propagation Lag or Control-Store Partition:* If replica nodes cache key validity blindly for 15 minutes, attackers continue exploiting revoked credentials. Architecture enforces sub-second revocation propagation (pub/sub + short multi-second epoch verification) and `fail-closed` behavior on flagged/stale security states.
 
 ---
 
-### UC-08: Kiểm soát Ngân sách Phân cấp & Hạch toán Chi phí Luồng Streaming
-- **Tác nhân:** `R4 (FinOps/Security Admin)` đặt hạn mức; `R2 (Developer)` tiêu dùng.
-- **Tiền điều kiện:** Nhóm A được cấp ngân sách cứng `100 USD / tháng` và cảnh báo mềm ở mức `80 USD`.
+### UC-08: Hierarchical Budget Governance & Streaming Cost Settlement
+- **Actors:** `R4 (FinOps/Security Admin)` configures caps; `R2 (Developer)` consumes quota.
+- **Preconditions:** Team A is assigned a hard `100 USD / month` budget ceiling with a soft alert at `80 USD`.
 - **Happy Path:**
-  1. Khi tổng chi tiêu chạm `80 USD`, Tanpopo phát sự kiện cảnh báo qua webhook/console.
-  2. Khi chạm `100 USD`, các truy vấn phát sinh phí mới từ Nhóm A bị từ chối gọn gàng với mã lỗi `429 budget_exceeded` (hoặc tự động chuyển hướng sang mô hình nội bộ miễn phí nếu chính sách nhóm cấu hình chế độ `downgrade-on-budget-cap`).
+  1. Crossing `80 USD` emits a soft-threshold webhook/console alert.
+  2. Reaching `100 USD` cleanly blocks new billable Team A requests with `429 budget_exceeded` (or routes to a zero-cost local model if policy configures `downgrade-on-budget-cap`).
 - **Failure / Edge Paths:**
-  - *Lỗi 1 — Đua tranh song song vượt trần ngân sách (Concurrent Streaming Overspend):* Khi ngân sách còn `0.50 USD`, một tác nhân bắn đồng loạt 40 luồng yêu cầu ngữ cảnh lớn cùng một mili-giây. Nếu chỉ trừ tiền *sau khi* luồng kết thúc, cả 40 luồng đều lọt qua cổng kiểm tra ban đầu và làm lố ngân sách hàng chục USD. Tanpopo cần cơ chế **tạm giữ hạn mức ước tính trước khi cho qua (pre-request quota reservation)** và quyết toán lại số dư thật khi luồng kết thúc.
-  - *Lỗi 2 — Thiếu bảng giá hoặc nhà cung cấp không trả số đếm token khi đứt mạng:* Adapter phải có cơ chế đếm ước lượng dự phòng gắn cờ `estimated_usage = true` để sổ cái không bị bỏ trống chi phí.
+  - *Failure 1 — Concurrent Streaming Overspend:* With `0.50 USD` remaining, an agent fires 40 parallel long-context SSE streams within the same millisecond. Deducting spend only *after* stream completion lets all 40 streams bypass initial checks and overshoot the cap by tens of USD. Tanpopo enforces **pre-request quota reservation** before opening upstream streams and reconciles exact spend on completion.
+  - *Failure 2 — Missing Pricing Schedule or Dropped Upstream Usage Metrics:* On abrupt disconnects where upstream omits final token counts, the Adapter applies fallback token estimation flagged with `estimated_usage = true` so ledger entries never silently default to zero.
 
 ---
 
-### UC-09: Nâng cấp, Ghim phiên bản, Rollback & Thu hồi Khẩn cấp Plugin
-- **Tác nhân:** `R1 (Operator)` & `R4 (Security Admin)`.
-- **Tiền điều kiện:** Hệ thống đang dùng `provider-x-adapter@1.2.0` cho lưu lượng thật; bản `1.3.0` vừa phát hành (hoặc phát hiện lỗ hổng bảo mật trong một community plugin).
+### UC-09: Plugin Upgrade, Version Pinning, Rollback & Emergency Quarantine
+- **Actors:** `R1 (Operator)` & `R4 (Security Admin)`.
+- **Preconditions:** Production traffic runs `provider-x-adapter@1.2.0`; `1.3.0` is released (or a critical vulnerability surfaces in an installed community plugin).
 - **Happy Path:**
-  1. `R1` kiểm tra bản cập nhật; hệ thống đối chiếu tính tương thích cấu hình hiện tại với schema của `1.3.0`, tải gói mới, chuyển lưu lượng mới sang bản `1.3.0` trong khi chờ các kết nối streaming đang chạy trên bản `1.2.0` hoàn tất êm đẹp (graceful drain).
-  2. Nếu bản `1.3.0` phát sinh tỷ lệ lỗi cao, `R1` chạy một lệnh quay lui (rollback) về bản `1.2.0` đã ghim trong lockfile chỉ trong vài giây.
+  1. `R1` runs upgrade preflight; Tanpopo validates existing connection configs against `1.3.0` schemas, stages the new package, shifts new requests to `1.3.0`, and gracefully drains in-flight `1.2.0` SSE streams.
+  2. If `1.3.0` exhibits elevated error rates, `R1` executes a single rollback command reverting to the lockfile-pinned `1.2.0` artifact within seconds.
 - **Failure / Edge Paths:**
-  - *Lỗi — Thu hồi khẩn cấp plugin độc hại / vi phạm nghiêm trọng (Emergency Plugin Quarantine):* Khi phát hiện một plugin bên ngoài có lỗ hổng nghiêm trọng, `R4` thực hiện lệnh cách ly (`quarantine/revoke`). Tanpopo lập tức ngắt quyền thực thi và quyền mạng của plugin đó, vô hiệu hóa các tuyến phụ thuộc vào nó với thông báo tường minh cho ứng dụng gọi tới, và xuất danh sách toàn bộ khóa/dự án từng đi qua plugin đó trong nhật ký kiểm toán để phục vụ điều tra.
+  - *Failure — Emergency Malicious Plugin Quarantine:* Upon discovering a severe vulnerability in an external plugin, `R4` triggers `quarantine/revoke`. Tanpopo immediately terminates execution and network privileges for that plugin, fails closed on dependent routes with explicit client diagnostics, and exports an audit impact report enumerating every key and project that traversed the quarantined plugin.

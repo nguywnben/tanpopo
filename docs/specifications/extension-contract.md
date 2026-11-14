@@ -1,53 +1,53 @@
-# Đặc tả Hợp đồng Nền tảng Phần mở rộng & Mô hình Thực thi Cô lập (Extension Contract & Isolation Architecture) — Tanpopo
+# Extension Platform Contract & Isolated Execution Architecture Specification — Tanpopo
 
-> **Tài liệu Đặc tả Kiến trúc Phần mở rộng (Phase ASTRA A04 — `DRAFT / ILLUSTRATIVE CANDIDATE SPEC`)**
-> - **Mã tài liệu:** `SPEC-EXT-01` | **Phiên bản:** `0.1.0-step04-draft` | **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Platform Architect & Security-Minded SDK Designer
-> - **Tuyên bố Trạng thái Chuẩn hóa:** Toàn bộ cấu trúc `Manifest`, lược đồ JSON/ABI, hạn mức tài nguyên và sơ đồ trình tự trong tài liệu này **mang tính minh họa thiết kế ứng viên (`ILLUSTRATIVE — PRE-ADR & PRE-POC`)**, **chưa phải chuẩn đóng băng cuối cùng** cho tới khi Product Owner phê duyệt Cổng **Gate G1/G2** và hoàn tất thử nghiệm kỹ thuật (`EXP-01`..`EXP-03`) tại [`decisions.md`](../governance/decisions.md).
-> - **Truy vết Yêu cầu:** `TP-FR-0301`..`0306`, `TP-NFR-0101`..`0102`, `TP-NFR-0202`, `TP-NFR-0401`..`0403`, `TP-NFR-0902`, `TP-BR-0104`, `TP-BR-0401`..`0404`.
+> **Extension Architecture Specification Document (ASTRA Phase A04 — `DRAFT / ILLUSTRATIVE CANDIDATE SPEC`)**
+> - **Document ID:** `SPEC-EXT-01` | **Version:** `0.1.0-step04-draft` | **Last Updated:** `2026-11-11`
+> - **Authoring Role:** Platform Architect & Security-Minded SDK Designer
+> - **Standardization Status Statement:** All `Manifest` structures, JSON/ABI schemas, resource quotas, and sequence diagrams in this document are **illustrative candidate designs (`ILLUSTRATIVE — PRE-ADR & PRE-POC`)** — **not yet frozen standards** — pending Product Owner approval at **Gate G1/G2** and completion of technical spikes (`EXP-01`..`EXP-03`) tracked in [`decisions.md`](../governance/decisions.md).
+> - **Requirements Traceability:** `TP-FR-0301`..`0306`, `TP-NFR-0101`..`0102`, `TP-NFR-0202`, `TP-NFR-0401`..`0403`, `TP-NFR-0902`, `TP-BR-0104`, `TP-BR-0401`..`0404`.
 
 ---
 
-## 1. Phân loại Học Hệ sinh thái (`Canonical Extension Taxonomy`) & Ranh giới Nhân Core
+## 1. Ecosystem Taxonomy (`Canonical Extension Taxonomy`) & Core Kernel Boundaries
 
-Để giải quyết bài toán cốt lõi — **cộng đồng và doanh nghiệp tự thêm nhà cung cấp và tính năng mới mà không cần sửa hay phát hành lại Tanpopo Core** — hệ thống tách bạch tuyệt đối **Danh tính đóng gói (`Identity`)**, **Cơ chế thực thi (`Runtime`)** và **Vòng đời quản trị (`Lifecycle`)**:
+To solve Tanpopo's foundational extensibility goal — **enabling communities and enterprises to add new AI providers and capabilities without modifying or re-releasing Tanpopo Core** — the architecture strictly decouples **Packaging Identity (`Identity`)**, **Execution Mechanism (`Runtime`)**, and **Governance Lifecycle (`Lifecycle`)**:
 
-### 1.1. Bảng Phân tách 8 Thực thể Kiến trúc
+### 1.1. Eight-Entity Architectural Partition Matrix
 
-| Thực thể | Danh tính (`Identity`) | Nơi chạy (`Runtime`) | Vòng đời & Sở hữu (`Lifecycle`) | Thuộc Nhân Core hay Extension? |
+| Architectural Entity | Identity (`Identity`) | Execution Locus (`Runtime`) | Ownership & Lifecycle (`Lifecycle`) | Core Kernel vs. External Extension? |
 |---|---|---|---|---|
-| **1. `Extension Package`** | Gói tạo tác bất biến có định danh `@publisher/name`, phiên bản `SemVer` và mã băm `SHA-256`. | Không tự chạy; đóng vai trò đơn vị phân phối chứa `Manifest`, quy tắc khai báo hoặc mã thực thi cô lập. | Cấp `Instance` (`SM-01`), bật/tắt theo chính sách `Organization` (`TP-BR-0202`). | **Đơn vị mở rộng bên ngoài** (nạp động vào Core). |
-| **2. `Provider Adapter`** | Năng lực (`Capability`) bên trong một `Extension Package` định nghĩa cách giao tiếp với một dòng nhà cung cấp AI. | Chạy ở Tầng 1 (`Declarative`), Tầng 2 (`Sandboxed Hook`) hoặc Tầng 3 (`Isolated Sidecar`). **Hoàn toàn không chứa khóa của khách hàng.** | Theo vòng đời của `Extension Installation` (`SM-01`). | **Mở rộng độc lập** (kể cả `Official Adapters` cũng tuân thủ đúng hợp đồng này). |
-| **3. `Provider Connection`** | Bản ghi cấu hình nghiệp vụ (`conn_id`) ghép 1 `Provider Adapter` + 1 tham chiếu bí mật (`secret_ref`) + URL đích + `Data Region`. | Được quản lý và thực thi kiểm tra quyền trực tiếp bên trong **Tanpopo Core**. | Thuộc `Organization` hoặc `Project` (`SM-02`). | **Thuộc Nhân Core** (dữ liệu cấu hình sống, không phải gói mã). |
-| **4. `Logical Model` & `Model Deployment`** | `Logical Model`: hồ sơ năng lực chuẩn (`model_id`).<br/>`Model Deployment`: đích vận hành thực tế (`deploy_id`) gắn 1-1 với `Provider Connection`. | Bộ định tuyến, ngắt mạch và sổ cái của **Tanpopo Core** tính toán trực tiếp trên `Model Deployment`. | Cấp `Organization` / `Project` (`SM-04`). | **Thuộc Nhân Core** (nhận siêu dữ liệu gợi ý từ Adapter nhưng quản trị tại Core). |
-| **5. `Auth Driver`** | Cơ chế chứng thực với dịch vụ đích: bộ nguyên hàm chuẩn của Host hoặc trình ký tùy biến giới hạn trong `Extension Package`. | Nguyên hàm chuẩn (Bearer, OAuth 2.1, mTLS, HMAC Host-Sign) chạy trong **Host Egress Broker**; biến đổi đặc thù chạy trong Sandbox bị khóa biên. | Theo cấu hình `Secret Credential` & `Provider Connection` (`SM-02`, `SM-03`). | **Lai có kiểm soát:** Kho khóa & tiêm khóa thuộc **Core**; công thức tạo chữ ký lạ có thể mở rộng. |
-| **6. `MCP Server` & `MCP Tool`** | Dịch vụ ngữ cảnh/công cụ độc lập tuân thủ giao thức **Model Context Protocol** và từng công cụ con (`<server>__<tool>`). | Chạy trên tiến trình/máy chủ đích bên ngoài (hoặc Sidecar cách ly), đi qua mặt phẳng **Core MCP Hub** (`/mcp/...`). | Đăng ký cấp `Organization`/`Project`; công cụ khóa theo `schema_hash` & `SM-06`. | **Mặt phẳng MCP riêng biệt** (`DEC-003`) — **không phải** là `Provider Adapter`. |
-| **7. `Agent Endpoint` & `A2A Task`** | Tác nhân tự chủ công bố `AgentCard` và đơn vị tác vụ bất đồng bộ có trạng thái nhiều bước trên mặt phẳng **A2A**. | Tác nhân chạy độc lập bên ngoài; mặt phẳng **Core A2A Plane** (`/a2a/...`) kiểm soát ủy quyền, bước nhảy và trần ngân sách. | Đăng ký cấp `Organization`/`Project`; tác vụ theo `SM-06` & `SM-07`. | **Mặt phẳng A2A riêng biệt** (`DEC-003`) — **không lẫn** vào `Provider` hay `MCP`. |
-| **8. `Routing / Policy / Exporter Extension`** | Các năng lực mở rộng đường ống: chấm điểm định tuyến tùy chỉnh, bộ lọc nội dung/PII (`Guardrail`), hoặc bộ xuất sự kiện tùy chỉnh. | Chạy trong Tầng 2 (`Sandboxed Hook`) hoặc Tầng 3 (`Isolated Sidecar`) tại các điểm móc (`Hook Stages`) xác định. | Cấp `Instance` / `Organization` (`SM-01`). | **Mở rộng độc lập**, nhưng **không được ghi đè** các rào chắn `Fail-Closed` cứng của Core. |
+| **1. `Extension Package`** | Immutable artifact bundle identified by `@publisher/name`, `SemVer` version, and `SHA-256` digest. | Does not execute on its own; serves as the distribution unit holding the `Manifest`, declarative rules, or isolated guest bytecode. | `Instance`-scoped (`SM-01`), enabled/disabled per `Organization` policy (`TP-BR-0202`). | **External extension unit** (dynamically loaded into Core). |
+| **2. `Provider Adapter`** | A `Capability` inside an `Extension Package` defining wire translation for an upstream AI provider family. | Executes at Tier 1 (`Declarative`), Tier 2 (`Sandboxed Hook`), or Tier 3 (`Isolated Sidecar`). **Contains zero customer credentials.** | Coupled to its parent `Extension Installation` lifecycle (`SM-01`). | **Decoupled extension** (even `Official Adapters` obey this exact contract). |
+| **3. `Provider Connection`** | Operational configuration record (`conn_id`) binding 1 `Provider Adapter` + 1 `secret_ref` + target endpoint URL + `Data Region`. | Managed and access-enforced directly inside **Tanpopo Core**. | Owned by an `Organization` or `Project` (`SM-02`). | **Core Kernel entity** (live configuration state, not a code package). |
+| **4. `Logical Model` & `Model Deployment`** | `Logical Model`: canonical capability profile (`model_id`).<br/>`Model Deployment`: concrete routing target (`deploy_id`) bound 1-to-1 to a `Provider Connection`. | Core's router, circuit breaker, and budget ledger evaluate `Model Deployment` entities directly. | `Organization` / `Project`-scoped (`SM-04`). | **Core Kernel entity** (may seed defaults from Adapter catalog hints, but governed in Core). |
+| **5. `Auth Driver`** | Upstream authentication mechanism: either a built-in Host primitive or a bounded custom signer inside an `Extension Package`. | Standard primitives (Bearer, OAuth 2.1, mTLS, Host-Sign HMAC) execute inside the **Host Egress Broker**; custom canonicalization runs inside a boundary-locked Sandbox. | Bound to `Secret Credential` & `Provider Connection` lifecycles (`SM-02`, `SM-03`). | **Controlled hybrid:** Secret vault & wire injection belong to **Core**; custom signing string construction is extensible. |
+| **6. `MCP Server` & `MCP Tool`** | Standalone context/tool service speaking **Model Context Protocol** and its individual namespaced tools (`<server>__<tool>`). | Runs as an external server (or isolated Sidecar), governed exclusively through the **Core MCP Hub** (`/mcp/...`). | Registered at `Organization`/`Project` scope; tools pinned by `schema_hash` & `SM-06`. | **Dedicated MCP Plane** (`DEC-003`) — **not** a `Provider Adapter`. |
+| **7. `Agent Endpoint` & `A2A Task`** | Autonomous agent publishing an `AgentCard` and stateful multi-step asynchronous task units on the **A2A** plane. | Agent executes externally; the **Core A2A Plane** (`/a2a/...`) enforces delegation scopes, hop limits, and sub-budget holds. | Registered at `Organization`/`Project` scope; tasks governed by `SM-06` & `SM-07`. | **Dedicated A2A Plane** (`DEC-003`) — **never conflated** with `Provider` or `MCP`. |
+| **8. `Routing / Policy / Exporter Extension`** | Pipeline extension capabilities: custom route scoring, PII/content `Guardrail` hooks, or custom telemetry sinks. | Executes in Tier 2 (`Sandboxed Hook`) or Tier 3 (`Isolated Sidecar`) at deterministic `Hook Stages`. | `Instance` / `Organization`-scoped (`SM-01`). | **Decoupled extension**, **never permitted to override** Core's hard `Fail-Closed` invariants. |
 
-### 1.2. Hạt nhân Bất khả Xâm phạm của Tanpopo Core (`Non-Overridable Kernel`)
+### 1.2. Non-Overridable Kernel of Tanpopo Core (`Non-Overridable Kernel`)
 
-Dù cài đặt bất kỳ phần mở rộng nào, **7 thành phần sau luôn nằm cố định trong Tanpopo Core và không một Extension nào có quyền tắt hoặc đi vòng qua**:
-1. Xác thực danh tính `Principal` / `Virtual Key`, phân quyền `RBAC` và cô lập cứng đa tổ chức (`TP-BR-0101`).
-2. Kho bí mật gốc (`Master Secret Vault`) và Trình tiêm khóa mù tại biên mạng (`Blind Host Credential Broker` — `TP-BR-0402`).
-3. Sổ cái ngân sách giữ chỗ hai pha (`Two-Phase Budget Hold & Settlement` — `TP-BR-0701`, `0702`).
-4. Ràng buộc cứng vùng cư trú dữ liệu (`Hard Data Residency`) và tư thế `Fail-Closed` bắt buộc (`TP-BR-0501`, `0502`).
-5. Bộ cưỡng chế cô lập Sandbox, danh sách trắng `allowed_hosts`, chống SSRF và ngắt mạch tài nguyên (`TP-BR-0401`, `0404`).
-6. Cổng phê duyệt con người cho công cụ MCP `destructive` và giới hạn khuếch đại đặc quyền A2A (`TP-BR-0602`, `0604`).
-7. Nhật ký kiểm toán bất biến (`Append-Only Audit Sink`) và Hệ thống công tắc ngắt khẩn cấp 4 cấp (`TP-BR-0803`).
+Regardless of which extensions are installed, **the following 7 kernel subsystems remain permanently anchored inside Tanpopo Core and cannot be disabled or bypassed by any Extension**:
+1. `Principal` / `Virtual Key` authentication, `RBAC` authorization, and hard multi-tenant isolation (`TP-BR-0101`).
+2. The `Master Secret Vault` and network-edge `Blind Host Credential Broker` (`TP-BR-0402`).
+3. The `Two-Phase Budget Hold & Settlement` ledger (`TP-BR-0701`, `0702`).
+4. `Hard Data Residency` enforcement and mandatory `Fail-Closed` posture (`TP-BR-0501`, `0502`).
+5. Sandbox isolation enforcement, `allowed_hosts` egress allowlisting, SSRF prevention, and resource circuit breakers (`TP-BR-0401`, `0404`).
+6. Human-in-the-loop approval gates for `destructive` MCP tools and A2A privilege-amplification bounds (`TP-BR-0602`, `0604`).
+7. The `Append-Only Audit Sink` and 4-level emergency kill-switch subsystem (`TP-BR-0803`).
 
 ---
 
-## 2. Hợp đồng SDK & Giao diện Nhị phân/Dữ liệu Đa Ngôn ngữ (`Versioned Language-Agnostic Contract`)
+## 2. SDK Contract & Versioned Language-Agnostic Interface (`Versioned Language-Agnostic Contract`)
 
-### 2.1. Nguyên lý Không Phụ thuộc Ngôn ngữ Lập trình
-- **Tách rời ngôn ngữ Core và ngôn ngữ viết Extension:** Hợp đồng giao tiếp giữa Host (Tanpopo Core) và Guest (Extension) được định nghĩa qua **lược đồ dữ liệu chuẩn hóa có phiên bản (`contract_version`)** và **biên giới giao diện trung lập** (ứng viên ưu tiên: **WebAssembly Component Model / WIT** cho Tầng 2 và **HTTP/gRPC Protobuf/JSON qua Unix Domain Socket / mTLS** cho Tầng 3).
-- Nhờ đó, ngay cả khi Tanpopo Core được viết bằng Go hay Rust (`OQ-001`), tác giả cộng đồng vẫn có thể viết phần mở rộng bằng **YAML/JSON thuần** (Tầng 1), hoặc biên dịch từ **TypeScript/JavaScript, Rust, Go, Python** sang gói chuẩn (Tầng 2/Tầng 3) dùng chung một bộ kiểm thử hợp đồng.
+### 2.1. Language-Agnostic Design Principle
+- **Decoupling Core implementation language from Extension authoring language:** Communication between Host (Tanpopo Core) and Guest (Extension) is governed by **versioned canonical data envelopes (`contract_version`)** across a **language-neutral binary/IPC boundary** (primary candidates: **WebAssembly Component Model / WIT** for Tier 2 and **HTTP/gRPC Protobuf/JSON over Unix Domain Socket / mTLS** for Tier 3).
+- Consequently, whether Tanpopo Core is implemented in Go or Rust (`OQ-001`), community and enterprise authors can write extensions in **pure YAML/JSON** (Tier 1) or compile from **TypeScript/JavaScript, Rust, Go, or Python** into standard artifacts (Tier 2 / Tier 3) verified against a single shared contract test suite.
 
-### 2.2. Ví dụ Minh họa `Extension Manifest` (`ILLUSTRATIVE — CHƯA PHẢI CHUẨN ĐÓNG BĂNG`)
+### 2.2. Illustrative `Extension Manifest` (`ILLUSTRATIVE — NOT A FROZEN STANDARD`)
 
 ```yaml
-# MINH HỌA ỨNG VIÊN (ILLUSTRATIVE CANDIDATE v0.1-draft — Chờ chốt ADR)
+# ILLUSTRATIVE CANDIDATE (v0.1-draft — Pending ADR Approval)
 apiVersion: tanpopo.dev/extension/v1alpha1
 kind: ExtensionManifest
 
@@ -60,8 +60,8 @@ metadata:
   description: "Provider adapter for Acme Sovereign EU/JP inference endpoints."
 
 compatibility:
-  contractVersion: "0.1"              # Phiên bản hợp đồng Host-Guest yêu cầu
-  coreVersionRange: ">=0.1.0 <0.3.0"  # Khoảng phiên bản Tanpopo Core tương thích
+  contractVersion: "0.1"              # Required Host-Guest contract version
+  coreVersionRange: ">=0.1.0 <0.3.0"  # Compatible Tanpopo Core SemVer range
 
 runtime:
   tier: "sandboxed_wasm"              # Enum: declarative | sandboxed_wasm | isolated_sidecar
@@ -80,12 +80,12 @@ capabilities:
     nativePassthroughPrefix: "/native/acme"
     authMethods:
       - id: "api_key_header"
-        mode: "host_blind_inject"     # Host tự gắn khóa ở biên mạng; Wasm KHÔNG thấy khóa gốc
+        mode: "host_blind_inject"     # Host injects credential at network edge; Wasm NEVER sees raw key
         headerName: "X-Acme-Api-Key"
       - id: "enterprise_hmac"
-        mode: "host_crypto_sign"      # Wasm gửi chuỗi cần ký; Host ký HMAC trả chữ ký
+        mode: "host_crypto_sign"      # Wasm emits canonical string; Host computes HMAC and attaches signature
 
-configSchema:                         # JSON Schema cho cấu hình phi bí mật trên Connection
+configSchema:                         # JSON Schema for non-secret Connection configuration
   type: "object"
   required: ["regionCode"]
   additionalProperties: false
@@ -97,13 +97,13 @@ configSchema:                         # JSON Schema cho cấu hình phi bí mậ
       type: "string"
       pattern: "^[a-z0-9-]{1,32}$"
 
-secretSlots:                          # Chỉ định nghĩa tên khe tham chiếu, KHÔNG chứa giá trị bí mật
+secretSlots:                          # Declares slot reference names ONLY; NEVER holds secret values
   - slot: "primary_api_key"
     requiredForAuthMethods: ["api_key_header"]
   - slot: "hmac_signing_secret"
     requiredForAuthMethods: ["enterprise_hmac"]
 
-permissions:                          # Mặc định đóng (Default-Deny); mọi quyền ngoài mục này bị chặn cứng
+permissions:                          # Default-Deny; every undeclared capability is hard-blocked
   networkEgress:
     allowedHosts:
       - "inference.eu-central-1.acme-ai.example"
@@ -117,60 +117,60 @@ permissions:                          # Mặc định đóng (Default-Deny); m�
     - "provider:extract_usage"
     - "provider:classify_error"
   payloadAccess:
-    inspectRequestBody: true          # Bắt buộc để dịch schema JSON suy luận
+    inspectRequestBody: true          # Required to translate inference JSON schemas
     inspectResponseBody: true
     maxPayloadBytes: 16777216         # 16 MB
 ```
 
-### 2.3. Hợp đồng Điểm vào (`Entrypoints / Hooks`), Luồng Dữ liệu, Hủy & Đo đếm
+### 2.3. Entrypoints (`Entrypoints / Hooks`), Streaming, Cancellation & Metering Contracts
 
-Mọi giao diện giữa Core và Extension đều truyền qua các **Phong bì Chuẩn hóa (`Normalized Envelopes`)** bất biến theo phiên bản hợp đồng:
+Every boundary call between Core and an Extension exchanges immutable, contract-versioned **`Normalized Envelopes`**:
 
-| Nhóm giao diện (`Hook / Contract`) | Đầu vào từ Host truyền vào Guest | Đầu ra từ Guest trả về Host | Bất biến Bảo mật & Độ tin cậy |
+| Interface Group (`Hook / Contract`) | Host-to-Guest Input | Guest-to-Host Output | Security & Reliability Invariants |
 |---|---|---|---|
-| **`validate_connection(cfg, host_probe)`** | Cấu hình phi bí mật đã khớp `configSchema` + tay cầm gọi thử qua Host. | `ValidationResult { ok, detected_models[], error_code? }`. | Không nhận chuỗi khóa gốc; lệnh kiểm tra mạng vẫn bị khóa chặt trong `allowedHosts`. |
-| **`transform_request(req_envelope, ctx)`** | Yêu cầu chuẩn hóa (hoặc khung passthrough), `request_id`, `capabilities_required`, cấu hình kết nối, danh sách `secret_slot_refs`. | `UpstreamHttpSpec { method, url, headers, body_mode, credential_inject_instruction }`. | Host kiểm tra lại `url` của `UpstreamHttpSpec` trước khi mở socket: nếu lệch `allowedHosts` hoặc dính IP nội bộ → hủy tức khắc (`TP-AC-SEC-02`). |
-| **`transform_stream_chunk(state, raw_chunk)`** | Trạng thái luồng cục bộ có giới hạn dung lượng (`<= 64 KB`) + mảnh byte/SSE từ nhà cung cấp. | `StreamEmit { normalized_events[], state_next, usage_delta?, terminal_status? }`. | Xử lý cuốn chiếu từng mảnh (`zero full-stream buffering`); nếu gặp lỗi sau khi `chunks_emitted >= 1`, Host khóa cứng không cho phép gọi lại đích khác (`TP-BR-0503`). |
-| **`on_cancel(cancel_reason)`** | Tín hiệu hủy khi `API Client` ngắt kết nối hoặc hết hạn `timeout`. | Giải phóng trạng thái tạm của phiên trong `< 50 ms`. | Việc đóng socket TCP/HTTP2 tới nhà cung cấp do **Host** cưỡng chế trực tiếp trong `< 500 ms` (`TP-FR-0104`), không phụ thuộc sự hợp tác của Plugin! |
-| **`extract_usage(resp_or_stream_summary)`** | Phản hồi cuối hoặc bộ tích lũy luồng (kèm đếm byte/ký tự dự phòng của Host). | `UsageReport { input_tokens, output_tokens, cache_read, cache_write, reasoning_tokens, accuracy: EXACT \| ESTIMATED \| UNMETERED_FLAGGED }`. | Nếu Plugin trả thiếu số đo hoặc luồng đứt giữa chừng, Host tự động ép nhãn tối đa là `ESTIMATED` hoặc `UNMETERED_FLAGGED`, không bao giờ chấp nhận `EXACT = 0` giả tạo (`TP-BR-0703`). |
-| **`classify_error(http_status, headers, sanitized_body)`** | Mã HTTP, tiêu đề `Retry-After` và thân lỗi đã được Host lọc sơ bộ khóa nhạy cảm. | `CanonicalError { category, retryable_pre_stream, cooldown_ms, trigger_reauth, public_code }`. | Chuẩn hóa về bảng mã lỗi chung của Tanpopo để bộ định tuyến và máy trạng thái `SM-02`/`SM-04` quyết định ngắt mạch hay chuyển mạch. |
+| **`validate_connection(cfg, host_probe)`** | Non-secret config validated against `configSchema` + bounded Host probe handle. | `ValidationResult { ok, detected_models[], error_code? }`. | Receives zero raw secret strings; probe calls remain strictly confined to `allowedHosts`. |
+| **`transform_request(req_envelope, ctx)`** | Normalized request (or passthrough frame), `request_id`, `capabilities_required`, connection config, and `secret_slot_refs`. | `UpstreamHttpSpec { method, url, headers, body_mode, credential_inject_instruction }`. | Host re-verifies `UpstreamHttpSpec.url` before opening any socket: any mismatch against `allowedHosts` or resolution to private IP ranges aborts immediately (`TP-AC-SEC-02`). |
+| **`transform_stream_chunk(state, raw_chunk)`** | Bounded per-stream state (`<= 64 KB`) + upstream raw byte/SSE chunk. | `StreamEmit { normalized_events[], state_next, usage_delta?, terminal_status? }`. | Incremental chunk-by-chunk relay (`zero full-stream buffering`); if an error occurs once `chunks_emitted >= 1`, Host hard-locks out any fallback retry (`TP-BR-0503`). |
+| **`on_cancel(cancel_reason)`** | Cancellation signal on `API Client` disconnect or deadline expiry. | Releases per-session scratch state within `< 50 ms`. | Upstream TCP/HTTP2 socket teardown is enforced **directly by Host** within `< 500 ms` (`TP-FR-0104`), independent of Plugin cooperation! |
+| **`extract_usage(resp_or_stream_summary)`** | Final response or stream accumulator (paired with Host fallback byte/char counters). | `UsageReport { input_tokens, output_tokens, cache_read, cache_write, reasoning_tokens, accuracy: EXACT \| ESTIMATED \| UNMETERED_FLAGGED }`. | If the Plugin omits usage metrics or a stream aborts mid-flight, Host automatically caps accuracy at `ESTIMATED` or `UNMETERED_FLAGGED`, never accepting a synthetic `EXACT = 0` (`TP-BR-0703`). |
+| **`classify_error(http_status, headers, sanitized_body)`** | HTTP status, `Retry-After` headers, and Host-sanitized error body. | `CanonicalError { category, retryable_pre_stream, cooldown_ms, trigger_reauth, public_code }`. | Maps vendor failures onto Tanpopo's canonical error taxonomy so the router and `SM-02`/`SM-04` state machines govern circuit breaking and failover deterministically. |
 
-### 2.4. Quy tắc Phiên bản hóa & Tương thích Ngược (`Compatibility & Deprecation Policy`)
-- **Nguyên tắc mở rộng chỉ cộng thêm (`Additive Evolution`):** Trong cùng một nhánh hợp đồng (ví dụ `0.1` → `0.2` hoặc `1.0` → `1.x`), chỉ được phép thêm trường tùy chọn mới (`optional fields`) có giá trị mặc định an toàn; cấm đổi kiểu dữ liệu hoặc xóa trường hiện hữu.
-- **Cửa sổ hỗ trợ lùi (`N-1` / `12 tháng` — `TP-NFR-0902`):** Giai đoạn `0.x`, Tanpopo Core duy trì bộ chuyển đổi tương thích (`Contract Adapter Shim`) cho tối thiểu `N-1` phiên bản hợp đồng liền trước. Từ `v1.0` trở đi, mọi thay đổi ngưng hỗ trợ (`Compulsory Deprecation`) phải công bố cảnh báo trước tối thiểu **12 tháng** kèm công cụ kiểm tra di trú `tanpopo plugin migrate-check`.
+### 2.4. Versioning & Backward Compatibility Policy (`Compatibility & Deprecation Policy`)
+- **Additive-Only Evolution (`Additive Evolution`):** Within any minor contract line (e.g., `0.1` → `0.2` or `1.0` → `1.x`), only new `optional fields` with safe defaults may be introduced; mutating field types or removing existing fields is forbidden.
+- **Backward Support Window (`N-1` / `12 months` — `TP-NFR-0902`):** During `0.x`, Tanpopo Core maintains a `Contract Adapter Shim` for at least `N-1` prior contract versions. From `v1.0` onward, any `Compulsory Deprecation` requires at least **12 months** advance notice alongside automated checks in `tanpopo plugin migrate-check`.
 
 ---
 
-## 3. Ba Mô hình Thực thi Mở rộng & Ranh giới Cô lập Bảo mật (`Three Extensibility Tiers`)
+## 3. Three Extension Execution Models & Security Isolation Boundaries (`Three Extensibility Tiers`)
 
-> **Bất biến An ninh Tuyệt đối (`TP-NFR-0401`):** Mã nguồn từ phần mở rộng bên thứ ba hoặc chưa tin cậy **không bao giờ được chạy chung không gian tiến trình/bộ nhớ (`in-process`)** với nhân Tanpopo Core (cấm tuyệt đối `dlopen` thư viện động tùy ý, `eval()`, hoặc `import()` trực tiếp mã JS/Python không cách ly).
+> **Absolute Security Invariant (`TP-NFR-0401`):** Third-party or untrusted extension code **must never execute `in-process` within the same memory address space** as the Tanpopo Core kernel (arbitrary native `dlopen`, `eval()`, or unisolated `import()` of JS/Python code is unconditionally prohibited).
 
-### 3.1. Bảng So sánh & Đánh đổi Ba Kiểu Thực thi
+### 3.1. Comparison & Trade-Off Matrix Across the Three Execution Tiers
 
-| Tiêu chí | **Kiểu 1: Gói Khai báo (`Declarative Adapter`)** | **Kiểu 2: Móc Thực thi Cô lập (`Sandboxed Hooks — Wasm`)** | **Kiểu 3: Tiến trình Phụ Cách ly (`Isolated Sidecar`)** |
+| Dimension | **Tier 1: Declarative Package (`Declarative Adapter`)** | **Tier 2: Isolated Execution Hooks (`Sandboxed Hooks — Wasm`)** | **Tier 3: Out-of-Process Service (`Isolated Sidecar`)** |
 |---|---|---|---|
-| **Bản chất kỹ thuật** | Tệp dữ liệu cấu hình tĩnh (YAML/JSON + biểu thức ánh xạ an toàn không Turing-complete). | Mô-đun biên dịch chạy trong máy ảo cô lập dựa trên năng lực (WebAssembly Component Sandbox). | Dịch vụ độc lập đóng gói OCI Container / tiến trình hệ điều hành riêng giao tiếp qua UDS / mTLS loopback. |
-| **Khi nào sử dụng** | ~75–80% nhà cung cấp REST/SSE tương thích họ OpenAI hoặc chỉ khác tên đường dẫn, header, bảng giá, tên model. | ~15–20% nhà cung cấp có cấu trúc JSON/SSE riêng biệt, chữ ký xác thực tùy biến hoặc bộ lọc chính sách nhanh. | ~5% tích hợp doanh nghiệp nặng: cần thư viện C/C++/PKCS#11 HSM gốc, mô hình ML cục bộ quét PII, hoặc cầu nối `stdio` MCP. |
-| **Ưu điểm lớn nhất** | Bề mặt tấn công thực thi mã **bằng `0`**; độ trễ cực thấp (`< 2 ms`); tạo mới trong `< 30 phút`. | Một tệp nhị phân chạy trên mọi OS/CPU; cô lập bộ nhớ tuyến tính tuyệt đối; dễ phân phối qua Git/ZIP. | Không bị giới hạn bởi hệ sinh thái biên dịch Wasm; tận dụng được mọi thư viện gốc có sẵn của doanh nghiệp. |
-| **Đánh đổi / Chi phí** | Không xử lý được các thuật toán biến đổi luồng có trạng thái phức tạp. | Cần bước biên dịch SDK sang `.wasm`; phải kiểm chứng kỹ chi phí copy bộ nhớ khi streaming tải cao (`POC-01`). | Tốn bộ nhớ nền riêng cho mỗi Sidecar; đòi hỏi hạ tầng điều phối Container/cgroups/NetworkPolicy của `Operator`. |
-| **Ai được phép cài?** | `Operator` / `Org Owner` từ mọi nguồn hợp lệ sau khi duyệt quyền mạng. | `Operator` / `Org Owner` sau khi duyệt `Manifest` & hạn mức sandbox. | **Chỉ `Operator` hạ tầng** mới có quyền triển khai và phê duyệt cấu hình mạng/container cho Sidecar. |
+| **Technical Nature** | Static configuration artifact (YAML/JSON + non-Turing-complete safe mapping expressions). | Compiled bytecode module running inside a capability-based virtual machine (WebAssembly Component Sandbox). | Standalone OCI Container / OS process communicating over loopback UDS / mTLS. |
+| **Target Coverage** | ~75–80% of OpenAI-compatible REST/SSE providers differing only in URL paths, headers, pricing, or model slugs. | ~15–20% of providers with bespoke JSON/SSE wire shapes, custom request signatures, or fast policy guardrails. | ~5% of heavy enterprise integrations: native C/C++/PKCS#11 HSM libraries, local ML PII scanners, or `stdio` MCP bridges. |
+| **Primary Advantage** | **`0` arbitrary code execution attack surface**; ultra-low overhead (`< 2 ms`); authored in `< 30 minutes`. | Single portable binary across OS/CPU architectures; hard linear-memory isolation; trivial Git/ZIP distribution. | Unconstrained by Wasm compiler toolchains; reuses existing native enterprise SDKs and C libraries. |
+| **Trade-Offs / Cost** | Cannot express complex stateful stream-transformation state machines. | Requires SDK compilation to `.wasm`; high-throughput streaming memory-copy overhead must be benchmarked (`POC-01`). | Per-sidecar baseline RAM footprint; requires `Operator` container/cgroups/NetworkPolicy orchestration. |
+| **Who May Install?** | `Operator` / `Org Owner` from permitted origins after network egress consent. | `Operator` / `Org Owner` after `Manifest` & sandbox quota approval. | **Infrastructure `Operator` exclusively** may deploy and approve Sidecar container/network manifests. |
 
-### 3.2. Ma trận Miền Tin cậy, Quyền Hệ thống & Hạn mức Tài nguyên (`Trust Domains & Quotas`)
+### 3.2. Trust Domains, System Permissions & Resource Quotas Matrix (`Trust Domains & Quotas`)
 
-| Ranh giới kiểm soát | Kiểu 1: `Declarative` | Kiểu 2: `Sandboxed Hooks (Wasm)` | Kiểu 3: `Isolated Sidecar` |
+| Control Boundary | Tier 1: `Declarative` | Tier 2: `Sandboxed Hooks (Wasm)` | Tier 3: `Isolated Sidecar` |
 |---|---|---|---|
-| **Truy cập Hệ thống Tệp (`Filesystem`)** | **Không** (`0` quyền tệp). | **Không** (không gắn WASI filesystem của máy chủ; chỉ làm việc trên bộ nhớ đệm truyền vào). | Hệ thống tệp gốc chỉ đọc (`read-only rootfs`), người dùng phi đặc quyền (`non-root UID`), chỉ có thư mục tạm `/tmp` giới hạn dung lượng trong bộ nhớ. |
-| **Biến Môi trường Máy chủ (`Host Env`)** | **Không** (cấm đọc `os.Environ` của Core). | **Không** (mặc định rỗng hoàn toàn). | Chỉ nhận đúng các biến cấu hình phi nhạy cảm được `Operator` khai báo tường minh cho Sidecar đó. |
-| **Kết nối Mạng Ra ngoài (`Network Egress`)** | Chỉ thông qua **Host Egress Proxy** tới đúng `allowedHosts`. | Không có quyền mở socket TCP thô; mọi lệnh gọi HTTP phải đi qua hàm Host bị khóa cứng vào `allowedHosts` + bộ lọc chống SSRF. | Bắt buộc khóa bằng chính sách mạng cấp container/OS: chặn toàn bộ mạng nội bộ, chỉ cho phép đi qua cổng kiểm soát Egress của Tanpopo hoặc danh sách IP/miền đã duyệt. |
-| **Giới hạn CPU & Thời gian Chờ (*Mục tiêu dự kiến*)** | `< 1 ms` ánh xạ cấu trúc. | Đếm lệnh thực thi (`fuel / epoch interruption`): mặc định `<= 15 ms CPU` mỗi lượt biến đổi khung và `<= 2 ms CPU` mỗi mảnh SSE. | Giới hạn `cgroups` CPU (ví dụ `0.5–2.0 vCPU`) + thời gian chờ cứng mỗi lệnh IPC từ Core (`<= 50 ms` cho hook chính sách, có ngắt mạch riêng). |
-| **Giới hạn Bộ nhớ (*Mục tiêu dự kiến*)** | Không cấp phát vùng nhớ riêng. | Trần bộ nhớ tuyến tính cứng trên mỗi thực thể (`16 MB – 64 MB` cấu hình theo Manifest; vượt trần hủy phiên tức thì). | Trần bộ nhớ container cứng (`OOM-kill` cô lập bên trong container Sidecar, không ảnh hưởng tiến trình Core). |
-| **Nhật ký Kiểm toán (`Audit`)** | Ghi vết cài đặt, thay đổi phiên bản và vi phạm miền mạng. | Ghi vết nạp gói, từng lần bị ngắt do vượt hạn mức CPU/RAM và mọi nỗ lực gọi host ngoài danh sách trắng (`TP-BR-0803`). | Ghi vết khởi tạo, chứng chỉ mTLS nội bộ, trạng thái sức khỏe và mọi lỗi ngắt mạch giao tiếp Sidecar. |
+| **Filesystem Access (`Filesystem`)** | **None** (`0` file permissions). | **None** (no host WASI filesystem mounted; operates purely on passed byte buffers). | `read-only rootfs`, unprivileged `non-root UID`, bounded tmpfs `/tmp` scratch space only. |
+| **Host Environment (`Host Env`)** | **None** (barred from reading Core's `os.Environ`). | **None** (completely empty environment by default). | Receives solely non-sensitive configuration variables explicitly declared by the `Operator` for that Sidecar. |
+| **Outbound Network (`Network Egress`)** | Exclusively via **Host Egress Proxy** restricted to `allowedHosts`. | Zero raw TCP socket APIs; all HTTP probes flow through Host functions hard-locked to `allowedHosts` + anti-SSRF guards. | Enforced via container/OS network policy: blocks all RFC1918/link-local traffic and permits egress solely via Tanpopo's Egress Proxy or approved host allowlists. |
+| **CPU & Timeout Quotas (*Target Design*)** | `< 1 ms` structural mapping. | Instruction metering (`fuel / epoch interruption`): default `<= 15 ms CPU` per request/response transform and `<= 2 ms CPU` per SSE chunk. | `cgroups` CPU limits (e.g., `0.5–2.0 vCPU`) + hard per-IPC call deadline from Core (`<= 50 ms` for policy hooks, backed by a dedicated circuit breaker). |
+| **Memory Quotas (*Target Design*)** | Zero dedicated heap allocation. | Hard per-instance linear memory ceiling (`16 MB – 64 MB` per Manifest; breaching traps only that invocation). | Hard container memory ceiling (`OOM-kill` contained inside the Sidecar container without impacting Core). |
+| **Audit Trail (`Audit`)** | Logs installation, version pinning, and host allowlist rejections. | Logs module load, every CPU/RAM trap, and any attempted call outside `allowedHosts` (`TP-BR-0803`). | Logs provisioning, internal mTLS certificate rotation, health probes, and Sidecar circuit-breaker trips. |
 
 ---
 
-## 4. Các Điểm Chưa Thể Kết luận Khi Chưa Chạy PoC / Chốt ADR (`Open Technical Unknowns`)
+## 4. Open Technical Unknowns Pending PoC / ADR Finalization (`Open Technical Unknowns`)
 
-Tuân thủ kỷ luật minh bạch kiến trúc, các chi tiết dưới đây được ghi nhận là **chưa đóng băng** và cần kiểm chứng thực nghiệm ở bước tiếp theo trước khi chốt chuẩn `1.0`:
-1. **`POC-01` — Chuẩn Giao diện Wasm cụ thể (`WASI Preview 2 / Component Model WIT` vs ABI tối giản kiểu `Extism`):** Phụ thuộc vào độ trưởng thành của trình biên dịch đa ngôn ngữ (đặc biệt là TypeScript/Python sang Wasm) và độ trễ truyền mảnh SSE thực tế trong thử nghiệm `EXP-01` (`ASM-002`).
-2. **`POC-02` — Ngôn ngữ Biểu thức An toàn trong Gói Khai báo (Tầng 1):** Cần đo đạc thực tế trên 10 nhà cung cấp AI khác nhau (`EXP-02`) để chọn tập toán tử ánh xạ JSON/template tối giản nhất mà vẫn đạt độ phủ `>= 75%` (`ASM-004`), tránh tự phát minh lại một ngôn ngữ lập trình phức tạp trong YAML.
-3. **`POC-03` — Giao thức IPC giữa Core và Isolated Sidecar (Tầng 3):** Lựa chọn giữa `ConnectRPC / gRPC` và `HTTP/2 JSON + SSE` qua Unix Domain Socket / mTLS sẽ được chốt đồng bộ cùng ngôn ngữ Core (`OQ-001`).
+In accordance with architectural transparency discipline, the items below remain **explicitly unfrozen** and require empirical PoC verification before locking the `1.0` specification:
+1. **`POC-01` — Concrete Wasm ABI Standard (`WASI Preview 2 / Component Model WIT` vs Minimal `Extism`-Style ABI):** Contingent on polyglot toolchain maturity (especially TypeScript/Python-to-Wasm) and measured SSE chunk-relay latency in spike `EXP-01` (`ASM-002`).
+2. **`POC-02` — Safe Expression Subset in Declarative Packages (Tier 1):** Requires empirical validation across 10 diverse AI providers (`EXP-02`) to select the smallest JSON-mapping/template operator set achieving `>= 75%` coverage (`ASM-004`) without inventing an ad-hoc programming language inside YAML.
+3. **`POC-03` — Core-to-Isolated-Sidecar IPC Wire Protocol (Tier 3):** Selecting between `ConnectRPC / gRPC` and `HTTP/2 JSON + SSE` over Unix Domain Sockets / mTLS will be finalized jointly with the Core implementation language decision (`OQ-001`).

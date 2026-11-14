@@ -1,74 +1,74 @@
-# Cô lập Sandbox Phần Mở rộng & Bảo mật Chuỗi Cung ứng (Plugin Sandbox, Provenance & Supply-Chain Security) — Tanpopo
+# Plugin Sandbox, Provenance & Supply-Chain Security — Tanpopo
 
-> **Tài liệu Kỹ thuật Bảo mật Nền tảng Mở rộng (Phase ASTRA A07 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — NO CODE`)**
-> - **Mã tài liệu:** `SPEC-SEC-02` | **Phiên bản:** `0.1.0-step07-draft` | **Ngày cập nhật:** `2026-11-12`
-> - **Vai trò biên soạn:** Principal Security Engineer & Sandbox Runtime Architect
-> - **Trạng thái quản trị:** **Đặc tả Bảo mật Đề xuất (`PROPOSED`)** — quy định chi tiết các chốt kiểm soát phòng vệ chiều sâu cho [`extension-contract.md`](../specifications/extension-contract.md) (`SPEC-EXT-01`), [`marketplace-lifecycle.md`](../specifications/marketplace-lifecycle.md) (`SPEC-EXT-04`), [`ADR-0002`](../architecture/adr/0002-three-tier-extension-sandbox-and-blind-broker.md) và [`security-checklist.md`](../../.agents/references/security-checklist.md).
-> - **Truy vết Yêu cầu:** `DEC-002`, `DEC-004`, `TP-FR-0301`..`0307`, `TP-FR-0705`, `TP-FR-1004`, `TP-NFR-0202`, `TP-NFR-0401`, `TP-NFR-0403`, `RSK-001`, `RSK-005`, `RSK-012`, `RSK-014`.
+> **Extension Platform Security Specification (Phase ASTRA A07 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — NO CODE`)**
+> - **Document ID:** `SPEC-SEC-02` | **Version:** `0.1.0-step07-draft` | **Last Updated:** `2026-11-12`
+> - **Authoring Role:** Principal Security Engineer & Sandbox Runtime Architect
+> - **Governance Status:** **Proposed Security Specification (`PROPOSED`)** — defines defense-in-depth security controls for [`extension-contract.md`](../specifications/extension-contract.md) (`SPEC-EXT-01`), [`marketplace-lifecycle.md`](../specifications/marketplace-lifecycle.md) (`SPEC-EXT-04`), [`ADR-0002`](../architecture/adr/0002-three-tier-extension-sandbox-and-blind-broker.md), and [`security-checklist.md`](../../.agents/references/security-checklist.md).
+> - **Requirements Traceability:** `DEC-002`, `DEC-004`, `TP-FR-0301`..`0307`, `TP-FR-0705`, `TP-FR-1004`, `TP-NFR-0202`, `TP-NFR-0401`, `TP-NFR-0403`, `RSK-001`, `RSK-005`, `RSK-012`, `RSK-014`.
 
 ---
 
-## 1. Bảo mật Chuỗi Cung ứng Kép: Cho Chính Tanpopo Core & Cho Hệ sinh thái Extension
+## 1. Dual Supply-Chain Security: Tanpopo Core & the Extension Ecosystem
 
-Một hệ thống AI Gateway chỉ an toàn khi **cả hai chuỗi cung ứng** — (A) chuỗi biên dịch nhị phân/giao diện của chính dự án Tanpopo và (B) chuỗi phân phối các gói `Extension` do người dùng cài thêm — đều được khóa chặt chống đầu độc:
+An AI Gateway is only trustworthy when **both supply chains** — (A) the build pipeline producing Tanpopo's own Core binary and Web Console, and (B) the distribution pipeline delivering user-installed `Extension` packages — are hardened against tampering and poisoning:
 
-### 1.1. Chuỗi Cung ứng Nội bộ Của Tanpopo (`Core & Web Console Build Hardening`)
-Tuân thủ nghiêm ngặt mục *Dependency Security & Install-Script Gate* trong [`security-checklist.md`](../../.agents/references/security-checklist.md):
-1. **Một Tệp Khóa Có Thẩm quyền Duy nhất Trên Mỗi Ranh giới Cài đặt:**
-   - Phần Core Go khóa bằng `go.mod` + `go.sum` (`go build -mod=readonly -trimpath`, `CGO_ENABLED=0`); phần Web Console khóa bằng `package-lock.json` duy nhất thông qua `npm ci`. Cổng CI dừng ngay nếu phát hiện tệp khóa cạnh tranh (`yarn.lock` / `pnpm-lock.yaml` thừa) hoặc tệp khóa bị sửa đổi trong quá trình dựng.
-2. **Chặn Kịch bản Cài đặt Phụ thuộc Trước Khi Chạy (`Default-Deny Lifecycle Scripts`):**
-   - Mọi bước cài đặt gói Node.js cho giao diện quản trị bắt buộc chạy với cờ **`npm ci --ignore-scripts`** (hoặc chính sách `strict-allow-scripts=true` đã duyệt từng phiên bản cụ thể). Tuyệt đối không phê duyệt tràn lan kịch bản `postinstall` chưa qua đọc mã nguồn.
-3. **Quét Lỗ hổng Theo Khả năng Chạm Tới, Ký Số & Xuất `SBOM` Cho Mỗi Bản Phát hành:**
-   - Quét tự động `govulncheck ./...`, `npm audit` và `osv-scanner scan source -r .` trên mỗi PR; nghiêm cấm chạy tự động `npm audit fix --force`.
-   - Mỗi bản phát hành chính thức của `tanpopod` / `tanpopo` CLI sinh kèm hóa đơn vật liệu phần mềm **`CycloneDX SBOM` (`sbom.cdx.json`)**, chứng thực nguồn gốc dựng **`SLSA Build Provenance`** và chữ ký không khóa **`Sigstore Cosign`** để người tự vận hành kiểm tra trước khi chạy.
+### 1.1. Internal Supply Chain for Tanpopo (`Core & Web Console Build Hardening`)
+Strictly enforces the *Dependency Security & Install-Script Gate* in [`security-checklist.md`](../../.agents/references/security-checklist.md):
+1. **Single Authoritative Lockfile per Install Boundary:**
+   - The Go Core locks dependencies via `go.mod` + `go.sum` (`go build -mod=readonly -trimpath`, `CGO_ENABLED=0`); the Web Console locks dependencies via a single `package-lock.json` enforced through `npm ci`. The CI gate fails immediately if competing lockfiles (`yarn.lock` / `pnpm-lock.yaml`) are detected or if any lockfile mutates during build.
+2. **Default-Deny Dependency Lifecycle Scripts (`Default-Deny Lifecycle Scripts`):**
+   - Every Node.js dependency installation step for the Admin Console must run with **`npm ci --ignore-scripts`** (or an explicit per-package, version-pinned `strict-allow-scripts=true` allowlist). Blanket approval of uninspected `postinstall` scripts is strictly prohibited.
+3. **Reachability-Aware Vulnerability Scanning, Cryptographic Signing & Release `SBOM`:**
+   - Automated scans via `govulncheck ./...`, `npm audit`, and `osv-scanner scan source -r .` run on every PR; automated `npm audit fix --force` execution is strictly forbidden.
+   - Every official release of `tanpopod` / `tanpopo` CLI ships with a **`CycloneDX SBOM` (`sbom.cdx.json`)**, **`SLSA Build Provenance`** attestation, and keyless **`Sigstore Cosign`** signatures for self-hosted operators to verify prior to execution.
 
-### 1.2. Chuỗi Cung ứng Cho Gói Phần Mở rộng Bên Ngoài (`Extension Provenance & Verification`)
+### 1.2. External Extension Package Supply Chain (`Extension Provenance & Verification`)
 
 ```mermaid
 flowchart LR
-    P1["1. Nhận Nguồn Gói (Marketplace / Git 40-hex SHA / .tpkg / OCI Digest)"] --> P2["2. Giải nén Bộ nhớ Giới hạn (<=64 MiB, Chặn Zip-Slip & Symlink)"]
-    P2 --> P3["3. Đối chiếu Băm SHA-256 & Danh sách Thu hồi (revocations.json)"]
-    P3 --> P4["4. Xác thực Chữ ký Mật mã (Cosign / Ed25519) -> Suy xuất Trust Tier"]
-    P4 --> P5["5. Kiểm định Tĩnh Manifest, Contract Version & SBOM Gói"]
-    P5 --> P6["6. Cổng Người Duyệt Bảng Quyền -> Ghi Bất biến tanpopo.lock"]
+    P1["1. Ingest Package Source (Marketplace / 40-hex Git SHA / .tpkg / OCI Digest)"] --> P2["2. Bounded In-Memory Extraction (<=64 MiB, Block Zip-Slip & Symlinks)"]
+    P2 --> P3["3. Verify SHA-256 Digest & Revocation Feed (revocations.json)"]
+    P3 --> P4["4. Verify Cryptographic Signature (Cosign / Ed25519) -> Derive Trust Tier"]
+    P4 --> P5["5. Static Inspection of Manifest, Contract Version & Package SBOM"]
+    P5 --> P6["6. Human Permission Approval Gate -> Immutable tanpopo.lock Write"]
 ```
 
-| Chốt Kiểm soát Chuỗi Cung ứng | Quy tắc Thực thi Kỹ thuật Cụ thể | Xử lý Khi Vi phạm |
+| Supply-Chain Control | Concrete Technical Enforcement Rule | Violation Handling |
 |---|---|---|
-| **Cấm Tham chiếu Động (`No Mutable Refs`)** | Khi cài từ Git hoặc kho OCI ở môi trường sản xuất, hệ thống buộc phân giải và ghim vào **`commit SHA` 40 ký tự** hoặc **`OCI sha256 digest`** kèm mã băm `SHA-256` của toàn bộ gói nén trong `tanpopo.lock`. | Từ chối cài đặt nếu `expected_sha256` không khớp từng bit (`exit 22` / `400 hash_mismatch`). |
-| **Xác thực Nguồn gốc Tách Rời Khỏi Lời Tự Khai** | Nhãn `official` chỉ được cấp khi chữ ký khớp khóa gốc của dự án Tanpopo; `verified` khi khớp chứng chỉ nhà phát hành đã đăng ký trong sổ cái công khai và không bị thu hồi; `private-enterprise` khi khớp khóa công khai nội bộ do `OPERATOR` cấu hình tại `/etc/tanpopo/trusted-keys/`. Mọi trường hợp còn lại bắt buộc mang nhãn `unverified-external`. | Bác bỏ mọi nỗ lực giả mạo trường `trustTier` hoặc chiếm dụng tiền tố `@tanpopo-official/*` (`CT-05`). |
-| **Gắn Kèm `SBOM` Trong Gói `.tpkg` (`Tier-2` / `Tier-3`)** | Lệnh `tanpopo plugin pack` tự động nhúng tệp `bom.cdx.json` liệt kê các thư viện biên dịch vào `.wasm` / ảnh Sidecar để doanh nghiệp có thể quét CVE nhanh đối với toàn bộ phần mở rộng đang cài mà không cần mã nguồn gốc. | Gói thiếu `SBOM` không được xét cấp nhãn `verified` trên Marketplace chính thức. |
-| **Cơ chế Cảnh báo Thu hồi & Cách ly Khẩn (`CVE / Malicious Quarantine`)** | Máy chủ có thể đối chiếu định kỳ (hoặc nạp ngoại tuyến qua `tanpopo bundle import`) tệp `revocations.json` đã ký số. Nếu phát hiện phiên bản phần mở rộng đang cài dính mã độc mức `CRITICAL`, hệ thống phát cảnh báo `PAGE` và cho phép (hoặc tự động theo chính sách máy chủ) chuyển gói sang **`QUARANTINED`** trong `< 5 giây`. | Ngắt toàn bộ kết nối dùng gói đó, cắt luồng mở và xuất báo cáo bán kính tác động (`INC-03`). |
+| **No Mutable References (`No Mutable Refs`)** | When installing from Git or an OCI registry in production, the installer resolves and pins to a **40-character `commit SHA`** or **`OCI sha256 digest`** paired with the full archive `SHA-256` digest in `tanpopo.lock`. | Reject installation immediately if `expected_sha256` fails bit-for-bit verification (`exit 22` / `400 hash_mismatch`). |
+| **Provenance Verification Decoupled from Self-Declaration** | The `official` tier is granted only when the signature matches the Tanpopo project root key; `verified` when matching a non-revoked publisher certificate registered in the public transparency ledger; `private-enterprise` when matching an internal public key configured by `OPERATOR` under `/etc/tanpopo/trusted-keys/`. Every other package is unconditionally labeled `unverified-external`. | Reject any attempt to spoof the `trustTier` field or squat on the `@tanpopo-official/*` prefix (`CT-05`). |
+| **Embedded `SBOM` Inside `.tpkg` Archives (`Tier-2` / `Tier-3`)** | `tanpopo plugin pack` automatically embeds `bom.cdx.json` enumerating libraries compiled into the `.wasm` module or Sidecar image so enterprises can run fast CVE scans across installed extensions without requiring original source code. | Packages lacking an embedded `SBOM` are ineligible for the `verified` badge on the official Marketplace. |
+| **Revocation Feed & Emergency Quarantine (`CVE / Malicious Quarantine`)** | Instances periodically poll (or import offline via `tanpopo bundle import`) a cryptographically signed `revocations.json` feed. If an installed extension version matches a `CRITICAL` malware or CVE advisory, the system emits a `PAGE` alert and allows (or automatically triggers per instance policy) transition to **`QUARANTINED`** within `< 5s`. | Sever all connections using that package, abort open streams, and emit a blast-radius forensic report (`INC-03`). |
 
 ---
 
-## 2. Biên giới Cô lập Cứng Ở Ba Tầng Thực thi (`Sandbox Resource & Network Boundaries`)
+## 2. Hard Isolation Boundaries Across Three Execution Tiers (`Sandbox Resource & Network Boundaries`)
 
-Tanpopo áp dụng nguyên tắc **Quyền Tối thiểu Theo Năng lực (`Capability-Based Least Privilege`)**: phần mở rộng bắt đầu với **`0` quyền** và chỉ nhận được đúng các hàm cầu nối (`Host Functions`) khớp với những gì quản trị viên đã duyệt trong `Permission Inspection Sheet`:
+Tanpopo enforces **Capability-Based Least Privilege**: every extension starts with **`0` capabilities** and receives only the exact `Host Functions` corresponding to permissions explicitly approved by an administrator in the `Permission Inspection Sheet`:
 
-| Khía cạnh Cô lập | `Tier 1: Declarative Pack` *(Mặc định Khuyến nghị)* | `Tier 2: Wasm Capability Sandbox` (`wazero` Pure-Go) | `Tier 3: Isolated Sidecar` *(Chỉ Doanh nghiệp / Nặng)* |
+| Isolation Dimension | `Tier 1: Declarative Pack` *(Recommended Default)* | `Tier 2: Wasm Capability Sandbox` (`wazero` Pure-Go) | `Tier 3: Isolated Sidecar` *(Enterprise / Heavy Only)* |
 |---|---|---|---|
-| **Thực thi Mã Tùy ý** | **Không (`0` mã thực thi)** — chỉ là dữ liệu cấu hình JSON/YAML được trình thông dịch an toàn của Core đọc. | Chạy mã bytecode WebAssembly trong không gian địa chỉ tuyến tính tách biệt hoàn toàn với ngăn xếp và vùng nhớ Go của Host. | Chạy trong container/tiến trình không đặc quyền riêng biệt, giao tiếp qua `ConnectRPC` trên UDS hoặc `mTLS`. |
-| **Hệ Tệp (`Filesystem`)** | Không truy cập. | **`0` quyền gắn thư mục hệ tệp Host** (`No WASI preopened dirs`). Mọi thao tác trên đĩa của Host đều bất khả thi từ bên trong Wasm. | Hệ tệp gốc chỉ đọc (`readOnlyRootFilesystem: true`), chỉ có `/tmp` bộ nhớ ngắn hạn giới hạn `64 MiB`. |
-| **Biến Môi trường & Tiến trình** | Không truy cập. | **`0` biến môi trường Host**, không có đồng hồ độ phân giải nano-giây phục vụ tấn công kênh kề thời gian, không thể gọi `fork`/`exec`. | Chỉ nhận cấu hình phi bí mật riêng của Sidecar; bật `NoNewPrivileges`, gỡ toàn bộ `Linux Capabilities` (`cap_drop: ALL`). |
-| **Mạng Đi Ra (`Network Egress`)** | Chỉ qua `Host HTTP Proxy` tới đúng `allowed_hosts` đã duyệt. | **Không có quyền mở socket TCP/UDP trực tiếp.** Chỉ trả về cấu trúc `UpstreamHttpSpec` để Host kiểm tra `allowed_hosts` + `SSRFGuard` rồi mới gọi mạng hộ. | Khóa cứng bằng `Kubernetes NetworkPolicy` / tường lửa hệ điều hành: chỉ được nói chuyện với `tanpopod` (hoặc cổng egress proxy kiểm soát). |
-| **Trần CPU / Chống Treo Vòng lặp** | Biểu thức ánh xạ không Turing-complete (`0` vòng lặp). | Giới hạn thời gian thực thi mỗi lần gọi móc (`<= 50 ms` cho biến đổi yêu cầu, `<= 5 ms` cho mảnh SSE — *`TARGET / UNVERIFIED`*) thông qua cơ chế đóng ngữ cảnh cắt ngang của `wazero`. | Giới hạn `cgroup CPU quota` + `ConnectRPC deadline` cứng từ phía Host; quá hạn sẽ cắt kết nối. |
-| **Trần Bộ nhớ (`Memory Cap`)** | Kích thước tệp cấu hình `<= 1 MiB`. | Khóa cứng trần trang bộ nhớ tuyến tính Wasm (`maxMemoryPages`: mặc định **`16 MiB`**, tối đa tuyệt đối **`64 MiB`** nếu được duyệt). Tràn bộ nhớ chỉ hủy đúng phiên Wasm đó, tiến trình Core giữ nguyên `100%` ổn định. | Giới hạn `cgroup memory.max` (ví dụ `256 MiB`); nếu `OOMKilled` không ảnh hưởng tiến trình `tanpopod`. |
-| **Tiếp cận Bí mật (`Secrets`)** | Chỉ khai báo tên khe `secret_slot` để `Blind Broker` tiêm hộ. | **Mặc định mù (`0 byte` khóa thật trong bộ nhớ Wasm).** Chế độ ngoại lệ mở niêm phong có phạm vi (`scoped_secret_unseal`) bị tắt mặc định, chỉ mở khi quản trị viên cấp cao phê duyệt đặc biệt cho bài toán ký số tùy biến không chuẩn. | Mặc định ưu tiên để Host tiêm hộ ở biên; nếu Sidecar bắt buộc cầm chứng chỉ riêng thì chỉ được cấp đúng thông tin của `Connection` đó, tuyệt đối không thấy kho chung. |
+| **Arbitrary Code Execution** | **None (`0` executable code)** — pure JSON/YAML configuration interpreted by the Core safe evaluator. | Executes WebAssembly bytecode inside a linear memory address space completely isolated from the Host Go stack and heap. | Runs inside a dedicated unprivileged container/process communicating over `ConnectRPC` via UDS or mutual `mTLS`. |
+| **Filesystem** | No access. | **`0` preopened Host filesystem directories** (`No WASI preopened dirs`). Host disk operations are structurally impossible from inside Wasm. | Read-only root filesystem (`readOnlyRootFilesystem: true`) with only an ephemeral tmpfs `/tmp` capped at `64 MiB`. |
+| **Environment Variables & Processes** | No access. | **`0` Host environment variables**, no nanosecond-resolution clock for timing side-channel attacks, and no `fork`/`exec` capability. | Receives only non-secret Sidecar-specific config; enforces `NoNewPrivileges` and drops all Linux capabilities (`cap_drop: ALL`). |
+| **Network Egress** | Only through `Host HTTP Proxy` to approved `allowed_hosts`. | **No direct TCP/UDP socket access.** Returns an `UpstreamHttpSpec` structure for the Host to validate against `allowed_hosts` + `SSRFGuard` before executing outbound calls on its behalf. | Locked down via `Kubernetes NetworkPolicy` / OS firewall: permitted to communicate only with `tanpopod` (or a controlled egress proxy). |
+| **CPU Cap / Infinite-Loop Protection** | Non-Turing-complete mapping expressions (`0` loops). | Per-hook execution deadline (`<= 50 ms` for request transforms, `<= 5 ms` per SSE chunk — *`TARGET / UNVERIFIED`*) enforced via `wazero` interruptible context cancellation. | Enforced via `cgroup CPU quota` + hard Host-side `ConnectRPC deadline`; deadline expiry terminates the RPC stream. |
+| **Memory Cap** | Declarative pack size `<= 1 MiB`. | Hard Wasm linear memory page ceiling (`maxMemoryPages`: **`16 MiB`** default, **`64 MiB`** absolute maximum when explicitly approved). OOM aborts only that Wasm instance while the Core process remains `100%` stable. | Enforced via `cgroup memory.max` (e.g., `256 MiB`); Sidecar `OOMKilled` events never impact `tanpopod`. |
+| **Secrets Access** | Declares symbolic `secret_slot` names only for `Blind Broker` injection. | **Blind by default (`0 bytes` of raw secret material in Wasm memory).** The scoped unsealing exception (`scoped_secret_unseal`) is disabled by default and requires privileged administrator approval for non-standard custom request signing. | Defaults to Host-side edge injection; if a Sidecar strictly requires a dedicated client certificate, it receives only that `Connection`'s credential and never sees the shared vault. |
 
 ---
 
-## 3. Kiểm soát Vòng đời Cài đặt, Cập nhật Chống Leo thang Quyền & Gỡ Bỏ An toàn
+## 3. Installation Lifecycle Controls, Anti-Escalation Updates & Safe Uninstallation
 
-1. **Cổng Chặn Tự động Nâng Quyền Khi Cập nhật (`Anti-Escalation Re-Consent Gate` — `TP-BR-0403`):**
-   - Trước khi kích hoạt bản cập nhật từ phiên bản $v_{old}$ lên $v_{new}$, Core tính toán tập hợp chênh lệch quyền:
+1. **Anti-Escalation Re-Consent Gate on Updates (`TP-BR-0403`):**
+   - Before activating an update from version $v_{old}$ to $v_{new}$, Core computes the capability delta set:
 
 $$
 \Delta P = P(v_{new}) \setminus P(v_{old})
 $$
 
-   - Nếu $\Delta P \neq \emptyset$ (ví dụ thêm dù chỉ 1 tên miền mới vào `network.allowed_hosts`, thêm 1 khe bí mật mới, nâng tầng thực thi từ `Tier 1` lên `Tier 2`, hoặc tăng trần bộ nhớ), bản cập nhật **bị khóa cứng ở trạng thái `UPDATING_PENDING_RECONSENT`**, lưu lượng sản xuất tiếp tục chảy qua $v_{old}$ không gián đoạn cho tới khi quản trị viên (và `Reviewer` nếu bật `Four-Eyes`) ký duyệt rõ ràng bản chênh lệch $\Delta P$ kèm bản ghi kiểm toán.
-2. **Thao tác Xóa / Gỡ Cài đặt Tập tin An toàn (`Safe Path Containment`):**
-   - Khi gỡ bỏ một phiên bản phần mở rộng cũ không còn được tham chiếu trên đĩa, bộ quản lý gói tuân thủ quy tắc *Destructive Operations on Derived Paths* trong [`security-checklist.md`](../../.agents/references/security-checklist.md): phân giải đường dẫn thật (`filepath.EvalSymlinks`), xác minh nằm sâu ít nhất `1` cấp bên dưới thư mục gốc cho phép `/var/lib/tanpopo/plugins/blobs/` và khớp dấu sở hữu mã băm trước khi xóa — không bao giờ ghép chuỗi tên gói từ `Manifest` trực tiếp vào lệnh xóa tệp.
-3. **Cách ly Sự cố Lỗi Liên tiếp (`Per-Extension Fault Breaker`):**
-   - Nếu một phần mở rộng gây lỗi hoảng loạn (`trap` / `panic` / `OOM`) vượt ngưỡng cấu hình (ví dụ `> 20 lần` trong `60 giây`), bộ bảo vệ tự động mở mạch bảo vệ riêng cho phần mở rộng đó, thu hồi các phiên Wasm hỏng khỏi hồ tái sử dụng và phát cảnh báo `ALT-PLUGIN-TRAP` mà không làm chậm bất kỳ nhà cung cấp nào khác trên cùng máy chủ.
+   - If $\Delta P \neq \emptyset$ (for example, adding even a single new domain to `network.allowed_hosts`, requesting a new secret slot, escalating execution tier from `Tier 1` to `Tier 2`, or raising the memory cap), the update is **hard-locked in `UPDATING_PENDING_RECONSENT`**. Production traffic continues flowing uninterrupted through $v_{old}$ until an administrator (plus an independent `Reviewer` when `Four-Eyes` is enabled) explicitly signs off on $\Delta P$ with an immutable audit record.
+2. **Safe File Uninstallation & Garbage Collection (`Safe Path Containment`):**
+   - When pruning an unreferenced historical extension version from disk, the package manager enforces the *Destructive Operations on Derived Paths* rule in [`security-checklist.md`](../../.agents/references/security-checklist.md): resolve canonical real paths (`filepath.EvalSymlinks`), verify a depth of at least `1` directory level beneath the allowed root `/var/lib/tanpopo/plugins/blobs/`, and verify content-hash ownership markers before deletion — never concatenating raw `Manifest` package names directly into file removal calls.
+3. **Consecutive Fault Isolation (`Per-Extension Fault Breaker`):**
+   - If an extension triggers panics or runtime faults (`trap` / `panic` / `OOM`) exceeding the configured threshold (e.g., `> 20` faults within `60s`), the fault guard trips a dedicated circuit breaker for that extension, evicts tainted Wasm instances from the warm instance pool, and emits `ALT-PLUGIN-TRAP` without degrading any other provider running on the same host.

@@ -1,90 +1,90 @@
-# Định vị Sản phẩm, Thước đo Thành công, Phạm vi Phát hành & Thử nghiệm Kiểm chứng — Tanpopo
+# Product Positioning, Success Metrics, Release Scope & Discovery Experiments — Tanpopo
 
-> **Tài liệu Discovery (Phase ASTRA A01 — Gate G1: `READY_FOR_REVIEW`)**
-> - **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Product Intelligence Lead
-> - **Trạng thái:** Đề xuất chiến lược sản phẩm (`PROPOSED`), trình Product Owner xem xét tại Cổng G1. Chưa khóa thành yêu cầu bắt buộc cho tới khi được phê duyệt.
-
----
-
-## 1. Tuyên bố Định vị Đề xuất (Proposed Positioning Statement — `PROPOSED`)
-
-### 1.1. Khung Định vị Cốt lõi
-
-- **Dành cho:** Các **Nhóm phát triển sản phẩm (Dev Teams 5–50 kỹ sư)** và **Đội ngũ Hạ tầng AI (AI Platform Teams)** đang vận hành ứng dụng đa mô hình, công cụ MCP và tác nhân tự động trong thực tế,
-- **Những người đang gặp vấn đề:** Bị kẹt giữa các AI Gateway mã nguồn mở đóng cứng hàng trăm tích hợp vào nhân (dễ lỗi khi nâng cấp, khóa tính năng quản trị bảo mật vào bản Enterprise đắt đỏ) và các cổng đám mây phức tạp đòi hỏi Kubernetes/Istio hoặc thu thuế phần trăm theo lưu lượng,
-- **Tanpopo là:** Một **AI Gateway mã nguồn mở (Apache-2.0), ưu tiên tự vận hành (self-hosted-first) và lấy khả năng mở rộng an toàn làm trung tâm (extension-first)**,
-- **Mang lại giá trị cốt lõi:** Thống nhất điều phối, chính sách bảo mật, giám sát và kiểm soát ngân sách trên cả 3 mặt phẳng lưu lượng tách biệt (**Model Providers, MCP Tools và Agent-to-Agent / A2A**), đồng thời cho phép cài đặt hoặc tự phát triển **Provider Adapters và Extensions** có cô lập bảo mật ngay từ Marketplace, Git, URL hoặc kho nội bộ **mà không cần nâng cấp Tanpopo Core**,
-- **Khác với LiteLLM, Portkey, Agentgateway hay OpenRouter:** Tanpopo kết hợp trải nghiệm tự khởi chạy trong 1 lệnh kèm sẵn Web Console + CLI với kiến trúc Plugin có sandbox, kiểm thử hợp đồng tự động và cam kết tuân thủ các phương thức kết nối chính thống (không bẫy tường phí bảo mật cơ bản, không dựa vào vùng xám bẻ khóa gói thuê bao cá nhân).
-
-### 1.2. Thông điệp Ngắn gọn (One-Line Pitch — `PROPOSED`)
-> **"Tanpopo — Cổng AI tự vận hành mở rộng bằng Plugin cô lập: Quản trị thống nhất Models, MCP Tools và A2A Agents mà không cần chờ nâng cấp Core."**
+> **Discovery Document (Phase ASTRA A01 — Gate G1: `READY_FOR_REVIEW`)**
+> - **Last Updated:** `2026-11-11`
+> - **Authored By:** Product Intelligence Lead
+> - **Status:** Strategic product proposal (`PROPOSED`), submitted to the Product Owner for review at Gate G1. Not locked as mandatory requirements until formally approved.
 
 ---
 
-## 2. Hệ thống Thước đo Thành công (North Star Metric & Measurable Outcomes — `PROPOSED`)
+## 1. Proposed Positioning Statement (`PROPOSED`)
 
-### 2.1. North Star Metric (NSM) cho Hạ tầng Mã nguồn mở Tự vận hành
+### 1.1. Core Positioning Framework
 
-Vì Tanpopo ưu tiên tự host và tôn trọng quyền riêng tư dữ liệu của người dùng (tuyệt đối không thu thập lén dữ liệu ngầm — *zero forced telemetry*), hệ thống đo lường được thiết kế trên 2 góc nhìn bổ trợ nhau:
+- **For:** **Product Development Teams (Dev Teams of 5–50 engineers)** and **AI Platform Teams** operating multi-model applications, MCP tools, and autonomous agents in production,
+- **Who struggle with:** Being trapped between open-source AI Gateways that hardcode hundreds of integrations into their core (causing upgrade regressions and locking baseline security governance behind expensive Enterprise paywalls) and heavyweight cloud proxies that demand Kubernetes/Istio or extract percentage-based usage fees,
+- **Tanpopo is:** An **open-source (Apache-2.0), self-hosted-first, and security-isolated extension-first AI Gateway**,
+- **That delivers:** Unified orchestration, security policy enforcement, observability, and budget governance across 3 distinct traffic planes (**Model Providers, MCP Tools, and Agent-to-Agent / A2A**), while enabling teams to install or author sandboxed **Provider Adapters and Extensions** directly from the Marketplace, Git, URLs, or private registries **without upgrading Tanpopo Core**,
+- **Unlike LiteLLM, Portkey, Agentgateway, or OpenRouter:** Tanpopo pairs a single-command startup experience with a built-in Web Console + CLI alongside a sandboxed Plugin runtime, automated contract testing, and strict adherence to authorized connectivity methods (zero paywall traps on baseline self-hosted security, and zero reliance on grey-market consumer subscription circumvention).
 
-1. **North Star Cấp độ Giá trị Sản phẩm (Hiển thị trực tiếp trên mỗi máy chủ Tanpopo & tổng hợp ẩn danh nếu người dùng chủ động bật opt-in):**
-   - **Chỉ số:** **Số lượng Truy vấn Đa mặt phẳng Được Quản trị qua Extension Đạt chuẩn mỗi Tuần (`Weekly Governed Multi-Plane Requests — WGMR`)**.
-   - *Định nghĩa:* Một truy vấn chỉ được tính vào `WGMR` khi đi qua đầy đủ chuỗi giá trị cốt lõi của Tanpopo: (1) xác thực Virtual Key/Identity hợp lệ, (2) kiểm tra Policy & Hạn mức ngân sách, (3) thực thi qua một Adapter/Plane có kiểm định hợp đồng (`Provider`, `MCP` hoặc `A2A`), và (4) ghi nhận thành công vào sổ cái chi phí/telemetry.
-   - *Lý do chọn:* Phản ánh việc hệ thống thực sự được tin dùng cho lưu lượng hằng ngày chứ không phải lượt tải thử rồi bỏ xó (vanity stars/downloads).
-2. **North Star Cấp độ Khác biệt Hệ sinh thái (Đo lường công khai không cần telemetry):**
-   - **Chỉ số:** **Tỷ lệ Kết nối Nhà cung cấp/Mô hình Mới Không Cần Phát hành lại Core (`Zero-Core-Release Onboarding Rate`)** kết hợp **Số lượng Gói Adapter/Extension Đạt Kiểm thử Hợp đồng Tự động (`Verified Contract-Passing Extensions`)**.
-   - *Mục tiêu khi đạt độ chín (`v1.0`):* `>= 90%` mô hình hoặc nhà cung cấp AI mới xuất hiện trên thị trường được cộng đồng/đội ngũ hỗ trợ chỉ bằng cách cập nhật hoặc cài mới gói Adapter mà không phải nâng cấp tệp thực thi Tanpopo Core.
+### 1.2. One-Line Pitch (`PROPOSED`)
+> **"Tanpopo — The self-hosted AI Gateway powered by sandboxed plugins: Unify governance across Models, MCP Tools, and A2A Agents without waiting on Core upgrades."**
 
-### 2.2. Các Chỉ tiêu Kỹ thuật & Trải nghiệm Đo lường được (Measurable Outcomes / SLO Hypotheses)
+---
 
-| Nhóm mục tiêu | Thước đo cụ thể | Ngưỡng mục tiêu đề xuất (`PROPOSED`) | Ý nghĩa thực tế |
+## 2. Success Metrics Framework (North Star Metric & Measurable Outcomes — `PROPOSED`)
+
+### 2.1. North Star Metric (NSM) for Self-Hosted Open-Source Infrastructure
+
+Because Tanpopo is self-hosted-first and strictly respects user data privacy (*zero forced telemetry*), its measurement model combines two complementary lenses:
+
+1. **Product-Value North Star (Displayed locally on every Tanpopo instance & aggregated anonymously only when operators explicitly opt in):**
+   - **Metric:** **Weekly Governed Multi-Plane Requests (`WGMR`)**.
+   - *Definition:* A request counts toward `WGMR` if and only if it traverses Tanpopo's complete core value chain: (1) valid Virtual Key/Identity authentication, (2) Policy & budget quota evaluation, (3) execution through a contract-verified Adapter/Plane (`Provider`, `MCP`, or `A2A`), and (4) successful settlement into the cost/telemetry ledger.
+   - *Rationale:* Reflects genuine day-to-day operational reliance rather than vanity GitHub stars or one-off container downloads.
+2. **Ecosystem-Differentiation North Star (Publicly measurable with zero telemetry):**
+   - **Metric:** **Zero-Core-Release Onboarding Rate** paired with **Verified Contract-Passing Extensions**.
+   - *Maturity Target (`v1.0`):* `>= 90%` of newly launched AI models or providers in the market are onboarded by the community or maintainers solely by publishing or updating an Adapter package without releasing a new Tanpopo Core binary.
+
+### 2.2. Measurable Technical & UX Outcomes (SLO Hypotheses)
+
+| Goal Category | Metric | Proposed Target Threshold (`PROPOSED`) | Practical Rationale |
 |---|---|---|---|
-| **UX Khởi đầu (Onboarding)** | **Time-to-First-Governed-Request (`TTFGR`)** | **`< 3 phút`** từ lúc tải container/binary đến lúc gọi thành công request đầu tiên có ghi log & chi phí | Đảm bảo tính *"dùng được thực tế"* cho cả Solo Dev lẫn nhóm nhỏ mà không cần đọc tài liệu hàng giờ. |
-| **UX Nhà phát triển Plugin** | **Time-to-First-Custom-Adapter (`TTFCA`)** | **`< 30 phút`** cho gói khai báo (Declarative Tier-1) và **`< 2 giờ`** cho gói Wasm (Tier-2) có sẵn khung SDK | Hạ thấp rào cản để phá vỡ bài toán "con gà – quả trứng" của Marketplace. |
-| **Hiệu năng Đường dữ liệu** | **Gateway Internal Latency Overhead (`p95`)** | **`< 2 ms`** (Tier-1 Declarative) / **`< 5 ms`** (Tier-2 Wasm Sandbox), chưa tính độ trễ mạng của hãng AI | Không làm chậm tốc độ phản hồi streaming của mô hình hay tác nhân. |
-| **Tài nguyên Tự vận hành** | **Mức tiêu thụ RAM khi rỗi (Standalone Mode)** | **`< 128 MB RAM`** (bao gồm cả tiến trình Core, cơ sở dữ liệu nhúng và tệp tĩnh Web Console) | Chạy nhẹ nhàng trên máy trạm cá nhân hoặc VPS giá rẻ nhất. |
-| **An toàn Vận hành & Chi phí** | **Độ trễ Thu hồi Khóa / Cách ly Plugin Khẩn cấp** | **`< 1 giây`** (chế độ đơn lẻ) / **`< 5 giây`** (chế độ cụm phân tán HA) | Đáp ứng yêu cầu ứng phó sự cố thực tế (`UC-07`, `UC-09`). |
-| **Độ chính xác Sổ cái Ngân sách** | **Sai số Vượt trần Ngân sách khi Bắn luồng Song song** | **`<= 1` luồng đang mở tối đa** nhờ cơ chế tạm giữ hạn mức trước khi cho qua (`Pre-reservation`) | Chặn đứng rủi ro cháy túi do vòng lặp agent lỗi (`UC-08`). |
+| **Onboarding UX** | **Time-to-First-Governed-Request (`TTFGR`)** | **`< 3 minutes`** from downloading the container/binary to completing the first logged & cost-metered request | Guarantees real Day-1 usability for Solo Devs and small teams without hours of manual setup. |
+| **Plugin Author UX** | **Time-to-First-Custom-Adapter (`TTFCA`)** | **`< 30 minutes`** for a Declarative pack (Tier-1) and **`< 2 hours`** for a Wasm pack (Tier-2) using SDK templates | Lowers authoring friction to break the Marketplace "chicken-and-egg" loop. |
+| **Data-Plane Performance** | **Gateway Internal Latency Overhead (`p95`)** | **`< 2 ms`** (Tier-1 Declarative) / **`< 5 ms`** (Tier-2 Wasm Sandbox), excluding upstream AI provider network latency | Preserves snappy streaming responsiveness for interactive models and agents. |
+| **Self-Hosted Footprint** | **Idle RAM Consumption (Standalone Mode)** | **`< 128 MB RAM`** (encompassing Core process, embedded database, and static Web Console assets) | Runs effortlessly on developer laptops or entry-level VPS instances. |
+| **Operational & Financial Safety** | **Emergency Key Revocation / Plugin Quarantine Latency** | **`< 1 second`** (standalone mode) / **`< 5 seconds`** (distributed HA cluster mode) | Meets real-world incident containment requirements (`UC-07`, `UC-09`). |
+| **Budget Ledger Precision** | **Concurrent Streaming Budget Overshoot Bound** | **`<= 1` maximum in-flight stream margin** via pre-request quota holds (`Pre-reservation`) | Neutralizes runaway agent loops before they drain cloud budgets (`UC-08`). |
 
 ---
 
-## 3. Ranh giới Sản phẩm: Core vs Optional Extension vs Out-of-Scope (`PROPOSED`)
+## 3. Product Boundaries: Core vs Optional Extension vs Out-of-Scope (`PROPOSED`)
 
-Việc vạch rõ ranh giới ngay từ bước Discovery giúp Tanpopo giữ cho phần nhân luôn gọn, nhanh, dễ kiểm toán bảo mật, đồng thời phát huy tối đa triết lý `extension-first`.
+Establishing crisp boundaries during Discovery keeps Tanpopo Core lean, fast, and security-auditable while maximizing the `extension-first` architecture.
 
-| Hạng mục năng lực | **1. Tanpopo Core (Nhân bắt buộc)** | **2. Optional Extensions (Official hoặc Community/Private)** | **3. Out-of-Scope (Ngoài phạm vi sản phẩm)** |
+| Capability Domain | **1. Tanpopo Core (Mandatory Spine)** | **2. Optional Extensions (Official or Community/Private)** | **3. Out-of-Scope** |
 |---|---|---|---|
-| **Kết nối Mô hình & Giao thức** | Đường ống HTTP/SSE Ingress (Unified API + Native Passthrough), Bộ điều phối MCP Plane, Bộ điều phối A2A Plane | **Tất cả Provider Adapters cụ thể** (OpenAI, Anthropic, Gemini, vLLM/Ollama, Bedrock, Azure, các hãng khu vực...) | Tự chạy mô hình suy luận trên GPU/CPU hoặc lưu trữ trọng số mô hình (vai trò của `vLLM`, `Ollama`) |
-| **Cơ chế Mở rộng** | Trình nạp Manifest & Wasm Sandbox, Blind Credential Broker, Trình quản lý vòng đời & lockfile, CLI kiểm thử hợp đồng | Các gói Adapter tùy chỉnh nội bộ doanh nghiệp, bộ biến đổi xác thực đặc thù (Custom Enterprise Auth) | Chạy mã script trần không cô lập bảo mật trực tiếp trong tiến trình chủ của Core |
-| **Định tuyến, Chính sách & Bảo mật** | Capability-Aware Router, Circuit Breaker, Rate Limiter, RBAC, Quản lý Virtual Keys, Chính sách vùng dữ liệu & lọc quyền MCP cơ bản | Các bộ lọc nội dung chuyên sâu (PII Redaction nâng cao, kết nối dịch vụ Guardrail ngoài, tích hợp KMS/Vault đặc thù) | Hệ thống phát hiện xâm nhập mạng cấp hệ điều hành hoặc tường lửa lớp L3/L4 |
-| **Giám sát & Kiểm soát Chi phí** | Sổ cái token/chi phí phân cấp, Cơ chế tạm giữ ngân sách, Nhật ký kiểm toán (Audit Log), Xuất chuẩn OpenTelemetry (OTLP), Log cục bộ có giới hạn vòng đời | Bộ xuất dữ liệu chuyên biệt sang nền tảng phân tích bên thứ ba hoặc kho lưu trữ đám mây riêng | Nền tảng chấm điểm đánh giá chất lượng mô hình quy mô lớn (LLM-as-a-Judge Evals), gán nhãn dữ liệu hoặc huấn luyện tinh chỉnh (Fine-tuning) |
-| **Giao diện & Phân phối** | Web Console quản trị (xây dựng chuẩn Astryx) và CLI `tanpopo`; trình đọc chỉ mục Registry/Git/URL | Các kho Private Registry tự dựng của từng tập đoàn; giao diện tùy biến riêng nếu cần | Cổng thanh toán mua bán lại tín dụng AI ăn chênh lệch hoặc các công cụ bẻ khóa/tái sử dụng gói thuê bao cá nhân trái TOS (`REJECTED`) |
+| **Model & Protocol Connectivity** | HTTP/SSE Ingress pipeline (Unified API + Native Passthrough), MCP Plane orchestrator, A2A Plane orchestrator | **All concrete Provider Adapters** (OpenAI, Anthropic, Gemini, vLLM/Ollama, Bedrock, Azure, regional providers, etc.) | Hosting model weights or running GPU/CPU inference engines directly (role of `vLLM`, `Ollama`) |
+| **Extensibility Runtime** | Manifest loader & Wasm Sandbox, Blind Credential Broker, lifecycle & lockfile manager, contract test CLI | Custom internal enterprise Adapter packs, specialized enterprise auth transformers (Custom Enterprise Auth) | Executing unsandboxed arbitrary host scripts directly inside the Core host process |
+| **Routing, Policy & Security** | Capability-Aware Router, Circuit Breaker, Rate Limiter, RBAC, Virtual Key management, baseline data-residency & MCP tool scoping policies | Deep content inspection filters (advanced PII Redaction, external Guardrail connectors, specialized KMS/Vault backends) | OS-level network intrusion detection systems or L3/L4 perimeter firewalls |
+| **Observability & Cost Control** | Hierarchical token/cost ledger, two-phase budget reservation, Audit Log, OpenTelemetry (OTLP) exporter, bounded local trace logs | Specialized data exporters targeting third-party analytics platforms or proprietary cloud object stores | Large-scale LLM-as-a-Judge evaluation suites, dataset labeling, or model fine-tuning pipelines |
+| **Surfaces & Distribution** | Admin Web Console (built on Astryx) and `tanpopo` CLI; Registry/Git/URL index resolver | Organization-hosted Private Registries; optional custom internal UI portals | Credit-reselling payment gateways charging markup spreads, or TOS-violating consumer subscription circumvention/repurposing tools (`REJECTED`) |
 
 ---
 
-## 4. Đề xuất Phạm vi Phát hành theo Giai đoạn (`0.x` đến `v1.0` — `PROPOSED`)
+## 4. Proposed Phased Release Scope (`0.x` to `v1.0` — `PROPOSED`)
 
-Lộ trình được chia thành các lát cắt dọc có thể dùng thật ở mỗi chặng, trong đó **mô hình dữ liệu nền tảng ngay từ `v0.1` đã tách sẵn 4 lớp (`Provider`, `Plugin`, `MCP`, `A2A`)** để không phải đập đi xây lại ở các bản sau:
+The roadmap is structured as end-to-end usable vertical slices where **the foundational `v0.1` domain model already cleanly separates all 4 layers (`Provider`, `Plugin`, `MCP`, `A2A`)**, eliminating destructive schema rewrites in later milestones:
 
-| Phiên bản mục tiêu | Trọng tâm chiến lược | Phạm vi bàn giao cốt lõi (`PROPOSED`) | Tiêu chí hoàn thành (Exit Criteria) |
+| Target Milestone | Strategic Focus | Core Deliverables (`PROPOSED`) | Exit Criteria |
 |---|---|---|---|
-| **`v0.1` — Usable Core & Extension Engine (MVP thực dụng)** | Chứng minh kiến trúc `extension-first` chạy thật với các mô hình AI phổ biến nhất | - Khung miền chuẩn 4 lớp tách biệt<br>- Unified Model API + Native Dialect Passthrough + Streaming SSE<br>- Động cơ Plugin Hai Tầng (Declarative + Wasm Sandbox) + Blind Credential Broker + Lockfile<br>- Bộ 5–6 Official Reference Adapters (OpenAI, Anthropic, Gemini, OpenAI-Compatible cho Ollama/vLLM, Bedrock/Azure)<br>- Virtual Keys, Rate Limit, Capability-Aware Routing cơ bản, Sổ cái ngân sách & OTel cơ bản (chế độ Standalone SQLite)<br>- CLI `tanpopo` (chạy server, cài/test plugin) + Web Console Astryx cốt lõi (Providers, Plugins, Keys, Budgets, Logs) | Một nhóm kỹ sư tải về, chạy trong `< 3 phút`, định tuyến thành công qua 3 hãng AI + Ollama cục bộ và cài thêm được 1 Adapter từ URL/Git mà không cần biên dịch lại Core. |
-| **`v0.2` — MCP Governance Plane & Registry Ecosystem** | Mở rộng sang quản trị công cụ tác nhân & hoàn thiện quy trình phát hành Plugin | - Mặt phẳng **MCP Plane** hạng nhất (Streamable HTTP/SSE, lọc danh sách tool theo khóa, tiêm thông tin xác thực ngầm, ghim `schema_hash` chống Rug-Pull)<br>- Hỗ trợ OAuth 2.1 được cấp phép & OIDC cơ bản trong SDK<br>- Chỉ mục Danh mục Extension tĩnh công khai + Hỗ trợ Private Registry nội bộ + Bộ công cụ ghi/phát lại kiểm thử `plugin test --replay`<br>- Công cụ mô phỏng định tuyến & chính sách (`/v1/route/explain`) | Tác nhân lập trình (IDE/CLI) kết nối cả LLM lẫn 5+ MCP servers qua duy nhất một cổng Tanpopo với phân quyền cấp công cụ chặt chẽ; bên thứ ba tự xuất bản được Adapter đạt chuẩn kiểm thử. |
-| **`v0.3` — A2A Connectivity Plane & Clustered Scale-Out** | Sẵn sàng cho phối hợp đa tác nhân và chịu tải cao trong doanh nghiệp | - Mặt phẳng **A2A Plane** độc lập (Agent Card registry/discovery, ủy quyền tác vụ bất đồng bộ, áp chính sách liên tác nhân và truy vết xuyên luồng)<br>- Chế độ triển khai cụm **Scale-out HA** không trạng thái với PostgreSQL + Redis/Valkey (đồng bộ thu hồi khóa tức thì và hạn mức phân tán)<br>- RBAC nhiều nhóm/dự án, tích hợp kho bí mật ngoài (KMS/Vault extension) và gói cài đặt offline (`bundle export`) | Vận hành ổn định nhiều bản sao dưới tải streaming liên tục mà không mất đồng bộ ngân sách; điều phối được giao tiếp A2A có kiểm toán đầy đủ. |
-| **`v1.0` — Production & Ecosystem Stability Guarantee** | Cam kết ổn định hợp đồng dài hạn & sẵn sàng cho tổ chức lớn | - Đóng băng cam kết tương thích ngược **Plugin Contract `v1.0`** và **Unified/Admin API `v1.0`**<br>- Kiểm toán bảo mật độc lập cho Wasm Sandbox & Credential Broker<br>- Hoàn thiện tài liệu vận hành sản xuất (Helm charts, Terraform/GitOps, kịch bản khôi phục thảm họa, SSO/OIDC quản trị viên) | Hợp đồng Plugin ổn định để cộng đồng và doanh nghiệp yên tâm đầu tư lâu dài; vượt qua bộ kiểm tra tải, bảo mật và độ tin cậy cấp sản xuất. |
+| **`v0.1` — Usable Core & Extension Engine (Pragmatic MVP)** | Prove the `extension-first` architecture in real usage across flagship AI models | - Canonical 4-layer decoupled domain foundation<br>- Unified Model API + Native Dialect Passthrough + Streaming SSE<br>- Two-Tier Plugin Engine (Declarative + Wasm Sandbox) + Blind Credential Broker + Lockfile<br>- 5–6 Official Reference Adapters (OpenAI, Anthropic, Gemini, OpenAI-Compatible for Ollama/vLLM, Bedrock/Azure)<br>- Virtual Keys, Rate Limiting, baseline Capability-Aware Routing, Budget Ledger & baseline OTel (Standalone SQLite mode)<br>- `tanpopo` CLI (server lifecycle, plugin install/test) + Core Astryx Web Console (Providers, Plugins, Keys, Budgets, Logs) | An engineering team downloads Tanpopo, starts it in `< 3 minutes`, routes traffic across 3 cloud AI vendors + local Ollama, and installs 1 external Adapter from URL/Git without recompiling Core. |
+| **`v0.2` — MCP Governance Plane & Registry Ecosystem** | Expand into agent tool governance & mature the Plugin publishing workflow | - First-class **MCP Plane** (Streamable HTTP/SSE, per-key tool filtering, upstream credential injection, `schema_hash` pinning against Rug-Pulls)<br>- Authorized OAuth 2.1 & baseline OIDC primitives in SDK<br>- Static public Extension Catalog Index + Private Registry support + `plugin test --replay` cassette tooling<br>- Dry-run route & policy simulator (`/v1/route/explain`) | Coding agents (IDE/CLI) connect to both LLMs and 5+ MCP servers through a single Tanpopo gateway with strict tool-level ACLs; third-party authors publish contract-verified Adapters independently. |
+| **`v0.3` — A2A Connectivity Plane & Clustered Scale-Out** | Unlock multi-agent orchestration and high-availability enterprise scale | - Dedicated **A2A Plane** (Agent Card registry/discovery, asynchronous task delegation, cross-agent policy enforcement, end-to-end correlation tracing)<br>- Stateless **Scale-out HA** cluster mode backed by PostgreSQL + Redis/Valkey (sub-second key revocation sync and distributed quotas)<br>- Multi-team/project RBAC, external secret backends (KMS/Vault extension), and offline air-gapped bundles (`bundle export`) | Sustains multi-replica streaming load without budget ledger drift; governs and audits asynchronous A2A delegations end-to-end. |
+| **`v1.0` — Production & Ecosystem Stability Guarantee** | Long-term contract stability commitment & regulated enterprise readiness | - Frozen backward-compatibility guarantees for **Plugin Contract `v1.0`** and **Unified/Admin API `v1.0`**<br>- Independent security audit of Wasm Sandbox & Credential Broker<br>- Complete production operations kit (Helm charts, Terraform/GitOps workflows, disaster recovery runbooks, admin SSO/OIDC) | Stable Plugin Contract enabling confident long-term community and enterprise investment; passes production-grade load, security, and reliability gates. |
 
 ---
 
-## 5. Top 6 Thử nghiệm Khám phá & Kiểm chứng Sớm (Top Discovery Experiments)
+## 5. Top 6 Early Discovery & Validation Experiments
 
-Trước khi đầu tư hàng tháng viết toàn bộ hệ thống, cần chạy **6 thử nghiệm kiểm chứng ngắn hạn, chi phí thấp, có ngưỡng Đạt/Trượt rõ ràng** để loại bỏ các giả định rủi ro nhất:
+Before investing months into full-scale implementation, Tanpopo executes **6 short, low-cost validation spikes with explicit Pass/Pivot thresholds** to retire the highest-risk assumptions early:
 
-| Mã | Giả thuyết cần kiểm chứng | Phương pháp thực hiện | Thời lượng ước tính | Tiêu chí Đạt (Pass) / Hướng xoay trục nếu Trượt (Pivot) |
+| ID | Hypothesis Under Test | Execution Method | Estimated Duration | Pass Criterion / Pivot Path on Failure |
 |---|---|---|---|---|
-| **EXP-01** | **Kiểm chứng Streaming qua Wasm Sandbox (`OQ-002`, `ASM-002`):** Plugin biên dịch ra `.wasm` có thể biến đổi luồng SSE từng mảnh (chunk-by-chunk) mà vẫn giữ độ trễ thấp và bộ nhớ nhỏ. | Viết 1 nguyên mẫu tối thiểu (spike) cho Host nhận luồng SSE giả lập tốc độ cao, đẩy qua 1 module Wasm biến đổi JSON sang chuẩn OpenAI trên 1.000 kết nối đồng thời, đo p95 latency và RAM. | 2 – 3 ngày | **Đạt:** Độ trễ cộng thêm `< 5 ms p95`, không rò rỉ bộ nhớ.<br>**Nếu Trượt:** Giữ Wasm cho biến đổi header/request/response theo khung sự kiện nhỏ hoặc đẩy nhiều khả năng hơn về tầng Declarative Engine chạy trực tiếp trong Host. |
-| **EXP-02** | **Kiểm chứng Độ bao phủ của Declarative Adapter (`ASM-004`):** Cấu hình khai báo YAML/JSON có thể mô tả gọn gàng ít nhất 75% nhà cung cấp AI thương mại/mã nguồn mở phổ biến mà không cần viết mã. | Thử đặc tả nháp schema khai báo trên giấy/JSON Schema cho 10 nhà cung cấp thật (OpenAI, Groq, Together, Mistral, DeepSeek, Ollama, OpenRouter, Azure, Anthropic, Gemini) để tìm điểm gãy. | 1 – 2 ngày | **Đạt:** `>= 7/10` hãng biểu diễn trọn vẹn bằng cấu hình khai báo; chỉ 2–3 hãng có phương ngữ rất riêng mới cần Tier-2 Wasm.<br>**Nếu Trượt:** Tinh chỉnh lại ranh giới biểu thức ánh xạ trong manifest trước khi công bố SDK. |
-| **EXP-03** | **Kiểm thử Trải nghiệm Tác giả Viết Adapter (`TTFCA < 30 phút`):** Một lập trình viên chưa từng đọc mã nguồn Core của Tanpopo có thể tự tạo một Adapter mới chỉ từ tài liệu mẫu trong dưới 30 phút. | Đưa tài liệu hợp đồng nháp (1 trang) và tệp mẫu cho 3–5 kỹ sư độc lập yêu cầu họ viết cấu hình kết nối cho 1 API mô hình bất kỳ và ghi nhận các chỗ họ bị vướng. | 2 ngày | **Đạt:** Ít nhất 4/5 người hoàn thành đúng dưới 30 phút không cần giải thích miệng.<br>**Nếu Trượt:** Đơn giản hóa cấu trúc manifest và thông báo lỗi kiểm tra hợp đồng. |
-| **EXP-04** | **Kiểm chứng Chống Đua tranh Ngân sách Streaming (`UC-08`):** Cơ chế tạm giữ hạn mức hai pha ngăn chặn được lỗi vượt chi tiêu khi bắn hàng chục luồng SSE song song mà không làm nghẽn thông lượng. | Dựng mô hình kiểm thử bắn 100 luồng đồng thời vào một tài khoản chỉ còn hạn mức đủ cho 5 luồng, kèm kịch bản ngắt kết nối đột ngột giữa chừng. | 1 – 2 ngày | **Đạt:** Số dư quyết toán cuối cùng không vượt trần quá biên độ dự phòng của 1 luồng và toàn bộ khoản giữ chỗ treo được thu hồi sạch khi đứt mạng. |
-| **EXP-05** | **Kiểm chứng Thực tế với Các MCP Clients Phổ biến (`UC-06`):** Mặt phẳng MCP trung gian của Tanpopo tương thích trơn tru với các công cụ thực tế (Claude Code, Cursor, Codex, MCP Inspector) khi bật lọc quyền công cụ và phân trang lớn (>150 tools). | Dựng điểm cuối MCP Streamable HTTP mẫu đứng trước 3 MCP servers thật, kiểm tra hành vi khám phá tool, gọi tool và phản ứng khi `schema_hash` thay đổi. | 2 ngày | **Đạt:** Mọi client phổ biến nhận diện và gọi đúng công cụ được cấp quyền, không gặp lỗi cắt cụt danh sách hay vỡ phiên.<br>**Nếu Trượt:** Bổ sung chế độ tương thích cho từng loại transport của client trước khi thiết kế chi tiết `v0.2`. |
-| **EXP-06** | **Phỏng vấn Khám phá Nhu cầu Thực tế với Nhóm Mũi nhọn (`ASM-001`):** Xác nhận xem nỗi đau lớn nhất khiến các Dev Teams / AI Platform Teams sẵn sàng chuyển sang hoặc triển khai Tanpopo là gì. | Thực hiện 8–10 cuộc trao đổi ngắn (hoặc khảo sát kỹ thuật có cấu trúc) với các kỹ sư đang tự vận hành LiteLLM / One-API / cổng tự viết về sự cố nâng cấp, quản lý MCP và chính sách nội bộ. | 1 tuần (chạy song song) | **Đạt:** Xác nhận rõ thứ tự ưu tiên tính năng cho `v0.1` và `v0.2` dựa trên nỗi đau thật thay vì suy đoán chủ quan. |
+| **EXP-01** | **Streaming Across Wasm Sandbox (`OQ-002`, `ASM-002`):** `.wasm` plugins can transform SSE streams chunk-by-chunk while maintaining low latency and bounded memory. | Build a minimal Host spike ingesting high-throughput simulated SSE streams through a JSON-to-OpenAI Wasm module across 1,000 concurrent connections; measure `p95` latency and RAM. | 2–3 days | **Pass:** Added latency `< 5 ms p95`, zero memory leaks.<br>**Pivot:** Scope Wasm transforms to compact event frames/headers/requests and push common streaming normalization into the native Host Declarative Engine. |
+| **EXP-02** | **Declarative Adapter Coverage (`ASM-004`):** Declarative YAML/JSON manifests cleanly express at least 75% of popular commercial/open-source AI providers with zero custom code. | Draft a declarative JSON Schema specification against 10 real providers (OpenAI, Groq, Together, Mistral, DeepSeek, Ollama, OpenRouter, Azure, Anthropic, Gemini) to surface edge-case breaks. | 1–2 days | **Pass:** `>= 7/10` providers fully expressed declaratively; only 2–3 bespoke dialects require Tier-2 Wasm.<br>**Pivot:** Refine manifest mapping expressions before publishing the initial SDK. |
+| **EXP-03** | **Adapter Authoring Ergonomics (`TTFCA < 30 minutes`):** A developer unfamiliar with Tanpopo Core internals can author a working Adapter from sample docs in under 30 minutes. | Hand a 1-page draft contract guide and template to 3–5 independent engineers, tasking them with wrapping a model API while observing friction points. | 2 days | **Pass:** At least 4/5 engineers finish cleanly in under 30 minutes with zero verbal hints.<br>**Pivot:** Simplify manifest syntax and improve contract validator error diagnostics. |
+| **EXP-04** | **Concurrent Streaming Budget Race Defense (`UC-08`):** Two-phase quota reservation prevents budget cap breaches under burst concurrent SSE streams without throttling throughput. | Build a harness firing 100 simultaneous streams at an account holding budget sufficient for only 5 streams, injecting abrupt mid-stream disconnects. | 1–2 days | **Pass:** Final settled spend never exceeds the cap beyond a 1-stream margin, and 100% of orphaned holds are reclaimed cleanly on network drops. |
+| **EXP-05** | **Real-World MCP Client Interoperability (`UC-06`):** Tanpopo's intermediary MCP Plane interoperates seamlessly with production clients (Claude Code, Cursor, Codex, MCP Inspector) under tool ACL filtering and large catalogs (>150 tools). | Stand up a prototype MCP Streamable HTTP endpoint fronting 3 real MCP servers; verify tool discovery, pagination, invocation, and `schema_hash` mutation blocking. | 2 days | **Pass:** Every major client discovers and invokes authorized tools cleanly with zero list truncation or session breakage.<br>**Pivot:** Add per-client transport compatibility shims prior to locking detailed `v0.2` specs. |
+| **EXP-06** | **Beachhead User Pain Validation Interviews (`ASM-001`):** Confirm which concrete pain points compel Dev Teams / AI Platform Teams to adopt or migrate to Tanpopo. | Conduct 8–10 structured technical interviews with engineers operating LiteLLM / One-API / custom proxies regarding upgrade incidents, MCP governance, and internal policy pain. | 1 week (parallel) | **Pass:** Empirically validates `v0.1` and `v0.2` feature priorities grounded in real operational pain rather than speculation. |

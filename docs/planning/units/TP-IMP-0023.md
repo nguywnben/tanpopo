@@ -1,30 +1,30 @@
-# `TP-IMP-0023` — Nhật ký Kiểm toán Bất biến Nối Chuỗi Băm `JCS` Theo `Org`, Công tắc Khẩn cấp 4 Cấp (`< 1s` Cắt Luồng) & Truy vấn `Blast-Radius`
+# `TP-IMP-0023` — Immutable Per-`Org` `JCS` Hash-Chained Audit Log, 4-Level Emergency Kill-Switch (`< 1s` Stream Sever) & `Blast-Radius` Query
 
-| Thuộc tính | Giá trị |
+| Property | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0023` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0009`, `TP-IMP-0011`, `TP-IMP-0022` — `GAP-01, 05`)* |
-| **Quy mô (`Size`)** | `L` (`internal/security/audit/*`, `internal/security/killswitch/*`, `db/migrations/sqlite/0010_audit_killswitch.sql`) |
-| **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Tính toàn vẹn bằng chứng pháp y chống sửa xóa `TM-13` & cắt đứt khẩn cấp sự cố an ninh)* |
-| **Chủ sở hữu Kỹ thuật** | `Principal Security & Incident Response Engineer` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0009`, `TP-IMP-0011`, `TP-IMP-0022` — `GAP-01, 05`)* |
+| **Size** | `L` (`internal/security/audit/*`, `internal/security/killswitch/*`, `db/migrations/sqlite/0010_audit_killswitch.sql`) |
+| **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Tamper-evident forensic integrity `TM-13` & emergency security incident containment)* |
+| **Technical Owner** | `Principal Security & Incident Response Engineer` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Xây dựng hai năng lực phòng thủ và pháp y tối hậu của mặt phẳng quản trị (`TP-FR-0704`, `TP-FR-0705`):
-1. **Nhật ký Kiểm toán Bất biến Nối Chuỗi Băm Theo Từng `Organization` + Chuỗi `SYSTEM` (`Per-Org + SYSTEM RFC 8785 JCS Hash-Chained Audit Log` — `CR-06`):** Mọi hành động quản trị, cấp/thu hồi khóa, cài/cách ly plugin, thay đổi chính sách và vi phạm bảo mật đều được chuẩn hóa JSON xác định theo `RFC 8785 (JCS)` và nối chuỗi băm `entry_hash = SHA-256(chain_key || seq_no || prev_hash || jcs_payload)` (trong đó `chain_key = org_id` cho sự kiện thuộc tổ chức và `chain_key = "SYSTEM"` cho sự kiện cấp máy chủ có `org_id IS NULL` như `Bootstrap` / `Break-Glass`), kèm trigger CSDL cấm `UPDATE`/`DELETE` và trình xác minh chuỗi độc lập (`VerifyAuditChain`).
-2. **Công tắc Ngắt Khẩn cấp 4 Cấp (`4-Level Emergency Kill-Switch`) & Truy vấn Tầm Ảnh hưởng (`Blast-Radius Query`):** Cho phép khóa tức thì ở cấp (1) `VirtualKey`, (2) `ProviderConnection`, (3) `ExtensionInstallation` (`QUARANTINED`), hoặc (4) toàn bộ `Project / Organization Traffic Freeze`, cắt đứt mọi luồng SSE đang mở thuộc phạm vi bị ngắt trong `< 1 giây` trên nút đơn (`SLO-07`, `OPS-AC-03`, `OPS-AC-04`, `INC-02`, `INC-03`) và liệt kê chính xác những dự án/khóa/yêu cầu nào vừa chạm tới phần mở rộng hoặc khóa bị lộ trong cửa sổ thời gian sự cố.
+## 1. Intent
+Build the two ultimate defensive and forensic governance capabilities of the Control Plane (`TP-FR-0704`, `TP-FR-0705`):
+1. **Immutable Per-`Organization` + `SYSTEM` Hash-Chained Audit Log (`Per-Org + SYSTEM RFC 8785 JCS Hash-Chained Audit Log` — `CR-06`):** Every administrative mutation, key issuance/revocation, plugin install/quarantine, policy update, and security violation is deterministically canonicalized via `RFC 8785 (JCS)` and chained via `entry_hash = SHA-256(chain_key || seq_no || prev_hash || jcs_payload)` (where `chain_key = org_id` for tenant events and `chain_key = "SYSTEM"` for instance-scoped events with `org_id IS NULL` such as `Bootstrap` / `Break-Glass`), protected by DB triggers forbidding `UPDATE`/`DELETE` and verified by a standalone `VerifyAuditChain` inspector.
+2. **4-Level Emergency Kill-Switch & `Blast-Radius` Forensics:** Enables instant containment at (1) `VirtualKey`, (2) `ProviderConnection`, (3) `ExtensionInstallation` (`QUARANTINED`), or (4) full `Project / Organization Traffic Freeze` granularity, severing every matching in-flight SSE stream in `< 1 second` on single-node deployments (`SLO-07`, `OPS-AC-03`, `OPS-AC-04`, `INC-02`, `INC-03`) and enumerating every project, virtual key, and request trace that touched a compromised plugin or credential within an incident window.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `internal/security/audit/jcs.go` (chuẩn hóa JSON `RFC 8785` tất định cho khóa từ điển, chuỗi Unicode và số nguyên).
-  - `internal/security/audit/logger.go` (ghi nối chuỗi tuần tự theo `chain_key` (`org_id` hoặc `"SYSTEM"`) với số thứ tự `seq_no` tăng liên tục không hở, che sạch bí mật qua `privacy.Redactor` và chế độ `Fail-Closed` cho hành động quản trị).
-  - `internal/security/audit/verifier.go` (kiểm định toàn bộ chuỗi băm theo `org_id` và chuỗi `"SYSTEM"`, phát cảnh báo `ALT-AUDIT-TAMPER` ngay khi phát hiện sửa 1 bit hoặc xóa dòng giữa chuỗi — `CT-30`, `OPS-AC-08`).
-  - `internal/security/killswitch/registry.go` (bảng đăng ký các luồng `InFlightStream` gắn thẻ `(org_id, project_id, vkey_id, connection_id, plugin_install_id)` để khi bật bất kỳ cấp công tắc khẩn cấp nào đều gọi `CancelFunc` hàng loạt dưới `< 1s` kèm lý do kiểm toán).
-  - `internal/security/audit/blastradius.go` (truy vấn đối chiếu `request_traces_meta` + `audit_events` theo `plugin_install_id` / `connection_id` / `vkey_id` trong khoảng `[from, to]`).
-  - `db/migrations/sqlite/0010_audit_killswitch.sql` (`audit_events` kèm trigger `BEFORE UPDATE / BEFORE DELETE RAISE(ABORT, 'audit_events_immutable')`, `emergency_kill_switches`).
-- **Out-of-Scope:** Truyền tin công tắc khẩn cấp toàn cụm đa nút `< 5s` qua `Valkey` (thuộc `TP-IMP-0040`).
+  - `internal/security/audit/jcs.go` (deterministic `RFC 8785` JSON canonicalizer across map keys, Unicode strings, and integer representations).
+  - `internal/security/audit/logger.go` (gapless monotonic `seq_no` hash-chain writer partitioned by `chain_key` (`org_id` or `"SYSTEM"`), scrubbed through `privacy.Redactor`, enforcing `Fail-Closed` semantics on administrative mutations).
+  - `internal/security/audit/verifier.go` (full hash-chain verifier across per-`org_id` and `"SYSTEM"` chains, raising `ALT-AUDIT-TAMPER` immediately upon detecting a single flipped bit or deleted row — `CT-30`, `OPS-AC-08`).
+  - `internal/security/killswitch/registry.go` (`InFlightStream` registry indexed by `(org_id, project_id, vkey_id, connection_id, plugin_install_id)` invoking bulk `CancelFunc` callbacks in `< 1s` with audited reason codes when any kill-switch level fires).
+  - `internal/security/audit/blastradius.go` (forensic correlation query joining `request_traces_meta` + `audit_events` by `plugin_install_id` / `connection_id` / `vkey_id` across `[from, to]`).
+  - `db/migrations/sqlite/0010_audit_killswitch.sql` (`audit_events` guarded by `BEFORE UPDATE / BEFORE DELETE RAISE(ABORT, 'audit_events_immutable')` triggers, `emergency_kill_switches`).
+- **Out-of-Scope:** Multi-node `< 5s` cluster-wide kill-switch fan-out over `Valkey` (owned by `TP-IMP-0040`).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0704`, `TP-FR-0705`, `TP-NFR-0404`, `TP-NFR-0501`, `SLO-07`, `TP-BR-0803`, `CT-30`, `AUTH-06`, `OPS-AC-03`, `OPS-AC-04`, `OPS-AC-08`, `INC-02`, `INC-03`.
@@ -32,23 +32,23 @@ Xây dựng hai năng lực phòng thủ và pháp y tối hậu của mặt ph�
 - **Design Refs:** [`threat-model.md`](../../security/threat-model.md) (`TM-13`), [`monitoring-incidents.md`](../../operations/monitoring-incidents.md) (`INC-02`, `INC-03`, `ALT-AUDIT-TAMPER`), [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-06`).
 
 ## 4. API, Wire & Data Contracts
-- **Bất biến Giao dịch Kiểm toán (`Transactional Audit Atomicity`):** Mọi thay đổi trạng thái quản trị (tạo/xóa khóa, duyệt plugin, sửa chính sách, bật/tắt kill-switch) phải ghi `audit_events` **trong cùng một giao dịch CSDL (`Tx`)** với thay đổi nghiệp vụ — đảm bảo không bao giờ tồn tại thay đổi cấu hình mà mất dấu vết kiểm toán.
-- **Công thức Nối Chuỗi Theo `Org` & `SYSTEM` (`Genesis Hash`):** Dòng đầu tiên (`seq_no = 1`) của mỗi chuỗi có `prev_hash = SHA-256("tanpopo:audit:genesis:v1:" + chain_key)` với `chain_key = org_id` (hoặc `"SYSTEM"` khi `org_id IS NULL`).
+- **Transactional Audit Atomicity (`Transactional Audit Atomicity`):** Every administrative state mutation (creating/revoking keys, approving plugins, updating policies, toggling kill-switches) must append its `audit_events` row **inside the exact same database transaction (`Tx`)** as the domain mutation — guaranteeing no configuration change can ever commit without its forensic audit trail.
+- **Per-`Org` & `SYSTEM` Chain Genesis (`Genesis Hash`):** Entry `seq_no = 1` of each chain binds `prev_hash = SHA-256("tanpopo:audit:genesis:v1:" + chain_key)` where `chain_key = org_id` (or `"SYSTEM"` when `org_id IS NULL`).
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`CT-30` & `OPS-AC-08` Tamper Detection):** Given 500 bản ghi kiểm toán của `Org A`, `Org B` và chuỗi `"SYSTEM"` xen kẽ nhau, When chạy `VerifyAuditChain` cho cả 3 chuỗi, Then tất cả hợp lệ `100%`; khi tắt tạm trigger trong bài test để sửa 1 ký tự JSON hoặc xóa dòng `seq_no = 250` trên tệp SQLite thô, `VerifyAuditChain` phát hiện chính xác vị trí dòng bị can thiệp (`seq_no = 250`) và bật cờ `ALT-AUDIT-TAMPER`.
-- **`AC-2` (`OPS-AC-03, 04` 4-Level Kill-Switch `< 1s`):** Given 8 luồng SSE đang truyền dở trên 2 Plugin và 2 Dự án khác nhau, When kích hoạt Kill-Switch cấp `ExtensionInstallation` cho `Plugin 1`, Then đúng 4 luồng thuộc `Plugin 1` bị đóng trong `< 1 giây`, còn 4 luồng thuộc `Plugin 2` tiếp tục chạy không gián đoạn.
-- **`NEG-1`:** Thử chạy lệnh SQL `DELETE FROM audit_events` hoặc `UPDATE audit_events SET actor_id = 'x'` qua kết nối ứng dụng → bị trigger CSDL chặn cứng ngay lập tức.
-- **`NEG-2` (`Transactional Audit Rollback`):** Giả lập lỗi ghi `audit_events` → toàn bộ lệnh tạo `Virtual Key` hoặc bật `Plugin` trong cùng giao dịch bị hoàn tác (`Rollback`), không có thay đổi âm thầm.
+- **`AC-1` (`CT-30` & `OPS-AC-08` Tamper Detection):** Given 500 interleaved audit rows across `Org A`, `Org B`, and `"SYSTEM"`, When running `VerifyAuditChain` across all 3 chains, Then `100%` validate cleanly; when triggers are temporarily bypassed in a test harness to mutate 1 JSON character or delete `seq_no = 250` directly in the raw SQLite file, `VerifyAuditChain` pinpoints the exact tampered sequence (`seq_no = 250`) and fires `ALT-AUDIT-TAMPER`.
+- **`AC-2` (`OPS-AC-03, 04` 4-Level Kill-Switch `< 1s`):** Given 8 active SSE streams across 2 Plugins and 2 Projects, When triggering an `ExtensionInstallation` Kill-Switch targeting `Plugin 1`, Then all 4 streams using `Plugin 1` terminate within `< 1 second` while all 4 streams using `Plugin 2` continue streaming uninterrupted.
+- **`NEG-1`:** Executing `DELETE FROM audit_events` or `UPDATE audit_events SET actor_id = 'x'` over the application DB connection → immediately aborted by the DB immutability trigger.
+- **`NEG-2` (`Transactional Audit Rollback`):** Injecting a simulated `audit_events` write failure → rolls back the enclosing `Virtual Key` creation or `Plugin` activation transaction completely with zero silent state drift.
 
 ## 6. Test Commands & Required Evidence
-- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/security/audit/... ./internal/security/killswitch/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/security/audit/... ./internal/security/killswitch/...`)*
-- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/security/audit/... ./internal/security/killswitch/...`
+- Pure-Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/security/audit/... ./internal/security/killswitch/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/security/audit/... ./internal/security/killswitch/...`)*
+- Data-race (`-race`): `go test -v -race ./internal/security/audit/... ./internal/security/killswitch/...`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Không một vai trò nào (`ORG_OWNER`, `OPERATOR`, `SECURITY_REVIEWER`) có thể xóa hay tắt bộ ghi `audit_events`; việc gỡ bỏ trạng thái `Kill-Switch` bắt buộc phải ghi một bản ghi kiểm toán mới kèm lý do giải trình bắt buộc (`reason` không rỗng).
-- **Rollback:** Bảng cộng thêm `0010_audit_killswitch.sql`.
+- **Security Invariant:** No role (`ORG_OWNER`, `OPERATOR`, `SECURITY_REVIEWER`) can delete rows from or disable `audit_events`; lifting an active `Kill-Switch` requires appending a new audited event with a non-empty mandatory `reason`.
+- **Rollback:** Additive schema `0010_audit_killswitch.sql`.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0003` (khóa chuẩn băm `JCS` theo `Org` tại `CR-06`), `TP-IMP-0009`, `TP-IMP-0011` và `TP-IMP-0022` đã hoàn tất.
-- **DoD:** Xanh toàn bộ ca `CT-30`, `AUTH-06`, `OPS-AC-03, 04, 08` dưới `-race`, vượt qua `REQUIRES_STRONG_REVIEW`.
+- **DoR:** `TP-IMP-0003` (`CR-06` per-`Org` `JCS` hash-chain lock), `TP-IMP-0009`, `TP-IMP-0011`, and `TP-IMP-0022` are complete.
+- **DoD:** `100%` green across `CT-30`, `AUTH-06`, and `OPS-AC-03, 04, 08` under `-race`; passes `REQUIRES_STRONG_REVIEW`.

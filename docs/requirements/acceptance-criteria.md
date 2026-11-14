@@ -1,209 +1,209 @@
-# Đặc tả Tiêu chí Nghiệm thu Chức năng, Bảo mật & Phi Chức năng (Acceptance Criteria) — Tanpopo
+# Functional, Security & Non-Functional Acceptance Criteria — Tanpopo
 
-> **Tài liệu Kiểm chứng Nghiệm thu (Phase ASTRA A03 — Gate G2: `READY_FOR_REVIEW` | `DRAFT — UNLOCKED SCOPE`)**
-> - **Phiên bản:** `0.1.0-step03-draft`
-> - **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Principal Requirements Engineer & Product Manager
-> - **Trạng thái quản trị:** **Bản nháp chưa khóa phạm vi (`DRAFT`)**. Mọi tiêu chí dưới đây được viết theo cấu trúc `Given / When / Then` có thể tự động hóa thành bài kiểm thử tích hợp, kiểm thử hợp đồng và kiểm thử thâm nhập bảo mật. **100% yêu cầu `Must` (`P0`) trong [`srs.md`](./srs.md) đều có tiêu chí nghiệm thu trực tiếp.**
-
----
-
-## Phần A — Tiêu chí Nghiệm thu Chức năng theo Phân hệ (`TP-AC-F0101` .. `TP-AC-F1003`)
-
-### Domain 01: Gateway, Giao thức & Đa phương thức (`gateway-protocols`)
-
-- **`TP-AC-F0101` — Điểm cuối Unified Inference & Truyền luồng SSE (`TP-FR-0101`):**
-  - *Given:* `Route R1` ánh xạ tới `Model Deployment` đang `HEALTHY` và `API Client` mang `Virtual Key` hợp lệ.
-  - *When:* Gửi yêu cầu chuẩn OpenAI SDK tới `/v1/chat/completions`, `/v1/responses` (cả `stream: false` và `stream: true`) và `/v1/embeddings`.
-  - *Then:* Hệ thống trả `200 OK` đúng định dạng JSON hoặc `text/event-stream` kết thúc chuẩn, đính kèm `x-tanpopo-request-id` trên tiêu đề phản hồi và ghi nhận bút toán sử dụng vào sổ cái.
-- **`TP-AC-F0102` — Chặn Sớm Yêu cầu Vượt Năng lực Mô hình Đích (`TP-FR-0102`):**
-  - *Given:* Tuyến đích chỉ chứa mô hình khai báo `audio_input = false` hoặc `strict_json_schema = false` trong `Capability Profile`.
-  - *When:* `API Client` gửi yêu cầu đính kèm tệp âm thanh hoặc yêu cầu `response_format` có `json_schema` với `strict: true`.
-  - *Then:* Hệ thống từ chối ngay với `400 capability_not_supported` chỉ rõ tên năng lực thiếu, **không mở bất kỳ kết nối mạng nào ra nhà cung cấp ngoài** và giải phóng khoản giữ chỗ ngân sách (`RELEASED_UNUSED`).
-- **`TP-AC-F0103` — Cấm Tuyệt đối Chuyển mạch Ngầm Sau Khi Đã Phát Luồng Một phần (`TP-FR-0103`):**
-  - *Given:* `Route R1` có `Deployment D1` (chính) và `D2` (dự phòng khỏe mạnh); `D1` phát thành công 15 mảnh dữ liệu SSE đầu tiên về `API Client` rồi ngắt kết nối đột ngột.
-  - *When:* Gateway phát hiện kết nối tới `D1` bị đứt giữa luồng.
-  - *Then:* Gateway phát khung sự kiện lỗi chuẩn `mid_stream_abort` để đóng luồng SSE, **hoàn toàn không gửi yêu cầu sang `D2`**, và quyết toán phần dữ liệu đã truyền của `D1` với nhãn `ESTIMATED`.
-- **`TP-AC-F0104` — Lan truyền Hủy Kết nối Tức thì & Khung Lỗi Đồng nhất (`TP-FR-0104`):**
-  - *Given:* Yêu cầu sinh văn bản dài đang truyền luồng SSE ở giây thứ 2.
-  - *When:* `API Client` chủ động đóng kết nối TCP/HTTP hủy yêu cầu.
-  - *Then:* Gateway hủy yêu cầu tương ứng phía nhà cung cấp đích trong vòng `< 500 ms` và tất toán ngay khoản giữ chỗ ngân sách.
-- **`TP-AC-F0105` — Giữ nguyên Phương ngữ Gốc Không Mất mát & Bảo vệ Cùng Phương ngữ (`TP-FR-0105`):**
-  - *Given:* `API Client` gọi `/native/anthropic/v1/messages` kèm cấu trúc đặc thù (`cache_control`, `thinking` blocks) và một trường mở rộng mới chưa từng định nghĩa trong Core.
-  - *When:* Yêu cầu đi qua tuyến trỏ tới triển khai phương ngữ Anthropic (trường hợp 1) hoặc cấu hình sai trỏ sang triển khai khác phương ngữ (trường hợp 2).
-  - *Then:* Ở trường hợp 1, nhà cung cấp đích nhận nguyên vẹn 100% các trường JSON gốc không bị gọt bỏ và sổ cái vẫn trích xuất đúng token cache/suy luận; ở trường hợp 2, hệ thống từ chối ngay với `400 dialect_mismatch`.
-
-### Domain 02: Nhà cung cấp, Mô hình & Thông tin Xác thực (`provider-credentials`)
-
-- **`TP-AC-F0201` — Phân tách 4 Thực thể, Chia sẻ Một chiều & Chặn Xóa Kết nối Đang dùng (`TP-FR-0201`, `TP-FR-0203`):**
-  - *Given:* Một `Provider Adapter` duy nhất được dùng để tạo 2 `Provider Connection` (`C_Org` cấp Tổ chức và `C_Proj` cấp Dự án), trong đó `C_Org` được chia sẻ xuống `Project P1` và gắn vào `Route R_Active`.
-  - *When:* `Team Admin` của `P1` sử dụng `C_Org` để định tuyến, cố đọc/sửa khóa của `C_Org`, hoặc quản trị viên cố xóa cứng `C_Org` khi `R_Active` đang bật.
-  - *Then:* Định tuyến hoạt động bình thường; thao tác đọc/sửa khóa của `Team Admin` bị từ chối `403`; lệnh xóa cứng `C_Org` bị chặn `409 resource_in_use` cho tới khi gỡ khỏi `R_Active`.
-- **`TP-AC-F0202` — Hỗ trợ Nạp Nguội Mô hình Cục bộ (`Ollama`/`vLLM`) & Biểu giá Tùy chỉnh (`TP-FR-0202`):**
-  - *Given:* `Model Deployment` nội bộ cấu hình `first_byte_timeout = 60s` và đơn giá `0 USD` (hoặc đơn giá khấu hao nội bộ), máy chủ GPU mất `35 giây` nạp mô hình vào VRAM trước khi trả mảnh đầu tiên.
-  - *When:* Gửi yêu cầu suy luận lần đầu tới mô hình nội bộ đó.
-  - *Then:* Yêu cầu không bị ngắt nhầm ở mốc 5–10 giây mặc định của đám mây, triển khai vẫn giữ trạng thái `HEALTHY` và sổ cái ghi nhận đúng đơn giá nội bộ đã cấu hình.
-- **`TP-AC-F0203` — Làm mới Đơn luồng `Authorized OAuth 2.1` (`TP-FR-0205`):**
-  - *Given:* Kết nối `Authorized OAuth` có `access_token` vừa chạm ngưỡng hết hạn và nhận đồng thời 50 yêu cầu suy luận song song.
-  - *When:* Cơ chế làm mới tự động kích hoạt.
-  - *Then:* Đúng 1 yêu cầu làm mới duy nhất được gửi tới `token_endpoint` của nhà cung cấp; 49 luồng còn lại chờ nhận token mới và cả 50 yêu cầu suy luận hoàn tất thành công không phát sinh lỗi xung đột thu hồi token.
-- **`TP-AC-F0204` — Định danh Liên kết Đám mây & Khóa Bọc KMS Ngoài (`TP-FR-0206`):**
-  - *Given:* Kết nối cấu hình dùng `Workload Identity` / OIDC hoặc kho khóa bọc KMS bên ngoài.
-  - *When:* Thực hiện khởi động máy chủ và gọi suy luận tới đám mây đích.
-  - *Then:* Hệ thống xác thực thành công mà không cần lưu khóa API tĩnh lâu dài trên đĩa cục bộ; nếu KMS bị thu hồi quyền giải mã, máy chủ chuyển `/readyz` sang không sẵn sàng an toàn (`Fail-Closed`).
-
-### Domain 03: Động cơ Phần mở rộng & Marketplace (`plugin-marketplace`)
-
-- **`TP-AC-F0301` — Cài đặt Nóng Provider Adapter Mới Không Cần Biên dịch Lại Core (`TP-FR-0301`, `TP-FR-0302`):**
-  - *Given:* Tiến trình Tanpopo Core đang chạy ổn định (giữ nguyên mã băm tệp thực thi Core); có một nhà cung cấp giả lập mới `Vendor-Z` chưa từng tồn tại trong mã nguồn Core.
-  - *When:* Cài đặt và phê duyệt quyền một `Declarative Pack` (hoặc `Sandbox Plugin`) cho `Vendor-Z`, tạo `Connection` và gọi suy luận.
-  - *Then:* Truy vấn hoàn tất thành công qua `Vendor-Z` mà không phải biên dịch lại hay khởi động lại toàn bộ tiến trình Core.
-- **`TP-AC-F0302` — Đa Nguồn Cài đặt, 3 Nhãn Nguồn gốc, Duyệt Quyền & Khóa `tanpopo.lock` (`TP-FR-0304`, `TP-FR-0307`):**
-  - *Given:* Gói phần mở rộng tải từ kho Git/URL/ZIP/Private Registry chưa có chữ ký phát hành của dự án Tanpopo và khai báo cần gọi `api.vendor-z.example`.
-  - *When:* Chạy lệnh cài đặt khi chưa xác nhận bảng quyền hạn, sau đó thực hiện phê duyệt quyền.
-  - *Then:* Trước khi duyệt, gói nằm yên ở `PENDING_PERMISSION_APPROVAL` và không nhận lưu lượng; sau khi duyệt, gói mang nhãn `unverified-external` (hoặc `verified`/`official` đúng theo chữ ký mật mã hợp lệ) và mã băm SHA-256 cùng tập quyền được ghi chính xác vào `tanpopo.lock`.
-- **`TP-AC-F0303` — Khung Kiểm thử Hợp đồng Tự động bằng Tệp Băng ghi (`TP-FR-0305`, `TP-FR-0903`):**
-  - *Given:* Tác giả tạo gói phần mở rộng mới bằng `tanpopo plugin init` kèm bộ băng ghi mẫu (`Cassettes`) cho 5 kịch bản (đồng bộ, SSE streaming, lỗi `401`, lỗi `429`, đứt luồng).
-  - *When:* Chạy lệnh `tanpopo plugin test` hoàn toàn ngoại tuyến (không cần khóa thật).
-  - *Then:* Công cụ kiểm tra tự động tính hợp lệ của `Manifest`, schema đầu vào/ra, phân loại lỗi và xuất báo cáo đạt/trượt rõ ràng với mã thoát chuẩn cho CI.
-- **`TP-AC-F0304` — Chặn Tự động Kích hoạt Khi Tăng Quyền & Quay lui Tức thì (`TP-FR-0306`):**
-  - *Given:* `Plugin P@1.0.0` đang chạy với quyền gọi `a.example.com`; bản `P@1.1.0` bổ sung thêm `b.example.com` vào `Manifest`.
-  - *When:* Kích hoạt cập nhật không kèm phê duyệt quyền mới (bước 1), sau đó duyệt lên `1.1.0` rồi gọi lệnh `Rollback` về `1.0.0` khi đang có luồng truyền dở (bước 2).
-  - *Then:* Ở bước 1, bản `1.1.0` bị chặn ở `UPDATING_PENDING_RECONSENT` và `100%` lưu lượng vẫn đi qua `1.0.0`; ở bước 2, các luồng mới quay về `1.0.0` trong vài giây trong khi luồng đang chạy trên `1.1.0` được rút êm (`Graceful Drain`).
-
-### Domain 04: Mặt phẳng MCP & Mặt phẳng Liên tác nhân A2A (`mcp-a2a`)
-
-- **`TP-AC-F0401` — Lọc Danh mục Công cụ MCP Theo Khóa & Phân trang Không Cắt cụt (`TP-FR-0401`):**
-  - *Given:* Tổ chức đăng ký các `MCP Server` có tổng cộng 250 công cụ; `Virtual Key K_Dev` chỉ được cấp quyền trên 120 công cụ chỉ đọc.
-  - *When:* `MCP Client` dùng `K_Dev` gọi `tools/list` qua con trỏ phân trang và sau đó thử gọi trực tiếp 1 công cụ nằm trong nhóm 130 công cụ không được cấp quyền.
-  - *Then:* `tools/list` trả đủ đúng 120 công cụ qua các trang (không bị cắt cụt ở mốc 100 và ẩn hoàn toàn 130 công cụ kia); lệnh gọi trái phép bị chặn `403` và ghi sự kiện kiểm toán.
-- **`TP-AC-F0402` — Chặn Tức thì Khi Lệch Dấu vân tay Cấu trúc Công cụ MCP (`TP-FR-0402`):**
-  - *Given:* Công cụ `query_crm` đã được duyệt trong môi trường `production` với `schema_hash = H1`.
-  - *When:* `MCP Server` phía sau tự ý sửa chuỗi mô tả văn bản của `query_crm` (`schema_hash` đổi sang `H2`) và tác nhân gửi lệnh gọi `query_crm`.
-  - *Then:* Mặt phẳng MCP chặn đứng lệnh gọi với mã lỗi lệch dấu vân tay cấu trúc và phát cảnh báo an ninh cho quản trị viên.
-- **`TP-AC-F0403` — Phê duyệt Con người Chế độ Kép Cho Công cụ `destructive` (`TP-FR-0403`, `TP-FR-0904`):**
-  - *Given:* Công cụ `drop_staging_table` gắn mức rủi ro `destructive`.
-  - *When:* Tác nhân gọi công cụ ở chế độ chờ ngắn (được `Reviewer` bấm duyệt trong 15 giây) hoặc chế độ bất đồng bộ (nhận mã chờ, `Reviewer` duyệt trên Web Console sau 5 phút rồi tác nhân gọi lại kèm `Pre-Approval Token` đúng tham số).
-  - *Then:* Cả hai luồng đều chỉ thực thi công cụ đúng 1 lần sau khi có chữ ký phê duyệt hợp lệ của `Reviewer` và ghi đầy đủ vào `AuditEvent`.
-- **`TP-AC-F0404` — Khám phá `AgentCard`, Ủy quyền A2A Bất đồng bộ & Giới hạn Bước nhảy (`TP-FR-0405`, `TP-FR-0406`):**
-  - *Given:* Hai `Agent Endpoint` hợp lệ được đăng ký trên mặt phẳng A2A với `Max Delegation Hop Depth = 5`.
-  - *When:* Tác nhân A ủy quyền tác vụ hợp lệ cho Tác nhân B (trường hợp 1) hoặc tạo chuỗi ủy quyền vòng lặp sang bước nhảy thứ 6 (trường hợp 2).
-  - *Then:* Trường hợp 1 hoàn tất luồng trạng thái và gộp chi phí dưới cùng một mã truy vết gốc; trường hợp 2 bị từ chối ngay ở bước nhảy vượt ngưỡng với mã lỗi `delegation_depth_exceeded`.
-
-### Domain 05: Xác thực, Đa người thuê & Phân quyền (`iam-tenancy`)
-
-- **`TP-AC-F0501` — Phân cấp `Org → Project → Env` & Nâng cấp Từ Chế độ Cá nhân (`TP-FR-0501`):**
-  - *Given:* Người dùng khởi tạo ở `Personal Mode` (tự sinh 1 `Organization`, 1 `Project`, 1 `Environment` mặc định), sau đó tạo thêm `Project` thứ hai và môi trường `staging`/`production`.
-  - *When:* Chuyển sang giao diện làm việc nhóm.
-  - *Then:* Toàn bộ khóa, kết nối và sổ cái cũ vẫn giữ nguyên vẹn không cần di chuyển lại cơ sở dữ liệu.
-- **`TP-AC-F0502` — Kiểm soát Quyền RBAC Tập trung & Chống Dò Mật khẩu (`TP-FR-0502`):**
-  - *Given:* Tài khoản có vai trò `Developer` trong `Project P1` và một nguồn bên ngoài gửi liên tiếp các lần đăng nhập sai mật khẩu vượt ngưỡng.
-  - *When:* `Developer` gọi trực tiếp Admin REST API để cài phần mở rộng mới hoặc tăng trần ngân sách của `P1`.
-  - *Then:* API từ chối `403 Forbidden` (không phụ thuộc giao diện Web); nguồn đăng nhập sai liên tiếp bị khóa/giới hạn tốc độ tạm thời và ghi nhật ký bảo mật.
-- **`TP-AC-F0503` — Xoay Khóa Kép Không Gián đoạn vs Thu hồi Khẩn cấp (`TP-FR-0503`):**
-  - *Given:* `Virtual Key K1` đang phục vụ lưu lượng liên tục.
-  - *When:* Thực hiện lệnh xoay khóa (`Rotate` với cửa sổ 24h) để sinh `K2`, sau đó kiểm tra dữ liệu lưu trong bảng khóa.
-  - *Then:* Cả `K1` và `K2` đều hoạt động hợp lệ trong cửa sổ chuyển giao, cơ sở dữ liệu chỉ lưu mã băm một chiều (không chứa chuỗi khóa rõ), và `K1` tự động hết hiệu lực khi hết hạn cửa sổ xoay vòng.
-- **`TP-AC-F0504` — Liên kết `OIDC SSO` & Quy tắc Bốn Mắt (`TP-FR-0504`):**
-  - *Given:* Tổ chức bật đăng nhập OIDC và bật quy tắc `Four-Eyes` cho thao tác duyệt phần mở rộng bên ngoài.
-  - *When:* Quản trị viên A tải gói phần mở rộng lên và tự bấm nút phê duyệt bằng chính tài khoản của mình.
-  - *Then:* Hệ thống từ chối tự phê duyệt, yêu cầu một quản trị viên/thẩm định viên B độc lập thứ hai xác nhận mới chuyển sang `ENABLED_ACTIVE`.
-
-### Domain 06: Định tuyến Nhận thức Năng lực & Chịu lỗi (`routing-resilience`)
-
-- **`TP-AC-F0601` — Định tuyến Năng lực, Chuyển mạch Trước Luồng & Ngắt mạch (`TP-FR-0601`, `TP-FR-0603`):**
-  - *Given:* `Route R1` gồm `D1` (cửa sổ 32k), `D2` (128k, chính) và `D3` (128k, dự phòng); `D2` liên tục trả lỗi `503` trước khi sinh dữ liệu.
-  - *When:* Gửi loạt yêu cầu có ngữ cảnh 60k token vào `R1`.
-  - *Then:* `D1` bị bỏ qua do thiếu cửa sổ ngữ cảnh; yêu cầu tự động chuyển từ `D2` sang `D3` thành công; sau khi chạm ngưỡng lỗi, `D2` chuyển sang `CIRCUIT_OPEN_UNHEALTHY` để các yêu cầu tiếp theo đi thẳng tới `D3` không tốn thời gian chờ `D2`.
-- **`TP-AC-F0602` — Ép buộc Cứng Vùng Cư trú Dữ liệu Không Phá rào Khi Lỗi (`TP-FR-0602`):**
-  - *Given:* Chính sách bắt buộc `Data Region = EU`; `D_EU` đang mở ngắt mạch do sự cố nhà cung cấp trong khi `D_US` hoàn toàn khỏe mạnh.
-  - *When:* Gửi yêu cầu suy luận vào tuyến đó.
-  - *Then:* Bộ định tuyến từ chối dùng `D_US` và trả ngay `503 no_compliant_deployment_available`.
-- **`TP-AC-F0603` — Trình Mô phỏng Giải thích Khô Không Tốn Chi phí (`TP-FR-0604`, `TP-FR-0904`):**
-  - *Given:* Cấu hình tuyến phức tạp gồm 4 triển khai mô hình và 3 quy tắc chính sách.
-  - *When:* Gọi `/v1/route/explain` (hoặc trên Console/CLI) với thông số yêu cầu giả lập.
-  - *Then:* Hệ thống trả về danh sách đầy đủ cả 4 triển khai kèm lý do đạt/loại chính xác cho từng cái, với `0` gói tin gọi ra nhà cung cấp ngoài và `0 USD` trừ vào sổ cái.
-
-### Domain 07: Động cơ Chính sách & Bảo mật Vận hành (`policy-security`)
-
-- **`TP-AC-F0701` — Nhật ký Kiểm toán Bất biến & Công tắc Ngắt Khẩn cấp 4 Cấp (`TP-FR-0704`, `TP-FR-0705`):**
-  - *Given:* Hệ thống đã ghi nhận các sự kiện cài đặt plugin, tạo khóa và vi phạm chính sách.
-  - *When:* Quản trị viên thử gọi lệnh sửa/xóa dòng nhật ký kiểm toán qua API (bước 1), sau đó kích hoạt cách ly khẩn cấp `Extension Quarantine` trên một plugin và chạy truy vấn bán kính ảnh hưởng (bước 2).
-  - *Then:* Bước 1 bị từ chối `403`; bước 2 ngắt ngay lưu lượng qua plugin đó và trả về danh sách chính xác toàn bộ các `Project` và `Virtual Key` từng gọi qua plugin trong khung thời gian tra cứu.
-
-### Domain 08: Quan sát Vận hành, Sổ cái Ngân sách & Tài chính (`telemetry-finops`)
-
-- **`TP-AC-F0801` — Giữ chỗ Hai Pha Chống Đua tranh Vượt Trần Ngân sách Song song (`TP-FR-0801`):**
-  - *Given:* Ngân sách cứng khả dụng của `Project P1` chỉ còn đúng `0.10 USD`; mỗi yêu cầu ước tính giữ chỗ `0.05 USD`.
-  - *When:* Bắn đồng thời 30 yêu cầu streaming song song cùng một thời điểm vào `P1`.
-  - *Then:* Tối đa chỉ 2 yêu cầu được cấp giữ chỗ `RESERVED_HOLD` và đi ra nhà cung cấp ngoài; tối thiểu 28 yêu cầu còn lại bị chặn ngay tại cửa với `429 project_budget_exceeded`; nếu một tiến trình gặp sự cố làm treo khoản giữ chỗ quá hạn TTL, bộ dọn dẹp tự động thu hồi về trạng thái chuẩn.
-- **`TP-AC-F0802` — Quyết toán Đa thành phần & Kết chuyển Số dư Âm Nhẹ Cuối luồng (`TP-FR-0802`):**
-  - *Given:* Số dư khả dụng còn `0.04 USD`, yêu cầu cuối cùng giữ chỗ hợp lệ `0.04 USD` nhưng khi luồng kết thúc nhà cung cấp báo thực tế tiêu tốn `0.05 USD` (gồm cả token suy luận/cache).
-  - *When:* Luồng kết thúc và ứng dụng gửi tiếp một yêu cầu mới ngay sau đó.
-  - *Then:* Luồng đang chạy không bị cắt cụt ở từ cuối cùng, sổ cái ghi nhận trung thực thực chi `0.05 USD` (số dư khả dụng thành `-0.01 USD`) và yêu cầu kế tiếp bị chặn cứng cho tới khi được cấp thêm ngân sách.
-- **`TP-AC-F0803` — Phân loại Trung thực `EXACT` / `ESTIMATED` / `UNMETERED_FLAGGED` (`TP-FR-0802`, `TP-FR-0803`):**
-  - *Given:* Trong kỳ có 3 giao dịch: (1) hoàn tất đủ số đếm chuẩn từ hãng, (2) đứt luồng giữa chừng sau khi truyền 400 từ không có bản tin tổng kết cuối luồng, và (3) đi qua cổng tùy chỉnh chưa khai báo bảng giá.
-  - *When:* Xuất báo cáo đối soát chi phí (`Chargeback Report`) của dự án.
-  - *Then:* Giao dịch (1) mang nhãn `EXACT`, giao dịch (2) tính chi phí ước lượng `> 0` mang nhãn `ESTIMATED`, giao dịch (3) mang nhãn `UNMETERED_FLAGGED`; báo cáo tách riêng các cột này và **không nơi nào tuyên bố tổng chi phí chính xác tuyệt đối 100% khi đang tồn tại giao dịch (2) hoặc (3)**.
-- **`TP-AC-F0804` — Mặc định Không Lưu Nội dung Gốc & Xuất OTLP `Fail-Open` Có Kiểm soát (`TP-FR-0805`, `TP-FR-0806`):**
-  - *Given:* Dự án ở cấu hình mặc định và bộ thu thập OpenTelemetry bên ngoài bị tắt đột ngột.
-  - *When:* Gửi truy vấn chứa chuỗi dữ liệu khách hàng đặc trưng `SECRET_PII_MARKER_99` kèm khóa xác thực.
-  - *Then:* Truy vấn suy luận vẫn thành công bình thường (bộ đếm gói OTLP bị rớt tăng lên cảnh báo, không làm treo cổng), và tìm kiếm toàn văn trong kho nhật ký bền vững của Tanpopo trả về `0` kết quả cho cả `SECRET_PII_MARKER_99` lẫn giá trị khóa xác thực.
-
-### Domain 09: Giao diện Web Console, CLI & Admin API (`console-cli-api`)
-
-- **`TP-AC-F0901` — Phân trang Chuẩn & Chống Ghi đè Đồng thời `409 Conflict` (`TP-FR-0901`):**
-  - *Given:* Quản trị viên A và B cùng tải cấu hình `Route R1` ở phiên bản `v2`; A lưu thay đổi lên `v3`.
-  - *When:* B gửi lệnh cập nhật `R1` vẫn đính kèm phiên bản cũ `v2`.
-  - *Then:* Admin API từ chối yêu cầu của B với mã `409 Conflict` mà không làm mất thay đổi `v3` của A.
-- **`TP-AC-F0902` — Trải nghiệm Khởi tạo Ngày đầu Đồng bộ Giữa Web Console và CLI (`TP-FR-0902`, `TP-FR-0903`):**
-  - *Given:* Máy chủ mới khởi chạy lần đầu tiên chưa có cấu hình.
-  - *When:* Người vận hành thực hiện Setup Wizard trên Web Console (Astryx `neutral`) để bật 1 Official Adapter, nhập khóa, tạo `Route`, phát hành `Virtual Key` và chạy thử 1 truy vấn.
-  - *Then:* Toàn bộ luồng hoàn tất liền mạch trong `< 3 phút`, và mọi tài nguyên vừa tạo đều tra cứu/quản trị nhất quán qua lệnh `tanpopo` CLI.
-
-### Domain 10: Tự Vận hành, Cài đặt, Sao lưu & Nâng cấp (`selfhost-ops`)
-
-- **`TP-AC-F1001` — Khởi chạy Đơn nút Tự chứa, `/healthz` `/readyz` & Khởi tạo GitOps (`TP-FR-1001`, `TP-FR-1002`, `TP-FR-0903`):**
-  - *Given:* Máy chủ sạch không cài sẵn PostgreSQL hay Redis ngoài, chỉ có tệp cấu hình khai báo và `tanpopo.lock`.
-  - *When:* Chạy lệnh khởi động Tanpopo.
-  - *Then:* Hệ thống tự khởi tạo kho nhúng, xác minh `tanpopo.lock`, chuyển `/healthz` và `/readyz` sang `200 OK` và sẵn sàng phục vụ lưu lượng đúng theo cấu hình khai báo.
-- **`TP-AC-F1002` — Chặn Nâng cấp Khi Lệch Hợp đồng (`Preflight Check`) & Xóa Sạch Đơn vị Thuê (`TP-FR-1003`, `TP-FR-1004`, `TP-FR-0307`):**
-  - *Given:* Hệ thống đang bật một `Extension` chỉ tương thích hợp đồng `v1`, trong khi bản Core nâng cấp yêu cầu tối thiểu `v3` (kịch bản 1); hoặc quản trị viên ra lệnh xóa vĩnh viễn `Project P_Old` (kịch bản 2).
-  - *When:* Chạy trình kiểm tra nâng cấp (kịch bản 1) hoặc xác nhận xóa `P_Old` (kịch bản 2).
-  - *Then:* Kịch bản 1 dừng an toàn ở trạng thái `BLOCKED_INCOMPATIBLE` liệt kê rõ tên phần mở rộng cần cập nhật trước; kịch bản 2 rút sạch luồng đang chạy và xóa không thể khôi phục toàn bộ khóa bí mật cùng dữ liệu truy vấn của `P_Old`.
-- **`TP-AC-F1003` — Mở rộng Ngang Không Trạng thái Nhiều Bản sao (`TP-FR-1005`):**
-  - *Given:* Cụm gồm 3 bản sao Data Plane đứng sau bộ cân bằng tải vòng tròn (`Round-Robin`, không gán dính phiên) dùng chung kho dữ liệu và bộ đếm phân tán.
-  - *When:* Gửi tải liên tục đồng thời tắt đột ngột 1 trong 3 bản sao.
-  - *Then:* Hạn mức ngân sách và tốc độ toàn cục vẫn được thực thi chính xác không bị nhân 3 lần, và toàn bộ yêu cầu mới tự động được 2 bản sao còn sống xử lý bình thường.
+> **Acceptance Verification Specification (Phase ASTRA A03 — Gate G2: `READY_FOR_REVIEW` | `DRAFT — UNLOCKED SCOPE`)**
+> - **Version:** `0.1.0-step03-draft`
+> - **Last Updated:** `2026-11-11`
+> - **Authoring Role:** Principal Requirements Engineer & Product Manager
+> - **Governance Status:** **Unlocked-scope draft (`DRAFT`)**. Every criterion below is structured in `Given / When / Then` form suitable for automated integration testing, contract testing, and security penetration testing. **100% of `Must` (`P0`) requirements in [`srs.md`](./srs.md) have direct acceptance criteria.**
 
 ---
 
-## Phần B — Bộ Tiêu chí Nghiệm thu Bảo mật, Ranh giới Tin cậy & Tuân thủ (`TP-AC-SEC-01` .. `TP-AC-SEC-08`)
+## Part A — Functional Acceptance Criteria by Domain (`TP-AC-F0101` .. `TP-AC-F1003`)
 
-| Mã AC Bảo mật | Hạng mục rủi ro trọng yếu | Kịch bản kiểm thử tấn công / Lạm dụng (`Given / When / Then`) |
+### Domain 01: Gateway, Protocols & Multimodality (`gateway-protocols`)
+
+- **`TP-AC-F0101` — Unified Inference Endpoints & SSE Streaming (`TP-FR-0101`):**
+  - *Given:* `Route R1` maps to a `HEALTHY` `Model Deployment` and the `API Client` presents a valid `Virtual Key`.
+  - *When:* Standard OpenAI SDK requests are sent to `/v1/chat/completions`, `/v1/responses` (both `stream: false` and `stream: true`), and `/v1/embeddings`.
+  - *Then:* The system returns `200 OK` with a schema-valid JSON payload or properly terminated `text/event-stream`, attaches `x-tanpopo-request-id` to the response headers, and records the usage entry in the ledger.
+- **`TP-AC-F0102` — Fail-Fast Rejection for Requests Exceeding Target Model Capabilities (`TP-FR-0102`):**
+  - *Given:* The target route contains only models declaring `audio_input = false` or `strict_json_schema = false` in their `Capability Profile`.
+  - *When:* An `API Client` submits a request containing an audio attachment or a `response_format` requiring `json_schema` with `strict: true`.
+  - *Then:* The system immediately rejects the request with `400 capability_not_supported` explicitly naming the missing capability, **opens zero outbound network connections to external providers**, and releases the budget hold (`RELEASED_UNUSED`).
+- **`TP-AC-F0103` — Strict Prohibition of Silent Failover After Partial Stream Emission (`TP-FR-0103`):**
+  - *Given:* `Route R1` has `Deployment D1` (primary) and `D2` (healthy fallback); `D1` successfully emits the first 15 SSE chunks to the `API Client` and then abruptly drops the connection.
+  - *When:* The Gateway detects the mid-stream disconnect from `D1`.
+  - *Then:* The Gateway emits a canonical `mid_stream_abort` error event frame to close the SSE stream, **never dispatches a fallback request to `D2`**, and settles the partial output already streamed by `D1` tagged as `ESTIMATED`.
+- **`TP-AC-F0104` — Immediate Cancellation Propagation & Uniform Error Envelope (`TP-FR-0104`):**
+  - *Given:* A long-form text generation request is actively streaming SSE chunks at the 2-second mark.
+  - *When:* The `API Client` actively closes the TCP/HTTP connection to cancel the request.
+  - *Then:* The Gateway cancels the corresponding upstream provider request within `< 500 ms` and immediately settles the budget hold.
+- **`TP-AC-F0105` — Lossless Native Dialect Passthrough & Same-Dialect Failover Guard (`TP-FR-0105`):**
+  - *Given:* An `API Client` calls `/native/anthropic/v1/messages` with provider-specific constructs (`cache_control`, `thinking` blocks) plus a newly introduced extension field never previously defined in Core.
+  - *When:* The request traverses a route pointing to an Anthropic-dialect deployment (Case 1) or a misconfigured route pointing to a different-dialect deployment (Case 2).
+  - *Then:* In Case 1, the upstream provider receives 100% of the original JSON fields intact without stripping, and the ledger accurately extracts cache/reasoning token counts; in Case 2, the system immediately rejects the request with `400 dialect_mismatch`.
+
+### Domain 02: Providers, Models & Credentials (`provider-credentials`)
+
+- **`TP-AC-F0201` — Four-Entity Separation, Downward One-Way Sharing & In-Use Deletion Guard (`TP-FR-0201`, `TP-FR-0203`):**
+  - *Given:* A single `Provider Adapter` is used to create two `Provider Connection` instances (`C_Org` at the Organization level and `C_Proj` at the Project level), where `C_Org` is shared downward to `Project P1` and attached to active `Route R_Active`.
+  - *When:* The `Team Admin` of `P1` routes traffic through `C_Org`, attempts to read or modify the secret key of `C_Org`, or an administrator attempts to hard-delete `C_Org` while `R_Active` is enabled.
+  - *Then:* Inference routing succeeds normally; the `Team Admin` attempt to read or modify the secret key is denied with `403`; and the hard-delete request on `C_Org` is blocked with `409 resource_in_use` until detached from `R_Active`.
+- **`TP-AC-F0202` — Cold-Start Support for Local Models (`Ollama`/`vLLM`) & Custom Pricing (`TP-FR-0202`):**
+  - *Given:* An internal `Model Deployment` is configured with `first_byte_timeout = 60s` and unit pricing of `0 USD` (or an internal amortization rate), and the GPU server takes `35 seconds` to load model weights into VRAM before emitting the first chunk.
+  - *When:* An initial inference request is sent to that internal model.
+  - *Then:* The request is not prematurely aborted at default 5–10s cloud timeouts, the deployment remains `HEALTHY`, and the ledger records the configured internal unit price accurately.
+- **`TP-AC-F0203` — Single-Flight Refresh for `Authorized OAuth 2.1` (`TP-FR-0205`):**
+  - *Given:* An `Authorized OAuth` connection has an `access_token` reaching its expiration threshold while simultaneously receiving 50 concurrent inference requests.
+  - *When:* Automatic token refresh is triggered.
+  - *Then:* Exactly 1 refresh request is sent to the provider's `token_endpoint`; the other 49 concurrent requests await the refreshed token, and all 50 inference requests complete successfully without token revocation race conditions.
+- **`TP-AC-F0204` — Cloud Federated Identity & External KMS Envelope Encryption (`TP-FR-0206`):**
+  - *Given:* A connection is configured to use `Workload Identity` / OIDC or an external KMS envelope encryption key store.
+  - *When:* Server startup and inference calls to the target cloud provider are executed.
+  - *Then:* Authentication succeeds without persisting long-lived static API keys on local disk; if KMS decryption permission is revoked, the server transitions `/readyz` to safely unready (`Fail-Closed`).
+
+### Domain 03: Extension Engine & Marketplace (`plugin-marketplace`)
+
+- **`TP-AC-F0301` — Hot-Installing a New Provider Adapter Without Recompiling Core (`TP-FR-0301`, `TP-FR-0302`):**
+  - *Given:* The Tanpopo Core process is running steadily (preserving an unchanged Core binary hash); a mock new provider `Vendor-Z` has never existed in the Core codebase.
+  - *When:* An operator installs and approves permissions for a `Declarative Pack` (or `Sandbox Plugin`) for `Vendor-Z`, creates a `Connection`, and invokes inference.
+  - *Then:* The inference query completes end-to-end through `Vendor-Z` without recompiling or restarting the entire Core process.
+- **`TP-AC-F0302` — Multi-Source Installation, 3 Provenance Tiers, Permission Consent & `tanpopo.lock` Pinning (`TP-FR-0304`, `TP-FR-0307`):**
+  - *Given:* An extension package fetched from Git/URL/ZIP/Private Registry lacks an official Tanpopo release signature and declares outbound access to `api.vendor-z.example`.
+  - *When:* The install command runs prior to permission sheet confirmation, followed by explicit permission approval.
+  - *Then:* Prior to approval, the package remains dormant in `PENDING_PERMISSION_APPROVAL` and serves zero traffic; after approval, the package carries the `unverified-external` badge (or `verified`/`official` strictly matching valid cryptographic signatures) and its SHA-256 digest and approved permission set are recorded accurately in `tanpopo.lock`.
+- **`TP-AC-F0303` — Automated Cassette-Driven Contract Test Harness (`TP-FR-0305`, `TP-FR-0903`):**
+  - *Given:* A plugin author scaffolds a new extension package via `tanpopo plugin init` with recorded `Cassettes` covering 5 scenarios (synchronous response, SSE streaming, `401` auth error, `429` rate limit, mid-stream disconnect).
+  - *When:* `tanpopo plugin test` is executed completely offline (without live provider keys).
+  - *Then:* The CLI harness automatically validates the `Manifest`, input/output schemas, and error classification, emitting a clear pass/fail report and deterministic CI exit code.
+- **`TP-AC-F0304` — Blocking Auto-Activation on Permission Escalation & Instant Rollback (`TP-FR-0306`):**
+  - *Given:* `Plugin P@1.0.0` is running with approved network access to `a.example.com`; `P@1.1.0` adds `b.example.com` to its `Manifest`.
+  - *When:* An update is triggered without new permission consent (Step 1), followed by consenting to `1.1.0` and then issuing a `Rollback` to `1.0.0` while active streams are in flight (Step 2).
+  - *Then:* In Step 1, `1.1.0` is held in `UPDATING_PENDING_RECONSENT` while `100%` of live traffic continues through `1.0.0`; in Step 2, new requests revert to `1.0.0` within seconds while in-flight streams on `1.1.0` complete via `Graceful Drain`.
+
+### Domain 04: MCP Plane & A2A Inter-Agent Plane (`mcp-a2a`)
+
+- **`TP-AC-F0401` — Per-Key MCP Tool Catalog Filtering & Non-Truncating Pagination (`TP-FR-0401`):**
+  - *Given:* An organization registers `MCP Server` backends exposing 250 total tools; `Virtual Key K_Dev` is granted access to only 120 read-only tools.
+  - *When:* An `MCP Client` authenticating with `K_Dev` paginates through `tools/list` via cursor and then attempts a direct invocation of 1 tool belonging to the 130 unauthorized tools.
+  - *Then:* `tools/list` returns all 120 authorized tools across pages (without truncating at 100 and completely hiding the other 130 tools); the unauthorized direct tool call is rejected with `403` and generates an audit event.
+- **`TP-AC-F0402` — Immediate Execution Block on MCP Tool Schema Hash Drift (`TP-FR-0402`):**
+  - *Given:* Tool `query_crm` is approved in the `production` environment with pinned `schema_hash = H1`.
+  - *When:* The downstream `MCP Server` silently alters the text description of `query_crm` (`schema_hash` shifts to `H2`) and an agent invokes `query_crm`.
+  - *Then:* The MCP plane immediately blocks the tool invocation with a schema hash mismatch error code and dispatches a security alert to administrators.
+- **`TP-AC-F0403` — Dual-Mode Human Approval for `destructive` Tools (`TP-FR-0403`, `TP-FR-0904`):**
+  - *Given:* Tool `drop_staging_table` is classified with risk level `destructive`.
+  - *When:* An agent invokes the tool either in short-wait synchronous mode (approved by a `Reviewer` within 15 seconds) or asynchronous mode (receiving a pending token, approved by a `Reviewer` in the Web Console 5 minutes later, and re-invoked by the agent with the parameter-bound `Pre-Approval Token`).
+  - *Then:* Both flows execute the downstream tool exactly once only after receiving a valid `Reviewer` approval signature, recording full provenance in `AuditEvent`.
+- **`TP-AC-F0404` — `AgentCard` Discovery, Asynchronous A2A Delegation & Hop-Depth Limit (`TP-FR-0405`, `TP-FR-0406`):**
+  - *Given:* Two valid `Agent Endpoint` registrations exist on the A2A plane with `Max Delegation Hop Depth = 5`.
+  - *When:* Agent A delegates a valid task to Agent B (Case 1) or creates a circular delegation chain reaching hop 6 (Case 2).
+  - *Then:* Case 1 completes the task state stream and aggregates cost under a single root trace ID; Case 2 is rejected immediately at the hop exceeding the ceiling with error code `delegation_depth_exceeded`.
+
+### Domain 05: Authentication, Multi-Tenancy & Authorization (`iam-tenancy`)
+
+- **`TP-AC-F0501` — `Org → Project → Env` Hierarchy & Seamless Upgrade from Personal Mode (`TP-FR-0501`):**
+  - *Given:* A user initializes Tanpopo in `Personal Mode` (auto-provisioning 1 default `Organization`, 1 `Project`, and 1 `Environment`), then creates a second `Project` and `staging`/`production` environments.
+  - *When:* Transitioning to multi-project team collaboration views.
+  - *Then:* All existing keys, connections, and ledger records remain intact without requiring a destructive database re-migration.
+- **`TP-AC-F0502` — Centralized RBAC Enforcement & Brute-Force Login Protection (`TP-FR-0502`):**
+  - *Given:* An account holds the `Developer` role in `Project P1`, while an external source submits repeated invalid password attempts exceeding the rate threshold.
+  - *When:* The `Developer` directly calls the Admin REST API to install a new extension or raise `P1`'s budget ceiling.
+  - *Then:* The API returns `403 Forbidden` (independent of Web UI controls); the brute-force source is temporarily rate-limited/locked out and logged in the security audit trail.
+- **`TP-AC-F0503` — Zero-Downtime Dual-Key Rotation vs Emergency Revocation (`TP-FR-0503`):**
+  - *Given:* `Virtual Key K1` is actively serving continuous traffic.
+  - *When:* A key rotation (`Rotate` with a 24h grace window) is triggered to issue `K2`, and the persisted key table is inspected.
+  - *Then:* Both `K1` and `K2` authenticate validly during the grace window, the database stores only one-way cryptographic hashes (zero plaintext key strings), and `K1` automatically expires once the rotation window elapses.
+- **`TP-AC-F0504` — `OIDC SSO` Federation & Four-Eyes Approval Enforcement (`TP-FR-0504`):**
+  - *Given:* An organization enables OIDC login and enforces the `Four-Eyes` policy for external extension approvals.
+  - *When:* Administrator A uploads an external extension package and attempts to approve it using the same account.
+  - *Then:* The system rejects self-approval, requiring a second independent administrator/reviewer B to confirm before transitioning to `ENABLED_ACTIVE`.
+
+### Domain 06: Capability-Aware Routing & Resilience (`routing-resilience`)
+
+- **`TP-AC-F0601` — Capability Filtering, Pre-Stream Failover & Circuit Breaking (`TP-FR-0601`, `TP-FR-0603`):**
+  - *Given:* `Route R1` contains `D1` (32k context window), `D2` (128k, primary), and `D3` (128k, fallback); `D2` repeatedly returns `503` prior to emitting any content bytes.
+  - *When:* A batch of 60k-token context requests is sent to `R1`.
+  - *Then:* `D1` is skipped due to insufficient context window; requests automatically fail over from `D2` to `D3` successfully; once the failure threshold is crossed, `D2` transitions to `CIRCUIT_OPEN_UNHEALTHY` so subsequent requests route directly to `D3` without incurring `D2` timeout latency.
+- **`TP-AC-F0602` — Hard Data Residency Enforcement Without Outage Bypass (`TP-FR-0602`):**
+  - *Given:* Policy mandates `Data Region = EU`; `D_EU` has an open circuit breaker due to a provider outage while `D_US` is completely healthy.
+  - *When:* An inference request is submitted to that route.
+  - *Then:* The router refuses to route to `D_US` and immediately returns `503 no_compliant_deployment_available`.
+- **`TP-AC-F0603` — Zero-Cost Dry-Run Route & Policy Explain Simulator (`TP-FR-0604`, `TP-FR-0904`):**
+  - *Given:* A complex route configuration comprising 4 model deployments and 3 policy rules.
+  - *When:* `/v1/route/explain` is invoked (or triggered via Console/CLI) with simulated request parameters.
+  - *Then:* The system returns all 4 deployments with exact selection/rejection rule explanations, emitting `0` outbound network packets to external providers and deducting `0 USD` from the budget ledger.
+
+### Domain 07: Policy Engine & Operational Security (`policy-security`)
+
+- **`TP-AC-F0701` — Immutable Audit Log & 4-Level Emergency Kill-Switches (`TP-FR-0704`, `TP-FR-0705`):**
+  - *Given:* The system has recorded plugin installations, key creations, and policy violation events.
+  - *When:* An administrator attempts to modify or delete an audit log entry via API (Step 1), then triggers emergency `Extension Quarantine` on a plugin and runs a blast-radius impact query (Step 2).
+  - *Then:* Step 1 is rejected with `403`; Step 2 immediately severs traffic through that plugin and returns the exact list of all `Project` and `Virtual Key` entities that invoked the plugin within the queried time window.
+
+### Domain 08: Operational Telemetry, Budget Ledger & FinOps (`telemetry-finops`)
+
+- **`TP-AC-F0801` — Two-Phase Pre-Execution Hold Preventing Concurrent Budget Overshoot (`TP-FR-0801`):**
+  - *Given:* `Project P1` has exactly `0.10 USD` of remaining hard budget; each request requires an estimated `0.05 USD` pre-execution hold.
+  - *When:* 30 concurrent streaming requests are fired simultaneously at `P1`.
+  - *Then:* At most 2 requests acquire `RESERVED_HOLD` and reach the upstream provider; at least 28 requests are rejected immediately at ingress with `429 project_budget_exceeded`; if a node crash leaves a hold orphaned past its TTL, the reaper reclaims it cleanly with an audit record.
+- **`TP-AC-F0802` — Multi-Component Settlement & Slight End-of-Stream Negative Balance Carryover (`TP-FR-0802`):**
+  - *Given:* Available balance is `0.04 USD`; the final request validly holds `0.04 USD`, but upon stream completion the provider reports actual consumption of `0.05 USD` (including reasoning/cache tokens).
+  - *When:* The stream finishes and the client immediately sends a follow-up request.
+  - *Then:* The active stream is not truncated on its final token, the ledger truthfully records the `0.05 USD` actual spend (bringing available balance to `-0.01 USD`), and the subsequent request is hard-blocked until budget is replenished.
+- **`TP-AC-F0803` — Honest `EXACT` / `ESTIMATED` / `UNMETERED_FLAGGED` Classification (`TP-FR-0802`, `TP-FR-0803`):**
+  - *Given:* Within a billing period, 3 transactions occur: (1) completed with authoritative provider token counts, (2) aborted mid-stream after emitting 400 words with no final usage frame, and (3) routed through a custom endpoint lacking a pricing schedule.
+  - *When:* The project's `Chargeback Report` is exported.
+  - *Then:* Transaction (1) is tagged `EXACT`, transaction (2) computes an estimated cost `> 0` tagged `ESTIMATED`, and transaction (3) is tagged `UNMETERED_FLAGGED`; the report segregates these columns explicitly and **never claims 100% exact total cost while transactions of type (2) or (3) are present**.
+- **`TP-AC-F0804` — Metadata-Only Default Privacy & Controlled `Fail-Open` OTLP Export (`TP-FR-0805`, `TP-FR-0806`):**
+  - *Given:* A project uses default privacy settings and the external OpenTelemetry collector is abruptly shut down.
+  - *When:* An inference query containing unique customer payload marker `SECRET_PII_MARKER_99` and authentication credentials is sent.
+  - *Then:* The inference query still succeeds normally (the dropped-OTLP-batch counter increments with a warning without stalling the gateway), and full-text search across Tanpopo's persistent log store returns `0` matches for both `SECRET_PII_MARKER_99` and the raw credential value.
+
+### Domain 09: Web Console, CLI & Admin API (`console-cli-api`)
+
+- **`TP-AC-F0901` — Standard Pagination & `409 Conflict` Optimistic Concurrency Guard (`TP-FR-0901`):**
+  - *Given:* Administrators A and B both fetch `Route R1` at version `v2`; A saves an update advancing it to `v3`.
+  - *When:* B submits an update to `R1` still carrying stale version `v2`.
+  - *Then:* The Admin API rejects B's update with `409 Conflict` without overwriting A's `v3` changes.
+- **`TP-AC-F0902` — Cohesive Day-1 Onboarding Across Web Console and CLI (`TP-FR-0902`, `TP-FR-0903`):**
+  - *Given:* A freshly started server instance with zero prior configuration.
+  - *When:* An operator completes the Setup Wizard in the Web Console (Astryx `neutral`) to enable 1 Official Adapter, enter a credential, create a `Route`, issue a `Virtual Key`, and run 1 test prompt.
+  - *Then:* The end-to-end flow finishes seamlessly in `< 3 minutes`, and every newly created resource is consistently inspectable and manageable via the `tanpopo` CLI.
+
+### Domain 10: Self-Hosted Operations, Installer, Backup & Upgrades (`selfhost-ops`)
+
+- **`TP-AC-F1001` — Zero-Dependency Standalone Startup, `/healthz` `/readyz` & GitOps Bootstrap (`TP-FR-1001`, `TP-FR-1002`, `TP-FR-0903`):**
+  - *Given:* A clean host without external PostgreSQL or Redis installed, supplied only with a declarative config file and `tanpopo.lock`.
+  - *When:* The Tanpopo startup command is executed.
+  - *Then:* The system initializes its embedded store, verifies `tanpopo.lock`, transitions `/healthz` and `/readyz` to `200 OK`, and serves traffic matching the declarative configuration.
+- **`TP-AC-F1002` — `Preflight Check` Upgrade Block on Contract Mismatch & Clean Tenant Erasure (`TP-FR-1003`, `TP-FR-1004`, `TP-FR-0307`):**
+  - *Given:* An active `Extension` supports only contract `v1` while the target Core upgrade requires at least `v3` (Scenario 1); or an administrator confirms permanent deletion of `Project P_Old` (Scenario 2).
+  - *When:* The upgrade preflight checker runs (Scenario 1) or deletion of `P_Old` is confirmed (Scenario 2).
+  - *Then:* Scenario 1 halts safely in `BLOCKED_INCOMPATIBLE`, explicitly listing the incompatible extension requiring update first; Scenario 2 drains active streams and irrecoverably erases all secret credentials and stored query payloads belonging to `P_Old`.
+- **`TP-AC-F1003` — Multi-Replica Stateless Horizontal Scale-Out (`TP-FR-1005`):**
+  - *Given:* A 3-replica Data Plane cluster sits behind a round-robin load balancer (no sticky sessions) backed by shared relational storage and distributed counters.
+  - *When:* Continuous traffic is driven while 1 of the 3 replicas is abruptly terminated.
+  - *Then:* Global budget ceilings and rate limits remain accurately enforced (never multiplied 3x), and all new requests are automatically served by the 2 surviving replicas.
+
+---
+
+## Part B — Security, Trust Boundary & Compliance Acceptance Criteria (`TP-AC-SEC-01` .. `TP-AC-SEC-08`)
+
+| Security AC ID | Critical Risk Category | Adversarial / Abuse Test Scenario (`Given / When / Then`) |
 |---|---|---|
-| **`TP-AC-SEC-01`** | **1. Bảo vệ Kho Bí mật Gốc (`Secrets`)** | *Given:* Đã lưu API Key thật `sk-live-REAL999` vào kho bí mật và gắn với một `Community Adapter` chuẩn.<br/>*When:* (a) Quản trị viên gọi mọi điểm cuối Admin API/CLI/UI để xem chi tiết kết nối; (b) Bên trong mã của phần mở rộng cố đọc toàn bộ bộ nhớ đầu vào được truyền vào; (c) Nhà cung cấp đích trả về lỗi `401` có nhại lại chuỗi khóa.<br/>*Then:* Cả (a), (b) và (c) đều **không bao giờ** xuất hiện chuỗi `sk-live-REAL999` ở dạng văn bản rõ (Host tự tiêm khóa ở biên mạng và tự lọc sạch chuỗi khóa khỏi mọi phản hồi lỗi/nhật ký). |
-| **`TP-AC-SEC-02`** | **2. Kiềm tỏa Phần mở rộng Cộng đồng / Không Tin cậy (`Community Plugins`)** | *Given:* Một gói phần mở rộng bên ngoài: (a) tự ghi `"trust_tier": "official"` giả mạo trong Manifest, (b) bị sửa 1 byte so với mã băm trong `tanpopo.lock`, (c) cố mở kết nối mạng ngầm tới `attacker.example` ngoài `allowed_hosts`, hoặc (d) chạy vòng lặp vô hạn `while(true){}`.<br/>*When:* Cài đặt và gửi lưu lượng qua phần mở rộng đó.<br/>*Then:* (a) Nhãn giả mạo bị bác bỏ/hạ cưỡng bức xuống `unverified-external`; (b) Gói lệch băm bị từ chối nạp; (c) Kết nối tới `attacker.example` bị chặn tức khắc kèm ghi `AuditEvent` bảo mật và cách ly `QUARANTINED`; (d) Vòng lặp vô hạn bị ngắt đúng hạn mức CPU mà không làm sập hay nghẽn các tuyến khác trên cổng. |
-| **`TP-AC-SEC-03`** | **3. Bảo mật Kết nối `Authorized OAuth` (`User / App OAuth`)** | *Given:* Luồng kết nối OAuth 2.1 được cấp phép.<br/>*When:* (a) Kẻ tấn công gửi callback giả mạo lệch tham số `state` hoặc thiếu bộ kiểm chứng `PKCE`; (b) Nhà cung cấp trả về tập `scopes` thiếu quyền hoặc rộng bất thường không khớp cấu hình; (c) Quản trị viên thu hồi quyền phía nhà cung cấp dẫn tới lỗi `invalid_grant` khi đang có tải cao.<br/>*Then:* (a) và (b) bị từ chối kích hoạt ngay lập tức; (c) Kết nối lập tức chuyển sang `AUTH_EXPIRED_REAUTH_REQUIRED` sau 1 lần gọi làm mới duy nhất, dừng bắn yêu cầu vô ích và không rò rỉ `refresh_token` ra ngoài. |
-| **`TP-AC-SEC-04`** | **4. Chuyển tiếp Mã Xác thực & Chống SSRF (`Token Forwarding & SSRF`)** | *Given:* `API Client` gửi `Virtual Key vk-client-123` vào Tanpopo; hoặc kẻ có quyền cấu hình thử nhập điểm cuối mô hình/MCP trỏ tới `http://169.254.169.254/latest/meta-data/`, `http://127.0.0.1:6379` hay máy chủ trả HTTP `302 Redirect` sang tên miền khác.<br/>*When:* Thực thi kiểm tra kết nối hoặc gửi truy vấn.<br/>*Then:* `vk-client-123` luôn bị lột sạch trước khi ra ngoài; khi gặp HTTP `302` khác tên miền đích đã duyệt, hệ thống **tuyệt đối không tự động chuyển tiếp tiêu đề `Authorization`** sang miền lạ; mọi địa chỉ siêu dữ liệu đám mây và mạng nội bộ trái phép đều bị chặn cứng ngay từ tầng kiểm tra biên mạng. |
-| **`TP-AC-SEC-05`** | **5. Ranh giới Tin cậy 4 Lớp & Tư thế `Fail-Closed` (`Trust Boundaries`)** | *Given:* (a) `Virtual Key` chỉ được cấp quyền gọi suy luận `Provider`; (b) `Organization` khóa chính sách chỉ cho phép phần mở rộng `official`; (c) Kho kiểm tra ngân sách cứng hoặc bộ kiểm tra vùng dữ liệu bị gián đoạn tạm thời.<br/>*When:* (a) Dùng khóa đó gọi mặt phẳng `/mcp` hoặc `/a2a`; (b) `Team Admin` cố gắn gói `unverified-external` vào dự án; (c) Gửi truy vấn phát sinh phí.<br/>*Then:* Cả 3 kịch bản đều bị từ chối an toàn (`Fail-Closed` — `403`/`503`), không có bất kỳ quyền ngầm nào bắc cầu giữa 4 lớp hay vượt rào chính sách cấp trên. |
-| **`TP-AC-SEC-06`** | **6. Tuân thủ Điều khoản Thuê bao (`Subscription Authorization`)** | *Given:* Rà soát toàn bộ mã nguồn Core, bộ Official Adapters, quy tắc kiểm định Marketplace, giao diện Web Console/Setup Wizard và tài liệu chính thức.<br/>*When:* Kiểm tra khả năng cấu hình hoặc nộp gói phần mở rộng trích xuất cookie/phiên trình duyệt/OAuth đóng của gói thuê bao tiêu dùng cá nhân (`ChatGPT Plus/Pro`, `Codex` cá nhân, `Claude Pro/Max`, `Google Antigravity`...).<br/>*Then:* Gói nộp lên Marketplace chính thức bị từ chối cấp nhãn `official`/`verified`; sản phẩm không chứa bất kỳ công cụ trích xuất phiên tiêu dùng, mẫu hướng dẫn hay nút bấm *"Tôi chấp nhận rủi ro để dùng tài khoản Plus/Pro làm API chung"* nào; tài liệu ghi rõ OAuth chỉ áp dụng cho tích hợp được nhà cung cấp cấp phép hợp lệ. |
-| **`TP-AC-SEC-07`** | **7. Cô lập Đa Người thuê & Đơn Môi trường (`Multi-Tenancy`)** | *Given:* Trên cùng một máy chủ có `Organization A` và `Organization B`; trong `Org A` có `Virtual Key K_Dev` gắn với môi trường `development` và `K_Sec` đang mở 5 luồng SSE dài.<br/>*When:* (a) Chủ thể của `Org A` dùng ID đoán được để gọi/xem `Route`, `Secret`, `MCP Tool` hoặc `AuditEvent` của `Org B`; (b) Dùng `K_Dev` gọi tuyến `production`; (c) Bấm nút *Thu hồi Khẩn cấp An ninh* đối với `K_Sec`.<br/>*Then:* (a) Trả lỗi không tiết lộ sự tồn tại của tài nguyên `Org B` kèm ghi cảnh báo bảo mật; (b) Từ chối lệch môi trường; (c) Cả 5 luồng SSE đang mở của `K_Sec` bị ngắt đứt và các yêu cầu mới bị chặn trong ngưỡng SLA (`< 1s` đơn nút / `< 5s` cụm). |
-| **`TP-AC-SEC-08`** | **8. Kiểm soát Tác động Phụ & Khuếch đại Đặc quyền (`Side Effects`)** | *Given:* Công cụ MCP `execute_refund` (`destructive`) đã được `Reviewer` duyệt cho tham số `(order_id="100", amount=20)` và tác nhân A2A cha còn hạn mức ngân sách `1.00 USD`.<br/>*When:* (a) Tác nhân đổi tham số thành `amount=2000` (hoặc tự duyệt yêu cầu của chính mình); (b) Lệnh gọi `execute_refund` hợp lệ bị quá thời gian chờ mạng sau khi đã gửi tới `MCP Server`; (c) Tác nhân A2A cha ủy quyền tác vụ con đòi trần `5.00 USD`.<br/>*Then:* (a) Bị chặn `403 parameter_hash_mismatch` / `self_approval_forbidden`; (b) Hệ thống chỉ gửi đúng 1 lần duy nhất, **không tự động thử lại lần 2** và trả `ambiguous_side_effect_timeout`; (c) Ủy quyền A2A vượt ngân sách cha bị từ chối ngay lập tức. |
+| **`TP-AC-SEC-01`** | **1. Upstream Secret Vault Protection (`Secrets`)** | *Given:* Real API key `sk-live-REAL999` is stored in the secret vault and bound to a standard `Community Adapter`.<br/>*When:* (a) An administrator queries every Admin API/CLI/UI endpoint for connection details; (b) Extension code attempts to dump its entire input memory buffer; (c) The upstream provider returns a `401` error echoing the raw key string.<br/>*Then:* Across (a), (b), and (c), the plaintext string `sk-live-REAL999` **never** appears (the Host injects credentials at the network egress boundary and scrubs secret strings from all error responses and logs). |
+| **`TP-AC-SEC-02`** | **2. Untrusted / Community Plugin Containment (`Community Plugins`)** | *Given:* An external extension package: (a) spoofs `"trust_tier": "official"` in its Manifest, (b) has 1 byte altered relative to its `tanpopo.lock` digest, (c) attempts covert egress to `attacker.example` outside `allowed_hosts`, or (d) executes an infinite loop `while(true){}`.<br/>*When:* Installing and routing traffic through that extension.<br/>*Then:* (a) Spoofed provenance is rejected or forcibly downgraded to `unverified-external`; (b) Digest mismatch refuses to load; (c) Egress to `attacker.example` is blocked immediately with a security `AuditEvent` and `QUARANTINED` transition; (d) The infinite loop is terminated at its CPU quota without crashing or starving other gateway routes. |
+| **`TP-AC-SEC-03`** | **3. `Authorized OAuth` Connection Security (`User / App OAuth`)** | *Given:* An authorized OAuth 2.1 connection flow.<br/>*When:* (a) An attacker replays a forged callback with a mismatched `state` parameter or missing `PKCE` verifier; (b) The provider returns insufficient or overly broad `scopes` mismatched against configuration; (c) Provider-side revocation triggers `invalid_grant` under heavy concurrent load.<br/>*Then:* (a) and (b) are rejected prior to activation; (c) The connection transitions immediately to `AUTH_EXPIRED_REAUTH_REQUIRED` after a single representative refresh call, halts futile retries, and never leaks `refresh_token` material externally. |
+| **`TP-AC-SEC-04`** | **4. Credential Stripping & SSRF Defense (`Token Forwarding & SSRF`)** | *Given:* An `API Client` sends `Virtual Key vk-client-123` to Tanpopo; or a privileged user configures a model/MCP endpoint targeting `http://169.254.169.254/latest/meta-data/`, `http://127.0.0.1:6379`, or an upstream returning an HTTP `302 Redirect` to a different host.<br/>*When:* Connection validation or request forwarding runs.<br/>*Then:* `vk-client-123` is stripped completely before egress; on cross-origin HTTP `302` redirects, the system **never forwards the `Authorization` header** to an unapproved host; all cloud metadata and unauthorized internal network addresses are blocked at the egress guard. |
+| **`TP-AC-SEC-05`** | **5. Four-Layer Trust Boundaries & `Fail-Closed` Posture (`Trust Boundaries`)** | *Given:* (a) A `Virtual Key` is scoped solely to `Provider` inference; (b) An `Organization` policy restricts extensions exclusively to `official`; (c) The hard-budget store or data-residency evaluator experiences a transient outage.<br/>*When:* (a) That key calls `/mcp` or `/a2a`; (b) A `Team Admin` attempts to bind an `unverified-external` package to a project; (c) A billable inference request arrives.<br/>*Then:* All 3 scenarios fail safely (`Fail-Closed` — `403`/`503`), with zero implicit cross-plane privilege bridging or parent-policy bypass. |
+| **`TP-AC-SEC-06`** | **6. Consumer Subscription Terms Compliance (`Subscription Authorization`)** | *Given:* A full audit of Core source code, Official Adapters, Marketplace review rules, Web Console/Setup Wizard UI, and official documentation.<br/>*When:* Evaluating support for configuring or submitting extension packages that scrape browser cookies/sessions/closed OAuth tokens from consumer subscriptions (`ChatGPT Plus/Pro`, personal `Codex`, `Claude Pro/Max`, `Google Antigravity`, etc.).<br/>*Then:* Submissions to the official Marketplace are denied `official`/`verified` badges; the product contains zero consumer session extractors, templates, or *"I accept the risk to use my Plus/Pro account as a shared API"* toggles; documentation states unambiguously that OAuth applies strictly to provider-authorized integrations. |
+| **`TP-AC-SEC-07`** | **7. Multi-Tenant & Single-Environment Isolation (`Multi-Tenancy`)** | *Given:* A single instance hosts `Organization A` and `Organization B`; inside `Org A`, `Virtual Key K_Dev` is bound to `development` and `K_Sec` holds 5 active long-lived SSE streams.<br/>*When:* (a) A principal in `Org A` probes predictable IDs to access a `Route`, `Secret`, `MCP Tool`, or `AuditEvent` in `Org B`; (b) `K_Dev` invokes a `production` route; (c) *Emergency Security Revoke* is triggered on `K_Sec`.<br/>*Then:* (a) Returns a non-enumerable error concealing `Org B` resource existence and logs a security alert; (b) Rejects environment mismatch; (c) All 5 active SSE streams on `K_Sec` are terminated and new requests are blocked within the revocation SLA (`< 1s` single-node / `< 5s` cluster). |
+| **`TP-AC-SEC-08`** | **8. Side-Effect Protection & Privilege Amplification Guard (`Side Effects`)** | *Given:* `destructive` MCP tool `execute_refund` is approved by a `Reviewer` for `(order_id="100", amount=20)`, and a parent A2A agent has `1.00 USD` remaining budget.<br/>*When:* (a) The agent tampers with the parameter to `amount=2000` (or attempts self-approval); (b) A valid `execute_refund` call times out on the network after dispatch to the `MCP Server`; (c) The parent A2A agent delegates a child task requesting a `5.00 USD` ceiling.<br/>*Then:* (a) Blocked with `403 parameter_hash_mismatch` / `self_approval_forbidden`; (b) Dispatched at most once with **zero automatic second retry**, returning `ambiguous_side_effect_timeout`; (c) Child A2A delegation exceeding parent budget is rejected immediately. |
 
 ---
 
-## Phần C — Tiêu chí Xác minh Yêu cầu Phi Chức năng (`TP-AC-N01` .. `TP-AC-N10`)
+## Part C — Non-Functional Requirement Verification Criteria (`TP-AC-N01` .. `TP-AC-N10`)
 
-| Mã AC | Các NFR được xác minh | Phương pháp đo đạc & Ngưỡng đạt (*Mục tiêu dự kiến trước Benchmark*) |
+| AC ID | Verified NFR IDs | Measurement Method & Pass Threshold (*Pre-Benchmark Target*) |
 |---|---|---|
-| **`TP-AC-N01`** | `TP-NFR-0101`..`0103` | Chạy bộ tạo tải tự động nối với máy chủ nhà cung cấp giả lập có độ trễ cố định `0 ms`: xác nhận độ trễ nội bộ cộng thêm `p95 < 2 ms` (Tầng 1) / `< 5 ms` (Tầng 2), độ trễ chuyển tiếp mảnh SSE `< 1 ms`, RAM rỗi đơn nút `< 128 MB` và khởi động `/readyz < 3 giây`. |
-| **`TP-AC-N02`** | `TP-NFR-0201`..`0202` | Tiêm lỗi sập ngẫu nhiên 1 nút Data Plane trong cụm `>= 2` nút và tiêm phần mở rộng lỗi lặp vô hạn: xác nhận lưu lượng chung duy trì tỷ lệ thành công mục tiêu `>= 99.9%` và tiến trình chính có `0` lần sập. |
-| **`TP-AC-N03`** | `TP-NFR-0301`..`0302` | Mở đồng thời `1.000` kết nối SSE kéo dài 60 giây trên nút chuẩn (2 vCPU, 2 GB RAM): xác nhận không rò rỉ bộ nhớ sau khi đóng luồng và thông lượng tăng tương ứng khi nâng số bản sao từ 1 lên 3 nút. |
-| **`TP-AC-N04`** | `TP-NFR-0404` | Trong khi đang bắn `100 req/s` bằng một `Virtual Key`, kích hoạt lệnh thu hồi khẩn cấp và đo dấu thời gian của yêu cầu cuối cùng còn lọt qua: xác nhận `< 1 giây` (đơn nút) và `< 5 giây` (cụm phân tán). |
-| **`TP-AC-N05`** | `TP-NFR-0501`..`0502` | Cấu hình TTL ngắn trong môi trường kiểm thử và thực hiện lệnh xóa `Project`: xác nhận trình dọn dẹp xóa đúng hạn không gây khóa nghẽn lưu lượng và `100%` khóa/nội dung của dự án bị xóa biến mất khỏi kho hoạt động trong `< 60 giây`. |
-| **`TP-AC-N06`** | `TP-NFR-0601`..`0602` | Thực hiện lệnh sao lưu khi đang có tải, khởi tạo máy chủ mới sạch hoàn toàn và khôi phục: xác nhận hoàn tất trong `< 15 phút` (`RTO` dự kiến), tệp sao lưu không giải mã được khóa bí mật nếu thiếu khóa chủ tách biệt, và cấu hình xuất ra chạy tốt trên môi trường mới. |
-| **`TP-AC-N07`** | `TP-NFR-0701`..`0702` | Kiểm thử giao diện tự động trên các trình duyệt mục tiêu ở khung nhìn `1440px`, `1280px`, `768px` và `375px` (cho màn hình cảnh báo/công tắc khẩn cấp): xác nhận không vỡ bố cục, không mất thanh cuộn bảng và bấm được trọn vẹn thao tác khẩn cấp. |
-| **`TP-AC-N08`** | `TP-NFR-0801`, `TP-NFR-1001` | Chạy kiểm tra tự động `cmd /c npx astryx doctor --built <dir>`, quét mã nguồn giao diện và chạy bộ kiểm tra WCAG 2.2 AA + điều hướng thuần bàn phím: xác nhận `0 fail` từ `astryx doctor`, `0` thẻ `div`/`span` thô, `0` mã màu cứng ngoài token và hoàn tất được luồng duyệt quyền/thu hồi khóa chỉ bằng bàn phím. |
-| **`TP-AC-N09`** | `TP-NFR-0901` | Quy trình CI xuất bản và chạy kiểm thử khói (`smoke test`) thành công ảnh OCI (`linux/amd64`, `linux/arm64`) và tệp thực thi CLI trên Linux, macOS (`arm64`) và Windows (`amd64`). |
-| **`TP-AC-N10`** | `TP-NFR-0902`, `TP-NFR-1002` | Nạp phần mở rộng viết theo hợp đồng phiên bản `N-1` trên bản Core `N`: xác nhận chạy tương thích hoàn toàn; kiểm tra mọi phản hồi lỗi từ chối đều khớp schema mã lỗi chuẩn và lệnh `tanpopo doctor` chỉ ra đúng lỗi cấu hình mẫu được tiêm vào. |
+| **`TP-AC-N01`** | `TP-NFR-0101`..`0103` | Run an automated load generator against a deterministic `0 ms` mock upstream provider: verify added internal proxy overhead `p95 < 2 ms` (Tier 1) / `< 5 ms` (Tier 2), per-chunk SSE passthrough latency `< 1 ms`, idle single-node RSS `< 128 MB`, and cold startup to `/readyz < 3 seconds`. |
+| **`TP-AC-N02`** | `TP-NFR-0201`..`0202` | Inject random single-node Data Plane crashes in a `>= 2`-node cluster plus an infinite-loop faulty extension: verify aggregate traffic sustains target availability `>= 99.9%` and the host gateway process records `0` crashes. |
+| **`TP-AC-N03`** | `TP-NFR-0301`..`0302` | Hold `1,000` concurrent 60-second SSE connections open on a reference node (2 vCPU, 2 GB RAM): verify zero post-close memory leaks and near-linear throughput scaling when expanding from 1 to 3 replicas. |
+| **`TP-AC-N04`** | `TP-NFR-0404` | While driving `100 req/s` with a `Virtual Key`, trigger emergency revocation and measure the timestamp delta of the final admitted request: verify `< 1 second` (single-node) and `< 5 seconds` (distributed cluster). |
+| **`TP-AC-N05`** | `TP-NFR-0501`..`0502` | Configure short retention TTLs in test mode and execute `Project` deletion: verify background TTL purging completes on schedule without locking live traffic tables and `100%` of deleted project secrets/payloads are purged from active storage within `< 60 seconds`. |
+| **`TP-AC-N06`** | `TP-NFR-0601`..`0602` | Execute an online backup under live load, provision a clean host, and restore: verify full recovery within `< 15 minutes` (target `RTO`), confirm backup archives cannot decrypt secrets without the detached master key, and verify exported declarative configs boot cleanly in a new environment. |
+| **`TP-AC-N07`** | `TP-NFR-0701`..`0702` | Run automated UI tests across target browsers at `1440px`, `1280px`, `768px`, and `375px` viewports (covering alert banners and emergency kill-switches): verify zero layout breakage, intact table scrollbars, and unobstructed emergency controls. |
+| **`TP-AC-N08`** | `TP-NFR-0801`, `TP-NFR-1001` | Run `cmd /c npx astryx doctor --built <dir>`, static UI source checks, and automated WCAG 2.2 AA + keyboard-only navigation suites: verify `0 fail` from `astryx doctor`, `0` raw `div`/`span` elements, `0` hardcoded non-token hex/px styles, and full keyboard-only completion of permission approval and key revocation flows. |
+| **`TP-AC-N09`** | `TP-NFR-0901` | Verify CI builds and passes smoke tests for multi-arch OCI container images (`linux/amd64`, `linux/arm64`) and native CLI binaries on Linux, macOS (`arm64`), and Windows (`amd64`). |
+| **`TP-AC-N10`** | `TP-NFR-0902`, `TP-NFR-1002` | Load an extension targeting contract version `N-1` on Core version `N`: verify full backward compatibility; verify all rejection responses conform to the canonical error schema and `tanpopo doctor` pinpoints injected misconfigurations accurately. |

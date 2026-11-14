@@ -1,246 +1,246 @@
-# Danh mục Màn hình, Đặc tả Hợp đồng Giao diện & Rào chắn UX (Screen Inventory, Contracts & UX Guardrails) — Tanpopo
+# Screen Inventory, UI Contracts & UX Guardrails — Tanpopo
 
-> **Tài liệu Đặc tả Màn hình Chi tiết (Phase ASTRA A06 — `DRAFT / READY_FOR_REVIEW`)**
-> - **Mã tài liệu:** `SPEC-UX-03` | **Phiên bản:** `0.1.0-step06-draft` | **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Lead Product Designer & Security UX Architect
-> - **Trạng thái quản trị:** **Đặc tả Thiết kế Đề xuất (`PROPOSED — NO CODE`)** — liên kết chặt chẽ với [`information-architecture.md`](./information-architecture.md), [`api-contracts.md`](../specifications/api-contracts.md) (`SPEC-API-01`), [`data-model.md`](../architecture/data-model.md) và [`accessibility-checklist.md`](../../.agents/references/accessibility-checklist.md).
-> - **Truy vết Yêu cầu:** `TP-FR-0201`..`0904`, `TP-NFR-0402`, `TP-NFR-0404`, `TP-NFR-0701`, `TP-NFR-0702`, `TP-NFR-1001`, `TP-NFR-1002`, `DEC-004`.
+> **Detailed Screen Specification (Phase ASTRA A06 — `DRAFT / READY_FOR_REVIEW`)**
+> - **Document ID:** `SPEC-UX-03` | **Version:** `0.1.0-step06-draft` | **Last Updated:** `2026-11-11`
+> - **Authored By:** Lead Product Designer & Security UX Architect
+> - **Governance Status:** **Proposed Design Specification (`PROPOSED — NO CODE`)** — tightly coupled with [`information-architecture.md`](./information-architecture.md), [`api-contracts.md`](../specifications/api-contracts.md) (`SPEC-API-01`), [`data-model.md`](../architecture/data-model.md), and [`accessibility-checklist.md`](../../.agents/references/accessibility-checklist.md).
+> - **Requirements Traceability:** `TP-FR-0201`..`0904`, `TP-NFR-0402`, `TP-NFR-0404`, `TP-NFR-0701`, `TP-NFR-0702`, `TP-NFR-1001`, `TP-NFR-1002`, `DEC-004`.
 
 ---
 
-## 1. Sáu Rào chắn Trải nghiệm Bắt buộc (`Mandatory UX Guardrails`: `UX-GR-01` .. `UX-GR-06`)
+## 1. Six Mandatory Experience Guardrails (`Mandatory UX Guardrails`: `UX-GR-01` .. `UX-GR-06`)
 
-Mọi màn hình trong danh mục dưới đây đều phải tuân thủ 6 rào chắn bảo mật, pháp lý và trung thực kỹ thuật không có ngoại lệ:
+Every screen in the catalog below enforces six non-negotiable security, compliance, and technical-honesty guardrails without exception:
 
-| Mã Rào chắn | Nguyên tắc Cốt lõi | Hành vi Giao diện Bắt buộc & Điều bị Nghiêm cấm |
+| Guardrail ID | Core Principle | Mandatory UI Behavior & Strict Prohibitions |
 |---|---|---|
-| **`UX-GR-01`**<br/>**Bí mật Ghi Một Chiều & Khóa Ảo Hiện Đúng Một Lần** | Không bao giờ hiển thị lại khóa bí mật nhạy cảm sau khi lưu. | - Mọi trường nhập API Key, Client Secret, Webhook Secret dùng kiểu mật khẩu một chiều; sau khi lưu chỉ hiển thị dấu vân tay cuối (ví dụ `sk-...9a2f`) và ngày tạo — **cấm tuyệt đối nút "Show / Reveal Secret"** gọi lấy lại bản rõ từ máy chủ.<br/>- Khi phát hành `Virtual Key` (`vk_tp_...`), hộp thoại `Dialog` chỉ hiện bản rõ **duy nhất 1 lần ngay lúc tạo** kèm cảnh báo *"Sao chép ngay; Tanpopo chỉ lưu mã băm SHA-256 và không thể hiển thị lại khóa này lần thứ hai."* |
-| **`UX-GR-02`**<br/>**Thừa nhận Trung thực Tính năng Không Hỗ trợ** | Không lặng lẽ cắt bỏ tham số hay hứa hẹn tương thích `100%`. | - Trong `Model Catalog`, `Route Builder` và `Playground`, mỗi tính năng (`strict_json_schema`, `audio_input`, `reasoning`, `prompt_caching`) phải gắn thẻ cấp độ bảo chứng thực tế (`VERIFIED` / `TESTED` / `DECLARED` / `UNSUPPORTED`).<br/>- Nếu tính năng chỉ chạy nguyên vẹn qua đường giữ nguyên phương ngữ gốc (`/native/{dialect}/...`), giao diện phải ghi chú rõ ràng và cung cấp nút chuyển đổi sang đoạn mã `Native Passthrough` thay vì làm rơi trường dữ liệu ngầm. |
-| **`UX-GR-03`**<br/>**Cấm Gắn Nhãn "Chính thức Hỗ trợ" Cho Kết nối Thuê bao Tiêu dùng** | Bảo toàn ranh giới pháp lý `DEC-004` & `ADR-0005`. | - Tuyệt đối **không bao giờ** gắn nhãn `Official`, `Verified`, `Supported` hay viết hướng dẫn biến các gói thuê bao cá nhân (`ChatGPT Plus/Pro`, `Codex`, `Claude Pro/Max`, `Google Antigravity`...) thành cổng API dùng chung.<br/>- Biểu mẫu `Provider Connection` chỉ có 2 chế độ thanh toán minh bạch: `Commercial API Billing` và `Self-Hosted Infrastructure`; không chấp nhận dán cookie trình duyệt hay token phiên cá nhân không được hãng cấp phép. |
-| **`UX-GR-04`**<br/>**Không Giấu Rủi ro Cộng đồng Sau Một Nút Cài đặt** | Minh bạch quyền hạn, tác giả và nguồn gốc trước mọi thao tác. | - Trên danh sách `Extension Marketplace` và trình cài gói ngoài, nút hành động đầu tiên luôn là **"Inspect Permissions & Trust..."** (không bao giờ là nút cài đặt kích hoạt ngầm một chạm).<br/>- Hộp kiểm tra bắt buộc hiển thị `Publisher Identity`, `Origin`, `Trust Tier` (`Unverified External` có biểu tượng cảnh báo riêng), `Allowed Hosts` và `Secret Slots` trước khi nút xác nhận kích hoạt được mở khóa. |
-| **`UX-GR-05`**<br/>**Cảnh báo Vận hành Chủ động Đúng Thời điểm** | Báo trước rủi ro mất dữ liệu, kịch trần quy mô hoặc lệch chi phí. | Thanh `Banner` trên `AppShell` hoặc thẻ cảnh báo ngữ cảnh tự động bật khi phát hiện:<br/>1. Chưa xác nhận sao lưu khóa chủ `TANPOPO_MASTER_KEY` ở môi trường sản xuất;<br/>2. Chế độ đơn nút SQLite vượt ngưỡng khuyến nghị (`> 100 RPS` duy trì hoặc tệp WAL `> 512 MiB`) → gợi ý di trú sang PostgreSQL;<br/>3. Nút cụm Data Plane lệch nhịp đồng bộ thu hồi `> 5 giây`;<br/>4. Phát sinh giao dịch `UNMETERED_FLAGGED` thiếu bảng giá;<br/>5. Có phần mở rộng đang dùng phiên bản hợp đồng cũ `N-1` sắp hết hạn hỗ trợ. |
-| **`UX-GR-06`**<br/>**Kiểm soát Ghi đè Lạc quan & Phê duyệt Chống Bấm Nhầm** | Chống mất cấu hình khi nhiều quản trị viên thao tác cùng lúc. | - Mọi biểu mẫu chỉnh sửa (`PATCH`/`PUT`/`POST :approve`) đính kèm `If-Match: "<etag>"`; nếu nhận `409 version_conflict`, giao diện hiển thị bản đối chiếu chênh lệch (`Diff`) thay vì xóa công sức người dùng hoặc ghi đè mù.<br/>- Thao tác phá hủy diện rộng (`Quarantine Extension`, `Freeze Project`, `Delete Organization`) dùng `AlertDialog` yêu cầu nhập lại định danh (`slug`) và lý do bắt buộc (`>= 5` ký tự) để ghi kiểm toán. |
+| **`UX-GR-01`**<br/>**Write-Only Secrets & One-Time Virtual Key Reveal** | Never re-display sensitive secret material once persisted. | - Every upstream API Key, Client Secret, and Webhook Secret field uses a one-way write-only input; once saved, only a trailing fingerprint (e.g., `sk-...9a2f`) and creation timestamp are shown — **strictly prohibiting any `"Show / Reveal Secret"` button** that fetches plaintext back from the server.<br/>- Upon issuing a `Virtual Key` (`vk_tp_...`), a modal `Dialog` displays the plaintext **strictly once at creation time** alongside the warning: *"Copy this key now; Tanpopo stores only its SHA-256 hash and cannot display it a second time."* |
+| **`UX-GR-02`**<br/>**Honest Disclosure of Unsupported Capabilities** | Never silently drop parameters or promise `100%` universal parity. | - Across `Model Catalog`, `Route Builder`, and `Playground`, every capability (`strict_json_schema`, `audio_input`, `reasoning`, `prompt_caching`) carries its empirical assurance badge (`VERIFIED` / `TESTED` / `DECLARED` / `UNSUPPORTED`).<br/>- Whenever a feature operates losslessly only via native dialect passthrough (`/native/{dialect}/...`), the UI states that explicitly and offers a one-click toggle to the `Native Passthrough` snippet rather than silently stripping request fields. |
+| **`UX-GR-03`**<br/>**Strict Prohibition of `"Official / Supported"` Labels on Consumer Subscriptions** | Enforce the legal and terms-of-service boundary of `DEC-004` & `ADR-0005`. | - Strictly **never** attach `Official`, `Verified`, or `Supported` badges — nor provide instructions — for turning individual consumer subscriptions (`ChatGPT Plus/Pro`, `Codex`, `Claude Pro/Max`, `Google Antigravity`, etc.) into shared multi-user API gateways.<br/>- The `Provider Connection` form exposes strictly two transparent billing postures: `Commercial API Billing` and `Self-Hosted Infrastructure`; it rejects pasted browser cookies or unauthorized personal session tokens. |
+| **`UX-GR-04`**<br/>**Never Hide Third-Party Risk Behind a Single Install Button** | Surface permissions, publisher identity, and origin prior to any activation. | - Across `Extension Marketplace` listings and custom package installers, the primary call-to-action is always **`"Inspect Permissions & Trust..."`** (never a silent one-click install-and-enable button).<br/>- The mandatory inspection sheet renders `Publisher Identity`, `Origin`, `Trust Tier` (`Unverified External` carries its own distinct warning icon), `Allowed Hosts`, and `Secret Slots` before the activation confirmation button unlocks. |
+| **`UX-GR-05`**<br/>**Proactive, Context-Timely Operational Warnings** | Surface data-loss, scale-ceiling, and billing-drift hazards before impact. | The `AppShell` system `Banner` or contextual warning callout triggers automatically whenever any of the following conditions are detected:<br/>1. Unacknowledged backup of `TANPOPO_MASTER_KEY` in a production deployment;<br/>2. Single-node SQLite mode exceeding recommended operating thresholds (`> 100 RPS` sustained or WAL file `> 512 MiB`) → prompting migration to PostgreSQL;<br/>3. Data Plane cluster node revocation sync lag exceeding `> 5 seconds`;<br/>4. Requests settled as `UNMETERED_FLAGGED` due to missing model rate cards;<br/>5. Active extensions targeting a deprecated `N-1` contract version approaching end-of-support. |
+| **`UX-GR-06`**<br/>**Optimistic Concurrency Control & Anti-Fat-Finger Destructive Gates** | Prevent silent overwrites across concurrent administrators and accidental blast-radius actions. | - Every mutating configuration form (`PATCH`/`PUT`/`POST :approve`) attaches `If-Match: "<etag>"`; on `409 version_conflict`, the UI renders a side-by-side `Diff` rather than discarding the operator's draft or blindly overwriting.<br/>- High-blast-radius destructive operations (`Quarantine Extension`, `Freeze Project`, `Delete Organization`) invoke an `AlertDialog` requiring exact `slug` re-entry and a mandatory audit reason (`>= 5` characters). |
 
 ---
 
-## 2. Chuẩn Chung Về Khả năng Tiếp cận (`WCAG 2.2 AA`) & Đáp ứng Đa Thiết bị (`Responsive Contract`)
+## 2. Shared Accessibility (`WCAG 2.2 AA`) & Multi-Viewport Responsive Contract (`Responsive Contract`)
 
-Áp dụng đồng nhất cho toàn bộ **16 màn hình (`SCR-01`..`SCR-16`)** dưới đây (`TP-NFR-0701`, `TP-NFR-0702`, [`accessibility-checklist.md`](../../.agents/references/accessibility-checklist.md)):
-1. **Tiếp cận Bàn phím & Trình đọc Màn hình (`WCAG 2.2 AA`):**
-   - Khung `AppShell` cung cấp sẵn liên kết bỏ qua điều hướng (`Skip to main content`) ở điểm dừng `Tab` đầu tiên, vùng mốc `banner`, hai vùng `nav` có nhãn `label` riêng biệt và đúng một tiêu đề cấp 1 (`Heading level={1}`) trong vùng `main`.
-   - Độ tương phản chữ thường `>= 4.5:1`, chữ lớn và đường viền thành phần tương tác `>= 3:1` trên cả chế độ Sáng và Tối của theme `neutral`.
-   - **Không dùng màu sắc làm dấu hiệu duy nhất:** Mọi thẻ `Token` trạng thái đều ghép cặp `icon` đặc trưng + văn bản ngắn (ví dụ: biểu tượng dấu kiểm + `Healthy`, biểu tượng tam giác + `Degraded`, biểu tượng ổ khóa chắn + `Quarantined`).
-   - Mọi thông báo thay đổi động (lọc bảng không ra kết quả, đã sao chép khóa, lưu thành công, lỗi xác thực biểu mẫu) đều phát qua hook `useAnnounce` (`polite` cho trạng thái, `assertive` cho lỗi/cảnh báo khẩn).
-   - Mọi hộp thoại `Dialog` / `AlertDialog` giữ tiêu điểm bên trong khi mở, đóng bằng phím `Escape` và trả tiêu điểm về đúng nút đã kích hoạt khi đóng.
-2. **Hợp đồng Đáp ứng Ba Ngưỡng Chiều Rộng (`Responsive Contract`):**
-   - **Desktop (`>= 1280px`):** Hiển thị đầy đủ 3 vùng (`SideNav 256px` + `LayoutContent fill` + `LayoutPanel 380px` khi chọn dòng chi tiết).
-   - **Tablet / Laptop hẹp (`768px – 1023px`):** Giữ `SideNav` (có thể thu gọn), chuyển ngăn chi tiết `LayoutPanel` sang hộp thoại nổi `Dialog` hoặc ngăn kéo `Drawer` có lớp mờ (`useMediaQuery('(max-width: 1024px)')`).
-   - **Mobile (`375px – 767px`):** `SideNav` tự động gom vào ngăn kéo di động của `AppShell` (`mobileNav={{ breakpoint: 'md' }}`), lưới chỉ số tự động gập xuống 1 cột (`Grid columns={{ minWidth: 240, max: 4 }}`), kích thước vùng chạm tối thiểu `44x44 CSS px`. Các bảng cấu hình nhiều cột hỗ trợ cuộn ngang giữ cột định danh đầu tiên, riêng **4 luồng trực chiến khẩn cấp (`SCR-02`, `SCR-13`, `SCR-14`, `SCR-16`: xem cảnh báo, thu hồi `Virtual Key`, duyệt/từ chối lệnh `destructive`, kích hoạt `Kill-Switch`)** được tối ưu nút bấm toàn chiều rộng để hoàn tất dưới `15 giây` bằng một tay trên điện thoại.
+Applied uniformly across all **16 screens (`SCR-01`..`SCR-16`)** specified below (`TP-NFR-0701`, `TP-NFR-0702`, [`accessibility-checklist.md`](../../.agents/references/accessibility-checklist.md)):
+1. **Keyboard & Screen Reader Accessibility (`WCAG 2.2 AA`):**
+   - `AppShell` provides a built-in `Skip to main content` link at the first `Tab` stop, a `banner` landmark, two `nav` landmarks with distinct `label` attributes, and exactly one level-1 heading (`Heading level={1}`) inside `main`.
+   - Minimum contrast ratio `>= 4.5:1` for body text and `>= 3:1` for large text and interactive component boundaries across both Light and Dark modes of the `neutral` theme.
+   - **Never rely on color alone:** Every status `Token` pairs a distinct `icon` with a concise text label (e.g., checkmark icon + `Healthy`, warning triangle + `Degraded`, shield/prohibition icon + `Quarantined`).
+   - All asynchronous UI state changes (zero-result filter updates, copied key confirmation, successful saves, form validation errors) announce via `useAnnounce` (`polite` for status updates, `assertive` for errors and urgent alerts).
+   - Every `Dialog` and `AlertDialog` traps focus while open, dismisses on `Escape`, and restores focus to its triggering control upon close.
+2. **Three-Tier Breakpoint Contract (`Responsive Contract`):**
+   - **Desktop (`>= 1280px`):** Displays all 3 workspace regions simultaneously (`SideNav 256px` + `LayoutContent fill` + `LayoutPanel 380px` when inspecting a selected row).
+   - **Tablet / Narrow Laptop (`768px – 1023px`):** Retains `SideNav` (collapsible) while converting the `LayoutPanel` detail inspector into a modal `Dialog` or scrim-backed `Drawer` (`useMediaQuery('(max-width: 1024px)')`).
+   - **Mobile (`375px – 767px`):** `SideNav` collapses automatically into `AppShell`'s mobile navigation drawer (`mobileNav={{ breakpoint: 'md' }}`), KPI grids stack cleanly to a single column (`Grid columns={{ minWidth: 240, max: 4 }}`), and interactive touch targets enforce a `44x44 CSS px` minimum. Multi-column configuration tables allow horizontal scrolling with a sticky leading identifier column, while the **4 emergency on-call workflows (`SCR-02`, `SCR-13`, `SCR-14`, `SCR-16`: inspecting active alerts, revoking a `Virtual Key`, approving/rejecting `destructive` calls, and triggering a `Kill-Switch`)** provide full-width action controls completable one-handed on a phone in under `15 seconds`.
 
 ---
 
-## 3. Đặc tả Chi tiết 16 Màn hình Chuẩn (`SCR-01` .. `SCR-16`)
+## 3. Detailed Specifications for All 16 Canonical Screens (`SCR-01` .. `SCR-16`)
 
-### Nhóm 1: Khởi tạo, Tổng quan & Cổng Mô hình (`SCR-01` .. `SCR-05`)
+### Group 1: Bootstrap, System Posture & Model Gateway (`SCR-01` .. `SCR-05`)
 
 #### `SCR-01`: First-Run Setup Wizard & Admin Login (`/setup`, `/login`)
-- **Mục tiêu:** Chuyển giao quyền sở hữu máy chủ an toàn trong lần chạy đầu tiên bằng `Bootstrap Token` và đưa người dùng tới yêu cầu suy luận thành công đầu tiên dưới `3 phút` (`UJ-01`), hoặc đăng nhập quản trị thường nhật (mật khẩu cục bộ / SSO OIDC).
-- **Actor & Quyền:** `Personal Admin` / `OPERATOR` (lần đầu tại `/setup`); mọi vai trò Console tại `/login`.
-- **Data Contracts:** `POST /admin/v1/setup:claim-bootstrap`, `POST /admin/v1/connections`, `POST /admin/v1/connections/{id}:validate`, `POST /admin/v1/virtual-keys`, `POST /v1/chat/completions` (kiểm tra luồng SSE đầu tiên), `POST /admin/v1/auth/login`.
-- **Actions:** Xác thực mã mồi; đặt tài khoản `ORG_OWNER` đầu tiên; xác nhận đã lưu `TANPOPO_MASTER_KEY`; kết nối khóa API chính thức hoặc máy chủ `Ollama`/`vLLM` cục bộ; phát hành `Virtual Key` đầu tiên; bắn yêu cầu thử trực tiếp.
-- **Validations:** `Bootstrap Token` đúng định dạng và còn hạn; mật khẩu quản trị `>= 12` ký tự; URL mô hình cục bộ hợp lệ và không trỏ vào địa chỉ metadata đám mây bị cấm (`169.254.169.254`).
-- **Errors:** `401 bootstrap_token_expired_or_used` (hướng dẫn lệnh CLI sinh lại mã), `422 upstream_auth_failed`, `429 login_rate_limited`.
-- **Confirmation:** Hộp kiểm bắt buộc xác nhận đã sao lưu khóa `Virtual Key` vừa sinh trước khi đóng bước cấp khóa (`UX-GR-01`).
+- **Objective:** Securely transfer instance ownership on first boot via a one-time `Bootstrap Token` and guide the operator to their first successful inference request in under `3 minutes` (`UJ-01`), or authenticate daily administrative sessions (local password / OIDC SSO).
+- **Actor & RBAC:** `Personal Admin` / `OPERATOR` (first run at `/setup`); all Console roles at `/login`.
+- **Data Contracts:** `POST /admin/v1/setup:claim-bootstrap`, `POST /admin/v1/connections`, `POST /admin/v1/connections/{id}:validate`, `POST /admin/v1/virtual-keys`, `POST /v1/chat/completions` (first SSE stream smoke test), `POST /admin/v1/auth/login`.
+- **Actions:** Verify bootstrap token; create initial `ORG_OWNER` account; acknowledge `TANPOPO_MASTER_KEY` backup; connect an official commercial API key or local `Ollama`/`vLLM` endpoint; issue the first `Virtual Key`; fire a live streaming test request.
+- **Validations:** Valid, unexpired `Bootstrap Token`; administrator password `>= 12` characters; valid local model URL blocked from targeting cloud metadata addresses (`169.254.169.254`).
+- **Errors:** `401 bootstrap_token_expired_or_used` (displays CLI reset command), `422 upstream_auth_failed`, `429 login_rate_limited`.
+- **Confirmation:** Mandatory checkbox confirming the newly generated `Virtual Key` has been stored before dismissing the key-issuance dialog (`UX-GR-01`).
 - **Audit:** `system.bootstrap.claimed`, `iam.owner.created`, `connection.created`, `virtual_key.issued`.
-- **Success Feedback:** Pháo hiệu trạng thái hoàn tất bước kèm thẻ tóm tắt `request_id`, độ trễ `TTFT` của cuộc gọi đầu tiên và nút chuyển vào `/overview`.
-- **Accessibility & Responsive:** Mẫu `form-wizard-vertical` (tự xoay thanh bước sang ngang khi `< 768px`); `/login` dùng mẫu `login-sso` căn giữa tối giản, tự gán tiêu điểm vào ô đầu tiên.
+- **Success Feedback:** Step completion indicator with summary card displaying `request_id`, first-call `TTFT` latency, and a primary button entering `/overview`.
+- **Accessibility & Responsive:** Built on `form-wizard-vertical` (step indicator pivots horizontally below `768px`); `/login` uses centered `login-sso` with automatic initial focus on the first input field.
 
 #### `SCR-02`: Overview & System Posture Dashboard (`/overview`)
-- **Mục tiêu:** Cung cấp bức tranh tức thời trong `5 giây` về lưu lượng, tỷ lệ lỗi, độ trễ `p95`, tốc độ đốt ngân sách `micro-USD`, sức khỏe các `Model Deployments` và danh sách cảnh báo cần hành động ngay.
-- **Actor & Quyền:** Mọi vai trò (dữ liệu lọc tự động theo phạm vi `RBAC` của từng vai trò).
+- **Objective:** Deliver an immediate `5-second` posture snapshot covering request throughput, error rate, `p95` latency, `micro-USD` budget burn rate, `Model Deployment` health, and actionable alerts requiring attention.
+- **Actor & RBAC:** All roles (telemetry automatically filtered to the caller's `RBAC` scope).
 - **Data Contracts:** `GET /admin/v1/telemetry/overview?window=1h|24h|7d`, `GET /admin/v1/deployments?status=unhealthy`, `GET /admin/v1/alerts/active`.
-- **Actions:** Đổi khung thời gian (`1h`, `24h`, `7d`, `30d`); bấm từ ô cảnh báo nhảy thẳng tới màn hình xử lý (`Re-authorize OAuth`, `Review Approval`, `Top-up Budget`, `Kill-Switch`).
-- **Validations:** Khung thời gian truy vấn nằm trong giới hạn lưu giữ cấu hình.
-- **Errors:** Khi kho số đo chậm hoặc mất kết nối OTLP ngoài, hiển thị dữ liệu cục bộ kèm `Banner` cảnh báo độ trễ đồng bộ.
-- **Confirmation:** Không cần xác nhận cho thao tác lọc chỉ đọc.
-- **Audit:** Không ghi kiểm toán cho truy vấn đọc tổng quan.
-- **Success Feedback:** Thông báo tinh tế thời điểm cập nhật số liệu gần nhất (`Updated 5s ago`) và đọc tóm tắt cảnh báo mới qua `useAnnounce`.
-- **Accessibility & Responsive:** Mẫu `dashboard-alert-rail`; lưới 4 ô chỉ số dùng `Grid columns={{ minWidth: 240, max: 4 }}` tự gập 2 cột ở `768px` và 1 cột ở `375px`, cột cảnh báo cuộn độc lập tự xếp xuống trên thiết bị hẹp.
+- **Actions:** Switch time window (`1h`, `24h`, `7d`, `30d`); deep-link directly from an alert item to its remediation workflow (`Re-authorize OAuth`, `Review Approval`, `Top-up Budget`, `Kill-Switch`).
+- **Validations:** Requested query window falls within configured retention bounds.
+- **Errors:** When metrics storage lags or external OTLP export is unreachable, renders local telemetry accompanied by a sync-lag warning `Banner`.
+- **Confirmation:** None required for read-only window filtering.
+- **Audit:** No audit event emitted for read-only dashboard queries.
+- **Success Feedback:** Subtle freshness indicator (`Updated 5s ago`) and screen-reader summary announcement for newly arrived alerts via `useAnnounce`.
+- **Accessibility & Responsive:** Built on `dashboard-alert-rail`; 4-tile KPI row uses `Grid columns={{ minWidth: 240, max: 4 }}` folding to 2 columns at `768px` and 1 column at `375px`, with the independently scrolling alert rail stacking cleanly on narrow viewports.
 
 #### `SCR-03`: Provider Adapters Directory (`/providers/adapters`)
-- **Mục tiêu:** Xem toàn bộ trình điều khiển giao thức `Provider Adapters` đang có mặt trên máy chủ (cả gói đi kèm chính thức lẫn gói cài thêm), đối chiếu năng lực hỗ trợ và đi tới tạo `Provider Connection`.
-- **Actor & Quyền:** Đọc: mọi vai trò quản trị; Cài mới / Cấu hình cấp máy chủ: `OPERATOR`.
+- **Objective:** Inspect all protocol-level `Provider Adapters` installed on the instance (both built-in official adapters and externally installed packages), compare supported capabilities, and launch `Provider Connection` creation.
+- **Actor & RBAC:** Read: all administrative roles; Install new / configure instance-level settings: `OPERATOR`.
 - **Data Contracts:** `GET /admin/v1/provider-adapters?cursor=...&limit=50`, `GET /admin/v1/provider-adapters/{adapterId}`.
-- **Actions:** Tìm kiếm theo tên hãng / giao thức (`OpenAI-Compatible`, `Anthropic Messages`, `Gemini`, `Custom`); mở ngăn chi tiết xem ma trận phương thức xác thực (`API Key`, `Authorized OAuth 2.1`, `AWS SigV4`) và bấm **"New Connection with this Adapter"**.
-- **Validations:** Chỉ cho phép bấm tạo kết nối khi trạng thái gói mở rộng gốc là `ENABLED_ACTIVE`.
-- **Errors:** Nếu gói mở rộng chứa Adapter đang bị `QUARANTINED`, hiển thị thẻ đỏ khóa nút tạo kết nối kèm liên kết tới sự kiện cách ly.
-- **Confirmation:** Không áp dụng (chuyển sang `SCR-04` hoặc `SCR-06`).
-- **Audit:** Không áp dụng cho thao tác xem.
-- **Success Feedback:** Mở ngăn bên `LayoutPanel` mượt mà không tải lại trang.
-- **Accessibility & Responsive:** Bảng `Table` (`table-page`), ngăn chi tiết chuyển thành `Dialog` khi `<= 1024px`.
+- **Actions:** Filter by vendor or wire protocol (`OpenAI-Compatible`, `Anthropic Messages`, `Gemini`, `Custom`); open side detail inspector to review supported authentication drivers (`API Key`, `Authorized OAuth 2.1`, `AWS SigV4`) and click **`"New Connection with this Adapter"`**.
+- **Validations:** Connection creation button is enabled solely when the backing extension package is in `ENABLED_ACTIVE` state.
+- **Errors:** If the backing extension is `QUARANTINED`, renders a red status token disabling connection creation with a direct link to the quarantine audit record.
+- **Confirmation:** Not applicable (navigates to `SCR-04` or `SCR-06`).
+- **Audit:** Not applicable for read-only inspection.
+- **Success Feedback:** Smooth `LayoutPanel` detail expansion without full-page reload.
+- **Accessibility & Responsive:** Tabular `Table` (`table-page`), with the detail panel converting to a modal `Dialog` at `<= 1024px`.
 
 #### `SCR-04`: Provider Connections & Authorized OAuth Vault (`/providers/connections`)
-- **Mục tiêu:** Quản lý vòng đời các hồ sơ xác thực thật (`SM-02`, `SM-03`), nạp khóa một chiều vào `Write-Only Vault`, thực hiện luồng `Authorized OAuth 2.1 + PKCE`, kiểm tra kết nối sống và ngắt kết nối khi có sự cố.
-- **Actor & Quyền:** `ORG_OWNER` (cấp `Org`), `TEAM_ADMIN` (cấp `Project`), `REVIEWER` (chỉ đọc siêu dữ liệu, `0` quyền xem/sửa khóa).
+- **Objective:** Manage live upstream credential profiles (`SM-02`, `SM-03`), seal write-only secrets into the `Write-Only Vault`, execute `Authorized OAuth 2.1 + PKCE` flows, validate live connectivity, and disable compromised or failing connections.
+- **Actor & RBAC:** `ORG_OWNER` (`Org` scope), `TEAM_ADMIN` (`Project` scope), `REVIEWER` (metadata read-only, `0` secret read/write privileges).
 - **Data Contracts:** `GET /admin/v1/connections`, `POST /admin/v1/connections`, `PATCH /admin/v1/connections/{id}` (`If-Match`), `POST /admin/v1/connections/{id}:validate`, `POST /admin/v1/connections/{id}/oauth:start`, `GET /admin/v1/oauth/callback`.
-- **Actions:** Tạo kết nối (`COMMERCIAL_API` hoặc `SELF_HOSTED_INFRA`); xoay khóa bí mật mới (ghi đè một chiều); khởi chạy / ủy quyền lại OAuth; bấm **"Smoke Test Connection"**; tạm ngưng hoặc xóa kết nối.
-- **Validations:** Chế độ thanh toán bắt buộc thuộc `COMMERCIAL_API | SELF_HOSTED_INFRA` (`UX-GR-03`); tên miền máy chủ riêng phải khớp `allowed_hosts` của Adapter và vượt qua bộ lọc chống SSRF; khóa bí mật không được để trống khi tạo mới.
-- **Errors:** `400 ssrf_blocked_private_ip`, `409 version_conflict`, `422 oauth_scope_insufficient`, trạng thái `AUTH_EXPIRED_REAUTH_REQUIRED` hiện `Token` màu cam kèm nút ủy quyền lại ngay trên dòng.
-- **Confirmation:** Xóa hoặc vô hiệu hóa kết nối đang gắn với `Model Deployment` hoạt động mở `AlertDialog` liệt kê chính xác số lượng `Routes` sẽ chịu ảnh hưởng.
+- **Actions:** Create connection (`COMMERCIAL_API` or `SELF_HOSTED_INFRA`); rotate secret credentials (write-only overwrite); initiate or re-authorize OAuth; run **`"Smoke Test Connection"`**; suspend or delete a connection.
+- **Validations:** Billing mode must be `COMMERCIAL_API | SELF_HOSTED_INFRA` (`UX-GR-03`); custom endpoint hostnames must match the Adapter's `allowed_hosts` and pass SSRF egress filtering; secret inputs cannot be empty on initial creation.
+- **Errors:** `400 ssrf_blocked_private_ip`, `409 version_conflict`, `422 oauth_scope_insufficient`; `AUTH_EXPIRED_REAUTH_REQUIRED` surfaces an orange `Token` with an inline re-authorization trigger.
+- **Confirmation:** Deleting or disabling a connection referenced by active `Model Deployments` opens an `AlertDialog` enumerating the exact count of impacted `Routes`.
 - **Audit:** `connection.created`, `connection.secret_rotated`, `connection.oauth_authorized`, `connection.disabled`, `connection.deleted`.
-- **Success Feedback:** `Toast` xác nhận kèm độ trễ kiểm tra kết nối thành công (ví dụ `Connection verified in 142 ms`); trường bí mật lập tức xóa trắng khỏi bộ nhớ trình duyệt.
-- **Accessibility & Responsive:** Bảng dòng dày đặc (`Table`), biểu mẫu tạo/xoay khóa mở trong `Drawer` có bẫy tiêu điểm bàn phím; trên điện thoại `375px` hỗ trợ nút ngắt khẩn cấp kết nối lỗi.
+- **Success Feedback:** Confirmation `Toast` reporting verified round-trip latency (e.g., `Connection verified in 142 ms`); secret input buffer is immediately wiped from browser memory.
+- **Accessibility & Responsive:** Dense `Table` layout with creation/rotation forms inside a focus-trapped `Drawer`; `375px` mobile view preserves one-tap emergency connection disablement.
 
 #### `SCR-05`: Model Catalog & Deployments Matrix (`/models`)
-- **Mục tiêu:** Quản lý ánh xạ từ `Provider Connection` sang các `Model Deployments` vật lý (kèm `Data Region` & bảng giá `micro-USD`) và cung cấp danh mục tra cứu năng lực minh bạch cho kỹ sư (`UJ-04`).
-- **Actor & Quyền:** Tạo/Sửa `Deployment`: `ORG_OWNER`, `TEAM_ADMIN`; Tra cứu danh mục & năng lực: `DEVELOPER`, `REVIEWER`.
+- **Objective:** Govern bindings from `Provider Connections` to physical `Model Deployments` (with `Data Region` and `micro-USD` pricing rate cards) while giving application engineers a transparent capability lookup directory (`UJ-04`).
+- **Actor & RBAC:** Create/Edit `Deployment`: `ORG_OWNER`, `TEAM_ADMIN`; Browse catalog & capability matrix: `DEVELOPER`, `REVIEWER`.
 - **Data Contracts:** `GET /admin/v1/models?env_id=...`, `GET /admin/v1/deployments?env_id=...`, `POST /admin/v1/deployments`, `PATCH /admin/v1/deployments/{id}` (`If-Match`).
-- **Actions:** Lọc đa tiêu chí (`Capability`, `Assurance Level`, `Data Region`, `Health SM-04`); đăng ký `Deployment` mới; cập nhật bảng giá tùy chỉnh (hợp đồng doanh nghiệp riêng); sao chép `Model Slug` để gọi API.
-- **Validations:** Đơn giá nhập vào phải `>= 0` (nếu là mô hình tự host chưa gắn đơn giá điện/GPU, bắt buộc tích chọn rõ `Self-Hosted Zero Rate` hoặc đánh dấu để không trộn vào chi phí thương mại `EXACT`); mã vùng dữ liệu bắt buộc khai báo rõ (`EU`, `US`, `APAC`, `ON_PREM`).
-- **Errors:** Cảnh báo rõ các tính năng `UNSUPPORTED` hoặc chỉ `DECLARED` chưa qua kiểm thử (`UX-GR-02`); hiển thị trạng thái ngắt mạch `CIRCUIT_OPEN` thời gian thực.
-- **Confirmation:** Hạ hoặc gỡ `Deployment` cuối cùng đang phục vụ một `Route` yêu cầu xác nhận qua `AlertDialog`.
+- **Actions:** Multi-facet filtering (`Capability`, `Assurance Level`, `Data Region`, `Health SM-04`); register new `Deployment`; override custom enterprise pricing rate cards; copy canonical `Model Slug` for API calls.
+- **Validations:** Unit rates must be `>= 0` (for self-hosted models without electricity/GPU amortization rates, operators must explicitly check `Self-Hosted Zero Rate` or tag accordingly so traffic is never conflated with commercial `EXACT` spend); `Data Region` code must be explicitly declared (`EU`, `US`, `APAC`, `ON_PREM`).
+- **Errors:** Explicit warnings on `UNSUPPORTED` or unverified `DECLARED`-only capabilities (`UX-GR-02`); real-time display of `CIRCUIT_OPEN` breaker posture.
+- **Confirmation:** Demoting or detaching the last healthy `Deployment` backing an active `Route` requires confirmation via `AlertDialog`.
 - **Audit:** `deployment.created`, `deployment.pricing_updated`, `deployment.state_changed`.
-- **Success Feedback:** `Toast` lưu thành công và làm mới hàng trong bảng giữ nguyên vị trí cuộn.
-- **Accessibility & Responsive:** Mẫu `table-filter` có quản lý ẩn/hiện cột qua `useTableColumnSettingsState`; ngăn so sánh năng lực cuộn mượt bằng bàn phím.
+- **Success Feedback:** Save confirmation `Toast` with in-place table row refresh preserving scroll position.
+- **Accessibility & Responsive:** Built on `table-filter` with column visibility managed via `useTableColumnSettingsState`; keyboard-scrollable capability comparison side panel.
 
 ---
 
-### Nhóm 2: Hệ sinh thái Extension, Định tuyến & Mặt phẳng MCP/A2A (`SCR-06` .. `SCR-10`)
+### Group 2: Extension Ecosystem, Routing & MCP/A2A Planes (`SCR-06` .. `SCR-10`)
 
 #### `SCR-06`: Extension Marketplace & Custom Source Installer (`/extensions/marketplace`)
-- **Mục tiêu:** Duyệt danh mục gói mở rộng đã kiểm duyệt hoặc nạp gói từ Git commit SHA / URL `.tpkg` / Private OCI Registry với quy trình kiểm tra danh tính nhà phát hành và bảng quyền bắt buộc trước khi cài (`UJ-02`, `UX-GR-04`).
-- **Actor & Quyền:** Xem danh mục: mọi quản trị viên; Nạp & gửi yêu cầu cài đặt: `OPERATOR`; Phê duyệt độc lập (khi bật 4 mắt): `REVIEWER`.
-- **Data Contracts:** `GET /admin/v1/marketplace/catalog`, `POST /admin/v1/extensions:install` (giai đoạn dàn dựng `PENDING_PERMISSION_APPROVAL`), `POST /admin/v1/extensions/{id}:approve-permissions` (`If-Match`).
-- **Actions:** Lọc theo loại mở rộng (`Provider Adapter`, `Auth Driver`, `Policy/Guardrail`, `Telemetry Exporter`) và `Trust Tier`; bấm **"Inspect Permissions & Trust..."** mở ngăn kiểm tra; dán URI + mã băm `SHA-256` 64 ký tự để kiểm định gói ngoài.
-- **Validations:** `expected_sha256` bắt buộc khớp chuẩn `^[a-f0-9]{64}$`; từ chối gói thiếu khai báo quyền hoặc đòi quyền mạng ký tự đại diện `*`; gói `Unverified External` bắt buộc tích ô xác nhận rủi ro bên thứ ba.
-- **Errors:** `400 hash_mismatch`, `400 contract_version_incompatible`, `403 reserved_namespace_spoofing`, cảnh báo đỏ nếu gói nằm trong danh sách thu hồi an ninh (`Revocation Advisory`).
-- **Confirmation:** Hộp thoại `Dialog` **Permission Inspection Sheet** bắt buộc đối chiếu toàn bộ quyền mạng/bí mật/tài nguyên trước khi nút **"Approve & Activate"** sáng lên (`UX-GR-04`).
+- **Objective:** Browse curated extensions or stage packages from a pinned Git commit SHA, `.tpkg` URL, or Private OCI Registry with mandatory pre-activation inspection of publisher identity and requested permissions (`UJ-02`, `UX-GR-04`).
+- **Actor & RBAC:** Browse catalog: all administrators; Stage & request installation: `OPERATOR`; Independent sign-off (when `Four-Eyes` is active): `REVIEWER`.
+- **Data Contracts:** `GET /admin/v1/marketplace/catalog`, `POST /admin/v1/extensions:install` (stages as `PENDING_PERMISSION_APPROVAL`), `POST /admin/v1/extensions/{id}:approve-permissions` (`If-Match`).
+- **Actions:** Filter by extension kind (`Provider Adapter`, `Auth Driver`, `Policy/Guardrail`, `Telemetry Exporter`) and `Trust Tier`; click **`"Inspect Permissions & Trust..."`** to open the inspection sheet; paste URI + 64-character `SHA-256` digest to stage an external package.
+- **Validations:** `expected_sha256` must match `^[a-f0-9]{64}$`; rejects manifests missing permission declarations or requesting forbidden wildcard `*` network hosts; `Unverified External` packages require checking an explicit third-party risk acknowledgment box.
+- **Errors:** `400 hash_mismatch`, `400 contract_version_incompatible`, `403 reserved_namespace_spoofing`; prominent red alert if the package matches a security `Revocation Advisory`.
+- **Confirmation:** Modal **Permission Inspection Sheet** `Dialog` requires reviewing all network, secret, and resource capabilities before the **`"Approve & Activate"`** button unlocks (`UX-GR-04`).
 - **Audit:** `extension.staged`, `extension.permissions_approved`, `extension.install_rejected`.
-- **Success Feedback:** `Toast` thông báo gói đã ghi vào `tanpopo.lock` và sẵn sàng sử dụng ngay không cần khởi động lại Core, kèm nút chuyển sang tạo `Connection`.
-- **Accessibility & Responsive:** Bảng/danh sách rõ ràng với 3 thẻ `Token` (`Origin`, `Publisher Tier`, `Execution Tier`) có biểu tượng phân biệt; hộp kiểm tra quyền cuộn dọc đầy đủ trên màn hình nhỏ.
+- **Success Feedback:** `Toast` confirming the package has been pinned in `tanpopo.lock` and activated hot without restarting Core, paired with a shortcut to create a `Connection`.
+- **Accessibility & Responsive:** Structured table/list displaying 3 icon-paired `Token` badges (`Origin`, `Publisher Tier`, `Execution Tier`); full vertical scrolling inside the permission dialog on compact viewports.
 
 #### `SCR-07`: Installed Plugins, Lockfile Diff & Rollback (`/extensions/installed`, `/extensions/lockfile`)
-- **Mục tiêu:** Quản trị vòng đời các phần mở rộng đang cài trên máy chủ (`SM-01`), rà soát nâng cấp bị chặn do đòi tăng quyền (`UPDATING_PENDING_RECONSENT` — `UJ-07`), quay lui phiên bản trong `< 5s` hoặc cách ly khẩn cấp (`QUARANTINE`), và xuất `tanpopo.lock` cho GitOps.
-- **Actor & Quyền:** `OPERATOR` (quản trị cài đặt/quay lui/cách ly), `ORG_OWNER` (bật/tắt trong phạm vi `Org`), `REVIEWER` (duyệt tăng quyền).
+- **Objective:** Govern the lifecycle of installed instance extensions (`SM-01`), review upgrades paused for permission escalation (`UPDATING_PENDING_RECONSENT` — `UJ-07`), execute `< 5s` version rollbacks or emergency `QUARANTINE`, and export `tanpopo.lock` for GitOps pipelines.
+- **Actor & RBAC:** `OPERATOR` (install/rollback/quarantine governance), `ORG_OWNER` (enable/disable within `Org` scope), `REVIEWER` (re-consent escalated permissions).
 - **Data Contracts:** `GET /admin/v1/extensions/installations`, `POST /admin/v1/extensions/{id}:upgrade`, `POST /admin/v1/extensions/{id}:rollback` (`If-Match`), `GET /admin/v1/extensions/lockfile`, `POST /admin/v1/kill-switches:trigger` (`EXTENSION`).
-- **Actions:** Kiểm tra bản cập nhật; mở hộp **Side-by-Side Permission Diff** khi gói ở trạng thái `UPDATING_PENDING_RECONSENT`; bấm `Rollback` về bản ghim trước; bấm `Quarantine` khẩn cấp; tải xuống/sao chép tệp `tanpopo.lock`.
-- **Validations:** Không cho phép kích hoạt bản nâng cấp có quyền mở rộng nếu chưa duyệt bảng chênh lệch quyền; không cho gỡ cài đặt cứng khi còn `Connection` tham chiếu (phải ngắt hoặc chuyển sang `DISABLED` trước).
-- **Errors:** `409 version_conflict`, cảnh báo vàng `Deprecated Contract N-1` (`UX-GR-05`).
-- **Confirmation:** `Rollback` và `Quarantine` dùng `AlertDialog` hiển thị số lượng `Connections` và `Projects` sẽ bị tạm ngưng tức thì.
+- **Actions:** Check for updates; open the **Side-by-Side Permission Diff** dialog when an extension enters `UPDATING_PENDING_RECONSENT`; trigger `Rollback` to the previous pinned version; trigger emergency `Quarantine`; download or copy `tanpopo.lock`.
+- **Validations:** Blocks activation of any permission-expanding upgrade until the permission diff is explicitly re-consented; prevents hard uninstallation while active `Connections` still reference the package (must disable or detach first).
+- **Errors:** `409 version_conflict`; yellow warning badge for `Deprecated Contract N-1` (`UX-GR-05`).
+- **Confirmation:** Both `Rollback` and `Quarantine` invoke an `AlertDialog` detailing the exact count of `Connections` and `Projects` that will be immediately suspended.
 - **Audit:** `extension.upgraded`, `extension.escalation_reconsented`, `extension.rolled_back`, `extension.quarantined`.
-- **Success Feedback:** Cập nhật trạng thái dòng tức thời và hiển thị báo cáo bán kính tác động sau khi cách ly.
-- **Accessibility & Responsive:** Bảng `Table` (`table-page`); bản so sánh quyền mới/cũ dùng ký hiệu dấu cộng `+` / dấu trừ `-` tường minh ngoài màu nền xanh/đỏ để người mù màu đọc rõ.
+- **Success Feedback:** Immediate row state update followed by a blast-radius summary report upon quarantine.
+- **Accessibility & Responsive:** Tabular `Table` (`table-page`) / collapsible groups; permission diff view prefixes added/removed entries with explicit `+` / `-` glyphs alongside green/red highlights for color-blind clarity.
 
 #### `SCR-08`: Capability Routes & Dry-Run `Route Explain` Studio (`/routes`, `/routes/explain`)
-- **Mục tiêu:** Thiết kế các tuyến định tuyến thông minh có dự phòng trước luồng (`Priority`, `Weighted`, `Lowest-Cost`), khóa cứng vùng cư trú dữ liệu và kiểm thử khô cây quyết định định tuyến (`UJ-05`).
-- **Actor & Quyền:** Tạo/Sửa `Route`: `ORG_OWNER`, `TEAM_ADMIN`; Chạy mô phỏng `Route Explain`: mọi vai trò (kể cả `DEVELOPER`).
+- **Objective:** Author capability-aware routes with pre-stream failover strategies (`Priority`, `Weighted`, `Lowest-Cost`), enforce fail-closed data residency constraints, and dry-run routing decision trees (`UJ-05`).
+- **Actor & RBAC:** Create/Edit `Route`: `ORG_OWNER`, `TEAM_ADMIN`; Execute dry-run `Route Explain`: all roles (including `DEVELOPER`).
 - **Data Contracts:** `GET /admin/v1/routes?env_id=...`, `POST /admin/v1/routes`, `PUT /admin/v1/routes/{id}` (`If-Match`), `POST /admin/v1/routes:explain`.
-- **Actions:** Sắp xếp thứ tự ưu tiên hoặc tỷ trọng phần trăm các `Model Deployments` (bằng nút lên/xuống hỗ trợ bàn phím bên cạnh kéo thả); đặt ngưỡng timeout và chính sách ngắt mạch; nhập kịch bản thử vào `Route Explain` để xem cây loại trừ từng bước.
-- **Validations:** Tổng trọng số của tuyến `Weighted` phải bằng `100%`; mọi đích trong tuyến phải thuộc cùng `Environment` hoặc phạm vi `Org` hợp lệ; cảnh báo đỏ nếu tất cả đích đều xung đột với chính sách `Data Residency` cấp trên.
-- **Errors:** `409 version_conflict`, `422 invalid_weight_sum`, mô phỏng khô hiển thị rõ mã `503 no_compliant_deployment_available` khi không còn ứng viên hợp lệ.
-- **Confirmation:** Sửa tuyến đang nhận lưu lượng lớn ở môi trường `prod` hiện hộp thoại tóm tắt thay đổi kèm tùy chọn chạy `Route Explain` kiểm tra trước khi lưu.
+- **Actions:** Order priority targets or assign percentage traffic weights across `Model Deployments` (using accessible keyboard up/down controls alongside drag-and-drop); configure request timeouts and circuit-breaker thresholds; submit synthetic request metadata into `Route Explain` to inspect step-by-step candidate elimination.
+- **Validations:** `Weighted` route weights must sum to `100%`; all target deployments must belong to the same `Environment` or permitted `Org` pool; surfaces a red error banner if every target violates an inherited `Data Residency` policy.
+- **Errors:** `409 version_conflict`, `422 invalid_weight_sum`; dry-run simulator explicitly previews `503 no_compliant_deployment_available` when zero candidates survive filtering.
+- **Confirmation:** Modifying a live high-traffic `prod` route presents a change-summary confirmation dialog with a one-click option to run `Route Explain` prior to committing.
 - **Audit:** `route.created`, `route.updated`, `route.deleted`.
-- **Success Feedback:** `Toast` xác nhận phiên bản `ConfigSnapshot` mới đã phát tán (`< 1s`).
-- **Accessibility & Responsive:** Mẫu `form-two-column` trên Desktop; mọi thao tác đổi thứ tự ưu tiên đều có nút bấm bàn phím rõ ràng (không phụ thuộc chuột kéo thả).
+- **Success Feedback:** `Toast` confirming the new `ConfigSnapshot` epoch has propagated (`< 1s`).
+- **Accessibility & Responsive:** Built on `form-two-column` on Desktop; every priority-reordering interaction provides explicit keyboard buttons (zero mouse-only drag-and-drop dependency).
 
 #### `SCR-09`: Hierarchical Policies & Guardrails Configuration (`/policies`)
-- **Mục tiêu:** Quản lý các chính sách kế thừa phân cấp (`Instance → Organization → Project → Environment`) về giới hạn tốc độ (`RPM`/`TPM`/`Concurrent Streams`), vùng cư trú dữ liệu bắt buộc, danh sách mô hình cho phép và các bộ lọc nội dung/PII (`Guardrails`).
-- **Actor & Quyền:** Cấp `Instance`: `OPERATOR`; Cấp `Org`: `ORG_OWNER`; Cấp `Project/Env` (chỉ được thu hẹp chặt hơn, cấm nới lỏng trần cấp trên — `TP-BR-0501`): `TEAM_ADMIN`.
+- **Objective:** Govern hierarchical policy inheritance (`Instance → Organization → Project → Environment`) across rate limits (`RPM`/`TPM`/`Concurrent Streams`), mandatory data residency, model allowlists, and content/PII `Guardrails`.
+- **Actor & RBAC:** `Instance` floor: `OPERATOR`; `Org` ceiling: `ORG_OWNER`; `Project/Env` narrowing (strictly tighten-only; relaxing upstream ceilings is forbidden per `TP-BR-0501`): `TEAM_ADMIN`.
 - **Data Contracts:** `GET /admin/v1/policies/effective?env_id=...`, `PUT /admin/v1/policies/{policyId}` (`If-Match`).
-- **Actions:** Xem bảng hợp nhất **Effective Policy** (chỉ rõ mỗi quy tắc đang kế thừa từ tầng nào); thêm quy tắc thu hẹp ở dự án; cấu hình hành động khi bộ lọc PII/Guardrail gặp sự cố (`Fail-Closed` bắt buộc cho dữ liệu nhạy cảm vs `Fail-Open` ghi cảnh báo cho bộ lọc phụ).
-- **Validations:** Chặn ngay trên giao diện và máy chủ nếu quản trị dự án cố đặt trần `RPM` cao hơn trần `Org` hoặc cố mở vùng dữ liệu `US` khi `Org` đã khóa cứng `EU Only`.
-- **Errors:** `422 policy_relaxation_forbidden` (chỉ rõ quy tắc cha đang khóa ở tầng `Organization`), `409 version_conflict`.
-- **Confirmation:** Bật quy tắc chặn diện rộng trên môi trường `prod` mở `AlertDialog` xác nhận.
+- **Actions:** Inspect the merged **Effective Policy** matrix (attributing the exact tier each rule inherits from); attach tighter project-level constraints; configure failure posture for PII/Guardrail plugins (mandatory `Fail-Closed` for regulated data vs `Fail-Open` with warning telemetry for auxiliary filters).
+- **Validations:** Blocks both client-side and server-side attempts by a project admin to set an `RPM` ceiling above the `Org` cap or permit `US` routing when the `Org` enforces `EU Only`.
+- **Errors:** `422 policy_relaxation_forbidden` (pinpointing the parent rule locked at the `Organization` tier), `409 version_conflict`.
+- **Confirmation:** Activating broad blocking guardrails in `prod` requires `AlertDialog` confirmation.
 - **Audit:** `policy.created`, `policy.updated`, `policy.guardrail_attached`.
-- **Success Feedback:** Hiển thị ngay kết quả hợp nhất chính sách mới sau khi lưu.
-- **Accessibility & Responsive:** Mẫu `table-tree` / `settings-sidebar` thể hiện rõ quan hệ cha-con bằng mức thụt lề và nhãn cấp độ văn bản.
+- **Success Feedback:** Immediately renders the recalculated effective policy snapshot upon save.
+- **Accessibility & Responsive:** Built on `table-tree` / `settings-sidebar`, conveying parent-child hierarchy via both structural indentation and explicit text tier tokens.
 
 #### `SCR-10`: MCP Governance Hub & A2A Agent Registry (`/mcp/*` — `v0.2`, `/a2a/*` — `v0.3`)
-- **Mục tiêu:** Đăng ký máy chủ công cụ `MCP Server`, đóng dấu vân tay `schema_hash` từng công cụ, gán phân loại rủi ro (`read_only` / `mutating` / `destructive` — `UJ-06`), và (ở nhịp `v0.3`) quản lý danh bạ `A2A AgentCard` kèm trần độ sâu ủy quyền `hop_count <= 5`.
-- **Actor & Quyền:** Quản trị đăng ký & ghim băm: `ORG_OWNER`, `TEAM_ADMIN`; Duyệt lại khi lệch schema: `ORG_OWNER` / `REVIEWER`; Xem danh mục công cụ được cấp: `DEVELOPER`.
+- **Objective:** Register upstream `MCP Servers`, pin cryptographic `schema_hash` fingerprints per tool, assign risk classifications (`read_only` / `mutating` / `destructive` — `UJ-06`), and (in wave `v0.3`) govern the `A2A AgentCard` directory with delegation depth caps (`hop_count <= 5`).
+- **Actor & RBAC:** Register & pin hashes: `ORG_OWNER`, `TEAM_ADMIN`; Re-approve drifted schemas: `ORG_OWNER` / `REVIEWER`; Browse permitted tools: `DEVELOPER`.
 - **Data Contracts:** `GET /admin/v1/mcp/servers`, `POST /admin/v1/mcp/servers`, `POST /admin/v1/mcp/servers/{id}:sync-tools`, `POST /admin/v1/mcp/tools/{toolId}:approve-schema` (`If-Match`), `GET /admin/v1/a2a/agents` (`v0.3`).
-- **Actions:** Đồng bộ danh mục công cụ từ máy chủ MCP đích; gán nhãn rủi ro mặc định đóng (công cụ mới chưa phân loại không tự mở là `read_only`); mở hộp so sánh `Schema Diff` khi phát hiện máy chủ ngoài tự ý đổi mô tả/tham số công cụ; đặt trần ngân sách và số bước nhảy ủy quyền cho `A2A Agent`.
-- **Validations:** URL máy chủ MCP/A2A phải vượt qua kiểm tra chống SSRF; `max_delegation_hops` giới hạn trong khoảng `1..5`.
-- **Errors:** Cảnh báo đỏ `SCHEMA_DRIFT_LOCKED` tự động khóa công cụ bị đổi ngầm cho tới khi được duyệt lại; `502 mcp_upstream_unreachable`.
-- **Confirmation:** Đổi phân loại một công cụ từ `destructive` xuống `read_only` (bỏ cổng duyệt con người) bắt buộc xác nhận trong `AlertDialog` kèm ghi lý do kiểm toán.
+- **Actions:** Synchronize tool catalogs from upstream MCP servers; assign fail-closed risk tiers (newly discovered unclassified tools never default to open `read_only`); inspect the `Schema Diff` modal whenever an upstream server mutates tool descriptions or parameters; enforce budget ceilings and `max_delegation_hops` on `A2A Agents`.
+- **Validations:** Upstream MCP/A2A endpoint URLs must pass SSRF egress validation; `max_delegation_hops` must stay within `1..5`.
+- **Errors:** Red `SCHEMA_DRIFT_LOCKED` token automatically locks any silently mutated tool until re-consented; `502 mcp_upstream_unreachable`.
+- **Confirmation:** Downgrading a tool's classification from `destructive` to `read_only` (bypassing human-in-the-loop approval) requires `AlertDialog` confirmation with a mandatory audit justification.
 - **Audit:** `mcp.server_registered`, `mcp.tool_schema_pinned`, `mcp.schema_drift_detected`, `mcp.risk_tier_changed`, `a2a.agent_registered`.
-- **Success Feedback:** `Toast` thông báo số lượng công cụ đã ghim `schema_hash` an toàn.
-- **Accessibility & Responsive:** Hai tab `TabList` tách biệt rõ `MCP Servers & Tools` và `A2A Agents`; bảng công cụ dùng `Table` chuẩn không bọc thẻ rườm rà.
+- **Success Feedback:** `Toast` reporting the exact count of tools cryptographically pinned by `schema_hash`.
+- **Accessibility & Responsive:** Clean `TabList` separating `MCP Servers & Tools` from `A2A Agents`; dense `Table` rows without decorative card wrappers.
 
 ---
 
-### Nhóm 3: Quan sát, Tài chính FinOps, Truy cập & Trực chiến Bảo mật (`SCR-11` .. `SCR-16`)
+### Group 3: Observability, FinOps, Access Control & Security Operations (`SCR-11` .. `SCR-16`)
 
 #### `SCR-11`: Request Traces & Waterfall Inspector (`/observability/traces`)
-- **Mục tiêu:** Tra cứu nhanh nhật ký truy vết siêu dữ liệu theo thời gian thực và mổ xẻ dòng thời gian 12 chặng của từng `request_id` để chẩn đoán lỗi/độ trễ tức thì mà vẫn bảo vệ quyền riêng tư mặc định (`UJ-08`, `TP-BR-0802`).
-- **Actor & Quyền:** `OPERATOR`, `ORG_OWNER`, `TEAM_ADMIN`, `REVIEWER`, `DEVELOPER` (chỉ thấy yêu cầu của khóa/dự án mình có quyền).
+- **Objective:** Search real-time metadata request traces and dissect the 12-stage hot-path timeline of any `request_id` to diagnose failures or latency spikes instantly while preserving privacy-by-default (`UJ-08`, `TP-BR-0802`).
+- **Actor & RBAC:** `OPERATOR`, `ORG_OWNER`, `TEAM_ADMIN`, `REVIEWER`, `DEVELOPER` (scoped strictly to authorized keys/projects).
 - **Data Contracts:** `GET /admin/v1/traces?env_id=...&status=...&model=...&cursor=...`, `GET /admin/v1/traces/{requestId}`.
-- **Actions:** Tìm chính xác theo `request_id`; lọc theo mã trạng thái (`4xx`, `5xx`, `mid_stream_abort`), `Virtual Key`, `Route`, `Data Region` hoặc độ chính xác chi phí (`ESTIMATED`, `UNMETERED_FLAGGED`); mở ngăn `LayoutPanel` xem thanh thác nước (`Waterfall`) và bấm **"Replay Metadata in Route Explain"**.
-- **Validations:** Giới hạn khung thời gian tìm kiếm hợp lệ; mặc định **không hiển thị nội dung văn bản prompt/completion** (nếu dự án có bật chế độ gỡ lỗi ngắn hạn `TTL <= 72h`, việc mở xem nội dung yêu cầu quyền riêng và tự sinh bản ghi kiểm toán).
-- **Errors:** Không tiết lộ sự tồn tại của `request_id` thuộc tổ chức khác (`404 trace_not_found_in_scope`).
-- **Confirmation:** Bấm xem nội dung gỡ lỗi nhạy cảm (khi tính năng debug payload đang bật) hiện cảnh báo xác nhận thao tác sẽ được ghi vào `Audit Log`.
-- **Audit:** `trace.debug_payload_viewed` (khi mở xem nội dung gỡ lỗi).
-- **Success Feedback:** Sao chép `request_id` hoặc đoạn chẩn đoán lỗi đã che bí mật với thông báo `Toast`.
-- **Accessibility & Responsive:** Mẫu `table-filter` kết hợp `LayoutPanel`; thanh thời gian Waterfall kèm bảng số liệu mili-giây dạng văn bản cho trình đọc màn hình.
+- **Actions:** Exact lookup by `request_id`; filter by HTTP status (`4xx`, `5xx`, `mid_stream_abort`), `Virtual Key`, `Route`, `Data Region`, or cost precision (`ESTIMATED`, `UNMETERED_FLAGGED`); open `LayoutPanel` to inspect the 12-stage `Waterfall` and click **`"Replay Metadata in Route Explain"`**.
+- **Validations:** Enforces valid retention query windows; **omits prompt/completion body text by default** (if short-lived opt-in debug payload capture `TTL <= 72h` is active for a project, viewing payload text requires a dedicated permission and emits an immutable audit record).
+- **Errors:** Never leaks existence of a `request_id` belonging to another tenant (`404 trace_not_found_in_scope`).
+- **Confirmation:** Opening sensitive opt-in debug payloads displays an explicit notice that the access event will be recorded in the `Audit Log`.
+- **Audit:** `trace.debug_payload_viewed` (emitted whenever opt-in debug payloads are inspected).
+- **Success Feedback:** `Toast` confirmation upon copying `request_id` or redacted diagnostic metadata.
+- **Accessibility & Responsive:** Built on `table-filter` paired with `LayoutPanel`; visual Waterfall bars are accompanied by a structured millisecond text breakdown table for screen readers.
 
 #### `SCR-12`: FinOps Budgets, Pre-Hold Monitor & Chargeback Ledger (`/finops/budgets`, `/finops/chargeback`)
-- **Mục tiêu:** Thiết lập trần ngân sách cứng/mềm (`BIGINT micro-USD`), theo dõi trực quan cả phần đã quyết toán (`Settled`) lẫn phần đang tạm giữ cho các luồng mở (`Active Pre-Request Holds` — `SM-07`), và xuất báo cáo phân bổ chi phí minh bạch độ chính xác (`EXACT` vs `ESTIMATED` vs `UNMETERED_FLAGGED`).
-- **Actor & Quyền:** Thiết lập/Nâng trần ngân sách: `ORG_OWNER` (cấp `Org`/`Project`), `TEAM_ADMIN` (chia nhỏ trong `Project`); Đọc báo cáo: `REVIEWER`, `DEVELOPER` (phạm vi cá nhân).
+- **Objective:** Configure hard/soft budget ceilings (`BIGINT micro-USD`), monitor settled spend alongside in-flight stream reservations (`Active Pre-Request Holds` — `SM-07`), and export cost-allocation ledgers explicitly partitioned by precision (`EXACT` vs `ESTIMATED` vs `UNMETERED_FLAGGED`).
+- **Actor & RBAC:** Configure/raise budget ceilings: `ORG_OWNER` (`Org`/`Project` scope), `TEAM_ADMIN` (sub-allocation within `Project`); Read reports: `REVIEWER`, `DEVELOPER` (own key scope).
 - **Data Contracts:** `GET /admin/v1/budgets`, `PUT /admin/v1/budgets/{id}` (`If-Match`), `GET /admin/v1/ledger/chargeback?group_by=project|env|key|model&from=...&to=...`, `GET /admin/v1/ledger/export.csv`.
-- **Actions:** Đặt hạn mức theo ngày/tháng và ngưỡng cảnh báo sớm (`50%`, `80%`, `100%`); xử lý số dư âm nhẹ kết chuyển cuối luồng (`Negative Balance Carryover` — `BA-OQ-002`); lọc và xuất CSV/JSON báo cáo `Chargeback` tách riêng 3 cột `Exact Commercial Spend`, `Estimated Spend` và `Unmetered Requests Count`.
-- **Validations:** Trần ngân sách con không được vượt trần ngân sách cha nếu tổ chức khóa phân bổ cứng; giá trị tiền tệ quy đổi chính xác sang đơn vị nguyên `micro-USD` không làm tròn dấu phẩy động sai lệch.
-- **Errors:** `409 version_conflict`; hiển thị `Banner` cảnh báo nổi bật nếu có bất kỳ mô hình nào phát sinh `UNMETERED_FLAGGED` (thiếu bảng giá) để quản trị viên bổ sung ngay tại `SCR-05` (`UX-GR-05`).
-- **Confirmation:** Nâng trần ngân sách vượt ngưỡng lớn hoặc xóa trần chặn cứng mở `AlertDialog` (hỗ trợ luồng 4 mắt nếu `Organization` bật kiểm soát tài chính chéo).
+- **Actions:** Set daily/monthly ceilings and early-warning thresholds (`50%`, `80%`, `100%`); reconcile end-of-stream `Negative Balance Carryover` (`BA-OQ-002`); filter and export CSV/JSON `Chargeback` reports separating `Exact Commercial Spend`, `Estimated Spend`, and `Unmetered Requests Count` into 3 distinct columns.
+- **Validations:** Child budget ceilings cannot exceed parent ceilings when hard hierarchical allocation is enabled; monetary inputs convert losslessly into integer `micro-USD` units without floating-point rounding drift.
+- **Errors:** `409 version_conflict`; prominent warning `Banner` whenever any model accrues `UNMETERED_FLAGGED` traffic (missing rate card) linking directly to `SCR-05` for remediation (`UX-GR-05`).
+- **Confirmation:** Raising budget caps above governance thresholds or removing a hard ceiling opens an `AlertDialog` (supporting `Four-Eyes` approval when dual financial control is enabled on the `Organization`).
 - **Audit:** `budget.created`, `budget.limit_changed`, `budget.carryover_cleared`, `ledger.exported`.
-- **Success Feedback:** Cập nhật ngay thanh tiến độ ngân sách ba thành phần (`Settled` + `Reserved Hold` + `Remaining`).
-- **Accessibility & Responsive:** Mẫu `dashboard-comparison` + `Table`; thanh tiến độ ngân sách luôn hiển thị con số phần trăm và giá trị `USD` bằng chữ ngay bên dưới để không phụ thuộc màu thanh.
+- **Success Feedback:** Immediate update of the three-segment budget bar (`Settled` + `Reserved Hold` + `Remaining`).
+- **Accessibility & Responsive:** Built on `dashboard-comparison` + `Table`; budget progress bars always print explicit percentage and `USD` figures in text directly underneath so comprehension never depends on bar color.
 
 #### `SCR-13`: Virtual API Keys, Team Members & RBAC (`/access/virtual-keys`, `/access/members`, `/access/roles`)
-- **Mục tiêu:** Phát hành `Virtual Key` gắn cứng với **đúng 1 `Environment`** (`TP-BR-0103`), giới hạn danh sách `Models`/`Routes`/`MCP Tools` được gọi, thực hiện xoay vòng êm hai khóa song hành (`Graceful Dual-Key Rotation` — `WF-10`) hoặc thu hồi khẩn cấp cắt luồng (`Emergency Revoke` — `BA-OQ-003`), và quản lý thành viên theo 5 vai trò RBAC.
-- **Actor & Quyền:** `ORG_OWNER` (toàn quyền `Org`), `TEAM_ADMIN` (quản lý khóa & thành viên trong `Project`), `DEVELOPER` (chỉ tạo/xoay khóa cá nhân nếu chính sách dự án bật).
+- **Objective:** Issue `Virtual Keys` hard-bound to **exactly 1 `Environment`** (`TP-BR-0103`), scope permitted `Models`/`Routes`/`MCP Tools`, execute zero-downtime `Graceful Dual-Key Rotation` (`WF-10`) or stream-severing `Emergency Revoke` (`BA-OQ-003`), and administer members across the 5 RBAC roles.
+- **Actor & RBAC:** `ORG_OWNER` (full `Org` control), `TEAM_ADMIN` (keys & members within `Project`), `DEVELOPER` (create/rotate personal keys only when permitted by project policy).
 - **Data Contracts:** `GET /admin/v1/virtual-keys?env_id=...`, `POST /admin/v1/virtual-keys`, `POST /admin/v1/virtual-keys/{id}:rotate`, `POST /admin/v1/virtual-keys/{id}:revoke`, `GET /admin/v1/members`, `POST /admin/v1/members`.
-- **Actions:** Tạo `Virtual Key` (chọn `Environment`, hạn dùng, trần `RPM`/`TPM`/chi phí riêng, danh sách trắng `Models` & `MCP Tools`); bấm **"Rotate Key (Grace Window)"** đặt thời gian chồng lấp `1h..72h`; bấm **"Emergency Security Revoke"** cắt đứt ngay cả luồng đang mở; gán vai trò RBAC cho thành viên.
-- **Validations:** Một `Virtual Key` không thể chọn nhiều `Environments`; thời hạn khóa không vượt quá trần tối đa của chính sách bảo mật tổ chức; người dùng không thể tự nâng quyền của chính mình (`Self-Privilege Escalation` bị chặn).
+- **Actions:** Issue `Virtual Key` (select single `Environment`, expiration, per-key `RPM`/`TPM`/spend ceiling, and `Models` & `MCP Tools` allowlists); click **`"Rotate Key (Grace Window)"`** with `1h..72h` overlap; click **`"Emergency Security Revoke"`** to sever active streams immediately; assign RBAC roles to team members.
+- **Validations:** A `Virtual Key` cannot span multiple `Environments`; key expiration cannot exceed the organization's maximum security TTL; actors are blocked from `Self-Privilege Escalation`.
 - **Errors:** `403 role_escalation_denied`, `409 version_conflict`.
 - **Confirmation:**
-  - Khi vừa tạo hoặc xoay khóa: `Dialog` hiển thị chuỗi khóa mới **đúng 1 lần duy nhất** (`UX-GR-01`).
-  - Khi bấm thu hồi: `AlertDialog` bắt buộc người dùng chọn rõ giữa **Chế độ 1: Hết hạn êm (cho luồng dở chạy nốt `<= 60s`)** và **Chế độ 2: Thu hồi An ninh Khẩn cấp (cắt ngang mọi luồng SSE đang truyền trong `< 1s`/`< 5s`)**.
+  - Upon key creation or rotation: modal `Dialog` reveals the new key secret **strictly once** (`UX-GR-01`).
+  - Upon revocation: `AlertDialog` requires explicitly selecting between **Mode 1: Graceful Drain (allow in-flight streams `<= 60s` to finish)** and **Mode 2: Emergency Security Revoke (abort all open SSE streams within `< 1s` single-node / `< 5s` cluster)**.
 - **Audit:** `virtual_key.issued`, `virtual_key.rotated`, `virtual_key.revoked_graceful`, `virtual_key.revoked_emergency`, `iam.member_role_changed`.
-- **Success Feedback:** `Toast` xác nhận thu hồi kèm số lượng luồng đang mở đã bị cắt đứt thành công.
-- **Accessibility & Responsive:** Trên màn hình di động `375px`, danh sách khóa giữ nổi bật nút **Emergency Revoke** kích thước chạm `>= 44px` để kỹ sư trực chiến khóa ngay khóa lộ từ điện thoại.
+- **Success Feedback:** Confirmation `Toast` reporting revocation completion alongside the exact count of severed in-flight streams.
+- **Accessibility & Responsive:** On `375px` mobile viewports, key rows keep the **`Emergency Revoke`** control prominent with `>= 44px` touch target height so on-call responders can neutralize leaked credentials immediately from a phone.
 
 #### `SCR-14`: Security Center — Approval Queue, Audit Log & 4-Level Kill-Switches (`/security/*`)
-- **Mục tiêu:** Trung tâm chỉ huy bảo mật hợp nhất ba năng lực sống còn: (1) Hàng đợi phê duyệt con người cho lệnh `MCP destructive` và nâng quyền Plugin (`SM-06`), (2) Nhật ký kiểm toán bất biến nối chuỗi băm (`TP-FR-0704`), và (3) Bảng công tắc ngắt khẩn cấp 4 cấp độ (`OPS-04`).
-- **Actor & Quyền:** Hàng đợi phê duyệt: `REVIEWER`, `ORG_OWNER`; Kill-Switch: `OPERATOR`, `ORG_OWNER`, `TEAM_ADMIN` (theo phạm vi); Đọc & kiểm tra tính toàn vẹn `Audit Log`: `REVIEWER`, `ORG_OWNER`, `OPERATOR`.
+- **Objective:** Unified security command center combining three mission-critical capabilities: (1) Human-in-the-loop approval queue for `MCP destructive` calls and Plugin permission escalations (`SM-06`), (2) Tamper-evident hash-chained `Audit Log` (`TP-FR-0704`), and (3) the 4-level emergency `Kill-Switch` console (`OPS-04`).
+- **Actor & RBAC:** Approval queue: `REVIEWER`, `ORG_OWNER`; Kill-Switch: `OPERATOR`, `ORG_OWNER`, `TEAM_ADMIN` (within authorized scope); Read & verify `Audit Log` chain integrity: `REVIEWER`, `ORG_OWNER`, `OPERATOR`.
 - **Data Contracts:** `GET /admin/v1/approvals?status=PENDING`, `POST /admin/v1/approvals/{id}:decide` (`If-Match`), `GET /admin/v1/audit-events?actor=...&action=...&cursor=...`, `POST /admin/v1/audit-events:verify-chain`, `POST /admin/v1/kill-switches:trigger`.
-- **Actions:** Duyệt hoặc Từ chối yêu cầu chờ (hiển thị rõ tham số JSON đã băm `SHA-256` không thể sửa đổi); kích hoạt 1 trong 4 công tắc khẩn cấp (`Revoke Key` / `Freeze Project` / `Disable Connection` / `Quarantine Extension`) kèm xem báo cáo bán kính ảnh hưởng (`Blast Radius Report`); lọc/xuất `Audit Log` và bấm kiểm chứng chuỗi băm chống sửa trộm.
-- **Validations:** Người gửi yêu cầu không được tự phê duyệt yêu cầu của chính mình khi bật `Four-Eyes`; lý do từ chối hoặc kích hoạt Kill-Switch bắt buộc `>= 5` ký tự.
-- **Errors:** `409 approval_already_decided_or_expired` (khi hết hạn chờ hoặc người khác đã xử lý trước), `403 self_approval_forbidden`.
-- **Confirmation:** Mọi thao tác kích hoạt `Kill-Switch` cấp `Project`, `Connection` hoặc `Extension` mở `AlertDialog` yêu cầu gõ lại đúng tên định danh (`slug`) và chọn có cắt luồng đang chạy hay không.
+- **Actions:** Approve or Reject pending requests (inspecting immutable `SHA-256`-pinned JSON arguments); trigger 1 of the 4 emergency kill-switches (`Revoke Key` / `Freeze Project` / `Disable Connection` / `Quarantine Extension`) and inspect the resulting `Blast Radius Report`; filter/export `Audit Log` entries and run cryptographic hash-chain verification.
+- **Validations:** Requesters cannot self-approve their own submissions under `Four-Eyes` policy; rejection or Kill-Switch activation reasons require `>= 5` characters.
+- **Errors:** `409 approval_already_decided_or_expired` (when TTL expires or another reviewer acted first), `403 self_approval_forbidden`.
+- **Confirmation:** Every `Project`-, `Connection`-, or `Extension`-level `Kill-Switch` opens an `AlertDialog` requiring exact `slug` re-entry and an explicit toggle for severing active streams.
 - **Audit:** `approval.approved`, `approval.rejected`, `killswitch.triggered`, `audit.chain_verified`.
-- **Success Feedback:** Phản hồi tức thì trạng thái đồng bộ toàn cụm (`Cluster Epoch #... acknowledged by all active nodes`) và báo cáo danh sách khóa/dự án chịu tác động.
-- **Accessibility & Responsive:** Mẫu `incident-console`; ưu tiên hàng đầu khả năng thao tác hoàn chỉnh bằng 1 tay trên điện thoại `375px` (`<= 3` lần chạm từ thông báo cảnh báo tới lúc kích hoạt xong Kill-Switch).
+- **Success Feedback:** Real-time cluster propagation confirmation (`Cluster Epoch #... acknowledged by all active nodes`) accompanied by the affected keys/projects inventory.
+- **Accessibility & Responsive:** Built on `incident-console`; engineered first for one-handed `375px` mobile execution (`<= 3` taps from an alert notification to completed Kill-Switch activation).
 
 #### `SCR-15`: Developer Workspace — Playground, API Explorer, SDK Snippets & Smoke Diagnostics (`/devtools/*`)
-- **Mục tiêu:** Giúp kỹ sư tích hợp kiểm thử nhanh mô hình/tuyến đường ngay trên trình duyệt, tra cứu tài liệu OpenAPI tương tác, lấy đoạn mã mẫu điền sẵn đúng địa chỉ cổng & tên mô hình, và chạy kiểm tra khói (`Smoke Test`) khóa ảo.
-- **Actor & Quyền:** `DEVELOPER`, `TEAM_ADMIN`, `ORG_OWNER` (`OPERATOR` có thêm tab xuất gói chẩn đoán `support-bundle`).
-- **Data Contracts:** `POST /v1/chat/completions` (hoặc `/native/...` khi thử trong `Playground` bằng khóa phiên thử nghiệm có hạn mức), `GET /admin/v1/openapi.json`, `POST /admin/v1/diagnostics:smoke-test`, `POST /admin/v1/diagnostics:support-bundle` (`OPERATOR`).
-- **Actions:** So sánh song song phản hồi streaming của 2 mô hình/tuyến trong `Playground` (hiển thị trực tiếp `TTFT`, `tokens/sec`, chi phí quyết toán và cây `Route Explain`); sao chép đoạn mã mẫu (`OpenAI Python/TS/Go`, `Anthropic/Gemini Native`, `curl`, cấu hình `MCP Client`); tải gói chẩn đoán `support-bundle` đã tự động che sạch mọi khóa bí mật và PII.
-- **Validations:** `Playground` không tự động lưu trữ lịch sử câu hỏi nhạy cảm lên máy chủ (chỉ giữ tạm trong bộ nhớ phiên trình duyệt của chính kỹ sư và xóa ngay khi đóng tab hoặc bấm `Clear`).
-- **Errors:** Hiển thị nguyên bản phong bì lỗi chuẩn `CanonicalErrorEnvelope` cạnh thẻ hướng dẫn cách sửa lỗi tương ứng (`Error Resolution Card`).
-- **Confirmation:** Không áp dụng cho thử nghiệm thông thường; xuất `support-bundle` hiện danh mục những thông tin được thu thập và khẳng định `0` bí mật thô được đóng gói.
+- **Objective:** Enable integration engineers to test models and routes interactively in the browser, browse embedded OpenAPI documentation, copy pre-populated gateway SDK snippets, and run `Virtual Key` smoke diagnostics.
+- **Actor & RBAC:** `DEVELOPER`, `TEAM_ADMIN`, `ORG_OWNER` (`OPERATOR` additionally accesses the redacted `support-bundle` export tab).
+- **Data Contracts:** `POST /v1/chat/completions` (or `/native/...` when testing inside `Playground` using a rate-capped ephemeral session key), `GET /admin/v1/openapi.json`, `POST /admin/v1/diagnostics:smoke-test`, `POST /admin/v1/diagnostics:support-bundle` (`OPERATOR`).
+- **Actions:** Compare streaming responses side-by-side across 2 models/routes in `Playground` (displaying live `TTFT`, `tokens/sec`, settled `micro-USD` cost, and `Route Explain` trace); copy ready-to-run snippets (`OpenAI Python/TS/Go`, `Anthropic/Gemini Native`, `curl`, `MCP Client` config); download a `support-bundle` scrubbed of all secrets and PII.
+- **Validations:** `Playground` never persists sensitive prompt history to server storage automatically (retaining state solely inside ephemeral browser tab memory and wiping immediately on tab close or `Clear`).
+- **Errors:** Renders raw `CanonicalErrorEnvelope` payloads side-by-side with an actionable `Error Resolution Card`.
+- **Confirmation:** None required for routine interactive testing; `support-bundle` export previews the exact manifest of collected files and confirms `0` raw secrets are included.
 - **Audit:** `diagnostics.support_bundle_generated`.
-- **Success Feedback:** `Toast` xác nhận đã sao chép đoạn mã SDK vào khay nhớ tạm.
-- **Accessibility & Responsive:** Mẫu `ai-chat` (có khung kết quả bên cạnh có thể co giãn) cho `Playground` và `documentation-technical` cho kho đoạn mã SDK; trên di động xếp dọc gọn gàng.
+- **Success Feedback:** `Toast` confirming SDK snippet copy to clipboard.
+- **Accessibility & Responsive:** Built on `ai-chat` (with resizable metadata side panel) for `Playground` and `documentation-technical` for SDK snippets; stacks vertically cleanly on mobile viewports.
 
 #### `SCR-16`: Instance Operations, Backups, Upgrades & Privacy Settings (`/ops/*`, `/settings/*`)
-- **Mục tiêu:** Cung cấp bảng điều khiển vận hành tự chủ cho `OPERATOR` và `ORG_OWNER`: kiểm tra sức khỏe từng thành phần (`/healthz`, `/readyz`, độ trễ đồng bộ cụm), chạy kiểm tra tương thích trước nâng cấp (`Upgrade Preflight`), quản lý sao lưu mã hóa, cài đặt thời hạn lưu giữ (`TTL`) và thực thi xóa sạch dữ liệu tổ chức/dự án (`Crypto-Shredding < 60s`).
-- **Actor & Quyền:** `/ops/*`: chỉ `OPERATOR` (hoặc `Personal Admin`); `/settings/residency-retention`: `ORG_OWNER`.
+- **Objective:** Provide a self-contained operations console for `OPERATOR` and `ORG_OWNER`: inspect subsystem health (`/healthz`, `/readyz`, cluster epoch sync lag), run `Upgrade Preflight` compatibility gates, trigger encrypted backups, configure retention `TTL` windows, and execute tenant/project deletion (`Crypto-Shredding < 60s`).
+- **Actor & RBAC:** `/ops/*`: `OPERATOR` (or `Personal Admin`) exclusively; `/settings/residency-retention`: `ORG_OWNER`.
 - **Data Contracts:** `GET /admin/v1/ops/cluster-status`, `POST /admin/v1/ops/backups:trigger`, `POST /admin/v1/ops/upgrades:preflight`, `PUT /admin/v1/settings/retention` (`If-Match`), `DELETE /admin/v1/projects/{id}` / `DELETE /admin/v1/organizations/{id}`.
-- **Actions:** Xem trạng thái từng nút Data Plane (`ConfigSnapshot Epoch`, kết nối DB/Valkey/KMS, mức dùng bộ nhớ hồ Wasm); kích hoạt chụp sao lưu nóng; tải tệp kiểm tra tương thích hợp đồng trước khi nâng cấp phiên bản Core (`SM-08`); chỉnh thời hạn tự xóa cho truy vết kỹ thuật (`7..30 ngày`) và sổ cái kiểm toán (`>= 365 ngày`); đóng và xóa vĩnh viễn dự án/tổ chức.
-- **Validations:** Cấm đặt `TTL` của nội dung gỡ lỗi vượt quá `72 giờ`; cấm hạ thời gian lưu sổ cái kiểm toán xuống dưới ngưỡng chính sách tối thiểu của đơn vị; kiểm tra không còn luồng mở trước khi hủy khóa mã hóa dự án.
-- **Errors:** Báo cáo rõ danh sách các plugin chặn nâng cấp (`BLOCKED_INCOMPATIBLE` — nêu rõ tên gói và phiên bản hợp đồng lệch); cảnh báo dung lượng đĩa thấp trước khi chụp sao lưu.
-- **Confirmation:** Xóa vĩnh viễn `Project` hoặc `Organization` dùng `AlertDialog` cấp nguy hiểm cao nhất: yêu cầu gõ chính xác câu xác nhận `DELETE <slug>` và giải thích rõ khóa giải mã `DEK` sẽ bị hủy vĩnh viễn không thể khôi phục trong `< 60 giây`.
+- **Actions:** Monitor per-node Data Plane posture (`ConfigSnapshot Epoch`, DB/Valkey/KMS connectivity, Wasm pool memory footprint); trigger hot encrypted backups; run contract-compatibility preflight checks ahead of Core version upgrades (`SM-08`); configure automatic purge `TTL` windows for technical traces (`7..30 days` default, up to `90 days`) and audit ledgers (`>= 365 days`); permanently close and crypto-shred a project or organization.
+- **Validations:** Prohibits setting opt-in debug payload `TTL` above `72 hours`; blocks lowering audit ledger retention below the organization's compliance floor; verifies active streams are drained/aborted prior to destroying tenant encryption keys.
+- **Errors:** Explicitly lists upgrade-blocking extensions (`BLOCKED_INCOMPATIBLE` — naming each package and mismatched contract version); surfaces low-disk-space warnings before initiating hot backups.
+- **Confirmation:** Permanent deletion of a `Project` or `Organization` invokes the highest-severity `AlertDialog`: requiring exact entry of `DELETE <slug>` and stating clearly that the tenant's `DEK` encryption key will be irreversibly destroyed within `< 60 seconds`.
 - **Audit:** `ops.backup_created`, `ops.upgrade_preflight_ran`, `settings.retention_updated`, `tenant.crypto_shredded`.
-- **Success Feedback:** Biên nhận hoàn tất kèm mã băm tệp sao lưu hoặc biên bản xác nhận hủy khóa mật mã học.
-- **Accessibility & Responsive:** Mẫu `settings-sidebar` + bảng trạng thái nút cụm `Table`; đọc rõ trạng thái sức khỏe từng nút cho trình đọc màn hình mà không phụ thuộc chấm màu.
+- **Success Feedback:** Completion receipt displaying the backup archive `SHA-256` digest or anonymized cryptographic key-destruction certificate.
+- **Accessibility & Responsive:** Built on `settings-sidebar` + cluster node `Table`; exposes explicit text health labels per node to screen readers without relying on colored status dots.

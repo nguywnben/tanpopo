@@ -39,9 +39,9 @@ RULES:
 
 If you are starting a fresh session with no prior chat context (e.g., executing a `TP-IMP-xxxx` unit):
 1. **Read [`docs/governance/execution-baseline.md`](./docs/governance/execution-baseline.md) FIRST** (`EXEC-BL-001-DRAFT`).
-   - Current Delivery Handoff Verdict: **`NO_GO`** (`Gate G1, G2, G3, G4` and `CR-01..10` await explicit Product Owner approval in [`docs/governance/decisions.md`](./docs/governance/decisions.md); `0 / 47` units are `READY`).
+   - Current Delivery Handoff Verdict: **`NO_GO`** (`Gate G1, G2, G3, G4` and `CR-01..10` await explicit Product Owner approval in [`docs/governance/owner-approval-sheet.md`](./docs/governance/owner-approval-sheet.md) and [`docs/governance/decisions.md`](./docs/governance/decisions.md); `0 / 47` units are `READY`).
    - Do **NOT** write application/PoC code, infer approval from document existence, or publish/tag releases while `HANDOFF_VERDICT` is `NO_GO`.
 2. **Master Unit Index & Specs:** [`docs/planning/implementation-index.md`](./docs/planning/implementation-index.md) → `docs/planning/units/TP-IMP-xxxx.md`.
 3. **Audit & Gap Logs:** [`docs/reviews/execution-readiness.md`](./docs/reviews/execution-readiness.md) (A10), [`docs/reviews/integrated-audit.md`](./docs/reviews/integrated-audit.md) & [`docs/reviews/unresolved-gaps.md`](./docs/reviews/unresolved-gaps.md) (A08).
-4. **Documentation Hub:** [`docs/README.md`](./docs/README.md).
+4. **Repository Overview & Documentation Hub:** [`README.md`](./README.md) & [`docs/README.md`](./docs/README.md).
 <!-- TANPOPO-HANDOFF:END -->

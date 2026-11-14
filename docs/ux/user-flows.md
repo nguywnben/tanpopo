@@ -1,47 +1,47 @@
-# Hành trình Người dùng Đầu-Cuối & Ma trận 5 Trạng thái Giao diện (End-to-End User Flows & State Matrices) — Tanpopo
+# End-to-End User Flows & Five-State UI Matrices — Tanpopo
 
-> **Tài liệu Thiết kế Luồng Tương tác (Phase ASTRA A06 — `DRAFT / READY_FOR_REVIEW`)**
-> - **Mã tài liệu:** `SPEC-UX-02` | **Phiên bản:** `0.1.0-step06-draft` | **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Lead Product Designer & Developer Experience Lead
-> - **Trạng thái quản trị:** **Đặc tả Thiết kế Đề xuất (`PROPOSED — NO CODE`)** — cụ thể hóa 13 luồng nghiệp vụ tại [`workflows.md`](../requirements/workflows.md) thành **8 hành trình tương tác cốt lõi trên Web Console & CLI**, kèm đầy đủ **5 trạng thái bắt buộc (`Happy`, `Loading`, `Empty`, `Error`, `Offline`)** cho từng hành trình.
-> - **Truy vết Yêu cầu:** `WF-01`..`WF-12`, `SM-01`..`SM-08`, `TP-FR-0101`..`1004`, `TP-NFR-0404`, `TP-NFR-0701`, `TP-NFR-1001`.
-
----
-
-## Tổng quan 8 Hành trình Người dùng Trọng tâm (`UJ-01` .. `UJ-08`)
-
-Mỗi hành trình dưới đây tuân thủ nghiêm ngặt quy tắc của kỹ năng `frontend-ui-engineering`: **không một luồng nào chỉ vẽ đường màu hồng (`Happy Path`)**, mà phải định nghĩa rõ hệ thống hiển thị và phản hồi thế nào khi đang tải/truyền luồng (`Loading`), khi chưa có dữ liệu (`Empty`), khi xảy ra xung đột/lỗi hợp đồng (`Error`), và khi trình duyệt mất mạng hoặc máy chủ nội bộ hoạt động trong môi trường cách ly Internet (`Offline / Air-Gapped`).
+> **Interaction Flow Specification (Phase ASTRA A06 — `DRAFT / READY_FOR_REVIEW`)**
+> - **Document ID:** `SPEC-UX-02` | **Version:** `0.1.0-step06-draft` | **Last Updated:** `2026-11-11`
+> - **Authored By:** Lead Product Designer & Developer Experience Lead
+> - **Governance Status:** **Proposed Design Specification (`PROPOSED — NO CODE`)** — operationalizes the 13 business workflows in [`workflows.md`](../requirements/workflows.md) into **8 core end-to-end user journeys across Web Console & CLI**, complete with all **5 mandatory UI states (`Happy`, `Loading`, `Empty`, `Error`, `Offline`)** per journey.
+> - **Requirements Traceability:** `WF-01`..`WF-12`, `SM-01`..`SM-08`, `TP-FR-0101`..`1004`, `TP-NFR-0404`, `TP-NFR-0701`, `TP-NFR-1001`.
 
 ---
 
-## `UJ-01`: Zero-to-First-Successful-Request (`TTFGR < 3 Phút` — `WF-01`, `WF-02`)
+## Overview of the 8 Core User Journeys (`UJ-01` .. `UJ-08`)
 
-- **Tác nhân:** `Personal Admin` hoặc `OPERATOR` lần đầu khởi chạy Tanpopo.
-- **Mục tiêu:** Đi từ tiến trình mới bật chưa có cấu hình tới cuộc gọi suy luận thành công đầu tiên qua Unified API trong **dưới `180 giây`** mà không phải đọc hàng chục trang cấu hình.
+Every user journey below strictly enforces the discipline of `frontend-ui-engineering`: **no workflow is specified solely as a Happy Path**. Each journey explicitly defines UI rendering and system feedback during asynchronous or streaming execution (`Loading`), zero-data initial or filtered states (`Empty`), contract/validation/concurrency failures (`Error`), and browser disconnection or isolated intranet operation (`Offline / Air-Gapped`).
+
+---
+
+## `UJ-01`: Zero-to-First-Successful-Request (`TTFGR < 3 Minutes` — `WF-01`, `WF-02`)
+
+- **Actor:** `Personal Admin` or `OPERATOR` booting Tanpopo for the first time.
+- **Objective:** Progress from an unconfigured fresh `tanpopod` process to the first successful inference request through the Unified API in **under `180 seconds`** without consulting multi-page external setup guides.
 
 ```mermaid
 flowchart LR
-    S1["1. Mở Console & Nhập Bootstrap Token một lần"] --> S2["2. Tạo Tài khoản Owner + Khởi tạo Default Project (dev)"]
-    S2 --> S3["3. Chọn Kết nối Đầu tiên: Official API Key HOẶC Local Ollama/vLLM"]
-    S3 --> S4["4. Kiểm tra Kết nối Thực tế (ValidateConnection < 2s)"]
-    S4 --> S5["5. Phát hành Virtual Key (Hiển thị đúng 1 lần + Nút Copy)"]
-    S5 --> S6["6. Chạy Yêu cầu Thử Trực tiếp (SSE Stream) & Hoàn tất Setup"]
+    S1["1. Open Console & Redeem One-Time Bootstrap Token"] --> S2["2. Create Owner Account + Initialize Default Project (dev)"]
+    S2 --> S3["3. Choose First Connection: Official API Key OR Local Ollama/vLLM"]
+    S3 --> S4["4. Live Connection Check (ValidateConnection < 2s)"]
+    S4 --> S5["5. Issue Virtual Key (Revealed Exactly Once + Copy Button)"]
+    S5 --> S6["6. Fire Live Streaming Test Request (SSE) & Finish Setup"]
 ```
 
-| Trạng thái | Hành vi Giao diện & Phản hồi Hệ thống Cụ thể |
+| UI State | Concrete Interface Behavior & System Feedback |
 |---|---|
-| **`Happy`** | Bước 1 xác thực `Bootstrap Token` (in ở nhật ký khởi động tiến trình `tanpopod`) và hủy hiệu lực mã mồi ngay sau khi tạo mật khẩu quản trị. Bước 3 cung cấp 2 lối tắt rõ ràng: (a) dán API Key thương mại chính thức (OpenAI/Anthropic/Gemini...) hoặc (b) tự phát hiện mô hình cục bộ `Ollama`/`vLLM`. Bước 5 mở hộp thoại hiển thị chuỗi `vk_tp_live_...` **duy nhất một lần** kèm đoạn lệnh `curl` / Python SDK điền sẵn để bấm **"Send Test Request"** ngay tại chỗ, nhận luồng chữ SSE trả về kèm chi phí `micro-USD` và mã `request_id`. |
-| **`Loading`** | Khung tiến trình `Vertical Wizard` (`form-wizard-vertical`) giữ cố định thanh bước bên trái; nút **"Verify & Connect"** chuyển sang trạng thái bận (`isLoading`), phát thông báo đọc màn hình qua `useAnnounce('Đang kiểm tra kết nối tới nhà cung cấp...')`; bước thử nghiệm hiển thị từng mảnh token chảy trực tiếp theo thời gian thực. |
-| **`Empty`** | Trước khi kết nối nhà cung cấp ở Bước 3, vùng danh sách mô hình hiển thị trạng thái rỗng có hướng dẫn hành động rõ: *"Chưa có mô hình nào sẵn sàng. Kết nối khóa API chính thức hoặc trỏ tới máy chủ Ollama/vLLM nội bộ để mở khóa yêu cầu đầu tiên."* (Có nút bỏ qua sang cấu hình sau nếu muốn vào thẳng Console). |
-| **`Error`** | - Nhập sai hoặc hết hạn `Bootstrap Token` (`> 15 phút`): báo lỗi cụ thể kèm lệnh CLI `tanpopo admin reset-bootstrap-token` để sinh mã mới.<br/>- Khóa API nhà cung cấp không hợp lệ (`401` từ hãng): giữ nguyên dữ liệu tên kết nối đã nhập, xóa ô mật khẩu để nhập lại, hiển thị rõ mã lỗi chuẩn hóa mà không in lại khóa thô. |
-| **`Offline`** | Nếu máy chủ chạy trong mạng nội bộ không có Internet (`Air-Gapped`), hệ thống tự phát hiện không vươn tới danh mục đám mây, hiển thị `Banner` thông tin nhẹ nhàng *"Đang chạy ở chế độ Mạng Nội bộ / Offline"* và tự động đưa lựa chọn **Local Model (`Ollama` / `vLLM` / `OpenAI-Compatible LAN Endpoint`)** lên vị trí ưu tiên số 1 mà không treo giao diện chờ mạng ngoài. |
+| **`Happy`** | Step 1 verifies the `Bootstrap Token` (printed to `tanpopod` startup logs) and permanently invalidates it immediately upon creating the administrator password. Step 3 offers 2 clear fast paths: (a) paste an official commercial API Key (OpenAI/Anthropic/Gemini, etc.) or (b) auto-detect a local `Ollama`/`vLLM` model server. Step 5 opens a modal dialog revealing `vk_tp_live_...` **strictly once** alongside pre-populated `curl` / Python SDK snippets so the user can click **`"Send Test Request"`** inline, receiving live SSE token chunks plus settled `micro-USD` cost and `request_id`. |
+| **`Loading`** | The `Vertical Wizard` frame (`form-wizard-vertical`) keeps the left-hand progress rail stable; clicking **`"Verify & Connect"`** enters `isLoading` state while broadcasting a screen-reader status update via `useAnnounce('Verifying upstream provider connection...')`; the inline test step streams incremental token deltas in real time. |
+| **`Empty`** | Prior to connecting a provider at Step 3, the model preview area renders an actionable empty state: *"No models ready yet. Connect an official commercial API key or point to a local Ollama/vLLM server to unlock your first request."* (Includes a secondary skip link to enter the Console directly and configure later). |
+| **`Error`** | - Invalid or expired `Bootstrap Token` (`> 15 minutes`): renders a clear error banner quoting the exact CLI command `tanpopo admin reset-bootstrap-token` to mint a fresh token.<br/>- Upstream API key rejected (`401` from vendor): preserves the typed connection name, clears the write-only secret input for re-entry, and displays the normalized error code without echoing raw secret text. |
+| **`Offline`** | When `tanpopod` runs inside an isolated intranet without public Internet egress (`Air-Gapped`), the wizard detects cloud catalog unreachability immediately, surfaces a calm informational `Banner` (*"Running in Local Network / Offline Mode"*), and promotes **Local Model (`Ollama` / `vLLM` / `OpenAI-Compatible LAN Endpoint`)** to the primary selection slot without hanging on external timeouts. |
 
 ---
 
-## `UJ-02`: Cài đặt External Provider Plugin & Kiểm tra Quyền Tường minh (`WF-04`, `SM-01`)
+## `UJ-02`: External Provider Plugin Installation & Explicit Permission Inspection (`WF-04`, `SM-01`)
 
-- **Tác nhân:** `OPERATOR` (cài đặt) + `REVIEWER` (nếu tổ chức bật nguyên tắc 4 mắt `Four-Eyes`).
-- **Mục tiêu:** Cài một gói `Provider Adapter` bên ngoài (từ Marketplace, Git commit SHA, tệp `.tpkg` hoặc kho OCI nội bộ) mà **không cần biên dịch lại Tanpopo Core**, đồng thời buộc hiển thị đầy đủ danh tính tác giả, độ tin cậy và bảng quyền trước khi kích hoạt.
+- **Actor:** `OPERATOR` (stages installation) + `REVIEWER` (when organizational `Four-Eyes` governance is enabled).
+- **Objective:** Install an external `Provider Adapter` package (from Marketplace, pinned Git commit SHA, `.tpkg` archive, or internal OCI registry) **without recompiling Tanpopo Core**, while mandating full inspection of publisher identity, trust tier, and requested permissions prior to activation.
 
 ```mermaid
 sequenceDiagram
@@ -50,79 +50,79 @@ sequenceDiagram
     participant API as Control Plane (/admin/v1)
     actor Rev as Reviewer (Optional Four-Eyes)
 
-    Op->>UI: Chọn nguồn cài (Marketplace / Git SHA / .tpkg / OCI) + SHA-256
+    Op->>UI: Select install source (Marketplace / Git SHA / .tpkg / OCI) + SHA-256
     UI->>API: POST /admin/v1/extensions:install
     API-->>UI: 202 Staged (PENDING_PERMISSION_APPROVAL) + Manifest Diff + Trust Metadata
-    UI->>Op: Mở ngăn Permission Inspection Sheet (Origin, Publisher Tier, Allowed Hosts, Secret Slots)
-    alt Tổ chức bật chế độ Four-Eyes cho Unverified External
-        Op->>UI: Bấm "Submit for Security Review"
-        Rev->>UI: Mở hàng đợi Approvals -> Kiểm tra quyền & Bấm "Approve & Activate" (If-Match)
-    else Chế độ Quản trị Đơn chuẩn
-        Op->>UI: Tích xác nhận hiểu rủi ro Unverified External -> Bấm "Approve Permissions & Activate"
+    UI->>Op: Open Permission Inspection Sheet (Origin, Publisher Tier, Allowed Hosts, Secret Slots)
+    alt Organization enforces Four-Eyes for Unverified External
+        Op->>UI: Click "Submit for Security Review"
+        Rev->>UI: Open Approvals Queue -> Inspect permissions & Click "Approve & Activate" (If-Match)
+    else Standard Single-Admin Mode
+        Op->>UI: Check Unverified External risk acknowledgment -> Click "Approve Permissions & Activate"
     end
     UI->>API: POST /admin/v1/extensions/{id}:approve-permissions (If-Match: "v1")
-    API-->>UI: 200 ENABLED_ACTIVE (Ghi tanpopo.lock & cập nhật ConfigSnapshot < 1s)
+    API-->>UI: 200 ENABLED_ACTIVE (Writes tanpopo.lock & updates ConfigSnapshot < 1s)
 ```
 
-| Trạng thái | Hành vi Giao diện & Phản hồi Hệ thống Cụ thể |
+| UI State | Concrete Interface Behavior & System Feedback |
 |---|---|
-| **`Happy`** | Gói được tải vào vùng cách ly tạm, đối chiếu băm `SHA-256` và chữ ký, sau đó mở hộp kiểm tra bắt buộc **`Permission Inspection Sheet`** hiển thị rõ: (1) 3 thẻ `Token` (`Origin`, `Publisher Trust Tier`, `Execution Tier`), (2) danh sách tên miền mạng duy nhất plugin được vươn tới (`network.allowed_hosts`), (3) tên các khe bí mật được tiêm hộ qua `Blind Broker`, và (4) mức giới hạn CPU/RAM. Khi bấm duyệt, plugin chuyển sang `ENABLED_ACTIVE` tức thì mà không khởi động lại tiến trình Core. |
-| **`Loading`** | Hiển thị từng chặng kiểm định rõ ràng: `Downloading bundle` → `Verifying SHA-256 & Cosign signature` → `Validating contract compatibility` → `Extracting permission manifest`. |
-| **`Empty`** | Tab `Installed Plugins` khi mới chỉ có các gói đi kèm mặc định sẽ tách rõ nhóm *"Built-in Official Adapters"* và khung hướng dẫn *"Cài thêm Provider hoặc Guardrail từ Marketplace, Git hoặc tệp `.tpkg`"*. |
-| **`Error`** | - Sai lệch mã băm `SHA-256` hoặc lệch phiên bản hợp đồng (`contract_version` ngoài tầm hỗ trợ): chặn ngay lập tức với hộp thông báo đỏ nêu rõ phiên bản Core hiện tại và phiên bản gói yêu cầu.<br/>- Manifest đòi quyền mạng ký tự đại diện cấm (`*`) hoặc cố mạo danh không gian tên `@tanpopo-official/*` không có chữ ký gốc: từ chối cứng và ghi sự kiện bảo mật vào `Audit Log`.<br/>- Xung đột `409 version_conflict` khi hai quản trị viên cùng bấm duyệt: tải lại trạng thái mới nhất thay vì ghi đè mù. |
-| **`Offline`** | Khi không có kết nối tới chỉ mục Marketplace công cộng, tab `Curated Marketplace` hiển thị bản đệm gần nhất kèm dấu thời gian *"Danh mục ngoại tuyến cập nhật lần cuối: ..."* và chuyển hướng nổi bật sang 2 phương thức hoạt động 100% nội bộ: **Tải lên gói `.tpkg` đã ký (`tanpopo bundle import`)** hoặc **Kéo từ Private OCI Registry nội bộ**. |
+| **`Happy`** | The package is downloaded into an isolated staging area, verified against its `SHA-256` digest and signature, and presented inside the mandatory **`Permission Inspection Sheet`** displaying: (1) 3 independent `Token` badges (`Origin`, `Publisher Trust Tier`, `Execution Tier`), (2) exact outbound domains permitted (`network.allowed_hosts`), (3) named secret slots injected via the `Blind Broker`, and (4) CPU/memory sandbox ceilings. Upon approval, the extension transitions to `ENABLED_ACTIVE` hot without restarting Core. |
+| **`Loading`** | Displays granular verification milestones: `Downloading bundle` → `Verifying SHA-256 & Cosign signature` → `Validating contract compatibility` → `Extracting permission manifest`. |
+| **`Empty`** | When `Installed Plugins` contains only bundled default drivers, the view cleanly separates *"Built-in Official Adapters"* from an actionable callout guiding operators to *"Install additional Providers or Guardrails from Marketplace, Git, or `.tpkg` archives"*. |
+| **`Error`** | - `SHA-256` digest mismatch or incompatible `contract_version`: halts immediately with an error dialog comparing the running Core version against the manifest's required contract range.<br/>- Manifest requests forbidden wildcard network egress (`*`) or attempts to spoof `@tanpopo-official/*` without an official signature: hard-rejects installation and records a security event in `Audit Log`.<br/>- `409 version_conflict` from concurrent administrator approval: reloads latest server state rather than blindly overwriting. |
+| **`Offline`** | When the public Marketplace index is unreachable, the `Curated Marketplace` tab displays the cached snapshot stamped with *"Offline catalog last synced: ..."* and prominently foregrounds the 2 fully air-gapped installation paths: **Upload signed `.tpkg` archive (`tanpopo bundle import`)** or **Pull from internal Private OCI Registry**. |
 
 ---
 
-## `UJ-03`: Cấp Quyền `Authorized OAuth 2.1` Hợp lệ & Tái Xác thực Khi Hết hạn (`WF-05`, `SM-02`, `SM-03`)
+## `UJ-03`: Legitimate `Authorized OAuth 2.1` Grant & Expiry Re-Authentication (`WF-05`, `SM-02`, `SM-03`)
 
-- **Tác nhân:** `ORG_OWNER` hoặc `TEAM_ADMIN`.
-- **Mục tiêu:** Thiết lập `Provider Connection` qua luồng `OAuth 2.1 Authorization Code + PKCE (S256)` hoặc `Device Authorization Flow` cho các nền tảng thực sự cấp phép chính thức (ví dụ Google Cloud Vertex AI / cổng SSO AI nội bộ doanh nghiệp), tuyệt đối không cho phép dán cookie phiên trình duyệt hay biến gói thuê bao cá nhân thành cổng API chung (`DEC-004`).
+- **Actor:** `ORG_OWNER` or `TEAM_ADMIN`.
+- **Objective:** Establish a `Provider Connection` via `OAuth 2.1 Authorization Code + PKCE (S256)` or `Device Authorization Flow` for platforms that officially sanction programmatic OAuth gateways (e.g., Google Cloud Vertex AI or enterprise internal AI SSO gateways), strictly forbidding browser session cookie pasting or repurposing consumer subscriptions into shared API proxies (`DEC-004`).
 
-| Trạng thái | Hành vi Giao diện & Phản hồi Hệ thống Cụ thể |
+| UI State | Concrete Interface Behavior & System Feedback |
 |---|---|
-| **`Happy`** | Quản trị viên chọn một `Provider Adapter` có khai báo `auth_methods: ["oauth2_pkce"]`, chọn phạm vi quyền tối thiểu (`scopes`) và bấm **"Authorize with Provider"**. Control Plane sinh `state` chống CSRF + `code_verifier` PKCE và chuyển hướng sang trang đăng nhập chính chủ của nhà cung cấp. Khi quay về `/admin/v1/oauth/callback`, hệ thống niêm phong cặp `access_token`/`refresh_token` thẳng vào kho khóa một chiều, chỉ trả về trình duyệt trạng thái `ACTIVE`, định danh tài khoản đại diện (ví dụ `gcp-sa@corp.iam`), danh sách `scopes` đã cấp và thời điểm hết hạn dự kiến. |
-| **`Loading`** | Trong khi chờ callback hoặc khi đang dùng `Device Code Flow` trên máy chủ từ xa, màn hình hiển thị mã xác nhận ngắn kèm bộ đếm ngược thời gian hiệu lực và vòng kiểm tra trạng thái định kỳ có nút **"Cancel Authorization"** bất kỳ lúc nào. |
-| **`Empty`** | Nếu `Adapter` đang chọn **không hỗ trợ** OAuth hợp lệ (ví dụ hãng chỉ cung cấp khóa API thương mại trả theo mức dùng), phần tùy chọn OAuth **ẩn hoàn toàn hoặc khóa cứng kèm giải thích trung thực**: *"Nhà cung cấp này chỉ cấp phép truy cập qua Commercial API Key; không hỗ trợ OAuth cho cổng trung gian."* |
-| **`Error`** | - Từ chối cấp quyền (`access_denied`), lệch `state` CSRF, hoặc token trả về thiếu `scope` bắt buộc: hủy phiên kết nối nháp, không lưu bất kỳ dữ liệu dở dang nào.<br/>- Khi đang vận hành mà `refresh_token` bị thu hồi từ phía hãng (`SM-03` chuyển sang `AUTH_EXPIRED_REAUTH_REQUIRED`): hiển thị `Banner` cảnh báo màu cam cho quản trị viên kèm nút **"Re-authorize Connection"** một chạm; các tuyến có đích dự phòng tự chuyển lưu lượng sang kết nối khỏe mạnh khác. |
-| **`Offline`** | Nếu trình duyệt quản trị viên có Internet nhưng máy chủ `tanpopod` đặt trong vùng mạng kín không vươn tới máy chủ đổi mã token của nhà cung cấp, bước kiểm tra tiền điều kiện báo ngay lỗi định tuyến mạng máy chủ (`Egress unreachable to token_endpoint`) trước khi mở cửa sổ đăng nhập vô ích. |
+| **`Happy`** | The administrator selects a `Provider Adapter` declaring `auth_methods: ["oauth2_pkce"]`, picks least-privilege `scopes`, and clicks **`"Authorize with Provider"`**. The Control Plane mints a CSRF `state` nonce + PKCE `code_verifier` and redirects to the vendor's official authorization server. Upon returning to `/admin/v1/oauth/callback`, Tanpopo seals the `access_token`/`refresh_token` pair directly into the write-only vault, returning to the browser only `ACTIVE` posture, principal identifier (e.g., `gcp-sa@corp.iam`), granted `scopes`, and token expiry metadata. |
+| **`Loading`** | While awaiting OAuth callback or polling during `Device Code Flow` on a headless server, the UI renders the short verification code with a live expiry countdown and an always-enabled **`"Cancel Authorization"`** button. |
+| **`Empty`** | If the selected `Adapter` **does not support** sanctioned OAuth (e.g., the vendor authorizes gateway access solely via pay-per-use Commercial API Keys), OAuth controls remain **completely hidden or disabled with an honest explanation**: *"This provider authorizes gateway access exclusively via Commercial API Keys; OAuth proxy flows are not supported."* |
+| **`Error`** | - User denial (`access_denied`), CSRF `state` mismatch, or missing mandatory `scope` in the returned token: aborts the draft connection cleanly with zero partial secret persistence.<br/>- Upstream revocation of `refresh_token` during production operation (`SM-03` transitions to `AUTH_EXPIRED_REAUTH_REQUIRED`): surfaces an orange warning `Banner` with a one-click **`"Re-authorize Connection"`** button while multi-target routes automatically fail over traffic to healthy backup deployments. |
+| **`Offline`** | If the administrator's browser has Internet access while `tanpopod` runs inside a restricted subnet unable to reach the vendor's `token_endpoint`, preflight connectivity validation reports `Egress unreachable to token_endpoint` immediately before opening a doomed login redirect. |
 
 ---
 
-## `UJ-04`: Khám phá Danh mục Mô hình & Đối chiếu Năng lực Bảo chứng (`FT-03`, `SPEC-EXT-02`)
+## `UJ-04`: Model Catalog Discovery & Capability Assurance Comparison (`FT-03`, `SPEC-EXT-02`)
 
-- **Tác nhân:** `DEVELOPER`, `TEAM_ADMIN`.
-- **Mục tiêu:** Tra cứu nhanh những `Logical Models` và `Model Deployments` nào đang sẵn sàng trong `Environment` hiện tại, lọc chính xác theo năng lực (`vision`, `tools`, `strict_json_schema`, `reasoning`), vùng cư trú dữ liệu (`EU`, `US`, `ON_PREM`), mức giá `micro-USD` và cấp độ bảo chứng thực tế.
+- **Actor:** `DEVELOPER`, `TEAM_ADMIN`.
+- **Objective:** Quickly discover which `Logical Models` and `Model Deployments` are available in the active `Environment`, filtering accurately by capability (`vision`, `tools`, `strict_json_schema`, `reasoning`), data residency (`EU`, `US`, `ON_PREM`), `micro-USD` pricing, and empirical assurance tier.
 
-| Trạng thái | Hành vi Giao diện & Phản hồi Hệ thống Cụ thể |
+| UI State | Concrete Interface Behavior & System Feedback |
 |---|---|
-| **`Happy`** | Trang `/models` dựng từ mẫu bảng lọc `table-filter` hiển thị danh sách dày đặc theo dòng (`Table`), mỗi dòng nêu rõ: `Model Slug`, số lượng `Deployments` khỏe mạnh, các thẻ năng lực, cấp bảo chứng (`Token` có biểu tượng riêng cho `VERIFIED` / `TESTED` / `DECLARED`), vùng dữ liệu và đơn giá đầu vào/đầu ra (tính trên `1M tokens`). Bấm vào một dòng mở ngăn bên `LayoutPanel` đối chiếu chi tiết những tham số nào hỗ trợ qua **Unified API** và những tính năng chuyên sâu nào cần đi qua đường **Native Passthrough** (`/native/...`) hoặc **không được hỗ trợ**. |
-| **`Loading`** | Giữ nguyên tiêu đề cột bảng và thanh bộ lọc, hiển thị khung xương dòng (`Table skeleton rows`) không gây nhảy bố cục (`CLS = 0`). |
-| **`Empty`** | - Chưa có mô hình trong `Environment`: hướng dẫn `TEAM_ADMIN` gắn `Model Deployment` từ `Provider Connection` sẵn có.<br/>- Bộ lọc quá chặt (ví dụ lọc đồng thời `ON_PREM` + `audio_input` không có kết quả): hiển thị nút **"Clear active filters"** và chỉ rõ tiêu chí nào đang loại hết ứng viên. |
-| **`Error`** | Nếu một `Model Deployment` đang ở trạng thái ngắt mạch `CIRCUIT_OPEN` hoặc `DEGRADED`, dòng mô hình hiển thị rõ lý do sự cố gần nhất (ví dụ `Upstream 429 Rate Limit — thử lại bán mở sau 24s`) thay vì để lập trình viên gọi thử rồi mới gặp lỗi mù. |
-| **`Offline`** | Hoạt động `100%` từ `ConfigSnapshot` nội bộ trên máy chủ tự host mà không cần tải bảng giá hay danh mục mô hình từ bất kỳ dịch vụ đám mây bên ngoài nào. |
+| **`Happy`** | `/models` (scaffolded from `table-filter`) renders dense tabular rows (`Table`) showing `Model Slug`, healthy `Deployment` count, capability tags, assurance level (`Token` with distinct icons for `VERIFIED` / `TESTED` / `DECLARED`), data regions, and input/output rates per `1M tokens`. Selecting a row opens `LayoutPanel` comparing parameters supported across the **Unified API** versus vendor-specific features requiring **Native Passthrough** (`/native/...`) or marked **Unsupported**. |
+| **`Loading`** | Preserves table column headers and filter controls intact while rendering `Table skeleton rows` with zero layout shift (`CLS = 0`). |
+| **`Empty`** | - Zero models bound in the `Environment`: guides `TEAM_ADMIN` to attach a `Model Deployment` from an active `Provider Connection`.<br/>- Over-constrained filter combination (e.g., `ON_PREM` + `audio_input` yielding 0 matches): displays **`"Clear active filters"`** and highlights which filter facet eliminated remaining candidates. |
+| **`Error`** | Whenever a `Model Deployment` enters `CIRCUIT_OPEN` or `DEGRADED`, its row surfaces the latest upstream failure reason inline (e.g., `Upstream 429 Rate Limit — half-open probe in 24s`) so engineers never discover outages blindly in production. |
+| **`Offline`** | Operates `100%` from the self-hosted instance's in-memory `ConfigSnapshot` without fetching pricing tables or model catalogs from any external cloud service. |
 
 ---
 
-## `UJ-05`: Tạo Tuyến Định tuyến Nhận thức Năng lực & Mô phỏng `Route Explain` (`WF-07`, `SPEC-CORE-01`)
+## `UJ-05`: Capability-Aware Route Creation & `Route Explain` Simulation (`WF-07`, `SPEC-CORE-01`)
 
-- **Tác nhân:** `TEAM_ADMIN`, `ORG_OWNER`, `DEVELOPER` (chạy mô phỏng).
-- **Mục tiêu:** Thiết lập một `Route` (ví dụ `prod-assistant-default`) ghép nhiều `Model Deployments` dự phòng theo chiến lược (`Priority`, `Weighted`, `Lowest-Cost`), khóa cứng vùng cư trú dữ liệu (`Fail-Closed`) và chạy thử nghiệm khô (`Dry-Run Route Explain`) trước khi áp dụng cho lưu lượng thật.
+- **Actor:** `TEAM_ADMIN`, `ORG_OWNER`, `DEVELOPER` (dry-run simulation).
+- **Objective:** Author a `Route` (e.g., `prod-assistant-default`) composing multiple fallback `Model Deployments` under a routing strategy (`Priority`, `Weighted`, `Lowest-Cost`), enforce `Fail-Closed` data residency, and dry-run routing decisions (`Dry-Run Route Explain`) before exposing live traffic.
 
-| Trạng thái | Hành vi Giao diện & Phản hồi Hệ thống Cụ thể |
+| UI State | Concrete Interface Behavior & System Feedback |
 |---|---|
-| **`Happy`** | Biểu mẫu hai cột (`form-two-column`): cột trái cấu hình tên tuyến, yêu cầu năng lực tối thiểu, ràng buộc vùng dữ liệu (ví dụ `EU Only — Fail Closed`) và thứ tự các `Deployments`; cột phải là khung **Live `Route Explain` Simulator** cho phép giả lập một yêu cầu (ví dụ `has_vision: true, tools: true, region: EU`) và vẽ ngay cây quyết định giải thích vì sao Đích #1 được chọn và vì sao Đích #2 bị loại (ví dụ *"Loại: Vùng US trái chính sách EU"*). Lưu thành công qua `If-Match` cập nhật tức thì vào bộ định tuyến. |
-| **`Loading`** | Khi chạy `POST /admin/v1/routes:explain`, khung cây quyết định hiển thị chỉ báo tính toán ngắn (`< 50 ms`, `0` cuộc gọi ra nhà cung cấp ngoài). |
-| **`Empty`** | Khi tạo tuyến mới chưa chọn đích nào, bảng ứng viên gợi ý ngay các `Model Deployments` trong cùng `Environment` tương thích với bộ lọc vùng dữ liệu hiện hành của dự án. |
-| **`Error`** | - Cảnh báo ngay lúc cấu hình nếu toàn bộ các `Deployments` trong tuyến đều nằm ngoài vùng cư trú dữ liệu bắt buộc của `Organization Policy` (tuyến chắc chắn sẽ trả `503 no_compliant_deployment_available` khi chạy thật).<br/>- Chặn cấu hình tự động chuyển mạch sau khi đã phát luồng dở (`Fallback after partial stream` bị khóa cứng theo `TP-BR-0503` kèm chú thích giải thích rõ nguyên nhân chống ghép chữ hỏng). |
-| **`Offline`** | Toàn bộ trình tạo tuyến và trình mô phỏng khô `Route Explain` chạy thuần trên logic bộ nhớ của Control Plane nội bộ, không phụ thuộc kết nối mạng ra ngoài. |
+| **`Happy`** | Two-column workspace (`form-two-column`): the left column configures route slug, minimum required capabilities, data residency constraints (e.g., `EU Only — Fail Closed`), and ordered `Deployments`; the right column hosts a sticky **Live `Route Explain` Simulator** accepting synthetic request traits (e.g., `has_vision: true, tools: true, region: EU`) and rendering the exact candidate decision tree showing why Target #1 won and why Target #2 was eliminated (e.g., *"Eliminated: Region US violates EU residency policy"*). Saving with `If-Match` propagates to the hot router in `< 1s`. |
+| **`Loading`** | Invoking `POST /admin/v1/routes:explain` renders a brief computation indicator (`< 50 ms`, `0` outbound provider network calls). |
+| **`Empty`** | When authoring a brand-new route prior to selecting targets, the candidate picker automatically suggests `Model Deployments` in the active `Environment` matching the project's residency posture. |
+| **`Error`** | - Immediate configuration-time warning if every `Deployment` added to the route violates an inherited `Organization Policy` residency lock (which would deterministically fail at runtime with `503 no_compliant_deployment_available`).<br/>- Hard-locks mid-stream failover (`Fallback after partial stream` remains permanently disabled per `TP-BR-0503` with an explanatory tooltip detailing corrupted-stream prevention). |
+| **`Offline`** | Both the route builder and dry-run `Route Explain` engine execute purely against in-memory Control Plane metadata with zero external network dependency. |
 
 ---
 
-## `UJ-06`: Cấp Quyền Công cụ MCP Theo Khóa Ảo & Phê duyệt Con người Cho Lệnh `destructive` (`WF-09`, `SM-06`)
+## `UJ-06`: Per-Virtual-Key MCP Tool Scoping & Human-in-the-Loop Approval for `destructive` Calls (`WF-09`, `SM-06`)
 
-- **Tác nhân:** `TEAM_ADMIN` (gắn quyền tool), `API Client / Agent` (gọi tool), `REVIEWER` (phê duyệt hành động nhạy cảm).
-- **Mục tiêu:** Đảm bảo mỗi `Virtual Key` chỉ nhìn thấy và gọi được đúng tập con `MCP Tools` đã được cấp phép có khóa mã băm `schema_hash`, đồng thời chặn giữ mọi lời gọi công cụ `destructive` chờ con người xác nhận khớp chính xác tham số đã băm (`BA-OQ-004`).
+- **Actor:** `TEAM_ADMIN` (scopes tools), `API Client / Agent` (invokes tool), `REVIEWER` (approves sensitive execution).
+- **Objective:** Ensure each `Virtual Key` sees and invokes strictly its allowlisted subset of `schema_hash`-pinned `MCP Tools`, while intercepting every `destructive` tool invocation until a human reviewer approves the exact SHA-256-hashed parameter payload (`BA-OQ-004`).
 
 ```mermaid
 sequenceDiagram
@@ -132,49 +132,49 @@ sequenceDiagram
     actor Rev as Security Reviewer
 
     Agent->>Hub: POST /mcp (tools/call: delete_prod_index, args={index:"logs-2025"})
-    Hub->>Hub: Kiểm tra Allowlist + schema_hash + Phân loại rủi ro = DESTRUCTIVE
+    Hub->>Hub: Verify Allowlist + schema_hash + Risk Tier = DESTRUCTIVE
     Hub-->>Agent: 202 Accepted / Pending Approval (pre_approval_token_id, args_sha256, expires_in=900s)
-    Hub->>Queue: Đẩy yêu cầu PENDING vào hàng đợi Approvals + Phát Webhook/Thông báo
-    Rev->>Queue: Đối chiếu tham số JSON rõ ràng & Bấm "Approve Exact Execution"
-    Queue->>Hub: Chuyển trạng thái -> APPROVED_ONCE (gắn cứng args_sha256)
-    Agent->>Hub: Gọi lại kèm X-Tanpopo-Approval-Token (cùng args y hệt)
-    Hub-->>Agent: 200 Thực thi đúng 1 lần & Ghi bất biến vào Audit Log
+    Hub->>Queue: Enqueue PENDING approval record + Emit Webhook/Notification
+    Rev->>Queue: Inspect formatted JSON arguments & Click "Approve Exact Execution"
+    Queue->>Hub: Transition state -> APPROVED_ONCE (bound to args_sha256)
+    Agent->>Hub: Replay call with X-Tanpopo-Approval-Token (identical args)
+    Hub-->>Agent: 200 Execute strictly once & Append immutable Audit Log entry
 ```
 
-| Trạng thái | Hành vi Giao diện & Phản hồi Hệ thống Cụ thể |
+| UI State | Concrete Interface Behavior & System Feedback |
 |---|---|
-| **`Happy`** | Trên màn hình cấu hình `Virtual Key`, quản trị viên tích chọn từng công cụ cụ thể của `MCP Server` (thay vì mở toang cả máy chủ). Khi có lệnh `destructive`, mục `Security & Approvals` trên `SideNav` nảy số đếm `Badge` mới; `REVIEWER` mở ngăn đối chiếu thấy rõ: ai gọi, công cụ nào, máy chủ đích nào, toàn bộ tham số JSON định dạng sạch và đồng hồ đếm ngược hết hạn. Sau khi duyệt, mã phê duyệt chỉ dùng được **đúng 1 lần** với **đúng bộ tham số đó**. |
-| **`Loading`** | Hàng đợi phê duyệt tự cập nhật trạng thái thời gian thực; khi `REVIEWER` bấm duyệt, nút khóa ngay để chống bấm đúp. |
-| **`Empty`** | Khi không có yêu cầu nào chờ duyệt, hàng đợi hiển thị trạng thái an tâm rõ ràng: *"Không có yêu cầu thực thi nhạy cảm nào đang chờ phê duyệt"* kèm liên kết xem lịch sử các quyết định đã xử lý trong `Audit Log`. |
-| **`Error`** | - Nếu máy chủ MCP bên ngoài tự ý sửa mô tả/tham số công cụ làm lệch `schema_hash` (*Tool Poisoning / Rug-Pull*): hệ thống tự động khóa công cụ đó (`403 schema_hash_drift_blocked`), gắn cảnh báo đỏ trên màn hình `/mcp/tools` yêu cầu quản trị viên xem bản so sánh (`diff`) schema cũ – mới trước khi mở lại.<br/>- Nếu tác nhân gọi lại bằng mã đã duyệt nhưng lén đổi dù chỉ 1 ký tự tham số: từ chối cứng `403 parameter_hash_mismatch`.<br/>- Nếu lệnh thực thi công cụ có tác động phụ bị quá thời gian chờ mạng: gắn cờ `AMBIGUOUS_TIMEOUT` (tuyệt đối không tự gọi lặp lần hai — `TP-BR-0603`). |
-| **`Offline`** | Nếu mất kết nối mạng từ trình duyệt của `REVIEWER` tới máy chủ quản trị đúng lúc bấm duyệt, giao diện báo mất kết nối tức thì, **không hiển thị xác nhận giả tạo**, và yêu cầu tải lại trạng thái thật từ máy chủ trước khi thao tác lại. |
+| **`Happy`** | On the `Virtual Key` form, administrators select individual `MCP Tools` granularly (rather than granting blanket server access). When a `destructive` call arrives, `Security & Approvals` on `SideNav` increments its `Badge` count; `REVIEWER` opens the inspection drawer displaying caller identity, target tool, upstream server, formatted JSON arguments, and expiry countdown. Once approved, the single-use token authorizes **strictly 1 execution** with **that exact parameter hash**. |
+| **`Loading`** | The approval queue streams live state updates; clicking approve immediately locks the action button to prevent double-submission. |
+| **`Empty`** | With zero pending approvals, the queue renders a calm zero-inbox posture: *"No sensitive tool executions awaiting approval"* with a link to review historical decisions in `Audit Log`. |
+| **`Error`** | - Upstream MCP server silently alters a tool's description or input schema (*Tool Poisoning / Rug-Pull*): Tanpopo automatically blocks calls (`403 schema_hash_drift_blocked`) and flags `/mcp/tools` with a red drift alert requiring administrator review of the old-vs-new schema `diff` before re-pinning.<br/>- Agent replays an approved token while mutating even 1 character of arguments: hard-rejected with `403 parameter_hash_mismatch`.<br/>- Mutating/destructive tool execution times out upstream: marked `AMBIGUOUS_TIMEOUT` (never retried automatically per `TP-BR-0603`). |
+| **`Offline`** | If the `REVIEWER`'s browser loses connectivity to the Control Plane mid-click, the UI surfaces connection loss immediately, **never renders a fake optimistic approval**, and requires re-fetching authoritative server state upon reconnection. |
 
 ---
 
-## `UJ-07`: Nâng cấp Plugin, Chặn Tự động Mở rộng Quyền & Quay lui Khẩn cấp (`WF-11`, `SM-01`, `SM-08`)
+## `UJ-07`: Plugin Upgrade, Permission-Escalation Blocking & Emergency Rollback (`WF-11`, `SM-01`, `SM-08`)
 
-- **Tác nhân:** `OPERATOR` (và `REVIEWER` khi tăng quyền).
-- **Mục tiêu:** Cập nhật phiên bản mới cho một `Extension` đang chạy mà không làm rớt các luồng suy luận hiện hữu, **chặn đứng mọi hành vi âm thầm đòi thêm quyền mạng/bí mật ở bản cập nhật (`Permission Escalation`)**, và cho phép quay lui về bản ghim cũ trong `< 5 giây`.
+- **Actor:** `OPERATOR` (plus `REVIEWER` when permissions expand).
+- **Objective:** Upgrade a live `Extension` without dropping active inference streams, **block silent permission expansion on upgrade (`Permission Escalation`)**, and support `< 5 second` rollback to the previously pinned version.
 
-| Trạng thái | Hành vi Giao diện & Phản hồi Hệ thống Cụ thể |
+| UI State | Concrete Interface Behavior & System Feedback |
 |---|---|
-| **`Happy`** | - **Cập nhật giữ nguyên hoặc thu hẹp quyền:** Tải gói mới, chạy kiểm tra hợp đồng tự động, ghi bản ghi mới vào `tanpopo.lock` (vẫn giữ bản cũ trong kho đệm để quay lui) và chuyển con trỏ `ConfigSnapshot` sang bản mới êm ái; các luồng đang chạy dở trên bản cũ được phép kết thúc tự nhiên.<br/>- **Quay lui (`Rollback`):** Bấm **"Rollback to Previous Pin (`v1.1.0`)"** → xác nhận trong `AlertDialog` → khôi phục tức thì trong `< 5 giây`. |
-| **`Loading`** | Hiển thị trạng thái chuyển tiếp rõ trên dòng plugin: `Validating v1.2.0` → `Draining active streams on v1.1.0 (12 remaining)` → `Active on v1.2.0`. |
-| **`Empty`** | Nếu gói đang ở phiên bản ghim đầu tiên chưa từng có lịch sử nâng cấp, nút `Rollback` bị vô hiệu hóa kèm chú thích rõ *"Chưa có phiên bản ghim liền trước; sử dụng Disable hoặc Quarantine nếu cần ngắt khẩn cấp."* |
-| **`Error`** | **Phát hiện Tăng quyền (`Permission Escalation` — `TP-BR-0403`):** Khi bản `v1.2.0` đòi thêm tên miền mới (ví dụ `telemetry.thirdparty.io`) hoặc thêm khe bí mật mới so với `v1.1.0`, hệ thống **tuyệt đối không tự kích hoạt** mà dừng ở trạng thái `UPDATING_PENDING_RECONSENT`, giữ `v1.1.0` tiếp tục chạy an toàn và bật thẻ cảnh báo yêu cầu quản trị viên mở hộp thoại **Side-by-Side Permission Diff** để duyệt phần quyền cộng thêm hoặc hủy bản cập nhật. |
-| **`Offline`** | Trong môi trường ngắt mạng ngoài, trình nâng cấp đọc trực tiếp từ kho gói cục bộ đã nạp sẵn (`tanpopo bundle import`) và đối chiếu với `tanpopo.lock` mà không cần gọi ra Internet. |
+| **`Happy`** | - **Non-escalating upgrade (identical or narrower permissions):** Stages the new archive, runs automated contract checks, updates `tanpopo.lock` (retaining the prior artifact in local cache for instant rollback), and atomically flips `ConfigSnapshot` while allowing in-flight streams on the old version to drain naturally.<br/>- **Rollback:** Clicking **`"Rollback to Previous Pin (`v1.1.0`)"`** → confirming inside `AlertDialog` → restores the prior version across active nodes in `< 5 seconds`. |
+| **`Loading`** | Displays explicit transition phases inline on the plugin row: `Validating v1.2.0` → `Draining active streams on v1.1.0 (12 remaining)` → `Active on v1.2.0`. |
+| **`Empty`** | If an extension sits on its initial installation pin with zero prior upgrade history, the `Rollback` button is disabled with an explanatory tooltip: *"No previous pinned version exists; use Disable or Quarantine for emergency cutoff."* |
+| **`Error`** | **Permission Escalation Intercepted (`TP-BR-0403`):** Whenever `v1.2.0` requests an additional outbound domain (e.g., `telemetry.thirdparty.io`) or a new secret slot beyond `v1.1.0`, Tanpopo **refuses automatic activation**, parks the upgrade in `UPDATING_PENDING_RECONSENT`, keeps `v1.1.0` serving production safely, and prompts the administrator to inspect the **Side-by-Side Permission Diff** dialog to explicitly re-consent or abort the upgrade. |
+| **`Offline`** | Inside air-gapped environments, upgrades resolve directly against pre-imported local bundles (`tanpopo bundle import`) and verify against `tanpopo.lock` with zero Internet calls. |
 
 ---
 
-## `UJ-08`: Truy vết & Chẩn đoán Yêu cầu Lỗi / Chậm / Bị Chặn (`WF-06`, `OPS-07`, `SPEC-CORE-02`)
+## `UJ-08`: Tracing & Diagnosing Failed / Slow / Blocked Requests (`WF-06`, `OPS-07`, `SPEC-CORE-02`)
 
-- **Tác nhân:** `DEVELOPER`, `TEAM_ADMIN`, `OPERATOR`.
-- **Mục tiêu:** Khi ứng dụng nhận mã lỗi (`400`, `403`, `429`, `502`, `503` hoặc sự kiện `mid_stream_abort`) kèm `request_id`, kỹ sư chỉ cần dán `request_id` vào Console để biết chính xác yêu cầu dừng ở chặng nào trong 12 bước đường nóng và cách khắc phục ngay mà không lộ bí mật hay nội dung nhạy cảm.
+- **Actor:** `DEVELOPER`, `TEAM_ADMIN`, `OPERATOR`.
+- **Objective:** Whenever a client receives an error (`400`, `403`, `429`, `502`, `503`, or `mid_stream_abort`) carrying a `request_id`, pasting that `request_id` into the Console pinpoints the exact stage among the 12 hot-path steps where execution stopped and surfaces immediate remediation without exposing secrets or private prompt payloads.
 
-| Trạng thái | Hành vi Giao diện & Phản hồi Hệ thống Cụ thể |
+| UI State | Concrete Interface Behavior & System Feedback |
 |---|---|
-| **`Happy`** | Bấm `Ctrl+K` dán `req_01j...` mở ngay ngăn chi tiết **Request Waterfall Inspector** trên màn hình `/observability/traces`: hiển thị thanh thời gian của từng chặng (`Auth` `0.2ms` → `Budget Hold` `0.6ms` → `Policy` `0.3ms` → `Route Match` → `Attempt #1 Upstream 429` → `Pre-Stream Failover Attempt #2` → `TTFT` → `Budget Settlement`), độ chính xác chi phí (`EXACT` / `ESTIMATED`), mã lỗi chuẩn hóa `CanonicalError`, hướng dẫn xử lý cụ thể và nút **"Simulate in Route Explain"** để tái hiện quyết định định tuyến chỉ bằng siêu dữ liệu. |
-| **`Loading`** | Nếu yêu cầu vừa mới kết thúc cách đó vài trăm mili-giây và lô ghi truy vết bất đồng bộ (`AsyncTraceFlusher`) đang xả xuống cơ sở dữ liệu, giao diện hiển thị trạng thái *"Đang đồng bộ bản ghi truy vết vừa phát sinh (thử lại tự động sau 1s)..."* thay vì báo không tìm thấy ngay lập tức. |
-| **`Empty`** | Khi môi trường mới tạo chưa có lưu lượng đi qua, bảng truy vết hiển thị hướng dẫn gửi yêu cầu đầu tiên kèm đường dẫn mở `Playground` hoặc sao chép đoạn mã SDK mẫu. |
-| **`Error`** | - Nếu `DEVELOPER` dán `request_id` thuộc về một `Project` hoặc `Organization` khác mà mình không có quyền: trả về thông báo đồng nhất *"Không tìm thấy mã truy vết trong phạm vi được cấp quyền"* (`TP-BR-0101` — chống dò quét chéo tổ chức).<br/>- Nêu bật trực quan sự khác biệt giữa **Chuyển mạch thành công trước luồng** và **Ngắt giữa luồng (`mid_stream_abort`)** kèm giải thích rõ vì sao hệ thống không ghép luồng nhà cung cấp khác sau khi đã phát mảnh dữ liệu đầu tiên. |
-| **`Offline`** | Truy vấn trực tiếp trên kho SQLite / PostgreSQL nội bộ của máy chủ tự vận hành; ngay cả khi bộ thu nhận OTel bên ngoài (Grafana/Datadog) bị đứt kết nối, quản trị viên vẫn tra cứu được các bản ghi truy vết siêu dữ liệu gần nhất lưu cục bộ kèm cảnh báo trên `Banner` rằng hàng đợi xuất OTLP đang dồn cục bộ. |
+| **`Happy`** | Pressing `Ctrl+K` and pasting `req_01j...` opens the **Request Waterfall Inspector** on `/observability/traces`, rendering per-stage millisecond spans (`Auth` `0.2ms` → `Budget Hold` `0.6ms` → `Policy` `0.3ms` → `Route Match` → `Attempt #1 Upstream 429` → `Pre-Stream Failover Attempt #2` → `TTFT` → `Budget Settlement`), cost accuracy (`EXACT` / `ESTIMATED`), normalized `CanonicalError` code, concrete remediation steps, and **`"Simulate in Route Explain"`** to replay routing metadata safely. |
+| **`Loading`** | If a request finished a few hundred milliseconds ago and `AsyncTraceFlusher` is still committing the batch to storage, the UI displays *"Syncing newly completed trace record (auto-retrying in 1s)..."* rather than flashing a premature not-found error. |
+| **`Empty`** | In a newly created environment with zero recorded traffic, the traces view offers quickstart actions to open `Playground` or copy an SDK snippet to send a first request. |
+| **`Error`** | - If a `DEVELOPER` pastes a `request_id` belonging to another `Project` or `Organization` outside their RBAC scope: returns a uniform `"Trace ID not found within authorized scope"` message (`TP-BR-0101` — preventing cross-tenant enumeration).<br/>- Visually distinguishes **Successful Pre-Stream Failover** from **Mid-Stream Abort (`mid_stream_abort`)**, explaining why Tanpopo never splices output from a second upstream model once initial stream chunks have been emitted to the client. |
+| **`Offline`** | Queries local SQLite / PostgreSQL storage directly on the self-hosted instance; even if an external OTel collector (Grafana/Datadog) is unreachable, operators retain full visibility into locally persisted metadata traces alongside a `Banner` indicating OTLP export buffering. |

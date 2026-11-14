@@ -1,55 +1,55 @@
-# `TP-IMP-0042` — Động cơ `Tier-3 Isolated Sidecar` (`ConnectRPC` UDS/`mTLS`) & Mặt phẳng Liên Tác nhân `A2A` (`AgentCard`, `SM-09`, Trần Ngân sách Con & `hop <= 5`)
+# `TP-IMP-0042` — `Tier-3 Isolated Sidecar` Runtime (`ConnectRPC` UDS/`mTLS`) & Inter-Agent `A2A` Plane (`AgentCard`, `SM-09`, Sub-Budget Ceilings & `hop <= 5`)
 
-| Thuộc tính | Giá trị |
+| Attribute | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0042` |
-| **Milestone / Epic** | `M4` (`v0.3 Clustered HA, Enterprise Security & A2A` — **Cổng `GATE-M4`**) · `EP-08` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0013`, `TP-IMP-0021`, `TP-IMP-0039` — `GAP-01, 08, 09`)* |
-| **Quy mô (`Size`)** | `L` (`go.mod`, `internal/extension/sidecar/*`, `internal/ingress/a2a/*`, `db/migrations/postgres/0002_a2a_sidecar.sql`) |
-| **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Ranh giới tiến trình phụ xác thực hai chiều `mTLS`, chống vòng lặp gọi đệ quy vô tận giữa các Agent `hop_count <= 5` & chống leo thang quyền qua Agent trung gian)* |
-| **Chủ sở hữu Kỹ thuật** | `Principal Platform & Agent Systems Architect` |
+| **Milestone / Epic** | `M4` (`v0.3 Clustered HA, Enterprise Security & A2A` — **Gate `GATE-M4`**) · `EP-08` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0013`, `TP-IMP-0021`, `TP-IMP-0039` — `GAP-01, 08, 09`)* |
+| **Size** | `L` (`go.mod`, `internal/extension/sidecar/*`, `internal/ingress/a2a/*`, `db/migrations/postgres/0002_a2a_sidecar.sql`) |
+| **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Mutual-TLS `mTLS` sidecar process boundary, anti-recursion agent loop cap `hop_count <= 5` & anti-confused-deputy privilege narrowing)* |
+| **Technical Owner** | `Principal Platform & Agent Systems Architect` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Hoàn thiện mảnh ghép kiến trúc cuối cùng của nhịp `v0.3` — khép kín **Cổng `GATE-M4`**:
-1. **Động cơ Thực thi Tầng 3 `Isolated Sidecar` (`ADR-0002`, `CR-02` — `TP-FR-0308`):** Dành cho các bộ lọc bảo mật doanh nghiệp nặng (như nhận diện PII bằng mô hình cục bộ) không thể biên dịch sang Wasm: giao tiếp qua `ConnectRPC / gRPC` trên ổ cắm miền Unix có phân quyền chặt (`0600`) hoặc `mTLS` xoay vòng chứng chỉ ngắn hạn (`AUTH-08`), vẫn giữ nguyên bất biến **Sidecar không bao giờ nhận toàn bộ kho khóa của Host**.
-2. **Mặt phẳng Kết nối Liên Tác nhân Độc lập `A2A Plane` (`TP-FR-0405`, `TP-FR-0406`, `DEC-003`, `CR-08`):**
-   - Khám phá danh thiếp tác nhân đã xác thực (`/.well-known/agent.json` / danh mục `/a2a/agents`) và điều phối vòng đời tác vụ bất đồng bộ theo máy trạng thái riêng **`SM-09`** (`SUBMITTED -> WORKING <-> INPUT_REQUIRED -> COMPLETED | FAILED | CANCELED` — tách biệt hoàn toàn khỏi `SM-06` của MCP theo `CR-08`).
-   - **Trần Quyền & Trần Ngân sách Con Thu hẹp Đơn điệu (`Privilege & Sub-Budget Ceiling` — `TP-BR-0604`, `CT-23`):** Khi Tác nhân A ủy quyền tác vụ con cho Tác nhân B, mã thông báo ủy quyền sinh ra bị thu hẹp bằng phép giao $P_{\text{child}} = P_{\text{caller}} \cap P_{\text{agent\_b}}$, ngân sách con không thể vượt phần dư của tác vụ cha, và bộ đếm bước nhảy `X-Tanpopo-A2A-Hop-Count` bị chặn cứng ở **`hop_count <= 5`** (cộng phát hiện chu trình đồ thị `call_chain_ids`) để dập tắt hoàn toàn bão đệ quy đốt tiền giữa các Agent!
+## 1. Intent
+Deliver the final architectural pillars of `v0.3` — closing **Gate `GATE-M4`**:
+1. **Tier-3 `Isolated Sidecar` Execution Engine (`ADR-0002`, `CR-02` — `TP-FR-0308`):** Built for heavy enterprise security filters (such as local-model PII scrubbers) that cannot compile cleanly to Wasm: communicates via `ConnectRPC / gRPC` over permission-restricted (`0600`) Unix domain sockets or short-lived certificate-rotating `mTLS` (`AUTH-08`), strictly preserving the invariant that **a Sidecar never receives the Host credential vault**.
+2. **Dedicated Inter-Agent `A2A Plane` (`TP-FR-0405`, `TP-FR-0406`, `DEC-003`, `CR-08`):**
+   - Authenticated agent card discovery (`/.well-known/agent.json` / `/a2a/agents` catalog) and asynchronous task lifecycle coordination governed by its dedicated state machine **`SM-09`** (`SUBMITTED -> WORKING <-> INPUT_REQUIRED -> COMPLETED | FAILED | CANCELED` — cleanly separated from MCP's `SM-06` per `CR-08`).
+   - **Monotonically Narrowed Privilege & Sub-Budget Ceilings (`Privilege & Sub-Budget Ceiling` — `TP-BR-0604`, `CT-23`):** When Agent A delegates a subtask to Agent B, the minted delegation token narrows effective permissions via intersection $P_{\text{child}} = P_{\text{caller}} \cap P_{\text{agent\_b}}$, caps the sub-budget strictly within the parent task's remaining balance, and enforces a hard hop ceiling on `X-Tanpopo-A2A-Hop-Count` at **`hop_count <= 5`** (plus `call_chain_ids` cycle detection) to extinguish runaway cost-amplifying agent ping-pong loops.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `go.mod`, `go.sum` (thêm `connectrpc.com/connect` & `google.golang.org/protobuf`).
-  - `internal/extension/sidecar/client.go` & `mtls_creds.go` (trình khách `ExtensionRuntimeService` Protobuf triển khai `extension/port.ProviderRuntime`, xác thực chứng chỉ hai chiều `mTLS`, ngắt mạch riêng nếu Sidecar sập hoặc quá hạn).
-  - `internal/ingress/a2a/registry.go` & `task_coordinator.go` (điểm cuối `/a2a/*` JSON-RPC + SSE cập nhật tiến trình tác vụ `SM-09` vào bảng chuẩn `a2a_tasks`, kiểm tra `hop_count <= 5`, chống chu trình `A -> B -> A` và phân bổ trần ngân sách con từ `finops/ledger`).
-  - Bổ sung thẻ hiển thị danh mục `A2A Agents & Active Tasks` vào màn hình `SCR-10` trên `web/console/`.
-- **Out-of-Scope:** Giao thức tự thương lượng kinh tế đa tổ chức bên ngoài (ngoài phạm vi `v1.0`).
+  - `go.mod`, `go.sum` (adding `connectrpc.com/connect` & `google.golang.org/protobuf`).
+  - `internal/extension/sidecar/client.go` & `mtls_creds.go` (`ExtensionRuntimeService` Protobuf client implementing `extension/port.ProviderRuntime`, mutual-TLS `mTLS` authentication, and per-sidecar circuit breaking on process crash or timeout).
+  - `internal/ingress/a2a/registry.go` & `task_coordinator.go` (`/a2a/*` JSON-RPC + SSE endpoints persisting `SM-09` task progress in the canonical `a2a_tasks` table, enforcing `hop_count <= 5`, blocking `A -> B -> A` call cycles, and allocating sub-budget holds from `finops/ledger`).
+  - `A2A Agents & Active Tasks` catalog tab added to `SCR-10` in `web/console/`.
+- **Out-of-Scope:** Cross-organization autonomous economic negotiation protocols (outside `v1.0` scope).
 
 ## 3. Requirements, Dependencies & Design References
-- **Requirements Refs:** `TP-FR-0308` *(bổ sung ở `TP-IMP-0001`)*, `TP-FR-0405`, `TP-FR-0406`, `DEC-003`, `TP-BR-0604`, `SM-09`, `CR-02`, `CR-08`, `CT-23`, `AUTH-08`.
+- **Requirements Refs:** `TP-FR-0308` *(added in `TP-IMP-0001`)*, `TP-FR-0405`, `TP-FR-0406`, `DEC-003`, `TP-BR-0604`, `SM-09`, `CR-02`, `CR-08`, `CT-23`, `AUTH-08`.
 - **Dependencies:** `TP-IMP-0013`, `TP-IMP-0021`, `TP-IMP-0039`.
-- **Design Refs:** [`ADR-0002`](../../architecture/adr/0002-three-tier-extension-sandbox-and-blind-broker.md), [`mcp-a2a-boundaries.md`](../../specifications/mcp-a2a-boundaries.md) (`SPEC-EXT-05` Mục 6), [`contract-test-matrix.md`](../../quality/contract-test-matrix.md) (`CT-23`, `AUTH-08`), [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-02`, `CR-08`).
+- **Design Refs:** [`ADR-0002`](../../architecture/adr/0002-three-tier-extension-sandbox-and-blind-broker.md), [`mcp-a2a-boundaries.md`](../../specifications/mcp-a2a-boundaries.md) (`SPEC-EXT-05` Section 6), [`contract-test-matrix.md`](../../quality/contract-test-matrix.md) (`CT-23`, `AUTH-08`), [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-02`, `CR-08`).
 
 ## 4. API, Wire & Data Contracts
-- **Bất biến Không Khuếch đại Quyền Qua Tác nhân (`No Confused-Deputy Escalation` — `CT-23`):** Một người dùng/khóa ảo chỉ có quyền gọi mô hình `gpt-4o-mini` không thể nhờ một `A2A Agent` nội bộ gọi hộ mô hình cấm hoặc công cụ MCP mà chính người gọi gốc không có quyền (trừ khi chính sách ủy quyền dịch vụ được `SECURITY_REVIEWER` ký duyệt tường minh kèm trần ngân sách riêng).
-- **Chống Vòng lặp Vô tận (`Anti-Loop Invariant` — `CT-23`):** Nếu `hop_count > 5` hoặc `target_agent_id` đã xuất hiện trong mảng `call_chain` của cùng vết phân tán → từ chối ngay lập tức với mã chuẩn **`400 delegation_depth_exceeded`**.
+- **No Confused-Deputy Privilege Escalation Invariant (`No Confused-Deputy Escalation` — `CT-23`):** A caller/virtual key permitted to invoke only `gpt-4o-mini` cannot leverage an internal `A2A Agent` to invoke restricted models or MCP tools that the original caller lacks permission to access (unless an explicit service-delegation policy with a dedicated sub-budget ceiling has been signed off by a `SECURITY_REVIEWER`).
+- **Anti-Loop Invariant (`Anti-Loop Invariant` — `CT-23`):** Whenever `hop_count > 5` or `target_agent_id` already appears in the distributed trace's `call_chain` array, the request is rejected immediately with canonical error **`400 delegation_depth_exceeded`**.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`AUTH-08` Mutual-TLS Sidecar Isolation):** Sidecar hợp lệ có chứng chỉ do CA nội bộ của phiên Tanpopo cấp kết nối và xử lý hook thành công; khi Sidecar sập đột ngột (`SIGKILL`), cầu dao ngắt mạch cô lập Sidecar đó mà tiến trình Core không bị ảnh hưởng.
-- **`AC-2` (`SM-09` Full Async A2A Task Lifecycle):** Thực thi trọn vẹn vòng đời tác vụ liên tác nhân `submitted -> working -> input-required -> working -> completed` qua luồng sự kiện SSE và quyết toán đúng phần chi phí vào ngân sách con đã cấp.
-- **`NEG-1` (`CT-23` Infinite Agent Ping-Pong Loop & Hop > 5):** Cấu hình `Agent A` gọi `Agent B` và `Agent B` gọi ngược `Agent A` (hoặc chuỗi `A1 -> A2 -> ... -> A6`) → bị chặn đứng với **`400 delegation_depth_exceeded`**, tiêu tốn `0` token dư thừa.
-- **`NEG-2` (`AUTH-08` Unauthenticated / Expired Cert Sidecar):** Tiến trình giả mạo cố kết nối vào cổng RPC Sidecar mà không có chứng chỉ `mTLS` hợp lệ → bị từ chối bắt tay TLS ngay lập tức.
+- **`AC-1` (`AUTH-08` Mutual-TLS Sidecar Isolation):** A legitimate Sidecar presenting a certificate issued by Tanpopo's ephemeral internal CA connects and executes hooks cleanly; abruptly killing the Sidecar (`SIGKILL`) trips its dedicated circuit breaker without impacting the Core Gateway process.
+- **`AC-2` (`SM-09` Full Async A2A Task Lifecycle):** An inter-agent task transitions cleanly across `submitted -> working -> input-required -> working -> completed` over SSE and settles exact consumption against its allocated sub-budget.
+- **`NEG-1` (`CT-23` Infinite Agent Ping-Pong Loop & Hop > 5):** Configuring `Agent A` to call `Agent B` and `Agent B` to call back `Agent A` (or chaining `A1 -> A2 -> ... -> A6`) halts deterministically with **`400 delegation_depth_exceeded`**, consuming `0` excess tokens.
+- **`NEG-2` (`AUTH-08` Unauthenticated / Expired Cert Sidecar):** An unauthorized local process attempting to connect to the Sidecar RPC endpoint without a valid `mTLS` client certificate is rejected during the TLS handshake.
 
 ## 6. Test Commands & Required Evidence
-- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/extension/sidecar/... ./internal/ingress/a2a/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/extension/sidecar/... ./internal/ingress/a2a/...`)*
-- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/extension/sidecar/... ./internal/ingress/a2a/...`
+- Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/extension/sidecar/... ./internal/ingress/a2a/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/extension/sidecar/... ./internal/ingress/a2a/...`)*
+- Race detector (`-race`): `go test -v -race ./internal/extension/sidecar/... ./internal/ingress/a2a/...`
 - `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Cả `Tier-3 Sidecar` và `A2A Plane` mặc định **tắt (`disabled`)** trong cấu hình khởi đầu; chỉ bật khi quản trị viên kích hoạt tường minh.
-- **Rollback:** Tắt cờ `runtime.sidecar.enabled` và `a2a.enabled` cô lập hoàn toàn bề mặt này.
+- **Security Invariant:** Both `Tier-3 Sidecar` and `A2A Plane` ship **disabled (`disabled`)** by default in baseline configurations, activating only when explicitly enabled by an administrator.
+- **Rollback:** Setting `runtime.sidecar.enabled = false` and `a2a.enabled = false` completely isolates both surfaces.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0001` & `TP-IMP-0002` (khóa `TP-FR-0308`, `SM-09` & `runtime.proto`), `TP-IMP-0013`, `TP-IMP-0021` và `TP-IMP-0039` đã hoàn tất.
-- **DoD:** Đạt toàn bộ tiêu chí Cổng `GATE-M4` (`v0.3`), xanh ca `CT-23` & `AUTH-08` dưới `-race`, vượt qua `REQUIRES_STRONG_REVIEW`.
+- **DoR:** `TP-IMP-0001` & `TP-IMP-0002` (locking `TP-FR-0308`, `SM-09`, & `runtime.proto`), `TP-IMP-0013`, `TP-IMP-0021`, and `TP-IMP-0039` are complete.
+- **DoD:** All Gate `GATE-M4` (`v0.3`) exit criteria satisfied, `CT-23` & `AUTH-08` passing under `-race`, and `REQUIRES_STRONG_REVIEW` sign-off achieved.

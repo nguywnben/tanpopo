@@ -1,27 +1,27 @@
-# `TP-IMP-0016` — Mở rộng Điểm cuối `/v1/responses`, `/v1/embeddings`, `/v1/models`, Chống Trùng `Idempotency-Key` & Luồng `blob_ref` Đa phương thức
+# `TP-IMP-0016` — Unified `/v1/responses`, `/v1/embeddings`, `/v1/models`, `Idempotency-Key` Deduplication & Multimodal `blob_ref` Streaming
 
-| Thuộc tính | Giá trị |
+| Property | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0016` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-03` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0015` — `GAP-01, 03`)* |
-| **Quy mô (`Size`)** | `L` (`internal/ingress/http/responses.go`, `embeddings.go`, `models.go`, `internal/ingress/idempotency/*`, `internal/ingress/blob/*`) |
-| **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Xử lý tệp đính kèm đa phương thức `<= 32 MiB` chống SSRF/OOM & cô lập khóa chống trùng theo `Org/Project`)* |
-| **Chủ sở hữu Kỹ thuật** | `Staff Gateway / Protocol Engineer` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0015` — `GAP-01, 03`)* |
+| **Size** | `L` (`internal/ingress/http/responses.go`, `embeddings.go`, `models.go`, `internal/ingress/idempotency/*`, `internal/ingress/blob/*`) |
+| **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Handles `<= 32 MiB` multimodal attachments defending against SSRF/OOM & `Org/Project`-isolated idempotency keys)* |
+| **Technical Owner** | `Staff Gateway / Protocol Engineer` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Hoàn thiện bề mặt **Unified OpenAI-Compatible API** cho `MVP (v0.1)` gồm `POST /v1/responses`, `POST /v1/embeddings`, `GET /v1/models` (lọc nghiêm ngặt theo danh sách mô hình mà `Virtual Key` hiện tại được phép dùng), thực thi cơ chế chống gửi trùng `Idempotency-Key` gắn chặt phạm vi `(org_id, project_id, vkey_id, idempotency_key)` + dấu vân tay thân yêu cầu, và hiện thực hóa đường ống truyền dữ liệu nhị phân đa phương thức qua bảng cầm nắm `blob_ref` của Host (`CR-05`) để tệp ảnh/âm thanh/PDF tới `32 MiB` **không bao giờ tràn vào trần `16 MiB` bộ nhớ tuyến tính của Wasm Sandbox**.
+## 1. Intent
+Complete the **Unified OpenAI-Compatible API** surface for `MVP (v0.1)` across `POST /v1/responses`, `POST /v1/embeddings`, and `GET /v1/models` (filtered strictly to models authorized for the caller's `Virtual Key`), enforce `Idempotency-Key` replay deduplication scoped tightly to `(org_id, project_id, vkey_id, idempotency_key)` + payload SHA-256 digest, and implement the Host out-of-band `blob_ref` multimodal streaming table (`CR-05`) so image/audio/PDF attachments up to `32 MiB` **never enter Wasm's `16 MiB` linear memory ceiling**.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `internal/ingress/http/responses.go` (`POST /v1/responses` đồng bộ & sự kiện luồng chuẩn hóa).
-  - `internal/ingress/http/embeddings.go` (`POST /v1/embeddings` kiểm tra khớp kiểu đầu vào mảng chuỗi/token và chiều véc-tơ).
-  - `internal/ingress/http/models.go` (`GET /v1/models` trả danh mục `LogicalModel` được cấp quyền kèm siêu dữ liệu cờ năng lực mở rộng `x_tanpopo_capabilities`).
-  - `internal/ingress/blob/store.go` (tách các phần tử `image_url` / `input_audio` / `file` `base64` lớn thành `blob_ref` lưu bộ đệm luồng có giới hạn `<= 32 MiB` tổng mỗi yêu cầu; mặc định **tắt** tự tải URL ảnh từ xa để chống SSRF, hoặc bắt buộc đi qua `SSRFGuardDialer` + giới hạn MIME/kích thước nếu chính sách dự án bật tường minh).
-  - `internal/ingress/idempotency/guard.go` (lưu trạng thái `IN_FLIGHT` / phản hồi hoàn tất ngắn hạn cho yêu cầu không truyền luồng có gắn `Idempotency-Key`).
-- **Out-of-Scope:** Điểm cuối `/v1/rerank` (thuộc `TP-IMP-0035` ở `v0.2` theo `CR-01`); luồng âm thanh thời gian thực hai chiều WebRTC/WebSocket (`TP-FR-0106` — `Later / Post-v1.0`).
+  - `internal/ingress/http/responses.go` (`POST /v1/responses` synchronous & normalized streaming event lifecycle).
+  - `internal/ingress/http/embeddings.go` (`POST /v1/embeddings` validating string/token-array inputs and output vector `dimensions`).
+  - `internal/ingress/http/models.go` (`GET /v1/models` returning authorized `LogicalModel` entries enriched with `x_tanpopo_capabilities` metadata).
+  - `internal/ingress/blob/store.go` (extract large inline `base64` `image_url` / `input_audio` / `file` parts into bounded `<= 32 MiB`/request Host `blob_ref` stream handles; **disable** automatic fetching of remote media URLs by default to prevent SSRF, or route strictly through `SSRFGuardDialer` + MIME/size caps when explicitly enabled by project policy).
+  - `internal/ingress/idempotency/guard.go` (short-TTL `IN_FLIGHT` / completed response cache for non-streaming requests carrying `Idempotency-Key`).
+- **Out-of-Scope:** `/v1/rerank` (scheduled in `TP-IMP-0035` for `v0.2` per `CR-01`); bidirectional realtime WebRTC/WebSocket audio (`TP-FR-0106` — `Later / Post-v1.0`).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0101`, `TP-FR-0102`, `TP-NFR-1002`, `TP-BR-0503`, `CT-08`, `CT-09`.
@@ -29,26 +29,26 @@ Hoàn thiện bề mặt **Unified OpenAI-Compatible API** cho `MVP (v0.1)` gồ
 - **Design Refs:** [`api-contracts.md`](../../specifications/api-contracts.md) (`SPEC-API-01`), [`api-protocol-compatibility.md`](../../specifications/api-protocol-compatibility.md) (`SPEC-EXT-06`), [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-05`, `GAP-03`).
 
 ## 4. API, Wire & Data Contracts
-- **Kiểm tra Năng lực Nghiêm ngặt (`No Silent Parameter Drop` — `CT-08`):** Nếu yêu cầu gửi `tools`, `response_format: json_schema`, ảnh đa phương thức hoặc `reasoning_effort` tới một mô hình không hỗ trợ năng lực tương ứng (và chính sách không bật chế độ cho phép biến đổi tường minh), Gateway **bắt buộc từ chối trước khi gọi đi** với `400 capability_not_supported` kèm tên trường bị từ chối — tuyệt đối không âm thầm cắt bỏ tham số.
-- **Hợp đồng `Idempotency-Key`:**
-  - Cùng `(org_id, project_id, vkey_id, key)` + cùng `body_sha256` đã hoàn tất → trả lại phản hồi đã lưu kèm header `Idempotent-Replayed: true` mà không trừ ngân sách lần hai.
-  - Cùng `key` nhưng khác `body_sha256` → từ chối `422 idempotency_key_payload_mismatch`; nếu yêu cầu đầu đang `IN_FLIGHT` → trả `409 idempotency_request_in_progress`.
+- **Strict Capability Enforcement (`No Silent Parameter Drop` — `CT-08`):** Whenever a request supplies `tools`, `response_format: json_schema`, multimodal attachments, or `reasoning_effort` targeting a model lacking that capability (without an explicit policy transform opt-in), the Gateway **must fail-fast prior to egress** with `400 capability_not_supported` naming the unsupported field — strictly never dropping parameters silently.
+- **`Idempotency-Key` Contract:**
+  - Matching `(org_id, project_id, vkey_id, key)` + matching `body_sha256` already settled → replay cached response with header `Idempotent-Replayed: true` without double-charging the budget ledger.
+  - Matching `key` with mismatched `body_sha256` → reject with `422 idempotency_key_payload_mismatch`; while the initial call remains `IN_FLIGHT` → return `409 idempotency_request_in_progress`.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1`:** Given yêu cầu đa phương thức đính kèm ảnh `base64` nặng `20 MiB` đi qua Adapter Wasm Tầng 2 (`16 MiB` giới hạn RAM), When gọi `POST /v1/chat/completions` hoặc `POST /v1/responses`, Then Host tách ảnh sang `blob_ref`, Wasm chỉ biến đổi siêu dữ liệu JSON nhẹ và Host ghép luồng byte thẳng ra kết nối đích thành công mà không chạm trần bộ nhớ Wasm.
-- **`AC-2`:** Given `Virtual Key` chỉ được phép gọi `gpt-4o-mini` và `text-embedding-3-small`, When gọi `GET /v1/models`, Then danh sách trả về chỉ chứa đúng 2 mô hình đó (ẩn hoàn toàn các mô hình khác của tổ chức).
-- **`NEG-1` (`CT-08` Silent Parameter Drop Prevention):** Gửi `response_format: {"type": "json_schema", ...}` tới mô hình khai báo `supports_structured_output = false` → trả `400 capability_not_supported` trong `< 2 ms`, `0` cuộc gọi lên thượng nguồn.
-- **`NEG-2` (`Multimodal SSRF`):** Gửi `image_url: "http://169.254.169.254/latest/meta-data/"` → bị từ chối cứng `400 remote_media_url_disabled` (hoặc `403 ssrf_blocked_ip` nếu dự án bật tải URL ngoài).
-- **`NEG-3` (`Cross-Tenant Idempotency Isolation`):** `Org A` và `Org B` tình cờ gửi trùng chuỗi `Idempotency-Key: req-123` → hoàn toàn độc lập, `0` rò rỉ phản hồi chéo tổ chức.
+- **`AC-1`:** Given a multimodal request carrying a `20 MiB` `base64` image routed through a Tier-2 Wasm Adapter (`16 MiB` RAM ceiling), When calling `POST /v1/chat/completions` or `POST /v1/responses`, Then the Host offloads the binary payload into `blob_ref`, Wasm transforms only lightweight JSON metadata, and the Host splices the binary stream directly onto the outbound socket without breaching Wasm linear memory.
+- **`AC-2`:** Given a `Virtual Key` restricted to `gpt-4o-mini` and `text-embedding-3-small`, When calling `GET /v1/models`, Then the returned list contains exclusively those 2 models (completely hiding all other org models).
+- **`NEG-1` (`CT-08` Silent Parameter Drop Prevention):** Sending `response_format: {"type": "json_schema", ...}` to a model declaring `supports_structured_output = false` → rejected in `< 2 ms` with `400 capability_not_supported` and `0` upstream calls.
+- **`NEG-2` (`Multimodal SSRF`):** Submitting `image_url: "http://169.254.169.254/latest/meta-data/"` → hard-rejected with `400 remote_media_url_disabled` (or `403 ssrf_blocked_ip` when remote media fetching is policy-enabled).
+- **`NEG-3` (`Cross-Tenant Idempotency Isolation`):** `Org A` and `Org B` coincidentally sending identical `Idempotency-Key: req-123` headers → completely isolated with `0` cross-tenant response replay.
 
 ## 6. Test Commands & Required Evidence
-- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/ingress/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/ingress/...`)*
-- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/ingress/...`
+- Pure-Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/ingress/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/ingress/...`)*
+- Data-race (`-race`): `go test -v -race ./internal/ingress/...`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Vùng đệm `blob_ref` chỉ tồn tại trong vòng đời yêu cầu (xóa tức thì trong `defer`), không ghi tệp tạm không mã hóa xuống đĩa trừ khi vượt ngưỡng tràn cấu hình có mã hóa tạm thời, và không bao giờ chia sẻ khóa `Idempotency-Key` chéo `Virtual Key`.
-- **Rollback:** Có thể tắt riêng từng điểm cuối mới qua cấu hình định tuyến HTTP mà không ảnh hưởng `/v1/chat/completions`.
+- **Security Invariant:** `blob_ref` buffers live strictly within the request lifecycle (scrubbed immediately via `defer`), never spill unencrypted temporary files to disk unless ephemeral encrypted overflow is configured, and never share `Idempotency-Key` namespaces across distinct `Virtual Key` identities.
+- **Rollback:** Individual protocol endpoints can be toggled independently in the HTTP router without impacting `/v1/chat/completions`.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0002` (khóa đặc tả `blob_ref` `CR-05`) và `TP-IMP-0015` đã hoàn tất.
-- **DoD:** Xanh toàn bộ ca kiểm thử `CT-08`, `CT-09`, bài kiểm thử ảnh `20 MiB` qua Wasm `16 MiB` và vượt qua `REQUIRES_STRONG_REVIEW`.
+- **DoR:** `TP-IMP-0002` (`blob_ref` `CR-05` contract lock) and `TP-IMP-0015` are complete.
+- **DoD:** `100%` green across `CT-08`, `CT-09`, and the `20 MiB` multimodal payload test through a `16 MiB` Wasm Sandbox; passes `REQUIRES_STRONG_REVIEW`.

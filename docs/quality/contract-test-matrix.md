@@ -1,138 +1,138 @@
-# Ma trận Kiểm thử Hợp đồng, Xác thực/Ủy quyền, Phủ định & Nhiễu loạn (Contract, AuthN/AuthZ & Fuzz Test Matrix) — Tanpopo
+# Contract, AuthN/AuthZ, Negative & Fuzz Test Matrix — Tanpopo
 
-> **Tài liệu Đảm bảo Chất lượng & Kiểm định Hợp đồng (Updated in Phase ASTRA A07 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — NO CODE`)**
-> - **Mã tài liệu:** `SPEC-QA-01` | **Phiên bản:** `0.2.0-step07-draft` | **Ngày cập nhật:** `2026-11-12`
-> - **Vai trò biên soạn:** Principal Security Engineer, QA Architect & Platform SDK Lead
-> - **Mục đích cốt lõi:** Định nghĩa bộ khung kiểm thử băng ghi tất định chạy `100%` ngoại tuyến (`tanpopo plugin test`), ma trận kiểm thử xác thực/ủy quyền/cô lập thuê bao (`AUTH-01`..`16`), các mục tiêu kiểm thử nhiễu loạn & thuộc tính (`FZ-01`..`06`), cùng kịch bản nghiệm thu đầu-cuối chứng minh **`Provider Adapter` bên ngoài vận hành trọn vòng đời sản xuất mà không sửa hay biên dịch lại Tanpopo Core (`EXT-ACCEPT-01`)**.
-> - **Truy vết Yêu cầu:** `DEC-002`..`004`, `MO-02`, `MO-04`, `TP-FR-0101`..`1005`, `TP-NFR-0401`..`0502`, `TP-AC-F0101`..`F1003`, `TP-AC-SEC-01`..`08`, `SPEC-SEC-01`..`03`.
-
----
-
-## 1. Kiến trúc Bộ Kiểm thử Băng ghi Tất định Ngoại tuyến (`Deterministic Cassette Harness`)
-
-Mọi gói phần mở rộng (`Official`, `Verified`, `Private-Enterprise` và `Unverified-External`) đều được kiểm định bằng cùng một công cụ `tanpopo plugin test` dựa trên các tệp băng ghi cố định (`Cassettes` — cặp bản tin HTTP/SSE giả lập của nhà cung cấp và đầu ra kỳ vọng của Host):
-- **Chạy `100%` ngoại tuyến trong CI dưới vài giây:** Cấm tuyệt đối mở kết nối ra Internet thật (`TANPOPO_TEST_HERMETIC=1`), không cần khóa API thật, **`0 USD` chi phí gọi hãng AI ngoài** và không bị nhiễu mạng.
-- **Quyết định Cấp độ Đảm bảo Năng lực (`Capability Assurance Level`):** Chỉ những năng lực trong `Manifest` có bài băng ghi vượt qua ma trận dưới đây mới được nâng từ `DECLARED` lên `TESTED` (xem [`provider-adapter.md`](../specifications/provider-adapter.md)).
+> **Quality Assurance & Contract Verification Specification (Updated in Phase ASTRA A07 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — NO CODE`)**
+> - **Document ID:** `SPEC-QA-01` | **Version:** `0.2.0-step07-draft` | **Last Updated:** `2026-11-12`
+> - **Authoring Role:** Principal Security Engineer, QA Architect & Platform SDK Lead
+> - **Core Purpose:** Defines the `100%` offline deterministic cassette harness (`tanpopo plugin test`), the authentication/authorization/tenant-isolation matrix (`AUTH-01`..`16`), property-based and fuzzing targets (`FZ-01`..`06`), and the end-to-end acceptance scenario proving that **an external `Provider Adapter` operates across its full production lifecycle without modifying or recompiling Tanpopo Core (`EXT-ACCEPT-01`)**.
+> - **Requirements Traceability:** `DEC-002`..`004`, `MO-02`, `MO-04`, `TP-FR-0101`..`1005`, `TP-NFR-0401`..`0502`, `TP-AC-F0101`..`F1003`, `TP-AC-SEC-01`..`08`, `SPEC-SEC-01`..`03`.
 
 ---
 
-## 2. Ma trận Kiểm thử Hợp đồng & Đối kháng Mở rộng (`CT-01` .. `CT-32`)
+## 1. Deterministic Offline Cassette Harness Architecture
 
-### Nhóm A — Kiểm định Đóng gói, Lược đồ `Manifest` & Chuỗi Cung ứng (`Packaging & Provenance`)
-
-| Mã Test | Loại | Kịch bản & Đầu vào kiểm thử | Kết quả kỳ vọng bắt buộc (`Pass Criteria`) | Truy vết AC / TM |
-|---|---|---|---|---|
-| **`CT-01`** | Hợp đồng | Kiểm tra cú pháp `Manifest`, `configSchema`, `secretSlots` và `permissions` hợp lệ. | Đạt `100%` kiểm tra JSON Schema; từ chối mọi trường quyền không xác định hoặc quyền mạng `*` mặc định. | `TP-AC-F0302` |
-| **`CT-02`** | Phủ định | Gói khai báo `contractVersion: "9.0"` không nằm trong dải hỗ trợ của Core hiện hành. | Chặn ngay ở bước `VERIFYING` (`SM-01` → `REJECTED_INVALID`) với mã lỗi nêu rõ dải phiên bản hỗ trợ. | `TP-AC-F0303` |
-| **`CT-03`** | Phủ định | Sửa đổi `1 byte` trong tệp `.wasm` / khai báo sau khi đã ghi mã băm vào `tanpopo.lock` hoặc chữ ký số. | Từ chối nạp gói (`artifact_digest_mismatch`), ghi `AuditEvent` bảo mật mức cao. | `TP-AC-SEC-02`, `TM-02` |
-| **`CT-04`** | Phủ định | Gói nén `.tpkg`/`.zip` chứa tệp thoát thư mục `../../etc/passwd` (*Zip-Slip*), `symlink` ra ngoài hoặc giải nén phình đại `> 64 MiB` (*Zip-Bomb*). | Trình giải nén hủy ngay lập tức tại luồng đọc bộ nhớ giới hạn, không ghi bất kỳ byte nào ra đĩa. | `TP-AC-SEC-02`, `TM-01` |
-| **`CT-05`** | Phủ định | Gói bên ngoài tự điền `"trustTier": "official"` hoặc lấy tiền tố `@tanpopo-official/*` nhưng không có chữ ký khóa gốc ngoại tuyến của dự án Tanpopo. | Bác bỏ nhãn giả mạo và chặn chiếm dụng không gian tên dành riêng (`403 reserved_namespace_spoofing`). | `TP-AC-SEC-02`, `TM-03` |
-
-### Nhóm B — Tương thích Giao thức, Truyền luồng & Số đo của `Provider Adapter` (`Protocol & Metering`)
-
-| Mã Test | Loại | Kịch bản & Đầu vào kiểm thử | Kết quả kỳ vọng bắt buộc (`Pass Criteria`) | Truy vết AC / TM |
-|---|---|---|---|---|
-| **`CT-06`** | Hợp đồng | Yêu cầu đồng bộ `/v1/chat/completions` và `/v1/embeddings` qua băng ghi chuẩn. | Biến đổi đúng đường dẫn, tiêu đề, thân JSON và chuẩn hóa phản hồi khớp `100%` lược đồ đầu ra kèm `x-tanpopo-request-id`. | `TP-AC-F0101` |
-| **`CT-07`** | Hợp đồng | Truyền luồng SSE 50 mảnh liên tiếp xen kẽ dòng giữ kết nối `: ping`. | Chuyển tiếp từng mảnh tức thì không gom đệm toàn luồng; bỏ qua `: ping` không sinh mảnh rỗng sai lệch. | `TP-AC-F0101`, `TP-AC-N01` |
-| **`CT-08`** | Phủ định | Gửi yêu cầu đính kèm âm thanh, `strict_json_schema: true` hoặc vi phạm `allowed_data_regions = ["EU"]`. | Trả ngay `400 capability_not_supported` (hoặc `503 no_compliant_deployment_available`), `0` lệnh gọi mạng sai vùng, hoàn trả ngay khoản giữ chỗ. | `TP-AC-F0102`, `TP-AC-F0602` |
-| **`CT-09`** | Hợp đồng & Phủ định | Gọi hàm (`tool_calls`) dạng luồng delta hợp lệ vs băng ghi mô hình nội bộ trả JSON gọi hàm bị cụt dấu ngoặc. | Ca hợp lệ ghép mảnh đúng thứ tự chỉ mục; ca lỗi phân loại đúng `upstream_malformed_response` mà không làm sập tiến trình. | `TP-AC-F0202` |
-| **`CT-10`** | Phủ định | Băng ghi nhà cung cấp ngắt kết nối TCP đột ngột sau khi đã phát 10 mảnh nội dung SSE (`Partial Stream`). | Phát sự kiện kết thúc `mid_stream_abort`, **tuyệt đối không gọi đích dự phòng**, quyết toán sổ cái với cờ `ESTIMATED`. | `TP-AC-F0103`, `FMEA-01` |
-| **`CT-11`** | Hợp đồng | `API Client` hủy kết nối ở mảnh SSE thứ 3; kiểm tra thời gian đóng kết nối giả lập phía nhà cung cấp. | Host ngắt kết nối upstream trong `< 500 ms` (`TARGET / UNVERIFIED`), gọi móc dọn dẹp và giải phóng hạn mức giữ chỗ còn dư. | `TP-AC-F0104` |
-| **`CT-12`** | Hợp đồng | Băng ghi trả HTTP `429` kèm `Retry-After: 12` trước mảnh đầu tiên, hoặc trả đủ/thiếu usage ở cuối luồng. | Ca `429` chuyển mạch sang đích dự phòng và đặt `THROTTLED_COOLDOWN = 12s`; ca thiếu usage gắn `ESTIMATED` / `UNMETERED_FLAGGED`, cấm ghi `EXACT = 0`. | `TP-AC-F0601`, `TP-AC-F0803`, `FMEA-04` |
-| **`CT-13`** | Hợp đồng & Phủ định | Gọi đường dẫn phương ngữ gốc `/native/<dialect>/...` chứa trường JSON mới lạ vs tuyến trỏ nhầm sang khác phương ngữ. | Trường JSON lạ được giữ nguyên `100%` không bị cắt bỏ; trường hợp lệch phương ngữ bị chặn ngay với `400 dialect_mismatch`. | `TP-AC-F0105` |
-
-### Nhóm C — Kiểm thử Phủ định & Tấn công Vùng Cô lập Bảo mật (`Adversarial Security & Sandbox`)
-
-| Mã Test | Loại | Kịch bản Tấn công / Lạm dụng | Kết quả Phòng vệ Bắt buộc (`Pass Criteria`) | Truy vết AC / TM |
-|---|---|---|---|---|
-| **`CT-14`** | Bảo mật (Phủ định) | Mã trong Plugin cố tình trả `UpstreamHttpSpec` trỏ tới `https://exfil.attacker.example` không nằm trong `allowedHosts`. | Host Egress Proxy chặn đứng trước khi phân giải DNS/mở socket, hủy yêu cầu, ghi `AuditEvent` bảo mật và chuyển sang `QUARANTINED` theo chính sách. | `TP-AC-SEC-02`, `TM-05` |
-| **`CT-15`** | Bảo mật (Phủ định) | Cấu hình URL hoặc phản hồi HTTP `302 Redirect` trỏ về `http://169.254.169.254/latest/meta-data/`, `127.0.0.1` hoặc miền thứ ba khác. | Chặn cứng mọi địa chỉ siêu dữ liệu đám mây/loopback; lột sạch tiêu đề `Authorization` khi gặp chuyển hướng khác miền đích đã duyệt. | `TP-AC-SEC-04`, `TM-06` |
-| **`CT-16`** | Bảo mật (Phủ định) | Plugin kiểm thử cố quét toàn bộ dữ liệu đầu vào/biến môi trường để tìm khóa `sk-live-SECRET`, và nhà cung cấp giả lập nhại lại chuỗi khóa trong thân lỗi `401`. | Không gian bộ nhớ của Plugin chứa `0` byte chuỗi khóa thật (`host_blind_inject`); bộ lọc lỗi của Host xóa sạch chuỗi khóa khỏi nhật ký và phản hồi trả về Client. | `TP-AC-SEC-01`, `TM-05` |
-| **`CT-17`** | Cô lập Lỗi (Phủ định) | Plugin độc hại chạy vòng lặp vô tận `while(true){}` hoặc cấp phát bộ nhớ vượt ngưỡng `maxMemoryMb` trong khi 100 luồng khỏe mạnh khác đang chạy song song. | Phiên thực thi lỗi bị ngắt cưỡng bức đúng hạn mức CPU/RAM; tiến trình Core `0 crash`; 100 luồng khỏe mạnh hoàn tất bình thường (`FMEA-05`). | `TP-AC-SEC-02`, `TP-AC-N02`, `TM-04` |
-| **`CT-18`** | Bảo mật (Phủ định) | Cập nhật gói từ `0.2.0` lên `0.3.0`, trong đó `0.3.0` lén thêm 1 tên miền mới vào `allowedHosts` hoặc xin đổi sang `scoped_secret_unseal`. | Tự động chặn kích hoạt bản `0.3.0` ở trạng thái `UPDATING_PENDING_RECONSENT`; lưu lượng hiện tại vẫn đi qua `0.2.0` an toàn tuyệt đối. | `TP-AC-F0304` |
-| **`CT-19`** | Bảo mật (Phủ định) | Bắn 50 yêu cầu song song vào kết nối `Authorized OAuth` vừa hết hạn token; thử dùng token của `Connection A` gửi sang tên miền của `Connection B`. | Đúng `1` lệnh làm mới được gọi tới IdP (*Single-Flight*); mọi nỗ lực gắn chéo token khác `allowed_audience_hosts` bị chặn cứng tại biên mạng. | `TP-AC-F0203`, `TP-AC-SEC-03`, `TM-08` |
-| **`CT-20`** | Tuân thủ (Phủ định) | Nộp gói kiểm định Marketplace chứa cơ chế đọc cookie trình duyệt hoặc nhúng `client_id` đóng của gói thuê bao cá nhân (`ChatGPT Plus/Pro`, `Codex`, `Claude Pro/Max`, `Antigravity`...). | Bộ kiểm tra tuân thủ đánh trượt dứt khoát, từ chối cấp nhãn `official`/`verified`. | `TP-AC-SEC-06`, `DEC-004` |
-
-### Nhóm D & E — Mặt phẳng MCP, A2A & Tương thích Ngược Khi Nâng cấp Core
-
-| Mã Test | Loại | Kịch bản kiểm thử | Kết quả kỳ vọng bắt buộc (`Pass Criteria`) | Truy vết AC / TM |
-|---|---|---|---|---|
-| **`CT-21`** | Hợp đồng & Bảo mật | Danh mục 250 công cụ MCP lọc theo khóa ảo qua phân trang; sau đó `MCP Server` sửa 1 từ trong mô tả công cụ đã duyệt. | Phân trang trả đúng các công cụ được cấp quyền không cắt cụt ở 100; công cụ bị sửa mô tả lệch `schema_hash` bị khóa ngay tức khắc (*Rug-Pull Blocked*). | `TP-AC-F0401`, `F0402`, `TM-07` |
-| **`CT-22`** | Bảo mật (Phủ định) | Đổi tham số của công cụ MCP `destructive` sau khi đã được `Reviewer` duyệt, hoặc giả lập quá hạn mạng sau khi đã gửi lệnh `mutating`. | Đổi tham số bị chặn `403 parameter_hash_mismatch`; quá hạn mạng chỉ gửi đúng **1 lần duy nhất**, không retry mù và trả `ambiguous_side_effect_timeout`. | `TP-AC-F0403`, `FMEA-02`, `TM-07` |
-| **`CT-23`** | Bảo mật (Phủ định) | Chuỗi tác vụ A2A gọi vòng tròn vượt bước nhảy thứ 5 hoặc đòi ngân sách con lớn hơn số dư còn lại của tác nhân cha. | Từ chối ngay với `400 delegation_depth_exceeded` / `403 budget_or_privilege_exceeded`. | `TP-AC-F0404`, `TM-12` |
-| **`CT-24`** | Tương thích Nâng cấp | Chạy gói phần mở rộng hợp đồng `N-1` trên bản Core `N`, và thử nâng cấp Core khi đang có gói hợp đồng cũ `N-2` hết hạn hỗ trợ. | Gói `N-1` chạy không cần sửa đổi; gói `N-2` bị bước `Preflight Upgrade Check` phát hiện và chặn nâng cấp an toàn (`BLOCKED_INCOMPATIBLE`). | `TP-AC-F1002`, `TP-AC-N10` |
-
-### Nhóm F — Chuỗi Cung ứng Sâu, `DNS Rebinding`, Bộ nhớ Đệm Đa Thuê bao, Đua tranh Ngân sách, Kiểm toán & Di trú (`CT-25` .. `CT-32` — Bổ sung A07)
-
-| Mã Test | Loại | Kịch bản Đối kháng / Hỏng hóc | Kết quả Phòng vệ Bắt buộc (`Pass Criteria`) | Truy vết AC / TM |
-|---|---|---|---|---|
-| **`CT-25`** | Chuỗi cung ứng (Phủ định) | Cài đặt phần mở rộng ở môi trường `prod` bằng nhánh/thẻ Git động (`ref=main` hoặc `tag=v1.0`) không kèm `commit SHA` 40 ký tự và `expected_sha256`. | Từ chối ngay lập tức với `400 mutable_git_ref_forbidden` trước khi nạp bất kỳ gói nào. | `TM-02`, `SPEC-SEC-02` |
-| **`CT-26`** | Bảo mật Mạng (Phủ định) | Máy chủ DNS giả lập trả IP công khai hợp lệ ở lần hỏi đầu (`TTL=0`), sau đó đổi sang `169.254.169.254` hoặc `127.0.0.1` ngay khoảnh khắc mở kết nối TCP. | Móc kiểm tra IP bên trong `net.Dialer.Control` (lúc `connect()`) chặn đứng tức khắc; **`0` gói tin TCP SYN** chạm vào địa chỉ nội bộ/metadata. | `TP-AC-SEC-04`, `TM-06`, `RSK-014` |
-| **`CT-27`** | Bảo mật Đầu ra (Phủ định) | Phản hồi từ mô hình/MCP chứa mã kịch bản độc hại (`javascript:` URI, thuộc tính sự kiện HTML) và chuỗi thoát thiết bị đầu cuối (`\x1b]52;...` chiếm quyền clipboard). | Web Console mã hóa văn bản thuần `100%` dưới `CSP` chặt (`0` kịch bản thực thi); `tanpopo` CLI lọc sạch ký tự điều khiển ANSI nguy hiểm trước khi in ra màn hình. | `TM-07`, `UX-AC-05` |
-| **`CT-28`** | Quyền riêng tư Cache (Phủ định) | Bật bộ nhớ đệm phản hồi; `Org A` gửi truy vấn chứa bí mật nội bộ (lưu vào cache), sau đó `Org B` (hoặc môi trường `staging`, hoặc `Virtual Key` có chính sách lọc khác) gửi đúng cùng câu hỏi và mô hình. | **`0` lần trúng cache chéo tổ chức / môi trường / chính sách**; khóa cache bắt buộc phân tách theo `org_id:project_id:env_id:deployment_id:policy_hash`. | `TM-09`, `FMEA-03`, `RSK-016` |
-| **`CT-29`** | Tài chính (Đua tranh) | Số dư ngân sách còn đủ cho đúng `5` lần giữ chỗ; bắn đồng thời `50` yêu cầu suy luận song song tại cùng một thời điểm. | Tối đa `5` yêu cầu được mở kết nối tới hãng AI; ít nhất `45` yêu cầu bị từ chối tức thì `429 project_budget_exceeded`; **`0` vượt trần ngân sách bất ngờ**. | `TP-AC-F0801`, `TM-12`, `RSK-007` |
-| **`CT-30`** | Toàn vẹn Kiểm toán (Phủ định) | Dùng quyền quản trị DB trực tiếp sửa `1` ký tự hoặc xóa `1` dòng ở giữa bảng `audit_events`, sau đó chạy kiểm tra chuỗi băm kiểm toán. | Phát hiện chính xác vị trí dòng gãy chuỗi băm `SHA-256`, trả mã thoát khác `0` và kích hoạt cảnh báo `ALT-AUDIT-TAMPER`. | `TP-AC-F0701`, `TM-13`, `OPS-AC-08` |
-| **`CT-31`** | Mạng kín `Air-Gap` (Phủ định) | Nhập gói ngoại tuyến `tanpopo bundle import` có chữ ký gốc sai, danh sách `revocations.json` quá hạn hoặc `1 byte` gói `.tpkg` bên trong bị tráo. | Huỷ toàn bộ giao dịch nhập gói nguyên tử, giữ nguyên kho cục bộ hiện hành và báo rõ tệp vi phạm. | `SPEC-OPS-01`, `OPS-AC-11` |
-| **`CT-32`** | Toàn vẹn Di trú DB | Chạy lệnh di trú dữ liệu từ `SQLite WAL` sang `PostgreSQL 16+` rồi chạy kiểm tra đối soát. | Khớp `100%` số dòng, tổng sổ cái `BIGINT micro-USD`, chuỗi băm `audit_events` và giải mã thành công kho khóa `AEAD AAD` với `0` khóa rõ rò rỉ ra đĩa/log. | `FMEA-06`, `RSK-013` |
+Every extension package (`Official`, `Verified`, `Private-Enterprise`, and `Unverified-External`) is verified through the unified `tanpopo plugin test` runner backed by deterministic fixture recordings (`Cassettes` — paired upstream HTTP/SSE frames and expected Host outputs):
+- **Executes `100%` offline in CI within seconds:** Live outbound Internet sockets are strictly prohibited (`TANPOPO_TEST_HERMETIC=1`), requiring zero live upstream API keys, **`0 USD` external AI spend**, and zero network flakiness.
+- **Drives Capability Assurance Levels:** Only `Manifest` capabilities backed by passing cassette scenarios in the matrix below are promoted from `DECLARED` to `TESTED` (see [`provider-adapter.md`](../specifications/provider-adapter.md)).
 
 ---
 
-## 3. Ma trận Kiểm thử Xác thực, Ủy quyền & Cô lập Thuê bao (`AUTH-01` .. `AUTH-16`)
+## 2. Extended Contract & Adversarial Test Matrix (`CT-01` .. `CT-32`)
 
-> Phân biệt rạch ròi giữa **kiểm chứng kỹ thuật giao thức xác thực** và **cưỡng chế ranh giới chính sách của nhà cung cấp (`DEC-004`)**:
+### Group A — Packaging, `Manifest` Schema & Supply-Chain Provenance
 
-| Mã Test | Hạng mục Xác thực / Ủy quyền | Kịch bản Kiểm thử Dương tính & Phủ định | Tiêu chí Đạt Bắt buộc (`Pass Criteria`) |
+| Test ID | Category | Test Scenario & Input | Mandatory Pass Criteria | AC / TM Trace |
+|---|---|---|---|---|
+| **`CT-01`** | Contract | Validate well-formed `Manifest`, `configSchema`, `secretSlots`, and `permissions` definitions. | Passes `100%` JSON Schema validation; rejects unknown permission keys or wildcard `*` network permissions by default. | `TP-AC-F0302` |
+| **`CT-02`** | Negative | Package declares `contractVersion: "9.0"` outside the active Core's supported compatibility window. | Blocked immediately at `VERIFYING` (`SM-01` → `REJECTED_INVALID`) with an explicit error code listing supported contract versions. | `TP-AC-F0303` |
+| **`CT-03`** | Negative | Mutate `1 byte` in a `.wasm` binary or declarative file after recording its digest in `tanpopo.lock` or cryptographic signature. | Refuses to load the package (`artifact_digest_mismatch`) and writes a high-severity security `AuditEvent`. | `TP-AC-SEC-02`, `TM-02` |
+| **`CT-04`** | Negative | `.tpkg`/`.zip` archive contains path traversal `../../etc/passwd` (*Zip-Slip*), external `symlink` entries, or decompresses past `> 64 MiB` (*Zip-Bomb*). | Extractor aborts immediately on the bounded in-memory reader stream without writing a single byte to disk. | `TP-AC-SEC-02`, `TM-01` |
+| **`CT-05`** | Negative | External package self-declares `"trustTier": "official"` or claims the `@tanpopo-official/*` prefix without a valid signature from Tanpopo's offline root key. | Rejects the spoofed trust label and blocks reserved namespace squatting (`403 reserved_namespace_spoofing`). | `TP-AC-SEC-02`, `TM-03` |
+
+### Group B — Protocol Compatibility, Streaming & `Provider Adapter` Metering
+
+| Test ID | Category | Test Scenario & Input | Mandatory Pass Criteria | AC / TM Trace |
+|---|---|---|---|---|
+| **`CT-06`** | Contract | Synchronous `/v1/chat/completions` and `/v1/embeddings` requests replayed against standard cassettes. | Transforms path, headers, and JSON body accurately; normalizes responses `100%` to the canonical output schema with `x-tanpopo-request-id`. | `TP-AC-F0101` |
+| **`CT-07`** | Contract | Stream 50 consecutive SSE chunks interleaved with `: ping` keep-alive comments. | Flushes each chunk immediately without full-stream buffering; strips `: ping` comments without emitting spurious empty delta frames. | `TP-AC-F0101`, `TP-AC-N01` |
+| **`CT-08`** | Negative | Submit a request containing audio input, `strict_json_schema: true`, or violating `allowed_data_regions = ["EU"]`. | Immediately returns `400 capability_not_supported` (or `503 no_compliant_deployment_available`), executes `0` out-of-region network calls, and releases the budget hold immediately. | `TP-AC-F0102`, `TP-AC-F0602` |
+| **`CT-09`** | Contract & Negative | Valid streaming `tool_calls` delta chunks vs. a local-model cassette emitting truncated tool-call JSON brackets. | Valid case reassembles argument deltas in exact index order; malformed case classifies `upstream_malformed_response` cleanly without crashing the process. | `TP-AC-F0202` |
+| **`CT-10`** | Negative | Upstream cassette resets the TCP connection abruptly after emitting 10 SSE content chunks (`Partial Stream`). | Emits terminal `mid_stream_abort` error frame, **never invokes a fallback provider**, and settles the ledger entry as `ESTIMATED`. | `TP-AC-F0103`, `FMEA-01` |
+| **`CT-11`** | Contract | `API Client` cancels the connection at SSE chunk 3; measure simulated upstream connection teardown latency. | Host aborts the upstream connection within `< 500 ms` (`TARGET / UNVERIFIED`), invokes cleanup hooks, and releases unused budget hold balance. | `TP-AC-F0104` |
+| **`CT-12`** | Contract | Cassette returns HTTP `429` with `Retry-After: 12` before first byte, or completes a stream with present vs. omitted `usage` fields. | `429` fails over to the backup deployment and sets `THROTTLED_COOLDOWN = 12s`; missing-usage case marks `ESTIMATED` / `UNMETERED_FLAGGED` and never records `EXACT = 0`. | `TP-AC-F0601`, `TP-AC-F0803`, `FMEA-04` |
+| **`CT-13`** | Contract & Negative | Invoke native dialect passthrough `/native/<dialect>/...` carrying novel vendor JSON fields vs. a route misconfigured for another dialect. | Unknown vendor JSON fields pass through `100%` lossless without stripping; dialect mismatch fails immediately with `400 dialect_mismatch`. | `TP-AC-F0105` |
+
+### Group C — Negative Security & Sandbox Isolation Tests
+
+| Test ID | Category | Attack / Abuse Scenario | Mandatory Defense Pass Criteria | AC / TM Trace |
+|---|---|---|---|---|
+| **`CT-14`** | Security (Negative) | Plugin code deliberately returns an `UpstreamHttpSpec` targeting `https://exfil.attacker.example` outside approved `allowedHosts`. | Host Egress Proxy blocks the call prior to DNS resolution/socket open, aborts the request, logs a security `AuditEvent`, and transitions to `QUARANTINED` per policy. | `TP-AC-SEC-02`, `TM-05` |
+| **`CT-15`** | Security (Negative) | Configured upstream URL or HTTP `302 Redirect` points to `http://169.254.169.254/latest/meta-data/`, `127.0.0.1`, or an unapproved third-party domain. | Hard-blocks cloud metadata and loopback addresses; strips `Authorization` headers upon any redirect leaving the approved target host. | `TP-AC-SEC-04`, `TM-06` |
+| **`CT-16`** | Security (Negative) | Test plugin scans all guest inputs/env memory for `sk-live-SECRET`, while a mock upstream echoes the raw secret inside a `401` error payload. | Plugin guest memory contains `0` bytes of the raw secret (`host_blind_inject`); Host error scrubber strips the echoed secret from both logs and client responses. | `TP-AC-SEC-01`, `TM-05` |
+| **`CT-17`** | Fault Isolation (Negative) | Malicious plugin enters an infinite loop `while(true){}` or allocates memory beyond `maxMemoryMb` while 100 healthy concurrent streams run alongside it. | Faulting guest instance is forcibly terminated at its CPU/RAM cap; Core process suffers `0 crashes`; all 100 healthy streams complete normally (`FMEA-05`). | `TP-AC-SEC-02`, `TP-AC-N02`, `TM-04` |
+| **`CT-18`** | Security (Negative) | Upgrade package from `0.2.0` to `0.3.0` where `0.3.0` stealthily adds 1 new domain to `allowedHosts` or requests `scoped_secret_unseal`. | Automatically halts `0.3.0` activation in `UPDATING_PENDING_RECONSENT`; live traffic continues uninterrupted through `0.2.0`. | `TP-AC-F0304` |
+| **`CT-19`** | Security (Negative) | Fire 50 concurrent requests at an `Authorized OAuth` connection whose token just expired; attempt to send `Connection A`'s token to `Connection B`'s host. | Exactly `1` upstream refresh call hits the IdP (*Single-Flight*); cross-host token injection outside `allowed_audience_hosts` is hard-blocked at the network edge. | `TP-AC-F0203`, `TP-AC-SEC-03`, `TM-08` |
+| **`CT-20`** | Compliance (Negative) | Submit a Marketplace verification package containing browser cookie harvesters or closed internal `client_id`s for personal consumer plans (`ChatGPT Plus/Pro`, `Codex`, `Claude Pro/Max`, `Antigravity`, etc.). | Compliance scanner fails the package unconditionally and denies `official`/`verified` badging. | `TP-AC-SEC-06`, `DEC-004` |
+
+### Group D & E — MCP Plane, A2A Delegation & Core N-1 Upgrade Compatibility
+
+| Test ID | Category | Test Scenario | Mandatory Pass Criteria | AC / TM Trace |
+|---|---|---|---|---|
+| **`CT-21`** | Contract & Security | Paginate a 250-tool MCP catalog filtered by virtual key; subsequently have the `MCP Server` mutate 1 word in an approved tool description. | Pagination returns exact authorized tools without truncating at 100; mutated tool description mismatches `schema_hash` and is locked immediately (*Rug-Pull Blocked*). | `TP-AC-F0401`, `F0402`, `TM-07` |
+| **`CT-22`** | Security (Negative) | Mutate arguments of a `destructive` MCP tool after `Reviewer` approval, or simulate network read timeout after dispatching a `mutating` tool call. | Argument mutation fails with `403 parameter_hash_mismatch`; network timeout dispatches **at most once**, performs zero blind retries, and returns `ambiguous_side_effect_timeout`. | `TP-AC-F0403`, `FMEA-02`, `TM-07` |
+| **`CT-23`** | Security (Negative) | Circular A2A task delegation exceeding hop 5 or requesting a child budget exceeding the parent agent's remaining balance. | Rejected immediately with `400 delegation_depth_exceeded` / `403 budget_or_privilege_exceeded`. | `TP-AC-F0404`, `TM-12` |
+| **`CT-24`** | Upgrade Compatibility | Run an `N-1` contract extension on Core `N`, and attempt a Core upgrade while an unsupported `N-2` contract extension remains active. | `N-1` package runs unmodified; `N-2` package is caught by `Preflight Upgrade Check` and safely blocks upgrade (`BLOCKED_INCOMPATIBLE`). | `TP-AC-F1002`, `TP-AC-N10` |
+
+### Group F — Deep Supply Chain, `DNS Rebinding`, Multi-Tenant Cache, Budget Races, Audit & Migration (`CT-25` .. `CT-32` — Added in A07)
+
+| Test ID | Category | Adversarial / Failure Scenario | Mandatory Defense Pass Criteria | AC / TM Trace |
+|---|---|---|---|---|
+| **`CT-25`** | Supply Chain (Negative) | Install an extension in `prod` using a mutable Git branch/tag (`ref=main` or `tag=v1.0`) without a 40-char `commit SHA` and `expected_sha256`. | Rejected immediately with `400 mutable_git_ref_forbidden` before fetching or staging any archive. | `TM-02`, `SPEC-SEC-02` |
+| **`CT-26`** | Network Security (Negative) | Mock DNS server returns a valid public IP on initial lookup (`TTL=0`), then flips to `169.254.169.254` or `127.0.0.1` right as the TCP connection opens. | IP guard inside `net.Dialer.Control` (at `connect()`) aborts immediately; **`0` TCP SYN packets** reach internal or cloud-metadata addresses. | `TP-AC-SEC-04`, `TM-06`, `RSK-014` |
+| **`CT-27`** | Output Security (Negative) | Model/MCP output embeds malicious script payloads (`javascript:` URIs, HTML event attributes) and ANSI terminal escape sequences (`\x1b]52;...` clipboard hijack). | Web Console renders `100%` escaped plain text under strict `CSP` (`0` script execution); `tanpopo` CLI strips hazardous ANSI control bytes prior to terminal output. | `TM-07`, `UX-AC-05` |
+| **`CT-28`** | Cache Privacy (Negative) | Enable response caching; `Org A` sends a confidential prompt (populating cache), then `Org B` (or `staging`, or a `Virtual Key` under a different policy) sends the identical prompt and model. | **`0` cross-org / cross-env / cross-policy cache hits**; cache keys strictly partition by `org_id:project_id:env_id:deployment_id:policy_hash`. | `TM-09`, `FMEA-03`, `RSK-016` |
+| **`CT-29`** | Financial (Race) | Remaining project budget covers exactly `5` pre-request holds; fire `50` concurrent inference requests simultaneously. | At most `5` requests open upstream provider connections; at least `45` are rejected immediately with `429 project_budget_exceeded`; **`0` unrecorded budget overruns**. | `TP-AC-F0801`, `TM-12`, `RSK-007` |
+| **`CT-30`** | Audit Integrity (Negative) | Use direct DB admin access to edit `1` character or delete `1` row mid-table in `audit_events`, then run the audit hash-chain verifier. | Pinpoints the exact row breaking the `SHA-256` hash chain, exits non-zero, and fires `ALT-AUDIT-TAMPER`. | `TP-AC-F0701`, `TM-13`, `OPS-AC-08` |
+| **`CT-31`** | `Air-Gap` Bundle (Negative) | Import an offline bundle via `tanpopo bundle import` carrying an invalid root signature, an expired `revocations.json` feed, or a `1-byte` tampered inner `.tpkg`. | Rolls back the entire bundle import atomically, preserves existing local registry state untouched, and reports the offending artifact. | `SPEC-OPS-01`, `OPS-AC-11` |
+| **`CT-32`** | DB Migration Integrity | Execute `SQLite WAL` to `PostgreSQL 16+` engine migration followed by automated state reconciliation. | Matches `100%` row counts, `BIGINT micro-USD` ledger totals, and `audit_events` hash chains; successfully unseals `AEAD AAD` vault records with `0` plaintext secrets leaked to disk/logs. | `FMEA-06`, `RSK-013` |
+
+---
+
+## 3. Authentication, Authorization & Tenant Isolation Matrix (`AUTH-01` .. `AUTH-16`)
+
+> Maintains an explicit boundary between **protocol-level authentication verification** and **provider policy enforcement (`DEC-004`)**:
+
+| Test ID | AuthN / AuthZ Surface | Positive & Negative Test Scenarios | Mandatory Pass Criteria |
 |---|---|---|---|
-| **`AUTH-01`** | **Đăng nhập Quản trị `OIDC + PKCE`** | Đăng nhập Control Plane qua `FakeOAuthIdP` chuẩn `Authorization Code + PKCE (S256)` kèm kiểm tra `state` và `nonce`. | Tạo phiên quản trị hợp lệ với cờ cookie `HttpOnly; Secure; SameSite=Strict`, ánh xạ đúng vai trò RBAC từ nhóm OIDC. |
-| **`AUTH-02`** | **Token OIDC Hết hạn / Giả mạo / Dò Mật khẩu** | Gửi JWT quản trị hết hạn (`exp`), lệch đồng hồ quá ngưỡng, sai chữ ký `JWKS`, sai `iss`/`aud`, hoặc bắn 30 lần đăng nhập sai liên tiếp. | Mọi JWT sai/hết hạn bị chặn `401`; dò mật khẩu bị hãm tốc độ `429 Retry-After` và ghi sự kiện kiểm toán. |
-| **`AUTH-03`** | **Chống Giả mạo Yêu cầu Chéo Trang (`CSRF`)** | Trình duyệt có cookie quản trị hợp lệ nhưng gửi `POST /admin/v1/virtual-keys` thiếu `X-CSRF-Token` hoặc tiêu đề `Origin` từ miền lạ. | Từ chối cứng `403 csrf_validation_failed`, `0` thay đổi trạng thái hệ thống. |
-| **`AUTH-04`** | **Khóa Ảo `Virtual Key` & Khóa Môi trường** | Xác thực `/v1/chat/completions` bằng khóa `vk_tp_staging_...` hợp lệ vào tuyến `staging` vs thử gọi vào tuyến chỉ mở cho `prod`. | Đối chiếu băm hằng định thời gian; đúng môi trường cho qua (`200`), lệch môi trường chặn ngay (`403 environment_scope_denied`). |
-| **`AUTH-05`** | **Xoay Khóa Hai Chiều Êm (`Grace Window`)** | Xoay `Virtual Key` với cửa sổ ân hạn `grace_ttl = 60s` trên đồng hồ giả lập `FakeClock`. | Tại `T + 30s` cả khóa cũ và mới đều hoạt động; đúng tại `T + 61s` khóa cũ trả `401 key_expired` tức thì (`SM-05`). |
-| **`AUTH-06`** | **Thu hồi Khẩn cấp (`Emergency Revoke`)** | Kích hoạt thu hồi an ninh khẩn cấp một `Virtual Key` đang có `10` luồng SSE truyền dở trên cụm nhiều nút. | Nút nhận tin cắt đứt cả `10` luồng đang mở và chặn mọi yêu cầu mới trong `< 1s` (đơn nút) / `< 5s` (cụm — `TARGET / UNVERIFIED`). |
-| **`AUTH-07`** | **Chặn Vượt Rào Giữa Hai Mặt phẳng (`Plane Crossover`)** | Dùng `Virtual Key` (`vk_tp_...`) gọi bất kỳ API `/admin/v1/*` nào, hoặc dùng cookie quản trị gọi thẳng `/v1/chat/completions`. | Cả hai chiều đều bị bác bỏ `401 invalid_credential_plane`. |
-| **`AUTH-08`** | **Tín nhiệm Liên Dịch vụ (`Service-to-Service mTLS / UDS`)** | Tiến trình lạ gọi vào cổng `ExtensionRuntimeService` của `Tier-3 Sidecar` không có chứng chỉ `mTLS` hợp lệ hoặc lệch định danh `SPIFFE SAN`. | Ngắt kết nối ngay ở bước bắt tay TLS/UDS, `0` khung RPC được giải mã. |
-| **`AUTH-09`** | **Luồng `Authorized OAuth 2.1` Hợp lệ Cho Nhà cung cấp** | Cấp quyền kết nối tới cổng AI doanh nghiệp / hãng đối tác hợp lệ qua `OAuth 2.1 + PKCE` và `Client Credentials`; hết hạn tự làm mới 1 lần duy nhất. | Lưu cặp token bằng mã hóa phong bì `AEAD AAD`; làm mới ngầm không làm hỏng các truy vấn song song. |
-| **`AUTH-10`** | **Token OAuth Bị Hãng Đích Thu hồi (`Revoked Upstream`)** | Máy chủ ủy quyền trả `400 invalid_grant` khi Tanpopo làm mới `refresh_token`. | Dừng ngay mọi nỗ lực thử lại mù (`0` bão retry), chuyển kết nối sang `REAUTH_REQUIRED` (`SM-03`), phát cảnh báo `ALT-OAUTH-REAUTH` (`FMEA-08`). |
-| **`AUTH-11`** | **Ma trận Phân quyền Từng Hành động (`Action RBAC`)** | Kiểm thử tự động toàn bộ tổ hợp `(6 Vai trò × Mọi Endpoint /admin/v1/*)` và kiểm tra khởi động máy chủ khi có route quên gắn quyền. | Vai trò `DEVELOPER` / `FINOPS_VIEWER` bị chặn `403` trên mọi thao tác duyệt plugin, xoay khóa hãng hoặc sửa chính sách; máy chủ từ chối khởi động nếu sót route chưa khai báo quyền. |
-| **`AUTH-12`** | **Nguyên tắc Bốn Mắt (`Four-Eyes Duty Separation`)** | Cùng một quản trị viên vừa tải lên gói `unverified-external` (hoặc yêu cầu chạy công cụ MCP `destructive`) vừa tự bấm nút `Approve` khi cờ `Four-Eyes` đang bật. | Bị chặn cứng `403 self_approval_forbidden`; chỉ thành công khi một `SECURITY_REVIEWER` độc lập thứ hai ký duyệt. |
-| **`AUTH-13`** | **Chống Giả mạo `org_id` Trong Thân Yêu cầu** | Quản trị viên của `Org A` gửi `POST /admin/v1/routes` kèm trường JSON `"org_id": "<UUID_Org_B>"`. | Hệ thống bác bỏ hoặc ghi đè bằng `org_id` thật của phiên xác thực; `0` bản ghi nào được tạo dưới tên `Org B`. |
-| **`AUTH-14`** | **Bảo vệ Cấy ghép Bản mã `AEAD AAD` & `PostgreSQL RLS`** | (1) Dùng SQL chép `secret_ciphertext` của `Org A` sang dòng kết nối của `Org B`; (2) Chạy truy vấn thiếu `WHERE` dưới biến phiên `app.current_org_id = Org_B`. | (1) Giải mã `AES-256-GCM` thất bại tức khắc do sai `AAD`; (2) `FORCE RLS` trả về đúng `0` dòng của `Org A`. |
-| **`AUTH-15`** | **Chống Dò Quét Đối tượng Chéo Tổ chức (`Anti-Oracle IDOR`)** | Chủ thể của `Org A` gọi `GET / PATCH / DELETE` lên `Connection`, `Virtual Key`, `Route` và `Trace` của `Org B`. | Trả đồng nhất `404 resource_not_found` (không lộ `403`), đồng thời ghi sự kiện `cross_tenant_probe_blocked` vào nhật ký kiểm toán. |
-| **`AUTH-16`** | **Phân biệt Hỗ trợ Kỹ thuật vs Cấm Lạm dụng Thuê bao & Chuyển tiếp Token (`DEC-004` + `RFC 8707`)** | (1) Thử chuyển tiếp token quản trị của người dùng sang máy chủ MCP ngoài hoặc đổi miền đích của kết nối OAuth mà không xin cấp quyền lại; (2) Thử nạp cấu hình `billing_mode = CONSUMER_SUBSCRIPTION` hoặc trình trích xuất cookie thuê bao cá nhân. | (1) Chặn cứng mọi hành vi chuyển tiếp chéo khán giả (`403 token_audience_mismatch`, vô hiệu hóa token khi đổi miền); (2) Chặn dứt khoát ở cả lược đồ dữ liệu, cổng kiểm định Marketplace và rào chắn giao diện (`UX-GR-03`) — khẳng định việc hỗ trợ giao thức `OAuth 2.1` chuẩn hoàn toàn tách biệt với việc bác bỏ hành vi lách điều khoản thuê bao tiêu dùng. |
+| **`AUTH-01`** | **Admin `OIDC + PKCE` Login** | Authenticate to Control Plane via `FakeOAuthIdP` using `Authorization Code + PKCE (S256)` with `state` and `nonce` verification. | Establishes valid admin session with `HttpOnly; Secure; SameSite=Strict` cookies and maps OIDC group claims to exact RBAC roles. |
+| **`AUTH-02`** | **Expired / Forged OIDC JWT & Brute Force** | Present expired (`exp`), clock-skewed, bad-`JWKS`-signature, or wrong-`iss`/`aud` JWTs, or fire 30 consecutive failed logins. | All invalid/expired JWTs fail `401`; brute-force attempts hit `429 Retry-After` rate limiting and emit audit events. |
+| **`AUTH-03`** | **`CSRF` Protection** | Browser carrying a valid admin session cookie sends `POST /admin/v1/virtual-keys` missing `X-CSRF-Token` or carrying a foreign `Origin` header. | Hard-rejected with `403 csrf_validation_failed` and `0` state mutations. |
+| **`AUTH-04`** | **`Virtual Key` & Environment Scope** | Call `/v1/chat/completions` using a valid `vk_tp_staging_...` key against a `staging` route vs. a `prod`-only route. | Constant-time digest comparison; matching environment succeeds (`200`), mismatched environment fails immediately (`403 environment_scope_denied`). |
+| **`AUTH-05`** | **Zero-Downtime Key Rotation (`Grace Window`)** | Rotate a `Virtual Key` with `grace_ttl = 60s` driven by deterministic `FakeClock`. | At `T + 30s` both old and new keys succeed; at `T + 61s` the old key immediately returns `401 key_expired` (`SM-05`). |
+| **`AUTH-06`** | **`Emergency Revoke`** | Trigger emergency security revocation on a `Virtual Key` with `10` active in-flight SSE streams across a multi-node cluster. | Nodes sever all `10` active streams and block new requests within `< 1s` (single-node) / `< 5s` (cluster — `TARGET / UNVERIFIED`). |
+| **`AUTH-07`** | **Cross-Plane Credential Rejection (`Plane Crossover`)** | Present a `Virtual Key` (`vk_tp_...`) to any `/admin/v1/*` endpoint, or present an admin session cookie directly to `/v1/chat/completions`. | Both directions fail with `401 invalid_credential_plane`. |
+| **`AUTH-08`** | **Service-to-Service `mTLS / UDS` Trust** | Unauthorized local/network process connects to a `Tier-3 Sidecar` `ExtensionRuntimeService` socket without valid `mTLS` client cert or matching `SPIFFE SAN`. | Terminated during TLS/UDS handshake with `0` RPC frames decoded. |
+| **`AUTH-09`** | **Valid `Authorized OAuth 2.1` Upstream Flow** | Authorize an enterprise AI gateway / approved partner vendor via `OAuth 2.1 + PKCE` and `Client Credentials`; expire token to trigger single-flight refresh. | Persists token pair under `AEAD AAD` envelope encryption; background refresh completes transparently without failing concurrent requests. |
+| **`AUTH-10`** | **Upstream OAuth Token Revocation (`Revoked Upstream`)** | Authorization server returns `400 invalid_grant` during `refresh_token` exchange. | Halts retry attempts immediately (`0` retry storm), transitions connection to `REAUTH_REQUIRED` (`SM-03`), and fires `ALT-OAUTH-REAUTH` (`FMEA-08`). |
+| **`AUTH-11`** | **Action-Level RBAC Matrix (`Action RBAC`)** | Exhaustively test `(6 Roles × Every /admin/v1/* Endpoint)` combinations and test server boot with an unguarded route. | `DEVELOPER` / `FINOPS_VIEWER` roles receive `403` on plugin approvals, upstream secret rotations, and policy mutations; server refuses to boot if any admin route omits permission metadata. |
+| **`AUTH-12`** | **Four-Eyes Separation of Duties** | Same administrator uploads an `unverified-external` package (or requests a `destructive` MCP tool call) and attempts to click `Approve` while `Four-Eyes` is enabled. | Hard-blocked with `403 self_approval_forbidden`; succeeds only when a second independent `SECURITY_REVIEWER` signs off. |
+| **`AUTH-13`** | **Request-Body `org_id` Spoofing Prevention** | An `Org A` admin sends `POST /admin/v1/routes` carrying JSON body `"org_id": "<Org_B_UUID>"`. | Rejects or overrides with the authenticated session's true `org_id`; `0` records are created under `Org B`. |
+| **`AUTH-14`** | **`AEAD AAD` Ciphertext Transplant & `PostgreSQL RLS`** | (1) Copy `Org A`'s `secret_ciphertext` via raw SQL into `Org B`'s connection row; (2) Execute an unfiltered SQL `SELECT` under `app.current_org_id = Org_B`. | (1) `AES-256-GCM` open fails immediately due to `AAD` mismatch; (2) `FORCE RLS` returns `0` `Org A` rows. |
+| **`AUTH-15`** | **Cross-Tenant Anti-Oracle `IDOR` Defense** | Principal in `Org A` issues `GET / PATCH / DELETE` against `Org B` `Connection`, `Virtual Key`, `Route`, and `Trace` UUIDs. | Returns uniform `404 resource_not_found` (never leaking `403`) while recording `cross_tenant_probe_blocked` in the audit log. |
+| **`AUTH-16`** | **Protocol Capability vs. Consumer Subscription Ban & Token Relay Guard (`DEC-004` + `RFC 8707`)** | (1) Attempt to relay an admin user token to an external MCP server or mutate an OAuth connection's target domain without re-consent; (2) Attempt to register `billing_mode = CONSUMER_SUBSCRIPTION` or load a consumer cookie harvester. | (1) Blocks cross-audience token relay (`403 token_audience_mismatch` and invalidates token on host mutation); (2) Rejects consumer subscription abuse across DB schema constraints, Marketplace verification, and UI guardrails (`UX-GR-03`) — proving standard `OAuth 2.1` support remains strictly separated from consumer ToS circumvention. |
 
 ---
 
-## 4. Kiểm thử Nhiễu loạn & Bất biến Thuộc tính (`FZ-01` .. `FZ-06` — Go Fuzzing & Property Tests)
+## 4. Fuzzing & Property-Based Invariant Tests (`FZ-01` .. `FZ-06` — Go Fuzzing & Property Tests)
 
-| Mã Fuzz | Mục tiêu Kiểm thử (`Target Function`) | Thuộc tính Bất biến Phải Giữ Vững Qua Hàng Triệu Đầu vào Ngẫu nhiên |
+| Fuzz ID | Target Function | Invariant Property Maintained Across Millions of Randomized Inputs |
 |---|---|---|
-| **`FZ-01`** | **`FuzzManifestAndDeclarativeExpr`** | Trình phân tích `Manifest` và biểu thức ánh xạ Tầng 1 không bao giờ `panic`, không cấp phát quá `2 MiB` RAM và kết thúc dưới `5 ms` trước mọi chuỗi JSON/template dị dạng. |
-| **`FZ-02`** | **`FuzzPackageArchiveExtractor`** | Trình đọc gói `.tpkg` / `.zip` / `.tar.zst` không bao giờ tạo tệp ngoài thư mục đích, không đi theo `symlink`, và hủy ngay khi tổng byte giải nén vượt trần `64 MiB`. |
-| **`FZ-03`** | **`FuzzSSEStreamFrameParser`** | Bộ tách khung luồng `SSE` xử lý an toàn mọi kiểu cắt mảnh TCP ở giữa ký tự `UTF-8` đa byte, dòng không có ký tự xuống dòng dài `10 MiB` và khung JSON hỏng mà `0` `panic` và không rò rỉ bộ đệm. |
-| **`FZ-04`** | **`FuzzJCSSchemaCanonicalizer`** | Kiểm thử thuộc tính chuẩn hóa `RFC 8785 (JCS)` cho công cụ MCP: đảo thứ tự khóa JSON hoặc thêm khoảng trắng luôn cho ra **cùng một `schema_hash`**, nhưng đổi bất kỳ `1` ký tự nào trong `description` hoặc kiểu tham số luôn tạo ra `schema_hash` khác biệt. |
-| **`FZ-05`** | **`FuzzWasmHostGuestABI`** | Giả lập khách Wasm độc hại trả về con trỏ âm, độ dài vượt biên vùng nhớ tuyến tính hoặc chuỗi không hợp lệ sang Host → Host bắt lỗi gọn gàng (`guest_abi_violation`), **`0` đọc/ghi tràn vùng nhớ của tiến trình Core**. |
-| **`FZ-06`** | **`PropertyLedgerConservation`** | Chạy máy trạng thái ngẫu nhiên `10.000` bước xen kẽ `Reserve`, `SettleExact`, `SettleEstimated`, `CancelHold`, `ExpireHold` trên số nguyên `BIGINT micro-USD` → Luôn thỏa mãn đẳng thức bảo toàn tuyệt đối: $\text{Spent} + \text{ActiveHolds} + \text{Remaining} = \text{Limit} + \text{RecordedOverage}$ với **`0` sai số làm tròn**. |
+| **`FZ-01`** | **`FuzzManifestAndDeclarativeExpr`** | `Manifest` parser and Tier-1 mapping evaluator exhibit `0` panics, allocate `<= 2 MiB` RAM, and terminate in `< 5 ms` on arbitrary malformed JSON/template inputs. |
+| **`FZ-02`** | **`FuzzPackageArchiveExtractor`** | `.tpkg` / `.zip` / `.tar.zst` reader never writes outside its staging directory, never follows `symlink` entries, and aborts immediately once cumulative decompressed bytes exceed `64 MiB`. |
+| **`FZ-03`** | **`FuzzSSEStreamFrameParser`** | `SSE` frame splitter safely handles arbitrary TCP packet splits mid-multi-byte `UTF-8` rune, `10 MiB` newline-free lines, and truncated JSON deltas with `0` panics and `0` buffer leaks. |
+| **`FZ-04`** | **`FuzzJCSSchemaCanonicalizer`** | `RFC 8785 (JCS)` property test for MCP tools: permuting JSON object key order or whitespace always yields the **exact same `schema_hash`**, whereas mutating any `1` character in `description` or parameter types always produces a distinct `schema_hash`. |
+| **`FZ-05`** | **`FuzzWasmHostGuestABI`** | Adversarial Wasm guest returning negative pointers, out-of-bounds linear memory lengths, or invalid UTF-8 to Host → Host catches `guest_abi_violation` cleanly with **`0` out-of-bounds reads/writes in Core memory**. |
+| **`FZ-06`** | **`PropertyLedgerConservation`** | `10,000`-step randomized state-machine interleaving `Reserve`, `SettleExact`, `SettleEstimated`, `CancelHold`, and `ExpireHold` over `BIGINT micro-USD` integers → Strictly preserves exact conservation: $\text{Spent} + \text{ActiveHolds} + \text{Remaining} = \text{Limit} + \text{RecordedOverage}$ with **`0` rounding drift**. |
 
 ---
 
-## 5. Kịch bản Nghiệm thu Đầu-Cuối Bắt buộc: External Provider Adapter Độc lập Hoàn toàn Với Core (`EXT-ACCEPT-01`)
+## 5. Mandatory End-to-End Acceptance Scenario: External Provider Adapter Completely Independent of Core (`EXT-ACCEPT-01`)
 
-> **Mục tiêu chứng minh sống còn (`MO-02`):** Chứng minh bằng bằng chứng mật mã rằng một nhà cung cấp AI hoàn toàn mới chưa từng có mặt lúc biên dịch Tanpopo Core được phát triển ở kho mã độc lập và vận hành trọn vòng đời sản xuất trên tệp thực thi Core giữ nguyên bất biến.
+> **Mission-Critical Proof Objective (`MO-02`):** Prove with cryptographic evidence that a brand-new AI provider unknown at Tanpopo Core compile time can be authored in an independent repository and operated across its entire production lifecycle against an unchanged, continuously running Core binary.
 
-### Điều kiện Tiền đề Kiểm định
-1. Ghi nhận mã băm tệp thực thi nhân hệ thống trước bài kiểm thử: `CORE_BIN_SHA256_BEFORE = sha256sum(tanpopod)`.
-2. Khởi chạy tiến trình Tanpopo Core và giữ nguyên `PID` xuyên suốt toàn bộ 10 bước dưới đây (không biên dịch lại, không khởi động lại tiến trình Core).
-3. Khởi chạy máy chủ giả lập nhà cung cấp khu vực mới `Mock-Acme-Sovereign-AI` trên cổng loopback cục bộ có giao thức tiêu đề/JSON riêng chưa từng được biết tới trong mã nguồn Core.
+### Verification Preconditions
+1. Record the Core binary digest prior to test execution: `CORE_BIN_SHA256_BEFORE = sha256sum(tanpopod)`.
+2. Start the Tanpopo Core process and keep its `PID` unchanged across all 10 steps below (zero recompilation, zero Core process restarts).
+3. Start a local loopback mock regional provider `Mock-Acme-Sovereign-AI` speaking a custom header/JSON wire dialect unknown to Core source code.
 
-### Mười Bước Nghiệm thu Bắt buộc (`Given / When / Then` Chuỗi Liên hoàn)
+### Ten Mandatory Chained Acceptance Steps (`Given / When / Then`)
 
-1. **Khởi tạo & Kiểm thử Ngoại tuyến:** Trong một thư mục trống tách rời hoàn toàn khỏi mã nguồn Core, chạy `tanpopo plugin init` tạo gói `@acme-cloud/regional-llm-adapter@0.2.0`, chạy `tanpopo plugin test` vượt qua toàn bộ các bài `CT-01`..`CT-17` và đóng gói ra tệp `acme-0.2.0.tpkg`.
-2. **Cài đặt Chờ Duyệt Quyền:** Nạp gói `acme-0.2.0.tpkg` vào tiến trình Tanpopo đang chạy → Xác nhận trạng thái dừng đúng ở `PENDING_PERMISSION_APPROVAL`, nhãn hiển thị là `unverified-external` và chưa thể định tuyến lưu lượng.
-3. **Phê duyệt Quyền & Khóa `tanpopo.lock`:** Quản trị viên duyệt quyền mạng chỉ mở tới địa chỉ của `Mock-Acme-Sovereign-AI` và cơ chế `host_blind_inject` → Gói chuyển sang `ENABLED_ACTIVE` và mã băm SHA-256 được ghi vào `tanpopo.lock`.
-4. **Tạo Kết nối, Tuyến & Ngân sách:** Lưu khóa bí mật vào kho một chiều, tạo `Provider Connection` (`Data Region = EU`), bật `Model Deployment` và gắn vào `Route` có trần ngân sách `1.00 USD`.
-5. **Gọi Suy luận Hợp nhất & Streaming Thực tế:** Dùng OpenAI SDK tiêu chuẩn gửi truy vấn streaming và gọi công cụ vào `/v1/chat/completions` → Nhận luồng SSE mượt mà, nhà cung cấp đích nhận đúng tiêu đề khóa thật trong khi Sandbox của Adapter không hề nhìn thấy khóa, sổ cái ghi nhận bút toán `SETTLED_EXACT`.
-6. **Kiểm chứng Tình huống Lỗi & Vùng Dữ liệu:** Ngắt luồng giả lập ở mảnh thứ 5 → Xác nhận nhận khung `mid_stream_abort` không fallback ngầm và quyết toán `SETTLED_ESTIMATED`; tắt đích `EU` khi chỉ còn đích dự phòng `US` → Xác nhận trả `503 no_compliant_deployment_available`.
-7. **Chặn Đứng Cập nhật Leo thang Quyền:** Tải lên bản `acme-0.3.0.tpkg` có cài thêm tên miền lạ trong `Manifest` → Xác nhận bản `0.3.0` bị khóa ở `UPDATING_PENDING_RECONSENT` và các truy vấn đang gọi liên tục vẫn đi qua bản `0.2.0` với `0` lỗi rớt mạng.
-8. **Nâng cấp Hợp lệ & Quay lui Tức thì (`Rollback`):** Nạp bản `0.2.1` không tăng quyền (chuyển lưu lượng êm qua `DRAINING`), sau đó chạy lệnh `Rollback` về `0.2.0` → Xác nhận lưu lượng quay lại `0.2.0` trong vài giây.
-9. **Cách ly Khẩn cấp (`Quarantine`) & Điều tra:** Kích hoạt lệnh cách ly khẩn cấp đối với `@acme-cloud/regional-llm-adapter` → Trong vòng `< 1 giây` (đơn nút — `TARGET / UNVERIFIED`), mọi truy vấn mới bị chặn với `503 extension_quarantined` và truy vấn kiểm toán trả về đúng danh sách `Virtual Key` / `Project` đã đi qua gói này.
-10. **Đối chiếu Bất biến Nhân Core:** Kiểm tra lại `sha256sum(tanpopod) == CORE_BIN_SHA256_BEFORE` và `PID` của tiến trình Core không đổi — **chứng minh hoàn chỉnh tính độc lập tuyệt đối giữa hệ sinh thái Extension và chu kỳ phát hành Tanpopo Core**.
+1. **Scaffold & Test Offline:** Inside an empty directory completely outside the Core source tree, run `tanpopo plugin init` to scaffold `@acme-cloud/regional-llm-adapter@0.2.0`, run `tanpopo plugin test` passing `CT-01`..`CT-17`, and pack `acme-0.2.0.tpkg`.
+2. **Stage Pending Permission Approval:** Upload `acme-0.2.0.tpkg` into the running Tanpopo instance → Verify state halts at `PENDING_PERMISSION_APPROVAL`, displays trust tier `unverified-external`, and refuses to route traffic.
+3. **Approve Permissions & Pin `tanpopo.lock`:** Administrator approves egress solely to `Mock-Acme-Sovereign-AI` with `host_blind_inject` → Package transitions to `ENABLED_ACTIVE` and writes its SHA-256 digest to `tanpopo.lock`.
+4. **Provision Connection, Route & Budget:** Store an upstream secret in the write-only vault, create a `Provider Connection` (`Data Region = EU`), enable a `Model Deployment`, and attach it to a `Route` capped at `1.00 USD`.
+5. **Execute Unified Inference & Live Streaming:** Using the unmodified standard OpenAI SDK, send streaming chat and tool-call requests to `/v1/chat/completions` → Receive smooth SSE chunks, confirm the upstream mock receives the true secret header while the Adapter sandbox sees `0` secret bytes, and verify a `SETTLED_EXACT` ledger entry.
+6. **Verify Fault & Data-Residency Enforcement:** Reset the mock stream at chunk 5 → Confirm client receives `mid_stream_abort` with zero silent fallback and `SETTLED_ESTIMATED` accounting; mark the `EU` deployment unhealthy while only a `US` backup exists → Confirm `503 no_compliant_deployment_available`.
+7. **Block Capability-Escalating Update:** Upload `acme-0.3.0.tpkg` adding an unapproved external host in `Manifest` → Confirm `0.3.0` halts in `UPDATING_PENDING_RECONSENT` while continuous background traffic flows uninterrupted through `0.2.0` with `0` dropped requests.
+8. **Non-Escalating Upgrade & Instant `Rollback`:** Upload non-escalating `0.2.1` (draining cleanly via `DRAINING`), then trigger `Rollback` to `0.2.0` → Confirm traffic reverts cleanly to `0.2.0` within seconds.
+9. **Emergency `Quarantine` & Forensics:** Trigger emergency quarantine on `@acme-cloud/regional-llm-adapter` → Within `< 1s` (single-node — `TARGET / UNVERIFIED`), new requests fail with `503 extension_quarantined` and blast-radius audit queries list every `Virtual Key` / `Project` that traversed the package.
+10. **Verify Core Binary Invariance:** Assert `sha256sum(tanpopod) == CORE_BIN_SHA256_BEFORE` and unchanged Core `PID` — **conclusively proving total decoupling between the Extension ecosystem and the Tanpopo Core release cycle**.

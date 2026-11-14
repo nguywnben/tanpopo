@@ -1,37 +1,37 @@
-# Mô hình Tác nhân, Bản đồ Thực thể Nghiệp vụ & Máy Trạng thái (Actors, Business Entity Map & State Machines) — Tanpopo
+# Actors, Business Entity Map & State Machines — Tanpopo
 
-> **Tài liệu Phân tích Nghiệp vụ (Phase ASTRA A02 — `DRAFT / UNLOCKED SCOPE`)**
-> - **Phiên bản:** `0.1.0-a02-draft`
-> - **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Lead Business Analyst & Product Architect
-> - **Trạng thái quản trị:** **Bản nháp chưa khóa phạm vi (`DRAFT`)** — chờ Product Owner phê duyệt Cổng **Gate G1** và **Gate G2** tại [`docs/governance/decisions.md`](../governance/decisions.md). Không chứa giả định khóa cứng ngôn ngữ lập trình hay cơ sở dữ liệu.
+> **Business Analysis Specification (Phase ASTRA A02 — `DRAFT / UNLOCKED SCOPE`)**
+> - **Version:** `0.1.0-a02-draft`
+> - **Last Updated:** `2026-11-11`
+> - **Authoring Role:** Lead Business Analyst & Product Architect
+> - **Governance Status:** **Unlocked-scope draft (`DRAFT`)** — awaiting Product Owner approval of **Gate G1** and **Gate G2** in [`docs/governance/decisions.md`](../governance/decisions.md). Contains zero hard-locked programming language or database assumptions.
 
 ---
 
-## 1. Danh mục Đầy đủ 12 Tác nhân Nghiệp vụ (Actors Matrix)
+## 1. Complete Catalog of 12 Business Actors (Actors Matrix)
 
-Mỗi tác nhân dưới đây có phạm vi thẩm quyền, mục tiêu vận hành và ranh giới tin cậy độc lập:
+Each actor below operates within an independent authority scope, operational objective, and trust boundary:
 
-| Mã | Tác nhân (Actor) | Bản chất & Cấp độ tin cậy | Quyền hạn cốt lõi (Allowed) | Ranh giới bị cấm (Prohibited) |
+| ID | Actor | Nature & Trust Level | Core Allowed Privileges (Allowed) | Prohibited Boundaries (Prohibited) |
 |---|---|---|---|---|
-| **ACT-01** | **Personal Admin** | Con người — Tin cậy tối đa trên máy chủ cá nhân (`Single-Tenant Mode`) | Thực hiện trọn vẹn vai trò của `Operator`, `Organization Owner` và `Team Admin` trên bản cài đặt cá nhân của mình. | Không áp dụng trong chế độ tổ chức nhiều phòng ban nếu chính sách yêu cầu phân tách nhiệm vụ (Segregation of Duties). |
-| **ACT-02** | **Organization Owner** | Con người — Thẩm quyền quản trị cao nhất trong một `Organization` | Thiết lập cấu trúc `Project`/`Environment`, ngân sách tổng, chính sách vùng dữ liệu, ngưỡng tin cậy Plugin, quy tắc lưu giữ/xóa dữ liệu và nút ngắt khẩn cấp cấp tổ chức. | Không xem được dữ liệu của `Organization` khác trên cùng `Instance`; không sửa đổi hạ tầng máy chủ gốc của `Operator`. |
-| **ACT-03** | **Team Admin** | Con người — Thẩm quyền quản trị trong phạm vi một `Project` được giao | Quản lý thành viên nhóm, tạo/xoay vòng/thu hồi `Virtual Key`, tạo `Route`, chia nhỏ ngân sách nhóm, gắn `Provider Connection` của riêng nhóm (nếu tổ chức cho phép). | Không được tự ý cài đặt `Extension` mới lên hệ thống hoặc nâng trần ngân sách vượt quá hạn mức do `Organization Owner` cấp. |
-| **ACT-04** | **Developer** | Con người — Người tiêu dùng nội bộ trong `Project` | Sử dụng khóa ảo được cấp, thử nghiệm trên Playground, xem danh mục `Model`/`MCP Tool` được phép và tra cứu log/trace trong `Environment` được phân quyền. | Không được đọc giá trị khóa gốc (`Credential`), không sửa chính sách an toàn hay phê duyệt quyền của chính mình. |
-| **ACT-05** | **API Client** | Phần mềm tự động — Không tương tác giao diện người dùng | Gửi yêu cầu suy luận mô hình (Unified API hoặc phương ngữ gốc) kèm `Virtual Key` hợp lệ; nhận luồng phản hồi và mã lỗi chuẩn hóa. | Không được gọi API quản trị Control Plane; không được biết khóa hay cấu hình tài khoản nhà cung cấp phía sau. |
-| **ACT-06** | **Extension Publisher** | Con người / Tổ chức phát triển bên trong hoặc bên ngoài — **Mặc định không tin cậy tuyệt đối** cho tới khi qua kiểm định | Đóng gói `Extension Version` kèm `Manifest` khai báo quyền, bộ kiểm thử hợp đồng và chữ ký nguồn gốc; phát hành lên Marketplace, Git hoặc kho riêng. | Không được yêu cầu quyền ẩn ngoài `Manifest`; bên thứ ba không được mạo danh nhãn `official` của Tanpopo. |
-| **ACT-07** | **Reviewer** | Con người thẩm định độc lập (Cấp Marketplace công khai hoặc Cấp Bảo mật nội bộ) | *(Cấp Marketplace)* Duyệt/từ chối/thu hồi nhãn `verified`. *(Cấp Tổ chức)* Phê duyệt hoặc từ chối cài đặt/nâng cấp plugin tăng quyền và lệnh gọi công cụ `destructive`. | Không được tự phê duyệt yêu cầu nhạy cảm do chính mình khởi tạo nếu tổ chức bật chế độ kiểm soát hai người (Four-Eyes Principle). |
-| **ACT-08** | **Operator** | Con người — Quản trị hạ tầng hệ thống (`Instance / SRE`) | Cài đặt ban đầu, nâng cấp/hạ cấp nhân Tanpopo, cấu hình kho bí mật chủ, sao lưu/phục hồi, giám sát sức khỏe hạ tầng và cách ly khẩn cấp plugin cấp hệ thống. | Không được bỏ qua nhật ký kiểm toán (`Audit Event`) khi can thiệp khẩn cấp vào trạng thái khóa hoặc kết nối. |
-| **ACT-09** | **MCP Client** | Phần mềm (IDE, ứng dụng tác nhân) kết nối vào mặt phẳng MCP | Khám phá danh sách công cụ/tài nguyên đã lọc theo quyền và gửi yêu cầu thực thi công cụ kèm ngữ cảnh định danh. | Không được nhìn thấy hoặc gọi trực tiếp các công cụ nằm ngoài phạm vi cấp phép của `Virtual Key` / `Principal`. |
-| **ACT-10** | **MCP Server** | Hệ thống công cụ đích bên dưới (nội bộ hoặc bên thứ ba) — **Bán tin cậy** | Công bố danh mục `Tools`/`Resources`/`Prompts` và thực thi lệnh gọi được Tanpopo chuyển tiếp hợp lệ. | Không được tự ý thay đổi mô tả/cấu trúc công cụ đã ghim (`schema_hash`) mà không bị cổng phát hiện và chặn kiểm duyệt lại. |
-| **ACT-11** | **Agent** | Tác nhân tự chủ (nội bộ hoặc đối tác từ xa qua mặt phẳng A2A) | Thực hiện chuỗi tác vụ kết hợp mô hình + MCP hoặc gửi/nhận ủy quyền tác vụ bất đồng bộ (`Agent Task`) trong giới hạn ngân sách và thời gian sống được cấp. | Không được tự nới rộng quyền hạn ủy nhiệm (privilege amplification) vượt quá quyền của chủ thể gốc đã kích hoạt tác nhân. |
-| **ACT-12** | **External Identity / AI Provider** | Dịch vụ xác thực (IdP/OAuth) và Nhà cung cấp mô hình bên ngoài — Ranh giới pháp nhân độc lập | *(IdP)* Xác thực danh tính và phát hành token ủy quyền hợp lệ. *(AI Provider)* Xử lý yêu cầu suy luận theo biểu giá, hạn mức và điều khoản thương mại riêng. | Không thuộc quyền kiểm soát vận hành của Tanpopo; sự cố hoặc thay đổi điều khoản từ phía họ phải được Tanpopo cô lập an toàn. |
+| **ACT-01** | **Personal Admin** | Human — Full trust on a personal server (`Single-Tenant Mode`) | Exercises the combined responsibilities of `Operator`, `Organization Owner`, and `Team Admin` on a self-hosted personal instance. | Not applicable in multi-department organizational deployments where policy mandates Segregation of Duties. |
+| **ACT-02** | **Organization Owner** | Human — Highest administrative authority within an `Organization` | Configures `Project`/`Environment` hierarchy, top-level budgets, data residency policies, Plugin trust thresholds, retention/erasure rules, and organization-wide emergency kill-switches. | Cannot inspect data belonging to other `Organization` tenants on the same `Instance`; cannot alter host-level infrastructure owned by `Operator`. |
+| **ACT-03** | **Team Admin** | Human — Administrative authority scoped to an assigned `Project` | Manages project members, creates/rotates/revokes `Virtual Key` credentials, defines `Route` policies, subdivides project budgets, and attaches dedicated project `Provider Connection` resources (where permitted by organization policy). | Cannot install new `Extension` packages onto the instance or raise budget ceilings above allocations granted by the `Organization Owner`. |
+| **ACT-04** | **Developer** | Human — Internal consumer within a `Project` | Uses issued virtual keys, experiments in the Playground, views permitted `Model`/`MCP Tool` catalogs, and inspects logs/traces within authorized `Environment` scopes. | Cannot read raw upstream `Credential` secrets, modify safety policies, or self-approve permission requests. |
+| **ACT-05** | **API Client** | Automated software — Headless, non-UI consumer | Sends model inference requests (Unified API or native dialect) bearing a valid `Virtual Key`; consumes streamed responses and canonical error envelopes. | Cannot invoke Control Plane administrative APIs; never observes upstream provider keys or account configurations. |
+| **ACT-06** | **Extension Publisher** | Human / Internal or external engineering entity — **Untrusted by default** until verified | Packages `Extension Version` artifacts with permission-declaring `Manifest` files, contract test suites, and provenance signatures; publishes to Marketplace, Git, or private registries. | Cannot request undeclared capabilities outside the `Manifest`; third parties cannot spoof Tanpopo's `official` provenance tier. |
+| **ACT-07** | **Reviewer** | Independent human verifier (Public Marketplace tier or Internal Security tier) | *(Marketplace level)* Approves/rejects/revokes the `verified` badge. *(Organization level)* Approves or rejects permission-escalating plugin installs/updates and `destructive` tool invocations. | Cannot self-approve sensitive requests initiated by the same principal when organizational Four-Eyes controls are enabled. |
+| **ACT-08** | **Operator** | Human — System infrastructure administrator (`Instance / SRE`) | Executes initial bootstrap, upgrades/rolls back Tanpopo Core, configures master secret protection, manages backups/recovery, monitors host health, and enforces instance-wide plugin quarantine. | Cannot bypass immutable `Audit Event` logging during emergency interventions on keys or connections. |
+| **ACT-09** | **MCP Client** | Software (IDE, agent runtime) connecting to the MCP plane | Discovers permission-filtered tool/resource catalogs and submits authenticated tool execution calls. | Cannot enumerate or invoke tools outside the authorized scope of its `Virtual Key` / `Principal`. |
+| **ACT-10** | **MCP Server** | Downstream tool backend (internal or third-party) — **Semi-trusted** | Publishes `Tools`/`Resources`/`Prompts` catalogs and executes tool calls validly forwarded by Tanpopo. | Cannot silently mutate pinned tool descriptions/schemas (`schema_hash`) without triggering gateway detection and re-approval blocking. |
+| **ACT-11** | **Agent** | Autonomous agent (internal or remote partner via the A2A plane) | Executes multi-step model + MCP workflows or sends/receives asynchronous delegated tasks (`Agent Task`) within granted budget and TTL bounds. | Cannot amplify delegated privileges beyond the entitlements and remaining budget of the originating principal. |
+| **ACT-12** | **External Identity / AI Provider** | External authentication service (IdP/OAuth) and upstream model vendor — Independent legal boundary | *(IdP)* Authenticates principals and issues valid authorization tokens. *(AI Provider)* Processes inference calls under its own pricing, rate limits, and commercial terms. | Outside Tanpopo's operational control; upstream outages or terms changes must be safely contained by Tanpopo. |
 
 ---
 
-## 2. Bản đồ Thực thể Nghiệp vụ & Quyền Sở hữu (Business Entity Map & Ownership)
+## 2. Business Entity Map & Ownership
 
-### 2.1. Sơ đồ Quan hệ Thực thể Cốt lõi (Domain ER Diagram)
+### 2.1. Core Domain ER Diagram
 
 ```mermaid
 erDiagram
@@ -67,193 +67,193 @@ erDiagram
     ORGANIZATION ||--o{ AUDIT_EVENT : "records_immutable"
 ```
 
-### 2.2. Phân biệt Rạch ròi 4 Thực thể trong Chuỗi Mô hình (Tránh Nhầm lẫn Nghiệp vụ)
+### 2.2. Explicit Disambiguation of the 4-Entity Model Chain
 
-| Thực thể | Câu hỏi nghiệp vụ trả lời | Ví dụ thực tế | Chủ sở hữu & Vòng đời |
+| Entity | Business Question Answered | Concrete Example | Ownership & Lifecycle |
 |---|---|---|---|
-| **1. `Provider Adapter`** | *"Làm thế nào để nói chuyện đúng giao thức với dòng nhà cung cấp này?"* | Gói `anthropic-official@1.4.0` hoặc `corp-internal-llm@0.2.1` | Thuộc danh mục phần mở rộng cấp `Instance`/`Organization`. Không chứa khóa bí mật và không gắn với riêng dự án nào. |
-| **2. `Provider Connection`** | *"Chúng ta chứng thực bằng tài khoản/khóa nào và đi tới địa chỉ dịch vụ nào?"* | Kết nối `"Anthropic Thương mại Prod - Khối Sản phẩm"` gắn với `API Key #A1` | Thuộc `Organization` (có thể chia sẻ có kiểm soát cho một số `Project`) hoặc thuộc riêng một `Project`. |
-| **3. `Model`** *(Logical Model)* | *"Mô hình này có năng lực gì về mặt bản chất?"* | Mô hình logic `claude-sonnet-4-5` (hỗ trợ `200k context`, `vision`, `tool_calling`, `thinking`) | Danh mục chuẩn hóa từ `Provider Adapter` kết hợp khai báo quản trị; độc lập với tài khoản thanh toán. |
-| **4. `Model Deployment`** | *"Đích vận hành cụ thể nào sẽ nhận lưu lượng ngay lúc này, ở vùng địa lý nào, giá bao nhiêu và đang sống hay chết?"* | `Deployment #1`: `claude-sonnet-4-5` qua kết nối `Bedrock Frankfurt (EU)` vs `Deployment #2`: qua `Anthropic Direct (US)` | Gắn 1-1 với một `Provider Connection`. **Mọi quyết định định tuyến, ngắt mạch (circuit breaker), vùng dữ liệu và tính giá đều thực thi trên `Model Deployment`.** |
+| **1. `Provider Adapter`** | *"How do we speak the wire protocol of this provider family?"* | Package `anthropic-official@1.4.0` or `corp-internal-llm@0.2.1` | Belongs to the `Instance`/`Organization` extension catalog. Contains zero secret keys and is decoupled from individual projects. |
+| **2. `Provider Connection`** | *"Which account/credential authenticates us, and to which service endpoint?"* | Connection `"Anthropic Commercial Prod - Product Division"` bound to `API Key #A1` | Owned by an `Organization` (optionally shared downward to selected `Project` scopes) or dedicated to a single `Project`. |
+| **3. `Model`** *(Logical Model)* | *"What intrinsic capabilities does this model family possess?"* | Logical model `claude-sonnet-4-5` (supporting `200k context`, `vision`, `tool_calling`, `thinking`) | Normalized catalog entry derived from `Provider Adapter` metadata plus admin overrides; independent of billing accounts. |
+| **4. `Model Deployment`** | *"Which concrete operational target receives live traffic right now, in what data region, at what unit price, and in what health state?"* | `Deployment #1`: `claude-sonnet-4-5` via `Bedrock Frankfurt (EU)` vs `Deployment #2`: via `Anthropic Direct (US)` | Bound 1-to-1 to a `Provider Connection`. **All routing, circuit breaking, data residency, and pricing enforcement operate on `Model Deployment`.** |
 
-### 2.3. Ma trận Quyền Sở hữu, Chia sẻ & Cô lập Dữ liệu (Ownership & Sharing Matrix)
+### 2.3. Ownership, Sharing & Data Isolation Matrix
 
-| Thực thể nghiệp vụ | Cấp sở hữu gốc (Primary Owner) | Phạm vi chia sẻ hợp lệ | Hành vi khi xóa chủ sở hữu |
+| Business Entity | Primary Owner | Valid Sharing Scope | Owner Deletion Behavior |
 |---|---|---|---|
-| `Organization (Tenant)` | `Organization Owner` | **Tuyệt đối không chia sẻ** bất kỳ tài nguyên sống nào sang `Organization` khác. | Chuyển sang trạng thái chờ đóng băng → thu hồi toàn bộ khóa/kết nối → xóa dữ liệu nghiệp vụ theo chính sách lưu giữ. |
-| `Secret Credential` | `Organization` hoặc `Project` | Khóa cấp `Organization` chỉ cho phép `Project` *sử dụng gián tiếp* qua `Provider Connection` được cấp quyền, không bao giờ phơi bày chuỗi bí mật thô. | Cấm xóa cứng nếu đang gắn với `Provider Connection` đang hoạt động (phải gỡ liên kết hoặc thu hồi kết nối trước). |
-| `Provider Connection` & `Model Deployment` | `Organization` (dùng chung có chọn lọc) hoặc `Project` (dùng riêng) | Có thể cấp quyền tiêu dùng xuống từng `Project` / `Environment` thông qua `Policy` và `Route`. | Ngừng nhận lưu lượng mới (`Draining`), giữ lại định danh lịch sử tối thiểu trong sổ cái chi phí để không làm hỏng báo cáo đối soát. |
-| `Virtual Key` | `Environment` thuộc một `Project` | Chỉ thuộc duy nhất 1 `Environment` của 1 `Project` (không dùng chung một khóa ảo cho cả `dev` và `prod`). | Thu hồi tức thì hiệu lực xác thực; giữ bản ghi siêu dữ liệu khóa đã băm để tra cứu nhật ký kiểm toán. |
-| `Extension Installation` | `Instance` (với chính sách bật/tắt theo `Organization`) | Gói cài đặt được kiểm soát bởi `Operator`; từng `Organization` chỉ được kích hoạt các plugin phù hợp chính sách tin cậy của mình. | Gỡ cài đặt chỉ thành công khi không còn `Provider Connection` hay `Policy` đang hoạt động nào phụ thuộc vào nó (hoặc phải cưỡng bức `Quarantine`). |
-| `MCP Server Registration` & `MCP Tool` | `Organization` hoặc `Project` | Lọc quyền truy cập đến từng tên công cụ cụ thể (`Tool-level Scoping`) cho từng `Virtual Key` / vai trò. | Thu hồi phiên kết nối công cụ và hủy các yêu cầu chờ phê duyệt đang treo. |
-| `Budget Ledger` & `Audit Event` | `Organization` (phân bổ hạn mức con cho `Project` / `Virtual Key`) | Chỉ đọc theo phân cấp quản trị (`Team Admin` chỉ thấy sổ cái của `Project` mình; `Org Owner` thấy toàn tổ chức). | **Bất biến (Append-only/Immutable)** trong suốt thời hạn lưu giữ pháp lý/tài chính ngay cả khi khóa ảo hay dự án con đã ngừng hoạt động. |
+| `Organization (Tenant)` | `Organization Owner` | **Zero cross-tenant sharing** of any live resource across different `Organization` boundaries. | Transitions to pending freeze → revokes all keys/connections → purges operational data per retention policy. |
+| `Secret Credential` | `Organization` or `Project` | `Organization`-owned secrets permit *indirect consumption* by authorized child `Project` scopes via a `Provider Connection`, never exposing raw secret plaintext. | Hard deletion blocked while bound to an active `Provider Connection` (must detach or revoke the connection first). |
+| `Provider Connection` & `Model Deployment` | `Organization` (selectively shared) or `Project` (dedicated) | Consumption rights can be granted downward to specific `Project` / `Environment` scopes via `Policy` and `Route` bindings. | Stops admitting new traffic (`Draining`); retains minimal historical identifiers in the cost ledger to preserve chargeback reconciliation integrity. |
+| `Virtual Key` | `Environment` within a `Project` | Strictly bound to 1 `Environment` of 1 `Project` (a single virtual key is never shared across `dev` and `prod`). | Immediately invalidates authentication authority; retains hashed key metadata for audit log traceability. |
+| `Extension Installation` | `Instance` (with per-`Organization` enablement policy) | Installed artifacts are governed by `Operator`; each `Organization` may activate only plugins satisfying its trust policy. | Uninstallation succeeds only when no active `Provider Connection` or `Policy` depends on it (unless forcibly transitioned to `Quarantine`). |
+| `MCP Server Registration` & `MCP Tool` | `Organization` or `Project` | Scopes access down to individual tool names (`Tool-level Scoping`) per `Virtual Key` / role. | Revokes active tool sessions and cancels pending approval requests. |
+| `Budget Ledger` & `Audit Event` | `Organization` (sub-allocating child ceilings to `Project` / `Virtual Key`) | Read-only along administrative hierarchy (`Team Admin` views only their `Project` ledger; `Org Owner` views organization-wide records). | **Append-only / Immutable** throughout statutory/financial retention windows even after child keys or projects are decommissioned. |
 
 ---
 
-## 3. Tám Máy Trạng thái & Chuyển tiếp Nghiệp vụ (State Machines & Transitions)
+## 3. Eight Business State Machines & Transitions (`SM-01` .. `SM-08`)
 
-### SM-01: Vòng đời Phần mở rộng (`Plugin / Extension Lifecycle`)
+### SM-01: Plugin / Extension Lifecycle
 
 ```mermaid
 stateDiagram-v2
     [*] --> DISCOVERED
-    DISCOVERED --> VERIFYING : "Chọn cài đặt (Marketplace/Git/ZIP/Registry)"
-    VERIFYING --> REJECTED_INVALID : "Sai hợp đồng / hỏng chữ ký / vi phạm quy tắc nguồn"
-    VERIFYING --> PENDING_PERMISSION_APPROVAL : "Hợp lệ kỹ thuật -> Trình bảng quyền & nhãn Trust Tier"
-    PENDING_PERMISSION_APPROVAL --> INSTALLED_DISABLED : "Admin/Reviewer phê duyệt quyền"
-    PENDING_PERMISSION_APPROVAL --> CANCELLED : "Từ chối cấp quyền"
-    INSTALLED_DISABLED --> ENABLED_ACTIVE : "Kích hoạt cho lưu lượng"
-    ENABLED_ACTIVE --> DRAINING : "Tạm dừng / Chuẩn bị nâng cấp hoặc gỡ bỏ"
-    ENABLED_ACTIVE --> UPDATING_PENDING_RECONSENT : "Bản cập nhật mới đòi thêm quyền (Permission Escalation)"
-    UPDATING_PENDING_RECONSENT --> DRAINING : "Phê duyệt quyền mới -> Chuyển phiên bản êm"
-    UPDATING_PENDING_RECONSENT --> ENABLED_ACTIVE : "Từ chối quyền mới -> Giữ nguyên bản cũ đang chạy"
-    DRAINING --> INSTALLED_DISABLED : "Các luồng đang chạy hoàn tất"
-    DRAINING --> ENABLED_ACTIVE : "Kích hoạt bản mới (hoặc Rollback về bản ghim cũ)"
-    ENABLED_ACTIVE --> QUARANTINED : "Sự cố bảo mật / Vượt quyền mạng / Thu hồi khẩn cấp"
-    INSTALLED_DISABLED --> QUARANTINED : "Nhận cảnh báo độc hại"
-    QUARANTINED --> INSTALLED_DISABLED : "Chỉ khi Operator/Owner gỡ cách ly có kiểm toán"
-    INSTALLED_DISABLED --> UNINSTALLED : "Gỡ bỏ (khi không còn Connection phụ thuộc)"
-    QUARANTINED --> UNINSTALLED : "Xóa bỏ gói độc hại sau khi giữ bằng chứng audit"
+    DISCOVERED --> VERIFYING : "Select install (Marketplace/Git/ZIP/Registry)"
+    VERIFYING --> REJECTED_INVALID : "Contract mismatch / invalid signature / source policy violation"
+    VERIFYING --> PENDING_PERMISSION_APPROVAL : "Technically valid -> Present permission sheet & Trust Tier badge"
+    PENDING_PERMISSION_APPROVAL --> INSTALLED_DISABLED : "Admin/Reviewer approves permissions"
+    PENDING_PERMISSION_APPROVAL --> CANCELLED : "Deny permission grant"
+    INSTALLED_DISABLED --> ENABLED_ACTIVE : "Enable for live traffic"
+    ENABLED_ACTIVE --> DRAINING : "Pause / Prepare upgrade or removal"
+    ENABLED_ACTIVE --> UPDATING_PENDING_RECONSENT : "Update requests additional permissions (Permission Escalation)"
+    UPDATING_PENDING_RECONSENT --> DRAINING : "Approve new permissions -> Graceful version cutover"
+    UPDATING_PENDING_RECONSENT --> ENABLED_ACTIVE : "Reject new permissions -> Keep existing version active"
+    DRAINING --> INSTALLED_DISABLED : "In-flight streams complete"
+    DRAINING --> ENABLED_ACTIVE : "Activate new version (or Rollback to pinned version)"
+    ENABLED_ACTIVE --> QUARANTINED : "Security violation / Egress breach / Emergency revocation"
+    INSTALLED_DISABLED --> QUARANTINED : "Malicious advisory received"
+    QUARANTINED --> INSTALLED_DISABLED : "Audited unquarantine by Operator/Owner only"
+    INSTALLED_DISABLED --> UNINSTALLED : "Uninstall (when zero dependent Connections remain)"
+    QUARANTINED --> UNINSTALLED : "Purge malicious package after preserving audit evidence"
 ```
 
-- **Điểm chặn nghiệp vụ cốt lõi:** Mọi bản cập nhật phát sinh quyền mới (`Permission Escalation`) **bắt buộc** dừng ở `UPDATING_PENDING_RECONSENT`, tuyệt đối không tự động nâng cấp ngầm. Trạng thái `QUARANTINED` cắt lập tức mọi luồng mới và quyền mạng mà không xóa nhật ký điều tra.
+- **Core Business Gate:** Every extension update introducing expanded capabilities (`Permission Escalation`) **must** halt at `UPDATING_PENDING_RECONSENT` and never silently auto-upgrade. Entering `QUARANTINED` immediately severs new traffic and network permissions while preserving forensic logs.
 
 ---
 
-### SM-02: Vòng đời Kết nối Nhà cung cấp (`Provider Connection Lifecycle`)
+### SM-02: Provider Connection Lifecycle
 
 ```mermaid
 stateDiagram-v2
     [*] --> DRAFT
-    DRAFT --> VALIDATING : "Gắn Credential & kiểm tra kết nối thử"
-    VALIDATING --> ACTIVE : "Xác thực hợp lệ & tuân thủ chính sách"
-    VALIDATING --> DRAFT : "Sai thông tin cấu hình / mạng lỗi"
-    ACTIVE --> DEGRADED : "Tỷ lệ lỗi hoặc độ trễ vượt ngưỡng cảnh báo"
-    DEGRADED --> ACTIVE : "Sức khỏe phục hồi ổn định"
-    ACTIVE --> AUTH_EXPIRED_REAUTH_REQUIRED : "Khóa hết hạn / OAuth bị thu hồi (401/403 xác thực)"
-    DEGRADED --> AUTH_EXPIRED_REAUTH_REQUIRED : "Làm mới xác thực thất bại"
-    AUTH_EXPIRED_REAUTH_REQUIRED --> VALIDATING : "Cập nhật khóa mới / Cấp quyền lại thành công"
-    ACTIVE --> SUSPENDED_BY_ADMIN : "Tạm ngưng chủ động"
-    SUSPENDED_BY_ADMIN --> VALIDATING : "Mở lại kết nối"
-    ACTIVE --> REVOKED : "Thu hồi vĩnh viễn kết nối"
-    AUTH_EXPIRED_REAUTH_REQUIRED --> REVOKED : "Hủy bỏ kết nối"
-    SUSPENDED_BY_ADMIN --> REVOKED : "Hủy bỏ kết nối"
-    REVOKED --> ARCHIVED : "Lưu trữ lịch sử đối soát chi phí"
+    DRAFT --> VALIDATING : "Bind Credential & run connectivity probe"
+    VALIDATING --> ACTIVE : "Valid authentication & policy compliance"
+    VALIDATING --> DRAFT : "Invalid configuration / network error"
+    ACTIVE --> DEGRADED : "Error rate or latency exceeds warning threshold"
+    DEGRADED --> ACTIVE : "Steady health recovered"
+    ACTIVE --> AUTH_EXPIRED_REAUTH_REQUIRED : "Key expired / OAuth revoked (401/403 auth)"
+    DEGRADED --> AUTH_EXPIRED_REAUTH_REQUIRED : "Auth refresh failed"
+    AUTH_EXPIRED_REAUTH_REQUIRED --> VALIDATING : "Credential rotated / Re-authorization completed"
+    ACTIVE --> SUSPENDED_BY_ADMIN : "Proactive admin suspension"
+    SUSPENDED_BY_ADMIN --> VALIDATING : "Re-enable connection"
+    ACTIVE --> REVOKED : "Permanently revoke connection"
+    AUTH_EXPIRED_REAUTH_REQUIRED --> REVOKED : "Decommission connection"
+    SUSPENDED_BY_ADMIN --> REVOKED : "Decommission connection"
+    REVOKED --> ARCHIVED : "Archive historical metadata for chargeback reconciliation"
 ```
 
 ---
 
-### SM-03: Vòng đời OAuth Được Cấp phép & Tái Ủy quyền (`Authorized OAuth Token Lifecycle`)
+### SM-03: Authorized OAuth Token Lifecycle
 
 ```mermaid
 stateDiagram-v2
     [*] --> UNBOUND
-    UNBOUND --> AUTHORIZING : "Khởi tạo luồng cấp quyền chính thức (PKCE / Client Credentials)"
-    AUTHORIZING --> TOKEN_VALID : "Nhận token hợp lệ & khớp phạm vi (scopes) được phép"
-    AUTHORIZING --> UNBOUND : "Người dùng hủy / Sai phạm vi cấp phép"
-    TOKEN_VALID --> REFRESHING_SINGLEFLIGHT : "Chạm ngưỡng sắp hết hạn (chỉ 1 luồng đại diện làm mới)"
-    REFRESHING_SINGLEFLIGHT --> TOKEN_VALID : "Cấp token mới thành công"
-    REFRESHING_SINGLEFLIGHT --> REFRESH_GRACE_DEGRADED : "Lỗi mạng tạm thời phía IdP (token hiện tại còn hạn ngắn)"
-    REFRESH_GRACE_DEGRADED --> REFRESHING_SINGLEFLIGHT : "Thử lại theo lịch lùi (backoff)"
-    REFRESHING_SINGLEFLIGHT --> REAUTH_REQUIRED : "Lỗi invalid_grant / Token bị thu hồi / Đổi mật khẩu"
-    REFRESH_GRACE_DEGRADED --> REAUTH_REQUIRED : "Token chính thức hết hạn hoàn toàn"
-    REAUTH_REQUIRED --> AUTHORIZING : "Quản trị viên thực hiện cấp quyền lại"
-    TOKEN_VALID --> REVOKED : "Thu hồi chủ động từ Tanpopo"
-    REAUTH_REQUIRED --> REVOKED : "Xóa liên kết xác thực"
+    UNBOUND --> AUTHORIZING : "Initiate authorized OAuth flow (PKCE / Client Credentials)"
+    AUTHORIZING --> TOKEN_VALID : "Receive valid token & verified allowed scopes"
+    AUTHORIZING --> UNBOUND : "User cancelled / Scope mismatch"
+    TOKEN_VALID --> REFRESHING_SINGLEFLIGHT : "Reach expiry refresh window (single representative refresh flight)"
+    REFRESHING_SINGLEFLIGHT --> TOKEN_VALID : "New token issued successfully"
+    REFRESHING_SINGLEFLIGHT --> REFRESH_GRACE_DEGRADED : "Transient IdP network error (current token still within short grace)"
+    REFRESH_GRACE_DEGRADED --> REFRESHING_SINGLEFLIGHT : "Scheduled backoff retry"
+    REFRESHING_SINGLEFLIGHT --> REAUTH_REQUIRED : "invalid_grant / Token revoked / Password changed"
+    REFRESH_GRACE_DEGRADED --> REAUTH_REQUIRED : "Access token fully expired"
+    REAUTH_REQUIRED --> AUTHORIZING : "Admin performs interactive re-authorization"
+    TOKEN_VALID --> REVOKED : "Proactive revocation from Tanpopo"
+    REAUTH_REQUIRED --> REVOKED : "Delete authentication binding"
 ```
 
 ---
 
-### SM-04: Trạng thái Sức khỏe Đích Mô hình (`Model Deployment Health Lifecycle`)
+### SM-04: Model Deployment Health Lifecycle
 
 ```mermaid
 stateDiagram-v2
     [*] --> PROVISIONED
-    PROVISIONED --> HEALTHY : "Kiểm tra sẵn sàng đạt chuẩn"
-    HEALTHY --> THROTTLED_COOLDOWN : "Nhận 429 Rate Limit / Retry-After từ nhà cung cấp"
-    THROTTLED_COOLDOWN --> HEALTHY : "Hết thời gian chờ Retry-After"
-    HEALTHY --> CIRCUIT_OPEN_UNHEALTHY : "Lỗi 5xx / Timeout liên tiếp vượt ngưỡng ngắt mạch"
-    THROTTLED_COOLDOWN --> CIRCUIT_OPEN_UNHEALTHY : "Thất bại kéo dài"
-    CIRCUIT_OPEN_UNHEALTHY --> HALF_OPEN_PROBING : "Hết chu kỳ cách ly -> Cho 1 lượng nhỏ request thăm dò"
-    HALF_OPEN_PROBING --> HEALTHY : "Request thăm dò thành công liên tiếp"
-    HALF_OPEN_PROBING --> CIRCUIT_OPEN_UNHEALTHY : "Request thăm dò tiếp tục lỗi"
-    HEALTHY --> DRAINING_MAINTENANCE : "Bảo trì chủ động"
-    DRAINING_MAINTENANCE --> DISABLED : "Hoàn tất rút lưu lượng"
-    DISABLED --> PROVISIONED : "Bật lại Deployment"
+    PROVISIONED --> HEALTHY : "Readiness check passes"
+    HEALTHY --> THROTTLED_COOLDOWN : "Receive upstream 429 Rate Limit / Retry-After"
+    THROTTLED_COOLDOWN --> HEALTHY : "Retry-After cooldown elapses"
+    HEALTHY --> CIRCUIT_OPEN_UNHEALTHY : "Consecutive 5xx / Timeout breaches circuit threshold"
+    THROTTLED_COOLDOWN --> CIRCUIT_OPEN_UNHEALTHY : "Sustained upstream failure"
+    CIRCUIT_OPEN_UNHEALTHY --> HALF_OPEN_PROBING : "Isolation window elapses -> Admit bounded probe requests"
+    HALF_OPEN_PROBING --> HEALTHY : "Consecutive probe requests succeed"
+    HALF_OPEN_PROBING --> CIRCUIT_OPEN_UNHEALTHY : "Probe request fails"
+    HEALTHY --> DRAINING_MAINTENANCE : "Planned maintenance drain"
+    DRAINING_MAINTENANCE --> DISABLED : "In-flight drain completes"
+    DISABLED --> PROVISIONED : "Re-enable Deployment"
 ```
 
 ---
 
-### SM-05: Vòng đời Khóa Ảo (`Virtual Key Lifecycle`)
+### SM-05: Virtual Key Lifecycle
 
 ```mermaid
 stateDiagram-v2
     [*] --> CREATED_ACTIVE
-    CREATED_ACTIVE --> ROTATING_DUAL_VALID : "Kích hoạt xoay vòng khóa có ân hạn (cấp khóa mới, khóa cũ chờ hết hạn ngắn)"
-    ROTATING_DUAL_VALID --> CREATED_ACTIVE : "Khóa cũ hết cửa sổ ân hạn -> Chỉ khóa mới còn hiệu lực"
-    CREATED_ACTIVE --> QUOTA_PAUSED : "Chạm trần ngân sách kỳ hạn (tự mở lại khi sang kỳ mới hoặc tăng trần)"
-    QUOTA_PAUSED --> CREATED_ACTIVE : "Đầu kỳ ngân sách mới / Quản trị viên cấp thêm hạn mức"
-    CREATED_ACTIVE --> SUSPENDED : "Tạm khóa điều tra bất thường"
-    SUSPENDED --> CREATED_ACTIVE : "Xác nhận an toàn, mở lại"
-    CREATED_ACTIVE --> EXPIRED : "Chạm thời điểm hết hạn định trước (TTL)"
-    CREATED_ACTIVE --> REVOKED : "Thu hồi khẩn cấp (mất hiệu lực ngay lập tức)"
-    ROTATING_DUAL_VALID --> REVOKED : "Thu hồi khẩn cấp cả cặp khóa"
-    SUSPENDED --> REVOKED : "Chốt hủy vĩnh viễn"
-    EXPIRED --> PURGED_METADATA_RETAINED : "Xóa vật liệu xác thực, giữ mã định danh kiểm toán"
-    REVOKED --> PURGED_METADATA_RETAINED : "Xóa vật liệu xác thực, giữ mã định danh kiểm toán"
+    CREATED_ACTIVE --> ROTATING_DUAL_VALID : "Trigger grace-period rotation (new key active, old key expiring)"
+    ROTATING_DUAL_VALID --> CREATED_ACTIVE : "Grace window elapses -> Only new key remains valid"
+    CREATED_ACTIVE --> QUOTA_PAUSED : "Period budget ceiling reached (auto-resumes next period or on top-up)"
+    QUOTA_PAUSED --> CREATED_ACTIVE : "New billing period starts / Admin raises ceiling"
+    CREATED_ACTIVE --> SUSPENDED : "Temporary investigation hold"
+    SUSPENDED --> CREATED_ACTIVE : "Cleared safe, re-enabled"
+    CREATED_ACTIVE --> EXPIRED : "Preconfigured TTL reached"
+    CREATED_ACTIVE --> REVOKED : "Emergency revocation (immediate invalidation)"
+    ROTATING_DUAL_VALID --> REVOKED : "Emergency revocation of both paired keys"
+    SUSPENDED --> REVOKED : "Permanent termination"
+    EXPIRED --> PURGED_METADATA_RETAINED : "Purge auth material, retain audit identifier"
+    REVOKED --> PURGED_METADATA_RETAINED : "Purge auth material, retain audit identifier"
 ```
 
 ---
 
-### SM-06: Vòng đời Phê duyệt & Tác vụ Bất đồng bộ (`Approval & Task Lifecycle`)
+### SM-06: Approval & Task Lifecycle
 
 ```mermaid
 stateDiagram-v2
     [*] --> CREATED
-    CREATED --> EXECUTING : "Hành động nằm trong danh sách tự động cho phép"
-    CREATED --> AWAITING_APPROVAL : "Chạm quy tắc bắt buộc phê duyệt (VD: MCP Tool destructive)"
-    AWAITING_APPROVAL --> APPROVED : "Reviewer có thẩm quyền chấp thuận trong thời hạn"
-    AWAITING_APPROVAL --> REJECTED : "Reviewer từ chối"
-    AWAITING_APPROVAL --> APPROVAL_EXPIRED : "Quá thời gian chờ phê duyệt (TTL) -> Tự động hủy an toàn"
-    AWAITING_APPROVAL --> CANCELLED : "Người gọi chủ động hủy yêu cầu"
-    APPROVED --> EXECUTING : "Giải phóng lệnh thực thi đúng với tham số đã khóa băm"
-    EXECUTING --> COMPLETED : "Thực thi thành công & ghi biên nhận"
-    EXECUTING --> CANCELLED : "Hủy giữa chừng theo tín hiệu người gọi"
-    EXECUTING --> FAILED : "Lỗi thực thi (không tự động gọi lặp lại nếu có tác động phụ)"
+    CREATED --> EXECUTING : "Action matches pre-authorized allowlist"
+    CREATED --> AWAITING_APPROVAL : "Matches mandatory approval policy (e.g., destructive MCP Tool)"
+    AWAITING_APPROVAL --> APPROVED : "Authorized Reviewer approves within TTL"
+    AWAITING_APPROVAL --> REJECTED : "Reviewer rejects"
+    AWAITING_APPROVAL --> APPROVAL_EXPIRED : "Approval TTL elapses -> Safe auto-cancel"
+    AWAITING_APPROVAL --> CANCELLED : "Caller cancels request"
+    APPROVED --> EXECUTING : "Release execution strictly matching hash-bound parameters"
+    EXECUTING --> COMPLETED : "Execution succeeds & receipt recorded"
+    EXECUTING --> CANCELLED : "Aborted mid-flight on caller cancellation signal"
+    EXECUTING --> FAILED : "Execution failed (no blind retry if side-effecting)"
 ```
 
 ---
 
-### SM-07: Vòng đời Tạm giữ & Quyết toán Ngân sách (`Budget Reservation & Settlement Lifecycle`)
+### SM-07: Budget Reservation & Settlement Lifecycle
 
 ```mermaid
 stateDiagram-v2
     [*] --> CHECKED
-    CHECKED --> REJECTED_INSUFFICIENT_BUDGET : "Số dư khả dụng (trừ các khoản đang giữ chỗ) không đủ"
-    CHECKED --> RESERVED_HOLD : "Khóa tạm khoản chi ước tính tối đa của yêu cầu"
-    RESERVED_HOLD --> RELEASED_UNUSED : "Yêu cầu bị từ chối ở bước Policy / Lỗi trước khi gửi đi"
-    RESERVED_HOLD --> STREAMING_ACCRUING : "Đã mở kết nối tới nhà cung cấp đích"
-    STREAMING_ACCRUING --> SETTLED_EXACT : "Hoàn tất có đầy đủ số đo tiêu thụ chính xác từ nhà cung cấp"
-    STREAMING_ACCRUING --> SETTLED_ESTIMATED : "Đứt luồng giữa chừng / Nhà cung cấp thiếu số đo -> Áp công thức ước tính chuẩn"
-    STREAMING_ACCRUING --> SETTLED_UNMETERED_FLAGGED : "Loại tác vụ không thể ước tính tự động -> Ghi cờ chờ đối soát"
-    RESERVED_HOLD --> EXPIRED_RECLAIMED : "Sự cố sập nút mạng làm treo khoản giữ chỗ quá hạn -> Thu hồi có kiểm toán"
+    CHECKED --> REJECTED_INSUFFICIENT_BUDGET : "Available balance (minus active holds) insufficient"
+    CHECKED --> RESERVED_HOLD : "Lock estimated maximum request spend"
+    RESERVED_HOLD --> RELEASED_UNUSED : "Rejected at Policy gate / Pre-egress failure"
+    RESERVED_HOLD --> STREAMING_ACCRUING : "Upstream provider connection opened"
+    STREAMING_ACCRUING --> SETTLED_EXACT : "Completed with authoritative upstream usage metrics"
+    STREAMING_ACCRUING --> SETTLED_ESTIMATED : "Mid-stream abort / Missing upstream usage -> Apply deterministic estimator"
+    STREAMING_ACCRUING --> SETTLED_UNMETERED_FLAGGED : "Workload unestimable -> Flag for manual reconciliation"
+    RESERVED_HOLD --> EXPIRED_RECLAIMED : "Node crash leaves hold orphaned past TTL -> Audited reclamation"
 ```
 
 ---
 
-### SM-08: Vòng đời Phát hành & Nâng cấp Hệ thống (`Release & Upgrade Lifecycle`)
+### SM-08: Release & Upgrade Lifecycle
 
 ```mermaid
 stateDiagram-v2
     [*] --> PREFLIGHT_COMPAT_CHECK
-    PREFLIGHT_COMPAT_CHECK --> BLOCKED_INCOMPATIBLE : "Phát hiện Plugin đang chạy lệch phiên bản Hợp đồng không hỗ trợ"
-    PREFLIGHT_COMPAT_CHECK --> BACKUP_SNAPSHOT : "Tương thích hợp lệ -> Chụp ảnh cấu hình & sổ cái an toàn"
-    BACKUP_SNAPSHOT --> UPGRADING_CONTROL_PLANE : "Cập nhật cấu trúc quản trị tương thích ngược"
-    UPGRADING_CONTROL_PLANE --> ROLLING_DATA_PLANE : "Chuyển lưu lượng mới sang tiến trình mới, rút êm luồng cũ"
-    ROLLING_DATA_PLANE --> VERIFYING_HEALTH : "Chạy kiểm tra tự chẩn đoán đầu cuối"
-    VERIFYING_HEALTH --> COMMITTED : "Mọi chỉ số sức khỏe & kết nối ổn định"
-    UPGRADING_CONTROL_PLANE --> ROLLING_BACK : "Lỗi di trú cấu hình"
-    ROLLING_DATA_PLANE --> ROLLING_BACK : "Tỷ lệ lỗi tăng vọt"
-    VERIFYING_HEALTH --> ROLLING_BACK : "Kiểm tra sức khỏe thất bại"
-    ROLLING_BACK --> ROLLED_BACK_SAFE : "Khôi phục bản chạy ổn định liền trước & báo cáo nguyên nhân"
+    PREFLIGHT_COMPAT_CHECK --> BLOCKED_INCOMPATIBLE : "Active Plugin incompatible with target Contract version"
+    PREFLIGHT_COMPAT_CHECK --> BACKUP_SNAPSHOT : "Compatibility verified -> Snapshot config & ledger safely"
+    BACKUP_SNAPSHOT --> UPGRADING_CONTROL_PLANE : "Apply backward-compatible control plane schema migration"
+    UPGRADING_CONTROL_PLANE --> ROLLING_DATA_PLANE : "Shift new traffic to upgraded workers, gracefully drain old workers"
+    ROLLING_DATA_PLANE --> VERIFYING_HEALTH : "Run end-to-end self-diagnostic checks"
+    VERIFYING_HEALTH --> COMMITTED : "All health metrics & connections nominal"
+    UPGRADING_CONTROL_PLANE --> ROLLING_BACK : "Configuration migration failure"
+    ROLLING_DATA_PLANE --> ROLLING_BACK : "Error rate spike detected"
+    VERIFYING_HEALTH --> ROLLING_BACK : "Post-upgrade health check failed"
+    ROLLING_BACK --> ROLLED_BACK_SAFE : "Restore prior stable release & emit root-cause report"
 ```

@@ -1,55 +1,55 @@
-# `TP-IMP-0038` — Trải nghiệm Kỹ sư & Quản trị `v0.2`: `Dry-Run Route Explain` (`SCR-08`), `Playground` Phiên Ngắn Hạn (`SCR-15`), `MCP Hub` (`SCR-10`) & Hàng đợi Duyệt
+# `TP-IMP-0038` — `v0.2` Developer & Governance UX: `Dry-Run Route Explain` (`SCR-08`), Ephemeral `Playground` (`SCR-15`), `MCP Hub` (`SCR-10`) & Approval Queue
 
-| Thuộc tính | Giá trị |
+| Attribute | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0038` |
-| **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1` — **Cổng `GATE-M3`**) · `EP-07` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0020`, `TP-IMP-0029`, `TP-IMP-0030`, `TP-IMP-0037` — `GAP-01, 07`)* |
-| **Quy mô (`Size`)** | `L` (`internal/admin/http/route_explain.go`, `playground.go`, `web/console/src/pages/mcp/*`, `playground/*`) |
-| **Cấp độ Review** | `STANDARD_REVIEW` *(Phiên thử nghiệm ngắn hạn có trần chi phí an toàn `CR-10` & tuân thủ kỷ luật Astryx)* |
-| **Chủ sở hữu Kỹ thuật** | `Lead Developer Experience & Frontend Engineer` |
+| **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1` — **Gate `GATE-M3`**) · `EP-07` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0020`, `TP-IMP-0029`, `TP-IMP-0030`, `TP-IMP-0037` — `GAP-01, 07`)* |
+| **Size** | `L` (`internal/admin/http/route_explain.go`, `playground.go`, `web/console/src/pages/mcp/*`, `playground/*`) |
+| **Review Tier** | `STANDARD_REVIEW` *(Cost-capped ephemeral Playground sessions `CR-10` & strict Astryx Design System compliance)* |
+| **Technical Owner** | `Lead Developer Experience & Frontend Engineer` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Hoàn thiện bộ công cụ tương tác trực quan trên Web Console và CLI cho nhịp `v0.2` (`TP-FR-0604`, `TP-FR-0904`, `CR-10`) — khép kín **Cổng `GATE-M3`**:
-1. **Mô phỏng Giải thích Tuyến Không Gọi Thật (`Dry-Run Route Explain` — `TP-FR-0604`, `SCR-08` & `tanpopo route explain`):** Cho phép kỹ sư nhập mô hình, vùng cư trú, danh sách năng lực yêu cầu (`tools`, `vision`, `context_tokens`) để nhận cây giải thích từng bước 1→6: những `Deployment` nào bị loại (và vì chính sách, thiếu năng lực hay cầu dao đang `OPEN`), đích nào thắng cuộc và giá giữ chỗ ước tính — tốn `0` cuộc gọi mạng ra ngoài.
-2. **Bàn Thử nghiệm Tương tác Dùng Khóa Phiên Ngắn Hạn (`Interactive Playground` — `SCR-15`, `CR-10`):** Thay vì bắt người dùng dán lộ `Virtual Key` dài hạn vào trình duyệt hoặc gọi vòng qua cookie quản trị không qua sổ cái, Backend cấp một `Ephemeral Playground Key` ngắn hạn (`TTL <= 15 phút`, trần chi phí cứng thấp, tự hủy khi đăng xuất) đi qua đúng đường nóng `/v1/*` để người dùng thử truyền luồng SSE, so sánh phản hồi và xem vết thực tế ngay bên cạnh.
-3. **Giao diện Quản trị `MCP Hub` (`SCR-10`), Kết nối `OAuth 2.1` (`SCR-04`) & Hàng đợi Phê duyệt Con người (`SCR-14`):** Đăng ký máy chủ MCP, cấp quyền từng công cụ `<server>__<tool>`, xem cảnh báo lệch `schema_hash` và bấm `Approve / Reject` các lệnh gọi công cụ `destructive` kèm xem đối số JSON rõ ràng.
+## 1. Intent
+Deliver the interactive Web Console and CLI developer/governance tooling for `v0.2` (`TP-FR-0604`, `TP-FR-0904`, `CR-10`) — closing **Gate `GATE-M3`**:
+1. **Zero-Side-Effect `Dry-Run Route Explain` (`TP-FR-0604`, `SCR-08` & `tanpopo route explain`):** Allow engineers to supply a target model, data-residency constraint, and required capability set (`tools`, `vision`, `context_tokens`) to inspect the deterministic 6-step routing decision tree: which `Deployment` candidates were pruned (whether by policy, missing capability, or `OPEN` circuit breaker), which target won, and the estimated budget hold — making `0` outbound network calls.
+2. **Interactive `Playground` Backed by Ephemeral Session Keys (`Interactive Playground` — `SCR-15`, `CR-10`):** Instead of forcing operators to paste long-lived `Virtual Keys` into the browser or bypassing the FinOps ledger via admin cookies, the Backend mints a short-lived `Ephemeral Playground Key` (`TTL <= 15 minutes`, tight hard budget ceiling, auto-revoked on logout) routed directly through `/v1/*` so users can test SSE streaming, compare responses, and inspect live execution traces side-by-side.
+3. **`MCP Hub` Console (`SCR-10`), `OAuth 2.1` Connection Flow (`SCR-04`) & HITL Approval Queue (`SCR-14`):** Register MCP servers, grant per-tool `<server>__<tool>` permissions, inspect `schema_hash` drift alerts, and `Approve / Reject` queued `destructive` tool calls with full canonical JSON argument inspection.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
   - `internal/admin/http/route_explain.go` (`POST /admin/v1/routes/explain`) & `internal/cli/route/explain.go` (`tanpopo route explain`).
-  - `internal/admin/http/playground.go` (`POST /admin/v1/playground/sessions` — khớp `100%` đường dẫn chuẩn tại `TP-IMP-0002` & `CR-10`, gắn chặt với quyền của người dùng đang đăng nhập).
+  - `internal/admin/http/playground.go` (`POST /admin/v1/playground/sessions` — 100% aligned with the canonical path locked in `TP-IMP-0002` & `CR-10`, strictly scoped to the authenticated caller's permissions).
   - `web/console/src/pages/mcp/McpHubPage.tsx` (`SCR-10`).
   - `web/console/src/pages/playground/PlaygroundPage.tsx` (`SCR-15`).
-  - Cập nhật mở rộng `SCR-04` (nút ủy quyền `OAuth 2.1`), `SCR-08` (ngăn kéo `Route Explain`), và `SCR-14` (thẻ `Approval Queue`).
-- **Out-of-Scope:** Thẻ quản lý danh mục tác nhân `A2A AgentCard` trên `SCR-10` (sẽ hiển thị ở `v0.3` sau khi `TP-IMP-0042` hoàn tất).
+  - Targeted feature additions on `SCR-04` (`OAuth 2.1` authorization button), `SCR-08` (`Route Explain` drawer), and `SCR-14` (`Approval Queue` tab).
+- **Out-of-Scope:** `A2A AgentCard` catalog tab on `SCR-10` (surfaced in `v0.3` once `TP-IMP-0042` completes).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0604`, `TP-FR-0904`, `UJ-03`, `UJ-05`, `UJ-06`, `SCR-04`, `SCR-08`, `SCR-10`, `SCR-14`, `SCR-15`, `UX-AC-09`, `CR-10`.
 - **Dependencies:** `TP-IMP-0020`, `TP-IMP-0029`, `TP-IMP-0030`, `TP-IMP-0037`.
-- **Design Refs:** [`user-flows.md`](../../ux/user-flows.md) (`UJ-03`, `UJ-05`, `UJ-06`), [`screen-specifications.md`](../../ux/screen-specifications.md) (`SCR-10`, `SCR-15`), [`routing-and-policy.md`](../../specifications/routing-and-policy.md) Mục 5, [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-10`).
+- **Design Refs:** [`user-flows.md`](../../ux/user-flows.md) (`UJ-03`, `UJ-05`, `UJ-06`), [`screen-specifications.md`](../../ux/screen-specifications.md) (`SCR-10`, `SCR-15`), [`routing-and-policy.md`](../../specifications/routing-and-policy.md) Section 5, [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-10`).
 
 ## 4. API, Wire & Data Contracts
-- **Bất biến Không Tác động Phụ Của `Route Explain`:** Gọi `POST /admin/v1/routes/explain` không bao giờ trừ hạn ngạch `RPM/TPM`, không tạo giữ chỗ sổ cái và không gửi bất kỳ gói tin nào lên nhà cung cấp AI.
-- **Giới hạn An toàn `Playground`:** Vai trò `FINOPS_VIEWER` không thể gọi `POST /admin/v1/playground/sessions`; mọi cuộc gọi từ `SCR-15` đều được ghi sổ cái bình thường vào dự án được chọn và mặc định vẫn giữ `0 byte` nội dung lưu xuống đĩa trên máy chủ (nội dung hội thoại chỉ nằm tạm trong RAM trình duyệt).
+- **Zero-Side-Effect Invariant on `Route Explain`:** Calling `POST /admin/v1/routes/explain` never decrements `RPM/TPM` rate-limit buckets, never creates FinOps budget holds, and never transmits packets to upstream AI providers.
+- **`Playground` Safety Guardrails:** Principals with the `FINOPS_VIEWER` role cannot invoke `POST /admin/v1/playground/sessions`; all requests initiated from `SCR-15` settle normally into the selected project's FinOps ledger while preserving the default `0-byte` server-side prompt persistence rule (conversation turns reside solely in transient browser memory).
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1`:** Given tuyến phức tạp gồm 4 đích có vùng cư trú, năng lực và trạng thái cầu dao khác nhau, When chạy `tanpopo route explain` hoặc thử trên `SCR-08`, Then kết quả giải thích khớp `100%` với quyết định định tuyến thực tế của `RouteResolver`.
-- **`AC-2` (`UX-AC-09` Smooth `100 tok/s` Playground Stream):** Chạy kịch bản E2E cho cả 3 hành trình `UJ-03` (ủy quyền OAuth 2.1 hợp lệ), `UJ-06` (duyệt công cụ MCP bị chặn `destructive` & cảnh báo `schema_hash` thay đổi) và `SCR-15` (`Playground` nhận luồng SSE tốc độ `100 tokens/s` mượt mà không giật khung hình + hủy giữa chừng) đạt `100%`.
-- **`NEG-1`:** Khi khóa phiên `Playground` hết hạn sau 15 phút hoặc người dùng đăng xuất, khóa đó bị thu hồi ngay lập tức (`401`).
-- **`NEG-2`:** Chạy `npx @astryxdesign/cli doctor --built dist` đạt `0 fail` (`0` thẻ `div`/`span` thô, `Badge` chỉ dùng cho số lượng như số yêu cầu đang chờ duyệt trên `SCR-14`).
+- **`AC-1`:** Given a multi-target route spanning 4 deployments with distinct residency regions, capabilities, and circuit-breaker states, When running `tanpopo route explain` or inspecting via `SCR-08`, Then the dry-run explanation matches `RouteResolver`'s live routing decision `100%`.
+- **`AC-2` (`UX-AC-09` Smooth `100 tok/s` Playground Stream):** End-to-end Playwright journeys pass at `100%` across `UJ-03` (authorized OAuth 2.1 grant), `UJ-06` (approving a gated `destructive` MCP tool call & surfacing `schema_hash` drift warnings), and `SCR-15` (`Playground` rendering a `100 tokens/s` SSE stream smoothly without dropped frames + mid-stream cancellation).
+- **`NEG-1`:** When an ephemeral `Playground` session key expires after 15 minutes or the operator logs out, subsequent calls using that key are immediately rejected (`401`).
+- **`NEG-2`:** Running `npx @astryxdesign/cli doctor --built dist` passes with `0 fail` (`0` raw `div`/`span` elements, `Badge` used strictly for numeric counts such as pending approval counts on `SCR-14`).
 
 ## 6. Test Commands & Required Evidence
 - `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
-- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/admin/http/... ./internal/cli/route/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/admin/http/... ./internal/cli/route/...`)*
-- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/admin/http/... ./internal/cli/route/...`
+- Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/admin/http/... ./internal/cli/route/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/admin/http/... ./internal/cli/route/...`)*
+- Race detector (`-race`): `go test -v -race ./internal/admin/http/... ./internal/cli/route/...`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Bảng xem đối số chờ duyệt trên `SCR-14` hiển thị văn bản JSON thuần an toàn chống XSS và khóa nút `Approve` nếu mã băm công cụ hiện tại bị lệch (`SCHEMA_DRIFT_BLOCKED`).
-- **Rollback:** Tắt tính năng `Playground` qua cờ cấu hình `console.playground.enabled = false` cho các môi trường sản xuất khóa chặt.
+- **Security Invariant:** The pending-approval argument inspector on `SCR-14` renders strictly escaped plain-text JSON preventing XSS and disables the `Approve` button whenever the underlying tool hash is drifted (`SCHEMA_DRIFT_BLOCKED`).
+- **Rollback:** `Playground` can be disabled cleanly in locked-down production environments via `console.playground.enabled = false`.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0020`, `TP-IMP-0029`, `TP-IMP-0030` và `TP-IMP-0037` đã hoàn tất.
-- **DoD:** Vượt qua toàn bộ tiêu chí Cổng `GATE-M3` (`v0.2`), `astryx doctor --built dist` đạt `0 fail`, `axe-core` sạch lỗi.
+- **DoR:** `TP-IMP-0020`, `TP-IMP-0029`, `TP-IMP-0030`, and `TP-IMP-0037` are complete.
+- **DoD:** All Gate `GATE-M3` (`v0.2`) exit criteria satisfied, `astryx doctor --built dist` at `0 fail`, and `axe-core` accessibility audits clean.

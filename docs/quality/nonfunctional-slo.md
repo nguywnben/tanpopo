@@ -1,116 +1,116 @@
-# Chỉ tiêu Độ tin cậy, NFR, Chịu tải Quá ngưỡng & Phân tích Chế độ Lỗi Sâu (Reliability, SLOs & Deep FMEA) — Tanpopo
+# Reliability Targets, Non-Functional SLOs, Overload Control & Deep FMEA — Tanpopo
 
-> **Tài liệu Kỹ thuật Độ tin cậy & SRE (Phase ASTRA A07 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — NO CODE`)**
-> - **Mã tài liệu:** `SPEC-QA-03` | **Phiên bản:** `0.1.0-step07-draft` | **Ngày cập nhật:** `2026-11-12`
-> - **Vai trò biên soạn:** Principal SRE, Performance Engineer & Resilience Architect
-> - **Kỷ luật trung thực đo lường:** Tính đến hết bước **A07**, dự án **chưa viết mã nguồn thực thi và chưa chạy thử nghiệm đo tải thực tế**. Do đó, **mọi con số độ trễ, thông lượng, dung lượng bộ nhớ, `MTTR` và `SLO` trong tài liệu này đều bắt buộc mang nhãn `TARGET / UNVERIFIED`** và chỉ được chuyển sang `VERIFIED` sau khi có báo cáo đo tự động từ `SPIKE-01`..`04` và `Stage 4 CI`.
-> - **Truy vết Yêu cầu:** `TP-NFR-0101`..`1002`, `TP-AC-N01`..`10`, `OPS-AC-01`..`12`, `ARCH-SYS-01`, `ARCH-OPS-01`, `ADR-0001`..`0006`.
+> **Reliability & SRE Engineering Specification (Phase ASTRA A07 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — NO CODE`)**
+> - **Document ID:** `SPEC-QA-03` | **Version:** `0.1.0-step07-draft` | **Last Updated:** `2026-11-12`
+> - **Authoring Role:** Principal SRE, Performance Engineer & Resilience Architect
+> - **Measurement Honesty Discipline:** Through the completion of phase **A07**, **zero production runtime code has been written and zero live load benchmarks have been executed**. Accordingly, **every latency, throughput, memory footprint, `MTTR`, and `SLO` figure in this document is strictly labeled `TARGET / UNVERIFIED`** and may transition to `VERIFIED` only after automated benchmark evidence from `SPIKE-01`..`04` and `Stage 4 CI` is recorded.
+> - **Requirements Traceability:** `TP-NFR-0101`..`1002`, `TP-AC-N01`..`10`, `OPS-AC-01`..`12`, `ARCH-SYS-01`, `ARCH-OPS-01`, `ADR-0001`..`0006`.
 
 ---
 
-## 1. Bảng Mục tiêu Cấp độ Dịch vụ (`SLOs`), Độ trễ Cộng thêm & Dung lượng (`TARGET / UNVERIFIED`)
+## 1. Service Level Objectives (`SLOs`), Gateway Overhead & Capacity Targets (`TARGET / UNVERIFIED`)
 
-| Mã Chỉ tiêu | Hạng mục Đo lường (`SLI` — Chỉ số Thực tế) | Ngưỡng Cam kết Đề xuất | Trạng thái Xác thực | Phương pháp Kiểm chứng Tự động (`Stage 4 CI / PoC`) |
+| Target ID | Measured Service Level Indicator (`SLI`) | Proposed Commitment Threshold | Verification Status | Automated Verification Method (`Stage 4 CI / PoC`) |
 |---|---|---|---|---|
-| **`SLO-01`** | **Độ sẵn sàng Nội tại Của Data Plane (`Internal Availability`)** — Tỷ lệ truy vấn hợp lệ không gặp lỗi nội bộ `500` của Tanpopo (loại trừ lỗi `429/5xx` từ hãng AI đích). | **`>= 99.9%` / tháng** *(Ngân sách lỗi: `43,2 phút/tháng`)* | **`TARGET / UNVERIFIED`** | Giám sát liên tục qua chỉ số `tanpopo_gateway_internal_errors_total / tanpopo_requests_total` và bài đo tải bền `24h`. |
-| **`SLO-02`** | **Độ trễ Cộng thêm Của Gateway (`Proxy Overhead` không tính thời gian chờ hãng AI):**<br/>- Nhánh `Tier 1 Declarative`<br/>- Nhánh `Tier 2 Wasm Sandbox` | - Tier 1: **`p95 < 2,0 ms`**, **`p99 < 5,0 ms`**<br/>- Tier 2: **`p95 < 5,0 ms`**, **`p99 < 12,0 ms`** | **`TARGET / UNVERIFIED`** | Kịch bản `k6` bắn `500 RPS` vào `FakeLLMServer` (`0 ms` delay) trên máy chuẩn `2 vCPU / 2 GiB RAM` (`SPIKE-01`, `SPIKE-02`). |
-| **`SLO-03`** | **Độ trễ Chuyển tiếp Từng Mảnh `SSE` & Phản ứng Hủy luồng:**<br/>- Độ trễ qua cổng mỗi mảnh `data:`<br/>- Thời gian đóng kết nối đích khi khách hủy | - Mảnh SSE: **`p95 < 1,0 ms`**, **`p99 < 2,5 ms`**<br/>- Hủy upstream: **`< 500 ms`** | **`TARGET / UNVERIFIED`** | Đo chênh lệch dấu thời gian nano-giây giữa `FakeLLMServer` và trình đọc khách trên `1.000` luồng mở đồng thời (`CT-07`, `CT-11`). |
-| **`SLO-04`** | **Tỷ lệ Lỗi Nội bộ Dưới Tải Định mức (`Internal Error Rate`)** | **`< 0,05%`** | **`TARGET / UNVERIFIED`** | Bài kiểm thử tải kết hợp thay đổi cấu hình liên tục trong `30 phút`. |
-| **`SLO-05`** | **Thời gian Khởi động Lạnh & Dấu chân Bộ nhớ Tĩnh (`Cold Start & Idle RSS`):**<br/>- Từ lúc chạy lệnh tới `/readyz = 200`<br/>- Bộ nhớ `RSS` khi nghỉ (chế độ đơn nút) | - Khởi động: **`< 3,0 giây`**<br/>- Bộ nhớ nghỉ: **`< 128 MiB`** | **`TARGET / UNVERIFIED`** | Đo tự động trên container Linux sạch giới hạn tài nguyên (`OPS-AC-01`). |
-| **`SLO-06`** | **Sức chịu tải Định mức Trên Một Nút (`Single-Node Capacity` — `2 vCPU / 2 GiB RAM`)** | **`>= 1.000` luồng SSE đồng thời** + **`>= 500 RPS` truy vấn ngắn** | **`TARGET / UNVERIFIED`** | Bài đo tải bậc thang (`Step-Load k6`) kiểm tra không rò rỉ goroutine hay tăng bộ nhớ tuyến tính. |
-| **`SLO-07`** | **Độ trễ Lan truyền Lệnh Thu hồi Khóa / Cách ly Plugin (`Revocation SLA`)** | - Đơn nút: **`< 1,0 giây`**<br/>- Cụm đa nút: **`p99 < 5,0 giây`** | **`TARGET / UNVERIFIED`** | Kịch bản `AUTH-06` & `OPS-AC-03` bắn truy vấn liên tục trong lúc gọi API `Emergency Revoke`. |
-| **`SLO-08`** | **Khôi phục Thảm họa & Khắc phục Sự cố (`MTTR / RPO / RTO`)** | - `MTTR`: **`< 15 phút`**<br/>- `RTO`: **`< 15 phút`**<br/>- `RPO`: **`<= 15 phút`** (SQLite backup) / **`<= 1 phút`** (Postgres WAL) | **`TARGET / UNVERIFIED`** | Diễn tập bấm giờ tự động 4 sổ tay `DR-01`..`04` trên môi trường sạch (`OPS-AC-07`). |
+| **`SLO-01`** | **Data-Plane Internal Availability** — Fraction of valid inference requests free of internal Tanpopo `500` faults (excluding upstream AI vendor `429/5xx` responses). | **`>= 99.9%` / month** *(Error budget: `43.2 min/month`)* | **`TARGET / UNVERIFIED`** | Continuous monitoring of `tanpopo_gateway_internal_errors_total / tanpopo_requests_total` plus `24h` soak load testing. |
+| **`SLO-02`** | **Added Gateway Proxy Overhead (excluding upstream LLM wait time):**<br/>- `Tier 1 Declarative` path<br/>- `Tier 2 Wasm Sandbox` path | - Tier 1: **`p95 < 2.0 ms`**, **`p99 < 5.0 ms`**<br/>- Tier 2: **`p95 < 5.0 ms`**, **`p99 < 12.0 ms`** | **`TARGET / UNVERIFIED`** | `k6` driving `500 RPS` against `FakeLLMServer` (`0 ms` upstream delay) on a `2 vCPU / 2 GiB RAM` baseline runner (`SPIKE-01`, `SPIKE-02`). |
+| **`SLO-03`** | **Per-Chunk `SSE` Forwarding Latency & Cancellation Propagation:**<br/>- Gateway forwarding delta per `data:` frame<br/>- Upstream socket close latency upon client cancel | - SSE chunk: **`p95 < 1.0 ms`**, **`p99 < 2.5 ms`**<br/>- Upstream cancel: **`< 500 ms`** | **`TARGET / UNVERIFIED`** | Nanosecond timestamp delta between `FakeLLMServer` and client reader across `1,000` concurrent open streams (`CT-07`, `CT-11`). |
+| **`SLO-04`** | **Internal Error Rate Under Rated Load** | **`< 0.05%`** | **`TARGET / UNVERIFIED`** | Load test interleaved with continuous configuration mutations over `30 min`. |
+| **`SLO-05`** | **Cold-Start Time & Idle Memory Footprint (`Cold Start & Idle RSS`):**<br/>- Process launch to `/readyz = 200`<br/>- Idle `RSS` memory (single-node standalone) | - Cold start: **`< 3.0 s`**<br/>- Idle RSS: **`< 128 MiB`** | **`TARGET / UNVERIFIED`** | Automated measurement inside a clean resource-capped Linux container (`OPS-AC-01`). |
+| **`SLO-06`** | **Single-Node Rated Capacity (`2 vCPU / 2 GiB RAM`)** | **`>= 1,000` concurrent SSE streams** + **`>= 500 RPS` short requests** | **`TARGET / UNVERIFIED`** | Step-load `k6` profile asserting zero goroutine leaks and bounded non-linear heap growth. |
+| **`SLO-07`** | **Key Revocation / Plugin Quarantine Propagation Latency (`Revocation SLA`)** | - Single-node: **`< 1.0 s`**<br/>- Multi-node cluster: **`p99 < 5.0 s`** | **`TARGET / UNVERIFIED`** | `AUTH-06` & `OPS-AC-03` continuous request probe while firing `Emergency Revoke`. |
+| **`SLO-08`** | **Disaster Recovery & Incident Restoration (`MTTR / RPO / RTO`)** | - `MTTR`: **`< 15 min`**<br/>- `RTO`: **`< 15 min`**<br/>- `RPO`: **`<= 15 min`** (SQLite backup) / **`<= 1 min`** (Postgres WAL) | **`TARGET / UNVERIFIED`** | Timed automated drills across all 4 runbooks `DR-01`..`04` on clean infrastructure (`OPS-AC-07`). |
 
 ---
 
-## 2. Kiểm soát Quá tải, Đua tranh Cấu hình, Sao lưu, Nâng cấp & Chế độ Cụm HA
+## 2. Overload Control, Concurrent Config Mutations, Backups, Upgrades & HA Cluster Resilience
 
-1. **Giới hạn Tốc độ Đa Tầng & Xả tải Chủ động Khi Quá ngưỡng (`Rate Limiting & Graceful Load Shedding`):**
-   - Áp dụng đồng thời bộ đếm tốc độ theo `Virtual Key`, `Project` và `Organization` (`RPM`, `TPM` ước tính đầu vào và `Max Concurrent Streams`).
-   - **Cơ chế Xả tải Bảo vệ Sống còn (`Load Shedding`):** Khi số luồng đang mở trên một nút chạm **`90%` trần cấu hình** hoặc bộ nhớ heap Go chạm **`85%` `GOMEMLIMIT`**, cổng tự động từ chối sớm các yêu cầu mới độ ưu tiên thấp ngay tại biên mạng với mã **`503 gateway_overloaded`** kèm tiêu đề `Retry-After: 2` (có cộng nhiễu ngẫu nhiên chống dội tải đồng loạt), bảo toàn `100%` các luồng SSE đang truyền dở và mặt phẳng quản trị `/healthz` không bị `OOMKilled`.
-   - Khi hàng đợi xuất `OpenTelemetry` đầy trần `32 MiB` do bộ thu ngoài chết, hệ thống xả bỏ bản ghi cũ nhất (`Drop-Oldest`) và tăng bộ đếm `tanpopo_telemetry_dropped_total` — **tuyệt đối không bao giờ chặn luồng suy luận vì lỗi hệ thống giám sát (`RSK-015`)**.
-2. **Đột biến Cấu hình Đồng thời Dưới Tải Cao (`Concurrent Config Mutations`):**
-   - Hai quản trị viên sửa cùng một `Route` hoặc `Policy` không gửi đúng `If-Match` sẽ nhận ngay `409 conflict_version_mismatch`.
-   - Ở đường đọc Data Plane, cấu hình được đóng gói thành con trỏ bất biến `atomic.Pointer[ConfigSnapshot]`: bài kiểm thử căng thẳng bắn `50` lần cập nhật tuyến/giây song song với `1.000 RPS` lưu lượng suy luận phải đạt **`0` tranh chấp khóa (`mutex contention`) và `0` truy vấn đọc phải cấu hình nửa vời**.
-3. **Diễn tập Sao lưu / Khôi phục, An toàn Di trú & Nâng cấp Không Gián đoạn (`Startup / Upgrade / Rollback / HA`):**
-   - **Khởi động & Tắt Êm (`Graceful Drain`):** Khi nhận `SIGTERM`, nút lập tức chuyển `/readyz` sang `503 draining` (để cân bằng tải ngưng gửi kết nối mới), giữ sống các luồng SSE đang truyền tới khi kết thúc tự nhiên hoặc chạm `drain_timeout` (mặc định `60s`), quyết toán nốt các khoản giữ chỗ ngân sách rồi mới thoát `exit 0`.
-   - **Chế độ Cụm Đa Bản sao (`HA Chaos Matrix`):** Bộ kiểm thử tiêm lỗi cụm kiểm chứng 3 kịch bản thực tế: (a) Giết đột ngột `Valkey` → các nút tự hạ cấp về bộ đếm tốc độ cục bộ chia theo số nút ước tính và kênh `PG LISTEN/NOTIFY`, không rớt truy vấn; (b) Chuyển đổi dự phòng `PostgreSQL Primary` → hồ kết nối tự nối lại trong vài giây, Data Plane vẫn phục vụ đọc từ `ConfigSnapshot` trong RAM; (c) Giết bất ngờ `1` trong `3` bản sao `tanpopod` giữa luồng → `2` bản sao còn lại gánh toàn bộ lưu lượng mới.
+1. **Multi-Tier Rate Limiting & Proactive Load Shedding (`Rate Limiting & Graceful Load Shedding`):**
+   - Simultaneously enforces token-bucket/sliding-window limits across `Virtual Key`, `Project`, and `Organization` scopes (`RPM`, estimated input `TPM`, and `Max Concurrent Streams`).
+   - **Protective Load Shedding:** When active open streams on a node reach **`90%` of its configured ceiling** or Go heap usage reaches **`85%` of `GOMEMLIMIT`**, the ingress sheds newly arriving low-priority requests immediately at the edge with **`503 gateway_overloaded`** and `Retry-After: 2` (with randomized jitter to prevent thundering-herd retries), preserving `100%` of in-flight SSE streams and keeping `/healthz` safe from `OOMKilled`.
+   - When the outbound `OpenTelemetry` export buffer hits its `32 MiB` cap due to a dead external collector, Tanpopo drops the oldest buffered spans (`Drop-Oldest`) and increments `tanpopo_telemetry_dropped_total` — **never blocking inference traffic due to observability backend outages (`RSK-015`)**.
+2. **Concurrent Configuration Mutations Under Heavy Load:**
+   - Two administrators editing the same `Route` or `Policy` with a stale `If-Match` ETag immediately receive `409 conflict_version_mismatch`.
+   - On the Data-Plane read path, active configuration is published via an immutable `atomic.Pointer[ConfigSnapshot]`: stress tests firing `50` route updates/sec alongside `1,000 RPS` inference traffic must observe **`0` mutex contention and `0` torn partial-config reads**.
+3. **Backup/Restore Drills, Migration Safety & Zero-Downtime Upgrades (`Startup / Upgrade / Rollback / HA`):**
+   - **Graceful Startup & Drain:** Upon `SIGTERM`, a node immediately flips `/readyz` to `503 draining` (stopping load-balancer new connections), keeps active SSE streams alive until natural completion or `drain_timeout` (default `60s`), settles remaining budget holds, and exits cleanly (`exit 0`).
+   - **Multi-Replica HA Chaos Matrix:** Fault-injection tests validate 3 cluster failure scenarios: (a) Abrupt `Valkey` kill → nodes degrade gracefully to local per-node quota slices and `PG LISTEN/NOTIFY` without dropping inference requests; (b) `PostgreSQL Primary` failover → connection pool reconnects within seconds while the Data Plane continues serving reads from in-RAM `ConfigSnapshot`; (c) Abrupt `SIGKILL` of `1` of `3` `tanpopod` replicas mid-stream → remaining `2` replicas absorb all new traffic seamlessly.
 
 ---
 
-## 3. Phân tích Chiều Sâu Tám Chế độ Hỏng hóc Trọng yếu (`Deep Failure Mode & Effects Analysis — FMEA-01 .. FMEA-08`)
+## 3. Deep Failure Mode & Effects Analysis (`FMEA-01 .. FMEA-08`)
 
-Bảng phân tích dưới đây khóa chặt hành vi tất định của Tanpopo trước **8 ca hỏng hóc nguy hiểm nhất trong sản xuất** — không để lập trình viên phải tự suy đoán cách xử lý ngoại lệ lúc viết code:
+The analysis below locks down deterministic runtime behavior across the **8 most hazardous production failure modes** — leaving zero ambiguity for engineers during implementation:
 
-### `FMEA-01` — Đứt Luồng Giữa Chừng & Lệnh Cấm Chuyển Mạch Sau Mảnh Đầu Tiên (`Partial Stream + Fallback`)
-- **Tình huống kích hoạt:** Nhà cung cấp chính (`Primary Deployment`) trả `HTTP 200 text/event-stream`, đã truyền thành công `k >= 1` mảnh văn bản/gọi hàm về phía `API Client`, sau đó kết nối TCP bị đứt ngang hoặc hãng trả lỗi giữa chừng.
-- **Hiểm họa nếu xử lý sai:** Nếu Gateway âm thầm gọi sang nhà cung cấp dự phòng (`Fallback`) và đổ tiếp luồng mới nối đuôi vào luồng cũ, ứng dụng khách sẽ nhận một câu trả lời lắp ghép vô nghĩa hoặc thực thi lặp lại lệnh gọi công cụ `tool_calls` hai lần.
-- **Quy tắc xử lý bất biến:**
-  1. **Trước khi gửi byte nội dung đầu tiên (`k = 0`):** Lỗi kết nối, quá hạn `TTFT`, `429` hoặc `5xx` → **ĐƯỢC PHÉP** chuyển mạch sang đích dự phòng kế tiếp trong `Route` (`SM-04`).
-  2. **Sau khi đã gửi mảnh đầu tiên (`k >= 1`):** **CẤM TUYỆT ĐỐI mọi hành vi retry hoặc chuyển mạch dự phòng.** Gateway phát một khung sự kiện lỗi chuẩn hóa cuối luồng (`event: error` kèm mã `mid_stream_abort`, `request_id` và số mảnh đã phát) rồi đóng kết nối HTTP rõ ràng để SDK phía khách nhận biết luồng chưa hoàn chỉnh.
-- **Quyết toán & Kiểm toán:** Đếm số token đã phát thực tế qua bộ ước lượng cục bộ, chốt bút toán sổ cái ở trạng thái **`SETTLED_ESTIMATED`** (giải phóng phần tiền giữ chỗ còn dư) và ghi nhận điểm phạt sức khỏe cho `Deployment` vừa đứt.
-- **Bài kiểm thử bắt buộc:** `CT-10`, `EXT-ACCEPT-01` (Bước 6).
+### `FMEA-01` — Mid-Stream Disconnect & Post-First-Chunk Failover Prohibition (`Partial Stream + Fallback`)
+- **Trigger Scenario:** Primary upstream deployment returns `HTTP 200 text/event-stream`, flushes `k >= 1` content or tool-call delta chunks to the `API Client`, and subsequently drops the TCP socket or emits an upstream mid-stream error.
+- **Hazard if Mishandled:** Silently failing over to a backup provider and appending a fresh completion stream onto the partial stream produces corrupted chimeric text or executes duplicate `tool_calls`.
+- **Invariant Handling Rules:**
+  1. **Before flushing the first content byte (`k = 0`):** Connection errors, `TTFT` timeouts, `429`, or `5xx` responses **ARE PERMITTED** to fail over to the next candidate in the `Route` (`SM-04`).
+  2. **After flushing the first content chunk (`k >= 1`):** **ALL automatic retries and fallback transitions are STRICTLY PROHIBITED.** The gateway emits a canonical terminal SSE error frame (`event: error` carrying `mid_stream_abort`, `request_id`, and flushed chunk count) and closes the HTTP stream cleanly so client SDKs detect the incomplete stream.
+- **Settlement & Audit:** Counts actually flushed tokens via the local tokenizer fallback, settles the ledger hold as **`SETTLED_ESTIMATED`** (releasing unused hold remainder), and records a health penalty against the aborted `Deployment`.
+- **Mandatory Verification:** `CT-10`, `EXT-ACCEPT-01` (Step 6).
 
-### `FMEA-02` — Thử Lại Các Lệnh Gọi Công cụ Có Tác động Phụ (`Retrying Tool Calls with Side Effects`)
-- **Tình huống kích hoạt:** Tác nhân gọi công cụ qua mặt phẳng `MCP Hub` (ví dụ `charge_credit_card`, `create_jira_issue`, `delete_cluster`) và kết nối mạng tới máy chủ MCP bị quá hạn đọc (`Read Timeout`) hoặc rớt kết nối sau khi gói tin yêu cầu đã rời khỏi card mạng của Tanpopo.
-- **Hiểm họa nếu xử lý sai:** Cơ chế retry tự động mặc định của proxy HTTP sẽ gửi lệnh lần thứ 2 làm trừ tiền khách hàng hai lần hoặc xóa nhầm tài nguyên tiếp theo.
-- **Quy tắc xử lý bất biến:**
-  1. Mọi công cụ MCP đều mang phân loại tác động (`read_only`, `mutating`, `destructive` — mặc định nếu chưa phân loại thì coi là **`mutating`** để đóng an toàn).
-  2. Chỉ công cụ `read_only` mới được phép thử lại tối đa `1` lần khi lỗi mạng kết nối ban đầu. Với **`mutating` và `destructive`, số lần tự động thử lại bị khóa cứng bằng `0`** một khi byte đầu tiên của yêu cầu đã được ghi ra socket.
-  3. Tanpopo đính kèm tiêu đề `Idempotency-Key` xuyên suốt xuống máy chủ MCP và trả về cho tác nhân mã lỗi tường minh **`504 ambiguous_side_effect_timeout`** kèm hướng dẫn kiểm tra trạng thái thực tế trước khi quyết định gọi lại.
-  4. Với công cụ `destructive`, phiếu phê duyệt `Pre-Approval Token` bị gắn cứng với mã băm `SHA-256` của tham số chuẩn hóa JCS và chỉ có giá trị sử dụng **đúng `1` lần (`Single-Use Nonce`)**.
-- **Bài kiểm thử bắt buộc:** `CT-22`.
+### `FMEA-02` — Retrying Tool Calls with External Side Effects (`Retrying Tool Calls with Side Effects`)
+- **Trigger Scenario:** An agent invokes a tool through `MCP Hub` (e.g., `charge_credit_card`, `create_jira_issue`, `delete_cluster`) and the network connection to the MCP server hits a `Read Timeout` or socket reset after request bytes have left Tanpopo's NIC.
+- **Hazard if Mishandled:** Naive HTTP proxy retries dispatch the mutation a second time, double-charging customers or deleting unintended resources.
+- **Invariant Handling Rules:**
+  1. Every MCP tool carries an explicit side-effect classification (`read_only`, `mutating`, `destructive` — unclassified tools default fail-closed to **`mutating`**).
+  2. Only `read_only` tools permit at most `1` retry on initial connection failure. For **`mutating` and `destructive` tools, automatic retry count is hard-locked to `0`** once the first request byte is written to the socket.
+  3. Tanpopo propagates an `Idempotency-Key` header end-to-end to the MCP server and returns **`504 ambiguous_side_effect_timeout`** instructing the caller to inspect upstream state before deciding whether to re-invoke.
+  4. For `destructive` tools, the human `Pre-Approval Token` is cryptographically bound to the `SHA-256` digest of JCS-canonicalized arguments and enforced as a **`Single-Use Nonce`** (exact-once consumption).
+- **Mandatory Verification:** `CT-22`.
 
-### `FMEA-03` — Rò rỉ Quyền Riêng tư & Đầu độc Chéo Thuê bao Qua Bộ nhớ Đệm (`Response Cache Privacy`)
-- **Tình huống kích hoạt:** Bật bộ nhớ đệm phản hồi (`Exact` hoặc `Semantic Cache`) trên cổng dùng chung nhiều dự án/phòng ban; `Project A` hỏi câu hỏi trùng khớp ngữ nghĩa với câu hỏi trước đó của `Project B` có đính kèm ngữ cảnh mật hoặc quyền công cụ cao hơn.
-- **Hiểm họa nếu xử lý sai:** Trả nhầm câu trả lời chứa dữ liệu mật của `Project B` sang `Project A` (*Cross-Tenant Cache Bleed*), hoặc lưu đệm một phản hồi bị cắt cụt/chứa thông tin cá nhân nhạy cảm.
-- **Quy tắc xử lý bất biến:**
-  1. **Mặc định tắt (`Disabled by Default`);** chỉ bật khi quản trị viên cấu hình tường minh trên từng `Route` / `Project`.
-  2. **Cấm tuyệt đối chia sẻ cache chéo `Organization`, chéo `Project` hoặc chéo `Environment`:** Khóa tra cứu bắt buộc tính bằng `HMAC-SHA256(org_de_salt, org_id || project_id || env_id || deployment_id || canonical_prompt_and_params || policy_version_hash || allowed_tools_hash)`.
-  3. Tự động bỏ qua không lưu và không đọc cache khi: truy vấn có `temperature > 0` (trừ khi tuyến ép buộc), có tiêu đề `Cache-Control: no-store` / `X-Tanpopo-No-Cache: true`, chứa kết quả gọi công cụ động, luồng bị ngắt dở (`mid_stream_abort`), hoặc bộ lọc đầu ra phát hiện dấu hiệu bí mật/PII.
-  4. Mọi mục cache được mã hóa bằng `Org DEK` — khi chạy `Crypto-Shredding`, toàn bộ cache của tổ chức đó lập tức vô hiệu hóa.
-- **Bài kiểm thử bắt buộc:** `CT-28`.
+### `FMEA-03` — Response Cache Privacy Bleed & Cross-Tenant Poisoning (`Response Cache Privacy`)
+- **Trigger Scenario:** Response caching (`Exact` or `Semantic Cache`) is enabled on a multi-project gateway; `Project A` submits a prompt semantically matching an earlier `Project B` prompt that carried confidential context or elevated tool permissions.
+- **Hazard if Mishandled:** Returning `Project B`'s confidential completion to `Project A` (*Cross-Tenant Cache Bleed*), or caching truncated/PII-tainted completions.
+- **Invariant Handling Rules:**
+  1. **Disabled by default;** requires explicit opt-in configuration per `Route` / `Project`.
+  2. **Zero cache sharing across `Organization`, `Project`, or `Environment` boundaries:** Lookup keys must be derived as `HMAC-SHA256(org_de_salt, org_id || project_id || env_id || deployment_id || canonical_prompt_and_params || policy_version_hash || allowed_tools_hash)`.
+  3. Automatically bypasses both cache read and cache write whenever `temperature > 0` (unless explicitly overridden on the route), `Cache-Control: no-store` / `X-Tanpopo-No-Cache: true` is present, dynamic tool outputs are included, the stream aborted (`mid_stream_abort`), or output guardrails detect secrets/PII.
+  4. Cached entries are encrypted under `Org DEK` — executing `Crypto-Shredding` instantaneously invalidates the entire tenant's cache.
+- **Mandatory Verification:** `CT-28`.
 
-### `FMEA-04` — Thiếu Số Liệu Token Từ Nhà Cung cấp Hoặc Đếm Ước lượng (`Missing or Estimated Provider Usage`)
-- **Tình huống kích hoạt:** Một mô hình tự host (`vLLM` cũ, adapter nội bộ) hoặc một luồng streaming kết thúc mà không gửi khối `usage` chuẩn ở mảnh cuối cùng; hoặc nhà cung cấp trả số âm/dị dạng.
-- **Hiểm họa nếu xử lý sai:** Quyết toán sổ cái bằng `0 USD` tạo lỗ hổng cho người dùng tiêu xài vô hạn không bị trừ hạn mức, hoặc ngược lại báo cáo sai lệch thành con số chính xác trên hóa đơn kế toán nội bộ.
-- **Quy tắc xử lý bất biến:**
-  1. **Cấm tuyệt đối ghi nhận `SETTLED_EXACT = 0` khi có nội dung sinh ra mà thiếu trường `usage`.**
-  2. Áp dụng thang dự phòng 3 bậc: (Bậc 1) Đếm token cục bộ theo bộ từ vựng khai báo của mô hình + bảng giá của `Deployment` → gắn nhãn **`SETTLED_ESTIMATED`**; (Bậc 2) Nếu không biết bộ từ vựng, ước tính bảo thủ theo số byte UTF-8 (`ceil(bytes / 3)`) → gắn nhãn **`SETTLED_ESTIMATED`**; (Bậc 3) Nếu `Deployment` chưa cấu hình đơn giá thương mại → chốt số lượng ước tính với cờ **`UNMETERED_FLAGGED`**.
-  3. Báo cáo `FinOps Chargeback` tách riêng 3 cột `Exact Spend`, `Estimated Spend` và `Unmetered Requests`; nếu tỷ lệ không chính xác vượt `> 5%` trong `15 phút`, hệ thống bắn cảnh báo `ALT-UNMETERED-SPEND` (`INC-01`).
-- **Bài kiểm thử bắt buộc:** `CT-12`, `FZ-06`.
+### `FMEA-04` — Missing or Malformed Upstream Token Usage (`Missing or Estimated Provider Usage`)
+- **Trigger Scenario:** A self-hosted upstream (`vLLM`, internal adapter) or streaming response finishes without emitting a final `usage` block, or returns negative/malformed token integers.
+- **Hazard if Mishandled:** Settling ledger entries at `0 USD` creates an unbounded free-spend loophole, whereas disguising estimates as exact figures corrupts internal financial chargeback reports.
+- **Invariant Handling Rules:**
+  1. **Recording `SETTLED_EXACT = 0` when non-empty output was generated without upstream `usage` is strictly prohibited.**
+  2. Applies a 3-tier fallback ladder: (Tier 1) Count tokens locally using the model's declared tokenizer + `Deployment` pricing table → mark **`SETTLED_ESTIMATED`**; (Tier 2) If tokenizer is unknown, estimate conservatively from UTF-8 byte length (`ceil(bytes / 3)`) → mark **`SETTLED_ESTIMATED`**; (Tier 3) If the `Deployment` has no configured commercial unit price → record estimated token counts with **`UNMETERED_FLAGGED`**.
+  3. `FinOps Chargeback` reports separate `Exact Spend`, `Estimated Spend`, and `Unmetered Requests` into distinct columns; if non-exact requests exceed `> 5%` over `15 min`, Tanpopo fires `ALT-UNMETERED-SPEND` (`INC-01`).
+- **Mandatory Verification:** `CT-12`, `FZ-06`.
 
-### `FMEA-05` — Phần Mở rộng Bị Sập, Treo Vòng lặp CPU Hoặc Cạn kiệt Bộ nhớ (`Plugin Crash / CPU / OOM`)
-- **Tình huống kích hoạt:** Một `Extension` Tầng 2 (`.wasm`) hoặc Tầng 3 (`Sidecar`) có lỗi chia cho 0, giải tham chiếu con trỏ rỗng (`wasm unreachable trap`), rơi vào vòng lặp vô hạn biểu thức chính quy (*ReDoS*), hoặc rò rỉ bộ nhớ trên mỗi yêu cầu.
-- **Hiểm họa nếu xử lý sai:** Làm sập (`panic`) toàn bộ tiến trình `tanpopod`, treo cứng các goroutine xử lý cho mọi nhà cung cấp khác, hoặc ăn hết RAM của máy chủ.
-- **Quy tắc xử lý bất biến:**
-  1. Mỗi lần gọi vào phiên Wasm được bọc bởi bộ phục hồi lỗi (`recover` biên ABI), trần bộ nhớ tuyến tính riêng (`16 MiB`) và đồng hồ cắt ngữ cảnh cứng (`<= 50 ms` cho biến đổi yêu cầu, `<= 5 ms` cho mảnh SSE — `TARGET / UNVERIFIED`).
-  2. Ngay khi một phiên Wasm bị `trap`, quá hạn CPU hoặc chạm trần bộ nhớ, phiên đó **bị hủy bỏ hoàn toàn và không bao giờ đưa trở lại hồ tái sử dụng (`Instance Pool`)**; truy vấn hiện tại nhận lỗi chuẩn `502 extension_execution_fault` (nếu chưa phát mảnh SSE nào thì bộ định tuyến được phép chuyển sang đích dự phòng dùng Adapter khác khỏe mạnh).
-  3. Nếu cùng một gói mở rộng gây lỗi vượt ngưỡng (`> 20 lần / 60 giây`), bộ ngắt mạch riêng của gói đó tự mở (`ALT-PLUGIN-TRAP`), bảo vệ `100%` độ trễ của các gói khác trên cùng máy chủ.
-- **Bài kiểm thử bắt buộc:** `CT-17`, `FZ-05`, `SPIKE-02`.
+### `FMEA-05` — Extension Crash, Infinite CPU Loop or Memory Exhaustion (`Plugin Crash / CPU / OOM`)
+- **Trigger Scenario:** A Tier-2 (`.wasm`) or Tier-3 (`Sidecar`) extension triggers division-by-zero, `wasm unreachable trap`, catastrophic backtracking (*ReDoS*), or per-request memory leaks.
+- **Hazard if Mishandled:** Panics the entire `tanpopod` process, starves goroutines serving unrelated providers, or exhausts host RAM.
+- **Invariant Handling Rules:**
+  1. Every Wasm invocation runs inside an ABI boundary `recover` wrapper, a dedicated linear memory cap (`16 MiB`), and a hard context deadline (`<= 50 ms` per request transform, `<= 5 ms` per SSE chunk — `TARGET / UNVERIFIED`).
+  2. Whenever a Wasm instance traps, exceeds its CPU deadline, or hits its memory ceiling, **that instance is destroyed immediately and never returned to the warm `Instance Pool`**; the in-flight request receives `502 extension_execution_fault` (and if zero SSE chunks were flushed, the router may fail over to a healthy backup deployment using another adapter).
+  3. If a single extension exceeds its fault threshold (`> 20 faults / 60s`), its dedicated per-extension breaker trips (`ALT-PLUGIN-TRAP`), protecting `100%` of latency on co-hosted providers.
+- **Mandatory Verification:** `CT-17`, `FZ-05`, `SPIKE-02`.
 
-### `FMEA-06` — Lỗi Giữa Chừng Khi Nâng cấp Lược đồ Hoặc Di trú Cơ sở Dữ liệu (`Data Migration Failure`)
-- **Tình huống kích hoạt:** Đang chạy nâng cấp phiên bản mới có thay đổi bảng SQL thì mất điện/ràng buộc dữ liệu cũ bị lỗi; hoặc quá trình chuyển từ `SQLite` sang `PostgreSQL` bị ngắt mạng ở bảng thứ 8/15.
-- **Hiểm họa nếu xử lý sai:** Cơ sở dữ liệu rơi vào trạng thái nửa nạc nửa mỡ khiến bản mới không chạy được mà quay lui (`Rollback`) về nhị phân bản cũ cũng chết đứng.
-- **Quy tắc xử lý bất biến:**
-  1. **Kỷ luật Tương thích Lược đồ Hai Bước (`Expand -> Contract`):** Bản phát hành `N` chỉ được phép *mở rộng* (thêm bảng mới, thêm cột cho phép `NULL` hoặc có giá trị mặc định) sao cho nhị phân bản `N-1` vẫn đọc/ghi bình thường trên lược đồ đã nâng cấp nếu phải quay lui khẩn cấp; việc xóa cột cũ chỉ được thực hiện ở bản `N+1`.
-  2. Tự động chụp bản sao lưu an toàn trước khi chạy bất kỳ tệp migration nào; trên PostgreSQL bọc mỗi bước trong giao dịch DDL có khóa tư vấn (`pg_advisory_lock`); nếu một migration thất bại và để lại cờ `dirty = true`, tiến trình mới dừng khởi động ngay (`exit 31`) kèm hướng dẫn khôi phục rõ ràng thay vì chạy liều trên dữ liệu hỏng.
-  3. Lệnh `tanpopo db migrate-engine` (`SQLite -> Postgres`) chỉ ghi vào cơ sở dữ liệu đích trống theo từng lô giao dịch, kiểm tra khớp `100%` tổng số dòng, tổng sổ cái `micro-USD`, chuỗi băm `audit_events` và thử giải mã mẫu `AEAD AAD` thành công rồi mới cho phép chuyển lưu lượng.
-- **Bài kiểm thử bắt buộc:** `CT-24`, `CT-32`, `OPS-AC-05`, `OPS-AC-06`.
+### `FMEA-06` — Mid-Flight Schema Upgrade or Database Engine Migration Failure (`Data Migration Failure`)
+- **Trigger Scenario:** Power loss or legacy constraint violation occurs mid-SQL migration during version upgrade; or `SQLite` to `PostgreSQL` migration drops network connectivity at table 8 of 15.
+- **Hazard if Mishandled:** Leaves the database half-migrated so the new binary refuses to run while rolling back to the previous binary also crashes.
+- **Invariant Handling Rules:**
+  1. **Two-Phase `Expand -> Contract` Schema Compatibility:** Release `N` performs *additive expand-only* DDL (new tables, nullable/defaulted columns) so binary `N-1` continues reading and writing cleanly against the upgraded schema during emergency rollback; destructive column drops are deferred to `N+1`.
+  2. Automatically snapshots a pre-migration backup before applying pending migrations; wraps PostgreSQL DDL steps inside transactional `pg_advisory_lock` guards; if a migration fails leaving `dirty = true`, startup halts immediately (`exit 31`) with explicit recovery instructions rather than serving against corrupted state.
+  3. `tanpopo db migrate-engine` (`SQLite -> Postgres`) writes exclusively into an empty target database in transactional batches, verifying `100%` row counts, `micro-USD` ledger sums, `audit_events` hash chains, and sample `AEAD AAD` decryption before cutover is permitted.
+- **Mandatory Verification:** `CT-24`, `CT-32`, `OPS-AC-05`, `OPS-AC-06`.
 
-### `FMEA-07` — Đứt Kênh Truyền Tin Thu hồi Khóa / Quyền Trên Cụm Phân tán (`Revocation Propagation Failure`)
-- **Tình huống kích hoạt:** Quản trị viên bấm thu hồi khẩn cấp một `Virtual Key` vừa bị lộ hoặc cách ly một Plugin độc hại, nhưng một nút `Data Plane` trong cụm bị phân mảnh mạng tạm thời với `Valkey Pub/Sub` và `PostgreSQL`.
-- **Hiểm họa nếu xử lý sai:** Nút bị mù thông tin vẫn tiếp tục cho phép kẻ tấn công dùng chiếc khóa đã thu hồi để hút dữ liệu và tiêu tiền không giới hạn từ ảnh chụp bộ nhớ cũ.
-- **Quy tắc xử lý bất biến (`Stale-Node Fail-Closed Circuit Breaker` — `ADR-0006`):**
-  1. Truyền tin thu hồi qua **3 kênh độc lập**: (1) `Valkey Pub/Sub` tức thì, (2) `PostgreSQL LISTEN/NOTIFY`, và (3) vòng lặp đối chiếu `config_epoch` + `revocation_watermark` trực tiếp từ DB mỗi `2 giây`.
-  2. Mỗi nút duy trì dấu thời gian `last_verified_epoch_at`. Nếu nút không thể xác nhận `revocation_watermark` với nguồn chân lý quá **`max_stale_revocation_window = 10 giây`** (`TARGET / UNVERIFIED`), nút đó lập tức chuyển `/readyz` sang **`503 stale_security_state`** (để cân bằng tải cắt lưu lượng vào nút mù) và đóng an toàn (`Fail-Closed`) đối với các thao tác nhạy cảm thay vì phục vụ mù quáng vô thời hạn.
-- **Bài kiểm thử bắt buộc:** `AUTH-06`, `OPS-AC-03`, `OPS-AC-04`.
+### `FMEA-07` — Cluster Revocation Channel Partition (`Revocation Propagation Failure`)
+- **Trigger Scenario:** An administrator triggers emergency revocation of a leaked `Virtual Key` or quarantines a malicious plugin while a `Data Plane` node suffers a transient network partition from both `Valkey Pub/Sub` and `PostgreSQL`.
+- **Hazard if Mishandled:** The partitioned node continues serving unbounded requests to an attacker using the revoked key from its stale in-memory snapshot.
+- **Invariant Handling Rules (`Stale-Node Fail-Closed Circuit Breaker` — `ADR-0006`):**
+  1. Propagates revocations across **3 independent channels**: (1) real-time `Valkey Pub/Sub`, (2) `PostgreSQL LISTEN/NOTIFY`, and (3) direct DB polling of `config_epoch` + `revocation_watermark` every `2s`.
+  2. Every node tracks `last_verified_epoch_at`. If a node cannot verify `revocation_watermark` against the source of truth for longer than **`max_stale_revocation_window = 10s`** (`TARGET / UNVERIFIED`), it immediately flips `/readyz` to **`503 stale_security_state`** (causing load balancers to drain traffic away from the partitioned node) and fails closed on sensitive operations rather than serving stale security state indefinitely.
+- **Mandatory Verification:** `AUTH-06`, `OPS-AC-03`, `OPS-AC-04`.
 
-### `FMEA-08` — Bão Làm Mới Token `OAuth` Đồng loạt Hoặc Sập Máy chủ Định danh (`OAuth Stampede & IdP Outage`)
-- **Tình huống kích hoạt:** Một `Provider Connection` dùng `Authorized OAuth 2.1` phục vụ `200` truy vấn/giây chạm mốc hết hạn `access_token`; hoặc máy chủ OAuth của đối tác gặp sự cố `503` / thu hồi `refresh_token` (`invalid_grant`).
-- **Hiểm họa nếu xử lý sai:** Cả `200` goroutine cùng bắn `200` yêu cầu làm mới token một lúc làm đối tác khóa tài khoản vì lạm dụng tốc độ, hoặc chiếc `refresh_token` dùng một lần (*Rotating Refresh Token*) bị vô hiệu hóa do đua tranh.
-- **Quy tắc xử lý bất biến:**
-  1. **Làm mới Chủ động Sớm (`Proactive Refresh at 80% TTL`):** Tác vụ nền tự động gia hạn khi token đạt `80%` vòng đời — nếu lúc đó máy chủ IdP chập chờn `503`, lưu lượng sản xuất vẫn chạy êm trên `20%` thời gian sống còn lại của token hiện hành mà khách không hề hay biết.
-  2. **Khóa Đơn Luồng (`Single-Flight Refresh Lock`):** Khi token đã hết hạn hẳn, khóa nguyên tử (trong tiến trình và trên `Valkey` khi chạy cụm) đảm bảo chỉ **đúng `1` yêu cầu duy nhất** gọi tới IdP; các yêu cầu đồng thời khác chờ kết quả chung trong giới hạn `<= 5 giây`.
-  3. Nếu IdP trả lỗi xác thực dứt khoát (`400 invalid_grant` / `401`), hệ thống **dừng ngay lập tức không thử lại**, chuyển kết nối sang `REAUTH_REQUIRED` (`SM-03`), phát cảnh báo `ALT-OAUTH-REAUTH` (`INC-05`) và cho phép bộ định tuyến chuyển lưu lượng sang đích dự phòng hợp lệ khác (nếu có).
-- **Bài kiểm thử bắt buộc:** `CT-19`, `AUTH-10`.
+### `FMEA-08` — Concurrent `OAuth` Refresh Stampede or Identity Provider Outage (`OAuth Stampede & IdP Outage`)
+- **Trigger Scenario:** An `Authorized OAuth 2.1` `Provider Connection` serving `200` RPS hits `access_token` expiry, or the upstream OAuth server returns `503` / revokes the `refresh_token` (`invalid_grant`).
+- **Hazard if Mishandled:** All `200` goroutines fire `200` simultaneous token refresh requests, triggering upstream rate-limit bans or invalidating single-use *Rotating Refresh Tokens* through race conditions.
+- **Invariant Handling Rules:**
+  1. **Proactive Background Refresh at `80% TTL`:** A background worker renews tokens at `80%` lifetime — if the IdP experiences transient `503` errors, production traffic continues unaffected on the remaining `20%` token validity window.
+  2. **Single-Flight Refresh Lock:** If a token is already expired, an atomic lock (in-process and distributed on `Valkey` in cluster mode) guarantees **exactly `1` refresh request** reaches the IdP while concurrent callers await the shared result up to `<= 5s`.
+  3. Upon a deterministic upstream auth rejection (`400 invalid_grant` / `401`), Tanpopo **halts retries immediately**, transitions the connection to `REAUTH_REQUIRED` (`SM-03`), fires `ALT-OAUTH-REAUTH` (`INC-05`), and allows the router to fail over to any healthy backup deployment.
+- **Mandatory Verification:** `CT-19`, `AUTH-10`.

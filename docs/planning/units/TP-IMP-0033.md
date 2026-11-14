@@ -1,27 +1,27 @@
-# `TP-IMP-0033` — Đóng gói Đa Nền tảng (`linux`, `darwin`, `windows`), Ảnh OCI Không Đặc quyền, Dịch vụ `systemd`/Compose, Xuất `SBOM` & Ký `Cosign`
+# `TP-IMP-0033` — Cross-Platform Packaging (`linux`, `darwin`, `windows`), Rootless OCI Image, `systemd`/Compose Units, `SBOM` Generation & `Cosign` Signing
 
-| Thuộc tính | Giá trị |
+| Attribute | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0033` |
-| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product` — **Cổng `GATE-M2`**) · `EP-06` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0032` — `GAP-01`)* |
-| **Quy mô (`Size`)** | `M` (`deploy/docker/*`, `deploy/compose/*`, `deploy/systemd/*`, `.goreleaser.yaml`, `scripts/release/verify-artifacts.sh`) |
-| **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Chuỗi cung ứng phần mềm cốt lõi, container không đặc quyền `nonroot` & cổng thoát `MVP v0.1`)* |
-| **Chủ sở hữu Kỹ thuật** | `Release & Platform Security Engineer` |
+| **Milestone / Epic** | `M2` (`MVP v0.1 Core Product` — **Gate `GATE-M2`**) · `EP-06` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0032` — `GAP-01`)* |
+| **Size** | `M` (`deploy/docker/*`, `deploy/compose/*`, `deploy/systemd/*`, `.goreleaser.yaml`, `scripts/release/verify-artifacts.sh`) |
+| **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Core software supply chain, rootless `nonroot` OCI container & `MVP v0.1` exit gate)* |
+| **Technical Owner** | `Release & Platform Security Engineer` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Đóng gói toàn bộ sản phẩm `MVP (v0.1)` thành các hiện vật phân phối tái lập được (`Reproducible Builds`), an toàn chuỗi cung ứng và chạy ngay trên cả 3 hệ điều hành mục tiêu (`linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`), bao gồm ảnh container OCI tối giản không quyền root (`distroless/static:nonroot`, hệ tệp gốc chỉ đọc `readOnlyRootFilesystem`), bộ mẫu `docker-compose.yml` + `tanpopo.service` (`systemd` hardening), sinh tự động danh mục linh kiện `CycloneDX SBOM` cho cả Go lẫn npm và ký số `Cosign` + `SHA256SUMS` — khép kín **Cổng `GATE-M2` (`MVP v0.1`)**.
+## 1. Intent
+Package the complete `MVP (v0.1)` product into deterministic, supply-chain-hardened distribution artifacts (`Reproducible Builds`) ready to run across all 3 target operating systems (`linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`), including a minimal rootless OCI container image (`distroless/static:nonroot` with `readOnlyRootFilesystem`), hardened `docker-compose.yml` + `tanpopo.service` (`systemd`) templates, automated `CycloneDX SBOM` generation covering both Go and npm dependencies, and `Cosign` + `SHA256SUMS` cryptographic signing — closing **Gate `GATE-M2` (`MVP v0.1`)**.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `.goreleaser.yaml` (biên dịch chéo `CGO_ENABLED=0 -trimpath -ldflags="-s -w"`, đóng gói `.tar.gz` / `.zip` tái lập được cho 5 tổ hợp OS/Arch).
-  - `deploy/docker/Dockerfile` (đa tầng: dựng `web/console` với `--ignore-scripts` → dựng nhị phân tĩnh `tanpopo` → chép vào ảnh nền `nonroot` `UID 65532`, không có `/bin/sh` hay trình quản lý gói để triệt tiêu bề mặt tấn công hậu khai thác).
-  - `deploy/compose/docker-compose.standalone.yml` (cấu hình `read_only: true`, `cap_drop: ["ALL"]`, `security_opt: ["no-new-privileges:true"]`, volume riêng cho `/var/lib/tanpopo`).
-  - `deploy/systemd/tanpopo.service` (`DynamicUser=yes` hoặc user riêng, `ProtectSystem=strict`, `ProtectHome=yes`, `NoNewPrivileges=yes`).
-  - `.github/workflows/release-dry-run.yml` & `scripts/release/verify-artifacts.sh` (sinh `SBOM` CycloneDX, quét lỗ hổng `govulncheck` + `trivy` `0 Critical/High`, ký thử nghiệm bằng khóa kiểm thử `Cosign` trong CI — **tuyệt đối không tự đẩy bản phát hành công khai**).
-- **Out-of-Scope:** Biểu đồ `Helm Chart` đa bản sao tách vai trò cho Kubernetes HA (thuộc `TP-IMP-0040` ở `M4`); phát hành công khai thật ra bên ngoài (chỉ thực hiện ở `TP-IMP-0047` khi có chữ ký của Product Owner).
+  - `.goreleaser.yaml` (`CGO_ENABLED=0 -trimpath -ldflags="-s -w"` cross-compilation producing reproducible `.tar.gz` / `.zip` archives across all 5 OS/Arch targets).
+  - `deploy/docker/Dockerfile` (multi-stage build: compile `web/console` with `--ignore-scripts` -> compile static `tanpopo` binary -> copy into `nonroot` `UID 65532` base image containing no `/bin/sh` or package manager to eliminate post-exploitation shell surfaces).
+  - `deploy/compose/docker-compose.standalone.yml` (`read_only: true`, `cap_drop: ["ALL"]`, `security_opt: ["no-new-privileges:true"]`, dedicated `/var/lib/tanpopo` volume).
+  - `deploy/systemd/tanpopo.service` (`DynamicUser=yes` or dedicated service account, `ProtectSystem=strict`, `ProtectHome=yes`, `NoNewPrivileges=yes`).
+  - `.github/workflows/release-dry-run.yml` & `scripts/release/verify-artifacts.sh` (`CycloneDX SBOM` generation, `govulncheck` + `trivy` vulnerability scanning at `0 Critical/High`, ephemeral `Cosign` test-key signing in CI — **strictly without publishing public releases**).
+- **Out-of-Scope:** Multi-replica role-split Kubernetes `Helm Chart` for HA deployments (covered in `TP-IMP-0040` in `M4`); actual public release publishing (restricted exclusively to `TP-IMP-0047` upon explicit Product Owner sign-off).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-NFR-0103`, `TP-NFR-0901`, `SLO-05`, `SPEC-OPS-01`, `SPEC-SEC-02`, `GATE-REL-02`, `GATE-REL-04`.
@@ -29,22 +29,22 @@
 - **Design Refs:** [`installer-upgrades.md`](../../operations/installer-upgrades.md) (`SPEC-OPS-01`), [`plugin-sandbox-and-supply-chain.md`](../../security/plugin-sandbox-and-supply-chain.md) (`SPEC-SEC-02`), [`release-readiness.md`](../../quality/release-readiness.md) (`GATE-REL-02`, `GATE-REL-04`).
 
 ## 4. API, Wire & Data Contracts
-- **Ngân sách Tài nguyên Khởi động Lạnh (`TP-NFR-0103` / `SLO-05` — `TARGET / UNVERIFIED`):** Bài kiểm thử khói đo thực nghiệm nhị phân đóng gói khởi động đến trạng thái `/readyz = 200` dưới `< 3 giây` (`< 2s` mục tiêu) và tiêu thụ RSS trạng thái nghỉ `< 128 MiB`.
-- **Bất biến Container Không Đặc quyền:** Ảnh OCI từ chối chạy nếu bị ép chạy dưới `UID 0` (hoặc mặc định luôn chạy `65532:65532`) và hoạt động hoàn hảo khi hệ tệp gốc bị gắn cờ chỉ đọc (`--read-only`).
+- **Cold-Start Resource Budget (`TP-NFR-0103` / `SLO-05` — `TARGET / UNVERIFIED`):** Smoke tests empirically measure packaged binary startup to `/readyz = 200` within `< 3 seconds` (`< 2s` target) and idle RSS memory footprint under `< 128 MiB`.
+- **Rootless Container Invariant:** The OCI image defaults to `65532:65532` (refusing privileged `UID 0` execution in production mode) and operates cleanly with a read-only root filesystem (`--read-only`).
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`GATE-REL-02` Multi-OS Cross-Build):** Chạy đóng gói thử nghiệm cục bộ (`goreleaser build --snapshot --clean`) tạo đủ 5 nhị phân cho Linux/macOS/Windows mà không cần bất kỳ trình biên dịch C (`gcc`/`clang`) nào.
-- **`AC-2`:** Dựng ảnh OCI và khởi chạy với `docker run --read-only --cap-drop=ALL --security-opt=no-new-privileges:true` → `/healthz`, `/readyz`, Web Console và bài kiểm thử khói `EXT-ACCEPT-01` đều vượt qua `100%`.
-- **`AC-3` (`GATE-REL-04` Apache-2.0, SBOM & Cosign):** Sinh tệp `sbom-go.cdx.json` + `sbom-web.cdx.json`, xác minh giấy phép phụ thuộc không dính `AGPL/GPL` truyền nhiễm và xác minh chữ ký `cosign verify-blob` thành công.
-- **`NEG-1`:** Thử thực thi lệnh shell `/bin/sh` bên trong ảnh container sản xuất → thất bại vì ảnh nền tĩnh không chứa shell.
+- **`AC-1` (`GATE-REL-02` Multi-OS Cross-Build):** Running a local snapshot build (`goreleaser build --snapshot --clean`) produces all 5 Linux/macOS/Windows binaries without requiring any C compiler (`gcc`/`clang`).
+- **`AC-2`:** Building the OCI image and launching with `docker run --read-only --cap-drop=ALL --security-opt=no-new-privileges:true` passes `/healthz`, `/readyz`, Web Console asset serving, and the `EXT-ACCEPT-01` smoke suite at `100%`.
+- **`AC-3` (`GATE-REL-04` Apache-2.0, SBOM & Cosign):** Generates `sbom-go.cdx.json` + `sbom-web.cdx.json`, verifies zero copyleft `AGPL/GPL` dependency contamination, and passes `cosign verify-blob` verification.
+- **`NEG-1`:** Attempting to spawn `/bin/sh` inside the production container image fails deterministically because the distroless static image ships no shell binary.
 
 ## 6. Test Commands & Required Evidence
-- Đa nền tảng (Go script + container check): `go run ./scripts/ci/check.go --verify-artifacts` *(hoặc `bash scripts/release/verify-artifacts.sh` trên Linux/macOS CI)*.
+- Cross-platform verification (Go driver + container check): `go run ./scripts/ci/check.go --verify-artifacts` *(or `bash scripts/release/verify-artifacts.sh` on Linux/macOS CI)*.
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Workflow trong đơn vị này chỉ là `dry-run` kiểm chứng đóng gói trên PR/nhánh — **cấm cấu hình tự động tạo GitHub Release công khai hoặc đẩy thẻ chính thức khi chưa qua `TP-IMP-0047`**.
-- **Rollback:** Giữ ảnh container và tệp nén gắn mã băm bất biến theo từng commit.
+- **Security Invariant:** CI workflows in this unit perform `dry-run` artifact verification on PRs/branches only — **automated public GitHub Releases or official tag pushes are strictly prohibited prior to `TP-IMP-0047`**.
+- **Rollback:** Immutable digest-pinned container images and archives per commit.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0032` và toàn bộ các đơn vị của `Milestone M2` (`0016`..`0032`) đã hoàn tất.
-- **DoD:** Đạt toàn bộ tiêu chí Cổng `GATE-M2` (`MVP v0.1`), `0` lỗ hổng `Critical/High`, đo xác nhận thời gian khởi động & RSS thực tế, vượt qua `REQUIRES_STRONG_REVIEW`.
+- **DoR:** `TP-IMP-0032` and all `Milestone M2` units (`0016`..`0032`) are complete.
+- **DoD:** All Gate `GATE-M2` (`MVP v0.1`) exit criteria satisfied, `0` `Critical/High` vulnerabilities, empirical cold-start & idle RSS measurements recorded, and `REQUIRES_STRONG_REVIEW` sign-off achieved.

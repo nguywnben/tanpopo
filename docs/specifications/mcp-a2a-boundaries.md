@@ -1,75 +1,75 @@
-# Đặc tả Ranh giới Kiến trúc Mặt phẳng MCP Hub & Mặt phẳng Liên Tác nhân A2A (MCP Hub & A2A Plane Specification) — Tanpopo
+# MCP Hub Plane & A2A Inter-Agent Plane Architectural Boundary Specification — Tanpopo
 
-> **Tài liệu Đặc tả Kiến trúc Kết nối Tác nhân (Phase ASTRA A04 — `DRAFT / ILLUSTRATIVE CANDIDATE SPEC`)**
-> - **Mã tài liệu:** `SPEC-EXT-05` | **Phiên bản:** `0.1.0-step04-draft` | **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Platform Architect & Security-Minded SDK Designer
-> - **Tuyên bố Trạng thái Chuẩn hóa:** Các đường dẫn giao thức, cấu trúc băm tham số phê duyệt và phong bì ủy quyền A2A dưới đây **mang tính minh họa thiết kế (`ILLUSTRATIVE — PRE-ADR`)**, bám sát đặc tả mở của **Model Context Protocol (MCP)** và **Agent2Agent (A2A)**, chưa tự nhận là chuẩn nội bộ đã đóng băng.
-> - **Truy vết Yêu cầu:** `DEC-003`, `REJ-004`, `SM-06`, `SM-07`, `WF-09`, `TP-FR-0401`..`0406`, `TP-BR-0104`, `TP-BR-0601`..`0604`, `TP-AC-F0401`..`0404`, `TP-AC-SEC-05`, `08`.
+> **Agent Connectivity Architecture Specification Document (ASTRA Phase A04 — `DRAFT / ILLUSTRATIVE CANDIDATE SPEC`)**
+> - **Document ID:** `SPEC-EXT-05` | **Version:** `0.1.0-step04-draft` | **Last Updated:** `2026-11-11`
+> - **Authoring Role:** Platform Architect & Security-Minded SDK Designer
+> - **Standardization Status Statement:** The protocol route conventions, approval parameter-binding digests, and A2A delegation envelopes below are **illustrative candidate designs (`ILLUSTRATIVE — PRE-ADR`)** aligned with the open **Model Context Protocol (MCP)** and **Agent2Agent (A2A)** specifications, and are not claimed as frozen internal standards prior to ADR sign-off.
+> - **Requirements Traceability:** `DEC-003`, `REJ-004`, `SM-06`, `SM-07`, `WF-09`, `TP-FR-0401`..`0406`, `TP-BR-0104`, `TP-BR-0601`..`0604`, `TP-AC-F0401`..`0404`, `TP-AC-SEC-05`, `08`.
 
 ---
 
-## 1. Tại sao Cấm Tuyệt đối Gộp `MCP` và `A2A` vào `Provider Adapter`? (`DEC-003`)
+## 1. Why Conflating `MCP` and `A2A` into `Provider Adapter` Is Strictly Prohibited (`DEC-003`)
 
-Một số cổng thử nghiệm cố ép công cụ MCP hoặc tác nhân A2A giả dạng thành một "mô hình Chat giả" bên trong `Provider Adapter`. Tanpopo bác bỏ hướng đi này (`REJ-004`) vì 4 mặt phẳng có bản chất kỹ thuật và mô hình rủi ro trái ngược hoàn toàn:
+Several early experimental proxies attempt to disguise MCP tool servers or A2A agents as "synthetic chat models" inside a `Provider Adapter`. Tanpopo explicitly rejects that anti-pattern (`REJ-004`) because the four architectural planes exhibit fundamentally incompatible execution semantics and threat models:
 
-| Thuộc tính kiến trúc | **Lớp `Provider` (LLM Inference)** | **Lớp `MCP` (Tools / Context)** | **Lớp `A2A` (Inter-Agent Tasks)** | **Lớp `Plugin / Extension`** |
+| Architectural Attribute | **`Provider` Plane (LLM Inference)** | **`MCP` Plane (Tools / Context)** | **`A2A` Plane (Inter-Agent Tasks)** | **`Plugin / Extension` Plane** |
 |---|---|---|---|---|
-| **Đơn vị giao dịch** | Yêu cầu suy luận sinh token một lượt (`Stateless Request / SSE`). | Khám phá & gọi hàm có tác động thực tế lên hệ thống ngoài (`Tools / Resources / Prompts`). | Tác vụ bất đồng bộ kéo dài nhiều bước, có thể tạm dừng hỏi thêm thông tin (`Stateful Task`). | Gói phần mềm mở rộng năng lực nội bộ cho cổng (`Package Artifact`). |
-| **Chính sách Thử lại (`Retry`)** | Được phép thử lại / chuyển mạch sang mô hình tương đương **trước mảnh đầu tiên**. | **Cấm tuyệt đối thử lại mù** với công cụ `mutating`/`destructive` (tránh xóa lặp / trừ tiền hai lần — `TP-BR-0603`). | Không thể tự động đổi sang một tác nhân khác giữa chừng tác vụ đang giữ trạng thái. | Không phải mặt phẳng lưu lượng mạng trực tiếp. |
-| **Đơn vị tính phí / Hạn mức** | Token đầu vào/ra/cache/suy luận, ảnh, giây âm thanh. | Số lượt gọi công cụ, độ trễ và hạn mức tác động phụ. | Trần ngân sách ủy quyền con (`Sub-Budget Hold`) trích từ ngân sách tác nhân cha. | Giới hạn CPU (mili-giây) và bộ nhớ RAM của Sandbox. |
-| **Rủi ro an ninh đặc thù** | Lộ khóa API thương mại, trượt vùng dữ liệu (`Data Residency`), lố tiền luồng song song. | Chèn chỉ thị độc hại qua mô tả công cụ (*MCP Rug-Pull*), xóa nhầm cơ sở dữ liệu sản xuất, chuyển tiếp nhầm token (*Confused Deputy*). | Vòng lặp ủy quyền vô tận giữa các tác nhân, khuếch đại đặc quyền vượt quyền gốc. | Mã độc thoát vùng cô lập, leo thang quyền khi cập nhật gói. |
+| **Unit of Interaction** | Single-turn token generation request (`Stateless Request / SSE`). | Discovery & invocation of external side-effecting operations (`Tools / Resources / Prompts`). | Asynchronous, multi-step stateful workflow that may pause for human/caller input (`Stateful Task`). | Artifact bundle extending internal gateway capabilities (`Package Artifact`). |
+| **Retry Policy (`Retry`)** | Permitted to retry / fail over to an equivalent model **prior to the first emitted chunk**. | **Blind retries strictly FORBIDDEN** on `mutating`/`destructive` tools (prevents double-deletes / duplicate charges — `TP-BR-0603`). | Cannot silently swap to a different agent mid-flight inside a stateful task. | Not a live network traffic plane. |
+| **Metering / Quota Unit** | Input/output/cache/reasoning tokens, images, audio seconds. | Tool invocation count, execution latency, and side-effect risk budgets. | Attenuated `Sub-Budget Hold` carved directly out of the parent agent's ledger. | Sandbox CPU fuel (milliseconds) and linear RAM ceilings. |
+| **Distinct Security Threats** | Commercial API key leakage, `Data Residency` drift, concurrent streaming budget overrun. | Malicious prompt injection via mutated tool descriptions (*MCP Rug-Pull*), accidental production DB wipes, cross-server token replay (*Confused Deputy*). | Infinite inter-agent delegation loops, privilege amplification beyond caller scope. | Sandbox escape, permission escalation across package upgrades. |
 
 ---
 
-## 2. Đặc tả Mặt phẳng Quản trị Công cụ — `Tanpopo MCP Hub` (`/mcp/...`)
+## 2. Tool Governance Plane Specification — `Tanpopo MCP Hub` (`/mcp/...`)
 
-### 2.1. Đăng ký Máy chủ, Giao thức Vận chuyển & Khám phá Không Đụng độ Tên
-1. **Giao thức vận chuyển (`Transports`):**
-   - **Chuẩn chính (`Primary`):** `MCP Streamable HTTP` (hỗ trợ cả phản hồi đơn và nâng cấp luồng sự kiện hai chiều chuẩn xác) cùng chế độ tương thích ngược `HTTP + SSE`.
-   - **Máy chủ cục bộ dạng `stdio`:** Để ngăn lỗ hổng thực thi lệnh hệ điều hành tùy ý (`RCE`), quản trị viên dự án **không được nhập lệnh shell tùy ý trên giao diện Web**; các máy chủ `stdio` chỉ được phép đóng gói thành **Isolated Sidecar (Tầng 3)** do `Operator` phê duyệt hạ tầng và kết nối vào Hub qua giao thức mạng nội bộ cô lập.
-2. **Định danh Không gian Tên Chống Chiếm Quyền (`Deterministic Tool Namespacing`):**
-   - Mọi công cụ từ `MCP Server` khi qua Hub đều được gắn tiền tố định danh bất biến `<server_slug>__<tool_name>` (ví dụ `billing_db__query_invoices`, `github_corp__create_issue`) để một máy chủ MCP mới không bao giờ đặt trùng tên công cụ nhằm đánh lừa tác nhân gọi nhầm (*Tool Shadowing*).
-3. **Khám phá Lọc Quyền (`Per-Tool ACL`) & Phân trang Chuẩn (`TP-FR-0401`):**
-   - Khi `MCP Client` gọi `tools/list` (hoặc `resources/list`, `prompts/list`), Hub lọc danh sách theo quyền `mcp:invoke:<server>:<tool>` của `Virtual Key` ngay trước khi phân trang con trỏ (`cursor`), đảm bảo: (a) tác nhân hoàn toàn không biết tới sự tồn tại của công cụ cấm (giúp tiết kiệm ngữ cảnh mô hình), và (b) hỗ trợ danh mục hàng trăm công cụ mà không cắt cụt ở mốc 100.
+### 2.1. Server Registration, Transports & Collision-Free Discovery
+1. **Supported Transports (`Transports`):**
+   - **Primary Standard (`Primary`):** `MCP Streamable HTTP` (supporting both single JSON-RPC responses and bidirectional SSE stream upgrades) alongside backward-compatible `HTTP + SSE`.
+   - **Local `stdio` Servers:** To eliminate arbitrary OS command execution (`RCE`) vulnerabilities, project administrators **may never enter raw shell commands in the Web Console**; `stdio`-based MCP servers must be packaged as `Operator`-approved **Isolated Sidecars (Tier 3)** bridged into the Hub over isolated internal IPC.
+2. **Anti-Shadowing Deterministic Namespacing (`Deterministic Tool Namespacing`):**
+   - Every tool surfaced through the Hub receives an immutable prefix `<server_slug>__<tool_name>` (e.g., `billing_db__query_invoices`, `github_corp__create_issue`) so newly registered MCP servers can never collide with or hijack trusted tool names (*Tool Shadowing*).
+3. **ACL-Filtered Discovery (`Per-Tool ACL`) & Cursor Pagination (`TP-FR-0401`):**
+   - When an `MCP Client` calls `tools/list` (or `resources/list`, `prompts/list`), the Hub filters entries against the `Virtual Key`'s `mcp:invoke:<server>:<tool>` grants *prior* to cursor pagination (`cursor`), ensuring: (a) unauthorized tools remain completely invisible to the agent (saving LLM context window budget), and (b) catalogs of hundreds of tools paginate cleanly without truncating at 100 items.
 
-### 2.2. Cách ly Đích Nhận Xác thực OAuth (`MCP OAuth & Audience Isolation`)
-- **Cấm chuyển tiếp mù Token của Client (`Zero Token Passthrough`):** Mã xác thực mà `MCP Client` gửi tới Tanpopo (`Virtual Key` hoặc OAuth token có `aud = tanpopo-mcp-hub`) **luôn bị dừng lại và lột bỏ tại Hub**.
-- Khi gọi xuống `MCP Server` phía sau, Hub sử dụng `Secret Credential` hoặc luồng `Authorized OAuth 2.1` riêng biệt có tham số `resource` / `audience` (RFC 8707) khớp duy nhất với địa chỉ của `MCP Server` đó (`TP-AC-SEC-04`). Nếu `MCP Server A` bị xâm nhập, nó không bao giờ lấy được mã thông báo để giả danh người dùng gọi sang `MCP Server B` hoặc mặt phẳng LLM.
+### 2.2. OAuth Audience Isolation (`MCP OAuth & Audience Isolation`)
+- **Zero Client Token Passthrough (`Zero Token Passthrough`):** The credential presented by an `MCP Client` to Tanpopo (a `Virtual Key` or an OAuth token with `aud = tanpopo-mcp-hub`) **always terminates and is stripped at the Hub**.
+- Upstream calls from the Hub to a backing `MCP Server` authenticate using a dedicated `Secret Credential` or an independent `Authorized OAuth 2.1` grant carrying an RFC 8707 `resource` / `audience` indicator bound exclusively to that `MCP Server` (`TP-AC-SEC-04`). Even if `MCP Server A` is compromised, it receives zero credential material reusable against `MCP Server B` or the LLM Provider plane.
 
-### 2.3. Tường lửa Công cụ (`Tool Firewall`), Ghim `schema_hash` & Phê duyệt Con người (`SM-06`)
+### 2.3. `Tool Firewall`, `schema_hash` Pinning & Human-in-the-Loop Approval (`SM-06`)
 
-1. **Khóa Dấu vân tay Cấu trúc Chống *MCP Rug-Pull* (`TP-FR-0402`):**
-   - Tại thời điểm quản trị viên duyệt một công cụ, Hub chuẩn hóa JSON theo chuẩn sắp xếp khóa tất định (RFC 8785 JCS) đối với bộ ba `(tool_name, description, input_schema)` và lưu `schema_hash = SHA-256(...)`.
-   - Nếu `MCP Server` tự động thay đổi dù chỉ 1 câu trong `description` (nơi tin tặc thường cài bẫy *Prompt Injection* ngầm), Hub phát hiện `live_schema_hash != approved_schema_hash`, lập tức chặn thực thi công cụ trong môi trường kiểm soát chặt và ghi `AuditEvent` cảnh báo.
-2. **Kiểm tra Đầu vào/Ra tại Biên (`Tool Firewall`):**
-   - Xác thực tham số gọi công cụ khớp chặt với `input_schema` đã ghim trước khi chuyển tiếp; giới hạn kích thước đầu ra tối đa trả về cho tác nhân và chạy qua móc lọc che bí mật/PII (nếu tổ chức bật `Guardrail Extension`).
-3. **Phê duyệt Con người Gắn Băm Tham số Bất biến (`TP-FR-0403`, `TP-BR-0602`):**
-   - Với mọi công cụ phân loại `destructive`, Hub tính mã khóa yêu cầu:
+1. **Structural Fingerprinting Against *MCP Rug-Pull* (`TP-FR-0402`):**
+   - When an administrator approves an MCP tool, the Hub canonicalizes `(tool_name, description, input_schema)` using RFC 8785 JSON Canonicalization Scheme (JCS) and records `schema_hash = SHA-256(...)`.
+   - If the upstream `MCP Server` silently alters even a single sentence inside `description` (a primary vector for covert *Prompt Injection*), the Hub detects `live_schema_hash != approved_schema_hash`, blocks execution in enforced environments immediately, and emits a high-priority `AuditEvent`.
+2. **Edge Input/Output Validation (`Tool Firewall`):**
+   - Validates tool call arguments strictly against the pinned `input_schema` prior to forwarding, enforces maximum tool-output byte caps returned to the agent, and runs secret/PII redaction hooks (when an organization enables a `Guardrail Extension`).
+3. **Immutable Parameter-Bound Human Approval (`TP-FR-0403`, `TP-BR-0602`):**
+   - For every tool classified as `destructive`, the Hub computes an immutable invocation digest:
      `approval_binding_hash = SHA-256(org_id || principal_id || server_slug || tool_name || JCS(arguments))`
-   - Hỗ trợ **2 chế độ song hành** (`TD-G2-05`):
-     - *Chờ đồng bộ ngắn hạn (`<= 60 giây`):* Dành cho phiên làm việc trực tiếp có người ngồi trước màn hình bấm duyệt ngay.
-     - *Phê duyệt bất đồng bộ bằng `Pre-Approval Token`:* Hub trả ngay cấu trúc báo chờ kèm mã yêu cầu; sau khi `Reviewer` duyệt trên Web Console/Webhook, tác nhân gọi lại đính kèm `Pre-Approval Token`. Nếu bất kỳ tham số nào bị sửa đổi dù nhỏ nhất, `approval_binding_hash` sẽ lệch và bị từ chối `403 parameter_hash_mismatch`.
-4. **Cấm Thử lại Mù Công cụ Có Tác động Phụ (`TP-FR-0404`, `TP-BR-0603`):**
-   - Chỉ công cụ `read-only` mới được phép cấu hình thử lại lỗi mạng tạm thời; công cụ `mutating` và `destructive` luôn gửi tối đa **1 lần duy nhất**, trả mã `ambiguous_side_effect_timeout` nếu đứt kết nối sau khi đã đẩy gói tin đi.
+   - Supports **two complementary execution modes** (`TD-G2-05`):
+     - *Short Synchronous Hold (`<= 60 seconds`):* Tailored for interactive IDE/chat sessions where a human operator approves immediately in real time.
+     - *Asynchronous `Pre-Approval Token` Flow:* The Hub immediately returns a pending approval envelope with a request ID; once a `Reviewer` approves via Web Console or Webhook, the agent replays the tool call carrying the signed `Pre-Approval Token`. Any mutation to even a single argument bit invalidates `approval_binding_hash` and fails with `403 parameter_hash_mismatch`.
+4. **Zero Blind Retry on Side-Effecting Tools (`TP-FR-0404`, `TP-BR-0603`):**
+   - Automatic transient-network retries may be configured exclusively for `read-only` tools; `mutating` and `destructive` tools are dispatched **at most once**, returning `ambiguous_side_effect_timeout` if the connection drops post-dispatch.
 
 ---
 
-## 3. Đặc tả Mặt phẳng Liên Tác nhân — `Tanpopo A2A Plane` (`/a2a/...`)
+## 3. Inter-Agent Connectivity Plane Specification — `Tanpopo A2A Plane` (`/a2a/...`)
 
-### 3.1. Ranh giới Hồ sơ `AgentCard` và Vòng đời Tác vụ (`A2A Task`)
-- **Đăng ký & Khám phá Có Phân quyền (`TP-FR-0405`):** Mỗi tác nhân nội bộ hoặc đối tác được đăng ký thành thực thể `AgentEndpoint` riêng kèm hồ sơ năng lực `AgentCard` (danh sách kỹ năng `skills`, định dạng đầu vào/ra `artifacts`, chế độ thông báo đẩy, vùng dữ liệu). Lệnh khám phá danh mục tác nhân tuân theo quyền `a2a:discover` và `a2a:delegate:<agent_id>` của dự án.
-- **Quản lý Vòng đời Tác vụ Bất đồng bộ:** Khác với `/v1/chat/completions`, mặt phẳng `/a2a/...` theo dõi trạng thái tác vụ có định danh `task_id` xuyên suốt các chặng `submitted → working → input-required → completed | failed | canceled`, đồng thời gắn mã truy vết liên thông `x-tanpopo-trace-root` cho mọi lệnh gọi LLM hoặc MCP phát sinh bên trong tác vụ đó.
+### 3.1. `AgentCard` Boundaries & Asynchronous `A2A Task` Lifecycle
+- **Permission-Scoped Registration & Discovery (`TP-FR-0405`):** Each internal or partner agent registers as a distinct `AgentEndpoint` entity paired with its `AgentCard` capability descriptor (`skills`, `artifacts` input/output schemas, push-notification support, and `Data Region`). Agent catalog discovery honors project-level `a2a:discover` and `a2a:delegate:<agent_id>` permissions.
+- **Stateful Asynchronous Task Tracking:** Unlike stateless `/v1/chat/completions`, the `/a2a/...` plane tracks `task_id` lifecycles across `submitted → working → input-required → completed | failed | canceled`, propagating a unified correlation header `x-tanpopo-trace-root` across every downstream LLM or MCP invocation spawned by that task.
 
-### 3.2. Chính sách Ủy quyền Thu hẹp Đơn điệu (`Monotonic Privilege & Budget Attenuation` — `TP-FR-0406`)
+### 3.2. `Monotonic Privilege & Budget Attenuation` (`TP-FR-0406`)
 
-Khi `Tác nhân Cha (Agent P)` ủy quyền một tác vụ con sang `Tác nhân Đích (Agent C)` qua mặt phẳng A2A, Tanpopo cưỡng chế 3 rào chắn chống khuếch đại đặc quyền (`TP-BR-0604`):
-1. **Thu hẹp Ngân sách (`Sub-Budget Carving`):** Hạn mức tối đa cấp cho tác vụ con `budget(Task_C)` phải nhỏ hơn hoặc bằng số dư khả dụng còn lại của `Agent P` (khoản này được trích giữ chỗ trực tiếp trên sổ cái của dự án khởi xướng).
-2. **Thu hẹp Vùng Dữ liệu & Phạm vi Quyền:** Ràng buộc vùng dữ liệu hiệu lực của tác vụ con là **phép giao** giữa chính sách của người gọi và vùng của tác nhân đích (`Region_Effective = Region(Caller) ∩ Region(Agent_C)`). Nếu giao tập rỗng → từ chối `403 residency_incompatible`.
-3. **Chống Vòng lặp & Giới hạn Độ sâu Chuỗi Ủy quyền:** Mỗi bước chuyển tiếp A2A đính kèm danh sách định danh tác nhân đã đi qua và bộ đếm `hop_count`. Nếu phát hiện gọi vòng tròn (`A → B → A`) hoặc `hop_count > max_delegation_hops` (mặc định `5`) → từ chối ngay với `400 delegation_depth_exceeded`.
+Whenever a `Parent Agent (Agent P)` delegates a subtask to a `Child Agent (Agent C)` across the A2A plane, Tanpopo enforces three non-bypassable anti-amplification guardrails (`TP-BR-0604`):
+1. **Sub-Budget Carving (`Sub-Budget Carving`):** The maximum budget ceiling assigned to `budget(Task_C)` must be less than or equal to `Agent P`'s remaining available balance (carved and held directly against the originating project's ledger).
+2. **Data Residency & Scope Intersection:** The subtask's effective data residency policy is the **set intersection** of caller and callee constraints (`Region_Effective = Region(Caller) ∩ Region(Agent_C)`). An empty intersection rejects immediately with `403 residency_incompatible`.
+3. **Cycle Detection & Delegation Depth Bounding:** Every A2A hop appends the caller's agent identifier to the lineage chain and increments `hop_count`. Any circular call (`A → B → A`) or `hop_count > max_delegation_hops` (default `5`) is rejected immediately with `400 delegation_depth_exceeded`.
 
 ---
 
-## 4. Sơ đồ Trình tự Minh họa: Tương tác Xuyên 3 Mặt phẳng Độc lập (`A2A` + `Provider` + `MCP`)
+## 4. Illustrative Sequence Diagram: Cross-Plane Interaction Across Three Independent Planes (`A2A` + `Provider` + `MCP`)
 
 ```mermaid
 sequenceDiagram
@@ -80,17 +80,17 @@ sequenceDiagram
     participant MCP as Tanpopo MCP Hub (/mcp)
     actor Rev as Human Reviewer
 
-    Orchestrator->>A2A: 1. Ủy quyền Task (Trần con: 0.50 USD, Region: EU, Hop: 1)
-    A2A->>A2A: Kiểm tra quyền a2a:delegate, khóa tạm 0.50 USD từ sổ cái cha & đóng dấu Region=EU
-    A2A->>Worker: Chuyển tiếp Task kèm Ephemeral Scoped Virtual Key (chỉ hiệu lực cho Task này)
-    Worker->>LLM: 2. Gọi suy luận lập kế hoạch (/v1/chat/completions)
-    LLM-->>Worker: Trả về đề xuất gọi công cụ MCP `erp__issue_credit_note`
-    Worker->>MCP: 3. Gọi tools/call `erp__issue_credit_note(invoice="INV-9", amount=50)`
-    MCP->>MCP: Kiểm tra ACL + khớp schema_hash + phát hiện rủi ro DESTRUCTIVE -> Tạo ApprovalRequest
-    MCP-->>Rev: Yêu cầu phê duyệt (khóa chặt mã băm tham số JCS)
-    Rev->>MCP: Phê duyệt hợp lệ
-    MCP->>MCP: Lột khóa ảo, tiêm OAuth token riêng của ERP Server & thực thi ĐÚNG 1 LẦN
-    MCP-->>Worker: Kết quả biên nhận hoàn tiền
-    Worker-->>A2A: 4. Báo cáo Task COMPLETED kèm Artifact & đóng khóa tạm
-    A2A-->>Orchestrator: Trả kết quả + Quyết toán tổng chi phí liên thông trên cùng 1 Trace ID
+    Orchestrator->>A2A: 1. Delegate Task (Sub-budget cap: 0.50 USD, Region: EU, Hop: 1)
+    A2A->>A2A: Verify a2a:delegate grant, hold 0.50 USD from parent ledger & stamp Region=EU
+    A2A->>Worker: Dispatch Task with Ephemeral Scoped Virtual Key (bound strictly to this Task)
+    Worker->>LLM: 2. Invoke planning inference (/v1/chat/completions)
+    LLM-->>Worker: Propose MCP tool call `erp__issue_credit_note`
+    Worker->>MCP: 3. Invoke tools/call `erp__issue_credit_note(invoice="INV-9", amount=50)`
+    MCP->>MCP: Verify ACL + pinned schema_hash + classify DESTRUCTIVE risk -> Create ApprovalRequest
+    MCP-->>Rev: Request human approval (cryptographically bound to JCS argument digest)
+    Rev->>MCP: Grant explicit approval
+    MCP->>MCP: Strip Virtual Key, inject ERP Server's dedicated OAuth token & execute EXACTLY ONCE
+    MCP-->>Worker: Return credit-note issuance receipt
+    Worker-->>A2A: 4. Report Task COMPLETED with Artifact & release remaining hold
+    A2A-->>Orchestrator: Return final Task result + settle consolidated cross-plane spend under 1 Trace ID
 ```

@@ -1,59 +1,59 @@
-# `TP-IMP-0008` — Kho Khóa Mã hóa Phong bì Ba Tầng (`Master KEK -> Org DEK -> Project DEK`), `AEAD AAD` & `SecretCredential` Một chiều
+# `TP-IMP-0008` — Three-Tier Envelope Encryption Vault (`Master KEK -> Org DEK -> Project DEK`), `AEAD AAD` & Write-Only `SecretCredential`
 
-| Thuộc tính | Giá trị |
+| Property | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0008` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0007` — `GAP-01, 05`)* |
-| **Quy mô (`Size`)** | `M` (`internal/security/vault/*`, `db/migrations/sqlite/0002_vault.sql`) |
-| **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Mật mã học bảo vệ tài sản trọng yếu `AST-01`, `AST-02`)* |
-| **Chủ sở hữu Kỹ thuật** | `Principal Security / Cryptography Engineer` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0007` — `GAP-01, 05`)* |
+| **Size** | `M` (`internal/security/vault/*`, `db/migrations/sqlite/0002_vault.sql`) |
+| **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Cryptographic protection for crown-jewel assets `AST-01`, `AST-02`)* |
+| **Technical Owner** | `Principal Security / Cryptography Engineer` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Xây dựng kho bí mật ghi một chiều (`Write-Only Secret Vault`) sử dụng mã hóa phong bì xác thực `AES-256-GCM` ba tầng (`Master KEK` → `Org DEK` → `Project DEK`) có gắn cứng ngữ cảnh `AEAD AAD` theo [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md) và `CR-06`, đảm bảo: (1) chống tuyệt đối tấn công cấy ghép bản mã chéo tổ chức/dự án, (2) không có bất kỳ hàm đối ngoại nào đọc ngược khóa rõ cho API/UI, (3) xoay `Master KEK` trực tuyến chỉ bằng cách bọc lại `Org DEK`, và (4) hỗ trợ hủy khóa mật mã học (`Crypto-Shredding`) ở cả cấp `Organization` lẫn cấp `Project`.
+## 1. Intent
+Build the write-only secret vault (`Write-Only Secret Vault`) using three-tier `AES-256-GCM` authenticated envelope encryption (`Master KEK` → `Org DEK` → `Project DEK`) with hard-bound `AEAD AAD` context per [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md) and `CR-06`, guaranteeing: (1) complete immunity to cross-organization and cross-project ciphertext transplant attacks, (2) zero external API/UI read-back methods for plaintext secrets, (3) online `Master KEK` rotation via lightweight `Org DEK` re-wrapping, and (4) cryptographic erasure (`Crypto-Shredding`) at both `Organization` and `Project` granularity.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `internal/security/vault/kek.go` (giao diện `KEKProvider` + trình nạp khóa tĩnh `256-bit` từ biến `TANPOPO_MASTER_KEY` hoặc tệp khóa `0400`/`0600` cục bộ).
-  - `internal/security/vault/envelope.go` (quản lý `org_encryption_keys`, `project_encryption_keys`, bộ đệm RAM ngắn hạn `TTL <= 5m` có xóa vùng đệm `clear(buf)` ngay khi xoay/thu hồi/hủy).
-  - `internal/security/vault/store.go` (`SealSecret`, `RotateSecret`, `RewrapAllOrgDEKs`, `ShredProjectDEK`, `ShredOrgDEK`, và thẻ năng lực có trường ẩn `UnsealCapability` chỉ đúc 1 lần tại `cmd/tanpopo` để trao riêng cho `internal/security/broker.NewBlindBroker` gọi `UnsealWithCapability(cap, ...)` — chặn mọi gói khác trong repo tự ý mở niêm phong).
-  - `db/migrations/sqlite/0002_vault.sql` (`org_encryption_keys`, `project_encryption_keys`, `secret_credentials` có cột `owner_project_id` tùy chọn `NULL` cho bí mật dùng chung cấp `Org`).
-- **Out-of-Scope:** Tích hợp AWS/GCP KMS & HashiCorp Vault từ xa (thuộc `TP-IMP-0041` ở `v0.3`); luồng OAuth 2.1 (thuộc `TP-IMP-0034`).
+  - `internal/security/vault/kek.go` (`KEKProvider` interface + static `256-bit` key loader from `TANPOPO_MASTER_KEY` or local `0400`/`0600` keyfile).
+  - `internal/security/vault/envelope.go` (`org_encryption_keys` and `project_encryption_keys` lifecycle, short-lived `TTL <= 5m` in-memory DEK cache with immediate `clear(buf)` zeroization on rotate/revoke/shred).
+  - `internal/security/vault/store.go` (`SealSecret`, `RotateSecret`, `RewrapAllOrgDEKs`, `ShredProjectDEK`, `ShredOrgDEK`, and the unexported-field capability token `UnsealCapability` minted once in `cmd/tanpopo` exclusively for `internal/security/broker.NewBlindBroker` to call `UnsealWithCapability(cap, ...)` — mechanically preventing any other package in the repository from unsealing secrets).
+  - `db/migrations/sqlite/0002_vault.sql` (`org_encryption_keys`, `project_encryption_keys`, `secret_credentials` with nullable `owner_project_id` for shared `Org`-level credentials).
+- **Out-of-Scope:** Remote AWS/GCP KMS & HashiCorp Vault providers (owned by `TP-IMP-0041` in `v0.3`); OAuth 2.1 refresh brokering (owned by `TP-IMP-0034`).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0204`, `TP-FR-1003`, `TP-NFR-0402`, `TP-NFR-0502`, `TP-BR-0102`, `AST-01`, `AST-02`, `AUTH-14`, `OPS-AC-07`, `OPS-AC-09`.
 - **Dependencies:** `TP-IMP-0007`.
-- **Design Refs:** [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md) Mục 1 & 4, [`data-model.md`](../../architecture/data-model.md) Mục 3.1 & 3.2, [`backups-recovery.md`](../../operations/backups-recovery.md) (`DR-03`).
+- **Design Refs:** [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md) Sections 1 & 4, [`data-model.md`](../../architecture/data-model.md) Sections 3.1 & 3.2, [`backups-recovery.md`](../../operations/backups-recovery.md) (`DR-03`).
 
 ## 4. API, Wire & Data Contracts
-- **Hai Công thức `AEAD AAD` Chuẩn Hóa Duy Nhất (`CR-06` / `TP-IMP-0003`):**
-  1. Cho bí mật cấp `Org` (`owner_project_id IS NULL`, bọc dưới `Org DEK`):
+- **Two Canonical `AEAD AAD` Formulas (`CR-06` / `TP-IMP-0003`):**
+  1. For `Org`-scoped secrets (`owner_project_id IS NULL`, wrapped under `Org DEK`):
      `AAD = []byte("tanpopo:v1:cred:" + orgID + ":" + credentialID + ":" + secretKind)`.
-  2. Cho bí mật/thân gỡ lỗi/mục cache thuộc riêng `Project` (bọc dưới `Project DEK`):
+  2. For `Project`-scoped secrets/debug-blobs/cache-entries (wrapped under `Project DEK`):
      `AAD = []byte("tanpopo:v1:proj:" + orgID + ":" + projectID + ":" + recordKind + ":" + recordID)`.
-  - Luôn sinh `nonce` 96-bit từ `crypto/rand` mới hoàn toàn cho mỗi lần ghi/xoay khóa.
-- **Kiểu trả về cho Control Plane (`SecretMetadata`):** Chỉ chứa `{ ID, OrgID, OwnerProjectID, Name, SecretKind, BoundAudience, KeyFingerprint, Version, UpdatedAt }` — **không có trường `Plaintext` hay `Ciphertext`**.
+  - Always generate a fresh 96-bit `nonce` from `crypto/rand` on every seal or rotation operation.
+- **Control Plane Return DTO (`SecretMetadata`):** Contains only `{ ID, OrgID, OwnerProjectID, Name, SecretKind, BoundAudience, KeyFingerprint, Version, UpdatedAt }` — **never `Plaintext` or `Ciphertext`**.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1`:** Given khóa mồi `sk-tp-canary-DO-NOT-LEAK-9f8e7d6c`, When gọi `SealSecret`, Then dữ liệu trên đĩa SQLite chỉ chứa bản mã ngẫu nhiên (quét tệp `.db` thô tìm chuỗi canary ra `0` kết quả) và `GetSecretMetadata` chỉ trả dấu vân tay ẩn danh.
-- **`AC-2`:** Given `KEK_v1` đang bọc 10 `Org DEKs`, When gọi `RewrapAllOrgDEKs(KEK_v1 -> KEK_v2)`, Then cả 10 tổ chức tiếp tục giải mã `SecretCredential` bình thường dưới `KEK_v2` mà không cần mã hóa lại bảng `secret_credentials`.
-- **`AC-3`:** Given `Project P1` và `Project P2` cùng thuộc `Org A`, When gọi `ShredProjectDEK(Org_A, P1)`, Then vùng đệm RAM `DEK` của `P1` bị xóa tức thì và mọi bí mật riêng của `P1` không thể giải mã được nữa (kể cả từ bản sao lưu tệp SQLite chụp trước khi xóa!), trong khi `P2` vẫn hoạt động `100%` bình thường.
-- **`NEG-1` (`AUTH-14` Ciphertext Transplant):** Dùng câu lệnh SQL thô chép `nonce` + `ciphertext` từ dòng của `Org A` sang dòng của `Org B` (hoặc từ `Project P1` sang `Project P2`) → `UnsealWithCapability` thất bại tức khắc với lỗi xác thực thẻ `GCM` (`cipher: message authentication failed`).
-- **`NEG-2`:** Gọi `UnsealWithCapability` với `UnsealCapability{}` rỗng giả mạo hoặc khởi chạy ở chế độ sản xuất với `TANPOPO_MASTER_KEY` ngắn hơn `32 bytes` / toàn số `0` → từ chối ngay lập tức (`Fail-Closed`).
-- **`NEG-3`:** Không bao giờ tái sử dụng cùng một `nonce` cho cùng một `DEK` hoặc in lỗi giải mã chứa mảng byte khóa ra nhật ký.
+- **`AC-1`:** Given canary secret `sk-tp-canary-DO-NOT-LEAK-9f8e7d6c`, When calling `SealSecret`, Then on-disk SQLite bytes contain only high-entropy ciphertext (scanning the raw `.db` file for the canary string yields `0` hits) and `GetSecretMetadata` returns only an irreversible fingerprint.
+- **`AC-2`:** Given `KEK_v1` wrapping 10 `Org DEKs`, When invoking `RewrapAllOrgDEKs(KEK_v1 -> KEK_v2)`, Then all 10 organizations continue unsealing `SecretCredential` records seamlessly under `KEK_v2` without rewriting `secret_credentials`.
+- **`AC-3`:** Given `Project P1` and `Project P2` inside `Org A`, When invoking `ShredProjectDEK(Org_A, P1)`, Then `P1`'s cached RAM `DEK` is zeroized immediately and all `P1`-scoped secrets become permanently undecryptable (even from SQLite backups captured prior to shredding), while `P2` continues operating `100%` normally.
+- **`NEG-1` (`AUTH-14` Ciphertext Transplant):** Using raw SQL to copy `nonce` + `ciphertext` from `Org A` to `Org B` (or from `Project P1` to `Project P2`) → `UnsealWithCapability` fails immediately with a `GCM` authentication tag error (`cipher: message authentication failed`).
+- **`NEG-2`:** Invoking `UnsealWithCapability` with a zero-value forged `UnsealCapability{}` or starting in production mode with `TANPOPO_MASTER_KEY` shorter than `32 bytes` / all-zero bytes → rejected immediately (`Fail-Closed`).
+- **`NEG-3`:** Never reuse a `(DEK, nonce)` pair or include raw key bytes inside decryption error messages or logs.
 
 ## 6. Test Commands & Required Evidence
-- Kiểm tra thuần Go (`CGO_ENABLED=0`):
+- Pure-Go verification (`CGO_ENABLED=0`):
   - POSIX: `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/security/vault/...`
   - PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/security/vault/...`
-- Kiểm tra tranh chấp dữ liệu (`-race`, `CGO_ENABLED=1`): `go test -v -race ./internal/security/vault/...`
+- Data-race verification (`-race`, `CGO_ENABLED=1`): `go test -v -race ./internal/security/vault/...`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** `scripts/ci/check.go` kiểm tra AST đảm bảo hàm đúc `vault.MintUnsealCapabilityForBroker()` chỉ được gọi đúng 1 chỗ trong `cmd/tanpopo`; xóa mảng byte tạm `clear(plaintext)` bằng `defer` ngay sau khi sử dụng.
-- **Rollback:** Lược đồ bảng mới hoàn toàn cộng thêm (`0002_vault.sql`), tương thích sao lưu nóng SQLite.
+- **Security Invariant:** `scripts/ci/check.go` performs AST verification ensuring `vault.MintUnsealCapabilityForBroker()` is invoked at exactly one call site inside `cmd/tanpopo`; transient plaintext byte slices are scrubbed via `defer clear(plaintext)` immediately after use.
+- **Rollback:** Purely additive schema (`0002_vault.sql`), fully compatible with hot SQLite backups.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0003` (khóa 2 công thức `AAD` & `Project DEK`) và `TP-IMP-0007` đã hoàn tất.
-- **DoD:** Đạt độ phủ kiểm thử `>= 90%` trên `internal/security/vault/...`, vượt qua kiểm tra `CanaryScanner` và `REQUIRES_STRONG_REVIEW`.
+- **DoR:** `TP-IMP-0003` (locking the 2 `AAD` formulas & `Project DEK`) and `TP-IMP-0007` are complete.
+- **DoD:** Achieves `>= 90%` test coverage across `internal/security/vault/...`, passes `CanaryScanner`, and completes `REQUIRES_STRONG_REVIEW`.

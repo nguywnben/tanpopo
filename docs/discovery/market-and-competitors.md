@@ -1,119 +1,119 @@
-# Phân tích Thị trường & Đối thủ Cạnh tranh (Market & Competitors) — Tanpopo
+# Market & Competitor Analysis — Tanpopo
 
-> **Tài liệu Discovery (Phase ASTRA A01 — Gate G1: `READY_FOR_REVIEW`)**
-> - **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Product Intelligence Lead
-> - **Quy ước dẫn nguồn:** Mọi dữ kiện thị trường bên ngoài repository đều gắn nguồn tra cứu công khai tính đến tháng 11/2026 hoặc gắn nhãn `[CHƯA XÁC MINH]` nếu chưa có số liệu kiểm toán độc lập. Tài liệu này phục vụ khám phá sản phẩm, chưa phải quyết định khóa tính năng (`PROPOSED` / `OPEN`).
-
----
-
-## 1. Bối cảnh Thị trường Hạ tầng AI (2025–2026)
-
-Thị trường cổng kết nối AI (AI Gateway) đã dịch chuyển qua ba làn sóng rõ rệt, tạo ra một khoảng trống cấu trúc lớn cho thế hệ tiếp theo:
-
-1. **Làn sóng 1 — Proxy gom khóa & chuẩn hóa OpenAI API (2023–2024):** Giải quyết bài toán đổi model chỉ bằng cách sửa `base_url` (tiêu biểu: LiteLLM, One-API, OpenRouter). Tuy nhiên, khi các mô hình phân hóa sâu về năng lực (reasoning/thinking blocks, prompt caching, native multimodal, structured outputs), việc ép mọi thứ về mẫu số chung thấp nhất làm rớt tính năng, trong khi việc đóng cứng hàng trăm provider trong một kho mã nguồn duy nhất gây quá tải bảo trì.
-2. **Làn sóng 2 — Thương mại hóa Open-Core & Mua bán sáp nhập (2025–2026):** Các dự án mã nguồn mở dẫn đầu dịch chuyển mạnh sang khóa các tính năng quản trị thiết yếu (SSO, RBAC, audit log, kiểm soát ngân sách nâng cao, guardrails) vào gói Enterprise trả phí đắt đỏ, hoặc sáp nhập vào các tập đoàn bảo mật lớn (ví dụ thông tin thị trường về Portkey / Palo Alto Networks Prisma AIRS `[CHƯA XÁC MINH URL GỐC]`; TensorZero chuyển trạng thái lưu trữ / ngừng duy trì vào giữa năm 2026 `[CHƯA XÁC MINH URL GỐC]`). Đội ngũ tự vận hành (self-hosted) bị kẹt giữa bản miễn phí thiếu an toàn và hợp đồng thương mại lớn.
-3. **Làn sóng 3 — Bùng nổ Giao thức Tác nhân (MCP & A2A) và Siết chặt Điều khoản Thuê bao Tiêu dùng (2025–2026):**
-   - Lưu lượng AI không còn chỉ là chat stateless mà mở rộng sang kết nối công cụ theo chiều dọc qua **Model Context Protocol (MCP — hỗ trợ Streamable HTTP/SSE)** [Nguồn: `modelcontextprotocol.io`] và phối hợp liên tác nhân theo chiều ngang qua **Agent2Agent Protocol (A2A — thuộc Linux Foundation, khởi xướng bởi Google)** [Nguồn: `a2a-protocol.org`, `linuxfoundation.org`].
-   - Đồng thời, các phòng thí nghiệm AI lớn (đặc biệt là Anthropic và Google) đã thực thi chính sách khóa tài khoản và cấm sử dụng OAuth token của các gói thuê bao cá nhân giá cố định (Claude Pro/Max, Google AI Ultra/Antigravity...) qua các công cụ/proxy bên thứ ba nhằm ngăn chặn trục lợi chênh lệch giá token (token arbitrage) [Nguồn: Tổng hợp tin tức chính sách ngành 2025–2026]. Điều này đặt dấu chấm hết cho các dự án proxy sống dựa vào việc "lách" gói thuê bao cá nhân, mở ra nhu cầu cấp thiết về một cổng tự vận hành **chính thống, minh bạch pháp lý nhưng mở rộng linh hoạt**.
+> **Discovery Document (Phase ASTRA A01 — Gate G1: `READY_FOR_REVIEW`)**
+> - **Last Updated:** `2026-11-11`
+> - **Authored By:** Product Intelligence Lead
+> - **Citation Convention:** All market facts external to this repository cite public references available as of November 2026 or carry an `[UNVERIFIED]` tag where independent audit data is unavailable. This document supports product discovery and does not lock feature scope (`PROPOSED` / `OPEN`).
 
 ---
 
-## 2. Phân tích Chi tiết 4 Nhóm Đối thủ & Sản phẩm Thay thế
+## 1. AI Infrastructure Market Context (2025–2026)
 
-### 2.1. Nhóm 1: AI Gateway Proxy (Self-Hosted Open-Core & SaaS)
+The AI Gateway market has evolved through three distinct waves, exposing a major structural gap for the next generation of infrastructure:
+
+1. **Wave 1 — Key Aggregation Proxies & OpenAI API Normalization (2023–2024):** Solved model switching simply by changing `base_url` (exemplified by LiteLLM, One-API, OpenRouter). However, as models diverged deeply in capabilities (reasoning/thinking blocks, prompt caching, native multimodal, structured outputs), forcing traffic through a lowest-common-denominator schema dropped advanced features, while hardcoding hundreds of providers inside a single monolithic repository created unsustainable maintenance overhead.
+2. **Wave 2 — Open-Core Commercialization & Consolidation (2025–2026):** Leading open-source gateways shifted aggressively toward gating essential governance features (SSO, RBAC, audit logs, advanced budget controls, guardrails) behind expensive Enterprise paywalls, or consolidated into major security vendors (e.g., market reports surrounding Portkey / Palo Alto Networks Prisma AIRS `[UNVERIFIED PRIMARY URL]`; TensorZero transitioning to archived / unmaintained status in mid-2026 `[UNVERIFIED PRIMARY URL]`). Self-hosted engineering teams were left stranded between under-governed free tiers and heavy commercial contracts.
+3. **Wave 3 — Agent Protocol Proliferation (MCP & A2A) and Consumer Subscription Enforcement (2025–2026):**
+   - AI traffic expanded beyond stateless chat into vertical tool connectivity via the **Model Context Protocol (MCP — supporting Streamable HTTP/SSE)** [Source: `modelcontextprotocol.io`] and horizontal multi-agent coordination via the **Agent2Agent Protocol (A2A — Linux Foundation, initiated by Google)** [Source: `a2a-protocol.org`, `linuxfoundation.org`].
+   - Concurrently, frontier AI labs (notably Anthropic and Google) enforced account bans and prohibited routing consumer flat-rate subscription OAuth tokens (Claude Pro/Max, Google AI Ultra/Antigravity, etc.) through third-party proxies and harnesses to curb token arbitrage [Source: Industry policy enforcement reports, 2025–2026]. This effectively ended grey-market proxies built on consumer subscription workarounds, creating urgent demand for a **legitimate, legally transparent, yet flexibly extensible self-hosted gateway**.
+
+---
+
+## 2. Detailed Analysis of 4 Competitor & Alternative Categories
+
+### 2.1. Category 1: AI Gateway Proxies (Self-Hosted Open-Core & SaaS)
 
 #### A. LiteLLM (`BerriAI/litellm`)
-- **Mô hình & Kiến trúc:** Python SDK kết hợp Proxy Server (có bổ sung thành phần nhân hiệu năng bằng Rust ở các bản mới), hỗ trợ hơn 100 LLM APIs qua định dạng tương thích OpenAI, quản lý khóa ảo (virtual keys), ngân sách qua cơ sở dữ liệu SQL/Prisma và thử nghiệm MCP Gateway (`_experimental/mcp_server`) [Nguồn: `github.com/BerriAI/litellm`, `docs.litellm.ai`].
-- **Giấy phép:** Mô hình hai tầng — phần lõi ngoài thư mục `enterprise/` dùng **MIT**, nhưng các tính năng quản trị doanh nghiệp trọng yếu (SSO/SCIM v2, RBAC chi tiết, một số giao diện quản trị và chính sách bảo mật nâng cao) thuộc **giấy phép thương mại Enterprise** [Nguồn: `github.com/BerriAI/litellm`].
-- **Điểm mạnh:** Độ phủ provider có sẵn rất lớn; cộng đồng đông đảo; tài liệu phong phú.
-- **Điểm yếu & Khoảng trống cho Tanpopo:**
-  1. **Kiến trúc đóng cứng Provider vào Core:** Hầu hết tích hợp nằm chung trong kho mã nguồn chính, kéo theo tần suất phát hành dồn dập và nguy cơ lỗi hồi quy (regression) mỗi khi nâng cấp phiên bản.
-  2. **Chưa có hệ sinh thái Plugin cô lập có kiểm định:** Cơ chế custom provider của LiteLLM dựa trên nạp hàm Python trực tiếp trong tiến trình — không có cô lập bảo mật (sandbox) hay phân quyền mạng/bí mật cho mã từ bên thứ ba.
-  3. **Giới hạn ở lớp MCP thử nghiệm:** Ghi nhận các vấn đề thực tế như giới hạn phân trang công cụ (cắt ở mốc 100 tools trên một số route REST), hạn chế độ dài tham số `state` trong OAuth DCR và độ phức tạp khi truyền thông tin xác thực động xuống MCP server đích [Nguồn: Issues công khai trên `github.com/BerriAI/litellm`].
-  4. **Tranh luận ranh giới giấy phép:** Ranh giới giữa mã MIT và các hook kiểm tra bản quyền `enterprise/` ngay trong cùng repo gây e ngại cho một bộ phận kỹ sư mã nguồn mở [Nguồn: `github.com/BerriAI/litellm`].
+- **Model & Architecture:** Python SDK paired with a Proxy Server (supplemented by Rust performance components in newer releases), supporting 100+ LLM APIs via an OpenAI-compatible schema, virtual key management, SQL/Prisma budget ledgers, and an experimental MCP Gateway (`_experimental/mcp_server`) [Source: `github.com/BerriAI/litellm`, `docs.litellm.ai`].
+- **License:** Dual-tier model — core code outside `enterprise/` is **MIT**, while critical enterprise governance features (SSO/SCIM v2, fine-grained RBAC, selected admin UI workflows, and advanced security policies) require a **commercial Enterprise license** [Source: `github.com/BerriAI/litellm`].
+- **Strengths:** Massive built-in provider coverage; large community; extensive documentation.
+- **Weaknesses & White Space for Tanpopo:**
+  1. **Tightly Coupled In-Core Providers:** Nearly all integrations reside in the main repository, driving rapid release churn and elevated regression risk on every version upgrade.
+  2. **Lack of an Isolated, Verified Plugin Ecosystem:** LiteLLM's custom provider mechanism loads Python functions directly in-process — providing no security sandbox or network/secret isolation for third-party code.
+  3. **Experimental MCP Layer Limitations:** Documented operational issues include tool pagination truncation (capping at 100 tools on certain REST routes), `state` parameter length limits during OAuth DCR, and friction forwarding dynamic credentials to upstream MCP servers [Source: Public issues on `github.com/BerriAI/litellm`].
+  4. **License Boundary Friction:** In-tree `enterprise/` license hooks alongside MIT source code create adoption hesitation among some open-source engineering teams [Source: `github.com/BerriAI/litellm`].
 
 #### B. Portkey AI Gateway (`Portkey-AI/gateway`)
-- **Mô hình & Kiến trúc:** Nhân proxy gọn nhẹ viết bằng TypeScript (chạy được trên Node/Edge), kết nối hơn 1.600 mô hình, hỗ trợ retry, fallback, load balancing và cache cơ bản [Nguồn: `github.com/Portkey-AI/gateway`, `portkey.ai`]. Ghi nhận thông tin tích hợp/mua lại trong hệ sinh thái bảo mật Prisma AIRS `[CHƯA XÁC MINH URL GỐC — cần đối chiếu thông cáo chính thức trước khi trích dẫn thương mại]`.
-- **Giấy phép:** Nhân proxy mã nguồn mở dùng **MIT**; mặt phẳng quản trị toàn diện (Control Plane UI, RBAC theo Okta/Entra ID, quản lý ngân sách, MCP Registry tập trung, PII guardrails) nằm ở bản **Commercial SaaS / Enterprise** [Nguồn: `portkey.ai`].
-- **Điểm yếu & Khoảng trống cho Tanpopo:** Bản tự host miễn phí chỉ là lớp vỏ đường truyền (headless proxy), thiếu giao diện quản trị trọn gói, thiếu sổ cái chi phí tự vận hành đầy đủ và không có cơ chế cho phép người dùng tự cài đặt Provider Adapter đóng gói độc lập có sandbox từ Git/URL.
+- **Model & Architecture:** Lightweight TypeScript proxy core (runnable on Node/Edge) connecting 1,600+ models with retries, fallbacks, load balancing, and basic caching [Source: `github.com/Portkey-AI/gateway`, `portkey.ai`]. Market intelligence notes ecosystem integration/acquisition activity within Prisma AIRS `[UNVERIFIED PRIMARY URL — verify against official press release before citing commercially]`.
+- **License:** Open-source proxy core under **MIT**; the comprehensive governance plane (Control Plane UI, Okta/Entra ID RBAC, budget management, centralized MCP Registry, PII guardrails) resides in **Commercial SaaS / Enterprise** [Source: `portkey.ai`].
+- **Weaknesses & White Space for Tanpopo:** The free self-hosted edition is solely a headless transport proxy, lacking an integrated management console, a complete self-hosted financial ledger, and any mechanism to install sandboxed, independently packaged Provider Adapters from Git/URL.
 
-#### C. Bifrost bởi Maxim AI (`maximhq/bifrost`)
-- **Mô hình & Kiến trúc:** AI Gateway viết bằng **Go** hiệu năng cao (độ trễ cộng thêm rất thấp), đóng gói dạng binary/Docker hoặc nhúng làm Go SDK; tích hợp sẵn cổng `/mcp` hỗ trợ lọc danh sách công cụ được phép chạy (`tools_to_execute`) theo virtual key [Nguồn: `github.com/maximhq/bifrost`, `getbifrost.ai`].
-- **Giấy phép:** Lõi **Apache-2.0**, đi kèm bản **Enterprise thương mại** khóa các tính năng SSO, RBAC chi tiết, tích hợp kho khóa Vault và triển khai cụm doanh nghiệp nâng cao [Nguồn: `github.com/maximhq/bifrost`].
-- **Điểm yếu & Khoảng trống cho Tanpopo:** Tương tự LiteLLM/Portkey ở rào cản Open-Core cho quản trị bảo mật tự host; danh sách ~20+ provider tích hợp theo mô-đun nội bộ chứ chưa xây dựng chuẩn Marketplace/Registry mở độc lập với chu kỳ phát hành Core kèm hợp đồng kiểm thử tương thích công khai; chưa định hình lớp A2A độc lập.
+#### C. Bifrost by Maxim AI (`maximhq/bifrost`)
+- **Model & Architecture:** High-performance **Go** AI Gateway (ultra-low latency overhead), distributed as a single binary/Docker image or embeddable Go SDK; includes a built-in `/mcp` endpoint supporting per-virtual-key tool execution filtering (`tools_to_execute`) [Source: `github.com/maximhq/bifrost`, `getbifrost.ai`].
+- **License:** **Apache-2.0** core paired with a **commercial Enterprise** edition gating SSO, granular RBAC, Vault secret integration, and advanced enterprise clustering [Source: `github.com/maximhq/bifrost`].
+- **Weaknesses & White Space for Tanpopo:** Shares the Open-Core paywall barrier on self-hosted security governance seen in LiteLLM/Portkey; ships ~20+ providers as internal modules rather than an open, core-decoupled Marketplace/Registry with public contract conformance tests; lacks a dedicated A2A plane.
 
 #### D. One API / New API (`songquanpeng/one-api`)
-- **Mô hình & Kiến trúc:** Hệ thống quản lý và phân phối API LLM viết bằng **Go** kèm giao diện Web tích hợp sẵn, đóng gói 1 file binary / 1 Docker image rất dễ chạy với SQLite/MySQL [Nguồn: `github.com/songquanpeng/one-api`].
-- **Giấy phép:** **MIT** [Nguồn: `github.com/songquanpeng/one-api`].
-- **Điểm mạnh:** Chứng minh nhu cầu cực lớn của cộng đồng đối với trải nghiệm **"tự host bằng 1 lệnh chạy, có sẵn Web UI và quản lý hạn mức"**.
-- **Điểm yếu & Khoảng trống cho Tanpopo:** Thiết kế xoay quanh bài toán "gom kênh & chia lại hạn mức token" (key aggregator/reseller); toàn bộ adapter viết cứng bằng Go trong repo gốc nên thường trễ nhịp khi hãng đổi schema; thiếu hoàn toàn kiến trúc cô lập plugin, thiếu mặt phẳng quản trị MCP và A2A, thiếu kiểm soát policy/audit chuẩn doanh nghiệp.
+- **Model & Architecture:** LLM API distribution and management system written in **Go** with a bundled Web UI, packaged as a single binary / single Docker image backed by SQLite/MySQL [Source: `github.com/songquanpeng/one-api`].
+- **License:** **MIT** [Source: `github.com/songquanpeng/one-api`].
+- **Strengths:** Proves massive community demand for a **"one-command self-hosted gateway with built-in Web UI and quota management"**.
+- **Weaknesses & White Space for Tanpopo:** Architected around channel aggregation and quota reselling (key aggregator/reseller workflows); all adapters are hardcoded in Go inside the upstream repository and frequently lag upstream schema changes; completely lacks plugin sandboxing, MCP/A2A governance planes, and enterprise-grade policy/audit controls.
 
 #### E. OpenRouter (Managed SaaS)
-- **Mô hình & Kiến trúc:** Dịch vụ đám mây đóng (closed-source SaaS) gom hàng trăm mô hình, hỗ trợ định tuyến theo giá/độ trễ và chế độ BYOK (Bring Your Own Key) [Nguồn: `openrouter.ai/docs`].
-- **Chi phí:** Thu phí nạp tín dụng **5,5%** (gói Standard) hoặc **8%** (gói Business); chế độ BYOK miễn phí cho 25.000 USD lưu lượng niêm yết đầu tiên mỗi tháng, sau đó thu phí **5%** trên phần vượt mức `[Nguồn: openrouter.ai/docs — biểu phí có thể thay đổi theo thời điểm, CHƯA XÁC MINH ngày hiệu lực mới nhất]`.
-- **Điểm yếu & Khoảng trống cho Tanpopo:** **Hoàn toàn không thể tự host (non-self-hostable)** trong mạng riêng (VPC/on-premise/air-gapped); luồng dữ liệu nhạy cảm buộc phải đi qua đám mây trung gian của bên thứ ba; phát sinh thuế phí phần trăm theo quy mô lớn; không thể quản trị trực tiếp các MCP server nội bộ nằm sau tường lửa doanh nghiệp.
+- **Model & Architecture:** Closed-source cloud SaaS aggregating hundreds of models with price/latency routing and BYOK (Bring Your Own Key) support [Source: `openrouter.ai/docs`].
+- **Pricing:** Charges a **5.5%** credit top-up fee (Standard) or **8%** (Business); BYOK mode waives fees on the first \$25,000 of monthly list-price usage, then charges **5%** above that threshold `[Source: openrouter.ai/docs — fee schedules may change over time, UNVERIFIED latest effective date]`.
+- **Weaknesses & White Space for Tanpopo:** **Completely non-self-hostable** inside private networks (VPC/on-premise/air-gapped); forces sensitive payloads through a third-party cloud intermediary; imposes percentage-based volume taxes at scale; cannot directly govern internal MCP servers behind corporate firewalls.
 
-#### F. TensorZero (`tensorzero/tensorzero`) — *Bài học lịch sử*
-- **Hiện trạng:** Từng là AI Gateway + LLMOps hiệu năng cao viết bằng Rust (giấy phép Apache-2.0), được ghi nhận chuyển sang trạng thái lưu trữ (`archived`) và ngừng duy trì vào giữa năm 2026 `[Nguồn: github.com/tensorzero/tensorzero — CHƯA XÁC MINH commit/ngày lưu trữ độc lập]`.
-- **Bài học cho Tanpopo:** Ôm đồm toàn bộ vòng lặp đánh giá/tối ưu hóa mô hình (evals, fine-tuning recipes, ClickHouse bắt buộc) ngay trong một cổng proxy làm tăng độ nặng vận hành và khó duy trì bền vững nếu thiếu ranh giới sản phẩm sắc nét.
+#### F. TensorZero (`tensorzero/tensorzero`) — *Historical Lesson*
+- **Current Status:** Formerly a high-performance Rust AI Gateway + LLMOps stack (Apache-2.0), recorded as transitioning to `archived` status and ceasing active maintenance in mid-2026 `[Source: github.com/tensorzero/tensorzero — UNVERIFIED independent archive commit/date]`.
+- **Lesson for Tanpopo:** Bundling the entire model evaluation and optimization lifecycle (evals, fine-tuning recipes, mandatory ClickHouse) directly inside a gateway proxy inflates operational weight and undermines long-term sustainability when product boundaries are blurred.
 
 ---
 
-### 2.2. Nhóm 2: Cloud-Native & Wasm Infrastructure Gateways
+### 2.2. Category 2: Cloud-Native & Wasm Infrastructure Gateways
 
 #### A. Agentgateway (`agentgateway/agentgateway` — Solo.io / Agentic AI Foundation)
-- **Mô hình & Kiến trúc:** Data plane viết bằng **Rust** chuyên biệt cho giao thức tác nhân, hỗ trợ nguyên bản cả **LLM routing, MCP (stdio, SSE, Streamable HTTP) và A2A**, tích hợp ngôn ngữ chính sách Cedar/CEL, giao diện cấu hình có sẵn và chuẩn OpenTelemetry [Nguồn: `github.com/agentgateway/agentgateway`, `agentgateway.dev`].
-- **Giấy phép:** Lõi **Apache-2.0**; các tính năng điều phối cụm quy mô lớn, hạn mức phân tán toàn đội tàu (fleet-wide rate limiting) và bảng điều khiển doanh nghiệp thuộc gói **Solo Enterprise for agentgateway** [Nguồn: `agentgateway.dev`, tài liệu Solo.io].
-- **Điểm yếu & Khoảng trống cho Tanpopo:** Đây là đối thủ kiến trúc đáng gờm nhất về mặt hỗ trợ đa giao thức (LLM + MCP + A2A), **nhưng** `agentgateway` chủ đích đóng chặt logic xử lý trong nhân Rust (chỉ mở rộng hạn chế qua CEL/webhooks) chứ **không có hệ sinh thái Plugin/Provider Adapter đóng gói độc lập cài từ Marketplace/Git/URL kèm SDK cho bên thứ ba**; đồng thời thiếu lớp lưu trữ cache phản hồi nội tại và định hướng thiên nặng về hạ tầng đám mây Kubernetes của Solo.io.
+- **Model & Architecture:** **Rust** data plane purpose-built for agentic protocols, natively supporting **LLM routing, MCP (stdio, SSE, Streamable HTTP), and A2A**, integrated with Cedar/CEL policy engines, a built-in configuration UI, and OpenTelemetry [Source: `github.com/agentgateway/agentgateway`, `agentgateway.dev`].
+- **License:** **Apache-2.0** core; large-scale cluster orchestration, fleet-wide rate limiting, and enterprise management consoles belong to **Solo Enterprise for agentgateway** [Source: `agentgateway.dev`, Solo.io documentation].
+- **Weaknesses & White Space for Tanpopo:** Architecturally the strongest multi-protocol competitor (LLM + MCP + A2A), **yet** `agentgateway` deliberately keeps protocol logic compiled inside its Rust core (extensible only narrowly via CEL/webhooks) with **no third-party SDK or independently packaged Plugin/Provider Adapter ecosystem installable from Marketplace/Git/URL**; it also omits built-in response caching and skews heavily toward Solo.io's Kubernetes cloud-native footprint.
 
-#### B. Agent Router (trước đây là Envoy AI Gateway — `envoyproxy/ai-gateway`) & Higress (`alibaba/higress`) & Kong AI Gateway
-- **Đặc điểm chung:** Xây dựng trên nền tảng proxy hạ tầng truyền thống (**Envoy C++ / Istio** với Agent Router và Higress; **NGINX / Lua** với Kong) [Nguồn: `aigateway.envoyproxy.io`, `github.com/alibaba/higress`, `konghq.com`]. Đáng chú ý, **Higress** (dự án CNCF Sandbox, Apache-2.0) đã chứng minh tính khả thi kỹ thuật của việc dùng **WebAssembly (Proxy-Wasm)** viết bằng Go/Rust/JS để mở rộng AI Gateway và bọc OpenAPI thành MCP server [Nguồn: `github.com/alibaba/higress`].
-- **Điểm yếu & Khoảng trống cho Tanpopo:**
-  - **Rào cản vận hành cực lớn (Infrastructure Complexity):** Đòi hỏi Kubernetes, Envoy Gateway CRDs hoặc Istio control plane. Một lập trình viên độc lập hay nhóm sản phẩm 10–30 người gần như không thể dựng và vận hành Istio/Envoy chỉ để quản lý AI API, ngân sách và MCP tools.
-  - **Trải nghiệm phát triển Plugin nặng nề:** Chuẩn Proxy-Wasm cấp thấp của Envoy rất khó viết đối với tác giả cộng đồng muốn tạo nhanh một AI Provider Adapter mới (so với SDK chuyên biệt cho AI Gateway + Declarative Manifest).
+#### B. Agent Router (formerly Envoy AI Gateway — `envoyproxy/ai-gateway`), Higress (`alibaba/higress`), & Kong AI Gateway
+- **Shared Profile:** Built atop traditional infrastructure proxies (**Envoy C++ / Istio** for Agent Router and Higress; **NGINX / Lua** for Kong) [Source: `aigateway.envoyproxy.io`, `github.com/alibaba/higress`, `konghq.com`]. Notably, **Higress** (CNCF Sandbox, Apache-2.0) validates the technical viability of using **WebAssembly (Proxy-Wasm)** written in Go/Rust/JS to extend an AI Gateway and wrap OpenAPI specs as MCP servers [Source: `github.com/alibaba/higress`].
+- **Weaknesses & White Space for Tanpopo:**
+  - **Prohibitive Infrastructure Complexity:** Requires Kubernetes, Envoy Gateway CRDs, or an Istio control plane. Solo developers and 10–30-engineer product teams will rarely stand up and operate Istio/Envoy solely to manage AI APIs, budgets, and MCP tools.
+  - **Heavyweight Plugin Authoring UX:** Low-level Envoy Proxy-Wasm ABI authoring is far too complex for community authors who simply want to ship a new AI Provider Adapter quickly (compared to a purpose-built AI Gateway SDK + Declarative Manifest).
 
 ---
 
-### 2.3. Nhóm 3: Hệ sinh thái Plugin tham chiếu (Adjacent Plugin Ecosystems)
+### 2.3. Category 3: Adjacent Reference Plugin Ecosystems
 
 #### Dify & `dify-plugin-daemon` (`langgenius/dify`)
-- **Mô hình:** Nền tảng xây dựng ứng dụng/workflow LLMOps đã tách rời hoàn toàn **Model Providers** và **Tools** thành các gói plugin độc lập chạy qua dịch vụ `dify-plugin-daemon` (tiến trình con Python qua stdio/TCP hoặc serverless) và phân phối trên Dify Marketplace [Nguồn: `docs.dify.ai`, `github.com/langgenius/dify-plugin-daemon`].
-- **Giấy phép:** **Apache-2.0 sửa đổi (Modified Apache-2.0 / Source-Available)** — cấm sử dụng để cung cấp dịch vụ thương mại đa người thuê (multi-tenant) nếu không có thỏa thuận thương mại với LangGenius và ràng buộc giữ thương hiệu trên giao diện [Nguồn: `github.com/langgenius/dify/blob/main/LICENSE`].
-- **Ý nghĩa đối với Tanpopo:**
-  - **Bằng chứng xác thực nhu cầu (Market Proof):** Dify chứng minh rằng cộng đồng và các nhà cung cấp AI rất sẵn lòng tự viết và duy trì Model Provider Plugins nếu có SDK và Marketplace rõ ràng!
-  - **Sự khác biệt rõ rệt:** Dify là khung dựng ứng dụng đầu cuối nặng nề (kéo theo hàng loạt container Python, Celery, Vector DB) với giấy phép hạn chế, **không phải** một AI/MCP/A2A Gateway trung lập, độ trễ thấp, chuẩn Apache-2.0 thuần khiết đứng trước mọi ứng dụng và IDE.
+- **Model:** An LLMOps application/workflow builder that fully decoupled **Model Providers** and **Tools** into standalone plugin packages executed via `dify-plugin-daemon` (Python subprocesses over stdio/TCP or serverless workers) and distributed through the Dify Marketplace [Source: `docs.dify.ai`, `github.com/langgenius/dify-plugin-daemon`].
+- **License:** **Modified Apache-2.0 (Source-Available)** — prohibits offering commercial multi-tenant services without a commercial license from LangGenius and enforces UI branding retention [Source: `github.com/langgenius/dify/blob/main/LICENSE`].
+- **Implications for Tanpopo:**
+  - **Market Proof:** Dify proves that both community authors and AI vendors readily build and maintain Model Provider Plugins when given a clean SDK and Marketplace!
+  - **Sharp Differentiation:** Dify is a heavyweight end-to-end app builder (pulling in numerous Python, Celery, and Vector DB containers) under a restrictive license — **not** a neutral, low-latency, pure Apache-2.0 AI/MCP/A2A Gateway sitting cleanly in front of any application or IDE.
 
 ---
 
-### 2.4. Nhóm 4: LLMOps Observability & Cổng chuyên biệt cho MCP
+### 2.4. Category 4: LLMOps Observability & MCP-Only Gateways
 
-- **Helicone (`Helicone/helicone`, `Helicone/ai-gateway`) & Langfuse:** Mạnh về quan sát truy vết (observability), đánh giá (evals) và quản lý prompt. Riêng thành phần `Helicone/ai-gateway` viết bằng Rust nhưng dùng giấy phép **GPLv3** (gây dè dặt cho một số môi trường tích hợp doanh nghiệp so với Apache-2.0) và không tập trung vào kiến trúc mở rộng Provider/MCP/A2A qua plugin cô lập [Nguồn: `github.com/Helicone/ai-gateway`].
+- **Helicone (`Helicone/helicone`, `Helicone/ai-gateway`) & Langfuse:** Strong in tracing observability, evals, and prompt management. `Helicone/ai-gateway` is written in Rust but licensed under **GPLv3** (creating adoption friction in certain enterprise environments compared to Apache-2.0) and does not target isolated plugin extensibility across Provider/MCP/A2A [Source: `github.com/Helicone/ai-gateway`].
 - **Stacklok ToolHive (`stacklok/toolhive`), Docker MCP Gateway (`docker/mcp-gateway`), MetaMCP:**
-  - *ToolHive (Apache-2.0):* Cô lập từng MCP server trong container riêng, dùng chính sách Cedar rất tốt, nhưng **thiếu giao diện Web Console miễn phí** và phụ thuộc sâu vào Kubernetes khi chạy production [Nguồn: `github.com/stacklok/toolhive`].
-  - *Docker MCP Gateway (MIT):* Tối ưu cho máy cá nhân qua Docker Desktop, khóa các tính năng quản trị tổ chức nâng cao vào gói thương mại [Nguồn: `github.com/docker/mcp-gateway`].
-  - *Điểm nghẽn chung:* Chỉ giải quyết riêng lát cắt MCP. Tổ chức dùng chúng vẫn phải dựng thêm một cổng khác cho LLM API và một cơ chế khác cho A2A — dẫn tới phân mảnh khóa xác thực, nhân đôi chính sách bảo mật và đứt gãy truy vết chi phí/nhật ký.
+  - *ToolHive (Apache-2.0):* Isolates each MCP server inside its own container with strong Cedar policies, but **lacks a free OSS Web Console** and relies heavily on Kubernetes in production [Source: `github.com/stacklok/toolhive`].
+  - *Docker MCP Gateway (MIT):* Optimized for local developer workstations via Docker Desktop, gating advanced organizational governance behind commercial tiers [Source: `github.com/docker/mcp-gateway`].
+  - *Shared Bottleneck:* Solves only the MCP slice. Organizations adopting them must still deploy a separate gateway for LLM APIs and another mechanism for A2A — fragmenting credentials, duplicating security policies, and breaking unified cost/audit traceability.
 
 ---
 
-## 3. Ma trận So sánh Tổng hợp Thị trường
+## 3. Comprehensive Market Comparison Matrix
 
-| Tiêu chí so sánh | **Tanpopo (Định hướng mục tiêu)** | **LiteLLM** | **Portkey OSS** | **Maxim Bifrost** | **Agentgateway** | **Higress / Envoy AI** | **ToolHive (MCP)** | **OpenRouter** |
+| Comparison Criterion | **Tanpopo (Target Direction)** | **LiteLLM** | **Portkey OSS** | **Maxim Bifrost** | **Agentgateway** | **Higress / Envoy AI** | **ToolHive (MCP)** | **OpenRouter** |
 |---|---|---|---|---|---|---|---|---|
-| **Giấy phép lõi** | **Apache-2.0 thuần** (`PROPOSED` đồng bộ) | MIT + Enterprise đóng | MIT (chỉ lõi proxy) | Apache-2.0 + Enterprise đóng | Apache-2.0 + Solo Ent. | Apache-2.0 | Apache-2.0 + Ent. | Đóng (SaaS) |
-| **Độ dễ Self-Host (Ngày 1)** | **Cao** (Mục tiêu 1 binary / 1 container + sẵn UI/CLI) | Trung bình – Cao (YAML tĩnh không DB, hoặc Python + Postgres + Prisma khi bật sổ cái khóa ảo) | Cao (chỉ proxy, thiếu UI quản trị tự host) | Cao (Go binary/Docker) | Trung bình - Cao (Rust binary / K8s) | **Thấp** (Đòi hỏi K8s / Envoy / Istio) | Trung bình (CLI local, thiếu Web UI OSS) | **Không thể tự host** |
-| **Cài Provider mới không cần nâng cấp Core** | **Có (Cốt lõi: Marketplace / Git / URL / Private Registry)** | Không (Gắn chặt repo chính hoặc hook Python nội bộ) | Không (Gắn chặt repo chính) | Không (Mô-đun nội bộ theo bản phát hành) | Không (Chỉ mở cấu hình endpoint cơ bản) | Một phần (Qua viết Proxy-Wasm cấp thấp) | Không áp dụng (Chỉ làm MCP) | Không (Phụ thuộc đội ngũ OpenRouter) |
-| **Cô lập bảo mật cho Plugin bên thứ 3** | **Có (Sandbox + Quyền tường minh + Contract Test)** | Không (Chạy chung tiến trình Python) | Không có hệ plugin ngoài | Không có sandbox cho gói ngoài | Không nạp mã plugin bên thứ 3 (chỉ CEL/webhook) | Có (Wasm sandbox) | Có (Container cho mỗi MCP server) | Không áp dụng |
-| **Tách bạch & Thống nhất 4 lớp (`Provider`, `Plugin`, `MCP`, `A2A`)** | **Có (Kiến trúc cốt lõi)** | Chưa tách sạch (MCP mới thử nghiệm, thiếu A2A) | MCP/Quản trị sâu nằm ở bản thương mại | Có LLM + MCP cơ bản; thiếu A2A | **Có LLM + MCP + A2A** (nhưng thiếu lớp Plugin mở) | Có LLM + MCP (A2A đang sơ khai) | Chỉ có lớp MCP | Chỉ có lớp LLM/Model |
-| **Quản trị RBAC, Ngân sách & Audit tự host miễn phí** | **Có (Mục tiêu cốt lõi cho self-hosted)** | Bị giới hạn một phần ở tầng Enterprise | Khóa phần lớn ở tầng Cloud/Enterprise | Khóa SSO/RBAC sâu ở Enterprise | Khóa quản trị cụm ở Solo Enterprise | Tùy thuộc tích hợp ngoài (Grafana/Prometheus/Istio) | Có Cedar policy, nhưng không có Web UI OSS | Tính phí 5%–8% theo lưu lượng/tín dụng |
+| **Core License** | **Pure Apache-2.0** (`PROPOSED` alignment) | MIT + Closed Enterprise | MIT (proxy core only) | Apache-2.0 + Closed Enterprise | Apache-2.0 + Solo Ent. | Apache-2.0 | Apache-2.0 + Ent. | Closed (SaaS) |
+| **Day-1 Self-Host Ease** | **High** (Target: 1 binary / 1 container + built-in UI/CLI) | Medium–High (Stateless YAML without DB, or Python + Postgres + Prisma with virtual-key ledger) | High (headless proxy only, no self-hosted admin UI) | High (Go binary/Docker) | Medium–High (Rust binary / K8s) | **Low** (Requires K8s / Envoy / Istio) | Medium (Local CLI, no OSS Web UI) | **Not self-hostable** |
+| **Add New Provider Without Core Upgrade** | **Yes (Core thesis: Marketplace / Git / URL / Private Registry)** | No (Coupled to main repo or internal Python hooks) | No (Coupled to main repo) | No (Internal modules tied to releases) | No (Basic endpoint config only) | Partial (Via low-level Proxy-Wasm code) | N/A (MCP only) | No (Dependent on OpenRouter team) |
+| **Security Isolation for Third-Party Plugins** | **Yes (Sandbox + Explicit Permissions + Contract Tests)** | No (Runs in shared Python process) | No external plugin system | No sandbox for external packages | No third-party plugin code loading (CEL/webhook only) | Yes (Wasm sandbox) | Yes (Container per MCP server) | N/A |
+| **Decoupled & Unified 4 Layers (`Provider`, `Plugin`, `MCP`, `A2A`)** | **Yes (Foundational architecture)** | Not cleanly decoupled (experimental MCP, no A2A) | Deep MCP/Governance locked in commercial tier | LLM + basic MCP; no A2A | **LLM + MCP + A2A** (lacks open Plugin layer) | LLM + MCP (nascent A2A) | MCP layer only | LLM/Model layer only |
+| **Free Self-Hosted RBAC, Budgets & Audit Governance** | **Yes (Core self-hosted commitment)** | Partially gated in Enterprise tier | Mostly gated in Cloud/Enterprise tier | Deep SSO/RBAC gated in Enterprise | Cluster governance gated in Solo Enterprise | Depends on external stack (Grafana/Prometheus/Istio) | Cedar policy included, no OSS Web UI | Charges 5%–8% usage/credit fee |
 
 ---
 
-## 4. Kết luận Tình báo Thị trường: Tại sao Tanpopo Đáng Tồn Tại?
+## 4. Market Intelligence Conclusion: Why Should Tanpopo Exist?
 
-Không một giải pháp hiện hữu nào đồng thời thỏa mãn 4 điều kiện mà các đội ngũ kỹ thuật hiện đại đang cần:
+No existing solution simultaneously satisfies all four conditions demanded by modern engineering organizations:
 
-1. **Giải phóng khỏi nút thắt cổ chai của Core Maintainers (`Extension-First` thật sự):** Thay vì chờ LiteLLM hay Bifrost gộp PR và chịu rủi ro hỏng hệ thống mỗi lần nâng cấp phiên bản lớn, người vận hành Tanpopo chỉ cần cài hoặc ghim phiên bản một **Provider Adapter** đã qua kiểm thử hợp đồng (từ kho chính thức, Git hoặc kho nội bộ).
-2. **An toàn cho mã bên thứ ba trong cổng giữ khóa nhạy cảm:** Khác với cơ chế nạp script trần đầy rủi ro rò rỉ khóa, Tanpopo đặt cô lập bảo mật, quyền hạn tường minh và kiểm thử tương thích làm công dân hạng nhất của hệ thống plugin.
-3. **Một mặt phẳng quản trị cho cả Suy luận (Provider), Công cụ (MCP) và Tác nhân (A2A) mà không cần dựng cụm Istio/Kubernetes phức tạp:** Đem lại sức mạnh đa giao thức ngang tầm `agentgateway` nhưng với trải nghiệm khởi chạy đơn giản, có sẵn Web Console + CLI thân thiện như `One-API` / `Caddy`.
-4. **Cam kết Mã nguồn mở Tự chủ & Tuân thủ Chính thống:** Giấy phép Apache-2.0 sạch, không bẫy người tự vận hành vào tường phí cho các nhu cầu bảo mật cơ bản, và đứng ngoài vùng xám pháp lý của trào lưu bẻ khóa gói thuê bao cá nhân.
+1. **Freedom from Core Maintainer Bottlenecks (True `Extension-First` Architecture):** Instead of waiting for LiteLLM or Bifrost to merge PRs and risking system-wide regressions on major upgrades, Tanpopo operators simply install or version-pin a contract-tested **Provider Adapter** (from the official registry, Git, or an internal registry).
+2. **Safe Execution of Third-Party Code Inside a High-Privilege Secret Gateway:** Unlike raw in-process script loading that exposes master credentials, Tanpopo treats sandboxing, explicit capability grants, and contract verification as first-class citizens of its plugin runtime.
+3. **One Unified Governance Plane Across Inference (Provider), Tools (MCP), and Agents (A2A) Without Istio/Kubernetes Complexity:** Delivers multi-protocol power on par with `agentgateway` paired with the single-command startup and approachable Web Console + CLI ergonomics of `One-API` / `Caddy`.
+4. **Sovereign Open-Source Commitment & Lawful Compliance:** Clean Apache-2.0 licensing without bait-and-switch paywalls on baseline self-hosted security, standing firmly outside the legal grey zone of consumer subscription arbitrage hacks.

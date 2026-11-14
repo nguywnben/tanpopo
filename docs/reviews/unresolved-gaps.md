@@ -1,139 +1,139 @@
-# Sổ Đăng ký Các Khoảng Trống Chưa Đóng, Đề xuất Change Requests (`CR`) & Tiêu chí Nghiệm thu Đóng Lỗ hổng — Tanpopo
+# Unresolved Gaps Register, Proposed Change Requests (`CR`) & Closure Criteria — Tanpopo
 
-> **Tài liệu Quản trị Khắc phục Sau Kiểm toán (Phase ASTRA A08 — Companion to [`integrated-audit.md`](./integrated-audit.md))**
-> - **Mã tài liệu:** `REV-GAP-01` | **Phiên bản:** `0.1.0-step08` | **Ngày lập:** `2026-11-14`
-> - **Vai trò biên soạn:** Independent Product / Architecture / Security Reviewer
-> - **Nguyên tắc quản trị bất biến:** Kiểm toán viên **tuyệt đối không tự ý sửa đổi phạm vi sản phẩm, ngăn xếp công nghệ, lược đồ hợp đồng hay chính sách bảo mật**. Mọi thay đổi kiến trúc/phạm vi/chính sách đều được đóng gói thành **Đề xuất Thay đổi (`CR-01` .. `CR-10`)** trình **Product Owner** quyết định, kèm **Tiêu chí Đóng Đo lường Được (`Closure Criteria`)** cho từng khoảng trống.
-
----
-
-## Phần A — Mười Đề xuất Quyết định Thay đổi & Bổ sung ADR (`CR-01` .. `CR-10` — Trình Product Owner Phê duyệt)
-
-### `CR-01` — Khóa Danh mục `Official Reference Adapters` Cho `MVP (v0.1)` & Quyết định Điểm cuối `/v1/rerank`
-- **Liên kết lỗ hổng:** `AUD-007`, `AUD-023` | **Tác động:** Phạm vi `Gate G1 / G2` (`srs.md`, `release-scope.md`, `decisions.md`).
-- **Vấn đề:** Tài liệu hiện mâu thuẫn giữa `2–3`, `5`, `5–6` và `6–8` Official Adapters ở `v0.1`; đặc biệt `Bedrock` được nhắc ở `v0.1` nhưng lại phụ thuộc xác thực AWS IAM/SigV4 (`TP-FR-0206`, đang xếp ở `v0.3`). Ngoài ra `rerank` có trong `Charter` nhưng vắng mặt trong `SRS`.
-- **Các phương án trình Product Owner chọn:**
-  - **Phương án A *(Khuyến nghị)*:** Khóa cứng đúng **5 Official Reference Adapters trong `MVP (v0.1)`** dùng xác thực khóa tĩnh/tiêu đề chuẩn hoặc nội bộ gồm: **(1) `OpenAI`, (2) `Anthropic`, (3) `Google Gemini`, (4) `OpenAI-Compatible (vLLM / Groq / Together / DeepSeek)`, (5) `Ollama`** (trong đó `OpenAI`, `OpenAI-Compatible`, `Ollama` dùng Tầng 1 Khai báo; `Anthropic` và `Gemini` dùng Tầng 2 Wasm để kiểm chứng thực chiến cả 2 tầng!). Đưa **`AWS Bedrock` và `Azure OpenAI` (cần SigV4 / Entra ID)** sang **`v0.2`**, và bổ sung `/v1/rerank` làm yêu cầu `Should` ở `v0.2`.
-  - **Phương án B:** Đẩy sớm nguyên hàm ký `HOST_AWS_SIGV4` từ `v0.3` về `v0.1` để giao kèm cả `AWS Bedrock` ngay trong `MVP (v0.1)` (6 Adapters), chấp nhận tăng khối lượng công việc `v0.1` thêm ~1 tuần.
-- **Tiêu chí đóng (`Closure Criteria`):** Đồng bộ cùng một con số và tên hãng cụ thể trên `decisions.md`, `release-scope.md`, `srs.md` (`TP-FR-0301`/`0302`) và thêm kịch bản nghiệm thu danh mục Official Adapters vào `acceptance-criteria.md`.
+> **Post-Audit Remediation Governance Document (Phase ASTRA A08 — Companion to [`integrated-audit.md`](./integrated-audit.md))**
+> - **Document ID:** `REV-GAP-01` | **Version:** `0.1.0-step08` | **Date:** `2026-11-14`
+> - **Authoring Role:** Independent Product / Architecture / Security Reviewer
+> - **Non-Negotiable Governance Principle:** The independent auditor **never unilaterally alters product scope, technology stack, contract schemas, or security policies**. Every architectural, scope, or policy modification is packaged as an explicit **Change Request (`CR-01` .. `CR-10`)** for **Product Owner** decision, paired with measurable **Closure Criteria** for every unresolved gap.
 
 ---
 
-### `CR-02` — Giải quyết Phân liệt Mô hình Thực thi `2-Tier` (G1/G2/SRS) vs `3-Tier Isolated Sidecar` (`ADR-0002`)
-- **Liên kết lỗ hổng:** `AUD-008` | **Tác động:** `SD-G1-02`, `TD-G2-04`, `srs.md`, `release-scope.md`, `ADR-0002`.
-- **Vấn đề:** Nếu Product Owner duyệt `SD-G1-02` (2 tầng) và `ADR-0002` (3 tầng) như hiện tại thì hai quyết định tự mâu thuẫn nhau, và `Tier-3 Sidecar` không có yêu cầu `TP-FR-*` hay mốc phiên bản nào.
-- **Các phương án trình Product Owner chọn:**
-  - **Phương án A *(Khuyến nghị)*:** Xác nhận kiến trúc đích là **3 tầng (`ADR-0002`)**, nhưng **phân kỳ triển khai rõ trong `SRS` & `release-scope.md`**: `v0.1` chỉ bắt buộc xây dựng **`Tier-1 Declarative` (`TP-FR-0301`) + `Tier-2 Wasm Sandbox` (`TP-FR-0302`)**; bổ sung mới mã yêu cầu **`TP-FR-0308 (Could — v0.3): Động cơ Thực thi Tầng 3 Isolated Sidecar qua ConnectRPC UDS/mTLS`** (dùng chung cho cầu nối `stdio` MCP và HSM doanh nghiệp).
-  - **Phương án B:** Loại bỏ hoàn toàn `Tier-3 Sidecar` khỏi phạm vi trước `v1.0` để giữ kiến trúc thuần 2 tầng gọn nhẹ tuyệt đối (khi đó các máy chủ MCP `stdio` phải được người vận hành bọc thành `Streamable HTTP` bên ngoài Tanpopo).
-- **Tiêu chí đóng (`Closure Criteria`):** Cập nhật thống nhất `SD-G1-02`, `TD-G2-04`, `ADR-0002`, `srs.md` và `release-scope.md`; bổ sung `SPIKE` kiểm chứng IPC nếu giữ `Tier-3`.
+## Part A — Ten Proposed Change Requests & ADR Amendments (`CR-01` .. `CR-10` — For Product Owner Review)
+
+### `CR-01` — Lock the `Official Reference Adapters` Roster for `MVP (v0.1)` & Decide `/v1/rerank`
+- **Linked Findings:** `AUD-007`, `AUD-023` | **Impact:** `Gate G1 / G2` scope (`srs.md`, `release-scope.md`, `decisions.md`).
+- **Problem:** Existing documents conflict across `2–3`, `5`, `5–6`, and `6–8` Official Adapters in `v0.1`; notably, `Bedrock` is referenced in `v0.1` while depending on AWS IAM/SigV4 (`TP-FR-0206`, currently scheduled in `v0.3`). Additionally, `rerank` appears in the `Charter` but is absent from `SRS`.
+- **Options for Product Owner Decision:**
+  - **Option A *(Recommended)*:** Hard-lock exactly **5 Official Reference Adapters in `MVP (v0.1)`** using standard static API-key/header or local authentication: **(1) `OpenAI`, (2) `Anthropic`, (3) `Google Gemini`, (4) `OpenAI-Compatible (vLLM / Groq / Together / DeepSeek)`, and (5) `Ollama`** (implementing `OpenAI`, `OpenAI-Compatible`, and `Ollama` as Tier-1 Declarative packs, and `Anthropic` plus `Gemini` as Tier-2 Wasm adapters to dogfood both tiers in production!). Schedule **`AWS Bedrock` and `Azure OpenAI` (requiring SigV4 / Entra ID)** in **`v0.2`**, and add `/v1/rerank` as a `Should` requirement in `v0.2`.
+  - **Option B:** Pull the `HOST_AWS_SIGV4` signing primitive forward from `v0.3` into `v0.1` to ship `AWS Bedrock` in `MVP (v0.1)` (6 Adapters), accepting ~1 additional week of `v0.1` engineering scope.
+- **Closure Criteria:** Reconcile identical counts and vendor names across `decisions.md`, `release-scope.md`, and `srs.md` (`TP-FR-0301`/`0302`), and add an explicit Official Adapters acceptance scenario to `acceptance-criteria.md`.
 
 ---
 
-### `CR-03` — Thống nhất Mô hình Nhãn Nguồn gốc (`3` vs `4` `Trust Tiers`), Kiểu Chữ Enum & Không gian Tên Khóa Độc quyền
-- **Liên kết lỗ hổng:** `AUD-012`, `AUD-013` | **Tác động:** `TP-BR-0201`, `data-model.md`, `routing-and-policy.md`, `SPEC-UX-01/04`, `SPEC-SEC-02`.
-- **Vấn đề:** Xung đột giữa bất biến 3 nhãn của `TP-BR-0201` (`official`, `verified`, `unverified-external` + cờ nội bộ) với cột `origin_trust_tier` 4 giá trị (`PRIVATE_ENTERPRISE`), đồng thời lệch bảo vệ `@tanpopo/*` vs `@tanpopo-official/*`.
-- **Các phương án trình Product Owner chọn:**
-  - **Phương án A *(Khuyến nghị — Giữ đúng tinh thần `TP-BR-0201`)*:** Giữ cố định **3 giá trị `origin_trust_tier`** công cộng (`official`, `verified`, `unverified_external`), và thêm cột độc lập **`enterprise_signed BOOLEAN NOT NULL DEFAULT FALSE` + `signing_key_fingerprint VARCHAR(64)`** trên `extension_versions` (cho phép chính sách `min_plugin_trust` đặt `OFFICIAL_ONLY | VERIFIED_OR_ENTERPRISE_SIGNED | VERIFIED_ONLY | ANY_APPROVED`).
-  - **Phương án B:** Sửa chính thức `TP-BR-0201`, `glossary.md` và `TP-FR-0304` từ 3 nhãn lên **4 nhãn phân cấp tường minh** (`official > verified > private_enterprise > unverified_external`) xuyên suốt mọi tài liệu và cột DB.
-  - *Đi kèm bắt buộc cho cả A & B:* Khóa cứng biểu thức chính quy không gian tên dành riêng **`^@tanpopo(-[a-z0-9]+)?/`** (chặn mạo danh cả `@tanpopo/*` lẫn `@tanpopo-official/*`).
-- **Tiêu chí đóng (`Closure Criteria`):** Một tập giá trị enum duy nhất khớp `100%` giữa `TP-BR-0201`, DDL `CHECK (...)`, JSON Schema `tanpopo.lock` và thẻ `Token` trên giao diện.
+### `CR-02` — Resolve the `2-Tier` (G1/G2/SRS) vs. `3-Tier Isolated Sidecar` (`ADR-0002`) Runtime Split
+- **Linked Findings:** `AUD-008` | **Impact:** `SD-G1-02`, `TD-G2-04`, `srs.md`, `release-scope.md`, `ADR-0002`.
+- **Problem:** Approving `SD-G1-02` (2-tier) alongside `ADR-0002` (3-tier) as currently written creates a direct contradiction, and `Tier-3 Sidecar` has zero `TP-FR-*` requirements or release milestones.
+- **Options for Product Owner Decision:**
+  - **Option A *(Recommended)*:** Confirm the **3-tier target architecture (`ADR-0002`)** while **explicitly phasing delivery in `SRS` & `release-scope.md`**: `v0.1` builds only **`Tier-1 Declarative` (`TP-FR-0301`) + `Tier-2 Wasm Sandbox` (`TP-FR-0302`)**; add a new requirement **`TP-FR-0308 (Could — v0.3): Tier-3 Isolated Sidecar Runtime over ConnectRPC UDS/mTLS`** (shared across `stdio` MCP bridges and enterprise HSM integrations).
+  - **Option B:** Cut `Tier-3 Sidecar` entirely from pre-`v1.0` scope to preserve a strictly 2-tier lightweight runtime (requiring operators to wrap any `stdio` MCP servers as external `Streamable HTTP` services outside Tanpopo).
+- **Closure Criteria:** Align `SD-G1-02`, `TD-G2-04`, `ADR-0002`, `srs.md`, and `release-scope.md`; add an IPC verification `SPIKE` if `Tier-3` is retained.
 
 ---
 
-### `CR-04` — Chốt Bộ Vai trò `RBAC`, Bảng Bật/Tắt Plugin Theo `Organization` & Hiệu chỉnh Cổng Xuất xưởng `v0.1`
-- **Liên kết lỗ hổng:** `AUD-007`, `AUD-014` | **Tác động:** `data-model.md`, `release-scope.md`, `release-readiness.md`, `contract-test-matrix.md`.
-- **Đề xuất trình duyệt:**
-  1. **Vai trò `RBAC`:** Chốt `role_bindings.role_name` gồm **6 vai trò chuẩn** (`OPERATOR`, `ORG_OWNER`, `TEAM_ADMIN`, `SECURITY_REVIEWER`, `FINOPS_VIEWER`, `DEVELOPER`; chế độ `Personal Admin` tự động gán `OPERATOR + ORG_OWNER` cho người dùng đầu tiên).
-  2. **Bật/Tắt Plugin Cấp Tổ chức (`TP-BR-0202`):** Thêm bảng liên kết `org_extension_policies (org_id, package_id, enabled, pinned_installation_id, version)` và đổi ràng buộc trên `provider_adapters` thành `UNIQUE (installation_id, adapter_slug)` để nhiều phiên bản cùng tồn tại êm khi cuộn nâng cấp.
-  3. **Gỡ kẹt Cổng Xuất xưởng `MVP (v0.1)`:**
-     - Cho phép tạo `Organization` thứ hai qua CLI quản trị/API (`POST /admin/v1/organizations` dành cho `OPERATOR`) ngay ở `v0.1` để kiểm thử tự động `TP-AC-SEC-07` chạy thật 100%, trong khi giao diện chuyển đổi đa tổ chức nâng cao trên Web Console vẫn giữ lộ trình `v0.3`/`v1.0`.
-     - Tách điều kiện diễn tập gói `Air-Gap` trong `GATE-REL-06` và thu hồi cụm `< 5s` trong `TP-AC-N04` áp dụng từ cột mốc tương ứng (`v0.3`/`v1.0`), còn `v0.1` kiểm định thu hồi đơn nút `< 1s` và chạy Web Console ngoại tuyến không gọi CDN ngoài (`UX-AC-10`).
-- **Tiêu chí đóng (`Closure Criteria`):** `MVP (v0.1)` có tập tiêu chí xuất xưởng tự nhất quán 100% không phụ thuộc tính năng của `v0.3`/`v1.0`.
+### `CR-03` — Unify Provenance `Trust Tier` Taxonomy (`3` vs. `4` Tiers), Enum Casing & Reserved Namespaces
+- **Linked Findings:** `AUD-012`, `AUD-013` | **Impact:** `TP-BR-0201`, `data-model.md`, `routing-and-policy.md`, `SPEC-UX-01/04`, `SPEC-SEC-02`.
+- **Problem:** `TP-BR-0201`'s 3-label invariant (`official`, `verified`, `unverified-external` + internal signature boolean) conflicts with the 4-value `origin_trust_tier` column (`PRIVATE_ENTERPRISE`), while reserved namespace rules drift between `@tanpopo/*` and `@tanpopo-official/*`.
+- **Options for Product Owner Decision:**
+  - **Option A *(Recommended — Preserves `TP-BR-0201`)*:** Retain exactly **3 public `origin_trust_tier` values** (`official`, `verified`, `unverified_external`) and add independent columns **`enterprise_signed BOOLEAN NOT NULL DEFAULT FALSE` + `signing_key_fingerprint VARCHAR(64)`** on `extension_versions` (allowing `min_plugin_trust` policies of `OFFICIAL_ONLY | VERIFIED_OR_ENTERPRISE_SIGNED | VERIFIED_ONLY | ANY_APPROVED`).
+  - **Option B:** Formally amend `TP-BR-0201`, `glossary.md`, and `TP-FR-0304` from 3 labels to an **explicit 4-tier hierarchy** (`official > verified > private_enterprise > unverified_external`) across all documents and DB columns.
+  - *Mandatory across both A & B:* Enforce the reserved namespace regex **`^@tanpopo(-[a-z0-9]+)?/`** (blocking spoofing of both `@tanpopo/*` and `@tanpopo-official/*`).
+- **Closure Criteria:** Single canonical enum matching `100%` across `TP-BR-0201`, SQL `CHECK (...)` constraints, `tanpopo.lock` JSON Schema, and UI `Token` badges.
 
 ---
 
-### `CR-05` — Tái Thiết kế Hợp đồng `ExtensionRuntimeService` (`runtime.proto`), Tham chiếu Luồng Đa phương thức & Cổng Khóa Mù
-- **Liên kết lỗ hổng:** `AUD-001`, `AUD-002`, `AUD-016`, `AUD-021` | **Tác động:** `SPEC-API-01`, `SPEC-EXT-01/02/03`, `SPEC-CORE-02`, `SPEC-SEC-01/02`.
-- **Đề xuất kỹ thuật trình duyệt (bổ sung vào `ADR-0002` & `SPEC-API-01`):**
-  1. **Hoàn thiện `runtime.proto` biên dịch sạch (`0 errors`):** Định nghĩa đầy đủ `ExtractUsageInput`, bổ sung **`rpc TransformResponse(TransformResponseInput) returns (NormalizedInferenceResponse)`** cho luồng đồng bộ/embeddings, bổ sung **`rpc InspectNativeRequest(NativeRequestInput) returns (NativeRoutingHints)`** cho `/native/{dialect}/*`, và tách `ValidateConnection` thành giao thức 2 pha (`BuildValidationProbe -> UpstreamHttpSpec` do Host thực thi qua `Blind Broker` → `VerifyValidationResult`) để Guest không cần mở socket mạng.
-  2. **Tách Tệp Đa phương thức Khỏi Bộ nhớ Tuyến tính `16 MiB` Wasm (`Out-of-Band Blob Handles`):** Khi yêu cầu chứa ảnh/âm thanh/PDF base64 lớn, Host thay thế chuỗi base64 bằng mã tham chiếu `blob_ref://req_.../part_0` trước khi đưa JSON siêu dữ liệu (`< 256 KB`) vào Wasm `TransformRequest`, sau đó Host ghép luồng trực tiếp khi gửi đi; đồng thời công thức ước tính token tách riêng văn bản (`utf8_bytes / 3`) và định mức token cố định/theo trang cho từng khối `image`/`audio`/`document`!
-  3. **Hoàn thiện `HostCryptoSignSpec` & Đóng Cửa `scoped_secret_unseal` Trên Wasm Cộng đồng:** Bổ sung cấu trúc ký động (`HMAC-SHA256`, `AWS_SIGV4`, `RSA-SHA256` kèm `canonical_payload` và `output_encoding`) vào `CredentialInjectInstruction`; cấm cứng việc tiêm tiêu đề `Cookie` / `Set-Cookie` trong `Blind Broker` (`DEC-004`); và **loại bỏ hoàn toàn `scoped_secret_unseal` khỏi Tầng 1 & Tầng 2** (nếu doanh nghiệp bắt buộc dùng thư viện ký đóng riêng thì chỉ chạy qua `Tier-3 Isolated Sidecar` nội bộ do `OPERATOR` quản lý) để giữ nguyên vẹn 100% bất biến *Zero Raw Secrets in Wasm Memory*.
-- **Tiêu chí đóng (`Closure Criteria`):** Tệp `.proto` trích xuất từ `SPEC-API-01` vượt qua `buf lint` / `protoc`, và `NormalizedInferenceRequestEnvelope` chứa đầy đủ mọi trường của `TP-FR-0101`..`0105`.
+### `CR-04` — Lock the `RBAC` Role Set, Per-`Organization` Plugin Enablement Table & `v0.1` Exit Gate Alignment
+- **Linked Findings:** `AUD-007`, `AUD-014` | **Impact:** `data-model.md`, `release-scope.md`, `release-readiness.md`, `contract-test-matrix.md`.
+- **Proposed Remediation:**
+  1. **`RBAC` Roles:** Lock `role_bindings.role_name` to **6 canonical roles** (`OPERATOR`, `ORG_OWNER`, `TEAM_ADMIN`, `SECURITY_REVIEWER`, `FINOPS_VIEWER`, `DEVELOPER`; `Personal Admin` mode automatically grants `OPERATOR + ORG_OWNER` to the bootstrap owner).
+  2. **Organization-Scoped Plugin Enablement (`TP-BR-0202`):** Add `org_extension_policies (org_id, package_id, enabled, pinned_installation_id, version)` and change `provider_adapters` uniqueness to `UNIQUE (installation_id, adapter_slug)` so concurrent versions coexist cleanly during rolling upgrades.
+  3. **Unblock `MVP (v0.1)` Release Gates:**
+     - Expose `POST /admin/v1/organizations` (restricted to `OPERATOR`) and CLI org creation in `v0.1` so automated multi-tenant isolation suite `TP-AC-SEC-07` runs `100%` live in `v0.1`, while rich multi-org UI switching remains scheduled in `v0.3`/`v1.0`.
+     - Scope `Air-Gap` bundle drills in `GATE-REL-06` and `< 5s` cluster revocation in `TP-AC-N04` to their respective delivery milestones (`v0.3`/`v1.0`), while `v0.1` verifies `< 1s` single-node revocation and zero-external-CDN offline Web Console rendering (`UX-AC-10`).
+- **Closure Criteria:** `MVP (v0.1)` exit criteria are `100%` self-consistent with zero dependencies on `v0.3`/`v1.0` features.
 
 ---
 
-### `CR-06` — Cứng Hóa Lược đồ Dữ liệu Vật lý (`ARCH-DATA-01`): 8 Bảng Còn Thiếu, Mật mã Phong bì `Project DEK` & Chuỗi Kiểm toán Phân vùng
-- **Liên kết lỗ hổng:** `AUD-003`, `AUD-004`, `AUD-010`, `AUD-026`, `AUD-029` | **Tác động:** `data-model.md`, `secrets-and-tenant-isolation.md`, `backups-recovery.md`, `ADR-0003`, `ADR-0005`.
-- **Đề xuất kỹ thuật trình duyệt:**
-  1. **Bổ sung DDL cho các bảng còn thiếu:** `config_changelog (epoch BIGSERIAL PRIMARY KEY, ...)`, `distributed_leases`, `usage_rollups_hourly`, `oauth_authorization_sessions` (lưu PKCE/state/Device Flow có `expires_at`), `connection_secret_bindings (connection_id, slot_name, credential_id)` (hỗ trợ đa khe bí mật), `extension_revocations`, và (ở nhịp tương ứng) `a2a_tasks` + `webhook_endpoints`.
-  2. **Sửa các lỗi ràng buộc SQL & Đa thuê bao:** Cho phép `extension_installations.active_version_id` nhận `NULL` khi đang `PENDING_PERMISSION_APPROVAL`; cho phép `approval_requests.org_id` / `project_id` nhận `NULL` đối với hành động cấp `Instance`; thêm chỉ mục duy nhất một phần `WHERE org_id IS NULL` cho `principals`; áp dụng khóa tổ hợp `(org_id, id)` trên toàn bộ bảng con thuê bao kèm câu lệnh mẫu `ALTER TABLE ... ENABLE / FORCE ROW LEVEL SECURITY`; khóa kiểu thời gian trên SQLite thống nhất là **`BIGINT epoch_ms`**.
-  3. **Đồng nhất Mật mã & Giải quyết Triệt để `Crypto-Shredding` Cấp `Project`:**
-     - Chốt **1 công thức `AEAD AAD` duy nhất** khớp cột thật: `"tanpopo:v1:cred:" || org_id || ":" || credential_id || ":" || secret_kind`.
-     - Chốt băm `Virtual Key` bằng **`SHA-256` thuần trên khóa ngẫu nhiên CSPRNG 256-bit** (không phụ thuộc `Master KEK` nên xoay `KEK` không bao giờ làm chết khóa ảo).
-     - Bổ sung bảng **`project_encryption_keys (project_id, org_id, wrapped_project_dek)`** (bọc bởi `Org DEK`) để mã hóa các bí mật cấp `Project` và `debug_payload_blobs` (thêm cột `project_id`) — biến cam kết `Crypto-Shredding < 60s` ở cấp `Project` (`OPS-AC-09`) thành **đúng đắn 100% về mặt toán học kể cả trên bản sao lưu lạnh**!
-  4. **Chống Ghi Đúp Sổ cái & Chống Phân Nhánh Chuỗi Băm Kiểm toán Ở Cụm HA:**
-     - Thêm ràng buộc duy nhất `UNIQUE (request_id, settled_at)` kết hợp chuyển trạng thái nguyên tử `UPDATE budget_reservations SET state = 'SETTLED_...' WHERE id = ? AND state IN ('RESERVED_HOLD', 'STREAMING_ACCRUING')` trong cùng giao dịch, đồng thời thêm cột `media_usage_json` và `applied_pricing_snapshot_json` vào `usage_settlements`.
-     - Đổi chuỗi băm `audit_events` sang **chuỗi tuần tự theo từng `org_id` (và 1 chuỗi `SYSTEM` riêng cho `org_id IS NULL`) có cột `seq_no BIGINT` và băm trên chuỗi `RFC 8785 JCS(metadata)`**: vừa cho phép `ORG_OWNER` tự kiểm tra toàn vẹn chuỗi của tổ chức mình dưới `FORCE RLS` mà không lộ dữ liệu `Org B`, vừa không bị gãy khi di trú `SQLite <-> Postgres`!
-- **Tiêu chí đóng (`Closure Criteria`):** Lược đồ SQL chạy sạch trên cả `SQLite` và `PostgreSQL 16` không còn bất kỳ bảng tham chiếu mồ côi hay mâu thuẫn mật mã nào.
+### `CR-05` — Redesign `ExtensionRuntimeService` (`runtime.proto`), Out-of-Band Multimodal Blob Handles & Blind Broker Hardening
+- **Linked Findings:** `AUD-001`, `AUD-002`, `AUD-016`, `AUD-021` | **Impact:** `SPEC-API-01`, `SPEC-EXT-01/02/03`, `SPEC-CORE-02`, `SPEC-SEC-01/02`.
+- **Proposed Technical Specification (amending `ADR-0002` & `SPEC-API-01`):**
+  1. **Compile-Clean `runtime.proto` (`0 errors`):** Define `ExtractUsageInput`, add **`rpc TransformResponse(TransformResponseInput) returns (NormalizedInferenceResponse)`** for non-streaming/embedding responses, add **`rpc InspectNativeRequest(NativeRequestInput) returns (NativeRoutingHints)`** for `/native/{dialect}/*`, and split `ValidateConnection` into a 2-phase protocol (`BuildValidationProbe -> UpstreamHttpSpec` executed by Host via `Blind Broker` → `VerifyValidationResult`) so Guests never open network sockets.
+  2. **Keep Multimodal Blobs Outside `16 MiB` Wasm Linear Memory (`Out-of-Band Blob Handles`):** When requests carry large base64 images/audio/PDFs, Host replaces raw base64 payloads with opaque `blob_ref://req_.../part_0` handles before passing compact metadata JSON (`< 256 KB`) into Wasm `TransformRequest`, then splices streams directly on outbound egress; simultaneously split pre-hold token estimation into text (`utf8_bytes / 3`) plus per-image/per-second/per-page multimodal schedules!
+  3. **Complete `HostCryptoSignSpec` & Eliminate `scoped_secret_unseal` in Tier-1/2 Wasm:** Add structured Host signing (`HMAC-SHA256`, `AWS_SIGV4`, `RSA-SHA256` with `canonical_payload` and `output_encoding`) to `CredentialInjectInstruction`; hard-ban outbound `Cookie` / `Set-Cookie` header injection in `Blind Broker` (`DEC-004`); and **eliminate `scoped_secret_unseal` completely from Tier 1 & Tier 2** (if an enterprise requires proprietary closed signing libraries, it runs strictly inside an `OPERATOR`-managed `Tier-3 Isolated Sidecar`), preserving `100%` of the *Zero Raw Secrets in Wasm Memory* invariant.
+- **Closure Criteria:** Extracted `.proto` passes `buf lint` / `protoc`, and `NormalizedInferenceRequestEnvelope` covers `100%` of `TP-FR-0101`..`0105` fields.
 
 ---
 
-### `CR-07` — Khóa Lược đồ Khóa `Valkey Cluster` Có Hash-Tag `{org_id}` & Đồng bộ Nguồn Chân lý Ngân sách Khi Mất Cache
-- **Liên kết lỗ hổng:** `AUD-004` | **Tác động:** `deployment-topology.md`, `usage-billing-observability.md`, `ADR-0003`, `ADR-0005`.
-- **Đề xuất kỹ thuật trình duyệt:**
-  1. Bắt buộc mọi khóa trên `Valkey/Redis` sử dụng cú pháp **`Hash-Tag` chuẩn Redis Cluster `tp:v1:{<org_id>}:...`** (ví dụ `tp:v1:{org_01jc...}:budget:prj_01jc...`, `tp:v1:{org_01jc...}:rl:vk_01jc...`). Nhờ cặp ngoặc nhọn `{<org_id>}`, toàn bộ phân cấp `Org -> Project -> Env -> Virtual Key` của cùng một tổ chức luôn nằm trên đúng **1 hash slot duy nhất**, cho phép kịch bản Lua nguyên tử chạy `100%` không bao giờ gặp lỗi `CROSSSLOT`!
-  2. Để ngăn chi vượt trần khi `Valkey` sập giữa chừng: mỗi nút Data Plane định kỳ đồng bộ tổng mức giữ chỗ đang mở (`active_node_hold_micros`) kèm nhịp `heartbeat` `5 giây` xuống bảng nhẹ trên PostgreSQL; khi chuyển sang chế độ dự phòng đọc trực tiếp PostgreSQL, hệ thống cộng thêm biên độ bảo hiểm của các luồng đang mở trên cụm trước khi cấp phép yêu cầu mới.
-- **Tiêu chí đóng (`Closure Criteria`):** Cập nhật đầy đủ bảng khóa Valkey vào `ARCH-OPS-01` và kiểm chứng trong `SPIKE-03`.
+### `CR-06` — Harden Physical Data Schema (`ARCH-DATA-01`): 8 Missing Tables, `Project DEK` Envelope Hierarchy & Partitioned Audit Chains
+- **Linked Findings:** `AUD-003`, `AUD-004`, `AUD-010`, `AUD-026`, `AUD-029` | **Impact:** `data-model.md`, `secrets-and-tenant-isolation.md`, `backups-recovery.md`, `ADR-0003`, `ADR-0005`.
+- **Proposed Technical Specification:**
+  1. **Author Missing SQL DDL:** `config_changelog (epoch BIGSERIAL PRIMARY KEY, ...)`, `distributed_leases`, `usage_rollups_hourly`, `oauth_authorization_sessions` (persisting PKCE/state/Device Flow with `expires_at`), `connection_secret_bindings (connection_id, slot_name, credential_id)` (multi-slot credentials), `extension_revocations`, and (at their respective milestones) `a2a_tasks` + `webhook_endpoints`.
+  2. **Fix SQL Nullability & Multi-Tenant Relational Constraints:** Make `extension_installations.active_version_id` nullable during `PENDING_PERMISSION_APPROVAL`; make `approval_requests.org_id` / `project_id` nullable for `Instance`-scoped actions; add a partial unique index `WHERE org_id IS NULL` on `principals`; enforce composite `(org_id, id)` keys across all tenant child tables with reference `ALTER TABLE ... ENABLE / FORCE ROW LEVEL SECURITY` DDL; standardize SQLite timestamps to **`BIGINT epoch_ms`**.
+  3. **Unify Cryptography & Make `Project`-Level `Crypto-Shredding` Mathematically Exact:**
+     - Lock **1 canonical `AEAD AAD` formula** matching real columns: `"tanpopo:v1:cred:" || org_id || ":" || credential_id || ":" || secret_kind`.
+     - Lock `Virtual Key` hashing to **plain `SHA-256` over 256-bit CSPRNG keys** (decoupled from `Master KEK` so `KEK` rotation never invalidates virtual keys).
+     - Add **`project_encryption_keys (project_id, org_id, wrapped_project_dek)`** (wrapped by `Org DEK`) to encrypt `Project`-scoped secrets and `debug_payload_blobs` (adding `project_id`) — making `< 60s` `Project`-level `Crypto-Shredding` (`OPS-AC-09`) **`100%` mathematically sound even across historical cold backups**!
+  4. **Prevent Duplicate Ledger Settlements & HA Audit Hash-Chain Forks:**
+     - Add `UNIQUE (request_id, settled_at)` paired with atomic `UPDATE budget_reservations SET state = 'SETTLED_...' WHERE id = ? AND state IN ('RESERVED_HOLD', 'STREAMING_ACCRUING')` inside the same transaction, plus `media_usage_json` and `applied_pricing_snapshot_json` on `usage_settlements`.
+     - Partition `audit_events` hash chains **per `org_id` (plus a dedicated `SYSTEM` chain for `org_id IS NULL`) using `seq_no BIGINT` over `RFC 8785 JCS(metadata)`**: enabling `ORG_OWNER` self-verification under `FORCE RLS` without exposing `Org B` rows, and surviving `SQLite <-> Postgres` migrations intact!
+- **Closure Criteria:** SQL DDL executes cleanly on both `SQLite` and `PostgreSQL 16` with zero orphaned table references or cryptographic mismatches.
 
 ---
 
-### `CR-08` — Thiết kế Lại Giao thức Duyệt Công cụ MCP `destructive` Tương thích Chuẩn IDE & Tách Máy Trạng thái `SM-09` Cho `A2A Task`
-- **Liên kết lỗ hổng:** `AUD-006` | **Tác động:** `mcp-a2a-boundaries.md`, `business-entity-map.md`, `api-contracts.md`, `user-flows.md`.
-- **Đề xuất kỹ thuật trình duyệt:**
-  1. **Tương thích 100% với `Claude Code`, `Cursor`, `Codex` trên `POST /mcp`:** Thay vì trả HTTP `202` + đòi tiêu đề HTTP lạ `X-Tanpopo-Approval-Token` (làm gãy trình khách MCP chuẩn), ở chế độ bất đồng bộ Tanpopo trả về phản hồi **HTTP `200` JSON-RPC chuẩn của MCP** với `isError: true` chứa cấu trúc hướng dẫn rõ mã `approval_request_id` và cung cấp công cụ nội bộ hệ thống `tanpopo__check_approval_and_resume(approval_request_id)` (hoặc cho phép truyền qua trường chuẩn `_meta.tanpopoApprovalToken` sau khi gọi API lấy phiếu đã duyệt) — đồng thời sửa công thức băm tham số gắn vào `(org_id, virtual_key_id, server_slug, tool_name, JCS(arguments))` (không dùng `principal_id` rỗng).
-  2. **Tách riêng `SM-09 (A2A Task Lifecycle)`:** Giữ `SM-06` chuyên biệt cho `ApprovalRequest`, và tạo `SM-09` ánh xạ 1-1 với trạng thái chuẩn của giao thức `Agent2Agent` (`submitted -> working -> input-required -> completed | failed | canceled`) kèm chốt một chuẩn giao thức đường truyền duy nhất (JSON-RPC 2.0 qua HTTP/SSE theo chuẩn A2A gốc).
-- **Tiêu chí đóng (`Closure Criteria`):** Xác nhận bằng `EXP-05` với trình khách MCP tiêu chuẩn không cần viết bản vá riêng phía client.
+### `CR-07` — Lock `Valkey Cluster` `{org_id}` Hash-Tag Keyspace & Cache-Loss Budget Hold Reconciliation
+- **Linked Findings:** `AUD-004` | **Impact:** `deployment-topology.md`, `usage-billing-observability.md`, `ADR-0003`, `ADR-0005`.
+- **Proposed Technical Specification:**
+  1. Mandate Redis Cluster **`Hash-Tag` syntax `tp:v1:{<org_id>}:...`** across all `Valkey/Redis` keys (e.g., `tp:v1:{org_01jc...}:budget:prj_01jc...`, `tp:v1:{org_01jc...}:rl:vk_01jc...`). Wrapping `{<org_id>}` guarantees that the entire `Org -> Project -> Env -> Virtual Key` hierarchy for any tenant hashes to **1 exact Redis Cluster slot**, eliminating `CROSSSLOT` errors in atomic Lua scripts!
+  2. To prevent budget cap overruns on abrupt `Valkey` failure: each Data-Plane node periodically checkpoints its aggregate in-flight holds (`active_node_hold_micros`) with a `5s` heartbeat into a lightweight PostgreSQL table; during fallback to direct PostgreSQL reservation, Core adds active cluster hold margins before admitting new requests.
+- **Closure Criteria:** Document full Valkey keyspace schema in `ARCH-OPS-01` and validate in `SPIKE-03`.
 
 ---
 
-### `CR-09` — Bổ sung Các Năng lực Vận hành Tự Host Còn Thiếu & Quyết định Số phận Của `Webhooks` / `Response Cache`
-- **Liên kết lỗ hổng:** `AUD-023`, `AUD-024` | **Tác động:** `srs.md`, `release-scope.md`, `provider-adapter.md`, `installer-upgrades.md`, `data-model.md`.
-- **Đề xuất trình Product Owner chọn:**
-  1. **Bổ sung ngay vào `Must (v0.1)` (Nhẹ, thiết yếu để sống còn khi tự host):**
-     - Lệnh cứu hộ cục bộ yêu cầu quyền truy cập máy chủ vật lý/container: **`tanpopo admin reset-local-owner`** (khôi phục khi quên mật khẩu hoặc lỗi cấu hình OIDC).
-     - Quy tắc tự động chèn `stream_options: {"include_usage": true}` trên trình thông dịch OpenAI-Compatible khi `stream: true` để đạt tỷ lệ quyết toán `EXACT` tối đa.
-  2. **Quyết định rõ về `Webhooks` và `Response Cache`:**
-     - *Webhooks cảnh báo ngân sách / duyệt MCP:* Chính thức thêm bảng `webhook_subscriptions` + worker gửi có chữ ký HMAC vào nhịp **`v0.2` (`Should`)** (ở `v0.1` cảnh báo hiển thị trên `Banner` Console và nhật ký/metrics OTel).
-     - *Response Cache (`Exact/Semantic Cache`):* Chọn **Phương án A (Khuyến nghị):** Ghi rõ `Response Cache` là **`Later / Could (v0.3+)`** trong `srs.md` (chưa làm ở `v0.1–v0.2` để tránh phình phạm vi, giữ `FMEA-03`/`CT-28` làm cổng điều kiện khi bật ở `v0.3+`); hoặc **Phương án B:** Bổ sung `Exact Match Cache` đơn giản theo `Org DEK` ở `v0.2`.
-- **Tiêu chí đóng (`Closure Criteria`):** Không còn bất kỳ tính năng nào xuất hiện trong bài test/runbook mà không có mã `TP-FR-*` và lược đồ tương ứng.
+### `CR-08` — Redesign Standard-IDE-Compatible `destructive` MCP Approval Flow & Split `SM-09` for `A2A Task`
+- **Linked Findings:** `AUD-006` | **Impact:** `mcp-a2a-boundaries.md`, `business-entity-map.md`, `api-contracts.md`, `user-flows.md`.
+- **Proposed Technical Specification:**
+  1. **`100%` Compatibility with `Claude Code`, `Cursor`, and `Codex` on `POST /mcp`:** Rather than returning HTTP `202` + requiring a non-standard `X-Tanpopo-Approval-Token` HTTP header (which breaks off-the-shelf MCP clients), asynchronous approval returns a **standard MCP HTTP `200` JSON-RPC result** with `isError: true` containing structured instructions with `approval_request_id` plus a built-in system tool `tanpopo__check_approval_and_resume(approval_request_id)` (or `_meta.tanpopoApprovalToken` once approved) — while binding the parameter hash to `(org_id, virtual_key_id, server_slug, tool_name, JCS(arguments))` (never an empty `principal_id`).
+  2. **Dedicated `SM-09 (A2A Task Lifecycle)`:** Keep `SM-06` dedicated to `ApprovalRequest`, and introduce `SM-09` mapping 1-to-1 with canonical `Agent2Agent` states (`submitted -> working -> input-required -> completed | failed | canceled`) over a single canonical wire binding (JSON-RPC 2.0 over HTTP/SSE).
+- **Closure Criteria:** Verified via `EXP-05` against unmodified standard MCP clients requiring zero client-side patches.
 
 ---
 
-### `CR-10` — Hoàn thiện Mặt phẳng `Admin OpenAPI`, Luồng `Playground`, Cho phép `Ollama` Cục bộ Ngày đầu, Cây Lệnh CLI Đơn & Đóng gói Phông chữ `Air-Gap`
-- **Liên kết lỗ hổng:** `AUD-005`, `AUD-009`, `AUD-017`, `AUD-018`, `AUD-022` | **Tác động:** `api-contracts.md`, `screen-specifications.md`, `design-system-integration.md`, `developer-experience.md`, `ADR-0001`, `ADR-0004`.
-- **Đề xuất kỹ thuật trình duyệt:**
-  1. **Một nhị phân duy nhất `tanpopo`:** Chuẩn hóa tên tệp thực thi duy nhất là `tanpopo` (`tanpopo serve --role=...`, có thể tạo symlink `tanpopod -> tanpopo` trong gói `.deb`/container để tương thích dịch vụ Linux) và cập nhật đầy đủ các nhánh lệnh `admin`, `upgrade`, `incident` vào cây CLI chuẩn tại `SPEC-OPS-04`.
-  2. **Gỡ kẹt `Ollama` Cục bộ ở `UJ-01` (`TTFGR < 3m`):** Trong `Setup Wizard` (`SCR-01`) và `SCR-04`, khi chính `OPERATOR` / `Personal Admin` nhập địa chỉ mô hình cục bộ và tích xác nhận `Allow Private/Loopback Upstream`, Control Plane lưu thẳng vào `provider_connections.allow_private_ip = TRUE` (mà vẫn khóa cứng không bao giờ mở `169.254.169.254` / cổng quản trị của chính Tanpopo!), đồng thời Wizard tự tạo luôn `Model Deployment (HEALTHY)` + `Default Route` trong 1 giao dịch.
-  3. **Chuẩn hóa `Playground` (`SCR-15`):** Web Console gọi `POST /admin/v1/playground/sessions` (kiểm tra RBAC + CSRF) để nhận một khóa phiên ngắn hạn `TTL = 15 phút` có hạn mức nhỏ, sau đó gọi qua đường chuẩn Data Plane để kiểm chứng trung thực `100%` đường nóng giống hệt SDK bên ngoài.
-  4. **Giải pháp Đóng gói Phông chữ `Figtree` Cho `Air-Gap` Không Vi phạm `astryx doctor`:** Giữ nguyên `100%` tệp `astryx-themes.js` không chỉnh sửa tay (để vượt qua kiểm tra `theme-module` của `astryx doctor`), và cấu hình plugin/alias trong `vite.config.ts` ánh xạ `@astryxdesign/theme-neutral/fonts.css` sang tệp `@font-face` nội bộ trỏ tới các tệp `.woff2` của `Figtree` đóng gói tĩnh trong `web/console/public/fonts/`, đồng thời sử dụng đúng tập 29 biểu tượng ngữ nghĩa sẵn có của `@astryxdesign/core/Icon` (hoặc thêm gói `@phosphor-icons/react` / `lucide-react` giấy phép MIT sạch vào `ADR-0004`).
-- **Tiêu chí đóng (`Closure Criteria`):** Đủ `100%` schema OpenAPI cho `SCR-01..16`, `tsc --noEmit` xanh, `astryx doctor --built` đạt `0 fail` và trình duyệt mở trong mạng ngắt Internet có `0` yêu cầu mạng thất bại.
+### `CR-09` — Add Self-Hosted Break-Glass Essentials & Decide `Webhooks` / `Response Cache` Phasing
+- **Linked Findings:** `AUD-023`, `AUD-024` | **Impact:** `srs.md`, `release-scope.md`, `provider-adapter.md`, `installer-upgrades.md`, `data-model.md`.
+- **Options for Product Owner Decision:**
+  1. **Add Immediately to `Must (v0.1)` (Lightweight survival essentials for self-hosters):**
+     - Host/container-exec break-glass recovery CLI: **`tanpopo admin reset-local-owner`** (recovers locked-out local admin passwords or broken OIDC configs).
+     - Automatic `stream_options: {"include_usage": true}` injection in the OpenAI-Compatible adapter whenever `stream: true` to maximize `EXACT` ledger settlement.
+  2. **Explicit Phasing for `Webhooks` and `Response Cache`:**
+     - *Budget / MCP Approval Webhooks:* Formally schedule `webhook_subscriptions` + HMAC-signed delivery worker in **`v0.2` (`Should`)** (`v0.1` surfaces alerts via Console `Banner` and OTel logs/metrics).
+     - *Response Cache (`Exact/Semantic Cache`):* Select **Option A (Recommended):** Formally record `Response Cache` as **`Later / Could (v0.3+)`** in `srs.md` (omitted from `v0.1–v0.2` to prevent scope creep, keeping `FMEA-03`/`CT-28` as conditional activation gates in `v0.3+`); or **Option B:** Ship a minimal `Org DEK`-encrypted `Exact Match Cache` in `v0.2`.
+- **Closure Criteria:** Zero features appear in tests or runbooks without a corresponding `TP-FR-*` requirement and schema definition.
 
 ---
 
-## Phần B — Bảng Theo dõi Đóng Lỗ hổng Bắt buộc Trước Khi Viết Code (`Unresolved Gaps Closure Tracker`)
+### `CR-10` — Complete `Admin OpenAPI`, `Playground` Session Flow, Day-One Local `Ollama`, Single CLI Tree & `Air-Gap` Font Bundling
+- **Linked Findings:** `AUD-005`, `AUD-009`, `AUD-017`, `AUD-018`, `AUD-022` | **Impact:** `api-contracts.md`, `screen-specifications.md`, `design-system-integration.md`, `developer-experience.md`, `ADR-0001`, `ADR-0004`.
+- **Proposed Technical Specification:**
+  1. **Single `tanpopo` Binary:** Standardize `tanpopo` as the sole binary (`tanpopo serve --role=...`, with an optional `tanpopod -> tanpopo` package symlink in `.deb`/container images for Linux service ergonomics) and consolidate `admin`, `upgrade`, and `incident` subcommands into `SPEC-OPS-04`.
+  2. **Unblock Day-One Local `Ollama` in `UJ-01` (`TTFGR < 3m`):** In `Setup Wizard` (`SCR-01`) and `SCR-04`, when an `OPERATOR` / `Personal Admin` enters a local model URL and explicitly checks `Allow Private/Loopback Upstream`, Control Plane persists `provider_connections.allow_private_ip = TRUE` (while still unconditionally blocking `169.254.169.254` and Tanpopo's own admin listener ports!), and the Wizard atomically provisions `Model Deployment (HEALTHY)` + `Default Route` in a single transaction.
+  3. **Standardize `Playground` (`SCR-15`):** Web Console calls `POST /admin/v1/playground/sessions` (enforcing RBAC + CSRF) to mint a short-lived (`TTL = 15 min`), micro-capped ephemeral token, then exercises the exact standard Data-Plane hot path identical to external SDKs.
+  4. **`Air-Gap` `Figtree` Font Bundling Passing `astryx doctor`:** Keep `astryx-themes.js` `100%` unmodified (satisfying `astryx doctor`'s `theme-module` check) and configure a `vite.config.ts` resolve alias mapping `@astryxdesign/theme-neutral/fonts.css` to a local `@font-face` stylesheet referencing static `Figtree` `.woff2` assets under `web/console/public/fonts/`, while mapping icons strictly to `@astryxdesign/core/Icon`'s 29 built-in semantic icons (or recording an MIT-clean icon package such as `@phosphor-icons/react` / `lucide-react` in `ADR-0004`).
+- **Closure Criteria:** `100%` OpenAPI schema coverage for `SCR-01..16`, clean `tsc --noEmit`, `astryx doctor --built` reporting `0 fail`, and `0` failed network requests inside an air-gapped browser session.
 
-| Mã Khoảng trống | Liên kết Audit / CR | Mức độ | Chặn Cột mốc Nào? | Tiêu chí Kiểm chứng Đóng Hoàn toàn (`Verifiable Closure Criteria`) | Trạng thái |
+---
+
+## Part B — Mandatory Pre-Code Gap Closure Tracker (`Unresolved Gaps Closure Tracker`)
+
+| Gap ID | Linked Audit / CR | Severity | Blocked Milestone | Verifiable Closure Criteria | Status |
 |---|---|---|---|---|---|
-| **`GAP-01`** | `AUD-011` / Cổng `G1–G3` | **`CRITICAL`** | **Chặn mọi dòng code `v0.1` & PoC** | Product Owner phản hồi phê duyệt `SD-G1-01..05`, `TD-G2-01..06`, `ADR-0001..0006`, `CR-01..10` và cấp phép chạy `SPIKE-01..04` trong [`decisions.md`](../governance/decisions.md). | `OPEN — AWAITING OWNER` |
-| **`GAP-02`** | `AUD-001` / `CR-05` | **`CRITICAL`** | **Chặn `v0.1` Core & SDK** | `runtime.proto` định nghĩa đủ `ExtractUsageInput`, `TransformResponse`, `InspectNativeRequest`, `ValidateConnection` 2 pha và `HostCryptoSignSpec`; biên dịch `protoc` thành công `0` lỗi. | `OPEN` |
-| **`GAP-03`** | `AUD-002` / `CR-05` | **`CRITICAL`** | **Chặn `v0.1` Gateway & Wasm** | `NormalizedInferenceRequestEnvelope` có đủ trường công cụ/JSON/sampling; đặc tả truyền `blob_ref` ngoài vùng nhớ `16 MiB` Wasm và sửa công thức ước tính token đa phương thức. | `OPEN` |
-| **`GAP-04`** | `AUD-003` / `CR-06` | **`CRITICAL`** | **Chặn `v0.1` DB Migration** | `data-model.md` bổ sung đủ các bảng `config_changelog`, `distributed_leases`, `usage_rollups_hourly`, `oauth_authorization_sessions`, `connection_secret_bindings`, `org_extension_policies`, `extension_revocations`, sửa lỗi `NOT NULL` trên `extension_installations`/`approval_requests` và khóa tổ hợp `(org_id, id)` + `FORCE RLS`. | `OPEN` |
-| **`GAP-05`** | `AUD-010` / `CR-06` | **`CRITICAL`** | **Chặn `v0.1` Vault, Backup & Audit** | Đồng nhất 1 công thức `AEAD AAD` duy nhất, băm `SHA-256` cho `Virtual Key`, thêm `project_encryption_keys` cho `Crypto-Shredding` cấp dự án, hoàn thiện quy trình làm mới cache ở `DR-03` và đổi `audit_events` sang chuỗi băm theo `org_id` + `seq_no` + `JCS`. | `OPEN` |
-| **`GAP-06`** | `AUD-004` / `CR-06`, `07` | **`CRITICAL`** | **Chặn `v0.1` Ledger & `v0.3` HA** | Bổ sung khóa chống ghi đúp trên `usage_settlements`, cột đơn vị đa phương thức/bản chụp đơn giá, lược đồ khóa Valkey `{org_id}` chống `CROSSSLOT` và cơ chế đồng bộ giữ chỗ khi sập Valkey. | `OPEN` |
-| **`GAP-07`** | `AUD-005` / `CR-10` | **`CRITICAL`** | **Chặn `v0.1` Admin API & UI** | `api-contracts.md` định nghĩa đầy đủ đường dẫn và schema cho `/v1/responses`, `/v1/embeddings`, `/v1/models` và toàn bộ `51` endpoint `/admin/v1/*` của `SCR-01..16` (kể cả luồng `Playground`). | `OPEN` |
-| **`GAP-08`** | `AUD-006` / `CR-08` | **`CRITICAL`** | **Chặn `v0.1` Keys/Ops & `v0.2` MCP** | Sửa máy trạng thái `SM-01`, `SM-02`, `SM-04`, `SM-05` (`QUOTA_PAUSED -> REVOKED`), `SM-07` (`STREAMING_ACCRUING -> EXPIRED_RECLAIMED`), `SM-08`; tách `SM-09` cho A2A; đổi luồng duyệt MCP sang JSON-RPC tương thích IDE chuẩn. | `OPEN` |
-| **`GAP-09`** | `AUD-007`, `008` / `CR-01..04` | **`CRITICAL`** | **Chặn khóa phạm vi `v0.1`** | Chốt số lượng Official Adapters `v0.1`, phân kỳ `Tier-3 Sidecar`, thống nhất `Trust Tier` + tiền tố `@tanpopo(-*)/*`, chốt 6 vai trò RBAC và hiệu chỉnh cổng thoát `v0.1`. | `OPEN — AWAITING OWNER` |
-| **`GAP-10`** | `AUD-009` / `CR-10` | **`CRITICAL`** | **Chặn `v0.1` Onboarding `UJ-01`** | Hợp nhất quy tắc `allow_private_ip` cho `Ollama`/`vLLM`/LAN MCP và bổ sung bước tự tạo `Deployment (HEALTHY)` + `Route` trong Setup Wizard `SCR-01`. | `OPEN` |
-| **`GAP-11`** | `AUD-011` | **`CRITICAL`** | **Chặn cổng kiểm thử `v0.1`** | Viết bổ sung `TP-AC-*` và ca kiểm thử `CT-*`/`AUTH-*` cho giới hạn tốc độ `RPM/TPM/Concurrency` (`TP-FR-0702`), chống nới lỏng chính sách con (`TP-FR-0701`), phân trang con trỏ & `409 Conflict` (`TP-FR-0901`), và nâng `traceability.md` lên ánh xạ `1-1` theo từng mã yêu cầu. | `OPEN` |
-| **`GAP-12`** | `AUD-017`, `022` / `CR-10` | **`MAJOR`** | **Chặn `v0.1` Web Console Build** | Đặc tả cấu hình Vite đóng gói tĩnh phông chữ `Figtree` cho `Air-Gap`, chốt danh mục biểu tượng có thật, xử lý `ISS-001..005` khi mở pha code và sửa quy tắc chữ ký `offline_mode`. | `OPEN` |
-| **`GAP-13`** | `AUD-015`, `018`..`021`, `023`..`030` | **`MAJOR / MINOR`** | **Chặn trước khi đóng băng `Contract v0.1`** | Đồng bộ từ điển khóa năng lực `snake_case`, 1 cây lệnh `tanpopo` CLI (kèm `reset-local-owner` và mở khóa sau `freeze-writes`), 1 bảng hằng số thời gian chờ/RAM, 1 bộ tên metric Prometheus/JSON log, cấm tiêm `Cookie` ở `Blind Broker`, khép dải màn hình `1024–1279px` và bổ sung runner macOS/Windows + đa trình duyệt vào CI. | `OPEN` |
+| **`GAP-01`** | `AUD-011` / Gates `G1–G3` | **`CRITICAL`** | **Blocks all `v0.1` & PoC code** | Product Owner records decisions on `SD-G1-01..05`, `TD-G2-01..06`, `ADR-0001..0006`, `CR-01..10`, and authorizes `SPIKE-01..04` in [`decisions.md`](../governance/decisions.md). | `OPEN — AWAITING OWNER` |
+| **`GAP-02`** | `AUD-001` / `CR-05` | **`CRITICAL`** | **Blocks `v0.1` Core & SDK** | `runtime.proto` defines `ExtractUsageInput`, `TransformResponse`, `InspectNativeRequest`, 2-phase `ValidateConnection`, and `HostCryptoSignSpec`; compiles under `protoc` with `0` errors. | `OPEN` |
+| **`GAP-03`** | `AUD-002` / `CR-05` | **`CRITICAL`** | **Blocks `v0.1` Gateway & Wasm** | `NormalizedInferenceRequestEnvelope` includes tool/JSON/sampling fields; out-of-band `blob_ref` streaming keeps large blobs outside `16 MiB` Wasm RAM; multimodal token estimation fixed. | `OPEN` |
+| **`GAP-04`** | `AUD-003` / `CR-06` | **`CRITICAL`** | **Blocks `v0.1` DB Migration** | `data-model.md` adds `config_changelog`, `distributed_leases`, `usage_rollups_hourly`, `oauth_authorization_sessions`, `connection_secret_bindings`, `org_extension_policies`, and `extension_revocations`; fixes `NOT NULL` bugs on `extension_installations`/`approval_requests`; enforces `(org_id, id)` composite keys + `FORCE RLS`. | `OPEN` |
+| **`GAP-05`** | `AUD-010` / `CR-06` | **`CRITICAL`** | **Blocks `v0.1` Vault, Backup & Audit** | Reconciles 1 canonical `AEAD AAD` formula, plain `SHA-256` `Virtual Key` hashing, `project_encryption_keys` for project-level `Crypto-Shredding`, `DR-03` cache-refresh sequencing, and per-`org_id` + `seq_no` + `JCS` `audit_events` hash chains. | `OPEN` |
+| **`GAP-06`** | `AUD-004` / `CR-06`, `07` | **`CRITICAL`** | **Blocks `v0.1` Ledger & `v0.3` HA** | Adds idempotency uniqueness on `usage_settlements`, multimodal/pricing-snapshot columns, Valkey `{org_id}` hash-tag keyspace preventing `CROSSSLOT`, and Valkey-loss hold checkpointing. | `OPEN` |
+| **`GAP-07`** | `AUD-005` / `CR-10` | **`CRITICAL`** | **Blocks `v0.1` Admin API & UI** | `api-contracts.md` defines complete paths and schemas for `/v1/responses`, `/v1/embeddings`, `/v1/models`, and all `51` `/admin/v1/*` endpoints powering `SCR-01..16` (including `Playground`). | `OPEN` |
+| **`GAP-08`** | `AUD-006` / `CR-08` | **`CRITICAL`** | **Blocks `v0.1` Keys/Ops & `v0.2` MCP** | Fixes state machines `SM-01`, `SM-02`, `SM-04`, `SM-05` (`QUOTA_PAUSED -> REVOKED`), `SM-07` (`STREAMING_ACCRUING -> EXPIRED_RECLAIMED`), and `SM-08`; splits `SM-09` for A2A; switches MCP approval to standard JSON-RPC compatible with unmodified IDEs. | `OPEN` |
+| **`GAP-09`** | `AUD-007`, `008` / `CR-01..04` | **`CRITICAL`** | **Blocks `v0.1` scope freeze** | Locks `v0.1` Official Adapters roster, `Tier-3 Sidecar` milestone, unified `Trust Tier` + `@tanpopo(-*)/*` prefix rule, 6 RBAC roles, and `v0.1` exit gates. | `OPEN — AWAITING OWNER` |
+| **`GAP-10`** | `AUD-009` / `CR-10` | **`CRITICAL`** | **Blocks `v0.1` `UJ-01` Onboarding** | Unifies `allow_private_ip` rules for local `Ollama`/`vLLM`/LAN MCP and adds atomic `Deployment (HEALTHY)` + `Route` creation to Setup Wizard `SCR-01`. | `OPEN` |
+| **`GAP-11`** | `AUD-011` | **`CRITICAL`** | **Blocks `v0.1` verification gate** | Authors missing `TP-AC-*` and `CT-*`/`AUTH-*` tests for `RPM/TPM/Concurrency` rate limits (`TP-FR-0702`), child-policy narrowing (`TP-FR-0701`), and cursor pagination & `409 Conflict` (`TP-FR-0901`), plus expands `traceability.md` to `1-to-1` per-requirement mapping. | `OPEN` |
+| **`GAP-12`** | `AUD-017`, `022` / `CR-10` | **`MAJOR`** | **Blocks `v0.1` Web Console Build** | Specifies Vite static `Figtree` font bundling for `Air-Gap`, locks valid icon inventory, assigns `ISS-001..005` cleanup units, and fixes `offline_mode` signature rules. | `OPEN` |
+| **`GAP-13`** | `AUD-015`, `018`..`021`, `023`..`030` | **`MAJOR / MINOR`** | **Blocks `Contract v0.1` freeze** | Reconciles `snake_case` capability keys, single `tanpopo` CLI tree (including `reset-local-owner` and post-`freeze-writes` unfreeze), canonical timeout/RAM constants table, unified Prometheus/JSON log identifiers, `Blind Broker` `Cookie` ban, `1024–1279px` viewport rules, and macOS/Windows + multi-browser CI runners. | `OPEN` |

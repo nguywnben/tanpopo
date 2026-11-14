@@ -1,58 +1,58 @@
-# `TP-IMP-0012` — Động cơ Thông dịch Gói Khai báo Tầng 1 (`Declarative Adapter`) & Chuỗi 4 Thực thể Mô hình (`SM-02`)
+# `TP-IMP-0012` — Tier-1 `Declarative Adapter` Runtime Engine & 4-Entity Provider Catalog (`SM-02`)
 
-| Thuộc tính | Giá trị |
+| Property | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0012` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0004`, `TP-IMP-0010`, `TP-IMP-0011` — `GAP-01, 02`)* |
-| **Quy mô (`Size`)** | `L` (`internal/extension/declarative/*`, `internal/provider/catalog/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0005_providers_models.sql`) |
-| **Cấp độ Review** | **`REQUIRES_STRONG_REVIEW`** *(Bộ thông dịch biểu thức không Turing-complete chống ReDoS/OOM & ranh giới chuỗi 4 thực thể)* |
-| **Chủ sở hữu Kỹ thuật** | `Staff Platform / Runtime Engineer` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0004`, `TP-IMP-0010`, `TP-IMP-0011` — `GAP-01, 02`)* |
+| **Size** | `L` (`internal/extension/declarative/*`, `internal/provider/catalog/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0005_providers_models.sql`) |
+| **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Turing-incomplete expression interpreter defending against ReDoS/OOM & 4-entity catalog boundaries)* |
+| **Technical Owner** | `Staff Platform / Runtime Engineer` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Hiện thực hóa:
-1. **Chuỗi 4 thực thể chuẩn không nhập nhằng (`SPEC-EXT-02`):** `ProviderAdapter` (gói logic/biến đổi) → `ProviderConnection` (định danh kết nối, `allowed_hosts`, `allow_private_ip`, gắn khe bí mật qua `connection_secret_bindings` & máy trạng thái chuẩn `SM-02`) → `LogicalModel` (bí danh mô hình thống nhất kèm cờ năng lực `DECLARED / TESTED / VERIFIED` và cấu hình đơn giá `micro-USD`) → `ModelDeployment` (đích triển khai vật lý gắn vùng địa lý `region`, `idle_chunk_timeout_ms` và trọng số).
-2. **Động cơ Thông dịch Gói Khai báo Tầng 1 (`Tier-1 Declarative Engine`):** Cài đặt đúng giao diện chung `extension/port.ProviderRuntime` (`TP-IMP-0010`) sử dụng tập toán tử hữu hạn đã khóa ở `POC-02` (`TP-IMP-0004`), đạt mục tiêu phụ phí `< 2 ms p95` (`SLO-02` `TARGET / UNVERIFIED`) và bề mặt thực thi mã tùy ý bằng `0`.
+## 1. Intent
+Implement:
+1. **Unambiguous 4-Entity Provider Hierarchy (`SPEC-EXT-02`):** `ProviderAdapter` (transformation package) → `ProviderConnection` (endpoint identity, `allowed_hosts`, `allow_private_ip`, secret slot bindings via `connection_secret_bindings` & canonical `SM-02` state machine) → `LogicalModel` (unified model alias carrying `DECLARED / TESTED / VERIFIED` capability assurance tiers and `micro-USD` pricing tables) → `ModelDeployment` (physical routing target carrying geographic `region`, `idle_chunk_timeout_ms`, and routing weight).
+2. **Tier-1 `Declarative Adapter` Runtime Engine:** Implements the shared `extension/port.ProviderRuntime` contract (`TP-IMP-0010`) over the finite non-Turing-complete operator set locked in `POC-02` (`TP-IMP-0004`), targeting `< 2 ms p95` gateway overhead (`SLO-02` `TARGET / UNVERIFIED`) with zero arbitrary code execution surface.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `internal/provider/catalog/repository.go` (CRUD & truy vấn `ProviderAdapter`, `ProviderConnection`, `ConnectionSecretBinding`, `LogicalModel`, `ModelDeployment`, ghi `config_changelog`, triển khai `broker.CredentialBindingResolver`).
-  - `internal/config/snapshot/providers_view.go` (bổ sung bảng tra cứu `O(1)` cho chuỗi 4 thực thể vào `ConfigSnapshot`).
-  - `internal/provider/catalog/connection_health.go` (thực thi đúng các trạng thái chuẩn `SM-02`: `DRAFT -> VALIDATING -> ACTIVE <-> DEGRADED | AUTH_EXPIRED_REAUTH_REQUIRED | SUSPENDED_BY_ADMIN | REVOKED | ARCHIVED` qua 2 pha `BuildValidationProbe` / `VerifyValidationResult`).
-  - `internal/extension/declarative/engine.go` (triển khai `extension/port.ProviderRuntime` có giới hạn cứng độ sâu JSON `<= 32`, số bước toán tử `<= 256` mỗi thông điệp, cấm biểu thức chính quy quay lui `ReDoS`).
-  - `db/migrations/sqlite/0005_providers_models.sql` (`provider_adapters`, `provider_connections` kèm `CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA'))`, `connection_secret_bindings`, `logical_models`, `model_deployments`).
-- **Out-of-Scope:** Hồ thực thi mã `Wasm` Tầng 2 (thuộc `TP-IMP-0013` chạy song song trên gói riêng `internal/extension/wasm/*`); thuật toán định tuyến đa đích & chuyển đổi dự phòng (thuộc `TP-IMP-0020`).
+  - `internal/provider/catalog/repository.go` (CRUD & queries for `ProviderAdapter`, `ProviderConnection`, `ConnectionSecretBinding`, `LogicalModel`, `ModelDeployment`, appending to `config_changelog`, and implementing `broker.CredentialBindingResolver`).
+  - `internal/config/snapshot/providers_view.go` (extend `ConfigSnapshot` with `O(1)` lookup indexes across the 4-entity hierarchy).
+  - `internal/provider/catalog/connection_health.go` (drive canonical `SM-02` transitions: `DRAFT -> VALIDATING -> ACTIVE <-> DEGRADED | AUTH_EXPIRED_REAUTH_REQUIRED | SUSPENDED_BY_ADMIN | REVOKED | ARCHIVED` via two-phase `BuildValidationProbe` / `VerifyValidationResult`).
+  - `internal/extension/declarative/engine.go` (implement `extension/port.ProviderRuntime` with hard caps of JSON nesting depth `<= 32`, `<= 256` operator steps per message, and zero backtracking `ReDoS` regexes).
+  - `db/migrations/sqlite/0005_providers_models.sql` (`provider_adapters`, `provider_connections` enforcing `CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA'))`, `connection_secret_bindings`, `logical_models`, `model_deployments`).
+- **Out-of-Scope:** Tier-2 `Wasm` sandbox pool (owned by `TP-IMP-0013` executing in parallel under `internal/extension/wasm/*`); multi-target route selection & failover state machine (owned by `TP-IMP-0020`).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0201`, `TP-FR-0202`, `TP-FR-0203`, `TP-FR-0301`, `TP-NFR-0101`, `SLO-02`, `TP-BR-0102`, `TP-BR-0401`, `SM-02`, `FZ-01`.
 - **Dependencies:** `TP-IMP-0004`, `TP-IMP-0010`, `TP-IMP-0011`.
-- **Design Refs:** [`provider-adapter.md`](../../specifications/provider-adapter.md) (`SPEC-EXT-02`), [`data-model.md`](../../architecture/data-model.md) Mục 3.2, [`ADR-0005`](../../architecture/adr/0005-two-phase-budget-ledger-and-commercial-billing-separation.md).
+- **Design Refs:** [`provider-adapter.md`](../../specifications/provider-adapter.md) (`SPEC-EXT-02`), [`data-model.md`](../../architecture/data-model.md) Section 3.2, [`ADR-0005`](../../architecture/adr/0005-two-phase-budget-ledger-and-commercial-billing-separation.md).
 
 ## 4. API, Wire & Data Contracts
-- **Ranh giới Thanh toán Cứng (`DEC-004` & `ADR-0005`):** Cột `billing_mode` trên `provider_connections` chỉ chấp nhận `'COMMERCIAL_API'` hoặc `'SELF_HOSTED_INFRA'`; từ chối mọi giá trị cấu hình kiểu thuê bao cá nhân ở cả JSON Schema lẫn ràng buộc `CHECK` SQL.
-- **Ba Cấp độ Bảo chứng Năng lực (`Capability Assurance Tier`):** Mỗi cờ năng lực (`streaming`, `tool_calling`, `vision`, `audio_input`, `document_input`, `strict_json_schema`, `reasoning`) mang nhãn `DECLARED`, `TESTED`, hoặc `VERIFIED`.
+- **Hard Billing-Mode Boundary (`DEC-004` & `ADR-0005`):** `provider_connections.billing_mode` accepts exclusively `'COMMERCIAL_API'` or `'SELF_HOSTED_INFRA'`, rejecting any consumer-subscription mode at both JSON Schema and SQL `CHECK` layers.
+- **Three Capability Assurance Tiers (`Capability Assurance Tier`):** Every capability flag (`streaming`, `tool_calling`, `vision`, `audio_input`, `document_input`, `strict_json_schema`, `reasoning`) carries an explicit tier badge: `DECLARED`, `TESTED`, or `VERIFIED`.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1`:** Given gói `.tpkg` `Tier-1 Declarative Adapter` cài qua `TP-IMP-0011`, When tạo `ProviderConnection` gắn `SecretCredential` qua `connection_secret_bindings`, khai báo `LogicalModel` + `ModelDeployment` trỏ về `FakeLLMServer` qua `BlindBroker` (`TP-IMP-0010`), Then kiểm tra kết nối chuyển `SM-02` từ `DRAFT -> VALIDATING -> ACTIVE` và biến đổi chuẩn xác cả yêu cầu đồng bộ lẫn khung SSE.
-- **`AC-2`:** Given mô hình nội bộ tự vận hành (`vLLM` / `Ollama`) với `billing_mode = 'SELF_HOSTED_INFRA'`, `allow_private_ip = true` và `auth_mode = 'NONE'`, When định nghĩa `ModelDeployment`, Then hệ thống lưu trữ và tra cứu trên `ConfigSnapshot` thành công mà không đòi khóa API thương mại.
-- **`NEG-1` (`FZ-01` Malicious Declarative Mapping):** Nạp tệp ánh xạ khai báo có vòng tham chiếu đệ quy, độ sâu lồng nhau `> 32` hoặc mẫu trích xuất bệnh lý → bị từ chối ngay lúc nạp hoặc dừng an toàn dưới `< 1 ms` mà không gây panic hay tràn bộ nhớ.
-- **`NEG-2`:** Cố gắng tạo `ProviderConnection` với `billing_mode = 'CONSUMER_SUBSCRIPTION'` → bị từ chối `422 invalid_billing_mode` ở cả API lẫn ràng buộc CSDL.
-- **`NEG-3`:** Xóa cứng `ProviderAdapter` hoặc `ProviderConnection` đang còn `ModelDeployment` hoạt động tham chiếu tới → bị chặn `409 resource_in_use` (`port.ErrResourceInUse`).
+- **`AC-1`:** Given a `Tier-1 Declarative Adapter` `.tpkg` installed via `TP-IMP-0011`, When creating a `ProviderConnection` bound to a `SecretCredential` via `connection_secret_bindings` and registering `LogicalModel` + `ModelDeployment` pointing at `FakeLLMServer` through `BlindBroker` (`TP-IMP-0010`), Then connection validation advances `SM-02` `DRAFT -> VALIDATING -> ACTIVE` and transforms both synchronous payloads and SSE chunks accurately.
+- **`AC-2`:** Given a self-hosted LAN model (`vLLM` / `Ollama`) configured with `billing_mode = 'SELF_HOSTED_INFRA'`, `allow_private_ip = true`, and `auth_mode = 'NONE'`, When registering a `ModelDeployment`, Then persistence and `ConfigSnapshot` resolution succeed without requiring a commercial API secret.
+- **`NEG-1` (`FZ-01` Malicious Declarative Mapping):** Loading a declarative mapping containing recursive template references, nesting depth `> 32`, or pathological extraction patterns → rejected at load time or safely aborted in `< 1 ms` with zero panics or OOMs.
+- **`NEG-2`:** Attempting to create a `ProviderConnection` with `billing_mode = 'CONSUMER_SUBSCRIPTION'` → rejected with `422 invalid_billing_mode` at both API validation and SQL constraint layers.
+- **`NEG-3`:** Attempting hard deletion of a `ProviderAdapter` or `ProviderConnection` still referenced by an active `ModelDeployment` → blocked with `409 resource_in_use` (`port.ErrResourceInUse`).
 
 ## 6. Test Commands & Required Evidence
-- Kiểm tra thuần Go (`CGO_ENABLED=0`):
+- Pure-Go verification (`CGO_ENABLED=0`):
   - POSIX: `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/extension/declarative/... ./internal/provider/catalog/...`
   - PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/extension/declarative/... ./internal/provider/catalog/...`
-- Kiểm tra `-race` & Fuzzing (`FZ-01`):
+- Data-race (`-race`) & fuzzing (`FZ-01`):
   - `go test -v -race ./internal/extension/declarative/... ./internal/provider/catalog/...`
   - `go test -fuzz=FuzzDeclarativeEngine -fuzztime=30s ./internal/extension/declarative/...`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Bộ thông dịch Tầng 1 chỉ đọc dữ liệu từ `NormalizedRequest` / `UpstreamResponse` đã lọc — tuyệt đối không có toán tử đọc tệp hệ thống, đọc biến môi trường hay truy cập `vault`.
-- **Rollback:** Bảng cộng thêm `0005_providers_models.sql`; đình chỉ kết nối đưa `SM-02` về `SUSPENDED_BY_ADMIN` an toàn.
+- **Security Invariant:** The Tier-1 declarative interpreter operates strictly on sanitized `NormalizedRequest` / `UpstreamResponse` payloads — zero filesystem, environment variable, or `vault` operators exist.
+- **Rollback:** Additive schema `0005_providers_models.sql`; suspending a connection cleanly moves `SM-02` to `SUSPENDED_BY_ADMIN`.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0001` (vá `SM-02`), `TP-IMP-0004` (chốt toán tử `POC-02`), `TP-IMP-0010` và `TP-IMP-0011` đã hoàn tất.
-- **DoD:** Vượt qua bộ kiểm thử đơn vị, kiểm thử `FZ-01`, đo benchmark biến đổi khung `< 0.5 ms/op` trong bộ nhớ và đạt `REQUIRES_STRONG_REVIEW`.
+- **DoR:** `TP-IMP-0001` (`SM-02` remediation), `TP-IMP-0004` (`POC-02` operator lock), `TP-IMP-0010`, and `TP-IMP-0011` are complete.
+- **DoD:** Passes unit tests, `FZ-01` fuzzing, in-memory frame transform benchmark `< 0.5 ms/op`, and `REQUIRES_STRONG_REVIEW`.

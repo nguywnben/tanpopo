@@ -1,65 +1,65 @@
-# Cài đặt Self-Hosted, Di trú Trạng thái, Nâng cấp Không Gián đoạn & Môi trường Cách ly Mạng (Installer, Upgrades, Network & Air-Gap Operations) — Tanpopo
+# Self-Hosted Installer, State Migration, Zero-Downtime Upgrades & Air-Gapped Operations — Tanpopo
 
-> **Tài liệu Kỹ thuật Vận hành Hạ tầng (Phase ASTRA A06 — `DRAFT / READY_FOR_REVIEW`)**
-> - **Mã tài liệu:** `SPEC-OPS-01` | **Phiên bản:** `0.1.0-step06-draft` | **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Principal SRE & Self-Hosted Infrastructure Lead
-> - **Trạng thái quản trị:** **Đặc tả Vận hành Đề xuất (`PROPOSED — NO CODE`)** — cụ thể hóa quy trình triển khai và nâng cấp cho kiến trúc [`deployment-topology.md`](../architecture/deployment-topology.md) (`ARCH-OPS-01`), [`data-model.md`](../architecture/data-model.md) (`ARCH-DATA-01`) và [`ADR-0001`](../architecture/adr/0001-core-runtime-and-modular-monolith.md)..[`ADR-0006`](../architecture/adr/0006-immutable-config-snapshots-and-fast-revocation.md).
-> - **Truy vết Yêu cầu:** `WF-01`, `WF-11`, `SM-08`, `OPS-01`, `TP-FR-1001`..`1005`, `TP-NFR-0103`, `TP-NFR-0201`, `TP-NFR-0302`, `TP-NFR-0901`, `TP-NFR-0902`.
+> **Infrastructure Operations Specification (Phase ASTRA A06 — `DRAFT / READY_FOR_REVIEW`)**
+> - **Document ID:** `SPEC-OPS-01` | **Version:** `0.1.0-step06-draft` | **Last Updated:** `2026-11-11`
+> - **Authored By:** Principal SRE & Self-Hosted Infrastructure Lead
+> - **Governance Status:** **Proposed Operations Specification (`PROPOSED — NO CODE`)** — specifies deployment, state migration, and rolling upgrade workflows for [`deployment-topology.md`](../architecture/deployment-topology.md) (`ARCH-OPS-01`), [`data-model.md`](../architecture/data-model.md) (`ARCH-DATA-01`), and [`ADR-0001`](../architecture/adr/0001-core-runtime-and-modular-monolith.md)..[`ADR-0006`](../architecture/adr/0006-immutable-config-snapshots-and-fast-revocation.md).
+> - **Requirements Traceability:** `WF-01`, `WF-11`, `SM-08`, `OPS-01`, `TP-FR-1001`..`1005`, `TP-NFR-0103`, `TP-NFR-0201`, `TP-NFR-0302`, `TP-NFR-0901`, `TP-NFR-0902`.
 
 ---
 
-## 1. Giả định Môi trường Khởi chạy Đa Nền tảng (`Linux / macOS / Windows Bootstrap Matrix`)
+## 1. Cross-Platform Bootstrap Matrix (`Linux / macOS / Windows Bootstrap Matrix`)
 
-Nhờ đề xuất đóng gói một tệp nhị phân tĩnh thuần Go (`CGO_ENABLED=0`) nhúng sẵn giao diện tĩnh Web Console (`embed.FS` — `ADR-0001`, `ADR-0004`) và động cơ Wasm thuần Go (`wazero` — `ADR-0002`), máy chủ Tanpopo **không yêu cầu cài đặt trước Node.js, Python, trình biên dịch C hay thư viện hệ thống bên ngoài**:
+Because Tanpopo packages as a single statically linked pure-Go binary (`CGO_ENABLED=0`) embedding the compiled Web Console SPA (`embed.FS` — `ADR-0001`, `ADR-0004`) and a pure-Go WebAssembly runtime (`wazero` — `ADR-0002`), the host server **requires zero pre-installed Node.js, Python, C toolchains, or external shared system libraries**:
 
-| Hệ điều hành & Kiến trúc | Kịch bản Triển khai Mục tiêu | Phương thức Khởi chạy & Dịch vụ Nền | Quyền Tệp tin, Lưu trữ & Lưu ý Hệ điều hành Cụ thể |
+| Operating System & Architecture | Target Deployment Scenario | Launch Method & Background Daemon | Filesystem Permissions, Storage & OS-Specific Notes |
 |---|---|---|---|
-| **Linux (`x86_64`, `arm64`)**<br/>*(Ubuntu 22.04+, Debian 12+, RHEL 9+, Alpine 3.20+)* | **Chuẩn sản xuất chính** (VM, Bare-metal, Container, Kubernetes). | Gói `.deb`/`.rpm` + đơn vị `systemd` cứng hóa (`tanpopod.service`) hoặc ảnh OCI `distroless`. | Chạy dưới tài khoản hệ thống không đặc quyền `tanpopo:tanpopo`; thư mục dữ liệu `/var/lib/tanpopo` (`chmod 0700`), thư mục cấu hình `/etc/tanpopo` (`chmod 0750`, tệp cấu hình bên trong `0640`). Yêu cầu đĩa cục bộ (`ext4`/`xfs`, **không đặt SQLite WAL trên ổ mạng NFS/SMB** để tránh hỏng khóa tệp). |
-| **macOS (`arm64` Apple Silicon, `x86_64`)**<br/>*(macOS 14+)* | Máy trạm phát triển cá nhân, thử nghiệm cục bộ cùng `Ollama` / `LM Studio`. | Homebrew (`brew install tanpopo`), tệp nhị phân rời hoặc Docker Desktop; dịch vụ nền qua `launchd`. | Dữ liệu mặc định tại `~/.local/share/tanpopo` (`0700`); bản phát hành chính thức cần ký chứng chỉ Apple Developer ID (`codesign` & `notarize`) để Gatekeeper không chặn khi chạy lần đầu. |
-| **Windows (`x86_64`, `arm64`)**<br/>*(Windows 11, Windows Server 2022+)* | Máy trạm kỹ sư doanh nghiệp, máy chủ nội bộ Windows hoặc chạy trong **WSL2** / Docker. | Thực thi trực tiếp `tanpopod.exe` / `tanpopo.exe`, đăng ký **Windows Service** (`sc.exe` / `WinSW`), hoặc chạy bản Linux trong WSL2. | - Dữ liệu mặc định tại `%ProgramData%\Tanpopo` (chế độ dịch vụ) hoặc `%LOCALAPPDATA%\Tanpopo` (chế độ cá nhân), khóa quyền đọc riêng bằng `icacls` (gỡ quyền `Users` chung, chỉ giữ `SYSTEM`, `Administrators` và tài khoản dịch vụ).<br/>- Đường dẫn tệp trong cấu hình chuẩn hóa dấu gạch chéo hoặc thoát chuỗi an toàn; khi chạy lệnh công cụ Node/Astryx trong môi trường đóng góp mã nguồn trên PowerShell phải lưu ý chính sách `ExecutionPolicy` đối với tệp `.ps1`.<br/>- Windows Defender Firewall sẽ hỏi quyền mở cổng trong lần lắng nghe ngoài `127.0.0.1` đầu tiên. |
+| **Linux (`x86_64`, `arm64`)**<br/>*(Ubuntu 22.04+, Debian 12+, RHEL 9+, Alpine 3.20+)* | **Primary production baseline** (VM, Bare-metal, Container, Kubernetes). | `.deb`/`.rpm` packages + hardened `systemd` unit (`tanpopod.service`) or `distroless` OCI image. | Runs under unprivileged system account `tanpopo:tanpopo`; data directory `/var/lib/tanpopo` (`chmod 0700`), config directory `/etc/tanpopo` (`chmod 0750`, config files `0640`). Requires local block storage (`ext4`/`xfs`; **never place SQLite WAL on NFS/SMB network mounts** to avoid advisory file-lock corruption). |
+| **macOS (`arm64` Apple Silicon, `x86_64`)**<br/>*(macOS 14+)* | Developer workstation, local evaluation alongside `Ollama` / `LM Studio`. | Homebrew (`brew install tanpopo`), standalone binary, or Docker Desktop; background service via `launchd`. | Default data path `~/.local/share/tanpopo` (`0700`); official release binaries require Apple Developer ID signing (`codesign` & `notarize`) so Gatekeeper permits first-run execution cleanly. |
+| **Windows (`x86_64`, `arm64`)**<br/>*(Windows 11, Windows Server 2022+)* | Enterprise engineering workstation, on-prem Windows Server, or **WSL2** / Docker. | Direct `tanpopod.exe` / `tanpopo.exe` execution, registered **Windows Service** (`sc.exe` / `WinSW`), or Linux binary inside WSL2. | - Default data path `%ProgramData%\Tanpopo` (service mode) or `%LOCALAPPDATA%\Tanpopo` (user mode), restricted via `icacls` (revoking generic `Users` inheritance and retaining only `SYSTEM`, `Administrators`, and the service SID).<br/>- Config file paths normalize forward slashes or safe escaping; contributors running Node/Astryx build tooling on PowerShell must account for `ExecutionPolicy` rules on `.ps1` shims.<br/>- Windows Defender Firewall prompts on first bind outside `127.0.0.1`. |
 
 ---
 
-## 2. Kiểm tra Tiền điều kiện Tự động Trước Khi Chạy (`tanpopo doctor` Preflight Checks)
+## 2. Automated Preflight Checks (`tanpopo doctor` Preflight Checks)
 
-Trước khi mở cổng nhận lưu lượng (hoặc bất kỳ lúc nào quản trị viên chạy lệnh `tanpopo doctor`), hệ thống tự động thực hiện **8 phép kiểm tra tiền điều kiện** và báo lỗi rõ ràng kèm lệnh khắc phục nếu chưa đạt:
+Prior to binding traffic sockets on startup (or whenever an administrator runs `tanpopo doctor`), Tanpopo automatically executes **8 deterministic preflight checks** and emits actionable remediation commands upon failure:
 
-| Thứ tự | Hạng mục Kiểm tra (`Check ID`) | Tiêu chuẩn Đạt (`PASS`) | Hành vi Khi Thất bại (`FAIL` / `WARN`) |
+| Order | Check Identifier (`Check ID`) | Pass Criterion (`PASS`) | Failure / Warning Behavior (`FAIL` / `WARN`) |
 |---|---|---|---|
-| **1** | `clock-skew` | Độ lệch đồng hồ hệ thống so với chuẩn giờ `< 5 giây`. | `WARN` (hoặc `FAIL` khi dùng `AWS SigV4` / `OIDC` / `OAuth 2.1` vì lệch giờ làm hỏng chữ ký xác thực). |
-| **2** | `ports-available` | Cổng Data Plane (mặc định `127.0.0.1:8080` ở chế độ cục bộ) và cổng Admin/Metrics (`:9090` khi tách cổng) chưa bị chiếm dụng. | `FAIL` — In rõ số hiệu cổng bị trùng và cờ `--listen` / biến `TANPOPO_LISTEN_ADDR` để đổi cổng. |
-| **3** | `master-kek-ready` | Biến `TANPOPO_MASTER_KEY` (hoặc kết nối `Cloud KMS` / `Vault`) có độ ngẫu nhiên `>= 256-bit` hợp lệ. | Ở chế độ thử nghiệm đơn nút lần đầu: tự sinh tệp khóa cục bộ `0600` kèm cảnh báo nổi bật yêu cầu sao lưu (`UX-GR-05`). Ở chế độ `--production`: **`FAIL` cứng** nếu chưa cung cấp khóa chủ tường minh. |
-| **4** | `storage-fs-lock` | Thư mục dữ liệu ghi được, còn trống `>= 1 GiB`, hệ tệp hỗ trợ khóa nguyên tử cho SQLite WAL (hoặc kết nối PostgreSQL `>= 16` thành công). | `FAIL` nếu phát hiện thư mục SQLite đặt trên ổ mạng `NFS`/`CIFS` không an toàn hoặc thiếu quyền ghi. |
-| **5** | `cluster-cache` *(Chỉ Mode B/C)* | Ping tới `Valkey / Redis` `< 5 ms`, hỗ trợ `EVALSHA` (kịch bản Lua giới hạn tốc độ) và `SUBSCRIBE`. | `FAIL` khi bật `--cluster-mode` mà không chạm tới cụm bộ nhớ đệm. |
-| **6** | `bundle-lockfile-integrity` | Toàn bộ gói phần mở rộng liệt kê trong `tanpopo.lock` khớp chính xác mã băm `SHA-256` trên đĩa/kho. | `FAIL` — Chặn khởi chạy gói bị sửa đổi ngoài luồng và ghi sự kiện an ninh. |
-| **7** | `tls-posture` | Nếu lắng nghe trên giao diện mạng không phải `127.0.0.1`, phải bật TLS trực tiếp hoặc khai báo `trusted_proxies` đứng sau Reverse Proxy HTTPS. | `FAIL` mặc định khi phơi cổng quản trị HTTP trần ra mạng ngoài mà không có cờ xác nhận tường minh. |
-| **8** | `egress-dns-ssrf` | Bộ phân giải DNS hoạt động và bộ lọc mạng nội bộ chặn thành công địa chỉ siêu dữ liệu đám mây `169.254.169.254` / `fd00:ec2::254`. | `FAIL` nếu vòng tự kiểm tra bảo vệ SSRF không hoạt động đúng. |
+| **1** | `clock-skew` | System clock drift relative to reference time `< 5 seconds`. | `WARN` (escalates to `FAIL` when `AWS SigV4`, `OIDC`, or `OAuth 2.1` drivers are configured, since clock skew invalidates cryptographic request signatures). |
+| **2** | `ports-available` | Data Plane socket (default `127.0.0.1:8080` in local mode) and Admin/Metrics socket (`:9090` when split) are free. | `FAIL` — Prints the colliding port number alongside `--listen` / `TANPOPO_LISTEN_ADDR` override instructions. |
+| **3** | `master-kek-ready` | `TANPOPO_MASTER_KEY` (or configured `Cloud KMS` / `Vault` key) provides valid `>= 256-bit` entropy. | On first-run local evaluation: auto-generates a `0600` local keyfile and raises a persistent backup warning (`UX-GR-05`). Under `--production`: **hard `FAIL`** if no explicit master key is supplied. |
+| **4** | `storage-fs-lock` | Data directory is writable with `>= 1 GiB` free space and supports atomic file locking for SQLite WAL (or connects to PostgreSQL `>= 16`). | `FAIL` if the SQLite path resides on an unsafe `NFS`/`CIFS` mount or lacks write permissions. |
+| **5** | `cluster-cache` *(Mode B/C only)* | `Valkey / Redis` round-trip ping `< 5 ms`, supporting `EVALSHA` (Lua rate-limit scripts) and `SUBSCRIBE`. | `FAIL` when `--cluster-mode` is enabled without a reachable shared cache tier. |
+| **6** | `bundle-lockfile-integrity` | Every extension package pinned in `tanpopo.lock` matches its on-disk/registry `SHA-256` digest bit-for-bit. | `FAIL` — Blocks loading tampered artifacts and records a security audit event. |
+| **7** | `tls-posture` | Binding to any non-`127.0.0.1` interface requires either native TLS or explicit `trusted_proxies` behind an HTTPS Reverse Proxy. | Default `FAIL` when exposing plaintext HTTP admin endpoints on non-loopback interfaces without an explicit override flag. |
+| **8** | `egress-dns-ssrf` | DNS resolver succeeds and the internal egress dialer blocks cloud metadata endpoints `169.254.169.254` / `fd00:ec2::254`. | `FAIL` if the self-test SSRF guard check fails to block metadata loopback probes. |
 
 ---
 
-## 3. Khởi tạo Lần đầu Qua Web (`First-Run Setup`) vs Khởi tạo Tự động (`Headless GitOps`)
+## 3. Interactive Web First-Run Setup vs Declarative Headless GitOps
 
-Hệ thống hỗ trợ song song hai con đường khởi tạo ngày đầu theo đúng `OPS-01`:
+Tanpopo supports two complementary day-one initialization workflows per `OPS-01`:
 
-1. **Chế độ Tương tác Qua Trình duyệt (`Interactive First-Run Bootstrap` — Mặc định cho Cá nhân & Nhóm nhỏ):**
-   - Khi cơ sở dữ liệu chưa có bất kỳ `Organization` nào, `tanpopod` sinh một **`Bootstrap Token` ngẫu nhiên mật mã học 256-bit dùng đúng 1 lần, tự hết hạn sau `15 phút`**, và chỉ ghi ra luồng nhật ký chuẩn cục bộ (`stderr`) của tiến trình khởi động (tuyệt đối không trả qua bất kỳ API công khai nào).
-   - Người vận hành mở `http://localhost:8080/setup` (hoặc qua đường hầm SSH / tên miền HTTPS), nhập `Bootstrap Token`, tạo tài khoản `ORG_OWNER` đầu tiên và đi tiếp luồng `UJ-01` (`TTFGR < 3 phút`). Ngay khoảnh khắc tài khoản đầu tiên được ghi vào DB, điểm cuối `/admin/v1/setup:claim-bootstrap` tự khóa vĩnh viễn (`410 Gone`).
-2. **Chế độ Khai báo Không Giao diện (`Declarative Headless Bootstrap` — Cho CI/CD, Terraform & Kubernetes):**
-   - Cung cấp tệp `tanpopo.bootstrap.yaml` + `tanpopo.lock` kèm biến môi trường bí mật khi khởi chạy (`tanpopo serve --bootstrap-file /etc/tanpopo/tanpopo.bootstrap.yaml`).
-   - Tiến trình tự khởi tạo `Organization`, `Projects`, `Environments`, danh sách `Extensions` đã ghim băm, `Policies` và cấu hình OIDC Admin mà không cần mở trình duyệt lần đầu.
+1. **Interactive Browser Bootstrap (`Interactive First-Run Bootstrap` — Default for Solo & Small Teams):**
+   - When the database contains zero `Organization` records, `tanpopod` mints a **cryptographically random 256-bit single-use `Bootstrap Token` with a `15-minute` TTL** and writes it exclusively to the local startup process `stderr` log (never exposed over any public API endpoint).
+   - The operator opens `http://localhost:8080/setup` (directly, over an SSH tunnel, or via HTTPS ingress), redeems the `Bootstrap Token`, creates the initial `ORG_OWNER` account, and completes `UJ-01` (`TTFGR < 3 minutes`). The instant the initial owner record commits to storage, `/admin/v1/setup:claim-bootstrap` permanently seals itself (`410 Gone`).
+2. **Declarative Headless Bootstrap (`Declarative Headless Bootstrap` — For CI/CD, Terraform & Kubernetes):**
+   - Supply `tanpopo.bootstrap.yaml` + `tanpopo.lock` paired with secret environment references at launch (`tanpopo serve --bootstrap-file /etc/tanpopo/tanpopo.bootstrap.yaml`).
+   - `tanpopod` idempotently provisions the `Organization`, `Projects`, `Environments`, hash-pinned `Extensions`, `Policies`, and OIDC Admin bindings with zero interactive browser steps.
 
 ---
 
-## 4. Cấu hình TLS, Tường lửa & Quy tắc Mạng Chống SSRF (`TLS, Network & Firewall`)
+## 4. TLS Configuration, Firewall Rules & Anti-SSRF Egress Guard (`TLS, Network & Firewall`)
 
-### 4.1. Ba Mô hình Chấm dứt TLS (`TLS Termination Modes`)
-1. **Chế độ Cục bộ (`Loopback Only`):** Mặc định chỉ gắn vào `127.0.0.1:8080` trên máy cá nhân để tránh vô tình mở cổng ra mạng Wi-Fi công cộng.
-2. **TLS Tích hợp Sẵn (`Built-in TLS 1.3 / Automatic ACME`):** Dành cho triển khai 1 máy chủ VM gọn nhẹ — chỉ cần cấu hình `tls.domain = "ai-gateway.corp.example.com"` (ACME Let's Encrypt / ZeroSSL) hoặc trỏ cặp chứng chỉ nội bộ `tls.cert_file` / `tls.key_file` (tự nạp lại nóng khi gia hạn chứng chỉ không rớt kết nối).
-3. **Đứng sau Cân bằng Tải / Reverse Proxy (`Caddy / Nginx / Envoy / Ingress` — Khuyến nghị cho Mode B & C):**
-   - Bắt buộc tắt bộ đệm phản hồi để không làm nghẽn luồng truyền chữ SSE thời gian thực và kéo dài thời gian chờ đọc cho các mô hình suy luận sâu (`reasoning`):
+### 4.1. Three TLS Termination Modes (`TLS Termination Modes`)
+1. **Local Loopback (`Loopback Only`):** Binds strictly to `127.0.0.1:8080` by default on workstations, preventing accidental exposure over public Wi-Fi networks.
+2. **Built-In TLS (`Built-in TLS 1.3 / Automatic ACME`):** Designed for lean single-VM deployments — set `tls.domain = "ai-gateway.corp.example.com"` (ACME Let's Encrypt / ZeroSSL) or supply internal certificate paths via `tls.cert_file` / `tls.key_file` (hot-reloaded on renewal without dropping active connections).
+3. **Behind Load Balancer / Reverse Proxy (`Caddy / Nginx / Envoy / Ingress` — Recommended for Mode B & C):**
+   - Response buffering must be disabled so real-time SSE token streams flush immediately, and read timeouts must accommodate long-horizon `reasoning` models:
 
 ```nginx
-# Cấu hình mẫu Nginx chuẩn cho luồng SSE của Tanpopo Data Plane
+# Reference Nginx configuration for Tanpopo Data Plane SSE streaming
 location / {
     proxy_pass http://tanpopo_dataplane_upstream;
     proxy_http_version 1.1;
@@ -68,7 +68,7 @@ location / {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    # BẮT BUỘC cho AI Streaming (SSE / MCP Streamable HTTP):
+    # MANDATORY for AI Streaming (SSE / MCP Streamable HTTP):
     proxy_buffering off;
     proxy_cache off;
     chunked_transfer_encoding on;
@@ -77,76 +77,76 @@ location / {
 }
 ```
 
-### 4.2. Ma trận Cổng Tường lửa & Cho phép Mô hình Cục bộ An toàn (`Firewall & LAN GPU Allowlist`)
-- **Cổng vào (`Inbound`):**
-  - `:8080/tcp` (Data Plane: `/v1/*`, `/native/*`, `/mcp`, `/a2a/*`, `/healthz`, `/readyz`) — chỉ mở cho mạng ứng dụng nội bộ hoặc qua HTTPS Load Balancer.
-  - `:9090/tcp` (Control Plane Admin API, Web Console & `/metrics` Prometheus — ở Mode A đơn nút có thể gộp chung trên `:8080`, ở Mode C sản xuất **bắt buộc tách sang cổng/Ingress quản trị nội bộ riêng** bảo vệ bởi VPN/mTLS/SSO).
-- **Cổng ra & Bảo vệ SSRF (`Outbound & SSRF Guard`):**
-  - Mặc định mọi kết nối từ Tanpopo ra ngoài đều chặn dải IP nội bộ RFC1918 (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.0/8`, `::1`) và link-local/cloud metadata (`169.254.0.0/16`, `fe80::/10`).
-  - Khi người dùng muốn kết nối tới máy chủ GPU nội bộ hợp lệ (như `Ollama` tại `127.0.0.1:11434` hoặc cụm `vLLM` tại `10.20.30.40:8000`), `OPERATOR` phải khai báo tường minh vào danh sách **`network.allowed_private_upstreams: ["127.0.0.1:11434", "10.20.30.40:8000"]`** trong cấu hình máy chủ — ngay cả khi đó, dải siêu dữ liệu đám mây `169.254.169.254` **vẫn bị khóa cứng không thể mở**.
+### 4.2. Firewall Port Matrix & Safe LAN GPU Allowlist (`Firewall & LAN GPU Allowlist`)
+- **Inbound Ports (`Inbound`):**
+  - `:8080/tcp` (Data Plane: `/v1/*`, `/native/*`, `/mcp`, `/a2a/*`, `/healthz`, `/readyz`) — expose only to internal application subnets or through an HTTPS Load Balancer.
+  - `:9090/tcp` (Control Plane Admin API, Web Console & Prometheus `/metrics` — may share `:8080` in single-node Mode A, but in production Mode C **must be isolated onto a dedicated internal management port/Ingress** gated by VPN/mTLS/SSO).
+- **Outbound Egress & Anti-SSRF Guard (`Outbound & SSRF Guard`):**
+  - By default, Tanpopo's outbound dialer denies RFC1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.0/8`, `::1`), and link-local/cloud metadata ranges (`169.254.0.0/16`, `fe80::/10`).
+  - To route to legitimate internal GPU inference servers (such as local `Ollama` on `127.0.0.1:11434` or a LAN `vLLM` cluster at `10.20.30.40:8000`), an `OPERATOR` must explicitly allowlist exact `host:port` endpoints under **`network.allowed_private_upstreams: ["127.0.0.1:11434", "10.20.30.40:8000"]`** in server configuration — even then, cloud metadata IP `169.254.169.254` **remains unconditionally hard-blocked**.
 
 ---
 
-## 5. Triển khai Container, Máy ảo VM & Cụm Kubernetes (`Container / VM / K8s`)
+## 5. Container, Virtual Machine & Kubernetes Deployment (`Container / VM / K8s`)
 
-1. **Container Đơn & Docker Compose (`Mode A` / `Mode B`):**
-   - Ảnh container chính thức xây dựng trên nền tối giản không chứa vỏ lệnh (`non-root UID 65532`, `read_only: true`, chỉ gắn ổ ghi tại `/var/lib/tanpopo` và `/tmp` kích thước giới hạn).
-   - Bộ `docker-compose.prod.yml` chuẩn đóng gói sẵn `tanpopod`, `postgres:16-alpine` (kèm kiểm tra `pg_isready`), `valkey/valkey:8-alpine` và `caddy:2` tự động cấp HTTPS.
-2. **Máy ảo VM (`systemd` Hardening):**
-   - Tệp `tanpopod.service` bật sẵn `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict`, `ProtectHome=yes`, `ReadWritePaths=/var/lib/tanpopo`, `LimitNOFILE=65536` (đảm bảo chịu tải hàng nghìn luồng SSE mở đồng thời không chạm trần file descriptor).
+1. **Standalone Container & Docker Compose (`Mode A` / `Mode B`):**
+   - Official OCI image built on a shell-less minimal base (`non-root UID 65532`, `read_only: true`, mounting writable volumes solely at `/var/lib/tanpopo` and size-capped `/tmp`).
+   - Reference `docker-compose.prod.yml` wires `tanpopod`, `postgres:16-alpine` (gated on `pg_isready`), `valkey/valkey:8-alpine`, and `caddy:2` automatic HTTPS.
+2. **Virtual Machine (`systemd` Hardening):**
+   - `tanpopod.service` enforces `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict`, `ProtectHome=yes`, `ReadWritePaths=/var/lib/tanpopo`, and `LimitNOFILE=65536` (sustaining thousands of concurrent SSE streams without file-descriptor exhaustion).
 3. **Kubernetes Helm Chart (`Mode C — Multi-AZ HA`):**
-   - Tách thành 2 `Deployment` độc lập dùng chung một ảnh container nhưng khác cờ `--role`:
-     - `tanpopo-controlplane` (`replicas: 2`, bầu chọn leader qua khóa PostgreSQL cho các tác vụ nền làm mới OAuth và dọn TTL).
-     - `tanpopo-dataplane` (`HPA minReplicas: 3, maxReplicas: 20` co giãn theo mức CPU và chỉ số `tanpopo_active_streams`, kèm `PodDisruptionBudget minAvailable: 2` và `topologySpreadConstraints` trải đều qua các vùng AZ).
-   - Áp dụng `Kubernetes NetworkPolicy` mặc định đóng giữa các Pod Tier-3 Sidecar (chỉ cho phép `tanpopo-dataplane` gọi vào cổng gRPC/UDS của Sidecar).
+   - Splits into 2 independent `Deployments` sharing one container image differentiated by `--role`:
+     - `tanpopo-controlplane` (`replicas: 2`, PostgreSQL advisory-lock leader election for background OAuth refresh and TTL compaction).
+     - `tanpopo-dataplane` (`HPA minReplicas: 3, maxReplicas: 20` scaling on CPU utilization and `tanpopo_active_streams`, backed by `PodDisruptionBudget minAvailable: 2` and cross-AZ `topologySpreadConstraints`).
+   - Enforces default-deny `Kubernetes NetworkPolicy` around Tier-3 Sidecar Pods (permitting ingress solely from `tanpopo-dataplane` to the Sidecar's gRPC/UDS port).
 
 ---
 
-## 6. Quy trình Di trú Lưu trữ (`SQLite -> PostgreSQL`) & Nâng cấp Không Gián đoạn (`SM-08`)
+## 6. Storage State Migration (`SQLite -> PostgreSQL`) & Zero-Downtime Upgrades (`SM-08`)
 
-### 6.1. Di trú Khi Mở rộng Quy mô Từ Đơn nút Lên Cụm (`SQLite -> PostgreSQL State Migration`)
-Khi một nhóm phát triển từ `Mode A` (SQLite) lên `Mode B/C` (PostgreSQL) mà muốn giữ nguyên toàn bộ cấu hình, khóa đã mã hóa, lịch sử kiểm toán và sổ cái chi phí:
-1. Bật chế độ chỉ đọc cấu hình ngắn hạn (`tanpopo admin freeze-writes --reason "Migrate to Postgres"` — lưu lượng suy luận Data Plane vẫn chạy bình thường trên `ConfigSnapshot` RAM!).
-2. Chạy lệnh di trú có kiểm chứng tổng kiểm:
+### 6.1. Scaling Up From Single-Node to Clustered Storage (`SQLite -> PostgreSQL State Migration`)
+When a team outgrows `Mode A` (SQLite) and graduates to `Mode B/C` (PostgreSQL) while preserving all routes, envelope-encrypted credentials, audit chains, and financial ledgers:
+1. Enable brief Control Plane write freeze (`tanpopo admin freeze-writes --reason "Migrate to Postgres"` — live Data Plane inference traffic continues uninterrupted from in-memory `ConfigSnapshot`!).
+2. Run checksum-verified state migration:
    ```bash
    tanpopo storage migrate \
      --from "sqlite:///var/lib/tanpopo/tanpopo.db" \
      --to "postgres://tanpopo_app@pg.internal:5432/tanpopo?sslmode=require" \
      --verify-row-counts --verify-audit-chain
    ```
-   *(Do toàn bộ kho khóa chỉ di chuyển các bản mã `ciphertext` bọc dưới cùng `TANPOPO_MASTER_KEY`, quá trình di trú không cần giải mã lộ khóa gốc ra ngoài).*
-3. Cập nhật cấu hình sang địa chỉ PostgreSQL + Valkey, khởi chạy các nút mới và gỡ đóng băng ghi cấu hình.
+   *(Because vault rows transfer sealed `ciphertext` envelopes wrapped under the same `TANPOPO_MASTER_KEY`, migration never decrypts or exposes raw upstream credentials).*
+3. Point server configuration to PostgreSQL + Valkey, boot the clustered nodes, and lift the Control Plane write freeze.
 
-### 6.2. Quy trình 5 Bước Nâng cấp Không Gián đoạn (`Zero-Downtime Rolling Upgrade` — `SM-08`)
+### 6.2. Five-Step Zero-Downtime Rolling Upgrade (`Zero-Downtime Rolling Upgrade` — `SM-08`)
 
 ```mermaid
 flowchart LR
-    U1["1. tanpopo upgrade preflight (Kiểm tra tương thích Contract mọi Plugin đang bật)"] --> U2["2. Chụp Sao lưu Nóng + Chạy SQL Migration tương thích lùi (Expand-Only)"]
-    U2 --> U3["3. Cuộn nâng cấp Control Plane trước & Kiểm tra /readyz = 200"]
-    U3 --> U4["4. Cuộn từng nút Data Plane: SIGTERM -> /readyz=503 -> Xả êm luồng SSE (<=90s)"]
-    U4 --> U5["5. Kiểm tra hậu nâng cấp (Smoke Test); nếu lỗi -> Quay lui ảnh cũ < 60s"]
+    U1["1. tanpopo upgrade preflight (Verify Contract compatibility for all active Plugins)"] --> U2["2. Hot Encrypted Backup + Backward-Compatible SQL Migration (Expand-Only)"]
+    U2 --> U3["3. Roll Control Plane first & Verify /readyz = 200"]
+    U3 --> U4["4. Roll Data Plane nodes one-by-one: SIGTERM -> /readyz=503 -> Graceful SSE drain (<=90s)"]
+    U4 --> U5["5. Post-upgrade Smoke Test; on regression -> Rollback image in < 60s"]
 ```
 
-- **Chốt chặn An toàn Hợp đồng (`Preflight Gate` — `TP-FR-1004`):** Lệnh `tanpopo upgrade preflight --target-version v0.2.0` đọc danh sách mọi `Extension` đang `ENABLED_ACTIVE`. Nếu bất kỳ gói nào có `compatibility.contractVersion` không tương thích với bản nhị phân đích, lệnh dừng ngay với mã thoát `exit 22 (BLOCKED_INCOMPATIBLE)` và in rõ gói nào cần nâng cấp trước — tuyệt đối không để nâng cấp Core xong mới làm sập Adapter sản xuất.
+- **Mandatory Contract Compatibility Gate (`Preflight Gate` — `TP-FR-1004`):** `tanpopo upgrade preflight --target-version v0.2.0` inspects every `ENABLED_ACTIVE` `Extension`. If any package declares a `compatibility.contractVersion` outside the target binary's supported window, preflight aborts immediately with `exit 22 (BLOCKED_INCOMPATIBLE)` naming the exact blocking packages — preventing Core upgrades from ever breaking active production Adapters after the fact.
 
 ---
 
-## 7. Vận hành Môi trường Cách ly Mạng Hoàn toàn & Kho Riêng (`Air-Gapped & Private OCI Registry`)
+## 7. Fully Air-Gapped Operations & Private OCI Registries (`Air-Gapped & Private OCI Registry`)
 
-Đối với các tổ chức tài chính, viễn thông hoặc nhà máy chạy trong mạng nội bộ không có đường ra Internet (`Air-Gapped` — `TP-FR-0307`, `TP-FR-1002`):
-1. **Đóng gói Gói Cài đặt Ngoại tuyến Trên Máy Trạm Trung gian (`Connected Bastion`):**
+For financial, telecom, defense, or industrial environments operating inside networks with zero Internet egress (`Air-Gapped` — `TP-FR-0307`, `TP-FR-1002`):
+1. **Export Signed Offline Bundle on a Connected Bastion (`Connected Bastion`):**
    ```bash
-   # Tải nhị phân Core + các gói Extension đã ghim + chữ ký Cosign + danh sách thu hồi mới nhất thành 1 tệp nén ký số
+   # Package Core binary + lockfile-pinned Extensions + Cosign signatures + latest revocation feed into 1 signed archive
    tanpopo bundle export \
      --lockfile ./tanpopo.lock \
      --include-revocation-feed \
      --output tanpopo-airgap-bundle-2026-11.tar.zst
    ```
-2. **Kiểm tra & Nạp Vào Mạng Kín (`Offline Import`):**
-   - Chuyển tệp `.tar.zst` qua cổng kiểm duyệt vật lý vào mạng kín và chạy:
+2. **Verify & Import Across the Air-Gap Diode (`Offline Import`):**
+   - Transfer the `.tar.zst` archive across physical/diode inspection media into the isolated network and execute:
      ```bash
      tanpopo bundle verify tanpopo-airgap-bundle-2026-11.tar.zst --public-key /etc/tanpopo/trust-root.pub
      tanpopo bundle import tanpopo-airgap-bundle-2026-11.tar.zst --mirror-to oci://harbor.corp.internal/tanpopo-extensions
      ```
-3. **Chính sách Khóa Nguồn Cài đặt Nội bộ:**
-   - Đặt `extensions.allowed_sources: ["oci://harbor.corp.internal/tanpopo-extensions/*", "local_bundle"]` và `extensions.offline_mode: true` trong tệp cấu hình máy chủ: Tanpopo sẽ tắt hoàn toàn mọi tác vụ nền kiểm tra phiên bản ngoài Internet, dùng phông chữ nội bộ nhúng sẵn trên Web Console (`UX-AC-10`) và chỉ chấp nhận các gói đã ký bởi khóa gốc nội bộ của doanh nghiệp (`private-enterprise`).
+3. **Internal Source Lock Policy:**
+   - Configure `extensions.allowed_sources: ["oci://harbor.corp.internal/tanpopo-extensions/*", "local_bundle"]` and `extensions.offline_mode: true` in `tanpopo.yaml`: Tanpopo disables all background Internet update checks, serves locally bundled fonts in the Web Console (`UX-AC-10`), and accepts exclusively packages signed by the enterprise's internal trust root (`private-enterprise`).

@@ -1,27 +1,27 @@
-# Đặc tả Thiết kế Hợp đồng Giao diện Lập trình: OpenAPI, JSON Schema & Protobuf (API & Wire Contracts) — Tanpopo
+# API & Wire Contract Design Specification: OpenAPI, JSON Schema & Protobuf — Tanpopo
 
-> **Tài liệu Hợp đồng Giao diện Mức Thiết kế (Phase ASTRA A05 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — PRE-APPROVAL`)**
-> - **Mã tài liệu:** `SPEC-API-01` | **Phiên bản:** `0.1.0-step05-draft` | **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Principal API & Platform Architect
-> - **Trạng thái quản trị:** **Hợp đồng Mức Thiết kế (`DESIGN-LEVEL CONTRACT — PRE-ADR`)** — định nghĩa ranh giới kiểu dữ liệu cho (1) Ứng dụng khách Data Plane, (2) Quản trị Control Plane / Auth, và (3) Biên giới IPC/ABI của Phần mở rộng. Chưa đóng băng thành mã sinh tự động cho tới khi Owner duyệt Gate G3.
-> - **Truy vết Yêu cầu:** `TP-FR-0101`..`0105`, `TP-FR-0205`, `TP-FR-0301`..`0306`, `TP-FR-0401`..`0406`, `TP-FR-0901`, `TP-FR-1001`, `SPEC-EXT-01`, `SPEC-EXT-06`.
-
----
-
-## 1. Quy ước Phiên bản Hóa, Thời gian chờ, Hủy Kết nối & Chống Gọi Trùng
-
-1. **Phiên bản Hợp đồng Độc lập trên 3 Biên giới:**
-   - **Data Plane Unified API (`/v1/*`):** Tương thích chuẩn khách OpenAI v1; các mở rộng siêu dữ liệu của Tanpopo đi qua tiêu đề `X-Tanpopo-*` để không bao giờ phá vỡ trình kiểm tra kiểu của SDK có sẵn.
-   - **Control Plane Admin API (`/admin/v1/*`):** Phiên bản đường dẫn `/admin/v1` kết hợp tiêu đề ngày phát hành tùy chọn `X-Tanpopo-API-Version: 2026-11-01`; mọi thay đổi trong nhánh `v1` chỉ cộng thêm trường tùy chọn (`Additive-Only`), phân trang con trỏ bắt buộc (`limit <= 200`, `cursor`), và kiểm soát ghi đè bằng `ETag` / `If-Match` (`409 version_conflict`).
-   - **Extension Host-Guest Contract (`tanpopo.extension.v1`):** Thương lượng qua trường `compatibility.contractVersion` trong `Manifest`, bảo hành tương thích lùi `N-1` (giai đoạn `0.x`) và `>= 12 tháng` (từ `v1.0` — `TP-NFR-0902`).
-2. **Hợp đồng Thời gian Chờ, Truyền Luồng & Hủy Kết nối (`Streaming, Timeout & Cancellation`):**
-   - `API Client` có thể gửi `X-Tanpopo-Timeout-Ms` để đặt trần thời gian tối đa cho yêu cầu (bị kẹp trần bởi giới hạn của `Route`/`Deployment`, ví dụ `<= 300000 ms`).
-   - Trên luồng `text/event-stream` (SSE), Tanpopo gửi nhịp `: ping\n\n` mỗi `15 giây` khi chờ mô hình suy luận sâu để giữ kết nối qua tường lửa trung gian; nếu khách đóng kết nối TCP/HTTP2 stream reset, Core kích hoạt hủy ngữ cảnh tới cả Sandbox lẫn kết nối nhà cung cấp đích trong **`< 500 ms`** (`TP-FR-0104`).
-   - Khóa chống gọi trùng `Idempotency-Key` (tối đa `128` ký tự ASCII, hiệu lực lưu giữ `24 giờ`) áp dụng cho các lệnh `POST` không truyền luồng và các lệnh tạo tài nguyên/tác vụ quản trị (`SPEC-EXT-06` Mục 3).
+> **Design-Level Interface Contract Document (ASTRA Phase A05 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — PRE-APPROVAL`)**
+> - **Document ID:** `SPEC-API-01` | **Version:** `0.1.0-step05-draft` | **Last Updated:** `2026-11-11`
+> - **Authoring Role:** Principal API & Platform Architect
+> - **Governance Status:** **Design-Level Contract (`DESIGN-LEVEL CONTRACT — PRE-ADR`)** — defines type boundaries for (1) Data Plane API Clients, (2) Control Plane / Auth Administration, and (3) Extension IPC/ABI Boundaries. Not frozen into generated code stubs until the Product Owner approves Gate G3.
+> - **Requirements Traceability:** `TP-FR-0101`..`0105`, `TP-FR-0205`, `TP-FR-0301`..`0306`, `TP-FR-0401`..`0406`, `TP-FR-0901`, `TP-FR-1001`, `SPEC-EXT-01`, `SPEC-EXT-06`.
 
 ---
 
-## 2. Hợp đồng OpenAPI 3.1 Mức Thiết kế (Data Plane & Control Plane Cốt lõi)
+## 1. Versioning, Timeouts, Cancellation & Idempotency Conventions
+
+1. **Independent Contract Versioning Across Three Boundaries:**
+   - **Data Plane Unified API (`/v1/*`):** Compatible with the standard OpenAI v1 client specification; Tanpopo metadata extensions are carried via `X-Tanpopo-*` headers so they never break static type checkers in existing client SDKs.
+   - **Control Plane Admin API (`/admin/v1/*`):** Path-versioned under `/admin/v1` paired with an optional release-date header `X-Tanpopo-API-Version: 2026-11-01`; every change within the `v1` major line is strictly additive (`Additive-Only`), enforcing cursor-based pagination (`limit <= 200`, `cursor`) and optimistic concurrency control via `ETag` / `If-Match` (`409 version_conflict`).
+   - **Extension Host-Guest Contract (`tanpopo.extension.v1`):** Negotiated via the `compatibility.contractVersion` field in the `Manifest`, guaranteeing `N-1` backward compatibility (during `0.x`) and `>= 12 months` deprecation windows (from `v1.0` onward — `TP-NFR-0902`).
+2. **Streaming, Timeout & Cancellation Contract (`Streaming, Timeout & Cancellation`):**
+   - An `API Client` may pass `X-Tanpopo-Timeout-Ms` to set a per-request deadline ceiling (clamped by the `Route`/`Deployment` upper bound, e.g., `<= 300000 ms`).
+   - Over `text/event-stream` (SSE) streams, Tanpopo emits `: ping\n\n` heartbeats every `15 seconds` while awaiting deep-reasoning model generation to prevent idle timeouts across intermediate proxies and firewalls; if the client closes the TCP socket or resets the HTTP/2 stream, Core propagates context cancellation to both the Sandbox and the upstream provider connection within **`< 500 ms`** (`TP-FR-0104`).
+   - The `Idempotency-Key` header (maximum `128` ASCII characters, `24-hour` retention TTL) applies to non-streaming `POST` requests and administrative resource/task creation commands (`SPEC-EXT-06` Section 3).
+
+---
+
+## 2. Design-Level OpenAPI 3.1 Contract (Core Data Plane & Control Plane)
 
 ```yaml
 # DESIGN-LEVEL OPENAPI 3.1 SPECIFICATION (PROPOSED — STEP A05)
@@ -41,11 +41,11 @@ components:
     VirtualKeyBearer:
       type: http
       scheme: bearer
-      description: "Data Plane Virtual Key (vk_tp_...). Cấm tuyệt đối dùng trên /admin/v1/*."
+      description: "Data Plane Virtual Key (vk_tp_...). Strictly prohibited on /admin/v1/*."
     AdminSessionOrToken:
       type: http
       scheme: bearer
-      description: "OIDC JWT / Admin Service Token (hoặc HttpOnly Session Cookie kèm CSRF token)."
+      description: "OIDC JWT / Admin Service Token (or HttpOnly Session Cookie paired with a CSRF token)."
 
   parameters:
     IfMatchVersion:
@@ -83,7 +83,7 @@ components:
       type: object
       required: [model, messages]
       properties:
-        model: { type: string, description: "Route slug hoặc Logical Model slug trong Environment của khóa ảo." }
+        model: { type: string, description: "Route slug or Logical Model slug within the Virtual Key's Environment." }
         messages: { type: array, minItems: 1, items: { type: object } }
         stream: { type: boolean, default: false }
         max_completion_tokens: { type: integer, minimum: 1 }
@@ -104,13 +104,13 @@ paths:
   /healthz:
     get:
       security: []
-      summary: Liveness probe (tiến trình sống)
+      summary: Liveness probe (process alive)
       responses:
         "200": { description: Process alive }
   /readyz:
     get:
       security: []
-      summary: Readiness probe (DB, Vault KEK, ConfigSnapshot < 5s & Sandbox Pool sẵn sàng)
+      summary: Readiness probe (DB, Vault KEK, ConfigSnapshot < 5s & Sandbox Pool ready)
       responses:
         "200": { description: Ready to serve traffic }
         "503": { description: Not ready or draining }
@@ -243,7 +243,7 @@ paths:
 
 ---
 
-## 3. Lược đồ JSON Schema Chuẩn Hóa Cho Phong Bì Nội bộ (`Normalized Inference Envelope`)
+## 3. Canonical JSON Schema for the Internal Envelope (`Normalized Inference Envelope`)
 
 ```json
 {
@@ -274,8 +274,8 @@ paths:
               "properties": {
                 "kind": { "enum": ["text", "image", "audio", "document", "tool_call", "tool_result", "reasoning_opaque"] },
                 "text": { "type": "string" },
-                "media_ref": { "type": "string", "description": "HTTPS URL đã lọc hoặc chuỗi dữ liệu nội tuyến kiểm soát kích thước." },
-                "opaque_signature": { "type": "string", "description": "Bảo toàn chữ ký khối suy luận qua nhiều lượt hội thoại." }
+                "media_ref": { "type": "string", "description": "Sanitized HTTPS URL or size-bounded inline data URI." },
+                "opaque_signature": { "type": "string", "description": "Preserves reasoning block cryptographic signatures across multi-turn conversations." }
               }
             }
           }
@@ -284,7 +284,7 @@ paths:
     },
     "secret_slot_refs": {
       "type": "object",
-      "description": "CHỈ chứa tên khe tham chiếu (VD: primary_api_key -> slot_handle_01), TUYỆT ĐỐI KHÔNG chứa chuỗi bí mật thô!",
+      "description": "Contains ONLY secret slot reference handles (e.g., primary_api_key -> slot_handle_01); MUST NEVER contain raw secret plaintext!",
       "additionalProperties": { "type": "string" }
     }
   }
@@ -293,9 +293,9 @@ paths:
 
 ---
 
-## 4. Hợp đồng Protobuf (`proto3` / ConnectRPC) Giữa Host Core và Extension Thực thi (`Tier-2` / `Tier-3`)
+## 4. Protobuf (`proto3` / ConnectRPC) Contract Between Host Core and Execution Extensions (`Tier-2` / `Tier-3`)
 
-Hợp đồng nhị phân dưới đây định nghĩa giao thức truyền thông giữa **Tanpopo Host Core** và **Isolated Sidecar (`Tier-3` qua Unix Domain Socket / `mTLS`)**, đồng thời đóng vai trò mô hình dữ liệu tương đương 1-1 cho giao diện Host-Guest của **Wasm Sandbox (`Tier-2`)** (`POC-01`, `POC-03`):
+The binary wire contract below defines the IPC protocol between **Tanpopo Host Core** and an **Isolated Sidecar (`Tier-3` over Unix Domain Socket / `mTLS`)**, while simultaneously serving as the 1-to-1 structural data model equivalent for the **Wasm Sandbox (`Tier-2`)** Host-Guest ABI (`POC-01`, `POC-03`):
 
 ```protobuf
 // DESIGN-LEVEL PROTOBUF CONTRACT (tanpopo/extension/v1/runtime.proto)
@@ -306,25 +306,25 @@ package tanpopo.extension.v1;
 option go_package = "github.com/nguywnben/tanpopo/gen/extension/v1;extensionv1";
 
 service ExtensionRuntimeService {
-  // Kiểm tra cấu hình kết nối (Host thực hiện probe mạng hộ theo yêu cầu trong phạm vi allowed_hosts).
+  // Validates connection configuration (Host executes bounded network probes within allowed_hosts on behalf of Guest).
   rpc ValidateConnection(ValidateConnectionRequest) returns (ValidateConnectionResponse);
 
-  // Biến đổi yêu cầu chuẩn hóa thành đặc tả HTTP đích (Guest KHÔNG nhận API key gốc).
+  // Transforms a normalized request into an upstream HTTP specification (Guest NEVER receives raw API keys).
   rpc TransformRequest(TransformRequestEnvelope) returns (UpstreamHttpSpec);
 
-  // Xử lý cuốn chiếu từng mảnh luồng SSE không gom đệm toàn bộ phản hồi.
+  // Incrementally processes SSE stream chunks without full-response buffering.
   rpc TransformStreamChunk(StreamChunkInput) returns (StreamChunkOutput);
 
-  // Trích xuất số đếm token đa thành phần và phân loại độ chính xác.
+  // Extracts multi-component token usage counts and classifies metering accuracy.
   rpc ExtractUsage(ExtractUsageInput) returns (UsageReport);
 
-  // Chuẩn hóa lỗi HTTP từ nhà cung cấp sang bảng mã lỗi máy trạng thái SM-02 / SM-04.
+  // Maps upstream HTTP failures onto the canonical SM-02 / SM-04 state-machine error taxonomy.
   rpc ClassifyError(ClassifyErrorInput) returns (CanonicalProviderError);
 
-  // Đánh giá bộ lọc chính sách / PII Guardrail tại điểm móc trước hoặc sau suy luận.
+  // Evaluates policy filters / PII guardrails at pre-inference or post-inference hook stages.
   rpc EvaluateGuardrail(GuardrailInput) returns (GuardrailVerdict);
 
-  // Tín hiệu giải phóng tài nguyên phiên khi khách hủy kết nối (Host tự đóng socket trong < 500ms).
+  // Signals session resource teardown on client disconnect (Host forcibly closes upstream sockets in < 500ms).
   rpc CancelExecution(CancelExecutionSignal) returns (CancelAck);
 }
 
@@ -336,15 +336,15 @@ enum UsageAccuracy {
 }
 
 message CredentialInjectInstruction {
-  string secret_slot_name = 1; // VD: "primary_api_key"
+  string secret_slot_name = 1; // e.g., "primary_api_key"
   string target_location = 2;  // "HEADER" | "QUERY_PARAM" | "HOST_HMAC_SIGN"
-  string field_name = 3;       // VD: "Authorization" hoặc "X-Acme-Signature"
-  string value_prefix = 4;     // VD: "Bearer "
+  string field_name = 3;       // e.g., "Authorization" or "X-Acme-Signature"
+  string value_prefix = 4;     // e.g., "Bearer "
 }
 
 message UpstreamHttpSpec {
   string method = 1;
-  string target_url = 2; // Host BẮT BUỘC kiểm tra lại khớp allowed_hosts & chống SSRF trước khi mở socket!
+  string target_url = 2; // Host MUST re-verify against allowed_hosts and SSRF guards before opening a socket!
   map<string, string> safe_headers = 3;
   bytes body_bytes = 4;
   repeated CredentialInjectInstruction credential_injections = 5;
@@ -352,7 +352,7 @@ message UpstreamHttpSpec {
 
 message StreamChunkInput {
   string request_id = 1;
-  bytes session_state = 2; // Giới hạn cứng <= 65536 bytes
+  bytes session_state = 2; // Hard ceiling <= 65536 bytes
   bytes raw_upstream_chunk = 3;
   bool is_eof = 4;
 }

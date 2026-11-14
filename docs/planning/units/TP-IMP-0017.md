@@ -1,24 +1,24 @@
-# `TP-IMP-0017` — Đường Đi Giữ Nguyên Phương Ngữ Gốc Không Mất Mát (`/native/{dialect}/{upstreamPath}`) & Chốt Chặn Cùng Phương Ngữ
+# `TP-IMP-0017` — Lossless Native Dialect Passthrough (`/native/{dialect}/{upstreamPath}`) & Same-Dialect Guard
 
-| Thuộc tính | Giá trị |
+| Property | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0017` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-03` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0015` — `GAP-01, 02`)* |
-| **Quy mô (`Size`)** | `M` (`internal/ingress/native/*`) |
-| **Cấp độ Review** | `STANDARD_REVIEW` *(Ràng buộc định tuyến cùng phương ngữ & trích xuất token không làm biến dạng thân gốc)* |
-| **Chủ sở hữu Kỹ thuật** | `Staff Gateway / Protocol Engineer` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0015` — `GAP-01, 02`)* |
+| **Size** | `M` (`internal/ingress/native/*`) |
+| **Review Tier** | `STANDARD_REVIEW` *(Same-dialect routing invariants & zero-mutation token extraction)* |
+| **Technical Owner** | `Staff Gateway / Protocol Engineer` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Cung cấp đường đi **Giữ Nguyên Phương Ngữ Gốc Không Mất Mát (`Lossless Native Dialect Passthrough` — `TP-FR-0105`)** tại không gian đường dẫn `/native/{dialect}/{upstreamPath...}` (ví dụ `/native/anthropic/v1/messages`, `/native/gemini/v1beta/models/...`) để các SDK đặc thù và công cụ lập trình giữ nguyên `100%` tính năng chuyên sâu của từng hãng (`prompt caching`, `thinking/signature blocks`, `citations`, `batch`) nhưng **vẫn đi qua đầy đủ đường ống xác thực `Virtual Key`, chính sách, `SSRFGuard`, `BlindBroker`, sổ cái chi phí và vết OpenTelemetry**.
+## 1. Intent
+Provide **Lossless Native Dialect Passthrough (`TP-FR-0105`)** under `/native/{dialect}/{upstreamPath...}` (e.g., `/native/anthropic/v1/messages`, `/native/gemini/v1beta/models/...`) so vendor-native SDKs and coding agents preserve `100%` of provider-specific features (`prompt caching`, `thinking/signature blocks`, `citations`, `batch`) while **still traversing the full Tanpopo governance pipeline: `Virtual Key` authentication, hierarchical policies, `SSRFGuard`, `BlindBroker`, micro-USD budget ledger, and OpenTelemetry tracing**.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `internal/ingress/native/handler.go` (chuẩn hóa đường dẫn chống leo thư mục `path.Clean` / từ chối `..` và chuỗi truy vấn chèn lậu, xác thực `Virtual Key` qua tiêu đề `Authorization: Bearer vk_tp_...` hoặc `x-api-key: vk_tp_...` / `x-goog-api-key: vk_tp_...` rồi lột sạch khóa `vk_tp_*` trước khi giao cho `BlindBroker` tiêm khóa thật của nhà cung cấp).
-  - `internal/ingress/native/inspector.go` (chỉ đọc nhẹ tên `model`, cờ `stream` và móc trích xuất lượng tiêu thụ token `ExtractUsage` / `InspectNativeRequest` mà **không giải mã-ghi lại làm mất trường lạ hay đổi thứ tự nội dung khối ký số**).
-- **Out-of-Scope:** Không bao giờ thực hiện dịch chéo phương ngữ trên nhánh `/native/*` (ví dụ cấm tự dịch `/native/anthropic/v1/messages` sang định dạng OpenAI).
+  - `internal/ingress/native/handler.go` (canonicalize paths via `path.Clean` rejecting `..` traversal and smuggled query parameters; authenticate `Virtual Key` credentials carried in `Authorization: Bearer vk_tp_...`, `x-api-key: vk_tp_...`, or `x-goog-api-key: vk_tp_...` and strip `100%` of `vk_tp_*` headers before handing off to `BlindBroker` for upstream credential injection).
+  - `internal/ingress/native/inspector.go` (non-destructively inspect `model` and `stream` hints and invoke `ExtractUsage` / `InspectNativeRequest` **without unmarshaling/re-serializing the request/response body in ways that drop unknown beta fields or perturb signed thinking blocks**).
+- **Out-of-Scope:** Cross-dialect translation is strictly excluded on `/native/*` (e.g., never translate `/native/anthropic/v1/messages` into OpenAI wire format).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0105`, `TP-NFR-0102`, `TP-BR-0101`, `TP-BR-0503`, `CT-13`.
@@ -26,22 +26,22 @@ Cung cấp đường đi **Giữ Nguyên Phương Ngữ Gốc Không Mất Mát 
 - **Design Refs:** [`api-protocol-compatibility.md`](../../specifications/api-protocol-compatibility.md) (`SPEC-EXT-06`), [`api-contracts.md`](../../specifications/api-contracts.md) (`SPEC-API-01`), [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-05`).
 
 ## 4. API, Wire & Data Contracts
-- **Bất biến Cùng Phương Ngữ (`Same-Dialect Routing Invariant` — `CT-13`):** Yêu cầu vào `/native/anthropic/*` chỉ được phép định tuyến hoặc chuyển đổi dự phòng trước luồng sang các `ModelDeployment` có `native_dialect == "anthropic"`; nếu cấu hình trỏ sang phương ngữ khác → từ chối chuẩn **`400 dialect_mismatch`**.
-- **Chống Xâm nhập Đường dẫn (`Upstream Path Allowlist`):** `upstreamPath` phải khớp mẫu đường dẫn được Adapter của phương ngữ đó khai báo cho phép (ví dụ `^v1/messages(/count_tokens)?$`), chặn việc lợi dụng `/native/*` để gọi API quản lý tài khoản/thanh toán của hãng thượng nguồn.
+- **Same-Dialect Routing Invariant (`CT-13`):** Requests entering `/native/anthropic/*` may route or pre-stream-failover exclusively to `ModelDeployment` targets declaring `native_dialect == "anthropic"`; targeting a mismatched dialect fails fast with canonical **`400 dialect_mismatch`**.
+- **Upstream Path Allowlist (`Upstream Path Allowlist`):** `upstreamPath` must match the Adapter's declared path regex allowlist (e.g., `^v1/messages(/count_tokens)?$`), preventing callers from abusing `/native/*` to invoke upstream provider account/billing administration APIs.
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`CT-13` Byte-Preserving Native Passthrough):** Given thân yêu cầu Anthropic `/native/anthropic/v1/messages` chứa `cache_control: {"type": "ephemeral"}`, khối `thinking` có `signature` và một trường thử nghiệm tương lai `x_future_beta_field`, When gửi qua Gateway (cả đồng bộ và SSE `message_start / content_block_delta / message_delta`), Then `FakeLLMServer` nhận nguyên vẹn từng trường không rơi một byte nào, khách hàng nhận nguyên vẹn luồng sự kiện gốc và Gateway vẫn trích xuất chính xác `input_tokens`, `cache_read_input_tokens`, `output_tokens`.
-- **`NEG-1` (`Virtual Key Leak & Dialect Mismatch`):** Gửi khóa ảo qua `x-api-key: vk_tp_live_canary123` → `FakeLLMServer` chỉ nhận khóa thật của hãng, `0` vết `vk_tp_live_canary123`; trỏ nhầm sang đích khác phương ngữ → nhận `400 dialect_mismatch`.
-- **`NEG-2` (`Path Traversal / Admin Endpoint Abuse`):** Gửi `/native/openai/v1/../organization/admin_api_keys` → bị chặn `403 native_path_not_allowed` trước khi mở kết nối đi ra ngoài.
+- **`AC-1` (`CT-13` Byte-Preserving Native Passthrough):** Given an Anthropic `/native/anthropic/v1/messages` payload containing `cache_control: {"type": "ephemeral"}`, a signed `thinking` block, and a forward-compatible `x_future_beta_field`, When dispatched through the Gateway (both synchronous and SSE `message_start / content_block_delta / message_delta`), Then `FakeLLMServer` receives every field byte-for-byte intact, the caller receives the exact native event stream, and the Gateway accurately extracts `input_tokens`, `cache_read_input_tokens`, and `output_tokens`.
+- **`NEG-1` (`Virtual Key Leak & Dialect Mismatch`):** Passing a virtual key via `x-api-key: vk_tp_live_canary123` → `FakeLLMServer` receives only the upstream provider secret with `0` traces of `vk_tp_live_canary123`; routing to a non-matching dialect target returns `400 dialect_mismatch`.
+- **`NEG-2` (`Path Traversal / Admin Endpoint Abuse`):** Requesting `/native/openai/v1/../organization/admin_api_keys` → blocked with `403 native_path_not_allowed` before opening any outbound socket.
 
 ## 6. Test Commands & Required Evidence
-- Thuần Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/ingress/native/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/ingress/native/...`)*
-- Tranh chấp dữ liệu (`-race`): `go test -v -race ./internal/ingress/native/...`
+- Pure-Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/ingress/native/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/ingress/native/...`)*
+- Data-race (`-race`): `go test -v -race ./internal/ingress/native/...`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Danh sách đường dẫn con cho phép (`allowed_native_paths`) trên mỗi phương ngữ mặc định đóng (`Default-Deny`); cấm chuyển tiếp các header quản trị đặc quyền ngoài danh sách trắng của Adapter.
-- **Rollback:** Tắt cờ `gateway.native_passthrough.enabled` đưa `/native/*` về `404` an toàn mà không ảnh hưởng `/v1/*`.
+- **Security Invariant:** Per-dialect `allowed_native_paths` is strictly `Default-Deny`; privileged upstream administrative headers outside the Adapter's explicit header allowlist are stripped.
+- **Rollback:** Setting `gateway.native_passthrough.enabled = false` safely returns `404` on `/native/*` without affecting `/v1/*`.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0002` (khóa móc `ExtractNativeUsage` trong hợp đồng mở rộng) và `TP-IMP-0015` đã hoàn tất.
-- **DoD:** Xanh toàn bộ ca `CT-13` cho các phương ngữ `openai`, `anthropic`, `gemini` dưới `-race`.
+- **DoR:** `TP-IMP-0002` (locking `InspectNativeRequest` / native usage hooks in the extension contract) and `TP-IMP-0015` are complete.
+- **DoD:** `100%` green across `CT-13` for `openai`, `anthropic`, and `gemini` dialects under `-race`.

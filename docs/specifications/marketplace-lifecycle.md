@@ -1,43 +1,43 @@
-# Đặc tả Vòng đời Phần mở rộng Đa Nguồn & Quản trị Marketplace (Multi-Source Lifecycle & Marketplace Governance) — Tanpopo
+# Multi-Source Extension Lifecycle & Marketplace Governance Specification — Tanpopo
 
-> **Tài liệu Đặc tả Kiến trúc & Quản trị Chuỗi Cung ứng (Phase ASTRA A04 — `DRAFT / ILLUSTRATIVE CANDIDATE SPEC`)**
-> - **Mã tài liệu:** `SPEC-EXT-04` | **Phiên bản:** `0.1.0-step04-draft` | **Ngày cập nhật:** `2026-11-11`
-> - **Vai trò biên soạn:** Platform Architect & Security-Minded SDK Designer
-> - **Tuyên bố Trạng thái Chuẩn hóa:** Cấu trúc tệp khóa `tanpopo.lock`, chỉ mục Marketplace tĩnh và luồng ký số dưới đây **mang tính minh họa thiết kế (`ILLUSTRATIVE — PRE-ADR`)**, chưa tự nhận là chuẩn đóng băng trước khi chốt ADR chuỗi cung ứng.
-> - **Truy vết Yêu cầu:** `DEC-002`, `DEC-004`, `SM-01`, `SM-08`, `WF-04`, `WF-11`, `WF-12`, `OPS-08`, `OPS-09`, `TP-FR-0304`..`0307`, `TP-FR-0703`, `TP-FR-1002`, `TP-FR-1004`, `TP-NFR-0403`.
+> **Supply-Chain Architecture & Governance Specification Document (ASTRA Phase A04 — `DRAFT / ILLUSTRATIVE CANDIDATE SPEC`)**
+> - **Document ID:** `SPEC-EXT-04` | **Version:** `0.1.0-step04-draft` | **Last Updated:** `2026-11-11`
+> - **Authoring Role:** Platform Architect & Security-Minded SDK Designer
+> - **Standardization Status Statement:** The `tanpopo.lock` lockfile schema, static Marketplace index layout, and cryptographic signing flows below are **illustrative candidate designs (`ILLUSTRATIVE — PRE-ADR`)** and are not claimed as frozen standards prior to supply-chain ADR approval.
+> - **Requirements Traceability:** `DEC-002`, `DEC-004`, `SM-01`, `SM-08`, `WF-04`, `WF-11`, `WF-12`, `OPS-08`, `OPS-09`, `TP-FR-0304`..`0307`, `TP-FR-0703`, `TP-FR-1002`, `TP-FR-1004`, `TP-NFR-0403`.
 
 ---
 
-## 1. Nguyên tắc An ninh Nền tảng: Phân biệt `Origin` ≠ `Publisher Trust` ≠ `Safety`
+## 1. Foundational Supply-Chain Principle: Distinguishing `Origin` ≠ `Publisher Trust` ≠ `Safety`
 
-Một sai lầm nguy hiểm trong các hệ thống plugin là coi *"gói có chữ ký hợp lệ"* đồng nghĩa với *"an toàn tuyệt đối"*. Tanpopo tách bạch 3 khái niệm độc lập:
+A common and dangerous flaw in plugin ecosystems is equating *"cryptographically valid signature"* with *"unconditionally safe execution"*. Tanpopo strictly separates three orthogonal dimensions:
 
-| Chiều đánh giá | Câu hỏi trả lời | Bằng chứng kỹ thuật | Giới hạn thực tế (**`Signature != Safety`**) |
+| Evaluation Dimension | Question Answered | Technical Evidence | Practical Limitation (**`Signature != Safety`**) |
 |---|---|---|---|
-| **1. `Package Origin`** *(Nguồn tải gói)* | *"Gói tạo tác này được tải về từ kênh vận chuyển nào?"* | Chỉ mục Marketplace chính thức, URL kho Git (gắn mã băm commit), kho OCI nội bộ hay tệp `.tpkg`/`.zip` cục bộ. | Kênh tải an toàn (HTTPS/OCI) chỉ chống sửa đổi trên đường truyền, không chứng minh tác giả là ai. |
-| **2. `Publisher Trust`** *(Độ tin cậy nhà phát hành)* | *"Ai đã đóng gói phiên bản này và gói đó đã qua cấp kiểm định nào?"* | Chữ ký mật mã (Ed25519 / Sigstore OIDC) và nhãn phân cấp `official`, `verified` hoặc `unverified-external` (`TP-BR-0201`). | Chữ ký chỉ chứng minh **tính toàn vẹn và chống chối bỏ** kể từ lúc ký. Nếu khóa ký của nhà phát triển cộng đồng bị lộ hoặc mã nguồn có lỗ hổng logic, chữ ký vẫn hoàn toàn hợp lệ! |
-| **3. `Runtime Safety`** *(An toàn hành vi thực tế)* | *"Gói này được phép chạm vào tài nguyên nào nếu nó bị lỗi hoặc bị chiếm quyền?"* | Bảng quyền đã duyệt (`Approved Permission Grant`), vùng cô lập Sandbox mặc định đóng, `Blind Credential Broker` và hạn mức CPU/RAM. | **Áp dụng bắt buộc cho MỌI gói (kể cả `official` và `verified`)** — không bao giờ tắt Sandbox chỉ vì gói có chữ ký số. |
+| **1. `Package Origin`** *(Transport Source)* | *"Over which distribution channel was this artifact fetched?"* | Official Marketplace index, Git repository URL (pinned to commit SHA), internal OCI registry, or local `.tpkg`/`.zip` archive. | Transport security (HTTPS/OCI) prevents in-transit tampering but proves nothing about author identity or code behavior. |
+| **2. `Publisher Trust`** *(Publisher Provenance)* | *"Who packaged this release, and what vetting tier did it pass?"* | Cryptographic signature (Ed25519 / Sigstore OIDC) and trust badge `official`, `verified`, or `unverified-external` (`TP-BR-0201`). | A signature proves **integrity and non-repudiation** since signing time only. If a community publisher's signing key is compromised or the code contains a logic bug, the signature remains 100% valid! |
+| **3. `Runtime Safety`** *(Behavioral Containment)* | *"Which resources can this package touch if it malfunctions or is compromised?"* | Explicit `Approved Permission Grant`, default-deny Sandbox isolation, `Blind Credential Broker`, and hard CPU/RAM quotas. | **Mandated for EVERY package (including `official` and `verified`)** — Sandbox containment is never disabled merely because a package carries a valid signature. |
 
 ---
 
-## 2. Bốn Phương thức Cài đặt Chuẩn & Quy tắc Đóng gói Khép kín (`Hermetic Packaging`)
+## 2. Four Canonical Installation Sources & `Hermetic Packaging` Rules
 
-### 2.1. Bốn Nguồn Cài đặt Độc lập với Chu kỳ Phát hành Core
+### 2.1. Four Installation Channels Decoupled from Core Release Cycles
 
-| Phương thức cài đặt | Cú pháp minh họa (`CLI` / Khai báo) | Cơ chế ghim bất biến & Phòng vệ | Cột mốc dự kiến |
+| Installation Method | Illustrative CLI / Declarative Syntax | Immutable Pinning & Defense Mechanisms | Target Milestone |
 |---|---|---|---|
-| **1. Curated Marketplace** | `tanpopo plugin install @tanpopo/openai@^1.2.0` | Đối chiếu chỉ mục tĩnh đã ký số của dự án Tanpopo, kiểm tra chữ ký gói, mã băm SHA-256 và danh sách thu hồi (`Revocation Feed`). | `v0.2` (bộ cốt lõi đóng gói sẵn ở `v0.1`) |
-| **2. Git URL / Release / Commit** | `tanpopo plugin install git+https://github.com/org/ext.git#v0.4.1` | Nếu người dùng truyền tên nhánh/tag, trình cài đặt bắt buộc phân giải thành **mã `commit SHA` đầy đủ** + mã băm gói tạo tác trong `tanpopo.lock`; **tuyệt đối không chạy bất kỳ script cài đặt tự động nào** (`postinstall`, `Makefile`) trên máy chủ Gateway. | `v0.1` (`Must`) |
-| **3. Signed Package / Archive** | `tanpopo plugin install ./acme-adapter-0.2.0.tpkg` | Giới hạn kích thước giải nén tối đa (mặc định `<= 64 MB`), chặn đường dẫn tương đối thoát thư mục (`../` *Zip-Slip*), từ chối mọi liên kết tượng trưng (`symlinks`) trỏ ra ngoài và kiểm tra mã băm/chữ ký đính kèm. | `v0.1` (`Must`) |
-| **4. OCI Artifact / Private Registry** | `tanpopo plugin install oci://registry.corp.internal/ai-ext/acme:0.2.0` | Tải theo chuẩn OCI Artifact; khóa cứng theo **`digest` (`@sha256:...`)** thay vì chỉ tin vào thẻ nhãn động (`:latest`), hỗ trợ xác thực kho riêng và đóng gói ngoại tuyến (`Air-gapped Bundle`). | `v0.2` (`Should`) / `v1.0` (`Air-gapped`) |
+| **1. Curated Marketplace** | `tanpopo plugin install @tanpopo/openai@^1.2.0` | Verifies against Tanpopo's signed static Marketplace index, checks package signature, `SHA-256` digest, and the active `Revocation Feed`. | `v0.2` (core official bundle pre-packaged in `v0.1`) |
+| **2. Git URL / Release / Commit** | `tanpopo plugin install git+https://github.com/org/ext.git#v0.4.1` | When given a branch or tag ref, the installer resolves and pins the **full `commit SHA`** + artifact `SHA-256` inside `tanpopo.lock`; **strictly executes zero install hooks** (`postinstall`, `Makefile`) on the Gateway host. | `v0.1` (`Must`) |
+| **3. Signed Package / Archive** | `tanpopo plugin install ./acme-adapter-0.2.0.tpkg` | Enforces maximum uncompressed archive size (default `<= 64 MB`), blocks path-traversal entries (`../` *Zip-Slip*), rejects external `symlinks`, and verifies embedded digests/signatures. | `v0.1` (`Must`) |
+| **4. OCI Artifact / Private Registry** | `tanpopo plugin install oci://registry.corp.internal/ai-ext/acme:0.2.0` | Pulls standard OCI Artifacts; hard-pins by immutable **`digest` (`@sha256:...`)** rather than mutable tags (`:latest`), supporting private registry auth and offline `Air-gapped Bundle` export. | `v0.2` (`Should`) / `v1.0` (`Air-gapped`) |
 
-### 2.2. Quy tắc Phụ thuộc Không Rò rỉ (`Zero Transitive Runtime Dependency Rule`)
-- **Đóng gói tự chứa tại thời điểm biên dịch (`Build-Time Bundling Only`):** Mọi thư viện phụ thuộc của một `Extension Package` phải được tác giả đóng gói sẵn vào tệp `.wasm` (Tầng 2) hoặc ảnh container cố định (Tầng 3) từ trước khi xuất bản. Máy chủ Tanpopo **cấm tuyệt đối** việc gọi `npm install`, `pip install` hay tải mã phụ thuộc phát sinh từ Internet lúc cài đặt phần mở rộng.
-- **Không phụ thuộc chéo giữa các Plugin (`Flat Dependency Graph`):** Trong giai đoạn `v0.1`–`v1.0`, một `Extension` chỉ giao tiếp với `Plugin Contract` của Tanpopo Core, không gọi trực tiếp hàm nội bộ của một `Extension` khác nhằm loại bỏ hoàn toàn xung đột phiên bản hình thoi (*Diamond Dependency Problem*).
+### 2.2. `Zero Transitive Runtime Dependency Rule`
+- **Build-Time Bundling Only (`Build-Time Bundling Only`):** Every library dependency of an `Extension Package` must be pre-bundled by its author into the `.wasm` module (Tier 2) or immutable container image (Tier 3) at build time. A Tanpopo Gateway host **never** invokes `npm install`, `pip install`, or dynamic Internet dependency fetches during extension installation.
+- **Zero Cross-Plugin Dependencies (`Flat Dependency Graph`):** Across `v0.1`–`v1.0`, each `Extension` interacts exclusively with Tanpopo Core's `Plugin Contract` and never invokes internal functions of another `Extension`, eliminating the *Diamond Dependency Problem* entirely.
 
 ---
 
-## 3. Vòng đời Vận hành 9 Chặng Từ Kiểm định Tới Cách ly (`SM-01` Deep Dive)
+## 3. Nine-Stage Operational Lifecycle from Verification to Quarantine (`SM-01` Deep Dive)
 
 ```mermaid
 sequenceDiagram
@@ -48,29 +48,29 @@ sequenceDiagram
     participant Lock as tanpopo.lock & Audit
     participant RT as Isolated Runtime Pool
 
-    Op->>Inst: 1. Yêu cầu cài đặt / cập nhật phiên bản mới
-    Inst->>Inst: 2. Verification: Kiểm tra kích thước, chống Zip-Slip, SHA-256, chữ ký & Contract Version
-    Inst->>Stage: 3. Staging: Bóc tách Manifest tĩnh (KHÔNG thực thi mã của gói ở bước này!)
-    Stage->>Stage: 4. Permission Diff: So sánh quyền yêu cầu với bản đang chạy (nếu là Update)
-    alt Cài mới HOẶC Bản cập nhật đòi thêm quyền (Permission Escalation)
-        Stage-->>Rev: Trình Bảng Quyền & Nhãn Trust Tier (Giữ ở PENDING_APPROVAL / UPDATING_PENDING_RECONSENT)
-        Rev->>Stage: Phê duyệt tường minh danh sách quyền
+    Op->>Inst: 1. Request package install / version upgrade
+    Inst->>Inst: 2. Verification: Enforce size cap, Zip-Slip guard, SHA-256, signature & Contract Version
+    Inst->>Stage: 3. Staging: Parse static Manifest ONLY (ZERO guest code execution at this step!)
+    Stage->>Stage: 4. Permission Diff: Compare requested permissions against active grant (on Update)
+    alt Fresh install OR Update requests wider permissions (Permission Escalation)
+        Stage-->>Rev: Present Permission Diff & Trust Tier Badge (Hold in PENDING_APPROVAL / UPDATING_PENDING_RECONSENT)
+        Rev->>Stage: Explicitly approve permission grant
     end
-    Stage->>RT: 5. Self-Test: Nạp vào Sandbox nháp & chạy kiểm tra khởi tạo cô lập (Dry-Run Health)
-    RT-->>Lock: 6. Activation: Ghi mã băm + quyền đã duyệt vào tanpopo.lock & ghi AuditEvent
-    Lock->>RT: Chuyển lưu lượng mới sang bản mới; rút êm luồng đang chạy trên bản cũ (DRAINING)
-    opt Phát hiện lỗi vận hành -> Rollback
-        Op->>RT: 7. `tanpopo plugin rollback` -> Chuyển tức thì về mã băm liền trước trong tanpopo.lock
+    Stage->>RT: 5. Self-Test: Load into scratch Sandbox & run isolated initialization check (Dry-Run Health)
+    RT-->>Lock: 6. Activation: Commit artifact SHA-256 + approved grant to tanpopo.lock & emit AuditEvent
+    Lock->>RT: Cut new traffic over to new version; gracefully drain in-flight streams on prior version (DRAINING)
+    opt Operational regression detected -> Rollback
+        Op->>RT: 7. `tanpopo plugin rollback` -> Atomically revert to previous pinned SHA-256 in tanpopo.lock
     end
-    opt Phát hiện mã độc / vượt quyền mạng / Advisory khẩn cấp
-        Op->>RT: 8. `tanpopo plugin quarantine` -> Ngắt tức khắc thực thi & mạng, giữ nguyên dấu vết điều tra
+    opt Malicious behavior / egress violation / critical Advisory
+        Op->>RT: 8. `tanpopo plugin quarantine` -> Immediately sever execution & network, preserving forensic evidence
     end
 ```
 
-### Minh họa Cấu trúc Tệp Khóa Bất biến `tanpopo.lock` (`ILLUSTRATIVE — PRE-ADR`)
+### Illustrative Immutable `tanpopo.lock` Schema (`ILLUSTRATIVE — PRE-ADR`)
 
 ```yaml
-# MINH HỌA TỆP KHÓA CHUỖI CUNG ỨNG (ILLUSTRATIVE CANDIDATE — Chờ chốt ADR)
+# ILLUSTRATIVE SUPPLY-CHAIN LOCKFILE CANDIDATE (Pending ADR Approval)
 lockfileVersion: 1
 generatedAt: "2026-11-11T15:00:00Z"
 
@@ -96,26 +96,26 @@ extensions:
       artifactSha256: "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
 ```
 
-### Quy tắc Gỡ cài đặt (`Uninstall`) vs Cách ly (`Quarantine`)
-- **`Uninstall` (Gỡ sạch có điều kiện):** Chỉ thực hiện được khi `0` `Provider Connection` và `0` `Policy` đang tham chiếu tới phần mở rộng đó; xóa tệp tạo tác khỏi bộ nhớ đệm thực thi nhưng vẫn bảo toàn các dòng `AuditEvent` lịch sử.
-- **`Quarantine` (Cách ly khẩn cấp — `TP-BR-0404`):** Thực thi ngay lập tức bất kể đang có bao nhiêu kết nối tham chiếu; mọi yêu cầu đi tới kết nối phụ thuộc bị từ chối an toàn với mã `503 extension_quarantined`, gói tạo tác bị khóa niêm phong để phục vụ điều tra pháp y số và tra cứu bán kính ảnh hưởng (`TP-FR-0705`).
+### `Uninstall` vs. `Quarantine` Semantics
+- **`Uninstall` (Referentially Safe Removal):** Permitted only when `0` `Provider Connection` records and `0` `Policy` rules reference the extension; purges cached runtime artifacts while preserving historical `AuditEvent` entries intact.
+- **`Quarantine` (Emergency Containment — `TP-BR-0404`):** Executes immediately regardless of active connection references; dependent traffic fails safely with `503 extension_quarantined`, while the artifact bundle is sealed in place for digital forensics and blast-radius inspection (`TP-FR-0705`).
 
 ---
 
-## 4. Quản trị Marketplace, Xuất xứ Phần mềm (`SBOM / Provenance`) & Thu hồi (`Revocation`)
+## 4. Marketplace Governance, Software Provenance (`SBOM / Provenance`) & `Revocation`
 
-1. **Xác minh Danh tính Nhà phát hành (`Publisher Verification`):**
-   - Không gian tên `@tanpopo/*` được khóa độc quyền bằng khóa ký gốc ngoại tuyến của dự án Tanpopo.
-   - Các nhà phát hành đăng ký nhãn `verified` phải chứng minh quyền sở hữu tên miền tổ chức (DNS TXT) hoặc định danh kho mã nguồn qua chữ ký OIDC minh bạch (hướng chuẩn Sigstore/Cosign), để chống tấn công đặt tên gần giống (*typosquatting*).
-2. **Quy trình Kiểm duyệt (`Moderation Pipeline`):**
-   - *Bước tự động (CI Gate):* Kiểm tra lược đồ `Manifest`, quét giấy phép, kiểm tra đính kèm **SBOM** (`CycloneDX` hoặc `SPDX`), chạy toàn bộ bộ kiểm thử băng ghi `tanpopo plugin test` (`CT-01`..`CT-18`) và từ chối tự động các gói xin quyền mạng toàn cục `*`.
-   - *Bước thẩm định con người (`Marketplace Reviewer`):* Rà soát tuân thủ điều khoản nhà cung cấp — từ chối dứt khoát mọi gói trích xuất phiên thuê bao tiêu dùng cá nhân hoặc giả mạo thương hiệu (`TP-BR-0302`, `TP-AC-SEC-06`).
-3. **Giấy phép, SBOM & Chứng thực Xuất xứ (`License, SBOM & Provenance`):**
-   - Mọi gói trên Official Marketplace bắt buộc khai báo giấy phép chuẩn SPDX (chỉ nhận giấy phép nguồn mở tương thích hoặc giấy phép phân phối rõ ràng, cảnh báo nếu chứa thành phần copyleft hạn chế), đính kèm danh mục thành phần `sbom.cdx.json` và bản chứng thực nguồn biên dịch (`Build Provenance`) trỏ về đúng commit mã nguồn.
-4. **Bản tin An ninh & Danh sách Cảnh báo Thu hồi (`Security Advisories & Revocation Feed`):**
-   - Dự án duy trì tệp dữ liệu cảnh báo tĩnh được ký số (`revocations.json`), phân loại mức độ:
-     - `CRITICAL_MALICIOUS` (phát hiện mã độc / đánh cắp dữ liệu): Máy chủ tự vận hành có bật đồng bộ cảnh báo sẽ tự động chuyển gói khớp mã băm sang `QUARANTINED` (hoặc bắn cảnh báo khẩn cấp nếu chạy chế độ chỉ cảnh báo).
-     - `VULNERABLE_UPGRADE_ADVISED` (lỗi bảo mật đã có bản vá): Hiển thị cảnh báo đỏ trên Web Console và đầu ra của lệnh `tanpopo doctor`.
-   - Đối với môi trường mạng kín (`Air-gapped`), `Operator` có thể nhập tệp `revocations.json` ngoại tuyến qua CLI.
-5. **Kênh Báo cáo Vi phạm & Lỗ hổng (`Reporting & Takedown`):**
-   - Công bố quy trình công bố lỗ hổng có trách nhiệm (`Coordinated Vulnerability Disclosure`) và biểu mẫu báo cáo vi phạm bản quyền / vi phạm điều khoản nhà cung cấp với cam kết tạm ẩn khẩn cấp gói độc hại trên chỉ mục công khai ngay khi xác minh bằng chứng.
+1. **Publisher Identity Verification (`Publisher Verification`):**
+   - The `@tanpopo/*` scope is exclusively reserved and signed by the Tanpopo project's offline root signing keys.
+   - Publishers applying for the `verified` tier must prove organizational domain ownership (DNS TXT) or source repository provenance via transparent OIDC signing (aligned with Sigstore/Cosign) to prevent *typosquatting* attacks.
+2. **Moderation Pipeline (`Moderation Pipeline`):**
+   - *Automated Gate (CI Gate):* Validates `Manifest` schema, scans license compatibility, verifies attached **SBOM** (`CycloneDX` or `SPDX`), runs the full cassette-based `tanpopo plugin test` contract suite (`CT-01`..`CT-18`), and automatically rejects wildcard `*` network egress requests.
+   - *Human Compliance Review (`Marketplace Reviewer`):* Audits adherence to upstream provider Terms of Service — unconditionally rejecting packages that scrape personal consumer subscriptions or impersonate vendor brands (`TP-BR-0302`, `TP-AC-SEC-06`).
+3. **Licensing, SBOM & Build Provenance (`License, SBOM & Provenance`):**
+   - Every Official Marketplace listing must declare a valid SPDX license identifier (accepting compatible open-source or explicit redistribution licenses and flagging restrictive copyleft dependencies), attach `sbom.cdx.json`, and include `Build Provenance` attestations linking back to the exact source commit.
+4. **Security Advisories & Signed Revocation Feed (`Security Advisories & Revocation Feed`):**
+   - The project publishes a cryptographically signed static advisory feed (`revocations.json`) with two severity actions:
+     - `CRITICAL_MALICIOUS` (confirmed malware / credential exfiltration): Self-hosted instances with advisory sync enabled automatically transition matching artifact digests to `QUARANTINED` (or fire a critical page when configured in alert-only mode).
+     - `VULNERABLE_UPGRADE_ADVISED` (patched security vulnerability): Surfaces a prominent warning banner in the Web Console and `tanpopo doctor` CLI output.
+   - For `Air-gapped` deployments, an `Operator` can import `revocations.json` bundles offline via CLI.
+5. **Vulnerability & Abuse Reporting (`Reporting & Takedown`):**
+   - Publishes a clear `Coordinated Vulnerability Disclosure` policy and a trademark / ToS-violation takedown workflow committed to delisting confirmed malicious or infringing packages from the public index immediately upon verification.

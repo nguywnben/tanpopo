@@ -1,44 +1,44 @@
-# ADR-0001: Chọn Go (`1.24+`) Modular Monolith Có Khả năng Tách Vai trò Cho Tanpopo Core & CLI
+# ADR-0001: Select Go (`1.24+`) Role-Separable Modular Monolith for Tanpopo Core & CLI
 
 ## Status
-**`PROPOSED`** *(Chờ Product Owner phê duyệt tại Gate G3)*
+**`PROPOSED`** *(Awaiting Product Owner approval at Gate G3)*
 
 ## Date
 `2026-11-11`
 
 ## Context
-Tanpopo phải đồng thời đáp ứng:
-1. Trải nghiệm tự vận hành đơn nút siêu gọn (`TP-FR-1001`, `TP-NFR-0103`): khởi động `< 3 giây`, RAM khi rỗi `< 128 MB`, phân phối dạng 1 tệp thực thi đa hệ điều hành (`linux/amd64`, `linux/arm64`, `darwin/arm64`, `windows/amd64` — `TP-NFR-0901`).
-2. Hiệu năng đường nóng cao (`TP-NFR-0101`..`0102`, `TP-NFR-0301`): độ trễ cộng thêm `< 2 ms` (`p95`) cho Gói Khai báo, chuyển tiếp mảnh SSE `< 1 ms` (`p95`) và giữ `>= 1.000` luồng SSE đồng thời trên `2 vCPU, 2 GB RAM`.
-3. Vận hành đa mặt phẳng phong phú (`Unified/Native LLM`, `Plugin Sandbox`, `MCP Hub`, `A2A`, `OAuth 2.1`, `FinOps Ledger`, `Admin API`, `CLI`) mà vẫn có thể mở rộng ngang không trạng thái ở cụm doanh nghiệp (`TP-FR-1005`).
+Tanpopo must simultaneously satisfy three architectural constraints:
+1. Ultra-lean single-node self-hosted ergonomics (`TP-FR-1001`, `TP-NFR-0103`): startup in `< 3 seconds`, idle RAM `< 128 MB`, and distribution as a single cross-platform executable (`linux/amd64`, `linux/arm64`, `darwin/arm64`, `windows/amd64` — `TP-NFR-0901`).
+2. High-throughput hot-path performance (`TP-NFR-0101`..`0102`, `TP-NFR-0301`): `< 2 ms` (`p95`) proxy overhead for Declarative Bundles, `< 1 ms` (`p95`) per-SSE-chunk forwarding latency, and `>= 1,000` concurrent SSE streams within `2 vCPU, 2 GB RAM`.
+3. Rich multi-plane domain capabilities (`Unified/Native LLM`, `Plugin Sandbox`, `MCP Hub`, `A2A`, `OAuth 2.1`, `FinOps Ledger`, `Admin API`, `CLI`) that still scale horizontally without state affinity in enterprise clusters (`TP-FR-1005`).
 
 ## Decision
-1. Sử dụng **Go (`1.24+`, biên dịch tĩnh `CGO_ENABLED=0`)** làm ngôn ngữ thực thi duy nhất cho **Tanpopo Core (`tanpopod`)** và công cụ dòng lệnh **`tanpopo` CLI**.
-2. Tổ chức kiến trúc theo mô hình **Plane-Separated Modular Monolith**: một mã nguồn chia gói một chiều nghiêm ngặt (`ingress`, `iam`, `policy`, `routing`, `finops`, `extension`, `security`, `telemetry`, `storage`), biên dịch thành 1 tệp thực thi hỗ trợ cờ `--role=all` (mặc định đơn nút), `--role=data-plane` và `--role=control-plane` (khi triển khai cụm HA).
+1. Adopt **Go (`1.24+`, statically compiled with `CGO_ENABLED=0`)** as the sole implementation language for **Tanpopo Core (`tanpopod`)** and the **`tanpopo` CLI**.
+2. Structure the codebase as a **Plane-Separated Modular Monolith**: a single repository enforcing strict unidirectional internal package boundaries (`ingress`, `iam`, `policy`, `routing`, `finops`, `extension`, `security`, `telemetry`, `storage`), compiled into a single binary supporting `--role=all` (standalone default), `--role=data-plane`, and `--role=control-plane` (for HA cluster deployments).
 
 ## Alternatives Considered
 
-### Phương án B: Rust (`Tokio` + `Axum` + `Wasmtime`)
-- *Ưu điểm:* Hiệu năng tối đa, không có trễ thu gom rác (GC), tích hợp gốc Wasm Component Model nhanh nhất.
-- *Nhược điểm:* Tốc độ phát triển các luồng nghiệp vụ phức tạp ở Control Plane (OAuth 2.1, RBAC, Admin CRUD, MCP/A2A, đối soát tài chính) chậm hơn đáng kể; rào cản đóng góp từ cộng đồng mã nguồn mở cao hơn; liên kết tĩnh C++ khi biên dịch chéo đa nền tảng phức tạp hơn `CGO_ENABLED=0` của Go.
-- *Lý do không chọn:* Chi phí tốc độ phát triển ở giai đoạn `v0.1`–`v0.3` quá đắt trong khi Go đã dư sức đạt ngưỡng `< 2 ms` (`p95`).
+### Option B: Rust (`Tokio` + `Axum` + `Wasmtime`)
+- *Pros:* Maximum raw throughput, zero garbage-collection (GC) pauses, and fastest native Wasm Component Model runtime.
+- *Cons:* Substantially slower development velocity across complex Control Plane workflows (OAuth 2.1, RBAC, Admin CRUD, MCP/A2A coordination, financial reconciliation); higher barrier to open-source community contributions; and more complex C++ static linking during multi-OS cross-compilation compared to Go's `CGO_ENABLED=0`.
+- *Why not selected:* Velocity cost across `v0.1`–`v0.3` is disproportionately high when Go comfortably clears the `< 2 ms` (`p95`) latency target.
 
-### Phương án C: Full-Stack TypeScript (`Node.js 22+` hoặc `Bun`)
-- *Ưu điểm:* Đồng nhất 100% ngôn ngữ với giao diện Web Console; hệ sinh thái SDK web/MCP dồi dào.
-- *Nhược điểm:* Vòng lặp sự kiện đơn luồng dễ bị vọt độ trễ đuôi (`p99`) khi đồng thời phân tích JSON đa phương thức lớn và đẩy hàng nghìn luồng SSE; tệp đóng gói độc lập nặng (`~90–120 MB`), khó giữ mức RAM rỗi `< 128 MB`; đặc biệt tiềm ẩn cám dỗ nạp plugin JS trực tiếp trong tiến trình.
-- *Lý do không chọn:* Kém ưu thế về đóng gói hạ tầng tự vận hành gọn nhẹ và ổn định độ trễ dưới tải streaming lớn.
+### Option C: Full-Stack TypeScript (`Node.js 22+` or `Bun`)
+- *Pros:* 100% language uniformity with the Web Console; abundant web and MCP SDK ecosystem.
+- *Cons:* Single-threaded event loop suffers `p99` tail-latency spikes when parsing large multimodal JSON payloads concurrently with thousands of active SSE streams; standalone single-executable bundles are heavy (`~90–120 MB`), straining the `< 128 MB` idle RAM target; and creates dangerous temptation to load untrusted JS plugins directly in-process.
+- *Why not selected:* Inferior fit for lean self-hosted infrastructure packaging and predictable tail latency under heavy streaming load.
 
-### Phương án D: Python (`FastAPI` / `uvloop`) hoặc Kiến trúc Microservices Đa Dịch vụ ngay từ đầu
-- *Nhược điểm:* Python chịu giới hạn thông dịch/GIL gây nghẽn thông lượng proxy dưới tải cao; kiến trúc tách rời nhiều microservices ngay ở `v0.1` buộc mọi người tự host phải nuôi hàng loạt dịch vụ mạng nội bộ không cần thiết.
-- *Lý do bác bỏ:* Vi phạm trực tiếp mục tiêu hiệu năng và tính thực dụng tự vận hành.
+### Option D: Python (`FastAPI` / `uvloop`) or Upfront Multi-Service Microservices
+- *Cons:* Python's interpreter overhead and GIL bottleneck proxy throughput under load; decomposing into microservices at `v0.1` forces every self-hoster to operate an unnecessary fleet of internal network services.
+- *Why rejected:* Directly violates both hot-path latency targets and pragmatic Day-1 self-hosting ergonomics.
 
 ## Rationale
-Go với `CGO_ENABLED=0` (kết hợp động cơ Wasm thuần Go `wazero` và trình điều khiển SQLite thuần Go) là điểm cân bằng tối ưu nhất trên bảng chấm điểm trọng số (`9.05/10` tại `system-design.md`): vừa biên dịch ra 1 tệp thực thi tĩnh chạy mọi nơi và nhúng sẵn tài sản tĩnh Web Console qua `embed.FS`, vừa xử lý hàng nghìn kết nối SSE bằng goroutines siêu nhẹ, lại vừa dễ đọc, dễ bảo trì và thu hút đóng góp cộng đồng.
+Go with `CGO_ENABLED=0` (paired with the pure-Go `wazero` WebAssembly runtime and a pure-Go SQLite driver) achieves the highest weighted score (`9.05/10` in `system-design.md`): it compiles to a single static binary that runs everywhere while embedding Web Console static assets via `embed.FS`, multiplexes thousands of SSE connections over lightweight goroutines, and remains highly readable, maintainable, and approachable for open-source infrastructure contributors.
 
 ## Consequences
-- **Tích cực:** Cài đặt trong 1 tệp duy nhất; RAM thấp; tách vai trò `data-plane` / `control-plane` ở chế độ HA mà không tốn công duy trì nhiều kho mã dịch vụ rời rạc.
-- **Tiêu cực / Đánh đổi:** Tồn tại ranh giới hai ngôn ngữ trong monorepo (`Go` cho Backend/CLI và `TypeScript` cho Web Console + một bộ Plugin SDK); đội ngũ cần kiểm soát cấp phát bộ nhớ trên đường nóng (`sync.Pool`) để tránh trễ GC.
+- **Positive:** Single-binary installation; small memory footprint; clean `--role=data-plane` / `--role=control-plane` separation in HA mode without maintaining fragmented microservice repositories.
+- **Negative / Trade-offs:** Introduces a two-language boundary inside the monorepo (`Go` for Backend/CLI and `TypeScript` for the Web Console + one Plugin SDK target); engineers must enforce allocation discipline on the hot path (`sync.Pool`) to prevent GC tail pauses.
 
 ## Reversibility & Migration Implications
-- **Mức độ đảo ngược:** **Khó đảo ngược (*One-Way Door*)** sau khi hoàn thành `v0.1` Core. Tuy nhiên, nhờ toàn bộ `Extension Contract` (`SPEC-EXT-01`) và `API Contracts` (`SPEC-API-01`) hoàn toàn độc lập ngôn ngữ, các gói phần mở rộng của cộng đồng và Web Console sẽ không bị ảnh hưởng kể cả khi thay đổi thành phần nội bộ.
-- **Tác động di trú trên Repo hiện tại:** Chưa di chuyển tệp ngay trong bước A05; khi bắt đầu giai đoạn lập trình được duyệt, khởi tạo `go.mod` và tách gọn thư mục `cmd/`, `internal/`, `web/console/`.
+- **Reversibility:** **Hard to reverse (*One-Way Door*)** once `v0.1` Core is implemented. However, because both the `Extension Contract` (`SPEC-EXT-01`) and external `API Contracts` (`SPEC-API-01`) are strictly language-agnostic, community extension packages and the Web Console remain unaffected even if internal Core components evolve.
+- **Current Repository Migration Impact:** Zero files are moved during Phase A05; once implementation is explicitly approved, initialize `go.mod` and establish clean `cmd/`, `internal/`, and `web/console/` directories.

@@ -1,100 +1,100 @@
-# Quản lý Bí mật Một chiều, Mã hóa Phong bì & Cô lập Đa Tổ chức (Secrets Management, AuthZ & Tenant Isolation) — Tanpopo
+# Write-Only Secrets Management, Envelope Encryption & Multi-Tenant Isolation — Tanpopo
 
-> **Tài liệu Kỹ thuật Bảo mật Dữ liệu & Đa Thuê bao (Phase ASTRA A07 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — NO CODE`)**
-> - **Mã tài liệu:** `SPEC-SEC-03` | **Phiên bản:** `0.1.0-step07-draft` | **Ngày cập nhật:** `2026-11-12`
-> - **Vai trò biên soạn:** Principal Security Engineer & Cryptography / IAM Lead
-> - **Trạng thái quản trị:** **Đặc tả Bảo mật Đề xuất (`PROPOSED`)** — quy định cơ chế mã hóa phong bì có gắn ngữ cảnh (`AEAD AAD`), vòng đời bí mật một chiều, cô lập đa tầng theo `Organization / Project / Environment`, kiểm tra quyền trên mọi hành động quản trị và ranh giới giữa **khả năng kỹ thuật giao thức** với **quyền hợp pháp theo chính sách nhà cung cấp (`DEC-004`)**.
-> - **Truy vết Yêu cầu:** `DEC-003`, `DEC-004`, `TP-BR-0101`..`0104`, `TP-BR-0301`..`0304`, `TP-BR-0802`..`0803`, `TP-FR-0204`..`0206`, `TP-FR-0501`..`0504`, `TP-FR-0701`..`0705`, `TP-NFR-0402`, `TP-NFR-0404`, `TP-NFR-0501`..`0502`, `RSK-001`, `RSK-003`, `RSK-006`, `RSK-011`, `RSK-016`.
+> **Data Security & Multi-Tenancy Specification (Phase ASTRA A07 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — NO CODE`)**
+> - **Document ID:** `SPEC-SEC-03` | **Version:** `0.1.0-step07-draft` | **Last Updated:** `2026-11-12`
+> - **Authoring Role:** Principal Security Engineer & Cryptography / IAM Lead
+> - **Governance Status:** **Proposed Security Specification (`PROPOSED`)** — defines context-bound envelope encryption (`AEAD AAD`), write-only secret lifecycle rules, multi-layer isolation across `Organization / Project / Environment`, every-action administrative authorization, and the strict boundary between **protocol-level technical capability** and **provider policy legitimacy (`DEC-004`)**.
+> - **Requirements Traceability:** `DEC-003`, `DEC-004`, `TP-BR-0101`..`0104`, `TP-BR-0301`..`0304`, `TP-BR-0802`..`0803`, `TP-FR-0204`..`0206`, `TP-FR-0501`..`0504`, `TP-FR-0701`..`0705`, `TP-NFR-0402`, `TP-NFR-0404`, `TP-NFR-0501`..`0502`, `RSK-001`, `RSK-003`, `RSK-006`, `RSK-011`, `RSK-016`.
 
 ---
 
-## 1. Kiến trúc Mã hóa Phong bì Gắn Ngữ cảnh (`Envelope Encryption with AEAD Context Binding`)
+## 1. Context-Bound Envelope Encryption Architecture (`Envelope Encryption with AEAD Context Binding`)
 
-Mọi thông tin nhạy cảm bậc cao (`Upstream API Keys`, `Authorized OAuth Refresh/Access Tokens`, khóa ký webhook, hoặc mẫu gỡ lỗi ngắn hạn) đều được bảo vệ qua phân cấp khóa 2 tầng để vừa cho phép xoay khóa gốc tức thì, vừa chống tấn công cấy ghép bản mã chéo tổ chức (`Ciphertext Transplant Attack`):
+All high-sensitivity credentials (`Upstream API Keys`, `Authorized OAuth Refresh/Access Tokens`, webhook signing secrets, and short-lived debug payload captures) are protected by a two-tier key hierarchy that enables instant root key rotation while defeating cross-tenant ciphertext transplant attacks (`Ciphertext Transplant Attack`):
 
 ```mermaid
 flowchart TD
-    KEK["Master KEK (AWS/GCP KMS, HashiCorp Vault Transit, hoặc Keyfile 0400 tách rời DB)"]
-    DEK_A["Org-A DEK (AES-256-GCM 256-bit, bọc bởi Master KEK)"]
-    DEK_B["Org-B DEK (AES-256-GCM 256-bit, bọc bởi Master KEK)"]
-    SEC_A["Secret Ciphertext A (Nonce 96-bit CSPRNG + Ciphertext + Tag 128-bit)"]
-    AAD_A["Bắt buộc khớp AAD = 'tanpopo:v1:' || org_id || ':' || resource_type || ':' || resource_id || ':' || slot_name"]
+    KEK["Master KEK (AWS/GCP KMS, HashiCorp Vault Transit, or 0400 Keyfile Separated from DB)"]
+    DEK_A["Org-A DEK (256-bit AES-256-GCM, Wrapped by Master KEK)"]
+    DEK_B["Org-B DEK (256-bit AES-256-GCM, Wrapped by Master KEK)"]
+    SEC_A["Secret Ciphertext A (96-bit CSPRNG Nonce + Ciphertext + 128-bit Tag)"]
+    AAD_A["Mandatory AAD = 'tanpopo:v1:' || org_id || ':' || resource_type || ':' || resource_id || ':' || slot_name"]
 
-    KEK -->|"Unwrap khi cần (Cache ngắn hạn trong RAM Core)"| DEK_A
-    KEK -->|"Unwrap riêng biệt"| DEK_B
+    KEK -->|"Unwrap on demand (Short-lived Core RAM cache)"| DEK_A
+    KEK -->|"Isolated unwrap"| DEK_B
     DEK_A --> SEC_A
-    AAD_A -.->|"Xác thực nguyên vẹn ngữ cảnh khi mở niêm phong"| SEC_A
+    AAD_A -.->|"Verify cryptographic context integrity on unseal"| SEC_A
 ```
 
-### 1.1. Năm Quy tắc Mật mã & Vòng đời Bí mật Một Chiều (`Write-Only Secret Discipline`)
-1. **Gắn Cứng Dữ liệu Xác thực Bổ sung (`AEAD AAD Binding`):**
-   - Khi mã hóa hoặc giải mã bất kỳ bản ghi bí mật nào bằng `AES-256-GCM`, tầng `vault` bắt buộc truyền chuỗi định danh bất biến `AAD = "tanpopo:v1:" || org_id || ":" || resource_type || ":" || resource_id || ":" || slot_name`.
-   - **Hệ quả bảo mật:** Kể cả khi kẻ tấn công chiếm quyền sửa bảng SQL và chép giá trị cột `secret_ciphertext` từ `Connection` của `Org A` sang `Connection` của `Org B` (hoặc đổi `allowed_hosts` bằng cách tráo dòng), phép giải mã `GCM Open` lập tức thất bại với lỗi xác thực thẻ mật mã (`cipher: message authentication failed`) — khóa của `Org A` không bao giờ có thể bị mở nhầm cho đối tượng khác.
-2. **Bí mật Chỉ Đi Một Chiều (`Write-Only Plaintext`):**
-   - Khóa gốc chỉ được gửi lên duy nhất 1 lần lúc tạo hoặc xoay khóa qua kết nối TLS. Mọi phản hồi `GET / LIST / PATCH /admin/v1/*`, tệp xuất cấu hình GitOps, gói `tanpopo support-bundle` và bản sao lưu chỉ trả về trạng thái `configured: true`, dấu thời gian xoay khóa và `secret_version` — **tuyệt đối không bao giờ có API đọc ngược lại khóa rõ**.
-3. **Tiêm Mù Tại Biên Mạng & Xóa Vùng Nhớ Ngắn Hạn (`Blind Injection & Buffer Hygiene`):**
-   - `Blind Host Credential Broker` chỉ giải mã bí mật ngay tại bước dựng tiêu đề HTTP đi ra của tiến trình Core sau khi đã xác minh tên miền đích nằm trong `Connection.allowed_hosts` và vượt qua `SSRFGuard`. Mảng byte chứa bí mật giải mã được xóa về `0` (`clear(plaintextBuf)`) ngay sau khi ghi vào luồng TLS đi ra và không bao giờ đi vào cấu trúc ngữ cảnh truyền sang Wasm hay trình ghi nhật ký.
-4. **Băm Một Chiều Cho Khóa Ảo Đường Dữ liệu (`Virtual Key Hashing`):**
-   - Khóa ảo cấp cho ứng dụng khách (`vk_tp_<env>_<random_256bit>`) không dùng mã hóa hai chiều mà chỉ lưu mã băm `SHA-256` kèm `key_prefix` nhận diện. Lúc xác thực truy vấn suy luận, hệ thống băm khóa gửi lên và so sánh bằng `crypto/subtle.ConstantTimeCompare` trên bảng chỉ mục bộ nhớ của `ConfigSnapshot` (chống hoàn toàn tấn công đo thời gian `Timing Side-Channel`).
-5. **Xoay `Master KEK` Trực tuyến Không Gián đoạn (`Online KEK Re-Wrapping`):**
-   - Lệnh `tanpopo vault rotate-kek` chỉ cần giải bọc và bọc lại các khóa trung gian `Org DEK` (số lượng nhỏ) sang `KEK` thế hệ mới trong giao dịch nguyên tử mà không phải giải mã hàng vạn bản ghi thông tin xác thực hay làm rớt các luồng SSE đang mở (`DR-03`).
+### 1.1. Five Cryptographic Rules & Write-Only Secret Discipline
+1. **Hard Additional Authenticated Data Binding (`AEAD AAD Binding`):**
+   - Whenever sealing or unsealing any secret record via `AES-256-GCM`, the `vault` layer passes the immutable context identifier `AAD = "tanpopo:v1:" || org_id || ":" || resource_type || ":" || resource_id || ":" || slot_name`.
+   - **Security Consequence:** Even if an attacker gains SQL write access and copies `secret_ciphertext` from an `Org A` `Connection` row into an `Org B` `Connection` row (or swaps rows to alter `allowed_hosts`), `GCM Open` fails immediately with an authentication tag error (`cipher: message authentication failed`) — `Org A`'s credential can never be unsealed for another resource or tenant.
+2. **Write-Only Plaintext Lifecycle (`Write-Only Plaintext`):**
+   - Raw secret material is transmitted exactly once during creation or rotation over TLS. Every `GET / LIST / PATCH /admin/v1/*` response, GitOps configuration export, `tanpopo support-bundle` archive, and backup exposes only `configured: true`, rotation timestamps, and `secret_version` — **no read-back API for plaintext secrets ever exists**.
+3. **Blind Edge Injection & Ephemeral Buffer Hygiene (`Blind Injection & Buffer Hygiene`):**
+   - The `Blind Host Credential Broker` unseals credentials strictly at the Core outbound HTTP header construction step after verifying that the destination host matches `Connection.allowed_hosts` and passes `SSRFGuard`. The plaintext byte slice is zeroed immediately (`clear(plaintextBuf)`) after writing to the outbound TLS stream and never enters Wasm guest context structures or structured logs.
+4. **One-Way Hashing for Data-Plane Virtual Keys (`Virtual Key Hashing`):**
+   - Client-facing virtual keys (`vk_tp_<env>_<random_256bit>`) are never reversibly encrypted; only their `SHA-256` digest and a display `key_prefix` are persisted. At inference authentication time, Core hashes the presented bearer token and compares digests via `crypto/subtle.ConstantTimeCompare` against the in-memory `ConfigSnapshot` index (eliminating `Timing Side-Channel` attacks).
+5. **Zero-Downtime Online `Master KEK` Rotation (`Online KEK Re-Wrapping`):**
+   - `tanpopo vault rotate-kek` unwraps and re-wraps only the small set of intermediate `Org DEK` records under the new `KEK` generation inside an atomic transaction without re-encrypting tens of thousands of individual credential ciphertexts or dropping active SSE streams (`DR-03`).
 
 ---
 
-## 2. Cô lập Đa Tổ chức Chiều Sâu 4 Lớp (`Four-Layer Tenant, Project & Environment Isolation`)
+## 2. Four-Layer Multi-Tenant Isolation (`Four-Layer Tenant, Project & Environment Isolation`)
 
-Để triệt tiêu lỗi rò rỉ dữ liệu chéo tổ chức (`Cross-Tenant IDOR` / `Cache Bleed`), Tanpopo không dựa vào một câu lệnh `WHERE` đơn lẻ ở tầng ứng dụng mà khóa đồng thời ở **4 lớp độc lập**:
+To eliminate cross-tenant data leakage (`Cross-Tenant IDOR` / `Cache Bleed`), Tanpopo never relies on a single application-layer `WHERE` clause, enforcing isolation simultaneously across **4 independent layers**:
 
-| Lớp Cô lập | Cơ chế Thực thi Bắt buộc | Hành vi Khi Có Truy cập Trái phép / Lỗi Lập trình |
+| Isolation Layer | Mandatory Enforcement Mechanism | Behavior on Unauthorized Access or Coding Bug |
 |---|---|---|
-| **Lớp 1: Ngữ cảnh Định danh Bất biến (`Auth Context Binding`)** | `org_id`, `project_id` và `environment_id` ở Data Plane được suy xuất **duy nhất từ bản ghi `Virtual Key` đã xác thực**; ở Control Plane suy xuất từ phiên người dùng đã kiểm tra bảng thành viên RBAC (`org_memberships` / `project_grants`). Hệ thống phớt lờ hoặc từ chối mọi trường `org_id` giả mạo truyền kèm trong thân JSON. | Chặn ngay tại middleware xác thực trước khi chạm tới logic nghiệp vụ (`AUTH-13`). |
-| **Lớp 2: Ràng buộc Quan hệ Kép & `PostgreSQL FORCE RLS`** | Mọi bảng thuộc phạm vi thuê bao đều dùng khóa chính/khóa ngoại tổ hợp `(org_id, id)` trên cả SQLite và PostgreSQL (`TP-BR-0102`, cấm nối chéo `Route` của `Org A` sang `Connection` của `Org B`). Trên PostgreSQL `16+`, mọi giao dịch mở đầu bằng `SET LOCAL app.current_org_id = '<uuid>'` cùng chính sách `ENABLE` + **`FORCE ROW LEVEL SECURITY`**. | Ngay cả khi một truy vấn SQL mới viết thiếu mệnh đề lọc `org_id`, cơ sở dữ liệu vẫn tự động trả về `0` dòng của tổ chức khác (`AUTH-14`). |
-| **Lớp 3: Phân vùng Khóa Bộ nhớ Đệm & Cấm Chia sẻ Cache Chéo Thuê bao** | Mọi khóa trên `Valkey/Redis` và bộ nhớ cục bộ bắt buộc tuân thủ khuôn dạng phân cấp cứng: `tp:v1:{org_id}:{project_id}:{env_id}:{subsystem}:{hash}`. Khi tính năng bộ nhớ đệm phản hồi (`Exact / Semantic Cache`) được bật ở cấu hình tùy chọn, phạm vi tra cứu bị khóa chặt trong **cùng `org_id + project_id + env_id + model_deployment_id + policy_version_hash + tool_acl_hash`** — **nghiêm cấm tuyệt đối** việc dùng chung cache câu trả lời giữa hai tổ chức hoặc hai môi trường khác nhau. | Không bao giờ xảy ra hiện tượng người dùng ở `Project B` nhận được câu trả lời đã lưu đệm từ truy vấn nội bộ của `Project A` (`CT-28`, `FMEA-03`). |
-| **Lớp 4: Phản hồi Đồng nhất Chống Dò Tồn tại (`Anti-Oracle 404`)** | Khi chủ thể thuộc `Org A` gọi `/admin/v1/connections/{id_cua_Org_B}` hoặc tra cứu `request_id` của `Org B`, API trả về mã **`404 resource_not_found`** có cấu trúc và độ trễ giống hệt trường hợp `UUID` không tồn tại (thay vì trả `403` làm lộ việc đối tượng đó có thật), đồng thời ghi ngầm sự kiện `cross_tenant_probe_blocked` vào nhật ký kiểm toán an ninh. | Kẻ tấn công không thể quét dò danh sách tài nguyên của tổ chức khác trên cùng cụm máy chủ (`AUTH-15`). |
+| **Layer 1: Immutable Principal Binding (`Auth Context Binding`)** | Data-Plane `org_id`, `project_id`, and `environment_id` are derived **exclusively from the authenticated `Virtual Key` record**; Control-Plane scope is derived from the authenticated session verified against RBAC membership tables (`org_memberships` / `project_grants`). Any client-supplied `org_id` field in a JSON request body is ignored or rejected. | Blocked at authentication middleware before reaching business logic (`AUTH-13`). |
+| **Layer 2: Composite Relational Keys & `PostgreSQL FORCE RLS`** | Every tenant-scoped table enforces composite primary/foreign keys `(org_id, id)` on both SQLite and PostgreSQL (`TP-BR-0102`, preventing an `Org A` `Route` from referencing an `Org B` `Connection`). On PostgreSQL `16+`, every transaction begins with `SET LOCAL app.current_org_id = '<uuid>'` backed by `ENABLE` + **`FORCE ROW LEVEL SECURITY`** policies. | Even if a newly written SQL query omits an explicit `org_id` predicate, the database engine returns `0` rows from other organizations (`AUTH-14`). |
+| **Layer 3: Partitioned Cache Keyspace & Zero Cross-Tenant Cache Sharing** | Every key in `Valkey/Redis` and local RAM caches adheres to the strict hierarchical prefix `tp:v1:{org_id}:{project_id}:{env_id}:{subsystem}:{hash}`. Whenever optional response caching (`Exact / Semantic Cache`) is enabled, lookup scope is hard-bound to **`org_id + project_id + env_id + model_deployment_id + policy_version_hash + tool_acl_hash`** — **sharing cached completions across organizations, projects, or environments is strictly prohibited**. | A caller in `Project B` can never receive a cached completion generated from `Project A`'s confidential prompt (`CT-28`, `FMEA-03`). |
+| **Layer 4: Uniform Anti-Enumeration Responses (`Anti-Oracle 404`)** | When a principal in `Org A` requests `/admin/v1/connections/{org_b_id}` or queries an `Org B` `request_id`, the API returns **`404 resource_not_found`** with identical payload shape and latency to a nonexistent `UUID` (rather than `403`, which would leak existence), while silently recording `cross_tenant_probe_blocked` in the security audit log. | Attackers cannot enumerate resource UUIDs belonging to other tenants on a shared cluster (`AUTH-15`). |
 
 ---
 
-## 3. Ủy quyền Mọi Thao tác Quản trị (`Every-Action AuthZ`), Tín nhiệm Liên Dịch vụ & Khán giả Token
+## 3. Every-Action Administrative AuthZ, Service-to-Service Trust & Token Audience Binding
 
-### 3.1. Ma trận Tách Biệt Mặt phẳng Xác thực & Chống Tự Phê duyệt (`Plane Separation & Four-Eyes`)
-1. **Cấm Dùng Lẫn Khóa Giữa Data Plane và Control Plane:**
-   - Mang `Virtual Key` (`vk_tp_...`) gọi bất kỳ đường dẫn `/admin/v1/*` nào → Từ chối cứng **`401 invalid_credential_plane`**.
-   - Mang phiên cookie quản trị Web Console gọi trực tiếp `/v1/chat/completions` (trừ endpoint thử nghiệm nội bộ `/admin/v1/playground/completions` có kiểm tra quyền `Playground:Execute` + `CSRF` + gắn hạn mức thử nghiệm riêng) → Từ chối **`401`**.
-2. **Ủy quyền Từng Hành động & Kiểm soát Cạnh tranh (`Action-Level RBAC + Optimistic Locking`):**
-   - Mọi handler trong `/admin/v1/*` bắt buộc khai báo cặp `(Resource, Permission)` tường minh trong bảng định tuyến trung tâm (khởi tạo máy chủ sẽ `panic` ngay lúc kiểm thử nếu có một route `/admin/v1/*` nào chưa gắn bộ kiểm tra quyền).
-   - Các phiên trình duyệt dùng cookie bắt buộc cờ `HttpOnly; Secure; SameSite=Strict` kết hợp kiểm tra tiêu đề `Origin` và mã chống giả mạo yêu cầu chéo trang (`CSRF Token`) trên mọi phương thức `POST / PUT / PATCH / DELETE`.
-   - Mọi thao tác cập nhật cấu hình bắt buộc gửi kèm `If-Match: "<etag>"` để chống ghi đè mù giữa hai quản trị viên (`409 conflict_version_mismatch`).
-3. **Nguyên tắc Bốn Mắt (`Four-Eyes Separation of Duties` — `OPS-02`, `TP-FR-0504`):**
-   - Khi chính sách tổ chức bật `require_four_eyes_approval = true`, hệ thống kiểm tra bất biến `approver.principal_id != requester.principal_id` ở tầng giao dịch DB đối với 4 nhóm thao tác nhạy cảm: (a) kích hoạt gói `unverified-external` hoặc nâng quyền $\Delta P$, (b) bật chế độ ngoại lệ `scoped_secret_unseal`, (c) phê duyệt lệnh gọi công cụ MCP cấp `destructive`, và (d) bật ghi mẫu gỡ lỗi văn bản tạm thời (`TTL <= 72h`).
+### 3.1. Plane Separation Matrix & Anti-Self-Approval (`Plane Separation & Four-Eyes`)
+1. **Strict Credential Separation Between Data Plane and Control Plane:**
+   - Presenting a Data-Plane `Virtual Key` (`vk_tp_...`) against any `/admin/v1/*` endpoint → Hard reject **`401 invalid_credential_plane`**.
+   - Presenting a Web Console admin session cookie directly against `/v1/chat/completions` (outside the dedicated internal `/admin/v1/playground/completions` endpoint enforcing `Playground:Execute` + `CSRF` + isolated playground quota) → Hard reject **`401`**.
+2. **Action-Level RBAC & Optimistic Concurrency Control (`Action-Level RBAC + Optimistic Locking`):**
+   - Every handler under `/admin/v1/*` must declare an explicit `(Resource, Permission)` tuple in the central route registry (server initialization panics immediately under test if any `/admin/v1/*` route lacks a registered permission guard).
+   - Cookie-backed browser sessions enforce `HttpOnly; Secure; SameSite=Strict` paired with `Origin` header validation and an anti-CSRF token (`CSRF Token`) on every `POST / PUT / PATCH / DELETE` request.
+   - Every mutating configuration operation requires `If-Match: "<etag>"` to prevent lost updates across concurrent administrators (`409 conflict_version_mismatch`).
+3. **Four-Eyes Separation of Duties (`OPS-02`, `TP-FR-0504`):**
+   - When an organization enables `require_four_eyes_approval = true`, the database transaction layer enforces `approver.principal_id != requester.principal_id` across 4 high-risk action classes: (a) activating an `unverified-external` package or approving a capability escalation $\Delta P$, (b) enabling the `scoped_secret_unseal` exception, (c) approving a `destructive` MCP tool invocation, and (d) enabling temporary debug payload capture (`TTL <= 72h`).
 
-### 3.2. Tín nhiệm Liên Dịch vụ (`Service-to-Service`) & Cấm Chuyển tiếp Token Trái phép (`RFC 8707`)
-- **`Control Plane <-> Data Plane` (Chế độ tách vai trò):** Các nút Data Plane chỉ chấp nhận thông báo làm mới `config_epoch` đã ký HMAC/mTLS nội bộ và đọc cấu hình từ cơ sở dữ liệu bằng tài khoản DB chỉ có quyền đọc (`SELECT` trên các bảng cấu hình, `INSERT` trên bảng sổ cái/kiểm toán — không có quyền `DROP`/`ALTER` hay sửa chính sách).
-- **`Tanpopo Core <-> Tier-3 Sidecar`:** Trên cùng máy chủ dùng Unix Domain Socket đặt quyền `0600` thuộc người dùng dịch vụ riêng; qua mạng cụm bắt buộc **`mTLS` hai chiều** với chứng chỉ ngắn hạn (`TTL <= 24h`) gắn định danh `SPIFFE URI SAN` của đúng phiên bản phần mở rộng đó.
-- **Khóa Khán giả Token (`RFC 8707 Audience Binding`) & Cấm Chuyển tiếp Mù (`No Token Relay`):**
-  - Token OIDC của quản trị viên đăng nhập vào Tanpopo có `aud = tanpopo-control-plane` — Tanpopo **tuyệt đối không bao giờ** chuyển tiếp (`relay`) nguyên xi token này sang nhà cung cấp AI hay máy chủ MCP bên ngoài.
-  - Token `Authorized OAuth 2.1` lưu cho một `Provider Connection` hoặc `MCP Server` được gắn cứng danh sách `allowed_audience_hosts` (và tham số `resource` theo `RFC 8707` khi máy chủ ủy quyền hỗ trợ); mọi nỗ lực cấu hình lại URL đích sang miền khác mà không cấp quyền OAuth lại từ đầu đều làm vô hiệu hóa tức thì token đang lưu (`SM-03 -> INVALIDATED_HOST_CHANGE`, `CT-19`).
+### 3.2. Service-to-Service Trust & Unauthorized Token Relay Prohibition (`RFC 8707`)
+- **`Control Plane <-> Data Plane` (Split-Role Topology):** Data-Plane nodes accept only HMAC/mTLS-authenticated `config_epoch` invalidation signals and query the database using a least-privilege DB role (`SELECT` on configuration tables, `INSERT` on ledger/audit tables — zero `DROP`/`ALTER` or policy-mutation privileges).
+- **`Tanpopo Core <-> Tier-3 Sidecar`:** Co-located deployments use a `0600` Unix Domain Socket owned by a dedicated service user; networked cluster deployments require **mutual `mTLS`** with short-lived certificates (`TTL <= 24h`) bound to the exact extension version's `SPIFFE URI SAN`.
+- **Token Audience Binding (`RFC 8707`) & Blind Token Relay Prohibition (`No Token Relay`):**
+  - Administrator OIDC tokens issued for Tanpopo carry `aud = tanpopo-control-plane` — Tanpopo **never relays** this user token upstream to external AI providers or MCP servers.
+  - `Authorized OAuth 2.1` tokens stored for a `Provider Connection` or `MCP Server` are hard-bound to `allowed_audience_hosts` (and `RFC 8707` `resource` indicators where supported by the authorization server); reconfiguring the upstream endpoint URL to a different host without re-authorizing OAuth from scratch immediately invalidates the stored token (`SM-03 -> INVALIDATED_HOST_CHANGE`, `CT-19`).
 
-### 3.3. Phân định Rạch ròi: Hỗ trợ Kỹ thuật Giao thức vs Quyền Hợp pháp Theo Chính sách Hãng (`DEC-004`)
+### 3.3. Explicit Boundary: Protocol Technical Support vs. Provider Policy Legitimacy (`DEC-004`)
 
-Một yêu cầu cốt lõi của chiến lược xác minh Tanpopo là **tách biệt minh bạch giữa năng lực kỹ thuật của giao thức xác thực và quyền thương mại/điều khoản dịch vụ của nhà cung cấp**:
+A foundational requirement of Tanpopo's verification strategy is **transparent separation between protocol-level authentication capability and commercial/Terms-of-Service legitimacy**:
 
-| Tình huống Xác thực | Khả năng Kỹ thuật Ở Tầng Giao thức | Tính Hợp lệ Chính sách & Pháp lý (`DEC-004`) | Hành vi Cưỡng chế Của Tanpopo & Kiểm thử |
+| Authentication Scenario | Protocol-Layer Technical Capability | Policy & Legal Legitimacy (`DEC-004`) | Tanpopo Enforcement & Verification Behavior |
 |---|---|---|---|
-| **1. `API Key` / `Cloud IAM` thương mại chính thức (OpenAI Platform, Anthropic Console, Vertex AI, Bedrock)** | Hỗ trợ đầy đủ (`Bearer`, `x-api-key`, `SigV4`, `Workload Identity`). | **Được phép đầy đủ (`COMMERCIAL_API`).** | Hỗ trợ chính thức trong `Official Adapters`, tính toán sổ cái `micro-USD` đầy đủ (`AUTH-04`, `CT-06`). |
-| **2. `OAuth 2.1` cho Cổng AI Nội bộ Doanh nghiệp (Okta / Entra ID / Keycloak bọc trước vLLM / Azure / Gateway công ty)** | Chuẩn `Authorization Code + PKCE` hoặc `Client Credentials` với `client_id` do chính doanh nghiệp sở hữu. | **Được phép đầy đủ (`SELF_HOSTED_INFRA` / `COMMERCIAL_API`).** | Hỗ trợ chính thức qua trình điều khiển `Authorized OAuth 2.1` chuẩn (`AUTH-09`, `CT-19`). |
-| **3. `OAuth 2.1` chính thức của hãng AI/MCP có công bố chương trình đối tác cấp `client_id` hợp lệ** | Chuẩn `OAuth 2.1 + PKCE` / `Device Code` với `scope` công khai. | **Chỉ được phép khi hãng đó có điều khoản công khai cho phép ứng dụng bên thứ ba gọi API (`POL-01`).** | Chỉ bật trên `Official/Verified Adapter` sau khi đính kèm bằng chứng tài liệu điều khoản của hãng (`AUTH-09`). |
-| **4. Chiếm dụng phiên đăng nhập web / `session cookie` / `client_id` nội bộ đóng của gói thuê bao cá nhân (`ChatGPT Plus/Pro`, `Codex`, `Claude Pro/Max`, `Google Antigravity`, `Copilot Individual`...)** | Dù về mặt HTTP thô đều là gửi chuỗi ký tự trong tiêu đề `Cookie` hoặc `Authorization`... | **BỊ CẤM TUYỆT ĐỐI (`REJ-003` / `DEC-004`) — Vi phạm điều khoản dịch vụ nhà cung cấp.** | Core **không cung cấp** trình thu thập cookie trình duyệt; lược đồ DB khóa cứng `billing_mode`; cổng kiểm định Marketplace đánh trượt tự động (`CT-20`, `AUTH-16`); giao diện cấm gắn nhãn chính thức (`UX-GR-03`). |
+| **1. Official commercial `API Key` / `Cloud IAM` (OpenAI Platform, Anthropic Console, Vertex AI, Bedrock)** | Full support (`Bearer`, `x-api-key`, `SigV4`, `Workload Identity`). | **Fully permitted (`COMMERCIAL_API`).** | First-class support in `Official Adapters` with exact `micro-USD` ledger accounting (`AUTH-04`, `CT-06`). |
+| **2. `OAuth 2.1` for Enterprise Internal AI Gateways (Okta / Entra ID / Keycloak fronting internal vLLM / Azure / corporate gateways)** | Standard `Authorization Code + PKCE` or `Client Credentials` using an enterprise-owned `client_id`. | **Fully permitted (`SELF_HOSTED_INFRA` / `COMMERCIAL_API`).** | First-class support via the standard `Authorized OAuth 2.1` driver (`AUTH-09`, `CT-19`). |
+| **3. Official AI/MCP vendor `OAuth 2.1` with a published third-party partner `client_id` program** | Standard `OAuth 2.1 + PKCE` / `Device Code` with documented public scopes. | **Permitted strictly when the vendor publishes explicit third-party API access terms (`POL-01`).** | Enabled on `Official/Verified Adapters` only with archived vendor policy documentation (`AUTH-09`). |
+| **4. Hijacking web login sessions / `session cookies` / closed internal `client_id`s from personal consumer subscriptions (`ChatGPT Plus/Pro`, `Codex`, `Claude Pro/Max`, `Google Antigravity`, `Copilot Individual`, etc.)** | Even though raw HTTP merely transmits header strings in `Cookie` or `Authorization`... | **STRICTLY PROHIBITED (`REJ-003` / `DEC-004`) — Violates vendor Terms of Service.** | Core **never ships** browser cookie harvesters; DB schema constrains `billing_mode`; Marketplace verification automatically rejects offending packages (`CT-20`, `AUTH-16`); UI forbids official trust badges (`UX-GR-03`). |
 
 ---
 
-## 4. Phân loại Dữ liệu, Cư trú Địa lý (`Fail-Closed`) & Xóa Mật mã Tức thì (`Crypto-Shredding`)
+## 4. Data Classification, Fail-Closed Geo-Residency & Instant Crypto-Shredding
 
-1. **Bốn Mức Phân loại Dữ liệu & Lưu Giữ Mặc định:**
-   - `C1 — Công khai (`Public`)`: Danh mục mô hình logic, siêu dữ liệu gói trên Marketplace công khai.
-   - `C2 — Siêu dữ liệu Vận hành (`Operational Metadata`)`: Số lượng token, độ trễ, mã trạng thái HTTP, `request_id` (lưu mặc định, không chứa văn bản hội thoại).
-   - `C3 — Cấu hình Thuê bao & Sổ cái Tài chính (`Confidential Tenant Config & FinOps`)`: Bảng định tuyến, chính sách, bút toán `micro-USD`, sự kiện kiểm toán băm chuỗi (lưu `>= 365 ngày`, bảo vệ bởi `RLS`).
-   - `C4 — Bí mật Tối mật & Nội dung Hội thoại/PII (`Restricted Secrets & Payload`)`: Khóa xác thực (mã hóa phong bì vĩnh viễn) và văn bản prompt/completion/tham số công cụ (**mặc định lưu `0 byte`**; nếu quản trị viên bật gỡ lỗi có phê duyệt thì mã hóa bằng `Org DEK` và tự hủy cứng sau `TTL <= 72 giờ`).
-2. **Cưỡng chế Vùng Cư trú Dữ liệu Đóng An toàn (`Data Residency Fail-Closed` — `TP-BR-0502`):**
-   - Nếu chính sách của `Org / Project` đặt `allowed_data_regions = ["EU"]`, bộ định tuyến loại bỏ toàn bộ `Model Deployment` mang nhãn ngoài `"EU"` **trước khi xếp hạng và cả khi chuyển mạch dự phòng**. Khi mọi đích `"EU"` đều sập, hệ thống trả ngay `503 no_compliant_deployment_available` thay vì âm thầm rò rỉ dữ liệu sang máy chủ `"US"` (`CT-08`, `EXT-ACCEPT-01`).
-3. **Xóa Vĩnh viễn Dưới `60 Giây` Bằng Hủy Khóa (`Crypto-Shredding` — `TP-NFR-0502`):**
-   - Khi thực thi yêu cầu xóa toàn bộ dữ liệu của một `Organization` (hoặc kho gỡ lỗi của `Project`), hệ thống xóa bản ghi `Org DEK` khỏi kho khóa, quét xóa các khóa đệm `tp:v1:{org_id}:*` trên `Valkey/Redis` và ghi biên bản kiểm toán có chữ ký. Ngay lập tức trong `< 60 giây`, mọi bản mã bí mật và mẫu hội thoại gỡ lỗi của tổ chức đó (kể cả nằm trong các tệp sao lưu lạnh trước đó) trở thành nhiễu ngẫu nhiên không thể khôi phục về mặt toán học (`OPS-AC-09`).
+1. **Four Data Classification Tiers & Default Retention:**
+   - `C1 — Public`: Logical model catalog and public Marketplace package metadata.
+   - `C2 — Operational Metadata`: Token counts, latency histograms, HTTP status codes, and `request_id` (retained by default; zero conversational text).
+   - `C3 — Confidential Tenant Config & FinOps`: Routing tables, policies, `micro-USD` ledger entries, and hash-chained audit events (retained `>= 365 days`, protected by `RLS`).
+   - `C4 — Restricted Secrets & Payload`: Authentication credentials (permanently envelope-encrypted) and prompt/completion/tool-argument payloads (**`0 bytes` stored by default**; if explicitly enabled via approved debug sampling, encrypted under `Org DEK` and hard-purged at `TTL <= 72h`).
+2. **Fail-Closed Data Residency Enforcement (`TP-BR-0502`):**
+   - When an `Org / Project` policy sets `allowed_data_regions = ["EU"]`, the router prunes every `Model Deployment` tagged outside `"EU"` **prior to candidate ranking and throughout failover**. If every `"EU"` deployment is unhealthy, Tanpopo immediately returns `503 no_compliant_deployment_available` rather than silently failing over to a `"US"` endpoint (`CT-08`, `EXT-ACCEPT-01`).
+3. **Sub-`60-Second` Permanent Erasure via Key Destruction (`Crypto-Shredding` — `TP-NFR-0502`):**
+   - Upon executing a full erasure request for an `Organization` (or a `Project` debug store), Tanpopo destroys the target `Org DEK` record from the key store, purges `tp:v1:{org_id}:*` keys from `Valkey/Redis`, and writes a signed audit certificate. Within `< 60s`, every secret ciphertext and debug payload belonging to that tenant — including copies inside immutable cold backups — becomes mathematically unrecoverable random noise (`OPS-AC-09`).

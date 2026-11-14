@@ -1,30 +1,30 @@
-# `TP-IMP-0026` — Nền tảng Web Console (`web/console/`): Vite + StyleX + Astryx `neutral`, Đóng gói Tĩnh Phông `Figtree` `Air-Gap`, Khung `AppShell` & API Client
+# `TP-IMP-0026` — Web Console Foundation (`web/console/`): Vite + StyleX + Astryx `neutral`, Air-Gapped Static `Figtree` Font Bundling, `AppShell` & Typed API Client
 
-| Thuộc tính | Giá trị |
+| Attribute | Value |
 |---|---|
 | **Unit ID** | `TP-IMP-0026` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Trạng thái (`Status`)** | `BLOCKED` *(Phụ thuộc `TP-IMP-0005`, `TP-IMP-0024` — `GAP-01, 12`)* |
-| **Quy mô (`Size`)** | `M` (`web/console/*`) |
-| **Cấp độ Review** | `STANDARD_REVIEW` *(Tuân thủ tuyệt đối kỷ luật Astryx Design System v0.7.13 & vận hành mạng kín `0` tải ngoài)* |
-| **Chủ sở hữu Kỹ thuật** | `Lead Frontend / Design System Engineer` |
+| **Status** | `BLOCKED` *(Depends on `TP-IMP-0005`, `TP-IMP-0024` — `GAP-01, 12`)* |
+| **Size** | `M` (`web/console/*`) |
+| **Review Tier** | `STANDARD_REVIEW` *(Strict adherence to Astryx Design System v0.7.13 & zero-external-request air-gapped operation)* |
+| **Technical Owner** | `Lead Frontend / Design System Engineer` |
 
 ---
 
-## 1. Intent (Mục tiêu Đơn vị Thực thi)
-Thiết lập nền tảng kỹ thuật chuẩn xuất xưởng cho **Tanpopo Web Console (`web/console/`)** theo [`ADR-0004`](../../architecture/adr/0004-web-console-stack-astryx-evaluation-and-repo-layout.md) và [`design-system-integration.md`](../../ux/design-system-integration.md) (`SPEC-UX-04`):
-1. Di chuyển sạch bộ giữ chỗ gốc vào `web/console/` với trình đóng gói `Vite + TypeScript strict + StyleX compiler + @astryxdesign/core v0.7.13`, giữ nguyên gói giao diện mặc định **`neutral`** đã được Owner chọn (`DEC-007` — **cấm chạy `theme eject`**).
-2. Khắc phục triệt để xung đột mạng kín `Air-Gap` (`GAP-12` / `CR-10`): cấu hình Vite alias ánh xạ phông chữ sang tệp `.woff2` `Figtree` nội bộ đóng gói sẵn trong bundle để khi chạy trong mạng hoàn toàn không có Internet sẽ phát sinh **`0` yêu cầu tải tài nguyên ra `fonts.googleapis.com` hay bất kỳ CDN ngoài nào**.
-3. Khởi tạo khung điều hướng `AppShell` từ đúng template chuẩn của Astryx (`npx astryx template ...`), bộ khách API có kiểu dữ liệu sinh tự động từ `openapi/admin-v1.yaml` (tự động gắn `X-CSRF-Token` + `If-Match`), bộ chọn ngữ cảnh `Project / Environment` trên thanh đỉnh (ẩn bộ chọn đa `Org` ở `v0.1` đơn tổ chức theo `BA-OQ-001`) và các thành phần trạng thái chuẩn (`Loading`, `Empty`, `Error`, `Offline`).
+## 1. Intent
+Establish the production-grade frontend foundation for the **Tanpopo Web Console (`web/console/`)** in accordance with [`ADR-0004`](../../architecture/adr/0004-web-console-stack-astryx-evaluation-and-repo-layout.md) and [`design-system-integration.md`](../../ux/design-system-integration.md) (`SPEC-UX-04`):
+1. Cleanly migrate root placeholder files into `web/console/` with `Vite + TypeScript strict + StyleX compiler + @astryxdesign/core v0.7.13`, retaining the Owner-selected **`neutral`** default theme (`DEC-007` — **`theme eject` is strictly prohibited**).
+2. Permanently resolve the air-gap font conflict (`GAP-12` / `CR-10`): configure Vite aliases mapping font imports to locally bundled `Figtree` `.woff2` assets so that running in a completely offline network produces **`0` outbound requests to `fonts.googleapis.com` or any external CDN**.
+3. Scaffold the `AppShell` navigation frame from official Astryx templates (`npx astryx template ...`), build the strongly typed API client generated from `openapi/admin-v1.yaml` (automatically attaching `X-CSRF-Token` + `If-Match`), wire the top-bar `Project / Environment` context switcher (hiding the multi-`Org` switcher in single-organization `v0.1` deployments per `BA-OQ-001`), and provide canonical state views (`Loading`, `Empty`, `Error`, `Offline`).
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
-  - `web/console/package.json` (`"license": "Apache-2.0"`), `tsconfig.json`, `vite.config.ts` (kèm StyleX plugin & alias phông chữ `.woff2` nội bộ).
-  - `web/console/astryx-themes.js` (kế thừa nguyên vẹn cấu hình `neutral` — không sửa token thủ công hay `:root`).
-  - `web/console/src/main.tsx` (nhập đúng thứ tự `@astryxdesign/core/reset.css` và `@astryxdesign/core/astryx.css`).
-  - `web/console/src/shell/*` (khởi tạo từ Astryx dashboard shell template, định tuyến 11 phân khu IA ẩn/hiện theo 6 vai trò RBAC chuẩn, phím tắt bàn phím & điều hướng `WCAG 2.2 AA`).
-  - `web/console/src/api/*` (trình khách gõ kiểu mạnh từ `openapi/admin-v1.yaml`).
-- **Out-of-Scope:** Nội dung nghiệp vụ chi tiết của từng màn hình `SCR-01`..`16` (thuộc `TP-IMP-0027`..`0030` và `0038`).
+  - `web/console/package.json` (`"license": "Apache-2.0"`), `tsconfig.json`, `vite.config.ts` (with StyleX compiler plugin & local `.woff2` font alias).
+  - `web/console/astryx-themes.js` (inheriting the unmodified `neutral` theme configuration — no manual token edits or `:root` overrides).
+  - `web/console/src/main.tsx` (importing `@astryxdesign/core/reset.css` followed by `@astryxdesign/core/astryx.css` in exact order).
+  - `web/console/src/shell/*` (scaffolded from the Astryx dashboard shell template, routing across all 11 IA sections gated by the 6 canonical RBAC roles, keyboard shortcuts & `WCAG 2.2 AA` navigation).
+  - `web/console/src/api/*` (strongly typed client generated from `openapi/admin-v1.yaml`).
+- **Out-of-Scope:** Detailed domain implementations of individual screens `SCR-01`..`16` (covered in `TP-IMP-0027`..`0030` and `0038`).
 
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0902`, `TP-NFR-0701`, `TP-NFR-0702`, `TP-NFR-0801`, `TP-NFR-1001`, `DEC-007`, `UX-AC-06`, `UX-AC-07`, `UX-AC-08`, `UX-AC-10`, `GAP-12`.
@@ -32,25 +32,25 @@ Thiết lập nền tảng kỹ thuật chuẩn xuất xưởng cho **Tanpopo We
 - **Design Refs:** [`ADR-0004`](../../architecture/adr/0004-web-console-stack-astryx-evaluation-and-repo-layout.md), [`information-architecture.md`](../../ux/information-architecture.md) (`SPEC-UX-01`), [`design-system-integration.md`](../../ux/design-system-integration.md) (`SPEC-UX-04`), [`AGENTS.md`](../../../AGENTS.md).
 
 ## 4. API, Wire & Data Contracts
-- **Kỷ luật Bất khả Xâm phạm Của Astryx (`AGENTS.md` Rules):**
-  1. Khởi tạo khung từ `npx astryx build` / `npx astryx template`, đọc props bằng `npx astryx component <Name>` trước khi dùng.
-  2. **Tuyệt đối không dùng thẻ HTML `div` hoặc `span` thô** (`UX-AC-07`), không nhập tệp `.css` tùy biến ngoài các tệp hệ thống chuẩn của Astryx (`reset.css`, `astryx.css` và `theme.css` + alias phông nội bộ trong `astryx-themes.js`), không gõ mã màu `#hex` hay số đo `px` cứng.
-  3. **`Badge` chỉ dùng cho con số đếm (`counts only`)**; mọi trạng thái chữ (`ENABLED_ACTIVE`, `QUARANTINED`, `VERIFIED`) dùng đúng component `Token` có `icon + label` để người mù màu phân biệt được không phụ thuộc màu sắc (`UX-AC-06`).
-  4. Trước khi hoàn tất phải chạy `npx @astryxdesign/cli doctor --built dist` đạt **`0 fail`**, gói JS khởi đầu nén `gzip <= 250 KB` (`UX-AC-08`).
+- **Inviolable Astryx Design System Discipline (`AGENTS.md` Rules):**
+  1. Scaffold every page frame via `npx astryx build` / `npx astryx template`, and inspect component props via `npx astryx component <Name>` before usage.
+  2. **Strictly zero raw HTML `div` or `span` elements** (`UX-AC-07`), zero custom `.css` imports beyond Astryx's canonical stylesheets (`reset.css`, `astryx.css`, and `theme.css` + local font aliases in `astryx-themes.js`), and zero hardcoded `#hex` colors or `px` values.
+  3. **`Badge` is reserved strictly for numeric counts (`counts only`)**; all textual state indicators (`ENABLED_ACTIVE`, `QUARANTINED`, `VERIFIED`) MUST use the `Token` component with `icon + label` so color-vision-deficient operators can distinguish states without relying on color alone (`UX-AC-06`).
+  4. Prior to completion, `npx @astryxdesign/cli doctor --built dist` MUST pass with **`0 fail`**, and the initial JavaScript bundle MUST stay within `gzip <= 250 KB` (`UX-AC-08`).
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
-- **`AC-1` (`UX-AC-06`, `UX-AC-07` & `UX-AC-08`):** Given mã nguồn `web/console/`, When chạy `npm run typecheck && npm run build && npx @astryxdesign/cli doctor --built dist`, Then đóng gói hoàn tất với **`0 fail`**, gói JS khởi đầu nén `gzip <= 250 KB` (`UX-AC-08`) và mọi nhãn trạng thái dùng `icon + label` (`UX-AC-06`).
-- **`AC-2` (`UX-AC-10` & `GAP-12` True Air-Gap Zero External Requests):** Given bản dựng tĩnh `dist/` mở trong trình duyệt kiểm thử chặn toàn bộ mạng ngoài `127.0.0.1`, When tải khung `AppShell`, Then bảng Network ghi nhận **`0` yêu cầu tới bất kỳ miền bên ngoài nào** (phông chữ hiển thị sắc nét từ tài nguyên nội bộ).
-- **`NEG-1`:** Cố tình chèn một phần tử `div` thô, chuỗi `#ff0000` hoặc dùng `Badge` bọc chữ trạng thái trong bài test kiểm tra cổng CI → công cụ kiểm định đánh trượt ngay lập tức.
-- **`NEG-2` (`Offline Banner`):** Ngắt kết nối tới `/admin/v1/*` → thanh cảnh báo mất kết nối xuất hiện rõ ràng mà không làm trắng trang (`ErrorBoundary`).
+- **`AC-1` (`UX-AC-06`, `UX-AC-07` & `UX-AC-08`):** Given the `web/console/` source tree, When running `npm run typecheck && npm run build && npx @astryxdesign/cli doctor --built dist`, Then the build succeeds with **`0 fail`**, the initial compressed JS bundle is `gzip <= 250 KB` (`UX-AC-08`), and every status indicator pairs `icon + label` (`UX-AC-06`).
+- **`AC-2` (`UX-AC-10` & `GAP-12` True Air-Gap Zero External Requests):** Given the static `dist/` build opened in a test browser blocking all network traffic outside `127.0.0.1`, When loading `AppShell`, Then the Network panel records **`0` requests to any external domain** (with crisp typography rendered from bundled local assets).
+- **`NEG-1`:** Deliberately injecting a raw `div` element, a hardcoded `#ff0000` literal, or a `Badge` wrapping a textual status label in a CI gate test causes the lint/doctor gate to fail immediately.
+- **`NEG-2` (`Offline Banner`):** Disconnecting `/admin/v1/*` surfaces a clear offline banner without triggering a blank-screen crash (`ErrorBoundary`).
 
 ## 6. Test Commands & Required Evidence
 - `cd web/console && npm ci --ignore-scripts && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
-- **Security Invariant:** Không lưu khóa hay mã phiên trong `localStorage` / `sessionStorage` (chỉ dùng cookie `HttpOnly` + biến CSRF trong bộ nhớ); cấu hình `Content-Security-Policy (CSP)` nghiêm ngặt `default-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'`.
-- **Rollback:** Thư mục `web/console/` biệt lập, dễ dàng quay lui commit.
+- **Security Invariant:** Zero credentials or session tokens stored in `localStorage` / `sessionStorage` (`HttpOnly` cookies + in-memory CSRF token only); strict `Content-Security-Policy (CSP)` enforced as `default-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'`.
+- **Rollback:** Isolated `web/console/` directory allowing clean single-commit revert.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** Product Owner phê duyệt `ADR-0004` & `CR-10` (cho phép dời tệp gốc sang `web/console/`); `TP-IMP-0005` và `TP-IMP-0024` đã hoàn tất.
-- **DoD:** `npx astryx doctor --built dist` đạt `0 fail`, `0` yêu cầu mạng ngoài khi chạy `Air-Gap`, kiểm tra `axe-core` trên khung `AppShell` đạt `0` vi phạm nghiêm trọng.
+- **DoR:** Product Owner approves `ADR-0004` & `CR-10` (authorizing relocation of root UI files into `web/console/`); `TP-IMP-0005` and `TP-IMP-0024` are complete.
+- **DoD:** `npx astryx doctor --built dist` passes with `0 fail`, `0` external network requests in air-gap mode, and `axe-core` audit on `AppShell` reports `0` critical/serious violations.
