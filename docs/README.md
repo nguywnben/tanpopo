@@ -1,6 +1,6 @@
-# Tanpopo Documentation & Context Hub (Updated through Phase A08 Audit — `SPECIFICATION COMPLETENESS: FAIL | BLOCKING GAPS TRACKED`)
+# Tanpopo Documentation & Context Hub (Updated through Phase A09 Draft Implementation Plan — `GATE G4: READY_FOR_REVIEW | EXECUTION BASELINE UNLOCKED`)
 
-Chào mừng đến với trung tâm tài liệu chuẩn hóa bối cảnh, khám phá sản phẩm, phân tích nghiệp vụ, đặc tả yêu cầu, nền tảng mở rộng, kiến trúc giải pháp, trải nghiệm người dùng/nhà phát triển, vận hành SRE, chiến lược bảo mật/kiểm định và **kiểm toán độc lập toàn diện (`ASTRA A08`)** của dự án **Tanpopo** (`https://github.com/nguywnben/tanpopo`). Bộ tài liệu được thiết lập qua các bước **ASTRA A00 → A08** nhằm bảo đảm không một AI Agent hay kỹ sư nào bước vào viết mã nguồn khi vẫn còn các mâu thuẫn hợp đồng, lỗ hổng lược đồ dữ liệu hoặc quyết định chưa được Product Owner phê duyệt.
+Chào mừng đến với trung tâm tài liệu chuẩn hóa bối cảnh, khám phá sản phẩm, phân tích nghiệp vụ, đặc tả yêu cầu, nền tảng mở rộng, kiến trúc giải pháp, trải nghiệm người dùng/nhà phát triển, vận hành SRE, chiến lược bảo mật/kiểm định, kiểm toán độc lập (`ASTRA A08`) và **kế hoạch triển khai A–Z (`ASTRA A09`)** của dự án **Tanpopo** (`https://github.com/nguywnben/tanpopo`). Bộ tài liệu được thiết lập qua các bước **ASTRA A00 → A09** nhằm bảo đảm không một AI Agent hay kỹ sư nào bước vào viết mã nguồn khi vẫn còn các mâu thuẫn hợp đồng, lỗ hổng lược đồ dữ liệu hoặc quyết định chưa được Product Owner phê duyệt.
 
 > **Trạng thái Cổng Giai đoạn Hiện tại:**
 > - **Gate G0 (ASTRA A00 — Chuẩn hóa bối cảnh):** `COMPLETED`
@@ -9,7 +9,8 @@ Chào mừng đến với trung tâm tài liệu chuẩn hóa bối cảnh, khá
 > - **Gate G2 (ASTRA A03 — Product Definition, PRD/SRS & Feature Specs):** **`READY_FOR_REVIEW`** *(Bộ đặc tả `DRAFT — UNLOCKED SCOPE`; chờ Product Owner duyệt `TD-G2-01`..`06` + `CR-01`..`04`, `CR-09` và bổ sung `AC` theo `GAP-11`).*
 > - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`READY_FOR_REVIEW`** *(Cần hoàn thiện hợp đồng `TransformResponse` / đa phương thức / MCP JSON-RPC theo `CR-05`, `CR-08`).*
 > - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`READY_FOR_REVIEW`** *(Bộ thiết kế đề xuất `PROPOSED — NO CODE` chờ Product Owner duyệt `ADR-0001`..`0006` và cho phép chạy `SPIKE-01`..`04`).*
-> - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`FAIL` *(11 `CRITICAL` Blockers + 14 `MAJOR` Gaps Open)*** — Xem báo cáo kiểm toán đầy đủ tại [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) và 10 đề xuất thay đổi `CR-01`..`10` + tiêu chí đóng tại [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md). **Dừng trước giai đoạn lập kế hoạch đơn vị mã nguồn (`STOP — NO UNIT IMPLEMENTATION`).**
+> - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`FAIL` *(11 `CRITICAL` Blockers + 14 `MAJOR` Gaps Open)*** — Xem báo cáo kiểm toán đầy đủ tại [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) và 10 đề xuất thay đổi `CR-01`..`10` + tiêu chí đóng tại [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md).
+> - **Gate G4 (ASTRA A09 — End-to-End Implementation Plan `A -> Z`):** **`READY_FOR_REVIEW` *(`DRAFT — EXECUTION BASELINE UNLOCKED`)*** — Đã lập đầy đủ lộ trình 9 pha, 6 cột mốc `M0..M5`, đồ thị DAG phi chu trình và **47 đơn vị thực thi độc lập `TP-IMP-0001`..`0047`** tại [`docs/planning/implementation-index.md`](./planning/implementation-index.md) (trong đó `M0: TP-IMP-0001..0004` đóng toàn bộ lỗ hổng đặc tả A08 & chạy `SPIKE` trước khi chạm tới mã nguồn nghiệp vụ). **Toàn bộ `47/47` đơn vị đang `BLOCKED` chờ Product Owner phê duyệt; dừng hoàn toàn sau A09, không viết code.**
 
 ---
 
@@ -23,6 +24,14 @@ Trước khi thực hiện bất kỳ bước đóng lỗ hổng đặc tả, th
 |---|---|---|---|
 | **0A** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`FAIL`):** Phản biện độc lập theo chiều ngang & 8 lát cắt dọc; danh mục 30 phát hiện (`AUD-001`..`030`: `11 CRITICAL`, `14 MAJOR`, `5 MINOR`), kiểm toán sẵn sàng 54 yêu cầu `P0`, nhật ký sửa lỗi phi quyết định và lộ trình quay lại `A02–A07`. | **Luôn đọc đầu tiên** trước khi tin tưởng bất kỳ chi tiết hợp đồng/lược đồ nào ở các tệp A02–A07. |
 | **0B** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01`:** Chi tiết **10 Yêu cầu Thay đổi (`CR-01`..`CR-10`)** trình Product Owner phê duyệt và bảng theo dõi tiêu chí đóng kiểm chứng được cho `GAP-01`..`13`. | Khi Product Owner ra quyết định mở khóa cổng hoặc khi kỹ sư thực hiện vòng vá đặc tả. |
+
+### 1.0B. Tầng Kế hoạch Triển khai Đa Tầng & 47 Đơn vị Thực thi (`docs/planning/` — `DRAFT — EXECUTION BASELINE UNLOCKED`)
+
+| Thứ tự | Đường dẫn thực tế | Nội dung cốt lõi | Khi nào bắt buộc đọc |
+|---|---|---|---|
+| **0C** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Bảng chỉ mục chủ toàn bộ **47 đơn vị thực thi (`TP-IMP-0001`..`0047`)** kèm cột mốc, phụ thuộc, nhãn `REQUIRES_STRONG_REVIEW` (`37/47`), trạng thái `BLOCKED` trung thực và liên kết tới từng tệp [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | **Điểm vào đầu tiên của Agent thực thi ("Luna")** khi được giao một `UNIT_ID` duy nhất sau khi Product Owner mở cổng. |
+| **0D** | [`docs/planning/roadmap.md`](./planning/roadmap.md) & [`docs/planning/milestone-map.md`](./planning/milestone-map.md) | **`PLAN-RM-01` & `PLAN-MS-01`:** Lộ trình 9 pha kỹ thuật (`EP-00`..`09`), 3 nhóm blocker toàn cục, chiến lược nhánh/worktree/canary, bảng ước lượng năng lực kèm dải bất định và 6 cổng cột mốc `GATE-M0`..`GATE-M5`. | Khi điều phối chương trình, kiểm tra tiêu chí thoát cột mốc hoặc đánh giá dải tiến độ. |
+| **0E** | [`docs/planning/dependency-graph.md`](./planning/dependency-graph.md) | **`PLAN-DAG-01`:** Đồ thị phụ thuộc phi chu trình 47 nút ($u < v$), đường găng kỹ thuật, 4 điểm mở luồng song song bằng `git worktree`, thứ tự **5 đơn vị đầu tiên** ngay khi mở khóa và quy trình môi trường kiểm thử khép kín. | Khi phân luồng làm việc song song hoặc kiểm tra điều kiện sẵn sàng của đơn vị phụ thuộc. |
 
 ### 1.1. Tầng Quản trị & Từ điển Chuẩn (`docs/governance/` & `docs/product/glossary.md`)
 
@@ -117,7 +126,7 @@ Trước khi thực hiện bất kỳ bước đóng lỗ hổng đặc tả, th
 
 ## 2. Phân biệt rạch ròi: Đã tồn tại trong Code vs Chỉ có trong Thiết kế Tài liệu
 
-> **Kết luận cốt lõi (`VERIFIED_IN_REPO`):** Tính đến hết bước **A08**, repository **vẫn chưa có bất kỳ dòng mã thực thi nghiệp vụ AI Gateway, mã giao diện màn hình mới, mã kiểm thử thực thi hay mã PoC nào** (chưa có server, chưa có Unified API, chưa có routing/policy/cost engine, chưa có plugin runtime/SDK, chưa có MCP/A2A, chưa có CLI và chưa thêm bundler). Bộ đặc tả A00–A07 đã được kiểm toán đối kháng toàn diện tại **A08 (`FAIL` — còn `11 CRITICAL` blockers cần Product Owner chốt `CR-01`..`10` và vòng vá đặc tả trước khi lập kế hoạch đơn vị mã nguồn)**.
+> **Kết luận cốt lõi (`VERIFIED_IN_REPO`):** Tính đến hết bước **A09**, repository **vẫn chưa có bất kỳ dòng mã thực thi nghiệp vụ AI Gateway, mã giao diện màn hình mới, mã kiểm thử thực thi hay mã PoC nào** (chưa có server, chưa có Unified API, chưa có routing/policy/cost engine, chưa có plugin runtime/SDK, chưa có MCP/A2A, chưa có CLI và chưa thêm bundler). Bộ đặc tả A00–A07 đã được kiểm toán đối kháng tại **A08 (`FAIL` — `11 CRITICAL` blockers)** và quy hoạch thành kế hoạch thực thi nháp 47 đơn vị tại **A09 (`DRAFT — EXECUTION BASELINE UNLOCKED`, dừng hoàn toàn chờ Product Owner phê duyệt)**.
 
 ### 2.1. Kiểm kê toàn bộ hiện trạng Repository (`Repository Inventory`)
 
@@ -146,6 +155,7 @@ Trước khi thực hiện bất kỳ bước đóng lỗ hổng đặc tả, th
 | `docs/security/*` | **Tài liệu Mô hình Mối đe dọa, Sandbox & Cô lập Bí mật/Thuê bao (A07 — `PROPOSED`)** | Bao gồm 3 tệp: `threat-model.md` (`SPEC-SEC-01`), `plugin-sandbox-and-supply-chain.md` (`SPEC-SEC-02`), `secrets-and-tenant-isolation.md` (`SPEC-SEC-03`). |
 | `docs/quality/*` | **Tài liệu Ma trận Kiểm thử, CI Khép kín, SLO/FMEA & Cổng Xuất xưởng (A04 → A08 — `PROPOSED`)** | Bao gồm 4 tệp: `contract-test-matrix.md` (`SPEC-QA-01`), `test-strategy.md` (`SPEC-QA-02`), `nonfunctional-slo.md` (`SPEC-QA-03`), `release-readiness.md` (`SPEC-QA-04`). |
 | `docs/reviews/*` | **Tài liệu Kiểm toán Độc lập & Sổ Khoảng trống Chưa Đóng (A08 — `AUDIT GATE`)** | Bao gồm 2 tệp: `integrated-audit.md` (`REV-AUD-01`) và `unresolved-gaps.md` (`REV-GAP-01` — `CR-01`..`10`, `GAP-01`..`13`). |
+| `docs/planning/*` & `docs/planning/units/*` | **Kế hoạch Triển khai Đa tầng & 47 Đơn vị Thực thi Nháp (A09 — `GATE G4: READY_FOR_REVIEW`)** | Bao gồm **51 tệp**: `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md` và trọn bộ `units/TP-IMP-0001.md`..`TP-IMP-0047.md`. |
 
 ---
 
@@ -159,7 +169,7 @@ Trước khi thực hiện bất kỳ bước đóng lỗ hổng đặc tả, th
 
 ---
 
-## 4. Trạng thái Git hiện tại sau bước A08 (`AUDIT VERDICT: FAIL | STOP BEFORE IMPLEMENTATION`)
+## 4. Trạng thái Git hiện tại sau bước A09 (`DRAFT PLAN COMPLETE | EXECUTION BASELINE UNLOCKED | STOP`)
 
 - **Nhánh làm việc:** `main` (đồng bộ với `origin/main`).
-- **Tệp thay đổi/tạo mới qua A00 → A08:** Chỉ làm việc trong thư mục `docs/` (tổng cộng **56 tệp Markdown** gồm `docs/README.md`, 3 tệp `docs/governance/*`, 5 tệp `docs/discovery/*`, 4 tệp `docs/product/*`, 7 tệp `docs/requirements/*`, 9 tệp `docs/specifications/*`, 10 tệp `docs/architecture/*`, 4 tệp `docs/ux/*`, 4 tệp `docs/operations/*`, 3 tệp `docs/security/*`, 4 tệp `docs/quality/*` và 2 tệp `docs/reviews/*`), **không chỉnh sửa bất kỳ tệp cấu hình, theme hay mã nguồn nào đã có trước đó**. Mỗi bước được lưu mốc bằng một atomic Git commit riêng biệt theo quy ước `DEC-008` (`docs: step <NN> - ...`).
+- **Tệp thay đổi/tạo mới qua A00 → A09:** Chỉ làm việc trong thư mục `docs/` (tổng cộng **107 tệp Markdown** gồm `docs/README.md`, 3 tệp `docs/governance/*`, 5 tệp `docs/discovery/*`, 4 tệp `docs/product/*`, 7 tệp `docs/requirements/*`, 9 tệp `docs/specifications/*`, 10 tệp `docs/architecture/*`, 4 tệp `docs/ux/*`, 4 tệp `docs/operations/*`, 3 tệp `docs/security/*`, 4 tệp `docs/quality/*`, 2 tệp `docs/reviews/*` và **51 tệp `docs/planning/*`**), **không chỉnh sửa bất kỳ tệp cấu hình, theme hay mã nguồn nào đã có trước đó**. Mỗi bước được lưu mốc bằng một atomic Git commit riêng biệt theo quy ước `DEC-008` (`docs: step <NN> - ...`).
