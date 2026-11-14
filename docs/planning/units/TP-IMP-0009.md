@@ -5,7 +5,7 @@
 | **Unit ID** | `TP-IMP-0009` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
 | **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-018`: upstream `TP-IMP-0007` & `TP-IMP-0008` are `DONE`)* |
-| **Size** | `L` (`go.mod`, `internal/iam/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0003_iam_keys.sql`) |
+| **Size** | `L` (`go.mod`, `internal/iam/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0005_iam_keys.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Authentication, multi-tenant authorization, `< 1s` key revocation & uniform `404` anti-oracle)* |
 | **Technical Owner** | `Principal Security / IAM Engineer` |
 
@@ -22,7 +22,7 @@ Implement core identity authentication, **6-role canonical RBAC (`OPERATOR`, `OR
   - `internal/iam/rbac/authorizer.go` (per-action `Authorize(actor, action, scope)` across all 6 canonical roles; ignore spoofed `org_id` fields in JSON request bodies by deriving `org_id` strictly from authenticated session context — `AUTH-13`; return uniform `404 resource_not_found` across cross-org lookups to prevent ID enumeration — `AUTH-15`).
   - `internal/iam/vkey/service.go` (`SM-05` state machine: `CREATED_ACTIVE -> ROTATING_DUAL_VALID -> QUOTA_PAUSED | SUSPENDED | REVOKED | EXPIRED`; enforce environment scope so `vk_tp_staging_...` targeting `prod` returns `403 environment_scope_denied` — `AUTH-04`; dual revocation modes: standard revoke vs emergency revoke severing in-flight streams via `context.CancelFunc`).
   - `internal/config/snapshot/manager.go` (`atomic.Pointer[ConfigSnapshot]`, tailing `config_changelog` for `< 1s` atomic snapshot swaps).
-  - `db/migrations/sqlite/0003_iam_keys.sql` (`principals` with partial unique index `WHERE org_id IS NULL` for `OPERATOR`, `role_bindings`, `virtual_keys`).
+  - `db/migrations/sqlite/0005_iam_keys.sql` (`principals` with partial unique index `WHERE org_id IS NULL` for `OPERATOR`, `role_bindings`, `virtual_keys`).
 - **Out-of-Scope:** `Enterprise OIDC SSO` federation & `Four-Eyes` dual control (owned by `TP-IMP-0041`); multi-node `Valkey Pub/Sub` revocation propagation (owned by `TP-IMP-0040`).
 
 ## 3. Requirements, Dependencies & Design References
@@ -52,7 +52,7 @@ Implement core identity authentication, **6-role canonical RBAC (`OPERATOR`, `OR
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Never persist or emit `rawKey`, plaintext passwords, or raw session tokens in DB tables, logs, or OTel spans; every Admin endpoint defaults to `Deny` unless explicitly mapped to an `Action` constant.
-- **Rollback:** Additive schema `0003_iam_keys.sql`; keys can be emergency-suspended via kill-switch flags without data loss.
+- **Rollback:** Additive schema `0005_iam_keys.sql`; keys can be emergency-suspended via kill-switch flags without data loss.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0001` (locking the 6 roles & `SM-05`), `TP-IMP-0007`, and `TP-IMP-0008` are complete.
