@@ -813,6 +813,58 @@ func TestSQLiteEdgeCasesTransactionsValidationAndErrorMapping(t *testing.T) {
 	}
 }
 
+func TestSQLiteCheckpointWALDetectsBusyReaderAndRecovers(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "busy_wal.db")
+	st, err := Open(ctx, Config{DBPath: dbPath})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	// Seed initial row and generate WAL frames.
+	if _, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "busy-org", DisplayName: "Busy Org"}); err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+
+	// Open an independent SQLite reader holding an active snapshot read transaction on the WAL.
+	readerDB, err := sql.Open("sqlite", buildWALDSN(dbPath))
+	if err != nil {
+		t.Fatalf("open readerDB: %v", err)
+	}
+	defer readerDB.Close()
+	rtx, err := readerDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatalf("reader BeginTx: %v", err)
+	}
+	var count int
+	if err := rtx.QueryRowContext(ctx, `SELECT count(*) FROM organizations`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("reader count=%d err=%v", count, err)
+	}
+
+	// Mutate WAL after reader snapshot started so TRUNCATE must move past the reader's WAL mark and hits busy=1.
+	if _, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "busy-org-2", DisplayName: "Busy Org 2"}); err != nil {
+		t.Fatalf("CreateOrganization 2: %v", err)
+	}
+
+	// Lower busy_timeout on this test handle so CheckpointWAL fails fast instead of waiting 5s on the held read mark.
+	if _, err := st.RawDB().ExecContext(ctx, "PRAGMA busy_timeout = 25"); err != nil {
+		t.Fatalf("set short busy_timeout: %v", err)
+	}
+	if err := st.CheckpointWAL(ctx); !errors.Is(err, ErrWALCheckpointBusy) {
+		t.Fatalf("expected ErrWALCheckpointBusy while busy reader holds snapshot, got %v", err)
+	}
+
+	// Release busy reader snapshot -> retry CheckpointWAL succeeds cleanly.
+	if err := rtx.Rollback(); err != nil {
+		t.Fatalf("reader rollback: %v", err)
+	}
+	if err := st.CheckpointWAL(ctx); err != nil {
+		t.Fatalf("expected CheckpointWAL to succeed after reader released, got %v", err)
+	}
+}
+
 func TestSQLiteLeaseStaleReleaseAndExpiredGetSemantics(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

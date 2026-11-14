@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -394,7 +395,11 @@ func TestVaultShredProjectDEKAndOrgDEKAC3AndCONDPO02(t *testing.T) {
 		t.Fatalf("wrongKEK: %v", err)
 	}
 	defer wrongKEK.Close()
-	detachedVault, err := NewStore(Config{DB: backupStore.RawDB(), KEK: wrongKEK})
+	detachedVault, err := NewStore(Config{
+		DB:            backupStore.RawDB(),
+		KEK:           wrongKEK,
+		PostShredHook: backupStore.CheckpointWAL,
+	})
 	if err != nil {
 		t.Fatalf("detachedVault: %v", err)
 	}
@@ -674,13 +679,16 @@ func TestVaultRotateSecretTTLEvictionConcurrencyAndErrorHygieneNEG3(t *testing.T
 	env := newVaultTestEnv(t, 2*time.Minute)
 
 	// Reject TTL > 5m and nil DB/KEK.
-	if _, err := NewStore(Config{DB: env.sqlite.RawDB(), KEK: env.kek, CacheTTL: 6 * time.Minute}); !errors.Is(err, ErrInvalidInput) {
+	if _, err := NewStore(Config{DB: env.sqlite.RawDB(), KEK: env.kek, PostShredHook: env.sqlite.CheckpointWAL, CacheTTL: 6 * time.Minute}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput for TTL > 5m, got %v", err)
 	}
-	if _, err := NewStore(Config{KEK: env.kek}); !errors.Is(err, ErrInvalidInput) {
+	if _, err := NewStore(Config{DB: env.sqlite.RawDB(), KEK: env.kek}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected fail-closed ErrInvalidInput for nil PostShredHook, got %v", err)
+	}
+	if _, err := NewStore(Config{KEK: env.kek, PostShredHook: env.sqlite.CheckpointWAL}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput for nil DB, got %v", err)
 	}
-	if _, err := NewStore(Config{DB: env.sqlite.RawDB()}); !errors.Is(err, ErrInvalidInput) {
+	if _, err := NewStore(Config{DB: env.sqlite.RawDB(), PostShredHook: env.sqlite.CheckpointWAL}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput for nil KEK, got %v", err)
 	}
 
@@ -1119,7 +1127,7 @@ func TestVaultValidationCacheMissRollbackAndKEKEdgeBranches(t *testing.T) {
 		t.Fatalf("expected DEK error rotating with invalid project DEK: %v", err)
 	}
 
-	defaultNowVault, err := NewStore(Config{DB: env.sqlite.RawDB(), KEK: env.kek})
+	defaultNowVault, err := NewStore(Config{DB: env.sqlite.RawDB(), KEK: env.kek, PostShredHook: env.sqlite.CheckpointWAL})
 	if err != nil || defaultNowVault.nowMs() <= 0 {
 		t.Fatalf("expected valid default NowMs vault store, got err=%v", err)
 	}
@@ -1127,7 +1135,7 @@ func TestVaultValidationCacheMissRollbackAndKEKEdgeBranches(t *testing.T) {
 	org2, _ := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "closed-kek-org", DisplayName: "CK"})
 	closedKEK, _ := NewStaticKEKProvider("kek_c", random32Key(t))
 	closedKEK.Close()
-	ckStore, _ := NewStore(Config{DB: env.sqlite.RawDB(), KEK: closedKEK})
+	ckStore, _ := NewStore(Config{DB: env.sqlite.RawDB(), KEK: closedKEK, PostShredHook: env.sqlite.CheckpointWAL})
 	if _, err := ckStore.SealSecret(ctx, SealSecretParams{OrgID: org2.ID, Name: "n", SecretKind: SecretKindAPIKey, Plaintext: []byte("x")}); !errors.Is(err, ErrInvalidMasterKey) {
 		t.Fatalf("expected ErrInvalidMasterKey when ActiveKeyID fails, got %v", err)
 	}
@@ -1275,7 +1283,199 @@ func TestVaultCacheRollbackAndConcurrentShredRace(t *testing.T) {
 	if _, err := env.vault.SealSecret(ctx, SealSecretParams{OrgID: orgEmpty.ID, OwnerProjectID: &pHookPrj.ID, Name: "hs", SecretKind: SecretKindAPIKey, Plaintext: []byte("hs")}); err != nil {
 		t.Fatalf("seed hook project: %v", err)
 	}
-	if err := hookStore.ShredProjectDEK(ctx, orgEmpty.ID, pHookPrj.ID); !errors.Is(err, hookErr) {
-		t.Fatalf("expected wrapped PostShredHook error on ShredProjectDEK, got %v", err)
+	if err := hookStore.ShredProjectDEK(ctx, orgEmpty.ID, pHookPrj.ID); !errors.Is(err, ErrPostShredCleanupFailed) || !errors.Is(err, hookErr) {
+		t.Fatalf("expected ErrPostShredCleanupFailed wrapping PostShredHook error on ShredProjectDEK, got %v", err)
+	}
+	// Retry ShredProjectDEK with healthy hookStore succeeds idempotently when PostShredHook recovers.
+	if hookStore.PendingShredCleanups() != 2 {
+		t.Fatalf("expected 2 pending cleanups (orgRB + pHookPrj), got %d", hookStore.PendingShredCleanups())
+	}
+	hookErr = nil
+	if err := hookStore.ShredProjectDEK(ctx, orgEmpty.ID, pHookPrj.ID); err != nil {
+		t.Fatalf("retry ShredProjectDEK after hook recovery: %v", err)
+	}
+	if err := hookStore.ShredOrgDEK(ctx, orgRB.ID); err != nil {
+		t.Fatalf("retry ShredOrgDEK after hook recovery: %v", err)
+	}
+	if hookStore.PendingShredCleanups() != 0 {
+		t.Fatalf("expected 0 pending cleanups after recovery, got %d", hookStore.PendingShredCleanups())
+	}
+}
+
+// TestVaultAdversarialPreShredBackupRestoreWithIntactKEK empirically tests the AC-3 / COND-PO-02
+// adversarial scenario: restoring an immutable pre-shred SQLite backup alongside the SAME intact
+// shared Master KEK (kek_v1) that was active before shredding. This proves the mathematical limit
+// documented in CR-12: deleting a live Project DEK row does NOT make an already-copied cold backup
+// undecipherable under an intact shared KEK unless kek_v1 itself is retired/destroyed or external
+// per-project root keys are used.
+func TestVaultAdversarialPreShredBackupRestoreWithIntactKEK(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 5*time.Minute)
+
+	orgA, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "adv-a", DisplayName: "Adv A"})
+	if err != nil {
+		t.Fatalf("CreateOrg: %v", err)
+	}
+	p1, err := env.sqlite.Tenancy().CreateProject(ctx, orgA.ID, port.CreateProjectParams{Slug: "adv-p1", DisplayName: "Adv P1"})
+	if err != nil {
+		t.Fatalf("CreateProj P1: %v", err)
+	}
+	p2, err := env.sqlite.Tenancy().CreateProject(ctx, orgA.ID, port.CreateProjectParams{Slug: "adv-p2", DisplayName: "Adv P2"})
+	if err != nil {
+		t.Fatalf("CreateProj P2: %v", err)
+	}
+
+	p1Secret := []byte("adversarial-p1-secret-material")
+	secP1, err := env.vault.SealSecret(ctx, SealSecretParams{
+		OrgID: orgA.ID, OwnerProjectID: &p1.ID, Name: "p1-key", SecretKind: SecretKindAPIKey, Plaintext: p1Secret,
+	})
+	if err != nil {
+		t.Fatalf("Seal P1: %v", err)
+	}
+	if _, err := env.vault.SealSecret(ctx, SealSecretParams{
+		OrgID: orgA.ID, OwnerProjectID: &p2.ID, Name: "p2-key", SecretKind: SecretKindAPIKey, Plaintext: []byte("p2-ok"),
+	}); err != nil {
+		t.Fatalf("Seal P2: %v", err)
+	}
+
+	// Capture pre-shred SQLite backup BEFORE shredding P1.
+	preShredBackup := filepath.Join(env.dir, "adversarial-pre-shred.db")
+	if err := env.sqlite.BackupTo(ctx, preShredBackup); err != nil {
+		t.Fatalf("BackupTo: %v", err)
+	}
+
+	// Shred P1 on the live DB while retaining intact shared kek_v1 for P2.
+	if err := env.vault.ShredProjectDEK(ctx, orgA.ID, p1.ID); err != nil {
+		t.Fatalf("ShredProjectDEK: %v", err)
+	}
+
+	// Adversarial restore: restore pre-shred backup onto clean dir using the SAME intact Master KEK (env.kek = kek_v1).
+	restoredStore, err := sqlite.Open(ctx, sqlite.Config{DBPath: preShredBackup, SkipMigrate: true})
+	if err != nil {
+		t.Fatalf("open restored pre-shred backup: %v", err)
+	}
+	defer restoredStore.Close()
+	restoredVault, err := NewStore(Config{
+		DB:            restoredStore.RawDB(),
+		KEK:           env.kek,
+		PostShredHook: restoredStore.CheckpointWAL,
+	})
+	if err != nil {
+		t.Fatalf("restoredVault NewStore: %v", err)
+	}
+	defer restoredVault.Close()
+
+	// Empirical proof for CR-12: with intact shared kek_v1, pre-shred snapshot STILL decrypts secP1!
+	recovered, err := restoredVault.UnsealWithCapability(ctx, env.cap, orgA.ID, secP1.ID)
+	if err != nil || !bytes.Equal(recovered.Plaintext, p1Secret) {
+		t.Fatalf("expected adversarial restore with intact shared kek_v1 to demonstrate CR-12 recoverability, err=%v", err)
+	}
+	recovered.Zeroize()
+	t.Log("CR-12 EMPIRICAL PROOF: Restoring pre-shred SQLite backup with intact shared kek_v1 still decrypts deleted Project P1 secret; AC-3 pre-shred backup non-recoverability CANNOT hold without per-project external KEK destruction or KEK rotation+retirement.")
+
+	// Conversely, if kek_v1 is rotated to kek_v2 and retired/destroyed from the KEK provider,
+	// restoring the pre-shred backup fails closed with ErrKEKNotFound.
+	kekV2 := random32Key(t)
+	if err := env.kek.RegisterKey("kek_v2", kekV2, true); err != nil {
+		t.Fatalf("RegisterKey kek_v2: %v", err)
+	}
+	if _, err := env.vault.RewrapAllOrgDEKs(ctx, "kek_v1", "kek_v2"); err != nil {
+		t.Fatalf("RewrapAllOrgDEKs: %v", err)
+	}
+	if err := env.kek.RetireKey("kek_v1"); err != nil {
+		t.Fatalf("RetireKey kek_v1: %v", err)
+	}
+	restoredVault.EvictAllDEKs()
+	if _, err := restoredVault.UnsealWithCapability(ctx, env.cap, orgA.ID, secP1.ID); !errors.Is(err, ErrKEKNotFound) {
+		t.Fatalf("expected ErrKEKNotFound against pre-shred backup once kek_v1 is retired, got %v", err)
+	}
+}
+
+func TestVaultShredBusyReaderCleanupFailureAndRetryRecovery(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 5*time.Minute)
+
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "busy-shred-org", DisplayName: "Busy Shred"})
+	if err != nil {
+		t.Fatalf("CreateOrg: %v", err)
+	}
+	prj, err := env.sqlite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "busy-prj", DisplayName: "Busy Prj"})
+	if err != nil {
+		t.Fatalf("CreateProj: %v", err)
+	}
+	sec, err := env.vault.SealSecret(ctx, SealSecretParams{
+		OrgID: org.ID, OwnerProjectID: &prj.ID, Name: "busy-sec", SecretKind: SecretKindAPIKey, Plaintext: []byte("busy-secret"),
+	})
+	if err != nil {
+		t.Fatalf("SealSecret: %v", err)
+	}
+
+	// Capture wrapped_project_dek bytes prior to shred so we can inspect WAL residue.
+	var pWrappedBytes []byte
+	if err := env.sqlite.RawDB().QueryRowContext(ctx,
+		`SELECT wrapped_project_dek FROM project_encryption_keys WHERE org_id = ? AND project_id = ?`,
+		org.ID, prj.ID).Scan(&pWrappedBytes); err != nil {
+		t.Fatalf("scan wrapped_project_dek: %v", err)
+	}
+
+	// Hold an active WAL read snapshot on an independent connection so TRUNCATE checkpoint hits busy=1.
+	readerDSN := "file:" + filepath.ToSlash(env.dbPath) + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(25)"
+	readerDB, err := sql.Open("sqlite", readerDSN)
+	if err != nil {
+		t.Fatalf("open readerDB: %v", err)
+	}
+	defer readerDB.Close()
+	rtx, err := readerDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatalf("reader BeginTx: %v", err)
+	}
+	var dummy int
+	if err := rtx.QueryRowContext(ctx, `SELECT count(*) FROM project_encryption_keys`).Scan(&dummy); err != nil {
+		t.Fatalf("reader snapshot select: %v", err)
+	}
+
+	// Lower busy_timeout on store handle so CheckpointWAL fails fast during busy reader test.
+	if _, err := env.sqlite.RawDB().ExecContext(ctx, "PRAGMA busy_timeout = 25"); err != nil {
+		t.Fatalf("set short busy_timeout: %v", err)
+	}
+
+	// 1. Attempt ShredProjectDEK while busy reader holds snapshot -> MUST fail closed with ErrPostShredCleanupFailed + ErrWALCheckpointBusy!
+	shredErr := env.vault.ShredProjectDEK(ctx, org.ID, prj.ID)
+	if !errors.Is(shredErr, ErrPostShredCleanupFailed) || !errors.Is(shredErr, sqlite.ErrWALCheckpointBusy) {
+		t.Fatalf("expected ErrPostShredCleanupFailed wrapping ErrWALCheckpointBusy, got %v", shredErr)
+	}
+	if env.vault.PendingShredCleanups() != 1 {
+		t.Fatalf("expected 1 pending shred cleanup after busy failure, got %d", env.vault.PendingShredCleanups())
+	}
+	// Live unseal MUST already fail closed because DB row was deleted and RAM cache was evicted.
+	if _, err := env.vault.UnsealWithCapability(ctx, env.cap, org.ID, sec.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on live unseal while WAL cleanup pending, got %v", err)
+	}
+
+	// 2. Release busy reader snapshot -> retry ShredProjectDEK recovers and truncates WAL cleanly.
+	if err := rtx.Rollback(); err != nil {
+		t.Fatalf("reader rollback: %v", err)
+	}
+	_ = readerDB.Close()
+
+	if err := env.vault.ShredProjectDEK(ctx, org.ID, prj.ID); err != nil {
+		t.Fatalf("retry ShredProjectDEK after busy reader closed: %v", err)
+	}
+	if env.vault.PendingShredCleanups() != 0 {
+		t.Fatalf("expected 0 pending cleanups after retry success, got %d", env.vault.PendingShredCleanups())
+	}
+
+	// 3. Subsequent duplicate ShredProjectDEK returns ErrNotFound, and 0 deleted key bytes remain in .db/-wal/-shm.
+	if err := env.vault.ShredProjectDEK(ctx, org.ID, prj.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on completed duplicate ShredProjectDEK, got %v", err)
+	}
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		if rawDisk, rerr := os.ReadFile(env.dbPath + suffix); rerr == nil {
+			if bytes.Contains(rawDisk, pWrappedBytes) {
+				t.Fatalf("residual deleted wrapped_project_dek bytes persisted in %s after retry recovery", env.dbPath+suffix)
+			}
+		}
 	}
 }

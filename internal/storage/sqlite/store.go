@@ -199,11 +199,20 @@ func (s *Store) RawDB() *sql.DB {
 	return s.db
 }
 
+// ErrWALCheckpointBusy indicates PRAGMA wal_checkpoint(TRUNCATE) could not flush
+// all WAL frames because an active reader/snapshot held a WAL read mark.
+var ErrWALCheckpointBusy = errors.New("sqlite: WAL checkpoint blocked by busy reader or incomplete frames")
+
 // CheckpointWAL checkpoints and truncates the SQLite WAL file so deleted rows/keys
 // overwritten by PRAGMA secure_delete=ON do not linger in pre-shred WAL frames.
+// Fails closed if SQLite reports busy != 0 or incomplete frame checkpointing.
 func (s *Store) CheckpointWAL(ctx context.Context) error {
-	if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+	var busy, logFrames, checkpointed int
+	if err := s.db.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed); err != nil {
 		return fmt.Errorf("sqlite: PRAGMA wal_checkpoint(TRUNCATE): %w", err)
+	}
+	if busy != 0 || checkpointed != logFrames {
+		return fmt.Errorf("%w (busy=%d, log=%d, checkpointed=%d)", ErrWALCheckpointBusy, busy, logFrames, checkpointed)
 	}
 	return nil
 }

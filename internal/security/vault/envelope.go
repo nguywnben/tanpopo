@@ -32,6 +32,9 @@ var (
 	ErrDecryptionFailed = errors.New("vault: AEAD decryption failed")
 	// ErrMissingUnsealCapability indicates UnsealWithCapability was called with an unminted/zero-value capability.
 	ErrMissingUnsealCapability = errors.New("vault: unseal capability required")
+	// ErrPostShredCleanupFailed indicates the DEK row was deleted and cached RAM zeroized,
+	// but the post-shred WAL/disk cleanup failed (e.g. busy reader); callers must retry shred.
+	ErrPostShredCleanupFailed = errors.New("vault: post-shred cleanup failed; retry shred to complete physical erasure")
 )
 
 func validateAADSegment(label, val string) error {

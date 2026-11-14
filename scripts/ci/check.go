@@ -614,6 +614,9 @@ func checkFloorGuard(rootDir string) ([]Violation, error) {
 		return nil, err
 	}
 
+	// TP-IMP-0008 enforces at-most-one (<= 1) production MintUnsealCapabilityForBroker call/reference
+	// strictly inside cmd/tanpopo/ (0 allowed in any other production package). Tightening to
+	// exactly-one (== 1) is deferred to TP-IMP-0010/0015 when BlindHostCredentialBroker is wired.
 	if len(cmdCapabilityMints) > 1 {
 		for _, site := range cmdCapabilityMints[1:] {
 			violations = append(violations, site)
