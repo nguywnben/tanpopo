@@ -1,11 +1,11 @@
 # Execution Baseline & Agent Handoff Contract — Tanpopo
 
 > **MANDATORY COLD-START ENTRYPOINT FOR EVERY NEW EXECUTION SESSION (`ZERO PRIOR CHAT MEMORY REQUIRED`)**
-> - **Baseline ID:** `EXEC-BL-001-DRAFT`
-> - **Version:** `0.2.0-en` | **Last Updated:** `2026-11-14` | **Pre-Closure Reference Commit:** `bb3ffb0`
-> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`NO_GO`** *(Code execution is NOT unlocked!)*
-> - **CURRENT `GATE G4` STATUS:** **`BLOCKED` / `READY_FOR_REVIEW`** *(Awaiting explicit Product Owner sign-off on `Gate G1`, `Gate G2`, `Gate G3`, `CR-01`..`CR-10`, and `Gate G4` via [`owner-approval-sheet.md`](./owner-approval-sheet.md) and [`decisions.md`](./decisions.md)).*
-> - **CURRENT READY UNITS (`READY_UNITS`):** **`NONE` (`0 / 47` `READY`, `47 / 47` `BLOCKED`)**
+> - **Baseline ID:** `EXEC-BL-001-STAGE1`
+> - **Version:** `1.0.0-m0-done` | **Last Updated:** `2026-11-14` | **Pre-M0 Reference Commit:** `5147497`
+> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`NO_GO`** *(`M1+` production code execution is NOT yet unlocked — awaiting Gate G4 Stage 2 Final Owner Handoff Approval per `DEC-009`!)*
+> - **CURRENT `GATE G4` STATUS:** **`STAGE_1_DONE` (`M0`: `TP-IMP-0001`..`0004` `DONE`) / `STAGE_2_AWAITING_OWNER_GO`** *(Product Owner approved `Gate G1`, `Gate G2`, `Gate G3`, `CR-01`..`10` + `COND-PO-01`..`05`, and `M0` via [`owner-approval-sheet.md`](./owner-approval-sheet.md); Stage 2 `M1+` Engineering Handoff awaits final Owner `GO`.)*
+> - **CURRENT UNIT COUNTS (`UNIT_STATUS`):** **`4 / 47` `DONE` (`TP-IMP-0001`..`0004`), `0 / 47` `READY`, `43 / 47` `BLOCKED` (`TP-IMP-0005`..`0047`; `TP-IMP-0005` is 1st eligible `READY` unit upon Stage 2 `GO`)**
 
 ---
 
@@ -25,30 +25,31 @@ If you are an Engineering Coding Agent (e.g., **Luna**) starting a fresh session
 
 ## 1. Confirmed Owner Decisions (`CONFIRMED_BY_OWNER`) vs. Pending Approvals
 
-### 1.1. Locked Baseline Decisions (`DEC-001` .. `DEC-008`) & Permanently Rejected Directions (`REJ-001` .. `REJ-004`)
-Only the following decisions are currently confirmed in the repository ([`decisions.md`](./decisions.md)):
+### 1.1. Locked Baseline Decisions (`DEC-001` .. `DEC-009`), Binding Conditions (`COND-PO-01` .. `05`) & Rejected Directions (`REJ-001` .. `REJ-004`)
+All strategic, scope, and architectural decisions below are formally confirmed by the Product Owner in [`decisions.md`](./decisions.md) and [`owner-approval-sheet.md`](./owner-approval-sheet.md):
 - **`DEC-001`:** Tanpopo is an **open-source, self-hosted-first, extension-first, production-grade, scalable AI Gateway** spanning Unified API, routing, policies, observability, FinOps cost control, MCP tools, A2A connectivity, Web Console, and CLI.
 - **`DEC-002`:** Users independently install **Provider Adapters and other extensions** from Marketplace indexes, Git repositories, URLs/`.tpkg` archives, or private registries **without rebuilding or re-releasing Tanpopo Core**.
 - **`DEC-003`:** **Provider, Plugin, MCP, and A2A are 4 independent architectural layers** — conflating their schemas, wire protocols, or permission models is permanently rejected (`REJ-004`).
 - **`DEC-004` (`Absolute Legal & Compliance Boundary`):** Official Adapters strictly target official commercial Provider APIs and provider-authorized access flows; **Tanpopo never builds, bundles, documents, or legitimizes converting personal consumer subscriptions (`ChatGPT Plus/Pro`, `Claude Pro/Max`, `Codex`, `Antigravity`, etc.) into general-purpose APIs, nor uses "accept-risk" disclaimers to excuse TOS violations (`REJ-003`)**.
 - **`DEC-005`:** Canonical repository `https://github.com/nguywnben/tanpopo` (`main` branch), Git author `Nguyễn Công Ben <nben940665@gmail.com>`.
 - **`DEC-006`:** Local installation and use of all 25 software engineering skills in [`.agents/skills/`](../../.agents/skills) (`skills-lock.json`).
-- **`DEC-007`:** Web Console baseline uses `@astryxdesign/core@^0.7.13` + `@stylexjs/stylex@^0.19.1` with default theme **`neutral`** ([`astryx-themes.js`](../../astryx-themes.js)) — **never run `astryx theme eject`, never emit raw `div`/`span` HTML elements, and reserve `Badge` strictly for numeric counts**.
+- **`DEC-007`:** Web Console baseline uses `@astryxdesign/core@^0.7.13` + `@stylexjs/stylex@^0.19.1` with default theme **`neutral`** ([`astryx-themes.js`](../../astryx-themes.js)) — **never run `astryx theme eject`, never emit raw `div`/`span` HTML elements, reserve `Badge` strictly for numeric counts, and keep 100% English UI copy (`ISS-008`)**.
 - **`DEC-008`:** Atomic Conventional Commits formatted as `<type>: step <NN> - <description>` (or `<type>(<module>): step <NN> - <description>`); no `a`-prefixed step numbers and no force-pushes on `main`.
+- **`DEC-009` & `COND-PO-01`..`05` (`GOV-OAS-01` Ruling — `2026-11-14`):** Approved Track A (`18` items) and Track B (`15` items: `Apache-2.0`, `SD-G1-01..05`, `BA-OQ-001..05`, `TD-G2-01..06`, `ADR-0001..0006`, `CR-01..10`) subject to **5 mandatory binding conditions**:
+  1. **`COND-PO-01`:** Keep every unmeasured SLO/latency/memory/throughput claim explicitly labeled **`TARGET` / `UNVERIFIED`**.
+  2. **`COND-PO-02`:** Prove full `Master KEK -> Org DEK -> Project DEK` lifecycle, RAM cache eviction, and backup/restore non-recoverability (`TP-IMP-0008`, `TP-IMP-0032`) before claiming backup undecipherability.
+  3. **`COND-PO-03`:** Prove Valkey/PostgreSQL budget ledger consistency across concurrency, Valkey failover, network disconnect, and recovery (`TP-IMP-0021`, `TP-IMP-0040`, `TP-IMP-0043`); a `1s` checkpoint alone is insufficient proof.
+  4. **`COND-PO-04`:** Align `/mcp` strictly with **`MCP Specification 2025-03-26 (Streamable HTTP)`** and execute empirical client compatibility suite `CT-36` (`TP-IMP-0036`, `0037`).
+  5. **`COND-PO-05`:** If any spike or quality gate disproves an approved assumption, **stop and file a `CR`** rather than forcing a flawed design.
 
-### 1.2. Consolidated Pending Decisions Required to Flip `NO_GO` → `GO`
-All pending approvals are consolidated with full trade-off and impact analysis in **[`docs/governance/owner-approval-sheet.md`](./owner-approval-sheet.md)**:
-1. **`Gate G1`:** `SD-G1-01`..`05` ([`decisions.md`](./decisions.md) Part C).
-2. **`Gate G2`:** `BA-OQ-001`..`05` & `TD-G2-01`..`06` ([`decisions.md`](./decisions.md) Parts E–F).
-3. **`Gate G3`:** `ADR-0001`..`0006` and explicit authorization to run isolated offline PoCs `SPIKE-01`..`04` ([`decisions.md`](./decisions.md) Part H & [`release-readiness.md`](../quality/release-readiness.md) Section 4).
-4. **`Audit A08 Change Requests`:** `CR-01`..`CR-10` ([`unresolved-gaps.md`](../reviews/unresolved-gaps.md)) to unlock spec-closure units `TP-IMP-0001`..`0003`.
-5. **`Gate G4`:** Approval of this Execution Baseline (`EXEC-BL-001-DRAFT` → `EXEC-BL-001-APPROVED`) and confirmation of implementation unit commit tagging (`[TP-IMP-xxxx]`).
+### 1.2. Single Remaining Gate Required to Flip `NO_GO` → `GO` (`Gate G4 Stage 2`)
+Milestone `M0` (`TP-IMP-0001`..`0004`, closing `GAP-01`..`13` and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md)) is **100% complete**. The **sole remaining gate** before unlocking `M1+` implementation is **Product Owner Stage 2 Handoff Sign-Off (`Gate G4 Stage 2`)** flipping `HANDOFF_VERDICT` from `NO_GO` to `GO` and promoting **`TP-IMP-0005`** to `READY`.
 
 ---
 
 ## 2. Canonical Zero-Guesswork Technical Dictionary for Engineering Agents
 
-Once the candidate architecture (`ADR-0001`..`0006` + `CR-01`..`10`) is approved by the Product Owner, every implementation unit `TP-IMP-0001`..`0047` **MUST** adhere strictly to the following single canonical identifiers:
+Every implementation unit `TP-IMP-0005`..`0047` **MUST** adhere strictly to the following single canonical identifiers:
 
 | Dimension | Single Canonical Standard | Prohibited Legacy / Drift Variants |
 |---|---|---|
@@ -79,16 +80,14 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 
 ---
 
-## 4. Dependency-Ordered Initial Execution Queue (Once Unblocked)
+## 4. Dependency-Ordered Initial Execution Queue (`M0` Complete; `M1` Ready Upon Stage 2 `GO`)
 
-> **Live Status Today:** `0` units `READY` (`NO_GO`). Immediately upon Product Owner sign-off of [`owner-approval-sheet.md`](./owner-approval-sheet.md), units unlock in the following strict topological waves:
+> **Live Status Today:** `TP-IMP-0001`..`0004` (`M0`) are **`DONE`**. `HANDOFF_VERDICT` remains **`NO_GO`** (`0` units `READY`) pending Product Owner Stage 2 `GO`. Immediately upon Stage 2 `GO`, **`TP-IMP-0005` promotes to `READY`** as the entry wave of `M1`:
 
-| Wave | Unit ID(s) | Execution Mode | Mandatory Review / Gate Checkpoint Before Next Wave |
+| Wave | Unit ID(s) | Execution Mode | Status / Mandatory Checkpoint Before Next Wave |
 |---|---|---|---|
-| **Wave 0.1** | [`TP-IMP-0001`](../planning/units/TP-IMP-0001.md) | Sequential (`1` branch) | `REQUIRES_STRONG_REVIEW` — Closes `GAP-08, 09, 11`. |
-| **Wave 0.2** | [`TP-IMP-0002`](../planning/units/TP-IMP-0002.md) | Sequential (`1` branch) | `REQUIRES_STRONG_REVIEW` — Extracts `runtime.proto` & `openapi/*.yaml` (`GAP-02, 03, 07, 10, 12, 13`). |
-| **Wave 0.3** | [`TP-IMP-0003`](../planning/units/TP-IMP-0003.md) | Sequential (`1` branch) | `REQUIRES_STRONG_REVIEW` — Locks `26` SQL tables, `AEAD AAD`, `FORCE RLS`, `Valkey {org_id}` (`GAP-04, 05, 06`). |
-| **Wave 0.4 / 1.1** | [`TP-IMP-0004`](../planning/units/TP-IMP-0004.md) **\|\|** [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) | **Parallel (`2` `git worktree`s, `0` file overlap)** | **`GATE-M0` (`Owner + Architect Sign-Off`)** after `0004` + `check.go` green on `0005`. |
+| **Wave 0.1–0.4 (`M0`)** | [`TP-IMP-0001`](../planning/units/TP-IMP-0001.md) → [`0002`](../planning/units/TP-IMP-0002.md) → [`0003`](../planning/units/TP-IMP-0003.md) → [`0004`](../planning/units/TP-IMP-0004.md) | Completed in `M0` | **`DONE` (`GATE-M0` Verified):** Closed `GAP-01..13`; compiled `runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`; locked `POC-01` & `POC-02` in `spike-results.md`. |
+| **Wave 1.1 *(Next on `GO`)* ** | [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) | Sequential (`1` branch) | **1st `READY` unit upon Stage 2 `GO`** (`REQUIRES_STRONG_REVIEW` — Monorepo `go.mod`, `web/console/`, `Apache-2.0`, `ISS-008` English UI copy, `CONSTRAINTS.md` & `check.go`). |
 | **Wave 1.2** | [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md) **\|\|** [`TP-IMP-0007`](../planning/units/TP-IMP-0007.md) | **Parallel (`2` `git worktree`s)** | Hermetic `netguard` (`0006`) + `SQLite WAL` migration runner (`0007`). |
 | **Wave 1.3** | [`TP-IMP-0008`](../planning/units/TP-IMP-0008.md) → [`TP-IMP-0009`](../planning/units/TP-IMP-0009.md) | Sequential | `REQUIRES_STRONG_REVIEW` — 3-tier Envelope Vault + `RBAC` / `Virtual Key` / `ConfigSnapshot`. |
 | **Wave 1.4** | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md) **\|\|** [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md) | **Parallel (`2` `git worktree`s)** | `REQUIRES_STRONG_REVIEW` — `SSRFGuard` + `BlindBroker` + `.tpkg` Installer `SM-01`. |

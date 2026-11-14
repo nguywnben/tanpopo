@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0002` |
 | **Milestone / Epic** | `M0` (`Spec Closure & Spikes`) · `EP-00` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0001` & Owner decisions on `CR-05, CR-10` — `GAP-01, 02, 03, 07`)* |
+| **Status** | **`DONE`** *(Completed & verified on `2026-11-14` under Product Owner Stage 1 M0 approval `DEC-009` — closed `GAP-02, 03, 07, 10, 12, 13`)* |
 | **Size** | `L` (Extract canonical `proto/*`, `openapi/*` + synchronize `13` contract, UX, QA & ops spec files) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Locks Wasm/Sidecar binary contracts, OpenAPI schemas & OOM prevention rules)* |
 | **Technical Owner** | `Principal API/SDK Architect + UX/DX Lead` |

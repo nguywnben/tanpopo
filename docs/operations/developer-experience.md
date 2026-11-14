@@ -1,84 +1,101 @@
 # Developer Experience: CLI, Management API, SDKs, Error Handling & Diagnostics — Tanpopo
 
-> **Developer Experience & Integration Ecosystem Specification (Phase ASTRA A06 — `DRAFT / READY_FOR_REVIEW`)**
-> - **Document ID:** `SPEC-OPS-04` | **Version:** `0.1.0-step06-draft` | **Last Updated:** `2026-11-11`
+> **Canonical Developer Experience & Unified CLI Specification (Synchronized in `TP-IMP-0002` — Spec Closure Batch B)**
+> - **Document ID:** `SPEC-OPS-04` | **Version:** `0.2.0-m0-closure` | **Last Updated:** `2026-11-14`
 > - **Authored By:** Developer Experience (DX) Lead & SDK Architect
-> - **Governance Status:** **Proposed Design Specification (`PROPOSED — NO CODE`)** — synchronized 100% with [`api-contracts.md`](../specifications/api-contracts.md) (`SPEC-API-01`), [`extension-contract.md`](../specifications/extension-contract.md) (`SPEC-EXT-01`), [`api-protocol-compatibility.md`](../specifications/api-protocol-compatibility.md) (`SPEC-EXT-06`), and [`contract-test-matrix.md`](../quality/contract-test-matrix.md) (`SPEC-QA-01`).
-> - **Requirements Traceability:** `OPS-07`, `OPS-09`, `TP-FR-0101`..`0105`, `TP-FR-0305`, `TP-FR-0604`, `TP-FR-0901`, `TP-FR-0903`, `TP-FR-0904`, `TP-NFR-0902`, `TP-NFR-1001`, `TP-NFR-1002`.
+> - **Single Binary & Contract Parity (`ADR-0001`, `CR-10`):** Tanpopo ships as **1 single unified executable binary named `tanpopo`** covering server execution (`tanpopo serve --role=all|data-plane|control-plane`), operator administration, database engine migration (`tanpopo db migrate-engine`), air-gap bundling, and extension SDK authoring — synchronized `100%` with [`openapi/dataplane-v1.yaml`](../../openapi/dataplane-v1.yaml) and [`openapi/admin-v1.yaml`](../../openapi/admin-v1.yaml).
+> - **Measurement Honesty (`COND-PO-01`):** All latency, overhead, and turnaround targets in this document are **`TARGET / UNVERIFIED`** until empirical verification completes.
+> - **Requirements Traceability:** `OPS-07`, `OPS-09`, `TP-FR-0101`..`0105`, `TP-FR-0305`, `TP-FR-0604`, `TP-FR-0901`, `TP-FR-0903`, `TP-FR-0904`, `TP-NFR-0902`, `TP-NFR-1001`, `TP-NFR-1002`, `CR-09`, `CR-10`.
 
 ---
 
 ## 1. Developer Experience Philosophy (`Zero-Lock-In & Self-Diagnosing DX`)
 
-Tanpopo serves three distinct engineering personas with sharply different workflow expectations:
-1. **AI Application Engineer (`API Consumer`):** Refuses proprietary heavyweight SDK lock-in; expects changing `base_url` and `api_key` in official OpenAI / Anthropic / Gemini / MCP SDKs to work immediately, and expects any failure envelope to pinpoint the exact fix within 10 seconds.
-2. **Platform & DevOps Engineer (`Operator`):** Requires `100%` parity between Web Console actions, scriptable CLI commands (`--output json`), and `ETag`-guarded Management APIs suitable for Terraform and GitOps pipelines.
-3. **Plugin Developer (`Extension Author`):** Scaffolds, locally contract-tests (`CT-01`..`24`), and packages a new `Provider Adapter` in under `30 minutes` using Tier-1 declarative manifests or the Tier-2 Wasm SDK without cloning or compiling Tanpopo Core.
+Tanpopo serves three distinct engineering personas:
+1. **AI Application Engineer (`API Consumer`):** Connects official OpenAI, Anthropic, Google GenAI, and MCP SDKs by changing only `base_url` and `api_key`, receiving actionable `CanonicalErrorEnvelope` diagnostics with `x-tanpopo-request-id`.
+2. **Platform & SRE Engineer (`Operator`):** Operates `100%` of gateway capabilities identically across the Astryx Web Console, scriptable `tanpopo` CLI (`--output json|yaml`), and `ETag`-guarded `/admin/v1/*` APIs.
+3. **Plugin Developer (`Extension Author`):** Scaffolds, contract-tests offline (`CT-01`..`18`), and packs `.tpkg` adapters (`Tier-1 Declarative` or `Tier-2 Wasm`) using `tanpopo plugin ...` without cloning or recompiling `tanpopo` Core.
 
 ---
 
-## 2. `tanpopo` CLI Design (`Operator & Plugin Author CLI`)
+## 2. Unified `tanpopo` CLI Contract (`Single Binary — Zero Multi-Binary Drift`)
 
-### 2.1. Global CLI Conventions (`UNIX & Automation Friendly`)
-- **Output Formatting:** Prints clean aligned human-readable tables by default (honoring `NO_COLOR=1`); pass `--output json` or `--output yaml` for deterministic machine-readable schemas consumable by `jq` and CI/CD pipelines; progress spinners and warnings always write to `stderr` so `stdout` JSON remains uncorrupted.
-- **Standard Environment Variables:** `TANPOPO_URL` (Control Plane base URL), `TANPOPO_ADMIN_TOKEN` (CI service token), `TANPOPO_ORG` / `TANPOPO_PROJECT` / `TANPOPO_ENV`.
-- **Deterministic Exit Codes:**
+### 2.1. Global CLI Conventions & Canonical Exit Codes (`execution-baseline.md`)
+- **Output Formatting & Terminal Safety (`CT-27`):** Human-readable aligned tables by default (honoring `NO_COLOR=1`, stripping hazardous `ANSI` / `OSC-52` terminal escape sequences from untrusted strings); pass `--output json` or `--output yaml` for deterministic `stdout` schemas while progress logs write exclusively to `stderr`.
+- **Standard Environment Variables:** `TANPOPO_URL`, `TANPOPO_ADMIN_TOKEN`, `TANPOPO_ORG`, `TANPOPO_PROJECT`, `TANPOPO_ENV`, `TANPOPO_MASTER_KEY`.
+- **Canonical Deterministic Exit Codes:**
   - `0`: Complete success.
-  - `2`: Invalid CLI flag syntax or malformed local input argument.
-  - `10`: Authentication failure or insufficient `RBAC` permission (`401` / `403`).
-  - `14`: Optimistic concurrency conflict (`409 version_conflict`) or expired approval token.
-  - `22`: **Preflight / Contract / Hash Verification Gate Blocked** — e.g., extension `SHA-256` mismatch, unauthorized permission request, or incompatible target upgrade contract.
-  - `30`: Upstream provider connectivity validation or `Smoke Test` failure.
+  - `2`: Invalid CLI flag syntax, validation error, or malformed local input argument.
+  - `10`: Network / upstream connectivity failure or request timeout.
+  - `14`: Authentication failure, `RBAC` permission denial (`401`/`403`), `409 optimistic_lock_conflict`, or canary secret leak detection.
+  - `22`: **Contract / Hash / Signature / Integrity / Upgrade Preflight Gate Failed** — e.g., `.tpkg` `SHA-256` mismatch, unauthorized permission escalation, expired `revocations.json` in an air-gap bundle, or `BLOCKED_INCOMPATIBLE` active extensions during `tanpopo upgrade preflight`.
+  - `30`: Unexpected internal error.
+  - `31`: **Dirty Database Migration State (`FMEA-06`)** — schema migration halted with `dirty = true`; `tanpopo serve` refuses to boot against half-migrated state and prints recovery steps.
 
-### 2.2. Standardized `tanpopo` CLI Command Tree
+### 2.2. Canonical Unified `tanpopo` CLI Command Tree
 
 ```text
 tanpopo
-├── serve                       # Start gateway daemon (--role=all|data-plane|control-plane, --config)
-├── doctor                      # Run 8 preflight checks across OS, network, vault & lockfile integrity
-├── login / whoami              # Authenticate via OIDC Device/Browser flow or admin service token
-├── key                         # Manage Virtual Keys (list, create, rotate --grace-period, revoke, test)
-├── connection                  # Manage Provider Connections (list, create, oauth-login, test, disable)
-├── model / route               # Inspect models & routing (route list, route apply, route explain)
-├── policy / budget             # Sync hierarchical policies & inspect budget ceilings / active holds
-├── approval                    # Approve or reject MCP destructive calls & permission escalations via CLI
-├── killswitch                  # Trigger 4-level emergency kill-switches (--level, --target, --abort-streams)
-├── plugin                      # Shared toolchain for Operators & Extension Authors:
-│   ├── init <name> --tier 1|2  # Scaffold a Declarative Adapter (YAML) or Wasm SDK project
-│   ├── validate                # Statically validate Manifest schema, network hosts & secret slots
-│   ├── test                    # Run local contract test suite (CT-01..24) against mock harness
-│   ├── pack / sign             # Build reproducible .tpkg archive & sign with Cosign
+├── serve                                # Start gateway process (--role=all|data-plane|control-plane, --config, --bootstrap-file)
+├── doctor                               # Run 8 preflight checks across clock, ports, Master KEK, storage lock, TLS & SSRFGuard
+├── login / logout / whoami              # Authenticate via OIDC Device/Browser PKCE flow or Admin Bearer Token
+├── admin                                # Instance break-glass & state integrity commands (OPERATOR):
+│   ├── reset-local-owner                # Break-glass local owner password / OIDC lockout recovery on host (CR-09)
+│   ├── reset-bootstrap-token            # Mint fresh 15m Bootstrap Token if initial /setup token expired unclaimed
+│   ├── verify-state --check-audit-chain # Verify Per-Org + SYSTEM JCS audit hash chains, ledger sums & AEAD AAD (OPS-AC-08)
+│   ├── freeze-writes                    # Pause Control Plane config writes ahead of engine migration (Data Plane stays live)
+│   └── unfreeze-writes                  # Lift Control Plane write freeze cleanly after verification
+├── db
+│   └── migrate-engine                   # Checksum-verified SQLite WAL -> PostgreSQL 16+ migration (pre-creates monthly partitions)
+├── upgrade
+│   └── preflight --target-version <ver> # Verify compatibility.contractVersion across all ENABLED_ACTIVE extensions (exit 22 on block)
+├── org / project / env                  # Manage Organizations (OPERATOR), Projects & Environments
+├── key                                  # Manage Virtual Keys (list, create, rotate --grace-period, revoke --mode, test)
+├── connection                           # Manage Provider Connections (list, create, oauth-login, test, disable)
+├── model / route                        # Inspect models & routes (route list, route apply, route explain)
+├── policy / budget                      # Sync hierarchical policies & run `tanpopo budget inspect --project <slug>` / `budget set`
+├── approval                             # Inspect, approve, or reject pending MCP destructive / extension escalation requests
+├── killswitch                           # Trigger 4-level emergency kill-switches (trigger --level --target --abort-streams --reason)
+├── incident
+│   └── blast-radius                     # Query keys/projects/connections traversing a quarantined extension or compromised connection
+├── plugin                               # Extension SDK & lifecycle toolchain (.tpkg):
+│   ├── init <name> --tier 1|2           # Scaffold a Tier-1 Declarative Pack or Tier-2 Wasm SDK project
+│   ├── validate                         # Validate Manifest JSON Schema, ^@tanpopo(-[a-z0-9]+)?/ rule, allowedHosts & 16 MiB cap
+│   ├── test                             # Run 100% offline deterministic cassette suite (CT-01..18)
+│   ├── pack / sign                      # Build reproducible .tpkg archive & sign with Cosign / Ed25519
+│   ├── migrate-check                    # Check extension compatibility against upcoming N+1 contract schemas
 │   └── install / upgrade / rollback / quarantine / lock
-├── bundle                      # Export/verify/import offline bundles for Air-Gapped deployments
-├── backup / storage / vault    # Encrypted backups, SQLite->Postgres migration, Master KEK rotation
-└── support-bundle              # Collect diagnostic archive with 100% automated secret & PII redaction
+├── bundle                               # Air-Gap bundle workflow: `bundle export`, `bundle verify`, `bundle import` (.tpbundle / .tar.zst)
+├── backup                               # Encrypted backup workflow: `backup create`, `backup verify`, `backup restore` (.tpop.enc)
+├── vault                                # Envelope encryption management (`vault status`, `vault rotate-kek`)
+└── support-bundle                       # Export multi-pass secret- and PII-scrubbed diagnostic archive (OPS-AC-10)
 ```
 
 ---
 
-## 3. Management API & Copy-Pasteable SDK Integration Snippets (`SDK & Wire Snippets`)
+## 3. Management API Ergonomics & Copy-Pasteable SDK Integration Snippets
 
-### 3.1. Management API Ergonomics (`/admin/v1/*`)
-- **Zero Blind Overwrites:** Every `GET` response on a mutable configuration resource returns `ETag: "v7"`. Subsequent `PUT`/`PATCH` mutations supply `If-Match: "v7"`, guaranteeing safety when multiple engineers or GitOps pipelines run concurrently.
-- **Constant-Time Cursor Pagination:** Every high-cardinality collection uses `?limit=100&cursor=eyJ...` returning `{ "data": [...], "next_cursor": "...", "has_more": true }` (avoiding `OFFSET` degradation on deep pages).
-- **Safe Retries:** Mutating `POST` endpoints for key issuance, connection creation, and task triggers honor the `Idempotency-Key` header.
+### 3.1. Management API Conventions (`/admin/v1/*` — [`openapi/admin-v1.yaml`](../../openapi/admin-v1.yaml))
+- **Optimistic Concurrency (`ETag` / `If-Match`):** Mutable resources emit `ETag: "v7"`; stale `If-Match` headers return `409 optimistic_lock_conflict` carrying `error.current_resource`.
+- **HMAC-Signed Cursor Pagination:** Collection endpoints accept `?limit=50&cursor=...` (`limit <= 200`) and return `{ "data": [...], "next_cursor": "...", "has_more": true }`.
+- **CSRF & Plane Firewall:** Cookie-authenticated mutations require `X-CSRF-Token` (`403 csrf_validation_failed`); `Virtual Keys` (`vk_tp_*`) are barred from `/admin/v1/*` (`401 invalid_credential_plane`).
 
-### 3.2. Unified Inference Integration (Zero Custom SDK Required)
+### 3.2. Drop-In Client SDK Snippets (Zero Custom SDK Required)
 
-#### A. Python (Standard `openai` SDK — Swap Only `base_url` and `api_key`)
+#### A. Python (`openai` SDK — Unified `/v1/*`)
 ```python
 from openai import OpenAI
 
 client = OpenAI(
     base_url="https://ai-gateway.corp.example.com/v1",
-    api_key="vk_tp_live_example_only_not_real",  # Virtual Key hard-bound to 1 Environment
+    api_key="vk_tp_prod_example_only_not_real_000001",
     default_headers={
-        "X-Tanpopo-Data-Region": "EU",           # Optional: enforce fail-closed data residency
+        "X-Tanpopo-Data-Region": "EU",
     },
 )
 
 stream = client.chat.completions.create(
-    model="prod-assistant-default",              # Target a smart Route or Logical Model slug
+    model="prod-assistant-default",
     messages=[{"role": "user", "content": "Summarize this week's operations report."}],
     stream=True,
 )
@@ -87,7 +104,7 @@ for chunk in stream:
         print(chunk.choices[0].delta.content, end="", flush=True)
 ```
 
-#### B. TypeScript / Node.js (Standard `openai` SDK + Idempotency Header)
+#### B. TypeScript / Node.js (`openai` SDK + `Idempotency-Key` & `X-Tanpopo-Timeout-Ms`)
 ```typescript
 import OpenAI from 'openai';
 
@@ -103,21 +120,20 @@ const response = await client.chat.completions.create(
   },
   {
     headers: {
-      'Idempotency-Key': 'job-check-20261111-001',
+      'Idempotency-Key': 'job-check-20261114-001',
       'X-Tanpopo-Timeout-Ms': '30000',
     },
   },
 );
 ```
 
-#### C. Lossless Vendor-Specific Dialect Routing (`Lossless Native Passthrough`)
-For deep vendor-native capabilities (such as signed `thinking` blocks or granular Anthropic / Gemini `cache_control`) while retaining full Tanpopo virtual-key scoping, `micro-USD` budget enforcement, and audit logging:
+#### C. Lossless Vendor-Native Passthrough (`/native/{dialect}/{upstreamPath}`)
 ```python
 import anthropic
 
 client = anthropic.Anthropic(
     base_url="https://ai-gateway.corp.example.com/native/anthropic",
-    api_key="vk_tp_live_example_only_not_real",  # Tanpopo authenticates Virtual Key & injects real credential in Blind Broker!
+    api_key="vk_tp_prod_example_only_not_real_000001",
 )
 
 msg = client.messages.create(
@@ -127,7 +143,7 @@ msg = client.messages.create(
 )
 ```
 
-#### D. Governed MCP Gateway Client Configuration (`Dedicated MCP Plane` — Wave `v0.2`)
+#### D. Governed MCP Hub Configuration (`MCP Specification 2025-03-26 Streamable HTTP` — `v0.2`)
 ```json
 {
   "mcpServers": {
@@ -141,92 +157,85 @@ msg = client.messages.create(
   }
 }
 ```
+*(Per `COND-PO-04`, end-to-end IDE client compatibility for async `destructive` HITL approvals is empirically gated on `CT-36` in `M3`.)*
 
-#### E. Rapid CLI Smoke Diagnostics (`Smoke Testing Key, Connection & Route`)
+#### E. Rapid CLI Diagnostics (`Key`, `Connection`, `Budget` & `Route Explain`)
 ```bash
 # 1. Verify Virtual Key validity, remaining budget, and model scope (0 billable upstream calls):
 tanpopo key test --key "$TANPOPO_VIRTUAL_KEY"
 
-# 2. Validate live upstream connectivity from Tanpopo through the Blind Broker:
+# 2. Run 2-phase blind connectivity probe through BlindBroker + SSRFGuard:
 tanpopo connection test prod-vertex-eu-01
 
-# 3. Dry-run routing decision tree directly in the terminal:
-tanpopo route explain prod-assistant-default --capability vision,tools --region EU
+# 3. Inspect real-time settled spend and active pre-request holds:
+tanpopo budget inspect --project core-assistant
+
+# 4. Dry-run 6-step routing decision tree in terminal (POST /admin/v1/routes/explain):
+tanpopo route explain prod-assistant-default --capability vision,tool_calling,strict_json_schema --region EU
 ```
 
 ---
 
-## 4. Documentation Architecture, API Explorer & Structured Logs (`Docs, Explorer & Logs`)
+## 4. Documentation Architecture, Offline API Explorer & `snake_case` Structured Logs
 
-### 4.1. Documentation Information Architecture (`Documentation IA`)
-Both public documentation and the embedded offline manual are structured around **4 distinct reader journeys** (aligned with Astryx `documentation` & `documentation-technical` templates):
-1. **Quickstart (`5 Minutes`):** Single-command launch → complete Setup Wizard → send first verified request.
-2. **Application Developer Guide:** Unified API vs Native Passthrough, streaming/cancellation semantics, canonical error handling, MCP Client & A2A integration.
-3. **Self-Host Operator & SRE Guide:** Linux/macOS/Windows/Docker/Helm deployment, TLS & Nginx SSE tuning, `Master KEK` backup custody, zero-downtime rolling upgrades, and the 7 incident runbooks.
-4. **Extension Author SDK Reference:** Building a Tier-1 Declarative Adapter in 15 minutes, authoring Tier-2 Wasm Plugins, `Blind Broker` secret-slot rules, `tanpopo plugin test` contract harness, and Cosign signing for Marketplace / Private OCI registries.
+1. **Four-Journey Documentation IA:** (1) `5-Minute Quickstart`, (2) `Application Developer Guide`, (3) `Self-Host Operator & SRE Guide`, and (4) `Extension Author SDK Reference`.
+2. **Air-Gap Built-In API Explorer (`SCR-15`):** `/devtools/api-explorer` renders binary-embedded [`openapi/dataplane-v1.yaml`](../../openapi/dataplane-v1.yaml) and [`openapi/admin-v1.yaml`](../../openapi/admin-v1.yaml) via `GET /admin/v1/openapi.json` with `0` external network calls.
+3. **Canonical `snake_case` Structured JSON Log Contract (`SPEC-CORE-02` Parity):**
+   Every log record emitted to `stdout` uses flat **`snake_case`** keys matching `usage-billing-observability.md` `100%`:
 
-### 4.2. Interactive Built-In API Explorer (`Built-in API Explorer`)
-- `/devtools/api-explorer` in the Web Console renders the binary-embedded `OpenAPI 3.1` specification (`100%` air-gap functional), pre-filling the active gateway URL and enabling safe read-only calls and dry-run `Route Explain` simulations directly in-browser.
-
-### 4.3. Secret-Safe Structured JSON Log Contract (`Structured JSON Log Contract`)
-Every log line written to `stdout` is a flat single-line JSON object adhering strictly to `observability-and-instrumentation` standards (always carrying `request_id` and `entry_point`, zero unstructured string interpolation, and `0` secrets or PII):
 ```json
 {
-  "ts": "2026-11-11T16:45:12.304Z",
+  "ts": "2026-11-14T16:45:12.304Z",
   "level": "WARN",
   "event": "gateway.routing.pre_stream_failover",
-  "entry_point": "http_data_plane",
+  "entry_point": "unified_http",
   "request_id": "req_01jcd8k9p2v4x7m1n6q8r0s2t4",
   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-  "org_id": "org_01jc...",
-  "project_id": "prj_01jc...",
-  "env_id": "env_prod",
-  "route": "prod-assistant-default",
-  "failed_deployment": "dep_openai_eu_01",
+  "org_id": "org_01jc8001",
+  "project_id": "prj_01jc8009",
+  "env_id": "env_01jc8010",
+  "route_slug": "prod-assistant-default",
+  "failed_deployment_id": "dep_openai_eu_01",
   "upstream_status": 429,
-  "selected_fallback": "dep_vertex_eu_02",
+  "next_deployment_id": "dep_vertex_eu_02",
+  "attempt": 1,
   "overhead_ms": 1.84
 }
 ```
 
 ---
 
-## 5. Canonical Error Resolution Guide (`Canonical Error Resolution Guide`)
-
-Every error emitted by Tanpopo uses the deterministic `CanonicalErrorEnvelope` carrying `request_id` and an accurate `retryable` boolean so client SDKs know immediately whether automated retry is safe:
+## 5. Canonical Error Resolution Guide (`Synchronized with SPEC-EXT-06`)
 
 | Error Code (`error.code`) | HTTP | `retryable` | Root Cause | Concrete Engineer / Administrator Remediation |
 |---|---|---|---|---|
-| `capability_not_supported` | `400` | `false` | Request uses a capability (e.g., strict `json_schema` or `audio`) unsupported by the target model/route. | Check `/models` capability assurance, target a capable `Route`, or switch to `/native/{dialect}/...` if supported only natively. |
-| `virtual_key_invalid_or_revoked` | `401` | `false` | Virtual key is malformed, expired, or revoked. | Check `TANPOPO_VIRTUAL_KEY` or issue a replacement key bound to the right `Environment` at `SCR-13`. |
-| `model_or_tool_not_in_key_scope` | `403` | `false` | Valid virtual key lacks allowlist permission for the requested model or MCP tool. | Ask `TEAM_ADMIN` to widen the key's allowlist at `SCR-13`, or inspect scope via `tanpopo key test`. |
-| `schema_hash_drift_blocked` | `403` | `false` | Upstream MCP server mutated tool schema away from its pinned `schema_hash`. | Administrator opens `SCR-10 (/mcp/tools)`, inspects the Schema Diff, and re-pins if legitimate (`INC-06`). |
-| `parameter_hash_mismatch` | `403` | `false` | Arguments supplied alongside a `destructive` approval token differ from the `Reviewer`-approved payload. | Replay the exact approved JSON argument object or submit a fresh approval request (`UJ-06`). |
-| `version_conflict` | `409` | `true` *(after re-read)* | `If-Match` header carries a stale `ETag` superseded by a newer server write. | `GET` the latest resource and `ETag`, merge changes, and resubmit. |
-| `project_budget_exceeded` | `429` | `false` *(short-term)* | Settled spend plus active pre-request holds reached the hard ceiling for the project or key. | Inspect `SCR-12 (/finops/budgets)` for runaway agent loops or raise the budget ceiling (`INC-01`). |
-| `rate_limit_exceeded` | `429` | `true` *(honor `Retry-After`)* | Virtual key hit its configured `RPM` / `TPM` / `Max Concurrent Streams` cap on Tanpopo. | Respect `Retry-After` using `Exponential Backoff + Jitter`. |
-| `no_compliant_deployment_available` | `503` | `true` *(with backoff)* | Every deployment satisfying both required capabilities and `Data Residency` is currently `CIRCUIT_OPEN` or disabled. | Run `tanpopo route explain` to distinguish `CIRCUIT_OPEN` targets from region-eliminated targets (`INC-04`). |
-| `mid_stream_abort` *(Terminal SSE event)* | `200` *(stream already open)* | `false` *(never splice)* | Upstream connection dropped after at least one content chunk was already flushed to the client (`TP-BR-0503`). | Surface clear interruption notice to the end user and initiate a fresh request (Tanpopo never splices output from another model mid-stream). |
-| `ambiguous_side_effect_timeout` | `504` | **`false`** | Mutating/destructive MCP tool call timed out upstream, leaving execution state indeterminate (`TP-BR-0603`). | Verify state on the target system or supply an idempotency key before manually retrying. |
+| `capability_not_supported` | `400` | `false` | Target deployments lack a required `snake_case` capability (`strict_json_schema`, `vision`, `audio_input`, `document_input`, `tool_calling`, `reasoning`). | Inspect `/models` (`SCR-05`), target a capable `Route`, or use `/native/{dialect}/{upstreamPath}`. |
+| `dialect_mismatch` | `400` | `false` | `/native/{dialect}/*` called against a route resolving to another wire dialect. | Point `/native/{dialect}/*` at a route/model matching `{dialect}`. |
+| `invalid_virtual_key` | `401` | `false` | Virtual key is malformed, expired, or `REVOKED` (`SM-05`). | Verify `TANPOPO_VIRTUAL_KEY` or issue/rotate a key at `SCR-13`. |
+| `invalid_credential_plane` | `401` | `false` | Virtual Key used on `/admin/v1/*`, or admin session cookie used directly on `/v1/*`. | Use Admin Bearer/Session on `/admin/v1/*` and `POST /admin/v1/playground/sessions` for Playground (`AUTH-07`). |
+| `scope_or_plane_denied` | `403` | `false` | Key lacks environment, model, MCP tool, or plane permission. | Inspect grants via `tanpopo key test` or update key allowlists at `SCR-13`. |
+| `schema_hash_drift_blocked` | `403` | `false` | Upstream MCP tool mutated away from its pinned JCS `schema_hash`. | Inspect Schema Diff on `SCR-10` and re-pin via `POST /admin/v1/mcp/tools/{toolId}/approve-schema` (`INC-06`). |
+| `parameter_hash_mismatch` | `403` | `false` | Replay arguments for an approved `destructive` MCP tool differ from the approved 5-tuple JCS hash. | Replay exact approved arguments or request a fresh approval (`UJ-06`). |
+| `optimistic_lock_conflict` | `409` | `true` *(after re-read)* | Stale `If-Match` ETag on configuration write. | Re-read resource (or use `error.current_resource` in Diff modal) and retry. |
+| `bootstrap_already_completed` | `410` | `false` | `/admin/v1/bootstrap/complete` called on an already initialized instance. | Sign in via `/login`, or run host break-glass `tanpopo admin reset-local-owner` if locked out. |
+| `project_budget_exceeded` | `429` | `false` | Settled spend + carryover + active pre-holds reached hard `micro-USD` ceiling. | Run `tanpopo budget inspect` or adjust ceiling at `SCR-12` (`INC-01`). |
+| `rate_limit_exceeded` | `429` | `true` *(honor `Retry-After`)* | Caller hit `RPM`, `TPM`, or `Max Concurrent Streams` ceiling. | Back off per `Retry-After` with jitter. |
+| `extension_execution_fault` | `502` | `true` *(pre-stream)* | Tier-2 Wasm / Tier-3 Sidecar trapped, timed out (`> 15 ms` / `> 5 ms`), or hit `16 MiB` OOM (`FMEA-05`). | Inspect `tanpopo_sandbox_traps_total` and quarantine/rollback faulty `.tpkg` at `SCR-07` (`INC-03`). |
+| `no_compliant_deployment_available` | `503` | `true` *(with backoff)* | Zero healthy deployments satisfy `Data Residency` and policy filters. | Run `tanpopo route explain` to separate `CIRCUIT_OPEN_UNHEALTHY` targets from region-filtered targets (`INC-04`). |
+| `mid_stream_abort` *(SSE event)* | `200` *(open stream)* | `false` *(never splice)* | Upstream stream dropped after `>= 1` chunk flushed to caller (`FMEA-01`). | Surface incomplete-stream notice and start a fresh request. |
+| `ambiguous_side_effect_timeout` | `504` | **`false`** | `mutating` / `destructive` MCP tool timed out post-dispatch (`0` auto-retries). | Reconcile upstream state before manually retrying with `Idempotency-Key`. |
 
 ---
 
-## 6. Automated Secret-Redacted Diagnostics (`tanpopo support-bundle`) & SDK Compatibility Policy
+## 6. Secret-Redacted Diagnostics (`tanpopo support-bundle`) & Contract SLA
 
-### 6.1. Redacted Diagnostics Archive Structure (`Redacted Diagnostics Bundle`)
-Whenever operators share troubleshooting evidence with internal platform teams or attach diagnostics to open-source GitHub issues **without risking credential or customer-payload leakage**, they run:
-```bash
-tanpopo support-bundle --since 2h --output ./tanpopo-diag-20261111.tar.gz
-```
-The resulting archive contains strictly multi-pass scrubbed technical metadata (`OPS-AC-10`):
-- `doctor-report.json`: Results of all 8 preflight checks, OS/kernel version, `tanpopod` build stamp, free disk capacity, and NTP clock skew.
-- `config-redacted.yaml` & `tanpopo.lock`: Complete route trees, policy hierarchies, and pinned extension `SHA-256` hashes, with every secret slot and sensitive internal URL replaced by `[REDACTED_BY_TANPOPO]`.
-- `cluster-epochs.json` & `metrics-snapshot.prom`: Point-in-time Prometheus counters, Wasm pool latencies, `SM-04` deployment circuit states, and `ConfigSnapshot` propagation lag.
-- `recent-errors-redacted.jsonl`: Up to `500` recent structured error records (retaining only error code, latency, and `request_id`; never capturing `Authorization`, `Cookie`, or prompt/completion bodies).
-
-### 6.2. SDK Versioning & Contract Compatibility Policy (`SDK & Contract Compatibility Policy`)
-1. **Zero Client Application Lock-In:** Data Plane endpoints under `/v1/*` maintain compatibility with non-breaking updates of official OpenAI SDKs; all Tanpopo-specific governance extensions pass via optional `X-Tanpopo-*` headers.
-2. **Semantic Versioning (`SemVer 2.0`) for Plugin SDK & `tanpopo.extension.v1` Contract:**
-   - **Patch (`x.y.Z`):** Bug fixes only; zero changes to JSON Schemas or host ABI signatures.
-   - **Minor (`x.Y.0`):** Strictly additive optional fields or host functions (`Additive-Only`); extensions compiled against `x.(Y-1)` continue running unmodified without repackaging.
-   - **Backward-Compatibility Window & Deprecation Notice (`N-1` / `12 Months` — `TP-NFR-0902`, `BA-OQ-005`):** Prior to `v1.0`, Tanpopo preserves at least `1` preceding minor contract (`N-1 minor`); from `v1.0` onward, Tanpopo guarantees a minimum **`12-month`** backward-compatibility window accompanied by advance warnings in `tanpopo upgrade preflight` and `SCR-07` so ecosystem authors can invest in long-lived Adapters with confidence.
+1. **Redacted Diagnostics Archive (`OPS-AC-10`):**
+   ```bash
+   tanpopo support-bundle --since 2h --output ./tanpopo-diag-20261114.tar.gz
+   ```
+   Produces a multi-pass scrubbed archive containing:
+   - `doctor-report.json`: Results of all 8 preflight checks, OS/kernel version, **`tanpopo`** build stamp, free disk capacity, and clock skew.
+   - `config-redacted.yaml` & `tanpopo.lock`: Routes, policies, and pinned `.tpkg` `SHA-256` digests with all secret slots and private URLs replaced by `[REDACTED_BY_TANPOPO]`.
+   - `cluster-epochs.json` & `metrics-snapshot.prom`: Bounded Prometheus counters (`tanpopo_http_requests_total`, `tanpopo_proxy_overhead_seconds`, `tanpopo_config_snapshot_age_seconds`, `tanpopo_telemetry_dropped_total`) and `SM-04` circuit states.
+   - `recent-errors-redacted.jsonl`: Up to `500` `snake_case` error metadata records (`0` headers, `0` cookies, `0` prompt/completion text).
+2. **Extension Contract Compatibility Window (`TP-NFR-0902`):** Preserves `N-1` minor compatibility during `0.x` and `>= 12 months` across `1.x`, enforced prior to upgrades by `tanpopo upgrade preflight`.

@@ -1,96 +1,103 @@
 # MCP Hub Plane & A2A Inter-Agent Plane Architectural Boundary Specification — Tanpopo
 
-> **Agent Connectivity Architecture Specification Document (ASTRA Phase A04 — `DRAFT / ILLUSTRATIVE CANDIDATE SPEC`)**
-> - **Document ID:** `SPEC-EXT-05` | **Version:** `0.1.0-step04-draft` | **Last Updated:** `2026-11-11`
+> **Canonical Agent Connectivity Specification (Synchronized in `TP-IMP-0002` — Spec Closure Batch B)**
+> - **Document ID:** `SPEC-EXT-05` | **Version:** `0.2.0-m0-closure` | **Last Updated:** `2026-11-14`
 > - **Authoring Role:** Platform Architect & Security-Minded SDK Designer
-> - **Standardization Status Statement:** The protocol route conventions, approval parameter-binding digests, and A2A delegation envelopes below are **illustrative candidate designs (`ILLUSTRATIVE — PRE-ADR`)** aligned with the open **Model Context Protocol (MCP)** and **Agent2Agent (A2A)** specifications, and are not claimed as frozen internal standards prior to ADR sign-off.
-> - **Requirements Traceability:** `DEC-003`, `REJ-004`, `SM-06`, `SM-07`, `WF-09`, `TP-FR-0401`..`0406`, `TP-BR-0104`, `TP-BR-0601`..`0604`, `TP-AC-F0401`..`0404`, `TP-AC-SEC-05`, `08`.
+> - **Pinned Protocol Baseline & Verification Honesty (`CR-08`, `COND-PO-04`):**
+>   - **Pinned MCP Wire Baseline:** **`MCP Specification 2025-03-26 (Streamable HTTP)`** on `/mcp` ([`openapi/dataplane-v1.yaml`](../../openapi/dataplane-v1.yaml)).
+>   - **Dedicated State Machines:** Human-in-the-loop approvals remain governed by **`SM-06`**, while asynchronous Agent2Agent tasks are governed by dedicated **`SM-09` (`A2A Task Lifecycle`)**.
+>   - **Client Compatibility Verification Condition (`COND-PO-04`):** Although returning standard HTTP `200` JSON-RPC envelopes eliminates the deterministic MCP `202` transport violation, **end-to-end compatibility across external IDE and agent MCP clients (`Claude Code`, `Cursor`, `Codex`, etc.) is NOT claimed as `100%` proven upfront and MUST be empirically verified via automated interoperability test `CT-36` (`EXP-05`) during `M3` (`v0.2`)**.
+> - **Measurement Honesty (`COND-PO-01`):** Synchronous approval hold bounds (`<= 60 seconds`) and propagation figures are **`TARGET / UNVERIFIED`**.
+> - **Requirements Traceability:** `DEC-003`, `REJ-004`, `SM-06`, `SM-07`, `SM-09`, `WF-09`, `TP-FR-0401`..`0406`, `TP-BR-0104`, `TP-BR-0601`..`0604`, `TP-AC-F0401`..`0404`, `TP-AC-SEC-05`, `08`, `CR-08`, `CT-21`..`23`, `CT-36`.
 
 ---
 
 ## 1. Why Conflating `MCP` and `A2A` into `Provider Adapter` Is Strictly Prohibited (`DEC-003`)
 
-Several early experimental proxies attempt to disguise MCP tool servers or A2A agents as "synthetic chat models" inside a `Provider Adapter`. Tanpopo explicitly rejects that anti-pattern (`REJ-004`) because the four architectural planes exhibit fundamentally incompatible execution semantics and threat models:
+Tanpopo permanently rejects disguising MCP tool servers or A2A agents as synthetic chat models (`REJ-004`) because the four architectural planes have incompatible execution semantics, state lifecycles, and threat models:
 
-| Architectural Attribute | **`Provider` Plane (LLM Inference)** | **`MCP` Plane (Tools / Context)** | **`A2A` Plane (Inter-Agent Tasks)** | **`Plugin / Extension` Plane** |
+| Architectural Attribute | **`Provider` Plane (`/v1/*`, `/native/*`)** | **`MCP` Plane (`/mcp` — `v0.2`)** | **`A2A` Plane (`/a2a/*` — `v0.3`)** | **`Plugin / Extension` Plane** |
 |---|---|---|---|---|
-| **Unit of Interaction** | Single-turn token generation request (`Stateless Request / SSE`). | Discovery & invocation of external side-effecting operations (`Tools / Resources / Prompts`). | Asynchronous, multi-step stateful workflow that may pause for human/caller input (`Stateful Task`). | Artifact bundle extending internal gateway capabilities (`Package Artifact`). |
-| **Retry Policy (`Retry`)** | Permitted to retry / fail over to an equivalent model **prior to the first emitted chunk**. | **Blind retries strictly FORBIDDEN** on `mutating`/`destructive` tools (prevents double-deletes / duplicate charges — `TP-BR-0603`). | Cannot silently swap to a different agent mid-flight inside a stateful task. | Not a live network traffic plane. |
-| **Metering / Quota Unit** | Input/output/cache/reasoning tokens, images, audio seconds. | Tool invocation count, execution latency, and side-effect risk budgets. | Attenuated `Sub-Budget Hold` carved directly out of the parent agent's ledger. | Sandbox CPU fuel (milliseconds) and linear RAM ceilings. |
-| **Distinct Security Threats** | Commercial API key leakage, `Data Residency` drift, concurrent streaming budget overrun. | Malicious prompt injection via mutated tool descriptions (*MCP Rug-Pull*), accidental production DB wipes, cross-server token replay (*Confused Deputy*). | Infinite inter-agent delegation loops, privilege amplification beyond caller scope. | Sandbox escape, permission escalation across package upgrades. |
+| **Unit of Interaction** | Single-turn inference request (`Stateless HTTP / SSE`). | Discovery & invocation of external side-effecting operations (`Tools / Resources / Prompts`). | Multi-step stateful workflow governed by **`SM-09`** (`submitted -> working -> input-required -> completed \| failed \| canceled`). | Immutable `.tpkg` / OCI artifact extending gateway capabilities (`SM-01`). |
+| **Retry Policy** | Pre-first-chunk failover permitted (`1 + max_failover_hops <= 4`). | **`0` automatic retries** on `mutating` and `destructive` tools (`TP-BR-0603`, `FMEA-02`). | Never swaps target agent mid-task inside a stateful `SM-09` session. | Not a live network traffic plane. |
+| **Metering / Quota Unit** | 5 token dimensions + `MediaUsage` (`micro-USD`). | Tool call count, latency, and side-effect risk policy. | Attenuated `Sub-Budget Hold` carved from parent project ledger (`SM-07`). | Sandbox CPU deadlines (`<= 15 ms` / `<= 5 ms`) and `16 MiB` Wasm RAM. |
+| **Distinct Security Threats** | Credential leakage, `Data Residency` drift, concurrent budget overrun. | Mutated tool descriptions (*MCP Rug-Pull*), destructive side effects, cross-audience token replay (*Confused Deputy*). | Delegation loops (`> 5` hops), privilege or budget amplification. | Sandbox escape, stealth permission escalation on upgrade. |
 
 ---
 
-## 2. Tool Governance Plane Specification — `Tanpopo MCP Hub` (`/mcp/...`)
+## 2. Tool Governance Plane — `Tanpopo MCP Hub` (`/mcp` — Pinned to `MCP 2025-03-26 Streamable HTTP`)
 
-### 2.1. Server Registration, Transports & Collision-Free Discovery
-1. **Supported Transports (`Transports`):**
-   - **Primary Standard (`Primary`):** `MCP Streamable HTTP` (supporting both single JSON-RPC responses and bidirectional SSE stream upgrades) alongside backward-compatible `HTTP + SSE`.
-   - **Local `stdio` Servers:** To eliminate arbitrary OS command execution (`RCE`) vulnerabilities, project administrators **may never enter raw shell commands in the Web Console**; `stdio`-based MCP servers must be packaged as `Operator`-approved **Isolated Sidecars (Tier 3)** bridged into the Hub over isolated internal IPC.
-2. **Anti-Shadowing Deterministic Namespacing (`Deterministic Tool Namespacing`):**
-   - Every tool surfaced through the Hub receives an immutable prefix `<server_slug>__<tool_name>` (e.g., `billing_db__query_invoices`, `github_corp__create_issue`) so newly registered MCP servers can never collide with or hijack trusted tool names (*Tool Shadowing*).
-3. **ACL-Filtered Discovery (`Per-Tool ACL`) & Cursor Pagination (`TP-FR-0401`):**
-   - When an `MCP Client` calls `tools/list` (or `resources/list`, `prompts/list`), the Hub filters entries against the `Virtual Key`'s `mcp:invoke:<server>:<tool>` grants *prior* to cursor pagination (`cursor`), ensuring: (a) unauthorized tools remain completely invisible to the agent (saving LLM context window budget), and (b) catalogs of hundreds of tools paginate cleanly without truncating at 100 items.
+### 2.1. Pinned Transport, Sidecar `stdio` Containment & Collision-Free Discovery
+1. **Pinned Transport Standard (`MCP Specification 2025-03-26`):**
+   - Exposes `POST /mcp`, `GET /mcp`, and `DELETE /mcp` honoring `Mcp-Session-Id` headers (`Streamable HTTP` supporting both single JSON-RPC 2.0 responses and `text/event-stream` upgrades; HTTP `202 Accepted` is reserved strictly for empty JSON-RPC notifications/responses per spec).
+   - **Zero Raw Shell `stdio` Commands:** Administrators can never enter shell commands in the Web Console or Admin API; `stdio` MCP servers must run inside `OPERATOR`-approved **Tier-3 Isolated Sidecars (`v0.3`)** bridged over internal IPC.
+2. **Deterministic Anti-Shadowing Tool Namespacing:**
+   - Every tool is exposed under `<server_slug>__<tool_name>` (e.g., `billing_db__query_invoices`, `github_corp__create_issue`), preventing cross-server *Tool Shadowing*.
+3. **Per-Tool ACL Filtering Prior to Cursor Pagination (`TP-FR-0401`, `CT-21`):**
+   - On `tools/list` (and `resources/list`, `prompts/list`), the Hub filters against the caller `Virtual Key`'s `allowed_mcp_tools` grants *before* computing pagination cursors (`cursor` -> `nextCursor`), hiding unauthorized tools completely and paginating `250+` tools without truncation.
 
-### 2.2. OAuth Audience Isolation (`MCP OAuth & Audience Isolation`)
-- **Zero Client Token Passthrough (`Zero Token Passthrough`):** The credential presented by an `MCP Client` to Tanpopo (a `Virtual Key` or an OAuth token with `aud = tanpopo-mcp-hub`) **always terminates and is stripped at the Hub**.
-- Upstream calls from the Hub to a backing `MCP Server` authenticate using a dedicated `Secret Credential` or an independent `Authorized OAuth 2.1` grant carrying an RFC 8707 `resource` / `audience` indicator bound exclusively to that `MCP Server` (`TP-AC-SEC-04`). Even if `MCP Server A` is compromised, it receives zero credential material reusable against `MCP Server B` or the LLM Provider plane.
+### 2.2. OAuth Audience Isolation (`Zero Token Passthrough` — `AUTH-16`)
+- Credentials presented by an `MCP Client` to Tanpopo (`Virtual Key` `vk_tp_*` or OAuth token with `aud = tanpopo-mcp-hub`) **always terminate and are stripped at the Hub**.
+- Upstream calls from the Hub to a registered `MCP Server` authenticate via a dedicated vault credential or `Authorized OAuth 2.1` grant bound via RFC 8707 `resource` indicator exclusively to that `MCP Server`'s `allowed_audience_hosts` (`TP-AC-SEC-04`).
 
-### 2.3. `Tool Firewall`, `schema_hash` Pinning & Human-in-the-Loop Approval (`SM-06`)
+### 2.3. `Tool Firewall`, JCS `schema_hash` Pinning & 5-Tuple JSON-RPC HITL Approval (`SM-06`, `CR-08`, `COND-PO-04`)
 
-1. **Structural Fingerprinting Against *MCP Rug-Pull* (`TP-FR-0402`):**
-   - When an administrator approves an MCP tool, the Hub canonicalizes `(tool_name, description, input_schema)` using RFC 8785 JSON Canonicalization Scheme (JCS) and records `schema_hash = SHA-256(...)`.
-   - If the upstream `MCP Server` silently alters even a single sentence inside `description` (a primary vector for covert *Prompt Injection*), the Hub detects `live_schema_hash != approved_schema_hash`, blocks execution in enforced environments immediately, and emits a high-priority `AuditEvent`.
-2. **Edge Input/Output Validation (`Tool Firewall`):**
-   - Validates tool call arguments strictly against the pinned `input_schema` prior to forwarding, enforces maximum tool-output byte caps returned to the agent, and runs secret/PII redaction hooks (when an organization enables a `Guardrail Extension`).
-3. **Immutable Parameter-Bound Human Approval (`TP-FR-0403`, `TP-BR-0602`):**
-   - For every tool classified as `destructive`, the Hub computes an immutable invocation digest:
-     `approval_binding_hash = SHA-256(org_id || principal_id || server_slug || tool_name || JCS(arguments))`
-   - Supports **two complementary execution modes** (`TD-G2-05`):
-     - *Short Synchronous Hold (`<= 60 seconds`):* Tailored for interactive IDE/chat sessions where a human operator approves immediately in real time.
-     - *Asynchronous `Pre-Approval Token` Flow:* The Hub immediately returns a pending approval envelope with a request ID; once a `Reviewer` approves via Web Console or Webhook, the agent replays the tool call carrying the signed `Pre-Approval Token`. Any mutation to even a single argument bit invalidates `approval_binding_hash` and fails with `403 parameter_hash_mismatch`.
-4. **Zero Blind Retry on Side-Effecting Tools (`TP-FR-0404`, `TP-BR-0603`):**
-   - Automatic transient-network retries may be configured exclusively for `read-only` tools; `mutating` and `destructive` tools are dispatched **at most once**, returning `ambiguous_side_effect_timeout` if the connection drops post-dispatch.
-
----
-
-## 3. Inter-Agent Connectivity Plane Specification — `Tanpopo A2A Plane` (`/a2a/...`)
-
-### 3.1. `AgentCard` Boundaries & Asynchronous `A2A Task` Lifecycle
-- **Permission-Scoped Registration & Discovery (`TP-FR-0405`):** Each internal or partner agent registers as a distinct `AgentEndpoint` entity paired with its `AgentCard` capability descriptor (`skills`, `artifacts` input/output schemas, push-notification support, and `Data Region`). Agent catalog discovery honors project-level `a2a:discover` and `a2a:delegate:<agent_id>` permissions.
-- **Stateful Asynchronous Task Tracking:** Unlike stateless `/v1/chat/completions`, the `/a2a/...` plane tracks `task_id` lifecycles across `submitted → working → input-required → completed | failed | canceled`, propagating a unified correlation header `x-tanpopo-trace-root` across every downstream LLM or MCP invocation spawned by that task.
-
-### 3.2. `Monotonic Privilege & Budget Attenuation` (`TP-FR-0406`)
-
-Whenever a `Parent Agent (Agent P)` delegates a subtask to a `Child Agent (Agent C)` across the A2A plane, Tanpopo enforces three non-bypassable anti-amplification guardrails (`TP-BR-0604`):
-1. **Sub-Budget Carving (`Sub-Budget Carving`):** The maximum budget ceiling assigned to `budget(Task_C)` must be less than or equal to `Agent P`'s remaining available balance (carved and held directly against the originating project's ledger).
-2. **Data Residency & Scope Intersection:** The subtask's effective data residency policy is the **set intersection** of caller and callee constraints (`Region_Effective = Region(Caller) ∩ Region(Agent_C)`). An empty intersection rejects immediately with `403 residency_incompatible`.
-3. **Cycle Detection & Delegation Depth Bounding:** Every A2A hop appends the caller's agent identifier to the lineage chain and increments `hop_count`. Any circular call (`A → B → A`) or `hop_count > max_delegation_hops` (default `5`) is rejected immediately with `400 delegation_depth_exceeded`.
+1. **RFC 8785 JCS `schema_hash` Pinning Against *MCP Rug-Pull* (`TP-FR-0402`, `CT-21`):**
+   - Canonicalizes `{ name, description, inputSchema }` via RFC 8785 (JCS) and pins `schema_hash = SHA-256(JCS(...))`.
+   - Any upstream mutation (`live_schema_hash != approved_schema_hash`) locks the tool immediately (`SCHEMA_DRIFT_LOCKED`), rejects invocations with `403 schema_hash_drift_blocked`, and emits a high-priority `AuditEvent` (`INC-06`).
+2. **Canonical `snake_case` Side-Effect Risk Tiers & Zero Blind Retry (`TP-FR-0404`, `FMEA-02`):**
+   - Every tool carries `risk_tier` in `{ read_only, mutating, destructive }` (newly discovered unclassified tools default fail-closed to **`mutating`**).
+   - Automatic transient-network retry (`<= 1`) is allowed solely for `read_only` tools; **`mutating` and `destructive` tools enforce `0` automatic retries**, propagating `Idempotency-Key` and returning `504 ambiguous_side_effect_timeout` on post-dispatch network drops (`CT-22`).
+3. **5-Tuple JCS Approval Hash & Standard HTTP `200` JSON-RPC HITL Flow (`CR-08`, `COND-PO-04`):**
+   - For every `destructive` tool invocation, the Hub computes the canonical **5-tuple RFC 8785 JCS digest** (binding directly to `virtual_key_id` rather than a nullable `principal_id`):
+     `approval_binding_hash = SHA-256(JCS({org_id, virtual_key_id, server_slug, tool_name, arguments}))`
+   - Supports **two execution modes**:
+     - *Mode 1 — Short Synchronous Hold (`<= 60 seconds` `TARGET / UNVERIFIED`):* Holds the JSON-RPC call briefly while an interactive operator approves in `SCR-14` (`SM-06`: `PENDING -> APPROVED -> CONSUMED`).
+     - *Mode 2 — Standard HTTP `200` MCP JSON-RPC Asynchronous Flow (`CR-08`):* Instead of returning non-standard HTTP `202` + `X-Tanpopo-Approval-Token`, the Hub returns a **standard MCP HTTP `200` JSON-RPC response** (`result.isError = true`) carrying structured `McpAsyncApprovalPendingContent` (`approval_request_id`, `approval_binding_hash`, `expires_at`) and exposes the built-in system tool `tanpopo__check_approval_and_resume(approval_request_id)` (plus `_meta.tanpopoApprovalToken` single-use nonce replay once a `SECURITY_REVIEWER` / `ORG_OWNER` approves via `POST /admin/v1/approvals/{approvalId}/decide`). Mutating even 1 character of `arguments` on replay invalidates the 5-tuple digest and fails closed with `403 parameter_hash_mismatch` (`CT-22`).
+   - **Mandatory Interoperability Gate (`COND-PO-04`):** Real-world behavioral parity of `isError: true` + `tanpopo__check_approval_and_resume` across unmodified IDE/agent MCP clients must be empirically validated and recorded under **`CT-36`** (`EXP-05`) in `M3` (`v0.2`) before claiming drop-in client support.
 
 ---
 
-## 4. Illustrative Sequence Diagram: Cross-Plane Interaction Across Three Independent Planes (`A2A` + `Provider` + `MCP`)
+## 3. Inter-Agent Connectivity Plane — `Tanpopo A2A Plane` (`/a2a/*` — Dedicated `SM-09`)
+
+### 3.1. `AgentCard` Discovery & Dedicated `SM-09` (`A2A Task Lifecycle`)
+- **Permission-Scoped Registration & Discovery (`TP-FR-0405`):** External or internal agents register as `AgentEndpoint` records (`POST /admin/v1/a2a/agents`) publishing an `AgentCard` (`skills`, `data_region`, `max_delegation_hops <= 5`). Discovery via `GET /a2a/agents` filters strictly by `a2a:discover` and `a2a:delegate:<agent_id>` grants.
+- **Dedicated `SM-09` State Machine (`CR-08`):** Decoupled completely from `SM-06` (`ApprovalRequest`), `a2a_tasks` transitions follow canonical Agent2Agent states over JSON-RPC 2.0 / HTTP+SSE (`POST /a2a/tasks`, `GET /a2a/tasks/{taskId}`, `POST /a2a/tasks/{taskId}/cancel`):
+  - `submitted` -> `working` -> `input-required` (resumable back to `working`) -> terminal `{ completed | failed | canceled }`.
+  - Propagates `X-Tanpopo-Trace-Root` across every downstream `/v1/*` and `/mcp` call spawned by the task.
+
+### 3.2. Monotonic Privilege, Residency & Budget Attenuation (`TP-FR-0406`, `CT-23`)
+
+Whenever `Parent Agent P` delegates a subtask to `Child Agent C` across `/a2a/tasks`:
+1. **Sub-Budget Carving (`SM-07`):** `sub_budget_hold_micros(Task_C)` must be `<=` `Agent P`'s remaining available project budget balance and is held atomically prior to dispatch (`403 budget_or_privilege_exceeded` on breach).
+2. **Data Residency & Scope Intersection:** `Region_Effective = Region(Caller) ∩ Region(Agent_C)`; an empty intersection fails closed immediately with `403 residency_incompatible`.
+3. **Cycle Detection & `hop_count <= 5` Ceiling:** Appends caller agent ID to `lineage_agent_ids` and increments `hop_count`; any cycle (`A -> B -> A`) or `hop_count > max_delegation_hops` (`<= 5`) fails immediately with **`400 delegation_depth_exceeded`**.
+
+---
+
+## 4. End-to-End Cross-Plane Sequence (`A2A SM-09` + `Provider /v1` + `MCP SM-06`)
 
 ```mermaid
 sequenceDiagram
     participant Orchestrator as Parent Agent
-    participant A2A as Tanpopo A2A Plane (/a2a)
+    participant A2A as Tanpopo A2A Plane (/a2a - SM-09)
     participant Worker as Finance Worker Agent
     participant LLM as Tanpopo Provider Plane (/v1)
-    participant MCP as Tanpopo MCP Hub (/mcp)
-    actor Rev as Human Reviewer
+    participant MCP as Tanpopo MCP Hub (/mcp - 2025-03-26)
+    actor Rev as Security Reviewer (SCR-14)
 
-    Orchestrator->>A2A: 1. Delegate Task (Sub-budget cap: 0.50 USD, Region: EU, Hop: 1)
-    A2A->>A2A: Verify a2a:delegate grant, hold 0.50 USD from parent ledger & stamp Region=EU
-    A2A->>Worker: Dispatch Task with Ephemeral Scoped Virtual Key (bound strictly to this Task)
-    Worker->>LLM: 2. Invoke planning inference (/v1/chat/completions)
+    Orchestrator->>A2A: 1. POST /a2a/tasks (sub_budget_hold_micros=500000, Region=EU, hop_count=1)
+    A2A->>A2A: Verify a2a:delegate + carve 500,000 micro-USD hold + create Task (SM-09: submitted -> working)
+    A2A->>Worker: Dispatch Task with task-scoped Virtual Key + X-Tanpopo-Trace-Root
+    Worker->>LLM: 2. POST /v1/chat/completions
     LLM-->>Worker: Propose MCP tool call `erp__issue_credit_note`
-    Worker->>MCP: 3. Invoke tools/call `erp__issue_credit_note(invoice="INV-9", amount=50)`
-    MCP->>MCP: Verify ACL + pinned schema_hash + classify DESTRUCTIVE risk -> Create ApprovalRequest
-    MCP-->>Rev: Request human approval (cryptographically bound to JCS argument digest)
-    Rev->>MCP: Grant explicit approval
-    MCP->>MCP: Strip Virtual Key, inject ERP Server's dedicated OAuth token & execute EXACTLY ONCE
-    MCP-->>Worker: Return credit-note issuance receipt
-    Worker-->>A2A: 4. Report Task COMPLETED with Artifact & release remaining hold
-    A2A-->>Orchestrator: Return final Task result + settle consolidated cross-plane spend under 1 Trace ID
+    Worker->>MCP: 3. POST /mcp tools/call `erp__issue_credit_note(invoice="INV-9", amount=50)`
+    MCP->>MCP: Verify ACL + JCS schema_hash + risk_tier=destructive -> Compute 5-tuple JCS approval_binding_hash
+    MCP-->>Worker: HTTP 200 JSON-RPC (isError=true, approval_request_id, resume_tool="tanpopo__check_approval_and_resume")
+    Rev->>MCP: POST /admin/v1/approvals/{approvalId}/decide (SM-06: PENDING -> APPROVED)
+    Worker->>MCP: POST /mcp tools/call `tanpopo__check_approval_and_resume(approval_request_id)`
+    MCP->>MCP: Verify 5-tuple JCS digest, consume single-use approval (SM-06 -> CONSUMED), strip Virtual Key & execute ONCE
+    MCP-->>Worker: HTTP 200 JSON-RPC credit-note receipt
+    Worker-->>A2A: 4. Complete Task (SM-09 -> completed) & release unused sub-budget hold
+    A2A-->>Orchestrator: Return Task artifact + consolidated cross-plane trace under X-Tanpopo-Trace-Root
 ```

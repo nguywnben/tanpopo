@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0004` |
 | **Milestone / Epic** | `M0` (`Spec Closure & Spikes` — **Gate `GATE-M0`**) · `EP-00` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0002, 0003` & explicit Product Owner PoC authorization — `GAP-01`)* |
+| **Status** | **`DONE`** *(Completed & verified offline on `2026-11-14` under Product Owner Stage 1 M0 approval `DEC-009` — locked `POC-01` & `POC-02` in `spike-results.md`)* |
 | **Size** | `M` (`tools/spikes/*` with isolated `go.mod` + benchmark updates in `ADR-0002`, `ADR-0005`, `decisions.md`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Locks long-term Host–Wasm binary memory ABI architecture)* |
 | **Technical Owner** | `Principal Platform Architect + Performance/Security Engineer` |

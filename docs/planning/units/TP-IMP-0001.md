@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0001` |
 | **Milestone / Epic** | `M0` (`Spec Closure & Spikes`) · `EP-00` |
-| **Status** | `BLOCKED` *(Awaiting Product Owner sign-off on `Gate G1/G2` & `CR-01..04, 08, 09` — `GAP-01`)* |
+| **Status** | **`DONE`** *(Completed & verified on `2026-11-14` under Product Owner Stage 1 M0 approval `DEC-009` — closed `GAP-08, 09, 11`)* |
 | **Size** | `M` (`11` business, requirements, test & release-readiness specification files) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Touches security key-revocation state machines & release scope gates)* |
 | **Technical Owner** | `Lead Business Analyst + Principal Requirements Engineer` |

@@ -1,9 +1,14 @@
 # Consolidated Product Owner Approval Sheet (`Pre-Build Gate Closure`) — Tanpopo
 
 > **Actionable Decision Sign-Off Artifact — Pre-Build Closure (Gates G1, G2, G3, A08 CRs & Gate G4)**
-> - **Document ID:** `GOV-OAS-01` | **Version:** `1.0.0` | **Date:** `2026-11-14`
-> - **Current Governance Posture:** **`AWAITING_OWNER_SIGN_OFF` (`HANDOFF_VERDICT = NO_GO`)**
-> - **Purpose:** Consolidate **every pending Product Owner decision** across `Gate G1` (`SD-G1-01..05`), `Gate G2` (`BA-OQ-001..05`, `TD-G2-01..06`), `Gate G3` (`ADR-0001..0006` + `SPIKE-01..04` authorization), `Audit A08 Change Requests` (`CR-01..10`), and `Gate G4` (`EXEC-BL-001` unlock) into one concise, structured review sheet so the Product Owner can unlock specification closure (`TP-IMP-0001..0003`), feasibility spikes (`TP-IMP-0004`), and engineering execution without re-reading all 110+ documents.
+> - **Document ID:** `GOV-OAS-01` | **Version:** `1.1.0-owner-signed-stage1` | **Date:** `2026-11-14`
+> - **Current Governance Posture:** **`STAGE_1_APPROVED_BY_OWNER` (`M0`: `TP-IMP-0001..0004` Authorized) | `STAGE_2_PENDING_FINAL_OWNER_APPROVAL` (`HANDOFF_VERDICT = NO_GO` for `M1+` Luna Production Code)**
+> - **Recorded Product Owner Ruling (`2026-11-14`):**
+>   1. **Track A (`18 items`):** **`APPROVED` (`CONFIRMED_BY_OWNER`)** across all recommended options.
+>   2. **Track B (`15 items`):** **`APPROVED_WITH_CONDITIONS` (`CONFIRMED_BY_OWNER`)** across all recommended options (`Apache-2.0`, phased scope, 3-tier sandbox, security/crypto, SQL/Valkey schemas, MCP JSON-RPC), bound to 5 mandatory conditions **`COND-PO-01`..`COND-PO-05`** recorded in [`decisions.md`](./decisions.md).
+>   3. **M0 Execution & Spikes Authorization:** **`APPROVED`** to execute `TP-IMP-0001` → `TP-IMP-0002` → `TP-IMP-0003` and isolated offline `TP-IMP-0004` (`SPIKE-01..04`) with zero paid external AI API calls.
+>   4. **Gate G4 Stage Split:** **Stage 1 (`M0 Spec Closure & Feasibility Validation`) = `APPROVED`**; **Stage 2 (`Engineering Handoff / M1+ Production Units`) = `NOT_YET_APPROVED`** (`HANDOFF_VERDICT` remains **`NO_GO`** until final Product Owner review of M0 deliverables).
+>   5. **English-First UI Placeholder Condition (`ISS-008`):** Remaining Vietnamese demo strings in `src/App.tsx` must be replaced with English prior to completing Web Console foundation (`TP-IMP-0005` / `TP-IMP-0026`) without altering identifiers or breaking Astryx setup.
 
 ---
 

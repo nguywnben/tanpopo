@@ -5,11 +5,11 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 > [!IMPORTANT]
-> **Current Project Status — Pre-Build Governance & Specification Phase (`HANDOFF_VERDICT: NO_GO`)**
+> **Current Project Status — Milestone `M0` Spec Closure & Spikes Complete (`HANDOFF_VERDICT: NO_GO` Pending Gate G4 Stage 2)**
 >
-> Tanpopo has completed its end-to-end product discovery, requirements engineering, extension contract design, solution architecture, UX/SRE operations design, security threat modeling, adversarial audit, and 47-unit implementation planning framework (`ASTRA A00–A10`).
+> Tanpopo has completed its end-to-end discovery, requirements, architecture, UX/SRE, security, and 47-unit planning framework (`ASTRA A00–A10`) **plus Milestone `M0` (`TP-IMP-0001`..`0004` = `DONE`)** under Product Owner Stage 1 approval (`DEC-009` in [`docs/governance/decisions.md`](./docs/governance/decisions.md)): machine-verified Protobuf (`proto/`), OpenAPI 3.1 (`openapi/`), dual-dialect SQL schemas (`db/spec-check/`), and isolated pure-Go feasibility spikes (`tools/spikes/` & [`docs/architecture/spike-results.md`](./docs/architecture/spike-results.md)).
 >
-> **No runtime gateway, CLI, plugin sandbox, or production Web Console code has been implemented yet** (only the initial Astryx UI theme setup and placeholder in [`src/`](./src) exist on disk). Execution of implementation units (`TP-IMP-0001`..`TP-IMP-0047`) is currently **`BLOCKED` (`0 / 47` `READY`)** awaiting explicit Product Owner sign-off on **[`docs/governance/owner-approval-sheet.md`](./docs/governance/owner-approval-sheet.md)**.
+> **No `M1+` production gateway, CLI, plugin runtime, or production Web Console code has been implemented yet** (only the initial Astryx UI setup in [`src/`](./src) and isolated `M0` spikes in [`tools/spikes/`](./tools/spikes) exist on disk). Production implementation units (`TP-IMP-0005`..`0047`) remain **`BLOCKED` (`0 / 47` `READY`; `TP-IMP-0005` queued first)** awaiting final Product Owner **Gate G4 Stage 2** sign-off (`COND-PO-01`..`05`: all unmeasured Gateway SLOs remain `TARGET / UNVERIFIED`).
 
 ---
 
@@ -61,6 +61,10 @@ Start here based on your role:
 ├── AGENTS.md / GEMINI.md        # Astryx v0.7.13 UI rules + Cold-start Engineering Agent handoff gate
 ├── LICENSE                      # Apache License 2.0
 ├── README.md                    # Project overview & pre-build status (this file)
+├── buf.yaml / proto/            # Canonical Extension Runtime Protobuf v1 contract (compiled in M0)
+├── openapi/                     # Canonical OpenAPI 3.1.0 Data Plane & Admin Control Plane specs
+├── db/spec-check/               # Canonical 26-group SQLite WAL & PostgreSQL 16 (FORCE RLS) reference DDL
+├── tools/spikes/                # Isolated pure-Go (CGO_ENABLED=0) M0 feasibility spikes (SPIKE-01..04)
 ├── package.json                 # Initial Astryx v0.7.13 + StyleX setup (relocates to web/console/ in TP-IMP-0005)
 ├── astryx-themes.js             # Generated Astryx 'neutral' theme module (do not edit manually)
 ├── src/                         # Unbundled UI placeholder (replaced by template-scaffolded pages in M2)

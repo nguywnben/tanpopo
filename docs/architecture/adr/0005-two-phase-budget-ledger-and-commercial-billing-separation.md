@@ -1,7 +1,7 @@
 # ADR-0005: Integer `Micro-USD` Two-Phase Budget Ledger, Accuracy Labeling & Strict Commercial API Billing Separation
 
 ## Status
-**`PROPOSED`** *(Awaiting Product Owner approval at Gate G3 & load verification via `SPIKE-03`)*
+**`ACCEPTED`** *(Approved by Product Owner on `2026-11-14` via `GOV-OAS-01` Track B + `CR-06, CR-07`; subject to `COND-PO-01, 03, 05` — 1s Valkey checkpoint alone is NOT sufficient proof without concurrent/failover/recovery chaos verification)*
 
 ## Date
 `2026-11-11`

@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0005` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-01` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0003` & Owner sign-off on `ADR-0001, ADR-0004` — `GAP-01`)* |
+| **Status** | `BLOCKED` *(Awaiting Gate G4 Stage 2 Final Owner Handoff Approval — all M0 upstream prerequisites `TP-IMP-0001..0004`, `ADR-0001`, `ADR-0004`, `SD-G1-05` are complete; first `READY` candidate upon Stage 2 `GO`)* |
 | **Size** | `M` (`go.mod`, `.gitignore`, `web/console/`, `CONSTRAINTS.md`, `scripts/ci/check.go` & GitHub Actions) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Establishes `Floor Guard` quality gates, root Go module path & repository layout)* |
 | **Technical Owner** | `Staff Platform Engineer + CI/Security Engineer` |
@@ -22,12 +22,12 @@ Establish a clean physical repository foundation that executes identically acros
   - `go.mod` (`module github.com/nguywnben/tanpopo`), `cmd/tanpopo/main.go` (minimal bootstrap stub supporting `--version`).
   - Canonical package directory skeleton with `doc.go` boundary declarations: `internal/{pkg,testkit,storage,config,security,iam,extension,provider,policy,ratelimit,routing,finops,telemetry,webhook,ingress,admin,webui,cli,ops}`.
   - `.gitignore` (complete exclusion rules for Go binaries, SQLite WAL files, secret/backup artifacts, and `git worktree` directories).
-  - Relocate `package.json`, `package-lock.json`, `astryx-themes.js`, `src/*` into `web/console/` and update path notes in `AGENTS.md` (preserving `100%` of the `<!-- ASTRYX:START -->..<!-- ASTRYX:END -->` and `<!-- TANPOPO-HANDOFF:START -->..<!-- TANPOPO-HANDOFF:END -->` blocks).
+  - Relocate `package.json`, `package-lock.json`, `astryx-themes.js`, `src/*` into `web/console/`, standardize all placeholder demo UI copy in `web/console/src/App.tsx` to English (`ISS-008` — preserving Astryx layout/theme and zero raw `div`/`span`), and update path notes in `AGENTS.md` (preserving `100%` of the `<!-- ASTRYX:START -->..<!-- ASTRYX:END -->` and `<!-- TANPOPO-HANDOFF:START -->..<!-- TANPOPO-HANDOFF:END -->` blocks).
   - `CONSTRAINTS.md`, `scripts/ci/check.go` (runnable via `go run ./scripts/ci/check.go` across Windows/macOS/Linux), and `.github/workflows/ci.yml` (`Stage 0` & `Stage 1`, pre-seeded with `OPENAI_API_KEY=CANARY_FORBIDDEN_CI_KEY`).
 - **Out-of-Scope:** Vite/TypeScript configuration (`tsconfig.json`, `tsc --noEmit`) and production UI screen scaffolding belong to `TP-IMP-0026` (`Stage 1` conditionally activates `npm run typecheck` once `web/console/tsconfig.json` lands in `TP-IMP-0026`); zero storage or networking logic (owned by `TP-IMP-0006`+).
 
 ## 3. Requirements, Dependencies & Design References
-- **Requirements & Issues Refs:** `TP-NFR-0901`, `TP-NFR-1001`, `ISS-002`..`004`, `RSK-012`, `GATE-REL-01`, `GATE-REL-04`.
+- **Requirements & Issues Refs:** `TP-NFR-0901`, `TP-NFR-1001`, `ISS-002`..`004`, `ISS-008`, `RSK-012`, `GATE-REL-01`, `GATE-REL-04`.
 - **Dependencies:** `TP-IMP-0003`.
 - **Design Refs:** [`ADR-0001`](../../architecture/adr/0001-core-runtime-and-modular-monolith.md), [`ADR-0004`](../../architecture/adr/0004-web-console-stack-astryx-evaluation-and-repo-layout.md), [`release-readiness.md`](../../quality/release-readiness.md) Section 2, [`test-strategy.md`](../../quality/test-strategy.md) Section 5, [`plugin-sandbox-and-supply-chain.md`](../../security/plugin-sandbox-and-supply-chain.md) Section 1.1.
 
@@ -56,4 +56,4 @@ Establish a clean physical repository foundation that executes identically acros
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** Product Owner has approved `ADR-0001`, `ADR-0004`, `SD-G1-05` (`Apache-2.0`), and `TP-IMP-0003` is complete.
-- **DoD:** Closes `ISS-002`, `ISS-003`, `ISS-004`; `go run ./scripts/ci/check.go --all` and `Stage 0/1 CI` pass `100%`; `REQUIRES_STRONG_REVIEW` approved.
+- **DoD:** Closes `ISS-002`, `ISS-003`, `ISS-004`, `ISS-008`; `go run ./scripts/ci/check.go --all` and `Stage 0/1 CI` pass `100%`; `REQUIRES_STRONG_REVIEW` approved.

@@ -1,76 +1,77 @@
 # Extension Platform Contract & Isolated Execution Architecture Specification — Tanpopo
 
-> **Extension Architecture Specification Document (ASTRA Phase A04 — `DRAFT / ILLUSTRATIVE CANDIDATE SPEC`)**
-> - **Document ID:** `SPEC-EXT-01` | **Version:** `0.1.0-step04-draft` | **Last Updated:** `2026-11-11`
+> **Canonical Extension Architecture Specification (Synchronized in `TP-IMP-0002` — Spec Closure Batch B)**
+> - **Document ID:** `SPEC-EXT-01` | **Version:** `0.2.0-m0-closure` | **Last Updated:** `2026-11-14`
 > - **Authoring Role:** Platform Architect & Security-Minded SDK Designer
-> - **Standardization Status Statement:** All `Manifest` structures, JSON/ABI schemas, resource quotas, and sequence diagrams in this document are **illustrative candidate designs (`ILLUSTRATIVE — PRE-ADR & PRE-POC`)** — **not yet frozen standards** — pending Product Owner approval at **Gate G1/G2** and completion of technical spikes (`EXP-01`..`EXP-03`) tracked in [`decisions.md`](../governance/decisions.md).
-> - **Requirements Traceability:** `TP-FR-0301`..`0306`, `TP-NFR-0101`..`0102`, `TP-NFR-0202`, `TP-NFR-0401`..`0403`, `TP-NFR-0902`, `TP-BR-0104`, `TP-BR-0401`..`0404`.
+> - **Machine-Readable Contract Reference:** [`proto/tanpopo/extension/v1/runtime.proto`](../../proto/tanpopo/extension/v1/runtime.proto) & [`buf.yaml`](../../buf.yaml) (`version: v2`). Host–Wasm binary ABI details (`POC-01`) and Tier-1 mapping operator sets (`POC-02`) are empirically validated in `SPIKE-01` / `SPIKE-02` (`TP-IMP-0004`).
+> - **Measurement Honesty (`COND-PO-01`):** All CPU deadlines (`<= 15 ms`, `<= 5 ms`), SSE chunk forwarding targets (`< 1 ms p95`), memory caps (`16 MiB`), and cancellation bounds (`< 500 ms`) in this document are **`TARGET / UNVERIFIED`** until benchmark verification completes.
+> - **Requirements Traceability:** `TP-FR-0301`..`0308`, `TP-NFR-0101`..`0102`, `TP-NFR-0202`, `TP-NFR-0401`..`0403`, `TP-NFR-0902`, `TP-BR-0104`, `TP-BR-0401`..`0404`, `CR-02`, `CR-05`.
 
 ---
 
 ## 1. Ecosystem Taxonomy (`Canonical Extension Taxonomy`) & Core Kernel Boundaries
 
-To solve Tanpopo's foundational extensibility goal — **enabling communities and enterprises to add new AI providers and capabilities without modifying or re-releasing Tanpopo Core** — the architecture strictly decouples **Packaging Identity (`Identity`)**, **Execution Mechanism (`Runtime`)**, and **Governance Lifecycle (`Lifecycle`)**:
+To enable communities and enterprises to add AI providers and pipeline capabilities **without modifying or re-releasing the `tanpopo` Core binary**, Tanpopo strictly decouples **Packaging Identity**, **Execution Locus**, and **Governance Lifecycle**:
 
 ### 1.1. Eight-Entity Architectural Partition Matrix
 
 | Architectural Entity | Identity (`Identity`) | Execution Locus (`Runtime`) | Ownership & Lifecycle (`Lifecycle`) | Core Kernel vs. External Extension? |
 |---|---|---|---|---|
-| **1. `Extension Package`** | Immutable artifact bundle identified by `@publisher/name`, `SemVer` version, and `SHA-256` digest. | Does not execute on its own; serves as the distribution unit holding the `Manifest`, declarative rules, or isolated guest bytecode. | `Instance`-scoped (`SM-01`), enabled/disabled per `Organization` policy (`TP-BR-0202`). | **External extension unit** (dynamically loaded into Core). |
-| **2. `Provider Adapter`** | A `Capability` inside an `Extension Package` defining wire translation for an upstream AI provider family. | Executes at Tier 1 (`Declarative`), Tier 2 (`Sandboxed Hook`), or Tier 3 (`Isolated Sidecar`). **Contains zero customer credentials.** | Coupled to its parent `Extension Installation` lifecycle (`SM-01`). | **Decoupled extension** (even `Official Adapters` obey this exact contract). |
-| **3. `Provider Connection`** | Operational configuration record (`conn_id`) binding 1 `Provider Adapter` + 1 `secret_ref` + target endpoint URL + `Data Region`. | Managed and access-enforced directly inside **Tanpopo Core**. | Owned by an `Organization` or `Project` (`SM-02`). | **Core Kernel entity** (live configuration state, not a code package). |
-| **4. `Logical Model` & `Model Deployment`** | `Logical Model`: canonical capability profile (`model_id`).<br/>`Model Deployment`: concrete routing target (`deploy_id`) bound 1-to-1 to a `Provider Connection`. | Core's router, circuit breaker, and budget ledger evaluate `Model Deployment` entities directly. | `Organization` / `Project`-scoped (`SM-04`). | **Core Kernel entity** (may seed defaults from Adapter catalog hints, but governed in Core). |
-| **5. `Auth Driver`** | Upstream authentication mechanism: either a built-in Host primitive or a bounded custom signer inside an `Extension Package`. | Standard primitives (Bearer, OAuth 2.1, mTLS, Host-Sign HMAC) execute inside the **Host Egress Broker**; custom canonicalization runs inside a boundary-locked Sandbox. | Bound to `Secret Credential` & `Provider Connection` lifecycles (`SM-02`, `SM-03`). | **Controlled hybrid:** Secret vault & wire injection belong to **Core**; custom signing string construction is extensible. |
-| **6. `MCP Server` & `MCP Tool`** | Standalone context/tool service speaking **Model Context Protocol** and its individual namespaced tools (`<server>__<tool>`). | Runs as an external server (or isolated Sidecar), governed exclusively through the **Core MCP Hub** (`/mcp/...`). | Registered at `Organization`/`Project` scope; tools pinned by `schema_hash` & `SM-06`. | **Dedicated MCP Plane** (`DEC-003`) — **not** a `Provider Adapter`. |
-| **7. `Agent Endpoint` & `A2A Task`** | Autonomous agent publishing an `AgentCard` and stateful multi-step asynchronous task units on the **A2A** plane. | Agent executes externally; the **Core A2A Plane** (`/a2a/...`) enforces delegation scopes, hop limits, and sub-budget holds. | Registered at `Organization`/`Project` scope; tasks governed by `SM-06` & `SM-07`. | **Dedicated A2A Plane** (`DEC-003`) — **never conflated** with `Provider` or `MCP`. |
-| **8. `Routing / Policy / Exporter Extension`** | Pipeline extension capabilities: custom route scoring, PII/content `Guardrail` hooks, or custom telemetry sinks. | Executes in Tier 2 (`Sandboxed Hook`) or Tier 3 (`Isolated Sidecar`) at deterministic `Hook Stages`. | `Instance` / `Organization`-scoped (`SM-01`). | **Decoupled extension**, **never permitted to override** Core's hard `Fail-Closed` invariants. |
+| **1. `Extension Package`** | Immutable `.tpkg` / OCI artifact identified by `@publisher/name` (reserved regex `^@tanpopo(-[a-z0-9]+)?/`), `SemVer` version, and `SHA-256` digest. | Distribution unit holding `Manifest`, Tier-1 declarative rules, or Tier-2/Tier-3 guest artifacts. | `Instance`-scoped (`SM-01`), enabled/disabled per `Organization` via `org_extension_policies` (`TP-BR-0202`, `CR-04`). | **External extension unit** (dynamically loaded without Core rebuild). |
+| **2. `Provider Adapter`** | Capability inside an `Extension Package` defining wire translation for an upstream AI provider family. | Executes at Tier 1 (`Declarative` — `v0.1`), Tier 2 (`Sandboxed Wasm` — `v0.1`), or Tier 3 (`Isolated Sidecar` — `v0.3`, `TP-FR-0308`). **Contains zero customer credentials.** | Coupled to its parent `Extension Installation` lifecycle (`SM-01`). | **Decoupled extension** (`Official Adapters` obey this exact contract). |
+| **3. `Provider Connection`** | Operational configuration record (`conn_id`) binding 1 `Provider Adapter` + multi-slot `connection_secret_bindings` + endpoint URL + `Data Region`. | Managed and access-enforced directly inside **Tanpopo Core**. | Owned by an `Organization` or `Project` (`SM-02`). | **Core Kernel entity** (live configuration state, not a code package). |
+| **4. `Logical Model` & `Model Deployment`** | `Logical Model`: canonical `snake_case` capability profile (`model_id`).<br/>`Model Deployment`: concrete routing target (`deploy_id`) bound to a `Provider Connection`. | Core's router, circuit breaker, and two-phase budget ledger evaluate `Model Deployment` entities directly. | `Organization` / `Project`-scoped (`SM-04`). | **Core Kernel entity** (may seed defaults from Adapter catalog hints, governed in Core). |
+| **5. `Auth Driver`** | Upstream authentication mechanism: built-in Host primitive or Host-executed cryptographic signer (`HostCryptoSignSpec`). | Standard primitives (`host_blind_inject`, `OAuth 2.1`, `mTLS`, `host_crypto_sign`: `HMAC_SHA256`, `AWS_SIGV4`, `RSA_SHA256`) execute inside the **Host Blind Credential Broker** (`0` raw secrets in Tier-1/Tier-2; `Cookie` injection hard-banned). | Bound to `Secret Credential` & `Provider Connection` lifecycles (`SM-02`, `SM-03`). | **Controlled hybrid:** Vault & wire injection belong exclusively to **Core**; canonical string construction runs in Sandbox. |
+| **6. `MCP Server` & `MCP Tool`** | External tool/context service speaking **MCP Specification `2025-03-26` (Streamable HTTP)** and namespaced tools (`<server_slug>__<tool_name>`). | Runs externally (or as an `OPERATOR`-managed Tier-3 Sidecar for `stdio` bridges), governed through the **Core MCP Hub** (`/mcp`). | Registered at `Organization`/`Project` scope; tools pinned by JCS `schema_hash` & HITL `SM-06`. | **Dedicated MCP Plane** (`DEC-003`) — **not** a `Provider Adapter`. |
+| **7. `Agent Endpoint` & `A2A Task`** | Autonomous agent publishing an `AgentCard` and stateful asynchronous tasks on the **A2A** plane. | Agent executes externally; the **Core A2A Plane** (`/a2a/*`) enforces delegation scopes, `hop_count <= 5`, and sub-budget holds. | Registered at `Organization`/`Project` scope; tasks governed by dedicated **`SM-09`** (`CR-08`) & `SM-07`. | **Dedicated A2A Plane** (`DEC-003`) — **never conflated** with `Provider`, `MCP`, or `SM-06`. |
+| **8. `Routing / Policy / Exporter Extension`** | Pipeline extension capabilities: custom route scoring, PII/content `Guardrail` hooks, or custom telemetry sinks. | Executes in Tier 2 (`Sandboxed Wasm`) or Tier 3 (`Isolated Sidecar`) at deterministic `Hook Stages`. | `Instance` / `Organization`-scoped (`SM-01`). | **Decoupled extension**, **never permitted to override** Core's hard `Fail-Closed` invariants. |
 
-### 1.2. Non-Overridable Kernel of Tanpopo Core (`Non-Overridable Kernel`)
+### 1.2. Non-Overridable Kernel of Tanpopo Core
 
 Regardless of which extensions are installed, **the following 7 kernel subsystems remain permanently anchored inside Tanpopo Core and cannot be disabled or bypassed by any Extension**:
-1. `Principal` / `Virtual Key` authentication, `RBAC` authorization, and hard multi-tenant isolation (`TP-BR-0101`).
-2. The `Master Secret Vault` and network-edge `Blind Host Credential Broker` (`TP-BR-0402`).
-3. The `Two-Phase Budget Hold & Settlement` ledger (`TP-BR-0701`, `0702`).
+1. `Principal` / `Virtual Key` authentication, 6-role `RBAC` authorization, and hard multi-tenant isolation (`TP-BR-0101`).
+2. The 3-tier `Envelope Encryption Vault` (`Master KEK -> Org DEK -> Project DEK`) and network-edge `Blind Host Credential Broker` (`TP-BR-0402`, hard `Cookie`/`Set-Cookie` ban per `DEC-004`).
+3. The `Two-Phase Budget Hold & Settlement` `micro-USD` ledger (`TP-BR-0701`, `0702`).
 4. `Hard Data Residency` enforcement and mandatory `Fail-Closed` posture (`TP-BR-0501`, `0502`).
-5. Sandbox isolation enforcement, `allowed_hosts` egress allowlisting, SSRF prevention, and resource circuit breakers (`TP-BR-0401`, `0404`).
-6. Human-in-the-loop approval gates for `destructive` MCP tools and A2A privilege-amplification bounds (`TP-BR-0602`, `0604`).
-7. The `Append-Only Audit Sink` and 4-level emergency kill-switch subsystem (`TP-BR-0803`).
+5. Sandbox isolation enforcement (`16 MiB` Wasm RAM cap, `<= 15 ms` / `<= 5 ms` CPU bounds), `allowedHosts` egress allowlisting, connect-time `SSRFGuard`, and per-extension fault quarantine breakers (`TP-BR-0401`, `0404`).
+6. Human-in-the-loop approval gates (`SM-06`, 5-tuple JCS hash) for `destructive` MCP tools and A2A privilege-amplification bounds (`SM-09`, `TP-BR-0602`, `0604`).
+7. The `Per-Org + SYSTEM` JCS hash-chained `Audit Sink` and 4-level emergency kill-switch subsystem (`TP-BR-0803`).
 
 ---
 
-## 2. SDK Contract & Versioned Language-Agnostic Interface (`Versioned Language-Agnostic Contract`)
+## 2. SDK Contract & Versioned Language-Agnostic Interface
 
-### 2.1. Language-Agnostic Design Principle
-- **Decoupling Core implementation language from Extension authoring language:** Communication between Host (Tanpopo Core) and Guest (Extension) is governed by **versioned canonical data envelopes (`contract_version`)** across a **language-neutral binary/IPC boundary** (primary candidates: **WebAssembly Component Model / WIT** for Tier 2 and **HTTP/gRPC Protobuf/JSON over Unix Domain Socket / mTLS** for Tier 3).
-- Consequently, whether Tanpopo Core is implemented in Go or Rust (`OQ-001`), community and enterprise authors can write extensions in **pure YAML/JSON** (Tier 1) or compile from **TypeScript/JavaScript, Rust, Go, or Python** into standard artifacts (Tier 2 / Tier 3) verified against a single shared contract test suite.
+### 2.1. Language-Agnostic Binary Contract & Out-of-Band `BlobRef` Boundary
+- **Decoupling Core runtime from Extension authoring language:** Communication between Host (`tanpopo` Core) and Guest (Extension) is governed by [`proto/tanpopo/extension/v1/runtime.proto`](../../proto/tanpopo/extension/v1/runtime.proto) (`go_package = "github.com/nguywnben/tanpopo/gen/proto/extension/v1;extensionv1"`). Tier-2 Wasm guests exchange the exact same structural envelopes over bounded linear-memory buffers (`POC-01`), while Tier-3 Isolated Sidecars (`v0.3`) speak `ConnectRPC / Protobuf` over `0600` Unix Domain Sockets or `mTLS` (`POC-03`).
+- **Out-of-Band Multimodal `BlobRef` Invariant (`CR-05` / `NEG-1`):** Ingress payloads up to `32 MiB` never copy decoded attachments `> 64 KiB` into Tier-2 Wasm's `16 MiB` linear memory. Host Core extracts large media blocks into Host streaming buffers, passes compact `BlobRef` handles (`blob_ref://<request_id>/<part_index>`, `mime_type`, `byte_length`, `sha256_hex`) into `TransformRequestInput`, and splices bytes directly onto the outbound TLS stream on egress.
+- **Zero `scoped_secret_unseal` in Tier-1 & Tier-2 (`CR-05`):** Neither Tier-1 Declarative packs nor Tier-2 Wasm modules can ever request raw secret unsealing. Dynamic cryptographic signatures (`HMAC_SHA256`, `AWS_SIGV4`, `RSA_SHA256`) are computed inside Host Core via `HostCryptoSignSpec`. Proprietary closed native C/HSM signing libraries are permitted exclusively inside `OPERATOR`-provisioned Tier-3 Isolated Sidecars (`v0.3`).
 
-### 2.2. Illustrative `Extension Manifest` (`ILLUSTRATIVE — NOT A FROZEN STANDARD`)
+### 2.2. Canonical `Extension Manifest` Structure (`.tpkg` Archive)
 
 ```yaml
-# ILLUSTRATIVE CANDIDATE (v0.1-draft — Pending ADR Approval)
 apiVersion: tanpopo.dev/extension/v1alpha1
 kind: ExtensionManifest
 
 metadata:
-  id: "@acme-cloud/regional-llm-adapter"
+  id: "@acme-cloud/regional-llm-adapter"   # ^@tanpopo(-[a-z0-9]+)?/ reserved exclusively for Tanpopo root key
   name: "Acme Regional Sovereign AI Adapter"
   version: "0.2.0"
   license: "Apache-2.0"
   homepage: "https://github.com/acme-cloud/tanpopo-regional-llm"
-  description: "Provider adapter for Acme Sovereign EU/JP inference endpoints."
+  description: "Provider adapter for Acme Sovereign EU/APAC inference endpoints."
 
 compatibility:
-  contractVersion: "0.1"              # Required Host-Guest contract version
-  coreVersionRange: ">=0.1.0 <0.3.0"  # Compatible Tanpopo Core SemVer range
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0 <0.3.0"
 
 runtime:
-  tier: "sandboxed_wasm"              # Enum: declarative | sandboxed_wasm | isolated_sidecar
+  tier: "sandboxed_wasm"                   # Enum: declarative | sandboxed_wasm | isolated_sidecar
   entrypoint: "dist/adapter.wasm"
   sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   quotas:
-    maxMemoryMb: 32
-    maxCpuMsPerCall: 15
-    maxStreamChunkCpuMs: 2
+    maxMemoryMib: 16                       # Hard Tier-2 Wasm ceiling: 16 MiB (TARGET / UNVERIFIED)
+    maxCpuMsPerCall: 15                    # Request/Response/Probe/Error hook ceiling: <= 15 ms (TARGET / UNVERIFIED)
+    maxStreamChunkCpuMs: 5                 # Per-SSE-chunk hook ceiling: <= 5 ms (< 1 ms p95 target — TARGET / UNVERIFIED)
 
 capabilities:
   - type: "provider_adapter"
@@ -80,12 +81,12 @@ capabilities:
     nativePassthroughPrefix: "/native/acme"
     authMethods:
       - id: "api_key_header"
-        mode: "host_blind_inject"     # Host injects credential at network edge; Wasm NEVER sees raw key
-        headerName: "X-Acme-Api-Key"
+        mode: "host_blind_inject"          # Host injects credential at network edge; Wasm NEVER sees raw secret
+        headerName: "X-Acme-Api-Key"       # "Cookie" and "Set-Cookie" are unconditionally rejected (DEC-004)
       - id: "enterprise_hmac"
-        mode: "host_crypto_sign"      # Wasm emits canonical string; Host computes HMAC and attaches signature
+        mode: "host_crypto_sign"           # Guest builds canonical_payload; Host signs via HMAC_SHA256 / AWS_SIGV4 / RSA_SHA256
 
-configSchema:                         # JSON Schema for non-secret Connection configuration
+configSchema:
   type: "object"
   required: ["regionCode"]
   additionalProperties: false
@@ -93,17 +94,14 @@ configSchema:                         # JSON Schema for non-secret Connection co
     regionCode:
       type: "string"
       enum: ["eu-central-1", "ap-northeast-1"]
-    customSubdomain:
-      type: "string"
-      pattern: "^[a-z0-9-]{1,32}$"
 
-secretSlots:                          # Declares slot reference names ONLY; NEVER holds secret values
+secretSlots:                               # Declares slot reference names ONLY; NEVER holds secret plaintext
   - slot: "primary_api_key"
     requiredForAuthMethods: ["api_key_header"]
   - slot: "hmac_signing_secret"
     requiredForAuthMethods: ["enterprise_hmac"]
 
-permissions:                          # Default-Deny; every undeclared capability is hard-blocked
+permissions:                               # Default-Deny; every undeclared capability is hard-blocked
   networkEgress:
     allowedHosts:
       - "inference.eu-central-1.acme-ai.example"
@@ -111,66 +109,68 @@ permissions:                          # Default-Deny; every undeclared capabilit
     allowPrivateIp: false
     requireTls: true
   hooks:
-    - "provider:validate_connection"
+    - "provider:build_validation_probe"
+    - "provider:verify_validation_result"
     - "provider:transform_request"
+    - "provider:transform_response"
     - "provider:transform_stream_chunk"
+    - "provider:normalize_error"
     - "provider:extract_usage"
-    - "provider:classify_error"
+    - "provider:inspect_native_request"
   payloadAccess:
-    inspectRequestBody: true          # Required to translate inference JSON schemas
+    inspectRequestBody: true
     inspectResponseBody: true
-    maxPayloadBytes: 16777216         # 16 MB
+    maxInlineMetadataBytes: 262144         # <= 256 KiB metadata JSON; > 64 KiB media passed as BlobRef handles
 ```
 
-### 2.3. Entrypoints (`Entrypoints / Hooks`), Streaming, Cancellation & Metering Contracts
+### 2.3. Canonical `ExtensionRuntimeService` Hook Reference (`runtime.proto`)
 
-Every boundary call between Core and an Extension exchanges immutable, contract-versioned **`Normalized Envelopes`**:
-
-| Interface Group (`Hook / Contract`) | Host-to-Guest Input | Guest-to-Host Output | Security & Reliability Invariants |
+| RPC / Hook Method | Host-to-Guest Input | Guest-to-Host Output | Security & Reliability Invariants |
 |---|---|---|---|
-| **`validate_connection(cfg, host_probe)`** | Non-secret config validated against `configSchema` + bounded Host probe handle. | `ValidationResult { ok, detected_models[], error_code? }`. | Receives zero raw secret strings; probe calls remain strictly confined to `allowedHosts`. |
-| **`transform_request(req_envelope, ctx)`** | Normalized request (or passthrough frame), `request_id`, `capabilities_required`, connection config, and `secret_slot_refs`. | `UpstreamHttpSpec { method, url, headers, body_mode, credential_inject_instruction }`. | Host re-verifies `UpstreamHttpSpec.url` before opening any socket: any mismatch against `allowedHosts` or resolution to private IP ranges aborts immediately (`TP-AC-SEC-02`). |
-| **`transform_stream_chunk(state, raw_chunk)`** | Bounded per-stream state (`<= 64 KB`) + upstream raw byte/SSE chunk. | `StreamEmit { normalized_events[], state_next, usage_delta?, terminal_status? }`. | Incremental chunk-by-chunk relay (`zero full-stream buffering`); if an error occurs once `chunks_emitted >= 1`, Host hard-locks out any fallback retry (`TP-BR-0503`). |
-| **`on_cancel(cancel_reason)`** | Cancellation signal on `API Client` disconnect or deadline expiry. | Releases per-session scratch state within `< 50 ms`. | Upstream TCP/HTTP2 socket teardown is enforced **directly by Host** within `< 500 ms` (`TP-FR-0104`), independent of Plugin cooperation! |
-| **`extract_usage(resp_or_stream_summary)`** | Final response or stream accumulator (paired with Host fallback byte/char counters). | `UsageReport { input_tokens, output_tokens, cache_read, cache_write, reasoning_tokens, accuracy: EXACT \| ESTIMATED \| UNMETERED_FLAGGED }`. | If the Plugin omits usage metrics or a stream aborts mid-flight, Host automatically caps accuracy at `ESTIMATED` or `UNMETERED_FLAGGED`, never accepting a synthetic `EXACT = 0` (`TP-BR-0703`). |
-| **`classify_error(http_status, headers, sanitized_body)`** | HTTP status, `Retry-After` headers, and Host-sanitized error body. | `CanonicalError { category, retryable_pre_stream, cooldown_ms, trigger_reauth, public_code }`. | Maps vendor failures onto Tanpopo's canonical error taxonomy so the router and `SM-02`/`SM-04` state machines govern circuit breaking and failover deterministically. |
+| **`BuildValidationProbe` -> `VerifyValidationResult`** | `ValidationProbeInput` -> Host executes via `BlindBroker` -> `ValidationResultInput`. | `UpstreamHttpSpec` -> `ValidationVerdict`. | Two-phase blind probe: Guest opens `0` network sockets and sees `0` raw secret bytes; Host strips `Set-Cookie` and echoed secrets before Phase 2. |
+| **`TransformRequest`** | `TransformRequestInput` (`normalized_request_json < 256 KiB`, `BlobRef[]`, `secret_slot_refs`). | `UpstreamHttpSpec` (`method`, `target_url`, `safe_headers`, `body_bytes`, `outbound_blob_splices`, `credential_injections`). | Host re-verifies `target_url` against `allowedHosts` + connect-time `SSRFGuard` and rejects `Cookie`/`Set-Cookie` in `field_name` (`NEG-3`). |
+| **`TransformResponse`** | `TransformResponseInput` (`http_status`, `sanitized_headers`, `raw_response_body`, `modality`). | `NormalizedInferenceResponse` (`normalized_response_json`, `NormalizedUsage`, `finish_reason`). | Synchronous response normalization (`stream=false` chat, responses, embeddings, rerank) within `<= 15 ms` (`TARGET / UNVERIFIED`). |
+| **`TransformStreamChunk`** | `StreamChunkInput` (`session_state <= 64 KiB`, `raw_upstream_chunk`, `is_eof`). | `StreamChunkOutput` (`next_session_state <= 64 KiB`, `normalized_sse_frames[]`, `incremental_usage`, `stream_completed`). | Incremental chunk relay (`<= 5 ms` ceiling — `TARGET / UNVERIFIED`); once `>= 1` chunk flushes to client, Host forbids fallback retries (`FMEA-01`). |
+| **`NormalizeError`** | `NormalizeErrorInput` (`http_status`, `sanitized_headers`, `sanitized_body`). | `CanonicalProviderError` (`canonical_code`, `retryable_pre_stream`, `cooldown_ms`, `trigger_connection_reauth`). | Drives `SM-02` / `SM-04` transitions deterministically; Host pre-scrubs echoed upstream secrets (`CT-16`). |
+| **`ExtractUsage`** | `ExtractUsageInput` (`raw_response_or_trailer_bytes`, text-only byte fallbacks, `BlobRef[]`). | `NormalizedUsage` (5 token counters + `MediaUsage` + `UsageAccuracy`). | Never accepts synthetic `EXACT = 0` on non-empty responses missing upstream `usage` (`FMEA-04`). |
+| **`InspectNativeRequest`** | `NativeRequestInput` (`dialect`, `upstream_path`, `sanitized_headers`, `raw_request_body`, `BlobRef[]`). | `NativeRoutingHints` (`target_model`, `stream`, `required_capabilities`, `max_output_tokens_hint`, `credential_injections`). | Enables 6-step capability routing, policy checks, and Phase-1 budget holds on lossless `/native/{dialect}/{upstreamPath}` calls. |
+| **`EvaluateGuardrail`** | `GuardrailInput` (`PRE_REQUEST` or `POST_RESPONSE`, `payload_json`). | `GuardrailVerdict` (`allowed`, `violation_code`, `redacted_payload_json`). | Honors per-policy `FAIL_CLOSED` vs `FAIL_OPEN` posture (`SPEC-CORE-01`). |
+| **`CancelExecution`** | `CancelExecutionSignal` (`request_id`, `reason`). | `CancelAck` (`released`). | Host tears down upstream TCP/HTTP2 sockets directly within `< 500 ms` (`TARGET / UNVERIFIED`), independent of Guest cooperation. |
 
-### 2.4. Versioning & Backward Compatibility Policy (`Compatibility & Deprecation Policy`)
-- **Additive-Only Evolution (`Additive Evolution`):** Within any minor contract line (e.g., `0.1` → `0.2` or `1.0` → `1.x`), only new `optional fields` with safe defaults may be introduced; mutating field types or removing existing fields is forbidden.
-- **Backward Support Window (`N-1` / `12 months` — `TP-NFR-0902`):** During `0.x`, Tanpopo Core maintains a `Contract Adapter Shim` for at least `N-1` prior contract versions. From `v1.0` onward, any `Compulsory Deprecation` requires at least **12 months** advance notice alongside automated checks in `tanpopo plugin migrate-check`.
+### 2.4. Versioning & Backward Compatibility Policy
+- **Additive-Only Evolution:** Minor contract revisions within `0.x` or `1.x` introduce only optional fields with safe defaults; field numbers and wire types in `runtime.proto` are never reused or mutated (`buf breaking` `FILE` rule in [`buf.yaml`](../../buf.yaml)).
+- **Backward Support Window (`N-1` / `12 months` — `TP-NFR-0902`):** During `0.x`, Tanpopo Core supports at least `N-1` minor contract versions. From `v1.0` GA onward, deprecations carry a minimum **12-month** compatibility window verified via `tanpopo plugin migrate-check` and `tanpopo upgrade preflight`.
 
 ---
 
-## 3. Three Extension Execution Models & Security Isolation Boundaries (`Three Extensibility Tiers`)
+## 3. Three Extension Execution Tiers, Phased Delivery & Canonical Quotas
 
-> **Absolute Security Invariant (`TP-NFR-0401`):** Third-party or untrusted extension code **must never execute `in-process` within the same memory address space** as the Tanpopo Core kernel (arbitrary native `dlopen`, `eval()`, or unisolated `import()` of JS/Python code is unconditionally prohibited).
+> **Absolute Security Invariant (`TP-NFR-0401`):** Untrusted or third-party extension code **never executes in-process** inside Tanpopo Core's memory space (`dlopen`, Go `plugin`, `eval()`, or unisolated JS/Python `import()` are unconditionally prohibited). Per `CR-02`, **`Tier-1 Declarative` (`TP-FR-0301`) and `Tier-2 Wasm Sandbox` (`TP-FR-0302`) ship in `MVP (v0.1)`**, while **`Tier-3 Isolated Sidecar` (`TP-FR-0308`) ships in `v0.3`**.
 
 ### 3.1. Comparison & Trade-Off Matrix Across the Three Execution Tiers
 
-| Dimension | **Tier 1: Declarative Package (`Declarative Adapter`)** | **Tier 2: Isolated Execution Hooks (`Sandboxed Hooks — Wasm`)** | **Tier 3: Out-of-Process Service (`Isolated Sidecar`)** |
+| Dimension | **Tier 1: Declarative Package (`v0.1`)** | **Tier 2: Sandboxed Wasm (`wazero` — `v0.1`)** | **Tier 3: Isolated Sidecar (`ConnectRPC` — `v0.3`)** |
 |---|---|---|---|
-| **Technical Nature** | Static configuration artifact (YAML/JSON + non-Turing-complete safe mapping expressions). | Compiled bytecode module running inside a capability-based virtual machine (WebAssembly Component Sandbox). | Standalone OCI Container / OS process communicating over loopback UDS / mTLS. |
-| **Target Coverage** | ~75–80% of OpenAI-compatible REST/SSE providers differing only in URL paths, headers, pricing, or model slugs. | ~15–20% of providers with bespoke JSON/SSE wire shapes, custom request signatures, or fast policy guardrails. | ~5% of heavy enterprise integrations: native C/C++/PKCS#11 HSM libraries, local ML PII scanners, or `stdio` MCP bridges. |
-| **Primary Advantage** | **`0` arbitrary code execution attack surface**; ultra-low overhead (`< 2 ms`); authored in `< 30 minutes`. | Single portable binary across OS/CPU architectures; hard linear-memory isolation; trivial Git/ZIP distribution. | Unconstrained by Wasm compiler toolchains; reuses existing native enterprise SDKs and C libraries. |
-| **Trade-Offs / Cost** | Cannot express complex stateful stream-transformation state machines. | Requires SDK compilation to `.wasm`; high-throughput streaming memory-copy overhead must be benchmarked (`POC-01`). | Per-sidecar baseline RAM footprint; requires `Operator` container/cgroups/NetworkPolicy orchestration. |
-| **Who May Install?** | `Operator` / `Org Owner` from permitted origins after network egress consent. | `Operator` / `Org Owner` after `Manifest` & sandbox quota approval. | **Infrastructure `Operator` exclusively** may deploy and approve Sidecar container/network manifests. |
+| **Technical Nature** | Static `.tpkg` configuration artifact (YAML/JSON + bounded non-Turing-complete mapping operators). | Compiled `.wasm` bytecode running inside pure-Go `wazero` (`CGO_ENABLED=0`) with `0` WASI FS/env/socket imports. | Standalone OCI container / OS process communicating over `0600` UDS or mutual TLS (`ConnectRPC`). |
+| **Target Coverage** | ~75–80% of OpenAI-compatible REST/SSE providers (`OpenAI`, `OpenAI-Compatible/vLLM`, `Ollama`). | ~15–20% of bespoke wire/SSE providers (`Anthropic`, `Gemini`, `AWS Bedrock` in `v0.2`) and fast guardrails. | ~5% of heavy enterprise integrations: native C/PKCS#11 HSM signers, ML PII classifiers, or `stdio` MCP bridges. |
+| **Primary Advantage** | **`0` arbitrary code execution surface**; `< 2.0 ms p95` target overhead (`TARGET / UNVERIFIED`). | Cross-OS single-binary portability; hard `16 MiB` linear-memory isolation; `< 5.0 ms p95` target overhead (`TARGET / UNVERIFIED`). | Reuses native enterprise libraries outside Wasm toolchain constraints. |
+| **Who May Install?** | `OPERATOR` (enabled per Org by `ORG_OWNER`). | `OPERATOR` after `Manifest` permission consent (`SECURITY_REVIEWER` under `Four-Eyes`). | **Infrastructure `OPERATOR` exclusively.** |
 
-### 3.2. Trust Domains, System Permissions & Resource Quotas Matrix (`Trust Domains & Quotas`)
+### 3.2. Canonical Sandbox Quotas & Fault-Isolation Constants (`TARGET / UNVERIFIED`)
 
-| Control Boundary | Tier 1: `Declarative` | Tier 2: `Sandboxed Hooks (Wasm)` | Tier 3: `Isolated Sidecar` |
+| Control Boundary | Tier 1: `Declarative` | Tier 2: `Sandboxed Wasm` (`wazero`) | Tier 3: `Isolated Sidecar` (`v0.3`) |
 |---|---|---|---|
-| **Filesystem Access (`Filesystem`)** | **None** (`0` file permissions). | **None** (no host WASI filesystem mounted; operates purely on passed byte buffers). | `read-only rootfs`, unprivileged `non-root UID`, bounded tmpfs `/tmp` scratch space only. |
-| **Host Environment (`Host Env`)** | **None** (barred from reading Core's `os.Environ`). | **None** (completely empty environment by default). | Receives solely non-sensitive configuration variables explicitly declared by the `Operator` for that Sidecar. |
-| **Outbound Network (`Network Egress`)** | Exclusively via **Host Egress Proxy** restricted to `allowedHosts`. | Zero raw TCP socket APIs; all HTTP probes flow through Host functions hard-locked to `allowedHosts` + anti-SSRF guards. | Enforced via container/OS network policy: blocks all RFC1918/link-local traffic and permits egress solely via Tanpopo's Egress Proxy or approved host allowlists. |
-| **CPU & Timeout Quotas (*Target Design*)** | `< 1 ms` structural mapping. | Instruction metering (`fuel / epoch interruption`): default `<= 15 ms CPU` per request/response transform and `<= 2 ms CPU` per SSE chunk. | `cgroups` CPU limits (e.g., `0.5–2.0 vCPU`) + hard per-IPC call deadline from Core (`<= 50 ms` for policy hooks, backed by a dedicated circuit breaker). |
-| **Memory Quotas (*Target Design*)** | Zero dedicated heap allocation. | Hard per-instance linear memory ceiling (`16 MB – 64 MB` per Manifest; breaching traps only that invocation). | Hard container memory ceiling (`OOM-kill` contained inside the Sidecar container without impacting Core). |
-| **Audit Trail (`Audit`)** | Logs installation, version pinning, and host allowlist rejections. | Logs module load, every CPU/RAM trap, and any attempted call outside `allowedHosts` (`TP-BR-0803`). | Logs provisioning, internal mTLS certificate rotation, health probes, and Sidecar circuit-breaker trips. |
+| **Filesystem & Env** | **None** (`0` FS, `0` `os.Environ`). | **None** (`0` WASI FS mounts, empty env). | `read-only rootfs`, `nonroot` UID `65532`, bounded `/tmp` tmpfs only. |
+| **Network Egress** | Exclusively via Host `BlindBroker` + `SSRFGuard` locked to `allowedHosts`. | Zero guest socket syscalls; all HTTP probes/calls flow via Host `BlindBroker` + `SSRFGuard`. | Default-deny `NetworkPolicy`; egress restricted to Tanpopo Egress Proxy / approved hosts. |
+| **Hook SLO Targets vs. Hard Watchdogs** | `< 1 ms` structural evaluation (`TARGET / UNVERIFIED`; `6.10 µs/op` in `SPIKE-01`). | **SLO Targets (`TARGET / UNVERIFIED`):** `< 5.0 ms p95` request/response hook, `< 1.0 ms p95` stream chunk (`0.95 µs/op` in `SPIKE-02`). **Hard Kill Watchdogs (`WithCloseOnContextDone` started strictly after pool acquisition):** `<= 100 ms` body hook, `<= 50 ms` stream chunk (`> 3x` OS 15.6ms scheduler quantum so thread preemption never false-kills healthy modules). | **`<= 50 ms`** per guardrail/IPC call (`cgroups` `0.5–2.0 vCPU`) backed by circuit breaker (`TARGET / UNVERIFIED`). |
+| **Memory Ceiling (`TARGET / UNVERIFIED`)** | Bounded `<= 2 MiB` parser arena (`<= 32` JSON depth, `<= 10,000` steps — `FZ-01`). | Hard **`16 MiB` (`256` pages)** linear memory ceiling per Wasm instance (`> 64 KiB` blobs externalized via `BlobRef`). | Container `cgroups` memory limit (`OOM-kill` isolated from `tanpopo` Core). |
+| **Trap & Auto-Quarantine (`FMEA-05`)** | Rejects invalid expressions at install time. | Trap/timeout/OOM permanently closes and replaces the tainted `api.Module` from pre-compiled `CompiledModule` (`0` pool reuse; healthy calls zero input/output slices via `clear`) and returns **`502 extension_execution_fault`**; **`> 20` faults / `60s`** trips `ALT-PLUGIN-TRAP` -> **`QUARANTINED`**. | Per-sidecar circuit breaker + `ALT-PLUGIN-TRAP` auto-quarantine on repeated IPC faults. |
 
 ---
 
-## 4. Open Technical Unknowns Pending PoC / ADR Finalization (`Open Technical Unknowns`)
+## 4. `M0` Technical Spike Closure (`POC-01` & `POC-02` Verified in `TP-IMP-0004`)
 
-In accordance with architectural transparency discipline, the items below remain **explicitly unfrozen** and require empirical PoC verification before locking the `1.0` specification:
-1. **`POC-01` — Concrete Wasm ABI Standard (`WASI Preview 2 / Component Model WIT` vs Minimal `Extism`-Style ABI):** Contingent on polyglot toolchain maturity (especially TypeScript/Python-to-Wasm) and measured SSE chunk-relay latency in spike `EXP-01` (`ASM-002`).
-2. **`POC-02` — Safe Expression Subset in Declarative Packages (Tier 1):** Requires empirical validation across 10 diverse AI providers (`EXP-02`) to select the smallest JSON-mapping/template operator set achieving `>= 75%` coverage (`ASM-004`) without inventing an ad-hoc programming language inside YAML.
-3. **`POC-03` — Core-to-Isolated-Sidecar IPC Wire Protocol (Tier 3):** Selecting between `ConnectRPC / gRPC` and `HTTP/2 JSON + SSE` over Unix Domain Sockets / mTLS will be finalized jointly with the Core implementation language decision (`OQ-001`).
+Full reproducible benchmarks and invariants are recorded in [`docs/architecture/spike-results.md`](../architecture/spike-results.md) (`tools/spikes/`):
+1. **`POC-01` (`SPIKE-02` — `LOCKED`):** Locked the **Linear-Memory Slice ABI `(ptr: i32, len: i32) -> packed u64 ((outPtr << 32) | outLen)`** with `wazero` (`CGO_ENABLED=0`), achieving `953.9 ns/op` and `1,000 / 1,000` simultaneous SSE streams (`50,000` chunk calls, `0` errors, `0` canary secret bytes in Wasm RAM) when enforcing tainted-module replacement and separating pool queue wait from the `50 ms` hard kill watchdog. End-to-end Gateway `SLO-02`/`SLO-03` remain `TARGET / UNVERIFIED` per `COND-PO-01`.
+2. **`POC-02` (`SPIKE-01` — `LOCKED`):** Validated the non-Turing-complete Tier-1 Declarative operator grammar across **`9 / 10` (`90%`)** representative providers (`<= 48` lines per manifest, `<= 32` depth guard); `AWS Bedrock` (`SigV4` + binary `EventStream`) is cleanly assigned to Tier-2 Wasm (`v0.2` per `CR-01`).
+3. **`POC-03` (`Contract Verified in M0`, Runtime in `M4` / `v0.3`):** `proto/tanpopo/extension/v1/runtime.proto` compiled with `0` errors via `protocompile`; `ConnectRPC` over `0600` UDS and `mTLS` (`AUTH-08`) executes in `TP-IMP-0042` (`TP-FR-0308`).

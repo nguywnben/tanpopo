@@ -1,7 +1,7 @@
 # ADR-0001: Select Go (`1.24+`) Role-Separable Modular Monolith for Tanpopo Core & CLI
 
 ## Status
-**`PROPOSED`** *(Awaiting Product Owner approval at Gate G3)*
+**`ACCEPTED`** *(Approved by Product Owner on `2026-11-14` via `GOV-OAS-01` Track A; performance targets remain `TARGET / UNVERIFIED` per `COND-PO-01`, `05`)*
 
 ## Date
 `2026-11-11`
@@ -13,7 +13,7 @@ Tanpopo must simultaneously satisfy three architectural constraints:
 3. Rich multi-plane domain capabilities (`Unified/Native LLM`, `Plugin Sandbox`, `MCP Hub`, `A2A`, `OAuth 2.1`, `FinOps Ledger`, `Admin API`, `CLI`) that still scale horizontally without state affinity in enterprise clusters (`TP-FR-1005`).
 
 ## Decision
-1. Adopt **Go (`1.24+`, statically compiled with `CGO_ENABLED=0`)** as the sole implementation language for **Tanpopo Core (`tanpopod`)** and the **`tanpopo` CLI**.
+1. Adopt **Go (`1.24+`, statically compiled with `CGO_ENABLED=0`)** as the sole implementation language for **Tanpopo Core** and the unified **`tanpopo` CLI/daemon binary** (`tanpopo serve --role=...` per `CR-10`).
 2. Structure the codebase as a **Plane-Separated Modular Monolith**: a single repository enforcing strict unidirectional internal package boundaries (`ingress`, `iam`, `policy`, `routing`, `finops`, `extension`, `security`, `telemetry`, `storage`), compiled into a single binary supporting `--role=all` (standalone default), `--role=data-plane`, and `--role=control-plane` (for HA cluster deployments).
 
 ## Alternatives Considered

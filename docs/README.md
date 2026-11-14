@@ -1,14 +1,14 @@
 # Tanpopo Documentation & Context Hub (`English-First Canonical Edition`)
 
-> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: NO_GO | GATE G4: BLOCKED_ON_OWNER_APPROVAL`)**
+> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: NO_GO | GATE G4: STAGE_1_DONE / STAGE_2_AWAITING_OWNER_GO`)**
 > - **Gate G0 (ASTRA A00 — Context Intake & Baseline):** `COMPLETED`
-> - **Gate G1 (ASTRA A01 — Product Discovery):** **`READY_FOR_REVIEW`** *(Pending Product Owner sign-off on `SD-G1-01`..`SD-G1-05`; never self-marked `APPROVED`).*
-> - **Baseline A02 (ASTRA A02 — Business Analysis):** `DRAFT_COMPLETED` *(`SM-01..09` transition fixes scheduled in `TP-IMP-0001`).*
-> - **Gate G2 (ASTRA A03 — Product Definition, PRD/SRS & Feature Specs):** **`READY_FOR_REVIEW`** *(`DRAFT — UNLOCKED SCOPE`; pending Product Owner sign-off on `BA-OQ-001`..`05`, `TD-G2-01`..`06`, and `CR-01`..`04`, `CR-09`).*
-> - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`READY_FOR_REVIEW`** *(`runtime.proto` & `blob_ref` extraction scheduled in `TP-IMP-0002`).*
-> - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`READY_FOR_REVIEW`** *(Pending Product Owner sign-off on `ADR-0001`..`0006` and authorization for `SPIKE-01`..`04`).*
-> - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`FAIL` *(11 `CRITICAL` Blockers + 10 `CRs` Open)*** — See [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) and [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md).
-> - **Gate G4 & Pre-Build Closure (ASTRA A09–A10):** **`BLOCKED` / `READY_FOR_REVIEW` | `DELIVERY HANDOFF VERDICT = NO_GO`** — All official documentation (`110` files in `docs/`, root [`README.md`](../README.md), and [`AGENTS.md`](../AGENTS.md)) is standardized into Technical English, and all pending Product Owner decisions are consolidated in **[`docs/governance/owner-approval-sheet.md`](./governance/owner-approval-sheet.md)**. **`0 / 47` units are `READY` (`47 / 47` `BLOCKED`); execution is paused at the Owner Approval Gate.**
+> - **Gate G1 (ASTRA A01 — Product Discovery):** **`APPROVED` *(`CONFIRMED_BY_OWNER` — `DEC-009`)* **
+> - **Baseline A02 (ASTRA A02 — Business Analysis):** **`APPROVED` *(`SM-01..09` & `BA-OQ-001..05` closed in `TP-IMP-0001`)* **
+> - **Gate G2 (ASTRA A03 — Product Definition, PRD/SRS & Feature Specs):** **`APPROVED` *(`TD-G2-01..06` & `CR-01..04, 09` closed in `TP-IMP-0001`)* **
+> - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`APPROVED_WITH_CONDITIONS`** *(`runtime.proto` & `POC-01/02` verified in `TP-IMP-0002, 0004`; `COND-PO-01, 04, 05`).*
+> - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`APPROVED_WITH_CONDITIONS`** *(`ADR-0001..0006` `ACCEPTED`, `openapi/*.yaml` & `db/spec-check/*.sql` verified, `SPIKE-01..04` completed in [`spike-results.md`](./architecture/spike-results.md); bound to `COND-PO-01..05`).*
+> - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`REMEDIATED_IN_M0` *(`PASS` — `13 / 13` Gaps Closed)*** — See [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md).
+> - **Gate G4 & Pre-Build Closure (ASTRA A09–A10 + `M0`):** **`STAGE_1_DONE` (`TP-IMP-0001..0004 = DONE`) / `STAGE_2_AWAITING_OWNER_GO` | `DELIVERY HANDOFF VERDICT = NO_GO`** — Per Product Owner ruling (`DEC-009`), `TP-IMP-0005`..`0047` (`43 / 47` units) remain **`BLOCKED` (`0 / 47` `READY`)** pending final Stage 2 Owner sign-off (`TP-IMP-0005` is 1st eligible `READY` unit on `GO`).
 
 ---
 
@@ -62,7 +62,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | **12** | [`docs/architecture/system-design.md`](./architecture/system-design.md) | **`ARCH-SYS-01`:** Role-splittable Go Modular Monolith (`--role`), C4 Level 1–3 diagrams, tech-stack decision matrix, 12-step hot inference path, zero-rebuild plugin installation path, `SSRFGuard`, 6 background workers, and `SPIKE-01`..`04`. | Primary architecture reference for all engineers. |
 | **13** | [`docs/architecture/data-model.md`](./architecture/data-model.md) | **`ARCH-DATA-01`:** `SQLite WAL` ↔ `PostgreSQL 16+` portability rules, physical SQL DDL (`UUIDv7`, `BIGINT micro-USD` ledger, `RLS`, Write-Only Vault, Hash-Chained Audit), indexes, `Expand/Contract` migrations, and Crypto-Shredding. | Writing SQL migrations, `storage/port`, and backup/erasure tooling. |
 | **14** | [`docs/architecture/deployment-topology.md`](./architecture/deployment-topology.md) | **`ARCH-OPS-01`:** Standalone, Compose, and Multi-AZ K8s HA topologies, `Copy-on-Write ConfigSnapshot` + 3-layer revocation (`< 1s` / `< 5s`), cache matrix, distributed Lua rate limiting, and zero-drop rolling upgrades. | Designing Docker/Helm, SSE load balancing, Valkey Lua scripts, and HA drills. |
-| **15** | [`docs/architecture/adr/README.md`](./architecture/adr/README.md) | **Index of `ADR-0001` .. `ADR-0006`:** Context, decision matrices, rejected options, reversibility, and A07 verification links for Go Core, 3-Tier Sandbox, Dual Persistence, Embedded Astryx SPA, Two-Phase Ledger, and Config Snapshots. | Before proposing changes to any foundational architectural choice. |
+| **15** | [`docs/architecture/adr/README.md`](./architecture/adr/README.md) & [`docs/architecture/spike-results.md`](./architecture/spike-results.md) | **Index of `ADR-0001` .. `ADR-0006` (`ACCEPTED` under `COND-PO-01..05`) & `ARCH-SPIKE-01`:** Architectural decisions plus empirical `M0` benchmark results (`SPIKE-01`..`04`, `POC-01` Linear-Memory Wasm ABI & `POC-02`). | Before proposing changes to any foundational architectural choice or Wasm sandbox pool. |
 
 ### 1.4. User Experience (UX/UI) & Astryx Design System Integration (`docs/ux/` — `PROPOSED`)
 
@@ -127,7 +127,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 
 ## 2. Explicit Separation: Existing Code on Disk vs. Specification & Planning Artifacts
 
-> **Verified Repository Fact (`VERIFIED_IN_REPO`):** Through Pre-Build Closure, the repository **contains zero runtime AI Gateway implementation code, zero new UI screen implementations, zero executable tests, and zero PoC spike code** (no HTTP server, no Unified API, no routing/policy/ledger engine, no plugin runtime/SDK, no MCP/A2A plane, no CLI binary, and no Vite bundler yet). All `110` Markdown artifacts in `docs/` plus root [`README.md`](../README.md) and [`AGENTS.md`](../AGENTS.md) form the English-standardized pre-build governance, specification, audit, and 47-unit execution framework (**`HANDOFF_VERDICT: NO_GO`** awaiting Product Owner approval of [`owner-approval-sheet.md`](./governance/owner-approval-sheet.md)).
+> **Verified Repository Fact (`VERIFIED_IN_REPO`):** Through Milestone `M0` Closure, the repository **contains zero `M1+` production AI Gateway runtime code and zero production Web Console screen implementations** (no root `go.mod`, no production HTTP server, and no Vite bundler yet — only the pre-existing Astryx placeholder in `src/`, the machine-readable contracts in `proto/`, `openapi/`, and `db/spec-check/`, and the isolated `M0` feasibility test suite in `tools/spikes/`). Execution of `TP-IMP-0005`..`0047` remains at **`HANDOFF_VERDICT: NO_GO`** awaiting Product Owner Gate G4 Stage 2 sign-off.
 
 ### 2.1. Complete Repository Inventory (`VERIFIED_IN_REPO`)
 

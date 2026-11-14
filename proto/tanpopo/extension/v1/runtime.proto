@@ -1,0 +1,288 @@
+// Copyright 2026 The Tanpopo Authors. Licensed under Apache-2.0.
+// Canonical Host-Guest & Sidecar Runtime Contract (SPEC-API-01 / SPEC-EXT-01 / CR-05).
+// Security Invariants:
+//   1. Zero Raw Secrets in Tier-1/Tier-2 Guest Memory (scoped_secret_unseal is strictly absent from Tier-2 Wasm).
+//   2. Out-of-Band Multimodal Streaming: Payloads > 64 KiB stay outside 16 MiB Wasm linear memory via BlobRef ("blob_ref://...").
+//   3. DEC-004 Enforcement: Host Blind Broker unconditionally rejects "Cookie" and "Set-Cookie" in CredentialInjectInstruction.field_name
+//      and strips Set-Cookie/Cookie echoes from inbound upstream responses.
+
+syntax = "proto3";
+
+package tanpopo.extension.v1;
+
+option go_package = "github.com/nguywnben/tanpopo/gen/proto/extension/v1;extensionv1";
+
+// ExtensionRuntimeService defines the canonical contract between Tanpopo Host Core
+// and isolated extensions across Tier-2 (wazero Wasm ABI 1:1 data model) and Tier-3 (ConnectRPC over UDS / mTLS).
+service ExtensionRuntimeService {
+  // Phase 1 of two-phase blind connection validation: Guest constructs an upstream HTTP probe without opening sockets or reading raw secrets.
+  rpc BuildValidationProbe(ValidationProbeInput) returns (UpstreamHttpSpec);
+
+  // Phase 2 of two-phase blind connection validation: Host executes the probe via BlindBroker + SSRFGuard and passes the sanitized response back to Guest.
+  rpc VerifyValidationResult(ValidationResultInput) returns (ValidationVerdict);
+
+  // Transforms a normalized inference request envelope into an upstream HTTP specification (Guest NEVER receives raw API keys or > 64 KiB inline blobs).
+  rpc TransformRequest(TransformRequestInput) returns (UpstreamHttpSpec);
+
+  // Transforms a non-streaming upstream HTTP response (chat stream=false, responses, embeddings, rerank) into a canonical normalized response.
+  rpc TransformResponse(TransformResponseInput) returns (NormalizedInferenceResponse);
+
+  // Incrementally transforms upstream SSE / chunked stream frames without full-stream buffering (<= 5 ms deadline ceiling per chunk — TARGET / UNVERIFIED).
+  rpc TransformStreamChunk(StreamChunkInput) returns (StreamChunkOutput);
+
+  // Maps upstream HTTP failure responses onto Tanpopo's canonical SM-02 / SM-04 state-machine error taxonomy.
+  rpc NormalizeError(NormalizeErrorInput) returns (CanonicalProviderError);
+
+  // Extracts multi-dimensional token and media usage counters and classifies settlement accuracy (EXACT, ESTIMATED, UNMETERED_FLAGGED).
+  rpc ExtractUsage(ExtractUsageInput) returns (NormalizedUsage);
+
+  // Inspects a lossless /native/{dialect}/{upstreamPath} request to extract routing hints (model, stream flag, required capabilities) without mutating body bytes.
+  rpc InspectNativeRequest(NativeRequestInput) returns (NativeRoutingHints);
+
+  // Evaluates policy filters or PII/content guardrails at pre-request or post-response hook stages.
+  rpc EvaluateGuardrail(GuardrailInput) returns (GuardrailVerdict);
+
+  // Signals per-request scratch resource release upon client disconnect or deadline expiry (Host tears down upstream sockets directly in < 500 ms — TARGET / UNVERIFIED).
+  rpc CancelExecution(CancelExecutionSignal) returns (CancelAck);
+}
+
+// UsageAccuracy classifies FinOps settlement precision for the two-phase micro-USD ledger.
+enum UsageAccuracy {
+  USAGE_ACCURACY_UNSPECIFIED = 0;
+  USAGE_ACCURACY_EXACT = 1;
+  USAGE_ACCURACY_ESTIMATED = 2;
+  USAGE_ACCURACY_UNMETERED_FLAGGED = 3;
+}
+
+// SigningAlgorithm enumerates Host-executed cryptographic request-signing primitives (HMAC_SHA256, AWS_SIGV4, RSA_SHA256).
+enum SigningAlgorithm {
+  SIGNING_ALGORITHM_UNSPECIFIED = 0;
+  SIGNING_ALGORITHM_HMAC_SHA256 = 1;
+  SIGNING_ALGORITHM_AWS_SIGV4 = 2;
+  SIGNING_ALGORITHM_RSA_SHA256 = 3;
+}
+
+// SignatureEncoding controls how Host formats computed signature bytes before header/query attachment.
+enum SignatureEncoding {
+  SIGNATURE_ENCODING_UNSPECIFIED = 0;
+  SIGNATURE_ENCODING_HEX_LOWER = 1;
+  SIGNATURE_ENCODING_BASE64 = 2;
+  SIGNATURE_ENCODING_BASE64URL = 3;
+}
+
+// CredentialTargetLocation specifies where the Host Blind Credential Broker injects credentials at the network edge.
+enum CredentialTargetLocation {
+  CREDENTIAL_TARGET_LOCATION_UNSPECIFIED = 0;
+  CREDENTIAL_TARGET_LOCATION_HEADER = 1;
+  CREDENTIAL_TARGET_LOCATION_QUERY_PARAM = 2;
+  CREDENTIAL_TARGET_LOCATION_HOST_CRYPTO_SIGN = 3;
+}
+
+// GuardrailStage identifies the pipeline hook stage for policy and content guardrail extensions.
+enum GuardrailStage {
+  GUARDRAIL_STAGE_UNSPECIFIED = 0;
+  GUARDRAIL_STAGE_PRE_REQUEST = 1;
+  GUARDRAIL_STAGE_POST_RESPONSE = 2;
+}
+
+// BlobRef represents an out-of-band multimodal payload handle (> 64 KiB up to 32 MiB) held in Host streaming buffers
+// so large images, audio, and PDFs never cross into Tier-2 Wasm's 16 MiB linear memory ceiling.
+message BlobRef {
+  string blob_id = 1;     // Unique Host-scoped handle ID (e.g., "blob_01jc8x9p2m4n6q8r0s2t4v6w8y_0")
+  string uri = 2;         // Canonical opaque URI ("blob_ref://<request_id>/<part_index>")
+  string mime_type = 3;   // Verified MIME type (e.g., "image/png", "audio/wav", "application/pdf")
+  int64 byte_length = 4;  // Decoded payload byte length verified by Host ingress
+  string sha256_hex = 5;  // 64-character lowercase hex SHA-256 digest of decoded bytes
+}
+
+// HostCryptoSignSpec instructs the Host Blind Broker to sign canonical payload bytes using a vault-sealed secret slot.
+message HostCryptoSignSpec {
+  SigningAlgorithm algorithm = 1;          // HMAC_SHA256, AWS_SIGV4, or RSA_SHA256
+  bytes canonical_payload = 2;             // Canonical string/payload constructed by Guest from non-secret request metadata
+  SignatureEncoding output_encoding = 3;   // Output encoding for HMAC_SHA256 / RSA_SHA256 signatures
+  string aws_region = 4;                   // Target AWS region (required when algorithm == SIGNING_ALGORITHM_AWS_SIGV4)
+  string aws_service = 5;                  // Target AWS service, e.g., "bedrock" (required when algorithm == SIGNING_ALGORITHM_AWS_SIGV4)
+  int64 signing_timestamp_epoch_sec = 6;   // UTC epoch timestamp anchored by Host clock-skew guard
+  repeated string signed_headers = 7;      // Lowercase header names included in the canonical signing string
+}
+
+// CredentialInjectInstruction binds an approved manifest secret slot to an outbound HTTP header, query parameter, or Host signature.
+message CredentialInjectInstruction {
+  string secret_slot_name = 1;                 // Logical slot name from Manifest.secretSlots (e.g., "primary_api_key")
+  CredentialTargetLocation target_location = 2;
+  // Target header or query parameter name (e.g., "Authorization", "x-api-key").
+  // HARD BAN (DEC-004 / NEG-3): "Cookie" and "Set-Cookie" (case-insensitive) are unconditionally rejected by Host Blind Broker!
+  string field_name = 3;
+  string value_prefix = 4;                     // Optional static prefix (e.g., "Bearer ")
+  HostCryptoSignSpec crypto_sign = 5;          // Required when target_location == CREDENTIAL_TARGET_LOCATION_HOST_CRYPTO_SIGN
+}
+
+// UpstreamHttpSpec describes the outbound HTTP request to be executed by Tanpopo Host Core via SSRFGuard + BlindBroker.
+message UpstreamHttpSpec {
+  string method = 1;                                              // HTTP method ("POST", "GET")
+  string target_url = 2;                                          // Must match Manifest.permissions.networkEgress.allowedHosts
+  map<string, string> safe_headers = 3;                           // Non-secret headers (Cookie / Set-Cookie forbidden)
+  bytes body_bytes = 4;                                           // Outbound body or JSON template referencing blob_ref:// URIs
+  repeated BlobRef outbound_blob_splices = 5;                     // Out-of-band blobs spliced directly into the egress stream by Host
+  repeated CredentialInjectInstruction credential_injections = 6; // Edge-injected credentials resolved by Host Blind Broker
+  int32 timeout_override_ms = 7;                                  // Optional bounded timeout hint clamped by Deployment ceiling
+}
+
+// ValidationProbeInput initiates Phase 1 of blind connection validation.
+message ValidationProbeInput {
+  string request_id = 1;
+  string config_json = 2;               // Non-secret connection configuration validated against Manifest.configSchema
+  repeated string secret_slot_names = 3; // Bound slot names available in Host Vault (zero secret values)
+}
+
+// ValidationResultInput delivers the Host-sanitized probe response into Phase 2 of blind connection validation.
+message ValidationResultInput {
+  string request_id = 1;
+  int32 http_status = 2;
+  map<string, string> sanitized_headers = 3; // Sensitive headers and Set-Cookie stripped by Host
+  bytes response_body = 4;                   // Host-scrubbed response body (capped <= 1 MiB)
+}
+
+// ValidationVerdict reports whether connection credentials and endpoint configuration are healthy.
+message ValidationVerdict {
+  bool valid = 1;
+  repeated string detected_model_ids = 2;
+  string failure_code = 3;       // Canonical code when valid == false (e.g., "upstream_auth_failed")
+  string sanitized_message = 4;  // Operator-safe diagnostic message free of raw secrets
+}
+
+// TransformRequestInput carries the compact normalized request envelope (< 256 KiB) into Guest.
+message TransformRequestInput {
+  string request_id = 1;
+  string config_json = 2;                    // Non-secret Provider Connection configuration JSON
+  bytes normalized_request_json = 3;         // NormalizedInferenceRequestEnvelope JSON with > 64 KiB media replaced by blob_ref:// URIs
+  repeated BlobRef blob_refs = 4;            // Metadata descriptors for out-of-band multimodal blobs
+  map<string, string> secret_slot_refs = 5;  // Slot handle map (slot_name -> opaque handle ID; NEVER plaintext)
+}
+
+// TransformResponseInput carries a synchronous upstream HTTP response into Guest for canonical normalization.
+message TransformResponseInput {
+  string request_id = 1;
+  int32 http_status = 2;
+  map<string, string> sanitized_headers = 3; // Set-Cookie and echoed credentials stripped by Host prior to Guest entry
+  bytes raw_response_body = 4;
+  string modality = 5;                       // "chat" | "responses" | "embeddings" | "rerank"
+}
+
+// NormalizedInferenceResponse contains the OpenAI-compatible / Unified JSON payload and extracted usage counters.
+message NormalizedInferenceResponse {
+  bytes normalized_response_json = 1;
+  NormalizedUsage usage = 2;
+  string upstream_model_id = 3;
+  string finish_reason = 4;
+}
+
+// StreamChunkInput feeds an incremental upstream stream slice into TransformStreamChunk.
+message StreamChunkInput {
+  string request_id = 1;
+  bytes session_state = 2;      // Bounded per-stream Guest scratch state (hard ceiling <= 65536 bytes)
+  bytes raw_upstream_chunk = 3; // Raw SSE / chunked bytes read from upstream socket
+  bool is_eof = 4;
+}
+
+// StreamChunkOutput emits zero or more normalized SSE frames plus updated bounded scratch state.
+message StreamChunkOutput {
+  bytes next_session_state = 1;           // Hard ceiling <= 65536 bytes
+  repeated bytes normalized_sse_frames = 2;
+  NormalizedUsage incremental_usage = 3;  // Populated when upstream emits usage delta/trailer frame
+  bool stream_completed = 4;
+}
+
+// MediaUsage tracks non-text multimodal billing units for C_media_nano / media_usage_json settlement.
+message MediaUsage {
+  int32 image_count = 1;
+  int64 image_pixels = 2;
+  double audio_input_seconds = 3;
+  double audio_output_seconds = 4;
+  int32 document_pages = 5;
+  int32 rerank_search_units = 6;
+}
+
+// NormalizedUsage standardizes 5-component token accounting plus multimodal unit usage.
+message NormalizedUsage {
+  int64 input_tokens = 1;
+  int64 output_tokens = 2;
+  int64 cache_read_tokens = 3;
+  int64 cache_write_tokens = 4;
+  int64 reasoning_tokens = 5;
+  UsageAccuracy accuracy = 6;
+  MediaUsage media_usage = 7;
+}
+
+// ExtractUsageInput provides raw upstream response/trailer payloads alongside Host byte-counter fallbacks.
+message ExtractUsageInput {
+  string request_id = 1;
+  string modality = 2;                       // "chat" | "responses" | "embeddings" | "rerank"
+  bytes raw_response_or_trailer_bytes = 3;   // Upstream response body or trailing SSE usage frame
+  int64 fallback_utf8_input_bytes = 4;       // Text-only UTF-8 input byte count tracked by Host (excludes BlobRef bytes)
+  int64 fallback_utf8_output_bytes = 5;      // Streamed UTF-8 output byte count tracked by Host
+  repeated BlobRef input_blobs = 6;          // Multimodal input blob descriptors for fallback media unit accounting
+}
+
+// NormalizeErrorInput supplies Host-scrubbed upstream HTTP failure details to NormalizeError.
+message NormalizeErrorInput {
+  string request_id = 1;
+  int32 http_status = 2;
+  map<string, string> sanitized_headers = 3; // Includes Retry-After and X-RateLimit-*; Set-Cookie stripped
+  bytes sanitized_body = 4;                  // Scrubbed by Host Canary/Secret redactor prior to Guest entry
+}
+
+// CanonicalProviderError drives deterministic SM-02 / SM-04 circuit-breaker and pre-stream failover decisions.
+message CanonicalProviderError {
+  string canonical_code = 1;           // e.g., "rate_limit_exceeded", "upstream_malformed_response"
+  string error_type = 2;               // e.g., "rate_limit_error", "upstream_error", "authentication_error"
+  bool retryable_pre_stream = 3;       // Ignored by Host once >= 1 SSE chunk has been flushed (FMEA-01)
+  int32 cooldown_ms = 4;               // Parsed Retry-After cooldown hint for SM-04 THROTTLED_COOLDOWN
+  bool trigger_connection_reauth = 5;  // Transitions SM-02/SM-03 to AUTH_EXPIRED_REAUTH_REQUIRED when true
+  string sanitized_public_message = 6;
+}
+
+// NativeRequestInput passes metadata and bounded headers/body of a /native/{dialect}/{upstreamPath} request for inspection.
+message NativeRequestInput {
+  string request_id = 1;
+  string dialect = 2;                        // e.g., "anthropic", "gemini"
+  string upstream_path = 3;                  // e.g., "v1/messages", "v1beta/models/gemini-2.5-pro:streamGenerateContent"
+  map<string, string> sanitized_headers = 4; // Client Virtual Key already stripped by Host
+  bytes raw_request_body = 5;                // Compact JSON body (or metadata projection when > 64 KiB blobs are extracted)
+  repeated BlobRef blob_refs = 6;
+}
+
+// NativeRoutingHints enables Core policy, capability routing, and pre-hold budget estimation on /native/* passthrough calls.
+message NativeRoutingHints {
+  string target_model = 1;                                        // Extracted logical/vendor model identifier
+  bool stream = 2;                                                // Whether upstream call streams SSE / chunked frames
+  repeated string required_capabilities = 3;                      // Canonical snake_case capability keys (e.g., "vision", "tool_calling", "reasoning")
+  int64 max_output_tokens_hint = 4;                               // Extracted max_tokens / maxOutputTokens for Phase-1 budget pre-hold
+  repeated CredentialInjectInstruction credential_injections = 5; // Edge credential injection instructions for this dialect
+}
+
+// GuardrailInput carries pre-request or post-response JSON payloads into a Policy / Guardrail extension.
+message GuardrailInput {
+  string request_id = 1;
+  GuardrailStage stage = 2;
+  bytes payload_json = 3;
+}
+
+// GuardrailVerdict determines whether the request/response passes policy inspection or is redacted/blocked.
+message GuardrailVerdict {
+  bool allowed = 1;
+  string violation_code = 2;
+  bytes redacted_payload_json = 3;
+  string sanitized_reason = 4;
+}
+
+// CancelExecutionSignal notifies Guest to release any per-request state associated with request_id.
+message CancelExecutionSignal {
+  string request_id = 1;
+  string reason = 2;
+}
+
+// CancelAck confirms Guest scratch state teardown.
+message CancelAck {
+  bool released = 1;
+}

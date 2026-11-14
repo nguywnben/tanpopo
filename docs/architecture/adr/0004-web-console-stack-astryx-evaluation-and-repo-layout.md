@@ -1,7 +1,7 @@
 # ADR-0004: Independent Evaluation of Embedded Static Web Console Stack (`React 19 + Vite + StyleX + Astryx neutral`) & Apache-2.0 Monorepo Layout
 
 ## Status
-**`PROPOSED`** *(Awaiting Product Owner approval at Gate G3)*
+**`ACCEPTED`** *(Approved by Product Owner on `2026-11-14` via `GOV-OAS-01` Track A + `CR-10`; remaining Vietnamese UI strings in initial `src/App.tsx` placeholder MUST be replaced with English prior to completing `TP-IMP-0026` per `ISS-008`)*
 
 ## Date
 `2026-11-11`

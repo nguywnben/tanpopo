@@ -1,541 +1,358 @@
 # Persistence, Physical Data Model & Data Lifecycle Architecture — Tanpopo
 
-> **Data Architecture Document (Phase ASTRA A05 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — PRE-APPROVAL`)**
-> - **Document ID:** `ARCH-DATA-01` | **Version:** `0.1.0-step05-draft` | **Last Updated:** `2026-11-11`
-> - **Authoring Roles:** Principal Architect & Data/Security Engineer
-> - **Governance Status:** **Proposed Schema Design (`PROPOSED`)** — coupled to [`ADR-0003`](./adr/0003-dual-mode-persistence-and-cluster-state.md) and [`ADR-0005`](./adr/0005-two-phase-budget-ledger-and-commercial-billing-separation.md).
-> - **Requirements Traceability:** `TP-FR-0201`..`0206`, `TP-FR-0304`, `TP-FR-0401`..`0406`, `TP-FR-0501`..`0504`, `TP-FR-0704`, `TP-FR-0801`..`0806`, `TP-FR-1001`..`1005`, `TP-NFR-0402`, `TP-NFR-0501`, `TP-NFR-0502`, `TP-NFR-0601`.
+> **Data Architecture Specification (Phase ASTRA A05 — Updated in `TP-IMP-0003` Spec Closure Batch C)**
+> - **Document ID:** `ARCH-DATA-01` | **Version:** `0.2.0-step03-closure` | **Last Updated:** `2026-11-14`
+> - **Authoring Roles:** Principal Data Architect & Cryptography/Security Lead
+> - **Governance Status:** **Accepted Architecture Contract (`ACCEPTED` — `CR-03, CR-04, CR-06, CR-07` & `COND-PO-01..05`)** — synchronized 1-to-1 with machine-readable reference schemas [`db/spec-check/sqlite_schema.sql`](../../db/spec-check/sqlite_schema.sql) and [`db/spec-check/postgres_schema.sql`](../../db/spec-check/postgres_schema.sql), [`ADR-0003`](./adr/0003-dual-mode-persistence-and-cluster-state.md), and [`ADR-0005`](./adr/0005-two-phase-budget-ledger-and-commercial-billing-separation.md). **All quantitative latency, `RTO`/`RPO`, revocation (`< 1s` / `< 5s`), and erasure (`< 60s`) figures in this document are `TARGET / UNVERIFIED` design goals until empirically validated in `TP-IMP-0004`..`TP-IMP-0043` (`COND-PO-01`).**
+> - **Requirements Traceability:** `GAP-04`, `GAP-05`, `GAP-06`; `TP-FR-0201`..`0206`, `TP-FR-0304`, `TP-FR-0401`..`0406`, `TP-FR-0501`..`0504`, `TP-FR-0704`, `TP-FR-0801`..`0806`, `TP-FR-1001`..`1005`, `TP-NFR-0402`, `TP-NFR-0404`, `TP-NFR-0501`, `TP-NFR-0502`, `TP-NFR-0601`.
 
 ---
 
-## 1. Dual-Mode Portability Rules (`Dual-Mode Portability Rules`)
+## 1. Dual-Mode Portability & Multi-Tenant Isolation Rules
 
-So that a single domain layer executes cleanly on both **embedded SQLite (`WAL mode`)** in standalone deployments and **PostgreSQL `16+`** in HA clusters without heavyweight ORMs or fragmented business logic (`RSK-013`), the physical schema enforces six invariant portability rules:
+To ensure a single domain layer executes identically on **embedded SQLite (`WAL mode`, `modernc.org/sqlite`, `CGO_ENABLED=0`)** in standalone deployments and **PostgreSQL `16+`** (`pgx/v5`) in stateless HA clusters without ORM impedance or schema drift (`RSK-013`), every table in [`sqlite_schema.sql`](../../db/spec-check/sqlite_schema.sql) and [`postgres_schema.sql`](../../db/spec-check/postgres_schema.sql) enforces seven invariant rules:
 
-1. **Time-Ordered Domain-Prefixed Primary Keys (`UUIDv7` / `ULID`):** Stored as canonical strings (`TEXT` / `VARCHAR(40)`, e.g., `org_01jc8x...`, `vk_01jc8x...`, `req_01jc8x...`), ensuring monotonic sequential B-Tree inserts without index page fragmentation and identical behavior across SQLite and PostgreSQL.
-2. **Zero IEEE-754 Floating-Point Arithmetic for Currency (`Zero IEEE-754 Float for Money`):** All budgets, active holds, and cost settlements are persisted as signed 64-bit integers (**`BIGINT` denominated in `nano-USD` for unit rates (`10^-9 USD / token`) and `micro-USD` for ledger balances (`1 USD = 1_000_000 micro-USD`)**), eliminating cumulative rounding drift entirely (`ADR-0005`).
-3. **Strict Billing Mode Separation (`Strict Billing Mode Separation`):** The `billing_mode` column on `provider_connections` accepts exclusively `'COMMERCIAL_API'` (metered against legitimate commercial API token/unit pricing) or `'SELF_HOSTED_INFRA'` (`0 micro-USD` or internal chargeback unit rates for self-hosted GPU clusters). Zero tables or states exist to convert personal consumer subscriptions into shared API quota.
-4. **Optimistic Concurrency Control (`Optimistic Concurrency Control`):** Every mutable configuration table modified via Console, CLI, or GitOps includes `version BIGINT NOT NULL DEFAULT 1` (mapped directly to HTTP `ETag`). All updates enforce `WHERE id = ? AND version = ?` while incrementing `version = version + 1`; if `rows_affected == 0`, the API immediately returns `409 version_conflict` (`TP-FR-0901`).
-5. **Canonical UTC Timestamps:** Every timestamp is stored in UTC (`TIMESTAMPTZ` on PostgreSQL; uniform `epoch_ms BIGINT` or `ISO-8601 UTC` strings on SQLite normalized through the `storage/port` type adapter).
-6. **Defense-in-Depth Multi-Tenant Isolation (`Defense-in-Depth Tenant Isolation`):** Every tenant-scoped table carries a mandatory `org_id` column in foreign keys and leading composite index positions; on PostgreSQL, **`Row-Level Security (RLS)`** policies bound to session variable `app.current_org_id` provide a second line of defense against omitted `WHERE org_id = ?` predicates.
+1. **Time-Ordered Domain-Prefixed `UUIDv7` Primary Keys:**
+   - Every domain entity ID is formatted as `<prefix>_<26_chars_crockford_base32_uuidv7>` (total length `<= 32` characters inside `VARCHAR(40)`), preserving monotonic B-Tree insertion order across both SQLite and PostgreSQL.
+   - Canonical 26 prefixes (`TP-IMP-0007`): `org_`, `prj_`, `env_`, `prc_`, `vky_`, `sec_`, `ext_`, `exv_`, `ins_`, `adp_`, `con_`, `lmd_`, `dpl_`, `pol_`, `rte_`, `bdg_`, `rsv_`, `set_`, `trc_`, `aud_`, `ksw_`, `mcp_`, `apr_`, `whk_`, `agt_`, `tsk_`.
+2. **Zero IEEE-754 Floating-Point Arithmetic for Currency (`ADR-0005`):**
+   - Model pricing rate cards store unit rates as signed 64-bit integers in **`nano-USD` (`10^-9 USD / token`)**, while all budget ceilings, active holds, rollups, and settlements are stored as `BIGINT` in **`micro-USD` (`1 USD = 1_000_000 micro-USD`)** using deterministic ceiling division `ceil_div(nano_usd, 1000)`. `FLOAT`, `REAL`, and `DOUBLE PRECISION` columns are banned across all financial tables.
+3. **Strict Billing Mode Separation (`DEC-004`):**
+   - `provider_connections.billing_mode` and `usage_settlements.billing_mode` enforce `CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA'))`. Zero tables, columns, or states exist to pool or convert personal consumer subscriptions into shared API quota.
+4. **Optimistic Concurrency Control (`ETag` / `version BIGINT` — `TP-FR-0901`):**
+   - Every mutable configuration resource (`organizations`, `projects`, `environments`, `principals`, `role_bindings`, `virtual_keys`, `secret_credentials`, `oauth_token_states`, `extension_installations`, `org_extension_policies`, `provider_adapters`, `provider_connections`, `logical_models`, `model_deployments`, `route_policies`, `policies`, `mcp_servers`, `mcp_tools`, `mcp_tool_grants`, `agent_endpoints`, `a2a_tasks`, `approval_requests`, `admin_change_requests`, `webhook_subscriptions`, `budget_ledgers`, `emergency_kill_switches`) carries `version BIGINT NOT NULL DEFAULT 1`. Mutations execute `WHERE org_id = ? AND id = ? AND version = ?` while incrementing `version = version + 1`; `0` affected rows return `409 optimistic_lock_conflict` (`port.ErrVersionConflict`).
+5. **Uniform UTC Epoch Millisecond Timestamps (`*_ms BIGINT`):**
+   - All timestamps across both SQLite and PostgreSQL are stored as UTC Unix epoch milliseconds (`BIGINT`, e.g., `created_at_ms`, `updated_at_ms`, `settled_at_ms`, `expires_at_ms`), eliminating `TEXT` vs. `TIMESTAMPTZ` formatting drift during `SQLite -> PostgreSQL` migrations (`CT-32`).
+6. **Four-Way Multi-Tenant Relational & Cryptographic Isolation (`CR-06`, `CR-07`):**
+   - **SQL Composite Keys:** Every tenant-owned child table enforces `PRIMARY KEY (org_id, ...)` and composite foreign keys `FOREIGN KEY (org_id, ...) REFERENCES parent(org_id, id)` on both SQLite (`PRAGMA foreign_keys = ON;`) and PostgreSQL, making cross-organization entity wiring structurally impossible at the database layer.
+   - **PostgreSQL `ENABLE + FORCE ROW LEVEL SECURITY`:** Every tenant-scoped table enforces `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` bound to `current_setting('app.current_org_id', true)` under a non-`SUPERUSER`, non-`BYPASSRLS` application role. If `app.current_org_id` is unset, queries fail closed and return `0` rows.
+   - **Context-Bound `AEAD AAD`:** Ciphertexts in `secret_credentials`, `debug_payload_blobs`, and `response_cache_entries` bind `org_id` (and `project_id` where project-scoped) inside `AES-256-GCM` Additional Authenticated Data.
+   - **Valkey Hash-Tag Keyspace:** Distributed cluster keys use `tp:v1:{<org_id>}:*` so multi-key Lua scripts stay within a single hash slot and never touch cross-tenant state.
+7. **Append-Only Immutability Triggers (`usage_settlements` & `audit_events`):**
+   - Both SQLite and PostgreSQL enforce `BEFORE UPDATE` and `BEFORE DELETE` triggers aborting any attempt to mutate or delete settled financial records or security audit events (`usage_settlements_immutable`, `audit_events_immutable`). To prevent foreign-key cascades from colliding with immutability triggers during project or key cleanup, historical `usage_settlements` and `audit_events` rows store immutable identifier strings rather than cascading `ON DELETE` foreign keys.
 
 ---
 
-## 2. Physical Schema Overview (`Physical Schema Overview`)
+## 2. Physical Schema Overview & Complete Table Inventory
+
+### 2.1. Entity-Relationship Overview
 
 ```mermaid
 erDiagram
     organizations ||--|{ projects : "org_id"
-    organizations ||--|{ org_encryption_keys : "org_id"
-    projects ||--|{ environments : "project_id"
-    organizations ||--o{ principals : "org_id"
+    organizations ||--|| org_encryption_keys : "org_id"
+    org_encryption_keys ||--o{ project_encryption_keys : "org_id"
+    projects ||--|| project_encryption_keys : "(org_id, project_id)"
+    projects ||--|{ environments : "(org_id, project_id)"
+    organizations ||--o{ principals : "org_id (nullable)"
     principals ||--o{ role_bindings : "principal_id"
-    environments ||--o{ virtual_keys : "env_id"
+    environments ||--o{ virtual_keys : "(org_id, env_id)"
 
     extension_packages ||--|{ extension_versions : "package_id"
-    extension_versions ||--o{ extension_installations : "version_id"
+    extension_packages ||--o| extension_installations : "package_id"
+    extension_packages ||--o{ org_extension_policies : "package_id"
     extension_installations ||--o{ provider_adapters : "installation_id"
 
     organizations ||--o{ secret_credentials : "org_id"
-    secret_credentials ||--o| oauth_token_states : "credential_id"
+    project_encryption_keys ||--o{ secret_credentials : "(org_id, owner_project_id)"
+    secret_credentials ||--o| oauth_token_states : "(org_id, credential_id)"
+    secret_credentials ||--o| oauth_token_leases : "(org_id, credential_id)"
+    organizations ||--o{ oauth_authorization_sessions : "org_id"
+
     provider_adapters ||--o{ provider_connections : "adapter_id"
-    secret_credentials ||--o{ provider_connections : "credential_id"
-    provider_connections ||--|{ model_deployments : "connection_id"
+    provider_connections ||--o{ connection_secret_bindings : "(org_id, connection_id)"
+    secret_credentials ||--o{ connection_secret_bindings : "(org_id, credential_id)"
+    provider_connections ||--|{ model_deployments : "(org_id, connection_id)"
     logical_models ||--o{ model_deployments : "logical_model_id"
 
-    projects ||--o{ routes : "project_id"
-    routes ||--|{ route_targets : "route_id"
-    model_deployments ||--o{ route_targets : "deployment_id"
+    environments ||--o{ route_policies : "(org_id, env_id)"
+    route_policies ||--|{ route_targets : "(org_id, route_id)"
+    model_deployments ||--o{ route_targets : "(org_id, deployment_id)"
     organizations ||--o{ policies : "org_id"
 
-    projects ||--o{ mcp_server_registrations : "project_id"
-    mcp_server_registrations ||--|{ mcp_tools : "mcp_server_id"
-    projects ||--o{ agent_endpoints : "project_id"
-    principals ||--o{ approval_requests : "decided_by"
+    projects ||--o{ mcp_servers : "(org_id, project_id)"
+    mcp_servers ||--|{ mcp_tools : "(org_id, mcp_server_id)"
+    mcp_tools ||--o{ mcp_tool_grants : "(org_id, mcp_tool_id)"
+    projects ||--o{ agent_endpoints : "(org_id, project_id)"
+    agent_endpoints ||--o{ a2a_tasks : "(org_id, agent_endpoint_id)"
+    organizations ||--o{ approval_requests : "org_id (nullable)"
+    organizations ||--o{ webhook_subscriptions : "org_id"
+    webhook_subscriptions ||--o{ webhook_deliveries : "(org_id, subscription_id)"
 
-    organizations ||--|{ budget_ledgers : "scope_owner"
-    virtual_keys ||--o{ budget_reservations : "virtual_key_id"
-    budget_reservations ||--o| usage_settlements : "reservation_id"
+    organizations ||--|{ budget_ledgers : "org_id"
+    budget_ledgers ||--o{ valkey_hold_checkpoints : "(org_id, ledger_id)"
+    organizations ||--o{ budget_reservations : "org_id"
+    organizations ||--o{ usage_settlements : "org_id"
+    organizations ||--o{ usage_rollups_hourly : "org_id"
     organizations ||--o{ request_traces_meta : "org_id"
-    organizations ||--o{ audit_events : "org_id"
+    project_encryption_keys ||--o{ debug_payload_blobs : "(org_id, project_id)"
+    organizations ||--o{ audit_events : "chain_key (org_id | SYSTEM)"
 ```
+
+### 2.2. Master Inventory of the `26` Canonical Domain Subsystems (`48` Physical SQL Tables)
+
+Every table referenced across `ARCH-SYS-01`, `ARCH-OPS-01`, `SPEC-SEC-02/03`, `SCR-01..16`, and implementation units `TP-IMP-0007`..`TP-IMP-0042` maps 1-to-1 to the physical tables below (`100%` parity between [`sqlite_schema.sql`](../../db/spec-check/sqlite_schema.sql) and [`postgres_schema.sql`](../../db/spec-check/postgres_schema.sql)):
+
+| Domain Group | Physical SQL Table(s) | Classification (`C1..C4`) | Tenancy & PostgreSQL `RLS` Scope | Owning Unit |
+|---|---|---|---|---|
+| **0. Migration Ledger** | `schema_migrations` | `C1` | Instance-global (checksum & `dirty` guard — `FMEA-06`) | `TP-IMP-0007`, `0039` |
+| **1. Organizations** | `organizations` | `C3` | Hybrid `FORCE RLS` (`id = current_org_id` or `OPERATOR`) | `TP-IMP-0007` |
+| **2. Projects** | `projects` | `C3` | Strict `FORCE RLS` (`PRIMARY KEY (org_id, id)`) | `TP-IMP-0007` |
+| **3. Environments** | `environments` | `C3` | Strict `FORCE RLS` (`PRIMARY KEY (org_id, id)`) | `TP-IMP-0007` |
+| **4. Org Envelope Keys** | `org_encryption_keys` | `C4` | Strict `FORCE RLS` (`Org DEK` wrapped by `Master KEK`) | `TP-IMP-0008` |
+| **5. Project Envelope Keys** | `project_encryption_keys` | `C4` | Strict `FORCE RLS` (`Project DEK` wrapped by `Org DEK`) | `TP-IMP-0008` |
+| **6. Principals** | `principals` | `C3` / `C4` | Hybrid `FORCE RLS` + partial unique index `WHERE org_id IS NULL` | `TP-IMP-0009` |
+| **7. RBAC Role Bindings** | `role_bindings` | `C3` | Hybrid `FORCE RLS` (`6` canonical roles) | `TP-IMP-0009` |
+| **8. Virtual Keys** | `virtual_keys` | `C3` / `C4` | Strict `FORCE RLS` (`vk_tp_` + plain `SHA-256`, `SM-05`) | `TP-IMP-0009` |
+| **9. Secret Vault & OAuth State** | `secret_credentials`, `oauth_token_states`, `oauth_token_leases` | `C4` | Strict `FORCE RLS` (`AEAD AAD` + `SM-03` single-flight lease) | `TP-IMP-0008`, `0034` |
+| **10. OAuth 2.1 Auth Sessions** | `oauth_authorization_sessions` | `C4` | Strict `FORCE RLS` (sealed `PKCE code_verifier`, `state`, `device_code`) | `TP-IMP-0034` |
+| **11. Extension Packages** | `extension_packages` | `C1` | Instance-global catalog (`official`, `verified`, `unverified_external`) | `TP-IMP-0011` |
+| **12. Extension Versions** | `extension_versions` | `C1` | Instance-global (`enterprise_signed`, `DECLARATIVE_T1`..`ISOLATED_SIDECAR_T3`) | `TP-IMP-0011` |
+| **13. Extension Installations** | `extension_installations` | `C3` | Instance-global (`SM-01`, nullable `active_version_id` while staging) | `TP-IMP-0011` |
+| **14. Org Extension Policies** | `org_extension_policies` | `C3` | Strict `FORCE RLS` (`PRIMARY KEY (org_id, package_id)`) | `TP-IMP-0011`, `0019` |
+| **15. Extension Revocations** | `extension_revocations` | `C1` / `C3` | Instance-global (`revocations.json` monotonic `version_serial`) | `TP-IMP-0011`, `0035` |
+| **16. Provider Adapters** | `provider_adapters` | `C1` | Instance-global (`UNIQUE (installation_id, adapter_slug)`) | `TP-IMP-0012` |
+| **17. Provider Connections** | `provider_connections` | `C3` | Strict `FORCE RLS` (`COMMERCIAL_API`/`SELF_HOSTED_INFRA`, `SM-02`) | `TP-IMP-0012` |
+| **18. Connection Secret Bindings** | `connection_secret_bindings` | `C3` | Strict `FORCE RLS` (multi-slot `(org_id, connection_id, slot_name)`) | `TP-IMP-0012` |
+| **19. Logical Models** | `logical_models` | `C1` / `C3` | Hybrid `FORCE RLS` (global `org_id IS NULL` + custom tenant models) | `TP-IMP-0012` |
+| **20. Model Deployments** | `model_deployments` | `C3` | Strict `FORCE RLS` (`SM-04` `HALF_OPEN_PROBING`, `idle_chunk_timeout_ms`) | `TP-IMP-0012`, `0020` |
+| **21. Routing, Policies, Idempotency & Cache** | `route_policies`, `route_targets`, `policies`, `idempotency_records`, `response_cache_entries` | `C3` / `C4` | Strict `FORCE RLS` (composite `(org_id, ...)` FKs; `Project DEK` cache) | `TP-IMP-0016`, `0019`, `0020`, `0041` |
+| **22. MCP Governance Hub** | `mcp_servers`, `mcp_tools`, `mcp_tool_grants` | `C3` | Strict `FORCE RLS` (`JCS schema_hash`, Default-Deny tool ACLs) | `TP-IMP-0036` |
+| **23. A2A Inter-Agent Plane** | `agent_endpoints`, `a2a_tasks` | `C3` | Strict `FORCE RLS` (`SM-09`, `hop_count <= 5`, sub-budget cap) | `TP-IMP-0042` |
+| **24. Approvals, Four-Eyes & Webhooks** | `approval_requests`, `admin_change_requests`, `webhook_subscriptions`, `webhook_deliveries` | `C3` | Strict / Hybrid `FORCE RLS` (nullable `org_id`/`project_id` on instance approvals) | `TP-IMP-0037`, `0041` |
+| **25. FinOps Budget Ledger & Rollups** | `budget_ledgers`, `budget_reservations`, `valkey_hold_checkpoints`, `usage_settlements`, `usage_rollups_hourly` | `C3` | Strict `FORCE RLS` (`usage_settlements` monthly partitioned + immutable) | `TP-IMP-0021`, `0040` |
+| **26. Traces, Blobs, Audit, Kill-Switch & Sync** | `request_traces_meta`, `debug_payload_blobs`, `audit_events`, `emergency_kill_switches`, `config_changelog`, `distributed_leases` | `C2` / `C3` / `C4` | `FORCE RLS` on tenant/hybrid tables; global `config_changelog` & `distributed_leases` | `TP-IMP-0007`, `0022`, `0023` |
+
+*(Note on non-RLS global coordination tables: `config_changelog` and `distributed_leases` intentionally omit per-`org_id` RLS because stateless Data Plane pods execute a single cluster-wide `SELECT ... FROM config_changelog WHERE config_epoch > $1` poll every `2 seconds` to refresh their in-memory `ConfigSnapshot`, and singleton leader jobs coordinate via `distributed_leases`; neither table stores secrets or conversational data.)*
 
 ---
 
-## 3. Detailed Subsystem DDL Specification (Reference PostgreSQL `16+` DDL)
+## 3. Cryptographic, Hash-Chain, Valkey & DDL Contracts
 
-### 3.1. Tenancy, Identity, RBAC & Virtual Keys (`Tenancy, IAM & Virtual Keys`)
+### 3.1. Three-Tier Envelope Encryption & the Two Canonical `AEAD AAD` Formulas (`CR-06`)
+
+1. **Key Hierarchy (`Master KEK -> Org DEK -> Project DEK`):**
+   - `Master KEK` (`256-bit`, held in external Cloud KMS / HashiCorp Vault Transit or a `0400`/`0600` local keyfile / `TANPOPO_MASTER_KEY` strictly separated from the database and backups) wraps each organization's `256-bit` `Org DEK` inside `org_encryption_keys`.
+   - Each organization's `Org DEK` wraps each child project's `256-bit` `Project DEK` inside `project_encryption_keys (org_id, project_id)`.
+2. **Exact Two Canonical `AEAD AAD` Formulas (`Zero Drift Across All Modules`):**
+   - **Formula 1 — `Organization`-Scoped Secret (`secret_credentials.owner_project_id IS NULL`, sealed under `Org DEK`):**
+     ```text
+     "tanpopo:v1:cred:" + org_id + ":" + credential_id + ":" + secret_kind
+     ```
+   - **Formula 2 — `Project`-Scoped Secret, Debug Payload Blob, or Opt-In Cache Entry (sealed under `Project DEK`):**
+     ```text
+     "tanpopo:v1:proj:" + org_id + ":" + project_id + ":" + record_kind + ":" + record_id
+     ```
+     where `(record_kind, record_id)` is:
+     - `("cred", credential_id)` for project-owned rows in `secret_credentials` (`owner_project_id IS NOT NULL`),
+     - `("debug_blob", request_id)` for opt-in rows in `debug_payload_blobs` (`TTL <= 72h`), and
+     - `("cache_entry", cache_key_sha256)` for opt-in rows in `response_cache_entries` (`v0.3`).
+3. **Plain `SHA-256` Virtual Key Digests (`AUD-026`):**
+   - Client-facing Data Plane keys follow `vk_tp_<env>_<32_base62_chars>` (`256-bit` CSPRNG entropy). Only raw 32-byte `SHA-256(rawKey)` digests are persisted in `virtual_keys.active_key_hash` and `previous_key_hash` (compared via `crypto/subtle.ConstantTimeCompare`), decoupling `Virtual Key` validity from `Master KEK` rotation.
+
+### 3.2. Partitioned `RFC 8785 JCS` Audit Hash Chains (`CR-06`, `TP-IMP-0023`, `TP-IMP-0039`)
+
+To prevent concurrent multi-pod hash-chain forks and preserve `100%` self-verifiability for `ORG_OWNER` principals under `PostgreSQL FORCE RLS` without exposing rows from sibling tenants or instance-level operations (`NEG-2`):
+- **Chain Partition Key (`chain_key`):** Enforced by SQL `CHECK ((org_id IS NULL AND chain_key = 'SYSTEM') OR (org_id IS NOT NULL AND chain_key = org_id))`. Every `Organization` maintains an independent gapless sequence `seq_no = 1, 2, ...`, alongside one dedicated `'SYSTEM'` chain for instance-scoped events (`org_id IS NULL`, such as initial bootstrap or `tanpopo admin reset-local-owner`).
+- **Genesis Anchor (`seq_no = 1`):** `prev_hash = SHA-256("tanpopo:audit:genesis:v1:" + chain_key)`.
+- **Deterministic `JCS` Entry Digest:** Metadata and envelope fields (`{ id, created_at_ms, org_id, actor_kind, actor_id, entry_point, event_type, target_type, target_id, request_id, metadata }`) are canonicalized per **RFC 8785 JSON Canonicalization Scheme (`JCS`)** prior to hashing:
+  ```text
+  entry_hash = SHA-256(chain_key + ":" + seq_no + ":" + prev_hash + ":" + JCS(event_envelope))
+  ```
+  Because `JCS` normalizes key order and whitespace deterministically, `entry_hash` remains bit-for-bit identical across `SQLite TEXT` and `PostgreSQL JSONB` migrations (`CT-32`).
+- **HA Multi-Writer Serialization:** In PostgreSQL HA clusters, appending to `audit_events` acquires transaction-scoped `SELECT pg_advisory_xact_lock(hashtextextended('audit:' || chain_key, 0))` so concurrent Control Plane pods serialize `seq_no` per `chain_key` without blocking other organizations.
+
+### 3.3. Valkey Cluster `{<org_id>}` Hash-Tags & `valkey_hold_checkpoints` (`CR-07`)
+
+- **Cluster Hash-Slot Co-Location:** Every Valkey key embeds `{<org_id>}` as its sole Redis Cluster hash tag (`tp:v1:{<org_id>}:rl:...`, `tp:v1:{<org_id>}:budget:...`, `tp:v1:{<org_id>}:rsv:...`, `tp:v1:{<org_id>}:idem:...`, `tp:v1:{<org_id>}:cache:...`), guaranteeing that atomic Lua scripts evaluating `VirtualKey -> Env -> Project -> Org` rate limits or budget holds execute within a single hash slot (`0` `CROSSSLOT` errors).
+- **Periodic Hold Checkpointing (`valkey_hold_checkpoints`):** Each Data Plane pod flushes its aggregate active in-flight Valkey hold total (`active_hold_micro_usd`, `active_inflight_streams`) every **`1 second`** (`TARGET / UNVERIFIED`) into PostgreSQL `valkey_hold_checkpoints (org_id, ledger_id, node_id, ...)`. When Valkey degrades and admission falls back directly to PostgreSQL `budget_ledgers`, Core subtracts `SUM(active_hold_micro_usd)` across active node checkpoints plus a conservative per-node in-flight safety margin before admitting new requests.
+
+> [!IMPORTANT]
+> **Product Owner Verification Condition (`COND-PO-03` — Distributed Ledger Consistency):**
+> Defining a `1-second` `valkey_hold_checkpoints` table in the schema is **NOT** sufficient proof of financial ledger consistency. Full ledger invariants (`0` unattributed `micro-USD` drift, prevention of concurrent ceiling overspend, clean `OrphanReservationReaper` lease recovery, and post-failover reconstruction via `tanpopo admin verify-state --check-audit-chain --reconcile-orphaned-holds --rebuild-valkey-state`) remain **`TARGET / UNVERIFIED`** until proven under concurrent load, abrupt Valkey failover, network partition, and crash-recovery fault-injection tests in **`TP-IMP-0021`**, **`TP-IMP-0040`**, and **`TP-IMP-0043`**.
+
+### 3.4. Core Subsystem Reference DDL Highlights (PostgreSQL `16+` — Full Schema in `db/spec-check/*`)
+
+The complete, executable DDL for all `48` base tables, monthly partitions, secondary indexes, immutability triggers, and `46` `FORCE ROW LEVEL SECURITY` policies resides in [`db/spec-check/postgres_schema.sql`](../../db/spec-check/postgres_schema.sql) and [`db/spec-check/sqlite_schema.sql`](../../db/spec-check/sqlite_schema.sql). Key structural excerpts illustrating the hardened contracts:
 
 ```sql
--- 1. Organizations & Organization-Scoped Envelope Keys (enables < 60s Crypto-Shredding)
+-- Tenancy & Three-Tier Envelope Encryption Hierarchy (Groups 1..5)
 CREATE TABLE organizations (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'org_...'
-    slug                VARCHAR(64) NOT NULL UNIQUE,
-    display_name        VARCHAR(128) NOT NULL,
-    status              VARCHAR(24) NOT NULL DEFAULT 'ACTIVE', -- ACTIVE | SUSPENDED | PENDING_ERASURE
-    default_data_region VARCHAR(32),             -- NULL (Global) | 'EU' | 'US' | 'APAC' | 'ON_PREM'
-    min_plugin_trust    VARCHAR(24) NOT NULL DEFAULT 'UNVERIFIED_ALLOWED', -- OFFICIAL_ONLY | VERIFIED_PLUS | UNVERIFIED_ALLOWED
-    version             BIGINT NOT NULL DEFAULT 1,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                          VARCHAR(40) PRIMARY KEY,
+    slug                        VARCHAR(64) NOT NULL UNIQUE,
+    display_name                VARCHAR(128) NOT NULL,
+    status                      VARCHAR(24) NOT NULL DEFAULT 'ACTIVE'
+                                CHECK (status IN ('ACTIVE', 'SUSPENDED', 'DELETING', 'PENDING_ERASURE')),
+    default_data_region         VARCHAR(32),
+    min_plugin_trust            VARCHAR(40) NOT NULL DEFAULT 'ANY_APPROVED'
+                                CHECK (min_plugin_trust IN (
+                                    'OFFICIAL_ONLY',
+                                    'VERIFIED_OR_ENTERPRISE_SIGNED',
+                                    'VERIFIED_ONLY',
+                                    'ANY_APPROVED'
+                                )),
+    require_four_eyes_approval  BOOLEAN NOT NULL DEFAULT FALSE,
+    version                     BIGINT NOT NULL DEFAULT 1 CHECK (version >= 1),
+    created_at_ms               BIGINT NOT NULL,
+    updated_at_ms               BIGINT NOT NULL
 );
 
-CREATE TABLE org_encryption_keys (
-    org_id              VARCHAR(40) PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
-    kek_key_id          VARCHAR(128) NOT NULL,   -- Master key identifier in KMS/Vault/LocalKeyring
-    wrapped_dek         BYTEA NOT NULL,          -- 256-bit Org DEK AEAD-wrapped by Master KEK
-    rotated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 2. Projects & Environments (Rigid 3-tier hierarchy: Org -> Project -> Environment)
 CREATE TABLE projects (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'prj_...'
-    org_id              VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    slug                VARCHAR(64) NOT NULL,
-    display_name        VARCHAR(128) NOT NULL,
-    status              VARCHAR(24) NOT NULL DEFAULT 'ACTIVE', -- ACTIVE | EMERGENCY_HALTED | DELETING
-    enforced_region     VARCHAR(32),             -- Must equal or narrow Org's default_data_region
-    version             BIGINT NOT NULL DEFAULT 1,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    id              VARCHAR(40) NOT NULL,
+    org_id          VARCHAR(40) NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    slug            VARCHAR(64) NOT NULL,
+    display_name    VARCHAR(128) NOT NULL,
+    status          VARCHAR(24) NOT NULL DEFAULT 'ACTIVE'
+                    CHECK (status IN ('ACTIVE', 'EMERGENCY_HALTED', 'DELETING', 'PENDING_ERASURE')),
+    enforced_region VARCHAR(32),
+    version         BIGINT NOT NULL DEFAULT 1 CHECK (version >= 1),
+    created_at_ms   BIGINT NOT NULL,
+    updated_at_ms   BIGINT NOT NULL,
+    PRIMARY KEY (org_id, id),
+    UNIQUE (id),
     UNIQUE (org_id, slug)
 );
 
-CREATE TABLE environments (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'env_...'
-    org_id              VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    project_id          VARCHAR(40) NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    slug                VARCHAR(32) NOT NULL,    -- 'dev' | 'staging' | 'prod'
-    require_tested_caps BOOLEAN NOT NULL DEFAULT FALSE, -- When TRUE (prod): rejects DECLARED-only capabilities
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (project_id, slug)
+CREATE TABLE org_encryption_keys (
+    org_id          VARCHAR(40) PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+    kek_key_id      VARCHAR(128) NOT NULL,
+    aead_alg        VARCHAR(32) NOT NULL DEFAULT 'AES-256-GCM' CHECK (aead_alg = 'AES-256-GCM'),
+    nonce           BYTEA NOT NULL,
+    wrapped_org_dek BYTEA NOT NULL,
+    dek_version     BIGINT NOT NULL DEFAULT 1 CHECK (dek_version >= 1),
+    created_at_ms   BIGINT NOT NULL,
+    rotated_at_ms   BIGINT NOT NULL
 );
 
--- 3. Administrative Principals & RBAC Role Bindings
-CREATE TABLE principals (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'usr_...' | 'svc_...'
-    org_id              VARCHAR(40) REFERENCES organizations(id), -- NULL for global Instance Operator
-    kind                VARCHAR(24) NOT NULL,    -- HUMAN_LOCAL | HUMAN_OIDC | ADMIN_SERVICE_TOKEN
-    email_or_sub        VARCHAR(255) NOT NULL,
-    password_argon2id   TEXT,                    -- NULL when OIDC-backed; Argon2id hash for local admin
-    oidc_issuer         TEXT,
-    status              VARCHAR(24) NOT NULL DEFAULT 'ACTIVE',
-    last_login_at       TIMESTAMPTZ,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (org_id, kind, email_or_sub)
-);
-
-CREATE TABLE role_bindings (
-    id                  VARCHAR(40) PRIMARY KEY,
-    principal_id        VARCHAR(40) NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
-    scope_type          VARCHAR(24) NOT NULL,    -- INSTANCE | ORG | PROJECT
-    scope_id            VARCHAR(40) NOT NULL,
-    role_name           VARCHAR(32) NOT NULL,    -- OPERATOR | ORG_OWNER | TEAM_ADMIN | REVIEWER | DEVELOPER
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (principal_id, scope_type, scope_id, role_name)
-);
-
--- 4. Inference & Agent Virtual Keys (SM-05 — One-way hashed, dual-valid rotation & emergency revocation)
-CREATE TABLE virtual_keys (
-    id                      VARCHAR(40) PRIMARY KEY, -- 'vk_...'
-    org_id                  VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    project_id              VARCHAR(40) NOT NULL REFERENCES projects(id),
-    env_id                  VARCHAR(40) NOT NULL REFERENCES environments(id),
-    name                    VARCHAR(128) NOT NULL,
-    key_prefix              VARCHAR(20) NOT NULL,    -- Safe display prefix, e.g., 'vk_tp_live_9a2f'
-    active_key_hash         BYTEA NOT NULL UNIQUE,   -- HMAC-SHA256 of active secret (Write-Only)
-    previous_key_hash       BYTEA UNIQUE,            -- Prior key hash during ROTATING_DUAL_VALID grace window
-    rotation_grace_until    TIMESTAMPTZ,
-    state                   VARCHAR(32) NOT NULL DEFAULT 'CREATED_ACTIVE', -- SM-05
-    allowed_planes          VARCHAR(64) NOT NULL DEFAULT 'PROVIDER',       -- Subset of: PROVIDER,MCP,A2A
-    allowed_routes_json     JSONB NOT NULL DEFAULT '["*"]',
-    allowed_mcp_tools_json  JSONB NOT NULL DEFAULT '[]',                   -- Empty by default (Default-Deny for MCP!)
-    rpm_limit               INTEGER,
-    tpm_limit               INTEGER,
-    max_concurrent_streams  INTEGER NOT NULL DEFAULT 50,
-    expires_at              TIMESTAMPTZ,
-    revoked_at              TIMESTAMPTZ,
-    revocation_mode         VARCHAR(24),             -- STANDARD | EMERGENCY_SECURITY
-    version                 BIGINT NOT NULL DEFAULT 1,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
-
-### 3.2. Secret Vault, OAuth 2.1, Extensions & the 4-Entity Model Chain
-
-```sql
--- 5. AEAD Write-Only Secret Vault (TP-FR-0204)
-CREATE TABLE secret_credentials (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'sec_...'
-    org_id              VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    owner_project_id    VARCHAR(40) REFERENCES projects(id), -- NULL = Org-owned
-    name                VARCHAR(128) NOT NULL,
-    secret_kind         VARCHAR(32) NOT NULL,    -- API_KEY | OAUTH2_TOKEN_SET | HMAC_SECRET | MTLS_CLIENT_CERT
-    aead_alg            VARCHAR(32) NOT NULL DEFAULT 'AES-256-GCM',
-    nonce               BYTEA NOT NULL,
-    ciphertext          BYTEA NOT NULL,          -- AAD cryptographically bound to (org_id || id || secret_kind)
-    bound_audience      TEXT,                    -- Enforced match to block Cross-Audience Token Confusion (RFC 8707)
-    key_fingerprint     VARCHAR(32) NOT NULL,    -- One-way digest for rotation audit without secret disclosure
-    version             BIGINT NOT NULL DEFAULT 1,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 6. Authorized OAuth State Machine & Single-Flight Refresh Lease (SM-03)
-CREATE TABLE oauth_token_states (
-    credential_id       VARCHAR(40) PRIMARY KEY REFERENCES secret_credentials(id) ON DELETE CASCADE,
-    org_id              VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    state               VARCHAR(32) NOT NULL DEFAULT 'UNBOUND', -- SM-03: TOKEN_VALID | REFRESHING_SINGLEFLIGHT | REAUTH_REQUIRED...
-    granted_scopes      TEXT NOT NULL,
-    access_expires_at   TIMESTAMPTZ,
-    refresh_lease_owner VARCHAR(64),             -- Node ID holding the Single-Flight Refresh lease
-    refresh_lease_until TIMESTAMPTZ,
-    last_refresh_error  VARCHAR(128),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 7. Extension Packages, Versions & Installations (SM-01)
-CREATE TABLE extension_packages (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'pkg_...'
-    canonical_name      VARCHAR(160) NOT NULL UNIQUE, -- e.g., '@acme-cloud/regional-llm-adapter'
-    publisher_id        VARCHAR(128) NOT NULL,
-    origin_trust_tier   VARCHAR(32) NOT NULL,    -- OFFICIAL | VERIFIED | PRIVATE_ENTERPRISE | UNVERIFIED_EXTERNAL
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE extension_versions (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'extv_...'
-    package_id          VARCHAR(40) NOT NULL REFERENCES extension_packages(id),
-    semver              VARCHAR(64) NOT NULL,
-    contract_version    VARCHAR(16) NOT NULL,    -- e.g., '0.1'
-    runtime_tier        VARCHAR(24) NOT NULL,    -- DECLARATIVE | SANDBOXED_WASM | ISOLATED_SIDECAR
-    bundle_sha256       CHAR(64) NOT NULL,
-    signature_verified  BOOLEAN NOT NULL DEFAULT FALSE,
-    source_uri          TEXT NOT NULL,
-    manifest_json       JSONB NOT NULL,
-    sbom_digest         CHAR(64),
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (package_id, semver)
-);
-
-CREATE TABLE extension_installations (
-    id                          VARCHAR(40) PRIMARY KEY, -- 'inst_...'
-    package_id                  VARCHAR(40) NOT NULL REFERENCES extension_packages(id),
-    active_version_id           VARCHAR(40) NOT NULL REFERENCES extension_versions(id),
-    previous_pinned_version_id  VARCHAR(40) REFERENCES extension_versions(id), -- Enables < 5s Rollback
-    candidate_version_id        VARCHAR(40) REFERENCES extension_versions(id), -- Populated while UPDATING_PENDING_RECONSENT
-    lifecycle_state             VARCHAR(40) NOT NULL,    -- SM-01: PENDING_PERMISSION_APPROVAL | ENABLED_ACTIVE | QUARANTINED...
-    approved_permissions_json   JSONB NOT NULL,          -- Explicit permission set granted by Admin
-    approved_by_principal_id    VARCHAR(40) REFERENCES principals(id),
-    approved_at                 TIMESTAMPTZ,
-    quarantine_reason           TEXT,
-    version                     BIGINT NOT NULL DEFAULT 1,
-    updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 8. 4-Entity Model Chain: Adapter -> Connection -> Logical Model -> Model Deployment
-CREATE TABLE provider_adapters (
-    id                  VARCHAR(40) PRIMARY KEY,
-    installation_id     VARCHAR(40) NOT NULL REFERENCES extension_installations(id),
-    adapter_slug        VARCHAR(64) NOT NULL UNIQUE,
-    native_prefix       VARCHAR(64),             -- e.g., '/native/anthropic'
-    supported_dialects  JSONB NOT NULL
-);
-
-CREATE TABLE provider_connections (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'conn_...'
-    org_id              VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    owner_project_id    VARCHAR(40) REFERENCES projects(id), -- NULL = Org-Shared (one-way downward sharing to Projects)
-    adapter_id          VARCHAR(40) NOT NULL REFERENCES provider_adapters(id),
-    credential_id       VARCHAR(40) REFERENCES secret_credentials(id), -- NULL for keyless internal Ollama
-    name                VARCHAR(128) NOT NULL,
-    endpoint_base_url   TEXT NOT NULL,
-    allow_private_ip    BOOLEAN NOT NULL DEFAULT FALSE, -- Only Operator may enable TRUE for internal GPU hosts
-    data_region         VARCHAR(32) NOT NULL,    -- 'EU' | 'US' | 'APAC' | 'ON_PREM'
-    billing_mode        VARCHAR(24) NOT NULL CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA')),
-    state               VARCHAR(40) NOT NULL DEFAULT 'DRAFT', -- SM-02
-    shared_project_ids  JSONB NOT NULL DEFAULT '[]',
-    config_json         JSONB NOT NULL DEFAULT '{}',
-    version             BIGINT NOT NULL DEFAULT 1,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE logical_models (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'mdl_...'
-    canonical_slug      VARCHAR(128) NOT NULL UNIQUE, -- e.g., 'claude-sonnet-4-5', 'gpt-4o', 'qwen2.5-72b'
-    modality_kind       VARCHAR(32) NOT NULL,    -- CHAT | EMBEDDING | MULTIMODAL
-    context_window      INTEGER NOT NULL,
-    max_output_tokens   INTEGER NOT NULL,
-    base_capabilities   JSONB NOT NULL           -- vision, audio_input, document_input, tool_calling, strict_json_schema...
-);
-
-CREATE TABLE model_deployments (
-    id                      VARCHAR(40) PRIMARY KEY, -- 'dep_...'
-    org_id                  VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    connection_id           VARCHAR(40) NOT NULL REFERENCES provider_connections(id),
-    logical_model_id        VARCHAR(40) NOT NULL REFERENCES logical_models(id),
-    upstream_model_name     VARCHAR(160) NOT NULL,   -- Exact model identifier sent to upstream provider
-    capability_overrides    JSONB NOT NULL DEFAULT '{}',
-    assurance_level         VARCHAR(16) NOT NULL DEFAULT 'DECLARED', -- DECLARED | TESTED | VERIFIED
-    pricing_nano_usd_json   JSONB NOT NULL,          -- Unit rates in nano-USD/token for input, output, cache_read, cache_write, reasoning
-    health_state            VARCHAR(32) NOT NULL DEFAULT 'PROVISIONED', -- SM-04
-    cooldown_until          TIMESTAMPTZ,
-    connect_timeout_ms      INTEGER NOT NULL DEFAULT 5000,
-    first_byte_timeout_ms   INTEGER NOT NULL DEFAULT 30000, -- Up to 120000 for cold-loading Ollama/vLLM models
-    version                 BIGINT NOT NULL DEFAULT 1,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
-
-### 3.3. Routing, Hierarchical Policies, MCP, A2A & Idempotency
-
-```sql
--- 9. Routes & Hierarchical Governance Policies
-CREATE TABLE routes (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'rt_...'
-    org_id              VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    project_id          VARCHAR(40) NOT NULL REFERENCES projects(id),
-    env_id              VARCHAR(40) NOT NULL REFERENCES environments(id),
-    route_slug          VARCHAR(128) NOT NULL,   -- Virtual model slug invoked by API Clients (e.g., 'prod-default' or 'claude-sonnet')
-    strategy            VARCHAR(32) NOT NULL DEFAULT 'PRIORITY_FAILOVER', -- PRIORITY_FAILOVER | WEIGHTED | LOWEST_COST
-    max_failover_hops   SMALLINT NOT NULL DEFAULT 3 CHECK (max_failover_hops BETWEEN 0 AND 5),
-    required_region     VARCHAR(32),
-    version             BIGINT NOT NULL DEFAULT 1,
-    UNIQUE (env_id, route_slug)
-);
-
-CREATE TABLE route_targets (
-    route_id            VARCHAR(40) NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
-    deployment_id       VARCHAR(40) NOT NULL REFERENCES model_deployments(id),
-    priority_order      SMALLINT NOT NULL,
-    weight              SMALLINT NOT NULL DEFAULT 100,
-    PRIMARY KEY (route_id, deployment_id)
-);
-
-CREATE TABLE policies (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'pol_...'
-    org_id              VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    scope_type          VARCHAR(16) NOT NULL,    -- ORG | PROJECT | ENV
-    scope_id            VARCHAR(40) NOT NULL,
-    policy_type         VARCHAR(32) NOT NULL,    -- MODEL_ALLOWLIST | DATA_RESIDENCY | GUARDRAIL | MCP_GOVERNANCE
-    failure_mode        VARCHAR(16) NOT NULL DEFAULT 'FAIL_CLOSED', -- FAIL_OPEN prohibited for Auth/Residency/HardBudget/DestructiveMCP
-    rules_json          JSONB NOT NULL,
-    enabled             BOOLEAN NOT NULL DEFAULT TRUE,
-    version             BIGINT NOT NULL DEFAULT 1,
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 10. MCP Plane, A2A Plane, Human-in-the-Loop Approvals (SM-06) & Idempotency Records
-CREATE TABLE mcp_server_registrations (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'mcps_...'
-    org_id              VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    project_id          VARCHAR(40) NOT NULL REFERENCES projects(id),
-    server_slug         VARCHAR(64) NOT NULL,    -- Forms canonical namespace '<server_slug>__<tool_name>'
-    transport_kind      VARCHAR(24) NOT NULL,    -- STREAMABLE_HTTP | SIDECAR_STDIO
-    endpoint_url        TEXT NOT NULL,
-    credential_id       VARCHAR(40) REFERENCES secret_credentials(id),
-    pinning_mode        VARCHAR(24) NOT NULL DEFAULT 'STRICT_LOCK', -- STRICT_LOCK | WARN_ONLY
-    status              VARCHAR(24) NOT NULL DEFAULT 'ACTIVE',
-    version             BIGINT NOT NULL DEFAULT 1,
-    UNIQUE (project_id, server_slug)
-);
-
-CREATE TABLE mcp_tools (
-    id                      VARCHAR(40) PRIMARY KEY,
-    org_id                  VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    mcp_server_id           VARCHAR(40) NOT NULL REFERENCES mcp_server_registrations(id) ON DELETE CASCADE,
-    tool_name               VARCHAR(128) NOT NULL,
-    side_effect_class       VARCHAR(24) NOT NULL DEFAULT 'MUTATING', -- READ_ONLY | MUTATING | DESTRUCTIVE
-    approved_schema_sha256  CHAR(64) NOT NULL,   -- Approved RFC 8785 JCS digest (MCP Rug-Pull defense)
-    observed_schema_sha256  CHAR(64) NOT NULL,
-    schema_drift_locked     BOOLEAN NOT NULL DEFAULT FALSE,
-    tool_schema_json        JSONB NOT NULL,
-    UNIQUE (mcp_server_id, tool_name)
-);
-
-CREATE TABLE agent_endpoints (
-    id                      VARCHAR(40) PRIMARY KEY, -- 'agt_...'
-    org_id                  VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    project_id              VARCHAR(40) NOT NULL REFERENCES projects(id),
-    agent_slug              VARCHAR(64) NOT NULL,
-    endpoint_url            TEXT NOT NULL,
-    agent_card_json         JSONB NOT NULL,
-    max_delegation_hops     SMALLINT NOT NULL DEFAULT 5 CHECK (max_delegation_hops <= 10),
-    status                  VARCHAR(24) NOT NULL DEFAULT 'ACTIVE',
-    UNIQUE (project_id, agent_slug)
-);
-
-CREATE TABLE approval_requests (
-    id                      VARCHAR(40) PRIMARY KEY, -- 'apr_...'
-    org_id                  VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    project_id              VARCHAR(40) NOT NULL REFERENCES projects(id),
-    action_kind             VARCHAR(32) NOT NULL,    -- MCP_DESTRUCTIVE_CALL | EXTENSION_ESCALATION | BUDGET_OVERRIDE
-    requester_key_or_sub    VARCHAR(64) NOT NULL,
-    target_identifier       VARCHAR(160) NOT NULL,   -- e.g., 'prod_db__drop_table'
-    params_jcs_sha256       CHAR(64) NOT NULL,       -- Cryptographically bound to canonicalized parameter digest!
-    state                   VARCHAR(24) NOT NULL DEFAULT 'AWAITING_APPROVAL', -- SM-06
-    pre_approval_token_hash BYTEA UNIQUE,            -- Single-use token hash for asynchronous approval replay
-    decided_by              VARCHAR(40) REFERENCES principals(id),
-    decision_reason         TEXT,
-    expires_at              TIMESTAMPTZ NOT NULL,
-    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    decided_at              TIMESTAMPTZ
-);
-
-CREATE TABLE idempotency_records (
-    org_id                  VARCHAR(40) NOT NULL,
-    scope_owner_id          VARCHAR(40) NOT NULL,    -- virtual_key_id or principal_id
-    idempotency_key         VARCHAR(128) NOT NULL,
-    payload_sha256          CHAR(64) NOT NULL,
-    state                   VARCHAR(16) NOT NULL,    -- IN_FLIGHT | COMPLETED
-    http_status             SMALLINT,
-    response_headers_json   JSONB,
-    response_body_bytes     BYTEA,
-    expires_at              TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (org_id, scope_owner_id, idempotency_key)
-);
-```
-
-### 3.4. Two-Phase Budget Ledger, Observability Traces & Immutable Security Audit
-
-```sql
--- 11. Hierarchical Budget Ledgers (Unit: micro-USD = 10^-6 USD)
-CREATE TABLE budget_ledgers (
-    id                          VARCHAR(40) PRIMARY KEY, -- 'bdg_...'
-    org_id                      VARCHAR(40) NOT NULL REFERENCES organizations(id),
-    scope_type                  VARCHAR(16) NOT NULL,    -- ORG | PROJECT | ENV | VIRTUAL_KEY
-    scope_id                    VARCHAR(40) NOT NULL,
-    period_kind                 VARCHAR(16) NOT NULL,    -- MONTHLY | DAILY | TOTAL_LIFETIME
-    period_start                TIMESTAMPTZ NOT NULL,
-    period_end                  TIMESTAMPTZ NOT NULL,
-    hard_limit_micros           BIGINT NOT NULL CHECK (hard_limit_micros >= 0),
-    reserved_hold_micros        BIGINT NOT NULL DEFAULT 0 CHECK (reserved_hold_micros >= 0),
-    settled_exact_micros        BIGINT NOT NULL DEFAULT 0 CHECK (settled_exact_micros >= 0),
-    settled_estimated_micros    BIGINT NOT NULL DEFAULT 0 CHECK (settled_estimated_micros >= 0),
-    negative_carryover_micros   BIGINT NOT NULL DEFAULT 0 CHECK (negative_carryover_micros >= 0),
-    soft_alert_thresholds_pct   JSONB NOT NULL DEFAULT '[50, 80, 100]',
-    last_alerted_threshold_pct  SMALLINT NOT NULL DEFAULT 0,
-    UNIQUE (scope_type, scope_id, period_kind, period_start)
-);
-
--- 12. Active In-Flight Budget Reservations (SM-07)
-CREATE TABLE budget_reservations (
-    id                  VARCHAR(40) PRIMARY KEY, -- 'rsv_...'
-    request_id          VARCHAR(40) NOT NULL UNIQUE,
+CREATE TABLE project_encryption_keys (
     org_id              VARCHAR(40) NOT NULL,
     project_id          VARCHAR(40) NOT NULL,
-    env_id              VARCHAR(40) NOT NULL,
-    virtual_key_id      VARCHAR(40) NOT NULL,
-    state               VARCHAR(32) NOT NULL,    -- RESERVED_HOLD | STREAMING_ACCRUING | SETTLED_* | RELEASED_UNUSED | EXPIRED_RECLAIMED
-    hold_micros         BIGINT NOT NULL CHECK (hold_micros >= 0),
-    lease_expires_at    TIMESTAMPTZ NOT NULL,    -- Enables OrphanReservationReaper reclamation upon worker crash
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    org_dek_version     BIGINT NOT NULL DEFAULT 1 CHECK (org_dek_version >= 1),
+    aead_alg            VARCHAR(32) NOT NULL DEFAULT 'AES-256-GCM' CHECK (aead_alg = 'AES-256-GCM'),
+    nonce               BYTEA NOT NULL,
+    wrapped_project_dek BYTEA NOT NULL,
+    dek_version         BIGINT NOT NULL DEFAULT 1 CHECK (dek_version >= 1),
+    created_at_ms       BIGINT NOT NULL,
+    rotated_at_ms       BIGINT NOT NULL,
+    PRIMARY KEY (org_id, project_id),
+    FOREIGN KEY (org_id) REFERENCES org_encryption_keys(org_id) ON DELETE CASCADE,
+    FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id) ON DELETE CASCADE
+);
+```
+
+```sql
+-- Append-Only Partitioned Ledger, Checkpoint & Per-Org/SYSTEM Audit Chain (Groups 25..26)
+CREATE TABLE valkey_hold_checkpoints (
+    org_id                  VARCHAR(40) NOT NULL,
+    ledger_id               VARCHAR(40) NOT NULL,
+    node_id                 VARCHAR(64) NOT NULL,
+    active_hold_micro_usd   BIGINT NOT NULL DEFAULT 0 CHECK (active_hold_micro_usd >= 0),
+    active_inflight_streams INTEGER NOT NULL DEFAULT 0 CHECK (active_inflight_streams >= 0),
+    updated_at_ms           BIGINT NOT NULL,
+    PRIMARY KEY (org_id, ledger_id, node_id),
+    FOREIGN KEY (org_id, ledger_id) REFERENCES budget_ledgers(org_id, id) ON DELETE CASCADE
 );
 
--- 13. Immutable Cost Settlement Ledger (Append-Only, Monthly Range-Partitioned in Postgres)
 CREATE TABLE usage_settlements (
-    id                      VARCHAR(40) NOT NULL,
-    settled_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    request_id              VARCHAR(40) NOT NULL,
-    reservation_id          VARCHAR(40),
-    org_id                  VARCHAR(40) NOT NULL,
-    project_id              VARCHAR(40) NOT NULL,
-    env_id                  VARCHAR(40) NOT NULL,
-    virtual_key_id          VARCHAR(40) NOT NULL,
-    plane                   VARCHAR(16) NOT NULL,    -- PROVIDER | MCP | A2A
-    deployment_id           VARCHAR(40),
-    logical_model_slug      VARCHAR(128),
-    billing_mode            VARCHAR(24) NOT NULL,    -- COMMERCIAL_API | SELF_HOSTED_INFRA
-    usage_accuracy          VARCHAR(24) NOT NULL CHECK (usage_accuracy IN ('EXACT', 'ESTIMATED', 'UNMETERED_FLAGGED')),
-    input_tokens            INTEGER NOT NULL DEFAULT 0,
-    output_tokens           INTEGER NOT NULL DEFAULT 0,
-    cache_read_tokens       INTEGER NOT NULL DEFAULT 0,
-    cache_write_tokens      INTEGER NOT NULL DEFAULT 0,
-    reasoning_tokens        INTEGER NOT NULL DEFAULT 0,
-    total_cost_micros       BIGINT NOT NULL CHECK (total_cost_micros >= 0),
-    PRIMARY KEY (id, settled_at)
-) PARTITION BY RANGE (settled_at);
+    id                            VARCHAR(40) NOT NULL,
+    settled_at_ms                 BIGINT NOT NULL,
+    request_id                    VARCHAR(40) NOT NULL,
+    reservation_id                VARCHAR(40),
+    org_id                        VARCHAR(40) NOT NULL,
+    project_id                    VARCHAR(40) NOT NULL,
+    env_id                        VARCHAR(40) NOT NULL,
+    virtual_key_id                VARCHAR(40) NOT NULL,
+    plane                         VARCHAR(16) NOT NULL CHECK (plane IN ('PROVIDER', 'MCP', 'A2A')),
+    deployment_id                 VARCHAR(40),
+    logical_model_slug            VARCHAR(128),
+    billing_mode                  VARCHAR(24) NOT NULL CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA')),
+    usage_accuracy                VARCHAR(24) NOT NULL CHECK (usage_accuracy IN ('EXACT', 'ESTIMATED', 'UNMETERED_FLAGGED')),
+    input_tokens                  INTEGER NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
+    output_tokens                 INTEGER NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
+    cache_read_tokens             INTEGER NOT NULL DEFAULT 0 CHECK (cache_read_tokens >= 0),
+    cache_write_tokens            INTEGER NOT NULL DEFAULT 0 CHECK (cache_write_tokens >= 0),
+    reasoning_tokens              INTEGER NOT NULL DEFAULT 0 CHECK (reasoning_tokens >= 0),
+    media_usage_json              JSONB NOT NULL DEFAULT '{}'::jsonb,
+    applied_pricing_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    total_cost_micros             BIGINT NOT NULL CHECK (total_cost_micros >= 0),
+    PRIMARY KEY (org_id, id, settled_at_ms),
+    UNIQUE (request_id, settled_at_ms)
+) PARTITION BY RANGE (settled_at_ms);
 
--- 14. Technical Request Trace Metadata (Metadata-Only by Default — ZERO Prompt/Response Payloads!)
-CREATE TABLE request_traces_meta (
-    request_id              VARCHAR(40) NOT NULL,
-    started_at              TIMESTAMPTZ NOT NULL,
-    org_id                  VARCHAR(40) NOT NULL,
-    project_id              VARCHAR(40) NOT NULL,
-    env_id                  VARCHAR(40) NOT NULL,
-    virtual_key_id          VARCHAR(40),
-    entry_point             VARCHAR(24) NOT NULL,    -- unified_http | native_http | mcp_http | a2a_http | playground
-    otel_trace_id           CHAR(32),
-    route_slug              VARCHAR(128),
-    selected_deployment_id  VARCHAR(40),
-    failover_attempts       SMALLINT NOT NULL DEFAULT 0,
-    http_status             SMALLINT NOT NULL,
-    canonical_error_code    VARCHAR(64),
-    proxy_overhead_us       INTEGER NOT NULL,        -- Tanpopo internal proxy overhead (microseconds)
-    ttft_ms                 INTEGER,                 -- Time-to-First-Token (ms)
-    total_duration_ms       INTEGER NOT NULL,
-    PRIMARY KEY (request_id, started_at)
-) PARTITION BY RANGE (started_at);
-
--- Strictly segregated table for opt-in debug payloads (Written ONLY when Admin explicitly enables + hard TTL <= 72h)
-CREATE TABLE debug_payload_blobs (
-    request_id              VARCHAR(40) PRIMARY KEY,
-    org_id                  VARCHAR(40) NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    nonce                   BYTEA NOT NULL,
-    encrypted_payload_aead  BYTEA NOT NULL,          -- Auth headers stripped & AEAD-encrypted under Org DEK
-    expires_at              TIMESTAMPTZ NOT NULL     -- Enforced <= started_at + INTERVAL '72 hours'
-);
-
--- 15. Immutable Administrative & Security Audit Log (Append-Only + Tamper-Evident Hash Chain)
 CREATE TABLE audit_events (
-    id                      VARCHAR(40) NOT NULL,    -- 'aud_...'
-    occurred_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    org_id                  VARCHAR(40),             -- NULL for Instance-scoped events
-    actor_kind              VARCHAR(24) NOT NULL,
-    actor_id                VARCHAR(64) NOT NULL,
-    entry_point             VARCHAR(24) NOT NULL,    -- admin_api | cli | gitops_boot | system_reaper
-    event_type              VARCHAR(64) NOT NULL,    -- e.g., 'plugin.quarantined', 'virtual_key.emergency_revoked'
-    target_type             VARCHAR(32) NOT NULL,
-    target_id               VARCHAR(64) NOT NULL,
-    request_id              VARCHAR(40),
-    metadata_json           JSONB NOT NULL,          -- Scrubbed through strict secret-field denylist
-    prev_event_hash         CHAR(64) NOT NULL,
-    event_hash              CHAR(64) NOT NULL,       -- SHA-256(prev_event_hash || occurred_at || event_type || target_id || metadata_json)
-    PRIMARY KEY (id, occurred_at)
-) PARTITION BY RANGE (occurred_at);
+    id            VARCHAR(40) NOT NULL,
+    created_at_ms BIGINT NOT NULL,
+    org_id        VARCHAR(40),
+    chain_key     VARCHAR(40) NOT NULL,
+    seq_no        BIGINT NOT NULL CHECK (seq_no >= 1),
+    actor_kind    VARCHAR(24) NOT NULL,
+    actor_id      VARCHAR(64) NOT NULL,
+    entry_point   VARCHAR(24) NOT NULL
+                  CHECK (entry_point IN ('admin_api', 'cli', 'gitops_boot', 'system_reaper', 'data_plane_guard')),
+    event_type    VARCHAR(64) NOT NULL,
+    target_type   VARCHAR(32) NOT NULL,
+    target_id     VARCHAR(64) NOT NULL,
+    request_id    VARCHAR(40),
+    metadata_json JSONB NOT NULL,
+    prev_hash     CHAR(64) NOT NULL,
+    entry_hash    CHAR(64) NOT NULL,
+    CHECK ((org_id IS NULL AND chain_key = 'SYSTEM') OR (org_id IS NOT NULL AND chain_key = org_id)),
+    PRIMARY KEY (chain_key, seq_no, created_at_ms),
+    UNIQUE (id, created_at_ms)
+) PARTITION BY RANGE (created_at_ms);
+
+-- Reference Engine-Level Isolation Applied Across All Tenant Tables:
+ALTER TABLE secret_credentials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE secret_credentials FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON secret_credentials
+    USING (org_id = current_setting('app.current_org_id', true))
+    WITH CHECK (org_id = current_setting('app.current_org_id', true));
 ```
 
 ---
 
-## 4. Indexing Strategy (`Query-Plan-Justified Indexes`)
+## 4. Query-Plan-Justified Indexing Strategy
 
-Avoiding indiscriminate indexing that degrades write throughput (`performance-optimization`), every index below directly serves a high-frequency production query plan:
+Every secondary and partial index in [`sqlite_schema.sql`](../../db/spec-check/sqlite_schema.sql) and [`postgres_schema.sql`](../../db/spec-check/postgres_schema.sql) maps directly to a bounded production query path:
 
-| Index Name | Table & Ordered Key Columns `(Equality -> Range/Sort)` | Target Query Plan Optimized |
+| Index Name | Table & Key Columns | Target Query Plan Optimized |
 |---|---|---|
-| `idx_vkeys_env_active` | `virtual_keys (org_id, project_id, env_id) WHERE state IN ('CREATED_ACTIVE', 'ROTATING_DUAL_VALID')` | Fast `ConfigSnapshot` hydration and Console active-key listing (*Partial Index*). |
-| `idx_rsv_orphan_lease` | `budget_reservations (lease_expires_at) WHERE state IN ('RESERVED_HOLD', 'STREAMING_ACCRUING')` | Enables `OrphanReservationReaper` to locate expired holds in `< 1 ms` without scanning finalized reservations! |
-| `idx_settlements_chargeback` | `usage_settlements (org_id, project_id, usage_accuracy, settled_at DESC)` | Generates `Chargeback` exports separating `EXACT` vs `ESTIMATED / UNMETERED` columns by billing window (`TP-FR-0803`). |
-| `idx_traces_project_time` | `request_traces_meta (org_id, project_id, env_id, started_at DESC)` | Powers cursor-paginated (`started_at, request_id`) log/trace exploration in the Web Console. |
-| `idx_traces_error_lookup` | `request_traces_meta (org_id, canonical_error_code, started_at DESC) WHERE canonical_error_code IS NOT NULL` | Accelerates blocked/failed request triage without indexing `99%` of successful traffic rows. |
-| `idx_audit_org_time` | `audit_events (org_id, occurred_at DESC)` & `audit_events (target_type, target_id, occurred_at DESC)` | Powers compliance audit queries and incident blast-radius lookups (`Impact Analysis` — `TP-FR-0705`). |
-| `idx_debug_blobs_ttl` | `debug_payload_blobs (expires_at)` | Fast batch purging of expired debug payload blobs (`<= 72 hours`). |
+| `idx_principals_instance_operator_unique` | `principals (kind, email_or_sub) WHERE org_id IS NULL` | Prevents duplicate global `OPERATOR` accounts when `org_id` is `NULL` (`CR-06`). |
+| `idx_vkeys_env_active` | `virtual_keys (org_id, project_id, env_id) WHERE state IN ('CREATED_ACTIVE', 'ROTATING_DUAL_VALID')` | Fast `ConfigSnapshot` hydration and Console active-key listing. |
+| `idx_rsv_orphan_lease` | `budget_reservations (lease_expires_at_ms) WHERE state IN ('RESERVED_HOLD', 'STREAMING_ACCRUING')` | Enables `OrphanReservationReaper` to reclaim expired holds in `< 1 ms` (`TARGET / UNVERIFIED`) without scanning settled rows. |
+| `idx_hold_checkpoints_updated` | `valkey_hold_checkpoints (org_id, ledger_id, updated_at_ms DESC)` | Sums active per-node Valkey holds during PostgreSQL fallback admission. |
+| `idx_settlements_chargeback` | `usage_settlements (org_id, project_id, usage_accuracy, settled_at_ms DESC)` | Powers `Chargeback` exports separating `EXACT`, `ESTIMATED`, and `UNMETERED_FLAGGED` spend (`TP-FR-0803`). |
+| `idx_traces_project_time` | `request_traces_meta (org_id, project_id, env_id, created_at_ms DESC)` | Powers cursor-paginated (`created_at_ms, request_id`) trace exploration in `SCR-11`. |
+| `idx_traces_error_lookup` | `request_traces_meta (org_id, canonical_error_code, created_at_ms DESC) WHERE canonical_error_code IS NOT NULL` | Accelerates failed-request triage without indexing `2xx` traffic rows. |
+| `idx_traces_blast_radius_ext` / `_conn` | `request_traces_meta (extension_installation_id, created_at_ms DESC)` & `(org_id, connection_id, created_at_ms DESC)` | Powers incident `Blast-Radius` correlation across compromised extensions or credentials (`TP-FR-0705`). |
+| `idx_debug_blobs_ttl` | `debug_payload_blobs (expires_at_ms)` | Bounded batch purging of expired `<= 72h` opt-in debug payload blobs. |
+| `idx_audit_org_time` / `idx_audit_target_time` | `audit_events (chain_key, created_at_ms DESC)` & `(target_type, target_id, created_at_ms DESC)` | Per-`Organization` / `SYSTEM` chain verification (`VerifyAuditChain`) and forensic lookups. |
+| `idx_webhook_deliveries_queue` | `webhook_deliveries (status, next_attempt_at_ms) WHERE status IN ('PENDING', 'RETRY_SCHEDULED')` | Polls due outbound webhook retries without scanning delivered rows. |
+| `idx_config_changelog_org_epoch` | `config_changelog (org_id, config_epoch DESC)` | Supports rapid delta inspection alongside the global `config_epoch` tail query. |
 
 ---
 
-## 5. Schema Migrations, Retention, `< 60s` Erasure & Backup/Recovery
+## 5. Migrations, `SQLite -> PostgreSQL` Promotion, Retention & Crypto-Shredding
 
-1. **Zero-Downtime Schema Migrations (`Expand / Contract Migrations`):**
-   - Managed via sequentially numbered, checksum-verified SQL migration files (`db/migrations/postgres/*.sql` and `db/migrations/sqlite/*.sql`).
-   - In HA clusters (`SM-08`), every upgrade follows the **Expand → Migrate Rollout → Contract** discipline: Control Plane upgrades introduce only nullable/defaulted columns or new tables so prior-version Data Plane pods undergoing `Rolling Drain` never encounter broken SQL statements; deprecated columns are dropped only in a subsequent release.
-2. **Zero-Lock Automated Retention (`Zero-Lock Retention` — `TP-NFR-0501`):**
-   - **On PostgreSQL:** `usage_settlements`, `request_traces_meta`, and `audit_events` are range-partitioned by time (monthly/weekly). Upon retention expiry (default `7–30 days` for `request_traces_meta`, `>= 365 days` for `usage_settlements` & `audit_events`), the worker detaches and drops expired partitions (`DETACH PARTITION CONCURRENTLY` → `DROP TABLE`) with **zero `VACUUM` bloat and zero locks on active partitions**.
-   - **On SQLite (Standalone):** `RetentionAndErasureWorker` deletes in small bounded batches (`DELETE FROM request_traces_meta WHERE rowid IN (SELECT rowid ... LIMIT 500)`) interleaved with `50 ms` yields so WAL writers are never stalled.
-3. **`< 60-Second` Organization/Project Erasure Integrity (`Crypto-Shredding + Erasure` — `TP-NFR-0502`):**
-   - Step 1 (`< 1 second`): Transition status to `PENDING_ERASURE` and broadcast an emergency revocation signal terminating all active streams belonging to that tenant scope.
-   - Step 2 (`< 5 seconds`): **Permanently delete the `org_encryption_keys` row (or `Project` subkey) along with all rows in `secret_credentials`, `oauth_token_states`, and `debug_payload_blobs`** → any secret or debug ciphertext becomes immediately undecipherable even on unoverwritten disk pages (*Crypto-Shredding*).
-   - Step 3 (`< 60 seconds`): Purge all routes and virtual keys, retaining only minimal anonymized accounting aggregates where required by the host organization's statutory financial retention rules.
-4. **Online Hot Backup & Disaster Recovery (`RTO < 15 Minutes` — `TP-NFR-0601`):**
-   - **Standalone Mode (`SQLite`):** `tanpopo backup create --out backup.tdb.enc` invokes SQLite's online hot backup primitive (`VACUUM INTO` / Online Backup API) bundled with `tanpopo.lock` without pausing live traffic.
-   - **HA Cluster Mode (`PostgreSQL`):** Uses base backups paired with continuous WAL archiving (`pgBackRest` / Cloud PITR).
-   - **Master Key Separation Invariant (`TP-FR-1003`):** Database backup archives **never contain the `Master KEK`**. An attacker who exfiltrates a complete SQL dump remains cryptographically unable to decrypt any upstream `Secret Credential`.
+1. **Zero-Downtime Schema Migrations (`Expand / Contract` — `SM-08`, `FMEA-06`):**
+   - Managed via sequentially numbered, `SHA-256` checksum-verified SQL migrations tracked in `schema_migrations`. If `dirty = true` or any previously applied checksum mismatches, `tanpopo serve` refuses to bind traffic ports and exits with code **`31`**.
+   - Clustered PostgreSQL upgrades coordinate DDL behind `pg_advisory_lock` and obey strict **Expand -> Rollout -> Contract** sequencing so draining `N-1` Data Plane pods never encounter missing columns.
+2. **Lossless Standalone-to-HA Engine Promotion (`tanpopo db migrate-engine` — `CT-32`):**
+   - Step 1: Freeze Control Plane configuration writes via `tanpopo admin freeze-writes --reason "Promote SQLite to PostgreSQL"` (live Data Plane inference continues uninterrupted from resident `ConfigSnapshot`).
+   - Step 2: Execute `tanpopo db migrate-engine --from sqlite:///var/lib/tanpopo/tanpopo.db --to postgres://... --verify`, which: (a) opens the SQLite source strictly read-only, (b) **pre-creates all required historical and 3-month lookahead monthly `RANGE` partitions** (`usage_settlements_YYYY_MM`, `request_traces_meta_YYYY_MM`, `audit_events_YYYY_MM`) on PostgreSQL prior to bulk copy so historical timestamps never fail partition routing, and (c) verifies exact row counts, `SUM(total_cost_micros)`, `VerifyAuditChain` across every `chain_key`, and trial `DEK` unwrapping (rolling back and exiting with code **`22`** on any discrepancy).
+   - Step 3: Point `tanpopo` nodes to PostgreSQL + Valkey, verify `/readyz = 200`, and lift the write lock via **`tanpopo admin unfreeze-writes`**.
+3. **Zero-Lock Automated Retention (`TP-NFR-0501`):**
+   - **PostgreSQL:** `partition_manager.go` pre-creates monthly partitions 3 months ahead and detaches/drops expired partitions (`DETACH PARTITION CONCURRENTLY` -> `DROP TABLE`) past configured retention windows (`7–90 days` default `30 days` for `request_traces_meta`; `>= 365 days` after archival export for `usage_settlements` and `audit_events`).
+   - **SQLite:** `RetentionAndErasureWorker` deletes aged `request_traces_meta` and `debug_payload_blobs` in bounded micro-batches interleaved with `50 ms` yields so WAL writers are never stalled.
+4. **Organization & Single-Project Erasure (`< 60s TARGET / UNVERIFIED` — `TP-NFR-0502`, `OPS-AC-09`):**
+   - **Single-Project Erasure:** Transitions `projects.status` to `PENDING_ERASURE`, broadcasts an emergency stream-abort and `DEK` cache-eviction event via `config_changelog` / `Valkey Pub/Sub`, and deletes the project's row in `project_encryption_keys (org_id, project_id)` (cascading live `Project`-owned `secret_credentials`, `debug_payload_blobs`, and `response_cache_entries` without affecting sibling projects or breaking the parent organization's `audit_events` hash chain).
+   - **Full Organization Erasure:** Destroys `org_encryption_keys` (and all child `project_encryption_keys`), purges `tp:v1:{<org_id>}:*` keys in Valkey, removes mutable tenant configuration, and records an anonymized `tenant.crypto_shredded` compliance receipt.
+
+> [!IMPORTANT]
+> **Product Owner Verification Condition (`COND-PO-02` — Crypto-Shredding & Cold-Backup Undecipherability):**
+> Introducing `org_encryption_keys` and `project_encryption_keys` in the physical schema establishes the cryptographic mechanism for tenant and project erasure, **NOT** empirical proof that historical cold backups are undecipherable in production. Both the **`< 60-second` erasure window** and **cold-backup undecipherability** remain **`TARGET / UNVERIFIED`** until end-to-end key-lifecycle tests, live `.tpop.enc` / PostgreSQL PITR backup-and-restore drills, multi-node RAM `DEK` cache eviction/zeroization checks, SQLite WAL/page residue inspections, and post-shredding non-recoverability assertions pass in **`TP-IMP-0008`** and **`TP-IMP-0032`** (and multi-node HA drills in **`TP-IMP-0043`**).
+
+5. **Online Hot Backup & `Master KEK` Separation (`RTO < 15m TARGET / UNVERIFIED` — `TP-FR-1003`, `TP-NFR-0601`):**
+   - **Standalone (`SQLite WAL`):** `tanpopo backup create --output backup.tpop.enc` captures an online snapshot via `VACUUM INTO` bundled with `tanpopo.lock` and a `SHA-256` manifest.
+   - **Clustered HA (`PostgreSQL 16+`):** Continuous base backups + WAL archiving (`pgBackRest` / `WAL-G`, `RPO < 5m TARGET / UNVERIFIED`).
+   - **`Master KEK` Separation Invariant:** `.tpop.enc` archives and PostgreSQL dumps **never** include `TANPOPO_MASTER_KEY`.

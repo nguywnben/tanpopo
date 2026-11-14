@@ -1,8 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Draft Milestone Plan (Phase ASTRA A09 — Gate G4: `READY_FOR_REVIEW` | `DRAFT — EXECUTION BASELINE UNLOCKED`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `0.1.0-step09-draft` | **Date:** `2026-11-14`
+> **Milestone Plan (Reconciled Post-`M0` — Gate G4: `STAGE_1_DONE / STAGE_2_AWAITING_OWNER_GO` | `HANDOFF_VERDICT: NO_GO`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.0.0-m0-done` | **Date:** `2026-11-14`
 > - **Authors:** Technical Program Manager & QA Lead
+> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) is **`DONE`** (automated `GATE-M0` checks green; [`spike-results.md`](../architecture/spike-results.md) published); Milestones `M1`..`M5` (`TP-IMP-0005`..`0047`) remain **`BLOCKED`** awaiting Product Owner **Gate G4 Stage 2** `GO` (`DEC-009`, `COND-PO-01`..`05`).
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---

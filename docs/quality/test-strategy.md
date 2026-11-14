@@ -1,79 +1,75 @@
-# End-to-End Verification Strategy, Hermetic Test Doubles & CI Pipeline — Tanpopo
+# End-to-End Verification Strategy, Hermetic Test Doubles & Multi-OS/Browser CI Pipeline — Tanpopo
 
-> **Quality Assurance Architecture Specification (Phase ASTRA A07 — Gate G3: `READY_FOR_REVIEW` | `PROPOSED — NO CODE`)**
-> - **Document ID:** `SPEC-QA-02` | **Version:** `0.1.0-step07-draft` | **Last Updated:** `2026-11-12`
+> **Canonical Quality Assurance & CI Architecture Specification (Synchronized in `TP-IMP-0002` — Spec Closure Batch B)**
+> - **Document ID:** `SPEC-QA-02` | **Version:** `0.2.0-m0-closure` | **Last Updated:** `2026-11-14`
 > - **Authoring Role:** Principal QA Architect, Test Systems Lead & CI/CD Engineer
-> - **Governance Status:** **Proposed Verification Specification (`PROPOSED`)** — applies *Red-Green-Refactor* discipline, resource-scoped test tiers (*Small / Medium / Large*) from [`test-driven-development`](../../.agents/skills/test-driven-development/SKILL.md), and automated quality gates from [`ci-cd-and-automation`](../../.agents/skills/ci-cd-and-automation/SKILL.md).
-> - **Requirements Traceability:** `TP-FR-0101`..`1005`, `TP-NFR-0101`..`1002`, `TP-AC-F0101`..`F1003`, `TP-AC-SEC-01`..`08`, `TP-AC-N01`..`10`, `UX-AC-01`..`12`, `OPS-AC-01`..`12`, `SPEC-QA-01`.
+> - **Aligned Contracts:** [`proto/tanpopo/extension/v1/runtime.proto`](../../proto/tanpopo/extension/v1/runtime.proto), [`openapi/dataplane-v1.yaml`](../../openapi/dataplane-v1.yaml), [`openapi/admin-v1.yaml`](../../openapi/admin-v1.yaml), [`contract-test-matrix.md`](./contract-test-matrix.md) (`SPEC-QA-01`), and [`execution-baseline.md`](../governance/execution-baseline.md).
+> - **Measurement Honesty (`COND-PO-01`):** Every per-test time budget (`< 50 ms`, `< 5 s`, `< 60 s`) and CI stage runtime target (`< 45 s` .. `< 25 min`) in this document is **`TARGET / UNVERIFIED`** until empirical CI pipeline execution begins in `M1`–`M5`.
+> - **Requirements Traceability:** `TP-FR-0101`..`1005`, `TP-NFR-0101`..`1002`, `TP-AC-F0101`..`F1003`, `TP-AC-SEC-01`..`08`, `TP-AC-N01`..`10`, `UX-AC-01`..`12`, `OPS-AC-01`..`12`, `COND-PO-04`, `GAP-13`.
 
 ---
 
 ## 1. Resource-Based Test Pyramid
 
-Rather than relying on hundreds of slow, flaky browser-driven tests, Tanpopo allocates verification coverage by execution resource footprint so defects fail at the fastest, cheapest deterministic layer:
+Tanpopo allocates verification coverage by execution resource footprint so defects fail at the fastest deterministic layer:
 
-| Tier | Resource Scope | Per-Test Time Budget (`TARGET`) | Primary Verification Scope | Execution Cadence |
+| Tier | Resource Scope | Per-Test Time Budget (`TARGET / UNVERIFIED`) | Primary Verification Scope | Execution Cadence |
 |---|---|---|---|---|
-| **Tier 1: `Small` (`Unit & Property Tests`)** | Pure in-memory single process; `0` real disk I/O, `0` network sockets, deterministic `FakeClock`. | `< 50 ms` | Policy intersection algebra `Org ∩ Project ∩ Env`, candidate route ranking, state machines `SM-01`..`08`, `micro-USD` ledger conservation (`FZ-06`), JCS `schema_hash` canonicalization, SSE frame parsing. | Every local file save & `Stage 1` on every PR. |
-| **Tier 2: `Medium` (`Dual-DB Integration, Contract & Fuzz`)** | Loopback `127.0.0.1` only + `SQLite WAL` + `PostgreSQL 16` container + `Valkey` + `wazero` Sandbox + Cassette fixtures. | `< 5 s` | Full `CT-01`..`CT-32` and `AUTH-01`..`AUTH-16` matrices, `SQLite <-> PostgreSQL` behavioral parity, `Blind Broker`, `SSRFGuard`, `Single-Flight OAuth`, and time-budgeted fuzz runs. | Mandatory `Stage 2` gate on every PR. |
-| **Tier 3: `Large` (`System E2E, Accessibility, Load & Chaos`)** | Real `tanpopod` binary embedding the Astryx SPA + `Playwright` + `axe-core` + local multi-node cluster + loopback `FakeLLM / FakeIdP / FakeMCP` servers. | `< 60 s` | `EXT-ACCEPT-01`, all 8 journeys `UJ-01`..`UJ-08` across 5 UI states, `WCAG 2.2 AA` audits, `Air-Gap` bundle import, `DR-01`..`04` recovery drills, `k6` load benchmarks, and chaos fault injection. | E2E smoke suite on every PR (`Stage 3`); extended soak load and chaos drills nightly & pre-release (`Stage 4`). |
+| **Tier 1: `Small` (`Unit & Property`)** | Pure in-memory single process; `0` disk I/O, `0` sockets, deterministic `FakeClock`. | `< 50 ms` | Policy intersection `Instance ∩ Org ∩ Project ∩ Env`, 6-step route ranking, state machines **`SM-01`..`SM-09`**, `micro-USD` conservation (`FZ-06`), 5-tuple JCS hashing, SSE frame splitting, OpenAPI/`runtime.proto` schema linting. | Every local save & `Stage 1` on every PR. |
+| **Tier 2: `Medium` (`Dual-DB, Contract & Fuzz`)** | Loopback `127.0.0.1` only + `SQLite WAL` + `PostgreSQL 16` + `Valkey` + `wazero` Sandbox + Cassette fixtures. | `< 5 s` | Full `CT-01`..`CT-36` (as milestones unlock) and `AUTH-01`..`AUTH-16`, `SQLite <-> PostgreSQL` behavioral parity, `BlindBroker` (`Cookie` ban `NEG-3`), `BlobRef` (`> 64 KiB` outside `16 MiB` Wasm `NEG-1`), `SSRFGuard`, and short fuzzing. | Mandatory `Stage 2` gate on every PR. |
+| **Tier 3: `Large` (`System E2E, Multi-Browser, Multi-OS & Load`)** | Single unified **`tanpopo`** binary embedding the Astryx SPA + `Playwright` (Chromium, Firefox, WebKit) + `axe-core` + loopback `FakeLLM / FakeIdP / FakeMCP` servers. | `< 60 s` | `EXT-ACCEPT-01`, journeys `UJ-01`..`UJ-08` across 5 UI states and 4 viewport bands, `WCAG 2.2 AA` Light/Dark audits, `Air-Gap` zero-external-request UI (`UX-AC-10`), `DR-01`..`04` drills, and `k6` benchmarks. | Smoke E2E on every PR (`Stage 3`); full Multi-OS/Browser, load & chaos suite nightly & pre-release (`Stage 4`). |
 
 ---
 
-## 2. Functional, Negative, Integration & E2E Coverage Matrix Across 9 Business Domains
+## 2. Functional, Negative, Contract & E2E Matrix Across 9 Business Domains
 
-Every business domain must maintain complete coverage across **Happy Path**, **Negative & Adversarial**, **Contract / Integration**, and **End-to-End (`E2E`)** verification:
-
-| Business Domain | Functional Happy Path | Negative & Edge Cases | Contract / Integration / E2E Gates |
+| Business Domain | Functional Happy Path | Negative & Adversarial Cases | Contract / Integration / E2E Gates |
 |---|---|---|---|
-| **1. `Provider Adapter` & Protocol Normalization** | Sync & streaming inference across OpenAI, Anthropic, Gemini, Bedrock, Ollama, plus lossless `/native/*` extension fields. | Upstream returns truncated JSON, non-standard `529` status, missing `Content-Type`, or oversized `> 32 MiB` bodies. | `CT-06`, `CT-09`, `CT-13`, `FZ-03`, `EXT-ACCEPT-01`. |
-| **2. `SSE` Streaming & Client Cancellation** | Zero-buffering chunk forwarding, `: ping` keep-alive filtering, immediate upstream teardown when caller closes tab or fires `AbortController`. | Abrupt TCP reset after chunk `k` (`Partial Stream`), backpressured *Slow Consumer*, multi-byte `UTF-8` rune split across TCP segments. | `CT-07`, `CT-10`, `CT-11`, `FZ-03`, `FMEA-01`. |
-| **3. Two-Phase Budget Settlement (`Usage Settlement`)** | `Pre-Hold` reservation -> `SETTLED_EXACT` across all 5 token components (input, output, reasoning, cache read/write). | 50 parallel requests racing final budget dollars; upstream omits terminal `usage`; actual cost slightly exceeds pre-hold (`Negative Balance Carryover`). | `CT-12`, `CT-29`, `FZ-06`, `FMEA-04`. |
-| **4. Capability-Aware Routing & Failover** | Weighted/cost/latency candidate selection; automatic failover on upstream `429`/`503` **prior to first chunk**; `Dry-Run` route explainability. | Request requires `vision` / `audio` / `strict_json_schema` unsupported by target -> `400`; all `EU` deployments down -> fail-closed `503`, zero spillover to `US`. | `CT-08`, `CT-10`, `CT-12`, `UJ-05`, `FMEA-01`. |
-| **5. `MCP` Tool Side Effects & `A2A` Delegation** | Per-`Virtual Key` tool filtering, `> 200`-tool cursor pagination, `read_only` tool invocation, sync/async human approval for `destructive` tools. | MCP server silently edits tool description (*Rug-Pull*); network timeout during `mutating` tool call (**`0` automatic retries**); post-approval argument tampering; A2A loop `> 5` hops. | `CT-21`..`23`, `FZ-04`, `UJ-06`, `FMEA-02`. |
-| **6. Extension Lifecycle (`Plugin Lifecycle`)** | Stage -> Approve permission sheet -> Hot-enable -> Graceful `DRAINING` upgrade -> Instant `Rollback` to prior version. | Update stealthily adds network/secret permissions (`UPDATING_PENDING_RECONSENT`); Wasm infinite loop or OOM; emergency `QUARANTINED` cutoff in `< 1s`. | `CT-17`, `CT-18`, `CT-24`, `UJ-02`, `UJ-07`, `FMEA-05`. |
-| **7. Marketplace & 4 Installation Sources** | Install cleanly from: (1) Signed static Marketplace index, (2) `40-hex SHA`-pinned Git URL, (3) Local `.tpkg`/`.zip` archive, (4) Internal `OCI Private Registry`. | Unpinned mutable Git tag; bad `Cosign` signature; `@tanpopo-official/*` namespace squatting; `Zip-Slip` / `Zip-Bomb`; consumer subscription scraper submission. | `CT-01`..`05`, `CT-20`, `CT-25`, `FZ-02`. |
-| **8. AuthN/AuthZ, Multi-Tenancy & Fast Revocation** | `OIDC + PKCE` login, grace-window `Virtual Key` rotation, single-flight `Authorized OAuth 2.1` refresh, hash-chained audit logs. | Calling `/admin/v1/*` with a `Virtual Key`; `Four-Eyes` self-approval; cross-tenant `UUID` probing (`IDOR`); cross-org ciphertext transplant; cluster node partitioned from revocation bus. | `AUTH-01`..`16`, `CT-30`, `FMEA-07`, `FMEA-08`. |
-| **9. Self-Hosted Installer, `Air-Gap` & Disaster Recovery** | `< 3s` single-binary startup, `tanpopo doctor` preflight, offline `Air-Gap` bundle import, hot backup & clean-host restore, `SQLite -> Postgres` migration. | Launching as `root` without explicit override flag; expired revocation feed in `Air-Gap` bundle; mid-flight DB migration disconnect; restore missing `Master KEK`. | `CT-31`, `CT-32`, `OPS-AC-01`..`12`, `FMEA-06`. |
+| **1. `Provider Adapter` & Multimodal `BlobRef`** | Sync (`TransformResponse`) & streaming (`TransformStreamChunk`) across the 5 `v0.1` Official Adapters (`OpenAI`, `Anthropic`, `Gemini`, `OpenAI-Compatible/vLLM`, `Ollama`), `v0.2` `Bedrock`/`Azure`/`/v1/rerank`, and `/native/*`. | `32 MiB` multimodal attachment (`> 64 KiB` kept outside `16 MiB` Wasm via `BlobRef` — `NEG-1`), truncated tool JSON (`502 upstream_malformed_response`), `400 dialect_mismatch`. | `CT-06`, `CT-09`, `CT-13`, `FZ-03`, `EXT-ACCEPT-01`. |
+| **2. `SSE` Streaming & Client Cancellation** | Immediate chunk relay, auto `stream_options.include_usage=true` (`CR-09`), `: ping` heartbeats, `< 500 ms` (`TARGET / UNVERIFIED`) cancel teardown. | Abrupt TCP reset after chunk `k >= 1` (`mid_stream_abort`, `0` fallback), multi-byte UTF-8 split across segments. | `CT-07`, `CT-10`, `CT-11`, `FZ-03`, `FMEA-01`. |
+| **3. Two-Phase `Micro-USD` Ledger** | Text-only byte pre-hold + separate `BlobRef` media unit schedule -> `SETTLED_EXACT` across 5 token dimensions + `MediaUsage`. | `50` parallel budget-exhaustion racers (`429 project_budget_exceeded`), missing `usage`, `Valkey` `{org_id}` hash-tag Lua & `valkey_hold_checkpoints` failover (`CR-07`). | `CT-12`, `CT-29`, `FZ-06`, `FMEA-04`. |
+| **4. Capability Routing & Residency** | `PRIORITY_FAILOVER` / `WEIGHTED` / `LOWEST_COST` (`<= 4` attempts pre-stream), zero-side-effect `POST /admin/v1/routes/explain`. | Unsupported `snake_case` capability (`strict_json_schema`, `vision`, `audio_input`, `document_input`) -> `400 capability_not_supported`; all `EU` targets down -> `503 no_compliant_deployment_available`. | `CT-08`, `CT-10`, `CT-12`, `UJ-05`, `FMEA-01`. |
+| **5. `MCP` (`2025-03-26`) & `A2A` (`SM-09`)** | Per-key `<server>__<tool>` ACL pagination, HTTP `200` JSON-RPC async HITL approval with 5-tuple JCS hash (`CR-08`), A2A `SM-09` lifecycle. | *MCP Rug-Pull* (`403 schema_hash_drift_blocked`), `0` retry on `mutating`/`destructive` timeout (`504 ambiguous_side_effect_timeout`), argument mutation (`403 parameter_hash_mismatch`), A2A `> 5` hops (`400 delegation_depth_exceeded`), **empirical IDE client verification (`CT-36` — `COND-PO-04`)**. | `CT-21`..`23`, **`CT-36`**, `FZ-04`, `UJ-06`, `FMEA-02`. |
+| **6. Extension Sandbox & Lifecycle (`SM-01`)** | Stage `.tpkg` -> inspect `permission-diff` -> approve -> hot-enable -> `< 5s` (`TARGET / UNVERIFIED`) rollback. | Permission escalation (`UPDATING_PENDING_RECONSENT`), Wasm infinite loop / `> 16 MiB` OOM -> `502 extension_execution_fault` & `> 20` faults/60s -> `QUARANTINED`, outbound `Cookie` header ban (`NEG-3`). | `CT-14`..`18`, `CT-24`, `FZ-05`, `FMEA-05`. |
+| **7. Marketplace & Supply Chain** | Install from signed Marketplace, 40-hex Git commit SHA, `.tpkg`, and digest-pinned Private OCI. | Mutable Git ref (`CT-25`), `^@tanpopo(-[a-z0-9]+)?/` spoofing (`403 reserved_namespace_spoofing`), *Zip-Slip* / *Zip-Bomb* (`> 64 MiB`), `DEC-004` consumer scraper rejection. | `CT-01`..`05`, `CT-20`, `CT-25`, `FZ-02`. |
+| **8. 6-Role RBAC, Vault & Revocation** | OIDC PKCE login, 6-role RBAC matrix, `Master KEK -> Org DEK -> Project DEK`, `Per-Org + SYSTEM` JCS audit chains, `POST /admin/v1/playground/sessions`. | Virtual Key on `/admin/v1/*` (`401 invalid_credential_plane`), `QUOTA_PAUSED -> REVOKED` (`SM-05`), missing `X-CSRF-Token` (`403`), cross-org IDOR (`404`), `409 optimistic_lock_conflict`. | `AUTH-01`..`16`, `CT-30`, `FMEA-07`, `FMEA-08`. |
+| **9. Multi-OS Installer, Migration & Air-Gap** | `tanpopo serve` (`< 3s` `TARGET / UNVERIFIED`), `SCR-01` `allow_private_ip` local `Ollama` setup, `tanpopo admin reset-local-owner`, `tanpopo db migrate-engine`, `.tpop.enc` backup, `< 60s` (`TARGET / UNVERIFIED`) `Project DEK` crypto-shredding. | Dirty SQL migration (`exit 31`), `offline_mode` verifying both `official` + `enterprise_signed` `.tpkg` and rejecting expired `revocations.json` (`exit 22` — `CT-31`), `0` Google Fonts requests (`NEG-2`). | `CT-31`, `CT-32`, `OPS-AC-01`..`12`, `UX-AC-10`, `FMEA-06`. |
 
 ---
 
 ## 3. Hermetic Local Fake Ecosystem & Zero-External-Call Guarantee
 
-> **Non-Negotiable CI & Local Test Invariant:** Zero automated tests (Unit, Contract, Integration, Fuzz, or E2E) may ever depend on external network reachability or accidentally invoke live paid APIs at OpenAI, Anthropic, Google, AWS, or any third-party AI vendor.
+> **Non-Negotiable Hermetic Invariant:** Zero automated tests may ever touch external Internet hosts or invoke paid third-party AI APIs (`0 USD` external spend).
 
-### 3.1. Four Deterministic Fault-Injecting Local Servers (`testkit/*` Local Fakes)
-1. **`FakeLLMServer` (`127.0.0.1:0`):** Emulates exact wire dialects for OpenAI (`/v1/chat/completions`, `/v1/responses`, `/v1/embeddings`), Anthropic (`/v1/messages`), Gemini (`streamGenerateContent`), and Ollama. Accepts deterministic fault-injection directives via `X-Tanpopo-Fake-Fault`:
-   - `delay_first_byte_ms=300`, `inter_chunk_ms=10`,
-   - `tcp_rst_after_chunks=5` (exercises `FMEA-01` mid-stream abort),
-   - `http_status=429;retry_after=12` (exercises pre-stream failover),
-   - `omit_stream_usage=true` or `corrupt_json_at_byte=128` (exercises `FMEA-04` and frame parser resilience),
-   - `echo_auth_header_in_error=true` (exercises `CT-16` credential redaction in upstream error bodies).
-2. **`FakeOAuthIdP` (`127.0.0.1:0`):** Ephemeral loopback OIDC / OAuth 2.1 server minting per-test `JWKS` signing keys and supporting `PKCE S256`, `refresh_token` rotation, active revocation, and simulated `503` outages (`FMEA-08`).
-3. **`FakeMCPServer` (`127.0.0.1:0`):** Loopback Streamable HTTP MCP server exposing up to `300` synthetic tools, injecting read-timeout stalls on `mutating` tools (`FMEA-02`), and mutating live tool descriptions mid-run to trigger `schema_hash` locks (`CT-21`).
-4. **`FakeRegistryAndGitServer` (`127.0.0.1:0`):** Serves smart Git HTTP and `OCI v2` registry APIs on loopback paired with ephemeral `Cosign` test keypairs to verify all 4 extension installation sources without touching GitHub or Docker Hub.
-
-### 3.2. Dual-Layer Mechanical Outbound Network Guard
-1. **Layer 1 — In-Process Socket Interceptor (`testkit/netguard`):**
-   - Enabled by default (`TANPOPO_TEST_HERMETIC=1`) inside `TestMain` across every Go test package and E2E harness, hooking `http.DefaultTransport` and `net.Dialer.Control`.
-   - Any attempt to dial a TCP/UDP address **outside `127.0.0.0/8` or `::1`** (or resolve DNS outside `.test.local` / `localhost`) is **aborted immediately and fails the test with a full stack trace**.
-2. **Layer 2 — OS Network Namespace Isolation in CI & Canary Env Vars:**
-   - Once checksum-verified dependency caches are restored, CI test execution steps (`go test`, `tanpopo plugin test`, `playwright test`) execute inside an isolated network namespace exposing only `lo` (`unshare --net` on Linux runners or `--internal` container networks with zero NAT gateway).
-   - Sensitive provider env vars on CI runners are populated with inert canary traps: `OPENAI_API_KEY=CANARY_FORBIDDEN_CI_KEY`, `ANTHROPIC_API_KEY=CANARY_FORBIDDEN_CI_KEY`, `GEMINI_API_KEY=CANARY_FORBIDDEN_CI_KEY`.
+1. **Four Deterministic Loopback Test Doubles (`internal/testkit` on `127.0.0.1:0`):**
+   - **`FakeLLMServer`:** Emulates OpenAI (`/v1/chat/completions`, `/v1/responses`, `/v1/embeddings`, `/v1/rerank`), Anthropic, Gemini, and Ollama wire shapes with `X-Tanpopo-Fake-Fault` fault injection (`tcp_rst_after_chunks`, `http_status=429`, `omit_stream_usage`, `echo_auth_header_in_error`).
+   - **`FakeOAuthIdP`:** Loopback OIDC / OAuth 2.1 server (`PKCE S256`, `RFC 8707` audience checks, rotating refresh tokens, `400 invalid_grant`).
+   - **`FakeMCPServer`:** Loopback `MCP 2025-03-26 Streamable HTTP` server (`300` paginated tools, live *Rug-Pull* description mutation, `mutating` read-timeout injection).
+   - **`FakeRegistryAndGitServer`:** Loopback smart Git HTTP + `OCI v2` registry with ephemeral `Cosign` / `Ed25519` test keys.
+2. **Dual-Layer Outbound Socket Guard:**
+   - **In-Process (`testkit/netguard`):** Active whenever `TANPOPO_TEST_HERMETIC=1`, failing immediately with a stack trace on any dial outside `127.0.0.0/8` or `::1`.
+   - **OS Network Isolation & Canary Env Traps:** CI test steps run inside loopback-only network namespaces (`unshare --net` / `--internal`) with `OPENAI_API_KEY=CANARY_FORBIDDEN_CI_KEY`, etc.
 
 ---
 
-## 4. Parallel Test Data Isolation, Deterministic Reproduction & Canary Secret Scanning
+## 4. Two-Command Go Test Discipline, Multi-OS Matrix & Multi-Browser / 4-Viewport Matrix
 
-1. **Strict `t.Parallel()` Isolation:**
-   - `SQLite`: each test provisions a private `t.TempDir()` automatically cleaned up upon completion.
-   - `PostgreSQL 16` & `Valkey`: each test mints a unique `UUIDv7` `org_id` (and isolated `Valkey` key prefix), enabling hundreds of concurrent integration tests against a shared DB container with zero state collisions.
-2. **`100%` Wall-Clock-Free Determinism (`Deterministic Reproduction`):**
-   - Sliding rate-limit windows, token TTLs, key rotation grace periods, and circuit-breaker cooldowns read time exclusively via `clock.Clock` (tests advance `FakeClock.Advance(duration)` rather than calling slow, flaky `time.Sleep()`).
-   - Randomized property/fuzz runs log `TANPOPO_TEST_SEED=<uint64>` up front so engineers can reproduce any failure bit-for-bit with a single local command.
-3. **Automated Canary Secret Scanner (`OPS-AC-10`):**
-   - Every integration and E2E suite seeds high-entropy canary credentials `sk-tp-canary-DO-NOT-LEAK-9f8e7d6c` and OAuth token `eyJ_tp_canary_secret_token_9f8e7d6c`, driving traffic through `200` completions, `400/401/429/500` faults, mid-stream aborts, and `tanpopo support-bundle` exports.
-   - A post-run scanner sweeps all `stdout/stderr` logs, every text column in `SQLite/PostgreSQL`, captured `OpenTelemetry` spans, and `support-bundle` archives: **even `1` canary match fails the entire CI pipeline immediately**.
+1. **Mandatory Two-Command Go Test Separation (`execution-baseline.md`):**
+   Because Go's race detector (`-race`) requires `CGO_ENABLED=1` whereas production `tanpopo` binaries compile with `CGO_ENABLED=0`, local verification and CI **always execute two separate commands** (never combining `CGO_ENABLED=0` and `-race` in one invocation):
+   - **Pure-Go Verification:** `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test ./...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test ./...`)*
+   - **Race-Detector Verification:** `TANPOPO_TEST_HERMETIC=1 go test -race ./...`
+2. **Multi-OS CI Runner Matrix (`TP-NFR-0901` — Closing `AUD-025`):**
+   - **`ubuntu-24.04` (`linux/amd64` & `linux/arm64`):** Full Stages `0`–`4`, `PostgreSQL 16 + Valkey` containers, and Linux `unshare --net` air-gap tests.
+   - **`macos-14` (`darwin/arm64` + cross-built `darwin/amd64`):** Verifies pure-Go `CGO_ENABLED=0` `tanpopo` build, `SQLite WAL` locking, `0700` data directory permissions, and `wazero` sandbox parity.
+   - **`windows-2022` (`windows/amd64` + cross-built `windows/arm64`):** Verifies `tanpopo.exe` cold start, Windows path normalization, `icacls` ACL hardening, and `npx.cmd @astryxdesign/cli` tooling compatibility.
+3. **Multi-Browser & 4-Band Responsive Viewport Matrix (`TP-NFR-0701`, `TP-AC-N07` — Closing `AUD-025`):**
+   - **Browsers (`Playwright`):** `Chromium` (Chrome / Edge engine), `Firefox`, and `WebKit` (Safari engine).
+   - **Continuous 4-Tier Viewport Matrix (`Zero Gap at 1024px–1279px`):**
+     1. `1440x900` — Desktop (`>= 1280px`: 3-region `SideNav + LayoutContent + LayoutPanel`)
+     2. `1152x800` — Compact Desktop (`1024px – 1279px`: `SideNav + LayoutContent` with slide-over `Drawer` inspector)
+     3. `834x1112` — Tablet (`768px – 1023px`: collapsible `SideNav` + modal `Dialog` / `Drawer`)
+     4. `375x812` — Mobile Emergency (`375px – 767px`: mobile nav drawer + `< 15s` `TARGET / UNVERIFIED` one-handed Kill-Switch & key revocation)
+4. **Canary Secret Scanner (`OPS-AC-10`):** Post-test sweep across `stdout/stderr`, SQL metadata columns, OTel spans, DOM/HAR captures, and `support-bundle` tarballs fails CI on `>= 1` match of `sk-tp-canary-DO-NOT-LEAK-*`.
 
 ---
 
@@ -81,16 +77,16 @@ Every business domain must maintain complete coverage across **Happy Path**, **N
 
 ```mermaid
 flowchart LR
-    S0["Stage 0 (<45s): Floor Guard, License, Gitleaks & Lockfile Check"] --> S1["Stage 1 (<2m): Go/TS Lint, Static Security & Unit Tests"]
-    S1 --> S2["Stage 2 (<4m): Dual-DB (SQLite+PG16) Integration, CT-01..32, AUTH-01..16 & Short Fuzz"]
-    S2 --> S3["Stage 3 (<3m): Astryx Doctor, Build Embed, Playwright E2E + Axe A11y (Offline NetNS)"]
-    S3 --> S4["Stage 4 (Nightly / Pre-Release): k6 Load, Chaos/FMEA Drills, Migration, SBOM & Cosign"]
+    S0["Stage 0 (<45s): Floor Guard, buf lint, OpenAPI Check, Gitleaks & License Gate"] --> S1["Stage 1 (<2m): Lint, Static Security, Pure-Go (CGO=0) & -race Small Tests"]
+    S1 --> S2["Stage 2 (<4m): Dual-DB (SQLite+PG16) CT-01..36, AUTH-01..16 & Short Fuzz"]
+    S2 --> S3["Stage 3 (<4m): Astryx Doctor --built, Embed tanpopo, Playwright 4-Viewport + Axe"]
+    S3 --> S4["Stage 4 (Nightly / Release): Multi-OS (Linux/macOS/Win), Full 3-Browser, k6, FMEA/DR, SBOM & Cosign"]
 ```
 
-| CI Stage | Concrete Tools & Commands | Time Budget (`TARGET`) | Merge-Blocking Rule |
+| CI Stage | Concrete Tools & Commands | Time Budget (`TARGET / UNVERIFIED`) | Merge-Blocking Rule |
 |---|---|---|---|
-| **`Stage 0: Floor & Supply-Chain Guard`** | `CONSTRAINTS.md` anti-bar-lowering check (blocks `.skip`, `@ts-ignore`, `//nolint:gosec`), `gitleaks --redact`, single-lockfile check, `npm ci --ignore-scripts`, dependency license gate (`0` `GPL`/`AGPL`). | `< 45 s` | Any violation aborts the entire pipeline immediately to save runner compute. |
-| **`Stage 1: Static Analysis & Small Tests`** | `golangci-lint` (`gosec`, `errcheck`, `govet`), `govulncheck ./...`, `osv-scanner`, `tsc --noEmit`, `go test -race -short ./...` + `FZ-06` property conservation test. | `< 2 min` | `0` static security warnings, `0` `-race` data races, and mandatory branch coverage floor on security/ledger packages. |
-| **`Stage 2: Dual-DB Contract & Adversarial`** | Parallel execution of the full integration suite (`CT-01`..`CT-32`, `AUTH-01`..`AUTH-16`, `Canary Secret` sweep) across **both `SQLite WAL` and `PostgreSQL 16 + Valkey`** inside an offline network namespace; short fuzzing of `FZ-01`..`05` (`10s`/target per PR). | `< 4 min` | Must pass `100%` on both `SQLite` and `PostgreSQL`; any behavioral divergence between DB engines blocks merge (`RSK-013`). |
-| **`Stage 3: Astryx UI Doctor & Hermetic E2E`** | Build SPA Console -> run `npx @astryxdesign/cli doctor` & `doctor --built` (`0 fail`) -> embed into `tanpopod` -> run `EXT-ACCEPT-01`, `UJ-01`..`08` smoke journeys, and `axe-core` accessibility scans (`0` `critical`/`serious` violations). | `< 3 min` | Blocks merge on any `astryx doctor` failure, E2E failure, or `WCAG 2.2 AA` regression. |
-| **`Stage 4: Reliability, Chaos & Release Signing`** *(Nightly & Release Branch Cut)* | Deep fuzzing (`15 min`/target), `k6` load benchmarks against `p95`/`p99` budgets, `FMEA-01`..`08` & `DR-01`..`04` drills over realistic synthetic datasets, cross-platform binary builds, `CycloneDX SBOM` generation, and `Cosign` signing. | `< 25 min` | Must pass `100%` before tagging any `v0.x` or `v1.0` release. |
+| **`Stage 0: Contract, Floor & Supply-Chain Guard`** | `buf lint` (`proto/tanpopo/extension/v1/runtime.proto`), OpenAPI `3.1.0` schema & `SCR-01..16` parity check (`openapi/*.yaml`), legacy binary drift check (`0` legacy binary refs), `CONSTRAINTS.md` floor guard (`0` `.skip`/`@ts-ignore`/`//nolint:gosec`/raw `div`-`span`), `gitleaks`, `Apache-2.0` license gate. | `< 45 s` | Any violation aborts immediately. |
+| **`Stage 1: Static Analysis & Small Tests`** | `golangci-lint`, `govulncheck ./...`, `tsc --noEmit`, separate `CGO_ENABLED=0 go test -short ./...` and `go test -race -short ./...` + `FZ-06` ledger conservation property test. | `< 2 min` | `0` warnings, `0` data races, pure-Go `CGO_ENABLED=0` green. |
+| **`Stage 2: Dual-DB Contract & Adversarial`** | Full `CT-01`..`CT-36` and `AUTH-01`..`AUTH-16` + `CanaryScanner` across **both `SQLite WAL` and `PostgreSQL 16 + Valkey`** in an offline network namespace; short `FZ-01`..`05` fuzzing (`10s`/target) + multi-OS smoke tests (`linux`, `macos-14`, `windows-2022`). | `< 4 min` | `100%` parity across SQLite & PostgreSQL and all 3 OS families. |
+| **`Stage 3: Astryx Doctor & Offline E2E`** | Build `web/console` (local `Figtree` `.woff2` Vite alias) -> `npx @astryxdesign/cli doctor --built dist` (`0 fail`) -> embed into **`tanpopo`** -> run `EXT-ACCEPT-01`, `UJ-01`..`08` across all 4 viewports (`1440`, `1152`, `834`, `375`), `0` external requests (`UX-AC-10`), and `@axe-core/playwright` (`Light` + `Dark`). | `< 4 min` | Blocks merge on any `astryx doctor`, E2E, `1024–1279px` layout, or `WCAG 2.2 AA` failure. |
+| **`Stage 4: Multi-Browser, Load, Chaos & Signing`** *(Nightly & Pre-Release)* | Full 3-engine Playwright matrix (`Chromium`, `Firefox`, `WebKit`), `15 min`/target fuzzing, `k6` `SLO-01`..`08` verification, `FMEA-01`..`08` & `DR-01`..`04` drills, 6-target OS/arch builds, `CycloneDX SBOM`, and `Cosign` signing. | `< 25 min` | Must pass `100%` prior to any release sign-off gate (`TP-IMP-0047`). |

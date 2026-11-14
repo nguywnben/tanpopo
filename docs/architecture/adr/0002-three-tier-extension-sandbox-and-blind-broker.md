@@ -1,7 +1,7 @@
 # ADR-0002: 3-Tier Isolated Extension Execution Model & `Blind Host Credential Broker`
 
 ## Status
-**`PROPOSED`** *(Awaiting Product Owner approval at Gate G3 & verification via `SPIKE-01`, `SPIKE-02`)*
+**`ACCEPTED`** *(Approved by Product Owner on `2026-11-14` via `GOV-OAS-01` Track B + `CR-02, CR-05`; subject to `COND-PO-01`, `05` and empirical `SPIKE-01`, `SPIKE-02` validation)*
 
 ## Date
 `2026-11-11`
@@ -12,10 +12,10 @@ A defining differentiator of Tanpopo is allowing operators to install `Provider 
 ## Decision
 1. **Strict Prohibition on Unisolated In-Process Code (`Zero In-Process Untrusted Code`):** Dynamic shared libraries (`plugin.Open`/`dlopen`), host-privileged script interpreters, and unisolated dynamic module imports are unconditionally banned.
 2. **Adopt a 3-Tier Isolated Extension Architecture (`SPEC-EXT-01`):**
-   - **Tier 1 — `Declarative Adapter` (Static YAML/JSON):** Executed directly by Core's safe, non-Turing-complete mapping interpreter for `~75–80%` of standard providers (`0` arbitrary code execution surface).
-   - **Tier 2 — `Sandboxed Wasm Hooks` (executed on pure-Go `wazero`, default-deny `0` FS/Env/Socket privileges):** Serves `~15–20%` of providers requiring custom stream framing or bespoke request signing, enforcing hard CPU fuel/epoch deadlines (`fuel/epoch`) and linear memory caps (`16–64 MB`).
-   - **Tier 3 — `Isolated Sidecar` (isolated container/process communicating over `ConnectRPC / Protobuf` via UDS or `mTLS`):** Deployable exclusively by an `Operator` for the `~5%` of workloads requiring native C/HSM/ML libraries or `stdio` MCP bridges.
-3. **Mandatory `Blind Host Credential Broker`:** Extensions never access the master secret vault; for all standard authentication schemes and Host-supported HMAC signers, raw secret material is injected or signed strictly at the Host network egress boundary and exclusively for explicitly approved `allowedHosts`.
+   - **Tier 1 — `Declarative Adapter` (Static YAML/JSON):** Executed directly by Core's safe, non-Turing-complete mapping interpreter (`<= 32` JSON depth, `<= 10,000` steps — verified in `SPIKE-01` across `9 / 10` representative providers, `POC-02`) with `0` arbitrary code execution surface.
+   - **Tier 2 — `Sandboxed Wasm Hooks` (executed on pure-Go `wazero`, default-deny `0` FS/Env/Socket privileges):** Serves providers requiring custom stream framing or bespoke formatting, enforcing a hard **`16 MiB` (`256` Wasm pages)** linear memory cap (large multimodal payloads bypass Wasm via Host `blob_ref` handles per `CR-05`), **Linear-Memory Slice ABI `(ptr, len) -> packed u64`** (`POC-01`, verified at `953.9 ns/op` across `1,000` simultaneous SSE streams in [`spike-results.md`](../spike-results.md)), **`50 ms` chunk / `100 ms` body hard kill watchdogs** (separated from pool queue wait), and **mandatory tainted-module eviction/replacement** whenever `WithCloseOnContextDone(true)` interrupts a module.
+   - **Tier 3 — `Isolated Sidecar` (`TP-FR-0308`, scheduled in `v0.3` per `CR-02` — isolated container/process communicating over `ConnectRPC / Protobuf` via `0600` UDS or `mTLS`):** Deployable exclusively by an `OPERATOR` for specialized native C/HSM/ML libraries or `stdio` MCP bridges (`POC-03`).
+3. **Mandatory `Blind Host Credential Broker` (`CR-05`):** Tier-1 and Tier-2 extensions never access raw secret bytes (`scoped_secret_unseal` is removed from Tier-2 Wasm); raw secret material or Host-computed `HMAC-SHA256` / `AWS SigV4` / `RSA-JWT` signatures are injected strictly at the Host network egress boundary exclusively for approved `allowedHosts`, with **`Cookie` / `Set-Cookie` credential injection unconditionally banned (`DEC-004`)**.
 
 ## Alternatives Considered
 
@@ -38,4 +38,4 @@ The 3-tier model aligns execution cost and blast radius directly with integratio
 
 ## Reversibility & Migration Implications
 - **Reversibility:** **Medium during `0.x`** (`N-1` contract compatibility window), transitioning to **Hard from `v1.0` onward** (`>= 12-month` compatibility commitment).
-- **Pre-Freeze Gate:** `SPIKE-01` and `SPIKE-02` must complete after Product Owner authorization prior to freezing the Wasm linear-memory ABI (`POC-01`).
+- **Pre-Freeze Gate (`COMPLETED IN M0`):** `SPIKE-01` and `SPIKE-02` completed offline in `tools/spikes/` (`TP-IMP-0004`, documented in [`spike-results.md`](../spike-results.md)), locking `POC-01` and `POC-02` with zero architectural fallback CR required (`COND-PO-05`); end-to-end Gateway latency/memory targets remain `TARGET / UNVERIFIED` per `COND-PO-01` until measured in `TP-IMP-0035` / `0043`.

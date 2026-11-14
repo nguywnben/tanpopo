@@ -1,7 +1,7 @@
 # ADR-0006: Immutable Copy-on-Write Config Snapshots, Dual-Channel Fast Revocation & Tiered Failure Posture
 
 ## Status
-**`PROPOSED`** *(Awaiting Product Owner approval at Gate G3)*
+**`ACCEPTED`** *(Approved by Product Owner on `2026-11-14` via `GOV-OAS-01` Track A; `< 1s` / `< 5s` revocation SLAs remain `TARGET / UNVERIFIED` until verified under load per `COND-PO-01, 05`)*
 
 ## Date
 `2026-11-11`

@@ -1,10 +1,10 @@
 # End-to-End Traceability Matrix & A08 Gate Audit Results — Tanpopo
 
-> **Traceability Verification Specification (Updated through Phase ASTRA A10 Final Readiness Audit — `HANDOFF VERDICT: NO_GO | GATE G4: BLOCKED_ON_OWNER_APPROVAL`)**
-> - **Version:** `0.4.0-step10-readiness`
+> **Traceability Verification Specification (Updated through Milestone `M0` Spec Closure & Spikes — `HANDOFF VERDICT: NO_GO | GATE G4: STAGE_1_DONE / STAGE_2_AWAITING_OWNER_GO`)**
+> - **Version:** `1.0.0-m0-reconciled`
 > - **Last Updated:** `2026-11-14`
-> - **Authoring Role:** Principal Requirements Engineer, Principal Architect, Independent Auditor (A08), TPM/QA Lead (A09) & Independent Delivery Readiness Reviewer (A10)
-> - **Governance Status:** **Unlocked Execution Baseline (`HANDOFF: NO_GO — GATE G1/G2/G3/G4: READY_FOR_REVIEW / BLOCKED | AUDIT A08: FAIL`)**. Provides end-to-end bidirectional traceability from Discovery (`UC`, `RSK`) and Business Analysis (`WF`, `OPS`, `SM`, `TP-BR`) through `SRS` (`TP-FR`, `TP-NFR`), `AC` (`TP-AC`, `UX-AC`, `OPS-AC`), Architecture/UX/Ops/Security/QA (`A04–A07`), Independent Audit A08 (`CR-01`..`10`, `GAP-01`..`13`), **all 47 normalized Implementation Units in [`implementation-index.md`](../planning/implementation-index.md)**, and **Delivery Handoff Artifacts [`execution-baseline.md`](../governance/execution-baseline.md) / [`execution-readiness.md`](../reviews/execution-readiness.md)**.
+> - **Authoring Role:** Principal Requirements Engineer, Principal Architect, Independent Auditor (A08), TPM/QA Lead (A09) & Independent Delivery Readiness Reviewer (A10/M0)
+> - **Governance Status:** **`M0` Spec Closure & Spikes Complete (`TP-IMP-0001..0004 = DONE | GAP-01..13 = CLOSED`); Stage 2 Production Handoff Held at `HANDOFF_VERDICT = NO_GO` Pending Final Owner Sign-Off (`DEC-009`, `COND-PO-01..05`)**. Provides end-to-end bidirectional traceability from Discovery (`UC`, `RSK`) and Business Analysis (`WF`, `OPS`, `SM-01..09`, `TP-BR`) through `SRS` (`56` `TP-FR-*`, `22` `TP-NFR-*`), `AC` (`59` `TP-AC-*`, `UX-AC`, `OPS-AC`), Machine-Readable Contracts (`runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`), Spikes (`spike-results.md`), **all 47 Implementation Units in [`implementation-index.md`](../planning/implementation-index.md)**, and **Delivery Handoff Artifacts [`execution-baseline.md`](../governance/execution-baseline.md) / [`execution-readiness.md`](../reviews/execution-readiness.md)**.
 
 ---
 
@@ -42,28 +42,28 @@
 
 ---
 
-## 3. Bidirectional Coverage Audit (`Reconciled at A08`)
+## 3. Bidirectional Coverage Audit (`Reconciled Through M0 Spec Closure`)
 
-| Verification Dimension | Total Elements | Fully Mapped Elements | Gaps Detected at A08 Audit (`GAP-*`) | Post-Audit A08 Determination |
+| Verification Dimension | Total Elements | Fully Mapped Elements | Historical A08 Audit Finding (`GAP-*`) | Live M0 Closure Status |
 |---|---|---|---|---|
-| **Discovery Use Cases (`UC-01` .. `UC-09`) & Business Workflows (`WF-01` .. `WF-13`)** | `9` + `13` | `22 / 22` linked to `UJ-01`..`08` & `INC/DR` | Missing dedicated root `UC/WF` journey for `A2A` (`AUD-006`) | Add upon opening `v0.3` horizon |
-| **Operational Requirements (`OPS-01` .. `OPS-09`) & Candidates (`CAND-001` .. `017`)** | `9` + `17` | `26 / 26` linked to `SPEC-OPS-01`..`04` | Missing local break-glass admin lockout recovery workflow (`AUD-023` / `CR-09`) | Remediate under `GAP-13` |
-| **State Machines (`SM-01` .. `SM-08`) & Business Rules (`TP-BR-0101` .. `0803`)** | `8` + `30` | `38 / 38` surfaced across `SCR` & `UX-GR` | Transition dead-ends in `SM-01, 02, 04, 05, 07, 08` & conflated `SM-06` (`AUD-006`) | **Blocking (`GAP-08`)** — remediate in A02 |
-| **Functional (`TP-FR-*`) & Non-Functional (`TP-NFR-*`) Requirements** | `53` (`51 Active + 2 Later`) + `22` = **`75`** | `70 / 73 Active` (`+ 2 Later` Post-v1 placeholders) | **`3` `Must` requirements missing partial `AC`/Test clauses:** `TP-FR-0701` (narrowing), `TP-FR-0702` (`RPM/TPM/Concurrency`), `TP-FR-0901` (cursor pagination); `Tier-3 Sidecar` & `Response Cache` lack dedicated `TP-FR-*` IDs (`AUD-008`, `011`, `024`) | **Blocking (`GAP-09`, `GAP-11`)** — expand `1-1` tables & add `AC`/Tests in A03/A07 |
-| **Screen Catalog (`SCR-01` .. `SCR-16`) & Usability/Ops Criteria (`UX-AC`, `OPS-AC`)** | `16` + `24` | `40 / 40` mapped to `SRS` & Astryx Templates | **`51 / 57` `/admin/v1/*` endpoints referenced by `SCR-01..16` lack schemas in `SPEC-API-01`**; `Air-Gap` font bundle discrepancy (`AUD-005`, `017`) | **Blocking (`GAP-07`, `GAP-12`)** — remediate in A05/A06 |
-| **Threats (`TM-01` .. `13`), Risks (`RSK-001` .. `016`) & Deep Failure Modes (`FMEA-01` .. `08`)** | `13` + `16` + `8` | `37 / 37` bound to `CT-*`, `AUTH-*`, `FZ-*`, `GATE-REL-*` | `runtime.proto` compilation flaw, multimodal Wasm RAM exhaustion, `8` missing SQL tables & `AEAD AAD` mismatch (`AUD-001`..`004`, `010`) | **Blocking (`GAP-02`..`06`)** — remediate in A04/A05 |
+| **Discovery Use Cases (`UC-01` .. `UC-09`) & Business Workflows (`WF-01` .. `WF-13`)** | `9` + `13` | `22 / 22` linked to `UJ-01`..`08` & `INC/DR` | Missing dedicated root `UC/WF` journey for `A2A` (`AUD-006`) | `SM-09` extracted in `M0` (`TP-IMP-0001`); `A2A` journey scheduled in `v0.3` (`TP-IMP-0042`) |
+| **Operational Requirements (`OPS-01` .. `OPS-09`) & Candidates (`CAND-001` .. `017`)** | `9` + `17` | `26 / 26` linked to `SPEC-OPS-01`..`04` | Missing local break-glass admin lockout recovery workflow (`AUD-023` / `CR-09`) | **`CLOSED` (`GAP-13`):** `tanpopo admin reset-local-owner` added to `TP-FR-0903, 1001` (`TP-IMP-0031`) |
+| **State Machines (`SM-01` .. `SM-09`) & Business Rules (`TP-BR-0101` .. `0803`)** | `9` + `30` | `39 / 39` surfaced across `SCR` & `UX-GR` | Transition dead-ends in `SM-01, 02, 04, 05, 07, 08` & conflated `SM-06` (`AUD-006`) | **`CLOSED` (`GAP-08`):** All terminal/emergency edges added & `SM-09` split (`TP-IMP-0001`) |
+| **Functional (`TP-FR-*`) & Non-Functional (`TP-NFR-*`) Requirements** | `56` (`54 Active + 2 Later`) + `22` = **`78`** | **`76 / 76 Active` (`100%`)** (`+ 2 Later` Post-v1 placeholders) | `3` `Must` items missing sub-clause `AC`/`CT`; `Rerank`, `Tier-3 Sidecar`, `Response Cache` lacked `TP-FR-*` IDs (`AUD-008, 011, 024`) | **`CLOSED` (`GAP-09`, `GAP-11`):** Added `TP-FR-0107, 0308, 0706`, `7` `TP-AC-*`, and `CT-33..36` (`TP-IMP-0001`) |
+| **Screen Catalog (`SCR-01` .. `SCR-16`) & Usability/Ops Criteria (`UX-AC`, `OPS-AC`)** | `16` + `24` | `40 / 40` mapped to `SRS` & `openapi/admin-v1.yaml` | `51 / 57` `/admin/v1/*` endpoints lacked schemas; `Air-Gap` font discrepancy (`AUD-005`, `017`) | **`CLOSED` (`GAP-07`, `GAP-12`):** Full `openapi/admin-v1.yaml` + local `Figtree` `.woff2` Vite alias (`TP-IMP-0002`) |
+| **Threats (`TM-01` .. `13`), Risks (`RSK-001` .. `016`) & Deep Failure Modes (`FMEA-01` .. `08`)** | `13` + `16` + `8` | `37 / 37` bound to `CT-*`, `AUTH-*`, `FZ-*`, `GATE-REL-*` | `runtime.proto` compilation flaw, multimodal Wasm RAM exhaustion, missing SQL tables & `AEAD AAD` mismatch (`AUD-001`..`004`, `010`) | **`CLOSED` (`GAP-02`..`06`):** `runtime.proto` (`0` errors), `blob_ref`, `db/spec-check/*.sql`, and `SPIKE-01..04` verified (`TP-IMP-0002..0004`) |
 
 ---
 
-## 4. Mandatory Gate G2 Self-Check (`Audited at A08`)
+## 4. Mandatory Gate G2 Self-Check (`Reconciled After M0 Closure`)
 
-| Mandatory Gate G2 Self-Check Criterion (ASTRA A03 Prompt) | Post-A08 Audit Verdict | Concrete Verification Evidence in Repository |
+| Mandatory Gate G2 Self-Check Criterion (ASTRA A03 Prompt) | Post-M0 Closure Verdict | Concrete Verification Evidence in Repository |
 |---|---|---|
-| **1. Zero `P0` (`Must`) features lacking Acceptance Criteria (`AC`)?** | **NEEDS REMEDIATION (`PARTIAL — GAP-11`)** | Independent Audit A08 (`AUD-011`) identified `3/36` `Must` items missing one sub-clause `AC`/`CT` scenario: `TP-FR-0702` verifies SSRF but not `RPM/TPM/Concurrency`, `TP-FR-0701` lacks `422 policy_relaxation_forbidden`, and `TP-FR-0901` lacks cursor pagination verification; the `v0.1` `Official Adapters` roster (`TP-FR-0301`) awaits sign-off under `CR-01`. |
-| **2. Zero blanket "full support" claims lacking a Protocol / Capability Matrix?** | **`PASS`** | Section 1 of [`srs.md`](./srs.md) defines a 14-row matrix explicitly distinguishing translated endpoints, lossless native passthrough, dedicated planes, and policy-prohibited mechanisms. |
+| **1. Zero `P0` (`Must`) features lacking Acceptance Criteria (`AC`)?** | **`PASS` *(Closed in `TP-IMP-0001`)* ** | All `36 / 36` `Must` FRs and `18 / 18` `Must` NFRs (`54 / 54` `P0`) have explicit `Given/When/Then` `TP-AC-*` scenarios (`TP-AC-SEC-04B`, `TP-AC-SEC-05B`, `TP-AC-F0901B`, `TP-AC-F0301B`) and `CT-01`..`36` / `AUTH-01`..`16` tests. |
+| **2. Zero blanket "full support" claims lacking a Protocol / Capability Matrix?** | **`PASS`** | Section 1 of [`srs.md`](./srs.md) defines a 14-row matrix explicitly distinguishing translated endpoints, lossless native passthrough, dedicated planes (`MCP 2025-03-26`, `COND-PO-04`), and policy-prohibited mechanisms. |
 | **3. Zero ambiguous pricing/token-metering scenarios claiming `100%` exact billing?** | **`PASS`** | `TP-BR-0703`, `TP-FR-0802`, `SPEC-CORE-02`, `ADR-0005`, `SCR-12`, and `FMEA-04` enforce `EXACT`, `ESTIMATED`, or `UNMETERED_FLAGGED` classification with segregated `Chargeback` report columns. |
 | **4. Zero claims of universal consumer subscription OAuth support?** | **`PASS`** | `NG-03` & `PC-03` in [`prd.md`](../product/prd.md), `SPEC-EXT-03`, `ADR-0005`, `UX-GR-03`, and `SPEC-SEC-03` Section 3.3 restrict OAuth strictly to legitimate `Authorized OAuth 2.1` integrations and forbid consumer subscription arbitrage. |
-| **5. Draft governance posture & Gate approval authority strictly respected?** | **`PASS`** | **Gate G1**, **Gate G2**, **Baseline A04**, **Gate G3 (A05–A07)**, and **Baseline A06** remain **`READY_FOR_REVIEW`** in [`decisions.md`](../governance/decisions.md) and are never self-promoted to `APPROVED`. |
+| **5. Governance posture & Gate approval authority strictly respected?** | **`PASS`** | **Gate G1–G3** and **Gate G4 Stage 1 (`M0`)** were elevated only after explicit Product Owner sign-off (`DEC-009`), while **Gate G4 Stage 2 (`M1+` Handoff)** remains **`NO_GO`** pending final Owner approval. |
 
 ---
 
@@ -106,23 +106,23 @@
 
 ---
 
-## 8. Independent Specification Completeness Audit (`Phase A08 — FAIL`)
+## 8. Independent Specification Completeness Audit (`Phase A08 -> Remediated in M0`)
 
-> Line-level evidence and targeted remediation instructions across phases `A02–A07` are recorded in [`docs/reviews/integrated-audit.md`](../reviews/integrated-audit.md) (`REV-AUD-01`) and [`docs/reviews/unresolved-gaps.md`](../reviews/unresolved-gaps.md) (`REV-GAP-01`):
+> Historical A08 findings are preserved in [`docs/reviews/integrated-audit.md`](../reviews/integrated-audit.md) (`REV-AUD-01`) and M0 closure evidence is recorded in [`docs/reviews/unresolved-gaps.md`](../reviews/unresolved-gaps.md) (`REV-GAP-01`):
 
-| A08 Audit Dimension | Independent Verdict | Pre-Implementation Blocking Notes |
+| A08 Audit Dimension | Historical A08 Verdict | Post-M0 Closure Status (`TP-IMP-0001..0004`) |
 |---|---|---|
-| **`Specification Completeness` Verdict** | **`FAIL`** | Identified **`11 CRITICAL`**, **`14 MAJOR`**, and **`5 MINOR`** findings (`AUD-001`..`030`); resolved `14` non-policy clerical/cross-reference typos immediately while escalating all architectural/scope conflicts as `CR-01`..`10` for Owner decision. |
-| **Readiness of `54/54` `Must` (`P0`) Requirements** | **`BLOCKED (`GAP-01`..`13`)`** | Awaiting Product Owner approval of `Gate G1–G3` + `CR-01`..`10`, authorization to run `SPIKE-01`..`04`, and targeted specification remediation passes across `A02`, `A03`, `A04`, `A05`, `A06`, and `A07`. |
-| **Post-Audit Halting Boundary (`No Unit Implementation`)** | **`PASS`** | Zero application code written after A08; Phase A09 establishes only an unlocked `DRAFT — EXECUTION BASELINE UNLOCKED` plan placing `M0` spec-closure units (`TP-IMP-0001`..`0004`) as hard prerequisites ahead of all coding units `TP-IMP-0005`..`0047`. |
+| **`Specification Completeness` Verdict** | `FAIL` *(at A08)* | **`PASS` *(Remediated in M0)*:** All `10` Change Requests (`CR-01`..`10`) approved by Product Owner (`DEC-009`) and all `13 / 13` blocking specification/contract/spike gaps (`GAP-01`..`13`) closed with machine-verifiable `.proto`, OpenAPI, SQL, and `wazero` spike artifacts. |
+| **Readiness of `54/54` `Must` (`P0`) Requirements** | `BLOCKED` *(at A08)* | **`SPEC_READY` *(Subject to Stage 2 Owner `GO`)*:** `100%` of `P0` requirements have approved ADRs, compiled schemas, `TP-AC-*`, and `CT-*`/`AUTH-*` test IDs (`COND-PO-01..05`). |
+| **Stage 2 Production Halting Boundary** | `PASS` | **`PASS`:** Only Product-Owner-authorized `M0` (`TP-IMP-0001`..`0004` + isolated `tools/spikes/`) was executed; `M1+` production units (`TP-IMP-0005`..`0047`) remain strictly untouched and `BLOCKED` pending Gate G4 Stage 2 Owner `GO`. |
 
 ---
 
-## 9. 1-to-1 Traceability Matrix from System Requirements (`54 Must P0` + `19 Should/Could`) to Implementation Units `TP-IMP-xxxx` & Release Evidence (Reconciled at Phase A10)
+## 9. 1-to-1 Traceability Matrix from System Requirements (`54 Must P0` + `22 Should/Could`) to Implementation Units `TP-IMP-xxxx` & Release Evidence (Reconciled Through `M0`)
 
-> **A10 Coverage Audit Summary:** **`54 / 54` `Must` (`P0`) requirements** (`36 FR` + `18 NFR`), **`19 / 19` `Should/Could` requirements** (`15 FR` + `4 NFR`), and **`113 / 113` verification identifiers (`CT-01..32`, `AUTH-01..16`, `FZ-01..06`, `EXT-ACCEPT-01`, `SLO-01..08`, `FMEA-01..08`, `UX-AC-01..12`, `OPS-AC-01..12`, `INC-01..07`, `DR-01..04`, `GATE-REL-01..07`)** map 1-to-1 to concrete `TP-IMP-xxxx` units (**`0` orphaned `P0` requirements, `0` orphaned test IDs**). The `2` `Later` items (`TP-FR-0106`, `TP-FR-0804`) remain explicitly outside `v1.0` scope (`Post-v1.0`). All `47` units remain **`BLOCKED` (`READY = 0`, `PLANNED = 0`, `BLOCKED = 47`, Handoff = `NO_GO`)** until Product Owner approval of `Gate G1–G4` + `CR-01`..`10`.
+> **M0 Coverage Audit Summary:** **`54 / 54` `Must` (`P0`) requirements** (`36 FR` + `18 NFR`), **`22 / 22` `Should/Could` requirements** (`18 FR` + `4 NFR`), and **`117 / 117` verification identifiers (`CT-01..36`, `AUTH-01..16`, `FZ-01..06`, `EXT-ACCEPT-01`, `SLO-01..08`, `FMEA-01..08`, `UX-AC-01..12`, `OPS-AC-01..12`, `INC-01..07`, `DR-01..04`, `GATE-REL-01..07`)** map 1-to-1 to concrete `TP-IMP-xxxx` units (**`0` orphaned `P0` requirements, `0` orphaned test IDs**). The `2` `Later` items (`TP-FR-0106`, `TP-FR-0804`) remain explicitly outside `v1.0` scope (`Post-v1.0`). Milestone `M0` (`TP-IMP-0001`..`0004`) is **`DONE` (`4 / 47`)**, while `TP-IMP-0005`..`0047` (`43 / 47`) remain **`BLOCKED` (`HANDOFF_VERDICT = NO_GO`)** awaiting Gate G4 Stage 2 Final Owner Handoff Approval (`TP-IMP-0005` is the first eligible `READY` unit upon Stage 2 `GO`).
 
-### 9.1. All 53 Functional Requirements (`36 Must P0` + `11 Should` + `4 Could` + `2 Later`)
+### 9.1. All 56 Functional Requirements (`36 Must P0` + `12 Should` + `6 Could` + `2 Later`)
 
 | FR ID | Priority | Spec-Closure Unit (`M0`) | Primary Implementation Units (`TP-IMP-xxxx`) | Target Milestone | Verification Evidence & Release Gates (`release-readiness.md`) |
 |---|---|---|---|---|---|
@@ -132,6 +132,7 @@
 | `TP-FR-0104` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0015`](../planning/units/TP-IMP-0015.md) | `M1` | `TP-AC-F0104`, `CT-11`, `FZ-03`, `SLO-03`, `GATE-REL-01` |
 | `TP-FR-0105` | `Should` | `TP-IMP-0002` | [`TP-IMP-0017`](../planning/units/TP-IMP-0017.md), [`TP-IMP-0018`](../planning/units/TP-IMP-0018.md) | `M2` | `TP-AC-F0105`, `CT-13`, `GATE-REL-01` |
 | `TP-FR-0106` | `Later` | — *(Post-v1.0)* | *(Out of `v1.0` scope — unsupported protocol upgrades cleanly rejected in `TP-IMP-0015`)* | `Post-v1.0` | Unsupported protocol upgrade rejection test in `TP-IMP-0015` |
+| `TP-FR-0107` | `Should` | `TP-IMP-0001`, `0002` | [`TP-IMP-0035`](../planning/units/TP-IMP-0035.md) | `M3` | `TP-AC-F0106`, `CT-08`, `GATE-REL-01` |
 | `TP-FR-0201` | **`Must` (`P0`)** | `TP-IMP-0001`, `0003` | [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md) | `M1` → `M2` | `TP-AC-F0201`, `EXT-ACCEPT-01`, `UX-AC-12`, `GATE-REL-01` |
 | `TP-FR-0202` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md), [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md), [`TP-IMP-0018`](../planning/units/TP-IMP-0018.md), [`TP-IMP-0027`](../planning/units/TP-IMP-0027.md) | `M1` → `M2` | `TP-AC-F0202`, `CT-26`, `UX-AC-01`, `GATE-REL-01` |
 | `TP-FR-0203` | **`Must` (`P0`)** | `TP-IMP-0003` | [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md) | `M1` → `M2` | `TP-AC-F0201`, `AUTH-13`, `AUTH-15`, `GATE-REL-01` |
@@ -145,9 +146,10 @@
 | `TP-FR-0305` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0006`](../planning/units/TP-IMP-0006.md), [`TP-IMP-0014`](../planning/units/TP-IMP-0014.md) | `M1` | `TP-AC-F0303`, `CT-01`..`18`, `GATE-REL-01` |
 | `TP-FR-0306` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md), [`TP-IMP-0028`](../planning/units/TP-IMP-0028.md) | `M1` → `M2` | `TP-AC-F0304`, `CT-18`, `UX-AC-03`, `GATE-REL-03` |
 | `TP-FR-0307` | `Should` | `TP-IMP-0001`, `0003` | [`TP-IMP-0035`](../planning/units/TP-IMP-0035.md), [`TP-IMP-0045`](../planning/units/TP-IMP-0045.md) | `M3` → `M5` | `CT-20`, `CT-31`, `OPS-AC-11`, `GATE-REL-04`, `GATE-REL-06` |
-| `TP-FR-0401` | `Should` | `TP-IMP-0002` | [`TP-IMP-0036`](../planning/units/TP-IMP-0036.md) | `M3` | `TP-AC-F0401`, `FZ-04`, `GATE-REL-01` |
+| `TP-FR-0308` | `Could` | `TP-IMP-0001`, `0002` | [`TP-IMP-0042`](../planning/units/TP-IMP-0042.md) | `M4` | `TP-AC-F0305`, `AUTH-08`, `GATE-REL-03` |
+| `TP-FR-0401` | `Should` | `TP-IMP-0002` | [`TP-IMP-0036`](../planning/units/TP-IMP-0036.md) | `M3` | `TP-AC-F0401`, `CT-36` *(`COND-PO-04`)*, `FZ-04`, `GATE-REL-01` |
 | `TP-FR-0402` | `Should` | `TP-IMP-0002` | [`TP-IMP-0036`](../planning/units/TP-IMP-0036.md) | `M3` | `TP-AC-F0402`, `CT-21`, `INC-06`, `GATE-REL-03` |
-| `TP-FR-0403` | `Should` | `TP-IMP-0001`, `0002` | [`TP-IMP-0037`](../planning/units/TP-IMP-0037.md), [`TP-IMP-0038`](../planning/units/TP-IMP-0038.md) | `M3` | `TP-AC-F0403`, `CT-22`, `GATE-REL-03` |
+| `TP-FR-0403` | `Should` | `TP-IMP-0001`, `0002` | [`TP-IMP-0037`](../planning/units/TP-IMP-0037.md), [`TP-IMP-0038`](../planning/units/TP-IMP-0038.md) | `M3` | `TP-AC-F0403`, `CT-22`, `CT-36` *(`COND-PO-04`)*, `GATE-REL-03` |
 | `TP-FR-0404` | `Should` | `TP-IMP-0002` | [`TP-IMP-0037`](../planning/units/TP-IMP-0037.md) | `M3` | `TP-AC-SEC-08`, `FMEA-02`, `GATE-REL-03` |
 | `TP-FR-0405` | `Could` | `TP-IMP-0001`, `0002` | [`TP-IMP-0042`](../planning/units/TP-IMP-0042.md) | `M4` | `TP-AC-F0404`, `AUTH-08`, `GATE-REL-01` |
 | `TP-FR-0406` | `Could` | `TP-IMP-0001`, `0002` | [`TP-IMP-0042`](../planning/units/TP-IMP-0042.md) | `M4` | `TP-AC-F0404`, `CT-23`, `GATE-REL-03` |
@@ -159,18 +161,19 @@
 | `TP-FR-0602` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0020`](../planning/units/TP-IMP-0020.md) | `M2` | `TP-AC-F0602`, `CT-08`, `INC-04`, `GATE-REL-03` |
 | `TP-FR-0603` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0020`](../planning/units/TP-IMP-0020.md) | `M2` | `TP-AC-F0601`, `CT-12`, `FMEA-01`, `GATE-REL-03` |
 | `TP-FR-0604` | `Should` | `TP-IMP-0002` | [`TP-IMP-0038`](../planning/units/TP-IMP-0038.md) | `M3` | `TP-AC-F0603`, `CT-08`, `GATE-REL-01` |
-| `TP-FR-0701` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0019`](../planning/units/TP-IMP-0019.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md), [`TP-IMP-0029`](../planning/units/TP-IMP-0029.md) | `M2` | `TP-AC-SEC-05` *(+ supplemental `AC`/`CT` in `TP-IMP-0001`)*, `GATE-REL-03` |
-| `TP-FR-0702` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md), [`TP-IMP-0019`](../planning/units/TP-IMP-0019.md) | `M1` → `M2` | `TP-AC-SEC-04`, `CT-14`..`16`, `CT-26`, `GATE-REL-03` |
+| `TP-FR-0701` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0019`](../planning/units/TP-IMP-0019.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md), [`TP-IMP-0029`](../planning/units/TP-IMP-0029.md) | `M2` | `TP-AC-SEC-05`, `TP-AC-SEC-05B`, `CT-33`, `GATE-REL-03` |
+| `TP-FR-0702` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md), [`TP-IMP-0019`](../planning/units/TP-IMP-0019.md) | `M1` → `M2` | `TP-AC-SEC-04`, `TP-AC-SEC-04B`, `CT-14`..`16`, `CT-26`, `CT-34`, `GATE-REL-03` |
 | `TP-FR-0703` | **`Must` (`P0`)** | `TP-IMP-0001` | [`TP-IMP-0010`](../planning/units/TP-IMP-0010.md), [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md), [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md), [`TP-IMP-0028`](../planning/units/TP-IMP-0028.md) | `M1` → `M2` | `TP-AC-SEC-06`, `CT-20`, `AUTH-16`, `GATE-REL-04` |
 | `TP-FR-0704` | **`Must` (`P0`)** | `TP-IMP-0003` | [`TP-IMP-0023`](../planning/units/TP-IMP-0023.md), [`TP-IMP-0030`](../planning/units/TP-IMP-0030.md) | `M2` | `TP-AC-F0701`, `CT-30`, `OPS-AC-08`, `GATE-REL-03` |
 | `TP-FR-0705` | **`Must` (`P0`)** | `TP-IMP-0003` | [`TP-IMP-0023`](../planning/units/TP-IMP-0023.md), [`TP-IMP-0030`](../planning/units/TP-IMP-0030.md) | `M2` | `TP-AC-F0701`, `OPS-AC-03`, `OPS-AC-04`, `UX-AC-02`, `INC-02`, `INC-03`, `GATE-REL-03` |
+| `TP-FR-0706` | `Could` | `TP-IMP-0001`, `0003` | [`TP-IMP-0041`](../planning/units/TP-IMP-0041.md) | `M4` | `TP-AC-SEC-09`, `CT-28`, `FMEA-03`, `GATE-REL-03` |
 | `TP-FR-0801` | **`Must` (`P0`)** | `TP-IMP-0001`, `0003`, `0004` | [`TP-IMP-0021`](../planning/units/TP-IMP-0021.md) | `M2` | `TP-AC-F0801`, `CT-29`, `FZ-06`, `GATE-REL-01` |
 | `TP-FR-0802` | **`Must` (`P0`)** | `TP-IMP-0001`, `0003` | [`TP-IMP-0021`](../planning/units/TP-IMP-0021.md), [`TP-IMP-0030`](../planning/units/TP-IMP-0030.md) | `M2` | `TP-AC-F0802`, `FMEA-04`, `UX-AC-06`, `INC-01`, `GATE-REL-01` |
 | `TP-FR-0803` | `Should` | `TP-IMP-0002` | [`TP-IMP-0021`](../planning/units/TP-IMP-0021.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md), [`TP-IMP-0037`](../planning/units/TP-IMP-0037.md) | `M2` → `M3` | `TP-AC-F0803`, `UX-AC-06`, `INC-01`, `GATE-REL-01` |
 | `TP-FR-0804` | `Later` | — *(Post-v1.0)* | *(Out of `v1.0` scope)* | `Post-v1.0` | — |
 | `TP-FR-0805` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0022`](../planning/units/TP-IMP-0022.md) | `M2` | `TP-AC-F0804`, `OPS-AC-12`, `GATE-REL-03` |
 | `TP-FR-0806` | **`Must` (`P0`)** | `TP-IMP-0003` | [`TP-IMP-0022`](../planning/units/TP-IMP-0022.md), [`TP-IMP-0030`](../planning/units/TP-IMP-0030.md) | `M2` | `TP-AC-SEC-01`, `OPS-AC-10`, `GATE-REL-03` |
-| `TP-FR-0901` | **`Must` (`P0`)** | `TP-IMP-0001`, `0002` | [`TP-IMP-0024`](../planning/units/TP-IMP-0024.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md) | `M2` | `TP-AC-F0901`, `AUTH-02`..`15`, `UX-AC-11`, `GATE-REL-01` |
+| `TP-FR-0901` | **`Must` (`P0`)** | `TP-IMP-0001`, `0002` | [`TP-IMP-0024`](../planning/units/TP-IMP-0024.md), [`TP-IMP-0025`](../planning/units/TP-IMP-0025.md) | `M2` | `TP-AC-F0901`, `TP-AC-F0901B`, `CT-35`, `AUTH-02`..`15`, `UX-AC-11`, `GATE-REL-01` |
 | `TP-FR-0902` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0026`](../planning/units/TP-IMP-0026.md), [`TP-IMP-0027`](../planning/units/TP-IMP-0027.md), [`TP-IMP-0028`](../planning/units/TP-IMP-0028.md), [`TP-IMP-0029`](../planning/units/TP-IMP-0029.md), [`TP-IMP-0030`](../planning/units/TP-IMP-0030.md) | `M2` | `TP-AC-F0902`, `UX-AC-01`..`12`, `CT-27`, `GATE-REL-05` |
 | `TP-FR-0903` | **`Must` (`P0`)** | `TP-IMP-0002` | [`TP-IMP-0014`](../planning/units/TP-IMP-0014.md), [`TP-IMP-0031`](../planning/units/TP-IMP-0031.md) | `M1` → `M2` | `TP-AC-F0303`, `CT-27`, `OPS-AC-10`, `GATE-REL-05` |
 | `TP-FR-0904` | `Should` | `TP-IMP-0002` | [`TP-IMP-0038`](../planning/units/TP-IMP-0038.md) | `M3` | `TP-AC-F0603`, `UX-AC-09`, `GATE-REL-01` |

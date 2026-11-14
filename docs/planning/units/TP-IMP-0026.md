@@ -27,7 +27,7 @@ Establish the production-grade frontend foundation for the **Tanpopo Web Console
 - **Out-of-Scope:** Detailed domain implementations of individual screens `SCR-01`..`16` (covered in `TP-IMP-0027`..`0030` and `0038`).
 
 ## 3. Requirements, Dependencies & Design References
-- **Requirements Refs:** `TP-FR-0902`, `TP-NFR-0701`, `TP-NFR-0702`, `TP-NFR-0801`, `TP-NFR-1001`, `DEC-007`, `UX-AC-06`, `UX-AC-07`, `UX-AC-08`, `UX-AC-10`, `GAP-12`.
+- **Requirements Refs:** `TP-FR-0902`, `TP-NFR-0701`, `TP-NFR-0702`, `TP-NFR-0801`, `TP-NFR-1001`, `DEC-007`, `ISS-008` *(100% English-only UI copy across `web/console/src/*`)*, `UX-AC-06`, `UX-AC-07`, `UX-AC-08`, `UX-AC-10`, `GAP-12`.
 - **Dependencies:** `TP-IMP-0005`, `TP-IMP-0024`.
 - **Design Refs:** [`ADR-0004`](../../architecture/adr/0004-web-console-stack-astryx-evaluation-and-repo-layout.md), [`information-architecture.md`](../../ux/information-architecture.md) (`SPEC-UX-01`), [`design-system-integration.md`](../../ux/design-system-integration.md) (`SPEC-UX-04`), [`AGENTS.md`](../../../AGENTS.md).
 

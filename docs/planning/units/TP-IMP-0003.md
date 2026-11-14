@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0003` |
 | **Milestone / Epic** | `M0` (`Spec Closure & Spikes`) · `EP-00` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0001`, `TP-IMP-0002` & Owner decisions on `CR-06, CR-07` — `GAP-01, 04..06`)* |
+| **Status** | **`DONE`** *(Completed & verified on `2026-11-14` under Product Owner Stage 1 M0 approval `DEC-009` — closed `GAP-04, 05, 06`)* |
 | **Size** | `M` (`8` data-architecture, security & ops files + reference SQL schemas in `db/spec-check/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Touches envelope encryption hierarchy, multi-tenant RLS isolation & monetary ledger)* |
 | **Technical Owner** | `Principal Data Architect + Cryptography/Security Lead` |

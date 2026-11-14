@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Draft Technical Program Plan (Phase ASTRA A09 — Gate G4: `READY_FOR_REVIEW` | `DRAFT — EXECUTION BASELINE UNLOCKED`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `0.1.0-step09-draft` | **Date:** `2026-11-14`
+> **Technical Program Plan (Reconciled Post-`M0` — Gate G4: `STAGE_1_DONE / STAGE_2_AWAITING_OWNER_GO` | `HANDOFF_VERDICT: NO_GO`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.0.0-m0-done` | **Date:** `2026-11-14`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **MANDATORY GOVERNANCE NOTICE (`DO NOT LOCK EXECUTION BASELINE`):**
->   1. As of Phase ASTRA A09 planning, **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, and **Gate G3 (`ADR-0001`..`0006`)** all remain in **`READY_FOR_REVIEW`** status (awaiting Product Owner approval).
->   2. The independent A08 audit report ([`integrated-audit.md`](../reviews/integrated-audit.md)) currently holds a **`FAIL`** verdict with **`11 CRITICAL` blockers** and **10 open Change Requests (`CR-01`..`CR-10`)** tracked in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md).
->   3. Consequently, this roadmap is a **Conditional Pre-Approval Draft (`DRAFT — PRE-APPROVAL`)**; **the Execution Baseline is strictly unlocked and Gate G4 is NOT approved**. All `47` implementation units (`TP-IMP-0001`..`0047`) honestly remain **`BLOCKED`** pending explicit Product Owner sign-off on the blockers in Section 1.2.
+> - **MANDATORY GOVERNANCE NOTICE (`STAGE 2 HANDOFF GATE HELD AT NO_GO`):**
+>   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
+>   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are now **`DONE`**, closing all `13 / 13` gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
+>   3. Per the Product Owner's Stage-Split Ruling (`DEC-009`), **Gate G4 Stage 2 (`M1+` Production Implementation Handoff) remains `NOT YET APPROVED` (`HANDOFF_VERDICT = NO_GO`)**: `TP-IMP-0005`..`0047` (`43 / 47` units) stay **`BLOCKED`** until final Owner Stage 2 `GO` (`TP-IMP-0005` promotes first to `READY`).
 
 ---
 

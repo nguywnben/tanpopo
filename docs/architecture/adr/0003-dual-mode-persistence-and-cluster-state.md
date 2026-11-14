@@ -1,7 +1,7 @@
 # ADR-0003: Dual-Mode Persistence via Abstract Ports (`SQLite WAL` Standalone & `PostgreSQL + Valkey` HA Cluster)
 
 ## Status
-**`PROPOSED`** *(Awaiting Product Owner approval at Gate G3)*
+**`ACCEPTED`** *(Approved by Product Owner on `2026-11-14` via `GOV-OAS-01` Track B + `CR-06, CR-07`; subject to `COND-PO-01..03`, `05`)*
 
 ## Date
 `2026-11-11`

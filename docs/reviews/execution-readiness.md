@@ -1,111 +1,67 @@
-# Final Delivery Readiness Audit (`ASTRA A10`) — Tanpopo
+# Final Delivery Readiness Audit (`ASTRA A10` — Reconciled Post-`M0` Closure) — Tanpopo
 
-> **Independent Governance Verdict Document (Phase ASTRA A10 — Gate G4 Review & Luna Handoff Assessment)**
-> - **Report ID:** `REV-RDY-01` | **Version:** `1.0.0-step10` | **Audit Date:** `2026-11-14`
-> - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect (supported by 2 `Zero-Context Adversarial Subagents`)
-> - **DELIVERY HANDOFF VERDICT:** **`NO_GO`** *(Source implementation remains locked and not yet handed off to Luna)*
-> - **`GATE G4` STATUS:** **`BLOCKED` / `READY_FOR_REVIEW`** *(0 `READY` units, `47 / 47` `BLOCKED` units)*
-
----
-
-## 1. Executive Summary & Rationale for `NO_GO` (`Why NO_GO, Not CONDITIONAL_GO`)
-
-Under strict **ASTRA A10** audit governance rules:
-- A **`GO`** verdict may be issued only when every human gate (`G1/G2/G3/G4`) has received explicit Product Owner sign-off and `0` blocking gaps remain open.
-- A **`CONDITIONAL_GO`** verdict may be issued strictly for a subset of units that are already genuinely **`READY`**, completely unaffected by unapproved gaps, and **must never be used to bypass pending human approval gates**.
-
-Direct verification across the entire Git commit history (`13` commits from `0a35b74` through `4adfc26` on `origin/main`) and [`docs/governance/decisions.md`](../governance/decisions.md) establishes:
-1. **The Product Owner has confirmed only `DEC-001`..`DEC-008` (and `REJ-001`..`004`).** All 4 downstream decision groups — **`Gate G1` (`SD-G1-01`..`05`), `Gate G2` (`TD-G2-01`..`06`, `BA-OQ-001`..`05`), `Gate G3` (`ADR-0001`..`0006` + authorization for `SPIKE-01`..`04`), and `CR-01`..`10` (from the A08 `FAIL` audit) — REMAIN UNAPPROVED** (`READY_FOR_REVIEW` / `OPEN`).
-2. Even the very first unit in the execution DAG, [`TP-IMP-0001`](../planning/units/TP-IMP-0001.md), depends directly on Product Owner decisions across `CR-01..04, 08, 09` and `Gate G1/G2` (`NEG-1`: agents are strictly forbidden from self-deciding on the Owner's behalf). Consequently, the count of genuinely `READY` units today is **`0 / 47`**.
-3. **Mandatory Verdict:** Delivery handoff readiness is **`NO_GO`**. At the same time, every internal discrepancy in the A09 planning layer uncovered via cold-context adversarial simulation has been **remediated in full during A10**, bringing the repository's planning architecture to `100%` structural readiness — once the Product Owner signs off on the **single consolidated approval checklist in Section 7** (see [`owner-approval-sheet.md`](../governance/owner-approval-sheet.md)), the baseline can transition cleanly from `NO_GO` and dispatch `TP-IMP-0001` immediately to Luna with zero re-planning required.
+> **Independent Governance Verdict Document (Phase ASTRA A10 + Milestone `M0` Spec Closure & Spike Verification)**
+> - **Report ID:** `REV-RDY-01` | **Version:** `2.0.0-m0-done-stage2-gate` | **Audit Date:** `2026-11-14`
+> - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
+> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`NO_GO`** *(`M1+` production implementation remains locked solely on Product Owner **Gate G4 Stage 2** sign-off per `DEC-009`)*
+> - **READINESS RECOMMENDATION FOR STAGE 2:** **`RECOMMEND_GO_FOR_STAGE_2`** *(`10 / 10` technical, contract, spike, English-standardization, and DAG criteria are `100%` satisfied; **`TP-IMP-0005`** is ready to promote to `READY` immediately upon Owner Stage 2 `GO`)*
+> - **CURRENT `GATE G4` STATUS:** **`STAGE_1_DONE` (`4 / 47` `M0` units `DONE`) / `STAGE_2_AWAITING_OWNER_GO` (`0 / 47` `READY`, `43 / 47` `BLOCKED`)**
 
 ---
 
-## 2. Empirical Approval Verification (`Zero Inferred Approvals`)
+## 1. Executive Summary & Why `HANDOFF_VERDICT` Remains `NO_GO` Pending Stage 2 Owner Sign-Off
 
-| Gate / Decision Group | Item Count | Actual Status in Repository | Verification Evidence | Explicitly Owner-Confirmed? |
+On `2026-11-14`, the Product Owner reviewed [`owner-approval-sheet.md`](../governance/owner-approval-sheet.md) (`GOV-OAS-01`) and issued a binding **Two-Stage Ruling (`DEC-009` in [`decisions.md`](../governance/decisions.md))**:
+1. **Approved Track A (`18` items) & Track B (`15` items)** across `Gate G1` (`SD-G1-01..05`), `Gate G2` (`BA-OQ-001..05`, `TD-G2-01..06`), `Gate G3` (`ADR-0001..0006`), and `Audit A08 Change Requests` (`CR-01..10`), subject to **5 mandatory conditions (`COND-PO-01`..`05`)**.
+2. **Approved Gate G4 Stage 1 (`Milestone M0` ONLY):** Authorized executing specification closure units **`TP-IMP-0001` → `TP-IMP-0002` → `TP-IMP-0003`** and isolated offline technical spikes **`TP-IMP-0004` (`SPIKE-01`..`04` in `tools/spikes/`)** with zero paid external AI API calls.
+3. **Explicitly Held Gate G4 Stage 2 (`Engineering Handoff / M1+ Production Implementation`) at `NO_GO`:** Instructed that `HANDOFF_VERDICT` **MUST NOT** be flipped to `GO` unilaterally, and `TP-IMP-0005`..`0047` **MUST NOT** be unlocked or implemented until the Product Owner inspects the completed `M0` deliverables and grants final Stage 2 approval.
+
+All four `M0` units (`TP-IMP-0001`..`0004`) have now been executed and mechanically verified (`0` errors across `runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`, and `SPIKE-01..04`). Consequently:
+- **Live Governance Verdict Today:** **`NO_GO`** (honoring the Product Owner's Stage 2 hold `100%`).
+- **Technical Readiness Recommendation:** **`RECOMMEND_GO_FOR_STAGE_2`** — once the Product Owner replies with Stage 2 `GO`, `HANDOFF_VERDICT` transitions cleanly to `GO` and **`TP-IMP-0005`** becomes the first `READY` unit for the Engineering Agent ("Luna").
+
+---
+
+## 2. Empirical Approval & Gate Verification (`Zero Inferred Approvals`)
+
+| Gate / Decision Group | Item Count | Live Status in Repository | Verification Evidence | Explicitly Owner-Confirmed? |
 |---|---|---|---|---|
-| **Foundational Decisions `DEC-001`..`DEC-008`** | `8 / 8` | `CONFIRMED_BY_OWNER` (`DEC-005..007` also `VERIFIED_IN_REPO`) | [`decisions.md`](../governance/decisions.md) Part A, commits `0a35b74`, `6b73bcd` | **YES** *(Sole confirmed group)* |
-| **Rejected Directions `REJ-001`..`REJ-004`** | `4 / 4` | `REJECTED` | [`decisions.md`](../governance/decisions.md) Part B | **YES** *(Negative guardrails)* |
-| **Gate G1 (`SD-G1-01`..`05`)** | `5 / 5` | `READY_FOR_REVIEW` / `OPEN` (`PROPOSED`) | [`decisions.md`](../governance/decisions.md) Part C | **NO** |
-| **Gate G2 (`BA-OQ-001`..`05`, `TD-G2-01`..`06`)** | `11 / 11` | `READY_FOR_REVIEW` (`DRAFT — UNLOCKED SCOPE`) | [`decisions.md`](../governance/decisions.md) Parts E–F, [`release-scope.md`](../product/release-scope.md) | **NO** |
-| **Gate G3 (`ADR-0001`..`0006` + `SPIKE-01`..`04`)** | `6` ADRs + `4` Spikes | `READY_FOR_REVIEW` / `PROPOSED — NO CODE` | [`decisions.md`](../governance/decisions.md) Part H, [`docs/architecture/adr/*`](../architecture/adr/README.md) | **NO** |
-| **Audit Gate A08 (`GAP-01`..`13` & `CR-01`..`10`)** | `13` Gaps / `10` CRs | **`FAIL` *(Blocking Gaps Open)*** | [`integrated-audit.md`](./integrated-audit.md), [`unresolved-gaps.md`](./unresolved-gaps.md) | **NO (`FAIL`)** |
-| **Gate G4 (`EXEC-BL-001-DRAFT` & `TP-IMP-0001`..`0047`)** | `47 / 47` Units | **`BLOCKED` / `READY_FOR_REVIEW` (`NO_GO`)** | [`execution-baseline.md`](../governance/execution-baseline.md), [`implementation-index.md`](../planning/implementation-index.md) | **NO** |
+| **Foundational Decisions `DEC-001`..`DEC-009` & `COND-PO-01`..`05`** | `9` DECs + `5` CONDs | `CONFIRMED_BY_OWNER` | [`decisions.md`](../governance/decisions.md) Part A, [`owner-approval-sheet.md`](../governance/owner-approval-sheet.md) | **YES** |
+| **Rejected Directions `REJ-001`..`REJ-004`** | `4 / 4` | `REJECTED` | [`decisions.md`](../governance/decisions.md) Part B | **YES** |
+| **Gate G1 (`SD-G1-01`..`05`)** | `5 / 5` | `APPROVED` (`CONFIRMED_BY_OWNER`) | [`decisions.md`](../governance/decisions.md) Part C | **YES** (`Track A & B`) |
+| **Gate G2 (`BA-OQ-001`..`05`, `TD-G2-01`..`06`)** | `11 / 11` | `APPROVED` (`CONFIRMED_BY_OWNER`) | [`decisions.md`](../governance/decisions.md) Parts E–F, [`release-scope.md`](../product/release-scope.md) | **YES** (`Track A & B`) |
+| **Gate G3 (`ADR-0001`..`0006` + `SPIKE-01`..`04`)** | `6` ADRs + `4` Spikes | `ACCEPTED` / `VERIFIED_IN_SPIKE` (`COND-PO-01..05`) | [`docs/architecture/adr/*`](../architecture/adr/README.md), [`spike-results.md`](../architecture/spike-results.md) | **YES** (`Track A & B`) |
+| **Audit Gate A08 (`CR-01`..`10` & `GAP-01`..`13`)** | `10` CRs / `13` Gaps | **`REMEDIATED_IN_M0` (`13 / 13 CLOSED`)** | [`unresolved-gaps.md`](./unresolved-gaps.md), `TP-IMP-0001..0004` | **YES** (`CR-01..10` Approved) |
+| **Gate G4 Stage 1 (`M0`: `TP-IMP-0001`..`0004`)** | `4 / 4` `M0` Units | **`APPROVED & DONE`** | [`implementation-index.md`](../planning/implementation-index.md), `tools/spikes/*` | **YES** (`Stage 1`) |
+| **Gate G4 Stage 2 (`M1+` Handoff: `TP-IMP-0005`..`0047`)** | `43 / 47` Units | **`BLOCKED` (`HANDOFF_VERDICT = NO_GO`)** | [`execution-baseline.md`](../governance/execution-baseline.md), [`owner-approval-sheet.md`](../governance/owner-approval-sheet.md) | **NO *(Awaiting Final Stage 2 Owner `GO`)* ** |
 
 ---
 
-## 3. Horizontal–Vertical Consistency Audit & A10 Planning-Layer Remediation Log
+## 3. Final 10-Criterion Engineering Readiness Gate Evaluation (`Post-M0 Verification`)
 
-### 3.1. Automated Repository-Wide Verification Metrics (Post-A10 Remediation)
-
-| Automated Verification Check | Pre-A10 Result (on A09 draft `4adfc26`) | Post-A10 Remediated Result (`VERIFIED`) |
-|---|---|---|
-| **1. Broken Markdown Relative Links** | `0` errors / `107` files | **`0` errors / `109` Markdown files** |
-| **2. Duplicate / Unstable `UNIT_ID`s or `DAG Cycles`** | `0` duplicates · `0` cycles ($u < v$) · `0` orphan deps | **`0` duplicates · `0` cycles ($u < v$) · `0` orphan deps** (`47/47` 1-to-1 match with Index) |
-| **3. `P0 (Must)` Requirements Missing `TP-IMP-xxxx` Units or Design/Tests** | `0 / 54` missing units (`3` FRs missing half of `AC`/`CT` per `GAP-11`, `13` table rows missing explicit test IDs) | **`0 / 54` missing units** · `73 / 73` active requirements in [`traceability.md`](../requirements/traceability.md) Section 9 mapped to canonical test IDs (`GAP-11` remediation locked in `TP-IMP-0001`) |
-| **4. Orphaned Verification IDs (across `113` total IDs)** | Found **`6` orphaned IDs with `0` unit references** (`UX-AC-08`, `INC-01, 04..07`) + `12+` misassigned/partial IDs + `GATE-REL-02..06` numbering shift dropping Grey-Box Pen-Test | **`0 / 113` orphaned IDs** — Full `32/32 CT`, `16/16 AUTH`, `6/6 FZ`, `1/1 EXT-ACCEPT`, `8/8 SLO`, `8/8 FMEA`, `12/12 UX-AC`, `12/12 OPS-AC`, `7/7 INC`, `4/4 DR`, plus restored `7/7 GATE-REL` including **Grey-Box Pen-Test** |
-| **5. Units Missing `AC`/`NEG` or Carrying Conflicting OS / Test Flags** | Found `CGO_ENABLED=0` + `-race` flag conflict on Go units, missing PowerShell syntax, and `Files Touched` drift in `M0` | **`0 / 47` conflicts** — Cleanly separated `CGO_ENABLED=0` from `-race`, added PowerShell syntax + cross-platform Go runner `scripts/ci/check.go` |
-| **6. Cold-Start Root Discovery Entrypoint** | `AGENTS.md` contained only the Astryx UI block (no navigation pointers to planning & governance gates) | **`PASS`** — Added `TANPOPO-HANDOFF` navigation block to [`AGENTS.md`](../../AGENTS.md) (automatically loaded via `GEMINI.md` as well) pointing directly to [`execution-baseline.md`](../governance/execution-baseline.md) while keeping `100%` of the Astryx block intact (`astryx doctor`: `18 pass, 0 fail`) |
-
-### 3.2. Planning-Layer Defects Caught by Adversarial Review & Remediated in A10
-Applying `doubt-driven-development`, two independent zero-context reviewers audited all `TP-IMP-0001`..`0047` unit specs; every discrepancy uncovered was **remediated directly across `docs/planning/*` & `traceability.md` during A10**:
-1. **Eliminated `go test` Flag & Cross-OS Shell Conflicts (`[F-SYS-01, 02]`):** Separated pure-Go `CGO_ENABLED=0` build/test commands from `-race` (`CGO_ENABLED=1`) runs, added Windows PowerShell command equivalents, and specified the cross-platform `scripts/ci/check.go` task runner in `TP-IMP-0005`.
-2. **Closed `M0` File-Scope Boundaries (`[F-0001..0004]`):** Added all touched contract/specification paths into `In-Scope` across `TP-IMP-0001..0003` (`proto/tanpopo/extension/v1/runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`, `contract-test-matrix.md`, `release-readiness.md`, `backups-recovery.md`, etc.), added `SM-01` transition fixes to `TP-IMP-0001`, reconciled `tanpopoctl` → `tanpopod`/`tanpopo` in `TP-IMP-0002`, and isolated `tools/spikes/go.mod` in `TP-IMP-0004` so parallel execution never collides with the root `go.mod` in `TP-IMP-0005`.
-3. **Synchronized `100%` of Identifiers, SQL Table Names, RBAC Roles, Package Paths & Error Codes Across All 47 Units:**
-   - Locked `module github.com/nguywnben/tanpopo`, package `internal/ingress/{http,sse,native,cache,mcp,a2a}`, and epic codes `EP-00`..`EP-09` matching `roadmap.md`.
-   - Locked the 6 canonical roles (`OPERATOR`, `ORG_OWNER`, `TEAM_ADMIN`, `SECURITY_REVIEWER`, `FINOPS_VIEWER`, `DEVELOPER`), `vk_tp_` prefix, `X-CSRF-Token` / `x-tanpopo-request-id` headers, `.tpkg` / `.tpop.enc` / `.tpbundle` archive extensions, `allow_private_ip` flag, outbound `Cookie` injection ban (`TP-IMP-0010`), `vault.UnsealCapability` capability token (`TP-IMP-0008`), shared `extension/port.ProviderRuntime` interface (`TP-IMP-0010`), and precompiled `.wasm` test fixtures in `internal/testkit/wasmfixtures` (`TP-IMP-0006` — removing mandatory host `TinyGo` installation on test runners).
-   - Locked all 26 canonical SQL table names (`config_changelog`, `budget_ledgers`, `usage_settlements`, `usage_rollups_hourly`, `request_traces_meta`, `approval_requests`, `webhook_subscriptions`, `valkey_hold_checkpoints`), the `SYSTEM` audit chain (`org_id IS NULL`), `429 project_budget_exceeded` (`TP-IMP-0021`), `503 no_compliant_deployment_available` (`TP-IMP-0020`), `502 extension_execution_fault` + `> 20` faults/60s breaker threshold (`TP-IMP-0013`), 5-tuple `JCS` approval hash + fail-closed `mutating` default (`TP-IMP-0037`), `POST /admin/v1/playground/sessions` (`TP-IMP-0038`), `tanpopo db migrate-engine` (`TP-IMP-0039`), and `tanpopo admin verify-state` (`TP-IMP-0040`).
-   - Cleanly separated `EXT-SLICE-M1` in `TP-IMP-0015` from the full **10/10-step `EXT-ACCEPT-01`** verification in `TP-IMP-0032` (`GATE-M2`); restored the `2 vCPU / 2 GiB RAM` load-test baseline (`TP-IMP-0043`); and restored canonical `GATE-REL-01..07` numbering including the **5-Surface Grey-Box Penetration Test (`TP-IMP-0044`, `TP-IMP-0047`)**.
+| # | Final Engineering Readiness Criterion | Technical Verification Result | Evidence in Repository |
+|---|---|---|---|
+| **1** | **Official repository documentation standardized to Technical English?** | **`PASS`** | `100%` of `docs/**/*.md` (`111` files including `spike-results.md`), `README.md`, `AGENTS.md`, `proto/*`, `openapi/*`, `db/spec-check/*`, and `tools/spikes/*` contain **`0` Vietnamese diacritics** (save Git author proper noun in `DEC-005`). Remaining placeholder UI strings in `src/App.tsx` are tracked in `ISS-008` for `TP-IMP-0005` / `0026`. |
+| **2** | **`G1 / G2 / G3` and `CR-01..10` explicitly confirmed by Product Owner?** | **`PASS`** | Recorded verbatim in [`owner-approval-sheet.md`](../governance/owner-approval-sheet.md) (`v1.1.0-owner-signed-stage1`) and [`decisions.md`](../governance/decisions.md) (`DEC-009`, `COND-PO-01`..`05`). |
+| **3** | **Zero open `CRITICAL` gaps remaining in [`unresolved-gaps.md`](./unresolved-gaps.md)?** | **`PASS`** | All `13 / 13` gaps (`GAP-01`..`13`, including all `11 CRITICAL` gaps) are marked **`CLOSED`** with concrete file and test citations. |
+| **4** | **`runtime.proto` compiles cleanly with `0` errors?** | **`PASS`** | [`proto/tanpopo/extension/v1/runtime.proto`](../../proto/tanpopo/extension/v1/runtime.proto) compiled via `github.com/bufbuild/protocompile` in `TestContractProtoCompilesCleanly` (`0` errors, `10` RPC methods verified). |
+| **5** | **`openapi/dataplane-v1.yaml` and `openapi/admin-v1.yaml` valid with `0` broken `$ref`s?** | **`PASS`** | `TestOpenAPISpecsParseAndResolveAllInternalRefs` verified OpenAPI `3.1.0` syntax, `14` Data Plane paths (`133` `$ref`s), and `74` Admin paths (`305` `$ref`s) matching `100%` of `SCR-01`..`16` contracts (`0` unresolved `$ref`s). |
+| **6** | **Reference SQLite & PostgreSQL 16 schemas complete and syntactically verified?** | **`PASS`** | [`db/spec-check/sqlite_schema.sql`](../../db/spec-check/sqlite_schema.sql) executed live on pure-Go `modernc.org/sqlite` (`PRAGMA foreign_keys = ON;`) in `TestPhysicalSQLiteAndPostgresSchemaParityAndConstraints`, confirming parity across all canonical tables with [`postgres_schema.sql`](../../db/spec-check/postgres_schema.sql) (`FORCE ROW LEVEL SECURITY`) and rejecting cross-org FK writes. |
+| **7** | **`SPIKE-01..04` completed offline (`0` paid external AI calls) and `POC-01` / `POC-02` locked?** | **`PASS`** | All `8` pure-Go test suites + microbenchmarks in `tools/spikes/` passed (`CGO_ENABLED=0`, loopback-only `hermeticControl` socket guard): `SPIKE-01` (`9/10` providers), `SPIKE-02` (`953.9 ns/op`, `1,000` simultaneous SSE streams x `50` chunks = `0` errors, `0` canary bytes in Wasm RAM, tainted-module eviction & `50ms` watchdog invariants locked in [`spike-results.md`](../architecture/spike-results.md)), `SPIKE-03` (`5/50` exact holds, `0` overrun), `SPIKE-04` (`1/100` OAuth refresh, `300`-tool JCS hash in `1.07–2.45 ms`). Zero `CR` required (`COND-PO-05`). |
+| **8** | **Zero broken Markdown links, zero DAG cycles, zero orphaned `P0` requirements or test IDs?** | **`PASS`** | `0` broken relative links across all Markdown files; acyclic `47`-unit DAG ($u < v$); `56` FRs + `22` NFRs + `117` verification IDs (`CT-01..36`, `AUTH-01..16`, `FZ-01..06`, `EXT-ACCEPT-01`, `SLO-01..08`, `FMEA-01..08`, `UX-AC-01..12`, `OPS-AC-01..12`, `INC-01..07`, `DR-01..04`, `GATE-REL-01..07`) mapped `1-to-1` in [`traceability.md`](../requirements/traceability.md). |
+| **9** | **Astryx Design System baseline & `COND-PO-01..04` honesty guardrails intact?** | **`PASS`** | `cmd /c npx @astryxdesign/cli doctor` reports **`18 pass, 0 fail`** (`src/*`, `package.json`, `astryx-themes.js` untouched); all unmeasured Gateway SLOs, Crypto-Shredding backup guarantees, and HA Valkey failover claims remain explicitly labeled **`TARGET / UNVERIFIED`**. |
+| **10** | **Gate G4 Stage 2 (`M1+` Engineering Handoff) explicitly signed off by Product Owner?** | **`PENDING_OWNER_STAGE_2` *(Sole Blocker)* ** | Held at **`NO_GO`** per Product Owner instruction (`DEC-009`). Ready for immediate transition to `GO` (`TP-IMP-0005` -> `READY`) upon Owner confirmation. |
 
 ---
 
-## 4. Cold-Context Execution Simulation for Luna Across `M0` & `M1` (`TP-IMP-0001` .. `0015`)
+## 4. Cold-Start Execution Simulation for Engineering Agent ("Luna") Upon Stage 2 `GO`
 
-Simulating a brand-new execution agent session receiving only `"Execute TP-IMP-xxxx"` (once unlocked by Product Owner approval):
-
-| Unit Slice (`M0` & `M1`) | Root Discovery Path | Scope & Contract Clarity | Hermetic Self-Verification | Post-A10 Simulation Result |
-|---|---|---|---|---|
-| **`TP-IMP-0001` .. `0003`** *(A08 Spec Closure)* | `AGENTS.md` → `execution-baseline.md` → `units/TP-IMP-0001..0003.md` | Enumerates exact Markdown, `.proto`, `openapi/*.yaml`, and `db/spec-check/*.sql` paths, exact `SM-01..09` edges, and canonical `AEAD AAD` formula. | `node -e` verification scripts run out of the box on every OS with zero extra binaries. | **`PASS`** *(Awaiting Owner `CR-01..10` sign-off)* |
-| **`TP-IMP-0004`** *(`SPIKE-01..04`)* | Isolated under `tools/spikes/go.mod` | Explicit `< 5ms p95`, `< 1ms/chunk`, `16 MiB` Wasm, `2 vCPU / 2 GiB RAM` targets and loopback-only socket guards. | Runs concurrently alongside `0005` without colliding with root `go.mod`. | **`PASS`** *(Awaiting Owner PoC authorization)* |
-| **`TP-IMP-0005` .. `0007`** *(Monorepo, Testkit, SQLite)* | Explicit `module github.com/nguywnben/tanpopo`, `modernc.org/sqlite`, `<= 32`-char Base32 `idgen` | Covers `.gitignore`, `CONSTRAINTS.md`, `scripts/ci/check.go`, `netguard` hooking `DefaultResolver`, and prebuilt `wasmfixtures`. | Passes cleanly on both Windows PowerShell and Linux CI (`CGO_ENABLED=0` separated from `-race`). | **`PASS`** *(After `M0` completion)* |
-| **`TP-IMP-0008` .. `0011`** *(Vault, IAM, Broker, `.tpkg`)* | Explicit `security/{vault,egress,broker}`, `iam/*`, `extension/{port,installer}` packages | Locks `UnsealCapability`, 6 RBAC roles, `vk_tp_`, outbound `Cookie` ban, `401` echoed-secret scrubbing (`CT-16`), `.tpkg` format & `SM-01`. | Full adversarial coverage across `AUTH-02..16`, `CT-01..05, 14..26`, `FZ-02`. | **`PASS`** *(After `0004, 0007`)* |
-| **`TP-IMP-0012` .. `0015`** *(Tier-1, Tier-2 Wasm, SDK, SSE Slice)* | Shared `extension/port.ProviderRuntime`; Data Plane in `internal/ingress/*` | Zero file collisions during parallel `0012 \|\| 0013`; `SPEC-OPS-04` exit codes `0/2/14/22`; explicit `M1` default route target rule. | Executes `EXT-SLICE-M1`, `< 500ms` cancel teardown, `goleak`, `FZ-01, 03, 05` with zero `TinyGo` or external network requirement. | **`PASS`** *(Closes `GATE-M1`)* |
+| Next Eligible Unit | Cold-Start Discovery Chain | Technical DoR Satisfaction | Exact Scope & Verification Readiness |
+|---|---|---|---|
+| **[`TP-IMP-0005`](../planning/units/TP-IMP-0005.md)** *(First `M1` Foundation Unit)* | `AGENTS.md` → `execution-baseline.md` → `implementation-index.md` → `units/TP-IMP-0005.md` | **`100%` Satisfied Technically:** `TP-IMP-0003` (`DONE`), `ADR-0001` (`ACCEPTED`), `ADR-0004` (`ACCEPTED`), `SD-G1-05` `Apache-2.0` (`APPROVED`), `ISS-008` English UI copy explicitly scoped. | Initializes root `go.mod` (`github.com/nguywnben/tanpopo` — zero collision with `tools/spikes/go.mod`), relocates UI to `web/console/` with English copy & `Apache-2.0`, hardens `.gitignore`, and builds cross-OS `scripts/ci/check.go` + `.github/workflows/ci.yml`. |
 
 ---
 
-## 5. Project & Repository Assumptions Audit
+## 5. Single Action for Product Owner to Unlock Stage 2 (`NO_GO` → `GO`)
 
-1. **Agent Skills Inventory (`25/25` Verified):** [`.agents/skills/`](../../.agents/skills) contains all `25` skills matching `100%` of [`skills-lock.json`](../../skills-lock.json), alongside `4` subagent personas (`.agents/agents/`) and `7` reference checklists (`.agents/references/`).
-2. **Astryx Design System Baseline (`VERIFIED_IN_REPO`):** [`package.json`](../../package.json), [`astryx-themes.js`](../../astryx-themes.js) (`defaultThemeSlug = "neutral"`), [`src/App.tsx`](../../src/App.tsx), and [`src/main.tsx`](../../src/main.tsx) remain `100%` untouched; `cmd /c npx @astryxdesign/cli doctor` reports **`18 pass, 0 fail, 3 warn`**; baseline issues `ISS-001`..`005` are explicitly assigned to `TP-IMP-0005` and `TP-IMP-0026`.
-3. **Secrets & Credential Hygiene (`0` Secrets Committed):** Full working-tree and `13`-commit `git log -p` inspection confirmed **`0` `.env*` files, `0` `.pem`/`.key` private keys, and `0` live API tokens**. `TP-IMP-0005` hardens [`.gitignore`](../../.gitignore) in the very first code commit.
-4. **Target Environments, Commands, Branch/Worktree Rules, CI & Seed Fixtures:** Explicitly documented across operating systems in [`execution-baseline.md`](../governance/execution-baseline.md) Sections 2 & 4, [`dependency-graph.md`](../planning/dependency-graph.md) Sections 2–3, [`roadmap.md`](../planning/roadmap.md) Section 3, and [`test-strategy.md`](../quality/test-strategy.md) Sections 3–5.
-
----
-
-## 6. Verification of Tanpopo's 10 Core Architectural & Product Pillars
-
-| Core Architectural / Product Pillar | Post-A10 Structural Assessment | Execution Unlock Dependency |
-|---|---|---|
-| **1. Official vs. Community Plugin Separation & `DEC-004` Legal Boundary** | **`PASS`** — Enforces `^@tanpopo(-[a-z0-9]+)?/` regex, 3 orthogonal UI trust dimensions (`UX-GR-04`), outbound `Cookie` ban, and `CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA'))`. | Awaiting Owner sign-off on `CR-01, CR-03` |
-| **2. External Provider Adapter Lifecycle Without Modifying/Recompiling Core** | **`PASS`** — Proven early in `M1` (`TP-IMP-0015` `EXT-SLICE-M1`) and locked across all 10 `PID` + `sha256sum(tanpopo)` invariant steps in `M2` (`TP-IMP-0032` `EXT-ACCEPT-01`). | Awaiting Owner unlock of `G1–G4` |
-| **3. Auth & Token Boundaries (`Write-Only Vault`, `RFC 8707`, `Single-Flight`)** | **`PASS`** — 3-tier `AEAD AAD` envelope, exclusive `UnsealCapability` for `BlindBroker`, echoed-secret scrubbing (`CT-16`), `RFC 8707` audience pinning (`AUTH-16`), and zero-retry `invalid_grant` handling (`AUTH-10`). | Awaiting Owner sign-off on `G3` & `CR-05, 06` |
-| **4. Plugin Sandbox Isolation (`Declarative` / `wazero <= 16 MiB` / `mTLS Sidecar`)** | **`PASS`** — `0` in-process third-party code (`ADR-0002`), `<= 5ms/chunk` CPU interrupts, `> 20` faults/60s auto-breaker (`FMEA-05`), and out-of-band `blob_ref` streaming outside Wasm RAM (`CR-05`). | Awaiting Owner sign-off on `ADR-0002`, `CR-02, 05` & `SPIKE-02` |
-| **5. `MCP` & `A2A` Plane Separation (`DEC-003`)** | **`PASS`** — Dedicated `/mcp` and `/a2a/*` planes, JCS `schema_hash` pinning (`CT-21`), `0` retries on side-effecting tools (`FMEA-02`), 5-tuple `JCS` JSON-RPC human approval (`CR-08`), separate `SM-09`, and `hop_count <= 5` (`CT-23`). | Awaiting Owner sign-off on `TD-G2-01, 05` & `CR-08` |
-| **6. 6-Step Capability-Aware Routing & Fail-Closed Data Residency** | **`PASS`** — Blocks silent parameter dropping (`400 capability_not_supported`), enforces fail-closed `Data Residency` even during full regional outages (`503 no_compliant_deployment_available` — `CT-08`), and bans post-first-byte SSE failover (`FMEA-01`). | Awaiting Owner sign-off on `TD-G2-02` |
-| **7. Two-Phase `Micro-USD` Integer Budget Ledger & Metering Honesty** | **`PASS`** — `0` floating-point currency math, concurrent race blocking `429 project_budget_exceeded` (`CT-29`), explicit `EXACT / ESTIMATED / UNMETERED_FLAGGED` separation (`FMEA-04`, `UX-GR-05`), and `Valkey {org_id}` slot binding (`CR-07`). | Awaiting Owner sign-off on `ADR-0005` & `CR-06, 07` |
-| **8. Self-Hosted Operations, `.tpop.enc` Backups, `< 60s` `Crypto-Shredding` & `Air-Gap`** | **`PASS`** — Single `tanpopo` binary embedding static SPA (local `Figtree` fonts with `0` external calls — `UX-AC-10`), `doctor`, zero-secret `support-bundle`, `DR-01..04` (`RTO < 15m`), and `Air-Gap Bundle` (`CT-31`). | Awaiting Owner sign-off on `ADR-0001, 0003, 0004` & `CR-09, 10` |
-| **9. `JCS` Hash-Chained Audit Log (`Per-Org + SYSTEM`) & 4-Level Kill-Switch** | **`PASS`** — Atomic transactions, `UPDATE/DELETE`-blocking triggers, per-`Org` + `SYSTEM` chains compatible with `FORCE RLS` (`CR-06`), `< 1s` single-node / `< 5s` cluster revocation, and `> 10s` stale-node breaker (`FMEA-07`). | Awaiting Owner sign-off on `ADR-0006` & `CR-06` |
-| **10. `GATE-REL-01..07` Release Gates & Mandatory Human Sign-Off** | **`PASS`** — 6 automated technical gates (including `>= 4h` Fuzzing, 5-surface Grey-Box Pen-Test, `< 60s` Canary rollback) plus terminal human gate `GATE-REL-07` (`TP-IMP-0047`) prohibiting autonomous AI publishing. | Hard-locked across project lifecycle |
-
----
-
-## 7. Consolidated Decisions Required from Product Owner to Unlock `Gate G4` (`Actionable Owner Sign-Off Sheet`)
-
-The Product Owner **does not need** to re-read all 109 specification files from scratch — use the dedicated one-page sign-off template at [`owner-approval-sheet.md`](../governance/owner-approval-sheet.md) to confirm (or override) the **5 consolidated decision items** below to lift the current `NO_GO` hold and unlock `TP-IMP-0001`:
-
-1. **Approve `Gate G1` (`SD-G1-01`..`05` in [`decisions.md`](../governance/decisions.md) Part C):** Confirm Option 1 across all 5 items (self-hosted Dev/Platform Teams scaling from single-node to HA cluster; hybrid Sandbox + Blind Broker; phased `v0.1 -> v0.2 -> v0.3 -> v1.0` rollout; strict `DEC-004` curation on official channels; pure **Apache-2.0** licensing repo-wide).
-2. **Approve `Gate G2` (`BA-OQ-001`..`05` & `TD-G2-01`..`06` in [`decisions.md`](../governance/decisions.md) Parts E–F):** Confirm scope trade-offs (default single-`Org` UX in `0.x` → Multi-Org GA in `v1.0`, `Negative Balance Carryover`, dual-mode `Virtual Key` revocation, dual-mode MCP destructive approval, `N-1` / `12-month` contract compatibility window).
-3. **Approve `Gate G3` (`ADR-0001`..`0006` & authorize `SPIKE-01`..`04` in [`decisions.md`](../governance/decisions.md) Part H):** Confirm the **Go `1.24+` (`CGO_ENABLED=0`) + `wazero` + `SQLite WAL / PostgreSQL 16 + Valkey` + `Vite/StyleX/Astryx neutral`** stack and authorize running isolated spike benchmarks under `tools/spikes/` in `TP-IMP-0004`.
-4. **Approve `CR-01`..`CR-10` (in [`unresolved-gaps.md`](./unresolved-gaps.md)):** Authorize executing specification-closure units `TP-IMP-0001`..`0003` per the recommended options to move `Audit A08` from `FAIL` to `PASS`.
-5. **Approve `Gate G4` (`EXEC-BL-001` in [`execution-baseline.md`](../governance/execution-baseline.md) via [`owner-approval-sheet.md`](../governance/owner-approval-sheet.md)):** Unlock sequential implementation handoff starting at **`TP-IMP-0001`** for the execution agent ("Luna") and confirm atomic per-unit commits tagged with `TP-IMP-xxxx`.
+All specification closures, machine-readable contracts (`runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`), and isolated feasibility spikes (`SPIKE-01`..`04` in [`spike-results.md`](../architecture/spike-results.md)) are complete and verified. To unlock `M1` implementation for the Engineering Agent, the Product Owner need only confirm **Gate G4 Stage 2 (`GO`)** to flip `HANDOFF_VERDICT` to `GO` and promote **`TP-IMP-0005`** to `READY`.

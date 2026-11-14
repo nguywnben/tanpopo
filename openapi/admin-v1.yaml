@@ -1,0 +1,3204 @@
+# Copyright 2026 The Tanpopo Authors. Licensed under Apache-2.0.
+# Canonical Admin Control Plane OpenAPI 3.1 Contract (SPEC-API-01 / SPEC-UX-03 / CR-01..10).
+# Synchronized 100% character-for-character with docs/ux/screen-specifications.md (SCR-01..16).
+openapi: 3.1.0
+info:
+  title: Tanpopo AI Gateway — Control Plane Administration API (/admin/v1)
+  version: 0.1.0
+  description: >-
+    Machine-readable OpenAPI 3.1.0 specification for Tanpopo Control Plane
+    administration powering all 16 Web Console screens (SCR-01..16) and the
+    unified `tanpopo` CLI. Enforces strict plane separation (Virtual Keys
+    vk_tp_* rejected with 401 invalid_credential_plane — AUTH-07), X-CSRF-Token
+    verification on browser sessions (AUTH-03), ETag / If-Match optimistic
+    concurrency control (409 optimistic_lock_conflict), HMAC-signed org-bound
+    cursor pagination, and write-only secret handling (UX-GR-01). All latency
+    and propagation figures in descriptions are TARGET / UNVERIFIED.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: http://127.0.0.1:8080
+    description: Standalone single-port listener (Mode A default)
+  - url: http://127.0.0.1:9090
+    description: Dedicated internal Control Plane listener (Mode B/C)
+
+security:
+  - AdminBearerToken: []
+  - AdminSessionCookie: []
+
+tags:
+  - name: BootstrapAndAuth
+    description: First-run bootstrap ownership transfer and admin session / OIDC authentication (SCR-01).
+  - name: TenancyAndRBAC
+    description: Organizations, Projects, Environments, Members, and 6-role RBAC (SCR-13, SCR-16).
+  - name: VirtualKeys
+    description: Environment-bound Virtual Keys, graceful rotation, and emergency revocation (SCR-01, SCR-13).
+  - name: OverviewAndAlerts
+    description: System posture summary and active operational/security alerts (SCR-02).
+  - name: SecretsAndConnections
+    description: Write-only Vault secrets, Provider Adapters, Connections, and Authorized OAuth 2.1 (SCR-03, SCR-04).
+  - name: ModelsAndDeployments
+    description: Logical Models capability catalog and physical Model Deployments (SCR-05).
+  - name: ExtensionsAndMarketplace
+    description: Signed Marketplace catalog, .tpkg staging, permission approval, rollback, and tanpopo.lock (SCR-06, SCR-07).
+  - name: RoutesAndPolicies
+    description: Capability-aware Routes, Dry-Run Route Explain, and monotonic Hierarchical Policies (SCR-08, SCR-09).
+  - name: MCPAndA2A
+    description: MCP Server/Tool schema_hash governance (v0.2) and A2A AgentCard registry (v0.3) (SCR-10).
+  - name: TracesAndFinOps
+    description: Privacy-preserving 12-stage Request Traces, micro-USD Budgets, Chargeback exports, and Webhooks (SCR-11, SCR-12).
+  - name: SecurityCenter
+    description: HITL Approvals, JCS hash-chained Audit Events, 4-level Kill-Switches, and Blast-Radius forensics (SCR-14).
+  - name: DevToolsAndOps
+    description: Ephemeral Playground sessions, OpenAPI spec, Support Bundles, Backups, and Upgrade Preflight (SCR-15, SCR-16).
+
+components:
+  securitySchemes:
+    AdminBearerToken:
+      type: http
+      scheme: bearer
+      description: Dedicated Admin Service Token or OIDC JWT. Data Plane Virtual Keys (vk_tp_*) are rejected with 401 invalid_credential_plane.
+    AdminSessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-tanpopo_admin_session
+      description: HttpOnly; Secure; SameSite=Strict admin session cookie; state-mutating calls MUST supply X-CSRF-Token.
+
+  parameters:
+    ApiVersionHeader:
+      name: X-Tanpopo-API-Version
+      in: header
+      required: false
+      schema:
+        type: string
+        examples: ["2026-11-01"]
+    CsrfTokenHeader:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      description: Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03).
+      schema:
+        type: string
+        minLength: 32
+    IfMatchHeader:
+      name: If-Match
+      in: header
+      required: true
+      description: Optimistic concurrency revision ETag (e.g., '"v3"'). Stale values return 409 optimistic_lock_conflict.
+      schema:
+        type: string
+        examples: ['"v1"', '"v3"']
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        maxLength: 128
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    CursorParam:
+      name: cursor
+      in: query
+      required: false
+      description: HMAC-signed org_id-bound opaque pagination cursor.
+      schema:
+        type: string
+    EnvIdQueryParam:
+      name: env_id
+      in: query
+      required: false
+      schema:
+        type: string
+    ProjectIdQueryParam:
+      name: project_id
+      in: query
+      required: false
+      schema:
+        type: string
+
+  headers:
+    ETag:
+      description: Current optimistic-concurrency resource revision tag (e.g., '"v4"').
+      schema:
+        type: string
+    X-Tanpopo-Request-Id:
+      description: Unique Control Plane request correlation identifier.
+      schema:
+        type: string
+
+  schemas:
+    RbacRole:
+      type: string
+      description: Canonical 6-role RBAC set locked in CR-04.
+      enum:
+        - OPERATOR
+        - ORG_OWNER
+        - TEAM_ADMIN
+        - SECURITY_REVIEWER
+        - FINOPS_VIEWER
+        - DEVELOPER
+
+    OriginTrustTier:
+      type: string
+      description: Three canonical public origin trust tiers (TP-BR-0201 / CR-03), paired with orthogonal enterprise_signed boolean.
+      enum:
+        - official
+        - verified
+        - unverified_external
+
+    DataRegion:
+      type: string
+      enum: [EU, US, APAC, ON_PREM]
+
+    CanonicalError:
+      type: object
+      additionalProperties: false
+      required: [code, type, message, request_id, retryable]
+      properties:
+        code:
+          type: string
+          examples:
+            - bootstrap_already_completed
+            - auth_rate_limited
+            - csrf_validation_failed
+            - invalid_credential_plane
+            - optimistic_lock_conflict
+            - policy_relaxation_forbidden
+            - self_approval_forbidden
+            - approval_already_decided_or_expired
+            - ssrf_blocked_private_ip
+            - reserved_namespace_spoofing
+            - resource_not_found
+        type:
+          type: string
+          enum:
+            - invalid_request_error
+            - authentication_error
+            - permission_error
+            - not_found_error
+            - conflict_error
+            - rate_limit_error
+            - upstream_error
+            - extension_error
+        message: { type: string }
+        request_id: { type: string }
+        retryable: { type: boolean }
+        current_resource:
+          type: object
+          description: Returned on 409 optimistic_lock_conflict so Console renders side-by-side diff (UX-AC-11).
+
+    CanonicalErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/CanonicalError"
+
+    CapabilityProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - streaming
+        - tool_calling
+        - parallel_tool_calls
+        - strict_json_schema
+        - json_object
+        - vision
+        - audio_input
+        - document_input
+        - reasoning
+        - prompt_caching
+        - embeddings
+        - rerank
+      properties:
+        streaming: { type: boolean }
+        tool_calling: { type: boolean }
+        parallel_tool_calls: { type: boolean }
+        strict_json_schema: { type: boolean }
+        json_object: { type: boolean }
+        vision: { type: boolean }
+        audio_input: { type: boolean }
+        document_input: { type: boolean }
+        reasoning: { type: boolean }
+        prompt_caching: { type: boolean }
+        embeddings: { type: boolean }
+        rerank: { type: boolean }
+
+    BootstrapStatusResponse:
+      type: object
+      required: [initialized, offline_mode]
+      properties:
+        initialized: { type: boolean }
+        offline_mode: { type: boolean }
+        version: { type: string }
+
+    BootstrapCompleteRequest:
+      type: object
+      required: [bootstrap_token, owner_email, owner_password, master_kek_backup_acknowledged]
+      properties:
+        bootstrap_token: { type: string, minLength: 32 }
+        owner_email: { type: string, format: email }
+        owner_password: { type: string, minLength: 12 }
+        org_name: { type: string, default: Default Organization }
+        project_name: { type: string, default: default }
+        master_kek_backup_acknowledged: { type: boolean }
+        initial_connection:
+          type: object
+          description: Optional atomic first-run provider onboarding (provisions Connection + ACTIVE_HEALTHY Deployment + Default Route + Virtual Key — CR-10).
+          required: [adapter_id, name, billing_mode, endpoint_url, model_id, data_region]
+          properties:
+            adapter_id: { type: string }
+            name: { type: string }
+            billing_mode: { type: string, enum: [COMMERCIAL_API, SELF_HOSTED_INFRA] }
+            endpoint_url: { type: string, format: uri }
+            allow_private_ip:
+              type: boolean
+              default: false
+              description: Explicit operator consent for loopback/RFC1918 local GPU servers (Ollama/vLLM); 169.254.169.254 and Tanpopo admin ports remain hard-blocked.
+            secret_value:
+              type: string
+              writeOnly: true
+            model_id: { type: string }
+            data_region: { $ref: "#/components/schemas/DataRegion" }
+
+    BootstrapCompleteResponse:
+      type: object
+      required: [org_id, project_id, env_id, owner_principal_id, csrf_token]
+      properties:
+        org_id: { type: string }
+        project_id: { type: string }
+        env_id: { type: string }
+        owner_principal_id: { type: string }
+        csrf_token: { type: string }
+        connection_id: { type: string }
+        deployment_id: { type: string }
+        default_route_id: { type: string }
+        initial_virtual_key:
+          $ref: "#/components/schemas/VirtualKeyCreatedResponse"
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 1, writeOnly: true }
+
+    AdminSessionResponse:
+      type: object
+      required: [principal_id, email, roles, csrf_token, expires_at]
+      properties:
+        principal_id: { type: string }
+        email: { type: string }
+        org_id: { type: ["string", "null"] }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/RbacRole" }
+        csrf_token: { type: string }
+        expires_at: { type: string, format: date-time }
+
+    Organization:
+      type: object
+      required: [id, slug, name, min_plugin_trust, version, created_at]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        min_plugin_trust:
+          type: string
+          enum: [OFFICIAL_ONLY, VERIFIED_OR_ENTERPRISE_SIGNED, VERIFIED_ONLY, ANY_APPROVED]
+        four_eyes_enabled: { type: boolean }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    Project:
+      type: object
+      required: [id, org_id, slug, name, version, created_at]
+      properties:
+        id: { type: string }
+        org_id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    Environment:
+      type: object
+      required: [id, org_id, project_id, slug, name, created_at]
+      properties:
+        id: { type: string }
+        org_id: { type: string }
+        project_id: { type: string }
+        slug: { type: string, examples: [dev, staging, prod] }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+
+    DestructiveConfirmRequest:
+      type: object
+      required: [confirm_slug, reason]
+      properties:
+        confirm_slug: { type: string, minLength: 1 }
+        reason: { type: string, minLength: 5 }
+
+    CryptoShredReceipt:
+      type: object
+      required: [target_type, target_id, destroyed_dek_id, shredded_at, revoked_virtual_keys_count]
+      properties:
+        target_type: { type: string, enum: [ORGANIZATION, PROJECT] }
+        target_id: { type: string }
+        destroyed_dek_id: { type: string }
+        shredded_at: { type: string, format: date-time }
+        revoked_virtual_keys_count: { type: integer }
+
+    MemberSummary:
+      type: object
+      required: [id, email, kind, roles, version, created_at]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        kind: { type: string, enum: [HUMAN, SERVICE_ACCOUNT] }
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/RbacRole" }
+        project_ids:
+          type: array
+          items: { type: string }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    VirtualKeyCreateRequest:
+      type: object
+      required: [name, project_id, env_id]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        project_id: { type: string }
+        env_id:
+          type: string
+          description: Exactly 1 Environment per Virtual Key (TP-BR-0103).
+        expires_at: { type: ["string", "null"], format: date-time }
+        rpm_limit: { type: ["integer", "null"], minimum: 1 }
+        tpm_limit: { type: ["integer", "null"], minimum: 1 }
+        max_concurrent_streams: { type: ["integer", "null"], minimum: 1 }
+        budget_ceiling_micros: { type: ["integer", "null"], minimum: 0 }
+        allowed_models:
+          type: array
+          items: { type: string }
+        allowed_mcp_tools:
+          type: array
+          items: { type: string }
+
+    VirtualKeySummary:
+      type: object
+      description: Read-safe metadata projection — NEVER includes secret_key plaintext (UX-GR-01).
+      required: [id, name, project_id, env_id, key_prefix, last_four, state, version, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        project_id: { type: string }
+        env_id: { type: string }
+        owner_principal_id: { type: ["string", "null"] }
+        key_prefix: { type: string, examples: [vk_tp_prod_] }
+        last_four: { type: string, minLength: 4, maxLength: 4 }
+        state:
+          type: string
+          enum: [CREATED_ACTIVE, ROTATING_DUAL_VALID, QUOTA_PAUSED, EXPIRED, REVOKED]
+        expires_at: { type: ["string", "null"], format: date-time }
+        rpm_limit: { type: ["integer", "null"] }
+        tpm_limit: { type: ["integer", "null"] }
+        max_concurrent_streams: { type: ["integer", "null"] }
+        allowed_models:
+          type: array
+          items: { type: string }
+        allowed_mcp_tools:
+          type: array
+          items: { type: string }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    VirtualKeyCreatedResponse:
+      allOf:
+        - $ref: "#/components/schemas/VirtualKeySummary"
+        - type: object
+          required: [secret_key]
+          properties:
+            secret_key:
+              type: string
+              description: Returned STRICTLY ONCE at creation or rotation time; Tanpopo stores only SHA-256(secret_key).
+
+    OverviewSummaryResponse:
+      type: object
+      required: [window, total_requests, error_rate_ratio, p95_overhead_ms, settled_micro_usd, active_hold_micros, active_alerts_count, updated_at]
+      properties:
+        window: { type: string, enum: [1h, 24h, 7d, 30d] }
+        total_requests: { type: integer }
+        error_rate_ratio: { type: number }
+        p95_overhead_ms: { type: number }
+        settled_micro_usd: { type: integer }
+        active_hold_micros: { type: integer }
+        unmetered_request_count: { type: integer }
+        active_alerts_count: { type: integer }
+        sync_lag_warning: { type: boolean }
+        updated_at: { type: string, format: date-time }
+
+    AlertItem:
+      type: object
+      required: [id, alert_code, severity, summary, remediation_route, triggered_at]
+      properties:
+        id: { type: string }
+        alert_code:
+          type: string
+          enum:
+            - ALT-GATEWAY-BURN
+            - ALT-LATENCY-SLO
+            - ALT-REVOCATION-LAG
+            - ALT-AUDIT-TAMPER
+            - ALT-PLUGIN-TRAP
+            - ALT-BUDGET-80
+            - ALT-OAUTH-EXPIRY
+            - ALT-UNMETERED-SPEND
+        severity: { type: string, enum: [PAGE, TICKET] }
+        summary: { type: string }
+        remediation_route: { type: string }
+        triggered_at: { type: string, format: date-time }
+
+    ProviderAdapterSummary:
+      type: object
+      required: [id, slug, name, package_id, version, execution_tier, origin_trust_tier, enterprise_signed, installation_state, supported_auth_methods, allowed_hosts]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        package_id: { type: string }
+        version: { type: string }
+        execution_tier: { type: string, enum: [declarative, sandboxed_wasm, isolated_sidecar] }
+        origin_trust_tier: { $ref: "#/components/schemas/OriginTrustTier" }
+        enterprise_signed: { type: boolean }
+        installation_state: { type: string }
+        wire_protocol: { type: string }
+        native_passthrough_prefix: { type: ["string", "null"] }
+        supported_auth_methods:
+          type: array
+          items: { type: string }
+        secret_slots:
+          type: array
+          items: { type: string }
+        allowed_hosts:
+          type: array
+          items: { type: string }
+
+    SecretCreateRequest:
+      type: object
+      required: [name, secret_kind, secret_value]
+      properties:
+        name: { type: string, minLength: 1 }
+        project_id: { type: ["string", "null"] }
+        secret_kind: { type: string, enum: [API_KEY, HMAC_SECRET, OAUTH_CLIENT_SECRET, WEBHOOK_SECRET] }
+        secret_value:
+          type: string
+          minLength: 1
+          writeOnly: true
+          description: Write-only raw credential sealed immediately under Org/Project DEK with canonical AEAD AAD.
+
+    SecretMetadata:
+      type: object
+      description: Strictly zero plaintext fields — exposes only opaque credential_id and irreversible trailing fingerprint.
+      required: [credential_id, name, secret_kind, trailing_fingerprint, version, created_at]
+      properties:
+        credential_id: { type: string }
+        project_id: { type: ["string", "null"] }
+        name: { type: string }
+        secret_kind: { type: string }
+        trailing_fingerprint: { type: string, examples: ["...9a2f"] }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    ProviderConnectionCreateRequest:
+      type: object
+      required: [name, adapter_id, billing_mode, endpoint_url, data_region]
+      properties:
+        name: { type: string, minLength: 1 }
+        project_id: { type: ["string", "null"] }
+        adapter_id: { type: string }
+        billing_mode:
+          type: string
+          description: Consumer subscriptions are unconditionally prohibited (DEC-004 / UX-GR-03).
+          enum: [COMMERCIAL_API, SELF_HOSTED_INFRA]
+        endpoint_url: { type: string, format: uri }
+        data_region: { $ref: "#/components/schemas/DataRegion" }
+        allow_private_ip:
+          type: boolean
+          default: false
+          description: Explicit operator opt-in for local Ollama/vLLM endpoints; 169.254.169.254 remains unconditionally blocked.
+        config: { type: object }
+        secret_bindings:
+          type: object
+          description: Multi-slot map of Manifest slot_name -> sealed credential_id (connection_secret_bindings).
+          additionalProperties: { type: string }
+
+    ProviderConnection:
+      type: object
+      required: [id, name, adapter_id, billing_mode, endpoint_url, data_region, allow_private_ip, state, secret_slot_fingerprints, version, created_at]
+      properties:
+        id: { type: string }
+        project_id: { type: ["string", "null"] }
+        name: { type: string }
+        adapter_id: { type: string }
+        billing_mode: { type: string, enum: [COMMERCIAL_API, SELF_HOSTED_INFRA] }
+        endpoint_url: { type: string }
+        data_region: { $ref: "#/components/schemas/DataRegion" }
+        allow_private_ip: { type: boolean }
+        state:
+          type: string
+          enum: [CREATED_UNVERIFIED, ACTIVE, DEGRADED, AUTH_EXPIRED_REAUTH_REQUIRED, DISABLED]
+        secret_slot_fingerprints:
+          type: object
+          additionalProperties: { type: string }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    ConnectionTestResponse:
+      type: object
+      required: [valid, latency_ms, detected_model_ids]
+      properties:
+        valid: { type: boolean }
+        latency_ms: { type: integer }
+        detected_model_ids:
+          type: array
+          items: { type: string }
+        failure_code: { type: ["string", "null"] }
+        sanitized_message: { type: ["string", "null"] }
+
+    LogicalModel:
+      type: object
+      required: [id, slug, display_name, context_window, max_output_tokens, assurance_tier, capabilities]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        display_name: { type: string }
+        context_window: { type: integer, minimum: 1 }
+        max_output_tokens: { type: integer, minimum: 1 }
+        assurance_tier: { type: string, enum: [DECLARED, TESTED, VERIFIED] }
+        capabilities:
+          $ref: "#/components/schemas/CapabilityProfile"
+
+    RateCardNanoUsd:
+      type: object
+      required: [input_token_nano_usd, output_token_nano_usd]
+      properties:
+        input_token_nano_usd: { type: integer, minimum: 0 }
+        output_token_nano_usd: { type: integer, minimum: 0 }
+        cache_read_token_nano_usd: { type: integer, minimum: 0, default: 0 }
+        cache_write_token_nano_usd: { type: integer, minimum: 0, default: 0 }
+        reasoning_token_nano_usd: { type: integer, minimum: 0, default: 0 }
+        image_unit_nano_usd: { type: integer, minimum: 0, default: 0 }
+        audio_sec_nano_usd: { type: integer, minimum: 0, default: 0 }
+        document_page_nano_usd: { type: integer, minimum: 0, default: 0 }
+        self_hosted_zero_rate: { type: boolean, default: false }
+
+    ModelDeployment:
+      type: object
+      required: [id, env_id, logical_model_id, connection_id, upstream_model_name, data_region, state, rate_card, version]
+      properties:
+        id: { type: string }
+        env_id: { type: string }
+        logical_model_id: { type: string }
+        connection_id: { type: string }
+        upstream_model_name: { type: string }
+        data_region: { $ref: "#/components/schemas/DataRegion" }
+        state:
+          type: string
+          enum: [PROVISIONED, ACTIVE_HEALTHY, THROTTLED_COOLDOWN, CIRCUIT_OPEN_UNHEALTHY, HALF_OPEN_PROBING, DRAINING_MAINTENANCE, DISABLED]
+        idle_chunk_timeout_ms: { type: integer, minimum: 1000, default: 15000 }
+        first_byte_timeout_ms: { type: integer, minimum: 1000, default: 30000 }
+        rate_card:
+          $ref: "#/components/schemas/RateCardNanoUsd"
+        version: { type: integer }
+
+    ExtensionInstallRequest:
+      type: object
+      required: [source_uri, expected_sha256]
+      properties:
+        source_uri:
+          type: string
+          description: Marketplace package ref, 40-char commit-pinned git+https URL, local .tpkg path, or digest-pinned oci:// URI.
+        expected_sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+
+    ExtensionPermissionDiff:
+      type: object
+      required: [installation_id, package_id, candidate_version, origin_trust_tier, enterprise_signed, execution_tier, added_allowed_hosts, removed_allowed_hosts, secret_slots, quotas]
+      properties:
+        installation_id: { type: string }
+        package_id: { type: string }
+        active_version: { type: ["string", "null"] }
+        candidate_version: { type: string }
+        origin_trust_tier: { $ref: "#/components/schemas/OriginTrustTier" }
+        enterprise_signed: { type: boolean }
+        execution_tier: { type: string, enum: [declarative, sandboxed_wasm, isolated_sidecar] }
+        added_allowed_hosts:
+          type: array
+          items: { type: string }
+        removed_allowed_hosts:
+          type: array
+          items: { type: string }
+        secret_slots:
+          type: array
+          items: { type: string }
+        quotas:
+          type: object
+          properties:
+            max_memory_mib: { type: integer, maximum: 16 }
+            max_cpu_ms_per_call: { type: integer, maximum: 15 }
+            max_stream_chunk_cpu_ms: { type: integer, maximum: 5 }
+
+    ExtensionInstallation:
+      type: object
+      required: [id, package_id, state, origin_trust_tier, enterprise_signed, execution_tier, version]
+      properties:
+        id: { type: string }
+        package_id: { type: string }
+        active_version: { type: ["string", "null"] }
+        candidate_version: { type: ["string", "null"] }
+        previous_rollback_version: { type: ["string", "null"] }
+        contract_version: { type: string }
+        state:
+          type: string
+          enum:
+            - PENDING_PERMISSION_APPROVAL
+            - INSTALLED_DISABLED
+            - ENABLED_ACTIVE
+            - UPDATING_PENDING_RECONSENT
+            - DRAINING
+            - QUARANTINED
+            - REJECTED_INVALID
+        origin_trust_tier: { $ref: "#/components/schemas/OriginTrustTier" }
+        enterprise_signed: { type: boolean }
+        execution_tier: { type: string, enum: [declarative, sandboxed_wasm, isolated_sidecar] }
+        version: { type: integer }
+
+    RouteUpsertRequest:
+      type: object
+      required: [slug, env_id, strategy, targets]
+      properties:
+        slug: { type: string, minLength: 1 }
+        env_id: { type: string }
+        strategy: { type: string, enum: [PRIORITY_FAILOVER, WEIGHTED, LOWEST_COST] }
+        allowed_data_regions:
+          type: array
+          items: { $ref: "#/components/schemas/DataRegion" }
+        max_failover_hops: { type: integer, minimum: 0, maximum: 3, default: 3 }
+        request_timeout_ms: { type: integer, minimum: 500, maximum: 300000, default: 60000 }
+        targets:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [deployment_id]
+            properties:
+              deployment_id: { type: string }
+              priority_order: { type: integer, minimum: 1 }
+              weight: { type: integer, minimum: 0, maximum: 100 }
+
+    RouteResource:
+      allOf:
+        - $ref: "#/components/schemas/RouteUpsertRequest"
+        - type: object
+          required: [id, version, updated_at]
+          properties:
+            id: { type: string }
+            version: { type: integer }
+            updated_at: { type: string, format: date-time }
+
+    RouteExplainRequest:
+      type: object
+      required: [env_id, target_model]
+      properties:
+        env_id: { type: string }
+        target_model: { type: string }
+        data_region: { $ref: "#/components/schemas/DataRegion" }
+        dialect: { type: string, default: openai_compatible }
+        required_capabilities:
+          type: array
+          items: { type: string }
+        estimated_input_tokens: { type: integer, minimum: 0, default: 512 }
+        max_output_tokens: { type: integer, minimum: 1, default: 1024 }
+
+    RouteExplainResponse:
+      type: object
+      required: [request_id, dry_run, route_slug, effective_policy, required_capabilities, selected_candidates_ordered, rejected_deployments]
+      properties:
+        request_id: { type: string }
+        dry_run: { type: boolean, const: true }
+        route_slug: { type: string }
+        effective_policy: { type: object }
+        required_capabilities:
+          type: array
+          items: { type: string }
+        selected_candidates_ordered:
+          type: array
+          items: { type: object }
+        rejected_deployments:
+          type: array
+          items: { type: object }
+
+    PolicyDocument:
+      type: object
+      required: [id, scope_tier, scope_id, allowed_data_regions, min_plugin_trust, min_capability_assurance, version]
+      properties:
+        id: { type: string }
+        scope_tier: { type: string, enum: [INSTANCE, ORGANIZATION, PROJECT, ENVIRONMENT] }
+        scope_id: { type: string }
+        allowed_data_regions:
+          type: array
+          items: { $ref: "#/components/schemas/DataRegion" }
+        min_plugin_trust:
+          type: string
+          enum: [OFFICIAL_ONLY, VERIFIED_OR_ENTERPRISE_SIGNED, VERIFIED_ONLY, ANY_APPROVED]
+        min_capability_assurance:
+          type: string
+          enum: [VERIFIED, TESTED, DECLARED]
+        rpm_ceiling: { type: ["integer", "null"] }
+        tpm_ceiling: { type: ["integer", "null"] }
+        max_concurrent_streams: { type: ["integer", "null"] }
+        guardrail_hooks:
+          type: array
+          items:
+            type: object
+            required: [extension_id, failure_posture]
+            properties:
+              extension_id: { type: string }
+              failure_posture: { type: string, enum: [FAIL_CLOSED, FAIL_OPEN] }
+        version: { type: integer }
+
+    McpServerResource:
+      type: object
+      required: [id, slug, name, transport, endpoint_url, state, tool_count, version]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        transport: { type: string, enum: [streamable_http, isolated_sidecar] }
+        endpoint_url: { type: string }
+        allow_private_ip: { type: boolean, default: false }
+        state: { type: string, enum: [ACTIVE, SCHEMA_DRIFT_LOCKED, DISABLED] }
+        tool_count: { type: integer }
+        version: { type: integer }
+
+    TraceSummary:
+      type: object
+      required: [request_id, plane, route_slug, status_code, error_code, usage_accuracy, total_cost_micros, duration_ms, has_debug_payload, created_at]
+      properties:
+        request_id: { type: string }
+        plane: { type: string, enum: [PROVIDER, NATIVE, MCP, A2A] }
+        env_id: { type: string }
+        virtual_key_id: { type: string }
+        route_slug: { type: string }
+        deployment_id: { type: ["string", "null"] }
+        data_region: { type: ["string", "null"] }
+        status_code: { type: integer }
+        error_code: { type: ["string", "null"] }
+        usage_accuracy: { type: string, enum: [EXACT, ESTIMATED, UNMETERED_FLAGGED] }
+        total_cost_micros: { type: integer }
+        ttft_ms: { type: ["number", "null"] }
+        duration_ms: { type: number }
+        has_debug_payload: { type: boolean }
+        waterfall_stages:
+          type: array
+          items:
+            type: object
+            required: [stage, duration_ms, outcome]
+            properties:
+              stage: { type: string }
+              duration_ms: { type: number }
+              outcome: { type: string }
+        created_at: { type: string, format: date-time }
+
+    BudgetResource:
+      type: object
+      required: [id, scope_tier, scope_id, period, hard_limit_micros, settled_exact_micros, settled_estimated_micros, reserved_hold_micros, negative_carryover_micros, version]
+      properties:
+        id: { type: string }
+        scope_tier: { type: string, enum: [ORGANIZATION, PROJECT, ENVIRONMENT, VIRTUAL_KEY] }
+        scope_id: { type: string }
+        period: { type: string, enum: [DAILY, MONTHLY] }
+        hard_limit_micros: { type: integer, minimum: 0 }
+        soft_warning_percents:
+          type: array
+          items: { type: integer }
+        settled_exact_micros: { type: integer }
+        settled_estimated_micros: { type: integer }
+        reserved_hold_micros: { type: integer }
+        negative_carryover_micros: { type: integer }
+        unmetered_request_count: { type: integer }
+        version: { type: integer }
+
+    UsageChargebackRow:
+      type: object
+      required: [group_key, exact_micro_usd, estimated_micro_usd, unmetered_request_count]
+      properties:
+        group_key: { type: string }
+        exact_micro_usd: { type: integer }
+        estimated_micro_usd: { type: integer }
+        unmetered_request_count: { type: integer }
+
+    ApprovalRequestResource:
+      type: object
+      required: [id, action_kind, state, approval_binding_hash, requested_by, created_at, expires_at, version]
+      properties:
+        id: { type: string }
+        org_id: { type: ["string", "null"] }
+        project_id: { type: ["string", "null"] }
+        action_kind: { type: string, enum: [MCP_DESTRUCTIVE_TOOL, EXTENSION_ESCALATION, BUDGET_CEILING_OVERRIDE] }
+        state: { type: string, enum: [PENDING, APPROVED, CONSUMED, REJECTED, EXPIRED] }
+        approval_binding_hash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        payload_preview_json: { type: string }
+        requested_by: { type: string }
+        decided_by: { type: ["string", "null"] }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        version: { type: integer }
+
+    AuditEventResource:
+      type: object
+      required: [id, chain_partition, seq_no, actor_id, action, prev_hash, event_hash, created_at]
+      properties:
+        id: { type: string }
+        org_id: { type: ["string", "null"] }
+        chain_partition: { type: string, description: "org_id or SYSTEM" }
+        seq_no: { type: integer }
+        actor_id: { type: string }
+        action: { type: string }
+        target_type: { type: string }
+        target_id: { type: string }
+        metadata: { type: object }
+        prev_hash: { type: string }
+        event_hash: { type: string }
+        created_at: { type: string, format: date-time }
+
+    KillSwitchTriggerRequest:
+      type: object
+      required: [target_level, target_id, abort_active_streams, reason]
+      properties:
+        target_level: { type: string, enum: [VIRTUAL_KEY, PROJECT, PROVIDER_CONNECTION, EXTENSION] }
+        target_id: { type: string }
+        confirm_slug: { type: string }
+        abort_active_streams: { type: boolean, default: true }
+        reason: { type: string, minLength: 5 }
+
+    PlaygroundSessionCreateRequest:
+      type: object
+      required: [project_id, env_id]
+      properties:
+        project_id: { type: string }
+        env_id: { type: string }
+        ttl_seconds: { type: integer, minimum: 60, maximum: 900, default: 900 }
+        max_budget_micros: { type: integer, minimum: 1000, maximum: 5000000, default: 500000 }
+
+    PlaygroundSessionResponse:
+      type: object
+      required: [session_id, ephemeral_virtual_key, env_id, expires_at, max_budget_micros]
+      properties:
+        session_id: { type: string }
+        ephemeral_virtual_key:
+          type: string
+          description: Short-lived (<= 15m), cost-capped vk_tp_ token used by SCR-15 to call standard /v1/* Data Plane routes (CR-10).
+        env_id: { type: string }
+        expires_at: { type: string, format: date-time }
+        max_budget_micros: { type: integer }
+
+paths:
+  # ==================== GROUP A: BOOTSTRAP & AUTH (SCR-01) ====================
+  /admin/v1/bootstrap/status:
+    get:
+      tags: [BootstrapAndAuth]
+      operationId: getBootstrapStatus
+      security: []
+      summary: Query first-run bootstrap posture (SCR-01)
+      responses:
+        "200":
+          description: Bootstrap status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BootstrapStatusResponse" }
+
+  /admin/v1/bootstrap/complete:
+    post:
+      tags: [BootstrapAndAuth]
+      operationId: completeBootstrap
+      security: []
+      summary: Claim one-time Bootstrap Token, create ORG_OWNER, and optionally provision atomic Connection + ACTIVE_HEALTHY Deployment + Default Route + Virtual Key (SCR-01)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BootstrapCompleteRequest" }
+      responses:
+        "201":
+          description: Ownership claimed and initial gateway topology provisioned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BootstrapCompleteResponse" }
+        "401":
+          description: Invalid or expired bootstrap token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "410":
+          description: 410 bootstrap_already_completed — bootstrap endpoint permanently sealed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "422":
+          description: Upstream connection validation failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/auth/login:
+    post:
+      tags: [BootstrapAndAuth]
+      operationId: loginAdminPassword
+      security: []
+      summary: Authenticate local administrator credentials (SCR-01)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Session established via HttpOnly cookie + CSRF token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSessionResponse" }
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "429":
+          description: 429 auth_rate_limited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/auth/oidc/start:
+    get:
+      tags: [BootstrapAndAuth]
+      operationId: startAdminOidcLogin
+      security: []
+      summary: Initiate Enterprise OIDC Authorization Code + PKCE (S256) login (SCR-01 — v0.3)
+      responses:
+        "302":
+          description: Redirect to configured OIDC Identity Provider
+
+  /admin/v1/auth/oidc/callback:
+    get:
+      tags: [BootstrapAndAuth]
+      operationId: completeAdminOidcCallback
+      security: []
+      summary: Complete OIDC SSO login callback, map RBAC group claims, and set HttpOnly session cookie (SCR-01 — v0.3)
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "302":
+          description: Redirect to /overview
+
+  /admin/v1/auth/session:
+    get:
+      tags: [BootstrapAndAuth]
+      operationId: getAdminSession
+      summary: Inspect current authenticated principal and CSRF token (SCR-01)
+      responses:
+        "200":
+          description: Active admin session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSessionResponse" }
+        "401":
+          description: Unauthenticated or invalid_credential_plane
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/auth/logout:
+    post:
+      tags: [BootstrapAndAuth]
+      operationId: logoutAdminSession
+      summary: Terminate admin session and revoke any active Playground ephemeral keys (SCR-01)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "204":
+          description: Logged out cleanly
+
+  # ==================== GROUP B: TENANCY, PROJECTS & RBAC (SCR-13, SCR-16) ====================
+  /admin/v1/organizations:
+    get:
+      tags: [TenancyAndRBAC]
+      operationId: listOrganizations
+      summary: List organizations visible to caller (SCR-16)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Cursor-paginated organizations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Organization" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [TenancyAndRBAC]
+      operationId: createOrganization
+      summary: Create new Organization and wrapped Org DEK (OPERATOR only in v0.1 per CR-04) (SCR-16)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name]
+              properties:
+                slug: { type: string }
+                name: { type: string }
+      responses:
+        "201":
+          description: Organization provisioned
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organization" }
+
+  /admin/v1/organizations/{orgId}:
+    delete:
+      tags: [TenancyAndRBAC]
+      operationId: deleteAndCryptoShredOrganization
+      summary: Permanently close Organization and crypto-shred Org DEK in < 60s (SCR-16)
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DestructiveConfirmRequest" }
+      responses:
+        "200":
+          description: Organization deleted and Org DEK irreversibly destroyed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CryptoShredReceipt" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/organizations/{orgId}/extension-policies:
+    put:
+      tags: [ExtensionsAndMarketplace]
+      operationId: putOrgExtensionPolicies
+      summary: Update per-Organization extension enablement and min_plugin_trust policy (SCR-07, CR-04)
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [min_plugin_trust, policies]
+              properties:
+                min_plugin_trust:
+                  type: string
+                  enum: [OFFICIAL_ONLY, VERIFIED_OR_ENTERPRISE_SIGNED, VERIFIED_ONLY, ANY_APPROVED]
+                policies:
+                  type: array
+                  items:
+                    type: object
+                    required: [package_id, enabled]
+                    properties:
+                      package_id: { type: string }
+                      enabled: { type: boolean }
+                      pinned_installation_id: { type: ["string", "null"] }
+      responses:
+        "200":
+          description: Updated org_extension_policies
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organization" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/projects:
+    get:
+      tags: [TenancyAndRBAC]
+      operationId: listProjects
+      summary: List Projects within caller scope (SCR-13, SCR-16)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Cursor-paginated projects
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Project" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [TenancyAndRBAC]
+      operationId: createProject
+      summary: Create Project and wrapped Project DEK (CR-06) (SCR-13, SCR-16)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name]
+              properties:
+                slug: { type: string }
+                name: { type: string }
+      responses:
+        "201":
+          description: Project created
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+
+  /admin/v1/projects/{projectId}:
+    delete:
+      tags: [TenancyAndRBAC]
+      operationId: deleteAndCryptoShredProject
+      summary: Permanently close Project and crypto-shred Project DEK in < 60s (OPS-AC-09, SCR-16)
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DestructiveConfirmRequest" }
+      responses:
+        "200":
+          description: Project deleted and Project DEK irreversibly destroyed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CryptoShredReceipt" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/projects/{projectId}/environments:
+    get:
+      tags: [TenancyAndRBAC]
+      operationId: listProjectEnvironments
+      summary: List Environments for a Project (SCR-13)
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Environments list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Environment" } }
+    post:
+      tags: [TenancyAndRBAC]
+      operationId: createProjectEnvironment
+      summary: Create Environment under a Project (SCR-13)
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name]
+              properties:
+                slug: { type: string }
+                name: { type: string }
+      responses:
+        "201":
+          description: Environment created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Environment" }
+
+  /admin/v1/projects/{projectId}/virtual-keys:
+    post:
+      tags: [VirtualKeys]
+      operationId: createProjectVirtualKey
+      summary: Issue show-once Virtual Key under explicit project path (SCR-13, TP-IMP-0024)
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VirtualKeyCreateRequest" }
+      responses:
+        "201":
+          description: Show-once Virtual Key created
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualKeyCreatedResponse" }
+
+  # ==================== GROUP C: VIRTUAL KEYS & RBAC MEMBERS (SCR-01, SCR-13) ====================
+  /admin/v1/virtual-keys:
+    get:
+      tags: [VirtualKeys]
+      operationId: listVirtualKeys
+      summary: Cursor-paginated Virtual Keys list (0 plaintext secrets returned) (SCR-13)
+      parameters:
+        - $ref: "#/components/parameters/EnvIdQueryParam"
+        - $ref: "#/components/parameters/ProjectIdQueryParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated Virtual Key summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/VirtualKeySummary" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [VirtualKeys]
+      operationId: createVirtualKey
+      summary: Issue Environment-bound Virtual Key (secret_key returned strictly once — UX-GR-01) (SCR-01, SCR-13)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VirtualKeyCreateRequest" }
+      responses:
+        "201":
+          description: Virtual Key issued (plaintext shown strictly once)
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualKeyCreatedResponse" }
+
+  /admin/v1/virtual-keys/{keyId}:
+    patch:
+      tags: [VirtualKeys]
+      operationId: updateVirtualKey
+      summary: Update Virtual Key rate limits or model/MCP allowlists (SCR-13)
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                rpm_limit: { type: ["integer", "null"] }
+                tpm_limit: { type: ["integer", "null"] }
+                max_concurrent_streams: { type: ["integer", "null"] }
+                allowed_models: { type: array, items: { type: string } }
+                allowed_mcp_tools: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Updated Virtual Key summary
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualKeySummary" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/virtual-keys/{keyId}/rotate:
+    post:
+      tags: [VirtualKeys]
+      operationId: rotateVirtualKey
+      summary: Graceful dual-key rotation with overlap window (ROTATING_DUAL_VALID — SM-05, SCR-13)
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grace_window_seconds]
+              properties:
+                grace_window_seconds: { type: integer, minimum: 60, maximum: 259200, default: 86400 }
+      responses:
+        "200":
+          description: Rotated Virtual Key (new secret_key returned strictly once)
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualKeyCreatedResponse" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/virtual-keys/{keyId}/revoke:
+    post:
+      tags: [VirtualKeys]
+      operationId: revokeVirtualKey
+      summary: Revoke Virtual Key via Graceful Drain or Emergency Stream Cutoff (permitted from QUOTA_PAUSED per SM-05, SCR-13)
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode, reason]
+              properties:
+                mode: { type: string, enum: [GRACEFUL_DRAIN, EMERGENCY_ABORT_STREAMS] }
+                reason: { type: string, minLength: 5 }
+      responses:
+        "200":
+          description: Key transitioned to REVOKED
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [key, severed_streams_count]
+                properties:
+                  key: { $ref: "#/components/schemas/VirtualKeySummary" }
+                  severed_streams_count: { type: integer }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/members:
+    get:
+      tags: [TenancyAndRBAC]
+      operationId: listMembers
+      summary: Cursor-paginated list of organization principals and 6-role RBAC bindings (SCR-13)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated members
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/MemberSummary" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [TenancyAndRBAC]
+      operationId: createMember
+      summary: Add principal and assign initial 6-role RBAC binding (SCR-13)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, roles]
+              properties:
+                email: { type: string, format: email }
+                kind: { type: string, enum: [HUMAN, SERVICE_ACCOUNT], default: HUMAN }
+                roles:
+                  type: array
+                  minItems: 1
+                  items: { $ref: "#/components/schemas/RbacRole" }
+                project_ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        "201":
+          description: Member added
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberSummary" }
+        "403":
+          description: role_escalation_denied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/members/{memberId}/roles:
+    patch:
+      tags: [TenancyAndRBAC]
+      operationId: updateMemberRoles
+      summary: Update principal RBAC roles with anti-self-escalation check (SCR-13)
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles]
+              properties:
+                roles:
+                  type: array
+                  items: { $ref: "#/components/schemas/RbacRole" }
+                project_ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Member roles updated
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberSummary" }
+        "403":
+          description: role_escalation_denied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  # ==================== GROUP D: OVERVIEW & ALERTS (SCR-02) ====================
+  /admin/v1/overview/summary:
+    get:
+      tags: [OverviewAndAlerts]
+      operationId: getOverviewSummary
+      summary: System posture KPI snapshot filtered to caller RBAC scope (SCR-02)
+      parameters:
+        - name: window
+          in: query
+          required: false
+          schema: { type: string, enum: [1h, 24h, 7d, 30d], default: 24h }
+      responses:
+        "200":
+          description: Posture metrics summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OverviewSummaryResponse" }
+
+  /admin/v1/alerts/active:
+    get:
+      tags: [OverviewAndAlerts]
+      operationId: listActiveAlerts
+      summary: List active operational, quota, OAuth, and security alerts (SCR-02)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Active alerts list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AlertItem" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+
+  # ==================== GROUP E: ADAPTERS, WRITE-ONLY SECRETS & CONNECTIONS (SCR-03, SCR-04) ====================
+  /admin/v1/provider-adapters:
+    get:
+      tags: [SecretsAndConnections]
+      operationId: listProviderAdapters
+      summary: Cursor-paginated list of installed Provider Adapters (SCR-03)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Installed Provider Adapters
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/ProviderAdapterSummary" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+
+  /admin/v1/provider-adapters/{adapterId}:
+    get:
+      tags: [SecretsAndConnections]
+      operationId: getProviderAdapter
+      summary: Inspect single Provider Adapter manifest capabilities and auth methods (SCR-03)
+      parameters:
+        - name: adapterId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Provider Adapter detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProviderAdapterSummary" }
+        "404":
+          description: resource_not_found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/secrets:
+    get:
+      tags: [SecretsAndConnections]
+      operationId: listSecretsMetadata
+      summary: List write-only vault credential metadata (0 plaintext bytes ever returned — UX-GR-01) (SCR-04)
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdQueryParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated credential metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/SecretMetadata" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [SecretsAndConnections]
+      operationId: createSecret
+      summary: Seal write-only upstream credential into 3-tier Envelope Vault (SCR-01, SCR-04)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretCreateRequest" }
+      responses:
+        "201":
+          description: Sealed credential handle and trailing fingerprint
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretMetadata" }
+
+  /admin/v1/secrets/{credentialId}:
+    delete:
+      tags: [SecretsAndConnections]
+      operationId: deleteSecret
+      summary: Delete unreferenced vault credential record (SCR-04)
+      parameters:
+        - name: credentialId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "204":
+          description: Secret deleted
+        "409":
+          description: optimistic_lock_conflict or credential_in_use
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/connections:
+    get:
+      tags: [SecretsAndConnections]
+      operationId: listConnections
+      summary: Cursor-paginated list of Provider Connections (SCR-04)
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdQueryParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated Provider Connections
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/ProviderConnection" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [SecretsAndConnections]
+      operationId: createConnection
+      summary: Create Provider Connection (COMMERCIAL_API or SELF_HOSTED_INFRA; explicit allow_private_ip opt-in) (SCR-01, SCR-04)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProviderConnectionCreateRequest" }
+      responses:
+        "201":
+          description: Provider Connection created
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProviderConnection" }
+        "400":
+          description: 400 ssrf_blocked_private_ip or disallowed host
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/connections/{connectionId}:
+    patch:
+      tags: [SecretsAndConnections]
+      operationId: updateConnection
+      summary: Rotate secret slot bindings, update endpoint, or disable connection (permitted from DEGRADED per SM-02) (SCR-04)
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                endpoint_url: { type: string, format: uri }
+                allow_private_ip: { type: boolean }
+                state: { type: string, enum: [ACTIVE, DISABLED] }
+                secret_bindings:
+                  type: object
+                  additionalProperties: { type: string }
+      responses:
+        "200":
+          description: Updated Provider Connection
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProviderConnection" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+    delete:
+      tags: [SecretsAndConnections]
+      operationId: deleteConnection
+      summary: Delete detached Provider Connection (SCR-04)
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "204":
+          description: Connection deleted
+        "409":
+          description: optimistic_lock_conflict or connection_referenced_by_deployments
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/connections/{connectionId}/test:
+    post:
+      tags: [SecretsAndConnections]
+      operationId: testConnection
+      summary: Execute 2-phase blind validation probe through BlindBroker + SSRFGuard (SCR-01, SCR-04)
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "200":
+          description: Validation probe verdict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionTestResponse" }
+
+  /admin/v1/connections/{connectionId}/oauth/start:
+    post:
+      tags: [SecretsAndConnections]
+      operationId: startConnectionOAuth
+      summary: Initiate Authorized OAuth 2.1 + PKCE (S256) or Device Flow session persisted in oauth_authorization_sessions (SCR-04 — v0.2)
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "200":
+          description: OAuth authorization URL or RFC 8628 device code metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [flow, state, expires_at]
+                properties:
+                  flow: { type: string, enum: [authorization_code_pkce, device_code] }
+                  authorization_url: { type: string, format: uri }
+                  verification_uri: { type: string, format: uri }
+                  user_code: { type: string }
+                  state: { type: string }
+                  expires_at: { type: string, format: date-time }
+
+  /admin/v1/oauth/callback:
+    get:
+      tags: [SecretsAndConnections]
+      operationId: completeConnectionOAuthCallback
+      summary: Handle OAuth 2.1 callback, verify state + PKCE + RFC 8707 audience, seal tokens in Write-Only Vault, and redirect (SCR-04 — v0.2)
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "302":
+          description: Redirects back to /providers/connections (never echoes raw tokens)
+
+  # ==================== GROUP F: MODELS & DEPLOYMENTS (SCR-01, SCR-02, SCR-05) ====================
+  /admin/v1/models:
+    get:
+      tags: [ModelsAndDeployments]
+      operationId: listAdminModels
+      summary: Cursor-paginated Logical Models capability catalog (SCR-05)
+      parameters:
+        - $ref: "#/components/parameters/EnvIdQueryParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Logical Models catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/LogicalModel" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [ModelsAndDeployments]
+      operationId: createAdminModel
+      summary: Register custom Logical Model capability profile (SCR-05)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LogicalModel" }
+      responses:
+        "201":
+          description: Logical Model created
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LogicalModel" }
+
+  /admin/v1/deployments:
+    get:
+      tags: [ModelsAndDeployments]
+      operationId: listDeployments
+      summary: Cursor-paginated Model Deployments matrix (SCR-02, SCR-05)
+      parameters:
+        - $ref: "#/components/parameters/EnvIdQueryParam"
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Model Deployments list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/ModelDeployment" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [ModelsAndDeployments]
+      operationId: createDeployment
+      summary: Bind Provider Connection to a physical Model Deployment with integer nano-USD rate card (SCR-01, SCR-05)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [env_id, logical_model_id, connection_id, upstream_model_name, data_region, rate_card]
+              properties:
+                env_id: { type: string }
+                logical_model_id: { type: string }
+                connection_id: { type: string }
+                upstream_model_name: { type: string }
+                data_region: { $ref: "#/components/schemas/DataRegion" }
+                activate_immediately: { type: boolean, default: true }
+                rate_card: { $ref: "#/components/schemas/RateCardNanoUsd" }
+      responses:
+        "201":
+          description: Model Deployment created
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelDeployment" }
+
+  /admin/v1/deployments/{deploymentId}:
+    patch:
+      tags: [ModelsAndDeployments]
+      operationId: updateDeployment
+      summary: Update deployment rate card, timeouts, or administrative state (DISABLED permitted from CIRCUIT_OPEN_UNHEALTHY per SM-04) (SCR-05)
+      parameters:
+        - name: deploymentId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                state: { type: string, enum: [ACTIVE_HEALTHY, DRAINING_MAINTENANCE, DISABLED] }
+                idle_chunk_timeout_ms: { type: integer, minimum: 1000 }
+                first_byte_timeout_ms: { type: integer, minimum: 1000 }
+                rate_card: { $ref: "#/components/schemas/RateCardNanoUsd" }
+      responses:
+        "200":
+          description: Updated Model Deployment
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelDeployment" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+    delete:
+      tags: [ModelsAndDeployments]
+      operationId: deleteDeployment
+      summary: Delete detached Model Deployment (SCR-05)
+      parameters:
+        - name: deploymentId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "204":
+          description: Deployment deleted
+
+  # ==================== GROUP G: MARKETPLACE, EXTENSIONS & LOCKFILE (SCR-06, SCR-07) ====================
+  /admin/v1/marketplace/catalog:
+    get:
+      tags: [ExtensionsAndMarketplace]
+      operationId: listMarketplaceCatalog
+      summary: Browse signed static Marketplace catalog or offline bundle cache (SCR-06)
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema: { type: string }
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Catalog entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, offline_cached, has_more]
+                properties:
+                  data: { type: array, items: { type: object } }
+                  offline_cached: { type: boolean }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+
+  /admin/v1/extensions/install:
+    post:
+      tags: [ExtensionsAndMarketplace]
+      operationId: stageExtensionInstall
+      summary: Verify digest/signature/^@tanpopo(-[a-z0-9]+)?/ namespace and stage package in PENDING_PERMISSION_APPROVAL (SCR-06)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExtensionInstallRequest" }
+      responses:
+        "202":
+          description: Staged in PENDING_PERMISSION_APPROVAL with permission diff
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtensionPermissionDiff" }
+        "400":
+          description: hash_mismatch, contract_version_incompatible, or mutable_git_ref_forbidden
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "403":
+          description: 403 reserved_namespace_spoofing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/extensions/installations:
+    get:
+      tags: [ExtensionsAndMarketplace]
+      operationId: listExtensionInstallations
+      summary: Cursor-paginated list of installed Extension Packages (SCR-07)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Installed extensions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/ExtensionInstallation" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+
+  /admin/v1/extensions/{installationId}/permission-diff:
+    get:
+      tags: [ExtensionsAndMarketplace]
+      operationId: getExtensionPermissionDiff
+      summary: Inspect requested Manifest capabilities and upgrade escalation delta (SCR-06, SCR-07)
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Permission inspection sheet payload
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtensionPermissionDiff" }
+
+  /admin/v1/extensions/{installationId}/approve-permissions:
+    post:
+      tags: [ExtensionsAndMarketplace]
+      operationId: approveExtensionPermissions
+      summary: Consent to manifest permissions, update tanpopo.lock, and transition via SM-01 (INSTALLED_DISABLED or ENABLED_ACTIVE) (SCR-06, SCR-07)
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enable_immediately]
+              properties:
+                enable_immediately: { type: boolean, default: true }
+                acknowledge_unverified_external: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Permissions approved and pinned in tanpopo.lock
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtensionInstallation" }
+        "403":
+          description: 403 self_approval_forbidden when Four-Eyes is active
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/extensions/{installationId}/upgrade:
+    post:
+      tags: [ExtensionsAndMarketplace]
+      operationId: upgradeExtension
+      summary: Stage version upgrade; halts in UPDATING_PENDING_RECONSENT if permissions expand (SCR-07)
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExtensionInstallRequest" }
+      responses:
+        "200":
+          description: Non-escalating upgrade draining and activated
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtensionInstallation" }
+        "202":
+          description: Permission escalation detected — parked in UPDATING_PENDING_RECONSENT
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtensionPermissionDiff" }
+
+  /admin/v1/extensions/{installationId}/rollback:
+    post:
+      tags: [ExtensionsAndMarketplace]
+      operationId: rollbackExtension
+      summary: Atomically roll back to previousPinnedRollback in tanpopo.lock (< 5s TARGET / UNVERIFIED) (SCR-07)
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5 }
+      responses:
+        "200":
+          description: Rolled back to previous pinned version
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtensionInstallation" }
+
+  /admin/v1/extensions/{installationId}:
+    delete:
+      tags: [ExtensionsAndMarketplace]
+      operationId: uninstallOrDiscardExtension
+      summary: Uninstall unreferenced extension or discard staged candidate version (SCR-07)
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "204":
+          description: Uninstalled or candidate discarded
+        "409":
+          description: extension_referenced_by_active_connections or optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/extensions/lockfile:
+    get:
+      tags: [ExtensionsAndMarketplace]
+      operationId: getExtensionLockfile
+      summary: Export deterministic tanpopo.lock document for GitOps (SCR-07)
+      responses:
+        "200":
+          description: tanpopo.lock YAML content
+          content:
+            application/yaml:
+              schema: { type: string }
+            application/json:
+              schema: { type: object }
+
+  # ==================== GROUP H: ROUTES & HIERARCHICAL POLICIES (SCR-08, SCR-09) ====================
+  /admin/v1/routes:
+    get:
+      tags: [RoutesAndPolicies]
+      operationId: listRoutes
+      summary: Cursor-paginated Capability Routes (SCR-08)
+      parameters:
+        - $ref: "#/components/parameters/EnvIdQueryParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Routes list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/RouteResource" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [RoutesAndPolicies]
+      operationId: createRoute
+      summary: Create Capability-Aware Route (SCR-01, SCR-08)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RouteUpsertRequest" }
+      responses:
+        "201":
+          description: Route created
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RouteResource" }
+        "422":
+          description: invalid_weight_sum or residency policy violation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/routes/{routeId}:
+    put:
+      tags: [RoutesAndPolicies]
+      operationId: updateRoute
+      summary: Update Capability Route under ETag optimistic concurrency control (SCR-08)
+      parameters:
+        - name: routeId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RouteUpsertRequest" }
+      responses:
+        "200":
+          description: Route updated
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RouteResource" }
+        "409":
+          description: 409 optimistic_lock_conflict (includes current_resource for Diff modal — UX-AC-11)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+    delete:
+      tags: [RoutesAndPolicies]
+      operationId: deleteRoute
+      summary: Delete Capability Route (SCR-08)
+      parameters:
+        - name: routeId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "204":
+          description: Route deleted
+
+  /admin/v1/routes/explain:
+    post:
+      tags: [RoutesAndPolicies]
+      operationId: explainRouteDecision
+      summary: Zero-side-effect dry-run 6-step route simulator (0 upstream calls, 0 budget holds) (SCR-08, SCR-11, SCR-15)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RouteExplainRequest" }
+      responses:
+        "200":
+          description: Deterministic 6-step routing decision tree
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RouteExplainResponse" }
+
+  /admin/v1/policies/effective:
+    get:
+      tags: [RoutesAndPolicies]
+      operationId: getEffectivePolicy
+      summary: Inspect merged hierarchical policy (Instance ∩ Org ∩ Project ∩ Env) (SCR-09)
+      parameters:
+        - $ref: "#/components/parameters/EnvIdQueryParam"
+        - $ref: "#/components/parameters/ProjectIdQueryParam"
+      responses:
+        "200":
+          description: Effective merged policy and per-rule tier provenance
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyDocument" }
+
+  /admin/v1/policies/{policyId}:
+    put:
+      tags: [RoutesAndPolicies]
+      operationId: updatePolicy
+      summary: Update scoped policy (strictly tighten-only; child relaxation rejected with 422 policy_relaxation_forbidden) (SCR-09)
+      parameters:
+        - name: policyId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PolicyDocument" }
+      responses:
+        "200":
+          description: Policy saved
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyDocument" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "422":
+          description: 422 policy_relaxation_forbidden
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  # ==================== GROUP I: MCP GOVERNANCE HUB & A2A REGISTRY (SCR-10) ====================
+  /admin/v1/mcp/servers:
+    get:
+      tags: [MCPAndA2A]
+      operationId: listMcpServers
+      summary: List registered MCP Servers (SCR-10 — v0.2)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated MCP servers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/McpServerResource" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [MCPAndA2A]
+      operationId: registerMcpServer
+      summary: Register Streamable HTTP or Sidecar MCP Server (raw shell stdio forbidden) (SCR-10 — v0.2)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name, transport, endpoint_url]
+              properties:
+                slug: { type: string }
+                name: { type: string }
+                transport: { type: string, enum: [streamable_http, isolated_sidecar] }
+                endpoint_url: { type: string, format: uri }
+                allow_private_ip: { type: boolean, default: false }
+                credential_id: { type: ["string", "null"] }
+      responses:
+        "201":
+          description: MCP Server registered
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/McpServerResource" }
+
+  /admin/v1/mcp/servers/{serverId}/sync-tools:
+    post:
+      tags: [MCPAndA2A]
+      operationId: syncMcpServerTools
+      summary: Synchronize upstream MCP tools and compute RFC 8785 JCS schema_hash digests (SCR-10 — v0.2)
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "200":
+          description: Discovered and drifted tool inventory
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [synced_count, drifted_count, tools]
+                properties:
+                  synced_count: { type: integer }
+                  drifted_count: { type: integer }
+                  tools: { type: array, items: { type: object } }
+
+  /admin/v1/mcp/tools/{toolId}/approve-schema:
+    post:
+      tags: [MCPAndA2A]
+      operationId: approveMcpToolSchema
+      summary: Pin or re-approve MCP tool JCS schema_hash and risk classification (read_only | mutating | destructive) (SCR-10 — v0.2)
+      parameters:
+        - name: toolId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_schema_hash, risk_tier]
+              properties:
+                expected_schema_hash: { type: string, pattern: "^[a-f0-9]{64}$" }
+                risk_tier: { type: string, enum: [read_only, mutating, destructive] }
+                justification: { type: string }
+      responses:
+        "200":
+          description: Tool schema_hash pinned
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { type: object }
+
+  /admin/v1/a2a/agents:
+    get:
+      tags: [MCPAndA2A]
+      operationId: listAdminA2aAgents
+      summary: List registered A2A AgentEndpoints and AgentCards (SCR-10 — v0.3)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated A2A agents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { type: object } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [MCPAndA2A]
+      operationId: registerAdminA2aAgent
+      summary: Register A2A AgentEndpoint with max_delegation_hops <= 5 (SCR-10 — v0.3)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, endpoint_url, data_region, max_delegation_hops]
+              properties:
+                name: { type: string }
+                endpoint_url: { type: string, format: uri }
+                data_region: { $ref: "#/components/schemas/DataRegion" }
+                max_delegation_hops: { type: integer, minimum: 1, maximum: 5, default: 5 }
+      responses:
+        "201":
+          description: A2A AgentEndpoint registered
+          content:
+            application/json:
+              schema: { type: object }
+
+  # ==================== GROUP J: TRACES, FINOPS BUDGETS, CHARGEBACK & WEBHOOKS (SCR-11, SCR-12) ====================
+  /admin/v1/traces:
+    get:
+      tags: [TracesAndFinOps]
+      operationId: listTraces
+      summary: Cursor-paginated metadata Request Traces (0 prompt/completion bodies by default) (SCR-11)
+      parameters:
+        - $ref: "#/components/parameters/EnvIdQueryParam"
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+        - name: model
+          in: query
+          required: false
+          schema: { type: string }
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated metadata traces
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/TraceSummary" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+
+  /admin/v1/traces/{requestId}:
+    get:
+      tags: [TracesAndFinOps]
+      operationId: getTraceWaterfall
+      summary: Dissect 12-stage hot-path timeline for a request_id (uniform 404 across tenant boundaries — AUTH-15) (SCR-11)
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 12-stage TraceSummary waterfall
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TraceSummary" }
+        "404":
+          description: 404 resource_not_found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/traces/{requestId}/debug-payload:
+    get:
+      tags: [TracesAndFinOps]
+      operationId: getTraceDebugPayload
+      summary: Inspect short-lived (<= 72h) Project-DEK-encrypted opt-in debug payload (emits immutable trace.debug_payload_viewed audit event) (SCR-11)
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Audited opt-in debug payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [request_id, expires_at, payload]
+                properties:
+                  request_id: { type: string }
+                  expires_at: { type: string, format: date-time }
+                  payload: { type: object }
+
+  /admin/v1/budgets:
+    get:
+      tags: [TracesAndFinOps]
+      operationId: listBudgets
+      summary: List hierarchical micro-USD budgets, settled balances, and active pre-request holds (SCR-12)
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdQueryParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Budgets list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/BudgetResource" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+
+  /admin/v1/budgets/{budgetId}:
+    put:
+      tags: [TracesAndFinOps]
+      operationId: updateBudget
+      summary: Configure hard/soft integer micro-USD budget ceilings (SCR-12)
+      parameters:
+        - name: budgetId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hard_limit_micros, period]
+              properties:
+                hard_limit_micros: { type: integer, minimum: 0 }
+                period: { type: string, enum: [DAILY, MONTHLY] }
+                soft_warning_percents: { type: array, items: { type: integer } }
+      responses:
+        "200":
+          description: Updated BudgetResource
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BudgetResource" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/usage/summary:
+    get:
+      tags: [TracesAndFinOps]
+      operationId: getUsageChargebackSummary
+      summary: Grouped FinOps chargeback rollup separating EXACT, ESTIMATED, and UNMETERED_FLAGGED (SCR-12)
+      parameters:
+        - name: group_by
+          in: query
+          required: true
+          schema: { type: string, enum: [project, env, key, model] }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Partitioned chargeback summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/UsageChargebackRow" } }
+
+  /admin/v1/usage/export:
+    get:
+      tags: [TracesAndFinOps]
+      operationId: exportUsageChargeback
+      summary: Export CSV or JSON chargeback report (CSV cells formula-injection sanitized) (SCR-12)
+      parameters:
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [csv, json], default: csv }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Chargeback export stream
+          content:
+            text/csv:
+              schema: { type: string }
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/UsageChargebackRow" }
+
+  /admin/v1/webhooks:
+    get:
+      tags: [TracesAndFinOps]
+      operationId: listWebhookSubscriptions
+      summary: List HMAC-signed budget and HITL approval webhook subscriptions (SCR-12, SCR-14 — v0.2, CR-09)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Webhook subscriptions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { type: object } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+    post:
+      tags: [TracesAndFinOps]
+      operationId: createWebhookSubscription
+      summary: Register HMAC-signed webhook subscription bound to a vault secret_id (SCR-12, SCR-14 — v0.2, CR-09)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_url, events, signing_credential_id]
+              properties:
+                target_url: { type: string, format: uri }
+                events: { type: array, items: { type: string } }
+                signing_credential_id: { type: string }
+      responses:
+        "201":
+          description: Webhook subscription created
+          content:
+            application/json:
+              schema: { type: object }
+
+  # ==================== GROUP K: SECURITY CENTER — APPROVALS, AUDIT & KILL-SWITCH (SCR-14) ====================
+  /admin/v1/approvals:
+    get:
+      tags: [SecurityCenter]
+      operationId: listApprovalRequests
+      summary: Cursor-paginated HITL Approval Queue (SM-06) (SCR-14)
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [PENDING, APPROVED, CONSUMED, REJECTED, EXPIRED] }
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated approval requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/ApprovalRequestResource" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+
+  /admin/v1/approvals/{approvalId}/decide:
+    post:
+      tags: [SecurityCenter]
+      operationId: decideApprovalRequest
+      summary: Approve or reject pending MCP destructive tool call or extension escalation (Four-Eyes enforced — AUTH-12) (SCR-14)
+      parameters:
+        - name: approvalId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, expected_binding_hash]
+              properties:
+                decision: { type: string, enum: [APPROVE, REJECT] }
+                expected_binding_hash: { type: string, pattern: "^[a-f0-9]{64}$" }
+                reason: { type: string, minLength: 5 }
+      responses:
+        "200":
+          description: Approval decision committed
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalRequestResource" }
+        "403":
+          description: 403 self_approval_forbidden
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: 409 approval_already_decided_or_expired or optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/audit-events:
+    get:
+      tags: [SecurityCenter]
+      operationId: listAuditEvents
+      summary: Cursor-paginated Per-Org + SYSTEM JCS hash-chained Audit Log (SCR-14)
+      parameters:
+        - name: actor
+          in: query
+          required: false
+          schema: { type: string }
+        - name: action
+          in: query
+          required: false
+          schema: { type: string }
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AuditEventResource" } }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
+
+  /admin/v1/audit-events/verify:
+    post:
+      tags: [SecurityCenter]
+      operationId: verifyAuditHashChain
+      summary: Verify cryptographic SHA-256 JCS hash-chain continuity across Per-Org / SYSTEM audit partitions (SCR-14)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "200":
+          description: Verification report
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [intact, checked_events_count]
+                properties:
+                  intact: { type: boolean }
+                  checked_events_count: { type: integer }
+                  first_broken_seq_no: { type: ["integer", "null"] }
+
+  /admin/v1/kill-switches:
+    post:
+      tags: [SecurityCenter]
+      operationId: triggerKillSwitch
+      summary: Trigger 4-level emergency Kill-Switch (VIRTUAL_KEY | PROJECT | PROVIDER_CONNECTION | EXTENSION) (< 1s single-node / < 5s HA TARGET / UNVERIFIED) (SCR-07, SCR-14)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KillSwitchTriggerRequest" }
+      responses:
+        "200":
+          description: Kill-Switch propagated and logged to immutable audit chain
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [config_epoch, severed_streams_count, affected_entities_count]
+                properties:
+                  config_epoch: { type: integer }
+                  severed_streams_count: { type: integer }
+                  affected_entities_count: { type: integer }
+
+  /admin/v1/blast-radius:
+    get:
+      tags: [SecurityCenter]
+      operationId: queryBlastRadius
+      summary: Enumerate Keys, Projects, and Connections that traversed a quarantined Extension or compromised Connection (SCR-14)
+      parameters:
+        - name: target_type
+          in: query
+          required: true
+          schema: { type: string, enum: [EXTENSION, PROVIDER_CONNECTION] }
+        - name: target_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: since
+          in: query
+          required: false
+          schema: { type: string, default: 168h }
+      responses:
+        "200":
+          description: Forensic blast-radius inventory
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [organizations, projects, virtual_keys, connections]
+                properties:
+                  organizations: { type: array, items: { type: string } }
+                  projects: { type: array, items: { type: string } }
+                  virtual_keys: { type: array, items: { type: string } }
+                  connections: { type: array, items: { type: string } }
+
+  # ==================== GROUP L: PLAYGROUND, DEVTOOLS & INSTANCE OPS (SCR-15, SCR-16) ====================
+  /admin/v1/playground/sessions:
+    post:
+      tags: [DevToolsAndOps]
+      operationId: createPlaygroundSession
+      summary: Mint short-lived (TTL <= 15m), cost-capped ephemeral Virtual Key for SCR-15 Playground (CR-10; denied to FINOPS_VIEWER)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlaygroundSessionCreateRequest" }
+      responses:
+        "201":
+          description: Ephemeral Playground Virtual Key minted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlaygroundSessionResponse" }
+        "403":
+          description: Forbidden for FINOPS_VIEWER or unauthorized project scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/openapi.json:
+    get:
+      tags: [DevToolsAndOps]
+      operationId: getEmbeddedOpenApiBundle
+      summary: Serve binary-embedded OpenAPI 3.1 contract bundle for Air-Gap API Explorer (SCR-15)
+      responses:
+        "200":
+          description: Bundled OpenAPI 3.1 JSON document
+          content:
+            application/json:
+              schema: { type: object }
+
+  /admin/v1/diagnostics/smoke-test:
+    post:
+      tags: [DevToolsAndOps]
+      operationId: runSmokeDiagnostic
+      summary: Run Virtual Key / Connection / Route smoke diagnostic (SCR-15)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [check_kind, target_id]
+              properties:
+                check_kind: { type: string, enum: [VIRTUAL_KEY, CONNECTION, ROUTE] }
+                target_id: { type: string }
+      responses:
+        "200":
+          description: Smoke diagnostic result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [passed, checks]
+                properties:
+                  passed: { type: boolean }
+                  checks: { type: array, items: { type: object } }
+
+  /admin/v1/diagnostics/support-bundle:
+    post:
+      tags: [DevToolsAndOps]
+      operationId: createRedactedSupportBundle
+      summary: Export multi-pass secret- and PII-scrubbed diagnostic archive (OPERATOR only — OPS-AC-10) (SCR-15)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                since: { type: string, default: 2h }
+      responses:
+        "200":
+          description: Redacted tar.gz diagnostic bundle
+          content:
+            application/gzip:
+              schema: { type: string, format: binary }
+
+  /admin/v1/ops/cluster-status:
+    get:
+      tags: [DevToolsAndOps]
+      operationId: getClusterOpsStatus
+      summary: Inspect Data Plane node ConfigSnapshot epoch lag, DB/Valkey/KMS posture, and Wasm pool stats (OPERATOR only) (SCR-16)
+      responses:
+        "200":
+          description: Cluster operational status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [current_epoch, storage_engine, nodes]
+                properties:
+                  current_epoch: { type: integer }
+                  storage_engine: { type: string, enum: [sqlite_wal, postgres] }
+                  nodes: { type: array, items: { type: object } }
+
+  /admin/v1/ops/backups:
+    post:
+      tags: [DevToolsAndOps]
+      operationId: triggerEncryptedBackup
+      summary: Trigger hot Master-KEK-sealed .tpop.enc backup archive (OPERATOR only) (SCR-16)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: Encrypted .tpop.enc backup receipt
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [backup_id, archive_filename, sha256_hex, size_bytes, created_at]
+                properties:
+                  backup_id: { type: string }
+                  archive_filename: { type: string, examples: [tanpopo-backup-20261114.tpop.enc] }
+                  sha256_hex: { type: string, pattern: "^[a-f0-9]{64}$" }
+                  size_bytes: { type: integer }
+                  created_at: { type: string, format: date-time }
+
+  /admin/v1/ops/upgrades/preflight:
+    post:
+      tags: [DevToolsAndOps]
+      operationId: runUpgradePreflight
+      summary: Verify contractVersion compatibility across all ENABLED_ACTIVE extensions prior to Core upgrade (SM-08, SCR-16)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_core_version]
+              properties:
+                target_core_version: { type: string, examples: [v0.2.0] }
+      responses:
+        "200":
+          description: Upgrade preflight compatibility verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [compatible, state, blocking_extensions]
+                properties:
+                  compatible: { type: boolean }
+                  state: { type: string, enum: [READY_TO_UPGRADE, BLOCKED_INCOMPATIBLE] }
+                  blocking_extensions: { type: array, items: { type: object } }
+
+  /admin/v1/settings/retention:
+    put:
+      tags: [DevToolsAndOps]
+      operationId: updateRetentionSettings
+      summary: Configure automatic TTL purge windows (opt-in debug payload TTL <= 72h; audit floor >= 365d) (SCR-16)
+      parameters:
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [trace_metadata_ttl_days, audit_ledger_ttl_days, debug_payload_capture_enabled, debug_payload_ttl_hours]
+              properties:
+                trace_metadata_ttl_days: { type: integer, minimum: 1, maximum: 90, default: 30 }
+                audit_ledger_ttl_days: { type: integer, minimum: 365 }
+                debug_payload_capture_enabled: { type: boolean, default: false }
+                debug_payload_ttl_hours: { type: integer, minimum: 1, maximum: 72, default: 24 }
+      responses:
+        "200":
+          description: Retention settings updated
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { type: object }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
