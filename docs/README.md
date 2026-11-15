@@ -1,6 +1,6 @@
 # Tanpopo Documentation & Context Hub (`English-First Canonical Edition`)
 
-> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | GATE G4: APPROVED | TP-IMP-0001..0012: DONE | READY: TP-IMP-0013`)**
+> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | GATE G4: APPROVED | TP-IMP-0001..0013: DONE | READY: TP-IMP-0014`)**
 > - **Gate G0 (ASTRA A00 — Context Intake & Baseline):** `COMPLETED`
 > - **Gate G1 (ASTRA A01 — Product Discovery):** **`APPROVED` *(`CONFIRMED_BY_OWNER` — `DEC-009`)* **
 > - **Baseline A02 (ASTRA A02 — Business Analysis):** **`APPROVED` *(`SM-01..09` & `BA-OQ-001..05` closed in `TP-IMP-0001`)* **
@@ -8,7 +8,7 @@
 > - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`APPROVED_WITH_CONDITIONS`** *(`runtime.proto` & `POC-01/02` verified locally in `TP-IMP-0002, 0004`; `COND-PO-01, 04, 05`).*
 > - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`APPROVED_WITH_CONDITIONS`** *(`ADR-0001..0006` `ACCEPTED`, `openapi/*.yaml` & `sqlite_schema.sql` verified locally, `postgres_schema.sql` static parity checked with live PG 16 DDL gated in `TP-IMP-0039`, `SPIKE-01..04` documented in [`spike-results.md`](./architecture/spike-results.md); bound to `COND-PO-01..05`).*
 > - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`REMEDIATED_IN_M0` *(`13 / 13` Gaps Closed)*** — See [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md).
-> - **Gate G4 & Engineering Handoff (`DEC-009`..`DEC-023`):** **`APPROVED` | `DELIVERY HANDOFF VERDICT = GO`** — `TP-IMP-0001`..`0012` (`12 / 47`: `M0` + `Wave 1.1`–`1.4` + `0011` + `0012`) = **`DONE`** (`TP-IMP-0005`..`0011` via `DEC-011`..`DEC-021`; `TP-IMP-0012` accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-023` standalone scope at `b5f548ae` / CI `43707209233`); **[`TP-IMP-0013`](./planning/units/TP-IMP-0013.md) (`1 / 47`) = `READY`**; `TP-IMP-0014`..`0047` (`34 / 47`) remain **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
+> - **Gate G4 & Engineering Handoff (`DEC-009`..`DEC-024`):** **`APPROVED` | `DELIVERY HANDOFF VERDICT = GO`** — `TP-IMP-0001`..`0013` (`13 / 47`: `M0` + `Wave 1.1`–`1.4` + `0011` + `0012` + `0013`) = **`DONE`** (`TP-IMP-0005`..`0011` via `DEC-011`..`DEC-021`; `TP-IMP-0012` accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-023` at `b5f548ae` / CI `43707209233`; `TP-IMP-0013` accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-024` standalone scope at `dea06fbc` / CI `43724587829`); **[`TP-IMP-0014`](./planning/units/TP-IMP-0014.md) (`1 / 47`) = `READY`** (execution stopped after `TP-IMP-0013 = DONE` per Owner instruction); `TP-IMP-0015`..`0047` (`33 / 47`) remain **`BLOCKED`** behind their upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 
 ---
 
@@ -26,11 +26,11 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | **0D** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`Historical A08`):** Independent A08 horizontal + 8 vertical-slice adversarial audit (`AUD-001`..`030`) whose blocking items were closed in `M0`. | Historical audit provenance for `CR-01`..`10`. |
 | **0E** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01` (`13 / 13 M0 Gaps CLOSED · CR-11 & CR-12 APPROVED`):** Change Requests **`CR-01`..`CR-12`** and `M0`/`M1` closure evidence. | Verifying how each audit/implementation gap was resolved. |
 
-### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `12 DONE, 1 READY [TP-IMP-0013], 34 BLOCKED`)
+### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `13 DONE, 1 READY [TP-IMP-0014], 33 BLOCKED`)
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
-| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all **47 execution units (`TP-IMP-0001`..`0047`)** (`0001..0012 = DONE`, **`0013 = READY`**, `0014..0047 = BLOCKED`), `REQUIRES_STRONG_REVIEW` flags (`37/47`), and links to [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | When checking unit readiness, dependencies, or locating a `UNIT_ID` spec. |
+| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all **47 execution units (`TP-IMP-0001`..`0047`)** (`0001..0013 = DONE`, **`0014 = READY`** [workflow stopped after `0013 = DONE`], `0015..0047 = BLOCKED`), `REQUIRES_STRONG_REVIEW` flags (`37/47`), and links to [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | When checking unit readiness, dependencies, or locating a `UNIT_ID` spec. |
 | **0G** | [`docs/planning/roadmap.md`](./planning/roadmap.md) & [`docs/planning/milestone-map.md`](./planning/milestone-map.md) | **`PLAN-RM-01` & `PLAN-MS-01`:** 9 dependency-driven phases (`EP-00`..`09`), program blockers, trunk/worktree/canary rollout strategy, capacity & uncertainty ranges, and milestone gates `GATE-M0`..`GATE-M5`. | Program coordination, milestone gate checks, and capacity planning. |
 | **0H** | [`docs/planning/dependency-graph.md`](./planning/dependency-graph.md) | **`PLAN-DAG-01`:** Verified acyclic 47-node Mermaid DAG ($u < v$), critical path, 4 parallel `git worktree` expansion points, conditional First 5 Units, and hermetic cross-OS build/test procedures. | Parallel worktree scheduling and build/test environment setup. |
 
@@ -158,7 +158,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | `docs/security/*` (`3` files) | **Security & Tenant Isolation** | `threat-model.md`, `plugin-sandbox-and-supply-chain.md`, `secrets-and-tenant-isolation.md`. |
 | `docs/quality/*` (`4` files) | **QA, Hermetic CI, SLOs & Gates** | `contract-test-matrix.md`, `test-strategy.md`, `nonfunctional-slo.md`, `release-readiness.md`. |
 | `docs/reviews/*` (`3` files) | **Independent Audits & Readiness** | `integrated-audit.md` (`Historical A08`), `unresolved-gaps.md` (`13/13 M0 CLOSED`, `CR-11 & CR-12 APPROVED`), `execution-readiness.md` (`Stage 2: GO`). |
-| `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and `units/TP-IMP-0001.md`..`TP-IMP-0047.md` (`0001..0012 = DONE`, `0013 = READY`, `0014..0047 = BLOCKED`). |
+| `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and `units/TP-IMP-0001.md`..`TP-IMP-0047.md` (`0001..0013 = DONE`, `0014 = READY`, `0015..0047 = BLOCKED`). |
 | `buf.yaml`, `proto/`, `openapi/`, `db/spec-check/`, `tools/spikes/` | **`M0` Contracts & Isolated Spikes** | Machine-verified `runtime.proto`, `dataplane-v1.yaml`, `admin-v1.yaml`, `sqlite_schema.sql` (live), `postgres_schema.sql` (static parity), and pure-Go `SPIKE-01..04`. |
 
 ---

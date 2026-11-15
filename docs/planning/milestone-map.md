@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0012: DONE` | `READY: TP-IMP-0013`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.15.0-tp-imp-0012-done` | **Date:** `2026-11-15`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0013: DONE` | `READY: TP-IMP-0014`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.16.0-tp-imp-0013-done` | **Date:** `2026-11-15`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) plus `TP-IMP-0005`..`0011` (`DEC-011`..`DEC-021`) and **`TP-IMP-0012`** (accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-023`, `b5f548ae`, CI `43707209233` `SUCCESS`) are **`DONE` (`12 / 47`)**; **[`TP-IMP-0013`](./units/TP-IMP-0013.md) (`1 / 47`) is `READY`**; `34` downstream units `0014`..`0047` remain `BLOCKED` behind their dependency (`TP-IMP-0014` now awaits solely `0013`), review, and `COND-PO-01`..`05` verification gates.
+> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) plus `TP-IMP-0005`..`0011` (`DEC-011`..`DEC-021`), **`TP-IMP-0012`** (accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-023`, `b5f548ae`, CI `43707209233` `SUCCESS`), and **`TP-IMP-0013`** (accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-024`, standalone scope at `dea06fbc`, CI `43724587829` `SUCCESS`) are **`DONE` (`13 / 47`)**; **[`TP-IMP-0014`](./units/TP-IMP-0014.md) (`1 / 47`) is `READY`** (execution stopped cleanly after `TP-IMP-0013 = DONE` per Owner instruction); `33` downstream units `0015`..`0047` remain `BLOCKED` behind their dependency (`TP-IMP-0015` now awaits solely `0014`), review, and `COND-PO-01`..`05` verification gates.
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---

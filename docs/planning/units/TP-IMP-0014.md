@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0014` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | `BLOCKED` *(Waiting solely on `TP-IMP-0013` — upstream `TP-IMP-0006` & `TP-IMP-0012` = `DONE`)* |
+| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-024`](../../governance/decisions.md) — `100%` of upstream `Dependencies` [`TP-IMP-0006`, `0012`, `0013`] = `DONE`; active workflow stopped cleanly after `TP-IMP-0013 = DONE` per Owner instruction)* |
 | **Size** | `M` (`cmd/tanpopo/main.go`, `sdk/*`, `internal/cli/plugin/*`, `internal/extension/testharness/*`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Contract verification toolchain for extension authors)* |
 | **Technical Owner** | `Developer Experience & Extension SDK Lead` |
