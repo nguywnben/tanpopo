@@ -5,11 +5,14 @@ package snapshot_test
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 	"github.com/nguywnben/tanpopo/internal/testkit/clock"
@@ -149,11 +152,16 @@ func TestProviderCatalogSnapshotSecurityAndFailClosed(t *testing.T) {
 
 	now := nowFn()
 	db := st.RawDB()
+	rootPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootFP := trust.PublicKeyFingerprint(rootPub)
 	_, err = db.ExecContext(ctx, `INSERT INTO extension_packages (id, canonical_name, extension_kind, publisher_id, origin_trust_tier, created_at_ms) VALUES ('ext_s', '@tanpopo/adp-sec', 'PROVIDER_ADAPTER', 'tanpopo', 'official', ?)`, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.ExecContext(ctx, `INSERT INTO extension_versions (id, package_id, semver, contract_version, core_version_range, execution_tier, bundle_sha256, signature_verified, source_uri, manifest_json, created_at_ms) VALUES ('exv_s', 'ext_s', '1.0.0', '0.1', '>=0.1.0', 'DECLARATIVE_T1', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 1, 'oci://local', '{}', ?)`, now)
+	_, err = db.ExecContext(ctx, `INSERT INTO extension_versions (id, package_id, semver, contract_version, core_version_range, execution_tier, bundle_sha256, signature_verified, signing_key_fingerprint, source_uri, manifest_json, created_at_ms) VALUES ('exv_s', 'ext_s', '1.0.0', '0.1', '>=0.1.0', 'DECLARATIVE_T1', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 1, ?, 'oci://local', '{}', ?)`, rootFP, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +190,11 @@ func TestProviderCatalogSnapshotSecurityAndFailClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: db, NowMs: nowFn})
+	mgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{
+		DB:      db,
+		NowMs:   nowFn,
+		Keyring: trust.TrustedKeyring{RootPublicKeys: map[string]ed25519.PublicKey{rootFP: rootPub}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,21 +365,221 @@ func TestProviderConnectionVisibleToProjectEnforcesTPBR0202OrgOptIn(t *testing.T
 		t.Fatal("security bypass (TP-BR-0202): child project saw unsigned unverified_external org connection without ORG_OWNER opt-in")
 	}
 
-	// 2. ORG_OWNER opt-in (org_extension_policies.enabled = 1) grants visibility to child projects.
-	if _, err := db.ExecContext(ctx, `INSERT INTO org_extension_policies (org_id, package_id, enabled, version, created_at_ms, updated_at_ms) VALUES (?, 'ext_u', 1, 1, ?, ?)`, org.ID, now+1, now+1); err != nil {
+	// 2. Policy enabled=1 WITHOUT org_owner_opt_in=1 (e.g., non-ORG_OWNER SECURITY_REVIEWER enablement)
+	//    MUST NOT unlock child project visibility, while org-level scope stays operational.
+	if _, err := db.ExecContext(ctx, `INSERT INTO org_extension_policies (org_id, package_id, enabled, org_owner_opt_in, version, created_at_ms, updated_at_ms) VALUES (?, 'ext_u', 1, 0, 1, ?, ?)`, org.ID, now+1, now+1); err != nil {
 		t.Fatal(err)
 	}
-	c2 := refresh(now + 1)
+	cNonOwner := refresh(now + 1)
+	if !cNonOwner.VisibleToProject(org.ID, "") {
+		t.Fatal("expected org-level access allowed when org_extension_policies.enabled=1")
+	}
+	if cNonOwner.VisibleToProject(org.ID, proj.ID) {
+		t.Fatal("security bypass (TP-BR-0202): enabled=1 with org_owner_opt_in=0 unlocked child project visibility")
+	}
+
+	// 3. Explicit ORG_OWNER opt-in (enabled=1, org_owner_opt_in=1) grants visibility to child projects.
+	if _, err := db.ExecContext(ctx, `UPDATE org_extension_policies SET org_owner_opt_in = 1, version = version + 1, updated_at_ms = ? WHERE org_id = ? AND package_id = 'ext_u'`, now+2, org.ID); err != nil {
+		t.Fatal(err)
+	}
+	c2 := refresh(now + 2)
 	if !c2.VisibleToProject(org.ID, "") || !c2.VisibleToProject(org.ID, proj.ID) {
 		t.Fatal("expected ORG_OWNER opt-in to unlock child project visibility for org-level connection")
 	}
 
-	// 3. Explicit org policy disable (enabled = 0) blocks both org and child project scopes.
-	if _, err := db.ExecContext(ctx, `UPDATE org_extension_policies SET enabled = 0, version = version + 1, updated_at_ms = ? WHERE org_id = ? AND package_id = 'ext_u'`, now+2, org.ID); err != nil {
+	// 4. Explicit org policy disable (enabled = 0, org_owner_opt_in = 0) blocks both org and child project scopes.
+	if _, err := db.ExecContext(ctx, `UPDATE org_extension_policies SET enabled = 0, org_owner_opt_in = 0, version = version + 1, updated_at_ms = ? WHERE org_id = ? AND package_id = 'ext_u'`, now+3, org.ID); err != nil {
 		t.Fatal(err)
 	}
-	c3 := refresh(now + 2)
+	c3 := refresh(now + 3)
 	if c3.VisibleToProject(org.ID, "") || c3.VisibleToProject(org.ID, proj.ID) {
 		t.Fatal("expected disabled org policy (enabled=0) to block both org and child project scopes")
+	}
+}
+
+func TestProviderConnectionVisibleToProjectKeyringDriftWithStaleDBTier(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	clk := clock.NewFakeClock(time.UnixMilli(1760000000000))
+	nowFn := func() int64 { return clk.Now().UnixMilli() }
+
+	st, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: filepath.Join(t.TempDir(), "tanpopo.db"),
+		NowMs:  nowFn,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	orgAny, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{
+		Slug:           "snap-kr-any",
+		DisplayName:    "Snap Keyring ANY_APPROVED",
+		MinPluginTrust: port.MinTrustAnyApproved,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projAny, err := st.Tenancy().CreateProject(ctx, orgAny.ID, port.CreateProjectParams{Slug: "p-any", DisplayName: "P Any"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	orgVer, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{
+		Slug:           "snap-kr-ver",
+		DisplayName:    "Snap Keyring VERIFIED_ONLY",
+		MinPluginTrust: port.MinTrustVerifiedOnly,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projVer, err := st.Tenancy().CreateProject(ctx, orgVer.ID, port.CreateProjectParams{Slug: "p-ver", DisplayName: "P Ver"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pubKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubFP := trust.PublicKeyFingerprint(pubKey)
+	now := nowFn()
+	db := st.RawDB()
+
+	// Seed package whose DB row still says origin_trust_tier='verified' and version carries publisher signature + fingerprint.
+	if _, err := db.ExecContext(ctx, `INSERT INTO extension_packages (id, canonical_name, extension_kind, publisher_id, origin_trust_tier, created_at_ms) VALUES ('ext_kr', '@third/kr-drift', 'PROVIDER_ADAPTER', 'third', 'verified', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO extension_versions (id, package_id, semver, contract_version, core_version_range, execution_tier, bundle_sha256, signature_verified, signing_key_fingerprint, enterprise_signed, source_uri, manifest_json, created_at_ms) VALUES ('exv_kr', 'ext_kr', '1.0.0', '0.1', '>=0.1.0', 'DECLARATIVE_T1', 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', 1, ?, 0, 'oci://local', '{}', ?)`, pubFP, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO extension_installations (id, package_id, active_version_id, state, approved_permissions_json, version, created_at_ms, updated_at_ms) VALUES ('ins_kr', 'ext_kr', 'exv_kr', 'ENABLED_ACTIVE', '{"allowed_hosts":["api.example.com"],"execution_tier":"DECLARATIVE_T1"}', 1, ?, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO provider_adapters (id, installation_id, adapter_slug, supported_dialects_json, allowed_hosts_json, version, created_at_ms) VALUES ('adp_kr', 'ins_kr', 'kr-drift', '["openai_chat"]', '["api.example.com"]', 1, ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	// Org-level connections with empty shared_project_ids_json = '[]' in both orgs.
+	if _, err := db.ExecContext(ctx, `INSERT INTO provider_connections (id, org_id, owner_project_id, adapter_id, name, endpoint_base_url, allow_private_ip, allowed_cidrs_json, data_region, billing_mode, auth_mode, state, shared_project_ids_json, config_json, version, created_at_ms, updated_at_ms) VALUES ('con_any', ?, NULL, 'adp_kr', 'OrgAny', 'https://api.example.com', 0, '[]', 'us', 'COMMERCIAL_API', 'NONE', 'ACTIVE', '[]', '{}', 1, ?, ?), ('con_ver', ?, NULL, 'adp_kr', 'OrgVer', 'https://api.example.com', 0, '[]', 'us', 'COMMERCIAL_API', 'NONE', 'ACTIVE', '[]', '{}', 1, ?, ?)`, orgAny.ID, now, now, orgVer.ID, now, now); err != nil {
+		t.Fatal(err)
+	}
+	// Prior non-ORG_OWNER (e.g. SECURITY_REVIEWER) enabled=1 policy created while package was verified (org_owner_opt_in=0).
+	if _, err := db.ExecContext(ctx, `INSERT INTO org_extension_policies (org_id, package_id, enabled, org_owner_opt_in, version, created_at_ms, updated_at_ms) VALUES (?, 'ext_kr', 1, 0, 1, ?, ?)`, orgAny.ID, now, now); err != nil {
+		t.Fatal(err)
+	}
+
+	activeKR := trust.TrustedKeyring{PublisherPublicKeys: map[string]ed25519.PublicKey{pubFP: pubKey}}
+	mgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: db, NowMs: nowFn, Keyring: activeKR})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cAny1, _ := mgr.Current().LookupProviderConnection(orgAny.ID, "con_any")
+	cVer1, _ := mgr.Current().LookupProviderConnection(orgVer.ID, "con_ver")
+	if !cAny1.VisibleToProject(orgAny.ID, "") || !cAny1.VisibleToProject(orgAny.ID, projAny.ID) {
+		t.Fatalf("expected verified keyring to allow org and child project in ANY_APPROVED, got conn=%+v", cAny1)
+	}
+	if !cVer1.VisibleToProject(orgVer.ID, "") || !cVer1.VisibleToProject(orgVer.ID, projVer.ID) {
+		t.Fatalf("expected verified keyring to allow org and child project in VERIFIED_ONLY, got conn=%+v", cVer1)
+	}
+
+	// Withdraw publisher key from keyring WITHOUT modifying DB extension_packages.origin_trust_tier or org_extension_policies!
+	withdrawnKR := trust.TrustedKeyring{}
+	mgr.SetKeyring(withdrawnKR)
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	freshMgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: db, NowMs: nowFn, Keyring: withdrawnKR})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, snap := range map[string]*snapshot.ConfigSnapshot{
+		"rotated_live_mgr": mgr.Current(),
+		"fresh_withdrawn":  freshMgr.Current(),
+	} {
+		cAny, _ := snap.LookupProviderConnection(orgAny.ID, "con_any")
+		if cAny.DerivedPublicTrust != trust.TierUnverifiedExternal {
+			t.Fatalf("[%s] expected derived trust unverified_external after key withdrawal, got %q", name, cAny.DerivedPublicTrust)
+		}
+		if !cAny.VisibleToProject(orgAny.ID, "") {
+			t.Fatalf("[%s] expected org-level flow still allowed under ANY_APPROVED", name)
+		}
+		if cAny.VisibleToProject(orgAny.ID, projAny.ID) {
+			t.Fatalf("[%s] security bypass: child project allowed via stale DB 'verified' or SECURITY_REVIEWER enabled=1", name)
+		}
+		cVer, _ := snap.LookupProviderConnection(orgVer.ID, "con_ver")
+		if cVer.VisibleToProject(orgVer.ID, "") || cVer.VisibleToProject(orgVer.ID, projVer.ID) {
+			t.Fatalf("[%s] expected VERIFIED_ONLY org to block both org and child project after key withdrawal", name)
+		}
+	}
+
+	// Explicit ORG_OWNER opt-in (enabled=1, org_owner_opt_in=1) restores child project visibility under ANY_APPROVED.
+	if _, err := db.ExecContext(ctx, `UPDATE org_extension_policies SET org_owner_opt_in = 1, version = version + 1, updated_at_ms = ? WHERE org_id = ? AND package_id = 'ext_kr'`, now+10, orgAny.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'org_extension_policy', ?, 'UPSERT', 0, ?)`, orgAny.ID, orgAny.ID+":ext_kr", now+10); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cAnyAfter, _ := mgr.Current().LookupProviderConnection(orgAny.ID, "con_any")
+	if !cAnyAfter.VisibleToProject(orgAny.ID, "") || !cAnyAfter.VisibleToProject(orgAny.ID, projAny.ID) {
+		t.Fatal("expected ORG_OWNER opt-in to restore child project visibility under ANY_APPROVED")
+	}
+
+	// QUARANTINED and INSTALLED_DISABLED installation states block VisibleToProject after Refresh.
+	for _, badState := range []string{"QUARANTINED", "INSTALLED_DISABLED"} {
+		if _, err := db.ExecContext(ctx, `UPDATE extension_installations SET state = ?, version = version + 1, updated_at_ms = ? WHERE id = 'ins_kr'`, badState, now+11); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'extension_installation', 'ins_kr', 'QUARANTINE', 1, ?)`, orgAny.ID, now+11); err != nil {
+			t.Fatal(err)
+		}
+		if err := mgr.Refresh(ctx); err != nil {
+			t.Fatal(err)
+		}
+		cBad, _ := mgr.Current().LookupProviderConnection(orgAny.ID, "con_any")
+		if cBad.VisibleToProject(orgAny.ID, "") || cBad.VisibleToProject(orgAny.ID, projAny.ID) {
+			t.Fatalf("expected extension state %s to block VisibleToProject at both org and child scopes", badState)
+		}
+	}
+
+	// Enterprise key withdrawal revokes VERIFIED_OR_ENTERPRISE_SIGNED and child access even while DB enterprise_signed=1.
+	entPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entFP := trust.PublicKeyFingerprint(entPub)
+	if _, err := db.ExecContext(ctx, `UPDATE extension_installations SET state = 'ENABLED_ACTIVE', version = version + 1, updated_at_ms = ? WHERE id = 'ins_kr'`, now+12); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE extension_versions SET signature_verified = 0, enterprise_signed = 1, signing_key_fingerprint = ?, enterprise_key_fingerprint = ? WHERE id = 'exv_kr'`, entFP, entFP); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM org_extension_policies WHERE org_id = ? AND package_id = 'ext_kr'`, orgAny.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE organizations SET min_plugin_trust = 'VERIFIED_OR_ENTERPRISE_SIGNED', version = version + 1, updated_at_ms = ? WHERE id = ?`, now+12, orgAny.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'organization', ?, 'UPSERT', 0, ?)`, orgAny.ID, orgAny.ID, now+12); err != nil {
+		t.Fatal(err)
+	}
+	mgr.SetKeyring(trust.TrustedKeyring{EnterprisePublicKeys: map[string]ed25519.PublicKey{"ent": entPub}})
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cEntOK, _ := mgr.Current().LookupProviderConnection(orgAny.ID, "con_any")
+	if !cEntOK.VisibleToProject(orgAny.ID, "") || !cEntOK.VisibleToProject(orgAny.ID, projAny.ID) {
+		t.Fatal("expected active enterprise key to permit VERIFIED_OR_ENTERPRISE_SIGNED across org and child scopes")
+	}
+	mgr.SetKeyring(trust.TrustedKeyring{})
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cEntRevoked, _ := mgr.Current().LookupProviderConnection(orgAny.ID, "con_any")
+	if cEntRevoked.VisibleToProject(orgAny.ID, "") || cEntRevoked.VisibleToProject(orgAny.ID, projAny.ID) {
+		t.Fatal("expected withdrawn enterprise key to fail closed even while DB enterprise_signed=1")
 	}
 }

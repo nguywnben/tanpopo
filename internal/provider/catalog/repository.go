@@ -24,10 +24,10 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
-	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
@@ -1234,13 +1234,14 @@ func (r *Repository) ResolveConnectionPolicy(ctx context.Context, orgID, connect
 		gov              extensionGovernanceState
 		activeVerID      sql.NullString
 		entSigned        int
+		orgOwnerOptIn    int
 	)
 	err := r.db.QueryRowContext(ctx, `
 		SELECT pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.state,
 		       pc.owner_project_id, pc.shared_project_ids_json,
 		       pa.allowed_hosts_json, ei.state, ev.id, ei.approved_permissions_json,
-		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0),
-		       o.min_plugin_trust, oep.enabled
+		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0), COALESCE(ev.enterprise_key_fingerprint, ''),
+		       o.min_plugin_trust, oep.enabled, COALESCE(oep.org_owner_opt_in, 0)
 		FROM provider_connections pc
 		JOIN organizations o ON o.id = pc.org_id
 		JOIN provider_adapters pa ON pa.id = pc.adapter_id
@@ -1253,8 +1254,8 @@ func (r *Repository) ResolveConnectionPolicy(ctx context.Context, orgID, connect
 		&endpointStr, &allowPriv, &cidrsJSON, &state,
 		&connOwnerProj, &sharedProjJSON,
 		&adapterHostsJSON, &gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
-		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned,
-		&gov.MinPluginTrust, &gov.OrgPolicyEnabled,
+		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
+		&gov.MinPluginTrust, &gov.OrgPolicyEnabled, &orgOwnerOptIn,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
@@ -1270,6 +1271,7 @@ func (r *Repository) ResolveConnectionPolicy(ctx context.Context, orgID, connect
 		gov.ActiveVersionID = activeVerID.String
 	}
 	gov.EnterpriseSigned = entSigned != 0
+	gov.OrgOwnerOptIn = orgOwnerOptIn != 0
 	gov.HasChildProjectScope = connOwnerProj.Valid || len(sharedProjects) > 0
 	if err := r.validateOrgAndActiveExtensionTrust(&gov, true, ErrConnectionNotReady); err != nil {
 		return nil, err
@@ -1308,6 +1310,7 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 		gov               extensionGovernanceState
 		activeVerID       sql.NullString
 		entSigned         int
+		orgOwnerOptIn     int
 		slotCredID        sql.NullString
 		slotInjectMode    sql.NullString
 		primaryHasBinding bool
@@ -1316,8 +1319,8 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 		SELECT pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.state, pc.credential_id,
 		       pc.owner_project_id, pc.shared_project_ids_json, pa.allowed_hosts_json,
 		       ei.state, ev.id, ei.approved_permissions_json,
-		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0),
-		       o.min_plugin_trust, oep.enabled, csb.credential_id, csb.inject_mode,
+		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0), COALESCE(ev.enterprise_key_fingerprint, ''),
+		       o.min_plugin_trust, oep.enabled, COALESCE(oep.org_owner_opt_in, 0), csb.credential_id, csb.inject_mode,
 		       EXISTS (SELECT 1 FROM connection_secret_bindings b
 		               WHERE b.org_id = pc.org_id AND b.connection_id = pc.id
 		                 AND b.credential_id = pc.credential_id)
@@ -1336,8 +1339,8 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 		&endpointStr, &allowPriv, &cidrsJSON, &state, &primaryCredID,
 		&connOwnerProj, &sharedProjJSON, &adapterHostsJSON,
 		&gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
-		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned,
-		&gov.MinPluginTrust, &gov.OrgPolicyEnabled, &slotCredID, &slotInjectMode, &primaryHasBinding,
+		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
+		&gov.MinPluginTrust, &gov.OrgPolicyEnabled, &orgOwnerOptIn, &slotCredID, &slotInjectMode, &primaryHasBinding,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
@@ -1353,6 +1356,7 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 		gov.ActiveVersionID = activeVerID.String
 	}
 	gov.EnterpriseSigned = entSigned != 0
+	gov.OrgOwnerOptIn = orgOwnerOptIn != 0
 	gov.HasChildProjectScope = connOwnerProj.Valid || len(sharedProjects) > 0
 	if err := r.validateOrgAndActiveExtensionTrust(&gov, true, ErrConnectionNotReady); err != nil {
 		return nil, err
@@ -1596,16 +1600,18 @@ type rowQuerier interface {
 }
 
 type extensionGovernanceState struct {
-	InstallState            string
-	ActiveVersionID         string
-	ApprovedPermissionsJSON string
-	CanonicalName           string
-	SignatureVerified       int
-	Fingerprint             string
-	EnterpriseSigned        bool
-	MinPluginTrust          string
-	OrgPolicyEnabled        sql.NullInt64
-	HasChildProjectScope    bool
+	InstallState             string
+	ActiveVersionID          string
+	ApprovedPermissionsJSON  string
+	CanonicalName            string
+	SignatureVerified        int
+	Fingerprint              string
+	EnterpriseSigned         bool
+	EnterpriseKeyFingerprint string
+	MinPluginTrust           string
+	OrgPolicyEnabled         sql.NullInt64
+	OrgOwnerOptIn            bool
+	HasChildProjectScope     bool
 }
 
 func loadAdapterExtensionGovernance(ctx context.Context, q rowQuerier, installationID string) (*extensionGovernanceState, error) {
@@ -1616,14 +1622,14 @@ func loadAdapterExtensionGovernance(ctx context.Context, q rowQuerier, installat
 	)
 	err := q.QueryRowContext(ctx, `
 		SELECT ei.state, ev.id, ei.approved_permissions_json,
-		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0)
+		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0), COALESCE(ev.enterprise_key_fingerprint, '')
 		FROM extension_installations ei
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
 		WHERE ei.id = ?`, installationID,
 	).Scan(
 		&gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
-		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned,
+		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: extension installation %q not found", port.ErrNotFound, installationID)
@@ -1643,6 +1649,7 @@ func loadConnectionExtensionGovernanceByAdapter(ctx context.Context, q rowQuerie
 		gov              extensionGovernanceState
 		activeVerID      sql.NullString
 		entSigned        int
+		orgOwnerOptIn    int
 		adapterHostsJSON string
 	)
 	if err := q.QueryRowContext(ctx, `SELECT min_plugin_trust FROM organizations WHERE id = ?`, orgID).Scan(&gov.MinPluginTrust); err != nil {
@@ -1653,7 +1660,8 @@ func loadConnectionExtensionGovernanceByAdapter(ctx context.Context, q rowQuerie
 	}
 	err := q.QueryRowContext(ctx, `
 		SELECT pa.allowed_hosts_json, ei.state, ev.id, ei.approved_permissions_json,
-		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0), oep.enabled
+		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0), COALESCE(ev.enterprise_key_fingerprint, ''),
+		       oep.enabled, COALESCE(oep.org_owner_opt_in, 0)
 		FROM provider_adapters pa
 		JOIN extension_installations ei ON ei.id = pa.installation_id
 		JOIN extension_packages ep ON ep.id = ei.package_id
@@ -1662,7 +1670,8 @@ func loadConnectionExtensionGovernanceByAdapter(ctx context.Context, q rowQuerie
 		WHERE pa.id = ?`, orgID, adapterID,
 	).Scan(
 		&adapterHostsJSON, &gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
-		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned, &gov.OrgPolicyEnabled,
+		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
+		&gov.OrgPolicyEnabled, &orgOwnerOptIn,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, fmt.Errorf("%w: provider_adapter %q not found", port.ErrNotFound, adapterID)
@@ -1678,6 +1687,7 @@ func loadConnectionExtensionGovernanceByAdapter(ctx context.Context, q rowQuerie
 		gov.ActiveVersionID = activeVerID.String
 	}
 	gov.EnterpriseSigned = entSigned != 0
+	gov.OrgOwnerOptIn = orgOwnerOptIn != 0
 	return adapterHosts, &gov, nil
 }
 
@@ -1811,20 +1821,28 @@ func (r *Repository) validateOrgAndActiveExtensionTrust(gov *extensionGovernance
 	} else if !isValidAdapterInstallState(gov.InstallState) {
 		return fmt.Errorf("%w: adapter extension installation state %q cannot create connections", wrapSentinel, gov.InstallState)
 	}
-	if gov.OrgPolicyEnabled.Valid && gov.OrgPolicyEnabled.Int64 == 0 {
+	verdict := trust.EvaluateOrgExtensionTrust(r.keyring, trust.OrgExtensionTrustInput{
+		MinPluginTrust:           gov.MinPluginTrust,
+		CanonicalName:            gov.CanonicalName,
+		ActiveVersionID:          gov.ActiveVersionID,
+		SignatureVerified:        gov.SignatureVerified != 0,
+		SigningKeyFingerprint:    gov.Fingerprint,
+		EnterpriseSigned:         gov.EnterpriseSigned,
+		EnterpriseKeyFingerprint: gov.EnterpriseKeyFingerprint,
+		OrgPolicyEnabled:         gov.OrgPolicyEnabled,
+		OrgOwnerOptIn:            gov.OrgOwnerOptIn,
+	})
+	if verdict.DisabledByOrgPolicy {
 		return fmt.Errorf("%w: adapter extension is disabled by organization policy", wrapSentinel)
 	}
-	publicTrust := r.keyring.DerivePublicTrustTier(gov.CanonicalName, gov.SignatureVerified != 0, gov.Fingerprint)
-	if err := installer.CheckOrgMinTrustPolicy(gov.MinPluginTrust, publicTrust, gov.EnterpriseSigned); err != nil {
-		return fmt.Errorf("%w: %w", wrapSentinel, err)
+	if verdict.MinTrustErr != nil {
+		return fmt.Errorf("%w: %w", wrapSentinel, verdict.MinTrustErr)
 	}
 	// TP-BR-0202 Exception: By default in organizations, unsigned unverified_external packages are unavailable
-	// to child Project scopes unless explicitly enabled by ORG_OWNER in org_extension_policies (enabled=1).
-	if gov.HasChildProjectScope && publicTrust == lockfile.TrustTierUnverifiedExternal && !gov.EnterpriseSigned {
-		if !gov.OrgPolicyEnabled.Valid || gov.OrgPolicyEnabled.Int64 != 1 {
-			return fmt.Errorf("%w: %w: unsigned unverified_external package requires explicit ORG_OWNER enablement for child project scopes",
-				wrapSentinel, installer.ErrOrgTrustPolicyDenied)
-		}
+	// to child Project scopes unless explicitly enabled by ORG_OWNER in org_extension_policies (enabled=1, org_owner_opt_in=1).
+	if gov.HasChildProjectScope && verdict.RequiresOrgOwnerChildOptIn {
+		return fmt.Errorf("%w: %w: unsigned unverified_external package requires explicit ORG_OWNER enablement for child project scopes",
+			wrapSentinel, installer.ErrOrgTrustPolicyDenied)
 	}
 	return nil
 }
@@ -2054,12 +2072,7 @@ func isValidAdapterInstallState(s string) bool {
 }
 
 func isUsableExtensionState(s string) bool {
-	switch s {
-	case "ENABLED_ACTIVE", "ROLLED_BACK", "UPDATING_PENDING_RECONSENT":
-		return true
-	default:
-		return false
-	}
+	return trust.IsUsableExtensionState(s)
 }
 
 func marshalStringSlice(items []string) (string, error) {

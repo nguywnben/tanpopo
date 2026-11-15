@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
@@ -31,13 +32,13 @@ const (
 
 // Canonical Virtual Key states matching SM-05 and SQLite/PostgreSQL CHECK constraints.
 const (
-	KeyStateCreatedActive           = "CREATED_ACTIVE"
-	KeyStateRotatingDualValid       = "ROTATING_DUAL_VALID"
-	KeyStateQuotaPaused             = "QUOTA_PAUSED"
-	KeyStateSuspended               = "SUSPENDED"
-	KeyStateRevoked                 = "REVOKED"
-	KeyStateExpired                 = "EXPIRED"
-	KeyStatePurgedMetadataRetained  = "PURGED_METADATA_RETAINED"
+	KeyStateCreatedActive          = "CREATED_ACTIVE"
+	KeyStateRotatingDualValid      = "ROTATING_DUAL_VALID"
+	KeyStateQuotaPaused            = "QUOTA_PAUSED"
+	KeyStateSuspended              = "SUSPENDED"
+	KeyStateRevoked                = "REVOKED"
+	KeyStateExpired                = "EXPIRED"
+	KeyStatePurgedMetadataRetained = "PURGED_METADATA_RETAINED"
 )
 
 // Hot-path Virtual Key authentication error sentinels mapped to canonical HTTP codes.
@@ -407,6 +408,7 @@ type ManagerConfig struct {
 	NowMs      func() int64
 	MaxStaleMs int64
 	Streams    *ActiveStreamRegistry
+	Keyring    trust.TrustedKeyring
 }
 
 type fenceAction uint8
@@ -439,6 +441,8 @@ type Manager struct {
 	lastRefreshErrMu  sync.Mutex
 	lastRefreshErr    error
 	refreshMu         sync.Mutex
+	keyring           trust.TrustedKeyring
+	keyringDirty      bool
 	pendingFences     map[string]localKeyFence
 	wakeCh            chan struct{}
 }
@@ -465,6 +469,7 @@ func NewManager(ctx context.Context, cfg ManagerConfig) (*Manager, error) {
 		nowMs:         nowFn,
 		maxStaleMs:    maxStale,
 		streams:       streams,
+		keyring:       cfg.Keyring.Clone(),
 		pendingFences: make(map[string]localKeyFence),
 		wakeCh:        make(chan struct{}, 1),
 	}
@@ -488,6 +493,18 @@ func (m *Manager) Streams() *ActiveStreamRegistry {
 		return nil
 	}
 	return m.streams
+}
+
+// SetKeyring updates the trusted extension verification keyring used on subsequent Refresh builds
+// so keyring rotations take effect on the next Refresh even if config_changelog has not advanced.
+func (m *Manager) SetKeyring(keyring trust.TrustedKeyring) {
+	if m == nil {
+		return
+	}
+	m.refreshMu.Lock()
+	m.keyring = keyring.Clone()
+	m.keyringDirty = true
+	m.refreshMu.Unlock()
 }
 
 // Notify triggers an immediate non-blocking wakeup for StartWatcher.
@@ -656,7 +673,7 @@ func (m *Manager) Refresh(ctx context.Context) error {
 
 	// Fast-path heartbeat when config_changelog has not advanced since last snapshot build,
 	// unless a local fence requires a newer minEpoch not yet visible to this reader.
-	if cur != nil && targetEpoch == prevEpoch && !m.hasPendingFenceAheadOfLocked(targetEpoch) {
+	if cur != nil && targetEpoch == prevEpoch && !m.keyringDirty && !m.hasPendingFenceAheadOfLocked(targetEpoch) {
 		_ = tx.Commit()
 		m.lastPollSuccessMs.Store(m.nowMs())
 		m.setLastErr(nil)
@@ -682,7 +699,7 @@ func (m *Manager) Refresh(ctx context.Context) error {
 		m.setLastErr(err)
 		return err
 	}
-	providers, err := loadProviderCatalogSQL(ctx, tx)
+	providers, err := loadProviderCatalogSQL(ctx, tx, m.keyring)
 	if err != nil {
 		m.setLastErr(err)
 		return err
@@ -704,6 +721,7 @@ func (m *Manager) Refresh(ctx context.Context) error {
 
 	m.applyAndPruneFencesLocked(next, targetEpoch)
 
+	m.keyringDirty = false
 	m.snap.Store(next)
 	m.lastPollSuccessMs.Store(next.LoadedAtMs)
 	m.setLastErr(nil)

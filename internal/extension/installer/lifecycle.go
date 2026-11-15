@@ -580,12 +580,12 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO extension_versions (
 			id, package_id, semver, contract_version, core_version_range, execution_tier,
-			bundle_sha256, signature_verified, enterprise_signed, signing_key_fingerprint,
+			bundle_sha256, signature_verified, enterprise_signed, signing_key_fingerprint, enterprise_key_fingerprint,
 			source_uri, manifest_json, sbom_digest, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		verID, pkgID, vm.Manifest.Metadata.Version, vm.Manifest.Compatibility.ContractVersion,
 		vm.Manifest.Compatibility.CoreVersionRange, vm.ExecutionTier, extracted.BundleSHA256,
-		sigVerInt, entSigInt, nullStr(prov.SigningKeyFingerprint), canonSourceURI,
+		sigVerInt, entSigInt, nullStr(prov.SigningKeyFingerprint), nullStr(prov.EnterpriseKeyFingerprint), canonSourceURI,
 		string(manifestJSON), nullStr(req.SBOMDigest), now,
 	); err != nil {
 		if isUniqueConstraintErr(err) {
@@ -745,12 +745,13 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 		return nil, rerr
 	}
 	candTrustTier := deriveTrustTierFromVersion(rowData.canonicalName, candInfo, s.keyring)
-	if perr := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, candTrustTier, candInfo.enterpriseSigned); perr != nil {
+	candEntSigned := deriveEnterpriseSignedFromVersion(candInfo, s.keyring)
+	if perr := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, candTrustTier, candEntSigned); perr != nil {
 		_ = tx.Rollback()
 		s.emitAudit(ctx, req.OrgID, req.ApproverPrincipalID, req.RequestID, "extension.org_trust_policy_denied", "extension_installation", req.InstallationID, map[string]any{
 			"canonical_name":    rowData.canonicalName,
 			"origin_trust_tier": candTrustTier,
-			"enterprise_signed": candInfo.enterpriseSigned,
+			"enterprise_signed": candEntSigned,
 		})
 		return nil, perr
 	}
@@ -939,7 +940,8 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 		return nil, err
 	}
 	oldActiveTrust := deriveTrustTierFromVersion(rowData.canonicalName, oldActiveInfo, s.keyring)
-	prevActiveUnsigned := oldActiveTrust == lockfile.TrustTierUnverifiedExternal && !oldActiveInfo.enterpriseSigned
+	oldActiveEnt := deriveEnterpriseSignedFromVersion(oldActiveInfo, s.keyring)
+	prevActiveUnsigned := oldActiveTrust == lockfile.TrustTierUnverifiedExternal && !oldActiveEnt
 	var resetDowngradeOrg []string
 	if prov.OriginTrustTier == lockfile.TrustTierUnverifiedExternal && !prov.EnterpriseSigned && !prevActiveUnsigned {
 		var rerr error
@@ -952,12 +954,12 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO extension_versions (
 			id, package_id, semver, contract_version, core_version_range, execution_tier,
-			bundle_sha256, signature_verified, enterprise_signed, signing_key_fingerprint,
+			bundle_sha256, signature_verified, enterprise_signed, signing_key_fingerprint, enterprise_key_fingerprint,
 			source_uri, manifest_json, sbom_digest, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		newVerID, rowData.packageID, vm.Manifest.Metadata.Version, vm.Manifest.Compatibility.ContractVersion,
 		vm.Manifest.Compatibility.CoreVersionRange, vm.ExecutionTier, extracted.BundleSHA256,
-		boolToInt(prov.SignatureVerified), boolToInt(prov.EnterpriseSigned), nullStr(prov.SigningKeyFingerprint),
+		boolToInt(prov.SignatureVerified), boolToInt(prov.EnterpriseSigned), nullStr(prov.SigningKeyFingerprint), nullStr(prov.EnterpriseKeyFingerprint),
 		canonSourceURI, string(manifestJSON), nullStr(req.SBOMDigest), now,
 	); err != nil {
 		if isUniqueConstraintErr(err) {
@@ -1163,7 +1165,8 @@ func (s *LifecycleService) RequestActivePermissionReconsent(
 	}
 
 	activeTrustTier := deriveTrustTierFromVersion(rowData.canonicalName, activeInfo, s.keyring)
-	if err := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, activeTrustTier, activeInfo.enterpriseSigned); err != nil {
+	activeEntSigned := deriveEnterpriseSignedFromVersion(activeInfo, s.keyring)
+	if err := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, activeTrustTier, activeEntSigned); err != nil {
 		return nil, PermissionDelta{}, err
 	}
 
@@ -1268,7 +1271,8 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 		return nil, rerr
 	}
 	candTrustTier := deriveTrustTierFromVersion(rowData.canonicalName, candInfo, s.keyring)
-	if err := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, candTrustTier, candInfo.enterpriseSigned); err != nil {
+	candEntSigned := deriveEnterpriseSignedFromVersion(candInfo, s.keyring)
+	if err := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, candTrustTier, candEntSigned); err != nil {
 		return nil, err
 	}
 	vm, err := ValidateManifestStruct(candInfo.manifest, s.valPolicy, nil)
@@ -1465,13 +1469,15 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 	}
 
 	restoredTrustTier := deriveTrustTierFromVersion(rowData.canonicalName, targetPrevInfo, s.keyring)
-	if err := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, restoredTrustTier, targetPrevInfo.enterpriseSigned); err != nil {
+	restoredEntSigned := deriveEnterpriseSignedFromVersion(targetPrevInfo, s.keyring)
+	if err := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, restoredTrustTier, restoredEntSigned); err != nil {
 		return nil, err
 	}
 	curActiveTrust := deriveTrustTierFromVersion(rowData.canonicalName, curActiveInfo, s.keyring)
-	curActiveUnsigned := curActiveTrust == lockfile.TrustTierUnverifiedExternal && !curActiveInfo.enterpriseSigned
+	curActiveEnt := deriveEnterpriseSignedFromVersion(curActiveInfo, s.keyring)
+	curActiveUnsigned := curActiveTrust == lockfile.TrustTierUnverifiedExternal && !curActiveEnt
 	var resetDowngradeOrg []string
-	if restoredTrustTier == lockfile.TrustTierUnverifiedExternal && !targetPrevInfo.enterpriseSigned && !curActiveUnsigned {
+	if restoredTrustTier == lockfile.TrustTierUnverifiedExternal && !restoredEntSigned && !curActiveUnsigned {
 		var rerr error
 		resetDowngradeOrg, rerr = resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx, tx, rowData.packageID, now)
 		if rerr != nil {
@@ -1697,7 +1703,7 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 			}
 			checks = append(checks, versionTrustCheck{
 				originTrust:      deriveTrustTierFromVersion(canonicalName, verInfo, s.keyring),
-				enterpriseSigned: verInfo.enterpriseSigned,
+				enterpriseSigned: deriveEnterpriseSignedFromVersion(verInfo, s.keyring),
 			})
 		}
 		return nil
@@ -1760,6 +1766,7 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 		})
 	}
 
+	orgOwnerOptIn := false
 	if enabled {
 		requiresOrgOwner := false
 		for _, chk := range checks {
@@ -1777,22 +1784,26 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 			}
 		}
 		// TP-BR-0202: Enabling unsigned unverified_external packages in an organization requires explicit ORG_OWNER role.
+		// Only explicit ORG_OWNER enablement under requiresOrgOwner grants org_owner_opt_in; prior non-owner enablements
+		// (e.g., SECURITY_REVIEWER enabling a verified package before key withdrawal) keep org_owner_opt_in = 0.
 		if requiresOrgOwner {
 			if oerr := ensureOrgOwnerRoleTx(ctx, tx, actorID, orgID); oerr != nil {
 				return oerr
 			}
+			orgOwnerOptIn = true
 		}
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO org_extension_policies (org_id, package_id, enabled, pinned_installation_id, version, created_at_ms, updated_at_ms)
-		VALUES (?, ?, ?, ?, 1, ?, ?)
+		INSERT INTO org_extension_policies (org_id, package_id, enabled, org_owner_opt_in, pinned_installation_id, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, ?, ?, ?, 1, ?, ?)
 		ON CONFLICT (org_id, package_id) DO UPDATE SET
 			enabled = excluded.enabled,
+			org_owner_opt_in = excluded.org_owner_opt_in,
 			pinned_installation_id = excluded.pinned_installation_id,
 			version = org_extension_policies.version + 1,
 			updated_at_ms = excluded.updated_at_ms`,
-		orgID, packageID, boolToInt(enabled), nullStrPtr(pinnedParam), now, now,
+		orgID, packageID, boolToInt(enabled), boolToInt(orgOwnerOptIn), nullStrPtr(pinnedParam), now, now,
 	); err != nil {
 		if isUniqueConstraintErr(err) {
 			return fmt.Errorf("%w: org_extension_policy conflict: %v", port.ErrAlreadyExists, err)
@@ -1809,7 +1820,8 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 	committed = true
 
 	s.emitAudit(ctx, orgID, actorID, "", "extension.org_policy_updated", "org_extension_policy", packageID, map[string]any{
-		"enabled": enabled,
+		"enabled":          enabled,
+		"org_owner_opt_in": orgOwnerOptIn,
 	})
 	return nil
 }
@@ -2050,8 +2062,8 @@ func (s *LifecycleService) syncLockfileEntry(
 		ArtifactSHA256:               ver.bundleSHA256,
 		ContractVersion:              ver.contractVersion,
 		TrustTier:                    originTrustTier,
-		EnterpriseSigned:             ver.enterpriseSigned,
-		OrgInternalSignatureVerified: ver.enterpriseSigned,
+		EnterpriseSigned:             deriveEnterpriseSignedFromVersion(ver, s.keyring),
+		OrgInternalSignatureVerified: deriveEnterpriseSignedFromVersion(ver, s.keyring),
 		SigningKeyFingerprint:        ver.fingerprint,
 		ExecutionTier:                ver.executionTier,
 		ApprovedPermissions: lockfile.ApprovedPermissions{
@@ -2142,16 +2154,17 @@ func loadInstallationForTx(ctx context.Context, tx *sql.Tx, installationID strin
 }
 
 type versionRowInfo struct {
-	id                string
-	semver            string
-	contractVersion   string
-	executionTier     string
-	bundleSHA256      string
-	signatureVerified bool
-	enterpriseSigned  bool
-	fingerprint       string
-	sourceURI         string
-	manifest          ExtensionManifest
+	id                    string
+	semver                string
+	contractVersion       string
+	executionTier         string
+	bundleSHA256          string
+	signatureVerified     bool
+	enterpriseSigned      bool
+	fingerprint           string
+	enterpriseFingerprint string
+	sourceURI             string
+	manifest              ExtensionManifest
 }
 
 func loadVersionInfoTx(ctx context.Context, tx *sql.Tx, versionID string) (*versionRowInfo, error) {
@@ -2160,13 +2173,15 @@ func loadVersionInfoTx(ctx context.Context, tx *sql.Tx, versionID string) (*vers
 		sigInt int
 		entInt int
 		fp     sql.NullString
+		entFP  sql.NullString
 		mJSON  string
 	)
 	err := tx.QueryRowContext(ctx, `
 		SELECT id, semver, contract_version, execution_tier, bundle_sha256,
-		       signature_verified, enterprise_signed, signing_key_fingerprint, source_uri, manifest_json
+		       signature_verified, enterprise_signed, signing_key_fingerprint, COALESCE(enterprise_key_fingerprint, ''),
+		       source_uri, manifest_json
 		FROM extension_versions WHERE id = ?`, versionID,
-	).Scan(&v.id, &v.semver, &v.contractVersion, &v.executionTier, &v.bundleSHA256, &sigInt, &entInt, &fp, &v.sourceURI, &mJSON)
+	).Scan(&v.id, &v.semver, &v.contractVersion, &v.executionTier, &v.bundleSHA256, &sigInt, &entInt, &fp, &entFP, &v.sourceURI, &mJSON)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, port.ErrNotFound
@@ -2176,6 +2191,7 @@ func loadVersionInfoTx(ctx context.Context, tx *sql.Tx, versionID string) (*vers
 	v.signatureVerified = sigInt == 1
 	v.enterpriseSigned = entInt == 1
 	v.fingerprint = fp.String
+	v.enterpriseFingerprint = entFP.String
 	if err := json.Unmarshal([]byte(mJSON), &v.manifest); err != nil {
 		return nil, fmt.Errorf("installer: corrupt manifest_json for version %s: %w", versionID, err)
 	}
@@ -2187,6 +2203,13 @@ func deriveTrustTierFromVersion(canonicalName string, ver *versionRowInfo, keyri
 		return lockfile.TrustTierUnverifiedExternal
 	}
 	return keyring.DerivePublicTrustTier(canonicalName, ver.signatureVerified, ver.fingerprint)
+}
+
+func deriveEnterpriseSignedFromVersion(ver *versionRowInfo, keyring TrustedKeyring) bool {
+	if ver == nil {
+		return false
+	}
+	return keyring.DeriveEnterpriseSigned(ver.signatureVerified, ver.enterpriseSigned, ver.fingerprint, ver.enterpriseFingerprint)
 }
 
 func (s *LifecycleService) preflightLockfile() error {
@@ -2283,8 +2306,8 @@ func resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx context.Context, tx *sql.
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE org_extension_policies
-		SET enabled = 0, version = version + 1, updated_at_ms = ?
-		WHERE package_id = ? AND enabled = 1`,
+		SET enabled = 0, org_owner_opt_in = 0, version = version + 1, updated_at_ms = ?
+		WHERE package_id = ? AND (enabled = 1 OR org_owner_opt_in = 1)`,
 		now, packageID,
 	); err != nil {
 		return nil, fmt.Errorf("installer: reset org_extension_policies on trust downgrade: %w", err)

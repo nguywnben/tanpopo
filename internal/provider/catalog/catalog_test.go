@@ -98,14 +98,6 @@ func newTestHarness(t *testing.T) *testHarness {
 		t.Fatalf("vault.NewStore failed: %v", err)
 	}
 
-	snapMgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{
-		DB:    st.RawDB(),
-		NowMs: nowMs,
-	})
-	if err != nil {
-		t.Fatalf("snapshot.NewManager failed: %v", err)
-	}
-
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("GenerateKey failed: %v", err)
@@ -115,6 +107,15 @@ func newTestHarness(t *testing.T) *testHarness {
 	keyID := installer.PublicKeyFingerprint(pub)
 	keyring := installer.TrustedKeyring{
 		RootPublicKeys: map[string]ed25519.PublicKey{keyID: pub},
+	}
+
+	snapMgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{
+		DB:      st.RawDB(),
+		NowMs:   nowMs,
+		Keyring: keyring,
+	})
+	if err != nil {
+		t.Fatalf("snapshot.NewManager failed: %v", err)
 	}
 
 	repo, err := catalog.NewRepository(catalog.Config{
@@ -2117,7 +2118,6 @@ adapter:
 
 }
 
-
 func (h *testHarness) createOrgOwnerRole(t *testing.T, orgID, orgSlug string) string {
 	t.Helper()
 	ownerID := "prc_orgowner_" + orgSlug
@@ -2850,5 +2850,370 @@ adapter:
 	}
 	if !snapConnAfter.VisibleToProject(orgID, projID) {
 		t.Fatal("expected child project visibility after explicit ORG_OWNER opt-in")
+	}
+}
+
+func TestTPBR0202OrgConnectionEmptySharedProjectsKeyWithdrawalAndLegacySecurityReviewerPolicy(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	now := h.clk.Now().UnixMilli()
+
+	org, err := h.store.Tenancy().CreateOrganization(h.ctx, port.CreateOrgParams{
+		Slug:           "tpbr0202-kr-drift",
+		DisplayName:    "TP-BR-0202 Keyring Drift Org",
+		MinPluginTrust: port.MinTrustAnyApproved,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	orgID := org.ID
+	proj, err := h.store.Tenancy().CreateProject(h.ctx, orgID, port.CreateProjectParams{
+		Slug:        "child-proj",
+		DisplayName: "Child Project",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projID := proj.ID
+
+	opID, orgOwnerID, secRevID := "prc_op_kr", "prc_owner_kr", "prc_sec_kr"
+	for _, p := range []struct {
+		id, email, role string
+	}{
+		{opID, "op-kr@example.com", "OPERATOR"},
+		{orgOwnerID, "owner-kr@example.com", "ORG_OWNER"},
+		{secRevID, "sec-kr@example.com", "SECURITY_REVIEWER"},
+	} {
+		if _, err := h.store.RawDB().ExecContext(h.ctx, `
+			INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms)
+			VALUES (?, ?, 'HUMAN_LOCAL', ?, 'ACTIVE', 1, ?, ?)`,
+			p.id, orgID, p.email, now, now,
+		); err != nil {
+			t.Fatal(err)
+		}
+		scopeType, scopeID, rbOrgID := "ORG", orgID, any(&orgID)
+		if p.role == "OPERATOR" {
+			scopeType, scopeID, rbOrgID = "INSTANCE", "instance", nil
+		}
+		if _, err := h.store.RawDB().ExecContext(h.ctx, `
+			INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+			VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+			"rb_"+p.id, rbOrgID, p.id, scopeType, scopeID, p.role, now,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	pubP, privP, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubFP := installer.PublicKeyFingerprint(pubP)
+	activeKeyring := installer.TrustedKeyring{
+		RootPublicKeys:      map[string]ed25519.PublicKey{h.keyID: h.pubKey},
+		PublisherPublicKeys: map[string]ed25519.PublicKey{pubFP: pubP},
+	}
+	withdrawnKeyring := installer.TrustedKeyring{
+		RootPublicKeys: map[string]ed25519.PublicKey{h.keyID: h.pubKey},
+	}
+
+	instActive, err := installer.NewLifecycleService(installer.ServiceConfig{
+		DB:           h.store.RawDB(),
+		Audit:        noopAuditSink{},
+		PluginsDir:   h.plugins,
+		LockfilePath: filepath.Join(t.TempDir(), "tanpopo.lock"),
+		Keyring:      activeKeyring,
+		NowMs:        func() int64 { return h.clk.Now().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	instWithdrawn, err := installer.NewLifecycleService(installer.ServiceConfig{
+		DB:           h.store.RawDB(),
+		Audit:        noopAuditSink{},
+		PluginsDir:   h.plugins,
+		LockfilePath: filepath.Join(t.TempDir(), "tanpopo-withdrawn.lock"),
+		Keyring:      withdrawnKeyring,
+		NowMs:        func() int64 { return h.clk.Now().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repoActive, err := catalog.NewRepository(catalog.Config{
+		DB:        h.store.RawDB(),
+		NowMs:     func() int64 { return h.clk.Now().UnixMilli() },
+		Snapshots: h.snapshots,
+		Audit:     noopAuditSink{},
+		Keyring:   activeKeyring,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapActive, err := snapshot.NewManager(h.ctx, snapshot.ManagerConfig{
+		DB:      h.store.RawDB(),
+		NowMs:   func() int64 { return h.clk.Now().UnixMilli() },
+		Keyring: activeKeyring,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manifestYAML := `
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@thirdparty/kr-drift-adapter"
+  name: Keyring Drift Adapter
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["api.drift.example"]
+adapter:
+  slug: kr-drift-adapter
+  baseUrl: "https://api.drift.example/v1"
+`
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	_ = tw.WriteHeader(&tar.Header{Name: "manifest.yaml", Mode: 0o644, Size: int64(len(manifestYAML))})
+	_, _ = tw.Write([]byte(manifestYAML))
+	_ = tw.Close()
+	_ = gw.Close()
+	bundleBytes := buf.Bytes()
+	sum := sha256.Sum256(bundleBytes)
+	hexSum := hex.EncodeToString(sum[:])
+
+	sig := ed25519.Sign(privP, installer.SignatureSigningPayload("@thirdparty/kr-drift-adapter", "1.0.0", hexSum))
+	staged, err := instActive.StageFreshInstall(h.ctx, installer.StageInstallRequest{
+		ArchiveReader: bytes.NewReader(bundleBytes),
+		Source:        installer.SourceSpec{Kind: "oci", URI: "oci://registry.tanpopo.dev/thirdparty/kr@sha256:" + hexSum, ExpectedSHA256: hexSum},
+		Signature:     installer.ProvenanceSignature{PublisherOrRootSig: sig},
+		ActorID:       opID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := instActive.ApproveAndActivate(h.ctx, installer.ApproveInstallRequest{
+		InstallationID:      staged.Installation.InstallationID,
+		ExpectedVersion:     staged.Installation.Version,
+		ApproverPrincipalID: opID,
+		ActivateImmediately: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if app.OriginTrustTier != "verified" {
+		t.Fatalf("expected initial DB trust tier verified, got %q", app.OriginTrustTier)
+	}
+
+	// SECURITY_REVIEWER enables policy while package is still verified in activeKeyring (sets enabled=1, org_owner_opt_in=0).
+	if err := instActive.SetOrgExtensionPolicy(h.ctx, orgID, app.PackageID, true, nil, secRevID); err != nil {
+		t.Fatalf("SECURITY_REVIEWER enablement of verified package failed: %v", err)
+	}
+
+	adp, err := repoActive.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: app.InstallationID,
+		AdapterSlug:    "kr-drift-adapter",
+		AllowedHosts:   []string{"api.drift.example"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Org-level connection with owner_project_id = nil and empty shared_project_ids = [].
+	orgConn, err := repoActive.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		Name:            "Org Level Drift Conn",
+		EndpointBaseURL: "https://api.drift.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repoActive.TransitionConnectionState(h.ctx, orgID, orgConn.ID, catalog.ConnStateValidating, orgConn.Version, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Also create a child-project connection while publisher key is still present.
+	childConn, err := repoActive.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		OwnerProjectID:  &projID,
+		AdapterID:       adp.ID,
+		Name:            "Child Project Conn",
+		EndpointBaseURL: "https://api.drift.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repoActive.TransitionConnectionState(h.ctx, orgID, childConn.ID, catalog.ConnStateValidating, childConn.Version, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := snapActive.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	orgViewActive, ok := snapActive.Current().LookupProviderConnection(orgID, orgConn.ID)
+	if !ok || !orgViewActive.VisibleToProject(orgID, "") || !orgViewActive.VisibleToProject(orgID, projID) {
+		t.Fatalf("expected active publisher keyring to expose orgConn to org and child project, ok=%v view=%+v", ok, orgViewActive)
+	}
+
+	// Now withdraw publisher key from keyring WITHOUT modifying DB extension_packages.origin_trust_tier or org_extension_policies!
+	repoWithdrawn, err := catalog.NewRepository(catalog.Config{
+		DB:        h.store.RawDB(),
+		NowMs:     func() int64 { return h.clk.Now().UnixMilli() },
+		Snapshots: h.snapshots,
+		Audit:     noopAuditSink{},
+		Keyring:   withdrawnKeyring,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapWithdrawn, err := snapshot.NewManager(h.ctx, snapshot.ManagerConfig{
+		DB:      h.store.RawDB(),
+		NowMs:   func() int64 { return h.clk.Now().UnixMilli() },
+		Keyring: withdrawnKeyring,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Confirm stale DB rows still claim 'verified' and enabled=1.
+	var dbTier string
+	var dbEnabled, dbOwnerOptIn int
+	if err := h.store.RawDB().QueryRowContext(h.ctx, `SELECT origin_trust_tier FROM extension_packages WHERE id = ?`, app.PackageID).Scan(&dbTier); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.RawDB().QueryRowContext(h.ctx, `SELECT enabled, org_owner_opt_in FROM org_extension_policies WHERE org_id = ? AND package_id = ?`, orgID, app.PackageID).Scan(&dbEnabled, &dbOwnerOptIn); err != nil {
+		t.Fatal(err)
+	}
+	if dbTier != "verified" || dbEnabled != 1 || dbOwnerOptIn != 0 {
+		t.Fatalf("unexpected setup DB state: tier=%q enabled=%d optIn=%d", dbTier, dbEnabled, dbOwnerOptIn)
+	}
+
+	// Snapshot & Catalog MUST agree after key withdrawal:
+	// (a) Org-level flow still works in both snapshot and catalog under ANY_APPROVED.
+	orgViewWithdrawn, ok := snapWithdrawn.Current().LookupProviderConnection(orgID, orgConn.ID)
+	if !ok {
+		t.Fatal("missing orgConn in withdrawn snapshot")
+	}
+	if !orgViewWithdrawn.VisibleToProject(orgID, "") {
+		t.Fatal("expected org-level VisibleToProject(orgID, '') to remain true under ANY_APPROVED after key withdrawal")
+	}
+	if _, err := repoWithdrawn.ResolveConnectionPolicy(h.ctx, orgID, orgConn.ID); err != nil {
+		t.Fatalf("expected org-level ResolveConnectionPolicy to keep working under ANY_APPROVED, got %v", err)
+	}
+
+	// (b) Child project scope MUST be blocked in both snapshot and catalog because SECURITY_REVIEWER enabled=1 is NOT ORG_OWNER opt-in!
+	if orgViewWithdrawn.VisibleToProject(orgID, projID) {
+		t.Fatal("security bypass: org-level empty shared_project_ids leaked to child project after key withdrawal via stale DB tier / SECURITY_REVIEWER policy")
+	}
+	if _, err := repoWithdrawn.ResolveConnectionPolicy(h.ctx, orgID, childConn.ID); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected catalog ResolveConnectionPolicy to deny childConn after key withdrawal, got %v", err)
+	}
+	if _, err := repoWithdrawn.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		OwnerProjectID:  &projID,
+		AdapterID:       adp.ID,
+		Name:            "Blocked Child After Withdrawal",
+		EndpointBaseURL: "https://api.drift.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	}); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected CreateProviderConnection for child project denied after key withdrawal, got %v", err)
+	}
+	if _, err := repoWithdrawn.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:            orgID,
+		AdapterID:        adp.ID,
+		Name:             "Blocked Downward Share After Withdrawal",
+		EndpointBaseURL:  "https://api.drift.example/v1",
+		DataRegion:       "us",
+		BillingMode:      catalog.BillingModeCommercialAPI,
+		AuthMode:         catalog.AuthModeNone,
+		SharedProjectIDs: []string{projID},
+	}); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected CreateProviderConnection with SharedProjectIDs denied after key withdrawal, got %v", err)
+	}
+
+	// (c) SECURITY_REVIEWER remains denied under withdrawn keyring; ORG_OWNER explicit opt-in unlocks BOTH snapshot and catalog.
+	if perr := instWithdrawn.SetOrgExtensionPolicy(h.ctx, orgID, app.PackageID, true, nil, secRevID); !errors.Is(perr, installer.ErrPermissionDenied) {
+		t.Fatalf("expected ErrPermissionDenied for SECURITY_REVIEWER after key withdrawal, got %v", perr)
+	}
+	if err := instWithdrawn.SetOrgExtensionPolicy(h.ctx, orgID, app.PackageID, true, nil, orgOwnerID); err != nil {
+		t.Fatalf("expected ORG_OWNER opt-in after key withdrawal to succeed: %v", err)
+	}
+	if err := snapWithdrawn.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	orgViewAfterOwner, _ := snapWithdrawn.Current().LookupProviderConnection(orgID, orgConn.ID)
+	if !orgViewAfterOwner.VisibleToProject(orgID, "") || !orgViewAfterOwner.VisibleToProject(orgID, projID) {
+		t.Fatal("expected ORG_OWNER explicit opt-in to unlock child project visibility in snapshot")
+	}
+	if _, err := repoWithdrawn.ResolveConnectionPolicy(h.ctx, orgID, childConn.ID); err != nil {
+		t.Fatalf("expected ORG_OWNER explicit opt-in to unlock childConn in catalog, got %v", err)
+	}
+
+	// (d) Enterprise key withdrawal: while DB keeps enterprise_signed=1, removing the enterprise key from
+	// EnterprisePublicKeys blocks VERIFIED_OR_ENTERPRISE_SIGNED orgs in both snapshot and catalog.
+	entPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entFP := installer.PublicKeyFingerprint(entPub)
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE extension_versions SET signature_verified = 0, enterprise_signed = 1, signing_key_fingerprint = ?, enterprise_key_fingerprint = ? WHERE package_id = ?`, entFP, entFP, app.PackageID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE organizations SET min_plugin_trust = ?, version = version + 1, updated_at_ms = ? WHERE id = ?`, port.MinTrustVerifiedOrEnterpriseSigned, now+6, orgID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'organization', ?, 'UPSERT', 0, ?)`, orgID, orgID, now+6); err != nil {
+		t.Fatal(err)
+	}
+	entKeyring := installer.TrustedKeyring{EnterprisePublicKeys: map[string]ed25519.PublicKey{"ent": entPub}}
+	snapWithdrawn.SetKeyring(entKeyring)
+	if err := snapWithdrawn.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	repoEntActive, err := catalog.NewRepository(catalog.Config{
+		DB:        h.store.RawDB(),
+		NowMs:     func() int64 { return h.clk.Now().UnixMilli() },
+		Snapshots: snapWithdrawn,
+		Audit:     noopAuditSink{},
+		Keyring:   entKeyring,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repoEntActive.ResolveConnectionPolicy(h.ctx, orgID, orgConn.ID); err != nil {
+		t.Fatalf("expected active enterprise key to permit ResolveConnectionPolicy, got: %v", err)
+	}
+	vEntOK, _ := snapWithdrawn.Current().LookupProviderConnection(orgID, orgConn.ID)
+	if !vEntOK.VisibleToProject(orgID, "") || !vEntOK.VisibleToProject(orgID, projID) {
+		t.Fatal("expected snapshot VisibleToProject to allow active enterprise key")
+	}
+
+	snapWithdrawn.SetKeyring(withdrawnKeyring)
+	if err := snapWithdrawn.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repoWithdrawn.ResolveConnectionPolicy(h.ctx, orgID, orgConn.ID); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected ResolveConnectionPolicy ErrOrgTrustPolicyDenied after enterprise key withdrawal, got: %v", err)
+	}
+	vEntAfter, _ := snapWithdrawn.Current().LookupProviderConnection(orgID, orgConn.ID)
+	if vEntAfter.VisibleToProject(orgID, "") || vEntAfter.VisibleToProject(orgID, projID) {
+		t.Fatal("expected snapshot VisibleToProject false after enterprise key withdrawal even with DB enterprise_signed=1")
 	}
 }

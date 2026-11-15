@@ -1679,7 +1679,6 @@ func FuzzArchiveAndManifest(f *testing.F) {
 	})
 }
 
-
 func TestInstallerLegacyMissingSlotReconsentAndOrgOwnerOptIn(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -1825,13 +1824,17 @@ func TestInstallerTPBR0202TrustDowngradeInvalidatesNonOwnerPolicy(t *testing.T) 
 		})
 	}
 
-	isOrgEnabled := func(pkgID string) bool {
-		var enabledInt int
-		err := h.st.RawDB().QueryRowContext(ctx, `SELECT enabled FROM org_extension_policies WHERE org_id = ? AND package_id = ?`, h.orgID, pkgID).Scan(&enabledInt)
+	policyFlags := func(pkgID string) (bool, bool) {
+		var enabledInt, optInInt int
+		err := h.st.RawDB().QueryRowContext(ctx, `SELECT enabled, org_owner_opt_in FROM org_extension_policies WHERE org_id = ? AND package_id = ?`, h.orgID, pkgID).Scan(&enabledInt, &optInInt)
 		if err != nil {
 			t.Fatalf("query org_extension_policies: %v", err)
 		}
-		return enabledInt == 1
+		return enabledInt == 1, optInInt == 1
+	}
+	isOrgEnabled := func(pkgID string) bool {
+		en, _ := policyFlags(pkgID)
+		return en
 	}
 
 	// A. Verified v1.0.0 enabled by non-ORG_OWNER SECURITY_REVIEWER.
@@ -1857,8 +1860,8 @@ func TestInstallerTPBR0202TrustDowngradeInvalidatesNonOwnerPolicy(t *testing.T) 
 	if err := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, act1.PackageID, true, nil, h.secRevID); err != nil {
 		t.Fatalf("SECURITY_REVIEWER should be allowed to enable verified package: %v", err)
 	}
-	if !isOrgEnabled(act1.PackageID) {
-		t.Fatal("expected org_extension_policies.enabled = 1 after verified enablement")
+	if en, optIn := policyFlags(act1.PackageID); !en || optIn {
+		t.Fatalf("expected enabled=1 and org_owner_opt_in=0 after SECURITY_REVIEWER verified enablement, got en=%v optIn=%v", en, optIn)
 	}
 
 	// B. Upgrade to unsigned v1.1.0 (escalated -> UPDATING_PENDING_RECONSENT):
@@ -1890,6 +1893,9 @@ func TestInstallerTPBR0202TrustDowngradeInvalidatesNonOwnerPolicy(t *testing.T) 
 	}
 	if err := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, act2.PackageID, true, nil, h.orgOwnerID); err != nil {
 		t.Fatalf("ORG_OWNER opt-in failed: %v", err)
+	}
+	if en, optIn := policyFlags(act2.PackageID); !en || !optIn {
+		t.Fatalf("expected enabled=1 and org_owner_opt_in=1 after ORG_OWNER opt-in, got en=%v optIn=%v", en, optIn)
 	}
 
 	// C. Same-tier unsigned upgrade (1.1.0 unsigned -> 1.1.1 unsigned) preserves prior ORG_OWNER opt-in.

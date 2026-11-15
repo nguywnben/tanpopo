@@ -5,9 +5,7 @@ package installer
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -15,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
-	"github.com/nguywnben/tanpopo/internal/storage/port"
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 )
 
 // Installation source channel identifiers (SPEC-EXT-04 §2.1).
@@ -39,7 +37,7 @@ var (
 	ErrUnpinnedReference    = errors.New("installer: expected sha256 digest required for remote source")
 	ErrDigestMismatch       = errors.New("installer: artifact_digest_mismatch")
 	ErrInvalidSignature     = errors.New("installer: invalid Ed25519 package signature")
-	ErrOrgTrustPolicyDenied = errors.New("installer: org_trust_policy_denied (403)")
+	ErrOrgTrustPolicyDenied = trust.ErrOrgTrustPolicyDenied
 )
 
 // SourceSpec describes the artifact origin channel and immutable reference pin.
@@ -134,11 +132,7 @@ func ValidateSourceRef(src SourceSpec) (string, error) {
 
 // TrustedKeyring holds the offline Ed25519 verification keys across Tanpopo's
 // three provenance axes (Root -> official, Publisher -> verified, Enterprise -> enterprise_signed).
-type TrustedKeyring struct {
-	RootPublicKeys       map[string]ed25519.PublicKey
-	PublisherPublicKeys  map[string]ed25519.PublicKey
-	EnterprisePublicKeys map[string]ed25519.PublicKey
-}
+type TrustedKeyring = trust.TrustedKeyring
 
 // ProvenanceSignature carries detached Ed25519 signatures over SignatureSigningPayload.
 type ProvenanceSignature struct {
@@ -148,11 +142,12 @@ type ProvenanceSignature struct {
 
 // ProvenanceVerdict reports cryptographically derived origin trust tier and orthogonal enterprise signature.
 type ProvenanceVerdict struct {
-	OriginTrustTier       string // official | verified | unverified_external
-	SignatureVerified     bool
-	EnterpriseSigned      bool
-	SigningKeyFingerprint string
-	BundleSHA256          string
+	OriginTrustTier          string // official | verified | unverified_external
+	SignatureVerified        bool
+	EnterpriseSigned         bool
+	SigningKeyFingerprint    string
+	EnterpriseKeyFingerprint string
+	BundleSHA256             string
 }
 
 // SignatureSigningPayload constructs the domain-separated canonical byte slice signed by Ed25519 keys.
@@ -162,8 +157,7 @@ func SignatureSigningPayload(canonicalName, version, bundleSHA256Hex string) []b
 
 // PublicKeyFingerprint computes the deterministic 64-hex SHA-256 fingerprint of an Ed25519 public key.
 func PublicKeyFingerprint(pub ed25519.PublicKey) string {
-	sum := sha256.Sum256(pub)
-	return hex.EncodeToString(sum[:])
+	return trust.PublicKeyFingerprint(pub)
 }
 
 // VerifyProvenance verifies archive digest parity (CT-03), offline Ed25519 signatures across
@@ -210,6 +204,7 @@ func VerifyProvenance(
 			// Signed solely by enterprise key -> remains unverified_external publicly + enterprise_signed=true (CR-03).
 			verdict.EnterpriseSigned = true
 			verdict.SigningKeyFingerprint = fp
+			verdict.EnterpriseKeyFingerprint = fp
 		} else {
 			return nil, fmt.Errorf("%w: provided signature failed Ed25519 verification against trusted keys", ErrInvalidSignature)
 		}
@@ -221,6 +216,7 @@ func VerifyProvenance(
 			return nil, fmt.Errorf("%w: enterprise signature failed Ed25519 verification", ErrInvalidSignature)
 		}
 		verdict.EnterpriseSigned = true
+		verdict.EnterpriseKeyFingerprint = fp
 		if verdict.SigningKeyFingerprint == "" {
 			verdict.SigningKeyFingerprint = fp
 		}
@@ -246,50 +242,7 @@ func verifyAgainstKeyMap(payload, sig []byte, keys map[string]ed25519.PublicKey)
 	return "", false
 }
 
-// DerivePublicTrustTier classifies a verified artifact against the current public trust keys.
-func (keyring TrustedKeyring) DerivePublicTrustTier(canonicalName string, signatureVerified bool, fingerprint string) string {
-	fp := strings.TrimSpace(fingerprint)
-	if !signatureVerified || fp == "" {
-		return lockfile.TrustTierUnverifiedExternal
-	}
-	for _, pub := range keyring.RootPublicKeys {
-		if PublicKeyFingerprint(pub) == fp {
-			return lockfile.TrustTierOfficial
-		}
-	}
-	if !IsReservedTanpopoNamespace(canonicalName) {
-		for _, pub := range keyring.PublisherPublicKeys {
-			if PublicKeyFingerprint(pub) == fp {
-				return lockfile.TrustTierVerified
-			}
-		}
-	}
-	return lockfile.TrustTierUnverifiedExternal
-}
-
 // CheckOrgMinTrustPolicy enforces organizations.min_plugin_trust against derived provenance (CT-20 / CR-03).
 func CheckOrgMinTrustPolicy(minPluginTrust, originTrustTier string, enterpriseSigned bool) error {
-	normTier, err := lockfile.NormalizeTrustTier(originTrustTier)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrOrgTrustPolicyDenied, err)
-	}
-	switch minPluginTrust {
-	case port.MinTrustOfficialOnly:
-		if normTier == lockfile.TrustTierOfficial {
-			return nil
-		}
-	case port.MinTrustVerifiedOnly:
-		if normTier == lockfile.TrustTierOfficial || normTier == lockfile.TrustTierVerified {
-			return nil
-		}
-	case port.MinTrustVerifiedOrEnterpriseSigned:
-		if normTier == lockfile.TrustTierOfficial || normTier == lockfile.TrustTierVerified || enterpriseSigned {
-			return nil
-		}
-	case port.MinTrustAnyApproved:
-		return nil
-	default:
-		return fmt.Errorf("%w: unknown organization min_plugin_trust policy %q", ErrOrgTrustPolicyDenied, minPluginTrust)
-	}
-	return fmt.Errorf("%w: org requires %s (got origin_trust_tier=%s, enterprise_signed=%v)", ErrOrgTrustPolicyDenied, minPluginTrust, normTier, enterpriseSigned)
+	return trust.CheckOrgMinTrustPolicy(minPluginTrust, originTrustTier, enterpriseSigned)
 }

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 	"gopkg.in/yaml.v3"
 )
 
@@ -32,22 +33,22 @@ const (
 
 // Canonical SQL/system execution tiers matching extension_versions.execution_tier CHECK constraints.
 const (
-	ExecutionTierDeclarativeT1    = "DECLARATIVE_T1"
-	ExecutionTierWasmSandboxT2    = "WASM_SANDBOX_T2"
+	ExecutionTierDeclarativeT1     = "DECLARATIVE_T1"
+	ExecutionTierWasmSandboxT2     = "WASM_SANDBOX_T2"
 	ExecutionTierIsolatedSidecarT3 = "ISOLATED_SIDECAR_T3"
 )
 
 // Canonical SQL/system extension kinds matching extension_packages.extension_kind CHECK constraints.
 const (
-	ExtensionKindProviderAdapter  = "PROVIDER_ADAPTER"
-	ExtensionKindAuthDriver       = "AUTH_DRIVER"
-	ExtensionKindGuardrailPolicy  = "GUARDRAIL_POLICY"
+	ExtensionKindProviderAdapter   = "PROVIDER_ADAPTER"
+	ExtensionKindAuthDriver        = "AUTH_DRIVER"
+	ExtensionKindGuardrailPolicy   = "GUARDRAIL_POLICY"
 	ExtensionKindTelemetryExporter = "TELEMETRY_EXPORTER"
 )
 
 var (
 	// ReservedNamespaceRe locks the ^@tanpopo(-[a-z0-9]+)?/ namespace exclusively for Tanpopo root-signed packages (CR-03 / CT-05).
-	ReservedNamespaceRe = regexp.MustCompile(`^@tanpopo(-[a-z0-9]+)?/`)
+	ReservedNamespaceRe = trust.ReservedNamespaceRe
 	packageIDRe         = regexp.MustCompile(`^@[a-z0-9][a-z0-9-]{0,62}/[a-z0-9][a-z0-9._-]{0,62}$`)
 	semverRe            = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$`)
 	sha256LowerRe       = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -55,14 +56,14 @@ var (
 
 // Canonical manifest validation error sentinels.
 var (
-	ErrManifestInvalid             = errors.New("installer: invalid extension manifest")
-	ErrUnsupportedContractVersion  = errors.New("installer: unsupported contractVersion")
-	ErrIncompatibleCoreVersion     = errors.New("installer: incompatible coreVersionRange")
-	ErrReservedNamespaceSpoof      = errors.New("installer: reserved_namespace_spoofing")
-	ErrProhibitedCookiePermission  = errors.New("installer: prohibited_cookie_injection")
-	ErrWildcardEgressForbidden     = errors.New("installer: wildcard_egress_forbidden")
-	ErrProhibitedCapabilityTier    = errors.New("installer: scoped_secret_unseal is prohibited in Tier-1/Tier-2")
-	ErrEntrypointMismatch          = errors.New("installer: runtime entrypoint missing or sha256 mismatch")
+	ErrManifestInvalid            = errors.New("installer: invalid extension manifest")
+	ErrUnsupportedContractVersion = errors.New("installer: unsupported contractVersion")
+	ErrIncompatibleCoreVersion    = errors.New("installer: incompatible coreVersionRange")
+	ErrReservedNamespaceSpoof     = errors.New("installer: reserved_namespace_spoofing")
+	ErrProhibitedCookiePermission = errors.New("installer: prohibited_cookie_injection")
+	ErrWildcardEgressForbidden    = errors.New("installer: wildcard_egress_forbidden")
+	ErrProhibitedCapabilityTier   = errors.New("installer: scoped_secret_unseal is prohibited in Tier-1/Tier-2")
+	ErrEntrypointMismatch         = errors.New("installer: runtime entrypoint missing or sha256 mismatch")
 )
 
 // ValidationPolicy configures contract version support and Core SemVer compatibility window (CT-02 / CT-24).
@@ -181,7 +182,7 @@ type ValidatedManifest struct {
 
 // IsReservedTanpopoNamespace reports whether pkgID matches ^@tanpopo(-[a-z0-9]+)?/ (CT-05).
 func IsReservedTanpopoNamespace(pkgID string) bool {
-	return ReservedNamespaceRe.MatchString(strings.TrimSpace(pkgID))
+	return trust.IsReservedTanpopoNamespace(pkgID)
 }
 
 // ParseAndValidateManifest decodes YAML strictly (guarding depth, node count, alias bombs, and

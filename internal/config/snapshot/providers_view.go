@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 )
 
 // ProviderConnection SM-02 state constants mirrored in snapshot views (no Tier-5 import).
@@ -63,29 +65,32 @@ type ConnectionSecretBindingView struct {
 
 // ProviderConnectionView is an immutable O(1) snapshot record of provider_connections.
 type ProviderConnectionView struct {
-	ID               string
-	OrgID            string
-	OwnerProjectID   *string
-	AdapterID        string
-	AdapterSlug      string
-	CredentialID     *string
-	Name             string
-	EndpointBaseURL  string
-	AllowPrivateIP   bool
-	AllowedCIDRs     []string
-	DataRegion       string
-	BillingMode      string
-	AuthMode         string
-	State            string
+	ID                            string
+	OrgID                         string
+	OwnerProjectID                *string
+	AdapterID                     string
+	AdapterSlug                   string
+	CredentialID                  *string
+	Name                          string
+	EndpointBaseURL               string
+	AllowPrivateIP                bool
+	AllowedCIDRs                  []string
+	DataRegion                    string
+	BillingMode                   string
+	AuthMode                      string
+	State                         string
 	SharedProjectIDs              []string
 	sharedProjectSet              map[string]struct{}
+	AdapterInstallUsable          bool
+	DerivedPublicTrust            string
 	ChildProjectBlockedByOrgTrust bool
+	BlockedByOrgTrustPolicy       bool
 	DisabledByOrgPolicy           bool
 	ConfigJSON                    string
-	SecretBindings   map[string]*ConnectionSecretBindingView
-	Version          int64
-	CreatedAtMs      int64
-	UpdatedAtMs      int64
+	SecretBindings                map[string]*ConnectionSecretBindingView
+	Version                       int64
+	CreatedAtMs                   int64
+	UpdatedAtMs                   int64
 }
 
 func (c *ProviderConnectionView) clone() *ProviderConnectionView {
@@ -110,11 +115,11 @@ func (c *ProviderConnectionView) clone() *ProviderConnectionView {
 // VisibleToProject reports whether projectID inside orgID can access
 // this connection according to owner_project_id and downward shared_project_ids.
 func (c *ProviderConnectionView) VisibleToProject(orgID, projectID string) bool {
-	if c == nil || c.OrgID != orgID || c.DisabledByOrgPolicy {
+	if c == nil || c.OrgID != orgID || !c.AdapterInstallUsable || c.DisabledByOrgPolicy || c.BlockedByOrgTrustPolicy {
 		return false
 	}
 	// TP-BR-0202: Unsigned unverified_external extensions are unavailable to child Project
-	// scopes unless explicitly enabled by ORG_OWNER via org_extension_policies (enabled=1),
+	// scopes unless explicitly enabled by ORG_OWNER via org_extension_policies (enabled=1, org_owner_opt_in=1),
 	// even when owner_project_id IS NULL and shared_project_ids is empty.
 	if projectID != "" && c.ChildProjectBlockedByOrgTrust {
 		return false
@@ -307,7 +312,7 @@ func (s *ConfigSnapshot) LookupDeploymentsForSlug(orgID, canonicalSlug string) [
 	return out
 }
 
-func loadProviderCatalogSQL(ctx context.Context, tx *sql.Tx) (*ProviderCatalogView, error) {
+func loadProviderCatalogSQL(ctx context.Context, tx *sql.Tx, keyring trust.TrustedKeyring) (*ProviderCatalogView, error) {
 	view := &ProviderCatalogView{
 		adaptersByID:         make(map[string]*ProviderAdapterView),
 		connectionsByID:      make(map[string]*ProviderConnectionView),
@@ -320,7 +325,7 @@ func loadProviderCatalogSQL(ctx context.Context, tx *sql.Tx) (*ProviderCatalogVi
 	if err := loadAdaptersSQL(ctx, tx, view); err != nil {
 		return nil, err
 	}
-	if err := loadConnectionsSQL(ctx, tx, view); err != nil {
+	if err := loadConnectionsSQL(ctx, tx, view, keyring); err != nil {
 		return nil, err
 	}
 	if err := loadConnectionBindingsSQL(ctx, tx, view); err != nil {
@@ -373,17 +378,24 @@ func loadAdaptersSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView)
 	return rows.Err()
 }
 
-func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView) error {
+func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView, keyring trust.TrustedKeyring) error {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT pc.id, pc.org_id, pc.owner_project_id, pc.adapter_id, pc.credential_id, pc.name,
 		       pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.data_region,
 		       pc.billing_mode, pc.auth_mode, pc.state, pc.shared_project_ids_json, pc.config_json,
 		       pc.version, pc.created_at_ms, pc.updated_at_ms,
-		       COALESCE(ep.origin_trust_tier, 'unverified_external'),
+		       COALESCE(o.min_plugin_trust, ''),
+		       COALESCE(ei.state, ''),
+		       COALESCE(ep.canonical_name, ''),
+		       COALESCE(ev.signature_verified, 0),
+		       COALESCE(ev.signing_key_fingerprint, ''),
 		       COALESCE(ev.enterprise_signed, 0),
-		       ei.active_version_id,
-		       oep.enabled
+		       COALESCE(ev.enterprise_key_fingerprint, ''),
+		       ev.id,
+		       oep.enabled,
+		       COALESCE(oep.org_owner_opt_in, 0)
 		FROM provider_connections pc
+		LEFT JOIN organizations o ON o.id = pc.org_id
 		LEFT JOIN provider_adapters pa ON pa.id = pc.adapter_id
 		LEFT JOIN extension_installations ei ON ei.id = pa.installation_id
 		LEFT JOIN extension_packages ep ON ep.id = ei.package_id
@@ -403,28 +415,43 @@ func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogVi
 			allowPriv        int
 			cidrsJSON        string
 			sharedJSON       string
-			pkgTrustTier     string
+			minPluginTrust   string
+			installState     string
+			canonicalName    string
+			sigVerified      int
+			fingerprint      string
 			entSigned        int
+			entFingerprint   string
 			activeVerID      sql.NullString
 			orgPolicyEnabled sql.NullInt64
+			orgOwnerOptIn    int
 		)
 		if err := rows.Scan(
 			&c.ID, &c.OrgID, &ownerProj, &c.AdapterID, &credID, &c.Name,
 			&c.EndpointBaseURL, &allowPriv, &cidrsJSON, &c.DataRegion,
 			&c.BillingMode, &c.AuthMode, &c.State, &sharedJSON, &c.ConfigJSON,
 			&c.Version, &c.CreatedAtMs, &c.UpdatedAtMs,
-			&pkgTrustTier, &entSigned, &activeVerID, &orgPolicyEnabled,
+			&minPluginTrust, &installState, &canonicalName, &sigVerified, &fingerprint, &entSigned, &entFingerprint,
+			&activeVerID, &orgPolicyEnabled, &orgOwnerOptIn,
 		); err != nil {
 			return fmt.Errorf("snapshot: scan provider_connections: %w", err)
 		}
-		if orgPolicyEnabled.Valid && orgPolicyEnabled.Int64 == 0 {
-			c.DisabledByOrgPolicy = true
-		}
-		unsignedUnverified := (!activeVerID.Valid || strings.TrimSpace(activeVerID.String) == "") ||
-			(pkgTrustTier == "unverified_external" && entSigned == 0)
-		if unsignedUnverified && (!orgPolicyEnabled.Valid || orgPolicyEnabled.Int64 != 1) {
-			c.ChildProjectBlockedByOrgTrust = true
-		}
+		verdict := trust.EvaluateOrgExtensionTrust(keyring, trust.OrgExtensionTrustInput{
+			MinPluginTrust:           minPluginTrust,
+			CanonicalName:            canonicalName,
+			ActiveVersionID:          activeVerID.String,
+			SignatureVerified:        sigVerified != 0,
+			SigningKeyFingerprint:    fingerprint,
+			EnterpriseSigned:         entSigned != 0,
+			EnterpriseKeyFingerprint: entFingerprint,
+			OrgPolicyEnabled:         orgPolicyEnabled,
+			OrgOwnerOptIn:            orgOwnerOptIn != 0,
+		})
+		c.AdapterInstallUsable = trust.IsUsableExtensionState(installState)
+		c.DerivedPublicTrust = verdict.DerivedPublicTrust
+		c.DisabledByOrgPolicy = verdict.DisabledByOrgPolicy
+		c.BlockedByOrgTrustPolicy = verdict.MinTrustDenied
+		c.ChildProjectBlockedByOrgTrust = verdict.RequiresOrgOwnerChildOptIn
 		if ownerProj.Valid {
 			v := ownerProj.String
 			c.OwnerProjectID = &v
