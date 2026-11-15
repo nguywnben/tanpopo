@@ -48,15 +48,19 @@ type Engine struct {
 	probeModelsPath        parsedPath
 	probeModelIDField      parsedPath
 
-	reqMethod            string
-	reqPathParts         []templatePart
-	reqDefaultOpenAIPath bool
-	staticHeaders        map[string]string
-	renames              []compiledRename
-	defaults             []compiledDefault
-	drops                []parsedPath
-	injectStreamUsage    bool
-	forceStreamUsage     bool
+	reqMethod                   string
+	reqPathParts                []templatePart
+	reqDefaultOpenAIPath        bool
+	responsesPathParts          []templatePart
+	responsesDefaultOpenAIPath  bool
+	embeddingsPathParts         []templatePart
+	embeddingsDefaultOpenAIPath bool
+	staticHeaders               map[string]string
+	renames                     []compiledRename
+	defaults                    []compiledDefault
+	drops                       []parsedPath
+	injectStreamUsage           bool
+	forceStreamUsage            bool
 
 	respModelPath        parsedPath
 	respFinishReasonPath parsedPath
@@ -101,21 +105,23 @@ func CompileSpec(spec Spec) (*Engine, error) {
 	}
 
 	eng := &Engine{
-		id:                     strings.TrimSpace(spec.ID),
-		slug:                   strings.TrimSpace(spec.Slug),
-		nativePrefix:           strings.TrimSpace(spec.NativePrefix),
-		supportedDialects:      append([]string(nil), spec.SupportedDialects...),
-		allowedHosts:           allowedHosts,
-		defaultBaseURL:         strings.TrimSpace(spec.DefaultBaseURL),
-		authBindings:           make(map[string]port.CredentialInjectInstruction, len(spec.AuthBindings)),
-		staticHeaders:          make(map[string]string, len(spec.RequestMapping.StaticHeaders)),
-		probeSuccessCodes:      make(map[int32]struct{}),
-		reauthStatuses:         make(map[int32]struct{}),
-		retryableStatuses:      make(map[int32]struct{}),
-		injectStreamUsage:      spec.RequestMapping.InjectStreamUsage,
-		forceStreamUsage:       spec.canonicalOpenAI,
-		probeDefaultOpenAIPath: spec.canonicalOpenAI && strings.TrimSpace(spec.ValidationProbe.PathTemplate) == "",
-		reqDefaultOpenAIPath:   spec.canonicalOpenAI && strings.TrimSpace(spec.RequestMapping.PathTemplate) == "",
+		id:                          strings.TrimSpace(spec.ID),
+		slug:                        strings.TrimSpace(spec.Slug),
+		nativePrefix:                strings.TrimSpace(spec.NativePrefix),
+		supportedDialects:           append([]string(nil), spec.SupportedDialects...),
+		allowedHosts:                allowedHosts,
+		defaultBaseURL:              strings.TrimSpace(spec.DefaultBaseURL),
+		authBindings:                make(map[string]port.CredentialInjectInstruction, len(spec.AuthBindings)),
+		staticHeaders:               make(map[string]string, len(spec.RequestMapping.StaticHeaders)),
+		probeSuccessCodes:           make(map[int32]struct{}),
+		reauthStatuses:              make(map[int32]struct{}),
+		retryableStatuses:           make(map[int32]struct{}),
+		injectStreamUsage:           spec.RequestMapping.InjectStreamUsage,
+		forceStreamUsage:            spec.canonicalOpenAI,
+		probeDefaultOpenAIPath:      spec.canonicalOpenAI && strings.TrimSpace(spec.ValidationProbe.PathTemplate) == "",
+		reqDefaultOpenAIPath:        spec.canonicalOpenAI && strings.TrimSpace(spec.RequestMapping.PathTemplate) == "",
+		responsesDefaultOpenAIPath:  spec.canonicalOpenAI && strings.TrimSpace(spec.RequestMapping.ResponsesPathTemplate) == "",
+		embeddingsDefaultOpenAIPath: spec.canonicalOpenAI && strings.TrimSpace(spec.RequestMapping.EmbeddingsPathTemplate) == "",
 	}
 
 	if err := eng.compileAuthBindings(spec.AuthBindings); err != nil {
@@ -241,6 +247,24 @@ func (e *Engine) compileRequestMapping(rm RequestMappingSpec) error {
 		return err
 	}
 	e.reqPathParts = parts
+
+	respTmpl := strings.TrimSpace(rm.ResponsesPathTemplate)
+	if respTmpl == "" {
+		respTmpl = "/v1/responses"
+	}
+	e.responsesPathParts, err = validateTemplateString(respTmpl, true)
+	if err != nil {
+		return err
+	}
+
+	embTmpl := strings.TrimSpace(rm.EmbeddingsPathTemplate)
+	if embTmpl == "" {
+		embTmpl = "/v1/embeddings"
+	}
+	e.embeddingsPathParts, err = validateTemplateString(embTmpl, true)
+	if err != nil {
+		return err
+	}
 
 	ruleCount := len(rm.StaticHeaders) + len(rm.FieldRenames) + len(rm.FieldDefaults) + len(rm.DropFields)
 	if ruleCount > MaxOperatorSteps {
@@ -626,13 +650,15 @@ func (e *Engine) TransformRequest(ctx context.Context, in port.TransformRequestI
 	if err != nil {
 		return port.UpstreamHttpSpec{}, err
 	}
+	modality := strings.ToLower(strings.TrimSpace(vars["_tanpopo_modality"]))
+	delete(vars, "_tanpopo_modality")
 
 	payload, err := decodeBoundedJSONMap(in.NormalizedRequestJSON)
 	if err != nil {
 		return port.UpstreamHttpSpec{}, err
 	}
 
-	if err := e.applyRequestRules(payload, budget); err != nil {
+	if err := e.applyRequestRules(payload, modality, budget); err != nil {
 		return port.UpstreamHttpSpec{}, err
 	}
 
@@ -640,7 +666,18 @@ func (e *Engine) TransformRequest(ctx context.Context, in port.TransformRequestI
 		vars["model"] = strings.TrimSpace(modelStr)
 	}
 
-	targetURL, err := renderEndpointURL(baseURL, e.reqPathParts, e.reqDefaultOpenAIPath, vars, e.allowedHosts, budget)
+	pathParts := e.reqPathParts
+	implicitOpenAI := e.reqDefaultOpenAIPath
+	switch modality {
+	case "responses":
+		pathParts = e.responsesPathParts
+		implicitOpenAI = e.responsesDefaultOpenAIPath
+	case "embeddings":
+		pathParts = e.embeddingsPathParts
+		implicitOpenAI = e.embeddingsDefaultOpenAIPath
+	}
+
+	targetURL, err := renderEndpointURL(baseURL, pathParts, implicitOpenAI, vars, e.allowedHosts, budget)
 	if err != nil {
 		return port.UpstreamHttpSpec{}, err
 	}
@@ -681,7 +718,7 @@ func (e *Engine) TransformRequest(ctx context.Context, in port.TransformRequestI
 	return spec, nil
 }
 
-func (e *Engine) applyRequestRules(payload map[string]any, budget *stepBudget) error {
+func (e *Engine) applyRequestRules(payload map[string]any, modality string, budget *stepBudget) error {
 	for _, d := range e.defaults {
 		if err := setByPath(payload, d.to, d.value, false, budget); err != nil {
 			return err
@@ -708,7 +745,7 @@ func (e *Engine) applyRequestRules(payload map[string]any, budget *stepBudget) e
 			return err
 		}
 	}
-	if e.injectStreamUsage {
+	if e.injectStreamUsage && (modality == "" || modality == "chat") {
 		if err := budget.consume(1); err != nil {
 			return err
 		}
@@ -735,6 +772,13 @@ func (e *Engine) TransformResponse(ctx context.Context, in port.TransformRespons
 	rawMap, err := decodeBoundedJSONMap(in.RawResponseBody)
 	if err != nil {
 		return port.NormalizedInferenceResponse{}, fmt.Errorf("%w: %w", ErrUpstreamMalformedResponse, err)
+	}
+
+	switch strings.ToUpper(strings.TrimSpace(in.Modality)) {
+	case "EMBEDDINGS":
+		return e.transformEmbeddingsResponse(rawMap, budget)
+	case "RESPONSES":
+		return e.transformResponsesResponse(rawMap, budget)
 	}
 
 	modelID := e.extractStringPath(rawMap, e.respModelPath, budget)
@@ -789,6 +833,242 @@ func (e *Engine) TransformResponse(ctx context.Context, in port.TransformRespons
 		UpstreamModelID:        modelID,
 		FinishReason:           finishReason,
 	}, nil
+}
+
+func (e *Engine) transformEmbeddingsResponse(rawMap map[string]any, budget *stepBudget) (port.NormalizedInferenceResponse, error) {
+	modelID := e.extractStringPath(rawMap, e.respModelPath, budget)
+	if modelID == "" {
+		if m, ok := rawMap["model"].(string); ok {
+			modelID = m
+		}
+	}
+	rawData, hasData := rawMap["data"]
+	dataSlice, okData := rawData.([]any)
+	if !hasData || !okData || len(dataSlice) == 0 {
+		return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+	}
+	if len(dataSlice) > 4096 {
+		return port.NormalizedInferenceResponse{}, ErrOperatorBudgetExceeded
+	}
+	if err := budget.consume(1); err != nil {
+		return port.NormalizedInferenceResponse{}, err
+	}
+	outData := make([]map[string]any, 0, len(dataSlice))
+	for i, item := range dataSlice {
+		m, ok := item.(map[string]any)
+		if !ok || m == nil {
+			return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+		}
+		emb, hasEmb := m["embedding"]
+		if !hasEmb || emb == nil {
+			return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+		}
+		switch emb.(type) {
+		case []any, string:
+		default:
+			return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+		}
+		idxVal := int64(i)
+		if rawIdx, exists := m["index"]; exists {
+			if n, ok := extractInt64(rawIdx); ok && n >= 0 {
+				idxVal = n
+			} else {
+				return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+			}
+		}
+		outData = append(outData, map[string]any{
+			"object":    "embedding",
+			"index":     idxVal,
+			"embedding": emb,
+		})
+	}
+
+	usage, err := extractUsageFromMap(rawMap, e.respUsagePaths, budget)
+	if err != nil {
+		return port.NormalizedInferenceResponse{}, err
+	}
+	if usage.Accuracy == port.UsageAccuracyUnmeteredFlagged {
+		if uMap, ok := rawMap["usage"].(map[string]any); ok {
+			if pTok, okP := extractInt64(uMap["prompt_tokens"]); okP && pTok >= 0 {
+				usage.InputTokens = pTok
+				usage.Accuracy = port.UsageAccuracyExact
+			} else if tTok, okT := extractInt64(uMap["total_tokens"]); okT && tTok >= 0 {
+				usage.InputTokens = tTok
+				usage.Accuracy = port.UsageAccuracyExact
+			}
+		}
+	}
+
+	totalTokens := usage.InputTokens + usage.OutputTokens
+	normObj := map[string]any{
+		"object": "list",
+		"model":  modelID,
+		"data":   outData,
+		"usage": map[string]any{
+			"prompt_tokens": usage.InputTokens,
+			"total_tokens":  totalTokens,
+		},
+	}
+	normBytes, err := json.Marshal(normObj)
+	if err != nil {
+		return port.NormalizedInferenceResponse{}, fmt.Errorf("%w: marshal embeddings response: %v", port.ErrExecutionFault, err)
+	}
+	return port.NormalizedInferenceResponse{
+		NormalizedResponseJSON: normBytes,
+		Usage:                  usage,
+		UpstreamModelID:        modelID,
+		FinishReason:           "stop",
+	}, nil
+}
+
+func (e *Engine) transformResponsesResponse(rawMap map[string]any, budget *stepBudget) (port.NormalizedInferenceResponse, error) {
+	modelID := e.extractStringPath(rawMap, e.respModelPath, budget)
+	if modelID == "" {
+		if m, ok := rawMap["model"].(string); ok {
+			modelID = m
+		}
+	}
+
+	var outputItems []any
+	var status string
+	if s, ok := rawMap["status"].(string); ok && strings.TrimSpace(s) != "" {
+		status = strings.TrimSpace(s)
+	}
+
+	if rawOutput, hasOutput := rawMap["output"]; hasOutput {
+		arr, ok := rawOutput.([]any)
+		if !ok || len(arr) == 0 {
+			return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+		}
+		if err := budget.consume(len(arr)); err != nil {
+			return port.NormalizedInferenceResponse{}, err
+		}
+		for _, elem := range arr {
+			itemMap, ok := elem.(map[string]any)
+			if !ok || itemMap == nil {
+				return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+			}
+			if itemType, _ := itemMap["type"].(string); itemType == "function_call" {
+				if args, ok := itemMap["arguments"].(string); ok && !json.Valid([]byte(args)) {
+					return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+				}
+			}
+		}
+		outputItems = arr
+		if status == "" {
+			status = "completed"
+		}
+	} else {
+		// Fallback translation from chat-mapped upstream response to OpenAI Responses shape.
+		content := e.extractStringPath(rawMap, e.respContentPath, budget)
+		role := e.extractStringPath(rawMap, e.respRolePath, budget)
+		if role == "" {
+			role = "assistant"
+		}
+		toolCalls, err := extractToolCalls(rawMap, e.respToolCallsPath, budget, true)
+		if err != nil {
+			return port.NormalizedInferenceResponse{}, err
+		}
+		if content == "" && len(toolCalls) == 0 {
+			return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+		}
+		if content != "" {
+			outputItems = append(outputItems, map[string]any{
+				"type":   "message",
+				"role":   role,
+				"status": "completed",
+				"content": []map[string]any{
+					{"type": "output_text", "text": content},
+				},
+			})
+		}
+		for _, tc := range toolCalls {
+			fn, _ := tc["function"].(map[string]any)
+			fcItem := map[string]any{
+				"type":      "function_call",
+				"call_id":   tc["id"],
+				"name":      fn["name"],
+				"arguments": fn["arguments"],
+				"status":    "completed",
+			}
+			outputItems = append(outputItems, fcItem)
+		}
+		if status == "" {
+			status = "completed"
+		}
+	}
+
+	usage, err := extractResponsesUsageFromMap(rawMap, e.respUsagePaths, budget)
+	if err != nil {
+		return port.NormalizedInferenceResponse{}, err
+	}
+
+	normObj := map[string]any{
+		"object": "response",
+		"model":  modelID,
+		"status": status,
+		"output": outputItems,
+	}
+	if idStr, ok := rawMap["id"].(string); ok && idStr != "" {
+		normObj["id"] = idStr
+	}
+	if createdVal, ok := rawMap["created_at"]; ok {
+		normObj["created_at"] = createdVal
+	}
+	if usage != nil && usage.Accuracy != port.UsageAccuracyUnmeteredFlagged {
+		normObj["usage"] = map[string]any{
+			"prompt_tokens":     usage.InputTokens,
+			"completion_tokens": usage.OutputTokens,
+			"total_tokens":      usage.InputTokens + usage.OutputTokens,
+			"input_tokens":      usage.InputTokens,
+			"output_tokens":     usage.OutputTokens,
+		}
+	}
+
+	normBytes, err := json.Marshal(normObj)
+	if err != nil {
+		return port.NormalizedInferenceResponse{}, fmt.Errorf("%w: marshal responses payload: %v", port.ErrExecutionFault, err)
+	}
+	return port.NormalizedInferenceResponse{
+		NormalizedResponseJSON: normBytes,
+		Usage:                  usage,
+		UpstreamModelID:        modelID,
+		FinishReason:           status,
+	}, nil
+}
+
+func extractResponsesUsageFromMap(root map[string]any, fallbackPaths compiledUsagePaths, budget *stepBudget) (*port.NormalizedUsage, error) {
+	if uMap, ok := root["usage"].(map[string]any); ok {
+		inTok, hasIn := extractInt64(uMap["input_tokens"])
+		outTok, hasOut := extractInt64(uMap["output_tokens"])
+		if hasIn || hasOut {
+			if inTok < 0 {
+				inTok = 0
+			}
+			if outTok < 0 {
+				outTok = 0
+			}
+			var cacheRead, reasoning int64
+			if det, ok := uMap["input_tokens_details"].(map[string]any); ok {
+				if v, ok := extractInt64(det["cached_tokens"]); ok && v > 0 {
+					cacheRead = v
+				}
+			}
+			if det, ok := uMap["output_tokens_details"].(map[string]any); ok {
+				if v, ok := extractInt64(det["reasoning_tokens"]); ok && v > 0 {
+					reasoning = v
+				}
+			}
+			return &port.NormalizedUsage{
+				InputTokens:     inTok,
+				OutputTokens:    outTok,
+				CacheReadTokens: cacheRead,
+				ReasoningTokens: reasoning,
+				Accuracy:        port.UsageAccuracyExact,
+			}, nil
+		}
+	}
+	return extractUsageFromMap(root, fallbackPaths, budget)
 }
 
 func extractToolCalls(root any, p parsedPath, budget *stepBudget, complete bool) ([]map[string]any, error) {
@@ -1027,6 +1307,58 @@ func (e *Engine) TransformStreamChunk(ctx context.Context, in port.StreamChunkIn
 			return port.StreamChunkOutput{}, fmt.Errorf("%w: upstream stream error: %s", port.ErrExecutionFault, sanitizePublicMessage(errMsg))
 		}
 
+		if eventType, ok := chunkObj["type"].(string); ok && strings.HasPrefix(eventType, "response.") {
+			if !isValidResponsesSSEEventType(eventType) {
+				return port.StreamChunkOutput{}, fmt.Errorf("%w: invalid SSE event type", ErrUpstreamMalformedResponse)
+			}
+			if eventType == "response.failed" {
+				errMsg := "upstream response failed"
+				if respMap, ok := chunkObj["response"].(map[string]any); ok {
+					if em, ok := respMap["error"].(map[string]any); ok {
+						if m, ok := em["message"].(string); ok && strings.TrimSpace(m) != "" {
+							errMsg = m
+						}
+					}
+				}
+				return port.StreamChunkOutput{}, fmt.Errorf("%w: upstream stream error: %s", port.ErrExecutionFault, sanitizePublicMessage(errMsg))
+			}
+
+			var respUsage *port.NormalizedUsage
+			if respMap, ok := chunkObj["response"].(map[string]any); ok {
+				u, uerr := extractResponsesUsageFromMap(respMap, e.streamUsagePaths, frameBudget)
+				if uerr != nil {
+					return port.StreamChunkOutput{}, uerr
+				}
+				respUsage = u
+			} else {
+				u, uerr := extractResponsesUsageFromMap(chunkObj, e.streamUsagePaths, frameBudget)
+				if uerr != nil {
+					return port.StreamChunkOutput{}, uerr
+				}
+				respUsage = u
+			}
+			if respUsage != nil && respUsage.Accuracy == port.UsageAccuracyExact {
+				latestUsage = respUsage
+			}
+			if eventType == "response.completed" {
+				completed = true
+			}
+
+			encoded, err := json.Marshal(chunkObj)
+			if err != nil {
+				return port.StreamChunkOutput{}, fmt.Errorf("%w: marshal Responses SSE frame: %v", port.ErrExecutionFault, err)
+			}
+			var sseBuf bytes.Buffer
+			sseBuf.Grow(len(eventType) + len(encoded) + 18)
+			sseBuf.WriteString("event: ")
+			sseBuf.WriteString(eventType)
+			sseBuf.WriteString("\ndata: ")
+			sseBuf.Write(encoded)
+			sseBuf.WriteString("\n\n")
+			frames = append(frames, sseBuf.Bytes())
+			continue
+		}
+
 		delta := e.extractStringPath(chunkObj, e.streamDeltaContentPath, frameBudget)
 		toolCalls, err := extractToolCalls(chunkObj, e.streamDeltaToolCallsPath, frameBudget, false)
 		if err != nil {
@@ -1087,10 +1419,6 @@ func (e *Engine) TransformStreamChunk(ctx context.Context, in port.StreamChunkIn
 		}
 		nextState = append([]byte(nil), rem...)
 	}
-	if in.IsEOF {
-		completed = true
-		nextState = nil
-	}
 
 	return port.StreamChunkOutput{
 		NextSessionState:    nextState,
@@ -1105,6 +1433,20 @@ func finishReasonOrNil(s string) any {
 		return nil
 	}
 	return s
+}
+
+func isValidResponsesSSEEventType(s string) bool {
+	if len(s) == 0 || len(s) > 128 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		isValid := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-'
+		if !isValid {
+			return false
+		}
+	}
+	return true
 }
 
 // ErrUpstreamMalformedResponse identifies an invalid synchronous tool-call payload.

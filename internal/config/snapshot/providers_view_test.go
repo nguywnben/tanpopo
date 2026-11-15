@@ -728,5 +728,14 @@ func TestResolveDefaultDeploymentSelectionAndExtensionMetadata(t *testing.T) {
 	if _, ok := mgr.Current().ResolveDefaultDeployment(org.ID, projA.ID, "", "missing/model"); ok {
 		t.Fatal("expected false for unknown model slug")
 	}
-}
 
+	// Verify ListAuthorizedLogicalModels filters strictly to authorized allowlist and evaluates capability assurance.
+	list := mgr.Current().ListAuthorizedLogicalModels(org.ID, projA.ID, "", []string{"acme/chat-1", "other/unbacked"}, true)
+	if len(list) != 1 || list[0].ID != "acme/chat-1" {
+		t.Fatalf("expected exclusively acme/chat-1 for restricted allowlist, got %+v", list)
+	}
+	listEmpty := mgr.Current().ListAuthorizedLogicalModels(org.ID, projA.ID, "", []string{"other/model"}, false)
+	if len(listEmpty) != 0 {
+		t.Fatalf("expected 0 models when allowlist permits none backed by active deployments, got %+v", listEmpty)
+	}
+}

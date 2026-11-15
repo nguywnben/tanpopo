@@ -6,9 +6,6 @@ package http
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +25,8 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
+	"github.com/nguywnben/tanpopo/internal/ingress/blob"
+	"github.com/nguywnben/tanpopo/internal/ingress/idempotency"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
@@ -35,25 +34,130 @@ import (
 
 // MaxInlineBlobBytes enforces CR-05's 64 KiB boundary above which inline multimodal
 // payloads are offloaded to Host buffers and passed across extension runtimes via blob_ref://.
-const MaxInlineBlobBytes = 64 * 1024
+const MaxInlineBlobBytes = blob.MaxInlineBlobBytes
 
 type chatCompletionIngressRequest struct {
-	Model           string            `json:"model"`
-	Messages        []json.RawMessage `json:"messages"`
-	Stream          bool              `json:"stream"`
-	ResponseFormat  *responseFormat   `json:"response_format,omitempty"`
-	Tools           []json.RawMessage `json:"tools,omitempty"`
-	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
+	Model           string
+	Messages        []any
+	Stream          bool
+	ResponseFormat  *responseFormat
+	Tools           []any
+	ReasoningEffort string
 }
 
 type responseFormat struct {
 	Type       string              `json:"type"`
+	Name       string              `json:"name,omitempty"`
+	Strict     *bool               `json:"strict,omitempty"`
 	JSONSchema *responseSchemaSpec `json:"json_schema,omitempty"`
 }
 
 type responseSchemaSpec struct {
 	Name   string `json:"name"`
 	Strict bool   `json:"strict"`
+}
+
+func parseStrictChatCompletionRequest(raw []byte) (*chatCompletionIngressRequest, error) {
+	obj, err := blob.DecodeStrictJSONObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	req := &chatCompletionIngressRequest{}
+	if v, ok := obj["model"]; ok && v != nil {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("field 'model' must be a string")
+		}
+		req.Model = s
+	}
+	if v, ok := obj["messages"]; ok && v != nil {
+		arr, ok := v.([]any)
+		if !ok {
+			return nil, fmt.Errorf("field 'messages' must be an array")
+		}
+		req.Messages = arr
+	}
+	if v, ok := obj["stream"]; ok && v != nil {
+		b, ok := v.(bool)
+		if !ok {
+			return nil, fmt.Errorf("field 'stream' must be a boolean")
+		}
+		req.Stream = b
+	}
+	if v, ok := obj["tools"]; ok && v != nil {
+		arr, ok := v.([]any)
+		if !ok {
+			return nil, fmt.Errorf("field 'tools' must be an array")
+		}
+		req.Tools = arr
+	}
+	if v, ok := obj["reasoning_effort"]; ok && v != nil {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("field 'reasoning_effort' must be a string")
+		}
+		req.ReasoningEffort = s
+	}
+	if v, ok := obj["response_format"]; ok && v != nil {
+		rf, err := parseStrictResponseFormat(v)
+		if err != nil {
+			return nil, err
+		}
+		req.ResponseFormat = rf
+	}
+	return req, nil
+}
+
+func parseStrictResponseFormat(v any) (*responseFormat, error) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("response format must be an object")
+	}
+	rf := &responseFormat{}
+	if t, ok := m["type"]; ok && t != nil {
+		s, ok := t.(string)
+		if !ok {
+			return nil, fmt.Errorf("response format 'type' must be a string")
+		}
+		rf.Type = s
+	}
+	if n, ok := m["name"]; ok && n != nil {
+		s, ok := n.(string)
+		if !ok {
+			return nil, fmt.Errorf("response format 'name' must be a string")
+		}
+		rf.Name = s
+	}
+	if st, ok := m["strict"]; ok && st != nil {
+		b, ok := st.(bool)
+		if !ok {
+			return nil, fmt.Errorf("response format 'strict' must be a boolean")
+		}
+		rf.Strict = &b
+	}
+	if js, ok := m["json_schema"]; ok && js != nil {
+		jsMap, ok := js.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("response format 'json_schema' must be an object")
+		}
+		spec := &responseSchemaSpec{}
+		if jn, ok := jsMap["name"]; ok && jn != nil {
+			s, ok := jn.(string)
+			if !ok {
+				return nil, fmt.Errorf("json_schema 'name' must be a string")
+			}
+			spec.Name = s
+		}
+		if jst, ok := jsMap["strict"]; ok && jst != nil {
+			b, ok := jst.(bool)
+			if !ok {
+				return nil, fmt.Errorf("json_schema 'strict' must be a boolean")
+			}
+			spec.Strict = b
+		}
+		rf.JSONSchema = spec
+	}
+	return rf, nil
 }
 
 func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -63,60 +167,21 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// AUTH-07: Admin session cookies are strictly forbidden on /v1/* Data Plane routes.
-	if hasAdminSessionCookie(r) {
-		writeCanonicalError(w, meta.RequestID, http.StatusUnauthorized, "invalid_credential_plane", "authentication_error", "Admin session cookies are prohibited on /v1/* inference endpoints; authenticate with a Virtual Key Bearer token.", false)
-		return
-	}
-
-	rawKey, ok := extractBearerToken(r.Header.Get("Authorization"))
+	streamCtx, cancelStream, match, handleID, ok := s.authenticateProviderRequest(w, r, meta.RequestID, "/v1/chat/completions")
 	if !ok {
-		writeCanonicalError(w, meta.RequestID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Missing or malformed Bearer Virtual Key.", false)
 		return
 	}
-	if !strings.HasPrefix(rawKey, "vk_tp_") {
-		writeCanonicalError(w, meta.RequestID, http.StatusUnauthorized, "invalid_credential_plane", "authentication_error", "Presented credential is not a Data Plane Virtual Key.", false)
-		return
-	}
-
-	// DEC-019: Authenticate strictly via snapshot.Manager APIs enforcing CheckServingReady()
-	// and register active cancellation handle atomically before admitting any work.
-	streamCtx, cancelStream := context.WithCancel(r.Context())
 	defer cancelStream()
-
-	targetEnvID := strings.TrimSpace(r.Header.Get("X-Tanpopo-Env-Id"))
-	match, handleID, authErr := s.snapshots.RegisterAuthenticatedStream(rawKey, targetEnvID, cancelStream)
-	if authErr != nil {
-		s.writeSnapshotAuthError(w, meta.RequestID, authErr)
-		return
-	}
 	defer s.snapshots.Streams().Unregister(match.Key.ID, handleID)
 
-	if !planePermitsProvider(match.Key.AllowedPlanes) {
-		writeCanonicalError(w, meta.RequestID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", "Virtual Key is not authorized for the PROVIDER plane.", false)
-		return
-	}
-	if !routeAllowlistPermits(match.Key.AllowedRoutes, "/v1/chat/completions") {
-		writeCanonicalError(w, meta.RequestID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", "Virtual Key route allowlist denies /v1/chat/completions.", false)
-		return
-	}
-
-	// Bounded JSON body read (default 32 MiB ceiling per SPEC-EXT-06).
-	r.Body = http.MaxBytesReader(w, r.Body, s.maxReqBodyBytes)
-	rawBody, readErr := io.ReadAll(r.Body)
-	if readErr != nil {
-		var maxErr *http.MaxBytesError
-		if errors.As(readErr, &maxErr) {
-			writeCanonicalError(w, meta.RequestID, http.StatusRequestEntityTooLarge, "payload_too_large", "invalid_request_error", fmt.Sprintf("Request body exceeds %d byte limit.", s.maxReqBodyBytes), false)
-			return
-		}
-		writeCanonicalError(w, meta.RequestID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Failed to read request body.", false)
+	rawBody, ok := s.readBoundedBody(w, r, meta.RequestID)
+	if !ok {
 		return
 	}
 	defer clear(rawBody)
 
-	var reqEnvelope chatCompletionIngressRequest
-	if err := json.Unmarshal(rawBody, &reqEnvelope); err != nil {
+	reqEnvelope, err := parseStrictChatCompletionRequest(rawBody)
+	if err != nil {
 		writeCanonicalError(w, meta.RequestID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Malformed JSON request body.", false)
 		return
 	}
@@ -130,23 +195,24 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	snap := s.snapshots.Current()
-	if snap == nil {
-		writeCanonicalError(w, meta.RequestID, http.StatusServiceUnavailable, "snapshot_not_ready", "api_error", "Configuration snapshot unavailable.", true)
+	var idemClaim *idempotency.Claim
+	if !reqEnvelope.Stream {
+		claim, replayedOrRejected := s.beginIdempotency(w, r, meta.RequestID, match.Key, "/v1/chat/completions", rawBody)
+		if replayedOrRejected {
+			return
+		}
+		idemClaim = claim
+		if idemClaim != nil {
+			defer idemClaim.Abort(context.Background())
+		}
+	}
+
+	target, ok := s.resolveActiveTarget(w, meta.RequestID, match.Key, modelSlug)
+	if !ok {
 		return
 	}
 
-	target, found := snap.ResolveDefaultDeployment(match.Key.OrgID, match.Key.ProjectID, match.Key.EnvID, modelSlug)
-	if !found || target == nil {
-		writeCanonicalError(w, meta.RequestID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", fmt.Sprintf("No compliant active deployment is available for model %q.", modelSlug), true)
-		return
-	}
-	if strings.EqualFold(target.Adapter.ExtensionState, installer.StateQuarantined) {
-		writeCanonicalError(w, meta.RequestID, http.StatusServiceUnavailable, "extension_quarantined", "extension_error", "The backing provider adapter extension is quarantined.", false)
-		return
-	}
-
-	if capErr := checkM1Capabilities(target, match.Config, &reqEnvelope); capErr != "" {
+	if capErr := checkM1Capabilities(target, match.Config, reqEnvelope); capErr != "" {
 		writeCanonicalError(w, meta.RequestID, http.StatusBadRequest, "capability_not_supported", "invalid_request_error", capErr, false)
 		return
 	}
@@ -158,114 +224,45 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cachedRT.release()
 
-	// Build normalized payload targeting the deployment's concrete upstream_model_name,
-	// offloading > 64 KiB inline multimodal payloads into Host buffers as blob_ref:// handles (CR-05).
-	normReqBytes, blobRefs, hostBlobs, err := prepareRequestForTransform(meta.RequestID, rawBody, target.Deployment.UpstreamModelName, reqEnvelope.Stream)
-	defer scrubHostBlobs(hostBlobs)
+	offloadRes, offloadErr := blob.OffloadEndpointMultimodalRequest(
+		streamCtx,
+		meta.RequestID,
+		rawBody,
+		target.Deployment.UpstreamModelName,
+		reqEnvelope.Stream,
+		s.maxReqBodyBytes,
+		s.remoteMediaPolicy,
+		"messages",
+	)
+	if offloadErr != nil {
+		s.writeBlobError(w, meta.RequestID, offloadErr)
+		return
+	}
+	defer offloadRes.Scrub()
+
+	spec, egressReq, constraint, err := s.transformAndBuildEgress(
+		streamCtx,
+		meta,
+		match.Key,
+		target,
+		cachedRT,
+		offloadRes.NormalizedJSON,
+		offloadRes.BlobRefs,
+		offloadRes.HostBlobs,
+		"chat",
+	)
 	if err != nil {
-		writeCanonicalError(w, meta.RequestID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Invalid JSON object payload.", false)
+		s.writePreparedRequestError(w, meta.RequestID, err)
 		return
 	}
-
-	connCfgJSON, err := buildAdapterConfigJSON(target.Connection)
-	if err != nil {
-		writeCanonicalError(w, meta.RequestID, http.StatusInternalServerError, "internal_error", "api_error", "Invalid connection configuration JSON.", false)
-		return
-	}
-
-	secretRefs := make(map[string]string, len(target.Connection.SecretBindings))
-	for slotName := range target.Connection.SecretBindings {
-		secretRefs[slotName] = slotName
-	}
-
-	narrowPolicy := buildHostNarrowPolicy(cachedRT.perms, target.Adapter, target.Connection)
-	wasmCtx := wasm.WithEgressScope(streamCtx, wasm.EgressScope{
-		OrgID:        match.Key.OrgID,
-		ConnectionID: target.Connection.ID,
-		ActorKind:    "virtual_key",
-		ActorID:      match.Key.ID,
-		EntryPoint:   wasm.DefaultAuditEntryPoint,
-		RequestID:    meta.RequestID,
-		NarrowPolicy: &narrowPolicy,
-	})
-
-	spec, err := cachedRT.rt.TransformRequest(wasmCtx, port.TransformRequestInput{
-		RequestID:             meta.RequestID,
-		ConfigJSON:            connCfgJSON,
-		NormalizedRequestJSON: normReqBytes,
-		BlobRefs:              blobRefs,
-		SecretSlotRefs:        secretRefs,
-	})
-	if err != nil {
-		s.writeRuntimeFaultError(w, meta.RequestID, err)
-		return
-	}
-
-	outboundBody, err := spliceHostBlobs(spec.BodyBytes, hostBlobs, s.maxReqBodyBytes)
-	if err != nil {
-		writeCanonicalError(w, meta.RequestID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Failed to reconstruct outbound request payload from Host blob references.", false)
-		return
-	}
-	defer clear(outboundBody)
-
-	credInjections, err := mapCredentialInjections(spec.CredentialInjections, target.Connection.SecretBindings)
-	if err != nil {
-		writeCanonicalError(w, meta.RequestID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Provider adapter requested an invalid or unauthorized credential injection.", false)
-		return
-	}
-
-	// Merge W3C trace context & correlation headers into sanitized SafeHeaders without allowing
-	// extension-returned case or whitespace variants to overwrite Gateway correlation headers.
-	safeHeaders := make(map[string]string, len(spec.SafeHeaders)+2)
-	for k, v := range spec.SafeHeaders {
-		tk := strings.TrimSpace(k)
-		if tk == "" || strings.EqualFold(tk, "X-Tanpopo-Request-Id") || strings.EqualFold(tk, "Traceparent") {
-			continue
-		}
-		safeHeaders[tk] = v
-	}
-	safeHeaders["X-Tanpopo-Request-Id"] = meta.RequestID
-	safeHeaders["Traceparent"] = meta.Traceparent
-
-	firstByteTimeout := s.firstByteTimeout
-	if target.Deployment.FirstByteTimeoutMs > 0 {
-		firstByteTimeout = time.Duration(target.Deployment.FirstByteTimeoutMs) * time.Millisecond
-	}
-	timeoutOverride := firstByteTimeout
-	if spec.TimeoutOverrideMs > 0 {
-		ov := time.Duration(spec.TimeoutOverrideMs) * time.Millisecond
-		if ov < timeoutOverride {
-			timeoutOverride = ov
-		}
-	}
-
-	egressReq := broker.EgressRequest{
-		OrgID:                match.Key.OrgID,
-		ConnectionID:         target.Connection.ID,
-		Method:               spec.Method,
-		TargetURL:            spec.TargetURL,
-		SafeHeaders:          safeHeaders,
-		BodyBytes:            outboundBody,
-		CredentialInjections: credInjections,
-		TimeoutOverride:      timeoutOverride,
-		ActorKind:            "virtual_key",
-		ActorID:              match.Key.ID,
-		EntryPoint:           wasm.DefaultAuditEntryPoint,
-		RequestID:            meta.RequestID,
-	}
-	constraint := broker.HostEgressConstraint{
-		NarrowPolicy: &narrowPolicy,
-	}
-	if _, cerr := narrowPolicy.ValidateTargetURL(spec.TargetURL); cerr != nil {
-		s.writeBrokerOrEgressError(w, meta.RequestID, cerr)
-		return
-	}
+	defer clear(egressReq.BodyBytes)
+	_ = spec
 
 	if reqEnvelope.Stream {
 		s.executeStreamingChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug)
 		return
 	}
-	s.executeSyncChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug)
+	s.executeSyncChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, idemClaim)
 }
 
 func (s *Server) executeSyncChatCompletion(
@@ -278,6 +275,7 @@ func (s *Server) executeSyncChatCompletion(
 	constraint broker.HostEgressConstraint,
 	_ *snapshot.ResolvedTarget,
 	requestedModel string,
+	idemClaim *idempotency.Claim,
 ) {
 	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
@@ -325,14 +323,7 @@ func (s *Server) executeSyncChatCompletion(
 		return
 	}
 
-	if normResp.Usage != nil && normResp.Usage.Accuracy != "" {
-		w.Header().Set("X-Tanpopo-Usage-Accuracy", formatUsageAccuracyHeader(normResp.Usage.Accuracy))
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Tanpopo-Request-Id", reqID)
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(finalBody)
+	writeSettledJSONResponse(w, ctx, reqID, normResp.Usage, finalBody, idemClaim)
 }
 
 func (s *Server) executeStreamingChatCompletion(
@@ -544,6 +535,350 @@ func (s *Server) writeBrokerOrEgressError(w http.ResponseWriter, reqID string, e
 	writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_connection_failed", "upstream_error", "Failed to reach upstream provider.", true)
 }
 
+type preparedRequestErr struct {
+	httpStatus int
+	code       string
+	errType    string
+	message    string
+	cause      error
+}
+
+func (e *preparedRequestErr) Error() string { return e.message }
+
+func (s *Server) authenticateProviderRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	reqID string,
+	routePath string,
+) (context.Context, context.CancelFunc, snapshot.KeyMatchResult, uint64, bool) {
+	// AUTH-07: Admin session cookies are strictly forbidden on /v1/* Data Plane routes.
+	if hasAdminSessionCookie(r) {
+		writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_credential_plane", "authentication_error", "Admin session cookies are prohibited on /v1/* inference endpoints; authenticate with a Virtual Key Bearer token.", false)
+		return nil, nil, snapshot.KeyMatchResult{}, 0, false
+	}
+
+	rawKey, ok := extractBearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Missing or malformed Bearer Virtual Key.", false)
+		return nil, nil, snapshot.KeyMatchResult{}, 0, false
+	}
+	if !strings.HasPrefix(rawKey, "vk_tp_") {
+		writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_credential_plane", "authentication_error", "Presented credential is not a Data Plane Virtual Key.", false)
+		return nil, nil, snapshot.KeyMatchResult{}, 0, false
+	}
+
+	// DEC-019: Authenticate strictly via snapshot.Manager APIs enforcing CheckServingReady()
+	// and register active cancellation handle atomically before admitting any work.
+	streamCtx, cancelStream := context.WithCancel(r.Context())
+	targetEnvID := strings.TrimSpace(r.Header.Get("X-Tanpopo-Env-Id"))
+	match, handleID, authErr := s.snapshots.RegisterAuthenticatedStream(rawKey, targetEnvID, cancelStream)
+	if authErr != nil {
+		cancelStream()
+		s.writeSnapshotAuthError(w, reqID, authErr)
+		return nil, nil, snapshot.KeyMatchResult{}, 0, false
+	}
+
+	if !planePermitsProvider(match.Key.AllowedPlanes) {
+		s.snapshots.Streams().Unregister(match.Key.ID, handleID)
+		cancelStream()
+		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", "Virtual Key is not authorized for the PROVIDER plane.", false)
+		return nil, nil, snapshot.KeyMatchResult{}, 0, false
+	}
+	if !routeAllowlistPermits(match.Key.AllowedRoutes, routePath) {
+		s.snapshots.Streams().Unregister(match.Key.ID, handleID)
+		cancelStream()
+		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key route allowlist denies %s.", routePath), false)
+		return nil, nil, snapshot.KeyMatchResult{}, 0, false
+	}
+	return streamCtx, cancelStream, match, handleID, true
+}
+
+func (s *Server) readBoundedBody(w http.ResponseWriter, r *http.Request, reqID string) ([]byte, bool) {
+	// Bounded JSON body read (default 32 MiB ceiling per SPEC-EXT-06).
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxReqBodyBytes)
+	rawBody, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		clear(rawBody)
+		var maxErr *http.MaxBytesError
+		if errors.As(readErr, &maxErr) {
+			writeCanonicalError(w, reqID, http.StatusRequestEntityTooLarge, "payload_too_large", "invalid_request_error", fmt.Sprintf("Request body exceeds %d byte limit.", s.maxReqBodyBytes), false)
+			return nil, false
+		}
+		writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Failed to read request body.", false)
+		return nil, false
+	}
+	return rawBody, true
+}
+
+func (s *Server) beginIdempotency(
+	w http.ResponseWriter,
+	r *http.Request,
+	reqID string,
+	key *snapshot.VirtualKeyView,
+	routePath string,
+	rawBody []byte,
+) (*idempotency.Claim, bool) {
+	rawIdem := r.Header.Values("Idempotency-Key")
+	if len(rawIdem) == 0 || s.idempotency == nil {
+		return nil, false
+	}
+	if len(rawIdem) > 1 {
+		writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Multiple Idempotency-Key headers are prohibited.", false)
+		return nil, true
+	}
+	idemKey, err := idempotency.ValidateKey(rawIdem[0])
+	if err != nil {
+		writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Idempotency-Key must be 1..128 printable non-whitespace ASCII characters.", false)
+		return nil, true
+	}
+
+	digest := idempotency.ComputePayloadSHA256(r.Method, routePath, rawBody)
+	scope := idempotency.ScopeKey{
+		OrgID:          key.OrgID,
+		ProjectID:      key.ProjectID,
+		VirtualKeyID:   key.ID,
+		IdempotencyKey: idemKey,
+	}
+	res, berr := s.idempotency.Begin(r.Context(), scope, digest)
+	if berr != nil {
+		writeCanonicalError(w, reqID, http.StatusInternalServerError, "internal_error", "api_error", "Failed to claim idempotency key.", true)
+		return nil, true
+	}
+	switch res.Outcome {
+	case idempotency.OutcomeAcquired:
+		return res.Claim, false
+	case idempotency.OutcomeReplay:
+		for k, v := range res.Replay.Headers {
+			if k != "" {
+				w.Header().Set(k, v)
+			}
+		}
+		w.Header().Set("X-Tanpopo-Request-Id", reqID)
+		w.Header().Set("Idempotent-Replayed", "true")
+		w.WriteHeader(res.Replay.StatusCode)
+		_, _ = w.Write(res.Replay.Body)
+		return nil, true
+	case idempotency.OutcomeInFlight:
+		writeCanonicalError(w, reqID, http.StatusConflict, "request_in_progress", "conflict_error", "A request with this Idempotency-Key is currently in progress.", true)
+		return nil, true
+	case idempotency.OutcomeMismatch:
+		writeCanonicalError(w, reqID, http.StatusUnprocessableEntity, "idempotency_key_reused_mismatch", "invalid_request_error", "Idempotency-Key was reused with a modified request payload.", false)
+		return nil, true
+	default:
+		writeCanonicalError(w, reqID, http.StatusInternalServerError, "internal_error", "api_error", "Unexpected idempotency state.", true)
+		return nil, true
+	}
+}
+
+func writeSettledJSONResponse(
+	w http.ResponseWriter,
+	ctx context.Context,
+	reqID string,
+	usage *port.NormalizedUsage,
+	finalBody []byte,
+	idemClaim *idempotency.Claim,
+) {
+	replayHdrs := map[string]string{
+		"Content-Type":  "application/json; charset=utf-8",
+		"Cache-Control": "no-store",
+	}
+	if usage != nil && usage.Accuracy != "" {
+		acc := formatUsageAccuracyHeader(usage.Accuracy)
+		w.Header().Set("X-Tanpopo-Usage-Accuracy", acc)
+		replayHdrs["X-Tanpopo-Usage-Accuracy"] = acc
+	}
+	if idemClaim != nil {
+		baseCtx := ctx
+		if baseCtx == nil {
+			baseCtx = context.Background()
+		}
+		completeCtx, cancelComplete := context.WithTimeout(context.WithoutCancel(baseCtx), 2*time.Second)
+		cerr := idemClaim.Complete(completeCtx, http.StatusOK, replayHdrs, finalBody)
+		cancelComplete()
+		if cerr != nil {
+			idemClaim.Abort(context.Background())
+		}
+	}
+	w.Header().Set("Content-Type", replayHdrs["Content-Type"])
+	w.Header().Set("Cache-Control", replayHdrs["Cache-Control"])
+	w.Header().Set("X-Tanpopo-Request-Id", reqID)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(finalBody)
+}
+
+func (s *Server) resolveActiveTarget(w http.ResponseWriter, reqID string, key *snapshot.VirtualKeyView, modelSlug string) (*snapshot.ResolvedTarget, bool) {
+	snap := s.snapshots.Current()
+	if snap == nil {
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "snapshot_not_ready", "api_error", "Configuration snapshot unavailable.", true)
+		return nil, false
+	}
+
+	target, found := snap.ResolveDefaultDeployment(key.OrgID, key.ProjectID, key.EnvID, modelSlug)
+	if !found || target == nil {
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", fmt.Sprintf("No compliant active deployment is available for model %q.", modelSlug), true)
+		return nil, false
+	}
+	if strings.EqualFold(target.Adapter.ExtensionState, installer.StateQuarantined) {
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "extension_quarantined", "extension_error", "The backing provider adapter extension is quarantined.", false)
+		return nil, false
+	}
+	return target, true
+}
+
+func (s *Server) writeBlobError(w http.ResponseWriter, reqID string, err error) {
+	var bErr *blob.Error
+	if errors.As(err, &bErr) {
+		status := bErr.HTTPStatus
+		if status <= 0 {
+			status = http.StatusBadRequest
+		}
+		errType := bErr.ErrType
+		if errType == "" {
+			errType = "invalid_request_error"
+		}
+		writeCanonicalError(w, reqID, status, bErr.Code, errType, bErr.Message, false)
+		return
+	}
+	writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Invalid multimodal request payload.", false)
+}
+
+func (s *Server) transformAndBuildEgress(
+	streamCtx context.Context,
+	meta ingressContext,
+	key *snapshot.VirtualKeyView,
+	target *snapshot.ResolvedTarget,
+	cachedRT *cachedAdapterEntry,
+	normReqBytes []byte,
+	blobRefs []port.BlobRef,
+	hostBlobs map[string][]byte,
+	modality string,
+) (port.UpstreamHttpSpec, broker.EgressRequest, broker.HostEgressConstraint, error) {
+	connCfgJSON, err := buildAdapterConfigJSONWithModality(target.Connection, modality)
+	if err != nil {
+		return port.UpstreamHttpSpec{}, broker.EgressRequest{}, broker.HostEgressConstraint{}, &preparedRequestErr{
+			httpStatus: http.StatusInternalServerError,
+			code:       "internal_error",
+			errType:    "api_error",
+			message:    "Invalid connection configuration JSON.",
+		}
+	}
+
+	secretRefs := make(map[string]string, len(target.Connection.SecretBindings))
+	for slotName := range target.Connection.SecretBindings {
+		secretRefs[slotName] = slotName
+	}
+
+	narrowPolicy := buildHostNarrowPolicy(cachedRT.perms, target.Adapter, target.Connection)
+	wasmCtx := wasm.WithEgressScope(streamCtx, wasm.EgressScope{
+		OrgID:        key.OrgID,
+		ConnectionID: target.Connection.ID,
+		ActorKind:    "virtual_key",
+		ActorID:      key.ID,
+		EntryPoint:   wasm.DefaultAuditEntryPoint,
+		RequestID:    meta.RequestID,
+		NarrowPolicy: &narrowPolicy,
+	})
+
+	spec, err := cachedRT.rt.TransformRequest(wasmCtx, port.TransformRequestInput{
+		RequestID:             meta.RequestID,
+		ConfigJSON:            connCfgJSON,
+		NormalizedRequestJSON: normReqBytes,
+		BlobRefs:              blobRefs,
+		SecretSlotRefs:        secretRefs,
+	})
+	if err != nil {
+		return port.UpstreamHttpSpec{}, broker.EgressRequest{}, broker.HostEgressConstraint{}, &preparedRequestErr{cause: err}
+	}
+
+	outboundBody, err := blob.SpliceHostBlobs(spec.BodyBytes, hostBlobs, s.maxReqBodyBytes)
+	if err != nil {
+		return port.UpstreamHttpSpec{}, broker.EgressRequest{}, broker.HostEgressConstraint{}, &preparedRequestErr{
+			httpStatus: http.StatusBadGateway,
+			code:       "extension_execution_fault",
+			errType:    "extension_error",
+			message:    "Failed to reconstruct outbound request payload from Host blob references.",
+		}
+	}
+
+	credInjections, err := mapCredentialInjections(spec.CredentialInjections, target.Connection.SecretBindings)
+	if err != nil {
+		clear(outboundBody)
+		return port.UpstreamHttpSpec{}, broker.EgressRequest{}, broker.HostEgressConstraint{}, &preparedRequestErr{
+			httpStatus: http.StatusBadGateway,
+			code:       "extension_execution_fault",
+			errType:    "extension_error",
+			message:    "Provider adapter requested an invalid or unauthorized credential injection.",
+		}
+	}
+
+	// Merge W3C trace context & correlation headers into sanitized SafeHeaders without allowing
+	// extension-returned case or whitespace variants to overwrite Gateway correlation headers.
+	safeHeaders := make(map[string]string, len(spec.SafeHeaders)+2)
+	for k, v := range spec.SafeHeaders {
+		tk := strings.TrimSpace(k)
+		if tk == "" || strings.EqualFold(tk, "X-Tanpopo-Request-Id") || strings.EqualFold(tk, "Traceparent") {
+			continue
+		}
+		safeHeaders[tk] = v
+	}
+	safeHeaders["X-Tanpopo-Request-Id"] = meta.RequestID
+	safeHeaders["Traceparent"] = meta.Traceparent
+
+	firstByteTimeout := s.firstByteTimeout
+	if target.Deployment.FirstByteTimeoutMs > 0 {
+		firstByteTimeout = time.Duration(target.Deployment.FirstByteTimeoutMs) * time.Millisecond
+	}
+	timeoutOverride := firstByteTimeout
+	if spec.TimeoutOverrideMs > 0 {
+		ov := time.Duration(spec.TimeoutOverrideMs) * time.Millisecond
+		if ov < timeoutOverride {
+			timeoutOverride = ov
+		}
+	}
+
+	egressReq := broker.EgressRequest{
+		OrgID:                key.OrgID,
+		ConnectionID:         target.Connection.ID,
+		Method:               spec.Method,
+		TargetURL:            spec.TargetURL,
+		SafeHeaders:          safeHeaders,
+		BodyBytes:            outboundBody,
+		CredentialInjections: credInjections,
+		TimeoutOverride:      timeoutOverride,
+		ActorKind:            "virtual_key",
+		ActorID:              key.ID,
+		EntryPoint:           wasm.DefaultAuditEntryPoint,
+		RequestID:            meta.RequestID,
+	}
+	constraint := broker.HostEgressConstraint{
+		NarrowPolicy: &narrowPolicy,
+	}
+	if _, cerr := narrowPolicy.ValidateTargetURL(spec.TargetURL); cerr != nil {
+		clear(outboundBody)
+		return port.UpstreamHttpSpec{}, broker.EgressRequest{}, broker.HostEgressConstraint{}, &preparedRequestErr{cause: cerr}
+	}
+	return spec, egressReq, constraint, nil
+}
+
+func (s *Server) writePreparedRequestError(w http.ResponseWriter, reqID string, err error) {
+	var pErr *preparedRequestErr
+	if errors.As(err, &pErr) {
+		if pErr.cause != nil {
+			var bErr *broker.Error
+			var eErr *egress.Error
+			if errors.As(pErr.cause, &bErr) || errors.As(pErr.cause, &eErr) {
+				s.writeBrokerOrEgressError(w, reqID, pErr.cause)
+				return
+			}
+			s.writeRuntimeFaultError(w, reqID, pErr.cause)
+			return
+		}
+		writeCanonicalError(w, reqID, pErr.httpStatus, pErr.code, pErr.errType, pErr.message, false)
+		return
+	}
+	s.writeRuntimeFaultError(w, reqID, err)
+}
+
 func hasAdminSessionCookie(r *http.Request) bool {
 	for _, c := range r.Cookies() {
 		name := strings.ToLower(strings.TrimSpace(c.Name))
@@ -592,8 +927,26 @@ func planePermitsProvider(allowedPlanes string) bool {
 func routeAllowlistPermits(allowedRoutes []string, path string) bool {
 	for _, r := range allowedRoutes {
 		tr := strings.TrimSpace(r)
-		if tr == "*" || tr == path || (tr == "chat.completions" && path == "/v1/chat/completions") {
+		if tr == "*" || tr == "/v1/*" || tr == path {
 			return true
+		}
+		switch path {
+		case "/v1/chat/completions":
+			if tr == "chat.completions" {
+				return true
+			}
+		case "/v1/responses":
+			if tr == "responses" {
+				return true
+			}
+		case "/v1/embeddings":
+			if tr == "embeddings" {
+				return true
+			}
+		case "/v1/models":
+			if tr == "models" {
+				return true
+			}
 		}
 	}
 	return false
@@ -609,19 +962,33 @@ func modelAllowlistPermits(allowedModels []string, model string) bool {
 	return false
 }
 
+func checkResponseFormatCapabilities(supports func(string) bool, targetID string, rf *responseFormat) string {
+	if rf == nil {
+		return ""
+	}
+	typ := strings.ToLower(strings.TrimSpace(rf.Type))
+	switch typ {
+	case "json_schema":
+		isStrict := (rf.Strict != nil && *rf.Strict) || (rf.JSONSchema != nil && rf.JSONSchema.Strict)
+		if isStrict {
+			if !supports("strict_json_schema") {
+				return fmt.Sprintf("Deployment %q does not support strict_json_schema.", targetID)
+			}
+		} else if !supports("strict_json_schema") && !supports("json_object") {
+			return fmt.Sprintf("Deployment %q does not support strict_json_schema.", targetID)
+		}
+	case "json_object":
+		if !supports("json_object") {
+			return fmt.Sprintf("Deployment %q does not support json_object.", targetID)
+		}
+	}
+	return ""
+}
+
 func checkM1Capabilities(target *snapshot.ResolvedTarget, cfg *snapshot.EffectiveConfig, req *chatCompletionIngressRequest) string {
+	requireTested := cfg != nil && cfg.RequireTestedCaps
 	supports := func(capName string) bool {
-		val := ""
-		if v, ok := target.Deployment.CapabilityOverrides[capName]; ok {
-			val = v
-		} else if v, ok := target.LogicalModel.BaseCapabilities[capName]; ok {
-			val = v
-		}
-		upper := strings.ToUpper(strings.TrimSpace(val))
-		if cfg != nil && cfg.RequireTestedCaps {
-			return upper == "TESTED" || upper == "VERIFIED"
-		}
-		return upper == "DECLARED" || upper == "TESTED" || upper == "VERIFIED"
+		return snapshot.DeploymentSupportsCapability(target, requireTested, capName)
 	}
 
 	if req.Stream && !supports("streaming") {
@@ -630,10 +997,8 @@ func checkM1Capabilities(target *snapshot.ResolvedTarget, cfg *snapshot.Effectiv
 	if len(req.Tools) > 0 && !supports("tool_calling") {
 		return fmt.Sprintf("Deployment %q does not support tool_calling.", target.Deployment.ID)
 	}
-	if req.ResponseFormat != nil && strings.EqualFold(req.ResponseFormat.Type, "json_schema") && req.ResponseFormat.JSONSchema != nil && req.ResponseFormat.JSONSchema.Strict {
-		if !supports("strict_json_schema") {
-			return fmt.Sprintf("Deployment %q does not support strict_json_schema.", target.Deployment.ID)
-		}
+	if rfErr := checkResponseFormatCapabilities(supports, target.Deployment.ID, req.ResponseFormat); rfErr != "" {
+		return rfErr
 	}
 	if strings.TrimSpace(req.ReasoningEffort) != "" && !supports("reasoning") {
 		return fmt.Sprintf("Deployment %q does not support reasoning.", target.Deployment.ID)
@@ -652,31 +1017,36 @@ func checkM1Capabilities(target *snapshot.ResolvedTarget, cfg *snapshot.Effectiv
 	return ""
 }
 
-func detectMultimodalParts(messages []json.RawMessage) (vision, audio, doc bool) {
-	for _, rawMsg := range messages {
-		var msg struct {
-			Content json.RawMessage `json:"content"`
+func detectMultimodalParts(items []any) (vision, audio, doc bool) {
+	inspectPart := func(part map[string]any) {
+		if part == nil {
+			return
 		}
-		if err := json.Unmarshal(rawMsg, &msg); err != nil || len(bytes.TrimSpace(msg.Content)) == 0 {
+		ptype := strings.ToLower(strings.TrimSpace(stringField(part["type"])))
+		if ptype == "image_url" || ptype == "input_image" || ptype == "image" || part["image_url"] != nil || part["image"] != nil {
+			vision = true
+		}
+		if ptype == "input_audio" || ptype == "audio" || part["input_audio"] != nil || part["audio"] != nil {
+			audio = true
+		}
+		if ptype == "file" || ptype == "input_file" || ptype == "document" || part["file"] != nil || part["input_file"] != nil || part["document"] != nil {
+			doc = true
+		}
+	}
+
+	for _, rawItem := range items {
+		itemObj, ok := rawItem.(map[string]any)
+		if !ok || itemObj == nil {
 			continue
 		}
-		var parts []map[string]any
-		if err := json.Unmarshal(msg.Content, &parts); err != nil {
+		inspectPart(itemObj)
+		parts, ok := itemObj["content"].([]any)
+		if !ok {
 			continue
 		}
-		for _, part := range parts {
-			if part == nil {
-				continue
-			}
-			ptype := strings.ToLower(strings.TrimSpace(stringField(part["type"])))
-			if ptype == "image_url" || ptype == "image" || part["image_url"] != nil {
-				vision = true
-			}
-			if ptype == "input_audio" || part["input_audio"] != nil {
-				audio = true
-			}
-			if ptype == "file" || ptype == "document" || part["file"] != nil || part["document"] != nil {
-				doc = true
+		for _, rawPart := range parts {
+			if part, ok := rawPart.(map[string]any); ok {
+				inspectPart(part)
 			}
 		}
 	}
@@ -688,175 +1058,11 @@ func stringField(v any) string {
 	return s
 }
 
-func prepareRequestForTransform(reqID string, rawBody []byte, upstreamModel string, stream bool) ([]byte, []port.BlobRef, map[string][]byte, error) {
-	dec := json.NewDecoder(bytes.NewReader(rawBody))
-	dec.UseNumber()
-	var obj map[string]any
-	if err := dec.Decode(&obj); err != nil || obj == nil {
-		return nil, nil, nil, fmt.Errorf("expected JSON object")
-	}
-	if strings.TrimSpace(upstreamModel) != "" {
-		obj["model"] = strings.TrimSpace(upstreamModel)
-	}
-	if stream {
-		obj["stream"] = true
-	}
-
-	var nonceBytes [16]byte
-	if _, err := rand.Read(nonceBytes[:]); err != nil {
-		return nil, nil, nil, err
-	}
-	blobPrefix := fmt.Sprintf("blob_ref://%s-%s/", reqID, hex.EncodeToString(nonceBytes[:]))
-	if bytes.Contains(rawBody, []byte(blobPrefix)) {
-		return nil, nil, nil, fmt.Errorf("request payload contains reserved blob_ref handle prefix")
-	}
-
-	var blobRefs []port.BlobRef
-	hostBlobs := make(map[string][]byte)
-	nextIdx := 0
-
-	addBlob := func(payload string, fallbackMime string) string {
-		rawBytes := []byte(payload)
-		sum := sha256.Sum256(rawBytes)
-		uri := fmt.Sprintf("%s%d", blobPrefix, nextIdx)
-		blobID := fmt.Sprintf("blob_%d", nextIdx)
-		nextIdx++
-		mimeType := parseDataURIMimeType(payload, fallbackMime)
-		blobRefs = append(blobRefs, port.BlobRef{
-			BlobID:     blobID,
-			URI:        uri,
-			MimeType:   mimeType,
-			ByteLength: int64(len(rawBytes)),
-			SHA256Hex:  hex.EncodeToString(sum[:]),
-		})
-		hostBlobs[uri] = rawBytes
-		return uri
-	}
-
-	if msgs, ok := obj["messages"].([]any); ok {
-		for _, m := range msgs {
-			msgMap, ok := m.(map[string]any)
-			if !ok {
-				continue
-			}
-			parts, ok := msgMap["content"].([]any)
-			if !ok {
-				continue
-			}
-			for _, p := range parts {
-				partMap, ok := p.(map[string]any)
-				if !ok {
-					continue
-				}
-				if imgMap, ok := partMap["image_url"].(map[string]any); ok {
-					if urlStr, ok := imgMap["url"].(string); ok && shouldOffloadInlineBlob(urlStr) {
-						imgMap["url"] = addBlob(urlStr, "application/octet-stream")
-					}
-				}
-				if audioMap, ok := partMap["input_audio"].(map[string]any); ok {
-					if dataStr, ok := audioMap["data"].(string); ok && shouldOffloadInlineBlob(dataStr) {
-						audioMap["data"] = addBlob(dataStr, "audio/wav")
-					}
-				}
-				if fileMap, ok := partMap["file"].(map[string]any); ok {
-					if dataStr, ok := fileMap["file_data"].(string); ok && shouldOffloadInlineBlob(dataStr) {
-						fileMap["file_data"] = addBlob(dataStr, "application/octet-stream")
-					}
-				}
-				if docMap, ok := partMap["document"].(map[string]any); ok {
-					if dataStr, ok := docMap["data"].(string); ok && shouldOffloadInlineBlob(dataStr) {
-						docMap["data"] = addBlob(dataStr, "application/pdf")
-					}
-				}
-			}
-		}
-	}
-
-	encoded, err := json.Marshal(obj)
-	if err != nil {
-		scrubHostBlobs(hostBlobs)
-		return nil, nil, nil, err
-	}
-	if len(hostBlobs) == 0 {
-		hostBlobs = nil
-	}
-	return encoded, blobRefs, hostBlobs, nil
-}
-
-func shouldOffloadInlineBlob(val string) bool {
-	if len(val) <= MaxInlineBlobBytes {
-		return false
-	}
-	lower := strings.ToLower(strings.TrimSpace(val))
-	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
-		return false
-	}
-	return true
-}
-
-func parseDataURIMimeType(val, fallback string) string {
-	if !strings.HasPrefix(val, "data:") {
-		return fallback
-	}
-	rest := val[len("data:"):]
-	if idx := strings.IndexByte(rest, ','); idx >= 0 {
-		meta := rest[:idx]
-		if semi := strings.IndexByte(meta, ';'); semi >= 0 {
-			meta = meta[:semi]
-		}
-		if strings.TrimSpace(meta) != "" {
-			return strings.TrimSpace(meta)
-		}
-	}
-	return fallback
-}
-
-func spliceHostBlobs(body []byte, hostBlobs map[string][]byte, maxBytes int64) ([]byte, error) {
-	if len(hostBlobs) == 0 {
-		return append([]byte(nil), body...), nil
-	}
-	out := append([]byte(nil), body...)
-	for uri, rawVal := range hostBlobs {
-		quotedPlaceholder, err := json.Marshal(uri)
-		if err != nil {
-			clear(out)
-			return nil, err
-		}
-		count := bytes.Count(out, quotedPlaceholder)
-		if count == 0 {
-			continue
-		}
-		if count != 1 {
-			clear(out)
-			return nil, fmt.Errorf("duplicate or unexpected blob reference %q", uri)
-		}
-		quotedPayload, err := json.Marshal(string(rawVal))
-		if err != nil {
-			clear(out)
-			return nil, err
-		}
-		projected := int64(len(out)) + (int64(len(quotedPayload)) - int64(len(quotedPlaceholder)))
-		if maxBytes > 0 && projected > maxBytes+4096 {
-			clear(quotedPayload)
-			clear(out)
-			return nil, fmt.Errorf("spliced payload exceeds bounded request limit")
-		}
-		next := bytes.Replace(out, quotedPlaceholder, quotedPayload, 1)
-		clear(quotedPayload)
-		clear(out)
-		out = next
-	}
-	return out, nil
-}
-
-func scrubHostBlobs(hostBlobs map[string][]byte) {
-	for k, v := range hostBlobs {
-		clear(v)
-		delete(hostBlobs, k)
-	}
-}
-
 func buildAdapterConfigJSON(conn *snapshot.ProviderConnectionView) (string, error) {
+	return buildAdapterConfigJSONWithModality(conn, "")
+}
+
+func buildAdapterConfigJSONWithModality(conn *snapshot.ProviderConnectionView, modality string) (string, error) {
 	merged := make(map[string]any)
 	raw := strings.TrimSpace(conn.ConfigJSON)
 	if raw != "" && raw != "{}" {
@@ -865,6 +1071,9 @@ func buildAdapterConfigJSON(conn *snapshot.ProviderConnectionView) (string, erro
 		}
 	}
 	merged["endpoint_base_url"] = conn.EndpointBaseURL
+	if strings.TrimSpace(modality) != "" {
+		merged["_tanpopo_modality"] = strings.ToLower(strings.TrimSpace(modality))
+	}
 	out, err := json.Marshal(merged)
 	if err != nil {
 		return "", err

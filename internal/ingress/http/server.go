@@ -23,6 +23,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -48,6 +49,8 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
+	"github.com/nguywnben/tanpopo/internal/ingress/blob"
+	"github.com/nguywnben/tanpopo/internal/ingress/idempotency"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
@@ -80,6 +83,12 @@ type ServerConfig struct {
 	WasmPoolSize            int
 	DefaultFirstByteTimeout time.Duration
 	SSEHeartbeatInterval    time.Duration
+	IdempotencyDB           *sql.DB
+	IdempotencyTTL          time.Duration
+	RemoteMediaPolicy       blob.RemoteMediaPolicy
+	DisableResponses        bool
+	DisableEmbeddings       bool
+	DisableModels           bool
 }
 
 type runtimeCacheKey struct {
@@ -129,7 +138,7 @@ func (e *cachedAdapterEntry) release() {
 	}
 }
 
-// Server serves Data Plane HTTP inference routes (/v1/chat/completions in M1).
+// Server serves Data Plane HTTP inference routes (/v1/chat/completions, /v1/responses, /v1/embeddings, /v1/models).
 type Server struct {
 	snapshots         *snapshot.Manager
 	broker            *broker.BlindHostCredentialBroker
@@ -141,6 +150,8 @@ type Server struct {
 	wasmPoolSize      int
 	firstByteTimeout  time.Duration
 	heartbeatInterval time.Duration
+	idempotency       *idempotency.Guard
+	remoteMediaPolicy blob.RemoteMediaPolicy
 
 	wasmCache wazero.CompilationCache
 
@@ -205,6 +216,12 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		})
 	}
 
+	idemGuard := idempotency.NewGuard(idempotency.Config{
+		DB:    cfg.IdempotencyDB,
+		TTL:   cfg.IdempotencyTTL,
+		NowMs: nowFn,
+	})
+
 	s := &Server{
 		snapshots:         cfg.Snapshots,
 		broker:            cfg.Broker,
@@ -216,12 +233,23 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		wasmPoolSize:      poolSize,
 		firstByteTimeout:  firstByteTimeout,
 		heartbeatInterval: hbInterval,
+		idempotency:       idemGuard,
+		remoteMediaPolicy: cfg.RemoteMediaPolicy,
 		wasmCache:         wazero.NewCompilationCache(),
 		runtimes:          make(map[runtimeCacheKey]*cachedAdapterEntry),
 		mux:               http.NewServeMux(),
 	}
 
 	s.mux.HandleFunc("/v1/chat/completions", s.handleChatCompletions)
+	if !cfg.DisableResponses {
+		s.mux.HandleFunc("/v1/responses", s.handleResponses)
+	}
+	if !cfg.DisableEmbeddings {
+		s.mux.HandleFunc("/v1/embeddings", s.handleEmbeddings)
+	}
+	if !cfg.DisableModels {
+		s.mux.HandleFunc("/v1/models", s.handleModels)
+	}
 	s.mux.HandleFunc("/", s.handleNotFound)
 	s.rootRouter = s.withIngressEnvelope(s.mux)
 	return s, nil
@@ -725,6 +753,12 @@ func verifyManifestParity(diskRaw, db installer.ExtensionManifest) error {
 	}
 	if !reflect.DeepEqual(normDB.Adapter, normDisk.Adapter) {
 		return fmt.Errorf("%w: on-disk manifest adapter rules mismatch against database record", port.ErrExecutionFault)
+	}
+	if !reflect.DeepEqual(normDB.SecretSlots, normDisk.SecretSlots) {
+		return fmt.Errorf("%w: on-disk manifest secret slots mismatch against database record", port.ErrExecutionFault)
+	}
+	if !reflect.DeepEqual(normDB.Capabilities, normDisk.Capabilities) {
+		return fmt.Errorf("%w: on-disk manifest capabilities mismatch against database record", port.ErrExecutionFault)
 	}
 	return nil
 }

@@ -317,6 +317,23 @@ func TestSSEPumpMidStreamAbortAndPreStreamError(t *testing.T) {
 	if rec0.Body.Len() != 0 {
 		t.Fatalf("expected empty ResponseWriter body before first byte, got %q", rec0.Body.String())
 	}
+
+	// 3. Clean io.EOF after 1 frame without [DONE] sentinel -> ErrMidStreamAbort + mid_stream_abort event.
+	recEOF := httptest.NewRecorder()
+	resEOF, pumpErrEOF := sse.Pump(context.Background(), sse.PumpConfig{
+		RequestID:           "req_clean_eof_no_done",
+		Upstream:            io.NopCloser(strings.NewReader("data: {\"id\":\"c1\",\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n")),
+		Runtime:             rt,
+		Writer:              recEOF,
+		HeartbeatInterval:   -1,
+		RequireDoneSentinel: true,
+	})
+	if !errors.Is(pumpErrEOF, sse.ErrMidStreamAbort) || !resEOF.StreamStarted || resEOF.SawDone {
+		t.Fatalf("expected ErrMidStreamAbort on clean EOF without [DONE], got res=%+v err=%v", resEOF, pumpErrEOF)
+	}
+	if !strings.Contains(recEOF.Body.String(), `"code":"mid_stream_abort"`) || strings.Contains(recEOF.Body.String(), "[DONE]") {
+		t.Fatalf("expected mid_stream_abort without [DONE] on premature clean EOF, got %q", recEOF.Body.String())
+	}
 }
 
 func TestSSEPumpOversizedLineAbortsBoundedRAM(t *testing.T) {

@@ -91,13 +91,15 @@ type ValidationProbeSpec struct {
 
 // RequestMappingSpec defines bounded non-Turing-complete JSON request rewrites.
 type RequestMappingSpec struct {
-	Method            string            `yaml:"method" json:"method"`
-	PathTemplate      string            `yaml:"pathTemplate" json:"path_template"`
-	StaticHeaders     map[string]string `yaml:"staticHeaders" json:"static_headers"`
-	FieldRenames      map[string]string `yaml:"fieldRenames" json:"field_renames"`
-	FieldDefaults     map[string]any    `yaml:"fieldDefaults" json:"field_defaults"`
-	DropFields        []string          `yaml:"dropFields" json:"drop_fields"`
-	InjectStreamUsage bool              `yaml:"injectStreamUsage" json:"inject_stream_usage"`
+	Method                 string            `yaml:"method" json:"method"`
+	PathTemplate           string            `yaml:"pathTemplate" json:"path_template"`
+	ResponsesPathTemplate  string            `yaml:"responsesPathTemplate" json:"responses_path_template"`
+	EmbeddingsPathTemplate string            `yaml:"embeddingsPathTemplate" json:"embeddings_path_template"`
+	StaticHeaders          map[string]string `yaml:"staticHeaders" json:"static_headers"`
+	FieldRenames           map[string]string `yaml:"fieldRenames" json:"field_renames"`
+	FieldDefaults          map[string]any    `yaml:"fieldDefaults" json:"field_defaults"`
+	DropFields             []string          `yaml:"dropFields" json:"drop_fields"`
+	InjectStreamUsage      bool              `yaml:"injectStreamUsage" json:"inject_stream_usage"`
 }
 
 // UsagePathSpec specifies dot-paths for extracting the 5-component NormalizedUsage counters.
@@ -333,6 +335,12 @@ func specFromAdapterBlock(env manifestEnvelope) (Spec, error) {
 	if spec.RequestMapping.PathTemplate == "" && ab.Endpoints["chat"] != "" {
 		spec.RequestMapping.PathTemplate = ab.Endpoints["chat"]
 	}
+	if spec.RequestMapping.ResponsesPathTemplate == "" && ab.Endpoints["responses"] != "" {
+		spec.RequestMapping.ResponsesPathTemplate = ab.Endpoints["responses"]
+	}
+	if spec.RequestMapping.EmbeddingsPathTemplate == "" && ab.Endpoints["embeddings"] != "" {
+		spec.RequestMapping.EmbeddingsPathTemplate = ab.Endpoints["embeddings"]
+	}
 	if ab.ResponseMapping != nil {
 		spec.ResponseMapping = *ab.ResponseMapping
 	}
@@ -447,9 +455,11 @@ func DefaultOpenAICompatibleSpec(slug string, allowedHosts []string) Spec {
 			ModelIDField:    "id",
 		},
 		RequestMapping: RequestMappingSpec{
-			Method:            "POST",
-			PathTemplate:      "/v1/chat/completions",
-			InjectStreamUsage: true,
+			Method:                 "POST",
+			PathTemplate:           "/v1/chat/completions",
+			ResponsesPathTemplate:  "/v1/responses",
+			EmbeddingsPathTemplate: "/v1/embeddings",
+			InjectStreamUsage:      true,
 		},
 		ResponseMapping: ResponseMappingSpec{
 			ModelPath:        "model",

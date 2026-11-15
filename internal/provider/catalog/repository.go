@@ -101,13 +101,19 @@ const (
 
 // Canonical capability flag names governed by Capability Assurance Tiers.
 var validCapabilityFlags = map[string]struct{}{
-	"streaming":          {},
-	"tool_calling":       {},
-	"vision":             {},
-	"audio_input":        {},
-	"document_input":     {},
-	"strict_json_schema": {},
-	"reasoning":          {},
+	"streaming":           {},
+	"tool_calling":        {},
+	"parallel_tool_calls": {},
+	"strict_json_schema":  {},
+	"json_object":         {},
+	"vision":              {},
+	"audio_input":         {},
+	"document_input":      {},
+	"reasoning":           {},
+	"prompt_caching":      {},
+	"embeddings":          {},
+	"rerank":              {},
+	"custom_dimensions":   {},
 }
 
 // Canonical catalog error sentinels.

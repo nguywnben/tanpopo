@@ -791,3 +791,153 @@ func TestDeclarativeTruncatedResponseJSON502AndSSEFragmentsPreserved(t *testing.
 			string(streamOut.NormalizedSSEFrames[0]), string(streamOut.NormalizedSSEFrames[1]))
 	}
 }
+
+func TestDeclarativeResponsesAndEmbeddingsModalitiesAndSSE(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	spec := DefaultOpenAICompatibleSpec("openai", []string{"api.openai.com"})
+	eng, err := CompileSpec(spec)
+	if err != nil {
+		t.Fatalf("CompileSpec failed: %v", err)
+	}
+
+	// 1. Embeddings request selects /v1/embeddings and never injects stream_options.
+	embCfg := `{"endpoint_base_url":"https://api.openai.com","_tanpopo_modality":"embeddings"}`
+	embSpec, err := eng.TransformRequest(ctx, port.TransformRequestInput{
+		RequestID:             "req_emb_1",
+		ConfigJSON:            embCfg,
+		NormalizedRequestJSON: []byte(`{"model":"text-embedding-3-small","input":"hello"}`),
+		SecretSlotRefs:        map[string]string{"api_key": "sec_1"},
+	})
+	if err != nil {
+		t.Fatalf("TransformRequest embeddings failed: %v", err)
+	}
+	if embSpec.TargetURL != "https://api.openai.com/v1/embeddings" {
+		t.Fatalf("expected /v1/embeddings target URL, got %q", embSpec.TargetURL)
+	}
+	if bytes.Contains(embSpec.BodyBytes, []byte("stream_options")) {
+		t.Fatalf("did not expect stream_options in embeddings request: %s", string(embSpec.BodyBytes))
+	}
+
+	// 2. Embeddings response validates CT-09 data array and extracts prompt_tokens.
+	embResp, err := eng.TransformResponse(ctx, port.TransformResponseInput{
+		RequestID:       "req_emb_1",
+		HTTPStatus:      http.StatusOK,
+		RawResponseBody: []byte(`{"object":"list","model":"text-embedding-3-small","data":[{"object":"embedding","index":0,"embedding":[0.1,0.2]}],"usage":{"prompt_tokens":5,"total_tokens":5}}`),
+		Modality:        "EMBEDDINGS",
+	})
+	if err != nil {
+		t.Fatalf("TransformResponse EMBEDDINGS failed: %v", err)
+	}
+	if embResp.Usage == nil || embResp.Usage.InputTokens != 5 || embResp.Usage.Accuracy != port.UsageAccuracyExact {
+		t.Fatalf("unexpected embeddings usage: %+v", embResp.Usage)
+	}
+	if _, err := eng.TransformResponse(ctx, port.TransformResponseInput{
+		RequestID:       "req_emb_bad",
+		HTTPStatus:      http.StatusOK,
+		RawResponseBody: []byte(`{"object":"list","data":[]}`),
+		Modality:        "EMBEDDINGS",
+	}); !errors.Is(err, ErrUpstreamMalformedResponse) {
+		t.Fatalf("expected ErrUpstreamMalformedResponse for empty embeddings data, got %v", err)
+	}
+
+	// 3. Responses request selects /v1/responses and omits chat stream_options injection.
+	respCfg := `{"endpoint_base_url":"https://api.openai.com","_tanpopo_modality":"responses"}`
+	respSpec, err := eng.TransformRequest(ctx, port.TransformRequestInput{
+		RequestID:             "req_resp_1",
+		ConfigJSON:            respCfg,
+		NormalizedRequestJSON: []byte(`{"model":"gpt-4o","input":"hello","stream":true}`),
+		SecretSlotRefs:        map[string]string{"api_key": "sec_1"},
+	})
+	if err != nil {
+		t.Fatalf("TransformRequest responses failed: %v", err)
+	}
+	if respSpec.TargetURL != "https://api.openai.com/v1/responses" {
+		t.Fatalf("expected /v1/responses target URL, got %q", respSpec.TargetURL)
+	}
+	if bytes.Contains(respSpec.BodyBytes, []byte("stream_options")) {
+		t.Fatalf("did not expect stream_options in responses request: %s", string(respSpec.BodyBytes))
+	}
+
+	// 4. Synchronous RESPONSES response checks output array and extracts input/output/cached/reasoning tokens.
+	normResp, err := eng.TransformResponse(ctx, port.TransformResponseInput{
+		RequestID:  "req_resp_1",
+		HTTPStatus: http.StatusOK,
+		RawResponseBody: []byte(`{
+			"id":"resp_1","object":"response","status":"completed","model":"gpt-4o",
+			"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}],
+			"usage":{"input_tokens":14,"output_tokens":6,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":1}}
+		}`),
+		Modality: "RESPONSES",
+	})
+	if err != nil {
+		t.Fatalf("TransformResponse RESPONSES failed: %v", err)
+	}
+	if normResp.Usage == nil || normResp.Usage.InputTokens != 14 || normResp.Usage.OutputTokens != 6 ||
+		normResp.Usage.CacheReadTokens != 2 || normResp.Usage.ReasoningTokens != 1 {
+		t.Fatalf("unexpected responses usage: %+v", normResp.Usage)
+	}
+	if _, err := eng.TransformResponse(ctx, port.TransformResponseInput{
+		RequestID:       "req_resp_bad",
+		HTTPStatus:      http.StatusOK,
+		RawResponseBody: []byte(`{"id":"resp_bad","output":[]}`),
+		Modality:        "RESPONSES",
+	}); !errors.Is(err, ErrUpstreamMalformedResponse) {
+		t.Fatalf("expected ErrUpstreamMalformedResponse for missing responses output, got %v", err)
+	}
+
+	// 5. Responses SSE stream event normalization: output_text.delta + response.completed -> StreamCompleted + Usage.
+	sseOut, err := eng.TransformStreamChunk(ctx, port.StreamChunkInput{
+		RequestID: "req_resp_sse",
+		RawUpstreamChunk: []byte(
+			"event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Hel\"}\n\n" +
+				"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"usage\":{\"input_tokens\":9,\"output_tokens\":3}}}\n\n",
+		),
+	})
+	if err != nil {
+		t.Fatalf("TransformStreamChunk responses SSE failed: %v", err)
+	}
+	if !sseOut.StreamCompleted || len(sseOut.NormalizedSSEFrames) != 2 {
+		t.Fatalf("expected StreamCompleted=true and 2 normalized frames, got completed=%v frames=%d", sseOut.StreamCompleted, len(sseOut.NormalizedSSEFrames))
+	}
+	if sseOut.IncrementalUsage == nil || sseOut.IncrementalUsage.InputTokens != 9 || sseOut.IncrementalUsage.OutputTokens != 3 {
+		t.Fatalf("expected response.completed usage (9,3), got %+v", sseOut.IncrementalUsage)
+	}
+	if !strings.Contains(string(sseOut.NormalizedSSEFrames[0]), "event: response.output_text.delta") {
+		t.Fatalf("expected event header preserved on responses SSE frame: %q", string(sseOut.NormalizedSSEFrames[0]))
+	}
+
+	// 6. Responses SSE event type containing CR/LF/colon injection must fail closed.
+	if _, err := eng.TransformStreamChunk(ctx, port.StreamChunkInput{
+		RequestID:        "req_resp_sse_inj",
+		RawUpstreamChunk: []byte("data: {\"type\":\"response.delta\\nevent: evil\\ndata: {}\"}\n\n"),
+	}); !errors.Is(err, ErrUpstreamMalformedResponse) {
+		t.Fatalf("expected ErrUpstreamMalformedResponse on SSE frame injection event type, got %v", err)
+	}
+
+	// 7. FMEA-01: clean EOF without [DONE] or response.completed MUST NOT fabricate StreamCompleted=true.
+	prematureChat, err := eng.TransformStreamChunk(ctx, port.StreamChunkInput{
+		RequestID:        "req_eof_no_done",
+		RawUpstreamChunk: []byte("data: {\"id\":\"c1\",\"model\":\"gpt-4o\",\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n"),
+		IsEOF:            true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on chunk before EOF: %v", err)
+	}
+	if prematureChat.StreamCompleted {
+		t.Fatalf("expected StreamCompleted=false when IsEOF occurs without [DONE]")
+	}
+	prematureResp, err := eng.TransformStreamChunk(ctx, port.StreamChunkInput{
+		RequestID:        "req_eof_no_completed",
+		RawUpstreamChunk: []byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n"),
+		IsEOF:            true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on responses chunk before EOF: %v", err)
+	}
+	if prematureResp.StreamCompleted {
+		t.Fatalf("expected StreamCompleted=false when IsEOF occurs without response.completed")
+	}
+}
+

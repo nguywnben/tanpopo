@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/security/trust"
@@ -386,6 +387,129 @@ func (s *ConfigSnapshot) ResolveDefaultDeployment(orgID, projectID, _ string, mo
 		Connection:   bestConn.clone(),
 		Adapter:      bestAdp.clone(),
 	}, true
+}
+
+// ModelCapabilityProfile mirrors OpenAPI CapabilityProfile (12 canonical snake_case booleans).
+type ModelCapabilityProfile struct {
+	Streaming         bool `json:"streaming"`
+	ToolCalling       bool `json:"tool_calling"`
+	ParallelToolCalls bool `json:"parallel_tool_calls"`
+	StrictJSONSchema  bool `json:"strict_json_schema"`
+	JSONObject        bool `json:"json_object"`
+	Vision            bool `json:"vision"`
+	AudioInput        bool `json:"audio_input"`
+	DocumentInput     bool `json:"document_input"`
+	Reasoning         bool `json:"reasoning"`
+	PromptCaching     bool `json:"prompt_caching"`
+	Embeddings        bool `json:"embeddings"`
+	Rerank            bool `json:"rerank"`
+}
+
+// AuthorizedModelSummary represents a Virtual-Key-authorized LogicalModel entry for GET /v1/models.
+type AuthorizedModelSummary struct {
+	ID              string
+	CreatedSec      int64
+	OwnedBy         string
+	ModalityKind    string
+	ContextWindow   int64
+	MaxOutputTokens int64
+	AssuranceTier   string
+	Capabilities    ModelCapabilityProfile
+}
+
+// DeploymentSupportsCapability evaluates capability maturity against RequireTestedCaps rules.
+func DeploymentSupportsCapability(target *ResolvedTarget, requireTested bool, capName string) bool {
+	if target == nil || target.Deployment == nil || target.LogicalModel == nil {
+		return false
+	}
+	val := ""
+	if v, ok := target.Deployment.CapabilityOverrides[capName]; ok {
+		val = v
+	} else if v, ok := target.LogicalModel.BaseCapabilities[capName]; ok {
+		val = v
+	}
+	upper := strings.ToUpper(strings.TrimSpace(val))
+	if requireTested {
+		return upper == "TESTED" || upper == "VERIFIED"
+	}
+	return upper == "DECLARED" || upper == "TESTED" || upper == "VERIFIED"
+}
+
+// ListAuthorizedLogicalModels returns deterministically sorted models accessible inside
+// (orgID, projectID, envID) filtered strictly by Virtual Key allowedModels and backed by
+// at least one ACTIVE_HEALTHY deployment on an ACTIVE, project-visible connection.
+func (s *ConfigSnapshot) ListAuthorizedLogicalModels(orgID, projectID, envID string, allowedModels []string, requireTested bool) []AuthorizedModelSummary {
+	if s == nil || s.providers == nil || orgID == "" {
+		return nil
+	}
+	seenSlugs := make(map[string]struct{})
+	var out []AuthorizedModelSummary
+	for key := range s.providers.deploymentsByOrgSlug {
+		if key.OrgID != orgID {
+			continue
+		}
+		if _, dup := seenSlugs[key.Slug]; dup {
+			continue
+		}
+		if !modelAllowlistPermitsSnapshot(allowedModels, key.Slug) {
+			continue
+		}
+		target, ok := s.ResolveDefaultDeployment(orgID, projectID, envID, key.Slug)
+		if !ok || target == nil || target.LogicalModel == nil || target.Deployment == nil {
+			continue
+		}
+		seenSlugs[key.Slug] = struct{}{}
+
+		ownedBy := "tanpopo"
+		if target.Adapter != nil && strings.TrimSpace(target.Adapter.AdapterSlug) != "" {
+			ownedBy = strings.TrimSpace(target.Adapter.AdapterSlug)
+		}
+		assurance := strings.ToUpper(strings.TrimSpace(target.Deployment.AssuranceLevel))
+		switch assurance {
+		case "DECLARED", "TESTED", "VERIFIED":
+		default:
+			assurance = "DECLARED"
+		}
+
+		profile := ModelCapabilityProfile{
+			Streaming:         DeploymentSupportsCapability(target, requireTested, "streaming"),
+			ToolCalling:       DeploymentSupportsCapability(target, requireTested, "tool_calling"),
+			ParallelToolCalls: DeploymentSupportsCapability(target, requireTested, "parallel_tool_calls"),
+			StrictJSONSchema:  DeploymentSupportsCapability(target, requireTested, "strict_json_schema"),
+			JSONObject:        DeploymentSupportsCapability(target, requireTested, "json_object"),
+			Vision:            DeploymentSupportsCapability(target, requireTested, "vision"),
+			AudioInput:        DeploymentSupportsCapability(target, requireTested, "audio_input"),
+			DocumentInput:     DeploymentSupportsCapability(target, requireTested, "document_input"),
+			Reasoning:         DeploymentSupportsCapability(target, requireTested, "reasoning"),
+			PromptCaching:     DeploymentSupportsCapability(target, requireTested, "prompt_caching"),
+			Embeddings:        DeploymentSupportsCapability(target, requireTested, "embeddings"),
+			Rerank:            DeploymentSupportsCapability(target, requireTested, "rerank"),
+		}
+		out = append(out, AuthorizedModelSummary{
+			ID:              target.LogicalModel.CanonicalSlug,
+			CreatedSec:      target.LogicalModel.CreatedAtMs / 1000,
+			OwnedBy:         ownedBy,
+			ModalityKind:    target.LogicalModel.ModalityKind,
+			ContextWindow:   target.LogicalModel.ContextWindow,
+			MaxOutputTokens: target.LogicalModel.MaxOutputTokens,
+			AssuranceTier:   assurance,
+			Capabilities:    profile,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+func modelAllowlistPermitsSnapshot(allowedModels []string, modelSlug string) bool {
+	for _, raw := range allowedModels {
+		tr := strings.TrimSpace(raw)
+		if tr == "*" || tr == modelSlug {
+			return true
+		}
+	}
+	return false
 }
 
 func loadProviderCatalogSQL(ctx context.Context, tx *sql.Tx, keyring trust.TrustedKeyring) (*ProviderCatalogView, error) {
