@@ -1517,6 +1517,139 @@ func TestInstallerThreeAuditFindingsRepro(t *testing.T) {
 	}
 }
 
+func TestInstallerCT20ResidualUnpinnedPolicyAndNoVersionFallback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newInstallerHarness(t, port.MinTrustVerifiedOnly)
+	wasmBytes := wasmfixtures.EchoTransformWASM()
+	wasmSHA := shaHex(wasmBytes)
+
+	// 1. Install verified v1.0.0 -> enable unpinned org policy (pinned_installation_id = NULL) -> uninstall.
+	mV1 := makeWasmManifestYAML("@ct20/residual", "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.example.com"}, nil, 16)
+	tpkgV1, shaV1 := buildTPKGBytes(t, []archiveEntrySpec{
+		{name: "manifest.yaml", body: mV1},
+		{name: "dist/adapter.wasm", body: wasmBytes},
+	})
+	pubSigV1 := ed25519.Sign(h.pubPriv, SignatureSigningPayload("@ct20/residual", "1.0.0", shaV1))
+
+	st1, err := h.svc.StageFreshInstall(ctx, StageInstallRequest{
+		ArchiveReader: bytes.NewReader(tpkgV1),
+		Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./residual-v1.tpkg"},
+		Signature:     ProvenanceSignature{PublisherOrRootSig: pubSigV1},
+		ActorID:       h.devID,
+		TargetOrgID:   h.orgID,
+	})
+	if err != nil {
+		t.Fatalf("StageFreshInstall verified v1: %v", err)
+	}
+	dis1, err := h.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      st1.Installation.InstallationID,
+		ExpectedVersion:     st1.Installation.Version,
+		ApproverPrincipalID: h.secRevID,
+		ActivateImmediately: false,
+		OrgID:               h.orgID,
+	})
+	if err != nil {
+		t.Fatalf("ApproveAndActivate disabled: %v", err)
+	}
+	if err := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, dis1.PackageID, true, nil, h.secRevID); err != nil {
+		t.Fatalf("SetOrgExtensionPolicy unpinned verified: %v", err)
+	}
+	if err := h.svc.UninstallInstallation(ctx, dis1.InstallationID, dis1.Version, "", h.opID, ""); err != nil {
+		t.Fatalf("UninstallInstallation: %v", err)
+	}
+
+	// 2. When no active/candidate version exists (UNINSTALLED), SetOrgExtensionPolicy MUST NOT
+	//    fall back to stale package-level origin_trust_tier='verified' to grant enablement,
+	//    nor allow pinning the uninstalled installation ID.
+	if perr := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, dis1.PackageID, true, nil, h.secRevID); !errors.Is(perr, ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected ErrOrgTrustPolicyDenied when no active/candidate version exists, got %v", perr)
+	}
+	if pinErr := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, dis1.PackageID, true, &dis1.InstallationID, h.secRevID); !errors.Is(pinErr, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound when pinning UNINSTALLED installation, got %v", pinErr)
+	}
+	if _, uerr := h.st.RawDB().ExecContext(ctx, `UPDATE extension_packages SET origin_trust_tier = 'verified' WHERE id = ?`, dis1.PackageID); uerr != nil {
+		t.Fatalf("simulate stale package tier: %v", uerr)
+	}
+	if perr := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, dis1.PackageID, true, nil, h.secRevID); !errors.Is(perr, ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected ErrOrgTrustPolicyDenied even with stale package-level origin_trust_tier='verified', got %v", perr)
+	}
+
+	// 3. Reinstall unsigned v2.0.0 with TargetOrgID="" while unpinned VERIFIED_ONLY org policy is still enabled!
+	//    StageFreshInstall MUST block unverified_external for a package enabled in a VERIFIED_ONLY org.
+	mV2 := makeWasmManifestYAML("@ct20/residual", "2.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.example.com"}, nil, 16)
+	tpkgV2, shaV2 := buildTPKGBytes(t, []archiveEntrySpec{
+		{name: "manifest.yaml", body: mV2},
+		{name: "dist/adapter.wasm", body: wasmBytes},
+	})
+	if _, stErr := h.svc.StageFreshInstall(ctx, StageInstallRequest{
+		ArchiveReader: bytes.NewReader(tpkgV2),
+		Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./residual-v2-unsigned.tpkg"},
+		ActorID:       h.devID,
+		TargetOrgID:   "",
+	}); !errors.Is(stErr, ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected ErrOrgTrustPolicyDenied on unsigned reinstall with enabled VERIFIED_ONLY policy, got %v", stErr)
+	}
+
+	// 4. Legitimate verified reinstall + approve still succeeds cleanly!
+	pubSigV2 := ed25519.Sign(h.pubPriv, SignatureSigningPayload("@ct20/residual", "2.0.0", shaV2))
+	st2Valid, err := h.svc.StageFreshInstall(ctx, StageInstallRequest{
+		ArchiveReader: bytes.NewReader(tpkgV2),
+		Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./residual-v2-signed.tpkg"},
+		Signature:     ProvenanceSignature{PublisherOrRootSig: pubSigV2},
+		ActorID:       h.devID,
+		TargetOrgID:   "",
+	})
+	if err != nil {
+		t.Fatalf("expected legitimate verified reinstall to succeed, got %v", err)
+	}
+	act2Valid, err := h.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      st2Valid.Installation.InstallationID,
+		ExpectedVersion:     st2Valid.Installation.Version,
+		ApproverPrincipalID: h.opID,
+		ActivateImmediately: true,
+	})
+	if err != nil || act2Valid.State != StateEnabledActive || act2Valid.OriginTrustTier != lockfile.TrustTierVerified {
+		t.Fatalf("expected verified reinstall approved and active, got rec=%+v err=%v", act2Valid, err)
+	}
+
+	// 5. TOCTOU: if an unsigned installation is staged BEFORE org trust is tightened (ANY_APPROVED -> VERIFIED_ONLY),
+	//    ApproveAndActivate MUST still block activation with ErrOrgTrustPolicyDenied.
+	hTOCTOU := newInstallerHarness(t, port.MinTrustAnyApproved)
+	mTOCTOU := makeWasmManifestYAML("@ct20/toctou", "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.example.com"}, nil, 16)
+	tpkgTOCTOU, _ := buildTPKGBytes(t, []archiveEntrySpec{
+		{name: "manifest.yaml", body: mTOCTOU},
+		{name: "dist/adapter.wasm", body: wasmBytes},
+	})
+	stTOCTOU, err := hTOCTOU.svc.StageFreshInstall(ctx, StageInstallRequest{
+		ArchiveReader: bytes.NewReader(tpkgTOCTOU),
+		Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./toctou-unsigned.tpkg"},
+		ActorID:       hTOCTOU.devID,
+		TargetOrgID:   "",
+	})
+	if err != nil {
+		t.Fatalf("StageFreshInstall unsigned under ANY_APPROVED: %v", err)
+	}
+	if err := hTOCTOU.svc.SetOrgExtensionPolicy(ctx, hTOCTOU.orgID, stTOCTOU.Installation.PackageID, true, nil, hTOCTOU.secRevID); err != nil {
+		t.Fatalf("SetOrgExtensionPolicy unpinned under ANY_APPROVED: %v", err)
+	}
+	if _, err := hTOCTOU.st.RawDB().ExecContext(ctx, `UPDATE organizations SET min_plugin_trust = ? WHERE id = ?`, port.MinTrustVerifiedOnly, hTOCTOU.orgID); err != nil {
+		t.Fatalf("tighten org min_plugin_trust to VERIFIED_ONLY: %v", err)
+	}
+	if _, aerr := hTOCTOU.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      stTOCTOU.Installation.InstallationID,
+		ExpectedVersion:     stTOCTOU.Installation.Version,
+		ApproverPrincipalID: hTOCTOU.opID,
+		ActivateImmediately: true,
+	}); !errors.Is(aerr, ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected ErrOrgTrustPolicyDenied on ApproveAndActivate after org trust tightened, got %v", aerr)
+	}
+	stillPending, err := hTOCTOU.svc.GetInstallation(ctx, stTOCTOU.Installation.InstallationID)
+	if err != nil || stillPending.State != StatePendingPermissionApproval {
+		t.Fatalf("expected installation to remain PENDING_PERMISSION_APPROVAL, got rec=%+v err=%v", stillPending, err)
+	}
+}
+
 // FZ-02: Native Go fuzzer verifying zero panics and zero path escapes across arbitrary archive/YAML bytes.
 func FuzzArchiveAndManifest(f *testing.F) {
 	f.Add([]byte("not-a-gzip"))

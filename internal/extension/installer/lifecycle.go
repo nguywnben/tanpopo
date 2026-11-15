@@ -513,6 +513,14 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 		}
 		reusingPkg = true
 		pkgID = existingPkg
+		if perr := checkEnabledOrgPoliciesForPackageTx(ctx, tx, pkgID, prov.OriginTrustTier, prov.EnterpriseSigned); perr != nil {
+			_ = tx.Rollback()
+			s.emitAudit(ctx, req.TargetOrgID, req.ActorID, req.RequestID, "extension.org_trust_policy_denied", "extension_package", vm.Manifest.Metadata.ID, map[string]any{
+				"origin_trust_tier": prov.OriginTrustTier,
+				"enterprise_signed": prov.EnterpriseSigned,
+			})
+			return nil, perr
+		}
 	case !errors.Is(err, sql.ErrNoRows):
 		return nil, err
 	}
@@ -705,12 +713,23 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 		return nil, err
 	}
 	if rerr := checkRevocationsTx(ctx, tx, rowData.canonicalName, candInfo.semver, candInfo.bundleSHA256); rerr != nil {
+		_ = tx.Rollback()
 		s.emitAudit(ctx, req.OrgID, req.ApproverPrincipalID, req.RequestID, "extension.activation_blocked_revoked", "extension_installation", req.InstallationID, map[string]any{
 			"canonical_name":    rowData.canonicalName,
 			"candidate_version": candInfo.semver,
 			"candidate_sha256":  candInfo.bundleSHA256,
 		})
 		return nil, rerr
+	}
+	candTrustTier := deriveTrustTierFromVersion(rowData.canonicalName, candInfo, s.keyring)
+	if perr := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, candTrustTier, candInfo.enterpriseSigned); perr != nil {
+		_ = tx.Rollback()
+		s.emitAudit(ctx, req.OrgID, req.ApproverPrincipalID, req.RequestID, "extension.org_trust_policy_denied", "extension_installation", req.InstallationID, map[string]any{
+			"canonical_name":    rowData.canonicalName,
+			"origin_trust_tier": candTrustTier,
+			"enterprise_signed": candInfo.enterpriseSigned,
+		})
+		return nil, perr
 	}
 	vm, err := ValidateManifestStruct(candInfo.manifest, s.valPolicy, nil)
 	if err != nil {
@@ -736,6 +755,9 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return nil, port.ErrVersionConflict
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`, candTrustTier, rowData.packageID); err != nil {
+		return nil, fmt.Errorf("installer: sync package origin_trust_tier on approve: %w", err)
+	}
 
 	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", req.InstallationID, port.MutationUpsert, false, now); err != nil {
 		return nil, err
@@ -748,7 +770,7 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 	}
 	committed = true
 
-	if lerr := s.syncLockfileEntry(rowData.canonicalName, rowData.originTrustTier, candInfo, vm.Permissions, req.ApproverPrincipalID, now, nil); lerr != nil {
+	if lerr := s.syncLockfileEntry(rowData.canonicalName, candTrustTier, candInfo, vm.Permissions, req.ApproverPrincipalID, now, nil); lerr != nil {
 		s.emitAudit(ctx, req.OrgID, req.ApproverPrincipalID, req.RequestID, "extension.lockfile_sync_failed", "extension_installation", req.InstallationID, map[string]any{
 			"canonical_name": rowData.canonicalName,
 			"reason":         lerr.Error(),
@@ -1081,6 +1103,7 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 		return nil, err
 	}
 	if rerr := checkRevocationsTx(ctx, tx, rowData.canonicalName, candInfo.semver, candInfo.bundleSHA256); rerr != nil {
+		_ = tx.Rollback()
 		s.emitAudit(ctx, orgID, approverPrincipalID, requestID, "extension.activation_blocked_revoked", "extension_installation", installationID, map[string]any{
 			"canonical_name":    rowData.canonicalName,
 			"candidate_version": candInfo.semver,
@@ -1261,6 +1284,7 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 
 	// CR-06: Never allow rollback to re-activate a CRITICAL / CRITICAL_MALICIOUS revoked version.
 	if rerr := checkRevocationsTx(ctx, tx, rowData.canonicalName, targetPrevInfo.semver, targetPrevInfo.bundleSHA256); rerr != nil {
+		_ = tx.Rollback()
 		s.emitAudit(ctx, orgID, actorID, requestID, "extension.rollback_blocked_revoked", "extension_installation", installationID, map[string]any{
 			"canonical_name": rowData.canonicalName,
 			"target_version": targetPrevInfo.semver,
@@ -1451,22 +1475,27 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 		}
 		return err
 	}
-	var canonicalName, originTrust string
-	if err := tx.QueryRowContext(ctx, `SELECT canonical_name, origin_trust_tier FROM extension_packages WHERE id = ?`, packageID).Scan(&canonicalName, &originTrust); err != nil {
+	var canonicalName string
+	if err := tx.QueryRowContext(ctx, `SELECT canonical_name FROM extension_packages WHERE id = ?`, packageID).Scan(&canonicalName); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return port.ErrNotFound
 		}
 		return err
 	}
 
+	// Never fall back to stale package-level origin_trust_tier when no active/candidate version exists.
+	originTrust := lockfile.TrustTierUnverifiedExternal
 	enterpriseSigned := false
+	var targetVerID sql.NullString
+	var pinnedParam *string
 	if pinnedInstallationID != nil && strings.TrimSpace(*pinnedInstallationID) != "" {
-		var targetVerID sql.NullString
+		pinID := strings.TrimSpace(*pinnedInstallationID)
+		pinnedParam = &pinID
 		err := tx.QueryRowContext(ctx, `
 			SELECT COALESCE(ei.active_version_id, ei.candidate_version_id)
 			FROM extension_installations ei
-			WHERE ei.id = ? AND ei.package_id = ?`,
-			*pinnedInstallationID, packageID,
+			WHERE ei.id = ? AND ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`,
+			pinID, packageID, StateUninstalled, StateRejectedInvalid, StateCancelled,
 		).Scan(&targetVerID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
@@ -1474,18 +1503,7 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 			}
 			return err
 		}
-		if targetVerID.Valid && strings.TrimSpace(targetVerID.String) != "" {
-			verInfo, verr := loadVersionInfoTx(ctx, tx, targetVerID.String)
-			if verr != nil {
-				return verr
-			}
-			enterpriseSigned = verInfo.enterpriseSigned
-			originTrust = deriveTrustTierFromVersion(canonicalName, verInfo, s.keyring)
-		} else {
-			originTrust = lockfile.TrustTierUnverifiedExternal
-		}
 	} else {
-		var targetVerID sql.NullString
 		err := tx.QueryRowContext(ctx, `
 			SELECT COALESCE(ei.active_version_id, ei.candidate_version_id)
 			FROM extension_installations ei
@@ -1496,18 +1514,19 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		if err == nil && targetVerID.Valid && strings.TrimSpace(targetVerID.String) != "" {
-			verInfo, verr := loadVersionInfoTx(ctx, tx, targetVerID.String)
-			if verr != nil {
-				return verr
-			}
-			enterpriseSigned = verInfo.enterpriseSigned
-			originTrust = deriveTrustTierFromVersion(canonicalName, verInfo, s.keyring)
+	}
+	if targetVerID.Valid && strings.TrimSpace(targetVerID.String) != "" {
+		verInfo, verr := loadVersionInfoTx(ctx, tx, targetVerID.String)
+		if verr != nil {
+			return verr
 		}
+		enterpriseSigned = verInfo.enterpriseSigned
+		originTrust = deriveTrustTierFromVersion(canonicalName, verInfo, s.keyring)
 	}
 
 	if enabled {
 		if cerr := CheckOrgMinTrustPolicy(minTrust, originTrust, enterpriseSigned); cerr != nil {
+			_ = tx.Rollback()
 			s.emitAudit(ctx, orgID, actorID, "", "extension.org_trust_policy_denied", "extension_package", packageID, map[string]any{
 				"min_plugin_trust":  minTrust,
 				"origin_trust_tier": originTrust,
@@ -1525,7 +1544,7 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 			pinned_installation_id = excluded.pinned_installation_id,
 			version = org_extension_policies.version + 1,
 			updated_at_ms = excluded.updated_at_ms`,
-		orgID, packageID, boolToInt(enabled), nullStrPtr(pinnedInstallationID), now, now,
+		orgID, packageID, boolToInt(enabled), nullStrPtr(pinnedParam), now, now,
 	); err != nil {
 		if isUniqueConstraintErr(err) {
 			return fmt.Errorf("%w: org_extension_policy conflict: %v", port.ErrAlreadyExists, err)
@@ -1615,6 +1634,9 @@ func (s *LifecycleService) UninstallInstallation(ctx context.Context, installati
 	}
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return port.ErrVersionConflict
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`, lockfile.TrustTierUnverifiedExternal, rowData.packageID); err != nil {
+		return fmt.Errorf("installer: reset package origin_trust_tier on uninstall: %w", err)
 	}
 	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationDelete, false, now); err != nil {
 		return err
