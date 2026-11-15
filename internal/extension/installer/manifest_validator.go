@@ -504,7 +504,11 @@ func ValidateManifestStruct(m ExtensionManifest, policy ValidationPolicy, archiv
 				if strings.EqualFold(mode, "scoped_secret_unseal") && execTier != ExecutionTierIsolatedSidecarT3 {
 					return nil, fmt.Errorf("%w: adapter.auth scoped_secret_unseal forbidden in %s", ErrProhibitedCapabilityTier, execTier)
 				}
-				if rawSlot, hasSlot := am["secretSlot"]; hasSlot {
+				rawSlot, hasSlot := am["secretSlot"]
+				if !hasSlot {
+					rawSlot, hasSlot = am["slot"]
+				}
+				if hasSlot {
 					slotName, ok := rawSlot.(string)
 					sn := strings.TrimSpace(slotName)
 					if !ok || sn == "" || strings.ContainsAny(sn, " \t\r\n\x00:") {

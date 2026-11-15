@@ -257,7 +257,7 @@ func extractBool(v any) (bool, bool) {
 	return b, ok
 }
 
-func renderEndpointURL(baseURL string, parts []templatePart, vars map[string]string, allowedHosts map[string]struct{}, budget *stepBudget) (string, error) {
+func renderEndpointURL(baseURL string, parts []templatePart, implicitOpenAIPath bool, vars map[string]string, allowedHosts map[string]struct{}, budget *stepBudget) (string, error) {
 	baseParsed, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil || (baseParsed.Scheme != "http" && baseParsed.Scheme != "https") || baseParsed.Hostname() == "" || baseParsed.User != nil {
 		return "", fmt.Errorf("%w: invalid endpoint_base_url %q", ErrInvalidDeclarativeSpec, baseURL)
@@ -292,6 +292,9 @@ func renderEndpointURL(baseURL string, parts []templatePart, vars map[string]str
 	}
 
 	relStr := relBuilder.String()
+	if implicitOpenAIPath && strings.HasSuffix(strings.TrimRight(baseParsed.EscapedPath(), "/"), "/v1") {
+		relStr = strings.TrimPrefix(relStr, "/v1")
+	}
 	if strings.Contains(relStr, "://") || strings.HasPrefix(relStr, "//") || strings.Contains(relStr, "@") {
 		return "", fmt.Errorf("%w: rendered relative path cannot alter authority", ErrInvalidDeclarativeSpec)
 	}

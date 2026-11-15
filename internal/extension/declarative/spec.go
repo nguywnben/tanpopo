@@ -68,6 +68,7 @@ type Spec struct {
 	StreamMapping     StreamMappingSpec   `yaml:"streamMapping" json:"stream_mapping"`
 	ErrorMapping      ErrorMappingSpec    `yaml:"errorMapping" json:"error_mapping"`
 	NativeMapping     NativeMappingSpec   `yaml:"nativeMapping" json:"native_mapping"`
+	canonicalOpenAI   bool
 }
 
 // AuthBindingSpec declares how a Host Vault secret slot binds to outbound HTTP credentials.
@@ -80,12 +81,12 @@ type AuthBindingSpec struct {
 
 // ValidationProbeSpec defines Phase-1/Phase-2 connection probe generation & evaluation.
 type ValidationProbeSpec struct {
-	Method          string   `yaml:"method" json:"method"`
-	PathTemplate    string   `yaml:"pathTemplate" json:"path_template"`
-	BodyJSON        string   `yaml:"bodyJson" json:"body_json"`
-	SuccessStatuses []int32  `yaml:"successStatuses" json:"success_statuses"`
-	ModelsArrayPath string   `yaml:"modelsArrayPath" json:"models_array_path"`
-	ModelIDField    string   `yaml:"modelIdField" json:"model_id_field"`
+	Method          string  `yaml:"method" json:"method"`
+	PathTemplate    string  `yaml:"pathTemplate" json:"path_template"`
+	BodyJSON        string  `yaml:"bodyJson" json:"body_json"`
+	SuccessStatuses []int32 `yaml:"successStatuses" json:"success_statuses"`
+	ModelsArrayPath string  `yaml:"modelsArrayPath" json:"models_array_path"`
+	ModelIDField    string  `yaml:"modelIdField" json:"model_id_field"`
 }
 
 // RequestMappingSpec defines bounded non-Turing-complete JSON request rewrites.
@@ -114,17 +115,19 @@ type ResponseMappingSpec struct {
 	FinishReasonPath string        `yaml:"finishReasonPath" json:"finish_reason_path"`
 	ContentPath      string        `yaml:"contentPath" json:"content_path"`
 	RolePath         string        `yaml:"rolePath" json:"role_path"`
+	ToolCallsPath    string        `yaml:"toolCallsPath" json:"tool_calls_path"`
 	UsagePaths       UsagePathSpec `yaml:"usagePaths" json:"usage_paths"`
 }
 
 // StreamMappingSpec defines bounded SSE frame parsing and delta normalization.
 type StreamMappingSpec struct {
-	DoneSentinel     string        `yaml:"doneSentinel" json:"done_sentinel"`
-	DeltaContentPath string        `yaml:"deltaContentPath" json:"delta_content_path"`
-	FinishReasonPath string        `yaml:"finishReasonPath" json:"finish_reason_path"`
-	ModelPath        string        `yaml:"modelPath" json:"model_path"`
-	UsagePaths       UsagePathSpec `yaml:"usagePaths" json:"usage_paths"`
-	ErrorMessagePath string        `yaml:"errorMessagePath" json:"error_message_path"`
+	DoneSentinel       string        `yaml:"doneSentinel" json:"done_sentinel"`
+	DeltaContentPath   string        `yaml:"deltaContentPath" json:"delta_content_path"`
+	DeltaToolCallsPath string        `yaml:"deltaToolCallsPath" json:"delta_tool_calls_path"`
+	FinishReasonPath   string        `yaml:"finishReasonPath" json:"finish_reason_path"`
+	ModelPath          string        `yaml:"modelPath" json:"model_path"`
+	UsagePaths         UsagePathSpec `yaml:"usagePaths" json:"usage_paths"`
+	ErrorMessagePath   string        `yaml:"errorMessagePath" json:"error_message_path"`
 }
 
 // ErrorMappingSpec allows mapping upstream HTTP error codes onto canonical behaviors.
@@ -191,12 +194,15 @@ type manifestSlot struct {
 }
 
 type adapterBlock struct {
-	Slug              string             `yaml:"slug"`
-	NativePrefix      string             `yaml:"nativePrefix"`
-	BaseURL           string             `yaml:"baseUrl"`
-	SupportedDialects []string           `yaml:"supportedDialects"`
-	Endpoints         map[string]string  `yaml:"endpoints"`
-	Auth              []manifestAuthRule `yaml:"auth"`
+	Slug              string               `yaml:"slug"`
+	NativePrefix      string               `yaml:"nativePrefix"`
+	BaseURL           string               `yaml:"baseUrl"`
+	BaseURLTemplate   string               `yaml:"baseUrlTemplate"`
+	WireProtocol      string               `yaml:"wireProtocol"`
+	UsageExtraction   manifestUsagePaths   `yaml:"usageExtraction"`
+	SupportedDialects []string             `yaml:"supportedDialects"`
+	Endpoints         map[string]string    `yaml:"endpoints"`
+	Auth              []manifestAuthRule   `yaml:"auth"`
 	ValidationProbe   *ValidationProbeSpec `yaml:"validationProbe"`
 	RequestMapping    *RequestMappingSpec  `yaml:"requestMapping"`
 	ResponseMapping   *ResponseMappingSpec `yaml:"responseMapping"`
@@ -205,13 +211,41 @@ type adapterBlock struct {
 	NativeMapping     *NativeMappingSpec   `yaml:"nativeMapping"`
 }
 
+type manifestUsagePaths struct {
+	InputTokens      string `yaml:"inputTokensPath"`
+	OutputTokens     string `yaml:"outputTokensPath"`
+	CacheReadTokens  string `yaml:"cacheReadTokensPath"`
+	CacheWriteTokens string `yaml:"cacheWriteTokensPath"`
+	ReasoningTokens  string `yaml:"reasoningTokensPath"`
+}
+
+func (p manifestUsagePaths) fillMissing(out *UsagePathSpec) {
+	for _, field := range []struct {
+		target *string
+		path   string
+	}{
+		{&out.InputTokens, p.InputTokens},
+		{&out.OutputTokens, p.OutputTokens},
+		{&out.CacheReadTokens, p.CacheReadTokens},
+		{&out.CacheWriteTokens, p.CacheWriteTokens},
+		{&out.ReasoningTokens, p.ReasoningTokens},
+	} {
+		if strings.TrimSpace(*field.target) == "" {
+			*field.target = strings.TrimPrefix(strings.TrimSpace(field.path), "$.")
+		}
+	}
+}
+
 type manifestAuthRule struct {
-	Slot       string `yaml:"slot"`
-	Mode       string `yaml:"mode"`
-	Location   string `yaml:"location"`
-	HeaderName string `yaml:"headerName"`
-	ParamName  string `yaml:"paramName"`
-	Prefix     string `yaml:"prefix"`
+	ID          string `yaml:"id"`
+	Slot        string `yaml:"slot"`
+	SecretSlot  string `yaml:"secretSlot"`
+	Mode        string `yaml:"mode"`
+	Location    string `yaml:"location"`
+	HeaderName  string `yaml:"headerName"`
+	ParamName   string `yaml:"paramName"`
+	Prefix      string `yaml:"prefix"`
+	ValuePrefix string `yaml:"valuePrefix"`
 }
 
 // ParseDeclarativeManifestYAML parses a canonical DeclarativeProviderAdapter YAML document
@@ -264,13 +298,17 @@ func specFromAdapterBlock(env manifestEnvelope) (Spec, error) {
 	if slug == "" {
 		slug = strings.TrimSpace(env.Metadata.ID)
 	}
+	baseURL := strings.TrimSpace(ab.BaseURLTemplate)
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(ab.BaseURL)
+	}
 	spec := Spec{
 		ID:                strings.TrimSpace(env.Metadata.ID),
 		Slug:              slug,
 		NativePrefix:      strings.TrimSpace(ab.NativePrefix),
 		SupportedDialects: append([]string(nil), ab.SupportedDialects...),
 		AllowedHosts:      append([]string(nil), env.Permissions.NetworkEgress.AllowedHosts...),
-		DefaultBaseURL:    strings.TrimSpace(ab.BaseURL),
+		DefaultBaseURL:    baseURL,
 	}
 	if ab.ValidationProbe != nil {
 		spec.ValidationProbe = *ab.ValidationProbe
@@ -281,6 +319,17 @@ func specFromAdapterBlock(env manifestEnvelope) (Spec, error) {
 	if ab.RequestMapping != nil {
 		spec.RequestMapping = *ab.RequestMapping
 	}
+	wireProto := strings.ToLower(strings.TrimSpace(ab.WireProtocol))
+	if wireProto == "openai_chat_v1" {
+		// SPEC-EXT-02 CR-09: openai_chat_v1 automatically enables stream_options.include_usage=true.
+		spec.RequestMapping.InjectStreamUsage = true
+		spec.canonicalOpenAI = true
+		if len(spec.SupportedDialects) == 0 {
+			spec.SupportedDialects = []string{"openai_chat"}
+		}
+	} else if wireProto != "" {
+		return Spec{}, fmt.Errorf("%w: unsupported wireProtocol %q", ErrInvalidDeclarativeSpec, ab.WireProtocol)
+	}
 	if spec.RequestMapping.PathTemplate == "" && ab.Endpoints["chat"] != "" {
 		spec.RequestMapping.PathTemplate = ab.Endpoints["chat"]
 	}
@@ -290,6 +339,8 @@ func specFromAdapterBlock(env manifestEnvelope) (Spec, error) {
 	if ab.StreamMapping != nil {
 		spec.StreamMapping = *ab.StreamMapping
 	}
+	ab.UsageExtraction.fillMissing(&spec.ResponseMapping.UsagePaths)
+	ab.UsageExtraction.fillMissing(&spec.StreamMapping.UsagePaths)
 	if ab.ErrorMapping != nil {
 		spec.ErrorMapping = *ab.ErrorMapping
 	}
@@ -297,7 +348,10 @@ func specFromAdapterBlock(env manifestEnvelope) (Spec, error) {
 		spec.NativeMapping = *ab.NativeMapping
 	}
 	for _, a := range ab.Auth {
-		slot := strings.TrimSpace(a.Slot)
+		slot := strings.TrimSpace(a.SecretSlot)
+		if slot == "" {
+			slot = strings.TrimSpace(a.Slot)
+		}
 		if slot == "" {
 			slot = "api_key"
 		}
@@ -320,11 +374,15 @@ func specFromAdapterBlock(env manifestEnvelope) (Spec, error) {
 		if fieldName == "" && targetLoc == port.CredentialTargetLocationHeader {
 			fieldName = "Authorization"
 		}
+		prefix := a.ValuePrefix
+		if prefix == "" {
+			prefix = a.Prefix
+		}
 		spec.AuthBindings = append(spec.AuthBindings, AuthBindingSpec{
 			SlotName:       slot,
 			TargetLocation: targetLoc,
 			FieldName:      fieldName,
-			ValuePrefix:    a.Prefix,
+			ValuePrefix:    prefix,
 		})
 	}
 	return spec, nil
@@ -399,10 +457,10 @@ func DefaultOpenAICompatibleSpec(slug string, allowedHosts []string) Spec {
 			ContentPath:      "choices.0.message.content",
 			RolePath:         "choices.0.message.role",
 			UsagePaths: UsagePathSpec{
-				InputTokens:      "usage.prompt_tokens",
-				OutputTokens:     "usage.completion_tokens",
-				CacheReadTokens:  "usage.prompt_tokens_details.cached_tokens",
-				ReasoningTokens:  "usage.completion_tokens_details.reasoning_tokens",
+				InputTokens:     "usage.prompt_tokens",
+				OutputTokens:    "usage.completion_tokens",
+				CacheReadTokens: "usage.prompt_tokens_details.cached_tokens",
+				ReasoningTokens: "usage.completion_tokens_details.reasoning_tokens",
 			},
 		},
 		StreamMapping: StreamMappingSpec{
@@ -411,10 +469,10 @@ func DefaultOpenAICompatibleSpec(slug string, allowedHosts []string) Spec {
 			FinishReasonPath: "choices.0.finish_reason",
 			ModelPath:        "model",
 			UsagePaths: UsagePathSpec{
-				InputTokens:      "usage.prompt_tokens",
-				OutputTokens:     "usage.completion_tokens",
-				CacheReadTokens:  "usage.prompt_tokens_details.cached_tokens",
-				ReasoningTokens:  "usage.completion_tokens_details.reasoning_tokens",
+				InputTokens:     "usage.prompt_tokens",
+				OutputTokens:    "usage.completion_tokens",
+				CacheReadTokens: "usage.prompt_tokens_details.cached_tokens",
+				ReasoningTokens: "usage.completion_tokens_details.reasoning_tokens",
 			},
 			ErrorMessagePath: "error.message",
 		},

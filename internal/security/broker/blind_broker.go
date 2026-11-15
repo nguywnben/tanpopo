@@ -100,6 +100,24 @@ const (
 	TargetHostCryptoSign TargetLocation = "HOST_CRYPTO_SIGN"
 )
 
+const (
+	InjectModeHostBlind      = "HOST_BLIND_INJECT"
+	InjectModeHostCryptoSign = "HOST_CRYPTO_SIGN"
+)
+
+func allowsInjectionMode(mode string, target TargetLocation) bool {
+	switch mode {
+	case "":
+		return true // Existing resolvers may omit a mode.
+	case InjectModeHostBlind:
+		return target == TargetBearer || target == TargetHeader || target == TargetBasic || target == TargetQueryParam
+	case InjectModeHostCryptoSign:
+		return target == TargetHostCryptoSign
+	default:
+		return false
+	}
+}
+
 // SigningAlgorithm identifies Host-executed request-signing algorithms (runtime.proto).
 type SigningAlgorithm string
 
@@ -141,10 +159,12 @@ type CredentialInjection struct {
 // ResolvedSlot carries non-secret metadata resolved for (orgID, connectionID, slotName).
 // Plaintext secrets are never returned by CredentialBindingResolver; only Vault holds secrets.
 type ResolvedSlot struct {
-	OrgID          string
-	ConnectionID   string
-	SlotName       string
-	SecretID       string
+	OrgID        string
+	ConnectionID string
+	SlotName     string
+	SecretID     string
+	// InjectMode restricts use of the credential when specified by the binding resolver.
+	InjectMode     string
 	BoundAudience  *string
 	AllowedHosts   []string
 	AllowPrivateIP bool
@@ -172,7 +192,7 @@ type VaultUnsealer interface {
 
 // Config configures BlindHostCredentialBroker fail-closed.
 type Config struct {
-	Resolver                  CredentialBindingResolver
+	Resolver CredentialBindingResolver
 	// PolicyResolver optionally provides an explicit Host-authoritative connection
 	// egress policy lookup for zero-slot connections (auth_mode=NONE). When nil,
 	// BlindHostCredentialBroker falls back to Resolver.(ConnectionPolicyResolver)
@@ -469,15 +489,11 @@ func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressReque
 	}
 
 	// 2. Resolve slots/policies and validate HostMatches + BoundAudience prior to unsealing or dialing.
-	type slotPlan struct {
-		inj  CredentialInjection
-		slot *ResolvedSlot
-	}
-	var plans []slotPlan
+	var plans []brokerSlotPlan
 	var policies []egress.Policy
 
 	if len(req.CredentialInjections) > 0 {
-		plans = make([]slotPlan, 0, len(req.CredentialInjections))
+		plans = make([]brokerSlotPlan, 0, len(req.CredentialInjections))
 		for _, inj := range req.CredentialInjections {
 			slot, rerr := b.resolver.ResolveSlot(ctx, req.OrgID, req.ConnectionID, inj.SecretSlotName)
 			if rerr != nil {
@@ -513,6 +529,18 @@ func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressReque
 				}
 			}
 
+			if !allowsInjectionMode(slot.InjectMode, inj.Location) {
+				b.recordAudit(ctx, req, "broker.credential_binding_mode_denied", map[string]any{
+					"slot_name": inj.SecretSlotName,
+				})
+				return nil, &Error{
+					HTTPStatus: http.StatusForbidden,
+					Code:       "credential_binding_mode_denied",
+					Message:    "credential injection does not match the resolved slot binding mode",
+					Err:        ErrInvalidEgressRequest,
+				}
+			}
+
 			pol := egress.Policy{
 				AllowedHosts:   slot.AllowedHosts,
 				AllowPrivateIP: slot.AllowPrivateIP,
@@ -541,7 +569,7 @@ func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressReque
 					Err:        ErrAudienceMismatch,
 				}
 			}
-			plans = append(plans, slotPlan{inj: inj, slot: slot})
+			plans = append(plans, brokerSlotPlan{inj: inj, slot: slot})
 			policies = append(policies, pol)
 		}
 		if b.hasExplicitPolicyResolver {
@@ -680,12 +708,35 @@ func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressReque
 		}
 	}
 
+	// Re-verify live connection/extension authorization immediately prior to socket dial (TOCTOU guard).
+	if verr := b.reverifyAuthorizationBeforeDispatch(ctx, req, parsedURL, rawURL, plans, constraint); verr != nil {
+		_ = b.recordAudit(ctx, req, "broker.egress_revoked_pre_dispatch", map[string]any{
+			"target_host": parsedURL.Host,
+			"reason":      scrubber.scrubString(verr.Error()),
+		})
+		return nil, scrubber.sanitizeError(verr)
+	}
+
+	effectiveControlHook := func(network, address string, c syscall.RawConn) error {
+		if rerr := b.reverifyAuthorizationBeforeDispatch(ctx, req, parsedURL, rawURL, plans, constraint); rerr != nil {
+			_ = b.recordAudit(ctx, req, "broker.egress_revoked_pre_connect", map[string]any{
+				"target_host": parsedURL.Host,
+				"reason":      scrubber.scrubString(rerr.Error()),
+			})
+			return rerr
+		}
+		if b.controlHook != nil {
+			return b.controlHook(network, address, c)
+		}
+		return nil
+	}
+
 	client, err := egress.NewGuardedHTTPClient(egress.ClientConfig{
 		Policy:                   mergedPolicy,
 		Timeout:                  timeout,
 		DenyCrossOriginRedirects: !b.allowCrossOriginRedirects,
 		Resolver:                 b.hostResolver,
-		ControlHook:              b.controlHook,
+		ControlHook:              effectiveControlHook,
 	})
 	if err != nil {
 		return nil, scrubber.sanitizeError(err)
@@ -724,6 +775,98 @@ func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressReque
 		SanitizedHeaders: sanitizedHeaders,
 		Body:             scrubbedBody,
 	}, nil
+}
+
+type brokerSlotPlan struct {
+	inj  CredentialInjection
+	slot *ResolvedSlot
+}
+
+func (b *BlindHostCredentialBroker) reverifyAuthorizationBeforeDispatch(
+	ctx context.Context,
+	req EgressRequest,
+	parsedURL *url.URL,
+	rawURL string,
+	plans []brokerSlotPlan,
+	constraint HostEgressConstraint,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var policies []egress.Policy
+	if len(plans) > 0 {
+		for _, item := range plans {
+			slot, rerr := b.resolver.ResolveSlot(ctx, req.OrgID, req.ConnectionID, item.inj.SecretSlotName)
+			if rerr != nil {
+				return rerr
+			}
+			if slot == nil {
+				return fmt.Errorf("%w: resolved slot %q is nil", ErrInvalidEgressRequest, item.inj.SecretSlotName)
+			}
+			if slot.OrgID != req.OrgID || slot.ConnectionID != req.ConnectionID {
+				return &egress.Error{
+					HTTPStatus: http.StatusForbidden,
+					Code:       "egress_host_denied",
+					Message:    "resolved credential slot tenant or connection mismatch",
+					Err:        egress.ErrHostDenied,
+				}
+			}
+			if slot.SecretID != item.slot.SecretID || slot.InjectMode != item.slot.InjectMode || !allowsInjectionMode(slot.InjectMode, item.inj.Location) {
+				return &Error{
+					HTTPStatus: http.StatusForbidden,
+					Code:       "credential_binding_mode_denied",
+					Message:    "credential binding changed or no longer permitted prior to dispatch",
+					Err:        ErrInvalidEgressRequest,
+				}
+			}
+			pol := egress.Policy{
+				AllowedHosts:   slot.AllowedHosts,
+				AllowPrivateIP: slot.AllowPrivateIP,
+				AllowedCIDRs:   slot.AllowedCIDRs,
+				AllowedPorts:   slot.AllowedPorts,
+				RequireTLS:     slot.RequireTLS,
+			}
+			if _, verr := pol.ValidateTargetURL(rawURL); verr != nil {
+				return verr
+			}
+			if ok, mismatchReason := AudienceMatches(parsedURL, slot.BoundAudience); !ok {
+				return &Error{
+					HTTPStatus: http.StatusForbidden,
+					Code:       "credential_audience_mismatch",
+					Message:    mismatchReason,
+					Err:        ErrAudienceMismatch,
+				}
+			}
+			policies = append(policies, pol)
+		}
+		if b.hasExplicitPolicyResolver {
+			connPolicy, cerr := b.resolveAuthoritativeConnectionPolicy(ctx, req, parsedURL, rawURL)
+			if cerr != nil {
+				return cerr
+			}
+			policies = append(policies, connPolicy)
+		}
+	} else {
+		connPolicy, cerr := b.resolveAuthoritativeConnectionPolicy(ctx, req, parsedURL, rawURL)
+		if cerr != nil {
+			return cerr
+		}
+		policies = append(policies, connPolicy)
+	}
+	if constraint.NarrowPolicy != nil {
+		if _, cerr := constraint.NarrowPolicy.ValidateTargetURL(rawURL); cerr != nil {
+			return cerr
+		}
+		policies = append(policies, *constraint.NarrowPolicy)
+	}
+	mergedPolicy, err := intersectPolicies(policies)
+	if err != nil {
+		return err
+	}
+	if _, verr := mergedPolicy.ValidateTargetURL(rawURL); verr != nil {
+		return verr
+	}
+	return nil
 }
 
 func (b *BlindHostCredentialBroker) resolveAuthoritativeConnectionPolicy(
@@ -1509,6 +1652,7 @@ var safeMatchedSentinels = []error{
 	ErrResponseTooLarge,
 	vault.ErrMissingUnsealCapability,
 	port.ErrNotFound,
+	port.ErrInvalidInput,
 	context.Canceled,
 	context.DeadlineExceeded,
 }

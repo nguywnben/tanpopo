@@ -70,13 +70,23 @@ func IsValidSM02Transition(from, to string) bool {
 
 // TransitionConnectionState enforces SM-02 + optimistic locking, appends to config_changelog
 // (marking emergency=true for REVOKED / SUSPENDED_BY_ADMIN / AUTH_EXPIRED_REAUTH_REQUIRED),
-// and synchronously refreshes ConfigSnapshot.
+// and synchronously refreshes ConfigSnapshot. If the DB commit succeeds and only snapshot
+// synchronization fails, the committed ProviderConnection is returned alongside ErrSnapshotSyncFailed.
 func (r *Repository) TransitionConnectionState(ctx context.Context, orgID, connectionID, targetState string, expectedVersion int64, reason string) (*ProviderConnection, error) {
+	if _, err := r.transitionConnectionStateDB(ctx, orgID, connectionID, targetState, expectedVersion, reason); err != nil {
+		return nil, err
+	}
+	syncErr := r.syncSnapshot(ctx)
+	updated, readErr := r.getConnWithoutCancel(ctx, orgID, connectionID)
+	return updated, errors.Join(syncErr, readErr)
+}
+
+func (r *Repository) transitionConnectionStateDB(ctx context.Context, orgID, connectionID, targetState string, expectedVersion int64, reason string) (int64, error) {
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(connectionID) == "" {
-		return nil, fmt.Errorf("%w: org_id and connection_id are required", port.ErrInvalidInput)
+		return 0, fmt.Errorf("%w: org_id and connection_id are required", port.ErrInvalidInput)
 	}
 	if expectedVersion < 1 {
-		return nil, fmt.Errorf("%w: expected_version >= 1 required", port.ErrInvalidInput)
+		return 0, fmt.Errorf("%w: expected_version >= 1 required", port.ErrInvalidInput)
 	}
 
 	now := r.nowMs()
@@ -98,6 +108,11 @@ func (r *Repository) TransitionConnectionState(ctx context.Context, orgID, conne
 		}
 		if !IsValidSM02Transition(prevState, targetState) {
 			return fmt.Errorf("%w: %s -> %s", ErrInvalidStateTransition, prevState, targetState)
+		}
+		if targetState == ConnStateActive {
+			if aerr := r.ensureConnectionAuthorized(ctx, tx, orgID, connectionID, ErrConnectionNotReady); aerr != nil {
+				return aerr
+			}
 		}
 
 		res, err := tx.ExecContext(ctx, `
@@ -128,12 +143,9 @@ func (r *Repository) TransitionConnectionState(ctx context.Context, orgID, conne
 		}
 		return appendChangelogTx(ctx, tx, &orgID, "provider_connection", connectionID, mutType, emergency, now)
 	}); err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	if err := r.syncSnapshot(ctx); err != nil {
-		return nil, err
-	}
 	if r.audit != nil && (targetState == ConnStateRevoked || targetState == ConnStateSuspendedAdmin || targetState == ConnStateActive) {
 		auditID, _ := idgen.New(idgen.PrefixAudit)
 		_ = r.audit.Append(ctx, port.AuditEvent{
@@ -149,7 +161,15 @@ func (r *Repository) TransitionConnectionState(ctx context.Context, orgID, conne
 			MetadataJSON: fmt.Sprintf(`{"from":%q,"to":%q,"reason":%q}`, prevState, targetState, strings.TrimSpace(reason)),
 		})
 	}
-	return r.GetProviderConnection(ctx, orgID, connectionID)
+	return now, nil
+}
+
+func connectionAfterTransition(conn *ProviderConnection, state string, updatedAt int64) *ProviderConnection {
+	updated := *conn
+	updated.State = state
+	updated.Version++
+	updated.UpdatedAtMs = updatedAt
+	return &updated
 }
 
 // ValidateConnection drives the two-phase blind probe lifecycle:
@@ -177,10 +197,29 @@ func (r *Repository) ValidateConnection(
 		cur.CredentialID == nil && len(cur.SecretBindings) == 0 {
 		return nil, nil, fmt.Errorf("%w: auth_mode %s requires bound credential slot before validation", port.ErrInvalidInput, cur.AuthMode)
 	}
+	if aerr := r.ensureConnectionAuthorized(ctx, r.db, orgID, connectionID, ErrConnectionNotReady); aerr != nil {
+		verdict := extport.ValidationVerdict{
+			Valid:            false,
+			FailureCode:      "authorization_revoked",
+			SanitizedMessage: aerr.Error(),
+		}
+		return &verdict, cur, aerr
+	}
 
-	validatingConn, err := r.TransitionConnectionState(ctx, orgID, connectionID, ConnStateValidating, cur.Version, "probe_started")
+	validatingAt, err := r.transitionConnectionStateDB(ctx, orgID, connectionID, ConnStateValidating, cur.Version, "probe_started")
 	if err != nil {
+		if errors.Is(err, port.ErrVersionConflict) {
+			curNow, _ := r.getConnWithoutCancel(ctx, orgID, connectionID)
+			return nil, curNow, err
+		}
 		return nil, nil, err
+	}
+	validatingConn := connectionAfterTransition(cur, ConnStateValidating, validatingAt)
+	if syncErr := r.syncSnapshot(ctx); syncErr != nil {
+		// VALIDATING already committed in DB; revert VALIDATING -> DRAFT while respecting
+		// optimistic locking (e.g., concurrent REVOKED) so the caller can safely retry.
+		reverted, revertErr := r.rollbackValidatingToDraft(ctx, validatingConn, "validating_snapshot_sync_failed")
+		return nil, reverted, errors.Join(syncErr, revertErr)
 	}
 
 	probeReqID, err := idgen.New(idgen.PrefixTrace)
@@ -189,7 +228,7 @@ func (r *Repository) ValidateConnection(
 	}
 	mergedConfig, err := mergeConnectionConfigJSON(validatingConn.EndpointBaseURL, validatingConn.ConfigJSON)
 	if err != nil {
-		updated, revertErr := r.rollbackValidatingToDraft(ctx, orgID, connectionID, validatingConn.Version, "config_merge_error")
+		updated, revertErr := r.rollbackValidatingToDraft(ctx, validatingConn, "config_merge_error")
 		return nil, updated, errors.Join(err, revertErr)
 	}
 
@@ -204,19 +243,19 @@ func (r *Repository) ValidateConnection(
 		SecretSlotNames: slotNames,
 	})
 	if err != nil {
-		updated, revertErr := r.rollbackValidatingToDraft(ctx, orgID, connectionID, validatingConn.Version, "build_probe_failed")
+		updated, revertErr := r.rollbackValidatingToDraft(ctx, validatingConn, "build_probe_failed")
 		return nil, updated, errors.Join(err, revertErr)
 	}
 
 	egressReq, hostConstraint, err := buildBrokerProbeRequest(orgID, connectionID, probeReqID, validatingConn, probeSpec)
 	if err != nil {
-		updated, revertErr := r.rollbackValidatingToDraft(ctx, orgID, connectionID, validatingConn.Version, "broker_request_invalid")
+		updated, revertErr := r.rollbackValidatingToDraft(ctx, validatingConn, "broker_request_invalid")
 		return nil, updated, errors.Join(err, revertErr)
 	}
 
 	egressResp, err := brk.ExecuteWithHostConstraint(ctx, egressReq, hostConstraint)
 	if err != nil {
-		updated, revertErr := r.rollbackValidatingToDraft(ctx, orgID, connectionID, validatingConn.Version, "probe_egress_failed")
+		updated, revertErr := r.rollbackValidatingToDraft(ctx, validatingConn, "probe_egress_failed")
 		verdict := &extport.ValidationVerdict{
 			Valid:            false,
 			FailureCode:      "probe_egress_failed",
@@ -232,34 +271,59 @@ func (r *Repository) ValidateConnection(
 		ResponseBody:     egressResp.Body,
 	})
 	if err != nil {
-		updated, revertErr := r.rollbackValidatingToDraft(ctx, orgID, connectionID, validatingConn.Version, "verify_probe_error")
+		updated, revertErr := r.rollbackValidatingToDraft(ctx, validatingConn, "verify_probe_error")
 		return nil, updated, errors.Join(err, revertErr)
 	}
 
-	targetState := ConnStateDraft
-	reason := verdict.FailureCode
-	if verdict.Valid {
-		targetState = ConnStateActive
-		reason = "probe_passed"
-	} else {
-		updated, revertErr := r.rollbackValidatingToDraft(ctx, orgID, connectionID, validatingConn.Version, reason)
+	if !verdict.Valid {
+		updated, revertErr := r.rollbackValidatingToDraft(ctx, validatingConn, verdict.FailureCode)
 		return &verdict, updated, revertErr
 	}
-	updated, terr := r.TransitionConnectionState(ctx, orgID, connectionID, targetState, validatingConn.Version, reason)
+	activeAt, terr := r.transitionConnectionStateDB(ctx, orgID, connectionID, ConnStateActive, validatingConn.Version, "probe_passed")
 	if terr != nil {
-		if !errors.Is(terr, port.ErrVersionConflict) {
-			reverted, revertErr := r.rollbackValidatingToDraft(ctx, orgID, connectionID, validatingConn.Version, "final_transition_failed")
-			return &verdict, reverted, errors.Join(terr, revertErr)
+		verdict.Valid = false
+		verdict.FailureCode = "authorization_revoked"
+		verdict.SanitizedMessage = "connection or extension authorization revoked prior to ACTIVE commit"
+		if errors.Is(terr, port.ErrVersionConflict) {
+			curNow, _ := r.getConnWithoutCancel(ctx, orgID, connectionID)
+			return &verdict, curNow, terr
 		}
-		return &verdict, updated, terr
+		reverted, revertErr := r.rollbackValidatingToDraft(ctx, validatingConn, "authorization_revoked")
+		return &verdict, reverted, errors.Join(terr, revertErr)
+	}
+	updated := connectionAfterTransition(validatingConn, ConnStateActive, activeAt)
+	if syncErr := r.syncSnapshot(ctx); syncErr != nil {
+		// ACTIVE already committed in DB; return the actual committed connection and ErrSnapshotSyncFailed
+		// instead of issuing a stale-version rollback against VALIDATING.
+		return &verdict, updated, syncErr
 	}
 	return &verdict, updated, nil
 }
 
-func (r *Repository) rollbackValidatingToDraft(ctx context.Context, orgID, connectionID string, expectedVersion int64, reason string) (*ProviderConnection, error) {
+func (r *Repository) getConnWithoutCancel(ctx context.Context, orgID, connectionID string) (*ProviderConnection, error) {
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	return r.GetProviderConnection(readCtx, orgID, connectionID)
+}
+
+func (r *Repository) rollbackValidatingToDraft(ctx context.Context, conn *ProviderConnection, reason string) (*ProviderConnection, error) {
 	revertCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	return r.TransitionConnectionState(revertCtx, orgID, connectionID, ConnStateDraft, expectedVersion, reason)
+	draftAt, err := r.transitionConnectionStateDB(revertCtx, conn.OrgID, conn.ID, ConnStateDraft, conn.Version, reason)
+	if err != nil {
+		if errors.Is(err, port.ErrVersionConflict) {
+			curNow, readErr := r.GetProviderConnection(revertCtx, conn.OrgID, conn.ID)
+			if readErr == nil {
+				return curNow, err
+			}
+		}
+		return nil, err
+	}
+	reverted := connectionAfterTransition(conn, ConnStateDraft, draftAt)
+	if syncErr := r.syncSnapshot(revertCtx); syncErr != nil {
+		return reverted, syncErr
+	}
+	return reverted, nil
 }
 
 // RecordRuntimeHealthOutcome applies SM-02 health feedback from normalized upstream inference errors.

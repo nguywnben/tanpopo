@@ -15,10 +15,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -103,11 +106,23 @@ func newTestHarness(t *testing.T) *testHarness {
 		t.Fatalf("snapshot.NewManager failed: %v", err)
 	}
 
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey failed: %v", err)
+	}
+	pluginsDir := filepath.Join(tmpDir, "plugins")
+	lockPath := filepath.Join(tmpDir, "tanpopo.lock")
+	keyID := installer.PublicKeyFingerprint(pub)
+	keyring := installer.TrustedKeyring{
+		RootPublicKeys: map[string]ed25519.PublicKey{keyID: pub},
+	}
+
 	repo, err := catalog.NewRepository(catalog.Config{
 		DB:        st.RawDB(),
 		NowMs:     nowMs,
 		Snapshots: snapMgr,
 		Audit:     noopAuditSink{},
+		Keyring:   keyring,
 	})
 	if err != nil {
 		t.Fatalf("catalog.NewRepository failed: %v", err)
@@ -128,23 +143,13 @@ func newTestHarness(t *testing.T) *testHarness {
 		t.Fatalf("broker.NewBlindBroker failed: %v", err)
 	}
 
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("GenerateKey failed: %v", err)
-	}
-	pluginsDir := filepath.Join(tmpDir, "plugins")
-	lockPath := filepath.Join(tmpDir, "tanpopo.lock")
-	keyID := installer.PublicKeyFingerprint(pub)
-
 	inst, err := installer.NewLifecycleService(installer.ServiceConfig{
 		DB:           st.RawDB(),
 		Audit:        noopAuditSink{},
 		PluginsDir:   pluginsDir,
 		LockfilePath: lockPath,
-		Keyring: installer.TrustedKeyring{
-			RootPublicKeys: map[string]ed25519.PublicKey{keyID: pub},
-		},
-		NowMs: nowMs,
+		Keyring:      keyring,
+		NowMs:        nowMs,
 	})
 	if err != nil {
 		t.Fatalf("installer.NewLifecycleService failed: %v", err)
@@ -968,9 +973,14 @@ compatibility:
   coreVersionRange: ">=0.1.0"
 runtime:
   tier: "declarative"
+secretSlots:
+  - slot: "api_key"
+    requiredForAuthMethods: ["api_key"]
 permissions:
   networkEgress:
     allowedHosts: ["api.example.com", "127.0.0.1"]
+    allowPrivateIp: true
+    requireTls: false
 adapter:
   slug: secrem
   baseUrl: "https://api.example.com"
@@ -1262,3 +1272,1423 @@ func (s *cancelingRuntimeSpy) InspectNativeRequest(ctx context.Context, in extpo
 	return s.inner.InspectNativeRequest(ctx, in)
 }
 
+type faultySnapshotRefresher struct {
+	inner     *snapshot.Manager
+	failOn    atomic.Int32
+	calls     atomic.Int32
+	onRefresh func(callNum int32)
+}
+
+func (f *faultySnapshotRefresher) Refresh(ctx context.Context) error {
+	callNum := f.calls.Add(1)
+	if f.onRefresh != nil {
+		f.onRefresh(callNum)
+	}
+	target := f.failOn.Load()
+	if target < 0 || (target > 0 && callNum == target) {
+		return errors.New("injected snapshot refresh failure")
+	}
+	return f.inner.Refresh(ctx)
+}
+
+func TestSM01ApprovedPermissionIntersectionAndFailClosed(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	orgID, _, approverID := h.createOrgProjectApprover(t, "sm01-perms")
+
+	manifestYAML := `
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@tanpopo/adapter-sm01-perm"
+  name: Strict Permission Intersection Adapter
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["api.approved.example:8443", "alt.approved.example"]
+    allowPrivateIp: false
+    requireTls: true
+adapter:
+  slug: strict-perm
+  baseUrlTemplate: "https://api.approved.example:8443/v1"
+  wireProtocol: "openai_chat_v1"
+  auth:
+    - id: "bearer_api_key"
+      mode: "host_blind_inject"
+      secretSlot: "api_key"
+      headerName: "Authorization"
+      valuePrefix: "Bearer "
+`
+	installID := h.installDeclarativePackage(t, "@tanpopo/adapter-sm01-perm", approverID, manifestYAML)
+
+	// 1. CreateProviderAdapter fails closed on empty allowed_hosts, unapproved host, and port widening.
+	if _, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: installID,
+		AdapterSlug:    "empty-hosts",
+		AllowedHosts:   nil,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on empty AllowedHosts, got %v", err)
+	}
+	if _, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: installID,
+		AdapterSlug:    "unapproved-host",
+		AllowedHosts:   []string{"evil.example"},
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on unapproved host, got %v", err)
+	}
+	if _, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: installID,
+		AdapterSlug:    "port-widen",
+		AllowedHosts:   []string{"api.approved.example"}, // approved pinned :8443
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput when adapter widens approved port, got %v", err)
+	}
+
+	// Narrow adapter to ONLY api.approved.example:8443 (omitting alt.approved.example approved on extension).
+	adp, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: installID,
+		AdapterSlug:    "strict-perm",
+		AllowedHosts:   []string{"api.approved.example:8443"},
+	})
+	if err != nil {
+		t.Fatalf("valid narrowed CreateProviderAdapter failed: %v", err)
+	}
+
+	sec, err := h.vault.SealSecret(h.ctx, vault.SealSecretParams{
+		OrgID:      orgID,
+		Name:       "strict-key",
+		SecretKind: vault.SecretKindAPIKey,
+		Plaintext:  []byte("sk-strict"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Host intersection at CreateProviderConnection: alt.approved.example approved by extension but NOT adapter.
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		CredentialID:    &sec.ID,
+		Name:            "Adapter Narrow Denied",
+		EndpointBaseURL: "https://alt.approved.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on host outside adapter intersection, got %v", err)
+	}
+
+	// 3. TLS intersection: requireTls=true rejects http:// even for approved host.
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		CredentialID:    &sec.ID,
+		Name:            "HTTP Denied RequireTLS",
+		EndpointBaseURL: "http://api.approved.example:8443/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on http:// when requireTls=true, got %v", err)
+	}
+
+	// 4. allowPrivateIp intersection: extension allowPrivateIp=false rejects AllowPrivateIP=true connection.
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		CredentialID:    &sec.ID,
+		Name:            "PrivateIP Denied",
+		EndpointBaseURL: "https://api.approved.example:8443/v1",
+		AllowPrivateIP:  true,
+		AllowedCIDRs:    []string{"10.0.0.0/8"},
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on AllowPrivateIP=true when approved allowPrivateIp=false, got %v", err)
+	}
+
+	// 5. Secret slot & inject_mode intersection: unapproved slot or escalated HOST_CRYPTO_SIGN rejected.
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		Name:            "Unapproved Slot",
+		EndpointBaseURL: "https://api.approved.example:8443/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+		SecretBindings: []catalog.SecretBindingInput{
+			{SlotName: "unapproved_slot", CredentialID: sec.ID, InjectMode: catalog.InjectModeHostBlind},
+		},
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for unapproved slot, got %v", err)
+	}
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		Name:            "Escalated Inject Mode",
+		EndpointBaseURL: "https://api.approved.example:8443/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAWSSigV4,
+		SecretBindings: []catalog.SecretBindingInput{
+			{SlotName: "api_key", CredentialID: sec.ID, InjectMode: catalog.InjectModeHostCryptoSign},
+		},
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for unapproved HOST_CRYPTO_SIGN mode, got %v", err)
+	}
+
+	// Valid connection matching exact intersection succeeds and transitions to VALIDATING for resolver tests.
+	validConn, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		CredentialID:    &sec.ID,
+		Name:            "Strict Approved Conn",
+		EndpointBaseURL: "https://api.approved.example:8443/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+	})
+	if err != nil {
+		t.Fatalf("CreateProviderConnection valid failed: %v", err)
+	}
+	if _, err := h.repo.TransitionConnectionState(h.ctx, orgID, validConn.ID, catalog.ConnStateValidating, validConn.Version, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify BOTH resolvers initially succeed.
+	if pol, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, validConn.ID); err != nil || !pol.RequireTLS || pol.AllowPrivateIP {
+		t.Fatalf("expected valid ResolveConnectionPolicy RequireTLS=true AllowPrivateIP=false, got pol=%+v err=%v", pol, err)
+	}
+	if slot, err := h.repo.ResolveSlot(h.ctx, orgID, validConn.ID, "api_key"); err != nil || slot == nil || !slot.RequireTLS || slot.InjectMode != broker.InjectModeHostBlind {
+		t.Fatalf("expected slot with TLS and host blind injection, got slot=%+v err=%v", slot, err)
+	}
+
+	// 6. Both ResolveConnectionPolicy and ResolveSlot fail closed when approved_permissions_json narrows, corrupts, or drops active_version_id.
+	var origApproved string
+	var origActiveVer string
+	if err := h.store.RawDB().QueryRowContext(h.ctx, `SELECT approved_permissions_json, active_version_id FROM extension_installations WHERE id = ?`, installID).Scan(&origApproved, &origActiveVer); err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove "api_key" from approved_permissions_json -> ResolveSlot fails closed while host-only policy still holds.
+	noSlotPerms := `{"allowed_hosts":["api.approved.example:8443"],"allow_private_ip":false,"require_tls":true,"execution_tier":"DECLARATIVE_T1","secret_slots":[]}`
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE extension_installations SET approved_permissions_json = ? WHERE id = ?`, noSlotPerms, installID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.ResolveSlot(h.ctx, orgID, validConn.ID, "api_key"); !errors.Is(err, catalog.ErrConnectionNotReady) {
+		t.Fatalf("expected ResolveSlot ErrConnectionNotReady when slot dropped from SM-01 approval, got %v", err)
+	}
+
+	// Narrow host in approved_permissions_json -> BOTH ResolveConnectionPolicy and ResolveSlot fail closed.
+	narrowHostPerms := `{"allowed_hosts":["other.example"],"allow_private_ip":false,"require_tls":true,"execution_tier":"DECLARATIVE_T1","secret_slots":["api_key"]}`
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE extension_installations SET approved_permissions_json = ? WHERE id = ?`, narrowHostPerms, installID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, validConn.ID); !errors.Is(err, catalog.ErrConnectionNotReady) {
+		t.Fatalf("expected ResolveConnectionPolicy fail closed when host narrowed in SM-01 approval, got %v", err)
+	}
+	if _, err := h.repo.ResolveSlot(h.ctx, orgID, validConn.ID, "api_key"); !errors.Is(err, catalog.ErrConnectionNotReady) {
+		t.Fatalf("expected ResolveSlot fail closed when host narrowed in SM-01 approval, got %v", err)
+	}
+
+	// Corrupt/empty approved_permissions_json -> BOTH resolvers AND CreateProviderAdapter fail closed.
+	for _, badJSON := range []string{`{}`, `null`, `{corrupt`} {
+		if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE extension_installations SET approved_permissions_json = ? WHERE id = ?`, badJSON, installID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+			InstallationID: installID,
+			AdapterSlug:    "corrupt-perm-" + badJSON,
+			AllowedHosts:   []string{"api.approved.example:8443"},
+		}); !errors.Is(err, port.ErrInvalidInput) {
+			t.Fatalf("CreateProviderAdapter(%s) expected ErrInvalidInput, got %v", badJSON, err)
+		}
+		if _, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, validConn.ID); !errors.Is(err, catalog.ErrConnectionNotReady) {
+			t.Fatalf("ResolveConnectionPolicy(%s) expected ErrConnectionNotReady, got %v", badJSON, err)
+		}
+		if _, err := h.repo.ResolveSlot(h.ctx, orgID, validConn.ID, "api_key"); !errors.Is(err, catalog.ErrConnectionNotReady) {
+			t.Fatalf("ResolveSlot(%s) expected ErrConnectionNotReady, got %v", badJSON, err)
+		}
+	}
+
+	// Restore valid permissions then clear active_version_id -> BOTH adapters and resolvers fail closed.
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE extension_installations SET approved_permissions_json = ?, active_version_id = NULL WHERE id = ?`, origApproved, installID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: installID,
+		AdapterSlug:    "no-active-ver",
+		AllowedHosts:   []string{"api.approved.example:8443"},
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("CreateProviderAdapter without active_version_id expected ErrInvalidInput, got %v", err)
+	}
+	if _, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, validConn.ID); !errors.Is(err, catalog.ErrConnectionNotReady) {
+		t.Fatalf("ResolveConnectionPolicy without active_version_id expected ErrConnectionNotReady, got %v", err)
+	}
+	if _, err := h.repo.ResolveSlot(h.ctx, orgID, validConn.ID, "api_key"); !errors.Is(err, catalog.ErrConnectionNotReady) {
+		t.Fatalf("ResolveSlot without active_version_id expected ErrConnectionNotReady, got %v", err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE extension_installations SET active_version_id = ? WHERE id = ?`, origActiveVer, installID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTPBR0202OrgMinPluginTrustAndDisablePolicy(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	nowMs := func() int64 { return h.clk.Now().UnixMilli() }
+
+	rootPub, rootPriv, _ := ed25519.GenerateKey(rand.Reader)
+	pubPub, pubPriv, _ := ed25519.GenerateKey(rand.Reader)
+	entPub, entPriv, _ := ed25519.GenerateKey(rand.Reader)
+
+	keyring := installer.TrustedKeyring{
+		RootPublicKeys:       map[string]ed25519.PublicKey{"root": rootPub},
+		PublisherPublicKeys:  map[string]ed25519.PublicKey{"pub": pubPub},
+		EnterprisePublicKeys: map[string]ed25519.PublicKey{"ent": entPub},
+	}
+	repoConfig := catalog.Config{DB: h.store.RawDB(), Keyring: keyring, Snapshots: h.snapshots, NowMs: nowMs}
+	repo, err := catalog.NewRepository(repoConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.repo = repo
+
+	instSvc, err := installer.NewLifecycleService(installer.ServiceConfig{
+		DB:           h.store.RawDB(),
+		Audit:        noopAuditSink{},
+		PluginsDir:   filepath.Join(t.TempDir(), "plugins"),
+		LockfilePath: filepath.Join(t.TempDir(), "tanpopo.lock"),
+		Keyring:      keyring,
+		NowMs:        nowMs,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	orgID, _, approverID := h.createOrgProjectApprover(t, "br0202")
+	installWithTrust := func(pkgID string, sigMode string) (installID string, pkgRowID string) {
+		yamlBody := fmt.Sprintf(`
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: %q
+  name: Trust Adapter %s
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["api.trust.example"]
+    allowPrivateIp: false
+    requireTls: true
+adapter:
+  slug: "trust-adp"
+  baseUrlTemplate: "https://api.trust.example/v1"
+  wireProtocol: "openai_chat_v1"
+  auth:
+    - id: "k"
+      mode: "host_blind_inject"
+      secretSlot: "api_key"
+      headerName: "Authorization"
+      valuePrefix: "Bearer "
+`, pkgID, sigMode)
+		var buf bytes.Buffer
+		gw := gzip.NewWriter(&buf)
+		tw := tar.NewWriter(gw)
+		_ = tw.WriteHeader(&tar.Header{Name: "manifest.yaml", Mode: 0o644, Size: int64(len(yamlBody))})
+		_, _ = tw.Write([]byte(yamlBody))
+		_ = tw.Close()
+		_ = gw.Close()
+		bundleBytes := buf.Bytes()
+		sum := sha256.Sum256(bundleBytes)
+		hexSum := hex.EncodeToString(sum[:])
+
+		payload := installer.SignatureSigningPayload(pkgID, "1.0.0", hexSum)
+		var sig installer.ProvenanceSignature
+		switch sigMode {
+		case "official":
+			sig.PublisherOrRootSig = ed25519.Sign(rootPriv, payload)
+		case "verified":
+			sig.PublisherOrRootSig = ed25519.Sign(pubPriv, payload)
+		case "enterprise_signed":
+			sig.EnterpriseSig = ed25519.Sign(entPriv, payload)
+		case "unverified":
+		}
+
+		staged, err := instSvc.StageFreshInstall(h.ctx, installer.StageInstallRequest{
+			ArchiveReader: bytes.NewReader(bundleBytes),
+			Source: installer.SourceSpec{
+				Kind:           "oci",
+				URI:            "oci://registry.tanpopo.dev/ext/" + sigMode + "@sha256:" + hexSum,
+				ExpectedSHA256: hexSum,
+			},
+			Signature: sig,
+			ActorID:   approverID,
+		})
+		if err != nil {
+			t.Fatalf("StageFreshInstall(%s) failed: %v", sigMode, err)
+		}
+		app, err := instSvc.ApproveAndActivate(h.ctx, installer.ApproveInstallRequest{
+			InstallationID:      staged.Installation.InstallationID,
+			ExpectedVersion:     staged.Installation.Version,
+			ApproverPrincipalID: approverID,
+			ActivateImmediately: true,
+		})
+		if err != nil {
+			t.Fatalf("ApproveAndActivate(%s) failed: %v", sigMode, err)
+		}
+		return app.InstallationID, app.PackageID
+	}
+
+	insOfficial, pkgOfficial := installWithTrust("@tanpopo/trust-official", "official")
+	insVerified, _ := installWithTrust("@thirdparty/trust-verified", "verified")
+	insEnt, _ := installWithTrust("@thirdparty/trust-ent", "enterprise_signed")
+	insUnverified, _ := installWithTrust("@thirdparty/trust-unverified", "unverified")
+
+	mkAdapter := func(insID, slug string) *catalog.ProviderAdapter {
+		a, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+			InstallationID: insID,
+			AdapterSlug:    slug,
+			AllowedHosts:   []string{"api.trust.example"},
+		})
+		if err != nil {
+			t.Fatalf("CreateProviderAdapter(%s) failed: %v", slug, err)
+		}
+		return a
+	}
+	adpOfficial := mkAdapter(insOfficial, "official")
+	adpVerified := mkAdapter(insVerified, "verified")
+	adpEnt := mkAdapter(insEnt, "ent")
+	adpUnverified := mkAdapter(insUnverified, "unverified")
+
+	sec, err := h.vault.SealSecret(h.ctx, vault.SealSecretParams{
+		OrgID:      orgID,
+		Name:       "trust-key",
+		SecretKind: vault.SecretKindAPIKey,
+		Plaintext:  []byte("sk-trust"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	setMinTrust := func(tier string) {
+		if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE organizations SET min_plugin_trust = ? WHERE id = ?`, tier, orgID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// 1. Tighten org to OFFICIAL_ONLY -> verified, enterprise-signed, and unverified blocked on BOTH NONE and API_KEY creation.
+	setMinTrust(port.MinTrustOfficialOnly)
+	for _, tc := range []struct {
+		name string
+		adp  string
+		mode string
+		cred *string
+	}{
+		{"verified_none", adpVerified.ID, catalog.AuthModeNone, nil},
+		{"verified_apikey", adpVerified.ID, catalog.AuthModeAPIKey, &sec.ID},
+		{"ent_none", adpEnt.ID, catalog.AuthModeNone, nil},
+		{"unverified_none", adpUnverified.ID, catalog.AuthModeNone, nil},
+	} {
+		if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+			OrgID:           orgID,
+			AdapterID:       tc.adp,
+			CredentialID:    tc.cred,
+			Name:            tc.name,
+			EndpointBaseURL: "https://api.trust.example/v1",
+			DataRegion:      "us",
+			BillingMode:     catalog.BillingModeCommercialAPI,
+			AuthMode:        tc.mode,
+		}); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+			t.Fatalf("%s under OFFICIAL_ONLY expected ErrOrgTrustPolicyViolation, got %v", tc.name, err)
+		}
+	}
+
+	// 2. Under VERIFIED_ONLY -> enterprise-signed unverified blocked; verified allowed.
+	setMinTrust(port.MinTrustVerifiedOnly)
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adpEnt.ID,
+		Name:            "ent_under_verified_only",
+		EndpointBaseURL: "https://api.trust.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	}); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected enterprise-signed unverified blocked under VERIFIED_ONLY, got %v", err)
+	}
+
+	// 3. Under VERIFIED_OR_ENTERPRISE_SIGNED -> enterprise-signed succeeds for NONE and API_KEY; unsigned fails.
+	setMinTrust(port.MinTrustVerifiedOrEnterpriseSigned)
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adpUnverified.ID,
+		Name:            "unsigned_under_ent_tier",
+		EndpointBaseURL: "https://api.trust.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	}); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected unverified blocked under VERIFIED_OR_ENTERPRISE_SIGNED, got %v", err)
+	}
+	connEntNone, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adpEnt.ID,
+		Name:            "ent_none_ok",
+		EndpointBaseURL: "https://api.trust.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatalf("ent NONE connection under VERIFIED_OR_ENTERPRISE_SIGNED failed: %v", err)
+	}
+	if _, err := h.repo.TransitionConnectionState(h.ctx, orgID, connEntNone.ID, catalog.ConnStateValidating, connEntNone.Version, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify ResolveConnectionPolicy works now on connEntNone, then tighten org to VERIFIED_ONLY -> resolver fails closed!
+	if _, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, connEntNone.ID); err != nil {
+		t.Fatalf("expected ResolveConnectionPolicy OK under VERIFIED_OR_ENTERPRISE_SIGNED, got %v", err)
+	}
+	setMinTrust(port.MinTrustVerifiedOnly)
+	if _, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, connEntNone.ID); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected zero-slot ResolveConnectionPolicy rejection after tightening org to VERIFIED_ONLY, got %v", err)
+	}
+
+	// Also verify credentialed connection resolves under VERIFIED_ONLY and fails after tightening to OFFICIAL_ONLY.
+	connVerifiedKey, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adpVerified.ID,
+		CredentialID:    &sec.ID,
+		Name:            "verified_key_ok",
+		EndpointBaseURL: "https://api.trust.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.TransitionConnectionState(h.ctx, orgID, connVerifiedKey.ID, catalog.ConnStateValidating, connVerifiedKey.Version, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.ResolveSlot(h.ctx, orgID, connVerifiedKey.ID, "api_key"); err != nil {
+		t.Fatalf("expected ResolveSlot OK under VERIFIED_ONLY, got %v", err)
+	}
+	rotatedConfig := repoConfig
+	rotatedConfig.Keyring.PublisherPublicKeys = nil
+	rotatedRepo, err := catalog.NewRepository(rotatedConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rotatedRepo.ResolveSlot(h.ctx, orgID, connVerifiedKey.ID, "api_key"); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected public trust to reflect the current keyring, got %v", err)
+	}
+	if _, err := rotatedRepo.ResolveConnectionPolicy(h.ctx, orgID, connVerifiedKey.ID); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected connection policy to reflect the current keyring, got %v", err)
+	}
+
+	setMinTrust(port.MinTrustOfficialOnly)
+	if _, err := h.repo.ResolveSlot(h.ctx, orgID, connVerifiedKey.ID, "api_key"); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected ResolveSlot ErrOrgTrustPolicyViolation under OFFICIAL_ONLY, got %v", err)
+	}
+	if _, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, connVerifiedKey.ID); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected ResolveConnectionPolicy ErrOrgTrustPolicyViolation under OFFICIAL_ONLY, got %v", err)
+	}
+
+	// 4. Preserve org disable decision (org_extension_policies.enabled=0) even for official package under ANY_APPROVED!
+	setMinTrust(port.MinTrustAnyApproved)
+	connOfficial, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adpOfficial.ID,
+		CredentialID:    &sec.ID,
+		Name:            "official_disable_check",
+		EndpointBaseURL: "https://api.trust.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.TransitionConnectionState(h.ctx, orgID, connOfficial.ID, catalog.ConnStateValidating, connOfficial.Version, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := instSvc.SetOrgExtensionPolicy(h.ctx, orgID, pkgOfficial, false, nil, approverID); err != nil {
+		t.Fatalf("SetOrgExtensionPolicy disable failed: %v", err)
+	}
+	// Blocked BOTH at egress resolvers AND at CreateProviderConnection!
+	if _, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, connOfficial.ID); !errors.Is(err, catalog.ErrConnectionNotReady) {
+		t.Fatalf("expected ResolveConnectionPolicy blocked when org policy disabled, got %v", err)
+	}
+	if _, err := h.repo.ResolveSlot(h.ctx, orgID, connOfficial.ID, "api_key"); !errors.Is(err, catalog.ErrConnectionNotReady) {
+		t.Fatalf("expected ResolveSlot blocked when org policy disabled, got %v", err)
+	}
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adpOfficial.ID,
+		Name:            "blocked_by_org_disable",
+		EndpointBaseURL: "https://api.trust.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected CreateProviderConnection blocked when org policy disabled, got %v", err)
+	}
+}
+
+func TestValidateConnectionPostCommitSnapshotFailureFaultInjection(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	orgID, _, approverID := h.createOrgProjectApprover(t, "val-snap-fi")
+
+	llm := fakellm.NewServer(t)
+	defer llm.Close()
+	u, err := url.Parse(llm.URL())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manifestYAML := fmt.Sprintf(`
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@tanpopo/adapter-snap-fi"
+  name: Snapshot Fault Injection Adapter
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["%s"]
+    allowPrivateIp: true
+    requireTls: false
+adapter:
+  slug: snap-fi
+  baseUrl: %q
+  supportedDialects: ["openai_chat"]
+  endpoints:
+    models: "/v1/models"
+    chat: "/v1/chat/completions"
+`, u.Hostname(), llm.URL())
+
+	installID := h.installDeclarativePackage(t, "@tanpopo/adapter-snap-fi", approverID, manifestYAML)
+	rt, err := declarative.ParseDeclarativeManifestYAML([]byte(manifestYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	faultySync := &faultySnapshotRefresher{inner: h.snapshots}
+	repoFI, err := catalog.NewRepository(catalog.Config{
+		DB:                h.store.RawDB(),
+		NowMs:             func() int64 { return h.clk.Now().UnixMilli() },
+		Snapshots:         h.snapshots,
+		SnapshotRefresher: faultySync,
+		Audit:             noopAuditSink{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adp, err := repoFI.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: installID,
+		AdapterSlug:    "snap-fi",
+		AllowedHosts:   []string{u.Hostname()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	readDBState := func(connID string) (string, int64) {
+		var st string
+		var ver int64
+		if err := h.store.RawDB().QueryRowContext(h.ctx, `SELECT state, version FROM provider_connections WHERE org_id = ? AND id = ?`, orgID, connID).Scan(&st, &ver); err != nil {
+			t.Fatalf("query DB state failed: %v", err)
+		}
+		return st, ver
+	}
+
+	// Case 1: Snapshot refresh fails AFTER committing entry into VALIDATING -> rolls back to DRAFT and allows clean retry.
+	conn1, err := repoFI.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		Name:            "FI Enter Validating",
+		EndpointBaseURL: llm.URL(),
+		AllowPrivateIP:  true,
+		AllowedCIDRs:    []string{"127.0.0.1/32"},
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeSelfHostedInfra,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	faultySync.calls.Store(0)
+	faultySync.failOn.Store(-1) // fail both the VALIDATING sync and revert sync
+	_, resConn1, valErr1 := repoFI.ValidateConnection(h.ctx, orgID, conn1.ID, rt, h.broker)
+	if !errors.Is(valErr1, catalog.ErrSnapshotSyncFailed) {
+		t.Fatalf("expected ErrSnapshotSyncFailed after VALIDATING commit, got %v", valErr1)
+	}
+	if resConn1 == nil || resConn1.State != catalog.ConnStateDraft {
+		t.Fatalf("expected rolled-back DRAFT connection returned, got %+v", resConn1)
+	}
+	dbState1, _ := readDBState(conn1.ID)
+	if dbState1 != catalog.ConnStateDraft {
+		t.Fatalf("expected actual DB state reverted to DRAFT (not stuck VALIDATING), got %q", dbState1)
+	}
+	// Retry succeeds once snapshot sync recovers.
+	faultySync.failOn.Store(0)
+	vRetry, resRetry, errRetry := repoFI.ValidateConnection(h.ctx, orgID, conn1.ID, rt, h.broker)
+	if errRetry != nil || vRetry == nil || !vRetry.Valid || resRetry.State != catalog.ConnStateActive {
+		t.Fatalf("expected retry ValidateConnection to reach ACTIVE cleanly, got err=%v verdict=%+v conn=%+v", errRetry, vRetry, resRetry)
+	}
+
+	// Case 2: Concurrent REVOKED right after VALIDATING commit when snapshot sync fails -> respects REVOKED (optimistic lock).
+	conn2, err := repoFI.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		Name:            "FI Concurrent Revoke",
+		EndpointBaseURL: llm.URL(),
+		AllowPrivateIP:  true,
+		AllowedCIDRs:    []string{"127.0.0.1/32"},
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeSelfHostedInfra,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	faultySync.calls.Store(0)
+	faultySync.failOn.Store(1)
+	faultySync.onRefresh = func(callNum int32) {
+		if callNum == 1 {
+			// Concurrent admin revokes while snapshot sync runs on VALIDATING commit (version=2).
+			_, _ = h.repo.TransitionConnectionState(h.ctx, orgID, conn2.ID, catalog.ConnStateRevoked, 2, "concurrent_revoke")
+		}
+	}
+	_, resConn2, valErr2 := repoFI.ValidateConnection(h.ctx, orgID, conn2.ID, rt, h.broker)
+	faultySync.onRefresh = nil
+	if !errors.Is(valErr2, port.ErrVersionConflict) || !errors.Is(valErr2, catalog.ErrSnapshotSyncFailed) {
+		t.Fatalf("expected ErrSnapshotSyncFailed + ErrVersionConflict on concurrent revoke, got %v", valErr2)
+	}
+	if resConn2 == nil || resConn2.State != catalog.ConnStateRevoked {
+		t.Fatalf("expected returned connection to reflect concurrent REVOKED, got %+v", resConn2)
+	}
+	if dbState2, _ := readDBState(conn2.ID); dbState2 != catalog.ConnStateRevoked {
+		t.Fatalf("expected actual DB state to stay REVOKED, got %q", dbState2)
+	}
+
+	// Case 3: Snapshot refresh fails AFTER final ACTIVE transition commits -> DB stays ACTIVE, no stale-version rollback, snapshot retry converges!
+	conn3, err := repoFI.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		Name:            "FI Final Active",
+		EndpointBaseURL: llm.URL(),
+		AllowPrivateIP:  true,
+		AllowedCIDRs:    []string{"127.0.0.1/32"},
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeSelfHostedInfra,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	faultySync.calls.Store(0)
+	faultySync.failOn.Store(2) // Call 1 = VALIDATING ok, Call 2 = post-ACTIVE commit fails!
+	verdict3, resConn3, valErr3 := repoFI.ValidateConnection(h.ctx, orgID, conn3.ID, rt, h.broker)
+	if !errors.Is(valErr3, catalog.ErrSnapshotSyncFailed) || errors.Is(valErr3, port.ErrVersionConflict) {
+		t.Fatalf("expected pure ErrSnapshotSyncFailed (no spurious ErrVersionConflict), got %v", valErr3)
+	}
+	if verdict3 == nil || !verdict3.Valid || resConn3 == nil || resConn3.State != catalog.ConnStateActive {
+		t.Fatalf("expected valid verdict & committed ACTIVE conn returned, got verdict=%+v conn=%+v", verdict3, resConn3)
+	}
+	if dbState3, _ := readDBState(conn3.ID); dbState3 != catalog.ConnStateActive {
+		t.Fatalf("expected actual DB state ACTIVE after final commit, got %q", dbState3)
+	}
+	if resConn3.Version != conn3.Version+2 {
+		t.Fatalf("unexpected committed connection version %d", resConn3.Version)
+	}
+	if before, ok := h.snapshots.Current().LookupProviderConnection(orgID, conn3.ID); !ok ||
+		before.State != catalog.ConnStateValidating || before.Version != conn3.Version+1 {
+		t.Fatalf("expected snapshot to still reflect VALIDATING, got %+v", before)
+	}
+	faultySync.failOn.Store(0)
+	if err := repoFI.SyncSnapshots(h.ctx); err != nil {
+		t.Fatalf("SyncSnapshots retry failed: %v", err)
+	}
+	if after, ok := h.snapshots.Current().LookupProviderConnection(orgID, conn3.ID); !ok ||
+		after.State != catalog.ConnStateActive || after.Version != resConn3.Version {
+		t.Fatalf("expected snapshot to converge to committed ACTIVE state, got %+v", after)
+	}
+
+	// Case 4: Snapshot refresh fails AFTER final DRAFT rollback (probe returns HTTP 401) -> DB is DRAFT & retry succeeds once upstream recovers.
+	unauthSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"invalid key"}}`))
+	}))
+	defer unauthSrv.Close()
+	uu, err := url.Parse(unauthSrv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unauthManifest := fmt.Sprintf(`
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@tanpopo/adapter-snap-401"
+  name: Snapshot 401 Adapter
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["%s"]
+    allowPrivateIp: true
+    requireTls: false
+adapter:
+  slug: snap-401
+  baseUrl: %q
+`, uu.Hostname(), unauthSrv.URL)
+	ins401 := h.installDeclarativePackage(t, "@tanpopo/adapter-snap-401", approverID, unauthManifest)
+	rt401, err := declarative.ParseDeclarativeManifestYAML([]byte(unauthManifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	adp401, err := repoFI.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: ins401,
+		AdapterSlug:    "snap-401",
+		AllowedHosts:   []string{uu.Hostname()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn4, err := repoFI.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp401.ID,
+		Name:            "FI Final Draft On 401",
+		EndpointBaseURL: unauthSrv.URL,
+		AllowPrivateIP:  true,
+		AllowedCIDRs:    []string{"127.0.0.1/32"},
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeSelfHostedInfra,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	faultySync.calls.Store(0)
+	faultySync.failOn.Store(2) // Call 1 VALIDATING ok; Call 2 final DRAFT rollback fails snapshot sync
+	verdict4, resConn4, valErr4 := repoFI.ValidateConnection(h.ctx, orgID, conn4.ID, rt401, h.broker)
+	if !errors.Is(valErr4, catalog.ErrSnapshotSyncFailed) {
+		t.Fatalf("expected ErrSnapshotSyncFailed on post-DRAFT snapshot failure, got %v", valErr4)
+	}
+	if verdict4 == nil || verdict4.Valid || resConn4 == nil || resConn4.State != catalog.ConnStateDraft {
+		t.Fatalf("expected invalid verdict + DRAFT conn returned, got verdict=%+v conn=%+v", verdict4, resConn4)
+	}
+	if dbState4, _ := readDBState(conn4.ID); dbState4 != catalog.ConnStateDraft {
+		t.Fatalf("expected actual DB state DRAFT, got %q", dbState4)
+	}
+	// Retry ValidateConnection cleanly with recovered snapshot & valid runtime/endpoint fails verdict -> stays DRAFT cleanly without error.
+	faultySync.failOn.Store(0)
+	verdict4Retry, res4Retry, err4Retry := repoFI.ValidateConnection(h.ctx, orgID, conn4.ID, rt401, h.broker)
+	if err4Retry != nil || verdict4Retry == nil || verdict4Retry.Valid || res4Retry.State != catalog.ConnStateDraft {
+		t.Fatalf("expected clean retry on DRAFT conn returning invalid verdict without error, got err=%v verdict=%+v conn=%+v", err4Retry, verdict4Retry, res4Retry)
+	}
+
+}
+
+
+func (h *testHarness) createOrgOwnerRole(t *testing.T, orgID, orgSlug string) string {
+	t.Helper()
+	ownerID := "prc_orgowner_" + orgSlug
+	now := h.clk.Now().UnixMilli()
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'HUMAN_LOCAL', ?, 'ACTIVE', 1, ?, ?)`,
+		ownerID, orgID, "owner-"+orgSlug+"@example.com", now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES (?, ?, ?, 'ORG', ?, 'ORG_OWNER', 1, ?)`,
+		"rb_orgowner_"+orgSlug, orgID, ownerID, orgID, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	return ownerID
+}
+
+func TestValidateConnectionProbeNeverReportsActiveWhenRevokedMidProbe(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	orgID, _, approverID := h.createOrgProjectApprover(t, "midprobe-rev")
+	orgOwnerID := h.createOrgOwnerRole(t, orgID, "midprobe-rev")
+
+	var onProbe atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if fn, ok := onProbe.Load().(func()); ok && fn != nil {
+			fn()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"gpt-4o"}]}`))
+	}))
+	defer upstream.Close()
+	u, _ := url.Parse(upstream.URL)
+
+	setupAdapterAndConn := func(pkgID, slug string) (string, string, string, *catalog.ProviderConnection, extport.ProviderRuntime) {
+		manifestYAML := fmt.Sprintf(`
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: %q
+  name: Midprobe Revoke Adapter
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["%s"]
+    allowPrivateIp: true
+    requireTls: false
+adapter:
+  slug: %q
+  baseUrl: %q
+  auth:
+    - id: "k"
+      mode: "host_blind_inject"
+      secretSlot: "api_key"
+      headerName: "Authorization"
+      valuePrefix: "Bearer "
+`, pkgID, u.Hostname(), slug, upstream.URL)
+		insID := h.installDeclarativePackage(t, pkgID, approverID, manifestYAML)
+		rec, err := h.installer.GetInstallation(h.ctx, insID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rt, err := declarative.ParseDeclarativeManifestYAML([]byte(manifestYAML))
+		if err != nil {
+			t.Fatal(err)
+		}
+		adp, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+			InstallationID: insID,
+			AdapterSlug:    slug,
+			AllowedHosts:   []string{u.Hostname()},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sec, err := h.vault.SealSecret(h.ctx, vault.SealSecretParams{
+			OrgID:         orgID,
+			Name:          "key-" + slug,
+			SecretKind:    vault.SecretKindAPIKey,
+			BoundAudience: &[]string{u.Hostname()}[0],
+			Plaintext:     []byte("sk-probe-" + slug),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		conn, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+			OrgID:           orgID,
+			AdapterID:       adp.ID,
+			CredentialID:    &sec.ID,
+			Name:            "Conn " + slug,
+			EndpointBaseURL: upstream.URL,
+			AllowPrivateIP:  true,
+			AllowedCIDRs:    []string{"127.0.0.1/32"},
+			DataRegion:      "us",
+			BillingMode:     catalog.BillingModeSelfHostedInfra,
+			AuthMode:        catalog.AuthModeAPIKey,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return insID, rec.PackageID, sec.ID, conn, rt
+	}
+
+	// A. Quarantining extension installation AFTER upstream returns 200 OK -> ValidateConnection MUST NOT report Valid=true or commit ACTIVE.
+	insA, _, _, connA, rtA := setupAdapterAndConn("@tanpopo/midprobe-q", "midq")
+	onProbe.Store(func() {
+		_ = h.installer.QuarantineInstallation(h.ctx, insA, "mid_probe_cve", approverID)
+	})
+	verdictA, gotA, errA := h.repo.ValidateConnection(h.ctx, orgID, connA.ID, rtA, h.broker)
+	if errA == nil || verdictA == nil || verdictA.Valid || gotA == nil || gotA.State == catalog.ConnStateActive {
+		t.Fatalf("expected non-ACTIVE & invalid verdict when extension quarantined mid-probe, got err=%v verdict=%+v conn=%+v", errA, verdictA, gotA)
+	}
+	var dbStateA string
+	_ = h.store.RawDB().QueryRowContext(h.ctx, `SELECT state FROM provider_connections WHERE id = ?`, connA.ID).Scan(&dbStateA)
+	if dbStateA == catalog.ConnStateActive {
+		t.Fatalf("security bypass: DB connection transitioned to ACTIVE despite quarantined extension")
+	}
+
+	// B. Disabling org extension policy AFTER upstream 200 OK -> ValidateConnection MUST NOT report Valid=true or commit ACTIVE.
+	_, pkgB, _, connB, rtB := setupAdapterAndConn("@tanpopo/midprobe-orgdis", "midorg")
+	onProbe.Store(func() {
+		_ = h.installer.SetOrgExtensionPolicy(h.ctx, orgID, pkgB, false, nil, orgOwnerID)
+	})
+	verdictB, gotB, errB := h.repo.ValidateConnection(h.ctx, orgID, connB.ID, rtB, h.broker)
+	if errB == nil || verdictB == nil || verdictB.Valid || gotB == nil || gotB.State == catalog.ConnStateActive {
+		t.Fatalf("expected non-ACTIVE & invalid verdict when org disables package mid-probe, got err=%v verdict=%+v conn=%+v", errB, verdictB, gotB)
+	}
+
+	// C. Shredding/revoking bound secret mid-probe -> ValidateConnection MUST NOT report Valid=true or commit ACTIVE.
+	_, _, _, connC, rtC := setupAdapterAndConn("@tanpopo/midprobe-sec", "midsec")
+	onProbe.Store(func() {
+		_, _ = h.store.RawDB().ExecContext(h.ctx, `UPDATE provider_connections SET credential_id = NULL WHERE id = ?`, connC.ID)
+		_, _ = h.store.RawDB().ExecContext(h.ctx, `UPDATE extension_installations SET approved_permissions_json = '{"allowed_hosts":["127.0.0.1"],"allow_private_ip":true,"execution_tier":"DECLARATIVE_T1"}' WHERE id = (SELECT installation_id FROM provider_adapters WHERE id = ?)`, connC.AdapterID)
+	})
+	verdictC, gotC, errC := h.repo.ValidateConnection(h.ctx, orgID, connC.ID, rtC, h.broker)
+	if errC == nil || verdictC == nil || verdictC.Valid || gotC == nil || gotC.State == catalog.ConnStateActive {
+		t.Fatalf("expected non-ACTIVE & invalid verdict when slot permissions revoked mid-probe, got err=%v verdict=%+v conn=%+v", errC, verdictC, gotC)
+	}
+}
+
+func TestTPBR0202ChildProjectUnsignedRequiresOrgOwnerOptIn(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	orgID, projID, approverID := h.createOrgProjectApprover(t, "tpbr0202-child")
+	orgOwnerID := h.createOrgOwnerRole(t, orgID, "tpbr0202-child")
+
+	// Second principal who is ONLY SECURITY_REVIEWER (not ORG_OWNER).
+	secRevID := "prc_secrev_tpbr0202"
+	now := h.clk.Now().UnixMilli()
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'HUMAN_LOCAL', 'secrev-0202@example.com', 'ACTIVE', 1, ?, ?)`,
+		secRevID, orgID, now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES ('rb_secrev_0202', ?, ?, 'ORG', ?, 'SECURITY_REVIEWER', 1, ?)`,
+		orgID, secRevID, orgID, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	manifestYAML := `
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@thirdparty/unsigned-child-proj"
+  name: Unsigned Child Project Adapter
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["api.unsigned.example"]
+adapter:
+  slug: unsigned-child
+  baseUrl: "https://api.unsigned.example/v1"
+`
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	_ = tw.WriteHeader(&tar.Header{Name: "manifest.yaml", Mode: 0o644, Size: int64(len(manifestYAML))})
+	_, _ = tw.Write([]byte(manifestYAML))
+	_ = tw.Close()
+	_ = gw.Close()
+	bundleBytes := buf.Bytes()
+	sum := sha256.Sum256(bundleBytes)
+	hexSum := hex.EncodeToString(sum[:])
+
+	staged, err := h.installer.StageFreshInstall(h.ctx, installer.StageInstallRequest{
+		ArchiveReader: bytes.NewReader(bundleBytes),
+		Source:        installer.SourceSpec{Kind: "oci", URI: "oci://registry.tanpopo.dev/thirdparty/u@sha256:" + hexSum, ExpectedSHA256: hexSum},
+		ActorID:       approverID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := h.installer.ApproveAndActivate(h.ctx, installer.ApproveInstallRequest{
+		InstallationID:      staged.Installation.InstallationID,
+		ExpectedVersion:     staged.Installation.Version,
+		ApproverPrincipalID: approverID,
+		ActivateImmediately: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adp, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: app.InstallationID,
+		AdapterSlug:    "unsigned-child",
+		AllowedHosts:   []string{"api.unsigned.example"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Default newly created org (min_plugin_trust=ANY_APPROVED, no org_extension_policies opt-in):
+	//    Child Project connection MUST be DENIED; org-wide connection succeeds.
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		OwnerProjectID:  &projID,
+		AdapterID:       adp.ID,
+		Name:            "Blocked Child Project Conn",
+		EndpointBaseURL: "https://api.unsigned.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	}); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected child project blocked for unsigned unverified_external without ORG_OWNER opt-in, got %v", err)
+	}
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:            orgID,
+		AdapterID:        adp.ID,
+		Name:             "Blocked Downward Shared Conn",
+		EndpointBaseURL:  "https://api.unsigned.example/v1",
+		DataRegion:       "us",
+		BillingMode:      catalog.BillingModeCommercialAPI,
+		AuthMode:         catalog.AuthModeNone,
+		SharedProjectIDs: []string{projID},
+	}); !errors.Is(err, installer.ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected shared project scope blocked for unsigned unverified_external without ORG_OWNER opt-in, got %v", err)
+	}
+	orgConn, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		Name:            "Org-Wide Allowed Under ANY_APPROVED",
+		EndpointBaseURL: "https://api.unsigned.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatalf("expected org-wide connection under ANY_APPROVED allowed, got %v", err)
+	}
+	_ = orgConn
+
+	// 2. Non-ORG_OWNER (SECURITY_REVIEWER) cannot grant the opt-in.
+	if perr := h.installer.SetOrgExtensionPolicy(h.ctx, orgID, app.PackageID, true, nil, secRevID); !errors.Is(perr, installer.ErrPermissionDenied) {
+		t.Fatalf("expected ErrPermissionDenied for SECURITY_REVIEWER opt-in, got %v", perr)
+	}
+
+	// 3. Explicit ORG_OWNER opt-in unlocks child Project creation & ResolveConnectionPolicy!
+	if err := h.installer.SetOrgExtensionPolicy(h.ctx, orgID, app.PackageID, true, nil, orgOwnerID); err != nil {
+		t.Fatalf("SetOrgExtensionPolicy by ORG_OWNER failed: %v", err)
+	}
+	childConn, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		OwnerProjectID:  &projID,
+		AdapterID:       adp.ID,
+		Name:            "Enabled Child Project Conn",
+		EndpointBaseURL: "https://api.unsigned.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatalf("expected child project allowed after ORG_OWNER opt-in, got %v", err)
+	}
+	if _, err := h.repo.TransitionConnectionState(h.ctx, orgID, childConn.ID, catalog.ConnStateValidating, childConn.Version, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, childConn.ID); err != nil {
+		t.Fatalf("expected ResolveConnectionPolicy OK after ORG_OWNER opt-in, got %v", err)
+	}
+
+	// 4. Disabling or removing policy re-blocks child Project resolution immediately.
+	if err := h.installer.SetOrgExtensionPolicy(h.ctx, orgID, app.PackageID, false, nil, orgOwnerID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, childConn.ID); !errors.Is(err, catalog.ErrConnectionNotReady) {
+		t.Fatalf("expected ResolveConnectionPolicy blocked after ORG_OWNER disable, got %v", err)
+	}
+}
+
+func TestLegacyInstallationMissingSlotReconsentEndToEndWithCatalog(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	orgID, projID, approverID := h.createOrgProjectApprover(t, "legacy-cat")
+
+	manifestYAML := `
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@tanpopo/legacy-cat-adapter"
+  name: Legacy Catalog Adapter
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["api.legacy.example"]
+    requireTls: true
+adapter:
+  slug: legacy-cat
+  baseUrl: "https://api.legacy.example/v1"
+  auth:
+    - id: "k"
+      mode: "host_blind_inject"
+      secretSlot: "api_key"
+      headerName: "Authorization"
+      valuePrefix: "Bearer "
+`
+	insID := h.installDeclarativePackage(t, "@tanpopo/legacy-cat-adapter", approverID, manifestYAML)
+	// Simulate legacy approved_permissions_json missing secret_slots.
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `
+		UPDATE extension_installations
+		SET approved_permissions_json = '{"allowed_hosts":["api.legacy.example"],"require_tls":true,"execution_tier":"DECLARATIVE_T1"}'
+		WHERE id = ?`, insID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	adp, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: insID,
+		AdapterSlug:    "legacy-cat",
+		AllowedHosts:   []string{"api.legacy.example"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec, err := h.vault.SealSecret(h.ctx, vault.SealSecretParams{
+		OrgID:          orgID,
+		OwnerProjectID: &projID,
+		Name:           "legacy-key",
+		SecretKind:     vault.SecretKindAPIKey,
+		Plaintext:      []byte("sk-legacy"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Before re-consent -> CreateProviderConnection MUST fail closed on unapproved api_key slot.
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		OwnerProjectID:  &projID,
+		AdapterID:       adp.ID,
+		CredentialID:    &sec.ID,
+		Name:            "Blocked Before Reconsent",
+		EndpointBaseURL: "https://api.legacy.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected unapproved legacy slot rejected prior to re-consent, got %v", err)
+	}
+
+	// Request re-consent -> while UPDATING_PENDING_RECONSENT, STILL rejected (no auto-grant!).
+	cur, err := h.installer.GetInstallation(h.ctx, insID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, _, err := h.installer.RequestActivePermissionReconsent(h.ctx, insID, cur.Version, approverID, orgID, "req_cat_rc")
+	if err != nil {
+		t.Fatalf("RequestActivePermissionReconsent failed: %v", err)
+	}
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		OwnerProjectID:  &projID,
+		AdapterID:       adp.ID,
+		CredentialID:    &sec.ID,
+		Name:            "Blocked While Pending Reconsent",
+		EndpointBaseURL: "https://api.legacy.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected slot rejected while UPDATING_PENDING_RECONSENT, got %v", err)
+	}
+
+	// Explicit ApproveEscalatedUpgrade unlocks slot for CreateProviderConnection + ResolveSlot!
+	if _, err := h.installer.ApproveEscalatedUpgrade(h.ctx, insID, pending.Version, approverID, orgID, "req_cat_app"); err != nil {
+		t.Fatalf("ApproveEscalatedUpgrade failed: %v", err)
+	}
+	conn, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		OwnerProjectID:  &projID,
+		AdapterID:       adp.ID,
+		CredentialID:    &sec.ID,
+		Name:            "Allowed After Reconsent",
+		EndpointBaseURL: "https://api.legacy.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+	})
+	if err != nil {
+		t.Fatalf("expected CreateProviderConnection OK after re-consent, got %v", err)
+	}
+	if _, err := h.repo.TransitionConnectionState(h.ctx, orgID, conn.ID, catalog.ConnStateValidating, conn.Version, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.ResolveSlot(h.ctx, orgID, conn.ID, "api_key"); err != nil {
+		t.Fatalf("expected ResolveSlot OK after re-consent, got %v", err)
+	}
+}
+
+func TestTPBR0202TrustDowngradeBlocksChildProjectUntilOrgOwnerReoptsIn(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	orgID, projID, approverID := h.createOrgProjectApprover(t, "tpbr0202-downgrade")
+	orgOwnerID := h.createOrgOwnerRole(t, orgID, "tpbr0202-downgrade")
+
+	secRevID := "prc_secrev_downgrade"
+	now := h.clk.Now().UnixMilli()
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'HUMAN_LOCAL', 'secrev-dg@example.com', 'ACTIVE', 1, ?, ?)`,
+		secRevID, orgID, now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES ('rb_secrev_dg', ?, ?, 'ORG', ?, 'SECURITY_REVIEWER', 1, ?)`,
+		orgID, secRevID, orgID, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	buildTGZ := func(ver string, extraHost bool) ([]byte, string) {
+		hosts := `["api.dg.example"]`
+		if extraHost {
+			hosts = `["api.dg.example","api2.dg.example"]`
+		}
+		manifest := fmt.Sprintf(`
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@partner/downgrade-0202"
+  name: Downgrade Adapter
+  version: "%s"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: %s
+adapter:
+  slug: dg-0202
+  baseUrl: "https://api.dg.example/v1"
+`, ver, hosts)
+		var buf bytes.Buffer
+		gw := gzip.NewWriter(&buf)
+		tw := tar.NewWriter(gw)
+		_ = tw.WriteHeader(&tar.Header{Name: "manifest.yaml", Mode: 0o644, Size: int64(len(manifest))})
+		_, _ = tw.Write([]byte(manifest))
+		_ = tw.Close()
+		_ = gw.Close()
+		raw := buf.Bytes()
+		sum := sha256.Sum256(raw)
+		return raw, hex.EncodeToString(sum[:])
+	}
+
+	// 1. Install official signed v1.0.0 and let non-ORG_OWNER SECURITY_REVIEWER enable org policy.
+	b1, s1 := buildTGZ("1.0.0", false)
+	st1, err := h.installer.StageFreshInstall(h.ctx, installer.StageInstallRequest{
+		ArchiveReader: bytes.NewReader(b1),
+		Source:        installer.SourceSpec{Kind: "oci", URI: "oci://registry.tanpopo.dev/tanpopo/dg@sha256:" + s1, ExpectedSHA256: s1},
+		Signature:     installer.ProvenanceSignature{PublisherOrRootSig: ed25519.Sign(h.privKey, installer.SignatureSigningPayload("@partner/downgrade-0202", "1.0.0", s1))},
+		ActorID:       approverID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	act1, err := h.installer.ApproveAndActivate(h.ctx, installer.ApproveInstallRequest{
+		InstallationID:      st1.Installation.InstallationID,
+		ExpectedVersion:     st1.Installation.Version,
+		ApproverPrincipalID: approverID,
+		ActivateImmediately: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.installer.SetOrgExtensionPolicy(h.ctx, orgID, act1.PackageID, true, nil, secRevID); err != nil {
+		t.Fatalf("SECURITY_REVIEWER enablement of signed official package should pass: %v", err)
+	}
+	adp, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: act1.InstallationID,
+		AdapterSlug:    "dg-0202",
+		AllowedHosts:   []string{"api.dg.example"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Stage escalating upgrade to unsigned v1.1.0 (not @tanpopo/ official sig -> unverified_external):
+	//    prior non-owner policy must be invalidated immediately (enabled=0), SECURITY_REVIEWER cannot re-enable during UPDATING_PENDING_RECONSENT,
+	//    and child project CreateProviderConnection must fail until ORG_OWNER explicitly re-opts in!
+	b2, s2 := buildTGZ("1.1.0", true)
+	up2, err := h.installer.StageUpgrade(h.ctx, installer.StageUpgradeRequest{
+		InstallationID:  act1.InstallationID,
+		ExpectedVersion: act1.Version,
+		ArchiveReader:   bytes.NewReader(b2),
+		Source:          installer.SourceSpec{Kind: "oci", URI: "oci://registry.tanpopo.dev/tanpopo/dg@sha256:" + s2, ExpectedSHA256: s2},
+		ActorID:         approverID,
+	})
+	if err != nil || !up2.Escalated {
+		t.Fatalf("expected escalating StageUpgrade to unsigned v1.1.0, err=%v escalated=%v", err, up2 != nil && up2.Escalated)
+	}
+	if err := h.installer.SetOrgExtensionPolicy(h.ctx, orgID, act1.PackageID, true, nil, secRevID); !errors.Is(err, installer.ErrPermissionDenied) {
+		t.Fatalf("expected ErrPermissionDenied for SECURITY_REVIEWER while unsigned candidate staged, got %v", err)
+	}
+	if _, err := h.installer.ApproveEscalatedUpgrade(h.ctx, up2.Installation.InstallationID, up2.Installation.Version, approverID, "", "req_dg_app"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		OwnerProjectID:  &projID,
+		AdapterID:       adp.ID,
+		Name:            "Must Be Blocked After Trust Downgrade",
+		EndpointBaseURL: "https://api.dg.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected child project blocked after trust downgrade (reset enabled=0) until ORG_OWNER re-opts in, got %v", err)
+	}
+
+	// 3. Explicit ORG_OWNER opt-in unlocks child Project creation again.
+	if err := h.installer.SetOrgExtensionPolicy(h.ctx, orgID, act1.PackageID, true, nil, orgOwnerID); err != nil {
+		t.Fatalf("expected ORG_OWNER re-opt-in to succeed: %v", err)
+	}
+	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		OwnerProjectID:  &projID,
+		AdapterID:       adp.ID,
+		Name:            "Allowed After ORG_OWNER Re-Opt-In",
+		EndpointBaseURL: "https://api.dg.example/v1",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	}); err != nil {
+		t.Fatalf("expected child project allowed after ORG_OWNER re-opt-in, got %v", err)
+	}
+}

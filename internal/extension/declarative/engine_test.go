@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -538,5 +540,254 @@ adapter:
 	})
 	if err != nil || !strings.Contains(slashReq.TargetURL, "meta-llama%2FLlama-3.3-70B:generate") {
 		t.Fatalf("expected %%2F single path segment preservation, got err=%v url=%q", err, slashReq.TargetURL)
+	}
+}
+
+func TestCanonicalSpecExt02ManifestAndToolCallsStreamingPreservation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Exact canonical YAML shape from docs/specifications/provider-adapter.md (SPEC-EXT-02).
+	canonicalYAML := `
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@tanpopo/adapter-nova-infer"
+  name: Nova Infer Canonical Adapter
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0 <0.3.0"
+permissions:
+  networkEgress:
+    allowedHosts: ["api.nova-infer.example"]
+    allowPrivateIp: false
+    requireTls: true
+adapter:
+  slug: "nova-infer"
+  baseUrlTemplate: "https://api.nova-infer.example/v1"
+  wireProtocol: "openai_chat_v1"
+  auth:
+    - id: "bearer_api_key"
+      mode: "host_blind_inject"
+      secretSlot: "primary_api_key"
+      headerName: "Authorization"
+      valuePrefix: "Bearer "
+  usageExtraction:
+    inputTokensPath: "$.meter.input"
+    outputTokensPath: "$.meter.output"
+`
+	eng, err := ParseDeclarativeManifestYAML([]byte(canonicalYAML))
+	if err != nil {
+		t.Fatalf("ParseDeclarativeManifestYAML canonical SPEC-EXT-02 failed: %v", err)
+	}
+
+	probe, err := eng.BuildValidationProbe(ctx, port.ValidationProbeInput{
+		RequestID:       "req_canon_probe",
+		ConfigJSON:      `{}`,
+		SecretSlotNames: []string{"primary_api_key"},
+	})
+	if err != nil {
+		t.Fatalf("BuildValidationProbe failed: %v", err)
+	}
+	if probe.TargetURL != "https://api.nova-infer.example/v1/models" {
+		t.Fatalf("expected baseUrlTemplate probe URL https://api.nova-infer.example/v1/models, got %q", probe.TargetURL)
+	}
+	if len(probe.CredentialInjections) != 1 ||
+		probe.CredentialInjections[0].SecretSlotName != "primary_api_key" ||
+		probe.CredentialInjections[0].ValuePrefix != "Bearer " ||
+		probe.CredentialInjections[0].FieldName != "Authorization" {
+		t.Fatalf("unexpected canonical auth injection: %+v", probe.CredentialInjections)
+	}
+
+	alternateProbe, err := eng.BuildValidationProbe(ctx, port.ValidationProbeInput{
+		RequestID:  "req_canon_probe_override",
+		ConfigJSON: `{"endpoint_base_url":"https://api.nova-infer.example/proxy"}`,
+	})
+	if err != nil || alternateProbe.TargetURL != "https://api.nova-infer.example/proxy/v1/models" {
+		t.Fatalf("unexpected canonical probe with endpoint override: %q, %v", alternateProbe.TargetURL, err)
+	}
+
+	// wireProtocol=openai_chat_v1 auto-enables CR-09 stream_options.include_usage=true.
+	reqSpec, err := eng.TransformRequest(ctx, port.TransformRequestInput{
+		RequestID:             "req_canon_stream",
+		ConfigJSON:            `{}`,
+		SecretSlotRefs:        map[string]string{"primary_api_key": "ref"},
+		NormalizedRequestJSON: []byte(`{"model":"nova-70b-instruct","stream":true,"stream_options":{"include_usage":false,"example":true},"messages":[{"role":"user","content":"hi"}]}`),
+	})
+	if err != nil {
+		t.Fatalf("TransformRequest failed: %v", err)
+	}
+	if reqSpec.TargetURL != "https://api.nova-infer.example/v1/chat/completions" {
+		t.Fatalf("expected chat URL from baseUrlTemplate, got %q", reqSpec.TargetURL)
+	}
+	var reqBody map[string]any
+	if err := json.Unmarshal(reqSpec.BodyBytes, &reqBody); err != nil {
+		t.Fatal(err)
+	}
+	so, ok := reqBody["stream_options"].(map[string]any)
+	if !ok || so["include_usage"] != true || so["example"] != true {
+		t.Fatalf("expected wireProtocol=openai_chat_v1 to auto-inject stream_options.include_usage=true, got %#v", reqBody)
+	}
+
+	// Verify SSE tool_calls index ordering and verbatim fragmented JSON arguments preservation.
+	chunk1 := "data: " + `{"id":"chatcmpl_tc","model":"nova-70b-instruct","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":1,"id":"call_2","type":"function","function":{"name":"lookup","arguments":""}},{"index":0,"id":"call_1","type":"function","function":{"name":"weather","arguments":"{\"city\": "}}]},"finish_reason":null}]}` + "\n\n"
+	chunk2 := "data: " + `{"id":"chatcmpl_tc","model":"nova-70b-instruct","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"Tokyo\"}"}},{"index":1,"function":{"arguments":"{\"q\": \"Go\"}"}}]},"finish_reason":null}]}` + "\n\n"
+
+	out1, err := eng.TransformStreamChunk(ctx, port.StreamChunkInput{
+		RequestID:        "req_tc_1",
+		RawUpstreamChunk: []byte(chunk1),
+	})
+	if err != nil || len(out1.NormalizedSSEFrames) != 1 {
+		t.Fatalf("TransformStreamChunk #1 failed: err=%v out=%+v", err, out1)
+	}
+	out2, err := eng.TransformStreamChunk(ctx, port.StreamChunkInput{
+		RequestID:        "req_tc_2",
+		RawUpstreamChunk: []byte(chunk2),
+		IsEOF:            true,
+	})
+	if err != nil || len(out2.NormalizedSSEFrames) != 1 {
+		t.Fatalf("TransformStreamChunk #2 failed: err=%v out=%+v", err, out2)
+	}
+
+	reassembled := map[int64]string{}
+	decodeFrame := func(rawFrame []byte, expectIndices []int64) {
+		payload := strings.TrimPrefix(strings.TrimSpace(string(rawFrame)), "data: ")
+		var m map[string]any
+		if err := json.Unmarshal([]byte(payload), &m); err != nil {
+			t.Fatalf("invalid JSON frame %q: %v", payload, err)
+		}
+		choices := m["choices"].([]any)
+		delta := choices[0].(map[string]any)["delta"].(map[string]any)
+		tcs, ok := delta["tool_calls"].([]any)
+		if !ok || len(tcs) != len(expectIndices) {
+			t.Fatalf("expected %d tool_calls entries, got %#v", len(expectIndices), delta["tool_calls"])
+		}
+		for i, wantIdx := range expectIndices {
+			tc := tcs[i].(map[string]any)
+			gotIdx := int64(tc["index"].(float64))
+			if gotIdx != wantIdx {
+				t.Fatalf("tool_calls[%d].index = %d, want %d (must preserve index ordering)", i, gotIdx, wantIdx)
+			}
+			fn := tc["function"].(map[string]any)
+			if args, ok := fn["arguments"].(string); ok {
+				reassembled[gotIdx] += args
+			}
+		}
+	}
+	decodeFrame(out1.NormalizedSSEFrames[0], []int64{0, 1})
+	decodeFrame(out2.NormalizedSSEFrames[0], []int64{0, 1})
+
+	if reassembled[0] != `{"city": "Tokyo"}` {
+		t.Fatalf("expected verbatim fragmented JSON args for index 0, got %q", reassembled[0])
+	}
+	if reassembled[1] != `{"q": "Go"}` {
+		t.Fatalf("expected verbatim fragmented JSON args for index 1, got %q", reassembled[1])
+	}
+
+	// Non-streaming TransformResponse also preserves tool_calls.
+	respOut, err := eng.TransformResponse(ctx, port.TransformResponseInput{
+		RequestID:       "req_tc_sync",
+		RawResponseBody: []byte(`{"id":"chatcmpl_sync","model":"nova-70b-instruct","choices":[{"index":0,"message":{"role":"assistant","content":"","tool_calls":[{"index":0,"id":"call_sync","type":"function","function":{"name":"weather","arguments":"{\"city\":\"Seoul\"}"}}]},"finish_reason":"tool_calls"}],"meter":{"input":10,"output":5}}`),
+	})
+	if err != nil {
+		t.Fatalf("TransformResponse failed: %v", err)
+	}
+	if respOut.Usage == nil || respOut.Usage.InputTokens != 10 || respOut.Usage.OutputTokens != 5 {
+		t.Fatalf("expected canonical usageExtraction for sync response, got %+v", respOut.Usage)
+	}
+	streamUsage, err := eng.ExtractUsage(ctx, port.ExtractUsageInput{
+		RawResponseOrTrailerBytes: []byte(`data: {"meter":{"input":11,"output":6}}`),
+	})
+	if err != nil || streamUsage.InputTokens != 11 || streamUsage.OutputTokens != 6 {
+		t.Fatalf("expected canonical usageExtraction for SSE, got %+v, %v", streamUsage, err)
+	}
+
+	var respObj map[string]any
+	if err := json.Unmarshal(respOut.NormalizedResponseJSON, &respObj); err != nil {
+		t.Fatal(err)
+	}
+	syncMsg := respObj["choices"].([]any)[0].(map[string]any)["message"].(map[string]any)
+	if tcs, ok := syncMsg["tool_calls"].([]any); !ok || len(tcs) != 1 {
+		t.Fatalf("expected tool_calls in synchronous normalized response, got %#v", syncMsg)
+	}
+	malformedToolCalls := []byte(`{"choices":[{"message":{"tool_calls":[{"function":{"arguments":"{\"city\":"}}]}}]}`)
+	if _, err := eng.TransformResponse(ctx, port.TransformResponseInput{RawResponseBody: malformedToolCalls}); !errors.Is(err, ErrUpstreamMalformedResponse) {
+		t.Fatalf("expected malformed synchronous tool calls to fail, got %v", err)
+	}
+	normalizedErr, err := eng.NormalizeError(ctx, port.NormalizeErrorInput{HTTPStatus: 200, SanitizedBody: malformedToolCalls})
+	if err != nil || normalizedErr.CanonicalCode != "upstream_malformed_response" {
+		t.Fatalf("expected malformed response classification, got %+v, %v", normalizedErr, err)
+	}
+}
+
+func TestDeclarativeTruncatedResponseJSON502AndSSEFragmentsPreserved(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	eng, err := CompileSpec(DefaultOpenAICompatibleSpec("trunc", []string{"api.openai.com"}))
+	if err != nil {
+		t.Fatalf("CompileSpec failed: %v", err)
+	}
+
+	// 1. Truncated synchronous response JSON variants -> ErrUpstreamMalformedResponse + 502 upstream_malformed_response.
+	truncatedBodies := [][]byte{
+		[]byte(`{"id":"chatcmpl-1","choices":[{"message":{"role":"assistant","content":"partial`),
+		[]byte(`{`),
+		[]byte(`{"choices":[{"message":{"tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{\"city\":\"Han"}}`),
+		[]byte(`[1, 2, 3`),
+	}
+	for i, raw := range truncatedBodies {
+		if _, err := eng.TransformResponse(ctx, port.TransformResponseInput{
+			RequestID:       fmt.Sprintf("req_trunc_%d", i),
+			HTTPStatus:      http.StatusOK,
+			RawResponseBody: raw,
+		}); !errors.Is(err, ErrUpstreamMalformedResponse) || !errors.Is(err, port.ErrExecutionFault) {
+			t.Fatalf("case %d: expected ErrUpstreamMalformedResponse + ErrExecutionFault from TransformResponse, got %v", i, err)
+		}
+
+		for _, status := range []int32{http.StatusOK, http.StatusBadGateway} {
+			normErr, nerr := eng.NormalizeError(ctx, port.NormalizeErrorInput{
+				RequestID:     fmt.Sprintf("req_norm_%d_%d", i, status),
+				HTTPStatus:    status,
+				SanitizedBody: raw,
+			})
+			if nerr != nil {
+				t.Fatalf("case %d status %d NormalizeError failed: %v", i, status, nerr)
+			}
+			if normErr.CanonicalCode != "upstream_malformed_response" || normErr.RetryablePreStream {
+				t.Fatalf("case %d status %d expected non-retryable upstream_malformed_response, got %+v", i, status, normErr)
+			}
+		}
+	}
+
+	// 2. Non-JSON plain-text 502 Bad Gateway continues mapping to upstream_unavailable.
+	plain502, err := eng.NormalizeError(ctx, port.NormalizeErrorInput{
+		RequestID:     "req_502_plain",
+		HTTPStatus:    http.StatusBadGateway,
+		SanitizedBody: []byte("Bad Gateway"),
+	})
+	if err != nil || plain502.CanonicalCode != "upstream_unavailable" {
+		t.Fatalf("expected plain-text 502 to remain upstream_unavailable, got %+v (err=%v)", plain502, err)
+	}
+
+	// 3. Valid SSE streaming delta chunks carrying partial JSON function.arguments fragments MUST remain untouched!
+	sseChunk := []byte("data: {\"id\":\"c1\",\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Ha\"}}]}}]}\n\n" +
+		"data: {\"id\":\"c1\",\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"noi\\\"}\"}}]}}]}\n\n")
+	streamOut, err := eng.TransformStreamChunk(ctx, port.StreamChunkInput{
+		RequestID:        "req_sse_frag",
+		RawUpstreamChunk: sseChunk,
+	})
+	if err != nil {
+		t.Fatalf("expected fragmented SSE tool_calls arguments to succeed, got %v", err)
+	}
+	if len(streamOut.NormalizedSSEFrames) != 2 {
+		t.Fatalf("expected 2 normalized SSE frames, got %d", len(streamOut.NormalizedSSEFrames))
+	}
+	if !strings.Contains(string(streamOut.NormalizedSSEFrames[0]), `\"city\":\"Ha`) ||
+		!strings.Contains(string(streamOut.NormalizedSSEFrames[1]), `noi\"}`) {
+		t.Fatalf("expected SSE argument fragments preserved verbatim, got frames=%q / %q",
+			string(streamOut.NormalizedSSEFrames[0]), string(streamOut.NormalizedSSEFrames[1]))
 	}
 }

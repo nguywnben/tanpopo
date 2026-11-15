@@ -37,36 +37,41 @@ type Engine struct {
 	allowedHosts      map[string]struct{}
 	defaultBaseURL    string
 
-	authBindings    map[string]port.CredentialInjectInstruction
-	authSlotOrder   []string
+	authBindings  map[string]port.CredentialInjectInstruction
+	authSlotOrder []string
 
-	probeMethod       string
-	probePathParts    []templatePart
-	probeBodyBytes    []byte
-	probeSuccessCodes map[int32]struct{}
-	probeModelsPath   parsedPath
-	probeModelIDField parsedPath
+	probeMethod            string
+	probePathParts         []templatePart
+	probeDefaultOpenAIPath bool
+	probeBodyBytes         []byte
+	probeSuccessCodes      map[int32]struct{}
+	probeModelsPath        parsedPath
+	probeModelIDField      parsedPath
 
-	reqMethod         string
-	reqPathParts      []templatePart
-	staticHeaders     map[string]string
-	renames           []compiledRename
-	defaults          []compiledDefault
-	drops             []parsedPath
-	injectStreamUsage bool
+	reqMethod            string
+	reqPathParts         []templatePart
+	reqDefaultOpenAIPath bool
+	staticHeaders        map[string]string
+	renames              []compiledRename
+	defaults             []compiledDefault
+	drops                []parsedPath
+	injectStreamUsage    bool
+	forceStreamUsage     bool
 
 	respModelPath        parsedPath
 	respFinishReasonPath parsedPath
 	respContentPath      parsedPath
 	respRolePath         parsedPath
+	respToolCallsPath    parsedPath
 	respUsagePaths       compiledUsagePaths
 
-	streamDoneSentinel     string
-	streamDeltaContentPath parsedPath
-	streamFinishReasonPath parsedPath
-	streamModelPath        parsedPath
-	streamUsagePaths       compiledUsagePaths
-	streamErrorMsgPath     parsedPath
+	streamDoneSentinel       string
+	streamDeltaContentPath   parsedPath
+	streamDeltaToolCallsPath parsedPath
+	streamFinishReasonPath   parsedPath
+	streamModelPath          parsedPath
+	streamUsagePaths         compiledUsagePaths
+	streamErrorMsgPath       parsedPath
 
 	reauthStatuses    map[int32]struct{}
 	retryableStatuses map[int32]struct{}
@@ -96,18 +101,21 @@ func CompileSpec(spec Spec) (*Engine, error) {
 	}
 
 	eng := &Engine{
-		id:                strings.TrimSpace(spec.ID),
-		slug:              strings.TrimSpace(spec.Slug),
-		nativePrefix:      strings.TrimSpace(spec.NativePrefix),
-		supportedDialects: append([]string(nil), spec.SupportedDialects...),
-		allowedHosts:      allowedHosts,
-		defaultBaseURL:    strings.TrimSpace(spec.DefaultBaseURL),
-		authBindings:      make(map[string]port.CredentialInjectInstruction, len(spec.AuthBindings)),
-		staticHeaders:     make(map[string]string, len(spec.RequestMapping.StaticHeaders)),
-		probeSuccessCodes: make(map[int32]struct{}),
-		reauthStatuses:    make(map[int32]struct{}),
-		retryableStatuses: make(map[int32]struct{}),
-		injectStreamUsage: spec.RequestMapping.InjectStreamUsage,
+		id:                     strings.TrimSpace(spec.ID),
+		slug:                   strings.TrimSpace(spec.Slug),
+		nativePrefix:           strings.TrimSpace(spec.NativePrefix),
+		supportedDialects:      append([]string(nil), spec.SupportedDialects...),
+		allowedHosts:           allowedHosts,
+		defaultBaseURL:         strings.TrimSpace(spec.DefaultBaseURL),
+		authBindings:           make(map[string]port.CredentialInjectInstruction, len(spec.AuthBindings)),
+		staticHeaders:          make(map[string]string, len(spec.RequestMapping.StaticHeaders)),
+		probeSuccessCodes:      make(map[int32]struct{}),
+		reauthStatuses:         make(map[int32]struct{}),
+		retryableStatuses:      make(map[int32]struct{}),
+		injectStreamUsage:      spec.RequestMapping.InjectStreamUsage,
+		forceStreamUsage:       spec.canonicalOpenAI,
+		probeDefaultOpenAIPath: spec.canonicalOpenAI && strings.TrimSpace(spec.ValidationProbe.PathTemplate) == "",
+		reqDefaultOpenAIPath:   spec.canonicalOpenAI && strings.TrimSpace(spec.RequestMapping.PathTemplate) == "",
 	}
 
 	if err := eng.compileAuthBindings(spec.AuthBindings); err != nil {
@@ -352,6 +360,9 @@ func (e *Engine) compileResponseMapping(rm ResponseMappingSpec) error {
 	if e.respRolePath, err = parseDotPath(orDefault(rm.RolePath, "choices.0.message.role")); err != nil {
 		return err
 	}
+	if e.respToolCallsPath, err = parseDotPath(orDefault(rm.ToolCallsPath, "choices.0.message.tool_calls")); err != nil {
+		return err
+	}
 	e.respUsagePaths, err = compileUsagePaths(rm.UsagePaths, UsagePathSpec{
 		InputTokens:     "usage.prompt_tokens",
 		OutputTokens:    "usage.completion_tokens",
@@ -371,6 +382,9 @@ func (e *Engine) compileStreamMapping(sm StreamMappingSpec) error {
 	e.streamDoneSentinel = orDefault(sm.DoneSentinel, "[DONE]")
 	var err error
 	if e.streamDeltaContentPath, err = parseDotPath(orDefault(sm.DeltaContentPath, "choices.0.delta.content")); err != nil {
+		return err
+	}
+	if e.streamDeltaToolCallsPath, err = parseDotPath(orDefault(sm.DeltaToolCallsPath, "choices.0.delta.tool_calls")); err != nil {
 		return err
 	}
 	if e.streamFinishReasonPath, err = parseDotPath(orDefault(sm.FinishReasonPath, "choices.0.finish_reason")); err != nil {
@@ -502,7 +516,7 @@ func (e *Engine) BuildValidationProbe(ctx context.Context, in port.ValidationPro
 	if err != nil {
 		return port.UpstreamHttpSpec{}, err
 	}
-	targetURL, err := renderEndpointURL(baseURL, e.probePathParts, vars, e.allowedHosts, budget)
+	targetURL, err := renderEndpointURL(baseURL, e.probePathParts, e.probeDefaultOpenAIPath, vars, e.allowedHosts, budget)
 	if err != nil {
 		return port.UpstreamHttpSpec{}, err
 	}
@@ -626,7 +640,7 @@ func (e *Engine) TransformRequest(ctx context.Context, in port.TransformRequestI
 		vars["model"] = strings.TrimSpace(modelStr)
 	}
 
-	targetURL, err := renderEndpointURL(baseURL, e.reqPathParts, vars, e.allowedHosts, budget)
+	targetURL, err := renderEndpointURL(baseURL, e.reqPathParts, e.reqDefaultOpenAIPath, vars, e.allowedHosts, budget)
 	if err != nil {
 		return port.UpstreamHttpSpec{}, err
 	}
@@ -704,7 +718,7 @@ func (e *Engine) applyRequestRules(payload map[string]any, budget *stepBudget) e
 				opts = make(map[string]any, 1)
 				payload["stream_options"] = opts
 			}
-			if _, hasInclude := opts["include_usage"]; !hasInclude {
+			if _, hasInclude := opts["include_usage"]; e.forceStreamUsage || !hasInclude {
 				opts["include_usage"] = true
 			}
 		}
@@ -720,7 +734,7 @@ func (e *Engine) TransformResponse(ctx context.Context, in port.TransformRespons
 	budget := newStepBudget()
 	rawMap, err := decodeBoundedJSONMap(in.RawResponseBody)
 	if err != nil {
-		return port.NormalizedInferenceResponse{}, err
+		return port.NormalizedInferenceResponse{}, fmt.Errorf("%w: %w", ErrUpstreamMalformedResponse, err)
 	}
 
 	modelID := e.extractStringPath(rawMap, e.respModelPath, budget)
@@ -730,10 +744,22 @@ func (e *Engine) TransformResponse(ctx context.Context, in port.TransformRespons
 	if role == "" {
 		role = "assistant"
 	}
+	toolCalls, err := extractToolCalls(rawMap, e.respToolCallsPath, budget, true)
+	if err != nil {
+		return port.NormalizedInferenceResponse{}, err
+	}
 
 	usage, err := extractUsageFromMap(rawMap, e.respUsagePaths, budget)
 	if err != nil {
 		return port.NormalizedInferenceResponse{}, err
+	}
+
+	msgMap := map[string]any{
+		"role":    role,
+		"content": content,
+	}
+	if len(toolCalls) > 0 {
+		msgMap["tool_calls"] = toolCalls
 	}
 
 	normObj := map[string]any{
@@ -741,11 +767,8 @@ func (e *Engine) TransformResponse(ctx context.Context, in port.TransformRespons
 		"model":  modelID,
 		"choices": []map[string]any{
 			{
-				"index": 0,
-				"message": map[string]any{
-					"role":    role,
-					"content": content,
-				},
+				"index":         0,
+				"message":       msgMap,
 				"finish_reason": finishReason,
 			},
 		},
@@ -766,6 +789,104 @@ func (e *Engine) TransformResponse(ctx context.Context, in port.TransformRespons
 		UpstreamModelID:        modelID,
 		FinishReason:           finishReason,
 	}, nil
+}
+
+func extractToolCalls(root any, p parsedPath, budget *stepBudget, complete bool) ([]map[string]any, error) {
+	if len(p.tokens) == 0 {
+		return nil, nil
+	}
+	val, found, err := getByPath(root, p, budget)
+	if err != nil {
+		return nil, err
+	}
+	if !found || val == nil {
+		return nil, nil
+	}
+	rawArr, ok := val.([]any)
+	if !ok && complete {
+		return nil, ErrUpstreamMalformedResponse
+	}
+	if len(rawArr) == 0 {
+		return nil, nil
+	}
+
+	type indexedCall struct {
+		hasIdx bool
+		idx    int64
+		entry  map[string]any
+	}
+	if err := budget.consume(len(rawArr)); err != nil {
+		return nil, err
+	}
+	items := make([]indexedCall, 0, len(rawArr))
+	for _, rawElem := range rawArr {
+		src, ok := rawElem.(map[string]any)
+		if complete {
+			fn, _ := src["function"].(map[string]any)
+			args, _ := fn["arguments"].(string)
+			if !json.Valid([]byte(args)) {
+				return nil, ErrUpstreamMalformedResponse
+			}
+		}
+		if !ok {
+			continue
+		}
+		entry := make(map[string]any, 4)
+		var (
+			idxVal int64
+			hasIdx bool
+		)
+		if rawIdx, exists := src["index"]; exists {
+			number, _ := rawIdx.(json.Number)
+			n, err := number.Int64()
+			if err != nil || n < 0 {
+				return nil, ErrUpstreamMalformedResponse
+			}
+			entry["index"] = n
+			idxVal = n
+			hasIdx = true
+		}
+		if idStr, ok := src["id"].(string); ok && idStr != "" {
+			entry["id"] = idStr
+		}
+		if typStr, ok := src["type"].(string); ok && typStr != "" {
+			entry["type"] = typStr
+		}
+		if fnRaw, ok := src["function"].(map[string]any); ok {
+			fnOut := make(map[string]any, 2)
+			if name, ok := fnRaw["name"].(string); ok && name != "" {
+				fnOut["name"] = name
+			}
+			// Preserve raw JSON argument delta fragment verbatim without trimming/mutating.
+			if args, ok := fnRaw["arguments"].(string); ok {
+				fnOut["arguments"] = args
+			}
+			if len(fnOut) > 0 {
+				entry["function"] = fnOut
+			}
+		}
+		if len(entry) > 0 {
+			items = append(items, indexedCall{
+				hasIdx: hasIdx,
+				idx:    idxVal,
+				entry:  entry,
+			})
+		}
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].hasIdx != items[j].hasIdx {
+			return items[i].hasIdx
+		}
+		return items[i].hasIdx && items[i].idx < items[j].idx
+	})
+	out := make([]map[string]any, len(items))
+	for i := range items {
+		out[i] = items[i].entry
+	}
+	return out, nil
 }
 
 func (e *Engine) extractStringPath(root any, p parsedPath, budget *stepBudget) string {
@@ -907,6 +1028,10 @@ func (e *Engine) TransformStreamChunk(ctx context.Context, in port.StreamChunkIn
 		}
 
 		delta := e.extractStringPath(chunkObj, e.streamDeltaContentPath, frameBudget)
+		toolCalls, err := extractToolCalls(chunkObj, e.streamDeltaToolCallsPath, frameBudget, false)
+		if err != nil {
+			return port.StreamChunkOutput{}, err
+		}
 		finishReason := e.extractStringPath(chunkObj, e.streamFinishReasonPath, frameBudget)
 		modelID := e.extractStringPath(chunkObj, e.streamModelPath, frameBudget)
 
@@ -921,6 +1046,9 @@ func (e *Engine) TransformStreamChunk(ctx context.Context, in port.StreamChunkIn
 		deltaObj := map[string]any{}
 		if delta != "" {
 			deltaObj["content"] = delta
+		}
+		if len(toolCalls) > 0 {
+			deltaObj["tool_calls"] = toolCalls
 		}
 		frameMap := map[string]any{
 			"object": "chat.completion.chunk",
@@ -979,12 +1107,42 @@ func finishReasonOrNil(s string) any {
 	return s
 }
 
+// ErrUpstreamMalformedResponse identifies an invalid synchronous tool-call payload.
+var ErrUpstreamMalformedResponse = fmt.Errorf("%w: upstream_malformed_response", port.ErrExecutionFault)
+
 // NormalizeError implements port.ProviderRuntime upstream HTTP failure normalization.
 func (e *Engine) NormalizeError(ctx context.Context, in port.NormalizeErrorInput) (port.CanonicalProviderError, error) {
 	if err := ctx.Err(); err != nil {
 		return port.CanonicalProviderError{}, err
 	}
 	status := in.HTTPStatus
+	if (status >= http.StatusOK && status < http.StatusMultipleChoices) || status == http.StatusBadGateway {
+		trimmedBody := bytes.TrimSpace(in.SanitizedBody)
+		if len(trimmedBody) > 0 {
+			body, err := decodeBoundedJSONMap(trimmedBody)
+			if err != nil {
+				looksLikeJSON := trimmedBody[0] == '{' || trimmedBody[0] == '['
+				if (status >= http.StatusOK && status < http.StatusMultipleChoices) || looksLikeJSON {
+					return port.CanonicalProviderError{
+						CanonicalCode:          "upstream_malformed_response",
+						ErrorType:              "server_error",
+						RetryablePreStream:     false,
+						SanitizedPublicMessage: "upstream returned malformed or truncated JSON response",
+					}, nil
+				}
+			} else {
+				_, toolErr := extractToolCalls(body, e.respToolCallsPath, newStepBudget(), true)
+				if errors.Is(toolErr, ErrUpstreamMalformedResponse) {
+					return port.CanonicalProviderError{
+						CanonicalCode:          "upstream_malformed_response",
+						ErrorType:              "server_error",
+						RetryablePreStream:     false,
+						SanitizedPublicMessage: "upstream returned malformed tool calls",
+					}, nil
+				}
+			}
+		}
+	}
 	_, triggerReauth := e.reauthStatuses[status]
 	_, retryable := e.retryableStatuses[status]
 

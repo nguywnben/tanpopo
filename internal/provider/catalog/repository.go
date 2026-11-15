@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/netip"
 	"net/url"
 	"strconv"
@@ -22,6 +23,8 @@ import (
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/extension/installer"
+	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
@@ -91,8 +94,8 @@ const (
 
 // Canonical secret injection modes (connection_secret_bindings.inject_mode).
 const (
-	InjectModeHostBlind      = "HOST_BLIND_INJECT"
-	InjectModeHostCryptoSign = "HOST_CRYPTO_SIGN"
+	InjectModeHostBlind      = broker.InjectModeHostBlind
+	InjectModeHostCryptoSign = broker.InjectModeHostCryptoSign
 	InjectModeMTLSHandshake  = "MTLS_HANDSHAKE"
 )
 
@@ -115,11 +118,19 @@ var (
 	ErrSnapshotSyncFailed     = errors.New("catalog: committed to database but snapshot sync failed")
 )
 
+// SnapshotRefresher refreshes in-memory serving snapshots synchronously.
+type SnapshotRefresher interface {
+	Refresh(context.Context) error
+}
+
 // Config configures Repository fail-closed.
 type Config struct {
-	DB                        *sql.DB
-	NowMs                     func() int64
-	Snapshots                 *snapshot.Manager
+	DB                *sql.DB
+	NowMs             func() int64
+	Snapshots         *snapshot.Manager
+	SnapshotRefresher SnapshotRefresher
+	// Keyring is the same trusted key configuration used by the extension installer.
+	Keyring                   installer.TrustedKeyring
 	AllowDetachedControlPlane bool
 	Audit                     port.AuditSink
 }
@@ -130,6 +141,8 @@ type Repository struct {
 	db        *sql.DB
 	nowMs     func() int64
 	snapshots *snapshot.Manager
+	snapSync  SnapshotRefresher
+	keyring   installer.TrustedKeyring
 	audit     port.AuditSink
 }
 
@@ -138,7 +151,11 @@ func NewRepository(cfg Config) (*Repository, error) {
 	if cfg.DB == nil {
 		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", port.ErrInvalidInput)
 	}
-	if cfg.Snapshots == nil && !cfg.AllowDetachedControlPlane {
+	syncer := cfg.SnapshotRefresher
+	if syncer == nil && cfg.Snapshots != nil {
+		syncer = cfg.Snapshots
+	}
+	if syncer == nil && !cfg.AllowDetachedControlPlane {
 		return nil, fmt.Errorf("%w: non-nil SnapshotManager is required unless AllowDetachedControlPlane=true", port.ErrInvalidInput)
 	}
 	nowFn := cfg.NowMs
@@ -149,6 +166,8 @@ func NewRepository(cfg Config) (*Repository, error) {
 		db:        cfg.DB,
 		nowMs:     nowFn,
 		snapshots: cfg.Snapshots,
+		snapSync:  syncer,
+		keyring:   cfg.Keyring,
 		audit:     cfg.Audit,
 	}, nil
 }
@@ -297,10 +316,14 @@ type CreateModelDeploymentParams struct {
 	IdleChunkTimeoutMs  int64
 }
 
-// CreateProviderAdapter registers a declarative or runtime provider adapter linked to an installation.
+// CreateProviderAdapter registers a declarative or runtime provider adapter linked to an installation,
+// strictly constrained by SM-01 approved permissions on the installation's active version.
 func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreateProviderAdapterParams) (*ProviderAdapter, error) {
 	if strings.TrimSpace(params.InstallationID) == "" || strings.TrimSpace(params.AdapterSlug) == "" {
 		return nil, fmt.Errorf("%w: installation_id and adapter_slug are required", port.ErrInvalidInput)
+	}
+	if len(params.AllowedHosts) == 0 {
+		return nil, fmt.Errorf("%w: allowed_hosts must not be empty (default-deny CT-14)", port.ErrInvalidInput)
 	}
 	id, err := resolveID(params.ID, idgen.PrefixAdapter)
 	if err != nil {
@@ -322,16 +345,24 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 	now := r.nowMs()
 
 	if err := r.withTx(ctx, func(tx *sql.Tx) error {
-		var installState string
-		err := tx.QueryRowContext(ctx, `SELECT state FROM extension_installations WHERE id = ?`, params.InstallationID).Scan(&installState)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: extension installation %q not found", port.ErrNotFound, params.InstallationID)
-		}
+		gov, err := loadAdapterExtensionGovernance(ctx, tx, params.InstallationID)
 		if err != nil {
-			return mapDBError(err)
+			return err
 		}
-		if !isValidAdapterInstallState(installState) {
-			return fmt.Errorf("%w: extension installation %q state %s cannot back an adapter", port.ErrInvalidInput, params.InstallationID, installState)
+		if !isValidAdapterInstallState(gov.InstallState) {
+			return fmt.Errorf("%w: extension installation %q state %s cannot back an adapter", port.ErrInvalidInput, params.InstallationID, gov.InstallState)
+		}
+		if gov.ActiveVersionID == "" {
+			return fmt.Errorf("%w: extension installation %q has no active SM-01 version", port.ErrInvalidInput, params.InstallationID)
+		}
+		approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
+		if err != nil {
+			return fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
+		}
+		for _, reqHost := range params.AllowedHosts {
+			if !hostPatternPermittedByApproved(reqHost, approved.AllowedHosts) {
+				return fmt.Errorf("%w: adapter allowed_host %q exceeds SM-01 approved networkEgress.allowedHosts", port.ErrInvalidInput, reqHost)
+			}
 		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO provider_adapters (
@@ -545,28 +576,25 @@ func (r *Repository) CreateProviderConnection(ctx context.Context, params Create
 
 	now := r.nowMs()
 	if err := r.withTx(ctx, func(tx *sql.Tx) error {
-		var orgStatus string
-		if err := tx.QueryRowContext(ctx, `SELECT status FROM organizations WHERE id = ?`, params.OrgID).Scan(&orgStatus); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("%w: organization %q not found", port.ErrNotFound, params.OrgID)
-			}
-			return mapDBError(err)
-		}
-
-		// Verify adapter exists & endpoint host falls inside adapter allowed_hosts when non-empty.
-		var adapterHostsJSON string
-		if err := tx.QueryRowContext(ctx, `SELECT allowed_hosts_json FROM provider_adapters WHERE id = ?`, params.AdapterID).Scan(&adapterHostsJSON); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("%w: provider_adapter %q not found", port.ErrNotFound, params.AdapterID)
-			}
-			return mapDBError(err)
-		}
-		adapterHosts, err := decodeStringSliceStrict(adapterHostsJSON, "provider_adapters.allowed_hosts_json")
+		adapterHosts, gov, err := loadConnectionExtensionGovernanceByAdapter(ctx, tx, params.OrgID, params.AdapterID)
 		if err != nil {
 			return err
 		}
-		if !hostPermittedByAdapter(parsedEndpoint, adapterHosts) {
-			return fmt.Errorf("%w: endpoint host %q rejected by adapter allowed_hosts", port.ErrInvalidInput, parsedEndpoint.Hostname())
+		gov.HasChildProjectScope = ownerProjPtr != nil || len(sharedProjects) > 0
+		if err := r.validateOrgAndActiveExtensionTrust(gov, false, port.ErrInvalidInput); err != nil {
+			return err
+		}
+		approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
+		if err != nil {
+			return fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
+		}
+		if err := validateEndpointAndPermissions(parsedEndpoint, params.AllowPrivateIP, adapterHosts, approved, port.ErrInvalidInput); err != nil {
+			return err
+		}
+		for _, b := range bindings {
+			if err := slotPermittedByApproved(b.SlotName, b.InjectMode, approved, port.ErrInvalidInput); err != nil {
+				return err
+			}
 		}
 
 		if ownerProjPtr != nil {
@@ -1189,7 +1217,8 @@ func (r *Repository) DeleteModelDeployment(ctx context.Context, orgID, deploymen
 }
 
 // ResolveConnectionPolicy implements broker.ConnectionPolicyResolver fail-closed for both
-// credentialed and zero-slot (auth_mode=NONE) connections (DEC-020).
+// credentialed and zero-slot (auth_mode=NONE) connections (DEC-020), enforcing SM-01
+// approved permissions, org disable policy, and TP-BR-0202 org minimum trust tier.
 func (r *Repository) ResolveConnectionPolicy(ctx context.Context, orgID, connectionID string) (*egress.Policy, error) {
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(connectionID) == "" {
 		return nil, fmt.Errorf("%w: orgID and connectionID are required", port.ErrInvalidInput)
@@ -1199,30 +1228,55 @@ func (r *Repository) ResolveConnectionPolicy(ctx context.Context, orgID, connect
 		allowPriv        int
 		cidrsJSON        string
 		state            string
+		connOwnerProj    sql.NullString
+		sharedProjJSON   string
 		adapterHostsJSON string
-		installState     string
-		oepEnabled       sql.NullInt64
+		gov              extensionGovernanceState
+		activeVerID      sql.NullString
+		entSigned        int
 	)
 	err := r.db.QueryRowContext(ctx, `
 		SELECT pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.state,
-		       pa.allowed_hosts_json, ei.state, oep.enabled
+		       pc.owner_project_id, pc.shared_project_ids_json,
+		       pa.allowed_hosts_json, ei.state, ev.id, ei.approved_permissions_json,
+		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0),
+		       o.min_plugin_trust, oep.enabled
 		FROM provider_connections pc
+		JOIN organizations o ON o.id = pc.org_id
 		JOIN provider_adapters pa ON pa.id = pc.adapter_id
 		JOIN extension_installations ei ON ei.id = pa.installation_id
+		JOIN extension_packages ep ON ep.id = ei.package_id
+		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
 		LEFT JOIN org_extension_policies oep ON oep.org_id = pc.org_id AND oep.package_id = ei.package_id
 		WHERE pc.org_id = ? AND pc.id = ?`, orgID, connectionID,
-	).Scan(&endpointStr, &allowPriv, &cidrsJSON, &state, &adapterHostsJSON, &installState, &oepEnabled)
+	).Scan(
+		&endpointStr, &allowPriv, &cidrsJSON, &state,
+		&connOwnerProj, &sharedProjJSON,
+		&adapterHostsJSON, &gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
+		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned,
+		&gov.MinPluginTrust, &gov.OrgPolicyEnabled,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
 	}
 	if err != nil {
 		return nil, mapDBError(err)
 	}
-	if !isUsableExtensionState(installState) {
-		return nil, fmt.Errorf("%w: adapter extension installation state %q is not active", ErrConnectionNotReady, installState)
+	sharedProjects, err := decodeStringSliceStrict(sharedProjJSON, "shared_project_ids_json")
+	if err != nil {
+		return nil, err
 	}
-	if oepEnabled.Valid && oepEnabled.Int64 == 0 {
-		return nil, fmt.Errorf("%w: adapter extension is disabled by organization policy", ErrConnectionNotReady)
+	if activeVerID.Valid {
+		gov.ActiveVersionID = activeVerID.String
+	}
+	gov.EnterpriseSigned = entSigned != 0
+	gov.HasChildProjectScope = connOwnerProj.Valid || len(sharedProjects) > 0
+	if err := r.validateOrgAndActiveExtensionTrust(&gov, true, ErrConnectionNotReady); err != nil {
+		return nil, err
+	}
+	approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrConnectionNotReady, err)
 	}
 	allowedCIDRs, err := decodeStringSliceStrict(cidrsJSON, "allowed_cidrs_json")
 	if err != nil {
@@ -1232,61 +1286,96 @@ func (r *Repository) ResolveConnectionPolicy(ctx context.Context, orgID, connect
 	if err != nil {
 		return nil, err
 	}
-	return buildAuthoritativeEgressPolicy(endpointStr, allowPriv != 0, allowedCIDRs, adapterHosts, state)
+	return buildAuthoritativeEgressPolicy(endpointStr, allowPriv != 0, allowedCIDRs, adapterHosts, approved, state)
 }
 
 // ResolveSlot implements broker.CredentialBindingResolver fail-closed without ever reading
-// or returning plaintext or ciphertext secret bytes (SPEC-SEC-03).
+// or returning plaintext or ciphertext secret bytes (SPEC-SEC-03), enforcing SM-01 approved
+// secret slots/modes/egress permissions, org disable policy, and TP-BR-0202 org min trust.
 func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotName string) (*broker.ResolvedSlot, error) {
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(connectionID) == "" || strings.TrimSpace(slotName) == "" {
 		return nil, fmt.Errorf("%w: orgID, connectionID, and slotName are required", port.ErrInvalidInput)
 	}
 	var (
-		endpointStr      string
-		allowPriv        int
-		cidrsJSON        string
-		state            string
-		primaryCredID    sql.NullString
-		connOwnerProj    sql.NullString
-		sharedProjJSON   string
-		adapterHostsJSON string
-		installState     string
-		oepEnabled       sql.NullInt64
-		slotCredID       sql.NullString
+		endpointStr       string
+		allowPriv         int
+		cidrsJSON         string
+		state             string
+		primaryCredID     sql.NullString
+		connOwnerProj     sql.NullString
+		sharedProjJSON    string
+		adapterHostsJSON  string
+		gov               extensionGovernanceState
+		activeVerID       sql.NullString
+		entSigned         int
+		slotCredID        sql.NullString
+		slotInjectMode    sql.NullString
+		primaryHasBinding bool
 	)
 	err := r.db.QueryRowContext(ctx, `
 		SELECT pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.state, pc.credential_id,
-		       pc.owner_project_id, pc.shared_project_ids_json, pa.allowed_hosts_json, ei.state, oep.enabled, csb.credential_id
+		       pc.owner_project_id, pc.shared_project_ids_json, pa.allowed_hosts_json,
+		       ei.state, ev.id, ei.approved_permissions_json,
+		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0),
+		       o.min_plugin_trust, oep.enabled, csb.credential_id, csb.inject_mode,
+		       EXISTS (SELECT 1 FROM connection_secret_bindings b
+		               WHERE b.org_id = pc.org_id AND b.connection_id = pc.id
+		                 AND b.credential_id = pc.credential_id)
 		FROM provider_connections pc
+		JOIN organizations o ON o.id = pc.org_id
 		JOIN provider_adapters pa ON pa.id = pc.adapter_id
 		JOIN extension_installations ei ON ei.id = pa.installation_id
+		JOIN extension_packages ep ON ep.id = ei.package_id
+		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
 		LEFT JOIN org_extension_policies oep ON oep.org_id = pc.org_id AND oep.package_id = ei.package_id
 		LEFT JOIN connection_secret_bindings csb
 		       ON csb.org_id = pc.org_id AND csb.connection_id = pc.id AND csb.slot_name = ?
 		WHERE pc.org_id = ? AND pc.id = ?`,
 		slotName, orgID, connectionID,
-	).Scan(&endpointStr, &allowPriv, &cidrsJSON, &state, &primaryCredID,
-		&connOwnerProj, &sharedProjJSON, &adapterHostsJSON, &installState, &oepEnabled, &slotCredID)
+	).Scan(
+		&endpointStr, &allowPriv, &cidrsJSON, &state, &primaryCredID,
+		&connOwnerProj, &sharedProjJSON, &adapterHostsJSON,
+		&gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
+		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned,
+		&gov.MinPluginTrust, &gov.OrgPolicyEnabled, &slotCredID, &slotInjectMode, &primaryHasBinding,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
 	}
 	if err != nil {
 		return nil, mapDBError(err)
 	}
-	if !isUsableExtensionState(installState) {
-		return nil, fmt.Errorf("%w: adapter extension installation state %q is not active", ErrConnectionNotReady, installState)
+	sharedProjects, err := decodeStringSliceStrict(sharedProjJSON, "shared_project_ids_json")
+	if err != nil {
+		return nil, err
 	}
-	if oepEnabled.Valid && oepEnabled.Int64 == 0 {
-		return nil, fmt.Errorf("%w: adapter extension is disabled by organization policy", ErrConnectionNotReady)
+	if activeVerID.Valid {
+		gov.ActiveVersionID = activeVerID.String
+	}
+	gov.EnterpriseSigned = entSigned != 0
+	gov.HasChildProjectScope = connOwnerProj.Valid || len(sharedProjects) > 0
+	if err := r.validateOrgAndActiveExtensionTrust(&gov, true, ErrConnectionNotReady); err != nil {
+		return nil, err
+	}
+	approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrConnectionNotReady, err)
 	}
 
 	credID := ""
+	injectMode := InjectModeHostBlind
 	if slotCredID.Valid && slotCredID.String != "" {
 		credID = slotCredID.String
-	} else if slotName == "api_key" && primaryCredID.Valid && primaryCredID.String != "" {
+		if slotInjectMode.Valid && slotInjectMode.String != "" {
+			injectMode = slotInjectMode.String
+		}
+	} else if slotName == "api_key" && primaryCredID.Valid && primaryCredID.String != "" && !primaryHasBinding {
 		credID = primaryCredID.String
 	} else {
 		return nil, fmt.Errorf("%w: secret slot %q not bound on connection %q", port.ErrNotFound, slotName, connectionID)
+	}
+	if err := slotPermittedByApproved(slotName, injectMode, approved, ErrConnectionNotReady); err != nil {
+		return nil, err
 	}
 
 	var (
@@ -1301,11 +1390,6 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 			return nil, fmt.Errorf("%w: bound secret_credential %q not found", port.ErrNotFound, credID)
 		}
 		return nil, mapDBError(err)
-	}
-
-	sharedProjects, err := decodeStringSliceStrict(sharedProjJSON, "shared_project_ids_json")
-	if err != nil {
-		return nil, err
 	}
 	if secretOwnerProj.Valid {
 		if !connOwnerProj.Valid || connOwnerProj.String != secretOwnerProj.String || len(sharedProjects) > 0 {
@@ -1322,7 +1406,7 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 	if err != nil {
 		return nil, err
 	}
-	policy, err := buildAuthoritativeEgressPolicy(endpointStr, allowPriv != 0, allowedCIDRs, adapterHosts, state)
+	policy, err := buildAuthoritativeEgressPolicy(endpointStr, allowPriv != 0, allowedCIDRs, adapterHosts, approved, state)
 	if err != nil {
 		return nil, err
 	}
@@ -1338,6 +1422,7 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 		ConnectionID:   connectionID,
 		SlotName:       slotName,
 		SecretID:       credID,
+		InjectMode:     injectMode,
 		BoundAudience:  audPtr,
 		AllowedHosts:   policy.AllowedHosts,
 		AllowPrivateIP: policy.AllowPrivateIP,
@@ -1347,7 +1432,7 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 	}, nil
 }
 
-func buildAuthoritativeEgressPolicy(endpointStr string, allowPrivateIP bool, allowedCIDRs, adapterHosts []string, state string) (*egress.Policy, error) {
+func buildAuthoritativeEgressPolicy(endpointStr string, allowPrivateIP bool, allowedCIDRs, adapterHosts []string, approved installer.PermissionSet, state string) (*egress.Policy, error) {
 	switch state {
 	case ConnStateValidating, ConnStateActive, ConnStateDegraded:
 	default:
@@ -1357,10 +1442,18 @@ func buildAuthoritativeEgressPolicy(endpointStr string, allowPrivateIP bool, all
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
 		return nil, fmt.Errorf("%w: malformed endpoint_base_url %q", port.ErrInvalidInput, endpointStr)
 	}
-	if !hostPermittedByAdapter(u, adapterHosts) {
-		return nil, fmt.Errorf("%w: endpoint host %q denied by adapter allowed_hosts", port.ErrInvalidInput, u.Hostname())
+	if err := validateEndpointAndPermissions(u, allowPrivateIP, adapterHosts, approved, ErrConnectionNotReady); err != nil {
+		return nil, err
 	}
-	return buildEgressPolicyFromURL(endpointStr, allowPrivateIP, allowedCIDRs)
+	effectiveAllowPrivate := allowPrivateIP && approved.AllowPrivateIP
+	policy, err := buildEgressPolicyFromURL(endpointStr, effectiveAllowPrivate, allowedCIDRs)
+	if err != nil {
+		return nil, err
+	}
+	if approved.RequireTLS {
+		policy.RequireTLS = true
+	}
+	return policy, nil
 }
 
 func buildEgressPolicyFromURL(endpointStr string, allowPrivateIP bool, allowedCIDRs []string) (*egress.Policy, error) {
@@ -1412,11 +1505,16 @@ func (r *Repository) withTx(ctx context.Context, fn func(tx *sql.Tx) error) erro
 	return nil
 }
 
+// SyncSnapshots triggers an immediate synchronous serving snapshot refresh.
+func (r *Repository) SyncSnapshots(ctx context.Context) error {
+	return r.syncSnapshot(ctx)
+}
+
 func (r *Repository) syncSnapshot(ctx context.Context) error {
-	if r.snapshots == nil {
+	if r.snapSync == nil {
 		return nil
 	}
-	if err := r.snapshots.Refresh(ctx); err != nil {
+	if err := r.snapSync.Refresh(ctx); err != nil {
 		return fmt.Errorf("%w: %v", ErrSnapshotSyncFailed, err)
 	}
 	return nil
@@ -1450,7 +1548,7 @@ func ensureProjectOwnedByOrgTx(ctx context.Context, tx *sql.Tx, orgID, projectID
 }
 
 func ensureSecretCompatibleWithConnectionTx(
-	ctx context.Context, tx *sql.Tx, orgID string,
+	ctx context.Context, tx rowQuerier, orgID string,
 	connOwnerProjectID *string, connSharedProjectIDs []string, secretID string,
 ) error {
 	var secretOwnerProj sql.NullString
@@ -1493,15 +1591,373 @@ func validateHostEntry(raw string) error {
 	return nil
 }
 
-func hostPermittedByAdapter(u *url.URL, adapterHosts []string) bool {
-	if len(adapterHosts) == 0 {
-		return true
+type rowQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+type extensionGovernanceState struct {
+	InstallState            string
+	ActiveVersionID         string
+	ApprovedPermissionsJSON string
+	CanonicalName           string
+	SignatureVerified       int
+	Fingerprint             string
+	EnterpriseSigned        bool
+	MinPluginTrust          string
+	OrgPolicyEnabled        sql.NullInt64
+	HasChildProjectScope    bool
+}
+
+func loadAdapterExtensionGovernance(ctx context.Context, q rowQuerier, installationID string) (*extensionGovernanceState, error) {
+	var (
+		gov         extensionGovernanceState
+		activeVerID sql.NullString
+		entSigned   int
+	)
+	err := q.QueryRowContext(ctx, `
+		SELECT ei.state, ev.id, ei.approved_permissions_json,
+		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0)
+		FROM extension_installations ei
+		JOIN extension_packages ep ON ep.id = ei.package_id
+		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
+		WHERE ei.id = ?`, installationID,
+	).Scan(
+		&gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
+		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: extension installation %q not found", port.ErrNotFound, installationID)
 	}
-	hostname := strings.ToLower(u.Hostname())
-	hostPort := strings.ToLower(u.Host)
-	for _, ah := range adapterHosts {
-		norm := strings.ToLower(strings.TrimSpace(ah))
-		if norm == hostname || norm == hostPort {
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	if activeVerID.Valid {
+		gov.ActiveVersionID = activeVerID.String
+	}
+	gov.EnterpriseSigned = entSigned != 0
+	return &gov, nil
+}
+
+func loadConnectionExtensionGovernanceByAdapter(ctx context.Context, q rowQuerier, orgID, adapterID string) ([]string, *extensionGovernanceState, error) {
+	var (
+		gov              extensionGovernanceState
+		activeVerID      sql.NullString
+		entSigned        int
+		adapterHostsJSON string
+	)
+	if err := q.QueryRowContext(ctx, `SELECT min_plugin_trust FROM organizations WHERE id = ?`, orgID).Scan(&gov.MinPluginTrust); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, fmt.Errorf("%w: organization %q not found", port.ErrNotFound, orgID)
+		}
+		return nil, nil, mapDBError(err)
+	}
+	err := q.QueryRowContext(ctx, `
+		SELECT pa.allowed_hosts_json, ei.state, ev.id, ei.approved_permissions_json,
+		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0), oep.enabled
+		FROM provider_adapters pa
+		JOIN extension_installations ei ON ei.id = pa.installation_id
+		JOIN extension_packages ep ON ep.id = ei.package_id
+		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
+		LEFT JOIN org_extension_policies oep ON oep.org_id = ? AND oep.package_id = ei.package_id
+		WHERE pa.id = ?`, orgID, adapterID,
+	).Scan(
+		&adapterHostsJSON, &gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
+		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned, &gov.OrgPolicyEnabled,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, fmt.Errorf("%w: provider_adapter %q not found", port.ErrNotFound, adapterID)
+	}
+	if err != nil {
+		return nil, nil, mapDBError(err)
+	}
+	adapterHosts, err := decodeStringSliceStrict(adapterHostsJSON, "provider_adapters.allowed_hosts_json")
+	if err != nil {
+		return nil, nil, err
+	}
+	if activeVerID.Valid {
+		gov.ActiveVersionID = activeVerID.String
+	}
+	gov.EnterpriseSigned = entSigned != 0
+	return adapterHosts, &gov, nil
+}
+
+func decodeApprovedPermissionsStrict(raw string) (installer.PermissionSet, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed == "{}" || trimmed == "null" {
+		return installer.PermissionSet{}, errors.New("SM-01 approved_permissions_json is empty or missing")
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &obj); err != nil || obj == nil {
+		return installer.PermissionSet{}, fmt.Errorf("corrupt SM-01 approved_permissions_json: must be a JSON object")
+	}
+	var perms installer.PermissionSet
+	if err := json.Unmarshal([]byte(trimmed), &perms); err != nil {
+		return installer.PermissionSet{}, fmt.Errorf("corrupt SM-01 approved_permissions_json: %v", err)
+	}
+	perms = installer.NormalizePermissionSet(perms)
+	if len(perms.AllowedHosts) == 0 {
+		return installer.PermissionSet{}, errors.New("SM-01 approved networkEgress.allowedHosts is empty (default-deny CT-14)")
+	}
+	return perms, nil
+}
+
+type dbQuerier interface {
+	rowQuerier
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func (r *Repository) ensureConnectionAuthorized(ctx context.Context, q dbQuerier, orgID, connectionID string, wrapSentinel error) error {
+	var (
+		adapterID      string
+		endpointStr    string
+		allowPriv      int
+		ownerProj      sql.NullString
+		sharedProjJSON string
+		primaryCredID  sql.NullString
+	)
+	err := q.QueryRowContext(ctx, `
+		SELECT adapter_id, endpoint_base_url, allow_private_ip, owner_project_id, shared_project_ids_json, credential_id
+		FROM provider_connections
+		WHERE org_id = ? AND id = ?`, orgID, connectionID,
+	).Scan(&adapterID, &endpointStr, &allowPriv, &ownerProj, &sharedProjJSON, &primaryCredID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
+	}
+	if err != nil {
+		return mapDBError(err)
+	}
+	sharedProjects, err := decodeStringSliceStrict(sharedProjJSON, "shared_project_ids_json")
+	if err != nil {
+		return err
+	}
+	parsedEndpoint, perr := url.Parse(strings.TrimSpace(endpointStr))
+	if perr != nil || parsedEndpoint.Hostname() == "" {
+		return fmt.Errorf("%w: invalid endpoint_base_url %q", wrapSentinel, endpointStr)
+	}
+	adapterHosts, gov, err := loadConnectionExtensionGovernanceByAdapter(ctx, q, orgID, adapterID)
+	if err != nil {
+		return err
+	}
+	gov.HasChildProjectScope = ownerProj.Valid || len(sharedProjects) > 0
+	if err := r.validateOrgAndActiveExtensionTrust(gov, true, wrapSentinel); err != nil {
+		return err
+	}
+	approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
+	if err != nil {
+		return fmt.Errorf("%w: %w", wrapSentinel, err)
+	}
+	if err := validateEndpointAndPermissions(parsedEndpoint, allowPriv != 0, adapterHosts, approved, wrapSentinel); err != nil {
+		return err
+	}
+
+	rows, err := q.QueryContext(ctx, `
+		SELECT slot_name, credential_id, inject_mode
+		FROM connection_secret_bindings
+		WHERE org_id = ? AND connection_id = ?`, orgID, connectionID,
+	)
+	if err != nil {
+		return mapDBError(err)
+	}
+	var bindings []SecretBindingInput
+	hasAPIKeyBinding := false
+	for rows.Next() {
+		var b SecretBindingInput
+		if serr := rows.Scan(&b.SlotName, &b.CredentialID, &b.InjectMode); serr != nil {
+			_ = rows.Close()
+			return mapDBError(serr)
+		}
+		if b.SlotName == "api_key" {
+			hasAPIKeyBinding = true
+		}
+		bindings = append(bindings, b)
+	}
+	if rerr := rows.Err(); rerr != nil {
+		_ = rows.Close()
+		return mapDBError(rerr)
+	}
+	_ = rows.Close()
+
+	if !hasAPIKeyBinding && primaryCredID.Valid && primaryCredID.String != "" {
+		bindings = append(bindings, SecretBindingInput{
+			SlotName:     "api_key",
+			CredentialID: primaryCredID.String,
+			InjectMode:   InjectModeHostBlind,
+		})
+	}
+	var ownerProjPtr *string
+	if ownerProj.Valid {
+		v := ownerProj.String
+		ownerProjPtr = &v
+	}
+	for _, b := range bindings {
+		if err := slotPermittedByApproved(b.SlotName, b.InjectMode, approved, wrapSentinel); err != nil {
+			return err
+		}
+		if err := ensureSecretCompatibleWithConnectionTx(ctx, q, orgID, ownerProjPtr, sharedProjects, b.CredentialID); err != nil {
+			return fmt.Errorf("%w: %w", wrapSentinel, err)
+		}
+	}
+	return nil
+}
+
+func (r *Repository) validateOrgAndActiveExtensionTrust(gov *extensionGovernanceState, requireUsableState bool, wrapSentinel error) error {
+	if gov.ActiveVersionID == "" {
+		return fmt.Errorf("%w: adapter extension has no active SM-01 version", wrapSentinel)
+	}
+	if requireUsableState {
+		if !isUsableExtensionState(gov.InstallState) {
+			return fmt.Errorf("%w: adapter extension installation state %q is not active", wrapSentinel, gov.InstallState)
+		}
+	} else if !isValidAdapterInstallState(gov.InstallState) {
+		return fmt.Errorf("%w: adapter extension installation state %q cannot create connections", wrapSentinel, gov.InstallState)
+	}
+	if gov.OrgPolicyEnabled.Valid && gov.OrgPolicyEnabled.Int64 == 0 {
+		return fmt.Errorf("%w: adapter extension is disabled by organization policy", wrapSentinel)
+	}
+	publicTrust := r.keyring.DerivePublicTrustTier(gov.CanonicalName, gov.SignatureVerified != 0, gov.Fingerprint)
+	if err := installer.CheckOrgMinTrustPolicy(gov.MinPluginTrust, publicTrust, gov.EnterpriseSigned); err != nil {
+		return fmt.Errorf("%w: %w", wrapSentinel, err)
+	}
+	// TP-BR-0202 Exception: By default in organizations, unsigned unverified_external packages are unavailable
+	// to child Project scopes unless explicitly enabled by ORG_OWNER in org_extension_policies (enabled=1).
+	if gov.HasChildProjectScope && publicTrust == lockfile.TrustTierUnverifiedExternal && !gov.EnterpriseSigned {
+		if !gov.OrgPolicyEnabled.Valid || gov.OrgPolicyEnabled.Int64 != 1 {
+			return fmt.Errorf("%w: %w: unsigned unverified_external package requires explicit ORG_OWNER enablement for child project scopes",
+				wrapSentinel, installer.ErrOrgTrustPolicyDenied)
+		}
+	}
+	return nil
+}
+
+func validateEndpointAndPermissions(
+	u *url.URL, allowPrivateIP bool, adapterHosts []string, approved installer.PermissionSet, wrapSentinel error,
+) error {
+	if len(adapterHosts) == 0 {
+		return fmt.Errorf("%w: adapter allowed_hosts is empty (default-deny CT-14)", wrapSentinel)
+	}
+	if !urlHostPermittedByList(u, adapterHosts) {
+		return fmt.Errorf("%w: endpoint host %q denied by adapter allowed_hosts", wrapSentinel, u.Hostname())
+	}
+	if !urlHostPermittedByList(u, approved.AllowedHosts) {
+		return fmt.Errorf("%w: endpoint host %q denied by SM-01 approved networkEgress.allowedHosts", wrapSentinel, u.Hostname())
+	}
+	if approved.RequireTLS && u.Scheme != "https" {
+		return fmt.Errorf("%w: endpoint scheme %q violates SM-01 approved requireTls=true", wrapSentinel, u.Scheme)
+	}
+	if allowPrivateIP && !approved.AllowPrivateIP {
+		return fmt.Errorf("%w: allow_private_ip=true denied by SM-01 approved networkEgress.allowPrivateIp=false", wrapSentinel)
+	}
+	return nil
+}
+
+func slotPermittedByApproved(slotName, injectMode string, approved installer.PermissionSet, wrapSentinel error) error {
+	trimmedSlot := strings.TrimSpace(slotName)
+	slotAllowed := false
+	for _, s := range approved.SecretSlots {
+		if strings.TrimSpace(s) == trimmedSlot {
+			slotAllowed = true
+			break
+		}
+	}
+	if !slotAllowed {
+		return fmt.Errorf("%w: secret slot %q is not approved in SM-01 approved_permissions_json", wrapSentinel, trimmedSlot)
+	}
+
+	modeSpec, hasModeSpec := approved.SecretBindingModes[trimmedSlot]
+	modeSpec = strings.TrimSpace(modeSpec)
+	if !hasModeSpec || modeSpec == "" {
+		// Unannotated slots allow HOST_BLIND_INJECT only; HOST_CRYPTO_SIGN / MTLS_HANDSHAKE require explicit manifest grant.
+		if injectMode == InjectModeHostBlind {
+			return nil
+		}
+		return fmt.Errorf("%w: inject_mode %q for slot %q requires explicit SM-01 binding mode permission", wrapSentinel, injectMode, trimmedSlot)
+	}
+	for _, tok := range strings.Split(modeSpec, ",") {
+		if approvedModeMatchesInjectMode(strings.TrimSpace(tok), injectMode) {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: inject_mode %q for slot %q exceeds SM-01 approved mode %q", wrapSentinel, injectMode, trimmedSlot, modeSpec)
+}
+
+func approvedModeMatchesInjectMode(manifestMode, injectMode string) bool {
+	mm := strings.ToLower(strings.TrimSpace(manifestMode))
+	switch injectMode {
+	case InjectModeHostBlind:
+		return mm == "host_blind_inject" || mm == "header" || mm == "query" || mm == "query_param" || mm == "bearer"
+	case InjectModeHostCryptoSign:
+		return mm == "host_crypto_sign"
+	case InjectModeMTLSHandshake:
+		return mm == "mtls_handshake"
+	default:
+		return false
+	}
+}
+
+func splitHostAndOptionalPort(raw string) (hostname, port string, ok bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", "", false
+	}
+	if strings.HasPrefix(trimmed, "[") {
+		if strings.HasSuffix(trimmed, "]") {
+			return strings.ToLower(trimmed[1 : len(trimmed)-1]), "", true
+		}
+		h, p, err := net.SplitHostPort(trimmed)
+		if err != nil {
+			return "", "", false
+		}
+		return strings.ToLower(h), p, true
+	}
+	if strings.ContainsRune(trimmed, ':') {
+		h, p, err := net.SplitHostPort(trimmed)
+		if err != nil {
+			return "", "", false
+		}
+		return strings.ToLower(h), p, true
+	}
+	return strings.ToLower(trimmed), "", true
+}
+
+func hostPatternPermittedByApproved(candidate string, approved []string) bool {
+	if len(approved) == 0 {
+		return false
+	}
+	candHost, candPort, ok := splitHostAndOptionalPort(candidate)
+	if !ok || candHost == "" {
+		return false
+	}
+	for _, ap := range approved {
+		apHost, apPort, aok := splitHostAndOptionalPort(ap)
+		if !aok || apHost != candHost {
+			continue
+		}
+		if apPort == "" || apPort == candPort {
+			return true
+		}
+	}
+	return false
+}
+
+func urlHostPermittedByList(u *url.URL, list []string) bool {
+	if len(list) == 0 {
+		return false
+	}
+	uHost := strings.ToLower(u.Hostname())
+	uPort := u.Port()
+	if uPort == "" {
+		if u.Scheme == "https" {
+			uPort = "443"
+		} else if u.Scheme == "http" {
+			uPort = "80"
+		}
+	}
+	for _, entry := range list {
+		apHost, apPort, ok := splitHostAndOptionalPort(entry)
+		if !ok || apHost != uHost {
+			continue
+		}
+		if apPort == "" || apPort == uPort {
 			return true
 		}
 	}

@@ -333,6 +333,36 @@ func TestBlindBrokerAC1FakeLLMInjectsBearerAndZeroLeakToPlugin(t *testing.T) {
 	assertNoCanaryInEvents(t, h.scanner, h.audit.snapshot())
 }
 
+func TestBlindBrokerEnforcesResolvedSlotBindingMode(t *testing.T) {
+	t.Parallel()
+
+	dns := &mockHostResolver{}
+	h := newBrokerHarness(t, dns)
+	h.resolver.put(&ResolvedSlot{
+		OrgID:        h.orgID,
+		ConnectionID: h.connID,
+		SlotName:     "signing_key",
+		InjectMode:   InjectModeHostCryptoSign,
+		AllowedHosts: []string{"api.example.com"},
+	})
+	_, err := h.broker.Execute(context.Background(), EgressRequest{
+		OrgID:        h.orgID,
+		ConnectionID: h.connID,
+		Method:       http.MethodPost,
+		TargetURL:    "https://api.example.com",
+		CredentialInjections: []CredentialInjection{
+			{SecretSlotName: "signing_key", Location: TargetBearer},
+		},
+	})
+	var denied *Error
+	if !errors.As(err, &denied) || denied.Code != "credential_binding_mode_denied" {
+		t.Fatalf("expected binding mode denial, got %v", err)
+	}
+	if dns.calls.Load() != 0 || h.counted.unsealCalls.Load() != 0 {
+		t.Fatal("binding mode denial must precede DNS and vault access")
+	}
+}
+
 func TestBlindBrokerNEG1_CT14_BlocksUnapprovedHostPreDNS(t *testing.T) {
 	t.Parallel()
 
@@ -1524,3 +1554,143 @@ func TestBlindBrokerZeroSlotTrustBoundaryAndNoSelfDeclaredPolicyBypass(t *testin
 	assertNoCanaryInEvents(t, h.scanner, h.audit.snapshot())
 }
 
+
+type callbackVaultUnsealer struct {
+	inner    VaultUnsealer
+	onUnseal func()
+}
+
+func (c *callbackVaultUnsealer) UnsealWithCapability(ctx context.Context, cap vault.UnsealCapability, orgID, secretID string) (*vault.UnsealedSecret, error) {
+	sec, err := c.inner.UnsealWithCapability(ctx, cap, orgID, secretID)
+	if err == nil && c.onUnseal != nil {
+		c.onUnseal()
+	}
+	return sec, err
+}
+
+type callbackHostResolver struct {
+	onLookup func()
+	addr     netip.Addr
+}
+
+func (c *callbackHostResolver) LookupNetIP(_ context.Context, _, _ string) ([]netip.Addr, error) {
+	if c.onLookup != nil {
+		c.onLookup()
+	}
+	return []netip.Addr{c.addr}, nil
+}
+
+func TestBlindBrokerRevokeQuarantineMidFlightTOCTOU(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// 1. Revoke/quarantine after initial ResolveSlot & Vault unseal, BEFORE HTTP dispatch.
+	h1 := newBrokerHarness(t, nil)
+	var upstreamHits1 atomic.Int32
+	srv1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamHits1.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv1.Close()
+	u1, _ := url.Parse(srv1.URL)
+
+	meta1 := h1.sealCanarySecret(t, "midflight-key", nil, []byte(canary.DefaultCanarySecret()))
+	conn1 := idgen.MustNew(idgen.PrefixConnection)
+	h1.resolver.conns[h1.orgID+"|"+conn1] = &egress.Policy{
+		AllowedHosts:   []string{u1.Host},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+	}
+	h1.resolver.put(&ResolvedSlot{
+		OrgID:          h1.orgID,
+		ConnectionID:   conn1,
+		SlotName:       "api_key",
+		SecretID:       meta1.ID,
+		AllowedHosts:   []string{u1.Host},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+	})
+
+	brk1, err := NewBlindBroker(Config{
+		Resolver:       h1.resolver,
+		PolicyResolver: h1.resolver,
+		Vault: &callbackVaultUnsealer{
+			inner: h1.vs,
+			onUnseal: func() {
+				h1.resolver.mu.Lock()
+				delete(h1.resolver.slots, slotKey{orgID: h1.orgID, conn: conn1, slot: "api_key"})
+				delete(h1.resolver.conns, h1.orgID+"|"+conn1)
+				h1.resolver.mu.Unlock()
+			},
+		},
+		UnsealCap: vault.MintUnsealCapabilityForBroker(),
+		Audit:     h1.audit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err1 := brk1.Execute(ctx, EgressRequest{
+		OrgID:        h1.orgID,
+		ConnectionID: conn1,
+		Method:       http.MethodPost,
+		TargetURL:    srv1.URL + "/v1/chat/completions",
+		CredentialInjections: []CredentialInjection{
+			{SecretSlotName: "api_key", Location: TargetBearer, FieldName: "Authorization"},
+		},
+	})
+	if !errors.Is(err1, port.ErrNotFound) {
+		t.Fatalf("expected pre-dispatch TOCTOU block after post-unseal revoke, got %v", err1)
+	}
+	if upstreamHits1.Load() != 0 {
+		t.Fatalf("expected 0 upstream HTTP requests after mid-flight revoke, got %d", upstreamHits1.Load())
+	}
+
+	// 2. Zero-slot revocation AFTER pre-dispatch check (during DNS LookupNetIP, before connect(2)).
+	h2 := newBrokerHarness(t, nil)
+	var upstreamHits2 atomic.Int32
+	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamHits2.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv2.Close()
+	u2, _ := url.Parse(srv2.URL)
+	targetHost := "api.revoked-dial.internal:" + u2.Port()
+
+	conn2 := idgen.MustNew(idgen.PrefixConnection)
+	h2.resolver.conns[h2.orgID+"|"+conn2] = &egress.Policy{
+		AllowedHosts:   []string{targetHost},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+	}
+	brk2, err := NewBlindBroker(Config{
+		Resolver:       h2.resolver,
+		PolicyResolver: h2.resolver,
+		Vault:          h2.vs,
+		UnsealCap:      vault.MintUnsealCapabilityForBroker(),
+		Audit:          h2.audit,
+		HostResolver: &callbackHostResolver{
+			addr: netip.MustParseAddr("127.0.0.1"),
+			onLookup: func() {
+				h2.resolver.mu.Lock()
+				delete(h2.resolver.conns, h2.orgID+"|"+conn2)
+				h2.resolver.mu.Unlock()
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err2 := brk2.Execute(ctx, EgressRequest{
+		OrgID:        h2.orgID,
+		ConnectionID: conn2,
+		Method:       http.MethodGet,
+		TargetURL:    "http://" + targetHost + "/v1/models",
+	})
+	if err2 == nil || !errors.Is(err2, port.ErrNotFound) {
+		t.Fatalf("expected ControlHook connect-time block after mid-dial revoke, got %v", err2)
+	}
+	if upstreamHits2.Load() != 0 {
+		t.Fatalf("expected 0 upstream HTTP requests after pre-connect revoke, got %d", upstreamHits2.Load())
+	}
+	assertNoCanaryInEvents(t, h1.scanner, h1.audit.snapshot())
+}

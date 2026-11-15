@@ -178,6 +178,7 @@ type installerHarness struct {
 	entPriv    ed25519.PrivateKey
 	orgID      string
 	opID       string
+	orgOwnerID string
 	secRevID   string
 	devID      string
 }
@@ -210,6 +211,7 @@ func newInstallerHarness(t *testing.T, orgMinTrust string) *installerHarness {
 	}
 
 	opID := idgen.MustNew(idgen.PrefixPrincipal)
+	orgOwnerID := idgen.MustNew(idgen.PrefixPrincipal)
 	secRevID := idgen.MustNew(idgen.PrefixPrincipal)
 	devID := idgen.MustNew(idgen.PrefixPrincipal)
 	now := fc.Now().UnixMilli()
@@ -222,6 +224,7 @@ func newInstallerHarness(t *testing.T, orgMinTrust string) *installerHarness {
 		role  string
 	}{
 		{opID, "op@example.com", "INSTANCE", "instance", nil, "OPERATOR"},
+		{orgOwnerID, "owner@example.com", "ORG", org.ID, &org.ID, "ORG_OWNER"},
 		{secRevID, "sec@example.com", "ORG", org.ID, &org.ID, "SECURITY_REVIEWER"},
 		{devID, "dev@example.com", "ORG", org.ID, &org.ID, "DEVELOPER"},
 	} {
@@ -281,6 +284,7 @@ func newInstallerHarness(t *testing.T, orgMinTrust string) *installerHarness {
 		entPriv:    entPriv,
 		orgID:      org.ID,
 		opID:       opID,
+		orgOwnerID: orgOwnerID,
 		secRevID:   secRevID,
 		devID:      devID,
 	}
@@ -1262,6 +1266,13 @@ adapter:
 	if !deltaMode.BindingModeChanged || !deltaMode.HasEscalation() {
 		t.Fatalf("expected SecretBindingModes change detected in DeltaP, got %+v", deltaMode)
 	}
+	implicitMode := ComputePermissionDelta(
+		PermissionSet{ExecutionTier: ExecutionTierWasmSandboxT2, SecretSlots: []string{"k1"}, SecretBindingModes: map[string]string{"k1": "host_crypto_sign"}},
+		PermissionSet{ExecutionTier: ExecutionTierWasmSandboxT2, SecretSlots: []string{"k1"}},
+	)
+	if !implicitMode.BindingModeChanged || !implicitMode.HasEscalation() {
+		t.Fatalf("expected implicit blind injection to require reconsent, got %+v", implicitMode)
+	}
 
 	// PROJECT-scoped SECURITY_REVIEWER cannot approve global (OrgID == "") or cross-org actions!
 	projSecID := idgen.MustNew(idgen.PrefixPrincipal)
@@ -1634,8 +1645,12 @@ func TestInstallerCT20ResidualUnpinnedPolicyAndNoVersionFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StageFreshInstall unsigned under ANY_APPROVED: %v", err)
 	}
-	if err := hTOCTOU.svc.SetOrgExtensionPolicy(ctx, hTOCTOU.orgID, stTOCTOU.Installation.PackageID, true, nil, hTOCTOU.secRevID); err != nil {
-		t.Fatalf("SetOrgExtensionPolicy unpinned under ANY_APPROVED: %v", err)
+	// SECURITY_REVIEWER cannot opt an org into unsigned unverified_external packages (requires ORG_OWNER per TP-BR-0202).
+	if perr := hTOCTOU.svc.SetOrgExtensionPolicy(ctx, hTOCTOU.orgID, stTOCTOU.Installation.PackageID, true, nil, hTOCTOU.secRevID); !errors.Is(perr, ErrPermissionDenied) {
+		t.Fatalf("expected ErrPermissionDenied for SECURITY_REVIEWER enabling unsigned package, got %v", perr)
+	}
+	if err := hTOCTOU.svc.SetOrgExtensionPolicy(ctx, hTOCTOU.orgID, stTOCTOU.Installation.PackageID, true, nil, hTOCTOU.orgOwnerID); err != nil {
+		t.Fatalf("SetOrgExtensionPolicy unpinned by ORG_OWNER under ANY_APPROVED: %v", err)
 	}
 	if _, err := hTOCTOU.st.RawDB().ExecContext(ctx, `UPDATE organizations SET min_plugin_trust = ? WHERE id = ?`, port.MinTrustVerifiedOnly, hTOCTOU.orgID); err != nil {
 		t.Fatalf("tighten org min_plugin_trust to VERIFIED_ONLY: %v", err)
@@ -1662,4 +1677,285 @@ func FuzzArchiveAndManifest(f *testing.F) {
 		_, _ = ParseAndValidateManifest(data, DefaultValidationPolicy(), nil)
 		_, _ = ExtractSafeArchive(bytes.NewReader(data), t.TempDir())
 	})
+}
+
+
+func TestInstallerLegacyMissingSlotReconsentAndOrgOwnerOptIn(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newInstallerHarness(t, port.MinTrustAnyApproved)
+
+	wasmBytes := wasmfixtures.EchoTransformWASM()
+	wasmSHA := shaHex(wasmBytes)
+	mYAML := makeWasmManifestYAML("@legacy/reconsent", "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.example.com"}, []string{"api_key", "org_secret"}, 16)
+	// Add prior v0.9.0 first, then upgrade to v1.0.0 so previous_pinned_version_id is non-NULL,
+	// and simulate a legacy row missing secret_slots from approved_permissions_json.
+	mPrevYAML := makeWasmManifestYAML("@legacy/reconsent", "0.9.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.example.com"}, []string{"api_key", "org_secret"}, 16)
+	pkgPrev, _ := buildTPKGBytes(t, []archiveEntrySpec{
+		{name: "manifest.yaml", body: mPrevYAML},
+		{name: "dist/adapter.wasm", body: wasmBytes},
+	})
+	st0, err := h.svc.StageFreshInstall(ctx, StageInstallRequest{
+		ArchiveReader: bytes.NewReader(pkgPrev),
+		Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./legacy-0.9.tpkg"},
+		ActorID:       h.opID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	act0, err := h.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      st0.Installation.InstallationID,
+		ExpectedVersion:     st0.Installation.Version,
+		ApproverPrincipalID: h.opID,
+		ActivateImmediately: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkgCur, _ := buildTPKGBytes(t, []archiveEntrySpec{
+		{name: "manifest.yaml", body: mYAML},
+		{name: "dist/adapter.wasm", body: wasmBytes},
+	})
+	up, err := h.svc.StageUpgrade(ctx, StageUpgradeRequest{
+		InstallationID:  act0.InstallationID,
+		ExpectedVersion: act0.Version,
+		ArchiveReader:   bytes.NewReader(pkgCur),
+		Source:          SourceSpec{Kind: SourceKindLocalArchive, URI: "./legacy-1.0.tpkg"},
+		ActorID:         h.opID,
+	})
+	if err != nil || up.Escalated {
+		t.Fatalf("expected non-escalating upgrade v0.9->v1.0, err=%v escalated=%v", err, up != nil && up.Escalated)
+	}
+	prevPinBefore := derefStr(up.Installation.PreviousPinnedVersionID)
+	if prevPinBefore == "" {
+		t.Fatal("expected previous_pinned_version_id set after upgrade")
+	}
+
+	// Simulate legacy installation row where approved_permissions_json omitted manifest secret slots.
+	legacyApproved := `{"allowed_hosts":["api.example.com"],"require_tls":true,"execution_tier":"WASM_SANDBOX_T2","hooks":["provider:transform_request"],"max_memory_mib":16}`
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE extension_installations SET approved_permissions_json = ? WHERE id = ?`, legacyApproved, up.Installation.InstallationID); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Unauthorized DEVELOPER cannot request re-consent.
+	if _, _, derr := h.svc.RequestActivePermissionReconsent(ctx, up.Installation.InstallationID, up.Installation.Version, h.devID, h.orgID, "req_dev"); !errors.Is(derr, ErrPermissionDenied) {
+		t.Fatalf("expected ErrPermissionDenied for developer reconsent request, got %v", derr)
+	}
+
+	// 2. RequestActivePermissionReconsent moves installation to UPDATING_PENDING_RECONSENT WITHOUT auto-granting slots.
+	cur, err := h.svc.GetInstallation(ctx, up.Installation.InstallationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stagedReconsent, delta, err := h.svc.RequestActivePermissionReconsent(ctx, cur.InstallationID, cur.Version, h.secRevID, h.orgID, "req_reconsent_1")
+	if err != nil {
+		t.Fatalf("RequestActivePermissionReconsent failed: %v", err)
+	}
+	if stagedReconsent.State != StateUpdatingPendingReconsent {
+		t.Fatalf("expected UPDATING_PENDING_RECONSENT, got %s", stagedReconsent.State)
+	}
+	if len(delta.AddedSecretSlots) != 2 || delta.AddedSecretSlots[0] != "api_key" || delta.AddedSecretSlots[1] != "org_secret" {
+		t.Fatalf("expected delta.AddedSecretSlots=[api_key org_secret], got %+v", delta.AddedSecretSlots)
+	}
+	if len(stagedReconsent.ApprovedPermissions.SecretSlots) != 0 {
+		t.Fatalf("SM-01 consent boundary violated: slots must remain unapproved before explicit approval, got %v", stagedReconsent.ApprovedPermissions.SecretSlots)
+	}
+
+	// 3. RejectEscalatedUpgrade restores ENABLED_ACTIVE and leaves secret slots STILL unapproved.
+	rejected, err := h.svc.RejectEscalatedUpgrade(ctx, stagedReconsent.InstallationID, stagedReconsent.Version, h.secRevID, h.orgID, "req_rej")
+	if err != nil {
+		t.Fatalf("RejectEscalatedUpgrade failed: %v", err)
+	}
+	if rejected.State != StateEnabledActive || len(rejected.ApprovedPermissions.SecretSlots) != 0 {
+		t.Fatalf("expected rejection to preserve legacy missing slots & ENABLED_ACTIVE, got state=%s slots=%v", rejected.State, rejected.ApprovedPermissions.SecretSlots)
+	}
+
+	// 4. Re-stage and ApproveEscalatedUpgrade grants consent, preserves previous_pinned_version_id, and syncs lockfile.
+	restaged, _, err := h.svc.RequestActivePermissionReconsent(ctx, rejected.InstallationID, rejected.Version, h.secRevID, h.orgID, "req_reconsent_2")
+	if err != nil {
+		t.Fatalf("second RequestActivePermissionReconsent failed: %v", err)
+	}
+	approved, err := h.svc.ApproveEscalatedUpgrade(ctx, restaged.InstallationID, restaged.Version, h.opID, "", "req_approve_reconsent")
+	if err != nil {
+		t.Fatalf("ApproveEscalatedUpgrade for legacy reconsent failed: %v", err)
+	}
+	if approved.State != StateEnabledActive || len(approved.ApprovedPermissions.SecretSlots) != 2 {
+		t.Fatalf("expected ENABLED_ACTIVE with 2 approved slots, got state=%s slots=%v", approved.State, approved.ApprovedPermissions.SecretSlots)
+	}
+	if derefStr(approved.PreviousPinnedVersionID) != prevPinBefore {
+		t.Fatalf("expected rollback history previous_pinned_version_id preserved (%s), got %v", prevPinBefore, approved.PreviousPinnedVersionID)
+	}
+	lf, err := lockfile.Read(h.lockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry := lf.Extensions["@legacy/reconsent"]; len(entry.ApprovedPermissions.SecretSlots) != 2 || entry.PreviousPinnedRollback == nil || entry.PreviousPinnedRollback.Version != "0.9.0" {
+		t.Fatalf("expected tanpopo.lock synced with slots and rollback 0.9.0, got %+v", entry)
+	}
+
+	// 5. ORG_OWNER vs non-owner role boundary for unsigned unverified_external SetOrgExtensionPolicy (TP-BR-0202).
+	if perr := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, approved.PackageID, true, nil, h.devID); !errors.Is(perr, ErrPermissionDenied) {
+		t.Fatalf("expected ErrPermissionDenied for DEVELOPER, got %v", perr)
+	}
+	if perr := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, approved.PackageID, true, nil, h.secRevID); !errors.Is(perr, ErrPermissionDenied) {
+		t.Fatalf("expected ErrPermissionDenied for SECURITY_REVIEWER enabling unsigned unverified_external, got %v", perr)
+	}
+	if perr := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, approved.PackageID, true, nil, h.opID); !errors.Is(perr, ErrPermissionDenied) {
+		t.Fatalf("expected ErrPermissionDenied for non-ORG_OWNER INSTANCE OPERATOR enabling unsigned package, got %v", perr)
+	}
+	if err := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, approved.PackageID, true, nil, h.orgOwnerID); err != nil {
+		t.Fatalf("expected ORG_OWNER to opt org into unsigned unverified_external package cleanly, got %v", err)
+	}
+}
+
+func TestInstallerTPBR0202TrustDowngradeInvalidatesNonOwnerPolicy(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newInstallerHarness(t, port.MinTrustAnyApproved)
+
+	wasmBytes := []byte("wasm-tpbr0202-downgrade")
+	wSum := sha256.Sum256(wasmBytes)
+	wasmSHA := hex.EncodeToString(wSum[:])
+
+	buildArchive := func(ver string, hosts []string, slots []string) ([]byte, string) {
+		m := makeWasmManifestYAML("@dg/policy-reset", ver, "0.1", ">=0.1.0", wasmSHA, hosts, slots, 16)
+		return buildTPKGBytes(t, []archiveEntrySpec{
+			{name: "manifest.yaml", body: m},
+			{name: "dist/adapter.wasm", body: wasmBytes},
+		})
+	}
+
+	isOrgEnabled := func(pkgID string) bool {
+		var enabledInt int
+		err := h.st.RawDB().QueryRowContext(ctx, `SELECT enabled FROM org_extension_policies WHERE org_id = ? AND package_id = ?`, h.orgID, pkgID).Scan(&enabledInt)
+		if err != nil {
+			t.Fatalf("query org_extension_policies: %v", err)
+		}
+		return enabledInt == 1
+	}
+
+	// A. Verified v1.0.0 enabled by non-ORG_OWNER SECURITY_REVIEWER.
+	b1, s1 := buildArchive("1.0.0", []string{"api.example.com"}, nil)
+	st1, err := h.svc.StageFreshInstall(ctx, StageInstallRequest{
+		ArchiveReader: bytes.NewReader(b1),
+		Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./dg-1.0.tpkg"},
+		Signature:     ProvenanceSignature{PublisherOrRootSig: ed25519.Sign(h.pubPriv, SignatureSigningPayload("@dg/policy-reset", "1.0.0", s1))},
+		ActorID:       h.devID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	act1, err := h.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      st1.Installation.InstallationID,
+		ExpectedVersion:     st1.Installation.Version,
+		ApproverPrincipalID: h.opID,
+		ActivateImmediately: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, act1.PackageID, true, nil, h.secRevID); err != nil {
+		t.Fatalf("SECURITY_REVIEWER should be allowed to enable verified package: %v", err)
+	}
+	if !isOrgEnabled(act1.PackageID) {
+		t.Fatal("expected org_extension_policies.enabled = 1 after verified enablement")
+	}
+
+	// B. Upgrade to unsigned v1.1.0 (escalated -> UPDATING_PENDING_RECONSENT):
+	//    policy must immediately reset to enabled=0, and SECURITY_REVIEWER cannot re-enable while candidate is unsigned!
+	b2, _ := buildArchive("1.1.0", []string{"api.example.com"}, []string{"api_key"})
+	up2, err := h.svc.StageUpgrade(ctx, StageUpgradeRequest{
+		InstallationID:  act1.InstallationID,
+		ExpectedVersion: act1.Version,
+		ArchiveReader:   bytes.NewReader(b2),
+		Source:          SourceSpec{Kind: SourceKindLocalArchive, URI: "./dg-1.1-unsigned.tpkg"},
+		ActorID:         h.opID,
+	})
+	if err != nil || !up2.Escalated {
+		t.Fatalf("expected escalating StageUpgrade to unsigned 1.1.0, err=%v esc=%v", err, up2 != nil && up2.Escalated)
+	}
+	if isOrgEnabled(act1.PackageID) {
+		t.Fatal("security bypass: org_extension_policies.enabled remained 1 after staging unsigned downgrade")
+	}
+	if perr := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, act1.PackageID, true, nil, h.secRevID); !errors.Is(perr, ErrPermissionDenied) {
+		t.Fatalf("expected ErrPermissionDenied for SECURITY_REVIEWER while unsigned candidate is staged, got %v", perr)
+	}
+	// Approve unsigned v1.1.0, verify still disabled until ORG_OWNER explicitly re-opts in.
+	act2, err := h.svc.ApproveEscalatedUpgrade(ctx, up2.Installation.InstallationID, up2.Installation.Version, h.opID, "", "req_dg2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if isOrgEnabled(act1.PackageID) {
+		t.Fatal("expected policy to remain disabled after approving unsigned v1.1.0 without ORG_OWNER opt-in")
+	}
+	if err := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, act2.PackageID, true, nil, h.orgOwnerID); err != nil {
+		t.Fatalf("ORG_OWNER opt-in failed: %v", err)
+	}
+
+	// C. Same-tier unsigned upgrade (1.1.0 unsigned -> 1.1.1 unsigned) preserves prior ORG_OWNER opt-in.
+	b2p, _ := buildArchive("1.1.1", []string{"api.example.com"}, []string{"api_key"})
+	up2p, err := h.svc.StageUpgrade(ctx, StageUpgradeRequest{
+		InstallationID:  act2.InstallationID,
+		ExpectedVersion: act2.Version,
+		ArchiveReader:   bytes.NewReader(b2p),
+		Source:          SourceSpec{Kind: SourceKindLocalArchive, URI: "./dg-1.1.1-unsigned.tpkg"},
+		ActorID:         h.opID,
+	})
+	if err != nil || up2p.Escalated {
+		t.Fatalf("expected non-escalating unsigned upgrade 1.1.0->1.1.1, err=%v esc=%v", err, up2p != nil && up2p.Escalated)
+	}
+	if !isOrgEnabled(act1.PackageID) {
+		t.Fatal("expected ORG_OWNER opt-in preserved across unsigned->unsigned upgrade")
+	}
+
+	// D. Upgrade to verified v2.0.0 + non-owner re-enable, then RollbackInstallation back to unsigned v1.1.1 -> resets enabled=0!
+	b3, s3 := buildArchive("2.0.0", []string{"api.example.com"}, []string{"api_key"})
+	up3, err := h.svc.StageUpgrade(ctx, StageUpgradeRequest{
+		InstallationID:  up2p.Installation.InstallationID,
+		ExpectedVersion: up2p.Installation.Version,
+		ArchiveReader:   bytes.NewReader(b3),
+		Source:          SourceSpec{Kind: SourceKindLocalArchive, URI: "./dg-2.0-verified.tpkg"},
+		Signature:       ProvenanceSignature{PublisherOrRootSig: ed25519.Sign(h.pubPriv, SignatureSigningPayload("@dg/policy-reset", "2.0.0", s3))},
+		ActorID:         h.opID,
+	})
+	if err != nil || up3.Escalated {
+		t.Fatalf("expected non-escalating verified upgrade 1.1.1->2.0.0, err=%v", err)
+	}
+	if err := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, act1.PackageID, true, nil, h.secRevID); err != nil {
+		t.Fatal(err)
+	}
+	rb, err := h.svc.RollbackInstallation(ctx, up3.Installation.InstallationID, up3.Installation.Version, h.opID, "", "req_rb_unsigned")
+	if err != nil {
+		t.Fatalf("RollbackInstallation failed: %v", err)
+	}
+	if isOrgEnabled(act1.PackageID) {
+		t.Fatal("security bypass: RollbackInstallation from verified -> unsigned left org_extension_policies.enabled = 1")
+	}
+
+	// E. Non-owner enables (if restored to verified? disable->uninstall while enabled unpinned):
+	//    Re-test Uninstall while unpinned enabled (via verified reinstall or ORG_OWNER enable -> unsigned StageFreshInstall).
+	if err := h.svc.SetOrgExtensionPolicy(ctx, h.orgID, rb.PackageID, true, nil, h.orgOwnerID); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.svc.QuarantineInstallation(ctx, rb.InstallationID, "prepare uninstall", h.opID); err != nil {
+		t.Fatal(err)
+	}
+	dis, err := h.svc.GetInstallation(ctx, rb.InstallationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.svc.UninstallInstallation(ctx, dis.InstallationID, dis.Version, "", h.opID, ""); err != nil {
+		t.Fatal(err)
+	}
+	b4, _ := buildArchive("3.0.0", []string{"api.example.com"}, nil)
+	if _, err := h.svc.StageFreshInstall(ctx, StageInstallRequest{
+		ArchiveReader: bytes.NewReader(b4),
+		Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./dg-3.0-unsigned.tpkg"},
+		ActorID:       h.devID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if isOrgEnabled(rb.PackageID) {
+		t.Fatal("security bypass: stale unpinned org_extension_policies.enabled=1 survived uninstall -> unsigned StageFreshInstall")
+	}
 }

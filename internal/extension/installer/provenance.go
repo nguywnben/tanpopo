@@ -34,12 +34,12 @@ var (
 
 // Canonical provenance and source-pinning error sentinels.
 var (
-	ErrUnpinnedGitReference   = errors.New("installer: unpinned_git_reference (422)")
-	ErrUnpinnedOCIDigest      = errors.New("installer: unpinned_oci_digest (422)")
-	ErrUnpinnedReference      = errors.New("installer: expected sha256 digest required for remote source")
-	ErrDigestMismatch         = errors.New("installer: artifact_digest_mismatch")
-	ErrInvalidSignature       = errors.New("installer: invalid Ed25519 package signature")
-	ErrOrgTrustPolicyDenied   = errors.New("installer: org_trust_policy_denied (403)")
+	ErrUnpinnedGitReference = errors.New("installer: unpinned_git_reference (422)")
+	ErrUnpinnedOCIDigest    = errors.New("installer: unpinned_oci_digest (422)")
+	ErrUnpinnedReference    = errors.New("installer: expected sha256 digest required for remote source")
+	ErrDigestMismatch       = errors.New("installer: artifact_digest_mismatch")
+	ErrInvalidSignature     = errors.New("installer: invalid Ed25519 package signature")
+	ErrOrgTrustPolicyDenied = errors.New("installer: org_trust_policy_denied (403)")
 )
 
 // SourceSpec describes the artifact origin channel and immutable reference pin.
@@ -244,6 +244,27 @@ func verifyAgainstKeyMap(payload, sig []byte, keys map[string]ed25519.PublicKey)
 		}
 	}
 	return "", false
+}
+
+// DerivePublicTrustTier classifies a verified artifact against the current public trust keys.
+func (keyring TrustedKeyring) DerivePublicTrustTier(canonicalName string, signatureVerified bool, fingerprint string) string {
+	fp := strings.TrimSpace(fingerprint)
+	if !signatureVerified || fp == "" {
+		return lockfile.TrustTierUnverifiedExternal
+	}
+	for _, pub := range keyring.RootPublicKeys {
+		if PublicKeyFingerprint(pub) == fp {
+			return lockfile.TrustTierOfficial
+		}
+	}
+	if !IsReservedTanpopoNamespace(canonicalName) {
+		for _, pub := range keyring.PublisherPublicKeys {
+			if PublicKeyFingerprint(pub) == fp {
+				return lockfile.TrustTierVerified
+			}
+		}
+	}
+	return lockfile.TrustTierUnverifiedExternal
 }
 
 // CheckOrgMinTrustPolicy enforces organizations.min_plugin_trust against derived provenance (CT-20 / CR-03).
