@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0015` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice` — **Gate `GATE-M1`**) · `EP-03` |
-| **Status** | `BLOCKED` *(Waiting solely on `TP-IMP-0014` — upstream `TP-IMP-0009`, `0012`, & `0013` = `DONE`; `GAP-01, 02` closed in `M0`)* |
+| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-026`](../../governance/decisions.md) — `100%` of upstream `Dependencies` [`TP-IMP-0009`, `0012`, `0013`, `0014`] = `DONE`; `GAP-01, 02` closed in `M0`)* |
 | **Size** | `L` (`go.mod`, `internal/ingress/http/*`, `internal/ingress/sse/*`, `tests/integration/ext_accept_01_test.go`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Hot SSE Data Plane, stream-cancellation buffer hygiene & `M1` architectural vertical-slice proof)* |
 | **Technical Owner** | `Staff Gateway / Data-Plane Engineer` |

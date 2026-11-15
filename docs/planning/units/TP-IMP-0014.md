@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0014` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-024`](../../governance/decisions.md) — `100%` of upstream `Dependencies` [`TP-IMP-0006`, `0012`, `0013`] = `DONE`; active workflow stopped cleanly after `TP-IMP-0013 = DONE` per Owner instruction)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-15` under [`DEC-025`](../../governance/decisions.md)/[`DEC-026`](../../governance/decisions.md) by **Gemini 4 Hydrogen** — Commit `6924ea30`, CI Run `43732602287` `completed/success`, `code-reviewer` [`d83959e2`] `APPROVE`)* |
 | **Size** | `M` (`cmd/tanpopo/main.go`, `sdk/*`, `internal/cli/plugin/*`, `internal/extension/testharness/*`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Contract verification toolchain for extension authors)* |
 | **Technical Owner** | `Developer Experience & Extension SDK Lead` |
