@@ -36,12 +36,12 @@ Deliver the two enterprise scale-out capabilities scheduled for `v1.0 GA` per [`
 - **`AC-1` (`CT-31` & `OPS-AC-11` True Zero-Egress Air-Gap Install):** Inside a fully network-isolated enclave with zero external routes, running `tanpopo bundle verify ./release.tpbundle && tanpopo bundle import ./release.tpbundle` boots the Gateway, loads the Web Console cleanly (`0` external font/asset errors), and serves enclave-local inference at `100%`.
 - **`AC-2` (`Multi-Org Progressive Disclosure`):** Single-`Org` installations retain a minimal header; users belonging to both `Org A` and `Org B` can switch seamlessly between organizations with `0` cached cross-org data remnants in the UI.
 - **`NEG-1` (`Tampered Air-Gap Bundle`):** Flipping 1 byte inside an embedded `.tpkg` within `.tpbundle` causes `tanpopo bundle verify` to detect the digest/signature mismatch immediately and abort import (`exit code 22`).
-- **`NEG-2` (`UX-AC-10`):** Running with network interfaces completely disabled confirms `0` external browser requests, and `npx @astryxdesign/cli doctor --built dist` passes with `0 fail`.
+- **`NEG-2` (`UX-AC-10`):** Running with network interfaces completely disabled confirms `0` external browser requests, and `npm run astryx -- doctor --built dist` passes with `0 fail`.
 
 ## 6. Test Commands & Required Evidence
 - Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/cli/bundle/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/cli/bundle/...`)*
 - Race detector (`-race`): `go test -v -race ./internal/cli/bundle/...`
-- `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
+- `cd web/console && npm run typecheck && npm run test && npm run build && npm run astryx -- doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Provisioning new `Organization` tenants on a shared cluster is restricted strictly to instance-level `OPERATOR` principals (or declarative GitOps config), preventing single-tenant admins from spawning arbitrary organizations.

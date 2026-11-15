@@ -147,7 +147,7 @@ This legal, ethical, and product governance boundary MUST be enforced across eve
 | **C-01** | Open-Source Licensing | Root [`LICENSE`](../../LICENSE) and relocated [`web/console/package.json`](../../web/console/package.json) both specify **Apache License 2.0** (`ISS-002` implemented in `TP-IMP-0005`). | `VERIFIED_IN_REPO` / `READY_FOR_REVIEW` |
 | **C-02** | Extension Security | External extensions are untrusted by default and MUST run under capability-isolated execution boundaries without raw vault access. | `CONFIRMED_BY_OWNER` |
 | **C-03** | Legal & Provider TOS | Zero tolerance for TOS-violating consumer subscription connectors; strict provenance separation between `official` and `community`/`external` packages. | `CONFIRMED_BY_OWNER` |
-| **C-04** | UI Design System Baseline | Repository has `@astryxdesign/core` (`0.7.13`), `@astryxdesign/theme-neutral` (`0.7.13`), `@astryxdesign/cli` (`0.7.13`), and `@stylexjs/stylex` (`0.19.1`) configured with default theme `neutral`; preserve this UI baseline intact without assuming the entire backend Core must be Node.js/React. | `CONFIRMED_BY_OWNER` & `VERIFIED_IN_REPO` |
+| **C-04** | UI Design System Baseline | Repository has `@astryxdesign/core` (`0.7.16`), `@astryxdesign/theme-neutral` (`0.7.16`), `@astryxdesign/cli` (`0.7.16`), and `@stylexjs/stylex` (`0.19.1`) configured with default theme `neutral`; preserve this UI baseline intact without assuming the entire backend Core must be Node.js/React. | `CONFIRMED_BY_OWNER` & `VERIFIED_IN_REPO` |
 | **C-05** | Engineering Workflow Skills | Repository includes 25 curated SDLC Agent Skills in [`.agents/skills/`](../../.agents/skills) and mandatory Astryx UI rules in [`AGENTS.md`](../../AGENTS.md). | `VERIFIED_IN_REPO` |
 
 ---

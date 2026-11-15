@@ -154,7 +154,7 @@ Complying with `TP-NFR-1001` and [`execution-baseline.md`](../governance/executi
 
 | UI Stack Option | Advantages | Disadvantages / Maintenance Cost | Verdict |
 |---|---|---|---|
-| **1. Static SPA (`TypeScript + React 19 + Vite + StyleX + Astryx v0.7.13 neutral`) Embedded into `tanpopo` (`embed.FS`)** | Build-time StyleX CSS (`0` runtime CSS overhead), `WCAG 2.2 AA` components, local `Figtree` `.woff2` Vite alias for `0`-external-request Air-Gap operation (`CR-10`), and `0` Node.js runtime processes in production. | Relocates root UI scaffold into `web/console/` and syncs `package.json` license to `Apache-2.0` (`TP-IMP-0005`). | **`ACCEPTED`** |
+| **1. Static SPA (`TypeScript + React 19 + Vite + StyleX + Astryx v0.7.16 neutral`) Embedded into `tanpopo` (`embed.FS`)** | Build-time StyleX CSS (`0` runtime CSS overhead), `WCAG 2.2 AA` components, local `Figtree` `.woff2` Vite alias for `0`-external-request Air-Gap operation (`CR-10`), and `0` Node.js runtime processes in production. | Relocates root UI scaffold into `web/console/` and syncs `package.json` license to `Apache-2.0` (`TP-IMP-0005`). | **`ACCEPTED`** |
 | **2. `React + Tailwind CSS + shadcn/ui`** | Broad template ecosystem. | Discards `DEC-007` baseline and automated `astryx doctor --built` enforcement. | **Not selected.** |
 | **3. `Next.js App Router (SSR Node Server)`** | Strong for public SEO pages. | Authenticated internal console has `0` SEO requirement; adds an unnecessary Node.js server. | **Rejected.** |
 | **4. `Go HTML Templates + HTMX`** | No JS build step. | Poor fit for side-by-side SSE `Playground`, interactive `Route Explain` trees, and permission diff modals. | **Rejected.** |

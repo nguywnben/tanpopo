@@ -39,10 +39,10 @@ Deliver the interactive Web Console and CLI developer/governance tooling for `v0
 - **`AC-1`:** Given a multi-target route spanning 4 deployments with distinct residency regions, capabilities, and circuit-breaker states, When running `tanpopo route explain` or inspecting via `SCR-08`, Then the dry-run explanation matches `RouteResolver`'s live routing decision `100%`.
 - **`AC-2` (`UX-AC-09` Smooth `100 tok/s` Playground Stream):** End-to-end Playwright journeys pass at `100%` across `UJ-03` (authorized OAuth 2.1 grant), `UJ-06` (approving a gated `destructive` MCP tool call & surfacing `schema_hash` drift warnings), and `SCR-15` (`Playground` rendering a `100 tokens/s` SSE stream smoothly without dropped frames + mid-stream cancellation).
 - **`NEG-1`:** When an ephemeral `Playground` session key expires after 15 minutes or the operator logs out, subsequent calls using that key are immediately rejected (`401`).
-- **`NEG-2`:** Running `npx @astryxdesign/cli doctor --built dist` passes with `0 fail` (`0` raw `div`/`span` elements, `Badge` used strictly for numeric counts such as pending approval counts on `SCR-14`).
+- **`NEG-2`:** Running `npm run astryx -- doctor --built dist` passes with `0 fail` (`0` raw `div`/`span` elements, `Badge` used strictly for numeric counts such as pending approval counts on `SCR-14`).
 
 ## 6. Test Commands & Required Evidence
-- `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
+- `cd web/console && npm run typecheck && npm run test && npm run build && npm run astryx -- doctor --built dist`
 - Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/admin/http/... ./internal/cli/route/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/admin/http/... ./internal/cli/route/...`)*
 - Race detector (`-race`): `go test -v -race ./internal/admin/http/... ./internal/cli/route/...`
 

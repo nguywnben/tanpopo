@@ -28,12 +28,12 @@ func seedCleanRepo(t *testing.T) string {
   "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
-    "@astryxdesign/core": "^0.7.13",
+    "@astryxdesign/core": "0.7.16",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "^0.7.13"
+    "@astryxdesign/cli": "0.7.16"
   }
 }`)
 	writeTestFile(t, root, "web/console/package-lock.json", `{"name":"tanpopo-console","lockfileVersion":3,"packages":{"":{"license":"Apache-2.0"},"node_modules/react":{"license":"MIT"}}}`)

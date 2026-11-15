@@ -36,10 +36,10 @@ Build the 3 core `v0.1` routing, policy hierarchy, and access-control management
 ## 5. Acceptance Criteria & Mandatory Negative Cases
 - **`AC-1` (`Route Guardrails` & `UX-AC-11` `409 Conflict` Draft-Preserving Diff Modal):** Configuring route weights whose sum differs from `100` or selecting a fallback target missing `tool_calling` triggers an immediate inline warning; encountering `409 optimistic_lock_conflict` on `SCR-08`/`SCR-09` due to a concurrent administrator edit opens a two-version diff modal preserving the user's in-progress draft (`UX-AC-11`) with zero lost input.
 - **`AC-2`:** When a `TEAM_ADMIN` views `SCR-09`, regions or models restricted at the `Org` level render as locked inherited controls (annotated with their `Org Policy` origin) and cannot be re-enabled.
-- **`NEG-1`:** `npx astryx doctor --built dist` passes with `0 fail` (`0` raw `div`/`span` elements, `Table` used for virtual-key and member lists, `Badge` used strictly for numeric counts).
+- **`NEG-1`:** `npm run astryx -- doctor --built dist` passes with `0 fail` (`0` raw `div`/`span` elements, `Table` used for virtual-key and member lists, `Badge` used strictly for numeric counts).
 
 ## 6. Test Commands & Required Evidence
-- `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
+- `cd web/console && npm run typecheck && npm run test && npm run build && npm run astryx -- doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Newly created `secret_key` values are never cached in global browser state; React state holding the plaintext secret is wiped immediately on dialog dismissal.

@@ -58,7 +58,7 @@ Start here based on your role:
 
 ```text
 .
-├── AGENTS.md / GEMINI.md        # Astryx v0.7.13 UI rules, CONSTRAINTS.md contract & Cold-start Agent gate
+├── AGENTS.md / GEMINI.md        # Astryx v0.7.16 UI rules, CONSTRAINTS.md contract & Cold-start Agent gate
 ├── CONSTRAINTS.md               # Repository quality bar & Floor Guard enforcement rules
 ├── LICENSE                      # Apache License 2.0
 ├── README.md                    # Project overview & M1 bootstrap status (this file)
@@ -71,7 +71,7 @@ Start here based on your role:
 ├── openapi/                     # Canonical OpenAPI 3.1.0 Data Plane & Admin Control Plane specs
 ├── db/spec-check/               # Canonical 26-group SQLite WAL & PostgreSQL 16 (FORCE RLS) reference DDL
 ├── tools/spikes/                # Isolated pure-Go (CGO_ENABLED=0) M0 feasibility spikes (SPIKE-01..04)
-├── web/console/                 # Relocated Apache-2.0 Astryx v0.7.13 Web Console (package.json, astryx-themes.js, src/)
+├── web/console/                 # Relocated Apache-2.0 Astryx v0.7.16 Web Console (package.json, astryx-themes.js, AGENTS.md, src/)
 ├── .agents/                     # 25 curated SDLC engineering skills, checklists & reviewer personas
 └── docs/                        # Complete English engineering specifications & 47-unit execution plan
     ├── governance/              # Charter, Decision Register, Assumptions, Execution Baseline & Owner Approval Sheet

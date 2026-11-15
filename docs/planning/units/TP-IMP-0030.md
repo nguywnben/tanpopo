@@ -39,10 +39,10 @@ Deliver the 4 observability, FinOps, and incident-response views of `MVP (v0.1)`
 - **`AC-1` (`UX-GR-05` & `UX-AC-06` Honest FinOps Accuracy + Non-Color-Only Tokens):** Given ledger entries spanning `EXACT`, `ESTIMATED`, and `UNMETERED_FLAGGED` settlement states, When opening `SCR-12`, Then all 3 categories are displayed distinctly using `Token` components pairing `icon + label` (never relying on color alone — `UX-AC-06`).
 - **`AC-2` (`UX-AC-02` Mobile Emergency Kill-Switch `375px` & `UX-AC-09` `200`-Row `< 100ms INP`):** On `SCR-14` across both desktop (`1280px`) and on-call mobile (`375px` — `UX-AC-02`) viewports, an operator can inspect `Blast-Radius` and trigger an emergency Kill-Switch without clipped controls; a 200-row trace table on `SCR-11` maintains interaction responsiveness at `INP < 100 ms` (`UX-AC-09`).
 - **`NEG-1` (`CT-27` Stored XSS Payload in Trace/Audit):** Injecting malicious script payloads into `error_message` / `user_agent` trace fields renders strictly as inert plain text on `SCR-11`/`SCR-14`.
-- **`NEG-2` (`UX-AC-05`):** `npx @astryxdesign/cli doctor --built dist` passes with `0 fail`, and `axe-core` passes cleanly across both Light and Dark themes.
+- **`NEG-2` (`UX-AC-05`):** `npm run astryx -- doctor --built dist` passes with `0 fail`, and `axe-core` passes cleanly across both Light and Dark themes.
 
 ## 6. Test Commands & Required Evidence
-- `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
+- `cd web/console && npm run typecheck && npm run test && npm run build && npm run astryx -- doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Principals with the `FINOPS_VIEWER` role can access `SCR-12` only (with zero access to debug payloads on `SCR-11` or `Kill-Switch` controls on `SCR-14`).

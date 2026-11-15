@@ -35,7 +35,7 @@ Execute the final quality hardening and security audit campaign ahead of freezin
 
 ## 5. Acceptance Criteria & Mandatory Negative Cases
 - **`AC-1` (`GATE-REL-01 & 03` Adversarial Matrix, Fuzzing `>= 4h` & 5-Surface Grey-Box Pen-Test):** All 52 `CT/AUTH` adversarial cases pass, `gosec` + `govulncheck` + `npm audit --omit=dev` report `0 Critical / 0 High`, `FZ-01..06` completes `>= 4 hours` with `0` crashes, and the 5-Surface Grey-Box Penetration Test dossier closes with `0` open `Critical / High` findings.
-- **`AC-2` (`GATE-REL-02 & 05` Multi-Browser, Accessibility & Core Web Vitals):** All `UJ-01`..`08` journeys pass on `Chromium`, `Firefox`, and `WebKit` (`0 flaky retries`), Light/Dark `axe-core` audits report `0` `critical`/`serious` violations across all 16 screens (`UX-AC-05`), Lighthouse CI achieves `LCP <= 2.0s`, `INP <= 150ms`, `CLS <= 0.05` (`UX-AC-08`), and `npx @astryxdesign/cli doctor --built dist` passes with `0 fail`.
+- **`AC-2` (`GATE-REL-02 & 05` Multi-Browser, Accessibility & Core Web Vitals):** All `UJ-01`..`08` journeys pass on `Chromium`, `Firefox`, and `WebKit` (`0 flaky retries`), Light/Dark `axe-core` audits report `0` `critical`/`serious` violations across all 16 screens (`UX-AC-05`), Lighthouse CI achieves `LCP <= 2.0s`, `INP <= 150ms`, `CLS <= 0.05` (`UX-AC-08`), and `npm run astryx -- doctor --built dist` passes with `0 fail`.
 - **`AC-3` (`CT-24` & `GATE-REL-02` Contract N-1 Compatibility):** `.tpkg` artifacts built during `M1/M2` pass `tanpopo plugin migrate-check` and execute cleanly on the `v1.0 RC` runtime.
 - **`NEG-1`:** Automated `CONSTRAINTS.md` enforcement (`go run ./scripts/ci/check.go --all`) confirms `0` lint/type suppressions or lowered coverage thresholds.
 
@@ -43,7 +43,7 @@ Execute the final quality hardening and security audit campaign ahead of freezin
 - Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./tests/security/... ./internal/extension/compat/... ./internal/cli/plugin/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./tests/security/... ./internal/extension/compat/... ./internal/cli/plugin/...`)*
 - Race detector (`-race`): `go test -v -race ./tests/security/...`
 - `go run ./scripts/qa/run-fuzz-campaign.go --duration=4h`
-- `cd web/console && npx playwright test --project=chromium --project=firefox --project=webkit && npx astryx doctor --built dist`
+- `cd web/console && npx playwright test --project=chromium --project=firefox --project=webkit && npm run astryx -- doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Every edge case or defect uncovered by fuzzing or the 5-Surface Grey-Box Penetration Test MUST be committed as a permanent regression seed inside `testdata/` prior to closing this unit.

@@ -24,7 +24,7 @@
 | One-way package DAG | `0` import cycles; strict layer order `pkg <- storage <- security <- config <- domain <- edge <- cli <- cmd` | `go run ./scripts/ci/check.go --dag` | every task end, Stage 0 CI |
 | Floor Guard & stubs | `0` banned suppressions, skips, unguarded `net/http`/`net.Dial`/`Dialer` defaults, `tools/spikes` imports, or raw HTML `div`/`span` | `go run ./scripts/ci/check.go --floor-guard` | every task end, Stage 0 CI |
 | Licensing & lockfiles | Root `LICENSE` + `web/console/package.json` aligned to `Apache-2.0`; `0` GPL/AGPL/SSPL deps; single `package-lock.json` | `go run ./scripts/ci/check.go --license --lockfiles` | every task end, Stage 0 CI |
-| Astryx UI baseline | `defaultThemeSlug = "neutral"` unmodified; `0` failures in doctor check; English UI strings | `go run ./scripts/ci/check.go --ui-layout` and `cd web/console && npx @astryxdesign/cli doctor` | every UI edit, Stage 0/1 CI |
+| Astryx UI baseline | `defaultThemeSlug = "neutral"` unmodified; `0` failures in doctor check; English UI strings | `go run ./scripts/ci/check.go --ui-layout` and `cd web/console && npm run astryx -- doctor` (or `npx --no -- @astryxdesign/cli doctor`) | every UI edit, Stage 0/1 CI |
 | Canary & secret hygiene | `0` unredacted secret or canary leaks in `cmd/`, `internal/`, `scripts/`, `web/console/` | `go run ./scripts/ci/check.go --canary` | every edit, Stage 0 CI |
 | Go unit tests (pure-Go) | `100%` pass rate with `CGO_ENABLED=0` and `TANPOPO_TEST_HERMETIC=1` | `go test -v ./...` | every task end, Stage 1 CI |
 | Go race detector | `100%` pass rate with `-race` on C-toolchain environments (`ubuntu-24.04`, `macos-15`) | `go test -v -race ./...` | Stage 1 CI (Linux/macOS) |

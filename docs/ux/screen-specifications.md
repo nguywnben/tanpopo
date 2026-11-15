@@ -219,7 +219,7 @@ Every screen in the catalog below enforces six non-negotiable security, complian
 - **Confirmation:** `AlertDialog` requiring exact `confirm_slug` re-entry and `abort_active_streams` toggle.
 - **Audit:** `approval.approved`, `approval.rejected`, `killswitch.triggered`, `audit.chain_verified`.
 - **Success Feedback:** Cluster epoch propagation receipt + blast-radius inventory.
-- **Accessibility & Responsive:** Built on stable `table-grouped` / `table-filter` (replaces WIP `incident-console` in `@astryxdesign/cli@0.7.13`); engineered for `<= 3`-tap `375px` mobile execution (`< 15s` `TARGET / UNVERIFIED`).
+- **Accessibility & Responsive:** Built on stable `table-grouped` / `table-filter` (replaces WIP `incident-console` in `@astryxdesign/cli@0.7.16`); engineered for `<= 3`-tap `375px` mobile execution (`< 15s` `TARGET / UNVERIFIED`).
 
 #### `SCR-15`: Developer Workspace — Playground, API Explorer, SDK Snippets & Smoke Diagnostics (`/devtools/*`)
 - **Objective:** Enable engineers to compare streaming models interactively via short-lived cost-capped ephemeral Playground keys (`CR-10`), browse embedded offline OpenAPI `3.1.0` docs, copy SDK snippets, and run smoke diagnostics.

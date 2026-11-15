@@ -63,7 +63,7 @@ flowchart LR
    - **Multi-Tenant Isolation Without `v1.0` UI Blockers (`CR-04`):** Verifies `100%` cross-organization API/DB isolation (`TP-AC-SEC-07`, `AUTH-13`..`15`) by provisioning a second tenant via `OPERATOR` CLI/API (`POST /admin/v1/organizations`); Multi-Org Console UI Switcher and `.tpbundle` `Air-Gap Bundle` are explicitly **not** `v0.1` blockers (`v0.1` verifies zero-external-CDN offline Web Console rendering `UX-AC-10` and **`< 1s` (`TARGET / UNVERIFIED`) single-node emergency revocation**).
    - A clean-room operator completes download-to-first-governed-inference in **`< 3 minutes` (`TARGET / UNVERIFIED` — `COND-PO-01`)**, and `tanpopo admin reset-local-owner` passes local break-glass recovery verification.
    - Installs at least 1 external `Declarative Pack` and 1 `Tier-2 Wasm Sandbox Plugin` onto a running `tanpopo` binary **without recompiling Core** (`EXT-ACCEPT-01`), blocking `100%` of unauthorized egress and raw secret memory reads.
-   - Production Web Console build passes `npx @astryxdesign/cli doctor --built <dir>` with `0 fail` and `0` raw `div`/`span` elements.
+   - Production Web Console build inside `web/console/` passes `npm run astryx -- doctor --built <dir>` (or `npx --no -- @astryxdesign/cli doctor --built <dir>`) with `0 fail` and `0` raw `div`/`span` elements.
 2. **`v0.2` Exit Criteria:**
    - Passes `100%` of **`MCP Specification 2025-03-26 (Streamable HTTP)`** governance (`TP-AC-F0401`..`F0403`, `TP-AC-SEC-08`) and empirical client compatibility suite **`CT-36`** (`COND-PO-04`), Authorized OAuth 2.1 (`TP-AC-F0203`, `TP-AC-SEC-03`), `AWS Bedrock` (`SigV4`) + `Azure OpenAI` Official Adapters, `/v1/rerank` (`TP-AC-F0106`), and HMAC `Webhooks` (`TP-FR-0803`).
 3. **`v0.3` Exit Criteria:**

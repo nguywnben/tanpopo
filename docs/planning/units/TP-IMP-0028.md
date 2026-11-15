@@ -37,10 +37,10 @@ Build the 5-screen AI catalog and extension lifecycle management suite (`SCR-03`
 - **`AC-1` (`UX-AC-03` No Blind One-Click Install/Upgrade):** Given an unverified community package (`unverified-external`), When an administrator initiates installation or upgrades a package with $\Delta P \neq \emptyset$ on `SCR-06`/`SCR-07`, Then the package never activates immediately and MUST pass through the 3-axis trust + explicit permission review modal; clicking `Rollback` cleanly restores the previous version.
 - **`AC-2` (`UX-AC-12` Capability Assurance Visibility):** On `SCR-05`, operators can filter and clearly distinguish newly declared models (`DECLARED`) from cassette-verified models (`TESTED`/`VERIFIED`).
 - **`NEG-1`:** A user with the `DEVELOPER` role opening `SCR-06`/`SCR-07` sees `Install`, `Approve Permissions`, and `Quarantine` actions hidden/disabled per the RBAC matrix (`SPEC-UX-01`).
-- **`NEG-2`:** Running `npx astryx doctor --built dist` returns `0 fail` (`0` raw `div`/`span` elements, `Badge` used strictly for numeric counts).
+- **`NEG-2`:** Running `npm run astryx -- doctor --built dist` returns `0 fail` (`0` raw `div`/`span` elements, `Badge` used strictly for numeric counts).
 
 ## 6. Test Commands & Required Evidence
-- `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
+- `cd web/console && npm run typecheck && npm run test && npm run build && npm run astryx -- doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Every manifest metadata string authored by external package publishers (`description`, `author`, `changelog`) MUST be rendered exclusively as escaped React plain text — **never via raw HTML (`dangerouslySetInnerHTML`)** — preventing `Stored XSS` from malicious packages.

@@ -40,7 +40,7 @@ Deliver the **Zero-to-First-Governed-Request Under 3 Minutes (`UJ-01` — `TTFGR
 - **`NEG-2`:** Responsive layout verification across 3 viewport widths (`1280`, `768`, `375`) plus `axe-core` audit confirms `0` horizontal overflow issues and `0` critical/serious accessibility violations.
 
 ## 6. Test Commands & Required Evidence
-- `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
+- `cd web/console && npm run typecheck && npm run test && npm run build && npm run astryx -- doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** The `Bootstrap Token` on `SCR-01` is transmitted exclusively inside a `POST` JSON request body (never placed in URL query parameters where it could leak via `Referer` headers or browser history).
@@ -48,4 +48,4 @@ Deliver the **Zero-to-First-Governed-Request Under 3 Minutes (`UJ-01` — `TTFGR
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0025` and `TP-IMP-0026` are complete.
-- **DoD:** `UJ-01` E2E journey passing, `npx astryx doctor --built dist` reporting `0 fail`, and `REQUIRES_STRONG_REVIEW` sign-off achieved.
+- **DoD:** `UJ-01` E2E journey passing, `npm run astryx -- doctor --built dist` reporting `0 fail`, and `REQUIRES_STRONG_REVIEW` sign-off achieved.

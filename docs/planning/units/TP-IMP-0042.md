@@ -44,7 +44,7 @@ Deliver the final architectural pillars of `v0.3` — closing **Gate `GATE-M4`**
 ## 6. Test Commands & Required Evidence
 - Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/extension/sidecar/... ./internal/ingress/a2a/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/extension/sidecar/... ./internal/ingress/a2a/...`)*
 - Race detector (`-race`): `go test -v -race ./internal/extension/sidecar/... ./internal/ingress/a2a/...`
-- `cd web/console && npm run typecheck && npm run test && npm run build && npx astryx doctor --built dist`
+- `cd web/console && npm run typecheck && npm run test && npm run build && npm run astryx -- doctor --built dist`
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Both `Tier-3 Sidecar` and `A2A Plane` ship **disabled (`disabled`)** by default in baseline configurations, activating only when explicitly enabled by an administrator.
