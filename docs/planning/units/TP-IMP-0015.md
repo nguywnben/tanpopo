@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0015` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice` — **Gate `GATE-M1`**) · `EP-03` |
-| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-026`](../../governance/decisions.md) — `100%` of upstream `Dependencies` [`TP-IMP-0009`, `0012`, `0013`, `0014`] = `DONE`; `GAP-01, 02` closed in `M0`)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-15` under [`DEC-025`](../../governance/decisions.md)/[`DEC-027`](../../governance/decisions.md) by delegated **Gemini 4 Hydrogen** at `baf154dc` — CI Run `43745804370` `completed / success` across Stage 0 + Stage 1 Linux/macOS/Windows; fresh `code-reviewer` [`5e3e6453`] `APPROVE` & `security-auditor` [`363b1896`] `PASS`; `GATE-M1` / `EXT-SLICE-M1` closed via `TestEXTAccept01_VerticalSliceM1`, `goleak`, `FuzzSSEParser` 30s `559,328` execs; `MaxConcurrentStreams` tracked in `TP-IMP-0019`)* |
 | **Size** | `L` (`go.mod`, `internal/ingress/http/*`, `internal/ingress/sse/*`, `tests/integration/ext_accept_01_test.go`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Hot SSE Data Plane, stream-cancellation buffer hygiene & `M1` architectural vertical-slice proof)* |
 | **Technical Owner** | `Staff Gateway / Data-Plane Engineer` |

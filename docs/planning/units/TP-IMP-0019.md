@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0019` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0009`, `TP-IMP-0015` — `GAP-01, 11`)* |
+| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-027`](../../governance/decisions.md) — `100%` of upstream `Dependencies` [`TP-IMP-0009`, `TP-IMP-0015`] = `DONE`; `GAP-01, 11` closed in `M0`)* |
 | **Size** | `M` (`internal/policy/engine/*`, `internal/ratelimit/*`, `db/migrations/sqlite/0006_policies.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(`Fail-Closed` access-control gate & child-policy relaxation prevention)* |
 | **Technical Owner** | `Principal Security / Policy Engineer` |
