@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0018` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-03` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0014`, `TP-IMP-0016`, `TP-IMP-0017` — `GAP-01, 09`)* |
+| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-025`](../../governance/decisions.md) / [`DEC-029`](../../governance/decisions.md) — `TP-IMP-0014`, `0016`, `0017` = `DONE` + PO-delegated `CR-01` roster sign-off)* |
 | **Size** | `L` (`extensions/official/openai/*`, `anthropic/*`, `gemini/*`, `openai-compatible/*`, `ollama/*`) |
 | **Review Tier** | `STANDARD_REVIEW` *(`100%` public extension contract dogfooding — `0` privileged internal Core shortcuts)* |
 | **Technical Owner** | `Platform Integrations Lead` |
