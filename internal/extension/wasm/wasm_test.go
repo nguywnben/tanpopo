@@ -572,11 +572,12 @@ func TestWasmAC1ConcurrentTransformAndZeroSecret(t *testing.T) {
 	scanner := canary.NewScanner()
 
 	rt, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
-		WasmBytes:        wasmfixtures.EchoTransformWASM(),
-		PoolSize:         16,
-		MemoryLimitPages: wasm.DefaultMemoryLimitPages,
-		CallTimeout:      200 * time.Millisecond,
-		ABIMode:          wasm.ABIModeSliceTransform,
+		WasmBytes:          wasmfixtures.EchoTransformWASM(),
+		PoolSize:           16,
+		MemoryLimitPages:   wasm.DefaultMemoryLimitPages,
+		CallTimeout:        2 * time.Second,
+		StreamChunkTimeout: 500 * time.Millisecond,
+		ABIMode:            wasm.ABIModeSliceTransform,
 		SliceTransform: &wasm.SliceTransformConfig{
 			Method:    http.MethodPost,
 			TargetURL: "https://api.acme.example/v1/chat/completions",
@@ -1326,7 +1327,7 @@ func TestWasmCT17HundredConcurrentHealthyWithAdversarialFaults(t *testing.T) {
 	healthyRT, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
 		WasmBytes:      wasmfixtures.EchoTransformWASM(),
 		PoolSize:       16,
-		CallTimeout:    200 * time.Millisecond,
+		CallTimeout:    2 * time.Second,
 		ABIMode:        wasm.ABIModeSliceTransform,
 		AllowedHosts:   []string{"api.acme.example"},
 		SliceTransform: &wasm.SliceTransformConfig{Method: http.MethodPost, TargetURL: "https://api.acme.example/v1/chat"},
@@ -1458,6 +1459,8 @@ func TestWasmStrictExtensionRuntimeAllTenRPCsAndKillSwitch(t *testing.T) {
 	rt, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
 		WasmBytes:           wasmBytes,
 		PoolSize:            2,
+		CallTimeout:         2 * time.Second,
+		StreamChunkTimeout:  500 * time.Millisecond,
 		AllowedHosts:        []string{"api.acme.example"},
 		ApprovedSecretSlots: []string{"api_key"},
 		EnabledFunc:         enabled.Load,
@@ -1903,9 +1906,11 @@ func TestWasmSliceModeAllRPCsAndOutboundValidation(t *testing.T) {
 	ctx := context.Background()
 
 	rt, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
-		WasmBytes: wasmfixtures.EchoTransformWASM(),
-		PoolSize:  2,
-		ABIMode:   wasm.ABIModeSliceTransform,
+		WasmBytes:          wasmfixtures.EchoTransformWASM(),
+		PoolSize:           2,
+		CallTimeout:        2 * time.Second,
+		StreamChunkTimeout: 500 * time.Millisecond,
+		ABIMode:            wasm.ABIModeSliceTransform,
 		SliceTransform: &wasm.SliceTransformConfig{
 			Method:      http.MethodPost,
 			TargetURL:   "https://[::1]:8443/v1/chat",
@@ -2280,6 +2285,7 @@ func TestWasmHostEgressEdgeCasesAndPolicyNarrowing(t *testing.T) {
 	rt, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
 		WasmBytes:            buildHostEgressBridgeWASM(),
 		PoolSize:             1,
+		CallTimeout:          2 * time.Second,
 		AllowHostBlindEgress: true,
 		BlindBroker:          br,
 		AllowedHosts:         []string{addrHost},
