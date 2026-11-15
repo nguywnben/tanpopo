@@ -717,8 +717,8 @@ adapter:
 		t.Fatalf("expected malformed synchronous tool calls to fail, got %v", err)
 	}
 	normalizedErr, err := eng.NormalizeError(ctx, port.NormalizeErrorInput{HTTPStatus: 200, SanitizedBody: malformedToolCalls})
-	if err != nil || normalizedErr.CanonicalCode != "upstream_malformed_response" {
-		t.Fatalf("expected malformed response classification, got %+v, %v", normalizedErr, err)
+	if err != nil || normalizedErr.CanonicalCode != "upstream_malformed_response" || normalizedErr.ErrorType != "upstream_error" || normalizedErr.RetryablePreStream {
+		t.Fatalf("expected non-retryable upstream_malformed_response / upstream_error classification, got %+v, %v", normalizedErr, err)
 	}
 }
 
@@ -756,8 +756,8 @@ func TestDeclarativeTruncatedResponseJSON502AndSSEFragmentsPreserved(t *testing.
 			if nerr != nil {
 				t.Fatalf("case %d status %d NormalizeError failed: %v", i, status, nerr)
 			}
-			if normErr.CanonicalCode != "upstream_malformed_response" || normErr.RetryablePreStream {
-				t.Fatalf("case %d status %d expected non-retryable upstream_malformed_response, got %+v", i, status, normErr)
+			if normErr.CanonicalCode != "upstream_malformed_response" || normErr.ErrorType != "upstream_error" || normErr.RetryablePreStream {
+				t.Fatalf("case %d status %d expected non-retryable upstream_malformed_response with type upstream_error, got %+v", i, status, normErr)
 			}
 		}
 	}

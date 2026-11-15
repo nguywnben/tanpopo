@@ -709,7 +709,7 @@ func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressReque
 	}
 
 	// Re-verify live connection/extension authorization immediately prior to socket dial (TOCTOU guard).
-	if verr := b.reverifyAuthorizationBeforeDispatch(ctx, req, parsedURL, rawURL, plans, constraint); verr != nil {
+	if verr := b.reverifyAuthorizationBeforeDispatch(ctx, req, parsedURL, rawURL, plans, constraint, ""); verr != nil {
 		_ = b.recordAudit(ctx, req, "broker.egress_revoked_pre_dispatch", map[string]any{
 			"target_host": parsedURL.Host,
 			"reason":      scrubber.scrubString(verr.Error()),
@@ -718,9 +718,10 @@ func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressReque
 	}
 
 	effectiveControlHook := func(network, address string, c syscall.RawConn) error {
-		if rerr := b.reverifyAuthorizationBeforeDispatch(ctx, req, parsedURL, rawURL, plans, constraint); rerr != nil {
+		if rerr := b.reverifyAuthorizationBeforeDispatch(ctx, req, parsedURL, rawURL, plans, constraint, address); rerr != nil {
 			_ = b.recordAudit(ctx, req, "broker.egress_revoked_pre_connect", map[string]any{
 				"target_host": parsedURL.Host,
+				"dial_addr":   address,
 				"reason":      scrubber.scrubString(rerr.Error()),
 			})
 			return rerr
@@ -789,6 +790,7 @@ func (b *BlindHostCredentialBroker) reverifyAuthorizationBeforeDispatch(
 	rawURL string,
 	plans []brokerSlotPlan,
 	constraint HostEgressConstraint,
+	dialAddr string,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -865,6 +867,38 @@ func (b *BlindHostCredentialBroker) reverifyAuthorizationBeforeDispatch(
 	}
 	if _, verr := mergedPolicy.ValidateTargetURL(rawURL); verr != nil {
 		return verr
+	}
+	if strings.TrimSpace(dialAddr) != "" {
+		if cerr := verifyConnectSocketAddr(mergedPolicy, parsedURL, dialAddr); cerr != nil {
+			return cerr
+		}
+	}
+	return nil
+}
+
+func verifyConnectSocketAddr(policy egress.Policy, parsedURL *url.URL, dialAddr string) error {
+	liveDialer, err := egress.NewDialer(egress.DialerConfig{Policy: policy})
+	if err != nil {
+		return err
+	}
+	if err := liveDialer.CheckAddr(dialAddr); err != nil {
+		return err
+	}
+	_, portStr, err := net.SplitHostPort(strings.TrimSpace(dialAddr))
+	if err != nil {
+		return &egress.Error{
+			HTTPStatus: http.StatusForbidden,
+			Code:       "egress_host_denied",
+			Message:    fmt.Sprintf("invalid connect address %q", dialAddr),
+			Err:        egress.ErrHostDenied,
+		}
+	}
+	if parsedURL != nil && parsedURL.Hostname() != "" {
+		socketURL := *parsedURL
+		socketURL.Host = net.JoinHostPort(parsedURL.Hostname(), portStr)
+		if _, verr := policy.ValidateTargetURL(socketURL.String()); verr != nil {
+			return verr
+		}
 	}
 	return nil
 }

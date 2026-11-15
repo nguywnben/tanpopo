@@ -2692,3 +2692,163 @@ adapter:
 		t.Fatalf("expected child project allowed after ORG_OWNER re-opt-in, got %v", err)
 	}
 }
+
+func TestTPBR0202OrgConnectionEmptySharedProjectsSnapshotAndOrgFlow(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	orgID, projID, approverID := h.createOrgProjectApprover(t, "tpbr0202-orgempty")
+	orgOwnerID := h.createOrgOwnerRole(t, orgID, "tpbr0202-orgempty")
+
+	secRevID := "prc_secrev_orgempty"
+	now := h.clk.Now().UnixMilli()
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'HUMAN_LOCAL', 'secrev-oe@example.com', 'ACTIVE', 1, ?, ?)`,
+		secRevID, orgID, now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES ('rb_secrev_oe', ?, ?, 'ORG', ?, 'SECURITY_REVIEWER', 1, ?)`,
+		orgID, secRevID, orgID, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	manifestYAML := `
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@thirdparty/unsigned-org-empty"
+  name: Unsigned Org Adapter
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["127.0.0.1"]
+    allowPrivateIp: true
+adapter:
+  slug: unsigned-orgempty
+  baseUrl: "` + srv.URL + `"
+`
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	_ = tw.WriteHeader(&tar.Header{Name: "manifest.yaml", Mode: 0o644, Size: int64(len(manifestYAML))})
+	_, _ = tw.Write([]byte(manifestYAML))
+	_ = tw.Close()
+	_ = gw.Close()
+	bundleBytes := buf.Bytes()
+	sum := sha256.Sum256(bundleBytes)
+	hexSum := hex.EncodeToString(sum[:])
+
+	staged, err := h.installer.StageFreshInstall(h.ctx, installer.StageInstallRequest{
+		ArchiveReader: bytes.NewReader(bundleBytes),
+		Source:        installer.SourceSpec{Kind: "oci", URI: "oci://registry.tanpopo.dev/thirdparty/uoe@sha256:" + hexSum, ExpectedSHA256: hexSum},
+		ActorID:       approverID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := h.installer.ApproveAndActivate(h.ctx, installer.ApproveInstallRequest{
+		InstallationID:      staged.Installation.InstallationID,
+		ExpectedVersion:     staged.Installation.Version,
+		ApproverPrincipalID: approverID,
+		ActivateImmediately: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adp, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: app.InstallationID,
+		AdapterSlug:    "unsigned-orgempty",
+		AllowedHosts:   []string{"127.0.0.1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Valid org-level connection (owner_project_id = nil, shared_project_ids = [] / empty) succeeds
+	//    even without ORG_OWNER opt-in, transitions to ACTIVE, and executes org-level egress cleanly.
+	orgConn, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		OwnerProjectID:  nil,
+		AdapterID:       adp.ID,
+		Name:            "Org Level Unsigned Empty SharedProjects",
+		EndpointBaseURL: srv.URL,
+		AllowPrivateIP:  true,
+		AllowedCIDRs:    []string{"127.0.0.1/32"},
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatalf("expected valid org-level connection with empty shared_project_ids to succeed, got %v", err)
+	}
+	if _, err := h.repo.TransitionConnectionState(h.ctx, orgID, orgConn.ID, catalog.ConnStateValidating, orgConn.Version, "probe"); err != nil {
+		t.Fatal(err)
+	}
+	orgConnV, err := h.repo.GetProviderConnection(h.ctx, orgID, orgConn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.TransitionConnectionState(h.ctx, orgID, orgConn.ID, catalog.ConnStateActive, orgConnV.Version, "probe-ok"); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := h.broker.Execute(h.ctx, broker.EgressRequest{
+		OrgID:        orgID,
+		ConnectionID: orgConn.ID,
+		Method:       http.MethodGet,
+		TargetURL:    srv.URL + "/v1/models",
+	})
+	if err != nil || resp == nil || resp.StatusCode != http.StatusOK || hits.Load() != 1 {
+		t.Fatalf("expected valid org-level egress to succeed cleanly, resp=%+v err=%v hits=%d", resp, err, hits.Load())
+	}
+
+	// 2. Snapshot visibility: org scope (projectID=="") is allowed, while child project (projID) MUST be blocked!
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	snapConn, ok := h.snapshots.Current().LookupProviderConnection(orgID, orgConn.ID)
+	if !ok {
+		t.Fatal("missing orgConn in snapshot")
+	}
+	if !snapConn.VisibleToProject(orgID, "") {
+		t.Fatal("expected org-level snapshot visibility (projectID=='') to remain true")
+	}
+	if snapConn.VisibleToProject(orgID, projID) {
+		t.Fatal("security bypass (TP-BR-0202): child project saw org-level unsigned unverified_external connection with empty shared_project_ids")
+	}
+
+	// 3. Non-ORG_OWNER cannot grant opt-in; explicit ORG_OWNER opt-in unlocks child project visibility after snapshot refresh.
+	if perr := h.installer.SetOrgExtensionPolicy(h.ctx, orgID, app.PackageID, true, nil, secRevID); !errors.Is(perr, installer.ErrPermissionDenied) {
+		t.Fatalf("expected ErrPermissionDenied for SECURITY_REVIEWER opt-in, got %v", perr)
+	}
+	if err := h.installer.SetOrgExtensionPolicy(h.ctx, orgID, app.PackageID, true, nil, orgOwnerID); err != nil {
+		t.Fatalf("SetOrgExtensionPolicy by ORG_OWNER failed: %v", err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	snapConnAfter, ok := h.snapshots.Current().LookupProviderConnection(orgID, orgConn.ID)
+	if !ok {
+		t.Fatal("missing orgConn in snapshot after opt-in")
+	}
+	if !snapConnAfter.VisibleToProject(orgID, projID) {
+		t.Fatal("expected child project visibility after explicit ORG_OWNER opt-in")
+	}
+}

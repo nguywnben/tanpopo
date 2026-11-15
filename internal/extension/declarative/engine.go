@@ -1125,7 +1125,7 @@ func (e *Engine) NormalizeError(ctx context.Context, in port.NormalizeErrorInput
 				if (status >= http.StatusOK && status < http.StatusMultipleChoices) || looksLikeJSON {
 					return port.CanonicalProviderError{
 						CanonicalCode:          "upstream_malformed_response",
-						ErrorType:              "server_error",
+						ErrorType:              "upstream_error",
 						RetryablePreStream:     false,
 						SanitizedPublicMessage: "upstream returned malformed or truncated JSON response",
 					}, nil
@@ -1135,7 +1135,7 @@ func (e *Engine) NormalizeError(ctx context.Context, in port.NormalizeErrorInput
 				if errors.Is(toolErr, ErrUpstreamMalformedResponse) {
 					return port.CanonicalProviderError{
 						CanonicalCode:          "upstream_malformed_response",
-						ErrorType:              "server_error",
+						ErrorType:              "upstream_error",
 						RetryablePreStream:     false,
 						SanitizedPublicMessage: "upstream returned malformed tool calls",
 					}, nil

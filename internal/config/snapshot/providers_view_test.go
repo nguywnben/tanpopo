@@ -272,3 +272,102 @@ func TestProviderCatalogSnapshotSecurityAndFailClosed(t *testing.T) {
 		t.Fatal("expected Refresh to fail closed on corrupt allowed_hosts_json")
 	}
 }
+
+func TestProviderConnectionVisibleToProjectEnforcesTPBR0202OrgOptIn(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	clk := clock.NewFakeClock(time.UnixMilli(1760000000000))
+	nowFn := func() int64 { return clk.Now().UnixMilli() }
+
+	st, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: filepath.Join(t.TempDir(), "tanpopo.db"),
+		NowMs:  nowFn,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{
+		Slug:           "snap-tpbr0202",
+		DisplayName:    "Snap TP-BR-0202",
+		MinPluginTrust: port.MinTrustAnyApproved,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proj, err := st.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "child-1", DisplayName: "Child 1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := nowFn()
+	db := st.RawDB()
+	if _, err := db.ExecContext(ctx, `INSERT INTO extension_packages (id, canonical_name, extension_kind, publisher_id, origin_trust_tier, created_at_ms) VALUES ('ext_u', '@third/unsigned', 'PROVIDER_ADAPTER', 'third', 'unverified_external', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO extension_versions (id, package_id, semver, contract_version, core_version_range, execution_tier, bundle_sha256, signature_verified, enterprise_signed, source_uri, manifest_json, created_at_ms) VALUES ('exv_u', 'ext_u', '1.0.0', '0.1', '>=0.1.0', 'DECLARATIVE_T1', 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 0, 0, 'oci://local', '{}', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO extension_installations (id, package_id, active_version_id, state, approved_permissions_json, version, created_at_ms, updated_at_ms) VALUES ('ins_u', 'ext_u', 'exv_u', 'ENABLED_ACTIVE', '{"allowed_hosts":["api.example.com"],"execution_tier":"DECLARATIVE_T1"}', 1, ?, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO provider_adapters (id, installation_id, adapter_slug, supported_dialects_json, allowed_hosts_json, version, created_at_ms) VALUES ('adp_u', 'ins_u', 'unsigned', '["openai_chat"]', '["api.example.com"]', 1, ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	// Org-level connection with owner_project_id = NULL and empty shared_project_ids_json = '[]'.
+	if _, err := db.ExecContext(ctx, `INSERT INTO provider_connections (id, org_id, owner_project_id, adapter_id, name, endpoint_base_url, allow_private_ip, allowed_cidrs_json, data_region, billing_mode, auth_mode, state, shared_project_ids_json, config_json, version, created_at_ms, updated_at_ms) VALUES ('con_org_u', ?, NULL, 'adp_u', 'OrgSharedUnsigned', 'https://api.example.com', 0, '[]', 'us', 'COMMERCIAL_API', 'NONE', 'ACTIVE', '[]', '{}', 1, ?, ?)`, org.ID, now, now); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: db, NowMs: nowFn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	refresh := func(ts int64) *snapshot.ProviderConnectionView {
+		if _, err := db.ExecContext(ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'provider_connection', 'con_org_u', 'UPSERT', 0, ?)`, org.ID, ts); err != nil {
+			t.Fatal(err)
+		}
+		if err := mgr.Refresh(ctx); err != nil {
+			t.Fatal(err)
+		}
+		v, ok := mgr.Current().LookupProviderConnection(org.ID, "con_org_u")
+		if !ok {
+			t.Fatal("missing con_org_u in snapshot")
+		}
+		return v
+	}
+
+	// 1. No ORG_OWNER opt-in: org scope (projectID=="") allowed, child project (projectID!="") BLOCKED despite empty shared_project_ids.
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	c1, ok := mgr.Current().LookupProviderConnection(org.ID, "con_org_u")
+	if !ok {
+		t.Fatal("missing con_org_u")
+	}
+	if !c1.VisibleToProject(org.ID, "") {
+		t.Fatal("expected org-level access (projectID=='') allowed for org-owned connection with empty shared_project_ids")
+	}
+	if c1.VisibleToProject(org.ID, proj.ID) {
+		t.Fatal("security bypass (TP-BR-0202): child project saw unsigned unverified_external org connection without ORG_OWNER opt-in")
+	}
+
+	// 2. ORG_OWNER opt-in (org_extension_policies.enabled = 1) grants visibility to child projects.
+	if _, err := db.ExecContext(ctx, `INSERT INTO org_extension_policies (org_id, package_id, enabled, version, created_at_ms, updated_at_ms) VALUES (?, 'ext_u', 1, 1, ?, ?)`, org.ID, now+1, now+1); err != nil {
+		t.Fatal(err)
+	}
+	c2 := refresh(now + 1)
+	if !c2.VisibleToProject(org.ID, "") || !c2.VisibleToProject(org.ID, proj.ID) {
+		t.Fatal("expected ORG_OWNER opt-in to unlock child project visibility for org-level connection")
+	}
+
+	// 3. Explicit org policy disable (enabled = 0) blocks both org and child project scopes.
+	if _, err := db.ExecContext(ctx, `UPDATE org_extension_policies SET enabled = 0, version = version + 1, updated_at_ms = ? WHERE org_id = ? AND package_id = 'ext_u'`, now+2, org.ID); err != nil {
+		t.Fatal(err)
+	}
+	c3 := refresh(now + 2)
+	if c3.VisibleToProject(org.ID, "") || c3.VisibleToProject(org.ID, proj.ID) {
+		t.Fatal("expected disabled org policy (enabled=0) to block both org and child project scopes")
+	}
+}

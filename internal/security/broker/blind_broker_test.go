@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1693,4 +1694,178 @@ func TestBlindBrokerRevokeQuarantineMidFlightTOCTOU(t *testing.T) {
 		t.Fatalf("expected 0 upstream HTTP requests after pre-connect revoke, got %d", upstreamHits2.Load())
 	}
 	assertNoCanaryInEvents(t, h1.scanner, h1.audit.snapshot())
+}
+
+func TestBlindBrokerConnectTimeSocketIPAndPortPolicyTightening(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// A. Credentialed slot: CIDR tightened mid-dial (between pre-dispatch & ControlHook connect(2)).
+	hA := newBrokerHarness(t, nil)
+	var hitsA atomic.Int32
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsA.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srvA.Close()
+	uA, _ := url.Parse(srvA.URL)
+	portA, _ := strconv.Atoi(uA.Port())
+	hostA := "api.cidr-slot.internal:" + uA.Port()
+
+	metaA := hA.sealCanarySecret(t, "cidr-slot-key", nil, []byte(canary.DefaultCanarySecret()))
+	connA := idgen.MustNew(idgen.PrefixConnection)
+	hA.resolver.conns[hA.orgID+"|"+connA] = &egress.Policy{
+		AllowedHosts:   []string{hostA},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+		AllowedPorts:   []int{portA},
+	}
+	hA.resolver.put(&ResolvedSlot{
+		OrgID:          hA.orgID,
+		ConnectionID:   connA,
+		SlotName:       "api_key",
+		SecretID:       metaA.ID,
+		AllowedHosts:   []string{hostA},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+		AllowedPorts:   []int{portA},
+	})
+
+	brkA, err := NewBlindBroker(Config{
+		Resolver:       hA.resolver,
+		PolicyResolver: hA.resolver,
+		Vault:          hA.vs,
+		UnsealCap:      vault.MintUnsealCapabilityForBroker(),
+		Audit:          hA.audit,
+		HostResolver: &callbackHostResolver{
+			addr: netip.MustParseAddr("127.0.0.1"),
+			onLookup: func() {
+				hA.resolver.mu.Lock()
+				hA.resolver.conns[hA.orgID+"|"+connA].AllowedCIDRs = []string{"10.0.0.0/8"}
+				hA.resolver.slots[slotKey{orgID: hA.orgID, conn: connA, slot: "api_key"}].AllowedCIDRs = []string{"10.0.0.0/8"}
+				hA.resolver.mu.Unlock()
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, errA := brkA.Execute(ctx, EgressRequest{
+		OrgID:        hA.orgID,
+		ConnectionID: connA,
+		Method:       http.MethodPost,
+		TargetURL:    "http://" + hostA + "/v1/chat/completions",
+		CredentialInjections: []CredentialInjection{
+			{SecretSlotName: "api_key", Location: TargetBearer, FieldName: "Authorization"},
+		},
+	})
+	if errA == nil || !errors.Is(errA, egress.ErrPrivateIPBlocked) {
+		t.Fatalf("expected connect-time ErrPrivateIPBlocked after mid-dial CIDR tightening, got %v", errA)
+	}
+	if hitsA.Load() != 0 {
+		t.Fatalf("expected 0 upstream hits after connect-time CIDR block, got %d", hitsA.Load())
+	}
+	assertNoCanaryInEvents(t, hA.scanner, hA.audit.snapshot())
+
+	// B. Zero-slot egress: connect-time CIDR tightened mid-dial -> blocked before connect(2).
+	hB := newBrokerHarness(t, nil)
+	var hitsB atomic.Int32
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsB.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srvB.Close()
+	uB, _ := url.Parse(srvB.URL)
+	portB, _ := strconv.Atoi(uB.Port())
+	hostB := "api.cidr-zero.internal:" + uB.Port()
+
+	connB := idgen.MustNew(idgen.PrefixConnection)
+	hB.resolver.conns[hB.orgID+"|"+connB] = &egress.Policy{
+		AllowedHosts:   []string{hostB},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+		AllowedPorts:   []int{portB},
+	}
+	brkB, err := NewBlindBroker(Config{
+		Resolver:       hB.resolver,
+		PolicyResolver: hB.resolver,
+		Vault:          hB.vs,
+		UnsealCap:      vault.MintUnsealCapabilityForBroker(),
+		Audit:          hB.audit,
+		HostResolver: &callbackHostResolver{
+			addr: netip.MustParseAddr("127.0.0.1"),
+			onLookup: func() {
+				hB.resolver.mu.Lock()
+				hB.resolver.conns[hB.orgID+"|"+connB].AllowedCIDRs = []string{"192.168.50.0/24"}
+				hB.resolver.mu.Unlock()
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, errB := brkB.Execute(ctx, EgressRequest{
+		OrgID:        hB.orgID,
+		ConnectionID: connB,
+		Method:       http.MethodGet,
+		TargetURL:    "http://" + hostB + "/v1/models",
+	}); errB == nil || !errors.Is(errB, egress.ErrPrivateIPBlocked) {
+		t.Fatalf("expected zero-slot connect-time ErrPrivateIPBlocked after CIDR tightening, got %v", errB)
+	}
+	if hitsB.Load() != 0 {
+		t.Fatalf("expected 0 upstream hits for zero-slot CIDR tightening, got %d", hitsB.Load())
+	}
+
+	// C. Connect-time socket PORT tightening mid-dial -> blocked before connect(2).
+	hC := newBrokerHarness(t, nil)
+	var hitsC atomic.Int32
+	srvC := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsC.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srvC.Close()
+	uC, _ := url.Parse(srvC.URL)
+	portC, _ := strconv.Atoi(uC.Port())
+	otherPort := portC + 1
+	if otherPort > 65535 {
+		otherPort = portC - 1
+	}
+	hostC := "api.port-tighten.internal"
+
+	connC := idgen.MustNew(idgen.PrefixConnection)
+	hC.resolver.conns[hC.orgID+"|"+connC] = &egress.Policy{
+		AllowedHosts:   []string{hostC},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+		AllowedPorts:   []int{portC, otherPort},
+	}
+	brkC, err := NewBlindBroker(Config{
+		Resolver:       hC.resolver,
+		PolicyResolver: hC.resolver,
+		Vault:          hC.vs,
+		UnsealCap:      vault.MintUnsealCapabilityForBroker(),
+		Audit:          hC.audit,
+		HostResolver: &callbackHostResolver{
+			addr: netip.MustParseAddr("127.0.0.1"),
+			onLookup: func() {
+				hC.resolver.mu.Lock()
+				hC.resolver.conns[hC.orgID+"|"+connC].AllowedPorts = []int{otherPort}
+				hC.resolver.mu.Unlock()
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, errC := brkC.Execute(ctx, EgressRequest{
+		OrgID:        hC.orgID,
+		ConnectionID: connC,
+		Method:       http.MethodGet,
+		TargetURL:    fmt.Sprintf("http://%s:%d/v1/models", hostC, portC),
+	}); errC == nil || !errors.Is(errC, egress.ErrPortDenied) {
+		t.Fatalf("expected connect-time ErrPortDenied after port tightening, got %v", errC)
+	}
+	if hitsC.Load() != 0 {
+		t.Fatalf("expected 0 upstream hits after connect-time port tightening, got %d", hitsC.Load())
+	}
 }

@@ -77,9 +77,11 @@ type ProviderConnectionView struct {
 	BillingMode      string
 	AuthMode         string
 	State            string
-	SharedProjectIDs []string
-	sharedProjectSet map[string]struct{}
-	ConfigJSON       string
+	SharedProjectIDs              []string
+	sharedProjectSet              map[string]struct{}
+	ChildProjectBlockedByOrgTrust bool
+	DisabledByOrgPolicy           bool
+	ConfigJSON                    string
 	SecretBindings   map[string]*ConnectionSecretBindingView
 	Version          int64
 	CreatedAtMs      int64
@@ -108,7 +110,13 @@ func (c *ProviderConnectionView) clone() *ProviderConnectionView {
 // VisibleToProject reports whether projectID inside orgID can access
 // this connection according to owner_project_id and downward shared_project_ids.
 func (c *ProviderConnectionView) VisibleToProject(orgID, projectID string) bool {
-	if c == nil || c.OrgID != orgID {
+	if c == nil || c.OrgID != orgID || c.DisabledByOrgPolicy {
+		return false
+	}
+	// TP-BR-0202: Unsigned unverified_external extensions are unavailable to child Project
+	// scopes unless explicitly enabled by ORG_OWNER via org_extension_policies (enabled=1),
+	// even when owner_project_id IS NULL and shared_project_ids is empty.
+	if projectID != "" && c.ChildProjectBlockedByOrgTrust {
 		return false
 	}
 	if c.OwnerProjectID == nil {
@@ -367,11 +375,20 @@ func loadAdaptersSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView)
 
 func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView) error {
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id, org_id, owner_project_id, adapter_id, credential_id, name,
-		       endpoint_base_url, allow_private_ip, allowed_cidrs_json, data_region,
-		       billing_mode, auth_mode, state, shared_project_ids_json, config_json,
-		       version, created_at_ms, updated_at_ms
-		FROM provider_connections
+		SELECT pc.id, pc.org_id, pc.owner_project_id, pc.adapter_id, pc.credential_id, pc.name,
+		       pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.data_region,
+		       pc.billing_mode, pc.auth_mode, pc.state, pc.shared_project_ids_json, pc.config_json,
+		       pc.version, pc.created_at_ms, pc.updated_at_ms,
+		       COALESCE(ep.origin_trust_tier, 'unverified_external'),
+		       COALESCE(ev.enterprise_signed, 0),
+		       ei.active_version_id,
+		       oep.enabled
+		FROM provider_connections pc
+		LEFT JOIN provider_adapters pa ON pa.id = pc.adapter_id
+		LEFT JOIN extension_installations ei ON ei.id = pa.installation_id
+		LEFT JOIN extension_packages ep ON ep.id = ei.package_id
+		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
+		LEFT JOIN org_extension_policies oep ON oep.org_id = pc.org_id AND oep.package_id = ep.id
 	`)
 	if err != nil {
 		return fmt.Errorf("snapshot: query provider_connections: %w", err)
@@ -380,20 +397,33 @@ func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogVi
 
 	for rows.Next() {
 		var (
-			c          ProviderConnectionView
-			ownerProj  sql.NullString
-			credID     sql.NullString
-			allowPriv  int
-			cidrsJSON  string
-			sharedJSON string
+			c                ProviderConnectionView
+			ownerProj        sql.NullString
+			credID           sql.NullString
+			allowPriv        int
+			cidrsJSON        string
+			sharedJSON       string
+			pkgTrustTier     string
+			entSigned        int
+			activeVerID      sql.NullString
+			orgPolicyEnabled sql.NullInt64
 		)
 		if err := rows.Scan(
 			&c.ID, &c.OrgID, &ownerProj, &c.AdapterID, &credID, &c.Name,
 			&c.EndpointBaseURL, &allowPriv, &cidrsJSON, &c.DataRegion,
 			&c.BillingMode, &c.AuthMode, &c.State, &sharedJSON, &c.ConfigJSON,
 			&c.Version, &c.CreatedAtMs, &c.UpdatedAtMs,
+			&pkgTrustTier, &entSigned, &activeVerID, &orgPolicyEnabled,
 		); err != nil {
 			return fmt.Errorf("snapshot: scan provider_connections: %w", err)
+		}
+		if orgPolicyEnabled.Valid && orgPolicyEnabled.Int64 == 0 {
+			c.DisabledByOrgPolicy = true
+		}
+		unsignedUnverified := (!activeVerID.Valid || strings.TrimSpace(activeVerID.String) == "") ||
+			(pkgTrustTier == "unverified_external" && entSigned == 0)
+		if unsignedUnverified && (!orgPolicyEnabled.Valid || orgPolicyEnabled.Int64 != 1) {
+			c.ChildProjectBlockedByOrgTrust = true
 		}
 		if ownerProj.Valid {
 			v := ownerProj.String
