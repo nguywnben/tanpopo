@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0010: DONE` | `READY_FOR_REVIEW: TP-IMP-0011`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `1.13.0-tp-imp-0011-ready-for-review` | **Date:** `2026-11-15`
+> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0011: DONE` | `READY: TP-IMP-0012, TP-IMP-0013`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.14.0-tp-imp-0011-done` | **Date:** `2026-11-15`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **MANDATORY GOVERNANCE NOTICE (`TP-IMP-0005..0010 ACCEPTED — TP-IMP-0011 READY_FOR_REVIEW`):**
+> - **MANDATORY GOVERNANCE NOTICE (`TP-IMP-0005..0011 ACCEPTED — TP-IMP-0012, 0013 READY`):**
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
 >   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Following Product Owner acceptance of **`TP-IMP-0005`** (`DEC-011`, `1f4f5a1`, CI `43584413913`), **`CR-11` / `TP-IMP-0006`** (`DEC-012`/`DEC-013`, `b929deb`, CI `43590868455`), **`TP-IMP-0007`** (`DEC-015`, `4cc8b6ad`, CI `43595815734`), **`CR-12` Option A (`DEC-017`) & `TP-IMP-0008`** (`DEC-018`, `14238799`, CI `43606876169`), **`TP-IMP-0009`** (`DEC-019`, `c3e3dd93`, CI `43615717101`), and **`TP-IMP-0010`** (`DEC-020`, `c11d23f1`, CI `43622524885` `SUCCESS` across Stage 0 + Stage 1 `ubuntu-24.04` `unshare --net` + `-race`, `macos-15` `-race`, and `windows-2022` `CGO_ENABLED=0`), **`TP-IMP-0001`..`0010` are `DONE` (`10 / 47`)**, **`TP-IMP-0011` (`1 / 47`) is `READY_FOR_REVIEW`** (implemented & locally verified with fresh `security-auditor` [`b0538b96`] & `code-reviewer` [`6c3d6169`] `PASS`), and `TP-IMP-0012`..`0047` (`36 / 47`) remain **`BLOCKED`** behind upstream dependency (`0012`/`0013` await `0011` acceptance), `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
+>   3. Following Product Owner acceptance of **`TP-IMP-0005`** (`DEC-011`, `1f4f5a1`, CI `43584413913`), **`CR-11` / `TP-IMP-0006`** (`DEC-012`/`DEC-013`, `b929deb`, CI `43590868455`), **`TP-IMP-0007`** (`DEC-015`, `4cc8b6ad`, CI `43595815734`), **`CR-12` Option A (`DEC-017`) & `TP-IMP-0008`** (`DEC-018`, `14238799`, CI `43606876169`), **`TP-IMP-0009`** (`DEC-019`, `c3e3dd93`, CI `43615717101`), **`TP-IMP-0010`** (`DEC-020`, `c11d23f1`, CI `43622524885`), and **`TP-IMP-0011`** (`DEC-021`, `4cb12ce8`, CI `43684854935` `SUCCESS` across Stage 0 + Stage 1 Linux `unshare --net` + `-race`, Windows `CGO_ENABLED=0`, macOS `-race`; `FZ-02` 30s PASS), **`TP-IMP-0001`..`0011` are `DONE` (`11 / 47`)**, **`TP-IMP-0012` & `TP-IMP-0013` (`2 / 47`) are `READY`**, and `TP-IMP-0014`..`0047` (`34 / 47`) remain **`BLOCKED`** behind upstream dependency, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 
 ---
 

@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0011` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified `2026-11-15`; `db/migrations/sqlite/0006_extensions.sql`, `internal/extension/lockfile/*`, `internal/extension/installer/*`; fresh `security-auditor` [`b0538b96`] & `code-reviewer` [`6c3d6169`] `PASS`; awaiting Product Owner acceptance & remote CI)* |
+| **Status** | **`DONE`** *(Product Owner accepted `DEC-021` `2026-11-15` in standalone scope at `4cb12ce8bb53b080f2a6f1517022a2de6299519b` / CI Run `43684854935` `completed / success` across Stage 0 + Stage 1 `ubuntu-24.04` `unshare --net` + `-race`, `windows-2022` `CGO_ENABLED=0`, `macos-15` `-race`; local `CGO_ENABLED=0` + `FZ-02` 30s PASS; fresh `security-auditor` [`e24f01f0`] & `code-reviewer` [`3baf20b4`] `PASS`; downstream runtime/sidecar/PostgreSQL/admin-API wiring stays `UNVERIFIED` until `TP-IMP-0012`, `0013`, `0024`, `0039`, `0042`)* |
 | **Size** | `L` (`go.mod`, `internal/extension/installer/*`, `internal/extension/lockfile/*`, `db/migrations/sqlite/0006_extensions.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Extension supply chain `TB-5`, Zip-Slip/Archive-Bomb defense & privilege-escalation guard)* |
 | **Technical Owner** | `Platform Supply-Chain & Security Engineer` |

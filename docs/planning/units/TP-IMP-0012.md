@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0012` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0004`, `TP-IMP-0010`, `TP-IMP-0011` — `GAP-01, 02`)* |
+| **Status** | **`READY`** *(Dependencies `TP-IMP-0004`, `TP-IMP-0010` [`DEC-020`], and `TP-IMP-0011` [`DEC-021`] satisfied — `GAP-01, 02`)* |
 | **Size** | `L` (`internal/extension/declarative/*`, `internal/provider/catalog/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0005_providers_models.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Turing-incomplete expression interpreter defending against ReDoS/OOM & 4-entity catalog boundaries)* |
 | **Technical Owner** | `Staff Platform / Runtime Engineer` |
