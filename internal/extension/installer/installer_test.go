@@ -1357,6 +1357,166 @@ adapter:
 	_ = SafeRemovePackageDir(pluginsDir, fromFileExt.StagingDir)
 }
 
+func TestInstallerThreeAuditFindingsRepro(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// 1. CT-20 Provenance / Trust Drift across StageUpgrade & SetOrgExtensionPolicy & tanpopo.lock.
+	h1 := newInstallerHarness(t, port.MinTrustVerifiedOnly)
+	wasmBytes := wasmfixtures.EchoTransformWASM()
+	wasmSHA := shaHex(wasmBytes)
+	mV1 := makeWasmManifestYAML("@drift/pkg", "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.example.com"}, []string{"k1"}, 16)
+	tpkgV1, shaV1 := buildTPKGBytes(t, []archiveEntrySpec{
+		{name: "manifest.yaml", body: mV1},
+		{name: "dist/adapter.wasm", body: wasmBytes},
+	})
+	pubSigV1 := ed25519.Sign(h1.pubPriv, SignatureSigningPayload("@drift/pkg", "1.0.0", shaV1))
+
+	st1, err := h1.svc.StageFreshInstall(ctx, StageInstallRequest{
+		ArchiveReader: bytes.NewReader(tpkgV1),
+		Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./drift-v1.tpkg"},
+		Signature:     ProvenanceSignature{PublisherOrRootSig: pubSigV1},
+		ActorID:       h1.devID,
+		TargetOrgID:   h1.orgID,
+	})
+	if err != nil {
+		t.Fatalf("StageFreshInstall v1: %v", err)
+	}
+	act1, err := h1.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      st1.Installation.InstallationID,
+		ExpectedVersion:     st1.Installation.Version,
+		ApproverPrincipalID: h1.secRevID,
+		ActivateImmediately: true,
+		OrgID:               h1.orgID,
+	})
+	if err != nil {
+		t.Fatalf("ApproveAndActivate v1: %v", err)
+	}
+
+	// Non-escalating upgrade to unsigned v1.1.0 (unverified_external): MUST update active trust tier to unverified_external!
+	mV11 := makeWasmManifestYAML("@drift/pkg", "1.1.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.example.com"}, []string{"k1"}, 16)
+	tpkgV11, _ := buildTPKGBytes(t, []archiveEntrySpec{
+		{name: "manifest.yaml", body: mV11},
+		{name: "dist/adapter.wasm", body: wasmBytes},
+	})
+	up11, err := h1.svc.StageUpgrade(ctx, StageUpgradeRequest{
+		InstallationID:  act1.InstallationID,
+		ExpectedVersion: act1.Version,
+		ArchiveReader:   bytes.NewReader(tpkgV11),
+		Source:          SourceSpec{Kind: SourceKindLocalArchive, URI: "./drift-v11.tpkg"},
+		ActorID:         h1.opID,
+	})
+	if err != nil {
+		t.Fatalf("StageUpgrade v1.1 unsigned: %v", err)
+	}
+	if up11.Installation.OriginTrustTier != lockfile.TrustTierUnverifiedExternal {
+		t.Fatalf("expected OriginTrustTier updated to unverified_external after unsigned upgrade, got %q", up11.Installation.OriginTrustTier)
+	}
+	lf1, err := lockfile.Read(h1.lockPath)
+	if err != nil {
+		t.Fatalf("lockfile.Read: %v", err)
+	}
+	if gotTier := lf1.Extensions["@drift/pkg"].TrustTier; gotTier != lockfile.TrustTierUnverifiedExternal {
+		t.Fatalf("expected tanpopo.lock trustTier=unverified_external, got %q", gotTier)
+	}
+	if perr := h1.svc.SetOrgExtensionPolicy(ctx, h1.orgID, act1.PackageID, true, &act1.InstallationID, h1.secRevID); !errors.Is(perr, ErrOrgTrustPolicyDenied) {
+		t.Fatalf("expected VERIFIED_ONLY org denied when active version is unverified_external, got %v", perr)
+	}
+
+	// 2. CT-04 Uninstall Ownership: UninstallInstallation on package A MUST NOT delete package B's directory inside pluginsDir!
+	h2 := newInstallerHarness(t, port.MinTrustAnyApproved)
+	mA := makeWasmManifestYAML("@own/pkg-a", "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.a.example"}, nil, 16)
+	tpkgA, _ := buildTPKGBytes(t, []archiveEntrySpec{{name: "manifest.yaml", body: mA}, {name: "dist/adapter.wasm", body: wasmBytes}})
+	stA, err := h2.svc.StageFreshInstall(ctx, StageInstallRequest{ArchiveReader: bytes.NewReader(tpkgA), Source: SourceSpec{Kind: SourceKindLocalArchive, URI: "./a.tpkg"}})
+	if err != nil {
+		t.Fatalf("StageFreshInstall A: %v", err)
+	}
+	disA, err := h2.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      stA.Installation.InstallationID,
+		ExpectedVersion:     stA.Installation.Version,
+		ApproverPrincipalID: h2.secRevID,
+		ActivateImmediately: false,
+		OrgID:               h2.orgID,
+	})
+	if err != nil {
+		t.Fatalf("Approve A: %v", err)
+	}
+
+	mB := makeWasmManifestYAML("@own/pkg-b", "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.b.example"}, nil, 16)
+	tpkgB, _ := buildTPKGBytes(t, []archiveEntrySpec{{name: "manifest.yaml", body: mB}, {name: "dist/adapter.wasm", body: wasmBytes}})
+	stB, err := h2.svc.StageFreshInstall(ctx, StageInstallRequest{ArchiveReader: bytes.NewReader(tpkgB), Source: SourceSpec{Kind: SourceKindLocalArchive, URI: "./b.tpkg"}})
+	if err != nil {
+		t.Fatalf("StageFreshInstall B: %v", err)
+	}
+	if _, err := h2.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      stB.Installation.InstallationID,
+		ExpectedVersion:     stB.Installation.Version,
+		ApproverPrincipalID: h2.secRevID,
+		ActivateImmediately: true,
+		OrgID:               h2.orgID,
+	}); err != nil {
+		t.Fatalf("Approve B: %v", err)
+	}
+
+	// Attempt to uninstall A while passing B's active directory path!
+	if uerr := h2.svc.UninstallInstallation(ctx, disA.InstallationID, disA.Version, stB.Archive.StagingDir, h2.opID, ""); !errors.Is(uerr, ErrPathNotConfined) {
+		t.Fatalf("expected ErrPathNotConfined when packageDir belongs to another installation, got %v", uerr)
+	}
+	if _, statErr := os.Stat(stB.Archive.StagingDir); statErr != nil {
+		t.Fatalf("package B directory MUST remain intact on disk, stat err=%v", statErr)
+	}
+
+	// 3. Revocation TOCTOU between staging and ApproveAndActivate / ApproveEscalatedUpgrade.
+	h3 := newInstallerHarness(t, port.MinTrustAnyApproved)
+	mR1 := makeWasmManifestYAML("@rev/toctou", "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.r.example"}, nil, 16)
+	tpkgR1, shaR1 := buildTPKGBytes(t, []archiveEntrySpec{{name: "manifest.yaml", body: mR1}, {name: "dist/adapter.wasm", body: wasmBytes}})
+	stR1, err := h3.svc.StageFreshInstall(ctx, StageInstallRequest{ArchiveReader: bytes.NewReader(tpkgR1), Source: SourceSpec{Kind: SourceKindLocalArchive, URI: "./r1.tpkg"}})
+	if err != nil {
+		t.Fatalf("StageFreshInstall R1: %v", err)
+	}
+	// Revoke R1 while it is parked in PENDING_PERMISSION_APPROVAL!
+	_, _ = h3.st.RawDB().ExecContext(ctx, `
+		INSERT INTO extension_revocations (id, package_slug, version_or_sha256, severity, version_serial, reason, feed_expires_at_ms, imported_at_ms)
+		VALUES ('rev_toctou1', '@rev/toctou', ?, 'CRITICAL_MALICIOUS', 1, 'revoked during approval wait', 9999999999999, 1000)`, shaR1)
+	if _, aerr := h3.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      stR1.Installation.InstallationID,
+		ExpectedVersion:     stR1.Installation.Version,
+		ApproverPrincipalID: h3.opID,
+		ActivateImmediately: true,
+	}); !errors.Is(aerr, ErrRevokedExtension) {
+		t.Fatalf("expected ApproveAndActivate blocked by ErrRevokedExtension on TOCTOU revocation, got %v", aerr)
+	}
+
+	// Also test TOCTOU revocation during ApproveEscalatedUpgrade!
+	mR1Clean := makeWasmManifestYAML("@rev/toctou-up", "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.r.example"}, nil, 16)
+	tpkgR1Clean, _ := buildTPKGBytes(t, []archiveEntrySpec{{name: "manifest.yaml", body: mR1Clean}, {name: "dist/adapter.wasm", body: wasmBytes}})
+	stR1C, _ := h3.svc.StageFreshInstall(ctx, StageInstallRequest{ArchiveReader: bytes.NewReader(tpkgR1Clean), Source: SourceSpec{Kind: SourceKindLocalArchive, URI: "./r1c.tpkg"}})
+	actR1C, _ := h3.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      stR1C.Installation.InstallationID,
+		ExpectedVersion:     stR1C.Installation.Version,
+		ApproverPrincipalID: h3.opID,
+		ActivateImmediately: true,
+	})
+	mR2 := makeWasmManifestYAML("@rev/toctou-up", "2.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.r.example", "extra.r.example"}, nil, 16)
+	tpkgR2, shaR2 := buildTPKGBytes(t, []archiveEntrySpec{{name: "manifest.yaml", body: mR2}, {name: "dist/adapter.wasm", body: wasmBytes}})
+	upR2, err := h3.svc.StageUpgrade(ctx, StageUpgradeRequest{
+		InstallationID:  actR1C.InstallationID,
+		ExpectedVersion: actR1C.Version,
+		ArchiveReader:   bytes.NewReader(tpkgR2),
+		Source:          SourceSpec{Kind: SourceKindLocalArchive, URI: "./r2.tpkg"},
+		ActorID:         h3.opID,
+	})
+	if err != nil || !upR2.Escalated {
+		t.Fatalf("StageUpgrade R2: %+v err=%v", upR2, err)
+	}
+	_, _ = h3.st.RawDB().ExecContext(ctx, `
+		INSERT INTO extension_revocations (id, package_slug, version_or_sha256, severity, version_serial, reason, feed_expires_at_ms, imported_at_ms)
+		VALUES ('rev_toctou2', '@rev/toctou-up', ?, 'CRITICAL', 1, 'revoked before reconsent approval', 9999999999999, 1000)`, shaR2)
+	if _, aerr := h3.svc.ApproveEscalatedUpgrade(ctx, upR2.Installation.InstallationID, upR2.Installation.Version, h3.opID, "", "req_toctou2"); !errors.Is(aerr, ErrRevokedExtension) {
+		t.Fatalf("expected ApproveEscalatedUpgrade blocked by ErrRevokedExtension on TOCTOU revocation, got %v", aerr)
+	}
+}
+
 // FZ-02: Native Go fuzzer verifying zero panics and zero path escapes across arbitrary archive/YAML bytes.
 func FuzzArchiveAndManifest(f *testing.F) {
 	f.Add([]byte("not-a-gzip"))
