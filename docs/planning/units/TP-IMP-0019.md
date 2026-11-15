@@ -4,8 +4,8 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0019` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-027`](../../governance/decisions.md) — `100%` of upstream `Dependencies` [`TP-IMP-0009`, `TP-IMP-0015`] = `DONE`; `GAP-01, 11` closed in `M0`)* |
-| **Size** | `M` (`internal/policy/engine/*`, `internal/ratelimit/*`, `db/migrations/sqlite/0006_policies.sql`) |
+| **Status** | **`DONE`** *(Accepted `2026-11-15` by delegated **Gemini 4 Hydrogen** under [`DEC-025`](../../governance/decisions.md) / [`DEC-031`](../../governance/decisions.md); Commit `6c313e8f`, GitHub Actions CI Run `43772630305` `completed / success`; `policy/engine` `90.5%` & `ratelimit` `93.8%` coverage; fresh `code-reviewer` [`eac61e5f`] `APPROVE` & `security-auditor` [`26305d32`] `PASS`; unlocks `TP-IMP-0020` as `READY`)* |
+| **Size** | `M` (`internal/policy/engine/*`, `internal/ratelimit/*`, `db/migrations/sqlite/0010_policies.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(`Fail-Closed` access-control gate & child-policy relaxation prevention)* |
 | **Technical Owner** | `Principal Security / Policy Engineer` |
 

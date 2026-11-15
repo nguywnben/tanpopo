@@ -4,8 +4,8 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0020` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0016`, `TP-IMP-0019` — `GAP-01, 08`)* |
-| **Size** | `L` (`internal/routing/resolver/*`, `internal/routing/breaker/*`, `db/migrations/sqlite/0007_routes.sql`) |
+| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-031`](../../governance/decisions.md) — `100%` of upstream `Dependencies` [`TP-IMP-0016`, `TP-IMP-0019`] = `DONE`; `GAP-01, 08` closed in `M0`; final unit in `DEC-025` batch)* |
+| **Size** | `L` (`internal/routing/resolver/*`, `internal/routing/breaker/*`, `internal/routing/failover/*`, `db/migrations/sqlite/0011_routes.sql` [`0007` spec slot occupied cleanly by earlier migrations `0007`..`0010`]) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Prevents cross-border data-residency failover leaks & governs circuit-breaker state transitions)* |
 | **Technical Owner** | `Staff Distributed Systems / Routing Engineer` |
 
