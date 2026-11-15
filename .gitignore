@@ -21,6 +21,8 @@ coverage/
 
 # Production & Build outputs
 dist/
+!sdk/templates/tier2-wasm/dist/
+!sdk/templates/tier2-wasm/dist/adapter.wasm
 build/
 out/
 
