@@ -2023,3 +2023,51 @@ permissions:
 	}
 }
 
+func TestAllowedNativePathsAndHeadersValidation(t *testing.T) {
+	base := `apiVersion: tanpopo.dev/extension/v1alpha1
+kind: ExtensionManifest
+metadata:
+  id: "@acme/native-cap"
+  name: "Native Cap"
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+capabilities:
+  - type: "provider_adapter"
+    adapterSlug: "native-cap"
+    supportedDialects: ["anthropic"]
+    allowedNativePaths:
+      - "^v1/messages(/count_tokens)?$"
+    allowedNativeHeaders:
+      - "anthropic-beta"
+permissions:
+  networkEgress:
+    allowedHosts: ["api.anthropic.com"]
+`
+	if _, err := ParseAndValidateManifest([]byte(base), DefaultValidationPolicy(), nil); err != nil {
+		t.Fatalf("expected valid allowedNativePaths/Headers manifest to pass, got %v", err)
+	}
+
+	for _, badPat := range []string{`[unclosed-regex`, `^v1/messages$)|(.*)|(?:x`} {
+		badRegex := strings.ReplaceAll(base, `^v1/messages(/count_tokens)?$`, badPat)
+		if _, err := ParseAndValidateManifest([]byte(badRegex), DefaultValidationPolicy(), nil); !errors.Is(err, ErrManifestInvalid) {
+			t.Fatalf("expected ErrManifestInvalid on bad/breakout allowedNativePaths regex %q, got %v", badPat, err)
+		}
+	}
+
+	cookieHdr := strings.ReplaceAll(base, `anthropic-beta`, `Cookie`)
+	if _, err := ParseAndValidateManifest([]byte(cookieHdr), DefaultValidationPolicy(), nil); !errors.Is(err, ErrProhibitedCookiePermission) {
+		t.Fatalf("expected ErrProhibitedCookiePermission on Cookie in allowedNativeHeaders, got %v", err)
+	}
+
+	for _, forbidden := range []string{"Authorization", "x-api-key", "X-Tanpopo-Env-Id", "Host", "Accept-Encoding", "Bad Header"} {
+		cand := strings.ReplaceAll(base, `anthropic-beta`, forbidden)
+		if _, err := ParseAndValidateManifest([]byte(cand), DefaultValidationPolicy(), nil); !errors.Is(err, ErrManifestInvalid) {
+			t.Fatalf("expected ErrManifestInvalid for forbidden allowedNativeHeaders %q, got %v", forbidden, err)
+		}
+	}
+}

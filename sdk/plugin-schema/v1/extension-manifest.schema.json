@@ -137,6 +137,14 @@
           "nativePassthroughPrefix": {
             "type": "string"
           },
+          "allowedNativePaths": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "allowedNativeHeaders": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
           "authMethods": {
             "type": "array",
             "items": {

@@ -41,6 +41,8 @@ type ProviderAdapterView struct {
 	NativePrefix            string
 	SupportedDialects       []string
 	AllowedHosts            []string
+	AllowedNativePaths      []string
+	AllowedNativeHeaders    []string
 	CanonicalName           string
 	ExtensionKind           string
 	ExecutionTier           string
@@ -60,6 +62,8 @@ func (a *ProviderAdapterView) clone() *ProviderAdapterView {
 	cp := *a
 	cp.SupportedDialects = append([]string(nil), a.SupportedDialects...)
 	cp.AllowedHosts = append([]string(nil), a.AllowedHosts...)
+	cp.AllowedNativePaths = append([]string(nil), a.AllowedNativePaths...)
+	cp.AllowedNativeHeaders = append([]string(nil), a.AllowedNativeHeaders...)
 	return &cp
 }
 
@@ -586,9 +590,45 @@ func loadAdaptersSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView)
 		if a.AllowedHosts, err = parseJSONStringSliceStrict(hostsJSON); err != nil {
 			return fmt.Errorf("snapshot: decode adapter %q allowed_hosts_json: %w", a.ID, err)
 		}
+		if err := populateNativeCapLists(&a); err != nil {
+			return fmt.Errorf("snapshot: decode adapter %q manifest_json: %w", a.ID, err)
+		}
 		view.adaptersByID[a.ID] = &a
 	}
 	return rows.Err()
+}
+
+func populateNativeCapLists(a *ProviderAdapterView) error {
+	trimmed := strings.TrimSpace(a.ManifestJSON)
+	if trimmed == "" || trimmed == "{}" {
+		return nil
+	}
+	var doc struct {
+		Capabilities []struct {
+			Type                 string   `json:"type"`
+			AllowedNativePaths   []string `json:"allowedNativePaths"`
+			AllowedNativeHeaders []string `json:"allowedNativeHeaders"`
+		} `json:"capabilities"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &doc); err != nil {
+		return err
+	}
+	for _, c := range doc.Capabilities {
+		if !strings.EqualFold(strings.TrimSpace(c.Type), "provider_adapter") {
+			continue
+		}
+		for _, p := range c.AllowedNativePaths {
+			if tp := strings.TrimSpace(p); tp != "" {
+				a.AllowedNativePaths = append(a.AllowedNativePaths, tp)
+			}
+		}
+		for _, h := range c.AllowedNativeHeaders {
+			if th := strings.TrimSpace(h); th != "" {
+				a.AllowedNativeHeaders = append(a.AllowedNativeHeaders, th)
+			}
+		}
+	}
+	return nil
 }
 
 func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView, keyring trust.TrustedKeyring) error {

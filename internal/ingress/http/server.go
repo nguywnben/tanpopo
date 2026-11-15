@@ -51,6 +51,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
 	"github.com/nguywnben/tanpopo/internal/ingress/blob"
 	"github.com/nguywnben/tanpopo/internal/ingress/idempotency"
+	"github.com/nguywnben/tanpopo/internal/ingress/native"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
@@ -85,10 +86,12 @@ type ServerConfig struct {
 	SSEHeartbeatInterval    time.Duration
 	IdempotencyDB           *sql.DB
 	IdempotencyTTL          time.Duration
-	RemoteMediaPolicy       blob.RemoteMediaPolicy
-	DisableResponses        bool
-	DisableEmbeddings       bool
-	DisableModels           bool
+	RemoteMediaPolicy        blob.RemoteMediaPolicy
+	DisableResponses         bool
+	DisableEmbeddings        bool
+	DisableModels            bool
+	DisableNativePassthrough bool
+	NativeUsageObserver      func(native.UsageRecord)
 }
 
 type runtimeCacheKey struct {
@@ -138,7 +141,7 @@ func (e *cachedAdapterEntry) release() {
 	}
 }
 
-// Server serves Data Plane HTTP inference routes (/v1/chat/completions, /v1/responses, /v1/embeddings, /v1/models).
+// Server serves Data Plane HTTP inference routes (/v1/chat/completions, /v1/responses, /v1/embeddings, /v1/models, /native/*).
 type Server struct {
 	snapshots         *snapshot.Manager
 	broker            *broker.BlindHostCredentialBroker
@@ -152,6 +155,7 @@ type Server struct {
 	heartbeatInterval time.Duration
 	idempotency       *idempotency.Guard
 	remoteMediaPolicy blob.RemoteMediaPolicy
+	nativeHandler     *native.Handler
 
 	wasmCache wazero.CompilationCache
 
@@ -240,6 +244,31 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		mux:               http.NewServeMux(),
 	}
 
+	if !cfg.DisableNativePassthrough {
+		nh, nhErr := native.NewHandler(native.Config{
+			Snapshots:           s.snapshots,
+			Broker:              s.broker,
+			Audit:               s.audit,
+			Idempotency:         s.idempotency,
+			MaxRequestBodyBytes: s.maxReqBodyBytes,
+			FirstByteTimeout:    s.firstByteTimeout,
+			HeartbeatInterval:   s.heartbeatInterval,
+			NowMs:               s.nowMs,
+			OnUsage:             cfg.NativeUsageObserver,
+			AcquireRuntime: func(ctx context.Context, target *snapshot.ResolvedTarget) (port.ProviderRuntime, func(), error) {
+				entry, err := s.getOrLoadAdapterRuntime(ctx, target)
+				if err != nil {
+					return nil, nil, err
+				}
+				return entry.rt, entry.release, nil
+			},
+		})
+		if nhErr != nil {
+			return nil, nhErr
+		}
+		s.nativeHandler = nh
+	}
+
 	s.mux.HandleFunc("/v1/chat/completions", s.handleChatCompletions)
 	if !cfg.DisableResponses {
 		s.mux.HandleFunc("/v1/responses", s.handleResponses)
@@ -305,6 +334,27 @@ type ingressContext struct {
 	Traceparent string
 }
 
+func isNativeRequestPath(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	for _, p := range []string{r.URL.EscapedPath(), r.URL.Path} {
+		if p == "/native" || strings.HasPrefix(p, "/native/") {
+			return true
+		}
+	}
+	if r.RequestURI != "" {
+		rawPath := r.RequestURI
+		if q := strings.IndexByte(rawPath, '?'); q >= 0 {
+			rawPath = rawPath[:q]
+		}
+		if rawPath == "/native" || strings.HasPrefix(rawPath, "/native/") {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqID := sanitizeOrMintRequestID(r.Header.Get("X-Tanpopo-Request-Id"))
@@ -323,7 +373,16 @@ func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 			RequestID:   reqID,
 			Traceparent: tp,
 		})
-		next.ServeHTTP(w, r.WithContext(ctx))
+		rCtx := r.WithContext(ctx)
+		if isNativeRequestPath(rCtx) {
+			if s.nativeHandler == nil {
+				s.handleNotFound(w, rCtx)
+				return
+			}
+			s.nativeHandler.ServeHTTP(w, rCtx)
+			return
+		}
+		next.ServeHTTP(w, rCtx)
 	})
 }
 

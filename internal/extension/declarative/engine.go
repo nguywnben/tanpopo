@@ -61,6 +61,7 @@ type Engine struct {
 	drops                       []parsedPath
 	injectStreamUsage           bool
 	forceStreamUsage            bool
+	canonicalOpenAI             bool
 
 	respModelPath        parsedPath
 	respFinishReasonPath parsedPath
@@ -118,6 +119,7 @@ func CompileSpec(spec Spec) (*Engine, error) {
 		retryableStatuses:           make(map[int32]struct{}),
 		injectStreamUsage:           spec.RequestMapping.InjectStreamUsage,
 		forceStreamUsage:            spec.canonicalOpenAI,
+		canonicalOpenAI:             spec.canonicalOpenAI,
 		probeDefaultOpenAIPath:      spec.canonicalOpenAI && strings.TrimSpace(spec.ValidationProbe.PathTemplate) == "",
 		reqDefaultOpenAIPath:        spec.canonicalOpenAI && strings.TrimSpace(spec.RequestMapping.PathTemplate) == "",
 		responsesDefaultOpenAIPath:  spec.canonicalOpenAI && strings.TrimSpace(spec.RequestMapping.ResponsesPathTemplate) == "",
@@ -1602,36 +1604,49 @@ func (e *Engine) ExtractUsage(ctx context.Context, in port.ExtractUsageInput) (p
 		return port.NormalizedUsage{}, err
 	}
 	rawTrimmed := bytes.TrimSpace(in.RawResponseOrTrailerBytes)
-	isSSE := bytes.HasPrefix(rawTrimmed, []byte("data:"))
-	trimmed := bytes.TrimSpace(bytes.TrimPrefix(rawTrimmed, []byte("data:")))
-
-	if len(trimmed) > 0 && !bytes.Equal(trimmed, []byte(e.streamDoneSentinel)) {
-		m, err := decodeBoundedJSONMap(trimmed)
-		if err != nil && errors.Is(err, ErrJSONDepthExceeded) {
+	isSSE := bytes.HasPrefix(rawTrimmed, []byte("data:")) ||
+		bytes.HasPrefix(rawTrimmed, []byte("event:")) ||
+		bytes.HasPrefix(rawTrimmed, []byte(":")) ||
+		bytes.HasPrefix(rawTrimmed, []byte("id:")) ||
+		bytes.HasPrefix(rawTrimmed, []byte("retry:"))
+	if isSSE {
+		var merged port.NormalizedUsage
+		remaining := rawTrimmed
+		for len(remaining) > 0 {
+			var line []byte
+			if nl := bytes.IndexByte(remaining, '\n'); nl >= 0 {
+				line = remaining[:nl]
+				remaining = remaining[nl+1:]
+			} else {
+				line = remaining
+				remaining = nil
+			}
+			tl := bytes.TrimSpace(line)
+			if !bytes.HasPrefix(tl, []byte("data:")) {
+				continue
+			}
+			payload := bytes.TrimSpace(bytes.TrimPrefix(tl, []byte("data:")))
+			if len(payload) == 0 || bytes.Equal(payload, []byte(e.streamDoneSentinel)) {
+				continue
+			}
+			frameUsage, err := e.extractSinglePayloadUsage(payload, true)
+			if err != nil {
+				return port.NormalizedUsage{}, err
+			}
+			if frameUsage != nil && frameUsage.Accuracy == port.UsageAccuracyExact {
+				mergeExactUsage(&merged, *frameUsage)
+			}
+		}
+		if merged.Accuracy == port.UsageAccuracyExact {
+			return merged, nil
+		}
+	} else if len(rawTrimmed) > 0 && !bytes.Equal(rawTrimmed, []byte(e.streamDoneSentinel)) {
+		singleUsage, err := e.extractSinglePayloadUsage(rawTrimmed, false)
+		if err != nil {
 			return port.NormalizedUsage{}, err
 		}
-		if err == nil {
-			budget := newStepBudget()
-			paths := e.respUsagePaths
-			if isSSE {
-				paths = e.streamUsagePaths
-			}
-			usage, uerr := extractUsageFromMap(m, paths, budget)
-			if uerr != nil {
-				return port.NormalizedUsage{}, uerr
-			}
-			if usage != nil && usage.Accuracy == port.UsageAccuracyExact {
-				return *usage, nil
-			}
-			if isSSE {
-				fallbackUsage, ferr := extractUsageFromMap(m, e.respUsagePaths, budget)
-				if ferr != nil {
-					return port.NormalizedUsage{}, ferr
-				}
-				if fallbackUsage != nil && fallbackUsage.Accuracy == port.UsageAccuracyExact {
-					return *fallbackUsage, nil
-				}
-			}
+		if singleUsage != nil && singleUsage.Accuracy == port.UsageAccuracyExact {
+			return *singleUsage, nil
 		}
 	}
 
@@ -1648,6 +1663,66 @@ func (e *Engine) ExtractUsage(ctx context.Context, in port.ExtractUsageInput) (p
 	return port.NormalizedUsage{
 		Accuracy: port.UsageAccuracyUnmeteredFlagged,
 	}, nil
+}
+
+func (e *Engine) extractSinglePayloadUsage(payload []byte, isSSE bool) (*port.NormalizedUsage, error) {
+	m, err := decodeBoundedJSONMap(payload)
+	if err != nil {
+		if errors.Is(err, ErrJSONDepthExceeded) {
+			return nil, err
+		}
+		return nil, nil
+	}
+	budget := newStepBudget()
+	paths := e.respUsagePaths
+	if isSSE {
+		paths = e.streamUsagePaths
+	}
+	usage, uerr := extractUsageFromMap(m, paths, budget)
+	if uerr != nil {
+		return nil, uerr
+	}
+	if usage != nil && usage.Accuracy == port.UsageAccuracyExact {
+		return usage, nil
+	}
+	if isSSE {
+		fallbackUsage, ferr := extractUsageFromMap(m, e.respUsagePaths, budget)
+		if ferr != nil {
+			return nil, ferr
+		}
+		if fallbackUsage != nil && fallbackUsage.Accuracy == port.UsageAccuracyExact {
+			return fallbackUsage, nil
+		}
+	}
+	if e.canonicalOpenAI {
+		targetMap := m
+		if nestedResp, ok := m["response"].(map[string]any); ok {
+			targetMap = nestedResp
+		}
+		if rUsage, rerr := extractResponsesUsageFromMap(targetMap, paths, budget); rerr == nil && rUsage != nil && rUsage.Accuracy == port.UsageAccuracyExact {
+			return rUsage, nil
+		}
+	}
+	return nil, nil
+}
+
+func mergeExactUsage(dst *port.NormalizedUsage, src port.NormalizedUsage) {
+	dst.Accuracy = port.UsageAccuracyExact
+	if src.InputTokens > 0 {
+		dst.InputTokens = src.InputTokens
+	}
+	if src.OutputTokens > 0 {
+		dst.OutputTokens = src.OutputTokens
+	}
+	if src.CacheReadTokens > 0 {
+		dst.CacheReadTokens = src.CacheReadTokens
+	}
+	if src.CacheWriteTokens > 0 {
+		dst.CacheWriteTokens = src.CacheWriteTokens
+	}
+	if src.ReasoningTokens > 0 {
+		dst.ReasoningTokens = src.ReasoningTokens
+	}
 }
 
 // InspectNativeRequest implements port.ProviderRuntime /native/* hint extraction.
@@ -1680,10 +1755,16 @@ func (e *Engine) InspectNativeRequest(ctx context.Context, in port.NativeRequest
 		}
 	}
 
-	// Fallback: check /models/{model} segment in UpstreamPath when JSON omitted model.
+	// Fallback: check /models/{model} or leading models/{model} segment in UpstreamPath when JSON omitted model.
 	if hints.TargetModel == "" && in.UpstreamPath != "" {
-		if idx := strings.Index(in.UpstreamPath, "/models/"); idx >= 0 {
-			rest := in.UpstreamPath[idx+len("/models/"):]
+		up := strings.TrimPrefix(in.UpstreamPath, "/")
+		var rest string
+		if strings.HasPrefix(up, "models/") {
+			rest = strings.TrimPrefix(up, "models/")
+		} else if idx := strings.Index(up, "/models/"); idx >= 0 {
+			rest = up[idx+len("/models/"):]
+		}
+		if rest != "" {
 			if colon := strings.IndexAny(rest, ":/?"); colon >= 0 {
 				rest = rest[:colon]
 			}

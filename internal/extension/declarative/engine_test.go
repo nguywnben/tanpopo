@@ -941,3 +941,55 @@ func TestDeclarativeResponsesAndEmbeddingsModalitiesAndSSE(t *testing.T) {
 	}
 }
 
+func TestEngineExtractUsageMultiFrameSSEAndLeadingModelsPath(t *testing.T) {
+	ctx := context.Background()
+	eng, err := CompileSpec(Spec{
+		ID:   "@acme/multi-sse",
+		Slug: "multi-sse",
+		StreamMapping: StreamMappingSpec{
+			DoneSentinel: "[DONE]",
+			UsagePaths: UsagePathSpec{
+				InputTokens:  "usage.prompt_tokens",
+				OutputTokens: "usage.completion_tokens",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CompileSpec failed: %v", err)
+	}
+
+	multiSSE := []byte("event: content.delta\ndata: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: {\"usage\":{\"prompt_tokens\":19,\"completion_tokens\":7}}\n\ndata: [DONE]\n\n")
+	usage, err := eng.ExtractUsage(ctx, port.ExtractUsageInput{
+		RequestID:                 "req_multi_sse",
+		RawResponseOrTrailerBytes: multiSSE,
+	})
+	if err != nil {
+		t.Fatalf("ExtractUsage failed: %v", err)
+	}
+	if usage.Accuracy != port.UsageAccuracyExact || usage.InputTokens != 19 || usage.OutputTokens != 7 {
+		t.Fatalf("expected exact multi-frame SSE usage 19/7, got %+v", usage)
+	}
+
+	commentSSE := []byte(": keepalive ping\n\ndata: {\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":4}}\n\ndata: [DONE]\n\n")
+	commentUsage, err := eng.ExtractUsage(ctx, port.ExtractUsageInput{
+		RequestID:                 "req_comment_sse",
+		RawResponseOrTrailerBytes: commentSSE,
+	})
+	if err != nil {
+		t.Fatalf("ExtractUsage comment SSE failed: %v", err)
+	}
+	if commentUsage.Accuracy != port.UsageAccuracyExact || commentUsage.InputTokens != 8 || commentUsage.OutputTokens != 4 {
+		t.Fatalf("expected exact SSE usage 8/4 after comment line, got %+v", commentUsage)
+	}
+
+	hints, err := eng.InspectNativeRequest(ctx, port.NativeRequestInput{
+		RequestID:    "req_leading_models",
+		UpstreamPath: "models/gemini-2.5-flash:generateContent",
+	})
+	if err != nil {
+		t.Fatalf("InspectNativeRequest failed: %v", err)
+	}
+	if hints.TargetModel != "gemini-2.5-flash" {
+		t.Fatalf("expected TargetModel gemini-2.5-flash from leading models/ path, got %q", hints.TargetModel)
+	}
+}

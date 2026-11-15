@@ -472,6 +472,20 @@ func validateManifestAgainstEmbeddedSchema(doc map[string]any) error {
 			if !ok {
 				return validationErr(fmt.Sprintf("JSON schema violation: capabilities[%d] must be an object", i), nil)
 			}
+			for _, listField := range []string{"allowedNativePaths", "allowedNativeHeaders"} {
+				if rawList, hasList := cMap[listField]; hasList {
+					items, ok := rawList.([]any)
+					if !ok {
+						return validationErr(fmt.Sprintf("JSON schema violation: capabilities[%d].%s must be an array", i, listField), nil)
+					}
+					for j, item := range items {
+						s, ok := item.(string)
+						if !ok || strings.TrimSpace(s) == "" {
+							return validationErr(fmt.Sprintf("JSON schema violation: capabilities[%d].%s[%d] must be a non-empty string", i, listField, j), nil)
+						}
+					}
+				}
+			}
 			if amRaw, hasAM := cMap["authMethods"]; hasAM {
 				ams, ok := amRaw.([]any)
 				if !ok {

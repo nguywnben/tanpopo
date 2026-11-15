@@ -135,6 +135,8 @@ type ManifestCap struct {
 	AdapterSlug             string               `yaml:"adapterSlug,omitempty" json:"adapterSlug,omitempty"`
 	SupportedDialects       []string             `yaml:"supportedDialects,omitempty" json:"supportedDialects,omitempty"`
 	NativePassthroughPrefix string               `yaml:"nativePassthroughPrefix,omitempty" json:"nativePassthroughPrefix,omitempty"`
+	AllowedNativePaths      []string             `yaml:"allowedNativePaths,omitempty" json:"allowedNativePaths,omitempty"`
+	AllowedNativeHeaders    []string             `yaml:"allowedNativeHeaders,omitempty" json:"allowedNativeHeaders,omitempty"`
 	AuthMethods             []ManifestAuthMethod `yaml:"authMethods,omitempty" json:"authMethods,omitempty"`
 }
 
@@ -478,6 +480,31 @@ func ValidateManifestStruct(m ExtensionManifest, policy ValidationPolicy, archiv
 		}
 		if i == 0 {
 			extKind = mappedKind
+		}
+		for _, rawPattern := range capEntry.AllowedNativePaths {
+			pat := strings.TrimSpace(rawPattern)
+			if pat == "" || len(pat) > 256 || strings.ContainsAny(pat, "\r\n\x00") {
+				return nil, fmt.Errorf("%w: invalid allowedNativePaths pattern %q", ErrManifestInvalid, rawPattern)
+			}
+			if _, err := regexp.Compile(pat); err != nil {
+				return nil, fmt.Errorf("%w: invalid allowedNativePaths regex %q: %v", ErrManifestInvalid, rawPattern, err)
+			}
+			if _, err := regexp.Compile("^(?:" + pat + ")$"); err != nil {
+				return nil, fmt.Errorf("%w: invalid allowedNativePaths regex %q: %v", ErrManifestInvalid, rawPattern, err)
+			}
+		}
+		for _, rawHdr := range capEntry.AllowedNativeHeaders {
+			hdr := strings.TrimSpace(rawHdr)
+			if !isValidHeaderToken(hdr) {
+				return nil, fmt.Errorf("%w: invalid allowedNativeHeaders header %q", ErrManifestInvalid, rawHdr)
+			}
+			lowHdr := strings.ToLower(hdr)
+			if lowHdr == "cookie" || lowHdr == "set-cookie" {
+				return nil, fmt.Errorf("%w: allowedNativeHeaders %q forbidden by DEC-004", ErrProhibitedCookiePermission, rawHdr)
+			}
+			if isForbiddenNativeHeader(lowHdr) {
+				return nil, fmt.Errorf("%w: allowedNativeHeaders %q is a prohibited credential or hop-by-hop header", ErrManifestInvalid, rawHdr)
+			}
 		}
 		for _, auth := range capEntry.AuthMethods {
 			if strings.EqualFold(strings.TrimSpace(auth.HeaderName), "cookie") || strings.EqualFold(strings.TrimSpace(auth.HeaderName), "set-cookie") {
@@ -847,3 +874,33 @@ func matchSingleComparator(ver semverVersion, clause string) (bool, error) {
 		return compareSemver(ver, target) == 0, nil
 	}
 }
+
+func isValidHeaderToken(s string) bool {
+	if len(s) == 0 || len(s) > 128 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		isAlpha := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+		isDigit := c >= '0' && c <= '9'
+		isSym := strings.IndexByte("!#$%&'*+-.^_`|~", c) >= 0
+		if !isAlpha && !isDigit && !isSym {
+			return false
+		}
+	}
+	return true
+}
+
+func isForbiddenNativeHeader(lower string) bool {
+	switch lower {
+	case "cookie", "set-cookie", "authorization", "proxy-authorization",
+		"x-api-key", "x-goog-api-key", "x-tanpopo-virtual-key",
+		"host", "connection", "content-length", "transfer-encoding",
+		"te", "trailer", "upgrade", "keep-alive", "proxy-connection", "accept-encoding",
+		"x-tanpopo-request-id", "traceparent", "x-tanpopo-env-id", "idempotency-key":
+		return true
+	default:
+		return strings.HasPrefix(lower, "x-tanpopo-")
+	}
+}
+
