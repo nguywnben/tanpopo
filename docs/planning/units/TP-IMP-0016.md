@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0016` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-03` |
-| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-027`](../../governance/decisions.md) — `100%` of upstream `Dependencies` [`TP-IMP-0015`] = `DONE`; `GAP-01, 03` closed in `M0`)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-15` by **Gemini 4 Hydrogen** under [`DEC-025`](../../governance/decisions.md) / [`DEC-028`](../../governance/decisions.md) — commit `f14989b0`, CI Run `43752413362` `completed/success`, `code-reviewer` [`51145b49`] `APPROVE` & `security-auditor` [`8dfc27cb`] `PASS`)* |
 | **Size** | `L` (`internal/ingress/http/responses.go`, `embeddings.go`, `models.go`, `internal/ingress/idempotency/*`, `internal/ingress/blob/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Handles `<= 32 MiB` multimodal attachments defending against SSRF/OOM & `Org/Project`-isolated idempotency keys)* |
 | **Technical Owner** | `Staff Gateway / Protocol Engineer` |
