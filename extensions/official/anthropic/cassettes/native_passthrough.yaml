@@ -1,0 +1,29 @@
+case_id: "anthropic_native_passthrough"
+description: "Verifies /native/anthropic/v1/messages extracts model and exact cache usage with blind x-api-key injection."
+capability: "native_passthrough"
+config:
+  endpoint_base_url: "https://api.anthropic.com"
+  dialect: "anthropic_messages"
+  upstream_path: "v1/messages"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "claude-sonnet-4-5"
+  max_tokens: 64
+  messages:
+    - role: "user"
+      content: "hello"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  expected_upstream_headers:
+    x-api-key: "__CANARY_SECRET__"
+  raw_body: '{"id":"msg_nat_1","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[{"type":"text","text":"Native Claude reply."}],"stop_reason":"end_turn","usage":{"input_tokens":14,"output_tokens":5,"cache_read_input_tokens":8}}'
+expected_normalized_output:
+  model: "claude-sonnet-4-5"
+  content_contains: "Native Claude reply"
+  require_usage: true
+  input_tokens: 14
+  output_tokens: 5
+  cache_read_tokens: 8

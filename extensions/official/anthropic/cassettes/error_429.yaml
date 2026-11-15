@@ -1,0 +1,23 @@
+case_id: "anthropic_error_429"
+description: "Verifies Anthropic 429 maps to retryable rate_limit_exceeded."
+capability: "error_normalization"
+config:
+  endpoint_base_url: "https://api.anthropic.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "claude-sonnet-4-5"
+  messages:
+    - role: "user"
+      content: "hi"
+upstream_recorded_exchange:
+  status: 429
+  headers:
+    content-type: "application/json"
+    retry-after: "3"
+  raw_body: '{"type":"error","error":{"type":"rate_limit_error","message":"Rate limit exceeded."}}'
+expected_canonical_error:
+  canonical_code: "rate_limit_exceeded"
+  error_type: "rate_limit_error"
+  retryable_pre_stream: true
+  trigger_reauth: false

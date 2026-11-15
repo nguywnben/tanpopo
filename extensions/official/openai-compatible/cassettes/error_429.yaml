@@ -1,0 +1,23 @@
+case_id: "oai_compat_error_429"
+description: "Verifies 429 rate-limit normalization enables pre-stream failover."
+capability: "error_normalization"
+config:
+  endpoint_base_url: "http://tgi.internal:8080"
+secret_slots: {}
+normalized_input:
+  model: "mistralai/Mistral-Large"
+  stream: false
+  messages:
+    - role: "user"
+      content: "ping"
+upstream_recorded_exchange:
+  status: 429
+  headers:
+    content-type: "application/json"
+    retry-after: "4"
+  raw_body: '{"error":{"message":"vLLM queue depth saturated","code":"rate_limit_exceeded"}}'
+expected_canonical_error:
+  canonical_code: "upstream_rate_limited"
+  error_type: "rate_limit_error"
+  retryable_pre_stream: true
+  trigger_reauth: false

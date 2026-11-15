@@ -405,7 +405,7 @@ func resolveCassetteSecrets(rawSlots map[string]string) (resolved map[string]str
 		slotRefs[slot] = "slot_ref:" + slot
 		secValues = append(secValues, actual)
 	}
-	if len(resolved) == 0 {
+	if rawSlots == nil {
 		slotRefs["api_key"] = "slot_ref:api_key"
 		resolved["api_key"] = defaultHarnessCanary()
 		secValues = append(secValues, resolved["api_key"])
@@ -433,6 +433,10 @@ func runCassetteCase(
 	reqBytes, err := json.Marshal(cas.NormalizedInput)
 	if err != nil {
 		return validationErr("marshal normalized_input", err)
+	}
+
+	if cas.Capability == "native_passthrough" {
+		return runNativePassthroughCassette(ctx, vm, rt, client, cas, resolvedSecrets, reqBytes, scanner)
 	}
 
 	// Step 1: Adapter builds UpstreamHttpSpec WITHOUT receiving any plaintext secret!
@@ -543,6 +547,139 @@ func runCassetteCase(
 		return contractErr(fmt.Sprintf("%s: TransformResponse failed", cas.CaseID), err)
 	}
 	return assertSyncOutput(cas, normResp, scanner)
+}
+
+func runNativePassthroughCassette(
+	ctx context.Context,
+	vm *installer.ValidatedManifest,
+	rt port.ProviderRuntime,
+	client *http.Client,
+	cas Cassette,
+	resolvedSecrets map[string]string,
+	reqBytes []byte,
+	scanner *SecretLeakScanner,
+) error {
+	strCfg := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := cas.Config[k].(string); ok && strings.TrimSpace(v) != "" {
+				return strings.TrimSpace(v)
+			}
+		}
+		return ""
+	}
+	dialect := strCfg("dialect")
+	if dialect == "" && len(vm.Manifest.Capabilities) > 0 && len(vm.Manifest.Capabilities[0].SupportedDialects) > 0 {
+		dialect = vm.Manifest.Capabilities[0].SupportedDialects[0]
+	}
+	upstreamPath := strCfg("upstream_path", "path")
+	if upstreamPath == "" {
+		return validationErr(fmt.Sprintf("%s: native_passthrough cassette requires config.upstream_path", cas.CaseID), nil)
+	}
+	baseURL := strCfg("endpoint_base_url", "base_url")
+	if baseURL == "" && len(vm.Manifest.Permissions.NetworkEgress.AllowedHosts) > 0 {
+		scheme := "http"
+		if vm.Manifest.Permissions.NetworkEgress.RequireTLS {
+			scheme = "https"
+		}
+		baseURL = scheme + "://" + vm.Manifest.Permissions.NetworkEgress.AllowedHosts[0]
+	}
+	targetURL := strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(upstreamPath, "/")
+
+	hints, err := rt.InspectNativeRequest(ctx, port.NativeRequestInput{
+		RequestID:      "test_" + cas.CaseID,
+		Dialect:        dialect,
+		UpstreamPath:   upstreamPath,
+		RawRequestBody: reqBytes,
+	})
+	if err != nil {
+		if leakErr := scanner.Check("InspectNativeRequest err", err.Error()); leakErr != nil {
+			return leakErr
+		}
+		return contractErr(fmt.Sprintf("%s: InspectNativeRequest failed", cas.CaseID), err)
+	}
+	if err := scanner.Check("NativeRoutingHints.TargetModel", hints.TargetModel); err != nil {
+		return err
+	}
+	var nativeInjections []port.CredentialInjectInstruction
+	if len(resolvedSecrets) > 0 {
+		nativeInjections = hints.CredentialInjections
+	}
+	spec := port.UpstreamHttpSpec{
+		Method:               http.MethodPost,
+		TargetURL:            targetURL,
+		SafeHeaders:          map[string]string{"Content-Type": "application/json", "Accept": "application/json"},
+		BodyBytes:            reqBytes,
+		CredentialInjections: nativeInjections,
+	}
+	if err := checkSpecSecurity(vm, spec, scanner); err != nil {
+		return err
+	}
+	if cas.ExpectedNormalizedOutput != nil && cas.ExpectedNormalizedOutput.Model != "" && hints.TargetModel != cas.ExpectedNormalizedOutput.Model {
+		return contractErr(fmt.Sprintf("%s: expected native target_model %q, got %q", cas.CaseID, cas.ExpectedNormalizedOutput.Model, hints.TargetModel), nil)
+	}
+
+	mockAddr, headerMismatchCh, shutdownMock, err := startCassetteMockServer(cas)
+	if err != nil {
+		return err
+	}
+	defer shutdownMock()
+
+	httpResp, err := executeHermeticEgress(ctx, client, mockAddr, spec, resolvedSecrets)
+	if err != nil {
+		return contractErr(fmt.Sprintf("%s: native hermetic mock request failed", cas.CaseID), err)
+	}
+	defer func() { _ = httpResp.Body.Close() }()
+
+	select {
+	case hdrErr := <-headerMismatchCh:
+		if hdrErr != nil {
+			return contractErr(cas.CaseID, hdrErr)
+		}
+	default:
+	}
+
+	rawBody, err := io.ReadAll(io.LimitReader(httpResp.Body, 4<<20))
+	if err != nil {
+		return contractErr(fmt.Sprintf("%s: read native mock response", cas.CaseID), err)
+	}
+
+	if httpResp.StatusCode >= http.StatusBadRequest || cas.ExpectedCanonicalError != nil {
+		sanitizedHeaders := make(map[string]string, len(httpResp.Header))
+		for k, vals := range httpResp.Header {
+			if strings.EqualFold(k, "set-cookie") || strings.EqualFold(k, "authorization") {
+				continue
+			}
+			if len(vals) > 0 {
+				sanitizedHeaders[k] = vals[0]
+			}
+		}
+		ce, nerr := rt.NormalizeError(ctx, port.NormalizeErrorInput{
+			RequestID:        "test_" + cas.CaseID,
+			HTTPStatus:       int32(httpResp.StatusCode),
+			SanitizedHeaders: sanitizedHeaders,
+			SanitizedBody:    rawBody,
+		})
+		if nerr != nil {
+			return contractErr(fmt.Sprintf("%s: NormalizeError failed", cas.CaseID), nerr)
+		}
+		return assertCanonicalError(cas, ce, scanner)
+	}
+
+	usage, err := rt.ExtractUsage(ctx, port.ExtractUsageInput{
+		RequestID:                 "test_" + cas.CaseID,
+		Modality:                  "native",
+		RawResponseOrTrailerBytes: rawBody,
+	})
+	if err != nil {
+		return contractErr(fmt.Sprintf("%s: ExtractUsage failed", cas.CaseID), err)
+	}
+	if cas.ExpectedNormalizedOutput != nil {
+		if cas.ExpectedNormalizedOutput.ContentContains != "" && !strings.Contains(string(rawBody), cas.ExpectedNormalizedOutput.ContentContains) {
+			return contractErr(fmt.Sprintf("%s: expected native body to contain %q", cas.CaseID, cas.ExpectedNormalizedOutput.ContentContains), nil)
+		}
+		return assertUsage(cas.CaseID, cas.ExpectedNormalizedOutput, &usage)
+	}
+	return nil
 }
 
 func checkSpecSecurity(vm *installer.ValidatedManifest, spec port.UpstreamHttpSpec, scanner *SecretLeakScanner) error {
@@ -964,6 +1101,15 @@ func extractUsageStruct(raw any) (*port.NormalizedUsage, bool) {
 	}
 	if v, ok := m["completion_tokens"].(float64); ok && u.OutputTokens == 0 {
 		u.OutputTokens = int64(v)
+	}
+	if v, ok := m["cache_read_tokens"].(float64); ok {
+		u.CacheReadTokens = int64(v)
+	}
+	if v, ok := m["cache_write_tokens"].(float64); ok {
+		u.CacheWriteTokens = int64(v)
+	}
+	if v, ok := m["reasoning_tokens"].(float64); ok {
+		u.ReasoningTokens = int64(v)
 	}
 	return u, true
 }

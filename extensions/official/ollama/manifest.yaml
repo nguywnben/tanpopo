@@ -1,0 +1,95 @@
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+
+metadata:
+  id: "@tanpopo/ollama"
+  name: "Ollama Local & Self-Hosted Adapter"
+  version: "0.1.0"
+  license: "Apache-2.0"
+  originTrustTier: "official"
+  description: "Official Tanpopo Tier-1 declarative adapter for Ollama (defaulting to SELF_HOSTED_INFRA billing mode and NONE | BEARER auth across loopback/LAN egress)."
+
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0 <0.3.0"
+
+runtime:
+  tier: "declarative"
+
+capabilities:
+  - type: "provider_adapter"
+    adapterSlug: "ollama"
+    supportedDialects:
+      - "openai_chat"
+      - "ollama"
+    nativePassthroughPrefix: "/native/ollama"
+    allowedNativePaths:
+      - "^v1/chat/completions$"
+      - "^v1/embeddings$"
+      - "^v1/models$"
+      - "^api/chat$"
+      - "^api/generate$"
+      - "^api/tags$"
+    authMethods:
+      - id: "none"
+        mode: "none"
+      - id: "bearer_api_key"
+        mode: "host_blind_inject"
+        headerName: "Authorization"
+
+secretSlots:
+  - slot: "api_key"
+    requiredForAuthMethods:
+      - "bearer_api_key"
+
+permissions:
+  networkEgress:
+    allowedHosts:
+      - "localhost"
+      - "127.0.0.1"
+      - "ollama.internal"
+    allowPrivateIp: true
+    requireTls: false
+  hooks:
+    - "provider:build_validation_probe"
+    - "provider:verify_validation_result"
+    - "provider:transform_request"
+    - "provider:transform_response"
+    - "provider:transform_stream_chunk"
+    - "provider:normalize_error"
+    - "provider:extract_usage"
+    - "provider:inspect_native_request"
+
+adapter:
+  slug: "ollama"
+  nativePrefix: "/native/ollama"
+  wireProtocol: "openai_chat_v1"
+  baseUrl: "http://localhost:11434"
+  supportedDialects:
+    - "openai_chat"
+    - "ollama"
+  endpoints:
+    chat: "/v1/chat/completions"
+    embeddings: "/v1/embeddings"
+    models: "/v1/models"
+  auth:
+    - id: "bearer_api_key"
+      secretSlot: "api_key"
+      mode: "host_blind_inject"
+      headerName: "Authorization"
+      valuePrefix: "Bearer "
+  usageExtraction:
+    inputTokensPath: "$.usage.prompt_tokens"
+    outputTokensPath: "$.usage.completion_tokens"
+  errorMapping:
+    reauthStatuses:
+      - 401
+      - 403
+    retryableStatuses:
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+    messagePath: "error.message"
+    codePath: "error.code"

@@ -1,0 +1,65 @@
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: ExtensionManifest
+
+metadata:
+  id: "@tanpopo/gemini"
+  name: "Google Gemini Official Adapter"
+  version: "0.1.0"
+  license: "Apache-2.0"
+  originTrustTier: "official"
+  description: "Official Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Google Gemini API (contents, systemInstruction, functionDeclarations/functionCall, streamGenerateContent?alt=sse, blind x-goog-api-key header injection without ?key= query params, and /native/gemini/*)."
+
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0 <0.3.0"
+
+runtime:
+  tier: "sandboxed_wasm"
+  entrypoint: "dist/adapter.wasm"
+  sha256: "ae8ed71b5ab3ed5f0312aa7c43dc4f7164b2da5e4069e25c9587190daf39cdcb"
+  quotas:
+    maxMemoryMib: 16
+    maxCpuMsPerCall: 50
+    maxStreamChunkCpuMs: 50
+
+capabilities:
+  - type: "provider_adapter"
+    adapterSlug: "gemini"
+    supportedDialects:
+      - "gemini_generate_content"
+      - "gemini"
+      - "openai_chat"
+    nativePassthroughPrefix: "/native/gemini"
+    allowedNativePaths:
+      - "^v1beta/models/[^/]+:(generateContent|streamGenerateContent|countTokens|embedContent)$"
+      - "^v1beta/models$"
+    authMethods:
+      - id: "x_goog_api_key"
+        mode: "host_blind_inject"
+        headerName: "x-goog-api-key"
+
+secretSlots:
+  - slot: "api_key"
+    requiredForAuthMethods:
+      - "x_goog_api_key"
+
+permissions:
+  networkEgress:
+    allowedHosts:
+      - "generativelanguage.googleapis.com"
+    allowPrivateIp: false
+    requireTls: true
+  hooks:
+    - "provider:build_validation_probe"
+    - "provider:verify_validation_result"
+    - "provider:transform_request"
+    - "provider:transform_response"
+    - "provider:transform_stream_chunk"
+    - "provider:normalize_error"
+    - "provider:extract_usage"
+    - "provider:inspect_native_request"
+    - "guardrail:evaluate_guardrail"
+  payloadAccess:
+    inspectRequestBody: true
+    inspectResponseBody: true
+    maxInlineMetadataBytes: 65536

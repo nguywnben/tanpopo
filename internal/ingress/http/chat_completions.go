@@ -37,12 +37,13 @@ import (
 const MaxInlineBlobBytes = blob.MaxInlineBlobBytes
 
 type chatCompletionIngressRequest struct {
-	Model           string
-	Messages        []any
-	Stream          bool
-	ResponseFormat  *responseFormat
-	Tools           []any
-	ReasoningEffort string
+	Model                string
+	Messages             []any
+	Stream               bool
+	CallerRequestedUsage bool
+	ResponseFormat       *responseFormat
+	Tools                []any
+	ReasoningEffort      string
 }
 
 type responseFormat struct {
@@ -83,6 +84,19 @@ func parseStrictChatCompletionRequest(raw []byte) (*chatCompletionIngressRequest
 			return nil, fmt.Errorf("field 'stream' must be a boolean")
 		}
 		req.Stream = b
+	}
+	if v, ok := obj["stream_options"]; ok && v != nil {
+		soMap, ok := v.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("field 'stream_options' must be an object")
+		}
+		if inc, hasInc := soMap["include_usage"]; hasInc && inc != nil {
+			b, ok := inc.(bool)
+			if !ok {
+				return nil, fmt.Errorf("field 'stream_options.include_usage' must be a boolean")
+			}
+			req.CallerRequestedUsage = b
+		}
 	}
 	if v, ok := obj["tools"]; ok && v != nil {
 		arr, ok := v.([]any)
@@ -259,7 +273,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	_ = spec
 
 	if reqEnvelope.Stream {
-		s.executeStreamingChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug)
+		s.executeStreamingChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, !reqEnvelope.CallerRequestedUsage)
 		return
 	}
 	s.executeSyncChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, idemClaim)
@@ -323,6 +337,15 @@ func (s *Server) executeSyncChatCompletion(
 		return
 	}
 
+	if s.usageObserver != nil && normResp.Usage != nil {
+		s.usageObserver(UsageRecord{
+			RequestID: reqID,
+			Route:     "/v1/chat/completions",
+			Model:     requestedModel,
+			Stream:    false,
+			Usage:     normResp.Usage,
+		})
+	}
 	writeSettledJSONResponse(w, ctx, reqID, normResp.Usage, finalBody, idemClaim)
 }
 
@@ -335,7 +358,8 @@ func (s *Server) executeStreamingChatCompletion(
 	egressReq broker.EgressRequest,
 	constraint broker.HostEgressConstraint,
 	target *snapshot.ResolvedTarget,
-	_ string,
+	requestedModel string,
+	elideUsageChunk bool,
 ) {
 	upCtx, cancelUp := context.WithCancel(streamCtx)
 	defer cancelUp()
@@ -377,7 +401,17 @@ func (s *Server) executeStreamingChatCompletion(
 		HeartbeatInterval:   s.heartbeatInterval,
 		IdleChunkTimeout:    idleChunkTimeout,
 		RequireDoneSentinel: true,
+		ElideUsageChunk:     elideUsageChunk,
 	})
+	if s.usageObserver != nil && pumpRes.Usage != nil {
+		s.usageObserver(UsageRecord{
+			RequestID: reqID,
+			Route:     "/v1/chat/completions",
+			Model:     requestedModel,
+			Stream:    true,
+			Usage:     pumpRes.Usage,
+		})
+	}
 	if pumpErr != nil && !pumpRes.StreamStarted {
 		if errors.Is(pumpErr, sse.ErrLineTooLarge) {
 			writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Upstream SSE stream exceeded maximum line byte limit.", false)

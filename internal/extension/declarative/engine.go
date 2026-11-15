@@ -1384,22 +1384,40 @@ func (e *Engine) TransformStreamChunk(ctx context.Context, in port.StreamChunkIn
 		if len(toolCalls) > 0 {
 			deltaObj["tool_calls"] = toolCalls
 		}
-		frameMap := map[string]any{
-			"object": "chat.completion.chunk",
-			"model":  modelID,
-			"choices": []map[string]any{
-				{
-					"index":         0,
-					"delta":         deltaObj,
-					"finish_reason": finishReasonOrNil(finishReason),
-				},
+		choicesSlice := []map[string]any{
+			{
+				"index":         0,
+				"delta":         deltaObj,
+				"finish_reason": finishReasonOrNil(finishReason),
 			},
+		}
+		if rawChoices, hasChoices := chunkObj["choices"].([]any); hasChoices && len(rawChoices) == 0 && delta == "" && len(toolCalls) == 0 && finishReason == "" {
+			choicesSlice = []map[string]any{}
+		}
+		frameMap := map[string]any{
+			"object":  "chat.completion.chunk",
+			"model":   modelID,
+			"choices": choicesSlice,
 		}
 		if idStr, ok := chunkObj["id"].(string); ok && idStr != "" {
 			frameMap["id"] = idStr
 		}
 		if latestUsage != nil && u != nil && u.Accuracy == port.UsageAccuracyExact {
-			frameMap["usage"] = u
+			usageMap := map[string]any{
+				"prompt_tokens":     u.InputTokens,
+				"completion_tokens": u.OutputTokens,
+				"total_tokens":      u.InputTokens + u.OutputTokens,
+			}
+			if u.CacheReadTokens > 0 {
+				usageMap["cache_read_tokens"] = u.CacheReadTokens
+			}
+			if u.CacheWriteTokens > 0 {
+				usageMap["cache_write_tokens"] = u.CacheWriteTokens
+			}
+			if u.ReasoningTokens > 0 {
+				usageMap["reasoning_tokens"] = u.ReasoningTokens
+			}
+			frameMap["usage"] = usageMap
 		}
 		encoded, err := json.Marshal(frameMap)
 		if err != nil {

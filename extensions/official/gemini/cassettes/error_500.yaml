@@ -1,0 +1,22 @@
+case_id: "gemini_error_500"
+description: "Verifies Gemini 500 maps to retryable upstream_server_error."
+capability: "error_normalization"
+config:
+  endpoint_base_url: "https://generativelanguage.googleapis.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gemini-2.5-flash"
+  messages:
+    - role: "user"
+      content: "hi"
+upstream_recorded_exchange:
+  status: 500
+  headers:
+    content-type: "application/json"
+  raw_body: '{"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}'
+expected_canonical_error:
+  canonical_code: "upstream_server_error"
+  error_type: "upstream_error"
+  retryable_pre_stream: true
+  trigger_reauth: false

@@ -1,0 +1,25 @@
+case_id: "ollama_chat_sync_no_auth"
+description: "Verifies synchronous /v1/chat/completions against local Ollama with auth_mode=NONE (zero secret slots)."
+capability: "chat_completion"
+config:
+  endpoint_base_url: "http://localhost:11434"
+  billing_mode: "SELF_HOSTED_INFRA"
+secret_slots: {}
+normalized_input:
+  model: "llama3.2"
+  stream: false
+  messages:
+    - role: "user"
+      content: "Say ready."
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  raw_body: '{"id":"chatcmpl-ollama-1","object":"chat.completion","model":"llama3.2","choices":[{"index":0,"message":{"role":"assistant","content":"Ready."},"finish_reason":"stop"}],"usage":{"prompt_tokens":11,"completion_tokens":2}}'
+expected_normalized_output:
+  model: "llama3.2"
+  finish_reason: "stop"
+  content: "Ready."
+  require_usage: true
+  input_tokens: 11
+  output_tokens: 2

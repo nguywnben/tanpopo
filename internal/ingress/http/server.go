@@ -91,7 +91,17 @@ type ServerConfig struct {
 	DisableEmbeddings        bool
 	DisableModels            bool
 	DisableNativePassthrough bool
+	UsageObserver            func(UsageRecord)
 	NativeUsageObserver      func(native.UsageRecord)
+}
+
+// UsageRecord captures normalized usage telemetry from Data Plane inference endpoints.
+type UsageRecord struct {
+	RequestID string
+	Route     string
+	Model     string
+	Stream    bool
+	Usage     *port.NormalizedUsage
 }
 
 type runtimeCacheKey struct {
@@ -155,6 +165,7 @@ type Server struct {
 	heartbeatInterval time.Duration
 	idempotency       *idempotency.Guard
 	remoteMediaPolicy blob.RemoteMediaPolicy
+	usageObserver     func(UsageRecord)
 	nativeHandler     *native.Handler
 
 	wasmCache wazero.CompilationCache
@@ -239,6 +250,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		heartbeatInterval: hbInterval,
 		idempotency:       idemGuard,
 		remoteMediaPolicy: cfg.RemoteMediaPolicy,
+		usageObserver:     cfg.UsageObserver,
 		wasmCache:         wazero.NewCompilationCache(),
 		runtimes:          make(map[runtimeCacheKey]*cachedAdapterEntry),
 		mux:               http.NewServeMux(),

@@ -1,0 +1,36 @@
+case_id: "oai_compat_tool_calls"
+description: "Verifies function tool calling across OpenAI-compatible vLLM servers."
+capability: "tool_calling"
+config:
+  endpoint_base_url: "http://vllm.internal:8000"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "Qwen/Qwen2.5-72B-Instruct"
+  stream: false
+  messages:
+    - role: "user"
+      content: "Lookup order 42"
+  tools:
+    - type: "function"
+      function:
+        name: "lookup_order"
+        parameters:
+          type: "object"
+          properties:
+            order_id:
+              type: "integer"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  raw_body: '{"id":"chatcmpl-vllm-tool","object":"chat.completion","model":"Qwen/Qwen2.5-72B-Instruct","choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_42","type":"function","function":{"name":"lookup_order","arguments":"{\"order_id\":42}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":28,"completion_tokens":12}}'
+expected_normalized_output:
+  model: "Qwen/Qwen2.5-72B-Instruct"
+  finish_reason: "tool_calls"
+  tool_calls_count: 1
+  tool_call_name: "lookup_order"
+  tool_call_arguments: '{"order_id":42}'
+  require_usage: true
+  input_tokens: 28
+  output_tokens: 12

@@ -1,0 +1,31 @@
+case_id: "openai_chat_sync"
+description: "Verifies synchronous /v1/chat/completions translation with cached and reasoning token accounting."
+capability: "chat_completion"
+config:
+  endpoint_base_url: "https://api.openai.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gpt-4o"
+  stream: false
+  messages:
+    - role: "system"
+      content: "Be concise."
+    - role: "user"
+      content: "Say hello."
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  expected_upstream_headers:
+    authorization: "Bearer __CANARY_SECRET__"
+  raw_body: '{"id":"chatcmpl-oa-sync-1","object":"chat.completion","model":"gpt-4o","choices":[{"index":0,"message":{"role":"assistant","content":"Hello!"},"finish_reason":"stop"}],"usage":{"prompt_tokens":24,"completion_tokens":8,"prompt_tokens_details":{"cached_tokens":12},"completion_tokens_details":{"reasoning_tokens":3}}}'
+expected_normalized_output:
+  model: "gpt-4o"
+  finish_reason: "stop"
+  content: "Hello!"
+  require_usage: true
+  input_tokens: 24
+  output_tokens: 8
+  cache_read_tokens: 12
+  reasoning_tokens: 3

@@ -538,6 +538,78 @@ func (noopChunkRuntime) TransformStreamChunk(_ context.Context, in port.StreamCh
 	}, nil
 }
 
+type usageOrderRuntime struct {
+	port.ProviderRuntime
+	step int
+}
+
+func (u *usageOrderRuntime) TransformStreamChunk(_ context.Context, in port.StreamChunkInput) (port.StreamChunkOutput, error) {
+	u.step++
+	switch u.step {
+	case 1:
+		return port.StreamChunkOutput{
+			NormalizedSSEFrames: [][]byte{[]byte("data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n")},
+			IncrementalUsage: &port.NormalizedUsage{
+				InputTokens: 15,
+				Accuracy:    port.UsageAccuracyExact,
+			},
+		}, nil
+	case 2:
+		return port.StreamChunkOutput{
+			NormalizedSSEFrames: [][]byte{[]byte("data: [DONE]\n\n")},
+			StreamCompleted:     true,
+			IncrementalUsage: &port.NormalizedUsage{
+				OutputTokens: 8,
+				Accuracy:     port.UsageAccuracyExact,
+			},
+		}, nil
+	default:
+		// Trailing EOF chunk with UnmeteredFlagged / Estimated must NOT downgrade Exact or overwrite counts.
+		return port.StreamChunkOutput{
+			StreamCompleted: true,
+			IncrementalUsage: &port.NormalizedUsage{
+				OutputTokens: 999,
+				Accuracy:     port.UsageAccuracyUnmeteredFlagged,
+			},
+		}, nil
+	}
+}
+
+type twoReadChunkReader struct {
+	chunks []string
+	idx    int
+}
+
+func (r *twoReadChunkReader) Read(p []byte) (int, error) {
+	if r.idx >= len(r.chunks) {
+		return 0, io.EOF
+	}
+	n := copy(p, r.chunks[r.idx])
+	r.idx++
+	return n, nil
+}
+
+func TestSSEPumpMergeUsagePreservesExactAccuracy(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t) })
+
+	rec := httptest.NewRecorder()
+	rt := &usageOrderRuntime{}
+	res, err := sse.Pump(context.Background(), sse.PumpConfig{
+		RequestID:           "req_merge_exact",
+		Upstream:            io.NopCloser(&twoReadChunkReader{chunks: []string{"chunk1\n\n", "chunk2\n\n"}}),
+		Runtime:             rt,
+		Writer:              rec,
+		HeartbeatInterval:   -1,
+		RequireDoneSentinel: true,
+	})
+	if err != nil {
+		t.Fatalf("sse.Pump failed: %v", err)
+	}
+	if res.Usage == nil || res.Usage.Accuracy != port.UsageAccuracyExact || res.Usage.InputTokens != 15 || res.Usage.OutputTokens != 8 {
+		t.Fatalf("expected Exact accuracy preserved with merged Exact token counts (in=15, out=8), got %+v", res.Usage)
+	}
+}
+
 func BenchmarkSSEPumpPerChunkOverhead(b *testing.B) {
 	chunk := []byte("data: {\"id\":\"c\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n")
 	payload := make([]byte, 0, len(chunk)*101)

@@ -1,0 +1,29 @@
+case_id: "ollama_vision_multimodal"
+description: "Verifies vision multimodal input on local Ollama LLaVA/Qwen-VL."
+capability: "chat_completion"
+config:
+  endpoint_base_url: "http://localhost:11434"
+secret_slots: {}
+normalized_input:
+  model: "llava:13b"
+  stream: false
+  messages:
+    - role: "user"
+      content:
+        - type: "text"
+          text: "What color is the pixel?"
+        - type: "image_url"
+          image_url:
+            url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  raw_body: '{"id":"chatcmpl-ollama-vis","object":"chat.completion","model":"llava:13b","choices":[{"index":0,"message":{"role":"assistant","content":"Dark gray."},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":3}}'
+expected_normalized_output:
+  model: "llava:13b"
+  finish_reason: "stop"
+  content: "Dark gray."
+  require_usage: true
+  input_tokens: 50
+  output_tokens: 3

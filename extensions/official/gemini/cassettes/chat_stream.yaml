@@ -1,0 +1,32 @@
+case_id: "gemini_chat_stream"
+description: "Verifies Gemini streamGenerateContent?alt=sse chunking across mid-UTF-8 and mid-data splits plus usage extraction."
+capability: "chat_stream"
+config:
+  endpoint_base_url: "https://generativelanguage.googleapis.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gemini-2.5-flash"
+  stream: true
+  messages:
+    - role: "user"
+      content: "Greet in English and Chinese"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "text/event-stream"
+  expected_upstream_headers:
+    x-goog-api-key: "__CANARY_SECRET__"
+  raw_sse_chunks:
+    - "base64:ZGF0YTogeyJyZXNwb25zZUlkIjoicmVzcF9nZW1fczEiLCJtb2RlbFZlcnNpb24iOiJnZW1pbmktMi41LWZsYXNoIiwiY2FuZGlkYXRlcyI6W3siY29udGVudCI6eyJyb2xlIjoibW9kZWwiLCJwYXJ0cyI6W3sidGV4dCI6IkhlbGxvIOQ="
+    - "base64:uJYifV19fV19CgpkYXRhOiB7Im1vZGVsVmVyc2lvbiI6ImdlbWluaS0yLjUtZmxhc2giLCJjYW5kaWRhdGVzIjpbeyJjb250ZW50Ijp7InJvbGUiOiJtb2RlbCIsIg=="
+    - "base64:cGFydHMiOlt7InRleHQiOiLnlYwhIn1dfSwiZmluaXNoUmVhc29uIjoiU1RPUCJ9XSwidXNhZ2VNZXRhZGF0YSI6eyJwcm9tcHRUb2tlbkNvdW50IjoxNiwiY2FuZGlkYXRlc1Rva2VuQ291bnQiOjUsImNhY2hlZENvbnRlbnRUb2tlbkNvdW50Ijo0LCJ0aG91Z2h0c1Rva2VuQ291bnQiOjJ9fQoK"
+expected_normalized_output:
+  model: "gemini-2.5-flash"
+  content: "Hello 世界!"
+  require_stream_completed: true
+  require_usage: true
+  input_tokens: 16
+  output_tokens: 5
+  cache_read_tokens: 4
+  reasoning_tokens: 2

@@ -1,0 +1,98 @@
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+
+metadata:
+  id: "@tanpopo/openai"
+  name: "OpenAI Official Adapter"
+  version: "0.1.0"
+  license: "Apache-2.0"
+  originTrustTier: "official"
+  description: "Official Tanpopo Tier-1 declarative adapter for OpenAI (/v1/chat/completions, /v1/responses, /v1/embeddings, /native/openai/*) with automatic CR-09 stream_options.include_usage injection."
+
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0 <0.3.0"
+
+runtime:
+  tier: "declarative"
+
+capabilities:
+  - type: "provider_adapter"
+    adapterSlug: "openai"
+    supportedDialects:
+      - "openai_chat"
+      - "openai_responses"
+      - "openai"
+    nativePassthroughPrefix: "/native/openai"
+    allowedNativePaths:
+      - "^v1/chat/completions$"
+      - "^v1/responses$"
+      - "^v1/embeddings$"
+      - "^v1/models$"
+    allowedNativeHeaders:
+      - "OpenAI-Beta"
+      - "OpenAI-Organization"
+      - "OpenAI-Project"
+    authMethods:
+      - id: "bearer_api_key"
+        mode: "host_blind_inject"
+        headerName: "Authorization"
+
+secretSlots:
+  - slot: "api_key"
+    requiredForAuthMethods:
+      - "bearer_api_key"
+
+permissions:
+  networkEgress:
+    allowedHosts:
+      - "api.openai.com"
+    allowPrivateIp: false
+    requireTls: true
+  hooks:
+    - "provider:build_validation_probe"
+    - "provider:verify_validation_result"
+    - "provider:transform_request"
+    - "provider:transform_response"
+    - "provider:transform_stream_chunk"
+    - "provider:normalize_error"
+    - "provider:extract_usage"
+    - "provider:inspect_native_request"
+
+adapter:
+  slug: "openai"
+  nativePrefix: "/native/openai"
+  wireProtocol: "openai_chat_v1"
+  baseUrl: "https://api.openai.com"
+  supportedDialects:
+    - "openai_chat"
+    - "openai_responses"
+    - "openai"
+  endpoints:
+    chat: "/v1/chat/completions"
+    responses: "/v1/responses"
+    embeddings: "/v1/embeddings"
+    models: "/v1/models"
+  auth:
+    - id: "bearer_api_key"
+      secretSlot: "api_key"
+      mode: "host_blind_inject"
+      headerName: "Authorization"
+      valuePrefix: "Bearer "
+  usageExtraction:
+    inputTokensPath: "$.usage.prompt_tokens"
+    outputTokensPath: "$.usage.completion_tokens"
+    cacheReadTokensPath: "$.usage.prompt_tokens_details.cached_tokens"
+    reasoningTokensPath: "$.usage.completion_tokens_details.reasoning_tokens"
+  errorMapping:
+    reauthStatuses:
+      - 401
+      - 403
+    retryableStatuses:
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+    messagePath: "error.message"
+    codePath: "error.code"

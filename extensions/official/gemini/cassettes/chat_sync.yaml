@@ -1,0 +1,30 @@
+case_id: "gemini_chat_sync"
+description: "Verifies systemInstruction translation, header-only x-goog-api-key injection (zero ?key=), and cache/reasoning usage."
+capability: "chat_completion"
+config:
+  endpoint_base_url: "https://generativelanguage.googleapis.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gemini-2.5-flash"
+  messages:
+    - role: "system"
+      content: "Respond concisely."
+    - role: "user"
+      content: "Say pong"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  expected_upstream_headers:
+    x-goog-api-key: "__CANARY_SECRET__"
+  raw_body: '{"responseId":"resp_gem_1","modelVersion":"gemini-2.5-flash","candidates":[{"content":{"role":"model","parts":[{"text":"pong"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":14,"candidatesTokenCount":2,"cachedContentTokenCount":5,"thoughtsTokenCount":3}}'
+expected_normalized_output:
+  model: "gemini-2.5-flash"
+  finish_reason: "stop"
+  content: "pong"
+  require_usage: true
+  input_tokens: 14
+  output_tokens: 2
+  cache_read_tokens: 5
+  reasoning_tokens: 3

@@ -1,0 +1,32 @@
+case_id: "anthropic_chat_stream"
+description: "Verifies stateful Anthropic SSE chunking across mid-UTF-8 and mid-data splits plus usage extraction."
+capability: "chat_stream"
+config:
+  endpoint_base_url: "https://api.anthropic.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "claude-sonnet-4-5"
+  stream: true
+  messages:
+    - role: "user"
+      content: "Greet in English and Chinese"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "text/event-stream"
+  expected_upstream_headers:
+    x-api-key: "__CANARY_SECRET__"
+    anthropic-version: "2023-06-01"
+  raw_sse_chunks:
+    - "base64:ZXZlbnQ6IG1lc3NhZ2Vfc3RhcnQKZGF0YTogeyJ0eXBlIjoibWVzc2FnZV9zdGFydCIsIm1lc3NhZ2UiOnsiaWQiOiJtc2dfYW50aF9zMSIsIm1vZGVsIjoiY2xhdWRlLXNvbm5ldC00LTUiLCJ1c2FnZSI6eyJpbnB1dF90b2tlbnMiOjIxLCJjYWNoZV9yZWFkX2lucHV0X3Rva2VucyI6N319fQoKZXZlbnQ6IGNvbnRlbnRfYmxvY2tfc3RhcnQKZGF0YTogeyJ0eXBlIjoiY29udGVudF9ibG9ja19zdGFydCIsImluZGV4IjowLCJjb250ZW50X2Jsb2NrIjp7InR5cGUiOiJ0ZXh0IiwidGV4dCI6IiJ9fQoKZXZlbnQ6IGNvbnRlbnRfYmxvY2tfZGVsdGEKZGF0YTogeyJ0eXBlIjoiY29udGVudF9ibG9ja19kZWx0YSIsImluZGV4IjowLCJkZWx0YSI6eyJ0eXBlIjoidGV4dF9kZWx0YSIsInRleHQiOiJIZWxsbyDk"
+    - "base64:uJYifX0KCmV2ZW50OiBjb250ZW50X2Jsb2NrX2RlbHRhCmRhdGE6IHsidHlwZSI6ImNvbnRlbnRfYmxvY2tfZGVsdGEiLCJpbmRleCI6MCwiZGVsdGEiOnsidHlwZSI6InRleHRfZGVsdGEiLA=="
+    - "base64:InRleHQiOiLnlYwhIn19CgpldmVudDogbWVzc2FnZV9kZWx0YQpkYXRhOiB7InR5cGUiOiJtZXNzYWdlX2RlbHRhIiwiZGVsdGEiOnsic3RvcF9yZWFzb24iOiJlbmRfdHVybiJ9LCJ1c2FnZSI6eyJvdXRwdXRfdG9rZW5zIjo2fX0KCmV2ZW50OiBtZXNzYWdlX3N0b3AKZGF0YTogeyJ0eXBlIjoibWVzc2FnZV9zdG9wIn0KCg=="
+expected_normalized_output:
+  model: "claude-sonnet-4-5"
+  content: "Hello 世界!"
+  require_stream_completed: true
+  require_usage: true
+  input_tokens: 21
+  output_tokens: 6
+  cache_read_tokens: 7

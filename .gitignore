@@ -23,6 +23,8 @@ coverage/
 dist/
 !sdk/templates/tier2-wasm/dist/
 !sdk/templates/tier2-wasm/dist/adapter.wasm
+!extensions/official/*/dist/
+!extensions/official/*/dist/adapter.wasm
 build/
 out/
 

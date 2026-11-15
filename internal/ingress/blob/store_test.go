@@ -369,5 +369,88 @@ func TestStrictJSONAndEndpointFieldIsolation(t *testing.T) {
 	if len(imgRes.BlobRefs) != 1 || bytes.Contains(imgRes.NormalizedJSON, []byte(bigImagePayload)) {
 		t.Fatalf("expected large image.source.data replaced by blob_ref:// handle, refs=%d", len(imgRes.BlobRefs))
 	}
+
+	// 6. #raw_base64 placeholder extracts base64 payload without data:<mime>;base64, prefix
+	// while rejecting combined duplicate placeholders across raw + #raw_base64.
+	uri := imgRes.BlobRefs[0].URI
+	dataBlobMap := map[string][]byte{
+		uri: []byte("data:image/png;base64," + bigImagePayload),
+	}
+	b64Doc := []byte(`{"source":{"type":"base64","media_type":"image/png","data":"` + uri + `#raw_base64"}}`)
+	splicedRawB64, err := blob.SpliceHostBlobs(b64Doc, dataBlobMap, blob.DefaultMaxBlobBytes)
+	if err != nil {
+		t.Fatalf("SpliceHostBlobs(#raw_base64) failed: %v", err)
+	}
+	if bytes.Contains(splicedRawB64, []byte("data:image/png;base64,")) || !bytes.Contains(splicedRawB64, []byte(`"data":"`+bigImagePayload+`"`)) {
+		t.Fatalf("expected #raw_base64 splice to strip data URI prefix cleanly")
+	}
+	dupDoc := []byte(`{"a":"` + uri + `","b":"` + uri + `#raw_base64"}`)
+	if _, err := blob.SpliceHostBlobs(dupDoc, dataBlobMap, blob.DefaultMaxBlobBytes); !errors.Is(err, blob.ErrInvalidPayload) {
+		t.Fatalf("expected ErrInvalidPayload on duplicate mixed blob_ref placeholders, got %v", err)
+	}
 }
+
+func TestRemoteMediaBudgetAndMalformedContentType(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t) })
+
+	// 1. RemoteMediaPolicy.MaxTotalBytes enforces aggregate download budget across multiple URLs.
+	mediaPayload := bytes.Repeat([]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}, 16) // 128 bytes
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(mediaPayload)
+	}))
+	defer srv.Close()
+
+	srvPort := 0
+	uIdx := strings.LastIndex(srv.URL, ":")
+	for i := uIdx + 1; i < len(srv.URL); i++ {
+		srvPort = srvPort*10 + int(srv.URL[i]-'0')
+	}
+
+	multiReq := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"http://media.internal.test:` + srv.URL[uIdx+1:] + `/1.png"}},{"type":"image_url","image_url":{"url":"http://media.internal.test:` + srv.URL[uIdx+1:] + `/2.png"}}]}]}`)
+	_, err := blob.OffloadEndpointMultimodalRequest(context.Background(), "req_total_budget", multiReq, "gpt-4o", false, blob.DefaultMaxBlobBytes, blob.RemoteMediaPolicy{
+		Enabled:           true,
+		AllowedHosts:      []string{"media.internal.test"},
+		AllowedPorts:      []int{srvPort},
+		AllowPrivateIP:    true,
+		AllowedCIDRs:      []string{"127.0.0.1/32"},
+		AllowInsecureHTTP: true,
+		MaxBytesPerBlob:   200,
+		MaxTotalBytes:     150, // 1st succeeds (128 <= 150), 2nd sees remaining=22 < 128 -> 413
+		Resolver:          staticResolver{"media.internal.test": {netip.MustParseAddr("127.0.0.1")}},
+	}, "messages")
+	var bErr *blob.Error
+	if !errors.As(err, &bErr) || bErr.HTTPStatus != http.StatusRequestEntityTooLarge || bErr.Code != "payload_too_large" {
+		t.Fatalf("expected 413 payload_too_large on aggregate MaxTotalBytes exceedance, got %+v (%v)", bErr, err)
+	}
+
+	// 2. Malformed Content-Type header (e.g. "image/svg+xml;bad") fails closed with 400 rather than falling back to sniffing.
+	badCTSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml;bad")
+		_, _ = w.Write([]byte("\x89PNG\r\n\x1a\nfake-png-bytes"))
+	}))
+	defer badCTSrv.Close()
+
+	badPort := 0
+	badIdx := strings.LastIndex(badCTSrv.URL, ":")
+	for i := badIdx + 1; i < len(badCTSrv.URL); i++ {
+		badPort = badPort*10 + int(badCTSrv.URL[i]-'0')
+	}
+
+	badCTReq := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"http://media.internal.test:` + badCTSrv.URL[badIdx+1:] + `/x"}}]}]}`)
+	_, err = blob.OffloadEndpointMultimodalRequest(context.Background(), "req_bad_ct", badCTReq, "gpt-4o", false, blob.DefaultMaxBlobBytes, blob.RemoteMediaPolicy{
+		Enabled:           true,
+		AllowedHosts:      []string{"media.internal.test"},
+		AllowedPorts:      []int{badPort},
+		AllowPrivateIP:    true,
+		AllowedCIDRs:      []string{"127.0.0.1/32"},
+		AllowInsecureHTTP: true,
+		Resolver:          staticResolver{"media.internal.test": {netip.MustParseAddr("127.0.0.1")}},
+	}, "messages")
+	bErr = nil
+	if !errors.As(err, &bErr) || bErr.HTTPStatus != http.StatusBadRequest || bErr.Code != "invalid_request_error" {
+		t.Fatalf("expected 400 invalid_request_error on malformed Content-Type header, got %+v (%v)", bErr, err)
+	}
+}
+
 

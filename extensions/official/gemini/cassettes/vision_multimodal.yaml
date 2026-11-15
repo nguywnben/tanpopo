@@ -1,0 +1,31 @@
+case_id: "gemini_vision_multimodal"
+description: "Verifies multimodal inlineData image forwarding and Gemini response normalization."
+capability: "chat_completion"
+config:
+  endpoint_base_url: "https://generativelanguage.googleapis.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gemini-2.5-flash"
+  messages:
+    - role: "user"
+      content:
+        - type: "text"
+          text: "Describe image"
+        - type: "image_url"
+          image_url:
+            url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  expected_upstream_headers:
+    x-goog-api-key: "__CANARY_SECRET__"
+  raw_body: '{"modelVersion":"gemini-2.5-flash","candidates":[{"content":{"role":"model","parts":[{"text":"Single black pixel."}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":110,"candidatesTokenCount":5}}'
+expected_normalized_output:
+  model: "gemini-2.5-flash"
+  finish_reason: "stop"
+  content: "Single black pixel."
+  require_usage: true
+  input_tokens: 110
+  output_tokens: 5

@@ -1,0 +1,27 @@
+case_id: "openai_native_responses_passthrough"
+description: "Verifies /native/openai/v1/responses passthrough extracts model and exact usage."
+capability: "native_passthrough"
+config:
+  endpoint_base_url: "https://api.openai.com"
+  dialect: "openai_responses"
+  upstream_path: "v1/responses"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gpt-4o"
+  input: "Summarize Tanpopo architecture."
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  expected_upstream_headers:
+    authorization: "Bearer __CANARY_SECRET__"
+  raw_body: '{"id":"resp_oa_1","object":"response","model":"gpt-4o","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Stateless Rust/Go style micro-gateway."}]}],"usage":{"input_tokens":18,"output_tokens":9,"input_tokens_details":{"cached_tokens":6},"output_tokens_details":{"reasoning_tokens":2}}}'
+expected_normalized_output:
+  model: "gpt-4o"
+  content_contains: "micro-gateway"
+  require_usage: true
+  input_tokens: 18
+  output_tokens: 9
+  cache_read_tokens: 6
+  reasoning_tokens: 2

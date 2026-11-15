@@ -1,0 +1,24 @@
+case_id: "anthropic_error_401"
+description: "Verifies Anthropic 401 maps to authentication_error with reauth=true and scrubs canary secret."
+capability: "error_normalization"
+config:
+  endpoint_base_url: "https://api.anthropic.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "claude-sonnet-4-5"
+  messages:
+    - role: "user"
+      content: "hi"
+upstream_recorded_exchange:
+  status: 401
+  headers:
+    content-type: "application/json"
+  raw_body: '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}'
+expected_canonical_error:
+  canonical_code: "authentication_error"
+  error_type: "authentication_error"
+  retryable_pre_stream: false
+  trigger_reauth: true
+  message_must_not_contain:
+    - "__CANARY_SECRET__"

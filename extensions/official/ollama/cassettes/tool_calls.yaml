@@ -1,0 +1,35 @@
+case_id: "ollama_tool_calls"
+description: "Verifies tool_calls normalization for Ollama function-calling models."
+capability: "tool_calling"
+config:
+  endpoint_base_url: "http://localhost:11434"
+secret_slots: {}
+normalized_input:
+  model: "llama3.2"
+  stream: false
+  messages:
+    - role: "user"
+      content: "Run health check"
+  tools:
+    - type: "function"
+      function:
+        name: "check_host"
+        parameters:
+          type: "object"
+          properties:
+            target:
+              type: "string"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  raw_body: '{"id":"chatcmpl-ollama-tool","object":"chat.completion","model":"llama3.2","choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_oll_1","type":"function","function":{"name":"check_host","arguments":"{\"target\":\"db\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":20,"completion_tokens":8}}'
+expected_normalized_output:
+  model: "llama3.2"
+  finish_reason: "tool_calls"
+  tool_calls_count: 1
+  tool_call_name: "check_host"
+  tool_call_arguments: '{"target":"db"}'
+  require_usage: true
+  input_tokens: 20
+  output_tokens: 8

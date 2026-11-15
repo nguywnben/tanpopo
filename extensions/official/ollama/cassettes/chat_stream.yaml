@@ -1,0 +1,34 @@
+case_id: "ollama_chat_stream_bearer"
+description: "Verifies streaming SSE against authenticated LAN Ollama proxy (auth_mode=BEARER) with CR-09 include_usage."
+capability: "chat_stream"
+config:
+  endpoint_base_url: "http://ollama.internal:11434"
+  billing_mode: "SELF_HOSTED_INFRA"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "qwen2.5:14b"
+  stream: true
+  messages:
+    - role: "user"
+      content: "Greet"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "text/event-stream"
+  expected_upstream_headers:
+    authorization: "Bearer __CANARY_SECRET__"
+  raw_sse_chunks:
+    - "base64:ZGF0YQ=="
+    - "base64:OiB7ImlkIjoiY2hhdGNtcGwtb2xsYW1hLXMxIiwibW9kZWwiOiJxd2VuMi41OjE0YiIsImNob2ljZXMiOlt7ImluZGV4IjowLCJkZWx0YSI6eyJjb250ZW50IjoiSGVsbG8g5Lg="
+    - "base64:lueVjCEifSwiZmluaXNoX3JlYXNvbiI6bnVsbH1dfQoK"
+    - "data: {\"id\":\"chatcmpl-ollama-s1\",\"model\":\"qwen2.5:14b\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
+    - "data: {\"id\":\"chatcmpl-ollama-s1\",\"model\":\"qwen2.5:14b\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":4}}\n\n"
+    - "data: [DONE]\n\n"
+expected_normalized_output:
+  content_contains: "Hello 世界!"
+  require_stream_completed: true
+  require_stream_options_include_usage: true
+  require_usage: true
+  input_tokens: 10
+  output_tokens: 4

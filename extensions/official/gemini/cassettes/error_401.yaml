@@ -1,0 +1,24 @@
+case_id: "gemini_error_401"
+description: "Verifies Gemini 401 maps to authentication_error with reauth=true and scrubs canary secret."
+capability: "error_normalization"
+config:
+  endpoint_base_url: "https://generativelanguage.googleapis.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gemini-2.5-flash"
+  messages:
+    - role: "user"
+      content: "hi"
+upstream_recorded_exchange:
+  status: 401
+  headers:
+    content-type: "application/json"
+  raw_body: '{"error":{"code":401,"message":"API key not valid.","status":"UNAUTHENTICATED"}}'
+expected_canonical_error:
+  canonical_code: "authentication_error"
+  error_type: "authentication_error"
+  retryable_pre_stream: false
+  trigger_reauth: true
+  message_must_not_contain:
+    - "__CANARY_SECRET__"

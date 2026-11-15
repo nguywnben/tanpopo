@@ -1,0 +1,35 @@
+case_id: "openai_chat_stream_include_usage"
+description: "Verifies CR-09 automatic stream_options.include_usage=true injection, split UTF-8 SSE chunks, and terminal usage extraction."
+capability: "chat_stream"
+config:
+  endpoint_base_url: "https://api.openai.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gpt-4o-mini"
+  stream: true
+  messages:
+    - role: "user"
+      content: "Say Hello 世"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "text/event-stream"
+  expected_upstream_headers:
+    authorization: "Bearer __CANARY_SECRET__"
+  raw_sse_chunks:
+    - "base64:ZGF0YQ=="
+    - "base64:OiB7ImlkIjoiY2hhdGNtcGwtb2Etc3RyZWFtLTEiLCJtb2RlbCI6ImdwdC00by1taW5pIiwiY2hvaWNlcyI6W3siaW5kZXgiOjAsImRlbHRhIjp7ImNvbnRlbnQiOiJIZWxsbyDkuA=="
+    - "base64:liJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo="
+    - "base64:OiBwaW5nCgo="
+    - "data: {\"id\":\"chatcmpl-oa-stream-1\",\"model\":\"gpt-4o-mini\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
+    - "data: {\"id\":\"chatcmpl-oa-stream-1\",\"model\":\"gpt-4o-mini\",\"choices\":[],\"usage\":{\"prompt_tokens\":14,\"completion_tokens\":5,\"prompt_tokens_details\":{\"cached_tokens\":4}}}\n\n"
+    - "data: [DONE]\n\n"
+expected_normalized_output:
+  content_contains: "Hello 世"
+  require_stream_completed: true
+  require_stream_options_include_usage: true
+  require_usage: true
+  input_tokens: 14
+  output_tokens: 5
+  cache_read_tokens: 4

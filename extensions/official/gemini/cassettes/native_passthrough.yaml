@@ -1,0 +1,29 @@
+case_id: "gemini_native_passthrough"
+description: "Verifies /native/gemini/v1beta/models/gemini-2.5-flash:generateContent uses x-goog-api-key header and extracts usage."
+capability: "native_passthrough"
+config:
+  endpoint_base_url: "https://generativelanguage.googleapis.com"
+  dialect: "gemini_generate_content"
+  upstream_path: "v1beta/models/gemini-2.5-flash:generateContent"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  contents:
+    - role: "user"
+      parts:
+        - text: "hello"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  expected_upstream_headers:
+    x-goog-api-key: "__CANARY_SECRET__"
+  raw_body: '{"modelVersion":"gemini-2.5-flash","candidates":[{"content":{"role":"model","parts":[{"text":"Native Gemini reply."}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":4,"cachedContentTokenCount":3,"thoughtsTokenCount":1}}'
+expected_normalized_output:
+  model: "gemini-2.5-flash"
+  content_contains: "Native Gemini reply"
+  require_usage: true
+  input_tokens: 12
+  output_tokens: 4
+  cache_read_tokens: 3
+  reasoning_tokens: 1

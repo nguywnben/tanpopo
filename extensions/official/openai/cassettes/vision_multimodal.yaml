@@ -1,0 +1,30 @@
+case_id: "openai_vision_multimodal"
+description: "Verifies multimodal image_url request forwarding and response normalization."
+capability: "chat_completion"
+config:
+  endpoint_base_url: "https://api.openai.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gpt-4o"
+  stream: false
+  messages:
+    - role: "user"
+      content:
+        - type: "text"
+          text: "Describe the icon"
+        - type: "image_url"
+          image_url:
+            url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  raw_body: '{"id":"chatcmpl-oa-vis-1","object":"chat.completion","model":"gpt-4o","choices":[{"index":0,"message":{"role":"assistant","content":"A single pixel icon."},"finish_reason":"stop"}],"usage":{"prompt_tokens":90,"completion_tokens":6}}'
+expected_normalized_output:
+  model: "gpt-4o"
+  finish_reason: "stop"
+  content: "A single pixel icon."
+  require_usage: true
+  input_tokens: 90
+  output_tokens: 6

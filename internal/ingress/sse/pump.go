@@ -71,6 +71,7 @@ type PumpConfig struct {
 	HeartbeatInterval   time.Duration
 	IdleChunkTimeout    time.Duration
 	RequireDoneSentinel bool
+	ElideUsageChunk     bool
 }
 
 // PumpResult summarizes terminal telemetry from a Pump execution.
@@ -398,6 +399,13 @@ pumpLoop:
 					if len(frame) == 0 {
 						continue
 					}
+					if cfg.ElideUsageChunk {
+						var skip bool
+						frame, skip = elideUsageFromSSEFrame(frame)
+						if skip || len(frame) == 0 {
+							continue
+						}
+					}
 					if isDoneSSEFrame(frame) {
 						res.SawDone = true
 					}
@@ -542,10 +550,127 @@ func mergeUsage(prev, next *port.NormalizedUsage) *port.NormalizedUsage {
 	if next == nil {
 		return prev
 	}
+	if prev == nil {
+		cp := *next
+		if next.MediaUsage != nil {
+			m := *next.MediaUsage
+			cp.MediaUsage = &m
+		}
+		return &cp
+	}
+	if prev.Accuracy == port.UsageAccuracyExact && next.Accuracy != port.UsageAccuracyExact {
+		return prev
+	}
+	if prev.Accuracy == port.UsageAccuracyExact && next.Accuracy == port.UsageAccuracyExact {
+		cp := *prev
+		if next.InputTokens > 0 {
+			cp.InputTokens = next.InputTokens
+		}
+		if next.OutputTokens > 0 {
+			cp.OutputTokens = next.OutputTokens
+		}
+		if next.CacheReadTokens > 0 {
+			cp.CacheReadTokens = next.CacheReadTokens
+		}
+		if next.CacheWriteTokens > 0 {
+			cp.CacheWriteTokens = next.CacheWriteTokens
+		}
+		if next.ReasoningTokens > 0 {
+			cp.ReasoningTokens = next.ReasoningTokens
+		}
+		if next.MediaUsage != nil {
+			m := *next.MediaUsage
+			cp.MediaUsage = &m
+		}
+		return &cp
+	}
 	cp := *next
 	if next.MediaUsage != nil {
 		m := *next.MediaUsage
 		cp.MediaUsage = &m
 	}
 	return &cp
+}
+
+func elideUsageFromSSEFrame(frame []byte) ([]byte, bool) {
+	if isDoneSSEFrame(frame) {
+		return frame, false
+	}
+	var prefixLines [][]byte
+	var dataLine []byte
+	rem := frame
+	for len(rem) > 0 {
+		idx := bytes.IndexByte(rem, '\n')
+		var line []byte
+		if idx < 0 {
+			line = rem
+			rem = nil
+		} else {
+			line = rem[:idx]
+			rem = rem[idx+1:]
+		}
+		trimmed := bytes.TrimSpace(line)
+		if len(trimmed) == 0 {
+			continue
+		}
+		if bytes.HasPrefix(trimmed, []byte("data:")) {
+			dataLine = bytes.TrimSpace(bytes.TrimPrefix(trimmed, []byte("data:")))
+		} else {
+			prefixLines = append(prefixLines, trimmed)
+		}
+	}
+	if len(dataLine) == 0 || dataLine[0] != '{' {
+		return frame, false
+	}
+	dec := json.NewDecoder(bytes.NewReader(dataLine))
+	dec.UseNumber()
+	var obj map[string]any
+	if err := dec.Decode(&obj); err != nil || obj == nil {
+		return frame, false
+	}
+	if _, hasUsage := obj["usage"]; !hasUsage {
+		return frame, false
+	}
+	if isUsageOnlyFrame(obj) {
+		return nil, true
+	}
+	delete(obj, "usage")
+	encoded, err := json.Marshal(obj)
+	if err != nil {
+		return frame, false
+	}
+	var out bytes.Buffer
+	for _, pl := range prefixLines {
+		out.Write(pl)
+		out.WriteByte('\n')
+	}
+	out.WriteString("data: ")
+	out.Write(encoded)
+	out.WriteString("\n\n")
+	return out.Bytes(), false
+}
+
+func isUsageOnlyFrame(obj map[string]any) bool {
+	choices, hasChoices := obj["choices"].([]any)
+	if !hasChoices {
+		_, hasType := obj["type"]
+		return !hasType
+	}
+	if len(choices) == 0 {
+		return true
+	}
+	if len(choices) == 1 {
+		c0, ok := choices[0].(map[string]any)
+		if !ok {
+			return false
+		}
+		if c0["finish_reason"] != nil {
+			return false
+		}
+		delta, ok := c0["delta"].(map[string]any)
+		if ok && len(delta) == 0 {
+			return true
+		}
+	}
+	return false
 }

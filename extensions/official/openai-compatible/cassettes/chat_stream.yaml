@@ -1,0 +1,31 @@
+case_id: "oai_compat_vllm_chat_stream"
+description: "Verifies CR-09 automatic stream_options.include_usage=true injection on vLLM/SGLang SSE streams."
+capability: "chat_stream"
+config:
+  endpoint_base_url: "http://vllm.internal:8000"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "meta-llama/Llama-3.3-70B-Instruct"
+  stream: true
+  messages:
+    - role: "user"
+      content: "Greet in Japanese"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "text/event-stream"
+  raw_sse_chunks:
+    - "base64:ZGF0YQ=="
+    - "base64:OiB7ImlkIjoiY2hhdGNtcGwtdmxsbS1zLTEiLCJtb2RlbCI6Im1ldGEtbGxhbWEvTGxhbWEtMy4zLTcwQi1JbnN0cnVjdCIsImNob2ljZXMiOlt7ImluZGV4IjowLCJkZWx0YSI6eyJjb250ZW50Ijoi44GT44KT44Gr44Gh44Gv5A=="
+    - "base64:uJbnlYwhIn0sImZpbmlzaF9yZWFzb24iOm51bGx9XX0KCg=="
+    - "data: {\"id\":\"chatcmpl-vllm-s-1\",\"model\":\"meta-llama/Llama-3.3-70B-Instruct\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
+    - "data: {\"id\":\"chatcmpl-vllm-s-1\",\"model\":\"meta-llama/Llama-3.3-70B-Instruct\",\"choices\":[],\"usage\":{\"prompt_tokens\":16,\"completion_tokens\":7}}\n\n"
+    - "data: [DONE]\n\n"
+expected_normalized_output:
+  content_contains: "こんにちは世界!"
+  require_stream_completed: true
+  require_stream_options_include_usage: true
+  require_usage: true
+  input_tokens: 16
+  output_tokens: 7

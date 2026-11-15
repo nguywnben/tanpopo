@@ -337,6 +337,7 @@ func OffloadEndpointMultimodalRequest(
 		totalTimeout = DefaultRemoteMediaTotalTimeout
 	}
 	remoteFetchCount := 0
+	var remoteTotalBytes int64
 	var (
 		fetchCtx    context.Context
 		cancelFetch context.CancelFunc
@@ -378,13 +379,40 @@ func OffloadEndpointMultimodalRequest(
 					Err:        ErrInvalidPayload,
 				}
 			}
+			remBudget := maxTotalBytes - res.TotalBlobBytes
+			if remotePolicy.MaxTotalBytes > 0 {
+				remRemote := remotePolicy.MaxTotalBytes - remoteTotalBytes
+				if remRemote < remBudget {
+					remBudget = remRemote
+				}
+			}
+			if remBudget <= 0 {
+				return "", false, &Error{
+					HTTPStatus: http.StatusRequestEntityTooLarge,
+					Code:       "payload_too_large",
+					ErrType:    "invalid_request_error",
+					Message:    "Remote media payload exceeds request budget.",
+					Err:        ErrPayloadTooLarge,
+				}
+			}
 			if fetchCtx == nil {
 				fetchCtx, cancelFetch = context.WithTimeout(ctx, totalTimeout)
 			}
-			fetchedBytes, mimeType, ferr := fetchBoundedRemoteMedia(fetchCtx, trimmed, maxTotalBytes-res.TotalBlobBytes, remotePolicy, fallbackMime)
+			fetchedBytes, mimeType, ferr := fetchBoundedRemoteMedia(fetchCtx, trimmed, remBudget, remotePolicy, fallbackMime)
 			if ferr != nil {
 				return "", false, ferr
 			}
+			if remotePolicy.MaxTotalBytes > 0 && remoteTotalBytes+int64(len(fetchedBytes)) > remotePolicy.MaxTotalBytes {
+				clear(fetchedBytes)
+				return "", false, &Error{
+					HTTPStatus: http.StatusRequestEntityTooLarge,
+					Code:       "payload_too_large",
+					ErrType:    "invalid_request_error",
+					Message:    fmt.Sprintf("Remote media total bytes exceed %d limit.", remotePolicy.MaxTotalBytes),
+					Err:        ErrPayloadTooLarge,
+				}
+			}
+			remoteTotalBytes += int64(len(fetchedBytes))
 			var stored []byte
 			if encodeRemoteAsDataURI {
 				encoded := make([]byte, len("data:")+len(mimeType)+len(";base64,")+base64.StdEncoding.EncodedLen(len(fetchedBytes)))
@@ -621,8 +649,9 @@ func OffloadEndpointMultimodalRequest(
 	return res, nil
 }
 
-// SpliceHostBlobs replaces Host-managed blob_ref:// placeholders inside adapter-transformed
-// outbound payloads directly before network egress while enforcing total byte bounds.
+// SpliceHostBlobs replaces Host-managed blob_ref:// placeholders (and #raw_base64 variants)
+// inside adapter-transformed outbound payloads directly before network egress while enforcing
+// total byte bounds.
 func SpliceHostBlobs(body []byte, hostBlobs map[string][]byte, maxBytes int64) ([]byte, error) {
 	if len(hostBlobs) == 0 {
 		return append([]byte(nil), body...), nil
@@ -634,31 +663,74 @@ func SpliceHostBlobs(body []byte, hostBlobs map[string][]byte, maxBytes int64) (
 			clear(out)
 			return nil, err
 		}
-		count := bytes.Count(out, quotedPlaceholder)
-		if count == 0 {
-			continue
-		}
-		if count != 1 {
-			clear(out)
-			return nil, fmt.Errorf("%w: duplicate or unexpected blob reference %q", ErrInvalidPayload, uri)
-		}
-		quotedPayload, err := json.Marshal(string(rawVal))
+		quotedRawB64Placeholder, err := json.Marshal(uri + "#raw_base64")
 		if err != nil {
 			clear(out)
 			return nil, err
 		}
-		projected := int64(len(out)) + (int64(len(quotedPayload)) - int64(len(quotedPlaceholder)))
+		verbatimCount := bytes.Count(out, quotedPlaceholder)
+		rawB64Count := bytes.Count(out, quotedRawB64Placeholder)
+		totalCount := verbatimCount + rawB64Count
+		if totalCount == 0 {
+			continue
+		}
+		if totalCount != 1 {
+			clear(out)
+			return nil, fmt.Errorf("%w: duplicate or unexpected blob reference %q", ErrInvalidPayload, uri)
+		}
+
+		activePlaceholder := quotedPlaceholder
+		var quotedPayload []byte
+		if rawB64Count == 1 {
+			activePlaceholder = quotedRawB64Placeholder
+			rawB64Str := extractOrEncodeBase64Payload(rawVal)
+			quotedPayload, err = json.Marshal(rawB64Str)
+			rawB64Str = ""
+		} else {
+			quotedPayload, err = json.Marshal(string(rawVal))
+		}
+		if err != nil {
+			clear(out)
+			return nil, err
+		}
+		projected := int64(len(out)) + (int64(len(quotedPayload)) - int64(len(activePlaceholder)))
 		if maxBytes > 0 && projected > maxBytes+4096 {
 			clear(quotedPayload)
 			clear(out)
 			return nil, fmt.Errorf("%w: spliced payload exceeds bounded request limit", ErrPayloadTooLarge)
 		}
-		next := bytes.Replace(out, quotedPlaceholder, quotedPayload, 1)
+		next := bytes.Replace(out, activePlaceholder, quotedPayload, 1)
 		clear(quotedPayload)
 		clear(out)
 		out = next
 	}
 	return out, nil
+}
+
+func extractOrEncodeBase64Payload(rawVal []byte) string {
+	if bytes.HasPrefix(rawVal, []byte("data:")) {
+		if idx := bytes.Index(rawVal, []byte(";base64,")); idx >= 0 {
+			return string(rawVal[idx+len(";base64,"):])
+		}
+		if comma := bytes.IndexByte(rawVal, ','); comma >= 0 {
+			return string(rawVal[comma+1:])
+		}
+	}
+	if len(rawVal) > 0 && isPrintableBase64(rawVal) {
+		return string(rawVal)
+	}
+	return base64.StdEncoding.EncodeToString(rawVal)
+}
+
+func isPrintableBase64(b []byte) bool {
+	for _, c := range b {
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+			c == '+' || c == '/' || c == '=' || c == '-' || c == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func isHTTPURL(s string) bool {
@@ -768,9 +840,6 @@ func fetchBoundedRemoteMedia(
 	}
 
 	capBytes := remainingBudget
-	if policy.MaxBytesPerBlob > 0 && (capBytes <= 0 || policy.MaxBytesPerBlob < capBytes) {
-		capBytes = policy.MaxBytesPerBlob
-	}
 	if capBytes <= 0 {
 		return nil, "", &Error{
 			HTTPStatus: http.StatusRequestEntityTooLarge,
@@ -779,6 +848,9 @@ func fetchBoundedRemoteMedia(
 			Message:    "Remote media payload exceeds request budget.",
 			Err:        ErrPayloadTooLarge,
 		}
+	}
+	if policy.MaxBytesPerBlob > 0 && policy.MaxBytesPerBlob < capBytes {
+		capBytes = policy.MaxBytesPerBlob
 	}
 
 	body, rerr := io.ReadAll(io.LimitReader(resp.Body, capBytes+1))
@@ -805,9 +877,18 @@ func fetchBoundedRemoteMedia(
 
 	ct := strings.TrimSpace(resp.Header.Get("Content-Type"))
 	if ct != "" {
-		if parsed, _, perr := mime.ParseMediaType(ct); perr == nil && parsed != "" {
-			ct = parsed
+		parsed, _, perr := mime.ParseMediaType(ct)
+		if perr != nil || parsed == "" {
+			clear(body)
+			return nil, "", &Error{
+				HTTPStatus: http.StatusBadRequest,
+				Code:       "invalid_request_error",
+				ErrType:    "invalid_request_error",
+				Message:    fmt.Sprintf("Invalid remote media Content-Type %q.", ct),
+				Err:        ErrInvalidPayload,
+			}
 		}
+		ct = parsed
 	}
 	if ct == "" && len(body) > 0 {
 		ct = http.DetectContentType(body)
