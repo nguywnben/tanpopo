@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0013` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`READY`** *(Dependencies `TP-IMP-0004`, `TP-IMP-0010` [`DEC-020`], and `TP-IMP-0011` [`DEC-021`] `DONE`; sole active `READY` unit following `TP-IMP-0012` acceptance under `DEC-022`/`DEC-023`)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented & verified locally `2026-11-15`; pending independent `REQUIRES_STRONG_REVIEW` sign-off and delegated Owner **Carbon** acceptance under [`DEC-022`](../../governance/decisions.md))* |
 | **Size** | `L` (`go.mod`, `internal/extension/wasm/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Untrusted guest execution boundary `TB-4` — must never crash or stall the Go Core process)* |
 | **Technical Owner** | `Principal Runtime & Sandbox Security Engineer` |
@@ -12,15 +12,15 @@
 ---
 
 ## 1. Intent
-Implement the Tier-2 extension sandbox pool satisfying the shared `extension/port.ProviderRuntime` contract (`TP-IMP-0010`) using pure-Go `github.com/tetratelabs/wazero` (`CGO_ENABLED=0`) under a **Default-Deny `Zero-Ambient-Authority Sandbox`**: `0` filesystem (`FS`) access, `0` environment variable (`Env`) access, `0` unmediated wall-clock access, `0` raw network socket access (all outbound HTTP calls delegate exclusively through `BlindHostCredentialBroker`), a hard linear-memory ceiling of `<= 16 MiB` (`256` Wasm pages) per instance, immediate CPU/deadline interruption on runaway loops, and automatic quarantine (`QUARANTINED`) on repeated guest faults per `FMEA-05`.
+Implement the Tier-2 extension sandbox pool satisfying the unified 10-method `extension/port.ExtensionRuntime` contract (`TP-IMP-0002` / `TP-IMP-0010`) using pure-Go `github.com/tetratelabs/wazero` (`CGO_ENABLED=0`) under a **Default-Deny `Zero-Ambient-Authority Sandbox`**: `0` filesystem (`FS`) access, `0` environment variable (`Env`) access, `0` unmediated wall-clock access, `0` raw network socket access (all outbound HTTP calls delegate exclusively through `BlindHostCredentialBroker`), a hard linear-memory ceiling of `<= 16 MiB` (`256` Wasm pages) per instance, immediate CPU/deadline interruption on runaway loops, and automatic quarantine (`QUARANTINED`) on repeated guest faults per `FMEA-05`.
 
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
   - `go.mod`, `go.sum` (add pure-Go dependency `github.com/tetratelabs/wazero`).
-  - `internal/extension/wasm/runtime.go` (initialize `wazero.Runtime` with `WithCloseOnContextDone(true)` and `WithMemoryLimitPages(256)` = `16 MiB`, pre-compiling `CompiledModule` once upon package activation).
-  - `internal/extension/wasm/pool.go` (bounded-concurrency instance pool that immediately destroys and replaces any instance hitting a `trap`, `timeout`, or page-growth high-water mark to eliminate cross-request state bleed).
-  - `internal/extension/wasm/abi_host.go` (implement all 8 methods of `extension/port.ProviderRuntime` locked in `TP-IMP-0002` & `POC-01`: `TransformRequest`, `TransformResponse`, `TransformStreamChunk`, `NormalizeError`, `ExtractUsage`, `InspectNativeRequest`, `BuildValidationProbe`, `VerifyValidationResult` + blind HTTP egress host callback via `TP-IMP-0010`).
-  - `internal/extension/wasm/fault_guard.go` (sliding-window fault tracker per `FMEA-05`: if an `extension_installation_id` triggers **`> 20` `trap/timeout/OOM` faults within a `60-second` sliding window**, automatically invoke `QuarantineFunc` from `TP-IMP-0011` to move `SM-01` to `QUARANTINED`, emit `ALT-PLUGIN-TRAP`, and isolate healthy sibling Adapters).
+  - `internal/extension/wasm/runtime.go` (initialize `wazero.Runtime` with `WithCloseOnContextDone(true)` and `WithMemoryLimitPages(256)` = `16 MiB`, validate imports/tables/globals, enforce `SM-01` host/TLS/CIDR/port/secret-slot defaults, expose `SetWasmEnabled`/`IsWasmEnabled` + `EnabledFunc` backing `runtime.wasm.enabled`, pre-compiling `CompiledModule` once upon package activation).
+  - `internal/extension/wasm/pool.go` (bounded-concurrency instance pool that serializes `abort()` vs `disarm()`, restores linear memory or re-instantiates slots containing mutable globals/tables/`tanpopo_alloc`, and immediately destroys and replaces any instance hitting a `trap`, `timeout`, or page-growth high-water mark to eliminate cross-request state bleed).
+  - `internal/extension/wasm/abi_host.go` (implement all 10 methods of `extension/port.ExtensionRuntime` locked in `TP-IMP-0002` / `TP-IMP-0010` & `POC-01`: `BuildValidationProbe`, `VerifyValidationResult`, `TransformRequest`, `TransformResponse`, `TransformStreamChunk`, `NormalizeError`, `ExtractUsage`, `InspectNativeRequest`, `EvaluateGuardrail`, `CancelExecution` + blind HTTP egress host callback via `BlindHostCredentialBroker`).
+  - `internal/extension/wasm/fault_guard.go` (sliding-window fault tracker per `FMEA-05`: if an `extension_installation_id` triggers **`> 20` `trap/timeout/OOM` faults within a `60-second` sliding window**, automatically invoke `QuarantineFunc` from `TP-IMP-0011` to move `SM-01` to `QUARANTINED`, emit `ALT-PLUGIN-TRAP` using `data_plane_guard`, and isolate healthy sibling Adapters).
 - **Out-of-Scope:** `Tier-3 Isolated Sidecar` engine over `ConnectRPC` UDS/mTLS (owned by `TP-IMP-0042` in `v0.3`).
 
 ## 3. Requirements, Dependencies & Design References
@@ -62,3 +62,33 @@ Implement the Tier-2 extension sandbox pool satisfying the shared `extension/por
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0002` (`runtime.proto` & `blob_ref` lock), `TP-IMP-0004` (`POC-01` Wasm ABI freeze), `TP-IMP-0006` (`wasmfixtures`), `TP-IMP-0010`, and `TP-IMP-0011` are complete.
 - **DoD:** `100%` green across adversarial suites `CT-17`, `FMEA-05`, and `FZ-05` under both `CGO_ENABLED=0` and `-race`; passes `REQUIRES_STRONG_REVIEW`.
+
+---
+
+## 9. Verification Evidence (`2026-11-15`)
+
+- **Delivered Files (`CGO_ENABLED=0` Pure-Go `wazero v1.11.0`):**
+  - [`go.mod`](../../../go.mod), [`go.sum`](../../../go.sum)
+  - [`internal/extension/wasm/runtime.go`](../../../internal/extension/wasm/runtime.go) (Zero-Ambient-Authority `wazero.Runtime` with `CoreFeatureReferenceTypes` disabled, `MaxWasmBinaryBytes` `64 MiB` & `MaxWasmCodeBytes` `16 MiB` caps, `256`-page / `16 MiB` default memory cap & non-zero `effectiveMaxPages` enforcement, `ErrUnapprovedWASIImport` + fail-closed pre-compile Wasm binary validator across Sections `0..12` enforcing section ordering/duplication/func-code/datacount counts, bounded vector counts & 5th-byte `readULEB32` `> 0x0f` rejection, Sec 10 compressed locals bounds [`MaxWasmFunctionLocals=65536`, `MaxWasmTotalLocals=1048576`], Sec 4 bounded tables [`MaxWasmTables=1`, `MaxWasmTableElements=65536`] & non-`externref` enforcement, and passive `data.drop`/`memory.init` state bleed rejection; `tanpopo_alloc` `(i32)->(i32)` signature validation, `ErrWasmRuntimeClosed`, `runtime.wasm.enabled` kill-switch, default-deny `SM-01` host/TLS/egress/strict-secret-slot validation)
+  - [`internal/extension/wasm/pool.go`](../../../internal/extension/wasm/pool.go) (bounded slot pool, admission-before-deadline queueing, single pool-wide watchdog goroutine, `inflightCall.disarm()` + `p.closed` barrier, `context.AfterFunc` + `CancelRequest` immediate `callCtx` + `CloseWithExitCode`, full memory restoration / `clear()`, tainted-module eviction & replacement, caller-size and `maxLinearMemBytes` rejections separated from guest `FaultKindOOM`)
+  - [`internal/extension/wasm/abi_host.go`](../../../internal/extension/wasm/abi_host.go) (10-method `port.ExtensionRuntime` bridge, unified `nil`-safe `preflightGate` with `closed` check across all RPC entrypoints/slice/envelope/probe, `tanpopo_host_v1.blind_http_egress` -> `BlindHostCredentialBroker` with canonical `(host, port)` + CIDR prefix-aware `intersectEgressPolicies` narrowing, `64 KiB` stream state cap)
+  - [`internal/extension/wasm/fault_guard.go`](../../../internal/extension/wasm/fault_guard.go) (`FMEA-05` `> 20` trap/timeout/OOM faults in `60s` sliding window -> pool warm eviction, atomic `QuarantineFunc` `QUARANTINED`, `ALT-PLUGIN-TRAP` `data_plane_guard` audit/alert + `OnError` callback)
+  - [`internal/extension/wasm/wasm_test.go`](../../../internal/extension/wasm/wasm_test.go) (`AC-1..3`, `NEG-1..3`, `CT-16`, `CT-17`, 10-RPC & kill-switch coverage, cancel/watchdog/evict race stress, mutable-global/table/passive-data/import/reference-types hardening, pre-compile Sec `0..12` / Sec 10 compressed locals / `MaxWasmCodeBytes` / `readULEB32` / `max=0` memory DoS tests, non-quarantine caller oversize & small-`maxLinearMemBytes` checks, `nil` `*Runtime` safety, physical SQLite `audit_events` `CHECK` test, `FuzzWasmABIBoundary` [`FZ-05`], microbenchmarks)
+- **Windows Primary Verification (`CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1`):**
+  - `go test -count=1 -cover ./internal/extension/wasm/...` -> **`PASS` (`0.926s`, `85.4%` statement coverage >= `85.0%` `CONSTRAINTS.md` threshold)**
+  - `go test -count=1 ./...` -> **`PASS` (all packages green; `internal/extension/wasm` `3.187s`)**
+  - `go vet ./...` -> **`PASS` (exit `0`)**
+  - `go run ./scripts/ci/check.go --all` -> **`PASS: all selected Tanpopo quality gates succeeded`**
+  - `tools/spikes` (`go test -count=1 -run "TestContract|OpenAPI|SQLite|PhysicalSQLite" ./...`) -> **`PASS` (`0.319s`)**
+  - `go test -run=^$ -fuzz=^FuzzWasmABIBoundary$ -fuzztime=30s ./internal/extension/wasm/...` (`FZ-05` on finalized Go runtime code) -> **`PASS` (`30.482s`, `47,580` execs, `92` interesting inputs from `74` baseline, `0` crashes/OOB reads)**
+  - `go test -run=^$ -bench=^BenchmarkWasm -benchmem ./internal/extension/wasm/...` (`12th Gen Intel(R) Core(TM) i5-12450H`):
+    - `BenchmarkWasmTransformRequest-12`: **`7572 ns/op`**, `1808 B/op`, `27 allocs/op`
+    - `BenchmarkWasmTransformStreamChunk-12`: **`5659 ns/op`**, `744 B/op`, `17 allocs/op`
+- **Linux VPS Race Verification (`ip-142-248-83-44`, SHA-256 Patch `b0ec3cfdc3c2055df2893c52cb934110bbe2d7164dcbbf4e47d14d2cc6184bab`):**
+  - `CGO_ENABLED=1 TANPOPO_TEST_HERMETIC=1 go test -v -race -count=1 ./internal/extension/wasm/...` -> **`PASS` (`3.038s`, `0` races)**
+  - `CGO_ENABLED=1 TANPOPO_TEST_HERMETIC=1 go test -race -count=1 ./...` -> **`PASS` (`4.987s` in `internal/extension/wasm`; all packages green)**
+  - `go vet ./...` -> **`PASS`**
+  - `go run ./scripts/ci/check.go --all` -> **`PASS: all selected Tanpopo quality gates succeeded`**
+- **`UNVERIFIED` Scope Boundaries (`COND-PO-01`):**
+  - Isolated `wazero` microbenchmarks do **not** claim full Data Plane Gateway `SLO-02`/`SLO-03` (`1,000` SSE streams on `2 vCPU / 2 GiB`, owned by `TP-IMP-0043`).
+  - Downstream SDK/CLI (`TP-IMP-0014`), HTTP `/v1/chat/completions` vertical slice (`TP-IMP-0015`), `Tier-3 Sidecar` (`TP-IMP-0042`), and `PostgreSQL 16` (`TP-IMP-0039`) remain unverified within standalone `TP-IMP-0013`.
