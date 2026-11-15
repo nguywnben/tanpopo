@@ -59,8 +59,8 @@ const (
 	DefaultMaxRequestBodyBytes int64 = 32 << 20
 	// DefaultFirstByteTimeout bounds upstream response-header waiting when deployment omits it.
 	DefaultFirstByteTimeout = 30 * time.Second
-	// MaxTraceHeaderLength bounds client-supplied correlation headers against header bloat.
-	MaxTraceHeaderLength = 64
+	// MaxTraceHeaderLength bounds client-supplied correlation headers to match audit_events.request_id VARCHAR(40).
+	MaxTraceHeaderLength = 40
 )
 
 var (
@@ -145,6 +145,7 @@ type Server struct {
 	wasmCache wazero.CompilationCache
 
 	rtMu       sync.Mutex
+	rtLoadWG   sync.WaitGroup
 	closed     atomic.Bool
 	runtimes   map[runtimeCacheKey]*cachedAdapterEntry
 	mux        *http.ServeMux
@@ -241,6 +242,10 @@ func (s *Server) Close(ctx context.Context) error {
 	}
 	s.rtMu.Lock()
 	s.closed.Store(true)
+	s.rtMu.Unlock()
+	s.rtLoadWG.Wait()
+
+	s.rtMu.Lock()
 	entries := make([]*cachedAdapterEntry, 0, len(s.runtimes))
 	for _, entry := range s.runtimes {
 		if entry != nil {
@@ -473,6 +478,8 @@ func (s *Server) getOrLoadAdapterRuntime(ctx context.Context, target *snapshot.R
 		s.rtMu.Unlock()
 		return cached, nil
 	}
+	s.rtLoadWG.Add(1)
+	defer s.rtLoadWG.Done()
 	s.rtMu.Unlock()
 
 	entry, err := s.loadAdapterRuntimeUncached(ctx, adp, target.Connection)
@@ -537,14 +544,6 @@ func adapterRuntimeScopeKey(tier string, adp *snapshot.ProviderAdapterView, conn
 		host = strings.ToLower(u.Hostname())
 	}
 	return scheme + "|" + host + "|" + strconv.Itoa(port) + "|" + strconv.FormatBool(conn.AllowPrivateIP) + "|" + strings.Join(cidrs, ",") + "|" + strings.Join(adpHosts, ",")
-}
-
-func endpointEffectivePort(rawURL string) int {
-	narrow := buildHostNarrowPolicy(installer.PermissionSet{}, nil, &snapshot.ProviderConnectionView{EndpointBaseURL: rawURL})
-	if len(narrow.AllowedPorts) > 0 {
-		return narrow.AllowedPorts[0]
-	}
-	return 0
 }
 
 func (s *Server) loadAdapterRuntimeUncached(ctx context.Context, adp *snapshot.ProviderAdapterView, conn *snapshot.ProviderConnectionView) (*cachedAdapterEntry, error) {
@@ -662,10 +661,7 @@ func (s *Server) loadAdapterRuntimeUncached(ctx context.Context, adp *snapshot.P
 			narrowCIDRs = narrow.AllowedCIDRs
 			requireTLS = narrow.RequireTLS
 		} else {
-			narrowHosts = append([]string(nil), perms.AllowedHosts...)
-			if len(narrowHosts) == 0 {
-				narrowHosts = append([]string(nil), adp.AllowedHosts...)
-			}
+			narrowHosts = intersectAllowedHosts(perms.AllowedHosts, adp.AllowedHosts)
 			narrowAllowPriv = perms.AllowPrivateIP
 		}
 

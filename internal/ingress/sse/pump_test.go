@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -551,5 +550,3 @@ func BenchmarkSSEPumpPerChunkOverhead(b *testing.B) {
 		}
 	}
 }
-
-var _ = json.Valid

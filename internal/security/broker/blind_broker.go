@@ -571,7 +571,18 @@ func (b *BlindHostCredentialBroker) sendOutbound(ctx context.Context, req Egress
 		return nil, err
 	}
 
-	// 2. Resolve slots/policies and validate HostMatches + BoundAudience prior to unsealing or dialing.
+	// 2. Enforce optional HostEgressConstraint fail-closed prior to slot/vault resolution, then
+	// resolve slots/policies and validate HostMatches + BoundAudience prior to unsealing or dialing.
+	if constraint.NarrowPolicy != nil {
+		if _, cerr := constraint.NarrowPolicy.ValidateTargetURL(rawURL); cerr != nil {
+			_ = b.recordAudit(ctx, req, "broker.egress_host_denied", map[string]any{
+				"target_host": parsedURL.Host,
+				"reason":      cerr.Error(),
+			})
+			return nil, cerr
+		}
+	}
+
 	var plans []brokerSlotPlan
 	var policies []egress.Policy
 
@@ -1848,6 +1859,12 @@ type scrubbingStreamReader struct {
 	closeErr  error
 }
 
+var streamReadBufPool = sync.Pool{
+	New: func() any {
+		return new([32 * 1024]byte)
+	},
+}
+
 func newScrubbingStreamReader(rc io.ReadCloser, scrubber *secretScrubber, closeIdle func()) io.ReadCloser {
 	return &scrubbingStreamReader{
 		rc:        rc,
@@ -1905,19 +1922,23 @@ func (r *scrubbingStreamReader) Read(p []byte) (int, error) {
 		rc := r.rc
 		r.mu.Unlock()
 
-		var tmp [32 * 1024]byte
-		n, err := rc.Read(tmp[:])
+		tmpPtr := streamReadBufPool.Get().(*[32 * 1024]byte)
+		n, err := rc.Read(tmpPtr[:])
 
 		r.mu.Lock()
 		if r.closed {
-			clear(tmp[:n])
+			clear(tmpPtr[:n])
+			clear(tmpPtr[:])
+			streamReadBufPool.Put(tmpPtr)
 			r.mu.Unlock()
 			return 0, io.ErrClosedPipe
 		}
 		if n > 0 {
-			r.pending = append(r.pending, tmp[:n]...)
-			clear(tmp[:n])
+			r.pending = append(r.pending, tmpPtr[:n]...)
+			clear(tmpPtr[:n])
 		}
+		clear(tmpPtr[:])
+		streamReadBufPool.Put(tmpPtr)
 		if err != nil {
 			r.readErr = r.scrubber.sanitizeError(err)
 		}

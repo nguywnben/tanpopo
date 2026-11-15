@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1063,4 +1065,387 @@ func TestChatCompletionsRemediationGuards(t *testing.T) {
 	}
 }
 
+type sqliteAuditSink struct {
+	mu  sync.Mutex
+	db  *sql.DB
+	seq int64
+}
+
+func newSQLiteAuditSink(t *testing.T, db *sql.DB) *sqliteAuditSink {
+	t.Helper()
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS audit_events (
+			id            VARCHAR(40) NOT NULL,
+			created_at_ms BIGINT NOT NULL,
+			org_id        VARCHAR(40),
+			chain_key     VARCHAR(40) NOT NULL,
+			seq_no        BIGINT NOT NULL CHECK (seq_no >= 1),
+			actor_kind    VARCHAR(24) NOT NULL,
+			actor_id      VARCHAR(64) NOT NULL,
+			entry_point   VARCHAR(24) NOT NULL
+			              CHECK (entry_point IN ('admin_api', 'cli', 'gitops_boot', 'system_reaper', 'data_plane_guard')),
+			event_type    VARCHAR(64) NOT NULL,
+			target_type   VARCHAR(32) NOT NULL,
+			target_id     VARCHAR(64) NOT NULL,
+			request_id    VARCHAR(40),
+			metadata_json TEXT NOT NULL,
+			prev_hash     CHAR(64) NOT NULL,
+			entry_hash    CHAR(64) NOT NULL,
+			CHECK ((org_id IS NULL AND chain_key = 'SYSTEM') OR (org_id IS NOT NULL AND chain_key = org_id)),
+			PRIMARY KEY (chain_key, seq_no, created_at_ms),
+			UNIQUE (chain_key, seq_no),
+			UNIQUE (id, created_at_ms)
+		)`); err != nil {
+		t.Fatalf("create audit_events table: %v", err)
+	}
+	return &sqliteAuditSink{db: db}
+}
+
+func (s *sqliteAuditSink) Append(ctx context.Context, ev storageport.AuditEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.seq++
+	chainKey := "SYSTEM"
+	var orgArg any
+	if ev.OrgID != nil && *ev.OrgID != "" {
+		chainKey = *ev.OrgID
+		orgArg = *ev.OrgID
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO audit_events (
+			id, created_at_ms, org_id, chain_key, seq_no,
+			actor_kind, actor_id, entry_point, event_type,
+			target_type, target_id, request_id, metadata_json,
+			prev_hash, entry_hash
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ev.ID, ev.CreatedAtMs, orgArg, chainKey, s.seq,
+		ev.ActorKind, ev.ActorID, ev.EntryPoint, ev.EventType,
+		ev.TargetType, ev.TargetID, ev.RequestID, ev.MetadataJSON,
+		strings.Repeat("0", 64), strings.Repeat("a", 64),
+	)
+	return err
+}
+
+func TestChatCompletionsAuditConstraintHostIntersectHeartbeatAndPlaneChecks(t *testing.T) {
+	h := setupIngressHarness(t, 0)
+
+	// 1. Non-vk_tp_ Bearer token on /v1/chat/completions -> 401 invalid_credential_plane (AUTH-07).
+	resp, body := h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(`{"model":"acme/chat-1","messages":[{"role":"user","content":"hi"}]}`), map[string]string{
+		"Authorization": "Bearer adm_tok_not_virtual_key",
+	}, nil)
+	assertErrorCode(t, resp, body, http.StatusUnauthorized, "invalid_credential_plane")
+
+	// 2. Empty AllowedPlanes in DB must fail closed -> 403 scope_or_plane_denied.
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE virtual_keys SET allowed_planes = '', version = version + 1 WHERE id = ?`, h.vkeyID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'virtual_key', ?, 'UPSERT', 0, 1760000220000)`, h.org.ID, h.vkeyID); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	resp, body = h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(`{"model":"acme/chat-1","messages":[{"role":"user","content":"hi"}]}`), nil, nil)
+	assertErrorCode(t, resp, body, http.StatusForbidden, "scope_or_plane_denied")
+
+	// Restore AllowedPlanes for subsequent checks.
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE virtual_keys SET allowed_planes = 'PROVIDER', version = version + 1 WHERE id = ?`, h.vkeyID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'virtual_key', ?, 'UPSERT', 0, 1760000220100)`, h.org.ID, h.vkeyID); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Real SQLite audit_events CHECK constraint on BlindBroker credential unseal & SSEHeartbeatInterval `: ping\n\n` emission.
+	sqlAudit := newSQLiteAuditSink(t, h.store.RawDB())
+	brkSQL, err := broker.NewBlindBroker(broker.Config{
+		Resolver:       h.catalog,
+		PolicyResolver: h.catalog,
+		Vault:          h.vault,
+		UnsealCap:      vault.MintUnsealCapabilityForBroker(),
+		Audit:          sqlAudit,
+		NowMs:          func() int64 { return h.clk.Now().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srvSQL, err := ingresshttp.NewServer(ingresshttp.ServerConfig{
+		Snapshots:            h.snapshots,
+		Broker:               brkSQL,
+		PluginsDir:           h.pluginsD,
+		Audit:                sqlAudit,
+		SSEHeartbeatInterval: 20 * time.Millisecond,
+		NowMs:                func() int64 { return h.clk.Now().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srvSQL.Close(context.Background()) })
+	sqlHTTP := httptest.NewServer(srvSQL)
+	t.Cleanup(sqlHTTP.Close)
+
+	// 3a. Sync call passes real SQLite audit_events CHECK (entry_point = 'data_plane_guard').
+	syncReq, _ := http.NewRequestWithContext(h.ctx, http.MethodPost, sqlHTTP.URL+"/v1/chat/completions", strings.NewReader(`{"model":"acme/chat-1","messages":[{"role":"user","content":"audit check"}]}`))
+	syncReq.Header.Set("Content-Type", "application/json")
+	syncReq.Header.Set("Authorization", "Bearer "+h.vkeyRaw)
+	sResp, err := sqlHTTP.Client().Do(syncReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sBody, _ := io.ReadAll(sResp.Body)
+	_ = sResp.Body.Close()
+	if sResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 with SQLite audit_events CHECK constraint, got %d body=%s", sResp.StatusCode, string(sBody))
+	}
+	var auditCount int
+	if err := h.store.RawDB().QueryRowContext(h.ctx, `SELECT COUNT(*) FROM audit_events WHERE entry_point = 'data_plane_guard'`).Scan(&auditCount); err != nil || auditCount < 1 {
+		t.Fatalf("expected >= 1 SQLite audit_events row with entry_point='data_plane_guard', count=%d err=%v", auditCount, err)
+	}
+
+	// 3b. Streaming call with SSEHeartbeatInterval=20ms emits `: ping\n\n` while upstream pauses cleanly between chunks.
+	hbUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		fl, _ := w.(http.Flusher)
+		_, _ = w.Write([]byte("data: {\"id\":\"c1\",\"model\":\"acme-upstream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n"))
+		if fl != nil {
+			fl.Flush()
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(75 * time.Millisecond):
+		}
+		_, _ = w.Write([]byte("data: {\"id\":\"c1\",\"model\":\"acme-upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"))
+		if fl != nil {
+			fl.Flush()
+		}
+	}))
+	t.Cleanup(hbUpstream.Close)
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE provider_connections SET endpoint_base_url = ?, version = version + 1 WHERE id = ?`, hbUpstream.URL, h.connID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'provider_connection', ?, 'UPSERT', 0, 1760000220200)`, h.org.ID, h.connID); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	hbReq, _ := http.NewRequestWithContext(h.ctx, http.MethodPost, sqlHTTP.URL+"/v1/chat/completions", strings.NewReader(`{"model":"acme/chat-1","stream":true,"messages":[{"role":"user","content":"hb"}]}`))
+	hbReq.Header.Set("Content-Type", "application/json")
+	hbReq.Header.Set("Authorization", "Bearer "+h.vkeyRaw)
+	hbResp, err := sqlHTTP.Client().Do(hbReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hbBody, _ := io.ReadAll(hbResp.Body)
+	_ = hbResp.Body.Close()
+	if hbResp.StatusCode != http.StatusOK || !strings.Contains(string(hbBody), ": ping\n\n") || !strings.Contains(string(hbBody), "data: [DONE]\n\n") {
+		t.Fatalf("expected 200 SSE with : ping heartbeat and [DONE], status=%d body=%q", hbResp.StatusCode, string(hbBody))
+	}
+
+	// 4. Adapter allowed_hosts_json narrowing against broader approved_permissions_json must intersect & fail closed.
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE provider_adapters SET allowed_hosts_json = '["api.narrowed-only.invalid"]', version = version + 1`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'provider_adapter', 'adp_narrow', 'UPSERT', 0, 1760000220300)`, h.org.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	narrowReq, _ := http.NewRequestWithContext(h.ctx, http.MethodPost, sqlHTTP.URL+"/v1/chat/completions", strings.NewReader(`{"model":"acme/chat-1","messages":[{"role":"user","content":"narrow"}]}`))
+	narrowReq.Header.Set("Content-Type", "application/json")
+	narrowReq.Header.Set("Authorization", "Bearer "+h.vkeyRaw)
+	nResp, err := sqlHTTP.Client().Do(narrowReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nBody, _ := io.ReadAll(nResp.Body)
+	_ = nResp.Body.Close()
+	if nResp.StatusCode == http.StatusOK {
+		t.Fatalf("expected fail-closed host rejection when adapter allowed_hosts narrows out 127.0.0.1, got 200")
+	}
+	assertErrorCode(t, nResp, nBody, http.StatusForbidden, "egress_host_denied")
+}
+
+func TestChatCompletionsEmptyPermissionsFailClosedAndTraceCap(t *testing.T) {
+	h := setupIngressHarness(t, 0)
+
+	// 1. Over-40-byte client X-Tanpopo-Request-Id is replaced by a canonical <=40-byte minted req_<26> ID.
+	longReqID := strings.Repeat("a", 41)
+	resp, _ := h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(`{"model":"acme/chat-1","messages":[{"role":"user","content":"trace"}]}`), map[string]string{
+		"X-Tanpopo-Request-Id": longReqID,
+	}, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", resp.StatusCode)
+	}
+	gotID := resp.Header.Get("X-Tanpopo-Request-Id")
+	if gotID == longReqID || len(gotID) > ingresshttp.MaxTraceHeaderLength || !strings.HasPrefix(gotID, "req_") {
+		t.Fatalf("expected fresh minted req_ ID <= %d chars when client sent %d chars, got %q (len=%d)",
+			ingresshttp.MaxTraceHeaderLength, len(longReqID), gotID, len(gotID))
+	}
+
+	// 2. Empty approved_permissions_json.allowedHosts must fail closed (403 egress_host_denied), never falling back to adapter/connection hosts.
+	emptyPermJSON := `{"allowedHosts":[],"allowPrivateIp":true,"requireTls":false,"secretSlots":["api_key"]}`
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE extension_installations SET approved_permissions_json = ? WHERE id = ?`, emptyPermJSON, h.instID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'extension_installation', ?, 'UPSERT', 0, 1760000230000)`, h.org.ID, h.instID); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	denyResp, denyBody := h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(`{"model":"acme/chat-1","messages":[{"role":"user","content":"blocked"}]}`), nil, nil)
+	assertErrorCode(t, denyResp, denyBody, http.StatusForbidden, "egress_host_denied")
+}
+
+func TestChatCompletionsUnmeteredOmitsUsageAndMultiFieldMultimodal(t *testing.T) {
+	h := setupIngressHarness(t, 0)
+
+	// 1. Multi-field content part mixing image_url type with input_audio object must still fail audio_input capability check.
+	// Allow vision on model while leaving audio_input unsupported.
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE logical_models SET base_capabilities_json = '{"streaming":"VERIFIED","tool_calling":"VERIFIED","vision":"VERIFIED"}', version = version + 1 WHERE canonical_slug = 'acme/chat-1'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'logical_model', 'lm_cap', 'UPSERT', 0, 1760000230100)`, h.org.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	mixedPayload := `{"model":"acme/chat-1","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"},"input_audio":{"data":"AAAA","format":"wav"}}]}]}`
+	mResp, mBody := h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(mixedPayload), nil, nil)
+	assertErrorCode(t, mResp, mBody, http.StatusBadRequest, "capability_not_supported")
+	if !strings.Contains(string(mBody), "audio_input") {
+		t.Fatalf("expected capability_not_supported mentioning audio_input, got %s", string(mBody))
+	}
+
+	// 2. Upstream omitting usage emits canonical OpenAI JSON with NO leaked internal "usage" object (e.g. accuracy/input_tokens).
+	noUsageSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-no-usage","model":"acme-gpt-upstream","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	}))
+	t.Cleanup(noUsageSrv.Close)
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE provider_connections SET endpoint_base_url = ?, version = version + 1 WHERE id = ?`, noUsageSrv.URL, h.connID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'provider_connection', ?, 'UPSERT', 0, 1760000230200)`, h.org.ID, h.connID); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	uResp, uBody := h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(`{"model":"acme/chat-1","messages":[{"role":"user","content":"no usage"}]}`), nil, nil)
+	if uResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d body=%s", uResp.StatusCode, string(uBody))
+	}
+	if uResp.Header.Get("X-Tanpopo-Usage-Accuracy") != "UNMETERED_FLAGGED" {
+		t.Fatalf("expected X-Tanpopo-Usage-Accuracy: UNMETERED_FLAGGED, got %q", uResp.Header.Get("X-Tanpopo-Usage-Accuracy"))
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(uBody, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if _, hasUsage := parsed["usage"]; hasUsage {
+		t.Fatalf("expected unmetered zero-usage response to omit 'usage', got body=%s", string(uBody))
+	}
+}
+
+func TestChatCompletionsPreFirstByteRevocationReturns401(t *testing.T) {
+	h := setupIngressHarness(t, 0)
+
+	arrived := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+
+	slowUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-arrived:
+		default:
+			close(arrived)
+		}
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	t.Cleanup(slowUp.Close)
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE provider_connections SET endpoint_base_url = ?, version = version + 1 WHERE id = ?`, slowUp.URL, h.connID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'provider_connection', ?, 'UPSERT', 0, 1760000230300)`, h.org.ID, h.connID); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	type result struct {
+		resp *http.Response
+		body []byte
+		err  error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		req, _ := http.NewRequestWithContext(h.ctx, http.MethodPost, h.httpSrv.URL+"/v1/chat/completions", strings.NewReader(`{"model":"acme/chat-1","stream":true,"messages":[{"role":"user","content":"revoke pre-first-byte"}]}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+h.vkeyRaw)
+		resp, err := h.client.Do(req)
+		if err != nil {
+			resCh <- result{err: err}
+			return
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		resCh <- result{resp: resp, body: body}
+	}()
+
+	select {
+	case <-arrived:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for upstream dial before revocation")
+	}
+	// Trigger immediate pre-first-byte AUTH-06 revocation.
+	h.snapshots.Streams().AbortKey(h.vkeyID)
+
+	res := <-resCh
+	if res.err != nil {
+		t.Fatalf("client error: %v", res.err)
+	}
+	assertErrorCode(t, res.resp, res.body, http.StatusUnauthorized, "invalid_virtual_key")
+}
+
+func TestServerCloseConcurrentRuntimeLoadRaceClean(t *testing.T) {
+	h := setupIngressHarness(t, 0)
+
+	// Launch concurrent requests racing with Server.Close (run under -race + goleak).
+	var wg sync.WaitGroup
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, h.httpSrv.URL+"/v1/chat/completions", strings.NewReader(`{"model":"acme/chat-1","messages":[{"role":"user","content":"close race"}]}`))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+h.vkeyRaw)
+			resp, err := h.client.Do(req)
+			if err == nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+			}
+		}()
+	}
+	time.Sleep(2 * time.Millisecond)
+	if err := h.server.Close(context.Background()); err != nil {
+		t.Fatalf("Server.Close error: %v", err)
+	}
+	wg.Wait()
+}
 

@@ -13,7 +13,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"sort"
 	"strconv"
@@ -70,6 +72,10 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	rawKey, ok := extractBearerToken(r.Header.Get("Authorization"))
 	if !ok {
 		writeCanonicalError(w, meta.RequestID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Missing or malformed Bearer Virtual Key.", false)
+		return
+	}
+	if !strings.HasPrefix(rawKey, "vk_tp_") {
+		writeCanonicalError(w, meta.RequestID, http.StatusUnauthorized, "invalid_credential_plane", "authentication_error", "Presented credential is not a Data Plane Virtual Key.", false)
 		return
 	}
 
@@ -178,7 +184,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		ConnectionID: target.Connection.ID,
 		ActorKind:    "virtual_key",
 		ActorID:      match.Key.ID,
-		EntryPoint:   "data_plane",
+		EntryPoint:   wasm.DefaultAuditEntryPoint,
 		RequestID:    meta.RequestID,
 		NarrowPolicy: &narrowPolicy,
 	})
@@ -244,22 +250,27 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		TimeoutOverride:      timeoutOverride,
 		ActorKind:            "virtual_key",
 		ActorID:              match.Key.ID,
-		EntryPoint:           "data_plane",
+		EntryPoint:           wasm.DefaultAuditEntryPoint,
 		RequestID:            meta.RequestID,
 	}
 	constraint := broker.HostEgressConstraint{
 		NarrowPolicy: &narrowPolicy,
 	}
-
-	if reqEnvelope.Stream {
-		s.executeStreamingChatCompletion(w, streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug)
+	if _, cerr := narrowPolicy.ValidateTargetURL(spec.TargetURL); cerr != nil {
+		s.writeBrokerOrEgressError(w, meta.RequestID, cerr)
 		return
 	}
-	s.executeSyncChatCompletion(w, streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug)
+
+	if reqEnvelope.Stream {
+		s.executeStreamingChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug)
+		return
+	}
+	s.executeSyncChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug)
 }
 
 func (s *Server) executeSyncChatCompletion(
 	w http.ResponseWriter,
+	clientCtx context.Context,
 	ctx context.Context,
 	reqID string,
 	rt port.ProviderRuntime,
@@ -270,6 +281,12 @@ func (s *Server) executeSyncChatCompletion(
 ) {
 	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			if clientCtx != nil && clientCtx.Err() == nil && ctx.Err() != nil {
+				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before response dispatch.", false)
+			}
+			return
+		}
 		s.writeBrokerOrEgressError(w, reqID, err)
 		return
 	}
@@ -288,6 +305,12 @@ func (s *Server) executeSyncChatCompletion(
 		Modality:         "CHAT",
 	})
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			if clientCtx != nil && clientCtx.Err() == nil && ctx.Err() != nil {
+				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before response dispatch.", false)
+			}
+			return
+		}
 		if errors.Is(err, declarative.ErrUpstreamMalformedResponse) {
 			writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Upstream provider returned an invalid or truncated chat completion payload.", false)
 			return
@@ -314,6 +337,7 @@ func (s *Server) executeSyncChatCompletion(
 
 func (s *Server) executeStreamingChatCompletion(
 	w http.ResponseWriter,
+	clientCtx context.Context,
 	streamCtx context.Context,
 	reqID string,
 	rt port.ProviderRuntime,
@@ -330,6 +354,12 @@ func (s *Server) executeStreamingChatCompletion(
 	// while keeping total stream duration open-ended.
 	upStream, err := s.broker.ExecuteStreamWithHostConstraint(upCtx, egressReq, constraint)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			if clientCtx != nil && clientCtx.Err() == nil && streamCtx.Err() != nil {
+				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before stream dispatch.", false)
+			}
+			return
+		}
 		s.writeBrokerOrEgressError(w, reqID, err)
 		return
 	}
@@ -367,6 +397,9 @@ func (s *Server) executeStreamingChatCompletion(
 			return
 		}
 		if errors.Is(pumpErr, context.Canceled) {
+			if clientCtx != nil && clientCtx.Err() == nil && streamCtx.Err() != nil {
+				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before stream dispatch.", false)
+			}
 			return
 		}
 		if errors.Is(pumpErr, port.ErrExecutionFault) {
@@ -389,19 +422,28 @@ func (s *Server) writeNormalizedUpstreamError(w http.ResponseWriter, ctx context
 		writeCanonicalError(w, reqID, mapUpstreamHTTPStatus(upstreamStatus), "upstream_error", "upstream_error", "Upstream provider request failed.", upstreamStatus == http.StatusTooManyRequests || upstreamStatus >= 500)
 		return
 	}
-	code := strings.TrimSpace(normErr.CanonicalCode)
-	if code == "" {
-		code = "upstream_error"
-	}
-	errType := strings.TrimSpace(normErr.ErrorType)
-	if errType == "" {
-		errType = "upstream_error"
-	}
+	code := sanitizeErrorToken(normErr.CanonicalCode, "upstream_error")
+	errType := sanitizeErrorToken(normErr.ErrorType, "upstream_error")
 	msg := sanitizePublicErrorMessage(normErr.SanitizedPublicMessage, 512)
 	if msg == "" {
 		msg = fmt.Sprintf("Upstream provider returned HTTP %d.", upstreamStatus)
 	}
 	writeCanonicalError(w, reqID, mapUpstreamHTTPStatus(upstreamStatus), code, errType, msg, normErr.RetryablePreStream)
+}
+
+func sanitizeErrorToken(raw, fallback string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || len(trimmed) > 64 {
+		return fallback
+	}
+	for i := 0; i < len(trimmed); i++ {
+		c := trimmed[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' {
+			continue
+		}
+		return fallback
+	}
+	return trimmed
 }
 
 func sanitizePublicErrorMessage(raw string, maxBytes int) string {
@@ -532,7 +574,10 @@ func extractBearerToken(authHdr string) (string, bool) {
 
 func planePermitsProvider(allowedPlanes string) bool {
 	trimmed := strings.TrimSpace(allowedPlanes)
-	if trimmed == "" || trimmed == "*" {
+	if trimmed == "" {
+		return false
+	}
+	if trimmed == "*" {
 		return true
 	}
 	for _, part := range strings.Split(trimmed, ",") {
@@ -624,12 +669,13 @@ func detectMultimodalParts(messages []json.RawMessage) (vision, audio, doc bool)
 				continue
 			}
 			ptype := strings.ToLower(strings.TrimSpace(stringField(part["type"])))
-			switch {
-			case ptype == "image_url" || ptype == "image" || part["image_url"] != nil:
+			if ptype == "image_url" || ptype == "image" || part["image_url"] != nil {
 				vision = true
-			case ptype == "input_audio" || part["input_audio"] != nil:
+			}
+			if ptype == "input_audio" || part["input_audio"] != nil {
 				audio = true
-			case ptype == "file" || ptype == "document" || part["file"] != nil || part["document"] != nil:
+			}
+			if ptype == "file" || ptype == "document" || part["file"] != nil || part["document"] != nil {
 				doc = true
 			}
 		}
@@ -826,32 +872,153 @@ func buildAdapterConfigJSON(conn *snapshot.ProviderConnectionView) (string, erro
 	return string(out), nil
 }
 
-func buildHostNarrowPolicy(perms installer.PermissionSet, adp *snapshot.ProviderAdapterView, conn *snapshot.ProviderConnectionView) egress.Policy {
-	var hosts []string
-	if len(perms.AllowedHosts) > 0 {
-		hosts = append([]string(nil), perms.AllowedHosts...)
-	} else if adp != nil && len(adp.AllowedHosts) > 0 {
-		hosts = append([]string(nil), adp.AllowedHosts...)
-	} else if u, err := url.Parse(conn.EndpointBaseURL); err == nil && u.Hostname() != "" {
-		hosts = []string{strings.ToLower(u.Hostname())}
+func endpointEffectivePort(rawURL string) int {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return 0
 	}
-	sort.Strings(hosts)
+	if pStr := u.Port(); pStr != "" {
+		if pNum, perr := strconv.Atoi(pStr); perr == nil && pNum >= 1 && pNum <= 65535 {
+			return pNum
+		}
+		return 0
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return 443
+	case "http":
+		return 80
+	default:
+		return 0
+	}
+}
 
-	var allowedPorts []int
-	if u, err := url.Parse(strings.TrimSpace(conn.EndpointBaseURL)); err == nil {
-		if pStr := u.Port(); pStr != "" {
-			if pNum, perr := strconv.Atoi(pStr); perr == nil && pNum >= 1 && pNum <= 65535 {
-				allowedPorts = []int{pNum}
+type hostAllowEntry struct {
+	host    string
+	port    string
+	hasPort bool
+}
+
+func parseNormalizedHostAllowEntry(raw string) (hostAllowEntry, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return hostAllowEntry{}, false
+	}
+	if addr, err := netip.ParseAddr(strings.Trim(trimmed, "[]")); err == nil {
+		return hostAllowEntry{host: strings.ToLower(addr.String())}, true
+	}
+	if strings.Contains(trimmed, ":") {
+		if h, p, err := net.SplitHostPort(trimmed); err == nil {
+			nh := strings.ToLower(strings.Trim(strings.TrimSpace(h), "[]"))
+			np := strings.TrimSpace(p)
+			if nh == "" || np == "" {
+				return hostAllowEntry{}, false
 			}
-		} else if strings.EqualFold(u.Scheme, "https") {
-			allowedPorts = []int{443}
-		} else if strings.EqualFold(u.Scheme, "http") {
-			allowedPorts = []int{80}
+			return hostAllowEntry{host: nh, port: np, hasPort: true}, true
 		}
 	}
+	return hostAllowEntry{host: strings.ToLower(trimmed)}, true
+}
 
-	allowPriv := conn.AllowPrivateIP
-	if adp != nil && len(perms.AllowedHosts) > 0 && !perms.AllowPrivateIP {
+func formatHostAllowEntry(e hostAllowEntry) string {
+	if e.hasPort {
+		return net.JoinHostPort(e.host, e.port)
+	}
+	if strings.Contains(e.host, ":") {
+		return "[" + e.host + "]"
+	}
+	return e.host
+}
+
+// intersectAllowedHosts requires non-empty approved manifest allowed_hosts (fail-closed)
+// and narrows against non-empty adapter allowed_hosts using canonical (host, port) matching.
+func intersectAllowedHosts(permHosts, adpHosts []string) []string {
+	normalize := func(in []string) []hostAllowEntry {
+		if len(in) == 0 {
+			return nil
+		}
+		seen := make(map[string]struct{}, len(in))
+		out := make([]hostAllowEntry, 0, len(in))
+		for _, raw := range in {
+			e, ok := parseNormalizedHostAllowEntry(raw)
+			if !ok {
+				continue
+			}
+			key := formatHostAllowEntry(e)
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, e)
+		}
+		return out
+	}
+
+	np := normalize(permHosts)
+	if len(np) == 0 {
+		// Fail closed: zero approved manifest hosts means zero permitted outbound hosts.
+		return nil
+	}
+	na := normalize(adpHosts)
+	if len(na) == 0 {
+		out := make([]string, len(np))
+		for i, e := range np {
+			out[i] = formatHostAllowEntry(e)
+		}
+		sort.Strings(out)
+		return out
+	}
+
+	seen := make(map[string]struct{})
+	var out []string
+	for _, pe := range np {
+		for _, ae := range na {
+			if pe.host != ae.host {
+				continue
+			}
+			var narrowed hostAllowEntry
+			switch {
+			case pe.hasPort && ae.hasPort:
+				if pe.port != ae.port {
+					continue
+				}
+				narrowed = pe
+			case pe.hasPort:
+				narrowed = pe
+			case ae.hasPort:
+				narrowed = ae
+			default:
+				narrowed = pe
+			}
+			k := formatHostAllowEntry(narrowed)
+			if _, ok := seen[k]; !ok {
+				seen[k] = struct{}{}
+				out = append(out, k)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func buildHostNarrowPolicy(perms installer.PermissionSet, adp *snapshot.ProviderAdapterView, conn *snapshot.ProviderConnectionView) egress.Policy {
+	var adpHosts []string
+	if adp != nil {
+		adpHosts = adp.AllowedHosts
+	}
+	hosts := intersectAllowedHosts(perms.AllowedHosts, adpHosts)
+
+	var allowedPorts []int
+	var allowPriv bool
+	var allowedCIDRs []string
+	if conn != nil {
+		if port := endpointEffectivePort(conn.EndpointBaseURL); port > 0 {
+			allowedPorts = []int{port}
+		}
+		allowPriv = conn.AllowPrivateIP
+		allowedCIDRs = append([]string(nil), conn.AllowedCIDRs...)
+	}
+	if adp != nil && !perms.AllowPrivateIP {
 		// If extension manifest permissions did not approve private IP egress, keep allow_private_ip false.
 		allowPriv = false
 	}
@@ -860,7 +1027,7 @@ func buildHostNarrowPolicy(perms installer.PermissionSet, adp *snapshot.Provider
 		AllowedHosts:   hosts,
 		AllowedPorts:   allowedPorts,
 		AllowPrivateIP: allowPriv,
-		AllowedCIDRs:   append([]string(nil), conn.AllowedCIDRs...),
+		AllowedCIDRs:   allowedCIDRs,
 		RequireTLS:     perms.RequireTLS,
 	}
 }
@@ -913,8 +1080,10 @@ func finalizeChatCompletionJSON(reqID, requestedModel string, norm port.Normaliz
 	if !json.Valid(norm.NormalizedResponseJSON) {
 		return nil, fmt.Errorf("invalid JSON response")
 	}
+	dec := json.NewDecoder(bytes.NewReader(norm.NormalizedResponseJSON))
+	dec.UseNumber()
 	var obj map[string]any
-	if err := json.Unmarshal(norm.NormalizedResponseJSON, &obj); err != nil || obj == nil {
+	if err := dec.Decode(&obj); err != nil || obj == nil {
 		return nil, fmt.Errorf("expected JSON object")
 	}
 	if id, ok := obj["id"].(string); !ok || strings.TrimSpace(id) == "" {
@@ -958,6 +1127,8 @@ func finalizeChatCompletionJSON(reqID, requestedModel string, norm port.Normaliz
 				usageMap["reasoning_tokens"] = norm.Usage.ReasoningTokens
 			}
 			obj["usage"] = usageMap
+		} else {
+			delete(obj, "usage")
 		}
 	}
 	return json.Marshal(obj)
