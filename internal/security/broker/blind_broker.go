@@ -33,6 +33,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -241,6 +242,15 @@ type EgressResponse struct {
 	StatusCode       int
 	SanitizedHeaders http.Header
 	Body             []byte
+}
+
+// EgressStreamResponse returns upstream HTTP status, Cookie/credential-stripped headers,
+// and a live scrubbing io.ReadCloser that strips any echoed credential variants (including
+// secrets split across chunk boundaries) and zeroizes ephemeral scrubber memory on Close.
+type EgressStreamResponse struct {
+	StatusCode       int
+	SanitizedHeaders http.Header
+	Body             io.ReadCloser
 }
 
 // BlindHostCredentialBroker executes outbound HTTP requests with connect-time SSRF protection,
@@ -462,7 +472,80 @@ func (b *BlindHostCredentialBroker) ExecuteWithHostConstraint(ctx context.Contex
 	return b.execute(ctx, req, constraint)
 }
 
+// ExecuteStream opens a streaming egress connection enforcing the exact same allowlists,
+// audience bindings, TOCTOU pre-connect hooks, header sanitization, and credential redaction as Execute,
+// returning a live scrubbing io.ReadCloser whose Close zeroizes all ephemeral secret buffers.
+func (b *BlindHostCredentialBroker) ExecuteStream(ctx context.Context, req EgressRequest) (*EgressStreamResponse, error) {
+	return b.executeStream(ctx, req, HostEgressConstraint{})
+}
+
+// ExecuteStreamWithHostConstraint behaves identically to ExecuteStream while applying
+// an optional HostEgressConstraint narrowing policy.
+func (b *BlindHostCredentialBroker) ExecuteStreamWithHostConstraint(ctx context.Context, req EgressRequest, constraint HostEgressConstraint) (*EgressStreamResponse, error) {
+	return b.executeStream(ctx, req, constraint)
+}
+
 func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressRequest, constraint HostEgressConstraint) (*EgressResponse, error) {
+	out, err := b.sendOutbound(ctx, req, constraint, false)
+	if err != nil {
+		return nil, err
+	}
+	if out.closeIdle != nil {
+		defer out.closeIdle()
+	}
+	defer out.scrubber.zeroize()
+	defer func() { _ = out.resp.Body.Close() }()
+
+	limited := io.LimitReader(out.resp.Body, b.maxResponseBodyBytes+1)
+	rawBody, readErr := io.ReadAll(limited)
+	defer clear(rawBody)
+	if readErr != nil {
+		return nil, out.scrubber.sanitizeError(fmt.Errorf("broker: read upstream response: %w", readErr))
+	}
+	if int64(len(rawBody)) > b.maxResponseBodyBytes {
+		return nil, &Error{
+			HTTPStatus: http.StatusBadGateway,
+			Code:       "upstream_response_too_large",
+			Message:    fmt.Sprintf("upstream response exceeds %d byte cap", b.maxResponseBodyBytes),
+			Err:        ErrResponseTooLarge,
+		}
+	}
+
+	scrubbedBody := out.scrubber.scrubBytes(rawBody)
+	return &EgressResponse{
+		StatusCode:       out.resp.StatusCode,
+		SanitizedHeaders: out.sanitizedHeaders,
+		Body:             scrubbedBody,
+	}, nil
+}
+
+func (b *BlindHostCredentialBroker) executeStream(ctx context.Context, req EgressRequest, constraint HostEgressConstraint) (*EgressStreamResponse, error) {
+	out, err := b.sendOutbound(ctx, req, constraint, true)
+	if err != nil {
+		return nil, err
+	}
+	return &EgressStreamResponse{
+		StatusCode:       out.resp.StatusCode,
+		SanitizedHeaders: out.sanitizedHeaders,
+		Body:             newScrubbingStreamReader(out.resp.Body, out.scrubber, out.closeIdle),
+	}, nil
+}
+
+type outboundSendResult struct {
+	resp             *http.Response
+	sanitizedHeaders http.Header
+	scrubber         *secretScrubber
+	closeIdle        func()
+}
+
+func (b *BlindHostCredentialBroker) sendOutbound(ctx context.Context, req EgressRequest, constraint HostEgressConstraint, streaming bool) (*outboundSendResult, error) {
+	var failZeroize *secretScrubber
+	handoff := false
+	defer func() {
+		if !handoff && failZeroize != nil {
+			failZeroize.zeroize()
+		}
+	}()
 	if ctx == nil {
 		return nil, fmt.Errorf("%w: context is required", ErrInvalidEgressRequest)
 	}
@@ -626,7 +709,7 @@ func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressReque
 	// 3. Unseal capability-protected secrets, re-verify Vault bound_audience, inject into wire buffers,
 	// capture transient scrubber variants, and immediately zeroize unsealed secret memory.
 	scrubber := &secretScrubber{}
-	defer scrubber.zeroize()
+	failZeroize = scrubber
 
 	injectedSensitiveHeaders := make([]string, 0, len(plans))
 	for _, item := range plans {
@@ -732,49 +815,40 @@ func (b *BlindHostCredentialBroker) execute(ctx context.Context, req EgressReque
 		return nil
 	}
 
-	client, err := egress.NewGuardedHTTPClient(egress.ClientConfig{
+	clientCfg := egress.ClientConfig{
 		Policy:                   mergedPolicy,
 		Timeout:                  timeout,
+		DisableTotalTimeout:      streaming,
+		DisableKeepAlives:        true,
 		DenyCrossOriginRedirects: !b.allowCrossOriginRedirects,
 		Resolver:                 b.hostResolver,
 		ControlHook:              effectiveControlHook,
-	})
+	}
+	if streaming {
+		clientCfg.ResponseHeaderTimeout = timeout
+	}
+	client, err := egress.NewGuardedHTTPClient(clientCfg)
 	if err != nil {
 		return nil, scrubber.sanitizeError(err)
 	}
 
 	resp, doErr := client.Do(httpReq)
 	if doErr != nil {
+		client.CloseIdleConnections()
 		_ = b.recordAudit(ctx, req, "broker.egress_transport_blocked", map[string]any{
 			"target_host": parsedURL.Host,
 			"reason":      scrubber.scrubString(doErr.Error()),
 		})
 		return nil, scrubber.sanitizeError(doErr)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	limited := io.LimitReader(resp.Body, b.maxResponseBodyBytes+1)
-	rawBody, readErr := io.ReadAll(limited)
-	defer clear(rawBody)
-	if readErr != nil {
-		return nil, scrubber.sanitizeError(fmt.Errorf("broker: read upstream response: %w", readErr))
-	}
-	if int64(len(rawBody)) > b.maxResponseBodyBytes {
-		return nil, &Error{
-			HTTPStatus: http.StatusBadGateway,
-			Code:       "upstream_response_too_large",
-			Message:    fmt.Sprintf("upstream response exceeds %d byte cap", b.maxResponseBodyBytes),
-			Err:        ErrResponseTooLarge,
-		}
-	}
-
-	scrubbedBody := scrubber.scrubBytes(rawBody)
 	sanitizedHeaders := sanitizeResponseHeaders(resp.Header, injectedSensitiveHeaders, scrubber)
-
-	return &EgressResponse{
-		StatusCode:       resp.StatusCode,
-		SanitizedHeaders: sanitizedHeaders,
-		Body:             scrubbedBody,
+	handoff = true
+	return &outboundSendResult{
+		resp:             resp,
+		sanitizedHeaders: sanitizedHeaders,
+		scrubber:         scrubber,
+		closeIdle:        client.CloseIdleConnections,
 	}, nil
 }
 
@@ -1760,3 +1834,178 @@ func (s *secretScrubber) zeroize() {
 	}
 	s.tokens = nil
 }
+
+type scrubbingStreamReader struct {
+	rc        io.ReadCloser
+	mu        sync.Mutex
+	scrubber  *secretScrubber
+	closeIdle func()
+	pending   []byte
+	outBuf    []byte
+	readErr   error
+	closed    bool
+	closeOnce sync.Once
+	closeErr  error
+}
+
+func newScrubbingStreamReader(rc io.ReadCloser, scrubber *secretScrubber, closeIdle func()) io.ReadCloser {
+	return &scrubbingStreamReader{
+		rc:        rc,
+		scrubber:  scrubber,
+		closeIdle: closeIdle,
+	}
+}
+
+func (r *scrubbingStreamReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	zeroSpins := 0
+	for {
+		r.mu.Lock()
+		if r.closed {
+			r.mu.Unlock()
+			return 0, io.ErrClosedPipe
+		}
+		if len(r.outBuf) > 0 {
+			n := copy(p, r.outBuf)
+			clear(r.outBuf[:n])
+			r.outBuf = r.outBuf[n:]
+			if len(r.outBuf) == 0 {
+				r.outBuf = nil
+			}
+			var retErr error
+			if len(r.outBuf) == 0 && len(r.pending) == 0 && r.readErr != nil {
+				retErr = r.readErr
+			}
+			r.mu.Unlock()
+			return n, retErr
+		}
+		if r.readErr != nil {
+			err := r.readErr
+			r.mu.Unlock()
+			return 0, err
+		}
+		// Fast pass-through when zero secrets are registered (zero buffering).
+		if r.scrubber == nil || len(r.scrubber.tokens) == 0 {
+			rc := r.rc
+			r.mu.Unlock()
+			n, err := rc.Read(p)
+			if err != nil {
+				r.mu.Lock()
+				if r.closed {
+					r.mu.Unlock()
+					return 0, io.ErrClosedPipe
+				}
+				r.readErr = err
+				r.mu.Unlock()
+			}
+			return n, err
+		}
+		rc := r.rc
+		r.mu.Unlock()
+
+		var tmp [32 * 1024]byte
+		n, err := rc.Read(tmp[:])
+
+		r.mu.Lock()
+		if r.closed {
+			clear(tmp[:n])
+			r.mu.Unlock()
+			return 0, io.ErrClosedPipe
+		}
+		if n > 0 {
+			r.pending = append(r.pending, tmp[:n]...)
+			clear(tmp[:n])
+		}
+		if err != nil {
+			r.readErr = r.scrubber.sanitizeError(err)
+		}
+		r.processPendingLocked(err != nil)
+		if len(r.outBuf) > 0 {
+			copied := copy(p, r.outBuf)
+			clear(r.outBuf[:copied])
+			r.outBuf = r.outBuf[copied:]
+			if len(r.outBuf) == 0 {
+				r.outBuf = nil
+			}
+			var retErr error
+			if len(r.outBuf) == 0 && len(r.pending) == 0 && r.readErr != nil {
+				retErr = r.readErr
+			}
+			r.mu.Unlock()
+			return copied, retErr
+		}
+		if r.readErr != nil {
+			retErr := r.readErr
+			r.mu.Unlock()
+			return 0, retErr
+		}
+		r.mu.Unlock()
+
+		if n == 0 {
+			zeroSpins++
+			if zeroSpins >= 16 {
+				return 0, nil
+			}
+		}
+	}
+}
+
+func (r *scrubbingStreamReader) processPendingLocked(atEOF bool) {
+	if len(r.pending) == 0 {
+		return
+	}
+	scrubbed := r.scrubber.scrubBytes(r.pending)
+	clear(r.pending)
+	r.pending = nil
+
+	holdLen := 0
+	if !atEOF && r.scrubber != nil {
+		for _, tok := range r.scrubber.tokens {
+			maxK := len(tok) - 1
+			if maxK > len(scrubbed) {
+				maxK = len(scrubbed)
+			}
+			for k := maxK; k > holdLen; k-- {
+				if bytes.HasSuffix(scrubbed, tok[:k]) {
+					holdLen = k
+					break
+				}
+			}
+		}
+	}
+
+	emitLen := len(scrubbed) - holdLen
+	if emitLen > 0 {
+		r.outBuf = append(r.outBuf, scrubbed[:emitLen]...)
+	}
+	if holdLen > 0 {
+		r.pending = append([]byte(nil), scrubbed[emitLen:]...)
+	}
+	clear(scrubbed)
+}
+
+func (r *scrubbingStreamReader) Close() error {
+	r.closeOnce.Do(func() {
+		if r.rc != nil {
+			r.closeErr = r.rc.Close()
+		}
+		if r.closeIdle != nil {
+			r.closeIdle()
+		}
+		r.mu.Lock()
+		r.closed = true
+		clear(r.pending)
+		r.pending = nil
+		clear(r.outBuf)
+		r.outBuf = nil
+		if r.scrubber != nil {
+			r.scrubber.zeroize()
+			r.scrubber = nil
+		}
+		r.mu.Unlock()
+	})
+	return r.closeErr
+}
+

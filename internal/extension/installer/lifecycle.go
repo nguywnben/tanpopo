@@ -119,6 +119,8 @@ type PermissionSet struct {
 	SecretBindingModes  map[string]string `json:"secret_binding_modes,omitempty"`
 	Hooks               []string          `json:"hooks,omitempty"`
 	MaxMemoryMib        int               `json:"max_memory_mib,omitempty"`
+	MaxCpuMsPerCall     int               `json:"max_cpu_ms_per_call,omitempty"`
+	MaxStreamChunkCpuMs int               `json:"max_stream_chunk_cpu_ms,omitempty"`
 	InspectRequestBody  bool              `json:"inspect_request_body,omitempty"`
 	InspectResponseBody bool              `json:"inspect_response_body,omitempty"`
 }
@@ -181,6 +183,7 @@ type PermissionDelta struct {
 	PrivateIPEscalated     bool     `json:"private_ip_escalated,omitempty"`
 	TLSDowngraded          bool     `json:"tls_downgraded,omitempty"`
 	MemoryIncreased        bool     `json:"memory_increased,omitempty"`
+	CpuQuotaIncreased      bool     `json:"cpu_quota_increased,omitempty"`
 	PayloadAccessEscalated bool     `json:"payload_access_escalated,omitempty"`
 }
 
@@ -194,6 +197,7 @@ func (d PermissionDelta) HasEscalation() bool {
 		d.PrivateIPEscalated ||
 		d.TLSDowngraded ||
 		d.MemoryIncreased ||
+		d.CpuQuotaIncreased ||
 		d.PayloadAccessEscalated
 }
 
@@ -281,6 +285,25 @@ func ComputePermissionDelta(approved, candidate PermissionSet) PermissionDelta {
 	}
 	if cMem > aMem {
 		delta.MemoryIncreased = true
+	}
+	aCpu := a.MaxCpuMsPerCall
+	if aCpu == 0 && a.ExecutionTier == ExecutionTierWasmSandboxT2 {
+		aCpu = 50
+	}
+	cCpu := c.MaxCpuMsPerCall
+	if cCpu == 0 && c.ExecutionTier == ExecutionTierWasmSandboxT2 {
+		cCpu = 50
+	}
+	aChunkCpu := a.MaxStreamChunkCpuMs
+	if aChunkCpu == 0 && a.ExecutionTier == ExecutionTierWasmSandboxT2 {
+		aChunkCpu = min(aCpu, 1000)
+	}
+	cChunkCpu := c.MaxStreamChunkCpuMs
+	if cChunkCpu == 0 && c.ExecutionTier == ExecutionTierWasmSandboxT2 {
+		cChunkCpu = min(cCpu, 1000)
+	}
+	if cCpu > aCpu || cChunkCpu > aChunkCpu {
+		delta.CpuQuotaIncreased = true
 	}
 	if (!a.InspectRequestBody && c.InspectRequestBody) || (!a.InspectResponseBody && c.InspectResponseBody) {
 		delta.PayloadAccessEscalated = true

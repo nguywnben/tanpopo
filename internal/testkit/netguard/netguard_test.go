@@ -60,8 +60,8 @@ func TestNetguardBlocksExternalEgressWithStackTraceNEG1(t *testing.T) {
 	assertBlockedWithStackTrace(t, dnsErr, "net.LookupHost(api.openai.com)")
 	_, lookupIPErr := net.LookupIP("api.openai.com")
 	assertBlockedWithStackTrace(t, lookupIPErr, "net.LookupIP(api.openai.com)")
-	_, lookupAddrErr := net.LookupAddr("8.8.8.8")
-	assertBlockedWithStackTrace(t, lookupAddrErr, "net.LookupAddr(8.8.8.8)")
+	_, lookupAddrErr := net.LookupAddr("198.51.100.1")
+	assertBlockedWithStackTrace(t, lookupAddrErr, "net.LookupAddr(198.51.100.1)")
 
 	// 3. Blocked UDP socket dial to 8.8.8.8:53 via Dialer Control.
 	d := NewDialer()

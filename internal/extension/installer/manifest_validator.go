@@ -27,8 +27,10 @@ const (
 	ActiveCoreSemver         = "0.1.0"
 	DefaultMaxYAMLDepth      = 32
 	DefaultMaxYAMLNodes      = 10000
-	DefaultMaxYAMLAliases    = 64
-	MaxAllowedMemoryMibLimit = 64
+	DefaultMaxYAMLAliases        = 64
+	MaxAllowedMemoryMibLimit     = 64
+	MaxAllowedCpuMsPerCall       = 5000
+	MaxAllowedStreamChunkCpuMs   = 1000
 )
 
 // Canonical SQL/system execution tiers matching extension_versions.execution_tier CHECK constraints.
@@ -363,7 +365,7 @@ func ValidateManifestStruct(m ExtensionManifest, policy ValidationPolicy, archiv
 
 	// Execution tier resolution & entrypoint/quota validation.
 	var execTier string
-	var maxMem int
+	var maxMem, maxCpuMs, maxChunkCpuMs int
 	tierStr := "declarative"
 	if m.Runtime != nil && strings.TrimSpace(m.Runtime.Tier) != "" {
 		tierStr = strings.TrimSpace(m.Runtime.Tier)
@@ -390,7 +392,15 @@ func ValidateManifestStruct(m ExtensionManifest, policy ValidationPolicy, archiv
 			if m.Runtime.Quotas.MaxCpuMsPerCall < 0 || m.Runtime.Quotas.MaxStreamChunkCpuMs < 0 {
 				return nil, fmt.Errorf("%w: runtime quotas cannot be negative", ErrManifestInvalid)
 			}
+			if m.Runtime.Quotas.MaxCpuMsPerCall > MaxAllowedCpuMsPerCall {
+				return nil, fmt.Errorf("%w: runtime.quotas.maxCpuMsPerCall %d exceeds %d ms cap", ErrManifestInvalid, m.Runtime.Quotas.MaxCpuMsPerCall, MaxAllowedCpuMsPerCall)
+			}
+			if m.Runtime.Quotas.MaxStreamChunkCpuMs > MaxAllowedStreamChunkCpuMs {
+				return nil, fmt.Errorf("%w: runtime.quotas.maxStreamChunkCpuMs %d exceeds %d ms cap", ErrManifestInvalid, m.Runtime.Quotas.MaxStreamChunkCpuMs, MaxAllowedStreamChunkCpuMs)
+			}
 			maxMem = m.Runtime.Quotas.MaxMemoryMib
+			maxCpuMs = m.Runtime.Quotas.MaxCpuMsPerCall
+			maxChunkCpuMs = m.Runtime.Quotas.MaxStreamChunkCpuMs
 		}
 		ep := strings.TrimSpace(m.Runtime.Entrypoint)
 		if execTier != ExecutionTierDeclarativeT1 && ep == "" {
@@ -570,6 +580,8 @@ func ValidateManifestStruct(m ExtensionManifest, policy ValidationPolicy, archiv
 		SecretBindingModes:  bindingModes,
 		Hooks:               m.Permissions.Hooks,
 		MaxMemoryMib:        maxMem,
+		MaxCpuMsPerCall:     maxCpuMs,
+		MaxStreamChunkCpuMs: maxChunkCpuMs,
 		InspectRequestBody:  inspectReq,
 		InspectResponseBody: inspectResp,
 	})

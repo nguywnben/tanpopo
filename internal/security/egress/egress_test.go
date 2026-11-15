@@ -6,6 +6,7 @@ package egress
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/nguywnben/tanpopo/internal/testkit/fakellm"
 	"github.com/nguywnben/tanpopo/internal/testkit/netguard"
@@ -556,4 +558,80 @@ func TestSSRFGuardEdgeCasesAndRedirectLimits(t *testing.T) {
 		t.Fatalf("unexpected Error formatting or Unwrap: %q", e.Error())
 	}
 }
+
+func TestNewGuardedHTTPClient_DisableTotalTimeout(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/slow-headers":
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(400 * time.Millisecond):
+			}
+			w.WriteHeader(http.StatusOK)
+		case "/slow-stream":
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			if fl, ok := w.(http.Flusher); ok {
+				fl.Flush()
+			}
+			for i := 0; i < 3; i++ {
+				select {
+				case <-r.Context().Done():
+					return
+				case <-time.After(60 * time.Millisecond):
+				}
+				_, _ = w.Write([]byte("data: ok\n\n"))
+				if fl, ok := w.(http.Flusher); ok {
+					fl.Flush()
+				}
+			}
+		}
+	}))
+	defer srv.Close()
+
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewGuardedHTTPClient(ClientConfig{
+		Policy: Policy{
+			AllowedHosts:   []string{u.Host},
+			AllowPrivateIP: true,
+			AllowedCIDRs:   []string{"127.0.0.1/32"},
+		},
+		Timeout:               80 * time.Millisecond,
+		DisableTotalTimeout:   true,
+		ResponseHeaderTimeout: 80 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("NewGuardedHTTPClient: %v", err)
+	}
+	if client.Timeout != 0 {
+		t.Fatalf("expected client.Timeout == 0 when DisableTotalTimeout=true, got %v", client.Timeout)
+	}
+
+	// Slow headers exceed ResponseHeaderTimeout (80ms < 400ms) -> fail promptly.
+	if resp, err := client.Get(srv.URL + "/slow-headers"); err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("expected slow-headers to time out via ResponseHeaderTimeout")
+	}
+
+	// Fast headers + slow body totaling ~180ms (> 80ms) must succeed without total timeout abort.
+	resp, err := client.Get(srv.URL + "/slow-stream")
+	if err != nil {
+		t.Fatalf("expected slow-stream to survive past ResponseHeaderTimeout, got %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, rerr := io.ReadAll(resp.Body)
+	if rerr != nil {
+		t.Fatalf("read slow-stream body: %v", rerr)
+	}
+	if strings.Count(string(body), "data: ok") != 3 {
+		t.Fatalf("expected 3 streamed chunks, got %q", string(body))
+	}
+}
+
 

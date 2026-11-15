@@ -291,6 +291,7 @@ func buildIsolatedRuntime(ctx context.Context, absDir string, vm *installer.Vali
 		for _, s := range vm.Manifest.SecretSlots {
 			slots = append(slots, s.Slot)
 		}
+		allowedHosts, allowPriv, allowedCIDRs := deriveManifestWasmEgressConfig(vm.Manifest.Permissions.NetworkEgress, false)
 		rt, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
 			WasmBytes:           wasmBytes,
 			InstallationID:      "test:" + vm.Manifest.Metadata.ID,
@@ -300,8 +301,9 @@ func buildIsolatedRuntime(ctx context.Context, absDir string, vm *installer.Vali
 			CallTimeout:         callTimeout,
 			StreamChunkTimeout:  chunkTimeout,
 			ABIMode:             wasm.ABIModeCanonicalEnvelope,
-			AllowedHosts:        vm.Manifest.Permissions.NetworkEgress.AllowedHosts,
-			AllowPrivateIP:      vm.Manifest.Permissions.NetworkEgress.AllowPrivateIP,
+			AllowedHosts:        allowedHosts,
+			AllowPrivateIP:      allowPriv,
+			AllowedCIDRs:        allowedCIDRs,
 			AllowInsecureHTTP:   !vm.Manifest.Permissions.NetworkEgress.RequireTLS,
 			ApprovedSecretSlots: slots,
 		})

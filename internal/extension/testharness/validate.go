@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
+	"net/netip"
 	"os"
 	"path"
 	"path/filepath"
@@ -28,8 +30,10 @@ import (
 )
 
 const (
-	manifestSchemaAssetPath = "plugin-schema/v1/extension-manifest.schema.json"
-	maxSchemaMemoryMib      = 64
+	manifestSchemaAssetPath   = "plugin-schema/v1/extension-manifest.schema.json"
+	maxSchemaMemoryMib        = 64
+	maxSchemaCpuMsPerCall     = 5000
+	maxSchemaStreamChunkCpuMs = 1000
 )
 
 var (
@@ -116,10 +120,26 @@ func ValidateExtensionDir(ctx context.Context, dir string) (*ValidationReport, *
 			}
 			memPages = reqPages
 		}
+		var callTimeout, chunkTimeout time.Duration
+		if vm.Manifest.Runtime.Quotas != nil {
+			if vm.Manifest.Runtime.Quotas.MaxCpuMsPerCall > maxSchemaCpuMsPerCall {
+				return nil, nil, nil, securityErr(fmt.Sprintf("maxCpuMsPerCall %d exceeds %d ms hard cap", vm.Manifest.Runtime.Quotas.MaxCpuMsPerCall, maxSchemaCpuMsPerCall), nil)
+			}
+			if vm.Manifest.Runtime.Quotas.MaxStreamChunkCpuMs > maxSchemaStreamChunkCpuMs {
+				return nil, nil, nil, securityErr(fmt.Sprintf("maxStreamChunkCpuMs %d exceeds %d ms hard cap", vm.Manifest.Runtime.Quotas.MaxStreamChunkCpuMs, maxSchemaStreamChunkCpuMs), nil)
+			}
+			if vm.Manifest.Runtime.Quotas.MaxCpuMsPerCall > 0 {
+				callTimeout = time.Duration(vm.Manifest.Runtime.Quotas.MaxCpuMsPerCall) * time.Millisecond
+			}
+			if vm.Manifest.Runtime.Quotas.MaxStreamChunkCpuMs > 0 {
+				chunkTimeout = time.Duration(vm.Manifest.Runtime.Quotas.MaxStreamChunkCpuMs) * time.Millisecond
+			}
+		}
 		var slotNames []string
 		for _, s := range vm.Manifest.SecretSlots {
 			slotNames = append(slotNames, s.Slot)
 		}
+		allowedHosts, allowPriv, allowedCIDRs := deriveManifestWasmEgressConfig(vm.Manifest.Permissions.NetworkEgress, true)
 		rtCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		rt, werr := wasm.NewRuntime(rtCtx, wasm.RuntimeConfig{
 			WasmBytes:           rawWasm,
@@ -127,8 +147,11 @@ func ValidateExtensionDir(ctx context.Context, dir string) (*ValidationReport, *
 			PoolSize:            1,
 			MemoryLimitPages:    memPages,
 			AllowExtendedMemory: allowExt,
-			AllowedHosts:        vm.Manifest.Permissions.NetworkEgress.AllowedHosts,
-			AllowPrivateIP:      vm.Manifest.Permissions.NetworkEgress.AllowPrivateIP,
+			CallTimeout:         callTimeout,
+			StreamChunkTimeout:  chunkTimeout,
+			AllowedHosts:        allowedHosts,
+			AllowPrivateIP:      allowPriv,
+			AllowedCIDRs:        allowedCIDRs,
 			AllowInsecureHTTP:   !vm.Manifest.Permissions.NetworkEgress.RequireTLS,
 			ApprovedSecretSlots: slotNames,
 		})
@@ -428,6 +451,12 @@ func validateManifestAgainstEmbeddedSchema(doc map[string]any) error {
 					if qField == "maxMemoryMib" && v > maxSchemaMemoryMib {
 						return securityErr(fmt.Sprintf("maxMemoryMib %d exceeds %d MiB hard cap", v, maxSchemaMemoryMib), nil)
 					}
+					if qField == "maxCpuMsPerCall" && v > maxSchemaCpuMsPerCall {
+						return securityErr(fmt.Sprintf("maxCpuMsPerCall %d exceeds %d ms hard cap", v, maxSchemaCpuMsPerCall), nil)
+					}
+					if qField == "maxStreamChunkCpuMs" && v > maxSchemaStreamChunkCpuMs {
+						return securityErr(fmt.Sprintf("maxStreamChunkCpuMs %d exceeds %d ms hard cap", v, maxSchemaStreamChunkCpuMs), nil)
+					}
 				}
 			}
 		}
@@ -498,4 +527,48 @@ func yamlInt(v any) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func deriveManifestWasmEgressConfig(ne installer.ManifestNetworkEgress, offlineStaticOnly bool) ([]string, bool, []string) {
+	hosts := append([]string(nil), ne.AllowedHosts...)
+	if !ne.AllowPrivateIP {
+		return hosts, false, nil
+	}
+	seen := make(map[string]struct{})
+	var cidrs []string
+	addCIDR := func(c string) {
+		if _, ok := seen[c]; !ok {
+			seen[c] = struct{}{}
+			cidrs = append(cidrs, c)
+		}
+	}
+	for _, raw := range hosts {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		hostPart := trimmed
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			hostPart = strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+		} else if h, _, err := net.SplitHostPort(trimmed); err == nil {
+			hostPart = h
+		}
+		if strings.EqualFold(hostPart, "localhost") {
+			addCIDR("127.0.0.1/32")
+			addCIDR("::1/128")
+			continue
+		}
+		if ip, err := netip.ParseAddr(hostPart); err == nil && ip.IsValid() {
+			if ip.Is4() {
+				addCIDR(ip.String() + "/32")
+			} else {
+				addCIDR(ip.String() + "/128")
+			}
+		}
+	}
+	if len(cidrs) == 0 && offlineStaticOnly {
+		// Manifest schema leaves CIDR narrowing to deployment ProviderConnection; static validation only checks binary imports/exports.
+		return hosts, false, nil
+	}
+	return hosts, true, cidrs
 }

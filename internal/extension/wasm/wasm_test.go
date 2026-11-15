@@ -1239,6 +1239,7 @@ func TestWasmCT16BlindBrokerZeroCanarySecretInMemory(t *testing.T) {
 	rt, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
 		WasmBytes:            buildHostEgressBridgeWASM(),
 		PoolSize:             2,
+		CallTimeout:          time.Second,
 		AllowHostBlindEgress: true,
 		BlindBroker:          br,
 		AllowedHosts:         []string{addrHost},
@@ -3659,3 +3660,37 @@ func TestWasmSecurityAuditAndPassiveDataHardening(t *testing.T) {
 		}
 	}
 }
+
+func TestWasmTimeoutUpperBoundsFailClosed(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	if _, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
+		WasmBytes:   wasmfixtures.EchoTransformWASM(),
+		CallTimeout: wasm.MaxAllowedCallTimeout + time.Millisecond,
+	}); !errors.Is(err, wasm.ErrInvalidRuntimeConfig) {
+		t.Fatalf("expected ErrInvalidRuntimeConfig for CallTimeout > MaxAllowedCallTimeout, got %v", err)
+	}
+
+	if _, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
+		WasmBytes:          wasmfixtures.EchoTransformWASM(),
+		StreamChunkTimeout: wasm.MaxAllowedStreamChunkTimeout + time.Millisecond,
+	}); !errors.Is(err, wasm.ErrInvalidRuntimeConfig) {
+		t.Fatalf("expected ErrInvalidRuntimeConfig for StreamChunkTimeout > MaxAllowedStreamChunkTimeout, got %v", err)
+	}
+
+	rt, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
+		WasmBytes:          wasmfixtures.EchoTransformWASM(),
+		PoolSize:           1,
+		CallTimeout:        wasm.MaxAllowedCallTimeout,
+		StreamChunkTimeout: wasm.MaxAllowedStreamChunkTimeout,
+		ABIMode:            wasm.ABIModeSliceTransform,
+		AllowedHosts:       []string{"api.acme.example"},
+		SliceTransform:     &wasm.SliceTransformConfig{Method: http.MethodPost, TargetURL: "https://api.acme.example/v1"},
+	})
+	if err != nil {
+		t.Fatalf("expected boundary timeouts (%v / %v) to be accepted, got %v", wasm.MaxAllowedCallTimeout, wasm.MaxAllowedStreamChunkTimeout, err)
+	}
+	_ = rt.Close(ctx)
+}
+

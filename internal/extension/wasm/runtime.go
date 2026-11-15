@@ -49,6 +49,10 @@ const (
 
 	// DefaultCallTimeout bounds guest CPU execution after slot acquisition (>= 50 ms watchdog floor).
 	DefaultCallTimeout = 50 * time.Millisecond
+	// MaxAllowedCallTimeout caps per-call guest CPU timeout at 5s.
+	MaxAllowedCallTimeout = 5 * time.Second
+	// MaxAllowedStreamChunkTimeout caps per-chunk streaming guest CPU timeout at 1s.
+	MaxAllowedStreamChunkTimeout = 1 * time.Second
 	// DefaultWatchdogInterval controls how frequently the single pool-wide watchdog checks deadlines.
 	DefaultWatchdogInterval = 5 * time.Millisecond
 	// DefaultInitTimeout bounds module instantiation and any guest (start) section.
@@ -316,9 +320,15 @@ func NewRuntime(ctx context.Context, cfg RuntimeConfig) (*Runtime, error) {
 	if callTimeout <= 0 {
 		callTimeout = DefaultCallTimeout
 	}
+	if callTimeout > MaxAllowedCallTimeout {
+		return nil, fmt.Errorf("%w: call timeout %v exceeds maximum %v", ErrInvalidRuntimeConfig, callTimeout, MaxAllowedCallTimeout)
+	}
 	chunkTimeout := cfg.StreamChunkTimeout
 	if chunkTimeout <= 0 {
-		chunkTimeout = callTimeout
+		chunkTimeout = min(callTimeout, MaxAllowedStreamChunkTimeout)
+	}
+	if chunkTimeout > MaxAllowedStreamChunkTimeout {
+		return nil, fmt.Errorf("%w: stream chunk timeout %v exceeds maximum %v", ErrInvalidRuntimeConfig, chunkTimeout, MaxAllowedStreamChunkTimeout)
 	}
 	watchdogInterval := cfg.WatchdogInterval
 	if watchdogInterval <= 0 {

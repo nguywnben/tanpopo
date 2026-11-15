@@ -314,7 +314,7 @@ func (s *FakeLLMServer) resolveChunkCount(r *http.Request) int {
 }
 
 func (s *FakeLLMServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 4<<20))
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 32<<20))
 	_ = r.Body.Close()
 
 	faultStr := s.nextFaultDirective(r.Header.Get(FaultHeader))

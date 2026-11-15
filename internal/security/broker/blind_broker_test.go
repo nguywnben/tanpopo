@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -24,6 +25,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
@@ -1869,3 +1871,116 @@ func TestBlindBrokerConnectTimeSocketIPAndPortPolicyTightening(t *testing.T) {
 		t.Fatalf("expected 0 upstream hits after connect-time port tightening, got %d", hitsC.Load())
 	}
 }
+
+func TestBlindBrokerExecuteStreamScrubbingAndCancellation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newBrokerHarness(t, nil)
+
+	canarySecret := canary.DefaultCanarySecret()
+	b64Secret := base64.StdEncoding.EncodeToString([]byte(canarySecret))
+	splitIdx := len(canarySecret) / 2
+	if splitIdx < 4 {
+		splitIdx = 4
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Set-Cookie", "bad=session")
+		w.Header().Set("X-Echo", canarySecret)
+		w.WriteHeader(http.StatusOK)
+		fl, _ := w.(http.Flusher)
+		// Chunk 1: prefix + first half of secret (must be held partially until remainder arrives)
+		_, _ = fmt.Fprintf(w, "data: {\"chunk\":1,\"val\":\"%s", canarySecret[:splitIdx])
+		if fl != nil {
+			fl.Flush()
+		}
+		time.Sleep(10 * time.Millisecond)
+		// Chunk 2: second half of raw secret + base64 secret + trailing event
+		_, _ = fmt.Fprintf(w, "%s\",\"b64\":\"%s\"}\n\ndata: [DONE]\n\n", canarySecret[splitIdx:], b64Secret)
+		if fl != nil {
+			fl.Flush()
+		}
+	}))
+	defer srv.Close()
+
+	u, _ := url.Parse(srv.URL)
+	connID := idgen.MustNew(idgen.PrefixConnection)
+	secMeta := h.sealCanarySecret(t, "acme_stream_key", nil, []byte(canarySecret))
+	h.resolver.put(&ResolvedSlot{
+		OrgID:          h.orgID,
+		ConnectionID:   connID,
+		SlotName:       "api_key",
+		SecretID:       secMeta.ID,
+		AllowedHosts:   []string{u.Host},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+	})
+	h.resolver.conns[h.orgID+"|"+connID] = &egress.Policy{
+		AllowedHosts:   []string{u.Host},
+		AllowPrivateIP: true,
+		AllowedCIDRs:   []string{"127.0.0.1/32"},
+	}
+
+	brk, err := NewBlindBroker(Config{
+		Resolver:       h.resolver,
+		PolicyResolver: h.resolver,
+		Vault:          h.vs,
+		UnsealCap:      vault.MintUnsealCapabilityForBroker(),
+		Audit:          h.audit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	streamResp, err := brk.ExecuteStream(ctx, EgressRequest{
+		OrgID:        h.orgID,
+		ConnectionID: connID,
+		Method:       http.MethodPost,
+		TargetURL:    srv.URL + "/v1/chat/completions",
+		CredentialInjections: []CredentialInjection{
+			{
+				SecretSlotName: "api_key",
+				Location:       TargetBearer,
+				FieldName:      "Authorization",
+				ValuePrefix:    "Bearer ",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	defer func() { _ = streamResp.Body.Close() }()
+
+	if streamResp.SanitizedHeaders.Get("Set-Cookie") != "" {
+		t.Fatalf("expected Set-Cookie stripped, got %q", streamResp.SanitizedHeaders.Get("Set-Cookie"))
+	}
+	if strings.Contains(streamResp.SanitizedHeaders.Get("X-Echo"), canarySecret) || !strings.Contains(streamResp.SanitizedHeaders.Get("X-Echo"), RedactedCredentialPlaceholder) {
+		t.Fatalf("expected X-Echo header scrubbed, got %q", streamResp.SanitizedHeaders.Get("X-Echo"))
+	}
+
+	allBytes, rerr := io.ReadAll(streamResp.Body)
+	if rerr != nil {
+		t.Fatalf("read ExecuteStream body: %v", rerr)
+	}
+	bodyStr := string(allBytes)
+	if findings := canary.NewScanner(canarySecret).ScanString("stream_body", bodyStr); len(findings) > 0 {
+		t.Fatalf("canary leak detected in ExecuteStream body: %v", findings)
+	}
+	if strings.Count(bodyStr, RedactedCredentialPlaceholder) != 2 {
+		t.Fatalf("expected 2 redacted placeholders (split raw + base64), got %q", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "data: [DONE]\n\n") {
+		t.Fatalf("expected trailing data: [DONE] intact, got %q", bodyStr)
+	}
+
+	// Closing must zeroize state cleanly and subsequent reads must fail closed.
+	if cerr := streamResp.Body.Close(); cerr != nil {
+		t.Fatalf("Close: %v", cerr)
+	}
+	var scratch [8]byte
+	if _, rerr2 := streamResp.Body.Read(scratch[:]); !errors.Is(rerr2, io.ErrClosedPipe) {
+		t.Fatalf("expected io.ErrClosedPipe after Close, got %v", rerr2)
+	}
+}
+

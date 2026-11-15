@@ -583,3 +583,150 @@ func TestProviderConnectionVisibleToProjectKeyringDriftWithStaleDBTier(t *testin
 		t.Fatal("expected withdrawn enterprise key to fail closed even while DB enterprise_signed=1")
 	}
 }
+
+func TestResolveDefaultDeploymentSelectionAndExtensionMetadata(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	clk := clock.NewFakeClock(time.UnixMilli(1760000100000))
+	nowFn := func() int64 { return clk.Now().UnixMilli() }
+
+	st, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: filepath.Join(t.TempDir(), "tanpopo.db"),
+		NowMs:  nowFn,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "def-org", DisplayName: "Def Org", MinPluginTrust: port.MinTrustVerifiedOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projA, err := st.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "proj-a", DisplayName: "Proj A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projB, err := st.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "proj-b", DisplayName: "Proj B"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pubPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubFP := trust.PublicKeyFingerprint(pubPub)
+
+	db := st.RawDB()
+	now := nowFn()
+	// Extension package + version + installation (ENABLED_ACTIVE, WASM_SANDBOX_T2)
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO extension_packages (id, canonical_name, extension_kind, publisher_id, origin_trust_tier, created_at_ms)
+		VALUES ('ext_rd', '@acme/acme-adapter', 'PROVIDER_ADAPTER', 'acme', 'verified', ?)
+	`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO extension_versions (id, package_id, semver, contract_version, core_version_range, execution_tier, bundle_sha256, signature_verified, signing_key_fingerprint, source_uri, manifest_json, created_at_ms)
+		VALUES ('exv_rd', 'ext_rd', '1.0.0', '0.1', '>=0.1.0', 'WASM_SANDBOX_T2', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, ?, 'file://acme.tpkg', '{"kind":"ExtensionManifest"}', ?)
+	`, pubFP, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO extension_installations (id, package_id, active_version_id, state, approved_permissions_json, version, created_at_ms, updated_at_ms)
+		VALUES ('ins_rd', 'ext_rd', 'exv_rd', 'ENABLED_ACTIVE', '{"allowed_hosts":["127.0.0.1:8080"]}', 1, ?, ?)
+	`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO provider_adapters (id, installation_id, adapter_slug, native_prefix, supported_dialects_json, allowed_hosts_json, version, created_at_ms)
+		VALUES ('adp_rd', 'ins_rd', 'acme', '/native/acme', '["openai"]', '["127.0.0.1:8080"]', 1, ?)
+	`, now); err != nil {
+		t.Fatal(err)
+	}
+
+	// Three connections: con_degraded (DEGRADED), con_proja (ACTIVE, owner=projA), con_orgwide (ACTIVE, org-wide)
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO provider_connections (id, org_id, owner_project_id, adapter_id, name, endpoint_base_url, allow_private_ip, allowed_cidrs_json, data_region, billing_mode, auth_mode, state, shared_project_ids_json, config_json, version, created_at_ms, updated_at_ms)
+		VALUES
+			('con_degraded', ?, NULL, 'adp_rd', 'degraded', 'http://127.0.0.1:8080', 1, '["127.0.0.1/32"]', 'eu', 'COMMERCIAL_API', 'API_KEY', 'DEGRADED', '[]', '{}', 1, ?, ?),
+			('con_proja', ?, ?, 'adp_rd', 'proj-a-conn', 'http://127.0.0.1:8080', 1, '["127.0.0.1/32"]', 'eu', 'COMMERCIAL_API', 'API_KEY', 'ACTIVE', '[]', '{}', 1, ?, ?),
+			('con_orgwide', ?, NULL, 'adp_rd', 'orgwide', 'http://127.0.0.1:8080', 1, '["127.0.0.1/32"]', 'us', 'COMMERCIAL_API', 'API_KEY', 'ACTIVE', '[]', '{}', 1, ?, ?);
+	`, org.ID, now, now, org.ID, projA.ID, now, now, org.ID, now, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO logical_models (id, org_id, canonical_slug, modality_kind, context_window, max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms)
+		VALUES ('lmod_rd', NULL, 'acme/chat-1', 'CHAT', 128000, 4096, '{"streaming":"VERIFIED"}', 1, ?, ?);
+	`, now, now); err != nil {
+		t.Fatal(err)
+	}
+
+	// Deployments:
+	// - dep_unhealthy: DEGRADED connection, earliest timestamp -> skipped
+	// - dep_disabled: DISABLED state -> skipped
+	// - dep_proja_b & dep_proja_a: ACTIVE_HEALTHY, earlier timestamp on dep_proja_a via ID tie-break
+	// - dep_orgwide: ACTIVE_HEALTHY on con_orgwide, later timestamp -> selected for projB, skipped for projA
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO model_deployments (id, org_id, connection_id, logical_model_id, upstream_model_name, native_dialect, capability_overrides_json, assurance_level, pricing_nano_usd_json, state, connect_timeout_ms, first_byte_timeout_ms, idle_chunk_timeout_ms, version, created_at_ms, updated_at_ms)
+		VALUES
+			('dep_unhealthy', ?, 'con_degraded', 'lmod_rd', 'acme-chat', 'openai', '{}', 'TESTED', '{"input_per_1m_nano_usd":100,"output_per_1m_nano_usd":200}', 'ACTIVE_HEALTHY', 5000, 30000, 30000, 1, ?, ?),
+			('dep_disabled', ?, 'con_proja', 'lmod_rd', 'acme-chat', 'openai', '{}', 'TESTED', '{"input_per_1m_nano_usd":100,"output_per_1m_nano_usd":200}', 'DISABLED', 5000, 30000, 30000, 1, ?, ?),
+			('dep_proja_b', ?, 'con_proja', 'lmod_rd', 'acme-chat-b', 'openai', '{}', 'TESTED', '{"input_per_1m_nano_usd":100,"output_per_1m_nano_usd":200}', 'ACTIVE_HEALTHY', 5000, 30000, 30000, 1, ?, ?),
+			('dep_proja_a', ?, 'con_proja', 'lmod_rd', 'acme-chat-a', 'openai', '{}', 'TESTED', '{"input_per_1m_nano_usd":100,"output_per_1m_nano_usd":200}', 'ACTIVE_HEALTHY', 5000, 30000, 30000, 1, ?, ?),
+			('dep_orgwide', ?, 'con_orgwide', 'lmod_rd', 'acme-chat-org', 'openai', '{}', 'TESTED', '{"input_per_1m_nano_usd":100,"output_per_1m_nano_usd":200}', 'ACTIVE_HEALTHY', 5000, 30000, 30000, 1, ?, ?);
+	`, org.ID, now-100, now, org.ID, now-50, now, org.ID, now, now, org.ID, now, now, org.ID, now+10, now); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{
+		DB:    db,
+		NowMs: nowFn,
+		Keyring: trust.TrustedKeyring{
+			PublisherPublicKeys: map[string]ed25519.PublicKey{"acme": pubPub},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// For projA: dep_proja_a and dep_proja_b share the earliest compliant CreatedAtMs; tie-breaker selects dep_proja_a.
+	tgtA, ok := mgr.Current().ResolveDefaultDeployment(org.ID, projA.ID, "", "acme/chat-1")
+	if !ok || tgtA == nil {
+		cDbg, cOk := mgr.Current().LookupProviderConnection(org.ID, "con_proja")
+		dDbg := mgr.Current().LookupDeploymentsForSlug(org.ID, "acme/chat-1")
+		aDbg, aOk := mgr.Current().LookupProviderAdapter("adp_rd")
+		t.Fatalf("expected compliant default deployment for projA (connOk=%v conn=%+v depls=%d adpOk=%v adp=%+v)", cOk, cDbg, len(dDbg), aOk, aDbg)
+	}
+	if tgtA.Deployment.ID != "dep_proja_a" || tgtA.Connection.ID != "con_proja" {
+		t.Fatalf("unexpected target for projA: depl=%s conn=%s", tgtA.Deployment.ID, tgtA.Connection.ID)
+	}
+	if tgtA.Adapter.CanonicalName != "@acme/acme-adapter" ||
+		tgtA.Adapter.ExecutionTier != "WASM_SANDBOX_T2" ||
+		tgtA.Adapter.ExtensionState != "ENABLED_ACTIVE" ||
+		tgtA.Adapter.ActiveVersionID != "exv_rd" ||
+		tgtA.Adapter.BundleSHA256 != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("unexpected enriched adapter metadata: %+v", tgtA.Adapter)
+	}
+
+	// Returned views must be deep clones so caller mutation never mutates snapshot state.
+	tgtA.Adapter.AllowedHosts[0] = "mutated.example"
+	tgtA2, _ := mgr.Current().ResolveDefaultDeployment(org.ID, projA.ID, "", "acme/chat-1")
+	if tgtA2.Adapter.AllowedHosts[0] != "127.0.0.1:8080" {
+		t.Fatalf("expected cloned AllowedHosts, got %v", tgtA2.Adapter.AllowedHosts)
+	}
+
+	// For projB: con_proja is invisible so ResolveDefaultDeployment falls through to dep_orgwide.
+	tgtB, ok := mgr.Current().ResolveDefaultDeployment(org.ID, projB.ID, "", "acme/chat-1")
+	if !ok || tgtB.Deployment.ID != "dep_orgwide" {
+		t.Fatalf("expected dep_orgwide for projB, got %+v (ok=%v)", tgtB, ok)
+	}
+
+	// Unknown model -> false.
+	if _, ok := mgr.Current().ResolveDefaultDeployment(org.ID, projA.ID, "", "missing/model"); ok {
+		t.Fatal("expected false for unknown model slug")
+	}
+}
+

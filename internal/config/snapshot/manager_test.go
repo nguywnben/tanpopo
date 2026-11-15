@@ -645,3 +645,53 @@ func BenchmarkSnapshotLookup(b *testing.B) {
 		}
 	}
 }
+
+func TestSnapshotRejectsMalformedVirtualKeyAllowlists(t *testing.T) {
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	nowMs := fk.Now().UTC().UnixMilli()
+	st, err := sqlite.Open(context.Background(), sqlite.Config{
+		DBPath: filepath.Join(t.TempDir(), "corrupt_vk.db"),
+		NowMs:  func() int64 { return nowMs },
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	ctx := context.Background()
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "bad-vk-org", DisplayName: "Bad VK Org"})
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+	proj, err := st.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "bad-vk-proj", DisplayName: "Bad VK Proj"})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	env, err := st.Tenancy().CreateEnvironment(ctx, org.ID, proj.ID, port.CreateEnvironmentParams{Slug: "prod"})
+	if err != nil {
+		t.Fatalf("CreateEnvironment: %v", err)
+	}
+
+	rawKey := "vk_tp_prod_corruptallowlist1234567890abcdef"
+	sum := sha256.Sum256([]byte(rawKey))
+	if _, err := st.RawDB().ExecContext(ctx, `
+		INSERT INTO virtual_keys (
+			id, org_id, project_id, env_id, owner_principal_id, name,
+			key_prefix, last_four, active_key_hash, previous_key_hash, grace_expires_at_ms,
+			state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
+			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
+			expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
+		) VALUES ('vky_01corrupt0000000000000000001', ?, ?, ?, NULL, 'bad-json', 'vk_tp_prod_', 'cdef', ?, NULL, NULL, 'CREATED_ACTIVE', 'PROVIDER', '["*"]', '{bad-json', '[]', NULL, NULL, 10, 0, NULL, NULL, NULL, 1, ?, ?)`,
+		org.ID, proj.ID, env.ID, sum[:], nowMs, nowMs,
+	); err != nil {
+		t.Fatalf("insert corrupt key: %v", err)
+	}
+
+	if _, err := NewManager(ctx, ManagerConfig{
+		DB:    st.RawDB(),
+		NowMs: func() int64 { return nowMs },
+	}); err == nil {
+		t.Fatal("expected NewManager to fail closed on malformed allowed_routes_json in virtual_keys")
+	}
+}
+

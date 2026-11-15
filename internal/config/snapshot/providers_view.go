@@ -31,16 +31,25 @@ type LogicalModelKey struct {
 	Slug  string
 }
 
-// ProviderAdapterView is an immutable O(1) snapshot record of provider_adapters.
+// ProviderAdapterView is an immutable O(1) snapshot record of provider_adapters
+// enriched with extension installation/package/version metadata.
 type ProviderAdapterView struct {
-	ID                string
-	InstallationID    string
-	AdapterSlug       string
-	NativePrefix      string
-	SupportedDialects []string
-	AllowedHosts      []string
-	Version           int64
-	CreatedAtMs       int64
+	ID                      string
+	InstallationID          string
+	AdapterSlug             string
+	NativePrefix            string
+	SupportedDialects       []string
+	AllowedHosts            []string
+	CanonicalName           string
+	ExtensionKind           string
+	ExecutionTier           string
+	ExtensionState          string
+	ActiveVersionID         string
+	BundleSHA256            string
+	ManifestJSON            string
+	ApprovedPermissionsJSON string
+	Version                 int64
+	CreatedAtMs             int64
 }
 
 func (a *ProviderAdapterView) clone() *ProviderAdapterView {
@@ -102,6 +111,12 @@ func (c *ProviderConnectionView) clone() *ProviderConnectionView {
 	cp.CredentialID = cloneStrPtr(c.CredentialID)
 	cp.AllowedCIDRs = append([]string(nil), c.AllowedCIDRs...)
 	cp.SharedProjectIDs = append([]string(nil), c.SharedProjectIDs...)
+	if c.sharedProjectSet != nil {
+		cp.sharedProjectSet = make(map[string]struct{}, len(c.sharedProjectSet))
+		for k := range c.sharedProjectSet {
+			cp.sharedProjectSet[k] = struct{}{}
+		}
+	}
 	cp.SecretBindings = make(map[string]*ConnectionSecretBindingView, len(c.SecretBindings))
 	for k, v := range c.SecretBindings {
 		if v != nil {
@@ -312,6 +327,67 @@ func (s *ConfigSnapshot) LookupDeploymentsForSlug(orgID, canonicalSlug string) [
 	return out
 }
 
+// ResolvedTarget bundles the resolved LogicalModel, ModelDeployment, ProviderConnection,
+// and ProviderAdapter views for M1 default target dispatch.
+type ResolvedTarget struct {
+	LogicalModel *LogicalModelView
+	Deployment   *ModelDeploymentView
+	Connection   *ProviderConnectionView
+	Adapter      *ProviderAdapterView
+}
+
+// ResolveDefaultDeployment selects the deterministic primary ACTIVE_HEALTHY ModelDeployment
+// bound to an ACTIVE, project-visible ProviderConnection for (orgID, projectID, modelSlug)
+// prior to multi-target RouteResolver landing in TP-IMP-0020.
+func (s *ConfigSnapshot) ResolveDefaultDeployment(orgID, projectID, _ string, modelSlug string) (*ResolvedTarget, bool) {
+	if s == nil || s.providers == nil || orgID == "" || modelSlug == "" {
+		return nil, false
+	}
+	candidates := s.providers.deploymentsByOrgSlug[LogicalModelKey{OrgID: orgID, Slug: modelSlug}]
+	if len(candidates) == 0 {
+		return nil, false
+	}
+
+	var (
+		bestDepl *ModelDeploymentView
+		bestConn *ProviderConnectionView
+		bestAdp  *ProviderAdapterView
+		bestLM   *LogicalModelView
+	)
+	for _, d := range candidates {
+		if d == nil || d.OrgID != orgID || d.State != "ACTIVE_HEALTHY" {
+			continue
+		}
+		conn, ok := s.providers.connectionsByID[d.ConnectionID]
+		if !ok || conn == nil || conn.State != ConnectionStateActive || !conn.VisibleToProject(orgID, projectID) {
+			continue
+		}
+		adp, ok := s.providers.adaptersByID[conn.AdapterID]
+		if !ok || adp == nil {
+			continue
+		}
+		lm, ok := s.providers.logicalModelsByID[d.LogicalModelID]
+		if !ok || lm == nil || (lm.OrgID != nil && *lm.OrgID != orgID) {
+			continue
+		}
+		if bestDepl == nil || d.CreatedAtMs < bestDepl.CreatedAtMs || (d.CreatedAtMs == bestDepl.CreatedAtMs && d.ID < bestDepl.ID) {
+			bestDepl = d
+			bestConn = conn
+			bestAdp = adp
+			bestLM = lm
+		}
+	}
+	if bestDepl == nil {
+		return nil, false
+	}
+	return &ResolvedTarget{
+		LogicalModel: bestLM.clone(),
+		Deployment:   bestDepl.clone(),
+		Connection:   bestConn.clone(),
+		Adapter:      bestAdp.clone(),
+	}, true
+}
+
 func loadProviderCatalogSQL(ctx context.Context, tx *sql.Tx, keyring trust.TrustedKeyring) (*ProviderCatalogView, error) {
 	view := &ProviderCatalogView{
 		adaptersByID:         make(map[string]*ProviderAdapterView),
@@ -342,9 +418,20 @@ func loadProviderCatalogSQL(ctx context.Context, tx *sql.Tx, keyring trust.Trust
 
 func loadAdaptersSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView) error {
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id, installation_id, adapter_slug, native_prefix,
-		       supported_dialects_json, allowed_hosts_json, version, created_at_ms
-		FROM provider_adapters
+		SELECT pa.id, pa.installation_id, pa.adapter_slug, pa.native_prefix,
+		       pa.supported_dialects_json, pa.allowed_hosts_json, pa.version, pa.created_at_ms,
+		       COALESCE(ep.canonical_name, ''),
+		       COALESCE(ep.extension_kind, ''),
+		       COALESCE(ei.state, ''),
+		       COALESCE(ei.active_version_id, ''),
+		       COALESCE(ei.approved_permissions_json, '{}'),
+		       COALESCE(ev.execution_tier, ''),
+		       COALESCE(ev.bundle_sha256, ''),
+		       COALESCE(ev.manifest_json, '{}')
+		FROM provider_adapters pa
+		LEFT JOIN extension_installations ei ON ei.id = pa.installation_id
+		LEFT JOIN extension_packages ep ON ep.id = ei.package_id
+		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
 	`)
 	if err != nil {
 		return fmt.Errorf("snapshot: query provider_adapters: %w", err)
@@ -361,6 +448,8 @@ func loadAdaptersSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView)
 		if err := rows.Scan(
 			&a.ID, &a.InstallationID, &a.AdapterSlug, &nativePrefix,
 			&dialectsJSON, &hostsJSON, &a.Version, &a.CreatedAtMs,
+			&a.CanonicalName, &a.ExtensionKind, &a.ExtensionState, &a.ActiveVersionID,
+			&a.ApprovedPermissionsJSON, &a.ExecutionTier, &a.BundleSHA256, &a.ManifestJSON,
 		); err != nil {
 			return fmt.Errorf("snapshot: scan provider_adapters: %w", err)
 		}

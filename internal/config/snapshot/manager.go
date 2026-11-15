@@ -11,7 +11,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -1098,9 +1097,15 @@ func loadVirtualKeysSQL(ctx context.Context, tx *sql.Tx) (
 			v.RevokedAtMs = &n
 		}
 		v.IsEphemeralPlayground = ephInt != 0
-		v.AllowedModels = parseJSONStringSlice(modelsJSON)
-		v.AllowedRoutes = parseJSONStringSlice(routesJSON)
-		v.AllowedMCPTools = parseJSONStringSlice(mcpJSON)
+		if v.AllowedModels, err = parseJSONStringSliceStrict(modelsJSON); err != nil {
+			return nil, nil, nil, fmt.Errorf("snapshot: decode virtual_key %q allowed_models_json: %w", v.ID, err)
+		}
+		if v.AllowedRoutes, err = parseJSONStringSliceStrict(routesJSON); err != nil {
+			return nil, nil, nil, fmt.Errorf("snapshot: decode virtual_key %q allowed_routes_json: %w", v.ID, err)
+		}
+		if v.AllowedMCPTools, err = parseJSONStringSliceStrict(mcpJSON); err != nil {
+			return nil, nil, nil, fmt.Errorf("snapshot: decode virtual_key %q allowed_mcp_tools_json: %w", v.ID, err)
+		}
 
 		if len(activeBytes) == 32 {
 			copy(v.ActiveKeyHash[:], activeBytes)
@@ -1117,16 +1122,4 @@ func loadVirtualKeysSQL(ctx context.Context, tx *sql.Tx) (
 		return nil, nil, nil, fmt.Errorf("snapshot: iterate virtual keys: %w", err)
 	}
 	return byActive, byPrev, byID, nil
-}
-
-func parseJSONStringSlice(raw string) []string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" || trimmed == "null" {
-		return nil
-	}
-	var out []string
-	if err := json.Unmarshal([]byte(trimmed), &out); err != nil {
-		return nil
-	}
-	return out
 }

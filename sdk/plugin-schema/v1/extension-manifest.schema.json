@@ -99,11 +99,13 @@
             },
             "maxCpuMsPerCall": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 5000
             },
             "maxStreamChunkCpuMs": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 1,
+              "maximum": 1000
             }
           }
         }

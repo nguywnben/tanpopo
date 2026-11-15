@@ -839,6 +839,9 @@ func isAllowedTCPNetwork(network string) bool {
 type ClientConfig struct {
 	Policy                   Policy
 	Timeout                  time.Duration
+	DisableTotalTimeout      bool
+	DisableKeepAlives        bool
+	ResponseHeaderTimeout    time.Duration
 	DialTimeout              time.Duration
 	TLSHandshakeTimeout      time.Duration
 	MaxRedirects             int
@@ -886,6 +889,14 @@ func NewGuardedHTTPClient(cfg ClientConfig) (*http.Client, error) {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
+	clientTimeout := timeout
+	respHeaderTimeout := cfg.ResponseHeaderTimeout
+	if cfg.DisableTotalTimeout {
+		clientTimeout = 0
+		if respHeaderTimeout <= 0 {
+			respHeaderTimeout = timeout
+		}
+	}
 	tlsTimeout := cfg.TLSHandshakeTimeout
 	if tlsTimeout <= 0 {
 		tlsTimeout = 10 * time.Second
@@ -896,9 +907,11 @@ func NewGuardedHTTPClient(cfg ClientConfig) (*http.Client, error) {
 		Proxy:                 nil,
 		DialContext:           dialer.DialContext,
 		ForceAttemptHTTP2:     true,
+		DisableKeepAlives:     cfg.DisableKeepAlives,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   tlsTimeout,
+		ResponseHeaderTimeout: respHeaderTimeout,
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
@@ -912,7 +925,7 @@ func NewGuardedHTTPClient(cfg ClientConfig) (*http.Client, error) {
 	})
 
 	return &http.Client{
-		Timeout: timeout,
+		Timeout: clientTimeout,
 		Transport: &policyCheckingRoundTripper{
 			policy: dialer.policy,
 			base:   tr,

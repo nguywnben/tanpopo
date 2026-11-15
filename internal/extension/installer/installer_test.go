@@ -1965,3 +1965,61 @@ func TestInstallerTPBR0202TrustDowngradeInvalidatesNonOwnerPolicy(t *testing.T) 
 		t.Fatal("security bypass: stale unpinned org_extension_policies.enabled=1 survived uninstall -> unsigned StageFreshInstall")
 	}
 }
+
+func TestCPUQuotaCapsAndEscalation(t *testing.T) {
+	t.Parallel()
+
+	overCall := []byte(`apiVersion: tanpopo.dev/extension/v1alpha1
+kind: ExtensionManifest
+metadata:
+  id: "@acme/over-cpu"
+  name: "Over CPU"
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "sandboxed_wasm"
+  entrypoint: "dist/adapter.wasm"
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  quotas:
+    maxCpuMsPerCall: 5001
+permissions:
+  networkEgress:
+    allowedHosts: ["api.acme.example"]
+`)
+	if _, err := ParseAndValidateManifest(overCall, DefaultValidationPolicy(), nil); !errors.Is(err, ErrManifestInvalid) {
+		t.Fatalf("expected ErrManifestInvalid for maxCpuMsPerCall > 5000, got %v", err)
+	}
+
+	overChunk := strings.ReplaceAll(string(overCall), "maxCpuMsPerCall: 5001", "maxCpuMsPerCall: 500\n    maxStreamChunkCpuMs: 1001")
+	if _, err := ParseAndValidateManifest([]byte(overChunk), DefaultValidationPolicy(), nil); !errors.Is(err, ErrManifestInvalid) {
+		t.Fatalf("expected ErrManifestInvalid for maxStreamChunkCpuMs > 1000, got %v", err)
+	}
+
+	deltaCall := ComputePermissionDelta(
+		PermissionSet{ExecutionTier: ExecutionTierWasmSandboxT2, MaxCpuMsPerCall: 50, MaxStreamChunkCpuMs: 25},
+		PermissionSet{ExecutionTier: ExecutionTierWasmSandboxT2, MaxCpuMsPerCall: 100, MaxStreamChunkCpuMs: 25},
+	)
+	if !deltaCall.CpuQuotaIncreased || !deltaCall.HasEscalation() {
+		t.Fatalf("expected MaxCpuMsPerCall increase to trigger CpuQuotaIncreased escalation, got %+v", deltaCall)
+	}
+
+	deltaChunk := ComputePermissionDelta(
+		PermissionSet{ExecutionTier: ExecutionTierWasmSandboxT2, MaxCpuMsPerCall: 50, MaxStreamChunkCpuMs: 25},
+		PermissionSet{ExecutionTier: ExecutionTierWasmSandboxT2, MaxCpuMsPerCall: 50, MaxStreamChunkCpuMs: 50},
+	)
+	if !deltaChunk.CpuQuotaIncreased || !deltaChunk.HasEscalation() {
+		t.Fatalf("expected MaxStreamChunkCpuMs increase to trigger CpuQuotaIncreased escalation, got %+v", deltaChunk)
+	}
+
+	deltaSame := ComputePermissionDelta(
+		PermissionSet{ExecutionTier: ExecutionTierWasmSandboxT2, MaxCpuMsPerCall: 100, MaxStreamChunkCpuMs: 50},
+		PermissionSet{ExecutionTier: ExecutionTierWasmSandboxT2, MaxCpuMsPerCall: 50, MaxStreamChunkCpuMs: 25},
+	)
+	if deltaSame.CpuQuotaIncreased || deltaSame.HasEscalation() {
+		t.Fatalf("expected decreased CPU quotas not to trigger escalation, got %+v", deltaSame)
+	}
+}
+
