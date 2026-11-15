@@ -1,0 +1,31 @@
+case_id: "ct07_stream_split_utf8_and_prefix"
+description: "Replays SSE chunks split mid-'data:' prefix and mid-multi-byte UTF-8 rune ('世') with : ping keepalives and [DONE]."
+capability: "chat_stream"
+config:
+  endpoint_base_url: "https://api.openai.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gpt-4o-mini"
+  stream: true
+  messages:
+    - role: "user"
+      content: "Greet in Chinese"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "text/event-stream"
+  raw_sse_chunks:
+    - "base64:ZGF0"
+    - "base64:YTogeyJpZCI6ImNoYXRjbXBsX3N0cmVhbV8xIiwibW9kZWwiOiJncHQtNG8tbWluaSIsImNob2ljZXMiOlt7ImRlbHRhIjp7ImNvbnRlbnQiOiJIZWxsbyDkuA=="
+    - "base64:liJ9LCJmaW5pc2hfcmVhc29uIjpudWxsfV19Cgo="
+    - "base64:OiBwaW5nX2tlZXBhbGl2ZQoK"
+    - "data: {\"id\":\"chatcmpl_stream_1\",\"model\":\"gpt-4o-mini\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":4}}\n\n"
+    - "data: [DONE]\n\n"
+expected_normalized_output:
+  content_contains: "Hello 世"
+  require_stream_completed: true
+  require_stream_options_include_usage: true
+  require_usage: true
+  input_tokens: 10
+  output_tokens: 4

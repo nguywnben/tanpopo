@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tanpopo.dev/schemas/plugin/v1/cassette.schema.json",
+  "title": "Tanpopo Offline Contract Cassette",
+  "description": "Canonical v1 offline cassette replay schema for `tanpopo plugin test` (TP-IMP-0014, SPEC-QA-01).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "case_id",
+    "capability",
+    "normalized_input",
+    "upstream_recorded_exchange"
+  ],
+  "anyOf": [
+    { "required": ["expected_normalized_output"] },
+    { "required": ["expected_canonical_error"] }
+  ],
+  "properties": {
+    "case_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "capability": {
+      "type": "string",
+      "enum": [
+        "chat_completion",
+        "chat_stream",
+        "tool_calling",
+        "error_normalization",
+        "validation_probe",
+        "native_passthrough",
+        "usage_extraction",
+        "guardrail"
+      ]
+    },
+    "config": {
+      "type": "object"
+    },
+    "secret_slots": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "normalized_input": {
+      "type": "object"
+    },
+    "upstream_recorded_exchange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "anyOf": [
+        { "required": ["raw_body"] },
+        { "required": ["sse_frames"] },
+        { "required": ["raw_sse_chunks"] }
+      ],
+      "properties": {
+        "status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "expected_upstream_headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "raw_body": {
+          "type": "string"
+        },
+        "sse_frames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "raw_sse_chunks": {
+          "type": "array",
+          "description": "Raw chunk segments (UTF-8 or base64: prefix for exact mid-UTF-8 byte boundaries).",
+          "items": { "type": "string" }
+        },
+        "abort_after_chunks": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "expected_normalized_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string" },
+        "finish_reason": { "type": "string" },
+        "content": { "type": "string" },
+        "content_contains": { "type": "string" },
+        "tool_calls_count": { "type": "integer", "minimum": 0 },
+        "tool_call_name": { "type": "string" },
+        "tool_call_arguments": { "type": "string" },
+        "require_stream_completed": { "type": "boolean" },
+        "require_usage": { "type": "boolean" },
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "cache_read_tokens": { "type": "integer", "minimum": 0 },
+        "reasoning_tokens": { "type": "integer", "minimum": 0 },
+        "require_stream_options_include_usage": { "type": "boolean" }
+      }
+    },
+    "expected_canonical_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_code"],
+      "properties": {
+        "canonical_code": { "type": "string", "minLength": 1 },
+        "error_type": { "type": "string" },
+        "retryable_pre_stream": { "type": "boolean" },
+        "trigger_reauth": { "type": "boolean" },
+        "message_must_not_contain": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

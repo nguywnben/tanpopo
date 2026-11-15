@@ -1,0 +1,58 @@
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: ExtensionManifest
+
+metadata:
+  id: "@example/starter-wasm-adapter"
+  name: "Starter Wasm Provider Adapter"
+  version: "0.1.0"
+  license: "Apache-2.0"
+  description: "Tier-2 sandboxed WebAssembly 1.0 OpenAI-compatible provider adapter template."
+
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0 <0.3.0"
+
+runtime:
+  tier: "sandboxed_wasm"
+  entrypoint: "dist/adapter.wasm"
+  sha256: "592e0efce3f3dd7c82ae51c5535618cceead8a4d298e9abd36a4b58e3f993567"
+  quotas:
+    maxMemoryMib: 16
+    maxCpuMsPerCall: 50
+    maxStreamChunkCpuMs: 50
+
+capabilities:
+  - type: "provider_adapter"
+    adapterSlug: "starter-wasm"
+    supportedDialects:
+      - "openai_chat"
+    authMethods:
+      - id: "api_key_header"
+        mode: "host_blind_inject"
+        headerName: "Authorization"
+
+secretSlots:
+  - slot: "api_key"
+    requiredForAuthMethods:
+      - "api_key_header"
+
+permissions:
+  networkEgress:
+    allowedHosts:
+      - "api.openai.com"
+    allowPrivateIp: false
+    requireTls: true
+  hooks:
+    - "provider:build_validation_probe"
+    - "provider:verify_validation_result"
+    - "provider:transform_request"
+    - "provider:transform_response"
+    - "provider:transform_stream_chunk"
+    - "provider:normalize_error"
+    - "provider:extract_usage"
+    - "provider:inspect_native_request"
+    - "guardrail:evaluate_guardrail"
+  payloadAccess:
+    inspectRequestBody: true
+    inspectResponseBody: true
+    maxInlineMetadataBytes: 65536

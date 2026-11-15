@@ -1,0 +1,25 @@
+case_id: "ct06_sync_chat_completion"
+description: "Verifies synchronous chat completion normalization, usage extraction, and blind secret injection in Tier-2 Wasm."
+capability: "chat_completion"
+config:
+  endpoint_base_url: "https://api.openai.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gpt-4o-mini"
+  stream: false
+  messages:
+    - role: "user"
+      content: "Ping"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  raw_body: '{"id":"chatcmpl_sync_01","model":"gpt-4o-mini","choices":[{"index":0,"message":{"role":"assistant","content":"Pong"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":3}}'
+expected_normalized_output:
+  model: "gpt-4o-mini"
+  finish_reason: "stop"
+  content: "Pong"
+  require_usage: true
+  input_tokens: 12
+  output_tokens: 3

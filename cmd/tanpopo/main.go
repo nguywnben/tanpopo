@@ -5,9 +5,15 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/spf13/cobra"
+
+	"github.com/nguywnben/tanpopo/internal/cli/plugin"
+	"github.com/nguywnben/tanpopo/internal/extension/testharness"
 )
 
 // Build metadata populated via linker -ldflags during release builds.
@@ -22,27 +28,57 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		printUsage(stdout)
-		return 0
+	var (
+		outputFmt   string
+		showVersion bool
+	)
+
+	rootCmd := &cobra.Command{
+		Use:           "tanpopo",
+		Short:         "Open-source, self-hosted-first, extension-first AI Gateway",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if showVersion {
+				_, _ = fmt.Fprintf(stdout, "tanpopo version %s (commit=%s built=%s)\n", version, commit, date)
+				return nil
+			}
+			return cmd.Help()
+		},
+	}
+	rootCmd.SetOut(stdout)
+	rootCmd.SetErr(stderr)
+	rootCmd.SetArgs(args)
+
+	rootCmd.PersistentFlags().StringVar(&outputFmt, "output", "table", "Output format (table|json|yaml)")
+	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Print version information")
+
+	versionCmd := &cobra.Command{
+		Use:   "version",
+		Short: "Print version information",
+		Args:  cobra.NoArgs,
+		Run: func(_ *cobra.Command, _ []string) {
+			_, _ = fmt.Fprintf(stdout, "tanpopo version %s (commit=%s built=%s)\n", version, commit, date)
+		},
 	}
 
-	switch args[0] {
-	case "--version", "-v", "version":
-		fmt.Fprintf(stdout, "tanpopo version %s (commit=%s built=%s)\n", version, commit, date)
-		return 0
-	case "--help", "-h", "help":
-		printUsage(stdout)
-		return 0
-	default:
-		fmt.Fprintf(stderr, "tanpopo: unknown command or flag %q (control/data plane commands unlock in M1-M2; run `tanpopo --help`)\n", args[0])
-		return 2
-	}
-}
+	rootCmd.AddCommand(
+		versionCmd,
+		plugin.NewCommand(plugin.Options{
+			OutputFormat: &outputFmt,
+			Stdout:       stdout,
+			Stderr:       stderr,
+		}),
+	)
 
-func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "tanpopo - Open-source, self-hosted-first, extension-first AI Gateway")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  tanpopo [--version | --help]")
+	if err := rootCmd.Execute(); err != nil {
+		code := testharness.ExitValidation
+		var ex *testharness.ExitError
+		if errors.As(err, &ex) && ex.Code != 0 {
+			code = ex.Code
+		}
+		_, _ = fmt.Fprintf(stderr, "tanpopo: %s\n", testharness.SanitizeTerminalText(err.Error()))
+		return code
+	}
+	return testharness.ExitOK
 }

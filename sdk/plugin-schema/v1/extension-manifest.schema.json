@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tanpopo.dev/schemas/plugin/v1/extension-manifest.schema.json",
+  "title": "Tanpopo Extension Manifest",
+  "description": "Canonical v1 schema for Tanpopo ExtensionManifest and DeclarativeProviderAdapter packages (SPEC-EXT-01, SPEC-EXT-02).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "compatibility",
+    "permissions"
+  ],
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "tanpopo.dev/extension/v1alpha1"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["ExtensionManifest", "DeclarativeProviderAdapter"]
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "license"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^@[a-z0-9][a-z0-9-]{0,62}/[a-z0-9][a-z0-9._-]{0,62}$",
+          "description": "Scoped package identifier. ^@tanpopo(-[a-z0-9]+)?/ is reserved for Tanpopo root-signed packages."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "homepage": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "originTrustTier": {
+          "type": "string",
+          "enum": ["official", "verified", "unverified_external"]
+        }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "coreVersionRange"],
+      "properties": {
+        "contractVersion": {
+          "type": "string",
+          "enum": ["0.1"]
+        },
+        "coreVersionRange": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tier"],
+      "properties": {
+        "tier": {
+          "type": "string",
+          "enum": ["declarative", "sandboxed_wasm", "isolated_sidecar"]
+        },
+        "entrypoint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "quotas": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxMemoryMib": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "maxCpuMsPerCall": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxStreamChunkCpuMs": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "provider_adapter",
+              "auth_driver",
+              "guardrail_policy",
+              "telemetry_exporter"
+            ]
+          },
+          "adapterSlug": {
+            "type": "string"
+          },
+          "supportedDialects": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "nativePassthroughPrefix": {
+            "type": "string"
+          },
+          "authMethods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "mode"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "mode": { "type": "string", "minLength": 1 },
+                "headerName": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "configSchema": {
+      "type": "object"
+    },
+    "secretSlots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["slot"],
+        "properties": {
+          "slot": { "type": "string", "minLength": 1 },
+          "requiredForAuthMethods": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["networkEgress"],
+      "properties": {
+        "networkEgress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allowedHosts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[^*?\\s/\\\\@?#%]+$"
+              }
+            },
+            "allowPrivateIp": {
+              "type": "boolean"
+            },
+            "requireTls": {
+              "type": "boolean"
+            }
+          }
+        },
+        "hooks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "payloadAccess": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "inspectRequestBody": { "type": "boolean" },
+            "inspectResponseBody": { "type": "boolean" },
+            "maxInlineMetadataBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 262144
+            }
+          }
+        }
+      }
+    },
+    "adapter": {
+      "type": "object",
+      "description": "Tier-1 DeclarativeProviderAdapter mapping definition (SPEC-EXT-02)."
+    }
+  }
+}

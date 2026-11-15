@@ -1,0 +1,27 @@
+case_id: "ct09_tool_calls_normalization"
+description: "Verifies ordered tool_calls extraction and JSON argument integrity."
+capability: "tool_calling"
+config:
+  endpoint_base_url: "https://api.openai.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gpt-4o-mini"
+  stream: false
+  messages:
+    - role: "user"
+      content: "Check weather"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  raw_body: '{"id":"chatcmpl_tool_01","model":"gpt-4o-mini","choices":[{"index":0,"message":{"role":"assistant","content":"","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Tokyo\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":20,"completion_tokens":8}}'
+expected_normalized_output:
+  model: "gpt-4o-mini"
+  finish_reason: "tool_calls"
+  tool_calls_count: 1
+  tool_call_name: "get_weather"
+  tool_call_arguments: '{"city":"Tokyo"}'
+  require_usage: true
+  input_tokens: 20
+  output_tokens: 8
