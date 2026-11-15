@@ -126,6 +126,7 @@ type ConfigSnapshot struct {
 	byPrevHash       map[[32]byte]*VirtualKeyView
 	byKeyID          map[string]*VirtualKeyView
 	effectiveConfigs map[ScopeKey]*EffectiveConfig
+	providers        *ProviderCatalogView
 }
 
 // KeyMatchResult returns the resolved immutable VirtualKeyView and whether authentication
@@ -681,6 +682,11 @@ func (m *Manager) Refresh(ctx context.Context) error {
 		m.setLastErr(err)
 		return err
 	}
+	providers, err := loadProviderCatalogSQL(ctx, tx)
+	if err != nil {
+		m.setLastErr(err)
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		m.setLastErr(err)
 		return fmt.Errorf("snapshot: commit read tx: %w", err)
@@ -693,6 +699,7 @@ func (m *Manager) Refresh(ctx context.Context) error {
 		byPrevHash:       byPrev,
 		byKeyID:          byID,
 		effectiveConfigs: effective,
+		providers:        providers,
 	}
 
 	m.applyAndPruneFencesLocked(next, targetEpoch)
@@ -843,6 +850,7 @@ func cloneSnapshotWithSingleFence(src *ConfigSnapshot, keyID string, f localKeyF
 		byPrevHash:       make(map[[32]byte]*VirtualKeyView, len(src.byPrevHash)),
 		byKeyID:          make(map[string]*VirtualKeyView, len(src.byKeyID)),
 		effectiveConfigs: src.effectiveConfigs,
+		providers:        src.providers,
 	}
 	for k, v := range src.byActiveHash {
 		dst.byActiveHash[k] = v

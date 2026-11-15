@@ -1300,15 +1300,19 @@ adapter:
 	if err != nil || disabledRec.State != StateInstalledDisabled {
 		t.Fatalf("expected INSTALLED_DISABLED, got rec=%+v err=%v", disabledRec, err)
 	}
-	// Simulate provider_adapters + active provider_connections blocking uninstall with ErrResourceInUse.
-	_, _ = h.st.RawDB().ExecContext(ctx, `CREATE TABLE provider_adapters (id TEXT PRIMARY KEY, installation_id TEXT NOT NULL)`)
-	_, _ = h.st.RawDB().ExecContext(ctx, `CREATE TABLE provider_connections (id TEXT PRIMARY KEY, adapter_id TEXT NOT NULL, state TEXT NOT NULL)`)
-	_, _ = h.st.RawDB().ExecContext(ctx, `INSERT INTO provider_adapters (id, installation_id) VALUES ('adp_1', ?)`, disabledRec.InstallationID)
-	_, _ = h.st.RawDB().ExecContext(ctx, `INSERT INTO provider_connections (id, adapter_id, state) VALUES ('con_1', 'adp_1', 'ACTIVE')`)
+	// Real provider_adapters + active provider_connections from 0007_providers_models.sql block uninstall with ErrResourceInUse.
+	if _, err := h.st.RawDB().ExecContext(ctx, `INSERT INTO provider_adapters (id, installation_id, adapter_slug, version, created_at_ms) VALUES ('adp_1', ?, 'acme', 1, 1000)`, disabledRec.InstallationID); err != nil {
+		t.Fatalf("insert provider_adapters: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `INSERT INTO provider_connections (id, org_id, adapter_id, name, endpoint_base_url, data_region, billing_mode, auth_mode, state, version, created_at_ms, updated_at_ms) VALUES ('con_1', ?, 'adp_1', 'Test', 'https://api.acme.example', 'us', 'COMMERCIAL_API', 'NONE', 'ACTIVE', 1, 1000, 1000)`, h.orgID); err != nil {
+		t.Fatalf("insert provider_connections: %v", err)
+	}
 	if derr := h.svc.UninstallInstallation(ctx, disabledRec.InstallationID, disabledRec.Version, "", h.opID, ""); !errors.Is(derr, port.ErrResourceInUse) {
 		t.Fatalf("expected ErrResourceInUse when active provider_connections depend on installation, got %v", derr)
 	}
-	_, _ = h.st.RawDB().ExecContext(ctx, `UPDATE provider_connections SET state = 'REVOKED' WHERE id = 'con_1'`)
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE provider_connections SET state = 'REVOKED' WHERE id = 'con_1'`); err != nil {
+		t.Fatalf("revoke provider_connections: %v", err)
+	}
 	if derr := h.svc.UninstallInstallation(ctx, disabledRec.InstallationID, disabledRec.Version, "", h.opID, ""); derr != nil {
 		t.Fatalf("expected UninstallInstallation from INSTALLED_DISABLED to succeed once connections revoked, got %v", derr)
 	}

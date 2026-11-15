@@ -4,8 +4,8 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0012` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`READY`** *(Dependencies `TP-IMP-0004`, `TP-IMP-0010` [`DEC-020`], and `TP-IMP-0011` [`DEC-021`] satisfied — `GAP-01, 02`)* |
-| **Size** | `L` (`internal/extension/declarative/*`, `internal/provider/catalog/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0005_providers_models.sql`) |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified `2026-11-15`; awaiting Lead Engineer / Product Owner acceptance & remote `-race` / CI verification)* |
+| **Size** | `L` (`internal/extension/declarative/*`, `internal/provider/catalog/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0007_providers_models.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Turing-incomplete expression interpreter defending against ReDoS/OOM & 4-entity catalog boundaries)* |
 | **Technical Owner** | `Staff Platform / Runtime Engineer` |
 
@@ -22,7 +22,7 @@ Implement:
   - `internal/config/snapshot/providers_view.go` (extend `ConfigSnapshot` with `O(1)` lookup indexes across the 4-entity hierarchy).
   - `internal/provider/catalog/connection_health.go` (drive canonical `SM-02` transitions: `DRAFT -> VALIDATING -> ACTIVE <-> DEGRADED | AUTH_EXPIRED_REAUTH_REQUIRED | SUSPENDED_BY_ADMIN | REVOKED | ARCHIVED` via two-phase `BuildValidationProbe` / `VerifyValidationResult`).
   - `internal/extension/declarative/engine.go` (implement `extension/port.ProviderRuntime` with hard caps of JSON nesting depth `<= 32`, `<= 256` operator steps per message, and zero backtracking `ReDoS` regexes).
-  - `db/migrations/sqlite/0005_providers_models.sql` (`provider_adapters`, `provider_connections` enforcing `CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA'))`, `connection_secret_bindings`, `logical_models`, `model_deployments`).
+  - `db/migrations/sqlite/0007_providers_models.sql` (`provider_adapters`, `provider_connections` enforcing `CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA'))`, `connection_secret_bindings`, `logical_models`, `model_deployments`).
 - **Out-of-Scope:** Tier-2 `Wasm` sandbox pool (owned by `TP-IMP-0013` executing in parallel under `internal/extension/wasm/*`); multi-target route selection & failover state machine (owned by `TP-IMP-0020`).
 
 ## 3. Requirements, Dependencies & Design References
@@ -52,7 +52,7 @@ Implement:
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** The Tier-1 declarative interpreter operates strictly on sanitized `NormalizedRequest` / `UpstreamResponse` payloads — zero filesystem, environment variable, or `vault` operators exist.
-- **Rollback:** Additive schema `0005_providers_models.sql`; suspending a connection cleanly moves `SM-02` to `SUSPENDED_BY_ADMIN`.
+- **Rollback:** Additive schema `0007_providers_models.sql`; suspending a connection cleanly moves `SM-02` to `SUSPENDED_BY_ADMIN`.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0001` (`SM-02` remediation), `TP-IMP-0004` (`POC-02` operator lock), `TP-IMP-0010`, and `TP-IMP-0011` are complete.
