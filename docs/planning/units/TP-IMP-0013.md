@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0013` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`READY`** *(Dependencies `TP-IMP-0010` [`DEC-020`] and `TP-IMP-0011` [`DEC-021`] satisfied — `TP-IMP-0004` / `POC-01` complete)* |
+| **Status** | **`READY`** *(Dependencies `TP-IMP-0004`, `TP-IMP-0010` [`DEC-020`], and `TP-IMP-0011` [`DEC-021`] `DONE`; sole active `READY` unit following `TP-IMP-0012` acceptance under `DEC-022`/`DEC-023`)* |
 | **Size** | `L` (`go.mod`, `internal/extension/wasm/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Untrusted guest execution boundary `TB-4` — must never crash or stall the Go Core process)* |
 | **Technical Owner** | `Principal Runtime & Sandbox Security Engineer` |

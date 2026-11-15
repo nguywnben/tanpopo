@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0011: DONE` | `READY: TP-IMP-0012, TP-IMP-0013`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.14.0-tp-imp-0011-done` | **Date:** `2026-11-15`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0012: DONE` | `READY: TP-IMP-0013`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.15.0-tp-imp-0012-done` | **Date:** `2026-11-15`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) plus `TP-IMP-0005` (`DEC-011`), `TP-IMP-0006` (`DEC-012`/`DEC-013`), `TP-IMP-0007` (`DEC-015`), **`CR-12` Option A (`DEC-017`) & `TP-IMP-0008`** (`DEC-018`), **`TP-IMP-0009`** (`DEC-019`, `c3e3dd93`, CI `43615717101`), **`TP-IMP-0010`** (`DEC-020`, `c11d23f1`, CI `43622524885`), and **`TP-IMP-0011`** (`DEC-021`, `4cb12ce8`, CI `43684854935` `SUCCESS`) are **`DONE` (`11 / 47`)**; **`TP-IMP-0012` & `TP-IMP-0013` (`2 / 47`) are `READY`** (`DEC-021`); `34` downstream units `0014`..`0047` remain `BLOCKED` behind their dependency, review, and `COND-PO-01`..`05` verification gates.
+> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) plus `TP-IMP-0005`..`0011` (`DEC-011`..`DEC-021`) and **`TP-IMP-0012`** (accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-023`, `b5f548ae`, CI `43707209233` `SUCCESS`) are **`DONE` (`12 / 47`)**; **[`TP-IMP-0013`](./units/TP-IMP-0013.md) (`1 / 47`) is `READY`**; `34` downstream units `0014`..`0047` remain `BLOCKED` behind their dependency (`TP-IMP-0014` now awaits solely `0013`), review, and `COND-PO-01`..`05` verification gates.
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---

@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0012` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified `2026-11-15`; awaiting Lead Engineer / Product Owner acceptance & remote `-race` / CI verification)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-15` standalone scope by delegated Owner **Carbon** under `DEC-022`/`DEC-023` at commit `b5f548ae398bc322109a025beb401a76dc3a15f3` / CI Run `43707209233` `completed / success` across Stage 0 + Stage 1 `ubuntu-24.04` `unshare --net` + `-race`, `macos-15` `-race`, `windows-2022` `CGO_ENABLED=0`; local VPS `CGO_ENABLED=0` + `-race` + `go vet` + `check.go --all` + `FZ-01` 30s [`329,718` execs, `0` crashes] + benchmarks [`16,566`/`11,142 ns/op`] PASS; fresh `code-reviewer` [`2ba4f140`] & `security-auditor` [`8510f93b`] `APPROVE`; added `0008_org_extension_policy_owner_opt_in.sql` and `internal/security/trust/*` unifying keyring-derived `TP-BR-0202` trust & `ORG_OWNER` opt-in across `snapshot` and `catalog`; downstream Tier-2 Wasm `0013`, SDK `0014`, Data Plane `0015`, Admin API `0025`, `AWS_SIGV4`/`OAuth 2.1`, sidecar `0042`, live `PostgreSQL 16`, macOS/Windows OS isolation, Stage 2–4 CI, and Gateway SLOs remain `UNVERIFIED`)* |
 | **Size** | `L` (`internal/extension/declarative/*`, `internal/provider/catalog/*`, `internal/config/snapshot/*`, `db/migrations/sqlite/0007_providers_models.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Turing-incomplete expression interpreter defending against ReDoS/OOM & 4-entity catalog boundaries)* |
 | **Technical Owner** | `Staff Platform / Runtime Engineer` |
@@ -22,7 +22,7 @@ Implement:
   - `internal/config/snapshot/providers_view.go` (extend `ConfigSnapshot` with `O(1)` lookup indexes across the 4-entity hierarchy).
   - `internal/provider/catalog/connection_health.go` (drive canonical `SM-02` transitions: `DRAFT -> VALIDATING -> ACTIVE <-> DEGRADED | AUTH_EXPIRED_REAUTH_REQUIRED | SUSPENDED_BY_ADMIN | REVOKED | ARCHIVED` via two-phase `BuildValidationProbe` / `VerifyValidationResult`).
   - `internal/extension/declarative/engine.go` (implement `extension/port.ProviderRuntime` with hard caps of JSON nesting depth `<= 32`, `<= 256` operator steps per message, and zero backtracking `ReDoS` regexes).
-  - `db/migrations/sqlite/0007_providers_models.sql` (`provider_adapters`, `provider_connections` enforcing `CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA'))`, `connection_secret_bindings`, `logical_models`, `model_deployments`).
+  - `db/migrations/sqlite/0007_providers_models.sql` & `0008_org_extension_policy_owner_opt_in.sql` (`provider_adapters`, `provider_connections` enforcing `CHECK (billing_mode IN ('COMMERCIAL_API', 'SELF_HOSTED_INFRA'))`, `connection_secret_bindings`, `logical_models`, `model_deployments`, `org_extension_policies.enabled_by_org_owner`), plus `internal/security/trust/*` (shared keyring-derived provenance trust evaluator).
 - **Out-of-Scope:** Tier-2 `Wasm` sandbox pool (owned by `TP-IMP-0013` executing in parallel under `internal/extension/wasm/*`); multi-target route selection & failover state machine (owned by `TP-IMP-0020`).
 
 ## 3. Requirements, Dependencies & Design References
