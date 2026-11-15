@@ -1,10 +1,10 @@
 # Final Delivery Readiness Audit (`ASTRA A10` — Gate G4 Stage 2 Handoff Approved) — Tanpopo
 
-> **Independent Governance Verdict Document (ASTRA A10 + `M0` + `0005..0011` [`DEC-011`..`DEC-021`])**
-> - **Report ID:** `REV-RDY-01` | **Version:** `2.13.0-tp-imp-0011-done` | **Audit Date:** `2026-11-15`
+> **Independent Governance Verdict Document (ASTRA A10 + `M0` + `0005..0011` + `DEC-022` [`DEC-011`..`DEC-022`])**
+> - **Report ID:** `REV-RDY-01` | **Version:** `2.14.0-dec-022-carbon-delegation` | **Audit Date:** `2026-11-15`
 > - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
-> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005`..`0011` accepted via `DEC-011`..`DEC-021`; **[`TP-IMP-0012`](../planning/units/TP-IMP-0012.md)** & **[`TP-IMP-0013`](../planning/units/TP-IMP-0013.md)** = **`READY`**)*
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`11 / 47` units `DONE` [`0001..0011`] · `0 / 47` `READY_FOR_REVIEW` · `2 / 47` `READY` [`TP-IMP-0012, 0013`] · `34 / 47` `BLOCKED` behind upstream dependencies & review gates)**
+> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005`..`0011` accepted via `DEC-011`..`DEC-021`; **`DEC-022`** delegates Owner decision & acceptance authority to **Carbon** strictly across `TP-IMP-0012`..`0015`; **[`TP-IMP-0012`](../planning/units/TP-IMP-0012.md)** = **`READY_FOR_REVIEW`** & **[`TP-IMP-0013`](../planning/units/TP-IMP-0013.md)** = **`READY`**)*
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`11 / 47` units `DONE` [`0001..0011`] · `1 / 47` `READY_FOR_REVIEW` [`TP-IMP-0012`] · `1 / 47` `READY` [`TP-IMP-0013`] · `34 / 47` `BLOCKED` behind upstream dependencies & review gates)**
 
 ---
 
@@ -17,7 +17,7 @@ On `2026-11-14`, across two sequential governance rulings (`DEC-009` and `DEC-01
 
 **Strict Boundaries of This Handoff (`DEC-010`):**
 - **Only [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) is promoted to `READY`.** Units `TP-IMP-0006`..`0047` (`42` units) keep their exact `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `DoD` gates intact.
-- **No AI Self-Acceptance or Autonomous Release:** Engineering Agents ("Luna") execute units and produce the 7-part completion report, but **never** accept units on the Product Owner's behalf and **never** create git tags or public releases (`GATE-REL-07` / `TP-IMP-0047`).
+- **No Execution Self-Acceptance, Scoped Carbon Delegation (`DEC-022`), or Autonomous Release:** Execution agents ("Hydrogen" / "Luna") never self-accept units on the Product Owner's behalf and **never** create git tags or public releases (`GATE-REL-07` / `TP-IMP-0047`). Direct human Product Owner sign-off governs `TP-IMP-0016`..`0047`, while strictly within **`TP-IMP-0012`..`0015`**, Owner decision-making, review arbitration, unit acceptance (`DONE`), governance synchronization, and sequential unlocking (`0012 -> 0013 -> 0014 -> 0015`) are explicitly delegated to **Carbon** under [`DEC-022`](../governance/decisions.md) with 100% of DoD, security, green CI, and independent review gates preserved.
 
 ---
 
