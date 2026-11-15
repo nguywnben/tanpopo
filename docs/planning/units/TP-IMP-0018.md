@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0018` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-03` |
-| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-025`](../../governance/decisions.md) / [`DEC-029`](../../governance/decisions.md) — `TP-IMP-0014`, `0016`, `0017` = `DONE` + PO-delegated `CR-01` roster sign-off)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-15` by delegated **Gemini 4 Hydrogen** under [`DEC-025`](../../governance/decisions.md) / [`DEC-030`](../../governance/decisions.md); Commit `fba66814`, CI Run `43766468056` `completed/success` across Stage 0 + Stage 1 Linux/macOS/Windows; fresh `code-reviewer` [`9d49b519`] `APPROVE`)* |
 | **Size** | `L` (`extensions/official/openai/*`, `anthropic/*`, `gemini/*`, `openai-compatible/*`, `ollama/*`) |
 | **Review Tier** | `STANDARD_REVIEW` *(`100%` public extension contract dogfooding — `0` privileged internal Core shortcuts)* |
 | **Technical Owner** | `Platform Integrations Lead` |
