@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0011` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`READY`** *(Unlocked `2026-11-14` via `DEC-019`: upstream `TP-IMP-0007` & `TP-IMP-0009` are `DONE` — Note: `db/migrations/sqlite/0001`–`0005` are already occupied, so this unit uses `0006_extensions.sql`)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implemented & locally verified `2026-11-15`; `db/migrations/sqlite/0006_extensions.sql`, `internal/extension/lockfile/*`, `internal/extension/installer/*`; fresh `security-auditor` [`b0538b96`] & `code-reviewer` [`6c3d6169`] `PASS`; awaiting Product Owner acceptance & remote CI)* |
 | **Size** | `L` (`go.mod`, `internal/extension/installer/*`, `internal/extension/lockfile/*`, `db/migrations/sqlite/0006_extensions.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Extension supply chain `TB-5`, Zip-Slip/Archive-Bomb defense & privilege-escalation guard)* |
 | **Technical Owner** | `Platform Supply-Chain & Security Engineer` |

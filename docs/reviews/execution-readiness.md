@@ -1,10 +1,10 @@
 # Final Delivery Readiness Audit (`ASTRA A10` — Gate G4 Stage 2 Handoff Approved) — Tanpopo
 
 > **Independent Governance Verdict Document (ASTRA A10 + `M0` + `0005..0010` [`DEC-011`..`DEC-020`])**
-> - **Report ID:** `REV-RDY-01` | **Version:** `2.11.0-tp-imp-0010-done` | **Audit Date:** `2026-11-15`
+> - **Report ID:** `REV-RDY-01` | **Version:** `2.12.0-tp-imp-0011-ready-for-review` | **Audit Date:** `2026-11-15`
 > - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
-> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005`..`0010` accepted via `DEC-011`..`DEC-020`; **[`TP-IMP-0011`](../planning/units/TP-IMP-0011.md) = `READY`**)*
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`10 / 47` units `DONE` [`0001..0010`] · `0 / 47` `READY_FOR_REVIEW` · `1 / 47` `READY` [`TP-IMP-0011`] · `36 / 47` `BLOCKED` behind upstream dependencies & review gates)**
+> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005`..`0010` accepted via `DEC-011`..`DEC-020`; **[`TP-IMP-0011`](../planning/units/TP-IMP-0011.md) = `READY_FOR_REVIEW`**)*
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`10 / 47` units `DONE` [`0001..0010`] · `1 / 47` `READY_FOR_REVIEW` [`TP-IMP-0011`] · `0 / 47` `READY` · `36 / 47` `BLOCKED` behind upstream dependencies & review gates)**
 
 ---
 
@@ -55,11 +55,11 @@ Every check below strictly separates **what has been verified locally in `M0`** 
 
 ---
 
-## 4. `TP-IMP-0005`..`0010` Acceptance (`DEC-011`..`DEC-020`) & Active `READY` Queue (`TP-IMP-0011`)
+## 4. `TP-IMP-0005`..`0010` Acceptance (`DEC-011`..`DEC-020`) & Active Queue (`TP-IMP-0011` `READY_FOR_REVIEW`)
 
 | Verification Check | Status | Concrete Evidence |
 |---|---|---|
 | **Governance Gate (`HANDOFF_VERDICT`)** | **`GO`** | Approved in `DEC-010`..`DEC-020` ([`decisions.md`](../governance/decisions.md)). |
 | **`TP-IMP-0005`..`0010` Acceptance Status** | **`DONE` *(Accepted `DEC-011`, `DEC-013`, `DEC-015`, `DEC-017`/`DEC-018`, `DEC-019`, `DEC-020`)* ** | `TP-IMP-0005` (`1f4f5a1`, CI `43584413913`); `CR-11` / `TP-IMP-0006` (`b929deb`, CI `43590868455`); `TP-IMP-0007` (`4cc8b6ad`, CI `43595815734`); `CR-12` Option A (`DEC-017`) & `TP-IMP-0008` (`14238799`, CI `43606876169`); `TP-IMP-0009` (`c3e3dd93`, CI `43615717101`); **`TP-IMP-0010` (`REQUIRES_STRONG_REVIEW`) accepted (`DEC-020`) at `c11d23f1631045f0f570c833d7b229d472b6ba4a` (`43622524885` `completed / success` across Stage 0 + Stage 1 Linux `unshare --net` + `-race`, macOS `-race`, Windows `CGO_ENABLED=0`; `ConnectionPolicy` trust-boundary remediation verified; fresh `security-auditor` [`6c93c9a7`] & `code-reviewer` [`c40e066b`] `PASS`)**. |
-| **Active `READY` Queue (`TP-IMP-0011`)** | **`1 / 47` `READY`** | **[`TP-IMP-0011`](../planning/units/TP-IMP-0011.md)** (`READY` via `DEC-019`, `REQUIRES_STRONG_REVIEW`, Deps: `0007, 0009` `DONE`). Accepting `0010` unlocked **`0` additional downstream units** (`TP-IMP-0012`/`0013` depend on `TP-IMP-0011`, so `TP-IMP-0012..0047` [`36` units] remain `BLOCKED`). |
-| **Luna Dispatch Verdict** | **`READY_FOR_EXECUTION (TP-IMP-0011)`** | `0011` has `100%` satisfied dependencies; downstream Data Plane units (`TP-IMP-0015`+) MUST enforce `Manager` `CheckServingReady()` APIs and wire **`Config.PolicyResolver`** explicitly alongside `Config.Resolver` on `BlindHostCredentialBroker` (credentialed & zero-slot fencing); `0012`..`0047` stay `BLOCKED` and all `UNVERIFIED` downstream Data Plane/revocation SLA/replica-lag/PostgreSQL 16/Stage 2–4/macOS-Windows OS isolation limits stay intact. |
+| **Active `READY_FOR_REVIEW` Queue (`TP-IMP-0011`)** | **`1 / 47` `READY_FOR_REVIEW`** | **[`TP-IMP-0011`](../planning/units/TP-IMP-0011.md)** (`0006_extensions.sql`, `internal/extension/{lockfile,installer}`, fresh `security-auditor` [`b0538b96`] & `code-reviewer` [`6c3d6169`] `PASS`; awaiting Product Owner acceptance & remote CI). **`0` additional downstream units unlocked** (`TP-IMP-0012`/`0013` await `0011` acceptance, so `TP-IMP-0012..0047` [`36` units] remain `BLOCKED`). |
+| **Luna Dispatch Verdict** | **`AWAITING_OWNER_REVIEW (TP-IMP-0011)`** | `0011` is implemented and locally verified (`READY_FOR_REVIEW`); downstream Data Plane units (`TP-IMP-0015`+) MUST enforce `Manager` `CheckServingReady()` APIs and wire **`Config.PolicyResolver`** explicitly alongside `Config.Resolver` on `BlindHostCredentialBroker`; `0012`..`0047` stay `BLOCKED` and all `UNVERIFIED` limits stay intact. |

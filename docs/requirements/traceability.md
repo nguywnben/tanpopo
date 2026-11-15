@@ -1,10 +1,10 @@
 # End-to-End Traceability Matrix & A08 Gate Audit Results — Tanpopo
 
-> **Traceability Verification Specification (`HANDOFF VERDICT: GO | TP-IMP-0001..0009: DONE | READY: TP-IMP-0010, TP-IMP-0011`)**
-> - **Version:** `1.10.0-tp-imp-0009-done-unlock-0011`
-> - **Last Updated:** `2026-11-14`
+> **Traceability Verification Specification (`HANDOFF VERDICT: GO | TP-IMP-0001..0010: DONE | READY_FOR_REVIEW: TP-IMP-0011`)**
+> - **Version:** `1.11.0-tp-imp-0011-ready-for-review`
+> - **Last Updated:** `2026-11-15`
 > - **Authoring Role:** Principal Requirements Engineer, Principal Architect, Independent Auditor (A08), TPM/QA Lead (A09) & Independent Delivery Readiness Reviewer (A10/M0)
-> - **Governance Status:** **`M0` + `TP-IMP-0005..0009` Complete (`TP-IMP-0001..0009 = DONE | GAP-01..13 = CLOSED | CR-11 = IMPLEMENTED_AND_VERIFIED | CR-12 Option A = APPROVED & IMPLEMENTED [DEC-017]`); `TP-IMP-0009` accepted via `DEC-019` (`c3e3dd93`, CI `43615717101`); `TP-IMP-0010` & `TP-IMP-0011 = READY` (`2 / 47`); `TP-IMP-0012..0047 = BLOCKED` (`36 / 47`), bound to `COND-PO-01..05`**. Provides end-to-end bidirectional traceability from Discovery (`UC`, `RSK`) and Business Analysis (`WF`, `OPS`, `SM-01..09`, `TP-BR`) through `SRS` (`56` `TP-FR-*`, `22` `TP-NFR-*`), `AC` (`59` `TP-AC-*`, `UX-AC`, `OPS-AC`), Machine-Readable Contracts (`runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`), Spikes (`spike-results.md`), **all 47 Implementation Units in [`implementation-index.md`](../planning/implementation-index.md)**, and **Delivery Handoff Artifacts [`execution-baseline.md`](../governance/execution-baseline.md) / [`execution-readiness.md`](../reviews/execution-readiness.md)**.
+> - **Governance Status:** **`M0` + `TP-IMP-0005..0010` Complete (`TP-IMP-0001..0010 = DONE | GAP-01..13 = CLOSED | CR-11 = IMPLEMENTED_AND_VERIFIED | CR-12 Option A = APPROVED & IMPLEMENTED [DEC-017]`); `TP-IMP-0009` accepted via `DEC-019` (`c3e3dd93`, CI `43615717101`); `TP-IMP-0010` accepted via `DEC-020` (`c11d23f1`, CI `43622524885`); `TP-IMP-0011 = READY_FOR_REVIEW` (`1 / 47`); `TP-IMP-0012..0047 = BLOCKED` (`36 / 47`), bound to `COND-PO-01..05`**. Provides end-to-end bidirectional traceability from Discovery (`UC`, `RSK`) and Business Analysis (`WF`, `OPS`, `SM-01..09`, `TP-BR`) through `SRS` (`56` `TP-FR-*`, `22` `TP-NFR-*`), `AC` (`59` `TP-AC-*`, `UX-AC`, `OPS-AC`), Machine-Readable Contracts (`runtime.proto`, `openapi/*.yaml`, `db/spec-check/*.sql`), Spikes (`spike-results.md`), **all 47 Implementation Units in [`implementation-index.md`](../planning/implementation-index.md)**, and **Delivery Handoff Artifacts [`execution-baseline.md`](../governance/execution-baseline.md) / [`execution-readiness.md`](../reviews/execution-readiness.md)**.
 
 ---
 
