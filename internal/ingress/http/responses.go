@@ -128,13 +128,18 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 		writeCanonicalError(w, meta.RequestID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Both 'model' and valid non-empty 'input' are required.", false)
 		return
 	}
-	if !modelAllowlistPermits(match.Key.AllowedModels, modelSlug) {
-		writeCanonicalError(w, meta.RequestID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", modelSlug), false)
+	estTokens := estimateIngressTokensFromJSON(rawBody)
+	preAdm, ok := s.evaluatePreAdmissionPolicy(w, r, meta.RequestID, match, modelSlug, rawBody, estTokens)
+	if !ok {
 		return
 	}
 
 	var idemClaim *idempotency.Claim
-	if !reqEnvelope.Stream {
+	var admLease *admissionLease
+	if !reqEnvelope.Stream && len(r.Header.Values("Idempotency-Key")) > 0 {
+		if !s.acquirePreIdempotencyRPM(w, r, meta.RequestID, match, preAdm) {
+			return
+		}
 		claim, replayedOrRejected := s.beginIdempotency(w, r, meta.RequestID, match.Key, "/v1/responses", rawBody)
 		if replayedOrRejected {
 			return
@@ -143,9 +148,21 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 		if idemClaim != nil {
 			defer idemClaim.Abort(context.Background())
 		}
+		lease, ok := s.acquirePostIdempotencyTPM(w, r, meta.RequestID, match, preAdm)
+		if !ok {
+			return
+		}
+		admLease = lease
+	} else {
+		lease, ok := s.acquireRateLimits(w, r, meta.RequestID, match, preAdm, reqEnvelope.Stream)
+		if !ok {
+			return
+		}
+		admLease = lease
 	}
+	defer admLease.Release()
 
-	target, ok := s.resolveActiveTarget(w, meta.RequestID, match.Key, modelSlug)
+	target, ok := s.resolveActiveTargetWithPolicy(w, meta.RequestID, match, preAdm, modelSlug)
 	if !ok {
 		return
 	}
@@ -196,10 +213,10 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 	defer clear(egressReq.BodyBytes)
 
 	if reqEnvelope.Stream {
-		s.executeStreamingResponses(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target)
+		s.executeStreamingResponses(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, admLease)
 		return
 	}
-	s.executeSyncResponses(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, modelSlug, idemClaim)
+	s.executeSyncResponses(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, modelSlug, idemClaim, admLease)
 }
 
 func (s *Server) executeSyncResponses(
@@ -212,6 +229,7 @@ func (s *Server) executeSyncResponses(
 	constraint broker.HostEgressConstraint,
 	requestedModel string,
 	idemClaim *idempotency.Claim,
+	admLease *admissionLease,
 ) {
 	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
@@ -259,6 +277,9 @@ func (s *Server) executeSyncResponses(
 		return
 	}
 
+	if normResp.Usage != nil {
+		s.reconcileAdmissionUsage(admLease, normResp.Usage)
+	}
 	writeSettledJSONResponse(w, ctx, reqID, normResp.Usage, finalBody, idemClaim)
 }
 
@@ -271,6 +292,7 @@ func (s *Server) executeStreamingResponses(
 	egressReq broker.EgressRequest,
 	constraint broker.HostEgressConstraint,
 	target *snapshot.ResolvedTarget,
+	admLease *admissionLease,
 ) {
 	upCtx, cancelUp := context.WithCancel(streamCtx)
 	defer cancelUp()
@@ -310,6 +332,9 @@ func (s *Server) executeStreamingResponses(
 		IdleChunkTimeout:    idleChunkTimeout,
 		RequireDoneSentinel: true,
 	})
+	if pumpRes.Usage != nil {
+		s.reconcileAdmissionUsage(admLease, pumpRes.Usage)
+	}
 	if pumpErr != nil && !pumpRes.StreamStarted {
 		if errors.Is(pumpErr, sse.ErrLineTooLarge) {
 			writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Upstream SSE stream exceeded maximum line byte limit.", false)

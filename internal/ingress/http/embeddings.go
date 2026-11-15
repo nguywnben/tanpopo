@@ -116,20 +116,41 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		writeCanonicalError(w, meta.RequestID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Field 'dimensions' must be a positive integer.", false)
 		return
 	}
-	if !modelAllowlistPermits(match.Key.AllowedModels, modelSlug) {
-		writeCanonicalError(w, meta.RequestID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", modelSlug), false)
+	estTokens := estimateIngressTokensFromJSON(rawBody)
+	preAdm, ok := s.evaluatePreAdmissionPolicy(w, r, meta.RequestID, match, modelSlug, rawBody, estTokens)
+	if !ok {
 		return
 	}
 
-	idemClaim, replayedOrRejected := s.beginIdempotency(w, r, meta.RequestID, match.Key, "/v1/embeddings", rawBody)
-	if replayedOrRejected {
-		return
+	var idemClaim *idempotency.Claim
+	var admLease *admissionLease
+	if len(r.Header.Values("Idempotency-Key")) > 0 {
+		if !s.acquirePreIdempotencyRPM(w, r, meta.RequestID, match, preAdm) {
+			return
+		}
+		claim, replayedOrRejected := s.beginIdempotency(w, r, meta.RequestID, match.Key, "/v1/embeddings", rawBody)
+		if replayedOrRejected {
+			return
+		}
+		idemClaim = claim
+		if idemClaim != nil {
+			defer idemClaim.Abort(context.Background())
+		}
+		lease, ok := s.acquirePostIdempotencyTPM(w, r, meta.RequestID, match, preAdm)
+		if !ok {
+			return
+		}
+		admLease = lease
+	} else {
+		lease, ok := s.acquireRateLimits(w, r, meta.RequestID, match, preAdm, false)
+		if !ok {
+			return
+		}
+		admLease = lease
 	}
-	if idemClaim != nil {
-		defer idemClaim.Abort(context.Background())
-	}
+	defer admLease.Release()
 
-	target, ok := s.resolveActiveTarget(w, meta.RequestID, match.Key, modelSlug)
+	target, ok := s.resolveActiveTargetWithPolicy(w, meta.RequestID, match, preAdm, modelSlug)
 	if !ok {
 		return
 	}
@@ -179,7 +200,7 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	}
 	defer clear(egressReq.BodyBytes)
 
-	s.executeSyncEmbedding(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, modelSlug, idemClaim)
+	s.executeSyncEmbedding(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, modelSlug, idemClaim, admLease)
 }
 
 func (s *Server) executeSyncEmbedding(
@@ -192,6 +213,7 @@ func (s *Server) executeSyncEmbedding(
 	constraint broker.HostEgressConstraint,
 	requestedModel string,
 	idemClaim *idempotency.Claim,
+	admLease *admissionLease,
 ) {
 	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
@@ -239,6 +261,9 @@ func (s *Server) executeSyncEmbedding(
 		return
 	}
 
+	if normResp.Usage != nil {
+		s.reconcileAdmissionUsage(admLease, normResp.Usage)
+	}
 	writeSettledJSONResponse(w, ctx, reqID, normResp.Usage, finalBody, idemClaim)
 }
 

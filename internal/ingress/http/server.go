@@ -54,6 +54,8 @@ import (
 	"github.com/nguywnben/tanpopo/internal/ingress/native"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
+	"github.com/nguywnben/tanpopo/internal/ratelimit"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	storageport "github.com/nguywnben/tanpopo/internal/storage/port"
 )
@@ -91,6 +93,8 @@ type ServerConfig struct {
 	DisableEmbeddings        bool
 	DisableModels            bool
 	DisableNativePassthrough bool
+	PolicyEvaluator          *policyengine.Evaluator
+	RateLimiter              ratelimit.RateLimiterPort
 	UsageObserver            func(UsageRecord)
 	NativeUsageObserver      func(native.UsageRecord)
 }
@@ -165,6 +169,8 @@ type Server struct {
 	heartbeatInterval time.Duration
 	idempotency       *idempotency.Guard
 	remoteMediaPolicy blob.RemoteMediaPolicy
+	policyEval        *policyengine.Evaluator
+	rateLimiter       ratelimit.RateLimiterPort
 	usageObserver     func(UsageRecord)
 	nativeHandler     *native.Handler
 
@@ -237,6 +243,17 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		NowMs: nowFn,
 	})
 
+	policyEval := cfg.PolicyEvaluator
+	if policyEval == nil {
+		policyEval = policyengine.NewEvaluator()
+	}
+	rateLimiter := cfg.RateLimiter
+	if rateLimiter == nil {
+		rateLimiter = ratelimit.NewMemoryLimiter(ratelimit.Config{
+			Now: func() time.Time { return time.UnixMilli(nowFn()).UTC() },
+		})
+	}
+
 	s := &Server{
 		snapshots:         cfg.Snapshots,
 		broker:            cfg.Broker,
@@ -250,6 +267,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		heartbeatInterval: hbInterval,
 		idempotency:       idemGuard,
 		remoteMediaPolicy: cfg.RemoteMediaPolicy,
+		policyEval:        policyEval,
+		rateLimiter:       rateLimiter,
 		usageObserver:     cfg.UsageObserver,
 		wasmCache:         wazero.NewCompilationCache(),
 		runtimes:          make(map[runtimeCacheKey]*cachedAdapterEntry),
@@ -262,6 +281,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 			Broker:              s.broker,
 			Audit:               s.audit,
 			Idempotency:         s.idempotency,
+			PolicyEvaluator:     s.policyEval,
+			RateLimiter:         s.rateLimiter,
 			MaxRequestBodyBytes: s.maxReqBodyBytes,
 			FirstByteTimeout:    s.firstByteTimeout,
 			HeartbeatInterval:   s.heartbeatInterval,

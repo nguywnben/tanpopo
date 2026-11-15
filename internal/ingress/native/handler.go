@@ -4,6 +4,7 @@
 package native
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -11,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -31,6 +33,8 @@ import (
 	"github.com/nguywnben/tanpopo/internal/ingress/idempotency"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
+	"github.com/nguywnben/tanpopo/internal/ratelimit"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	storageport "github.com/nguywnben/tanpopo/internal/storage/port"
@@ -66,6 +70,8 @@ type Config struct {
 	Broker              *broker.BlindHostCredentialBroker
 	Audit               storageport.AuditSink
 	Idempotency         *idempotency.Guard
+	PolicyEvaluator     *policyengine.Evaluator
+	RateLimiter         ratelimit.RateLimiterPort
 	AcquireRuntime      RuntimeAcquirer
 	NowMs               func() int64
 	MaxRequestBodyBytes int64
@@ -80,6 +86,8 @@ type Handler struct {
 	broker            *broker.BlindHostCredentialBroker
 	audit             storageport.AuditSink
 	idempotency       *idempotency.Guard
+	policyEval        *policyengine.Evaluator
+	rateLimiter       ratelimit.RateLimiterPort
 	acquireRuntime    RuntimeAcquirer
 	nowMs             func() int64
 	maxReqBodyBytes   int64
@@ -111,11 +119,23 @@ func NewHandler(cfg Config) (*Handler, error) {
 	if nowFn == nil {
 		nowFn = func() int64 { return time.Now().UTC().UnixMilli() }
 	}
+	policyEval := cfg.PolicyEvaluator
+	if policyEval == nil {
+		policyEval = policyengine.NewEvaluator()
+	}
+	rateLimiter := cfg.RateLimiter
+	if rateLimiter == nil {
+		rateLimiter = ratelimit.NewMemoryLimiter(ratelimit.Config{
+			Now: func() time.Time { return time.UnixMilli(nowFn()).UTC() },
+		})
+	}
 	return &Handler{
 		snapshots:         cfg.Snapshots,
 		broker:            cfg.Broker,
 		audit:             cfg.Audit,
 		idempotency:       cfg.Idempotency,
+		policyEval:        policyEval,
+		rateLimiter:       rateLimiter,
 		acquireRuntime:    cfg.AcquireRuntime,
 		nowMs:             nowFn,
 		maxReqBodyBytes:   maxBody,
@@ -174,10 +194,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fast fail-closed path check when no model is supplied yet so admin probes get 403 native_path_not_allowed.
+	// Fast fail-closed snapshot & policy integrity check before path/model dispatch.
 	snap := h.snapshots.Current()
 	if snap == nil {
 		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "snapshot_not_ready", "api_error", "Configuration snapshot unavailable.", true)
+		return
+	}
+	eff, pErr := h.policyEval.ResolveEffective(snap, match.Config, match.Key)
+	if pErr != nil {
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, policyengine.DenialCodeEngineUnavailable, "api_error", "Policy engine snapshot is corrupted or unavailable; failing closed.", true)
 		return
 	}
 
@@ -185,28 +210,53 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeCanonicalError(w, reqID, http.StatusForbidden, "native_path_not_allowed", "permission_error", "Native passthrough path rejected or missing target model.", false)
 		return
 	}
-	if !modelAllowlistPermits(match.Key.AllowedModels, rawHints.Model) {
-		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", rawHints.Model), false)
+	estTokens := estimateNativeTokensFromJSON(rawBody)
+	reqRegion, regionOK := resolveNativeRequestedDataRegion(r)
+	if !regionOK {
+		writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Conflicting X-Tanpopo-Data-Region header values.", false)
+		return
+	}
+	if !h.evaluateNativePreAdmissionPolicy(w, reqID, match, eff, rawHints.Model, reqRegion, rawBody, estTokens) {
 		return
 	}
 
-	// Step 4: Resolve target deployment, verify Same-Dialect Invariant (CT-13) and Adapter Allowlist (NEG-2).
-	target, found := snap.ResolveDefaultDeployment(match.Key.OrgID, match.Key.ProjectID, match.Key.EnvID, rawHints.Model)
-	if !found || target == nil {
-		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", fmt.Sprintf("No compliant active deployment is available for model %q.", rawHints.Model), true)
-		return
+	// Step 3b: When Idempotency-Key is supplied on synchronous POST, enforce RPM BEFORE idempotency SQLite lookup
+	// and reserve TPM ONLY after a fresh IN_FLIGHT claim (so cached replays still count against RPM without burning TPM).
+	var idemClaim *idempotency.Claim
+	var admLease *nativeAdmissionLease
+	if !rawHints.Stream && r.Method == http.MethodPost && len(r.Header.Values("Idempotency-Key")) > 0 {
+		if !h.acquireNativePreIdempotencyRPM(w, r, reqID, match, eff) {
+			return
+		}
+		idemRoutePath := "/native/" + dialect + "/" + upstreamPath
+		if cleanQuery != "" {
+			idemRoutePath += "?" + cleanQuery
+		}
+		claim, replayedOrRejected := h.beginIdempotency(w, r, reqID, match.Key, idemRoutePath, rawBody)
+		if replayedOrRejected {
+			return
+		}
+		idemClaim = claim
+		if idemClaim != nil {
+			defer idemClaim.Abort(context.Background())
+		}
+		lease, ok := h.acquireNativePostIdempotencyTPM(w, r, reqID, match, eff, estTokens)
+		if !ok {
+			return
+		}
+		admLease = lease
+	} else {
+		lease, ok := h.acquireNativeRateLimits(w, r, reqID, match, eff, estTokens, rawHints.Stream)
+		if !ok {
+			return
+		}
+		admLease = lease
 	}
-	if strings.EqualFold(target.Adapter.ExtensionState, installer.StateQuarantined) {
-		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "extension_quarantined", "extension_error", "The backing provider adapter extension is quarantined.", false)
-		return
-	}
+	defer admLease.Release()
 
-	if !adapterMatchesDialect(target, dialect) {
-		writeCanonicalError(w, reqID, http.StatusBadRequest, "dialect_mismatch", "invalid_request_error", fmt.Sprintf("Target deployment for model %q uses a different native dialect than %q.", rawHints.Model, dialect), false)
-		return
-	}
-	if !h.adapterAllowsNativePath(target.Adapter, upstreamPath) {
-		writeCanonicalError(w, reqID, http.StatusForbidden, "native_path_not_allowed", "permission_error", fmt.Sprintf("Native upstream path %q is denied by Default-Deny adapter policy.", upstreamPath), false)
+	// Step 4: Resolve policy-compliant target deployment, verify Same-Dialect Invariant (CT-13) and Adapter Allowlist (NEG-2).
+	target, ok := h.resolveNativeTargetWithPolicy(w, reqID, snap, match, eff, reqRegion, dialect, upstreamPath, rawHints.Model)
+	if !ok {
 		return
 	}
 
@@ -253,21 +303,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if insp.TargetModel != "" && insp.TargetModel != rawHints.Model {
-		newTarget, foundNew := snap.ResolveDefaultDeployment(match.Key.OrgID, match.Key.ProjectID, match.Key.EnvID, insp.TargetModel)
-		if !foundNew || newTarget == nil {
-			writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", fmt.Sprintf("No compliant active deployment is available for model %q.", insp.TargetModel), true)
+		if !h.evaluateNativePreAdmissionPolicy(w, reqID, match, eff, insp.TargetModel, reqRegion, rawBody, estTokens) {
 			return
 		}
-		if strings.EqualFold(newTarget.Adapter.ExtensionState, installer.StateQuarantined) {
-			writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "extension_quarantined", "extension_error", "The backing provider adapter extension is quarantined.", false)
-			return
-		}
-		if !adapterMatchesDialect(newTarget, dialect) {
-			writeCanonicalError(w, reqID, http.StatusBadRequest, "dialect_mismatch", "invalid_request_error", fmt.Sprintf("Target deployment for model %q uses a different native dialect than %q.", insp.TargetModel, dialect), false)
-			return
-		}
-		if !h.adapterAllowsNativePath(newTarget.Adapter, upstreamPath) {
-			writeCanonicalError(w, reqID, http.StatusForbidden, "native_path_not_allowed", "permission_error", fmt.Sprintf("Native upstream path %q is denied by Default-Deny adapter policy.", upstreamPath), false)
+		newTarget, ok := h.resolveNativeTargetWithPolicy(w, reqID, snap, match, eff, reqRegion, dialect, upstreamPath, insp.TargetModel)
+		if !ok {
 			return
 		}
 		if newTarget.Deployment.ID != target.Deployment.ID || newTarget.Adapter.ID != target.Adapter.ID || newTarget.Connection.ID != target.Connection.ID {
@@ -339,24 +379,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Step 6: Claim optional Idempotency-Key for synchronous POST mutations.
-	var idemClaim *idempotency.Claim
-	if !insp.Stream && r.Method == http.MethodPost {
-		idemRoutePath := "/native/" + dialect + "/" + upstreamPath
-		if cleanQuery != "" {
-			idemRoutePath += "?" + cleanQuery
-		}
-		claim, replayedOrRejected := h.beginIdempotency(w, r, reqID, match.Key, idemRoutePath, rawBody)
-		if replayedOrRejected {
+	if insp.Stream && !rawHints.Stream {
+		if !h.acquireDeferredStreamSlot(w, r, reqID, admLease) {
 			return
-		}
-		idemClaim = claim
-		if idemClaim != nil {
-			defer idemClaim.Abort(context.Background())
 		}
 	}
 
-	// Step 7: Build sanitized outbound request preserving exact rawBody bytes.
+	// Step 6: Build sanitized outbound request preserving exact rawBody bytes.
 	parsedBase, perr := url.Parse(strings.TrimSpace(target.Connection.EndpointBaseURL))
 	if perr != nil || parsedBase.Scheme == "" || parsedBase.Host == "" {
 		writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Target connection endpoint base URL is malformed.", false)
@@ -419,10 +448,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	constraint := broker.HostEgressConstraint{NarrowPolicy: &narrowPolicy}
 
 	if insp.Stream {
-		h.executeStreamingNative(w, r.Context(), streamCtx, reqID, dialect, insp.TargetModel, match.Key, rt, egressReq, constraint, target, rawBody)
+		h.executeStreamingNative(w, r.Context(), streamCtx, reqID, dialect, insp.TargetModel, match.Key, rt, egressReq, constraint, target, rawBody, admLease)
 		return
 	}
-	h.executeSyncNative(w, r.Context(), streamCtx, reqID, dialect, insp.TargetModel, match.Key, rt, egressReq, constraint, rawBody, idemClaim)
+	h.executeSyncNative(w, r.Context(), streamCtx, reqID, dialect, insp.TargetModel, match.Key, rt, egressReq, constraint, rawBody, idemClaim, admLease)
 }
 
 func (h *Handler) executeSyncNative(
@@ -438,6 +467,7 @@ func (h *Handler) executeSyncNative(
 	constraint broker.HostEgressConstraint,
 	rawReqBody []byte,
 	idemClaim *idempotency.Claim,
+	admLease *nativeAdmissionLease,
 ) {
 	upResp, err := h.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
@@ -458,6 +488,7 @@ func (h *Handler) executeSyncNative(
 	}
 
 	usage := ExtractSyncUsage(ctx, rt, reqID, rawReqBody, upResp.Body)
+	h.reconcileAdmissionUsage(admLease, &usage)
 	h.recordUsage(ctx, UsageRecord{
 		RequestID:    reqID,
 		Dialect:      dialect,
@@ -514,6 +545,7 @@ func (h *Handler) executeStreamingNative(
 	constraint broker.HostEgressConstraint,
 	target *snapshot.ResolvedTarget,
 	rawReqBody []byte,
+	admLease *nativeAdmissionLease,
 ) {
 	upCtx, cancelUp := context.WithCancel(streamCtx)
 	defer cancelUp()
@@ -565,6 +597,7 @@ func (h *Handler) executeStreamingNative(
 
 	usageCtx := context.WithoutCancel(streamCtx)
 	finalUsage := acc.Finalize(usageCtx)
+	h.reconcileAdmissionUsage(admLease, &finalUsage)
 	h.recordUsage(usageCtx, UsageRecord{
 		RequestID:    reqID,
 		Dialect:      dialect,
@@ -1815,3 +1848,523 @@ func headerContainsToken(vals []string, target string) bool {
 	}
 	return false
 }
+
+type nativeAdmissionLease struct {
+	streamLease *ratelimit.StreamLease
+	scope       ratelimit.LimitScope
+	limits      ratelimit.Limits
+	estTokens   int64
+}
+
+func (a *nativeAdmissionLease) Release() {
+	if a != nil && a.streamLease != nil {
+		a.streamLease.Release()
+	}
+}
+
+func (h *Handler) evaluateNativePreAdmissionPolicy(
+	w http.ResponseWriter,
+	reqID string,
+	match snapshot.KeyMatchResult,
+	eff policyengine.EffectivePolicy,
+	modelSlug string,
+	reqRegion string,
+	rawBody []byte,
+	estTokens int64,
+) bool {
+	if !modelAllowlistPermits(match.Key.AllowedModels, modelSlug) {
+		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", modelSlug), false)
+		return false
+	}
+	dec := policyengine.EvaluateEffective(eff, policyengine.EvalRequest{
+		OrgID:                match.Key.OrgID,
+		ProjectID:            match.Key.ProjectID,
+		EnvID:                match.Key.EnvID,
+		ModelSlug:            modelSlug,
+		RequestedDataRegion:  reqRegion,
+		RequestBodyBytes:     int64(len(rawBody)),
+		EstimatedTotalTokens: estTokens,
+	})
+	if !dec.Allowed {
+		if dec.DenialCode == policyengine.DenialCodeRegionDenied {
+			writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", dec.DenialReason+" ("+policyengine.DenialCodeRegionDenied+")", true)
+			return false
+		}
+		writeCanonicalError(w, reqID, dec.HTTPStatus, dec.DenialCode, dec.ErrorType, dec.DenialReason, false)
+		return false
+	}
+	return true
+}
+
+func resolveNativeRequestedDataRegion(r *http.Request) (string, bool) {
+	if r == nil {
+		return "", true
+	}
+	var resolved string
+	for _, hdr := range r.Header.Values("X-Tanpopo-Data-Region") {
+		for _, part := range strings.Split(hdr, ",") {
+			tok := strings.ToUpper(strings.TrimSpace(part))
+			if tok == "" {
+				continue
+			}
+			if resolved != "" && resolved != tok {
+				return "", false
+			}
+			resolved = tok
+		}
+	}
+	return resolved, true
+}
+
+func (h *Handler) acquireNativePreIdempotencyRPM(
+	w http.ResponseWriter,
+	r *http.Request,
+	reqID string,
+	match snapshot.KeyMatchResult,
+	eff policyengine.EffectivePolicy,
+) bool {
+	scope := ratelimit.LimitScope{
+		OrgID:        match.Key.OrgID,
+		ProjectID:    match.Key.ProjectID,
+		EnvID:        match.Key.EnvID,
+		VirtualKeyID: match.Key.ID,
+	}
+	rpmOnly := ratelimit.Limits{
+		RPMLimit:             eff.RPMLimit,
+		MaxConcurrentStreams: eff.MaxConcurrentStreams,
+	}
+	rlRes, rlErr := h.rateLimiter.AllowRequest(r.Context(), scope, 0, rpmOnly)
+	writeNativeRateLimitHeaders(w, rlRes, false)
+	if rlErr != nil {
+		if errors.Is(rlErr, ratelimit.ErrRateLimitExceeded) {
+			w.Header().Set("Retry-After", strconv.Itoa(max(1, rlRes.RetryAfterSec)))
+			writeCanonicalError(w, reqID, http.StatusTooManyRequests, "rate_limit_exceeded", "rate_limit_error", "Rate limit exceeded for Virtual Key or parent policy scope.", true)
+			return false
+		}
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "rate_limiter_unavailable", "api_error", "Rate limiter backend unavailable; failing closed.", true)
+		return false
+	}
+	return true
+}
+
+func (h *Handler) acquireNativePostIdempotencyTPM(
+	w http.ResponseWriter,
+	r *http.Request,
+	reqID string,
+	match snapshot.KeyMatchResult,
+	eff policyengine.EffectivePolicy,
+	estTokens int64,
+) (*nativeAdmissionLease, bool) {
+	scope := ratelimit.LimitScope{
+		OrgID:        match.Key.OrgID,
+		ProjectID:    match.Key.ProjectID,
+		EnvID:        match.Key.EnvID,
+		VirtualKeyID: match.Key.ID,
+	}
+	limits := ratelimit.Limits{
+		RPMLimit:             eff.RPMLimit,
+		TPMLimit:             eff.TPMLimit,
+		MaxConcurrentStreams: eff.MaxConcurrentStreams,
+	}
+	tpmOnly := ratelimit.Limits{
+		TPMLimit:             eff.TPMLimit,
+		MaxConcurrentStreams: eff.MaxConcurrentStreams,
+	}
+	rlRes, rlErr := h.rateLimiter.AllowRequest(r.Context(), scope, estTokens, tpmOnly)
+	writeNativeRateLimitHeaders(w, rlRes, false)
+	if rlErr != nil {
+		if errors.Is(rlErr, ratelimit.ErrRateLimitExceeded) {
+			w.Header().Set("Retry-After", strconv.Itoa(max(1, rlRes.RetryAfterSec)))
+			writeCanonicalError(w, reqID, http.StatusTooManyRequests, "rate_limit_exceeded", "rate_limit_error", "Rate limit exceeded for Virtual Key or parent policy scope.", true)
+			return nil, false
+		}
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "rate_limiter_unavailable", "api_error", "Rate limiter backend unavailable; failing closed.", true)
+		return nil, false
+	}
+	return &nativeAdmissionLease{
+		scope:     scope,
+		limits:    limits,
+		estTokens: estTokens,
+	}, true
+}
+
+func (h *Handler) acquireNativeRateLimits(
+	w http.ResponseWriter,
+	r *http.Request,
+	reqID string,
+	match snapshot.KeyMatchResult,
+	eff policyengine.EffectivePolicy,
+	estTokens int64,
+	stream bool,
+) (*nativeAdmissionLease, bool) {
+	scope := ratelimit.LimitScope{
+		OrgID:        match.Key.OrgID,
+		ProjectID:    match.Key.ProjectID,
+		EnvID:        match.Key.EnvID,
+		VirtualKeyID: match.Key.ID,
+	}
+	limits := ratelimit.Limits{
+		RPMLimit:             eff.RPMLimit,
+		TPMLimit:             eff.TPMLimit,
+		MaxConcurrentStreams: eff.MaxConcurrentStreams,
+	}
+
+	var streamLease *ratelimit.StreamLease
+	if stream && limits.MaxConcurrentStreams != nil {
+		lease, sRes, sErr := h.rateLimiter.AcquireStreamSlot(r.Context(), scope, *limits.MaxConcurrentStreams)
+		if sErr != nil {
+			if errors.Is(sErr, ratelimit.ErrConcurrencyLimitExceeded) {
+				w.Header().Set("X-RateLimit-Remaining-Streams", "0")
+				w.Header().Set("Retry-After", strconv.Itoa(max(1, sRes.RetryAfterSec)))
+				writeCanonicalError(w, reqID, http.StatusTooManyRequests, "concurrency_limit_exceeded", "rate_limit_error", "Maximum concurrent active streams limit reached for this Virtual Key.", true)
+				return nil, false
+			}
+			writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "rate_limiter_unavailable", "api_error", "Rate limiter backend unavailable; failing closed.", true)
+			return nil, false
+		}
+		streamLease = lease
+		w.Header().Set("X-RateLimit-Remaining-Streams", strconv.FormatInt(sRes.RemainingStreams, 10))
+	}
+
+	rlRes, rlErr := h.rateLimiter.AllowRequest(r.Context(), scope, estTokens, limits)
+	writeNativeRateLimitHeaders(w, rlRes, streamLease != nil)
+	if rlErr != nil {
+		if streamLease != nil {
+			streamLease.Release()
+		}
+		if errors.Is(rlErr, ratelimit.ErrRateLimitExceeded) {
+			w.Header().Set("Retry-After", strconv.Itoa(max(1, rlRes.RetryAfterSec)))
+			writeCanonicalError(w, reqID, http.StatusTooManyRequests, "rate_limit_exceeded", "rate_limit_error", "Rate limit exceeded for Virtual Key or parent policy scope.", true)
+			return nil, false
+		}
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "rate_limiter_unavailable", "api_error", "Rate limiter backend unavailable; failing closed.", true)
+		return nil, false
+	}
+
+	return &nativeAdmissionLease{
+		streamLease: streamLease,
+		scope:       scope,
+		limits:      limits,
+		estTokens:   estTokens,
+	}, true
+}
+
+func (h *Handler) acquireDeferredStreamSlot(w http.ResponseWriter, r *http.Request, reqID string, adm *nativeAdmissionLease) bool {
+	if adm == nil || adm.streamLease != nil || adm.limits.MaxConcurrentStreams == nil {
+		return true
+	}
+	lease, sRes, sErr := h.rateLimiter.AcquireStreamSlot(r.Context(), adm.scope, *adm.limits.MaxConcurrentStreams)
+	if sErr != nil {
+		if errors.Is(sErr, ratelimit.ErrConcurrencyLimitExceeded) {
+			w.Header().Set("X-RateLimit-Remaining-Streams", "0")
+			w.Header().Set("Retry-After", strconv.Itoa(max(1, sRes.RetryAfterSec)))
+			writeCanonicalError(w, reqID, http.StatusTooManyRequests, "concurrency_limit_exceeded", "rate_limit_error", "Maximum concurrent active streams limit reached for this Virtual Key.", true)
+			return false
+		}
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "rate_limiter_unavailable", "api_error", "Rate limiter backend unavailable; failing closed.", true)
+		return false
+	}
+	adm.streamLease = lease
+	w.Header().Set("X-RateLimit-Remaining-Streams", strconv.FormatInt(sRes.RemainingStreams, 10))
+	return true
+}
+
+func writeNativeRateLimitHeaders(w http.ResponseWriter, res ratelimit.CheckResult, streamHeaderWritten bool) {
+	if res.HasRPM {
+		w.Header().Set("X-RateLimit-Remaining-Requests", strconv.FormatInt(res.RemainingRequests, 10))
+	}
+	if res.HasTPM {
+		w.Header().Set("X-RateLimit-Remaining-Tokens", strconv.FormatInt(res.RemainingTokens, 10))
+	}
+	if res.HasStreams && !streamHeaderWritten {
+		w.Header().Set("X-RateLimit-Remaining-Streams", strconv.FormatInt(res.RemainingStreams, 10))
+	}
+}
+
+func (h *Handler) reconcileAdmissionUsage(adm *nativeAdmissionLease, usage *port.NormalizedUsage) {
+	if h == nil || h.rateLimiter == nil || adm == nil || usage == nil {
+		return
+	}
+	actual := max(int64(0), usage.InputTokens) +
+		max(int64(0), usage.OutputTokens) +
+		max(int64(0), usage.ReasoningTokens) +
+		max(int64(0), usage.CacheWriteTokens)
+	if usage.Accuracy == port.UsageAccuracyUnmeteredFlagged && actual == 0 {
+		return
+	}
+	_ = h.rateLimiter.ReconcileTokens(context.Background(), adm.scope, adm.estTokens, actual, adm.limits)
+}
+
+func (h *Handler) resolveNativeTargetWithPolicy(
+	w http.ResponseWriter,
+	reqID string,
+	snap *snapshot.ConfigSnapshot,
+	match snapshot.KeyMatchResult,
+	eff policyengine.EffectivePolicy,
+	reqRegion string,
+	dialect string,
+	upstreamPath string,
+	modelSlug string,
+) (*snapshot.ResolvedTarget, bool) {
+	candidates := snap.ListCandidateTargets(match.Key.OrgID, modelSlug)
+	var (
+		sawQuarantined     bool
+		sawDialectMismatch bool
+		sawPathDenied      bool
+		sawModelDenied     bool
+		modelDenial        policyengine.EvalDecision
+		sawTrustDenied     bool
+		trustDenial        policyengine.EvalDecision
+		sawRegionDenied    bool
+		regionDenial       policyengine.EvalDecision
+	)
+	for _, cand := range candidates {
+		if cand == nil || cand.Deployment == nil || cand.Deployment.State != "ACTIVE_HEALTHY" {
+			continue
+		}
+		if cand.Connection == nil || cand.Connection.State != snapshot.ConnectionStateActive || !cand.Connection.VisibleToProject(match.Key.OrgID, match.Key.ProjectID) {
+			continue
+		}
+		if cand.Adapter == nil {
+			continue
+		}
+		dec := policyengine.EvaluateEffective(eff, policyengine.EvalRequest{
+			OrgID:                     match.Key.OrgID,
+			ProjectID:                 match.Key.ProjectID,
+			EnvID:                     match.Key.EnvID,
+			ModelSlug:                 modelSlug,
+			AdapterSlug:               cand.Adapter.AdapterSlug,
+			DataRegion:                cand.Deployment.DataRegion,
+			RequestedDataRegion:       reqRegion,
+			ExtensionTrustTier:        cand.Connection.DerivedPublicTrust,
+			ExtensionEnterpriseSigned: cand.Connection.DerivedEnterpriseSigned,
+			CapabilityAssurance:       cand.Deployment.AssuranceLevel,
+			TargetEvaluation:          true,
+		})
+		if !dec.Allowed {
+			switch dec.DenialCode {
+			case policyengine.DenialCodeModelDenied:
+				if !sawModelDenied {
+					sawModelDenied = true
+					modelDenial = dec
+				}
+			case policyengine.DenialCodeTrustDenied:
+				if !sawTrustDenied {
+					sawTrustDenied = true
+					trustDenial = dec
+				}
+			case policyengine.DenialCodeRegionDenied:
+				if !sawRegionDenied {
+					sawRegionDenied = true
+					regionDenial = dec
+				}
+			}
+			continue
+		}
+		if strings.EqualFold(cand.Adapter.ExtensionState, installer.StateQuarantined) {
+			sawQuarantined = true
+			continue
+		}
+		if !adapterMatchesDialect(cand, dialect) {
+			sawDialectMismatch = true
+			continue
+		}
+		if !h.adapterAllowsNativePath(cand.Adapter, upstreamPath) {
+			sawPathDenied = true
+			continue
+		}
+		return cand, true
+	}
+
+	if sawQuarantined {
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "extension_quarantined", "extension_error", "The backing provider adapter extension is quarantined.", false)
+		return nil, false
+	}
+	if sawDialectMismatch {
+		writeCanonicalError(w, reqID, http.StatusBadRequest, "dialect_mismatch", "invalid_request_error", fmt.Sprintf("Target deployment for model %q uses a different native dialect than %q.", modelSlug, dialect), false)
+		return nil, false
+	}
+	if sawPathDenied {
+		writeCanonicalError(w, reqID, http.StatusForbidden, "native_path_not_allowed", "permission_error", fmt.Sprintf("Native upstream path %q is denied by Default-Deny adapter policy.", upstreamPath), false)
+		return nil, false
+	}
+	if sawModelDenied {
+		writeCanonicalError(w, reqID, http.StatusForbidden, policyengine.DenialCodeModelDenied, "permission_error", modelDenial.DenialReason, false)
+		return nil, false
+	}
+	if sawTrustDenied {
+		writeCanonicalError(w, reqID, trustDenial.HTTPStatus, policyengine.DenialCodeTrustDenied, trustDenial.ErrorType, trustDenial.DenialReason, false)
+		return nil, false
+	}
+	if sawRegionDenied {
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", regionDenial.DenialReason+" ("+policyengine.DenialCodeRegionDenied+")", true)
+		return nil, false
+	}
+	writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", fmt.Sprintf("No compliant active deployment is available for model %q.", modelSlug), true)
+	return nil, false
+}
+
+func estimateNativeTokensFromJSON(raw []byte) int64 {
+	base := max(int64(1), int64(len(raw)+3)/4)
+	if len(raw) == 0 {
+		return base
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+
+	tok, err := dec.Token()
+	if err != nil {
+		return base
+	}
+	delim, ok := tok.(json.Delim)
+	if !ok || delim != '{' {
+		return base
+	}
+
+	var maxOut int64
+	for dec.More() {
+		keyTok, err := dec.Token()
+		if err != nil {
+			break
+		}
+		key, ok := keyTok.(string)
+		if !ok {
+			break
+		}
+		switch key {
+		case "max_completion_tokens", "max_tokens", "max_output_tokens":
+			valTok, err := dec.Token()
+			if err != nil {
+				return finalizeNativeEstTokens(base, maxOut)
+			}
+			if num, ok := valTok.(json.Number); ok {
+				if parsed, ok := parseNativeJSONNumberCeiling(num); ok && parsed > maxOut {
+					maxOut = parsed
+				}
+			} else if d, ok := valTok.(json.Delim); ok {
+				if skipNativeJSONComposite(dec, d) != nil {
+					return finalizeNativeEstTokens(base, maxOut)
+				}
+			}
+		case "generationConfig", "generation_config":
+			valTok, err := dec.Token()
+			if err != nil {
+				return finalizeNativeEstTokens(base, maxOut)
+			}
+			d, ok := valTok.(json.Delim)
+			if !ok {
+				continue
+			}
+			if d != '{' {
+				if skipNativeJSONComposite(dec, d) != nil {
+					return finalizeNativeEstTokens(base, maxOut)
+				}
+				continue
+			}
+			for dec.More() {
+				subKeyTok, err := dec.Token()
+				if err != nil {
+					return finalizeNativeEstTokens(base, maxOut)
+				}
+				subKey, ok := subKeyTok.(string)
+				if !ok {
+					return finalizeNativeEstTokens(base, maxOut)
+				}
+				if subKey == "maxOutputTokens" || subKey == "max_output_tokens" {
+					subValTok, err := dec.Token()
+					if err != nil {
+						return finalizeNativeEstTokens(base, maxOut)
+					}
+					if num, ok := subValTok.(json.Number); ok {
+						if parsed, ok := parseNativeJSONNumberCeiling(num); ok && parsed > maxOut {
+							maxOut = parsed
+						}
+					} else if sd, ok := subValTok.(json.Delim); ok {
+						if skipNativeJSONComposite(dec, sd) != nil {
+							return finalizeNativeEstTokens(base, maxOut)
+						}
+					}
+					continue
+				}
+				if skipNativeNextJSONValue(dec) != nil {
+					return finalizeNativeEstTokens(base, maxOut)
+				}
+			}
+			if _, err := dec.Token(); err != nil {
+				return finalizeNativeEstTokens(base, maxOut)
+			}
+		default:
+			if skipNativeNextJSONValue(dec) != nil {
+				return finalizeNativeEstTokens(base, maxOut)
+			}
+		}
+	}
+	return finalizeNativeEstTokens(base, maxOut)
+}
+
+func finalizeNativeEstTokens(base, maxOut int64) int64 {
+	if maxOut > 0 {
+		if maxOut >= (1<<62) || base > (1<<62)-maxOut {
+			return 1 << 62
+		}
+		return base + maxOut
+	}
+	return base
+}
+
+func skipNativeNextJSONValue(dec *json.Decoder) error {
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if d, ok := tok.(json.Delim); ok {
+		return skipNativeJSONComposite(dec, d)
+	}
+	return nil
+}
+
+func skipNativeJSONComposite(dec *json.Decoder, open json.Delim) error {
+	depth := 1
+	for depth > 0 {
+		tok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		if d, ok := tok.(json.Delim); ok {
+			switch d {
+			case '{', '[':
+				depth++
+			case '}', ']':
+				depth--
+			}
+		}
+	}
+	return nil
+}
+
+func parseNativeJSONNumberCeiling(num json.Number) (int64, bool) {
+	if iv, err := num.Int64(); err == nil {
+		if iv <= 0 {
+			return 0, false
+		}
+		if iv >= (1 << 62) {
+			return 1 << 62, true
+		}
+		return iv, true
+	}
+	fv, err := strconv.ParseFloat(num.String(), 64)
+	if err != nil {
+		if errors.Is(err, strconv.ErrRange) && !math.IsNaN(fv) && fv > 0 {
+			return 1 << 62, true
+		}
+		return 0, false
+	}
+	if math.IsNaN(fv) || fv <= 0 {
+		return 0, false
+	}
+	if math.IsInf(fv, 1) || fv >= float64(1<<62) {
+		return 1 << 62, true
+	}
+	return int64(math.Ceil(fv)), true
+}
+

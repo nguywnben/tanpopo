@@ -6,8 +6,11 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/extension/installer"
+	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
 )
 
 type modelListResponse struct {
@@ -55,6 +58,20 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	eff, pErr := s.policyEval.ResolveEffective(snap, match.Config, match.Key)
+	if pErr != nil {
+		writeCanonicalError(w, meta.RequestID, http.StatusServiceUnavailable, policyengine.DenialCodeEngineUnavailable, "api_error", "Policy engine snapshot is corrupted or unavailable; failing closed.", true)
+		return
+	}
+	reqRegion, regionOK := resolveRequestedDataRegion(r)
+	if !regionOK {
+		writeCanonicalError(w, meta.RequestID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Conflicting X-Tanpopo-Data-Region header values.", false)
+		return
+	}
+	if !s.acquirePreIdempotencyRPM(w, r, meta.RequestID, match, &preAdmissionDecision{effPolicy: eff, reqRegion: reqRegion}) {
+		return
+	}
+
 	requireTested := match.Config != nil && match.Config.RequireTestedCaps
 	authorized := snap.ListAuthorizedLogicalModels(
 		match.Key.OrgID,
@@ -66,21 +83,34 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 
 	cards := make([]modelCardJSON, 0, len(authorized))
 	for _, m := range authorized {
+		compliantCand := firstPolicyCompliantCandidate(snap, match, eff, reqRegion, m.ID)
+		if compliantCand == nil {
+			continue
+		}
+		ownedBy := m.OwnedBy
+		if compliantCand.Adapter != nil && strings.TrimSpace(compliantCand.Adapter.AdapterSlug) != "" {
+			ownedBy = strings.TrimSpace(compliantCand.Adapter.AdapterSlug)
+		}
+		assuranceTier := m.AssuranceTier
+		if compliantCand.Deployment != nil && strings.TrimSpace(compliantCand.Deployment.AssuranceLevel) != "" {
+			assuranceTier = strings.ToUpper(strings.TrimSpace(compliantCand.Deployment.AssuranceLevel))
+		}
+		profile := snapshot.BuildModelCapabilityProfile(compliantCand, requireTested)
 		cards = append(cards, modelCardJSON{
 			ID:            m.ID,
 			Object:        "model",
 			Created:       m.CreatedSec,
-			OwnedBy:       m.OwnedBy,
+			OwnedBy:       ownedBy,
 			ContextWindow: m.ContextWindow,
 			MaxOutputTok:  m.MaxOutputTokens,
-			AssuranceTier: m.AssuranceTier,
-			Capabilities:  m.Capabilities,
+			AssuranceTier: assuranceTier,
+			Capabilities:  profile,
 			XTanpopoCaps: xTanpopoCapabilitiesMetadata{
 				ModalityKind:    m.ModalityKind,
-				AssuranceTier:   m.AssuranceTier,
+				AssuranceTier:   assuranceTier,
 				ContextWindow:   m.ContextWindow,
 				MaxOutputTokens: m.MaxOutputTokens,
-				Supported:       m.Capabilities,
+				Supported:       profile,
 			},
 		})
 	}
@@ -100,3 +130,45 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
 }
+
+func firstPolicyCompliantCandidate(
+	snap *snapshot.ConfigSnapshot,
+	match snapshot.KeyMatchResult,
+	eff policyengine.EffectivePolicy,
+	reqRegion string,
+	modelSlug string,
+) *snapshot.ResolvedTarget {
+	if !policyengine.ModelPermitted(eff, modelSlug) {
+		return nil
+	}
+	candidates := snap.ListCandidateTargets(match.Key.OrgID, modelSlug)
+	for _, cand := range candidates {
+		if cand == nil || cand.Deployment == nil || cand.Deployment.State != "ACTIVE_HEALTHY" {
+			continue
+		}
+		if cand.Connection == nil || cand.Connection.State != snapshot.ConnectionStateActive || !cand.Connection.VisibleToProject(match.Key.OrgID, match.Key.ProjectID) {
+			continue
+		}
+		if cand.Adapter == nil || strings.EqualFold(cand.Adapter.ExtensionState, installer.StateQuarantined) {
+			continue
+		}
+		dec := policyengine.EvaluateEffective(eff, policyengine.EvalRequest{
+			OrgID:                     match.Key.OrgID,
+			ProjectID:                 match.Key.ProjectID,
+			EnvID:                     match.Key.EnvID,
+			ModelSlug:                 modelSlug,
+			AdapterSlug:               cand.Adapter.AdapterSlug,
+			DataRegion:                cand.Deployment.DataRegion,
+			RequestedDataRegion:       reqRegion,
+			ExtensionTrustTier:        cand.Connection.DerivedPublicTrust,
+			ExtensionEnterpriseSigned: cand.Connection.DerivedEnterpriseSigned,
+			CapabilityAssurance:       cand.Deployment.AssuranceLevel,
+			TargetEvaluation:          true,
+		})
+		if dec.Allowed {
+			return cand
+		}
+	}
+	return nil
+}
+

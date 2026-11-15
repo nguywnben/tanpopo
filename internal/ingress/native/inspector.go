@@ -10,6 +10,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/extension/port"
@@ -338,8 +340,20 @@ func hasUsageCandidateKey(payload []byte) bool {
 func jsonNumberInt64(v any) (int64, bool) {
 	switch x := v.(type) {
 	case json.Number:
-		n, err := x.Int64()
-		return n, err == nil
+		if n, err := x.Int64(); err == nil {
+			return n, true
+		}
+		fv, err := strconv.ParseFloat(x.String(), 64)
+		if err != nil || math.IsNaN(fv) || math.IsInf(fv, 0) {
+			return 0, false
+		}
+		if fv >= float64(1<<62) {
+			return 1 << 62, true
+		}
+		if fv <= -float64(1<<62) {
+			return -(1 << 62), true
+		}
+		return int64(fv), true
 	case float64:
 		return int64(x), true
 	case int64:

@@ -97,6 +97,7 @@ type ProviderConnectionView struct {
 	sharedProjectSet              map[string]struct{}
 	AdapterInstallUsable          bool
 	DerivedPublicTrust            string
+	DerivedEnterpriseSigned       bool
 	ChildProjectBlockedByOrgTrust bool
 	BlockedByOrgTrustPolicy       bool
 	DisabledByOrgPolicy           bool
@@ -393,6 +394,47 @@ func (s *ConfigSnapshot) ResolveDefaultDeployment(orgID, projectID, _ string, mo
 	}, true
 }
 
+// ListCandidateTargets returns all deployments matching (orgID, modelSlug) paired with
+// their LogicalModel, ProviderConnection, and ProviderAdapter views in deterministic order.
+func (s *ConfigSnapshot) ListCandidateTargets(orgID, modelSlug string) []*ResolvedTarget {
+	if s == nil || s.providers == nil || orgID == "" || modelSlug == "" {
+		return nil
+	}
+	candidates := s.providers.deploymentsByOrgSlug[LogicalModelKey{OrgID: orgID, Slug: modelSlug}]
+	if len(candidates) == 0 {
+		return nil
+	}
+	out := make([]*ResolvedTarget, 0, len(candidates))
+	for _, d := range candidates {
+		if d == nil || d.OrgID != orgID {
+			continue
+		}
+		conn, _ := s.providers.connectionsByID[d.ConnectionID]
+		var adp *ProviderAdapterView
+		if conn != nil {
+			adp = s.providers.adaptersByID[conn.AdapterID]
+		}
+		lm := s.providers.logicalModelsByID[d.LogicalModelID]
+		if lm != nil && lm.OrgID != nil && *lm.OrgID != orgID {
+			lm = nil
+		}
+		out = append(out, &ResolvedTarget{
+			LogicalModel: lm.clone(),
+			Deployment:   d.clone(),
+			Connection:   conn.clone(),
+			Adapter:      adp.clone(),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		di, dj := out[i].Deployment, out[j].Deployment
+		if di.CreatedAtMs != dj.CreatedAtMs {
+			return di.CreatedAtMs < dj.CreatedAtMs
+		}
+		return di.ID < dj.ID
+	})
+	return out
+}
+
 // ModelCapabilityProfile mirrors OpenAPI CapabilityProfile (12 canonical snake_case booleans).
 type ModelCapabilityProfile struct {
 	Streaming         bool `json:"streaming"`
@@ -475,20 +517,7 @@ func (s *ConfigSnapshot) ListAuthorizedLogicalModels(orgID, projectID, envID str
 			assurance = "DECLARED"
 		}
 
-		profile := ModelCapabilityProfile{
-			Streaming:         DeploymentSupportsCapability(target, requireTested, "streaming"),
-			ToolCalling:       DeploymentSupportsCapability(target, requireTested, "tool_calling"),
-			ParallelToolCalls: DeploymentSupportsCapability(target, requireTested, "parallel_tool_calls"),
-			StrictJSONSchema:  DeploymentSupportsCapability(target, requireTested, "strict_json_schema"),
-			JSONObject:        DeploymentSupportsCapability(target, requireTested, "json_object"),
-			Vision:            DeploymentSupportsCapability(target, requireTested, "vision"),
-			AudioInput:        DeploymentSupportsCapability(target, requireTested, "audio_input"),
-			DocumentInput:     DeploymentSupportsCapability(target, requireTested, "document_input"),
-			Reasoning:         DeploymentSupportsCapability(target, requireTested, "reasoning"),
-			PromptCaching:     DeploymentSupportsCapability(target, requireTested, "prompt_caching"),
-			Embeddings:        DeploymentSupportsCapability(target, requireTested, "embeddings"),
-			Rerank:            DeploymentSupportsCapability(target, requireTested, "rerank"),
-		}
+		profile := BuildModelCapabilityProfile(target, requireTested)
 		out = append(out, AuthorizedModelSummary{
 			ID:              target.LogicalModel.CanonicalSlug,
 			CreatedSec:      target.LogicalModel.CreatedAtMs / 1000,
@@ -504,6 +533,24 @@ func (s *ConfigSnapshot) ListAuthorizedLogicalModels(orgID, projectID, envID str
 		return out[i].ID < out[j].ID
 	})
 	return out
+}
+
+// BuildModelCapabilityProfile builds the effective capability profile for a resolved target deployment.
+func BuildModelCapabilityProfile(target *ResolvedTarget, requireTested bool) ModelCapabilityProfile {
+	return ModelCapabilityProfile{
+		Streaming:         DeploymentSupportsCapability(target, requireTested, "streaming"),
+		ToolCalling:       DeploymentSupportsCapability(target, requireTested, "tool_calling"),
+		ParallelToolCalls: DeploymentSupportsCapability(target, requireTested, "parallel_tool_calls"),
+		StrictJSONSchema:  DeploymentSupportsCapability(target, requireTested, "strict_json_schema"),
+		JSONObject:        DeploymentSupportsCapability(target, requireTested, "json_object"),
+		Vision:            DeploymentSupportsCapability(target, requireTested, "vision"),
+		AudioInput:        DeploymentSupportsCapability(target, requireTested, "audio_input"),
+		DocumentInput:     DeploymentSupportsCapability(target, requireTested, "document_input"),
+		Reasoning:         DeploymentSupportsCapability(target, requireTested, "reasoning"),
+		PromptCaching:     DeploymentSupportsCapability(target, requireTested, "prompt_caching"),
+		Embeddings:        DeploymentSupportsCapability(target, requireTested, "embeddings"),
+		Rerank:            DeploymentSupportsCapability(target, requireTested, "rerank"),
+	}
 }
 
 func modelAllowlistPermitsSnapshot(allowedModels []string, modelSlug string) bool {
@@ -702,6 +749,7 @@ func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogVi
 		})
 		c.AdapterInstallUsable = trust.IsUsableExtensionState(installState)
 		c.DerivedPublicTrust = verdict.DerivedPublicTrust
+		c.DerivedEnterpriseSigned = verdict.DerivedEnterpriseSigned
 		c.DisabledByOrgPolicy = verdict.DisabledByOrgPolicy
 		c.BlockedByOrgTrustPolicy = verdict.MinTrustDenied
 		c.ChildProjectBlockedByOrgTrust = verdict.RequiresOrgOwnerChildOptIn

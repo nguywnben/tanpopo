@@ -204,13 +204,18 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeCanonicalError(w, meta.RequestID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Both 'model' and non-empty 'messages' are required.", false)
 		return
 	}
-	if !modelAllowlistPermits(match.Key.AllowedModels, modelSlug) {
-		writeCanonicalError(w, meta.RequestID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", modelSlug), false)
+	estTokens := estimateIngressTokensFromJSON(rawBody)
+	preAdm, ok := s.evaluatePreAdmissionPolicy(w, r, meta.RequestID, match, modelSlug, rawBody, estTokens)
+	if !ok {
 		return
 	}
 
 	var idemClaim *idempotency.Claim
-	if !reqEnvelope.Stream {
+	var admLease *admissionLease
+	if !reqEnvelope.Stream && len(r.Header.Values("Idempotency-Key")) > 0 {
+		if !s.acquirePreIdempotencyRPM(w, r, meta.RequestID, match, preAdm) {
+			return
+		}
 		claim, replayedOrRejected := s.beginIdempotency(w, r, meta.RequestID, match.Key, "/v1/chat/completions", rawBody)
 		if replayedOrRejected {
 			return
@@ -219,9 +224,21 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		if idemClaim != nil {
 			defer idemClaim.Abort(context.Background())
 		}
+		lease, ok := s.acquirePostIdempotencyTPM(w, r, meta.RequestID, match, preAdm)
+		if !ok {
+			return
+		}
+		admLease = lease
+	} else {
+		lease, ok := s.acquireRateLimits(w, r, meta.RequestID, match, preAdm, reqEnvelope.Stream)
+		if !ok {
+			return
+		}
+		admLease = lease
 	}
+	defer admLease.Release()
 
-	target, ok := s.resolveActiveTarget(w, meta.RequestID, match.Key, modelSlug)
+	target, ok := s.resolveActiveTargetWithPolicy(w, meta.RequestID, match, preAdm, modelSlug)
 	if !ok {
 		return
 	}
@@ -273,10 +290,10 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	_ = spec
 
 	if reqEnvelope.Stream {
-		s.executeStreamingChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, !reqEnvelope.CallerRequestedUsage)
+		s.executeStreamingChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, !reqEnvelope.CallerRequestedUsage, admLease)
 		return
 	}
-	s.executeSyncChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, idemClaim)
+	s.executeSyncChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, idemClaim, admLease)
 }
 
 func (s *Server) executeSyncChatCompletion(
@@ -290,6 +307,7 @@ func (s *Server) executeSyncChatCompletion(
 	_ *snapshot.ResolvedTarget,
 	requestedModel string,
 	idemClaim *idempotency.Claim,
+	admLease *admissionLease,
 ) {
 	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
@@ -337,6 +355,9 @@ func (s *Server) executeSyncChatCompletion(
 		return
 	}
 
+	if normResp.Usage != nil {
+		s.reconcileAdmissionUsage(admLease, normResp.Usage)
+	}
 	if s.usageObserver != nil && normResp.Usage != nil {
 		s.usageObserver(UsageRecord{
 			RequestID: reqID,
@@ -360,6 +381,7 @@ func (s *Server) executeStreamingChatCompletion(
 	target *snapshot.ResolvedTarget,
 	requestedModel string,
 	elideUsageChunk bool,
+	admLease *admissionLease,
 ) {
 	upCtx, cancelUp := context.WithCancel(streamCtx)
 	defer cancelUp()
@@ -403,6 +425,9 @@ func (s *Server) executeStreamingChatCompletion(
 		RequireDoneSentinel: true,
 		ElideUsageChunk:     elideUsageChunk,
 	})
+	if pumpRes.Usage != nil {
+		s.reconcileAdmissionUsage(admLease, pumpRes.Usage)
+	}
 	if s.usageObserver != nil && pumpRes.Usage != nil {
 		s.usageObserver(UsageRecord{
 			RequestID: reqID,
@@ -738,25 +763,6 @@ func writeSettledJSONResponse(
 	w.Header().Set("X-Tanpopo-Request-Id", reqID)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(finalBody)
-}
-
-func (s *Server) resolveActiveTarget(w http.ResponseWriter, reqID string, key *snapshot.VirtualKeyView, modelSlug string) (*snapshot.ResolvedTarget, bool) {
-	snap := s.snapshots.Current()
-	if snap == nil {
-		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "snapshot_not_ready", "api_error", "Configuration snapshot unavailable.", true)
-		return nil, false
-	}
-
-	target, found := snap.ResolveDefaultDeployment(key.OrgID, key.ProjectID, key.EnvID, modelSlug)
-	if !found || target == nil {
-		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", fmt.Sprintf("No compliant active deployment is available for model %q.", modelSlug), true)
-		return nil, false
-	}
-	if strings.EqualFold(target.Adapter.ExtensionState, installer.StateQuarantined) {
-		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "extension_quarantined", "extension_error", "The backing provider adapter extension is quarantined.", false)
-		return nil, false
-	}
-	return target, true
 }
 
 func (s *Server) writeBlobError(w http.ResponseWriter, reqID string, err error) {
