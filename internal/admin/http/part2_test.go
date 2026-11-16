@@ -638,6 +638,7 @@ func TestPart2E2ELifecycleAndAuditChain(t *testing.T) {
 		"endpoint_url":     upstream.URL,
 		"data_region":      "US",
 		"allow_private_ip": true,
+		"allowed_cidrs":    []string{"127.0.0.1/32"},
 		"secret_bindings":  map[string]string{"api_key": secMeta.CredentialID},
 	})
 	if recConn.Code != http.StatusCreated {
@@ -943,6 +944,7 @@ func TestPart2WriteOnlySecretsAndCanaryZeroLeak(t *testing.T) {
 		"endpoint_url":     echoUpstream.URL,
 		"data_region":      "US",
 		"allow_private_ip": true,
+		"allowed_cidrs":    []string{"127.0.0.1/32"},
 		"secret_bindings":  map[string]string{"api_key": sec1.CredentialID},
 	})
 	if recConn.Code != http.StatusCreated {
@@ -1214,14 +1216,18 @@ func TestPart2SSRFProbeRateLimitAndConnectionsSecurity(t *testing.T) {
 		"http://127.0.0.1:9090/v1",
 	} {
 		allowPriv := strings.Contains(badURL, "169.254") || strings.Contains(badURL, "9090")
-		recBad := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		reqBody := map[string]any{
 			"name":             "bad-ssrf",
 			"adapter_id":       adpID,
 			"billing_mode":     "SELF_HOSTED_INFRA",
 			"endpoint_url":     badURL,
 			"data_region":      "ON_PREM",
 			"allow_private_ip": allowPriv,
-		})
+		}
+		if allowPriv {
+			reqBody["allowed_cidrs"] = []string{"127.0.0.1/32", "169.254.169.254/32"}
+		}
+		recBad := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", reqBody)
 		if recBad.Code != http.StatusBadRequest && recBad.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("SSRF expected 400/422 for %s, got %d body=%s", badURL, recBad.Code, recBad.Body.String())
 		}
@@ -1234,6 +1240,7 @@ func TestPart2SSRFProbeRateLimitAndConnectionsSecurity(t *testing.T) {
 		"endpoint_url":     probeSrv.URL,
 		"data_region":      "ON_PREM",
 		"allow_private_ip": true,
+		"allowed_cidrs":    []string{"127.0.0.1/32"},
 	})
 	if recConn.Code != http.StatusCreated {
 		t.Fatalf("POST /connections local expected 201, got %d body=%s", recConn.Code, recConn.Body.String())
@@ -1268,6 +1275,7 @@ func TestPart2SSRFProbeRateLimitAndConnectionsSecurity(t *testing.T) {
 		"endpoint_url":     probeSrv.URL,
 		"data_region":      "ON_PREM",
 		"allow_private_ip": true,
+		"allowed_cidrs":    []string{"127.0.0.1/32"},
 	})
 	if recConnNR.Code != http.StatusCreated {
 		t.Fatalf("POST /connections NR code=%d body=%s", recConnNR.Code, recConnNR.Body.String())
@@ -3551,14 +3559,18 @@ func TestPart2AuditPaginationSeqNoSkewAndOracleAndZeroWeight(t *testing.T) {
 
 	// 2. WEIGHTED route target with explicit weight=0 MUST preserve "weight":0 in JSON responses (never omitempty).
 	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE extension_versions SET signing_key_fingerprint = ? WHERE package_id = 'tanpopo.local_openai'`, trust.PublicKeyFingerprint(h.rootPub)); err != nil {
+		t.Fatalf("sign seeded local adapter: %v", err)
+	}
 	connRec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
 		"adapter_id":       adpID,
 		"name":             "cp9-conn",
 		"endpoint_url":     "https://127.0.0.1:8443/v1",
 		"allow_private_ip": true,
+		"allowed_cidrs":    []string{"127.0.0.1/32"},
 		"data_region":      "US",
 		"billing_mode":     "COMMERCIAL_API",
-		"owner_project_id": boot.ProjectID,
+		"project_id":       boot.ProjectID,
 	})
 	if connRec.Code != http.StatusCreated {
 		t.Fatalf("create conn: %d %s", connRec.Code, connRec.Body.String())
@@ -3729,7 +3741,7 @@ func TestPart2AuditPaginationSeqNoSkewAndOracleAndZeroWeight(t *testing.T) {
 		ifm    string
 		body   any
 	}{
-		{http.MethodGet, "/admin/v1/traces/" + reqTraceID + "/waterfall", "", nil},
+		{http.MethodGet, "/admin/v1/traces/" + reqTraceID, "", nil},
 		{http.MethodGet, "/admin/v1/traces/" + reqTraceID + "/debug-payload", "", nil},
 		{http.MethodPatch, "/admin/v1/connections/" + conn.ID, `"v1"`, map[string]any{"name": "cross"}},
 		{http.MethodDelete, "/admin/v1/deployments/" + depIDs[0], `"v1"`, nil},
@@ -3740,6 +3752,157 @@ func TestPart2AuditPaginationSeqNoSkewAndOracleAndZeroWeight(t *testing.T) {
 		rec := h.doBearer(t, cp.method, cp.path, org2OwnerTok, cp.ifm, cp.body)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("cross-tenant ORG_OWNER %s %s expected 404, got %d body=%s", cp.method, cp.path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestPart2AdapterSecretSlotsAndConnectionProjectFilterAndExplicitCIDRs(t *testing.T) {
+	t.Parallel()
+	h := newPart2TestHarness(t, 20)
+	ctx := context.Background()
+	now := h.fk.Now().UTC().UnixMilli()
+	boot, ownerCookie := h.bootstrapOwner(t, "CP10 Filter Org", "proj-a")
+
+	// Create second project within same org.
+	recProjB := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "proj-b",
+		"name": "Project B",
+	})
+	if recProjB.Code != http.StatusCreated {
+		t.Fatalf("create proj-b: %d %s", recProjB.Code, recProjB.Body.String())
+	}
+	var projB projectDTO
+	mustDecodeJSON(t, recProjB.Body.Bytes(), &projB)
+
+	// 1. Provider adapter with zero declared secret_slots MUST serialize "secret_slots":[] (never omitted).
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO extension_packages (id, canonical_name, extension_kind, publisher_id, origin_trust_tier, created_at_ms)
+		VALUES ('ext_noslot', 'local.noslot', 'PROVIDER_ADAPTER', 'tanpopo', 'official', ?)`, now); err != nil {
+		t.Fatalf("insert ext_noslot: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO extension_versions (id, package_id, semver, contract_version, core_version_range, execution_tier, bundle_sha256, signature_verified, enterprise_signed, source_uri, manifest_json, created_at_ms)
+		VALUES ('exv_noslot', 'ext_noslot', '1.0.0', 'v1', '>=0.1.0', 'DECLARATIVE_T1', ?, 1, 0, 'builtin://noslot', '{}', ?)`,
+		strings.Repeat("b", 64), now); err != nil {
+		t.Fatalf("insert exv_noslot: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO extension_installations (id, package_id, active_version_id, state, approved_permissions_json, version, created_at_ms, updated_at_ms)
+		VALUES ('ins_noslot', 'ext_noslot', 'exv_noslot', 'ENABLED_ACTIVE', '{"allowedHosts":["127.0.0.1"],"allowPrivateIp":true,"secretSlots":null}', 1, ?, ?)`,
+		now, now); err != nil {
+		t.Fatalf("insert ins_noslot: %v", err)
+	}
+	adpNoSlot := idgen.MustNew(idgen.PrefixAdapter)
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO provider_adapters (id, installation_id, adapter_slug, supported_dialects_json, allowed_hosts_json, version, created_at_ms)
+		VALUES (?, 'ins_noslot', 'noslot-local', '["openai_compatible"]', '["127.0.0.1"]', 1, ?)`,
+		adpNoSlot, now); err != nil {
+		t.Fatalf("insert provider_adapters noslot: %v", err)
+	}
+
+	recAdp := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/provider-adapters/"+adpNoSlot, ownerCookie, "", "", nil)
+	if recAdp.Code != http.StatusOK {
+		t.Fatalf("GET /provider-adapters/{id}: %d %s", recAdp.Code, recAdp.Body.String())
+	}
+	var rawAdp map[string]any
+	mustDecodeJSON(t, recAdp.Body.Bytes(), &rawAdp)
+	slotsVal, hasSlots := rawAdp["secret_slots"]
+	if !hasSlots {
+		t.Fatalf("expected explicit secret_slots key even when empty, got body=%s", recAdp.Body.String())
+	}
+	if arr, ok := slotsVal.([]any); !ok || len(arr) != 0 {
+		t.Fatalf("expected secret_slots: [] (empty array), got %#v", slotsVal)
+	}
+
+	// 2. allow_private_ip=true WITHOUT explicit allowed_cidrs MUST be rejected 400 (no silent wildcard RFC1918/loopback default).
+	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE extension_versions SET signing_key_fingerprint = ? WHERE package_id = 'tanpopo.local_openai'`, trust.PublicKeyFingerprint(h.rootPub)); err != nil {
+		t.Fatalf("sign seeded local adapter: %v", err)
+	}
+	recMissingCIDR := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":             "missing-cidrs",
+		"project_id":       boot.ProjectID,
+		"adapter_id":       adpID,
+		"billing_mode":     "SELF_HOSTED_INFRA",
+		"endpoint_url":     "http://127.0.0.1:8080/v1",
+		"data_region":      "ON_PREM",
+		"allow_private_ip": true,
+	})
+	if recMissingCIDR.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when allow_private_ip=true omits allowed_cidrs, got %d body=%s", recMissingCIDR.Code, recMissingCIDR.Body.String())
+	}
+	recPubConn := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":             "public-to-priv-check",
+		"project_id":       boot.ProjectID,
+		"adapter_id":       adpID,
+		"billing_mode":     "COMMERCIAL_API",
+		"endpoint_url":     "https://api.openai.com/v1",
+		"data_region":      "US",
+		"allow_private_ip": false,
+	})
+	if recPubConn.Code != http.StatusCreated {
+		t.Fatalf("create public conn: %d %s", recPubConn.Code, recPubConn.Body.String())
+	}
+	var pubConn providerConnectionDTO
+	mustDecodeJSON(t, recPubConn.Body.Bytes(), &pubConn)
+	recPatchMissingCIDR := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/connections/"+pubConn.ID, ownerCookie, boot.CSRFToken, FormatETag(pubConn.Version), map[string]any{
+		"endpoint_url":     "http://127.0.0.1:8080/v1",
+		"allow_private_ip": true,
+	})
+	if recPatchMissingCIDR.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when PATCH enables allow_private_ip=true without allowed_cidrs, got %d body=%s", recPatchMissingCIDR.Code, recPatchMissingCIDR.Body.String())
+	}
+
+	// 3. GET /admin/v1/connections?project_id=projA MUST return projA-owned, org-wide, and shared-with-projA connections,
+	//    while excluding projB-only connections.
+	createConn := func(name string, projID *string, shared []string) string {
+		body := map[string]any{
+			"name":             name,
+			"adapter_id":       adpID,
+			"billing_mode":     "SELF_HOSTED_INFRA",
+			"endpoint_url":     "http://127.0.0.1:8080/v1",
+			"data_region":      "ON_PREM",
+			"allow_private_ip": true,
+			"allowed_cidrs":    []string{"127.0.0.1/32"},
+		}
+		if projID != nil {
+			body["project_id"] = *projID
+		}
+		if shared != nil {
+			body["shared_project_ids"] = shared
+		}
+		rec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", body)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create conn %s: %d %s", name, rec.Code, rec.Body.String())
+		}
+		var dto providerConnectionDTO
+		mustDecodeJSON(t, rec.Body.Bytes(), &dto)
+		return dto.ID
+	}
+	cProjA := createConn("owned-a", &boot.ProjectID, nil)
+	cOrgWide := createConn("org-wide", nil, nil)
+	cSharedA := createConn("shared-a", nil, []string{boot.ProjectID})
+	cProjB := createConn("owned-b", &projB.ID, nil)
+	cSharedBOnly := createConn("shared-b-only", nil, []string{projB.ID})
+
+	recListA := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/connections?project_id="+boot.ProjectID, ownerCookie, "", "", nil)
+	if recListA.Code != http.StatusOK {
+		t.Fatalf("GET /connections?project_id=A: %d %s", recListA.Code, recListA.Body.String())
+	}
+	var listA paginatedListEnvelope[providerConnectionDTO]
+	mustDecodeJSON(t, recListA.Body.Bytes(), &listA)
+	seen := make(map[string]bool)
+	for _, c := range listA.Data {
+		seen[c.ID] = true
+	}
+	for _, want := range []string{cProjA, cOrgWide, cSharedA} {
+		if !seen[want] {
+			t.Fatalf("expected connection %s in ?project_id=%s list, got %v", want, boot.ProjectID, seen)
+		}
+	}
+	for _, unwant := range []string{cProjB, cSharedBOnly} {
+		if seen[unwant] {
+			t.Fatalf("unexpected project B connection %s leaked into ?project_id=%s list", unwant, boot.ProjectID)
 		}
 	}
 }

@@ -266,6 +266,10 @@ components:
               type: boolean
               default: false
               description: Explicit operator consent for loopback/RFC1918 local GPU servers (Ollama/vLLM); 169.254.169.254 and Tanpopo admin ports remain hard-blocked.
+            allowed_cidrs:
+              type: array
+              items: { type: string }
+              description: Explicit non-wildcard IPv4/IPv6 CIDR allowlist required when allow_private_ip is true (0.0.0.0/0 and ::/0 forbidden).
             secret_value:
               type: string
               writeOnly: true
@@ -542,6 +546,10 @@ components:
           type: boolean
           default: false
           description: Explicit operator opt-in for local Ollama/vLLM endpoints; 169.254.169.254 remains unconditionally blocked.
+        allowed_cidrs:
+          type: array
+          items: { type: string }
+          description: Explicit non-wildcard IPv4/IPv6 CIDR allowlist required when allow_private_ip is true (0.0.0.0/0 and ::/0 forbidden).
         config: { type: object }
         secret_bindings:
           type: object
@@ -1802,6 +1810,9 @@ paths:
                 name: { type: string }
                 endpoint_url: { type: string, format: uri }
                 allow_private_ip: { type: boolean }
+                allowed_cidrs:
+                  type: array
+                  items: { type: string }
                 state: { type: string, enum: [ACTIVE, DISABLED] }
                 secret_bindings:
                   type: object
@@ -2723,6 +2734,8 @@ paths:
               type: object
               required: [hard_limit_micros, period]
               properties:
+                scope_tier: { type: string, enum: [ORGANIZATION, PROJECT, ENVIRONMENT, VIRTUAL_KEY] }
+                scope_id: { type: string }
                 hard_limit_micros: { type: integer, minimum: 0 }
                 period: { type: string, enum: [DAILY, MONTHLY] }
                 soft_warning_percents: { type: array, items: { type: integer } }
@@ -2779,6 +2792,10 @@ paths:
           in: query
           required: false
           schema: { type: string, enum: [csv, json], default: csv }
+        - name: group_by
+          in: query
+          required: false
+          schema: { type: string, enum: [project, env, key, model], default: project }
         - name: from
           in: query
           required: false

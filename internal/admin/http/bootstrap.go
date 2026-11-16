@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
@@ -28,14 +29,15 @@ type bootstrapStatusResponse struct {
 }
 
 type bootstrapInitialConnectionReq struct {
-	AdapterID      string `json:"adapter_id"`
-	Name           string `json:"name"`
-	BillingMode    string `json:"billing_mode"`
-	EndpointURL    string `json:"endpoint_url"`
-	AllowPrivateIP bool   `json:"allow_private_ip"`
-	SecretValue    string `json:"secret_value"`
-	ModelID        string `json:"model_id"`
-	DataRegion     string `json:"data_region"`
+	AdapterID      string   `json:"adapter_id"`
+	Name           string   `json:"name"`
+	BillingMode    string   `json:"billing_mode"`
+	EndpointURL    string   `json:"endpoint_url"`
+	AllowPrivateIP bool     `json:"allow_private_ip"`
+	AllowedCIDRs   []string `json:"allowed_cidrs"`
+	SecretValue    string   `json:"secret_value"`
+	ModelID        string   `json:"model_id"`
+	DataRegion     string   `json:"data_region"`
 }
 
 type bootstrapCompleteRequest struct {
@@ -115,6 +117,18 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 		}
 		if ic.SecretValue != "" && s.vault == nil {
 			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "vault_unavailable", "invalid_request_error", "vault is required to store initial_connection.secret_value", false, nil)
+			return
+		}
+
+		for _, rawCIDR := range ic.AllowedCIDRs {
+			pfx, perr := netip.ParsePrefix(strings.TrimSpace(rawCIDR))
+			if perr != nil || pfx.Masked().Bits() == 0 {
+				writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_initial_connection", "invalid_request_error", "initial_connection.allowed_cidrs must contain valid non-wildcard CIDR prefixes", false, nil)
+				return
+			}
+		}
+		if ic.AllowPrivateIP && len(ic.AllowedCIDRs) == 0 {
+			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_initial_connection", "invalid_request_error", "initial_connection.allowed_cidrs is required when allow_private_ip is true", false, nil)
 			return
 		}
 
@@ -308,8 +322,16 @@ func (s *Server) provisionInitialBootstrapTopologyTx(
 
 	now := s.nowMs()
 	cidrsJSON := "[]"
-	if ic.AllowPrivateIP {
-		cidrsJSON = `["127.0.0.0/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","::1/128"]`
+	if len(ic.AllowedCIDRs) > 0 {
+		trimmedCIDRs := make([]string, 0, len(ic.AllowedCIDRs))
+		for _, c := range ic.AllowedCIDRs {
+			trimmedCIDRs = append(trimmedCIDRs, strings.TrimSpace(c))
+		}
+		rawCIDRs, merr := json.Marshal(trimmedCIDRs)
+		if merr != nil {
+			return "", "", "", nil, nil, fmt.Errorf("marshal allowed_cidrs: %w", merr)
+		}
+		cidrsJSON = string(rawCIDRs)
 	}
 	authMode := "API_KEY"
 	if credIDPtr == nil {

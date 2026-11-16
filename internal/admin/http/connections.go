@@ -42,7 +42,7 @@ type providerAdapterSummaryDTO struct {
 	WireProtocol            string   `json:"wire_protocol,omitempty"`
 	NativePassthroughPrefix *string  `json:"native_passthrough_prefix,omitempty"`
 	SupportedAuthMethods    []string `json:"supported_auth_methods"`
-	SecretSlots             []string `json:"secret_slots,omitempty"`
+	SecretSlots             []string `json:"secret_slots"`
 	AllowedHosts            []string `json:"allowed_hosts"`
 }
 
@@ -91,14 +91,6 @@ type connectionTestResponseDTO struct {
 	DetectedModelIDs []string `json:"detected_model_ids"`
 	FailureCode      *string  `json:"failure_code,omitempty"`
 	SanitizedMessage *string  `json:"sanitized_message,omitempty"`
-}
-
-var defaultPrivateCIDRs = []string{
-	"127.0.0.0/8",
-	"10.0.0.0/8",
-	"172.16.0.0/12",
-	"192.168.0.0/16",
-	"::1/128",
 }
 
 func mapExecutionTierOpenAPI(dbTier string) string {
@@ -309,6 +301,9 @@ func scanProviderAdapterSummaryRow(row interface{ Scan(...any) error }) (provide
 	var perms installer.PermissionSet
 	_ = json.Unmarshal([]byte(permsJSON), &perms)
 	secretSlots := perms.SecretSlots
+	if secretSlots == nil {
+		secretSlots = []string{}
+	}
 
 	authMethods := []string{"API_KEY"}
 	if strings.TrimSpace(manifestJSON) != "" && manifestJSON != "{}" {
@@ -398,7 +393,11 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 		createdMs     int64
 	}
 	items := make([]rowItem, 0, limit+1)
-	needFilter := !orgWide && projFilter == ""
+	var filterProjSet map[string]bool
+	if projFilter != "" {
+		filterProjSet = map[string]bool{projFilter: true}
+	}
+	needFilter := !orgWide || projFilter != ""
 	batchLimit := limit + 1
 	if needFilter {
 		batchLimit = limit*2 + 20
@@ -420,10 +419,6 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 			       version, created_at_ms
 			FROM provider_connections
 			WHERE org_id = ?`)
-		if projFilter != "" {
-			q.WriteString(` AND owner_project_id = ?`)
-			args = append(args, projFilter)
-		}
 		if hasCur {
 			q.WriteString(` AND (created_at_ms < ? OR (created_at_ms = ? AND id < ?))`)
 			args = append(args, batchCreatedMs, batchCreatedMs, batchLastID)
@@ -463,8 +458,19 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
 				return
 			}
-			if needFilter {
+			if !orgWide {
 				vis, visErr := connectionVisibleToAnyProject(projNS, sharedJSON, allowedProjects)
+				if visErr != nil {
+					_ = rows.Close()
+					writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
+					return
+				}
+				if !vis {
+					continue
+				}
+			}
+			if projFilter != "" {
+				vis, visErr := connectionVisibleToAnyProject(projNS, sharedJSON, filterProjSet)
 				if visErr != nil {
 					_ = rows.Close()
 					writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
@@ -642,7 +648,8 @@ func (s *Server) handleCreateConnection(w http.ResponseWriter, r *http.Request) 
 
 	allowedCIDRs := append([]string(nil), req.AllowedCIDRs...)
 	if req.AllowPrivateIP && len(allowedCIDRs) == 0 {
-		allowedCIDRs = append([]string(nil), defaultPrivateCIDRs...)
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "allowed_cidrs is required when allow_private_ip is true", false, nil)
+		return
 	}
 
 	slotNames := make([]string, 0, len(req.SecretBindings))
@@ -839,12 +846,15 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var nextCIDRsPtr *[]string
+	effectiveCIDRs := cur.AllowedCIDRs
 	if req.AllowedCIDRs != nil {
 		copied := append([]string(nil), (*req.AllowedCIDRs)...)
 		nextCIDRsPtr = &copied
-	} else if req.AllowPrivateIP != nil && *req.AllowPrivateIP && len(cur.AllowedCIDRs) == 0 {
-		copied := append([]string(nil), defaultPrivateCIDRs...)
-		nextCIDRsPtr = &copied
+		effectiveCIDRs = copied
+	}
+	if nextAllowPriv && len(effectiveCIDRs) == 0 {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "allowed_cidrs is required when allow_private_ip is true", false, nil)
+		return
 	}
 
 	if req.EndpointURL != nil || req.AllowPrivateIP != nil || req.AllowedCIDRs != nil {

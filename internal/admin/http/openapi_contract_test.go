@@ -31,6 +31,7 @@ type openAPISchema struct {
 	Type       any                      `yaml:"type"`
 	Required   []string                 `yaml:"required"`
 	Enum       []any                    `yaml:"enum"`
+	Const      any                      `yaml:"const"`
 	Ref        string                   `yaml:"$ref"`
 	AllOf      []openAPISchema          `yaml:"allOf"`
 	Properties map[string]openAPISchema `yaml:"properties"`
@@ -50,76 +51,161 @@ func loadAdminOpenAPISpec(t *testing.T) openAPIDoc {
 	return doc
 }
 
-func resolveSchema(t *testing.T, doc openAPIDoc, schemaName string) ([]string, map[string]openAPISchema) {
+func mergeOpenAPISchema(t *testing.T, doc openAPIDoc, s openAPISchema) openAPISchema {
 	t.Helper()
-	sc, ok := doc.Components.Schemas[schemaName]
-	if !ok {
-		t.Fatalf("schema %q not found in openapi/admin-v1.yaml", schemaName)
+	merged := openAPISchema{
+		Type:       s.Type,
+		Enum:       s.Enum,
+		Const:      s.Const,
+		Items:      s.Items,
+		Properties: make(map[string]openAPISchema),
 	}
 	reqSet := make(map[string]bool)
-	props := make(map[string]openAPISchema)
 
-	var collect func(s openAPISchema)
-	collect = func(s openAPISchema) {
-		if s.Ref != "" {
-			refName := strings.TrimPrefix(s.Ref, "#/components/schemas/")
+	var collect func(cur openAPISchema)
+	collect = func(cur openAPISchema) {
+		if cur.Ref != "" {
+			refName := strings.TrimPrefix(cur.Ref, "#/components/schemas/")
 			target, ok := doc.Components.Schemas[refName]
 			if !ok {
-				t.Fatalf("broken $ref %q", s.Ref)
+				t.Fatalf("broken $ref %q", cur.Ref)
 			}
 			collect(target)
 		}
-		for _, sub := range s.AllOf {
+		for _, sub := range cur.AllOf {
 			collect(sub)
 		}
-		for _, r := range s.Required {
+		if merged.Type == nil && cur.Type != nil {
+			merged.Type = cur.Type
+		}
+		if len(merged.Enum) == 0 && len(cur.Enum) > 0 {
+			merged.Enum = cur.Enum
+		}
+		if merged.Const == nil && cur.Const != nil {
+			merged.Const = cur.Const
+		}
+		if merged.Items == nil && cur.Items != nil {
+			merged.Items = cur.Items
+		}
+		for _, r := range cur.Required {
 			reqSet[r] = true
 		}
-		for k, v := range s.Properties {
-			props[k] = v
+		for k, v := range cur.Properties {
+			merged.Properties[k] = v
 		}
 	}
-	collect(sc)
+	collect(s)
 
-	required := make([]string, 0, len(reqSet))
 	for r := range reqSet {
-		required = append(required, r)
+		merged.Required = append(merged.Required, r)
 	}
-	return required, props
+	return merged
 }
 
 func assertPayloadMatchesSchema(t *testing.T, doc openAPIDoc, schemaName string, rawJSON []byte) {
 	t.Helper()
-	var obj map[string]any
-	if err := json.Unmarshal(rawJSON, &obj); err != nil {
+	var val any
+	if err := json.Unmarshal(rawJSON, &val); err != nil {
 		t.Fatalf("decode JSON for schema %s: %v\npayload=%s", schemaName, err, string(rawJSON))
 	}
-	required, props := resolveSchema(t, doc, schemaName)
-	for _, reqField := range required {
-		val, exists := obj[reqField]
-		if !exists {
-			t.Fatalf("schema %s missing required field %q in payload: %s", schemaName, reqField, string(rawJSON))
-		}
-		_ = val
+	sc, ok := doc.Components.Schemas[schemaName]
+	if !ok {
+		t.Fatalf("schema %q not found in openapi/admin-v1.yaml", schemaName)
 	}
-	for fieldName, propSchema := range props {
-		val, exists := obj[fieldName]
-		if !exists || val == nil {
-			continue
+	validateValueAgainstSchema(t, doc, schemaName, sc, val)
+}
+
+func schemaAllowsType(schemaType any) (allowed []string, allowsNull bool) {
+	switch tv := schemaType.(type) {
+	case string:
+		if tv == "null" {
+			return nil, true
 		}
-		checkPropEnums(t, doc, schemaName+"."+fieldName, propSchema, val)
+		return []string{tv}, false
+	case []any:
+		for _, item := range tv {
+			if s, ok := item.(string); ok {
+				if s == "null" {
+					allowsNull = true
+				} else {
+					allowed = append(allowed, s)
+				}
+			}
+		}
+	case []string:
+		for _, s := range tv {
+			if s == "null" {
+				allowsNull = true
+			} else {
+				allowed = append(allowed, s)
+			}
+		}
+	}
+	return allowed, allowsNull
+}
+
+func valueMatchesTypeName(val any, typeName string) bool {
+	switch typeName {
+	case "string":
+		_, ok := val.(string)
+		return ok
+	case "boolean":
+		_, ok := val.(bool)
+		return ok
+	case "number":
+		_, ok := val.(float64)
+		return ok
+	case "integer":
+		f, ok := val.(float64)
+		return ok && f == float64(int64(f))
+	case "array":
+		_, ok := val.([]any)
+		return ok
+	case "object":
+		_, ok := val.(map[string]any)
+		return ok
+	default:
+		return true
 	}
 }
 
-func checkPropEnums(t *testing.T, doc openAPIDoc, fieldPath string, prop openAPISchema, val any) {
+func validateValueAgainstSchema(t *testing.T, doc openAPIDoc, fieldPath string, rawSchema openAPISchema, val any) {
 	t.Helper()
-	if prop.Ref != "" {
-		refName := strings.TrimPrefix(prop.Ref, "#/components/schemas/")
-		if target, ok := doc.Components.Schemas[refName]; ok {
-			checkPropEnums(t, doc, fieldPath, target, val)
+	prop := mergeOpenAPISchema(t, doc, rawSchema)
+
+	allowedTypes, allowsNull := schemaAllowsType(prop.Type)
+	if val == nil {
+		if len(allowedTypes) > 0 && !allowsNull {
+			t.Fatalf("%s is null but OpenAPI type %v is non-nullable", fieldPath, prop.Type)
 		}
 		return
 	}
+	if len(allowedTypes) > 0 {
+		matched := false
+		for _, tp := range allowedTypes {
+			if valueMatchesTypeName(val, tp) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			t.Fatalf("%s value %#v (%T) does not match OpenAPI type %v", fieldPath, val, val, prop.Type)
+		}
+	}
+
+	if prop.Const != nil {
+		switch c := prop.Const.(type) {
+		case int:
+			if f, ok := val.(float64); !ok || f != float64(c) {
+				t.Fatalf("%s value %#v does not equal OpenAPI const %#v", fieldPath, val, prop.Const)
+			}
+		default:
+			if val != prop.Const {
+				t.Fatalf("%s value %#v does not equal OpenAPI const %#v", fieldPath, val, prop.Const)
+			}
+		}
+	}
+
 	if len(prop.Enum) > 0 {
 		sVal, isStr := val.(string)
 		if isStr {
@@ -135,10 +221,28 @@ func checkPropEnums(t *testing.T, doc openAPIDoc, fieldPath string, prop openAPI
 			}
 		}
 	}
+
 	if prop.Items != nil {
 		if arr, ok := val.([]any); ok {
 			for _, elem := range arr {
-				checkPropEnums(t, doc, fieldPath+"[]", *prop.Items, elem)
+				validateValueAgainstSchema(t, doc, fieldPath+"[]", *prop.Items, elem)
+			}
+		}
+	}
+
+	if obj, ok := val.(map[string]any); ok {
+		for _, reqField := range prop.Required {
+			if _, exists := obj[reqField]; !exists {
+				t.Fatalf("%s missing required field %q in payload: %#v", fieldPath, reqField, obj)
+			}
+		}
+		if len(prop.Properties) > 0 {
+			for fieldName, subSchema := range prop.Properties {
+				subVal, exists := obj[fieldName]
+				if !exists {
+					continue
+				}
+				validateValueAgainstSchema(t, doc, fieldPath+"."+fieldName, subSchema, subVal)
 			}
 		}
 	}
@@ -368,6 +472,15 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	upURL, _ := url.Parse(upstream.URL)
 	adpID := seedLocalOpenAIAdapter(t, h, upURL.Hostname())
 
+	assertETag := func(label string, rec *httptest.ResponseRecorder) string {
+		t.Helper()
+		etag := strings.TrimSpace(rec.Result().Header.Get("ETag"))
+		if etag == "" {
+			t.Fatalf("%s missing required OpenAPI ETag response header", label)
+		}
+		return etag
+	}
+
 	// Group E: Provider Adapters, Secrets & Connections
 	recAdp := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/provider-adapters/"+adpID, ownerCookie, "", "", nil)
 	if recAdp.Code != http.StatusOK {
@@ -383,6 +496,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recSec.Code != http.StatusCreated {
 		t.Fatalf("POST /secrets status=%d body=%s", recSec.Code, recSec.Body.String())
 	}
+	assertETag("POST /secrets", recSec)
 	assertPayloadMatchesSchema(t, doc, "SecretMetadata", recSec.Body.Bytes())
 	var secMeta secretMetadataDTO
 	mustDecodeJSON(t, recSec.Body.Bytes(), &secMeta)
@@ -394,11 +508,13 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 		"endpoint_url":     upstream.URL,
 		"data_region":      "US",
 		"allow_private_ip": true,
+		"allowed_cidrs":    []string{"127.0.0.1/32"},
 		"secret_bindings":  map[string]string{"api_key": secMeta.CredentialID},
 	})
 	if recConn.Code != http.StatusCreated {
 		t.Fatalf("POST /connections status=%d body=%s", recConn.Code, recConn.Body.String())
 	}
+	assertETag("POST /connections", recConn)
 	assertPayloadMatchesSchema(t, doc, "ProviderConnection", recConn.Body.Bytes())
 	var conn providerConnectionDTO
 	mustDecodeJSON(t, recConn.Body.Bytes(), &conn)
@@ -408,6 +524,46 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 		t.Fatalf("POST /connections/{id}/test status=%d body=%s", recTest.Code, recTest.Body.String())
 	}
 	assertPayloadMatchesSchema(t, doc, "ConnectionTestResponse", recTest.Body.Bytes())
+
+	// Also verify failing POST /connections/{id}/test conforms to ConnectionTestResponse (valid=false, non-null failure_code/sanitized_message).
+	recFailConn := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":             "contract-fail-conn",
+		"adapter_id":       adpID,
+		"billing_mode":     "SELF_HOSTED_INFRA",
+		"endpoint_url":     "http://127.0.0.1:1/v1",
+		"data_region":      "ON_PREM",
+		"allow_private_ip": true,
+		"allowed_cidrs":    []string{"127.0.0.1/32"},
+	})
+	if recFailConn.Code != http.StatusCreated {
+		t.Fatalf("POST /connections failing target status=%d body=%s", recFailConn.Code, recFailConn.Body.String())
+	}
+	var failConn providerConnectionDTO
+	mustDecodeJSON(t, recFailConn.Body.Bytes(), &failConn)
+	recFailTest := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections/"+failConn.ID+"/test", ownerCookie, boot.CSRFToken, "", nil)
+	if recFailTest.Code != http.StatusOK {
+		t.Fatalf("failing POST /connections/{id}/test status=%d body=%s", recFailTest.Code, recFailTest.Body.String())
+	}
+	assertPayloadMatchesSchema(t, doc, "ConnectionTestResponse", recFailTest.Body.Bytes())
+	var failProbe connectionTestResponseDTO
+	mustDecodeJSON(t, recFailTest.Body.Bytes(), &failProbe)
+	if failProbe.Valid || failProbe.FailureCode == nil || failProbe.SanitizedMessage == nil {
+		t.Fatalf("expected valid=false with failure_code and sanitized_message, got %+v", failProbe)
+	}
+	// Reload latest version (validation test bumped version) then delete throwaway failConn.
+	recFailList := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/connections", ownerCookie, "", "", nil)
+	var failList paginatedListEnvelope[providerConnectionDTO]
+	mustDecodeJSON(t, recFailList.Body.Bytes(), &failList)
+	for _, c := range failList.Data {
+		if c.ID == failConn.ID {
+			failConn = c
+			break
+		}
+	}
+	recDelFailConn := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/connections/"+failConn.ID, ownerCookie, boot.CSRFToken, FormatETag(failConn.Version), nil)
+	if recDelFailConn.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /connections/{id} status=%d body=%s", recDelFailConn.Code, recDelFailConn.Body.String())
+	}
 
 	// Group F: Logical Models & Deployments
 	recMod := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/models", ownerCookie, boot.CSRFToken, "", map[string]any{
@@ -421,6 +577,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recMod.Code != http.StatusCreated {
 		t.Fatalf("POST /models status=%d body=%s", recMod.Code, recMod.Body.String())
 	}
+	assertETag("POST /models", recMod)
 	assertPayloadMatchesSchema(t, doc, "LogicalModel", recMod.Body.Bytes())
 	var mod logicalModelDTO
 	mustDecodeJSON(t, recMod.Body.Bytes(), &mod)
@@ -439,6 +596,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recDep.Code != http.StatusCreated {
 		t.Fatalf("POST /deployments status=%d body=%s", recDep.Code, recDep.Body.String())
 	}
+	assertETag("POST /deployments", recDep)
 	assertPayloadMatchesSchema(t, doc, "ModelDeployment", recDep.Body.Bytes())
 	var dep modelDeploymentDTO
 	mustDecodeJSON(t, recDep.Body.Bytes(), &dep)
@@ -449,7 +607,9 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recDepPatch.Code != http.StatusOK {
 		t.Fatalf("PATCH /deployments status=%d body=%s", recDepPatch.Code, recDepPatch.Body.String())
 	}
+	depETag := assertETag("PATCH /deployments", recDepPatch)
 	assertPayloadMatchesSchema(t, doc, "ModelDeployment", recDepPatch.Body.Bytes())
+	mustDecodeJSON(t, recDepPatch.Body.Bytes(), &dep)
 
 	// Group G: Marketplace, Extensions & Lockfile
 	recMkt := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/marketplace/catalog", ownerCookie, "", "", nil)
@@ -460,6 +620,8 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 
 	v1URI := "https://marketplace.tanpopo.dev/contract-1.0.0.tpkg"
 	v1SHA := h.registerSignedProviderTPKG(t, v1URI, "@tanpopo/contract-adapter", "1.0.0", []string{"api.openai.com"}, false, true)
+	v2URI := "https://marketplace.tanpopo.dev/contract-1.0.1.tpkg"
+	v2SHA := h.registerSignedProviderTPKG(t, v2URI, "@tanpopo/contract-adapter", "1.0.1", []string{"api.openai.com"}, false, true)
 	recIns := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/install", ownerCookie, boot.CSRFToken, "", map[string]any{
 		"source_uri":      v1URI,
 		"expected_sha256": v1SHA,
@@ -467,15 +629,16 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recIns.Code != http.StatusAccepted {
 		t.Fatalf("POST /extensions/install status=%d body=%s", recIns.Code, recIns.Body.String())
 	}
+	insETag := assertETag("POST /extensions/install", recIns)
 	assertPayloadMatchesSchema(t, doc, "ExtensionPermissionDiff", recIns.Body.Bytes())
 	var extDiff extensionPermissionDiffDTO
 	mustDecodeJSON(t, recIns.Body.Bytes(), &extDiff)
-	insETag := recIns.Result().Header.Get("ETag")
 
 	recDiff := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/extensions/"+extDiff.InstallationID+"/permission-diff", ownerCookie, "", "", nil)
 	if recDiff.Code != http.StatusOK {
 		t.Fatalf("GET /permission-diff status=%d body=%s", recDiff.Code, recDiff.Body.String())
 	}
+	assertETag("GET /permission-diff", recDiff)
 	assertPayloadMatchesSchema(t, doc, "ExtensionPermissionDiff", recDiff.Body.Bytes())
 
 	recApp := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+extDiff.InstallationID+"/approve-permissions", reviewerTok, insETag, map[string]any{
@@ -484,12 +647,49 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recApp.Code != http.StatusOK {
 		t.Fatalf("POST /approve-permissions status=%d body=%s", recApp.Code, recApp.Body.String())
 	}
+	appETag := assertETag("POST /approve-permissions", recApp)
 	assertPayloadMatchesSchema(t, doc, "ExtensionInstallation", recApp.Body.Bytes())
 
-	recLock := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/extensions/lockfile", ownerCookie, "", "", nil)
-	if recLock.Code != http.StatusOK {
-		t.Fatalf("GET /extensions/lockfile status=%d body=%s", recLock.Code, recLock.Body.String())
+	// Non-escalating upgrade (same hosts) -> 200 + ETag + ExtensionInstallation, then rollback -> 200 + ETag + ExtensionInstallation.
+	recUp := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+extDiff.InstallationID+"/upgrade", ownerCookie, boot.CSRFToken, appETag, map[string]any{
+		"source_uri":      v2URI,
+		"expected_sha256": v2SHA,
+	})
+	if recUp.Code != http.StatusOK {
+		t.Fatalf("POST /extensions/{id}/upgrade status=%d body=%s", recUp.Code, recUp.Body.String())
 	}
+	upETag := assertETag("POST /extensions/{id}/upgrade", recUp)
+	assertPayloadMatchesSchema(t, doc, "ExtensionInstallation", recUp.Body.Bytes())
+
+	recRB := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+extDiff.InstallationID+"/rollback", ownerCookie, boot.CSRFToken, upETag, map[string]any{
+		"reason": "Contract rollback verification",
+	})
+	if recRB.Code != http.StatusOK {
+		t.Fatalf("POST /extensions/{id}/rollback status=%d body=%s", recRB.Code, recRB.Body.String())
+	}
+	_ = assertETag("POST /extensions/{id}/rollback", recRB)
+	assertPayloadMatchesSchema(t, doc, "ExtensionInstallation", recRB.Body.Bytes())
+
+	recLockYAML := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/extensions/lockfile", ownerCookie, "", "", nil)
+	if recLockYAML.Code != http.StatusOK {
+		t.Fatalf("GET /extensions/lockfile status=%d body=%s", recLockYAML.Code, recLockYAML.Body.String())
+	}
+	if ct := recLockYAML.Header().Get("Content-Type"); !strings.Contains(ct, "application/yaml") {
+		t.Fatalf("GET /extensions/lockfile expected application/yaml Content-Type, got %q", ct)
+	}
+	reqLockJSON, _ := http.NewRequest(http.MethodGet, "/admin/v1/extensions/lockfile", nil)
+	reqLockJSON.AddCookie(ownerCookie)
+	reqLockJSON.Header.Set("Accept", "application/json")
+	recLockJSON := httptest.NewRecorder()
+	h.srv.handler.ServeHTTP(recLockJSON, reqLockJSON)
+	if recLockJSON.Code != http.StatusOK {
+		t.Fatalf("GET /extensions/lockfile Accept: application/json status=%d body=%s", recLockJSON.Code, recLockJSON.Body.String())
+	}
+	if ct := recLockJSON.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Fatalf("GET /extensions/lockfile expected application/json Content-Type, got %q", ct)
+	}
+	var lockObj map[string]any
+	mustDecodeJSON(t, recLockJSON.Body.Bytes(), &lockObj)
 
 	// Group H: Routes, Explain & Hierarchical Policies
 	recRoute := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
@@ -502,6 +702,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recRoute.Code != http.StatusCreated {
 		t.Fatalf("POST /routes status=%d body=%s", recRoute.Code, recRoute.Body.String())
 	}
+	assertETag("POST /routes", recRoute)
 	assertPayloadMatchesSchema(t, doc, "RouteResource", recRoute.Body.Bytes())
 
 	recExp := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes/explain", ownerCookie, boot.CSRFToken, "", map[string]any{
@@ -524,12 +725,14 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recPol.Code != http.StatusOK {
 		t.Fatalf("PUT /policies status=%d body=%s", recPol.Code, recPol.Body.String())
 	}
+	assertETag("PUT /policies/{id}", recPol)
 	assertPayloadMatchesSchema(t, doc, "PolicyDocument", recPol.Body.Bytes())
 
 	recEffPol := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/policies/effective?project_id="+boot.ProjectID, ownerCookie, "", "", nil)
 	if recEffPol.Code != http.StatusOK {
 		t.Fatalf("GET /policies/effective status=%d body=%s", recEffPol.Code, recEffPol.Body.String())
 	}
+	assertETag("GET /policies/effective", recEffPol)
 	assertPayloadMatchesSchema(t, doc, "PolicyDocument", recEffPol.Body.Bytes())
 
 	// Group J & D & K: Budgets, Usage, Traces, Debug Payload, Overview, Alerts, Audit, Kill-Switch, Blast-Radius
@@ -545,6 +748,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recBdg.Code != http.StatusOK {
 		t.Fatalf("PUT /budgets status=%d body=%s", recBdg.Code, recBdg.Body.String())
 	}
+	assertETag("PUT /budgets/{id}", recBdg)
 	assertPayloadMatchesSchema(t, doc, "BudgetResource", recBdg.Body.Bytes())
 
 	// Force high utilization + unmetered spend + trace + debug blob for AlertItem & TraceSummary checks.
@@ -684,7 +888,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	assertListFirstItemSchema("/admin/v1/budgets", "BudgetResource")
 	assertListFirstItemSchema("/admin/v1/traces", "TraceSummary")
 
-	// PATCH /connections/{id} and PUT /routes/{id} return canonical schemas.
+	// PATCH /connections/{id} and PUT /routes/{id} return canonical schemas + ETags.
 	recConnList := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/connections", ownerCookie, "", "", nil)
 	if recConnList.Code != http.StatusOK {
 		t.Fatalf("GET /connections status=%d body=%s", recConnList.Code, recConnList.Body.String())
@@ -704,6 +908,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recConnPatch.Code != http.StatusOK {
 		t.Fatalf("PATCH /connections/{id} status=%d body=%s", recConnPatch.Code, recConnPatch.Body.String())
 	}
+	connETag := assertETag("PATCH /connections/{id}", recConnPatch)
 	assertPayloadMatchesSchema(t, doc, "ProviderConnection", recConnPatch.Body.Bytes())
 
 	var createdRoute routeResourceDTO
@@ -718,9 +923,10 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recRoutePut.Code != http.StatusOK {
 		t.Fatalf("PUT /routes/{id} status=%d body=%s", recRoutePut.Code, recRoutePut.Body.String())
 	}
+	routeETag := assertETag("PUT /routes/{id}", recRoutePut)
 	assertPayloadMatchesSchema(t, doc, "RouteResource", recRoutePut.Body.Bytes())
 
-	// Extension policy PUT/GET + approvals list.
+	// Extension policy PUT -> 200 + ETag + Organization schema.
 	var approvedIns extensionInstallationDTO
 	mustDecodeJSON(t, recApp.Body.Bytes(), &approvedIns)
 	recExtPolPut := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/organizations/"+boot.OrgID+"/extension-policies", ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
@@ -730,6 +936,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recExtPolPut.Code != http.StatusOK {
 		t.Fatalf("PUT /extension-policies status=%d body=%s", recExtPolPut.Code, recExtPolPut.Body.String())
 	}
+	assertETag("PUT /extension-policies", recExtPolPut)
 	assertPayloadMatchesSchema(t, doc, "Organization", recExtPolPut.Body.Bytes())
 
 	recExpJSON := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/usage/export?format=json&group_by=project", ownerCookie, "", "", nil)
@@ -749,6 +956,46 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	}
 	if !strings.Contains(recExpCSV.Body.String(), "group_key,exact_micro_usd,estimated_micro_usd,unmetered_request_count") {
 		t.Fatalf("unexpected CSV header: %s", recExpCSV.Body.String())
+	}
+
+	// DELETE routes conformance (reverse dependency order): route -> deployment -> connection -> secret -> extension.
+	recDelRoute := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/routes/"+createdRoute.ID, ownerCookie, boot.CSRFToken, routeETag, nil)
+	if recDelRoute.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /routes/{id} status=%d body=%s", recDelRoute.Code, recDelRoute.Body.String())
+	}
+	recDelDep := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/deployments/"+dep.ID, ownerCookie, boot.CSRFToken, depETag, nil)
+	if recDelDep.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /deployments/{id} status=%d body=%s", recDelDep.Code, recDelDep.Body.String())
+	}
+	recDelConn := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/connections/"+conn.ID, ownerCookie, boot.CSRFToken, connETag, nil)
+	if recDelConn.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /connections/{id} status=%d body=%s", recDelConn.Code, recDelConn.Body.String())
+	}
+	recDelSec := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/secrets/"+secMeta.CredentialID, ownerCookie, boot.CSRFToken, FormatETag(secMeta.Version), nil)
+	if recDelSec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /secrets/{id} status=%d body=%s", recDelSec.Code, recDelSec.Body.String())
+	}
+	// Stage + approve a throwaway extension with enable_immediately=false (INSTALLED_DISABLED) so SM-01 permits DELETE /extensions/{id} -> 204.
+	v3URI := "https://marketplace.tanpopo.dev/contract-uninstall-1.0.0.tpkg"
+	v3SHA := h.registerSignedProviderTPKG(t, v3URI, "@tanpopo/contract-uninstall", "1.0.0", []string{"api.openai.com"}, false, true)
+	recInsDis := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/install", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"source_uri":      v3URI,
+		"expected_sha256": v3SHA,
+	})
+	if recInsDis.Code != http.StatusAccepted {
+		t.Fatalf("POST /extensions/install (for delete) status=%d body=%s", recInsDis.Code, recInsDis.Body.String())
+	}
+	var disDiff extensionPermissionDiffDTO
+	mustDecodeJSON(t, recInsDis.Body.Bytes(), &disDiff)
+	recAppDis := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+disDiff.InstallationID+"/approve-permissions", reviewerTok, assertETag("POST /extensions/install (delete)", recInsDis), map[string]any{
+		"enable_immediately": false,
+	})
+	if recAppDis.Code != http.StatusOK {
+		t.Fatalf("POST /approve-permissions (disabled) status=%d body=%s", recAppDis.Code, recAppDis.Body.String())
+	}
+	recDelExt := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/extensions/"+disDiff.InstallationID, ownerCookie, boot.CSRFToken, assertETag("POST /approve-permissions (disabled)", recAppDis), nil)
+	if recDelExt.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /extensions/{id} status=%d body=%s", recDelExt.Code, recDelExt.Body.String())
 	}
 }
 
