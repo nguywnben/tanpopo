@@ -4,6 +4,7 @@
 package http
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
+	"github.com/nguywnben/tanpopo/internal/iam/vkey"
+	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
@@ -107,7 +110,12 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Revoke any active ephemeral playground keys owned by the logging-out principal.
-	_ = s.revokeEphemeralPlaygroundKeys(r, sc.Actor.PrincipalID)
+	if err := s.revokeEphemeralPlaygroundKeys(r, sc.Actor.PrincipalID); err != nil {
+		s.emitSecurityAudit(r.Context(), sc, "auth.logout_playground_revoke_failed", map[string]any{
+			"error": err.Error(),
+		})
+	}
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -131,9 +139,15 @@ func (s *Server) revokeEphemeralPlaygroundKeys(r *http.Request, principalID stri
 	var keys []keyRef
 	for rows.Next() {
 		var k keyRef
-		if scanErr := rows.Scan(&k.id, &k.orgID); scanErr == nil {
-			keys = append(keys, k)
+		if scanErr := rows.Scan(&k.id, &k.orgID); scanErr != nil {
+			_ = rows.Close()
+			return scanErr
 		}
+		keys = append(keys, k)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		_ = rows.Close()
+		return rowsErr
 	}
 	_ = rows.Close()
 	if len(keys) == 0 {
@@ -146,6 +160,8 @@ func (s *Server) revokeEphemeralPlaygroundKeys(r *http.Request, principalID stri
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	var committedEpoch int64
+	reqIDPtr := ptrOrNil(requestIDFromContext(ctx))
 	for _, k := range keys {
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE virtual_keys
@@ -156,11 +172,38 @@ func (s *Server) revokeEphemeralPlaygroundKeys(r *http.Request, principalID stri
 		); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `
+		resEpoch, err := tx.ExecContext(ctx, `
 			INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
 			VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
 			k.orgID, k.id, port.MutationRevoke, now,
-		); err != nil {
+		)
+		if err != nil {
+			return err
+		}
+		if epoch, epochErr := resEpoch.LastInsertId(); epochErr == nil && epoch > committedEpoch {
+			committedEpoch = epoch
+		}
+		audID, audErr := idgen.New(idgen.PrefixAudit)
+		if audErr != nil {
+			return audErr
+		}
+		metaJSON, _ := json.Marshal(map[string]any{
+			"mode":   vkey.RevokeModeStandard,
+			"reason": "logout_ephemeral_playground_revoke",
+		})
+		if err := s.txAudit.AppendTx(ctx, tx, port.AuditEvent{
+			ID:           audID,
+			CreatedAtMs:  now,
+			OrgID:        &k.orgID,
+			ActorKind:    "PRINCIPAL",
+			ActorID:      principalID,
+			EntryPoint:   port.AuditEntryPointAdminAPI,
+			EventType:    "virtual_key.revoked",
+			TargetType:   "virtual_key",
+			TargetID:     k.id,
+			RequestID:    reqIDPtr,
+			MetadataJSON: string(metaJSON),
+		}); err != nil {
 			return err
 		}
 	}
@@ -168,7 +211,38 @@ func (s *Server) revokeEphemeralPlaygroundKeys(r *http.Request, principalID stri
 		return err
 	}
 	if s.snapshots != nil {
-		_ = s.snapshots.Refresh(ctx)
+		if streams := s.snapshots.Streams(); streams != nil {
+			for _, k := range keys {
+				streams.AbortKey(k.id)
+			}
+		}
+		if refErr := s.snapshots.Refresh(ctx); refErr != nil {
+			for _, k := range keys {
+				s.snapshots.FenceKeyRevocation(k.id, vkey.RevokeModeStandard, now, committedEpoch)
+				if s.audit != nil {
+					if audID, aerr := idgen.New(idgen.PrefixAudit); aerr == nil {
+						metaJSON, _ := json.Marshal(map[string]any{
+							"error":           refErr.Error(),
+							"committed_epoch": committedEpoch,
+						})
+						_ = s.audit.Append(ctx, port.AuditEvent{
+							ID:           audID,
+							CreatedAtMs:  now,
+							OrgID:        &k.orgID,
+							ActorKind:    "PRINCIPAL",
+							ActorID:      principalID,
+							EntryPoint:   port.AuditEntryPointAdminAPI,
+							EventType:    "virtual_key.snapshot_sync_pending",
+							TargetType:   "virtual_key",
+							TargetID:     k.id,
+							RequestID:    reqIDPtr,
+							MetadataJSON: string(metaJSON),
+						})
+					}
+				}
+			}
+			return refErr
+		}
 	}
 	return nil
 }

@@ -634,4 +634,70 @@ func TestNewGuardedHTTPClient_DisableTotalTimeout(t *testing.T) {
 	}
 }
 
+func TestStaticEndpointValidationAndTransitionIPs(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
 
+	// Transition and zone-scoped IP literals blocked unconditionally or when allowPrivateIP=false.
+	for _, rawIP := range []string{
+		"::169.254.169.254",
+		"64:ff9b::169.254.169.254",
+		"2002:a9fe:a9fe::",
+		"::ffff:127.0.0.1",
+		"fe80::1%eth0",
+	} {
+		ip := netip.MustParseAddr(rawIP)
+		if err := ClassifyStaticEndpointIP(ip, true); err == nil {
+			t.Fatalf("expected ClassifyStaticEndpointIP(%q, allowPrivateIP=true) to fail", rawIP)
+		}
+	}
+	if err := ClassifyStaticEndpointIP(netip.MustParseAddr("2002:7f00:0001::"), false); !errors.Is(err, ErrPrivateIPBlocked) {
+		t.Fatalf("expected 6to4 loopback blocked when allowPrivateIP=false, got %v", err)
+	}
+	if err := ClassifyStaticEndpointIP(netip.MustParseAddr("93.184.216.34"), false); err != nil {
+		t.Fatalf("expected public IPv4 permitted, got %v", err)
+	}
+
+	// Trailing-dot metadata/localhost, authority hygiene, blocked ports, and fail-closed DNS.
+	blockedPorts := map[int]bool{9090: true}
+	if err := ValidateStaticEndpointURL(ctx, "http://metadata.google.internal./computeMetadata/v1", true, nil, blockedPorts); !errors.Is(err, ErrMetadataBlocked) {
+		t.Fatalf("expected trailing-dot metadata blocked, got %v", err)
+	}
+	if err := ValidateStaticEndpointURL(ctx, "https://localhost./v1", false, nil, blockedPorts); !errors.Is(err, ErrPrivateIPBlocked) {
+		t.Fatalf("expected trailing-dot localhost blocked when allowPrivateIP=false, got %v", err)
+	}
+	if err := ValidateStaticEndpointURL(ctx, "https://localhost./v1", true, nil, blockedPorts); err != nil {
+		t.Fatalf("expected trailing-dot localhost allowed when allowPrivateIP=true, got %v", err)
+	}
+	for _, badURL := range []string{
+		"https://user:pass@api.example.com/v1",
+		"https://api.example.com\\@evil.test/v1",
+		"ftp://api.example.com/v1",
+	} {
+		if err := ValidateStaticEndpointURL(ctx, badURL, false, nil, blockedPorts); !errors.Is(err, ErrInvalidPolicy) {
+			t.Fatalf("expected ErrInvalidPolicy for %q, got %v", badURL, err)
+		}
+	}
+	if err := ValidateStaticEndpointURL(ctx, "https://api.example.com:9090/v1", false, nil, blockedPorts); !errors.Is(err, ErrPortDenied) {
+		t.Fatalf("expected ErrPortDenied for blocked port, got %v", err)
+	}
+
+	failDNS := &mockResolver{fn: func(_ int64, _ string) ([]netip.Addr, error) {
+		return nil, errors.New("dns timeout")
+	}}
+	if err := ValidateStaticEndpointURL(ctx, "https://api.example.com/v1", false, failDNS, blockedPorts); !errors.Is(err, ErrPrivateIPBlocked) {
+		t.Fatalf("expected fail-closed DNS lookup error, got %v", err)
+	}
+	emptyDNS := &mockResolver{fn: func(_ int64, _ string) ([]netip.Addr, error) {
+		return nil, nil
+	}}
+	if err := ValidateStaticEndpointURL(ctx, "https://api.example.com/v1", false, emptyDNS, blockedPorts); !errors.Is(err, ErrPrivateIPBlocked) {
+		t.Fatalf("expected fail-closed empty DNS result, got %v", err)
+	}
+	publicDNS := &mockResolver{fn: func(_ int64, _ string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+	}}
+	if err := ValidateStaticEndpointURL(ctx, "https://api.example.com/v1", false, publicDNS, blockedPorts); err != nil {
+		t.Fatalf("expected public DNS resolution to succeed, got %v", err)
+	}
+}

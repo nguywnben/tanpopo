@@ -451,3 +451,56 @@ type nonTxBootAuditSink struct{}
 
 func (nonTxBootAuditSink) Append(context.Context, port.AuditEvent) error { return nil }
 
+func TestBootstrapPreflightCompleteRequest(t *testing.T) {
+	t.Parallel()
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	st := openBootstrapDB(t, fk)
+	ctx := context.Background()
+
+	tokenPath := filepath.Join(t.TempDir(), "preflight.token")
+	mgr, err := NewManager(ManagerConfig{
+		DB:        st.RawDB(),
+		TokenPath: tokenPath,
+		NowMs:     func() int64 { return fk.Now().UTC().UnixMilli() },
+		Argon2:    auth.Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32},
+		AuditSink: testTxAuditSink{},
+	})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	tok, err := mgr.EnsureToken(ctx)
+	if err != nil {
+		t.Fatalf("EnsureToken: %v", err)
+	}
+
+	if err := mgr.PreflightCompleteRequest(ctx, CompleteRequest{
+		BootstrapToken:              "wrong-token",
+		OwnerEmail:                  "owner@tanpopo.local",
+		OwnerPassword:               "valid-owner-password-2026!",
+		MasterKEKBackupAcknowledged: true,
+	}); !errors.Is(err, ErrInvalidBootstrapToken) {
+		t.Fatalf("expected ErrInvalidBootstrapToken, got %v", err)
+	}
+
+	req := CompleteRequest{
+		BootstrapToken:              tok,
+		OwnerEmail:                  "owner@tanpopo.local",
+		OwnerPassword:               "valid-owner-password-2026!",
+		MasterKEKBackupAcknowledged: true,
+	}
+	// Non-consuming preflight succeeds repeatedly without burning the token.
+	for i := 0; i < 2; i++ {
+		if err := mgr.PreflightCompleteRequest(ctx, req); err != nil {
+			t.Fatalf("PreflightCompleteRequest attempt %d failed: %v", i, err)
+		}
+	}
+
+	// Token is still valid for Complete.
+	if _, err := mgr.Complete(ctx, req); err != nil {
+		t.Fatalf("Complete after PreflightCompleteRequest failed: %v", err)
+	}
+	// Post-completion preflight returns ErrBootstrapAlreadyCompleted.
+	if err := mgr.PreflightCompleteRequest(ctx, req); !errors.Is(err, ErrBootstrapAlreadyCompleted) {
+		t.Fatalf("expected ErrBootstrapAlreadyCompleted after Complete, got %v", err)
+	}
+}

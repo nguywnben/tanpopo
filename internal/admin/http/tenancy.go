@@ -247,6 +247,10 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 	orgID := strings.TrimSpace(r.PathValue("orgId"))
+	if orgID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
@@ -274,15 +278,7 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	currentDTO := organizationDTO{
-		ID:              org.ID,
-		Slug:            org.Slug,
-		Name:            org.DisplayName,
-		MinPluginTrust:  org.MinPluginTrust,
-		FourEyesEnabled: org.RequireFourEyesApproval,
-		Version:         org.Version,
-		CreatedAt:       formatTimeRFC3339Ms(org.CreatedAtMs),
-	}
+	currentDTO := toOrganizationDTO(org)
 	if org.Version != expectedVer {
 		writeOptimisticConflict(w, r, org.Version, currentDTO)
 		return
@@ -292,9 +288,108 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	now := s.nowMs()
+	var revokedKeysCount int
+	var activeKeyIDs []string
+	var orgPrincipals []string
+
+	// Phase 1 TX: Atomically fence organization version BEFORE destroying any DEK,
+	// collect keys/principals to invalidate, and tear down RESTRICT FKs leaving DEK metadata intact.
+	tx1, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting teardown fence transaction", true, nil)
+		return
+	}
+	defer func() { _ = tx1.Rollback() }()
+
+	resFence, err := tx1.ExecContext(r.Context(), `
+		UPDATE organizations SET status = 'DELETING', version = version + 1, updated_at_ms = ?
+		WHERE id = ? AND version = ?`,
+		now, orgID, expectedVer,
+	)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed fencing organization version", true, nil)
+		return
+	}
+	if affected, _ := resFence.RowsAffected(); affected == 0 {
+		_ = tx1.Rollback()
+		if latest, lerr := s.storage.Tenancy().GetOrganization(r.Context(), orgID); lerr == nil {
+			writeOptimisticConflict(w, r, latest.Version, toOrganizationDTO(latest))
+			return
+		} else if errors.Is(lerr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
+			return
+		}
+		writeOptimisticConflict(w, r, org.Version, currentDTO)
+		return
+	}
+	fencedVer := expectedVer + 1
+
+	kRows, kerr := tx1.QueryContext(r.Context(), `
+		SELECT id FROM virtual_keys
+		WHERE org_id = ? AND state NOT IN ('REVOKED', 'EXPIRED', 'PURGED_METADATA_RETAINED')`,
+		orgID,
+	)
+	if kerr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed enumerating organization virtual keys", true, nil)
+		return
+	}
+	for kRows.Next() {
+		var kid string
+		if scanErr := kRows.Scan(&kid); scanErr != nil {
+			_ = kRows.Close()
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning virtual key id", true, nil)
+			return
+		}
+		activeKeyIDs = append(activeKeyIDs, kid)
+	}
+	if rowsErr := kRows.Err(); rowsErr != nil {
+		_ = kRows.Close()
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating organization virtual keys", true, nil)
+		return
+	}
+	_ = kRows.Close()
+	revokedKeysCount = len(activeKeyIDs)
+
+	pRows, perr := tx1.QueryContext(r.Context(), `SELECT id FROM principals WHERE org_id = ?`, orgID)
+	if perr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed enumerating organization principals", true, nil)
+		return
+	}
+	for pRows.Next() {
+		var pid string
+		if scanErr := pRows.Scan(&pid); scanErr != nil {
+			_ = pRows.Close()
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning principal id", true, nil)
+			return
+		}
+		orgPrincipals = append(orgPrincipals, pid)
+	}
+	if rowsErr := pRows.Err(); rowsErr != nil {
+		_ = pRows.Close()
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating organization principals", true, nil)
+		return
+	}
+	_ = pRows.Close()
+
+	if err := cleanupOrgRestrictedFKsTx(r.Context(), tx1, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed tearing down organization resources", true, nil)
+		return
+	}
+
+	if err := tx1.Commit(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing organization teardown fence", true, nil)
+		return
+	}
+
+	// Phase 2: Crypto-shred organization DEK after winning the OCC version fence.
 	destroyedDEK := "none"
 	if s.vault != nil {
 		meta, merr := s.vault.GetOrgKeyMetadata(r.Context(), orgID)
+		if merr != nil && !errors.Is(merr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading organization encryption key metadata", true, nil)
+			return
+		}
 		if merr == nil && meta != nil {
 			shredReqID := fmt.Sprintf("admin-org-shred-%s-%d", orgID, s.nowMs())
 			if serr := s.vault.ShredOrgDEK(r.Context(), orgID, vault.ShredRequest{
@@ -310,92 +405,34 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	now := s.nowMs()
-	var revokedKeysCount int
-	var orgPrincipals []string
-
-	tx, err := s.db.BeginTx(r.Context(), nil)
+	// Phase 3 TX: Delete fenced organization row, emit SHRED changelog, and record audit.
+	tx2, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting teardown transaction", true, nil)
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting organization delete transaction", true, nil)
 		return
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() { _ = tx2.Rollback() }()
 
-	_ = tx.QueryRowContext(r.Context(), `
-		SELECT COUNT(*) FROM virtual_keys
-		WHERE org_id = ? AND state NOT IN ('REVOKED', 'EXPIRED', 'PURGED_METADATA_RETAINED')`,
-		orgID,
-	).Scan(&revokedKeysCount)
-
-	pRows, perr := tx.QueryContext(r.Context(), `SELECT id FROM principals WHERE org_id = ?`, orgID)
-	if perr == nil {
-		for pRows.Next() {
-			var pid string
-			if scanErr := pRows.Scan(&pid); scanErr == nil {
-				orgPrincipals = append(orgPrincipals, pid)
-			}
-		}
-		_ = pRows.Close()
-	}
-
-	restrictSteps := []struct {
-		query string
-		args  []any
-	}{
-		{
-			query: `DELETE FROM emergency_kill_switches WHERE org_id = ? OR triggered_by_principal_id IN (SELECT id FROM principals WHERE org_id = ?) OR cleared_by_principal_id IN (SELECT id FROM principals WHERE org_id = ?)`,
-			args:  []any{orgID, orgID, orgID},
-		},
-		{
-			query: `DELETE FROM route_targets WHERE org_id = ?`,
-			args:  []any{orgID},
-		},
-		{
-			query: `DELETE FROM route_policies WHERE org_id = ?`,
-			args:  []any{orgID},
-		},
-		{
-			query: `DELETE FROM model_deployments WHERE org_id = ?`,
-			args:  []any{orgID},
-		},
-		{
-			query: `DELETE FROM connection_secret_bindings WHERE org_id = ?`,
-			args:  []any{orgID},
-		},
-		{
-			query: `DELETE FROM provider_connections WHERE org_id = ?`,
-			args:  []any{orgID},
-		},
-		{
-			query: `DELETE FROM secret_credentials WHERE org_id = ?`,
-			args:  []any{orgID},
-		},
-	}
-	for _, st := range restrictSteps {
-		if _, derr := tx.ExecContext(r.Context(), st.query, st.args...); derr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed tearing down organization resources", true, nil)
-			return
-		}
-	}
-
-	res, err := tx.ExecContext(r.Context(), `DELETE FROM organizations WHERE id = ? AND version = ?`, orgID, expectedVer)
+	resDel, err := tx2.ExecContext(r.Context(), `DELETE FROM organizations WHERE id = ? AND version = ?`, orgID, fencedVer)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed deleting organization", true, nil)
 		return
 	}
-	if affected, _ := res.RowsAffected(); affected == 0 {
-		writeOptimisticConflict(w, r, org.Version, currentDTO)
+	if affected, _ := resDel.RowsAffected(); affected == 0 {
+		writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "concurrent organization teardown conflict", true, nil)
 		return
 	}
 
-	if _, err := tx.ExecContext(r.Context(), `
+	resEpoch, err := tx2.ExecContext(r.Context(), `
 		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
 		VALUES (?, 'organization', ?, 'SHRED', 1, ?)`,
 		orgID, orgID, now,
-	); err != nil {
+	)
+	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording shred changelog", true, nil)
 		return
 	}
+	shredEpoch, _ := resEpoch.LastInsertId()
 
 	audID, err := idgen.New(idgen.PrefixAudit)
 	if err != nil {
@@ -408,7 +445,7 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		"destroyed_dek_id": destroyedDEK,
 		"revoked_keys":     revokedKeysCount,
 	})
-	if err := s.txAudit.AppendTx(r.Context(), tx, port.AuditEvent{
+	if err := s.txAudit.AppendTx(r.Context(), tx2, port.AuditEvent{
 		ID:           audID,
 		CreatedAtMs:  now,
 		OrgID:        &orgID,
@@ -425,7 +462,7 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx2.Commit(); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing organization crypto-shred", true, nil)
 		return
 	}
@@ -434,7 +471,18 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		if s.snapshots.Streams() != nil {
 			s.snapshots.Streams().AbortScope(orgID, "")
 		}
-		_ = s.snapshots.Refresh(r.Context())
+		if refErr := s.snapshots.Refresh(r.Context()); refErr != nil {
+			for _, kid := range activeKeyIDs {
+				s.snapshots.FenceKeyRevocation(kid, "EMERGENCY_SECURITY", now, shredEpoch)
+			}
+			w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+			s.emitSecurityAudit(r.Context(), sc, "organization.snapshot_sync_pending", map[string]any{
+				"org_id":       orgID,
+				"shred_epoch":  shredEpoch,
+				"fenced_keys":  len(activeKeyIDs),
+				"error":        refErr.Error(),
+			})
+		}
 	}
 	if s.killSwitch != nil && s.killSwitch.Streams() != nil {
 		s.killSwitch.Streams().AbortMatching(killswitch.LevelProjectOrOrgFreeze, orgID, orgID)
@@ -457,14 +505,8 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	orgID := sc.OrgID
-	if sc.IsOperator {
-		if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
-			orgID = qOrg
-		}
-	}
-	if orgID == "" {
-		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "organization scope required", false, nil)
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionProjectRead, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
@@ -581,11 +623,11 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
 	}
-	if sc.OrgID == "" {
-		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "organization scope required", false, nil)
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
 		return
 	}
-	if !s.authorize(w, r, sc, rbac.ActionProjectWrite, rbac.TargetScope{OrgID: sc.OrgID}) {
+	if !s.authorize(w, r, sc, rbac.ActionProjectWrite, rbac.TargetScope{OrgID: orgID}) {
 		return
 	}
 	if strings.TrimSpace(req.Slug) == "" || strings.TrimSpace(req.Name) == "" {
@@ -593,7 +635,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prj, err := s.storage.Tenancy().CreateProject(r.Context(), sc.OrgID, port.CreateProjectParams{
+	prj, err := s.storage.Tenancy().CreateProject(r.Context(), orgID, port.CreateProjectParams{
 		Slug:        strings.TrimSpace(req.Slug),
 		DisplayName: strings.TrimSpace(req.Name),
 	})
@@ -610,7 +652,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.vault != nil {
-		if _, derr := s.vault.EnsureProjectDEK(r.Context(), sc.OrgID, prj.ID); derr != nil {
+		if _, derr := s.vault.EnsureProjectDEK(r.Context(), orgID, prj.ID); derr != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed minting project DEK", true, nil)
 			return
 		}
@@ -619,14 +661,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		_ = s.snapshots.Refresh(r.Context())
 	}
 
-	dto := projectDTO{
-		ID:        prj.ID,
-		OrgID:     prj.OrgID,
-		Slug:      prj.Slug,
-		Name:      prj.DisplayName,
-		Version:   prj.Version,
-		CreatedAt: formatTimeRFC3339Ms(prj.CreatedAtMs),
-	}
+	dto := toProjectDTO(prj)
 	w.Header().Set("ETag", FormatETag(prj.Version))
 	writeJSON(w, http.StatusCreated, dto)
 }
@@ -637,6 +672,10 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	projectID := strings.TrimSpace(r.PathValue("projectId"))
+	if projectID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
@@ -645,8 +684,12 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
 	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
 
-	prj, err := s.storage.Tenancy().GetProject(r.Context(), sc.OrgID, projectID)
+	prj, err := s.storage.Tenancy().GetProject(r.Context(), orgID, projectID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 		return
@@ -656,7 +699,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !s.authorize(w, r, sc, rbac.ActionProjectWrite, rbac.TargetScope{OrgID: sc.OrgID, ProjectID: projectID}) {
+	if !s.authorize(w, r, sc, rbac.ActionProjectWrite, rbac.TargetScope{OrgID: orgID, ProjectID: projectID}) {
 		return
 	}
 	if len(strings.TrimSpace(req.Reason)) < 5 {
@@ -664,14 +707,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentDTO := projectDTO{
-		ID:        prj.ID,
-		OrgID:     prj.OrgID,
-		Slug:      prj.Slug,
-		Name:      prj.DisplayName,
-		Version:   prj.Version,
-		CreatedAt: formatTimeRFC3339Ms(prj.CreatedAtMs),
-	}
+	currentDTO := toProjectDTO(prj)
 	if prj.Version != expectedVer {
 		writeOptimisticConflict(w, r, prj.Version, currentDTO)
 		return
@@ -681,63 +717,129 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	now := s.nowMs()
+	var revokedKeysCount int
+	var activeKeyIDs []string
+
+	// Phase 1 TX: Atomically fence project version BEFORE destroying any DEK,
+	// collect virtual keys to fence, and tear down RESTRICT FKs leaving DEK metadata intact.
+	tx1, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting project teardown fence transaction", true, nil)
+		return
+	}
+	defer func() { _ = tx1.Rollback() }()
+
+	resFence, err := tx1.ExecContext(r.Context(), `
+		UPDATE projects SET status = 'DELETING', version = version + 1, updated_at_ms = ?
+		WHERE org_id = ? AND id = ? AND version = ?`,
+		now, orgID, projectID, expectedVer,
+	)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed fencing project version", true, nil)
+		return
+	}
+	if affected, _ := resFence.RowsAffected(); affected == 0 {
+		_ = tx1.Rollback()
+		if latest, lerr := s.storage.Tenancy().GetProject(r.Context(), orgID, projectID); lerr == nil {
+			writeOptimisticConflict(w, r, latest.Version, toProjectDTO(latest))
+			return
+		} else if errors.Is(lerr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+			return
+		}
+		writeOptimisticConflict(w, r, prj.Version, currentDTO)
+		return
+	}
+	fencedVer := expectedVer + 1
+
+	kRows, kerr := tx1.QueryContext(r.Context(), `
+		SELECT id FROM virtual_keys
+		WHERE org_id = ? AND project_id = ? AND state NOT IN ('REVOKED', 'EXPIRED', 'PURGED_METADATA_RETAINED')`,
+		orgID, projectID,
+	)
+	if kerr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed enumerating project virtual keys", true, nil)
+		return
+	}
+	for kRows.Next() {
+		var kid string
+		if scanErr := kRows.Scan(&kid); scanErr != nil {
+			_ = kRows.Close()
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning virtual key id", true, nil)
+			return
+		}
+		activeKeyIDs = append(activeKeyIDs, kid)
+	}
+	if rowsErr := kRows.Err(); rowsErr != nil {
+		_ = kRows.Close()
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating project virtual keys", true, nil)
+		return
+	}
+	_ = kRows.Close()
+	revokedKeysCount = len(activeKeyIDs)
+
+	if err := cleanupProjectRestrictedFKsTx(r.Context(), tx1, orgID, projectID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed tearing down project dependencies", true, nil)
+		return
+	}
+
+	if err := tx1.Commit(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing project teardown fence", true, nil)
+		return
+	}
+
+	// Phase 2: Crypto-shred project DEK after winning the OCC version fence.
 	destroyedDEK := "none"
 	if s.vault != nil {
-		meta, merr := s.vault.GetProjectKeyMetadata(r.Context(), sc.OrgID, projectID)
+		meta, merr := s.vault.GetProjectKeyMetadata(r.Context(), orgID, projectID)
+		if merr != nil && !errors.Is(merr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading project encryption key metadata", true, nil)
+			return
+		}
 		if merr == nil && meta != nil {
 			shredReqID := fmt.Sprintf("admin-proj-shred-%s-%d", projectID, s.nowMs())
-			if serr := s.vault.ShredProjectDEK(r.Context(), sc.OrgID, projectID, vault.ShredRequest{
+			if serr := s.vault.ShredProjectDEK(r.Context(), orgID, projectID, vault.ShredRequest{
 				RequestID:          shredReqID,
 				ExpectedGeneration: meta.KeyGeneration,
 			}); serr != nil {
 				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed crypto-shredding project DEK", true, nil)
 				return
 			}
-			destroyedDEK = fmt.Sprintf("%s:%s:v%d:g%d", sc.OrgID, projectID, meta.DEKVersion, meta.KeyGeneration)
+			destroyedDEK = fmt.Sprintf("%s:%s:v%d:g%d", orgID, projectID, meta.DEKVersion, meta.KeyGeneration)
 		} else {
 			s.vault.EvictAllDEKs()
 		}
 	}
 
-	now := s.nowMs()
-	var revokedKeysCount int
-
-	tx, err := s.db.BeginTx(r.Context(), nil)
+	// Phase 3 TX: Delete fenced project row, emit SHRED changelog, and record audit.
+	tx2, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting project teardown transaction", true, nil)
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting project delete transaction", true, nil)
 		return
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() { _ = tx2.Rollback() }()
 
-	_ = tx.QueryRowContext(r.Context(), `
-		SELECT COUNT(*) FROM virtual_keys
-		WHERE org_id = ? AND project_id = ? AND state NOT IN ('REVOKED', 'EXPIRED', 'PURGED_METADATA_RETAINED')`,
-		sc.OrgID, projectID,
-	).Scan(&revokedKeysCount)
-
-	if err := cleanupProjectRestrictedFKsTx(r.Context(), tx, sc.OrgID, projectID); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed tearing down project dependencies", true, nil)
-		return
-	}
-
-	res, err := tx.ExecContext(r.Context(), `DELETE FROM projects WHERE org_id = ? AND id = ? AND version = ?`, sc.OrgID, projectID, expectedVer)
+	resDel, err := tx2.ExecContext(r.Context(), `DELETE FROM projects WHERE org_id = ? AND id = ? AND version = ?`, orgID, projectID, fencedVer)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed deleting project", true, nil)
 		return
 	}
-	if affected, _ := res.RowsAffected(); affected == 0 {
-		writeOptimisticConflict(w, r, prj.Version, currentDTO)
+	if affected, _ := resDel.RowsAffected(); affected == 0 {
+		writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "concurrent project teardown conflict", true, nil)
 		return
 	}
 
-	if _, err := tx.ExecContext(r.Context(), `
+	resEpoch, err := tx2.ExecContext(r.Context(), `
 		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
 		VALUES (?, 'project', ?, 'SHRED', 1, ?)`,
-		sc.OrgID, projectID, now,
-	); err != nil {
+		orgID, projectID, now,
+	)
+	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording shred changelog", true, nil)
 		return
 	}
+	shredEpoch, _ := resEpoch.LastInsertId()
 
 	audID, err := idgen.New(idgen.PrefixAudit)
 	if err != nil {
@@ -750,10 +852,10 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		"destroyed_dek_id": destroyedDEK,
 		"revoked_keys":     revokedKeysCount,
 	})
-	if err := s.txAudit.AppendTx(r.Context(), tx, port.AuditEvent{
+	if err := s.txAudit.AppendTx(r.Context(), tx2, port.AuditEvent{
 		ID:           audID,
 		CreatedAtMs:  now,
-		OrgID:        &sc.OrgID,
+		OrgID:        &orgID,
 		ActorKind:    "PRINCIPAL",
 		ActorID:      sc.Actor.PrincipalID,
 		EntryPoint:   port.AuditEntryPointAdminAPI,
@@ -767,19 +869,30 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx2.Commit(); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing project crypto-shred", true, nil)
 		return
 	}
 
 	if s.snapshots != nil {
 		if s.snapshots.Streams() != nil {
-			s.snapshots.Streams().AbortScope(sc.OrgID, projectID)
+			s.snapshots.Streams().AbortScope(orgID, projectID)
 		}
-		_ = s.snapshots.Refresh(r.Context())
+		if refErr := s.snapshots.Refresh(r.Context()); refErr != nil {
+			for _, kid := range activeKeyIDs {
+				s.snapshots.FenceKeyRevocation(kid, "EMERGENCY_SECURITY", now, shredEpoch)
+			}
+			w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+			s.emitSecurityAudit(r.Context(), sc, "project.snapshot_sync_pending", map[string]any{
+				"project_id":   projectID,
+				"shred_epoch":  shredEpoch,
+				"fenced_keys":  len(activeKeyIDs),
+				"error":        refErr.Error(),
+			})
+		}
 	}
 	if s.killSwitch != nil && s.killSwitch.Streams() != nil {
-		s.killSwitch.Streams().AbortMatching(killswitch.LevelProjectOrOrgFreeze, sc.OrgID, projectID)
+		s.killSwitch.Streams().AbortMatching(killswitch.LevelProjectOrOrgFreeze, orgID, projectID)
 	}
 
 	writeJSON(w, http.StatusOK, cryptoShredReceiptDTO{
@@ -791,7 +904,184 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func toOrganizationDTO(org *port.Organization) organizationDTO {
+	return organizationDTO{
+		ID:              org.ID,
+		Slug:            org.Slug,
+		Name:            org.DisplayName,
+		MinPluginTrust:  org.MinPluginTrust,
+		FourEyesEnabled: org.RequireFourEyesApproval,
+		Version:         org.Version,
+		CreatedAt:       formatTimeRFC3339Ms(org.CreatedAtMs),
+	}
+}
+
+func toProjectDTO(prj *port.Project) projectDTO {
+	return projectDTO{
+		ID:        prj.ID,
+		OrgID:     prj.OrgID,
+		Slug:      prj.Slug,
+		Name:      prj.DisplayName,
+		Version:   prj.Version,
+		CreatedAt: formatTimeRFC3339Ms(prj.CreatedAtMs),
+	}
+}
+
+func tableExistsTx(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
+	var cnt int
+	err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&cnt)
+	if err != nil {
+		return false, err
+	}
+	return cnt > 0, nil
+}
+
+func cleanupOrgRestrictedFKsTx(ctx context.Context, tx *sql.Tx, orgID string) error {
+	optionalSteps := []struct {
+		table string
+		query string
+		args  []any
+	}{
+		{
+			table: "a2a_tasks",
+			query: `UPDATE a2a_tasks SET parent_task_id = NULL WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+		{
+			table: "a2a_tasks",
+			query: `DELETE FROM a2a_tasks WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+		{
+			table: "approval_requests",
+			query: `DELETE FROM approval_requests WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+		{
+			table: "admin_change_requests",
+			query: `DELETE FROM admin_change_requests WHERE org_id = ? OR initiator_principal_id IN (SELECT id FROM principals WHERE org_id = ?) OR approver_principal_id IN (SELECT id FROM principals WHERE org_id = ?)`,
+			args:  []any{orgID, orgID, orgID},
+		},
+		{
+			table: "webhook_subscriptions",
+			query: `DELETE FROM webhook_subscriptions WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+		{
+			table: "agent_endpoints",
+			query: `DELETE FROM agent_endpoints WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+		{
+			table: "mcp_servers",
+			query: `DELETE FROM mcp_servers WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+	}
+	for _, st := range optionalSteps {
+		exists, err := tableExistsTx(ctx, tx, st.table)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, st.query, st.args...); err != nil {
+			return err
+		}
+	}
+
+	steps := []struct {
+		query string
+		args  []any
+	}{
+		{
+			query: `DELETE FROM emergency_kill_switches WHERE org_id = ? OR triggered_by_principal_id IN (SELECT id FROM principals WHERE org_id = ?) OR cleared_by_principal_id IN (SELECT id FROM principals WHERE org_id = ?)`,
+			args:  []any{orgID, orgID, orgID},
+		},
+		{
+			query: `DELETE FROM route_targets WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+		{
+			query: `DELETE FROM route_policies WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+		{
+			query: `DELETE FROM model_deployments WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+		{
+			query: `DELETE FROM connection_secret_bindings WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+		{
+			query: `DELETE FROM provider_connections WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+		{
+			query: `DELETE FROM secret_credentials WHERE org_id = ?`,
+			args:  []any{orgID},
+		},
+	}
+	for _, st := range steps {
+		if _, err := tx.ExecContext(ctx, st.query, st.args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func cleanupProjectRestrictedFKsTx(ctx context.Context, tx *sql.Tx, orgID, projectID string) error {
+	optionalSteps := []struct {
+		table string
+		query string
+		args  []any
+	}{
+		{
+			table: "a2a_tasks",
+			query: `UPDATE a2a_tasks SET parent_task_id = NULL WHERE org_id = ? AND (project_id = ? OR agent_endpoint_id IN (SELECT id FROM agent_endpoints WHERE org_id = ? AND project_id = ?) OR caller_virtual_key_id IN (SELECT id FROM virtual_keys WHERE org_id = ? AND project_id = ?))`,
+			args:  []any{orgID, projectID, orgID, projectID, orgID, projectID},
+		},
+		{
+			table: "a2a_tasks",
+			query: `DELETE FROM a2a_tasks WHERE org_id = ? AND (project_id = ? OR agent_endpoint_id IN (SELECT id FROM agent_endpoints WHERE org_id = ? AND project_id = ?) OR caller_virtual_key_id IN (SELECT id FROM virtual_keys WHERE org_id = ? AND project_id = ?))`,
+			args:  []any{orgID, projectID, orgID, projectID, orgID, projectID},
+		},
+		{
+			table: "approval_requests",
+			query: `DELETE FROM approval_requests WHERE org_id = ? AND (project_id = ? OR requester_virtual_key_id IN (SELECT id FROM virtual_keys WHERE org_id = ? AND project_id = ?))`,
+			args:  []any{orgID, projectID, orgID, projectID},
+		},
+		{
+			table: "webhook_subscriptions",
+			query: `DELETE FROM webhook_subscriptions WHERE org_id = ? AND (project_id = ? OR signing_secret_credential_id IN (SELECT id FROM secret_credentials WHERE org_id = ? AND owner_project_id = ?))`,
+			args:  []any{orgID, projectID, orgID, projectID},
+		},
+		{
+			table: "agent_endpoints",
+			query: `DELETE FROM agent_endpoints WHERE org_id = ? AND (project_id = ? OR credential_id IN (SELECT id FROM secret_credentials WHERE org_id = ? AND owner_project_id = ?))`,
+			args:  []any{orgID, projectID, orgID, projectID},
+		},
+		{
+			table: "mcp_servers",
+			query: `DELETE FROM mcp_servers WHERE org_id = ? AND (project_id = ? OR credential_id IN (SELECT id FROM secret_credentials WHERE org_id = ? AND owner_project_id = ?))`,
+			args:  []any{orgID, projectID, orgID, projectID},
+		},
+	}
+	for _, st := range optionalSteps {
+		exists, err := tableExistsTx(ctx, tx, st.table)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, st.query, st.args...); err != nil {
+			return err
+		}
+	}
+
 	steps := []struct {
 		query string
 		args  []any
@@ -843,7 +1133,15 @@ func (s *Server) handleListProjectEnvironments(w http.ResponseWriter, r *http.Re
 		return
 	}
 	projectID := strings.TrimSpace(r.PathValue("projectId"))
-	prj, err := s.storage.Tenancy().GetProject(r.Context(), sc.OrgID, projectID)
+	if projectID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	prj, err := s.storage.Tenancy().GetProject(r.Context(), orgID, projectID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 		return
@@ -853,11 +1151,11 @@ func (s *Server) handleListProjectEnvironments(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if !s.authorize(w, r, sc, rbac.ActionProjectRead, rbac.TargetScope{OrgID: sc.OrgID, ProjectID: prj.ID}) {
+	if !s.authorize(w, r, sc, rbac.ActionProjectRead, rbac.TargetScope{OrgID: orgID, ProjectID: prj.ID}) {
 		return
 	}
 
-	envs, err := s.storage.Tenancy().ListEnvironments(r.Context(), sc.OrgID, prj.ID)
+	envs, err := s.storage.Tenancy().ListEnvironments(r.Context(), orgID, prj.ID)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing environments", true, nil)
 		return
@@ -883,12 +1181,20 @@ func (s *Server) handleCreateProjectEnvironment(w http.ResponseWriter, r *http.R
 		return
 	}
 	projectID := strings.TrimSpace(r.PathValue("projectId"))
+	if projectID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+		return
+	}
 	var req createEnvironmentRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
 	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
 
-	prj, err := s.storage.Tenancy().GetProject(r.Context(), sc.OrgID, projectID)
+	prj, err := s.storage.Tenancy().GetProject(r.Context(), orgID, projectID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 		return
@@ -898,7 +1204,7 @@ func (s *Server) handleCreateProjectEnvironment(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if !s.authorize(w, r, sc, rbac.ActionEnvironmentWrite, rbac.TargetScope{OrgID: sc.OrgID, ProjectID: prj.ID}) {
+	if !s.authorize(w, r, sc, rbac.ActionEnvironmentWrite, rbac.TargetScope{OrgID: orgID, ProjectID: prj.ID}) {
 		return
 	}
 
@@ -909,7 +1215,7 @@ func (s *Server) handleCreateProjectEnvironment(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	env, err := s.storage.Tenancy().CreateEnvironment(r.Context(), sc.OrgID, prj.ID, port.CreateEnvironmentParams{
+	env, err := s.storage.Tenancy().CreateEnvironment(r.Context(), orgID, prj.ID, port.CreateEnvironmentParams{
 		Slug: slug,
 	})
 	if err != nil {

@@ -45,14 +45,8 @@ func (s *Server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	orgID := sc.OrgID
-	if sc.IsOperator {
-		if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
-			orgID = qOrg
-		}
-	}
-	if orgID == "" {
-		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "organization scope required", false, nil)
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
 		return
 	}
 
@@ -133,7 +127,7 @@ func (s *Server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 
 	data := make([]memberSummaryDTO, len(items))
 	for i := range items {
-		roles, projIDs, berr := s.loadMemberRolesAndProjects(r.Context(), items[i].dto.ID)
+		roles, projIDs, _, berr := s.loadMemberBindingDetails(r.Context(), orgID, items[i].dto.ID)
 		if berr != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading member roles", true, nil)
 			return
@@ -170,8 +164,8 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
 	}
-	if sc.OrgID == "" {
-		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "organization scope required", false, nil)
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
 		return
 	}
 
@@ -198,12 +192,14 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 
 	projIDs := normalizeUniqueIDs(req.ProjectIDs)
 	if len(projIDs) > 0 {
-		if !s.authorize(w, r, sc, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: sc.OrgID, ProjectID: projIDs[0]}) {
-			return
+		for _, pid := range projIDs {
+			if !s.authorize(w, r, sc, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: orgID, ProjectID: pid}) {
+				return
+			}
 		}
 		for _, pid := range projIDs {
 			var pExists int
-			err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, sc.OrgID, pid).Scan(&pExists)
+			err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, pid).Scan(&pExists)
 			if errors.Is(err, sql.ErrNoRows) {
 				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 				return
@@ -212,17 +208,14 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating project_ids", true, nil)
 				return
 			}
-			if !s.authorize(w, r, sc, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: sc.OrgID, ProjectID: pid}) {
-				return
-			}
 		}
 	} else {
-		if !s.authorize(w, r, sc, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: sc.OrgID}) {
+		if !s.authorize(w, r, sc, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: orgID}) {
 			return
 		}
 	}
 
-	roles, err := normalizeAndCheckGrantRoles(sc, sc.OrgID, req.Roles, projIDs)
+	roles, projIDsForResp, err := normalizeAndCheckGrantRoles(sc, orgID, req.Roles, projIDs)
 	if err != nil {
 		if errors.Is(err, rbac.ErrPermissionDenied) {
 			writeErrorEnvelope(w, r, http.StatusForbidden, "role_escalation_denied", "permission_error", err.Error(), false, nil)
@@ -251,7 +244,7 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 			id, org_id, kind, email_or_sub, password_argon2id, oidc_issuer,
 			status, version, last_login_at_ms, created_at_ms, updated_at_ms
 		) VALUES (?, ?, ?, ?, NULL, NULL, 'ACTIVE', 1, NULL, ?, ?)`,
-		prcID, sc.OrgID, dbKind, email, now, now,
+		prcID, orgID, dbKind, email, now, now,
 	); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "member with email already exists in organization", false, nil)
@@ -261,7 +254,7 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := insertRoleBindingsTx(r.Context(), tx, sc.OrgID, prcID, roles, projIDs, now); err != nil {
+	if err := insertRoleBindingsTx(r.Context(), tx, orgID, prcID, roles, projIDsForResp, now); err != nil {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
 		return
 	}
@@ -275,12 +268,12 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 		"email":       email,
 		"kind":        toOpenAPIMemberKind(dbKind),
 		"roles":       roles,
-		"project_ids": projIDs,
+		"project_ids": projIDsForResp,
 	})
 	if err := s.txAudit.AppendTx(r.Context(), tx, port.AuditEvent{
 		ID:           audID,
 		CreatedAtMs:  now,
-		OrgID:        &sc.OrgID,
+		OrgID:        &orgID,
 		ActorKind:    "PRINCIPAL",
 		ActorID:      sc.Actor.PrincipalID,
 		EntryPoint:   port.AuditEntryPointAdminAPI,
@@ -304,7 +297,7 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 		Email:      email,
 		Kind:       toOpenAPIMemberKind(dbKind),
 		Roles:      roles,
-		ProjectIDs: projIDs,
+		ProjectIDs: projIDsForResp,
 		Version:    1,
 		CreatedAt:  formatTimeRFC3339Ms(now),
 	}
@@ -318,12 +311,20 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	memberID := strings.TrimSpace(r.PathValue("memberId"))
+	if memberID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "member not found", false, nil)
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
 	}
 	var req updateMemberRolesRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
 		return
 	}
 
@@ -335,7 +336,7 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 	err := s.db.QueryRowContext(r.Context(), `
 		SELECT email_or_sub, kind, version, created_at_ms
 		FROM principals WHERE id = ? AND org_id = ?`,
-		memberID, sc.OrgID,
+		memberID, orgID,
 	).Scan(&email, &kind, &version, &createdMs)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "member not found", false, nil)
@@ -346,7 +347,7 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	curRoles, curProjs, berr := s.loadMemberRolesAndProjects(r.Context(), memberID)
+	curRoles, curProjs, curBindings, berr := s.loadMemberBindingDetails(r.Context(), orgID, memberID)
 	if berr != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading current member roles", true, nil)
 		return
@@ -371,11 +372,35 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Enforce authorization over ALL existing member bindings BEFORE version conflict checks
+	// so unauthorized callers never leak current_resource via 409 or tamper across scopes.
+	if !actorIsOrgOwnerOrOperator(sc.Actor, orgID) {
+		for _, b := range curBindings {
+			if b.ScopeType != rbac.ScopeProject ||
+				b.RoleName == rbac.RoleOrgOwner ||
+				b.RoleName == rbac.RoleSecurityReviewer ||
+				b.RoleName == rbac.RoleFinOpsViewer ||
+				b.RoleName == rbac.RoleOperator {
+				writeErrorEnvelope(w, r, http.StatusForbidden, "role_escalation_denied", "permission_error", "only ORG_OWNER or OPERATOR can modify organization-level role holders", false, nil)
+				return
+			}
+			if aErr := rbac.Authorize(sc.Actor, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: orgID, ProjectID: b.ScopeID}); aErr != nil {
+				writeErrorEnvelope(w, r, http.StatusForbidden, "role_escalation_denied", "permission_error", "cannot modify member bindings outside caller project scope", false, nil)
+				return
+			}
+		}
+	}
+
 	projIDs := normalizeUniqueIDs(req.ProjectIDs)
 	if len(projIDs) > 0 {
 		for _, pid := range projIDs {
+			if !s.authorize(w, r, sc, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: orgID, ProjectID: pid}) {
+				return
+			}
+		}
+		for _, pid := range projIDs {
 			var pExists int
-			pErr := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, sc.OrgID, pid).Scan(&pExists)
+			pErr := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, pid).Scan(&pExists)
 			if errors.Is(pErr, sql.ErrNoRows) {
 				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 				return
@@ -384,37 +409,25 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying project_ids", true, nil)
 				return
 			}
-			if !s.authorize(w, r, sc, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: sc.OrgID, ProjectID: pid}) {
-				return
-			}
 		}
 	} else {
-		if !s.authorize(w, r, sc, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: sc.OrgID}) {
+		if !s.authorize(w, r, sc, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: orgID}) {
 			return
 		}
 	}
 
-	if version != expectedVer {
-		writeOptimisticConflict(w, r, version, currentDTO)
-		return
-	}
-
-	if !actorHasOrgScopeBinding(sc.Actor, sc.OrgID) {
-		for _, cr := range curRoles {
-			if cr == rbac.RoleOrgOwner || cr == rbac.RoleSecurityReviewer || cr == rbac.RoleFinOpsViewer || cr == rbac.RoleOperator {
-				writeErrorEnvelope(w, r, http.StatusForbidden, "role_escalation_denied", "permission_error", "project-scoped admin cannot modify organization-level role holders", false, nil)
-				return
-			}
-		}
-	}
-
-	nextRoles, err := normalizeAndCheckGrantRoles(sc, sc.OrgID, req.Roles, projIDs)
+	nextRoles, projIDsForResp, err := normalizeAndCheckGrantRoles(sc, orgID, req.Roles, projIDs)
 	if err != nil {
 		if errors.Is(err, rbac.ErrPermissionDenied) {
 			writeErrorEnvelope(w, r, http.StatusForbidden, "role_escalation_denied", "permission_error", err.Error(), false, nil)
 			return
 		}
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+		return
+	}
+
+	if version != expectedVer {
+		writeOptimisticConflict(w, r, version, currentDTO)
 		return
 	}
 
@@ -426,11 +439,11 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(r.Context(), `DELETE FROM role_bindings WHERE principal_id = ? AND org_id = ?`, memberID, sc.OrgID); err != nil {
+	if _, err := tx.ExecContext(r.Context(), `DELETE FROM role_bindings WHERE principal_id = ? AND org_id = ?`, memberID, orgID); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed clearing previous bindings", true, nil)
 		return
 	}
-	if err := insertRoleBindingsTx(r.Context(), tx, sc.OrgID, memberID, nextRoles, projIDs, now); err != nil {
+	if err := insertRoleBindingsTx(r.Context(), tx, orgID, memberID, nextRoles, projIDsForResp, now); err != nil {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
 		return
 	}
@@ -438,7 +451,7 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 	res, err := tx.ExecContext(r.Context(), `
 		UPDATE principals SET version = version + 1, updated_at_ms = ?
 		WHERE id = ? AND org_id = ? AND version = ?`,
-		now, memberID, sc.OrgID, expectedVer,
+		now, memberID, orgID, expectedVer,
 	)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed bumping member version", true, nil)
@@ -457,12 +470,12 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 	metaJSON, _ := json.Marshal(map[string]any{
 		"previous_roles": curRoles,
 		"next_roles":     nextRoles,
-		"project_ids":    projIDs,
+		"project_ids":    projIDsForResp,
 	})
 	if err := s.txAudit.AppendTx(r.Context(), tx, port.AuditEvent{
 		ID:           audID,
 		CreatedAtMs:  now,
-		OrgID:        &sc.OrgID,
+		OrgID:        &orgID,
 		ActorKind:    "PRINCIPAL",
 		ActorID:      sc.Actor.PrincipalID,
 		EntryPoint:   port.AuditEntryPointAdminAPI,
@@ -487,7 +500,7 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		Email:      email,
 		Kind:       toOpenAPIMemberKind(kind),
 		Roles:      nextRoles,
-		ProjectIDs: projIDs,
+		ProjectIDs: projIDsForResp,
 		Version:    nextVer,
 		CreatedAt:  formatTimeRFC3339Ms(createdMs),
 	}
@@ -495,14 +508,20 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, updated)
 }
 
-func (s *Server) loadMemberRolesAndProjects(ctx context.Context, principalID string) ([]string, []string, error) {
+type memberBindingRow struct {
+	RoleName  string
+	ScopeType string
+	ScopeID   string
+}
+
+func (s *Server) loadMemberBindingDetails(ctx context.Context, orgID, principalID string) ([]string, []string, []memberBindingRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT role_name, scope_type, scope_id
-		FROM role_bindings WHERE principal_id = ? ORDER BY created_at_ms ASC, id ASC`,
-		principalID,
+		FROM role_bindings WHERE org_id = ? AND principal_id = ? ORDER BY created_at_ms ASC, id ASC`,
+		orgID, principalID,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	defer rows.Close()
 
@@ -510,47 +529,53 @@ func (s *Server) loadMemberRolesAndProjects(ctx context.Context, principalID str
 	seenProjs := make(map[string]struct{})
 	roles := []string{}
 	var projs []string
+	var bindings []memberBindingRow
 	for rows.Next() {
-		var role, sType, sID string
-		if scanErr := rows.Scan(&role, &sType, &sID); scanErr != nil {
-			return nil, nil, scanErr
+		var row memberBindingRow
+		if scanErr := rows.Scan(&row.RoleName, &row.ScopeType, &row.ScopeID); scanErr != nil {
+			return nil, nil, nil, scanErr
 		}
-		if _, ok := seenRoles[role]; !ok {
-			seenRoles[role] = struct{}{}
-			roles = append(roles, role)
+		bindings = append(bindings, row)
+		if _, ok := seenRoles[row.RoleName]; !ok {
+			seenRoles[row.RoleName] = struct{}{}
+			roles = append(roles, row.RoleName)
 		}
-		if sType == rbac.ScopeProject && sID != "" {
-			if _, ok := seenProjs[sID]; !ok {
-				seenProjs[sID] = struct{}{}
-				projs = append(projs, sID)
+		if row.ScopeType == rbac.ScopeProject && row.ScopeID != "" {
+			if _, ok := seenProjs[row.ScopeID]; !ok {
+				seenProjs[row.ScopeID] = struct{}{}
+				projs = append(projs, row.ScopeID)
 			}
 		}
 	}
-	return roles, projs, rows.Err()
+	return roles, projs, bindings, rows.Err()
 }
 
-func normalizeAndCheckGrantRoles(sc *authSessionContext, orgID string, rawRoles []string, projIDs []string) ([]string, error) {
+func normalizeAndCheckGrantRoles(sc *authSessionContext, orgID string, rawRoles []string, projIDs []string) ([]string, []string, error) {
 	if len(rawRoles) == 0 {
-		return nil, fmt.Errorf("%w: roles list cannot be empty", port.ErrInvalidInput)
+		return nil, nil, fmt.Errorf("%w: roles list cannot be empty", port.ErrInvalidInput)
 	}
-	hasOrgScopeCaller := actorHasOrgScopeBinding(sc.Actor, orgID)
+	isOrgOwnerOrOp := actorIsOrgOwnerOrOperator(sc.Actor, orgID)
 	seen := make(map[string]struct{}, len(rawRoles))
 	out := make([]string, 0, len(rawRoles))
+	hasProjectBindableRole := false
 
 	for _, r := range rawRoles {
 		role := strings.TrimSpace(r)
 		if !rbac.IsValidRole(role) {
-			return nil, fmt.Errorf("%w: unknown RBAC role %q", port.ErrInvalidInput, role)
+			return nil, nil, fmt.Errorf("%w: unknown RBAC role %q", port.ErrInvalidInput, role)
 		}
 		if role == rbac.RoleOperator {
-			return nil, fmt.Errorf("%w: OPERATOR role cannot be bound inside an organization member", rbac.ErrPermissionDenied)
+			return nil, nil, fmt.Errorf("%w: OPERATOR role cannot be bound inside an organization member", rbac.ErrPermissionDenied)
 		}
-		if !hasOrgScopeCaller {
+		if role == rbac.RoleTeamAdmin || role == rbac.RoleDeveloper {
+			hasProjectBindableRole = true
+		}
+		if !isOrgOwnerOrOp {
 			if role != rbac.RoleTeamAdmin && role != rbac.RoleDeveloper {
-				return nil, fmt.Errorf("%w: project-scoped admin cannot grant organization role %s", rbac.ErrPermissionDenied, role)
+				return nil, nil, fmt.Errorf("%w: only ORG_OWNER or OPERATOR can grant organization role %s", rbac.ErrPermissionDenied, role)
 			}
 			if len(projIDs) == 0 {
-				return nil, fmt.Errorf("%w: project-scoped admin must specify project_ids", port.ErrInvalidInput)
+				return nil, nil, fmt.Errorf("%w: project-scoped admin must specify project_ids and cannot grant organization-scoped bindings", rbac.ErrPermissionDenied)
 			}
 		}
 		if _, ok := seen[role]; !ok {
@@ -558,7 +583,14 @@ func normalizeAndCheckGrantRoles(sc *authSessionContext, orgID string, rawRoles 
 			out = append(out, role)
 		}
 	}
-	return out, nil
+	if len(projIDs) > 0 && !hasProjectBindableRole {
+		return nil, nil, fmt.Errorf("%w: project_ids can only be specified with TEAM_ADMIN or DEVELOPER roles", port.ErrInvalidInput)
+	}
+	var boundProjIDs []string
+	if hasProjectBindableRole && len(projIDs) > 0 {
+		boundProjIDs = projIDs
+	}
+	return out, boundProjIDs, nil
 }
 
 func insertRoleBindingsTx(ctx context.Context, tx *sql.Tx, orgID, principalID string, roles, projIDs []string, now int64) error {

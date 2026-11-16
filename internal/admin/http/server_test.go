@@ -12,14 +12,17 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
@@ -1356,3 +1359,722 @@ func TestOrganizationAndProjectCryptoShreddingCascadeAndCleanup(t *testing.T) {
 	_ = port.ErrInvalidInput
 	_ = sql.ErrNoRows
 }
+
+func TestRBACEscalationAndCrossProjectMemberIsolation(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	token := h.readBootstrapToken(t)
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "rbac-owner@example.test",
+		"owner_password":                 "StrongRBACPass#2026!",
+		"org_name":                       "RBAC Org",
+		"project_name":                   "p1",
+		"master_kek_backup_acknowledged": true,
+	})
+	if recBoot.Code != http.StatusCreated {
+		t.Fatalf("bootstrap failed: %d %s", recBoot.Code, recBoot.Body.String())
+	}
+	var boot bootstrapCompleteResponse
+	mustDecodeJSON(t, recBoot.Body.Bytes(), &boot)
+	ownerCookie := findCookie(t, recBoot.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	// Create second project P2.
+	recP2 := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "p2",
+		"name": "Project Two",
+	})
+	if recP2.Code != http.StatusCreated {
+		t.Fatalf("create P2 failed: %d %s", recP2.Code, recP2.Body.String())
+	}
+	var proj2 projectDTO
+	mustDecodeJSON(t, recP2.Body.Bytes(), &proj2)
+
+	// Dual-role actor: Org DEVELOPER + Project(P1) TEAM_ADMIN must NOT grant org-wide roles or omit project_ids.
+	dualActor := &rbac.Actor{
+		PrincipalID:     "prc_dual_team_admin",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings: []rbac.RoleBinding{
+			{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleDeveloper},
+			{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleTeamAdmin},
+		},
+	}
+	h.registerBearerToken("tok_dual_ta", dualActor)
+	for _, tc := range []struct {
+		name    string
+		payload map[string]any
+		wantErr string
+	}{
+		{
+			name: "dual_role_grant_org_owner",
+			payload: map[string]any{
+				"email":       "esc-owner@example.test",
+				"roles":       []string{"ORG_OWNER"},
+				"project_ids": []string{boot.ProjectID},
+			},
+			wantErr: "role_escalation_denied",
+		},
+		{
+			name: "dual_role_grant_finops_viewer",
+			payload: map[string]any{
+				"email":       "esc-fin@example.test",
+				"roles":       []string{"FINOPS_VIEWER"},
+				"project_ids": []string{boot.ProjectID},
+			},
+			wantErr: "role_escalation_denied",
+		},
+		{
+			name: "dual_role_empty_project_ids",
+			payload: map[string]any{
+				"email": "esc-empty@example.test",
+				"roles": []string{"DEVELOPER"},
+			},
+			wantErr: "insufficient_role_permission",
+		},
+	} {
+		rec := h.doBearer(t, http.MethodPost, "/admin/v1/members", "tok_dual_ta", "", tc.payload)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s: expected 403, got %d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+		var errEnv CanonicalErrorEnvelope
+		mustDecodeJSON(t, rec.Body.Bytes(), &errEnv)
+		if errEnv.Error.Code != tc.wantErr {
+			t.Fatalf("%s: expected error code %s, got %s", tc.name, tc.wantErr, errEnv.Error.Code)
+		}
+	}
+
+	// Non-project role with non-empty project_ids rejected as 400 invalid_request even by ORG_OWNER.
+	if rec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/members", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"email":       "bad-finops@example.test",
+		"roles":       []string{"FINOPS_VIEWER"},
+		"project_ids": []string{boot.ProjectID},
+	}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for FINOPS_VIEWER with project_ids, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Create multi-project member (P1 + P2) and org-scoped member as ORG_OWNER.
+	recMulti := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/members", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"email":       "multi@example.test",
+		"roles":       []string{"DEVELOPER"},
+		"project_ids": []string{boot.ProjectID, proj2.ID},
+	})
+	if recMulti.Code != http.StatusCreated {
+		t.Fatalf("create multi-project member failed: %d %s", recMulti.Code, recMulti.Body.String())
+	}
+	var multiMember memberSummaryDTO
+	mustDecodeJSON(t, recMulti.Body.Bytes(), &multiMember)
+
+	recOrgMem := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/members", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"email": "sec@example.test",
+		"roles": []string{"SECURITY_REVIEWER"},
+	})
+	if recOrgMem.Code != http.StatusCreated {
+		t.Fatalf("create org-scoped member failed: %d %s", recOrgMem.Code, recOrgMem.Body.String())
+	}
+	var orgMember memberSummaryDTO
+	mustDecodeJSON(t, recOrgMem.Body.Bytes(), &orgMember)
+
+	// Project-scoped TEAM_ADMIN(P1) attempting PATCH on multi-project member (even with stale If-Match "v999")
+	// MUST receive 403, never 409 current_resource oracle.
+	p1TA := &rbac.Actor{
+		PrincipalID:     "prc_p1_ta",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings: []rbac.RoleBinding{
+			{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleTeamAdmin},
+		},
+	}
+	h.registerBearerToken("tok_p1_ta", p1TA)
+	recCrossProj := h.doBearer(t, http.MethodPatch, "/admin/v1/members/"+multiMember.ID+"/roles", "tok_p1_ta", `"v999"`, map[string]any{
+		"roles":       []string{"DEVELOPER"},
+		"project_ids": []string{boot.ProjectID},
+	})
+	if recCrossProj.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for TEAM_ADMIN(P1) patching P1+P2 member with stale ETag, got %d body=%s", recCrossProj.Code, recCrossProj.Body.String())
+	}
+
+	// Project-scoped TEAM_ADMIN(P1) patching org-scoped SECURITY_REVIEWER MUST also receive 403, not 409.
+	recOrgTarget := h.doBearer(t, http.MethodPatch, "/admin/v1/members/"+orgMember.ID+"/roles", "tok_p1_ta", `"v999"`, map[string]any{
+		"roles":       []string{"DEVELOPER"},
+		"project_ids": []string{boot.ProjectID},
+	})
+	if recOrgTarget.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for TEAM_ADMIN(P1) patching org-scoped member, got %d body=%s", recOrgTarget.Code, recOrgTarget.Body.String())
+	}
+
+	// Instance-only OPERATOR without ?org_id= gets 403 on org-scoped endpoints (never 500), and succeeds with ?org_id=.
+	opActor := &rbac.Actor{
+		PrincipalID:     "prc_inst_op",
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	}
+	h.registerBearerToken("tok_inst_op", opActor)
+	if rec := h.doBearer(t, http.MethodGet, "/admin/v1/projects", "tok_inst_op", "", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for instance OPERATOR without org_id, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec := h.doBearer(t, http.MethodGet, "/admin/v1/projects?org_id="+boot.OrgID, "tok_inst_op", "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for instance OPERATOR with ?org_id=, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+type countingResolver struct {
+	calls atomic.Int64
+	fn    func(host string) ([]netip.Addr, error)
+}
+
+func (r *countingResolver) LookupNetIP(_ context.Context, _ string, host string) ([]netip.Addr, error) {
+	r.calls.Add(1)
+	if r.fn != nil {
+		return r.fn(host)
+	}
+	return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+}
+
+func TestBootstrapSecurityAndPreflightOrder(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	nowFn := func() int64 { return fk.Now().UTC().UnixMilli() }
+
+	st, err := sqlite.Open(ctx, sqlite.Config{DBPath: filepath.Join(dir, "boot.db"), NowMs: nowFn})
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	auditLog, err := audit.NewLogger(audit.LoggerConfig{DB: st.RawDB(), NowMs: nowFn})
+	if err != nil {
+		t.Fatalf("audit.NewLogger: %v", err)
+	}
+	snapshots, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: st.RawDB(), NowMs: nowFn})
+	if err != nil {
+		t.Fatalf("snapshot.NewManager: %v", err)
+	}
+	argonParams := auth.Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32}
+	authSvc, err := auth.NewLocalService(auth.ServiceConfig{DB: st.RawDB(), NowMs: nowFn, Argon2: argonParams, AuditSink: auditLog})
+	if err != nil {
+		t.Fatalf("auth.NewLocalService: %v", err)
+	}
+	tokenPath := filepath.Join(dir, "bootstrap.token")
+	bootMgr, err := bootstrap.NewManager(bootstrap.ManagerConfig{
+		DB: st.RawDB(), TokenPath: tokenPath, NowMs: nowFn, Argon2: argonParams, AuditSink: auditLog,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap.NewManager: %v", err)
+	}
+	rawTok, err := bootMgr.EnsureToken(ctx)
+	if err != nil {
+		t.Fatalf("EnsureToken: %v", err)
+	}
+	vkeySvc, err := vkey.NewService(vkey.ServiceConfig{DB: st.RawDB(), NowMs: nowFn, Snapshots: snapshots, AuditSink: auditLog})
+	if err != nil {
+		t.Fatalf("vkey.NewService: %v", err)
+	}
+
+	resolver := &countingResolver{}
+	// Nil Vault intentionally triggers 422 when initial_connection carries secret_value.
+	srv, err := NewServer(ServerConfig{
+		Store:             st,
+		DB:                st.RawDB(),
+		Bootstrap:         bootMgr,
+		Auth:              authSvc,
+		VKeys:             vkeySvc,
+		Vault:             nil,
+		Snapshots:         snapshots,
+		Audit:             auditLog,
+		NowMs:             nowFn,
+		HostResolver:      resolver,
+		BlockedAdminPorts: []int{9090},
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+
+	doBoot := func(payload map[string]any) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, "https://control.tanpopo.local/admin/v1/bootstrap/complete", bytes.NewReader(raw))
+		req.RemoteAddr = "203.0.113.10:4242"
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// 1) Invalid bootstrap token with initial_connection hostname MUST fail 401 BEFORE invoking DNS HostResolver!
+	recUnauth := doBoot(map[string]any{
+		"bootstrap_token":                "bad-token",
+		"owner_email":                    "owner@example.test",
+		"owner_password":                 "StrongBootPass#2026!",
+		"master_kek_backup_acknowledged": true,
+		"initial_connection": map[string]any{
+			"adapter_id":   "adp_openai_spec",
+			"name":         "probe-conn",
+			"billing_mode": "COMMERCIAL_API",
+			"endpoint_url": "https://attacker-dns-oracle.example.test/v1",
+			"model_id":     "gpt-4o",
+			"data_region":  "US",
+		},
+	})
+	if recUnauth.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on invalid bootstrap token, got %d body=%s", recUnauth.Code, recUnauth.Body.String())
+	}
+	if resolver.calls.Load() != 0 {
+		t.Fatalf("HostResolver must NOT be invoked on unauthenticated bootstrap attempt, got %d calls", resolver.calls.Load())
+	}
+
+	// 2) Valid token with secret_value + nil Vault MUST fail 422 without setting a session cookie!
+	recNoVault := doBoot(map[string]any{
+		"bootstrap_token":                rawTok,
+		"owner_email":                    "owner@example.test",
+		"owner_password":                 "StrongBootPass#2026!",
+		"master_kek_backup_acknowledged": true,
+		"initial_connection": map[string]any{
+			"adapter_id":   "adp_openai_spec",
+			"name":         "vault-req-conn",
+			"billing_mode": "COMMERCIAL_API",
+			"endpoint_url": "https://api.openai.com/v1",
+			"secret_value": "sk-secret-without-vault",
+			"model_id":     "gpt-4o",
+			"data_region":  "US",
+		},
+	})
+	if recNoVault.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 when secret_value sent without Vault, got %d body=%s", recNoVault.Code, recNoVault.Body.String())
+	}
+	for _, c := range recNoVault.Result().Cookies() {
+		if c.Name == "__Host-tanpopo_admin_session" {
+			t.Fatalf("session cookie must NOT be set on failed bootstrap")
+		}
+	}
+
+	// Seed adapter then succeed without secret_value (since Vault is nil), proving token was NOT burned.
+	hTmp := &adminTestHarness{st: st, fk: fk}
+	seedTestAdapter(t, hTmp)
+	recOK := doBoot(map[string]any{
+		"bootstrap_token":                rawTok,
+		"owner_email":                    "owner@example.test",
+		"owner_password":                 "StrongBootPass#2026!",
+		"master_kek_backup_acknowledged": true,
+		"initial_connection": map[string]any{
+			"adapter_id":   "adp_openai_spec",
+			"name":         "openai-public",
+			"billing_mode": "COMMERCIAL_API",
+			"endpoint_url": "https://api.openai.com/v1",
+			"model_id":     "gpt-4o",
+			"data_region":  "US",
+		},
+	})
+	if recOK.Code != http.StatusCreated {
+		t.Fatalf("expected 201 after non-burning preflight failures, got %d body=%s", recOK.Code, recOK.Body.String())
+	}
+
+	// 3) Post-bootstrap replay MUST fail 410 BEFORE invoking HostResolver again.
+	callsBeforeReplay := resolver.calls.Load()
+	recAfter := doBoot(map[string]any{
+		"bootstrap_token":                rawTok,
+		"owner_email":                    "owner@example.test",
+		"owner_password":                 "StrongBootPass#2026!",
+		"master_kek_backup_acknowledged": true,
+		"initial_connection": map[string]any{
+			"adapter_id":   "adp_openai_spec",
+			"name":         "replay-conn",
+			"billing_mode": "COMMERCIAL_API",
+			"endpoint_url": "https://replay-dns-oracle.example.test/v1",
+			"model_id":     "gpt-4o",
+			"data_region":  "US",
+		},
+	})
+	if recAfter.Code != http.StatusGone {
+		t.Fatalf("expected 410 post-bootstrap replay, got %d body=%s", recAfter.Code, recAfter.Body.String())
+	}
+	if resolver.calls.Load() != callsBeforeReplay {
+		t.Fatalf("HostResolver must NOT be invoked on post-bootstrap 410 replay")
+	}
+}
+
+func TestSSRFAndPlaneAndETagHardening(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	ctx := context.Background()
+	seedTestAdapter(t, h)
+
+	// 1) Short PaginationSecret (< 32 bytes) rejected fail-closed at startup.
+	if _, err := NewServer(ServerConfig{
+		Store:            h.st,
+		DB:               h.st.RawDB(),
+		Bootstrap:        h.bootMgr,
+		Auth:             h.authSvc,
+		VKeys:            h.vkeys,
+		Audit:            h.auditLog,
+		PaginationSecret: []byte("too-short"),
+	}); !errors.Is(err, ErrInvalidServerConfig) {
+		t.Fatalf("expected ErrInvalidServerConfig for short PaginationSecret, got %v", err)
+	}
+
+	// 2) SSRF IPv6 transition & trailing-dot metadata endpoints rejected during bootstrap.
+	token := h.readBootstrapToken(t)
+	for _, badURL := range []string{
+		"http://[::169.254.169.254]/",
+		"http://[64:ff9b::169.254.169.254]/",
+		"http://[2002:7f00:0001::]/",
+		"http://metadata.google.internal./computeMetadata/v1",
+	} {
+		rec := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+			"bootstrap_token":                token,
+			"owner_email":                    "ssrf-owner@example.test",
+			"owner_password":                 "StrongSSRFPass#2026!",
+			"master_kek_backup_acknowledged": true,
+			"initial_connection": map[string]any{
+				"adapter_id":   "adp_openai_spec",
+				"name":         "bad-ssrf",
+				"billing_mode": "COMMERCIAL_API",
+				"endpoint_url": badURL,
+				"model_id":     "gpt-4o",
+				"data_region":  "US",
+			},
+		})
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("URL %q expected 422, got %d body=%s", badURL, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Complete bootstrap validly.
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "ssrf-owner@example.test",
+		"owner_password":                 "StrongSSRFPass#2026!",
+		"master_kek_backup_acknowledged": true,
+	})
+	if recBoot.Code != http.StatusCreated {
+		t.Fatalf("bootstrap failed: %d %s", recBoot.Code, recBoot.Body.String())
+	}
+	var boot bootstrapCompleteResponse
+	mustDecodeJSON(t, recBoot.Body.Bytes(), &boot)
+	cookie := findCookie(t, recBoot.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	// 3) Multiple Authorization headers mixing Admin token + Data Plane vk_tp_ token -> 401 invalid_credential_plane.
+	h.registerBearerToken("tp_adm_valid_for_multi", &rbac.Actor{
+		PrincipalID:     "prc_multi_hdr",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleOrgOwner}},
+	})
+	reqMulti := httptest.NewRequest(http.MethodGet, "https://control.tanpopo.local/admin/v1/projects", nil)
+	reqMulti.Header.Add("Authorization", "Bearer tp_adm_valid_for_multi")
+	reqMulti.Header.Add("Authorization", "Bearer vk_tp_prod_smuggled")
+	recMulti := httptest.NewRecorder()
+	h.srv.ServeHTTP(recMulti, reqMulti)
+	if recMulti.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 invalid_credential_plane for multi-Authorization with vk_tp_, got %d body=%s", recMulti.Code, recMulti.Body.String())
+	}
+	var planeErr CanonicalErrorEnvelope
+	mustDecodeJSON(t, recMulti.Body.Bytes(), &planeErr)
+	if planeErr.Error.Code != "invalid_credential_plane" {
+		t.Fatalf("expected invalid_credential_plane, got %s", planeErr.Error.Code)
+	}
+
+	// 4) Signed If-Match ("v+1" / "v-1") rejected with 400 invalid_if_match.
+	recVKForETag := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects/"+boot.ProjectID+"/virtual-keys", cookie, boot.CSRFToken, "", map[string]any{
+		"name":       "etag-check-key",
+		"project_id": boot.ProjectID,
+		"env_id":     boot.EnvID,
+	})
+	if recVKForETag.Code != http.StatusCreated {
+		t.Fatalf("create key for ETag test failed: %d body=%s", recVKForETag.Code, recVKForETag.Body.String())
+	}
+	var vkETag virtualKeyCreatedDTO
+	mustDecodeJSON(t, recVKForETag.Body.Bytes(), &vkETag)
+	for _, badETag := range []string{`"v+1"`, `"v-1"`, `"v0"`, `v1`} {
+		recETag := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/virtual-keys/"+vkETag.ID, cookie, boot.CSRFToken, badETag, map[string]any{
+			"name": "Renamed",
+		})
+		if recETag.Code != http.StatusBadRequest {
+			t.Fatalf("If-Match %s expected 400, got %d body=%s", badETag, recETag.Code, recETag.Body.String())
+		}
+		var etErr CanonicalErrorEnvelope
+		mustDecodeJSON(t, recETag.Body.Bytes(), &etErr)
+		if etErr.Error.Code != "invalid_if_match" {
+			t.Fatalf("If-Match %s expected invalid_if_match, got %s", badETag, etErr.Error.Code)
+		}
+	}
+
+	// 5) Logout sets Cache-Control: no-store and audits revoked ephemeral playground keys.
+	recLogout := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/auth/logout", cookie, boot.CSRFToken, "", nil)
+	if recLogout.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 on logout, got %d", recLogout.Code)
+	}
+	if cc := recLogout.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("expected Cache-Control: no-store on logout 204, got %q", cc)
+	}
+	_ = ctx
+}
+
+func TestOCCShredSafetyBudgetCeilingAndPagination(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	ctx := context.Background()
+	seedTestAdapter(t, h)
+
+	token := h.readBootstrapToken(t)
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "occ-owner@example.test",
+		"owner_password":                 "StrongOCCPass#2026!",
+		"org_name":                       "OCC Org",
+		"project_name":                   "occ-proj",
+		"master_kek_backup_acknowledged": true,
+		"initial_connection": map[string]any{
+			"adapter_id":   "adp_openai_spec",
+			"name":         "occ-conn",
+			"billing_mode": "COMMERCIAL_API",
+			"endpoint_url": "https://api.openai.com/v1",
+			"secret_value": "sk-occ-preserved-secret",
+			"model_id":     "gpt-4o",
+			"data_region":  "US",
+		},
+	})
+	if recBoot.Code != http.StatusCreated {
+		t.Fatalf("bootstrap failed: %d %s", recBoot.Code, recBoot.Body.String())
+	}
+	var boot bootstrapCompleteResponse
+	mustDecodeJSON(t, recBoot.Body.Bytes(), &boot)
+	cookie := findCookie(t, recBoot.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	// Seal a project secret so we can prove DEK stays intact after stale 409 DELETE.
+	projSecret, err := h.vault.SealSecret(ctx, vault.SealSecretParams{
+		OrgID:          boot.OrgID,
+		OwnerProjectID: &boot.ProjectID,
+		Name:           "occ-proj-secret",
+		SecretKind:     vault.SecretKindAPIKey,
+		Plaintext:      []byte("still-alive-after-409"),
+	})
+	if err != nil {
+		t.Fatalf("SealSecret: %v", err)
+	}
+
+	// Simulate concurrent writer bumping project version to 2 so `"v1"` becomes stale -> DELETE returns 409 AND preserves Vault DEKs.
+	if _, uerr := h.st.RawDB().ExecContext(ctx, `UPDATE projects SET version = 2 WHERE id = ?`, boot.ProjectID); uerr != nil {
+		t.Fatalf("bump project version: %v", uerr)
+	}
+	recStaleProjDel := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/projects/"+boot.ProjectID, cookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"confirm_slug": "occ-proj",
+		"reason":       "stale version should not shred",
+	})
+	if recStaleProjDel.Code != http.StatusConflict {
+		t.Fatalf("expected 409 on stale DELETE /projects, got %d body=%s", recStaleProjDel.Code, recStaleProjDel.Body.String())
+	}
+	if _, err := h.vault.UnsealWithCapability(ctx, vault.MintUnsealCapabilityForBroker(), boot.OrgID, projSecret.ID); err != nil {
+		t.Fatalf("project DEK MUST survive stale 409 delete, unseal err=%v", err)
+	}
+
+	// Simulate concurrent writer bumping organization version to 2 -> DELETE with `"v1"` returns 409, DEK intact.
+	opActor := &rbac.Actor{
+		PrincipalID:     "prc_occ_op",
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	}
+	h.registerBearerToken("tok_occ_op", opActor)
+	if _, uerr := h.st.RawDB().ExecContext(ctx, `UPDATE organizations SET version = 2 WHERE id = ?`, boot.OrgID); uerr != nil {
+		t.Fatalf("bump org version: %v", uerr)
+	}
+	recStaleOrgDel := h.doBearer(t, http.MethodDelete, "/admin/v1/organizations/"+boot.OrgID, "tok_occ_op", `"v1"`, map[string]any{
+		"confirm_slug": "occ-org",
+		"reason":       "stale org delete should not shred",
+	})
+	if recStaleOrgDel.Code != http.StatusConflict {
+		t.Fatalf("expected 409 on stale DELETE /organizations, got %d body=%s", recStaleOrgDel.Code, recStaleOrgDel.Body.String())
+	}
+	if _, err := h.vault.UnsealWithCapability(ctx, vault.MintUnsealCapabilityForBroker(), boot.OrgID, projSecret.ID); err != nil {
+		t.Fatalf("org DEK MUST survive stale 409 org delete, unseal err=%v", err)
+	}
+
+	// POST /virtual-keys with budget_ceiling_micros persists a VIRTUAL_KEY MONTHLY ledger row.
+	recVK := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects/"+boot.ProjectID+"/virtual-keys", cookie, boot.CSRFToken, "", map[string]any{
+		"name":                  "budgeted-key",
+		"project_id":            boot.ProjectID,
+		"env_id":                boot.EnvID,
+		"budget_ceiling_micros": 5000000,
+	})
+	if recVK.Code != http.StatusCreated {
+		t.Fatalf("POST /virtual-keys with budget failed: %d body=%s", recVK.Code, recVK.Body.String())
+	}
+	var createdVK virtualKeyCreatedDTO
+	mustDecodeJSON(t, recVK.Body.Bytes(), &createdVK)
+	var hardLimit int64
+	if err := h.st.RawDB().QueryRowContext(ctx, `
+		SELECT hard_limit_micros FROM budget_ledgers
+		WHERE org_id = ? AND scope_type = ? AND scope_id = ? AND period_kind = ?`,
+		boot.OrgID, ledger.ScopeVirtualKey, createdVK.ID, ledger.PeriodMonthly,
+	).Scan(&hardLimit); err != nil || hardLimit != 5000000 {
+		t.Fatalf("expected persisted MONTHLY budget ledger hard_limit=5000000, got %d err=%v", hardLimit, err)
+	}
+
+	// Multi-page pagination across /organizations, /projects, and /members.
+	for i := 0; i < 3; i++ {
+		h.fk.Advance(time.Millisecond)
+		if rec := h.doBearer(t, http.MethodPost, "/admin/v1/organizations", "tok_occ_op", "", map[string]any{
+			"slug": fmt.Sprintf("page-org-%d", i),
+			"name": fmt.Sprintf("Page Org %d", i),
+		}); rec.Code != http.StatusCreated {
+			t.Fatalf("create org %d failed: %d %s", i, rec.Code, rec.Body.String())
+		}
+		if rec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", cookie, boot.CSRFToken, "", map[string]any{
+			"slug": fmt.Sprintf("page-proj-%d", i),
+			"name": fmt.Sprintf("Page Proj %d", i),
+		}); rec.Code != http.StatusCreated {
+			t.Fatalf("create proj %d failed: %d %s", i, rec.Code, rec.Body.String())
+		}
+		if rec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/members", cookie, boot.CSRFToken, "", map[string]any{
+			"email": fmt.Sprintf("page-mem-%d@example.test", i),
+			"roles": []string{"FINOPS_VIEWER"},
+		}); rec.Code != http.StatusCreated {
+			t.Fatalf("create member %d failed: %d %s", i, rec.Code, rec.Body.String())
+		}
+	}
+
+	assertTwoPages := func(path string, bearer string) int {
+		var rec1 *httptest.ResponseRecorder
+		if bearer != "" {
+			rec1 = h.doBearer(t, http.MethodGet, path+"?limit=2", bearer, "", nil)
+		} else {
+			rec1 = h.doAuthedCookie(t, http.MethodGet, path+"?limit=2", cookie, "", "", nil)
+		}
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("page1 %s failed: %d %s", path, rec1.Code, rec1.Body.String())
+		}
+		var page1 struct {
+			Data       []map[string]any `json:"data"`
+			NextCursor *string          `json:"next_cursor"`
+			HasMore    bool             `json:"has_more"`
+		}
+		mustDecodeJSON(t, rec1.Body.Bytes(), &page1)
+		if !page1.HasMore || page1.NextCursor == nil || len(page1.Data) != 2 {
+			t.Fatalf("page1 %s unexpected envelope: hasMore=%v len=%d", path, page1.HasMore, len(page1.Data))
+		}
+		nextPath := path + "?limit=2&cursor=" + *page1.NextCursor
+		var rec2 *httptest.ResponseRecorder
+		if bearer != "" {
+			rec2 = h.doBearer(t, http.MethodGet, nextPath, bearer, "", nil)
+		} else {
+			rec2 = h.doAuthedCookie(t, http.MethodGet, nextPath, cookie, "", "", nil)
+		}
+		if rec2.Code != http.StatusOK {
+			t.Fatalf("page2 %s failed: %d %s", path, rec2.Code, rec2.Body.String())
+		}
+		var page2 struct {
+			Data []map[string]any `json:"data"`
+		}
+		mustDecodeJSON(t, rec2.Body.Bytes(), &page2)
+		if len(page2.Data) < 2 {
+			t.Fatalf("page2 %s expected >= 2 items, got %d", path, len(page2.Data))
+		}
+		return len(page1.Data) + len(page2.Data)
+	}
+	assertTwoPages("/admin/v1/organizations", "tok_occ_op")
+	assertTwoPages("/admin/v1/projects", "")
+	assertTwoPages("/admin/v1/members", "")
+
+	// ErrSnapshotSyncFailed resilience on POST/PATCH/rotate/revoke using a separate snapshot DB missing tables.
+	snapDir := t.TempDir()
+	snapSt, err := sqlite.Open(ctx, sqlite.Config{DBPath: filepath.Join(snapDir, "snap.db"), NowMs: func() int64 { return h.fk.Now().UTC().UnixMilli() }})
+	if err != nil {
+		t.Fatalf("open snapSt: %v", err)
+	}
+	t.Cleanup(func() { _ = snapSt.Close() })
+	brokenSnaps, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: snapSt.RawDB(), NowMs: func() int64 { return h.fk.Now().UTC().UnixMilli() }})
+	if err != nil {
+		t.Fatalf("brokenSnaps NewManager: %v", err)
+	}
+	if _, derr := snapSt.RawDB().ExecContext(ctx, `DROP TABLE virtual_keys`); derr != nil {
+		t.Fatalf("drop snap virtual_keys: %v", derr)
+	}
+	brokenVKeySvc, err := vkey.NewService(vkey.ServiceConfig{
+		DB:        h.st.RawDB(),
+		NowMs:     func() int64 { return h.fk.Now().UTC().UnixMilli() },
+		Snapshots: brokenSnaps,
+		AuditSink: h.auditLog,
+	})
+	if err != nil {
+		t.Fatalf("brokenVKeySvc: %v", err)
+	}
+	srvSyncBroken, err := NewServer(ServerConfig{
+		Store:            h.st,
+		DB:               h.st.RawDB(),
+		Bootstrap:        h.bootMgr,
+		Auth:             h.authSvc,
+		VKeys:            brokenVKeySvc,
+		Vault:            h.vault,
+		Snapshots:        brokenSnaps,
+		KillSwitch:       h.killSwitch,
+		Audit:            h.auditLog,
+		NowMs:            func() int64 { return h.fk.Now().UTC().UnixMilli() },
+		PaginationSecret: []byte("0123456789abcdef0123456789abcdef"),
+		TokenVerifier: func(_ context.Context, raw string) (*rbac.Actor, *SessionMetadata, error) {
+			if raw == "tok_sync_owner" {
+				return &rbac.Actor{
+					PrincipalID:     boot.OwnerPrincipalID,
+					SessionOrgID:    &boot.OrgID,
+					CredentialPlane: rbac.CredentialPlaneAdminService,
+					Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleOrgOwner}},
+				}, &SessionMetadata{Email: "sync@example.test", ExpiresAtMs: h.fk.Now().UTC().UnixMilli() + 3600_000}, nil
+			}
+			return nil, nil, rbac.ErrUnauthenticated
+		},
+	})
+	if err != nil {
+		t.Fatalf("srvSyncBroken NewServer: %v", err)
+	}
+	doBroken := func(method, path, ifMatch string, body any) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest(method, "https://control.tanpopo.local"+path, bytes.NewReader(raw))
+		req.Header.Set("Authorization", "Bearer tok_sync_owner")
+		req.Header.Set("Content-Type", "application/json")
+		if ifMatch != "" {
+			req.Header.Set("If-Match", ifMatch)
+		}
+		rec := httptest.NewRecorder()
+		srvSyncBroken.ServeHTTP(rec, req)
+		return rec
+	}
+
+	recSyncCreate := doBroken(http.MethodPost, "/admin/v1/projects/"+boot.ProjectID+"/virtual-keys", "", map[string]any{
+		"name":       "sync-pending-key",
+		"project_id": boot.ProjectID,
+		"env_id":     boot.EnvID,
+	})
+	if recSyncCreate.Code != http.StatusCreated || recSyncCreate.Header().Get("X-Tanpopo-Snapshot-Sync") != "pending" {
+		t.Fatalf("expected 201 + X-Tanpopo-Snapshot-Sync: pending on create, got %d hdr=%q body=%s",
+			recSyncCreate.Code, recSyncCreate.Header().Get("X-Tanpopo-Snapshot-Sync"), recSyncCreate.Body.String())
+	}
+	var syncVK virtualKeyCreatedDTO
+	mustDecodeJSON(t, recSyncCreate.Body.Bytes(), &syncVK)
+	if !strings.HasPrefix(syncVK.SecretKey, "vk_tp_") {
+		t.Fatalf("expected SecretKey preserved on ErrSnapshotSyncFailed, got %q", syncVK.SecretKey)
+	}
+
+	recSyncPatch := doBroken(http.MethodPatch, "/admin/v1/virtual-keys/"+syncVK.ID, `"v1"`, map[string]any{"name": "sync-pending-v2"})
+	if recSyncPatch.Code != http.StatusOK || recSyncPatch.Header().Get("X-Tanpopo-Snapshot-Sync") != "pending" {
+		t.Fatalf("expected 200 + pending header on PATCH, got %d hdr=%q", recSyncPatch.Code, recSyncPatch.Header().Get("X-Tanpopo-Snapshot-Sync"))
+	}
+
+	recSyncRot := doBroken(http.MethodPost, "/admin/v1/virtual-keys/"+syncVK.ID+"/rotate", `"v2"`, map[string]any{"grace_window_seconds": 60})
+	if recSyncRot.Code != http.StatusOK || recSyncRot.Header().Get("X-Tanpopo-Snapshot-Sync") != "pending" {
+		t.Fatalf("expected 200 + pending header on rotate, got %d hdr=%q", recSyncRot.Code, recSyncRot.Header().Get("X-Tanpopo-Snapshot-Sync"))
+	}
+	var rotVK virtualKeyCreatedDTO
+	mustDecodeJSON(t, recSyncRot.Body.Bytes(), &rotVK)
+	if !strings.HasPrefix(rotVK.SecretKey, "vk_tp_") {
+		t.Fatalf("expected rotated SecretKey preserved on ErrSnapshotSyncFailed, got %q", rotVK.SecretKey)
+	}
+
+	recSyncRev := doBroken(http.MethodPost, "/admin/v1/virtual-keys/"+syncVK.ID+"/revoke", `"v3"`, map[string]any{
+		"mode":   "EMERGENCY_ABORT_STREAMS",
+		"reason": "sync pending revoke test",
+	})
+	if recSyncRev.Code != http.StatusOK || recSyncRev.Header().Get("X-Tanpopo-Snapshot-Sync") != "pending" {
+		t.Fatalf("expected 200 + pending header on revoke, got %d hdr=%q", recSyncRev.Code, recSyncRev.Header().Get("X-Tanpopo-Snapshot-Sync"))
+	}
+}
+

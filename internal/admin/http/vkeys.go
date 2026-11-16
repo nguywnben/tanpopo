@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
@@ -104,14 +105,8 @@ func (s *Server) handleListVirtualKeys(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	orgID := sc.OrgID
-	if sc.IsOperator {
-		if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
-			orgID = qOrg
-		}
-	}
-	if orgID == "" {
-		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "organization scope is required", false, nil)
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
 		return
 	}
 
@@ -235,8 +230,14 @@ func (s *Server) handleListVirtualKeys(w http.ResponseWriter, r *http.Request) {
 			v := formatTimeRFC3339Ms(expNS.Int64)
 			dto.ExpiresAt = &v
 		}
-		_ = json.Unmarshal([]byte(modelsJSON), &dto.AllowedModels)
-		_ = json.Unmarshal([]byte(mcpJSON), &dto.AllowedMCPTools)
+		if uerr := json.Unmarshal([]byte(modelsJSON), &dto.AllowedModels); uerr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "corrupt allowed_models_json metadata", true, nil)
+			return
+		}
+		if uerr := json.Unmarshal([]byte(mcpJSON), &dto.AllowedMCPTools); uerr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "corrupt allowed_mcp_tools_json metadata", true, nil)
+			return
+		}
 		items = append(items, rowItem{dto: dto, createdMs: createdMs})
 	}
 	if err := rows.Err(); err != nil {
@@ -276,6 +277,10 @@ func (s *Server) handleCreateVirtualKey(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleCreateProjectVirtualKey(w http.ResponseWriter, r *http.Request) {
 	pathProj := strings.TrimSpace(r.PathValue("projectId"))
+	if pathProj == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+		return
+	}
 	s.createVirtualKeyCommon(w, r, pathProj)
 }
 
@@ -289,9 +294,8 @@ func (s *Server) createVirtualKeyCommon(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	orgID := sc.OrgID
-	if orgID == "" {
-		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "organization scope required", false, nil)
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
 		return
 	}
 
@@ -325,16 +329,16 @@ func (s *Server) createVirtualKeyCommon(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	if !s.authorize(w, r, sc, rbac.ActionVKeyCreate, rbac.TargetScope{OrgID: orgID, ProjectID: projectID}) {
+		return
+	}
+
 	var exists int
 	if err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, projectID).Scan(&exists); errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 		return
 	} else if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying project", true, nil)
-		return
-	}
-
-	if !s.authorize(w, r, sc, rbac.ActionVKeyCreate, rbac.TargetScope{OrgID: orgID, ProjectID: projectID}) {
 		return
 	}
 
@@ -368,18 +372,52 @@ func (s *Server) createVirtualKeyCommon(w http.ResponseWriter, r *http.Request, 
 		ExpiresAtMs:          expMsPtr,
 		ActorID:              sc.Actor.PrincipalID,
 	})
+	snapshotSyncPending := false
 	if err != nil {
-		switch {
-		case errors.Is(err, port.ErrNotFound):
-			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "environment or project not found", false, nil)
-		case errors.Is(err, port.ErrInvalidInput):
-			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
-		default:
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating virtual key", true, nil)
+		if errors.Is(err, vkey.ErrSnapshotSyncFailed) && created != nil {
+			snapshotSyncPending = true
+		} else {
+			switch {
+			case errors.Is(err, port.ErrNotFound):
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "environment or project not found", false, nil)
+			case errors.Is(err, port.ErrInvalidInput):
+				writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+			default:
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating virtual key", true, nil)
+			}
+			return
 		}
-		return
 	}
 
+	if req.BudgetCeilingMicros != nil && s.ledgers != nil {
+		nowTime := time.UnixMilli(s.nowMs()).UTC()
+		monthStart := time.Date(nowTime.Year(), nowTime.Month(), 1, 0, 0, 0, 0, time.UTC)
+		monthEnd := monthStart.AddDate(0, 1, 0)
+		if _, lerr := s.ledgers.UpsertLedger(r.Context(), ledger.UpsertLedgerParams{
+			OrgID:           orgID,
+			ScopeType:       ledger.ScopeVirtualKey,
+			ScopeID:         created.Summary.ID,
+			PeriodKind:      ledger.PeriodMonthly,
+			PeriodStartMs:   monthStart.UnixMilli(),
+			PeriodEndMs:     monthEnd.UnixMilli(),
+			HardLimitMicros: *req.BudgetCeilingMicros,
+		}); lerr != nil {
+			_, _ = s.vkeys.RevokeWithReceipt(r.Context(), vkey.RevokeParams{
+				OrgID:           orgID,
+				KeyID:           created.Summary.ID,
+				ExpectedVersion: created.Summary.Version,
+				Mode:            vkey.RevokeModeStandard,
+				Reason:          "rollback orphaned key after budget ledger creation failure",
+				ActorID:         sc.Actor.PrincipalID,
+			})
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed provisioning virtual key budget ledger", true, nil)
+			return
+		}
+	}
+
+	if snapshotSyncPending {
+		w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+	}
 	w.Header().Set("ETag", FormatETag(created.Summary.Version))
 	writeJSON(w, http.StatusCreated, toVirtualKeyCreatedDTO(created))
 }
@@ -403,8 +441,12 @@ func (s *Server) handleUpdateVirtualKey(w http.ResponseWriter, r *http.Request) 
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
 	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
 
-	cur, err := s.vkeys.Get(r.Context(), sc.OrgID, keyID)
+	cur, err := s.vkeys.Get(r.Context(), orgID, keyID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
 		return
@@ -414,7 +456,7 @@ func (s *Server) handleUpdateVirtualKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !s.authorize(w, r, sc, rbac.ActionVKeyCreate, rbac.TargetScope{OrgID: sc.OrgID, ProjectID: cur.ProjectID}) {
+	if !s.authorize(w, r, sc, rbac.ActionVKeyCreate, rbac.TargetScope{OrgID: orgID, ProjectID: cur.ProjectID}) {
 		return
 	}
 
@@ -424,7 +466,7 @@ func (s *Server) handleUpdateVirtualKey(w http.ResponseWriter, r *http.Request) 
 	}
 
 	params := vkey.UpdateParams{
-		OrgID:           sc.OrgID,
+		OrgID:           orgID,
 		KeyID:           keyID,
 		ExpectedVersion: expectedVer,
 		Name:            req.Name,
@@ -460,11 +502,17 @@ func (s *Server) handleUpdateVirtualKey(w http.ResponseWriter, r *http.Request) 
 
 	updated, err := s.vkeys.Update(r.Context(), params)
 	if err != nil {
+		if errors.Is(err, vkey.ErrSnapshotSyncFailed) && updated != nil {
+			w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+			w.Header().Set("ETag", FormatETag(updated.Version))
+			writeJSON(w, http.StatusOK, toVirtualKeySummaryDTO(updated))
+			return
+		}
 		switch {
 		case errors.Is(err, port.ErrNotFound):
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
 		case errors.Is(err, port.ErrVersionConflict):
-			if latest, gerr := s.vkeys.Get(r.Context(), sc.OrgID, keyID); gerr == nil {
+			if latest, gerr := s.vkeys.Get(r.Context(), orgID, keyID); gerr == nil {
 				writeOptimisticConflict(w, r, latest.Version, toVirtualKeySummaryDTO(latest))
 				return
 			}
@@ -489,6 +537,10 @@ func (s *Server) handleRotateVirtualKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	keyID := strings.TrimSpace(r.PathValue("keyId"))
+	if keyID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
@@ -496,6 +548,10 @@ func (s *Server) handleRotateVirtualKey(w http.ResponseWriter, r *http.Request) 
 
 	var req rotateVirtualKeyRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
 		return
 	}
 
@@ -508,7 +564,7 @@ func (s *Server) handleRotateVirtualKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	cur, err := s.vkeys.Get(r.Context(), sc.OrgID, keyID)
+	cur, err := s.vkeys.Get(r.Context(), orgID, keyID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
 		return
@@ -518,7 +574,7 @@ func (s *Server) handleRotateVirtualKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !s.authorize(w, r, sc, rbac.ActionVKeyRotate, rbac.TargetScope{OrgID: sc.OrgID, ProjectID: cur.ProjectID}) {
+	if !s.authorize(w, r, sc, rbac.ActionVKeyRotate, rbac.TargetScope{OrgID: orgID, ProjectID: cur.ProjectID}) {
 		return
 	}
 
@@ -528,16 +584,22 @@ func (s *Server) handleRotateVirtualKey(w http.ResponseWriter, r *http.Request) 
 	}
 
 	rotated, err := s.vkeys.Rotate(r.Context(), vkey.RotateParams{
-		OrgID:           sc.OrgID,
+		OrgID:           orgID,
 		KeyID:           keyID,
 		ExpectedVersion: expectedVer,
 		GraceSeconds:    graceSec,
 		ActorID:         sc.Actor.PrincipalID,
 	})
 	if err != nil {
+		if errors.Is(err, vkey.ErrSnapshotSyncFailed) && rotated != nil {
+			w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+			w.Header().Set("ETag", FormatETag(rotated.Summary.Version))
+			writeJSON(w, http.StatusOK, toVirtualKeyCreatedDTO(rotated))
+			return
+		}
 		switch {
 		case errors.Is(err, port.ErrVersionConflict):
-			if latest, gerr := s.vkeys.Get(r.Context(), sc.OrgID, keyID); gerr == nil {
+			if latest, gerr := s.vkeys.Get(r.Context(), orgID, keyID); gerr == nil {
 				writeOptimisticConflict(w, r, latest.Version, toVirtualKeySummaryDTO(latest))
 				return
 			}
@@ -560,6 +622,10 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	keyID := strings.TrimSpace(r.PathValue("keyId"))
+	if keyID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
@@ -567,6 +633,10 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 
 	var req revokeVirtualKeyRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
 		return
 	}
 	var internalMode string
@@ -584,7 +654,7 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	cur, err := s.vkeys.Get(r.Context(), sc.OrgID, keyID)
+	cur, err := s.vkeys.Get(r.Context(), orgID, keyID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
 		return
@@ -594,7 +664,7 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !s.authorize(w, r, sc, rbac.ActionVKeyRevoke, rbac.TargetScope{OrgID: sc.OrgID, ProjectID: cur.ProjectID}) {
+	if !s.authorize(w, r, sc, rbac.ActionVKeyRevoke, rbac.TargetScope{OrgID: orgID, ProjectID: cur.ProjectID}) {
 		return
 	}
 
@@ -604,7 +674,7 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 	}
 
 	receipt, err := s.vkeys.RevokeWithReceipt(r.Context(), vkey.RevokeParams{
-		OrgID:           sc.OrgID,
+		OrgID:           orgID,
 		KeyID:           keyID,
 		ExpectedVersion: expectedVer,
 		Mode:            internalMode,
@@ -612,9 +682,18 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 		ActorID:         sc.Actor.PrincipalID,
 	})
 	if err != nil {
+		if errors.Is(err, vkey.ErrSnapshotSyncFailed) && receipt != nil && receipt.Summary != nil {
+			w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+			w.Header().Set("ETag", FormatETag(receipt.Summary.Version))
+			writeJSON(w, http.StatusOK, revokeVirtualKeyResponse{
+				Key:                 toVirtualKeySummaryDTO(receipt.Summary),
+				SeveredStreamsCount: receipt.SeveredStreamsCount,
+			})
+			return
+		}
 		switch {
 		case errors.Is(err, port.ErrVersionConflict):
-			if latest, gerr := s.vkeys.Get(r.Context(), sc.OrgID, keyID); gerr == nil {
+			if latest, gerr := s.vkeys.Get(r.Context(), orgID, keyID); gerr == nil {
 				writeOptimisticConflict(w, r, latest.Version, toVirtualKeySummaryDTO(latest))
 				return
 			}

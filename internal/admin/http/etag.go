@@ -33,6 +33,11 @@ func parseIfMatchHeader(r *http.Request) (int64, error) {
 		return 0, errInvalidIfMatch
 	}
 	numStr := raw[2 : len(raw)-1]
+	for i := 0; i < len(numStr); i++ {
+		if numStr[i] < '0' || numStr[i] > '9' {
+			return 0, errInvalidIfMatch
+		}
+	}
 	ver, err := strconv.ParseInt(numStr, 10, 64)
 	if err != nil || ver < 1 {
 		return 0, errInvalidIfMatch

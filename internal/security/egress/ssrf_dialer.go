@@ -84,6 +84,11 @@ func (r stdHostResolver) LookupNetIP(ctx context.Context, network, host string) 
 	return r.resolver.LookupNetIP(ctx, network, host)
 }
 
+// NewStdHostResolver constructs an explicit non-default net.Resolver HostResolver.
+func NewStdHostResolver() HostResolver {
+	return stdHostResolver{resolver: &net.Resolver{PreferGo: true}}
+}
+
 var (
 	// Unconditionally blocked prefixes (NEVER permitted even when AllowPrivateIP == true).
 	unconditionalMetadataPrefixes = []netip.Prefix{
@@ -603,6 +608,160 @@ func extractTransitionEmbeddedIPv4(ip netip.Addr) (netip.Addr, bool) {
 	default:
 		return netip.Addr{}, false
 	}
+}
+
+// ClassifyStaticEndpointIP enforces Tanpopo's full IPv4, IPv6, IPv4-mapped IPv6,
+// zone-ID, transition-prefix (::/96, 64:ff9b::/96, 2002::/16, fec0::/10), and
+// metadata/link-local SSRF rules without requiring a full dialer Policy.
+func ClassifyStaticEndpointIP(ip netip.Addr, allowPrivateIP bool) error {
+	if !ip.IsValid() || ip.Zone() != "" {
+		return &Error{
+			HTTPStatus: http.StatusForbidden,
+			Code:       "egress_metadata_blocked",
+			Message:    "invalid or zone-scoped IP address",
+			Err:        ErrMetadataBlocked,
+		}
+	}
+	unmapped := ip.Unmap()
+	embeddedV4, hasEmbeddedV4 := extractTransitionEmbeddedIPv4(ip)
+	for _, pfx := range unconditionalMetadataPrefixes {
+		if pfx.Contains(ip) || pfx.Contains(unmapped) || (hasEmbeddedV4 && pfx.Contains(embeddedV4)) {
+			return &Error{
+				HTTPStatus: http.StatusForbidden,
+				Code:       "egress_metadata_blocked",
+				Message:    fmt.Sprintf("address %s matches unconditionally blocked metadata/link-local range %s", ip, pfx),
+				Err:        ErrMetadataBlocked,
+			}
+		}
+	}
+	if ip.Is4In6() {
+		return &Error{
+			HTTPStatus: http.StatusForbidden,
+			Code:       "egress_private_ip_blocked",
+			Message:    fmt.Sprintf("IPv4-mapped IPv6 address %s is forbidden", ip),
+			Err:        ErrPrivateIPBlocked,
+		}
+	}
+
+	isPrivateOrSpecial := !unmapped.IsGlobalUnicast() || unmapped.IsPrivate() || unmapped.IsLoopback() ||
+		unmapped.IsLinkLocalUnicast() || unmapped.IsLinkLocalMulticast() || unmapped.IsMulticast() ||
+		unmapped.IsUnspecified() || unmapped.IsInterfaceLocalMulticast()
+	if !isPrivateOrSpecial {
+		for _, pfx := range privateAndSpecialPrefixes {
+			if pfx.Contains(unmapped) || pfx.Contains(ip) {
+				isPrivateOrSpecial = true
+				break
+			}
+		}
+	}
+	if isPrivateOrSpecial && !allowPrivateIP {
+		return &Error{
+			HTTPStatus: http.StatusForbidden,
+			Code:       "egress_private_ip_blocked",
+			Message:    fmt.Sprintf("non-public IP %s blocked because allow_private_ip=false", unmapped),
+			Err:        ErrPrivateIPBlocked,
+		}
+	}
+	return nil
+}
+
+// ValidateStaticEndpointURL checks Control Plane endpoint URLs for scheme/authority hygiene,
+// blocked local ports, reserved metadata/localhost names (with trailing dot normalization),
+// IP literal classification, and fail-closed HostResolver DNS verification when resolver != nil.
+func ValidateStaticEndpointURL(ctx context.Context, rawURL string, allowPrivateIP bool, resolver HostResolver, blockedPorts map[int]bool) error {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil {
+		return &Error{
+			HTTPStatus: http.StatusUnprocessableEntity,
+			Code:       "invalid_endpoint_url",
+			Message:    "valid http or https endpoint_url required",
+			Err:        ErrInvalidPolicy,
+		}
+	}
+	if strings.ContainsAny(parsed.Host, "\\@ \t\r\n\x00") {
+		return &Error{
+			HTTPStatus: http.StatusUnprocessableEntity,
+			Code:       "invalid_endpoint_url",
+			Message:    "ambiguous endpoint_url authority is forbidden",
+			Err:        ErrInvalidPolicy,
+		}
+	}
+
+	portNum := 443
+	if parsed.Scheme == "http" {
+		portNum = 80
+	}
+	if p := parsed.Port(); p != "" {
+		pv, perr := strconv.Atoi(p)
+		if perr != nil || pv < 1 || pv > 65535 {
+			return &Error{
+				HTTPStatus: http.StatusUnprocessableEntity,
+				Code:       "invalid_endpoint_url",
+				Message:    "invalid endpoint port",
+				Err:        ErrInvalidPolicy,
+			}
+		}
+		portNum = pv
+	}
+	if blockedPorts[portNum] {
+		return &Error{
+			HTTPStatus: http.StatusForbidden,
+			Code:       "egress_port_denied",
+			Message:    fmt.Sprintf("port %d denied by blocked control-plane ports policy", portNum),
+			Err:        ErrPortDenied,
+		}
+	}
+
+	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	if ip, perr := netip.ParseAddr(host); perr == nil {
+		return ClassifyStaticEndpointIP(ip, allowPrivateIP)
+	}
+	canonicalHost := strings.TrimRight(host, ".")
+	if canonicalHost == "" {
+		return &Error{
+			HTTPStatus: http.StatusUnprocessableEntity,
+			Code:       "invalid_endpoint_url",
+			Message:    "endpoint_url hostname cannot be empty",
+			Err:        ErrInvalidPolicy,
+		}
+	}
+	if canonicalHost == "metadata.google.internal" || canonicalHost == "metadata.goog" || canonicalHost == "instance-data" {
+		return &Error{
+			HTTPStatus: http.StatusForbidden,
+			Code:       "egress_metadata_blocked",
+			Message:    fmt.Sprintf("metadata hostname %q is unconditionally blocked", canonicalHost),
+			Err:        ErrMetadataBlocked,
+		}
+	}
+	if canonicalHost == "localhost" || strings.HasSuffix(canonicalHost, ".localhost") {
+		if !allowPrivateIP {
+			return &Error{
+				HTTPStatus: http.StatusForbidden,
+				Code:       "egress_private_ip_blocked",
+				Message:    fmt.Sprintf("localhost endpoint %q blocked because allow_private_ip=false", canonicalHost),
+				Err:        ErrPrivateIPBlocked,
+			}
+		}
+		return nil
+	}
+
+	if resolver != nil {
+		addrs, lerr := resolver.LookupNetIP(ctx, "ip", canonicalHost)
+		if lerr != nil || len(addrs) == 0 {
+			return &Error{
+				HTTPStatus: http.StatusForbidden,
+				Code:       "ssrf_blocked_private_ip",
+				Message:    fmt.Sprintf("DNS resolution failed for endpoint host %q", canonicalHost),
+				Err:        errors.Join(ErrPrivateIPBlocked, lerr),
+			}
+		}
+		for _, ip := range addrs {
+			if cerr := ClassifyStaticEndpointIP(ip, allowPrivateIP); cerr != nil {
+				return cerr
+			}
+		}
+	}
+	return nil
 }
 
 func (d *SSRFGuardDialer) checkConnectIP(ip netip.Addr, port int) error {

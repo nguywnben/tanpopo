@@ -79,6 +79,20 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Verify bootstrap completion status, token rate-limits, and Bootstrap Token
+	// BEFORE probing initial_connection DNS/SSRF or provider_adapters, without burning the token.
+	if err := s.bootstrap.PreflightCompleteRequest(r.Context(), bootstrap.CompleteRequest{
+		BootstrapToken:              req.BootstrapToken,
+		OwnerEmail:                  req.OwnerEmail,
+		OwnerPassword:               req.OwnerPassword,
+		OrgName:                     req.OrgName,
+		ProjectName:                 req.ProjectName,
+		MasterKEKBackupAcknowledged: req.MasterKEKBackupAcknowledged,
+	}); err != nil {
+		s.writeBootstrapCompleteError(w, r, err)
+		return
+	}
+
 	var resolvedAdapterID string
 	if req.InitialConnection != nil {
 		ic := req.InitialConnection
@@ -94,6 +108,10 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_data_region", "invalid_request_error", "data_region must be one of EU, US, APAC, ON_PREM", false, nil)
 			return
 		}
+		if ic.SecretValue != "" && s.vault == nil {
+			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "vault_unavailable", "invalid_request_error", "vault is required to store initial_connection.secret_value", false, nil)
+			return
+		}
 
 		// Validate endpoint SSRF rules BEFORE consuming the single-use Bootstrap Token.
 		if ssrfErr := validateEndpointSSRF(r.Context(), ic.EndpointURL, ic.AllowPrivateIP, s.hostResolver, s.blockedPorts); ssrfErr != nil {
@@ -102,7 +120,7 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 			if errors.Is(ssrfErr, egress.ErrPortDenied) {
 				code = "egress_port_denied"
 				msg = "endpoint_url targets a blocked local control-plane port"
-			} else if errors.Is(ssrfErr, port.ErrInvalidInput) {
+			} else if errors.Is(ssrfErr, egress.ErrInvalidPolicy) || errors.Is(ssrfErr, port.ErrInvalidInput) {
 				code = "invalid_endpoint_url"
 				msg = ssrfErr.Error()
 			}
@@ -133,18 +151,7 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 		MasterKEKBackupAcknowledged: req.MasterKEKBackupAcknowledged,
 	})
 	if err != nil {
-		switch {
-		case errors.Is(err, bootstrap.ErrBootstrapAlreadyCompleted):
-			writeErrorEnvelope(w, r, http.StatusGone, "bootstrap_already_completed", "conflict_error", "instance bootstrap has already been completed", false, nil)
-		case errors.Is(err, bootstrap.ErrInvalidBootstrapToken):
-			writeErrorEnvelope(w, r, http.StatusUnauthorized, "invalid_bootstrap_token", "authentication_error", "invalid or unreadable bootstrap token", false, nil)
-		case errors.Is(err, bootstrap.ErrBootstrapRateLimited):
-			writeErrorEnvelope(w, r, http.StatusTooManyRequests, "auth_rate_limited", "rate_limit_error", "too many invalid bootstrap token attempts", true, nil)
-		case errors.Is(err, bootstrap.ErrMasterKEKAckRequired):
-			writeErrorEnvelope(w, r, http.StatusBadRequest, "master_kek_ack_required", "invalid_request_error", "master_kek_backup_acknowledged must be true", false, nil)
-		default:
-			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_bootstrap_request", "invalid_request_error", err.Error(), false, nil)
-		}
+		s.writeBootstrapCompleteError(w, r, err)
 		return
 	}
 
@@ -159,20 +166,11 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	clientIP := extractClientIP(r)
-	sessInfo, cookie, err := s.auth.LoginForOrg(r.Context(), clientIP, res.OrgID, req.OwnerEmail, req.OwnerPassword)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "bootstrap completed but session creation failed", true, nil)
-		return
-	}
-	http.SetCookie(w, cookie)
-
 	resp := bootstrapCompleteResponse{
 		OrgID:            res.OrgID,
 		ProjectID:        res.ProjectID,
 		EnvID:            res.EnvID,
 		OwnerPrincipalID: res.OwnerPrincipalID,
-		CSRFToken:        sessInfo.CSRFToken,
 	}
 
 	if req.InitialConnection != nil {
@@ -198,11 +196,40 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	clientIP := extractClientIP(r)
+	sessInfo, cookie, err := s.auth.LoginForOrg(r.Context(), clientIP, res.OrgID, req.OwnerEmail, req.OwnerPassword)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "bootstrap completed but session creation failed", true, nil)
+		return
+	}
+	resp.CSRFToken = sessInfo.CSRFToken
+
 	if s.snapshots != nil {
-		_ = s.snapshots.Refresh(r.Context())
+		if refErr := s.snapshots.Refresh(r.Context()); refErr != nil {
+			w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+			s.emitSecurityAudit(r.Context(), &authSessionContext{OrgID: res.OrgID}, "bootstrap.snapshot_sync_pending", map[string]any{
+				"error": refErr.Error(),
+			})
+		}
 	}
 
+	http.SetCookie(w, cookie)
 	writeJSON(w, http.StatusCreated, resp)
+}
+
+func (s *Server) writeBootstrapCompleteError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, bootstrap.ErrBootstrapAlreadyCompleted):
+		writeErrorEnvelope(w, r, http.StatusGone, "bootstrap_already_completed", "conflict_error", "instance bootstrap has already been completed", false, nil)
+	case errors.Is(err, bootstrap.ErrInvalidBootstrapToken):
+		writeErrorEnvelope(w, r, http.StatusUnauthorized, "invalid_bootstrap_token", "authentication_error", "invalid or unreadable bootstrap token", false, nil)
+	case errors.Is(err, bootstrap.ErrBootstrapRateLimited):
+		writeErrorEnvelope(w, r, http.StatusTooManyRequests, "auth_rate_limited", "rate_limit_error", "too many invalid bootstrap token attempts", true, nil)
+	case errors.Is(err, bootstrap.ErrMasterKEKAckRequired):
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "master_kek_ack_required", "invalid_request_error", "master_kek_backup_acknowledged must be true", false, nil)
+	default:
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_bootstrap_request", "invalid_request_error", err.Error(), false, nil)
+	}
 }
 
 func (s *Server) provisionInitialBootstrapTopology(

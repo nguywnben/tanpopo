@@ -271,6 +271,85 @@ func (m *Manager) loadExistingTokenLocked() (string, error) {
 	return token, nil
 }
 
+// PreflightCompleteRequest verifies bootstrap completion status, token rate limits,
+// constant-time Bootstrap Token digest, and base owner fields WITHOUT mutating the DB
+// or consuming the single-use Bootstrap Token.
+func (m *Manager) PreflightCompleteRequest(ctx context.Context, req CompleteRequest) error {
+	if m == nil {
+		return fmt.Errorf("%w: nil bootstrap Manager", port.ErrInvalidInput)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.nowMs()
+	_, _, _, _, err := m.validateCompleteLocked(ctx, req, now)
+	return err
+}
+
+func (m *Manager) validateCompleteLocked(ctx context.Context, req CompleteRequest, now int64) (email, orgName, projName, pwHash string, err error) {
+	if m.burned {
+		m.burnLocked()
+		return "", "", "", "", ErrBootstrapAlreadyCompleted
+	}
+
+	booted, err := isBootstrappedSQL(ctx, m.db)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	if booted {
+		m.burnLocked()
+		return "", "", "", "", ErrBootstrapAlreadyCompleted
+	}
+
+	if m.blockedUntilMs > now {
+		m.emitAudit(ctx, now, "SYSTEM", "bootstrap", "bootstrap.token_rate_limited", "instance", "bootstrap", `{"reason":"brute_force_throttled"}`)
+		return "", "", "", "", ErrBootstrapRateLimited
+	}
+
+	if !m.hasDigest {
+		if _, loadErr := m.loadExistingTokenLocked(); loadErr != nil {
+			m.recordFailedTokenLocked(ctx, now)
+			return "", "", "", "", ErrInvalidBootstrapToken
+		}
+	}
+
+	presented := strings.TrimSpace(req.BootstrapToken)
+	if len(presented) < MinBootstrapTokenLen {
+		m.recordFailedTokenLocked(ctx, now)
+		return "", "", "", "", ErrInvalidBootstrapToken
+	}
+	presentedDigest := sha256.Sum256([]byte(presented))
+	if subtle.ConstantTimeCompare(presentedDigest[:], m.digest[:]) != 1 {
+		m.recordFailedTokenLocked(ctx, now)
+		return "", "", "", "", ErrInvalidBootstrapToken
+	}
+
+	email = strings.ToLower(strings.TrimSpace(req.OwnerEmail))
+	if email == "" || !strings.Contains(email, "@") || strings.ContainsAny(email, " \t\r\n") {
+		return "", "", "", "", fmt.Errorf("%w: valid owner_email is required", port.ErrInvalidInput)
+	}
+	if len(req.OwnerPassword) < auth.MinOwnerPasswordLength || strings.ContainsRune(req.OwnerPassword, '\x00') {
+		return "", "", "", "", fmt.Errorf("%w: owner_password must be at least %d characters", port.ErrInvalidInput, auth.MinOwnerPasswordLength)
+	}
+	if !req.MasterKEKBackupAcknowledged {
+		return "", "", "", "", ErrMasterKEKAckRequired
+	}
+
+	orgName = strings.TrimSpace(req.OrgName)
+	if orgName == "" {
+		orgName = "Default Organization"
+	}
+	projName = strings.TrimSpace(req.ProjectName)
+	if projName == "" {
+		projName = "default"
+	}
+
+	pwHash, err = auth.HashPasswordWithParams(req.OwnerPassword, m.argon2)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	return email, orgName, projName, pwHash, nil
+}
+
 // Complete verifies the one-time Bootstrap Token in constant time, atomically creates the
 // default Organization, Project, Dev Environment, Owner principal, and Personal Admin
 // role bindings (OPERATOR + ORG_OWNER), and permanently burns the Bootstrap Token.
@@ -283,65 +362,8 @@ func (m *Manager) Complete(ctx context.Context, req CompleteRequest) (*CompleteR
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.burned {
-		m.burnLocked()
-		return nil, ErrBootstrapAlreadyCompleted
-	}
-
-	booted, err := isBootstrappedSQL(ctx, m.db)
-	if err != nil {
-		return nil, err
-	}
-	if booted {
-		m.burnLocked()
-		return nil, ErrBootstrapAlreadyCompleted
-	}
-
 	now := m.nowMs()
-	if m.blockedUntilMs > now {
-		m.emitAudit(ctx, now, "SYSTEM", "bootstrap", "bootstrap.token_rate_limited", "instance", "bootstrap", `{"reason":"brute_force_throttled"}`)
-		return nil, ErrBootstrapRateLimited
-	}
-
-	if !m.hasDigest {
-		if _, loadErr := m.loadExistingTokenLocked(); loadErr != nil {
-			m.recordFailedTokenLocked(ctx, now)
-			return nil, ErrInvalidBootstrapToken
-		}
-	}
-
-	presented := strings.TrimSpace(req.BootstrapToken)
-	if len(presented) < MinBootstrapTokenLen {
-		m.recordFailedTokenLocked(ctx, now)
-		return nil, ErrInvalidBootstrapToken
-	}
-	presentedDigest := sha256.Sum256([]byte(presented))
-	if subtle.ConstantTimeCompare(presentedDigest[:], m.digest[:]) != 1 {
-		m.recordFailedTokenLocked(ctx, now)
-		return nil, ErrInvalidBootstrapToken
-	}
-
-	email := strings.ToLower(strings.TrimSpace(req.OwnerEmail))
-	if email == "" || !strings.Contains(email, "@") || strings.ContainsAny(email, " \t\r\n") {
-		return nil, fmt.Errorf("%w: valid owner_email is required", port.ErrInvalidInput)
-	}
-	if len(req.OwnerPassword) < auth.MinOwnerPasswordLength || strings.ContainsRune(req.OwnerPassword, '\x00') {
-		return nil, fmt.Errorf("%w: owner_password must be at least %d characters", port.ErrInvalidInput, auth.MinOwnerPasswordLength)
-	}
-	if !req.MasterKEKBackupAcknowledged {
-		return nil, ErrMasterKEKAckRequired
-	}
-
-	orgName := strings.TrimSpace(req.OrgName)
-	if orgName == "" {
-		orgName = "Default Organization"
-	}
-	projName := strings.TrimSpace(req.ProjectName)
-	if projName == "" {
-		projName = "default"
-	}
-
-	pwHash, err := auth.HashPasswordWithParams(req.OwnerPassword, m.argon2)
+	email, orgName, projName, pwHash, err := m.validateCompleteLocked(ctx, req, now)
 	if err != nil {
 		return nil, err
 	}

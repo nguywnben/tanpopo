@@ -30,12 +30,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/netip"
-	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
@@ -80,6 +80,7 @@ type ServerConfig struct {
 	Auth                *auth.LocalService
 	VKeys               *vkey.Service
 	Vault               *vault.Store
+	Ledgers             *ledger.Service
 	Snapshots           *snapshot.Manager
 	KillSwitch          *killswitch.Registry
 	Audit               port.AuditSink
@@ -109,6 +110,7 @@ type Server struct {
 	auth          *auth.LocalService
 	vkeys         *vkey.Service
 	vault         *vault.Store
+	ledgers       *ledger.Service
 	snapshots     *snapshot.Manager
 	killSwitch    *killswitch.Registry
 	audit         port.AuditSink
@@ -171,13 +173,36 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		maxBody = DefaultMaxRequestBodyBytes
 	}
 
-	cursorSecret := make([]byte, len(cfg.PaginationSecret))
-	copy(cursorSecret, cfg.PaginationSecret)
-	if len(cursorSecret) < 32 {
+	if len(cfg.PaginationSecret) > 0 && len(cfg.PaginationSecret) < 32 {
+		return nil, fmt.Errorf("%w: PaginationSecret must be at least 32 bytes when provided", ErrInvalidServerConfig)
+	}
+	var cursorSecret []byte
+	if len(cfg.PaginationSecret) == 0 {
 		cursorSecret = make([]byte, 32)
 		if _, err := rand.Read(cursorSecret); err != nil {
 			return nil, fmt.Errorf("%w: mint pagination HMAC secret: %w", ErrInvalidServerConfig, err)
 		}
+	} else {
+		cursorSecret = make([]byte, len(cfg.PaginationSecret))
+		copy(cursorSecret, cfg.PaginationSecret)
+	}
+
+	ledgerSvc := cfg.Ledgers
+	if ledgerSvc == nil {
+		var lerr error
+		ledgerSvc, lerr = ledger.NewService(ledger.Config{
+			DB:    db,
+			Audit: auditSink,
+			NowMs: nowFn,
+		})
+		if lerr != nil {
+			return nil, fmt.Errorf("%w: initialize ledger service: %w", ErrInvalidServerConfig, lerr)
+		}
+	}
+
+	hostResolver := cfg.HostResolver
+	if hostResolver == nil && os.Getenv("TANPOPO_TEST_HERMETIC") != "1" {
+		hostResolver = egress.NewStdHostResolver()
 	}
 
 	version := strings.TrimSpace(cfg.Version)
@@ -199,6 +224,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		auth:          cfg.Auth,
 		vkeys:         cfg.VKeys,
 		vault:         cfg.Vault,
+		ledgers:       ledgerSvc,
 		snapshots:     cfg.Snapshots,
 		killSwitch:    cfg.KillSwitch,
 		audit:         auditSink,
@@ -207,7 +233,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		maxBodyBytes:  maxBody,
 		cursorSecret:  cursorSecret,
 		tokenVerifier: cfg.TokenVerifier,
-		hostResolver:  cfg.HostResolver,
+		hostResolver:  hostResolver,
 		blockedPorts:  blockedPorts,
 		offlineMode:   cfg.OfflineMode,
 		version:       version,
@@ -401,23 +427,23 @@ func isSafeTokenChars(s string) bool {
 }
 
 func hasDataPlaneCredential(r *http.Request) bool {
-	if strings.HasPrefix(strings.TrimSpace(r.Header.Get("X-Tanpopo-Virtual-Key")), "vk_tp_") {
-		return true
+	for _, hdr := range []string{"X-Tanpopo-Virtual-Key", "x-api-key", "x-goog-api-key"} {
+		for _, val := range r.Header.Values(hdr) {
+			if strings.HasPrefix(strings.TrimSpace(val), "vk_tp_") {
+				return true
+			}
+		}
 	}
-	if strings.HasPrefix(strings.TrimSpace(r.Header.Get("x-api-key")), "vk_tp_") {
-		return true
-	}
-	if strings.HasPrefix(strings.TrimSpace(r.Header.Get("x-goog-api-key")), "vk_tp_") {
-		return true
-	}
-	authz := strings.TrimSpace(r.Header.Get("Authorization"))
-	if strings.HasPrefix(authz, "vk_tp_") {
-		return true
-	}
-	if len(authz) > 7 && strings.EqualFold(authz[:7], "Bearer ") {
-		token := strings.TrimSpace(authz[7:])
-		if strings.HasPrefix(token, "vk_tp_") {
+	for _, rawAuth := range r.Header.Values("Authorization") {
+		authz := strings.TrimSpace(rawAuth)
+		if strings.HasPrefix(authz, "vk_tp_") {
 			return true
+		}
+		if len(authz) > 7 && strings.EqualFold(authz[:7], "Bearer ") {
+			token := strings.TrimSpace(authz[7:])
+			if strings.HasPrefix(token, "vk_tp_") {
+				return true
+			}
 		}
 	}
 	return false
@@ -557,6 +583,35 @@ func actorHasOrgScopeBinding(actor *rbac.Actor, orgID string) bool {
 	return false
 }
 
+func actorIsOrgOwnerOrOperator(actor *rbac.Actor, orgID string) bool {
+	if actorHasOperator(actor) {
+		return true
+	}
+	if actor == nil || orgID == "" {
+		return false
+	}
+	for _, b := range actor.Bindings {
+		if b.ScopeType == rbac.ScopeOrg && b.OrgID != nil && *b.OrgID == orgID && b.RoleName == rbac.RoleOrgOwner {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) resolveTargetOrgID(w http.ResponseWriter, r *http.Request, sc *authSessionContext) (string, bool) {
+	orgID := sc.OrgID
+	if sc.IsOperator {
+		if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
+			orgID = qOrg
+		}
+	}
+	if orgID == "" {
+		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "organization scope required", false, nil)
+		return "", false
+	}
+	return orgID, true
+}
+
 func actorProjectIDs(actor *rbac.Actor, orgID string) []string {
 	if actor == nil || orgID == "" {
 		return nil
@@ -647,10 +702,16 @@ func (s *Server) decodeJSONAndCheckOrgSpoofing(w http.ResponseWriter, r *http.Re
 				return false
 			}
 			bodyOrg = strings.TrimSpace(bodyOrg)
-			if bodyOrg != "" && bodyOrg != sc.OrgID {
+			expectedOrg := sc.OrgID
+			if sc.IsOperator {
+				if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
+					expectedOrg = qOrg
+				}
+			}
+			if bodyOrg != "" && (!sc.IsOperator || expectedOrg != "") && bodyOrg != expectedOrg {
 				s.emitSecurityAudit(r.Context(), sc, "security.org_id_spoofing_blocked", map[string]any{
 					"spoofed_org_id": bodyOrg,
-					"session_org_id": sc.OrgID,
+					"session_org_id": expectedOrg,
 					"path":           r.URL.Path,
 				})
 				writeErrorEnvelope(w, r, http.StatusForbidden, "org_id_spoofing_forbidden", "permission_error", "request body org_id cannot override authenticated session organization", false, nil)
@@ -765,75 +826,5 @@ func sha256HexString(s string) string {
 }
 
 func validateEndpointSSRF(ctx context.Context, rawURL string, allowPrivateIP bool, resolver egress.HostResolver, blockedPorts map[int]bool) error {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil {
-		return fmt.Errorf("%w: valid http or https endpoint_url required", port.ErrInvalidInput)
-	}
-	portNum := 443
-	if parsed.Scheme == "http" {
-		portNum = 80
-	}
-	if p := parsed.Port(); p != "" {
-		var pv int
-		if _, serr := fmt.Sscanf(p, "%d", &pv); serr != nil || pv < 1 || pv > 65535 {
-			return fmt.Errorf("%w: invalid endpoint port", port.ErrInvalidInput)
-		}
-		portNum = pv
-	}
-	if blockedPorts[portNum] {
-		return egress.ErrPortDenied
-	}
-
-	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
-	if ip, perr := netip.ParseAddr(host); perr == nil {
-		return classifyEndpointIP(ip, allowPrivateIP)
-	}
-	if host == "localhost" || strings.HasSuffix(host, ".localhost") || host == "metadata.google.internal" {
-		if host == "metadata.google.internal" {
-			return egress.ErrMetadataBlocked
-		}
-		if !allowPrivateIP {
-			return egress.ErrPrivateIPBlocked
-		}
-	}
-	if resolver != nil {
-		addrs, err := resolver.LookupNetIP(ctx, "ip", host)
-		if err == nil {
-			for _, ip := range addrs {
-				if cerr := classifyEndpointIP(ip, allowPrivateIP); cerr != nil {
-					return cerr
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func classifyEndpointIP(ip netip.Addr, allowPrivateIP bool) error {
-	ip = ip.Unmap()
-	metaPrefixes := []netip.Prefix{
-		netip.MustParsePrefix("169.254.0.0/16"),
-		netip.MustParsePrefix("100.100.100.200/32"),
-		netip.MustParsePrefix("0.0.0.0/8"),
-		netip.MustParsePrefix("::/128"),
-		netip.MustParsePrefix("fe80::/10"),
-		netip.MustParsePrefix("fd00:ec2::254/128"),
-		netip.MustParsePrefix("224.0.0.0/4"),
-		netip.MustParsePrefix("ff00::/8"),
-	}
-	for _, pfx := range metaPrefixes {
-		if pfx.Contains(ip) {
-			return egress.ErrMetadataBlocked
-		}
-	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
-		if !allowPrivateIP {
-			return egress.ErrPrivateIPBlocked
-		}
-	}
-	cgnat := netip.MustParsePrefix("100.64.0.0/10")
-	if cgnat.Contains(ip) && !allowPrivateIP {
-		return egress.ErrPrivateIPBlocked
-	}
-	return nil
+	return egress.ValidateStaticEndpointURL(ctx, rawURL, allowPrivateIP, resolver, blockedPorts)
 }
