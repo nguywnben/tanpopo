@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -62,6 +63,8 @@ var (
 	ErrInvalidInput = storageport.ErrInvalidInput
 	// ErrInvalidStateTransition rejects invalid SM-07 reservation transitions.
 	ErrInvalidStateTransition = errors.New("ledger: invalid reservation state transition")
+	// ErrOverflow rejects signed 64-bit integer addition overflows in ledger accounting.
+	ErrOverflow = errors.New("ledger: 64-bit integer overflow")
 )
 
 // BudgetExceededError carries structured diagnostics for 429 project_budget_exceeded responses.
@@ -218,6 +221,11 @@ type SettlementResult struct {
 	SettledAtMs      int64
 	Accuracy         string
 	TotalCostMicros  int64
+	InputTokens      int64
+	OutputTokens     int64
+	CacheReadTokens  int64
+	CacheWriteTokens int64
+	ReasoningTokens  int64
 	UnmeteredFlagged bool
 	AlreadySettled   bool
 }
@@ -311,9 +319,13 @@ func (s *Service) UpsertLedger(ctx context.Context, params UpsertLedgerParams) (
 
 		switch {
 		case qErr == nil:
-			carryover := computeCarryover(exactMicros+estMicros, params.HardLimitMicros)
+			totalSettled, ok := addInt64Checked(exactMicros, estMicros)
+			if !ok {
+				return ErrOverflow
+			}
+			carryover := computeCarryover(totalSettled, params.HardLimitMicros)
 			// Allow re-arming higher soft thresholds if limit was topped up.
-			newPct := computeUtilizationPct(exactMicros+estMicros, params.HardLimitMicros)
+			newPct := computeUtilizationPct(totalSettled, params.HardLimitMicros)
 			if _, uErr := tx.ExecContext(ctx, `
 				UPDATE budget_ledgers
 				SET period_end_ms = ?,
@@ -460,13 +472,19 @@ func (s *Service) Reserve(ctx context.Context, req ReserveRequest) (*Reservation
 
 		resID := idgen.MustNew(idgen.PrefixReservation)
 		for _, l := range ledgers {
+			if _, ok := addInt64Checked(l.ReservedHoldMicros, req.HoldMicros); !ok {
+				return ErrOverflow
+			}
 			res, uErr := tx.ExecContext(ctx, `
 				UPDATE budget_ledgers
 				SET reserved_hold_micros = reserved_hold_micros + ?,
 				    version = version + 1,
 				    updated_at_ms = ?
 				WHERE org_id = ? AND id = ?
-				  AND (hard_limit_micros - settled_exact_micros - settled_estimated_micros - reserved_hold_micros) >= ?`,
+				  AND settled_exact_micros <= hard_limit_micros
+				  AND settled_estimated_micros <= hard_limit_micros - settled_exact_micros
+				  AND reserved_hold_micros <= hard_limit_micros - settled_exact_micros - settled_estimated_micros
+				  AND ? <= hard_limit_micros - settled_exact_micros - settled_estimated_micros - reserved_hold_micros`,
 				req.HoldMicros, now, req.OrgID, l.ID, req.HoldMicros,
 			)
 			if uErr != nil {
@@ -478,7 +496,7 @@ func (s *Service) Reserve(ctx context.Context, req ReserveRequest) (*Reservation
 					LedgerID:        l.ID,
 					ScopeType:       l.ScopeType,
 					ScopeID:         l.ScopeID,
-					AvailableMicros: l.AvailableBalance(),
+					AvailableMicros: safeAvailableBalance(l),
 					RequestedMicros: req.HoldMicros,
 				}
 			}
@@ -563,13 +581,23 @@ func (s *Service) DeltaReserve(ctx context.Context, req DeltaReserveRequest) (*R
 
 		delta := req.NewHoldMicros - cur.HoldMicros
 		for _, ledgerID := range cur.LedgerIDs {
+			lCur, lCurErr := scanLedgerByIDTx(ctx, tx, req.OrgID, ledgerID)
+			if lCurErr != nil {
+				return lCurErr
+			}
+			if _, ok := addInt64Checked(lCur.ReservedHoldMicros, delta); !ok {
+				return ErrOverflow
+			}
 			res, uErr := tx.ExecContext(ctx, `
 				UPDATE budget_ledgers
 				SET reserved_hold_micros = reserved_hold_micros + ?,
 				    version = version + 1,
 				    updated_at_ms = ?
 				WHERE org_id = ? AND id = ?
-				  AND (hard_limit_micros - settled_exact_micros - settled_estimated_micros - reserved_hold_micros) >= ?`,
+				  AND settled_exact_micros <= hard_limit_micros
+				  AND settled_estimated_micros <= hard_limit_micros - settled_exact_micros
+				  AND reserved_hold_micros <= hard_limit_micros - settled_exact_micros - settled_estimated_micros
+				  AND ? <= hard_limit_micros - settled_exact_micros - settled_estimated_micros - reserved_hold_micros`,
 				delta, now, req.OrgID, ledgerID, delta,
 			)
 			if uErr != nil {
@@ -577,15 +605,11 @@ func (s *Service) DeltaReserve(ctx context.Context, req DeltaReserveRequest) (*R
 			}
 			rowsAffected, _ := res.RowsAffected()
 			if rowsAffected == 0 {
-				l, lErr := scanLedgerByIDTx(ctx, tx, req.OrgID, ledgerID)
-				if lErr != nil {
-					return ErrBudgetExceeded
-				}
 				return &BudgetExceededError{
-					LedgerID:        l.ID,
-					ScopeType:       l.ScopeType,
-					ScopeID:         l.ScopeID,
-					AvailableMicros: l.AvailableBalance(),
+					LedgerID:        lCur.ID,
+					ScopeType:       lCur.ScopeType,
+					ScopeID:         lCur.ScopeID,
+					AvailableMicros: safeAvailableBalance(*lCur),
 					RequestedMicros: delta,
 				}
 			}
@@ -955,6 +979,11 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 			SettledAtMs:      now,
 			Accuracy:         breakdown.Accuracy,
 			TotalCostMicros:  breakdown.TotalMicroUSD,
+			InputTokens:      eff.InputTokens,
+			OutputTokens:     eff.OutputTokens,
+			CacheReadTokens:  eff.CacheReadTokens,
+			CacheWriteTokens: eff.CacheWriteTokens,
+			ReasoningTokens:  eff.ReasoningTokens,
 			UnmeteredFlagged: breakdown.UnmeteredFlagged,
 			AlreadySettled:   false,
 		}
@@ -979,7 +1008,7 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 				OrgID:        &orgCopy,
 				ActorKind:    "system",
 				ActorID:      "budget_ledger_service",
-				EntryPoint:   "finops_settle",
+				EntryPoint:   "data_plane_guard",
 				EventType:    "BUDGET_LATE_SETTLEMENT_AFTER_RECLAIM",
 				TargetType:   "budget_reservation",
 				TargetID:     req.ReservationID,
@@ -1335,12 +1364,19 @@ func applyLedgerSettlementTx(
 	}
 	newExact := l.SettledExactMicros
 	newEst := l.SettledEstimatedMicros
+	var ok bool
 	if breakdown.Accuracy == pricing.AccuracyExact {
-		newExact += breakdown.TotalMicroUSD
+		newExact, ok = addInt64Checked(newExact, breakdown.TotalMicroUSD)
 	} else {
-		newEst += breakdown.TotalMicroUSD
+		newEst, ok = addInt64Checked(newEst, breakdown.TotalMicroUSD)
 	}
-	totalSettled := newExact + newEst
+	if !ok {
+		return nil, ErrOverflow
+	}
+	totalSettled, ok := addInt64Checked(newExact, newEst)
+	if !ok {
+		return nil, ErrOverflow
+	}
 	carryover := computeCarryover(totalSettled, l.HardLimitMicros)
 
 	utilPct := computeUtilizationPct(totalSettled, l.HardLimitMicros)
@@ -1385,13 +1421,17 @@ func findSettlementByReservationTx(ctx context.Context, tx *sql.Tx, orgID, reser
 	var res SettlementResult
 	var resID sql.NullString
 	err := tx.QueryRowContext(ctx, `
-		SELECT id, reservation_id, request_id, settled_at_ms, usage_accuracy, total_cost_micros
+		SELECT id, reservation_id, request_id, settled_at_ms, usage_accuracy, total_cost_micros,
+		       input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens
 		FROM usage_settlements
 		WHERE org_id = ? AND reservation_id = ?
 		ORDER BY settled_at_ms DESC
 		LIMIT 1`,
 		orgID, reservationID,
-	).Scan(&res.SettlementID, &resID, &res.RequestID, &res.SettledAtMs, &res.Accuracy, &res.TotalCostMicros)
+	).Scan(
+		&res.SettlementID, &resID, &res.RequestID, &res.SettledAtMs, &res.Accuracy, &res.TotalCostMicros,
+		&res.InputTokens, &res.OutputTokens, &res.CacheReadTokens, &res.CacheWriteTokens, &res.ReasoningTokens,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1407,13 +1447,17 @@ func findSettlementByRequestIDTx(ctx context.Context, tx *sql.Tx, orgID, request
 	var res SettlementResult
 	var resID sql.NullString
 	err := tx.QueryRowContext(ctx, `
-		SELECT id, reservation_id, request_id, settled_at_ms, usage_accuracy, total_cost_micros
+		SELECT id, reservation_id, request_id, settled_at_ms, usage_accuracy, total_cost_micros,
+		       input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens
 		FROM usage_settlements
 		WHERE org_id = ? AND request_id = ?
 		ORDER BY settled_at_ms DESC
 		LIMIT 1`,
 		orgID, requestID,
-	).Scan(&res.SettlementID, &resID, &res.RequestID, &res.SettledAtMs, &res.Accuracy, &res.TotalCostMicros)
+	).Scan(
+		&res.SettlementID, &resID, &res.RequestID, &res.SettledAtMs, &res.Accuracy, &res.TotalCostMicros,
+		&res.InputTokens, &res.OutputTokens, &res.CacheReadTokens, &res.CacheWriteTokens, &res.ReasoningTokens,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -1423,4 +1467,30 @@ func findSettlementByRequestIDTx(ctx context.Context, tx *sql.Tx, orgID, request
 	res.ReservationID = resID.String
 	res.UnmeteredFlagged = res.Accuracy == pricing.AccuracyUnmeteredFlagged
 	return &res, nil
+}
+
+func addInt64Checked(a, b int64) (int64, bool) {
+	if b > 0 && a > math.MaxInt64-b {
+		return 0, false
+	}
+	if b < 0 && a < math.MinInt64-b {
+		return 0, false
+	}
+	return a + b, true
+}
+
+func safeAvailableBalance(l BudgetLedger) int64 {
+	s1, ok1 := addInt64Checked(l.SettledExactMicros, l.SettledEstimatedMicros)
+	if !ok1 {
+		return math.MinInt64
+	}
+	used, ok2 := addInt64Checked(s1, l.ReservedHoldMicros)
+	if !ok2 {
+		return math.MinInt64
+	}
+	avail, ok3 := addInt64Checked(l.HardLimitMicros, -used)
+	if !ok3 {
+		return math.MinInt64
+	}
+	return avail
 }

@@ -153,7 +153,7 @@ func (a *Aggregator) AggregateRange(ctx context.Context, fromMs, toMs int64) (in
 
 // QueryOrgRollups lists aggregated hourly rollups for orgID over [fromMs, toMs).
 func (a *Aggregator) QueryOrgRollups(ctx context.Context, orgID string, fromMs, toMs int64) ([]HourlyRow, error) {
-	if strings.TrimSpace(orgID) == "" || toMs <= fromMs {
+	if strings.TrimSpace(orgID) == "" || fromMs < 0 || toMs <= fromMs {
 		return nil, errors.New("rollup: invalid query arguments")
 	}
 	rows, err := a.db.QueryContext(ctx, `

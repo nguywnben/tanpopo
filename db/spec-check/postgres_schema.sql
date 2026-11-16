@@ -992,6 +992,16 @@ CREATE TABLE budget_reservations (
     UNIQUE (org_id, request_id)
 );
 
+CREATE TABLE budget_reservation_ledgers (
+    org_id         VARCHAR(40) NOT NULL,
+    reservation_id VARCHAR(40) NOT NULL,
+    ledger_id      VARCHAR(40) NOT NULL,
+    held_micros    BIGINT NOT NULL CHECK (held_micros >= 0),
+    PRIMARY KEY (org_id, reservation_id, ledger_id),
+    FOREIGN KEY (org_id, reservation_id) REFERENCES budget_reservations(org_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (org_id, ledger_id) REFERENCES budget_ledgers(org_id, id) ON DELETE CASCADE
+);
+
 CREATE TABLE valkey_hold_checkpoints (
     org_id                  VARCHAR(40) NOT NULL,
     ledger_id               VARCHAR(40) NOT NULL,
@@ -1198,15 +1208,28 @@ CREATE INDEX idx_vkeys_env_active
     ON virtual_keys (org_id, project_id, env_id)
     WHERE state IN ('CREATED_ACTIVE', 'ROTATING_DUAL_VALID');
 
+CREATE INDEX idx_ledgers_scope_active
+    ON budget_ledgers (org_id, scope_type, scope_id, period_start_ms, period_end_ms);
+
 CREATE INDEX idx_rsv_orphan_lease
     ON budget_reservations (lease_expires_at_ms)
     WHERE state IN ('RESERVED_HOLD', 'STREAMING_ACCRUING');
+
+CREATE INDEX idx_rsv_ledgers_ledger
+    ON budget_reservation_ledgers (org_id, ledger_id);
 
 CREATE INDEX idx_hold_checkpoints_updated
     ON valkey_hold_checkpoints (org_id, ledger_id, updated_at_ms DESC);
 
 CREATE INDEX idx_settlements_chargeback
     ON usage_settlements (org_id, project_id, usage_accuracy, settled_at_ms DESC);
+
+CREATE INDEX idx_settlements_reservation
+    ON usage_settlements (org_id, reservation_id)
+    WHERE reservation_id IS NOT NULL;
+
+CREATE INDEX idx_settlements_rollup
+    ON usage_settlements (settled_at_ms, org_id, project_id, env_id, virtual_key_id);
 
 CREATE INDEX idx_traces_project_time
     ON request_traces_meta (org_id, project_id, env_id, created_at_ms DESC);
@@ -1444,6 +1467,12 @@ CREATE POLICY tenant_isolation ON budget_ledgers
 ALTER TABLE budget_reservations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE budget_reservations FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON budget_reservations
+    USING (org_id = current_setting('app.current_org_id', true))
+    WITH CHECK (org_id = current_setting('app.current_org_id', true));
+
+ALTER TABLE budget_reservation_ledgers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE budget_reservation_ledgers FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON budget_reservation_ledgers
     USING (org_id = current_setting('app.current_org_id', true))
     WITH CHECK (org_id = current_setting('app.current_org_id', true));
 

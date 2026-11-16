@@ -284,9 +284,6 @@ func (s *Server) executeSyncEmbeddingAttempt(
 		}
 	}
 
-	if normResp.Usage != nil {
-		s.reconcileAdmissionUsage(admLease, normResp.Usage)
-	}
 	headerUsage, serr := budgetSess.settleSync(ctx, target, requestedModel, normResp.Usage, finalBody)
 	if serr != nil {
 		budgetSess.releaseIfUnsettled()
@@ -299,6 +296,9 @@ func (s *Server) executeSyncEmbeddingAttempt(
 				writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "budget_ledger_unavailable", "api_error", "Budget ledger settlement failed; failing closed to prevent unbilled response delivery.", false)
 			},
 		}
+	}
+	if headerUsage != nil {
+		s.reconcileAdmissionUsage(admLease, headerUsage)
 	}
 	writeSettledJSONResponse(w, ctx, reqID, headerUsage, finalBody, idemClaim)
 	return failover.AttemptResult{

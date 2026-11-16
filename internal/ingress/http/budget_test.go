@@ -27,6 +27,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
 	ingresshttp "github.com/nguywnben/tanpopo/internal/ingress/http"
+	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
 	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/trust"
@@ -410,6 +411,7 @@ adapter:
 			"streaming":    "VERIFIED",
 			"tool_calling": "VERIFIED",
 			"embeddings":   "VERIFIED",
+			"audio_input":  "VERIFIED",
 		},
 	})
 	if err != nil {
@@ -1069,5 +1071,182 @@ func TestTP0021_IdempotencyKeyReplayDoesNotDoubleChargeBudget(t *testing.T) {
 	if led.SettledExactMicros != 200 || led.ReservedHoldMicros != 0 {
 		t.Fatalf("expected single 200 micro-USD settlement after replay, got settled=%d reserved=%d", led.SettledExactMicros, led.ReservedHoldMicros)
 	}
+}
+
+func TestTP0021_AudioPreHoldBillingDoesNotMiscountAudioAsPagesAndBlocksOverrun(t *testing.T) {
+	// audio_input_per_sec = 2,000 micro-USD/s (2e6 nano-USD/s), document_page = 50,000 micro-USD/page (5e7 nano-USD/page).
+	// Budget = 3,500 micro-USD:
+	// - 1s audio clip holds ~2,060 <= 3,500 -> MUST SUCCEED (would fail if audio/ogg were miscounted as DocumentPages=50,000).
+	// - 3s audio clip (duration_seconds: 3) holds >= 6,000 > 3,500 -> MUST BLOCK with 429 project_budget_exceeded!
+	pricingJSON := `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000,"audio_input_per_sec_nano_usd":2000000,"document_page_nano_usd":50000000}`
+	bh := setupBudgetIngressHarness(t, pricingJSON, 3_500, 100)
+
+	// 1. Native Gemini inlineData audio/ogg (1s default) fits under 3,500 budget (proving audio/ogg does NOT count as 50,000-micro DocumentPages).
+	natSmall := `{"model":"acme/chat-1","max_tokens":10,"contents":[{"role":"user","parts":[{"inlineData":{"mimeType":"audio/ogg","data":"T2dnUw=="}}]}]}`
+	respNatOK, bodyNatOK := bh.h.doChatReq(t, http.MethodPost, "/native/openai/v1/chat/completions", []byte(natSmall), nil, nil)
+	if respNatOK.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for 1s native audio/ogg under 3,500 budget, got status=%d body=%s", respNatOK.StatusCode, string(bodyNatOK))
+	}
+
+	hitsBefore := bh.upHits.Load()
+
+	// 2. OpenAI input_audio with duration_seconds: 3 -> holds >= 6,000 -> MUST return 429 project_budget_exceeded before upstream.
+	chatBigAudio := `{"model":"acme/chat-1","max_tokens":10,"messages":[{"role":"user","content":[{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav","duration_seconds":3}}]}]}`
+	respChatBlk, bodyChatBlk := bh.h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(chatBigAudio), nil, nil)
+	if respChatBlk.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(bodyChatBlk), "project_budget_exceeded") {
+		t.Fatalf("expected 429 project_budget_exceeded for OpenAI 3s input_audio, got status=%d body=%s", respChatBlk.StatusCode, string(bodyChatBlk))
+	}
+
+	// 3. Native Gemini inlineData audio/ogg with duration_ms: 4000 -> holds >= 8,000 -> MUST return 429 project_budget_exceeded before upstream.
+	natBigAudio := `{"model":"acme/chat-1","max_tokens":10,"contents":[{"role":"user","parts":[{"inlineData":{"mimeType":"audio/ogg","data":"T2dnUw==","duration_ms":4000}}]}]}`
+	respNatBlk, bodyNatBlk := bh.h.doChatReq(t, http.MethodPost, "/native/openai/v1/chat/completions", []byte(natBigAudio), nil, nil)
+	if respNatBlk.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(bodyNatBlk), "project_budget_exceeded") {
+		t.Fatalf("expected 429 project_budget_exceeded for native 4s audio/ogg, got status=%d body=%s", respNatBlk.StatusCode, string(bodyNatBlk))
+	}
+
+	if bh.upHits.Load() != hitsBefore {
+		t.Fatalf("expected 0 upstream hits on blocked audio requests, got %d", bh.upHits.Load()-hitsBefore)
+	}
+}
+
+func TestTP0021_MultiCompletionPreHoldScalesByCompletionCount(t *testing.T) {
+	// 1 micro-USD/tok input & output; defaultHoldOutputTokens = 100; hardLimit = 1,000.
+	// Single completion max_tokens=100 or omitted max_tokens (~110 micro-USD) fits easily,
+	// whereas n=16 (with max_tokens=100 OR omitted max_tokens -> 1,600 out tokens > 1,000) and
+	// candidateCount=12 in native generationConfig (1,200 > 1,000) MUST block with 429 project_budget_exceeded!
+	bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 1_000, 100)
+	hitsBefore := bh.upHits.Load()
+
+	for _, tc := range []struct {
+		name  string
+		route string
+		body  string
+	}{
+		{
+			name:  "http_n16_explicit_max_tokens",
+			route: "/v1/chat/completions",
+			body:  `{"model":"acme/chat-1","n":16,"max_tokens":100,"messages":[{"role":"user","content":"hi"}]}`,
+		},
+		{
+			name:  "http_n16_default_hold",
+			route: "/v1/chat/completions",
+			body:  `{"model":"acme/chat-1","n":16,"messages":[{"role":"user","content":"hi"}]}`,
+		},
+		{
+			name:  "native_candidate_count_generation_config",
+			route: "/native/openai/v1/chat/completions",
+			body:  `{"model":"acme/chat-1","generationConfig":{"candidateCount":12,"maxOutputTokens":100},"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`,
+		},
+		{
+			name:  "native_candidate_count_default_hold",
+			route: "/native/openai/v1/chat/completions",
+			body:  `{"model":"acme/chat-1","generationConfig":{"candidateCount":12},"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`,
+		},
+	} {
+		resp, body := bh.h.doChatReq(t, http.MethodPost, tc.route, []byte(tc.body), nil, nil)
+		if resp.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(body), "project_budget_exceeded") {
+			t.Fatalf("%s: expected 429 project_budget_exceeded, got status=%d body=%s", tc.name, resp.StatusCode, string(body))
+		}
+	}
+	if bh.upHits.Load() != hitsBefore {
+		t.Fatalf("expected 0 upstream hits for multi-completion pre-hold blocks, got %d", bh.upHits.Load()-hitsBefore)
+	}
+}
+
+func TestTP0021_TPMReconciliationOrderingAndFMEA04Fallback(t *testing.T) {
+	t.Run("sync_settle_failure_does_not_refund_tpm", func(t *testing.T) {
+		bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 10_000, 100)
+		ps, err := policyengine.NewStore(policyengine.StoreConfig{DB: bh.h.store.RawDB(), NowMs: func() int64 { return bh.h.clk.Now().UnixMilli() }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ps.CreatePolicy(bh.h.ctx, policyengine.CreatePolicyParams{
+			OrgID: bh.h.org.ID, ScopeType: snapshot.PolicyScopeOrg, ScopeID: bh.h.org.ID,
+			PolicyType: snapshot.PolicyTypeRateLimit, RulesJSON: `{"tpm_limit": 200}`, Enabled: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := bh.h.snapshots.Refresh(bh.h.ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		// Upstream injects settlement DB failure AND reports low actual usage (10 tokens).
+		// Because settlement fails closed, TPM MUST NOT refund pre-reserved ~120 tokens!
+		bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+			if _, err := bh.h.store.RawDB().ExecContext(bh.h.ctx, `
+				CREATE TRIGGER fail_tpm_settle BEFORE INSERT ON usage_settlements
+				BEGIN
+					SELECT RAISE(ABORT, 'injected_settlement_failure');
+				END;
+			`); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"c_1","object":"chat.completion","model":"acme-gpt-upstream","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":5,"total_tokens":10}}`))
+		})
+		defer func() {
+			_, _ = bh.h.store.RawDB().ExecContext(bh.h.ctx, `DROP TRIGGER IF EXISTS fail_tpm_settle;`)
+		}()
+
+		resp1, body1 := bh.h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(`{"model":"acme/chat-1","max_tokens":100,"messages":[{"role":"user","content":"hi"}]}`), nil, nil)
+		if resp1.StatusCode != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503 fail-closed settlement failure, got %d body=%s", resp1.StatusCode, string(body1))
+		}
+		_, _ = bh.h.store.RawDB().ExecContext(bh.h.ctx, `DROP TRIGGER IF EXISTS fail_tpm_settle;`)
+
+		// Only ~80 TPM tokens remain out of 200 because ~120 was reserved and NOT refunded on fail-closed settle error.
+		// Requesting max_tokens=100 (~120 est) immediately MUST return 429 rate_limit_exceeded!
+		resp2, body2 := bh.h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(`{"model":"acme/chat-1","max_tokens":100,"messages":[{"role":"user","content":"second"}]}`), nil, nil)
+		if resp2.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(body2), "rate_limit_exceeded") {
+			t.Fatalf("expected 429 rate_limit_exceeded proving failed settle did not refund TPM, got %d body=%s", resp2.StatusCode, string(body2))
+		}
+	})
+
+	t.Run("fmea04_stream_abort_reconciles_fallback_tokens_into_tpm", func(t *testing.T) {
+		bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 50_000, 100)
+		ps, err := policyengine.NewStore(policyengine.StoreConfig{DB: bh.h.store.RawDB(), NowMs: func() int64 { return bh.h.clk.Now().UnixMilli() }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Allow enough for one small request (~25 tokens), then emit a huge SSE chunk (~800 bytes = ~200 output tokens) and abort mid-stream.
+		if _, err := ps.CreatePolicy(bh.h.ctx, policyengine.CreatePolicyParams{
+			OrgID: bh.h.org.ID, ScopeType: snapshot.PolicyScopeOrg, ScopeID: bh.h.org.ID,
+			PolicyType: snapshot.PolicyTypeRateLimit, RulesJSON: `{"tpm_limit": 200}`, Enabled: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := bh.h.snapshots.Refresh(bh.h.ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		bigText := strings.Repeat("x", 800)
+		bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`data: {"id":"chatcmpl_big_abort","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"` + bigText + `"}}]}` + "\n\n"))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			if hj, ok := w.(http.Hijacker); ok {
+				if conn, _, err := hj.Hijack(); err == nil {
+					_ = conn.Close()
+				}
+			}
+		})
+
+		resp1, body1 := bh.h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(`{"model":"acme/chat-1","stream":true,"max_tokens":5,"messages":[{"role":"user","content":"go"}]}`), nil, nil)
+		if resp1.StatusCode != http.StatusOK || !strings.Contains(string(body1), "mid_stream_abort") {
+			t.Fatalf("expected 200 SSE mid_stream_abort, got %d body=%s", resp1.StatusCode, string(body1))
+		}
+
+		// Aborted stream settled ~200+ fallback tokens > 100 pre-reserved -> reconcileAdmissionUsage must consume the delta in TPM!
+		// Even a tiny 50-token request immediately after MUST hit 429 rate_limit_exceeded!
+		resp2, body2 := bh.h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(`{"model":"acme/chat-1","max_tokens":50,"messages":[{"role":"user","content":"blocked"}]}`), nil, nil)
+		if resp2.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(body2), "rate_limit_exceeded") {
+			t.Fatalf("expected 429 rate_limit_exceeded after FMEA-04 fallback TPM reconciliation, got %d body=%s", resp2.StatusCode, string(body2))
+		}
+	})
 }
 

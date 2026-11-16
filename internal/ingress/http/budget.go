@@ -5,10 +5,12 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,9 +61,20 @@ func (s *Server) newRequestBudgetSession(
 		return nil
 	}
 	var baseIn, maxOut int64
+	completionCount := int64(1)
 	if preAdm != nil {
 		baseIn = preAdm.estBaseIn
 		maxOut = preAdm.estMaxOut
+		if preAdm.completionCount > 1 {
+			completionCount = preAdm.completionCount
+		}
+	}
+	defaultHold := s.defaultHoldOutputTokens
+	if completionCount > 1 {
+		if defaultHold <= 0 {
+			defaultHold = pricing.DefaultHoldOutputTokens
+		}
+		defaultHold = mulCapInt64(defaultHold, completionCount, 1<<62)
 	}
 	textBytes := int64(len(rawBody))
 	if baseIn > 0 && baseIn*4 < textBytes {
@@ -74,7 +87,7 @@ func (s *Server) newRequestBudgetSession(
 	}
 	return &requestBudgetSession{
 		svc:             s.budgetLedger,
-		defaultHoldOut:  s.defaultHoldOutputTokens,
+		defaultHoldOut:  defaultHold,
 		renewEvery:      renewEvery,
 		orgID:           key.OrgID,
 		projectID:       key.ProjectID,
@@ -89,37 +102,222 @@ func (s *Server) newRequestBudgetSession(
 	}
 }
 
+const maxEstimatedAudioMillis int64 = 1_000_000_000
+
 func countRequestMediaUnits(items []any) pricing.MediaUsage {
 	var m pricing.MediaUsage
-	inspect := func(part map[string]any) {
-		if part == nil {
+	var walk func(v any, depth int)
+	walk = func(v any, depth int) {
+		if depth > 24 || v == nil {
 			return
 		}
-		ptype := strings.ToLower(strings.TrimSpace(stringField(part["type"])))
-		switch {
-		case ptype == "image_url" || ptype == "input_image" || ptype == "image" || part["image_url"] != nil || part["image"] != nil:
-			m.ImageCount++
-		case ptype == "file" || ptype == "input_file" || ptype == "document" || part["file"] != nil || part["input_file"] != nil || part["document"] != nil:
-			m.DocumentPages++
-		}
-	}
-	for _, rawItem := range items {
-		obj, ok := rawItem.(map[string]any)
-		if !ok || obj == nil {
-			continue
-		}
-		inspect(obj)
-		parts, ok := obj["content"].([]any)
-		if !ok {
-			continue
-		}
-		for _, rawPart := range parts {
-			if part, ok := rawPart.(map[string]any); ok {
-				inspect(part)
+		switch node := v.(type) {
+		case []any:
+			for _, elem := range node {
+				walk(elem, depth+1)
+			}
+		case map[string]any:
+			if classifyMediaPart(node, &m) {
+				return
+			}
+			for _, child := range node {
+				switch child.(type) {
+				case map[string]any, []any:
+					walk(child, depth+1)
+				}
 			}
 		}
 	}
+	walk(items, 0)
 	return m
+}
+
+func classifyMediaPart(part map[string]any, m *pricing.MediaUsage) bool {
+	if part == nil {
+		return false
+	}
+	ptype := strings.ToLower(strings.TrimSpace(stringField(part["type"])))
+	if ptype == "image_url" || ptype == "input_image" || ptype == "image" || part["image_url"] != nil || part["image"] != nil {
+		m.ImageCount++
+		return true
+	}
+	if ptype == "input_audio" || ptype == "audio" || part["input_audio"] != nil || part["audio"] != nil || part["audio_base64"] != nil {
+		addAudioMillis(m, estimateAudioPartMillis(part))
+		return true
+	}
+	for _, inlineKey := range []string{"inlineData", "inline_data", "source"} {
+		if inlineObj, ok := part[inlineKey].(map[string]any); ok && inlineObj != nil {
+			mt := strings.ToLower(strings.TrimSpace(firstStringField(inlineObj, "mimeType", "mime_type", "media_type")))
+			switch {
+			case strings.HasPrefix(mt, "image/"):
+				m.ImageCount++
+				return true
+			case strings.HasPrefix(mt, "audio/"):
+				addAudioMillis(m, estimateAudioPartMillis(part))
+				return true
+			case mt != "":
+				m.DocumentPages++
+				return true
+			}
+		}
+	}
+	if hasAudioDataURIInPart(part) {
+		addAudioMillis(m, estimateAudioPartMillis(part))
+		return true
+	}
+	if ptype == "file" || ptype == "input_file" || ptype == "document" || part["file"] != nil || part["input_file"] != nil || part["document"] != nil || part["fileData"] != nil || part["file_data"] != nil {
+		m.DocumentPages++
+		return true
+	}
+	return false
+}
+
+func addAudioMillis(m *pricing.MediaUsage, delta int64) {
+	if delta <= 0 {
+		return
+	}
+	if m.AudioInputMillis >= maxEstimatedAudioMillis-delta {
+		m.AudioInputMillis = maxEstimatedAudioMillis
+		return
+	}
+	m.AudioInputMillis += delta
+}
+
+func firstStringField(obj map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if s := stringField(obj[k]); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func hasAudioDataURIInPart(part map[string]any) bool {
+	for _, k := range []string{"url", "file_url", "file_data", "data"} {
+		if s := strings.ToLower(strings.TrimSpace(stringField(part[k]))); strings.HasPrefix(s, "data:audio/") {
+			return true
+		}
+	}
+	for _, subKey := range []string{"file", "input_file", "document", "fileData"} {
+		if sub, ok := part[subKey].(map[string]any); ok && sub != nil {
+			for _, k := range []string{"url", "file_url", "file_data", "data"} {
+				if s := strings.ToLower(strings.TrimSpace(stringField(sub[k]))); strings.HasPrefix(s, "data:audio/") {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func estimateAudioPartMillis(part map[string]any) int64 {
+	var maxB64Len int64
+	var explicitMillis int64
+	inspectMap := func(obj map[string]any) {
+		if obj == nil {
+			return
+		}
+		if ms := extractDurationMillis(obj); ms > explicitMillis {
+			explicitMillis = ms
+		}
+		for _, k := range []string{"data", "audio_base64", "file_data", "url", "file_url"} {
+			s, ok := obj[k].(string)
+			if !ok {
+				continue
+			}
+			bLen := base64PayloadCharLen(s)
+			if bLen > maxB64Len {
+				maxB64Len = bLen
+			}
+		}
+	}
+	inspectMap(part)
+	for _, subKey := range []string{"input_audio", "audio", "inlineData", "inline_data", "source", "file", "input_file"} {
+		if sub, ok := part[subKey].(map[string]any); ok {
+			inspectMap(sub)
+		}
+	}
+	var bytesMillis int64
+	if maxB64Len > 0 {
+		decodedBytes := (maxB64Len * 3) / 4
+		bytesMillis = (decodedBytes * 1000) / 16000
+	}
+	est := max(int64(1000), max(explicitMillis, bytesMillis))
+	if est > maxEstimatedAudioMillis {
+		return maxEstimatedAudioMillis
+	}
+	return est
+}
+
+func base64PayloadCharLen(s string) int64 {
+	if s == "" {
+		return 0
+	}
+	if len(s) >= 5 && strings.EqualFold(s[:5], "data:") {
+		head := strings.ToLower(s[:min(len(s), 128)])
+		if idx := strings.Index(head, ";base64,"); idx >= 0 {
+			return int64(len(s) - (idx + len(";base64,")))
+		}
+		return 0
+	}
+	return int64(len(s))
+}
+
+func extractDurationMillis(obj map[string]any) int64 {
+	if v, ok := obj["duration_ms"]; ok {
+		if n := anyToNonNegCeilMillis(v, 1); n > 0 {
+			return n
+		}
+	}
+	for _, k := range []string{"duration_seconds", "duration"} {
+		if v, ok := obj[k]; ok {
+			if n := anyToNonNegCeilMillis(v, 1000); n > 0 {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+func anyToNonNegCeilMillis(v any, scale int64) int64 {
+	var f float64
+	switch t := v.(type) {
+	case float64:
+		f = t
+	case int64:
+		if t <= 0 {
+			return 0
+		}
+		if t > maxEstimatedAudioMillis/scale {
+			return maxEstimatedAudioMillis
+		}
+		return t * scale
+	case int:
+		if t <= 0 {
+			return 0
+		}
+		iv := int64(t)
+		if iv > maxEstimatedAudioMillis/scale {
+			return maxEstimatedAudioMillis
+		}
+		return iv * scale
+	case json.Number:
+		parsed, err := strconv.ParseFloat(t.String(), 64)
+		if err != nil {
+			return 0
+		}
+		f = parsed
+	default:
+		return 0
+	}
+	if f <= 0 || math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0
+	}
+	scaled := math.Ceil(f * float64(scale))
+	if scaled >= float64(maxEstimatedAudioMillis) {
+		return maxEstimatedAudioMillis
+	}
+	return int64(scaled)
 }
 
 func rateCardForTarget(target *snapshot.ResolvedTarget) pricing.RateCard {
@@ -406,12 +604,27 @@ func (b *requestBudgetSession) settleInternal(
 	b.mu.Unlock()
 
 	if origUsage == nil {
-		return &port.NormalizedUsage{
+		out := &port.NormalizedUsage{
 			Accuracy: portAccuracyFromLedger(res.Accuracy),
-		}, nil
+		}
+		if res.Accuracy == pricing.AccuracyEstimated {
+			out.InputTokens = res.InputTokens
+			out.OutputTokens = res.OutputTokens
+			out.CacheReadTokens = res.CacheReadTokens
+			out.CacheWriteTokens = res.CacheWriteTokens
+			out.ReasoningTokens = res.ReasoningTokens
+		}
+		return out, nil
 	}
 	cp := *origUsage
 	cp.Accuracy = portAccuracyFromLedger(res.Accuracy)
+	if res.Accuracy == pricing.AccuracyEstimated {
+		cp.InputTokens = res.InputTokens
+		cp.OutputTokens = res.OutputTokens
+		cp.CacheReadTokens = res.CacheReadTokens
+		cp.CacheWriteTokens = res.CacheWriteTokens
+		cp.ReasoningTokens = res.ReasoningTokens
+	}
 	return &cp, nil
 }
 

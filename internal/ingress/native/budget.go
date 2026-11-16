@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,9 +53,20 @@ func (h *Handler) newNativeBudgetSession(
 	rawBody []byte,
 	estBaseIn int64,
 	estMaxOut int64,
+	completionCount int64,
 ) *nativeBudgetSession {
 	if h == nil || h.budgetLedger == nil || key == nil {
 		return nil
+	}
+	if completionCount < 1 {
+		completionCount = 1
+	}
+	defaultHold := h.defaultHoldOutputTokens
+	if completionCount > 1 {
+		if defaultHold <= 0 {
+			defaultHold = pricing.DefaultHoldOutputTokens
+		}
+		defaultHold = mulCapNativeInt64(defaultHold, completionCount, 1<<62)
 	}
 	textBytes := int64(len(rawBody))
 	if estBaseIn > 0 && estBaseIn*4 < textBytes {
@@ -67,7 +79,7 @@ func (h *Handler) newNativeBudgetSession(
 	}
 	return &nativeBudgetSession{
 		svc:             h.budgetLedger,
-		defaultHoldOut:  h.defaultHoldOutputTokens,
+		defaultHoldOut:  defaultHold,
 		renewEvery:      renewEvery,
 		orgID:           key.OrgID,
 		projectID:       key.ProjectID,
@@ -81,6 +93,8 @@ func (h *Handler) newNativeBudgetSession(
 	}
 }
 
+const maxEstimatedNativeAudioMillis int64 = 1_000_000_000
+
 func countNativeMediaUnits(rawBody []byte) pricing.MediaUsage {
 	var m pricing.MediaUsage
 	if len(rawBody) == 0 {
@@ -91,66 +105,228 @@ func countNativeMediaUnits(rawBody []byte) pricing.MediaUsage {
 		return m
 	}
 
-	inspectPart := func(part map[string]any) {
-		if part == nil {
+	var walk func(v any, depth int)
+	walk = func(v any, depth int) {
+		if depth > 24 || v == nil {
 			return
 		}
-		ptype := ""
-		if s, ok := part["type"].(string); ok {
-			ptype = strings.ToLower(strings.TrimSpace(s))
-		}
-		switch {
-		case ptype == "image_url" || ptype == "input_image" || ptype == "image" || part["image_url"] != nil || part["image"] != nil:
-			m.ImageCount++
-			return
-		case ptype == "file" || ptype == "input_file" || ptype == "document" || part["file"] != nil || part["input_file"] != nil || part["document"] != nil || part["fileData"] != nil || part["file_data"] != nil:
-			m.DocumentPages++
-			return
-		}
-		for _, inlineKey := range []string{"inlineData", "inline_data"} {
-			if inlineObj, ok := part[inlineKey].(map[string]any); ok && inlineObj != nil {
-				mt := ""
-				if s, ok := inlineObj["mimeType"].(string); ok {
-					mt = strings.ToLower(strings.TrimSpace(s))
-				} else if s, ok := inlineObj["mime_type"].(string); ok {
-					mt = strings.ToLower(strings.TrimSpace(s))
-				}
-				switch {
-				case strings.HasPrefix(mt, "image/"):
-					m.ImageCount++
-				case mt != "":
-					m.DocumentPages++
-				}
+		switch node := v.(type) {
+		case []any:
+			for _, elem := range node {
+				walk(elem, depth+1)
+			}
+		case map[string]any:
+			if classifyNativeMediaPart(node, &m) {
 				return
+			}
+			for _, child := range node {
+				switch child.(type) {
+				case map[string]any, []any:
+					walk(child, depth+1)
+				}
 			}
 		}
 	}
 
 	for _, arrKey := range []string{"messages", "input", "contents"} {
-		items, ok := root[arrKey].([]any)
-		if !ok {
-			continue
+		if items, ok := root[arrKey]; ok && items != nil {
+			walk(items, 0)
 		}
-		for _, rawItem := range items {
-			obj, ok := rawItem.(map[string]any)
-			if !ok || obj == nil {
-				continue
+	}
+	return m
+}
+
+func classifyNativeMediaPart(part map[string]any, m *pricing.MediaUsage) bool {
+	if part == nil {
+		return false
+	}
+	ptype := strings.ToLower(strings.TrimSpace(nativeStringField(part["type"])))
+	if ptype == "image_url" || ptype == "input_image" || ptype == "image" || part["image_url"] != nil || part["image"] != nil {
+		m.ImageCount++
+		return true
+	}
+	if ptype == "input_audio" || ptype == "audio" || part["input_audio"] != nil || part["audio"] != nil || part["audio_base64"] != nil {
+		addNativeAudioMillis(m, estimateNativeAudioPartMillis(part))
+		return true
+	}
+	for _, inlineKey := range []string{"inlineData", "inline_data", "source"} {
+		if inlineObj, ok := part[inlineKey].(map[string]any); ok && inlineObj != nil {
+			mt := strings.ToLower(strings.TrimSpace(firstNativeStringField(inlineObj, "mimeType", "mime_type", "media_type")))
+			switch {
+			case strings.HasPrefix(mt, "image/"):
+				m.ImageCount++
+				return true
+			case strings.HasPrefix(mt, "audio/"):
+				addNativeAudioMillis(m, estimateNativeAudioPartMillis(part))
+				return true
+			case mt != "":
+				m.DocumentPages++
+				return true
 			}
-			inspectPart(obj)
-			for _, subKey := range []string{"content", "parts"} {
-				parts, ok := obj[subKey].([]any)
-				if !ok {
-					continue
-				}
-				for _, rawPart := range parts {
-					if part, ok := rawPart.(map[string]any); ok {
-						inspectPart(part)
-					}
+		}
+	}
+	if hasNativeAudioDataURIInPart(part) {
+		addNativeAudioMillis(m, estimateNativeAudioPartMillis(part))
+		return true
+	}
+	if ptype == "file" || ptype == "input_file" || ptype == "document" || part["file"] != nil || part["input_file"] != nil || part["document"] != nil || part["fileData"] != nil || part["file_data"] != nil {
+		m.DocumentPages++
+		return true
+	}
+	return false
+}
+
+func nativeStringField(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+func firstNativeStringField(obj map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if s := nativeStringField(obj[k]); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func addNativeAudioMillis(m *pricing.MediaUsage, delta int64) {
+	if delta <= 0 {
+		return
+	}
+	if m.AudioInputMillis >= maxEstimatedNativeAudioMillis-delta {
+		m.AudioInputMillis = maxEstimatedNativeAudioMillis
+		return
+	}
+	m.AudioInputMillis += delta
+}
+
+func hasNativeAudioDataURIInPart(part map[string]any) bool {
+	for _, k := range []string{"url", "file_url", "file_data", "data"} {
+		if s := strings.ToLower(strings.TrimSpace(nativeStringField(part[k]))); strings.HasPrefix(s, "data:audio/") {
+			return true
+		}
+	}
+	for _, subKey := range []string{"file", "input_file", "document", "fileData"} {
+		if sub, ok := part[subKey].(map[string]any); ok && sub != nil {
+			for _, k := range []string{"url", "file_url", "file_data", "data"} {
+				if s := strings.ToLower(strings.TrimSpace(nativeStringField(sub[k]))); strings.HasPrefix(s, "data:audio/") {
+					return true
 				}
 			}
 		}
 	}
-	return m
+	return false
+}
+
+func estimateNativeAudioPartMillis(part map[string]any) int64 {
+	var maxB64Len int64
+	var explicitMillis int64
+	inspectMap := func(obj map[string]any) {
+		if obj == nil {
+			return
+		}
+		if ms := extractNativeDurationMillis(obj); ms > explicitMillis {
+			explicitMillis = ms
+		}
+		for _, k := range []string{"data", "audio_base64", "file_data", "url", "file_url"} {
+			s, ok := obj[k].(string)
+			if !ok {
+				continue
+			}
+			bLen := nativeBase64PayloadCharLen(s)
+			if bLen > maxB64Len {
+				maxB64Len = bLen
+			}
+		}
+	}
+	inspectMap(part)
+	for _, subKey := range []string{"input_audio", "audio", "inlineData", "inline_data", "source", "file", "input_file"} {
+		if sub, ok := part[subKey].(map[string]any); ok {
+			inspectMap(sub)
+		}
+	}
+	var bytesMillis int64
+	if maxB64Len > 0 {
+		decodedBytes := (maxB64Len * 3) / 4
+		bytesMillis = (decodedBytes * 1000) / 16000
+	}
+	est := max(int64(1000), max(explicitMillis, bytesMillis))
+	if est > maxEstimatedNativeAudioMillis {
+		return maxEstimatedNativeAudioMillis
+	}
+	return est
+}
+
+func nativeBase64PayloadCharLen(s string) int64 {
+	if s == "" {
+		return 0
+	}
+	if len(s) >= 5 && strings.EqualFold(s[:5], "data:") {
+		head := strings.ToLower(s[:min(len(s), 128)])
+		if idx := strings.Index(head, ";base64,"); idx >= 0 {
+			return int64(len(s) - (idx + len(";base64,")))
+		}
+		return 0
+	}
+	return int64(len(s))
+}
+
+func extractNativeDurationMillis(obj map[string]any) int64 {
+	if v, ok := obj["duration_ms"]; ok {
+		if n := anyToNonNegCeilNativeMillis(v, 1); n > 0 {
+			return n
+		}
+	}
+	for _, k := range []string{"duration_seconds", "duration"} {
+		if v, ok := obj[k]; ok {
+			if n := anyToNonNegCeilNativeMillis(v, 1000); n > 0 {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+func anyToNonNegCeilNativeMillis(v any, scale int64) int64 {
+	var f float64
+	switch t := v.(type) {
+	case float64:
+		f = t
+	case int64:
+		if t <= 0 {
+			return 0
+		}
+		if t > maxEstimatedNativeAudioMillis/scale {
+			return maxEstimatedNativeAudioMillis
+		}
+		return t * scale
+	case int:
+		if t <= 0 {
+			return 0
+		}
+		iv := int64(t)
+		if iv > maxEstimatedNativeAudioMillis/scale {
+			return maxEstimatedNativeAudioMillis
+		}
+		return iv * scale
+	case json.Number:
+		parsed, err := strconv.ParseFloat(t.String(), 64)
+		if err != nil {
+			return 0
+		}
+		f = parsed
+	default:
+		return 0
+	}
+	if f <= 0 || math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0
+	}
+	scaled := math.Ceil(f * float64(scale))
+	if scaled >= float64(maxEstimatedNativeAudioMillis) {
+		return maxEstimatedNativeAudioMillis
+	}
+	return int64(scaled)
 }
 
 func nativeRateCardForTarget(target *snapshot.ResolvedTarget) pricing.RateCard {
@@ -437,7 +613,24 @@ func (b *nativeBudgetSession) settle(
 	b.mu.Unlock()
 
 	usage.Accuracy = nativePortAccuracy(res.Accuracy)
+	if res.Accuracy == pricing.AccuracyEstimated {
+		usage.InputTokens = res.InputTokens
+		usage.OutputTokens = res.OutputTokens
+		usage.CacheReadTokens = res.CacheReadTokens
+		usage.CacheWriteTokens = res.CacheWriteTokens
+		usage.ReasoningTokens = res.ReasoningTokens
+	}
 	return usage, nil
+}
+
+func mulCapNativeInt64(a, b, limit int64) int64 {
+	if a <= 0 || b <= 0 {
+		return 0
+	}
+	if a >= limit || b >= limit || a > limit/b {
+		return limit
+	}
+	return a * b
 }
 
 func secondsToMillis(sec float64) int64 {

@@ -135,4 +135,8 @@ func TestHourlyRollupSegregationAndIdempotency(t *testing.T) {
 	if r.RequestCount != 3 || r.ExactMicroUSD != 200 || r.EstimatedMicroUSD != 50 || r.UnmeteredRequestCount != 1 || r.InputTokensSum != 150 || r.OutputTokensSum != 70 {
 		t.Fatalf("unexpected segregated hourly rollup totals: %+v", r)
 	}
+
+	if _, err := agg.QueryOrgRollups(ctx, "org_rollup_01", -1, hourStart+rollup.HourMs); err == nil {
+		t.Fatalf("expected error for negative fromMs in QueryOrgRollups")
+	}
 }

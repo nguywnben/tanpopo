@@ -237,7 +237,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeCanonicalError(w, reqID, http.StatusForbidden, "native_path_not_allowed", "permission_error", "Native passthrough path rejected or missing target model.", false)
 		return
 	}
-	estTokens, estBaseIn, estMaxOut := estimateNativeTokensFromJSON(rawBody)
+	estTokens, estBaseIn, estMaxOut, completionCount := estimateNativeTokensAndCountFromJSON(rawBody)
 	reqRegion, regionOK := resolveNativeRequestedDataRegion(r)
 	if !regionOK {
 		writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Conflicting X-Tanpopo-Data-Region header values.", false)
@@ -463,7 +463,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	outboundBody := append([]byte(nil), rawBody...)
 	defer clear(outboundBody)
 
-	budgetSess := h.newNativeBudgetSession(match.Key, reqID, rawBody, estBaseIn, estMaxOut)
+	budgetSess := h.newNativeBudgetSession(match.Key, reqID, rawBody, estBaseIn, estMaxOut, completionCount)
 	if !budgetSess.reserveInitial(streamCtx, w, candidates) {
 		return
 	}
@@ -2695,9 +2695,15 @@ func (h *Handler) resolveNativeTargetsWithPolicy(
 }
 
 func estimateNativeTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {
+	estTotal, baseIn, maxOut, _ = estimateNativeTokensAndCountFromJSON(raw)
+	return estTotal, baseIn, maxOut
+}
+
+func estimateNativeTokensAndCountFromJSON(raw []byte) (estTotal, baseIn, maxOut, completionCount int64) {
+	completionCount = 1
 	rawLen := int64(len(raw))
 	if rawLen == 0 {
-		return 1, 1, 0
+		return 1, 1, 0, 1
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
@@ -2705,12 +2711,12 @@ func estimateNativeTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {
 	tok, err := dec.Token()
 	if err != nil {
 		b := max(int64(1), (rawLen+3)/4)
-		return b, b, 0
+		return b, b, 0, 1
 	}
 	delim, ok := tok.(json.Delim)
 	if !ok || delim != '{' {
 		b := max(int64(1), (rawLen+3)/4)
-		return b, b, 0
+		return b, b, 0, 1
 	}
 
 	var excessMediaBytes int64
@@ -2727,7 +2733,7 @@ func estimateNativeTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {
 		case "max_completion_tokens", "max_tokens", "max_output_tokens":
 			valTok, err := dec.Token()
 			if err != nil {
-				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 			}
 			if num, ok := valTok.(json.Number); ok {
 				if parsed, ok := parseNativeJSONNumberCeiling(num); ok && parsed > maxOut {
@@ -2737,13 +2743,29 @@ func estimateNativeTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {
 				ex, skipErr := skipNativeJSONCompositeCountMedia(dec, d, key, false)
 				excessMediaBytes += ex
 				if skipErr != nil {
-					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
+				}
+			}
+		case "n", "candidateCount", "candidate_count":
+			valTok, err := dec.Token()
+			if err != nil {
+				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
+			}
+			if num, ok := valTok.(json.Number); ok {
+				if parsed, ok := parseNativeJSONNumberCeiling(num); ok && parsed > completionCount {
+					completionCount = parsed
+				}
+			} else if d, ok := valTok.(json.Delim); ok {
+				ex, skipErr := skipNativeJSONCompositeCountMedia(dec, d, key, false)
+				excessMediaBytes += ex
+				if skipErr != nil {
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 				}
 			}
 		case "generationConfig", "generation_config":
 			valTok, err := dec.Token()
 			if err != nil {
-				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 			}
 			d, ok := valTok.(json.Delim)
 			if !ok {
@@ -2753,23 +2775,23 @@ func estimateNativeTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {
 				ex, skipErr := skipNativeJSONCompositeCountMedia(dec, d, key, false)
 				excessMediaBytes += ex
 				if skipErr != nil {
-					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 				}
 				continue
 			}
 			for dec.More() {
 				subKeyTok, err := dec.Token()
 				if err != nil {
-					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 				}
 				subKey, ok := subKeyTok.(string)
 				if !ok {
-					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 				}
 				if subKey == "maxOutputTokens" || subKey == "max_output_tokens" {
 					subValTok, err := dec.Token()
 					if err != nil {
-						return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+						return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 					}
 					if num, ok := subValTok.(json.Number); ok {
 						if parsed, ok := parseNativeJSONNumberCeiling(num); ok && parsed > maxOut {
@@ -2779,7 +2801,25 @@ func estimateNativeTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {
 						ex, skipErr := skipNativeJSONCompositeCountMedia(dec, sd, subKey, false)
 						excessMediaBytes += ex
 						if skipErr != nil {
-							return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+							return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
+						}
+					}
+					continue
+				}
+				if subKey == "candidateCount" || subKey == "candidate_count" {
+					subValTok, err := dec.Token()
+					if err != nil {
+						return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
+					}
+					if num, ok := subValTok.(json.Number); ok {
+						if parsed, ok := parseNativeJSONNumberCeiling(num); ok && parsed > completionCount {
+							completionCount = parsed
+						}
+					} else if sd, ok := subValTok.(json.Delim); ok {
+						ex, skipErr := skipNativeJSONCompositeCountMedia(dec, sd, subKey, false)
+						excessMediaBytes += ex
+						if skipErr != nil {
+							return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 						}
 					}
 					continue
@@ -2787,40 +2827,47 @@ func estimateNativeTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {
 				ex, skipErr := skipNativeNextJSONValueCountMedia(dec, key, subKey, false)
 				excessMediaBytes += ex
 				if skipErr != nil {
-					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 				}
 			}
 			if _, err := dec.Token(); err != nil {
-				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 			}
 		default:
 			ex, skipErr := skipNativeNextJSONValueCountMedia(dec, "", key, isNativeMultimodalRootKey(key))
 			excessMediaBytes += ex
 			if skipErr != nil {
-				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 			}
 		}
 	}
-	return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
+	return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount)
 }
 
 func isNativeMultimodalRootKey(key string) bool {
 	return key == "messages" || key == "input" || key == "contents"
 }
 
-func finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut int64) (estTotal, baseIn, outCap int64) {
+func finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount int64) (estTotal, baseIn, outCap, count int64) {
+	if completionCount < 1 {
+		completionCount = 1
+	}
 	effBytes := rawLen - excessMediaBytes
 	if effBytes < 1 {
 		effBytes = 1
 	}
 	baseIn = max(int64(1), (effBytes+3)/4)
-	if maxOut > 0 {
-		if maxOut >= (1<<62) || baseIn > (1<<62)-maxOut {
-			return 1 << 62, baseIn, maxOut
-		}
-		return baseIn + maxOut, baseIn, maxOut
+	scaledOut := maxOut
+	if scaledOut > 0 && completionCount > 1 {
+		scaledOut = mulCapNativeInt64(scaledOut, completionCount, 1<<62)
 	}
-	return baseIn, baseIn, 0
+	if scaledOut > 0 {
+		if scaledOut >= (1<<62) || baseIn > (1<<62)-scaledOut {
+			return 1 << 62, baseIn, scaledOut, completionCount
+		}
+		return baseIn + scaledOut, baseIn, scaledOut, completionCount
+	}
+	return baseIn, baseIn, 0, completionCount
 }
 
 func skipNativeNextJSONValueCountMedia(dec *json.Decoder, parentObjKey, key string, inMediaRoot bool) (int64, error) {

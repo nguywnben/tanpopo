@@ -5,11 +5,14 @@ package ledger_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -26,14 +29,79 @@ import (
 
 type spyAuditSink struct {
 	mu     sync.Mutex
+	db     *sql.DB
+	seq    int64
 	events []storageport.AuditEvent
+	err    error
 }
 
-func (s *spyAuditSink) Append(_ context.Context, ev storageport.AuditEvent) error {
+func (s *spyAuditSink) attachDB(t *testing.T, db *sql.DB) {
+	t.Helper()
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS audit_events (
+			id            VARCHAR(40) NOT NULL,
+			created_at_ms BIGINT NOT NULL,
+			org_id        VARCHAR(40),
+			chain_key     VARCHAR(40) NOT NULL,
+			seq_no        BIGINT NOT NULL CHECK (seq_no >= 1),
+			actor_kind    VARCHAR(24) NOT NULL,
+			actor_id      VARCHAR(64) NOT NULL,
+			entry_point   VARCHAR(24) NOT NULL
+			              CHECK (entry_point IN ('admin_api', 'cli', 'gitops_boot', 'system_reaper', 'data_plane_guard')),
+			event_type    VARCHAR(64) NOT NULL,
+			target_type   VARCHAR(32) NOT NULL,
+			target_id     VARCHAR(64) NOT NULL,
+			request_id    VARCHAR(40),
+			metadata_json TEXT NOT NULL,
+			prev_hash     CHAR(64) NOT NULL,
+			entry_hash    CHAR(64) NOT NULL,
+			CHECK ((org_id IS NULL AND chain_key = 'SYSTEM') OR (org_id IS NOT NULL AND chain_key = org_id)),
+			PRIMARY KEY (chain_key, seq_no, created_at_ms),
+			UNIQUE (chain_key, seq_no),
+			UNIQUE (id, created_at_ms)
+		)`); err != nil {
+		t.Fatalf("create audit_events table: %v", err)
+	}
+	s.mu.Lock()
+	s.db = db
+	s.mu.Unlock()
+}
+
+func (s *spyAuditSink) Append(ctx context.Context, ev storageport.AuditEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.db != nil {
+		s.seq++
+		chainKey := "SYSTEM"
+		var orgArg any
+		if ev.OrgID != nil && *ev.OrgID != "" {
+			chainKey = *ev.OrgID
+			orgArg = *ev.OrgID
+		}
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO audit_events (
+				id, created_at_ms, org_id, chain_key, seq_no,
+				actor_kind, actor_id, entry_point, event_type,
+				target_type, target_id, request_id, metadata_json,
+				prev_hash, entry_hash
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			ev.ID, ev.CreatedAtMs, orgArg, chainKey, s.seq,
+			ev.ActorKind, ev.ActorID, ev.EntryPoint, ev.EventType,
+			ev.TargetType, ev.TargetID, ev.RequestID, ev.MetadataJSON,
+			strings.Repeat("0", 64), strings.Repeat("a", 64),
+		); err != nil {
+			s.err = err
+			return err
+		}
+	}
 	s.events = append(s.events, ev)
 	return nil
+}
+
+func (s *spyAuditSink) LastError() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.err
 }
 
 func (s *spyAuditSink) Events() []storageport.AuditEvent {
@@ -80,6 +148,12 @@ func openLedgerFixture(t *testing.T, initialMs int64) (*sqlite.Store, *ledger.Se
 		t.Fatalf("open sqlite store: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
+	auditSink.attachDB(t, st.RawDB())
+	t.Cleanup(func() {
+		if err := auditSink.LastError(); err != nil {
+			t.Errorf("audit_events SQLite constraint failure: %v", err)
+		}
+	})
 
 	_, err = st.Tenancy().CreateOrganization(context.Background(), storageport.CreateOrgParams{
 		ID:             "org_finops_01",
@@ -721,7 +795,6 @@ func TestLedgerLifecycleValidationRenewAndTenantIsolation(t *testing.T) {
 	// ESTIMATED settlement, and invalid-input guards across Settle/DeltaReserve/MarkStreaming.
 	var fnAlerts int
 	stFn, svcFn, _, _, _ := openLedgerFixture(t, baseMs)
-	_ = stFn
 	svcDirect, err := ledger.NewService(ledger.Config{
 		DB:     stFn.RawDB(),
 		Alerts: ledger.AlertSinkFunc(func(_ context.Context, _ ledger.AlertEvent) { fnAlerts++ }),
@@ -809,7 +882,7 @@ func TestLedgerLifecycleValidationRenewAndTenantIsolation(t *testing.T) {
 func TestReserveScopeMismatchAndLateSettlementAfterReclaim(t *testing.T) {
 	ctx := context.Background()
 	const baseMs = 1_700_000_000_000
-	st, svc, clock, auditSink, _ := openLedgerFixture(t, baseMs)
+	_, svc, clock, auditSink, _ := openLedgerFixture(t, baseMs)
 
 	bdg, err := svc.UpsertLedger(ctx, ledger.UpsertLedgerParams{
 		OrgID:           "org_finops_01",
@@ -986,6 +1059,86 @@ func TestReserveScopeMismatchAndLateSettlementAfterReclaim(t *testing.T) {
 	if _, err := svc.Release(ctx, "", ""); !errors.Is(err, ledger.ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput for empty Release, got %v", err)
 	}
-	_ = st
+}
+
+func TestLedgerOverflowProtection(t *testing.T) {
+	ctx := context.Background()
+	const baseMs = 1_700_000_000_000
+	st, svc, _, _, _ := openLedgerFixture(t, baseMs)
+
+	led, err := svc.UpsertLedger(ctx, ledger.UpsertLedgerParams{
+		OrgID:           "org_finops_01",
+		ScopeType:       ledger.ScopeOrg,
+		ScopeID:         "org_finops_01",
+		PeriodKind:      ledger.PeriodTotalLifetime,
+		PeriodStartMs:   baseMs - 10_000,
+		PeriodEndMs:     baseMs + 86_400_000,
+		HardLimitMicros: math.MaxInt64,
+	})
+	if err != nil {
+		t.Fatalf("UpsertLedger MaxInt64: %v", err)
+	}
+
+	r1, err := svc.Reserve(ctx, ledger.ReserveRequest{
+		OrgID:        "org_finops_01",
+		ProjectID:    "prj_ov",
+		EnvID:        "env_ov",
+		VirtualKeyID: "vky_ov",
+		RequestID:    "req_ov_1",
+		HoldMicros:   math.MaxInt64 - 10,
+	})
+	if err != nil {
+		t.Fatalf("Reserve near-MaxInt64 failed: %v", err)
+	}
+
+	// Second Reserve of 20 would overflow reserved_hold_micros (MaxInt64-10 + 20 > MaxInt64) -> MUST return ErrBudgetExceeded or ErrOverflow cleanly (never wrap negative).
+	if _, err := svc.Reserve(ctx, ledger.ReserveRequest{
+		OrgID:        "org_finops_01",
+		ProjectID:    "prj_ov",
+		EnvID:        "env_ov",
+		VirtualKeyID: "vky_ov",
+		RequestID:    "req_ov_2",
+		HoldMicros:   20,
+	}); !errors.Is(err, ledger.ErrOverflow) && !errors.Is(err, ledger.ErrBudgetExceeded) {
+		t.Fatalf("expected ErrOverflow or ErrBudgetExceeded on near-MaxInt64 Reserve, got %v", err)
+	}
+
+	// DeltaReserve increasing hold to MaxInt64 succeeds; release restores 0 hold.
+	if _, err := svc.DeltaReserve(ctx, ledger.DeltaReserveRequest{
+		OrgID:         "org_finops_01",
+		ReservationID: r1.ID,
+		NewHoldMicros: math.MaxInt64,
+	}); err != nil {
+		t.Fatalf("DeltaReserve to exact MaxInt64 failed: %v", err)
+	}
+	if _, err := svc.Release(ctx, "org_finops_01", r1.ID); err != nil {
+		t.Fatalf("Release r1: %v", err)
+	}
+
+	// Pre-seed accumulated settled_exact_micros near MaxInt64, then verify Settle overflowing settled_exact_micros returns ErrOverflow.
+	if _, err := st.RawDB().ExecContext(ctx, `
+		UPDATE budget_ledgers SET settled_exact_micros = ? WHERE id = ?
+	`, int64(math.MaxInt64-50), led.ID); err != nil {
+		t.Fatalf("seed near-MaxInt64 settled_exact_micros: %v", err)
+	}
+	if _, err := svc.Settle(ctx, ledger.SettleRequest{
+		OrgID:        "org_finops_01",
+		ProjectID:    "prj_ov",
+		EnvID:        "env_ov",
+		VirtualKeyID: "vky_ov",
+		RequestID:    "req_ov_settle_overflow",
+		Plane:        ledger.PlaneProvider,
+		Rate: pricing.RateCard{
+			InputPer1MNanoUSD: 1_000_000_000, // 1 micro-USD/tok
+			BillingMode:       pricing.BillingModeCommercialAPI,
+		},
+		Usage: pricing.UsageInput{
+			InputTokens:          100, // 100 micro-USD + (MaxInt64-50) > MaxInt64
+			UpstreamUsagePresent: true,
+			UpstreamAccuracy:     pricing.AccuracyExact,
+		},
+	}); !errors.Is(err, ledger.ErrOverflow) {
+		t.Fatalf("expected ErrOverflow when cumulative settled spend exceeds MaxInt64, got %v", err)
+	}
 }
 

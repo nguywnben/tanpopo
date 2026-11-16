@@ -23,12 +23,13 @@ import (
 )
 
 type preAdmissionDecision struct {
-	snap      *snapshot.ConfigSnapshot
-	effPolicy policyengine.EffectivePolicy
-	estTokens int64
-	estBaseIn int64
-	estMaxOut int64
-	reqRegion string
+	snap            *snapshot.ConfigSnapshot
+	effPolicy       policyengine.EffectivePolicy
+	estTokens       int64
+	estBaseIn       int64
+	estMaxOut       int64
+	completionCount int64
+	reqRegion       string
 }
 
 type admissionLease struct {
@@ -113,13 +114,15 @@ func (s *Server) evaluatePreAdmissionPolicy(
 		return nil, false
 	}
 
+	_, _, _, completionCount := estimateIngressTokensAndCountFromJSON(rawBody)
 	return &preAdmissionDecision{
-		snap:      snap,
-		effPolicy: eff,
-		estTokens: estTokens,
-		estBaseIn: estBaseIn,
-		estMaxOut: estMaxOut,
-		reqRegion: reqRegion,
+		snap:            snap,
+		effPolicy:       eff,
+		estTokens:       estTokens,
+		estBaseIn:       estBaseIn,
+		estMaxOut:       estMaxOut,
+		completionCount: completionCount,
+		reqRegion:       reqRegion,
 	}, true
 }
 
@@ -329,6 +332,12 @@ func (s *Server) resolveTargetsWithPolicy(
 }
 
 func estimateIngressTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {
+	estTotal, baseIn, maxOut, _ = estimateIngressTokensAndCountFromJSON(raw)
+	return estTotal, baseIn, maxOut
+}
+
+func estimateIngressTokensAndCountFromJSON(raw []byte) (estTotal, baseIn, maxOut, completionCount int64) {
+	completionCount = 1
 	rawLen := int64(len(raw))
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
@@ -336,12 +345,12 @@ func estimateIngressTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) 
 	tok, err := dec.Token()
 	if err != nil {
 		b := max(int64(1), (rawLen+3)/4)
-		return b, b, 0
+		return b, b, 0, 1
 	}
 	delim, ok := tok.(json.Delim)
 	if !ok || delim != '{' {
 		b := max(int64(1), (rawLen+3)/4)
-		return b, b, 0
+		return b, b, 0, 1
 	}
 
 	var excessMediaBytes int64
@@ -354,7 +363,8 @@ func estimateIngressTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) 
 		if !ok {
 			break
 		}
-		if key == "max_completion_tokens" || key == "max_tokens" || key == "max_output_tokens" {
+		switch key {
+		case "max_completion_tokens", "max_tokens", "max_output_tokens":
 			valTok, err := dec.Token()
 			if err != nil {
 				break
@@ -366,14 +376,26 @@ func estimateIngressTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) 
 			} else if d, ok := valTok.(json.Delim); ok {
 				excessMediaBytes += skipJSONCompositeCountMedia(dec, d, key, false)
 			}
-			continue
-		}
-		valTok, err := dec.Token()
-		if err != nil {
-			break
-		}
-		if v, ok := valTok.(json.Delim); ok {
-			excessMediaBytes += skipJSONCompositeCountMedia(dec, v, key, isHTTPMultimodalRootKey(key))
+		case "n", "candidateCount", "candidate_count":
+			valTok, err := dec.Token()
+			if err != nil {
+				break
+			}
+			if num, ok := valTok.(json.Number); ok {
+				if parsed, ok := parsePositiveJSONNumberCeiling(num); ok && parsed > completionCount {
+					completionCount = parsed
+				}
+			} else if d, ok := valTok.(json.Delim); ok {
+				excessMediaBytes += skipJSONCompositeCountMedia(dec, d, key, false)
+			}
+		default:
+			valTok, err := dec.Token()
+			if err != nil {
+				break
+			}
+			if v, ok := valTok.(json.Delim); ok {
+				excessMediaBytes += skipJSONCompositeCountMedia(dec, v, key, isHTTPMultimodalRootKey(key))
+			}
 		}
 	}
 
@@ -383,12 +405,28 @@ func estimateIngressTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) 
 	}
 	baseIn = max(int64(1), (effBytes+3)/4)
 	if maxOut > 0 {
-		if maxOut >= (1<<62) || baseIn > (1<<62)-maxOut {
-			return 1 << 62, baseIn, maxOut
+		if completionCount > 1 {
+			maxOut = mulCapInt64(maxOut, completionCount, 1<<62)
 		}
-		return baseIn + maxOut, baseIn, maxOut
+		if maxOut >= (1<<62) || baseIn > (1<<62)-maxOut {
+			return 1 << 62, baseIn, maxOut, completionCount
+		}
+		return baseIn + maxOut, baseIn, maxOut, completionCount
 	}
-	return baseIn, baseIn, 0
+	return baseIn, baseIn, 0, completionCount
+}
+
+func mulCapInt64(a, b, capVal int64) int64 {
+	if a <= 0 || b <= 0 {
+		return 0
+	}
+	if a >= capVal || b >= capVal {
+		return capVal
+	}
+	if a > capVal/b {
+		return capVal
+	}
+	return a * b
 }
 
 func isHTTPMultimodalRootKey(key string) bool {
