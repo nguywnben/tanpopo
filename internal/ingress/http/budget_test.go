@@ -412,6 +412,7 @@ adapter:
 			"tool_calling": "VERIFIED",
 			"embeddings":   "VERIFIED",
 			"audio_input":  "VERIFIED",
+			"vision":       "VERIFIED",
 		},
 	})
 	if err != nil {
@@ -1248,5 +1249,76 @@ func TestTP0021_TPMReconciliationOrderingAndFMEA04Fallback(t *testing.T) {
 			t.Fatalf("expected 429 rate_limit_exceeded after FMEA-04 fallback TPM reconciliation, got %d body=%s", resp2.StatusCode, string(body2))
 		}
 	})
+}
+
+func TestTP0021_MultimodalSyncAndAbortedStreamSettleMediaMicroUSD(t *testing.T) {
+	// image_per_unit = 1,500 micro-USD/image (1.5e6 nano-USD/image)
+	// audio_input_per_sec = 2,000 micro-USD/s (2e6 nano-USD/s)
+	// tokens = 1 micro-USD/tok
+	pricingJSON := `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000,"image_per_unit_nano_usd":1500000,"audio_input_per_sec_nano_usd":2000000}`
+	bh := setupBudgetIngressHarness(t, pricingJSON, 50_000, 100)
+
+	// Upstream returns token usage ONLY (usage.MediaUsage == nil in declarative adapters).
+	bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"mm_sync","object":"chat.completion","model":"acme-gpt-upstream","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`))
+	})
+
+	// 1. HTTP sync /v1/chat/completions with 1 image (1,500) + 15 tokens (15) = 1,515 micro-USD.
+	httpImgBody := `{"model":"acme/chat-1","max_tokens":50,"messages":[{"role":"user","content":[{"type":"text","text":"look"},{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}]}]}`
+	resp1, body1 := bh.h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(httpImgBody), nil, nil)
+	if resp1.StatusCode != http.StatusOK {
+		t.Fatalf("http multimodal sync failed: status=%d body=%s", resp1.StatusCode, string(body1))
+	}
+	led1, err := bh.ledger.GetLedger(bh.h.ctx, bh.h.org.ID, "led_proj_budget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if led1.SettledExactMicros != 1515 || led1.ReservedHoldMicros != 0 {
+		t.Fatalf("expected HTTP multimodal sync to settle 1515 micro-USD (1500 image + 15 tokens), got exact=%d reserved=%d", led1.SettledExactMicros, led1.ReservedHoldMicros)
+	}
+
+	// 2. Native sync /native/openai/v1/chat/completions with 2s audio (4,000) + 15 tokens (15) = 4,015 micro-USD.
+	natAudioBody := `{"model":"acme/chat-1","max_tokens":50,"contents":[{"role":"user","parts":[{"inlineData":{"mimeType":"audio/ogg","data":"T2dnUw==","duration_ms":2000}}]}]}`
+	resp2, body2 := bh.h.doChatReq(t, http.MethodPost, "/native/openai/v1/chat/completions", []byte(natAudioBody), nil, nil)
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("native multimodal sync failed: status=%d body=%s", resp2.StatusCode, string(body2))
+	}
+	led2, err := bh.ledger.GetLedger(bh.h.ctx, bh.h.org.ID, "led_proj_budget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedExactAfter2 := int64(1515 + 4015)
+	if led2.SettledExactMicros != expectedExactAfter2 || led2.ReservedHoldMicros != 0 {
+		t.Fatalf("expected cumulative settled_exact=%d after native audio sync, got exact=%d reserved=%d", expectedExactAfter2, led2.SettledExactMicros, led2.ReservedHoldMicros)
+	}
+
+	// 3. Aborted SSE stream on /v1/chat/completions with 1 image (1,500 micro-USD) and NO usage chunk -> must settle ESTIMATED >= 1,500!
+	bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: {\"id\":\"mm_abort\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"}}]}\n\n"))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		if hj, ok := w.(http.Hijacker); ok {
+			if conn, _, err := hj.Hijack(); err == nil {
+				_ = conn.Close()
+			}
+		}
+	})
+	httpStreamImgBody := `{"model":"acme/chat-1","stream":true,"max_tokens":50,"messages":[{"role":"user","content":[{"type":"text","text":"stream"},{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}]}]}`
+	resp3, body3 := bh.h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(httpStreamImgBody), nil, nil)
+	if resp3.StatusCode != http.StatusOK || !strings.Contains(string(body3), "mid_stream_abort") {
+		t.Fatalf("expected 200 SSE mid_stream_abort, got status=%d body=%s", resp3.StatusCode, string(body3))
+	}
+	led3, err := bh.ledger.GetLedger(bh.h.ctx, bh.h.org.ID, "led_proj_budget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if led3.SettledEstimatedMicros < 1500 || led3.ReservedHoldMicros != 0 {
+		t.Fatalf("expected aborted multimodal SSE to settle >= 1500 image micro-USD as ESTIMATED, got estimated=%d reserved=%d", led3.SettledEstimatedMicros, led3.ReservedHoldMicros)
+	}
 }
 

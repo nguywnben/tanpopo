@@ -434,7 +434,7 @@ func (s *Service) Reserve(ctx context.Context, req ReserveRequest) (*Reservation
 	defer s.txMu.Unlock()
 
 	now := s.nowMs()
-	expiresAt := now + ttl
+	expiresAt := addInt64Saturating(now, ttl)
 	var out *Reservation
 
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
@@ -553,7 +553,7 @@ func (s *Service) DeltaReserve(ctx context.Context, req DeltaReserveRequest) (*R
 	defer s.txMu.Unlock()
 
 	now := s.nowMs()
-	expiresAt := now + ttl
+	expiresAt := addInt64Saturating(now, ttl)
 	var out *Reservation
 
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
@@ -655,7 +655,7 @@ func (s *Service) MarkStreaming(ctx context.Context, orgID, reservationID string
 	defer s.txMu.Unlock()
 
 	now := s.nowMs()
-	expiresAt := now + s.leaseTTLMs
+	expiresAt := addInt64Saturating(now, s.leaseTTLMs)
 	return s.withTx(ctx, func(tx *sql.Tx) error {
 		var curState string
 		err := tx.QueryRowContext(ctx, `
@@ -696,7 +696,7 @@ func (s *Service) RenewLease(ctx context.Context, orgID, reservationID string) e
 	defer s.txMu.Unlock()
 
 	now := s.nowMs()
-	expiresAt := now + s.leaseTTLMs
+	expiresAt := addInt64Saturating(now, s.leaseTTLMs)
 	return s.withTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
 			UPDATE budget_reservations
@@ -851,6 +851,13 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 				out = existing
 				return nil
 			}
+			if existingByReq, reqErr := findSettlementByRequestIDTx(ctx, tx, req.OrgID, req.RequestID); reqErr == nil {
+				existingByReq.AlreadySettled = true
+				out = existingByReq
+				return nil
+			} else if !errors.Is(reqErr, ErrNotFound) {
+				return reqErr
+			}
 			if curState == StateExpiredReclaimed {
 				existing, eErr := findSettlementByReservationTx(ctx, tx, req.OrgID, req.ReservationID)
 				if eErr == nil {
@@ -885,13 +892,17 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 				}
 				alertsToEmit = append(alertsToEmit, alerts...)
 
-				if _, uErr := tx.ExecContext(ctx, `
+				updRes, uErr := tx.ExecContext(ctx, `
 					UPDATE budget_reservations
 					SET state = ?, updated_at_ms = ?
 					WHERE org_id = ? AND id = ? AND state IN (?, ?)`,
 					targetResState, now, req.OrgID, req.ReservationID, StateReservedHold, StateStreamingAccruing,
-				); uErr != nil {
+				)
+				if uErr != nil {
 					return uErr
+				}
+				if n, _ := updRes.RowsAffected(); n != 1 {
+					return ErrInvalidStateTransition
 				}
 			}
 		} else {
@@ -1477,6 +1488,16 @@ func addInt64Checked(a, b int64) (int64, bool) {
 		return 0, false
 	}
 	return a + b, true
+}
+
+func addInt64Saturating(a, b int64) int64 {
+	if v, ok := addInt64Checked(a, b); ok {
+		return v
+	}
+	if b > 0 {
+		return math.MaxInt64
+	}
+	return math.MinInt64
 }
 
 func safeAvailableBalance(l BudgetLedger) int64 {

@@ -530,7 +530,7 @@ func (b *requestBudgetSession) settleSync(
 	if b == nil {
 		return usage, nil
 	}
-	inUsage := convertPortUsageToPricing(usage, b.inputTextBytes, int64(len(finalBody)), false)
+	inUsage := convertPortUsageToPricing(usage, b.media, b.inputTextBytes, int64(len(finalBody)), false)
 	return b.settleInternal(ctx, target, requestedModel, inUsage, usage)
 }
 
@@ -545,7 +545,7 @@ func (b *requestBudgetSession) settleStream(
 		return pumpRes.Usage, nil
 	}
 	forceEstimated := pumpErr != nil || pumpRes.Usage == nil
-	inUsage := convertPortUsageToPricing(pumpRes.Usage, b.inputTextBytes, pumpRes.EmittedBytes, forceEstimated)
+	inUsage := convertPortUsageToPricing(pumpRes.Usage, b.media, b.inputTextBytes, pumpRes.EmittedBytes, forceEstimated)
 	return b.settleInternal(ctx, target, requestedModel, inUsage, pumpRes.Usage)
 }
 
@@ -628,10 +628,11 @@ func (b *requestBudgetSession) settleInternal(
 	return &cp, nil
 }
 
-func convertPortUsageToPricing(u *port.NormalizedUsage, fallbackInBytes, fallbackOutBytes int64, forceEstimated bool) pricing.UsageInput {
+func convertPortUsageToPricing(u *port.NormalizedUsage, reqMedia pricing.MediaUsage, fallbackInBytes, fallbackOutBytes int64, forceEstimated bool) pricing.UsageInput {
 	in := pricing.UsageInput{
 		FallbackTextBytes:   max(int64(0), fallbackInBytes),
 		FallbackOutputBytes: max(int64(0), fallbackOutBytes),
+		Media:               reqMedia,
 	}
 	if u == nil {
 		in.UpstreamUsagePresent = false
@@ -643,7 +644,7 @@ func convertPortUsageToPricing(u *port.NormalizedUsage, fallbackInBytes, fallbac
 	in.CacheWriteTokens = max(int64(0), u.CacheWriteTokens)
 	in.ReasoningTokens = max(int64(0), u.ReasoningTokens)
 	if u.MediaUsage != nil {
-		in.Media = pricing.MediaUsage{
+		m := pricing.MediaUsage{
 			ImageCount:        max(int64(0), int64(u.MediaUsage.ImageCount)),
 			ImagePixels:       max(int64(0), u.MediaUsage.ImagePixels),
 			AudioInputMillis:  secondsFloatToMillis(u.MediaUsage.AudioInputSeconds),
@@ -651,6 +652,19 @@ func convertPortUsageToPricing(u *port.NormalizedUsage, fallbackInBytes, fallbac
 			DocumentPages:     max(int64(0), int64(u.MediaUsage.DocumentPages)),
 			RerankSearchUnits: max(int64(0), int64(u.MediaUsage.RerankSearchUnits)),
 		}
+		if m.ImageCount == 0 {
+			m.ImageCount = reqMedia.ImageCount
+		}
+		if m.AudioInputMillis == 0 {
+			m.AudioInputMillis = reqMedia.AudioInputMillis
+		}
+		if m.DocumentPages == 0 {
+			m.DocumentPages = reqMedia.DocumentPages
+		}
+		if m.RerankSearchUnits == 0 {
+			m.RerankSearchUnits = reqMedia.RerankSearchUnits
+		}
+		in.Media = m
 	}
 
 	if forceEstimated {

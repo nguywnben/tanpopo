@@ -90,7 +90,7 @@ func RateCardFromSnapshot(p snapshot.PricingNanoUSD, billingMode string) RateCar
 		AudioOutputPerSecNanoUSD: p.AudioOutputPerSecNanoUSD,
 		DocumentPageNanoUSD:      p.DocumentPageNanoUSD,
 		RerankUnitNanoUSD:        p.RerankUnitNanoUSD,
-		SelfHostedZeroRate:       p.SelfHostedZeroRate,
+		SelfHostedZeroRate:       mode == BillingModeSelfHostedInfra && p.SelfHostedZeroRate,
 		BillingMode:              mode,
 	}
 }
@@ -111,9 +111,12 @@ func (r RateCard) HasNumericRates() bool {
 }
 
 // HasConfiguredRates reports whether a rate card either sets positive pricing rates
-// or explicitly opts into zero-rate internal chargeback via SelfHostedZeroRate.
+// or explicitly opts into zero-rate internal chargeback via SelfHostedZeroRate on SELF_HOSTED_INFRA.
 func (r RateCard) HasConfiguredRates() bool {
-	return r.HasNumericRates() || r.SelfHostedZeroRate
+	if r.HasNumericRates() {
+		return true
+	}
+	return r.SelfHostedZeroRate && strings.EqualFold(strings.TrimSpace(r.BillingMode), BillingModeSelfHostedInfra)
 }
 
 // Validate checks that no pricing rate field is negative.

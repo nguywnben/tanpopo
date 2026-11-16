@@ -552,13 +552,14 @@ func (b *nativeBudgetSession) settle(
 		CacheReadTokens:      max(int64(0), usage.CacheReadTokens),
 		CacheWriteTokens:     max(int64(0), usage.CacheWriteTokens),
 		ReasoningTokens:      max(int64(0), usage.ReasoningTokens),
+		Media:                b.media,
 		FallbackTextBytes:    max(int64(0), b.inputTextBytes),
 		FallbackOutputBytes:  max(int64(0), fallbackOutBytes),
 		UpstreamUsagePresent: true,
 		UpstreamAccuracy:     nativeLedgerAccuracy(usage.Accuracy),
 	}
 	if usage.MediaUsage != nil {
-		inUsage.Media = pricing.MediaUsage{
+		m := pricing.MediaUsage{
 			ImageCount:        max(int64(0), int64(usage.MediaUsage.ImageCount)),
 			ImagePixels:       max(int64(0), usage.MediaUsage.ImagePixels),
 			AudioInputMillis:  secondsToMillis(usage.MediaUsage.AudioInputSeconds),
@@ -566,6 +567,19 @@ func (b *nativeBudgetSession) settle(
 			DocumentPages:     max(int64(0), int64(usage.MediaUsage.DocumentPages)),
 			RerankSearchUnits: max(int64(0), int64(usage.MediaUsage.RerankSearchUnits)),
 		}
+		if m.ImageCount == 0 {
+			m.ImageCount = b.media.ImageCount
+		}
+		if m.AudioInputMillis == 0 {
+			m.AudioInputMillis = b.media.AudioInputMillis
+		}
+		if m.DocumentPages == 0 {
+			m.DocumentPages = b.media.DocumentPages
+		}
+		if m.RerankSearchUnits == 0 {
+			m.RerankSearchUnits = b.media.RerankSearchUnits
+		}
+		inUsage.Media = m
 	}
 	if forceEstimated {
 		inUsage.UpstreamAccuracy = pricing.AccuracyEstimated

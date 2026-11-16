@@ -233,6 +233,23 @@ func TestFMEA04AccuracyBadgesAndUnmetered(t *testing.T) {
 	if zeroRated.TotalMicroUSD != 0 || zeroRated.Accuracy != pricing.AccuracyExact || zeroRated.UnmeteredFlagged {
 		t.Fatalf("expected explicit zero-rate self-hosted EXACT without unmetered flag, got %+v", zeroRated)
 	}
+
+	// Case 5: SelfHostedZeroRate=true on COMMERCIAL_API must NOT suppress UNMETERED_FLAGGED.
+	commercialZeroFlag, err := pricing.Calculate(pricing.RateCard{
+		BillingMode:        pricing.BillingModeCommercialAPI,
+		SelfHostedZeroRate: true,
+	}, pricing.UsageInput{
+		InputTokens:          500,
+		OutputTokens:         200,
+		UpstreamUsagePresent: true,
+		UpstreamAccuracy:     pricing.AccuracyExact,
+	})
+	if err != nil {
+		t.Fatalf("Calculate commercialZeroFlag: %v", err)
+	}
+	if commercialZeroFlag.TotalMicroUSD != 0 || commercialZeroFlag.Accuracy != pricing.AccuracyUnmeteredFlagged || !commercialZeroFlag.UnmeteredFlagged {
+		t.Fatalf("expected SelfHostedZeroRate on COMMERCIAL_API to settle UNMETERED_FLAGGED, got %+v", commercialZeroFlag)
+	}
 }
 
 func TestParseMediaUsageJSONWithoutFloats(t *testing.T) {
