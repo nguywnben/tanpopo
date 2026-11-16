@@ -1,0 +1,1344 @@
+// Copyright 2026 The Tanpopo Authors.
+// Licensed under the Apache License, Version 2.0.
+
+package http
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/nguywnben/tanpopo/internal/extension/installer"
+	extport "github.com/nguywnben/tanpopo/internal/extension/port"
+	"github.com/nguywnben/tanpopo/internal/iam/rbac"
+	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/provider/catalog"
+	"github.com/nguywnben/tanpopo/internal/security/broker"
+	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
+)
+
+type providerAdapterSummaryDTO struct {
+	ID                      string   `json:"id"`
+	Slug                    string   `json:"slug"`
+	Name                    string   `json:"name"`
+	PackageID               string   `json:"package_id"`
+	Version                 string   `json:"version"`
+	ExecutionTier           string   `json:"execution_tier"`
+	OriginTrustTier         string   `json:"origin_trust_tier"`
+	EnterpriseSigned        bool     `json:"enterprise_signed"`
+	InstallationState       string   `json:"installation_state"`
+	WireProtocol            string   `json:"wire_protocol,omitempty"`
+	NativePassthroughPrefix *string  `json:"native_passthrough_prefix,omitempty"`
+	SupportedAuthMethods    []string `json:"supported_auth_methods"`
+	SecretSlots             []string `json:"secret_slots,omitempty"`
+	AllowedHosts            []string `json:"allowed_hosts"`
+}
+
+type providerConnectionDTO struct {
+	ID                     string            `json:"id"`
+	ProjectID              *string           `json:"project_id"`
+	Name                   string            `json:"name"`
+	AdapterID              string            `json:"adapter_id"`
+	BillingMode            string            `json:"billing_mode"`
+	EndpointURL            string            `json:"endpoint_url"`
+	DataRegion             string            `json:"data_region"`
+	AllowPrivateIP         bool              `json:"allow_private_ip"`
+	State                  string            `json:"state"`
+	SecretSlotFingerprints map[string]string `json:"secret_slot_fingerprints"`
+	Version                int64             `json:"version"`
+	CreatedAt              string            `json:"created_at"`
+}
+
+type createConnectionRequest struct {
+	Name           string            `json:"name"`
+	ProjectID      *string           `json:"project_id"`
+	AdapterID      string            `json:"adapter_id"`
+	BillingMode    string            `json:"billing_mode"`
+	EndpointURL    string            `json:"endpoint_url"`
+	DataRegion     string            `json:"data_region"`
+	AllowPrivateIP bool              `json:"allow_private_ip"`
+	AllowedCIDRs   []string          `json:"allowed_cidrs"`
+	Config         map[string]any    `json:"config"`
+	SecretBindings map[string]string `json:"secret_bindings"`
+}
+
+type updateConnectionRequest struct {
+	Name           *string           `json:"name"`
+	EndpointURL    *string           `json:"endpoint_url"`
+	AllowPrivateIP *bool             `json:"allow_private_ip"`
+	AllowedCIDRs   []string          `json:"allowed_cidrs"`
+	State          *string           `json:"state"`
+	SecretBindings map[string]string `json:"secret_bindings"`
+}
+
+type connectionTestResponseDTO struct {
+	Valid            bool     `json:"valid"`
+	LatencyMs        int64    `json:"latency_ms"`
+	DetectedModelIDs []string `json:"detected_model_ids"`
+	FailureCode      *string  `json:"failure_code,omitempty"`
+	SanitizedMessage *string  `json:"sanitized_message,omitempty"`
+}
+
+var defaultPrivateCIDRs = []string{
+	"127.0.0.0/8",
+	"10.0.0.0/8",
+	"172.16.0.0/12",
+	"192.168.0.0/16",
+	"::1/128",
+}
+
+func mapExecutionTierOpenAPI(dbTier string) string {
+	switch strings.ToUpper(strings.TrimSpace(dbTier)) {
+	case "DECLARATIVE_T1", "DECLARATIVE":
+		return "declarative"
+	case "WASM_SANDBOX_T2", "SANDBOXED_WASM":
+		return "sandboxed_wasm"
+	case "ISOLATED_SIDECAR_T3", "ISOLATED_SIDECAR":
+		return "isolated_sidecar"
+	default:
+		return "declarative"
+	}
+}
+
+func mapConnectionStateOpenAPI(dbState string) string {
+	switch dbState {
+	case catalog.ConnStateDraft, catalog.ConnStateValidating:
+		return "CREATED_UNVERIFIED"
+	case catalog.ConnStateActive:
+		return "ACTIVE"
+	case catalog.ConnStateDegraded:
+		return "DEGRADED"
+	case catalog.ConnStateAuthExpired:
+		return "AUTH_EXPIRED_REAUTH_REQUIRED"
+	case catalog.ConnStateSuspendedAdmin, catalog.ConnStateRevoked, catalog.ConnStateArchived:
+		return "DISABLED"
+	default:
+		return "CREATED_UNVERIFIED"
+	}
+}
+
+func writeConnectionSSRFError(w http.ResponseWriter, r *http.Request, ssrfErr error) {
+	code := "ssrf_blocked_private_ip"
+	msg := "endpoint_url violates egress SSRF policy"
+	if errors.Is(ssrfErr, egress.ErrPortDenied) {
+		code = "egress_port_denied"
+		msg = "endpoint_url targets a blocked local control-plane port"
+	} else if errors.Is(ssrfErr, egress.ErrInvalidPolicy) {
+		code = "invalid_endpoint_url"
+		msg = "valid http or https endpoint_url is required"
+	} else if errors.Is(ssrfErr, egress.ErrMetadataBlocked) {
+		code = "ssrf_blocked_private_ip"
+		msg = "metadata and link-local addresses are unconditionally blocked"
+	}
+	writeErrorEnvelope(w, r, http.StatusBadRequest, code, "invalid_request_error", msg, false, nil)
+}
+
+func (s *Server) handleListProviderAdapters(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionConnectionRead, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
+		return
+	}
+
+	limit, cur, ok := parsePageParams(w, r, s.cursorSecret, "provider_adapters", orgID, sha256HexString("adapters"))
+	if !ok {
+		return
+	}
+
+	var q strings.Builder
+	var args []any
+	q.WriteString(`
+		SELECT pa.id, pa.adapter_slug, pa.native_prefix, pa.supported_dialects_json, pa.allowed_hosts_json, pa.created_at_ms,
+		       ep.id, ep.canonical_name, ep.origin_trust_tier,
+		       ei.state, ei.approved_permissions_json,
+		       COALESCE(ev.semver, '1.0.0'), COALESCE(ev.execution_tier, 'DECLARATIVE_T1'),
+		       COALESCE(ev.enterprise_signed, 0), COALESCE(ev.manifest_json, '{}')
+		FROM provider_adapters pa
+		JOIN extension_installations ei ON ei.id = pa.installation_id
+		JOIN extension_packages ep ON ep.id = ei.package_id
+		LEFT JOIN extension_versions ev ON ev.id = COALESCE(ei.active_version_id, ei.candidate_version_id)
+		WHERE 1=1`)
+	if cur != nil {
+		q.WriteString(` AND (pa.created_at_ms < ? OR (pa.created_at_ms = ? AND pa.id < ?))`)
+		args = append(args, cur.CreatedMs, cur.CreatedMs, cur.LastID)
+	}
+	q.WriteString(` ORDER BY pa.created_at_ms DESC, pa.id DESC LIMIT ?`)
+	args = append(args, limit+1)
+
+	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing provider adapters", true, nil)
+		return
+	}
+	defer rows.Close()
+
+	type rowItem struct {
+		dto       providerAdapterSummaryDTO
+		createdMs int64
+	}
+	items := make([]rowItem, 0, limit+1)
+	for rows.Next() {
+		dto, createdMs, scanErr := scanProviderAdapterSummaryRow(rows)
+		if scanErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning provider adapter", true, nil)
+			return
+		}
+		items = append(items, rowItem{dto: dto, createdMs: createdMs})
+	}
+	if err := rows.Err(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating provider adapters", true, nil)
+		return
+	}
+
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+	data := make([]providerAdapterSummaryDTO, len(items))
+	for i := range items {
+		data[i] = items[i].dto
+	}
+	var nextCursor *string
+	if hasMore && len(items) > 0 {
+		last := items[len(items)-1]
+		tok, curErr := encodePaginationCursor(s.cursorSecret, "provider_adapters", orgID, sha256HexString("adapters"), last.createdMs, last.dto.ID)
+		if curErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding cursor", true, nil)
+			return
+		}
+		nextCursor = &tok
+	}
+
+	writeJSON(w, http.StatusOK, paginatedListEnvelope[providerAdapterSummaryDTO]{
+		Data:       data,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	})
+}
+
+func (s *Server) handleGetProviderAdapter(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionConnectionRead, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
+		return
+	}
+	adapterID := strings.TrimSpace(r.PathValue("adapterId"))
+	if adapterID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider adapter not found", false, nil)
+		return
+	}
+
+	row := s.db.QueryRowContext(r.Context(), `
+		SELECT pa.id, pa.adapter_slug, pa.native_prefix, pa.supported_dialects_json, pa.allowed_hosts_json, pa.created_at_ms,
+		       ep.id, ep.canonical_name, ep.origin_trust_tier,
+		       ei.state, ei.approved_permissions_json,
+		       COALESCE(ev.semver, '1.0.0'), COALESCE(ev.execution_tier, 'DECLARATIVE_T1'),
+		       COALESCE(ev.enterprise_signed, 0), COALESCE(ev.manifest_json, '{}')
+		FROM provider_adapters pa
+		JOIN extension_installations ei ON ei.id = pa.installation_id
+		JOIN extension_packages ep ON ep.id = ei.package_id
+		LEFT JOIN extension_versions ev ON ev.id = COALESCE(ei.active_version_id, ei.candidate_version_id)
+		WHERE pa.id = ?`, adapterID)
+	dto, _, err := scanProviderAdapterSummaryRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider adapter not found", false, nil)
+		return
+	}
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading provider adapter", true, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, dto)
+}
+
+func scanProviderAdapterSummaryRow(row interface{ Scan(...any) error }) (providerAdapterSummaryDTO, int64, error) {
+	var (
+		id, slug, dialectsJSON, hostsJSON, pkgID, canonicalName, trustTier, installState, permsJSON, semver, execTier, manifestJSON string
+		nativePrefix                                                                                                                 sql.NullString
+		createdMs                                                                                                                    int64
+		entSigned                                                                                                                    int
+	)
+	if err := row.Scan(
+		&id, &slug, &nativePrefix, &dialectsJSON, &hostsJSON, &createdMs,
+		&pkgID, &canonicalName, &trustTier,
+		&installState, &permsJSON,
+		&semver, &execTier, &entSigned, &manifestJSON,
+	); err != nil {
+		return providerAdapterSummaryDTO{}, 0, err
+	}
+
+	var dialects []string
+	_ = json.Unmarshal([]byte(dialectsJSON), &dialects)
+	wireProtocol := "openai_compatible"
+	if len(dialects) > 0 && strings.TrimSpace(dialects[0]) != "" {
+		wireProtocol = dialects[0]
+	}
+
+	var hosts []string
+	_ = json.Unmarshal([]byte(hostsJSON), &hosts)
+	if hosts == nil {
+		hosts = []string{}
+	}
+
+	var perms installer.PermissionSet
+	_ = json.Unmarshal([]byte(permsJSON), &perms)
+	secretSlots := perms.SecretSlots
+
+	authMethods := []string{"API_KEY"}
+	if strings.TrimSpace(manifestJSON) != "" && manifestJSON != "{}" {
+		var mf map[string]any
+		if json.Unmarshal([]byte(manifestJSON), &mf) == nil {
+			if rawAuth, ok := mf["supportedAuthMethods"].([]any); ok && len(rawAuth) > 0 {
+				authMethods = make([]string, 0, len(rawAuth))
+				for _, item := range rawAuth {
+					if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+						authMethods = append(authMethods, s)
+					}
+				}
+			}
+		}
+	}
+	if len(authMethods) == 0 {
+		authMethods = []string{"API_KEY"}
+	}
+
+	dto := providerAdapterSummaryDTO{
+		ID:                   id,
+		Slug:                 slug,
+		Name:                 canonicalName,
+		PackageID:            pkgID,
+		Version:              semver,
+		ExecutionTier:        mapExecutionTierOpenAPI(execTier),
+		OriginTrustTier:      trustTier,
+		EnterpriseSigned:     entSigned != 0,
+		InstallationState:    installState,
+		WireProtocol:         wireProtocol,
+		SupportedAuthMethods: authMethods,
+		SecretSlots:          secretSlots,
+		AllowedHosts:         hosts,
+	}
+	if nativePrefix.Valid {
+		v := nativePrefix.String
+		dto.NativePassthroughPrefix = &v
+	}
+	return dto, createdMs, nil
+}
+
+func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	projFilter := strings.TrimSpace(r.URL.Query().Get("project_id"))
+	if projFilter != "" {
+		if !s.authorize(w, r, sc, rbac.ActionConnectionRead, rbac.TargetScope{OrgID: orgID, ProjectID: projFilter}) {
+			return
+		}
+	} else {
+		if !s.authorize(w, r, sc, rbac.ActionConnectionRead, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
+			return
+		}
+	}
+
+	filterHash := sha256HexString("connections|" + projFilter)
+	limit, cur, ok := parsePageParams(w, r, s.cursorSecret, "connections", orgID, filterHash)
+	if !ok {
+		return
+	}
+
+	var q strings.Builder
+	args := []any{orgID}
+	q.WriteString(`
+		SELECT id, owner_project_id, adapter_id, credential_id, name,
+		       endpoint_base_url, allow_private_ip, data_region, billing_mode, state,
+		       version, created_at_ms
+		FROM provider_connections
+		WHERE org_id = ?`)
+	if projFilter != "" {
+		q.WriteString(` AND owner_project_id = ?`)
+		args = append(args, projFilter)
+	}
+	if cur != nil {
+		q.WriteString(` AND (created_at_ms < ? OR (created_at_ms = ? AND id < ?))`)
+		args = append(args, cur.CreatedMs, cur.CreatedMs, cur.LastID)
+	}
+	q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
+	args = append(args, limit+1)
+
+	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing provider connections", true, nil)
+		return
+	}
+	defer rows.Close()
+
+	type rowItem struct {
+		dto           providerConnectionDTO
+		primaryCredID *string
+		createdMs     int64
+	}
+	items := make([]rowItem, 0, limit+1)
+	for rows.Next() {
+		var (
+			id, adapterID, name, endpointURL, dataRegion, billingMode, state string
+			projNS, credNS                                                   sql.NullString
+			allowPriv                                                        int
+			ver, createdMs                                                   int64
+		)
+		if scanErr := rows.Scan(
+			&id, &projNS, &adapterID, &credNS, &name,
+			&endpointURL, &allowPriv, &dataRegion, &billingMode, &state,
+			&ver, &createdMs,
+		); scanErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning provider connection", true, nil)
+			return
+		}
+		var projPtr, credPtr *string
+		if projNS.Valid {
+			v := projNS.String
+			projPtr = &v
+		}
+		if credNS.Valid && credNS.String != "" {
+			v := credNS.String
+			credPtr = &v
+		}
+		items = append(items, rowItem{
+			dto: providerConnectionDTO{
+				ID:                     id,
+				ProjectID:              projPtr,
+				Name:                   name,
+				AdapterID:              adapterID,
+				BillingMode:            billingMode,
+				EndpointURL:            endpointURL,
+				DataRegion:             dataRegion,
+				AllowPrivateIP:         allowPriv != 0,
+				State:                  mapConnectionStateOpenAPI(state),
+				SecretSlotFingerprints: map[string]string{},
+				Version:                ver,
+				CreatedAt:              formatTimeRFC3339Ms(createdMs),
+			},
+			primaryCredID: credPtr,
+			createdMs:     createdMs,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating provider connections", true, nil)
+		return
+	}
+
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+
+	data := make([]providerConnectionDTO, len(items))
+	for i := range items {
+		fps, ferr := s.loadConnectionSlotFingerprints(r.Context(), orgID, items[i].dto.ID, items[i].primaryCredID)
+		if ferr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading connection secret slot fingerprints", true, nil)
+			return
+		}
+		items[i].dto.SecretSlotFingerprints = fps
+		data[i] = items[i].dto
+	}
+
+	var nextCursor *string
+	if hasMore && len(items) > 0 {
+		last := items[len(items)-1]
+		tok, curErr := encodePaginationCursor(s.cursorSecret, "connections", orgID, filterHash, last.createdMs, last.dto.ID)
+		if curErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding cursor", true, nil)
+			return
+		}
+		nextCursor = &tok
+	}
+
+	writeJSON(w, http.StatusOK, paginatedListEnvelope[providerConnectionDTO]{
+		Data:       data,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	})
+}
+
+func (s *Server) handleCreateConnection(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	var req createConnectionRequest
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+
+	var ownerProjPtr *string
+	if req.ProjectID != nil {
+		if trimmed := strings.TrimSpace(*req.ProjectID); trimmed != "" {
+			ownerProjPtr = &trimmed
+		}
+	}
+	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: ptrStrValue(ownerProjPtr)}) {
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	adapterID := strings.TrimSpace(req.AdapterID)
+	endpointURL := strings.TrimSpace(req.EndpointURL)
+	billingMode := strings.TrimSpace(req.BillingMode)
+	dataRegion := strings.TrimSpace(req.DataRegion)
+	if name == "" || adapterID == "" || endpointURL == "" {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "name, adapter_id, and endpoint_url are required", false, nil)
+		return
+	}
+	if billingMode != catalog.BillingModeCommercialAPI && billingMode != catalog.BillingModeSelfHostedInfra {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_billing_mode", "invalid_request_error", "billing_mode must be COMMERCIAL_API or SELF_HOSTED_INFRA", false, nil)
+		return
+	}
+	if !isValidDataRegion(dataRegion) {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_data_region", "invalid_request_error", "data_region must be one of EU, US, APAC, ON_PREM", false, nil)
+		return
+	}
+
+	if ownerProjPtr != nil {
+		if !s.requireActiveOrgAndProject(w, r, orgID, *ownerProjPtr) {
+			return
+		}
+	} else {
+		if !s.requireActiveOrg(w, r, orgID) {
+			return
+		}
+	}
+
+	if ssrfErr := validateEndpointSSRF(r.Context(), endpointURL, req.AllowPrivateIP, s.hostResolver, s.blockedPorts); ssrfErr != nil {
+		writeConnectionSSRFError(w, r, ssrfErr)
+		return
+	}
+
+	allowedCIDRs := append([]string(nil), req.AllowedCIDRs...)
+	if req.AllowPrivateIP && len(allowedCIDRs) == 0 {
+		allowedCIDRs = append([]string(nil), defaultPrivateCIDRs...)
+	}
+
+	slotNames := make([]string, 0, len(req.SecretBindings))
+	for k := range req.SecretBindings {
+		slotNames = append(slotNames, k)
+	}
+	sort.Strings(slotNames)
+
+	bindings := make([]catalog.SecretBindingInput, 0, len(slotNames))
+	var primaryCredPtr *string
+	for _, slot := range slotNames {
+		credID := strings.TrimSpace(req.SecretBindings[slot])
+		bindings = append(bindings, catalog.SecretBindingInput{
+			SlotName:     slot,
+			CredentialID: credID,
+			InjectMode:   catalog.InjectModeHostBlind,
+		})
+		if slot == "api_key" || primaryCredPtr == nil {
+			v := credID
+			primaryCredPtr = &v
+		}
+	}
+
+	authMode := catalog.AuthModeNone
+	if len(bindings) > 0 {
+		authMode = catalog.AuthModeAPIKey
+	}
+
+	cfgJSON := "{}"
+	if len(req.Config) > 0 {
+		rawCfg, cerr := json.Marshal(req.Config)
+		if cerr != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "invalid connection config object", false, nil)
+			return
+		}
+		cfgJSON = string(rawCfg)
+	}
+
+	conn, err := s.catalog.CreateProviderConnection(r.Context(), catalog.CreateProviderConnectionParams{
+		OrgID:          orgID,
+		OwnerProjectID: ownerProjPtr,
+		AdapterID:      adapterID,
+		CredentialID:   primaryCredPtr,
+		Name:           name,
+		EndpointBaseURL: endpointURL,
+		AllowPrivateIP: req.AllowPrivateIP,
+		AllowedCIDRs:   allowedCIDRs,
+		DataRegion:     dataRegion,
+		BillingMode:    billingMode,
+		AuthMode:       authMode,
+		SecretBindings: bindings,
+		ConfigJSON:     cfgJSON,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, port.ErrNotFound):
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", err.Error(), false, nil)
+		case errors.Is(err, port.ErrAlreadyExists):
+			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "provider connection already exists", false, nil)
+		case errors.Is(err, catalog.ErrInvalidBillingMode), errors.Is(err, port.ErrInvalidInput):
+			code := "invalid_request"
+			if strings.Contains(err.Error(), "allowed_hosts") || strings.Contains(err.Error(), "allowedHosts") {
+				code = "disallowed_host"
+			}
+			writeErrorEnvelope(w, r, http.StatusBadRequest, code, "invalid_request_error", err.Error(), false, nil)
+		default:
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating provider connection", true, nil)
+		}
+		return
+	}
+
+	dto, ferr := s.buildProviderConnectionDTO(r.Context(), conn)
+	if ferr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading created connection metadata", true, nil)
+		return
+	}
+
+	if audID, aerr := idgen.New(idgen.PrefixAudit); aerr == nil && s.audit != nil {
+		rawMeta, _ := json.Marshal(map[string]any{
+			"adapter_id":   conn.AdapterID,
+			"billing_mode": conn.BillingMode,
+			"data_region":  conn.DataRegion,
+			"project_id":   conn.OwnerProjectID,
+		})
+		_ = s.audit.Append(r.Context(), port.AuditEvent{
+			ID:           audID,
+			CreatedAtMs:  s.nowMs(),
+			OrgID:        &orgID,
+			ActorKind:    "PRINCIPAL",
+			ActorID:      sc.Actor.PrincipalID,
+			EntryPoint:   port.AuditEntryPointAdminAPI,
+			EventType:    "provider_connection.api_created",
+			TargetType:   "provider_connection",
+			TargetID:     conn.ID,
+			RequestID:    ptrOrNil(requestIDFromContext(r.Context())),
+			MetadataJSON: string(rawMeta),
+		})
+	}
+
+	w.Header().Set("ETag", FormatETag(dto.Version))
+	writeJSON(w, http.StatusCreated, dto)
+}
+
+func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	var req updateConnectionRequest
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	connID := strings.TrimSpace(r.PathValue("connectionId"))
+	if connID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+		return
+	}
+
+	cur, err := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
+	if err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+			return
+		}
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading provider connection", true, nil)
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: ptrStrValue(cur.OwnerProjectID)}) {
+		return
+	}
+
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	curDTO, ferr := s.buildProviderConnectionDTO(r.Context(), cur)
+	if ferr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading connection fingerprints", true, nil)
+		return
+	}
+	if expectedVer != cur.Version {
+		writeOptimisticConflict(w, r, cur.Version, curDTO)
+		return
+	}
+
+	nextName := cur.Name
+	if req.Name != nil {
+		trimmed := strings.TrimSpace(*req.Name)
+		if trimmed == "" || len(trimmed) > 128 {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "name cannot be blank", false, nil)
+			return
+		}
+		nextName = trimmed
+	}
+
+	nextEndpoint := cur.EndpointBaseURL
+	if req.EndpointURL != nil {
+		trimmed := strings.TrimSpace(*req.EndpointURL)
+		if trimmed == "" {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_endpoint_url", "invalid_request_error", "endpoint_url cannot be blank", false, nil)
+			return
+		}
+		nextEndpoint = trimmed
+	}
+
+	nextAllowPriv := cur.AllowPrivateIP
+	if req.AllowPrivateIP != nil {
+		nextAllowPriv = *req.AllowPrivateIP
+	}
+
+	nextCIDRs := cur.AllowedCIDRs
+	if len(req.AllowedCIDRs) > 0 {
+		nextCIDRs = append([]string(nil), req.AllowedCIDRs...)
+	} else if nextAllowPriv && len(nextCIDRs) == 0 {
+		nextCIDRs = append([]string(nil), defaultPrivateCIDRs...)
+	}
+
+	if req.EndpointURL != nil || req.AllowPrivateIP != nil {
+		if ssrfErr := validateEndpointSSRF(r.Context(), nextEndpoint, nextAllowPriv, s.hostResolver, s.blockedPorts); ssrfErr != nil {
+			writeConnectionSSRFError(w, r, ssrfErr)
+			return
+		}
+	}
+
+	nextState := cur.State
+	if req.State != nil {
+		reqState := strings.ToUpper(strings.TrimSpace(*req.State))
+		switch reqState {
+		case "ACTIVE":
+			if cur.State == catalog.ConnStateActive {
+				nextState = catalog.ConnStateActive
+			} else if cur.State == catalog.ConnStateDegraded {
+				nextState = catalog.ConnStateActive
+			} else {
+				writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", "connections must pass POST /connections/{id}/test validation to activate", false, curDTO)
+				return
+			}
+		case "DISABLED":
+			switch cur.State {
+			case catalog.ConnStateDraft:
+				nextState = catalog.ConnStateArchived
+			case catalog.ConnStateActive, catalog.ConnStateDegraded, catalog.ConnStateAuthExpired:
+				nextState = catalog.ConnStateSuspendedAdmin
+			case catalog.ConnStateSuspendedAdmin, catalog.ConnStateRevoked, catalog.ConnStateArchived:
+				nextState = cur.State
+			default:
+				writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", fmt.Sprintf("cannot disable connection in state %s", cur.State), false, curDTO)
+				return
+			}
+		default:
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "state must be ACTIVE or DISABLED", false, nil)
+			return
+		}
+	}
+
+	now := s.nowMs()
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting connection update tx", true, nil)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := s.validateConnectionUpdateInTx(r.Context(), tx, orgID, cur, nextEndpoint, nextAllowPriv, req.SecretBindings); err != nil {
+		switch {
+		case errors.Is(err, port.ErrNotFound):
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", err.Error(), false, nil)
+		case errors.Is(err, port.ErrInvalidInput):
+			code := "invalid_request"
+			if strings.Contains(err.Error(), "allowed_hosts") || strings.Contains(err.Error(), "allowedHosts") {
+				code = "disallowed_host"
+			}
+			writeErrorEnvelope(w, r, http.StatusBadRequest, code, "invalid_request_error", err.Error(), false, nil)
+		default:
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating updated connection", true, nil)
+		}
+		return
+	}
+
+	cidrsJSON, merr := json.Marshal(nextCIDRs)
+	if merr != nil {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "invalid allowed_cidrs", false, nil)
+		return
+	}
+
+	nextPrimaryCred := cur.CredentialID
+	nextAuthMode := cur.AuthMode
+	if req.SecretBindings != nil {
+		if _, err := tx.ExecContext(r.Context(), `
+			DELETE FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ?`,
+			orgID, connID,
+		); err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed updating connection secret bindings", true, nil)
+			return
+		}
+		slots := make([]string, 0, len(req.SecretBindings))
+		for k := range req.SecretBindings {
+			slots = append(slots, k)
+		}
+		sort.Strings(slots)
+		nextPrimaryCred = nil
+		for _, slot := range slots {
+			credID := strings.TrimSpace(req.SecretBindings[slot])
+			if _, err := tx.ExecContext(r.Context(), `
+				INSERT INTO connection_secret_bindings (org_id, connection_id, slot_name, credential_id, inject_mode, created_at_ms)
+				VALUES (?, ?, ?, ?, ?, ?)`,
+				orgID, connID, slot, credID, catalog.InjectModeHostBlind, now,
+			); err != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed inserting connection secret binding", true, nil)
+				return
+			}
+			if slot == "api_key" || nextPrimaryCred == nil {
+				v := credID
+				nextPrimaryCred = &v
+			}
+		}
+		if len(slots) == 0 {
+			nextAuthMode = catalog.AuthModeNone
+		} else if nextAuthMode == catalog.AuthModeNone {
+			nextAuthMode = catalog.AuthModeAPIKey
+		}
+	}
+
+	res, err := tx.ExecContext(r.Context(), `
+		UPDATE provider_connections
+		SET name = ?, endpoint_base_url = ?, allow_private_ip = ?, allowed_cidrs_json = ?,
+		    credential_id = ?, auth_mode = ?, state = ?, version = version + 1, updated_at_ms = ?
+		WHERE org_id = ? AND id = ? AND version = ?`,
+		nextName, nextEndpoint, boolToInt(nextAllowPriv), string(cidrsJSON),
+		nullStrPtr(nextPrimaryCred), nextAuthMode, nextState, now,
+		orgID, connID, expectedVer,
+	)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed updating provider connection", true, nil)
+		return
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		_ = tx.Rollback()
+		latest, lerr := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
+		if lerr != nil {
+			if errors.Is(lerr, port.ErrNotFound) {
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+				return
+			}
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading provider connection", true, nil)
+			return
+		}
+		latestDTO, _ := s.buildProviderConnectionDTO(r.Context(), latest)
+		writeOptimisticConflict(w, r, latest.Version, latestDTO)
+		return
+	}
+
+	emergency := nextState == catalog.ConnStateSuspendedAdmin || nextState == catalog.ConnStateRevoked
+	if _, err := tx.ExecContext(r.Context(), `
+		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
+		VALUES (?, 'provider_connection', ?, ?, ?, ?)`,
+		orgID, connID, port.MutationUpsert, boolToInt(emergency), now,
+	); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording changelog", true, nil)
+		return
+	}
+
+	audID, err := idgen.New(idgen.PrefixAudit)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed minting audit id", true, nil)
+		return
+	}
+	rawMeta, _ := json.Marshal(map[string]any{
+		"name":  nextName,
+		"state": nextState,
+	})
+	if err := s.txAudit.AppendTx(r.Context(), tx, port.AuditEvent{
+		ID:           audID,
+		CreatedAtMs:  now,
+		OrgID:        &orgID,
+		ActorKind:    "PRINCIPAL",
+		ActorID:      sc.Actor.PrincipalID,
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    "provider_connection.updated",
+		TargetType:   "provider_connection",
+		TargetID:     connID,
+		RequestID:    ptrOrNil(requestIDFromContext(r.Context())),
+		MetadataJSON: string(rawMeta),
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed appending audit event", true, nil)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing connection update", true, nil)
+		return
+	}
+	_ = s.catalog.SyncSnapshots(r.Context())
+
+	updated, err := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading updated connection", true, nil)
+		return
+	}
+	dto, err := s.buildProviderConnectionDTO(r.Context(), updated)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading connection fingerprints", true, nil)
+		return
+	}
+	w.Header().Set("ETag", FormatETag(dto.Version))
+	writeJSON(w, http.StatusOK, dto)
+}
+
+func (s *Server) validateConnectionUpdateInTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	orgID string,
+	cur *catalog.ProviderConnection,
+	endpointURL string,
+	allowPrivateIP bool,
+	newBindings map[string]string,
+) error {
+	u, err := url.Parse(strings.TrimSpace(endpointURL))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
+		return fmt.Errorf("%w: invalid endpoint_url %q", port.ErrInvalidInput, endpointURL)
+	}
+	var hostsJSON, permsJSON string
+	if err := tx.QueryRowContext(ctx, `
+		SELECT pa.allowed_hosts_json, ei.approved_permissions_json
+		FROM provider_adapters pa
+		JOIN extension_installations ei ON ei.id = pa.installation_id
+		WHERE pa.id = ?`, cur.AdapterID,
+	).Scan(&hostsJSON, &permsJSON); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: provider_adapter %q", port.ErrNotFound, cur.AdapterID)
+		}
+		return err
+	}
+	var adapterHosts []string
+	if err := json.Unmarshal([]byte(hostsJSON), &adapterHosts); err != nil || len(adapterHosts) == 0 {
+		return fmt.Errorf("%w: adapter allowed_hosts is empty", port.ErrInvalidInput)
+	}
+	if !connectionHostAllowedByList(u, adapterHosts) {
+		return fmt.Errorf("%w: endpoint host %q denied by adapter allowed_hosts", port.ErrInvalidInput, u.Hostname())
+	}
+	var perms installer.PermissionSet
+	if err := json.Unmarshal([]byte(permsJSON), &perms); err == nil {
+		perms = installer.NormalizePermissionSet(perms)
+		if len(perms.AllowedHosts) > 0 && !connectionHostAllowedByList(u, perms.AllowedHosts) {
+			return fmt.Errorf("%w: endpoint host %q denied by SM-01 approved networkEgress.allowedHosts", port.ErrInvalidInput, u.Hostname())
+		}
+		if perms.RequireTLS && u.Scheme != "https" {
+			return fmt.Errorf("%w: endpoint scheme violates SM-01 requireTls=true", port.ErrInvalidInput)
+		}
+		if allowPrivateIP && !perms.AllowPrivateIP {
+			return fmt.Errorf("%w: allow_private_ip=true denied by SM-01 approved permissions", port.ErrInvalidInput)
+		}
+	}
+	for slot, rawCredID := range newBindings {
+		if strings.TrimSpace(slot) == "" || strings.TrimSpace(rawCredID) == "" {
+			return fmt.Errorf("%w: secret_bindings entries require non-empty slot and credential_id", port.ErrInvalidInput)
+		}
+		if len(perms.SecretSlots) > 0 {
+			found := false
+			for _, ps := range perms.SecretSlots {
+				if strings.TrimSpace(ps) == strings.TrimSpace(slot) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("%w: secret slot %q is not approved in SM-01 permissions", port.ErrInvalidInput, slot)
+			}
+		}
+		var secOwner sql.NullString
+		err := tx.QueryRowContext(ctx, `
+			SELECT owner_project_id FROM secret_credentials WHERE org_id = ? AND id = ?`,
+			orgID, strings.TrimSpace(rawCredID),
+		).Scan(&secOwner)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: secret_credential %q", port.ErrNotFound, rawCredID)
+		}
+		if err != nil {
+			return err
+		}
+		if secOwner.Valid {
+			if cur.OwnerProjectID == nil || *cur.OwnerProjectID != secOwner.String || len(cur.SharedProjectIDs) > 0 {
+				return fmt.Errorf("%w: project-owned secret %q cannot be bound to org-shared or cross-project connection", port.ErrInvalidInput, rawCredID)
+			}
+		}
+	}
+	return nil
+}
+
+func connectionHostAllowedByList(u *url.URL, hosts []string) bool {
+	uHost := strings.ToLower(u.Hostname())
+	for _, h := range hosts {
+		apHost := strings.ToLower(strings.TrimSpace(h))
+		if idx := strings.LastIndex(apHost, ":"); idx > 0 && !strings.Contains(apHost, "]") {
+			apHost = apHost[:idx]
+		}
+		if apHost == uHost {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) handleDeleteConnection(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	connID := strings.TrimSpace(r.PathValue("connectionId"))
+	if connID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+		return
+	}
+
+	cur, err := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
+	if err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+			return
+		}
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading provider connection", true, nil)
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: ptrStrValue(cur.OwnerProjectID)}) {
+		return
+	}
+
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	curDTO, _ := s.buildProviderConnectionDTO(r.Context(), cur)
+	if expectedVer != cur.Version {
+		writeOptimisticConflict(w, r, cur.Version, curDTO)
+		return
+	}
+
+	if err := s.catalog.DeleteProviderConnection(r.Context(), orgID, connID); err != nil {
+		switch {
+		case errors.Is(err, port.ErrNotFound):
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+		case errors.Is(err, port.ErrResourceInUse):
+			writeErrorEnvelope(w, r, http.StatusConflict, "connection_referenced_by_deployments", "conflict_error", "connection is referenced by active model deployments", false, curDTO)
+		default:
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed deleting provider connection", true, nil)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	connID := strings.TrimSpace(r.PathValue("connectionId"))
+	if connID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+		return
+	}
+
+	cur, err := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
+	if err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+			return
+		}
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading provider connection", true, nil)
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: ptrStrValue(cur.OwnerProjectID)}) {
+		return
+	}
+
+	if !s.probeLimiter.Allow(orgID+"|"+sc.Actor.PrincipalID, s.nowMs()) {
+		writeErrorEnvelope(w, r, http.StatusTooManyRequests, "probe_rate_limited", "rate_limit_error", "connection test rate limit exceeded", true, nil)
+		return
+	}
+
+	if ssrfErr := validateEndpointSSRF(r.Context(), cur.EndpointBaseURL, cur.AllowPrivateIP, s.hostResolver, s.blockedPorts); ssrfErr != nil {
+		writeConnectionSSRFError(w, r, ssrfErr)
+		return
+	}
+
+	if s.broker == nil || s.providerRuntime == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "probe_runtime_unavailable", "upstream_error", "connection validation broker or extension runtime unavailable", true, nil)
+		return
+	}
+
+	started := time.Now()
+	var verdict *extport.ValidationVerdict
+
+	switch cur.State {
+	case catalog.ConnStateDraft, catalog.ConnStateAuthExpired, catalog.ConnStateSuspendedAdmin:
+		verdict, _, err = s.catalog.ValidateConnection(r.Context(), orgID, connID, s.providerRuntime, s.broker)
+	case catalog.ConnStateActive, catalog.ConnStateDegraded:
+		verdict, err = s.probeActiveConnection(r.Context(), orgID, cur)
+	default:
+		writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", fmt.Sprintf("cannot test connection in state %s", cur.State), false, nil)
+		return
+	}
+
+	latencyMs := time.Since(started).Milliseconds()
+	if latencyMs < 0 {
+		latencyMs = 0
+	}
+
+	if err != nil && verdict == nil {
+		switch {
+		case errors.Is(err, egress.ErrPrivateIPBlocked), errors.Is(err, egress.ErrMetadataBlocked), errors.Is(err, egress.ErrHostDenied), errors.Is(err, egress.ErrPortDenied):
+			writeConnectionSSRFError(w, r, err)
+			return
+		case errors.Is(err, catalog.ErrInvalidStateTransition):
+			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", err.Error(), false, nil)
+			return
+		case errors.Is(err, port.ErrInvalidInput):
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+			return
+		case errors.Is(err, port.ErrNotFound):
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", err.Error(), false, nil)
+			return
+		default:
+			msg := err.Error()
+			code := "probe_failed"
+			verdict = &extport.ValidationVerdict{
+				Valid:            false,
+				FailureCode:      code,
+				SanitizedMessage: msg,
+			}
+		}
+	}
+
+	resp := connectionTestResponseDTO{
+		Valid:            verdict != nil && verdict.Valid,
+		LatencyMs:        latencyMs,
+		DetectedModelIDs: []string{},
+	}
+	if verdict != nil {
+		if len(verdict.DetectedModelIDs) > 0 {
+			resp.DetectedModelIDs = append([]string(nil), verdict.DetectedModelIDs...)
+		}
+		if verdict.FailureCode != "" {
+			v := verdict.FailureCode
+			resp.FailureCode = &v
+		}
+		if verdict.SanitizedMessage != "" {
+			v := verdict.SanitizedMessage
+			resp.SanitizedMessage = &v
+		}
+	}
+
+	if audID, aerr := idgen.New(idgen.PrefixAudit); aerr == nil && s.audit != nil {
+		rawMeta, _ := json.Marshal(map[string]any{
+			"valid":        resp.Valid,
+			"latency_ms":   resp.LatencyMs,
+			"failure_code": resp.FailureCode,
+		})
+		_ = s.audit.Append(r.Context(), port.AuditEvent{
+			ID:           audID,
+			CreatedAtMs:  s.nowMs(),
+			OrgID:        &orgID,
+			ActorKind:    "PRINCIPAL",
+			ActorID:      sc.Actor.PrincipalID,
+			EntryPoint:   port.AuditEntryPointAdminAPI,
+			EventType:    "provider_connection.tested",
+			TargetType:   "provider_connection",
+			TargetID:     connID,
+			RequestID:    ptrOrNil(requestIDFromContext(r.Context())),
+			MetadataJSON: string(rawMeta),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *catalog.ProviderConnection) (*extport.ValidationVerdict, error) {
+	probeReqID, err := idgen.New(idgen.PrefixTrace)
+	if err != nil {
+		probeReqID = "trc_probe_" + cur.ID
+	}
+	cfgMap := make(map[string]any)
+	if trimmed := strings.TrimSpace(cur.ConfigJSON); trimmed != "" && trimmed != "{}" {
+		_ = json.Unmarshal([]byte(trimmed), &cfgMap)
+	}
+	cfgMap["endpoint_base_url"] = cur.EndpointBaseURL
+	mergedCfg, _ := json.Marshal(cfgMap)
+
+	slotNames := make([]string, 0, len(cur.SecretBindings))
+	for _, b := range cur.SecretBindings {
+		slotNames = append(slotNames, b.SlotName)
+	}
+	probeSpec, err := s.providerRuntime.BuildValidationProbe(ctx, extport.ValidationProbeInput{
+		RequestID:       probeReqID,
+		ConfigJSON:      string(mergedCfg),
+		SecretSlotNames: slotNames,
+	})
+	if err != nil {
+		return nil, err
+	}
+	inj, err := catalog.ConvertCredentialInjections(probeSpec.CredentialInjections)
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.Parse(cur.EndpointBaseURL)
+	if err != nil || u.Hostname() == "" {
+		return nil, fmt.Errorf("%w: invalid endpoint_url", port.ErrInvalidInput)
+	}
+	portNum := 443
+	if u.Scheme == "http" {
+		portNum = 80
+	}
+	if p := u.Port(); p != "" {
+		var parsedPort int
+		if _, perr := fmt.Sscanf(p, "%d", &parsedPort); perr == nil && parsedPort > 0 && parsedPort <= 65535 {
+			portNum = parsedPort
+		}
+	}
+	narrowPolicy := &egress.Policy{
+		AllowedHosts:   []string{strings.ToLower(u.Hostname())},
+		AllowPrivateIP: cur.AllowPrivateIP,
+		AllowedCIDRs:   cur.AllowedCIDRs,
+		AllowedPorts:   []int{portNum},
+		RequireTLS:     u.Scheme == "https",
+	}
+	egressResp, err := s.broker.ExecuteWithHostConstraint(ctx, broker.EgressRequest{
+		OrgID:                orgID,
+		ConnectionID:         cur.ID,
+		Method:               probeSpec.Method,
+		TargetURL:            probeSpec.TargetURL,
+		SafeHeaders:          probeSpec.SafeHeaders,
+		BodyBytes:            probeSpec.BodyBytes,
+		CredentialInjections: inj,
+		ActorKind:            "SYSTEM",
+		ActorID:              "catalog_probe",
+		EntryPoint:           port.AuditEntryPointAdminAPI,
+		RequestID:            probeReqID,
+	}, broker.HostEgressConstraint{NarrowPolicy: narrowPolicy})
+	if err != nil {
+		return &extport.ValidationVerdict{
+			Valid:            false,
+			FailureCode:      "probe_egress_failed",
+			SanitizedMessage: err.Error(),
+		}, err
+	}
+	flatHdrs := make(map[string]string, len(egressResp.SanitizedHeaders))
+	for k, vals := range egressResp.SanitizedHeaders {
+		if len(vals) > 0 {
+			flatHdrs[k] = strings.Join(vals, ", ")
+		}
+	}
+	verdict, err := s.providerRuntime.VerifyValidationResult(ctx, extport.ValidationResultInput{
+		RequestID:        probeReqID,
+		HTTPStatus:       int32(egressResp.StatusCode),
+		SanitizedHeaders: flatHdrs,
+		ResponseBody:     egressResp.Body,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if verdict.Valid {
+		_, _ = s.catalog.RecordRuntimeHealthOutcome(ctx, orgID, cur.ID, nil)
+	}
+	return &verdict, nil
+}
+
+func (s *Server) buildProviderConnectionDTO(ctx context.Context, conn *catalog.ProviderConnection) (providerConnectionDTO, error) {
+	fps, err := s.loadConnectionSlotFingerprints(ctx, conn.OrgID, conn.ID, conn.CredentialID)
+	if err != nil {
+		return providerConnectionDTO{}, err
+	}
+	return providerConnectionDTO{
+		ID:                     conn.ID,
+		ProjectID:              conn.OwnerProjectID,
+		Name:                   conn.Name,
+		AdapterID:              conn.AdapterID,
+		BillingMode:            conn.BillingMode,
+		EndpointURL:            conn.EndpointBaseURL,
+		DataRegion:             conn.DataRegion,
+		AllowPrivateIP:         conn.AllowPrivateIP,
+		State:                  mapConnectionStateOpenAPI(conn.State),
+		SecretSlotFingerprints: fps,
+		Version:                conn.Version,
+		CreatedAt:              formatTimeRFC3339Ms(conn.CreatedAtMs),
+	}, nil
+}
+
+func (s *Server) loadConnectionSlotFingerprints(ctx context.Context, orgID, connID string, primaryCredID *string) (map[string]string, error) {
+	out := make(map[string]string)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT csb.slot_name, sc.key_fingerprint
+		FROM connection_secret_bindings csb
+		JOIN secret_credentials sc ON sc.org_id = csb.org_id AND sc.id = csb.credential_id
+		WHERE csb.org_id = ? AND csb.connection_id = ?
+		ORDER BY csb.slot_name ASC`,
+		orgID, connID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var slot, fp string
+		if scanErr := rows.Scan(&slot, &fp); scanErr != nil {
+			return nil, scanErr
+		}
+		out[slot] = formatTrailingFingerprint(fp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if _, hasAPIKey := out["api_key"]; !hasAPIKey && primaryCredID != nil && *primaryCredID != "" {
+		var fp string
+		err := s.db.QueryRowContext(ctx, `
+			SELECT key_fingerprint FROM secret_credentials WHERE org_id = ? AND id = ?`,
+			orgID, *primaryCredID,
+		).Scan(&fp)
+		if err == nil {
+			out["api_key"] = formatTrailingFingerprint(fp)
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+	}
+	return out, nil
+}

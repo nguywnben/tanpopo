@@ -1984,3 +1984,28 @@ func TestBlindBrokerExecuteStreamScrubbingAndCancellation(t *testing.T) {
 	}
 }
 
+func TestSecretScrubberConcurrentZeroizeNoRace(t *testing.T) {
+	t.Parallel()
+	for iter := 0; iter < 50; iter++ {
+		s := &secretScrubber{}
+		s.addSecret([]byte("sk-live-canary-race-test-987654"))
+
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			_ = s.scrubString("error dialing with sk-live-canary-race-test-987654")
+		}()
+		go func() {
+			defer wg.Done()
+			_ = s.trailingPrefixHold([]byte("partial sk-live"))
+		}()
+		go func() {
+			defer wg.Done()
+			s.zeroize()
+		}()
+		wg.Wait()
+	}
+}
+
+

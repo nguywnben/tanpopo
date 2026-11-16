@@ -32,15 +32,22 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/extension/installer"
+	extport "github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
+	"github.com/nguywnben/tanpopo/internal/provider/catalog"
+	"github.com/nguywnben/tanpopo/internal/routing/resolver"
+	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
@@ -54,6 +61,8 @@ const (
 	DefaultMaxRequestBodyBytes int64 = 2 << 20
 	// DefaultServerVersion reports the server build identifier when unconfigured.
 	DefaultServerVersion = "0.1.0"
+	// DefaultProbeRateLimitPerMinute caps POST /connections/{id}/test per (org, principal) per minute.
+	DefaultProbeRateLimitPerMinute = 20
 )
 
 // ErrInvalidServerConfig indicates missing or invalid Admin Server configuration.
@@ -68,30 +77,57 @@ type SessionMetadata struct {
 	ExpiresAtMs int64
 }
 
+// MarketplaceCatalogEntry describes an available marketplace extension package for GET /marketplace/catalog.
+type MarketplaceCatalogEntry struct {
+	PackageID            string   `json:"package_id"`
+	CanonicalName        string   `json:"canonical_name"`
+	Version              string   `json:"version"`
+	ExecutionTier        string   `json:"execution_tier"`
+	OriginTrustTier      string   `json:"origin_trust_tier"`
+	EnterpriseSigned     bool     `json:"enterprise_signed"`
+	SourceURI            string   `json:"source_uri"`
+	ExpectedSHA256       string   `json:"expected_sha256"`
+	Summary              string   `json:"summary,omitempty"`
+	Capabilities         []string `json:"capabilities,omitempty"`
+}
+
+// ExtensionArchiveResolver resolves staged archive streams + provenance metadata for Control Plane installs/upgrades.
+type ExtensionArchiveResolver func(ctx context.Context, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error)
+
 type rawDBProvider interface {
 	RawDB() *sql.DB
 }
 
 // ServerConfig configures the Control Plane Admin HTTP server fail-closed.
 type ServerConfig struct {
-	Store               port.Store
-	DB                  *sql.DB
-	Bootstrap           *bootstrap.Manager
-	Auth                *auth.LocalService
-	VKeys               *vkey.Service
-	Vault               *vault.Store
-	Ledgers             *ledger.Service
-	Snapshots           *snapshot.Manager
-	KillSwitch          *killswitch.Registry
-	Audit               port.AuditSink
-	NowMs               func() int64
-	MaxRequestBodyBytes int64
-	PaginationSecret    []byte
-	TokenVerifier       BearerTokenVerifier
-	HostResolver        egress.HostResolver
-	BlockedAdminPorts   []int
-	OfflineMode         bool
-	Version             string
+	Store                    port.Store
+	DB                       *sql.DB
+	Bootstrap                *bootstrap.Manager
+	Auth                     *auth.LocalService
+	VKeys                    *vkey.Service
+	Vault                    *vault.Store
+	Ledgers                  *ledger.Service
+	Snapshots                *snapshot.Manager
+	KillSwitch               *killswitch.Registry
+	Catalog                  *catalog.Repository
+	Installer                *installer.LifecycleService
+	Policies                 *policyengine.Store
+	RouteResolver            *resolver.Resolver
+	Broker                   *broker.BlindHostCredentialBroker
+	ProviderRuntime          extport.ProviderRuntime
+	MarketplaceCatalog       []MarketplaceCatalogEntry
+	ArchiveResolver          ExtensionArchiveResolver
+	LockfilePath             string
+	ProbeRateLimitPerMinute  int
+	Audit                    port.AuditSink
+	NowMs                    func() int64
+	MaxRequestBodyBytes      int64
+	PaginationSecret         []byte
+	TokenVerifier            BearerTokenVerifier
+	HostResolver             egress.HostResolver
+	BlockedAdminPorts        []int
+	OfflineMode              bool
+	Version                  string
 }
 
 type routeEntry struct {
@@ -102,27 +138,75 @@ type routeEntry struct {
 	Handler func(w http.ResponseWriter, r *http.Request)
 }
 
+type slidingWindowLimiter struct {
+	mu      sync.Mutex
+	limit   int
+	window  int64
+	buckets map[string][]int64
+}
+
+func newSlidingWindowLimiter(limit int, window time.Duration) *slidingWindowLimiter {
+	if limit <= 0 {
+		limit = DefaultProbeRateLimitPerMinute
+	}
+	return &slidingWindowLimiter{
+		limit:   limit,
+		window:  window.Milliseconds(),
+		buckets: make(map[string][]int64),
+	}
+}
+
+func (l *slidingWindowLimiter) Allow(key string, nowMs int64) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cutoff := nowMs - l.window
+	prev := l.buckets[key]
+	kept := prev[:0]
+	for _, ts := range prev {
+		if ts > cutoff {
+			kept = append(kept, ts)
+		}
+	}
+	if len(kept) >= l.limit {
+		l.buckets[key] = kept
+		return false
+	}
+	kept = append(kept, nowMs)
+	l.buckets[key] = kept
+	return true
+}
+
 // Server serves /admin/v1/* Control Plane REST endpoints.
 type Server struct {
-	db            *sql.DB
-	storage       port.Store
-	bootstrap     *bootstrap.Manager
-	auth          *auth.LocalService
-	vkeys         *vkey.Service
-	vault         *vault.Store
-	ledgers       *ledger.Service
-	snapshots     *snapshot.Manager
-	killSwitch    *killswitch.Registry
-	audit         port.AuditSink
-	txAudit       port.TxAuditSink
-	nowMs         func() int64
-	maxBodyBytes  int64
-	cursorSecret  []byte
-	tokenVerifier BearerTokenVerifier
-	hostResolver  egress.HostResolver
-	blockedPorts  map[int]bool
-	offlineMode   bool
-	version       string
+	db              *sql.DB
+	storage         port.Store
+	bootstrap       *bootstrap.Manager
+	auth            *auth.LocalService
+	vkeys           *vkey.Service
+	vault           *vault.Store
+	ledgers         *ledger.Service
+	snapshots       *snapshot.Manager
+	killSwitch      *killswitch.Registry
+	catalog         *catalog.Repository
+	installer       *installer.LifecycleService
+	policies        *policyengine.Store
+	routeResolver   *resolver.Resolver
+	broker          *broker.BlindHostCredentialBroker
+	providerRuntime extport.ProviderRuntime
+	marketplace     []MarketplaceCatalogEntry
+	archiveResolver ExtensionArchiveResolver
+	lockfilePath    string
+	probeLimiter    *slidingWindowLimiter
+	audit           port.AuditSink
+	txAudit         port.TxAuditSink
+	nowMs           func() int64
+	maxBodyBytes    int64
+	cursorSecret    []byte
+	tokenVerifier   BearerTokenVerifier
+	hostResolver    egress.HostResolver
+	blockedPorts    map[int]bool
+	offlineMode     bool
+	version         string
 
 	routes  []routeEntry
 	handler http.Handler
@@ -200,6 +284,39 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		}
 	}
 
+	catalogRepo := cfg.Catalog
+	if catalogRepo == nil {
+		var cerr error
+		catalogRepo, cerr = catalog.NewRepository(catalog.Config{
+			DB:                        db,
+			NowMs:                     nowFn,
+			Snapshots:                 cfg.Snapshots,
+			AllowDetachedControlPlane: cfg.Snapshots == nil,
+			Audit:                     auditSink,
+		})
+		if cerr != nil {
+			return nil, fmt.Errorf("%w: initialize catalog repository: %w", ErrInvalidServerConfig, cerr)
+		}
+	}
+
+	policyStore := cfg.Policies
+	if policyStore == nil {
+		var perr error
+		policyStore, perr = policyengine.NewStore(policyengine.StoreConfig{
+			DB:    db,
+			Audit: auditSink,
+			NowMs: nowFn,
+		})
+		if perr != nil {
+			return nil, fmt.Errorf("%w: initialize policy store: %w", ErrInvalidServerConfig, perr)
+		}
+	}
+
+	routeResolver := cfg.RouteResolver
+	if routeResolver == nil {
+		routeResolver = resolver.New()
+	}
+
 	hostResolver := cfg.HostResolver
 	if hostResolver == nil {
 		hostResolver = egress.NewStdHostResolver()
@@ -217,26 +334,38 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		}
 	}
 
+	marketplace := append([]MarketplaceCatalogEntry(nil), cfg.MarketplaceCatalog...)
+
 	s := &Server{
-		db:            db,
-		storage:       cfg.Store,
-		bootstrap:     cfg.Bootstrap,
-		auth:          cfg.Auth,
-		vkeys:         cfg.VKeys,
-		vault:         cfg.Vault,
-		ledgers:       ledgerSvc,
-		snapshots:     cfg.Snapshots,
-		killSwitch:    cfg.KillSwitch,
-		audit:         auditSink,
-		txAudit:       txAudit,
-		nowMs:         nowFn,
-		maxBodyBytes:  maxBody,
-		cursorSecret:  cursorSecret,
-		tokenVerifier: cfg.TokenVerifier,
-		hostResolver:  hostResolver,
-		blockedPorts:  blockedPorts,
-		offlineMode:   cfg.OfflineMode,
-		version:       version,
+		db:              db,
+		storage:         cfg.Store,
+		bootstrap:       cfg.Bootstrap,
+		auth:            cfg.Auth,
+		vkeys:           cfg.VKeys,
+		vault:           cfg.Vault,
+		ledgers:         ledgerSvc,
+		snapshots:       cfg.Snapshots,
+		killSwitch:      cfg.KillSwitch,
+		catalog:         catalogRepo,
+		installer:       cfg.Installer,
+		policies:        policyStore,
+		routeResolver:   routeResolver,
+		broker:          cfg.Broker,
+		providerRuntime: cfg.ProviderRuntime,
+		marketplace:     marketplace,
+		archiveResolver: cfg.ArchiveResolver,
+		lockfilePath:    strings.TrimSpace(cfg.LockfilePath),
+		probeLimiter:    newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
+		audit:           auditSink,
+		txAudit:         txAudit,
+		nowMs:           nowFn,
+		maxBodyBytes:    maxBody,
+		cursorSecret:    cursorSecret,
+		tokenVerifier:   cfg.TokenVerifier,
+		hostResolver:    hostResolver,
+		blockedPorts:    blockedPorts,
+		offlineMode:     cfg.OfflineMode,
+		version:         version,
 	}
 
 	s.routes = []routeEntry{
@@ -267,6 +396,18 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodPatch, Path: "/admin/v1/virtual-keys/{keyId}", Action: rbac.ActionVKeyCreate, Handler: s.handleUpdateVirtualKey},
 		{Method: http.MethodPost, Path: "/admin/v1/virtual-keys/{keyId}/rotate", Action: rbac.ActionVKeyRotate, Handler: s.handleRotateVirtualKey},
 		{Method: http.MethodPost, Path: "/admin/v1/virtual-keys/{keyId}/revoke", Action: rbac.ActionVKeyRevoke, Handler: s.handleRevokeVirtualKey},
+
+		// Group E: Provider Adapters, Write-Only Secrets & Connections
+		{Method: http.MethodGet, Path: "/admin/v1/provider-adapters", Action: rbac.ActionConnectionRead, Handler: s.handleListProviderAdapters},
+		{Method: http.MethodGet, Path: "/admin/v1/provider-adapters/{adapterId}", Action: rbac.ActionConnectionRead, Handler: s.handleGetProviderAdapter},
+		{Method: http.MethodGet, Path: "/admin/v1/secrets", Action: rbac.ActionSecretReadMeta, Handler: s.handleListSecrets},
+		{Method: http.MethodPost, Path: "/admin/v1/secrets", Action: rbac.ActionSecretWrite, Handler: s.handleCreateSecret},
+		{Method: http.MethodDelete, Path: "/admin/v1/secrets/{credentialId}", Action: rbac.ActionSecretWrite, Handler: s.handleDeleteSecret},
+		{Method: http.MethodGet, Path: "/admin/v1/connections", Action: rbac.ActionConnectionRead, Handler: s.handleListConnections},
+		{Method: http.MethodPost, Path: "/admin/v1/connections", Action: rbac.ActionConnectionWrite, Handler: s.handleCreateConnection},
+		{Method: http.MethodPatch, Path: "/admin/v1/connections/{connectionId}", Action: rbac.ActionConnectionWrite, Handler: s.handleUpdateConnection},
+		{Method: http.MethodDelete, Path: "/admin/v1/connections/{connectionId}", Action: rbac.ActionConnectionWrite, Handler: s.handleDeleteConnection},
+		{Method: http.MethodPost, Path: "/admin/v1/connections/{connectionId}/test", Action: rbac.ActionConnectionWrite, Handler: s.handleTestConnection},
 	}
 
 	if err := rbac.ValidateRoutePermissions(s.Routes()); err != nil {

@@ -1686,11 +1686,44 @@ func (b *BlindHostCredentialBroker) recordAudit(ctx context.Context, req EgressR
 // broker Execute call, replaces any occurrence with [REDACTED_CREDENTIAL], and wipes all
 // transient byte patterns upon return.
 type secretScrubber struct {
+	mu     sync.RWMutex
 	tokens [][]byte
 }
 
+func (s *secretScrubber) hasTokens() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	has := len(s.tokens) > 0
+	s.mu.RUnlock()
+	return has
+}
+
+func (s *secretScrubber) trailingPrefixHold(scrubbed []byte) int {
+	if s == nil || len(scrubbed) == 0 {
+		return 0
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	holdLen := 0
+	for _, tok := range s.tokens {
+		maxK := len(tok) - 1
+		if maxK > len(scrubbed) {
+			maxK = len(scrubbed)
+		}
+		for k := maxK; k > holdLen; k-- {
+			if bytes.HasSuffix(scrubbed, tok[:k]) {
+				holdLen = k
+				break
+			}
+		}
+	}
+	return holdLen
+}
+
 func (s *secretScrubber) addSecret(secret []byte) {
-	if len(secret) == 0 {
+	if s == nil || len(secret) == 0 {
 		return
 	}
 	rawStr := string(secret)
@@ -1711,6 +1744,9 @@ func (s *secretScrubber) addSecret(secret []byte) {
 		candidates = append(candidates, jsonQuoted[1:len(jsonQuoted)-1])
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	seen := make(map[string]bool, len(s.tokens)+len(candidates))
 	for _, existing := range s.tokens {
 		seen[string(existing)] = true
@@ -1729,13 +1765,16 @@ func (s *secretScrubber) addSecret(secret []byte) {
 }
 
 func (s *secretScrubber) scrubBytes(in []byte) []byte {
-	if len(in) == 0 || len(s.tokens) == 0 {
-		out := make([]byte, len(in))
-		copy(out, in)
-		return out
-	}
 	out := make([]byte, len(in))
 	copy(out, in)
+	if s == nil || len(in) == 0 {
+		return out
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.tokens) == 0 {
+		return out
+	}
 	redacted := []byte(RedactedCredentialPlaceholder)
 	for _, tok := range s.tokens {
 		if len(tok) > 0 && bytes.Contains(out, tok) {
@@ -1746,7 +1785,13 @@ func (s *secretScrubber) scrubBytes(in []byte) []byte {
 }
 
 func (s *secretScrubber) scrubString(in string) string {
-	if in == "" || len(s.tokens) == 0 {
+	if s == nil || in == "" {
+		return in
+	}
+	s.mu.RLock()
+	hasTokens := len(s.tokens) > 0
+	s.mu.RUnlock()
+	if !hasTokens {
 		return in
 	}
 	b := s.scrubBytes([]byte(in))
@@ -1839,11 +1884,16 @@ func (s *secretScrubber) sanitizeError(err error) error {
 }
 
 func (s *secretScrubber) zeroize() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
 	for i := range s.tokens {
 		clear(s.tokens[i])
 		s.tokens[i] = nil
 	}
 	s.tokens = nil
+	s.mu.Unlock()
 }
 
 type scrubbingStreamReader struct {
@@ -1904,7 +1954,7 @@ func (r *scrubbingStreamReader) Read(p []byte) (int, error) {
 			return 0, err
 		}
 		// Fast pass-through when zero secrets are registered (zero buffering).
-		if r.scrubber == nil || len(r.scrubber.tokens) == 0 {
+		if !r.scrubber.hasTokens() {
 			rc := r.rc
 			r.mu.Unlock()
 			n, err := rc.Read(p)
@@ -1982,19 +2032,8 @@ func (r *scrubbingStreamReader) processPendingLocked(atEOF bool) {
 	r.pending = nil
 
 	holdLen := 0
-	if !atEOF && r.scrubber != nil {
-		for _, tok := range r.scrubber.tokens {
-			maxK := len(tok) - 1
-			if maxK > len(scrubbed) {
-				maxK = len(scrubbed)
-			}
-			for k := maxK; k > holdLen; k-- {
-				if bytes.HasSuffix(scrubbed, tok[:k]) {
-					holdLen = k
-					break
-				}
-			}
-		}
+	if !atEOF {
+		holdLen = r.scrubber.trailingPrefixHold(scrubbed)
 	}
 
 	emitLen := len(scrubbed) - holdLen
