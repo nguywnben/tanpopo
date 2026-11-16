@@ -454,71 +454,79 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				initialRT = nil
 				initialTarget = newTarget
 
-				var newErr error
-				initialRT, releaseInitial, newErr = h.acquireRuntime(streamCtx, initialTarget)
-				if newErr != nil {
-					if errors.Is(newErr, context.Canceled) {
-						if r.Context().Err() == nil && streamCtx.Err() != nil {
-							h.writeNativeStreamCancelError(w, streamCtx, reqID, "Virtual Key was revoked or suspended before dispatch.")
-						}
-						return
-					}
-					if len(candidates) <= 1 {
-						h.writeRuntimeFaultError(w, reqID, newErr)
+				if blockedKS, ok := h.bindNativeTargetAndCheckKillSwitch(streamCtx, match.Key, initialTarget); !ok {
+					if len(candidates) <= 1 || (blockedKS != nil && (blockedKS.Level == killswitch.LevelVirtualKey || blockedKS.Level == killswitch.LevelProjectOrOrgFreeze)) {
+						writeKillSwitchError(w, reqID, blockedKS)
 						return
 					}
 					hasInitialInsp = false
-				} else if adapterChanged {
-					newSafeHeaders := buildSanitizedNativeHeaders(r.Header, initialTarget.Adapter.AllowedNativeHeaders, rawKey, reqID, tp)
-					newNarrowPolicy := buildHostNarrowPolicyFromTarget(initialTarget)
-					newWasmCtx := wasm.WithEgressScope(streamCtx, wasm.EgressScope{
-						OrgID:        match.Key.OrgID,
-						ConnectionID: initialTarget.Connection.ID,
-						ActorKind:    "virtual_key",
-						ActorID:      match.Key.ID,
-						EntryPoint:   wasm.DefaultAuditEntryPoint,
-						RequestID:    reqID,
-						NarrowPolicy: &newNarrowPolicy,
-					})
-					reRawHints := rawHints
-					reRawHints.Model = effectiveModel
-					reInsp, reErr := inspectNativeWithTelemetry(newWasmCtx, reqTel, initialTarget, initialRT, reqID, dialect, upstreamPath, newSafeHeaders, rawBody, reRawHints)
-					if reErr != nil {
-						if errors.Is(reErr, context.Canceled) {
+				} else {
+					var newErr error
+					initialRT, releaseInitial, newErr = h.acquireRuntime(streamCtx, initialTarget)
+					if newErr != nil {
+						if errors.Is(newErr, context.Canceled) {
 							if r.Context().Err() == nil && streamCtx.Err() != nil {
 								h.writeNativeStreamCancelError(w, streamCtx, reqID, "Virtual Key was revoked or suspended before dispatch.")
 							}
 							return
 						}
 						if len(candidates) <= 1 {
-							h.writeRuntimeFaultError(w, reqID, reErr)
+							h.writeRuntimeFaultError(w, reqID, newErr)
 							return
 						}
-						if releaseInitial != nil {
-							releaseInitial()
-							releaseInitial = nil
-						}
-						initialRT = nil
 						hasInitialInsp = false
-					} else {
-						if reInsp.TargetModel != "" && reInsp.TargetModel != effectiveModel {
-							writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Target adapter redirected model after deployment re-resolution.", false)
-							return
+					} else if adapterChanged {
+						newSafeHeaders := buildSanitizedNativeHeaders(r.Header, initialTarget.Adapter.AllowedNativeHeaders, rawKey, reqID, tp)
+						newNarrowPolicy := buildHostNarrowPolicyFromTarget(initialTarget)
+						newWasmCtx := wasm.WithEgressScope(streamCtx, wasm.EgressScope{
+							OrgID:        match.Key.OrgID,
+							ConnectionID: initialTarget.Connection.ID,
+							ActorKind:    "virtual_key",
+							ActorID:      match.Key.ID,
+							EntryPoint:   wasm.DefaultAuditEntryPoint,
+							RequestID:    reqID,
+							NarrowPolicy: &newNarrowPolicy,
+						})
+						reRawHints := rawHints
+						reRawHints.Model = effectiveModel
+						reInsp, reErr := inspectNativeWithTelemetry(newWasmCtx, reqTel, initialTarget, initialRT, reqID, dialect, upstreamPath, newSafeHeaders, rawBody, reRawHints)
+						if reErr != nil {
+							if errors.Is(reErr, context.Canceled) {
+								if r.Context().Err() == nil && streamCtx.Err() != nil {
+									h.writeNativeStreamCancelError(w, streamCtx, reqID, "Virtual Key was revoked or suspended before dispatch.")
+								}
+								return
+							}
+							if len(candidates) <= 1 {
+								h.writeRuntimeFaultError(w, reqID, reErr)
+								return
+							}
+							if releaseInitial != nil {
+								releaseInitial()
+								releaseInitial = nil
+							}
+							initialRT = nil
+							hasInitialInsp = false
+						} else {
+							if reInsp.TargetModel != "" && reInsp.TargetModel != effectiveModel {
+								writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Target adapter redirected model after deployment re-resolution.", false)
+								return
+							}
+							if reInsp.TargetModel == "" {
+								reInsp.TargetModel = effectiveModel
+							}
+							if !modelAllowlistPermits(match.Key.AllowedModels, reInsp.TargetModel) {
+								writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", reInsp.TargetModel), false)
+								return
+							}
+							reCaps := compactNonEmptyStrings(reInsp.Hints.RequiredCapabilities)
+							if missingCap := resolver.FirstMissingCapability(initialTarget, match.Config != nil && match.Config.RequireTestedCaps, reCaps); missingCap != "" {
+								writeCanonicalError(w, reqID, http.StatusBadRequest, "capability_not_supported", "invalid_request_error", fmt.Sprintf("Deployment %q does not support required capability %q.", initialTarget.Deployment.ID, missingCap), false)
+								return
+							}
+							insp = reInsp
+							effectiveModel = firstNonEmpty(insp.TargetModel, effectiveModel)
 						}
-						if reInsp.TargetModel == "" {
-							reInsp.TargetModel = effectiveModel
-						}
-						if !modelAllowlistPermits(match.Key.AllowedModels, reInsp.TargetModel) {
-							writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", reInsp.TargetModel), false)
-							return
-						}
-						reCaps := compactNonEmptyStrings(reInsp.Hints.RequiredCapabilities)
-						if missingCap := resolver.FirstMissingCapability(initialTarget, match.Config != nil && match.Config.RequireTestedCaps, reCaps); missingCap != "" {
-							writeCanonicalError(w, reqID, http.StatusBadRequest, "capability_not_supported", "invalid_request_error", fmt.Sprintf("Deployment %q does not support required capability %q.", initialTarget.Deployment.ID, missingCap), false)
-							return
-						}
-						insp = reInsp
-						effectiveModel = firstNonEmpty(insp.TargetModel, effectiveModel)
 					}
 				}
 			}
@@ -3631,4 +3639,3 @@ func parseNativeJSONNumberCeiling(num json.Number) (int64, bool) {
 	}
 	return int64(math.Ceil(fv)), true
 }
-

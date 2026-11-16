@@ -695,3 +695,69 @@ func TestSnapshotRejectsMalformedVirtualKeyAllowlists(t *testing.T) {
 	}
 }
 
+func TestSnapshotKillSwitchSyncRetryOnFastPath(t *testing.T) {
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	nowMs := fk.Now().UTC().UnixMilli()
+	st, err := sqlite.Open(context.Background(), sqlite.Config{
+		DBPath: filepath.Join(t.TempDir(), "ks_retry.db"),
+		NowMs:  func() int64 { return nowMs },
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	ctx := context.Background()
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "ks-retry-org", DisplayName: "KS Retry Org"})
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+
+	mgr, err := NewManager(ctx, ManagerConfig{
+		DB:    st.RawDB(),
+		NowMs: func() int64 { return nowMs },
+	})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	syncCalls := 0
+	failNext := true
+	mgr.RegisterKillSwitchSync(func(context.Context) error {
+		syncCalls++
+		if failNext {
+			return errors.New("transient sqlite lock")
+		}
+		return nil
+	})
+
+	if _, err := st.Changelog().Append(ctx, port.ChangelogEntry{
+		OrgID: &org.ID, EntityKind: "emergency_kill_switch", EntityID: "ksw_01RETRY", MutationType: port.MutationRevoke, Emergency: true, CreatedAtMs: nowMs,
+	}); err != nil {
+		t.Fatalf("Append changelog: %v", err)
+	}
+
+	if err := mgr.Refresh(ctx); err == nil {
+		t.Fatal("expected first Refresh with failing OnKillSwitchSync to return error")
+	}
+	if syncCalls != 1 {
+		t.Fatalf("expected 1 sync attempt, got %d", syncCalls)
+	}
+
+	// Next Refresh sees targetEpoch == prevEpoch, yet MUST NOT take fast-path because killSwitchSyncDirty is still true.
+	failNext = false
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatalf("expected second Refresh to retry OnKillSwitchSync and succeed, got %v", err)
+	}
+	if syncCalls != 2 {
+		t.Fatalf("expected retry sync call count=2, got %d", syncCalls)
+	}
+
+	// Subsequent Refresh with no new changelog events may safely take the fast-path without invoking ksSync again.
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatalf("expected steady-state fast-path Refresh to succeed, got %v", err)
+	}
+	if syncCalls != 2 {
+		t.Fatalf("expected steady-state fast-path Refresh not to invoke ksSync again, got %d", syncCalls)
+	}
+}

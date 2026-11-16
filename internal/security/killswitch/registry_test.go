@@ -620,3 +620,75 @@ func TestKillSwitchFailClosedRBACValidationAndCrossProcessWatcher(t *testing.T) 
 	}
 	_ = ksInst
 }
+
+func TestRegistryConcurrentTriggerClearAndRefreshNoLostUpdate(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newKillSwitchHarness(t)
+
+	const cycles = 20
+	var wg sync.WaitGroup
+	refreshStop := make(chan struct{})
+	refreshErr := make(chan error, 1)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-refreshStop:
+				return
+			default:
+				if err := h.reg.RefreshFromDB(ctx); err != nil {
+					select {
+					case refreshErr <- err:
+					default:
+					}
+					return
+				}
+			}
+		}
+	}()
+
+	for i := 0; i < cycles; i++ {
+		ks, err := h.reg.Trigger(ctx, TriggerParams{
+			OrgID: &h.orgAID, Level: LevelVirtualKey, TargetID: h.vkA1ID,
+			Reason: fmt.Sprintf("concurrent cycle %02d trigger", i), TriggeredByPrincipalID: h.prnAID,
+		})
+		if err != nil {
+			t.Fatalf("cycle %d Trigger: %v", i, err)
+		}
+		if _, blocked := h.reg.CheckAdmission(AdmissionQuery{OrgID: h.orgAID, VirtualKeyID: h.vkA1ID}); !blocked {
+			t.Fatalf("cycle %d: expected vkA1 blocked immediately after Trigger", i)
+		}
+		if _, err := h.reg.Clear(ctx, ClearParams{
+			OrgID: &h.orgAID, KillSwitchID: ks.ID, ExpectedVersion: ks.Version,
+			ClearedByPrincipalID: h.prnAID, ClearReason: fmt.Sprintf("concurrent cycle %02d clear", i),
+		}); err != nil {
+			t.Fatalf("cycle %d Clear: %v", i, err)
+		}
+		if _, blocked := h.reg.CheckAdmission(AdmissionQuery{OrgID: h.orgAID, VirtualKeyID: h.vkA1ID}); blocked {
+			t.Fatalf("cycle %d: expected vkA1 unblocked immediately after Clear", i)
+		}
+	}
+
+	close(refreshStop)
+	wg.Wait()
+	select {
+	case err := <-refreshErr:
+		t.Fatalf("concurrent RefreshFromDB failed: %v", err)
+	default:
+	}
+
+	// Trigger one final time concurrently with a final RefreshFromDB; final memory state must stay blocked.
+	ksFinal, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelVirtualKey, TargetID: h.vkA1ID,
+		Reason: "final active check after race", TriggeredByPrincipalID: h.prnAID,
+	})
+	if err != nil {
+		t.Fatalf("final Trigger: %v", err)
+	}
+	if _, blocked := h.reg.CheckAdmission(AdmissionQuery{OrgID: h.orgAID, VirtualKeyID: h.vkA1ID}); !blocked {
+		t.Fatalf("expected vkA1 blocked after final Trigger")
+	}
+	_ = ksFinal
+}

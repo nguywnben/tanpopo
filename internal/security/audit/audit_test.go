@@ -491,6 +491,16 @@ func TestBlastRadiusQueryCorrelationAndTenantIsolation(t *testing.T) {
 	if len(repPaginated.AuditEvents) != 1 || repPaginated.AuditEvents[0].EventType != "kill_switch.triggered" {
 		t.Fatalf("expected paginated Limit=1 audit event kill_switch.triggered via metadata_json.target_id, got %+v", repPaginated.AuditEvents)
 	}
+
+	// Passing reserved SYSTEM chain_key (any casing) without AllowInstanceScope MUST fail closed.
+	for _, reserved := range []string{SystemChainKey, "system"} {
+		if _, err := QueryBlastRadius(ctx, st.RawDB(), BlastRadiusQuery{
+			OrgID:                   reserved,
+			ExtensionInstallationID: "ins_bad_plugin",
+		}); !errors.Is(err, port.ErrInvalidInput) {
+			t.Fatalf("expected OrgID=%q without AllowInstanceScope to fail ErrInvalidInput, got %v", reserved, err)
+		}
+	}
 }
 
 func TestLoggerKeyAwareScrubbingAndRequestIDSanitization(t *testing.T) {

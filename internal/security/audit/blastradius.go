@@ -67,7 +67,7 @@ func QueryBlastRadius(ctx context.Context, db *sql.DB, q BlastRadiusQuery) (*Bla
 		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", port.ErrInvalidInput)
 	}
 	orgID := strings.TrimSpace(q.OrgID)
-	if orgID == "" && !q.AllowInstanceScope {
+	if (orgID == "" || strings.EqualFold(orgID, SystemChainKey)) && !q.AllowInstanceScope {
 		return nil, fmt.Errorf("%w: org_id is required unless AllowInstanceScope is enabled", port.ErrInvalidInput)
 	}
 	extID := strings.TrimSpace(q.ExtensionInstallationID)
@@ -177,7 +177,7 @@ func QueryBlastRadius(ctx context.Context, db *sql.DB, q BlastRadiusQuery) (*Bla
 
 	for rows.Next() {
 		var (
-			hit                                                TraceHit
+			hit                                               TraceHit
 			vkNS, routeNS, depNS, connNS, extNS, verNS, errNS sql.NullString
 		)
 		if serr := rows.Scan(

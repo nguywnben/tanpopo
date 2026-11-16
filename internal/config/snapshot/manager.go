@@ -502,23 +502,24 @@ type localKeyFence struct {
 // Manager atomically publishes immutable ConfigSnapshot updates by tailing config_changelog
 // and aborts active SSE streams immediately on emergency revocations/shreds.
 type Manager struct {
-	db                *sql.DB
-	nowMs             func() int64
-	maxStaleMs        int64
-	streams           *ActiveStreamRegistry
-	snap              atomic.Pointer[ConfigSnapshot]
-	lastPollSuccessMs atomic.Int64
-	watcherStarted    atomic.Bool
-	watcherStopped    atomic.Bool
-	lastRefreshErrMu  sync.Mutex
-	lastRefreshErr    error
-	refreshMu         sync.Mutex
-	keyring           trust.TrustedKeyring
-	keyringDirty      bool
-	pendingFences     map[string]localKeyFence
-	wakeCh            chan struct{}
-	killSwitchSyncMu  sync.RWMutex
-	killSwitchSync    func(context.Context) error
+	db                  *sql.DB
+	nowMs               func() int64
+	maxStaleMs          int64
+	streams             *ActiveStreamRegistry
+	snap                atomic.Pointer[ConfigSnapshot]
+	lastPollSuccessMs   atomic.Int64
+	watcherStarted      atomic.Bool
+	watcherStopped      atomic.Bool
+	lastRefreshErrMu    sync.Mutex
+	lastRefreshErr      error
+	refreshMu           sync.Mutex
+	keyring             trust.TrustedKeyring
+	keyringDirty        bool
+	pendingFences       map[string]localKeyFence
+	wakeCh              chan struct{}
+	killSwitchSyncMu    sync.RWMutex
+	killSwitchSync      func(context.Context) error
+	killSwitchSyncDirty bool
 }
 
 // NewManager initializes a ConfigSnapshot Manager and loads an initial snapshot if ctx is ready.
@@ -782,8 +783,8 @@ func (m *Manager) Refresh(ctx context.Context) error {
 	}
 
 	// Fast-path heartbeat when config_changelog has not advanced since last snapshot build,
-	// unless a local fence requires a newer minEpoch not yet visible to this reader.
-	if cur != nil && targetEpoch == prevEpoch && !m.keyringDirty && !m.hasPendingFenceAheadOfLocked(targetEpoch) {
+	// unless a local fence requires a newer minEpoch or a pending kill-switch sync retry remains.
+	if cur != nil && targetEpoch == prevEpoch && !m.keyringDirty && !m.killSwitchSyncDirty && !m.hasPendingFenceAheadOfLocked(targetEpoch) {
 		_ = tx.Commit()
 		m.lastPollSuccessMs.Store(m.nowMs())
 		m.setLastErr(nil)
@@ -855,6 +856,9 @@ func (m *Manager) Refresh(ctx context.Context) error {
 	}
 
 	if hasKillSwitchEvent || cur == nil {
+		m.killSwitchSyncDirty = true
+	}
+	if m.killSwitchSyncDirty {
 		m.killSwitchSyncMu.RLock()
 		ksSync := m.killSwitchSync
 		m.killSwitchSyncMu.RUnlock()
@@ -864,6 +868,7 @@ func (m *Manager) Refresh(ctx context.Context) error {
 				return err
 			}
 		}
+		m.killSwitchSyncDirty = false
 	}
 
 	m.lastPollSuccessMs.Store(next.LoadedAtMs)

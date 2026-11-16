@@ -239,6 +239,7 @@ type Registry struct {
 	streams *StreamRegistry
 	onAbort func(level Level, orgID, targetID string)
 
+	syncMu      sync.Mutex // Serializes DB-to-active-map sync across Trigger/Clear/RefreshFromDB before releasing for stream aborts.
 	mu          sync.RWMutex
 	initialized bool
 	active      map[string]KillSwitch // keyed by KillSwitch.ID
@@ -313,6 +314,14 @@ func (r *Registry) UnregisterStream(handleID uint64) {
 // RefreshFromDB reloads all active emergency_kill_switches rows into memory and immediately
 // severs any live streams matching kill switches activated out-of-band by peer processes.
 func (r *Registry) RefreshFromDB(ctx context.Context) error {
+	r.syncMu.Lock()
+	syncLocked := true
+	defer func() {
+		if syncLocked {
+			r.syncMu.Unlock()
+		}
+	}()
+
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
 		       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
@@ -338,25 +347,30 @@ func (r *Registry) RefreshFromDB(ctx context.Context) error {
 		return fmt.Errorf("killswitch: iterate active switches: %w", err)
 	}
 
+	var toAbort []KillSwitch
 	r.mu.Lock()
-	wasInitialized := r.initialized
-	prev := r.active
+	if r.initialized {
+		for id, ks := range next {
+			if _, existed := r.active[id]; !existed && ks.AbortActiveStreams {
+				toAbort = append(toAbort, ks)
+			}
+		}
+	}
 	r.active = next
 	r.initialized = true
 	r.mu.Unlock()
 
-	if wasInitialized {
-		for id, ks := range next {
-			if _, existed := prev[id]; !existed && ks.AbortActiveStreams {
-				scopeOrg := ""
-				if ks.OrgID != nil {
-					scopeOrg = *ks.OrgID
-				}
-				r.streams.AbortMatching(ks.Level, scopeOrg, ks.TargetID)
-				if r.onAbort != nil {
-					r.onAbort(ks.Level, scopeOrg, ks.TargetID)
-				}
-			}
+	syncLocked = false
+	r.syncMu.Unlock()
+
+	for _, ks := range toAbort {
+		scopeOrg := ""
+		if ks.OrgID != nil {
+			scopeOrg = *ks.OrgID
+		}
+		r.streams.AbortMatching(ks.Level, scopeOrg, ks.TargetID)
+		if r.onAbort != nil {
+			r.onAbort(ks.Level, scopeOrg, ks.TargetID)
 		}
 	}
 	return nil
@@ -465,6 +479,14 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 	}
 	now := r.nowMs()
 
+	r.syncMu.Lock()
+	syncLocked := true
+	defer func() {
+		if syncLocked {
+			r.syncMu.Unlock()
+		}
+	}()
+
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("killswitch: begin trigger tx: %w", err)
@@ -558,6 +580,9 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 	r.active[ks.ID] = ks
 	r.mu.Unlock()
 
+	syncLocked = false
+	r.syncMu.Unlock()
+
 	if abortStreams {
 		r.streams.AbortMatching(p.Level, orgID, targetID)
 		if r.onAbort != nil {
@@ -591,6 +616,14 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 		entryPoint = port.AuditEntryPointAdminAPI
 	}
 	now := r.nowMs()
+
+	r.syncMu.Lock()
+	syncLocked := true
+	defer func() {
+		if syncLocked {
+			r.syncMu.Unlock()
+		}
+	}()
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -680,6 +713,9 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 	r.mu.Lock()
 	delete(r.active, ks.ID)
 	r.mu.Unlock()
+
+	syncLocked = false
+	r.syncMu.Unlock()
 
 	ks.Active = false
 	ks.ClearedByPrincipalID = &principalID
@@ -977,11 +1013,11 @@ func countInstanceOperatorRoleTx(ctx context.Context, tx *sql.Tx, principalID st
 
 func scanKillSwitch(s interface{ Scan(...any) error }) (KillSwitch, error) {
 	var (
-		ks                    KillSwitch
-		levelStr              string
+		ks                     KillSwitch
+		levelStr               string
 		orgNS, clearedBy, crNS sql.NullString
-		clearedAt             sql.NullInt64
-		activeInt, abortInt   int
+		clearedAt              sql.NullInt64
+		activeInt, abortInt    int
 	)
 	if err := s.Scan(
 		&ks.ID, &orgNS, &levelStr, &ks.TargetID, &activeInt, &abortInt, &ks.Reason,
