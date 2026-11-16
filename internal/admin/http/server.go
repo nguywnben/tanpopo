@@ -527,6 +527,9 @@ func (s *Server) buildHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqID := resolveOrMintRequestID(r.Header.Get(RequestIDHeader))
 		w.Header().Set(RequestIDHeader, reqID)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		r = r.WithContext(contextWithRequestID(r.Context(), reqID))
 
 		defer func() {

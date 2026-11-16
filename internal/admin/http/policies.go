@@ -125,8 +125,12 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if policy exists in ANY org first to prevent cross-tenant existence probing (AUTH-15).
-	var existingOrgID string
-	err := s.db.QueryRowContext(r.Context(), `SELECT org_id FROM policies WHERE id = ?`, policyID).Scan(&existingOrgID)
+	var existingOrgID, existingScopeType, existingScopeID string
+	err := s.db.QueryRowContext(r.Context(), `
+		SELECT org_id, scope_type, scope_id
+		FROM policies
+		WHERE id = ?`, policyID,
+	).Scan(&existingOrgID, &existingScopeType, &existingScopeID)
 	policyExists := err == nil
 	switch {
 	case err == nil && existingOrgID != orgID:
@@ -137,42 +141,99 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scopeType, err := mapPolicyScopeTierToDB(req.ScopeTier)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
-		return
-	}
-	scopeID := strings.TrimSpace(req.ScopeID)
-	if scopeID == "" && scopeType == snapshot.PolicyScopeOrg {
-		scopeID = orgID
-	}
-	if scopeID == "" {
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "scope_id is required", false, nil)
-		return
-	}
+	var (
+		scopeType     string
+		scopeID       string
+		targetScope   rbac.TargetScope
+		ancestorEnvID string
+		expectedVer   int64
+	)
 
-	targetScope, ancestorEnvID, okScope := s.resolvePolicyTargetScope(w, r, orgID, scopeType, scopeID)
-	if !okScope {
-		return
-	}
-	action := rbac.ActionPolicyProjectWrite
-	switch strings.ToUpper(strings.TrimSpace(req.ScopeTier)) {
-	case "INSTANCE":
-		action = rbac.ActionPolicyInstanceWrite
-	case "ORGANIZATION":
-		action = rbac.ActionPolicyOrgWrite
-	case "PROJECT", "ENVIRONMENT":
-		action = rbac.ActionPolicyProjectWrite
-	}
-	if !s.authorize(w, r, sc, action, targetScope) {
-		return
-	}
-	if !s.requireActiveOrgAndProject(w, r, orgID, targetScope.ProjectID) {
-		return
-	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
+	if policyExists {
+		var okScope bool
+		targetScope, ancestorEnvID, okScope = s.resolvePolicyTargetScope(w, r, orgID, existingScopeType, existingScopeID)
+		if !okScope {
+			return
+		}
+		action := rbac.ActionPolicyProjectWrite
+		switch existingScopeType {
+		case snapshot.PolicyScopeOrg:
+			action = rbac.ActionPolicyOrgWrite
+		case snapshot.PolicyScopeProject, snapshot.PolicyScopeEnv:
+			action = rbac.ActionPolicyProjectWrite
+		}
+		if !s.authorize(w, r, sc, action, targetScope) {
+			return
+		}
+		if !s.requireActiveOrgAndProject(w, r, orgID, targetScope.ProjectID) {
+			return
+		}
+		var okVer bool
+		expectedVer, okVer = requireIfMatch(w, r)
+		if !okVer {
+			return
+		}
+		scopeType, err = mapPolicyScopeTierToDB(req.ScopeTier)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+			return
+		}
+		scopeID = strings.TrimSpace(req.ScopeID)
+		if scopeID == "" && scopeType == snapshot.PolicyScopeOrg {
+			scopeID = orgID
+		}
+		if scopeID == "" {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "scope_id is required", false, nil)
+			return
+		}
+		if existingScopeType != scopeType || existingScopeID != scopeID {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "scope_tier and scope_id cannot be mutated on existing policy", false, nil)
+			return
+		}
+	} else {
+		if strings.EqualFold(strings.TrimSpace(req.ScopeTier), "INSTANCE") {
+			if !s.authorize(w, r, sc, rbac.ActionPolicyInstanceWrite, rbac.TargetScope{}) {
+				return
+			}
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "INSTANCE-tier policies cannot be stored via /admin/v1/policies/{policyId}; use ORGANIZATION, PROJECT, or ENVIRONMENT", false, nil)
+			return
+		}
+		scopeType, err = mapPolicyScopeTierToDB(req.ScopeTier)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+			return
+		}
+		scopeID = strings.TrimSpace(req.ScopeID)
+		if scopeID == "" && scopeType == snapshot.PolicyScopeOrg {
+			scopeID = orgID
+		}
+		if scopeID == "" {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "scope_id is required", false, nil)
+			return
+		}
+		var okScope bool
+		targetScope, ancestorEnvID, okScope = s.resolvePolicyTargetScope(w, r, orgID, scopeType, scopeID)
+		if !okScope {
+			return
+		}
+		action := rbac.ActionPolicyProjectWrite
+		switch strings.ToUpper(strings.TrimSpace(req.ScopeTier)) {
+		case "ORGANIZATION", "ORG":
+			action = rbac.ActionPolicyOrgWrite
+		case "PROJECT", "ENVIRONMENT", "ENV":
+			action = rbac.ActionPolicyProjectWrite
+		}
+		if !s.authorize(w, r, sc, action, targetScope) {
+			return
+		}
+		if !s.requireActiveOrgAndProject(w, r, orgID, targetScope.ProjectID) {
+			return
+		}
+		var okVer bool
+		expectedVer, okVer = requireIfMatch(w, r)
+		if !okVer {
+			return
+		}
 	}
 
 	rulesJSON, err := encodePolicyRulesFromDTO(&req)
@@ -414,14 +475,14 @@ func (s *Server) writePolicyStoreError(w http.ResponseWriter, r *http.Request, e
 
 func mapPolicyScopeTierToDB(tier string) (string, error) {
 	switch strings.ToUpper(strings.TrimSpace(tier)) {
-	case "INSTANCE", "ORGANIZATION", "ORG":
+	case "ORGANIZATION", "ORG":
 		return snapshot.PolicyScopeOrg, nil
 	case "PROJECT":
 		return snapshot.PolicyScopeProject, nil
 	case "ENVIRONMENT", "ENV":
 		return snapshot.PolicyScopeEnv, nil
 	default:
-		return "", errors.New("scope_tier must be INSTANCE, ORGANIZATION, PROJECT, or ENVIRONMENT")
+		return "", errors.New("scope_tier must be ORGANIZATION, PROJECT, or ENVIRONMENT")
 	}
 }
 

@@ -993,6 +993,9 @@ func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: ptrStrValue(cur.OwnerProjectID)}) {
 		return
 	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, ptrStrValue(cur.OwnerProjectID)) {
+		return
+	}
 
 	if !s.probeLimiter.Allow(orgID+"|"+sc.Actor.PrincipalID, s.nowMs()) {
 		writeErrorEnvelope(w, r, http.StatusTooManyRequests, "probe_rate_limited", "rate_limit_error", "connection test rate limit exceeded", true, nil)

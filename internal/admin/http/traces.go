@@ -255,8 +255,8 @@ func (s *Server) handleGetTraceDebugPayload(w http.ResponseWriter, r *http.Reque
 	err := s.db.QueryRowContext(r.Context(), `
 		SELECT org_id, project_id, nonce, encrypted_payload_aead, expires_at_ms
 		FROM debug_payload_blobs
-		WHERE request_id = ?
-		ORDER BY created_at_ms DESC LIMIT 1`, reqID,
+		WHERE org_id = ? AND request_id = ?
+		ORDER BY created_at_ms DESC LIMIT 1`, orgID, reqID,
 	).Scan(&blobOrgID, &projID, &nonce, &ciphertext, &expiresAtMs)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && blobOrgID != orgID) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "debug payload not found", false, nil)

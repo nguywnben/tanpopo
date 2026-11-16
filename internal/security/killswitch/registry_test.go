@@ -842,4 +842,46 @@ func TestKillSwitchRemediationDeterministicPriorityUTF8AndListInstance(t *testin
 	if len(activeInst) != 0 {
 		t.Fatalf("expected 0 active instance switches, got %+v", activeInst)
 	}
+
+	// 4. TriggerWithSeveredCount returns the exact count of aborted matching streams across orgs.
+	sCtx1, sCancel1 := context.WithCancel(context.Background())
+	defer sCancel1()
+	sCtx2, sCancel2 := context.WithCancel(context.Background())
+	defer sCancel2()
+	sCtxOther, sCancelOther := context.WithCancel(context.Background())
+	defer sCancelOther()
+	h.reg.RegisterStream(StreamRegistration{OrgID: h.orgAID, PluginInstallID: h.inst1ID, Cancel: sCancel1})
+	h.reg.RegisterStream(StreamRegistration{OrgID: "org_other", PluginInstallID: h.inst1ID, Cancel: sCancel2})
+	hOther := h.reg.RegisterStream(StreamRegistration{OrgID: h.orgAID, PluginInstallID: "inst_unrelated", Cancel: sCancelOther})
+	defer h.reg.UnregisterStream(hOther)
+
+	ksWithCount, severed, err := h.reg.TriggerWithSeveredCount(ctx, TriggerParams{
+		Level: LevelExtensionInstallation, TargetID: h.inst1ID,
+		Reason: "verify atomic severed count", TriggeredByPrincipalID: h.prnInstID,
+	})
+	if err != nil {
+		t.Fatalf("TriggerWithSeveredCount: %v", err)
+	}
+	if severed != 2 {
+		t.Fatalf("expected severed=2, got %d", severed)
+	}
+	if h.reg.Streams().ActiveCount() != 1 {
+		t.Fatalf("expected 1 non-matching stream still active, got %d", h.reg.Streams().ActiveCount())
+	}
+	select {
+	case <-sCtx1.Done():
+	default:
+		t.Fatalf("expected sCtx1 canceled")
+	}
+	select {
+	case <-sCtx2.Done():
+	default:
+		t.Fatalf("expected sCtx2 canceled")
+	}
+	select {
+	case <-sCtxOther.Done():
+		t.Fatalf("expected non-matching sCtxOther to stay active")
+	default:
+	}
+	_ = ksWithCount
 }

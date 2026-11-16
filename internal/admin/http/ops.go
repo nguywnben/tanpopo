@@ -739,10 +739,6 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
 	}
-	orgID, ok := s.resolveTargetOrgID(w, r, sc)
-	if !ok {
-		return
-	}
 	targetID := strings.TrimSpace(req.TargetID)
 	reason := strings.TrimSpace(req.Reason)
 	if targetID == "" || len([]rune(reason)) < 5 {
@@ -754,6 +750,17 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 	if !okLevel {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "target_level must be VIRTUAL_KEY, PROJECT, PROVIDER_CONNECTION, or EXTENSION", false, nil)
 		return
+	}
+
+	qOrg := strings.TrimSpace(r.URL.Query().Get("org_id"))
+	var orgID string
+	if level == killswitch.LevelExtensionInstallation && sc.IsOperator && qOrg == "" && sc.OrgID == "" {
+		orgID = ""
+	} else {
+		orgID, ok = s.resolveTargetOrgID(w, r, sc)
+		if !ok {
+			return
+		}
 	}
 
 	// Cross-tenant & scope lookup BEFORE authorizing / triggering (AUTH-15).
@@ -853,21 +860,12 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 		abortStreams = *req.AbortActiveStreams
 	}
 
-	ksOrg := &orgID
-	if level == killswitch.LevelExtensionInstallation && sc.IsOperator && !actorHasOrgScopeBinding(sc.Actor, orgID) {
-		ksOrg = nil
-	}
-	ksOrgVal := ""
-	if ksOrg != nil {
-		ksOrgVal = *ksOrg
+	var ksOrg *string
+	if orgID != "" {
+		ksOrg = &orgID
 	}
 
-	severedCount := 0
-	if abortStreams && s.killSwitch.Streams() != nil {
-		severedCount = s.killSwitch.Streams().CountMatching(level, ksOrgVal, targetID)
-	}
-
-	_, err := s.killSwitch.Trigger(r.Context(), killswitch.TriggerParams{
+	_, severedCount, err := s.killSwitch.TriggerWithSeveredCount(r.Context(), killswitch.TriggerParams{
 		OrgID:                  ksOrg,
 		Level:                  level,
 		TargetID:               targetID,
@@ -917,18 +915,29 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	orgID, ok := s.resolveTargetOrgID(w, r, sc)
-	if !ok {
-		return
-	}
-	if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID}) {
-		return
-	}
-
 	tType := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("target_type")))
 	targetID := strings.TrimSpace(r.URL.Query().Get("target_id"))
 	if targetID == "" {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "target_type and target_id are required", false, nil)
+		return
+	}
+	if tType != "EXTENSION" && tType != "PROVIDER_CONNECTION" {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "target_type must be EXTENSION or PROVIDER_CONNECTION", false, nil)
+		return
+	}
+
+	qOrg := strings.TrimSpace(r.URL.Query().Get("org_id"))
+	allowInstanceScope := tType == "EXTENSION" && sc.IsOperator && qOrg == ""
+	var orgID string
+	if allowInstanceScope {
+		orgID = ""
+	} else {
+		orgID, ok = s.resolveTargetOrgID(w, r, sc)
+		if !ok {
+			return
+		}
+	}
+	if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID}) {
 		return
 	}
 
@@ -945,7 +954,7 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 	nowMs := s.nowMs()
 	q := audit.BlastRadiusQuery{
 		OrgID:              orgID,
-		AllowInstanceScope: sc.IsOperator && strings.TrimSpace(r.URL.Query().Get("org_id")) == "",
+		AllowInstanceScope: allowInstanceScope,
 		FromMs:             nowMs - dur.Milliseconds(),
 		ToMs:               nowMs,
 	}
@@ -954,9 +963,6 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 		q.ExtensionInstallationID = targetID
 	case "PROVIDER_CONNECTION":
 		q.ConnectionID = targetID
-	default:
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "target_type must be EXTENSION or PROVIDER_CONNECTION", false, nil)
-		return
 	}
 
 	report, err := audit.QueryBlastRadius(r.Context(), s.db, q)

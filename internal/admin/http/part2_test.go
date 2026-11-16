@@ -2891,3 +2891,266 @@ func TestPart2SecurityAndRemediationRegressions(t *testing.T) {
 		t.Fatalf("expected persisted GET /routes request_timeout_ms=45000, got %+v", rtListAfter.Data)
 	}
 }
+
+func TestPart2PolicyBudgetImmutableAndInstanceOperatorOps(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "Ops Policy Org", "proj-one")
+	now := h.fk.Now().UTC().UnixMilli()
+
+	// Create second org to test multi-tenant instance-only OPERATOR ops.
+	org2, err := h.st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "ops-org-2", DisplayName: "Ops Org 2"})
+	if err != nil {
+		t.Fatalf("CreateOrganization org2: %v", err)
+	}
+	proj2, err := h.st.Tenancy().CreateProject(ctx, org2.ID, port.CreateProjectParams{Slug: "proj-two", DisplayName: "Proj Two"})
+	if err != nil {
+		t.Fatalf("CreateProject proj2: %v", err)
+	}
+	env2, err := h.st.Tenancy().CreateEnvironment(ctx, org2.ID, proj2.ID, port.CreateEnvironmentParams{Slug: "prod-2"})
+	if err != nil {
+		t.Fatalf("CreateEnvironment env2: %v", err)
+	}
+
+	teamATok := "tok_pol_team_a"
+	h.registerBearerToken(teamATok, &rbac.Actor{
+		PrincipalID:     "pri_pol_team_a",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleTeamAdmin}},
+	})
+
+	// 1. Policy update RBAC check uses persisted scope BEFORE If-Match and rejects scope mutation on update.
+	orgPolID := idgen.MustNew(idgen.PrefixPolicy)
+	recCreateOrgPol := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+orgPolID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":               "ORGANIZATION",
+		"scope_id":                 boot.OrgID,
+		"allowed_data_regions":     []string{"US"},
+		"min_plugin_trust":         "OFFICIAL_ONLY",
+		"min_capability_assurance": "VERIFIED",
+		"rpm_ceiling":              1000,
+	})
+	if recCreateOrgPol.Code != http.StatusOK {
+		t.Fatalf("create org policy: %d %s", recCreateOrgPol.Code, recCreateOrgPol.Body.String())
+	}
+
+	// TEAM_ADMIN spoofing scope_tier=PROJECT, scope_id=boot.ProjectID on existing org policy MUST return 403 (both without and with If-Match).
+	for _, ifm := range []string{"", `"v1"`} {
+		recSpoofPol := h.doBearer(t, http.MethodPut, "/admin/v1/policies/"+orgPolID, teamATok, ifm, map[string]any{
+			"scope_tier":               "PROJECT",
+			"scope_id":                 boot.ProjectID,
+			"allowed_data_regions":     []string{"US"},
+			"min_plugin_trust":         "OFFICIAL_ONLY",
+			"min_capability_assurance": "VERIFIED",
+			"rpm_ceiling":              500,
+		})
+		if recSpoofPol.Code != http.StatusForbidden {
+			t.Fatalf("TEAM_ADMIN spoofed policy update (If-Match=%q) expected 403, got %d body=%s", ifm, recSpoofPol.Code, recSpoofPol.Body.String())
+		}
+	}
+
+	// TEAM_ADMIN creating new policy with scope_tier="ORG" MUST hit ActionPolicyOrgWrite -> 403 even without If-Match.
+	newPolID := idgen.MustNew(idgen.PrefixPolicy)
+	recTeamOrgAlias := h.doBearer(t, http.MethodPut, "/admin/v1/policies/"+newPolID, teamATok, "", map[string]any{
+		"scope_tier":               "ORG",
+		"scope_id":                 boot.OrgID,
+		"allowed_data_regions":     []string{"US"},
+		"min_plugin_trust":         "OFFICIAL_ONLY",
+		"min_capability_assurance": "VERIFIED",
+	})
+	if recTeamOrgAlias.Code != http.StatusForbidden {
+		t.Fatalf("TEAM_ADMIN create policy with scope_tier=ORG expected 403, got %d body=%s", recTeamOrgAlias.Code, recTeamOrgAlias.Body.String())
+	}
+
+	// ORG_OWNER mutating scope_tier or scope_id on existing policy MUST return 400.
+	recMutPol := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+orgPolID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":               "PROJECT",
+		"scope_id":                 boot.ProjectID,
+		"allowed_data_regions":     []string{"US"},
+		"min_plugin_trust":         "OFFICIAL_ONLY",
+		"min_capability_assurance": "VERIFIED",
+		"rpm_ceiling":              1000,
+	})
+	if recMutPol.Code != http.StatusBadRequest {
+		t.Fatalf("ORG_OWNER mutating policy scope expected 400, got %d body=%s", recMutPol.Code, recMutPol.Body.String())
+	}
+
+	// 2. Budget update rejects mutating scope_tier or scope_id -> 400 while permitting omitted fields -> 200.
+	bdgID := idgen.MustNew(idgen.PrefixBudget)
+	recCreateBdg := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/budgets/"+bdgID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":            "PROJECT",
+		"scope_id":              boot.ProjectID,
+		"period":                "MONTHLY",
+		"hard_limit_micros":     1000000,
+		"soft_warning_percents": []int{80},
+	})
+	if recCreateBdg.Code != http.StatusOK {
+		t.Fatalf("create budget: %d %s", recCreateBdg.Code, recCreateBdg.Body.String())
+	}
+	recMutBdgTier := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/budgets/"+bdgID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":        "ORGANIZATION",
+		"scope_id":          boot.OrgID,
+		"period":            "MONTHLY",
+		"hard_limit_micros": 2000000,
+	})
+	if recMutBdgTier.Code != http.StatusBadRequest {
+		t.Fatalf("mutating budget scope_tier expected 400, got %d body=%s", recMutBdgTier.Code, recMutBdgTier.Body.String())
+	}
+	recMutBdgID := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/budgets/"+bdgID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":        "PROJECT",
+		"scope_id":          boot.OrgID,
+		"period":            "MONTHLY",
+		"hard_limit_micros": 2000000,
+	})
+	if recMutBdgID.Code != http.StatusBadRequest {
+		t.Fatalf("mutating budget scope_id expected 400, got %d body=%s", recMutBdgID.Code, recMutBdgID.Body.String())
+	}
+	recUpdBdgOK := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/budgets/"+bdgID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"period":            "MONTHLY",
+		"hard_limit_micros": 2000000,
+	})
+	if recUpdBdgOK.Code != http.StatusOK {
+		t.Fatalf("updating budget without scope fields expected 200, got %d body=%s", recUpdBdgOK.Code, recUpdBdgOK.Body.String())
+	}
+
+	// 3. Instance-only OPERATOR (SessionOrgID == nil) querying blast-radius and triggering EXTENSION kill-switch without ?org_id=.
+	opID := idgen.MustNew(idgen.PrefixPrincipal)
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, created_at_ms, updated_at_ms)
+		VALUES (?, NULL, 'ADMIN_SERVICE_TOKEN', 'inst-op@example.test', 'ACTIVE', ?, ?)`,
+		opID, now, now,
+	); err != nil {
+		t.Fatalf("insert instance operator principal: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES ('rb_inst_op_part2', NULL, ?, 'INSTANCE', 'instance', 'OPERATOR', 1, ?)`,
+		opID, now,
+	); err != nil {
+		t.Fatalf("insert instance operator binding: %v", err)
+	}
+	instOpTok := "tok_inst_only_operator"
+	h.registerBearerToken(instOpTok, &rbac.Actor{
+		PrincipalID:     opID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	})
+
+	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	var extInstID string
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT installation_id FROM provider_adapters WHERE id = ?`, adpID).Scan(&extInstID); err != nil {
+		t.Fatalf("lookup extension installation_id: %v", err)
+	}
+	for _, tr := range []struct {
+		id     string
+		orgID  string
+		projID string
+		envID  string
+		vkID   string
+		connID string
+	}{
+		{"trc_inst_1", boot.OrgID, boot.ProjectID, boot.EnvID, "vk_inst_1", "conn_inst_1"},
+		{"trc_inst_2", org2.ID, proj2.ID, env2.ID, "vk_inst_2", "conn_inst_2"},
+	} {
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO request_traces_meta (
+				request_id, created_at_ms, started_at_ms, org_id, project_id, env_id, virtual_key_id, connection_id,
+				extension_installation_id, entry_point, route_slug, http_status, proxy_overhead_us, total_duration_ms, waterfall_stages_json
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unified_http', 'gpt-4o', 200, 100, 15, '[]')`,
+			tr.id, now, now-15, tr.orgID, tr.projID, tr.envID, tr.vkID, tr.connID, extInstID,
+		); err != nil {
+			t.Fatalf("insert trace %s: %v", tr.id, err)
+		}
+	}
+
+	recBRInst := h.doBearer(t, http.MethodGet, "/admin/v1/blast-radius?target_type=EXTENSION&target_id="+extInstID+"&since=24h", instOpTok, "", nil)
+	if recBRInst.Code != http.StatusOK {
+		t.Fatalf("instance-only OPERATOR GET /blast-radius expected 200, got %d body=%s", recBRInst.Code, recBRInst.Body.String())
+	}
+	var brInst blastRadiusResponseDTO
+	mustDecodeJSON(t, recBRInst.Body.Bytes(), &brInst)
+	if len(brInst.Organizations) != 2 || len(brInst.Connections) != 2 || len(brInst.VirtualKeys) != 2 {
+		t.Fatalf("expected multi-org blast radius (2 orgs, 2 conns, 2 vks), got %+v", brInst)
+	}
+
+	s1Ctx, s1Cancel := context.WithCancel(ctx)
+	defer s1Cancel()
+	s2Ctx, s2Cancel := context.WithCancel(ctx)
+	defer s2Cancel()
+	h.killSwitch.Streams().Register(killswitch.StreamRegistration{OrgID: boot.OrgID, ProjectID: boot.ProjectID, PluginInstallID: extInstID, Cancel: s1Cancel})
+	h.killSwitch.Streams().Register(killswitch.StreamRegistration{OrgID: org2.ID, ProjectID: proj2.ID, PluginInstallID: extInstID, Cancel: s2Cancel})
+
+	recKSInst := h.doBearer(t, http.MethodPost, "/admin/v1/kill-switches", instOpTok, "", map[string]any{
+		"target_level":         "EXTENSION",
+		"target_id":            extInstID,
+		"abort_active_streams": true,
+		"reason":               "Global emergency extension containment",
+	})
+	if recKSInst.Code != http.StatusOK {
+		t.Fatalf("instance-only OPERATOR POST /kill-switches EXTENSION expected 200, got %d body=%s", recKSInst.Code, recKSInst.Body.String())
+	}
+	var ksInstResp killSwitchTriggerResponseDTO
+	mustDecodeJSON(t, recKSInst.Body.Bytes(), &ksInstResp)
+	if ksInstResp.SeveredStreamsCount != 2 {
+		t.Fatalf("expected severed_streams_count=2 across both orgs, got %+v", ksInstResp)
+	}
+	select {
+	case <-s1Ctx.Done():
+	default:
+		t.Fatalf("expected org1 stream canceled by global extension kill switch")
+	}
+	select {
+	case <-s2Ctx.Done():
+	default:
+		t.Fatalf("expected org2 stream canceled by global extension kill switch")
+	}
+	var nullOrgCount int
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM emergency_kill_switches WHERE level = 'EXTENSION_INSTALLATION' AND target_id = ? AND org_id IS NULL AND active = 1`, extInstID).Scan(&nullOrgCount); err != nil || nullOrgCount != 1 {
+		t.Fatalf("expected 1 active global org_id IS NULL kill switch row, count=%d err=%v", nullOrgCount, err)
+	}
+
+	// 4. Policy scope_tier=INSTANCE cannot alias onto ORG: non-OPERATOR gets 403, OPERATOR gets 400, existing ORG policy rejects INSTANCE, and HTTP security headers are set.
+	if recBRInst.Header().Get("X-Content-Type-Options") != "nosniff" || recBRInst.Header().Get("X-Frame-Options") != "DENY" || recBRInst.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatalf("expected HTTP security headers on /admin/v1 responses, got nosniff=%q frame=%q ref=%q",
+			recBRInst.Header().Get("X-Content-Type-Options"), recBRInst.Header().Get("X-Frame-Options"), recBRInst.Header().Get("Referrer-Policy"))
+	}
+	orgOwnerOnlyTok := "tok_pol_org_owner_only"
+	h.registerBearerToken(orgOwnerOnlyTok, &rbac.Actor{
+		PrincipalID:     "pri_pol_org_owner_only",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleOrgOwner}},
+	})
+	instPolID := idgen.MustNew(idgen.PrefixPolicy)
+	recOwnerInstCreate := h.doBearer(t, http.MethodPut, "/admin/v1/policies/"+instPolID, orgOwnerOnlyTok, `"v1"`, map[string]any{
+		"scope_tier":               "INSTANCE",
+		"scope_id":                 boot.OrgID,
+		"allowed_data_regions":     []string{"US"},
+		"min_plugin_trust":         "OFFICIAL_ONLY",
+		"min_capability_assurance": "VERIFIED",
+	})
+	if recOwnerInstCreate.Code != http.StatusForbidden {
+		t.Fatalf("ORG_OWNER-only creating INSTANCE policy expected 403, got %d body=%s", recOwnerInstCreate.Code, recOwnerInstCreate.Body.String())
+	}
+	recOpInstCreate := h.doBearer(t, http.MethodPut, "/admin/v1/policies/"+instPolID+"?org_id="+boot.OrgID, instOpTok, `"v1"`, map[string]any{
+		"scope_tier":               "INSTANCE",
+		"scope_id":                 boot.OrgID,
+		"allowed_data_regions":     []string{"US"},
+		"min_plugin_trust":         "OFFICIAL_ONLY",
+		"min_capability_assurance": "VERIFIED",
+	})
+	if recOpInstCreate.Code != http.StatusBadRequest {
+		t.Fatalf("OPERATOR creating INSTANCE policy expected 400 (no silent ORG alias), got %d body=%s", recOpInstCreate.Code, recOpInstCreate.Body.String())
+	}
+	recOwnerMutToInst := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+orgPolID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":               "INSTANCE",
+		"scope_id":                 boot.OrgID,
+		"allowed_data_regions":     []string{"US"},
+		"min_plugin_trust":         "OFFICIAL_ONLY",
+		"min_capability_assurance": "VERIFIED",
+	})
+	if recOwnerMutToInst.Code != http.StatusBadRequest {
+		t.Fatalf("ORG_OWNER updating ORG policy with scope_tier=INSTANCE expected 400, got %d body=%s", recOwnerMutToInst.Code, recOwnerMutToInst.Body.String())
+	}
+}

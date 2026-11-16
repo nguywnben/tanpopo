@@ -487,14 +487,21 @@ func (r *Registry) CheckAdmission(q AdmissionQuery) (*KillSwitch, bool) {
 // an immutable audit_events row inside the exact same transaction, updates the in-memory
 // admission map, and severs all matching active SSE streams immediately (< 1s).
 func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, error) {
+	ks, _, err := r.TriggerWithSeveredCount(ctx, p)
+	return ks, err
+}
+
+// TriggerWithSeveredCount activates an emergency kill switch like Trigger and also
+// returns the exact number of in-flight streams aborted in r.streams.
+func (r *Registry) TriggerWithSeveredCount(ctx context.Context, p TriggerParams) (*KillSwitch, int, error) {
 	targetID := strings.TrimSpace(p.TargetID)
 	reason := strings.TrimSpace(p.Reason)
 	principalID := strings.TrimSpace(p.TriggeredByPrincipalID)
 	if !isValidLevel(p.Level) || targetID == "" || principalID == "" {
-		return nil, fmt.Errorf("%w: valid level, target_id, and triggered_by_principal_id are required", port.ErrInvalidInput)
+		return nil, 0, fmt.Errorf("%w: valid level, target_id, and triggered_by_principal_id are required", port.ErrInvalidInput)
 	}
 	if utf8.RuneCountInString(reason) < 5 {
-		return nil, fmt.Errorf("%w: kill-switch reason must be at least 5 characters", port.ErrInvalidInput)
+		return nil, 0, fmt.Errorf("%w: kill-switch reason must be at least 5 characters", port.ErrInvalidInput)
 	}
 
 	var orgPtr *string
@@ -505,7 +512,7 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 		orgID = o
 	}
 	if orgID == "" && p.Level != LevelExtensionInstallation {
-		return nil, fmt.Errorf("%w: org_id is required for kill-switch level %s", port.ErrInvalidInput, p.Level)
+		return nil, 0, fmt.Errorf("%w: org_id is required for kill-switch level %s", port.ErrInvalidInput, p.Level)
 	}
 
 	entryPoint := strings.TrimSpace(p.EntryPoint)
@@ -519,7 +526,7 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 
 	ksID, err := idgen.New(idgen.PrefixKillSwitch)
 	if err != nil {
-		return nil, fmt.Errorf("killswitch: generate id: %w", err)
+		return nil, 0, fmt.Errorf("killswitch: generate id: %w", err)
 	}
 	now := r.nowMs()
 
@@ -533,12 +540,12 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("killswitch: begin trigger tx: %w", err)
+		return nil, 0, fmt.Errorf("killswitch: begin trigger tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	if err := verifyPrincipalAndTargetTx(ctx, tx, orgID, p.Level, targetID, principalID); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var existingActive int
@@ -556,10 +563,10 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 		).Scan(&existingActive)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("killswitch: check active duplicate: %w", err)
+		return nil, 0, fmt.Errorf("killswitch: check active duplicate: %w", err)
 	}
 	if existingActive > 0 {
-		return nil, ErrAlreadyActive
+		return nil, 0, ErrAlreadyActive
 	}
 
 	var orgArg any
@@ -579,7 +586,7 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 		) VALUES (?, ?, ?, ?, 1, ?, ?, ?, NULL, NULL, 1, ?, NULL)`,
 		ksID, orgArg, string(p.Level), targetID, abortInt, reason, principalID, now,
 	); err != nil {
-		return nil, fmt.Errorf("killswitch: insert kill switch: %w", err)
+		return nil, 0, fmt.Errorf("killswitch: insert kill switch: %w", err)
 	}
 
 	mutType := port.MutationRevoke
@@ -591,7 +598,7 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 		VALUES (?, 'emergency_kill_switch', ?, ?, 1, ?)`,
 		orgArg, ksID, mutType, now,
 	); err != nil {
-		return nil, fmt.Errorf("killswitch: append config_changelog: %w", err)
+		return nil, 0, fmt.Errorf("killswitch: append config_changelog: %w", err)
 	}
 
 	if err := r.emitAuditTx(ctx, tx, orgPtr, principalID, entryPoint, p.RequestID, "kill_switch.triggered", ksID, map[string]any{
@@ -600,11 +607,11 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 		"reason":               reason,
 		"abort_active_streams": abortStreams,
 	}, now); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("killswitch: commit trigger: %w", err)
+		return nil, 0, fmt.Errorf("killswitch: commit trigger: %w", err)
 	}
 
 	ks := KillSwitch{
@@ -627,14 +634,15 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 	syncLocked = false
 	r.syncMu.Unlock()
 
+	abortedCount := 0
 	if abortStreams {
-		r.streams.AbortMatching(p.Level, orgID, targetID)
+		abortedCount = r.streams.AbortMatching(p.Level, orgID, targetID)
 		if r.onAbort != nil {
 			r.onAbort(p.Level, orgID, targetID)
 		}
 	}
 
-	return &ks, nil
+	return &ks, abortedCount, nil
 }
 
 // Clear lifts an active emergency kill switch under optimistic locking and records

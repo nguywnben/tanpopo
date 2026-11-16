@@ -408,6 +408,21 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if strings.TrimSpace(req.ScopeTier) != "" {
+		reqScope, sErr := mapBudgetScopeOpenAPIToDB(req.ScopeTier)
+		if sErr != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", sErr.Error(), false, nil)
+			return
+		}
+		if reqScope != scopeType {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "scope_tier cannot be mutated on existing budget", false, nil)
+			return
+		}
+	}
+	if strings.TrimSpace(req.ScopeID) != "" && strings.TrimSpace(req.ScopeID) != scopeID {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "scope_id cannot be mutated on existing budget", false, nil)
+		return
+	}
 	if req.HardLimitMicros == nil || *req.HardLimitMicros < 0 {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "non-negative hard_limit_micros is required", false, nil)
 		return
