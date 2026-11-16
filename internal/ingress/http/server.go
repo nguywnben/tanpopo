@@ -49,6 +49,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
+	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/ingress/blob"
 	"github.com/nguywnben/tanpopo/internal/ingress/idempotency"
 	"github.com/nguywnben/tanpopo/internal/ingress/native"
@@ -99,6 +100,8 @@ type ServerConfig struct {
 	RateLimiter              ratelimit.RateLimiterPort
 	Breaker                  *breaker.CircuitBreaker
 	RouteResolver            *resolver.Resolver
+	BudgetLedger             *ledger.Service
+	DefaultHoldOutputTokens  int64
 	UsageObserver            func(UsageRecord)
 	NativeUsageObserver      func(native.UsageRecord)
 }
@@ -175,9 +178,11 @@ type Server struct {
 	remoteMediaPolicy blob.RemoteMediaPolicy
 	policyEval        *policyengine.Evaluator
 	rateLimiter       ratelimit.RateLimiterPort
-	breaker           *breaker.CircuitBreaker
-	routeResolver     *resolver.Resolver
-	usageObserver     func(UsageRecord)
+	breaker                 *breaker.CircuitBreaker
+	routeResolver           *resolver.Resolver
+	budgetLedger            *ledger.Service
+	defaultHoldOutputTokens int64
+	usageObserver           func(UsageRecord)
 	nativeHandler     *native.Handler
 
 	wasmCache wazero.CompilationCache
@@ -285,25 +290,29 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		remoteMediaPolicy: cfg.RemoteMediaPolicy,
 		policyEval:        policyEval,
 		rateLimiter:       rateLimiter,
-		breaker:           cb,
-		routeResolver:     routeRes,
-		usageObserver:     cfg.UsageObserver,
-		wasmCache:         wazero.NewCompilationCache(),
-		runtimes:          make(map[runtimeCacheKey]*cachedAdapterEntry),
-		mux:               http.NewServeMux(),
+		breaker:                 cb,
+		routeResolver:           routeRes,
+		budgetLedger:            cfg.BudgetLedger,
+		defaultHoldOutputTokens: cfg.DefaultHoldOutputTokens,
+		usageObserver:           cfg.UsageObserver,
+		wasmCache:               wazero.NewCompilationCache(),
+		runtimes:                make(map[runtimeCacheKey]*cachedAdapterEntry),
+		mux:                     http.NewServeMux(),
 	}
 
 	if !cfg.DisableNativePassthrough {
 		nh, nhErr := native.NewHandler(native.Config{
-			Snapshots:           s.snapshots,
-			Broker:              s.broker,
-			Audit:               s.audit,
-			Idempotency:         s.idempotency,
-			PolicyEvaluator:     s.policyEval,
-			RateLimiter:         s.rateLimiter,
-			Breaker:             s.breaker,
-			RouteResolver:       s.routeResolver,
-			MaxRequestBodyBytes: s.maxReqBodyBytes,
+			Snapshots:               s.snapshots,
+			Broker:                  s.broker,
+			Audit:                   s.audit,
+			Idempotency:             s.idempotency,
+			PolicyEvaluator:         s.policyEval,
+			RateLimiter:             s.rateLimiter,
+			Breaker:                 s.breaker,
+			RouteResolver:           s.routeResolver,
+			BudgetLedger:            s.budgetLedger,
+			DefaultHoldOutputTokens: s.defaultHoldOutputTokens,
+			MaxRequestBodyBytes:     s.maxReqBodyBytes,
 			FirstByteTimeout:    s.firstByteTimeout,
 			HeartbeatInterval:   s.heartbeatInterval,
 			NowMs:               s.nowMs,

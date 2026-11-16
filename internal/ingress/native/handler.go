@@ -31,6 +31,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
+	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/ingress/idempotency"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
@@ -70,40 +71,44 @@ type RuntimeAcquirer func(ctx context.Context, target *snapshot.ResolvedTarget) 
 
 // Config configures the lossless /native/{dialect}/{upstreamPath} ingress handler.
 type Config struct {
-	Snapshots           *snapshot.Manager
-	Broker              *broker.BlindHostCredentialBroker
-	Audit               storageport.AuditSink
-	Idempotency         *idempotency.Guard
-	PolicyEvaluator     *policyengine.Evaluator
-	RateLimiter         ratelimit.RateLimiterPort
-	Breaker             *breaker.CircuitBreaker
-	RouteResolver       *resolver.Resolver
-	AcquireRuntime      RuntimeAcquirer
-	NowMs               func() int64
-	MaxRequestBodyBytes int64
-	FirstByteTimeout    time.Duration
-	HeartbeatInterval   time.Duration
-	OnUsage             func(UsageRecord)
+	Snapshots               *snapshot.Manager
+	Broker                  *broker.BlindHostCredentialBroker
+	Audit                   storageport.AuditSink
+	Idempotency             *idempotency.Guard
+	PolicyEvaluator         *policyengine.Evaluator
+	RateLimiter             ratelimit.RateLimiterPort
+	Breaker                 *breaker.CircuitBreaker
+	RouteResolver           *resolver.Resolver
+	AcquireRuntime          RuntimeAcquirer
+	BudgetLedger            *ledger.Service
+	DefaultHoldOutputTokens int64
+	NowMs                   func() int64
+	MaxRequestBodyBytes     int64
+	FirstByteTimeout        time.Duration
+	HeartbeatInterval       time.Duration
+	OnUsage                 func(UsageRecord)
 }
 
 // Handler serves /native/{dialect}/{upstreamPath} passthrough requests.
 type Handler struct {
-	snapshots         *snapshot.Manager
-	broker            *broker.BlindHostCredentialBroker
-	audit             storageport.AuditSink
-	idempotency       *idempotency.Guard
-	policyEval        *policyengine.Evaluator
-	rateLimiter       ratelimit.RateLimiterPort
-	breaker           *breaker.CircuitBreaker
-	routeResolver     *resolver.Resolver
-	acquireRuntime    RuntimeAcquirer
-	nowMs             func() int64
-	maxReqBodyBytes   int64
-	firstByteTimeout  time.Duration
-	heartbeatInterval time.Duration
-	onUsage           func(UsageRecord)
-	regexMu           sync.RWMutex
-	regexCache        map[string]*regexp.Regexp
+	snapshots               *snapshot.Manager
+	broker                  *broker.BlindHostCredentialBroker
+	audit                   storageport.AuditSink
+	idempotency             *idempotency.Guard
+	policyEval              *policyengine.Evaluator
+	rateLimiter             ratelimit.RateLimiterPort
+	breaker                 *breaker.CircuitBreaker
+	routeResolver           *resolver.Resolver
+	acquireRuntime          RuntimeAcquirer
+	budgetLedger            *ledger.Service
+	defaultHoldOutputTokens int64
+	nowMs                   func() int64
+	maxReqBodyBytes         int64
+	firstByteTimeout        time.Duration
+	heartbeatInterval       time.Duration
+	onUsage                 func(UsageRecord)
+	regexMu                 sync.RWMutex
+	regexCache              map[string]*regexp.Regexp
 }
 
 // NewHandler constructs a fail-closed native passthrough Handler.
@@ -148,21 +153,23 @@ func NewHandler(cfg Config) (*Handler, error) {
 		routeRes = resolver.New()
 	}
 	return &Handler{
-		snapshots:         cfg.Snapshots,
-		broker:            cfg.Broker,
-		audit:             cfg.Audit,
-		idempotency:       cfg.Idempotency,
-		policyEval:        policyEval,
-		rateLimiter:       rateLimiter,
-		breaker:           cb,
-		routeResolver:     routeRes,
-		acquireRuntime:    cfg.AcquireRuntime,
-		nowMs:             nowFn,
-		maxReqBodyBytes:   maxBody,
-		firstByteTimeout:  firstByte,
-		heartbeatInterval: hb,
-		onUsage:           cfg.OnUsage,
-		regexCache:        make(map[string]*regexp.Regexp),
+		snapshots:               cfg.Snapshots,
+		broker:                  cfg.Broker,
+		audit:                   cfg.Audit,
+		idempotency:             cfg.Idempotency,
+		policyEval:              policyEval,
+		rateLimiter:             rateLimiter,
+		breaker:                 cb,
+		routeResolver:           routeRes,
+		acquireRuntime:          cfg.AcquireRuntime,
+		budgetLedger:            cfg.BudgetLedger,
+		defaultHoldOutputTokens: cfg.DefaultHoldOutputTokens,
+		nowMs:                   nowFn,
+		maxReqBodyBytes:         maxBody,
+		firstByteTimeout:        firstByte,
+		heartbeatInterval:       hb,
+		onUsage:                 cfg.OnUsage,
+		regexCache:              make(map[string]*regexp.Regexp),
 	}, nil
 }
 
@@ -456,6 +463,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	outboundBody := append([]byte(nil), rawBody...)
 	defer clear(outboundBody)
 
+	budgetSess := h.newNativeBudgetSession(match.Key, reqID, rawBody, estBaseIn, estMaxOut)
+	if !budgetSess.reserveInitial(streamCtx, w, candidates) {
+		return
+	}
+	defer budgetSess.releaseIfUnsettled()
+
 	requireTested := match.Config != nil && match.Config.RequireTestedCaps
 	inspAdapterID := ""
 	if hasInitialInsp && initialTarget != nil && initialTarget.Adapter != nil {
@@ -500,6 +513,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			preInsp,
 			idemClaim,
 			admLease,
+			budgetSess,
 		)
 	})
 	if execRes.ClientCanceled && !execRes.StreamStarted && r.Context().Err() == nil && streamCtx.Err() != nil {
@@ -558,8 +572,12 @@ func (h *Handler) executeNativeHop(
 	preInsp *InspectResult,
 	idemClaim *idempotency.Claim,
 	admLease *nativeAdmissionLease,
+	budgetSess *nativeBudgetSession,
 ) failover.AttemptResult {
 	clientCtx := r.Context()
+	if abortRes, ok := budgetSess.ensureHoldForTarget(hopCtx, w, target); !ok {
+		return abortRes
+	}
 	if rt == nil {
 		var rtErr error
 		rt, releaseCurr, rtErr = h.acquireRuntime(hopCtx, target)
@@ -774,9 +792,9 @@ func (h *Handler) executeNativeHop(
 			admLease.streamLease = lease
 			w.Header().Set("X-RateLimit-Remaining-Streams", strconv.FormatInt(sRes.RemainingStreams, 10))
 		}
-		return h.executeStreamingNativeAttempt(w, clientCtx, hopCtx, streamCtx, reqID, dialect, hopModel, key, rt, egressReq, constraint, target, rawBody, admLease)
+		return h.executeStreamingNativeAttempt(w, clientCtx, hopCtx, streamCtx, reqID, dialect, hopModel, key, rt, egressReq, constraint, target, rawBody, admLease, budgetSess)
 	}
-	return h.executeSyncNativeAttempt(w, clientCtx, hopCtx, streamCtx, reqID, dialect, hopModel, key, rt, egressReq, constraint, rawBody, idemClaim, admLease)
+	return h.executeSyncNativeAttempt(w, clientCtx, hopCtx, streamCtx, reqID, dialect, hopModel, key, rt, egressReq, constraint, target, rawBody, idemClaim, admLease, budgetSess)
 }
 
 func (h *Handler) executeSyncNativeAttempt(
@@ -791,9 +809,11 @@ func (h *Handler) executeSyncNativeAttempt(
 	rt port.ProviderRuntime,
 	egressReq broker.EgressRequest,
 	constraint broker.HostEgressConstraint,
+	target *snapshot.ResolvedTarget,
 	rawReqBody []byte,
 	idemClaim *idempotency.Claim,
 	admLease *nativeAdmissionLease,
+	budgetSess *nativeBudgetSession,
 ) failover.AttemptResult {
 	upResp, err := h.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
@@ -805,6 +825,7 @@ func (h *Handler) executeSyncNativeAttempt(
 	}
 
 	usage := ExtractSyncUsage(ctx, rt, reqID, rawReqBody, upResp.Body)
+	usage = budgetSess.settle(ctx, target, model, usage, int64(len(upResp.Body)), false)
 	h.reconcileAdmissionUsage(admLease, &usage)
 	h.recordUsage(ctx, UsageRecord{
 		RequestID:    reqID,
@@ -869,6 +890,7 @@ func (h *Handler) executeStreamingNativeAttempt(
 	target *snapshot.ResolvedTarget,
 	rawReqBody []byte,
 	admLease *nativeAdmissionLease,
+	budgetSess *nativeBudgetSession,
 ) failover.AttemptResult {
 	upCtx, cancelUp := context.WithCancel(hopCtx)
 	defer cancelUp()
@@ -890,7 +912,10 @@ func (h *Handler) executeStreamingNativeAttempt(
 	}
 
 	acc := NewSSEUsageAccumulator(rt, reqID, rawReqBody)
-	pumpRes, pumpErr := pumpNativeSSE(hopCtx, w, reqID, upStream.Body, cancelUp, h.heartbeatInterval, idleChunkTimeout, acc)
+	onStreamStarted := func() {
+		budgetSess.markStreaming(hopCtx)
+	}
+	pumpRes, pumpErr := pumpNativeSSE(hopCtx, w, reqID, upStream.Body, cancelUp, h.heartbeatInterval, idleChunkTimeout, acc, onStreamStarted)
 	if pumpErr != nil && !pumpRes.streamStarted {
 		if errors.Is(pumpErr, sse.ErrLineTooLarge) {
 			return failover.AttemptResult{
@@ -945,6 +970,7 @@ func (h *Handler) executeStreamingNativeAttempt(
 
 	usageCtx := context.WithoutCancel(hopCtx)
 	finalUsage := acc.Finalize(usageCtx)
+	finalUsage = budgetSess.settle(usageCtx, target, model, finalUsage, pumpRes.emittedBytes, pumpErr != nil)
 	h.reconcileAdmissionUsage(admLease, &finalUsage)
 	h.recordUsage(usageCtx, UsageRecord{
 		RequestID:    reqID,
@@ -1165,6 +1191,7 @@ type nativeReadMsg struct {
 type nativePumpRes struct {
 	streamStarted      bool
 	framesEmitted      int
+	emittedBytes       int64
 	clientDisconnected bool
 }
 
@@ -1177,6 +1204,7 @@ func pumpNativeSSE(
 	hbInterval time.Duration,
 	idleTimeout time.Duration,
 	acc *SSEUsageAccumulator,
+	onStreamStarted func(),
 ) (nativePumpRes, error) {
 	var res nativePumpRes
 	rc := http.NewResponseController(w)
@@ -1341,6 +1369,9 @@ pumpLoop:
 				if !res.streamStarted {
 					writeNativeSSEHeaders(w)
 					res.streamStarted = true
+					if onStreamStarted != nil {
+						onStreamStarted()
+					}
 					startHeartbeat()
 				}
 				if _, werr := w.Write(msg.data); werr != nil {
@@ -1349,6 +1380,7 @@ pumpLoop:
 					return res, werr
 				}
 				res.framesEmitted++
+				res.emittedBytes += int64(len(msg.data))
 				if ferr := rc.Flush(); ferr != nil {
 					res.clientDisconnected = true
 					abortUpstream()

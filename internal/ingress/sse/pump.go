@@ -72,12 +72,14 @@ type PumpConfig struct {
 	IdleChunkTimeout    time.Duration
 	RequireDoneSentinel bool
 	ElideUsageChunk     bool
+	OnStreamStarted     func()
 }
 
 // PumpResult summarizes terminal telemetry from a Pump execution.
 type PumpResult struct {
 	StreamStarted      bool
 	FramesEmitted      int
+	EmittedBytes       int64
 	SawDone            bool
 	ClientDisconnected bool
 	Usage              *port.NormalizedUsage
@@ -406,13 +408,17 @@ pumpLoop:
 							continue
 						}
 					}
-					if isDoneSSEFrame(frame) {
+					isDone := isDoneSSEFrame(frame)
+					if isDone {
 						res.SawDone = true
 					}
 					if !res.StreamStarted {
 						writeSSEHeaders(cfg.Writer)
 						res.StreamStarted = true
 						startHeartbeat()
+						if cfg.OnStreamStarted != nil {
+							cfg.OnStreamStarted()
+						}
 					}
 					normalized := ensureSSEFrameTerminator(frame)
 					if _, werr := cfg.Writer.Write(normalized); werr != nil {
@@ -421,6 +427,9 @@ pumpLoop:
 						return res, werr
 					}
 					res.FramesEmitted++
+					if !isDone {
+						res.EmittedBytes += int64(len(normalized))
+					}
 				}
 				if out.StreamCompleted {
 					res.SawDone = true

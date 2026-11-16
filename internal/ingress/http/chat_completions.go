@@ -246,8 +246,14 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	budgetSess := s.newRequestBudgetSession(match.Key, meta.RequestID, modelSlug, rawBody, preAdm, reqEnvelope.Messages)
+	if !budgetSess.reserveInitial(r.Context(), w, candidates) {
+		return
+	}
+	defer budgetSess.releaseIfUnsettled()
+
 	s.executeRoutedPreStreamFailover(w, r.Context(), streamCtx, meta.RequestID, modelSlug, candidates, func(hopCtx context.Context, _ int, cand *resolver.RankedTarget) failover.AttemptResult {
-		return s.executeChatCompletionHop(w, r.Context(), hopCtx, meta, match.Key, cand.Target, rawBody, reqEnvelope, modelSlug, idemClaim, admLease)
+		return s.executeChatCompletionHop(w, r.Context(), hopCtx, meta, match.Key, cand.Target, rawBody, reqEnvelope, modelSlug, idemClaim, admLease, budgetSess)
 	})
 }
 
@@ -263,7 +269,11 @@ func (s *Server) executeChatCompletionHop(
 	modelSlug string,
 	idemClaim *idempotency.Claim,
 	admLease *admissionLease,
+	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
+	if abortRes, ok := budgetSess.ensureHoldForTarget(hopCtx, w, target); !ok {
+		return abortRes
+	}
 	cachedRT, rtErr := s.getOrLoadAdapterRuntime(hopCtx, target)
 	if rtErr != nil {
 		if errors.Is(rtErr, context.Canceled) {
@@ -313,9 +323,9 @@ func (s *Server) executeChatCompletionHop(
 	defer clear(egressReq.BodyBytes)
 
 	if reqEnvelope.Stream {
-		return s.executeStreamingChatCompletionAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, !reqEnvelope.CallerRequestedUsage, admLease)
+		return s.executeStreamingChatCompletionAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, !reqEnvelope.CallerRequestedUsage, admLease, budgetSess)
 	}
-	return s.executeSyncChatCompletionAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, modelSlug, idemClaim, admLease)
+	return s.executeSyncChatCompletionAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, idemClaim, admLease, budgetSess)
 }
 
 func (s *Server) executeSyncChatCompletionAttempt(
@@ -326,9 +336,11 @@ func (s *Server) executeSyncChatCompletionAttempt(
 	rt port.ProviderRuntime,
 	egressReq broker.EgressRequest,
 	constraint broker.HostEgressConstraint,
+	target *snapshot.ResolvedTarget,
 	requestedModel string,
 	idemClaim *idempotency.Claim,
 	admLease *admissionLease,
+	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
 	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
@@ -376,7 +388,8 @@ func (s *Server) executeSyncChatCompletionAttempt(
 			Usage:     normResp.Usage,
 		})
 	}
-	writeSettledJSONResponse(w, ctx, reqID, normResp.Usage, finalBody, idemClaim)
+	headerUsage := budgetSess.settleSync(ctx, target, requestedModel, normResp.Usage, finalBody)
+	writeSettledJSONResponse(w, ctx, reqID, headerUsage, finalBody, idemClaim)
 	return failover.AttemptResult{
 		Succeeded:  true,
 		Outcome:    breaker.OutcomeSuccess,
@@ -396,6 +409,7 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 	requestedModel string,
 	elideUsageChunk bool,
 	admLease *admissionLease,
+	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
 	upCtx, cancelUp := context.WithCancel(streamCtx)
 	defer cancelUp()
@@ -430,9 +444,15 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 		IdleChunkTimeout:    idleChunkTimeout,
 		RequireDoneSentinel: true,
 		ElideUsageChunk:     elideUsageChunk,
+		OnStreamStarted: func() {
+			budgetSess.markStreaming(streamCtx)
+		},
 	})
 	if pumpRes.Usage != nil {
 		s.reconcileAdmissionUsage(admLease, pumpRes.Usage)
+	}
+	if pumpRes.StreamStarted {
+		budgetSess.settleStream(streamCtx, target, requestedModel, pumpRes, pumpErr)
 	}
 	if s.usageObserver != nil && pumpRes.Usage != nil {
 		s.usageObserver(UsageRecord{

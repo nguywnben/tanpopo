@@ -158,8 +158,14 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	budgetSess := s.newRequestBudgetSession(match.Key, meta.RequestID, modelSlug, rawBody, preAdm, nil)
+	if !budgetSess.reserveInitial(r.Context(), w, candidates) {
+		return
+	}
+	defer budgetSess.releaseIfUnsettled()
+
 	s.executeRoutedPreStreamFailover(w, r.Context(), streamCtx, meta.RequestID, modelSlug, candidates, func(hopCtx context.Context, _ int, cand *resolver.RankedTarget) failover.AttemptResult {
-		return s.executeEmbeddingHop(w, r.Context(), hopCtx, meta, match.Key, cand.Target, rawBody, modelSlug, idemClaim, admLease)
+		return s.executeEmbeddingHop(w, r.Context(), hopCtx, meta, match.Key, cand.Target, rawBody, modelSlug, idemClaim, admLease, budgetSess)
 	})
 }
 
@@ -174,7 +180,11 @@ func (s *Server) executeEmbeddingHop(
 	modelSlug string,
 	idemClaim *idempotency.Claim,
 	admLease *admissionLease,
+	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
+	if abortRes, ok := budgetSess.ensureHoldForTarget(hopCtx, w, target); !ok {
+		return abortRes
+	}
 	cachedRT, rtErr := s.getOrLoadAdapterRuntime(hopCtx, target)
 	if rtErr != nil {
 		if errors.Is(rtErr, context.Canceled) {
@@ -223,7 +233,7 @@ func (s *Server) executeEmbeddingHop(
 	}
 	defer clear(egressReq.BodyBytes)
 
-	return s.executeSyncEmbeddingAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, modelSlug, idemClaim, admLease)
+	return s.executeSyncEmbeddingAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, idemClaim, admLease, budgetSess)
 }
 
 func (s *Server) executeSyncEmbeddingAttempt(
@@ -234,9 +244,11 @@ func (s *Server) executeSyncEmbeddingAttempt(
 	rt port.ProviderRuntime,
 	egressReq broker.EgressRequest,
 	constraint broker.HostEgressConstraint,
+	target *snapshot.ResolvedTarget,
 	requestedModel string,
 	idemClaim *idempotency.Claim,
 	admLease *admissionLease,
+	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
 	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
@@ -275,7 +287,8 @@ func (s *Server) executeSyncEmbeddingAttempt(
 	if normResp.Usage != nil {
 		s.reconcileAdmissionUsage(admLease, normResp.Usage)
 	}
-	writeSettledJSONResponse(w, ctx, reqID, normResp.Usage, finalBody, idemClaim)
+	headerUsage := budgetSess.settleSync(ctx, target, requestedModel, normResp.Usage, finalBody)
+	writeSettledJSONResponse(w, ctx, reqID, headerUsage, finalBody, idemClaim)
 	return failover.AttemptResult{
 		Succeeded:  true,
 		Outcome:    breaker.OutcomeSuccess,

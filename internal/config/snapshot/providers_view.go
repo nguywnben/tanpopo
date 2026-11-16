@@ -191,13 +191,20 @@ func (m *LogicalModelView) clone() *LogicalModelView {
 	return &cp
 }
 
-// PricingNanoUSD holds strict integer nano-USD pricing rates per 1M units (zero floats).
+// PricingNanoUSD holds strict integer nano-USD pricing rates per 1M units or media unit (zero floats).
 type PricingNanoUSD struct {
-	InputPer1MNanoUSD      int64 `json:"input_per_1m_nano_usd"`
-	OutputPer1MNanoUSD     int64 `json:"output_per_1m_nano_usd"`
-	CacheReadPer1MNanoUSD  int64 `json:"cache_read_per_1m_nano_usd,omitempty"`
-	CacheWritePer1MNanoUSD int64 `json:"cache_write_per_1m_nano_usd,omitempty"`
-	ReasoningPer1MNanoUSD  int64 `json:"reasoning_per_1m_nano_usd,omitempty"`
+	InputPer1MNanoUSD        int64 `json:"input_per_1m_nano_usd"`
+	OutputPer1MNanoUSD       int64 `json:"output_per_1m_nano_usd"`
+	CacheReadPer1MNanoUSD    int64 `json:"cache_read_per_1m_nano_usd,omitempty"`
+	CacheWritePer1MNanoUSD   int64 `json:"cache_write_per_1m_nano_usd,omitempty"`
+	ReasoningPer1MNanoUSD    int64 `json:"reasoning_per_1m_nano_usd,omitempty"`
+	ImagePerUnitNanoUSD      int64 `json:"image_per_unit_nano_usd,omitempty"`
+	ImagePer1MPixelsNanoUSD  int64 `json:"image_per_1m_pixels_nano_usd,omitempty"`
+	AudioInputPerSecNanoUSD  int64 `json:"audio_input_per_sec_nano_usd,omitempty"`
+	AudioOutputPerSecNanoUSD int64 `json:"audio_output_per_sec_nano_usd,omitempty"`
+	DocumentPageNanoUSD      int64 `json:"document_page_nano_usd,omitempty"`
+	RerankUnitNanoUSD        int64 `json:"rerank_unit_nano_usd,omitempty"`
+	SelfHostedZeroRate       bool  `json:"self_hosted_zero_rate,omitempty"`
 }
 
 // ModelDeploymentView is an immutable O(1) snapshot record of model_deployments.
@@ -958,7 +965,10 @@ func parsePricingNanoUSDStrict(raw string, out *PricingNanoUSD) error {
 	}
 	if out.InputPer1MNanoUSD < 0 || out.OutputPer1MNanoUSD < 0 ||
 		out.CacheReadPer1MNanoUSD < 0 || out.CacheWritePer1MNanoUSD < 0 ||
-		out.ReasoningPer1MNanoUSD < 0 {
+		out.ReasoningPer1MNanoUSD < 0 || out.ImagePerUnitNanoUSD < 0 ||
+		out.ImagePer1MPixelsNanoUSD < 0 || out.AudioInputPerSecNanoUSD < 0 ||
+		out.AudioOutputPerSecNanoUSD < 0 || out.DocumentPageNanoUSD < 0 ||
+		out.RerankUnitNanoUSD < 0 {
 		return fmt.Errorf("negative pricing rate in pricing_nano_usd_json")
 	}
 	return nil

@@ -170,8 +170,14 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	budgetSess := s.newRequestBudgetSession(match.Key, meta.RequestID, modelSlug, rawBody, preAdm, inputItems)
+	if !budgetSess.reserveInitial(r.Context(), w, candidates) {
+		return
+	}
+	defer budgetSess.releaseIfUnsettled()
+
 	s.executeRoutedPreStreamFailover(w, r.Context(), streamCtx, meta.RequestID, modelSlug, candidates, func(hopCtx context.Context, _ int, cand *resolver.RankedTarget) failover.AttemptResult {
-		return s.executeResponsesHop(w, r.Context(), hopCtx, meta, match.Key, cand.Target, rawBody, reqEnvelope, modelSlug, idemClaim, admLease)
+		return s.executeResponsesHop(w, r.Context(), hopCtx, meta, match.Key, cand.Target, rawBody, reqEnvelope, modelSlug, idemClaim, admLease, budgetSess)
 	})
 }
 
@@ -187,7 +193,11 @@ func (s *Server) executeResponsesHop(
 	modelSlug string,
 	idemClaim *idempotency.Claim,
 	admLease *admissionLease,
+	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
+	if abortRes, ok := budgetSess.ensureHoldForTarget(hopCtx, w, target); !ok {
+		return abortRes
+	}
 	cachedRT, rtErr := s.getOrLoadAdapterRuntime(hopCtx, target)
 	if rtErr != nil {
 		if errors.Is(rtErr, context.Canceled) {
@@ -237,9 +247,9 @@ func (s *Server) executeResponsesHop(
 	defer clear(egressReq.BodyBytes)
 
 	if reqEnvelope.Stream {
-		return s.executeStreamingResponsesAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, admLease)
+		return s.executeStreamingResponsesAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, admLease, budgetSess)
 	}
-	return s.executeSyncResponsesAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, modelSlug, idemClaim, admLease)
+	return s.executeSyncResponsesAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, idemClaim, admLease, budgetSess)
 }
 
 func (s *Server) executeSyncResponsesAttempt(
@@ -250,9 +260,11 @@ func (s *Server) executeSyncResponsesAttempt(
 	rt port.ProviderRuntime,
 	egressReq broker.EgressRequest,
 	constraint broker.HostEgressConstraint,
+	target *snapshot.ResolvedTarget,
 	requestedModel string,
 	idemClaim *idempotency.Claim,
 	admLease *admissionLease,
+	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
 	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
@@ -291,7 +303,8 @@ func (s *Server) executeSyncResponsesAttempt(
 	if normResp.Usage != nil {
 		s.reconcileAdmissionUsage(admLease, normResp.Usage)
 	}
-	writeSettledJSONResponse(w, ctx, reqID, normResp.Usage, finalBody, idemClaim)
+	headerUsage := budgetSess.settleSync(ctx, target, requestedModel, normResp.Usage, finalBody)
+	writeSettledJSONResponse(w, ctx, reqID, headerUsage, finalBody, idemClaim)
 	return failover.AttemptResult{
 		Succeeded:  true,
 		Outcome:    breaker.OutcomeSuccess,
@@ -308,7 +321,9 @@ func (s *Server) executeStreamingResponsesAttempt(
 	egressReq broker.EgressRequest,
 	constraint broker.HostEgressConstraint,
 	target *snapshot.ResolvedTarget,
+	requestedModel string,
 	admLease *admissionLease,
+	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
 	upCtx, cancelUp := context.WithCancel(streamCtx)
 	defer cancelUp()
@@ -339,9 +354,15 @@ func (s *Server) executeStreamingResponsesAttempt(
 		HeartbeatInterval:   s.heartbeatInterval,
 		IdleChunkTimeout:    idleChunkTimeout,
 		RequireDoneSentinel: true,
+		OnStreamStarted: func() {
+			budgetSess.markStreaming(streamCtx)
+		},
 	})
 	if pumpRes.Usage != nil {
 		s.reconcileAdmissionUsage(admLease, pumpRes.Usage)
+	}
+	if pumpRes.StreamStarted {
+		budgetSess.settleStream(streamCtx, target, requestedModel, pumpRes, pumpErr)
 	}
 	if pumpErr != nil {
 		if pumpRes.StreamStarted {

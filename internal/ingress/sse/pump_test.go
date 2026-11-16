@@ -610,6 +610,55 @@ func TestSSEPumpMergeUsagePreservesExactAccuracy(t *testing.T) {
 	}
 }
 
+func TestSSEPumpOnStreamStartedAndEmittedBytes(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t) })
+
+	rec := httptest.NewRecorder()
+	rt := testDeclarativeOpenAIRuntime(t)
+	startedCount := 0
+	res, err := sse.Pump(context.Background(), sse.PumpConfig{
+		RequestID:           "req_stream_started_cb",
+		Upstream:            io.NopCloser(strings.NewReader("data: {\"id\":\"1\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"}}]}\n\ndata: [DONE]\n\n")),
+		Runtime:             rt,
+		Writer:              rec,
+		HeartbeatInterval:   -1,
+		RequireDoneSentinel: true,
+		OnStreamStarted: func() {
+			startedCount++
+		},
+	})
+	if err != nil {
+		t.Fatalf("sse.Pump failed: %v", err)
+	}
+	if startedCount != 1 {
+		t.Fatalf("expected OnStreamStarted once, got %d", startedCount)
+	}
+	if res.EmittedBytes <= 0 {
+		t.Fatalf("expected positive EmittedBytes, got %d", res.EmittedBytes)
+	}
+
+	// Pre-stream error must NOT trigger OnStreamStarted.
+	recErr := httptest.NewRecorder()
+	startedPreErr := 0
+	_, perr := sse.Pump(context.Background(), sse.PumpConfig{
+		RequestID:           "req_stream_pre_err",
+		Upstream:            io.NopCloser(strings.NewReader("")),
+		Runtime:             rt,
+		Writer:              recErr,
+		HeartbeatInterval:   -1,
+		RequireDoneSentinel: true,
+		OnStreamStarted: func() {
+			startedPreErr++
+		},
+	})
+	if perr == nil {
+		t.Fatal("expected pre-stream error on empty stream")
+	}
+	if startedPreErr != 0 {
+		t.Fatalf("expected OnStreamStarted=0 on pre-stream failure, got %d", startedPreErr)
+	}
+}
+
 func BenchmarkSSEPumpPerChunkOverhead(b *testing.B) {
 	chunk := []byte("data: {\"id\":\"c\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n")
 	payload := make([]byte, 0, len(chunk)*101)
