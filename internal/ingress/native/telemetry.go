@@ -247,6 +247,31 @@ func (rt *nativeRequestTelemetry) startStage(ctx context.Context, stageName stri
 	}
 }
 
+func inspectNativeWithTelemetry(
+	ctx context.Context,
+	reqTel *nativeRequestTelemetry,
+	target *snapshot.ResolvedTarget,
+	rt port.ProviderRuntime,
+	reqID, dialect, upstreamPath string,
+	headers map[string]string,
+	rawBody []byte,
+	hints RawBodyHints,
+) (InspectResult, error) {
+	adpID, _, extTier := nativeTargetTelemetryLabels(target)
+	inspCtx, endInspHook := reqTel.startStage(ctx, "ExtensionHook",
+		attribute.String("hook", "inspect_native_request"),
+		attribute.String("adapter_id", adpID),
+		attribute.String("extension_tier", extTier),
+	)
+	res, err := InspectNativeRequest(inspCtx, rt, reqID, dialect, upstreamPath, headers, rawBody, hints)
+	st := "ok"
+	if err != nil {
+		st = "error"
+	}
+	endInspHook(st, "inspect_native_request", err)
+	return res, err
+}
+
 func (rt *nativeRequestTelemetry) finish(ctx context.Context, scw *nativeStatusCaptureWriter, r *http.Request) {
 	if rt == nil || rt.pipeline == nil {
 		return
@@ -254,7 +279,9 @@ func (rt *nativeRequestTelemetry) finish(ctx context.Context, scw *nativeStatusC
 	totalDur := time.Since(rt.startedAt)
 	status := http.StatusOK
 	errCode := ""
+	wrote := false
 	if scw != nil {
+		wrote = scw.wrote
 		if scw.status != 0 {
 			status = scw.status
 		}
@@ -264,6 +291,12 @@ func (rt *nativeRequestTelemetry) finish(ctx context.Context, scw *nativeStatusC
 	rt.mu.Lock()
 	if errCode == "" {
 		errCode = rt.errCode
+	}
+	if !wrote && r != nil && r.Context().Err() != nil {
+		status = 499
+		if errCode == "" {
+			errCode = "client_canceled"
+		}
 	}
 	orgID := rt.orgID
 	projectID := rt.projectID

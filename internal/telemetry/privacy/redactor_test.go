@@ -240,11 +240,35 @@ func TestRedactorPrefixedCookiesAndDebugPayload(t *testing.T) {
 		}
 	}
 
-	// Malformed truncated JSON nested object under a sensitive parent key must redact nested unprefixed fields.
+	// Malformed truncated JSON nested object under a sensitive parent key must redact nested unprefixed fields,
+	// including trailing-escape-backslash truncations.
 	nestedTrunc := []byte(`{"messages":[{"content":"keep-me"}],"credentials":{"val":"unprefixed-nested-secret"`)
 	cleanNestedTrunc := string(r.SanitizeDebugPayload(nestedTrunc, 4096))
 	if strings.Contains(cleanNestedTrunc, "unprefixed-nested-secret") {
 		t.Fatalf("malformed truncated nested JSON leaked nested credential: %s", cleanNestedTrunc)
+	}
+	trailingSlashTrunc := []byte(`{"api_key":"unprefixed_trailing_secret\`)
+	cleanTrailingSlash := string(r.SanitizeDebugPayload(trailingSlashTrunc, 4096))
+	if strings.Contains(cleanTrailingSlash, "unprefixed_trailing_secret") {
+		t.Fatalf("malformed truncated JSON ending in backslash leaked unprefixed secret: %s", cleanTrailingSlash)
+	}
+
+	quotedHdr := r.SanitizeString(`x-api-key: "quoted-unprefixed-hdr" X-Authorization: "Bearer tok" WWW-Authenticate: "Negotiate xyz"`)
+	for _, forbidden := range []string{"quoted-unprefixed-hdr", "Negotiate", "xyz"} {
+		if strings.Contains(quotedHdr, forbidden) {
+			t.Fatalf("quoted header assignment leaked %q: %s", forbidden, quotedHdr)
+		}
+	}
+	for _, hdr := range []string{"X-Authorization", "WWW-Authenticate", "Proxy-Authenticate", "Set-Cookie2"} {
+		if !privacy.IsSensitiveKey(hdr) {
+			t.Fatalf("expected privacy.IsSensitiveKey(%q) == true", hdr)
+		}
+	}
+	sanitizedMap := r.SanitizeMap(map[string]any{
+		"struct_val": struct{ Secret string }{Secret: "Bearer leaked-in-struct-val"},
+	})
+	if strings.Contains(sanitizedMap["struct_val"].(string), "leaked-in-struct-val") {
+		t.Fatalf("unknown struct value leaked Bearer token: %#v", sanitizedMap["struct_val"])
 	}
 
 	// Multi-MiB JSON array is redacted in bounded streaming time and capped strictly <= maxBytes.

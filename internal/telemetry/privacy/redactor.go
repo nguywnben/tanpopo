@@ -19,6 +19,7 @@ package privacy
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -42,18 +43,18 @@ const (
 )
 
 var (
-	bearerPattern        = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
-	basicPattern         = regexp.MustCompile(`(?i)\bBasic\s+[A-Za-z0-9+/=]+`)
-	vkeyPattern          = regexp.MustCompile(`vk_tp_[A-Za-z0-9_-]+`)
-	skTpPattern          = regexp.MustCompile(`sk-tp-[A-Za-z0-9._-]+`)
-	skPattern            = regexp.MustCompile(`(^|[^A-Za-z0-9])(sk-[A-Za-z0-9._-]{4,})`)
-	googleKeyPattern     = regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{16,}`)
-	ghTokenPattern       = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{16,}`)
+	bearerPattern         = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
+	basicPattern          = regexp.MustCompile(`(?i)\bBasic\s+[A-Za-z0-9+/=]+`)
+	vkeyPattern           = regexp.MustCompile(`vk_tp_[A-Za-z0-9_-]+`)
+	skTpPattern           = regexp.MustCompile(`sk-tp-[A-Za-z0-9._-]+`)
+	skPattern             = regexp.MustCompile(`(^|[^A-Za-z0-9])(sk-[A-Za-z0-9._-]{4,})`)
+	googleKeyPattern      = regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{16,}`)
+	ghTokenPattern        = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{16,}`)
 	urlUserInfoRe         = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^@/\s]+)@`)
 	cookieAssignRe        = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])([A-Za-z0-9._-]*(?:authorization|api[_-]?key|token|secret|password|session|cookie))=(?:"[^"]*"|[^\s;&,"']+)`)
-	headerSecretAssignRe  = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])(authorization|proxy-authorization|x-api-key|x-goog-api-key|x-tanpopo-virtual-key|x-auth-token|x-secret-key|client[_-]?secret|api[_-]?key)\s*[:=]\s*([^\s,;"]+)`)
+	headerSecretAssignRe  = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])(authorization|proxy-authorization|x-authorization|www-authenticate|proxy-authenticate|x-api-key|x-goog-api-key|x-tanpopo-virtual-key|x-auth-token|x-secret-key|client[_-]?secret|api[_-]?key)\s*[:=]\s*(?:"[^"]*"|[^\s,;"]+)`)
 	jsonSecretKVRe        = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*"((?:\\.|[^"\\])*)"`)
-	jsonSecretTailRe      = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*"((?:\\.|[^"\\])*)$`)
+	jsonSecretTailRe      = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*"((?:\\.|[^"\\])*\\?)$`)
 	jsonNestedSensitiveRe = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*[\{\[]`)
 )
 
@@ -62,11 +63,15 @@ var (
 var sensitiveKeys = map[string]bool{
 	"authorization":         true,
 	"proxy_authorization":   true,
+	"x_authorization":       true,
+	"www_authenticate":      true,
+	"proxy_authenticate":    true,
 	"x_api_key":             true,
 	"x_goog_api_key":        true,
 	"x_tanpopo_virtual_key": true,
 	"cookie":                true,
 	"set_cookie":            true,
+	"set_cookie2":           true,
 	"api_key":               true,
 	"apikey":                true,
 	"secret":                true,
@@ -700,8 +705,10 @@ func (r *Redactor) sanitizeValueWithLimit(val any, depth int, maxStrBytes int) a
 		return out
 	case error:
 		return r.SanitizeStringBounded(v.Error(), maxStrBytes)
-	default:
+	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 		return v
+	default:
+		return r.SanitizeStringBounded(fmt.Sprint(v), maxStrBytes)
 	}
 }
 

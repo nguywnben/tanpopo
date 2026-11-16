@@ -153,6 +153,7 @@ type MetricsRegistry struct {
 	mu             sync.Mutex
 	droppedBySig   map[string]int64
 	activeStreamCt map[string]int64
+	snapshotAgeFn  func() (syncChannel string, age time.Duration, ok bool)
 }
 
 // NewMetricsRegistry creates an isolated OpenTelemetry MeterProvider + Prometheus exporter
@@ -332,6 +333,14 @@ func (m *MetricsRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeMetricsUnauth(w)
 		return
 	}
+	m.mu.Lock()
+	ageProvider := m.snapshotAgeFn
+	m.mu.Unlock()
+	if ageProvider != nil {
+		if ch, age, ok := ageProvider(); ok {
+			m.SetConfigSnapshotAge(ch, age)
+		}
+	}
 	fams, err := m.promReg.Gather()
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -502,6 +511,16 @@ func (m *MetricsRegistry) SetConfigSnapshotAge(syncChannel string, age time.Dura
 	m.configSnapshotAgeSec.Record(context.Background(), age.Seconds(), metric.WithAttributes(attribute.String("sync_channel", ch)))
 }
 
+// SetConfigSnapshotAgeProvider registers a scrape-time callback to update tanpopo_config_snapshot_age_seconds.
+func (m *MetricsRegistry) SetConfigSnapshotAgeProvider(fn func() (syncChannel string, age time.Duration, ok bool)) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.snapshotAgeFn = fn
+	m.mu.Unlock()
+}
+
 // RecordDropped increments tanpopo_telemetry_dropped_total for traces, metrics, or logs.
 func (m *MetricsRegistry) RecordDropped(signal string, count int64) {
 	if m == nil || count <= 0 {
@@ -628,7 +647,7 @@ func normalizeExtTier(tier string) string {
 
 func normalizeTrapReason(reason string) string {
 	switch strings.ToLower(strings.TrimSpace(reason)) {
-	case "cpu_deadline", "oom_16mib", "egress_denied", "abi_violation":
+	case "cpu_deadline", "oom_16mib", "egress_denied", "abi_violation", "trap":
 		return strings.ToLower(strings.TrimSpace(reason))
 	default:
 		return "abi_violation"

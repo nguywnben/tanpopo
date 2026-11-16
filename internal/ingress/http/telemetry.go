@@ -274,7 +274,9 @@ func (rt *requestTelemetry) finish(ctx context.Context, scw *statusCaptureWriter
 	totalDur := time.Since(rt.startedAt)
 	status := http.StatusOK
 	errCode := ""
+	wrote := false
 	if scw != nil {
+		wrote = scw.wrote
 		if scw.status != 0 {
 			status = scw.status
 		}
@@ -284,6 +286,12 @@ func (rt *requestTelemetry) finish(ctx context.Context, scw *statusCaptureWriter
 	rt.mu.Lock()
 	if errCode == "" {
 		errCode = rt.errCode
+	}
+	if !wrote && r != nil && r.Context().Err() != nil {
+		status = 499
+		if errCode == "" {
+			errCode = "client_canceled"
+		}
 	}
 	orgID := rt.orgID
 	projectID := rt.projectID

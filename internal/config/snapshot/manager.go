@@ -580,6 +580,30 @@ func (m *Manager) LastError() error {
 	return m.lastRefreshErr
 }
 
+// LastSuccessMs returns the timestamp in milliseconds of the most recent successful snapshot refresh.
+func (m *Manager) LastSuccessMs() int64 {
+	if m == nil {
+		return 0
+	}
+	return m.lastPollSuccessMs.Load()
+}
+
+// SnapshotAge returns the elapsed duration since the last successful snapshot sync, or false if none loaded yet.
+func (m *Manager) SnapshotAge() (time.Duration, bool) {
+	if m == nil {
+		return 0, false
+	}
+	last := m.lastPollSuccessMs.Load()
+	if last <= 0 {
+		return 0, false
+	}
+	delta := m.nowMs() - last
+	if delta < 0 {
+		delta = 0
+	}
+	return time.Duration(delta) * time.Millisecond, true
+}
+
 // StartWatcher tails config_changelog on interval (plus immediate wakeups from Notify) until ctx is canceled.
 func (m *Manager) StartWatcher(ctx context.Context, interval time.Duration) {
 	if m == nil {

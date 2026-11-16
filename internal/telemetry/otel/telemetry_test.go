@@ -514,3 +514,75 @@ func TestPersistQueueDropOldestBoundsMemory(t *testing.T) {
 	}
 }
 
+func TestTrapReasonSnapshotAgeAndSessionRevoke(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t)
+	})
+
+	ctx := context.Background()
+	st, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: filepath.Join(t.TempDir(), "otel_rev.db"),
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	pipe, err := otel.NewPipeline(otel.PipelineConfig{
+		DB:                 st.RawDB(),
+		MetricsScrapeToken: "scrape_tok_123",
+	})
+	if err != nil {
+		t.Fatalf("NewPipeline: %v", err)
+	}
+	defer func() { _ = pipe.Shutdown(context.Background()) }()
+
+	pipe.Metrics.RecordSandboxTrap("adp_1", "trap")
+	ageCalls := 0
+	pipe.Metrics.SetConfigSnapshotAgeProvider(func() (string, time.Duration, bool) {
+		ageCalls++
+		return "db_poll", 12500 * time.Millisecond, true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.Header.Set("Authorization", "Bearer scrape_tok_123")
+	rec := httptest.NewRecorder()
+	pipe.Metrics.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /metrics = %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if ageCalls != 1 {
+		t.Fatalf("expected SetConfigSnapshotAgeProvider called once on /metrics scrape, got %d", ageCalls)
+	}
+	if !strings.Contains(body, `tanpopo_sandbox_traps_total{adapter_id="adp_1",trap_reason="trap"} 1`) {
+		t.Fatalf("expected explicit trap_reason=\"trap\" metric in /metrics output:\n%s", body)
+	}
+	if !strings.Contains(body, `tanpopo_config_snapshot_age_seconds{sync_channel="db_poll"} 12.5`) {
+		t.Fatalf("expected live tanpopo_config_snapshot_age_seconds in /metrics output:\n%s", body)
+	}
+
+	if _, err := pipe.CreateDebugCaptureSession("sess_rev_1", "org_1", "prj_1", "vk_1", 1); err != nil {
+		t.Fatalf("CreateDebugCaptureSession: %v", err)
+	}
+	if !pipe.HasActiveDebugSession("org_1", "prj_1", "vk_1") {
+		t.Fatalf("expected active debug capture session before revoke")
+	}
+	if !pipe.RevokeDebugCaptureSession("sess_rev_1") {
+		t.Fatalf("expected RevokeDebugCaptureSession to return true")
+	}
+	if pipe.HasActiveDebugSession("org_1", "prj_1", "vk_1") {
+		t.Fatalf("expected inactive debug capture session after revoke")
+	}
+	if _, err := pipe.CreateDebugCaptureSession("sess_rev_2", "org_1", "prj_1", "", 1); err != nil {
+		t.Fatalf("CreateDebugCaptureSession 2: %v", err)
+	}
+	if removed := pipe.RevokeProjectDebugCaptureSessions("org_1", "prj_1"); removed != 1 {
+		t.Fatalf("expected 1 revoked project debug session, got %d", removed)
+	}
+	if pipe.HasActiveDebugSession("org_1", "prj_1", "vk_1") {
+		t.Fatalf("expected inactive debug capture session after project revoke")
+	}
+}
+
+

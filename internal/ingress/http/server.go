@@ -328,6 +328,16 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		runtimes:                make(map[runtimeCacheKey]*cachedAdapterEntry),
 		mux:                     http.NewServeMux(),
 	}
+	if cfg.Telemetry != nil && cfg.Telemetry.Metrics != nil && cfg.Snapshots != nil {
+		snaps := cfg.Snapshots
+		if age, ok := snaps.SnapshotAge(); ok {
+			cfg.Telemetry.Metrics.SetConfigSnapshotAge("db_poll", age)
+		}
+		cfg.Telemetry.Metrics.SetConfigSnapshotAgeProvider(func() (string, time.Duration, bool) {
+			age, ok := snaps.SnapshotAge()
+			return "db_poll", age, ok
+		})
+	}
 
 	if !cfg.DisableNativePassthrough {
 		nh, nhErr := native.NewHandler(native.Config{

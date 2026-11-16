@@ -944,6 +944,75 @@ func TestGatewayTelemetrySecurityRemediation(t *testing.T) {
 		if errStatus != resp.StatusCode || strings.Contains(stagesJSON, "SECRET_PATIENT_RECORD_FAIL") {
 			t.Fatalf("unexpected native error trace status=%d vs resp=%d stages=%s", errStatus, resp.StatusCode, stagesJSON)
 		}
+		if !strings.Contains(stagesJSON, `"stage":"ExtensionHook"`) {
+			t.Fatalf("expected ExtensionHook waterfall stage in native trace: %s", stagesJSON)
+		}
+	})
+
+	t.Run("ConfigSnapshotAgeReportedOnMetricsScrape", func(t *testing.T) {
+		th := setupTelemetryIngressHarness(t, nil)
+		th.clk.Advance(14 * time.Second)
+
+		req, _ := http.NewRequest(http.MethodGet, th.httpSrv.URL+"/metrics", nil)
+		req.Header.Set("Authorization", "Bearer scrape-token-xyz")
+		resp, err := th.client.Do(req)
+		if err != nil {
+			t.Fatalf("GET /metrics: %v", err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET /metrics = %d body=%s", resp.StatusCode, string(body))
+		}
+		if !strings.Contains(string(body), `tanpopo_config_snapshot_age_seconds{sync_channel="db_poll"} 14`) {
+			t.Fatalf("expected live tanpopo_config_snapshot_age_seconds=14 in /metrics output:\n%s", string(body))
+		}
+	})
+
+	t.Run("PreHeaderClientCancelRecordedAs499ClientCanceled", func(t *testing.T) {
+		th := setupTelemetryIngressHarness(t, nil)
+
+		// Cancel an inbound client request while waiting on slow response headers before WriteHeader.
+		th.fake.EnqueueFault("delay_first_byte_ms=600")
+		reqCtx, cancel := context.WithCancel(th.ctx)
+		req, _ := http.NewRequestWithContext(reqCtx, http.MethodPost, th.httpSrv.URL+"/v1/chat/completions",
+			strings.NewReader(`{"model":"acme/chat-1","messages":[{"role":"user","content":"cancel me"}]}`))
+		req.Header.Set("Authorization", "Bearer "+th.vkeyRaw)
+		req.Header.Set("Content-Type", "application/json")
+
+		done := make(chan error, 1)
+		go func() {
+			resp, doErr := th.client.Do(req)
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			done <- doErr
+		}()
+		time.Sleep(80 * time.Millisecond)
+		cancel()
+		<-done
+		// Wait briefly for server handler goroutine to unwind defer finish() cleanly before ForceFlush.
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			_ = th.pipe.ForceFlush(th.ctx)
+			var cnt int
+			if err := th.store.RawDB().QueryRowContext(th.ctx, `SELECT COUNT(*) FROM request_traces_meta WHERE http_status = 499`).Scan(&cnt); err == nil && cnt > 0 {
+				break
+			}
+			time.Sleep(15 * time.Millisecond)
+		}
+
+		var status int
+		var errCode string
+		if err := th.store.RawDB().QueryRowContext(th.ctx, `
+			SELECT http_status, COALESCE(canonical_error_code, '')
+			FROM request_traces_meta
+			ORDER BY rowid DESC LIMIT 1`).Scan(&status, &errCode); err != nil {
+			t.Fatalf("query canceled trace: %v", err)
+		}
+		if status != 499 || errCode != "client_canceled" {
+			t.Fatalf("expected 499 client_canceled for pre-header client cancel, got status=%d code=%q", status, errCode)
+		}
 	})
 }
 

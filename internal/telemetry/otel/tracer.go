@@ -1141,6 +1141,40 @@ func (p *Pipeline) HasActiveDebugSession(orgID, projectID, virtualKeyID string) 
 	return false
 }
 
+// RevokeDebugCaptureSession terminates an active debug capture session immediately before its TTL expires.
+func (p *Pipeline) RevokeDebugCaptureSession(sessionID string) bool {
+	if p == nil || strings.TrimSpace(sessionID) == "" {
+		return false
+	}
+	id := strings.TrimSpace(sessionID)
+	p.sessMu.Lock()
+	defer p.sessMu.Unlock()
+	if _, ok := p.sessions[id]; !ok {
+		return false
+	}
+	delete(p.sessions, id)
+	return true
+}
+
+// RevokeProjectDebugCaptureSessions terminates all active debug capture sessions for an org/project scope.
+func (p *Pipeline) RevokeProjectDebugCaptureSessions(orgID, projectID string) int {
+	if p == nil || strings.TrimSpace(orgID) == "" {
+		return 0
+	}
+	o := strings.TrimSpace(orgID)
+	proj := strings.TrimSpace(projectID)
+	p.sessMu.Lock()
+	defer p.sessMu.Unlock()
+	removed := 0
+	for id, sess := range p.sessions {
+		if sess.OrgID == o && (proj == "" || sess.ProjectID == proj) {
+			delete(p.sessions, id)
+			removed++
+		}
+	}
+	return removed
+}
+
 // activeSessionExpiry returns the shortest active session expiry capped at 72h from createdAtMs.
 func (p *Pipeline) activeSessionExpiry(orgID, projectID, virtualKeyID string, createdAtMs int64) (int64, bool) {
 	now := p.nowMs()

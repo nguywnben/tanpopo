@@ -174,6 +174,16 @@ func NewHandler(cfg Config) (*Handler, error) {
 	if routeRes == nil {
 		routeRes = resolver.New()
 	}
+	if cfg.Telemetry != nil && cfg.Telemetry.Metrics != nil && cfg.Snapshots != nil {
+		snaps := cfg.Snapshots
+		if age, ok := snaps.SnapshotAge(); ok {
+			cfg.Telemetry.Metrics.SetConfigSnapshotAge("db_poll", age)
+		}
+		cfg.Telemetry.Metrics.SetConfigSnapshotAgeProvider(func() (string, time.Duration, bool) {
+			age, ok := snaps.SnapshotAge()
+			return "db_poll", age, ok
+		})
+	}
 	return &Handler{
 		snapshots:               cfg.Snapshots,
 		broker:                  cfg.Broker,
@@ -380,18 +390,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			NarrowPolicy: &narrowPolicy,
 		})
 
-		adpID, _, extTier := nativeTargetTelemetryLabels(initialTarget)
-		inspCtx, endInspHook := reqTel.startStage(wasmCtx, "ExtensionHook",
-			attribute.String("hook", "inspect_native_request"),
-			attribute.String("adapter_id", adpID),
-			attribute.String("extension_tier", extTier),
-		)
-		inspRes, err := InspectNativeRequest(inspCtx, initialRT, reqID, dialect, upstreamPath, safeHeaders, rawBody, rawHints)
-		inspStatus := "ok"
-		if err != nil {
-			inspStatus = "error"
-		}
-		endInspHook(inspStatus, "inspect_native_request", err)
+		inspRes, err := inspectNativeWithTelemetry(wasmCtx, reqTel, initialTarget, initialRT, reqID, dialect, upstreamPath, safeHeaders, rawBody, rawHints)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				if r.Context().Err() == nil && streamCtx.Err() != nil {
@@ -471,7 +470,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					})
 					reRawHints := rawHints
 					reRawHints.Model = effectiveModel
-					reInsp, reErr := InspectNativeRequest(newWasmCtx, initialRT, reqID, dialect, upstreamPath, newSafeHeaders, rawBody, reRawHints)
+					reInsp, reErr := inspectNativeWithTelemetry(newWasmCtx, reqTel, initialTarget, initialRT, reqID, dialect, upstreamPath, newSafeHeaders, rawBody, reRawHints)
 					if reErr != nil {
 						if errors.Is(reErr, context.Canceled) {
 							if r.Context().Err() == nil && streamCtx.Err() != nil {
@@ -547,8 +546,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if h.telemetry != nil && h.telemetry.Metrics != nil && cand.Target.Adapter != nil {
 				stateStr := "ACTIVE_HEALTHY"
-				if cand.Target.Deployment != nil && cand.Target.Deployment.State != "" {
-					stateStr = cand.Target.Deployment.State
+				var cooldownUntil *int64
+				if cand.Target.Deployment != nil {
+					if cand.Target.Deployment.State != "" {
+						stateStr = cand.Target.Deployment.State
+					}
+					cooldownUntil = cand.Target.Deployment.CooldownUntilMs
+				}
+				if h.breaker != nil && targetID != "" {
+					stateStr = h.breaker.PeekState(targetID, stateStr, cooldownUntil).State
 				}
 				h.telemetry.Metrics.SetDeploymentCircuitState(adpID, region, stateStr)
 			}
@@ -701,7 +707,7 @@ func (h *Handler) executeNativeHop(
 		})
 		hopRawHints := rawHints
 		hopRawHints.Model = effectiveModel
-		reInsp, reErr := InspectNativeRequest(wasmCtx, rt, reqID, dialect, upstreamPath, safeHeaders, rawBody, hopRawHints)
+		reInsp, reErr := inspectNativeWithTelemetry(wasmCtx, nativeTelemetryFromContext(hopCtx), target, rt, reqID, dialect, upstreamPath, safeHeaders, rawBody, hopRawHints)
 		if reErr != nil {
 			if errors.Is(reErr, context.Canceled) {
 				return h.classifyNativeBrokerAttemptError(w, clientCtx, streamCtx, reqID, reErr, true)

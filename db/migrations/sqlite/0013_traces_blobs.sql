@@ -40,7 +40,7 @@ CREATE TABLE debug_payload_blobs (
     project_id             VARCHAR(40) NOT NULL,
     aead_alg               VARCHAR(32) NOT NULL DEFAULT 'AES-256-GCM' CHECK (aead_alg = 'AES-256-GCM'),
     nonce                  BLOB NOT NULL,
-    encrypted_payload_aead BLOB NOT NULL, -- <= 256 KiB; Project DEK AAD = "tanpopo:v1:proj:" + org_id + ":" + project_id + ":debug_blob:" + request_id
+    encrypted_payload_aead BLOB NOT NULL CHECK (length(encrypted_payload_aead) <= 262144), -- <= 256 KiB; Project DEK AAD = "tanpopo:v1:proj:" + org_id + ":" + project_id + ":debug_blob:" + request_id
     created_at_ms          BIGINT NOT NULL,
     expires_at_ms          BIGINT NOT NULL CHECK (expires_at_ms > created_at_ms AND expires_at_ms <= created_at_ms + 259200000),
     PRIMARY KEY (org_id, project_id, request_id),

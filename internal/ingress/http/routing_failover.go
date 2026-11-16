@@ -129,8 +129,15 @@ func (s *Server) executeRoutedPreStreamFailover(
 			}
 			if s.telemetry != nil && s.telemetry.Metrics != nil && cand.Target.Adapter != nil {
 				stateStr := "ACTIVE_HEALTHY"
-				if cand.Target.Deployment != nil && cand.Target.Deployment.State != "" {
-					stateStr = cand.Target.Deployment.State
+				var cooldownUntil *int64
+				if cand.Target.Deployment != nil {
+					if cand.Target.Deployment.State != "" {
+						stateStr = cand.Target.Deployment.State
+					}
+					cooldownUntil = cand.Target.Deployment.CooldownUntilMs
+				}
+				if s.breaker != nil && targetID != "" {
+					stateStr = s.breaker.PeekState(targetID, stateStr, cooldownUntil).State
 				}
 				s.telemetry.Metrics.SetDeploymentCircuitState(adpID, region, stateStr)
 			}
