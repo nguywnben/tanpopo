@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0013: DONE` | `READY: TP-IMP-0014`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.16.0-tp-imp-0013-done` | **Date:** `2026-11-15`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0020: DONE` | `READY: TP-IMP-0021`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.23.0-dec-033-tp-imp-0021-ready` | **Date:** `2026-11-16`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`) plus `TP-IMP-0005`..`0011` (`DEC-011`..`DEC-021`), **`TP-IMP-0012`** (accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-023`, `b5f548ae`, CI `43707209233` `SUCCESS`), and **`TP-IMP-0013`** (accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-024`, standalone scope at `dea06fbc`, CI `43724587829` `SUCCESS`) are **`DONE` (`13 / 47`)**; **[`TP-IMP-0014`](./units/TP-IMP-0014.md) (`1 / 47`) is `READY`** (execution stopped cleanly after `TP-IMP-0013 = DONE` per Owner instruction); `33` downstream units `0015`..`0047` remain `BLOCKED` behind their dependency (`TP-IMP-0015` now awaits solely `0014`), review, and `COND-PO-01`..`05` verification gates.
+> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`), Milestone `M1` (`TP-IMP-0005`..`0015`, closing `GATE-M1` at `baf154dc` / CI `43745804370`), and Wave 2.1 (`TP-IMP-0016`..`0020` via `DEC-025`..`DEC-032`, latest accepted baseline `904ba2a9` / CI `43782208080`, `DEC-032` `bb0b2bb3` / CI `43783032340`) are **`DONE` (`20 / 47`)**; **[`TP-IMP-0021`](./units/TP-IMP-0021.md) (`1 / 47`) is `READY`** (unlocked & delegated to **Gemini 4 Hydrogen** under `DEC-033`, stopping cleanly at `0021 = DONE`); `26` downstream units `0022`..`0047` remain `BLOCKED` behind their dependency, review, and `COND-PO-01`..`05` verification gates.
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---

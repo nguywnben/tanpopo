@@ -4,8 +4,8 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0021` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0007`, `TP-IMP-0020` — `GAP-01, 06`)* |
-| **Size** | `L` (`internal/finops/ledger/*`, `internal/finops/pricing/*`, `db/migrations/sqlite/0008_budget_ledger.sql`) |
+| **Status** | **`READY`** *(Unlocked & delegated to **Gemini 4 Hydrogen** under [`DEC-033`](../../governance/decisions.md) — `100%` of DoR & upstream `Dependencies` [`TP-IMP-0001`, `0003`, `0007`, `0020`] = `DONE`; stop cleanly after `TP-IMP-0021 = DONE` without starting `0022`)* |
+| **Size** | `L` (`internal/finops/ledger/*`, `internal/finops/pricing/*`, `internal/finops/rollup/*`, `db/migrations/sqlite/0012_budget_ledger.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Zero-float monetary arithmetic, concurrent overspend prevention & orphan reservation reclamation)* |
 | **Technical Owner** | `Principal FinOps / Storage Engineer` |
 
@@ -22,7 +22,7 @@ Implement the two-phase budget accounting ledger (`Two-Phase Reservation & Settl
   - `internal/finops/ledger/service.go` (`Reserve`, `Settle`, `Release`, enforcing accounting invariant $\text{Limit} - \text{SettledSpend} - \text{ActiveReserved} \ge 0$ under serialized transactions).
   - `internal/finops/ledger/reaper.go` (`OrphanReservationReaper` periodically sweeping expired `lease_expires_at` holds to audited `EXPIRED_RECLAIMED` state — `SM-07`).
   - `internal/finops/rollup/aggregator.go` (`usage_rollups_hourly` aggregation maintaining separate `exact_micro_usd`, `estimated_micro_usd`, and `unmetered_request_count` columns).
-  - `db/migrations/sqlite/0008_budget_ledger.sql` (`budget_ledgers`, `budget_reservations`, `usage_settlements` with `UNIQUE (request_id, settled_at)`, `usage_rollups_hourly` — `100%` aligned with `TP-IMP-0003` and `ADR-0003/0005`).
+  - `db/migrations/sqlite/0012_budget_ledger.sql` (`budget_ledgers`, `budget_reservations`, `usage_settlements` with `UNIQUE (request_id, settled_at)`, `usage_rollups_hourly` — `100%` aligned with `TP-IMP-0003` and `ADR-0003/0005`, occupying slot `0012` sequentially after `0011_routes.sql` in `db/migrations/sqlite/`).
 - **Out-of-Scope:** Batched `Valkey Lua` cluster hold optimization (owned by `TP-IMP-0040`); external commercial customer invoicing (`TP-FR-0804` — `Later / Post-v1.0`).
 
 ## 3. Requirements, Dependencies & Design References
@@ -53,7 +53,7 @@ Implement the two-phase budget accounting ledger (`Two-Phase Reservation & Settl
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** Strictly partition budgets by `(org_id, scope_type, scope_id)`; SQLite/PostgreSQL triggers reject `DELETE` and `UPDATE` statements on `usage_settlements`.
-- **Rollback:** Additive schema `0008_budget_ledger.sql`.
+- **Rollback:** Additive schema `0012_budget_ledger.sql` (following `0011_routes.sql`).
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0001` (`SM-07` remediation), `TP-IMP-0003` (`CR-06` ledger DDL lock), `TP-IMP-0007`, and `TP-IMP-0020` are complete.

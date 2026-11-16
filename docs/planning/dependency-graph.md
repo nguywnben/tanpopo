@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0013: DONE` | `READY: TP-IMP-0014`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.16.0-tp-imp-0013-done` | **Date:** `2026-11-15`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0020: DONE` | `READY: TP-IMP-0021`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.23.0-dec-033-tp-imp-0021-ready` | **Date:** `2026-11-16`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0013` = **`DONE`** (`TP-IMP-0005`..`0011` accepted via `DEC-011`..`DEC-021`; `TP-IMP-0012` accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-023` at `b5f548ae` & CI Run `43707209233`; `TP-IMP-0013` accepted by delegated Owner **Carbon** under `DEC-022`/`DEC-024` at commit `dea06fbc` & CI Run `43724587829`); **[`TP-IMP-0014`](./units/TP-IMP-0014.md) = `READY` (`1 / 47` units)** (execution stopped cleanly after `TP-IMP-0013 = DONE` per Owner instruction); `TP-IMP-0015`..`0047` (`33 / 47`) = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates (`0015` now awaits solely `TP-IMP-0014`).
+> - **Live DAG Frontier:** `TP-IMP-0001`..`0020` = **`DONE`** (`TP-IMP-0005`..`0011` accepted via `DEC-011`..`DEC-021`; `TP-IMP-0012`..`0013` by **Carbon** via `DEC-022`..`DEC-024`; `TP-IMP-0014`..`0020` by **Gemini 4 Hydrogen** via `DEC-025`..`DEC-032`, `904ba2a9` / CI `43782208080`, `DEC-032` `bb0b2bb3` / CI `43783032340`); **[`TP-IMP-0021`](./units/TP-IMP-0021.md) = `READY` (`1 / 47` units — delegated to Gemini 4 Hydrogen under `DEC-033`, stopping after `0021 = DONE`)**; `TP-IMP-0022`..`0047` (`26 / 47`) = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `COND-PO-01`..`05` gates.
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier Today (`TP-IMP-0014` `READY` — halted after `0013 = DONE`):** **`TP-IMP-0001..0013` are `DONE` (`13 / 47`)**, **[`TP-IMP-0014`](./units/TP-IMP-0014.md) (`1 / 47`) is `READY`** (`DEC-024`, active orchestration stopped cleanly after `TP-IMP-0013 = DONE` per Owner instruction), and `TP-IMP-0015..0047` (`33 / 47`) remain `BLOCKED` pending upstream completion (`TP-IMP-0015` now awaits solely `0014`) and review gates.
+> **Live Queue Frontier Today (`TP-IMP-0021` `READY` — `DEC-033`):** **`TP-IMP-0001..0020` are `DONE` (`20 / 47`)**, **[`TP-IMP-0021`](./units/TP-IMP-0021.md) (`1 / 47`) is `READY`** (unlocked & delegated to **Gemini 4 Hydrogen** under `DEC-033`, stopping cleanly at `0021 = DONE` without starting `0022`), and `TP-IMP-0022..0047` (`26 / 47`) remain `BLOCKED` pending upstream completion, review gates, and direct human Product Owner unlock.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.
