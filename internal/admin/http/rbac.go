@@ -126,15 +126,23 @@ func (s *Server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := make([]memberSummaryDTO, len(items))
-	for i := range items {
-		roles, projIDs, _, berr := s.loadMemberBindingDetails(r.Context(), orgID, items[i].dto.ID)
+	if len(items) > 0 {
+		principalIDs := make([]string, len(items))
+		for i := range items {
+			principalIDs[i] = items[i].dto.ID
+		}
+		bindingsMap, berr := s.loadMemberBindingDetailsBatch(r.Context(), orgID, principalIDs)
 		if berr != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading member roles", true, nil)
 			return
 		}
-		items[i].dto.Roles = roles
-		items[i].dto.ProjectIDs = projIDs
-		data[i] = items[i].dto
+		for i := range items {
+			if details, ok := bindingsMap[items[i].dto.ID]; ok {
+				items[i].dto.Roles = details.roles
+				items[i].dto.ProjectIDs = details.projs
+			}
+			data[i] = items[i].dto
+		}
 	}
 
 	var nextCursor *string
@@ -222,6 +230,9 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+		return
+	}
+	if !s.requireActiveOrg(w, r, orgID) {
 		return
 	}
 
@@ -425,6 +436,9 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
 		return
 	}
+	if !s.requireActiveOrg(w, r, orgID) {
+		return
+	}
 
 	if version != expectedVer {
 		writeOptimisticConflict(w, r, version, currentDTO)
@@ -458,7 +472,37 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if affected, _ := res.RowsAffected(); affected == 0 {
-		writeOptimisticConflict(w, r, version, currentDTO)
+		_ = tx.Rollback()
+		var freshEmail, freshKind string
+		var freshVer, freshCreatedMs int64
+		rerr := s.db.QueryRowContext(r.Context(), `
+			SELECT email_or_sub, kind, version, created_at_ms
+			FROM principals WHERE id = ? AND org_id = ?`,
+			memberID, orgID,
+		).Scan(&freshEmail, &freshKind, &freshVer, &freshCreatedMs)
+		if errors.Is(rerr, sql.ErrNoRows) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "member not found", false, nil)
+			return
+		}
+		if rerr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading member after conflict", true, nil)
+			return
+		}
+		freshRoles, freshProjs, _, berr := s.loadMemberBindingDetails(r.Context(), orgID, memberID)
+		if berr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading member roles after conflict", true, nil)
+			return
+		}
+		freshDTO := memberSummaryDTO{
+			ID:         memberID,
+			Email:      freshEmail,
+			Kind:       toOpenAPIMemberKind(freshKind),
+			Roles:      freshRoles,
+			ProjectIDs: freshProjs,
+			Version:    freshVer,
+			CreatedAt:  formatTimeRFC3339Ms(freshCreatedMs),
+		}
+		writeOptimisticConflict(w, r, freshVer, freshDTO)
 		return
 	}
 
@@ -512,6 +556,67 @@ type memberBindingRow struct {
 	RoleName  string
 	ScopeType string
 	ScopeID   string
+}
+
+type memberBindingSummary struct {
+	roles []string
+	projs []string
+}
+
+func (s *Server) loadMemberBindingDetailsBatch(ctx context.Context, orgID string, principalIDs []string) (map[string]memberBindingSummary, error) {
+	out := make(map[string]memberBindingSummary, len(principalIDs))
+	if len(principalIDs) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(principalIDs))
+	args := make([]any, 0, len(principalIDs)+1)
+	args = append(args, orgID)
+	for i, pid := range principalIDs {
+		placeholders[i] = "?"
+		args = append(args, pid)
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT principal_id, role_name, scope_type, scope_id
+		FROM role_bindings
+		WHERE org_id = ? AND principal_id IN (`+strings.Join(placeholders, ",")+`)
+		ORDER BY created_at_ms ASC, id ASC`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	seenRoles := make(map[string]map[string]struct{}, len(principalIDs))
+	seenProjs := make(map[string]map[string]struct{}, len(principalIDs))
+	for rows.Next() {
+		var pid, roleName, scopeType, scopeID string
+		if scanErr := rows.Scan(&pid, &roleName, &scopeType, &scopeID); scanErr != nil {
+			return nil, scanErr
+		}
+		cur := out[pid]
+		if cur.roles == nil {
+			cur.roles = []string{}
+		}
+		if seenRoles[pid] == nil {
+			seenRoles[pid] = make(map[string]struct{})
+		}
+		if _, ok := seenRoles[pid][roleName]; !ok {
+			seenRoles[pid][roleName] = struct{}{}
+			cur.roles = append(cur.roles, roleName)
+		}
+		if scopeType == rbac.ScopeProject && scopeID != "" {
+			if seenProjs[pid] == nil {
+				seenProjs[pid] = make(map[string]struct{})
+			}
+			if _, ok := seenProjs[pid][scopeID]; !ok {
+				seenProjs[pid][scopeID] = struct{}{}
+				cur.projs = append(cur.projs, scopeID)
+			}
+		}
+		out[pid] = cur
+	}
+	return out, rows.Err()
 }
 
 func (s *Server) loadMemberBindingDetails(ctx context.Context, orgID, principalID string) ([]string, []string, []memberBindingRow, error) {

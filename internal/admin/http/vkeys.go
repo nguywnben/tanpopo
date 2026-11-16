@@ -333,12 +333,17 @@ func (s *Server) createVirtualKeyCommon(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	var exists int
-	if err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, projectID).Scan(&exists); errors.Is(err, sql.ErrNoRows) {
-		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+	if !s.requireActiveOrgAndProject(w, r, orgID, projectID) {
 		return
-	} else if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying project", true, nil)
+	}
+
+	var ownerPrincipalPtr *string
+	var ownerInOrg int
+	if err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM principals WHERE id = ? AND org_id = ?`, sc.Actor.PrincipalID, orgID).Scan(&ownerInOrg); err == nil {
+		id := sc.Actor.PrincipalID
+		ownerPrincipalPtr = &id
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying owner principal scope", true, nil)
 		return
 	}
 
@@ -362,7 +367,7 @@ func (s *Server) createVirtualKeyCommon(w http.ResponseWriter, r *http.Request, 
 		OrgID:                orgID,
 		ProjectID:            projectID,
 		EnvID:                strings.TrimSpace(req.EnvID),
-		OwnerPrincipalID:     &sc.Actor.PrincipalID,
+		OwnerPrincipalID:     ownerPrincipalPtr,
 		Name:                 req.Name,
 		RPMLimit:             req.RPMLimit,
 		TPMLimit:             req.TPMLimit,
@@ -457,6 +462,9 @@ func (s *Server) handleUpdateVirtualKey(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if !s.authorize(w, r, sc, rbac.ActionVKeyCreate, rbac.TargetScope{OrgID: orgID, ProjectID: cur.ProjectID}) {
+		return
+	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, cur.ProjectID) {
 		return
 	}
 
@@ -577,6 +585,9 @@ func (s *Server) handleRotateVirtualKey(w http.ResponseWriter, r *http.Request) 
 	if !s.authorize(w, r, sc, rbac.ActionVKeyRotate, rbac.TargetScope{OrgID: orgID, ProjectID: cur.ProjectID}) {
 		return
 	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, cur.ProjectID) {
+		return
+	}
 
 	if cur.Version != expectedVer {
 		writeOptimisticConflict(w, r, cur.Version, toVirtualKeySummaryDTO(cur))
@@ -667,6 +678,10 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 	if !s.authorize(w, r, sc, rbac.ActionVKeyRevoke, rbac.TargetScope{OrgID: orgID, ProjectID: cur.ProjectID}) {
 		return
 	}
+	if internalMode == vkey.RevokeModeStandard && !actorCanGracefulRevokeVKey(sc.Actor, orgID, cur.ProjectID) {
+		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "SECURITY_REVIEWER may only execute EMERGENCY_ABORT_STREAMS revocation", false, nil)
+		return
+	}
 
 	if cur.Version != expectedVer {
 		writeOptimisticConflict(w, r, cur.Version, toVirtualKeySummaryDTO(cur))
@@ -713,6 +728,31 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+func actorCanGracefulRevokeVKey(actor *rbac.Actor, orgID, projectID string) bool {
+	if actorHasOperator(actor) {
+		return true
+	}
+	if actor == nil || orgID == "" {
+		return false
+	}
+	for _, b := range actor.Bindings {
+		if b.OrgID == nil || *b.OrgID != orgID {
+			continue
+		}
+		if b.ScopeType == rbac.ScopeOrg && (b.RoleName == rbac.RoleOrgOwner || b.RoleName == rbac.RoleTeamAdmin) {
+			return true
+		}
+		if b.ScopeType == rbac.ScopeProject && b.ScopeID == projectID && b.RoleName == rbac.RoleTeamAdmin {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeOpenAPIVKeyState collapses the 7 internal SM-05 storage states onto the
+// 5 canonical OpenAPI VirtualKeySummary.state enum values:
+//   - SUSPENDED -> QUOTA_PAUSED
+//   - PURGED_METADATA_RETAINED -> REVOKED
 func normalizeOpenAPIVKeyState(state string) string {
 	switch state {
 	case snapshot.KeyStateCreatedActive,

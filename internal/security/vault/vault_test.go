@@ -2904,5 +2904,131 @@ func TestVaultEnsureOrgAndProjectDEK(t *testing.T) {
 	}
 }
 
+func TestVaultTxEnsureAndSealPaths(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 5*time.Minute)
+
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "tx-dek-org", DisplayName: "Tx DEK Org"})
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+	prj, err := env.sqlite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "tx-proj", DisplayName: "Tx Proj"})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	// Nil tx and empty IDs fail closed.
+	if _, err := env.vault.EnsureOrgDEKTx(ctx, nil, org.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for nil tx EnsureOrgDEKTx, got %v", err)
+	}
+	if _, err := env.vault.EnsureProjectDEKTx(ctx, nil, org.ID, prj.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for nil tx EnsureProjectDEKTx, got %v", err)
+	}
+	if _, _, err := env.vault.SealSecretTx(ctx, nil, SealSecretParams{
+		OrgID: org.ID, Name: "s", SecretKind: SecretKindAPIKey, Plaintext: []byte("secret"),
+	}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for nil tx SealSecretTx, got %v", err)
+	}
+
+	tx1, err := env.sqlite.RawDB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("BeginTx: %v", err)
+	}
+	if _, err := env.vault.EnsureOrgDEKTx(ctx, tx1, ""); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on empty orgID, got %v", err)
+	}
+	if _, err := env.vault.EnsureProjectDEKTx(ctx, tx1, org.ID, ""); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on empty projectID, got %v", err)
+	}
+	if _, err := env.vault.EnsureProjectDEKTx(ctx, tx1, org.ID, "prj_missing"); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing project, got %v", err)
+	}
+	if _, _, err := env.vault.SealSecretTx(ctx, tx1, SealSecretParams{
+		OrgID: org.ID, Name: "", SecretKind: SecretKindAPIKey, Plaintext: []byte("secret"),
+	}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for empty secret name, got %v", err)
+	}
+
+	// Provision org DEK + project DEK + sealed secret inside tx1, then ROLLBACK without invoking callbacks.
+	if _, err := env.vault.EnsureOrgDEKTx(ctx, tx1, org.ID); err != nil {
+		t.Fatalf("EnsureOrgDEKTx: %v", err)
+	}
+	if _, err := env.vault.EnsureProjectDEKTx(ctx, tx1, org.ID, prj.ID); err != nil {
+		t.Fatalf("EnsureProjectDEKTx: %v", err)
+	}
+	rolledBackMeta, _, err := env.vault.SealSecretTx(ctx, tx1, SealSecretParams{
+		OrgID:          org.ID,
+		OwnerProjectID: &prj.ID,
+		Name:           "rolled-back-secret",
+		SecretKind:     SecretKindAPIKey,
+		Plaintext:      []byte("sk-rollback"),
+	})
+	if err != nil {
+		t.Fatalf("SealSecretTx inside tx1: %v", err)
+	}
+	if err := tx1.Rollback(); err != nil {
+		t.Fatalf("tx1.Rollback: %v", err)
+	}
+	if _, err := env.vault.GetOrgKeyMetadata(ctx, org.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected org key absent after rollback, got %v", err)
+	}
+	if _, err := env.vault.UnsealWithCapability(ctx, MintUnsealCapabilityForBroker(), org.ID, rolledBackMeta.ID); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected rolled-back secret absent, got %v", err)
+	}
+
+	// Repeat inside tx2, commit, invoke post-commit cache closures, and verify unseal + idempotent re-ensure.
+	tx2, err := env.sqlite.RawDB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("BeginTx tx2: %v", err)
+	}
+	cOrg, err := env.vault.EnsureOrgDEKTx(ctx, tx2, org.ID)
+	if err != nil {
+		t.Fatalf("EnsureOrgDEKTx tx2: %v", err)
+	}
+	cProj, err := env.vault.EnsureProjectDEKTx(ctx, tx2, org.ID, prj.ID)
+	if err != nil {
+		t.Fatalf("EnsureProjectDEKTx tx2: %v", err)
+	}
+	committedMeta, cSec, err := env.vault.SealSecretTx(ctx, tx2, SealSecretParams{
+		OrgID:          org.ID,
+		OwnerProjectID: &prj.ID,
+		Name:           "committed-secret",
+		SecretKind:     SecretKindAPIKey,
+		Plaintext:      []byte("sk-tx-committed"),
+	})
+	if err != nil {
+		t.Fatalf("SealSecretTx tx2: %v", err)
+	}
+	if err := tx2.Commit(); err != nil {
+		t.Fatalf("tx2.Commit: %v", err)
+	}
+	cOrg()
+	cProj()
+	cSec()
+
+	plain, err := env.vault.UnsealWithCapability(ctx, MintUnsealCapabilityForBroker(), org.ID, committedMeta.ID)
+	if err != nil {
+		t.Fatalf("UnsealWithCapability: %v", err)
+	}
+	defer plain.Zeroize()
+	if string(plain.Plaintext) != "sk-tx-committed" {
+		t.Fatalf("expected sk-tx-committed, got %q", string(plain.Plaintext))
+	}
+	// Idempotent EnsureOrgDEKTx / EnsureProjectDEKTx hit existing rows cleanly.
+	tx3, err := env.sqlite.RawDB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("BeginTx tx3: %v", err)
+	}
+	defer func() { _ = tx3.Rollback() }()
+	if _, err := env.vault.EnsureOrgDEKTx(ctx, tx3, org.ID); err != nil {
+		t.Fatalf("idempotent EnsureOrgDEKTx: %v", err)
+	}
+	if _, err := env.vault.EnsureProjectDEKTx(ctx, tx3, org.ID, prj.ID); err != nil {
+		t.Fatalf("idempotent EnsureProjectDEKTx: %v", err)
+	}
+}
+
+
 
 

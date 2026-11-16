@@ -73,6 +73,8 @@ func (s *Server) handleBootstrapStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+var errBootstrapInitialConnectionFailed = errors.New("initial_connection provisioning failed")
+
 func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request) {
 	var req bootstrapCompleteRequest
 	if !decodePublicJSON(w, r, &req) {
@@ -96,8 +98,11 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 	var resolvedAdapterID string
 	if req.InitialConnection != nil {
 		ic := req.InitialConnection
-		if strings.TrimSpace(ic.AdapterID) == "" || strings.TrimSpace(ic.Name) == "" || strings.TrimSpace(ic.ModelID) == "" {
-			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_initial_connection", "invalid_request_error", "initial_connection requires adapter_id, name, billing_mode, endpoint_url, model_id, and data_region", false, nil)
+		name := strings.TrimSpace(ic.Name)
+		modelID := strings.TrimSpace(ic.ModelID)
+		if strings.TrimSpace(ic.AdapterID) == "" || name == "" || modelID == "" ||
+			len(name) > 128 || len(modelID) > 128 || strings.ContainsAny(modelID, "\x00\r\n") {
+			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_initial_connection", "invalid_request_error", "initial_connection requires valid adapter_id, name (<=128), billing_mode, endpoint_url, model_id (<=128), and data_region", false, nil)
 			return
 		}
 		if ic.BillingMode != "COMMERCIAL_API" && ic.BillingMode != "SELF_HOSTED_INFRA" {
@@ -122,7 +127,7 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 				msg = "endpoint_url targets a blocked local control-plane port"
 			} else if errors.Is(ssrfErr, egress.ErrInvalidPolicy) || errors.Is(ssrfErr, port.ErrInvalidInput) {
 				code = "invalid_endpoint_url"
-				msg = ssrfErr.Error()
+				msg = "valid http or https endpoint_url is required"
 			}
 			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, code, "invalid_request_error", msg, false, nil)
 			return
@@ -142,27 +147,68 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	res, err := s.bootstrap.Complete(r.Context(), bootstrap.CompleteRequest{
+	var (
+		connID      string
+		deployID    string
+		routeID     string
+		createdKey  *vkey.CreatedVirtualKey
+		commitDEKs  []func()
+	)
+	res, err := s.bootstrap.CompleteWithProvisioner(r.Context(), bootstrap.CompleteRequest{
 		BootstrapToken:              req.BootstrapToken,
 		OwnerEmail:                  req.OwnerEmail,
 		OwnerPassword:               req.OwnerPassword,
 		OrgName:                     req.OrgName,
 		ProjectName:                 req.ProjectName,
 		MasterKEKBackupAcknowledged: req.MasterKEKBackupAcknowledged,
+	}, func(ctx context.Context, tx *sql.Tx, res *bootstrap.CompleteResult) error {
+		if s.vault != nil {
+			cOrg, derr := s.vault.EnsureOrgDEKTx(ctx, tx, res.OrgID)
+			if derr != nil {
+				return fmt.Errorf("vault org DEK: %w", derr)
+			}
+			commitDEKs = append(commitDEKs, cOrg)
+
+			cProj, perr := s.vault.EnsureProjectDEKTx(ctx, tx, res.OrgID, res.ProjectID)
+			if perr != nil {
+				return fmt.Errorf("vault project DEK: %w", perr)
+			}
+			commitDEKs = append(commitDEKs, cProj)
+		}
+
+		if req.InitialConnection != nil {
+			var cSec func()
+			var provErr error
+			connID, deployID, routeID, createdKey, cSec, provErr = s.provisionInitialBootstrapTopologyTx(
+				ctx,
+				tx,
+				res.OrgID,
+				res.ProjectID,
+				res.EnvID,
+				res.OwnerPrincipalID,
+				resolvedAdapterID,
+				req.InitialConnection,
+			)
+			if provErr != nil {
+				return fmt.Errorf("%w: %v", errBootstrapInitialConnectionFailed, provErr)
+			}
+			if cSec != nil {
+				commitDEKs = append(commitDEKs, cSec)
+			}
+		}
+		return nil
 	})
 	if err != nil {
+		if errors.Is(err, errBootstrapInitialConnectionFailed) {
+			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "initial_connection_failed", "invalid_request_error", "initial_connection provisioning failed; bootstrap token was not consumed", false, nil)
+			return
+		}
 		s.writeBootstrapCompleteError(w, r, err)
 		return
 	}
-
-	if s.vault != nil {
-		if _, err := s.vault.EnsureOrgDEK(r.Context(), res.OrgID); err != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed provisioning organization encryption key", true, nil)
-			return
-		}
-		if _, err := s.vault.EnsureProjectDEK(r.Context(), res.OrgID, res.ProjectID); err != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed provisioning project encryption key", true, nil)
-			return
+	for _, fn := range commitDEKs {
+		if fn != nil {
+			fn()
 		}
 	}
 
@@ -171,29 +217,13 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 		ProjectID:        res.ProjectID,
 		EnvID:            res.EnvID,
 		OwnerPrincipalID: res.OwnerPrincipalID,
+		ConnectionID:     connID,
+		DeploymentID:     deployID,
+		DefaultRouteID:   routeID,
 	}
-
-	if req.InitialConnection != nil {
-		connID, deployID, routeID, createdKey, provErr := s.provisionInitialBootstrapTopology(
-			r.Context(),
-			res.OrgID,
-			res.ProjectID,
-			res.EnvID,
-			res.OwnerPrincipalID,
-			resolvedAdapterID,
-			req.InitialConnection,
-		)
-		if provErr != nil {
-			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "initial_connection_failed", "invalid_request_error", provErr.Error(), false, nil)
-			return
-		}
-		resp.ConnectionID = connID
-		resp.DeploymentID = deployID
-		resp.DefaultRouteID = routeID
-		if createdKey != nil {
-			dto := toVirtualKeyCreatedDTO(createdKey)
-			resp.InitialVirtualKey = &dto
-		}
+	if createdKey != nil {
+		dto := toVirtualKeyCreatedDTO(createdKey)
+		resp.InitialVirtualKey = &dto
 	}
 
 	clientIP := extractClientIP(r)
@@ -227,46 +257,53 @@ func (s *Server) writeBootstrapCompleteError(w http.ResponseWriter, r *http.Requ
 		writeErrorEnvelope(w, r, http.StatusTooManyRequests, "auth_rate_limited", "rate_limit_error", "too many invalid bootstrap token attempts", true, nil)
 	case errors.Is(err, bootstrap.ErrMasterKEKAckRequired):
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "master_kek_ack_required", "invalid_request_error", "master_kek_backup_acknowledged must be true", false, nil)
-	default:
+	case errors.Is(err, port.ErrInvalidInput):
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_bootstrap_request", "invalid_request_error", err.Error(), false, nil)
+	default:
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "bootstrap transaction failed; retry bootstrap", true, nil)
 	}
 }
 
-func (s *Server) provisionInitialBootstrapTopology(
+func (s *Server) provisionInitialBootstrapTopologyTx(
 	ctx context.Context,
+	tx *sql.Tx,
 	orgID, projectID, envID, ownerPrincipalID, adapterID string,
 	ic *bootstrapInitialConnectionReq,
-) (string, string, string, *vkey.CreatedVirtualKey, error) {
-	var credIDPtr *string
+) (string, string, string, *vkey.CreatedVirtualKey, func(), error) {
+	var (
+		credIDPtr   *string
+		commitCache func()
+	)
 	if ic.SecretValue != "" {
 		if s.vault == nil {
-			return "", "", "", nil, fmt.Errorf("vault is required to store initial_connection.secret_value")
+			return "", "", "", nil, nil, fmt.Errorf("vault is required to store initial_connection.secret_value")
 		}
 		secretBuf := []byte(ic.SecretValue)
 		defer clear(secretBuf)
-		meta, err := s.vault.SealSecret(ctx, vault.SealSecretParams{
+		meta, cFn, err := s.vault.SealSecretTx(ctx, tx, vault.SealSecretParams{
 			OrgID:      orgID,
 			Name:       strings.TrimSpace(ic.Name) + " API Key",
 			SecretKind: vault.SecretKindAPIKey,
 			Plaintext:  secretBuf,
 		})
 		if err != nil {
-			return "", "", "", nil, fmt.Errorf("seal initial secret: %w", err)
+			return "", "", "", nil, nil, fmt.Errorf("seal initial secret: %w", err)
 		}
 		credIDPtr = &meta.ID
+		commitCache = cFn
 	}
 
 	connID, err := idgen.New(idgen.PrefixConnection)
 	if err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 	deployID, err := idgen.New(idgen.PrefixDeployment)
 	if err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 	routeID, err := idgen.New(idgen.PrefixRoute)
 	if err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 
 	now := s.nowMs()
@@ -279,12 +316,6 @@ func (s *Server) provisionInitialBootstrapTopology(
 		authMode = "NONE"
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return "", "", "", nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO provider_connections (
 			id, org_id, owner_project_id, adapter_id, credential_id, name,
@@ -296,7 +327,7 @@ func (s *Server) provisionInitialBootstrapTopology(
 		strings.TrimSpace(ic.EndpointURL), boolToInt(ic.AllowPrivateIP), cidrsJSON, ic.DataRegion,
 		ic.BillingMode, authMode, now, now,
 	); err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 
 	if credIDPtr != nil {
@@ -306,7 +337,7 @@ func (s *Server) provisionInitialBootstrapTopology(
 			) VALUES (?, ?, 'api_key', ?, 'HOST_BLIND_INJECT', ?)`,
 			orgID, connID, *credIDPtr, now,
 		); err != nil {
-			return "", "", "", nil, err
+			return "", "", "", nil, nil, err
 		}
 	}
 
@@ -322,7 +353,7 @@ func (s *Server) provisionInitialBootstrapTopology(
 	if errors.Is(err, sql.ErrNoRows) {
 		logicalModelID, err = idgen.New(idgen.PrefixLogicalModel)
 		if err != nil {
-			return "", "", "", nil, err
+			return "", "", "", nil, nil, err
 		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO logical_models (
@@ -331,10 +362,10 @@ func (s *Server) provisionInitialBootstrapTopology(
 			) VALUES (?, ?, ?, 'CHAT', 128000, 8192, '{"streaming":"VERIFIED"}', 1, ?, ?)`,
 			logicalModelID, orgID, modelSlug, now, now,
 		); err != nil {
-			return "", "", "", nil, err
+			return "", "", "", nil, nil, err
 		}
 	} else if err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 
 	pricingJSON := `{"input_token_nano_usd":0,"output_token_nano_usd":0}`
@@ -348,7 +379,7 @@ func (s *Server) provisionInitialBootstrapTopology(
 		) VALUES (?, ?, ?, ?, ?, NULL, '{}', 'DECLARED', ?, 'ACTIVE_HEALTHY', NULL, 5000, 30000, 15000, 1, ?, ?)`,
 		deployID, orgID, connID, logicalModelID, modelSlug, pricingJSON, now, now,
 	); err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 
 	if _, err := tx.ExecContext(ctx, `
@@ -358,7 +389,7 @@ func (s *Server) provisionInitialBootstrapTopology(
 		) VALUES (?, ?, ?, ?, 'default', 'PRIORITY_FAILOVER', 3, ?, 1, ?, ?)`,
 		routeID, orgID, projectID, envID, ic.DataRegion, now, now,
 	); err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 
 	if _, err := tx.ExecContext(ctx, `
@@ -367,7 +398,7 @@ func (s *Server) provisionInitialBootstrapTopology(
 		) VALUES (?, ?, ?, 1, 100)`,
 		orgID, routeID, deployID,
 	); err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 
 	if _, err := tx.ExecContext(ctx, `
@@ -375,12 +406,12 @@ func (s *Server) provisionInitialBootstrapTopology(
 		VALUES (?, 'route_policy', ?, 'UPSERT', 0, ?)`,
 		orgID, routeID, now,
 	); err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 
 	audID, err := idgen.New(idgen.PrefixAudit)
 	if err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 	metaJSON, _ := json.Marshal(map[string]any{
 		"connection_id": connID,
@@ -400,14 +431,10 @@ func (s *Server) provisionInitialBootstrapTopology(
 		RequestID:    ptrOrNil(requestIDFromContext(ctx)),
 		MetadataJSON: string(metaJSON),
 	}); err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return "", "", "", nil, err
-	}
-
-	createdKey, err := s.vkeys.Create(ctx, vkey.CreateParams{
+	createdKey, err := s.vkeys.CreateTx(ctx, tx, vkey.CreateParams{
 		OrgID:            orgID,
 		ProjectID:        projectID,
 		EnvID:            envID,
@@ -416,9 +443,9 @@ func (s *Server) provisionInitialBootstrapTopology(
 		ActorID:          ownerPrincipalID,
 	})
 	if err != nil {
-		return "", "", "", nil, err
+		return "", "", "", nil, nil, err
 	}
-	return connID, deployID, routeID, createdKey, nil
+	return connID, deployID, routeID, createdKey, commitCache, nil
 }
 
 func isValidDataRegion(r string) bool {

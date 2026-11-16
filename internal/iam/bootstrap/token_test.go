@@ -504,3 +504,62 @@ func TestBootstrapPreflightCompleteRequest(t *testing.T) {
 		t.Fatalf("expected ErrBootstrapAlreadyCompleted after Complete, got %v", err)
 	}
 }
+
+func TestCompleteWithProvisionerRollbackPreservesTokenAndState(t *testing.T) {
+	t.Parallel()
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	st := openBootstrapDB(t, fk)
+	ctx := context.Background()
+
+	tokenPath := filepath.Join(t.TempDir(), "rollback.token")
+	mgr, err := NewManager(ManagerConfig{
+		DB:        st.RawDB(),
+		TokenPath: tokenPath,
+		NowMs:     func() int64 { return fk.Now().UTC().UnixMilli() },
+		Argon2:    auth.Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32},
+		AuditSink: testTxAuditSink{},
+	})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	tok, err := mgr.EnsureToken(ctx)
+	if err != nil {
+		t.Fatalf("EnsureToken: %v", err)
+	}
+
+	sentinelErr := errors.New("simulated provisioner failure")
+	req := CompleteRequest{
+		BootstrapToken:              tok,
+		OwnerEmail:                  "owner@tanpopo.local",
+		OwnerPassword:               "valid-owner-password-2026!",
+		MasterKEKBackupAcknowledged: true,
+	}
+	if _, err := mgr.CompleteWithProvisioner(ctx, req, func(_ context.Context, _ *sql.Tx, _ *CompleteResult) error {
+		return sentinelErr
+	}); !errors.Is(err, sentinelErr) {
+		t.Fatalf("expected sentinelErr, got %v", err)
+	}
+
+	bootstrapped, err := mgr.IsBootstrapped(ctx)
+	if err != nil || bootstrapped {
+		t.Fatalf("expected IsBootstrapped=false after rollback, got bootstrapped=%v err=%v", bootstrapped, err)
+	}
+	for _, tbl := range []string{"organizations", "projects", "principals", "audit_events"} {
+		var cnt int
+		if qerr := st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM `+tbl).Scan(&cnt); qerr != nil || cnt != 0 {
+			t.Fatalf("expected 0 rows in %s after rollback, got cnt=%d err=%v", tbl, cnt, qerr)
+		}
+	}
+
+	// Token remains unburned and succeeds when provisioner returns nil.
+	res, err := mgr.CompleteWithProvisioner(ctx, req, func(_ context.Context, _ *sql.Tx, _ *CompleteResult) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("CompleteWithProvisioner retry failed: %v", err)
+	}
+	if res.OrgID == "" || res.OwnerPrincipalID == "" {
+		t.Fatalf("unexpected empty bootstrap result: %+v", res)
+	}
+}
+

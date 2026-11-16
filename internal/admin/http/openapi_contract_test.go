@@ -7,15 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 type openAPIDoc struct {
@@ -299,8 +296,4 @@ func TestOpenAPIRouteAndPayloadConformancePart1(t *testing.T) {
 		t.Fatalf("DELETE /projects status=%d body=%s", recDelProj.Code, recDelProj.Body.String())
 	}
 	assertPayloadMatchesSchema(t, doc, "CryptoShredReceipt", recDelProj.Body.Bytes())
-
-	// Ensure unused import suppression avoided (port used indirectly via harness).
-	_ = port.ErrNotFound
-	_ = httptest.NewRecorder
 }

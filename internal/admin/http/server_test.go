@@ -6,7 +6,6 @@ package http
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -198,6 +197,7 @@ func newAdminTestHarness(t *testing.T) *adminTestHarness {
 				ExpiresAtMs: nowFn() + 3600_000,
 			}, nil
 		},
+		HostResolver:      &countingResolver{},
 		BlockedAdminPorts: []int{9090},
 		Version:           "0.1.0-test",
 	})
@@ -1110,7 +1110,6 @@ func TestVirtualKeyShowOnceCanaryRotateRevokeFromQuotaPausedAndLogout(t *testing
 func TestSixRoleRBACMatrixAndAntiSelfEscalation(t *testing.T) {
 	t.Parallel()
 	h := newAdminTestHarness(t)
-	ctx := context.Background()
 	token := h.readBootstrapToken(t)
 	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
 		"bootstrap_token":                token,
@@ -1237,7 +1236,6 @@ func TestSixRoleRBACMatrixAndAntiSelfEscalation(t *testing.T) {
 	}); rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for TeamAdmin assigning outside project scope, got %d", rec.Code)
 	}
-	_ = ctx
 }
 
 func TestOrganizationAndProjectCryptoShreddingCascadeAndCleanup(t *testing.T) {
@@ -1355,9 +1353,6 @@ func TestOrganizationAndProjectCryptoShreddingCascadeAndCleanup(t *testing.T) {
 	if recAfterSession.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 for revoked org owner session after org shred, got %d", recAfterSession.Code)
 	}
-
-	_ = port.ErrInvalidInput
-	_ = sql.ErrNoRows
 }
 
 func TestRBACEscalationAndCrossProjectMemberIsolation(t *testing.T) {
@@ -1697,7 +1692,6 @@ func TestBootstrapSecurityAndPreflightOrder(t *testing.T) {
 func TestSSRFAndPlaneAndETagHardening(t *testing.T) {
 	t.Parallel()
 	h := newAdminTestHarness(t)
-	ctx := context.Background()
 	seedTestAdapter(t, h)
 
 	// 1) Short PaginationSecret (< 32 bytes) rejected fail-closed at startup.
@@ -1808,7 +1802,6 @@ func TestSSRFAndPlaneAndETagHardening(t *testing.T) {
 	if cc := recLogout.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Fatalf("expected Cache-Control: no-store on logout 204, got %q", cc)
 	}
-	_ = ctx
 }
 
 func TestOCCShredSafetyBudgetCeilingAndPagination(t *testing.T) {
@@ -2009,6 +2002,7 @@ func TestOCCShredSafetyBudgetCeilingAndPagination(t *testing.T) {
 		Snapshots:        brokenSnaps,
 		KillSwitch:       h.killSwitch,
 		Audit:            h.auditLog,
+		HostResolver:     &countingResolver{},
 		NowMs:            func() int64 { return h.fk.Now().UTC().UnixMilli() },
 		PaginationSecret: []byte("0123456789abcdef0123456789abcdef"),
 		TokenVerifier: func(_ context.Context, raw string) (*rbac.Actor, *SessionMetadata, error) {
@@ -2077,4 +2071,346 @@ func TestOCCShredSafetyBudgetCeilingAndPagination(t *testing.T) {
 		t.Fatalf("expected 200 + pending header on revoke, got %d hdr=%q", recSyncRev.Code, recSyncRev.Header().Get("X-Tanpopo-Snapshot-Sync"))
 	}
 }
+
+func TestAdminRemediationRegressionSuite(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	ctx := context.Background()
+	seedTestAdapter(t, h)
+
+	token := h.readBootstrapToken(t)
+
+	// 1) Failure inside bootstrap provisionTx (duplicate route constraint via trigger) rolls back atomically
+	// without burning Bootstrap Token and returns sanitized 422 message.
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		CREATE TRIGGER trg_fail_boot_route_once
+		BEFORE INSERT ON route_policies
+		BEGIN
+			SELECT RAISE(ABORT, 'internal sqlite vault detail must not leak');
+		END`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+	recBootFail := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "atomic-owner@example.test",
+		"owner_password":                 "StrongAtomicPass#2026!",
+		"org_name":                       "Atomic Org",
+		"project_name":                   "atomic-proj",
+		"master_kek_backup_acknowledged": true,
+		"initial_connection": map[string]any{
+			"adapter_id":   "adp_openai_spec",
+			"name":         "atomic-conn",
+			"billing_mode": "COMMERCIAL_API",
+			"endpoint_url": "https://api.openai.com/v1",
+			"secret_value": "sk-atomic-rollback-secret",
+			"model_id":     "gpt-4o",
+			"data_region":  "US",
+		},
+	})
+	if recBootFail.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 initial_connection_failed, got %d body=%s", recBootFail.Code, recBootFail.Body.String())
+	}
+	if strings.Contains(recBootFail.Body.String(), "internal sqlite vault detail") {
+		t.Fatalf("raw internal SQLite error leaked in response: %s", recBootFail.Body.String())
+	}
+	for _, tbl := range []string{"organizations", "org_encryption_keys", "secret_credentials", "audit_events"} {
+		var cnt int
+		if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM `+tbl).Scan(&cnt); err != nil || cnt != 0 {
+			t.Fatalf("expected 0 rows in %s after bootstrap rollback, got cnt=%d err=%v", tbl, cnt, err)
+		}
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `DROP TRIGGER trg_fail_boot_route_once`); err != nil {
+		t.Fatalf("drop trigger: %v", err)
+	}
+
+	// Retry bootstrap with the SAME unburned token succeeds 201.
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "atomic-owner@example.test",
+		"owner_password":                 "StrongAtomicPass#2026!",
+		"org_name":                       "Atomic Org",
+		"project_name":                   "atomic-proj",
+		"master_kek_backup_acknowledged": true,
+	})
+	if recBoot.Code != http.StatusCreated {
+		t.Fatalf("bootstrap retry failed: %d body=%s", recBoot.Code, recBoot.Body.String())
+	}
+	var boot bootstrapCompleteResponse
+	mustDecodeJSON(t, recBoot.Body.Bytes(), &boot)
+	ownerCookie := findCookie(t, recBoot.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	// 2) Content-Type 415 enforcement on public & authenticated JSON endpoints.
+	reqPlainLogin := httptest.NewRequest(http.MethodPost, "https://control.tanpopo.local/admin/v1/auth/login", strings.NewReader(`{"email":"a@b.c","password":"x"}`))
+	reqPlainLogin.Header.Set("Content-Type", "text/plain")
+	recPlainLogin := httptest.NewRecorder()
+	h.srv.ServeHTTP(recPlainLogin, reqPlainLogin)
+	if recPlainLogin.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected 415 on text/plain login, got %d body=%s", recPlainLogin.Code, recPlainLogin.Body.String())
+	}
+
+	reqNoCT := httptest.NewRequest(http.MethodPost, "https://control.tanpopo.local/admin/v1/projects", strings.NewReader(`{"slug":"p","name":"P"}`))
+	reqNoCT.AddCookie(ownerCookie)
+	reqNoCT.Header.Set("Origin", "https://control.tanpopo.local")
+	reqNoCT.Header.Set("X-CSRF-Token", boot.CSRFToken)
+	recNoCT := httptest.NewRecorder()
+	h.srv.ServeHTTP(recNoCT, reqNoCT)
+	if recNoCT.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected 415 on missing Content-Type, got %d body=%s", recNoCT.Code, recNoCT.Body.String())
+	}
+
+	// 3) Duplicate Authorization headers rejected with 401 unauthenticated.
+	h.registerBearerToken("tok_dup_1", &rbac.Actor{
+		PrincipalID:     "prc_dup_op",
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	})
+	reqDupAuth := httptest.NewRequest(http.MethodGet, "https://control.tanpopo.local/admin/v1/organizations", nil)
+	reqDupAuth.Header.Add("Authorization", "Bearer tok_dup_1")
+	reqDupAuth.Header.Add("Authorization", "Bearer tok_dup_2")
+	recDupAuth := httptest.NewRecorder()
+	h.srv.ServeHTTP(recDupAuth, reqDupAuth)
+	if recDupAuth.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on duplicate Authorization headers, got %d body=%s", recDupAuth.Code, recDupAuth.Body.String())
+	}
+
+	// 4) Instance OPERATOR creates a Virtual Key in a secondary org via ?org_id= (OwnerPrincipalID nil).
+	recOrg2 := h.doBearer(t, http.MethodPost, "/admin/v1/organizations", "tok_dup_1", "", map[string]any{
+		"slug": "secondary-org",
+		"name": "Secondary Org",
+	})
+	if recOrg2.Code != http.StatusCreated {
+		t.Fatalf("POST /organizations failed: %d body=%s", recOrg2.Code, recOrg2.Body.String())
+	}
+	var org2 organizationDTO
+	mustDecodeJSON(t, recOrg2.Body.Bytes(), &org2)
+
+	recProj2 := h.doBearer(t, http.MethodPost, "/admin/v1/projects?org_id="+org2.ID, "tok_dup_1", "", map[string]any{
+		"slug": "sec-proj",
+		"name": "Secondary Proj",
+	})
+	if recProj2.Code != http.StatusCreated {
+		t.Fatalf("OPERATOR POST /projects?org_id= failed: %d body=%s", recProj2.Code, recProj2.Body.String())
+	}
+	var proj2 projectDTO
+	mustDecodeJSON(t, recProj2.Body.Bytes(), &proj2)
+
+	recEnv2 := h.doBearer(t, http.MethodPost, "/admin/v1/projects/"+proj2.ID+"/environments?org_id="+org2.ID, "tok_dup_1", "", map[string]any{
+		"slug": "prod",
+		"name": "Production",
+	})
+	if recEnv2.Code != http.StatusCreated {
+		t.Fatalf("OPERATOR POST /environments?org_id= failed: %d body=%s", recEnv2.Code, recEnv2.Body.String())
+	}
+	var env2 environmentDTO
+	mustDecodeJSON(t, recEnv2.Body.Bytes(), &env2)
+
+	recOpVK := h.doBearer(t, http.MethodPost, "/admin/v1/virtual-keys?org_id="+org2.ID, "tok_dup_1", "", map[string]any{
+		"name":       "operator-provisioned-key",
+		"project_id": proj2.ID,
+		"env_id":     env2.ID,
+	})
+	if recOpVK.Code != http.StatusCreated {
+		t.Fatalf("OPERATOR POST /virtual-keys?org_id= failed: %d body=%s", recOpVK.Code, recOpVK.Body.String())
+	}
+	var opVK virtualKeyCreatedDTO
+	mustDecodeJSON(t, recOpVK.Body.Bytes(), &opVK)
+	if opVK.OwnerPrincipalID != nil {
+		t.Fatalf("expected nil OwnerPrincipalID for cross-org OPERATOR key, got %v", *opVK.OwnerPrincipalID)
+	}
+	if _, authErr := h.snapshots.AuthenticateKey(opVK.SecretKey, env2.ID); authErr != nil {
+		t.Fatalf("expected OPERATOR-created virtual key to authenticate on Data Plane snapshot, got %v", authErr)
+	}
+
+	// 5) SECURITY_REVIEWER can only revoke with EMERGENCY_ABORT_STREAMS (403 on GRACEFUL_DRAIN).
+	h.registerBearerToken("tok_sec_rev_only", &rbac.Actor{
+		PrincipalID:     "prc_sec_rev",
+		SessionOrgID:    &org2.ID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings: []rbac.RoleBinding{{
+			OrgID:     &org2.ID,
+			ScopeType: rbac.ScopeOrg,
+			ScopeID:   org2.ID,
+			RoleName:  rbac.RoleSecurityReviewer,
+		}},
+	})
+	recGraceful := h.doBearer(t, http.MethodPost, "/admin/v1/virtual-keys/"+opVK.ID+"/revoke", "tok_sec_rev_only", `"v1"`, map[string]any{
+		"mode":   "GRACEFUL_DRAIN",
+		"reason": "security reviewer graceful check",
+	})
+	if recGraceful.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for SECURITY_REVIEWER GRACEFUL_DRAIN, got %d body=%s", recGraceful.Code, recGraceful.Body.String())
+	}
+	recEmerg := h.doBearer(t, http.MethodPost, "/admin/v1/virtual-keys/"+opVK.ID+"/revoke", "tok_sec_rev_only", `"v1"`, map[string]any{
+		"mode":   "EMERGENCY_ABORT_STREAMS",
+		"reason": "emergency containment test",
+	})
+	if recEmerg.Code != http.StatusOK {
+		t.Fatalf("expected 200 for SECURITY_REVIEWER EMERGENCY_ABORT_STREAMS, got %d body=%s", recEmerg.Code, recEmerg.Body.String())
+	}
+
+	// 6) Concurrent race on PATCH /members/{id}/roles hits RowsAffected == 0, rolls back deleted bindings,
+	// and emits fresh 409 current_resource; then a committed v1->v2 bump causes stale If-Match "v1" to return ETag "v2".
+	recMem := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/members", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"email": "occ-member@example.test",
+		"roles": []string{"FINOPS_VIEWER"},
+	})
+	if recMem.Code != http.StatusCreated {
+		t.Fatalf("POST /members failed: %d body=%s", recMem.Code, recMem.Body.String())
+	}
+	var mem memberSummaryDTO
+	mustDecodeJSON(t, recMem.Body.Bytes(), &mem)
+
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		CREATE TRIGGER trg_bump_member_version_once
+		AFTER DELETE ON role_bindings
+		WHEN OLD.principal_id = '`+mem.ID+`'
+		BEGIN
+			UPDATE principals SET version = version + 1 WHERE id = OLD.principal_id;
+		END`); err != nil {
+		t.Fatalf("create member race trigger: %v", err)
+	}
+	recMemRace := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/members/"+mem.ID+"/roles", ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"roles": []string{"SECURITY_REVIEWER"},
+	})
+	if _, err := h.st.RawDB().ExecContext(ctx, `DROP TRIGGER trg_bump_member_version_once`); err != nil {
+		t.Fatalf("drop member race trigger: %v", err)
+	}
+	if recMemRace.Code != http.StatusConflict {
+		t.Fatalf("expected 409 on concurrent member role race, got %d body=%s", recMemRace.Code, recMemRace.Body.String())
+	}
+	if recMemRace.Header().Get("ETag") != `"v1"` {
+		t.Fatalf("expected ETag \"v1\" after same-tx trigger rollback, got %q", recMemRace.Header().Get("ETag"))
+	}
+	var raceEnv CanonicalErrorEnvelope
+	mustDecodeJSON(t, recMemRace.Body.Bytes(), &raceEnv)
+	curMap, ok := raceEnv.Error.CurrentResource.(map[string]any)
+	if !ok || curMap["version"] != float64(1) {
+		t.Fatalf("expected rolled-back current_resource.version == 1, got %+v", raceEnv.Error.CurrentResource)
+	}
+	rolesAny, _ := curMap["roles"].([]any)
+	if len(rolesAny) != 1 || rolesAny[0] != "FINOPS_VIEWER" {
+		t.Fatalf("expected tx.Rollback to preserve original FINOPS_VIEWER role in current_resource, got %+v", curMap["roles"])
+	}
+
+	// Committed v1->v2 bump followed by stale If-Match "v1" returns 409 with ETag "v2".
+	recMemCommit := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/members/"+mem.ID+"/roles", ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"roles": []string{"SECURITY_REVIEWER"},
+	})
+	if recMemCommit.Code != http.StatusOK || recMemCommit.Header().Get("ETag") != `"v2"` {
+		t.Fatalf("expected 200 ETag v2 on committed member update, got %d etag=%q body=%s", recMemCommit.Code, recMemCommit.Header().Get("ETag"), recMemCommit.Body.String())
+	}
+	recMemStale := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/members/"+mem.ID+"/roles", ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"roles": []string{"FINOPS_VIEWER"},
+	})
+	if recMemStale.Code != http.StatusConflict || recMemStale.Header().Get("ETag") != `"v2"` {
+		t.Fatalf("expected 409 ETag \"v2\" on stale update, got %d etag=%q body=%s", recMemStale.Code, recMemStale.Header().Get("ETag"), recMemStale.Body.String())
+	}
+
+	// 7) DELETE /organizations/{id} rejects 409 resource_in_use when org principal triggered a global (org_id IS NULL) kill switch,
+	// leaving the global kill switch and org intact.
+	now := h.fk.Now().UTC().UnixMilli()
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO emergency_kill_switches (
+			id, org_id, level, target_id, active, abort_active_streams,
+			reason, triggered_by_principal_id, version, triggered_at_ms
+		) VALUES ('ksw_global_ref_01', NULL, 'EXTENSION_INSTALLATION', 'ext_global_1', 1, 1, 'Global emergency extension block', ?, 1, ?)`,
+		mem.ID, now,
+	); err != nil {
+		t.Fatalf("insert global kill switch: %v", err)
+	}
+	recDelBlocked := h.doBearer(t, http.MethodDelete, "/admin/v1/organizations/"+boot.OrgID, "tok_dup_1", `"v1"`, map[string]any{
+		"confirm_slug": "atomic-org",
+		"reason":       "attempt delete while principal holds global kill switch",
+	})
+	if recDelBlocked.Code != http.StatusConflict {
+		t.Fatalf("expected 409 resource_in_use when org principal holds global kill switch, got %d body=%s", recDelBlocked.Code, recDelBlocked.Body.String())
+	}
+	var ksGlobalCnt int
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM emergency_kill_switches WHERE id = 'ksw_global_ref_01' AND org_id IS NULL`).Scan(&ksGlobalCnt); err != nil || ksGlobalCnt != 1 {
+		t.Fatalf("expected global kill switch preserved intact, cnt=%d err=%v", ksGlobalCnt, err)
+	}
+
+	// 8) DELETING state guards on child endpoints & Phase 2 kill-switch preservation + Phase 3 cleanup & RefreshFromDB.
+	// Seed an active org-scoped kill switch in secondary org2, trigger Phase 2 Vault failure, verify kill switch & DELETING guards,
+	// then allow Phase 2/3 completion and verify kill switch cleared from DB + memory.
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO emergency_kill_switches (
+			id, org_id, level, target_id, active, abort_active_streams,
+			reason, triggered_by_principal_id, version, triggered_at_ms
+		) VALUES ('ksw_org2_freeze_01', ?, 'PROJECT_OR_ORG_FREEZE', ?, 1, 1, 'Incident containment freeze', ?, 1, ?)`,
+		org2.ID, org2.ID, boot.OwnerPrincipalID, now,
+	); err != nil {
+		t.Fatalf("insert org2 kill switch: %v", err)
+	}
+	if err := h.killSwitch.RefreshFromDB(ctx); err != nil {
+		t.Fatalf("killSwitch.RefreshFromDB: %v", err)
+	}
+
+	// Trigger simulated Phase 2 shred failure.
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		CREATE TRIGGER trg_fail_phase2_shred
+		BEFORE INSERT ON vault_shred_requests
+		BEGIN
+			SELECT RAISE(ABORT, 'simulated phase2 failure');
+		END`); err != nil {
+		t.Fatalf("create phase2 trigger: %v", err)
+	}
+	recDelPhase2Fail := h.doBearer(t, http.MethodDelete, "/admin/v1/organizations/"+org2.ID, "tok_dup_1", `"v1"`, map[string]any{
+		"confirm_slug": "secondary-org",
+		"reason":       "phase 2 failure test",
+	})
+	if recDelPhase2Fail.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when Phase 2 shred fails, got %d body=%s", recDelPhase2Fail.Code, recDelPhase2Fail.Body.String())
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `DROP TRIGGER trg_fail_phase2_shred`); err != nil {
+		t.Fatalf("drop phase2 trigger: %v", err)
+	}
+
+	// Org2 is now DELETING (version 2) and its emergency kill switch MUST still be active in DB!
+	var org2Status string
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT status FROM organizations WHERE id = ?`, org2.ID).Scan(&org2Status); err != nil || org2Status != port.OrgStatusDeleting {
+		t.Fatalf("expected org2 status %s after Phase 2 failure, got %q err=%v", port.OrgStatusDeleting, org2Status, err)
+	}
+	var org2KS int
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM emergency_kill_switches WHERE id = 'ksw_org2_freeze_01' AND active = 1`).Scan(&org2KS); err != nil || org2KS != 1 {
+		t.Fatalf("expected org2 kill switch to remain active after Phase 2 failure, cnt=%d err=%v", org2KS, err)
+	}
+
+	// Child mutations against DELETING org2 must return 409 resource_deleting.
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   map[string]any
+	}{
+		{http.MethodPost, "/admin/v1/projects?org_id=" + org2.ID, map[string]any{"slug": "new-p", "name": "New P"}},
+		{http.MethodPost, "/admin/v1/projects/" + proj2.ID + "/environments?org_id=" + org2.ID, map[string]any{"slug": "staging", "name": "Staging"}},
+		{http.MethodPost, "/admin/v1/members?org_id=" + org2.ID, map[string]any{"email": "blocked@example.test", "roles": []string{"DEVELOPER"}, "project_ids": []string{proj2.ID}}},
+		{http.MethodPost, "/admin/v1/virtual-keys?org_id=" + org2.ID, map[string]any{"name": "blocked-key", "project_id": proj2.ID, "env_id": env2.ID}},
+	} {
+		rec := h.doBearer(t, tc.method, tc.path, "tok_dup_1", "", tc.body)
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("%s %s expected 409 resource_deleting, got %d body=%s", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
+	}
+
+	if _, blocked := h.killSwitch.CheckAdmission(killswitch.AdmissionQuery{OrgID: org2.ID}); !blocked {
+		t.Fatalf("expected killSwitch.CheckAdmission to stay active after Phase 2 failure")
+	}
+
+	// Complete org2 teardown at version 2 -> removes kill switch in Phase 3 & refreshes killSwitch memory.
+	recDelOrg2OK := h.doBearer(t, http.MethodDelete, "/admin/v1/organizations/"+org2.ID, "tok_dup_1", `"v2"`, map[string]any{
+		"confirm_slug": "secondary-org",
+		"reason":       "complete org2 crypto shred after phase2 recovery",
+	})
+	if recDelOrg2OK.Code != http.StatusOK {
+		t.Fatalf("expected 200 on org2 delete recovery, got %d body=%s", recDelOrg2OK.Code, recDelOrg2OK.Body.String())
+	}
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM emergency_kill_switches WHERE id = 'ksw_org2_freeze_01'`).Scan(&org2KS); err != nil || org2KS != 0 {
+		t.Fatalf("expected org2 kill switch deleted in Phase 3, cnt=%d err=%v", org2KS, err)
+	}
+	if _, blocked := h.killSwitch.CheckAdmission(killswitch.AdmissionQuery{OrgID: org2.ID}); blocked {
+		t.Fatalf("expected killSwitch.RefreshFromDB to evict deleted org2 kill switch from memory")
+	}
+}
+
 

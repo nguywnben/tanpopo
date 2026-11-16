@@ -189,6 +189,31 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 // Create mints a new vk_tp_<env>_<32_base62> key, stores only its raw 32-byte SHA-256 digest,
 // records a config_changelog entry, refreshes ConfigSnapshot, and returns the secret strictly once.
 func (s *Service) Create(ctx context.Context, params CreateParams) (*CreatedVirtualKey, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	created, err := s.CreateTx(ctx, tx, params)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	if syncErr := s.syncSnapshot(ctx); syncErr != nil {
+		return created, syncErr
+	}
+	return created, nil
+}
+
+// CreateTx creates a Virtual Key inside caller-supplied tx without refreshing ConfigSnapshot
+// (callers MUST refresh ConfigSnapshot or call SyncSnapshot after tx commits).
+func (s *Service) CreateTx(ctx context.Context, tx *sql.Tx, params CreateParams) (*CreatedVirtualKey, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("%w: tx is required", port.ErrInvalidInput)
+	}
 	if strings.TrimSpace(params.OrgID) == "" || strings.TrimSpace(params.ProjectID) == "" ||
 		strings.TrimSpace(params.EnvID) == "" || strings.TrimSpace(params.Name) == "" {
 		return nil, fmt.Errorf("%w: org_id, project_id, env_id, and name are required", port.ErrInvalidInput)
@@ -243,12 +268,6 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (*CreatedVirt
 	if params.ExpiresAtMs != nil && *params.ExpiresAtMs <= now {
 		return nil, fmt.Errorf("%w: expires_at_ms must be in the future", port.ErrInvalidInput)
 	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
 
 	var envSlug string
 	if scanErr := tx.QueryRowContext(ctx, `
@@ -327,13 +346,7 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (*CreatedVirt
 		return nil, aerr
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
-	syncErr := s.syncSnapshot(ctx)
-
-	created := &CreatedVirtualKey{
+	return &CreatedVirtualKey{
 		Summary: VirtualKeySummary{
 			ID:                    keyID,
 			OrgID:                 params.OrgID,
@@ -358,11 +371,7 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (*CreatedVirt
 			UpdatedAtMs:           now,
 		},
 		SecretKey: rawSecret,
-	}
-	if syncErr != nil {
-		return created, syncErr
-	}
-	return created, nil
+	}, nil
 }
 
 // Get fetches read-safe Virtual Key metadata scoped strictly to orgID (AUTH-15).

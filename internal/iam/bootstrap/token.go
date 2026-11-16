@@ -355,6 +355,17 @@ func (m *Manager) validateCompleteLocked(ctx context.Context, req CompleteReques
 // role bindings (OPERATOR + ORG_OWNER), and permanently burns the Bootstrap Token.
 // Any replay or concurrent loser receives ErrBootstrapAlreadyCompleted (410).
 func (m *Manager) Complete(ctx context.Context, req CompleteRequest) (*CompleteResult, error) {
+	return m.CompleteWithProvisioner(ctx, req, nil)
+}
+
+// CompleteWithProvisioner runs Complete and invokes provisionTx (if non-nil) on the same
+// database transaction prior to Commit() and burning the single-use Bootstrap Token.
+// If provisionTx fails, everything rolls back atomically and the Bootstrap Token remains valid.
+func (m *Manager) CompleteWithProvisioner(
+	ctx context.Context,
+	req CompleteRequest,
+	provisionTx func(ctx context.Context, tx *sql.Tx, res *CompleteResult) error,
+) (*CompleteResult, error) {
 	if m == nil {
 		return nil, fmt.Errorf("%w: nil bootstrap Manager", port.ErrInvalidInput)
 	}
@@ -509,18 +520,25 @@ func (m *Manager) Complete(ctx context.Context, req CompleteRequest) (*CompleteR
 		return nil, aerr
 	}
 
+	result := &CompleteResult{
+		OrgID:            orgID,
+		ProjectID:        projID,
+		EnvID:            envID,
+		OwnerPrincipalID: principalID,
+	}
+	if provisionTx != nil {
+		if perr := provisionTx(ctx, tx, result); perr != nil {
+			return nil, perr
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, mapRaceOrErr(err)
 	}
 
 	m.burnLocked()
 
-	return &CompleteResult{
-		OrgID:            orgID,
-		ProjectID:        projID,
-		EnvID:            envID,
-		OwnerPrincipalID: principalID,
-	}, nil
+	return result, nil
 }
 
 func (m *Manager) recordFailedTokenLocked(ctx context.Context, now int64) {

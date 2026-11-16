@@ -29,8 +29,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -201,7 +201,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	}
 
 	hostResolver := cfg.HostResolver
-	if hostResolver == nil && os.Getenv("TANPOPO_TEST_HERMETIC") != "1" {
+	if hostResolver == nil {
 		hostResolver = egress.NewStdHostResolver()
 	}
 
@@ -510,6 +510,10 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) (*authSess
 		writeErrorEnvelope(w, r, http.StatusUnauthorized, "invalid_credential_plane", "authentication_error", "data plane virtual key is not accepted on control plane endpoints", false, nil)
 		return nil, false
 	}
+	if len(r.Header.Values("Authorization")) > 1 {
+		writeErrorEnvelope(w, r, http.StatusUnauthorized, "unauthenticated", "authentication_error", "multiple Authorization headers are not permitted", false, nil)
+		return nil, false
+	}
 
 	authz := strings.TrimSpace(r.Header.Get("Authorization"))
 	if len(authz) > 7 && strings.EqualFold(authz[:7], "Bearer ") {
@@ -664,10 +668,27 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, sc *authSessi
 	return false
 }
 
+func requireJSONContentType(w http.ResponseWriter, r *http.Request) bool {
+	ct := strings.TrimSpace(r.Header.Get("Content-Type"))
+	if ct == "" {
+		writeErrorEnvelope(w, r, http.StatusUnsupportedMediaType, "unsupported_media_type", "invalid_request_error", "Content-Type header must be application/json", false, nil)
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(ct)
+	if err != nil || !strings.EqualFold(mediaType, "application/json") {
+		writeErrorEnvelope(w, r, http.StatusUnsupportedMediaType, "unsupported_media_type", "invalid_request_error", "Content-Type must be application/json", false, nil)
+		return false
+	}
+	return true
+}
+
 // decodeJSONAndCheckOrgSpoofing decodes the request body into dst while enforcing
 // AUTH-13 anti-spoofing: if top-level JSON contains "org_id" differing from the
 // caller's authenticated organization, immediately fail with 403 and emit a security audit event.
 func (s *Server) decodeJSONAndCheckOrgSpoofing(w http.ResponseWriter, r *http.Request, sc *authSessionContext, dst any) bool {
+	if !requireJSONContentType(w, r) {
+		return false
+	}
 	if r.Body == nil {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "request body is required", false, nil)
 		return false
@@ -734,6 +755,9 @@ func (s *Server) decodeJSONAndCheckOrgSpoofing(w http.ResponseWriter, r *http.Re
 }
 
 func decodePublicJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if !requireJSONContentType(w, r) {
+		return false
+	}
 	if r.Body == nil {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "request body is required", false, nil)
 		return false
@@ -827,4 +851,46 @@ func sha256HexString(s string) string {
 
 func validateEndpointSSRF(ctx context.Context, rawURL string, allowPrivateIP bool, resolver egress.HostResolver, blockedPorts map[int]bool) error {
 	return egress.ValidateStaticEndpointURL(ctx, rawURL, allowPrivateIP, resolver, blockedPorts)
+}
+
+func (s *Server) requireActiveOrg(w http.ResponseWriter, r *http.Request, orgID string) bool {
+	var status string
+	err := s.db.QueryRowContext(r.Context(), `SELECT status FROM organizations WHERE id = ?`, orgID).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
+		return false
+	}
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying organization status", true, nil)
+		return false
+	}
+	if status != port.OrgStatusActive {
+		writeErrorEnvelope(w, r, http.StatusConflict, "resource_deleting", "conflict_error", "organization is not active", false, nil)
+		return false
+	}
+	return true
+}
+
+func (s *Server) requireActiveOrgAndProject(w http.ResponseWriter, r *http.Request, orgID, projectID string) bool {
+	var orgStatus, projStatus string
+	err := s.db.QueryRowContext(r.Context(), `
+		SELECT o.status, p.status
+		FROM projects p
+		JOIN organizations o ON o.id = p.org_id
+		WHERE p.org_id = ? AND p.id = ?`,
+		orgID, projectID,
+	).Scan(&orgStatus, &projStatus)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+		return false
+	}
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying project status", true, nil)
+		return false
+	}
+	if orgStatus != port.OrgStatusActive || projStatus != port.ProjectStatusActive {
+		writeErrorEnvelope(w, r, http.StatusConflict, "resource_deleting", "conflict_error", "organization or project is not active", false, nil)
+		return false
+	}
+	return true
 }

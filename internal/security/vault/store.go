@@ -327,11 +327,6 @@ func (s *Store) EnsureOrgDEK(ctx context.Context, orgID string) (*OrgKeyMetadata
 	if strings.TrimSpace(orgID) == "" {
 		return nil, fmt.Errorf("%w: org_id required", ErrInvalidInput)
 	}
-	now := s.nowMs()
-	gen := s.cache.generation()
-	var stage dekCacheStage
-	defer stage.clear()
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("vault: begin EnsureOrgDEK tx: %w", err)
@@ -343,18 +338,34 @@ func (s *Store) EnsureOrgDEK(ctx context.Context, orgID string) (*OrgKeyMetadata
 		}
 	}()
 
-	_, dek, err := s.ensureOrgDEKTx(ctx, tx, orgID, now, &stage)
+	commitCache, err := s.EnsureOrgDEKTx(ctx, tx, orgID)
 	if err != nil {
 		return nil, err
 	}
-	clear(dek)
-
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("vault: commit EnsureOrgDEK: %w", err)
 	}
 	committed = true
-	stage.commit(s.cache, now, gen)
+	commitCache()
 	return s.GetOrgKeyMetadata(ctx, orgID)
+}
+
+// EnsureOrgDEKTx mints (or validates existing) wrapped Org DEK inside caller-supplied tx,
+// returning a post-commit cache activation closure.
+func (s *Store) EnsureOrgDEKTx(ctx context.Context, tx *sql.Tx, orgID string) (func(), error) {
+	if tx == nil || strings.TrimSpace(orgID) == "" {
+		return nil, fmt.Errorf("%w: tx and org_id required", ErrInvalidInput)
+	}
+	now := s.nowMs()
+	gen := s.cache.generation()
+	var stage dekCacheStage
+	_, dek, err := s.ensureOrgDEKTx(ctx, tx, orgID, now, &stage)
+	if err != nil {
+		stage.clear()
+		return nil, err
+	}
+	clear(dek)
+	return func() { stage.commit(s.cache, now, gen) }, nil
 }
 
 // EnsureProjectDEK eagerly mints (or validates existing) wrapped AES-256-GCM Project DEK under
@@ -363,11 +374,6 @@ func (s *Store) EnsureProjectDEK(ctx context.Context, orgID, projectID string) (
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(projectID) == "" {
 		return nil, fmt.Errorf("%w: org_id and project_id required", ErrInvalidInput)
 	}
-	now := s.nowMs()
-	gen := s.cache.generation()
-	var stage dekCacheStage
-	defer stage.clear()
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("vault: begin EnsureProjectDEK tx: %w", err)
@@ -379,18 +385,34 @@ func (s *Store) EnsureProjectDEK(ctx context.Context, orgID, projectID string) (
 		}
 	}()
 
-	_, _, dek, err := s.ensureProjectDEKTx(ctx, tx, orgID, projectID, now, &stage)
+	commitCache, err := s.EnsureProjectDEKTx(ctx, tx, orgID, projectID)
 	if err != nil {
 		return nil, err
 	}
-	clear(dek)
-
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("vault: commit EnsureProjectDEK: %w", err)
 	}
 	committed = true
-	stage.commit(s.cache, now, gen)
+	commitCache()
 	return s.GetProjectKeyMetadata(ctx, orgID, projectID)
+}
+
+// EnsureProjectDEKTx mints (or validates existing) wrapped Project DEK inside caller-supplied tx,
+// returning a post-commit cache activation closure.
+func (s *Store) EnsureProjectDEKTx(ctx context.Context, tx *sql.Tx, orgID, projectID string) (func(), error) {
+	if tx == nil || strings.TrimSpace(orgID) == "" || strings.TrimSpace(projectID) == "" {
+		return nil, fmt.Errorf("%w: tx, org_id, and project_id required", ErrInvalidInput)
+	}
+	now := s.nowMs()
+	gen := s.cache.generation()
+	var stage dekCacheStage
+	_, _, dek, err := s.ensureProjectDEKTx(ctx, tx, orgID, projectID, now, &stage)
+	if err != nil {
+		stage.clear()
+		return nil, err
+	}
+	clear(dek)
+	return func() { stage.commit(s.cache, now, gen) }, nil
 }
 
 // Close scrubs all cached DEKs in RAM without closing the shared SQL pool.
@@ -410,14 +432,43 @@ func (s *Store) EvictAllDEKs() {
 // SealSecret envelopes plaintext using AES-256-GCM under the Org DEK (when OwnerProjectID == nil)
 // or the Project DEK (when OwnerProjectID != nil), binding the canonical AEAD AAD formula.
 func (s *Store) SealSecret(ctx context.Context, params SealSecretParams) (*SecretMetadata, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vault: begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	meta, commitCache, err := s.SealSecretTx(ctx, tx, params)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("vault: commit SealSecret: %w", err)
+	}
+	committed = true
+	commitCache()
+	return meta, nil
+}
+
+// SealSecretTx envelopes plaintext into secret_credentials inside caller-supplied tx, returning
+// write-only metadata and a post-commit DEK cache activation closure.
+func (s *Store) SealSecretTx(ctx context.Context, tx *sql.Tx, params SealSecretParams) (*SecretMetadata, func(), error) {
+	if tx == nil {
+		return nil, nil, fmt.Errorf("%w: tx is required", ErrInvalidInput)
+	}
 	if strings.TrimSpace(params.OrgID) == "" || strings.TrimSpace(params.Name) == "" {
-		return nil, fmt.Errorf("%w: org_id and name are required", ErrInvalidInput)
+		return nil, nil, fmt.Errorf("%w: org_id and name are required", ErrInvalidInput)
 	}
 	if !isValidSecretKind(params.SecretKind) {
-		return nil, fmt.Errorf("%w: invalid secret_kind %q", ErrInvalidInput, params.SecretKind)
+		return nil, nil, fmt.Errorf("%w: invalid secret_kind %q", ErrInvalidInput, params.SecretKind)
 	}
 	if len(params.Plaintext) == 0 {
-		return nil, fmt.Errorf("%w: secret plaintext cannot be empty", ErrInvalidInput)
+		return nil, nil, fmt.Errorf("%w: secret plaintext cannot be empty", ErrInvalidInput)
 	}
 
 	id := params.ID
@@ -425,10 +476,10 @@ func (s *Store) SealSecret(ctx context.Context, params SealSecretParams) (*Secre
 		var err error
 		id, err = idgen.New(idgen.PrefixSecret)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	} else if err := validateAADSegment("secret_id", id); err != nil || !strings.HasPrefix(id, idgen.PrefixSecret+"_") || len(id) > 40 {
-		return nil, fmt.Errorf("%w: invalid caller-supplied secret id %q", ErrInvalidInput, id)
+		return nil, nil, fmt.Errorf("%w: invalid caller-supplied secret id %q", ErrInvalidInput, id)
 	}
 
 	// Copy caller buffer so vault zeroizes its own transient slice reliably.
@@ -440,7 +491,7 @@ func (s *Store) SealSecret(ctx context.Context, params SealSecretParams) (*Secre
 	if params.OwnerProjectID != nil {
 		trimmed := strings.TrimSpace(*params.OwnerProjectID)
 		if trimmed == "" {
-			return nil, fmt.Errorf("%w: owner_project_id cannot be blank when provided", ErrInvalidInput)
+			return nil, nil, fmt.Errorf("%w: owner_project_id cannot be blank when provided", ErrInvalidInput)
 		}
 		ownerProj = &trimmed
 	}
@@ -453,25 +504,13 @@ func (s *Store) SealSecret(ctx context.Context, params SealSecretParams) (*Secre
 		aad, err = ProjectRecordAAD(params.OrgID, *ownerProj, RecordKindCred, id)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	now := s.nowMs()
 	fingerprint := computeKeyFingerprint(params.OrgID, id, pt)
 	gen := s.cache.generation()
 	var stage dekCacheStage
-	defer stage.clear()
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("vault: begin tx: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
 
 	var dek []byte
 	if ownerProj == nil {
@@ -480,13 +519,15 @@ func (s *Store) SealSecret(ctx context.Context, params SealSecretParams) (*Secre
 		_, _, dek, err = s.ensureProjectDEKTx(ctx, tx, params.OrgID, *ownerProj, now, &stage)
 	}
 	if err != nil {
-		return nil, err
+		stage.clear()
+		return nil, nil, err
 	}
 	defer clear(dek)
 
 	nonce, ciphertext, err := sealAESGCM(dek, aad, pt)
 	if err != nil {
-		return nil, err
+		stage.clear()
+		return nil, nil, err
 	}
 
 	if _, err := tx.ExecContext(ctx, `
@@ -497,18 +538,14 @@ func (s *Store) SealSecret(ctx context.Context, params SealSecretParams) (*Secre
 		id, params.OrgID, nullStringPtr(ownerProj), params.Name, params.SecretKind,
 		nonce, ciphertext, nullStringPtr(params.BoundAudience), fingerprint, now, now,
 	); err != nil {
-		return nil, mapVaultSQLiteError(err, false)
+		stage.clear()
+		return nil, nil, mapVaultSQLiteError(err, false)
 	}
 
 	if _, err := appendVaultChangelogTx(ctx, tx, params.OrgID, "secret_credential", id, port.MutationUpsert, false, now); err != nil {
-		return nil, err
+		stage.clear()
+		return nil, nil, err
 	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("vault: commit SealSecret: %w", err)
-	}
-	committed = true
-	stage.commit(s.cache, now, gen)
 
 	return &SecretMetadata{
 		ID:             id,
@@ -521,7 +558,7 @@ func (s *Store) SealSecret(ctx context.Context, params SealSecretParams) (*Secre
 		Version:        1,
 		CreatedAtMs:    now,
 		UpdatedAtMs:    now,
-	}, nil
+	}, func() { stage.commit(s.cache, now, gen) }, nil
 }
 
 // RotateSecret replaces ciphertext using a fresh 96-bit CSPRNG nonce under optimistic concurrency control.
