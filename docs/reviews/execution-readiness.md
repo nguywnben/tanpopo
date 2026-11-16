@@ -1,10 +1,10 @@
 # Final Delivery Readiness Audit (`ASTRA A10` — Gate G4 Stage 2 Handoff Approved) — Tanpopo
 
-> **Independent Governance Verdict Document (ASTRA A10 + `M0` + `M1` + `Wave 2.1` [`DEC-011`..`DEC-033`])**
-> - **Report ID:** `REV-RDY-01` | **Version:** `2.23.0-dec-033-tp-imp-0021-ready` | **Audit Date:** `2026-11-16`
+> **Independent Governance Verdict Document (ASTRA A10 + `M0` + `M1` + `Wave 2.1` [`DEC-011`..`DEC-032`; `DEC-033 REVOKED_BY_OWNER`])**
+> - **Report ID:** `REV-RDY-01` | **Version:** `2.24.0-post-0020-handoff-dec-033-revoked` | **Audit Date:** `2026-11-16`
 > - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
-> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005`..`0011` accepted via `DEC-011`..`DEC-021`; **`DEC-022`** delegated `0012`..`0013` to **Carbon** [`DEC-023`..`DEC-024`]; **`DEC-025`** delegated `0014`..`0020` to **Gemini 4 Hydrogen** [`DEC-026`..`DEC-032`, latest accepted baseline `904ba2a9` / CI `43782208080`, `DEC-032` `bb0b2bb3` / CI `43783032340`]; **`DEC-033`** delegates **`TP-IMP-0021`** to **Gemini 4 Hydrogen** and unlocks **[`TP-IMP-0021`](../planning/units/TP-IMP-0021.md)** = **`READY`** [`1 / 47`])*
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`20 / 47` units `DONE` [`0001..0020`] · `0 / 47` `READY_FOR_REVIEW` · `1 / 47` `READY` [`TP-IMP-0021`] · `26 / 47` `BLOCKED` behind upstream dependencies & review gates)**
+> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005`..`0011` accepted via `DEC-011`..`DEC-021`; **`DEC-022`** delegated `0012`..`0013` to **Carbon** [`DEC-023`..`DEC-024`]; **`DEC-025`** delegated `0014`..`0020` to **Gemini 4 Hydrogen** [`DEC-026`..`DEC-032`, latest accepted baseline `904ba2a9` / CI `43782208080`, `DEC-032` `bb0b2bb3` / CI `43783032340`]; **`DEC-033`**'s premature unlock/delegation of `TP-IMP-0021` in `4a30a65a` is **`REVOKED_BY_OWNER`**, leaving `0 / 47` `READY` until separate `TP-IMP-0021`–`0030` wave authorization)*
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`20 / 47` units `DONE` [`0001..0020`] · `0 / 47` `READY_FOR_REVIEW` · `0 / 47` `READY` · `27 / 47` `BLOCKED` [`0021..0047`] behind upstream dependencies, review gates & direct Owner batch unlock)**
 
 ---
 
@@ -17,7 +17,7 @@ On `2026-11-14`, across two sequential governance rulings (`DEC-009` and `DEC-01
 
 **Strict Boundaries of This Handoff (`DEC-010`):**
 - **Only [`TP-IMP-0005`](../planning/units/TP-IMP-0005.md) is promoted to `READY`.** Units `TP-IMP-0006`..`0047` (`42` units) keep their exact `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `DoD` gates intact.
-- **No Execution Self-Acceptance, Scoped Delegations (`DEC-022`, `DEC-025`, `DEC-033`), or Autonomous Release:** Outside explicitly authorized Owner delegations, execution agents never self-accept units on the Product Owner's behalf and **never** create git tags or public releases (`GATE-REL-07` / `TP-IMP-0047`). Following Carbon's `DEC-022` window (`0012`..`0013`) and **Gemini 4 Hydrogen**'s `DEC-025` batch (`0014`..`0020`), **[`DEC-033`](../governance/decisions.md)** explicitly delegates technical decisions, independent review orchestration/arbitration, `DONE` acceptance, and governance synchronization strictly within **`TP-IMP-0021`** to **Gemini 4 Hydrogen** (stopping cleanly at `TP-IMP-0021 = DONE` with 100% of DoD, security, green CI, and fresh independent review gates preserved); **`TP-IMP-0022`..`0047` stay under direct human Product Owner sign-off and unlock**.
+- **No Execution Self-Acceptance, Exhausted Delegations (`DEC-022`, `DEC-025`), `DEC-033` Revoked, or Autonomous Release:** Execution agents never self-accept units on the Product Owner's behalf outside an unrevoked active Product Owner delegation and **never** create git tags or public releases (`GATE-REL-07` / `TP-IMP-0047`). Carbon's `DEC-022` window (`0012`..`0013`) and **Gemini 4 Hydrogen**'s `DEC-025` batch (`0014`..`0020`) are complete, and **[`DEC-033`](../governance/decisions.md)**'s premature unlock and delegation for `TP-IMP-0021` (`4a30a65a`) is **`REVOKED_BY_OWNER`** (`2026-11-16`); **`TP-IMP-0021`..`0047` stay `BLOCKED` under direct human Product Owner sign-off and separate `TP-IMP-0021`–`0030` wave authorization**.
 
 ---
 
@@ -55,11 +55,11 @@ Every check below strictly separates **what has been verified locally in `M0`** 
 
 ---
 
-## 4. `TP-IMP-0005`..`0020` Acceptance (`DEC-011`..`DEC-032`) & Active Queue (`TP-IMP-0021` `READY`)
+## 4. `TP-IMP-0005`..`0020` Acceptance (`DEC-011`..`DEC-032`) & Post-`0020` Halt (`0 READY / 27 BLOCKED`)
 
 | Verification Check | Status | Concrete Evidence |
 |---|---|---|
-| **Governance Gate (`HANDOFF_VERDICT`)** | **`GO`** | Approved in `DEC-010`..`DEC-033` ([`decisions.md`](../governance/decisions.md)). |
+| **Governance Gate (`HANDOFF_VERDICT`)** | **`GO`** | Approved in `DEC-010`..`DEC-032` ([`decisions.md`](../governance/decisions.md); `DEC-033` `REVOKED_BY_OWNER`). |
 | **`TP-IMP-0005`..`0020` Acceptance Status** | **`DONE` *(Accepted `DEC-011`..`DEC-032`)* ** | `0005`..`0011` (`DEC-011`..`DEC-021`); `0012`..`0013` by **Carbon** (`DEC-022`..`DEC-024`); **`0014`..`0020` by Gemini 4 Hydrogen (`DEC-025`..`DEC-032`)** closing `M1` (`GATE-M1`) & `Wave 2.1`, latest accepted `TP-IMP-0020` at `904ba2a9e3785a2936bd67a85da1d141e2f055be` (CI Run `43782208080` `completed / success`; `DEC-032` `bb0b2bb3`, CI Run `43783032340` `completed / success`; fresh `security-auditor` [`59206f9a`] `PASS` & `code-reviewer` [`31d9454f`] `APPROVE`). |
-| **Active `READY` Queue (`TP-IMP-0021`)** | **`1 / 47` `READY`** | **[`TP-IMP-0021`](../planning/units/TP-IMP-0021.md)** (`Two-Phase Micro-USD Budget Ledger`, migration `0012_budget_ledger.sql`) is the sole active `READY` unit under Product Owner **`DEC-033`** delegation to **Gemini 4 Hydrogen**. Remaining downstream units `TP-IMP-0022..0047` (`26` units) stay `BLOCKED` (`0022` awaits `0021`). |
-| **Execution Dispatch Verdict** | **`GO_NEXT (TP-IMP-0021 ONLY — DEC-033)`** | Execute **[`TP-IMP-0021`](../planning/units/TP-IMP-0021.md)** under **Gemini 4 Hydrogen** delegated authority (`DEC-033`), then **halt cleanly at `TP-IMP-0021 = DONE`** (`0` work on `0022`+, `GATE-REL-07`); downstream Data Plane wiring preserves `Manager` `CheckServingReady()` APIs and explicit `BlindHostCredentialBroker` `Config.PolicyResolver`; all `UNVERIFIED` limits stay intact. |
+| **Active `READY` Queue** | **`0 / 47` `READY`** | **`0 / 47` `READY`** and **`0 / 47` `READY_FOR_REVIEW`**: `DEC-025` halted cleanly at `TP-IMP-0020 = DONE`, and premature Unit 21 unlock/delegation under `DEC-033` (`4a30a65a`) is **`REVOKED_BY_OWNER`**. Downstream units `TP-IMP-0021`..`0047` (`27 / 47`) remain **`BLOCKED`** (`TP-IMP-0021` retains planned migration `0012_budget_ledger.sql`) awaiting separate Product Owner authorization for `TP-IMP-0021`–`0030`. |
+| **Execution Dispatch Verdict** | **`HALTED_AFTER_0020 (AWAITING PO BATCH UNLOCK)`** | Execution stopped cleanly at **`TP-IMP-0020 = DONE`** (`20 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `27 BLOCKED`); **zero** active unit delegation exists until a dedicated Product Owner prompt opens `TP-IMP-0021`–`0030`; downstream Data Plane wiring must preserve `Manager` `CheckServingReady()` APIs and explicit `BlindHostCredentialBroker` `Config.PolicyResolver`, and all `UNVERIFIED` limits stay intact. |
