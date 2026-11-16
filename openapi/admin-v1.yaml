@@ -528,6 +528,9 @@ components:
       properties:
         name: { type: string, minLength: 1 }
         project_id: { type: ["string", "null"] }
+        shared_project_ids:
+          type: array
+          items: { type: string }
         adapter_id: { type: string }
         billing_mode:
           type: string
@@ -551,6 +554,9 @@ components:
       properties:
         id: { type: string }
         project_id: { type: ["string", "null"] }
+        shared_project_ids:
+          type: array
+          items: { type: string }
         name: { type: string }
         adapter_id: { type: string }
         billing_mode: { type: string, enum: [COMMERCIAL_API, SELF_HOSTED_INFRA] }

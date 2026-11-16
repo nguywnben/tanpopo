@@ -337,6 +337,11 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionSecretWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
+
 	cur, found, err := s.loadSecretMetadataDTO(r, orgID, credID)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading secret credential", true, nil)
@@ -347,6 +352,9 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionSecretWrite, rbac.TargetScope{OrgID: orgID, ProjectID: ptrStrValue(cur.ProjectID)}) {
+		return
+	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, ptrStrValue(cur.ProjectID)) {
 		return
 	}
 

@@ -391,7 +391,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 				continue
 			}
 		}
-		if b.limitM > 0 && (b.usedM*100)/b.limitM >= 80 {
+		if b.limitM > 0 && computeBudgetUtilizationPct(b.usedM, b.limitM) >= 80 {
 			alerts = append(alerts, alertItemDTO{
 				ID:               "alt_budget_" + b.id,
 				AlertCode:        "ALT-BUDGET-80",
@@ -508,7 +508,15 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 				_ = qRows.Close()
 				return nil, scanErr
 			}
-			if seenExt[id] || !connectionVisibleToAnyProject(ownerProj, sharedJSON, allowedProjSet) {
+			if seenExt[id] {
+				continue
+			}
+			vis, visErr := connectionVisibleToAnyProject(ownerProj, sharedJSON, allowedProjSet)
+			if visErr != nil {
+				_ = qRows.Close()
+				return nil, visErr
+			}
+			if !vis {
 				continue
 			}
 			seenExt[id] = true
@@ -763,7 +771,12 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Cross-tenant & scope lookup BEFORE authorizing / triggering (AUTH-15).
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionKillSwitchTrigger); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
+
+	// Cross-tenant & scope lookup (AUTH-15). For EXTENSION, authorize + check multi-tenant OPERATOR BEFORE lookup to prevent global ID enumeration.
 	var scopeProj string
 	var expectedConfirmSlug string
 	switch level {
@@ -822,6 +835,12 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 			expectedConfirmSlug = orgSlug
 		}
 	case killswitch.LevelExtensionInstallation:
+		if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{OrgID: orgID}) {
+			return
+		}
+		if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
+			return
+		}
 		var exists int
 		err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM extension_installations WHERE id = ?`, targetID).Scan(&exists)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -834,11 +853,8 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{OrgID: orgID, ProjectID: scopeProj}) {
-		return
-	}
-	if level == killswitch.LevelExtensionInstallation {
-		if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
+	if level != killswitch.LevelExtensionInstallation {
+		if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{OrgID: orgID, ProjectID: scopeProj}) {
 			return
 		}
 	}

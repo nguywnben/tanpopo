@@ -267,22 +267,25 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Cross-tenant existence check (AUTH-15).
-	var rowOrgID, scopeType, scopeID string
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionBudgetWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
+
+	// Cross-tenant existence check (AUTH-15): foreign-org rows follow create/auth path and return uniform 404 after RBAC + validation.
+	var rowOrgID, scopeType, scopeID, existingPeriodKind string
+	var existingPeriodStart, existingPeriodEnd int64
 	err := s.db.QueryRowContext(r.Context(), `
-		SELECT org_id, scope_type, scope_id
+		SELECT org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms
 		FROM budget_ledgers
 		WHERE id = ?`, budgetID,
-	).Scan(&rowOrgID, &scopeType, &scopeID)
-	rowExists := err == nil
+	).Scan(&rowOrgID, &scopeType, &scopeID, &existingPeriodKind, &existingPeriodStart, &existingPeriodEnd)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed looking up budget ledger", true, nil)
 		return
 	}
-	if rowExists && rowOrgID != orgID {
-		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
-		return
-	}
+	rowExists := err == nil && rowOrgID == orgID
+	foreignOrgExists := err == nil && rowOrgID != orgID
 
 	if !rowExists {
 		// Creation path: determine scope & authorize before enforcing If-Match / field validation.
@@ -331,7 +334,7 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if expectedVer != 1 {
+		if foreignOrgExists || expectedVer != 1 {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
 			return
 		}
@@ -462,13 +465,12 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 	if totalSettled > *req.HardLimitMicros {
 		newCarryover = totalSettled - *req.HardLimitMicros
 	}
-	newUtilPct := 0
-	if *req.HardLimitMicros > 0 {
-		newUtilPct = int((totalSettled * 100) / *req.HardLimitMicros)
-	} else if totalSettled > 0 {
-		newUtilPct = 100
-	}
+	newUtilPct := computeBudgetUtilizationPct(totalSettled, *req.HardLimitMicros)
 	now := s.nowMs()
+	nextPeriodStart, nextPeriodEnd := existingPeriodStart, existingPeriodEnd
+	if period != existingPeriodKind {
+		nextPeriodStart, nextPeriodEnd = computePeriodWindowMs(now, period)
+	}
 
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -480,6 +482,8 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 	res, err := tx.ExecContext(r.Context(), `
 		UPDATE budget_ledgers
 		SET period_kind = ?,
+		    period_start_ms = ?,
+		    period_end_ms = ?,
 		    hard_limit_micros = ?,
 		    negative_carryover_micros = ?,
 		    soft_alert_thresholds_pct_json = ?,
@@ -487,10 +491,14 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		    version = version + 1,
 		    updated_at_ms = ?
 		WHERE org_id = ? AND id = ? AND version = ?`,
-		period, *req.HardLimitMicros, newCarryover, string(threshJSONBytes),
+		period, nextPeriodStart, nextPeriodEnd, *req.HardLimitMicros, newCarryover, string(threshJSONBytes),
 		newUtilPct, newUtilPct, now, orgID, budgetID, expectedVer,
 	)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "budget ledger already exists for scope and period window", false, nil)
+			return
+		}
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed updating budget ledger", true, nil)
 		return
 	}
@@ -701,16 +709,20 @@ func parseOptionalTimeWindowParams(w http.ResponseWriter, r *http.Request) (*int
 
 func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionContext, orgID, groupBy string, fromMs, toMs *int64) ([]usageChargebackRowDTO, error) {
 	var selectExpr, joinSQL string
+	groupByExpr := "grp_key"
 	switch groupBy {
 	case "project":
 		selectExpr = `COALESCE(p.display_name, p.slug, us.project_id)`
 		joinSQL = `LEFT JOIN projects p ON p.org_id = us.org_id AND p.id = us.project_id`
+		groupByExpr = `us.project_id, grp_key`
 	case "env":
 		selectExpr = `COALESCE(e.slug, us.env_id)`
 		joinSQL = `LEFT JOIN environments e ON e.org_id = us.org_id AND e.id = us.env_id`
+		groupByExpr = `us.env_id, grp_key`
 	case "key":
 		selectExpr = `COALESCE(vk.name, us.virtual_key_id)`
 		joinSQL = `LEFT JOIN virtual_keys vk ON vk.org_id = us.org_id AND vk.id = us.virtual_key_id`
+		groupByExpr = `us.virtual_key_id, grp_key`
 	case "model":
 		selectExpr = `COALESCE(us.logical_model_slug, 'unknown')`
 	default:
@@ -749,8 +761,8 @@ func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionCo
 		FROM usage_settlements us
 		%s
 		WHERE %s
-		GROUP BY grp_key
-		ORDER BY grp_key ASC`, selectExpr, joinSQL, strings.Join(conds, " AND "))
+		GROUP BY %s
+		ORDER BY grp_key ASC`, selectExpr, joinSQL, strings.Join(conds, " AND "), groupByExpr)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -940,4 +952,26 @@ func computePeriodWindowMs(nowMs int64, period string) (int64, int64) {
 	}
 	start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
 	return start.UnixMilli(), start.AddDate(0, 1, 0).UnixMilli()
+}
+
+func computeBudgetUtilizationPct(totalSettled, hardLimit int64) int {
+	if totalSettled <= 0 {
+		return 0
+	}
+	if hardLimit <= 0 || totalSettled >= hardLimit {
+		return 100
+	}
+	pct := (totalSettled / hardLimit) * 100
+	rem := totalSettled % hardLimit
+	if rem > 0 {
+		if rem <= 9_000_000_000_000_000 {
+			pct += (rem * 100) / hardLimit
+		} else {
+			pct += rem / (hardLimit / 100)
+		}
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	return int(pct)
 }

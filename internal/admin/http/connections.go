@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +49,7 @@ type providerAdapterSummaryDTO struct {
 type providerConnectionDTO struct {
 	ID                     string            `json:"id"`
 	ProjectID              *string           `json:"project_id"`
+	SharedProjectIDs       []string          `json:"shared_project_ids,omitempty"`
 	Name                   string            `json:"name"`
 	AdapterID              string            `json:"adapter_id"`
 	BillingMode            string            `json:"billing_mode"`
@@ -61,16 +63,17 @@ type providerConnectionDTO struct {
 }
 
 type createConnectionRequest struct {
-	Name           string            `json:"name"`
-	ProjectID      *string           `json:"project_id"`
-	AdapterID      string            `json:"adapter_id"`
-	BillingMode    string            `json:"billing_mode"`
-	EndpointURL    string            `json:"endpoint_url"`
-	DataRegion     string            `json:"data_region"`
-	AllowPrivateIP bool              `json:"allow_private_ip"`
-	AllowedCIDRs   []string          `json:"allowed_cidrs"`
-	Config         map[string]any    `json:"config"`
-	SecretBindings map[string]string `json:"secret_bindings"`
+	Name             string            `json:"name"`
+	ProjectID        *string           `json:"project_id"`
+	SharedProjectIDs []string          `json:"shared_project_ids"`
+	AdapterID        string            `json:"adapter_id"`
+	BillingMode      string            `json:"billing_mode"`
+	EndpointURL      string            `json:"endpoint_url"`
+	DataRegion       string            `json:"data_region"`
+	AllowPrivateIP   bool              `json:"allow_private_ip"`
+	AllowedCIDRs     []string          `json:"allowed_cidrs"`
+	Config           map[string]any    `json:"config"`
+	SecretBindings   map[string]string `json:"secret_bindings"`
 }
 
 type updateConnectionRequest struct {
@@ -454,8 +457,22 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 			}
 			batchCreatedMs = createdMs
 			batchLastID = id
-			if needFilter && !connectionVisibleToAnyProject(projNS, sharedJSON, allowedProjects) {
-				continue
+			sharedProjIDs, shErr := parseSharedProjectIDsJSON(sharedJSON)
+			if shErr != nil {
+				_ = rows.Close()
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
+				return
+			}
+			if needFilter {
+				vis, visErr := connectionVisibleToAnyProject(projNS, sharedJSON, allowedProjects)
+				if visErr != nil {
+					_ = rows.Close()
+					writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
+					return
+				}
+				if !vis {
+					continue
+				}
 			}
 			var projPtr, credPtr *string
 			if projNS.Valid {
@@ -470,6 +487,7 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 				dto: providerConnectionDTO{
 					ID:                     id,
 					ProjectID:              projPtr,
+					SharedProjectIDs:       sharedProjIDs,
 					Name:                   name,
 					AdapterID:              adapterID,
 					BillingMode:            billingMode,
@@ -555,8 +573,33 @@ func (s *Server) handleCreateConnection(w http.ResponseWriter, r *http.Request) 
 			ownerProjPtr = &trimmed
 		}
 	}
-	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: ptrStrValue(ownerProjPtr)}) {
+	authProjID := ptrStrValue(ownerProjPtr)
+	if len(req.SharedProjectIDs) > 0 {
+		authProjID = ""
+	}
+	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: authProjID}) {
 		return
+	}
+
+	var sharedProjIDs []string
+	if len(req.SharedProjectIDs) > 0 {
+		if ownerProjPtr != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "project_id and shared_project_ids cannot both be set", false, nil)
+			return
+		}
+		seen := make(map[string]struct{}, len(req.SharedProjectIDs))
+		sharedProjIDs = make([]string, 0, len(req.SharedProjectIDs))
+		for _, rawSP := range req.SharedProjectIDs {
+			sp := strings.TrimSpace(rawSP)
+			if sp == "" {
+				writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "shared_project_ids cannot contain blank entries", false, nil)
+				return
+			}
+			if _, dup := seen[sp]; !dup {
+				seen[sp] = struct{}{}
+				sharedProjIDs = append(sharedProjIDs, sp)
+			}
+		}
 	}
 
 	name := strings.TrimSpace(req.Name)
@@ -584,6 +627,11 @@ func (s *Server) handleCreateConnection(w http.ResponseWriter, r *http.Request) 
 	} else {
 		if !s.requireActiveOrg(w, r, orgID) {
 			return
+		}
+		for _, sp := range sharedProjIDs {
+			if !s.requireActiveOrgAndProject(w, r, orgID, sp) {
+				return
+			}
 		}
 	}
 
@@ -634,19 +682,20 @@ func (s *Server) handleCreateConnection(w http.ResponseWriter, r *http.Request) 
 	}
 
 	conn, err := s.catalog.CreateProviderConnection(r.Context(), catalog.CreateProviderConnectionParams{
-		OrgID:          orgID,
-		OwnerProjectID: ownerProjPtr,
-		AdapterID:      adapterID,
-		CredentialID:   primaryCredPtr,
-		Name:           name,
-		EndpointBaseURL: endpointURL,
-		AllowPrivateIP: req.AllowPrivateIP,
-		AllowedCIDRs:   allowedCIDRs,
-		DataRegion:     dataRegion,
-		BillingMode:    billingMode,
-		AuthMode:       authMode,
-		SecretBindings: bindings,
-		ConfigJSON:     cfgJSON,
+		OrgID:            orgID,
+		OwnerProjectID:   ownerProjPtr,
+		SharedProjectIDs: sharedProjIDs,
+		AdapterID:        adapterID,
+		CredentialID:     primaryCredPtr,
+		Name:             name,
+		EndpointBaseURL:  endpointURL,
+		AllowPrivateIP:   req.AllowPrivateIP,
+		AllowedCIDRs:     allowedCIDRs,
+		DataRegion:       dataRegion,
+		BillingMode:      billingMode,
+		AuthMode:         authMode,
+		SecretBindings:   bindings,
+		ConfigJSON:       cfgJSON,
 	})
 	if err != nil {
 		switch {
@@ -1161,10 +1210,11 @@ func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *c
 		portNum = 80
 	}
 	if p := u.Port(); p != "" {
-		var parsedPort int
-		if _, perr := fmt.Sscanf(p, "%d", &parsedPort); perr == nil && parsedPort > 0 && parsedPort <= 65535 {
-			portNum = parsedPort
+		parsedPort, perr := strconv.Atoi(p)
+		if perr != nil || parsedPort <= 0 || parsedPort > 65535 {
+			return nil, fmt.Errorf("%w: invalid endpoint port %q", port.ErrInvalidInput, p)
 		}
+		portNum = parsedPort
 	}
 	narrowPolicy := &egress.Policy{
 		AllowedHosts:   []string{strings.ToLower(u.Hostname())},
@@ -1223,6 +1273,7 @@ func (s *Server) buildProviderConnectionDTO(ctx context.Context, conn *catalog.P
 	return providerConnectionDTO{
 		ID:                     conn.ID,
 		ProjectID:              conn.OwnerProjectID,
+		SharedProjectIDs:       append([]string(nil), conn.SharedProjectIDs...),
 		Name:                   conn.Name,
 		AdapterID:              conn.AdapterID,
 		BillingMode:            conn.BillingMode,

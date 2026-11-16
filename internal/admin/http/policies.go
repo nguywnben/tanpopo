@@ -123,23 +123,24 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "policy_engine_unavailable", "upstream_error", "policy store unavailable", true, nil)
 		return
 	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionPolicyProjectWrite, rbac.ActionPolicyOrgWrite, rbac.ActionPolicyInstanceWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 
-	// Check if policy exists in ANY org first to prevent cross-tenant existence probing (AUTH-15).
+	// Check if policy exists; foreign-org rows follow the create/auth path and return uniform 404 after RBAC + validation (AUTH-15).
 	var existingOrgID, existingScopeType, existingScopeID string
 	err := s.db.QueryRowContext(r.Context(), `
 		SELECT org_id, scope_type, scope_id
 		FROM policies
 		WHERE id = ?`, policyID,
 	).Scan(&existingOrgID, &existingScopeType, &existingScopeID)
-	policyExists := err == nil
-	switch {
-	case err == nil && existingOrgID != orgID:
-		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "policy not found", false, nil)
-		return
-	case err != nil && !errors.Is(err, sql.ErrNoRows):
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking policy", true, nil)
 		return
 	}
+	policyExists := err == nil && existingOrgID == orgID
+	foreignOrgExists := err == nil && existingOrgID != orgID
 
 	var (
 		scopeType     string
@@ -211,20 +212,25 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "scope_id is required", false, nil)
 			return
 		}
+		switch scopeType {
+		case snapshot.PolicyScopeOrg:
+			if !s.authorize(w, r, sc, rbac.ActionPolicyOrgWrite, rbac.TargetScope{OrgID: orgID}) {
+				return
+			}
+		case snapshot.PolicyScopeProject:
+			if !s.authorize(w, r, sc, rbac.ActionPolicyProjectWrite, rbac.TargetScope{OrgID: orgID, ProjectID: scopeID}) {
+				return
+			}
+		}
 		var okScope bool
 		targetScope, ancestorEnvID, okScope = s.resolvePolicyTargetScope(w, r, orgID, scopeType, scopeID)
 		if !okScope {
 			return
 		}
-		action := rbac.ActionPolicyProjectWrite
-		switch strings.ToUpper(strings.TrimSpace(req.ScopeTier)) {
-		case "ORGANIZATION", "ORG":
-			action = rbac.ActionPolicyOrgWrite
-		case "PROJECT", "ENVIRONMENT", "ENV":
-			action = rbac.ActionPolicyProjectWrite
-		}
-		if !s.authorize(w, r, sc, action, targetScope) {
-			return
+		if scopeType == snapshot.PolicyScopeEnv {
+			if !s.authorize(w, r, sc, rbac.ActionPolicyProjectWrite, targetScope) {
+				return
+			}
 		}
 		if !s.requireActiveOrgAndProject(w, r, orgID, targetScope.ProjectID) {
 			return
@@ -243,8 +249,8 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !policyExists {
-		// Create path on PUT only when If-Match is initial "v1" and caller passed valid policy payload.
-		if expectedVer != 1 {
+		// Create path on PUT only when policy does not exist in any org, If-Match is initial "v1", and caller passed valid policy payload.
+		if foreignOrgExists || expectedVer != 1 {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "policy not found", false, nil)
 			return
 		}

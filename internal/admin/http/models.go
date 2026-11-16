@@ -476,8 +476,15 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		for _, rrow := range rawRows {
 			batchCreatedMs = rrow.createdMs
 			batchLastID = rrow.id
-			if !orgWide && !connectionVisibleToAnyProject(rrow.ownerProj, rrow.sharedJSON, allowedProjects) {
-				continue
+			if !orgWide {
+				vis, visErr := connectionVisibleToAnyProject(rrow.ownerProj, rrow.sharedJSON, allowedProjects)
+				if visErr != nil {
+					writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
+					return
+				}
+				if !vis {
+					continue
+				}
 			}
 			envID, rateCard := decodeStoredPricingDocument(rrow.pricingJSON)
 			if envID == "" {
@@ -616,7 +623,12 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying provider connection", true, nil)
 		return
 	}
-	if !connectionVisibleToAnyProject(connOwnerProj, connSharedJSON, map[string]bool{projID: true}) && !actorIsOrgOwnerOrOperator(sc.Actor, orgID) {
+	vis, visErr := connectionVisibleToAnyProject(connOwnerProj, connSharedJSON, map[string]bool{projID: true})
+	if visErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
+		return
+	}
+	if !vis && !actorIsOrgOwnerOrOperator(sc.Actor, orgID) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
 		return
 	}
@@ -1243,28 +1255,41 @@ func coalescePositiveInt64(primary, fallback int64) int64 {
 	return fallback
 }
 
-func connectionVisibleToAnyProject(ownerProj sql.NullString, sharedJSON string, allowed map[string]bool) bool {
-	if ownerProj.Valid && ownerProj.String != "" {
-		if allowed[ownerProj.String] {
-			return true
-		}
-	} else {
-		var shared []string
-		if strings.TrimSpace(sharedJSON) != "" {
-			_ = json.Unmarshal([]byte(sharedJSON), &shared)
-		}
-		if len(shared) == 0 {
-			return true
-		}
+func parseSharedProjectIDsJSON(sharedJSON string) ([]string, error) {
+	trimmed := strings.TrimSpace(sharedJSON)
+	if trimmed == "" {
+		return nil, nil
 	}
 	var shared []string
-	if strings.TrimSpace(sharedJSON) != "" {
-		_ = json.Unmarshal([]byte(sharedJSON), &shared)
+	if err := json.Unmarshal([]byte(trimmed), &shared); err != nil {
+		return nil, err
+	}
+	return shared, nil
+}
+
+func connectionVisibleToAnyProject(ownerProj sql.NullString, sharedJSON string, allowed map[string]bool) (bool, error) {
+	shared, err := parseSharedProjectIDsJSON(sharedJSON)
+	if err != nil {
+		return false, err
+	}
+	if ownerProj.Valid && ownerProj.String != "" {
+		if allowed[ownerProj.String] {
+			return true, nil
+		}
+		for _, pid := range shared {
+			if allowed[pid] {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	if len(shared) == 0 {
+		return true, nil
 	}
 	for _, pid := range shared {
 		if allowed[pid] {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }

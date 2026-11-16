@@ -775,9 +775,16 @@ func (s *Server) validateRouteUpsert(w http.ResponseWriter, r *http.Request, sc 
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking target deployment", true, nil)
 			return nil, false
 		}
-		if !actorIsOrgOwnerOrOperator(sc.Actor, orgID) && !connectionVisibleToAnyProject(connOwnerProj, connSharedJSON, map[string]bool{projID: true}) {
-			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "target deployment not found", false, nil)
-			return nil, false
+		if !actorIsOrgOwnerOrOperator(sc.Actor, orgID) {
+			vis, visErr := connectionVisibleToAnyProject(connOwnerProj, connSharedJSON, map[string]bool{projID: true})
+			if visErr != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
+				return nil, false
+			}
+			if !vis {
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "target deployment not found", false, nil)
+				return nil, false
+			}
 		}
 		depEnvID, _ := decodeStoredPricingDocument(depPricingJSON)
 		if depEnvID != "" && depEnvID != envID {

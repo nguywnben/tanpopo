@@ -265,4 +265,30 @@ func TestRBACEdgeCasesAndResolvers(t *testing.T) {
 	if err := Authorize(ownerEmptyOrg, ActionVKeyCreate, TargetScope{}); !errors.Is(err, ErrPermissionDenied) {
 		t.Fatalf("ActionVKeyCreate with empty target.OrgID expected ErrPermissionDenied, got %v", err)
 	}
+
+	// HasAnyPermissionInOrg fail-closed checks.
+	if err := HasAnyPermissionInOrg(nil, orgA, ActionBudgetWrite); !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("nil actor HasAnyPermissionInOrg expected ErrUnauthenticated, got %v", err)
+	}
+	if err := HasAnyPermissionInOrg(badPlane, orgA, ActionBudgetWrite); !errors.Is(err, ErrInvalidCredentialPlane) {
+		t.Fatalf("bad plane HasAnyPermissionInOrg expected ErrInvalidCredentialPlane, got %v", err)
+	}
+	finViewer := &Actor{
+		PrincipalID:     "prc_fv",
+		SessionOrgID:    &orgA,
+		CredentialPlane: CredentialPlaneAdminService,
+		Bindings:        []RoleBinding{{ScopeType: ScopeOrg, OrgID: &orgA, ScopeID: orgA, RoleName: RoleFinOpsViewer}},
+	}
+	if err := HasAnyPermissionInOrg(finViewer, orgA, ActionBudgetWrite, ActionPolicyProjectWrite); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("FINOPS_VIEWER write precheck expected ErrPermissionDenied, got %v", err)
+	}
+	if err := HasAnyPermissionInOrg(finViewer, "org_b", ActionBudgetWrite); !errors.Is(err, ErrResourceNotFound) {
+		t.Fatalf("FINOPS_VIEWER foreign org precheck expected ErrResourceNotFound, got %v", err)
+	}
+	if err := HasAnyPermissionInOrg(projDev, orgA, ActionPolicyOrgWrite, ActionPolicyProjectWrite); err != nil {
+		t.Fatalf("TEAM_ADMIN policy write precheck expected nil, got %v", err)
+	}
+	if err := HasAnyPermissionInOrg(op, orgA, ActionKillSwitchTrigger); err != nil {
+		t.Fatalf("INSTANCE OPERATOR kill-switch precheck expected nil, got %v", err)
+	}
 }

@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
@@ -2763,6 +2764,69 @@ func TestPart2SecurityAndRemediationRegressions(t *testing.T) {
 	}
 	var sharedConn providerConnectionDTO
 	mustDecodeJSON(t, recSharedConn.Body.Bytes(), &sharedConn)
+	if len(sharedConn.SharedProjectIDs) != 2 || sharedConn.SharedProjectIDs[0] != boot.ProjectID || sharedConn.SharedProjectIDs[1] != projB.ID {
+		t.Fatalf("expected persisted shared_project_ids=[%s %s], got %+v", boot.ProjectID, projB.ID, sharedConn.SharedProjectIDs)
+	}
+
+	// Verify conflicting project_id + shared_project_ids returns 400 and TEAM_ADMIN cannot create shared_project_ids connections (403).
+	recBothScope := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":               "conflict-conn",
+		"adapter_id":         adpID,
+		"project_id":         boot.ProjectID,
+		"shared_project_ids": []string{projB.ID},
+		"billing_mode":       "COMMERCIAL_API",
+		"endpoint_url":       "https://api.openai.com/v1",
+		"data_region":        "US",
+	})
+	if recBothScope.Code != http.StatusBadRequest {
+		t.Fatalf("project_id + shared_project_ids expected 400, got %d body=%s", recBothScope.Code, recBothScope.Body.String())
+	}
+	recTeamShared := h.doBearer(t, http.MethodPost, "/admin/v1/connections", teamATok, "", map[string]any{
+		"name":               "team-shared-conn",
+		"adapter_id":         adpID,
+		"shared_project_ids": []string{boot.ProjectID},
+		"billing_mode":       "COMMERCIAL_API",
+		"endpoint_url":       "https://api.openai.com/v1",
+		"data_region":        "US",
+	})
+	if recTeamShared.Code != http.StatusForbidden {
+		t.Fatalf("TEAM_ADMIN shared_project_ids connection create expected 403, got %d body=%s", recTeamShared.Code, recTeamShared.Body.String())
+	}
+
+	// Third project (projC) MUST NOT see or target the [projA, projB]-shared connection.
+	projC, err := h.st.Tenancy().CreateProject(ctx, boot.OrgID, port.CreateProjectParams{Slug: "reg-proj-c", DisplayName: "Reg Proj C"})
+	if err != nil {
+		t.Fatalf("CreateProject projC: %v", err)
+	}
+	envC, err := h.st.Tenancy().CreateEnvironment(ctx, boot.OrgID, projC.ID, port.CreateEnvironmentParams{Slug: "prod-c"})
+	if err != nil {
+		t.Fatalf("CreateEnvironment envC: %v", err)
+	}
+	teamCTok := "tok_reg_team_c"
+	h.registerBearerToken(teamCTok, &rbac.Actor{
+		PrincipalID:     "pri_reg_team_c",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: projC.ID, RoleName: rbac.RoleTeamAdmin}},
+	})
+	recListConnA := h.doBearer(t, http.MethodGet, "/admin/v1/connections", teamATok, "", nil)
+	if recListConnA.Code != http.StatusOK {
+		t.Fatalf("GET /connections teamA code=%d body=%s", recListConnA.Code, recListConnA.Body.String())
+	}
+	var connListA paginatedListEnvelope[providerConnectionDTO]
+	mustDecodeJSON(t, recListConnA.Body.Bytes(), &connListA)
+	if len(connListA.Data) != 1 || connListA.Data[0].ID != sharedConn.ID {
+		t.Fatalf("expected teamA to see sharedConn %s, got %+v", sharedConn.ID, connListA.Data)
+	}
+	recListConnC := h.doBearer(t, http.MethodGet, "/admin/v1/connections", teamCTok, "", nil)
+	if recListConnC.Code != http.StatusOK {
+		t.Fatalf("GET /connections teamC code=%d body=%s", recListConnC.Code, recListConnC.Body.String())
+	}
+	var connListC paginatedListEnvelope[providerConnectionDTO]
+	mustDecodeJSON(t, recListConnC.Body.Bytes(), &connListC)
+	if len(connListC.Data) != 0 {
+		t.Fatalf("expected teamC NOT to see [projA,projB]-restricted connection, got %+v", connListC.Data)
+	}
 
 	recMod := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/models", ownerCookie, boot.CSRFToken, "", map[string]any{
 		"slug":              "reg-model",
@@ -2775,6 +2839,18 @@ func TestPart2SecurityAndRemediationRegressions(t *testing.T) {
 	}
 	var regMod logicalModelDTO
 	mustDecodeJSON(t, recMod.Body.Bytes(), &regMod)
+
+	recDepC := h.doBearer(t, http.MethodPost, "/admin/v1/deployments", teamCTok, "", map[string]any{
+		"env_id":              envC.ID,
+		"logical_model_id":    regMod.ID,
+		"connection_id":       sharedConn.ID,
+		"upstream_model_name": "gpt-c",
+		"data_region":         "US",
+		"rate_card":           map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
+	})
+	if recDepC.Code != http.StatusNotFound {
+		t.Fatalf("projC deployment targeting [projA,projB] sharedConn expected 404, got %d body=%s", recDepC.Code, recDepC.Body.String())
+	}
 
 	recDepA := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
 		"env_id":              boot.EnvID,
@@ -2889,6 +2965,18 @@ func TestPart2SecurityAndRemediationRegressions(t *testing.T) {
 	mustDecodeJSON(t, recRtListAfter.Body.Bytes(), &rtListAfter)
 	if len(rtListAfter.Data) != 1 || rtListAfter.Data[0].RequestTimeoutMs != 45000 {
 		t.Fatalf("expected persisted GET /routes request_timeout_ms=45000, got %+v", rtListAfter.Data)
+	}
+
+	// Third project (projC) MUST NOT route to depA backed by [projA, projB]-restricted connection.
+	recRtC := h.doBearer(t, http.MethodPost, "/admin/v1/routes", teamCTok, "", map[string]any{
+		"slug":                 "projc-blocked-route",
+		"env_id":               envC.ID,
+		"strategy":             "PRIORITY_FAILOVER",
+		"allowed_data_regions": []string{"US"},
+		"targets":              []map[string]any{{"deployment_id": depA.ID, "priority_order": 1, "weight": 100}},
+	})
+	if recRtC.Code != http.StatusNotFound {
+		t.Fatalf("projC route targeting [projA,projB] depA expected 404, got %d body=%s", recRtC.Code, recRtC.Body.String())
 	}
 }
 
@@ -3152,5 +3240,237 @@ func TestPart2PolicyBudgetImmutableAndInstanceOperatorOps(t *testing.T) {
 	})
 	if recOwnerMutToInst.Code != http.StatusBadRequest {
 		t.Fatalf("ORG_OWNER updating ORG policy with scope_tier=INSTANCE expected 400, got %d body=%s", recOwnerMutToInst.Code, recOwnerMutToInst.Body.String())
+	}
+}
+
+func TestPart2FinOpsPeriodOracleAndChargebackFixes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "Fix8 Org 1", "proj-one")
+	now := h.fk.Now().UTC().UnixMilli()
+
+	// Seed org2 + proj2 + env2 for multi-tenant isolation checks.
+	org2, err := h.st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "fix8-org-2", DisplayName: "Fix8 Org 2"})
+	if err != nil {
+		t.Fatalf("CreateOrganization org2: %v", err)
+	}
+	proj2, err := h.st.Tenancy().CreateProject(ctx, org2.ID, port.CreateProjectParams{Slug: "proj-2", DisplayName: "Proj 2"})
+	if err != nil {
+		t.Fatalf("CreateProject proj2: %v", err)
+	}
+	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	var extInstID string
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT installation_id FROM provider_adapters WHERE id = ?`, adpID).Scan(&extInstID); err != nil {
+		t.Fatalf("lookup installation_id: %v", err)
+	}
+
+	// Create org2 policy & org2 budget via ORG_OWNER of org2.
+	org2OwnerTok := "tok_fix8_org2_owner"
+	h.registerBearerToken(org2OwnerTok, &rbac.Actor{
+		PrincipalID:     "pri_fix8_org2_owner",
+		SessionOrgID:    &org2.ID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &org2.ID, ScopeType: rbac.ScopeOrg, ScopeID: org2.ID, RoleName: rbac.RoleOrgOwner}},
+	})
+	org2PolID := idgen.MustNew(idgen.PrefixPolicy)
+	recOrg2Pol := h.doBearer(t, http.MethodPut, "/admin/v1/policies/"+org2PolID, org2OwnerTok, `"v1"`, map[string]any{
+		"scope_tier":               "PROJECT",
+		"scope_id":                 proj2.ID,
+		"allowed_data_regions":     []string{"US"},
+		"min_plugin_trust":         "OFFICIAL_ONLY",
+		"min_capability_assurance": "VERIFIED",
+	})
+	if recOrg2Pol.Code != http.StatusOK {
+		t.Fatalf("create org2 policy: %d %s", recOrg2Pol.Code, recOrg2Pol.Body.String())
+	}
+	org2BdgID := idgen.MustNew(idgen.PrefixBudget)
+	recOrg2Bdg := h.doBearer(t, http.MethodPut, "/admin/v1/budgets/"+org2BdgID, org2OwnerTok, `"v1"`, map[string]any{
+		"scope_tier":        "ORGANIZATION",
+		"scope_id":          org2.ID,
+		"period":            "MONTHLY",
+		"hard_limit_micros": 5000000,
+	})
+	if recOrg2Bdg.Code != http.StatusOK {
+		t.Fatalf("create org2 budget: %d %s", recOrg2Bdg.Code, recOrg2Bdg.Body.String())
+	}
+
+	// 1. Existence oracle elimination: FINOPS_VIEWER in org1 gets 403 (NOT 404) on org2 policy, org2 budget, and EXTENSION kill-switch.
+	fvTok := "tok_fix8_fv"
+	h.registerBearerToken(fvTok, &rbac.Actor{
+		PrincipalID:     "pri_fix8_fv",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleFinOpsViewer}},
+	})
+	nonExistPolID := idgen.MustNew(idgen.PrefixPolicy)
+	for _, pid := range []string{org2PolID, nonExistPolID} {
+		rec := h.doBearer(t, http.MethodPut, "/admin/v1/policies/"+pid, fvTok, `"v1"`, map[string]any{
+			"scope_tier":               "ORGANIZATION",
+			"scope_id":                 boot.OrgID,
+			"allowed_data_regions":     []string{"US"},
+			"min_plugin_trust":         "OFFICIAL_ONLY",
+			"min_capability_assurance": "VERIFIED",
+		})
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("FINOPS_VIEWER policy probe %s expected 403, got %d body=%s", pid, rec.Code, rec.Body.String())
+		}
+	}
+	nonExistBdgID := idgen.MustNew(idgen.PrefixBudget)
+	for _, bid := range []string{org2BdgID, nonExistBdgID} {
+		rec := h.doBearer(t, http.MethodPut, "/admin/v1/budgets/"+bid, fvTok, `"v1"`, map[string]any{
+			"scope_tier":        "ORGANIZATION",
+			"scope_id":          boot.OrgID,
+			"period":            "MONTHLY",
+			"hard_limit_micros": 1000000,
+		})
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("FINOPS_VIEWER budget probe %s expected 403, got %d body=%s", bid, rec.Code, rec.Body.String())
+		}
+	}
+	for _, eid := range []string{extInstID, "ext_nonexistent_id"} {
+		rec := h.doBearer(t, http.MethodPost, "/admin/v1/kill-switches", fvTok, "", map[string]any{
+			"target_level": "EXTENSION",
+			"target_id":    eid,
+			"reason":       "oracle probe attempt",
+		})
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("FINOPS_VIEWER extension kill-switch probe %s expected 403, got %d body=%s", eid, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Non-operator ORG_OWNER in multi-tenant deployment probing EXTENSION kill-switch also gets 403 before existence lookup.
+	for _, eid := range []string{extInstID, "ext_nonexistent_id"} {
+		rec := h.doBearer(t, http.MethodPost, "/admin/v1/kill-switches", org2OwnerTok, "", map[string]any{
+			"target_level": "EXTENSION",
+			"target_id":    eid,
+			"reason":       "multi tenant extension probe",
+		})
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("non-operator multi-tenant extension kill-switch %s expected 403, got %d body=%s", eid, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Cross-tenant AUTH-15: org1 ORG_OWNER probing org2 policy/budget with valid org1 payload + If-Match="v1" still gets 404.
+	org1OwnerOnlyTok := "tok_fix8_org1_owner"
+	h.registerBearerToken(org1OwnerOnlyTok, &rbac.Actor{
+		PrincipalID:     "pri_fix8_org1_owner",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleOrgOwner}},
+	})
+	recCrossPol := h.doBearer(t, http.MethodPut, "/admin/v1/policies/"+org2PolID, org1OwnerOnlyTok, `"v1"`, map[string]any{
+		"scope_tier":               "ORGANIZATION",
+		"scope_id":                 boot.OrgID,
+		"allowed_data_regions":     []string{"US"},
+		"min_plugin_trust":         "OFFICIAL_ONLY",
+		"min_capability_assurance": "VERIFIED",
+	})
+	if recCrossPol.Code != http.StatusNotFound {
+		t.Fatalf("cross-tenant ORG_OWNER policy probe expected 404, got %d body=%s", recCrossPol.Code, recCrossPol.Body.String())
+	}
+	recCrossBdg := h.doBearer(t, http.MethodPut, "/admin/v1/budgets/"+org2BdgID, org1OwnerOnlyTok, `"v1"`, map[string]any{
+		"scope_tier":        "ORGANIZATION",
+		"scope_id":          boot.OrgID,
+		"period":            "MONTHLY",
+		"hard_limit_micros": 1000000,
+	})
+	if recCrossBdg.Code != http.StatusNotFound {
+		t.Fatalf("cross-tenant ORG_OWNER budget probe expected 404, got %d body=%s", recCrossBdg.Code, recCrossBdg.Body.String())
+	}
+
+	// 2. Budget period update recomputes period_start_ms/period_end_ms and maps UNIQUE collision to 409.
+	bdgMonthlyID := idgen.MustNew(idgen.PrefixBudget)
+	recCreateMonthly := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/budgets/"+bdgMonthlyID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":        "PROJECT",
+		"scope_id":          boot.ProjectID,
+		"period":            "MONTHLY",
+		"hard_limit_micros": 1000000,
+	})
+	if recCreateMonthly.Code != http.StatusOK {
+		t.Fatalf("create MONTHLY budget: %d %s", recCreateMonthly.Code, recCreateMonthly.Body.String())
+	}
+	recSwitchDaily := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/budgets/"+bdgMonthlyID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"period":            "DAILY",
+		"hard_limit_micros": 500000,
+	})
+	if recSwitchDaily.Code != http.StatusOK {
+		t.Fatalf("switch budget MONTHLY->DAILY expected 200, got %d body=%s", recSwitchDaily.Code, recSwitchDaily.Body.String())
+	}
+	var gotStart, gotEnd int64
+	var gotPeriod string
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT period_kind, period_start_ms, period_end_ms FROM budget_ledgers WHERE id = ?`, bdgMonthlyID).Scan(&gotPeriod, &gotStart, &gotEnd); err != nil {
+		t.Fatalf("query updated budget period: %v", err)
+	}
+	expStart, expEnd := computePeriodWindowMs(now, "DAILY")
+	if gotPeriod != "DAILY" || gotStart != expStart || gotEnd != expEnd {
+		t.Fatalf("expected DAILY window [%d, %d), got period=%s [%d, %d)", expStart, expEnd, gotPeriod, gotStart, gotEnd)
+	}
+
+	// Create a second MONTHLY budget on same project, then switch it to DAILY -> UNIQUE collision MUST return 409 (not 500).
+	bdgMonthly2ID := idgen.MustNew(idgen.PrefixBudget)
+	recCreateMonthly2 := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/budgets/"+bdgMonthly2ID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":        "PROJECT",
+		"scope_id":          boot.ProjectID,
+		"period":            "MONTHLY",
+		"hard_limit_micros": 2000000,
+	})
+	if recCreateMonthly2.Code != http.StatusOK {
+		t.Fatalf("create second MONTHLY budget: %d %s", recCreateMonthly2.Code, recCreateMonthly2.Body.String())
+	}
+	recCollide := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/budgets/"+bdgMonthly2ID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"period":            "DAILY",
+		"hard_limit_micros": 2500000,
+	})
+	if recCollide.Code != http.StatusConflict {
+		t.Fatalf("switching second budget to colliding DAILY window expected 409, got %d body=%s", recCollide.Code, recCollide.Body.String())
+	}
+
+	// 3. Usage chargeback group_by=project MUST NOT merge two distinct projects with identical display_name.
+	dupProj1, err := h.st.Tenancy().CreateProject(ctx, boot.OrgID, port.CreateProjectParams{Slug: "dup-alpha", DisplayName: "Shared Team Name"})
+	if err != nil {
+		t.Fatalf("CreateProject dupProj1: %v", err)
+	}
+	dupProj2, err := h.st.Tenancy().CreateProject(ctx, boot.OrgID, port.CreateProjectParams{Slug: "dup-beta", DisplayName: "Shared Team Name"})
+	if err != nil {
+		t.Fatalf("CreateProject dupProj2: %v", err)
+	}
+	for i, pid := range []string{dupProj1.ID, dupProj2.ID} {
+		setID := idgen.MustNew(idgen.PrefixSettlement)
+		reqID := fmt.Sprintf("trc_chg_%d", i)
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO usage_settlements (
+				id, settled_at_ms, request_id, org_id, project_id, env_id, virtual_key_id,
+				plane, logical_model_slug, billing_mode, usage_accuracy, total_cost_micros
+			) VALUES (?, ?, ?, ?, ?, ?, 'vk_chg', 'PROVIDER', 'gpt-4o', 'COMMERCIAL_API', 'EXACT', 1234)`,
+			setID, now, reqID, boot.OrgID, pid, boot.EnvID,
+		); err != nil {
+			t.Fatalf("insert usage_settlements %d: %v", i, err)
+		}
+	}
+	recChg := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/usage/summary?group_by=project", ownerCookie, "", "", nil)
+	if recChg.Code != http.StatusOK {
+		t.Fatalf("GET /usage/summary?group_by=project code=%d body=%s", recChg.Code, recChg.Body.String())
+	}
+	var chgResp struct {
+		Data []usageChargebackRowDTO `json:"data"`
+	}
+	mustDecodeJSON(t, recChg.Body.Bytes(), &chgResp)
+	matchCount := 0
+	for _, row := range chgResp.Data {
+		if row.GroupKey == "Shared Team Name" && row.ExactMicroUSD == 1234 {
+			matchCount++
+		}
+	}
+	if matchCount != 2 {
+		t.Fatalf("expected 2 separate rows for distinct projects with identical display_name, got %d (%+v)", matchCount, chgResp.Data)
+	}
+
+	// 4. Direct helper unit checks: connectionVisibleToAnyProject fail closed & computeBudgetUtilizationPct overflow-safe.
+	if _, err := connectionVisibleToAnyProject(sql.NullString{}, `{bad-json`, map[string]bool{boot.ProjectID: true}); err == nil {
+		t.Fatalf("expected error on invalid shared_project_ids_json")
+	}
+	if pct := computeBudgetUtilizationPct(9_000_000_000_000_000_000, 9_100_000_000_000_000_000); pct != 98 {
+		t.Fatalf("expected overflow-safe utilization pct 98, got %d", pct)
 	}
 }

@@ -477,3 +477,66 @@ func isProjectCollectionReadAction(action Action) bool {
 		return false
 	}
 }
+
+// HasAnyPermissionInOrg checks whether actor holds at least one of actions inside orgID
+// across either ORG-scoped, PROJECT-scoped, or INSTANCE OPERATOR bindings (fail closed).
+// Used before cross-tenant existence lookups on upsert/action endpoints so low-privilege
+// principals (e.g., FINOPS_VIEWER) receive 403 Permission Denied rather than 404 oracles.
+func HasAnyPermissionInOrg(actor *Actor, orgID string, actions ...Action) error {
+	if actor == nil || strings.TrimSpace(actor.PrincipalID) == "" {
+		return ErrUnauthenticated
+	}
+	switch actor.CredentialPlane {
+	case CredentialPlaneAdminSession, CredentialPlaneAdminService, CredentialPlaneAdminOIDC:
+	case CredentialPlaneDataVirtual:
+		return ErrInvalidCredentialPlane
+	default:
+		return ErrInvalidCredentialPlane
+	}
+	if len(actions) == 0 {
+		return ErrPermissionDenied
+	}
+
+	hasInstanceOperator := false
+	hasAnyOrgMatch := false
+	hasAction := false
+
+	for _, b := range actor.Bindings {
+		if !allRoles[b.RoleName] {
+			continue
+		}
+		if b.ScopeType == ScopeInstance {
+			if b.RoleName == RoleOperator && b.OrgID == nil {
+				hasInstanceOperator = true
+				for _, act := range actions {
+					if act != "" && knownActions[act] && rolePermissions[b.RoleName][act] {
+						hasAction = true
+						break
+					}
+				}
+			}
+			continue
+		}
+		if b.RoleName == RoleOperator {
+			continue
+		}
+		if orgID == "" || b.OrgID == nil || *b.OrgID != orgID {
+			continue
+		}
+		hasAnyOrgMatch = true
+		for _, act := range actions {
+			if act != "" && knownActions[act] && rolePermissions[b.RoleName][act] {
+				hasAction = true
+				break
+			}
+		}
+	}
+
+	if orgID != "" && !hasInstanceOperator && !hasAnyOrgMatch {
+		return ErrResourceNotFound
+	}
+	if !hasAction {
+		return ErrPermissionDenied
+	}
+	return nil
+}
