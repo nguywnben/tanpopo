@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0025` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0012`, `TP-IMP-0020`, `TP-IMP-0021`, `TP-IMP-0024` — `GAP-01, 07`)* |
+| **Status** | **`READY`** *(Unlocked `2026-11-16` sequentially under [`DEC-034`](../../governance/decisions.md)/[`DEC-038`](../../governance/decisions.md) after DoR & upstream `Dependencies` [`TP-IMP-0002`, `0012`, `0020`, `0021`, `0024`] = `DONE`)* |
 | **Size** | `L` (`internal/admin/http/extensions.go`, `connections.go`, `models.go`, `routes.go`, `policies.go`, `finops.go`, `traces.go`, `ops.go`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Write-only secrets, extension permission approval, financial chargeback export & Kill-Switch activation)* |
 | **Technical Owner** | `Staff Control-Plane Engineer` |
