@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0020: DONE` | `READY: NONE [0 / 47]`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.24.0-post-0020-handoff-dec-033-revoked` | **Date:** `2026-11-16`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0020: DONE` | `DEC-034 Active [0021..0030]` | `READY: TP-IMP-0021 [1 / 47]`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.25.0-dec-034-open-0021-ready` | **Date:** `2026-11-16`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0020` = **`DONE`** (`TP-IMP-0005`..`0011` accepted via `DEC-011`..`DEC-021`; `TP-IMP-0012`..`0013` by **Carbon** via `DEC-022`..`DEC-024`; `TP-IMP-0014`..`0020` by **Gemini 4 Hydrogen** via `DEC-025`..`DEC-032`, `904ba2a9` / CI `43782208080`, `DEC-032` `bb0b2bb3` / CI `43783032340`); **`0 / 47` `READY`** (`0 / 47` `READY_FOR_REVIEW`); `TP-IMP-0021`..`0047` (`27 / 47`) = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, `COND-PO-01`..`05` gates, and direct human Product Owner wave authorization (`DEC-033`'s premature Unit 21 unlock in `4a30a65a` is **`REVOKED_BY_OWNER`** pending separate `TP-IMP-0021`–`0030` opening).
+> - **Live DAG Frontier:** `TP-IMP-0001`..`0020` = **`DONE`** (`TP-IMP-0005`..`0011` accepted via `DEC-011`..`DEC-021`; `TP-IMP-0012`..`0013` by **Carbon** via `DEC-022`..`DEC-024`; `TP-IMP-0014`..`0020` by **Gemini 4 Hydrogen** via `DEC-025`..`DEC-032`, `904ba2a9` / CI `43782208080`, `DEC-032` `bb0b2bb3` / CI `43783032340`, `DEC-033 REVOKED_BY_OWNER` `8cfe2492` / CI `43798260070`); under **[`DEC-034`](../governance/decisions.md)** (`2026-11-16`), **[`TP-IMP-0021`](./units/TP-IMP-0021.md)** is **`READY` (`1 / 47`)** (DoR verified; `0 / 47` `READY_FOR_REVIEW`), while `TP-IMP-0022`..`0047` (`26 / 47`) = **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, `COND-PO-01`..`05` gates, sequential `DEC-034` progression (`0022`..`0030`), and direct human Product Owner wave authorization (`0031`..`0047`).
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier Today (`20 DONE`, `0 READY`, `27 BLOCKED` — `DEC-033 REVOKED_BY_OWNER`):** **`TP-IMP-0001..0020` are `DONE` (`20 / 47`)**, **`0 / 47` units are `READY`** (`DEC-033`'s premature Unit 21 unlock in `4a30a65a` is **`REVOKED_BY_OWNER`**), **`0 / 47` are `READY_FOR_REVIEW`**, and **`TP-IMP-0021..0047` (`27 / 47`) remain `BLOCKED`** pending review gates, `COND-PO-01`..`05`, and separate Product Owner authorization for `TP-IMP-0021`–`0030`.
+> **Live Queue Frontier Today (`20 DONE`, `1 READY` [`0021`], `26 BLOCKED` — `DEC-034` Active · `DEC-033 REVOKED`):** **`TP-IMP-0001..0020` are `DONE` (`20 / 47`)**, under **[`DEC-034`](../governance/decisions.md)** **[`TP-IMP-0021`](./units/TP-IMP-0021.md)** is **`READY` (`1 / 47`)** (`DEC-033` remains **`REVOKED_BY_OWNER`**), **`0 / 47` are `READY_FOR_REVIEW`**, and **`TP-IMP-0022..0047` (`26 / 47`) remain `BLOCKED`** pending sequential `DEC-034` progression (`0022`..`0030`), review gates, `COND-PO-01`..`05`, and direct human Product Owner authorization (`0031`..`0047`).
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.

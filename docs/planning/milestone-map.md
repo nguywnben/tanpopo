@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0020: DONE` | `READY: NONE [0 / 47]`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.24.0-post-0020-handoff-dec-033-revoked` | **Date:** `2026-11-16`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0020: DONE` | `DEC-034 Active [0021..0030]` | `READY: TP-IMP-0021 [1 / 47]`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.25.0-dec-034-open-0021-ready` | **Date:** `2026-11-16`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`), Milestone `M1` (`TP-IMP-0005`..`0015`, closing `GATE-M1` at `baf154dc` / CI `43745804370`), and Wave 2.1 (`TP-IMP-0016`..`0020` via `DEC-025`..`DEC-032`, latest accepted baseline `904ba2a9` / CI `43782208080`, `DEC-032` `bb0b2bb3` / CI `43783032340`) are **`DONE` (`20 / 47`)**; **`0 / 47` units are `READY` and `0 / 47` are `READY_FOR_REVIEW`** (`DEC-033`'s premature Unit 21 unlock in `4a30a65a` is **`REVOKED_BY_OWNER`**); `27` downstream units `0021`..`0047` remain **`BLOCKED`** behind their dependency, review, `COND-PO-01`..`05` verification gates, and separate Product Owner wave authorization (`TP-IMP-0021`–`0030` awaits separate unlock).
+> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`), Milestone `M1` (`TP-IMP-0005`..`0015`, closing `GATE-M1` at `baf154dc` / CI `43745804370`), and Wave 2.1 (`TP-IMP-0016`..`0020` via `DEC-025`..`DEC-032`, latest accepted baseline `904ba2a9` / CI `43782208080`, `DEC-032` `bb0b2bb3` / CI `43783032340`, `DEC-033 REVOKED_BY_OWNER` `8cfe2492` / CI `43798260070`) are **`DONE` (`20 / 47`)**; under **[`DEC-034`](../governance/decisions.md)** (`2026-11-16`), **[`TP-IMP-0021`](./units/TP-IMP-0021.md)** is **`READY` (`1 / 47`)** (`0 / 47` `READY_FOR_REVIEW`); `26` downstream units `0022`..`0047` remain **`BLOCKED`** behind upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, `COND-PO-01`..`05` gates, sequential `DEC-034` progression (`0022`..`0030`), and direct human Product Owner authorization (`0031`..`0047`).
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---

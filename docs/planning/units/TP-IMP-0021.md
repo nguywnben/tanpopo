@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0021` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | `BLOCKED` *(Awaiting separate Product Owner wave authorization for `TP-IMP-0021`–`0030`; premature unlock/delegation under [`DEC-033`](../../governance/decisions.md) is **`REVOKED_BY_OWNER`**; upstream `Dependencies` `TP-IMP-0007` & `TP-IMP-0020` are `DONE`)* |
+| **Status** | **`READY`** *(Batch `TP-IMP-0021`–`0030` opened and delegated to **Gemini 4 Hydrogen** under [`DEC-034`](../../governance/decisions.md); `DEC-033` remains `REVOKED_BY_OWNER`; `100%` of DoR & upstream `Dependencies` [`TP-IMP-0001`, `0003`, `0007`, `0020`] = `DONE`; planned SQLite migration `db/migrations/sqlite/0012_budget_ledger.sql` after `0011_routes.sql`)* |
 | **Size** | `L` (`internal/finops/ledger/*`, `internal/finops/pricing/*`, `internal/finops/rollup/*`, `db/migrations/sqlite/0012_budget_ledger.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Zero-float monetary arithmetic, concurrent overspend prevention & orphan reservation reclamation)* |
 | **Technical Owner** | `Principal FinOps / Storage Engineer` |
