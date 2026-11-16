@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0021` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | **`READY`** *(Batch `TP-IMP-0021`–`0030` opened and delegated to **Gemini 4 Hydrogen** under [`DEC-034`](../../governance/decisions.md); `DEC-033` remains `REVOKED_BY_OWNER`; `100%` of DoR & upstream `Dependencies` [`TP-IMP-0001`, `0003`, `0007`, `0020`] = `DONE`; planned SQLite migration `db/migrations/sqlite/0012_budget_ledger.sql` after `0011_routes.sql`)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-16` by delegated **Gemini 4 Hydrogen** under [`DEC-034`](../../governance/decisions.md)/[`DEC-035`](../../governance/decisions.md); `DEC-033` remains `REVOKED_BY_OWNER`; Commit `c751d74d`, CI Run `43811187903` `SUCCESS`; Pure-Go `CGO_ENABLED=0` + `-race` + `FuzzLedgerInvariants` 20s + `85.4%` ledger cov `PASS`; fresh `code-reviewer` [`b75c6267`] `APPROVE` & `security-auditor` [`7ebd3abe`] `PASS`; SQLite migration `db/migrations/sqlite/0012_budget_ledger.sql`)* |
 | **Size** | `L` (`internal/finops/ledger/*`, `internal/finops/pricing/*`, `internal/finops/rollup/*`, `db/migrations/sqlite/0012_budget_ledger.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Zero-float monetary arithmetic, concurrent overspend prevention & orphan reservation reclamation)* |
 | **Technical Owner** | `Principal FinOps / Storage Engineer` |

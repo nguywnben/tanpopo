@@ -4,8 +4,8 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0022` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0015`, `TP-IMP-0021` — `GAP-01, 13`)* |
-| **Size** | `M` (`go.mod`, `internal/telemetry/otel/*`, `internal/telemetry/privacy/*`, `deploy/monitoring/alerts.yaml`, `db/migrations/sqlite/0009_traces_blobs.sql`) |
+| **Status** | **`READY`** *(Unlocked `2026-11-16` sequentially under [`DEC-034`](../../governance/decisions.md)/[`DEC-035`](../../governance/decisions.md) after DoR & upstream `Dependencies` [`TP-IMP-0002`, `0015`, `0021`] = `DONE`; SQLite migration reconciled from `0009` [`0009_idempotency.sql`] to sequential `db/migrations/sqlite/0013_traces_blobs.sql`)* |
+| **Size** | `M` (`go.mod`, `internal/telemetry/otel/*`, `internal/telemetry/privacy/*`, `deploy/monitoring/alerts.yaml`, `db/migrations/sqlite/0013_traces_blobs.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(`0-byte` default prompt privacy & hot-path inference protection under OTLP collector blackholes)* |
 | **Technical Owner** | `Staff Observability & Privacy Engineer` |
 
@@ -23,7 +23,7 @@ Implement the unified observability plane over **OpenTelemetry (`Metrics`, `Trac
   - `internal/telemetry/otel/metrics.go` & `deploy/monitoring/alerts.yaml` (register canonical metrics enforcing strict `Bounded Cardinality` label allowlists and ship Prometheus alert rules cross-linked to all **7 incident runbooks `INC-01`..`INC-07`**).
   - `internal/telemetry/otel/tracer.go` (multi-stage distributed spans `Ingress -> Policy -> RouteAttempt -> ExtensionHook -> Egress`, non-blocking `32 MiB` ring buffer, and metadata trace persistence into `request_traces_meta` including `waterfall_stages_json`).
   - `internal/telemetry/ttl/cleaner.go` (background TTL reaper purging expired `debug_payload_blobs` where `expires_at <= now` and aging out historical trace metadata per retention policy).
-  - `db/migrations/sqlite/0009_traces_blobs.sql` (`request_traces_meta`, `debug_payload_blobs` scoped with `project_id`).
+  - `db/migrations/sqlite/0013_traces_blobs.sql` (`request_traces_meta`, `debug_payload_blobs` scoped with `project_id`; sequential slot `0013` after `0012_budget_ledger.sql`).
 - **Out-of-Scope:** Interactive waterfall trace viewer UI in the Web Console (owned by `TP-IMP-0030`).
 
 ## 3. Requirements, Dependencies & Design References
@@ -48,7 +48,7 @@ Implement the unified observability plane over **OpenTelemetry (`Metrics`, `Trac
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** `privacy.Redactor` sits at the lowest sink boundary ahead of the OTLP exporter, structured JSON logger, and `request_traces_meta` persistence writer.
-- **Rollback:** Additive schema `0009_traces_blobs.sql`; external OTLP export can be disabled via config while retaining internal `/metrics`.
+- **Rollback:** Additive schema `0013_traces_blobs.sql`; external OTLP export can be disabled via config while retaining internal `/metrics`.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0002` (`GAP-13` metric-name alignment), `TP-IMP-0015`, and `TP-IMP-0021` are complete.
