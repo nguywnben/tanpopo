@@ -1021,3 +1021,188 @@ func TestSQLiteAuditSinkFailClosedAndTenancyAtomicRollback(t *testing.T) {
 	}
 }
 
+func TestSQLiteTenancyAuditAllMutationsAndFailClosedRollback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	sink := &recordingSQLiteTxAuditSink{}
+	st, err := Open(ctx, Config{
+		DBPath:    filepath.Join(t.TempDir(), "tenancy-all-audit.db"),
+		AuditSink: sink,
+	})
+	if err != nil {
+		t.Fatalf("Open with TxAuditSink: %v", err)
+	}
+	defer st.Close()
+
+	// Seed org, project, and environment with audit succeeding.
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "audit-org", DisplayName: "Audit Org"})
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+	proj, err := st.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "audit-proj", DisplayName: "Audit Proj"})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	env, err := st.Tenancy().CreateEnvironment(ctx, org.ID, proj.ID, port.CreateEnvironmentParams{Slug: "staging"})
+	if err != nil {
+		t.Fatalf("CreateEnvironment: %v", err)
+	}
+
+	// UpdateOrganization, UpdateProject, UpdateEnvironment succeed and record events.
+	newOrgName := "Audit Org v2"
+	org2, err := st.Tenancy().UpdateOrganization(ctx, org.ID, org.Version, port.UpdateOrgParams{DisplayName: &newOrgName})
+	if err != nil || org2.Version != 2 || org2.DisplayName != newOrgName {
+		t.Fatalf("UpdateOrganization: org=%+v err=%v", org2, err)
+	}
+	newProjName := "Audit Proj v2"
+	proj2, err := st.Tenancy().UpdateProject(ctx, org.ID, proj.ID, proj.Version, port.UpdateProjectParams{DisplayName: &newProjName})
+	if err != nil || proj2.Version != 2 || proj2.DisplayName != newProjName {
+		t.Fatalf("UpdateProject: proj=%+v err=%v", proj2, err)
+	}
+	newEnvSlug := "production"
+	reqCaps := true
+	env2, err := st.Tenancy().UpdateEnvironment(ctx, org.ID, env.ID, env.Version, port.UpdateEnvironmentParams{
+		Slug:              &newEnvSlug,
+		RequireTestedCaps: &reqCaps,
+	})
+	if err != nil || env2.Version != 2 || env2.Slug != newEnvSlug || !env2.RequireTestedCaps {
+		t.Fatalf("UpdateEnvironment: env=%+v err=%v", env2, err)
+	}
+
+	epochBeforeFailures, err := st.Changelog().LatestEpoch(ctx)
+	if err != nil {
+		t.Fatalf("LatestEpoch before failures: %v", err)
+	}
+
+	// Inject audit failure and verify every remaining tenancy mutation rolls back BOTH state and changelog atomically.
+	sink.mu.Lock()
+	sink.fail = true
+	evCountBeforeFail := len(sink.events)
+	sink.mu.Unlock()
+
+	badOrgName := "Should Rollback Org"
+	if _, err := st.Tenancy().UpdateOrganization(ctx, org.ID, org2.Version, port.UpdateOrgParams{DisplayName: &badOrgName}); err == nil {
+		t.Fatalf("expected UpdateOrganization failure on audit error")
+	}
+	gotOrg, err := st.Tenancy().GetOrganization(ctx, org.ID)
+	if err != nil || gotOrg.Version != org2.Version || gotOrg.DisplayName != newOrgName {
+		t.Fatalf("expected UpdateOrganization rollback, got=%+v err=%v", gotOrg, err)
+	}
+
+	badProjName := "Should Rollback Proj"
+	if _, err := st.Tenancy().UpdateProject(ctx, org.ID, proj.ID, proj2.Version, port.UpdateProjectParams{DisplayName: &badProjName}); err == nil {
+		t.Fatalf("expected UpdateProject failure on audit error")
+	}
+	gotProj, err := st.Tenancy().GetProject(ctx, org.ID, proj.ID)
+	if err != nil || gotProj.Version != proj2.Version || gotProj.DisplayName != newProjName {
+		t.Fatalf("expected UpdateProject rollback, got=%+v err=%v", gotProj, err)
+	}
+
+	if _, err := st.Tenancy().CreateEnvironment(ctx, org.ID, proj.ID, port.CreateEnvironmentParams{Slug: "dev-rollback"}); err == nil {
+		t.Fatalf("expected CreateEnvironment failure on audit error")
+	}
+	envsAfterCreateFail, err := st.Tenancy().ListEnvironments(ctx, org.ID, proj.ID)
+	if err != nil || len(envsAfterCreateFail) != 1 {
+		t.Fatalf("expected CreateEnvironment rollback leaving 1 env, got len=%d err=%v", len(envsAfterCreateFail), err)
+	}
+
+	badEnvSlug := "should-rollback"
+	if _, err := st.Tenancy().UpdateEnvironment(ctx, org.ID, env.ID, env2.Version, port.UpdateEnvironmentParams{Slug: &badEnvSlug}); err == nil {
+		t.Fatalf("expected UpdateEnvironment failure on audit error")
+	}
+	gotEnv, err := st.Tenancy().GetEnvironment(ctx, org.ID, env.ID)
+	if err != nil || gotEnv.Version != env2.Version || gotEnv.Slug != newEnvSlug {
+		t.Fatalf("expected UpdateEnvironment rollback, got=%+v err=%v", gotEnv, err)
+	}
+
+	if err := st.Tenancy().DeleteEnvironment(ctx, org.ID, env.ID, env2.Version); err == nil {
+		t.Fatalf("expected DeleteEnvironment failure on audit error")
+	}
+	if _, err := st.Tenancy().GetEnvironment(ctx, org.ID, env.ID); err != nil {
+		t.Fatalf("expected env to still exist after DeleteEnvironment rollback, got %v", err)
+	}
+
+	if err := st.Tenancy().DeleteProject(ctx, org.ID, proj.ID, proj2.Version); err == nil {
+		t.Fatalf("expected DeleteProject failure on audit error")
+	}
+	if _, err := st.Tenancy().GetProject(ctx, org.ID, proj.ID); err != nil {
+		t.Fatalf("expected project to still exist after DeleteProject rollback, got %v", err)
+	}
+
+	epochAfterFailures, err := st.Changelog().LatestEpoch(ctx)
+	if err != nil {
+		t.Fatalf("LatestEpoch after failures: %v", err)
+	}
+	if epochAfterFailures != epochBeforeFailures {
+		t.Fatalf("changelog must roll back atomically on audit failures: before=%d after=%d", epochBeforeFailures, epochAfterFailures)
+	}
+
+	// Re-enable audit and verify DeleteEnvironment + DeleteProject succeed and emit events with "{}" metadata.
+	sink.mu.Lock()
+	sink.fail = false
+	sink.mu.Unlock()
+
+	if err := st.Tenancy().DeleteEnvironment(ctx, org.ID, env.ID, env2.Version); err != nil {
+		t.Fatalf("DeleteEnvironment after re-enabling audit: %v", err)
+	}
+	if err := st.Tenancy().DeleteProject(ctx, org.ID, proj.ID, proj2.Version); err != nil {
+		t.Fatalf("DeleteProject after re-enabling audit: %v", err)
+	}
+
+	sink.mu.Lock()
+	if len(sink.events) != evCountBeforeFail+2 {
+		sink.mu.Unlock()
+		t.Fatalf("expected %d total recorded events (+2 deletes), got %d", evCountBeforeFail+2, len(sink.events))
+	}
+	delEnvEv := sink.events[len(sink.events)-2]
+	delProjEv := sink.events[len(sink.events)-1]
+	sink.mu.Unlock()
+	if delEnvEv.EventType != "environment.deleted" || delEnvEv.MetadataJSON != "{}" ||
+		delProjEv.EventType != "project.deleted" || delProjEv.MetadataJSON != "{}" {
+		t.Fatalf("unexpected delete audit events: env=%+v proj=%+v", delEnvEv, delProjEv)
+	}
+
+	// Explicit BeginTx using tx.Tenancy(), tx.Changelog(), tx.Leases(), tx.Audit(), and Rollback().
+	tx, err := st.BeginTx(ctx)
+	if err != nil {
+		t.Fatalf("BeginTx: %v", err)
+	}
+	if tx.Audit() == nil {
+		t.Fatalf("expected non-nil tx.Audit()")
+	}
+	if _, err := tx.Changelog().LatestEpoch(ctx); err != nil {
+		t.Fatalf("tx.Changelog().LatestEpoch: %v", err)
+	}
+	if _, err := tx.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "tx-rolled-back", DisplayName: "Tx Rollback"}); err != nil {
+		t.Fatalf("tx.Tenancy().CreateOrganization: %v", err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatalf("tx.Rollback: %v", err)
+	}
+	if _, err := st.Tenancy().GetOrganizationBySlug(ctx, "tx-rolled-back"); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected tx-rolled-back absent after Rollback, got %v", err)
+	}
+
+	// Verify BackupTo rejects overwriting an existing file.
+	existingBackup := filepath.Join(t.TempDir(), "existing.db")
+	if err := os.WriteFile(existingBackup, []byte("occupied"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := st.BackupTo(ctx, existingBackup); !errors.Is(err, port.ErrAlreadyExists) {
+		t.Fatalf("expected ErrAlreadyExists on existing BackupTo target, got %v", err)
+	}
+
+	// Direct defensive edge-case checks for emitTenancyAuditTx.
+	if err := emitTenancyAuditTx(ctx, st.RawDB(), nil, nil, "test.noop", "system", "sys", nil, 1); err != nil {
+		t.Fatalf("expected nil auditSink to be a no-op, got %v", err)
+	}
+	if err := emitTenancyAuditTx(ctx, st.RawDB(), nonTxAuditSink{}, nil, "test.nontx", "system", "sys", nil, 1); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for non-TxAuditSink, got %v", err)
+	}
+	if err := emitTenancyAuditTx(ctx, st.RawDB(), sink, nil, "test.badexec", "system", "sys", nil, 1); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput when exec is *sql.DB instead of *sql.Tx, got %v", err)
+	}
+}
+
+
