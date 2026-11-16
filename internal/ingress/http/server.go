@@ -376,6 +376,10 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		s.nativeHandler = nh
 	}
 
+	if s.killSwitch != nil && s.snapshots != nil {
+		s.snapshots.RegisterKillSwitchSync(s.killSwitch.RefreshFromDB)
+	}
+
 	s.mux.HandleFunc("/v1/chat/completions", s.handleChatCompletions)
 	if !cfg.DisableResponses {
 		s.mux.HandleFunc("/v1/responses", s.handleResponses)

@@ -119,6 +119,44 @@ func QueryBlastRadius(ctx context.Context, db *sql.DB, q BlastRadiusQuery) (*Bla
 		return nil, fmt.Errorf("audit: count blast radius traces: %w", err)
 	}
 
+	// Compute full distinct affected resource dimensions across the complete unpaginated predicate.
+	distinctSQL := `
+		SELECT DISTINCT org_id, project_id, env_id, virtual_key_id, selected_deployment_id
+		FROM request_traces_meta
+		WHERE ` + whereClause
+	distRows, err := db.QueryContext(ctx, distinctSQL, args...)
+	if err != nil {
+		return nil, fmt.Errorf("audit: query blast radius affected dimensions: %w", err)
+	}
+	defer distRows.Close()
+
+	orgSet := make(map[string]struct{})
+	projSet := make(map[string]struct{})
+	envSet := make(map[string]struct{})
+	vkSet := make(map[string]struct{})
+	depSet := make(map[string]struct{})
+	for distRows.Next() {
+		var (
+			dOrg, dProj, dEnv string
+			dVK, dDep         sql.NullString
+		)
+		if serr := distRows.Scan(&dOrg, &dProj, &dEnv, &dVK, &dDep); serr != nil {
+			return nil, fmt.Errorf("audit: scan blast radius affected dimensions: %w", serr)
+		}
+		orgSet[dOrg] = struct{}{}
+		projSet[dProj] = struct{}{}
+		envSet[dEnv] = struct{}{}
+		if dVK.Valid && dVK.String != "" {
+			vkSet[dVK.String] = struct{}{}
+		}
+		if dDep.Valid && dDep.String != "" {
+			depSet[dDep.String] = struct{}{}
+		}
+	}
+	if err := distRows.Err(); err != nil {
+		return nil, fmt.Errorf("audit: iterate blast radius affected dimensions: %w", err)
+	}
+
 	traceSQL := `
 		SELECT request_id, created_at_ms, org_id, project_id, env_id, virtual_key_id,
 		       entry_point, route_slug, selected_deployment_id, connection_id,
@@ -135,16 +173,11 @@ func QueryBlastRadius(ctx context.Context, db *sql.DB, q BlastRadiusQuery) (*Bla
 	}
 	defer rows.Close()
 
-	orgSet := make(map[string]struct{})
-	projSet := make(map[string]struct{})
-	envSet := make(map[string]struct{})
-	vkSet := make(map[string]struct{})
-	depSet := make(map[string]struct{})
 	var traces []TraceHit
 
 	for rows.Next() {
 		var (
-			hit                                      TraceHit
+			hit                                                TraceHit
 			vkNS, routeNS, depNS, connNS, extNS, verNS, errNS sql.NullString
 		)
 		if serr := rows.Scan(
@@ -162,15 +195,6 @@ func QueryBlastRadius(ctx context.Context, db *sql.DB, q BlastRadiusQuery) (*Bla
 		hit.ExtensionVersionID = nullToPtr(verNS)
 		hit.CanonicalErrorCode = nullToPtr(errNS)
 
-		orgSet[hit.OrgID] = struct{}{}
-		projSet[hit.ProjectID] = struct{}{}
-		envSet[hit.EnvID] = struct{}{}
-		if hit.VirtualKeyID != nil {
-			vkSet[*hit.VirtualKeyID] = struct{}{}
-		}
-		if hit.SelectedDeploymentID != nil {
-			depSet[*hit.SelectedDeploymentID] = struct{}{}
-		}
 		traces = append(traces, hit)
 	}
 	if err := rows.Err(); err != nil {
@@ -209,8 +233,9 @@ func queryBlastRadiusAuditEvents(
 	var args []any
 
 	if orgID != "" {
-		// Extension installations live at SYSTEM chain_key when instance-installed, or org chain_key for org-scoped mutations.
-		if extID != "" && connID == "" && vkID == "" {
+		// Tenant-scoped queries MUST stay isolated to the tenant's own chain unless the caller
+		// explicitly holds instance-operator scope (AllowInstanceScope) while inspecting an extension.
+		if extID != "" && q.AllowInstanceScope {
 			conds = append(conds, "(chain_key = ? OR chain_key = 'SYSTEM')")
 			args = append(args, orgID)
 		} else {
@@ -231,7 +256,10 @@ func queryBlastRadiusAuditEvents(
 	}
 	placeholders := strings.Repeat("?,", len(targetIDs))
 	placeholders = placeholders[:len(placeholders)-1]
-	conds = append(conds, "target_id IN ("+placeholders+")")
+	conds = append(conds, "(target_id IN ("+placeholders+") OR (target_type = 'emergency_kill_switch' AND json_extract(metadata_json, '$.target_id') IN ("+placeholders+")))")
+	for _, tid := range targetIDs {
+		args = append(args, tid)
+	}
 	for _, tid := range targetIDs {
 		args = append(args, tid)
 	}

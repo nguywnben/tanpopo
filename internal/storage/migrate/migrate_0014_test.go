@@ -122,4 +122,45 @@ func TestSQLiteMigration0014AuditAndKillSwitchFreshAndUpgrade(t *testing.T) {
 		) VALUES ('ksw_valid', 'org_m14', 'EXTENSION_INSTALLATION', 'ins_1', 1, 1, 'compromised CVE-2026-0001', 'prn_m14', 1, ?)`, nowMs); err != nil {
 		t.Fatalf("insert valid emergency_kill_switches row: %v", err)
 	}
+
+	// Verify idx_killswitches_active_unique rejects duplicate active switch on same tuple (including NULL org_id).
+	if _, err := dbUpgrade.ExecContext(ctx, `
+		INSERT INTO emergency_kill_switches (
+			id, org_id, level, target_id, active, abort_active_streams, reason,
+			triggered_by_principal_id, version, triggered_at_ms
+		) VALUES ('ksw_dup_active', 'org_m14', 'EXTENSION_INSTALLATION', 'ins_1', 1, 1, 'duplicate active switch', 'prn_m14', 1, ?)`, nowMs); err == nil {
+		t.Fatalf("expected UNIQUE constraint failure on duplicate active kill switch")
+	}
+	if _, err := dbUpgrade.ExecContext(ctx, `
+		INSERT INTO emergency_kill_switches (
+			id, org_id, level, target_id, active, abort_active_streams, reason,
+			triggered_by_principal_id, version, triggered_at_ms
+		) VALUES ('ksw_inst_1', NULL, 'EXTENSION_INSTALLATION', 'ins_inst', 1, 1, 'instance quarantine', 'prn_m14', 1, ?)`, nowMs); err != nil {
+		t.Fatalf("insert instance-scoped kill switch: %v", err)
+	}
+	if _, err := dbUpgrade.ExecContext(ctx, `
+		INSERT INTO emergency_kill_switches (
+			id, org_id, level, target_id, active, abort_active_streams, reason,
+			triggered_by_principal_id, version, triggered_at_ms
+		) VALUES ('ksw_inst_dup', NULL, 'EXTENSION_INSTALLATION', 'ins_inst', 1, 1, 'duplicate instance quarantine', 'prn_m14', 1, ?)`, nowMs); err == nil {
+		t.Fatalf("expected UNIQUE constraint failure on duplicate active NULL-org kill switch")
+	}
+
+	// Verify clear_reason CHECK constraint (NULL or length >= 5).
+	if _, err := dbUpgrade.ExecContext(ctx, `
+		UPDATE emergency_kill_switches SET active = 0, clear_reason = 'no' WHERE id = 'ksw_valid'`); err == nil {
+		t.Fatalf("expected CHECK constraint failure for clear_reason shorter than 5 chars")
+	}
+	if _, err := dbUpgrade.ExecContext(ctx, `
+		UPDATE emergency_kill_switches SET active = 0, cleared_by_principal_id = 'prn_m14', clear_reason = 'verified clean', cleared_at_ms = ? WHERE id = 'ksw_valid'`, nowMs+5); err != nil {
+		t.Fatalf("clear emergency_kill_switches with valid clear_reason: %v", err)
+	}
+	// Historical inactive row must allow re-triggering active=1 on same target.
+	if _, err := dbUpgrade.ExecContext(ctx, `
+		INSERT INTO emergency_kill_switches (
+			id, org_id, level, target_id, active, abort_active_streams, reason,
+			triggered_by_principal_id, version, triggered_at_ms
+		) VALUES ('ksw_retrigger', 'org_m14', 'EXTENSION_INSTALLATION', 'ins_1', 1, 1, 're-triggered after clear', 'prn_m14', 1, ?)`, nowMs+10); err != nil {
+		t.Fatalf("expected re-triggering cleared target to succeed: %v", err)
+	}
 }

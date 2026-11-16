@@ -59,6 +59,7 @@ type CreateParams struct {
 	MaxConcurrentStreams  int64
 	IsEphemeralPlayground bool
 	ExpiresAtMs           *int64
+	ActorID               string
 }
 
 // RotateParams configures zero-downtime Virtual Key rotation under optimistic locking.
@@ -67,6 +68,7 @@ type RotateParams struct {
 	KeyID           string
 	ExpectedVersion int64
 	GraceSeconds    int64
+	ActorID         string
 }
 
 // RevokeParams configures standard or emergency security key revocation.
@@ -282,7 +284,11 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (*CreatedVirt
 		return nil, err
 	}
 
-	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", "system", "virtual_key.created", keyID, map[string]any{
+	actor := strings.TrimSpace(params.ActorID)
+	if actor == "" {
+		actor = "system"
+	}
+	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, port.AuditEntryPointAdminAPI, "virtual_key.created", keyID, map[string]any{
 		"env_id":         params.EnvID,
 		"allowed_planes": planes,
 	}, now); aerr != nil {
@@ -448,7 +454,11 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 		return nil, err
 	}
 
-	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", "system", "virtual_key.rotated", params.KeyID, map[string]any{
+	actor := strings.TrimSpace(params.ActorID)
+	if actor == "" {
+		actor = "system"
+	}
+	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, port.AuditEntryPointAdminAPI, "virtual_key.rotated", params.KeyID, map[string]any{
 		"grace_seconds": params.GraceSeconds,
 		"state":         nextState,
 	}, now); aerr != nil {
@@ -604,7 +614,7 @@ func (s *Service) transitionState(ctx context.Context, orgID, keyID string, expe
 		return nil, err
 	}
 
-	if _, aerr := s.emitAuditTx(ctx, tx, orgID, "SYSTEM", "vkey_lifecycle", "virtual_key.state_transition", keyID, map[string]any{
+	if _, aerr := s.emitAuditTx(ctx, tx, orgID, "SYSTEM", "vkey_lifecycle", port.AuditEntryPointAdminAPI, "virtual_key.state_transition", keyID, map[string]any{
 		"from": curState,
 		"to":   nextState,
 	}, now); aerr != nil {
@@ -720,7 +730,7 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 	if actor == "" {
 		actor = "system"
 	}
-	wroteTxAudit, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, "virtual_key.revoked", params.KeyID, map[string]any{
+	wroteTxAudit, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, port.AuditEntryPointAdminAPI, "virtual_key.revoked", params.KeyID, map[string]any{
 		"mode": mode,
 	}, now)
 	if aerr != nil {
@@ -741,14 +751,18 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 		s.snapshots.Streams().AbortKey(params.KeyID)
 	}
 
+	var auditErr error
 	if s.auditSink != nil && !wroteTxAudit {
 		auditCtx := context.WithoutCancel(ctx)
-		if audID, idErr := idgen.New(idgen.PrefixAudit); idErr == nil {
+		audID, idErr := idgen.New(idgen.PrefixAudit)
+		if idErr != nil {
+			auditErr = idErr
+		} else {
 			meta := fmt.Sprintf(`{"mode":%q}`, mode)
 			if syncErr != nil {
 				meta = fmt.Sprintf(`{"mode":%q,"snapshot_sync_pending":true}`, mode)
 			}
-			_ = s.auditSink.Append(auditCtx, port.AuditEvent{
+			auditErr = s.auditSink.Append(auditCtx, port.AuditEvent{
 				ID:           audID,
 				CreatedAtMs:  now,
 				OrgID:        &params.OrgID,
@@ -763,8 +777,8 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 		}
 	}
 
-	if syncErr != nil {
-		return summary, syncErr
+	if combinedErr := errors.Join(syncErr, auditErr); combinedErr != nil {
+		return summary, combinedErr
 	}
 	return summary, nil
 }
@@ -836,6 +850,11 @@ func (s *Service) FinalizeExpiredRotations(ctx context.Context) (int, error) {
 			return 0, err
 		}
 		committedEpoch = latestTxEpoch(ctx, tx, resEpoch)
+		if _, aerr := s.emitAuditTx(ctx, tx, r.orgID, "SYSTEM", "system_reaper", port.AuditEntryPointSystemReaper, "virtual_key.rotation_finalized", r.id, map[string]any{
+			"reason": "grace_period_expired",
+		}, now); aerr != nil {
+			return 0, aerr
+		}
 		finalized = append(finalized, r)
 	}
 
@@ -870,7 +889,7 @@ func (s *Service) syncSnapshot(ctx context.Context) error {
 func (s *Service) emitAuditTx(
 	ctx context.Context,
 	tx *sql.Tx,
-	orgID, actorKind, actorID, eventType, targetID string,
+	orgID, actorKind, actorID, entryPoint, eventType, targetID string,
 	meta map[string]any,
 	now int64,
 ) (bool, error) {
@@ -898,13 +917,16 @@ func (s *Service) emitAuditTx(
 	if strings.TrimSpace(actorID) == "" {
 		actorID = "system"
 	}
+	if strings.TrimSpace(entryPoint) == "" {
+		entryPoint = port.AuditEntryPointAdminAPI
+	}
 	return true, txSink.AppendTx(ctx, tx, port.AuditEvent{
 		ID:           audID,
 		CreatedAtMs:  now,
 		OrgID:        &orgID,
 		ActorKind:    actorKind,
 		ActorID:      actorID,
-		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EntryPoint:   entryPoint,
 		EventType:    eventType,
 		TargetType:   "virtual_key",
 		TargetID:     targetID,

@@ -46,6 +46,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	storageport "github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/telemetry/otel"
+	"github.com/nguywnben/tanpopo/internal/telemetry/privacy"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -186,6 +187,9 @@ func NewHandler(cfg Config) (*Handler, error) {
 			age, ok := snaps.SnapshotAge()
 			return "db_poll", age, ok
 		})
+	}
+	if cfg.KillSwitch != nil && cfg.Snapshots != nil {
+		cfg.Snapshots.RegisterKillSwitchSync(cfg.KillSwitch.RefreshFromDB)
 	}
 	return &Handler{
 		snapshots:               cfg.Snapshots,
@@ -369,7 +373,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else if rtLoaded, releaseLoaded, rtErr := h.acquireRuntime(streamCtx, initialTarget); rtErr != nil {
 		if errors.Is(rtErr, context.Canceled) {
 			if r.Context().Err() == nil && streamCtx.Err() != nil {
-				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
+				h.writeNativeStreamCancelError(w, streamCtx, reqID, "Virtual Key was revoked or suspended before dispatch.")
 			}
 			return
 		}
@@ -402,7 +406,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				if r.Context().Err() == nil && streamCtx.Err() != nil {
-					writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
+					h.writeNativeStreamCancelError(w, streamCtx, reqID, "Virtual Key was revoked or suspended before dispatch.")
 				}
 				return
 			}
@@ -455,7 +459,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if newErr != nil {
 					if errors.Is(newErr, context.Canceled) {
 						if r.Context().Err() == nil && streamCtx.Err() != nil {
-							writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
+							h.writeNativeStreamCancelError(w, streamCtx, reqID, "Virtual Key was revoked or suspended before dispatch.")
 						}
 						return
 					}
@@ -482,7 +486,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					if reErr != nil {
 						if errors.Is(reErr, context.Canceled) {
 							if r.Context().Err() == nil && streamCtx.Err() != nil {
-								writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
+								h.writeNativeStreamCancelError(w, streamCtx, reqID, "Virtual Key was revoked or suspended before dispatch.")
 							}
 							return
 						}
@@ -622,7 +626,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return res
 	})
 	if execRes.ClientCanceled && !execRes.StreamStarted && r.Context().Err() == nil && streamCtx.Err() != nil {
-		writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
+		h.writeNativeStreamCancelError(w, streamCtx, reqID, "Virtual Key was revoked or suspended before dispatch.")
 		return
 	}
 	if execRes.AttemptCount == 0 {
@@ -1138,15 +1142,7 @@ func (h *Handler) executeStreamingNativeAttempt(
 		}
 		if errors.Is(pumpErr, context.Canceled) {
 			if clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
-				return failover.AttemptResult{
-					Succeeded:  false,
-					Retryable:  false,
-					Outcome:    breaker.OutcomeCallerError,
-					HTTPStatus: http.StatusUnauthorized,
-					FlushFinal: func() {
-						writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before stream dispatch.", false)
-					},
-				}
+				return h.abortedNativeStreamCancelAttemptResult(w, streamCtx, reqID, "Virtual Key was revoked or suspended before stream dispatch.")
 			}
 			return failover.AttemptResult{
 				Succeeded: false,
@@ -1281,19 +1277,11 @@ func (h *Handler) classifyNativeBrokerAttemptError(
 ) failover.AttemptResult {
 	if errors.Is(err, context.Canceled) {
 		if clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
-			return failover.AttemptResult{
-				Succeeded:  false,
-				Retryable:  false,
-				Outcome:    breaker.OutcomeCallerError,
-				HTTPStatus: http.StatusUnauthorized,
-				FlushFinal: func() {
-					msg := "Virtual Key was revoked or suspended before response dispatch."
-					if !beforeStream {
-						msg = "Virtual Key was revoked or suspended before stream dispatch."
-					}
-					writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", msg, false)
-				},
+			msg := "Virtual Key was revoked or suspended before response dispatch."
+			if !beforeStream {
+				msg = "Virtual Key was revoked or suspended before stream dispatch."
 			}
+			return h.abortedNativeStreamCancelAttemptResult(w, streamCtx, reqID, msg)
 		}
 		return failover.AttemptResult{
 			Succeeded: false,
@@ -1635,6 +1623,21 @@ pumpLoop:
 	return res, nil
 }
 
+func (h *Handler) logAuditFailure(reqID, event string, err error) {
+	if h == nil || h.telemetry == nil || h.telemetry.Logger == nil || err == nil {
+		return
+	}
+	_ = h.telemetry.Logger.Log(privacy.LogRecord{
+		Level:      privacy.LevelWarn,
+		Event:      event,
+		EntryPoint: "native_http",
+		RequestID:  reqID,
+		Fields: map[string]any{
+			"error": err.Error(),
+		},
+	})
+}
+
 func (h *Handler) recordUsage(ctx context.Context, rec UsageRecord) {
 	if h.onUsage != nil {
 		h.onUsage(rec)
@@ -1650,23 +1653,32 @@ func (h *Handler) recordUsage(ctx context.Context, rec UsageRecord) {
 			"reasoning_tokens":   rec.Usage.ReasoningTokens,
 			"accuracy":           formatUsageAccuracyHeader(rec.Usage.Accuracy),
 		})
-		if err == nil {
-			reqIDCopy := rec.RequestID
-			auditCtx, auditCancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
-			defer auditCancel()
-			_ = h.audit.Append(auditCtx, storageport.AuditEvent{
-				ID:           idgen.MustNew(idgen.PrefixAudit),
-				CreatedAtMs:  h.nowMs(),
-				OrgID:        &rec.OrgID,
-				ActorKind:    "virtual_key",
-				ActorID:      rec.VirtualKeyID,
-				EntryPoint:   wasm.DefaultAuditEntryPoint,
-				EventType:    "native.inference.usage",
-				TargetType:   "virtual_key",
-				TargetID:     rec.VirtualKeyID,
-				RequestID:    &reqIDCopy,
-				MetadataJSON: string(metaBytes),
-			})
+		if err != nil {
+			h.logAuditFailure(rec.RequestID, "native.usage.audit_marshal_failed", err)
+			return
+		}
+		audID, idErr := idgen.New(idgen.PrefixAudit)
+		if idErr != nil {
+			h.logAuditFailure(rec.RequestID, "native.usage.audit_idgen_failed", idErr)
+			return
+		}
+		reqIDCopy := rec.RequestID
+		auditCtx, auditCancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		defer auditCancel()
+		if aerr := h.audit.Append(auditCtx, storageport.AuditEvent{
+			ID:           audID,
+			CreatedAtMs:  h.nowMs(),
+			OrgID:        &rec.OrgID,
+			ActorKind:    "virtual_key",
+			ActorID:      rec.VirtualKeyID,
+			EntryPoint:   wasm.DefaultAuditEntryPoint,
+			EventType:    "native.inference.usage",
+			TargetType:   "virtual_key",
+			TargetID:     rec.VirtualKeyID,
+			RequestID:    &reqIDCopy,
+			MetadataJSON: string(metaBytes),
+		}); aerr != nil {
+			h.logAuditFailure(rec.RequestID, "native.usage.audit_append_failed", aerr)
 		}
 	}
 }
@@ -1889,8 +1901,10 @@ func (h *Handler) authenticateNativeRequest(
 		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key route allowlist denies /native/%s/%s.", dialect, upstreamPath), false)
 		return "", nil, nil, snapshot.KeyMatchResult{}, 0, false
 	}
-	streamCtx = withNativeStreamTargetBinding(streamCtx, nativeStreamTargetBinding{
+	streamCtx = withNativeStreamTargetBinding(streamCtx, &nativeStreamTargetBinding{
 		KeyID:            match.Key.ID,
+		OrgID:            match.Key.OrgID,
+		ProjectID:        match.Key.ProjectID,
 		SnapshotHandleID: handleID,
 		KSHandleID:       ksHandleID,
 	})
@@ -2946,20 +2960,101 @@ type nativeStreamTargetContextKey struct{}
 
 type nativeStreamTargetBinding struct {
 	KeyID            string
+	OrgID            string
+	ProjectID        string
 	SnapshotHandleID uint64
 	KSHandleID       uint64
+
+	mu              sync.RWMutex
+	ConnectionID    string
+	PluginInstallID string
 }
 
-func withNativeStreamTargetBinding(ctx context.Context, b nativeStreamTargetBinding) context.Context {
+func (b *nativeStreamTargetBinding) setTargetCoords(connID, installID string) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.ConnectionID = connID
+	b.PluginInstallID = installID
+	b.mu.Unlock()
+}
+
+func (b *nativeStreamTargetBinding) targetCoords() (string, string) {
+	if b == nil {
+		return "", ""
+	}
+	b.mu.RLock()
+	connID, installID := b.ConnectionID, b.PluginInstallID
+	b.mu.RUnlock()
+	return connID, installID
+}
+
+func withNativeStreamTargetBinding(ctx context.Context, b *nativeStreamTargetBinding) context.Context {
 	return context.WithValue(ctx, nativeStreamTargetContextKey{}, b)
 }
 
-func nativeStreamTargetBindingFromContext(ctx context.Context) (nativeStreamTargetBinding, bool) {
+func nativeStreamTargetBindingFromContext(ctx context.Context) (*nativeStreamTargetBinding, bool) {
 	if ctx == nil {
-		return nativeStreamTargetBinding{}, false
+		return nil, false
 	}
-	b, ok := ctx.Value(nativeStreamTargetContextKey{}).(nativeStreamTargetBinding)
-	return b, ok
+	b, ok := ctx.Value(nativeStreamTargetContextKey{}).(*nativeStreamTargetBinding)
+	return b, ok && b != nil
+}
+
+func (h *Handler) writeNativeStreamCancelError(w http.ResponseWriter, ctx context.Context, reqID, defaultMsg string) {
+	if h != nil && h.killSwitch != nil {
+		if b, ok := nativeStreamTargetBindingFromContext(ctx); ok {
+			connID, installID := b.targetCoords()
+			if ks, blocked := h.killSwitch.CheckAdmission(killswitch.AdmissionQuery{
+				OrgID:           b.OrgID,
+				ProjectID:       b.ProjectID,
+				VirtualKeyID:    b.KeyID,
+				ConnectionID:    connID,
+				PluginInstallID: installID,
+			}); blocked {
+				writeKillSwitchError(w, reqID, ks)
+				return
+			}
+		}
+	}
+	writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", defaultMsg, false)
+}
+
+func (h *Handler) abortedNativeStreamCancelAttemptResult(w http.ResponseWriter, ctx context.Context, reqID, defaultMsg string) failover.AttemptResult {
+	status := http.StatusUnauthorized
+	var matchedKS *killswitch.KillSwitch
+	if h != nil && h.killSwitch != nil {
+		if b, ok := nativeStreamTargetBindingFromContext(ctx); ok {
+			connID, installID := b.targetCoords()
+			if ks, blocked := h.killSwitch.CheckAdmission(killswitch.AdmissionQuery{
+				OrgID:           b.OrgID,
+				ProjectID:       b.ProjectID,
+				VirtualKeyID:    b.KeyID,
+				ConnectionID:    connID,
+				PluginInstallID: installID,
+			}); blocked {
+				ksCopy := *ks
+				matchedKS = &ksCopy
+				if ks.Level != killswitch.LevelVirtualKey {
+					status = http.StatusServiceUnavailable
+				}
+			}
+		}
+	}
+	return failover.AttemptResult{
+		Succeeded:  false,
+		Retryable:  false,
+		Outcome:    breaker.OutcomeCallerError,
+		HTTPStatus: status,
+		FlushFinal: func() {
+			if matchedKS != nil {
+				writeKillSwitchError(w, reqID, matchedKS)
+				return
+			}
+			writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", defaultMsg, false)
+		},
+	}
 }
 
 func writeKillSwitchError(w http.ResponseWriter, reqID string, ks *killswitch.KillSwitch) {
@@ -3041,6 +3136,7 @@ func (h *Handler) bindNativeTargetAndCheckKillSwitch(
 	}
 	connID, installID := nativeTargetKillSwitchCoords(target)
 	if binding, ok := nativeStreamTargetBindingFromContext(ctx); ok {
+		binding.setTargetCoords(connID, installID)
 		if h.snapshots != nil && h.snapshots.Streams() != nil {
 			h.snapshots.Streams().BindTarget(binding.KeyID, binding.SnapshotHandleID, connID, installID)
 		}

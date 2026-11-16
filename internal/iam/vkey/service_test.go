@@ -921,3 +921,82 @@ func TestNEG2TransactionalAuditRollback(t *testing.T) {
 	}
 }
 
+func TestActorAttributionAndFinalizeExpiredRotationsAudit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newVKeyTestHarness(t)
+
+	sink := &failingVKeyTxAuditSink{}
+	var recorded []port.AuditEvent
+	captureSink := &capturingTxAuditSink{
+		inner:  sink,
+		events: &recorded,
+	}
+	svc, err := NewService(ServiceConfig{
+		DB:        h.st.RawDB(),
+		NowMs:     func() int64 { return h.fk.Now().UTC().UnixMilli() },
+		Snapshots: h.mgr,
+		AuditSink: captureSink,
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	created, err := svc.Create(ctx, CreateParams{
+		OrgID: h.orgAID, ProjectID: h.projAID, EnvID: h.envProd, Name: "actor-key", ActorID: "prc_creator_1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Rotate(ctx, RotateParams{
+		OrgID: h.orgAID, KeyID: created.Summary.ID, ExpectedVersion: created.Summary.Version, GraceSeconds: 60, ActorID: "prc_rotator_2",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorded) != 2 || recorded[0].ActorID != "prc_creator_1" || recorded[1].ActorID != "prc_rotator_2" {
+		t.Fatalf("expected ActorID attribution on Create & Rotate, got %+v", recorded)
+	}
+
+	h.fk.Advance(61 * time.Second)
+	// Failing AppendTx must roll back FinalizeExpiredRotations atomically!
+	sink.fail.Set(true)
+	if _, err := svc.FinalizeExpiredRotations(ctx); err == nil {
+		t.Fatalf("expected FinalizeExpiredRotations to fail closed when AppendTx fails")
+	}
+	gotBefore, err := svc.Get(ctx, h.orgAID, created.Summary.ID)
+	if err != nil || gotBefore.State != snapshot.KeyStateRotatingDualValid {
+		t.Fatalf("expected state ROTATING_DUAL_VALID preserved after audit rollback, got %+v err=%v", gotBefore, err)
+	}
+
+	// Succeeding AppendTx finalizes and records virtual_key.rotation_finalized under system_reaper.
+	sink.fail.Set(false)
+	n, err := svc.FinalizeExpiredRotations(ctx)
+	if err != nil || n != 1 {
+		t.Fatalf("FinalizeExpiredRotations: n=%d err=%v", n, err)
+	}
+	if len(recorded) != 3 || recorded[2].EventType != "virtual_key.rotation_finalized" || recorded[2].EntryPoint != port.AuditEntryPointSystemReaper {
+		t.Fatalf("expected virtual_key.rotation_finalized audit under system_reaper, got %+v", recorded)
+	}
+}
+
+type capturingTxAuditSink struct {
+	inner  *failingVKeyTxAuditSink
+	events *[]port.AuditEvent
+}
+
+func (c *capturingTxAuditSink) Append(ctx context.Context, ev port.AuditEvent) error {
+	if err := c.inner.Append(ctx, ev); err != nil {
+		return err
+	}
+	*c.events = append(*c.events, ev)
+	return nil
+}
+
+func (c *capturingTxAuditSink) AppendTx(ctx context.Context, tx *sql.Tx, ev port.AuditEvent) error {
+	if err := c.inner.AppendTx(ctx, tx, ev); err != nil {
+		return err
+	}
+	*c.events = append(*c.events, ev)
+	return nil
+}
+

@@ -35,8 +35,9 @@ const (
 
 // Canonical kill-switch error sentinels.
 var (
-	ErrAlreadyCleared = errors.New("killswitch: kill switch is already cleared")
-	ErrAlreadyActive  = errors.New("killswitch: matching active kill switch already exists")
+	ErrAlreadyCleared   = errors.New("killswitch: kill switch is already cleared")
+	ErrAlreadyActive    = errors.New("killswitch: matching active kill switch already exists")
+	ErrPermissionDenied = errors.New("killswitch: insufficient role permission")
 )
 
 // KillSwitch represents a persisted emergency_kill_switches record.
@@ -208,6 +209,18 @@ type ClearParams struct {
 	RequestID            *string
 }
 
+const (
+	// DefaultPollInterval defines the fallback DB sync cadence when StartWatcher is used without snapshot.Manager wakeup.
+	DefaultPollInterval = 500 * time.Millisecond
+)
+
+// ListFilter configures fail-closed kill-switch listing (requiring non-empty OrgID unless AllowInstanceScope is true).
+type ListFilter struct {
+	OrgID              string
+	AllowInstanceScope bool
+	ActiveOnly         bool
+}
+
 // RegistryConfig configures the 4-level Emergency Kill-Switch Registry.
 type RegistryConfig struct {
 	DB      *sql.DB
@@ -221,19 +234,27 @@ type RegistryConfig struct {
 // atomicity, serves O(1)/lock-fast CheckAdmission lookups, and severs active SSE streams in < 1s.
 type Registry struct {
 	db      *sql.DB
-	audit   port.AuditSink
+	audit   port.TxAuditSink
 	nowMs   func() int64
 	streams *StreamRegistry
 	onAbort func(level Level, orgID, targetID string)
 
-	mu     sync.RWMutex
-	active map[string]KillSwitch // keyed by KillSwitch.ID
+	mu          sync.RWMutex
+	initialized bool
+	active      map[string]KillSwitch // keyed by KillSwitch.ID
 }
 
 // NewRegistry initializes a kill-switch Registry and hydrates active switches fail-closed from SQLite.
 func NewRegistry(ctx context.Context, cfg RegistryConfig) (*Registry, error) {
 	if cfg.DB == nil {
 		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", port.ErrInvalidInput)
+	}
+	if cfg.Audit == nil {
+		return nil, fmt.Errorf("%w: non-nil port.TxAuditSink is required for fail-closed kill-switch audit", port.ErrInvalidInput)
+	}
+	txAudit, ok := cfg.Audit.(port.TxAuditSink)
+	if !ok {
+		return nil, fmt.Errorf("%w: Audit must implement port.TxAuditSink for transactional kill-switch audit", port.ErrInvalidInput)
 	}
 	nowFn := cfg.NowMs
 	if nowFn == nil {
@@ -245,7 +266,7 @@ func NewRegistry(ctx context.Context, cfg RegistryConfig) (*Registry, error) {
 	}
 	r := &Registry{
 		db:      cfg.DB,
-		audit:   cfg.Audit,
+		audit:   txAudit,
 		nowMs:   nowFn,
 		streams: streams,
 		onAbort: cfg.OnAbort,
@@ -289,7 +310,8 @@ func (r *Registry) UnregisterStream(handleID uint64) {
 	r.streams.Unregister(handleID)
 }
 
-// RefreshFromDB reloads all active emergency_kill_switches rows into memory.
+// RefreshFromDB reloads all active emergency_kill_switches rows into memory and immediately
+// severs any live streams matching kill switches activated out-of-band by peer processes.
 func (r *Registry) RefreshFromDB(ctx context.Context) error {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
@@ -317,9 +339,49 @@ func (r *Registry) RefreshFromDB(ctx context.Context) error {
 	}
 
 	r.mu.Lock()
+	wasInitialized := r.initialized
+	prev := r.active
 	r.active = next
+	r.initialized = true
 	r.mu.Unlock()
+
+	if wasInitialized {
+		for id, ks := range next {
+			if _, existed := prev[id]; !existed && ks.AbortActiveStreams {
+				scopeOrg := ""
+				if ks.OrgID != nil {
+					scopeOrg = *ks.OrgID
+				}
+				r.streams.AbortMatching(ks.Level, scopeOrg, ks.TargetID)
+				if r.onAbort != nil {
+					r.onAbort(ks.Level, scopeOrg, ks.TargetID)
+				}
+			}
+		}
+	}
 	return nil
+}
+
+// StartWatcher periodically polls emergency_kill_switches when running standalone without
+// snapshot.Manager event-driven synchronization until ctx is canceled.
+func (r *Registry) StartWatcher(ctx context.Context, interval time.Duration) {
+	if r == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = DefaultPollInterval
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = r.RefreshFromDB(ctx)
+		}
+	}
 }
 
 // CheckAdmission reports whether any active kill switch blocks the queried coordinates.
@@ -536,15 +598,14 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := verifyPrincipalForScopeTx(ctx, tx, scopeOrgID, principalID); err != nil {
+	// Fail closed BEFORE querying emergency_kill_switches to avoid any cross-tenant existence oracle:
+	// when scopeOrgID == "", caller MUST be an ACTIVE INSTANCE OPERATOR; when scopeOrgID != "",
+	// caller MUST be an ACTIVE INSTANCE OPERATOR or belong to scopeOrgID.
+	if err := verifyPrincipalMembershipForScopeTx(ctx, tx, scopeOrgID, principalID); err != nil {
 		return nil, err
 	}
 
-	var (
-		row sql.Row
-		_   = row
-		ks  KillSwitch
-	)
+	var ks KillSwitch
 	if scopeOrgID != "" {
 		ks, err = scanKillSwitch(tx.QueryRowContext(ctx, `
 			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
@@ -558,7 +619,7 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
 			       triggered_at_ms, cleared_at_ms
 			FROM emergency_kill_switches
-			WHERE id = ?`, ksID))
+			WHERE id = ? AND org_id IS NULL AND level = 'EXTENSION_INSTALLATION'`, ksID))
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, port.ErrNotFound
@@ -566,6 +627,12 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 	if err != nil {
 		return nil, err
 	}
+
+	// Verify exact RBAC role authorization against the resolved target/level.
+	if err := verifyPrincipalRoleForScopeTx(ctx, tx, scopeOrgID, ks.Level, ks.TargetID, principalID); err != nil {
+		return nil, err
+	}
+
 	if ks.Version != p.ExpectedVersion {
 		return nil, port.ErrVersionConflict
 	}
@@ -622,30 +689,20 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 	return &ks, nil
 }
 
-// Get retrieves a kill switch scoped strictly by orgID (when non-empty) or instance scope.
+// Get retrieves an organization-scoped kill switch strictly bound to non-empty orgID.
+// For instance-wide kill switches (org_id IS NULL), use GetInstance.
 func (r *Registry) Get(ctx context.Context, orgID, killSwitchID string) (*KillSwitch, error) {
-	if strings.TrimSpace(killSwitchID) == "" {
-		return nil, fmt.Errorf("%w: kill_switch_id is required", port.ErrInvalidInput)
+	trimmedOrg := strings.TrimSpace(orgID)
+	trimmedKS := strings.TrimSpace(killSwitchID)
+	if trimmedOrg == "" || trimmedKS == "" {
+		return nil, fmt.Errorf("%w: non-empty org_id and kill_switch_id are required", port.ErrInvalidInput)
 	}
-	var (
-		ks  KillSwitch
-		err error
-	)
-	if trimmedOrg := strings.TrimSpace(orgID); trimmedOrg != "" {
-		ks, err = scanKillSwitch(r.db.QueryRowContext(ctx, `
-			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
-			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
-			       triggered_at_ms, cleared_at_ms
-			FROM emergency_kill_switches
-			WHERE id = ? AND org_id = ?`, killSwitchID, trimmedOrg))
-	} else {
-		ks, err = scanKillSwitch(r.db.QueryRowContext(ctx, `
-			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
-			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
-			       triggered_at_ms, cleared_at_ms
-			FROM emergency_kill_switches
-			WHERE id = ?`, killSwitchID))
-	}
+	ks, err := scanKillSwitch(r.db.QueryRowContext(ctx, `
+		SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
+		       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
+		       triggered_at_ms, cleared_at_ms
+		FROM emergency_kill_switches
+		WHERE id = ? AND org_id = ?`, trimmedKS, trimmedOrg))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, port.ErrNotFound
 	}
@@ -655,8 +712,48 @@ func (r *Registry) Get(ctx context.Context, orgID, killSwitchID string) (*KillSw
 	return &ks, nil
 }
 
-// List returns kill switches scoped to orgID (or all including instance-wide switches when orgID == "").
+// GetInstance retrieves a global instance-scoped kill switch (org_id IS NULL).
+// Callers MUST authorize INSTANCE OPERATOR prior to invoking this method.
+func (r *Registry) GetInstance(ctx context.Context, killSwitchID string) (*KillSwitch, error) {
+	trimmedKS := strings.TrimSpace(killSwitchID)
+	if trimmedKS == "" {
+		return nil, fmt.Errorf("%w: kill_switch_id is required", port.ErrInvalidInput)
+	}
+	ks, err := scanKillSwitch(r.db.QueryRowContext(ctx, `
+		SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
+		       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
+		       triggered_at_ms, cleared_at_ms
+		FROM emergency_kill_switches
+		WHERE id = ? AND org_id IS NULL`, trimmedKS))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, port.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &ks, nil
+}
+
+// List returns kill switches strictly scoped to non-empty orgID.
+// To include or query instance-wide switches, callers must use ListWithFilter with AllowInstanceScope=true.
 func (r *Registry) List(ctx context.Context, orgID string, activeOnly bool) ([]KillSwitch, error) {
+	trimmedOrg := strings.TrimSpace(orgID)
+	if trimmedOrg == "" {
+		return nil, fmt.Errorf("%w: non-empty org_id is required", port.ErrInvalidInput)
+	}
+	return r.ListWithFilter(ctx, ListFilter{
+		OrgID:      trimmedOrg,
+		ActiveOnly: activeOnly,
+	})
+}
+
+// ListWithFilter returns kill switches filtered by ListFilter, rejecting empty OrgID unless AllowInstanceScope is true.
+func (r *Registry) ListWithFilter(ctx context.Context, filter ListFilter) ([]KillSwitch, error) {
+	trimmedOrg := strings.TrimSpace(filter.OrgID)
+	if trimmedOrg == "" && !filter.AllowInstanceScope {
+		return nil, fmt.Errorf("%w: org_id is required unless AllowInstanceScope is enabled", port.ErrInvalidInput)
+	}
+
 	query := `
 		SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
 		       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
@@ -665,11 +762,16 @@ func (r *Registry) List(ctx context.Context, orgID string, activeOnly bool) ([]K
 		WHERE 1=1`
 	var args []any
 
-	if trimmedOrg := strings.TrimSpace(orgID); trimmedOrg != "" {
-		query += ` AND org_id = ?`
-		args = append(args, trimmedOrg)
+	if trimmedOrg != "" {
+		if filter.AllowInstanceScope {
+			query += ` AND (org_id = ? OR org_id IS NULL)`
+			args = append(args, trimmedOrg)
+		} else {
+			query += ` AND org_id = ?`
+			args = append(args, trimmedOrg)
+		}
 	}
-	if activeOnly {
+	if filter.ActiveOnly {
 		query += ` AND active = 1`
 	}
 	query += ` ORDER BY triggered_at_ms DESC`
@@ -705,11 +807,7 @@ func (r *Registry) emitAuditTx(
 	nowMs int64,
 ) error {
 	if r.audit == nil {
-		return nil
-	}
-	txSink, ok := r.audit.(port.TxAuditSink)
-	if !ok {
-		return fmt.Errorf("%w: AuditSink must implement port.TxAuditSink for transactional kill-switch audit", port.ErrInvalidInput)
+		return fmt.Errorf("%w: non-nil port.TxAuditSink is required for transactional kill-switch audit", port.ErrInvalidInput)
 	}
 	audID, err := idgen.New(idgen.PrefixAudit)
 	if err != nil {
@@ -719,7 +817,7 @@ func (r *Registry) emitAuditTx(
 	if err != nil {
 		return fmt.Errorf("killswitch: marshal audit metadata: %w", err)
 	}
-	return txSink.AppendTx(ctx, tx, port.AuditEvent{
+	return r.audit.AppendTx(ctx, tx, port.AuditEvent{
 		ID:           audID,
 		CreatedAtMs:  nowMs,
 		OrgID:        orgPtr,
@@ -735,7 +833,10 @@ func (r *Registry) emitAuditTx(
 }
 
 func verifyPrincipalAndTargetTx(ctx context.Context, tx *sql.Tx, orgID string, level Level, targetID, principalID string) error {
-	if err := verifyPrincipalForScopeTx(ctx, tx, orgID, principalID); err != nil {
+	if err := verifyPrincipalMembershipForScopeTx(ctx, tx, orgID, principalID); err != nil {
+		return err
+	}
+	if err := verifyPrincipalRoleForScopeTx(ctx, tx, orgID, level, targetID, principalID); err != nil {
 		return err
 	}
 
@@ -766,7 +867,7 @@ func verifyPrincipalAndTargetTx(ctx context.Context, tx *sql.Tx, orgID string, l
 	return nil
 }
 
-func verifyPrincipalForScopeTx(ctx context.Context, tx *sql.Tx, orgID, principalID string) error {
+func verifyPrincipalMembershipForScopeTx(ctx context.Context, tx *sql.Tx, orgID, principalID string) error {
 	var (
 		pOrgID sql.NullString
 		status string
@@ -781,25 +882,97 @@ func verifyPrincipalForScopeTx(ctx context.Context, tx *sql.Tx, orgID, principal
 	if status != "ACTIVE" {
 		return fmt.Errorf("%w: principal %q is not ACTIVE (status=%s)", port.ErrInvalidInput, principalID, status)
 	}
+	opCount, err := countInstanceOperatorRoleTx(ctx, tx, principalID)
+	if err != nil {
+		return err
+	}
+	if opCount > 0 {
+		return nil
+	}
 	if orgID == "" {
+		return ErrPermissionDenied
+	}
+	if !pOrgID.Valid || pOrgID.String != orgID {
+		return port.ErrNotFound
+	}
+	return nil
+}
+
+func verifyPrincipalRoleForScopeTx(ctx context.Context, tx *sql.Tx, orgID string, level Level, targetID, principalID string) error {
+	opCount, err := countInstanceOperatorRoleTx(ctx, tx, principalID)
+	if err != nil {
+		return err
+	}
+	if opCount > 0 {
 		return nil
 	}
-	if pOrgID.Valid && pOrgID.String == orgID {
+	if orgID == "" {
+		return ErrPermissionDenied
+	}
+
+	var orgRoleCount int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM role_bindings
+		WHERE principal_id = ?
+		  AND org_id = ?
+		  AND scope_type = 'ORG'
+		  AND scope_id = ?
+		  AND role_name IN ('ORG_OWNER', 'SECURITY_REVIEWER')`,
+		principalID, orgID, orgID,
+	).Scan(&orgRoleCount); err != nil {
+		return fmt.Errorf("killswitch: verify org kill-switch role binding: %w", err)
+	}
+	if orgRoleCount > 0 {
 		return nil
 	}
-	// Permit instance OPERATOR across organizations while forbidding sibling-org tenant principals.
+
+	// Permit TEAM_ADMIN within their own PROJECT scope (project freeze or virtual key in that project).
+	var projRoleCount int
+	switch {
+	case level == LevelProjectOrOrgFreeze && targetID != orgID:
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM role_bindings
+			WHERE principal_id = ?
+			  AND org_id = ?
+			  AND scope_type = 'PROJECT'
+			  AND scope_id = ?
+			  AND role_name = 'TEAM_ADMIN'`,
+			principalID, orgID, targetID,
+		).Scan(&projRoleCount); err != nil {
+			return fmt.Errorf("killswitch: verify project role binding: %w", err)
+		}
+	case level == LevelVirtualKey:
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM virtual_keys vk
+			JOIN role_bindings rb
+			  ON rb.org_id = vk.org_id
+			 AND rb.scope_type = 'PROJECT'
+			 AND rb.scope_id = vk.project_id
+			WHERE vk.org_id = ?
+			  AND vk.id = ?
+			  AND rb.principal_id = ?
+			  AND rb.role_name = 'TEAM_ADMIN'`,
+			orgID, targetID, principalID,
+		).Scan(&projRoleCount); err != nil {
+			return fmt.Errorf("killswitch: verify project virtual key role binding: %w", err)
+		}
+	}
+	if projRoleCount > 0 {
+		return nil
+	}
+	return ErrPermissionDenied
+}
+
+func countInstanceOperatorRoleTx(ctx context.Context, tx *sql.Tx, principalID string) (int, error) {
 	var opCount int
 	if err := tx.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM role_bindings
 		WHERE principal_id = ? AND scope_type = 'INSTANCE' AND role_name = 'OPERATOR'`,
 		principalID,
 	).Scan(&opCount); err != nil {
-		return fmt.Errorf("killswitch: verify operator role binding: %w", err)
+		return 0, fmt.Errorf("killswitch: verify operator role binding: %w", err)
 	}
-	if opCount == 0 {
-		return port.ErrNotFound
-	}
-	return nil
+	return opCount, nil
 }
 
 func scanKillSwitch(s interface{ Scan(...any) error }) (KillSwitch, error) {

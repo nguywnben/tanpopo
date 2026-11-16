@@ -475,11 +475,12 @@ func (r *ActiveStreamRegistry) ActiveCount() int {
 
 // ManagerConfig configures the Copy-on-Write ConfigSnapshot Manager.
 type ManagerConfig struct {
-	DB         *sql.DB
-	NowMs      func() int64
-	MaxStaleMs int64
-	Streams    *ActiveStreamRegistry
-	Keyring    trust.TrustedKeyring
+	DB               *sql.DB
+	NowMs            func() int64
+	MaxStaleMs       int64
+	Streams          *ActiveStreamRegistry
+	Keyring          trust.TrustedKeyring
+	OnKillSwitchSync func(context.Context) error
 }
 
 type fenceAction uint8
@@ -516,6 +517,8 @@ type Manager struct {
 	keyringDirty      bool
 	pendingFences     map[string]localKeyFence
 	wakeCh            chan struct{}
+	killSwitchSyncMu  sync.RWMutex
+	killSwitchSync    func(context.Context) error
 }
 
 // NewManager initializes a ConfigSnapshot Manager and loads an initial snapshot if ctx is ready.
@@ -536,18 +539,30 @@ func NewManager(ctx context.Context, cfg ManagerConfig) (*Manager, error) {
 		streams = NewActiveStreamRegistry()
 	}
 	m := &Manager{
-		db:            cfg.DB,
-		nowMs:         nowFn,
-		maxStaleMs:    maxStale,
-		streams:       streams,
-		keyring:       cfg.Keyring.Clone(),
-		pendingFences: make(map[string]localKeyFence),
-		wakeCh:        make(chan struct{}, 1),
+		db:             cfg.DB,
+		nowMs:          nowFn,
+		maxStaleMs:     maxStale,
+		streams:        streams,
+		keyring:        cfg.Keyring.Clone(),
+		pendingFences:  make(map[string]localKeyFence),
+		wakeCh:         make(chan struct{}, 1),
+		killSwitchSync: cfg.OnKillSwitchSync,
 	}
 	if err := m.Refresh(ctx); err != nil {
 		return nil, err
 	}
 	return m, nil
+}
+
+// RegisterKillSwitchSync registers a callback invoked during Refresh whenever emergency_kill_switch
+// changelog deltas are observed so sibling processes remain synchronized with kill-switch changes.
+func (m *Manager) RegisterKillSwitchSync(fn func(context.Context) error) {
+	if m == nil {
+		return
+	}
+	m.killSwitchSyncMu.Lock()
+	m.killSwitchSync = fn
+	m.killSwitchSyncMu.Unlock()
 }
 
 // Current returns the active immutable ConfigSnapshot via a single lock-free atomic load.
@@ -822,10 +837,13 @@ func (m *Manager) Refresh(ctx context.Context) error {
 
 	m.keyringDirty = false
 	m.snap.Store(next)
-	m.lastPollSuccessMs.Store(next.LoadedAtMs)
-	m.setLastErr(nil)
 
+	hasKillSwitchEvent := false
 	for _, ev := range emergencies {
+		if ev.EntityKind == "emergency_kill_switch" {
+			hasKillSwitchEvent = true
+			continue
+		}
 		switch {
 		case ev.EntityKind == "virtual_key" && (ev.MutationType == port.MutationRevoke || ev.Emergency):
 			m.streams.AbortKey(ev.EntityID)
@@ -835,6 +853,21 @@ func (m *Manager) Refresh(ctx context.Context) error {
 			m.streams.AbortScope(ev.EntityID, "")
 		}
 	}
+
+	if hasKillSwitchEvent || cur == nil {
+		m.killSwitchSyncMu.RLock()
+		ksSync := m.killSwitchSync
+		m.killSwitchSyncMu.RUnlock()
+		if ksSync != nil {
+			if err := ksSync(ctx); err != nil {
+				m.setLastErr(err)
+				return err
+			}
+		}
+	}
+
+	m.lastPollSuccessMs.Store(next.LoadedAtMs)
+	m.setLastErr(nil)
 	return nil
 }
 
@@ -1058,7 +1091,7 @@ func readEmergencyEventsSinceSQL(ctx context.Context, tx *sql.Tx, afterEpoch int
 	rows, err := tx.QueryContext(ctx, `
 		SELECT COALESCE(org_id, ''), entity_kind, entity_id, mutation_type, emergency
 		FROM config_changelog
-		WHERE config_epoch > ? AND (emergency = 1 OR mutation_type IN ('REVOKE', 'SHRED'))
+		WHERE config_epoch > ? AND (emergency = 1 OR mutation_type IN ('REVOKE', 'SHRED') OR entity_kind = 'emergency_kill_switch')
 		ORDER BY config_epoch ASC`, afterEpoch)
 	if err != nil {
 		return nil, fmt.Errorf("snapshot: query emergency changelog deltas: %w", err)

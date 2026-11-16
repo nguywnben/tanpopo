@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
@@ -29,20 +30,101 @@ type streamTargetContextKey struct{}
 
 type streamTargetBinding struct {
 	KeyID            string
+	OrgID            string
+	ProjectID        string
 	SnapshotHandleID uint64
 	KSHandleID       uint64
+
+	mu              sync.RWMutex
+	ConnectionID    string
+	PluginInstallID string
 }
 
-func withStreamTargetBinding(ctx context.Context, b streamTargetBinding) context.Context {
+func (b *streamTargetBinding) setTargetCoords(connID, installID string) {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	b.ConnectionID = connID
+	b.PluginInstallID = installID
+	b.mu.Unlock()
+}
+
+func (b *streamTargetBinding) targetCoords() (string, string) {
+	if b == nil {
+		return "", ""
+	}
+	b.mu.RLock()
+	connID, installID := b.ConnectionID, b.PluginInstallID
+	b.mu.RUnlock()
+	return connID, installID
+}
+
+func withStreamTargetBinding(ctx context.Context, b *streamTargetBinding) context.Context {
 	return context.WithValue(ctx, streamTargetContextKey{}, b)
 }
 
-func streamTargetBindingFromContext(ctx context.Context) (streamTargetBinding, bool) {
+func streamTargetBindingFromContext(ctx context.Context) (*streamTargetBinding, bool) {
 	if ctx == nil {
-		return streamTargetBinding{}, false
+		return nil, false
 	}
-	b, ok := ctx.Value(streamTargetContextKey{}).(streamTargetBinding)
-	return b, ok
+	b, ok := ctx.Value(streamTargetContextKey{}).(*streamTargetBinding)
+	return b, ok && b != nil
+}
+
+func (s *Server) writeStreamCancelError(w http.ResponseWriter, ctx context.Context, reqID, defaultMsg string) {
+	if s != nil && s.killSwitch != nil {
+		if b, ok := streamTargetBindingFromContext(ctx); ok {
+			connID, installID := b.targetCoords()
+			if ks, blocked := s.killSwitch.CheckAdmission(killswitch.AdmissionQuery{
+				OrgID:           b.OrgID,
+				ProjectID:       b.ProjectID,
+				VirtualKeyID:    b.KeyID,
+				ConnectionID:    connID,
+				PluginInstallID: installID,
+			}); blocked {
+				writeKillSwitchError(w, reqID, ks)
+				return
+			}
+		}
+	}
+	writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", defaultMsg, false)
+}
+
+func (s *Server) abortedStreamCancelAttemptResult(w http.ResponseWriter, ctx context.Context, reqID, defaultMsg string) failover.AttemptResult {
+	status := http.StatusUnauthorized
+	var matchedKS *killswitch.KillSwitch
+	if s != nil && s.killSwitch != nil {
+		if b, ok := streamTargetBindingFromContext(ctx); ok {
+			connID, installID := b.targetCoords()
+			if ks, blocked := s.killSwitch.CheckAdmission(killswitch.AdmissionQuery{
+				OrgID:           b.OrgID,
+				ProjectID:       b.ProjectID,
+				VirtualKeyID:    b.KeyID,
+				ConnectionID:    connID,
+				PluginInstallID: installID,
+			}); blocked {
+				ksCopy := *ks
+				matchedKS = &ksCopy
+				if ks.Level != killswitch.LevelVirtualKey {
+					status = http.StatusServiceUnavailable
+				}
+			}
+		}
+	}
+	return failover.AttemptResult{
+		Succeeded:  false,
+		Retryable:  false,
+		Outcome:    breaker.OutcomeCallerError,
+		HTTPStatus: status,
+		FlushFinal: func() {
+			if matchedKS != nil {
+				writeKillSwitchError(w, reqID, matchedKS)
+				return
+			}
+			writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", defaultMsg, false)
+		},
+	}
 }
 
 func writeKillSwitchError(w http.ResponseWriter, reqID string, ks *killswitch.KillSwitch) {
@@ -126,6 +208,7 @@ func (s *Server) bindHopTargetAndCheckKillSwitch(
 	}
 	connID, installID := targetKillSwitchCoords(target)
 	if binding, ok := streamTargetBindingFromContext(hopCtx); ok {
+		binding.setTargetCoords(connID, installID)
 		if s.snapshots != nil && s.snapshots.Streams() != nil {
 			s.snapshots.Streams().BindTarget(binding.KeyID, binding.SnapshotHandleID, connID, installID)
 		}
@@ -299,7 +382,7 @@ func (s *Server) executeRoutedPreStreamFailover(
 		return res
 	})
 	if execRes.ClientCanceled && !execRes.StreamStarted && clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
-		writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
+		s.writeStreamCancelError(w, streamCtx, reqID, "Virtual Key was revoked or suspended before dispatch.")
 		return execRes
 	}
 	if execRes.AttemptCount == 0 {
@@ -395,19 +478,11 @@ func (s *Server) classifyBrokerAttemptError(
 ) failover.AttemptResult {
 	if errors.Is(err, context.Canceled) {
 		if clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
-			return failover.AttemptResult{
-				Succeeded:  false,
-				Retryable:  false,
-				Outcome:    breaker.OutcomeCallerError,
-				HTTPStatus: http.StatusUnauthorized,
-				FlushFinal: func() {
-					msg := "Virtual Key was revoked or suspended before response dispatch."
-					if !beforeStream {
-						msg = "Virtual Key was revoked or suspended before stream dispatch."
-					}
-					writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", msg, false)
-				},
+			msg := "Virtual Key was revoked or suspended before response dispatch."
+			if !beforeStream {
+				msg = "Virtual Key was revoked or suspended before stream dispatch."
 			}
+			return s.abortedStreamCancelAttemptResult(w, streamCtx, reqID, msg)
 		}
 		return failover.AttemptResult{
 			Succeeded: false,
@@ -485,15 +560,7 @@ func (s *Server) classifyPreparedAttemptError(
 ) failover.AttemptResult {
 	if errors.Is(err, context.Canceled) {
 		if clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
-			return failover.AttemptResult{
-				Succeeded:  false,
-				Retryable:  false,
-				Outcome:    breaker.OutcomeCallerError,
-				HTTPStatus: http.StatusUnauthorized,
-				FlushFinal: func() {
-					writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
-				},
-			}
+			return s.abortedStreamCancelAttemptResult(w, streamCtx, reqID, "Virtual Key was revoked or suspended before dispatch.")
 		}
 		return failover.AttemptResult{
 			Succeeded: false,
@@ -572,15 +639,7 @@ func (s *Server) classifyTransformResponseError(
 ) failover.AttemptResult {
 	if errors.Is(err, context.Canceled) {
 		if clientCtx != nil && clientCtx.Err() == nil && ctx != nil && ctx.Err() != nil {
-			return failover.AttemptResult{
-				Succeeded:  false,
-				Retryable:  false,
-				Outcome:    breaker.OutcomeCallerError,
-				HTTPStatus: http.StatusUnauthorized,
-				FlushFinal: func() {
-					writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before response dispatch.", false)
-				},
-			}
+			return s.abortedStreamCancelAttemptResult(w, ctx, reqID, "Virtual Key was revoked or suspended before response dispatch.")
 		}
 		return failover.AttemptResult{
 			Succeeded: false,
@@ -641,15 +700,7 @@ func (s *Server) classifyPreStreamPumpAttemptError(
 	}
 	if errors.Is(pumpErr, context.Canceled) {
 		if clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
-			return failover.AttemptResult{
-				Succeeded:  false,
-				Retryable:  false,
-				Outcome:    breaker.OutcomeCallerError,
-				HTTPStatus: http.StatusUnauthorized,
-				FlushFinal: func() {
-					writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before stream dispatch.", false)
-				},
-			}
+			return s.abortedStreamCancelAttemptResult(w, streamCtx, reqID, "Virtual Key was revoked or suspended before stream dispatch.")
 		}
 		return failover.AttemptResult{
 			Succeeded: false,

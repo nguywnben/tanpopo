@@ -428,9 +428,12 @@ func TestBlastRadiusQueryCorrelationAndTenantIsolation(t *testing.T) {
 		if ev.OrgID != nil && *ev.OrgID == orgB.ID {
 			t.Fatalf("cross-tenant audit leak from Org B into Org A blast radius: %+v", ev)
 		}
+		if ev.ChainKey == SystemChainKey {
+			t.Fatalf("tenant query without AllowInstanceScope leaked SYSTEM audit event: %+v", ev)
+		}
 	}
 
-	// Instance-scoped operator query sees both Org A and Org B affected resources for ins_bad_plugin.
+	// Instance-scoped operator query sees both Org A and Org B affected resources AND the SYSTEM audit event.
 	repInst, err := QueryBlastRadius(ctx, st.RawDB(), BlastRadiusQuery{
 		AllowInstanceScope:      true,
 		ExtensionInstallationID: "ins_bad_plugin",
@@ -442,6 +445,121 @@ func TestBlastRadiusQueryCorrelationAndTenantIsolation(t *testing.T) {
 	}
 	if repInst.TotalTraceCount != 3 || len(repInst.AffectedOrgs) != 2 {
 		t.Fatalf("expected 3 impacted traces across 2 orgs, got total=%d orgs=%v", repInst.TotalTraceCount, repInst.AffectedOrgs)
+	}
+	sawSystemEvent := false
+	for _, ev := range repInst.AuditEvents {
+		if ev.ChainKey == SystemChainKey && ev.EventType == "extension.quarantined" {
+			sawSystemEvent = true
+		}
+	}
+	if !sawSystemEvent {
+		t.Fatalf("expected instance-scoped blast radius query to include SYSTEM extension.quarantined audit event, got %+v", repInst.AuditEvents)
+	}
+
+	// Verify Limit: 1 still returns FULL unpaginated AffectedProjects / AffectedVirtualKeys AND
+	// correlates emergency_kill_switch audit events where TargetID is ksw_... and metadata_json.target_id is ins_bad_plugin.
+	if err := logger.Append(ctx, port.AuditEvent{
+		CreatedAtMs:  t0 + 1400,
+		OrgID:        nil,
+		ActorKind:    "PRINCIPAL",
+		ActorID:      "prn_op",
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    "kill_switch.triggered",
+		TargetType:   "emergency_kill_switch",
+		TargetID:     "ksw_01BADPLUGIN",
+		MetadataJSON: `{"level":"EXTENSION_INSTALLATION","target_id":"ins_bad_plugin"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	repPaginated, err := QueryBlastRadius(ctx, st.RawDB(), BlastRadiusQuery{
+		AllowInstanceScope:      true,
+		ExtensionInstallationID: "ins_bad_plugin",
+		FromMs:                  t0,
+		ToMs:                    t0 + 5000,
+		Limit:                   1,
+	})
+	if err != nil {
+		t.Fatalf("QueryBlastRadius paginated: %v", err)
+	}
+	if repPaginated.TotalTraceCount != 3 || len(repPaginated.Traces) != 1 {
+		t.Fatalf("expected TotalTraceCount=3 with 1 paginated trace, got total=%d len=%d", repPaginated.TotalTraceCount, len(repPaginated.Traces))
+	}
+	if len(repPaginated.AffectedOrgs) != 2 || len(repPaginated.AffectedProjects) != 3 || len(repPaginated.AffectedVirtualKeys) != 3 {
+		t.Fatalf("expected unpaginated affected sets under Limit=1, got orgs=%v projs=%v vks=%v",
+			repPaginated.AffectedOrgs, repPaginated.AffectedProjects, repPaginated.AffectedVirtualKeys)
+	}
+	if len(repPaginated.AuditEvents) != 1 || repPaginated.AuditEvents[0].EventType != "kill_switch.triggered" {
+		t.Fatalf("expected paginated Limit=1 audit event kill_switch.triggered via metadata_json.target_id, got %+v", repPaginated.AuditEvents)
+	}
+}
+
+func TestLoggerKeyAwareScrubbingAndRequestIDSanitization(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	st, _ := openAuditTestDB(t, fk)
+
+	orgA, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "scrub-adv-org", DisplayName: "Scrub Adv Org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := NewLogger(LoggerConfig{
+		DB:    st.RawDB(),
+		NowMs: func() int64 { return fk.Now().UTC().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reqWithSecret := "req_01TEST?token=sk-ant-api03-verysecretvalue123"
+	if err := logger.Append(ctx, port.AuditEvent{
+		OrgID:        &orgA.ID,
+		ActorKind:    "PRINCIPAL",
+		ActorID:      "prn_sec",
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    "debug.privacy",
+		TargetType:   "connection",
+		TargetID:     "conn_1",
+		RequestID:    &reqWithSecret,
+		MetadataJSON: `{"api_key":"raw_secret_no_prefix","password":"hunter2","credentials":{"access_token":"tok123"},"endpoint":"https://user:secretpass@api.example.com/v1","basic_hdr":"Basic dXNlcjpwYXNz","gh":"ghp_1234567890abcdefghijklmnop","input_tokens":128,"max_tokens":4096,"token_count":256}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Top-level null metadata_json normalizes cleanly to {} without panicking or failing JCS.
+	if err := logger.Append(ctx, port.AuditEvent{
+		OrgID:        &orgA.ID,
+		ActorKind:    "SYSTEM",
+		ActorID:      "worker",
+		EntryPoint:   port.AuditEntryPointSystemReaper,
+		EventType:    "debug.null_meta",
+		TargetType:   "system",
+		TargetID:     "sys_1",
+		MetadataJSON: "null",
+	}); err != nil {
+		t.Fatalf("Append null metadata_json: %v", err)
+	}
+
+	events, err := logger.List(ctx, ListFilter{ChainKey: orgA.ID})
+	if err != nil || len(events) != 2 {
+		t.Fatalf("List: err=%v len=%d", err, len(events))
+	}
+	ev0 := events[1] // chronological descending; oldest is debug.privacy (seq 1)
+	if ev0.RequestID == nil || strings.Contains(*ev0.RequestID, "sk-ant-") {
+		t.Fatalf("expected RequestID scrubbed of secrets, got %v", ev0.RequestID)
+	}
+	for _, leak := range []string{"raw_secret_no_prefix", "hunter2", "tok123", "secretpass", "dXNlcjpwYXNz", "ghp_1234567890"} {
+		if strings.Contains(ev0.MetadataJSON, leak) {
+			t.Fatalf("expected secret %q redacted from audit metadata_json, got %s", leak, ev0.MetadataJSON)
+		}
+	}
+	for _, safeTokenField := range []string{`"input_tokens":128`, `"max_tokens":4096`, `"token_count":256`} {
+		if !strings.Contains(ev0.MetadataJSON, safeTokenField) {
+			t.Fatalf("expected telemetry count %s preserved unredacted, got %s", safeTokenField, ev0.MetadataJSON)
+		}
+	}
+	if events[0].MetadataJSON != "{}" {
+		t.Fatalf("expected null metadata_json normalized to {}, got %q", events[0].MetadataJSON)
 	}
 }
 

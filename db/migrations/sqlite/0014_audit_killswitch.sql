@@ -55,7 +55,7 @@ CREATE TABLE emergency_kill_switches (
     reason                    TEXT NOT NULL CHECK (LENGTH(reason) >= 5),
     triggered_by_principal_id VARCHAR(40) NOT NULL REFERENCES principals(id) ON DELETE RESTRICT,
     cleared_by_principal_id   VARCHAR(40) REFERENCES principals(id) ON DELETE RESTRICT,
-    clear_reason              TEXT,
+    clear_reason              TEXT CHECK (clear_reason IS NULL OR LENGTH(clear_reason) >= 5),
     version                   BIGINT NOT NULL DEFAULT 1 CHECK (version >= 1),
     triggered_at_ms           BIGINT NOT NULL,
     cleared_at_ms             BIGINT
@@ -69,3 +69,7 @@ CREATE INDEX idx_audit_target_time
 
 CREATE INDEX idx_killswitches_active_lookup
     ON emergency_kill_switches (active, level, target_id);
+
+CREATE UNIQUE INDEX idx_killswitches_active_unique
+    ON emergency_kill_switches (level, target_id, COALESCE(org_id, ''))
+    WHERE active = 1;

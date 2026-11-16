@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
@@ -29,15 +30,56 @@ const (
 	genesisPrefix = "tanpopo:audit:genesis:v1:"
 )
 
+type secretRule struct {
+	re   *regexp.Regexp
+	repl string
+}
+
 var (
-	// defaultSecretPatterns redacts common credential formats in audit strings if no external hook overrides it.
-	defaultSecretPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`vk_tp_[A-Za-z0-9_-]+_[A-Za-z0-9]{16,}`),
-		regexp.MustCompile(`tp_adm_[A-Za-z0-9_-]{12,}`),
-		regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{12,}`),
-		regexp.MustCompile(`sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{16,}`),
-		regexp.MustCompile(`AIza[0-9A-Za-z_-]{20,}`),
-		regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._\-+/=]{12,}`),
+	// defaultSecretRules redacts common credential formats in audit strings if no external hook overrides it.
+	defaultSecretRules = []secretRule{
+		{re: regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^@/\s]+)@`), repl: "${1}[REDACTED]@"},
+		{re: regexp.MustCompile(`vk_tp_[A-Za-z0-9_-]+`), repl: "[REDACTED]"},
+		{re: regexp.MustCompile(`tp_adm_[A-Za-z0-9_-]{8,}`), repl: "[REDACTED]"},
+		{re: regexp.MustCompile(`sk-tp-[A-Za-z0-9._-]+`), repl: "[REDACTED]"},
+		{re: regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{8,}`), repl: "[REDACTED]"},
+		{re: regexp.MustCompile(`sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{12,}`), repl: "[REDACTED]"},
+		{re: regexp.MustCompile(`AIza[0-9A-Za-z_-]{16,}`), repl: "[REDACTED]"},
+		{re: regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{16,}`), repl: "[REDACTED]"},
+		{re: regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}`), repl: "Bearer [REDACTED]"},
+		{re: regexp.MustCompile(`(?i)\bBasic\s+[A-Za-z0-9+/=]{6,}`), repl: "Basic [REDACTED]"},
+	}
+
+	sensitiveAuditKeys = map[string]bool{
+		"authorization":         true,
+		"proxy_authorization":   true,
+		"x_authorization":       true,
+		"www_authenticate":      true,
+		"proxy_authenticate":    true,
+		"x_api_key":             true,
+		"x_goog_api_key":        true,
+		"x_tanpopo_virtual_key": true,
+		"cookie":                true,
+		"set_cookie":            true,
+		"set_cookie2":           true,
+		"api_key":               true,
+		"apikey":                true,
+		"secret":                true,
+		"client_secret":         true,
+		"access_token":          true,
+		"refresh_token":         true,
+		"id_token":              true,
+		"private_key":           true,
+		"password":              true,
+		"passwd":                true,
+		"credential":            true,
+		"credentials":           true,
+		"bearer_token":          true,
+		"x_auth_token":          true,
+		"openai_api_key":        true,
+		"anthropic_api_key":     true,
+		"tanpopo_master_key":    true,
+		"token":                 true,
 	}
 )
 
@@ -97,7 +139,7 @@ func CanonicalEnvelopeBytes(ev port.AuditEvent, parsedMeta any) ([]byte, error) 
 type LoggerConfig struct {
 	DB          *sql.DB
 	NowMs       func() int64
-	ScrubString func(string) string // Optional redaction hook (e.g., privacy.Redactor.RedactString).
+	ScrubString func(string) string // Optional redaction hook (e.g., privacy.Redactor.SanitizeString).
 }
 
 // Logger persists gapless, per-chain_key RFC 8785 JCS hash-chained audit events into audit_events.
@@ -246,7 +288,8 @@ func (l *Logger) normalizeEvent(ev port.AuditEvent) (port.AuditEvent, any, []byt
 		if trimmed == "" {
 			out.RequestID = nil
 		} else {
-			out.RequestID = &trimmed
+			scrubbedReq := l.scrub(trimmed)
+			out.RequestID = &scrubbedReq
 		}
 	}
 
@@ -273,6 +316,9 @@ func (l *Logger) normalizeEvent(ev port.AuditEvent) (port.AuditEvent, any, []byt
 		return out, nil, nil, fmt.Errorf("%w: metadata_json: %v", port.ErrInvalidInput, err)
 	}
 	scrubbedMeta := l.scrubJSONValue(parsedMeta)
+	if scrubbedMeta == nil {
+		scrubbedMeta = map[string]any{}
+	}
 	canonMeta, err := CanonicalizeValue(scrubbedMeta)
 	if err != nil {
 		return out, nil, nil, fmt.Errorf("%w: canonicalize metadata_json: %v", port.ErrInvalidInput, err)
@@ -289,8 +335,8 @@ func (l *Logger) scrub(s string) string {
 	if l.scrubString != nil {
 		out = l.scrubString(out)
 	}
-	for _, re := range defaultSecretPatterns {
-		out = re.ReplaceAllString(out, "[REDACTED]")
+	for _, rule := range defaultSecretRules {
+		out = rule.re.ReplaceAllString(out, rule.repl)
 	}
 	return out
 }
@@ -308,12 +354,83 @@ func (l *Logger) scrubJSONValue(v any) any {
 	case map[string]any:
 		res := make(map[string]any, len(x))
 		for k, val := range x {
-			res[l.scrub(k)] = l.scrubJSONValue(val)
+			sk := l.scrub(k)
+			if isSensitiveAuditKey(sk) {
+				res[sk] = "[REDACTED]"
+				continue
+			}
+			res[sk] = l.scrubJSONValue(val)
 		}
 		return res
 	default:
 		return v
 	}
+}
+
+func normalizeAuditKey(key string) string {
+	trimmed := strings.TrimSpace(key)
+	if trimmed == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(trimmed))
+	prevUnderscore := false
+	var prevRune rune
+	for i, r := range trimmed {
+		if r == '-' || r == '_' || r == '.' || r == ' ' {
+			if !prevUnderscore && b.Len() > 0 {
+				b.WriteByte('_')
+				prevUnderscore = true
+			}
+			prevRune = r
+			continue
+		}
+		if unicode.IsUpper(r) && i > 0 && !prevUnderscore {
+			if unicode.IsLower(prevRune) || unicode.IsDigit(prevRune) {
+				b.WriteByte('_')
+			}
+		}
+		b.WriteRune(unicode.ToLower(r))
+		prevUnderscore = false
+		prevRune = r
+	}
+	return strings.Trim(b.String(), "_")
+}
+
+func isSensitiveAuditKey(key string) bool {
+	nk := normalizeAuditKey(key)
+	if nk == "" {
+		return false
+	}
+	if sensitiveAuditKeys[nk] {
+		return true
+	}
+	for _, substr := range []string{
+		"secret",
+		"password",
+		"passwd",
+		"credential",
+		"private_key",
+		"signing_key",
+		"encryption_key",
+		"access_key",
+		"master_key",
+		"api_key",
+		"apikey",
+		"auth_header",
+		"bearer",
+	} {
+		if strings.Contains(nk, substr) {
+			return true
+		}
+	}
+	if strings.HasSuffix(nk, "_token") || strings.HasSuffix(nk, "_cookie") {
+		if strings.HasSuffix(nk, "_tokens") || strings.Contains(nk, "token_count") || strings.Contains(nk, "max_tokens") || strings.Contains(nk, "total_tokens") {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 func decodeStrictJSONValue(raw []byte) (any, error) {

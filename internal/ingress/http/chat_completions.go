@@ -763,8 +763,10 @@ func (s *Server) authenticateProviderRequest(
 		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key route allowlist denies %s.", routePath), false)
 		return nil, nil, snapshot.KeyMatchResult{}, 0, false
 	}
-	streamCtx = withStreamTargetBinding(streamCtx, streamTargetBinding{
+	streamCtx = withStreamTargetBinding(streamCtx, &streamTargetBinding{
 		KeyID:            match.Key.ID,
+		OrgID:            match.Key.OrgID,
+		ProjectID:        match.Key.ProjectID,
 		SnapshotHandleID: handleID,
 		KSHandleID:       ksHandleID,
 	})

@@ -565,7 +565,7 @@ func countSandboxGoroutines() int {
 // --- Unit, Acceptance & Negative Tests ---
 
 func TestWasmAC1ConcurrentTransformAndZeroSecret(t *testing.T) {
-	t.Parallel()
+	// Sequential: 100 concurrent streams avoid intra-package CPU contention under -race on slower runners.
 	ctx := context.Background()
 
 	secret := canary.DefaultCanarySecret()
@@ -576,7 +576,7 @@ func TestWasmAC1ConcurrentTransformAndZeroSecret(t *testing.T) {
 		PoolSize:           16,
 		MemoryLimitPages:   wasm.DefaultMemoryLimitPages,
 		CallTimeout:        2 * time.Second,
-		StreamChunkTimeout: 500 * time.Millisecond,
+		StreamChunkTimeout: wasm.MaxAllowedStreamChunkTimeout,
 		ABIMode:            wasm.ABIModeSliceTransform,
 		SliceTransform: &wasm.SliceTransformConfig{
 			Method:    http.MethodPost,

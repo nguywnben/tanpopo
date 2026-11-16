@@ -5,7 +5,6 @@ package http_test
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -735,6 +734,227 @@ func TestTP0023_HTTP_AC2_4LevelKillSwitch_SSE_Under1s(t *testing.T) {
 		rawRep, _ := json.Marshal(rep)
 		t.Fatalf("expected valid hash chains, got: %s", string(rawRep))
 	}
-	var unused bytes.Buffer
-	_ = unused
+}
+
+func TestTP0023_HTTP_CrossProcessKillSwitchSyncAnd503PreStreamCancel(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t)
+	})
+
+	ctx := context.Background()
+	clk := clock.NewFakeClock(time.UnixMilli(1760003000000))
+	nowFn := func() int64 { return clk.Now().UnixMilli() }
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "ks_multiproc_http.db")
+	pluginsDir := filepath.Join(tmp, "plugins")
+	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stWrite, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath, NowMs: nowFn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stWrite.Close() })
+	stServe, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath, NowMs: nowFn, SkipMigrate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stServe.Close() })
+
+	auditWriter, err := audit.NewLogger(audit.LoggerConfig{DB: stWrite.RawDB(), NowMs: nowFn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ksWriter, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{DB: stWrite.RawDB(), Audit: auditWriter, NowMs: nowFn})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	auditReader, err := audit.NewLogger(audit.LoggerConfig{DB: stServe.RawDB(), NowMs: nowFn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ksReader, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{DB: stServe.RawDB(), Audit: auditReader, NowMs: nowFn})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pubPub, pubPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyring := trust.TrustedKeyring{PublisherPublicKeys: map[string]ed25519.PublicKey{"acme": pubPub}}
+	mgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: stServe.RawDB(), NowMs: nowFn, Keyring: keyring})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rawMaster := make([]byte, 32)
+	_, _ = rand.Read(rawMaster)
+	kek, err := vault.NewStaticKEKProvider("kek-mp-http", rawMaster)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(kek.Close)
+	vStore, err := vault.NewStore(vault.Config{DB: stWrite.RawDB(), KEK: kek, NowMs: nowFn, PostShredHook: stWrite.CheckpointWAL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(vStore.Close)
+
+	catRepo, err := catalog.NewRepository(catalog.Config{DB: stWrite.RawDB(), NowMs: nowFn, Snapshots: mgr, Keyring: keyring, Audit: auditWriter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	brk, err := broker.NewBlindBroker(broker.Config{Resolver: catRepo, PolicyResolver: catRepo, Vault: vStore, UnsealCap: vault.MintUnsealCapabilityForBroker(), Audit: auditWriter, NowMs: nowFn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	instSvc, err := installer.NewLifecycleService(installer.ServiceConfig{DB: stWrite.RawDB(), PluginsDir: pluginsDir, Keyring: keyring, Audit: auditWriter, NowMs: nowFn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vkSvc, err := vkey.NewService(vkey.ServiceConfig{DB: stWrite.RawDB(), NowMs: nowFn, Snapshots: mgr, AuditSink: auditWriter})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	org, _ := stWrite.Tenancy().CreateOrganization(ctx, storageport.CreateOrgParams{Slug: "mp-org", DisplayName: "MP Org", MinPluginTrust: storageport.MinTrustVerifiedOnly})
+	proj, _ := stWrite.Tenancy().CreateProject(ctx, org.ID, storageport.CreateProjectParams{Slug: "mp-proj", DisplayName: "MP Proj"})
+	env, _ := stWrite.Tenancy().CreateEnvironment(ctx, org.ID, proj.ID, storageport.CreateEnvironmentParams{Slug: "prod"})
+	_, _ = stWrite.RawDB().ExecContext(ctx, `INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms) VALUES ('prc_op_ks', NULL, 'HUMAN_LOCAL', 'op_mp@acme.test', 'ACTIVE', 1, ?, ?)`, nowFn(), nowFn())
+	_, _ = stWrite.RawDB().ExecContext(ctx, `INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms) VALUES ('rb_op_ks', NULL, 'prc_op_ks', 'INSTANCE', 'instance', 'OPERATOR', 1, ?)`, nowFn())
+
+	instID, adpID := installTestDeclarativePlugin(t, ctx, tmp, pubPriv, instSvc, catRepo, org.ID, "@acme/mp-plugin", "mp-plugin")
+	secMeta, _ := vStore.SealSecret(ctx, vault.SealSecretParams{OrgID: org.ID, Name: "mp-key", SecretKind: vault.SecretKindAPIKey, Plaintext: []byte(canary.DefaultCanarySecret())})
+
+	enteredUpstream := make(chan struct{}, 2)
+	releaseHold := make(chan struct{})
+	var closeHoldOnce sync.Once
+	closeHold := func() { closeHoldOnce.Do(func() { close(releaseHold) }) }
+	t.Cleanup(closeHold)
+
+	upSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case enteredUpstream <- struct{}{}:
+		default:
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-releaseHold:
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-mp","object":"chat.completion","model":"up-mp","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`))
+	}))
+	t.Cleanup(func() { upSrv.CloseClientConnections(); upSrv.Close() })
+
+	conn, _ := catRepo.CreateProviderConnection(ctx, catalog.CreateProviderConnectionParams{
+		OrgID: org.ID, AdapterID: adpID, Name: "conn-mp", EndpointBaseURL: upSrv.URL, AllowPrivateIP: true, AllowedCIDRs: []string{"127.0.0.1/32"},
+		DataRegion: "us", BillingMode: catalog.BillingModeCommercialAPI, AuthMode: catalog.AuthModeAPIKey,
+		SecretBindings: []catalog.SecretBindingInput{{SlotName: "api_key", CredentialID: secMeta.ID, InjectMode: catalog.InjectModeHostBlind}},
+	})
+	conn, _ = catRepo.TransitionConnectionState(ctx, org.ID, conn.ID, catalog.ConnStateValidating, conn.Version, "val")
+	_, _ = catRepo.TransitionConnectionState(ctx, org.ID, conn.ID, catalog.ConnStateActive, conn.Version, "act")
+	lm, _ := catRepo.CreateLogicalModel(ctx, catalog.CreateLogicalModelParams{OrgID: &org.ID, CanonicalSlug: "model/mp", ModalityKind: catalog.ModalityChat, ContextWindow: 128000, MaxOutputTokens: 4096, BaseCapabilities: map[string]string{"streaming": "VERIFIED"}})
+	_, _ = catRepo.CreateModelDeployment(ctx, catalog.CreateModelDeploymentParams{OrgID: org.ID, ConnectionID: conn.ID, LogicalModelID: lm.ID, UpstreamModelName: "up-mp", AssuranceLevel: catalog.AssuranceVerified, State: catalog.DeployStateActiveHealthy, ConnectTimeoutMs: 5000, FirstByteTimeoutMs: 5000, IdleChunkTimeoutMs: 5000})
+
+	vk, err := vkSvc.Create(ctx, vkey.CreateParams{OrgID: org.ID, ProjectID: proj.ID, EnvID: env.ID, Name: "vk-mp", AllowedPlanes: "PROVIDER", MaxConcurrentStreams: 16})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	srv, err := ingresshttp.NewServer(ingresshttp.ServerConfig{
+		Snapshots: mgr, Broker: brk, PluginsDir: pluginsDir, Audit: auditReader, KillSwitch: ksReader, NowMs: nowFn, SSEHeartbeatInterval: 200 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srv.Close(context.Background()) })
+	httpSrv := httptest.NewServer(srv)
+	t.Cleanup(httpSrv.Close)
+
+	client := netguard.NewHTTPClient()
+	t.Cleanup(client.CloseIdleConnections)
+
+	// Start in-flight non-streaming request blocked before upstream response bytes return;
+	// trigger out-of-band PROVIDER_CONNECTION kill switch on ksWriter, then trigger mgr.Refresh
+	// (simulating snapshot watcher across processes) -> in-flight request cancels and MUST return 503 provider_connection_killed (not 401 invalid_virtual_key).
+	type httpResp struct {
+		status int
+		body   string
+		err    error
+	}
+	respCh := make(chan httpResp, 1)
+	go func() {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, httpSrv.URL+"/v1/chat/completions", strings.NewReader(`{"model":"model/mp","stream":false,"messages":[{"role":"user","content":"hi"}]}`))
+		req.Header.Set("Authorization", "Bearer "+vk.SecretKey)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			respCh <- httpResp{err: err}
+			return
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		respCh <- httpResp{status: resp.StatusCode, body: string(b)}
+	}()
+
+	select {
+	case <-enteredUpstream:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for request to reach upstream")
+	}
+
+	ksConn, err := ksWriter.Trigger(ctx, killswitch.TriggerParams{
+		OrgID: &org.ID, Level: killswitch.LevelProviderConnection, TargetID: conn.ID,
+		Reason: "out-of-band connection halt", TriggeredByPrincipalID: "prc_op_ks",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatalf("mgr.Refresh after out-of-band kill switch trigger: %v", err)
+	}
+
+	select {
+	case res := <-respCh:
+		if res.err != nil {
+			t.Fatalf("request error: %v", res.err)
+		}
+		if res.status != http.StatusServiceUnavailable || !strings.Contains(res.body, `"provider_connection_killed"`) {
+			t.Fatalf("expected 503 provider_connection_killed on canceled pre-stream dispatch, got %d %s", res.status, res.body)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for 503 response after cross-process Refresh")
+	}
+
+	// Out-of-band Clear (emergency=0, entity_kind='emergency_kill_switch') also propagates on mgr.Refresh!
+	closeHold()
+	if _, err := ksWriter.Clear(ctx, killswitch.ClearParams{
+		OrgID: &org.ID, KillSwitchID: ksConn.ID, ExpectedVersion: ksConn.Version,
+		ClearedByPrincipalID: "prc_op_ks", ClearReason: "connection recovered cleanly",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatalf("mgr.Refresh after out-of-band Clear: %v", err)
+	}
+	reqOK, _ := http.NewRequestWithContext(ctx, http.MethodPost, httpSrv.URL+"/v1/chat/completions", strings.NewReader(`{"model":"model/mp","stream":false,"messages":[{"role":"user","content":"hi"}]}`))
+	reqOK.Header.Set("Authorization", "Bearer "+vk.SecretKey)
+	reqOK.Header.Set("Content-Type", "application/json")
+	respOK, err := client.Do(reqOK)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bOK, _ := io.ReadAll(respOK.Body)
+	respOK.Body.Close()
+	if respOK.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK after out-of-band Clear + Refresh, got %d %s", respOK.StatusCode, string(bOK))
+	}
+	_ = instID
 }

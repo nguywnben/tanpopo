@@ -524,3 +524,219 @@ permissions:
 	})
 	_ = fmt.Sprint("")
 }
+
+func TestTP0023_Native_CrossProcessKillSwitchSyncAnd503PreStreamCancel(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t)
+	})
+
+	ctx := context.Background()
+	clk := clock.NewFakeClock(time.UnixMilli(1760004000000))
+	nowFn := func() int64 { return clk.Now().UnixMilli() }
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "native_mp_ks.db")
+	pluginsDir := filepath.Join(tmp, "plugins")
+	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stWrite, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath, NowMs: nowFn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stWrite.Close() })
+	stServe, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath, NowMs: nowFn, SkipMigrate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stServe.Close() })
+
+	auditWriter, _ := audit.NewLogger(audit.LoggerConfig{DB: stWrite.RawDB(), NowMs: nowFn})
+	ksWriter, _ := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{DB: stWrite.RawDB(), Audit: auditWriter, NowMs: nowFn})
+	auditReader, _ := audit.NewLogger(audit.LoggerConfig{DB: stServe.RawDB(), NowMs: nowFn})
+	ksReader, _ := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{DB: stServe.RawDB(), Audit: auditReader, NowMs: nowFn})
+
+	pubPub, pubPriv, _ := ed25519.GenerateKey(rand.Reader)
+	keyring := trust.TrustedKeyring{PublisherPublicKeys: map[string]ed25519.PublicKey{"acme": pubPub}}
+	mgr, _ := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: stServe.RawDB(), NowMs: nowFn, Keyring: keyring})
+
+	rawMaster := make([]byte, 32)
+	_, _ = rand.Read(rawMaster)
+	kek, _ := vault.NewStaticKEKProvider("kek-nat-mp", rawMaster)
+	t.Cleanup(kek.Close)
+	vStore, _ := vault.NewStore(vault.Config{DB: stWrite.RawDB(), KEK: kek, NowMs: nowFn, PostShredHook: stWrite.CheckpointWAL})
+	t.Cleanup(vStore.Close)
+
+	catRepo, _ := catalog.NewRepository(catalog.Config{DB: stWrite.RawDB(), NowMs: nowFn, Snapshots: mgr, Keyring: keyring, Audit: auditWriter})
+	brk, _ := broker.NewBlindBroker(broker.Config{Resolver: catRepo, PolicyResolver: catRepo, Vault: vStore, UnsealCap: vault.MintUnsealCapabilityForBroker(), Audit: auditWriter, NowMs: nowFn})
+	instSvc, _ := installer.NewLifecycleService(installer.ServiceConfig{DB: stWrite.RawDB(), PluginsDir: pluginsDir, Keyring: keyring, Audit: auditWriter, NowMs: nowFn})
+	vkSvc, _ := vkey.NewService(vkey.ServiceConfig{DB: stWrite.RawDB(), NowMs: nowFn, Snapshots: mgr, AuditSink: auditWriter})
+
+	org, _ := stWrite.Tenancy().CreateOrganization(ctx, storageport.CreateOrgParams{Slug: "nat-mp-org", DisplayName: "Nat MP", MinPluginTrust: storageport.MinTrustVerifiedOnly})
+	proj, _ := stWrite.Tenancy().CreateProject(ctx, org.ID, storageport.CreateProjectParams{Slug: "nat-mp-proj", DisplayName: "Nat MP Proj"})
+	env, _ := stWrite.Tenancy().CreateEnvironment(ctx, org.ID, proj.ID, storageport.CreateEnvironmentParams{Slug: "prod"})
+	_, _ = stWrite.RawDB().ExecContext(ctx, `INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms) VALUES ('prc_op_natmp', NULL, 'HUMAN_LOCAL', 'op_natmp@acme.test', 'ACTIVE', 1, ?, ?)`, nowFn(), nowFn())
+	_, _ = stWrite.RawDB().ExecContext(ctx, `INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms) VALUES ('rb_op_natmp', NULL, 'prc_op_natmp', 'INSTANCE', 'instance', 'OPERATOR', 1, ?)`, nowFn())
+
+	createdVK, err := vkSvc.Create(ctx, vkey.CreateParams{OrgID: org.ID, ProjectID: proj.ID, EnvID: env.ID, Name: "nat-mp-vk", AllowedPlanes: "PROVIDER", MaxConcurrentStreams: 16})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	enteredUpstream := make(chan struct{}, 2)
+	releaseHold := make(chan struct{})
+	var closeHoldOnce sync.Once
+	t.Cleanup(func() { closeHoldOnce.Do(func() { close(releaseHold) }) })
+
+	up := newSpyUpstream(t, func(w http.ResponseWriter, r *http.Request, body []byte) {
+		select {
+		case enteredUpstream <- struct{}{}:
+		default:
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-releaseHold:
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"msg_nat_mp","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[{"type":"text","text":"OK"}],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":2}}`))
+	})
+
+	wasmBytes := buildAnthropicNativeTestWasm()
+	wasmSum := sha256.Sum256(wasmBytes)
+	wasmHex := hex.EncodeToString(wasmSum[:])
+	manifest := `apiVersion: tanpopo.dev/extension/v1alpha1
+kind: ExtensionManifest
+metadata:
+  id: "@acme/anthropic-nat-mp"
+  name: "Anthropic Native MP Wasm"
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "sandboxed_wasm"
+  entrypoint: "dist/adapter.wasm"
+  sha256: "` + wasmHex + `"
+  quotas:
+    maxMemoryMib: 16
+    maxCpuMsPerCall: 2000
+capabilities:
+  - type: "provider_adapter"
+    adapterSlug: "anthropic-nat-mp"
+    supportedDialects: ["anthropic"]
+    allowedNativePaths:
+      - "^v1/messages(/count_tokens)?$"
+    allowedNativeHeaders:
+      - "anthropic-version"
+    authMethods:
+      - id: "api_key_hdr"
+        mode: "host_blind_inject"
+        headerName: "x-api-key"
+secretSlots:
+  - slot: "api_key"
+    requiredForAuthMethods: ["api_key_hdr"]
+permissions:
+  networkEgress:
+    allowedHosts:
+      - "127.0.0.1"
+    allowPrivateIp: true
+    requireTls: false
+  hooks:
+    - "provider:inspect_native_request"
+    - "provider:extract_usage"
+    - "provider:normalize_error"
+`
+	extDir := filepath.Join(tmp, "ext-nat-mp")
+	_ = os.MkdirAll(filepath.Join(extDir, "dist"), 0o755)
+	_ = os.WriteFile(filepath.Join(extDir, "manifest.yaml"), []byte(manifest), 0o600)
+	_ = os.WriteFile(filepath.Join(extDir, "dist", "adapter.wasm"), wasmBytes, 0o600)
+	tpkgPath := filepath.Join(tmp, "nat-mp.tpkg")
+	packRes, _ := testharness.PackExtension(ctx, extDir, tpkgPath)
+	sig := ed25519.Sign(pubPriv, installer.SignatureSigningPayload("@acme/anthropic-nat-mp", "1.0.0", packRes.SHA256))
+	staged, _ := instSvc.StageFreshInstall(ctx, installer.StageInstallRequest{
+		ArchivePath: tpkgPath, Source: installer.SourceSpec{Kind: installer.SourceKindLocalArchive, URI: "./nat-mp.tpkg", ExpectedSHA256: packRes.SHA256},
+		Signature: installer.ProvenanceSignature{PublisherOrRootSig: sig}, ActorID: "prc_op_natmp", TargetOrgID: org.ID,
+	})
+	rec, _ := instSvc.ApproveAndActivate(ctx, installer.ApproveInstallRequest{
+		InstallationID: staged.Installation.InstallationID, ExpectedVersion: staged.Installation.Version, ApproverPrincipalID: "prc_op_natmp", ActivateImmediately: true, OrgID: org.ID,
+	})
+	adp, _ := catRepo.CreateProviderAdapter(ctx, catalog.CreateProviderAdapterParams{InstallationID: rec.InstallationID, AdapterSlug: "anthropic-nat-mp", SupportedDialects: []string{"anthropic"}, AllowedHosts: []string{"127.0.0.1"}})
+	secMeta, _ := vStore.SealSecret(ctx, vault.SealSecretParams{OrgID: org.ID, Name: "nat-mp-sec", SecretKind: vault.SecretKindAPIKey, Plaintext: []byte(canary.DefaultCanarySecret())})
+	conn, _ := catRepo.CreateProviderConnection(ctx, catalog.CreateProviderConnectionParams{
+		OrgID: org.ID, AdapterID: adp.ID, Name: "conn-nat-mp", EndpointBaseURL: up.srv.URL, AllowPrivateIP: true, AllowedCIDRs: []string{"127.0.0.1/32"}, DataRegion: "us",
+		BillingMode: catalog.BillingModeCommercialAPI, AuthMode: catalog.AuthModeAPIKey,
+		SecretBindings: []catalog.SecretBindingInput{{SlotName: "api_key", CredentialID: secMeta.ID, InjectMode: catalog.InjectModeHostBlind}},
+	})
+	conn, _ = catRepo.TransitionConnectionState(ctx, org.ID, conn.ID, catalog.ConnStateValidating, conn.Version, "val")
+	_, _ = catRepo.TransitionConnectionState(ctx, org.ID, conn.ID, catalog.ConnStateActive, conn.Version, "act")
+	lm, _ := catRepo.CreateLogicalModel(ctx, catalog.CreateLogicalModelParams{OrgID: &org.ID, CanonicalSlug: "claude-sonnet-4-5", ModalityKind: catalog.ModalityChat, ContextWindow: 128000, MaxOutputTokens: 8192})
+	_, _ = catRepo.CreateModelDeployment(ctx, catalog.CreateModelDeploymentParams{OrgID: org.ID, ConnectionID: conn.ID, LogicalModelID: lm.ID, UpstreamModelName: "claude-sonnet-4-5", AssuranceLevel: catalog.AssuranceTested, State: catalog.DeployStateActiveHealthy, ConnectTimeoutMs: 5000, FirstByteTimeoutMs: 5000, IdleChunkTimeoutMs: 5000})
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	srv, err := ingresshttp.NewServer(ingresshttp.ServerConfig{
+		Snapshots: mgr, Broker: brk, PluginsDir: pluginsDir, Audit: auditReader, KillSwitch: ksReader, NowMs: nowFn, SSEHeartbeatInterval: 200 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srv.Close(context.Background()) })
+	httpSrv := httptest.NewServer(srv)
+	t.Cleanup(httpSrv.Close)
+
+	client := netguard.NewHTTPClient()
+	t.Cleanup(client.CloseIdleConnections)
+
+	type respRes struct {
+		code int
+		body string
+		err  error
+	}
+	respCh := make(chan respRes, 1)
+	go func() {
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, httpSrv.URL+"/native/anthropic/v1/messages", strings.NewReader(`{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hi"}]}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-api-key", createdVK.SecretKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+		resp, err := client.Do(req)
+		if err != nil {
+			respCh <- respRes{err: err}
+			return
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		respCh <- respRes{code: resp.StatusCode, body: string(b)}
+	}()
+
+	select {
+	case <-enteredUpstream:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for native request to reach upstream")
+	}
+
+	if _, err := ksWriter.Trigger(ctx, killswitch.TriggerParams{
+		Level: killswitch.LevelExtensionInstallation, TargetID: rec.InstallationID,
+		Reason: "out-of-band native adapter halt", TriggeredByPrincipalID: "prc_op_natmp",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatalf("mgr.Refresh: %v", err)
+	}
+
+	select {
+	case res := <-respCh:
+		if res.err != nil {
+			t.Fatalf("request err: %v", res.err)
+		}
+		if res.code != http.StatusServiceUnavailable || !strings.Contains(res.body, `"extension_quarantined"`) {
+			t.Fatalf("expected 503 extension_quarantined on pre-stream cancel, got %d %s", res.code, res.body)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for 503 extension_quarantined response")
+	}
+}

@@ -88,7 +88,10 @@ func newKillSwitchHarness(t *testing.T) *ksHarness {
 	}
 	if _, err := st.RawDB().ExecContext(ctx, `
 		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
-		VALUES ('rb_op', NULL, ?, 'INSTANCE', 'instance', 'OPERATOR', 1, ?)`, prnInst, now); err != nil {
+		VALUES ('rb_op', NULL, ?, 'INSTANCE', 'instance', 'OPERATOR', 1, ?),
+		       ('rb_org_a', ?, ?, 'ORG', ?, 'ORG_OWNER', 1, ?)`,
+		prnInst, now, orgA.ID, prnA, orgA.ID, now,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -443,4 +446,177 @@ func (f *failingTxAuditSink) Append(context.Context, port.AuditEvent) error {
 }
 func (f *failingTxAuditSink) AppendTx(context.Context, *sql.Tx, port.AuditEvent) error {
 	return errors.New("injected audit failure")
+}
+
+func TestKillSwitchFailClosedRBACValidationAndCrossProcessWatcher(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newKillSwitchHarness(t)
+
+	// 1. NewRegistry fails closed when Audit sink is nil.
+	if _, err := NewRegistry(ctx, RegistryConfig{DB: h.st.RawDB()}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewRegistry with nil Audit to fail ErrInvalidInput, got %v", err)
+	}
+
+	// 2. Get / List reject empty orgID fail-closed.
+	if _, err := h.reg.Get(ctx, "", "ksw_1"); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected Get empty orgID to fail ErrInvalidInput, got %v", err)
+	}
+	if _, err := h.reg.List(ctx, "", false); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected List empty orgID to fail ErrInvalidInput, got %v", err)
+	}
+
+	// 3. Seed an unprivileged DEVELOPER principal and a TEAM_ADMIN scoped strictly to projA1ID.
+	now := h.fk.Now().UTC().UnixMilli()
+	prnDev := "prn_dev_a"
+	prnTeamAdmin := "prn_ta_a1"
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'HUMAN_LOCAL', 'dev@example.com', 'ACTIVE', 1, ?, ?),
+		       (?, ?, 'HUMAN_LOCAL', 'ta@example.com', 'ACTIVE', 1, ?, ?)`,
+		prnDev, h.orgAID, now, now, prnTeamAdmin, h.orgAID, now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES ('rb_dev_a', ?, ?, 'ORG', ?, 'DEVELOPER', 1, ?),
+		       ('rb_ta_a1', ?, ?, 'PROJECT', ?, 'TEAM_ADMIN', 1, ?)`,
+		h.orgAID, prnDev, h.orgAID, now,
+		h.orgAID, prnTeamAdmin, h.projA1ID, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// DEVELOPER cannot trigger org-scoped kill switch -> ErrPermissionDenied.
+	if _, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelVirtualKey, TargetID: h.vkA1ID,
+		Reason: "developer attempt", TriggeredByPrincipalID: prnDev,
+	}); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("expected DEVELOPER Trigger to fail ErrPermissionDenied, got %v", err)
+	}
+
+	// Org admin cannot trigger or clear instance-scoped EXTENSION_INSTALLATION kill switch -> ErrPermissionDenied.
+	if _, err := h.reg.Trigger(ctx, TriggerParams{
+		Level: LevelExtensionInstallation, TargetID: h.inst1ID,
+		Reason: "non-operator extension attempt", TriggeredByPrincipalID: h.prnAID,
+	}); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("expected non-operator instance Trigger to fail ErrPermissionDenied, got %v", err)
+	}
+	ksInst, err := h.reg.Trigger(ctx, TriggerParams{
+		Level: LevelExtensionInstallation, TargetID: h.inst1ID,
+		Reason: "instance operator quarantine", TriggeredByPrincipalID: h.prnInstID,
+	})
+	if err != nil {
+		t.Fatalf("operator Trigger EXTENSION_INSTALLATION: %v", err)
+	}
+	if _, err := h.reg.Clear(ctx, ClearParams{
+		KillSwitchID: ksInst.ID, ExpectedVersion: ksInst.Version,
+		ClearedByPrincipalID: h.prnAID, ClearReason: "unauthorized org owner clear",
+	}); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("expected org owner clearing instance switch to fail ErrPermissionDenied, got %v", err)
+	}
+
+	// Org-scoped EXTENSION_INSTALLATION via Clear(OrgID: nil) MUST fail with ErrNotFound
+	// (Clear(OrgID: nil) is strictly for instance-level switches).
+	ksProj, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelProjectOrOrgFreeze, TargetID: h.projA1ID,
+		Reason: "freeze project 1", TriggeredByPrincipalID: h.prnAID,
+	})
+	if err != nil {
+		t.Fatalf("Trigger project freeze: %v", err)
+	}
+	if _, err := h.reg.Clear(ctx, ClearParams{
+		OrgID: nil, KillSwitchID: ksProj.ID, ExpectedVersion: ksProj.Version,
+		ClearedByPrincipalID: h.prnInstID, ClearReason: "must require OrgID for org-scoped switch",
+	}); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected Clear(OrgID: nil) on org-scoped switch to return ErrNotFound, got %v", err)
+	}
+
+	// Cross-tenant non-member attempting Clear on Org A switch fails with ErrNotFound (anti-oracle).
+	prnOrgB := "prn_org_b"
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'HUMAN_LOCAL', 'b@example.com', 'ACTIVE', 1, ?, ?)`,
+		prnOrgB, h.orgBID, now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.reg.Clear(ctx, ClearParams{
+		OrgID: &h.orgAID, KillSwitchID: ksProj.ID, ExpectedVersion: ksProj.Version,
+		ClearedByPrincipalID: prnOrgB, ClearReason: "org B anti-oracle probe",
+	}); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected non-member Clear probe on Org A to return ErrNotFound, got %v", err)
+	}
+
+	// TEAM_ADMIN for projA1ID CAN trigger vkA1ID (bound to projA1ID), CANNOT trigger vkA2ID (bound to projA2ID).
+	if _, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelVirtualKey, TargetID: h.vkA2ID,
+		Reason: "cross project attempt", TriggeredByPrincipalID: prnTeamAdmin,
+	}); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("expected TEAM_ADMIN(proj1) Trigger on vkA2(proj2) to fail ErrPermissionDenied, got %v", err)
+	}
+
+	// Duplicate active kill switch on same target fails cleanly under partial unique index.
+	if _, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelProjectOrOrgFreeze, TargetID: h.projA1ID,
+		Reason: "duplicate active switch", TriggeredByPrincipalID: h.prnAID,
+	}); err == nil {
+		t.Fatalf("expected duplicate active kill switch trigger to fail")
+	}
+
+	// Cross-process sync via second Registry sharing same DB + RefreshFromDB / StartWatcher.
+	proc2Reg, err := NewRegistry(ctx, RegistryConfig{DB: h.st.RawDB(), Audit: h.logger})
+	if err != nil {
+		t.Fatal(err)
+	}
+	streamCtx, streamCancel := context.WithCancel(context.Background())
+	defer streamCancel()
+	hid := proc2Reg.RegisterStream(StreamRegistration{
+		OrgID: h.orgAID, ProjectID: h.projA2ID, VirtualKeyID: h.vkA2ID, Cancel: streamCancel,
+	})
+	defer proc2Reg.UnregisterStream(hid)
+
+	watchCtx, watchCancel := context.WithCancel(ctx)
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		proc2Reg.StartWatcher(watchCtx, 25*time.Millisecond)
+	}()
+	defer func() {
+		watchCancel()
+		<-watchDone
+	}()
+
+	// Trigger vkA2 on primary h.reg -> proc2Reg watcher observes DB update and cancels streamCtx!
+	ksVK2, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelVirtualKey, TargetID: h.vkA2ID,
+		Reason: "out-of-band cross-process emergency", TriggeredByPrincipalID: h.prnAID,
+	})
+	if err != nil {
+		t.Fatalf("Trigger vkA2 on reg1: %v", err)
+	}
+	select {
+	case <-streamCtx.Done():
+	case <-time.After(1 * time.Second):
+		t.Fatalf("expected proc2Reg watcher to sever active stream via RefreshFromDB")
+	}
+	if _, blocked := proc2Reg.CheckAdmission(AdmissionQuery{OrgID: h.orgAID, VirtualKeyID: h.vkA2ID}); !blocked {
+		t.Fatalf("expected proc2Reg admission check to block vkA2 after sync")
+	}
+
+	// Clearing ksVK2 on reg1 unblocks proc2Reg after RefreshFromDB.
+	if _, err := h.reg.Clear(ctx, ClearParams{
+		OrgID: &h.orgAID, KillSwitchID: ksVK2.ID, ExpectedVersion: ksVK2.Version,
+		ClearedByPrincipalID: h.prnAID, ClearReason: "verified false alarm cleared",
+	}); err != nil {
+		t.Fatalf("Clear ksVK2: %v", err)
+	}
+	if err := proc2Reg.RefreshFromDB(ctx); err != nil {
+		t.Fatalf("proc2Reg.RefreshFromDB: %v", err)
+	}
+	if _, blocked := proc2Reg.CheckAdmission(AdmissionQuery{OrgID: h.orgAID, VirtualKeyID: h.vkA2ID}); blocked {
+		t.Fatalf("expected proc2Reg to unblock vkA2 after Clear + RefreshFromDB")
+	}
+	_ = ksInst
 }
