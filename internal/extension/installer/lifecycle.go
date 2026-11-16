@@ -742,7 +742,7 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 		}
 	}()
 
-	if err := ensureApproverRoleTx(ctx, tx, req.ApproverPrincipalID, req.OrgID); err != nil {
+	if err := ensureGlobalApproverRoleTx(ctx, tx, req.ApproverPrincipalID, req.OrgID); err != nil {
 		return nil, err
 	}
 
@@ -934,7 +934,7 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 		}
 	}()
 
-	if err := ensureApproverRoleTx(ctx, tx, req.ActorID, req.OrgID); err != nil {
+	if err := ensureGlobalApproverRoleTx(ctx, tx, req.ActorID, req.OrgID); err != nil {
 		return nil, err
 	}
 
@@ -1169,7 +1169,7 @@ func (s *LifecycleService) RequestActivePermissionReconsent(
 		}
 	}()
 
-	if err := ensureApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+	if err := ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
 		return nil, PermissionDelta{}, err
 	}
 
@@ -1275,7 +1275,7 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 		}
 	}()
 
-	if err := ensureApproverRoleTx(ctx, tx, approverPrincipalID, orgID); err != nil {
+	if err := ensureGlobalApproverRoleTx(ctx, tx, approverPrincipalID, orgID); err != nil {
 		return nil, err
 	}
 
@@ -1406,7 +1406,7 @@ func (s *LifecycleService) RejectEscalatedUpgrade(ctx context.Context, installat
 		}
 	}()
 
-	if err := ensureApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+	if err := ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
 		return nil, err
 	}
 
@@ -1471,7 +1471,7 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 		}
 	}()
 
-	if err := ensureApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+	if err := ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
 		return nil, err
 	}
 
@@ -1896,7 +1896,7 @@ func (s *LifecycleService) UninstallInstallation(ctx context.Context, installati
 		}
 	}()
 
-	if err := ensureApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+	if err := ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
 		return err
 	}
 
@@ -2454,6 +2454,39 @@ func ensureOrgOwnerRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID st
 		return fmt.Errorf("%w: active principal %q requires ORG(%s) ORG_OWNER role to enable unsigned unverified_external package (TP-BR-0202)", ErrPermissionDenied, principalID, orgID)
 	}
 	return nil
+}
+
+func ensureGlobalApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID string) error {
+	if strings.TrimSpace(principalID) == "" {
+		return fmt.Errorf("%w: approver principal_id is required", ErrPermissionDenied)
+	}
+	var orgCount int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE')`).Scan(&orgCount); err != nil {
+		return err
+	}
+	// Multi-tenant deployments (> 1 active organization) or empty orgID restrict global extension lifecycle
+	// mutations exclusively to active INSTANCE-scoped OPERATOR principals.
+	if orgCount > 1 || strings.TrimSpace(orgID) == "" {
+		var count int
+		err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*)
+			FROM role_bindings rb
+			JOIN principals p ON p.id = rb.principal_id
+			WHERE rb.principal_id = ?
+			  AND p.status = 'ACTIVE'
+			  AND rb.scope_type = 'INSTANCE'
+			  AND rb.role_name = 'OPERATOR'`,
+			principalID,
+		).Scan(&count)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			return fmt.Errorf("%w: active principal %q requires INSTANCE OPERATOR role for global operation", ErrPermissionDenied, principalID)
+		}
+		return nil
+	}
+	return ensureApproverRoleTx(ctx, tx, principalID, orgID)
 }
 
 func ensureApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID string) error {

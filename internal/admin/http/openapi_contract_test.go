@@ -657,5 +657,98 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 		t.Fatalf("GET /blast-radius status=%d body=%s", recBR.Code, recBR.Body.String())
 	}
 	assertRequiredJSONKeys(t, "GET /blast-radius", recBR.Body.Bytes(), "organizations", "projects", "virtual_keys", "connections")
+
+	// List & Update endpoint DTO schema conformance checks across Part 2 resource groups.
+	assertListFirstItemSchema := func(path, schemaName string) {
+		t.Helper()
+		rec := h.doAuthedCookie(t, http.MethodGet, path, ownerCookie, "", "", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s status=%d body=%s", path, rec.Code, rec.Body.String())
+		}
+		assertRequiredJSONKeys(t, "GET "+path, rec.Body.Bytes(), "data", "has_more")
+		var listResp paginatedListEnvelope[json.RawMessage]
+		mustDecodeJSON(t, rec.Body.Bytes(), &listResp)
+		if len(listResp.Data) == 0 {
+			t.Fatalf("GET %s returned empty data list for schema %s check", path, schemaName)
+		}
+		assertPayloadMatchesSchema(t, doc, schemaName, listResp.Data[0])
+	}
+
+	assertListFirstItemSchema("/admin/v1/provider-adapters", "ProviderAdapterSummary")
+	assertListFirstItemSchema("/admin/v1/secrets", "SecretMetadata")
+	assertListFirstItemSchema("/admin/v1/connections", "ProviderConnection")
+	assertListFirstItemSchema("/admin/v1/models", "LogicalModel")
+	assertListFirstItemSchema("/admin/v1/deployments", "ModelDeployment")
+	assertListFirstItemSchema("/admin/v1/extensions/installations", "ExtensionInstallation")
+	assertListFirstItemSchema("/admin/v1/routes", "RouteResource")
+	assertListFirstItemSchema("/admin/v1/budgets", "BudgetResource")
+	assertListFirstItemSchema("/admin/v1/traces", "TraceSummary")
+
+	// PATCH /connections/{id} and PUT /routes/{id} return canonical schemas.
+	recConnList := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/connections", ownerCookie, "", "", nil)
+	if recConnList.Code != http.StatusOK {
+		t.Fatalf("GET /connections status=%d body=%s", recConnList.Code, recConnList.Body.String())
+	}
+	var connList paginatedListEnvelope[providerConnectionDTO]
+	mustDecodeJSON(t, recConnList.Body.Bytes(), &connList)
+	connVer := conn.Version
+	for _, c := range connList.Data {
+		if c.ID == conn.ID {
+			connVer = c.Version
+			break
+		}
+	}
+	recConnPatch := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/connections/"+conn.ID, ownerCookie, boot.CSRFToken, FormatETag(connVer), map[string]any{
+		"name": "contract-conn-renamed",
+	})
+	if recConnPatch.Code != http.StatusOK {
+		t.Fatalf("PATCH /connections/{id} status=%d body=%s", recConnPatch.Code, recConnPatch.Body.String())
+	}
+	assertPayloadMatchesSchema(t, doc, "ProviderConnection", recConnPatch.Body.Bytes())
+
+	var createdRoute routeResourceDTO
+	mustDecodeJSON(t, recRoute.Body.Bytes(), &createdRoute)
+	recRoutePut := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/routes/"+createdRoute.ID, ownerCookie, boot.CSRFToken, FormatETag(createdRoute.Version), map[string]any{
+		"slug":                 "contract-route",
+		"env_id":               boot.EnvID,
+		"strategy":             "PRIORITY_FAILOVER",
+		"allowed_data_regions": []string{"US"},
+		"targets":              []map[string]any{{"deployment_id": dep.ID, "priority_order": 1, "weight": 100}},
+	})
+	if recRoutePut.Code != http.StatusOK {
+		t.Fatalf("PUT /routes/{id} status=%d body=%s", recRoutePut.Code, recRoutePut.Body.String())
+	}
+	assertPayloadMatchesSchema(t, doc, "RouteResource", recRoutePut.Body.Bytes())
+
+	// Extension policy PUT/GET + approvals list.
+	var approvedIns extensionInstallationDTO
+	mustDecodeJSON(t, recApp.Body.Bytes(), &approvedIns)
+	recExtPolPut := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/organizations/"+boot.OrgID+"/extension-policies", ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"min_plugin_trust": "VERIFIED_ONLY",
+		"policies":         []map[string]any{{"package_id": approvedIns.PackageID, "enabled": true}},
+	})
+	if recExtPolPut.Code != http.StatusOK {
+		t.Fatalf("PUT /extension-policies status=%d body=%s", recExtPolPut.Code, recExtPolPut.Body.String())
+	}
+	assertPayloadMatchesSchema(t, doc, "Organization", recExtPolPut.Body.Bytes())
+
+	recExpJSON := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/usage/export?format=json&group_by=project", ownerCookie, "", "", nil)
+	if recExpJSON.Code != http.StatusOK {
+		t.Fatalf("GET /usage/export?format=json status=%d body=%s", recExpJSON.Code, recExpJSON.Body.String())
+	}
+	var exportedRows []json.RawMessage
+	mustDecodeJSON(t, recExpJSON.Body.Bytes(), &exportedRows)
+	if len(exportedRows) == 0 {
+		t.Fatalf("expected exported UsageChargebackRow entries")
+	}
+	assertPayloadMatchesSchema(t, doc, "UsageChargebackRow", exportedRows[0])
+
+	recExpCSV := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/usage/export?format=csv&group_by=project", ownerCookie, "", "", nil)
+	if recExpCSV.Code != http.StatusOK {
+		t.Fatalf("GET /usage/export?format=csv status=%d body=%s", recExpCSV.Code, recExpCSV.Body.String())
+	}
+	if !strings.Contains(recExpCSV.Body.String(), "group_key,exact_micro_usd,estimated_micro_usd,unmetered_request_count") {
+		t.Fatalf("unexpected CSV header: %s", recExpCSV.Body.String())
+	}
 }
 

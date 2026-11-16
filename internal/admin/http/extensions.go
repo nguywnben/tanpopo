@@ -21,6 +21,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
+	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
@@ -177,6 +178,9 @@ func (s *Server) handleStageExtensionInstall(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionExtensionStage, rbac.TargetScope{OrgID: orgID}) {
+		return
+	}
+	if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
 		return
 	}
 	if s.installer == nil || s.archiveResolver == nil {
@@ -379,10 +383,6 @@ func (s *Server) handleApproveExtensionPermissions(w http.ResponseWriter, r *htt
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
 		return
 	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
-	}
 	var req approvePermissionsRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
@@ -392,6 +392,13 @@ func (s *Server) handleApproveExtensionPermissions(w http.ResponseWriter, r *htt
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionExtensionApprove, rbac.TargetScope{OrgID: orgID}) {
+		return
+	}
+	if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
+		return
+	}
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
 		return
 	}
 	if s.installer == nil {
@@ -475,10 +482,6 @@ func (s *Server) handleUpgradeExtension(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
 		return
 	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
-	}
 	var req extensionInstallRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
@@ -488,6 +491,13 @@ func (s *Server) handleUpgradeExtension(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionExtensionStage, rbac.TargetScope{OrgID: orgID}) {
+		return
+	}
+	if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
+		return
+	}
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
 		return
 	}
 	if s.installer == nil || s.archiveResolver == nil {
@@ -586,16 +596,8 @@ func (s *Server) handleRollbackExtension(w http.ResponseWriter, r *http.Request)
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
 		return
 	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
-	}
 	var req rollbackExtensionRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
-		return
-	}
-	if len(strings.TrimSpace(req.Reason)) < 5 {
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "reason must be at least 5 characters", false, nil)
 		return
 	}
 	orgID, ok := s.resolveTargetOrgID(w, r, sc)
@@ -603,6 +605,18 @@ func (s *Server) handleRollbackExtension(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionExtensionApprove, rbac.TargetScope{OrgID: orgID}) {
+		return
+	}
+	if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
+		return
+	}
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if len([]rune(reason)) < 5 {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "reason must be at least 5 characters", false, nil)
 		return
 	}
 	if s.installer == nil {
@@ -634,6 +648,23 @@ func (s *Server) handleRollbackExtension(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if audID, aerr := idgen.New(idgen.PrefixAudit); aerr == nil && s.audit != nil {
+		rawMeta, _ := json.Marshal(map[string]any{"reason": reason})
+		_ = s.audit.Append(r.Context(), port.AuditEvent{
+			ID:           audID,
+			CreatedAtMs:  s.nowMs(),
+			OrgID:        &orgID,
+			ActorKind:    "PRINCIPAL",
+			ActorID:      sc.Actor.PrincipalID,
+			EntryPoint:   port.AuditEntryPointAdminAPI,
+			EventType:    "extension.rollback_reason_recorded",
+			TargetType:   "extension_installation",
+			TargetID:     insID,
+			RequestID:    ptrOrNil(requestIDFromContext(r.Context())),
+			MetadataJSON: string(rawMeta),
+		})
+	}
+
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
@@ -656,15 +687,18 @@ func (s *Server) handleUninstallOrDiscardExtension(w http.ResponseWriter, r *htt
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
 		return
 	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
-	}
 	orgID, ok := s.resolveTargetOrgID(w, r, sc)
 	if !ok {
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionExtensionApprove, rbac.TargetScope{OrgID: orgID}) {
+		return
+	}
+	if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
+		return
+	}
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
 		return
 	}
 	if s.installer == nil {
@@ -764,15 +798,18 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
 		return
 	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
-	}
 	var req putOrgExtensionPoliciesRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionExtensionOrgPolicy, rbac.TargetScope{OrgID: orgID}) {
+		return
+	}
+	if !s.requireActiveOrg(w, r, orgID) {
+		return
+	}
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
 		return
 	}
 
@@ -818,7 +855,15 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 	}
 	if aff, _ := res.RowsAffected(); aff == 0 {
 		_ = tx.Rollback()
-		latest, _ := s.storage.Tenancy().GetOrganization(r.Context(), orgID)
+		latest, lerr := s.storage.Tenancy().GetOrganization(r.Context(), orgID)
+		if errors.Is(lerr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
+			return
+		}
+		if lerr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading organization", true, nil)
+			return
+		}
 		writeOptimisticConflict(w, r, latest.Version, toOrganizationDTO(latest))
 		return
 	}
@@ -850,13 +895,29 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 				return
 			}
 			if pkgTrust == lockfile.TrustTierUnverifiedExternal && !actorIsOrgOwnerOrOperator(sc.Actor, orgID) {
-				writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "ORG_OWNER role required to enable unverified_external package", false, nil)
+				writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "ORG_OWNER or OPERATOR role required to enable unverified_external package", false, nil)
 				return
 			}
 		}
 		var pinnedArg any
 		if pol.PinnedInstallationID != nil && strings.TrimSpace(*pol.PinnedInstallationID) != "" {
-			pinnedArg = strings.TrimSpace(*pol.PinnedInstallationID)
+			pinID := strings.TrimSpace(*pol.PinnedInstallationID)
+			var pinExists int
+			perr := tx.QueryRowContext(r.Context(), `
+				SELECT 1
+				FROM extension_installations
+				WHERE id = ? AND package_id = ? AND state NOT IN ('UNINSTALLED', 'CANCELLED', 'REJECTED_INVALID')`,
+				pinID, pkgID,
+			).Scan(&pinExists)
+			if errors.Is(perr, sql.ErrNoRows) {
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "pinned installation not found for extension package", false, nil)
+				return
+			}
+			if perr != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying pinned installation", true, nil)
+				return
+			}
+			pinnedArg = pinID
 		}
 		optIn := boolToInt(pol.Enabled && pkgTrust == lockfile.TrustTierUnverifiedExternal)
 		if _, err := tx.ExecContext(r.Context(), `
@@ -899,6 +960,25 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, toOrganizationDTO(updatedOrg))
 }
 
+func (s *Server) ensureGlobalExtensionOperatorIfMultiTenant(w http.ResponseWriter, r *http.Request, sc *authSessionContext) bool {
+	if sc == nil {
+		return false
+	}
+	if sc.IsOperator {
+		return true
+	}
+	var orgCount int
+	if err := s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE')`).Scan(&orgCount); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking active tenant count", true, nil)
+		return false
+	}
+	if orgCount > 1 {
+		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "multi-tenant global extension mutations require INSTANCE OPERATOR role", false, nil)
+		return false
+	}
+	return true
+}
+
 func (s *Server) cancelPendingInstallationTx(ctx context.Context, insID string, expectedVer int64, orgID, actorID, reqID string) error {
 	now := s.nowMs()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -926,9 +1006,9 @@ func (s *Server) cancelPendingInstallationTx(ctx context.Context, insID string, 
 	return tx.Commit()
 }
 
-func (s *Server) isFourEyesSelfApproval(ctx context.Context, orgID, insID, actorID string) bool {
-	var fourEyes int
-	if err := s.db.QueryRowContext(ctx, `SELECT require_four_eyes_approval FROM organizations WHERE id = ?`, orgID).Scan(&fourEyes); err != nil || fourEyes == 0 {
+func (s *Server) isFourEyesSelfApproval(ctx context.Context, _ string, insID, actorID string) bool {
+	var fourEyesOrgs int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE') AND require_four_eyes_approval = 1`).Scan(&fourEyesOrgs); err != nil || fourEyesOrgs == 0 {
 		return false
 	}
 	var stagerID string

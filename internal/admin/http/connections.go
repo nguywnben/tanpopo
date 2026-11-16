@@ -5,10 +5,13 @@ package http
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -74,7 +77,7 @@ type updateConnectionRequest struct {
 	Name           *string           `json:"name"`
 	EndpointURL    *string           `json:"endpoint_url"`
 	AllowPrivateIP *bool             `json:"allow_private_ip"`
-	AllowedCIDRs   []string          `json:"allowed_cidrs"`
+	AllowedCIDRs   *[]string         `json:"allowed_cidrs"`
 	State          *string           `json:"state"`
 	SecretBindings map[string]string `json:"secret_bindings"`
 }
@@ -370,31 +373,21 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var q strings.Builder
-	args := []any{orgID}
-	q.WriteString(`
-		SELECT id, owner_project_id, adapter_id, credential_id, name,
-		       endpoint_base_url, allow_private_ip, data_region, billing_mode, state,
-		       version, created_at_ms
-		FROM provider_connections
-		WHERE org_id = ?`)
-	if projFilter != "" {
-		q.WriteString(` AND owner_project_id = ?`)
-		args = append(args, projFilter)
+	orgWide := actorHasOrgScopeBinding(sc.Actor, orgID)
+	var allowedProjects map[string]bool
+	if !orgWide {
+		allowedProjects = make(map[string]bool)
+		for _, pid := range actorProjectIDs(sc.Actor, orgID) {
+			allowedProjects[pid] = true
+		}
+		if projFilter == "" && len(allowedProjects) == 0 {
+			writeJSON(w, http.StatusOK, paginatedListEnvelope[providerConnectionDTO]{
+				Data:    []providerConnectionDTO{},
+				HasMore: false,
+			})
+			return
+		}
 	}
-	if cur != nil {
-		q.WriteString(` AND (created_at_ms < ? OR (created_at_ms = ? AND id < ?))`)
-		args = append(args, cur.CreatedMs, cur.CreatedMs, cur.LastID)
-	}
-	q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
-	args = append(args, limit+1)
-
-	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing provider connections", true, nil)
-		return
-	}
-	defer rows.Close()
 
 	type rowItem struct {
 		dto           providerConnectionDTO
@@ -402,52 +395,110 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 		createdMs     int64
 	}
 	items := make([]rowItem, 0, limit+1)
-	for rows.Next() {
-		var (
-			id, adapterID, name, endpointURL, dataRegion, billingMode, state string
-			projNS, credNS                                                   sql.NullString
-			allowPriv                                                        int
-			ver, createdMs                                                   int64
-		)
-		if scanErr := rows.Scan(
-			&id, &projNS, &adapterID, &credNS, &name,
-			&endpointURL, &allowPriv, &dataRegion, &billingMode, &state,
-			&ver, &createdMs,
-		); scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning provider connection", true, nil)
+	needFilter := !orgWide && projFilter == ""
+	batchLimit := limit + 1
+	if needFilter {
+		batchLimit = limit*2 + 20
+	}
+	hasCur := cur != nil
+	var batchCreatedMs int64
+	var batchLastID string
+	if cur != nil {
+		batchCreatedMs = cur.CreatedMs
+		batchLastID = cur.LastID
+	}
+
+	for len(items) < limit+1 {
+		var q strings.Builder
+		args := []any{orgID}
+		q.WriteString(`
+			SELECT id, owner_project_id, shared_project_ids_json, adapter_id, credential_id, name,
+			       endpoint_base_url, allow_private_ip, data_region, billing_mode, state,
+			       version, created_at_ms
+			FROM provider_connections
+			WHERE org_id = ?`)
+		if projFilter != "" {
+			q.WriteString(` AND owner_project_id = ?`)
+			args = append(args, projFilter)
+		}
+		if hasCur {
+			q.WriteString(` AND (created_at_ms < ? OR (created_at_ms = ? AND id < ?))`)
+			args = append(args, batchCreatedMs, batchCreatedMs, batchLastID)
+		}
+		q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
+		args = append(args, batchLimit)
+
+		rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing provider connections", true, nil)
 			return
 		}
-		var projPtr, credPtr *string
-		if projNS.Valid {
-			v := projNS.String
-			projPtr = &v
+
+		sqlCount := 0
+		for rows.Next() {
+			sqlCount++
+			var (
+				id, sharedJSON, adapterID, name, endpointURL, dataRegion, billingMode, state string
+				projNS, credNS                                                               sql.NullString
+				allowPriv                                                                    int
+				ver, createdMs                                                               int64
+			)
+			if scanErr := rows.Scan(
+				&id, &projNS, &sharedJSON, &adapterID, &credNS, &name,
+				&endpointURL, &allowPriv, &dataRegion, &billingMode, &state,
+				&ver, &createdMs,
+			); scanErr != nil {
+				_ = rows.Close()
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning provider connection", true, nil)
+				return
+			}
+			batchCreatedMs = createdMs
+			batchLastID = id
+			if needFilter && !connectionVisibleToAnyProject(projNS, sharedJSON, allowedProjects) {
+				continue
+			}
+			var projPtr, credPtr *string
+			if projNS.Valid {
+				v := projNS.String
+				projPtr = &v
+			}
+			if credNS.Valid && credNS.String != "" {
+				v := credNS.String
+				credPtr = &v
+			}
+			items = append(items, rowItem{
+				dto: providerConnectionDTO{
+					ID:                     id,
+					ProjectID:              projPtr,
+					Name:                   name,
+					AdapterID:              adapterID,
+					BillingMode:            billingMode,
+					EndpointURL:            endpointURL,
+					DataRegion:             dataRegion,
+					AllowPrivateIP:         allowPriv != 0,
+					State:                  mapConnectionStateOpenAPI(state),
+					SecretSlotFingerprints: map[string]string{},
+					Version:                ver,
+					CreatedAt:              formatTimeRFC3339Ms(createdMs),
+				},
+				primaryCredID: credPtr,
+				createdMs:     createdMs,
+			})
+			if len(items) >= limit+1 {
+				break
+			}
 		}
-		if credNS.Valid && credNS.String != "" {
-			v := credNS.String
-			credPtr = &v
+		if rerr := rows.Err(); rerr != nil {
+			_ = rows.Close()
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating provider connections", true, nil)
+			return
 		}
-		items = append(items, rowItem{
-			dto: providerConnectionDTO{
-				ID:                     id,
-				ProjectID:              projPtr,
-				Name:                   name,
-				AdapterID:              adapterID,
-				BillingMode:            billingMode,
-				EndpointURL:            endpointURL,
-				DataRegion:             dataRegion,
-				AllowPrivateIP:         allowPriv != 0,
-				State:                  mapConnectionStateOpenAPI(state),
-				SecretSlotFingerprints: map[string]string{},
-				Version:                ver,
-				CreatedAt:              formatTimeRFC3339Ms(createdMs),
-			},
-			primaryCredID: credPtr,
-			createdMs:     createdMs,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating provider connections", true, nil)
-		return
+		_ = rows.Close()
+
+		if !needFilter || sqlCount < batchLimit {
+			break
+		}
+		hasCur = true
 	}
 
 	hasMore := len(items) > limit
@@ -678,6 +729,15 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: ptrStrValue(cur.OwnerProjectID)}) {
 		return
 	}
+	if cur.OwnerProjectID != nil {
+		if !s.requireActiveOrgAndProject(w, r, orgID, *cur.OwnerProjectID) {
+			return
+		}
+	} else {
+		if !s.requireActiveOrg(w, r, orgID) {
+			return
+		}
+	}
 
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
@@ -693,16 +753,22 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	nextName := cur.Name
+	if cur.State == catalog.ConnStateRevoked || cur.State == catalog.ConnStateArchived {
+		writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", fmt.Sprintf("cannot modify connection in state %s", cur.State), false, curDTO)
+		return
+	}
+
+	var nextNamePtr *string
 	if req.Name != nil {
 		trimmed := strings.TrimSpace(*req.Name)
 		if trimmed == "" || len(trimmed) > 128 {
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "name cannot be blank", false, nil)
 			return
 		}
-		nextName = trimmed
+		nextNamePtr = &trimmed
 	}
 
+	var nextEndpointPtr *string
 	nextEndpoint := cur.EndpointBaseURL
 	if req.EndpointURL != nil {
 		trimmed := strings.TrimSpace(*req.EndpointURL)
@@ -711,6 +777,7 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		nextEndpoint = trimmed
+		nextEndpointPtr = &trimmed
 	}
 
 	nextAllowPriv := cur.AllowPrivateIP
@@ -718,29 +785,30 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 		nextAllowPriv = *req.AllowPrivateIP
 	}
 
-	nextCIDRs := cur.AllowedCIDRs
-	if len(req.AllowedCIDRs) > 0 {
-		nextCIDRs = append([]string(nil), req.AllowedCIDRs...)
-	} else if nextAllowPriv && len(nextCIDRs) == 0 {
-		nextCIDRs = append([]string(nil), defaultPrivateCIDRs...)
+	var nextCIDRsPtr *[]string
+	if req.AllowedCIDRs != nil {
+		copied := append([]string(nil), (*req.AllowedCIDRs)...)
+		nextCIDRsPtr = &copied
+	} else if req.AllowPrivateIP != nil && *req.AllowPrivateIP && len(cur.AllowedCIDRs) == 0 {
+		copied := append([]string(nil), defaultPrivateCIDRs...)
+		nextCIDRsPtr = &copied
 	}
 
-	if req.EndpointURL != nil || req.AllowPrivateIP != nil {
+	if req.EndpointURL != nil || req.AllowPrivateIP != nil || req.AllowedCIDRs != nil {
 		if ssrfErr := validateEndpointSSRF(r.Context(), nextEndpoint, nextAllowPriv, s.hostResolver, s.blockedPorts); ssrfErr != nil {
 			writeConnectionSSRFError(w, r, ssrfErr)
 			return
 		}
 	}
 
-	nextState := cur.State
+	var nextStatePtr *string
 	if req.State != nil {
 		reqState := strings.ToUpper(strings.TrimSpace(*req.State))
+		var mapped string
 		switch reqState {
 		case "ACTIVE":
-			if cur.State == catalog.ConnStateActive {
-				nextState = catalog.ConnStateActive
-			} else if cur.State == catalog.ConnStateDegraded {
-				nextState = catalog.ConnStateActive
+			if cur.State == catalog.ConnStateActive || cur.State == catalog.ConnStateDegraded {
+				mapped = catalog.ConnStateActive
 			} else {
 				writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", "connections must pass POST /connections/{id}/test validation to activate", false, curDTO)
 				return
@@ -748,11 +816,11 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 		case "DISABLED":
 			switch cur.State {
 			case catalog.ConnStateDraft:
-				nextState = catalog.ConnStateArchived
+				mapped = catalog.ConnStateArchived
 			case catalog.ConnStateActive, catalog.ConnStateDegraded, catalog.ConnStateAuthExpired:
-				nextState = catalog.ConnStateSuspendedAdmin
+				mapped = catalog.ConnStateSuspendedAdmin
 			case catalog.ConnStateSuspendedAdmin, catalog.ConnStateRevoked, catalog.ConnStateArchived:
-				nextState = cur.State
+				mapped = cur.State
 			default:
 				writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", fmt.Sprintf("cannot disable connection in state %s", cur.State), false, curDTO)
 				return
@@ -761,20 +829,61 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "state must be ACTIVE or DISABLED", false, nil)
 			return
 		}
+		nextStatePtr = &mapped
 	}
 
-	now := s.nowMs()
-	tx, err := s.db.BeginTx(r.Context(), nil)
+	var replaceBindings bool
+	var nextBindings []catalog.SecretBindingInput
+	if req.SecretBindings != nil {
+		replaceBindings = true
+		slots := make([]string, 0, len(req.SecretBindings))
+		for k := range req.SecretBindings {
+			slots = append(slots, k)
+		}
+		sort.Strings(slots)
+		nextBindings = make([]catalog.SecretBindingInput, 0, len(slots))
+		for _, slot := range slots {
+			nextBindings = append(nextBindings, catalog.SecretBindingInput{
+				SlotName:     strings.TrimSpace(slot),
+				CredentialID: strings.TrimSpace(req.SecretBindings[slot]),
+				InjectMode:   catalog.InjectModeHostBlind,
+			})
+		}
+	}
+
+	updated, err := s.catalog.UpdateProviderConnection(r.Context(), catalog.UpdateProviderConnectionParams{
+		OrgID:           orgID,
+		ConnectionID:    connID,
+		ExpectedVersion: expectedVer,
+		Name:            nextNamePtr,
+		EndpointBaseURL: nextEndpointPtr,
+		AllowPrivateIP:  req.AllowPrivateIP,
+		AllowedCIDRs:    nextCIDRsPtr,
+		State:           nextStatePtr,
+		ReplaceBindings: replaceBindings,
+		SecretBindings:  nextBindings,
+		AuditActorKind:  "PRINCIPAL",
+		AuditActorID:    sc.Actor.PrincipalID,
+		RequestID:       requestIDFromContext(r.Context()),
+	})
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting connection update tx", true, nil)
-		return
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := s.validateConnectionUpdateInTx(r.Context(), tx, orgID, cur, nextEndpoint, nextAllowPriv, req.SecretBindings); err != nil {
 		switch {
 		case errors.Is(err, port.ErrNotFound):
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", err.Error(), false, nil)
+		case errors.Is(err, port.ErrVersionConflict):
+			latest, lerr := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
+			if errors.Is(lerr, port.ErrNotFound) {
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+				return
+			}
+			if lerr != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading provider connection", true, nil)
+				return
+			}
+			latestDTO, _ := s.buildProviderConnectionDTO(r.Context(), latest)
+			writeOptimisticConflict(w, r, latest.Version, latestDTO)
+		case errors.Is(err, catalog.ErrInvalidStateTransition):
+			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", err.Error(), false, curDTO)
 		case errors.Is(err, port.ErrInvalidInput):
 			code := "invalid_request"
 			if strings.Contains(err.Error(), "allowed_hosts") || strings.Contains(err.Error(), "allowedHosts") {
@@ -782,132 +891,11 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 			}
 			writeErrorEnvelope(w, r, http.StatusBadRequest, code, "invalid_request_error", err.Error(), false, nil)
 		default:
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating updated connection", true, nil)
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed updating provider connection", true, nil)
 		}
 		return
 	}
 
-	cidrsJSON, merr := json.Marshal(nextCIDRs)
-	if merr != nil {
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "invalid allowed_cidrs", false, nil)
-		return
-	}
-
-	nextPrimaryCred := cur.CredentialID
-	nextAuthMode := cur.AuthMode
-	if req.SecretBindings != nil {
-		if _, err := tx.ExecContext(r.Context(), `
-			DELETE FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ?`,
-			orgID, connID,
-		); err != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed updating connection secret bindings", true, nil)
-			return
-		}
-		slots := make([]string, 0, len(req.SecretBindings))
-		for k := range req.SecretBindings {
-			slots = append(slots, k)
-		}
-		sort.Strings(slots)
-		nextPrimaryCred = nil
-		for _, slot := range slots {
-			credID := strings.TrimSpace(req.SecretBindings[slot])
-			if _, err := tx.ExecContext(r.Context(), `
-				INSERT INTO connection_secret_bindings (org_id, connection_id, slot_name, credential_id, inject_mode, created_at_ms)
-				VALUES (?, ?, ?, ?, ?, ?)`,
-				orgID, connID, slot, credID, catalog.InjectModeHostBlind, now,
-			); err != nil {
-				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed inserting connection secret binding", true, nil)
-				return
-			}
-			if slot == "api_key" || nextPrimaryCred == nil {
-				v := credID
-				nextPrimaryCred = &v
-			}
-		}
-		if len(slots) == 0 {
-			nextAuthMode = catalog.AuthModeNone
-		} else if nextAuthMode == catalog.AuthModeNone {
-			nextAuthMode = catalog.AuthModeAPIKey
-		}
-	}
-
-	res, err := tx.ExecContext(r.Context(), `
-		UPDATE provider_connections
-		SET name = ?, endpoint_base_url = ?, allow_private_ip = ?, allowed_cidrs_json = ?,
-		    credential_id = ?, auth_mode = ?, state = ?, version = version + 1, updated_at_ms = ?
-		WHERE org_id = ? AND id = ? AND version = ?`,
-		nextName, nextEndpoint, boolToInt(nextAllowPriv), string(cidrsJSON),
-		nullStrPtr(nextPrimaryCred), nextAuthMode, nextState, now,
-		orgID, connID, expectedVer,
-	)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed updating provider connection", true, nil)
-		return
-	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		_ = tx.Rollback()
-		latest, lerr := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
-		if lerr != nil {
-			if errors.Is(lerr, port.ErrNotFound) {
-				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
-				return
-			}
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading provider connection", true, nil)
-			return
-		}
-		latestDTO, _ := s.buildProviderConnectionDTO(r.Context(), latest)
-		writeOptimisticConflict(w, r, latest.Version, latestDTO)
-		return
-	}
-
-	emergency := nextState == catalog.ConnStateSuspendedAdmin || nextState == catalog.ConnStateRevoked
-	if _, err := tx.ExecContext(r.Context(), `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'provider_connection', ?, ?, ?, ?)`,
-		orgID, connID, port.MutationUpsert, boolToInt(emergency), now,
-	); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording changelog", true, nil)
-		return
-	}
-
-	audID, err := idgen.New(idgen.PrefixAudit)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed minting audit id", true, nil)
-		return
-	}
-	rawMeta, _ := json.Marshal(map[string]any{
-		"name":  nextName,
-		"state": nextState,
-	})
-	if err := s.txAudit.AppendTx(r.Context(), tx, port.AuditEvent{
-		ID:           audID,
-		CreatedAtMs:  now,
-		OrgID:        &orgID,
-		ActorKind:    "PRINCIPAL",
-		ActorID:      sc.Actor.PrincipalID,
-		EntryPoint:   port.AuditEntryPointAdminAPI,
-		EventType:    "provider_connection.updated",
-		TargetType:   "provider_connection",
-		TargetID:     connID,
-		RequestID:    ptrOrNil(requestIDFromContext(r.Context())),
-		MetadataJSON: string(rawMeta),
-	}); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed appending audit event", true, nil)
-		return
-	}
-
-	if err := tx.Commit(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing connection update", true, nil)
-		return
-	}
-	_ = s.catalog.SyncSnapshots(r.Context())
-
-	updated, err := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading updated connection", true, nil)
-		return
-	}
 	dto, err := s.buildProviderConnectionDTO(r.Context(), updated)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading connection fingerprints", true, nil)
@@ -915,101 +903,6 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 	}
 	w.Header().Set("ETag", FormatETag(dto.Version))
 	writeJSON(w, http.StatusOK, dto)
-}
-
-func (s *Server) validateConnectionUpdateInTx(
-	ctx context.Context,
-	tx *sql.Tx,
-	orgID string,
-	cur *catalog.ProviderConnection,
-	endpointURL string,
-	allowPrivateIP bool,
-	newBindings map[string]string,
-) error {
-	u, err := url.Parse(strings.TrimSpace(endpointURL))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
-		return fmt.Errorf("%w: invalid endpoint_url %q", port.ErrInvalidInput, endpointURL)
-	}
-	var hostsJSON, permsJSON string
-	if err := tx.QueryRowContext(ctx, `
-		SELECT pa.allowed_hosts_json, ei.approved_permissions_json
-		FROM provider_adapters pa
-		JOIN extension_installations ei ON ei.id = pa.installation_id
-		WHERE pa.id = ?`, cur.AdapterID,
-	).Scan(&hostsJSON, &permsJSON); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: provider_adapter %q", port.ErrNotFound, cur.AdapterID)
-		}
-		return err
-	}
-	var adapterHosts []string
-	if err := json.Unmarshal([]byte(hostsJSON), &adapterHosts); err != nil || len(adapterHosts) == 0 {
-		return fmt.Errorf("%w: adapter allowed_hosts is empty", port.ErrInvalidInput)
-	}
-	if !connectionHostAllowedByList(u, adapterHosts) {
-		return fmt.Errorf("%w: endpoint host %q denied by adapter allowed_hosts", port.ErrInvalidInput, u.Hostname())
-	}
-	var perms installer.PermissionSet
-	if err := json.Unmarshal([]byte(permsJSON), &perms); err == nil {
-		perms = installer.NormalizePermissionSet(perms)
-		if len(perms.AllowedHosts) > 0 && !connectionHostAllowedByList(u, perms.AllowedHosts) {
-			return fmt.Errorf("%w: endpoint host %q denied by SM-01 approved networkEgress.allowedHosts", port.ErrInvalidInput, u.Hostname())
-		}
-		if perms.RequireTLS && u.Scheme != "https" {
-			return fmt.Errorf("%w: endpoint scheme violates SM-01 requireTls=true", port.ErrInvalidInput)
-		}
-		if allowPrivateIP && !perms.AllowPrivateIP {
-			return fmt.Errorf("%w: allow_private_ip=true denied by SM-01 approved permissions", port.ErrInvalidInput)
-		}
-	}
-	for slot, rawCredID := range newBindings {
-		if strings.TrimSpace(slot) == "" || strings.TrimSpace(rawCredID) == "" {
-			return fmt.Errorf("%w: secret_bindings entries require non-empty slot and credential_id", port.ErrInvalidInput)
-		}
-		if len(perms.SecretSlots) > 0 {
-			found := false
-			for _, ps := range perms.SecretSlots {
-				if strings.TrimSpace(ps) == strings.TrimSpace(slot) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return fmt.Errorf("%w: secret slot %q is not approved in SM-01 permissions", port.ErrInvalidInput, slot)
-			}
-		}
-		var secOwner sql.NullString
-		err := tx.QueryRowContext(ctx, `
-			SELECT owner_project_id FROM secret_credentials WHERE org_id = ? AND id = ?`,
-			orgID, strings.TrimSpace(rawCredID),
-		).Scan(&secOwner)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: secret_credential %q", port.ErrNotFound, rawCredID)
-		}
-		if err != nil {
-			return err
-		}
-		if secOwner.Valid {
-			if cur.OwnerProjectID == nil || *cur.OwnerProjectID != secOwner.String || len(cur.SharedProjectIDs) > 0 {
-				return fmt.Errorf("%w: project-owned secret %q cannot be bound to org-shared or cross-project connection", port.ErrInvalidInput, rawCredID)
-			}
-		}
-	}
-	return nil
-}
-
-func connectionHostAllowedByList(u *url.URL, hosts []string) bool {
-	uHost := strings.ToLower(u.Hostname())
-	for _, h := range hosts {
-		apHost := strings.ToLower(strings.TrimSpace(h))
-		if idx := strings.LastIndex(apHost, ":"); idx > 0 && !strings.Contains(apHost, "]") {
-			apHost = apHost[:idx]
-		}
-		if apHost == uHost {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Server) handleDeleteConnection(w http.ResponseWriter, r *http.Request) {
@@ -1038,6 +931,15 @@ func (s *Server) handleDeleteConnection(w http.ResponseWriter, r *http.Request) 
 	}
 	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: ptrStrValue(cur.OwnerProjectID)}) {
 		return
+	}
+	if cur.OwnerProjectID != nil {
+		if !s.requireActiveOrgAndProject(w, r, orgID, *cur.OwnerProjectID) {
+			return
+		}
+	} else {
+		if !s.requireActiveOrg(w, r, orgID) {
+			return
+		}
 	}
 
 	expectedVer, ok := requireIfMatch(w, r)
@@ -1125,27 +1027,26 @@ func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 		latencyMs = 0
 	}
 
-	if err != nil && verdict == nil {
+	if err != nil {
 		switch {
 		case errors.Is(err, egress.ErrPrivateIPBlocked), errors.Is(err, egress.ErrMetadataBlocked), errors.Is(err, egress.ErrHostDenied), errors.Is(err, egress.ErrPortDenied):
 			writeConnectionSSRFError(w, r, err)
 			return
-		case errors.Is(err, catalog.ErrInvalidStateTransition):
+		case verdict == nil && errors.Is(err, catalog.ErrInvalidStateTransition):
 			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", err.Error(), false, nil)
 			return
-		case errors.Is(err, port.ErrInvalidInput):
+		case verdict == nil && errors.Is(err, port.ErrInvalidInput):
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
 			return
-		case errors.Is(err, port.ErrNotFound):
+		case verdict == nil && errors.Is(err, port.ErrNotFound):
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", err.Error(), false, nil)
 			return
-		default:
-			msg := err.Error()
-			code := "probe_failed"
+		case verdict == nil || verdict.FailureCode == "probe_egress_failed":
+			code, safeMsg := classifySafeProbeError(err)
 			verdict = &extport.ValidationVerdict{
 				Valid:            false,
 				FailureCode:      code,
-				SanitizedMessage: msg,
+				SanitizedMessage: safeMsg,
 			}
 		}
 	}
@@ -1191,6 +1092,33 @@ func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func classifySafeProbeError(err error) (string, string) {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "upstream_timeout", "upstream validation probe timed out"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "upstream_timeout", "upstream validation probe timed out"
+	}
+	var (
+		certInvalid x509.CertificateInvalidError
+		unknownAuth x509.UnknownAuthorityError
+		hostErr     x509.HostnameError
+		tlsRecErr   tls.RecordHeaderError
+	)
+	lowerMsg := strings.ToLower(err.Error())
+	if errors.As(err, &certInvalid) ||
+		errors.As(err, &unknownAuth) ||
+		errors.As(err, &hostErr) ||
+		errors.As(err, &tlsRecErr) ||
+		strings.Contains(lowerMsg, "tls") ||
+		strings.Contains(lowerMsg, "x509") ||
+		strings.Contains(lowerMsg, "certificate") {
+		return "upstream_tls_error", "upstream TLS handshake or certificate validation failed"
+	}
+	return "upstream_unreachable", "upstream connection could not be reached"
 }
 
 func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *catalog.ProviderConnection) (*extport.ValidationVerdict, error) {
@@ -1256,10 +1184,11 @@ func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *c
 		RequestID:            probeReqID,
 	}, broker.HostEgressConstraint{NarrowPolicy: narrowPolicy})
 	if err != nil {
+		code, safeMsg := classifySafeProbeError(err)
 		return &extport.ValidationVerdict{
 			Valid:            false,
-			FailureCode:      "probe_egress_failed",
-			SanitizedMessage: err.Error(),
+			FailureCode:      code,
+			SanitizedMessage: safeMsg,
 		}, err
 	}
 	flatHdrs := make(map[string]string, len(egressResp.SanitizedHeaders))

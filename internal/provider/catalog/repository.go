@@ -266,6 +266,26 @@ type CreateProviderConnectionParams struct {
 	ConfigJSON       string
 }
 
+// UpdateProviderConnectionParams configures UpdateProviderConnection.
+type UpdateProviderConnectionParams struct {
+	OrgID           string
+	ConnectionID    string
+	ExpectedVersion int64
+	Name            *string
+	EndpointBaseURL *string
+	AllowPrivateIP  *bool
+	AllowedCIDRs    *[]string
+	State           *string
+	CredentialID    *string
+	AuthMode        *string
+	ReplaceBindings bool
+	SecretBindings  []SecretBindingInput
+	AuditActorKind  string
+	AuditActorID    string
+	RequestID       string
+	Emergency       bool
+}
+
 // LogicalModel represents row data for logical_models.
 type LogicalModel struct {
 	ID               string
@@ -755,6 +775,352 @@ func (r *Repository) GetProviderConnection(ctx context.Context, orgID, connectio
 		return nil, mapDBError(err)
 	}
 	return &out, nil
+}
+
+// UpdateProviderConnection atomically updates a ProviderConnection with optimistic locking,
+// enforcing CIDR/SSRF/port/scheme/SM-01 permission parity, binding-mode checks, project secret
+// ownership checks, config_changelog recording, transactional audit logging, and snapshot sync.
+func (r *Repository) UpdateProviderConnection(ctx context.Context, params UpdateProviderConnectionParams) (*ProviderConnection, error) {
+	if strings.TrimSpace(params.OrgID) == "" || strings.TrimSpace(params.ConnectionID) == "" || params.ExpectedVersion < 1 {
+		return nil, fmt.Errorf("%w: org_id, connection_id, and expected_version >= 1 are required", port.ErrInvalidInput)
+	}
+
+	now := r.nowMs()
+	if err := r.withTx(ctx, func(tx *sql.Tx) error {
+		var (
+			ownerProj      sql.NullString
+			adapterID      string
+			curCredID      sql.NullString
+			curName        string
+			curEndpoint    string
+			curAllowPriv   int
+			curCIDRsJSON   string
+			curAuthMode    string
+			curState       string
+			sharedProjJSON string
+			curVersion     int64
+		)
+		err := tx.QueryRowContext(ctx, `
+			SELECT owner_project_id, adapter_id, credential_id, name, endpoint_base_url,
+			       allow_private_ip, allowed_cidrs_json, auth_mode, state, shared_project_ids_json, version
+			FROM provider_connections
+			WHERE org_id = ? AND id = ?`,
+			params.OrgID, params.ConnectionID,
+		).Scan(
+			&ownerProj, &adapterID, &curCredID, &curName, &curEndpoint,
+			&curAllowPriv, &curCIDRsJSON, &curAuthMode, &curState, &sharedProjJSON, &curVersion,
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, params.ConnectionID)
+		}
+		if err != nil {
+			return mapDBError(err)
+		}
+		if curVersion != params.ExpectedVersion {
+			return port.ErrVersionConflict
+		}
+
+		curCIDRs, err := decodeStringSliceStrict(curCIDRsJSON, "allowed_cidrs_json")
+		if err != nil {
+			return err
+		}
+		sharedProjects, err := decodeStringSliceStrict(sharedProjJSON, "shared_project_ids_json")
+		if err != nil {
+			return err
+		}
+
+		nextName := curName
+		if params.Name != nil {
+			trimmed := strings.TrimSpace(*params.Name)
+			if trimmed == "" || len(trimmed) > 128 {
+				return fmt.Errorf("%w: connection name must be 1..128 characters", port.ErrInvalidInput)
+			}
+			nextName = trimmed
+		}
+
+		nextEndpoint := curEndpoint
+		if params.EndpointBaseURL != nil {
+			nextEndpoint = strings.TrimSpace(*params.EndpointBaseURL)
+		}
+		parsedEndpoint, err := url.Parse(strings.TrimSpace(nextEndpoint))
+		if err != nil || (parsedEndpoint.Scheme != "http" && parsedEndpoint.Scheme != "https") || parsedEndpoint.Hostname() == "" || parsedEndpoint.User != nil {
+			return fmt.Errorf("%w: invalid endpoint_base_url %q", port.ErrInvalidInput, nextEndpoint)
+		}
+
+		nextAllowPriv := curAllowPriv != 0
+		if params.AllowPrivateIP != nil {
+			nextAllowPriv = *params.AllowPrivateIP
+		}
+		nextCIDRs := curCIDRs
+		if params.AllowedCIDRs != nil {
+			nextCIDRs = append([]string(nil), (*params.AllowedCIDRs)...)
+		}
+		if err := validateCIDRs(nextCIDRs); err != nil {
+			return err
+		}
+		if nextAllowPriv && len(nextCIDRs) == 0 {
+			return fmt.Errorf("%w: allow_private_ip=true requires non-empty allowed_cidrs", port.ErrInvalidInput)
+		}
+		cidrsJSON, err := marshalStringSlice(nextCIDRs)
+		if err != nil {
+			return err
+		}
+
+		nextState := curState
+		if params.State != nil {
+			candidate := strings.TrimSpace(*params.State)
+			switch candidate {
+			case ConnStateDraft, ConnStateValidating, ConnStateActive, ConnStateDegraded, ConnStateAuthExpired, ConnStateSuspendedAdmin, ConnStateRevoked, ConnStateArchived:
+				nextState = candidate
+			default:
+				return fmt.Errorf("%w: invalid connection state %q", port.ErrInvalidInput, candidate)
+			}
+		}
+
+		if curState == ConnStateRevoked || curState == ConnStateArchived {
+			return fmt.Errorf("%w: connection in state %s cannot be modified", ErrInvalidStateTransition, curState)
+		}
+		mutatingNetworkOrSecrets := params.EndpointBaseURL != nil ||
+			params.AllowPrivateIP != nil ||
+			params.AllowedCIDRs != nil ||
+			params.ReplaceBindings ||
+			params.CredentialID != nil ||
+			params.AuthMode != nil
+
+		var nextPrimaryCred *string
+		if curCredID.Valid && curCredID.String != "" {
+			v := curCredID.String
+			nextPrimaryCred = &v
+		}
+		if params.CredentialID != nil {
+			if trimmed := strings.TrimSpace(*params.CredentialID); trimmed != "" {
+				nextPrimaryCred = &trimmed
+			} else {
+				nextPrimaryCred = nil
+			}
+		}
+
+		nextAuthMode := curAuthMode
+		if params.AuthMode != nil {
+			am := strings.TrimSpace(*params.AuthMode)
+			if !isValidAuthMode(am) {
+				return fmt.Errorf("%w: invalid auth_mode %q", port.ErrInvalidInput, am)
+			}
+			nextAuthMode = am
+		}
+
+		var (
+			normalizedBindings []SecretBindingInput
+			bindingsToValidate []SecretBindingInput
+		)
+		if params.ReplaceBindings {
+			seenSlots := make(map[string]struct{}, len(params.SecretBindings)+1)
+			var credForReplace *string
+			if params.CredentialID != nil {
+				credForReplace = nextPrimaryCred
+			}
+			for _, rawB := range params.SecretBindings {
+				slot := strings.TrimSpace(rawB.SlotName)
+				credID := strings.TrimSpace(rawB.CredentialID)
+				if slot == "" || credID == "" {
+					return fmt.Errorf("%w: secret binding slot_name and credential_id are required", port.ErrInvalidInput)
+				}
+				if _, dup := seenSlots[slot]; dup {
+					return fmt.Errorf("%w: duplicate secret binding slot_name %q", port.ErrInvalidInput, slot)
+				}
+				if slot == "api_key" && credForReplace != nil && credID != *credForReplace {
+					return fmt.Errorf("%w: credential_id %q conflicts with secret_bindings api_key %q", port.ErrInvalidInput, *credForReplace, credID)
+				}
+				mode := strings.TrimSpace(rawB.InjectMode)
+				if mode == "" {
+					mode = InjectModeHostBlind
+				}
+				if !isValidInjectMode(mode) {
+					return fmt.Errorf("%w: invalid inject_mode %q", port.ErrInvalidInput, mode)
+				}
+				seenSlots[slot] = struct{}{}
+				normalizedBindings = append(normalizedBindings, SecretBindingInput{
+					SlotName:     slot,
+					CredentialID: credID,
+					InjectMode:   mode,
+				})
+				if slot == "api_key" || credForReplace == nil {
+					v := credID
+					credForReplace = &v
+				}
+			}
+			nextPrimaryCred = credForReplace
+			if params.AuthMode == nil {
+				if len(normalizedBindings) == 0 {
+					nextAuthMode = AuthModeNone
+				} else if nextAuthMode == AuthModeNone {
+					nextAuthMode = AuthModeAPIKey
+				}
+			}
+			bindingsToValidate = normalizedBindings
+		} else {
+			rows, qerr := tx.QueryContext(ctx, `
+				SELECT slot_name, credential_id, inject_mode
+				FROM connection_secret_bindings
+				WHERE org_id = ? AND connection_id = ?
+				ORDER BY slot_name ASC`, params.OrgID, params.ConnectionID)
+			if qerr != nil {
+				return mapDBError(qerr)
+			}
+			hasAPIKeySlot := false
+			for rows.Next() {
+				var b SecretBindingInput
+				if serr := rows.Scan(&b.SlotName, &b.CredentialID, &b.InjectMode); serr != nil {
+					_ = rows.Close()
+					return mapDBError(serr)
+				}
+				if b.SlotName == "api_key" {
+					hasAPIKeySlot = true
+				}
+				bindingsToValidate = append(bindingsToValidate, b)
+			}
+			if rerr := rows.Err(); rerr != nil {
+				_ = rows.Close()
+				return mapDBError(rerr)
+			}
+			_ = rows.Close()
+			if !hasAPIKeySlot && nextPrimaryCred != nil && *nextPrimaryCred != "" {
+				bindingsToValidate = append(bindingsToValidate, SecretBindingInput{
+					SlotName:     "api_key",
+					CredentialID: *nextPrimaryCred,
+					InjectMode:   InjectModeHostBlind,
+				})
+			}
+		}
+
+		if nextAuthMode == AuthModeNone && (nextPrimaryCred != nil || len(bindingsToValidate) > 0) {
+			return fmt.Errorf("%w: auth_mode=NONE cannot bind credentials or secret slots", port.ErrInvalidInput)
+		}
+
+		if mutatingNetworkOrSecrets || nextState == ConnStateActive {
+			adapterHosts, gov, err := loadConnectionExtensionGovernanceByAdapter(ctx, tx, params.OrgID, adapterID)
+			if err != nil {
+				return err
+			}
+			gov.HasChildProjectScope = ownerProj.Valid || len(sharedProjects) > 0
+			if err := r.validateOrgAndActiveExtensionTrust(gov, false, port.ErrInvalidInput); err != nil {
+				return err
+			}
+			approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
+			if err != nil {
+				return fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
+			}
+			if err := validateEndpointAndPermissions(parsedEndpoint, nextAllowPriv, adapterHosts, approved, port.ErrInvalidInput); err != nil {
+				return err
+			}
+			var ownerProjPtr *string
+			if ownerProj.Valid {
+				v := ownerProj.String
+				ownerProjPtr = &v
+			}
+			for _, b := range bindingsToValidate {
+				if err := slotPermittedByApproved(b.SlotName, b.InjectMode, approved, port.ErrInvalidInput); err != nil {
+					return err
+				}
+				if err := ensureSecretCompatibleWithConnectionTx(ctx, tx, params.OrgID, ownerProjPtr, sharedProjects, b.CredentialID); err != nil {
+					return err
+				}
+			}
+		}
+
+		if params.ReplaceBindings {
+			if _, err := tx.ExecContext(ctx, `
+				DELETE FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ?`,
+				params.OrgID, params.ConnectionID,
+			); err != nil {
+				return mapDeleteDBError(err)
+			}
+			for _, b := range normalizedBindings {
+				if _, err := tx.ExecContext(ctx, `
+					INSERT INTO connection_secret_bindings (
+						org_id, connection_id, slot_name, credential_id, inject_mode, created_at_ms
+					) VALUES (?, ?, ?, ?, ?, ?)`,
+					params.OrgID, params.ConnectionID, b.SlotName, b.CredentialID, b.InjectMode, now,
+				); err != nil {
+					return mapWriteDBError(err)
+				}
+			}
+		}
+
+		allowPrivInt := 0
+		if nextAllowPriv {
+			allowPrivInt = 1
+		}
+		res, err := tx.ExecContext(ctx, `
+			UPDATE provider_connections
+			SET name = ?, endpoint_base_url = ?, allow_private_ip = ?, allowed_cidrs_json = ?,
+			    credential_id = ?, auth_mode = ?, state = ?, version = version + 1, updated_at_ms = ?
+			WHERE org_id = ? AND id = ? AND version = ?`,
+			nextName, nextEndpoint, allowPrivInt, cidrsJSON,
+			nullStrPtr(nextPrimaryCred), nextAuthMode, nextState, now,
+			params.OrgID, params.ConnectionID, params.ExpectedVersion,
+		)
+		if err != nil {
+			return mapWriteDBError(err)
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected == 0 {
+			return port.ErrVersionConflict
+		}
+
+		emergency := params.Emergency || nextState == ConnStateSuspendedAdmin || nextState == ConnStateRevoked
+		if err := appendChangelogTx(ctx, tx, &params.OrgID, "provider_connection", params.ConnectionID, port.MutationUpsert, emergency, now); err != nil {
+			return err
+		}
+
+		actorKind := strings.TrimSpace(params.AuditActorKind)
+		if actorKind == "" {
+			actorKind = "SYSTEM"
+		}
+		actorID := strings.TrimSpace(params.AuditActorID)
+		if actorID == "" {
+			actorID = "catalog"
+		}
+		var reqIDPtr *string
+		if trimmed := strings.TrimSpace(params.RequestID); trimmed != "" {
+			reqIDPtr = &trimmed
+		}
+		auditID, err := idgen.New(idgen.PrefixAudit)
+		if err != nil {
+			return err
+		}
+		rawMeta, err := json.Marshal(map[string]any{
+			"name":  nextName,
+			"state": nextState,
+		})
+		if err != nil {
+			return err
+		}
+		orgCopy := params.OrgID
+		return r.audit.AppendTx(ctx, tx, port.AuditEvent{
+			ID:           auditID,
+			CreatedAtMs:  now,
+			OrgID:        &orgCopy,
+			ActorKind:    actorKind,
+			ActorID:      actorID,
+			EntryPoint:   port.AuditEntryPointAdminAPI,
+			EventType:    "provider_connection.updated",
+			TargetType:   "provider_connection",
+			TargetID:     params.ConnectionID,
+			RequestID:    reqIDPtr,
+			MetadataJSON: string(rawMeta),
+		})
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := r.syncSnapshot(ctx); err != nil {
+		return nil, err
+	}
+	return r.GetProviderConnection(ctx, params.OrgID, params.ConnectionID)
 }
 
 // DeleteProviderConnection deletes an unreferenced ProviderConnection, returning port.ErrResourceInUse (409)

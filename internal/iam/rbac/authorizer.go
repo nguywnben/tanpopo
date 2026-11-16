@@ -471,7 +471,7 @@ func Authorize(actor *Actor, action Action, target TargetScope) error {
 
 func isProjectCollectionReadAction(action Action) bool {
 	switch action {
-	case ActionProjectRead, ActionModelRead, ActionExtensionRead, ActionRouteRead, ActionRouteExplain, ActionPolicyRead, ActionMCPRead, ActionTraceReadMeta, ActionBudgetRead, ActionVKeyRead:
+	case ActionProjectRead, ActionConnectionRead, ActionModelRead, ActionExtensionRead, ActionRouteRead, ActionRouteExplain, ActionPolicyRead, ActionMCPRead, ActionTraceReadMeta, ActionBudgetRead, ActionVKeyRead:
 		return true
 	default:
 		return false

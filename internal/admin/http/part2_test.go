@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -41,6 +42,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/audit"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
@@ -750,8 +752,8 @@ func TestPart2E2ELifecycleAndAuditChain(t *testing.T) {
 		"max_output_tokens": 16384,
 		"assurance_tier":    "VERIFIED",
 		"capabilities": map[string]any{
-			"tools":     true,
-			"streaming": true,
+			"tool_calling": true,
+			"streaming":    true,
 		},
 	})
 	if recModel.Code != http.StatusCreated {
@@ -1516,3 +1518,928 @@ func TestPart2TracesDebugPayloadKillSwitchAndAuditTamper(t *testing.T) {
 		t.Fatalf("expected intact=false first_broken_seq_no=1, got %+v", verTampered)
 	}
 }
+
+func TestPart2MultiTenantExtensionRBACAndFourEyesHardening(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "MT Org 1", "mt-proj-1")
+
+	// Add a second active organization to enter multi-tenant mode (> 1 active org).
+	org2, err := h.st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "mt-org-2", DisplayName: "MT Org 2"})
+	if err != nil {
+		t.Fatalf("CreateOrganization mt-org-2: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE organizations SET require_four_eyes_approval = 1 WHERE id = ?`, boot.OrgID); err != nil {
+		t.Fatalf("enable four-eyes on org1: %v", err)
+	}
+
+	// Register an ORG_OWNER-only actor (no INSTANCE OPERATOR) and two INSTANCE OPERATOR actors.
+	orgOwnerOnlyTok := "tok_mt_org_owner_only"
+	h.registerBearerToken(orgOwnerOnlyTok, &rbac.Actor{
+		PrincipalID:     "pri_mt_org_owner_only",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleOrgOwner}},
+	})
+
+	reviewerID := idgen.MustNew(idgen.PrefixPrincipal)
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'HUMAN_LOCAL', 'sec-mt@example.test', 'ACTIVE', 1000, 1000)`,
+		reviewerID, boot.OrgID,
+	); err != nil {
+		t.Fatalf("insert reviewer: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES ('rb_mt_rev', ?, ?, 'ORG', ?, 'SECURITY_REVIEWER', 1, 1000)`,
+		boot.OrgID, reviewerID, boot.OrgID,
+	); err != nil {
+		t.Fatalf("insert reviewer binding: %v", err)
+	}
+	secRevTok := "tok_mt_sec_rev"
+	h.registerBearerToken(secRevTok, &rbac.Actor{
+		PrincipalID:     reviewerID,
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleSecurityReviewer}},
+	})
+
+	opStagerID := idgen.MustNew(idgen.PrefixPrincipal)
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, created_at_ms, updated_at_ms)
+		VALUES (?, NULL, 'ADMIN_SERVICE_TOKEN', 'op-stager@example.test', 'ACTIVE', 1000, 1000)`,
+		opStagerID,
+	); err != nil {
+		t.Fatalf("insert opStager: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES ('rb_mt_op1', NULL, ?, 'INSTANCE', 'instance', 'OPERATOR', 1, 1000)`,
+		opStagerID,
+	); err != nil {
+		t.Fatalf("insert op1 binding: %v", err)
+	}
+	opStagerTok := "tok_mt_op_stager"
+	h.registerBearerToken(opStagerTok, &rbac.Actor{
+		PrincipalID:     opStagerID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	})
+
+	opApproverID := idgen.MustNew(idgen.PrefixPrincipal)
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, created_at_ms, updated_at_ms)
+		VALUES (?, NULL, 'ADMIN_SERVICE_TOKEN', 'op-approver@example.test', 'ACTIVE', 1000, 1000)`,
+		opApproverID,
+	); err != nil {
+		t.Fatalf("insert opApprover: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES ('rb_mt_op2', NULL, ?, 'INSTANCE', 'instance', 'OPERATOR', 1, 1000)`,
+		opApproverID,
+	); err != nil {
+		t.Fatalf("insert op2 binding: %v", err)
+	}
+	opApproverTok := "tok_mt_op_approver"
+	h.registerBearerToken(opApproverTok, &rbac.Actor{
+		PrincipalID:     opApproverID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	})
+
+	v1URI := "https://marketplace.tanpopo.dev/mt-1.0.0.tpkg"
+	v1SHA := h.registerSignedProviderTPKG(t, v1URI, "@tanpopo/mt-adapter", "1.0.0", []string{"api.openai.com"}, false, true)
+	v2URI := "https://marketplace.tanpopo.dev/mt-1.1.0.tpkg"
+	v2SHA := h.registerSignedProviderTPKG(t, v2URI, "@tanpopo/mt-adapter", "1.1.0", []string{"api.openai.com", "eu.api.openai.com"}, false, true)
+
+	// ORG_OWNER cannot stage in multi-tenant mode without INSTANCE OPERATOR.
+	recOrgStage := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/install", orgOwnerOnlyTok, "", map[string]any{
+		"source_uri":      v1URI,
+		"expected_sha256": v1SHA,
+	})
+	if recOrgStage.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for ORG_OWNER staging in multi-tenant mode, got %d body=%s", recOrgStage.Code, recOrgStage.Body.String())
+	}
+
+	// INSTANCE OPERATOR stages v1.
+	recStage := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/install?org_id="+boot.OrgID, opStagerTok, "", map[string]any{
+		"source_uri":      v1URI,
+		"expected_sha256": v1SHA,
+	})
+	if recStage.Code != http.StatusAccepted {
+		t.Fatalf("operator stage v1 expected 202, got %d body=%s", recStage.Code, recStage.Body.String())
+	}
+	var stageDiff extensionPermissionDiffDTO
+	mustDecodeJSON(t, recStage.Body.Bytes(), &stageDiff)
+	stageETag := recStage.Result().Header.Get("ETag")
+
+	// Cross-org ?org_id=org2 bypass attempt for four-eyes self-approval MUST fail with 403.
+	recSelfBypass := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+stageDiff.InstallationID+"/approve-permissions?org_id="+org2.ID, opStagerTok, stageETag, map[string]any{
+		"enable_immediately": true,
+	})
+	if recSelfBypass.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 self_approval_forbidden across ?org_id bypass, got %d body=%s", recSelfBypass.Code, recSelfBypass.Body.String())
+	}
+
+	// Org-scoped SECURITY_REVIEWER cannot approve global extension in multi-tenant mode.
+	recRevBlocked := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+stageDiff.InstallationID+"/approve-permissions", secRevTok, stageETag, map[string]any{
+		"enable_immediately": true,
+	})
+	if recRevBlocked.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for SECURITY_REVIEWER in multi-tenant mode, got %d body=%s", recRevBlocked.Code, recRevBlocked.Body.String())
+	}
+
+	// Distinct INSTANCE OPERATOR approves v1.
+	recAppV1 := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+stageDiff.InstallationID+"/approve-permissions?org_id="+boot.OrgID, opApproverTok, stageETag, map[string]any{
+		"enable_immediately": true,
+	})
+	if recAppV1.Code != http.StatusOK {
+		t.Fatalf("operator approve v1 expected 200, got %d body=%s", recAppV1.Code, recAppV1.Body.String())
+	}
+	var insV1 extensionInstallationDTO
+	mustDecodeJSON(t, recAppV1.Body.Bytes(), &insV1)
+
+	// Upgrade v1 -> v2 requires INSTANCE OPERATOR (ORG_OWNER blocked), then approved by distinct operator.
+	recOrgUp := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insV1.ID+"/upgrade", orgOwnerOnlyTok, FormatETag(insV1.Version), map[string]any{
+		"source_uri":      v2URI,
+		"expected_sha256": v2SHA,
+	})
+	if recOrgUp.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for ORG_OWNER upgrade in multi-tenant mode, got %d body=%s", recOrgUp.Code, recOrgUp.Body.String())
+	}
+	recUp := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insV1.ID+"/upgrade?org_id="+boot.OrgID, opStagerTok, FormatETag(insV1.Version), map[string]any{
+		"source_uri":      v2URI,
+		"expected_sha256": v2SHA,
+	})
+	if recUp.Code != http.StatusAccepted {
+		t.Fatalf("operator upgrade expected 202, got %d body=%s", recUp.Code, recUp.Body.String())
+	}
+	upETag := recUp.Result().Header.Get("ETag")
+	recAppV2 := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insV1.ID+"/approve-permissions?org_id="+boot.OrgID, opApproverTok, upETag, map[string]any{
+		"enable_immediately": true,
+	})
+	if recAppV2.Code != http.StatusOK {
+		t.Fatalf("operator approve v2 expected 200, got %d body=%s", recAppV2.Code, recAppV2.Body.String())
+	}
+	var insV2 extensionInstallationDTO
+	mustDecodeJSON(t, recAppV2.Body.Bytes(), &insV2)
+
+	// Multi-tenant rollback & uninstall & extension kill-switch blocked for ORG_OWNER.
+	recOrgRB := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insV2.ID+"/rollback", orgOwnerOnlyTok, FormatETag(insV2.Version), map[string]any{"reason": "Valid rollback reason"})
+	if recOrgRB.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for ORG_OWNER rollback in multi-tenant mode, got %d body=%s", recOrgRB.Code, recOrgRB.Body.String())
+	}
+	recOrgDel := h.doBearer(t, http.MethodDelete, "/admin/v1/extensions/"+insV2.ID, orgOwnerOnlyTok, FormatETag(insV2.Version), nil)
+	if recOrgDel.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for ORG_OWNER uninstall in multi-tenant mode, got %d body=%s", recOrgDel.Code, recOrgDel.Body.String())
+	}
+	recOrgExtKS := h.doBearer(t, http.MethodPost, "/admin/v1/kill-switches", orgOwnerOnlyTok, "", map[string]any{
+		"target_level":         "EXTENSION",
+		"target_id":            insV2.ID,
+		"abort_active_streams": true,
+		"reason":               "Tenant owner extension kill-switch must fail in multi-tenant",
+	})
+	if recOrgExtKS.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for ORG_OWNER extension kill-switch in multi-tenant mode, got %d body=%s", recOrgExtKS.Code, recOrgExtKS.Body.String())
+	}
+
+	// Short rollback reason rejected (400), valid reason succeeds and emits rollback reason audit event.
+	recShortRB := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insV2.ID+"/rollback?org_id="+boot.OrgID, opStagerTok, FormatETag(insV2.Version), map[string]any{"reason": "bad"})
+	if recShortRB.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on short rollback reason, got %d body=%s", recShortRB.Code, recShortRB.Body.String())
+	}
+	rbReason := "Post-upgrade regression containment reason"
+	recGoodRB := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insV2.ID+"/rollback?org_id="+boot.OrgID, opStagerTok, FormatETag(insV2.Version), map[string]any{"reason": rbReason})
+	if recGoodRB.Code != http.StatusOK {
+		t.Fatalf("operator rollback expected 200, got %d body=%s", recGoodRB.Code, recGoodRB.Body.String())
+	}
+	var rbAuditReason string
+	if err := h.st.RawDB().QueryRowContext(ctx, `
+		SELECT json_extract(metadata_json, '$.reason')
+		FROM audit_events
+		WHERE event_type = 'extension.rollback_reason_recorded' AND target_id = ?
+		ORDER BY seq_no DESC LIMIT 1`, insV2.ID,
+	).Scan(&rbAuditReason); err != nil || rbAuditReason != rbReason {
+		t.Fatalf("expected extension.rollback_reason_recorded audit event with reason %q, got %q err=%v", rbReason, rbAuditReason, err)
+	}
+
+	// pinned_installation_id validation in PUT /organizations/{orgId}/extension-policies.
+	recBadPin := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/organizations/"+boot.OrgID+"/extension-policies", ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"min_plugin_trust": "OFFICIAL_ONLY",
+		"policies": []map[string]any{
+			{"package_id": insV2.PackageID, "enabled": true, "pinned_installation_id": "ins_nonexistent"},
+		},
+	})
+	if recBadPin.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for nonexistent pinned_installation_id, got %d body=%s", recBadPin.Code, recBadPin.Body.String())
+	}
+
+	// Operator can trigger EXTENSION kill-switch in multi-tenant mode.
+	recOpExtKS := h.doBearer(t, http.MethodPost, "/admin/v1/kill-switches?org_id="+boot.OrgID, opStagerTok, "", map[string]any{
+		"target_level":         "EXTENSION",
+		"target_id":            insV2.ID,
+		"abort_active_streams": true,
+		"reason":               "Operator multi-tenant extension quarantine",
+	})
+	if recOpExtKS.Code != http.StatusOK {
+		t.Fatalf("operator EXTENSION kill-switch expected 200, got %d body=%s", recOpExtKS.Code, recOpExtKS.Body.String())
+	}
+}
+
+func TestPart2ConnectionPatchParityAndSSRFErrorRedaction(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "ConnParity Org", "proj-a")
+
+	recPB := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "proj-b",
+		"name": "Project B",
+	})
+	if recPB.Code != http.StatusCreated {
+		t.Fatalf("create proj-b: %d %s", recPB.Code, recPB.Body.String())
+	}
+	var projB projectDTO
+	mustDecodeJSON(t, recPB.Body.Bytes(), &projB)
+
+	// Closed local port for safe unreachable dial error redaction check.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	closedAddr := ln.Addr().String()
+	_ = ln.Close()
+
+	// Bad TLS server (self-signed untrusted cert) for TLS error redaction check.
+	tlsSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"object":"list","data":[]}`))
+	}))
+	defer tlsSrv.Close()
+
+	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	rootFP := trust.PublicKeyFingerprint(h.rootPub)
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE extension_versions SET signing_key_fingerprint = ? WHERE package_id = 'tanpopo.local_openai'`, rootFP); err != nil {
+		t.Fatalf("sign seeded local adapter: %v", err)
+	}
+
+	recSecA := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/secrets", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":         "sec-a",
+		"project_id":   boot.ProjectID,
+		"secret_kind":  "API_KEY",
+		"secret_value": "sk-proj-a-12345678",
+	})
+	if recSecA.Code != http.StatusCreated {
+		t.Fatalf("create sec-a: %d %s", recSecA.Code, recSecA.Body.String())
+	}
+	var secA secretMetadataDTO
+	mustDecodeJSON(t, recSecA.Body.Bytes(), &secA)
+
+	recSecB := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/secrets", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":         "sec-b",
+		"project_id":   projB.ID,
+		"secret_kind":  "API_KEY",
+		"secret_value": "sk-proj-b-12345678",
+	})
+	if recSecB.Code != http.StatusCreated {
+		t.Fatalf("create sec-b: %d %s", recSecB.Code, recSecB.Body.String())
+	}
+	var secB secretMetadataDTO
+	mustDecodeJSON(t, recSecB.Body.Bytes(), &secB)
+
+	recConn := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":             "patch-target",
+		"project_id":       boot.ProjectID,
+		"adapter_id":       adpID,
+		"billing_mode":     "SELF_HOSTED_INFRA",
+		"endpoint_url":     "http://" + closedAddr + "/v1",
+		"data_region":      "ON_PREM",
+		"allow_private_ip": true,
+		"allowed_cidrs":    []string{"127.0.0.1/32"},
+		"secret_bindings":  map[string]string{"api_key": secA.CredentialID},
+	})
+	if recConn.Code != http.StatusCreated {
+		t.Fatalf("create conn: %d %s", recConn.Code, recConn.Body.String())
+	}
+	var conn providerConnectionDTO
+	mustDecodeJSON(t, recConn.Body.Bytes(), &conn)
+
+	// Probe unreachable endpoint -> must redact raw IP/port/net.OpError from sanitized_message.
+	recProbeConnRefused := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections/"+conn.ID+"/test", ownerCookie, boot.CSRFToken, "", nil)
+	if recProbeConnRefused.Code != http.StatusOK {
+		t.Fatalf("probe closed port expected 200 ConnectionTestResponse, got %d body=%s", recProbeConnRefused.Code, recProbeConnRefused.Body.String())
+	}
+	var probeRefused connectionTestResponseDTO
+	mustDecodeJSON(t, recProbeConnRefused.Body.Bytes(), &probeRefused)
+	if probeRefused.Valid || probeRefused.SanitizedMessage == nil || strings.Contains(*probeRefused.SanitizedMessage, "127.0.0.1") || strings.Contains(*probeRefused.SanitizedMessage, "dial tcp") {
+		t.Fatalf("expected sanitized transport failure message without raw dial/IP details, got %+v", probeRefused)
+	}
+
+	// Re-read connection via list endpoint to obtain live revision after failed validation probe (DRAFT -> VALIDATING -> DRAFT).
+	recListConn := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/connections?project_id="+boot.ProjectID, ownerCookie, "", "", nil)
+	if recListConn.Code != http.StatusOK {
+		t.Fatalf("GET /connections expected 200, got %d body=%s", recListConn.Code, recListConn.Body.String())
+	}
+	var connList paginatedListEnvelope[providerConnectionDTO]
+	mustDecodeJSON(t, recListConn.Body.Bytes(), &connList)
+	foundConn := false
+	for _, c := range connList.Data {
+		if c.ID == conn.ID {
+			conn = c
+			foundConn = true
+			break
+		}
+	}
+	if !foundConn {
+		t.Fatalf("connection %s not found in GET /connections", conn.ID)
+	}
+
+	// Invalid CIDR, wildcard 0.0.0.0/0, empty allowed_cidrs with allow_private_ip=true, unapproved host, port mismatch, cross-project secret binding -> all blocked.
+	badPatches := []struct {
+		name string
+		body map[string]any
+	}{
+		{"invalid_cidr", map[string]any{"allowed_cidrs": []string{"not-a-cidr"}}},
+		{"wildcard_cidr", map[string]any{"allowed_cidrs": []string{"0.0.0.0/0"}}},
+		{"empty_cidrs_with_priv", map[string]any{"allowed_cidrs": []string{}}},
+		{"unapproved_host", map[string]any{"endpoint_url": "https://evil.example.com/v1"}},
+		{"cross_project_secret", map[string]any{"secret_bindings": map[string]string{"api_key": secB.CredentialID}}},
+	}
+	for _, tc := range badPatches {
+		rec := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/connections/"+conn.ID, ownerCookie, boot.CSRFToken, FormatETag(conn.Version), tc.body)
+		if rec.Code != http.StatusBadRequest && rec.Code != http.StatusUnprocessableEntity && rec.Code != http.StatusNotFound {
+			t.Fatalf("PATCH %s expected 400/404/422, got %d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Also point connection to untrusted TLS server and confirm sanitized TLS message hides internal IP/cert details.
+	recPatchTLS := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/connections/"+conn.ID, ownerCookie, boot.CSRFToken, FormatETag(conn.Version), map[string]any{
+		"endpoint_url": tlsSrv.URL + "/v1",
+	})
+	if recPatchTLS.Code != http.StatusOK {
+		t.Fatalf("PATCH endpoint to tlsSrv expected 200, got %d body=%s", recPatchTLS.Code, recPatchTLS.Body.String())
+	}
+	mustDecodeJSON(t, recPatchTLS.Body.Bytes(), &conn)
+
+	recProbeTLS := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections/"+conn.ID+"/test", ownerCookie, boot.CSRFToken, "", nil)
+	if recProbeTLS.Code != http.StatusOK {
+		t.Fatalf("probe untrusted TLS expected 200 ConnectionTestResponse, got %d body=%s", recProbeTLS.Code, recProbeTLS.Body.String())
+	}
+	var probeTLS connectionTestResponseDTO
+	mustDecodeJSON(t, recProbeTLS.Body.Bytes(), &probeTLS)
+	if probeTLS.Valid || probeTLS.SanitizedMessage == nil || !strings.Contains(*probeTLS.SanitizedMessage, "TLS") || strings.Contains(*probeTLS.SanitizedMessage, "127.0.0.1") {
+		t.Fatalf("expected sanitized TLS handshake message without IP leak, got %+v", probeTLS)
+	}
+
+	// Endpoint port restriction from adapter (require_tls=true on extension allows port 443; non-443 rejected unless custom port allowed -> check https://api.openai.com:8443/v1).
+	// Force port check by creating a strict TLS-required installation & adapter.
+	pkgPort := "@tanpopo/strict-port"
+	exvPort := idgen.MustNew(idgen.PrefixExtensionVersion)
+	insPort := idgen.MustNew(idgen.PrefixInstallation)
+	adpPort := idgen.MustNew(idgen.PrefixAdapter)
+	now := h.fk.Now().UTC().UnixMilli()
+	permsStrict, _ := json.Marshal(installer.PermissionSet{
+		AllowedHosts:   []string{"api.openai.com:443"},
+		AllowPrivateIP: false,
+		RequireTLS:     true,
+		SecretSlots:    []string{"api_key"},
+	})
+	if _, err := h.st.RawDB().ExecContext(ctx, `INSERT INTO extension_packages (id, canonical_name, extension_kind, publisher_id, origin_trust_tier, created_at_ms) VALUES (?, ?, 'PROVIDER_ADAPTER', 'tanpopo', 'official', ?)`, pkgPort, pkgPort, now); err != nil {
+		t.Fatalf("insert pkgPort: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `INSERT INTO extension_versions (id, package_id, semver, contract_version, core_version_range, execution_tier, bundle_sha256, signature_verified, enterprise_signed, signing_key_fingerprint, source_uri, manifest_json, created_at_ms) VALUES (?, ?, '1.0.0', 'v1', '>=0.1.0', 'DECLARATIVE_T1', ?, 1, 0, ?, 'builtin://strict', '{}', ?)`, exvPort, pkgPort, strings.Repeat("d", 64), rootFP, now); err != nil {
+		t.Fatalf("insert exvPort: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `INSERT INTO extension_installations (id, package_id, active_version_id, state, approved_permissions_json, version, created_at_ms, updated_at_ms) VALUES (?, ?, ?, 'ENABLED_ACTIVE', ?, 1, ?, ?)`, insPort, pkgPort, exvPort, string(permsStrict), now, now); err != nil {
+		t.Fatalf("insert insPort: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `INSERT INTO provider_adapters (id, installation_id, adapter_slug, supported_dialects_json, allowed_hosts_json, version, created_at_ms) VALUES (?, ?, 'strict-openai', '["openai_compatible"]', '["api.openai.com:443"]', 1, ?)`, adpPort, insPort, now); err != nil {
+		t.Fatalf("insert adpPort: %v", err)
+	}
+	recStrictConn := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":             "strict-conn",
+		"adapter_id":       adpPort,
+		"billing_mode":     "COMMERCIAL_API",
+		"endpoint_url":     "https://api.openai.com/v1",
+		"data_region":      "US",
+		"allow_private_ip": false,
+		"secret_bindings":  map[string]string{"api_key": secA.CredentialID},
+		"project_id":       boot.ProjectID,
+	})
+	if recStrictConn.Code != http.StatusCreated {
+		t.Fatalf("create strict conn: %d %s", recStrictConn.Code, recStrictConn.Body.String())
+	}
+	var strictConn providerConnectionDTO
+	mustDecodeJSON(t, recStrictConn.Body.Bytes(), &strictConn)
+
+	recPortMismatch := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/connections/"+strictConn.ID, ownerCookie, boot.CSRFToken, FormatETag(strictConn.Version), map[string]any{
+		"endpoint_url": "https://api.openai.com:8443/v1",
+	})
+	if recPortMismatch.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 disallowed_host on port 8443 under adapter/SM-01 port parity, got %d body=%s", recPortMismatch.Code, recPortMismatch.Body.String())
+	}
+
+	// Revoke strictConn in DB -> subsequent PATCH must be rejected (422/409).
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE provider_connections SET state = ? WHERE id = ?`, catalog.ConnStateRevoked, strictConn.ID); err != nil {
+		t.Fatalf("revoke strictConn: %v", err)
+	}
+	recRevokedPatch := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/connections/"+strictConn.ID, ownerCookie, boot.CSRFToken, FormatETag(strictConn.Version), map[string]any{
+		"name": "mutating-revoked",
+	})
+	if recRevokedPatch.Code != http.StatusUnprocessableEntity && recRevokedPatch.Code != http.StatusConflict {
+		t.Fatalf("expected 409/422 mutating REVOKED connection, got %d body=%s", recRevokedPatch.Code, recRevokedPatch.Body.String())
+	}
+}
+
+func TestPart2RouteValidationAndIfMatchOrdering(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "RouteIfMatch Org", "proj-1")
+
+	recP2 := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "proj-2",
+		"name": "Project 2",
+	})
+	if recP2.Code != http.StatusCreated {
+		t.Fatalf("create proj-2: %d %s", recP2.Code, recP2.Body.String())
+	}
+	var proj2 projectDTO
+	mustDecodeJSON(t, recP2.Body.Bytes(), &proj2)
+
+	recEnv2 := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects/"+proj2.ID+"/environments", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "staging",
+		"name": "Staging",
+	})
+	if recEnv2.Code != http.StatusCreated {
+		t.Fatalf("create env2: %d %s", recEnv2.Code, recEnv2.Body.String())
+	}
+	var env2 environmentDTO
+	mustDecodeJSON(t, recEnv2.Body.Bytes(), &env2)
+
+	recEnv1Alt := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects/"+boot.ProjectID+"/environments", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "prod-1",
+		"name": "Prod 1",
+	})
+	if recEnv1Alt.Code != http.StatusCreated {
+		t.Fatalf("create env1Alt: %d %s", recEnv1Alt.Code, recEnv1Alt.Body.String())
+	}
+	var env1Alt environmentDTO
+	mustDecodeJSON(t, recEnv1Alt.Body.Bytes(), &env1Alt)
+
+	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE extension_versions SET signing_key_fingerprint = ? WHERE package_id = 'tanpopo.local_openai'`, trust.PublicKeyFingerprint(h.rootPub)); err != nil {
+		t.Fatalf("sign seeded local adapter: %v", err)
+	}
+	recConn2 := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":             "conn-proj-2",
+		"project_id":       proj2.ID,
+		"adapter_id":       adpID,
+		"billing_mode":     "COMMERCIAL_API",
+		"endpoint_url":     "https://api.openai.com/v1",
+		"data_region":      "US",
+		"allow_private_ip": false,
+	})
+	if recConn2.Code != http.StatusCreated {
+		t.Fatalf("create conn2: %d %s", recConn2.Code, recConn2.Body.String())
+	}
+	var conn2 providerConnectionDTO
+	mustDecodeJSON(t, recConn2.Body.Bytes(), &conn2)
+
+	recMod := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/models", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":              "gpt-route",
+		"display_name":      "GPT Route",
+		"context_window":    32000,
+		"max_output_tokens": 4096,
+	})
+	if recMod.Code != http.StatusCreated {
+		t.Fatalf("create model: %d %s", recMod.Code, recMod.Body.String())
+	}
+	var mod logicalModelDTO
+	mustDecodeJSON(t, recMod.Body.Bytes(), &mod)
+
+	recDep2 := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"env_id":              env2.ID,
+		"logical_model_id":    mod.ID,
+		"connection_id":       conn2.ID,
+		"upstream_model_name": "gpt-route",
+		"data_region":         "US",
+		"rate_card":           map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
+	})
+	if recDep2.Code != http.StatusCreated {
+		t.Fatalf("create dep2: %d %s", recDep2.Code, recDep2.Body.String())
+	}
+	var dep2 modelDeploymentDTO
+	mustDecodeJSON(t, recDep2.Body.Bytes(), &dep2)
+
+	// Unreferenced legacy deployment with no stored env_id MUST NOT fall back to first org environment.
+	legacyDepID := idgen.MustNew(idgen.PrefixDeployment)
+	now := h.fk.Now().UTC().UnixMilli()
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO model_deployments (
+			id, org_id, connection_id, logical_model_id, upstream_model_name,
+			pricing_nano_usd_json, state, connect_timeout_ms, first_byte_timeout_ms, idle_chunk_timeout_ms,
+			version, created_at_ms, updated_at_ms
+		) VALUES (?, ?, ?, ?, 'gpt-legacy', '{"rate_card":{"input_token_nano_usd":1,"output_token_nano_usd":1}}', 'ACTIVE_HEALTHY', 5000, 30000, 15000, 1, ?, ?)`,
+		legacyDepID, boot.OrgID, conn2.ID, mod.ID, now, now,
+	); err != nil {
+		t.Fatalf("insert legacy dep: %v", err)
+	}
+	if resolvedEnv := h.srv.resolveDeploymentEnvID(ctx, boot.OrgID, legacyDepID); resolvedEnv != "" {
+		t.Fatalf("expected empty resolved env for unreferenced legacy deployment, got %q", resolvedEnv)
+	}
+
+	// >1 allowed_data_regions rejected with 400.
+	recMultiReg := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":                 "multi-reg",
+		"env_id":               env2.ID,
+		"strategy":             "PRIORITY_FAILOVER",
+		"allowed_data_regions": []string{"US", "EU"},
+		"targets":              []map[string]any{{"deployment_id": dep2.ID, "priority_order": 1, "weight": 100}},
+	})
+	if recMultiReg.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on >1 allowed_data_regions, got %d body=%s", recMultiReg.Code, recMultiReg.Body.String())
+	}
+
+	// Cross-environment deployment rejected (env1Alt belongs to proj-1 while dep2 belongs to env2).
+	recCrossEnv := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":                 "cross-env",
+		"env_id":               env1Alt.ID,
+		"strategy":             "PRIORITY_FAILOVER",
+		"allowed_data_regions": []string{"US"},
+		"targets":              []map[string]any{{"deployment_id": dep2.ID, "priority_order": 1, "weight": 100}},
+	})
+	if recCrossEnv.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 on cross-env deployment target, got %d body=%s", recCrossEnv.Code, recCrossEnv.Body.String())
+	}
+
+	// Create valid route in env2 and deployment in boot.EnvID for If-Match ordering checks.
+	recRoute := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":                 "valid-route",
+		"env_id":               env2.ID,
+		"strategy":             "PRIORITY_FAILOVER",
+		"allowed_data_regions": []string{"US"},
+		"targets":              []map[string]any{{"deployment_id": dep2.ID, "priority_order": 1, "weight": 100}},
+	})
+	if recRoute.Code != http.StatusCreated {
+		t.Fatalf("create valid-route: %d %s", recRoute.Code, recRoute.Body.String())
+	}
+	var rt routeResourceDTO
+	mustDecodeJSON(t, recRoute.Body.Bytes(), &rt)
+
+	// Missing If-Match ordering: project-1-only TEAM_ADMIN targeting project-2 resources WITHOUT If-Match MUST get 403/404, NEVER 428!
+	teamP1Tok := "tok_route_p1_team"
+	h.registerBearerToken(teamP1Tok, &rbac.Actor{
+		PrincipalID:     "pri_p1_team",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleTeamAdmin}},
+	})
+	finopsTok := "tok_route_finops"
+	h.registerBearerToken(finopsTok, &rbac.Actor{
+		PrincipalID:     "pri_route_fin",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleFinOpsViewer}},
+	})
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		tok    string
+		body   any
+	}{
+		{http.MethodPatch, "/admin/v1/connections/" + conn2.ID, teamP1Tok, map[string]any{"name": "x"}},
+		{http.MethodDelete, "/admin/v1/connections/" + conn2.ID, teamP1Tok, nil},
+		{http.MethodPatch, "/admin/v1/deployments/" + dep2.ID, teamP1Tok, map[string]any{"state": "DISABLED"}},
+		{http.MethodDelete, "/admin/v1/deployments/" + dep2.ID, teamP1Tok, nil},
+		{http.MethodPut, "/admin/v1/routes/" + rt.ID, teamP1Tok, map[string]any{"slug": "valid-route", "env_id": env2.ID, "strategy": "PRIORITY_FAILOVER", "targets": []map[string]any{{"deployment_id": dep2.ID, "priority_order": 1, "weight": 100}}}},
+		{http.MethodDelete, "/admin/v1/routes/" + rt.ID, teamP1Tok, nil},
+		{http.MethodPut, "/admin/v1/policies/" + idgen.MustNew(idgen.PrefixPolicy), finopsTok, map[string]any{"scope_tier": "ORGANIZATION", "scope_id": boot.OrgID, "allowed_data_regions": []string{"US"}, "min_plugin_trust": "OFFICIAL_ONLY", "min_capability_assurance": "TESTED"}},
+		{http.MethodPut, "/admin/v1/budgets/" + idgen.MustNew(idgen.PrefixBudget), finopsTok, map[string]any{"scope_tier": "PROJECT", "scope_id": boot.ProjectID, "period": "MONTHLY", "hard_limit_micros": 100}},
+	} {
+		rec := h.doBearer(t, tc.method, tc.path, tc.tok, "", tc.body)
+		if rec.Code == http.StatusPreconditionRequired {
+			t.Fatalf("%s %s leaked 428 before authorization/existence check! body=%s", tc.method, tc.path, rec.Body.String())
+		}
+		if rec.Code != http.StatusForbidden && rec.Code != http.StatusNotFound {
+			t.Fatalf("%s %s expected 403/404 without If-Match, got %d body=%s", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
+	}
+
+	// TEAM_ADMIN in proj-1 trying to reference dep2 (in proj-2) on route creation in boot.EnvID -> 404.
+	recCrossProj := h.doBearer(t, http.MethodPost, "/admin/v1/routes", teamP1Tok, "", map[string]any{
+		"slug":                 "cross-proj-route",
+		"env_id":               boot.EnvID,
+		"strategy":             "PRIORITY_FAILOVER",
+		"allowed_data_regions": []string{"US"},
+		"targets":              []map[string]any{{"deployment_id": dep2.ID, "priority_order": 1, "weight": 100}},
+	})
+	if recCrossProj.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for cross-project deployment_id target, got %d body=%s", recCrossProj.Code, recCrossProj.Body.String())
+	}
+}
+
+func TestPart2FilteredKeysetPaginationLoop(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "PagLoop Org", "proj-a")
+
+	recPB := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "proj-b",
+		"name": "Project B",
+	})
+	if recPB.Code != http.StatusCreated {
+		t.Fatalf("create proj-b: %d %s", recPB.Code, recPB.Body.String())
+	}
+	var projB projectDTO
+	mustDecodeJSON(t, recPB.Body.Bytes(), &projB)
+
+	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	now := h.fk.Now().UTC().UnixMilli()
+
+	// Insert 3 visible proj-a connections, deployments, and budgets OLDER than 230 skipped proj-b items (> maxPageLimit*2).
+	const visibleCnt = 3
+	const hiddenCnt = 230
+	modID := idgen.MustNew(idgen.PrefixLogicalModel)
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO logical_models (id, org_id, canonical_slug, modality_kind, context_window, max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'pag-model', 'CHAT', 4096, 1024, '{}', 1, ?, ?)`,
+		modID, boot.OrgID, now, now,
+	); err != nil {
+		t.Fatalf("insert model: %v", err)
+	}
+
+	var connAFirst string
+	for i := 0; i < visibleCnt+hiddenCnt; i++ {
+		pid := projB.ID
+		ts := now + int64(i) // newest items (last inserted) are in projB; oldest visibleCnt items are in projA!
+		if i < visibleCnt {
+			pid = boot.ProjectID
+		}
+		cid := idgen.MustNew(idgen.PrefixConnection)
+		if i == 0 {
+			connAFirst = cid
+		}
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO provider_connections (id, org_id, owner_project_id, shared_project_ids_json, adapter_id, name, endpoint_base_url, allow_private_ip, data_region, billing_mode, state, version, created_at_ms, updated_at_ms)
+			VALUES (?, ?, ?, '[]', ?, ?, 'https://api.openai.com/v1', 0, 'US', 'COMMERCIAL_API', 'ACTIVE', 1, ?, ?)`,
+			cid, boot.OrgID, pid, adpID, fmt.Sprintf("c-%03d", i), ts, ts,
+		); err != nil {
+			t.Fatalf("insert conn %d: %v", i, err)
+		}
+		did := idgen.MustNew(idgen.PrefixDeployment)
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO model_deployments (id, org_id, connection_id, logical_model_id, upstream_model_name, pricing_nano_usd_json, state, connect_timeout_ms, first_byte_timeout_ms, idle_chunk_timeout_ms, version, created_at_ms, updated_at_ms)
+			VALUES (?, ?, ?, ?, ?, '{"env_id":"","rate_card":{"input_token_nano_usd":1,"output_token_nano_usd":1}}', 'ACTIVE_HEALTHY', 5000, 30000, 15000, 1, ?, ?)`,
+			did, boot.OrgID, cid, modID, fmt.Sprintf("up-%03d", i), ts, ts,
+		); err != nil {
+			t.Fatalf("insert dep %d: %v", i, err)
+		}
+		bid := idgen.MustNew(idgen.PrefixBudget)
+		// budget_ledgers has UNIQUE(org_id, scope_type, scope_id) ONLY for period? Let's use distinct VIRTUAL_KEY scope IDs in each project!
+		vkID := fmt.Sprintf("vk_pag_%03d", i)
+		vkHash := sha256.Sum256([]byte(vkID))
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO virtual_keys (id, org_id, project_id, env_id, name, key_prefix, last_four, active_key_hash, allowed_models_json, allowed_mcp_tools_json, state, version, created_at_ms, updated_at_ms)
+			VALUES (?, ?, ?, ?, ?, 'vk_tp_pag', '0000', ?, '[]', '[]', 'CREATED_ACTIVE', 1, ?, ?)`,
+			vkID, boot.OrgID, pid, boot.EnvID, vkID, vkHash[:], ts, ts,
+		); err != nil {
+			t.Fatalf("insert vkey %d: %v", i, err)
+		}
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO budget_ledgers (id, org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms, hard_limit_micros, soft_alert_thresholds_pct_json, version, created_at_ms, updated_at_ms)
+			VALUES (?, ?, 'VIRTUAL_KEY', ?, 'MONTHLY', ?, ?, 10000, '[80]', 1, ?, ?)`,
+			bid, boot.OrgID, vkID, now, now+86400_000, ts, ts,
+		); err != nil {
+			t.Fatalf("insert budget %d: %v", i, err)
+		}
+	}
+	_ = connAFirst
+
+	teamATok := "tok_pag_team_a"
+	h.registerBearerToken(teamATok, &rbac.Actor{
+		PrincipalID:     "pri_pag_team_a",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleTeamAdmin}},
+	})
+
+	for _, ep := range []string{"/admin/v1/connections", "/admin/v1/deployments", "/admin/v1/budgets"} {
+		collected := 0
+		cursor := ""
+		pages := 0
+		for {
+			path := ep + "?limit=2"
+			if cursor != "" {
+				path += "&cursor=" + url.QueryEscape(cursor)
+			}
+			rec := h.doBearer(t, http.MethodGet, path, teamATok, "", nil)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("GET %s code=%d body=%s", path, rec.Code, rec.Body.String())
+			}
+			var page struct {
+				Data       []json.RawMessage `json:"data"`
+				NextCursor *string           `json:"next_cursor"`
+				HasMore    bool              `json:"has_more"`
+			}
+			mustDecodeJSON(t, rec.Body.Bytes(), &page)
+			collected += len(page.Data)
+			pages++
+			if !page.HasMore || page.NextCursor == nil {
+				break
+			}
+			cursor = *page.NextCursor
+			if pages > 10 {
+				t.Fatalf("pagination loop exceeded expected pages on %s", ep)
+			}
+		}
+		if collected != visibleCnt || pages != 2 {
+			t.Fatalf("GET %s expected %d visible items across 2 pages past %d skipped rows, got %d across %d pages", ep, visibleCnt, hiddenCnt, collected, pages)
+		}
+	}
+}
+
+func TestPart2AuditPartitionAlertIsolationKillSwitchAndLimiterBounds(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "ops-org-slug", "proj-a")
+	now := h.fk.Now().UTC().UnixMilli()
+
+	// 1. Audit partition auth: SYSTEM allowed only for INSTANCE OPERATOR; unknown partition 400.
+	if err := h.auditLog.Append(ctx, port.AuditEvent{
+		OrgID:      nil,
+		ActorKind:  "SYSTEM",
+		ActorID:    "sys_actor",
+		EntryPoint: port.AuditEntryPointAdminAPI,
+		EventType:  "system.boot_verified",
+		TargetType: "instance",
+		TargetID:   "instance",
+	}); err != nil {
+		t.Fatalf("Append SYSTEM event: %v", err)
+	}
+	orgOwnerOnlyTok := "tok_ops_org_owner_only"
+	h.registerBearerToken(orgOwnerOnlyTok, &rbac.Actor{
+		PrincipalID:     "pri_ops_org_owner_only",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleOrgOwner}},
+	})
+	recSysDenied := h.doBearer(t, http.MethodGet, "/admin/v1/audit-events?chain_partition=SYSTEM", orgOwnerOnlyTok, "", nil)
+	if recSysDenied.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for ORG_OWNER querying SYSTEM audit partition, got %d body=%s", recSysDenied.Code, recSysDenied.Body.String())
+	}
+	recVerifyDenied := h.doBearer(t, http.MethodPost, "/admin/v1/audit-events/verify?chain_partition=SYSTEM", orgOwnerOnlyTok, "", nil)
+	if recVerifyDenied.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for ORG_OWNER verifying SYSTEM audit partition, got %d body=%s", recVerifyDenied.Code, recVerifyDenied.Body.String())
+	}
+	recInvalidPart := h.doBearer(t, http.MethodGet, "/admin/v1/audit-events?chain_partition=org_other", orgOwnerOnlyTok, "", nil)
+	if recInvalidPart.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid chain_partition, got %d body=%s", recInvalidPart.Code, recInvalidPart.Body.String())
+	}
+
+	opTok := "tok_ops_sys_aud"
+	h.registerBearerToken(opTok, &rbac.Actor{
+		PrincipalID:     boot.OwnerPrincipalID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	})
+	recSysList := h.doBearer(t, http.MethodGet, "/admin/v1/audit-events?org_id="+boot.OrgID+"&chain_partition=SYSTEM", opTok, "", nil)
+	if recSysList.Code != http.StatusOK {
+		t.Fatalf("expected 200 for OPERATOR SYSTEM audit list, got %d body=%s", recSysList.Code, recSysList.Body.String())
+	}
+	recSysVer := h.doBearer(t, http.MethodPost, "/admin/v1/audit-events/verify?org_id="+boot.OrgID+"&chain_partition=SYSTEM", opTok, "", nil)
+	if recSysVer.Code != http.StatusOK {
+		t.Fatalf("expected 200 for OPERATOR SYSTEM audit verify, got %d body=%s", recSysVer.Code, recSysVer.Body.String())
+	}
+	var sysVer verifyAuditResponseDTO
+	mustDecodeJSON(t, recSysVer.Body.Bytes(), &sysVer)
+	if !sysVer.Intact || sysVer.CheckedEventsCount < 1 {
+		t.Fatalf("expected intact SYSTEM audit chain, got %+v", sysVer)
+	}
+
+	// 2. Project-scoped alert isolation (proj-a FINOPS_VIEWER must NOT see proj-b alerts).
+	recPB := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", ownerCookie, boot.CSRFToken, "", map[string]any{"slug": "proj-b", "name": "Proj B"})
+	if recPB.Code != http.StatusCreated {
+		t.Fatalf("create proj-b: %d %s", recPB.Code, recPB.Body.String())
+	}
+	var projB projectDTO
+	mustDecodeJSON(t, recPB.Body.Bytes(), &projB)
+
+	bdgB := idgen.MustNew(idgen.PrefixBudget)
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO budget_ledgers (id, org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms, hard_limit_micros, settled_exact_micros, soft_alert_thresholds_pct_json, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'PROJECT', ?, 'MONTHLY', ?, ?, 1000, 950, '[80]', 1, ?, ?)`,
+		bdgB, boot.OrgID, projB.ID, now, now+86400_000, now, now,
+	); err != nil {
+		t.Fatalf("insert bdgB: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO usage_settlements (id, settled_at_ms, request_id, org_id, project_id, env_id, virtual_key_id, plane, logical_model_slug, billing_mode, usage_accuracy, total_cost_micros)
+		VALUES ('stl_iso_b', ?, 'req_iso_b', ?, ?, ?, 'vk_b', 'PROVIDER', 'gpt', 'COMMERCIAL_API', 'UNMETERED_FLAGGED', 0)`,
+		now, boot.OrgID, projB.ID, boot.EnvID,
+	); err != nil {
+		t.Fatalf("insert stl_iso_b: %v", err)
+	}
+
+	// Quarantined extension used ONLY by projB connection.
+	adpB := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE extension_installations SET state = 'QUARANTINED' WHERE id = (SELECT installation_id FROM provider_adapters WHERE id = ?)`, adpB); err != nil {
+		t.Fatalf("quarantine adpB extension: %v", err)
+	}
+	connB := idgen.MustNew(idgen.PrefixConnection)
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO provider_connections (id, org_id, owner_project_id, shared_project_ids_json, adapter_id, name, endpoint_base_url, allow_private_ip, data_region, billing_mode, state, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, ?, '[]', ?, 'conn-b-quar', 'https://api.openai.com/v1', 0, 'US', 'COMMERCIAL_API', 'ACTIVE', 1, ?, ?)`,
+		connB, boot.OrgID, projB.ID, adpB, now, now,
+	); err != nil {
+		t.Fatalf("insert connB: %v", err)
+	}
+
+	finProjATok := "tok_fin_proj_a"
+	h.registerBearerToken(finProjATok, &rbac.Actor{
+		PrincipalID:     "pri_fin_proj_a",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleFinOpsViewer}},
+	})
+	recProjAAlerts := h.doBearer(t, http.MethodGet, "/admin/v1/alerts/active", finProjATok, "", nil)
+	if recProjAAlerts.Code != http.StatusOK {
+		t.Fatalf("GET /alerts/active projA code=%d body=%s", recProjAAlerts.Code, recProjAAlerts.Body.String())
+	}
+	var alertResp paginatedListEnvelope[alertItemDTO]
+	mustDecodeJSON(t, recProjAAlerts.Body.Bytes(), &alertResp)
+	if len(alertResp.Data) != 0 {
+		t.Fatalf("expected 0 alerts visible to proj-a viewer when all alerts belong to proj-b, got %+v", alertResp.Data)
+	}
+	recOwnerAlerts := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/alerts/active", ownerCookie, "", "", nil)
+	var ownerAlertResp paginatedListEnvelope[alertItemDTO]
+	mustDecodeJSON(t, recOwnerAlerts.Body.Bytes(), &ownerAlertResp)
+	if len(ownerAlertResp.Data) != 3 {
+		t.Fatalf("expected 3 org-wide alerts for ORG_OWNER, got %d (%+v)", len(ownerAlertResp.Data), ownerAlertResp.Data)
+	}
+
+	// 3. Kill-switch mandatory confirm_slug & tenant-scoped SeveredStreamsCount.
+	_, c1 := context.WithCancel(ctx)
+	_, c2 := context.WithCancel(ctx)
+	h.killSwitch.Streams().Register(killswitch.StreamRegistration{OrgID: boot.OrgID, ProjectID: boot.ProjectID, Cancel: c1})
+	h.killSwitch.Streams().Register(killswitch.StreamRegistration{OrgID: "org_other_tenant", ProjectID: "prj_other", Cancel: c2})
+
+	recBlankConfirm := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/kill-switches", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"target_level":         "PROJECT",
+		"target_id":            boot.ProjectID,
+		"confirm_slug":         "",
+		"abort_active_streams": true,
+		"reason":               "Missing confirm_slug check",
+	})
+	if recBlankConfirm.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 confirm_slug_mismatch for blank confirm_slug on PROJECT freeze, got %d body=%s", recBlankConfirm.Code, recBlankConfirm.Body.String())
+	}
+
+	recOrgBlankConfirm := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/kill-switches", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"target_level":         "PROJECT",
+		"target_id":            boot.OrgID,
+		"confirm_slug":         "wrong-slug",
+		"abort_active_streams": true,
+		"reason":               "Wrong org confirm_slug check",
+	})
+	if recOrgBlankConfirm.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 confirm_slug_mismatch on ORG freeze, got %d body=%s", recOrgBlankConfirm.Code, recOrgBlankConfirm.Body.String())
+	}
+
+	recOrgFreezeOK := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/kill-switches", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"target_level":         "PROJECT",
+		"target_id":            boot.OrgID,
+		"confirm_slug":         "ops-org-slug",
+		"abort_active_streams": true,
+		"reason":               "Emergency org freeze verified",
+	})
+	if recOrgFreezeOK.Code != http.StatusOK {
+		t.Fatalf("expected 200 on ORG freeze with valid confirm_slug, got %d body=%s", recOrgFreezeOK.Code, recOrgFreezeOK.Body.String())
+	}
+	var ksOrgResp killSwitchTriggerResponseDTO
+	mustDecodeJSON(t, recOrgFreezeOK.Body.Bytes(), &ksOrgResp)
+	if ksOrgResp.SeveredStreamsCount != 1 {
+		t.Fatalf("expected tenant-scoped severed_streams_count=1 (excluding other org stream), got %d", ksOrgResp.SeveredStreamsCount)
+	}
+
+	// 4. slidingWindowLimiter bounded buckets test.
+	lim := newSlidingWindowLimiter(5, time.Minute)
+	for i := 0; i < maxProbeLimiterBuckets+500; i++ {
+		if i == maxProbeLimiterBuckets+10 {
+			h.fk.Advance(2 * time.Minute)
+		}
+		_ = lim.Allow(fmt.Sprintf("conn_%05d", i), h.fk.Now().UTC().UnixMilli())
+	}
+	lim.mu.Lock()
+	bucketLen := len(lim.buckets)
+	lim.mu.Unlock()
+	if bucketLen > maxProbeLimiterBuckets {
+		t.Fatalf("expected limiter buckets <= %d, got %d", maxProbeLimiterBuckets, bucketLen)
+	}
+}
+

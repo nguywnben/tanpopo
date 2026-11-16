@@ -386,9 +386,36 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var q strings.Builder
-	args := []any{orgID}
-	q.WriteString(`
+	if !orgWide && envFilter == "" && len(allowedProjects) == 0 {
+		writeJSON(w, http.StatusOK, paginatedListEnvelope[modelDeploymentDTO]{
+			Data:    []modelDeploymentDTO{},
+			HasMore: false,
+		})
+		return
+	}
+
+	type depRow struct {
+		dto       modelDeploymentDTO
+		createdMs int64
+	}
+	items := make([]depRow, 0, limit+1)
+	needFilter := envFilter != "" || !orgWide
+	batchLimit := limit + 1
+	if needFilter {
+		batchLimit = limit*2 + 20
+	}
+	hasCur := cur != nil
+	var batchCreatedMs int64
+	var batchLastID string
+	if cur != nil {
+		batchCreatedMs = cur.CreatedMs
+		batchLastID = cur.LastID
+	}
+
+	for len(items) < limit+1 {
+		var q strings.Builder
+		args := []any{orgID}
+		q.WriteString(`
 		SELECT md.id, md.logical_model_id, md.connection_id, md.upstream_model_name,
 		       md.pricing_nano_usd_json, md.state, md.idle_chunk_timeout_ms,
 		       md.first_byte_timeout_ms, md.version, md.created_at_ms,
@@ -396,76 +423,93 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		FROM model_deployments md
 		JOIN provider_connections pc ON pc.org_id = md.org_id AND pc.id = md.connection_id
 		WHERE md.org_id = ?`)
-	if statusFilter != "" {
-		q.WriteString(` AND md.state = ?`)
-		args = append(args, statusFilter)
-	}
-	if cur != nil {
-		q.WriteString(` AND (md.created_at_ms < ? OR (md.created_at_ms = ? AND md.id < ?))`)
-		args = append(args, cur.CreatedMs, cur.CreatedMs, cur.LastID)
-	}
-	q.WriteString(` ORDER BY md.created_at_ms DESC, md.id DESC LIMIT ?`)
-	fetchLimit := limit + 1
-	if envFilter != "" || !orgWide {
-		fetchLimit = maxPageLimit * 2
-	}
-	args = append(args, fetchLimit)
+		if statusFilter != "" {
+			q.WriteString(` AND md.state = ?`)
+			args = append(args, statusFilter)
+		}
+		if hasCur {
+			q.WriteString(` AND (md.created_at_ms < ? OR (md.created_at_ms = ? AND md.id < ?))`)
+			args = append(args, batchCreatedMs, batchCreatedMs, batchLastID)
+		}
+		q.WriteString(` ORDER BY md.created_at_ms DESC, md.id DESC LIMIT ?`)
+		args = append(args, batchLimit)
 
-	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing deployments", true, nil)
-		return
-	}
-	defer rows.Close()
-
-	type depRow struct {
-		dto       modelDeploymentDTO
-		createdMs int64
-	}
-	var items []depRow
-	for rows.Next() {
-		var (
-			id, modelID, connID, upstreamName, pricingJSON, state, dataRegion, sharedJSON string
-			ownerProj                                                                   sql.NullString
-			idleTO, fbTO, ver, createdMs                                                int64
-		)
-		if scanErr := rows.Scan(&id, &modelID, &connID, &upstreamName, &pricingJSON, &state, &idleTO, &fbTO, &ver, &createdMs, &dataRegion, &ownerProj, &sharedJSON); scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning deployment", true, nil)
+		rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing deployments", true, nil)
 			return
 		}
-		if !orgWide && !connectionVisibleToAnyProject(ownerProj, sharedJSON, allowedProjects) {
-			continue
+
+		type rawDepRow struct {
+			id           string
+			modelID      string
+			connID       string
+			upstreamName string
+			pricingJSON  string
+			state        string
+			dataRegion   string
+			sharedJSON   string
+			ownerProj    sql.NullString
+			idleTO       int64
+			fbTO         int64
+			ver          int64
+			createdMs    int64
 		}
-		envID, rateCard := decodeStoredPricingDocument(pricingJSON)
-		if envID == "" {
-			envID = s.resolveDeploymentEnvID(r.Context(), orgID, id)
+		rawRows := make([]rawDepRow, 0, batchLimit)
+		for rows.Next() {
+			var rrow rawDepRow
+			if scanErr := rows.Scan(&rrow.id, &rrow.modelID, &rrow.connID, &rrow.upstreamName, &rrow.pricingJSON, &rrow.state, &rrow.idleTO, &rrow.fbTO, &rrow.ver, &rrow.createdMs, &rrow.dataRegion, &rrow.ownerProj, &rrow.sharedJSON); scanErr != nil {
+				_ = rows.Close()
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning deployment", true, nil)
+				return
+			}
+			rawRows = append(rawRows, rrow)
 		}
-		if envFilter != "" && envID != envFilter {
-			continue
+		iterErr := rows.Err()
+		_ = rows.Close()
+		if iterErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating deployments", true, nil)
+			return
 		}
-		items = append(items, depRow{
-			dto: modelDeploymentDTO{
-				ID:                 id,
-				EnvID:              envID,
-				LogicalModelID:     modelID,
-				ConnectionID:       connID,
-				UpstreamModelName:  upstreamName,
-				DataRegion:         dataRegion,
-				State:              state,
-				IdleChunkTimeoutMs: idleTO,
-				FirstByteTimeoutMs: fbTO,
-				RateCard:           rateCard,
-				Version:            ver,
-			},
-			createdMs: createdMs,
-		})
-		if len(items) >= limit+1 {
+
+		sqlCount := len(rawRows)
+		for _, rrow := range rawRows {
+			batchCreatedMs = rrow.createdMs
+			batchLastID = rrow.id
+			if !orgWide && !connectionVisibleToAnyProject(rrow.ownerProj, rrow.sharedJSON, allowedProjects) {
+				continue
+			}
+			envID, rateCard := decodeStoredPricingDocument(rrow.pricingJSON)
+			if envID == "" {
+				envID = s.resolveDeploymentEnvID(r.Context(), orgID, rrow.id)
+			}
+			if envFilter != "" && envID != envFilter {
+				continue
+			}
+			items = append(items, depRow{
+				dto: modelDeploymentDTO{
+					ID:                 rrow.id,
+					EnvID:              envID,
+					LogicalModelID:     rrow.modelID,
+					ConnectionID:       rrow.connID,
+					UpstreamModelName:  rrow.upstreamName,
+					DataRegion:         rrow.dataRegion,
+					State:              rrow.state,
+					IdleChunkTimeoutMs: rrow.idleTO,
+					FirstByteTimeoutMs: rrow.fbTO,
+					RateCard:           rateCard,
+					Version:            rrow.ver,
+				},
+				createdMs: rrow.createdMs,
+			})
+			if len(items) >= limit+1 {
+				break
+			}
+		}
+		if len(items) >= limit+1 || sqlCount < batchLimit {
 			break
 		}
-	}
-	if err := rows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating deployments", true, nil)
-		return
+		hasCur = true
 	}
 
 	hasMore := len(items) > limit
@@ -679,10 +723,6 @@ func (s *Server) handleUpdateDeployment(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "deployment not found", false, nil)
 		return
 	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
-	}
 	var req updateDeploymentRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
@@ -701,25 +741,11 @@ func (s *Server) handleUpdateDeployment(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading deployment", true, nil)
 		return
 	}
-
-	scopeProj := ""
-	if cur.EnvID != "" {
-		if pid, found, _ := s.lookupEnvironmentProject(r.Context(), orgID, cur.EnvID); found {
-			scopeProj = pid
-		}
+	if _, ok := s.authorizeDeploymentScope(w, r, sc, orgID, cur, ownerProj, sharedJSON); !ok {
+		return
 	}
-	if scopeProj == "" && ownerProj.Valid {
-		scopeProj = ownerProj.String
-	}
-	if scopeProj == "" && !actorHasOrgScopeBinding(sc.Actor, orgID) {
-		for _, pid := range actorProjectIDs(sc.Actor, orgID) {
-			if connectionVisibleToAnyProject(ownerProj, sharedJSON, map[string]bool{pid: true}) {
-				scopeProj = pid
-				break
-			}
-		}
-	}
-	if !s.authorize(w, r, sc, rbac.ActionModelWrite, rbac.TargetScope{OrgID: orgID, ProjectID: scopeProj}) {
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
 		return
 	}
 	if cur.Version != expectedVer {
@@ -791,7 +817,15 @@ func (s *Server) handleUpdateDeployment(w http.ResponseWriter, r *http.Request) 
 	}
 	if aff, _ := res.RowsAffected(); aff == 0 {
 		_ = tx.Rollback()
-		latest, _, _, _ := s.loadDeploymentDTO(r.Context(), orgID, depID)
+		latest, _, _, lerr := s.loadDeploymentDTO(r.Context(), orgID, depID)
+		if errors.Is(lerr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "deployment not found", false, nil)
+			return
+		}
+		if lerr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading deployment", true, nil)
+			return
+		}
 		writeOptimisticConflict(w, r, latest.Version, latest)
 		return
 	}
@@ -831,16 +865,12 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "deployment not found", false, nil)
 		return
 	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
-	}
 	orgID, ok := s.resolveTargetOrgID(w, r, sc)
 	if !ok {
 		return
 	}
 
-	cur, ownerProj, _, err := s.loadDeploymentDTO(r.Context(), orgID, depID)
+	cur, ownerProj, sharedJSON, err := s.loadDeploymentDTO(r.Context(), orgID, depID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "deployment not found", false, nil)
 		return
@@ -849,16 +879,11 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading deployment", true, nil)
 		return
 	}
-	scopeProj := ""
-	if cur.EnvID != "" {
-		if pid, found, _ := s.lookupEnvironmentProject(r.Context(), orgID, cur.EnvID); found {
-			scopeProj = pid
-		}
+	if _, ok := s.authorizeDeploymentScope(w, r, sc, orgID, cur, ownerProj, sharedJSON); !ok {
+		return
 	}
-	if scopeProj == "" && ownerProj.Valid {
-		scopeProj = ownerProj.String
-	}
-	if !s.authorize(w, r, sc, rbac.ActionModelWrite, rbac.TargetScope{OrgID: orgID, ProjectID: scopeProj}) {
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
 		return
 	}
 	if cur.Version != expectedVer {
@@ -891,7 +916,15 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 	}
 	if aff, _ := res.RowsAffected(); aff == 0 {
 		_ = tx.Rollback()
-		latest, _, _, _ := s.loadDeploymentDTO(r.Context(), orgID, depID)
+		latest, _, _, lerr := s.loadDeploymentDTO(r.Context(), orgID, depID)
+		if errors.Is(lerr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "deployment not found", false, nil)
+			return
+		}
+		if lerr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading deployment", true, nil)
+			return
+		}
 		writeOptimisticConflict(w, r, latest.Version, latest)
 		return
 	}
@@ -913,6 +946,38 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) authorizeDeploymentScope(w http.ResponseWriter, r *http.Request, sc *authSessionContext, orgID string, cur modelDeploymentDTO, ownerProj sql.NullString, sharedJSON string) (string, bool) {
+	scopeProj := ""
+	if cur.EnvID != "" {
+		pid, found, err := s.lookupEnvironmentProject(r.Context(), orgID, cur.EnvID)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating deployment environment", true, nil)
+			return "", false
+		}
+		if found {
+			scopeProj = pid
+		}
+	}
+	if scopeProj == "" && ownerProj.Valid {
+		scopeProj = ownerProj.String
+	}
+	if scopeProj == "" && !actorHasOrgScopeBinding(sc.Actor, orgID) {
+		for _, pid := range actorProjectIDs(sc.Actor, orgID) {
+			if connectionVisibleToAnyProject(ownerProj, sharedJSON, map[string]bool{pid: true}) {
+				scopeProj = pid
+				break
+			}
+		}
+	}
+	if !s.authorize(w, r, sc, rbac.ActionModelWrite, rbac.TargetScope{OrgID: orgID, ProjectID: scopeProj}) {
+		return "", false
+	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, scopeProj) {
+		return "", false
+	}
+	return scopeProj, true
 }
 
 func (s *Server) lookupEnvironmentProject(ctx context.Context, orgID, envID string) (string, bool, error) {
@@ -939,8 +1004,7 @@ func (s *Server) resolveDeploymentEnvID(ctx context.Context, orgID, depID string
 	if err == nil && envID != "" {
 		return envID
 	}
-	_ = s.db.QueryRowContext(ctx, `SELECT id FROM environments WHERE org_id = ? ORDER BY created_at_ms ASC, id ASC LIMIT 1`, orgID).Scan(&envID)
-	return envID
+	return ""
 }
 
 func (s *Server) loadDeploymentDTO(ctx context.Context, orgID, depID string) (modelDeploymentDTO, sql.NullString, string, error) {

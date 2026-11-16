@@ -139,6 +139,22 @@ func (s *StreamRegistry) ActiveCount() int {
 	return len(s.entries)
 }
 
+// CountMatching returns the number of currently active streams matching (level, orgID, targetID).
+func (s *StreamRegistry) CountMatching(level Level, orgID, targetID string) int {
+	if s == nil || targetID == "" {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	count := 0
+	for _, ent := range s.entries {
+		if matchesStreamTarget(ent.reg, level, orgID, targetID) {
+			count++
+		}
+	}
+	return count
+}
+
 // AbortMatching removes and immediately cancels all active streams matching (level, orgID, targetID).
 func (s *StreamRegistry) AbortMatching(level Level, orgID, targetID string) int {
 	if s == nil || targetID == "" {

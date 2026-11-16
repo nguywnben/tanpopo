@@ -138,6 +138,11 @@ type routeEntry struct {
 	Handler func(w http.ResponseWriter, r *http.Request)
 }
 
+const (
+	maxProbeLimiterBuckets      = 4096
+	probeLimiterSweepThreshold  = 256
+)
+
 type slidingWindowLimiter struct {
 	mu      sync.Mutex
 	limit   int
@@ -160,6 +165,21 @@ func (l *slidingWindowLimiter) Allow(key string, nowMs int64) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	cutoff := nowMs - l.window
+	if len(l.buckets) > probeLimiterSweepThreshold {
+		for k, times := range l.buckets {
+			kept := times[:0]
+			for _, ts := range times {
+				if ts > cutoff {
+					kept = append(kept, ts)
+				}
+			}
+			if len(kept) == 0 {
+				delete(l.buckets, k)
+			} else {
+				l.buckets[k] = kept
+			}
+		}
+	}
 	prev := l.buckets[key]
 	kept := prev[:0]
 	for _, ts := range prev {
@@ -170,6 +190,23 @@ func (l *slidingWindowLimiter) Allow(key string, nowMs int64) bool {
 	if len(kept) >= l.limit {
 		l.buckets[key] = kept
 		return false
+	}
+	if _, exists := l.buckets[key]; !exists && len(l.buckets) >= maxProbeLimiterBuckets {
+		var oldestKey string
+		var oldestTS int64 = nowMs + 1
+		for k, times := range l.buckets {
+			last := int64(0)
+			if len(times) > 0 {
+				last = times[len(times)-1]
+			}
+			if oldestKey == "" || last < oldestTS {
+				oldestKey = k
+				oldestTS = last
+			}
+		}
+		if oldestKey != "" {
+			delete(l.buckets, oldestKey)
+		}
 	}
 	kept = append(kept, nowMs)
 	l.buckets[key] = kept
@@ -1061,6 +1098,9 @@ func (s *Server) requireActiveOrg(w http.ResponseWriter, r *http.Request, orgID 
 }
 
 func (s *Server) requireActiveOrgAndProject(w http.ResponseWriter, r *http.Request, orgID, projectID string) bool {
+	if strings.TrimSpace(projectID) == "" {
+		return s.requireActiveOrg(w, r, orgID)
+	}
 	var orgStatus, projStatus string
 	err := s.db.QueryRowContext(r.Context(), `
 		SELECT o.status, p.status

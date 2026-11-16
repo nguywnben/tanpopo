@@ -110,10 +110,6 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "policy not found", false, nil)
 		return
 	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
-	}
 	var req policyDocumentDTO
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
@@ -169,6 +165,13 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		action = rbac.ActionPolicyProjectWrite
 	}
 	if !s.authorize(w, r, sc, action, targetScope) {
+		return
+	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, targetScope.ProjectID) {
+		return
+	}
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
 		return
 	}
 

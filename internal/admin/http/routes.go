@@ -146,6 +146,7 @@ func (s *Server) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 			ver, createdMs, updatedMs         int64
 		)
 		if scanErr := rows.Scan(&id, &projID, &envID, &slug, &strategy, &maxHops, &reqRegion, &ver, &createdMs, &updatedMs); scanErr != nil {
+			_ = rows.Close()
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning route", true, nil)
 			return
 		}
@@ -153,11 +154,6 @@ func (s *Server) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 		regions := []string{}
 		if reqRegion.Valid && reqRegion.String != "" {
 			regions = []string{reqRegion.String}
-		}
-		targets, terr := s.loadRouteTargets(r.Context(), orgID, id)
-		if terr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading route targets", true, nil)
-			return
 		}
 		items = append(items, rteRow{
 			dto: routeResourceDTO{
@@ -168,16 +164,25 @@ func (s *Server) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 				AllowedDataRegions: regions,
 				MaxFailoverHops:    maxHops,
 				RequestTimeoutMs:   60000,
-				Targets:            targets,
 				Version:            ver,
 				UpdatedAt:          formatTimeRFC3339Ms(updatedMs),
 			},
 			createdMs: createdMs,
 		})
 	}
-	if err := rows.Err(); err != nil {
+	iterErr := rows.Err()
+	_ = rows.Close()
+	if iterErr != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating routes", true, nil)
 		return
+	}
+	for i := range items {
+		targets, terr := s.loadRouteTargets(r.Context(), orgID, items[i].dto.ID)
+		if terr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading route targets", true, nil)
+			return
+		}
+		items[i].dto.Targets = targets
 	}
 
 	hasMore := len(items) > limit
@@ -315,10 +320,6 @@ func (s *Server) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "route not found", false, nil)
 		return
 	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
-	}
 	var req routeUpsertRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
@@ -338,6 +339,10 @@ func (s *Server) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionRouteWrite, rbac.TargetScope{OrgID: orgID, ProjectID: curProjID}) {
+		return
+	}
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
 		return
 	}
 	if curDTO.Version != expectedVer {
@@ -379,7 +384,15 @@ func (s *Server) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	if aff, _ := res.RowsAffected(); aff == 0 {
 		_ = tx.Rollback()
-		latest, _, _ := s.loadRouteResourceDTO(r.Context(), orgID, routeID)
+		latest, _, lerr := s.loadRouteResourceDTO(r.Context(), orgID, routeID)
+		if errors.Is(lerr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "route not found", false, nil)
+			return
+		}
+		if lerr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading route", true, nil)
+			return
+		}
 		writeOptimisticConflict(w, r, latest.Version, latest)
 		return
 	}
@@ -445,10 +458,6 @@ func (s *Server) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "route not found", false, nil)
 		return
 	}
-	expectedVer, ok := requireIfMatch(w, r)
-	if !ok {
-		return
-	}
 	orgID, ok := s.resolveTargetOrgID(w, r, sc)
 	if !ok {
 		return
@@ -464,6 +473,13 @@ func (s *Server) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionRouteWrite, rbac.TargetScope{OrgID: orgID, ProjectID: curProjID}) {
+		return
+	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, curProjID) {
+		return
+	}
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
 		return
 	}
 	if curDTO.Version != expectedVer {
@@ -490,7 +506,15 @@ func (s *Server) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	if aff, _ := res.RowsAffected(); aff == 0 {
 		_ = tx.Rollback()
-		latest, _, _ := s.loadRouteResourceDTO(r.Context(), orgID, routeID)
+		latest, _, lerr := s.loadRouteResourceDTO(r.Context(), orgID, routeID)
+		if errors.Is(lerr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "route not found", false, nil)
+			return
+		}
+		if lerr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading route", true, nil)
+			return
+		}
 		writeOptimisticConflict(w, r, latest.Version, latest)
 		return
 	}
@@ -682,6 +706,10 @@ func (s *Server) validateRouteUpsert(w http.ResponseWriter, r *http.Request, sc 
 			reqRegion = reg
 		}
 	}
+	if len(allowedRegSet) > 1 {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "allowed_data_regions currently supports at most 1 region per route", false, nil)
+		return nil, false
+	}
 
 	effPol, err := s.computeEffectivePolicySQL(r.Context(), orgID, projID, envID)
 	if err != nil {
@@ -727,19 +755,33 @@ func (s *Server) validateRouteUpsert(w http.ResponseWriter, r *http.Request, sc 
 		}
 		weightSum += tgt.Weight
 
-		var depRegion string
+		var (
+			depRegion      string
+			connOwnerProj  sql.NullString
+			connSharedJSON string
+			depPricingJSON string
+		)
 		qerr := s.db.QueryRowContext(r.Context(), `
-			SELECT pc.data_region
+			SELECT pc.data_region, pc.owner_project_id, pc.shared_project_ids_json, md.pricing_nano_usd_json
 			FROM model_deployments md
 			JOIN provider_connections pc ON pc.org_id = md.org_id AND pc.id = md.connection_id
 			WHERE md.org_id = ? AND md.id = ?`, orgID, depID,
-		).Scan(&depRegion)
+		).Scan(&depRegion, &connOwnerProj, &connSharedJSON, &depPricingJSON)
 		if errors.Is(qerr, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "target deployment not found", false, nil)
 			return nil, false
 		}
 		if qerr != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking target deployment", true, nil)
+			return nil, false
+		}
+		if !actorIsOrgOwnerOrOperator(sc.Actor, orgID) && !connectionVisibleToAnyProject(connOwnerProj, connSharedJSON, map[string]bool{projID: true}) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "target deployment not found", false, nil)
+			return nil, false
+		}
+		depEnvID, _ := decodeStoredPricingDocument(depPricingJSON)
+		if depEnvID != "" && depEnvID != envID {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "target deployment does not belong to environment", false, nil)
 			return nil, false
 		}
 		if len(allowedRegSet) > 0 && !allowedRegSet[depRegion] {
