@@ -5,16 +5,20 @@ package native
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"math"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/finops/pricing"
+	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/routing/breaker"
 	"github.com/nguywnben/tanpopo/internal/routing/failover"
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
@@ -23,18 +27,23 @@ import (
 type nativeBudgetSession struct {
 	svc             *ledger.Service
 	defaultHoldOut  int64
+	renewEvery      time.Duration
 	orgID           string
 	projectID       string
 	envID           string
 	vkeyID          string
 	reqID           string
+	ledgerReqID     string
 	inputTextBytes  int64
 	maxOutputTokens int64
+	media           pricing.MediaUsage
 
 	mu            sync.Mutex
 	reservationID string
 	currentHold   int64
 	settled       bool
+	renewCancel   context.CancelFunc
+	renewDone     chan struct{}
 }
 
 func (h *Handler) newNativeBudgetSession(
@@ -51,17 +60,97 @@ func (h *Handler) newNativeBudgetSession(
 	if estBaseIn > 0 && estBaseIn*4 < textBytes {
 		textBytes = estBaseIn * 4
 	}
+	ttlMs := h.budgetLedger.LeaseTTLMs()
+	renewEvery := time.Duration(ttlMs/3) * time.Millisecond
+	if renewEvery <= 0 {
+		renewEvery = time.Millisecond
+	}
 	return &nativeBudgetSession{
 		svc:             h.budgetLedger,
 		defaultHoldOut:  h.defaultHoldOutputTokens,
+		renewEvery:      renewEvery,
 		orgID:           key.OrgID,
 		projectID:       key.ProjectID,
 		envID:           key.EnvID,
 		vkeyID:          key.ID,
 		reqID:           reqID,
+		ledgerReqID:     idgen.MustNew(idgen.PrefixTrace),
 		inputTextBytes:  textBytes,
 		maxOutputTokens: estMaxOut,
+		media:           countNativeMediaUnits(rawBody),
 	}
+}
+
+func countNativeMediaUnits(rawBody []byte) pricing.MediaUsage {
+	var m pricing.MediaUsage
+	if len(rawBody) == 0 {
+		return m
+	}
+	var root map[string]any
+	if err := json.Unmarshal(rawBody, &root); err != nil || root == nil {
+		return m
+	}
+
+	inspectPart := func(part map[string]any) {
+		if part == nil {
+			return
+		}
+		ptype := ""
+		if s, ok := part["type"].(string); ok {
+			ptype = strings.ToLower(strings.TrimSpace(s))
+		}
+		switch {
+		case ptype == "image_url" || ptype == "input_image" || ptype == "image" || part["image_url"] != nil || part["image"] != nil:
+			m.ImageCount++
+			return
+		case ptype == "file" || ptype == "input_file" || ptype == "document" || part["file"] != nil || part["input_file"] != nil || part["document"] != nil || part["fileData"] != nil || part["file_data"] != nil:
+			m.DocumentPages++
+			return
+		}
+		for _, inlineKey := range []string{"inlineData", "inline_data"} {
+			if inlineObj, ok := part[inlineKey].(map[string]any); ok && inlineObj != nil {
+				mt := ""
+				if s, ok := inlineObj["mimeType"].(string); ok {
+					mt = strings.ToLower(strings.TrimSpace(s))
+				} else if s, ok := inlineObj["mime_type"].(string); ok {
+					mt = strings.ToLower(strings.TrimSpace(s))
+				}
+				switch {
+				case strings.HasPrefix(mt, "image/"):
+					m.ImageCount++
+				case mt != "":
+					m.DocumentPages++
+				}
+				return
+			}
+		}
+	}
+
+	for _, arrKey := range []string{"messages", "input", "contents"} {
+		items, ok := root[arrKey].([]any)
+		if !ok {
+			continue
+		}
+		for _, rawItem := range items {
+			obj, ok := rawItem.(map[string]any)
+			if !ok || obj == nil {
+				continue
+			}
+			inspectPart(obj)
+			for _, subKey := range []string{"content", "parts"} {
+				parts, ok := obj[subKey].([]any)
+				if !ok {
+					continue
+				}
+				for _, rawPart := range parts {
+					if part, ok := rawPart.(map[string]any); ok {
+						inspectPart(part)
+					}
+				}
+			}
+		}
+	}
+	return m
 }
 
 func nativeRateCardForTarget(target *snapshot.ResolvedTarget) pricing.RateCard {
@@ -77,11 +166,55 @@ func nativeRateCardForTarget(target *snapshot.ResolvedTarget) pricing.RateCard {
 
 func (b *nativeBudgetSession) estimateHold(target *snapshot.ResolvedTarget) (int64, error) {
 	rate := nativeRateCardForTarget(target)
-	bd, err := pricing.EstimatePreHold(rate, b.inputTextBytes, b.maxOutputTokens, b.defaultHoldOut, pricing.MediaUsage{})
+	bd, err := pricing.EstimatePreHold(rate, b.inputTextBytes, b.maxOutputTokens, b.defaultHoldOut, b.media)
 	if err != nil {
 		return 0, err
 	}
 	return bd.TotalMicroUSD, nil
+}
+
+func (b *nativeBudgetSession) startLeaseRenewalLocked(resID string) {
+	if b.renewCancel != nil || b.settled || resID == "" || b.renewEvery <= 0 {
+		return
+	}
+	rCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	b.renewCancel = cancel
+	b.renewDone = done
+	svc := b.svc
+	orgID := b.orgID
+	interval := b.renewEvery
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-rCtx.Done():
+				return
+			case <-ticker.C:
+				_ = svc.RenewLease(rCtx, orgID, resID)
+			}
+		}
+	}()
+}
+
+func (b *nativeBudgetSession) stopLeaseRenewal() {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	cancel := b.renewCancel
+	done := b.renewDone
+	b.renewCancel = nil
+	b.renewDone = nil
+	b.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
 }
 
 func (b *nativeBudgetSession) reserveInitial(ctx context.Context, w http.ResponseWriter, candidates []*resolver.RankedTarget) bool {
@@ -108,7 +241,7 @@ func (b *nativeBudgetSession) reserveInitial(ctx context.Context, w http.Respons
 		ProjectID:    b.projectID,
 		EnvID:        b.envID,
 		VirtualKeyID: b.vkeyID,
-		RequestID:    b.reqID,
+		RequestID:    b.ledgerReqID,
 		HoldMicros:   hold,
 	})
 	if rerr != nil {
@@ -122,6 +255,7 @@ func (b *nativeBudgetSession) reserveInitial(ctx context.Context, w http.Respons
 	b.mu.Lock()
 	b.reservationID = res.ID
 	b.currentHold = res.HoldMicros
+	b.startLeaseRenewalLocked(res.ID)
 	b.mu.Unlock()
 	return true
 }
@@ -190,6 +324,9 @@ func (b *nativeBudgetSession) markStreaming(ctx context.Context) {
 	b.mu.Lock()
 	resID := b.reservationID
 	settled := b.settled
+	if resID != "" && !settled {
+		b.startLeaseRenewalLocked(resID)
+	}
 	b.mu.Unlock()
 	if resID == "" || settled {
 		return
@@ -201,6 +338,7 @@ func (b *nativeBudgetSession) releaseIfUnsettled() {
 	if b == nil {
 		return
 	}
+	b.stopLeaseRenewal()
 	b.mu.Lock()
 	resID := b.reservationID
 	settled := b.settled
@@ -218,16 +356,18 @@ func (b *nativeBudgetSession) settle(
 	usage port.NormalizedUsage,
 	fallbackOutBytes int64,
 	forceEstimated bool,
-) port.NormalizedUsage {
+) (port.NormalizedUsage, error) {
 	if b == nil {
-		return usage
+		return usage, nil
 	}
+	b.stopLeaseRenewal()
+
 	b.mu.Lock()
 	resID := b.reservationID
 	already := b.settled
 	b.mu.Unlock()
 	if already {
-		return usage
+		return usage, nil
 	}
 
 	inUsage := pricing.UsageInput{
@@ -272,7 +412,7 @@ func (b *nativeBudgetSession) settle(
 	res, err := b.svc.Settle(context.WithoutCancel(ctx), ledger.SettleRequest{
 		OrgID:            b.orgID,
 		ReservationID:    resID,
-		RequestID:        b.reqID,
+		RequestID:        b.ledgerReqID,
 		ProjectID:        b.projectID,
 		EnvID:            b.envID,
 		VirtualKeyID:     b.vkeyID,
@@ -283,14 +423,21 @@ func (b *nativeBudgetSession) settle(
 		Usage:            inUsage,
 	})
 	if err != nil {
-		return usage
+		slog.Error("native budget ledger settlement failed",
+			"org_id", b.orgID,
+			"reservation_id", resID,
+			"request_id", b.reqID,
+			"ledger_request_id", b.ledgerReqID,
+			"error", err,
+		)
+		return usage, err
 	}
 	b.mu.Lock()
 	b.settled = true
 	b.mu.Unlock()
 
 	usage.Accuracy = nativePortAccuracy(res.Accuracy)
-	return usage
+	return usage, nil
 }
 
 func secondsToMillis(sec float64) int64 {

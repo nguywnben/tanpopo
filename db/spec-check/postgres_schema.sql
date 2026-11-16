@@ -1027,7 +1027,7 @@ CREATE TABLE usage_settlements (
     applied_pricing_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     total_cost_micros             BIGINT NOT NULL CHECK (total_cost_micros >= 0),
     PRIMARY KEY (org_id, id, settled_at_ms),
-    UNIQUE (request_id, settled_at_ms)
+    UNIQUE (org_id, request_id, settled_at_ms)
 ) PARTITION BY RANGE (settled_at_ms);
 
 -- Reference monthly partitions (automated in runtime by partition_manager.go & tanpopo db migrate-engine):

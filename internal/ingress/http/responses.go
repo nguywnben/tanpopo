@@ -303,7 +303,19 @@ func (s *Server) executeSyncResponsesAttempt(
 	if normResp.Usage != nil {
 		s.reconcileAdmissionUsage(admLease, normResp.Usage)
 	}
-	headerUsage := budgetSess.settleSync(ctx, target, requestedModel, normResp.Usage, finalBody)
+	headerUsage, serr := budgetSess.settleSync(ctx, target, requestedModel, normResp.Usage, finalBody)
+	if serr != nil {
+		budgetSess.releaseIfUnsettled()
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  false,
+			Outcome:    breaker.OutcomeCallerError,
+			HTTPStatus: http.StatusServiceUnavailable,
+			FlushFinal: func() {
+				writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "budget_ledger_unavailable", "api_error", "Budget ledger settlement failed; failing closed to prevent unbilled response delivery.", false)
+			},
+		}
+	}
 	writeSettledJSONResponse(w, ctx, reqID, headerUsage, finalBody, idemClaim)
 	return failover.AttemptResult{
 		Succeeded:  true,
@@ -362,7 +374,9 @@ func (s *Server) executeStreamingResponsesAttempt(
 		s.reconcileAdmissionUsage(admLease, pumpRes.Usage)
 	}
 	if pumpRes.StreamStarted {
-		budgetSess.settleStream(streamCtx, target, requestedModel, pumpRes, pumpErr)
+		if _, serr := budgetSess.settleStream(streamCtx, target, requestedModel, pumpRes, pumpErr); serr != nil {
+			budgetSess.releaseIfUnsettled()
+		}
 	}
 	if pumpErr != nil {
 		if pumpRes.StreamStarted {

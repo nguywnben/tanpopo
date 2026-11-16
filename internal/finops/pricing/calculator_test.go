@@ -244,4 +244,22 @@ func TestParseMediaUsageJSONWithoutFloats(t *testing.T) {
 	if m.ImageCount != 2 || m.ImagePixels != 1024 || m.AudioInputMillis != 1250 || m.AudioOutputMillis != 2000 || m.DocumentPages != 4 || m.RerankSearchUnits != 3 {
 		t.Fatalf("unexpected decoded MediaUsage: %+v", m)
 	}
+	if _, err := pricing.ParseMediaUsageJSON(`{"audio_input_seconds":"."}`); !errors.Is(err, pricing.ErrInvalidMediaUsage) {
+		t.Fatalf("expected ErrInvalidMediaUsage for bare '.', got %v", err)
+	}
+
+	// Priced deployment with upstream accuracy UNMETERED_FLAGGED must downgrade to ESTIMATED, never EXACT.
+	pricedUnmetered, err := pricing.Calculate(pricing.RateCard{
+		InputPer1MNanoUSD: 1_000_000_000,
+	}, pricing.UsageInput{
+		InputTokens:          100,
+		UpstreamUsagePresent: true,
+		UpstreamAccuracy:     pricing.AccuracyUnmeteredFlagged,
+	})
+	if err != nil {
+		t.Fatalf("Calculate priced unmetered: %v", err)
+	}
+	if pricedUnmetered.Accuracy != pricing.AccuracyEstimated || pricedUnmetered.UnmeteredFlagged || pricedUnmetered.TotalMicroUSD != 100 {
+		t.Fatalf("expected ESTIMATED with 100 micro-USD, got %+v", pricedUnmetered)
+	}
 }

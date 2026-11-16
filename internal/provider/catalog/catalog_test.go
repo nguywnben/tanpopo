@@ -3217,3 +3217,103 @@ adapter:
 		t.Fatal("expected snapshot VisibleToProject false after enterprise key withdrawal even with DB enterprise_signed=1")
 	}
 }
+
+func TestCreateAndUpdateDeploymentRejectsNegativeMediaPricing(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	orgID, _, approverID := h.createOrgProjectApprover(t, "org-neg-media-price")
+	manifestYAML := `
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@tanpopo/adapter-neg-price"
+  name: Negative Pricing Test Adapter
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["api.price.example"]
+adapter:
+  slug: price-test
+  baseUrl: "https://api.price.example"
+`
+	installID := h.installDeclarativePackage(t, "@tanpopo/adapter-neg-price", approverID, manifestYAML)
+	adp, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: installID,
+		AdapterSlug:    "price-test",
+		AllowedHosts:   []string{"api.price.example"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgID,
+		AdapterID:       adp.ID,
+		Name:            "PriceConn",
+		EndpointBaseURL: "https://api.price.example",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lm, err := h.repo.CreateLogicalModel(h.ctx, catalog.CreateLogicalModelParams{
+		CanonicalSlug:   "neg-price-model",
+		ModalityKind:    catalog.ModalityChat,
+		ContextWindow:   8192,
+		MaxOutputTokens: 2048,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	negativeCases := []struct {
+		name    string
+		pricing snapshot.PricingNanoUSD
+	}{
+		{name: "image_unit", pricing: snapshot.PricingNanoUSD{ImagePerUnitNanoUSD: -1}},
+		{name: "image_mpixels", pricing: snapshot.PricingNanoUSD{ImagePer1MPixelsNanoUSD: -1}},
+		{name: "audio_in", pricing: snapshot.PricingNanoUSD{AudioInputPerSecNanoUSD: -1}},
+		{name: "audio_out", pricing: snapshot.PricingNanoUSD{AudioOutputPerSecNanoUSD: -1}},
+		{name: "doc", pricing: snapshot.PricingNanoUSD{DocumentPageNanoUSD: -1}},
+		{name: "rerank", pricing: snapshot.PricingNanoUSD{RerankUnitNanoUSD: -1}},
+	}
+	for _, tc := range negativeCases {
+		if _, err := h.repo.CreateModelDeployment(h.ctx, catalog.CreateModelDeploymentParams{
+			OrgID:             orgID,
+			ConnectionID:      conn.ID,
+			LogicalModelID:    lm.ID,
+			UpstreamModelName: "neg-" + tc.name,
+			Pricing:           tc.pricing,
+		}); !errors.Is(err, port.ErrInvalidInput) {
+			t.Fatalf("CreateModelDeployment(%s): expected ErrInvalidInput, got %v", tc.name, err)
+		}
+	}
+
+	validDepl, err := h.repo.CreateModelDeployment(h.ctx, catalog.CreateModelDeploymentParams{
+		OrgID:             orgID,
+		ConnectionID:      conn.ID,
+		LogicalModelID:    lm.ID,
+		UpstreamModelName: "valid-price",
+		Pricing:           snapshot.PricingNanoUSD{InputPer1MNanoUSD: 1000},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range negativeCases {
+		badPrice := tc.pricing
+		if _, err := h.repo.UpdateModelDeployment(h.ctx, orgID, validDepl.ID, catalog.UpdateModelDeploymentParams{
+			ExpectedVersion: validDepl.Version,
+			Pricing:         &badPrice,
+		}); !errors.Is(err, port.ErrInvalidInput) {
+			t.Fatalf("UpdateModelDeployment(%s): expected ErrInvalidInput, got %v", tc.name, err)
+		}
+	}
+}
+

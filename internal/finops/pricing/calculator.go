@@ -286,7 +286,7 @@ func parseDecimalSecondsToMillis(v any) (int64, error) {
 		return 0, fmt.Errorf("%w: scientific notation not permitted", ErrInvalidMediaUsage)
 	}
 	wholeStr, fracStr, hasDot := strings.Cut(s, ".")
-	if wholeStr == "" && !hasDot {
+	if wholeStr == "" && fracStr == "" {
 		return 0, fmt.Errorf("%w: empty duration", ErrInvalidMediaUsage)
 	}
 	var whole int64
@@ -524,10 +524,7 @@ func resolveEffectiveUsageAndAccuracy(rate RateCard, in UsageInput) (UsageInput,
 		return effective, AccuracyEstimated, false
 	}
 
-	if normalizedUpstreamAcc == AccuracyUnmeteredFlagged && !rate.HasNumericRates() && !rate.SelfHostedZeroRate {
-		return effective, AccuracyUnmeteredFlagged, true
-	}
-	if normalizedUpstreamAcc == AccuracyEstimated {
+	if normalizedUpstreamAcc == AccuracyEstimated || normalizedUpstreamAcc == AccuracyUnmeteredFlagged {
 		return effective, AccuracyEstimated, false
 	}
 	return effective, AccuracyExact, false
@@ -561,15 +558,6 @@ func addMulU128(acc u128, a, b int64) (u128, error) {
 	pHi, pLo := bits.Mul64(uint64(a), uint64(b))
 	lo, carry := bits.Add64(acc.lo, pLo, 0)
 	hi, over := bits.Add64(acc.hi, pHi, carry)
-	if over != 0 {
-		return u128{}, ErrArithmeticOverflow
-	}
-	return u128{hi: hi, lo: lo}, nil
-}
-
-func addU128(acc u128, x u128) (u128, error) {
-	lo, carry := bits.Add64(acc.lo, x.lo, 0)
-	hi, over := bits.Add64(acc.hi, x.hi, carry)
 	if over != 0 {
 		return u128{}, ErrArithmeticOverflow
 	}

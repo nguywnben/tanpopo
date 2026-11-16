@@ -825,7 +825,20 @@ func (h *Handler) executeSyncNativeAttempt(
 	}
 
 	usage := ExtractSyncUsage(ctx, rt, reqID, rawReqBody, upResp.Body)
-	usage = budgetSess.settle(ctx, target, model, usage, int64(len(upResp.Body)), false)
+	settledUsage, serr := budgetSess.settle(ctx, target, model, usage, int64(len(upResp.Body)), false)
+	if serr != nil {
+		budgetSess.releaseIfUnsettled()
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  false,
+			Outcome:    breaker.OutcomeCallerError,
+			HTTPStatus: http.StatusServiceUnavailable,
+			FlushFinal: func() {
+				writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "budget_ledger_unavailable", "api_error", "Budget ledger settlement failed; failing closed to prevent unbilled response delivery.", false)
+			},
+		}
+	}
+	usage = settledUsage
 	h.reconcileAdmissionUsage(admLease, &usage)
 	h.recordUsage(ctx, UsageRecord{
 		RequestID:    reqID,
@@ -970,7 +983,12 @@ func (h *Handler) executeStreamingNativeAttempt(
 
 	usageCtx := context.WithoutCancel(hopCtx)
 	finalUsage := acc.Finalize(usageCtx)
-	finalUsage = budgetSess.settle(usageCtx, target, model, finalUsage, pumpRes.emittedBytes, pumpErr != nil)
+	settledUsage, serr := budgetSess.settle(usageCtx, target, model, finalUsage, pumpRes.emittedBytes, pumpErr != nil)
+	if serr != nil {
+		budgetSess.releaseIfUnsettled()
+	} else {
+		finalUsage = settledUsage
+	}
 	h.reconcileAdmissionUsage(admLease, &finalUsage)
 	h.recordUsage(usageCtx, UsageRecord{
 		RequestID:    reqID,

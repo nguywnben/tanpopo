@@ -379,16 +379,28 @@ func (s *Server) executeSyncChatCompletionAttempt(
 	if normResp.Usage != nil {
 		s.reconcileAdmissionUsage(admLease, normResp.Usage)
 	}
-	if s.usageObserver != nil && normResp.Usage != nil {
+	headerUsage, serr := budgetSess.settleSync(ctx, target, requestedModel, normResp.Usage, finalBody)
+	if serr != nil {
+		budgetSess.releaseIfUnsettled()
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  false,
+			Outcome:    breaker.OutcomeCallerError,
+			HTTPStatus: http.StatusServiceUnavailable,
+			FlushFinal: func() {
+				writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "budget_ledger_unavailable", "api_error", "Budget ledger settlement failed; failing closed to prevent unbilled response delivery.", false)
+			},
+		}
+	}
+	if s.usageObserver != nil && headerUsage != nil {
 		s.usageObserver(UsageRecord{
 			RequestID: reqID,
 			Route:     "/v1/chat/completions",
 			Model:     requestedModel,
 			Stream:    false,
-			Usage:     normResp.Usage,
+			Usage:     headerUsage,
 		})
 	}
-	headerUsage := budgetSess.settleSync(ctx, target, requestedModel, normResp.Usage, finalBody)
 	writeSettledJSONResponse(w, ctx, reqID, headerUsage, finalBody, idemClaim)
 	return failover.AttemptResult{
 		Succeeded:  true,
@@ -451,16 +463,22 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 	if pumpRes.Usage != nil {
 		s.reconcileAdmissionUsage(admLease, pumpRes.Usage)
 	}
+	observedUsage := pumpRes.Usage
 	if pumpRes.StreamStarted {
-		budgetSess.settleStream(streamCtx, target, requestedModel, pumpRes, pumpErr)
+		settledUsage, serr := budgetSess.settleStream(streamCtx, target, requestedModel, pumpRes, pumpErr)
+		if serr != nil {
+			budgetSess.releaseIfUnsettled()
+		} else if settledUsage != nil {
+			observedUsage = settledUsage
+		}
 	}
-	if s.usageObserver != nil && pumpRes.Usage != nil {
+	if s.usageObserver != nil && observedUsage != nil {
 		s.usageObserver(UsageRecord{
 			RequestID: reqID,
 			Route:     "/v1/chat/completions",
 			Model:     requestedModel,
 			Stream:    true,
-			Usage:     pumpRes.Usage,
+			Usage:     observedUsage,
 		})
 	}
 	if pumpErr != nil {

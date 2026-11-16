@@ -461,6 +461,7 @@ adapter:
 		PluginsDir:              pluginsDir,
 		Audit:                   audit,
 		NowMs:                   nowFn,
+		IdempotencyDB:           st.RawDB(),
 		BudgetLedger:            lSvc,
 		DefaultHoldOutputTokens: defaultHoldOut,
 		SSEHeartbeatInterval:    200 * time.Millisecond,
@@ -817,3 +818,256 @@ func TestTP0021_HTTPNativePassthroughBudgetRoundTrip(t *testing.T) {
 		t.Fatalf("expected native aborted SSE settled_estimated>0 & reserved=0, got est=%d reserved=%d", estMicros, led2.ReservedHoldMicros)
 	}
 }
+
+func TestTP0021_DuplicateClientRequestIDDoesNotBypassBudget(t *testing.T) {
+	// Limit=150 micro-USD, pricing=1 micro-USD/token, defaultHold=100 -> pre-hold ~110 micro-USD per request.
+	// Only 1 request fits headroom; 4 concurrent requests sharing identical X-Tanpopo-Request-Id MUST NOT share one reservation!
+	for _, route := range []string{"/v1/chat/completions", "/native/openai/v1/chat/completions"} {
+		t.Run(route, func(t *testing.T) {
+			bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 150, 100)
+			releaseUpstream := make(chan struct{})
+			bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+				<-releaseUpstream
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"id":"c_dup","object":"chat.completion","model":"acme/chat-1","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}`))
+			})
+
+			const N = 4
+			statuses := make([]int, N)
+			bodies := make([]string, N)
+			var ready sync.WaitGroup
+			ready.Add(N)
+			var wg sync.WaitGroup
+			for i := 0; i < N; i++ {
+				idx := i
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					ready.Done()
+					ready.Wait()
+					reqBody := []byte(`{"model":"acme/chat-1","max_tokens":100,"messages":[{"role":"user","content":"hi"}]}`)
+					resp, body := bh.h.doChatReq(t, http.MethodPost, route, reqBody, map[string]string{
+						"X-Tanpopo-Request-Id": "req_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+					}, nil)
+					statuses[idx] = resp.StatusCode
+					bodies[idx] = string(body)
+				}()
+			}
+			// Give concurrent Reserve goroutines a brief moment, then release admitted upstream.
+			time.Sleep(80 * time.Millisecond)
+			close(releaseUpstream)
+			wg.Wait()
+
+			okCount, blockedCount := 0, 0
+			for i, st := range statuses {
+				switch st {
+				case http.StatusOK:
+					okCount++
+				case http.StatusTooManyRequests:
+					if !strings.Contains(bodies[i], "project_budget_exceeded") {
+						t.Fatalf("unexpected 429 body: %s", bodies[i])
+					}
+					blockedCount++
+				default:
+					t.Fatalf("unexpected status[%d]=%d body=%s", i, st, bodies[i])
+				}
+			}
+			if okCount != 1 || blockedCount != N-1 {
+				t.Fatalf("expected exactly 1 OK and %d 429s, got ok=%d blocked=%d statuses=%v", N-1, okCount, blockedCount, statuses)
+			}
+		})
+	}
+}
+
+func TestTP0021_StreamingLeaseRenewalPreventsPrematureReclaim(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t)
+	})
+	// Build harness with LeaseTTLMs = 150ms using wall clock so renewal ticker (~50ms) and reaper (25ms) exercise real renewal under load.
+	bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 50_000, 100)
+	wallNow := func() int64 { return time.Now().UTC().UnixMilli() }
+
+	shortLedger, err := ledger.NewService(ledger.Config{
+		DB:         bh.h.store.RawDB(),
+		Audit:      bh.h.audit,
+		NowMs:      wallNow,
+		LeaseTTLMs: 150,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := shortLedger.UpsertLedger(bh.h.ctx, ledger.UpsertLedgerParams{
+		ID:              "led_proj_budget",
+		OrgID:           bh.h.org.ID,
+		ScopeType:       ledger.ScopeProject,
+		ScopeID:         bh.h.project.ID,
+		PeriodKind:      ledger.PeriodTotalLifetime,
+		PeriodStartMs:   0,
+		PeriodEndMs:     wallNow() + 86_400_000,
+		HardLimitMicros: 50_000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv, err := ingresshttp.NewServer(ingresshttp.ServerConfig{
+		Snapshots:               bh.h.snapshots,
+		Broker:                  bh.h.broker,
+		PluginsDir:              bh.h.pluginsD,
+		Audit:                   bh.h.audit,
+		NowMs:                   wallNow,
+		BudgetLedger:            shortLedger,
+		DefaultHoldOutputTokens: 100,
+		SSEHeartbeatInterval:    50 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = srv.Close(context.Background()) }()
+	httpSrv := httptest.NewServer(srv)
+	defer httpSrv.Close()
+
+	reaper, err := ledger.NewOrphanReservationReaper(shortLedger, 25*time.Millisecond, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stopReaper := reaper.Start(bh.h.ctx)
+	defer stopReaper()
+
+	bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fl, _ := w.(http.Flusher)
+		_, _ = w.Write([]byte("data: {\"id\":\"c_renew\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"part1\"}}]}\n\n"))
+		if fl != nil {
+			fl.Flush()
+		}
+		time.Sleep(360 * time.Millisecond)
+		_, _ = w.Write([]byte("data: {\"id\":\"c_renew\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":15,\"completion_tokens\":25,\"total_tokens\":40}}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+		if fl != nil {
+			fl.Flush()
+		}
+	})
+
+	req, err := http.NewRequest(http.MethodPost, httpSrv.URL+"/v1/chat/completions", strings.NewReader(`{"model":"acme/chat-1","stream":true,"max_tokens":50,"messages":[{"role":"user","content":"long stream"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+bh.h.vkeyRaw)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := bh.h.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "[DONE]") {
+		t.Fatalf("expected successful long stream, got status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	var resState string
+	if err := bh.h.store.RawDB().QueryRowContext(bh.h.ctx, `SELECT state FROM budget_reservations ORDER BY created_at_ms DESC LIMIT 1`).Scan(&resState); err != nil {
+		t.Fatal(err)
+	}
+	if resState != ledger.StateSettledExact {
+		t.Fatalf("expected reservation state SETTLED_EXACT (no premature reclaim across 360ms stream / 150ms TTL), got %s", resState)
+	}
+	led, err := shortLedger.GetLedger(bh.h.ctx, bh.h.org.ID, "led_proj_budget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if led.SettledExactMicros != 40 || led.ReservedHoldMicros != 0 {
+		t.Fatalf("expected settled_exact=40 reserved=0, got %+v", led)
+	}
+}
+
+func TestTP0021_NativeMultimodalPreHoldBlocksExceedingBudget(t *testing.T) {
+	// image_per_unit_nano_usd = 5,000,000,000 (5,000 micro-USD/image). Budget hard limit = 4,000 micro-USD.
+	// /native/openai/v1/chat/completions carrying an image_url MUST be rejected with 429 before contacting upstream!
+	bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000,"image_per_unit_nano_usd":5000000000}`, 4_000, 100)
+	hitsBefore := bh.upHits.Load()
+
+	bodyJSON := `{"model":"acme/chat-1","max_tokens":10,"messages":[{"role":"user","content":[{"type":"text","text":"look"},{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}]}]}`
+	resp, body := bh.h.doChatReq(t, http.MethodPost, "/native/openai/v1/chat/completions", []byte(bodyJSON), nil, nil)
+	if resp.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(body), "project_budget_exceeded") {
+		t.Fatalf("expected 429 project_budget_exceeded for native multimodal pre-hold, got status=%d body=%s", resp.StatusCode, string(body))
+	}
+	if bh.upHits.Load() != hitsBefore {
+		t.Fatalf("expected 0 upstream hits on blocked multimodal request, got %d", bh.upHits.Load()-hitsBefore)
+	}
+}
+
+func TestTP0021_SyncSettleErrorFailsClosedWith503(t *testing.T) {
+	bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 10_000, 100)
+	bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		if _, err := bh.h.store.RawDB().ExecContext(bh.h.ctx, `
+			CREATE TRIGGER fail_settlement_insert BEFORE INSERT ON usage_settlements
+			BEGIN
+				SELECT RAISE(ABORT, 'injected_settlement_failure');
+			END;
+		`); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"c_failclosed","object":"chat.completion","model":"acme-gpt-upstream","choices":[{"index":0,"message":{"role":"assistant","content":"secret"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}`))
+	})
+	defer func() {
+		_, _ = bh.h.store.RawDB().ExecContext(bh.h.ctx, `DROP TRIGGER IF EXISTS fail_settlement_insert;`)
+	}()
+
+	for _, ep := range []string{"/v1/chat/completions", "/native/openai/v1/chat/completions"} {
+		_, _ = bh.h.store.RawDB().ExecContext(bh.h.ctx, `DROP TRIGGER IF EXISTS fail_settlement_insert;`)
+		resp, body := bh.h.doChatReq(t, http.MethodPost, ep, []byte(`{"model":"acme/chat-1","max_tokens":50,"messages":[{"role":"user","content":"fail closed"}]}`), nil, nil)
+		if resp.StatusCode != http.StatusServiceUnavailable || !strings.Contains(string(body), "budget_ledger_unavailable") {
+			t.Fatalf("%s: expected fail-closed 503 budget_ledger_unavailable, got status=%d body=%s", ep, resp.StatusCode, string(body))
+		}
+		if strings.Contains(string(body), `"secret"`) {
+			t.Fatalf("%s: leaked upstream unbilled response body: %s", ep, string(body))
+		}
+	}
+	led, err := bh.ledger.GetLedger(bh.h.ctx, bh.h.org.ID, "led_proj_budget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if led.ReservedHoldMicros != 0 {
+		t.Fatalf("expected reserved_hold_micros=0 released on fail-closed settle failure, got %d", led.ReservedHoldMicros)
+	}
+}
+
+func TestTP0021_IdempotencyKeyReplayDoesNotDoubleChargeBudget(t *testing.T) {
+	bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 10_000, 100)
+	bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"c_idem","object":"chat.completion","model":"acme-gpt-upstream","choices":[{"index":0,"message":{"role":"assistant","content":"once"},"finish_reason":"stop"}],"usage":{"prompt_tokens":120,"completion_tokens":80,"total_tokens":200}}`))
+	})
+
+	reqBody := []byte(`{"model":"acme/chat-1","max_tokens":50,"messages":[{"role":"user","content":"idempotent budget"}]}`)
+	hdrs := map[string]string{"Idempotency-Key": "idem-budget-key-01"}
+
+	resp1, body1 := bh.h.doChatReq(t, http.MethodPost, "/v1/chat/completions", reqBody, hdrs, nil)
+	if resp1.StatusCode != http.StatusOK {
+		t.Fatalf("first idem call failed: status=%d body=%s", resp1.StatusCode, string(body1))
+	}
+	resp2, body2 := bh.h.doChatReq(t, http.MethodPost, "/v1/chat/completions", reqBody, hdrs, nil)
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("replay idem call failed: status=%d body=%s", resp2.StatusCode, string(body2))
+	}
+	if resp2.Header.Get("Idempotent-Replayed") != "true" {
+		t.Fatalf("expected Idempotent-Replayed=true on replay, got %q", resp2.Header.Get("Idempotent-Replayed"))
+	}
+	if bh.upHits.Load() != 1 {
+		t.Fatalf("expected upstream called exactly once across idempotent replay, got %d", bh.upHits.Load())
+	}
+	led, err := bh.ledger.GetLedger(bh.h.ctx, bh.h.org.ID, "led_proj_budget")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if led.SettledExactMicros != 200 || led.ReservedHoldMicros != 0 {
+		t.Fatalf("expected single 200 micro-USD settlement after replay, got settled=%d reserved=%d", led.SettledExactMicros, led.ReservedHoldMicros)
+	}
+}
+

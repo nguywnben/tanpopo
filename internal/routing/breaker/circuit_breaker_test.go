@@ -184,6 +184,7 @@ func TestSM04HalfOpenConcurrencyRaceSafety(t *testing.T) {
 
 	var admitted atomic.Int32
 	hold := make(chan struct{})
+	entered := make(chan struct{}, 32)
 	var ready sync.WaitGroup
 	ready.Add(32)
 	var wg sync.WaitGroup
@@ -195,12 +196,17 @@ func TestSM04HalfOpenConcurrencyRaceSafety(t *testing.T) {
 			ready.Wait()
 			if ok, _, _, rel := cb.AcquireAttempt("dep_race", breaker.StateActiveHealthy, nil); ok {
 				admitted.Add(1)
+				entered <- struct{}{}
 				<-hold
 				rel()
+			} else {
+				entered <- struct{}{}
 			}
 		}()
 	}
-	time.Sleep(10 * time.Millisecond)
+	for i := 0; i < 32; i++ {
+		<-entered
+	}
 	close(hold)
 	wg.Wait()
 	if admitted.Load() != 1 {

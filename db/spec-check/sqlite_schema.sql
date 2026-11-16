@@ -1012,7 +1012,7 @@ CREATE TABLE usage_settlements (
     applied_pricing_snapshot_json TEXT NOT NULL DEFAULT '{}',
     total_cost_micros             BIGINT NOT NULL CHECK (total_cost_micros >= 0),
     PRIMARY KEY (org_id, id, settled_at_ms),
-    UNIQUE (request_id, settled_at_ms)
+    UNIQUE (org_id, request_id, settled_at_ms)
 );
 
 CREATE TRIGGER trg_usage_settlements_no_update

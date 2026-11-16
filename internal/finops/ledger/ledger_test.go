@@ -805,3 +805,187 @@ func TestLedgerLifecycleValidationRenewAndTenantIsolation(t *testing.T) {
 		t.Fatalf("expected ErrInvalidInput when ReservationID and project/env/key omitted")
 	}
 }
+
+func TestReserveScopeMismatchAndLateSettlementAfterReclaim(t *testing.T) {
+	ctx := context.Background()
+	const baseMs = 1_700_000_000_000
+	st, svc, clock, auditSink, _ := openLedgerFixture(t, baseMs)
+
+	bdg, err := svc.UpsertLedger(ctx, ledger.UpsertLedgerParams{
+		OrgID:           "org_finops_01",
+		ScopeType:       ledger.ScopeOrg,
+		ScopeID:         "org_finops_01",
+		PeriodKind:      ledger.PeriodTotalLifetime,
+		PeriodStartMs:   baseMs - 10_000,
+		PeriodEndMs:     baseMs + 86_400_000,
+		HardLimitMicros: 20_000,
+	})
+	if err != nil {
+		t.Fatalf("UpsertLedger: %v", err)
+	}
+
+	// 1. Reserve duplicate (org_id, request_id, hold_micros) MUST reject mismatched project/env/vkey scopes.
+	orig, err := svc.Reserve(ctx, ledger.ReserveRequest{
+		OrgID:        "org_finops_01",
+		ProjectID:    "prj_01",
+		EnvID:        "env_01",
+		VirtualKeyID: "vky_01",
+		RequestID:    "req_scope_check",
+		HoldMicros:   1_000,
+	})
+	if err != nil {
+		t.Fatalf("Reserve orig: %v", err)
+	}
+	for _, mismatch := range []ledger.ReserveRequest{
+		{OrgID: "org_finops_01", ProjectID: "prj_OTHER", EnvID: "env_01", VirtualKeyID: "vky_01", RequestID: "req_scope_check", HoldMicros: 1_000},
+		{OrgID: "org_finops_01", ProjectID: "prj_01", EnvID: "env_OTHER", VirtualKeyID: "vky_01", RequestID: "req_scope_check", HoldMicros: 1_000},
+		{OrgID: "org_finops_01", ProjectID: "prj_01", EnvID: "env_01", VirtualKeyID: "vky_OTHER", RequestID: "req_scope_check", HoldMicros: 1_000},
+	} {
+		if _, err := svc.Reserve(ctx, mismatch); !errors.Is(err, ledger.ErrInvalidStateTransition) {
+			t.Fatalf("expected ErrInvalidStateTransition for mismatched Reserve scope %+v, got %v", mismatch, err)
+		}
+	}
+
+	// Settle orig cleanly so only subsequent reservation remains open.
+	rate := pricing.RateCard{InputPer1MNanoUSD: 1_000_000_000, OutputPer1MNanoUSD: 1_000_000_000, BillingMode: pricing.BillingModeCommercialAPI}
+	if _, err := svc.Settle(ctx, ledger.SettleRequest{
+		OrgID:         "org_finops_01",
+		ReservationID: orig.ID,
+		RequestID:     "req_scope_check",
+		Rate:          rate,
+		Usage:         pricing.UsageInput{InputTokens: 100, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact},
+	}); err != nil {
+		t.Fatalf("Settle orig: %v", err)
+	}
+
+	// 2. Reservation expires and gets reaped to EXPIRED_RECLAIMED; late Settle MUST bill accurately,
+	// emit BUDGET_LATE_SETTLEMENT_AFTER_RECLAIM, preserve EXPIRED_RECLAIMED state, and stay idempotent on retry.
+	lateRsv, err := svc.Reserve(ctx, ledger.ReserveRequest{
+		OrgID:        "org_finops_01",
+		ProjectID:    "prj_01",
+		EnvID:        "env_01",
+		VirtualKeyID: "vky_01",
+		RequestID:    "req_late_after_reclaim",
+		HoldMicros:   2_000,
+	})
+	if err != nil {
+		t.Fatalf("Reserve lateRsv: %v", err)
+	}
+	reaper, err := ledger.NewOrphanReservationReaper(svc, 5*time.Millisecond, 50)
+	if err != nil {
+		t.Fatalf("NewOrphanReservationReaper: %v", err)
+	}
+	clock.Add(ledger.DefaultLeaseTTLMs + 10_000)
+	reaped, err := reaper.ReapOnce(ctx)
+	if err != nil || reaped != 1 {
+		t.Fatalf("expected 1 reaped, got reaped=%d err=%v", reaped, err)
+	}
+
+	// Validate RequestID mismatch fails Settle cleanly.
+	if _, err := svc.Settle(ctx, ledger.SettleRequest{
+		OrgID:         "org_finops_01",
+		ReservationID: lateRsv.ID,
+		RequestID:     "wrong_req_id",
+		Rate:          rate,
+		Usage:         pricing.UsageInput{InputTokens: 500, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact},
+	}); !errors.Is(err, ledger.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for mismatched RequestID in Settle, got %v", err)
+	}
+
+	// Validate late settlement succeeds and bills 500 micro-USD without double-releasing hold.
+	lateSet, err := svc.Settle(ctx, ledger.SettleRequest{
+		OrgID:         "org_finops_01",
+		ReservationID: lateRsv.ID,
+		RequestID:     "req_late_after_reclaim",
+		Rate:          rate,
+		Usage:         pricing.UsageInput{InputTokens: 200, OutputTokens: 300, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact},
+	})
+	if err != nil || lateSet.AlreadySettled || lateSet.TotalCostMicros != 500 {
+		t.Fatalf("expected late Settle 500 micro-USD, got %+v err=%v", lateSet, err)
+	}
+	reloadedRsv, err := svc.GetReservation(ctx, "org_finops_01", lateRsv.ID)
+	if err != nil || reloadedRsv.State != ledger.StateExpiredReclaimed {
+		t.Fatalf("expected reservation state preserved as EXPIRED_RECLAIMED, got %+v err=%v", reloadedRsv, err)
+	}
+	reloadedLed, err := svc.GetLedger(ctx, "org_finops_01", bdg.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloadedLed.SettledExactMicros != 600 || reloadedLed.ReservedHoldMicros != 0 {
+		t.Fatalf("expected settled_exact=600 reserved=0 after late settle, got %+v", reloadedLed)
+	}
+
+	// Retry late Settle MUST replay idempotently without double billing.
+	lateDup, err := svc.Settle(ctx, ledger.SettleRequest{
+		OrgID:         "org_finops_01",
+		ReservationID: lateRsv.ID,
+		RequestID:     "req_late_after_reclaim",
+		Rate:          rate,
+		Usage:         pricing.UsageInput{InputTokens: 200, OutputTokens: 300, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact},
+	})
+	if err != nil || !lateDup.AlreadySettled || lateDup.SettlementID != lateSet.SettlementID {
+		t.Fatalf("expected idempotent replay on second late Settle, got %+v err=%v", lateDup, err)
+	}
+	events := auditSink.Events()
+	foundLateAudit := false
+	for _, ev := range events {
+		if ev.EventType == "BUDGET_LATE_SETTLEMENT_AFTER_RECLAIM" && ev.TargetID == lateRsv.ID {
+			foundLateAudit = true
+			break
+		}
+	}
+	if !foundLateAudit {
+		t.Fatalf("expected BUDGET_LATE_SETTLEMENT_AFTER_RECLAIM audit event, got %+v", events)
+	}
+
+	// 3. LeaseTTLMs, zero hard-limit utilization, threshold normalization, invalid BillingMode, and input guards.
+	if got := svc.LeaseTTLMs(); got != ledger.DefaultLeaseTTLMs {
+		t.Fatalf("expected DefaultLeaseTTLMs=%d, got %d", ledger.DefaultLeaseTTLMs, got)
+	}
+	var nilSvc *ledger.Service
+	if got := nilSvc.LeaseTTLMs(); got != ledger.DefaultLeaseTTLMs {
+		t.Fatalf("expected nilSvc.LeaseTTLMs()=%d, got %d", ledger.DefaultLeaseTTLMs, got)
+	}
+	if _, err := svc.UpsertLedger(ctx, ledger.UpsertLedgerParams{
+		OrgID:                  "org_finops_01",
+		ScopeType:              ledger.ScopeVirtualKey,
+		ScopeID:                "vky_zero",
+		PeriodKind:             ledger.PeriodMonthly,
+		PeriodStartMs:          baseMs - 10_000,
+		PeriodEndMs:            baseMs + 86_400_000,
+		HardLimitMicros:        0,
+		SoftAlertThresholdsPct: []int{-5, 80, 80, 150, 90},
+	}); err != nil {
+		t.Fatalf("UpsertLedger vkey zero limit: %v", err)
+	}
+	if _, err := svc.Settle(ctx, ledger.SettleRequest{
+		OrgID:        "org_finops_01",
+		ProjectID:    "prj_01",
+		EnvID:        "env_01",
+		VirtualKeyID: "vky_zero",
+		RequestID:    "req_zero_limit",
+		Plane:        ledger.PlaneProvider,
+		Rate:         rate,
+		Usage:        pricing.UsageInput{InputTokens: 100, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact},
+	}); err != nil {
+		t.Fatalf("Settle zero limit vkey: %v", err)
+	}
+	if _, err := svc.Settle(ctx, ledger.SettleRequest{
+		OrgID:        "org_finops_01",
+		ProjectID:    "prj_01",
+		EnvID:        "env_01",
+		VirtualKeyID: "vky_zero",
+		RequestID:    "req_bad_billing",
+		Rate:         pricing.RateCard{BillingMode: "CONSUMER_SUBSCRIPTION"},
+	}); !errors.Is(err, ledger.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for bad BillingMode, got %v", err)
+	}
+	if err := svc.RenewLease(ctx, "", ""); !errors.Is(err, ledger.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for empty RenewLease, got %v", err)
+	}
+	if _, err := svc.Release(ctx, "", ""); !errors.Is(err, ledger.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for empty Release, got %v", err)
+	}
+	_ = st
+}
+

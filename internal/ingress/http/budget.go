@@ -6,16 +6,19 @@ package http
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"math"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/finops/pricing"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
+	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/routing/breaker"
 	"github.com/nguywnben/tanpopo/internal/routing/failover"
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
@@ -24,11 +27,13 @@ import (
 type requestBudgetSession struct {
 	svc             *ledger.Service
 	defaultHoldOut  int64
+	renewEvery      time.Duration
 	orgID           string
 	projectID       string
 	envID           string
 	vkeyID          string
 	reqID           string
+	ledgerReqID     string
 	modelSlug       string
 	inputTextBytes  int64
 	maxOutputTokens int64
@@ -38,6 +43,8 @@ type requestBudgetSession struct {
 	reservationID string
 	currentHold   int64
 	settled       bool
+	renewCancel   context.CancelFunc
+	renewDone     chan struct{}
 }
 
 func (s *Server) newRequestBudgetSession(
@@ -60,14 +67,21 @@ func (s *Server) newRequestBudgetSession(
 	if baseIn > 0 && baseIn*4 < textBytes {
 		textBytes = baseIn * 4
 	}
+	ttlMs := s.budgetLedger.LeaseTTLMs()
+	renewEvery := time.Duration(ttlMs/3) * time.Millisecond
+	if renewEvery <= 0 {
+		renewEvery = time.Millisecond
+	}
 	return &requestBudgetSession{
 		svc:             s.budgetLedger,
 		defaultHoldOut:  s.defaultHoldOutputTokens,
+		renewEvery:      renewEvery,
 		orgID:           key.OrgID,
 		projectID:       key.ProjectID,
 		envID:           key.EnvID,
 		vkeyID:          key.ID,
 		reqID:           reqID,
+		ledgerReqID:     idgen.MustNew(idgen.PrefixTrace),
 		modelSlug:       modelSlug,
 		inputTextBytes:  textBytes,
 		maxOutputTokens: maxOut,
@@ -128,6 +142,50 @@ func (b *requestBudgetSession) estimateHold(target *snapshot.ResolvedTarget) (in
 	return bd.TotalMicroUSD, nil
 }
 
+func (b *requestBudgetSession) startLeaseRenewalLocked(resID string) {
+	if b.renewCancel != nil || b.settled || resID == "" || b.renewEvery <= 0 {
+		return
+	}
+	rCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	b.renewCancel = cancel
+	b.renewDone = done
+	svc := b.svc
+	orgID := b.orgID
+	interval := b.renewEvery
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-rCtx.Done():
+				return
+			case <-ticker.C:
+				_ = svc.RenewLease(rCtx, orgID, resID)
+			}
+		}
+	}()
+}
+
+func (b *requestBudgetSession) stopLeaseRenewal() {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	cancel := b.renewCancel
+	done := b.renewDone
+	b.renewCancel = nil
+	b.renewDone = nil
+	b.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
+}
+
 func (b *requestBudgetSession) reserveInitial(ctx context.Context, w http.ResponseWriter, candidates []*resolver.RankedTarget) bool {
 	if b == nil || len(candidates) == 0 {
 		return true
@@ -152,7 +210,7 @@ func (b *requestBudgetSession) reserveInitial(ctx context.Context, w http.Respon
 		ProjectID:    b.projectID,
 		EnvID:        b.envID,
 		VirtualKeyID: b.vkeyID,
-		RequestID:    b.reqID,
+		RequestID:    b.ledgerReqID,
 		HoldMicros:   hold,
 	})
 	if rerr != nil {
@@ -167,6 +225,7 @@ func (b *requestBudgetSession) reserveInitial(ctx context.Context, w http.Respon
 	b.mu.Lock()
 	b.reservationID = res.ID
 	b.currentHold = res.HoldMicros
+	b.startLeaseRenewalLocked(res.ID)
 	b.mu.Unlock()
 	return true
 }
@@ -238,6 +297,9 @@ func (b *requestBudgetSession) markStreaming(ctx context.Context) {
 	b.mu.Lock()
 	resID := b.reservationID
 	settled := b.settled
+	if resID != "" && !settled {
+		b.startLeaseRenewalLocked(resID)
+	}
 	b.mu.Unlock()
 	if resID == "" || settled {
 		return
@@ -249,6 +311,7 @@ func (b *requestBudgetSession) releaseIfUnsettled() {
 	if b == nil {
 		return
 	}
+	b.stopLeaseRenewal()
 	b.mu.Lock()
 	resID := b.reservationID
 	settled := b.settled
@@ -265,9 +328,9 @@ func (b *requestBudgetSession) settleSync(
 	requestedModel string,
 	usage *port.NormalizedUsage,
 	finalBody []byte,
-) *port.NormalizedUsage {
+) (*port.NormalizedUsage, error) {
 	if b == nil {
-		return usage
+		return usage, nil
 	}
 	inUsage := convertPortUsageToPricing(usage, b.inputTextBytes, int64(len(finalBody)), false)
 	return b.settleInternal(ctx, target, requestedModel, inUsage, usage)
@@ -279,13 +342,13 @@ func (b *requestBudgetSession) settleStream(
 	requestedModel string,
 	pumpRes sse.PumpResult,
 	pumpErr error,
-) {
+) (*port.NormalizedUsage, error) {
 	if b == nil {
-		return
+		return pumpRes.Usage, nil
 	}
 	forceEstimated := pumpErr != nil || pumpRes.Usage == nil
 	inUsage := convertPortUsageToPricing(pumpRes.Usage, b.inputTextBytes, pumpRes.EmittedBytes, forceEstimated)
-	b.settleInternal(ctx, target, requestedModel, inUsage, pumpRes.Usage)
+	return b.settleInternal(ctx, target, requestedModel, inUsage, pumpRes.Usage)
 }
 
 func (b *requestBudgetSession) settleInternal(
@@ -294,13 +357,15 @@ func (b *requestBudgetSession) settleInternal(
 	requestedModel string,
 	inUsage pricing.UsageInput,
 	origUsage *port.NormalizedUsage,
-) *port.NormalizedUsage {
+) (*port.NormalizedUsage, error) {
+	b.stopLeaseRenewal()
+
 	b.mu.Lock()
 	resID := b.reservationID
 	already := b.settled
 	b.mu.Unlock()
 	if already {
-		return origUsage
+		return origUsage, nil
 	}
 
 	deplID := ""
@@ -315,7 +380,7 @@ func (b *requestBudgetSession) settleInternal(
 	res, err := b.svc.Settle(context.WithoutCancel(ctx), ledger.SettleRequest{
 		OrgID:            b.orgID,
 		ReservationID:    resID,
-		RequestID:        b.reqID,
+		RequestID:        b.ledgerReqID,
 		ProjectID:        b.projectID,
 		EnvID:            b.envID,
 		VirtualKeyID:     b.vkeyID,
@@ -326,7 +391,14 @@ func (b *requestBudgetSession) settleInternal(
 		Usage:            inUsage,
 	})
 	if err != nil {
-		return origUsage
+		slog.Error("budget ledger settlement failed",
+			"org_id", b.orgID,
+			"reservation_id", resID,
+			"request_id", b.reqID,
+			"ledger_request_id", b.ledgerReqID,
+			"error", err,
+		)
+		return origUsage, err
 	}
 
 	b.mu.Lock()
@@ -336,11 +408,11 @@ func (b *requestBudgetSession) settleInternal(
 	if origUsage == nil {
 		return &port.NormalizedUsage{
 			Accuracy: portAccuracyFromLedger(res.Accuracy),
-		}
+		}, nil
 	}
 	cp := *origUsage
 	cp.Accuracy = portAccuracyFromLedger(res.Accuracy)
-	return &cp
+	return &cp, nil
 }
 
 func convertPortUsageToPricing(u *port.NormalizedUsage, fallbackInBytes, fallbackOutBytes int64, forceEstimated bool) pricing.UsageInput {

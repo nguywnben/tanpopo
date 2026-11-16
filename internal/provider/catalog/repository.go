@@ -954,9 +954,7 @@ func (r *Repository) CreateModelDeployment(ctx context.Context, params CreateMod
 	if err != nil {
 		return nil, err
 	}
-	if params.Pricing.InputPer1MNanoUSD < 0 || params.Pricing.OutputPer1MNanoUSD < 0 ||
-		params.Pricing.CacheReadPer1MNanoUSD < 0 || params.Pricing.CacheWritePer1MNanoUSD < 0 ||
-		params.Pricing.ReasoningPer1MNanoUSD < 0 {
+	if hasNegativePricingRates(params.Pricing) {
 		return nil, fmt.Errorf("%w: nano-USD pricing rates cannot be negative", port.ErrInvalidInput)
 	}
 	pricingBytes, err := json.Marshal(params.Pricing)
@@ -1081,9 +1079,7 @@ func (r *Repository) UpdateModelDeployment(ctx context.Context, orgID, deploymen
 		}
 		pricing := cur.Pricing
 		if params.Pricing != nil {
-			if params.Pricing.InputPer1MNanoUSD < 0 || params.Pricing.OutputPer1MNanoUSD < 0 ||
-				params.Pricing.CacheReadPer1MNanoUSD < 0 || params.Pricing.CacheWritePer1MNanoUSD < 0 ||
-				params.Pricing.ReasoningPer1MNanoUSD < 0 {
+			if hasNegativePricingRates(*params.Pricing) {
 				return fmt.Errorf("%w: nano-USD pricing rates cannot be negative", port.ErrInvalidInput)
 			}
 			pricing = *params.Pricing
@@ -1182,6 +1178,20 @@ func scanModelDeployment(row interface{ Scan(dest ...any) error }, deploymentID 
 	return &out, nil
 }
 
+func hasNegativePricingRates(p snapshot.PricingNanoUSD) bool {
+	return p.InputPer1MNanoUSD < 0 ||
+		p.OutputPer1MNanoUSD < 0 ||
+		p.CacheReadPer1MNanoUSD < 0 ||
+		p.CacheWritePer1MNanoUSD < 0 ||
+		p.ReasoningPer1MNanoUSD < 0 ||
+		p.ImagePerUnitNanoUSD < 0 ||
+		p.ImagePer1MPixelsNanoUSD < 0 ||
+		p.AudioInputPerSecNanoUSD < 0 ||
+		p.AudioOutputPerSecNanoUSD < 0 ||
+		p.DocumentPageNanoUSD < 0 ||
+		p.RerankUnitNanoUSD < 0
+}
+
 func decodePricingNanoUSDStrict(raw string) (snapshot.PricingNanoUSD, error) {
 	trimmed := strings.TrimSpace(raw)
 	var obj map[string]any
@@ -1192,9 +1202,7 @@ func decodePricingNanoUSDStrict(raw string) (snapshot.PricingNanoUSD, error) {
 	if err := json.Unmarshal([]byte(trimmed), &pricing); err != nil {
 		return snapshot.PricingNanoUSD{}, fmt.Errorf("%w: corrupt pricing_nano_usd_json: %v", port.ErrInvalidInput, err)
 	}
-	if pricing.InputPer1MNanoUSD < 0 || pricing.OutputPer1MNanoUSD < 0 ||
-		pricing.CacheReadPer1MNanoUSD < 0 || pricing.CacheWritePer1MNanoUSD < 0 ||
-		pricing.ReasoningPer1MNanoUSD < 0 {
+	if hasNegativePricingRates(pricing) {
 		return snapshot.PricingNanoUSD{}, fmt.Errorf("%w: corrupt pricing_nano_usd_json: negative rate", port.ErrInvalidInput)
 	}
 	return pricing, nil

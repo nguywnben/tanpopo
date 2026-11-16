@@ -268,6 +268,14 @@ func (s *Service) SoftThresholdAlertCount() int64 {
 	return s.softAlertCount.Load()
 }
 
+// LeaseTTLMs returns the configured reservation lease duration in milliseconds.
+func (s *Service) LeaseTTLMs() int64 {
+	if s == nil || s.leaseTTLMs <= 0 {
+		return DefaultLeaseTTLMs
+	}
+	return s.leaseTTLMs
+}
+
 // UpsertLedger creates or updates a scoped budget ledger, recalculating negative_carryover_micros
 // immediately so budget top-ups clear carryover cleanly (AC-3).
 func (s *Service) UpsertLedger(ctx context.Context, params UpsertLedgerParams) (*BudgetLedger, error) {
@@ -419,16 +427,20 @@ func (s *Service) Reserve(ctx context.Context, req ReserveRequest) (*Reservation
 
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
 		// Check for idempotent duplicate Reserve on same (org_id, request_id).
-		var existingID, existingState string
+		var existingID, existingState, existingProj, existingEnv, existingKey string
 		var existingHold int64
 		dupErr := tx.QueryRowContext(ctx, `
-			SELECT id, state, hold_micros
+			SELECT id, state, hold_micros, project_id, env_id, virtual_key_id
 			FROM budget_reservations
 			WHERE org_id = ? AND request_id = ?`,
 			req.OrgID, req.RequestID,
-		).Scan(&existingID, &existingState, &existingHold)
+		).Scan(&existingID, &existingState, &existingHold, &existingProj, &existingEnv, &existingKey)
 		if dupErr == nil {
-			if existingState == StateReservedHold && existingHold == req.HoldMicros {
+			if existingState == StateReservedHold &&
+				existingHold == req.HoldMicros &&
+				existingProj == req.ProjectID &&
+				existingEnv == req.EnvID &&
+				existingKey == req.VirtualKeyID {
 				loaded, lErr := scanReservationByIDTx(ctx, tx, req.OrgID, existingID)
 				if lErr != nil {
 					return lErr
@@ -749,6 +761,9 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 	if billingMode == "" {
 		billingMode = pricing.BillingModeCommercialAPI
 	}
+	if billingMode != pricing.BillingModeCommercialAPI && billingMode != pricing.BillingModeSelfHostedInfra {
+		return nil, ErrInvalidInput
+	}
 	req.Rate.BillingMode = billingMode
 
 	breakdown, calcErr := pricing.Calculate(req.Rate, req.Usage)
@@ -765,8 +780,9 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 
 	now := s.nowMs()
 	var (
-		out         *SettlementResult
-		alertsToEmit []AlertEvent
+		out                     *SettlementResult
+		alertsToEmit            []AlertEvent
+		lateSettledAfterReclaim bool
 	)
 
 	err = s.withTx(ctx, func(tx *sql.Tx) error {
@@ -789,6 +805,9 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 			if qErr != nil {
 				return qErr
 			}
+			if rReqID != req.RequestID {
+				return ErrInvalidInput
+			}
 			if projectID == "" {
 				projectID = rProj
 			}
@@ -808,24 +827,48 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 				out = existing
 				return nil
 			}
-			if curState != StateReservedHold && curState != StateStreamingAccruing {
+			if curState == StateExpiredReclaimed {
+				existing, eErr := findSettlementByReservationTx(ctx, tx, req.OrgID, req.ReservationID)
+				if eErr == nil {
+					existing.AlreadySettled = true
+					out = existing
+					return nil
+				} else if !errors.Is(eErr, ErrNotFound) {
+					return eErr
+				}
+				// Reservation lease expired and the reaper already released its held balance.
+				// Bill completed work against active ledgers with releaseHeld=0 while preserving
+				// EXPIRED_RECLAIMED as the reservation's terminal state for auditability.
+				ledgers, lErr := findActiveLedgersTx(ctx, tx, req.OrgID, projectID, envID, vkeyID, now)
+				if lErr != nil {
+					return lErr
+				}
+				for _, l := range ledgers {
+					al, aErr := applyLedgerSettlementTx(ctx, tx, req.OrgID, l.ID, 0, breakdown, now, req.RequestID)
+					if aErr != nil {
+						return aErr
+					}
+					alertsToEmit = append(alertsToEmit, al...)
+				}
+				lateSettledAfterReclaim = true
+			} else if curState != StateReservedHold && curState != StateStreamingAccruing {
 				return ErrInvalidStateTransition
-			}
+			} else {
+				// Release reserved hold from each linked ledger and apply settled spend + carryover.
+				alerts, sErr := settleLinkedLedgersTx(ctx, tx, req.OrgID, req.ReservationID, breakdown, now, req.RequestID)
+				if sErr != nil {
+					return sErr
+				}
+				alertsToEmit = append(alertsToEmit, alerts...)
 
-			// Release reserved hold from each linked ledger and apply settled spend + carryover.
-			alerts, sErr := settleLinkedLedgersTx(ctx, tx, req.OrgID, req.ReservationID, breakdown, now, req.RequestID)
-			if sErr != nil {
-				return sErr
-			}
-			alertsToEmit = append(alertsToEmit, alerts...)
-
-			if _, uErr := tx.ExecContext(ctx, `
-				UPDATE budget_reservations
-				SET state = ?, updated_at_ms = ?
-				WHERE org_id = ? AND id = ? AND state IN (?, ?)`,
-				targetResState, now, req.OrgID, req.ReservationID, StateReservedHold, StateStreamingAccruing,
-			); uErr != nil {
-				return uErr
+				if _, uErr := tx.ExecContext(ctx, `
+					UPDATE budget_reservations
+					SET state = ?, updated_at_ms = ?
+					WHERE org_id = ? AND id = ? AND state IN (?, ?)`,
+					targetResState, now, req.OrgID, req.ReservationID, StateReservedHold, StateStreamingAccruing,
+				); uErr != nil {
+					return uErr
+				}
 			}
 		} else {
 			if projectID == "" || envID == "" || vkeyID == "" {
@@ -922,6 +965,28 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 	}
 
 	if out != nil && !out.AlreadySettled {
+		if lateSettledAfterReclaim && s.audit != nil {
+			meta, _ := json.Marshal(map[string]any{
+				"reservation_id":    req.ReservationID,
+				"settlement_id":     out.SettlementID,
+				"total_cost_micros": out.TotalCostMicros,
+			})
+			orgCopy := req.OrgID
+			reqCopy := req.RequestID
+			_ = s.audit.Append(ctx, storageport.AuditEvent{
+				ID:           idgen.MustNew(idgen.PrefixAudit),
+				CreatedAtMs:  now,
+				OrgID:        &orgCopy,
+				ActorKind:    "system",
+				ActorID:      "budget_ledger_service",
+				EntryPoint:   "finops_settle",
+				EventType:    "BUDGET_LATE_SETTLEMENT_AFTER_RECLAIM",
+				TargetType:   "budget_reservation",
+				TargetID:     req.ReservationID,
+				RequestID:    &reqCopy,
+				MetadataJSON: string(meta),
+			})
+		}
 		for _, ev := range alertsToEmit {
 			if ev.Code == "ALT-UNMETERED-SPEND" {
 				s.unmeteredCount.Add(1)
