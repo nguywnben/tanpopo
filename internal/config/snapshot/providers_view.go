@@ -435,6 +435,36 @@ func (s *ConfigSnapshot) ListCandidateTargets(orgID, modelSlug string) []*Resolv
 	return out
 }
 
+// LookupResolvedTarget performs an O(1) tenant-isolated lookup of a single ModelDeployment
+// paired with its LogicalModel, ProviderConnection, and ProviderAdapter views.
+func (s *ConfigSnapshot) LookupResolvedTarget(orgID, deploymentID string) (*ResolvedTarget, bool) {
+	if s == nil || s.providers == nil || orgID == "" || deploymentID == "" {
+		return nil, false
+	}
+	d, ok := s.providers.deploymentsByID[deploymentID]
+	if !ok || d == nil || d.OrgID != orgID {
+		return nil, false
+	}
+	conn, ok := s.providers.connectionsByID[d.ConnectionID]
+	if !ok || conn == nil || conn.OrgID != orgID {
+		conn = nil
+	}
+	var adp *ProviderAdapterView
+	if conn != nil {
+		adp = s.providers.adaptersByID[conn.AdapterID]
+	}
+	lm := s.providers.logicalModelsByID[d.LogicalModelID]
+	if lm != nil && lm.OrgID != nil && *lm.OrgID != orgID {
+		lm = nil
+	}
+	return &ResolvedTarget{
+		LogicalModel: lm.clone(),
+		Deployment:   d.clone(),
+		Connection:   conn.clone(),
+		Adapter:      adp.clone(),
+	}, true
+}
+
 // ModelCapabilityProfile mirrors OpenAPI CapabilityProfile (12 canonical snake_case booleans).
 type ModelCapabilityProfile struct {
 	Streaming         bool `json:"streaming"`

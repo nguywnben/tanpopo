@@ -230,6 +230,33 @@ func ModelPermitted(eff EffectivePolicy, modelSlug string) bool {
 	return ok
 }
 
+// ModelExplicitlyDenied reports whether modelSlug appears on the hierarchical denied_models list.
+func ModelExplicitlyDenied(eff EffectivePolicy, modelSlug string) bool {
+	tok := strings.TrimSpace(modelSlug)
+	if tok == "" {
+		return false
+	}
+	_, denied := eff.deniedModelsSet[tok]
+	return denied
+}
+
+// AncestorModelPermitted reports whether modelSlug satisfies ancestor-scope
+// (ORG ∩ PROJECT ∩ ENV, excluding VIRTUAL_KEY) model allowlists and overall denylists.
+func AncestorModelPermitted(eff EffectivePolicy, modelSlug string) bool {
+	tok := strings.TrimSpace(modelSlug)
+	if tok == "" {
+		return false
+	}
+	if _, denied := eff.deniedModelsSet[tok]; denied {
+		return false
+	}
+	if !eff.hasAncestorAllowedModels || eff.ancestorWildcardModels {
+		return true
+	}
+	_, ok := eff.ancestorAllowedModelsSet[tok]
+	return ok
+}
+
 // AdapterPermitted reports whether adapterSlug is allowed by eff.
 func AdapterPermitted(eff EffectivePolicy, adapterSlug string) bool {
 	tok := strings.TrimSpace(adapterSlug)

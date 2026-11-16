@@ -56,6 +56,8 @@ import (
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
 	"github.com/nguywnben/tanpopo/internal/ratelimit"
+	"github.com/nguywnben/tanpopo/internal/routing/breaker"
+	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	storageport "github.com/nguywnben/tanpopo/internal/storage/port"
 )
@@ -95,6 +97,8 @@ type ServerConfig struct {
 	DisableNativePassthrough bool
 	PolicyEvaluator          *policyengine.Evaluator
 	RateLimiter              ratelimit.RateLimiterPort
+	Breaker                  *breaker.CircuitBreaker
+	RouteResolver            *resolver.Resolver
 	UsageObserver            func(UsageRecord)
 	NativeUsageObserver      func(native.UsageRecord)
 }
@@ -171,6 +175,8 @@ type Server struct {
 	remoteMediaPolicy blob.RemoteMediaPolicy
 	policyEval        *policyengine.Evaluator
 	rateLimiter       ratelimit.RateLimiterPort
+	breaker           *breaker.CircuitBreaker
+	routeResolver     *resolver.Resolver
 	usageObserver     func(UsageRecord)
 	nativeHandler     *native.Handler
 
@@ -253,6 +259,16 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 			Now: func() time.Time { return time.UnixMilli(nowFn()).UTC() },
 		})
 	}
+	cb := cfg.Breaker
+	if cb == nil {
+		cb = breaker.New(breaker.Config{
+			Now: func() time.Time { return time.UnixMilli(nowFn()).UTC() },
+		})
+	}
+	routeRes := cfg.RouteResolver
+	if routeRes == nil {
+		routeRes = resolver.New()
+	}
 
 	s := &Server{
 		snapshots:         cfg.Snapshots,
@@ -269,6 +285,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		remoteMediaPolicy: cfg.RemoteMediaPolicy,
 		policyEval:        policyEval,
 		rateLimiter:       rateLimiter,
+		breaker:           cb,
+		routeResolver:     routeRes,
 		usageObserver:     cfg.UsageObserver,
 		wasmCache:         wazero.NewCompilationCache(),
 		runtimes:          make(map[runtimeCacheKey]*cachedAdapterEntry),
@@ -283,6 +301,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 			Idempotency:         s.idempotency,
 			PolicyEvaluator:     s.policyEval,
 			RateLimiter:         s.rateLimiter,
+			Breaker:             s.breaker,
+			RouteResolver:       s.routeResolver,
 			MaxRequestBodyBytes: s.maxReqBodyBytes,
 			FirstByteTimeout:    s.firstByteTimeout,
 			HeartbeatInterval:   s.heartbeatInterval,
@@ -315,6 +335,22 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	s.mux.HandleFunc("/", s.handleNotFound)
 	s.rootRouter = s.withIngressEnvelope(s.mux)
 	return s, nil
+}
+
+// Breaker returns the Data Plane SM-04 circuit breaker shared across HTTP and native handlers.
+func (s *Server) Breaker() *breaker.CircuitBreaker {
+	if s == nil {
+		return nil
+	}
+	return s.breaker
+}
+
+// RouteResolver returns the Data Plane 6-step route resolver shared across handlers.
+func (s *Server) RouteResolver() *resolver.Resolver {
+	if s == nil {
+		return nil
+	}
+	return s.routeResolver
 }
 
 // ServeHTTP dispatches Data Plane HTTP requests through protocol/correlation guards.

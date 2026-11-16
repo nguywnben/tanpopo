@@ -72,14 +72,17 @@ type EffectivePolicy struct {
 	MaxRequestBodyBytes    *int64
 	GuardrailHooks         []snapshot.GuardrailHookSpec
 
-	allowedModelsSet  map[string]struct{}
-	deniedModelsSet   map[string]struct{}
-	allowedAdapterSet map[string]struct{}
-	deniedAdapterSet  map[string]struct{}
-	allowedRegionSet  map[string]struct{}
-	wildcardModels    bool
-	wildcardAdapters  bool
-	wildcardRegions   bool
+	allowedModelsSet         map[string]struct{}
+	deniedModelsSet          map[string]struct{}
+	allowedAdapterSet        map[string]struct{}
+	deniedAdapterSet         map[string]struct{}
+	allowedRegionSet         map[string]struct{}
+	wildcardModels           bool
+	wildcardAdapters         bool
+	wildcardRegions          bool
+	hasAncestorAllowedModels bool
+	ancestorWildcardModels   bool
+	ancestorAllowedModelsSet map[string]struct{}
 }
 
 // TrustStrictnessRank returns monotonic strictness order:
@@ -134,6 +137,7 @@ func ScopeHierarchyRank(scopeType string) int {
 func MergeLayers(layers ...ScopedLayer) EffectivePolicy {
 	var out EffectivePolicy
 	out.allowedModelsSet = make(map[string]struct{})
+	out.ancestorAllowedModelsSet = make(map[string]struct{})
 	out.deniedModelsSet = make(map[string]struct{})
 	out.allowedAdapterSet = make(map[string]struct{})
 	out.deniedAdapterSet = make(map[string]struct{})
@@ -169,6 +173,11 @@ func MergeLayers(layers ...ScopedLayer) EffectivePolicy {
 			out.HasAllowedModels, out.wildcardModels, out.allowedModelsSet = intersectAllowlist(
 				out.HasAllowedModels, out.wildcardModels, out.allowedModelsSet, r.AllowedModels, false,
 			)
+			if !strings.EqualFold(strings.TrimSpace(layer.ScopeType), snapshot.PolicyScopeVirtualKey) {
+				out.hasAncestorAllowedModels, out.ancestorWildcardModels, out.ancestorAllowedModelsSet = intersectAllowlist(
+					out.hasAncestorAllowedModels, out.ancestorWildcardModels, out.ancestorAllowedModelsSet, r.AllowedModels, false,
+				)
+			}
 		}
 		if r.HasAllowedAdapters {
 			out.HasAllowedAdapters, out.wildcardAdapters, out.allowedAdapterSet = intersectAllowlist(
@@ -224,6 +233,7 @@ func MergeLayers(layers ...ScopedLayer) EffectivePolicy {
 	// Subtract denylists from explicit allowlists after full hierarchical intersection.
 	for dm := range out.deniedModelsSet {
 		delete(out.allowedModelsSet, dm)
+		delete(out.ancestorAllowedModelsSet, dm)
 	}
 	for da := range out.deniedAdapterSet {
 		delete(out.allowedAdapterSet, da)

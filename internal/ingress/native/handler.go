@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -35,6 +36,9 @@ import (
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
 	"github.com/nguywnben/tanpopo/internal/ratelimit"
+	"github.com/nguywnben/tanpopo/internal/routing/breaker"
+	"github.com/nguywnben/tanpopo/internal/routing/failover"
+	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	storageport "github.com/nguywnben/tanpopo/internal/storage/port"
@@ -72,6 +76,8 @@ type Config struct {
 	Idempotency         *idempotency.Guard
 	PolicyEvaluator     *policyengine.Evaluator
 	RateLimiter         ratelimit.RateLimiterPort
+	Breaker             *breaker.CircuitBreaker
+	RouteResolver       *resolver.Resolver
 	AcquireRuntime      RuntimeAcquirer
 	NowMs               func() int64
 	MaxRequestBodyBytes int64
@@ -88,6 +94,8 @@ type Handler struct {
 	idempotency       *idempotency.Guard
 	policyEval        *policyengine.Evaluator
 	rateLimiter       ratelimit.RateLimiterPort
+	breaker           *breaker.CircuitBreaker
+	routeResolver     *resolver.Resolver
 	acquireRuntime    RuntimeAcquirer
 	nowMs             func() int64
 	maxReqBodyBytes   int64
@@ -129,6 +137,16 @@ func NewHandler(cfg Config) (*Handler, error) {
 			Now: func() time.Time { return time.UnixMilli(nowFn()).UTC() },
 		})
 	}
+	cb := cfg.Breaker
+	if cb == nil {
+		cb = breaker.New(breaker.Config{
+			Now: func() time.Time { return time.UnixMilli(nowFn()).UTC() },
+		})
+	}
+	routeRes := cfg.RouteResolver
+	if routeRes == nil {
+		routeRes = resolver.New()
+	}
 	return &Handler{
 		snapshots:         cfg.Snapshots,
 		broker:            cfg.Broker,
@@ -136,6 +154,8 @@ func NewHandler(cfg Config) (*Handler, error) {
 		idempotency:       cfg.Idempotency,
 		policyEval:        policyEval,
 		rateLimiter:       rateLimiter,
+		breaker:           cb,
+		routeResolver:     routeRes,
 		acquireRuntime:    cfg.AcquireRuntime,
 		nowMs:             nowFn,
 		maxReqBodyBytes:   maxBody,
@@ -210,7 +230,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeCanonicalError(w, reqID, http.StatusForbidden, "native_path_not_allowed", "permission_error", "Native passthrough path rejected or missing target model.", false)
 		return
 	}
-	estTokens := estimateNativeTokensFromJSON(rawBody)
+	estTokens, estBaseIn, estMaxOut := estimateNativeTokensFromJSON(rawBody)
 	reqRegion, regionOK := resolveNativeRequestedDataRegion(r)
 	if !regionOK {
 		writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Conflicting X-Tanpopo-Data-Region header values.", false)
@@ -254,142 +274,393 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer admLease.Release()
 
-	// Step 4: Resolve policy-compliant target deployment, verify Same-Dialect Invariant (CT-13) and Adapter Allowlist (NEG-2).
-	target, ok := h.resolveNativeTargetWithPolicy(w, reqID, snap, match, eff, reqRegion, dialect, upstreamPath, rawHints.Model)
+	// Step 4: Resolve policy-compliant target deployments via 6-step route resolver (CT-08, CT-13, SM-04).
+	candidates, ok := h.resolveNativeTargetsWithPolicy(w, reqID, snap, match, eff, reqRegion, dialect, upstreamPath, rawHints.Model, nil, estBaseIn, estMaxOut)
 	if !ok {
 		return
 	}
 
 	// Step 5: Acquire runtime, execute bounded InspectNativeRequest without mutating rawBody.
-	rt, releaseCurr, rtErr := h.acquireRuntime(streamCtx, target)
+	// If multiple failover candidates exist and the initial candidate's runtime is quarantined or
+	// fails inspection (non-canceled), fall through into failover.Execute so SM-04 records the
+	// fault and tries compliant backups cleanly.
+	initialTarget := candidates[0].Target
+	var (
+		initialRT      port.ProviderRuntime
+		releaseInitial func()
+		insp           InspectResult
+		hasInitialInsp bool
+	)
+	rtLoaded, releaseLoaded, rtErr := h.acquireRuntime(streamCtx, initialTarget)
 	if rtErr != nil {
-		if errors.Is(rtErr, context.Canceled) && r.Context().Err() == nil && streamCtx.Err() != nil {
-			writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
-			return
-		}
-		h.writeRuntimeFaultError(w, reqID, rtErr)
-		return
-	}
-	defer func() {
-		if releaseCurr != nil {
-			releaseCurr()
-		}
-	}()
-
-	safeHeaders := buildSanitizedNativeHeaders(r.Header, target.Adapter.AllowedNativeHeaders, rawKey, reqID, tp)
-
-	narrowPolicy := buildHostNarrowPolicyFromTarget(target)
-	wasmCtx := wasm.WithEgressScope(streamCtx, wasm.EgressScope{
-		OrgID:        match.Key.OrgID,
-		ConnectionID: target.Connection.ID,
-		ActorKind:    "virtual_key",
-		ActorID:      match.Key.ID,
-		EntryPoint:   wasm.DefaultAuditEntryPoint,
-		RequestID:    reqID,
-		NarrowPolicy: &narrowPolicy,
-	})
-
-	insp, err := InspectNativeRequest(wasmCtx, rt, reqID, dialect, upstreamPath, safeHeaders, rawBody, rawHints)
-	if err != nil {
-		if errors.Is(err, context.Canceled) && r.Context().Err() == nil && streamCtx.Err() != nil {
-			writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
-			return
-		}
-		h.writeRuntimeFaultError(w, reqID, err)
-		return
-	}
-	if insp.TargetModel != "" && !modelAllowlistPermits(match.Key.AllowedModels, insp.TargetModel) {
-		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", insp.TargetModel), false)
-		return
-	}
-	if insp.TargetModel != "" && insp.TargetModel != rawHints.Model {
-		if !h.evaluateNativePreAdmissionPolicy(w, reqID, match, eff, insp.TargetModel, reqRegion, rawBody, estTokens) {
-			return
-		}
-		newTarget, ok := h.resolveNativeTargetWithPolicy(w, reqID, snap, match, eff, reqRegion, dialect, upstreamPath, insp.TargetModel)
-		if !ok {
-			return
-		}
-		if newTarget.Deployment.ID != target.Deployment.ID || newTarget.Adapter.ID != target.Adapter.ID || newTarget.Connection.ID != target.Connection.ID {
-			adapterChanged := newTarget.Adapter.ID != target.Adapter.ID
-			if releaseCurr != nil {
-				releaseCurr()
-				releaseCurr = nil
+		if errors.Is(rtErr, context.Canceled) {
+			if r.Context().Err() == nil && streamCtx.Err() != nil {
+				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
 			}
-			target = newTarget
-			safeHeaders = buildSanitizedNativeHeaders(r.Header, target.Adapter.AllowedNativeHeaders, rawKey, reqID, tp)
-			narrowPolicy = buildHostNarrowPolicyFromTarget(target)
-			var newErr error
-			rt, releaseCurr, newErr = h.acquireRuntime(streamCtx, target)
-			if newErr != nil {
-				if errors.Is(newErr, context.Canceled) && r.Context().Err() == nil && streamCtx.Err() != nil {
+			return
+		}
+		if len(candidates) <= 1 {
+			h.writeRuntimeFaultError(w, reqID, rtErr)
+			return
+		}
+	} else {
+		initialRT = rtLoaded
+		releaseInitial = releaseLoaded
+		defer func() {
+			if releaseInitial != nil {
+				releaseInitial()
+			}
+		}()
+
+		safeHeaders := buildSanitizedNativeHeaders(r.Header, initialTarget.Adapter.AllowedNativeHeaders, rawKey, reqID, tp)
+		narrowPolicy := buildHostNarrowPolicyFromTarget(initialTarget)
+		wasmCtx := wasm.WithEgressScope(streamCtx, wasm.EgressScope{
+			OrgID:        match.Key.OrgID,
+			ConnectionID: initialTarget.Connection.ID,
+			ActorKind:    "virtual_key",
+			ActorID:      match.Key.ID,
+			EntryPoint:   wasm.DefaultAuditEntryPoint,
+			RequestID:    reqID,
+			NarrowPolicy: &narrowPolicy,
+		})
+
+		inspRes, err := InspectNativeRequest(wasmCtx, initialRT, reqID, dialect, upstreamPath, safeHeaders, rawBody, rawHints)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				if r.Context().Err() == nil && streamCtx.Err() != nil {
 					writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
-					return
 				}
-				h.writeRuntimeFaultError(w, reqID, newErr)
 				return
 			}
-			if adapterChanged {
-				newWasmCtx := wasm.WithEgressScope(streamCtx, wasm.EgressScope{
-					OrgID:        match.Key.OrgID,
-					ConnectionID: target.Connection.ID,
-					ActorKind:    "virtual_key",
-					ActorID:      match.Key.ID,
-					EntryPoint:   wasm.DefaultAuditEntryPoint,
-					RequestID:    reqID,
-					NarrowPolicy: &narrowPolicy,
-				})
-				reRawHints := rawHints
-				reRawHints.Model = insp.TargetModel
-				reInsp, reErr := InspectNativeRequest(newWasmCtx, rt, reqID, dialect, upstreamPath, safeHeaders, rawBody, reRawHints)
-				if reErr != nil {
-					if errors.Is(reErr, context.Canceled) && r.Context().Err() == nil && streamCtx.Err() != nil {
-						writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
-						return
-					}
-					h.writeRuntimeFaultError(w, reqID, reErr)
-					return
-				}
-				if reInsp.TargetModel != "" && reInsp.TargetModel != insp.TargetModel {
-					writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Target adapter redirected model after deployment re-resolution.", false)
-					return
-				}
-				if reInsp.TargetModel == "" {
-					reInsp.TargetModel = insp.TargetModel
-				}
-				if !modelAllowlistPermits(match.Key.AllowedModels, reInsp.TargetModel) {
-					writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", reInsp.TargetModel), false)
-					return
-				}
-				insp = reInsp
+			if len(candidates) <= 1 {
+				h.writeRuntimeFaultError(w, reqID, err)
+				return
+			}
+			if releaseInitial != nil {
+				releaseInitial()
+				releaseInitial = nil
+			}
+			initialRT = nil
+		} else {
+			insp = inspRes
+			hasInitialInsp = true
+			if insp.TargetModel != "" && !modelAllowlistPermits(match.Key.AllowedModels, insp.TargetModel) {
+				writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", insp.TargetModel), false)
+				return
 			}
 		}
 	}
 
-	requireTested := match.Config != nil && match.Config.RequireTestedCaps
-	for _, reqCap := range insp.Hints.RequiredCapabilities {
-		capName := strings.TrimSpace(reqCap)
-		if capName == "" {
-			continue
+	effectiveModel := rawHints.Model
+	if hasInitialInsp {
+		effectiveModel = firstNonEmpty(insp.TargetModel, rawHints.Model)
+		reqCaps := compactNonEmptyStrings(insp.Hints.RequiredCapabilities)
+		if insp.TargetModel != "" && insp.TargetModel != rawHints.Model {
+			if !h.evaluateNativePreAdmissionPolicy(w, reqID, match, eff, insp.TargetModel, reqRegion, rawBody, estTokens) {
+				return
+			}
 		}
-		if !snapshot.DeploymentSupportsCapability(target, requireTested, capName) {
-			effModel := firstNonEmpty(insp.TargetModel, rawHints.Model)
-			writeCanonicalError(w, reqID, http.StatusBadRequest, "capability_not_supported", "invalid_request_error", fmt.Sprintf("Target deployment for model %q does not support required capability %q.", effModel, capName), false)
-			return
+		if (insp.TargetModel != "" && insp.TargetModel != rawHints.Model) || len(reqCaps) > 0 {
+			newCandidates, ok := h.resolveNativeTargetsWithPolicy(w, reqID, snap, match, eff, reqRegion, dialect, upstreamPath, effectiveModel, reqCaps, estBaseIn, estMaxOut)
+			if !ok {
+				return
+			}
+			candidates = newCandidates
+			newTarget := candidates[0].Target
+			if !sameResolvedTarget(newTarget, initialTarget) {
+				adapterChanged := newTarget.Adapter.ID != initialTarget.Adapter.ID
+				if releaseInitial != nil {
+					releaseInitial()
+					releaseInitial = nil
+				}
+				initialRT = nil
+				initialTarget = newTarget
+
+				var newErr error
+				initialRT, releaseInitial, newErr = h.acquireRuntime(streamCtx, initialTarget)
+				if newErr != nil {
+					if errors.Is(newErr, context.Canceled) {
+						if r.Context().Err() == nil && streamCtx.Err() != nil {
+							writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
+						}
+						return
+					}
+					if len(candidates) <= 1 {
+						h.writeRuntimeFaultError(w, reqID, newErr)
+						return
+					}
+					hasInitialInsp = false
+				} else if adapterChanged {
+					newSafeHeaders := buildSanitizedNativeHeaders(r.Header, initialTarget.Adapter.AllowedNativeHeaders, rawKey, reqID, tp)
+					newNarrowPolicy := buildHostNarrowPolicyFromTarget(initialTarget)
+					newWasmCtx := wasm.WithEgressScope(streamCtx, wasm.EgressScope{
+						OrgID:        match.Key.OrgID,
+						ConnectionID: initialTarget.Connection.ID,
+						ActorKind:    "virtual_key",
+						ActorID:      match.Key.ID,
+						EntryPoint:   wasm.DefaultAuditEntryPoint,
+						RequestID:    reqID,
+						NarrowPolicy: &newNarrowPolicy,
+					})
+					reRawHints := rawHints
+					reRawHints.Model = effectiveModel
+					reInsp, reErr := InspectNativeRequest(newWasmCtx, initialRT, reqID, dialect, upstreamPath, newSafeHeaders, rawBody, reRawHints)
+					if reErr != nil {
+						if errors.Is(reErr, context.Canceled) {
+							if r.Context().Err() == nil && streamCtx.Err() != nil {
+								writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
+							}
+							return
+						}
+						if len(candidates) <= 1 {
+							h.writeRuntimeFaultError(w, reqID, reErr)
+							return
+						}
+						if releaseInitial != nil {
+							releaseInitial()
+							releaseInitial = nil
+						}
+						initialRT = nil
+						hasInitialInsp = false
+					} else {
+						if reInsp.TargetModel != "" && reInsp.TargetModel != effectiveModel {
+							writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Target adapter redirected model after deployment re-resolution.", false)
+							return
+						}
+						if reInsp.TargetModel == "" {
+							reInsp.TargetModel = effectiveModel
+						}
+						if !modelAllowlistPermits(match.Key.AllowedModels, reInsp.TargetModel) {
+							writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", reInsp.TargetModel), false)
+							return
+						}
+						reCaps := compactNonEmptyStrings(reInsp.Hints.RequiredCapabilities)
+						if missingCap := resolver.FirstMissingCapability(initialTarget, match.Config != nil && match.Config.RequireTestedCaps, reCaps); missingCap != "" {
+							writeCanonicalError(w, reqID, http.StatusBadRequest, "capability_not_supported", "invalid_request_error", fmt.Sprintf("Deployment %q does not support required capability %q.", initialTarget.Deployment.ID, missingCap), false)
+							return
+						}
+						insp = reInsp
+						effectiveModel = firstNonEmpty(insp.TargetModel, effectiveModel)
+					}
+				}
+			}
+		}
+
+		if insp.Stream && !rawHints.Stream {
+			if !h.acquireDeferredStreamSlot(w, r, reqID, admLease) {
+				return
+			}
 		}
 	}
 
-	if insp.Stream && !rawHints.Stream {
-		if !h.acquireDeferredStreamSlot(w, r, reqID, admLease) {
+	outboundBody := append([]byte(nil), rawBody...)
+	defer clear(outboundBody)
+
+	requireTested := match.Config != nil && match.Config.RequireTestedCaps
+	inspAdapterID := ""
+	if hasInitialInsp && initialTarget != nil && initialTarget.Adapter != nil {
+		inspAdapterID = initialTarget.Adapter.ID
+	}
+	execRes := failover.Execute(streamCtx, failover.Config{
+		Breaker: h.breaker,
+		Now:     func() time.Time { return time.UnixMilli(h.nowMs()).UTC() },
+	}, candidates, func(hopCtx context.Context, _ int, cand *resolver.RankedTarget) failover.AttemptResult {
+		var reuseRT port.ProviderRuntime
+		var releaseReuse func()
+		var preInsp *InspectResult
+		if hasInitialInsp && sameResolvedTarget(cand.Target, initialTarget) && initialRT != nil {
+			reuseRT = initialRT
+			releaseReuse = releaseInitial
+			inspCopy := insp
+			preInsp = &inspCopy
+			releaseInitial = nil
+			initialRT = nil
+		}
+		return h.executeNativeHop(
+			w,
+			r,
+			streamCtx,
+			hopCtx,
+			reqID,
+			tp,
+			dialect,
+			upstreamPath,
+			cleanQuery,
+			rawKey,
+			rawBody,
+			rawHints,
+			outboundBody,
+			match.Key,
+			requireTested,
+			cand.Target,
+			effectiveModel,
+			inspAdapterID,
+			reuseRT,
+			releaseReuse,
+			preInsp,
+			idemClaim,
+			admLease,
+		)
+	})
+	if execRes.ClientCanceled && !execRes.StreamStarted && r.Context().Err() == nil && streamCtx.Err() != nil {
+		writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
+		return
+	}
+	if execRes.AttemptCount == 0 {
+		if execRes.DeadlineExceeded {
+			writeCanonicalError(w, reqID, http.StatusGatewayTimeout, "upstream_timeout", "upstream_error", "Upstream failover deadline exceeded.", true)
 			return
 		}
+		if execRes.ExhaustedBreaker {
+			writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", fmt.Sprintf("No healthy compliant deployment is available for model %q.", effectiveModel), true)
+		}
+	}
+}
+
+func sameResolvedTarget(a, b *snapshot.ResolvedTarget) bool {
+	if a == nil || b == nil || a.Deployment == nil || b.Deployment == nil || a.Adapter == nil || b.Adapter == nil || a.Connection == nil || b.Connection == nil {
+		return false
+	}
+	return a.Deployment.ID == b.Deployment.ID && a.Adapter.ID == b.Adapter.ID && a.Connection.ID == b.Connection.ID
+}
+
+func compactNonEmptyStrings(in []string) []string {
+	var out []string
+	for _, s := range in {
+		if tr := strings.TrimSpace(s); tr != "" {
+			out = append(out, tr)
+		}
+	}
+	return out
+}
+
+func (h *Handler) executeNativeHop(
+	w http.ResponseWriter,
+	r *http.Request,
+	streamCtx context.Context,
+	hopCtx context.Context,
+	reqID string,
+	traceparent string,
+	dialect string,
+	upstreamPath string,
+	cleanQuery string,
+	rawKey string,
+	rawBody []byte,
+	rawHints RawBodyHints,
+	outboundBody []byte,
+	key *snapshot.VirtualKeyView,
+	requireTested bool,
+	target *snapshot.ResolvedTarget,
+	effectiveModel string,
+	initialAdapterID string,
+	rt port.ProviderRuntime,
+	releaseCurr func(),
+	preInsp *InspectResult,
+	idemClaim *idempotency.Claim,
+	admLease *nativeAdmissionLease,
+) failover.AttemptResult {
+	clientCtx := r.Context()
+	if rt == nil {
+		var rtErr error
+		rt, releaseCurr, rtErr = h.acquireRuntime(hopCtx, target)
+		if rtErr != nil {
+			if errors.Is(rtErr, context.Canceled) {
+				return h.classifyNativeBrokerAttemptError(w, clientCtx, streamCtx, reqID, rtErr, true)
+			}
+			return h.classifyNativeRuntimeLoadError(w, reqID, rtErr)
+		}
+	}
+	if releaseCurr != nil {
+		defer releaseCurr()
+	}
+
+	safeHeaders := buildSanitizedNativeHeaders(r.Header, target.Adapter.AllowedNativeHeaders, rawKey, reqID, traceparent)
+	narrowPolicy := buildHostNarrowPolicyFromTarget(target)
+
+	var insp InspectResult
+	if preInsp != nil && target.Adapter.ID == initialAdapterID {
+		insp = *preInsp
+	} else {
+		wasmCtx := wasm.WithEgressScope(hopCtx, wasm.EgressScope{
+			OrgID:        key.OrgID,
+			ConnectionID: target.Connection.ID,
+			ActorKind:    "virtual_key",
+			ActorID:      key.ID,
+			EntryPoint:   wasm.DefaultAuditEntryPoint,
+			RequestID:    reqID,
+			NarrowPolicy: &narrowPolicy,
+		})
+		hopRawHints := rawHints
+		hopRawHints.Model = effectiveModel
+		reInsp, reErr := InspectNativeRequest(wasmCtx, rt, reqID, dialect, upstreamPath, safeHeaders, rawBody, hopRawHints)
+		if reErr != nil {
+			if errors.Is(reErr, context.Canceled) {
+				return h.classifyNativeBrokerAttemptError(w, clientCtx, streamCtx, reqID, reErr, true)
+			}
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  true,
+				Outcome:    breaker.OutcomeSystemFault,
+				HTTPStatus: http.StatusBadGateway,
+				FlushFinal: func() {
+					h.writeRuntimeFaultError(w, reqID, reErr)
+				},
+			}
+		}
+		if reInsp.TargetModel != "" && reInsp.TargetModel != effectiveModel {
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  false,
+				Outcome:    breaker.OutcomeCallerError,
+				HTTPStatus: http.StatusBadGateway,
+				FlushFinal: func() {
+					writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Target adapter redirected model after deployment re-resolution.", false)
+				},
+			}
+		}
+		if reInsp.TargetModel == "" {
+			reInsp.TargetModel = effectiveModel
+		}
+		if !modelAllowlistPermits(key.AllowedModels, reInsp.TargetModel) {
+			deniedModel := reInsp.TargetModel
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  false,
+				Outcome:    breaker.OutcomeCallerError,
+				HTTPStatus: http.StatusForbidden,
+				FlushFinal: func() {
+					writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", deniedModel), false)
+				},
+			}
+		}
+		reCaps := compactNonEmptyStrings(reInsp.Hints.RequiredCapabilities)
+		if missingCap := resolver.FirstMissingCapability(target, requireTested, reCaps); missingCap != "" {
+			depID := target.Deployment.ID
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  false,
+				Outcome:    breaker.OutcomeCallerError,
+				HTTPStatus: http.StatusBadRequest,
+				FlushFinal: func() {
+					writeCanonicalError(w, reqID, http.StatusBadRequest, "capability_not_supported", "invalid_request_error", fmt.Sprintf("Deployment %q does not support required capability %q.", depID, missingCap), false)
+				},
+			}
+		}
+		insp = reInsp
 	}
 
 	// Step 6: Build sanitized outbound request preserving exact rawBody bytes.
 	parsedBase, perr := url.Parse(strings.TrimSpace(target.Connection.EndpointBaseURL))
 	if perr != nil || parsedBase.Scheme == "" || parsedBase.Host == "" {
-		writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Target connection endpoint base URL is malformed.", false)
-		return
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  false,
+			Outcome:    breaker.OutcomeCallerError,
+			HTTPStatus: http.StatusBadGateway,
+			FlushFinal: func() {
+				writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Target connection endpoint base URL is malformed.", false)
+			},
+		}
 	}
 	parsedBase.Path = strings.TrimRight(parsedBase.Path, "/") + "/" + upstreamPath
 	if cleanQuery != "" {
@@ -401,25 +672,53 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	targetURL := parsedBase.String()
 	if _, cerr := narrowPolicy.ValidateTargetURL(targetURL); cerr != nil {
-		h.writeBrokerOrEgressError(w, reqID, cerr)
-		return
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  false,
+			Outcome:    breaker.OutcomeCallerError,
+			HTTPStatus: http.StatusForbidden,
+			FlushFinal: func() {
+				h.writeBrokerOrEgressError(w, reqID, cerr)
+			},
+		}
 	}
 
 	var credInjections []broker.CredentialInjection
 	if !strings.EqualFold(strings.TrimSpace(target.Connection.AuthMode), "NONE") {
 		if len(target.Connection.SecretBindings) == 0 {
-			writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Authenticated provider connection has no bound secret slots.", false)
-			return
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  false,
+				Outcome:    breaker.OutcomeCallerError,
+				HTTPStatus: http.StatusBadGateway,
+				FlushFinal: func() {
+					writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Authenticated provider connection has no bound secret slots.", false)
+				},
+			}
 		}
 		if len(insp.Hints.CredentialInjections) == 0 {
-			writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Provider adapter omitted required credential injection instructions for authenticated connection.", false)
-			return
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  false,
+				Outcome:    breaker.OutcomeCallerError,
+				HTTPStatus: http.StatusBadGateway,
+				FlushFinal: func() {
+					writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Provider adapter omitted required credential injection instructions for authenticated connection.", false)
+				},
+			}
 		}
 		var cerr error
 		credInjections, cerr = mapCredentialInjections(insp.Hints.CredentialInjections, target.Connection.SecretBindings)
 		if cerr != nil {
-			writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Provider adapter requested an invalid or unauthorized credential injection.", false)
-			return
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  false,
+				Outcome:    breaker.OutcomeCallerError,
+				HTTPStatus: http.StatusBadGateway,
+				FlushFinal: func() {
+					writeCanonicalError(w, reqID, http.StatusBadGateway, "extension_execution_fault", "extension_error", "Provider adapter requested an invalid or unauthorized credential injection.", false)
+				},
+			}
 		}
 	}
 	stripInjectedCredentialHeaders(safeHeaders, credInjections)
@@ -428,11 +727,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		timeoutOverride = time.Duration(target.Deployment.FirstByteTimeoutMs) * time.Millisecond
 	}
 
-	outboundBody := append([]byte(nil), rawBody...)
-	defer clear(outboundBody)
-
 	egressReq := broker.EgressRequest{
-		OrgID:                match.Key.OrgID,
+		OrgID:                key.OrgID,
 		ConnectionID:         target.Connection.ID,
 		Method:               r.Method,
 		TargetURL:            targetURL,
@@ -441,23 +737,53 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		CredentialInjections: credInjections,
 		TimeoutOverride:      timeoutOverride,
 		ActorKind:            "virtual_key",
-		ActorID:              match.Key.ID,
+		ActorID:              key.ID,
 		EntryPoint:           wasm.DefaultAuditEntryPoint,
 		RequestID:            reqID,
 	}
 	constraint := broker.HostEgressConstraint{NarrowPolicy: &narrowPolicy}
 
+	hopModel := firstNonEmpty(insp.TargetModel, effectiveModel)
 	if insp.Stream {
-		h.executeStreamingNative(w, r.Context(), streamCtx, reqID, dialect, insp.TargetModel, match.Key, rt, egressReq, constraint, target, rawBody, admLease)
-		return
+		if admLease != nil && admLease.streamLease == nil && admLease.limits.MaxConcurrentStreams != nil {
+			lease, sRes, sErr := h.rateLimiter.AcquireStreamSlot(hopCtx, admLease.scope, *admLease.limits.MaxConcurrentStreams)
+			if sErr != nil {
+				if errors.Is(sErr, ratelimit.ErrConcurrencyLimitExceeded) {
+					return failover.AttemptResult{
+						Succeeded:  false,
+						Retryable:  false,
+						Outcome:    breaker.OutcomeCallerError,
+						HTTPStatus: http.StatusTooManyRequests,
+						FlushFinal: func() {
+							w.Header().Set("X-RateLimit-Remaining-Streams", "0")
+							w.Header().Set("Retry-After", strconv.Itoa(max(1, sRes.RetryAfterSec)))
+							writeCanonicalError(w, reqID, http.StatusTooManyRequests, "concurrency_limit_exceeded", "rate_limit_error", "Maximum concurrent active streams limit reached for this Virtual Key.", true)
+						},
+					}
+				}
+				return failover.AttemptResult{
+					Succeeded:  false,
+					Retryable:  false,
+					Outcome:    breaker.OutcomeCallerError,
+					HTTPStatus: http.StatusServiceUnavailable,
+					FlushFinal: func() {
+						writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "rate_limiter_unavailable", "api_error", "Rate limiter backend unavailable; failing closed.", true)
+					},
+				}
+			}
+			admLease.streamLease = lease
+			w.Header().Set("X-RateLimit-Remaining-Streams", strconv.FormatInt(sRes.RemainingStreams, 10))
+		}
+		return h.executeStreamingNativeAttempt(w, clientCtx, hopCtx, streamCtx, reqID, dialect, hopModel, key, rt, egressReq, constraint, target, rawBody, admLease)
 	}
-	h.executeSyncNative(w, r.Context(), streamCtx, reqID, dialect, insp.TargetModel, match.Key, rt, egressReq, constraint, rawBody, idemClaim, admLease)
+	return h.executeSyncNativeAttempt(w, clientCtx, hopCtx, streamCtx, reqID, dialect, hopModel, key, rt, egressReq, constraint, rawBody, idemClaim, admLease)
 }
 
-func (h *Handler) executeSyncNative(
+func (h *Handler) executeSyncNativeAttempt(
 	w http.ResponseWriter,
 	clientCtx context.Context,
 	ctx context.Context,
+	streamCtx context.Context,
 	reqID string,
 	dialect string,
 	model string,
@@ -468,23 +794,14 @@ func (h *Handler) executeSyncNative(
 	rawReqBody []byte,
 	idemClaim *idempotency.Claim,
 	admLease *nativeAdmissionLease,
-) {
+) failover.AttemptResult {
 	upResp, err := h.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			if clientCtx != nil && clientCtx.Err() == nil && ctx.Err() != nil {
-				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before response dispatch.", false)
-			}
-			return
-		}
-		h.writeBrokerOrEgressError(w, reqID, err)
-		return
+		return h.classifyNativeBrokerAttemptError(w, clientCtx, streamCtx, reqID, err, true)
 	}
 
-	sanitizedHdrs := flattenHTTPHeaders(upResp.SanitizedHeaders)
 	if upResp.StatusCode < 200 || upResp.StatusCode >= 300 {
-		h.writeNormalizedUpstreamError(w, ctx, reqID, rt, upResp.StatusCode, sanitizedHdrs, upResp.Body)
-		return
+		return h.makeNormalizedNativeUpstreamAttemptError(ctx, w, reqID, rt, upResp.StatusCode, upResp.SanitizedHeaders, upResp.Body)
 	}
 
 	usage := ExtractSyncUsage(ctx, rt, reqID, rawReqBody, upResp.Body)
@@ -530,11 +847,17 @@ func (h *Handler) executeSyncNative(
 	w.Header().Set("X-Tanpopo-Usage-Accuracy", accHeader)
 	w.WriteHeader(upResp.StatusCode)
 	_, _ = w.Write(upResp.Body)
+	return failover.AttemptResult{
+		Succeeded:  true,
+		Outcome:    breaker.OutcomeSuccess,
+		HTTPStatus: upResp.StatusCode,
+	}
 }
 
-func (h *Handler) executeStreamingNative(
+func (h *Handler) executeStreamingNativeAttempt(
 	w http.ResponseWriter,
 	clientCtx context.Context,
+	hopCtx context.Context,
 	streamCtx context.Context,
 	reqID string,
 	dialect string,
@@ -546,27 +869,19 @@ func (h *Handler) executeStreamingNative(
 	target *snapshot.ResolvedTarget,
 	rawReqBody []byte,
 	admLease *nativeAdmissionLease,
-) {
-	upCtx, cancelUp := context.WithCancel(streamCtx)
+) failover.AttemptResult {
+	upCtx, cancelUp := context.WithCancel(hopCtx)
 	defer cancelUp()
 
 	upStream, err := h.broker.ExecuteStreamWithHostConstraint(upCtx, egressReq, constraint)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			if clientCtx != nil && clientCtx.Err() == nil && streamCtx.Err() != nil {
-				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before stream dispatch.", false)
-			}
-			return
-		}
-		h.writeBrokerOrEgressError(w, reqID, err)
-		return
+		return h.classifyNativeBrokerAttemptError(w, clientCtx, streamCtx, reqID, err, false)
 	}
 	defer func() { _ = upStream.Body.Close() }()
 
 	if upStream.StatusCode < 200 || upStream.StatusCode >= 300 {
 		errBody, _ := io.ReadAll(io.LimitReader(upStream.Body, 1<<20))
-		h.writeNormalizedUpstreamError(w, streamCtx, reqID, rt, upStream.StatusCode, flattenHTTPHeaders(upStream.SanitizedHeaders), errBody)
-		return
+		return h.makeNormalizedNativeUpstreamAttemptError(hopCtx, w, reqID, rt, upStream.StatusCode, upStream.SanitizedHeaders, errBody)
 	}
 
 	var idleChunkTimeout time.Duration
@@ -575,27 +890,60 @@ func (h *Handler) executeStreamingNative(
 	}
 
 	acc := NewSSEUsageAccumulator(rt, reqID, rawReqBody)
-	pumpRes, pumpErr := pumpNativeSSE(streamCtx, w, reqID, upStream.Body, cancelUp, h.heartbeatInterval, idleChunkTimeout, acc)
+	pumpRes, pumpErr := pumpNativeSSE(hopCtx, w, reqID, upStream.Body, cancelUp, h.heartbeatInterval, idleChunkTimeout, acc)
 	if pumpErr != nil && !pumpRes.streamStarted {
 		if errors.Is(pumpErr, sse.ErrLineTooLarge) {
-			writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Upstream SSE stream exceeded maximum line byte limit.", false)
-			return
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  false,
+				Outcome:    breaker.OutcomeSystemFault,
+				HTTPStatus: http.StatusBadGateway,
+				FlushFinal: func() {
+					writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Upstream SSE stream exceeded maximum line byte limit.", false)
+				},
+			}
 		}
 		if errors.Is(pumpErr, context.DeadlineExceeded) || errors.Is(pumpErr, sse.ErrIdleChunkTimeout) {
-			writeCanonicalError(w, reqID, http.StatusGatewayTimeout, "upstream_timeout", "upstream_error", "Upstream SSE stream timed out before emitting first frame.", true)
-			return
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  true,
+				Outcome:    breaker.OutcomeSystemFault,
+				HTTPStatus: http.StatusGatewayTimeout,
+				FlushFinal: func() {
+					writeCanonicalError(w, reqID, http.StatusGatewayTimeout, "upstream_timeout", "upstream_error", "Upstream SSE stream timed out before emitting first frame.", true)
+				},
+			}
 		}
 		if errors.Is(pumpErr, context.Canceled) {
-			if clientCtx != nil && clientCtx.Err() == nil && streamCtx.Err() != nil {
-				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before stream dispatch.", false)
+			if clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
+				return failover.AttemptResult{
+					Succeeded:  false,
+					Retryable:  false,
+					Outcome:    breaker.OutcomeCallerError,
+					HTTPStatus: http.StatusUnauthorized,
+					FlushFinal: func() {
+						writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before stream dispatch.", false)
+					},
+				}
 			}
-			return
+			return failover.AttemptResult{
+				Succeeded: false,
+				Retryable: false,
+				Outcome:   breaker.OutcomeClientCanceled,
+			}
 		}
-		writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Upstream native stream terminated before emitting any frame.", false)
-		return
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  true,
+			Outcome:    breaker.OutcomeSystemFault,
+			HTTPStatus: http.StatusBadGateway,
+			FlushFinal: func() {
+				writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Upstream native stream terminated before emitting any frame.", false)
+			},
+		}
 	}
 
-	usageCtx := context.WithoutCancel(streamCtx)
+	usageCtx := context.WithoutCancel(hopCtx)
 	finalUsage := acc.Finalize(usageCtx)
 	h.reconcileAdmissionUsage(admLease, &finalUsage)
 	h.recordUsage(usageCtx, UsageRecord{
@@ -608,6 +956,204 @@ func (h *Handler) executeStreamingNative(
 		VirtualKeyID: key.ID,
 		Usage:        finalUsage,
 	})
+
+	outcome := breaker.OutcomeSuccess
+	if pumpErr != nil {
+		if pumpRes.clientDisconnected || errors.Is(pumpErr, context.Canceled) {
+			if clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
+				outcome = breaker.OutcomeCallerError
+			} else {
+				outcome = breaker.OutcomeClientCanceled
+			}
+		} else {
+			outcome = breaker.OutcomeSystemFault
+		}
+	}
+	return failover.AttemptResult{
+		Succeeded:     pumpErr == nil,
+		StreamStarted: true,
+		Retryable:     false,
+		Outcome:       outcome,
+		HTTPStatus:    http.StatusOK,
+	}
+}
+
+func (h *Handler) makeNormalizedNativeUpstreamAttemptError(
+	ctx context.Context,
+	w http.ResponseWriter,
+	reqID string,
+	rt port.ProviderRuntime,
+	upstreamStatus int,
+	rawHdrs http.Header,
+	body []byte,
+) failover.AttemptResult {
+	flatHdrs := flattenHTTPHeaders(rawHdrs)
+	httpStatus := mapUpstreamHTTPStatus(upstreamStatus)
+
+	code := "upstream_error"
+	errType := "upstream_error"
+	msg := fmt.Sprintf("Upstream provider returned HTTP %d.", upstreamStatus)
+	retryableFlag := upstreamStatus == http.StatusTooManyRequests || upstreamStatus == 529 || upstreamStatus >= 500
+
+	if rt != nil {
+		if normErr, nerr := rt.NormalizeError(ctx, port.NormalizeErrorInput{
+			RequestID:        reqID,
+			HTTPStatus:       int32(upstreamStatus),
+			SanitizedHeaders: flatHdrs,
+			SanitizedBody:    body,
+		}); nerr == nil {
+			code = sanitizeErrorToken(normErr.CanonicalCode, "upstream_error")
+			errType = sanitizeErrorToken(normErr.ErrorType, "upstream_error")
+			if sMsg := sanitizePublicErrorMessage(normErr.SanitizedPublicMessage, 512); sMsg != "" {
+				msg = sMsg
+			}
+			retryableFlag = normErr.RetryablePreStream
+		}
+	}
+
+	var outcome breaker.OutcomeKind
+	var retryFailover bool
+	var retryAfterRaw string
+	switch {
+	case upstreamStatus == http.StatusTooManyRequests || upstreamStatus == 529:
+		outcome = breaker.OutcomeThrottle429
+		retryFailover = true
+		if rawHdrs != nil {
+			retryAfterRaw = strings.TrimSpace(rawHdrs.Get("Retry-After"))
+		}
+	case upstreamStatus >= 500 || upstreamStatus == http.StatusRequestTimeout:
+		outcome = breaker.OutcomeSystemFault
+		retryFailover = true
+	default:
+		outcome = breaker.OutcomeCallerError
+		retryFailover = false
+	}
+
+	return failover.AttemptResult{
+		Succeeded:     false,
+		Retryable:     retryFailover,
+		Outcome:       outcome,
+		HTTPStatus:    upstreamStatus,
+		RetryAfterRaw: retryAfterRaw,
+		FlushFinal: func() {
+			writeCanonicalError(w, reqID, httpStatus, code, errType, msg, retryableFlag)
+		},
+	}
+}
+
+func (h *Handler) classifyNativeBrokerAttemptError(
+	w http.ResponseWriter,
+	clientCtx context.Context,
+	streamCtx context.Context,
+	reqID string,
+	err error,
+	beforeStream bool,
+) failover.AttemptResult {
+	if errors.Is(err, context.Canceled) {
+		if clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  false,
+				Outcome:    breaker.OutcomeCallerError,
+				HTTPStatus: http.StatusUnauthorized,
+				FlushFinal: func() {
+					msg := "Virtual Key was revoked or suspended before response dispatch."
+					if !beforeStream {
+						msg = "Virtual Key was revoked or suspended before stream dispatch."
+					}
+					writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", msg, false)
+				},
+			}
+		}
+		return failover.AttemptResult{
+			Succeeded: false,
+			Retryable: false,
+			Outcome:   breaker.OutcomeClientCanceled,
+		}
+	}
+
+	var bErr *broker.Error
+	if errors.As(err, &bErr) {
+		if bErr.HTTPStatus >= 400 && bErr.HTTPStatus < 500 {
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  false,
+				Outcome:    breaker.OutcomeCallerError,
+				HTTPStatus: bErr.HTTPStatus,
+				FlushFinal: func() {
+					h.writeBrokerOrEgressError(w, reqID, err)
+				},
+			}
+		}
+		st := bErr.HTTPStatus
+		if st <= 0 {
+			st = http.StatusBadGateway
+		}
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  true,
+			Outcome:    breaker.OutcomeSystemFault,
+			HTTPStatus: st,
+			FlushFinal: func() {
+				h.writeBrokerOrEgressError(w, reqID, err)
+			},
+		}
+	}
+
+	var eErr *egress.Error
+	if errors.As(err, &eErr) {
+		st := eErr.HTTPStatus
+		if st <= 0 {
+			st = http.StatusForbidden
+		}
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  false,
+			Outcome:    breaker.OutcomeCallerError,
+			HTTPStatus: st,
+			FlushFinal: func() {
+				h.writeBrokerOrEgressError(w, reqID, err)
+			},
+		}
+	}
+
+	st := http.StatusBadGateway
+	if errors.Is(err, context.DeadlineExceeded) {
+		st = http.StatusGatewayTimeout
+	}
+	return failover.AttemptResult{
+		Succeeded:  false,
+		Retryable:  true,
+		Outcome:    breaker.OutcomeSystemFault,
+		HTTPStatus: st,
+		FlushFinal: func() {
+			h.writeBrokerOrEgressError(w, reqID, err)
+		},
+	}
+}
+
+func (h *Handler) classifyNativeRuntimeLoadError(w http.ResponseWriter, reqID string, rtErr error) failover.AttemptResult {
+	var fault *wasm.ExecutionFaultError
+	if errors.As(rtErr, &fault) && fault.Kind == wasm.FaultKindQuarantined {
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  true,
+			Outcome:    breaker.OutcomeSystemFault,
+			HTTPStatus: http.StatusServiceUnavailable,
+			FlushFinal: func() {
+				h.writeRuntimeFaultError(w, reqID, rtErr)
+			},
+		}
+	}
+	return failover.AttemptResult{
+		Succeeded:  false,
+		Retryable:  true,
+		Outcome:    breaker.OutcomeSystemFault,
+		HTTPStatus: http.StatusBadGateway,
+		FlushFinal: func() {
+			h.writeRuntimeFaultError(w, reqID, rtErr)
+		},
+	}
 }
 
 type nativeReadMsg struct {
@@ -1079,24 +1625,6 @@ func routeAllowlistPermitsNative(allowedRoutes []string, dialect, upstreamPath s
 	return false
 }
 
-func adapterMatchesDialect(target *snapshot.ResolvedTarget, dialect string) bool {
-	if target == nil || target.Deployment == nil || target.Adapter == nil {
-		return false
-	}
-	depDialect := strings.ToLower(strings.TrimSpace(target.Deployment.NativeDialect))
-	if depDialect != "" {
-		return depDialect == dialect
-	}
-	adpPrefix := strings.Trim(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(target.Adapter.NativePrefix)), "/native/"), "/")
-	if adpPrefix != "" {
-		return adpPrefix == dialect
-	}
-	if len(target.Adapter.SupportedDialects) == 1 {
-		return strings.EqualFold(strings.TrimSpace(target.Adapter.SupportedDialects[0]), dialect)
-	}
-	return false
-}
-
 const maxCompiledNativePathRegex = 512
 
 func (h *Handler) compiledPathRegex(pat string) (*regexp.Regexp, error) {
@@ -1361,26 +1889,6 @@ func (h *Handler) writeBrokerOrEgressError(w http.ResponseWriter, reqID string, 
 		return
 	}
 	writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_connection_failed", "upstream_error", "Failed to reach upstream provider.", true)
-}
-
-func (h *Handler) writeNormalizedUpstreamError(w http.ResponseWriter, ctx context.Context, reqID string, rt port.ProviderRuntime, upstreamStatus int, headers map[string]string, body []byte) {
-	normErr, nerr := rt.NormalizeError(ctx, port.NormalizeErrorInput{
-		RequestID:        reqID,
-		HTTPStatus:       int32(upstreamStatus),
-		SanitizedHeaders: headers,
-		SanitizedBody:    body,
-	})
-	if nerr != nil {
-		writeCanonicalError(w, reqID, mapUpstreamHTTPStatus(upstreamStatus), "upstream_error", "upstream_error", "Upstream provider request failed.", upstreamStatus == http.StatusTooManyRequests || upstreamStatus >= 500)
-		return
-	}
-	code := sanitizeErrorToken(normErr.CanonicalCode, "upstream_error")
-	errType := sanitizeErrorToken(normErr.ErrorType, "upstream_error")
-	msg := sanitizePublicErrorMessage(normErr.SanitizedPublicMessage, 512)
-	if msg == "" {
-		msg = fmt.Sprintf("Upstream provider returned HTTP %d.", upstreamStatus)
-	}
-	writeCanonicalError(w, reqID, mapUpstreamHTTPStatus(upstreamStatus), code, errType, msg, normErr.RetryablePreStream)
 }
 
 func buildHostNarrowPolicyFromTarget(target *snapshot.ResolvedTarget) egress.Policy {
@@ -2095,7 +2603,7 @@ func (h *Handler) reconcileAdmissionUsage(adm *nativeAdmissionLease, usage *port
 	_ = h.rateLimiter.ReconcileTokens(context.Background(), adm.scope, adm.estTokens, actual, adm.limits)
 }
 
-func (h *Handler) resolveNativeTargetWithPolicy(
+func (h *Handler) resolveNativeTargetsWithPolicy(
 	w http.ResponseWriter,
 	reqID string,
 	snap *snapshot.ConfigSnapshot,
@@ -2105,123 +2613,57 @@ func (h *Handler) resolveNativeTargetWithPolicy(
 	dialect string,
 	upstreamPath string,
 	modelSlug string,
-) (*snapshot.ResolvedTarget, bool) {
-	candidates := snap.ListCandidateTargets(match.Key.OrgID, modelSlug)
-	var (
-		sawQuarantined     bool
-		sawDialectMismatch bool
-		sawPathDenied      bool
-		sawModelDenied     bool
-		modelDenial        policyengine.EvalDecision
-		sawTrustDenied     bool
-		trustDenial        policyengine.EvalDecision
-		sawRegionDenied    bool
-		regionDenial       policyengine.EvalDecision
-	)
-	for _, cand := range candidates {
-		if cand == nil || cand.Deployment == nil || cand.Deployment.State != "ACTIVE_HEALTHY" {
-			continue
-		}
-		if cand.Connection == nil || cand.Connection.State != snapshot.ConnectionStateActive || !cand.Connection.VisibleToProject(match.Key.OrgID, match.Key.ProjectID) {
-			continue
-		}
-		if cand.Adapter == nil {
-			continue
-		}
-		dec := policyengine.EvaluateEffective(eff, policyengine.EvalRequest{
-			OrgID:                     match.Key.OrgID,
-			ProjectID:                 match.Key.ProjectID,
-			EnvID:                     match.Key.EnvID,
-			ModelSlug:                 modelSlug,
-			AdapterSlug:               cand.Adapter.AdapterSlug,
-			DataRegion:                cand.Deployment.DataRegion,
-			RequestedDataRegion:       reqRegion,
-			ExtensionTrustTier:        cand.Connection.DerivedPublicTrust,
-			ExtensionEnterpriseSigned: cand.Connection.DerivedEnterpriseSigned,
-			CapabilityAssurance:       cand.Deployment.AssuranceLevel,
-			TargetEvaluation:          true,
-		})
-		if !dec.Allowed {
-			switch dec.DenialCode {
-			case policyengine.DenialCodeModelDenied:
-				if !sawModelDenied {
-					sawModelDenied = true
-					modelDenial = dec
-				}
-			case policyengine.DenialCodeTrustDenied:
-				if !sawTrustDenied {
-					sawTrustDenied = true
-					trustDenial = dec
-				}
-			case policyengine.DenialCodeRegionDenied:
-				if !sawRegionDenied {
-					sawRegionDenied = true
-					regionDenial = dec
-				}
-			}
-			continue
-		}
-		if strings.EqualFold(cand.Adapter.ExtensionState, installer.StateQuarantined) {
-			sawQuarantined = true
-			continue
-		}
-		if !adapterMatchesDialect(cand, dialect) {
-			sawDialectMismatch = true
-			continue
-		}
-		if !h.adapterAllowsNativePath(cand.Adapter, upstreamPath) {
-			sawPathDenied = true
-			continue
-		}
-		return cand, true
-	}
-
-	if sawQuarantined {
-		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "extension_quarantined", "extension_error", "The backing provider adapter extension is quarantined.", false)
+	requiredCaps []string,
+	estBaseIn int64,
+	estMaxOut int64,
+) ([]*resolver.RankedTarget, bool) {
+	requireTested := match.Config != nil && match.Config.RequireTestedCaps
+	candidates, rej := h.routeResolver.Resolve(resolver.ResolveRequest{
+		RequestID:            reqID,
+		Snapshot:             snap,
+		OrgID:                match.Key.OrgID,
+		ProjectID:            match.Key.ProjectID,
+		EnvID:                match.Key.EnvID,
+		TargetModel:          modelSlug,
+		EffectivePolicy:      eff,
+		RequestedDataRegion:  reqRegion,
+		Dialect:              dialect,
+		RequiredCapabilities: requiredCaps,
+		EstimatedInputTokens: estBaseIn,
+		MaxOutputTokens:      estMaxOut,
+		RequireTestedCaps:    requireTested,
+		Breaker:              h.breaker,
+		NativePathAllowed: func(adp *snapshot.ProviderAdapterView) bool {
+			return h.adapterAllowsNativePath(adp, upstreamPath)
+		},
+	})
+	if rej != nil {
+		writeCanonicalError(w, reqID, rej.HTTPStatus, rej.Code, rej.ErrorType, rej.Message, rej.Retryable)
 		return nil, false
 	}
-	if sawDialectMismatch {
-		writeCanonicalError(w, reqID, http.StatusBadRequest, "dialect_mismatch", "invalid_request_error", fmt.Sprintf("Target deployment for model %q uses a different native dialect than %q.", modelSlug, dialect), false)
-		return nil, false
-	}
-	if sawPathDenied {
-		writeCanonicalError(w, reqID, http.StatusForbidden, "native_path_not_allowed", "permission_error", fmt.Sprintf("Native upstream path %q is denied by Default-Deny adapter policy.", upstreamPath), false)
-		return nil, false
-	}
-	if sawModelDenied {
-		writeCanonicalError(w, reqID, http.StatusForbidden, policyengine.DenialCodeModelDenied, "permission_error", modelDenial.DenialReason, false)
-		return nil, false
-	}
-	if sawTrustDenied {
-		writeCanonicalError(w, reqID, trustDenial.HTTPStatus, policyengine.DenialCodeTrustDenied, trustDenial.ErrorType, trustDenial.DenialReason, false)
-		return nil, false
-	}
-	if sawRegionDenied {
-		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", regionDenial.DenialReason+" ("+policyengine.DenialCodeRegionDenied+")", true)
-		return nil, false
-	}
-	writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", fmt.Sprintf("No compliant active deployment is available for model %q.", modelSlug), true)
-	return nil, false
+	return candidates, true
 }
 
-func estimateNativeTokensFromJSON(raw []byte) int64 {
-	base := max(int64(1), int64(len(raw)+3)/4)
-	if len(raw) == 0 {
-		return base
+func estimateNativeTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {
+	rawLen := int64(len(raw))
+	if rawLen == 0 {
+		return 1, 1, 0
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 
 	tok, err := dec.Token()
 	if err != nil {
-		return base
+		b := max(int64(1), (rawLen+3)/4)
+		return b, b, 0
 	}
 	delim, ok := tok.(json.Delim)
 	if !ok || delim != '{' {
-		return base
+		b := max(int64(1), (rawLen+3)/4)
+		return b, b, 0
 	}
 
-	var maxOut int64
+	var excessMediaBytes int64
 	for dec.More() {
 		keyTok, err := dec.Token()
 		if err != nil {
@@ -2235,111 +2677,283 @@ func estimateNativeTokensFromJSON(raw []byte) int64 {
 		case "max_completion_tokens", "max_tokens", "max_output_tokens":
 			valTok, err := dec.Token()
 			if err != nil {
-				return finalizeNativeEstTokens(base, maxOut)
+				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 			}
 			if num, ok := valTok.(json.Number); ok {
 				if parsed, ok := parseNativeJSONNumberCeiling(num); ok && parsed > maxOut {
 					maxOut = parsed
 				}
 			} else if d, ok := valTok.(json.Delim); ok {
-				if skipNativeJSONComposite(dec, d) != nil {
-					return finalizeNativeEstTokens(base, maxOut)
+				ex, skipErr := skipNativeJSONCompositeCountMedia(dec, d, key, false)
+				excessMediaBytes += ex
+				if skipErr != nil {
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 				}
 			}
 		case "generationConfig", "generation_config":
 			valTok, err := dec.Token()
 			if err != nil {
-				return finalizeNativeEstTokens(base, maxOut)
+				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 			}
 			d, ok := valTok.(json.Delim)
 			if !ok {
 				continue
 			}
 			if d != '{' {
-				if skipNativeJSONComposite(dec, d) != nil {
-					return finalizeNativeEstTokens(base, maxOut)
+				ex, skipErr := skipNativeJSONCompositeCountMedia(dec, d, key, false)
+				excessMediaBytes += ex
+				if skipErr != nil {
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 				}
 				continue
 			}
 			for dec.More() {
 				subKeyTok, err := dec.Token()
 				if err != nil {
-					return finalizeNativeEstTokens(base, maxOut)
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 				}
 				subKey, ok := subKeyTok.(string)
 				if !ok {
-					return finalizeNativeEstTokens(base, maxOut)
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 				}
 				if subKey == "maxOutputTokens" || subKey == "max_output_tokens" {
 					subValTok, err := dec.Token()
 					if err != nil {
-						return finalizeNativeEstTokens(base, maxOut)
+						return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 					}
 					if num, ok := subValTok.(json.Number); ok {
 						if parsed, ok := parseNativeJSONNumberCeiling(num); ok && parsed > maxOut {
 							maxOut = parsed
 						}
 					} else if sd, ok := subValTok.(json.Delim); ok {
-						if skipNativeJSONComposite(dec, sd) != nil {
-							return finalizeNativeEstTokens(base, maxOut)
+						ex, skipErr := skipNativeJSONCompositeCountMedia(dec, sd, subKey, false)
+						excessMediaBytes += ex
+						if skipErr != nil {
+							return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 						}
 					}
 					continue
 				}
-				if skipNativeNextJSONValue(dec) != nil {
-					return finalizeNativeEstTokens(base, maxOut)
+				ex, skipErr := skipNativeNextJSONValueCountMedia(dec, key, subKey, false)
+				excessMediaBytes += ex
+				if skipErr != nil {
+					return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 				}
 			}
 			if _, err := dec.Token(); err != nil {
-				return finalizeNativeEstTokens(base, maxOut)
+				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 			}
 		default:
-			if skipNativeNextJSONValue(dec) != nil {
-				return finalizeNativeEstTokens(base, maxOut)
+			ex, skipErr := skipNativeNextJSONValueCountMedia(dec, "", key, isNativeMultimodalRootKey(key))
+			excessMediaBytes += ex
+			if skipErr != nil {
+				return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 			}
 		}
 	}
-	return finalizeNativeEstTokens(base, maxOut)
+	return finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut)
 }
 
-func finalizeNativeEstTokens(base, maxOut int64) int64 {
-	if maxOut > 0 {
-		if maxOut >= (1<<62) || base > (1<<62)-maxOut {
-			return 1 << 62
-		}
-		return base + maxOut
+func isNativeMultimodalRootKey(key string) bool {
+	return key == "messages" || key == "input" || key == "contents"
+}
+
+func finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut int64) (estTotal, baseIn, outCap int64) {
+	effBytes := rawLen - excessMediaBytes
+	if effBytes < 1 {
+		effBytes = 1
 	}
-	return base
+	baseIn = max(int64(1), (effBytes+3)/4)
+	if maxOut > 0 {
+		if maxOut >= (1<<62) || baseIn > (1<<62)-maxOut {
+			return 1 << 62, baseIn, maxOut
+		}
+		return baseIn + maxOut, baseIn, maxOut
+	}
+	return baseIn, baseIn, 0
 }
 
-func skipNativeNextJSONValue(dec *json.Decoder) error {
+func skipNativeNextJSONValueCountMedia(dec *json.Decoder, parentObjKey, key string, inMediaRoot bool) (int64, error) {
 	tok, err := dec.Token()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if d, ok := tok.(json.Delim); ok {
-		return skipNativeJSONComposite(dec, d)
+		return skipNativeJSONCompositeCountMedia(dec, d, key, inMediaRoot)
 	}
-	return nil
+	if s, ok := tok.(string); ok {
+		// Scalar values directly under root keys (even non-array top-level fields) are never discounted.
+		return nativeMediaBlobExcessBytes(false, parentObjKey, key, s), nil
+	}
+	return 0, nil
 }
 
-func skipNativeJSONComposite(dec *json.Decoder, open json.Delim) error {
-	depth := 1
-	for depth > 0 {
+func skipNativeJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, parentKey string, inMediaRoot bool) (int64, error) {
+	type frame struct {
+		isObject    bool
+		expectKey   bool
+		curKey      string
+		objName     string
+		inMediaRoot bool
+	}
+	stack := []frame{{
+		isObject:    open == '{',
+		expectKey:   open == '{',
+		curKey:      parentKey,
+		objName:     parentKey,
+		inMediaRoot: inMediaRoot,
+	}}
+	var excess int64
+	for len(stack) > 0 {
 		tok, err := dec.Token()
 		if err != nil {
-			return err
+			return excess, err
 		}
+		top := &stack[len(stack)-1]
 		if d, ok := tok.(json.Delim); ok {
-			switch d {
-			case '{', '[':
-				depth++
-			case '}', ']':
-				depth--
+			nextObjName := top.objName
+			if top.isObject {
+				nextObjName = top.curKey
 			}
+			switch d {
+			case '{':
+				stack = append(stack, frame{isObject: true, expectKey: true, objName: nextObjName, inMediaRoot: top.inMediaRoot})
+			case '[':
+				stack = append(stack, frame{isObject: false, expectKey: false, curKey: top.curKey, objName: nextObjName, inMediaRoot: top.inMediaRoot})
+			case '}', ']':
+				stack = stack[:len(stack)-1]
+				if len(stack) > 0 && stack[len(stack)-1].isObject {
+					stack[len(stack)-1].expectKey = true
+				}
+			}
+			continue
+		}
+		if top.isObject && top.expectKey {
+			if k, ok := tok.(string); ok {
+				top.curKey = k
+			}
+			top.expectKey = false
+			continue
+		}
+		if s, ok := tok.(string); ok {
+			excess += nativeMediaBlobExcessBytes(top.inMediaRoot, top.objName, top.curKey, s)
+		}
+		if top.isObject {
+			top.expectKey = true
 		}
 	}
-	return nil
+	return excess, nil
+}
+
+func nativeMediaBlobExcessBytes(inMediaRoot bool, parentObjKey, key, s string) int64 {
+	const cappedBlobBytes = 1024
+	if !inMediaRoot || len(s) <= cappedBlobBytes {
+		return 0
+	}
+	k := strings.ToLower(strings.TrimSpace(key))
+	pk := strings.ToLower(strings.TrimSpace(parentObjKey))
+	switch k {
+	case "url", "image_url", "file_url":
+		if isNativeMediaURLParentKey(pk) && isStrictNativeMultimodalBase64DataURI(s) {
+			return int64(len(s) - cappedBlobBytes)
+		}
+	case "file_data", "image_base64", "audio_base64", "b64_json":
+		if isNativeMediaPayloadParentKey(pk) && (isStrictNativeMultimodalBase64DataURI(s) || isStrictNativeBase64Payload(s)) {
+			return int64(len(s) - cappedBlobBytes)
+		}
+	case "data":
+		if isNativeMediaContainerKey(pk) && (isStrictNativeMultimodalBase64DataURI(s) || isStrictNativeBase64Payload(s)) {
+			return int64(len(s) - cappedBlobBytes)
+		}
+	}
+	return 0
+}
+
+func isNativeMediaURLParentKey(pk string) bool {
+	switch pk {
+	case "image_url", "image", "input_image", "file", "input_file", "document", "source", "input_audio", "audio", "content", "parts", "messages", "input", "contents":
+		return true
+	default:
+		return false
+	}
+}
+
+func isNativeMediaPayloadParentKey(pk string) bool {
+	switch pk {
+	case "file", "input_file", "document", "image", "image_url", "input_image", "audio", "input_audio", "video", "source", "inlinedata", "inline_data", "content", "parts", "messages", "input", "contents":
+		return true
+	default:
+		return false
+	}
+}
+
+func isNativeMediaContainerKey(pk string) bool {
+	switch pk {
+	case "source", "input_audio", "inlinedata", "inline_data", "image", "audio", "video", "file", "input_file", "document", "image_url":
+		return true
+	default:
+		return false
+	}
+}
+
+func isStrictNativeMultimodalBase64DataURI(s string) bool {
+	if len(s) < 12 || !strings.EqualFold(s[:5], "data:") {
+		return false
+	}
+	headLimit := min(len(s), 128)
+	headLower := strings.ToLower(s[5:headLimit])
+	semiIdx := strings.Index(headLower, ";base64,")
+	if semiIdx <= 0 {
+		return false
+	}
+	mimeType := strings.SplitN(headLower[:semiIdx], ";", 2)[0]
+	slash := strings.IndexByte(mimeType, '/')
+	if slash <= 0 || slash == len(mimeType)-1 {
+		return false
+	}
+	major := mimeType[:slash]
+	subtype := mimeType[slash+1:]
+	switch {
+	case major == "image" || major == "audio" || major == "video":
+	case mimeType == "application/pdf" || mimeType == "application/octet-stream":
+	default:
+		return false
+	}
+	for i := 0; i < len(subtype); i++ {
+		c := subtype[i]
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '+' || c == '-') {
+			return false
+		}
+	}
+	payloadStart := 5 + semiIdx + len(";base64,")
+	return isStrictNativeBase64Payload(s[payloadStart:])
+}
+
+func isStrictNativeBase64Payload(s string) bool {
+	if len(s) == 0 || len(s)%4 != 0 {
+		return false
+	}
+	strictEnc := base64.StdEncoding.Strict()
+	var src [4096]byte
+	var dst [3072]byte
+	n := len(s)
+	for off := 0; off < n; off += len(src) {
+		end := min(off+len(src), n)
+		chunkLen := end - off
+		if end < n {
+			// Ensure padding '=' never appears outside the very end of the full string.
+			for i := off; i < end; i++ {
+				if s[i] == '=' {
+					return false
+				}
+			}
+		}
+		copy(src[:chunkLen], s[off:end])
+		if _, err := strictEnc.Decode(dst[:], src[:chunkLen]); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func parseNativeJSONNumberCeiling(num json.Number) (int64, bool) {

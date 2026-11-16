@@ -128,6 +128,7 @@ type ConfigSnapshot struct {
 	effectiveConfigs map[ScopeKey]*EffectiveConfig
 	providers        *ProviderCatalogView
 	policies         *PolicyCatalogView
+	routes           *RouteCatalogView
 }
 
 // KeyMatchResult returns the resolved immutable VirtualKeyView and whether authentication
@@ -705,6 +706,7 @@ func (m *Manager) Refresh(ctx context.Context) error {
 		return err
 	}
 	policies := loadPoliciesSQL(ctx, tx)
+	routes := loadRoutesSQL(ctx, tx)
 	if err := tx.Commit(); err != nil {
 		m.setLastErr(err)
 		return fmt.Errorf("snapshot: commit read tx: %w", err)
@@ -719,6 +721,7 @@ func (m *Manager) Refresh(ctx context.Context) error {
 		effectiveConfigs: effective,
 		providers:        providers,
 		policies:         policies,
+		routes:           routes,
 	}
 
 	m.applyAndPruneFencesLocked(next, targetEpoch)
@@ -872,6 +875,7 @@ func cloneSnapshotWithSingleFence(src *ConfigSnapshot, keyID string, f localKeyF
 		effectiveConfigs: src.effectiveConfigs,
 		providers:        src.providers,
 		policies:         src.policies,
+		routes:           src.routes,
 	}
 	for k, v := range src.byActiveHash {
 		dst.byActiveHash[k] = v

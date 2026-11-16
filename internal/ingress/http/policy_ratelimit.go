@@ -6,6 +6,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,20 +16,24 @@ import (
 	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
-	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
 	"github.com/nguywnben/tanpopo/internal/ratelimit"
+	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 )
 
 type preAdmissionDecision struct {
+	snap      *snapshot.ConfigSnapshot
 	effPolicy policyengine.EffectivePolicy
 	estTokens int64
+	estBaseIn int64
+	estMaxOut int64
 	reqRegion string
 }
 
 type admissionLease struct {
 	streamLease *ratelimit.StreamLease
+	snap        *snapshot.ConfigSnapshot
 	scope       ratelimit.LimitScope
 	limits      ratelimit.Limits
 	effPolicy   policyengine.EffectivePolicy
@@ -70,6 +75,8 @@ func (s *Server) evaluatePreAdmissionPolicy(
 	modelSlug string,
 	rawBody []byte,
 	estTokens int64,
+	estBaseIn int64,
+	estMaxOut int64,
 ) (*preAdmissionDecision, bool) {
 	snap := s.snapshots.Current()
 	eff, pErr := s.policyEval.ResolveEffective(snap, match.Config, match.Key)
@@ -107,8 +114,11 @@ func (s *Server) evaluatePreAdmissionPolicy(
 	}
 
 	return &preAdmissionDecision{
+		snap:      snap,
 		effPolicy: eff,
 		estTokens: estTokens,
+		estBaseIn: estBaseIn,
+		estMaxOut: estMaxOut,
 		reqRegion: reqRegion,
 	}, true
 }
@@ -178,6 +188,7 @@ func (s *Server) acquirePostIdempotencyTPM(
 		return nil, false
 	}
 	return &admissionLease{
+		snap:      pre.snap,
 		scope:     scope,
 		limits:    limits,
 		effPolicy: pre.effPolicy,
@@ -240,6 +251,7 @@ func (s *Server) acquireRateLimits(
 
 	return &admissionLease{
 		streamLease: streamLease,
+		snap:        pre.snap,
 		scope:       scope,
 		limits:      limits,
 		effPolicy:   pre.effPolicy,
@@ -274,114 +286,65 @@ func (s *Server) reconcileAdmissionUsage(adm *admissionLease, usage *port.Normal
 	_ = s.rateLimiter.ReconcileTokens(context.Background(), adm.scope, adm.estTokens, actual, adm.limits)
 }
 
-func (s *Server) resolveActiveTargetWithPolicy(
+func (s *Server) resolveTargetsWithPolicy(
 	w http.ResponseWriter,
 	reqID string,
 	match snapshot.KeyMatchResult,
 	pre *preAdmissionDecision,
 	modelSlug string,
-) (*snapshot.ResolvedTarget, bool) {
-	snap := s.snapshots.Current()
+	requiredCaps []string,
+) ([]*resolver.RankedTarget, bool) {
+	var snap *snapshot.ConfigSnapshot
+	if pre != nil && pre.snap != nil {
+		snap = pre.snap
+	} else {
+		snap = s.snapshots.Current()
+	}
 	if snap == nil {
 		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "snapshot_not_ready", "api_error", "Configuration snapshot unavailable.", true)
 		return nil, false
 	}
 
-	candidates := snap.ListCandidateTargets(match.Key.OrgID, modelSlug)
-	var (
-		sawQuarantined  bool
-		sawModelDenied  bool
-		modelDenial     policyengine.EvalDecision
-		sawTrustDenied  bool
-		trustDenial     policyengine.EvalDecision
-		sawRegionDenied bool
-		regionDenial    policyengine.EvalDecision
-	)
-	for _, cand := range candidates {
-		if cand == nil || cand.Deployment == nil || cand.Deployment.State != "ACTIVE_HEALTHY" {
-			continue
-		}
-		if cand.Connection == nil || cand.Connection.State != snapshot.ConnectionStateActive || !cand.Connection.VisibleToProject(match.Key.OrgID, match.Key.ProjectID) {
-			continue
-		}
-		if cand.Adapter == nil {
-			continue
-		}
-		if strings.EqualFold(cand.Adapter.ExtensionState, installer.StateQuarantined) {
-			sawQuarantined = true
-			continue
-		}
-		dec := policyengine.EvaluateEffective(pre.effPolicy, policyengine.EvalRequest{
-			OrgID:                     match.Key.OrgID,
-			ProjectID:                 match.Key.ProjectID,
-			EnvID:                     match.Key.EnvID,
-			ModelSlug:                 modelSlug,
-			AdapterSlug:               cand.Adapter.AdapterSlug,
-			DataRegion:                cand.Deployment.DataRegion,
-			RequestedDataRegion:       pre.reqRegion,
-			ExtensionTrustTier:        cand.Connection.DerivedPublicTrust,
-			ExtensionEnterpriseSigned: cand.Connection.DerivedEnterpriseSigned,
-			CapabilityAssurance:       cand.Deployment.AssuranceLevel,
-			TargetEvaluation:          true,
-		})
-		if !dec.Allowed {
-			switch dec.DenialCode {
-			case policyengine.DenialCodeModelDenied:
-				if !sawModelDenied {
-					sawModelDenied = true
-					modelDenial = dec
-				}
-			case policyengine.DenialCodeTrustDenied:
-				if !sawTrustDenied {
-					sawTrustDenied = true
-					trustDenial = dec
-				}
-			case policyengine.DenialCodeRegionDenied:
-				if !sawRegionDenied {
-					sawRegionDenied = true
-					regionDenial = dec
-				}
-			}
-			continue
-		}
-		return cand, true
-	}
-
-	if sawQuarantined {
-		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "extension_quarantined", "extension_error", "The backing provider adapter extension is quarantined.", false)
+	requireTested := match.Config != nil && match.Config.RequireTestedCaps
+	candidates, rej := s.routeResolver.Resolve(resolver.ResolveRequest{
+		RequestID:            reqID,
+		Snapshot:             snap,
+		OrgID:                match.Key.OrgID,
+		ProjectID:            match.Key.ProjectID,
+		EnvID:                match.Key.EnvID,
+		TargetModel:          modelSlug,
+		EffectivePolicy:      pre.effPolicy,
+		RequestedDataRegion:  pre.reqRegion,
+		RequiredCapabilities: requiredCaps,
+		EstimatedInputTokens: pre.estBaseIn,
+		MaxOutputTokens:      pre.estMaxOut,
+		RequireTestedCaps:    requireTested,
+		Breaker:              s.breaker,
+	})
+	if rej != nil {
+		writeCanonicalError(w, reqID, rej.HTTPStatus, rej.Code, rej.ErrorType, rej.Message, rej.Retryable)
 		return nil, false
 	}
-	if sawModelDenied {
-		writeCanonicalError(w, reqID, http.StatusForbidden, policyengine.DenialCodeModelDenied, "permission_error", modelDenial.DenialReason, false)
-		return nil, false
-	}
-	if sawTrustDenied {
-		writeCanonicalError(w, reqID, trustDenial.HTTPStatus, policyengine.DenialCodeTrustDenied, trustDenial.ErrorType, trustDenial.DenialReason, false)
-		return nil, false
-	}
-	if sawRegionDenied {
-		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", regionDenial.DenialReason+" ("+policyengine.DenialCodeRegionDenied+")", true)
-		return nil, false
-	}
-	writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", fmt.Sprintf("No compliant active deployment is available for model %q.", modelSlug), true)
-	return nil, false
+	return candidates, true
 }
 
-func estimateIngressTokensFromJSON(raw []byte) int64 {
-	base := max(int64(1), int64(len(raw)+3)/4)
+func estimateIngressTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {
+	rawLen := int64(len(raw))
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 
 	tok, err := dec.Token()
 	if err != nil {
-		return base
+		b := max(int64(1), (rawLen+3)/4)
+		return b, b, 0
 	}
 	delim, ok := tok.(json.Delim)
 	if !ok || delim != '{' {
-		return base
+		b := max(int64(1), (rawLen+3)/4)
+		return b, b, 0
 	}
 
-	var maxOut int64
+	var excessMediaBytes int64
 	for dec.More() {
 		keyTok, err := dec.Token()
 		if err != nil {
@@ -401,54 +364,203 @@ func estimateIngressTokensFromJSON(raw []byte) int64 {
 					maxOut = parsed
 				}
 			} else if d, ok := valTok.(json.Delim); ok {
-				if skipErr := skipJSONComposite(dec, d); skipErr != nil {
-					break
+				excessMediaBytes += skipJSONCompositeCountMedia(dec, d, key, false)
+			}
+			continue
+		}
+		valTok, err := dec.Token()
+		if err != nil {
+			break
+		}
+		if v, ok := valTok.(json.Delim); ok {
+			excessMediaBytes += skipJSONCompositeCountMedia(dec, v, key, isHTTPMultimodalRootKey(key))
+		}
+	}
+
+	effBytes := rawLen - excessMediaBytes
+	if effBytes < 1 {
+		effBytes = 1
+	}
+	baseIn = max(int64(1), (effBytes+3)/4)
+	if maxOut > 0 {
+		if maxOut >= (1<<62) || baseIn > (1<<62)-maxOut {
+			return 1 << 62, baseIn, maxOut
+		}
+		return baseIn + maxOut, baseIn, maxOut
+	}
+	return baseIn, baseIn, 0
+}
+
+func isHTTPMultimodalRootKey(key string) bool {
+	return key == "messages" || key == "input"
+}
+
+func skipJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, parentKey string, inMediaRoot bool) int64 {
+	type frame struct {
+		isObject    bool
+		expectKey   bool
+		curKey      string
+		objName     string
+		inMediaRoot bool
+	}
+	stack := []frame{{
+		isObject:    open == '{',
+		expectKey:   open == '{',
+		curKey:      parentKey,
+		objName:     parentKey,
+		inMediaRoot: inMediaRoot,
+	}}
+	var excess int64
+	for len(stack) > 0 {
+		tok, err := dec.Token()
+		if err != nil {
+			return excess
+		}
+		top := &stack[len(stack)-1]
+		if d, ok := tok.(json.Delim); ok {
+			nextObjName := top.objName
+			if top.isObject {
+				nextObjName = top.curKey
+			}
+			switch d {
+			case '{':
+				stack = append(stack, frame{isObject: true, expectKey: true, objName: nextObjName, inMediaRoot: top.inMediaRoot})
+			case '[':
+				stack = append(stack, frame{isObject: false, expectKey: false, curKey: top.curKey, objName: nextObjName, inMediaRoot: top.inMediaRoot})
+			case '}', ']':
+				stack = stack[:len(stack)-1]
+				if len(stack) > 0 && stack[len(stack)-1].isObject {
+					stack[len(stack)-1].expectKey = true
 				}
 			}
 			continue
 		}
-		if skipErr := skipNextJSONValue(dec); skipErr != nil {
-			break
+		if top.isObject && top.expectKey {
+			if k, ok := tok.(string); ok {
+				top.curKey = k
+			}
+			top.expectKey = false
+			continue
+		}
+		if s, ok := tok.(string); ok {
+			excess += mediaBlobExcessBytes(top.inMediaRoot, top.objName, top.curKey, s)
+		}
+		if top.isObject {
+			top.expectKey = true
 		}
 	}
-
-	if maxOut > 0 {
-		if maxOut >= (1<<62) || base > (1<<62)-maxOut {
-			return 1 << 62
-		}
-		return base + maxOut
-	}
-	return base
+	return excess
 }
 
-func skipNextJSONValue(dec *json.Decoder) error {
-	tok, err := dec.Token()
-	if err != nil {
-		return err
+func mediaBlobExcessBytes(inMediaRoot bool, parentObjKey, key, s string) int64 {
+	const cappedBlobBytes = 1024
+	if !inMediaRoot || len(s) <= cappedBlobBytes {
+		return 0
 	}
-	if d, ok := tok.(json.Delim); ok {
-		return skipJSONComposite(dec, d)
+	k := strings.ToLower(strings.TrimSpace(key))
+	pk := strings.ToLower(strings.TrimSpace(parentObjKey))
+	switch k {
+	case "url", "image_url", "file_url":
+		if isMediaURLParentKey(pk) && isStrictMultimodalBase64DataURI(s) {
+			return int64(len(s) - cappedBlobBytes)
+		}
+	case "file_data", "image_base64", "audio_base64", "b64_json":
+		if isMediaPayloadParentKey(pk) && (isStrictMultimodalBase64DataURI(s) || isStrictBase64Payload(s)) {
+			return int64(len(s) - cappedBlobBytes)
+		}
+	case "data":
+		if isMediaContainerKey(pk) && (isStrictMultimodalBase64DataURI(s) || isStrictBase64Payload(s)) {
+			return int64(len(s) - cappedBlobBytes)
+		}
 	}
-	return nil
+	return 0
 }
 
-func skipJSONComposite(dec *json.Decoder, open json.Delim) error {
-	depth := 1
-	for depth > 0 {
-		tok, err := dec.Token()
-		if err != nil {
-			return err
+func isMediaURLParentKey(pk string) bool {
+	switch pk {
+	case "image_url", "image", "input_image", "file", "input_file", "document", "source", "input_audio", "audio", "content", "parts", "messages", "input":
+		return true
+	default:
+		return false
+	}
+}
+
+func isMediaPayloadParentKey(pk string) bool {
+	switch pk {
+	case "file", "input_file", "document", "image", "image_url", "input_image", "audio", "input_audio", "video", "source", "inlinedata", "inline_data", "content", "parts", "messages", "input":
+		return true
+	default:
+		return false
+	}
+}
+
+func isMediaContainerKey(pk string) bool {
+	switch pk {
+	case "source", "input_audio", "inlinedata", "inline_data", "image", "audio", "video", "file", "input_file", "document", "image_url":
+		return true
+	default:
+		return false
+	}
+}
+
+func isStrictMultimodalBase64DataURI(s string) bool {
+	if len(s) < 12 || !strings.EqualFold(s[:5], "data:") {
+		return false
+	}
+	headLimit := min(len(s), 128)
+	headLower := strings.ToLower(s[5:headLimit])
+	semiIdx := strings.Index(headLower, ";base64,")
+	if semiIdx <= 0 {
+		return false
+	}
+	mimeType := strings.SplitN(headLower[:semiIdx], ";", 2)[0]
+	slash := strings.IndexByte(mimeType, '/')
+	if slash <= 0 || slash == len(mimeType)-1 {
+		return false
+	}
+	major := mimeType[:slash]
+	subtype := mimeType[slash+1:]
+	switch {
+	case major == "image" || major == "audio" || major == "video":
+	case mimeType == "application/pdf" || mimeType == "application/octet-stream":
+	default:
+		return false
+	}
+	for i := 0; i < len(subtype); i++ {
+		c := subtype[i]
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '+' || c == '-') {
+			return false
 		}
-		if d, ok := tok.(json.Delim); ok {
-			switch d {
-			case '{', '[':
-				depth++
-			case '}', ']':
-				depth--
+	}
+	payloadStart := 5 + semiIdx + len(";base64,")
+	return isStrictBase64Payload(s[payloadStart:])
+}
+
+func isStrictBase64Payload(s string) bool {
+	if len(s) == 0 || len(s)%4 != 0 {
+		return false
+	}
+	strictEnc := base64.StdEncoding.Strict()
+	var src [4096]byte
+	var dst [3072]byte
+	n := len(s)
+	for off := 0; off < n; off += len(src) {
+		end := min(off+len(src), n)
+		chunkLen := end - off
+		if end < n {
+			// Ensure padding '=' never appears outside the very end of the full string.
+			for i := off; i < end; i++ {
+				if s[i] == '=' {
+					return false
+				}
 			}
 		}
+		copy(src[:chunkLen], s[off:end])
+		if _, err := strictEnc.Decode(dst[:], src[:chunkLen]); err != nil {
+			return false
+		}
 	}
-	return nil
+	return true
 }
 
 func parsePositiveJSONNumberCeiling(num json.Number) (int64, bool) {

@@ -1640,6 +1640,9 @@ permissions:
 		t.Fatalf("unexpected 429 normalized response (%d): %s", resp429.StatusCode, string(body429))
 	}
 
+	// SM-04 places single deployment into short THROTTLED_COOLDOWN after 429; advance FakeClock past cooldown before 500 subtest.
+	h.clk.Advance(5 * time.Second)
+
 	// 2. Upstream 500 on streaming -> mapped 502 Bad Gateway canonical envelope, zero secret leak.
 	mode.Store(1)
 	req500, _ := http.NewRequest(http.MethodPost, h.httpSrv.URL+"/native/anthropic/v1/messages", bytes.NewReader([]byte(`{"model":"claude-sonnet-4-5","stream":true,"messages":[{"role":"user","content":"err500"}]}`)))

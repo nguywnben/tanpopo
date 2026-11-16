@@ -21,13 +21,15 @@ import (
 	"unicode/utf8"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
-	"github.com/nguywnben/tanpopo/internal/extension/declarative"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
 	"github.com/nguywnben/tanpopo/internal/ingress/blob"
 	"github.com/nguywnben/tanpopo/internal/ingress/idempotency"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
+	"github.com/nguywnben/tanpopo/internal/routing/breaker"
+	"github.com/nguywnben/tanpopo/internal/routing/failover"
+	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 )
@@ -204,8 +206,8 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeCanonicalError(w, meta.RequestID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Both 'model' and non-empty 'messages' are required.", false)
 		return
 	}
-	estTokens := estimateIngressTokensFromJSON(rawBody)
-	preAdm, ok := s.evaluatePreAdmissionPolicy(w, r, meta.RequestID, match, modelSlug, rawBody, estTokens)
+	estTokens, estBaseIn, estMaxOut := estimateIngressTokensFromJSON(rawBody)
+	preAdm, ok := s.evaluatePreAdmissionPolicy(w, r, meta.RequestID, match, modelSlug, rawBody, estTokens, estBaseIn, estMaxOut)
 	if !ok {
 		return
 	}
@@ -238,25 +240,41 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	defer admLease.Release()
 
-	target, ok := s.resolveActiveTargetWithPolicy(w, meta.RequestID, match, preAdm, modelSlug)
+	requiredCaps := extractChatCapabilities(reqEnvelope)
+	candidates, ok := s.resolveTargetsWithPolicy(w, meta.RequestID, match, preAdm, modelSlug, requiredCaps)
 	if !ok {
 		return
 	}
 
-	if capErr := checkM1Capabilities(target, match.Config, reqEnvelope); capErr != "" {
-		writeCanonicalError(w, meta.RequestID, http.StatusBadRequest, "capability_not_supported", "invalid_request_error", capErr, false)
-		return
-	}
+	s.executeRoutedPreStreamFailover(w, r.Context(), streamCtx, meta.RequestID, modelSlug, candidates, func(hopCtx context.Context, _ int, cand *resolver.RankedTarget) failover.AttemptResult {
+		return s.executeChatCompletionHop(w, r.Context(), hopCtx, meta, match.Key, cand.Target, rawBody, reqEnvelope, modelSlug, idemClaim, admLease)
+	})
+}
 
-	cachedRT, rtErr := s.getOrLoadAdapterRuntime(streamCtx, target)
+func (s *Server) executeChatCompletionHop(
+	w http.ResponseWriter,
+	clientCtx context.Context,
+	hopCtx context.Context,
+	meta ingressContext,
+	key *snapshot.VirtualKeyView,
+	target *snapshot.ResolvedTarget,
+	rawBody []byte,
+	reqEnvelope *chatCompletionIngressRequest,
+	modelSlug string,
+	idemClaim *idempotency.Claim,
+	admLease *admissionLease,
+) failover.AttemptResult {
+	cachedRT, rtErr := s.getOrLoadAdapterRuntime(hopCtx, target)
 	if rtErr != nil {
-		s.writeRuntimeFaultError(w, meta.RequestID, rtErr)
-		return
+		if errors.Is(rtErr, context.Canceled) {
+			return s.classifyBrokerAttemptError(w, clientCtx, hopCtx, meta.RequestID, rtErr, true)
+		}
+		return classifyRuntimeLoadAttemptError(w, s, meta.RequestID, rtErr)
 	}
 	defer cachedRT.release()
 
 	offloadRes, offloadErr := blob.OffloadEndpointMultimodalRequest(
-		streamCtx,
+		hopCtx,
 		meta.RequestID,
 		rawBody,
 		target.Deployment.UpstreamModelName,
@@ -266,15 +284,22 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		"messages",
 	)
 	if offloadErr != nil {
-		s.writeBlobError(w, meta.RequestID, offloadErr)
-		return
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  false,
+			Outcome:    breaker.OutcomeCallerError,
+			HTTPStatus: http.StatusBadRequest,
+			FlushFinal: func() {
+				s.writeBlobError(w, meta.RequestID, offloadErr)
+			},
+		}
 	}
 	defer offloadRes.Scrub()
 
-	spec, egressReq, constraint, err := s.transformAndBuildEgress(
-		streamCtx,
+	_, egressReq, constraint, err := s.transformAndBuildEgress(
+		hopCtx,
 		meta,
-		match.Key,
+		key,
 		target,
 		cachedRT,
 		offloadRes.NormalizedJSON,
@@ -283,20 +308,17 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		"chat",
 	)
 	if err != nil {
-		s.writePreparedRequestError(w, meta.RequestID, err)
-		return
+		return s.classifyPreparedAttemptError(w, clientCtx, hopCtx, meta.RequestID, err)
 	}
 	defer clear(egressReq.BodyBytes)
-	_ = spec
 
 	if reqEnvelope.Stream {
-		s.executeStreamingChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, !reqEnvelope.CallerRequestedUsage, admLease)
-		return
+		return s.executeStreamingChatCompletionAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, !reqEnvelope.CallerRequestedUsage, admLease)
 	}
-	s.executeSyncChatCompletion(w, r.Context(), streamCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, idemClaim, admLease)
+	return s.executeSyncChatCompletionAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, modelSlug, idemClaim, admLease)
 }
 
-func (s *Server) executeSyncChatCompletion(
+func (s *Server) executeSyncChatCompletionAttempt(
 	w http.ResponseWriter,
 	clientCtx context.Context,
 	ctx context.Context,
@@ -304,29 +326,20 @@ func (s *Server) executeSyncChatCompletion(
 	rt port.ProviderRuntime,
 	egressReq broker.EgressRequest,
 	constraint broker.HostEgressConstraint,
-	_ *snapshot.ResolvedTarget,
 	requestedModel string,
 	idemClaim *idempotency.Claim,
 	admLease *admissionLease,
-) {
+) failover.AttemptResult {
 	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			if clientCtx != nil && clientCtx.Err() == nil && ctx.Err() != nil {
-				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before response dispatch.", false)
-			}
-			return
-		}
-		s.writeBrokerOrEgressError(w, reqID, err)
-		return
+		return s.classifyBrokerAttemptError(w, clientCtx, ctx, reqID, err, true)
+	}
+
+	if upResp.StatusCode < 200 || upResp.StatusCode >= 300 {
+		return s.makeNormalizedUpstreamAttemptError(ctx, w, reqID, rt, upResp.StatusCode, upResp.SanitizedHeaders, upResp.Body)
 	}
 
 	sanitizedHdrs := flattenHTTPHeaders(upResp.SanitizedHeaders)
-	if upResp.StatusCode < 200 || upResp.StatusCode >= 300 {
-		s.writeNormalizedUpstreamError(w, ctx, reqID, rt, upResp.StatusCode, sanitizedHdrs, upResp.Body)
-		return
-	}
-
 	normResp, err := rt.TransformResponse(ctx, port.TransformResponseInput{
 		RequestID:        reqID,
 		HTTPStatus:       int32(upResp.StatusCode),
@@ -335,24 +348,20 @@ func (s *Server) executeSyncChatCompletion(
 		Modality:         "CHAT",
 	})
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			if clientCtx != nil && clientCtx.Err() == nil && ctx.Err() != nil {
-				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before response dispatch.", false)
-			}
-			return
-		}
-		if errors.Is(err, declarative.ErrUpstreamMalformedResponse) {
-			writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Upstream provider returned an invalid or truncated chat completion payload.", false)
-			return
-		}
-		s.writeRuntimeFaultError(w, reqID, err)
-		return
+		return s.classifyTransformResponseError(w, clientCtx, ctx, reqID, err, "Upstream provider returned an invalid or truncated chat completion payload.")
 	}
 
 	finalBody, err := finalizeChatCompletionJSON(reqID, requestedModel, normResp, s.nowMs())
 	if err != nil {
-		writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Normalized chat completion payload failed OpenAI schema validation.", false)
-		return
+		return failover.AttemptResult{
+			Succeeded:  false,
+			Retryable:  true,
+			Outcome:    breaker.OutcomeSystemFault,
+			HTTPStatus: http.StatusBadGateway,
+			FlushFinal: func() {
+				writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Normalized chat completion payload failed OpenAI schema validation.", false)
+			},
+		}
 	}
 
 	if normResp.Usage != nil {
@@ -368,9 +377,14 @@ func (s *Server) executeSyncChatCompletion(
 		})
 	}
 	writeSettledJSONResponse(w, ctx, reqID, normResp.Usage, finalBody, idemClaim)
+	return failover.AttemptResult{
+		Succeeded:  true,
+		Outcome:    breaker.OutcomeSuccess,
+		HTTPStatus: http.StatusOK,
+	}
 }
 
-func (s *Server) executeStreamingChatCompletion(
+func (s *Server) executeStreamingChatCompletionAttempt(
 	w http.ResponseWriter,
 	clientCtx context.Context,
 	streamCtx context.Context,
@@ -382,7 +396,7 @@ func (s *Server) executeStreamingChatCompletion(
 	requestedModel string,
 	elideUsageChunk bool,
 	admLease *admissionLease,
-) {
+) failover.AttemptResult {
 	upCtx, cancelUp := context.WithCancel(streamCtx)
 	defer cancelUp()
 
@@ -391,21 +405,13 @@ func (s *Server) executeStreamingChatCompletion(
 	// while keeping total stream duration open-ended.
 	upStream, err := s.broker.ExecuteStreamWithHostConstraint(upCtx, egressReq, constraint)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			if clientCtx != nil && clientCtx.Err() == nil && streamCtx.Err() != nil {
-				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before stream dispatch.", false)
-			}
-			return
-		}
-		s.writeBrokerOrEgressError(w, reqID, err)
-		return
+		return s.classifyBrokerAttemptError(w, clientCtx, streamCtx, reqID, err, false)
 	}
 	defer func() { _ = upStream.Body.Close() }()
 
 	if upStream.StatusCode < 200 || upStream.StatusCode >= 300 {
 		errBody, _ := io.ReadAll(io.LimitReader(upStream.Body, 1<<20))
-		s.writeNormalizedUpstreamError(w, streamCtx, reqID, rt, upStream.StatusCode, flattenHTTPHeaders(upStream.SanitizedHeaders), errBody)
-		return
+		return s.makeNormalizedUpstreamAttemptError(streamCtx, w, reqID, rt, upStream.StatusCode, upStream.SanitizedHeaders, errBody)
 	}
 
 	var idleChunkTimeout time.Duration
@@ -437,48 +443,24 @@ func (s *Server) executeStreamingChatCompletion(
 			Usage:     pumpRes.Usage,
 		})
 	}
-	if pumpErr != nil && !pumpRes.StreamStarted {
-		if errors.Is(pumpErr, sse.ErrLineTooLarge) {
-			writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Upstream SSE stream exceeded maximum line byte limit.", false)
-			return
-		}
-		if errors.Is(pumpErr, context.DeadlineExceeded) || errors.Is(pumpErr, sse.ErrIdleChunkTimeout) {
-			writeCanonicalError(w, reqID, http.StatusGatewayTimeout, "upstream_timeout", "upstream_error", "Upstream SSE stream timed out before emitting first frame.", true)
-			return
-		}
-		if errors.Is(pumpErr, context.Canceled) {
-			if clientCtx != nil && clientCtx.Err() == nil && streamCtx.Err() != nil {
-				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before stream dispatch.", false)
+	if pumpErr != nil {
+		if pumpRes.StreamStarted {
+			return failover.AttemptResult{
+				Succeeded:     false,
+				StreamStarted: true,
+				Retryable:     false,
+				Outcome:       classifyMidStreamPumpOutcome(clientCtx, streamCtx, pumpRes, pumpErr),
+				HTTPStatus:    upStream.StatusCode,
 			}
-			return
 		}
-		if errors.Is(pumpErr, port.ErrExecutionFault) {
-			s.writeRuntimeFaultError(w, reqID, pumpErr)
-			return
-		}
-		writeCanonicalError(w, reqID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Upstream stream terminated before emitting a valid SSE frame.", false)
-		return
+		return s.classifyPreStreamPumpAttemptError(w, clientCtx, streamCtx, reqID, pumpErr)
 	}
-}
-
-func (s *Server) writeNormalizedUpstreamError(w http.ResponseWriter, ctx context.Context, reqID string, rt port.ProviderRuntime, upstreamStatus int, headers map[string]string, body []byte) {
-	normErr, nerr := rt.NormalizeError(ctx, port.NormalizeErrorInput{
-		RequestID:        reqID,
-		HTTPStatus:       int32(upstreamStatus),
-		SanitizedHeaders: headers,
-		SanitizedBody:    body,
-	})
-	if nerr != nil {
-		writeCanonicalError(w, reqID, mapUpstreamHTTPStatus(upstreamStatus), "upstream_error", "upstream_error", "Upstream provider request failed.", upstreamStatus == http.StatusTooManyRequests || upstreamStatus >= 500)
-		return
+	return failover.AttemptResult{
+		Succeeded:     true,
+		StreamStarted: true,
+		Outcome:       breaker.OutcomeSuccess,
+		HTTPStatus:    upStream.StatusCode,
 	}
-	code := sanitizeErrorToken(normErr.CanonicalCode, "upstream_error")
-	errType := sanitizeErrorToken(normErr.ErrorType, "upstream_error")
-	msg := sanitizePublicErrorMessage(normErr.SanitizedPublicMessage, 512)
-	if msg == "" {
-		msg = fmt.Sprintf("Upstream provider returned HTTP %d.", upstreamStatus)
-	}
-	writeCanonicalError(w, reqID, mapUpstreamHTTPStatus(upstreamStatus), code, errType, msg, normErr.RetryablePreStream)
 }
 
 func sanitizeErrorToken(raw, fallback string) string {
@@ -603,6 +585,7 @@ type preparedRequestErr struct {
 }
 
 func (e *preparedRequestErr) Error() string { return e.message }
+func (e *preparedRequestErr) Unwrap() error { return e.cause }
 
 func (s *Server) authenticateProviderRequest(
 	w http.ResponseWriter,
@@ -1000,61 +983,6 @@ func modelAllowlistPermits(allowedModels []string, model string) bool {
 		}
 	}
 	return false
-}
-
-func checkResponseFormatCapabilities(supports func(string) bool, targetID string, rf *responseFormat) string {
-	if rf == nil {
-		return ""
-	}
-	typ := strings.ToLower(strings.TrimSpace(rf.Type))
-	switch typ {
-	case "json_schema":
-		isStrict := (rf.Strict != nil && *rf.Strict) || (rf.JSONSchema != nil && rf.JSONSchema.Strict)
-		if isStrict {
-			if !supports("strict_json_schema") {
-				return fmt.Sprintf("Deployment %q does not support strict_json_schema.", targetID)
-			}
-		} else if !supports("strict_json_schema") && !supports("json_object") {
-			return fmt.Sprintf("Deployment %q does not support strict_json_schema.", targetID)
-		}
-	case "json_object":
-		if !supports("json_object") {
-			return fmt.Sprintf("Deployment %q does not support json_object.", targetID)
-		}
-	}
-	return ""
-}
-
-func checkM1Capabilities(target *snapshot.ResolvedTarget, cfg *snapshot.EffectiveConfig, req *chatCompletionIngressRequest) string {
-	requireTested := cfg != nil && cfg.RequireTestedCaps
-	supports := func(capName string) bool {
-		return snapshot.DeploymentSupportsCapability(target, requireTested, capName)
-	}
-
-	if req.Stream && !supports("streaming") {
-		return fmt.Sprintf("Deployment %q does not support streaming.", target.Deployment.ID)
-	}
-	if len(req.Tools) > 0 && !supports("tool_calling") {
-		return fmt.Sprintf("Deployment %q does not support tool_calling.", target.Deployment.ID)
-	}
-	if rfErr := checkResponseFormatCapabilities(supports, target.Deployment.ID, req.ResponseFormat); rfErr != "" {
-		return rfErr
-	}
-	if strings.TrimSpace(req.ReasoningEffort) != "" && !supports("reasoning") {
-		return fmt.Sprintf("Deployment %q does not support reasoning.", target.Deployment.ID)
-	}
-
-	hasVision, hasAudio, hasDoc := detectMultimodalParts(req.Messages)
-	if hasVision && !supports("vision") {
-		return fmt.Sprintf("Deployment %q does not support vision.", target.Deployment.ID)
-	}
-	if hasAudio && !supports("audio_input") {
-		return fmt.Sprintf("Deployment %q does not support audio_input.", target.Deployment.ID)
-	}
-	if hasDoc && !supports("document_input") {
-		return fmt.Sprintf("Deployment %q does not support document_input.", target.Deployment.ID)
-	}
-	return ""
 }
 
 func detectMultimodalParts(items []any) (vision, audio, doc bool) {
