@@ -408,6 +408,35 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodPatch, Path: "/admin/v1/connections/{connectionId}", Action: rbac.ActionConnectionWrite, Handler: s.handleUpdateConnection},
 		{Method: http.MethodDelete, Path: "/admin/v1/connections/{connectionId}", Action: rbac.ActionConnectionWrite, Handler: s.handleDeleteConnection},
 		{Method: http.MethodPost, Path: "/admin/v1/connections/{connectionId}/test", Action: rbac.ActionConnectionWrite, Handler: s.handleTestConnection},
+
+		// Group F: Logical Models & Model Deployments
+		{Method: http.MethodGet, Path: "/admin/v1/models", Action: rbac.ActionModelRead, Handler: s.handleListAdminModels},
+		{Method: http.MethodPost, Path: "/admin/v1/models", Action: rbac.ActionModelWrite, Handler: s.handleCreateAdminModel},
+		{Method: http.MethodGet, Path: "/admin/v1/deployments", Action: rbac.ActionModelRead, Handler: s.handleListDeployments},
+		{Method: http.MethodPost, Path: "/admin/v1/deployments", Action: rbac.ActionModelWrite, Handler: s.handleCreateDeployment},
+		{Method: http.MethodPatch, Path: "/admin/v1/deployments/{deploymentId}", Action: rbac.ActionModelWrite, Handler: s.handleUpdateDeployment},
+		{Method: http.MethodDelete, Path: "/admin/v1/deployments/{deploymentId}", Action: rbac.ActionModelWrite, Handler: s.handleDeleteDeployment},
+
+		// Group G: Marketplace, Extensions & Lockfile (static paths before {installationId})
+		{Method: http.MethodGet, Path: "/admin/v1/marketplace/catalog", Action: rbac.ActionExtensionRead, Handler: s.handleListMarketplaceCatalog},
+		{Method: http.MethodPost, Path: "/admin/v1/extensions/install", Action: rbac.ActionExtensionStage, Handler: s.handleStageExtensionInstall},
+		{Method: http.MethodGet, Path: "/admin/v1/extensions/installations", Action: rbac.ActionExtensionRead, Handler: s.handleListExtensionInstallations},
+		{Method: http.MethodGet, Path: "/admin/v1/extensions/lockfile", Action: rbac.ActionExtensionRead, Handler: s.handleGetExtensionLockfile},
+		{Method: http.MethodGet, Path: "/admin/v1/extensions/{installationId}/permission-diff", Action: rbac.ActionExtensionRead, Handler: s.handleGetExtensionPermissionDiff},
+		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/approve-permissions", Action: rbac.ActionExtensionApprove, Handler: s.handleApproveExtensionPermissions},
+		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/upgrade", Action: rbac.ActionExtensionStage, Handler: s.handleUpgradeExtension},
+		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/rollback", Action: rbac.ActionExtensionApprove, Handler: s.handleRollbackExtension},
+		{Method: http.MethodDelete, Path: "/admin/v1/extensions/{installationId}", Action: rbac.ActionExtensionApprove, Handler: s.handleUninstallOrDiscardExtension},
+		{Method: http.MethodPut, Path: "/admin/v1/organizations/{orgId}/extension-policies", Action: rbac.ActionExtensionOrgPolicy, Handler: s.handlePutOrgExtensionPolicies},
+
+		// Group H: Routing Rules, Dry-Run Explain & Hierarchical Policies (static paths before params)
+		{Method: http.MethodPost, Path: "/admin/v1/routes/explain", Action: rbac.ActionRouteExplain, Handler: s.handleExplainRoute},
+		{Method: http.MethodGet, Path: "/admin/v1/routes", Action: rbac.ActionRouteRead, Handler: s.handleListRoutes},
+		{Method: http.MethodPost, Path: "/admin/v1/routes", Action: rbac.ActionRouteWrite, Handler: s.handleCreateRoute},
+		{Method: http.MethodPut, Path: "/admin/v1/routes/{routeId}", Action: rbac.ActionRouteWrite, Handler: s.handleUpdateRoute},
+		{Method: http.MethodDelete, Path: "/admin/v1/routes/{routeId}", Action: rbac.ActionRouteWrite, Handler: s.handleDeleteRoute},
+		{Method: http.MethodGet, Path: "/admin/v1/policies/effective", Action: rbac.ActionPolicyRead, Handler: s.handleGetEffectivePolicy},
+		{Method: http.MethodPut, Path: "/admin/v1/policies/{policyId}", Action: rbac.ActionPolicyProjectWrite, Handler: s.handleUpdatePolicy},
 	}
 
 	if err := rbac.ValidateRoutePermissions(s.Routes()); err != nil {
