@@ -149,8 +149,25 @@ func NewHandler(cfg Config) (*Handler, error) {
 	}
 	cb := cfg.Breaker
 	if cb == nil {
+		var onTransition func(deploymentID, prevState, newState string)
+		if cfg.Telemetry != nil && cfg.Telemetry.Metrics != nil {
+			tel := cfg.Telemetry
+			snaps := cfg.Snapshots
+			onTransition = func(deploymentID, _, newState string) {
+				adapterID, region := "unknown", "UNSPECIFIED"
+				if snaps != nil {
+					if snap := snaps.Current(); snap != nil {
+						if a, reg, ok := snap.LookupDeploymentTelemetryLabels(deploymentID); ok {
+							adapterID, region = a, reg
+						}
+					}
+				}
+				tel.Metrics.SetDeploymentCircuitState(adapterID, region, newState)
+			}
+		}
 		cb = breaker.New(breaker.Config{
-			Now: func() time.Time { return time.UnixMilli(nowFn()).UTC() },
+			Now:          func() time.Time { return time.UnixMilli(nowFn()).UTC() },
+			OnTransition: onTransition,
 		})
 	}
 	routeRes := cfg.RouteResolver
@@ -1149,6 +1166,9 @@ func (h *Handler) executeStreamingNativeAttempt(
 
 	outcome := breaker.OutcomeSuccess
 	if pumpErr != nil {
+		if ec, ok := w.(interface{ SetCanonicalErrorCode(string) }); ok {
+			ec.SetCanonicalErrorCode("mid_stream_abort")
+		}
 		if pumpRes.clientDisconnected || errors.Is(pumpErr, context.Canceled) {
 			if clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
 				outcome = breaker.OutcomeCallerError

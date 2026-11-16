@@ -66,9 +66,19 @@ func TestMetricLabelAllowlistNEG1AndTenantToggle(t *testing.T) {
 		t.Fatalf("expected valid custom counter to succeed: %v", err)
 	}
 
+	// Direct ServeHTTP without ScrapeBearerToken fails closed (401) unless AllowUnauthenticatedScrape is explicitly enabled.
+	defaultRec := httptest.NewRecorder()
+	reg.ServeHTTP(defaultRec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if defaultRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 fail-closed on unauthenticated ServeHTTP when ScrapeBearerToken is unset, got %d", defaultRec.Code)
+	}
+
 	// OPS-AC-12 cluster toggle: IncludeTenantLabels = false removes org_id/project_id from exposition.
 	f := false
-	noTenantReg, err := otel.NewMetricsRegistry(otel.MetricsConfig{IncludeTenantLabels: &f})
+	noTenantReg, err := otel.NewMetricsRegistry(otel.MetricsConfig{
+		IncludeTenantLabels:        &f,
+		AllowUnauthenticatedScrape: true,
+	})
 	if err != nil {
 		t.Fatalf("NewMetricsRegistry(IncludeTenantLabels=false): %v", err)
 	}
@@ -266,6 +276,25 @@ func TestDebugCaptureTTLNEG2AndProjectDEKBlobRoundtrip(t *testing.T) {
 		}
 	}
 
+	// Request IDs > 40 bytes truncate consistently before SealProjectBlob so DB row and AAD always match.
+	longReqID := "trc_0123456789012345678901234567890123456789_extra"
+	pipe.EnqueueDebugBlob(org.ID, prj.ID, "vk_1", longReqID, []byte(`{"messages":[{"content":"long id blob"}]}`))
+	pipe.EnqueueRequestTrace(otel.RequestTraceRecord{
+		RequestID: longReqID, OrgID: org.ID, ProjectID: prj.ID, EnvID: "env_1", EntryPoint: "unified_http", HTTPStatus: 200,
+	})
+	if ferr := pipe.ForceFlush(ctx); ferr != nil {
+		t.Fatalf("ForceFlush: %v", ferr)
+	}
+	var longNonce, longCT []byte
+	if err := st.RawDB().QueryRowContext(ctx, `
+		SELECT nonce, encrypted_payload_aead FROM debug_payload_blobs WHERE request_id = ?`, longReqID[:40]).Scan(&longNonce, &longCT); err != nil {
+		t.Fatalf("query >40-char truncated debug blob: %v", err)
+	}
+	longPT, err := vs.UnsealProjectBlob(ctx, org.ID, prj.ID, vault.RecordKindDebugBlob, longReqID[:40], longNonce, longCT)
+	if err != nil || !strings.Contains(string(longPT), "long id blob") {
+		t.Fatalf("expected UnsealProjectBlob parity for >40-char requestID, got pt=%q err=%v", string(longPT), err)
+	}
+
 	// Once expired, session ID is pruned and can be recreated; invalid OTLP URLs fail closed.
 	fc.Advance(25 * time.Hour)
 	if _, err := pipe.CreateDebugCaptureSession("sess_ok", org.ID, prj.ID, "vk_1", 1); err != nil {
@@ -430,3 +459,58 @@ func TestAlertsYAMLCrossLinkedToAllRunbooks(t *testing.T) {
 		}
 	}
 }
+
+func TestPersistQueueDropOldestBoundsMemory(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t)
+	})
+
+	ctx := context.Background()
+	st, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: filepath.Join(t.TempDir(), "otel_drop.db"),
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	pipe, err := otel.NewPipeline(otel.PipelineConfig{
+		DB:                   st.RawDB(),
+		MaxPersistQueueBytes: 2048,
+	})
+	if err != nil {
+		t.Fatalf("NewPipeline: %v", err)
+	}
+	defer func() { _ = pipe.Shutdown(context.Background()) }()
+
+	// Enqueue 100 trace records (>75 KiB estimated bytes against 2 KiB cap) cleanly without blocking.
+	for i := 0; i < 100; i++ {
+		pipe.EnqueueRequestTrace(otel.RequestTraceRecord{
+			RequestID:  fmt.Sprintf("trc_drop_%03d", i),
+			OrgID:      "org_drop",
+			ProjectID:  "prj_drop",
+			EnvID:      "env_drop",
+			EntryPoint: "unified_http",
+			HTTPStatus: 200,
+			WaterfallStages: []otel.WaterfallStage{
+				{Stage: "auth", OffsetUs: 0, DurationUs: 1000},
+				{Stage: "upstream", OffsetUs: 1000, DurationUs: 5000},
+			},
+		})
+	}
+	if err := pipe.ForceFlush(ctx); err != nil {
+		t.Fatalf("ForceFlush: %v", err)
+	}
+	if dropped := pipe.Metrics.DroppedCount("traces"); dropped == 0 {
+		t.Fatalf("expected non-zero DroppedCount(traces) under 2048-byte persist queue cap, got 0")
+	}
+	// Latest trace record should still be present thanks to Drop-Oldest eviction.
+	var count int
+	if err := st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM request_traces_meta WHERE request_id = 'trc_drop_099'`).Scan(&count); err != nil {
+		t.Fatalf("query latest trace: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected newest trace trc_drop_099 retained by Drop-Oldest, got count=%d", count)
+	}
+}
+

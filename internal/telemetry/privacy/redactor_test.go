@@ -202,11 +202,53 @@ func TestRedactorPrefixedCookiesAndDebugPayload(t *testing.T) {
 		t.Fatalf("expected prompt content preserved in SanitizeDebugPayload output: %s", cleanJSON)
 	}
 
-	// Malformed/truncated JSON fallback also scrubs non-prefixed secrets.
-	truncated := []byte(`{"api_key":"azure-truncated-secret","messages":[{"content":"broken`)
+	// Malformed/truncated JSON fallback also scrubs non-prefixed secrets including escaped quotes.
+	truncated := []byte(`{"api_key":"part1\"part2-secret","secret_key":"tail-unclosed`)
 	cleanTrunc := string(r.SanitizeDebugPayload(truncated, 4096))
-	if strings.Contains(cleanTrunc, "azure-truncated-secret") {
-		t.Fatalf("truncated JSON leaked secret: %s", cleanTrunc)
+	for _, forbidden := range []string{"part1", "part2-secret", "tail-unclosed"} {
+		if strings.Contains(cleanTrunc, forbidden) {
+			t.Fatalf("truncated JSON leaked secret %q: %s", forbidden, cleanTrunc)
+		}
+	}
+
+	// Non-suffixed credential keys, nested credential objects, underscore prefixes, and colon headers.
+	advJSON := []byte(`{"secret_key":"sk-val","aws_secret_access_key":"aws-val","signing_key":"sig-val","private_key_pem":"pem-val","encryption_key":"enc-val","access_key":"acc-val","master_key":"mk-val","auth_header":"hdr-val","credentials":{"nested":"val"},"prompt_tokens":12,"prompt":"task-1234"}`)
+	cleanAdv := string(r.SanitizeDebugPayload(advJSON, 4096))
+	for _, forbidden := range []string{"sk-val", "aws-val", "sig-val", "pem-val", "enc-val", "acc-val", "mk-val", "hdr-val", "nested"} {
+		if strings.Contains(cleanAdv, forbidden) {
+			t.Fatalf("SanitizeDebugPayload leaked credential %q: %s", forbidden, cleanAdv)
+		}
+	}
+	if !strings.Contains(cleanAdv, `"prompt_tokens":12`) || !strings.Contains(cleanAdv, `"task-1234"`) {
+		t.Fatalf("SanitizeDebugPayload corrupted non-secret token count or benign task-1234 string: %s", cleanAdv)
+	}
+
+	inline := r.SanitizeString("key_vk_tp_abc123 key_sk-tp-canary99 x-api-key: hdr-secret-val task-1234")
+	for _, forbidden := range []string{"vk_tp_abc123", "sk-tp-canary99", "hdr-secret-val"} {
+		if strings.Contains(inline, forbidden) {
+			t.Fatalf("SanitizeString leaked inline secret %q: %s", forbidden, inline)
+		}
+	}
+	if !strings.Contains(inline, "task-1234") {
+		t.Fatalf("SanitizeString falsely redacted benign task-1234: %s", inline)
+	}
+
+	// Multi-MiB JSON array is redacted in bounded streaming time and capped strictly <= maxBytes.
+	var hugeBuilder strings.Builder
+	hugeBuilder.WriteString(`{"api_key":"secret-huge","items":[`)
+	for i := 0; i < 400000; i++ {
+		if i > 0 {
+			hugeBuilder.WriteByte(',')
+		}
+		hugeBuilder.WriteString(`"item_payload_value"`)
+	}
+	hugeBuilder.WriteString(`]}`)
+	hugeOut := r.SanitizeDebugPayload([]byte(hugeBuilder.String()), 256*1024-16)
+	if len(hugeOut) == 0 || len(hugeOut) > 256*1024-16 {
+		t.Fatalf("expected bounded output <= 262128 bytes, got %d", len(hugeOut))
+	}
+	if strings.Contains(string(hugeOut), "secret-huge") {
+		t.Fatalf("huge JSON stream leaked api_key")
 	}
 }
 

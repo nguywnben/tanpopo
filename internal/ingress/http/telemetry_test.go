@@ -531,8 +531,8 @@ func TestGatewayTelemetryOPSAC10ZeroPromptByteAndStages(t *testing.T) {
 		t.Fatalf("expected 200 OK on SSE stream, got %d", sResp.StatusCode)
 	}
 
-	if err := th.pipe.Ring.ForceFlush(th.ctx); err != nil {
-		t.Fatalf("ForceFlush spans: %v", err)
+	if err := th.pipe.ForceFlush(th.ctx); err != nil {
+		t.Fatalf("ForceFlush spans/traces: %v", err)
 	}
 
 	// Verify 0 debug_payload_blobs persisted by default.
@@ -636,6 +636,9 @@ func TestGatewayTelemetryOPSAC10ZeroPromptByteAndStages(t *testing.T) {
 	_ = dbgResp.Body.Close()
 	if dbgResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 on debug-captured request, got %d", dbgResp.StatusCode)
+	}
+	if err := th.pipe.ForceFlush(th.ctx); err != nil {
+		t.Fatalf("ForceFlush debug blob: %v", err)
 	}
 	var dbgReqID string
 	var dbgNonce, dbgCT []byte
@@ -894,6 +897,9 @@ func TestGatewayTelemetrySecurityRemediation(t *testing.T) {
 			if dr.StatusCode != http.StatusOK {
 				t.Fatalf("expected 200 on duplicate caller request id #%d, got %d", i, dr.StatusCode)
 			}
+		}
+		if err := th.pipe.ForceFlush(th.ctx); err != nil {
+			t.Fatalf("ForceFlush after duplicate requests: %v", err)
 		}
 		var traceCount, blobCount int
 		if err := th.store.RawDB().QueryRowContext(th.ctx, `SELECT count(*) FROM request_traces_meta WHERE route_slug = 'acme/chat-1'`).Scan(&traceCount); err != nil {

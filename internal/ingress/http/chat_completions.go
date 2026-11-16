@@ -534,6 +534,9 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 	}
 	if pumpErr != nil {
 		if pumpRes.StreamStarted {
+			if ec, ok := w.(interface{ SetCanonicalErrorCode(string) }); ok {
+				ec.SetCanonicalErrorCode("mid_stream_abort")
+			}
 			return failover.AttemptResult{
 				Succeeded:     false,
 				StreamStarted: true,

@@ -214,13 +214,17 @@ func (rt *requestTelemetry) captureDebugPayloadIfAuthorized(raw []byte) {
 	if !rt.pipeline.HasActiveDebugSession(orgID, projectID, vkeyID) {
 		return
 	}
-	cp := make([]byte, len(raw))
-	copy(cp, raw)
+	// Scrub and bound immediately at capture time (<= 256 KiB) so long-lived streams never pin 32 MiB buffers.
+	maxPT := otel.MaxDebugBlobCiphertextBytes - 16
+	scrubbed := rt.pipeline.Redactor.SanitizeDebugPayload(raw, maxPT)
+	if len(scrubbed) == 0 {
+		return
+	}
 	rt.mu.Lock()
 	if len(rt.debugBody) == 0 {
-		rt.debugBody = cp
+		rt.debugBody = scrubbed
 	} else {
-		clear(cp)
+		clear(scrubbed)
 	}
 	rt.mu.Unlock()
 }
@@ -362,10 +366,8 @@ func (rt *requestTelemetry) finish(ctx context.Context, scw *statusCaptureWriter
 		},
 	})
 
-	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
-	defer cancel()
 	if orgID != "" {
-		_ = rt.pipeline.RecordRequestTrace(persistCtx, otel.RequestTraceRecord{
+		rt.pipeline.EnqueueRequestTrace(otel.RequestTraceRecord{
 			RequestID:               traceRecordID,
 			StartedAtMs:             rt.startedAtMs,
 			OrgID:                   orgID,
@@ -388,7 +390,7 @@ func (rt *requestTelemetry) finish(ctx context.Context, scw *statusCaptureWriter
 			WaterfallStages:         stages,
 		})
 		if len(debugBody) > 0 {
-			_, _ = rt.pipeline.StoreDebugBlobIfAuthorized(persistCtx, orgID, projectID, vkeyID, traceRecordID, debugBody)
+			rt.pipeline.EnqueueDebugBlob(orgID, projectID, vkeyID, traceRecordID, debugBody)
 		}
 	}
 }

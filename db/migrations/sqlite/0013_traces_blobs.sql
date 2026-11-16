@@ -62,5 +62,8 @@ CREATE INDEX idx_traces_blast_radius_conn
     ON request_traces_meta (org_id, connection_id, created_at_ms DESC)
     WHERE connection_id IS NOT NULL;
 
+CREATE INDEX idx_traces_created_at_ms
+    ON request_traces_meta (created_at_ms);
+
 CREATE INDEX idx_debug_blobs_ttl
     ON debug_payload_blobs (expires_at_ms);

@@ -100,6 +100,9 @@ func ValidateMetricLabels(labels ...string) error {
 // RegisterCustomCounter validates labels strictly against AllowedMetricLabels before
 // creating a counter on MetricsRegistry, failing immediately on high-cardinality keys (NEG-1).
 func (m *MetricsRegistry) RegisterCustomCounter(name, description string, labels ...string) (metric.Int64Counter, error) {
+	if m == nil || m.meter == nil {
+		return nil, fmt.Errorf("telemetry: metrics registry is nil")
+	}
 	if err := ValidateMetricLabels(labels...); err != nil {
 		return nil, err
 	}
@@ -116,6 +119,9 @@ type MetricsConfig struct {
 	IncludeTenantLabels *bool
 	// ScrapeBearerToken optionally guards GET /metrics with a constant-time bearer token.
 	ScrapeBearerToken string
+	// AllowUnauthenticatedScrape explicitly opts in to unauthenticated /metrics scraping
+	// when ScrapeBearerToken is empty (disabled by default so ServeHTTP fails closed).
+	AllowUnauthenticatedScrape bool
 	// Redactor scrubs any stray tokens from metric label values.
 	Redactor *privacy.Redactor
 }
@@ -125,6 +131,7 @@ type MetricsConfig struct {
 type MetricsRegistry struct {
 	includeTenantLabels bool
 	scrapeToken         string
+	allowUnauth         bool
 	redactor            *privacy.Redactor
 
 	promReg       *prometheus.Registry
@@ -176,6 +183,7 @@ func NewMetricsRegistry(cfg MetricsConfig) (*MetricsRegistry, error) {
 	reg := &MetricsRegistry{
 		includeTenantLabels: includeTenants,
 		scrapeToken:         strings.TrimSpace(cfg.ScrapeBearerToken),
+		allowUnauth:         cfg.AllowUnauthenticatedScrape,
 		redactor:            red,
 		promReg:             promReg,
 		promExporter:        promExp,
@@ -265,8 +273,34 @@ func (m *MetricsRegistry) HasScrapeToken() bool {
 	return m != nil && m.scrapeToken != ""
 }
 
-// ServeHTTP exposes Prometheus text exposition format at GET /metrics with optional
-// constant-time bearer auth matching openapi/dataplane-v1.yaml.
+func writeMetricsUnauth(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]any{
+			"code":       "unauthorized",
+			"type":       "authentication_error",
+			"message":    "Missing or invalid internal metrics scrape token.",
+			"request_id": "",
+			"retryable":  false,
+		},
+	})
+}
+
+// Shutdown shuts down the underlying OpenTelemetry MeterProvider cleanly.
+func (m *MetricsRegistry) Shutdown(ctx context.Context) error {
+	if m == nil || m.meterProvider == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return m.meterProvider.Shutdown(ctx)
+}
+
+// ServeHTTP exposes Prometheus text exposition format at GET /metrics with
+// fail-closed constant-time bearer auth matching openapi/dataplane-v1.yaml.
 func (m *MetricsRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if m == nil {
 		http.NotFound(w, r)
@@ -291,20 +325,12 @@ func (m *MetricsRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		const prefix = "Bearer "
 		if !strings.HasPrefix(authHdr, prefix) ||
 			subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(authHdr, prefix)), []byte(m.scrapeToken)) != 1 {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			w.Header().Set("Cache-Control", "no-store")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error": map[string]any{
-					"code":       "unauthorized",
-					"type":       "authentication_error",
-					"message":    "Missing or invalid internal metrics scrape token.",
-					"request_id": "",
-					"retryable":  false,
-				},
-			})
+			writeMetricsUnauth(w)
 			return
 		}
+	} else if !m.allowUnauth {
+		writeMetricsUnauth(w)
+		return
 	}
 	fams, err := m.promReg.Gather()
 	if err != nil {

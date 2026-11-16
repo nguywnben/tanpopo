@@ -17,6 +17,7 @@
 package privacy
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -40,15 +42,18 @@ const (
 )
 
 var (
-	bearerPattern    = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
-	basicPattern     = regexp.MustCompile(`(?i)\bBasic\s+[A-Za-z0-9+/=]+`)
-	vkeyPattern      = regexp.MustCompile(`\bvk_tp_[A-Za-z0-9_-]+`)
-	skPattern        = regexp.MustCompile(`\bsk-[A-Za-z0-9._-]{4,}`)
-	googleKeyPattern = regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{16,}`)
-	ghTokenPattern   = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{16,}`)
-	urlUserInfoRe    = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^:/@\s]+):([^@/\s]+)@`)
-	cookieAssignRe   = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])([A-Za-z0-9._-]*(?:authorization|api[_-]?key|token|secret|password|session|cookie))=([^\s;&,"']+)`)
-	jsonSecretKVRe   = regexp.MustCompile(`(?i)"([^"]*(?:authorization|api[_-]?key|apikey|secret|password|passwd|credential|token|cookie)[^"]*)"\s*:\s*"([^"]*)"`)
+	bearerPattern        = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
+	basicPattern         = regexp.MustCompile(`(?i)\bBasic\s+[A-Za-z0-9+/=]+`)
+	vkeyPattern          = regexp.MustCompile(`vk_tp_[A-Za-z0-9_-]+`)
+	skTpPattern          = regexp.MustCompile(`sk-tp-[A-Za-z0-9._-]+`)
+	skPattern            = regexp.MustCompile(`(^|[^A-Za-z0-9])(sk-[A-Za-z0-9._-]{4,})`)
+	googleKeyPattern     = regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{16,}`)
+	ghTokenPattern       = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{16,}`)
+	urlUserInfoRe        = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^:/@\s]+):([^@/\s]+)@`)
+	cookieAssignRe       = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])([A-Za-z0-9._-]*(?:authorization|api[_-]?key|token|secret|password|session|cookie))=([^\s;&,"']+)`)
+	headerSecretAssignRe = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])(authorization|proxy-authorization|x-api-key|x-goog-api-key|x-tanpopo-virtual-key|api[_-]?key)\s*[:=]\s*([^\s,;"]+)`)
+	jsonSecretKVRe       = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*"((?:\\.|[^"\\])*)"`)
+	jsonSecretTailRe     = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*"((?:\\.|[^"\\])*)$`)
 )
 
 // sensitiveKeys contains canonical normalized lowercase underscore keys whose values
@@ -179,10 +184,26 @@ func IsSensitiveKey(key string) bool {
 	if sensitiveKeys[nk] {
 		return true
 	}
-	if strings.HasSuffix(nk, "_api_key") ||
-		strings.HasSuffix(nk, "_secret") ||
-		strings.HasSuffix(nk, "_token") ||
-		strings.HasSuffix(nk, "_password") ||
+	for _, substr := range []string{
+		"secret",
+		"password",
+		"passwd",
+		"credential",
+		"private_key",
+		"signing_key",
+		"encryption_key",
+		"access_key",
+		"master_key",
+		"api_key",
+		"apikey",
+		"auth_header",
+		"bearer",
+	} {
+		if strings.Contains(nk, substr) {
+			return true
+		}
+	}
+	if strings.HasSuffix(nk, "_token") ||
 		strings.HasSuffix(nk, "_cookie") {
 		// Permit explicitly non-secret counters/types such as token_count, input_tokens, output_tokens.
 		if strings.HasSuffix(nk, "_tokens") || strings.Contains(nk, "token_count") || strings.Contains(nk, "max_tokens") {
@@ -218,10 +239,12 @@ func (r *Redactor) SanitizeStringBounded(s string, maxBytes int) string {
 	out = bearerPattern.ReplaceAllString(out, "Bearer "+RedactedMarker)
 	out = basicPattern.ReplaceAllString(out, "Basic "+RedactedMarker)
 	out = vkeyPattern.ReplaceAllString(out, RedactedMarker)
-	out = skPattern.ReplaceAllString(out, RedactedMarker)
+	out = skTpPattern.ReplaceAllString(out, RedactedMarker)
+	out = skPattern.ReplaceAllString(out, "${1}"+RedactedMarker)
 	out = googleKeyPattern.ReplaceAllString(out, RedactedMarker)
 	out = ghTokenPattern.ReplaceAllString(out, RedactedMarker)
 	out = cookieAssignRe.ReplaceAllString(out, "${1}${2}="+RedactedMarker)
+	out = headerSecretAssignRe.ReplaceAllString(out, "${1}${2}="+RedactedMarker)
 	out = strings.Map(func(ch rune) rune {
 		if ch == '\r' || ch == '\n' || ch == '\t' {
 			return ' '
@@ -232,14 +255,227 @@ func (r *Redactor) SanitizeStringBounded(s string, maxBytes int) string {
 		return ch
 	}, out)
 	if len(out) > maxBytes {
-		out = out[:maxBytes]
+		out = truncateValidUTF8(out, maxBytes)
 	}
 	return out
 }
 
+func truncateValidUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	b := s[:maxBytes]
+	for len(b) > 0 && !utf8.ValidString(b) {
+		b = b[:len(b)-1]
+	}
+	return b
+}
+
+type jsonStreamFrame struct {
+	isObj     bool
+	count     int
+	expectKey bool
+}
+
+// sanitizeDebugJSONStream walks raw JSON incrementally via json.Decoder and stops as soon
+// as the redacted output reaches maxBytes, preventing multi-MiB AST heap amplification.
+func sanitizeDebugJSONStream(raw []byte, maxBytes int, capRed *Redactor) ([]byte, bool) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+
+	var out bytes.Buffer
+	growCap := maxBytes
+	if growCap > 32*1024 {
+		growCap = 32 * 1024
+	}
+	out.Grow(growCap)
+
+	var stack []jsonStreamFrame
+	pendingSensitive := false
+
+	writeJSONStr := func(s string) {
+		if encoded, err := json.Marshal(s); err == nil {
+			out.Write(encoded)
+		} else {
+			out.WriteString(`""`)
+		}
+	}
+
+	skipValue := func(first json.Token) error {
+		d, ok := first.(json.Delim)
+		if !ok || (d != '{' && d != '[') {
+			return nil
+		}
+		depth := 1
+		for depth > 0 {
+			t, err := dec.Token()
+			if err != nil {
+				return err
+			}
+			if td, ok := t.(json.Delim); ok {
+				if td == '{' || td == '[' {
+					depth++
+				} else {
+					depth--
+				}
+			}
+		}
+		return nil
+	}
+
+	emitValue := func(tok json.Token) error {
+		if len(stack) >= maxRecursionDepth {
+			if err := skipValue(tok); err != nil {
+				return err
+			}
+			writeJSONStr(ElidedMarker)
+			return nil
+		}
+		switch v := tok.(type) {
+		case json.Delim:
+			switch v {
+			case '{':
+				out.WriteByte('{')
+				stack = append(stack, jsonStreamFrame{isObj: true, expectKey: true})
+			case '[':
+				out.WriteByte('[')
+				stack = append(stack, jsonStreamFrame{isObj: false})
+			default:
+				return io.ErrUnexpectedEOF
+			}
+		case string:
+			if len(v) > maxBytes*2 {
+				v = truncateValidUTF8(v, maxBytes*2)
+			}
+			writeJSONStr(capRed.SanitizeStringBounded(v, maxBytes))
+		case json.Number:
+			out.WriteString(v.String())
+		case bool:
+			if v {
+				out.WriteString("true")
+			} else {
+				out.WriteString("false")
+			}
+		case nil:
+			out.WriteString("null")
+		default:
+			if encoded, err := json.Marshal(v); err == nil {
+				out.Write(encoded)
+			} else {
+				out.WriteString("null")
+			}
+		}
+		return nil
+	}
+
+	for out.Len() < maxBytes {
+		tok, err := dec.Token()
+		if err != nil {
+			if err == io.EOF && out.Len() > 0 && len(stack) == 0 {
+				break
+			}
+			clear(out.Bytes())
+			return nil, false
+		}
+		if len(stack) == 0 {
+			if out.Len() > 0 {
+				// Ignore trailing tokens past root JSON value.
+				break
+			}
+			if err := emitValue(tok); err != nil {
+				clear(out.Bytes())
+				return nil, false
+			}
+			continue
+		}
+
+		top := &stack[len(stack)-1]
+		if top.isObj {
+			if d, ok := tok.(json.Delim); ok && d == '}' && top.expectKey {
+				out.WriteByte('}')
+				stack = stack[:len(stack)-1]
+				if len(stack) > 0 && stack[len(stack)-1].isObj {
+					stack[len(stack)-1].expectKey = true
+				}
+				continue
+			}
+			if top.expectKey {
+				key, ok := tok.(string)
+				if !ok {
+					clear(out.Bytes())
+					return nil, false
+				}
+				if top.count > 0 {
+					out.WriteByte(',')
+				}
+				top.count++
+				writeJSONStr(key)
+				out.WriteByte(':')
+				top.expectKey = false
+				pendingSensitive = IsSensitiveKey(key)
+				continue
+			}
+
+			// Object value
+			if pendingSensitive {
+				if err := skipValue(tok); err != nil {
+					clear(out.Bytes())
+					return nil, false
+				}
+				writeJSONStr(RedactedMarker)
+				pendingSensitive = false
+				stack[len(stack)-1].expectKey = true
+				continue
+			}
+			prevLen := len(stack)
+			if err := emitValue(tok); err != nil {
+				clear(out.Bytes())
+				return nil, false
+			}
+			stack[prevLen-1].expectKey = true
+			continue
+		}
+
+		// Array frame
+		if d, ok := tok.(json.Delim); ok && d == ']' {
+			out.WriteByte(']')
+			stack = stack[:len(stack)-1]
+			if len(stack) > 0 && stack[len(stack)-1].isObj {
+				stack[len(stack)-1].expectKey = true
+			}
+			continue
+		}
+		if top.count > 0 {
+			out.WriteByte(',')
+		}
+		top.count++
+		if err := emitValue(tok); err != nil {
+			clear(out.Bytes())
+			return nil, false
+		}
+	}
+
+	if out.Len() == 0 {
+		return nil, false
+	}
+	res := out.Bytes()
+	end := len(res)
+	if end > maxBytes {
+		end = maxBytes
+		for end > 0 && !utf8.Valid(res[:end]) && end > maxBytes-utf8.UTFMax {
+			end--
+		}
+	}
+	cp := make([]byte, end)
+	copy(cp, res[:end])
+	clear(res)
+	return cp, true
+}
+
 // SanitizeDebugPayload scrubs all credentials and secrets from an authorized opt-in debug
-// payload (supporting arbitrary non-prefixed JSON credential fields and malformed JSON fallback)
-// while preserving non-secret prompt/completion context up to maxBytes.
+// payload (supporting arbitrary JSON credential fields and malformed JSON fallback)
+// using bounded streaming so multi-MiB payloads never cause heap amplification, while
+// preserving non-secret prompt/completion context up to maxBytes.
 func (r *Redactor) SanitizeDebugPayload(raw []byte, maxBytes int) []byte {
 	if len(raw) == 0 {
 		return nil
@@ -249,24 +485,28 @@ func (r *Redactor) SanitizeDebugPayload(raw []byte, maxBytes int) []byte {
 	}
 	capRed := &Redactor{CapturePayloads: true}
 
-	var decoded any
-	if err := json.Unmarshal(raw, &decoded); err == nil {
-		scrubbed := capRed.sanitizeValueWithLimit(decoded, 0, maxBytes)
-		if encoded, merr := json.Marshal(scrubbed); merr == nil {
-			if len(encoded) > maxBytes {
-				truncated := encoded[:maxBytes]
-				out := make([]byte, len(truncated))
-				copy(out, truncated)
-				clear(encoded)
-				return out
-			}
-			return encoded
-		}
+	if scrubbed, ok := sanitizeDebugJSONStream(raw, maxBytes, capRed); ok {
+		return scrubbed
 	}
 
-	// Fallback for non-JSON or truncated JSON bodies: scrub JSON key-values + inline tokens.
-	scrubbedText := jsonSecretKVRe.ReplaceAllStringFunc(string(raw), func(match string) string {
+	// Bounded fallback for non-JSON or truncated JSON bodies: never materialize > 2*maxBytes in RAM.
+	sliceLimit := maxBytes * 2
+	if sliceLimit < maxStringBytes {
+		sliceLimit = maxStringBytes
+	}
+	boundedRaw := raw
+	if len(boundedRaw) > sliceLimit {
+		boundedRaw = boundedRaw[:sliceLimit]
+	}
+	scrubbedText := jsonSecretKVRe.ReplaceAllStringFunc(string(boundedRaw), func(match string) string {
 		sub := jsonSecretKVRe.FindStringSubmatch(match)
+		if len(sub) >= 2 && IsSensitiveKey(sub[1]) {
+			return `"` + sub[1] + `":"` + RedactedMarker + `"`
+		}
+		return match
+	})
+	scrubbedText = jsonSecretTailRe.ReplaceAllStringFunc(scrubbedText, func(match string) string {
+		sub := jsonSecretTailRe.FindStringSubmatch(match)
 		if len(sub) >= 2 && IsSensitiveKey(sub[1]) {
 			return `"` + sub[1] + `":"` + RedactedMarker + `"`
 		}

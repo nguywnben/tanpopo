@@ -53,6 +53,10 @@ const (
 	aesGCMTagBytes = 16
 	// MaxActiveDebugSessions bounds the in-memory debug session registry.
 	MaxActiveDebugSessions = 4096
+	// DefaultMaxPersistQueueBytes caps the async trace/blob DB persistence queue at 8 MiB.
+	DefaultMaxPersistQueueBytes int64 = 8 << 20
+	// DefaultMaxPersistQueueItems caps queued DB trace/blob records to bound memory overhead.
+	DefaultMaxPersistQueueItems = 4096
 )
 
 var (
@@ -576,14 +580,15 @@ type PipelineConfig struct {
 	OTLPAllowPrivateIP  bool
 	OTLPAllowedCIDRs    []string
 	OTLPControlHook     func(network, address string, c syscall.RawConn) error
-	MaxRingBufferBytes  int64
-	ExportTimeout       time.Duration
-	FlushInterval       time.Duration
-	CapturePayloads     bool // Always false by default per OPS-AC-10
-	DB                  *sql.DB
-	Vault               *vault.Store
-	LogOut              io.Writer
-	NowMs               func() int64
+	MaxRingBufferBytes   int64
+	MaxPersistQueueBytes int64
+	ExportTimeout        time.Duration
+	FlushInterval        time.Duration
+	CapturePayloads      bool // Always false by default per OPS-AC-10
+	DB                   *sql.DB
+	Vault                *vault.Store
+	LogOut               io.Writer
+	NowMs                func() int64
 }
 
 type guardedOTLPClient struct {
@@ -646,8 +651,22 @@ func (c *guardedOTLPClient) UploadTraces(ctx context.Context, protoSpans []*trac
 	return nil
 }
 
-// Pipeline bundles Metrics, RingBufferSpanProcessor, Tracer, JSONLogger, trace DB persistence,
-// and opt-in Project-DEK debug payload capture.
+type debugBlobTask struct {
+	orgID        string
+	projectID    string
+	virtualKeyID string
+	requestID    string
+	payload      []byte
+}
+
+type persistTask struct {
+	trace *RequestTraceRecord
+	blob  *debugBlobTask
+	bytes int64
+}
+
+// Pipeline bundles Metrics, RingBufferSpanProcessor, Tracer, JSONLogger, non-blocking
+// trace/blob DB persistence worker, and opt-in Project-DEK debug payload capture.
 type Pipeline struct {
 	Metrics        *MetricsRegistry
 	Redactor       *privacy.Redactor
@@ -663,6 +682,17 @@ type Pipeline struct {
 	sessMu   sync.RWMutex
 	sessions map[string]DebugCaptureSession // key: session ID
 	closed   atomic.Bool
+
+	persistMaxBytes int64
+	persistMaxItems int
+	persistMu       sync.Mutex
+	persistQueue    []persistTask
+	persistBytes    int64
+	persistNotify   chan struct{}
+	persistFlushCh  chan chan struct{}
+	persistStopCh   chan struct{}
+	persistWG       sync.WaitGroup
+	shutdownOnce    sync.Once
 }
 
 // NewPipeline initializes the complete telemetry pipeline with strict metadata-only defaults.
@@ -752,30 +782,237 @@ func NewPipeline(cfg PipelineConfig) (*Pipeline, error) {
 		sdktrace.WithSpanProcessor(ring),
 	)
 
-	return &Pipeline{
-		Metrics:        metrics,
-		Redactor:       redactor,
-		Logger:         privacy.NewJSONLogger(cfg.LogOut, redactor, nowFn),
-		Ring:           ring,
-		TracerProvider: tp,
-		Tracer:         tp.Tracer("github.com/nguywnben/tanpopo/dataplane"),
-		db:             cfg.DB,
-		vault:          cfg.Vault,
-		nowMs:          nowMs,
-		sessions:       make(map[string]DebugCaptureSession),
-	}, nil
+	maxPersistBytes := cfg.MaxPersistQueueBytes
+	if maxPersistBytes <= 0 || maxPersistBytes > DefaultMaxPersistQueueBytes {
+		maxPersistBytes = DefaultMaxPersistQueueBytes
+	}
+
+	p := &Pipeline{
+		Metrics:         metrics,
+		Redactor:        redactor,
+		Logger:          privacy.NewJSONLogger(cfg.LogOut, redactor, nowFn),
+		Ring:            ring,
+		TracerProvider:  tp,
+		Tracer:          tp.Tracer("github.com/nguywnben/tanpopo/dataplane"),
+		db:              cfg.DB,
+		vault:           cfg.Vault,
+		nowMs:           nowMs,
+		sessions:        make(map[string]DebugCaptureSession),
+		persistMaxBytes: maxPersistBytes,
+		persistMaxItems: DefaultMaxPersistQueueItems,
+		persistNotify:   make(chan struct{}, 1),
+		persistFlushCh:  make(chan chan struct{}, 16),
+		persistStopCh:   make(chan struct{}),
+	}
+	if p.db != nil {
+		p.persistWG.Add(1)
+		go p.persistLoop()
+	}
+	return p, nil
 }
 
-// Shutdown flushes/terminates the ring buffer and OTel tracer provider cleanly.
+func (p *Pipeline) persistLoop() {
+	defer p.persistWG.Done()
+	for {
+		p.drainPersistQueue()
+		select {
+		case <-p.persistNotify:
+		case ch := <-p.persistFlushCh:
+			p.drainPersistQueue()
+			close(ch)
+		case <-p.persistStopCh:
+			p.drainPersistQueue()
+			for {
+				select {
+				case ch := <-p.persistFlushCh:
+					close(ch)
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+func (p *Pipeline) drainPersistQueue() {
+	for {
+		p.persistMu.Lock()
+		if len(p.persistQueue) == 0 {
+			p.persistMu.Unlock()
+			return
+		}
+		item := p.persistQueue[0]
+		p.persistQueue[0] = persistTask{}
+		p.persistQueue = p.persistQueue[1:]
+		if len(p.persistQueue) == 0 {
+			p.persistQueue = nil
+		}
+		p.persistBytes -= item.bytes
+		if p.persistBytes < 0 {
+			p.persistBytes = 0
+		}
+		p.persistMu.Unlock()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if item.trace != nil {
+			_ = p.writeRequestTrace(ctx, *item.trace)
+		}
+		if item.blob != nil {
+			_, _ = p.writeDebugBlobIfAuthorized(ctx, item.blob.orgID, item.blob.projectID, item.blob.virtualKeyID, item.blob.requestID, item.blob.payload)
+			clear(item.blob.payload)
+		}
+		cancel()
+	}
+}
+
+func (p *Pipeline) enqueuePersistTask(task persistTask) {
+	if p == nil || p.db == nil || p.closed.Load() {
+		if task.blob != nil {
+			clear(task.blob.payload)
+		}
+		return
+	}
+	var dropped int64
+	p.persistMu.Lock()
+	if p.closed.Load() {
+		p.persistMu.Unlock()
+		if task.blob != nil {
+			clear(task.blob.payload)
+		}
+		return
+	}
+	for len(p.persistQueue) > 0 && (len(p.persistQueue) >= p.persistMaxItems || p.persistBytes+task.bytes > p.persistMaxBytes) {
+		evicted := p.persistQueue[0]
+		p.persistQueue[0] = persistTask{}
+		p.persistQueue = p.persistQueue[1:]
+		p.persistBytes -= evicted.bytes
+		if evicted.blob != nil {
+			clear(evicted.blob.payload)
+		}
+		dropped++
+	}
+	if task.bytes > p.persistMaxBytes {
+		p.persistMu.Unlock()
+		if task.blob != nil {
+			clear(task.blob.payload)
+		}
+		if p.Metrics != nil {
+			p.Metrics.RecordDropped("traces", dropped+1)
+		}
+		return
+	}
+	p.persistQueue = append(p.persistQueue, task)
+	p.persistBytes += task.bytes
+	p.persistMu.Unlock()
+
+	if dropped > 0 && p.Metrics != nil {
+		p.Metrics.RecordDropped("traces", dropped)
+	}
+	select {
+	case p.persistNotify <- struct{}{}:
+	default:
+	}
+}
+
+// EnqueueRequestTrace enqueues a metadata-only waterfall trace onto the non-blocking
+// bounded Drop-Oldest DB persistence queue so gateway response teardown never blocks on SQLite.
+func (p *Pipeline) EnqueueRequestTrace(rec RequestTraceRecord) {
+	if p == nil || p.db == nil || p.closed.Load() {
+		return
+	}
+	if strings.TrimSpace(rec.OrgID) == "" || strings.TrimSpace(rec.RequestID) == "" {
+		return
+	}
+	recCopy := rec
+	if len(rec.WaterfallStages) > 0 {
+		recCopy.WaterfallStages = append([]WaterfallStage(nil), rec.WaterfallStages...)
+	}
+	estBytes := int64(512 + len(recCopy.WaterfallStages)*128)
+	p.enqueuePersistTask(persistTask{trace: &recCopy, bytes: estBytes})
+}
+
+// EnqueueDebugBlob checks for an active debug capture session and enqueues a bounded payload
+// onto the non-blocking Drop-Oldest DB persistence queue without blocking request teardown.
+func (p *Pipeline) EnqueueDebugBlob(orgID, projectID, virtualKeyID, requestID string, rawOrScrubbed []byte) {
+	if p == nil || p.db == nil || p.vault == nil || p.closed.Load() || len(rawOrScrubbed) == 0 {
+		return
+	}
+	if !p.HasActiveDebugSession(orgID, projectID, virtualKeyID) {
+		return
+	}
+	maxPT := MaxDebugBlobCiphertextBytes - aesGCMTagBytes
+	scrubbed := p.Redactor.SanitizeDebugPayload(rawOrScrubbed, maxPT)
+	if len(scrubbed) == 0 {
+		return
+	}
+	p.enqueuePersistTask(persistTask{
+		blob: &debugBlobTask{
+			orgID:        orgID,
+			projectID:    projectID,
+			virtualKeyID: virtualKeyID,
+			requestID:    truncateStr(strings.TrimSpace(requestID), 40),
+			payload:      scrubbed,
+		},
+		bytes: int64(256 + len(scrubbed)),
+	})
+}
+
+// ForceFlush flushes both the OTLP span ring buffer and any queued trace/blob DB writes.
+func (p *Pipeline) ForceFlush(ctx context.Context) error {
+	if p == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var flushErr error
+	if p.Ring != nil {
+		flushErr = p.Ring.ForceFlush(ctx)
+	}
+	if p.db != nil && !p.closed.Load() {
+		ch := make(chan struct{})
+		select {
+		case p.persistFlushCh <- ch:
+			select {
+			case <-ch:
+			case <-ctx.Done():
+				if flushErr == nil {
+					flushErr = ctx.Err()
+				}
+			}
+		case <-p.persistStopCh:
+		case <-ctx.Done():
+			if flushErr == nil {
+				flushErr = ctx.Err()
+			}
+		}
+	}
+	return flushErr
+}
+
+// Shutdown drains/stops the async DB persistence worker, OTel tracer provider, and metrics registry cleanly.
 func (p *Pipeline) Shutdown(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
-	p.closed.Store(true)
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return p.TracerProvider.Shutdown(ctx)
+	var retErr error
+	p.shutdownOnce.Do(func() {
+		p.closed.Store(true)
+		close(p.persistStopCh)
+		p.persistWG.Wait()
+		if p.TracerProvider != nil {
+			retErr = p.TracerProvider.Shutdown(ctx)
+		}
+		if p.Metrics != nil {
+			if merr := p.Metrics.Shutdown(ctx); merr != nil && retErr == nil {
+				retErr = merr
+			}
+		}
+	})
+	return retErr
 }
 
 // CreateDebugCaptureSession validates and activates an opt-in, project-scoped debug capture
@@ -955,6 +1192,13 @@ func (p *Pipeline) RecordRequestTrace(ctx context.Context, rec RequestTraceRecor
 	if p == nil || p.db == nil || p.closed.Load() {
 		return nil
 	}
+	return p.writeRequestTrace(ctx, rec)
+}
+
+func (p *Pipeline) writeRequestTrace(ctx context.Context, rec RequestTraceRecord) error {
+	if p == nil || p.db == nil {
+		return nil
+	}
 	if strings.TrimSpace(rec.OrgID) == "" || strings.TrimSpace(rec.RequestID) == "" {
 		return nil
 	}
@@ -1052,11 +1296,24 @@ func (p *Pipeline) RecordRequestTrace(ctx context.Context, rec RequestTraceRecor
 // strictly <= 256 KiB ciphertext) ONLY when an active, non-expired DebugCaptureSession covers
 // (orgID, projectID, virtualKeyID). By default (no active session), 0 bytes are persisted.
 func (p *Pipeline) StoreDebugBlobIfAuthorized(ctx context.Context, orgID, projectID, virtualKeyID, requestID string, rawPayload []byte) (bool, error) {
+	if p == nil || p.db == nil || p.vault == nil || p.closed.Load() || len(rawPayload) == 0 {
+		return false, nil
+	}
+	return p.writeDebugBlobIfAuthorized(ctx, orgID, projectID, virtualKeyID, requestID, rawPayload)
+}
+
+func (p *Pipeline) writeDebugBlobIfAuthorized(ctx context.Context, orgID, projectID, virtualKeyID, requestID string, rawPayload []byte) (bool, error) {
 	if p == nil || p.db == nil || p.vault == nil || len(rawPayload) == 0 {
 		return false, nil
 	}
+	normOrgID := truncateStr(strings.TrimSpace(orgID), 40)
+	normProjID := truncateStr(strings.TrimSpace(projectID), 40)
+	normReqID := truncateStr(strings.TrimSpace(requestID), 40)
+	if normOrgID == "" || normProjID == "" || normReqID == "" {
+		return false, nil
+	}
 	now := p.nowMs()
-	expMs, ok := p.activeSessionExpiry(orgID, projectID, virtualKeyID, now)
+	expMs, ok := p.activeSessionExpiry(normOrgID, normProjID, virtualKeyID, now)
 	if !ok {
 		return false, nil
 	}
@@ -1066,7 +1323,7 @@ func (p *Pipeline) StoreDebugBlobIfAuthorized(ctx context.Context, orgID, projec
 	scrubbed := p.Redactor.SanitizeDebugPayload(rawPayload, maxPT)
 	defer clear(scrubbed)
 
-	nonce, ct, err := p.vault.SealProjectBlob(ctx, orgID, projectID, vault.RecordKindDebugBlob, requestID, scrubbed)
+	nonce, ct, err := p.vault.SealProjectBlob(ctx, normOrgID, normProjID, vault.RecordKindDebugBlob, normReqID, scrubbed)
 	if err != nil {
 		return false, fmt.Errorf("telemetry: seal debug payload blob: %w", err)
 	}
@@ -1079,9 +1336,9 @@ func (p *Pipeline) StoreDebugBlobIfAuthorized(ctx context.Context, orgID, projec
 			request_id, org_id, project_id, aead_alg, nonce, encrypted_payload_aead, created_at_ms, expires_at_ms
 		) VALUES (?, ?, ?, 'AES-256-GCM', ?, ?, ?, ?)
 		ON CONFLICT(org_id, project_id, request_id) DO NOTHING`,
-		truncateStr(requestID, 40),
-		truncateStr(orgID, 40),
-		truncateStr(projectID, 40),
+		normReqID,
+		normOrgID,
+		normProjID,
 		nonce,
 		ct,
 		now,
