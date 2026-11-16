@@ -105,24 +105,32 @@ func countNativeMediaUnits(rawBody []byte) pricing.MediaUsage {
 		return m
 	}
 
-	var walk func(v any, depth int)
-	walk = func(v any, depth int) {
+	var walk func(v any, depth int, skipClassify bool)
+	walk = func(v any, depth int, skipClassify bool) {
 		if depth > 24 || v == nil {
 			return
 		}
 		switch node := v.(type) {
 		case []any:
 			for _, elem := range node {
-				walk(elem, depth+1)
+				walk(elem, depth+1, false)
 			}
 		case map[string]any:
-			if classifyNativeMediaPart(node, &m) {
-				return
+			var consumed map[string]bool
+			if !skipClassify {
+				consumed = classifyNativeMediaPart(node, &m)
 			}
-			for _, child := range node {
+			for k, child := range node {
 				switch child.(type) {
 				case map[string]any, []any:
-					walk(child, depth+1)
+					lk := strings.ToLower(strings.TrimSpace(k))
+					skipChild := false
+					if consumed[lk] {
+						if _, isMap := child.(map[string]any); isMap {
+							skipChild = true
+						}
+					}
+					walk(child, depth+1, skipChild)
 				}
 			}
 		}
@@ -130,50 +138,105 @@ func countNativeMediaUnits(rawBody []byte) pricing.MediaUsage {
 
 	for _, arrKey := range []string{"messages", "input", "contents"} {
 		if items, ok := root[arrKey]; ok && items != nil {
-			walk(items, 0)
+			walk(items, 0, false)
 		}
 	}
 	return m
 }
 
-func classifyNativeMediaPart(part map[string]any, m *pricing.MediaUsage) bool {
+func classifyNativeMediaPart(part map[string]any, m *pricing.MediaUsage) map[string]bool {
 	if part == nil {
-		return false
+		return nil
 	}
+	consumed := make(map[string]bool)
 	ptype := strings.ToLower(strings.TrimSpace(nativeStringField(part["type"])))
-	if ptype == "image_url" || ptype == "input_image" || ptype == "image" || part["image_url"] != nil || part["image"] != nil {
-		m.ImageCount++
-		return true
-	}
-	if ptype == "input_audio" || ptype == "audio" || part["input_audio"] != nil || part["audio"] != nil || part["audio_base64"] != nil {
-		addNativeAudioMillis(m, estimateNativeAudioPartMillis(part))
-		return true
-	}
+
+	var inlineImage, inlineAudio, inlineDoc bool
+	var inlineConsumed []string
 	for _, inlineKey := range []string{"inlineData", "inline_data", "source"} {
-		if inlineObj, ok := part[inlineKey].(map[string]any); ok && inlineObj != nil {
-			mt := strings.ToLower(strings.TrimSpace(firstNativeStringField(inlineObj, "mimeType", "mime_type", "media_type")))
-			switch {
-			case strings.HasPrefix(mt, "image/"):
-				m.ImageCount++
-				return true
-			case strings.HasPrefix(mt, "audio/"):
-				addNativeAudioMillis(m, estimateNativeAudioPartMillis(part))
-				return true
-			case mt != "":
-				m.DocumentPages++
-				return true
+		inlineObj, ok := part[inlineKey].(map[string]any)
+		if !ok || inlineObj == nil {
+			continue
+		}
+		inlineConsumed = append(inlineConsumed, strings.ToLower(inlineKey))
+		mt := strings.ToLower(strings.TrimSpace(firstNativeStringField(inlineObj, "mimeType", "mime_type", "media_type")))
+		switch {
+		case strings.HasPrefix(mt, "image/"):
+			inlineImage = true
+		case strings.HasPrefix(mt, "audio/"):
+			inlineAudio = true
+		case mt != "":
+			inlineDoc = true
+		case inlineKey == "source" && hasAnyNativeStringField(inlineObj, "data", "url", "file_data", "file_url"):
+			switch ptype {
+			case "file", "input_file", "document":
+				inlineDoc = true
+			case "input_audio", "audio":
+				inlineAudio = true
+			default:
+				inlineImage = true
 			}
 		}
 	}
-	if hasNativeAudioDataURIInPart(part) {
+
+	hasImageField := part["image_url"] != nil || part["image"] != nil || part["image_base64"] != nil || part["b64_json"] != nil
+	hasAudioField := part["input_audio"] != nil || part["audio"] != nil || part["audio_base64"] != nil
+
+	hasNonAudioDocField := false
+	for _, docKey := range []string{"file", "input_file", "document", "fileData", "file_data"} {
+		v, ok := part[docKey]
+		if !ok || v == nil {
+			continue
+		}
+		if sub, isMap := v.(map[string]any); isMap && sub != nil {
+			subMT := strings.ToLower(strings.TrimSpace(firstNativeStringField(sub, "mimeType", "mime_type", "media_type")))
+			if strings.HasPrefix(subMT, "audio/") || hasNativeAudioDataURIInMap(sub) {
+				inlineAudio = true
+				consumed[strings.ToLower(docKey)] = true
+				continue
+			}
+		} else if s, isStr := v.(string); isStr && strings.HasPrefix(strings.ToLower(strings.TrimSpace(s)), "data:audio/") {
+			inlineAudio = true
+			continue
+		}
+		hasNonAudioDocField = true
+		consumed[strings.ToLower(docKey)] = true
+	}
+
+	audioDataURIOnSelf := hasNativeAudioDataURIInMap(part)
+	if ptype == "input_audio" || ptype == "audio" || hasAudioField || inlineAudio || audioDataURIOnSelf {
 		addNativeAudioMillis(m, estimateNativeAudioPartMillis(part))
-		return true
+		for _, k := range []string{"input_audio", "audio", "audio_base64"} {
+			if part[k] != nil {
+				consumed[k] = true
+			}
+		}
+		for _, k := range inlineConsumed {
+			consumed[k] = true
+		}
 	}
-	if ptype == "file" || ptype == "input_file" || ptype == "document" || part["file"] != nil || part["input_file"] != nil || part["document"] != nil || part["fileData"] != nil || part["file_data"] != nil {
+
+	if ptype == "image_url" || ptype == "input_image" || ptype == "image" || hasImageField || inlineImage {
+		m.ImageCount++
+		for _, k := range []string{"image_url", "image", "input_image", "image_base64", "b64_json"} {
+			if part[k] != nil {
+				consumed[k] = true
+			}
+		}
+		for _, k := range inlineConsumed {
+			consumed[k] = true
+		}
+	}
+
+	isDocPType := ptype == "file" || ptype == "input_file" || ptype == "document"
+	if inlineDoc || hasNonAudioDocField || (isDocPType && !inlineAudio && !audioDataURIOnSelf && !inlineImage) {
 		m.DocumentPages++
-		return true
+		for _, k := range inlineConsumed {
+			consumed[k] = true
+		}
 	}
-	return false
+
+	return consumed
 }
 
 func nativeStringField(v any) string {
@@ -190,6 +253,15 @@ func firstNativeStringField(obj map[string]any, keys ...string) string {
 	return ""
 }
 
+func hasAnyNativeStringField(obj map[string]any, keys ...string) bool {
+	for _, k := range keys {
+		if strings.TrimSpace(nativeStringField(obj[k])) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func addNativeAudioMillis(m *pricing.MediaUsage, delta int64) {
 	if delta <= 0 {
 		return
@@ -201,19 +273,10 @@ func addNativeAudioMillis(m *pricing.MediaUsage, delta int64) {
 	m.AudioInputMillis += delta
 }
 
-func hasNativeAudioDataURIInPart(part map[string]any) bool {
+func hasNativeAudioDataURIInMap(obj map[string]any) bool {
 	for _, k := range []string{"url", "file_url", "file_data", "data"} {
-		if s := strings.ToLower(strings.TrimSpace(nativeStringField(part[k]))); strings.HasPrefix(s, "data:audio/") {
+		if s := strings.ToLower(strings.TrimSpace(nativeStringField(obj[k]))); strings.HasPrefix(s, "data:audio/") {
 			return true
-		}
-	}
-	for _, subKey := range []string{"file", "input_file", "document", "fileData"} {
-		if sub, ok := part[subKey].(map[string]any); ok && sub != nil {
-			for _, k := range []string{"url", "file_url", "file_data", "data"} {
-				if s := strings.ToLower(strings.TrimSpace(nativeStringField(sub[k]))); strings.HasPrefix(s, "data:audio/") {
-					return true
-				}
-			}
 		}
 	}
 	return false
@@ -241,7 +304,7 @@ func estimateNativeAudioPartMillis(part map[string]any) int64 {
 		}
 	}
 	inspectMap(part)
-	for _, subKey := range []string{"input_audio", "audio", "inlineData", "inline_data", "source", "file", "input_file"} {
+	for _, subKey := range []string{"input_audio", "audio", "inlineData", "inline_data", "source", "file", "input_file", "document", "fileData", "file_data"} {
 		if sub, ok := part[subKey].(map[string]any); ok {
 			inspectMap(sub)
 		}

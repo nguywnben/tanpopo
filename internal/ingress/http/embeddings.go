@@ -284,7 +284,7 @@ func (s *Server) executeSyncEmbeddingAttempt(
 		}
 	}
 
-	headerUsage, serr := budgetSess.settleSync(ctx, target, requestedModel, normResp.Usage, finalBody)
+	headerUsage, serr := budgetSess.settleSync(ctx, target, requestedModel, normResp.Usage, nil)
 	if serr != nil {
 		budgetSess.releaseIfUnsettled()
 		return failover.AttemptResult{

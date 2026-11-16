@@ -280,3 +280,84 @@ func TestParseMediaUsageJSONWithoutFloats(t *testing.T) {
 		t.Fatalf("expected ESTIMATED with 100 micro-USD, got %+v", pricedUnmetered)
 	}
 }
+
+func TestFMEA04MultimodalZeroTokensAndPartialEstimatedFallback(t *testing.T) {
+	rate := pricing.RateCard{
+		InputPer1MNanoUSD:   1_000_000_000, // 1 micro-USD / token
+		OutputPer1MNanoUSD:  2_000_000_000, // 2 micro-USD / token
+		ImagePerUnitNanoUSD: 1_500_000,     // 1,500 micro-USD / image
+		BillingMode:         pricing.BillingModeCommercialAPI,
+	}
+
+	// 1. Multimodal request with zero reported text tokens (claiming EXACT=0 tokens despite non-empty payload):
+	// MUST trigger FMEA-04 fallback to ESTIMATED combining BOTH media cost (1,500) AND byte-estimated token cost (10 + 30 = 40 -> 1,540).
+	mmBogusZero, err := pricing.Calculate(rate, pricing.UsageInput{
+		Media:                pricing.MediaUsage{ImageCount: 1},
+		UpstreamUsagePresent: true,
+		UpstreamAccuracy:     pricing.AccuracyExact,
+		FallbackTextBytes:    30, // 10 tokens -> 10 micro
+		FallbackOutputBytes:  45, // 15 tokens -> 30 micro
+	})
+	if err != nil {
+		t.Fatalf("Calculate mmBogusZero: %v", err)
+	}
+	if mmBogusZero.Accuracy != pricing.AccuracyEstimated {
+		t.Fatalf("expected ESTIMATED for multimodal zero-text-token payload, got %q", mmBogusZero.Accuracy)
+	}
+	if mmBogusZero.EffectiveUsage.InputTokens != 10 || mmBogusZero.EffectiveUsage.OutputTokens != 15 {
+		t.Fatalf("expected fallback tokens in=10 out=15, got in=%d out=%d", mmBogusZero.EffectiveUsage.InputTokens, mmBogusZero.EffectiveUsage.OutputTokens)
+	}
+	if mmBogusZero.TotalMicroUSD != 1540 {
+		t.Fatalf("expected 1540 micro-USD (1500 image + 10 in + 30 out), got %d", mmBogusZero.TotalMicroUSD)
+	}
+
+	// 2. Partial ESTIMATED usage (e.g., input tokens present, output tokens missing while fallback output bytes > 0):
+	// MUST backfill OutputTokens without clobbering provided InputTokens.
+	partialEst, err := pricing.Calculate(rate, pricing.UsageInput{
+		InputTokens:          25, // 25 micro
+		OutputTokens:         0,
+		UpstreamUsagePresent: true,
+		UpstreamAccuracy:     pricing.AccuracyEstimated,
+		FallbackTextBytes:    30,
+		FallbackOutputBytes:  45, // 15 tokens -> 30 micro
+	})
+	if err != nil {
+		t.Fatalf("Calculate partialEst: %v", err)
+	}
+	if partialEst.Accuracy != pricing.AccuracyEstimated {
+		t.Fatalf("expected ESTIMATED, got %q", partialEst.Accuracy)
+	}
+	if partialEst.EffectiveUsage.InputTokens != 25 || partialEst.EffectiveUsage.OutputTokens != 15 {
+		t.Fatalf("expected preserved in=25 and backfilled out=15, got in=%d out=%d", partialEst.EffectiveUsage.InputTokens, partialEst.EffectiveUsage.OutputTokens)
+	}
+	if partialEst.TotalMicroUSD != 55 {
+		t.Fatalf("expected 55 micro-USD (25 in + 30 out), got %d", partialEst.TotalMicroUSD)
+	}
+
+	// 3. Partial ESTIMATED prompt-cache hit (InputTokens == 0, CacheReadTokens > 0):
+	// Must NOT double-count FallbackTextBytes into InputTokens when CacheReadTokens already covers prompt input,
+	// while still backfilling missing OutputTokens.
+	cachedPartial, err := pricing.Calculate(pricing.RateCard{
+		InputPer1MNanoUSD:     1_000_000_000,
+		CacheReadPer1MNanoUSD: 100_000_000,
+		OutputPer1MNanoUSD:    2_000_000_000,
+		BillingMode:           pricing.BillingModeCommercialAPI,
+	}, pricing.UsageInput{
+		InputTokens:          0,
+		CacheReadTokens:      100, // 10 micro
+		OutputTokens:         0,
+		UpstreamUsagePresent: true,
+		UpstreamAccuracy:     pricing.AccuracyEstimated,
+		FallbackTextBytes:    30,
+		FallbackOutputBytes:  45, // 15 tokens -> 30 micro
+	})
+	if err != nil {
+		t.Fatalf("Calculate cachedPartial: %v", err)
+	}
+	if cachedPartial.EffectiveUsage.InputTokens != 0 || cachedPartial.EffectiveUsage.OutputTokens != 15 {
+		t.Fatalf("expected in=0 (cached) and out=15, got in=%d out=%d", cachedPartial.EffectiveUsage.InputTokens, cachedPartial.EffectiveUsage.OutputTokens)
+	}
+	if cachedPartial.TotalMicroUSD != 40 {
+		t.Fatalf("expected 40 micro-USD (10 cache + 30 out), got %d", cachedPartial.TotalMicroUSD)
+	}
+}

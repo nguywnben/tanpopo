@@ -800,7 +800,6 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 	}
 
 	s.txMu.Lock()
-	defer s.txMu.Unlock()
 
 	now := s.nowMs()
 	var (
@@ -832,15 +831,14 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 			if rReqID != req.RequestID {
 				return ErrInvalidInput
 			}
-			if projectID == "" {
-				projectID = rProj
+			if (projectID != "" && projectID != rProj) ||
+				(envID != "" && envID != rEnv) ||
+				(vkeyID != "" && vkeyID != rKey) {
+				return ErrInvalidInput
 			}
-			if envID == "" {
-				envID = rEnv
-			}
-			if vkeyID == "" {
-				vkeyID = rKey
-			}
+			projectID = rProj
+			envID = rEnv
+			vkeyID = rKey
 
 			if isSettledState(curState) {
 				existing, eErr := findSettlementByReservationTx(ctx, tx, req.OrgID, req.ReservationID)
@@ -868,18 +866,33 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 					return eErr
 				}
 				// Reservation lease expired and the reaper already released its held balance.
-				// Bill completed work against active ledgers with releaseHeld=0 while preserving
-				// EXPIRED_RECLAIMED as the reservation's terminal state for auditability.
-				ledgers, lErr := findActiveLedgersTx(ctx, tx, req.OrgID, projectID, envID, vkeyID, now)
+				// Prefer the reservation's originally linked ledgers (so period rollovers bill the
+				// originating period ledgers accurately) with releaseHeld=0, falling back to currently
+				// active ledgers if no linked holds existed. Keep EXPIRED_RECLAIMED terminal state.
+				origLinks, lErr := loadLinkedHoldsTx(ctx, tx, req.OrgID, req.ReservationID)
 				if lErr != nil {
 					return lErr
 				}
-				for _, l := range ledgers {
-					al, aErr := applyLedgerSettlementTx(ctx, tx, req.OrgID, l.ID, 0, breakdown, now, req.RequestID)
+				if len(origLinks) > 0 {
+					for _, lk := range origLinks {
+						al, aErr := applyLedgerSettlementTx(ctx, tx, req.OrgID, lk.LedgerID, 0, breakdown, now, req.RequestID)
+						if aErr != nil {
+							return aErr
+						}
+						alertsToEmit = append(alertsToEmit, al...)
+					}
+				} else {
+					ledgers, aErr := findActiveLedgersTx(ctx, tx, req.OrgID, projectID, envID, vkeyID, now)
 					if aErr != nil {
 						return aErr
 					}
-					alertsToEmit = append(alertsToEmit, al...)
+					for _, l := range ledgers {
+						al, sErr := applyLedgerSettlementTx(ctx, tx, req.OrgID, l.ID, 0, breakdown, now, req.RequestID)
+						if sErr != nil {
+							return sErr
+						}
+						alertsToEmit = append(alertsToEmit, al...)
+					}
 				}
 				lateSettledAfterReclaim = true
 			} else if curState != StateReservedHold && curState != StateStreamingAccruing {
@@ -1000,6 +1013,7 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 		}
 		return nil
 	})
+	s.txMu.Unlock()
 	if err != nil {
 		return nil, err
 	}

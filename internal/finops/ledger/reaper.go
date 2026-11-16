@@ -50,7 +50,6 @@ func (r *OrphanReservationReaper) ReapOnce(ctx context.Context) (int, error) {
 	}
 
 	r.svc.txMu.Lock()
-	defer r.svc.txMu.Unlock()
 
 	now := r.svc.nowMs()
 	type expiredRow struct {
@@ -110,6 +109,7 @@ func (r *OrphanReservationReaper) ReapOnce(ctx context.Context) (int, error) {
 		}
 		return nil
 	})
+	r.svc.txMu.Unlock()
 	if err != nil {
 		return 0, err
 	}

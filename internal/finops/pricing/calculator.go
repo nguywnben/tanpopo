@@ -499,12 +499,11 @@ func resolveEffectiveUsageAndAccuracy(rate RateCard, in UsageInput) (UsageInput,
 	}
 
 	normalizedUpstreamAcc := normalizeAccuracy(in.UpstreamAccuracy)
-	allTokensZero := in.InputTokens == 0 &&
+	allTextTokensZero := in.InputTokens == 0 &&
 		in.OutputTokens == 0 &&
 		in.CacheReadTokens == 0 &&
 		in.CacheWriteTokens == 0 &&
-		in.ReasoningTokens == 0 &&
-		in.Media.IsZero()
+		in.ReasoningTokens == 0
 
 	if !in.UpstreamUsagePresent {
 		if effective.InputTokens == 0 && in.FallbackTextBytes > 0 {
@@ -516,8 +515,9 @@ func resolveEffectiveUsageAndAccuracy(rate RateCard, in UsageInput) (UsageInput,
 		return effective, AccuracyEstimated, false
 	}
 
-	// FMEA-04 invariant: never stamp EXACT=0 when non-empty prompt/output payloads exist.
-	if allTokensZero && (in.FallbackTextBytes > 0 || in.FallbackOutputBytes > 0) {
+	// FMEA-04 invariant: never stamp EXACT=0 when non-empty prompt/output payloads exist
+	// (including multimodal requests whose media units are non-zero while text tokens are zero).
+	if allTextTokensZero && (in.FallbackTextBytes > 0 || in.FallbackOutputBytes > 0) {
 		if in.FallbackTextBytes > 0 {
 			effective.InputTokens = EstimateTokensFromUTF8Bytes(in.FallbackTextBytes)
 		}
@@ -528,6 +528,12 @@ func resolveEffectiveUsageAndAccuracy(rate RateCard, in UsageInput) (UsageInput,
 	}
 
 	if normalizedUpstreamAcc == AccuracyEstimated || normalizedUpstreamAcc == AccuracyUnmeteredFlagged {
+		if effective.InputTokens == 0 && effective.CacheReadTokens == 0 && effective.CacheWriteTokens == 0 && in.FallbackTextBytes > 0 {
+			effective.InputTokens = EstimateTokensFromUTF8Bytes(in.FallbackTextBytes)
+		}
+		if effective.OutputTokens == 0 && effective.ReasoningTokens == 0 && in.FallbackOutputBytes > 0 {
+			effective.OutputTokens = EstimateTokensFromUTF8Bytes(in.FallbackOutputBytes)
+		}
 		return effective, AccuracyEstimated, false
 	}
 	return effective, AccuracyExact, false

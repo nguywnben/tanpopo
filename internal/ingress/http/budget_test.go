@@ -1322,3 +1322,56 @@ func TestTP0021_MultimodalSyncAndAbortedStreamSettleMediaMicroUSD(t *testing.T) 
 	}
 }
 
+func TestTP0021_NestedMediaTraversalBypassBlocked(t *testing.T) {
+	// Hard limit 2,000 micro-USD; image_per_unit = 1,500 micro-USD.
+	// A decoy outer `"image":"x"` + 1 nested `image_url` inside `content`/`parts` totals 2 images (3,000 micro-USD > 2,000),
+	// so all three entry points MUST fail fast with 429 project_budget_exceeded without touching upstream.
+	pricingJSON := `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000,"image_per_unit_nano_usd":1500000}`
+	bh := setupBudgetIngressHarness(t, pricingJSON, 2_000, 10)
+
+	bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"should_not_hit"}`))
+	})
+
+	cases := []struct {
+		name string
+		path string
+		body string
+	}{
+		{
+			name: "http_chat_decoy_image_wrapping_content_array",
+			path: "/v1/chat/completions",
+			body: `{"model":"acme/chat-1","max_tokens":1,"messages":[{"role":"user","image":"x","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}]}]}`,
+		},
+		{
+			name: "http_responses_decoy_image_wrapping_nested_b64_json",
+			path: "/v1/responses",
+			body: `{"model":"acme/chat-1","max_output_tokens":1,"input":[{"role":"user","image":"x","content":[{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgo="}]}]}`,
+		},
+		{
+			name: "native_decoy_image_wrapping_parts_array",
+			path: "/native/openai/v1/chat/completions",
+			body: `{"model":"acme/chat-1","max_tokens":1,"contents":[{"role":"user","image":"x","parts":[{"inlineData":{"mimeType":"image/png","data":"iVBORw0KGgo="}}]}]}`,
+		},
+		{
+			name: "http_chat_single_map_with_image_nested_inside_image_object",
+			path: "/v1/chat/completions",
+			body: `{"model":"acme/chat-1","max_tokens":1,"messages":[{"role":"user","image":{"content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}]}}]}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			beforeHits := bh.upHits.Load()
+			resp, body := bh.h.doChatReq(t, http.MethodPost, tc.path, []byte(tc.body), nil, nil)
+			if resp.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(body), "project_budget_exceeded") {
+				t.Fatalf("expected 429 project_budget_exceeded for %s, got status=%d body=%s", tc.name, resp.StatusCode, string(body))
+			}
+			if bh.upHits.Load() != beforeHits {
+				t.Fatalf("expected upstream not to be called when nested media exceeds budget for %s", tc.name)
+			}
+		})
+	}
+}
+
