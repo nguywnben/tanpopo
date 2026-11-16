@@ -1,0 +1,837 @@
+// Copyright 2026 The Tanpopo Authors.
+// Licensed under the Apache License, Version 2.0.
+
+package http
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"encoding/csv"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+	"unicode"
+
+	"github.com/nguywnben/tanpopo/internal/finops/ledger"
+	"github.com/nguywnben/tanpopo/internal/iam/rbac"
+	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
+)
+
+type budgetResourceDTO struct {
+	ID                      string `json:"id"`
+	ScopeTier               string `json:"scope_tier"`
+	ScopeID                 string `json:"scope_id"`
+	Period                  string `json:"period"`
+	HardLimitMicros         int64  `json:"hard_limit_micros"`
+	SoftWarningPercents     []int  `json:"soft_warning_percents"`
+	SettledExactMicros      int64  `json:"settled_exact_micros"`
+	SettledEstimatedMicros  int64  `json:"settled_estimated_micros"`
+	ReservedHoldMicros      int64  `json:"reserved_hold_micros"`
+	NegativeCarryoverMicros int64  `json:"negative_carryover_micros"`
+	UnmeteredRequestCount   int64  `json:"unmetered_request_count"`
+	Version                 int64  `json:"version"`
+}
+
+type updateBudgetRequest struct {
+	HardLimitMicros     *int64 `json:"hard_limit_micros"`
+	Period              string `json:"period"`
+	SoftWarningPercents []int  `json:"soft_warning_percents"`
+	ScopeTier           string `json:"scope_tier,omitempty"`
+	ScopeID             string `json:"scope_id,omitempty"`
+}
+
+type usageChargebackRowDTO struct {
+	GroupKey              string `json:"group_key"`
+	ExactMicroUSD         int64  `json:"exact_micro_usd"`
+	EstimatedMicroUSD     int64  `json:"estimated_micro_usd"`
+	UnmeteredRequestCount int64  `json:"unmetered_request_count"`
+}
+
+func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+
+	projFilter := strings.TrimSpace(r.URL.Query().Get("project_id"))
+	if projFilter != "" {
+		var exists int
+		err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, projFilter).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+			return
+		}
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating project", true, nil)
+			return
+		}
+		if !s.authorize(w, r, sc, rbac.ActionBudgetRead, rbac.TargetScope{OrgID: orgID, ProjectID: projFilter}) {
+			return
+		}
+	} else {
+		if !s.authorize(w, r, sc, rbac.ActionBudgetRead, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
+			return
+		}
+	}
+
+	filterHash := sha256HexString("budgets|" + projFilter)
+	limit, cur, ok := parsePageParams(w, r, s.cursorSecret, "budgets", orgID, filterHash)
+	if !ok {
+		return
+	}
+
+	orgWide := actorHasOrgScopeBinding(sc.Actor, orgID)
+	var allowedProjects map[string]bool
+	if !orgWide {
+		allowedProjects = make(map[string]bool)
+		for _, pid := range actorProjectIDs(sc.Actor, orgID) {
+			allowedProjects[pid] = true
+		}
+	}
+
+	var q strings.Builder
+	args := []any{orgID}
+	q.WriteString(`
+		SELECT id, scope_type, scope_id, period_kind, hard_limit_micros,
+		       reserved_hold_micros, settled_exact_micros, settled_estimated_micros,
+		       negative_carryover_micros, soft_alert_thresholds_pct_json,
+		       version, created_at_ms
+		FROM budget_ledgers
+		WHERE org_id = ?`)
+	if cur != nil {
+		q.WriteString(` AND (created_at_ms < ? OR (created_at_ms = ? AND id < ?))`)
+		args = append(args, cur.CreatedMs, cur.CreatedMs, cur.LastID)
+	}
+	q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
+	fetchLimit := limit + 1
+	if projFilter != "" || !orgWide {
+		fetchLimit = maxPageLimit * 2
+	}
+	args = append(args, fetchLimit)
+
+	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing budgets", true, nil)
+		return
+	}
+	defer rows.Close()
+
+	type bdgRow struct {
+		dto       budgetResourceDTO
+		createdMs int64
+	}
+	var items []bdgRow
+	for rows.Next() {
+		var (
+			id, scopeType, scopeID, periodKind, threshJSON string
+			hardLimit, reservedHold, exactMicros, estMicros int64
+			carryover, ver, createdMs                      int64
+		)
+		if scanErr := rows.Scan(
+			&id, &scopeType, &scopeID, &periodKind, &hardLimit,
+			&reservedHold, &exactMicros, &estMicros, &carryover,
+			&threshJSON, &ver, &createdMs,
+		); scanErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning budget ledger", true, nil)
+			return
+		}
+		resolvedProj := s.resolveBudgetScopeProjectID(r.Context(), orgID, scopeType, scopeID)
+		if projFilter != "" && resolvedProj != projFilter {
+			continue
+		}
+		if !orgWide && (resolvedProj == "" || !allowedProjects[resolvedProj]) {
+			continue
+		}
+
+		unmetered := s.countScopeUnmeteredRequests(r.Context(), orgID, scopeType, scopeID)
+		items = append(items, bdgRow{
+			dto: budgetResourceDTO{
+				ID:                      id,
+				ScopeTier:               mapBudgetScopeDBToOpenAPI(scopeType),
+				ScopeID:                 scopeID,
+				Period:                  mapBudgetPeriodOpenAPI(periodKind),
+				HardLimitMicros:         hardLimit,
+				SoftWarningPercents:     decodeSoftThresholds(threshJSON),
+				SettledExactMicros:      exactMicros,
+				SettledEstimatedMicros:  estMicros,
+				ReservedHoldMicros:      reservedHold,
+				NegativeCarryoverMicros: carryover,
+				UnmeteredRequestCount:   unmetered,
+				Version:                 ver,
+			},
+			createdMs: createdMs,
+		})
+		if len(items) >= limit+1 {
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating budgets", true, nil)
+		return
+	}
+
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+	data := make([]budgetResourceDTO, len(items))
+	for i := range items {
+		data[i] = items[i].dto
+	}
+	var nextCursor *string
+	if hasMore && len(items) > 0 {
+		last := items[len(items)-1]
+		tok, curErr := encodePaginationCursor(s.cursorSecret, "budgets", orgID, filterHash, last.createdMs, last.dto.ID)
+		if curErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding cursor", true, nil)
+			return
+		}
+		nextCursor = &tok
+	}
+
+	writeJSON(w, http.StatusOK, paginatedListEnvelope[budgetResourceDTO]{
+		Data:       data,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	})
+}
+
+func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	budgetID := strings.TrimSpace(r.PathValue("budgetId"))
+	if budgetID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
+		return
+	}
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	var req updateBudgetRequest
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if req.HardLimitMicros == nil || *req.HardLimitMicros < 0 {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "non-negative hard_limit_micros is required", false, nil)
+		return
+	}
+	period := strings.ToUpper(strings.TrimSpace(req.Period))
+	if period != ledger.PeriodDaily && period != ledger.PeriodMonthly {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "period must be DAILY or MONTHLY", false, nil)
+		return
+	}
+	thresholds, okThresh := normalizeAndValidateThresholds(req.SoftWarningPercents)
+	if !okThresh {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "soft_warning_percents values must be integers between 1 and 100", false, nil)
+		return
+	}
+	threshJSONBytes, err := json.Marshal(thresholds)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding soft warning thresholds", true, nil)
+		return
+	}
+
+	// Cross-tenant existence check (AUTH-15).
+	var rowOrgID, scopeType, scopeID string
+	err = s.db.QueryRowContext(r.Context(), `
+		SELECT org_id, scope_type, scope_id
+		FROM budget_ledgers
+		WHERE id = ?`, budgetID,
+	).Scan(&rowOrgID, &scopeType, &scopeID)
+	rowExists := err == nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed looking up budget ledger", true, nil)
+		return
+	}
+	if rowExists && rowOrgID != orgID {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
+		return
+	}
+
+	if !rowExists {
+		// Allow PUT creation at initial version "v1" only when scope_tier and scope_id are provided.
+		if expectedVer != 1 || strings.TrimSpace(req.ScopeTier) == "" || strings.TrimSpace(req.ScopeID) == "" {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
+			return
+		}
+		dbScope, sErr := mapBudgetScopeOpenAPIToDB(req.ScopeTier)
+		if sErr != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", sErr.Error(), false, nil)
+			return
+		}
+		targetScopeID := strings.TrimSpace(req.ScopeID)
+		if dbScope == ledger.ScopeOrg && targetScopeID != orgID {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization scope target not found", false, nil)
+			return
+		}
+		projID, validTarget, vErr := s.verifyBudgetTargetExists(r.Context(), orgID, dbScope, targetScopeID)
+		if vErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying budget target scope", true, nil)
+			return
+		}
+		if !validTarget {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget target scope not found", false, nil)
+			return
+		}
+		if !s.authorize(w, r, sc, rbac.ActionBudgetWrite, rbac.TargetScope{OrgID: orgID, ProjectID: projID}) {
+			return
+		}
+		if !s.requireActiveOrg(w, r, orgID) {
+			return
+		}
+		now := s.nowMs()
+		pStart, pEnd := computePeriodWindowMs(now, period)
+		tx, txErr := s.db.BeginTx(r.Context(), nil)
+		if txErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting budget creation tx", true, nil)
+			return
+		}
+		defer func() { _ = tx.Rollback() }()
+		if _, insErr := tx.ExecContext(r.Context(), `
+			INSERT INTO budget_ledgers (
+				id, org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms,
+				hard_limit_micros, soft_alert_thresholds_pct_json, version, created_at_ms, updated_at_ms
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+			budgetID, orgID, dbScope, targetScopeID, period, pStart, pEnd,
+			*req.HardLimitMicros, string(threshJSONBytes), now, now,
+		); insErr != nil {
+			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "budget ledger conflict", false, nil)
+			return
+		}
+		if audErr := s.appendChangelogAndAuditTx(r.Context(), tx, &orgID, "budget_ledger", budgetID, port.MutationUpsert, false, sc.Actor.PrincipalID, "budget.created", map[string]any{
+			"scope_type":        dbScope,
+			"scope_id":          targetScopeID,
+			"period_kind":       period,
+			"hard_limit_micros": *req.HardLimitMicros,
+		}, requestIDFromContext(r.Context()), now); audErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording budget audit", true, nil)
+			return
+		}
+		if cErr := tx.Commit(); cErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing budget ledger", true, nil)
+			return
+		}
+		createdDTO, err := s.loadBudgetResourceDTO(r.Context(), orgID, budgetID)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading budget ledger", true, nil)
+			return
+		}
+		w.Header().Set("ETag", FormatETag(createdDTO.Version))
+		writeJSON(w, http.StatusOK, createdDTO)
+		return
+	}
+
+	projID := s.resolveBudgetScopeProjectID(r.Context(), orgID, scopeType, scopeID)
+	if !s.authorize(w, r, sc, rbac.ActionBudgetWrite, rbac.TargetScope{OrgID: orgID, ProjectID: projID}) {
+		return
+	}
+
+	curDTO, err := s.loadBudgetResourceDTO(r.Context(), orgID, budgetID)
+	if errors.Is(err, port.ErrNotFound) {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
+		return
+	}
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading budget ledger", true, nil)
+		return
+	}
+	if curDTO.Version != expectedVer {
+		writeOptimisticConflict(w, r, curDTO.Version, curDTO)
+		return
+	}
+
+	totalSettled := curDTO.SettledExactMicros + curDTO.SettledEstimatedMicros
+	newCarryover := int64(0)
+	if totalSettled > *req.HardLimitMicros {
+		newCarryover = totalSettled - *req.HardLimitMicros
+	}
+	newUtilPct := 0
+	if *req.HardLimitMicros > 0 {
+		newUtilPct = int((totalSettled * 100) / *req.HardLimitMicros)
+	} else if totalSettled > 0 {
+		newUtilPct = 100
+	}
+	now := s.nowMs()
+
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting budget update tx", true, nil)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(r.Context(), `
+		UPDATE budget_ledgers
+		SET period_kind = ?,
+		    hard_limit_micros = ?,
+		    negative_carryover_micros = ?,
+		    soft_alert_thresholds_pct_json = ?,
+		    last_alerted_threshold_pct = CASE WHEN ? < last_alerted_threshold_pct THEN ? ELSE last_alerted_threshold_pct END,
+		    version = version + 1,
+		    updated_at_ms = ?
+		WHERE org_id = ? AND id = ? AND version = ?`,
+		period, *req.HardLimitMicros, newCarryover, string(threshJSONBytes),
+		newUtilPct, newUtilPct, now, orgID, budgetID, expectedVer,
+	)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed updating budget ledger", true, nil)
+		return
+	}
+	if aff, _ := res.RowsAffected(); aff == 0 {
+		_ = tx.Rollback()
+		latest, _ := s.loadBudgetResourceDTO(r.Context(), orgID, budgetID)
+		writeOptimisticConflict(w, r, latest.Version, latest)
+		return
+	}
+
+	if err := s.appendChangelogAndAuditTx(r.Context(), tx, &orgID, "budget_ledger", budgetID, port.MutationUpsert, false, sc.Actor.PrincipalID, "budget.updated", map[string]any{
+		"period":            period,
+		"hard_limit_micros": *req.HardLimitMicros,
+	}, requestIDFromContext(r.Context()), now); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording budget update audit", true, nil)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing budget update", true, nil)
+		return
+	}
+
+	updatedDTO, err := s.loadBudgetResourceDTO(r.Context(), orgID, budgetID)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading budget ledger", true, nil)
+		return
+	}
+	w.Header().Set("ETag", FormatETag(updatedDTO.Version))
+	writeJSON(w, http.StatusOK, updatedDTO)
+}
+
+func (s *Server) handleGetUsageSummary(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionBudgetRead, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
+		return
+	}
+
+	groupBy := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("group_by")))
+	switch groupBy {
+	case "project", "env", "key", "model":
+	default:
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "group_by must be one of project, env, key, or model", false, nil)
+		return
+	}
+
+	fromMs, toMs, okRange := parseOptionalTimeWindowParams(w, r)
+	if !okRange {
+		return
+	}
+
+	rows, err := s.queryUsageChargebackRows(r.Context(), sc, orgID, groupBy, fromMs, toMs)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying usage chargeback summary", true, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": rows})
+}
+
+func (s *Server) handleExportUsage(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionBudgetRead, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
+		return
+	}
+
+	format := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
+	if format == "" {
+		format = "csv"
+	}
+	if format != "csv" && format != "json" {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "format must be csv or json", false, nil)
+		return
+	}
+
+	groupBy := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("group_by")))
+	if groupBy == "" {
+		groupBy = "project"
+	}
+	switch groupBy {
+	case "project", "env", "key", "model":
+	default:
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "group_by must be one of project, env, key, or model", false, nil)
+		return
+	}
+
+	fromMs, toMs, okRange := parseOptionalTimeWindowParams(w, r)
+	if !okRange {
+		return
+	}
+
+	rows, err := s.queryUsageChargebackRows(r.Context(), sc, orgID, groupBy, fromMs, toMs)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed exporting usage chargeback", true, nil)
+		return
+	}
+
+	if format == "json" {
+		writeJSON(w, http.StatusOK, rows)
+		return
+	}
+
+	var buf bytes.Buffer
+	cw := csv.NewWriter(&buf)
+	if err := cw.Write([]string{"group_key", "exact_micro_usd", "estimated_micro_usd", "unmetered_request_count"}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding CSV header", true, nil)
+		return
+	}
+	for _, row := range rows {
+		if err := cw.Write([]string{
+			sanitizeCSVCell(row.GroupKey),
+			strconv.FormatInt(row.ExactMicroUSD, 10),
+			strconv.FormatInt(row.EstimatedMicroUSD, 10),
+			strconv.FormatInt(row.UnmeteredRequestCount, 10),
+		}); err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding CSV row", true, nil)
+			return
+		}
+	}
+	cw.Flush()
+	if err := cw.Error(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed flushing CSV export", true, nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="tanpopo-usage.csv"`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
+}
+
+// sanitizeCSVCell neutralizes CSV spreadsheet formula injection (=, +, -, @, \t, \r)
+// including cells with leading whitespace or control prefixes.
+func sanitizeCSVCell(raw string) string {
+	trimmed := strings.TrimLeftFunc(raw, unicode.IsSpace)
+	if raw == "" {
+		return ""
+	}
+	check := raw
+	if len(trimmed) > 0 {
+		firstRaw := raw[0]
+		firstTrim := trimmed[0]
+		if isDangerousCSVPrefix(firstRaw) || isDangerousCSVPrefix(firstTrim) {
+			return "'" + check
+		}
+	} else if isDangerousCSVPrefix(raw[0]) {
+		return "'" + raw
+	}
+	return raw
+}
+
+func isDangerousCSVPrefix(b byte) bool {
+	switch b {
+	case '=', '+', '-', '@', '\t', '\r':
+		return true
+	default:
+		return false
+	}
+}
+
+func parseOptionalTimeWindowParams(w http.ResponseWriter, r *http.Request) (*int64, *int64, bool) {
+	var fromMs, toMs *int64
+	if rawFrom := strings.TrimSpace(r.URL.Query().Get("from")); rawFrom != "" {
+		t, err := time.Parse(time.RFC3339Nano, rawFrom)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "from must be RFC3339 date-time", false, nil)
+			return nil, nil, false
+		}
+		v := t.UTC().UnixMilli()
+		fromMs = &v
+	}
+	if rawTo := strings.TrimSpace(r.URL.Query().Get("to")); rawTo != "" {
+		t, err := time.Parse(time.RFC3339Nano, rawTo)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "to must be RFC3339 date-time", false, nil)
+			return nil, nil, false
+		}
+		v := t.UTC().UnixMilli()
+		toMs = &v
+	}
+	if fromMs != nil && toMs != nil && *fromMs > *toMs {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "from cannot exceed to", false, nil)
+		return nil, nil, false
+	}
+	return fromMs, toMs, true
+}
+
+func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionContext, orgID, groupBy string, fromMs, toMs *int64) ([]usageChargebackRowDTO, error) {
+	var selectExpr, joinSQL string
+	switch groupBy {
+	case "project":
+		selectExpr = `COALESCE(p.name, p.slug, us.project_id)`
+		joinSQL = `LEFT JOIN projects p ON p.org_id = us.org_id AND p.id = us.project_id`
+	case "env":
+		selectExpr = `COALESCE(e.slug, us.env_id)`
+		joinSQL = `LEFT JOIN environments e ON e.org_id = us.org_id AND e.id = us.env_id`
+	case "key":
+		selectExpr = `COALESCE(vk.name, us.virtual_key_id)`
+		joinSQL = `LEFT JOIN virtual_keys vk ON vk.org_id = us.org_id AND vk.id = us.virtual_key_id`
+	case "model":
+		selectExpr = `COALESCE(us.logical_model_slug, 'unknown')`
+	default:
+		return nil, fmt.Errorf("unsupported group_by %q", groupBy)
+	}
+
+	var conds []string
+	var args []any
+	conds = append(conds, `us.org_id = ?`)
+	args = append(args, orgID)
+
+	if !actorHasOrgScopeBinding(sc.Actor, orgID) {
+		projIDs := actorProjectIDs(sc.Actor, orgID)
+		if len(projIDs) == 0 {
+			return []usageChargebackRowDTO{}, nil
+		}
+		conds = append(conds, `us.project_id IN (`+strings.Repeat("?,", len(projIDs)-1)+`?)`)
+		for _, pid := range projIDs {
+			args = append(args, pid)
+		}
+	}
+	if fromMs != nil {
+		conds = append(conds, `us.settled_at_ms >= ?`)
+		args = append(args, *fromMs)
+	}
+	if toMs != nil {
+		conds = append(conds, `us.settled_at_ms <= ?`)
+		args = append(args, *toMs)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s AS grp_key,
+		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'EXACT' THEN us.total_cost_micros ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'ESTIMATED' THEN us.total_cost_micros ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'UNMETERED_FLAGGED' THEN 1 ELSE 0 END), 0)
+		FROM usage_settlements us
+		%s
+		WHERE %s
+		GROUP BY grp_key
+		ORDER BY grp_key ASC`, selectExpr, joinSQL, strings.Join(conds, " AND "))
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]usageChargebackRowDTO, 0)
+	for rows.Next() {
+		var r usageChargebackRowDTO
+		if scanErr := rows.Scan(&r.GroupKey, &r.ExactMicroUSD, &r.EstimatedMicroUSD, &r.UnmeteredRequestCount); scanErr != nil {
+			return nil, scanErr
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Server) resolveBudgetScopeProjectID(ctx context.Context, orgID, scopeType, scopeID string) string {
+	switch scopeType {
+	case ledger.ScopeProject:
+		return scopeID
+	case ledger.ScopeEnv:
+		pid, found, _ := s.lookupEnvironmentProject(ctx, orgID, scopeID)
+		if found {
+			return pid
+		}
+	case ledger.ScopeVirtualKey:
+		var pid string
+		_ = s.db.QueryRowContext(ctx, `SELECT project_id FROM virtual_keys WHERE org_id = ? AND id = ?`, orgID, scopeID).Scan(&pid)
+		return pid
+	}
+	return ""
+}
+
+func (s *Server) verifyBudgetTargetExists(ctx context.Context, orgID, scopeType, scopeID string) (string, bool, error) {
+	switch scopeType {
+	case ledger.ScopeOrg:
+		var exists int
+		err := s.db.QueryRowContext(ctx, `SELECT 1 FROM organizations WHERE id = ?`, orgID).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", err == nil, err
+	case ledger.ScopeProject:
+		var exists int
+		err := s.db.QueryRowContext(ctx, `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, scopeID).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return scopeID, err == nil, err
+	case ledger.ScopeEnv:
+		return s.lookupEnvironmentProject(ctx, orgID, scopeID)
+	case ledger.ScopeVirtualKey:
+		var pid string
+		err := s.db.QueryRowContext(ctx, `SELECT project_id FROM virtual_keys WHERE org_id = ? AND id = ?`, orgID, scopeID).Scan(&pid)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return pid, err == nil, err
+	default:
+		return "", false, nil
+	}
+}
+
+func (s *Server) countScopeUnmeteredRequests(ctx context.Context, orgID, scopeType, scopeID string) int64 {
+	var cnt int64
+	switch scopeType {
+	case ledger.ScopeOrg:
+		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`, orgID).Scan(&cnt)
+	case ledger.ScopeProject:
+		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND project_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`, orgID, scopeID).Scan(&cnt)
+	case ledger.ScopeEnv:
+		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND env_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`, orgID, scopeID).Scan(&cnt)
+	case ledger.ScopeVirtualKey:
+		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND virtual_key_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`, orgID, scopeID).Scan(&cnt)
+	}
+	return cnt
+}
+
+func (s *Server) loadBudgetResourceDTO(ctx context.Context, orgID, budgetID string) (budgetResourceDTO, error) {
+	var (
+		id, scopeType, scopeID, periodKind, threshJSON    string
+		hardLimit, reservedHold, exactMicros, estMicros   int64
+		carryover, ver                                    int64
+	)
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, scope_type, scope_id, period_kind, hard_limit_micros,
+		       reserved_hold_micros, settled_exact_micros, settled_estimated_micros,
+		       negative_carryover_micros, soft_alert_thresholds_pct_json, version
+		FROM budget_ledgers
+		WHERE org_id = ? AND id = ?`, orgID, budgetID,
+	).Scan(&id, &scopeType, &scopeID, &periodKind, &hardLimit, &reservedHold, &exactMicros, &estMicros, &carryover, &threshJSON, &ver)
+	if errors.Is(err, sql.ErrNoRows) {
+		return budgetResourceDTO{}, port.ErrNotFound
+	}
+	if err != nil {
+		return budgetResourceDTO{}, err
+	}
+	return budgetResourceDTO{
+		ID:                      id,
+		ScopeTier:               mapBudgetScopeDBToOpenAPI(scopeType),
+		ScopeID:                 scopeID,
+		Period:                  mapBudgetPeriodOpenAPI(periodKind),
+		HardLimitMicros:         hardLimit,
+		SoftWarningPercents:     decodeSoftThresholds(threshJSON),
+		SettledExactMicros:      exactMicros,
+		SettledEstimatedMicros:  estMicros,
+		ReservedHoldMicros:      reservedHold,
+		NegativeCarryoverMicros: carryover,
+		UnmeteredRequestCount:   s.countScopeUnmeteredRequests(ctx, orgID, scopeType, scopeID),
+		Version:                 ver,
+	}, nil
+}
+
+func mapBudgetScopeDBToOpenAPI(st string) string {
+	switch st {
+	case ledger.ScopeOrg:
+		return "ORGANIZATION"
+	case ledger.ScopeProject:
+		return "PROJECT"
+	case ledger.ScopeEnv:
+		return "ENVIRONMENT"
+	case ledger.ScopeVirtualKey:
+		return "VIRTUAL_KEY"
+	default:
+		return "ORGANIZATION"
+	}
+}
+
+func mapBudgetScopeOpenAPIToDB(tier string) (string, error) {
+	switch strings.ToUpper(strings.TrimSpace(tier)) {
+	case "ORGANIZATION", "ORG":
+		return ledger.ScopeOrg, nil
+	case "PROJECT":
+		return ledger.ScopeProject, nil
+	case "ENVIRONMENT", "ENV":
+		return ledger.ScopeEnv, nil
+	case "VIRTUAL_KEY":
+		return ledger.ScopeVirtualKey, nil
+	default:
+		return "", errors.New("scope_tier must be ORGANIZATION, PROJECT, ENVIRONMENT, or VIRTUAL_KEY")
+	}
+}
+
+func mapBudgetPeriodOpenAPI(pk string) string {
+	if pk == ledger.PeriodDaily {
+		return ledger.PeriodDaily
+	}
+	return ledger.PeriodMonthly
+}
+
+func decodeSoftThresholds(raw string) []int {
+	var parsed []int
+	if strings.TrimSpace(raw) != "" {
+		_ = json.Unmarshal([]byte(raw), &parsed)
+	}
+	if len(parsed) == 0 {
+		return []int{50, 80, 100}
+	}
+	return parsed
+}
+
+func normalizeAndValidateThresholds(in []int) ([]int, bool) {
+	if len(in) == 0 {
+		return []int{50, 80, 100}, true
+	}
+	seen := make(map[int]bool, len(in))
+	out := make([]int, 0, len(in))
+	for _, v := range in {
+		if v < 1 || v > 100 {
+			return nil, false
+		}
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out, true
+}
+
+func computePeriodWindowMs(nowMs int64, period string) (int64, int64) {
+	t := time.UnixMilli(nowMs).UTC()
+	if period == ledger.PeriodDaily {
+		start := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		return start.UnixMilli(), start.AddDate(0, 0, 1).UnixMilli()
+	}
+	start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+	return start.UnixMilli(), start.AddDate(0, 1, 0).UnixMilli()
+}
+
+var _ = idgen.PrefixBudget

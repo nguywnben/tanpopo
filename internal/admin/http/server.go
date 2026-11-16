@@ -437,6 +437,25 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodDelete, Path: "/admin/v1/routes/{routeId}", Action: rbac.ActionRouteWrite, Handler: s.handleDeleteRoute},
 		{Method: http.MethodGet, Path: "/admin/v1/policies/effective", Action: rbac.ActionPolicyRead, Handler: s.handleGetEffectivePolicy},
 		{Method: http.MethodPut, Path: "/admin/v1/policies/{policyId}", Action: rbac.ActionPolicyProjectWrite, Handler: s.handleUpdatePolicy},
+
+		// Group D: Control Plane Overview & Active Alerts
+		{Method: http.MethodGet, Path: "/admin/v1/overview/summary", Action: rbac.ActionBudgetRead, Handler: s.handleGetOverviewSummary},
+		{Method: http.MethodGet, Path: "/admin/v1/alerts/active", Action: rbac.ActionBudgetRead, Handler: s.handleListActiveAlerts},
+
+		// Group J: Observability Traces, Debug Payloads, Budgets & FinOps Usage
+		{Method: http.MethodGet, Path: "/admin/v1/traces", Action: rbac.ActionTraceReadMeta, Handler: s.handleListTraces},
+		{Method: http.MethodGet, Path: "/admin/v1/traces/{requestId}", Action: rbac.ActionTraceReadMeta, Handler: s.handleGetTraceWaterfall},
+		{Method: http.MethodGet, Path: "/admin/v1/traces/{requestId}/debug-payload", Action: rbac.ActionTraceReadDebugBlob, Handler: s.handleGetTraceDebugPayload},
+		{Method: http.MethodGet, Path: "/admin/v1/budgets", Action: rbac.ActionBudgetRead, Handler: s.handleListBudgets},
+		{Method: http.MethodPut, Path: "/admin/v1/budgets/{budgetId}", Action: rbac.ActionBudgetWrite, Handler: s.handleUpdateBudget},
+		{Method: http.MethodGet, Path: "/admin/v1/usage/summary", Action: rbac.ActionBudgetRead, Handler: s.handleGetUsageSummary},
+		{Method: http.MethodGet, Path: "/admin/v1/usage/export", Action: rbac.ActionBudgetRead, Handler: s.handleExportUsage},
+
+		// Group K: Audit Log, Hash-Chain Verification, Kill Switch & Blast Radius
+		{Method: http.MethodPost, Path: "/admin/v1/audit-events/verify", Action: rbac.ActionAuditReadVerify, Handler: s.handleVerifyAuditHashChain},
+		{Method: http.MethodGet, Path: "/admin/v1/audit-events", Action: rbac.ActionAuditReadVerify, Handler: s.handleListAuditEvents},
+		{Method: http.MethodPost, Path: "/admin/v1/kill-switches", Action: rbac.ActionKillSwitchTrigger, Handler: s.handleTriggerKillSwitch},
+		{Method: http.MethodGet, Path: "/admin/v1/blast-radius", Action: rbac.ActionAuditReadVerify, Handler: s.handleQueryBlastRadius},
 	}
 
 	if err := rbac.ValidateRoutePermissions(s.Routes()); err != nil {
