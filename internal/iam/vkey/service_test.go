@@ -1025,3 +1025,95 @@ func TestVKeyNewServiceRejectsMissingOrNonTxAuditSink(t *testing.T) {
 	}
 }
 
+func TestVKeyUpdateAndRevokeWithReceipt(t *testing.T) {
+	t.Parallel()
+	h := newVKeyTestHarness(t)
+	ctx := context.Background()
+
+	rpm := int64(60)
+	tpm := int64(5000)
+	created, err := h.svc.Create(ctx, CreateParams{
+		OrgID:                h.orgAID,
+		ProjectID:            h.projAID,
+		EnvID:                h.envProd,
+		Name:                 "initial-key",
+		RPMLimit:             &rpm,
+		TPMLimit:             &tpm,
+		MaxConcurrentStreams: 10,
+		AllowedModels:        []string{"gpt-4o"},
+		ActorID:              "prc_admin",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Stale version fails with port.ErrVersionConflict.
+	newName := "renamed-key"
+	if _, err := h.svc.Update(ctx, UpdateParams{
+		OrgID:           h.orgAID,
+		KeyID:           created.Summary.ID,
+		ExpectedVersion: 99,
+		Name:            &newName,
+		ActorID:         "prc_admin",
+	}); !errors.Is(err, port.ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict, got %v", err)
+	}
+
+	// Valid update mutates name, clears RPM limit, updates streams & allowlists, bumps version.
+	nextStreams := int64(25)
+	updated, err := h.svc.Update(ctx, UpdateParams{
+		OrgID:                h.orgAID,
+		KeyID:                created.Summary.ID,
+		ExpectedVersion:      1,
+		Name:                 &newName,
+		ClearRPMLimit:        true,
+		MaxConcurrentStreams: &nextStreams,
+		AllowedModels:        []string{"claude-3-7"},
+		HasAllowedModels:     true,
+		AllowedMCPTools:      []string{"tool_a"},
+		HasAllowedMCPTools:   true,
+		ActorID:              "prc_admin",
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.Version != 2 || updated.Name != newName || updated.RPMLimit != nil || updated.TPMLimit == nil || *updated.TPMLimit != 5000 || updated.MaxConcurrentStreams != 25 {
+		t.Fatalf("unexpected updated summary: %+v", updated)
+	}
+	if len(updated.AllowedModels) != 1 || updated.AllowedModels[0] != "claude-3-7" || len(updated.AllowedMCPTools) != 1 || updated.AllowedMCPTools[0] != "tool_a" {
+		t.Fatalf("unexpected allowlists: models=%v mcp=%v", updated.AllowedModels, updated.AllowedMCPTools)
+	}
+
+	// Register an active stream and emergency-revoke with receipt.
+	_, streamCancel := context.WithCancel(ctx)
+	defer streamCancel()
+	handle := h.mgr.Streams().Register(h.orgAID, h.projAID, created.Summary.ID, streamCancel)
+	defer h.mgr.Streams().Unregister(created.Summary.ID, handle)
+
+	receipt, err := h.svc.RevokeWithReceipt(ctx, RevokeParams{
+		OrgID:           h.orgAID,
+		KeyID:           created.Summary.ID,
+		ExpectedVersion: 2,
+		Mode:            RevokeModeEmergency,
+		Reason:          "incident response test",
+		ActorID:         "prc_sec",
+	})
+	if err != nil {
+		t.Fatalf("RevokeWithReceipt: %v", err)
+	}
+	if receipt.SeveredStreamsCount != 1 || receipt.Summary.State != snapshot.KeyStateRevoked || receipt.Summary.Version != 3 {
+		t.Fatalf("unexpected revoke receipt: %+v", receipt)
+	}
+
+	// Cannot update revoked key.
+	if _, err := h.svc.Update(ctx, UpdateParams{
+		OrgID:           h.orgAID,
+		KeyID:           created.Summary.ID,
+		ExpectedVersion: 3,
+		Name:            &newName,
+	}); !errors.Is(err, ErrInvalidStateTransition) {
+		t.Fatalf("expected ErrInvalidStateTransition updating revoked key, got %v", err)
+	}
+}
+
+

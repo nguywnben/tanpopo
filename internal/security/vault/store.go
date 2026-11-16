@@ -321,6 +321,78 @@ func (s *Store) GetProjectKeyMetadata(ctx context.Context, orgID, projectID stri
 	return &m, nil
 }
 
+// EnsureOrgDEK eagerly mints (or validates existing) wrapped AES-256-GCM Org DEK for orgID
+// and returns its write-only metadata without exposing raw key material.
+func (s *Store) EnsureOrgDEK(ctx context.Context, orgID string) (*OrgKeyMetadata, error) {
+	if strings.TrimSpace(orgID) == "" {
+		return nil, fmt.Errorf("%w: org_id required", ErrInvalidInput)
+	}
+	now := s.nowMs()
+	gen := s.cache.generation()
+	var stage dekCacheStage
+	defer stage.clear()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vault: begin EnsureOrgDEK tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_, dek, err := s.ensureOrgDEKTx(ctx, tx, orgID, now, &stage)
+	if err != nil {
+		return nil, err
+	}
+	clear(dek)
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("vault: commit EnsureOrgDEK: %w", err)
+	}
+	committed = true
+	stage.commit(s.cache, now, gen)
+	return s.GetOrgKeyMetadata(ctx, orgID)
+}
+
+// EnsureProjectDEK eagerly mints (or validates existing) wrapped AES-256-GCM Project DEK under
+// orgID/projectID and returns its write-only metadata without exposing raw key material.
+func (s *Store) EnsureProjectDEK(ctx context.Context, orgID, projectID string) (*ProjectKeyMetadata, error) {
+	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(projectID) == "" {
+		return nil, fmt.Errorf("%w: org_id and project_id required", ErrInvalidInput)
+	}
+	now := s.nowMs()
+	gen := s.cache.generation()
+	var stage dekCacheStage
+	defer stage.clear()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vault: begin EnsureProjectDEK tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_, _, dek, err := s.ensureProjectDEKTx(ctx, tx, orgID, projectID, now, &stage)
+	if err != nil {
+		return nil, err
+	}
+	clear(dek)
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("vault: commit EnsureProjectDEK: %w", err)
+	}
+	committed = true
+	stage.commit(s.cache, now, gen)
+	return s.GetProjectKeyMetadata(ctx, orgID, projectID)
+}
+
 // Close scrubs all cached DEKs in RAM without closing the shared SQL pool.
 func (s *Store) Close() {
 	if s.cache != nil {

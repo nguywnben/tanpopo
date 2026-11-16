@@ -2845,4 +2845,64 @@ func TestVaultSealUnsealProjectBlob(t *testing.T) {
 	}
 }
 
+func TestVaultEnsureOrgAndProjectDEK(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 5*time.Minute)
+
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "eager-dek", DisplayName: "Eager DEK"})
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+	prj, err := env.sqlite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "p1", DisplayName: "P1"})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	if _, err := env.vault.EnsureOrgDEK(ctx, ""); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on empty orgID, got %v", err)
+	}
+	if _, err := env.vault.EnsureProjectDEK(ctx, org.ID, ""); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on empty projectID, got %v", err)
+	}
+
+	orgMeta, err := env.vault.EnsureOrgDEK(ctx, org.ID)
+	if err != nil || orgMeta.KeyGeneration != 1 {
+		t.Fatalf("EnsureOrgDEK: meta=%+v err=%v", orgMeta, err)
+	}
+	// Idempotent second call keeps same generation.
+	orgMeta2, err := env.vault.EnsureOrgDEK(ctx, org.ID)
+	if err != nil || orgMeta2.KeyGeneration != 1 {
+		t.Fatalf("EnsureOrgDEK 2nd call: meta=%+v err=%v", orgMeta2, err)
+	}
+
+	projMeta, err := env.vault.EnsureProjectDEK(ctx, org.ID, prj.ID)
+	if err != nil || projMeta.KeyGeneration != 1 {
+		t.Fatalf("EnsureProjectDEK: meta=%+v err=%v", projMeta, err)
+	}
+	projMeta2, err := env.vault.EnsureProjectDEK(ctx, org.ID, prj.ID)
+	if err != nil || projMeta2.KeyGeneration != 1 {
+		t.Fatalf("EnsureProjectDEK 2nd call: meta=%+v err=%v", projMeta2, err)
+	}
+
+	// Nonexistent tenant paths fail closed with an error (ErrNotFound / SQLite constraint).
+	if _, err := env.vault.EnsureOrgDEK(ctx, "org_does_not_exist"); err == nil {
+		t.Fatalf("expected error for nonexistent org, got nil")
+	}
+	if _, err := env.vault.EnsureProjectDEK(ctx, org.ID, "prj_does_not_exist"); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected port.ErrNotFound for nonexistent project, got %v", err)
+	}
+
+	// Canceled context fails closed cleanly before mutating state.
+	canceledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := env.vault.EnsureOrgDEK(canceledCtx, org.ID); err == nil {
+		t.Fatalf("expected error on canceled ctx for EnsureOrgDEK")
+	}
+	if _, err := env.vault.EnsureProjectDEK(canceledCtx, org.ID, prj.ID); err == nil {
+		t.Fatalf("expected error on canceled ctx for EnsureProjectDEK")
+	}
+}
+
+
 

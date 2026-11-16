@@ -1,0 +1,1358 @@
+// Copyright 2026 The Tanpopo Authors.
+// Licensed under the Apache License, Version 2.0.
+
+package http
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/iam/auth"
+	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
+	"github.com/nguywnben/tanpopo/internal/iam/rbac"
+	"github.com/nguywnben/tanpopo/internal/iam/vkey"
+	"github.com/nguywnben/tanpopo/internal/security/audit"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
+	"github.com/nguywnben/tanpopo/internal/security/vault"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
+	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
+	"github.com/nguywnben/tanpopo/internal/testkit/canary"
+	"github.com/nguywnben/tanpopo/internal/testkit/clock"
+	"github.com/nguywnben/tanpopo/internal/testkit/netguard"
+)
+
+func TestMain(m *testing.M) {
+	os.Exit(netguard.MustRunHermeticMain(m))
+}
+
+type adminTestHarness struct {
+	st         *sqlite.Store
+	fk         *clock.FakeClock
+	auditLog   *audit.Logger
+	kek        *vault.StaticKEKProvider
+	vault      *vault.Store
+	snapshots  *snapshot.Manager
+	killSwitch *killswitch.Registry
+	authSvc    *auth.LocalService
+	bootMgr    *bootstrap.Manager
+	vkeys      *vkey.Service
+	srv        *Server
+	tokenPath  string
+	scanner    *canary.Scanner
+
+	bearerMu     sync.RWMutex
+	bearerTokens map[string]*rbac.Actor
+}
+
+func newAdminTestHarness(t *testing.T) *adminTestHarness {
+	t.Helper()
+	ctx := context.Background()
+	dir := t.TempDir()
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	nowFn := func() int64 { return fk.Now().UTC().UnixMilli() }
+
+	st, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: filepath.Join(dir, "admin.db"),
+		NowMs:  nowFn,
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	auditLog, err := audit.NewLogger(audit.LoggerConfig{
+		DB:    st.RawDB(),
+		NowMs: nowFn,
+	})
+	if err != nil {
+		t.Fatalf("audit.NewLogger: %v", err)
+	}
+
+	// Re-open or wrap with real audit sink for Tenancy operations too.
+	// Note st already exposes st.RawDB(); attach auditLog to services and ServerConfig.
+	masterKey := make([]byte, vault.KeySizeBytes)
+	for i := range masterKey {
+		masterKey[i] = byte(i + 17)
+	}
+	kek, err := vault.NewStaticKEKProvider("kek_test_v1", masterKey)
+	if err != nil {
+		t.Fatalf("NewStaticKEKProvider: %v", err)
+	}
+	vlt, err := vault.NewStore(vault.Config{
+		DB:            st.RawDB(),
+		KEK:           kek,
+		NowMs:         nowFn,
+		PostShredHook: st.CheckpointWAL,
+	})
+	if err != nil {
+		t.Fatalf("vault.NewStore: %v", err)
+	}
+
+	snapshots, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{
+		DB:    st.RawDB(),
+		NowMs: nowFn,
+	})
+	if err != nil {
+		t.Fatalf("snapshot.NewManager: %v", err)
+	}
+
+	ksReg, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{
+		DB:    st.RawDB(),
+		Audit: auditLog,
+		NowMs: nowFn,
+	})
+	if err != nil {
+		t.Fatalf("killswitch.NewRegistry: %v", err)
+	}
+
+	argonParams := auth.Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32}
+	authSvc, err := auth.NewLocalService(auth.ServiceConfig{
+		DB:        st.RawDB(),
+		NowMs:     nowFn,
+		Argon2:    argonParams,
+		AuditSink: auditLog,
+	})
+	if err != nil {
+		t.Fatalf("auth.NewLocalService: %v", err)
+	}
+
+	tokenPath := filepath.Join(dir, "bootstrap.token")
+	bootMgr, err := bootstrap.NewManager(bootstrap.ManagerConfig{
+		DB:        st.RawDB(),
+		TokenPath: tokenPath,
+		NowMs:     nowFn,
+		Argon2:    argonParams,
+		AuditSink: auditLog,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap.NewManager: %v", err)
+	}
+	if _, err := bootMgr.EnsureToken(ctx); err != nil {
+		t.Fatalf("bootMgr.EnsureToken: %v", err)
+	}
+
+	vkeySvc, err := vkey.NewService(vkey.ServiceConfig{
+		DB:        st.RawDB(),
+		NowMs:     nowFn,
+		Snapshots: snapshots,
+		AuditSink: auditLog,
+	})
+	if err != nil {
+		t.Fatalf("vkey.NewService: %v", err)
+	}
+
+	h := &adminTestHarness{
+		st:           st,
+		fk:           fk,
+		auditLog:     auditLog,
+		kek:          kek,
+		vault:        vlt,
+		snapshots:    snapshots,
+		killSwitch:   ksReg,
+		authSvc:      authSvc,
+		bootMgr:      bootMgr,
+		vkeys:        vkeySvc,
+		tokenPath:    tokenPath,
+		scanner:      canary.NewScanner(),
+		bearerTokens: make(map[string]*rbac.Actor),
+	}
+
+	pagSecret := []byte("0123456789abcdef0123456789abcdef")
+	srv, err := NewServer(ServerConfig{
+		Store:            st,
+		DB:               st.RawDB(),
+		Bootstrap:        bootMgr,
+		Auth:             authSvc,
+		VKeys:            vkeySvc,
+		Vault:            vlt,
+		Snapshots:        snapshots,
+		KillSwitch:       ksReg,
+		Audit:            auditLog,
+		NowMs:            nowFn,
+		PaginationSecret: pagSecret,
+		TokenVerifier: func(_ context.Context, raw string) (*rbac.Actor, *SessionMetadata, error) {
+			h.bearerMu.RLock()
+			actor, ok := h.bearerTokens[raw]
+			h.bearerMu.RUnlock()
+			if !ok {
+				return nil, nil, rbac.ErrUnauthenticated
+			}
+			return actor, &SessionMetadata{
+				Email:       "service-token@example.test",
+				ExpiresAtMs: nowFn() + 3600_000,
+			}, nil
+		},
+		BlockedAdminPorts: []int{9090},
+		Version:           "0.1.0-test",
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	h.srv = srv
+	return h
+}
+
+func (h *adminTestHarness) readBootstrapToken(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile(h.tokenPath)
+	if err != nil {
+		t.Fatalf("read bootstrap token: %v", err)
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func (h *adminTestHarness) registerBearerToken(token string, actor *rbac.Actor) {
+	h.bearerMu.Lock()
+	defer h.bearerMu.Unlock()
+	h.bearerTokens[token] = actor
+}
+
+func (h *adminTestHarness) doPublic(t *testing.T, method, path string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	return h.doRaw(t, method, path, body, nil, nil)
+}
+
+func (h *adminTestHarness) doAuthedCookie(t *testing.T, method, path string, cookie *http.Cookie, csrf, ifMatch string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	hdrs := map[string]string{
+		"Origin": "https://control.tanpopo.local",
+	}
+	if csrf != "" {
+		hdrs["X-CSRF-Token"] = csrf
+	}
+	if ifMatch != "" {
+		hdrs["If-Match"] = ifMatch
+	}
+	var cookies []*http.Cookie
+	if cookie != nil {
+		cookies = []*http.Cookie{cookie}
+	}
+	return h.doRaw(t, method, path, body, hdrs, cookies)
+}
+
+func (h *adminTestHarness) doBearer(t *testing.T, method, path, bearer, ifMatch string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	hdrs := map[string]string{
+		"Authorization": "Bearer " + bearer,
+	}
+	if ifMatch != "" {
+		hdrs["If-Match"] = ifMatch
+	}
+	return h.doRaw(t, method, path, body, hdrs, nil)
+}
+
+func (h *adminTestHarness) doRaw(t *testing.T, method, path string, body any, headers map[string]string, cookies []*http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		if raw, ok := body.([]byte); ok {
+			buf.Write(raw)
+		} else {
+			if err := json.NewEncoder(&buf).Encode(body); err != nil {
+				t.Fatalf("encode request body: %v", err)
+			}
+		}
+	}
+	req := httptest.NewRequest(method, "https://control.tanpopo.local"+path, &buf)
+	req.RemoteAddr = "203.0.113.10:4242"
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	h.srv.ServeHTTP(rec, req)
+	return rec
+}
+
+func mustDecodeJSON[T any](t *testing.T, data []byte, dst *T) {
+	t.Helper()
+	if err := json.Unmarshal(data, dst); err != nil {
+		t.Fatalf("json.Unmarshal: %v\npayload=%s", err, string(data))
+	}
+}
+
+func findCookie(t *testing.T, cookies []*http.Cookie, name string) *http.Cookie {
+	t.Helper()
+	for _, c := range cookies {
+		if c.Name == name {
+			return c
+		}
+	}
+	t.Fatalf("cookie %q not found", name)
+	return nil
+}
+
+func mustVKeyCreateParams(orgID, projID, envID, actorID, name string) vkey.CreateParams {
+	return vkey.CreateParams{
+		OrgID:            orgID,
+		ProjectID:        projID,
+		EnvID:            envID,
+		OwnerPrincipalID: &actorID,
+		Name:             name,
+		ActorID:          actorID,
+	}
+}
+
+func seedTestAdapter(t *testing.T, h *adminTestHarness) {
+	t.Helper()
+	now := h.fk.Now().UTC().UnixMilli()
+	ctx := context.Background()
+	_, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO extension_packages (
+			id, canonical_name, extension_kind, publisher_id, origin_trust_tier, created_at_ms
+		) VALUES ('ext_openai_spec', 'tanpopo.openai', 'PROVIDER_ADAPTER', 'tanpopo', 'official', ?)`,
+		now,
+	)
+	if err != nil {
+		t.Fatalf("insert extension_packages: %v", err)
+	}
+	_, err = h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO extension_versions (
+			id, package_id, semver, contract_version, core_version_range, execution_tier,
+			bundle_sha256, signature_verified, enterprise_signed, source_uri, manifest_json, created_at_ms
+		) VALUES ('exv_openai_spec', 'ext_openai_spec', '1.0.0', 'v1', '>=0.1.0', 'DECLARATIVE_T1', ?, 1, 0, 'builtin://tanpopo.openai', '{}', ?)`,
+		strings.Repeat("a", 64), now,
+	)
+	if err != nil {
+		t.Fatalf("insert extension_versions: %v", err)
+	}
+	_, err = h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO extension_installations (
+			id, package_id, active_version_id, state, approved_permissions_json,
+			approved_by_principal_id, version, created_at_ms, updated_at_ms
+		) VALUES ('ins_openai_spec', 'ext_openai_spec', 'exv_openai_spec', 'ENABLED_ACTIVE', '{}', NULL, 1, ?, ?)`,
+		now, now,
+	)
+	if err != nil {
+		t.Fatalf("insert extension_installations: %v", err)
+	}
+	_, err = h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO provider_adapters (
+			id, installation_id, adapter_slug, native_prefix, supported_dialects_json,
+			allowed_hosts_json, version, created_at_ms
+		) VALUES ('adp_openai_spec', 'ins_openai_spec', 'openai', 'openai', '["openai"]', '["api.openai.com"]', 1, ?)`,
+		now,
+	)
+	if err != nil {
+		t.Fatalf("insert provider_adapters: %v", err)
+	}
+}
+
+// TestAllAdminRoutesHaveExplicitPermission is the mandatory Security Invariant from TP-IMP-0024:
+// every /admin/v1/* route except explicit public bootstrap/login endpoints MUST declare a valid RBAC Action,
+// and rbac.ValidateRoutePermissions MUST fail closed if any route omits permission metadata.
+func TestAllAdminRoutesHaveExplicitPermission(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+
+	allowedPublic := map[string]bool{
+		"GET /admin/v1/bootstrap/status":   true,
+		"POST /admin/v1/bootstrap/complete": true,
+		"POST /admin/v1/auth/login":        true,
+	}
+
+	routes := h.srv.Routes()
+	if len(routes) == 0 {
+		t.Fatalf("expected non-empty route table")
+	}
+	if err := rbac.ValidateRoutePermissions(routes); err != nil {
+		t.Fatalf("rbac.ValidateRoutePermissions failed: %v", err)
+	}
+
+	for _, rt := range routes {
+		key := rt.Method + " " + rt.Path
+		if !strings.HasPrefix(rt.Path, "/admin/v1/") {
+			t.Fatalf("route %s does not start with /admin/v1/", key)
+		}
+		if rt.Public {
+			if !allowedPublic[key] {
+				t.Fatalf("unexpected public route without RBAC action: %s", key)
+			}
+			continue
+		}
+		if rt.Action == "" {
+			t.Fatalf("protected route %s has empty Action", key)
+		}
+	}
+
+	// Verify fail-closed rejection on missing permission binding.
+	badRoutes := append(append([]rbac.RoutePermissionSpec(nil), routes...), rbac.RoutePermissionSpec{
+		Method: http.MethodGet,
+		Path:   "/admin/v1/unprotected",
+		Public: false,
+		Action: "",
+	})
+	if err := rbac.ValidateRoutePermissions(badRoutes); err == nil {
+		t.Fatalf("expected ValidateRoutePermissions to fail closed when route lacks Action")
+	}
+}
+
+func TestNewServerFailClosedValidationAndWireRoundTrip(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+
+	// Fail-closed NewServer missing dependency checks.
+	if _, err := NewServer(ServerConfig{}); !errors.Is(err, ErrInvalidServerConfig) {
+		t.Fatalf("expected ErrInvalidServerConfig for empty config, got %v", err)
+	}
+	if _, err := NewServer(ServerConfig{Store: h.st}); !errors.Is(err, ErrInvalidServerConfig) {
+		t.Fatalf("expected ErrInvalidServerConfig without Bootstrap, got %v", err)
+	}
+
+	// Verify live HTTP wire server using ts.Client() (zero DefaultClient) + 404/405/panic/body-limit envelopes.
+	ts := httptest.NewServer(h.srv)
+	defer ts.Close()
+
+	client := ts.Client()
+	resp, err := client.Get(ts.URL + "/admin/v1/bootstrap/status")
+	if err != nil {
+		t.Fatalf("wire GET /bootstrap/status: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 over wire, got %d", resp.StatusCode)
+	}
+
+	// Method not allowed (405) + Allow header.
+	req405, err := http.NewRequest(http.MethodDelete, ts.URL+"/admin/v1/bootstrap/status", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	resp405, err := client.Do(req405)
+	if err != nil {
+		t.Fatalf("wire DELETE /bootstrap/status: %v", err)
+	}
+	_ = resp405.Body.Close()
+	if resp405.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", resp405.StatusCode)
+	}
+	if !strings.Contains(resp405.Header.Get("Allow"), "GET") {
+		t.Fatalf("expected Allow: GET, got %q", resp405.Header.Get("Allow"))
+	}
+
+	// Unknown route -> 404 JSON envelope.
+	resp404, err := client.Get(ts.URL + "/admin/v1/does-not-exist")
+	if err != nil {
+		t.Fatalf("wire GET unknown: %v", err)
+	}
+	_ = resp404.Body.Close()
+	if resp404.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp404.StatusCode)
+	}
+}
+
+func TestAC1BootstrapProvisioningAuditAndSnapshotImmediateAuth(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	ctx := context.Background()
+	seedTestAdapter(t, h)
+
+	// Fresh status check.
+	rec := h.doPublic(t, http.MethodGet, "/admin/v1/bootstrap/status", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var stResp bootstrapStatusResponse
+	mustDecodeJSON(t, rec.Body.Bytes(), &stResp)
+	if stResp.Initialized {
+		t.Fatalf("expected initialized=false on fresh server")
+	}
+
+	token := h.readBootstrapToken(t)
+
+	// SSRF blocked metadata IP MUST fail 422 WITHOUT burning the single-use Bootstrap Token!
+	recSSRF := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "owner@example.test",
+		"owner_password":                 "VeryStrongPassword#2026!",
+		"org_name":                       "Acme AI",
+		"project_name":                   "core",
+		"master_kek_backup_acknowledged": true,
+		"initial_connection": map[string]any{
+			"adapter_id":   "adp_openai_spec",
+			"name":         "bad-imds",
+			"billing_mode": "COMMERCIAL_API",
+			"endpoint_url": "http://169.254.169.254/latest/meta-data",
+			"model_id":     "gpt-4o",
+			"data_region":  "US",
+		},
+	})
+	if recSSRF.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 SSRF block, got %d body=%s", recSSRF.Code, recSSRF.Body.String())
+	}
+	var ssrfErr CanonicalErrorEnvelope
+	mustDecodeJSON(t, recSSRF.Body.Bytes(), &ssrfErr)
+	if ssrfErr.Error.Code != "ssrf_blocked_private_ip" {
+		t.Fatalf("expected ssrf_blocked_private_ip, got %s", ssrfErr.Error.Code)
+	}
+
+	// Token MUST still work on valid retry.
+	recComplete := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "owner@example.test",
+		"owner_password":                 "VeryStrongPassword#2026!",
+		"org_name":                       "Acme AI",
+		"project_name":                   "core",
+		"master_kek_backup_acknowledged": true,
+		"initial_connection": map[string]any{
+			"adapter_id":   "adp_openai_spec",
+			"name":         "openai-main",
+			"billing_mode": "COMMERCIAL_API",
+			"endpoint_url": "https://api.openai.com/v1",
+			"secret_value": "sk-initial-bootstrap-value",
+			"model_id":     "gpt-4o",
+			"data_region":  "US",
+		},
+	})
+	if recComplete.Code != http.StatusCreated {
+		t.Fatalf("expected 201 after pre-validation rejection, got %d body=%s", recComplete.Code, recComplete.Body.String())
+	}
+	var boot bootstrapCompleteResponse
+	mustDecodeJSON(t, recComplete.Body.Bytes(), &boot)
+	if boot.InitialVirtualKey == nil || !strings.HasPrefix(boot.InitialVirtualKey.SecretKey, "vk_tp_") {
+		t.Fatalf("expected initial vk_tp_ key, got %+v", boot.InitialVirtualKey)
+	}
+
+	// Verify Data Plane ConfigSnapshot immediately authenticates bootstrap virtual key.
+	authVK, err := h.snapshots.AuthenticateKey(boot.InitialVirtualKey.SecretKey, boot.EnvID)
+	if err != nil {
+		t.Fatalf("snapshots.AuthenticateKey on initial key failed: %v", err)
+	}
+	if authVK.Key == nil || authVK.Key.OrgID != boot.OrgID || authVK.Key.ProjectID != boot.ProjectID {
+		t.Fatalf("unexpected authenticated key scope: %+v", authVK)
+	}
+
+	cookie := findCookie(t, recComplete.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	// Provision another Project, Environment, and Virtual Key.
+	recProj := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", cookie, boot.CSRFToken, "", map[string]any{
+		"slug": "payments",
+		"name": "Payments AI",
+	})
+	if recProj.Code != http.StatusCreated {
+		t.Fatalf("POST /projects status=%d body=%s", recProj.Code, recProj.Body.String())
+	}
+	var proj projectDTO
+	mustDecodeJSON(t, recProj.Body.Bytes(), &proj)
+
+	recEnv := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects/"+proj.ID+"/environments", cookie, boot.CSRFToken, "", map[string]any{
+		"slug": "prod",
+		"name": "Production",
+	})
+	if recEnv.Code != http.StatusCreated {
+		t.Fatalf("POST /environments status=%d body=%s", recEnv.Code, recEnv.Body.String())
+	}
+	var env environmentDTO
+	mustDecodeJSON(t, recEnv.Body.Bytes(), &env)
+
+	recKey := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects/"+proj.ID+"/virtual-keys", cookie, boot.CSRFToken, "", map[string]any{
+		"name":       "payments-gateway",
+		"project_id": proj.ID,
+		"env_id":     env.ID,
+		"rpm_limit":  120,
+	})
+	if recKey.Code != http.StatusCreated {
+		t.Fatalf("POST /virtual-keys status=%d body=%s", recKey.Code, recKey.Body.String())
+	}
+	var vkCreated virtualKeyCreatedDTO
+	mustDecodeJSON(t, recKey.Body.Bytes(), &vkCreated)
+
+	// Verify immediate ConfigSnapshot auth + hash-chained audit trail integrity.
+	authVK2, err := h.snapshots.AuthenticateKey(vkCreated.SecretKey, env.ID)
+	if err != nil {
+		t.Fatalf("AuthenticateKey on newly provisioned key: %v", err)
+	}
+	if authVK2.Key == nil || authVK2.Key.ID != vkCreated.ID || authVK2.Key.RPMLimit == nil || *authVK2.Key.RPMLimit != 120 {
+		t.Fatalf("unexpected snapshot key state: %+v", authVK2)
+	}
+
+	report, err := audit.VerifyAuditChain(ctx, h.st.RawDB(), audit.VerifyOptions{})
+	if err != nil || !report.Valid || report.TotalVerified < 3 {
+		t.Fatalf("audit hash chain verification failed: report=%+v err=%v", report, err)
+	}
+
+	// Replay returns 410 bootstrap_already_completed.
+	recReplay := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "owner@example.test",
+		"owner_password":                 "VeryStrongPassword#2026!",
+		"master_kek_backup_acknowledged": true,
+	})
+	if recReplay.Code != http.StatusGone {
+		t.Fatalf("expected 410 Gone on bootstrap replay, got %d", recReplay.Code)
+	}
+}
+
+func TestAC2CursorPaginationDeterminism125KeysConcurrentInsert(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	token := h.readBootstrapToken(t)
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "pager@example.test",
+		"owner_password":                 "StrongPagingPassword#2026!",
+		"master_kek_backup_acknowledged": true,
+	})
+	if recBoot.Code != http.StatusCreated {
+		t.Fatalf("bootstrap failed: %d %s", recBoot.Code, recBoot.Body.String())
+	}
+	var boot bootstrapCompleteResponse
+	mustDecodeJSON(t, recBoot.Body.Bytes(), &boot)
+	cookie := findCookie(t, recBoot.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	// Seed 125 Virtual Keys advancing FakeClock slightly so timestamps/IDs order cleanly.
+	preExisting := make(map[string]bool, 125)
+	for i := 0; i < 125; i++ {
+		h.fk.Advance(10 * time.Millisecond)
+		rec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/virtual-keys", cookie, boot.CSRFToken, "", map[string]any{
+			"name":       fmt.Sprintf("key-%03d", i),
+			"project_id": boot.ProjectID,
+			"env_id":     boot.EnvID,
+		})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create key %d failed: %d %s", i, rec.Code, rec.Body.String())
+		}
+		var kc virtualKeyCreatedDTO
+		mustDecodeJSON(t, rec.Body.Bytes(), &kc)
+		preExisting[kc.ID] = true
+	}
+
+	// Page 1 (limit=50).
+	recP1 := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/virtual-keys?limit=50", cookie, "", "", nil)
+	if recP1.Code != http.StatusOK {
+		t.Fatalf("page 1 failed: %d %s", recP1.Code, recP1.Body.String())
+	}
+	var p1 paginatedListEnvelope[virtualKeySummaryDTO]
+	mustDecodeJSON(t, recP1.Body.Bytes(), &p1)
+	if len(p1.Data) != 50 || !p1.HasMore || p1.NextCursor == nil {
+		t.Fatalf("unexpected page 1 shape: len=%d hasMore=%v cursor=%v", len(p1.Data), p1.HasMore, p1.NextCursor)
+	}
+
+	// Concurrent insert into page 1 while iterating!
+	h.fk.Advance(10 * time.Millisecond)
+	recConcurrent := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/virtual-keys", cookie, boot.CSRFToken, "", map[string]any{
+		"name":       "concurrent-page1-insert",
+		"project_id": boot.ProjectID,
+		"env_id":     boot.EnvID,
+	})
+	if recConcurrent.Code != http.StatusCreated {
+		t.Fatalf("concurrent insert failed: %d %s", recConcurrent.Code, recConcurrent.Body.String())
+	}
+	var concurrentKey virtualKeyCreatedDTO
+	mustDecodeJSON(t, recConcurrent.Body.Bytes(), &concurrentKey)
+
+	// Page 2 (limit=50).
+	recP2 := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/virtual-keys?limit=50&cursor="+*p1.NextCursor, cookie, "", "", nil)
+	if recP2.Code != http.StatusOK {
+		t.Fatalf("page 2 failed: %d %s", recP2.Code, recP2.Body.String())
+	}
+	var p2 paginatedListEnvelope[virtualKeySummaryDTO]
+	mustDecodeJSON(t, recP2.Body.Bytes(), &p2)
+	if len(p2.Data) != 50 || !p2.HasMore || p2.NextCursor == nil {
+		t.Fatalf("unexpected page 2 shape: len=%d hasMore=%v", len(p2.Data), p2.HasMore)
+	}
+
+	// Page 3 (limit=50) -> final 25 records.
+	recP3 := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/virtual-keys?limit=50&cursor="+*p2.NextCursor, cookie, "", "", nil)
+	if recP3.Code != http.StatusOK {
+		t.Fatalf("page 3 failed: %d %s", recP3.Code, recP3.Body.String())
+	}
+	var p3 paginatedListEnvelope[virtualKeySummaryDTO]
+	mustDecodeJSON(t, recP3.Body.Bytes(), &p3)
+	if len(p3.Data) != 25 || p3.HasMore || p3.NextCursor != nil {
+		t.Fatalf("unexpected page 3 shape: len=%d hasMore=%v cursor=%v", len(p3.Data), p3.HasMore, p3.NextCursor)
+	}
+
+	seen := make(map[string]bool, 125)
+	for _, k := range append(append(p1.Data, p2.Data...), p3.Data...) {
+		if k.ID == concurrentKey.ID {
+			t.Fatalf("concurrent page-1 key leaked into subsequent pages")
+		}
+		if seen[k.ID] {
+			t.Fatalf("duplicate key %s returned across cursor pages", k.ID)
+		}
+		seen[k.ID] = true
+	}
+	if len(seen) != len(preExisting) {
+		t.Fatalf("expected %d distinct pre-existing keys, got %d", len(preExisting), len(seen))
+	}
+	for id := range preExisting {
+		if !seen[id] {
+			t.Fatalf("missing key %s from cursor pagination", id)
+		}
+	}
+
+	// Verify cursor tamper & limit bounds checks.
+	recTamper := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/virtual-keys?limit=50&cursor="+*p1.NextCursor+"tamper", cookie, "", "", nil)
+	if recTamper.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on tampered cursor, got %d", recTamper.Code)
+	}
+	recFilterMismatch := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/virtual-keys?limit=50&project_id="+boot.ProjectID+"&cursor="+*p1.NextCursor, cookie, "", "", nil)
+	if recFilterMismatch.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on filter-mismatched cursor, got %d", recFilterMismatch.Code)
+	}
+	recBadLimit := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/virtual-keys?limit=201", cookie, "", "", nil)
+	if recBadLimit.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on limit=201, got %d", recBadLimit.Code)
+	}
+}
+
+func TestNEG1PlaneIsolationCSRFSpoofingAndCrossTenant(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	ctx := context.Background()
+
+	// Complete bootstrap for Org A.
+	token := h.readBootstrapToken(t)
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "owner-a@example.test",
+		"owner_password":                 "StrongOrgAPass#2026!",
+		"org_name":                       "Org A",
+		"project_name":                   "proj-a",
+		"master_kek_backup_acknowledged": true,
+	})
+	if recBoot.Code != http.StatusCreated {
+		t.Fatalf("bootstrap failed: %d", recBoot.Code)
+	}
+	var bootA bootstrapCompleteResponse
+	mustDecodeJSON(t, recBoot.Body.Bytes(), &bootA)
+	cookieA := findCookie(t, recBoot.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	// Provision Org B + Owner B directly in storage/auth.
+	orgB, err := h.st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "org-b", DisplayName: "Org B"})
+	if err != nil {
+		t.Fatalf("CreateOrganization B: %v", err)
+	}
+	projB, err := h.st.Tenancy().CreateProject(ctx, orgB.ID, port.CreateProjectParams{Slug: "proj-b", DisplayName: "Proj B"})
+	if err != nil {
+		t.Fatalf("CreateProject B: %v", err)
+	}
+	envB, err := h.st.Tenancy().CreateEnvironment(ctx, orgB.ID, projB.ID, port.CreateEnvironmentParams{Slug: "prod"})
+	if err != nil {
+		t.Fatalf("CreateEnvironment B: %v", err)
+	}
+	ownerB, err := h.authSvc.CreatePrincipal(ctx, auth.CreatePrincipalParams{
+		OrgID:      &orgB.ID,
+		Kind:       auth.PrincipalKindHumanLocal,
+		EmailOrSub: "owner-b@example.test",
+		Password:   "StrongOrgBPass#2026!",
+	})
+	if err != nil {
+		t.Fatalf("CreatePrincipal B: %v", err)
+	}
+	if _, err := h.authSvc.BindRole(ctx, auth.BindRoleParams{
+		OrgID:       &orgB.ID,
+		PrincipalID: ownerB.ID,
+		ScopeType:   rbac.ScopeOrg,
+		ScopeID:     orgB.ID,
+		RoleName:    rbac.RoleOrgOwner,
+	}); err != nil {
+		t.Fatalf("BindRole B: %v", err)
+	}
+	if _, err := h.vkeys.Create(ctx, mustVKeyCreateParams(orgB.ID, projB.ID, envB.ID, ownerB.ID, "orgb-k1")); err != nil {
+		t.Fatalf("vkeys.Create B1: %v", err)
+	}
+	if _, err := h.vkeys.Create(ctx, mustVKeyCreateParams(orgB.ID, projB.ID, envB.ID, ownerB.ID, "orgb-k2")); err != nil {
+		t.Fatalf("vkeys.Create B2: %v", err)
+	}
+	_, cookieB, err := h.authSvc.LoginForOrg(ctx, "203.0.113.10", orgB.ID, "owner-b@example.test", "StrongOrgBPass#2026!")
+	if err != nil {
+		t.Fatalf("LoginForOrg B: %v", err)
+	}
+
+	// AUTH-07: Data Plane Virtual Key (vk_tp_*) rejected across all Admin headers & endpoints.
+	for _, hdr := range []struct{ k, v string }{
+		{"Authorization", "Bearer vk_tp_prod_secret1234567890"},
+		{"X-Tanpopo-Virtual-Key", "vk_tp_prod_secret1234567890"},
+		{"x-api-key", "vk_tp_prod_secret1234567890"},
+		{"x-goog-api-key", "vk_tp_prod_secret1234567890"},
+	} {
+		rec := h.doRaw(t, http.MethodGet, "/admin/v1/virtual-keys", nil, map[string]string{hdr.k: hdr.v}, nil)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 for vk_tp_ in %s, got %d", hdr.k, rec.Code)
+		}
+		var ee CanonicalErrorEnvelope
+		mustDecodeJSON(t, rec.Body.Bytes(), &ee)
+		if ee.Error.Code != "invalid_credential_plane" {
+			t.Fatalf("expected invalid_credential_plane, got %s", ee.Error.Code)
+		}
+	}
+
+	// AUTH-03: Missing X-CSRF-Token or bad Origin returns 403 csrf_validation_failed.
+	recNoCSRF := h.doRaw(t, http.MethodPost, "/admin/v1/projects", map[string]any{"slug": "x", "name": "X"}, map[string]string{
+		"Origin": "https://control.tanpopo.local",
+	}, []*http.Cookie{cookieA})
+	if recNoCSRF.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 missing CSRF, got %d", recNoCSRF.Code)
+	}
+	recBadOrigin := h.doRaw(t, http.MethodPost, "/admin/v1/projects", map[string]any{"slug": "x", "name": "X"}, map[string]string{
+		"Origin":       "https://evil.example.net",
+		"X-CSRF-Token": bootA.CSRFToken,
+	}, []*http.Cookie{cookieA})
+	if recBadOrigin.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 bad Origin, got %d", recBadOrigin.Code)
+	}
+
+	// AUTH-13: Forged top-level org_id in JSON body -> 403 org_id_spoofing_forbidden + audit_events.
+	recSpoof := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", cookieA, bootA.CSRFToken, "", map[string]any{
+		"org_id": orgB.ID,
+		"slug":   "spoofed",
+		"name":   "Spoofed",
+	})
+	if recSpoof.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 org_id spoofing, got %d body=%s", recSpoof.Code, recSpoof.Body.String())
+	}
+	var spoofErr CanonicalErrorEnvelope
+	mustDecodeJSON(t, recSpoof.Body.Bytes(), &spoofErr)
+	if spoofErr.Error.Code != "org_id_spoofing_forbidden" {
+		t.Fatalf("expected org_id_spoofing_forbidden, got %s", spoofErr.Error.Code)
+	}
+	var spoofAuditCount int
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_events WHERE event_type = 'security.org_id_spoofing_blocked'`).Scan(&spoofAuditCount); err != nil || spoofAuditCount < 1 {
+		t.Fatalf("expected security.org_id_spoofing_blocked audit event, count=%d err=%v", spoofAuditCount, err)
+	}
+
+	// AUTH-15: Org B next_cursor replayed by Org A -> 400 invalid_pagination_cursor.
+	recListB := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/virtual-keys?limit=1", cookieB, "", "", nil)
+	if recListB.Code != http.StatusOK {
+		t.Fatalf("list org B keys failed: %d", recListB.Code)
+	}
+	var pB paginatedListEnvelope[virtualKeySummaryDTO]
+	mustDecodeJSON(t, recListB.Body.Bytes(), &pB)
+	if pB.NextCursor == nil {
+		t.Fatalf("expected Org B next_cursor with limit=1")
+	}
+	recCrossCursor := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/virtual-keys?limit=1&cursor="+*pB.NextCursor, cookieA, "", "", nil)
+	if recCrossCursor.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 cross-org cursor replay, got %d", recCrossCursor.Code)
+	}
+	var curErr CanonicalErrorEnvelope
+	mustDecodeJSON(t, recCrossCursor.Body.Bytes(), &curErr)
+	if curErr.Error.Code != "invalid_pagination_cursor" {
+		t.Fatalf("expected invalid_pagination_cursor, got %s", curErr.Error.Code)
+	}
+
+	// AUTH-15: Org A targeting Org B Project ID -> 404 resource_not_found.
+	recCrossProj := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/projects/"+projB.ID+"/environments", cookieA, "", "", nil)
+	if recCrossProj.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 cross-org project access, got %d body=%s", recCrossProj.Code, recCrossProj.Body.String())
+	}
+
+	// Bearer token auth works for non-cookie CLI/service callers without X-CSRF-Token.
+	h.registerBearerToken("tp_adm_svc_valid_001", &rbac.Actor{
+		PrincipalID:     ownerB.ID,
+		SessionOrgID:    &orgB.ID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings: []rbac.RoleBinding{
+			{OrgID: &orgB.ID, ScopeType: rbac.ScopeOrg, ScopeID: orgB.ID, RoleName: rbac.RoleOrgOwner},
+		},
+	})
+	recBearer := h.doBearer(t, http.MethodGet, "/admin/v1/projects", "tp_adm_svc_valid_001", "", nil)
+	if recBearer.Code != http.StatusOK {
+		t.Fatalf("expected 200 for bearer auth, got %d body=%s", recBearer.Code, recBearer.Body.String())
+	}
+	recBadBearer := h.doBearer(t, http.MethodGet, "/admin/v1/projects", "tp_adm_svc_bogus", "", nil)
+	if recBadBearer.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for invalid bearer, got %d", recBadBearer.Code)
+	}
+}
+
+func TestNEG2OptimisticLockingETag428And409(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	token := h.readBootstrapToken(t)
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "occ@example.test",
+		"owner_password":                 "StrongOCCPassword#2026!",
+		"master_kek_backup_acknowledged": true,
+	})
+	var boot bootstrapCompleteResponse
+	mustDecodeJSON(t, recBoot.Body.Bytes(), &boot)
+	cookie := findCookie(t, recBoot.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	recCreate := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/virtual-keys", cookie, boot.CSRFToken, "", map[string]any{
+		"name":       "occ-key",
+		"project_id": boot.ProjectID,
+		"env_id":     boot.EnvID,
+	})
+	if recCreate.Code != http.StatusCreated {
+		t.Fatalf("create key: %d", recCreate.Code)
+	}
+	etag1 := recCreate.Header().Get("ETag")
+	if etag1 != `"v1"` {
+		t.Fatalf(`expected ETag "v1", got %q`, etag1)
+	}
+	var vk virtualKeyCreatedDTO
+	mustDecodeJSON(t, recCreate.Body.Bytes(), &vk)
+
+	// Missing If-Match -> 428 precondition_required.
+	rec428 := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/virtual-keys/"+vk.ID, cookie, boot.CSRFToken, "", map[string]any{"name": "no-if-match"})
+	if rec428.Code != http.StatusPreconditionRequired {
+		t.Fatalf("expected 428, got %d", rec428.Code)
+	}
+
+	// Wildcard / weak If-Match -> 400 invalid_if_match.
+	for _, bad := range []string{"*", `W/"v1"`, "v1"} {
+		rec400 := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/virtual-keys/"+vk.ID, cookie, boot.CSRFToken, bad, map[string]any{"name": "bad"})
+		if rec400.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for If-Match=%q, got %d", bad, rec400.Code)
+		}
+	}
+
+	// First writer succeeds ("v1" -> "v2").
+	recW1 := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/virtual-keys/"+vk.ID, cookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"name":      "occ-key-updated",
+		"rpm_limit": 250,
+	})
+	if recW1.Code != http.StatusOK || recW1.Header().Get("ETag") != `"v2"` {
+		t.Fatalf("first writer failed: code=%d etag=%q body=%s", recW1.Code, recW1.Header().Get("ETag"), recW1.Body.String())
+	}
+
+	// Concurrent second writer still holding "v1" receives 409 optimistic_lock_conflict + current_resource + ETag "v2".
+	recW2 := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/virtual-keys/"+vk.ID, cookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"name": "stale-overwrite",
+	})
+	if recW2.Code != http.StatusConflict {
+		t.Fatalf("expected 409 conflict, got %d body=%s", recW2.Code, recW2.Body.String())
+	}
+	if recW2.Header().Get("ETag") != `"v2"` {
+		t.Fatalf(`expected conflict ETag "v2", got %q`, recW2.Header().Get("ETag"))
+	}
+	var conflictErr CanonicalErrorEnvelope
+	mustDecodeJSON(t, recW2.Body.Bytes(), &conflictErr)
+	if conflictErr.Error.Code != "optimistic_lock_conflict" || conflictErr.Error.CurrentResource == nil {
+		t.Fatalf("expected optimistic_lock_conflict with current_resource, got %+v", conflictErr)
+	}
+
+	// Stale rotate and stale revoke also return 409.
+	recRot409 := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/virtual-keys/"+vk.ID+"/rotate", cookie, boot.CSRFToken, `"v1"`, map[string]any{"grace_window_seconds": 60})
+	if recRot409.Code != http.StatusConflict {
+		t.Fatalf("expected 409 on stale rotate, got %d", recRot409.Code)
+	}
+	recRev409 := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/virtual-keys/"+vk.ID+"/revoke", cookie, boot.CSRFToken, `"v1"`, map[string]any{"mode": "GRACEFUL_DRAIN", "reason": "stale version check"})
+	if recRev409.Code != http.StatusConflict {
+		t.Fatalf("expected 409 on stale revoke, got %d", recRev409.Code)
+	}
+}
+
+func TestNEG3BruteForceLoginRateLimitAndAudit(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	ctx := context.Background()
+	token := h.readBootstrapToken(t)
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "brute@example.test",
+		"owner_password":                 "StrongBrutePass#2026!",
+		"master_kek_backup_acknowledged": true,
+	})
+	if recBoot.Code != http.StatusCreated {
+		t.Fatalf("bootstrap failed: %d", recBoot.Code)
+	}
+
+	// Fail 10 times; the 11th failure from same IP must return 429 auth_rate_limited.
+	var saw429 bool
+	for attempt := 1; attempt <= 12; attempt++ {
+		rec := h.doPublic(t, http.MethodPost, "/admin/v1/auth/login", map[string]any{
+			"email":    "brute@example.test",
+			"password": "wrong-password",
+		})
+		if rec.Code == http.StatusTooManyRequests {
+			saw429 = true
+			if rec.Header().Get("Retry-After") == "" {
+				t.Fatalf("expected Retry-After header on 429")
+			}
+			var ee CanonicalErrorEnvelope
+			mustDecodeJSON(t, rec.Body.Bytes(), &ee)
+			if ee.Error.Code != "auth_rate_limited" {
+				t.Fatalf("expected auth_rate_limited, got %s", ee.Error.Code)
+			}
+			break
+		}
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d unexpected status %d: %s", attempt, rec.Code, rec.Body.String())
+		}
+	}
+	if !saw429 {
+		t.Fatalf("expected 429 auth_rate_limited after >10 failed login attempts")
+	}
+
+	var rlAudit int
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_events WHERE event_type = 'auth.login_rate_limited'`).Scan(&rlAudit); err != nil || rlAudit < 1 {
+		t.Fatalf("expected auth.login_rate_limited audit event, count=%d err=%v", rlAudit, err)
+	}
+}
+
+func TestVirtualKeyShowOnceCanaryRotateRevokeFromQuotaPausedAndLogout(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	ctx := context.Background()
+	token := h.readBootstrapToken(t)
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "vklife@example.test",
+		"owner_password":                 "StrongLifePass#2026!",
+		"master_kek_backup_acknowledged": true,
+	})
+	var boot bootstrapCompleteResponse
+	mustDecodeJSON(t, recBoot.Body.Bytes(), &boot)
+	cookie := findCookie(t, recBoot.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	// Create Virtual Key -> returns secret_key once.
+	recCreate := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects/"+boot.ProjectID+"/virtual-keys", cookie, boot.CSRFToken, "", map[string]any{
+		"name":       "show-once-key",
+		"project_id": boot.ProjectID,
+		"env_id":     boot.EnvID,
+	})
+	if recCreate.Code != http.StatusCreated {
+		t.Fatalf("create failed: %d", recCreate.Code)
+	}
+	var created virtualKeyCreatedDTO
+	mustDecodeJSON(t, recCreate.Body.Bytes(), &created)
+	h.scanner.AddSecret(created.SecretKey)
+
+	// GET list must NEVER disclose secret_key (show-once + CanaryScanner).
+	recList := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/virtual-keys", cookie, "", "", nil)
+	if recList.Code != http.StatusOK {
+		t.Fatalf("list failed: %d", recList.Code)
+	}
+	if findings := h.scanner.ScanString("GET /virtual-keys", recList.Body.String()); len(findings) > 0 {
+		t.Fatalf("secret leaked in GET /virtual-keys: %v", findings)
+	}
+
+	// Rotate -> ROTATING_DUAL_VALID with new secret_key.
+	recRot := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/virtual-keys/"+created.ID+"/rotate", cookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"grace_window_seconds": 300,
+	})
+	if recRot.Code != http.StatusOK {
+		t.Fatalf("rotate failed: %d body=%s", recRot.Code, recRot.Body.String())
+	}
+	var rotated virtualKeyCreatedDTO
+	mustDecodeJSON(t, recRot.Body.Bytes(), &rotated)
+	if rotated.State != snapshot.KeyStateRotatingDualValid || rotated.SecretKey == "" || rotated.SecretKey == created.SecretKey {
+		t.Fatalf("unexpected rotated key: %+v", rotated)
+	}
+	h.scanner.AddSecret(rotated.SecretKey)
+
+	// Transition key to QUOTA_PAUSED and register active streams; verify EMERGENCY_ABORT_STREAMS succeeds from QUOTA_PAUSED.
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE virtual_keys SET state = 'QUOTA_PAUSED' WHERE id = ?`, created.ID); err != nil {
+		t.Fatalf("set QUOTA_PAUSED: %v", err)
+	}
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	defer streamCancel()
+	h.snapshots.Streams().Register(boot.OrgID, boot.ProjectID, created.ID, streamCancel)
+
+	recRev := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/virtual-keys/"+created.ID+"/revoke", cookie, boot.CSRFToken, `"v2"`, map[string]any{
+		"mode":   "EMERGENCY_ABORT_STREAMS",
+		"reason": "Suspected leak from QUOTA_PAUSED key",
+	})
+	if recRev.Code != http.StatusOK {
+		t.Fatalf("revoke failed: %d body=%s", recRev.Code, recRev.Body.String())
+	}
+	var revResp revokeVirtualKeyResponse
+	mustDecodeJSON(t, recRev.Body.Bytes(), &revResp)
+	if revResp.Key.State != snapshot.KeyStateRevoked || revResp.SeveredStreamsCount != 1 {
+		t.Fatalf("expected REVOKED + 1 severed stream, got %+v", revResp)
+	}
+	if streamCtx.Err() == nil {
+		t.Fatalf("expected active stream context to be canceled immediately on EMERGENCY_ABORT_STREAMS")
+	}
+
+	// Create an ephemeral playground key owned by caller and verify POST /auth/logout revokes it cleanly.
+	pgKey, err := h.vkeys.Create(ctx, vkey.CreateParams{
+		OrgID:            boot.OrgID,
+		ProjectID:        boot.ProjectID,
+		EnvID:            boot.EnvID,
+		OwnerPrincipalID: &boot.OwnerPrincipalID,
+		Name:             "playground-ephemeral",
+		ActorID:          boot.OwnerPrincipalID,
+	})
+	if err != nil {
+		t.Fatalf("create playground key: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE virtual_keys SET is_ephemeral_playground = 1 WHERE id = ?`, pgKey.Summary.ID); err != nil {
+		t.Fatalf("mark ephemeral playground: %v", err)
+	}
+
+	recLogout := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/auth/logout", cookie, boot.CSRFToken, "", nil)
+	if recLogout.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 on logout, got %d body=%s", recLogout.Code, recLogout.Body.String())
+	}
+	var pgState string
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT state FROM virtual_keys WHERE id = ?`, pgKey.Summary.ID).Scan(&pgState); err != nil || pgState != snapshot.KeyStateRevoked {
+		t.Fatalf("expected playground key REVOKED after logout, got %q err=%v", pgState, err)
+	}
+}
+
+func TestSixRoleRBACMatrixAndAntiSelfEscalation(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	ctx := context.Background()
+	token := h.readBootstrapToken(t)
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "rbac-owner@example.test",
+		"owner_password":                 "StrongRBACPass#2026!",
+		"master_kek_backup_acknowledged": true,
+	})
+	var boot bootstrapCompleteResponse
+	mustDecodeJSON(t, recBoot.Body.Bytes(), &boot)
+	ownerCookie := findCookie(t, recBoot.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	// Create a second project to test TeamAdmin project isolation.
+	recP2 := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "isolated-p2",
+		"name": "Isolated P2",
+	})
+	var proj2 projectDTO
+	mustDecodeJSON(t, recP2.Body.Bytes(), &proj2)
+
+	// Confirm RoleFinOpsViewer NEVER has ActionSecretReadMeta or ActionMemberWrite.
+	finActor := &rbac.Actor{
+		PrincipalID:     "prc_finops_test",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleFinOpsViewer}},
+	}
+	if err := rbac.Authorize(finActor, rbac.ActionSecretReadMeta, rbac.TargetScope{OrgID: boot.OrgID}); !errors.Is(err, rbac.ErrPermissionDenied) {
+		t.Fatalf("FINOPS_VIEWER must NOT have ActionSecretReadMeta, got err=%v", err)
+	}
+	h.registerBearerToken("tok_finops", finActor)
+	if rec := h.doBearer(t, http.MethodPost, "/admin/v1/projects", "tok_finops", "", map[string]any{"slug": "x", "name": "X"}); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for FINOPS_VIEWER creating project, got %d", rec.Code)
+	}
+
+	// DEVELOPER can create project virtual key, cannot read/write members.
+	devActor := &rbac.Actor{
+		PrincipalID:     "prc_dev_test",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleDeveloper}},
+	}
+	h.registerBearerToken("tok_dev", devActor)
+	if rec := h.doBearer(t, http.MethodGet, "/admin/v1/members", "tok_dev", "", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for DEVELOPER listing members, got %d", rec.Code)
+	}
+
+	// SECURITY_REVIEWER can read members and virtual-keys, cannot mutate them.
+	secActor := &rbac.Actor{
+		PrincipalID:     "prc_sec_test",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleSecurityReviewer}},
+	}
+	h.registerBearerToken("tok_sec", secActor)
+	if rec := h.doBearer(t, http.MethodGet, "/admin/v1/members", "tok_sec", "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for SECURITY_REVIEWER listing members, got %d", rec.Code)
+	}
+	if rec := h.doBearer(t, http.MethodPost, "/admin/v1/projects", "tok_sec", "", map[string]any{"slug": "x", "name": "X"}); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for SECURITY_REVIEWER creating project, got %d", rec.Code)
+	}
+
+	// Create TeamAdmin bound only to boot.ProjectID via POST /members.
+	recCreateTA := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/members", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"email":       "ta@example.test",
+		"kind":        "HUMAN",
+		"roles":       []string{"TEAM_ADMIN"},
+		"project_ids": []string{boot.ProjectID},
+	})
+	if recCreateTA.Code != http.StatusCreated {
+		t.Fatalf("create TEAM_ADMIN failed: %d body=%s", recCreateTA.Code, recCreateTA.Body.String())
+	}
+	var taMember memberSummaryDTO
+	mustDecodeJSON(t, recCreateTA.Body.Bytes(), &taMember)
+
+	taActor := &rbac.Actor{
+		PrincipalID:     taMember.ID,
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleTeamAdmin}},
+	}
+	h.registerBearerToken("tok_ta", taActor)
+
+	// Anti-self-escalation: TEAM_ADMIN trying to elevate self to ORG_OWNER -> 403 role_escalation_denied.
+	recSelfEsc := h.doBearer(t, http.MethodPatch, "/admin/v1/members/"+taMember.ID+"/roles", "tok_ta", `"v1"`, map[string]any{
+		"roles": []string{"ORG_OWNER"},
+	})
+	if recSelfEsc.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 self-escalation block, got %d body=%s", recSelfEsc.Code, recSelfEsc.Body.String())
+	}
+	var escErr CanonicalErrorEnvelope
+	mustDecodeJSON(t, recSelfEsc.Body.Bytes(), &escErr)
+	if escErr.Error.Code != "role_escalation_denied" {
+		t.Fatalf("expected role_escalation_denied, got %s", escErr.Error.Code)
+	}
+
+	// Verify OPERATOR role cannot be granted to org members & non-OPERATOR cannot create Organization.
+	recEscOrg := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/members", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"email": "escalate-op@example.test",
+		"roles": []string{"OPERATOR"},
+	})
+	if recEscOrg.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 granting OPERATOR inside org, got %d", recEscOrg.Code)
+	}
+	orgOwnerOnly := &rbac.Actor{
+		PrincipalID:     "prc_orgowner_only",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleOrgOwner}},
+	}
+	h.registerBearerToken("tok_org_owner_only", orgOwnerOnly)
+	recNonOpOrg := h.doBearer(t, http.MethodPost, "/admin/v1/organizations", "tok_org_owner_only", "", map[string]any{
+		"slug": "unauth-org",
+		"name": "Unauth Org",
+	})
+	if recNonOpOrg.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for ORG_OWNER calling POST /organizations, got %d", recNonOpOrg.Code)
+	}
+
+	// TeamAdmin cannot create/modify developer in proj2 (outside scope).
+	if rec := h.doBearer(t, http.MethodPost, "/admin/v1/members", "tok_ta", "", map[string]any{
+		"email":       "dev-p2@example.test",
+		"roles":       []string{"DEVELOPER"},
+		"project_ids": []string{proj2.ID},
+	}); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for TeamAdmin assigning outside project scope, got %d", rec.Code)
+	}
+	_ = ctx
+}
+
+func TestOrganizationAndProjectCryptoShreddingCascadeAndCleanup(t *testing.T) {
+	t.Parallel()
+	h := newAdminTestHarness(t)
+	ctx := context.Background()
+	seedTestAdapter(t, h)
+
+	token := h.readBootstrapToken(t)
+	recBoot := h.doPublic(t, http.MethodPost, "/admin/v1/bootstrap/complete", map[string]any{
+		"bootstrap_token":                token,
+		"owner_email":                    "shred@example.test",
+		"owner_password":                 "StrongShredPass#2026!",
+		"org_name":                       "Shred Org",
+		"project_name":                   "shred-proj",
+		"master_kek_backup_acknowledged": true,
+		"initial_connection": map[string]any{
+			"adapter_id":   "adp_openai_spec",
+			"name":         "shred-conn",
+			"billing_mode": "COMMERCIAL_API",
+			"endpoint_url": "https://api.openai.com/v1",
+			"secret_value": "sk-shred-canary-secret-1",
+			"model_id":     "gpt-4o",
+			"data_region":  "US",
+		},
+	})
+	if recBoot.Code != http.StatusCreated {
+		t.Fatalf("bootstrap failed: %d %s", recBoot.Code, recBoot.Body.String())
+	}
+	var boot bootstrapCompleteResponse
+	mustDecodeJSON(t, recBoot.Body.Bytes(), &boot)
+	ownerCookie := findCookie(t, recBoot.Result().Cookies(), "__Host-tanpopo_admin_session")
+
+	// Seal a Project-scoped secret so Project crypto-shredding can prove unseal failure afterwards.
+	projSecret, err := h.vault.SealSecret(ctx, vault.SealSecretParams{
+		OrgID:          boot.OrgID,
+		OwnerProjectID: &boot.ProjectID,
+		Name:           "proj-secret",
+		SecretKind:     vault.SecretKindAPIKey,
+		Plaintext:      []byte("project-only-secret-value"),
+	})
+	if err != nil {
+		t.Fatalf("SealSecret project: %v", err)
+	}
+
+	// Register an active stream inside the project.
+	projStreamCtx, projStreamCancel := context.WithCancel(ctx)
+	defer projStreamCancel()
+	h.snapshots.Streams().Register(boot.OrgID, boot.ProjectID, boot.InitialVirtualKey.ID, projStreamCancel)
+
+	// Delete Project (with invalid confirm_slug first -> 400 confirm_slug_mismatch, then valid).
+	recBadSlug := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/projects/"+boot.ProjectID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"confirm_slug": "wrong-slug",
+		"reason":       "Shredding entire project test",
+	})
+	if recBadSlug.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 confirm_slug_mismatch, got %d", recBadSlug.Code)
+	}
+
+	recShredProj := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/projects/"+boot.ProjectID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"confirm_slug": "shred-proj",
+		"reason":       "GDPR erasure and project closeout",
+	})
+	if recShredProj.Code != http.StatusOK {
+		t.Fatalf("DELETE /projects failed: %d body=%s", recShredProj.Code, recShredProj.Body.String())
+	}
+	var receiptProj cryptoShredReceiptDTO
+	mustDecodeJSON(t, recShredProj.Body.Bytes(), &receiptProj)
+	if receiptProj.TargetType != "PROJECT" || receiptProj.RevokedVirtualKeysCount < 1 {
+		t.Fatalf("unexpected project shred receipt: %+v", receiptProj)
+	}
+	if projStreamCtx.Err() == nil {
+		t.Fatalf("expected project active stream to be aborted")
+	}
+	if _, unsealErr := h.vault.UnsealWithCapability(ctx, vault.MintUnsealCapabilityForBroker(), boot.OrgID, projSecret.ID); unsealErr == nil {
+		t.Fatalf("expected project secret unseal to fail permanently after Project DEK shred")
+	}
+
+	// Verify immutable audit chain survived project teardown intact.
+	if report, aerr := audit.VerifyAuditChain(ctx, h.st.RawDB(), audit.VerifyOptions{}); aerr != nil || !report.Valid {
+		t.Fatalf("audit chain broken after project shred: report=%+v err=%v", report, aerr)
+	}
+
+	// Now test OPERATOR creating a fresh Org and crypto-shredding Shred Org via DELETE /organizations/{orgId}.
+	opActor := &rbac.Actor{
+		PrincipalID:     "prc_instance_operator_test",
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	}
+	h.registerBearerToken("tok_operator", opActor)
+
+	recNewOrg := h.doBearer(t, http.MethodPost, "/admin/v1/organizations", "tok_operator", "", map[string]any{
+		"slug": "second-org",
+		"name": "Second Org",
+	})
+	if recNewOrg.Code != http.StatusCreated {
+		t.Fatalf("OPERATOR POST /organizations failed: %d body=%s", recNewOrg.Code, recNewOrg.Body.String())
+	}
+
+	recShredOrg := h.doBearer(t, http.MethodDelete, "/admin/v1/organizations/"+boot.OrgID, "tok_operator", `"v1"`, map[string]any{
+		"confirm_slug": "shred-org",
+		"reason":       "Full organization crypto-shredding verification",
+	})
+	if recShredOrg.Code != http.StatusOK {
+		t.Fatalf("DELETE /organizations failed: %d body=%s", recShredOrg.Code, recShredOrg.Body.String())
+	}
+	var receiptOrg cryptoShredReceiptDTO
+	mustDecodeJSON(t, recShredOrg.Body.Bytes(), &receiptOrg)
+	if receiptOrg.TargetType != "ORGANIZATION" || receiptOrg.TargetID != boot.OrgID {
+		t.Fatalf("unexpected org shred receipt: %+v", receiptOrg)
+	}
+
+	// Owner's session cookie MUST be invalidated after organization teardown.
+	recAfterSession := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/auth/session", ownerCookie, "", "", nil)
+	if recAfterSession.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for revoked org owner session after org shred, got %d", recAfterSession.Code)
+	}
+
+	_ = port.ErrInvalidInput
+	_ = sql.ErrNoRows
+}

@@ -71,13 +71,38 @@ type RotateParams struct {
 	ActorID         string
 }
 
+// UpdateParams configures partial optimistic-locked Virtual Key metadata updates.
+type UpdateParams struct {
+	OrgID                string
+	KeyID                string
+	ExpectedVersion      int64
+	Name                 *string
+	RPMLimit             *int64
+	ClearRPMLimit        bool
+	TPMLimit             *int64
+	ClearTPMLimit        bool
+	MaxConcurrentStreams *int64
+	AllowedModels        []string
+	HasAllowedModels     bool
+	AllowedMCPTools      []string
+	HasAllowedMCPTools   bool
+	ActorID              string
+}
+
 // RevokeParams configures standard or emergency security key revocation.
 type RevokeParams struct {
 	OrgID           string
 	KeyID           string
 	ExpectedVersion int64
 	Mode            string
+	Reason          string
 	ActorID         string
+}
+
+// RevokeReceipt captures the updated VirtualKeySummary alongside severed active streams count.
+type RevokeReceipt struct {
+	Summary             *VirtualKeySummary
+	SeveredStreamsCount int
 }
 
 // VirtualKeySummary exposes read-safe metadata — NEVER plaintext key material or hashes (UX-GR-01).
@@ -641,9 +666,168 @@ func (s *Service) transitionState(ctx context.Context, orgID, keyID string, expe
 	return summary, nil
 }
 
+// Update mutates metadata fields (name, limits, allowlists) under optimistic locking,
+// records config_changelog + immutable audit, and refreshes ConfigSnapshot immediately.
+func (s *Service) Update(ctx context.Context, params UpdateParams) (*VirtualKeySummary, error) {
+	if strings.TrimSpace(params.OrgID) == "" || strings.TrimSpace(params.KeyID) == "" || params.ExpectedVersion < 1 {
+		return nil, fmt.Errorf("%w: org_id, key_id, and expected_version >= 1 required", port.ErrInvalidInput)
+	}
+	if params.Name != nil && strings.TrimSpace(*params.Name) == "" {
+		return nil, fmt.Errorf("%w: name cannot be blank", port.ErrInvalidInput)
+	}
+	if params.RPMLimit != nil && *params.RPMLimit <= 0 {
+		return nil, fmt.Errorf("%w: rpm_limit must be > 0", port.ErrInvalidInput)
+	}
+	if params.TPMLimit != nil && *params.TPMLimit <= 0 {
+		return nil, fmt.Errorf("%w: tpm_limit must be > 0", port.ErrInvalidInput)
+	}
+	if params.MaxConcurrentStreams != nil && *params.MaxConcurrentStreams <= 0 {
+		return nil, fmt.Errorf("%w: max_concurrent_streams must be > 0", port.ErrInvalidInput)
+	}
+
+	now := s.nowMs()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	cur, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, `
+		SELECT
+			id, org_id, project_id, env_id, owner_principal_id, name,
+			key_prefix, last_four, state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
+			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
+			grace_expires_at_ms, expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
+		FROM virtual_keys
+		WHERE org_id = ? AND id = ?`, params.OrgID, params.KeyID))
+	if err != nil {
+		return nil, err
+	}
+	if cur.Version != params.ExpectedVersion {
+		return nil, port.ErrVersionConflict
+	}
+	switch cur.State {
+	case snapshot.KeyStateRevoked, snapshot.KeyStateExpired, snapshot.KeyStatePurgedMetadataRetained:
+		return nil, fmt.Errorf("%w: cannot update key in state %s", ErrInvalidStateTransition, cur.State)
+	}
+
+	nextName := cur.Name
+	if params.Name != nil {
+		nextName = strings.TrimSpace(*params.Name)
+	}
+	nextRPM := cur.RPMLimit
+	if params.ClearRPMLimit {
+		nextRPM = nil
+	} else if params.RPMLimit != nil {
+		nextRPM = cloneInt64Ptr(params.RPMLimit)
+	}
+	nextTPM := cur.TPMLimit
+	if params.ClearTPMLimit {
+		nextTPM = nil
+	} else if params.TPMLimit != nil {
+		nextTPM = cloneInt64Ptr(params.TPMLimit)
+	}
+	nextStreams := cur.MaxConcurrentStreams
+	if params.MaxConcurrentStreams != nil {
+		nextStreams = *params.MaxConcurrentStreams
+	}
+	nextModels := cur.AllowedModels
+	if params.HasAllowedModels {
+		if len(params.AllowedModels) == 0 {
+			nextModels = []string{}
+		} else {
+			nextModels = append([]string(nil), params.AllowedModels...)
+		}
+	}
+	nextMCP := cur.AllowedMCPTools
+	if params.HasAllowedMCPTools {
+		if len(params.AllowedMCPTools) == 0 {
+			nextMCP = []string{}
+		} else {
+			nextMCP = append([]string(nil), params.AllowedMCPTools...)
+		}
+	}
+	modelsJSON, err := json.Marshal(nextModels)
+	if err != nil {
+		return nil, err
+	}
+	mcpJSON, err := json.Marshal(nextMCP)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE virtual_keys
+		SET name = ?, rpm_limit = ?, tpm_limit = ?, max_concurrent_streams = ?,
+		    allowed_models_json = ?, allowed_mcp_tools_json = ?, version = version + 1, updated_at_ms = ?
+		WHERE org_id = ? AND id = ? AND version = ?`,
+		nextName, nullInt64Ptr(nextRPM), nullInt64Ptr(nextTPM), nextStreams,
+		string(modelsJSON), string(mcpJSON), now,
+		params.OrgID, params.KeyID, params.ExpectedVersion,
+	)
+	if err != nil {
+		return nil, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if affected == 0 {
+		return nil, port.ErrVersionConflict
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
+		VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
+		params.OrgID, params.KeyID, port.MutationUpsert, now,
+	); err != nil {
+		return nil, err
+	}
+
+	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, `
+		SELECT
+			id, org_id, project_id, env_id, owner_principal_id, name,
+			key_prefix, last_four, state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
+			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
+			grace_expires_at_ms, expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
+		FROM virtual_keys
+		WHERE org_id = ? AND id = ?`, params.OrgID, params.KeyID))
+	if err != nil {
+		return nil, err
+	}
+
+	actor := strings.TrimSpace(params.ActorID)
+	if actor == "" {
+		actor = "system"
+	}
+	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, port.AuditEntryPointAdminAPI, "virtual_key.updated", params.KeyID, map[string]any{
+		"name":                   nextName,
+		"max_concurrent_streams": nextStreams,
+	}, now); aerr != nil {
+		return nil, aerr
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	if syncErr := s.syncSnapshot(ctx); syncErr != nil {
+		return summary, syncErr
+	}
+	return summary, nil
+}
+
 // Revoke permanently revokes a Virtual Key from any non-terminal state (including QUOTA_PAUSED).
 // Under RevokeModeEmergency, it immediately aborts all active SSE streams bound to this key (AC-3 / AUTH-06).
 func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeySummary, error) {
+	receipt, err := s.RevokeWithReceipt(ctx, params)
+	if receipt == nil {
+		return nil, err
+	}
+	return receipt.Summary, err
+}
+
+// RevokeWithReceipt revokes a Virtual Key and reports the count of active streams severed immediately.
+func (s *Service) RevokeWithReceipt(ctx context.Context, params RevokeParams) (*RevokeReceipt, error) {
 	if strings.TrimSpace(params.OrgID) == "" || strings.TrimSpace(params.KeyID) == "" || params.ExpectedVersion < 1 {
 		return nil, fmt.Errorf("%w: org_id, key_id, and expected_version >= 1 required", port.ErrInvalidInput)
 	}
@@ -737,9 +921,13 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 	if actor == "" {
 		actor = "system"
 	}
-	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, port.AuditEntryPointAdminAPI, "virtual_key.revoked", params.KeyID, map[string]any{
+	meta := map[string]any{
 		"mode": mode,
-	}, now); aerr != nil {
+	}
+	if reason := strings.TrimSpace(params.Reason); reason != "" {
+		meta["reason"] = reason
+	}
+	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, port.AuditEntryPointAdminAPI, "virtual_key.revoked", params.KeyID, meta, now); aerr != nil {
 		return nil, aerr
 	}
 
@@ -747,14 +935,22 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 		return nil, err
 	}
 
+	severed := 0
+	if emergency && s.snapshots != nil && s.snapshots.Streams() != nil {
+		severed = s.snapshots.Streams().AbortKey(params.KeyID)
+	}
 	syncErr := s.syncSnapshot(ctx)
 	if syncErr != nil && s.snapshots != nil {
 		// Fail closed in local RAM immediately and preserve active stream cancellation
 		// without falsely claiming Refresh succeeded.
 		s.snapshots.FenceKeyRevocation(params.KeyID, mode, now, committedEpoch)
+		if s.snapshots.Streams() != nil {
+			severed += s.snapshots.Streams().AbortKey(params.KeyID)
+		}
 	}
-	if (emergency || syncErr != nil) && s.snapshots != nil && s.snapshots.Streams() != nil {
-		s.snapshots.Streams().AbortKey(params.KeyID)
+	receipt := &RevokeReceipt{
+		Summary:             summary,
+		SeveredStreamsCount: severed,
 	}
 
 	if syncErr != nil {
@@ -775,9 +971,9 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 				MetadataJSON: fmt.Sprintf(`{"mode":%q,"snapshot_sync_pending":true}`, mode),
 			})
 		}
-		return summary, errors.Join(syncErr, pendingAuditErr)
+		return receipt, errors.Join(syncErr, pendingAuditErr)
 	}
-	return summary, nil
+	return receipt, nil
 }
 
 // FinalizeExpiredRotations clears elapsed previous_key_hash grace windows cleanly back to CREATED_ACTIVE.

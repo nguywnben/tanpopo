@@ -69,14 +69,23 @@ func TestSixRoleRBACMatrixAndFailClosedGuards(t *testing.T) {
 		}
 	}
 
-	// FINOPS_VIEWER is barred from Playground (SCR-15), whereas DEVELOPER is allowed.
+	// FINOPS_VIEWER is barred from Playground (SCR-15) and Secrets (AUTH-11), whereas DEVELOPER is allowed Playground.
 	finops := mkActor(RoleFinOpsViewer, ScopeOrg, orgA, &orgA)
 	if err := Authorize(finops, ActionPlaygroundCreate, TargetScope{OrgID: orgA, ProjectID: projA1}); !errors.Is(err, ErrPermissionDenied) {
 		t.Fatalf("FINOPS_VIEWER playground expected ErrPermissionDenied, got %v", err)
 	}
+	if err := Authorize(finops, ActionSecretReadMeta, TargetScope{OrgID: orgA, ProjectID: projA1}); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("FINOPS_VIEWER secret read metadata expected ErrPermissionDenied, got %v", err)
+	}
+	if err := Authorize(finops, ActionSessionSelf, TargetScope{OrgID: orgA}); err != nil {
+		t.Fatalf("FINOPS_VIEWER ActionSessionSelf expected nil, got %v", err)
+	}
 	dev := mkActor(RoleDeveloper, ScopeOrg, orgA, &orgA)
 	if err := Authorize(dev, ActionPlaygroundCreate, TargetScope{OrgID: orgA, ProjectID: projA1}); err != nil {
 		t.Fatalf("DEVELOPER playground expected nil, got %v", err)
+	}
+	if err := Authorize(op, ActionSessionSelf, TargetScope{}); err != nil {
+		t.Fatalf("OPERATOR ActionSessionSelf expected nil, got %v", err)
 	}
 
 	// SECURITY_REVIEWER approves plugin capabilities, reads/verifies audit, emergency-revokes keys,

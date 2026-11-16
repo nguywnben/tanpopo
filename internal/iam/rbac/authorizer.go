@@ -52,6 +52,7 @@ type Action string
 
 // Canonical Control Plane actions mapped to /admin/v1/* endpoints (SCR-01..16).
 const (
+	ActionSessionSelf          Action = "auth:session_self"
 	ActionOrgCreate            Action = "org:create"
 	ActionOrgRead              Action = "org:read"
 	ActionOrgDelete            Action = "org:delete"
@@ -150,6 +151,7 @@ type RoutePermissionSpec struct {
 
 var rolePermissions = map[string]map[Action]bool{
 	RoleOperator: {
+		ActionSessionSelf:         true,
 		ActionOrgCreate:           true,
 		ActionOrgRead:             true,
 		ActionOrgDelete:           true,
@@ -199,6 +201,7 @@ var rolePermissions = map[string]map[Action]bool{
 	RoleOrgOwner: {
 		// Note: ActionOrgCreate (POST /admin/v1/organizations) and ActionSupportBundleExport
 		// are strictly reserved for OPERATOR (AUTH-11 / SCR-15 / SCR-16).
+		ActionSessionSelf:        true,
 		ActionOrgRead:            true,
 		ActionOrgDelete:          true,
 		ActionProjectRead:        true,
@@ -240,6 +243,7 @@ var rolePermissions = map[string]map[Action]bool{
 		ActionRetentionWrite:     true,
 	},
 	RoleTeamAdmin: {
+		ActionSessionSelf:        true,
 		ActionProjectRead:        true,
 		ActionMemberRead:         true,
 		ActionMemberWrite:        true,
@@ -268,6 +272,7 @@ var rolePermissions = map[string]map[Action]bool{
 		ActionPlaygroundCreate:   true,
 	},
 	RoleSecurityReviewer: {
+		ActionSessionSelf:        true,
 		ActionOrgRead:            true,
 		ActionProjectRead:        true,
 		ActionMemberRead:         true,
@@ -294,9 +299,9 @@ var rolePermissions = map[string]map[Action]bool{
 	RoleFinOpsViewer: {
 		// Strictly read-only across telemetry, models, routes, policies & budgets;
 		// explicitly barred from PLAYGROUND (SCR-15), secrets, approvals, and mutations (AUTH-11).
+		ActionSessionSelf:    true,
 		ActionOrgRead:        true,
 		ActionProjectRead:    true,
-		ActionSecretReadMeta: true,
 		ActionConnectionRead: true,
 		ActionModelRead:      true,
 		ActionExtensionRead:  true,
@@ -307,6 +312,7 @@ var rolePermissions = map[string]map[Action]bool{
 		ActionBudgetRead:     true,
 	},
 	RoleDeveloper: {
+		ActionSessionSelf:      true,
 		ActionProjectRead:      true,
 		ActionVKeyRead:         true,
 		ActionModelRead:        true,
@@ -365,7 +371,7 @@ func ResolveSessionOrgID(actor *Actor, _ string) (string, error) {
 		return *actor.SessionOrgID, nil
 	}
 	for _, b := range actor.Bindings {
-		if b.ScopeType == ScopeOrg && b.OrgID != nil && strings.TrimSpace(*b.OrgID) != "" {
+		if (b.ScopeType == ScopeOrg || b.ScopeType == ScopeProject) && b.OrgID != nil && strings.TrimSpace(*b.OrgID) != "" {
 			return *b.OrgID, nil
 		}
 	}
@@ -427,7 +433,7 @@ func Authorize(actor *Actor, action Action, target TargetScope) error {
 		case ScopeProject:
 			if target.ProjectID != "" && b.ScopeID == target.ProjectID {
 				matchedScopeBindings = append(matchedScopeBindings, b)
-			} else if target.ProjectID == "" && target.IsCollectionList && isProjectCollectionReadAction(action) {
+			} else if target.ProjectID == "" && (action == ActionSessionSelf || (target.IsCollectionList && isProjectCollectionReadAction(action))) {
 				matchedScopeBindings = append(matchedScopeBindings, b)
 			}
 		}
@@ -444,7 +450,7 @@ func Authorize(actor *Actor, action Action, target TargetScope) error {
 
 	for _, b := range matchedScopeBindings {
 		if b.ScopeType == ScopeProject {
-			if target.ProjectID == "" && !(target.IsCollectionList && isProjectCollectionReadAction(action)) {
+			if target.ProjectID == "" && action != ActionSessionSelf && !(target.IsCollectionList && isProjectCollectionReadAction(action)) {
 				continue
 			}
 			if target.ProjectID != "" && b.ScopeID != target.ProjectID {
