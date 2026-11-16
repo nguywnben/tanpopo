@@ -1,0 +1,128 @@
+# Copyright 2026 The Tanpopo Authors.
+# Licensed under the Apache License, Version 2.0.
+# Canonical Symptom-Based Prometheus Alert Rules (SPEC-OPS-03 / TP-IMP-0022)
+# Cross-linked 1-to-1 with incident runbooks INC-01..INC-07 in docs/operations/monitoring-incidents.md.
+
+groups:
+  - name: tanpopo.slo.and.security
+    rules:
+      - alert: ALT-GATEWAY-BURN
+        expr: |
+          (
+            sum(rate(tanpopo_http_requests_total{status_class="5xx",error_code!~"^upstream_.*"}[5m]))
+            /
+            clamp_min(sum(rate(tanpopo_http_requests_total[5m])), 1e-6)
+          ) > 0.0004
+        for: 5m
+        labels:
+          alert_id: ALT-GATEWAY-BURN
+          severity: page
+          runbook: INC-04
+        annotations:
+          summary: "Internal Tanpopo 5xx error budget burn exceeds threshold"
+          description: "Internal 5xx rate excluding upstream provider faults is burning >2% monthly 99.9% SLO budget. Inspect rollout for DR-04 rollback and check INC-04 / INC-07."
+          runbook_ref: "docs/operations/monitoring-incidents.md#inc-04"
+
+      - alert: ALT-LATENCY-SLO
+        expr: |
+          histogram_quantile(0.95, sum(rate(tanpopo_proxy_overhead_seconds_bucket[5m])) by (le)) > 0.010
+        for: 5m
+        labels:
+          alert_id: ALT-LATENCY-SLO
+          severity: page
+          runbook: INC-03
+        annotations:
+          summary: "Gateway internal proxy overhead p95 exceeds 10 ms"
+          description: "p95 of tanpopo_proxy_overhead_seconds has exceeded 0.010s continuously for 5m. Inspect Wasm sandbox pool contention (INC-03) and fast-state/Valkey latency (INC-07)."
+          runbook_ref: "docs/operations/monitoring-incidents.md#inc-03"
+
+      - alert: ALT-REVOCATION-LAG
+        expr: |
+          max(tanpopo_config_snapshot_age_seconds) > 5
+        for: 30s
+        labels:
+          alert_id: ALT-REVOCATION-LAG
+          severity: page
+          runbook: INC-07
+        annotations:
+          summary: "Data Plane config snapshot / revocation lag exceeds 5s"
+          description: "At least one Data Plane node reports tanpopo_config_snapshot_age_seconds > 5s for > 30s (nodes > 10s trip /readyz = 503). Inspect Valkey Pub/Sub & PostgreSQL LISTEN/NOTIFY per INC-07 and INC-02."
+          runbook_ref: "docs/operations/monitoring-incidents.md#inc-07"
+
+      - alert: ALT-AUDIT-TAMPER
+        expr: |
+          sum(increase(tanpopo_http_requests_total{error_code="audit_chain_tamper_detected"}[5m])) > 0
+        for: 0m
+        labels:
+          alert_id: ALT-AUDIT-TAMPER
+          severity: page
+          runbook: INC-02
+        annotations:
+          summary: "Audit hash chain integrity failure or tamper detected"
+          description: "Audit verifier or runtime check detected a broken prev_hash -> entry_hash link. Execute tanpopo admin freeze-writes, preserve volumes, cross-check encrypted backups, and assess key/tenant impact (INC-02 / INC-03)."
+          runbook_ref: "docs/operations/monitoring-incidents.md#inc-02"
+
+      - alert: ALT-PLUGIN-TRAP
+        expr: |
+          sum by (adapter_id) (increase(tanpopo_sandbox_traps_total[1m])) > 20
+        for: 0m
+        labels:
+          alert_id: ALT-PLUGIN-TRAP
+          severity: page
+          runbook: INC-03
+        annotations:
+          summary: "Wasm extension trap rate triggered automatic quarantine"
+          description: "tanpopo_sandbox_traps_total exceeded 20 faults in 60s for adapter {{ $labels.adapter_id }}. Extension transitioned to QUARANTINED; run forensic blast-radius per INC-03 (also check INC-06 for MCP drift)."
+          runbook_ref: "docs/operations/monitoring-incidents.md#inc-03"
+
+      - alert: ALT-BUDGET-80
+        expr: |
+          sum by (org_id, project_id) (increase(tanpopo_http_requests_total{error_code="project_budget_exceeded"}[5m])) > 0
+        for: 1m
+        labels:
+          alert_id: ALT-BUDGET-80
+          severity: ticket
+          runbook: INC-01
+        annotations:
+          summary: "Project budget exhaustion / 429 project_budget_exceeded detected"
+          description: "Project budget ceiling or 80%/100% soft threshold triggered. Inspect Virtual Key hold loops and budget balances per INC-01."
+          runbook_ref: "docs/operations/monitoring-incidents.md#inc-01"
+
+      - alert: ALT-OAUTH-EXPIRY
+        expr: |
+          sum by (org_id, project_id) (increase(tanpopo_http_requests_total{error_code="oauth_grant_expired"}[10m])) > 0
+        for: 0m
+        labels:
+          alert_id: ALT-OAUTH-EXPIRY
+          severity: ticket
+          runbook: INC-05
+        annotations:
+          summary: "Authorized OAuth 2.1 provider connection requires re-authorization"
+          description: "Provider connection transitioned to AUTH_EXPIRED_REAUTH_REQUIRED (SM-03). Re-authorize via PKCE flow per INC-05 (and inspect MCP tool drift per INC-06 if applicable)."
+          runbook_ref: "docs/operations/monitoring-incidents.md#inc-05"
+
+      - alert: ALT-UNMETERED-SPEND
+        expr: |
+          sum by (org_id, project_id, logical_model) (increase(tanpopo_usage_settlements_total{accuracy_tier="UNMETERED_FLAGGED"}[10m])) > 0
+        for: 0m
+        labels:
+          alert_id: ALT-UNMETERED-SPEND
+          severity: ticket
+          runbook: INC-01
+        annotations:
+          summary: "Settlements recorded with accuracy_tier=UNMETERED_FLAGGED"
+          description: "Usage settlements are missing a model rate card. Populate integer nano-USD pricing on SCR-05 and verify chargeback impact per INC-01."
+          runbook_ref: "docs/operations/monitoring-incidents.md#inc-01"
+
+      - alert: ALT-TELEMETRY-DROP
+        expr: |
+          sum by (signal) (rate(tanpopo_telemetry_dropped_total[5m])) > 0
+        for: 2m
+        labels:
+          alert_id: ALT-TELEMETRY-DROP
+          severity: ticket
+          runbook: INC-06
+        annotations:
+          summary: "OTLP 32 MiB Drop-Oldest ring buffer shedding telemetry"
+          description: "External OTLP collector is unreachable or slow; tanpopo_telemetry_dropped_total is incrementing without blocking inference. Inspect collector health and verify INC-06/INC-07 operational checks."
+          runbook_ref: "docs/operations/monitoring-incidents.md#inc-06"

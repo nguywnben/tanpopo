@@ -250,7 +250,7 @@ func (s *Server) executeSyncEmbeddingAttempt(
 	admLease *admissionLease,
 	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
-	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
+	upResp, err := s.executeBrokerSync(ctx, egressReq, constraint, target, requestedModel)
 	if err != nil {
 		return s.classifyBrokerAttemptError(w, clientCtx, ctx, reqID, err, true)
 	}
@@ -260,13 +260,13 @@ func (s *Server) executeSyncEmbeddingAttempt(
 	}
 
 	sanitizedHdrs := flattenHTTPHeaders(upResp.SanitizedHeaders)
-	normResp, err := rt.TransformResponse(ctx, port.TransformResponseInput{
+	normResp, err := s.transformResponseWithStage(ctx, rt, port.TransformResponseInput{
 		RequestID:        reqID,
 		HTTPStatus:       int32(upResp.StatusCode),
 		SanitizedHeaders: sanitizedHdrs,
 		RawResponseBody:  upResp.Body,
 		Modality:         "EMBEDDINGS",
-	})
+	}, target)
 	if err != nil {
 		return s.classifyTransformResponseError(w, clientCtx, ctx, reqID, err, "Upstream provider returned an invalid or truncated embeddings payload.")
 	}
@@ -299,6 +299,7 @@ func (s *Server) executeSyncEmbeddingAttempt(
 	}
 	if headerUsage != nil {
 		s.reconcileAdmissionUsage(admLease, headerUsage)
+		s.recordSettledUsageTelemetry(ctx, requestedModel, headerUsage)
 	}
 	writeSettledJSONResponse(w, ctx, reqID, headerUsage, finalBody, idemClaim)
 	return failover.AttemptResult{

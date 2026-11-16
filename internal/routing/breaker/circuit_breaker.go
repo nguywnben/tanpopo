@@ -96,6 +96,7 @@ type Config struct {
 	EWMADecay               float64
 	Now                     func() time.Time
 	JitterFn                func(base time.Duration) time.Duration
+	OnTransition            func(deploymentID, prevState, newState string)
 }
 
 type windowBucket struct {
@@ -324,47 +325,56 @@ func (b *CircuitBreaker) AcquireAttempt(deploymentID, snapshotState string, snap
 
 	now := b.now()
 	d := b.getOrCreate(deploymentID)
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	var transPrev, transNext string
+	allowed, state, isProbe, release, transPrev, transNext = func() (bool, string, bool, func(), string, string) {
+		d.mu.Lock()
+		defer d.mu.Unlock()
 
-	d.seedSnapshotCooldownIfUninitialized(snapshotState, snapshotCooldownUntilMs, now)
+		d.seedSnapshotCooldownIfUninitialized(snapshotState, snapshotCooldownUntilMs, now)
 
-	switch d.state {
-	case StateThrottledCooldown:
-		if now.Before(d.cooldownUntil) {
-			return false, StateThrottledCooldown, false, nil
-		}
-		d.state = StateActiveHealthy
-		d.cooldownUntil = time.Time{}
-		return true, StateActiveHealthy, false, func() {}
+		switch d.state {
+		case StateThrottledCooldown:
+			if now.Before(d.cooldownUntil) {
+				return false, StateThrottledCooldown, false, nil, "", ""
+			}
+			prev := d.state
+			d.state = StateActiveHealthy
+			d.cooldownUntil = time.Time{}
+			return true, StateActiveHealthy, false, func() {}, prev, StateActiveHealthy
 
-	case StateCircuitOpenUnhealthy:
-		if now.Before(d.openUntil) {
-			return false, StateCircuitOpenUnhealthy, false, nil
-		}
-		d.state = StateHalfOpenProbing
-		d.probeInFlight = true
-		d.probeSeq++
-		d.probeSuccesses = 0
-		seq := d.probeSeq
-		return true, StateHalfOpenProbing, true, func() {
-			b.releaseProbeLease(deploymentID, seq)
-		}
+		case StateCircuitOpenUnhealthy:
+			if now.Before(d.openUntil) {
+				return false, StateCircuitOpenUnhealthy, false, nil, "", ""
+			}
+			prev := d.state
+			d.state = StateHalfOpenProbing
+			d.probeInFlight = true
+			d.probeSeq++
+			d.probeSuccesses = 0
+			seq := d.probeSeq
+			return true, StateHalfOpenProbing, true, func() {
+				b.releaseProbeLease(deploymentID, seq)
+			}, prev, StateHalfOpenProbing
 
-	case StateHalfOpenProbing:
-		if d.probeInFlight {
-			return false, StateHalfOpenProbing, false, nil
-		}
-		d.probeInFlight = true
-		d.probeSeq++
-		seq := d.probeSeq
-		return true, StateHalfOpenProbing, true, func() {
-			b.releaseProbeLease(deploymentID, seq)
-		}
+		case StateHalfOpenProbing:
+			if d.probeInFlight {
+				return false, StateHalfOpenProbing, false, nil, "", ""
+			}
+			d.probeInFlight = true
+			d.probeSeq++
+			seq := d.probeSeq
+			return true, StateHalfOpenProbing, true, func() {
+				b.releaseProbeLease(deploymentID, seq)
+			}, "", ""
 
-	default:
-		return true, StateActiveHealthy, false, func() {}
+		default:
+			return true, StateActiveHealthy, false, func() {}, "", ""
+		}
+	}()
+	if transNext != "" && transPrev != transNext && b.cfg.OnTransition != nil {
+		b.cfg.OnTransition(deploymentID, transPrev, transNext)
 	}
+	return allowed, state, isProbe, release
 }
 
 func (b *CircuitBreaker) releaseProbeLease(deploymentID string, seq uint64) {
@@ -392,11 +402,10 @@ func (b *CircuitBreaker) RecordOutcome(deploymentID string, outcome AttemptOutco
 	now := b.now()
 	d := b.getOrCreate(deploymentID)
 	d.mu.Lock()
-	defer d.mu.Unlock()
-
 	if d.state == "" {
 		d.state = StateActiveHealthy
 	}
+	prevState := d.state
 
 	switch outcome.Kind {
 	case OutcomeCallerError, OutcomeClientCanceled:
@@ -404,7 +413,6 @@ func (b *CircuitBreaker) RecordOutcome(deploymentID string, outcome AttemptOutco
 		if outcome.IsProbe {
 			d.probeInFlight = false
 		}
-		return
 
 	case OutcomeSuccess:
 		b.observeLatencyLocked(d, outcome.Latency)
@@ -420,19 +428,16 @@ func (b *CircuitBreaker) RecordOutcome(deploymentID string, outcome AttemptOutco
 		} else if d.state == StateThrottledCooldown {
 			b.resetToHealthyLocked(d)
 		}
-		return
 
 	case OutcomeThrottle429:
 		d.probeInFlight = false
 		d.probeSuccesses = 0
 		d.throttleStreak++
-		if d.state == StateCircuitOpenUnhealthy && now.Before(d.openUntil) && !outcome.IsProbe {
-			return
+		if !(d.state == StateCircuitOpenUnhealthy && now.Before(d.openUntil) && !outcome.IsProbe) {
+			cooldown := b.computeCooldownDuration(outcome.RetryAfterRaw, d.throttleStreak-1, now)
+			d.state = StateThrottledCooldown
+			d.cooldownUntil = now.Add(cooldown)
 		}
-		cooldown := b.computeCooldownDuration(outcome.RetryAfterRaw, d.throttleStreak-1, now)
-		d.state = StateThrottledCooldown
-		d.cooldownUntil = now.Add(cooldown)
-		return
 
 	case OutcomeSystemFault:
 		b.recordWindowSampleLocked(d, now, true)
@@ -443,19 +448,23 @@ func (b *CircuitBreaker) RecordOutcome(deploymentID string, outcome AttemptOutco
 			d.openUntil = now.Add(b.cfg.OpenCooldown)
 			d.probeInFlight = false
 			d.probeSuccesses = 0
-			return
+		} else {
+			total, failures := b.sumWindowLocked(d, now)
+			tripByStreak := d.consecutiveFailures >= b.cfg.ConsecutiveFailureLimit
+			tripByRatio := total >= int64(b.cfg.MinSamples) && float64(failures)/float64(total) >= b.cfg.FailureRatio
+			if tripByStreak || tripByRatio {
+				d.state = StateCircuitOpenUnhealthy
+				d.openUntil = now.Add(b.cfg.OpenCooldown)
+				d.probeInFlight = false
+				d.probeSuccesses = 0
+			}
 		}
+	}
+	nextState := d.state
+	d.mu.Unlock()
 
-		total, failures := b.sumWindowLocked(d, now)
-		tripByStreak := d.consecutiveFailures >= b.cfg.ConsecutiveFailureLimit
-		tripByRatio := total >= int64(b.cfg.MinSamples) && float64(failures)/float64(total) >= b.cfg.FailureRatio
-		if tripByStreak || tripByRatio {
-			d.state = StateCircuitOpenUnhealthy
-			d.openUntil = now.Add(b.cfg.OpenCooldown)
-			d.probeInFlight = false
-			d.probeSuccesses = 0
-		}
-		return
+	if nextState != "" && prevState != nextState && b.cfg.OnTransition != nil {
+		b.cfg.OnTransition(deploymentID, prevState, nextState)
 	}
 }
 

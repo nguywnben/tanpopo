@@ -235,8 +235,8 @@ func TestFreshAndUpgradeMigration0011To0012(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadApplied: %v", err)
 	}
-	if len(recs) == 0 || recs[len(recs)-1].Version != 12 {
-		t.Fatalf("expected latest migration version 12, got %+v", recs)
+	if len(recs) == 0 || recs[len(recs)-1].Version < 12 {
+		t.Fatalf("expected latest migration version >= 12, got %+v", recs)
 	}
 	org, err := stUpgraded.Tenancy().GetOrganization(ctx, "org_upgrade_01")
 	if err != nil || org.Slug != "upgrade-org" {

@@ -44,6 +44,8 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	storageport "github.com/nguywnben/tanpopo/internal/storage/port"
+	"github.com/nguywnben/tanpopo/internal/telemetry/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -88,6 +90,7 @@ type Config struct {
 	FirstByteTimeout        time.Duration
 	HeartbeatInterval       time.Duration
 	OnUsage                 func(UsageRecord)
+	Telemetry               *otel.Pipeline
 }
 
 // Handler serves /native/{dialect}/{upstreamPath} passthrough requests.
@@ -108,6 +111,7 @@ type Handler struct {
 	firstByteTimeout        time.Duration
 	heartbeatInterval       time.Duration
 	onUsage                 func(UsageRecord)
+	telemetry               *otel.Pipeline
 	regexMu                 sync.RWMutex
 	regexCache              map[string]*regexp.Regexp
 }
@@ -170,6 +174,7 @@ func NewHandler(cfg Config) (*Handler, error) {
 		firstByteTimeout:        firstByte,
 		heartbeatInterval:       hb,
 		onUsage:                 cfg.OnUsage,
+		telemetry:               cfg.Telemetry,
 		regexCache:              make(map[string]*regexp.Regexp),
 	}, nil
 }
@@ -184,6 +189,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Tanpopo-Request-Id", reqID)
 	w.Header().Set("Traceparent", tp)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	var reqTel *nativeRequestTelemetry
+	if h.telemetry != nil {
+		spanCtx, rootSpan, traceID := h.telemetry.StartRequestSpan(r.Context(), tp, reqID, "native_http")
+		reqTel = &nativeRequestTelemetry{
+			pipeline:    h.telemetry,
+			reqID:       reqID,
+			traceID:     traceID,
+			entryPoint:  "native_http",
+			startedAt:   time.Now(),
+			startedAtMs: h.nowMs(),
+			rootSpan:    rootSpan,
+		}
+		scw := &nativeStatusCaptureWriter{ResponseWriter: w}
+		w = scw
+		r = r.WithContext(withNativeTelemetry(spanCtx, reqTel))
+		defer reqTel.finish(r.Context(), scw, r)
+	}
 
 	if r.Header.Get("Upgrade") != "" || headerContainsToken(r.Header.Values("Connection"), "upgrade") {
 		writeCanonicalError(w, reqID, http.StatusBadRequest, "unsupported_protocol_upgrade", "invalid_request_error", "HTTP protocol upgrades are not permitted on /native/{dialect}/{upstreamPath}.", false)
@@ -208,6 +231,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cancelStream()
 	defer h.snapshots.Streams().Unregister(match.Key.ID, handleID)
+	reqTel.recordAuth(match)
 
 	// Step 3: Read bounded body without altering any bytes destined for upstream.
 	rawBody, ok := h.readBoundedBody(w, r, reqID)
@@ -215,6 +239,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer clear(rawBody)
+	reqTel.captureDebugPayloadIfAuthorized(rawBody)
 
 	rawHints, err := ExtractRawHints(rawBody, upstreamPath, altParam)
 	if err != nil {
@@ -238,15 +263,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeCanonicalError(w, reqID, http.StatusForbidden, "native_path_not_allowed", "permission_error", "Native passthrough path rejected or missing target model.", false)
 		return
 	}
+	reqTel.recordModel(rawHints.Model)
 	estTokens, estBaseIn, estMaxOut, completionCount := estimateNativeTokensAndCountFromJSON(rawBody)
 	reqRegion, regionOK := resolveNativeRequestedDataRegion(r)
 	if !regionOK {
 		writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Conflicting X-Tanpopo-Data-Region header values.", false)
 		return
 	}
-	if !h.evaluateNativePreAdmissionPolicy(w, reqID, match, eff, rawHints.Model, reqRegion, rawBody, estTokens) {
+	_, endPolicyStage := reqTel.startStage(r.Context(), "Policy", attribute.String("logical_model", rawHints.Model))
+	policyAllowed := h.evaluateNativePreAdmissionPolicy(w, reqID, match, eff, rawHints.Model, reqRegion, rawBody, estTokens)
+	if !policyAllowed {
+		endPolicyStage("denied", "", nil)
 		return
 	}
+	endPolicyStage("ok", "", nil)
 
 	// Step 3b: When Idempotency-Key is supplied on synchronous POST, enforce RPM BEFORE idempotency SQLite lookup
 	// and reserve TPM ONLY after a fresh IN_FLIGHT claim (so cached replays still count against RPM without burning TPM).
@@ -332,7 +362,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			NarrowPolicy: &narrowPolicy,
 		})
 
-		inspRes, err := InspectNativeRequest(wasmCtx, initialRT, reqID, dialect, upstreamPath, safeHeaders, rawBody, rawHints)
+		adpID, _, extTier := nativeTargetTelemetryLabels(initialTarget)
+		inspCtx, endInspHook := reqTel.startStage(wasmCtx, "ExtensionHook",
+			attribute.String("hook", "inspect_native_request"),
+			attribute.String("adapter_id", adpID),
+			attribute.String("extension_tier", extTier),
+		)
+		inspRes, err := InspectNativeRequest(inspCtx, initialRT, reqID, dialect, upstreamPath, safeHeaders, rawBody, rawHints)
+		inspStatus := "ok"
+		if err != nil {
+			inspStatus = "error"
+		}
+		endInspHook(inspStatus, "inspect_native_request", err)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				if r.Context().Err() == nil && streamCtx.Err() != nil {
@@ -478,7 +519,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	execRes := failover.Execute(streamCtx, failover.Config{
 		Breaker: h.breaker,
 		Now:     func() time.Time { return time.UnixMilli(h.nowMs()).UTC() },
-	}, candidates, func(hopCtx context.Context, _ int, cand *resolver.RankedTarget) failover.AttemptResult {
+	}, candidates, func(hopCtx context.Context, attemptIdx int, cand *resolver.RankedTarget) failover.AttemptResult {
+		var targetID, adpID, region string
+		if cand != nil && cand.Target != nil {
+			reqTel.recordRouteAttempt(cand.Target, effectiveModel)
+			adpID, region, _ = nativeTargetTelemetryLabels(cand.Target)
+			if cand.Target.Deployment != nil {
+				targetID = cand.Target.Deployment.ID
+			}
+			if h.telemetry != nil && h.telemetry.Metrics != nil && cand.Target.Adapter != nil {
+				stateStr := "ACTIVE_HEALTHY"
+				if cand.Target.Deployment != nil && cand.Target.Deployment.State != "" {
+					stateStr = cand.Target.Deployment.State
+				}
+				h.telemetry.Metrics.SetDeploymentCircuitState(adpID, region, stateStr)
+			}
+		}
+		hopSpanCtx, endHopStage := reqTel.startStage(hopCtx, "RouteAttempt",
+			attribute.Int("attempt", attemptIdx+1),
+			attribute.String("adapter_id", adpID),
+			attribute.String("deployment_id", targetID),
+			attribute.String("data_region", region),
+		)
 		var reuseRT port.ProviderRuntime
 		var releaseReuse func()
 		var preInsp *InspectResult
@@ -490,11 +552,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			releaseInitial = nil
 			initialRT = nil
 		}
-		return h.executeNativeHop(
+		res := h.executeNativeHop(
 			w,
 			r,
 			streamCtx,
-			hopCtx,
+			hopSpanCtx,
 			reqID,
 			tp,
 			dialect,
@@ -516,6 +578,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			admLease,
 			budgetSess,
 		)
+		st := "ok"
+		var hopErr error
+		if !res.Succeeded {
+			st = fmt.Sprintf("http_%d", res.HTTPStatus)
+			if res.HTTPStatus >= 500 || res.HTTPStatus == 0 {
+				hopErr = fmt.Errorf("route attempt ended with status %d", res.HTTPStatus)
+			}
+		}
+		endHopStage(st, targetID, hopErr)
+		return res
 	})
 	if execRes.ClientCanceled && !execRes.StreamStarted && r.Context().Err() == nil && streamCtx.Err() != nil {
 		writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
@@ -816,7 +888,31 @@ func (h *Handler) executeSyncNativeAttempt(
 	admLease *nativeAdmissionLease,
 	budgetSess *nativeBudgetSession,
 ) failover.AttemptResult {
-	upResp, err := h.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
+	reqTel := nativeTelemetryFromContext(ctx)
+	adpID, region, _ := nativeTargetTelemetryLabels(target)
+	eCtx, endEgressStage := reqTel.startStage(ctx, "Egress",
+		attribute.String("adapter_id", adpID),
+		attribute.String("logical_model", model),
+		attribute.String("data_region", region),
+	)
+	egressStart := time.Now()
+	upResp, err := h.broker.ExecuteWithHostConstraint(eCtx, egressReq, constraint)
+	egressDur := time.Since(egressStart)
+	reqTel.addUpstreamDuration(egressDur)
+	statusCode := upResp.StatusCode
+	if err != nil && statusCode == 0 {
+		statusCode = http.StatusBadGateway
+	}
+	if h.telemetry != nil && h.telemetry.Metrics != nil {
+		h.telemetry.Metrics.RecordUpstreamCall(adpID, model, region, statusCode, "total", egressDur)
+	}
+	stageStatus := "ok"
+	if err != nil {
+		stageStatus = "error"
+	} else if statusCode >= 400 {
+		stageStatus = "upstream_error"
+	}
+	endEgressStage(stageStatus, "", err)
 	if err != nil {
 		return h.classifyNativeBrokerAttemptError(w, clientCtx, streamCtx, reqID, err, true)
 	}
@@ -841,6 +937,7 @@ func (h *Handler) executeSyncNativeAttempt(
 	}
 	usage = settledUsage
 	h.reconcileAdmissionUsage(admLease, &usage)
+	h.recordNativeUsageTelemetry(ctx, model, usage)
 	h.recordUsage(ctx, UsageRecord{
 		RequestID:    reqID,
 		Dialect:      dialect,
@@ -906,17 +1003,39 @@ func (h *Handler) executeStreamingNativeAttempt(
 	admLease *nativeAdmissionLease,
 	budgetSess *nativeBudgetSession,
 ) failover.AttemptResult {
-	upCtx, cancelUp := context.WithCancel(hopCtx)
+	reqTel := nativeTelemetryFromContext(hopCtx)
+	adpID, region, extTier := nativeTargetTelemetryLabels(target)
+	eCtx, endEgressStage := reqTel.startStage(hopCtx, "Egress",
+		attribute.String("adapter_id", adpID),
+		attribute.String("logical_model", model),
+		attribute.String("data_region", region),
+		attribute.Bool("stream", true),
+	)
+	egressStart := time.Now()
+
+	upCtx, cancelUp := context.WithCancel(eCtx)
 	defer cancelUp()
 
 	upStream, err := h.broker.ExecuteStreamWithHostConstraint(upCtx, egressReq, constraint)
 	if err != nil {
+		dur := time.Since(egressStart)
+		reqTel.addUpstreamDuration(dur)
+		if h.telemetry != nil && h.telemetry.Metrics != nil {
+			h.telemetry.Metrics.RecordUpstreamCall(adpID, model, region, http.StatusBadGateway, "total", dur)
+		}
+		endEgressStage("error", "", err)
 		return h.classifyNativeBrokerAttemptError(w, clientCtx, streamCtx, reqID, err, false)
 	}
 	defer func() { _ = upStream.Body.Close() }()
 
 	if upStream.StatusCode < 200 || upStream.StatusCode >= 300 {
 		errBody, _ := io.ReadAll(io.LimitReader(upStream.Body, 1<<20))
+		dur := time.Since(egressStart)
+		reqTel.addUpstreamDuration(dur)
+		if h.telemetry != nil && h.telemetry.Metrics != nil {
+			h.telemetry.Metrics.RecordUpstreamCall(adpID, model, region, upStream.StatusCode, "total", dur)
+		}
+		endEgressStage("upstream_error", "", nil)
 		return h.makeNormalizedNativeUpstreamAttemptError(hopCtx, w, reqID, rt, upStream.StatusCode, upStream.SanitizedHeaders, errBody)
 	}
 
@@ -925,11 +1044,37 @@ func (h *Handler) executeStreamingNativeAttempt(
 		idleChunkTimeout = time.Duration(target.Deployment.IdleChunkTimeoutMs) * time.Millisecond
 	}
 
+	var onChunkRelayed func(time.Duration)
+	if h.telemetry != nil && h.telemetry.Metrics != nil {
+		h.telemetry.Metrics.AddActiveStream("native_http", 1)
+		defer h.telemetry.Metrics.AddActiveStream("native_http", -1)
+		tel := h.telemetry
+		onChunkRelayed = func(relayDuration time.Duration) {
+			tel.Metrics.RecordSSEChunkRelay(extTier, relayDuration)
+		}
+	}
+
 	acc := NewSSEUsageAccumulator(rt, reqID, rawReqBody)
 	onStreamStarted := func() {
+		ttft := time.Since(egressStart)
+		reqTel.setTTFTMs(ttft.Milliseconds())
+		if h.telemetry != nil && h.telemetry.Metrics != nil {
+			h.telemetry.Metrics.RecordUpstreamCall(adpID, model, region, upStream.StatusCode, "ttft", ttft)
+		}
 		budgetSess.markStreaming(hopCtx)
 	}
-	pumpRes, pumpErr := pumpNativeSSE(hopCtx, w, reqID, upStream.Body, cancelUp, h.heartbeatInterval, idleChunkTimeout, acc, onStreamStarted)
+	pumpRes, pumpErr := pumpNativeSSE(eCtx, w, reqID, upStream.Body, cancelUp, h.heartbeatInterval, idleChunkTimeout, acc, onStreamStarted, onChunkRelayed)
+	totalDur := time.Since(egressStart)
+	reqTel.addUpstreamDuration(totalDur)
+	if h.telemetry != nil && h.telemetry.Metrics != nil {
+		h.telemetry.Metrics.RecordUpstreamCall(adpID, model, region, upStream.StatusCode, "total", totalDur)
+	}
+	stageStatus := "ok"
+	if pumpErr != nil {
+		stageStatus = "error"
+	}
+	endEgressStage(stageStatus, "", pumpErr)
+
 	if pumpErr != nil && !pumpRes.streamStarted {
 		if errors.Is(pumpErr, sse.ErrLineTooLarge) {
 			return failover.AttemptResult{
@@ -989,6 +1134,7 @@ func (h *Handler) executeStreamingNativeAttempt(
 		finalUsage = settledUsage
 	}
 	h.reconcileAdmissionUsage(admLease, &finalUsage)
+	h.recordNativeUsageTelemetry(usageCtx, model, finalUsage)
 	h.recordUsage(usageCtx, UsageRecord{
 		RequestID:    reqID,
 		Dialect:      dialect,
@@ -1222,6 +1368,7 @@ func pumpNativeSSE(
 	idleTimeout time.Duration,
 	acc *SSEUsageAccumulator,
 	onStreamStarted func(),
+	onChunkRelayed func(time.Duration),
 ) (nativePumpRes, error) {
 	var res nativePumpRes
 	rc := http.NewResponseController(w)
@@ -1380,6 +1527,10 @@ pumpLoop:
 				break pumpLoop
 			}
 			if len(msg.data) > 0 {
+				var chunkStart time.Time
+				if onChunkRelayed != nil {
+					chunkStart = time.Now()
+				}
 				if acc != nil {
 					acc.Feed(ctx, msg.data)
 				}
@@ -1402,6 +1553,9 @@ pumpLoop:
 					res.clientDisconnected = true
 					abortUpstream()
 					return res, ferr
+				}
+				if onChunkRelayed != nil {
+					onChunkRelayed(time.Since(chunkStart))
 				}
 			}
 			if msg.isEOF {
@@ -2278,6 +2432,9 @@ func writeMidStreamAbort(w http.ResponseWriter, rc *http.ResponseController, req
 }
 
 func writeCanonicalError(w http.ResponseWriter, reqID string, status int, code, errType, message string, retryable bool) {
+	if ec, ok := w.(interface{ SetCanonicalErrorCode(string) }); ok {
+		ec.SetCanonicalErrorCode(code)
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Tanpopo-Request-Id", reqID)

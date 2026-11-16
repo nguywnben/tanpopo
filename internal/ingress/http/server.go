@@ -61,6 +61,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	storageport "github.com/nguywnben/tanpopo/internal/storage/port"
+	"github.com/nguywnben/tanpopo/internal/telemetry/otel"
 )
 
 const (
@@ -104,6 +105,7 @@ type ServerConfig struct {
 	DefaultHoldOutputTokens  int64
 	UsageObserver            func(UsageRecord)
 	NativeUsageObserver      func(native.UsageRecord)
+	Telemetry                *otel.Pipeline
 }
 
 // UsageRecord captures normalized usage telemetry from Data Plane inference endpoints.
@@ -183,7 +185,8 @@ type Server struct {
 	budgetLedger            *ledger.Service
 	defaultHoldOutputTokens int64
 	usageObserver           func(UsageRecord)
-	nativeHandler     *native.Handler
+	nativeHandler           *native.Handler
+	telemetry               *otel.Pipeline
 
 	wasmCache wazero.CompilationCache
 
@@ -242,9 +245,17 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	}
 	faultGuard := cfg.FaultGuard
 	if faultGuard == nil {
+		var onTrap func(installationID string, kind wasm.FaultKind)
+		if cfg.Telemetry != nil && cfg.Telemetry.Metrics != nil {
+			tel := cfg.Telemetry
+			onTrap = func(installationID string, kind wasm.FaultKind) {
+				tel.Metrics.RecordSandboxTrap(installationID, mapFaultKindToTrapReason(kind))
+			}
+		}
 		faultGuard = wasm.NewFaultGuard(wasm.FaultGuardConfig{
 			AuditSink:  cfg.Audit,
 			EntryPoint: wasm.DefaultAuditEntryPoint,
+			OnTrap:     onTrap,
 		})
 	}
 
@@ -266,8 +277,16 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	}
 	cb := cfg.Breaker
 	if cb == nil {
+		var onTransition func(deploymentID, prevState, newState string)
+		if cfg.Telemetry != nil && cfg.Telemetry.Metrics != nil {
+			tel := cfg.Telemetry
+			onTransition = func(deploymentID, _, newState string) {
+				tel.Metrics.SetDeploymentCircuitState(deploymentID, "UNSPECIFIED", newState)
+			}
+		}
 		cb = breaker.New(breaker.Config{
-			Now: func() time.Time { return time.UnixMilli(nowFn()).UTC() },
+			Now:          func() time.Time { return time.UnixMilli(nowFn()).UTC() },
+			OnTransition: onTransition,
 		})
 	}
 	routeRes := cfg.RouteResolver
@@ -276,25 +295,26 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	}
 
 	s := &Server{
-		snapshots:         cfg.Snapshots,
-		broker:            cfg.Broker,
-		faultGuard:        faultGuard,
-		pluginsDir:        resolvedPluginsDir,
-		audit:             cfg.Audit,
-		nowMs:             nowFn,
-		maxReqBodyBytes:   maxBody,
-		wasmPoolSize:      poolSize,
-		firstByteTimeout:  firstByteTimeout,
-		heartbeatInterval: hbInterval,
-		idempotency:       idemGuard,
-		remoteMediaPolicy: cfg.RemoteMediaPolicy,
-		policyEval:        policyEval,
-		rateLimiter:       rateLimiter,
+		snapshots:               cfg.Snapshots,
+		broker:                  cfg.Broker,
+		faultGuard:              faultGuard,
+		pluginsDir:              resolvedPluginsDir,
+		audit:                   cfg.Audit,
+		nowMs:                   nowFn,
+		maxReqBodyBytes:         maxBody,
+		wasmPoolSize:            poolSize,
+		firstByteTimeout:        firstByteTimeout,
+		heartbeatInterval:       hbInterval,
+		idempotency:             idemGuard,
+		remoteMediaPolicy:       cfg.RemoteMediaPolicy,
+		policyEval:              policyEval,
+		rateLimiter:             rateLimiter,
 		breaker:                 cb,
 		routeResolver:           routeRes,
 		budgetLedger:            cfg.BudgetLedger,
 		defaultHoldOutputTokens: cfg.DefaultHoldOutputTokens,
 		usageObserver:           cfg.UsageObserver,
+		telemetry:               cfg.Telemetry,
 		wasmCache:               wazero.NewCompilationCache(),
 		runtimes:                make(map[runtimeCacheKey]*cachedAdapterEntry),
 		mux:                     http.NewServeMux(),
@@ -313,10 +333,11 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 			BudgetLedger:            s.budgetLedger,
 			DefaultHoldOutputTokens: s.defaultHoldOutputTokens,
 			MaxRequestBodyBytes:     s.maxReqBodyBytes,
-			FirstByteTimeout:    s.firstByteTimeout,
-			HeartbeatInterval:   s.heartbeatInterval,
-			NowMs:               s.nowMs,
-			OnUsage:             cfg.NativeUsageObserver,
+			FirstByteTimeout:        s.firstByteTimeout,
+			HeartbeatInterval:       s.heartbeatInterval,
+			NowMs:                   s.nowMs,
+			OnUsage:                 cfg.NativeUsageObserver,
+			Telemetry:               s.telemetry,
 			AcquireRuntime: func(ctx context.Context, target *snapshot.ResolvedTarget) (port.ProviderRuntime, func(), error) {
 				entry, err := s.getOrLoadAdapterRuntime(ctx, target)
 				if err != nil {
@@ -341,9 +362,28 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	if !cfg.DisableModels {
 		s.mux.HandleFunc("/v1/models", s.handleModels)
 	}
+	if s.telemetry != nil && s.telemetry.Metrics != nil {
+		s.mux.Handle("/metrics", s.MetricsHandler())
+	}
 	s.mux.HandleFunc("/", s.handleNotFound)
 	s.rootRouter = s.withIngressEnvelope(s.mux)
 	return s, nil
+}
+
+// MetricsHandler returns the Prometheus /metrics exposition handler when telemetry is configured.
+func (s *Server) MetricsHandler() http.Handler {
+	if s == nil || s.telemetry == nil || s.telemetry.Metrics == nil {
+		return http.NotFoundHandler()
+	}
+	return s.telemetry.Metrics
+}
+
+// FaultGuard returns the Server's active Wasm FaultGuard instance.
+func (s *Server) FaultGuard() *wasm.FaultGuard {
+	if s == nil {
+		return nil
+	}
+	return s.faultGuard
 }
 
 // Breaker returns the Data Plane SM-04 circuit breaker shared across HTTP and native handlers.
@@ -435,6 +475,12 @@ func isNativeRequestPath(r *http.Request) bool {
 
 func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL != nil && r.URL.Path == "/metrics" && s.telemetry != nil && s.telemetry.Metrics != nil {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			s.MetricsHandler().ServeHTTP(w, r)
+			return
+		}
+
 		reqID := sanitizeOrMintRequestID(r.Header.Get("X-Tanpopo-Request-Id"))
 		tp := sanitizeOrMintTraceparent(r.Header.Get("Traceparent"))
 
@@ -442,17 +488,17 @@ func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 		w.Header().Set("Traceparent", tp)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 
-		if isProtocolUpgradeRequest(r) {
-			writeCanonicalError(w, reqID, http.StatusBadRequest, "unsupported_protocol_upgrade", "invalid_request_error", "WebSocket and WebRTC protocol upgrades are not supported on this gateway endpoint.", false)
-			return
-		}
-
 		ctx := context.WithValue(r.Context(), requestContextKey{}, ingressContext{
 			RequestID:   reqID,
 			Traceparent: tp,
 		})
 		rCtx := r.WithContext(ctx)
+
 		if isNativeRequestPath(rCtx) {
+			if isProtocolUpgradeRequest(rCtx) {
+				writeCanonicalError(w, reqID, http.StatusBadRequest, "unsupported_protocol_upgrade", "invalid_request_error", "WebSocket and WebRTC protocol upgrades are not supported on this gateway endpoint.", false)
+				return
+			}
 			if s.nativeHandler == nil {
 				s.handleNotFound(w, rCtx)
 				return
@@ -460,7 +506,35 @@ func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 			s.nativeHandler.ServeHTTP(w, rCtx)
 			return
 		}
-		next.ServeHTTP(w, rCtx)
+
+		if s.telemetry == nil {
+			if isProtocolUpgradeRequest(rCtx) {
+				writeCanonicalError(w, reqID, http.StatusBadRequest, "unsupported_protocol_upgrade", "invalid_request_error", "WebSocket and WebRTC protocol upgrades are not supported on this gateway endpoint.", false)
+				return
+			}
+			next.ServeHTTP(w, rCtx)
+			return
+		}
+
+		spanCtx, rootSpan, traceID := s.telemetry.StartRequestSpan(rCtx.Context(), tp, reqID, "unified_http")
+		reqTel := &requestTelemetry{
+			pipeline:    s.telemetry,
+			reqID:       reqID,
+			traceID:     traceID,
+			entryPoint:  "unified_http",
+			startedAt:   time.Now(),
+			startedAtMs: s.nowMs(),
+			rootSpan:    rootSpan,
+		}
+		rCtx = rCtx.WithContext(withRequestTelemetry(spanCtx, reqTel))
+		scw := &statusCaptureWriter{ResponseWriter: w}
+		defer reqTel.finish(rCtx.Context(), scw, rCtx)
+
+		if isProtocolUpgradeRequest(rCtx) {
+			writeCanonicalError(scw, reqID, http.StatusBadRequest, "unsupported_protocol_upgrade", "invalid_request_error", "WebSocket and WebRTC protocol upgrades are not supported on this gateway endpoint.", false)
+			return
+		}
+		next.ServeHTTP(scw, rCtx)
 	})
 }
 
@@ -590,6 +664,9 @@ type canonicalErrorDetail struct {
 }
 
 func writeCanonicalError(w http.ResponseWriter, reqID string, status int, code, errType, message string, retryable bool) {
+	if ec, ok := w.(interface{ SetCanonicalErrorCode(string) }); ok {
+		ec.SetCanonicalErrorCode(code)
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Tanpopo-Request-Id", reqID)

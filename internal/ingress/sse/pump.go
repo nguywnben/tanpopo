@@ -73,6 +73,7 @@ type PumpConfig struct {
 	RequireDoneSentinel bool
 	ElideUsageChunk     bool
 	OnStreamStarted     func()
+	OnChunkRelayed      func(relayDuration time.Duration)
 }
 
 // PumpResult summarizes terminal telemetry from a Pump execution.
@@ -378,6 +379,10 @@ pumpLoop:
 				break pumpLoop
 			}
 			if len(msg.data) > 0 || msg.isEOF {
+				var chunkStart time.Time
+				if cfg.OnChunkRelayed != nil {
+					chunkStart = time.Now()
+				}
 				out, terr := cfg.Runtime.TransformStreamChunk(ctx, port.StreamChunkInput{
 					RequestID:        cfg.RequestID,
 					SessionState:     sessionState,
@@ -397,6 +402,7 @@ pumpLoop:
 				if out.IncrementalUsage != nil {
 					res.Usage = mergeUsage(res.Usage, out.IncrementalUsage)
 				}
+				framesBefore := res.FramesEmitted
 				for _, frame := range out.NormalizedSSEFrames {
 					if len(frame) == 0 {
 						continue
@@ -440,6 +446,9 @@ pumpLoop:
 						abortUpstream()
 						return res, ferr
 					}
+				}
+				if cfg.OnChunkRelayed != nil && res.FramesEmitted > framesBefore {
+					cfg.OnChunkRelayed(time.Since(chunkStart))
 				}
 			}
 			if msg.isEOF {

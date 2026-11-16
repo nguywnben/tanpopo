@@ -20,6 +20,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func extractChatCapabilities(req *chatCompletionIngressRequest) []string {
@@ -117,7 +118,41 @@ func (s *Server) executeRoutedPreStreamFailover(
 	execRes := failover.Execute(streamCtx, failover.Config{
 		Breaker: s.breaker,
 		Now:     func() time.Time { return time.UnixMilli(s.nowMs()).UTC() },
-	}, candidates, attemptFn)
+	}, candidates, func(hopCtx context.Context, attemptIdx int, cand *resolver.RankedTarget) failover.AttemptResult {
+		reqTel := telemetryFromContext(hopCtx)
+		var targetID, adpID, region string
+		if cand != nil && cand.Target != nil {
+			reqTel.recordRouteAttempt(cand.Target, modelSlug)
+			adpID, region, _ = targetTelemetryLabels(cand.Target)
+			if cand.Target.Deployment != nil {
+				targetID = cand.Target.Deployment.ID
+			}
+			if s.telemetry != nil && s.telemetry.Metrics != nil && cand.Target.Adapter != nil {
+				stateStr := "ACTIVE_HEALTHY"
+				if cand.Target.Deployment != nil && cand.Target.Deployment.State != "" {
+					stateStr = cand.Target.Deployment.State
+				}
+				s.telemetry.Metrics.SetDeploymentCircuitState(adpID, region, stateStr)
+			}
+		}
+		hopSpanCtx, endHopStage := reqTel.startStage(hopCtx, "RouteAttempt",
+			attribute.Int("attempt", attemptIdx+1),
+			attribute.String("adapter_id", adpID),
+			attribute.String("deployment_id", targetID),
+			attribute.String("data_region", region),
+		)
+		res := attemptFn(hopSpanCtx, attemptIdx, cand)
+		st := "ok"
+		var err error
+		if !res.Succeeded {
+			st = fmt.Sprintf("http_%d", res.HTTPStatus)
+			if res.HTTPStatus >= 500 || res.HTTPStatus == 0 {
+				err = fmt.Errorf("route attempt ended with status %d", res.HTTPStatus)
+			}
+		}
+		endHopStage(st, targetID, err)
+		return res
+	})
 	if execRes.ClientCanceled && !execRes.StreamStarted && clientCtx != nil && clientCtx.Err() == nil && streamCtx != nil && streamCtx.Err() != nil {
 		writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
 		return execRes

@@ -63,6 +63,7 @@ type FaultGuardConfig struct {
 	AuditSink         storageport.AuditSink
 	ActorID           string
 	EntryPoint        string
+	OnTrap            func(installationID string, kind FaultKind)
 	OnAlert           func(ctx context.Context, ev AlertEvent)
 	OnError           func(ctx context.Context, err error)
 }
@@ -84,6 +85,7 @@ type FaultGuard struct {
 	audit      storageport.AuditSink
 	actorID    string
 	entryPoint string
+	onTrap     func(installationID string, kind FaultKind)
 	onAlert    func(ctx context.Context, ev AlertEvent)
 	onError    func(ctx context.Context, err error)
 	idGen      *idgen.Generator
@@ -123,6 +125,7 @@ func NewFaultGuard(cfg FaultGuardConfig) *FaultGuard {
 		audit:      cfg.AuditSink,
 		actorID:    actorID,
 		entryPoint: entryPoint,
+		onTrap:     cfg.OnTrap,
 		onAlert:    cfg.OnAlert,
 		onError:    cfg.OnError,
 		idGen:      idgen.NewGenerator(nowFn),
@@ -213,6 +216,10 @@ func (g *FaultGuard) RecordFault(ctx context.Context, installationID string, kin
 		}
 	}
 	g.mu.Unlock()
+
+	if g.onTrap != nil {
+		g.onTrap(installationID, kind)
+	}
 
 	if !shouldTrigger {
 		return false

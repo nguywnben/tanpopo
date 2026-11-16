@@ -21,6 +21,7 @@ import (
 	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
 	"github.com/nguywnben/tanpopo/internal/ratelimit"
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type preAdmissionDecision struct {
@@ -80,20 +81,33 @@ func (s *Server) evaluatePreAdmissionPolicy(
 	estBaseIn int64,
 	estMaxOut int64,
 ) (*preAdmissionDecision, bool) {
+	reqTel := telemetryFromContext(r.Context())
+	reqTel.recordModel(modelSlug)
+	_, endStage := reqTel.startStage(r.Context(), "Policy", attribute.String("logical_model", modelSlug))
+	stageStatus := "ok"
+	var stageErr error
+	defer func() {
+		endStage(stageStatus, "", stageErr)
+	}()
+
 	snap := s.snapshots.Current()
 	eff, pErr := s.policyEval.ResolveEffective(snap, match.Config, match.Key)
 	if pErr != nil {
+		stageStatus = "error"
+		stageErr = pErr
 		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, policyengine.DenialCodeEngineUnavailable, "api_error", "Policy engine snapshot is corrupted or unavailable; failing closed.", true)
 		return nil, false
 	}
 
 	if !modelAllowlistPermits(match.Key.AllowedModels, modelSlug) {
+		stageStatus = "denied"
 		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key model allowlist denies %q.", modelSlug), false)
 		return nil, false
 	}
 
 	reqRegion, regionOK := resolveRequestedDataRegion(r)
 	if !regionOK {
+		stageStatus = "invalid"
 		writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Conflicting X-Tanpopo-Data-Region header values.", false)
 		return nil, false
 	}
@@ -107,6 +121,7 @@ func (s *Server) evaluatePreAdmissionPolicy(
 		EstimatedTotalTokens: estTokens,
 	})
 	if !dec.Allowed {
+		stageStatus = "denied"
 		if dec.DenialCode == policyengine.DenialCodeRegionDenied {
 			writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "no_compliant_deployment_available", "residency_unavailable_error", dec.DenialReason+" ("+policyengine.DenialCodeRegionDenied+")", true)
 			return nil, false

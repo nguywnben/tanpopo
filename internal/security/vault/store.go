@@ -718,6 +718,75 @@ func (s *Store) UnsealWithCapability(ctx context.Context, cap UnsealCapability, 
 	}, nil
 }
 
+// SealProjectBlob encrypts non-credential project-scoped payloads (strictly RecordKindDebugBlob
+// or RecordKindCacheEntry — never RecordKindCred) under the tenant's Project DEK using canonical
+// ProjectRecordAAD ("tanpopo:v1:proj:" + org_id + ":" + project_id + ":" + record_kind + ":" + record_id).
+func (s *Store) SealProjectBlob(ctx context.Context, orgID, projectID, recordKind, recordID string, plaintext []byte) (nonce, ciphertext []byte, err error) {
+	if recordKind != RecordKindDebugBlob && recordKind != RecordKindCacheEntry {
+		return nil, nil, fmt.Errorf("%w: SealProjectBlob supports only debug_blob or cache_entry", ErrInvalidInput)
+	}
+	aad, err := ProjectRecordAAD(orgID, projectID, recordKind, recordID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	pt := make([]byte, len(plaintext))
+	copy(pt, plaintext)
+	defer clear(pt)
+
+	now := s.nowMs()
+	gen := s.cache.generation()
+	var stage dekCacheStage
+	defer stage.clear()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("vault: begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_, _, dek, err := s.ensureProjectDEKTx(ctx, tx, orgID, projectID, now, &stage)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer clear(dek)
+
+	nonce, ciphertext, err = sealAESGCM(dek, aad, pt)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, fmt.Errorf("vault: commit SealProjectBlob: %w", err)
+	}
+	committed = true
+	stage.commit(s.cache, now, gen)
+	return nonce, ciphertext, nil
+}
+
+// UnsealProjectBlob decrypts non-credential project-scoped payloads (strictly RecordKindDebugBlob
+// or RecordKindCacheEntry — never RecordKindCred) under the tenant's Project DEK.
+func (s *Store) UnsealProjectBlob(ctx context.Context, orgID, projectID, recordKind, recordID string, nonce, ciphertext []byte) ([]byte, error) {
+	if recordKind != RecordKindDebugBlob && recordKind != RecordKindCacheEntry {
+		return nil, fmt.Errorf("%w: UnsealProjectBlob supports only debug_blob or cache_entry", ErrInvalidInput)
+	}
+	aad, err := ProjectRecordAAD(orgID, projectID, recordKind, recordID)
+	if err != nil {
+		return nil, err
+	}
+	_, _, dek, err := s.loadProjectDEKReadOnly(ctx, orgID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(dek)
+
+	return openAESGCM(dek, aad, nonce, ciphertext)
+}
+
 // RewrapAllOrgDEKs performs online Master KEK rotation from oldKEKID to newKEKID by atomically
 // re-wrapping org_encryption_keys rows without touching project_encryption_keys or secret_credentials,
 // appending KEY_ROTATE to config_changelog, and evicting old-KEK cached Org DEKs from RAM (DR-03 / AC-2).

@@ -32,6 +32,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // MaxInlineBlobBytes enforces CR-05's 64 KiB boundary above which inline multimodal
@@ -342,7 +343,7 @@ func (s *Server) executeSyncChatCompletionAttempt(
 	admLease *admissionLease,
 	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
-	upResp, err := s.broker.ExecuteWithHostConstraint(ctx, egressReq, constraint)
+	upResp, err := s.executeBrokerSync(ctx, egressReq, constraint, target, requestedModel)
 	if err != nil {
 		return s.classifyBrokerAttemptError(w, clientCtx, ctx, reqID, err, true)
 	}
@@ -352,13 +353,13 @@ func (s *Server) executeSyncChatCompletionAttempt(
 	}
 
 	sanitizedHdrs := flattenHTTPHeaders(upResp.SanitizedHeaders)
-	normResp, err := rt.TransformResponse(ctx, port.TransformResponseInput{
+	normResp, err := s.transformResponseWithStage(ctx, rt, port.TransformResponseInput{
 		RequestID:        reqID,
 		HTTPStatus:       int32(upResp.StatusCode),
 		SanitizedHeaders: sanitizedHdrs,
 		RawResponseBody:  upResp.Body,
 		Modality:         "CHAT",
-	})
+	}, target)
 	if err != nil {
 		return s.classifyTransformResponseError(w, clientCtx, ctx, reqID, err, "Upstream provider returned an invalid or truncated chat completion payload.")
 	}
@@ -391,6 +392,7 @@ func (s *Server) executeSyncChatCompletionAttempt(
 	}
 	if headerUsage != nil {
 		s.reconcileAdmissionUsage(admLease, headerUsage)
+		s.recordSettledUsageTelemetry(ctx, requestedModel, headerUsage)
 	}
 	if s.usageObserver != nil && headerUsage != nil {
 		s.usageObserver(UsageRecord{
@@ -423,7 +425,17 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 	admLease *admissionLease,
 	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
-	upCtx, cancelUp := context.WithCancel(streamCtx)
+	reqTel := telemetryFromContext(streamCtx)
+	adpID, region, extTier := targetTelemetryLabels(target)
+	eCtx, endEgressStage := reqTel.startStage(streamCtx, "Egress",
+		attribute.String("adapter_id", adpID),
+		attribute.String("logical_model", requestedModel),
+		attribute.String("data_region", region),
+		attribute.Bool("stream", true),
+	)
+	egressStart := time.Now()
+
+	upCtx, cancelUp := context.WithCancel(eCtx)
 	defer cancelUp()
 
 	// Preserve egressReq.TimeoutOverride so BlindBroker.ExecuteStreamWithHostConstraint
@@ -431,12 +443,24 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 	// while keeping total stream duration open-ended.
 	upStream, err := s.broker.ExecuteStreamWithHostConstraint(upCtx, egressReq, constraint)
 	if err != nil {
+		dur := time.Since(egressStart)
+		reqTel.addUpstreamDuration(dur)
+		if s.telemetry != nil && s.telemetry.Metrics != nil {
+			s.telemetry.Metrics.RecordUpstreamCall(adpID, requestedModel, region, http.StatusBadGateway, "total", dur)
+		}
+		endEgressStage("error", "", err)
 		return s.classifyBrokerAttemptError(w, clientCtx, streamCtx, reqID, err, false)
 	}
 	defer func() { _ = upStream.Body.Close() }()
 
 	if upStream.StatusCode < 200 || upStream.StatusCode >= 300 {
 		errBody, _ := io.ReadAll(io.LimitReader(upStream.Body, 1<<20))
+		dur := time.Since(egressStart)
+		reqTel.addUpstreamDuration(dur)
+		if s.telemetry != nil && s.telemetry.Metrics != nil {
+			s.telemetry.Metrics.RecordUpstreamCall(adpID, requestedModel, region, upStream.StatusCode, "total", dur)
+		}
+		endEgressStage("upstream_error", "", nil)
 		return s.makeNormalizedUpstreamAttemptError(streamCtx, w, reqID, rt, upStream.StatusCode, upStream.SanitizedHeaders, errBody)
 	}
 
@@ -445,7 +469,17 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 		idleChunkTimeout = time.Duration(target.Deployment.IdleChunkTimeoutMs) * time.Millisecond
 	}
 
-	pumpRes, pumpErr := sse.Pump(streamCtx, sse.PumpConfig{
+	var onChunkRelayed func(time.Duration)
+	if s.telemetry != nil && s.telemetry.Metrics != nil {
+		s.telemetry.Metrics.AddActiveStream("unified_http", 1)
+		defer s.telemetry.Metrics.AddActiveStream("unified_http", -1)
+		tel := s.telemetry
+		onChunkRelayed = func(relayDuration time.Duration) {
+			tel.Metrics.RecordSSEChunkRelay(extTier, relayDuration)
+		}
+	}
+
+	pumpRes, pumpErr := sse.Pump(eCtx, sse.PumpConfig{
 		RequestID:           reqID,
 		Upstream:            upStream.Body,
 		CancelUpstream:      cancelUp,
@@ -456,10 +490,27 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 		IdleChunkTimeout:    idleChunkTimeout,
 		RequireDoneSentinel: true,
 		ElideUsageChunk:     elideUsageChunk,
+		OnChunkRelayed:      onChunkRelayed,
 		OnStreamStarted: func() {
+			ttft := time.Since(egressStart)
+			reqTel.setTTFTMs(ttft.Milliseconds())
+			if s.telemetry != nil && s.telemetry.Metrics != nil {
+				s.telemetry.Metrics.RecordUpstreamCall(adpID, requestedModel, region, upStream.StatusCode, "ttft", ttft)
+			}
 			budgetSess.markStreaming(streamCtx)
 		},
 	})
+	totalDur := time.Since(egressStart)
+	reqTel.addUpstreamDuration(totalDur)
+	if s.telemetry != nil && s.telemetry.Metrics != nil {
+		s.telemetry.Metrics.RecordUpstreamCall(adpID, requestedModel, region, upStream.StatusCode, "total", totalDur)
+	}
+	stageStatus := "ok"
+	if pumpErr != nil {
+		stageStatus = "error"
+	}
+	endEgressStage(stageStatus, "", pumpErr)
+
 	observedUsage := pumpRes.Usage
 	if pumpRes.StreamStarted {
 		settledUsage, serr := budgetSess.settleStream(streamCtx, target, requestedModel, pumpRes, pumpErr)
@@ -469,6 +520,7 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 	}
 	if observedUsage != nil {
 		s.reconcileAdmissionUsage(admLease, observedUsage)
+		s.recordSettledUsageTelemetry(streamCtx, requestedModel, observedUsage)
 	}
 	if s.usageObserver != nil && observedUsage != nil {
 		s.usageObserver(UsageRecord{
@@ -668,6 +720,7 @@ func (s *Server) authenticateProviderRequest(
 		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key route allowlist denies %s.", routePath), false)
 		return nil, nil, snapshot.KeyMatchResult{}, 0, false
 	}
+	telemetryFromContext(r.Context()).recordAuth(match)
 	return streamCtx, cancelStream, match, handleID, true
 }
 
@@ -685,6 +738,7 @@ func (s *Server) readBoundedBody(w http.ResponseWriter, r *http.Request, reqID s
 		writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Failed to read request body.", false)
 		return nil, false
 	}
+	telemetryFromContext(r.Context()).captureDebugPayloadIfAuthorized(rawBody)
 	return rawBody, true
 }
 
@@ -838,13 +892,24 @@ func (s *Server) transformAndBuildEgress(
 		NarrowPolicy: &narrowPolicy,
 	})
 
-	spec, err := cachedRT.rt.TransformRequest(wasmCtx, port.TransformRequestInput{
+	adpID, _, extTier := targetTelemetryLabels(target)
+	hookCtx, endHook := telemetryFromContext(streamCtx).startStage(wasmCtx, "ExtensionHook",
+		attribute.String("hook", "transform_request"),
+		attribute.String("adapter_id", adpID),
+		attribute.String("extension_tier", extTier),
+	)
+	spec, err := cachedRT.rt.TransformRequest(hookCtx, port.TransformRequestInput{
 		RequestID:             meta.RequestID,
 		ConfigJSON:            connCfgJSON,
 		NormalizedRequestJSON: normReqBytes,
 		BlobRefs:              blobRefs,
 		SecretSlotRefs:        secretRefs,
 	})
+	hookStatus := "ok"
+	if err != nil {
+		hookStatus = "error"
+	}
+	endHook(hookStatus, "transform_request", err)
 	if err != nil {
 		return port.UpstreamHttpSpec{}, broker.EgressRequest{}, broker.HostEgressConstraint{}, &preparedRequestErr{cause: err}
 	}
