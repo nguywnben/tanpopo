@@ -98,6 +98,9 @@ func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	orgWide := actorHasOrgScopeBinding(sc.Actor, orgID)
+	projIDs := actorProjectIDs(sc.Actor, orgID)
+
 	var q strings.Builder
 	args := []any{orgID}
 	q.WriteString(`
@@ -107,6 +110,15 @@ func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 	if projFilter != "" {
 		q.WriteString(` AND owner_project_id = ?`)
 		args = append(args, projFilter)
+	} else if !orgWide {
+		if len(projIDs) == 0 {
+			writeJSON(w, http.StatusOK, paginatedListEnvelope[secretMetadataDTO]{Data: []secretMetadataDTO{}, HasMore: false})
+			return
+		}
+		q.WriteString(` AND owner_project_id IN (` + strings.Repeat("?,", len(projIDs)-1) + `?)`)
+		for _, pid := range projIDs {
+			args = append(args, pid)
+		}
 	}
 	if cur != nil {
 		q.WriteString(` AND (created_at_ms < ? OR (created_at_ms = ? AND id < ?))`)

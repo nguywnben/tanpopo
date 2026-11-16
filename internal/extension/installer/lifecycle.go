@@ -1875,6 +1875,166 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 	return nil
 }
 
+// CandidateProvenance resolves the keyring-verified origin_trust_tier and enterprise_signed
+// flags for an installation's candidate version (or active version when no candidate is staged).
+func (s *LifecycleService) CandidateProvenance(ctx context.Context, installationID string) (string, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var (
+		canonicalName string
+		actID, candID sql.NullString
+	)
+	err = tx.QueryRowContext(ctx, `
+		SELECT ep.canonical_name, ei.active_version_id, ei.candidate_version_id
+		FROM extension_installations ei
+		JOIN extension_packages ep ON ep.id = ei.package_id
+		WHERE ei.id = ?`, installationID,
+	).Scan(&canonicalName, &actID, &candID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, port.ErrNotFound
+	}
+	if err != nil {
+		return "", false, err
+	}
+
+	targetID := strings.TrimSpace(candID.String)
+	if !candID.Valid || targetID == "" {
+		targetID = strings.TrimSpace(actID.String)
+	}
+	if targetID == "" {
+		return lockfile.TrustTierUnverifiedExternal, false, nil
+	}
+	verInfo, verr := loadVersionInfoTx(ctx, tx, targetID)
+	if verr != nil {
+		return "", false, verr
+	}
+	return deriveTrustTierFromVersion(canonicalName, verInfo, s.keyring), deriveEnterpriseSignedFromVersion(verInfo, s.keyring), nil
+}
+
+// EvaluatePackagePolicyTrust validates minTrust against all active/candidate versions of
+// pinnedInstallationID (or all active installations of packageID when unpinned) and reports
+// whether any checked version is unsigned unverified_external (requiring ORG_OWNER/OPERATOR).
+func (s *LifecycleService) EvaluatePackagePolicyTrust(ctx context.Context, packageID, minTrust string, pinnedInstallationID *string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	return s.EvaluatePackagePolicyTrustTx(ctx, tx, packageID, minTrust, pinnedInstallationID)
+}
+
+// EvaluatePackagePolicyTrustTx is the caller-transaction variant of EvaluatePackagePolicyTrust
+// for atomic multi-statement Control Plane transactions under SQLite MaxOpenConns(1).
+func (s *LifecycleService) EvaluatePackagePolicyTrustTx(ctx context.Context, tx *sql.Tx, packageID, minTrust string, pinnedInstallationID *string) (bool, error) {
+
+	var canonicalName string
+	if err := tx.QueryRowContext(ctx, `SELECT canonical_name FROM extension_packages WHERE id = ?`, packageID).Scan(&canonicalName); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, port.ErrNotFound
+		}
+		return false, err
+	}
+
+	type versionTrustCheck struct {
+		originTrust      string
+		enterpriseSigned bool
+	}
+	var checks []versionTrustCheck
+	seenVerIDs := make(map[string]struct{})
+	collectVersions := func(actID, candID sql.NullString) error {
+		for _, nid := range []sql.NullString{actID, candID} {
+			if !nid.Valid || strings.TrimSpace(nid.String) == "" {
+				continue
+			}
+			vid := strings.TrimSpace(nid.String)
+			if _, ok := seenVerIDs[vid]; ok {
+				continue
+			}
+			seenVerIDs[vid] = struct{}{}
+			verInfo, verr := loadVersionInfoTx(ctx, tx, vid)
+			if verr != nil {
+				return verr
+			}
+			checks = append(checks, versionTrustCheck{
+				originTrust:      deriveTrustTierFromVersion(canonicalName, verInfo, s.keyring),
+				enterpriseSigned: deriveEnterpriseSignedFromVersion(verInfo, s.keyring),
+			})
+		}
+		return nil
+	}
+
+	if pinnedInstallationID != nil && strings.TrimSpace(*pinnedInstallationID) != "" {
+		pinID := strings.TrimSpace(*pinnedInstallationID)
+		var actID, candID sql.NullString
+		err := tx.QueryRowContext(ctx, `
+			SELECT ei.active_version_id, ei.candidate_version_id
+			FROM extension_installations ei
+			WHERE ei.id = ? AND ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`,
+			pinID, packageID, StateUninstalled, StateRejectedInvalid, StateCancelled,
+		).Scan(&actID, &candID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return false, port.ErrNotFound
+			}
+			return false, err
+		}
+		if cerr := collectVersions(actID, candID); cerr != nil {
+			return false, cerr
+		}
+	} else {
+		rows, qerr := tx.QueryContext(ctx, `
+			SELECT ei.active_version_id, ei.candidate_version_id
+			FROM extension_installations ei
+			WHERE ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`,
+			packageID, StateUninstalled, StateRejectedInvalid, StateCancelled,
+		)
+		if qerr != nil {
+			return false, qerr
+		}
+		type verPair struct{ act, cand sql.NullString }
+		var pairs []verPair
+		for rows.Next() {
+			var p verPair
+			if serr := rows.Scan(&p.act, &p.cand); serr != nil {
+				_ = rows.Close()
+				return false, serr
+			}
+			pairs = append(pairs, p)
+		}
+		if rerr := rows.Err(); rerr != nil {
+			_ = rows.Close()
+			return false, rerr
+		}
+		_ = rows.Close()
+		for _, p := range pairs {
+			if cerr := collectVersions(p.act, p.cand); cerr != nil {
+				return false, cerr
+			}
+		}
+	}
+
+	if len(checks) == 0 {
+		checks = append(checks, versionTrustCheck{
+			originTrust:      lockfile.TrustTierUnverifiedExternal,
+			enterpriseSigned: false,
+		})
+	}
+	requiresOrgOwner := false
+	for _, chk := range checks {
+		if cerr := CheckOrgMinTrustPolicy(minTrust, chk.originTrust, chk.enterpriseSigned); cerr != nil {
+			return false, cerr
+		}
+		if chk.originTrust == lockfile.TrustTierUnverifiedExternal && !chk.enterpriseSigned {
+			requiresOrgOwner = true
+		}
+	}
+	return requiresOrgOwner, nil
+}
+
 // UninstallInstallation enforces SM-01 uninstall preconditions (INSTALLED_DISABLED or QUARANTINED),
 // commits UNINSTALLED atomically in SQLite BEFORE pruning files inside pluginsDir (CT-04) and removing tanpopo.lock entry.
 func (s *LifecycleService) UninstallInstallation(ctx context.Context, installationID string, expectedVersion int64, packageDir, actorID, orgID string) error {

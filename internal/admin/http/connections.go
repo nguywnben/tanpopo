@@ -334,7 +334,7 @@ func scanProviderAdapterSummaryRow(row interface{ Scan(...any) error }) (provide
 		ExecutionTier:        mapExecutionTierOpenAPI(execTier),
 		OriginTrustTier:      trustTier,
 		EnterpriseSigned:     entSigned != 0,
-		InstallationState:    installState,
+		InstallationState:    mapExtensionStateOpenAPI(installState),
 		WireProtocol:         wireProtocol,
 		SupportedAuthMethods: authMethods,
 		SecretSlots:          secretSlots,

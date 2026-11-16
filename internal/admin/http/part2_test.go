@@ -400,6 +400,11 @@ func newPart2TestHarness(t *testing.T, probeLimitPerMin int) *part2Harness {
 
 func (h *part2Harness) registerSignedProviderTPKG(t *testing.T, sourceURI, pkgID, ver string, allowedHosts []string, allowPrivIP, requireTLS bool) string {
 	t.Helper()
+	return h.registerProviderTPKGWithSig(t, sourceURI, pkgID, ver, allowedHosts, allowPrivIP, requireTLS, true)
+}
+
+func (h *part2Harness) registerProviderTPKGWithSig(t *testing.T, sourceURI, pkgID, ver string, allowedHosts []string, allowPrivIP, requireTLS, signed bool) string {
+	t.Helper()
 	adapterYAML := []byte("id: " + pkgID + "\nslug: acme\n")
 	adapterSum := sha256.Sum256(adapterYAML)
 	adapterSHA := hex.EncodeToString(adapterSum[:])
@@ -475,7 +480,10 @@ permissions:
 	raw := buf.Bytes()
 	sum := sha256.Sum256(raw)
 	shaHex := hex.EncodeToString(sum[:])
-	sig := ed25519.Sign(h.rootPriv, installer.SignatureSigningPayload(pkgID, ver, shaHex))
+	var sig []byte
+	if signed {
+		sig = ed25519.Sign(h.rootPriv, installer.SignatureSigningPayload(pkgID, ver, shaHex))
+	}
 
 	h.archivesMu.Lock()
 	h.archives[sourceURI] = signedTestArchive{raw: raw, sig: sig}
@@ -2443,3 +2451,443 @@ func TestPart2AuditPartitionAlertIsolationKillSwitchAndLimiterBounds(t *testing.
 	}
 }
 
+func TestPart2SecurityAndRemediationRegressions(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "Regress Org", "proj-a")
+	now := h.fk.Now().UTC().UnixMilli()
+
+	// Create Project B + Environment B for isolation checks.
+	recPB := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "proj-b",
+		"name": "Project B",
+	})
+	if recPB.Code != http.StatusCreated {
+		t.Fatalf("create proj-b: %d %s", recPB.Code, recPB.Body.String())
+	}
+	var projB projectDTO
+	mustDecodeJSON(t, recPB.Body.Bytes(), &projB)
+
+	recEnvB := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects/"+projB.ID+"/environments", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "prod-b",
+		"name": "Prod B",
+	})
+	if recEnvB.Code != http.StatusCreated {
+		t.Fatalf("create env-b: %d %s", recEnvB.Code, recEnvB.Body.String())
+	}
+	var envB environmentDTO
+	mustDecodeJSON(t, recEnvB.Body.Bytes(), &envB)
+
+	// 1. Project-scoped overview summary: verify zero SQLite MaxOpenConns(1) deadlock and strict project isolation.
+	for _, vk := range []struct {
+		id     string
+		projID string
+		envID  string
+	}{
+		{"vk_reg_a", boot.ProjectID, boot.EnvID},
+		{"vk_reg_b", projB.ID, envB.ID},
+	} {
+		sum := sha256.Sum256([]byte(vk.id))
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO virtual_keys (id, org_id, project_id, env_id, name, key_prefix, last_four, active_key_hash, allowed_models_json, allowed_mcp_tools_json, state, version, created_at_ms, updated_at_ms)
+			VALUES (?, ?, ?, ?, ?, 'vk_tp_reg', '0000', ?, '[]', '[]', 'CREATED_ACTIVE', 1, ?, ?)`,
+			vk.id, boot.OrgID, vk.projID, vk.envID, vk.id, sum[:], now, now,
+		); err != nil {
+			t.Fatalf("insert vk %s: %v", vk.id, err)
+		}
+	}
+	for _, b := range []struct {
+		id        string
+		scopeType string
+		scopeID   string
+		hold      int64
+	}{
+		{"bdg_reg_pa", "PROJECT", boot.ProjectID, 100},
+		{"bdg_reg_pb", "PROJECT", projB.ID, 200},
+		{"bdg_reg_ea", "ENV", boot.EnvID, 50},
+		{"bdg_reg_eb", "ENV", envB.ID, 75},
+		{"bdg_reg_va", "VIRTUAL_KEY", "vk_reg_a", 25},
+		{"bdg_reg_vb", "VIRTUAL_KEY", "vk_reg_b", 999},
+	} {
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO budget_ledgers (id, org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms, hard_limit_micros, reserved_hold_micros, soft_alert_thresholds_pct_json, version, created_at_ms, updated_at_ms)
+			VALUES (?, ?, ?, ?, 'MONTHLY', ?, ?, 100000, ?, '[80]', 1, ?, ?)`,
+			b.id, boot.OrgID, b.scopeType, b.scopeID, now, now+86400_000, b.hold, now, now,
+		); err != nil {
+			t.Fatalf("insert budget %s: %v", b.id, err)
+		}
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO usage_settlements (id, settled_at_ms, request_id, org_id, project_id, env_id, virtual_key_id, plane, logical_model_slug, billing_mode, usage_accuracy, total_cost_micros)
+		VALUES
+		('stl_reg_a1', ?, 'req_reg_a1', ?, ?, ?, 'vk_reg_a', 'PROVIDER', 'gpt-4o', 'COMMERCIAL_API', 'EXACT', 500),
+		('stl_reg_a2', ?, 'req_reg_a2', ?, ?, ?, 'vk_reg_a', 'PROVIDER', 'gpt-4o', 'COMMERCIAL_API', 'UNMETERED_FLAGGED', 0),
+		('stl_reg_b1', ?, 'req_reg_b1', ?, ?, ?, 'vk_reg_b', 'PROVIDER', 'gpt-4o', 'COMMERCIAL_API', 'EXACT', 9000),
+		('stl_reg_b2', ?, 'req_reg_b2', ?, ?, ?, 'vk_reg_b', 'PROVIDER', 'gpt-4o', 'COMMERCIAL_API', 'UNMETERED_FLAGGED', 0),
+		('stl_reg_b3', ?, 'req_reg_b3', ?, ?, ?, 'vk_reg_b', 'PROVIDER', 'gpt-4o', 'COMMERCIAL_API', 'UNMETERED_FLAGGED', 0)`,
+		now, boot.OrgID, boot.ProjectID, boot.EnvID,
+		now, boot.OrgID, boot.ProjectID, boot.EnvID,
+		now, boot.OrgID, projB.ID, envB.ID,
+		now, boot.OrgID, projB.ID, envB.ID,
+		now, boot.OrgID, projB.ID, envB.ID,
+	); err != nil {
+		t.Fatalf("insert settlements: %v", err)
+	}
+
+	finATok := "tok_reg_fin_a"
+	h.registerBearerToken(finATok, &rbac.Actor{
+		PrincipalID:     "pri_reg_fin_a",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleFinOpsViewer}},
+	})
+	recOvA := h.doBearer(t, http.MethodGet, "/admin/v1/overview/summary", finATok, "", nil)
+	if recOvA.Code != http.StatusOK {
+		t.Fatalf("GET /overview/summary projA expected 200, got %d body=%s", recOvA.Code, recOvA.Body.String())
+	}
+	var ovA overviewSummaryResponseDTO
+	mustDecodeJSON(t, recOvA.Body.Bytes(), &ovA)
+	if ovA.ActiveHoldMicros != 175 || ovA.SettledMicroUSD != 500 || ovA.UnmeteredRequestCount != 1 {
+		t.Fatalf("expected projA holds=175 settled=500 unmetered=1, got %+v", ovA)
+	}
+	recOvOrg := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/overview/summary", ownerCookie, "", "", nil)
+	if recOvOrg.Code != http.StatusOK {
+		t.Fatalf("GET /overview/summary owner expected 200, got %d body=%s", recOvOrg.Code, recOvOrg.Body.String())
+	}
+	var ovOrg overviewSummaryResponseDTO
+	mustDecodeJSON(t, recOvOrg.Body.Bytes(), &ovOrg)
+	if ovOrg.ActiveHoldMicros != 1449 || ovOrg.SettledMicroUSD != 9500 || ovOrg.UnmeteredRequestCount != 3 {
+		t.Fatalf("expected org holds=1449 settled=9500 unmetered=3, got %+v", ovOrg)
+	}
+
+	// 2. Multi-partition Four-Eyes upgrade approval ordering & 3. unverified_external ack + org trust policy downgrade check.
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE organizations SET require_four_eyes_approval = 1 WHERE id = ?`, boot.OrgID); err != nil {
+		t.Fatalf("enable four-eyes: %v", err)
+	}
+	opAID := idgen.MustNew(idgen.PrefixPrincipal)
+	opBID := idgen.MustNew(idgen.PrefixPrincipal)
+	for idx, pid := range []string{opAID, opBID} {
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO principals (id, org_id, kind, email_or_sub, status, created_at_ms, updated_at_ms)
+			VALUES (?, NULL, 'ADMIN_SERVICE_TOKEN', ?, 'ACTIVE', ?, ?)`,
+			pid, fmt.Sprintf("op-reg-%d@example.test", idx), now, now,
+		); err != nil {
+			t.Fatalf("insert operator %s: %v", pid, err)
+		}
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+			VALUES (?, NULL, ?, 'INSTANCE', 'instance', 'OPERATOR', 1, ?)`,
+			fmt.Sprintf("rb_reg_op_%d", idx), pid, now,
+		); err != nil {
+			t.Fatalf("insert op binding %s: %v", pid, err)
+		}
+	}
+	opATok := "tok_reg_op_a"
+	opBTok := "tok_reg_op_b"
+	h.registerBearerToken(opATok, &rbac.Actor{
+		PrincipalID:     opAID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	})
+	h.registerBearerToken(opBTok, &rbac.Actor{
+		PrincipalID:     opBID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	})
+
+	// Stage unsigned community package -> requires acknowledge_unverified_external=true on approval.
+	unsigURI := "https://marketplace.tanpopo.dev/community-unsig-1.0.0.tpkg"
+	unsigSHA := h.registerProviderTPKGWithSig(t, unsigURI, "@community/unsig-pkg", "1.0.0", []string{"api.openai.com"}, false, true, false)
+	recStageUnsig := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/install?org_id="+boot.OrgID, opATok, "", map[string]any{
+		"source_uri":      unsigURI,
+		"expected_sha256": unsigSHA,
+	})
+	if recStageUnsig.Code != http.StatusAccepted {
+		t.Fatalf("stage unsigned pkg expected 202, got %d body=%s", recStageUnsig.Code, recStageUnsig.Body.String())
+	}
+	var diffUnsig extensionPermissionDiffDTO
+	mustDecodeJSON(t, recStageUnsig.Body.Bytes(), &diffUnsig)
+	etagUnsig := recStageUnsig.Result().Header.Get("ETag")
+
+	recAckMissing := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+diffUnsig.InstallationID+"/approve-permissions?org_id="+boot.OrgID, opBTok, etagUnsig, map[string]any{
+		"enable_immediately": true,
+	})
+	if recAckMissing.Code != http.StatusUnprocessableEntity || !strings.Contains(recAckMissing.Body.String(), "unverified_external_acknowledgement_required") {
+		t.Fatalf("expected 422 unverified_external_acknowledgement_required on unsigned install, got %d body=%s", recAckMissing.Code, recAckMissing.Body.String())
+	}
+	recAckOK := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+diffUnsig.InstallationID+"/approve-permissions?org_id="+boot.OrgID, opBTok, etagUnsig, map[string]any{
+		"enable_immediately":            true,
+		"acknowledge_unverified_external": true,
+	})
+	if recAckOK.Code != http.StatusOK {
+		t.Fatalf("expected 200 with acknowledge_unverified_external=true, got %d body=%s", recAckOK.Code, recAckOK.Body.String())
+	}
+
+	// Install signed v1.0.0 in single-org mode (audit goes to org partition with high seq_no).
+	signedV1URI := "https://marketplace.tanpopo.dev/downgrade-1.0.0.tpkg"
+	signedV1SHA := h.registerProviderTPKGWithSig(t, signedV1URI, "@community/trust-downgrade", "1.0.0", []string{"api.openai.com"}, false, true, true)
+	recStageV1 := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/install?org_id="+boot.OrgID, opATok, "", map[string]any{
+		"source_uri":      signedV1URI,
+		"expected_sha256": signedV1SHA,
+	})
+	if recStageV1.Code != http.StatusAccepted {
+		t.Fatalf("stage signed v1 expected 202, got %d body=%s", recStageV1.Code, recStageV1.Body.String())
+	}
+	var diffV1 extensionPermissionDiffDTO
+	mustDecodeJSON(t, recStageV1.Body.Bytes(), &diffV1)
+	recAppV1 := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+diffV1.InstallationID+"/approve-permissions?org_id="+boot.OrgID, opBTok, recStageV1.Result().Header.Get("ETag"), map[string]any{
+		"enable_immediately": true,
+	})
+	if recAppV1.Code != http.StatusOK {
+		t.Fatalf("approve signed v1 expected 200, got %d body=%s", recAppV1.Code, recAppV1.Body.String())
+	}
+	var insDowngrade extensionInstallationDTO
+	mustDecodeJSON(t, recAppV1.Body.Bytes(), &insDowngrade)
+
+	// Enter multi-tenant mode & advance clock: upgrade audit goes to SYSTEM partition (lower seq_no than org partition, newer created_at_ms).
+	if _, err := h.st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "reg-org-2", DisplayName: "Reg Org 2"}); err != nil {
+		t.Fatalf("CreateOrganization reg-org-2: %v", err)
+	}
+	h.fk.Advance(time.Minute)
+
+	unsignedV2URI := "https://marketplace.tanpopo.dev/downgrade-1.1.0.tpkg"
+	unsignedV2SHA := h.registerProviderTPKGWithSig(t, unsignedV2URI, "@community/trust-downgrade", "1.1.0", []string{"api.openai.com", "eu.api.openai.com"}, false, true, false)
+	recUpV2 := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insDowngrade.ID+"/upgrade?org_id="+boot.OrgID, opBTok, FormatETag(insDowngrade.Version), map[string]any{
+		"source_uri":      unsignedV2URI,
+		"expected_sha256": unsignedV2SHA,
+	})
+	if recUpV2.Code != http.StatusAccepted {
+		t.Fatalf("opB upgrade to unsigned v2 expected 202, got %d body=%s", recUpV2.Code, recUpV2.Body.String())
+	}
+	upETag := recUpV2.Result().Header.Get("ETag")
+
+	// opB staged the upgrade on SYSTEM chain (lower seq_no, newer timestamp) -> MUST get 403 self_approval_forbidden!
+	recSelfUp := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insDowngrade.ID+"/approve-permissions?org_id="+boot.OrgID, opBTok, upETag, map[string]any{
+		"enable_immediately":            true,
+		"acknowledge_unverified_external": true,
+	})
+	if recSelfUp.Code != http.StatusForbidden || !strings.Contains(recSelfUp.Body.String(), "self_approval_forbidden") {
+		t.Fatalf("expected 403 self_approval_forbidden across SYSTEM vs org seq_no ordering, got %d body=%s", recSelfUp.Code, recSelfUp.Body.String())
+	}
+
+	// opA approving without acknowledge_unverified_external fails 422, then with true succeeds 200.
+	recUpNoAck := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insDowngrade.ID+"/approve-permissions?org_id="+boot.OrgID, opATok, upETag, map[string]any{
+		"enable_immediately": true,
+	})
+	if recUpNoAck.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 on verified->unsigned upgrade without ack, got %d body=%s", recUpNoAck.Code, recUpNoAck.Body.String())
+	}
+	recUpOK := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insDowngrade.ID+"/approve-permissions?org_id="+boot.OrgID, opATok, upETag, map[string]any{
+		"enable_immediately":            true,
+		"acknowledge_unverified_external": true,
+	})
+	if recUpOK.Code != http.StatusOK {
+		t.Fatalf("opA approve downgraded upgrade expected 200, got %d body=%s", recUpOK.Code, recUpOK.Body.String())
+	}
+
+	// Org policy trust check: cannot enable package downgraded to unverified_external when min_plugin_trust requires VERIFIED_OR_ENTERPRISE_SIGNED!
+	recPolDeny := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/organizations/"+boot.OrgID+"/extension-policies", ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"min_plugin_trust": "VERIFIED_OR_ENTERPRISE_SIGNED",
+		"policies": []map[string]any{
+			{
+				"package_id": insDowngrade.PackageID,
+				"enabled":    true,
+			},
+		},
+	})
+	if recPolDeny.Code != http.StatusForbidden || !strings.Contains(recPolDeny.Body.String(), "org_trust_policy_denied") {
+		t.Fatalf("expected 403 org_trust_policy_denied for downgraded active unsigned version, got %d body=%s", recPolDeny.Code, recPolDeny.Body.String())
+	}
+
+	// 4. Secrets & Deployments cross-project isolation on org-shared connection.
+	teamATok := "tok_reg_team_a"
+	h.registerBearerToken(teamATok, &rbac.Actor{
+		PrincipalID:     "pri_reg_team_a",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleTeamAdmin}},
+	})
+	recSecA := h.doBearer(t, http.MethodPost, "/admin/v1/secrets", teamATok, "", map[string]any{
+		"name":         "sec-proj-a",
+		"project_id":   boot.ProjectID,
+		"secret_kind":  "API_KEY",
+		"secret_value": "sk-proj-a-1111",
+	})
+	if recSecA.Code != http.StatusCreated {
+		t.Fatalf("create secA: %d %s", recSecA.Code, recSecA.Body.String())
+	}
+	var secA secretMetadataDTO
+	mustDecodeJSON(t, recSecA.Body.Bytes(), &secA)
+	for _, sreq := range []map[string]any{
+		{"name": "sec-proj-b", "project_id": projB.ID, "secret_kind": "API_KEY", "secret_value": "sk-proj-b-2222"},
+		{"name": "sec-org-wide", "secret_kind": "API_KEY", "secret_value": "sk-org-wide-3333"},
+	} {
+		rec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/secrets", ownerCookie, boot.CSRFToken, "", sreq)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create secret %v: %d %s", sreq["name"], rec.Code, rec.Body.String())
+		}
+	}
+	recListSecUnscoped := h.doBearer(t, http.MethodGet, "/admin/v1/secrets", teamATok, "", nil)
+	if recListSecUnscoped.Code != http.StatusForbidden {
+		t.Fatalf("GET /secrets unscoped projA expected 403, got %d body=%s", recListSecUnscoped.Code, recListSecUnscoped.Body.String())
+	}
+	recListSecB := h.doBearer(t, http.MethodGet, "/admin/v1/secrets?project_id="+projB.ID, teamATok, "", nil)
+	if recListSecB.Code != http.StatusForbidden {
+		t.Fatalf("GET /secrets?project_id=projB expected 403, got %d body=%s", recListSecB.Code, recListSecB.Body.String())
+	}
+	recListSecA := h.doBearer(t, http.MethodGet, "/admin/v1/secrets?project_id="+boot.ProjectID, teamATok, "", nil)
+	if recListSecA.Code != http.StatusOK {
+		t.Fatalf("GET /secrets?project_id=projA code=%d body=%s", recListSecA.Code, recListSecA.Body.String())
+	}
+	var secListResp paginatedListEnvelope[secretMetadataDTO]
+	mustDecodeJSON(t, recListSecA.Body.Bytes(), &secListResp)
+	if len(secListResp.Data) != 1 || secListResp.Data[0].CredentialID != secA.CredentialID {
+		t.Fatalf("expected only projA secret %s, got %+v", secA.CredentialID, secListResp.Data)
+	}
+
+	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE extension_versions SET signing_key_fingerprint = ? WHERE package_id = 'tanpopo.local_openai'`, trust.PublicKeyFingerprint(h.rootPub)); err != nil {
+		t.Fatalf("sign seeded adapter: %v", err)
+	}
+	recSharedConn := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":               "org-shared-conn",
+		"adapter_id":         adpID,
+		"shared_project_ids": []string{boot.ProjectID, projB.ID},
+		"billing_mode":       "COMMERCIAL_API",
+		"endpoint_url":       "https://api.openai.com/v1",
+		"data_region":        "US",
+	})
+	if recSharedConn.Code != http.StatusCreated {
+		t.Fatalf("create shared conn: %d %s", recSharedConn.Code, recSharedConn.Body.String())
+	}
+	var sharedConn providerConnectionDTO
+	mustDecodeJSON(t, recSharedConn.Body.Bytes(), &sharedConn)
+
+	recMod := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/models", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":              "reg-model",
+		"display_name":      "Reg Model",
+		"context_window":    32000,
+		"max_output_tokens": 4096,
+	})
+	if recMod.Code != http.StatusCreated {
+		t.Fatalf("create model: %d %s", recMod.Code, recMod.Body.String())
+	}
+	var regMod logicalModelDTO
+	mustDecodeJSON(t, recMod.Body.Bytes(), &regMod)
+
+	recDepA := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"env_id":              boot.EnvID,
+		"logical_model_id":    regMod.ID,
+		"connection_id":       sharedConn.ID,
+		"upstream_model_name": "gpt-a",
+		"data_region":         "US",
+		"rate_card":           map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
+	})
+	if recDepA.Code != http.StatusCreated {
+		t.Fatalf("create depA: %d %s", recDepA.Code, recDepA.Body.String())
+	}
+	var depA modelDeploymentDTO
+	mustDecodeJSON(t, recDepA.Body.Bytes(), &depA)
+
+	recDepB := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"env_id":              envB.ID,
+		"logical_model_id":    regMod.ID,
+		"connection_id":       sharedConn.ID,
+		"upstream_model_name": "gpt-b",
+		"data_region":         "US",
+		"rate_card":           map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
+	})
+	if recDepB.Code != http.StatusCreated {
+		t.Fatalf("create depB: %d %s", recDepB.Code, recDepB.Body.String())
+	}
+
+	unattachedDepID := idgen.MustNew(idgen.PrefixDeployment)
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO model_deployments (
+			id, org_id, connection_id, logical_model_id, upstream_model_name,
+			pricing_nano_usd_json, state, connect_timeout_ms, first_byte_timeout_ms,
+			idle_chunk_timeout_ms, version, created_at_ms, updated_at_ms
+		) VALUES (?, ?, ?, ?, 'gpt-unattached', '{"env_id":"","rate_card":{"input_token_nano_usd":10,"output_token_nano_usd":20}}', 'ACTIVE_HEALTHY', 5000, 30000, 15000, 1, ?, ?)`,
+		unattachedDepID, boot.OrgID, sharedConn.ID, regMod.ID, now, now,
+	); err != nil {
+		t.Fatalf("insert unattached deployment: %v", err)
+	}
+
+	recListDepA := h.doBearer(t, http.MethodGet, "/admin/v1/deployments", teamATok, "", nil)
+	if recListDepA.Code != http.StatusOK {
+		t.Fatalf("GET /deployments projA code=%d body=%s", recListDepA.Code, recListDepA.Body.String())
+	}
+	var depListResp paginatedListEnvelope[modelDeploymentDTO]
+	mustDecodeJSON(t, recListDepA.Body.Bytes(), &depListResp)
+	if len(depListResp.Data) != 1 || depListResp.Data[0].ID != depA.ID {
+		t.Fatalf("expected only projA deployment %s (excluding projB and unattached shared deployment), got %+v", depA.ID, depListResp.Data)
+	}
+
+	recPatchUnatt := h.doBearer(t, http.MethodPatch, "/admin/v1/deployments/"+unattachedDepID, teamATok, `"v1"`, map[string]any{"state": "DISABLED"})
+	if recPatchUnatt.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for TEAM_ADMIN patching unattached shared deployment, got %d body=%s", recPatchUnatt.Code, recPatchUnatt.Body.String())
+	}
+	recDelUnatt := h.doBearer(t, http.MethodDelete, "/admin/v1/deployments/"+unattachedDepID, teamATok, `"v1"`, nil)
+	if recDelUnatt.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for TEAM_ADMIN deleting unattached shared deployment, got %d body=%s", recDelUnatt.Code, recDelUnatt.Body.String())
+	}
+	recOwnerPatchUnatt := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/deployments/"+unattachedDepID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{"state": "DISABLED"})
+	if recOwnerPatchUnatt.Code != http.StatusOK {
+		t.Fatalf("expected 200 for ORG_OWNER patching unattached shared deployment, got %d body=%s", recOwnerPatchUnatt.Code, recOwnerPatchUnatt.Body.String())
+	}
+
+	// 5. Route request_timeout_ms persistence round-trip (0015 migration + create/list/get/put).
+	recRtPost := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":                 "timeout-roundtrip",
+		"env_id":               boot.EnvID,
+		"strategy":             "PRIORITY_FAILOVER",
+		"allowed_data_regions": []string{"US"},
+		"request_timeout_ms":   12345,
+		"targets":              []map[string]any{{"deployment_id": depA.ID, "priority_order": 1, "weight": 100}},
+	})
+	if recRtPost.Code != http.StatusCreated {
+		t.Fatalf("POST /routes code=%d body=%s", recRtPost.Code, recRtPost.Body.String())
+	}
+	var rtCreated routeResourceDTO
+	mustDecodeJSON(t, recRtPost.Body.Bytes(), &rtCreated)
+	if rtCreated.RequestTimeoutMs != 12345 {
+		t.Fatalf("expected POST request_timeout_ms=12345, got %d", rtCreated.RequestTimeoutMs)
+	}
+
+	recRtList := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/routes?env_id="+boot.EnvID, ownerCookie, "", "", nil)
+	if recRtList.Code != http.StatusOK {
+		t.Fatalf("GET /routes code=%d body=%s", recRtList.Code, recRtList.Body.String())
+	}
+	var rtList paginatedListEnvelope[routeResourceDTO]
+	mustDecodeJSON(t, recRtList.Body.Bytes(), &rtList)
+	if len(rtList.Data) != 1 || rtList.Data[0].RequestTimeoutMs != 12345 {
+		t.Fatalf("expected GET /routes request_timeout_ms=12345, got %+v", rtList.Data)
+	}
+
+	recRtPut := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/routes/"+rtCreated.ID, ownerCookie, boot.CSRFToken, FormatETag(rtCreated.Version), map[string]any{
+		"slug":                 "timeout-roundtrip",
+		"env_id":               boot.EnvID,
+		"strategy":             "PRIORITY_FAILOVER",
+		"allowed_data_regions": []string{"US"},
+		"request_timeout_ms":   45000,
+		"targets":              []map[string]any{{"deployment_id": depA.ID, "priority_order": 1, "weight": 100}},
+	})
+	if recRtPut.Code != http.StatusOK {
+		t.Fatalf("PUT /routes code=%d body=%s", recRtPut.Code, recRtPut.Body.String())
+	}
+	var rtUpdated routeResourceDTO
+	mustDecodeJSON(t, recRtPut.Body.Bytes(), &rtUpdated)
+	if rtUpdated.RequestTimeoutMs != 45000 {
+		t.Fatalf("expected PUT request_timeout_ms=45000, got %d", rtUpdated.RequestTimeoutMs)
+	}
+	recRtListAfter := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/routes?env_id="+boot.EnvID, ownerCookie, "", "", nil)
+	if recRtListAfter.Code != http.StatusOK {
+		t.Fatalf("GET /routes after PUT code=%d body=%s", recRtListAfter.Code, recRtListAfter.Body.String())
+	}
+	var rtListAfter paginatedListEnvelope[routeResourceDTO]
+	mustDecodeJSON(t, recRtListAfter.Body.Bytes(), &rtListAfter)
+	if len(rtListAfter.Data) != 1 || rtListAfter.Data[0].RequestTimeoutMs != 45000 {
+		t.Fatalf("expected persisted GET /routes request_timeout_ms=45000, got %+v", rtListAfter.Data)
+	}
+}

@@ -102,7 +102,7 @@ func (s *Server) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 	args := []any{orgID}
 	q.WriteString(`
 		SELECT id, project_id, env_id, route_slug, strategy, max_failover_hops,
-		       required_region, version, created_at_ms, updated_at_ms
+		       request_timeout_ms, required_region, version, created_at_ms, updated_at_ms
 		FROM route_policies
 		WHERE org_id = ?`)
 	if envFilter != "" {
@@ -141,11 +141,11 @@ func (s *Server) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var (
 			id, projID, envID, slug, strategy string
-			maxHops                           int
+			maxHops, reqTimeoutMs             int
 			reqRegion                         sql.NullString
 			ver, createdMs, updatedMs         int64
 		)
-		if scanErr := rows.Scan(&id, &projID, &envID, &slug, &strategy, &maxHops, &reqRegion, &ver, &createdMs, &updatedMs); scanErr != nil {
+		if scanErr := rows.Scan(&id, &projID, &envID, &slug, &strategy, &maxHops, &reqTimeoutMs, &reqRegion, &ver, &createdMs, &updatedMs); scanErr != nil {
 			_ = rows.Close()
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning route", true, nil)
 			return
@@ -163,7 +163,7 @@ func (s *Server) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 				Strategy:           mapRouteStrategyOpenAPI(strategy),
 				AllowedDataRegions: regions,
 				MaxFailoverHops:    maxHops,
-				RequestTimeoutMs:   60000,
+				RequestTimeoutMs:   reqTimeoutMs,
 				Version:            ver,
 				UpdatedAt:          formatTimeRFC3339Ms(updatedMs),
 			},
@@ -251,16 +251,16 @@ func (s *Server) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 	if _, err := tx.ExecContext(r.Context(), `
 		INSERT INTO route_policies (
 			id, org_id, project_id, env_id, route_slug, strategy,
-			max_failover_hops, required_region, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+			max_failover_hops, request_timeout_ms, required_region, version, created_at_ms, updated_at_ms
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
 		routeID, orgID, norm.ProjectID, norm.EnvID, norm.Slug, norm.Strategy,
-		norm.MaxFailoverHops, reqRegArg, now, now,
+		norm.MaxFailoverHops, norm.RequestTimeoutMs, reqRegArg, now, now,
 	); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "route slug already exists in environment", false, nil)
 			return
 		}
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed persisting route policy", true, nil)
 		return
 	}
 
@@ -270,7 +270,7 @@ func (s *Server) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 			VALUES (?, ?, ?, ?, ?)`,
 			orgID, routeID, tgt.DeploymentID, tgt.PriorityOrder, tgt.Weight,
 		); err != nil {
-			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed persisting route targets", true, nil)
 			return
 		}
 	}
@@ -369,17 +369,17 @@ func (s *Server) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := tx.ExecContext(r.Context(), `
 		UPDATE route_policies
-		SET route_slug = ?, strategy = ?, max_failover_hops = ?, required_region = ?,
+		SET route_slug = ?, strategy = ?, max_failover_hops = ?, request_timeout_ms = ?, required_region = ?,
 		    version = version + 1, updated_at_ms = ?
 		WHERE org_id = ? AND id = ? AND version = ?`,
-		norm.Slug, norm.Strategy, norm.MaxFailoverHops, reqRegArg, now, orgID, routeID, expectedVer,
+		norm.Slug, norm.Strategy, norm.MaxFailoverHops, norm.RequestTimeoutMs, reqRegArg, now, orgID, routeID, expectedVer,
 	)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "route slug already exists in environment", false, nil)
 			return
 		}
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed updating route policy", true, nil)
 		return
 	}
 	if aff, _ := res.RowsAffected(); aff == 0 {
@@ -407,7 +407,7 @@ func (s *Server) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 			VALUES (?, ?, ?, ?, ?)`,
 			orgID, routeID, tgt.DeploymentID, tgt.PriorityOrder, tgt.Weight,
 		); err != nil {
-			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed persisting route targets", true, nil)
 			return
 		}
 	}
@@ -843,10 +843,10 @@ func (s *Server) loadRouteResourceDTO(ctx context.Context, orgID, routeID string
 	)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, project_id, env_id, route_slug, strategy, max_failover_hops,
-		       required_region, version, updated_at_ms
+		       request_timeout_ms, required_region, version, updated_at_ms
 		FROM route_policies
 		WHERE org_id = ? AND id = ?`, orgID, routeID,
-	).Scan(&dto.ID, &projID, &dto.EnvID, &dto.Slug, &dto.Strategy, &dto.MaxFailoverHops, &reqRegion, &dto.Version, &updatedMs)
+	).Scan(&dto.ID, &projID, &dto.EnvID, &dto.Slug, &dto.Strategy, &dto.MaxFailoverHops, &dto.RequestTimeoutMs, &reqRegion, &dto.Version, &updatedMs)
 	if errors.Is(err, sql.ErrNoRows) {
 		return routeResourceDTO{}, "", port.ErrNotFound
 	}
@@ -858,7 +858,6 @@ func (s *Server) loadRouteResourceDTO(ctx context.Context, orgID, routeID string
 	if reqRegion.Valid && reqRegion.String != "" {
 		dto.AllowedDataRegions = []string{reqRegion.String}
 	}
-	dto.RequestTimeoutMs = 60000
 	dto.UpdatedAt = formatTimeRFC3339Ms(updatedMs)
 	targets, err := s.loadRouteTargets(ctx, orgID, routeID)
 	if err != nil {

@@ -636,8 +636,9 @@ CREATE TABLE route_policies (
                           'LOWEST_COST',
                           'LOWEST_LATENCY_EWMA'
                       )),
-    max_failover_hops SMALLINT NOT NULL DEFAULT 3 CHECK (max_failover_hops BETWEEN 0 AND 5),
-    required_region   VARCHAR(32),
+    max_failover_hops  SMALLINT NOT NULL DEFAULT 3 CHECK (max_failover_hops BETWEEN 0 AND 5),
+    request_timeout_ms INTEGER NOT NULL DEFAULT 60000 CHECK (request_timeout_ms BETWEEN 500 AND 300000),
+    required_region    VARCHAR(32),
     version           BIGINT NOT NULL DEFAULT 1 CHECK (version >= 1),
     created_at_ms     BIGINT NOT NULL,
     updated_at_ms     BIGINT NOT NULL,

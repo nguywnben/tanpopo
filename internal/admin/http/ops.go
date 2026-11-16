@@ -209,38 +209,53 @@ func (s *Server) handleGetOverviewSummary(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var activeHolds int64
 	holdRows, err := s.db.QueryContext(r.Context(), `SELECT scope_type, scope_id, reserved_hold_micros FROM budget_ledgers WHERE org_id = ?`, orgID)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying active holds", true, nil)
 		return
 	}
-	defer holdRows.Close()
-	allowedProjSet := make(map[string]bool, len(projIDs))
-	for _, pid := range projIDs {
-		allowedProjSet[pid] = true
+	type rawHoldRow struct {
+		scopeType string
+		scopeID   string
+		hold      int64
 	}
+	var rawHolds []rawHoldRow
 	for holdRows.Next() {
-		var st, sid string
-		var hold int64
-		if scanErr := holdRows.Scan(&st, &sid, &hold); scanErr != nil {
+		var rrow rawHoldRow
+		if scanErr := holdRows.Scan(&rrow.scopeType, &rrow.scopeID, &rrow.hold); scanErr != nil {
+			_ = holdRows.Close()
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning active holds", true, nil)
 			return
 		}
-		if !orgWide {
-			resolvedProj := s.resolveBudgetScopeProjectID(r.Context(), orgID, st, sid)
-			if resolvedProj == "" || !allowedProjSet[resolvedProj] {
-				continue
-			}
-		}
-		activeHolds += hold
+		rawHolds = append(rawHolds, rrow)
 	}
-	if err := holdRows.Err(); err != nil {
+	holdErr := holdRows.Err()
+	_ = holdRows.Close()
+	if holdErr != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating active holds", true, nil)
 		return
 	}
 
-	alerts, _ := s.collectActiveAlerts(r.Context(), orgID, orgWide, allowedProjSet, nowMs)
+	var activeHolds int64
+	allowedProjSet := make(map[string]bool, len(projIDs))
+	for _, pid := range projIDs {
+		allowedProjSet[pid] = true
+	}
+	for _, rrow := range rawHolds {
+		if !orgWide {
+			resolvedProj := s.resolveBudgetScopeProjectID(r.Context(), orgID, rrow.scopeType, rrow.scopeID)
+			if resolvedProj == "" || !allowedProjSet[resolvedProj] {
+				continue
+			}
+		}
+		activeHolds += rrow.hold
+	}
+
+	alerts, err := s.collectActiveAlerts(r.Context(), orgID, orgWide, allowedProjSet, nowMs)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed collecting active alerts", true, nil)
+		return
+	}
 	syncLag := false
 	if s.snapshots != nil {
 		if s.snapshots.CheckServingReady() != nil {
@@ -407,11 +422,15 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 		}
 		var unmeteredCnt int64
 		var unmeteredLatestMs sql.NullInt64
-		if err := s.db.QueryRowContext(ctx, `
+		uErr := s.db.QueryRowContext(ctx, `
 			SELECT COUNT(*), MAX(settled_at_ms)
 			FROM usage_settlements
 			WHERE `+strings.Join(uConds, " AND "), uArgs...,
-		).Scan(&unmeteredCnt, &unmeteredLatestMs); err == nil && unmeteredCnt > 0 {
+		).Scan(&unmeteredCnt, &unmeteredLatestMs)
+		if uErr != nil {
+			return nil, uErr
+		}
+		if unmeteredCnt > 0 {
 			trigMs := nowMs
 			if unmeteredLatestMs.Valid {
 				trigMs = unmeteredLatestMs.Int64
@@ -429,7 +448,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 
 	// 3. Quarantined plugin alert (ALT-PLUGIN-TRAP) scoped to tenant/project connections & policies.
 	if orgWide {
-		qRows, err := s.db.QueryContext(ctx, `
+		qRows, qErr := s.db.QueryContext(ctx, `
 			SELECT ei.id, ei.package_id, ei.updated_at_ms
 			FROM extension_installations ei
 			WHERE ei.state = 'QUARANTINED'
@@ -445,53 +464,67 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 			    )
 			  )`, orgID, orgID,
 		)
-		if err == nil {
-			for qRows.Next() {
-				var id, pkgID string
-				var updMs int64
-				if qRows.Scan(&id, &pkgID, &updMs) == nil {
-					alerts = append(alerts, alertItemDTO{
-						ID:               "alt_plugin_" + id,
-						AlertCode:        "ALT-PLUGIN-TRAP",
-						Severity:         "PAGE",
-						Summary:          fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID),
-						RemediationRoute: "/extensions",
-						TriggeredAt:      formatTimeRFC3339Ms(updMs),
-					})
-				}
+		if qErr != nil {
+			return nil, qErr
+		}
+		for qRows.Next() {
+			var id, pkgID string
+			var updMs int64
+			if scanErr := qRows.Scan(&id, &pkgID, &updMs); scanErr != nil {
+				_ = qRows.Close()
+				return nil, scanErr
 			}
-			_ = qRows.Close()
+			alerts = append(alerts, alertItemDTO{
+				ID:               "alt_plugin_" + id,
+				AlertCode:        "ALT-PLUGIN-TRAP",
+				Severity:         "PAGE",
+				Summary:          fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID),
+				RemediationRoute: "/extensions",
+				TriggeredAt:      formatTimeRFC3339Ms(updMs),
+			})
+		}
+		iterErr := qRows.Err()
+		_ = qRows.Close()
+		if iterErr != nil {
+			return nil, iterErr
 		}
 	} else if len(allowedProjSet) > 0 {
-		qRows, err := s.db.QueryContext(ctx, `
+		qRows, qErr := s.db.QueryContext(ctx, `
 			SELECT ei.id, ei.package_id, ei.updated_at_ms, pc.owner_project_id, pc.shared_project_ids_json
 			FROM extension_installations ei
 			JOIN provider_adapters pa ON pa.installation_id = ei.id
 			JOIN provider_connections pc ON pc.adapter_id = pa.id
 			WHERE ei.state = 'QUARANTINED' AND pc.org_id = ?`, orgID,
 		)
-		if err == nil {
-			seenExt := make(map[string]bool)
-			for qRows.Next() {
-				var id, pkgID, sharedJSON string
-				var updMs int64
-				var ownerProj sql.NullString
-				if qRows.Scan(&id, &pkgID, &updMs, &ownerProj, &sharedJSON) == nil {
-					if seenExt[id] || !connectionVisibleToAnyProject(ownerProj, sharedJSON, allowedProjSet) {
-						continue
-					}
-					seenExt[id] = true
-					alerts = append(alerts, alertItemDTO{
-						ID:               "alt_plugin_" + id,
-						AlertCode:        "ALT-PLUGIN-TRAP",
-						Severity:         "PAGE",
-						Summary:          fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID),
-						RemediationRoute: "/extensions",
-						TriggeredAt:      formatTimeRFC3339Ms(updMs),
-					})
-				}
+		if qErr != nil {
+			return nil, qErr
+		}
+		seenExt := make(map[string]bool)
+		for qRows.Next() {
+			var id, pkgID, sharedJSON string
+			var updMs int64
+			var ownerProj sql.NullString
+			if scanErr := qRows.Scan(&id, &pkgID, &updMs, &ownerProj, &sharedJSON); scanErr != nil {
+				_ = qRows.Close()
+				return nil, scanErr
 			}
-			_ = qRows.Close()
+			if seenExt[id] || !connectionVisibleToAnyProject(ownerProj, sharedJSON, allowedProjSet) {
+				continue
+			}
+			seenExt[id] = true
+			alerts = append(alerts, alertItemDTO{
+				ID:               "alt_plugin_" + id,
+				AlertCode:        "ALT-PLUGIN-TRAP",
+				Severity:         "PAGE",
+				Summary:          fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID),
+				RemediationRoute: "/extensions",
+				TriggeredAt:      formatTimeRFC3339Ms(updMs),
+			})
+		}
+		iterErr := qRows.Err()
+		_ = qRows.Close()
+		if iterErr != nil {
+			return nil, iterErr
 		}
 	}
 

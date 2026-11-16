@@ -483,6 +483,20 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 			if envID == "" {
 				envID = s.resolveDeploymentEnvID(r.Context(), orgID, rrow.id)
 			}
+			if !orgWide {
+				if envID != "" {
+					envProjID, found, envErr := s.lookupEnvironmentProject(r.Context(), orgID, envID)
+					if envErr != nil {
+						writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resolving deployment environment", true, nil)
+						return
+					}
+					if !found || !allowedProjects[envProjID] {
+						continue
+					}
+				} else if !rrow.ownerProj.Valid || !allowedProjects[rrow.ownerProj.String] {
+					continue
+				}
+			}
 			if envFilter != "" && envID != envFilter {
 				continue
 			}
@@ -948,7 +962,7 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) authorizeDeploymentScope(w http.ResponseWriter, r *http.Request, sc *authSessionContext, orgID string, cur modelDeploymentDTO, ownerProj sql.NullString, sharedJSON string) (string, bool) {
+func (s *Server) authorizeDeploymentScope(w http.ResponseWriter, r *http.Request, sc *authSessionContext, orgID string, cur modelDeploymentDTO, ownerProj sql.NullString, _ string) (string, bool) {
 	scopeProj := ""
 	if cur.EnvID != "" {
 		pid, found, err := s.lookupEnvironmentProject(r.Context(), orgID, cur.EnvID)
@@ -963,14 +977,8 @@ func (s *Server) authorizeDeploymentScope(w http.ResponseWriter, r *http.Request
 	if scopeProj == "" && ownerProj.Valid {
 		scopeProj = ownerProj.String
 	}
-	if scopeProj == "" && !actorHasOrgScopeBinding(sc.Actor, orgID) {
-		for _, pid := range actorProjectIDs(sc.Actor, orgID) {
-			if connectionVisibleToAnyProject(ownerProj, sharedJSON, map[string]bool{pid: true}) {
-				scopeProj = pid
-				break
-			}
-		}
-	}
+	// Keep scopeProj empty when neither deployment env_id nor connection owner_project_id
+	// identifies a single owning project; org-level/shared deployments require org-wide privileges.
 	if !s.authorize(w, r, sc, rbac.ActionModelWrite, rbac.TargetScope{OrgID: orgID, ProjectID: scopeProj}) {
 		return "", false
 	}

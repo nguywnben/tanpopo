@@ -403,6 +403,8 @@ func (s *Server) writePolicyStoreError(w http.ResponseWriter, r *http.Request, e
 		writeOptimisticConflict(w, r, ver, currentResource)
 	case errors.Is(err, port.ErrNotFound):
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "policy scope target not found", false, nil)
+	case errors.Is(err, port.ErrAlreadyExists):
+		writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "policy already exists for target scope", false, nil)
 	case errors.Is(err, policyengine.ErrInvalidPolicyInput), errors.Is(err, port.ErrInvalidInput):
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
 	default:

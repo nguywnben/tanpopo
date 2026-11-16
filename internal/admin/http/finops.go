@@ -19,7 +19,6 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
-	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
@@ -927,5 +926,3 @@ func computePeriodWindowMs(nowMs int64, period string) (int64, int64) {
 	start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
 	return start.UnixMilli(), start.AddDate(0, 1, 0).UnixMilli()
 }
-
-var _ = idgen.PrefixBudget

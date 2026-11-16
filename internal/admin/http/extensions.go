@@ -5,9 +5,7 @@ package http
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +20,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
@@ -420,12 +419,31 @@ func (s *Server) handleApproveExtensionPermissions(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if s.isFourEyesSelfApproval(r.Context(), orgID, insID, sc.Actor.PrincipalID) {
+	blocked, fourErr := s.isFourEyesSelfApproval(r.Context(), orgID, insID, sc.Actor.PrincipalID)
+	if fourErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking four-eyes approval state", true, nil)
+		return
+	}
+	if blocked {
 		s.emitSecurityAudit(r.Context(), sc, "extension.self_approval_blocked", map[string]any{
 			"installation_id": insID,
 			"principal_id":    sc.Actor.PrincipalID,
 		})
 		writeErrorEnvelope(w, r, http.StatusForbidden, "self_approval_forbidden", "permission_error", "staging principal cannot approve own extension permissions when four-eyes approval is enabled", false, nil)
+		return
+	}
+
+	candTrust, candEntSigned, provErr := s.installer.CandidateProvenance(r.Context(), insID)
+	if errors.Is(provErr, port.ErrNotFound) {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
+		return
+	}
+	if provErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying candidate extension provenance", true, nil)
+		return
+	}
+	if candTrust == lockfile.TrustTierUnverifiedExternal && !candEntSigned && !req.AcknowledgeUnverifiedExternal {
+		writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "unverified_external_acknowledgement_required", "invalid_request_error", "acknowledge_unverified_external=true is required to approve unsigned unverified_external extensions", false, curDTO)
 		return
 	}
 
@@ -874,13 +892,8 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "policy package_id is required", false, nil)
 			return
 		}
-		var canonicalName, pkgTrust string
-		var entSignedInt int
-		qerr := tx.QueryRowContext(r.Context(), `
-			SELECT ep.canonical_name, ep.origin_trust_tier,
-			       COALESCE((SELECT MAX(ev.enterprise_signed) FROM extension_versions ev WHERE ev.package_id = ep.id), 0)
-			FROM extension_packages ep
-			WHERE ep.id = ?`, pkgID).Scan(&canonicalName, &pkgTrust, &entSignedInt)
+		var canonicalName string
+		qerr := tx.QueryRowContext(r.Context(), `SELECT canonical_name FROM extension_packages WHERE id = ?`, pkgID).Scan(&canonicalName)
 		if errors.Is(qerr, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension package not found", false, nil)
 			return
@@ -889,16 +902,8 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking extension package", true, nil)
 			return
 		}
-		if pol.Enabled {
-			if cerr := installer.CheckOrgMinTrustPolicy(minTrust, pkgTrust, entSignedInt == 1); cerr != nil {
-				writeErrorEnvelope(w, r, http.StatusForbidden, "org_trust_policy_denied", "permission_error", cerr.Error(), false, nil)
-				return
-			}
-			if pkgTrust == lockfile.TrustTierUnverifiedExternal && !actorIsOrgOwnerOrOperator(sc.Actor, orgID) {
-				writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "ORG_OWNER or OPERATOR role required to enable unverified_external package", false, nil)
-				return
-			}
-		}
+		_ = canonicalName
+
 		var pinnedArg any
 		if pol.PinnedInstallationID != nil && strings.TrimSpace(*pol.PinnedInstallationID) != "" {
 			pinID := strings.TrimSpace(*pol.PinnedInstallationID)
@@ -919,7 +924,34 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 			}
 			pinnedArg = pinID
 		}
-		optIn := boolToInt(pol.Enabled && pkgTrust == lockfile.TrustTierUnverifiedExternal)
+
+		requiresOrgOwner := false
+		if pol.Enabled {
+			if s.installer == nil {
+				writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "extension_installer_unavailable", "extension_error", "extension installer is not configured", true, nil)
+				return
+			}
+			reqOwner, trustErr := s.installer.EvaluatePackagePolicyTrustTx(r.Context(), tx, pkgID, minTrust, pol.PinnedInstallationID)
+			if errors.Is(trustErr, port.ErrNotFound) {
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension package or pinned installation not found", false, nil)
+				return
+			}
+			if errors.Is(trustErr, trust.ErrOrgTrustPolicyDenied) {
+				writeErrorEnvelope(w, r, http.StatusForbidden, "org_trust_policy_denied", "permission_error", trustErr.Error(), false, nil)
+				return
+			}
+			if trustErr != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed evaluating extension trust policy", true, nil)
+				return
+			}
+			requiresOrgOwner = reqOwner
+			if requiresOrgOwner && !actorIsOrgOwnerOrOperator(sc.Actor, orgID) {
+				writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "ORG_OWNER or OPERATOR role required to enable unverified_external package", false, nil)
+				return
+			}
+		}
+
+		optIn := boolToInt(pol.Enabled && requiresOrgOwner)
 		if _, err := tx.ExecContext(r.Context(), `
 			INSERT INTO org_extension_policies (org_id, package_id, enabled, org_owner_opt_in, pinned_installation_id, version, created_at_ms, updated_at_ms)
 			VALUES (?, ?, ?, ?, ?, 1, ?, ?)
@@ -931,7 +963,7 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 				updated_at_ms = excluded.updated_at_ms`,
 			orgID, pkgID, boolToInt(pol.Enabled), optIn, pinnedArg, now, now,
 		); err != nil {
-			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed persisting org extension policy", true, nil)
 			return
 		}
 	}
@@ -1006,10 +1038,13 @@ func (s *Server) cancelPendingInstallationTx(ctx context.Context, insID string, 
 	return tx.Commit()
 }
 
-func (s *Server) isFourEyesSelfApproval(ctx context.Context, _ string, insID, actorID string) bool {
+func (s *Server) isFourEyesSelfApproval(ctx context.Context, _ string, insID, actorID string) (bool, error) {
 	var fourEyesOrgs int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE') AND require_four_eyes_approval = 1`).Scan(&fourEyesOrgs); err != nil || fourEyesOrgs == 0 {
-		return false
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE') AND require_four_eyes_approval = 1`).Scan(&fourEyesOrgs); err != nil {
+		return true, err
+	}
+	if fourEyesOrgs == 0 {
+		return false, nil
 	}
 	var stagerID string
 	err := s.db.QueryRowContext(ctx, `
@@ -1017,12 +1052,15 @@ func (s *Server) isFourEyesSelfApproval(ctx context.Context, _ string, insID, ac
 		FROM audit_events
 		WHERE target_type = 'extension_installation' AND target_id = ?
 		  AND event_type IN ('extension.staged_pending_approval', 'extension.upgrade_pending_reconsent')
-		ORDER BY seq_no DESC LIMIT 1`, insID,
+		ORDER BY created_at_ms DESC, rowid DESC LIMIT 1`, insID,
 	).Scan(&stagerID)
-	if err != nil {
-		return false
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
 	}
-	return strings.TrimSpace(stagerID) == strings.TrimSpace(actorID)
+	if err != nil {
+		return true, err
+	}
+	return strings.TrimSpace(stagerID) == strings.TrimSpace(actorID), nil
 }
 
 func actorHasOrgScopedApproverBinding(actor *rbac.Actor, orgID string) bool {
@@ -1252,7 +1290,7 @@ func (s *Server) writeInstallerError(w http.ResponseWriter, r *http.Request, err
 	case errors.Is(err, port.ErrInvalidInput):
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
 	default:
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "extension_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "extension_error", "extension installer operation failed", true, nil)
 	}
 }
 
@@ -1295,6 +1333,3 @@ func sqlNullStrPtr(ns sql.NullString) *string {
 	v := ns.String
 	return &v
 }
-
-var _ = sha256.Size
-var _ = hex.EncodeToString
