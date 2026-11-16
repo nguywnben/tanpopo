@@ -912,5 +912,38 @@ func TestGatewayTelemetrySecurityRemediation(t *testing.T) {
 			t.Fatalf("expected 2 distinct request_traces_meta and 2 debug_payload_blobs rows on caller X-Tanpopo-Request-Id collision, got traces=%d blobs=%d", traceCount, blobCount)
 		}
 	})
+
+	t.Run("NativeSyncBrokerFailureWithTelemetryDoesNotPanic", func(t *testing.T) {
+		th := setupTelemetryIngressHarness(t, nil)
+		// Shut down the fake upstream server so blind broker execution fails with (nil, err).
+		th.fake.Close()
+
+		req, _ := http.NewRequest(http.MethodPost, th.httpSrv.URL+"/native/openai/v1/chat/completions",
+			strings.NewReader(`{"model":"acme/chat-1","messages":[{"role":"user","content":"SECRET_PATIENT_RECORD_FAIL"}]}`))
+		req.Header.Set("Authorization", "Bearer "+th.vkeyRaw)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := th.client.Do(req)
+		if err != nil {
+			t.Fatalf("POST /native/openai/v1/chat/completions on closed upstream: %v", err)
+		}
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode < 500 || resp.StatusCode >= 600 {
+			t.Fatalf("expected 5xx canonical gateway error on unreachable native upstream, got %d body=%s", resp.StatusCode, string(bodyBytes))
+		}
+		if err := th.pipe.ForceFlush(th.ctx); err != nil {
+			t.Fatalf("ForceFlush after native broker error: %v", err)
+		}
+		var errStatus int
+		var stagesJSON string
+		if err := th.store.RawDB().QueryRowContext(th.ctx, `
+			SELECT http_status, waterfall_stages_json FROM request_traces_meta WHERE entry_point = 'native_http' ORDER BY rowid DESC LIMIT 1`).
+			Scan(&errStatus, &stagesJSON); err != nil {
+			t.Fatalf("query native error trace: %v", err)
+		}
+		if errStatus != resp.StatusCode || strings.Contains(stagesJSON, "SECRET_PATIENT_RECORD_FAIL") {
+			t.Fatalf("unexpected native error trace status=%d vs resp=%d stages=%s", errStatus, resp.StatusCode, stagesJSON)
+		}
+	})
 }
 

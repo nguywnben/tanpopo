@@ -49,11 +49,12 @@ var (
 	skPattern            = regexp.MustCompile(`(^|[^A-Za-z0-9])(sk-[A-Za-z0-9._-]{4,})`)
 	googleKeyPattern     = regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{16,}`)
 	ghTokenPattern       = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{16,}`)
-	urlUserInfoRe        = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^:/@\s]+):([^@/\s]+)@`)
-	cookieAssignRe       = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])([A-Za-z0-9._-]*(?:authorization|api[_-]?key|token|secret|password|session|cookie))=([^\s;&,"']+)`)
-	headerSecretAssignRe = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])(authorization|proxy-authorization|x-api-key|x-goog-api-key|x-tanpopo-virtual-key|api[_-]?key)\s*[:=]\s*([^\s,;"]+)`)
-	jsonSecretKVRe       = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*"((?:\\.|[^"\\])*)"`)
-	jsonSecretTailRe     = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*"((?:\\.|[^"\\])*)$`)
+	urlUserInfoRe         = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^@/\s]+)@`)
+	cookieAssignRe        = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])([A-Za-z0-9._-]*(?:authorization|api[_-]?key|token|secret|password|session|cookie))=(?:"[^"]*"|[^\s;&,"']+)`)
+	headerSecretAssignRe  = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])(authorization|proxy-authorization|x-api-key|x-goog-api-key|x-tanpopo-virtual-key|x-auth-token|x-secret-key|client[_-]?secret|api[_-]?key)\s*[:=]\s*([^\s,;"]+)`)
+	jsonSecretKVRe        = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*"((?:\\.|[^"\\])*)"`)
+	jsonSecretTailRe      = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*"((?:\\.|[^"\\])*)$`)
+	jsonNestedSensitiveRe = regexp.MustCompile(`(?i)"([^"\\]{1,128})"\s*:\s*[\{\[]`)
 )
 
 // sensitiveKeys contains canonical normalized lowercase underscore keys whose values
@@ -89,29 +90,33 @@ var sensitiveKeys = map[string]bool{
 // payloadKeys contains keys carrying prompt, completion, or tool-argument content
 // that must be elided whenever CapturePayloads == false.
 var payloadKeys = map[string]bool{
-	"messages":      true,
-	"input":         true,
-	"arguments":     true,
-	"output":        true,
-	"prompt":        true,
-	"prompts":       true,
-	"completion":    true,
-	"completions":   true,
-	"choices":       true,
-	"candidates":    true,
-	"content":       true,
-	"text":          true,
-	"delta":         true,
-	"raw_body":      true,
-	"raw_response":  true,
-	"request_body":  true,
-	"response_body": true,
-	"tool_calls":    true,
-	"function_call": true,
-	"system":        true,
-	"instructions":  true,
-	"embedding":     true,
-	"embeddings":    true,
+	"messages":           true,
+	"input":              true,
+	"arguments":          true,
+	"output":             true,
+	"prompt":             true,
+	"prompts":            true,
+	"completion":         true,
+	"completions":        true,
+	"choices":            true,
+	"candidates":         true,
+	"content":            true,
+	"text":               true,
+	"delta":              true,
+	"raw_body":           true,
+	"raw_response":       true,
+	"request_body":       true,
+	"response_body":      true,
+	"tool_calls":         true,
+	"function_call":      true,
+	"tools":              true,
+	"functions":          true,
+	"parts":              true,
+	"system":             true,
+	"system_instruction": true,
+	"instructions":       true,
+	"embedding":          true,
+	"embeddings":         true,
 }
 
 // Redactor scrubs credentials unconditionally and elides prompt/completion payloads by default.
@@ -235,7 +240,7 @@ func (r *Redactor) SanitizeStringBounded(s string, maxBytes int) string {
 		maxBytes = maxStringBytes
 	}
 	out := s
-	out = urlUserInfoRe.ReplaceAllString(out, "${1}"+RedactedMarker+":"+RedactedMarker+"@")
+	out = urlUserInfoRe.ReplaceAllString(out, "${1}"+RedactedMarker+"@")
 	out = bearerPattern.ReplaceAllString(out, "Bearer "+RedactedMarker)
 	out = basicPattern.ReplaceAllString(out, "Basic "+RedactedMarker)
 	out = vkeyPattern.ReplaceAllString(out, RedactedMarker)
@@ -498,7 +503,8 @@ func (r *Redactor) SanitizeDebugPayload(raw []byte, maxBytes int) []byte {
 	if len(boundedRaw) > sliceLimit {
 		boundedRaw = boundedRaw[:sliceLimit]
 	}
-	scrubbedText := jsonSecretKVRe.ReplaceAllStringFunc(string(boundedRaw), func(match string) string {
+	scrubbedText := redactMalformedNestedSensitiveValues(string(boundedRaw))
+	scrubbedText = jsonSecretKVRe.ReplaceAllStringFunc(scrubbedText, func(match string) string {
 		sub := jsonSecretKVRe.FindStringSubmatch(match)
 		if len(sub) >= 2 && IsSensitiveKey(sub[1]) {
 			return `"` + sub[1] + `":"` + RedactedMarker + `"`
@@ -514,6 +520,71 @@ func (r *Redactor) SanitizeDebugPayload(raw []byte, maxBytes int) []byte {
 	})
 	bounded := capRed.SanitizeStringBounded(scrubbedText, maxBytes)
 	return []byte(bounded)
+}
+
+func redactMalformedNestedSensitiveValues(input string) string {
+	locs := jsonNestedSensitiveRe.FindAllStringSubmatchIndex(input, -1)
+	if len(locs) == 0 {
+		return input
+	}
+	var out strings.Builder
+	out.Grow(len(input))
+	cursor := 0
+	for _, loc := range locs {
+		if len(loc) < 4 || loc[0] < cursor {
+			continue
+		}
+		key := input[loc[2]:loc[3]]
+		if !IsSensitiveKey(key) {
+			continue
+		}
+		valStart := loc[1] - 1 // points to '{' or '['
+		out.WriteString(input[cursor:valStart])
+		out.WriteByte('"')
+		out.WriteString(RedactedMarker)
+		out.WriteByte('"')
+
+		depth := 0
+		inStr := false
+		escaped := false
+		pos := valStart
+		for pos < len(input) {
+			ch := input[pos]
+			pos++
+			if inStr {
+				if escaped {
+					escaped = false
+					continue
+				}
+				if ch == '\\' {
+					escaped = true
+					continue
+				}
+				if ch == '"' {
+					inStr = false
+				}
+				continue
+			}
+			switch ch {
+			case '"':
+				inStr = true
+			case '{', '[':
+				depth++
+			case '}', ']':
+				depth--
+				if depth == 0 {
+					goto doneValue
+				}
+			}
+		}
+	doneValue:
+		cursor = pos
+	}
+	if cursor == 0 {
+		return input
+	}
+	out.WriteString(input[cursor:])
+	return out.String()
 }
 
 // SanitizeHeaders returns a redacted header map safe for logs and spans.

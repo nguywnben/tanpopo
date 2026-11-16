@@ -917,7 +917,10 @@ func (h *Handler) executeSyncNativeAttempt(
 	upResp, err := h.broker.ExecuteWithHostConstraint(eCtx, egressReq, constraint)
 	egressDur := time.Since(egressStart)
 	reqTel.addUpstreamDuration(egressDur)
-	statusCode := upResp.StatusCode
+	statusCode := 0
+	if upResp != nil {
+		statusCode = upResp.StatusCode
+	}
 	if err != nil && statusCode == 0 {
 		statusCode = http.StatusBadGateway
 	}

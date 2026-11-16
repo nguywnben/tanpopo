@@ -475,12 +475,14 @@ type scrubbedSpanSnapshot struct {
 	name       string
 	attributes []attribute.KeyValue
 	events     []sdktrace.Event
+	links      []sdktrace.Link
 	statusMsg  string
 }
 
 func (s *scrubbedSpanSnapshot) Name() string                      { return s.name }
 func (s *scrubbedSpanSnapshot) Attributes() []attribute.KeyValue  { return s.attributes }
 func (s *scrubbedSpanSnapshot) Events() []sdktrace.Event          { return s.events }
+func (s *scrubbedSpanSnapshot) Links() []sdktrace.Link            { return s.links }
 func (s *scrubbedSpanSnapshot) Status() sdktrace.Status {
 	st := s.ReadOnlySpan.Status()
 	st.Description = s.statusMsg
@@ -514,11 +516,30 @@ func (p *RingBufferSpanProcessor) scrubSpan(s sdktrace.ReadOnlySpan) sdktrace.Re
 			})
 		}
 	}
+	rawLinks := s.Links()
+	var safeLinks []sdktrace.Link
+	if len(rawLinks) > 0 {
+		safeLinks = make([]sdktrace.Link, 0, len(rawLinks))
+		for _, lk := range rawLinks {
+			lkAttrs := make([]attribute.KeyValue, 0, len(lk.Attributes))
+			for _, kv := range lk.Attributes {
+				if sanitized, ok := p.scrubAttr(kv); ok {
+					lkAttrs = append(lkAttrs, sanitized)
+				}
+			}
+			safeLinks = append(safeLinks, sdktrace.Link{
+				SpanContext:           lk.SpanContext,
+				Attributes:            lkAttrs,
+				DroppedAttributeCount: lk.DroppedAttributeCount,
+			})
+		}
+	}
 	return &scrubbedSpanSnapshot{
 		ReadOnlySpan: s,
 		name:         p.redactor.SanitizeString(s.Name()),
 		attributes:   safeAttrs,
 		events:       safeEvents,
+		links:        safeLinks,
 		statusMsg:    p.redactor.SanitizeString(s.Status().Description),
 	}
 }
@@ -657,6 +678,7 @@ type debugBlobTask struct {
 	virtualKeyID string
 	requestID    string
 	payload      []byte
+	preScrubbed  bool
 }
 
 type persistTask struct {
@@ -858,7 +880,7 @@ func (p *Pipeline) drainPersistQueue() {
 			_ = p.writeRequestTrace(ctx, *item.trace)
 		}
 		if item.blob != nil {
-			_, _ = p.writeDebugBlobIfAuthorized(ctx, item.blob.orgID, item.blob.projectID, item.blob.virtualKeyID, item.blob.requestID, item.blob.payload)
+			_, _ = p.writeDebugBlobIfAuthorized(ctx, item.blob.orgID, item.blob.projectID, item.blob.virtualKeyID, item.blob.requestID, item.blob.payload, item.blob.preScrubbed)
 			clear(item.blob.payload)
 		}
 		cancel()
@@ -952,8 +974,37 @@ func (p *Pipeline) EnqueueDebugBlob(orgID, projectID, virtualKeyID, requestID st
 			virtualKeyID: virtualKeyID,
 			requestID:    truncateStr(strings.TrimSpace(requestID), 40),
 			payload:      scrubbed,
+			preScrubbed:  true,
 		},
 		bytes: int64(256 + len(scrubbed)),
+	})
+}
+
+// EnqueuePreScrubbedDebugBlob enqueues an already-sanitized debug payload bounded <= maxPT
+// onto the non-blocking DB persistence queue, avoiding redundant JSON tokenization passes.
+func (p *Pipeline) EnqueuePreScrubbedDebugBlob(orgID, projectID, virtualKeyID, requestID string, scrubbed []byte) {
+	if p == nil || p.db == nil || p.vault == nil || p.closed.Load() || len(scrubbed) == 0 {
+		return
+	}
+	if !p.HasActiveDebugSession(orgID, projectID, virtualKeyID) {
+		return
+	}
+	maxPT := MaxDebugBlobCiphertextBytes - aesGCMTagBytes
+	if len(scrubbed) > maxPT {
+		scrubbed = scrubbed[:maxPT]
+	}
+	owned := make([]byte, len(scrubbed))
+	copy(owned, scrubbed)
+	p.enqueuePersistTask(persistTask{
+		blob: &debugBlobTask{
+			orgID:        orgID,
+			projectID:    projectID,
+			virtualKeyID: virtualKeyID,
+			requestID:    truncateStr(strings.TrimSpace(requestID), 40),
+			payload:      owned,
+			preScrubbed:  true,
+		},
+		bytes: int64(256 + len(owned)),
 	})
 }
 
@@ -1299,10 +1350,10 @@ func (p *Pipeline) StoreDebugBlobIfAuthorized(ctx context.Context, orgID, projec
 	if p == nil || p.db == nil || p.vault == nil || p.closed.Load() || len(rawPayload) == 0 {
 		return false, nil
 	}
-	return p.writeDebugBlobIfAuthorized(ctx, orgID, projectID, virtualKeyID, requestID, rawPayload)
+	return p.writeDebugBlobIfAuthorized(ctx, orgID, projectID, virtualKeyID, requestID, rawPayload, false)
 }
 
-func (p *Pipeline) writeDebugBlobIfAuthorized(ctx context.Context, orgID, projectID, virtualKeyID, requestID string, rawPayload []byte) (bool, error) {
+func (p *Pipeline) writeDebugBlobIfAuthorized(ctx context.Context, orgID, projectID, virtualKeyID, requestID string, rawPayload []byte, preScrubbed bool) (bool, error) {
 	if p == nil || p.db == nil || p.vault == nil || len(rawPayload) == 0 {
 		return false, nil
 	}
@@ -1317,11 +1368,20 @@ func (p *Pipeline) writeDebugBlobIfAuthorized(ctx context.Context, orgID, projec
 	if !ok {
 		return false, nil
 	}
-	// Always scrub credentials (including non-prefixed JSON secret fields, Bearer, vk_tp_*, sk-*, cookies)
-	// before encrypting the opt-in debug payload.
 	maxPT := MaxDebugBlobCiphertextBytes - aesGCMTagBytes
-	scrubbed := p.Redactor.SanitizeDebugPayload(rawPayload, maxPT)
-	defer clear(scrubbed)
+	var scrubbed []byte
+	if preScrubbed {
+		if len(rawPayload) > maxPT {
+			scrubbed = rawPayload[:maxPT]
+		} else {
+			scrubbed = rawPayload
+		}
+	} else {
+		// Always scrub credentials (including non-prefixed JSON secret fields, Bearer, vk_tp_*, sk-*, cookies)
+		// before encrypting the opt-in debug payload.
+		scrubbed = p.Redactor.SanitizeDebugPayload(rawPayload, maxPT)
+		defer clear(scrubbed)
+	}
 
 	nonce, ct, err := p.vault.SealProjectBlob(ctx, normOrgID, normProjID, vault.RecordKindDebugBlob, normReqID, scrubbed)
 	if err != nil {

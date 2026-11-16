@@ -370,7 +370,7 @@ func (rt *nativeRequestTelemetry) finish(ctx context.Context, scw *nativeStatusC
 			WaterfallStages:         stages,
 		})
 		if len(debugBody) > 0 {
-			rt.pipeline.EnqueueDebugBlob(orgID, projectID, vkeyID, traceRecordID, debugBody)
+			rt.pipeline.EnqueuePreScrubbedDebugBlob(orgID, projectID, vkeyID, traceRecordID, debugBody)
 		}
 	}
 }

@@ -223,14 +223,28 @@ func TestRedactorPrefixedCookiesAndDebugPayload(t *testing.T) {
 		t.Fatalf("SanitizeDebugPayload corrupted non-secret token count or benign task-1234 string: %s", cleanAdv)
 	}
 
-	inline := r.SanitizeString("key_vk_tp_abc123 key_sk-tp-canary99 x-api-key: hdr-secret-val task-1234")
-	for _, forbidden := range []string{"vk_tp_abc123", "sk-tp-canary99", "hdr-secret-val"} {
+	inline := r.SanitizeString("key_vk_tp_abc123 key_sk-tp-canary99 https://tokonly@api.example.com/v1 tanpopo_session=\"quoted-sess-secret\" x-api-key: hdr-secret-val x-auth-token: xauth-secret-val task-1234")
+	for _, forbidden := range []string{"vk_tp_abc123", "sk-tp-canary99", "tokonly", "quoted-sess-secret", "hdr-secret-val", "xauth-secret-val"} {
 		if strings.Contains(inline, forbidden) {
 			t.Fatalf("SanitizeString leaked inline secret %q: %s", forbidden, inline)
 		}
 	}
 	if !strings.Contains(inline, "task-1234") {
 		t.Fatalf("SanitizeString falsely redacted benign task-1234: %s", inline)
+	}
+
+	// Default Redactor must also elide system prompts and tool/function/part schemas.
+	for _, k := range []string{"system", "instructions", "system_instruction", "tools", "functions", "parts"} {
+		if _, ok := r.SanitizeAttribute(k, "SYSTEM_SECRET_PROMPT"); ok {
+			t.Fatalf("expected payload key %q to be elided when CapturePayloads=false", k)
+		}
+	}
+
+	// Malformed truncated JSON nested object under a sensitive parent key must redact nested unprefixed fields.
+	nestedTrunc := []byte(`{"messages":[{"content":"keep-me"}],"credentials":{"val":"unprefixed-nested-secret"`)
+	cleanNestedTrunc := string(r.SanitizeDebugPayload(nestedTrunc, 4096))
+	if strings.Contains(cleanNestedTrunc, "unprefixed-nested-secret") {
+		t.Fatalf("malformed truncated nested JSON leaked nested credential: %s", cleanNestedTrunc)
 	}
 
 	// Multi-MiB JSON array is redacted in bounded streaming time and capped strictly <= maxBytes.
