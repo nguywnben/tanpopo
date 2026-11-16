@@ -757,6 +757,10 @@ func (s *Server) handleUpdateDeployment(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionModelWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 
 	cur, ownerProj, sharedJSON, err := s.loadDeploymentDTO(r.Context(), orgID, depID)
 	if errors.Is(err, port.ErrNotFound) {
@@ -893,6 +897,10 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 	}
 	orgID, ok := s.resolveTargetOrgID(w, r, sc)
 	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionModelWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
 		return
 	}
 

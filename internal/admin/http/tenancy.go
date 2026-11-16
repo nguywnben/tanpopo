@@ -694,16 +694,20 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 		return
 	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionProjectWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
 	}
 	var req destructiveConfirmRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
-		return
-	}
-	orgID, ok := s.resolveTargetOrgID(w, r, sc)
-	if !ok {
 		return
 	}
 
@@ -1240,6 +1244,10 @@ func (s *Server) handleListProjectEnvironments(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionProjectRead); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 	prj, err := s.storage.Tenancy().GetProject(r.Context(), orgID, projectID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
@@ -1290,6 +1298,10 @@ func (s *Server) handleCreateProjectEnvironment(w http.ResponseWriter, r *http.R
 	}
 	orgID, ok := s.resolveTargetOrgID(w, r, sc)
 	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionEnvironmentWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
 		return
 	}
 

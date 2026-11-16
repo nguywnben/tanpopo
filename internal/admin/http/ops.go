@@ -597,7 +597,7 @@ func (s *Server) handleListAuditEvents(w http.ResponseWriter, r *http.Request) {
 		args = append(args, actionFilter)
 	}
 	if cur != nil {
-		conds = append(conds, `(created_at_ms < ? OR (created_at_ms = ? AND id < ?))`)
+		conds = append(conds, `(seq_no < ? OR (seq_no = ? AND id < ?))`)
 		args = append(args, cur.CreatedMs, cur.CreatedMs, cur.LastID)
 	}
 
@@ -617,11 +617,7 @@ func (s *Server) handleListAuditEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	type audRow struct {
-		dto       auditEventResourceDTO
-		createdMs int64
-	}
-	var items []audRow
+	var items []auditEventResourceDTO
 	for rows.Next() {
 		var (
 			id, part, actorID, action, targetType, targetID, metaJSON, prevHash, entryHash string
@@ -639,22 +635,19 @@ func (s *Server) handleListAuditEvents(w http.ResponseWriter, r *http.Request) {
 		if metaMap == nil {
 			metaMap = map[string]any{}
 		}
-		items = append(items, audRow{
-			dto: auditEventResourceDTO{
-				ID:             id,
-				OrgID:          sqlNullStrPtr(evOrg),
-				ChainPartition: part,
-				SeqNo:          seqNo,
-				ActorID:        actorID,
-				Action:         action,
-				TargetType:     targetType,
-				TargetID:       targetID,
-				Metadata:       metaMap,
-				PrevHash:       prevHash,
-				EventHash:      entryHash,
-				CreatedAt:      formatTimeRFC3339Ms(createdMs),
-			},
-			createdMs: createdMs,
+		items = append(items, auditEventResourceDTO{
+			ID:             id,
+			OrgID:          sqlNullStrPtr(evOrg),
+			ChainPartition: part,
+			SeqNo:          seqNo,
+			ActorID:        actorID,
+			Action:         action,
+			TargetType:     targetType,
+			TargetID:       targetID,
+			Metadata:       metaMap,
+			PrevHash:       prevHash,
+			EventHash:      entryHash,
+			CreatedAt:      formatTimeRFC3339Ms(createdMs),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -666,14 +659,14 @@ func (s *Server) handleListAuditEvents(w http.ResponseWriter, r *http.Request) {
 	if hasMore {
 		items = items[:limit]
 	}
-	data := make([]auditEventResourceDTO, len(items))
-	for i := range items {
-		data[i] = items[i].dto
+	data := items
+	if data == nil {
+		data = []auditEventResourceDTO{}
 	}
 	var nextCursor *string
 	if hasMore && len(items) > 0 {
 		last := items[len(items)-1]
-		tok, curErr := encodePaginationCursor(s.cursorSecret, "audit_events", orgID, filterHash, last.createdMs, last.dto.ID)
+		tok, curErr := encodePaginationCursor(s.cursorSecret, "audit_events", orgID, filterHash, last.SeqNo, last.ID)
 		if curErr != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding cursor", true, nil)
 			return

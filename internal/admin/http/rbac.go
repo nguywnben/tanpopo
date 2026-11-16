@@ -326,16 +326,20 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "member not found", false, nil)
 		return
 	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionMemberWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
 	}
 	var req updateMemberRolesRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
-		return
-	}
-	orgID, ok := s.resolveTargetOrgID(w, r, sc)
-	if !ok {
 		return
 	}
 

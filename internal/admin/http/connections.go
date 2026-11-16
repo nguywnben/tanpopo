@@ -765,6 +765,10 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
 		return
 	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionConnectionWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 
 	cur, err := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
 	if err != nil {
@@ -968,6 +972,10 @@ func (s *Server) handleDeleteConnection(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
 		return
 	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionConnectionWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 
 	cur, err := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
 	if err != nil {
@@ -1027,6 +1035,10 @@ func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 	connID := strings.TrimSpace(r.PathValue("connectionId"))
 	if connID == "" {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionConnectionWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
 		return
 	}
 

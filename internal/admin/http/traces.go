@@ -215,6 +215,10 @@ func (s *Server) handleGetTraceWaterfall(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionTraceReadMeta); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 
 	dto, projID, err := s.loadTraceByRequestID(r.Context(), orgID, reqID)
 	if errors.Is(err, port.ErrNotFound) {
@@ -244,6 +248,10 @@ func (s *Server) handleGetTraceDebugPayload(w http.ResponseWriter, r *http.Reque
 	}
 	orgID, ok := s.resolveTargetOrgID(w, r, sc)
 	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionTraceReadDebugBlob); rerr != nil {
+		s.writeAuthError(w, r, rerr)
 		return
 	}
 

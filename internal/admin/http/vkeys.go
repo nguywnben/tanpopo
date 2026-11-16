@@ -437,6 +437,14 @@ func (s *Server) handleUpdateVirtualKey(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
 		return
 	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionVKeyCreate); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
@@ -444,10 +452,6 @@ func (s *Server) handleUpdateVirtualKey(w http.ResponseWriter, r *http.Request) 
 
 	var req updateVirtualKeyRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
-		return
-	}
-	orgID, ok := s.resolveTargetOrgID(w, r, sc)
-	if !ok {
 		return
 	}
 
@@ -549,6 +553,14 @@ func (s *Server) handleRotateVirtualKey(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
 		return
 	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionVKeyRotate); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
@@ -556,10 +568,6 @@ func (s *Server) handleRotateVirtualKey(w http.ResponseWriter, r *http.Request) 
 
 	var req rotateVirtualKeyRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
-		return
-	}
-	orgID, ok := s.resolveTargetOrgID(w, r, sc)
-	if !ok {
 		return
 	}
 
@@ -637,6 +645,14 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
 		return
 	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionVKeyRevoke); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
@@ -644,10 +660,6 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 
 	var req revokeVirtualKeyRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
-		return
-	}
-	orgID, ok := s.resolveTargetOrgID(w, r, sc)
-	if !ok {
 		return
 	}
 	var internalMode string

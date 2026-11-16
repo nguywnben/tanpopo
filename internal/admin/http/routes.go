@@ -22,7 +22,7 @@ import (
 type routeTargetDTO struct {
 	DeploymentID  string `json:"deployment_id"`
 	PriorityOrder int    `json:"priority_order,omitempty"`
-	Weight        int    `json:"weight,omitempty"`
+	Weight        int    `json:"weight"`
 }
 
 type routeUpsertRequest struct {
@@ -328,6 +328,10 @@ func (s *Server) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionRouteWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
 
 	curDTO, curProjID, err := s.loadRouteResourceDTO(r.Context(), orgID, routeID)
 	if errors.Is(err, port.ErrNotFound) {
@@ -460,6 +464,10 @@ func (s *Server) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	orgID, ok := s.resolveTargetOrgID(w, r, sc)
 	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionRouteWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
 		return
 	}
 

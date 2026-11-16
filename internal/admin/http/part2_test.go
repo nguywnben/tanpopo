@@ -3474,3 +3474,272 @@ func TestPart2FinOpsPeriodOracleAndChargebackFixes(t *testing.T) {
 		t.Fatalf("expected overflow-safe utilization pct 98, got %d", pct)
 	}
 }
+
+func TestPart2AuditPaginationSeqNoSkewAndOracleAndZeroWeight(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "CP9 Org", "proj-a")
+	now := h.fk.Now().UTC().UnixMilli()
+
+	// 1. Audit pagination with skewed created_at_ms relative to seq_no across pages.
+	// Insert 6 audit events into boot.OrgID chain with non-monotonic created_at_ms timestamps.
+	var prevHash sql.NullString
+	var maxSeq int64
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COALESCE(MAX(seq_no), 0) FROM audit_events WHERE chain_key = ?`, boot.OrgID).Scan(&maxSeq); err != nil {
+		t.Fatalf("query max seq_no: %v", err)
+	}
+	if maxSeq > 0 {
+		if err := h.st.RawDB().QueryRowContext(ctx, `SELECT entry_hash FROM audit_events WHERE chain_key = ? AND seq_no = ?`, boot.OrgID, maxSeq).Scan(&prevHash); err != nil {
+			t.Fatalf("query prev entry_hash: %v", err)
+		}
+	}
+	ph := strings.Repeat("0", 64)
+	if prevHash.Valid {
+		ph = prevHash.String
+	}
+	skewedTimestamps := []int64{now + 5000, now + 1000, now + 9000, now + 2000, now + 8000, now + 500}
+	for i, ts := range skewedTimestamps {
+		seq := maxSeq + int64(i) + 1
+		eid := idgen.MustNew(idgen.PrefixAudit)
+		eh := sha256HexString(fmt.Sprintf("%s|%d|%s", boot.OrgID, seq, eid))
+		if _, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO audit_events (id, created_at_ms, org_id, chain_key, seq_no, actor_kind, actor_id, entry_point, event_type, target_type, target_id, request_id, metadata_json, prev_hash, entry_hash)
+			VALUES (?, ?, ?, ?, ?, 'PRINCIPAL', ?, 'admin_api', 'test.skewed_audit', 'org', ?, 'req_skew', '{}', ?, ?)`,
+			eid, ts, boot.OrgID, boot.OrgID, seq, boot.OwnerPrincipalID, boot.OrgID, ph, eh,
+		); err != nil {
+			t.Fatalf("insert skewed audit %d: %v", i, err)
+		}
+		ph = eh
+	}
+	var totalOrgEvents int
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_events WHERE chain_key = ?`, boot.OrgID).Scan(&totalOrgEvents); err != nil {
+		t.Fatalf("count audit events: %v", err)
+	}
+	seenSeqs := make(map[int64]bool, totalOrgEvents)
+	var prevSeq int64
+	cursor := ""
+	for pageNum := 0; pageNum < 20; pageNum++ {
+		path := "/admin/v1/audit-events?limit=2"
+		if cursor != "" {
+			path += "&cursor=" + url.QueryEscape(cursor)
+		}
+		rec := h.doAuthedCookie(t, http.MethodGet, path, ownerCookie, "", "", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s code=%d body=%s", path, rec.Code, rec.Body.String())
+		}
+		var page paginatedListEnvelope[auditEventResourceDTO]
+		mustDecodeJSON(t, rec.Body.Bytes(), &page)
+		for _, ev := range page.Data {
+			if seenSeqs[ev.SeqNo] {
+				t.Fatalf("duplicate audit seq_no %d across cursor pages", ev.SeqNo)
+			}
+			if prevSeq > 0 && ev.SeqNo >= prevSeq {
+				t.Fatalf("audit seq_no not strictly descending across pages: prev=%d cur=%d", prevSeq, ev.SeqNo)
+			}
+			prevSeq = ev.SeqNo
+			seenSeqs[ev.SeqNo] = true
+		}
+		if !page.HasMore || page.NextCursor == nil {
+			break
+		}
+		cursor = *page.NextCursor
+	}
+	if len(seenSeqs) != totalOrgEvents {
+		t.Fatalf("skewed audit pagination missed rows: expected %d unique seq_nos, got %d", totalOrgEvents, len(seenSeqs))
+	}
+
+	// 2. WEIGHTED route target with explicit weight=0 MUST preserve "weight":0 in JSON responses (never omitempty).
+	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	connRec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"adapter_id":       adpID,
+		"name":             "cp9-conn",
+		"endpoint_url":     "https://127.0.0.1:8443/v1",
+		"allow_private_ip": true,
+		"data_region":      "US",
+		"billing_mode":     "COMMERCIAL_API",
+		"owner_project_id": boot.ProjectID,
+	})
+	if connRec.Code != http.StatusCreated {
+		t.Fatalf("create conn: %d %s", connRec.Code, connRec.Body.String())
+	}
+	var conn providerConnectionDTO
+	mustDecodeJSON(t, connRec.Body.Bytes(), &conn)
+
+	modID := idgen.MustNew(idgen.PrefixLogicalModel)
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO logical_models (id, org_id, canonical_slug, modality_kind, context_window, max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'cp9-model', 'CHAT', 8192, 2048, '{"streaming":"VERIFIED"}', 1, ?, ?)`,
+		modID, boot.OrgID, now, now,
+	); err != nil {
+		t.Fatalf("insert model: %v", err)
+	}
+
+	var depIDs [2]string
+	for i := range depIDs {
+		recDep := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
+			"logical_model_id":      modID,
+			"connection_id":         conn.ID,
+			"upstream_model_name":   fmt.Sprintf("up-cp9-%d", i),
+			"env_id":                boot.EnvID,
+			"data_region":           "US",
+			"rate_card":             map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
+			"idle_chunk_timeout_ms": 15000,
+			"first_byte_timeout_ms": 15000,
+		})
+		if recDep.Code != http.StatusCreated {
+			t.Fatalf("create dep %d: %d %s", i, recDep.Code, recDep.Body.String())
+		}
+		var dep modelDeploymentDTO
+		mustDecodeJSON(t, recDep.Body.Bytes(), &dep)
+		depIDs[i] = dep.ID
+	}
+
+	recRt := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":                 "cp9-weighted-zero",
+		"env_id":               boot.EnvID,
+		"strategy":             "WEIGHTED",
+		"allowed_data_regions": []string{"US"},
+		"targets": []map[string]any{
+			{"deployment_id": depIDs[0], "priority_order": 1, "weight": 0},
+			{"deployment_id": depIDs[1], "priority_order": 2, "weight": 100},
+		},
+	})
+	if recRt.Code != http.StatusCreated {
+		t.Fatalf("create weighted zero route: %d %s", recRt.Code, recRt.Body.String())
+	}
+	if !strings.Contains(recRt.Body.String(), `"weight":0`) {
+		t.Fatalf("expected explicit \"weight\":0 in POST /routes response, got %s", recRt.Body.String())
+	}
+	var createdRt routeResourceDTO
+	mustDecodeJSON(t, recRt.Body.Bytes(), &createdRt)
+	recListRt := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/routes", ownerCookie, "", "", nil)
+	if recListRt.Code != http.StatusOK || !strings.Contains(recListRt.Body.String(), `"weight":0`) {
+		t.Fatalf("expected \"weight\":0 in GET /routes response, code=%d body=%s", recListRt.Code, recListRt.Body.String())
+	}
+
+	// 3. Seed trace + debug blob + virtual key for intra-org vs cross-tenant existence oracle checks.
+	reqTraceID := "req_cp9_trace_1"
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO request_traces_meta (
+			request_id, created_at_ms, started_at_ms, org_id, project_id, env_id, entry_point, route_slug,
+			http_status, proxy_overhead_us, ttft_ms, total_duration_ms, waterfall_stages_json
+		) VALUES (?, ?, ?, ?, ?, ?, 'unified_http', 'cp9-weighted-zero', 200, 120, 10, 42, '[]')`,
+		reqTraceID, now, now-42, boot.OrgID, boot.ProjectID, boot.EnvID,
+	); err != nil {
+		t.Fatalf("insert request_traces_meta: %v", err)
+	}
+	nonce, ct, err := h.vault.SealProjectBlob(ctx, boot.OrgID, boot.ProjectID, vault.RecordKindDebugBlob, reqTraceID, []byte(`{"prompt":"cp9"}`))
+	if err != nil {
+		t.Fatalf("SealProjectBlob: %v", err)
+	}
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO debug_payload_blobs (request_id, org_id, project_id, nonce, encrypted_payload_aead, expires_at_ms, created_at_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		reqTraceID, boot.OrgID, boot.ProjectID, nonce, ct, now+600_000, now,
+	); err != nil {
+		t.Fatalf("insert debug_payload_blobs: %v", err)
+	}
+	recVK := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/virtual-keys", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":       "cp9-vk",
+		"project_id": boot.ProjectID,
+		"env_id":     boot.EnvID,
+	})
+	if recVK.Code != http.StatusCreated {
+		t.Fatalf("create virtual key: %d %s", recVK.Code, recVK.Body.String())
+	}
+	var vk virtualKeyCreatedDTO
+	mustDecodeJSON(t, recVK.Body.Bytes(), &vk)
+
+	finopsTok := "tok_cp9_finops"
+	h.registerBearerToken(finopsTok, &rbac.Actor{
+		PrincipalID:     "pri_cp9_finops",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleFinOpsViewer}},
+	})
+	devTok := "tok_cp9_dev"
+	h.registerBearerToken(devTok, &rbac.Actor{
+		PrincipalID:     "pri_cp9_dev",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleDeveloper}},
+	})
+	teamTok := "tok_cp9_team"
+	h.registerBearerToken(teamTok, &rbac.Actor{
+		PrincipalID:     "pri_cp9_team",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleTeamAdmin}},
+	})
+
+	oracleProbes := []struct {
+		tok    string
+		method string
+		exist  string
+		miss   string
+		ifm    string
+		body   any
+	}{
+		{finopsTok, http.MethodGet, "/admin/v1/traces/" + reqTraceID + "/debug-payload", "/admin/v1/traces/req_nonexistent/debug-payload", "", nil},
+		{devTok, http.MethodGet, "/admin/v1/traces/" + reqTraceID + "/debug-payload", "/admin/v1/traces/req_nonexistent/debug-payload", "", nil},
+		{teamTok, http.MethodGet, "/admin/v1/traces/" + reqTraceID + "/debug-payload", "/admin/v1/traces/req_nonexistent/debug-payload", "", nil},
+		{finopsTok, http.MethodPatch, "/admin/v1/connections/" + conn.ID, "/admin/v1/connections/conn_nonexistent", `"v1"`, map[string]any{"name": "probe"}},
+		{finopsTok, http.MethodDelete, "/admin/v1/connections/" + conn.ID, "/admin/v1/connections/conn_nonexistent", `"v1"`, nil},
+		{finopsTok, http.MethodPost, "/admin/v1/connections/" + conn.ID + "/test", "/admin/v1/connections/conn_nonexistent/test", "", nil},
+		{finopsTok, http.MethodPatch, "/admin/v1/deployments/" + depIDs[0], "/admin/v1/deployments/dep_nonexistent", `"v1"`, map[string]any{"state": "DISABLED"}},
+		{finopsTok, http.MethodDelete, "/admin/v1/deployments/" + depIDs[0], "/admin/v1/deployments/dep_nonexistent", `"v1"`, nil},
+		{finopsTok, http.MethodPut, "/admin/v1/routes/" + createdRt.ID, "/admin/v1/routes/rte_nonexistent", `"v1"`, map[string]any{"slug": "x", "env_id": boot.EnvID, "strategy": "PRIORITY_FAILOVER", "targets": []map[string]any{{"deployment_id": depIDs[0]}}}},
+		{finopsTok, http.MethodDelete, "/admin/v1/routes/" + createdRt.ID, "/admin/v1/routes/rte_nonexistent", `"v1"`, nil},
+		{finopsTok, http.MethodPost, "/admin/v1/projects/" + boot.ProjectID + "/environments", "/admin/v1/projects/proj_nonexistent/environments", "", map[string]any{"slug": "qa", "name": "QA"}},
+		{teamTok, http.MethodPost, "/admin/v1/projects/" + boot.ProjectID + "/environments", "/admin/v1/projects/proj_nonexistent/environments", "", map[string]any{"slug": "qa", "name": "QA"}},
+		{finopsTok, http.MethodDelete, "/admin/v1/projects/" + boot.ProjectID, "/admin/v1/projects/proj_nonexistent", "", map[string]any{"confirm_slug": "proj-a", "reason": "probe oracle check"}},
+		{finopsTok, http.MethodPatch, "/admin/v1/members/" + boot.OwnerPrincipalID + "/roles", "/admin/v1/members/pri_nonexistent/roles", "", map[string]any{"roles": []string{"ORG_OWNER"}}},
+		{finopsTok, http.MethodPatch, "/admin/v1/virtual-keys/" + vk.ID, "/admin/v1/virtual-keys/vk_nonexistent", "", map[string]any{"name": "probe"}},
+		{devTok, http.MethodPost, "/admin/v1/virtual-keys/" + vk.ID + "/rotate", "/admin/v1/virtual-keys/vk_nonexistent/rotate", "", map[string]any{"grace_window_seconds": 60}},
+		{devTok, http.MethodPost, "/admin/v1/virtual-keys/" + vk.ID + "/revoke", "/admin/v1/virtual-keys/vk_nonexistent/revoke", "", map[string]any{"mode": "GRACEFUL_DRAIN", "reason": "probe oracle check"}},
+	}
+	for _, p := range oracleProbes {
+		recEx := h.doBearer(t, p.method, p.exist, p.tok, p.ifm, p.body)
+		recMs := h.doBearer(t, p.method, p.miss, p.tok, p.ifm, p.body)
+		if recEx.Code != http.StatusForbidden || recMs.Code != http.StatusForbidden {
+			t.Fatalf("%s %s / %s expected uniform 403 without existence oracle, got exist=%d miss=%d body=%s",
+				p.method, p.exist, p.miss, recEx.Code, recMs.Code, recEx.Body.String())
+		}
+		if recEx.Header().Get("Content-Security-Policy") != "default-src 'none'; frame-ancestors 'none'" {
+			t.Fatalf("missing strict Content-Security-Policy header: %q", recEx.Header().Get("Content-Security-Policy"))
+		}
+	}
+
+	// Cross-tenant ORG_OWNER in org2 MUST still receive uniform 404 (AUTH-15) probing org1 resources.
+	org2, err := h.st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "cp9-org-2", DisplayName: "CP9 Org 2"})
+	if err != nil {
+		t.Fatalf("CreateOrganization org2: %v", err)
+	}
+	org2OwnerTok := "tok_cp9_org2_owner"
+	h.registerBearerToken(org2OwnerTok, &rbac.Actor{
+		PrincipalID:     "pri_cp9_org2_owner",
+		SessionOrgID:    &org2.ID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &org2.ID, ScopeType: rbac.ScopeOrg, ScopeID: org2.ID, RoleName: rbac.RoleOrgOwner}},
+	})
+	for _, cp := range []struct {
+		method string
+		path   string
+		ifm    string
+		body   any
+	}{
+		{http.MethodGet, "/admin/v1/traces/" + reqTraceID + "/waterfall", "", nil},
+		{http.MethodGet, "/admin/v1/traces/" + reqTraceID + "/debug-payload", "", nil},
+		{http.MethodPatch, "/admin/v1/connections/" + conn.ID, `"v1"`, map[string]any{"name": "cross"}},
+		{http.MethodDelete, "/admin/v1/deployments/" + depIDs[0], `"v1"`, nil},
+		{http.MethodDelete, "/admin/v1/routes/" + createdRt.ID, `"v1"`, nil},
+		{http.MethodDelete, "/admin/v1/projects/" + boot.ProjectID, `"v1"`, map[string]any{"confirm_slug": "proj-a", "reason": "cross tenant check"}},
+		{http.MethodPatch, "/admin/v1/virtual-keys/" + vk.ID, `"v1"`, map[string]any{"name": "cross"}},
+	} {
+		rec := h.doBearer(t, cp.method, cp.path, org2OwnerTok, cp.ifm, cp.body)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("cross-tenant ORG_OWNER %s %s expected 404, got %d body=%s", cp.method, cp.path, rec.Code, rec.Body.String())
+		}
+	}
+}
