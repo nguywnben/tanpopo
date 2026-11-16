@@ -2771,3 +2771,78 @@ func TestVaultStaleShredRetryFencingAfterRecreateProjectAndOrg(t *testing.T) {
 	}
 	flushCloseStore.Close()
 }
+
+func TestVaultSealUnsealProjectBlob(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 5*time.Minute)
+
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "blob-org", DisplayName: "Blob Org"})
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+	prj, err := env.sqlite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "blob-prj", DisplayName: "Blob Prj"})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	// 1. Rejects unsupported recordKind (including RecordKindCred) and invalid AAD identifiers.
+	if _, _, err := env.vault.SealProjectBlob(ctx, org.ID, prj.ID, RecordKindCred, "req_1", []byte("secret")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput sealing with RecordKindCred, got %v", err)
+	}
+	if _, err := env.vault.UnsealProjectBlob(ctx, org.ID, prj.ID, RecordKindCred, "req_1", []byte("n"), []byte("c")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput unsealing with RecordKindCred, got %v", err)
+	}
+	if _, _, err := env.vault.SealProjectBlob(ctx, "", prj.ID, RecordKindDebugBlob, "req_1", []byte("pt")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on empty orgID seal, got %v", err)
+	}
+	if _, err := env.vault.UnsealProjectBlob(ctx, "", prj.ID, RecordKindDebugBlob, "req_1", []byte("n"), []byte("c")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on empty orgID unseal, got %v", err)
+	}
+	if _, _, err := env.vault.SealProjectBlob(ctx, org.ID, "", RecordKindDebugBlob, "req_1", []byte("pt")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on empty projectID seal, got %v", err)
+	}
+	if _, _, err := env.vault.SealProjectBlob(ctx, org.ID, prj.ID, RecordKindDebugBlob, "", []byte("pt")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput on empty recordID seal, got %v", err)
+	}
+	if _, err := env.vault.UnsealProjectBlob(ctx, org.ID, prj.ID, RecordKindDebugBlob, "req_1", []byte("short"), []byte("ct")); err == nil {
+		t.Fatalf("expected error unsealing malformed nonce/ciphertext")
+	}
+
+	// 2. Roundtrip both RecordKindDebugBlob and RecordKindCacheEntry.
+	for _, kind := range []string{RecordKindDebugBlob, RecordKindCacheEntry} {
+		pt := []byte("payload-for-" + kind)
+		nonce, ct, err := env.vault.SealProjectBlob(ctx, org.ID, prj.ID, kind, "req_"+kind, pt)
+		if err != nil {
+			t.Fatalf("SealProjectBlob(%s): %v", kind, err)
+		}
+		got, err := env.vault.UnsealProjectBlob(ctx, org.ID, prj.ID, kind, "req_"+kind, nonce, ct)
+		if err != nil || !bytes.Equal(got, pt) {
+			t.Fatalf("UnsealProjectBlob(%s): got=%q err=%v", kind, got, err)
+		}
+		// Wrong recordID / AAD transplant fails authentication.
+		if _, err := env.vault.UnsealProjectBlob(ctx, org.ID, prj.ID, kind, "req_wrong", nonce, ct); err == nil {
+			t.Fatalf("expected AEAD authentication failure on wrong recordID for %s", kind)
+		}
+		// Wrong nonce fails authentication.
+		badNonce := append([]byte(nil), nonce...)
+		badNonce[0] ^= 0xff
+		if _, err := env.vault.UnsealProjectBlob(ctx, org.ID, prj.ID, kind, "req_"+kind, badNonce, ct); err == nil {
+			t.Fatalf("expected AEAD authentication failure on tampered nonce for %s", kind)
+		}
+	}
+
+	// 3. Sealing into a nonexistent project fails transaction cleanly; crypto-shredding Project DEK renders blobs unrecoverable.
+	nonce, ct, err := env.vault.SealProjectBlob(ctx, org.ID, prj.ID, RecordKindDebugBlob, "req_shred_1", []byte("sensitive-debug"))
+	if err != nil {
+		t.Fatalf("SealProjectBlob pre-shred: %v", err)
+	}
+	if err := env.vault.ShredProjectDEK(ctx, org.ID, prj.ID, ShredRequest{RequestID: "shred-blob-1", ExpectedGeneration: 1}); err != nil {
+		t.Fatalf("ShredProjectDEK: %v", err)
+	}
+	if _, err := env.vault.UnsealProjectBlob(ctx, org.ID, prj.ID, RecordKindDebugBlob, "req_shred_1", nonce, ct); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound unsealing debug blob after Project DEK shred, got %v", err)
+	}
+}
+
+

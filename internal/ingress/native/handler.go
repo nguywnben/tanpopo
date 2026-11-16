@@ -194,13 +194,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.telemetry != nil {
 		spanCtx, rootSpan, traceID := h.telemetry.StartRequestSpan(r.Context(), tp, reqID, "native_http")
 		reqTel = &nativeRequestTelemetry{
-			pipeline:    h.telemetry,
-			reqID:       reqID,
-			traceID:     traceID,
-			entryPoint:  "native_http",
-			startedAt:   time.Now(),
-			startedAtMs: h.nowMs(),
-			rootSpan:    rootSpan,
+			pipeline:      h.telemetry,
+			reqID:         reqID,
+			traceRecordID: idgen.MustNew(idgen.PrefixTrace),
+			traceID:       traceID,
+			entryPoint:    "native_http",
+			routePattern:  "/native/{dialect}",
+			startedAt:     time.Now(),
+			startedAtMs:   h.nowMs(),
+			rootSpan:      rootSpan,
 		}
 		scw := &nativeStatusCaptureWriter{ResponseWriter: w}
 		w = scw
@@ -263,14 +265,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeCanonicalError(w, reqID, http.StatusForbidden, "native_path_not_allowed", "permission_error", "Native passthrough path rejected or missing target model.", false)
 		return
 	}
-	reqTel.recordModel(rawHints.Model)
 	estTokens, estBaseIn, estMaxOut, completionCount := estimateNativeTokensAndCountFromJSON(rawBody)
 	reqRegion, regionOK := resolveNativeRequestedDataRegion(r)
 	if !regionOK {
 		writeCanonicalError(w, reqID, http.StatusBadRequest, "invalid_request_error", "invalid_request_error", "Conflicting X-Tanpopo-Data-Region header values.", false)
 		return
 	}
-	_, endPolicyStage := reqTel.startStage(r.Context(), "Policy", attribute.String("logical_model", rawHints.Model))
+	_, endPolicyStage := reqTel.startStage(r.Context(), "Policy", attribute.String("entry_point", "native_http"))
 	policyAllowed := h.evaluateNativePreAdmissionPolicy(w, reqID, match, eff, rawHints.Model, reqRegion, rawBody, estTokens)
 	if !policyAllowed {
 		endPolicyStage("denied", "", nil)
@@ -313,7 +314,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer admLease.Release()
 
 	// Step 4: Resolve policy-compliant target deployments via 6-step route resolver (CT-08, CT-13, SM-04).
-	candidates, ok := h.resolveNativeTargetsWithPolicy(w, reqID, snap, match, eff, reqRegion, dialect, upstreamPath, rawHints.Model, nil, estBaseIn, estMaxOut)
+	candidates, ok := h.resolveNativeTargetsWithPolicy(r.Context(), w, reqID, snap, match, eff, reqRegion, dialect, upstreamPath, rawHints.Model, nil, estBaseIn, estMaxOut)
 	if !ok {
 		return
 	}
@@ -410,7 +411,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if (insp.TargetModel != "" && insp.TargetModel != rawHints.Model) || len(reqCaps) > 0 {
-			newCandidates, ok := h.resolveNativeTargetsWithPolicy(w, reqID, snap, match, eff, reqRegion, dialect, upstreamPath, effectiveModel, reqCaps, estBaseIn, estMaxOut)
+			newCandidates, ok := h.resolveNativeTargetsWithPolicy(r.Context(), w, reqID, snap, match, eff, reqRegion, dialect, upstreamPath, effectiveModel, reqCaps, estBaseIn, estMaxOut)
 			if !ok {
 				return
 			}
@@ -2810,6 +2811,7 @@ func (h *Handler) reconcileAdmissionUsage(adm *nativeAdmissionLease, usage *port
 }
 
 func (h *Handler) resolveNativeTargetsWithPolicy(
+	ctx context.Context,
 	w http.ResponseWriter,
 	reqID string,
 	snap *snapshot.ConfigSnapshot,
@@ -2846,6 +2848,9 @@ func (h *Handler) resolveNativeTargetsWithPolicy(
 	if rej != nil {
 		writeCanonicalError(w, reqID, rej.HTTPStatus, rej.Code, rej.ErrorType, rej.Message, rej.Retryable)
 		return nil, false
+	}
+	if len(candidates) > 0 {
+		nativeTelemetryFromContext(ctx).recordValidatedModel(modelSlug)
 	}
 	return candidates, true
 }

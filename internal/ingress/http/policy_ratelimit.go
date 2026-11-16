@@ -82,8 +82,7 @@ func (s *Server) evaluatePreAdmissionPolicy(
 	estMaxOut int64,
 ) (*preAdmissionDecision, bool) {
 	reqTel := telemetryFromContext(r.Context())
-	reqTel.recordModel(modelSlug)
-	_, endStage := reqTel.startStage(r.Context(), "Policy", attribute.String("logical_model", modelSlug))
+	_, endStage := reqTel.startStage(r.Context(), "Policy", attribute.String("entry_point", "unified_http"))
 	stageStatus := "ok"
 	var stageErr error
 	defer func() {
@@ -306,6 +305,7 @@ func (s *Server) reconcileAdmissionUsage(adm *admissionLease, usage *port.Normal
 }
 
 func (s *Server) resolveTargetsWithPolicy(
+	ctx context.Context,
 	w http.ResponseWriter,
 	reqID string,
 	match snapshot.KeyMatchResult,
@@ -343,6 +343,9 @@ func (s *Server) resolveTargetsWithPolicy(
 	if rej != nil {
 		writeCanonicalError(w, reqID, rej.HTTPStatus, rej.Code, rej.ErrorType, rej.Message, rej.Retryable)
 		return nil, false
+	}
+	if len(candidates) > 0 {
+		telemetryFromContext(ctx).recordValidatedModel(modelSlug)
 	}
 	return candidates, true
 }

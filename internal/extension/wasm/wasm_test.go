@@ -2826,6 +2826,7 @@ func TestWasmPolicyParityFaultGuardErrorsAndSliceGates(t *testing.T) {
 	egRT, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
 		WasmBytes:            buildHostEgressBridgeWASM(),
 		PoolSize:             1,
+		CallTimeout:          2 * time.Second,
 		AllowHostBlindEgress: true,
 		BlindBroker:          br,
 		AllowedHosts:         []string{hostOnly},
@@ -3132,6 +3133,7 @@ func TestWasmImmutableGlobalsTablesEgressAndAuditBranches(t *testing.T) {
 	defRT, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
 		WasmBytes:            buildHostEgressBridgeWASM(),
 		PoolSize:             1,
+		CallTimeout:          2 * time.Second,
 		AllowHostBlindEgress: true,
 		BlindBroker:          br,
 		AllowedHosts:         []string{hostOnly, "[::1]"},

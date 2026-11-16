@@ -47,7 +47,8 @@ var (
 	googleKeyPattern = regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{16,}`)
 	ghTokenPattern   = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{16,}`)
 	urlUserInfoRe    = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^:/@\s]+):([^@/\s]+)@`)
-	cookieAssignRe   = regexp.MustCompile(`(?i)\b(authorization|api[_-]?key|token|secret|password|session|cookie)=([^\s;&,]+)`)
+	cookieAssignRe   = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])([A-Za-z0-9._-]*(?:authorization|api[_-]?key|token|secret|password|session|cookie))=([^\s;&,"']+)`)
+	jsonSecretKVRe   = regexp.MustCompile(`(?i)"([^"]*(?:authorization|api[_-]?key|apikey|secret|password|passwd|credential|token|cookie)[^"]*)"\s*:\s*"([^"]*)"`)
 )
 
 // sensitiveKeys contains canonical normalized lowercase underscore keys whose values
@@ -200,8 +201,17 @@ func IsPayloadKey(key string) bool {
 // SanitizeString scrubs inline credential patterns (Bearer, vk_tp_*, sk-*, cookies, URL userinfo)
 // and flattens control characters so logs/spans never split lines or leak secrets.
 func (r *Redactor) SanitizeString(s string) string {
+	return r.SanitizeStringBounded(s, maxStringBytes)
+}
+
+// SanitizeStringBounded behaves like SanitizeString with a caller-supplied maximum byte limit
+// (falling back to 16 KiB when maxBytes <= 0).
+func (r *Redactor) SanitizeStringBounded(s string, maxBytes int) string {
 	if s == "" {
 		return ""
+	}
+	if maxBytes <= 0 {
+		maxBytes = maxStringBytes
 	}
 	out := s
 	out = urlUserInfoRe.ReplaceAllString(out, "${1}"+RedactedMarker+":"+RedactedMarker+"@")
@@ -211,7 +221,7 @@ func (r *Redactor) SanitizeString(s string) string {
 	out = skPattern.ReplaceAllString(out, RedactedMarker)
 	out = googleKeyPattern.ReplaceAllString(out, RedactedMarker)
 	out = ghTokenPattern.ReplaceAllString(out, RedactedMarker)
-	out = cookieAssignRe.ReplaceAllString(out, "${1}="+RedactedMarker)
+	out = cookieAssignRe.ReplaceAllString(out, "${1}${2}="+RedactedMarker)
 	out = strings.Map(func(ch rune) rune {
 		if ch == '\r' || ch == '\n' || ch == '\t' {
 			return ' '
@@ -221,10 +231,49 @@ func (r *Redactor) SanitizeString(s string) string {
 		}
 		return ch
 	}, out)
-	if len(out) > maxStringBytes {
-		out = out[:maxStringBytes]
+	if len(out) > maxBytes {
+		out = out[:maxBytes]
 	}
 	return out
+}
+
+// SanitizeDebugPayload scrubs all credentials and secrets from an authorized opt-in debug
+// payload (supporting arbitrary non-prefixed JSON credential fields and malformed JSON fallback)
+// while preserving non-secret prompt/completion context up to maxBytes.
+func (r *Redactor) SanitizeDebugPayload(raw []byte, maxBytes int) []byte {
+	if len(raw) == 0 {
+		return nil
+	}
+	if maxBytes <= 0 {
+		maxBytes = 256*1024 - 16
+	}
+	capRed := &Redactor{CapturePayloads: true}
+
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err == nil {
+		scrubbed := capRed.sanitizeValueWithLimit(decoded, 0, maxBytes)
+		if encoded, merr := json.Marshal(scrubbed); merr == nil {
+			if len(encoded) > maxBytes {
+				truncated := encoded[:maxBytes]
+				out := make([]byte, len(truncated))
+				copy(out, truncated)
+				clear(encoded)
+				return out
+			}
+			return encoded
+		}
+	}
+
+	// Fallback for non-JSON or truncated JSON bodies: scrub JSON key-values + inline tokens.
+	scrubbedText := jsonSecretKVRe.ReplaceAllStringFunc(string(raw), func(match string) string {
+		sub := jsonSecretKVRe.FindStringSubmatch(match)
+		if len(sub) >= 2 && IsSensitiveKey(sub[1]) {
+			return `"` + sub[1] + `":"` + RedactedMarker + `"`
+		}
+		return match
+	})
+	bounded := capRed.SanitizeStringBounded(scrubbedText, maxBytes)
+	return []byte(bounded)
 }
 
 // SanitizeHeaders returns a redacted header map safe for logs and spans.
@@ -267,6 +316,10 @@ func (r *Redactor) SanitizeMap(m map[string]any) map[string]any {
 }
 
 func (r *Redactor) sanitizeMapDepth(m map[string]any, depth int) map[string]any {
+	return r.sanitizeMapDepthWithLimit(m, depth, maxStringBytes)
+}
+
+func (r *Redactor) sanitizeMapDepthWithLimit(m map[string]any, depth int, maxStrBytes int) map[string]any {
 	if len(m) == 0 {
 		return map[string]any{}
 	}
@@ -284,12 +337,16 @@ func (r *Redactor) sanitizeMapDepth(m map[string]any, depth int) map[string]any 
 			out[k] = ElidedMarker
 			continue
 		}
-		out[k] = r.sanitizeValue(v, depth+1)
+		out[k] = r.sanitizeValueWithLimit(v, depth+1, maxStrBytes)
 	}
 	return out
 }
 
 func (r *Redactor) sanitizeValue(val any, depth int) any {
+	return r.sanitizeValueWithLimit(val, depth, maxStringBytes)
+}
+
+func (r *Redactor) sanitizeValueWithLimit(val any, depth int, maxStrBytes int) any {
 	if val == nil {
 		return nil
 	}
@@ -298,11 +355,11 @@ func (r *Redactor) sanitizeValue(val any, depth int) any {
 	}
 	switch v := val.(type) {
 	case string:
-		return r.SanitizeString(v)
+		return r.SanitizeStringBounded(v, maxStrBytes)
 	case []byte:
-		return r.SanitizeString(string(v))
+		return r.SanitizeStringBounded(string(v), maxStrBytes)
 	case map[string]any:
-		return r.sanitizeMapDepth(v, depth+1)
+		return r.sanitizeMapDepthWithLimit(v, depth+1, maxStrBytes)
 	case map[string]string:
 		out := make(map[string]string, len(v))
 		capture := r != nil && r.CapturePayloads
@@ -315,23 +372,23 @@ func (r *Redactor) sanitizeValue(val any, depth int) any {
 				out[k] = ElidedMarker
 				continue
 			}
-			out[k] = r.SanitizeString(sv)
+			out[k] = r.SanitizeStringBounded(sv, maxStrBytes)
 		}
 		return out
 	case []string:
 		out := make([]string, len(v))
 		for i, s := range v {
-			out[i] = r.SanitizeString(s)
+			out[i] = r.SanitizeStringBounded(s, maxStrBytes)
 		}
 		return out
 	case []any:
 		out := make([]any, len(v))
 		for i, item := range v {
-			out[i] = r.sanitizeValue(item, depth+1)
+			out[i] = r.sanitizeValueWithLimit(item, depth+1, maxStrBytes)
 		}
 		return out
 	case error:
-		return r.SanitizeString(v.Error())
+		return r.SanitizeStringBounded(v.Error(), maxStrBytes)
 	default:
 		return v
 	}

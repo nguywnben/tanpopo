@@ -324,6 +324,38 @@ func (s *ConfigSnapshot) LookupModelDeployment(orgID, deploymentID string) (*Mod
 	return v.clone(), true
 }
 
+// LookupDeploymentTelemetryLabels resolves low-cardinality (adapterID, dataRegion)
+// labels for a deploymentID so circuit-breaker state transition metrics use the same
+// canonical labels as route-attempt metrics.
+func (s *ConfigSnapshot) LookupDeploymentTelemetryLabels(deploymentID string) (adapterID, dataRegion string, ok bool) {
+	if s == nil || s.providers == nil || deploymentID == "" {
+		return "", "", false
+	}
+	d, found := s.providers.deploymentsByID[deploymentID]
+	if !found || d == nil {
+		return "", "", false
+	}
+	dataRegion = d.DataRegion
+	if conn, cok := s.providers.connectionsByID[d.ConnectionID]; cok && conn != nil {
+		if adp, aok := s.providers.adaptersByID[conn.AdapterID]; aok && adp != nil {
+			adapterID = adp.ID
+			if adapterID == "" {
+				adapterID = adp.AdapterSlug
+			}
+		}
+		if dataRegion == "" {
+			dataRegion = conn.DataRegion
+		}
+	}
+	if adapterID == "" {
+		adapterID = "unknown"
+	}
+	if dataRegion == "" {
+		dataRegion = "UNSPECIFIED"
+	}
+	return adapterID, dataRegion, true
+}
+
 // LookupDeploymentsForSlug performs an O(1) lookup of ModelDeployments for (orgID, canonicalSlug).
 func (s *ConfigSnapshot) LookupDeploymentsForSlug(orgID, canonicalSlug string) []*ModelDeploymentView {
 	if s == nil || s.providers == nil || orgID == "" || canonicalSlug == "" {

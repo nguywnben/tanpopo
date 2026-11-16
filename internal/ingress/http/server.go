@@ -280,8 +280,17 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		var onTransition func(deploymentID, prevState, newState string)
 		if cfg.Telemetry != nil && cfg.Telemetry.Metrics != nil {
 			tel := cfg.Telemetry
+			snaps := cfg.Snapshots
 			onTransition = func(deploymentID, _, newState string) {
-				tel.Metrics.SetDeploymentCircuitState(deploymentID, "UNSPECIFIED", newState)
+				adapterID, region := "unknown", "UNSPECIFIED"
+				if snaps != nil {
+					if snap := snaps.Current(); snap != nil {
+						if a, reg, ok := snap.LookupDeploymentTelemetryLabels(deploymentID); ok {
+							adapterID, region = a, reg
+						}
+					}
+				}
+				tel.Metrics.SetDeploymentCircuitState(adapterID, region, newState)
 			}
 		}
 		cb = breaker.New(breaker.Config{
@@ -362,7 +371,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	if !cfg.DisableModels {
 		s.mux.HandleFunc("/v1/models", s.handleModels)
 	}
-	if s.telemetry != nil && s.telemetry.Metrics != nil {
+	if s.telemetry != nil && s.telemetry.Metrics != nil && s.telemetry.Metrics.HasScrapeToken() {
 		s.mux.Handle("/metrics", s.MetricsHandler())
 	}
 	s.mux.HandleFunc("/", s.handleNotFound)
@@ -475,7 +484,7 @@ func isNativeRequestPath(r *http.Request) bool {
 
 func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL != nil && r.URL.Path == "/metrics" && s.telemetry != nil && s.telemetry.Metrics != nil {
+		if r.URL != nil && r.URL.Path == "/metrics" && s.telemetry != nil && s.telemetry.Metrics != nil && s.telemetry.Metrics.HasScrapeToken() {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			s.MetricsHandler().ServeHTTP(w, r)
 			return
@@ -518,13 +527,14 @@ func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 
 		spanCtx, rootSpan, traceID := s.telemetry.StartRequestSpan(rCtx.Context(), tp, reqID, "unified_http")
 		reqTel := &requestTelemetry{
-			pipeline:    s.telemetry,
-			reqID:       reqID,
-			traceID:     traceID,
-			entryPoint:  "unified_http",
-			startedAt:   time.Now(),
-			startedAtMs: s.nowMs(),
-			rootSpan:    rootSpan,
+			pipeline:      s.telemetry,
+			reqID:         reqID,
+			traceRecordID: idgen.MustNew(idgen.PrefixTrace),
+			traceID:       traceID,
+			entryPoint:    "unified_http",
+			startedAt:     time.Now(),
+			startedAtMs:   s.nowMs(),
+			rootSpan:      rootSpan,
 		}
 		rCtx = rCtx.WithContext(withRequestTelemetry(spanCtx, reqTel))
 		scw := &statusCaptureWriter{ResponseWriter: w}
@@ -551,6 +561,7 @@ func ingressFromContext(ctx context.Context) ingressContext {
 }
 
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
+	telemetryFromContext(r.Context()).setRoutePattern("not_found")
 	meta := ingressFromContext(r.Context())
 	writeCanonicalError(w, meta.RequestID, http.StatusNotFound, "resource_not_found", "not_found_error", "The requested Data Plane endpoint does not exist.", false)
 }

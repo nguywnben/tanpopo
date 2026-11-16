@@ -39,6 +39,7 @@ type xTanpopoCapabilitiesMetadata struct {
 }
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
+	telemetryFromContext(r.Context()).setRoutePattern("/v1/models")
 	meta := ingressFromContext(r.Context())
 	if r.Method != http.MethodGet {
 		writeCanonicalError(w, meta.RequestID, http.StatusMethodNotAllowed, "method_not_allowed", "invalid_request_error", "GET is required on /v1/models.", false)

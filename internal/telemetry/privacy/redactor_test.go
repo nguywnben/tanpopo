@@ -174,3 +174,39 @@ func TestJSONLoggerFlatSnakeCaseAndSecretScrubbing(t *testing.T) {
 		t.Fatalf("unexpected flattened fields: %+v", parsed)
 	}
 }
+
+func TestRedactorPrefixedCookiesAndDebugPayload(t *testing.T) {
+	t.Parallel()
+	r := privacy.NewDefaultRedactor()
+
+	cookieStr := "tanpopo_session=sess_secret_val; __Host-tanpopo_admin_session=admin_secret_val; theme=dark"
+	scrubCookie := r.SanitizeString(cookieStr)
+	for _, forbidden := range []string{"sess_secret_val", "admin_secret_val"} {
+		if strings.Contains(scrubCookie, forbidden) {
+			t.Fatalf("prefixed session cookie leaked %q in %q", forbidden, scrubCookie)
+		}
+	}
+	if !strings.Contains(scrubCookie, "tanpopo_session=[REDACTED]") ||
+		!strings.Contains(scrubCookie, "__Host-tanpopo_admin_session=[REDACTED]") {
+		t.Fatalf("expected prefixed cookie keys preserved with redacted values: %q", scrubCookie)
+	}
+
+	rawJSON := []byte(`{"api_key":"azure-secret","nested":{"client_secret":"cs-123","password":"pw-456"},"messages":[{"role":"user","content":"preserve debug prompt"}]}`)
+	cleanJSON := string(r.SanitizeDebugPayload(rawJSON, 4096))
+	for _, forbidden := range []string{"azure-secret", "cs-123", "pw-456"} {
+		if strings.Contains(cleanJSON, forbidden) {
+			t.Fatalf("SanitizeDebugPayload leaked %q: %s", forbidden, cleanJSON)
+		}
+	}
+	if !strings.Contains(cleanJSON, "preserve debug prompt") {
+		t.Fatalf("expected prompt content preserved in SanitizeDebugPayload output: %s", cleanJSON)
+	}
+
+	// Malformed/truncated JSON fallback also scrubs non-prefixed secrets.
+	truncated := []byte(`{"api_key":"azure-truncated-secret","messages":[{"content":"broken`)
+	cleanTrunc := string(r.SanitizeDebugPayload(truncated, 4096))
+	if strings.Contains(cleanTrunc, "azure-truncated-secret") {
+		t.Fatalf("truncated JSON leaked secret: %s", cleanTrunc)
+	}
+}
+

@@ -51,6 +51,8 @@ const (
 	MaxDebugBlobCiphertextBytes = 256 * 1024
 	// aesGCMTagBytes accounts for the 16-byte GCM authentication tag when bounding plaintext.
 	aesGCMTagBytes = 16
+	// MaxActiveDebugSessions bounds the in-memory debug session registry.
+	MaxActiveDebugSessions = 4096
 )
 
 var (
@@ -58,6 +60,10 @@ var (
 	ErrDebugCaptureTTLExceeded = errors.New("telemetry: debug_capture_ttl_exceeds_72h")
 	// ErrInvalidDebugCaptureSession indicates missing/invalid debug capture session parameters.
 	ErrInvalidDebugCaptureSession = errors.New("telemetry: invalid debug capture session")
+	// ErrDuplicateDebugCaptureSession indicates an active debug capture session with the same ID already exists.
+	ErrDuplicateDebugCaptureSession = errors.New("telemetry: duplicate debug capture session")
+	// ErrDebugCaptureSessionLimitExceeded indicates active debug capture sessions reached MaxActiveDebugSessions.
+	ErrDebugCaptureSessionLimitExceeded = errors.New("telemetry: debug capture session limit exceeded")
 )
 
 // DebugCaptureError models a structured 422 API rejection matching NEG-2.
@@ -685,7 +691,11 @@ func NewPipeline(cfg PipelineConfig) (*Pipeline, error) {
 		}
 		client := cfg.OTLPHTTPClient
 		parsed, uerr := url.Parse(strings.TrimSpace(cfg.OTLPEndpoint))
-		if uerr != nil || parsed.Host == "" {
+		scheme := ""
+		if parsed != nil {
+			scheme = strings.ToLower(strings.TrimSpace(parsed.Scheme))
+		}
+		if uerr != nil || (scheme != "http" && scheme != "https") || parsed.Host == "" || parsed.User != nil {
 			return nil, fmt.Errorf("telemetry: invalid OTLP endpoint %q", cfg.OTLPEndpoint)
 		}
 		if client == nil {
@@ -792,6 +802,29 @@ func (p *Pipeline) CreateDebugCaptureSession(sessionID, orgID, projectID, virtua
 		ExpiresAtMs:  now + ttlHours*int64(time.Hour/time.Millisecond),
 	}
 	p.sessMu.Lock()
+	for id, existing := range p.sessions {
+		if now >= existing.ExpiresAtMs {
+			delete(p.sessions, id)
+		}
+	}
+	if _, dup := p.sessions[sess.ID]; dup {
+		p.sessMu.Unlock()
+		return nil, &DebugCaptureError{
+			HTTPStatus: http.StatusConflict,
+			Code:       "duplicate_debug_capture_session",
+			Message:    fmt.Sprintf("Debug capture session %q already exists and is active.", sess.ID),
+			Err:        ErrDuplicateDebugCaptureSession,
+		}
+	}
+	if len(p.sessions) >= MaxActiveDebugSessions {
+		p.sessMu.Unlock()
+		return nil, &DebugCaptureError{
+			HTTPStatus: http.StatusTooManyRequests,
+			Code:       "debug_capture_session_limit_exceeded",
+			Message:    fmt.Sprintf("Maximum active debug capture sessions (%d) reached.", MaxActiveDebugSessions),
+			Err:        ErrDebugCaptureSessionLimitExceeded,
+		}
+	}
 	p.sessions[sess.ID] = sess
 	p.sessMu.Unlock()
 	cp := sess
@@ -1027,14 +1060,13 @@ func (p *Pipeline) StoreDebugBlobIfAuthorized(ctx context.Context, orgID, projec
 	if !ok {
 		return false, nil
 	}
-	// Always scrub credentials (Bearer, vk_tp_*, sk-*, cookies) before encrypting debug payload.
-	scrubbed := p.Redactor.SanitizeString(string(rawPayload))
+	// Always scrub credentials (including non-prefixed JSON secret fields, Bearer, vk_tp_*, sk-*, cookies)
+	// before encrypting the opt-in debug payload.
 	maxPT := MaxDebugBlobCiphertextBytes - aesGCMTagBytes
-	if len(scrubbed) > maxPT {
-		scrubbed = scrubbed[:maxPT]
-	}
+	scrubbed := p.Redactor.SanitizeDebugPayload(rawPayload, maxPT)
+	defer clear(scrubbed)
 
-	nonce, ct, err := p.vault.SealProjectBlob(ctx, orgID, projectID, vault.RecordKindDebugBlob, requestID, []byte(scrubbed))
+	nonce, ct, err := p.vault.SealProjectBlob(ctx, orgID, projectID, vault.RecordKindDebugBlob, requestID, scrubbed)
 	if err != nil {
 		return false, fmt.Errorf("telemetry: seal debug payload blob: %w", err)
 	}

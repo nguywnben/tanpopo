@@ -260,6 +260,11 @@ func NewMetricsRegistry(cfg MetricsConfig) (*MetricsRegistry, error) {
 	return reg, nil
 }
 
+// HasScrapeToken reports whether a non-empty bearer token protects HTTP /metrics scraping.
+func (m *MetricsRegistry) HasScrapeToken() bool {
+	return m != nil && m.scrapeToken != ""
+}
+
 // ServeHTTP exposes Prometheus text exposition format at GET /metrics with optional
 // constant-time bearer auth matching openapi/dataplane-v1.yaml.
 func (m *MetricsRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) {

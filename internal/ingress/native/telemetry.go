@@ -15,6 +15,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
+	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/telemetry/otel"
 	"github.com/nguywnben/tanpopo/internal/telemetry/privacy"
 )
@@ -59,20 +60,22 @@ func (w *nativeStatusCaptureWriter) SetCanonicalErrorCode(code string) {
 }
 
 type nativeRequestTelemetry struct {
-	pipeline    *otel.Pipeline
-	reqID       string
-	traceID     string
-	entryPoint  string
-	startedAt   time.Time
-	startedAtMs int64
-	rootSpan    trace.Span
+	pipeline      *otel.Pipeline
+	reqID         string
+	traceRecordID string
+	traceID       string
+	entryPoint    string
+	startedAt     time.Time
+	startedAtMs   int64
+	rootSpan      trace.Span
 
 	mu               sync.Mutex
 	orgID            string
 	projectID        string
 	envID            string
 	vkeyID           string
-	routeSlug        string
+	routePattern     string
+	validatedModel   string
 	adapterID        string
 	extTier          string
 	deploymentID     string
@@ -115,23 +118,32 @@ func (rt *nativeRequestTelemetry) recordAuth(match snapshot.KeyMatchResult) {
 	rt.mu.Unlock()
 }
 
-func (rt *nativeRequestTelemetry) recordModel(modelSlug string) {
+func (rt *nativeRequestTelemetry) setRoutePattern(pattern string) {
+	if rt == nil || strings.TrimSpace(pattern) == "" {
+		return
+	}
+	rt.mu.Lock()
+	rt.routePattern = strings.TrimSpace(pattern)
+	rt.mu.Unlock()
+}
+
+func (rt *nativeRequestTelemetry) recordValidatedModel(modelSlug string) {
 	if rt == nil || strings.TrimSpace(modelSlug) == "" {
 		return
 	}
 	rt.mu.Lock()
-	rt.routeSlug = strings.TrimSpace(modelSlug)
+	rt.validatedModel = strings.TrimSpace(modelSlug)
 	rt.mu.Unlock()
 }
 
-func (rt *nativeRequestTelemetry) recordRouteAttempt(target *snapshot.ResolvedTarget, routeSlug string) {
+func (rt *nativeRequestTelemetry) recordRouteAttempt(target *snapshot.ResolvedTarget, validatedModel string) {
 	if rt == nil {
 		return
 	}
 	rt.mu.Lock()
 	rt.failoverAttempts++
-	if strings.TrimSpace(routeSlug) != "" {
-		rt.routeSlug = strings.TrimSpace(routeSlug)
+	if strings.TrimSpace(validatedModel) != "" {
+		rt.validatedModel = strings.TrimSpace(validatedModel)
 	}
 	if target != nil {
 		if target.Deployment != nil {
@@ -253,7 +265,8 @@ func (rt *nativeRequestTelemetry) finish(ctx context.Context, scw *nativeStatusC
 	projectID := rt.projectID
 	envID := rt.envID
 	vkeyID := rt.vkeyID
-	routeSlug := rt.routeSlug
+	routePattern := rt.routePattern
+	validatedModel := rt.validatedModel
 	extTier := rt.extTier
 	deploymentID := rt.deploymentID
 	connectionID := rt.connectionID
@@ -268,8 +281,21 @@ func (rt *nativeRequestTelemetry) finish(ctx context.Context, scw *nativeStatusC
 	rt.mu.Unlock()
 	defer clear(debugBody)
 
-	if routeSlug == "" && r != nil && r.URL != nil {
-		routeSlug = r.URL.Path
+	metricModel := validatedModel
+	if metricModel == "" {
+		metricModel = "unknown"
+	}
+	routeSlug := validatedModel
+	if routeSlug == "" {
+		if routePattern != "" {
+			routeSlug = routePattern
+		} else {
+			routeSlug = "/native/{dialect}"
+		}
+	}
+	traceRecordID := rt.traceRecordID
+	if traceRecordID == "" {
+		traceRecordID = idgen.MustNew(idgen.PrefixTrace)
 	}
 
 	overheadNs := totalDur.Nanoseconds() - upstreamNs
@@ -279,7 +305,7 @@ func (rt *nativeRequestTelemetry) finish(ctx context.Context, scw *nativeStatusC
 	proxyOverhead := time.Duration(overheadNs)
 
 	if rt.pipeline.Metrics != nil {
-		rt.pipeline.Metrics.RecordHTTPRequest(rt.entryPoint, orgID, projectID, routeSlug, status, errCode)
+		rt.pipeline.Metrics.RecordHTTPRequest(rt.entryPoint, orgID, projectID, metricModel, status, errCode)
 		rt.pipeline.Metrics.RecordProxyOverhead(rt.entryPoint, extTier, proxyOverhead)
 	}
 
@@ -320,7 +346,7 @@ func (rt *nativeRequestTelemetry) finish(ctx context.Context, scw *nativeStatusC
 	defer cancel()
 	if orgID != "" {
 		_ = rt.pipeline.RecordRequestTrace(persistCtx, otel.RequestTraceRecord{
-			RequestID:               rt.reqID,
+			RequestID:               traceRecordID,
 			StartedAtMs:             rt.startedAtMs,
 			OrgID:                   orgID,
 			ProjectID:               projectID,
@@ -342,7 +368,7 @@ func (rt *nativeRequestTelemetry) finish(ctx context.Context, scw *nativeStatusC
 			WaterfallStages:         stages,
 		})
 		if len(debugBody) > 0 {
-			_, _ = rt.pipeline.StoreDebugBlobIfAuthorized(persistCtx, orgID, projectID, vkeyID, rt.reqID, debugBody)
+			_, _ = rt.pipeline.StoreDebugBlobIfAuthorized(persistCtx, orgID, projectID, vkeyID, traceRecordID, debugBody)
 		}
 	}
 }

@@ -101,6 +101,7 @@ func parseStrictResponsesRequest(raw []byte) (*responsesIngressRequest, error) {
 }
 
 func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
+	telemetryFromContext(r.Context()).setRoutePattern("/v1/responses")
 	meta := ingressFromContext(r.Context())
 	if r.Method != http.MethodPost {
 		writeCanonicalError(w, meta.RequestID, http.StatusMethodNotAllowed, "method_not_allowed", "invalid_request_error", "POST is required on /v1/responses.", false)
@@ -166,7 +167,7 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 	defer admLease.Release()
 
 	requiredCaps := extractResponsesCapabilities(reqEnvelope, inputItems)
-	candidates, ok := s.resolveTargetsWithPolicy(w, meta.RequestID, match, preAdm, modelSlug, requiredCaps)
+	candidates, ok := s.resolveTargetsWithPolicy(r.Context(), w, meta.RequestID, match, preAdm, modelSlug, requiredCaps)
 	if !ok {
 		return
 	}

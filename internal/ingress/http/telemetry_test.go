@@ -790,3 +790,121 @@ func TestGatewayTPACF0804DeadBlackholeOTLPCollector2000Requests(t *testing.T) {
 	t.Logf("TP-AC-F0804: 2000 requests completed in %v, peak_ring=%d bytes, dropped_spans=%d, metric_dropped=%d",
 		elapsed, peakBytes, droppedSpans, th.pipe.Metrics.DroppedCount("traces"))
 }
+
+func TestGatewayTelemetrySecurityRemediation(t *testing.T) {
+	t.Run("UnsetMetricsScrapeTokenFailsClosed", func(t *testing.T) {
+		thNoToken := setupTelemetryIngressHarness(t, func(cfg *otel.PipelineConfig) {
+			cfg.MetricsScrapeToken = ""
+		})
+		respNoTok, err := thNoToken.client.Get(thNoToken.httpSrv.URL + "/metrics")
+		if err != nil {
+			t.Fatalf("GET /metrics without token configured: %v", err)
+		}
+		_ = respNoTok.Body.Close()
+		if respNoTok.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404 when MetricsScrapeToken is unset on Data Plane listener, got %d", respNoTok.StatusCode)
+		}
+	})
+
+	t.Run("BoundedCardinalityAndAuthoritativeTraceID", func(t *testing.T) {
+		th := setupTelemetryIngressHarness(t, nil)
+
+		for i := 0; i < 3; i++ {
+			req, _ := http.NewRequest(http.MethodPost, th.httpSrv.URL+"/probe/warmup", strings.NewReader(`{}`))
+			r, err := th.client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = io.Copy(io.Discard, r.Body)
+			_ = r.Body.Close()
+
+			badModelReq, _ := http.NewRequest(http.MethodPost, th.httpSrv.URL+"/v1/chat/completions", strings.NewReader(`{"model":"nonexistent-warmup","messages":[{"role":"user","content":"hi"}]}`))
+			badModelReq.Header.Set("Authorization", "Bearer "+th.vkeyRaw)
+			badModelReq.Header.Set("Content-Type", "application/json")
+			br, err := th.client.Do(badModelReq)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = io.Copy(io.Discard, br.Body)
+			_ = br.Body.Close()
+		}
+		baseSeries, err := th.pipe.Metrics.TimeSeriesCount()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for i := 0; i < 25; i++ {
+			probeReq, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/unauth-probe-%d", th.httpSrv.URL, i), nil)
+			pr, err := th.client.Do(probeReq)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = io.Copy(io.Discard, pr.Body)
+			_ = pr.Body.Close()
+
+			badModelReq, _ := http.NewRequest(http.MethodPost, th.httpSrv.URL+"/v1/chat/completions",
+				strings.NewReader(fmt.Sprintf(`{"model":"untrusted-probe-model-%d","messages":[{"role":"user","content":"hi"}]}`, i)))
+			badModelReq.Header.Set("Authorization", "Bearer "+th.vkeyRaw)
+			badModelReq.Header.Set("Content-Type", "application/json")
+			bm, err := th.client.Do(badModelReq)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = io.Copy(io.Discard, bm.Body)
+			_ = bm.Body.Close()
+		}
+
+		afterSeries, err := th.pipe.Metrics.TimeSeriesCount()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if afterSeries != baseSeries {
+			t.Fatalf("untrusted paths/models caused unbounded Prometheus series growth: base=%d after=%d", baseSeries, afterSeries)
+		}
+
+		mReq, _ := http.NewRequest(http.MethodGet, th.httpSrv.URL+"/metrics", nil)
+		mReq.Header.Set("Authorization", "Bearer scrape-token-xyz")
+		mResp, err := th.client.Do(mReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mBytes, _ := io.ReadAll(mResp.Body)
+		_ = mResp.Body.Close()
+		mText := string(mBytes)
+		if strings.Contains(mText, "unauth-probe-") || strings.Contains(mText, "untrusted-probe-model-") {
+			t.Fatalf("untrusted path or model reflected into /metrics output:\n%s", mText)
+		}
+
+		// Duplicate caller X-Tanpopo-Request-Id across two requests writes 2 distinct trace & debug blob rows.
+		if _, err := th.pipe.CreateDebugCaptureSession("dbg_dup_sess", th.org.ID, th.project.ID, th.vkeyID, 24); err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < 2; i++ {
+			dReq, _ := http.NewRequest(http.MethodPost, th.httpSrv.URL+"/v1/chat/completions",
+				strings.NewReader(fmt.Sprintf(`{"model":"acme/chat-1","messages":[{"role":"user","content":"dup-%d"}]}`, i)))
+			dReq.Header.Set("Authorization", "Bearer "+th.vkeyRaw)
+			dReq.Header.Set("Content-Type", "application/json")
+			dReq.Header.Set("X-Tanpopo-Request-Id", "req_caller_collision_123")
+			dr, err := th.client.Do(dReq)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = io.Copy(io.Discard, dr.Body)
+			_ = dr.Body.Close()
+			if dr.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200 on duplicate caller request id #%d, got %d", i, dr.StatusCode)
+			}
+		}
+		var traceCount, blobCount int
+		if err := th.store.RawDB().QueryRowContext(th.ctx, `SELECT count(*) FROM request_traces_meta WHERE route_slug = 'acme/chat-1'`).Scan(&traceCount); err != nil {
+			t.Fatal(err)
+		}
+		if err := th.store.RawDB().QueryRowContext(th.ctx, `SELECT count(*) FROM debug_payload_blobs`).Scan(&blobCount); err != nil {
+			t.Fatal(err)
+		}
+		if traceCount != 2 || blobCount != 2 {
+			t.Fatalf("expected 2 distinct request_traces_meta and 2 debug_payload_blobs rows on caller X-Tanpopo-Request-Id collision, got traces=%d blobs=%d", traceCount, blobCount)
+		}
+	})
+}
+

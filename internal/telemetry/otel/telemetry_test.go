@@ -229,9 +229,14 @@ func TestDebugCaptureTTLNEG2AndProjectDEKBlobRoundtrip(t *testing.T) {
 	if _, err := pipe.CreateDebugCaptureSession("sess_ok", org.ID, prj.ID, "vk_1", 24); err != nil {
 		t.Fatalf("CreateDebugCaptureSession 24h: %v", err)
 	}
+	// Duplicate active session ID must be rejected cleanly with 409.
+	if _, err := pipe.CreateDebugCaptureSession("sess_ok", org.ID, prj.ID, "vk_1", 24); !errors.Is(err, otel.ErrDuplicateDebugCaptureSession) {
+		t.Fatalf("expected ErrDuplicateDebugCaptureSession on active duplicate, got %v", err)
+	}
+
 	oversized := strings.Repeat("x", 300*1024)
 	canarySk := "sk-tp-" + "canary-998877"
-	rawPayload := fmt.Sprintf(`{"api_key":%q,"body":%q}`, canarySk, oversized)
+	rawPayload := fmt.Sprintf(`{"api_key":%q,"azure_api_key":"azure-nonprefixed-secret","messages":[{"role":"user","content":"debug context"}],"body":%q}`, canarySk, oversized)
 	stored, err = pipe.StoreDebugBlobIfAuthorized(ctx, org.ID, prj.ID, "vk_1", "req_with_sess", []byte(rawPayload))
 	if err != nil || !stored {
 		t.Fatalf("StoreDebugBlobIfAuthorized: stored=%v err=%v", stored, err)
@@ -255,8 +260,25 @@ func TestDebugCaptureTTLNEG2AndProjectDEKBlobRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UnsealProjectBlob: %v", err)
 	}
-	if strings.Contains(string(pt), canarySk) {
-		t.Fatalf("debug blob plaintext leaked canary secret even after Redactor scrubbing")
+	for _, forbidden := range []string{canarySk, "azure-nonprefixed-secret"} {
+		if strings.Contains(string(pt), forbidden) {
+			t.Fatalf("debug blob plaintext leaked secret %q even after Redactor scrubbing", forbidden)
+		}
+	}
+
+	// Once expired, session ID is pruned and can be recreated; invalid OTLP URLs fail closed.
+	fc.Advance(25 * time.Hour)
+	if _, err := pipe.CreateDebugCaptureSession("sess_ok", org.ID, prj.ID, "vk_1", 1); err != nil {
+		t.Fatalf("expected expired session ID to be pruned and reusable, got %v", err)
+	}
+	for _, badEndpoint := range []string{
+		"ftp://collector.local/v1/traces",
+		"file:///tmp/traces",
+		"https://alice:hunter2@collector.local/v1/traces",
+	} {
+		if _, perr := otel.NewPipeline(otel.PipelineConfig{OTLPEndpoint: badEndpoint}); perr == nil {
+			t.Fatalf("expected NewPipeline to reject unsafe OTLP endpoint %q", badEndpoint)
+		}
 	}
 
 	// Shredding Project DEK renders debug_payload_blobs permanently unreadable.
