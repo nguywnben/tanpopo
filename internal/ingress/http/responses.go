@@ -373,9 +373,7 @@ func (s *Server) executeStreamingResponsesAttempt(
 	observedUsage := pumpRes.Usage
 	if pumpRes.StreamStarted {
 		settledUsage, serr := budgetSess.settleStream(streamCtx, target, requestedModel, pumpRes, pumpErr)
-		if serr != nil {
-			budgetSess.releaseIfUnsettled()
-		} else if settledUsage != nil {
+		if serr == nil && settledUsage != nil {
 			observedUsage = settledUsage
 		}
 	}

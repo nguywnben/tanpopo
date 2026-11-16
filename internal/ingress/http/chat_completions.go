@@ -463,9 +463,7 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 	observedUsage := pumpRes.Usage
 	if pumpRes.StreamStarted {
 		settledUsage, serr := budgetSess.settleStream(streamCtx, target, requestedModel, pumpRes, pumpErr)
-		if serr != nil {
-			budgetSess.releaseIfUnsettled()
-		} else if settledUsage != nil {
+		if serr == nil && settledUsage != nil {
 			observedUsage = settledUsage
 		}
 	}
@@ -861,7 +859,29 @@ func (s *Server) transformAndBuildEgress(
 		}
 	}
 
-	credInjections, err := mapCredentialInjections(spec.CredentialInjections, target.Connection.SecretBindings)
+	var credInjections []broker.CredentialInjection
+	authMode := strings.TrimSpace(target.Connection.AuthMode)
+	if authMode != "" && !strings.EqualFold(authMode, "NONE") {
+		if len(target.Connection.SecretBindings) == 0 {
+			clear(outboundBody)
+			return port.UpstreamHttpSpec{}, broker.EgressRequest{}, broker.HostEgressConstraint{}, &preparedRequestErr{
+				httpStatus: http.StatusBadGateway,
+				code:       "extension_execution_fault",
+				errType:    "extension_error",
+				message:    "Authenticated provider connection has no bound secret slots.",
+			}
+		}
+		if len(spec.CredentialInjections) == 0 {
+			clear(outboundBody)
+			return port.UpstreamHttpSpec{}, broker.EgressRequest{}, broker.HostEgressConstraint{}, &preparedRequestErr{
+				httpStatus: http.StatusBadGateway,
+				code:       "extension_execution_fault",
+				errType:    "extension_error",
+				message:    "Provider adapter omitted required credential injection instructions for authenticated connection.",
+			}
+		}
+	}
+	credInjections, err = mapCredentialInjections(spec.CredentialInjections, target.Connection.SecretBindings)
 	if err != nil {
 		clear(outboundBody)
 		return port.UpstreamHttpSpec{}, broker.EgressRequest{}, broker.HostEgressConstraint{}, &preparedRequestErr{
@@ -1251,9 +1271,16 @@ func mapCredentialInjections(specs []port.CredentialInjectInstruction, bindings 
 	if len(specs) == 0 {
 		return nil, nil
 	}
+	if len(bindings) == 0 {
+		return nil, fmt.Errorf("authenticated connection lacks required secret bindings")
+	}
 	out := make([]broker.CredentialInjection, 0, len(specs))
 	for _, s := range specs {
-		if b, ok := bindings[s.SecretSlotName]; ok && b != nil && b.InjectMode == broker.InjectModeHostCryptoSign {
+		b, bound := bindings[s.SecretSlotName]
+		if !bound || b == nil {
+			continue
+		}
+		if b.InjectMode == broker.InjectModeHostCryptoSign {
 			if s.TargetLocation != port.CredentialTargetLocationHostCryptoSign {
 				return nil, fmt.Errorf("slot %q requires HOST_CRYPTO_SIGN binding mode", s.SecretSlotName)
 			}
@@ -1287,6 +1314,9 @@ func mapCredentialInjections(specs []port.CredentialInjectInstruction, bindings 
 			}
 		}
 		out = append(out, inj)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no adapter credential slots match connection secret bindings")
 	}
 	return out, nil
 }

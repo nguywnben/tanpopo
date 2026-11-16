@@ -290,6 +290,7 @@ func (s *Service) UpsertLedger(ctx context.Context, params UpsertLedgerParams) (
 	if strings.TrimSpace(params.OrgID) == "" ||
 		!isValidScopeType(params.ScopeType) ||
 		strings.TrimSpace(params.ScopeID) == "" ||
+		(params.ScopeType == ScopeOrg && params.ScopeID != params.OrgID) ||
 		!isValidPeriodKind(params.PeriodKind) ||
 		params.PeriodEndMs <= params.PeriodStartMs ||
 		params.HardLimitMicros < 0 {
@@ -799,65 +800,133 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 		return nil, err
 	}
 
-	s.txMu.Lock()
-
-	now := s.nowMs()
 	var (
+		now                     = s.nowMs()
 		out                     *SettlementResult
 		alertsToEmit            []AlertEvent
 		lateSettledAfterReclaim bool
 	)
 
-	err = s.withTx(ctx, func(tx *sql.Tx) error {
-		projectID := strings.TrimSpace(req.ProjectID)
-		envID := strings.TrimSpace(req.EnvID)
-		vkeyID := strings.TrimSpace(req.VirtualKeyID)
+	err = func() error {
+		s.txMu.Lock()
+		defer s.txMu.Unlock()
 
-		if strings.TrimSpace(req.ReservationID) != "" {
-			var curState string
-			var rProj, rEnv, rKey, rReqID string
-			qErr := tx.QueryRowContext(ctx, `
+		return s.withTx(ctx, func(tx *sql.Tx) error {
+			projectID := strings.TrimSpace(req.ProjectID)
+			envID := strings.TrimSpace(req.EnvID)
+			vkeyID := strings.TrimSpace(req.VirtualKeyID)
+
+			if strings.TrimSpace(req.ReservationID) != "" {
+				var curState string
+				var rProj, rEnv, rKey, rReqID string
+				qErr := tx.QueryRowContext(ctx, `
 				SELECT state, project_id, env_id, virtual_key_id, request_id
 				FROM budget_reservations
 				WHERE org_id = ? AND id = ?`,
-				req.OrgID, req.ReservationID,
-			).Scan(&curState, &rProj, &rEnv, &rKey, &rReqID)
-			if errors.Is(qErr, sql.ErrNoRows) {
-				return ErrNotFound
-			}
-			if qErr != nil {
-				return qErr
-			}
-			if rReqID != req.RequestID {
-				return ErrInvalidInput
-			}
-			if (projectID != "" && projectID != rProj) ||
-				(envID != "" && envID != rEnv) ||
-				(vkeyID != "" && vkeyID != rKey) {
-				return ErrInvalidInput
-			}
-			projectID = rProj
-			envID = rEnv
-			vkeyID = rKey
-
-			if isSettledState(curState) {
-				existing, eErr := findSettlementByReservationTx(ctx, tx, req.OrgID, req.ReservationID)
-				if eErr != nil {
-					return eErr
+					req.OrgID, req.ReservationID,
+				).Scan(&curState, &rProj, &rEnv, &rKey, &rReqID)
+				if errors.Is(qErr, sql.ErrNoRows) {
+					return ErrNotFound
 				}
-				existing.AlreadySettled = true
-				out = existing
-				return nil
-			}
-			if existingByReq, reqErr := findSettlementByRequestIDTx(ctx, tx, req.OrgID, req.RequestID); reqErr == nil {
-				existingByReq.AlreadySettled = true
-				out = existingByReq
-				return nil
-			} else if !errors.Is(reqErr, ErrNotFound) {
-				return reqErr
-			}
-			if curState == StateExpiredReclaimed {
-				existing, eErr := findSettlementByReservationTx(ctx, tx, req.OrgID, req.ReservationID)
+				if qErr != nil {
+					return qErr
+				}
+				if rReqID != req.RequestID {
+					return ErrInvalidInput
+				}
+				if (projectID != "" && projectID != rProj) ||
+					(envID != "" && envID != rEnv) ||
+					(vkeyID != "" && vkeyID != rKey) {
+					return ErrInvalidInput
+				}
+				projectID = rProj
+				envID = rEnv
+				vkeyID = rKey
+
+				if isSettledState(curState) {
+					existing, eErr := findSettlementByReservationTx(ctx, tx, req.OrgID, req.ReservationID)
+					if eErr != nil {
+						return eErr
+					}
+					existing.AlreadySettled = true
+					out = existing
+					return nil
+				}
+				if existingByReq, reqErr := findSettlementByRequestIDTx(ctx, tx, req.OrgID, req.RequestID); reqErr == nil {
+					existingByReq.AlreadySettled = true
+					out = existingByReq
+					return nil
+				} else if !errors.Is(reqErr, ErrNotFound) {
+					return reqErr
+				}
+				if curState == StateExpiredReclaimed {
+					existing, eErr := findSettlementByReservationTx(ctx, tx, req.OrgID, req.ReservationID)
+					if eErr == nil {
+						existing.AlreadySettled = true
+						out = existing
+						return nil
+					} else if !errors.Is(eErr, ErrNotFound) {
+						return eErr
+					}
+					// Reservation lease expired and the reaper already released its held balance.
+					// Prefer the reservation's originally linked ledgers (so period rollovers bill the
+					// originating period ledgers accurately) with releaseHeld=0, falling back to currently
+					// active ledgers if no linked holds existed. Keep EXPIRED_RECLAIMED terminal state.
+					origLinks, lErr := loadLinkedHoldsTx(ctx, tx, req.OrgID, req.ReservationID)
+					if lErr != nil {
+						return lErr
+					}
+					if len(origLinks) > 0 {
+						for _, lk := range origLinks {
+							al, aErr := applyLedgerSettlementTx(ctx, tx, req.OrgID, lk.LedgerID, 0, breakdown, now, req.RequestID)
+							if aErr != nil {
+								return aErr
+							}
+							alertsToEmit = append(alertsToEmit, al...)
+						}
+					} else {
+						ledgers, aErr := findActiveLedgersTx(ctx, tx, req.OrgID, projectID, envID, vkeyID, now)
+						if aErr != nil {
+							return aErr
+						}
+						for _, l := range ledgers {
+							al, sErr := applyLedgerSettlementTx(ctx, tx, req.OrgID, l.ID, 0, breakdown, now, req.RequestID)
+							if sErr != nil {
+								return sErr
+							}
+							alertsToEmit = append(alertsToEmit, al...)
+						}
+					}
+					lateSettledAfterReclaim = true
+				} else if curState != StateReservedHold && curState != StateStreamingAccruing {
+					return ErrInvalidStateTransition
+				} else {
+					// Release reserved hold from each linked ledger and apply settled spend + carryover.
+					alerts, sErr := settleLinkedLedgersTx(ctx, tx, req.OrgID, req.ReservationID, breakdown, now, req.RequestID)
+					if sErr != nil {
+						return sErr
+					}
+					alertsToEmit = append(alertsToEmit, alerts...)
+
+					updRes, uErr := tx.ExecContext(ctx, `
+					UPDATE budget_reservations
+					SET state = ?, updated_at_ms = ?
+					WHERE org_id = ? AND id = ? AND state IN (?, ?)`,
+						targetResState, now, req.OrgID, req.ReservationID, StateReservedHold, StateStreamingAccruing,
+					)
+					if uErr != nil {
+						return uErr
+					}
+					if n, _ := updRes.RowsAffected(); n != 1 {
+						return ErrInvalidStateTransition
+					}
+				}
+			} else {
+				if projectID == "" || envID == "" || vkeyID == "" {
+					return ErrInvalidInput
+				}
+				// Idempotency guard when Settle is invoked directly without reservation_id.
+				existing, eErr := findSettlementByRequestIDTx(ctx, tx, req.OrgID, req.RequestID)
 				if eErr == nil {
 					existing.AlreadySettled = true
 					out = existing
@@ -865,155 +934,89 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 				} else if !errors.Is(eErr, ErrNotFound) {
 					return eErr
 				}
-				// Reservation lease expired and the reaper already released its held balance.
-				// Prefer the reservation's originally linked ledgers (so period rollovers bill the
-				// originating period ledgers accurately) with releaseHeld=0, falling back to currently
-				// active ledgers if no linked holds existed. Keep EXPIRED_RECLAIMED terminal state.
-				origLinks, lErr := loadLinkedHoldsTx(ctx, tx, req.OrgID, req.ReservationID)
+
+				ledgers, lErr := findActiveLedgersTx(ctx, tx, req.OrgID, projectID, envID, vkeyID, now)
 				if lErr != nil {
 					return lErr
 				}
-				if len(origLinks) > 0 {
-					for _, lk := range origLinks {
-						al, aErr := applyLedgerSettlementTx(ctx, tx, req.OrgID, lk.LedgerID, 0, breakdown, now, req.RequestID)
-						if aErr != nil {
-							return aErr
-						}
-						alertsToEmit = append(alertsToEmit, al...)
-					}
-				} else {
-					ledgers, aErr := findActiveLedgersTx(ctx, tx, req.OrgID, projectID, envID, vkeyID, now)
+				for _, l := range ledgers {
+					al, aErr := applyLedgerSettlementTx(ctx, tx, req.OrgID, l.ID, 0, breakdown, now, req.RequestID)
 					if aErr != nil {
 						return aErr
 					}
-					for _, l := range ledgers {
-						al, sErr := applyLedgerSettlementTx(ctx, tx, req.OrgID, l.ID, 0, breakdown, now, req.RequestID)
-						if sErr != nil {
-							return sErr
-						}
-						alertsToEmit = append(alertsToEmit, al...)
-					}
+					alertsToEmit = append(alertsToEmit, al...)
 				}
-				lateSettledAfterReclaim = true
-			} else if curState != StateReservedHold && curState != StateStreamingAccruing {
-				return ErrInvalidStateTransition
-			} else {
-				// Release reserved hold from each linked ledger and apply settled spend + carryover.
-				alerts, sErr := settleLinkedLedgersTx(ctx, tx, req.OrgID, req.ReservationID, breakdown, now, req.RequestID)
-				if sErr != nil {
-					return sErr
-				}
-				alertsToEmit = append(alertsToEmit, alerts...)
-
-				updRes, uErr := tx.ExecContext(ctx, `
-					UPDATE budget_reservations
-					SET state = ?, updated_at_ms = ?
-					WHERE org_id = ? AND id = ? AND state IN (?, ?)`,
-					targetResState, now, req.OrgID, req.ReservationID, StateReservedHold, StateStreamingAccruing,
-				)
-				if uErr != nil {
-					return uErr
-				}
-				if n, _ := updRes.RowsAffected(); n != 1 {
-					return ErrInvalidStateTransition
-				}
-			}
-		} else {
-			if projectID == "" || envID == "" || vkeyID == "" {
-				return ErrInvalidInput
-			}
-			// Idempotency guard when Settle is invoked directly without reservation_id.
-			existing, eErr := findSettlementByRequestIDTx(ctx, tx, req.OrgID, req.RequestID)
-			if eErr == nil {
-				existing.AlreadySettled = true
-				out = existing
-				return nil
-			} else if !errors.Is(eErr, ErrNotFound) {
-				return eErr
 			}
 
-			ledgers, lErr := findActiveLedgersTx(ctx, tx, req.OrgID, projectID, envID, vkeyID, now)
-			if lErr != nil {
-				return lErr
+			setID := idgen.MustNew(idgen.PrefixSettlement)
+			var resIDPtr *string
+			if strings.TrimSpace(req.ReservationID) != "" {
+				v := req.ReservationID
+				resIDPtr = &v
 			}
-			for _, l := range ledgers {
-				al, aErr := applyLedgerSettlementTx(ctx, tx, req.OrgID, l.ID, 0, breakdown, now, req.RequestID)
-				if aErr != nil {
-					return aErr
-				}
-				alertsToEmit = append(alertsToEmit, al...)
+			var deplPtr *string
+			if strings.TrimSpace(req.DeploymentID) != "" {
+				v := strings.TrimSpace(req.DeploymentID)
+				deplPtr = &v
 			}
-		}
-
-		setID := idgen.MustNew(idgen.PrefixSettlement)
-		var resIDPtr *string
-		if strings.TrimSpace(req.ReservationID) != "" {
-			v := req.ReservationID
-			resIDPtr = &v
-		}
-		var deplPtr *string
-		if strings.TrimSpace(req.DeploymentID) != "" {
-			v := strings.TrimSpace(req.DeploymentID)
-			deplPtr = &v
-		}
-		var modelPtr *string
-		if strings.TrimSpace(req.LogicalModelSlug) != "" {
-			v := strings.TrimSpace(req.LogicalModelSlug)
-			modelPtr = &v
-		}
-		eff := breakdown.EffectiveUsage
-		if _, iErr := tx.ExecContext(ctx, `
+			var modelPtr *string
+			if strings.TrimSpace(req.LogicalModelSlug) != "" {
+				v := strings.TrimSpace(req.LogicalModelSlug)
+				modelPtr = &v
+			}
+			eff := breakdown.EffectiveUsage
+			if _, iErr := tx.ExecContext(ctx, `
 			INSERT INTO usage_settlements (
 				id, settled_at_ms, request_id, reservation_id, org_id, project_id, env_id, virtual_key_id,
 				plane, deployment_id, logical_model_slug, billing_mode, usage_accuracy,
 				input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens,
 				media_usage_json, applied_pricing_snapshot_json, total_cost_micros
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			setID, now, req.RequestID, resIDPtr, req.OrgID, projectID, envID, vkeyID,
-			plane, deplPtr, modelPtr, billingMode, breakdown.Accuracy,
-			eff.InputTokens, eff.OutputTokens, eff.CacheReadTokens, eff.CacheWriteTokens, eff.ReasoningTokens,
-			eff.Media.ToJSON(), req.Rate.SnapshotJSON(), breakdown.TotalMicroUSD,
-		); iErr != nil {
-			return iErr
-		}
-
-		if breakdown.UnmeteredFlagged {
-			alertsToEmit = append(alertsToEmit, AlertEvent{
-				Code:         "ALT-UNMETERED-SPEND",
-				Runbook:      "INC-01",
-				OrgID:        req.OrgID,
-				RequestID:    req.RequestID,
-				SettlementID: setID,
-				DeploymentID: req.DeploymentID,
-				LogicalModel: req.LogicalModelSlug,
-				OccurredAtMs: now,
-			})
-		}
-
-		for i := range alertsToEmit {
-			if alertsToEmit[i].SettlementID == "" {
-				alertsToEmit[i].SettlementID = setID
+				setID, now, req.RequestID, resIDPtr, req.OrgID, projectID, envID, vkeyID,
+				plane, deplPtr, modelPtr, billingMode, breakdown.Accuracy,
+				eff.InputTokens, eff.OutputTokens, eff.CacheReadTokens, eff.CacheWriteTokens, eff.ReasoningTokens,
+				eff.Media.ToJSON(), req.Rate.SnapshotJSON(), breakdown.TotalMicroUSD,
+			); iErr != nil {
+				return iErr
 			}
-		}
 
-		out = &SettlementResult{
-			SettlementID:     setID,
-			ReservationID:    req.ReservationID,
-			RequestID:        req.RequestID,
-			SettledAtMs:      now,
-			Accuracy:         breakdown.Accuracy,
-			TotalCostMicros:  breakdown.TotalMicroUSD,
-			InputTokens:      eff.InputTokens,
-			OutputTokens:     eff.OutputTokens,
-			CacheReadTokens:  eff.CacheReadTokens,
-			CacheWriteTokens: eff.CacheWriteTokens,
-			ReasoningTokens:  eff.ReasoningTokens,
-			UnmeteredFlagged: breakdown.UnmeteredFlagged,
-			AlreadySettled:   false,
-		}
-		return nil
-	})
-	s.txMu.Unlock()
+			if breakdown.UnmeteredFlagged {
+				alertsToEmit = append(alertsToEmit, AlertEvent{
+					Code:         "ALT-UNMETERED-SPEND",
+					Runbook:      "INC-01",
+					OrgID:        req.OrgID,
+					RequestID:    req.RequestID,
+					SettlementID: setID,
+					DeploymentID: req.DeploymentID,
+					LogicalModel: req.LogicalModelSlug,
+					OccurredAtMs: now,
+				})
+			}
+
+			for i := range alertsToEmit {
+				if alertsToEmit[i].SettlementID == "" {
+					alertsToEmit[i].SettlementID = setID
+				}
+			}
+
+			out = &SettlementResult{
+				SettlementID:     setID,
+				ReservationID:    req.ReservationID,
+				RequestID:        req.RequestID,
+				SettledAtMs:      now,
+				Accuracy:         breakdown.Accuracy,
+				TotalCostMicros:  breakdown.TotalMicroUSD,
+				InputTokens:      eff.InputTokens,
+				OutputTokens:     eff.OutputTokens,
+				CacheReadTokens:  eff.CacheReadTokens,
+				CacheWriteTokens: eff.CacheWriteTokens,
+				ReasoningTokens:  eff.ReasoningTokens,
+				UnmeteredFlagged: breakdown.UnmeteredFlagged,
+				AlreadySettled:   false,
+			}
+			return nil
+		})
+	}()
 	if err != nil {
 		return nil, err
 	}

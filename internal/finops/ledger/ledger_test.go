@@ -1614,5 +1614,34 @@ func TestLedgerValidationAndEdgePaths(t *testing.T) {
 	if _, err := reap.ReapOnce(cctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled from ReapOnce, got %v", err)
 	}
+
+	// Explicit ScopeOrg with valid dates MUST still reject ScopeID != OrgID.
+	if _, err := svc.UpsertLedger(ctx, ledger.UpsertLedgerParams{
+		OrgID:           "org_finops_01",
+		ScopeType:       ledger.ScopeOrg,
+		ScopeID:         "org_mismatch_other",
+		PeriodKind:      ledger.PeriodMonthly,
+		PeriodStartMs:   baseMs - 1_000,
+		PeriodEndMs:     baseMs + 86_400_000,
+		HardLimitMicros: 5_000,
+	}); !errors.Is(err, ledger.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput when ScopeOrg has ScopeID != OrgID, got %v", err)
+	}
+
+	// Failed Settle transaction MUST always unlock txMu cleanly so subsequent operations never deadlock.
+	sctx, scancel := context.WithCancel(ctx)
+	scancel()
+	if _, err := svc.Settle(sctx, ledger.SettleRequest{
+		OrgID: "org_finops_01", ProjectID: "p1", EnvID: "e1", VirtualKeyID: "k1",
+		RequestID: "req_canceled_settle", Plane: ledger.PlaneProvider,
+		Rate: pricing.RateCard{InputPer1MNanoUSD: 1_000_000_000, BillingMode: pricing.BillingModeCommercialAPI},
+		Usage: pricing.UsageInput{InputTokens: 10, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact},
+	}); err == nil {
+		t.Fatalf("expected canceled Settle to return error")
+	}
+	if _, err := svc.GetLedger(ctx, "org_finops_01", led.ID); err != nil {
+		t.Fatalf("expected GetLedger to succeed immediately after failed Settle without txMu deadlock, got %v", err)
+	}
 }
+
 

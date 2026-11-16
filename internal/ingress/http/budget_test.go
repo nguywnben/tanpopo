@@ -1375,3 +1375,175 @@ func TestTP0021_NestedMediaTraversalBypassBlocked(t *testing.T) {
 	}
 }
 
+func TestTP0021_PostStreamSettleFailurePreservesHoldAndOverflowFallsBack(t *testing.T) {
+	// 1. Post-StreamStarted settle DB failure MUST NOT call Release (hold stays locked, state != RELEASED_UNUSED).
+	for _, route := range []string{"/v1/chat/completions", "/v1/responses", "/native/openai/v1/chat/completions"} {
+		t.Run("preserve_hold_"+route, func(t *testing.T) {
+			bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 10_000, 100)
+			bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+				if _, err := bh.h.store.RawDB().ExecContext(bh.h.ctx, `
+					CREATE TRIGGER fail_stream_settle BEFORE INSERT ON usage_settlements
+					BEGIN
+						SELECT RAISE(ABORT, 'injected_post_stream_settlement_failure');
+					END;
+				`); err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hello\"}}]}\n\n"))
+				_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n"))
+				_, _ = w.Write([]byte("data: [DONE]\n\n"))
+			})
+
+			var reqBody string
+			switch route {
+			case "/v1/responses":
+				reqBody = `{"model":"acme/chat-1","stream":true,"max_output_tokens":100,"input":"hi"}`
+			default:
+				reqBody = `{"model":"acme/chat-1","stream":true,"max_tokens":100,"messages":[{"role":"user","content":"hi"}]}`
+			}
+			resp, _ := bh.h.doChatReq(t, http.MethodPost, route, []byte(reqBody), nil, nil)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("%s: expected 200 SSE start, got %d", route, resp.StatusCode)
+			}
+
+			led, err := bh.ledger.GetLedger(bh.h.ctx, bh.h.org.ID, "led_proj_budget")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if led.ReservedHoldMicros <= 0 {
+				t.Fatalf("%s: expected ReservedHoldMicros > 0 preserved after post-stream settle failure (must NEVER refund hold), got %d", route, led.ReservedHoldMicros)
+			}
+			var rsvState string
+			if err := bh.h.store.RawDB().QueryRowContext(bh.h.ctx, `SELECT state FROM budget_reservations ORDER BY created_at_ms DESC LIMIT 1`).Scan(&rsvState); err != nil {
+				t.Fatal(err)
+			}
+			if rsvState == ledger.StateReleasedUnused {
+				t.Fatalf("%s: reservation must NOT transition to RELEASED_UNUSED after stream started", route)
+			}
+		})
+	}
+
+	// 2. Streaming upstream usage overflow falls back to bounded byte-estimated ESTIMATED settlement cleanly.
+	for _, route := range []string{"/v1/chat/completions", "/native/openai/v1/chat/completions"} {
+		t.Run("overflow_fallback_"+route, func(t *testing.T) {
+			bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 50_000, 100)
+			bh.setUpstream(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("data: {\"id\":\"c_ov\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"stream payload\"}}]}\n\n"))
+				_, _ = w.Write([]byte("data: {\"id\":\"c_ov\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":9000000000000000000,\"completion_tokens\":9000000000000000000}}\n\n"))
+				_, _ = w.Write([]byte("data: [DONE]\n\n"))
+			})
+			resp, _ := bh.h.doChatReq(t, http.MethodPost, route, []byte(`{"model":"acme/chat-1","stream":true,"max_tokens":100,"messages":[{"role":"user","content":"overflow test"}]}`), nil, nil)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("%s: expected 200 OK, got %d", route, resp.StatusCode)
+			}
+			var accuracy string
+			var cost int64
+			if err := bh.h.store.RawDB().QueryRowContext(bh.h.ctx, `SELECT usage_accuracy, total_cost_micros FROM usage_settlements ORDER BY settled_at_ms DESC LIMIT 1`).Scan(&accuracy, &cost); err != nil {
+				t.Fatal(err)
+			}
+			if accuracy != "ESTIMATED" || cost <= 0 {
+				t.Fatalf("%s: expected bounded fallback ESTIMATED settlement with cost > 0, got accuracy=%s cost=%d", route, accuracy, cost)
+			}
+			led, err := bh.ledger.GetLedger(bh.h.ctx, bh.h.org.ID, "led_proj_budget")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if led.ReservedHoldMicros != 0 {
+				t.Fatalf("%s: expected ReservedHoldMicros=0 after fallback settlement, got %d", route, led.ReservedHoldMicros)
+			}
+		})
+	}
+}
+
+func TestTP0021_VideoPayloadNotDiscountedAndMultiCompletionDefaultHoldScalesPolicy(t *testing.T) {
+	bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 100_000, 100)
+	ps, err := policyengine.NewStore(policyengine.StoreConfig{
+		DB:    bh.h.store.RawDB(),
+		NowMs: func() int64 { return bh.h.clk.Now().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ps.CreatePolicy(bh.h.ctx, policyengine.CreatePolicyParams{
+		OrgID:      bh.h.org.ID,
+		ScopeType:  snapshot.PolicyScopeOrg,
+		ScopeID:    bh.h.org.ID,
+		PolicyType: snapshot.PolicyTypeGuardrail,
+		RulesJSON:  `{"max_context_tokens": 2000}`,
+		Enabled:    true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := bh.h.snapshots.Refresh(bh.h.ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	hitsBefore := bh.upHits.Load()
+
+	// 1. Large base64 video payload (> 12KB raw -> > 3,000 est tokens > MaxContextTokens 2000) MUST NOT be discounted.
+	rawVideo := strings.Repeat("AAAA", 3200) // 12,800 chars valid strict base64
+	videoHTTP := `{"model":"acme/chat-1","max_tokens":10,"messages":[{"role":"user","content":[{"type":"video_url","video":{"data":"data:video/mp4;base64,` + rawVideo + `"}}]}]}`
+	videoNative := `{"model":"acme/chat-1","max_tokens":10,"contents":[{"role":"user","parts":[{"inlineData":{"mimeType":"video/mp4","data":"` + rawVideo + `"}}]}]}`
+
+	for _, tc := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{"http_video_data_uri", "/v1/chat/completions", videoHTTP},
+		{"native_video_inline_data", "/native/openai/v1/chat/completions", videoNative},
+	} {
+		resp, body := bh.h.doChatReq(t, http.MethodPost, tc.path, []byte(tc.body), nil, nil)
+		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "policy_denied_max_context") {
+			t.Fatalf("%s: expected 400 context_length_exceeded (video must NOT be discounted), got status=%d body=%s", tc.name, resp.StatusCode, string(body))
+		}
+	}
+
+	// 2. Omitted max_tokens with n=16 / candidateCount=12 scales estTotal by DefaultHoldOutputTokens (16*256=4096 > 2000).
+	multiHTTP := `{"model":"acme/chat-1","n":16,"messages":[{"role":"user","content":"short"}]}`
+	multiNative := `{"model":"acme/chat-1","generationConfig":{"candidateCount":12},"contents":[{"role":"user","parts":[{"text":"short"}]}]}`
+	for _, tc := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{"http_n16_omitted_max_tokens", "/v1/chat/completions", multiHTTP},
+		{"native_candidateCount12_omitted_max_tokens", "/native/openai/v1/chat/completions", multiNative},
+	} {
+		resp, body := bh.h.doChatReq(t, http.MethodPost, tc.path, []byte(tc.body), nil, nil)
+		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "policy_denied_max_context") {
+			t.Fatalf("%s: expected 400 context_length_exceeded via DefaultHoldOutputTokens*count scaling, got status=%d body=%s", tc.name, resp.StatusCode, string(body))
+		}
+	}
+
+	if bh.upHits.Load() != hitsBefore {
+		t.Fatalf("expected 0 upstream hits for video / multi-completion policy rejections, got %d", bh.upHits.Load()-hitsBefore)
+	}
+}
+
+func TestTP0021_HTTPAuthConnectionEmptyCredentialInjectionsFailsClosed(t *testing.T) {
+	bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 50_000, 100)
+	hitsBefore := bh.upHits.Load()
+
+	// Remove bound secret slots on active AuthModeAPIKey connection (simulating missing/corrupt secret binding)
+	// and refresh snapshot -> HTTP transformAndBuildEgress MUST fail closed with 502 extension_execution_fault.
+	if _, err := bh.h.store.RawDB().ExecContext(bh.h.ctx, `DELETE FROM connection_secret_bindings WHERE connection_id = ?`, bh.h.connID); err != nil {
+		t.Fatal(err)
+	}
+	insertChangelogAndRefresh(t, bh.h, "provider_connection", bh.h.connID)
+
+	resp, body := bh.h.doChatReq(t, http.MethodPost, "/v1/chat/completions", []byte(`{"model":"acme/chat-1","max_tokens":10,"messages":[{"role":"user","content":"no cred"}]}`), nil, nil)
+	if resp.StatusCode != http.StatusBadGateway || !strings.Contains(string(body), "extension_execution_fault") {
+		t.Fatalf("expected 502 extension_execution_fault when AuthMode!=NONE has zero secret bindings, got status=%d body=%s", resp.StatusCode, string(body))
+	}
+	if bh.upHits.Load() != hitsBefore {
+		t.Fatalf("expected 0 upstream hits when fail-closed auth injection check fails")
+	}
+}
+
+

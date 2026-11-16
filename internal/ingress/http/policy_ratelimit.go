@@ -17,6 +17,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
+	"github.com/nguywnben/tanpopo/internal/finops/pricing"
 	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
 	"github.com/nguywnben/tanpopo/internal/ratelimit"
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
@@ -413,6 +414,13 @@ func estimateIngressTokensAndCountFromJSON(raw []byte) (estTotal, baseIn, maxOut
 		}
 		return baseIn + maxOut, baseIn, maxOut, completionCount
 	}
+	if completionCount > 1 {
+		scaledDefaultOut := mulCapInt64(pricing.DefaultHoldOutputTokens, completionCount, 1<<62)
+		if scaledDefaultOut >= (1<<62) || baseIn > (1<<62)-scaledDefaultOut {
+			return 1 << 62, baseIn, 0, completionCount
+		}
+		return baseIn + scaledDefaultOut, baseIn, 0, completionCount
+	}
 	return baseIn, baseIn, 0, completionCount
 }
 
@@ -435,11 +443,13 @@ func isHTTPMultimodalRootKey(key string) bool {
 
 func skipJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, parentKey string, inMediaRoot bool) int64 {
 	type frame struct {
-		isObject    bool
-		expectKey   bool
-		curKey      string
-		objName     string
-		inMediaRoot bool
+		isObject            bool
+		expectKey           bool
+		curKey              string
+		objName             string
+		inMediaRoot         bool
+		disallowedMedia     bool
+		pendingBase64Excess int64
 	}
 	stack := []frame{{
 		isObject:    open == '{',
@@ -452,6 +462,12 @@ func skipJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, parentKey s
 	for len(stack) > 0 {
 		tok, err := dec.Token()
 		if err != nil {
+			for i := len(stack) - 1; i >= 0; i-- {
+				f := stack[i]
+				if f.pendingBase64Excess > 0 && !f.disallowedMedia {
+					excess += f.pendingBase64Excess
+				}
+			}
 			return excess
 		}
 		top := &stack[len(stack)-1]
@@ -466,6 +482,9 @@ func skipJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, parentKey s
 			case '[':
 				stack = append(stack, frame{isObject: false, expectKey: false, curKey: top.curKey, objName: nextObjName, inMediaRoot: top.inMediaRoot})
 			case '}', ']':
+				if top.pendingBase64Excess > 0 && !top.disallowedMedia {
+					excess += top.pendingBase64Excess
+				}
 				stack = stack[:len(stack)-1]
 				if len(stack) > 0 && stack[len(stack)-1].isObject {
 					stack[len(stack)-1].expectKey = true
@@ -481,7 +500,23 @@ func skipJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, parentKey s
 			continue
 		}
 		if s, ok := tok.(string); ok {
-			excess += mediaBlobExcessBytes(top.inMediaRoot, top.objName, top.curKey, s)
+			if top.isObject {
+				switch strings.ToLower(strings.TrimSpace(top.curKey)) {
+				case "mimetype", "mime_type", "media_type":
+					if dm := strings.ToLower(strings.TrimSpace(s)); dm != "" && !isDiscountedMediaMIME(dm) {
+						top.disallowedMedia = true
+					}
+				case "type":
+					if dt := strings.ToLower(strings.TrimSpace(s)); strings.Contains(dt, "video") {
+						top.disallowedMedia = true
+					}
+				}
+			}
+			imm, pend := mediaBlobExcessBytes(top.inMediaRoot, top.objName, top.curKey, s)
+			excess += imm
+			if pend > 0 {
+				top.pendingBase64Excess += pend
+			}
 		}
 		if top.isObject {
 			top.expectKey = true
@@ -490,28 +525,54 @@ func skipJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, parentKey s
 	return excess
 }
 
-func mediaBlobExcessBytes(inMediaRoot bool, parentObjKey, key, s string) int64 {
+func isDiscountedMediaMIME(mimeType string) bool {
+	slash := strings.IndexByte(mimeType, '/')
+	if slash <= 0 || slash == len(mimeType)-1 {
+		return false
+	}
+	major := mimeType[:slash]
+	switch {
+	case major == "image" || major == "audio":
+		return true
+	case mimeType == "application/pdf" || mimeType == "application/octet-stream":
+		return true
+	default:
+		return false
+	}
+}
+
+func mediaBlobExcessBytes(inMediaRoot bool, parentObjKey, key, s string) (immediate, pendingRawBase64 int64) {
 	const cappedBlobBytes = 1024
 	if !inMediaRoot || len(s) <= cappedBlobBytes {
-		return 0
+		return 0, 0
 	}
 	k := strings.ToLower(strings.TrimSpace(key))
 	pk := strings.ToLower(strings.TrimSpace(parentObjKey))
 	switch k {
 	case "url", "image_url", "file_url":
 		if isMediaURLParentKey(pk) && isStrictMultimodalBase64DataURI(s) {
-			return int64(len(s) - cappedBlobBytes)
+			return int64(len(s) - cappedBlobBytes), 0
 		}
 	case "file_data", "image_base64", "audio_base64", "b64_json":
-		if isMediaPayloadParentKey(pk) && (isStrictMultimodalBase64DataURI(s) || isStrictBase64Payload(s)) {
-			return int64(len(s) - cappedBlobBytes)
+		if isMediaPayloadParentKey(pk) {
+			if isStrictMultimodalBase64DataURI(s) {
+				return int64(len(s) - cappedBlobBytes), 0
+			}
+			if isStrictBase64Payload(s) {
+				return 0, int64(len(s) - cappedBlobBytes)
+			}
 		}
 	case "data":
-		if isMediaContainerKey(pk) && (isStrictMultimodalBase64DataURI(s) || isStrictBase64Payload(s)) {
-			return int64(len(s) - cappedBlobBytes)
+		if isMediaContainerKey(pk) {
+			if isStrictMultimodalBase64DataURI(s) {
+				return int64(len(s) - cappedBlobBytes), 0
+			}
+			if isStrictBase64Payload(s) {
+				return 0, int64(len(s) - cappedBlobBytes)
+			}
 		}
 	}
-	return 0
+	return 0, 0
 }
 
 func isMediaURLParentKey(pk string) bool {
@@ -525,7 +586,7 @@ func isMediaURLParentKey(pk string) bool {
 
 func isMediaPayloadParentKey(pk string) bool {
 	switch pk {
-	case "file", "input_file", "document", "image", "image_url", "input_image", "audio", "input_audio", "video", "source", "inlinedata", "inline_data", "content", "parts", "messages", "input":
+	case "file", "input_file", "document", "image", "image_url", "input_image", "audio", "input_audio", "source", "inlinedata", "inline_data", "content", "parts", "messages", "input":
 		return true
 	default:
 		return false
@@ -534,7 +595,7 @@ func isMediaPayloadParentKey(pk string) bool {
 
 func isMediaContainerKey(pk string) bool {
 	switch pk {
-	case "source", "input_audio", "inlinedata", "inline_data", "image", "audio", "video", "file", "input_file", "document", "image_url":
+	case "source", "input_audio", "inlinedata", "inline_data", "image", "audio", "file", "input_file", "document", "image_url":
 		return true
 	default:
 		return false
@@ -559,7 +620,7 @@ func isStrictMultimodalBase64DataURI(s string) bool {
 	major := mimeType[:slash]
 	subtype := mimeType[slash+1:]
 	switch {
-	case major == "image" || major == "audio" || major == "video":
+	case major == "image" || major == "audio":
 	case mimeType == "application/pdf" || mimeType == "application/octet-stream":
 	default:
 		return false

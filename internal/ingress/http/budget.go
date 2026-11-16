@@ -45,6 +45,7 @@ type requestBudgetSession struct {
 	reservationID string
 	currentHold   int64
 	settled       bool
+	streamStarted bool
 	renewCancel   context.CancelFunc
 	renewDone     chan struct{}
 }
@@ -556,6 +557,7 @@ func (b *requestBudgetSession) markStreaming(ctx context.Context) {
 		return
 	}
 	b.mu.Lock()
+	b.streamStarted = true
 	resID := b.reservationID
 	settled := b.settled
 	if resID != "" && !settled {
@@ -576,8 +578,9 @@ func (b *requestBudgetSession) releaseIfUnsettled() {
 	b.mu.Lock()
 	resID := b.reservationID
 	settled := b.settled
+	streamStarted := b.streamStarted
 	b.mu.Unlock()
-	if resID == "" || settled {
+	if resID == "" || settled || streamStarted {
 		return
 	}
 	_, _ = b.svc.Release(context.Background(), b.orgID, resID)
@@ -594,7 +597,7 @@ func (b *requestBudgetSession) settleSync(
 		return usage, nil
 	}
 	inUsage := convertPortUsageToPricing(usage, b.media, b.inputTextBytes, int64(len(finalBody)), false)
-	return b.settleInternal(ctx, target, requestedModel, inUsage, usage)
+	return b.settleInternal(ctx, target, requestedModel, inUsage, usage, false)
 }
 
 func (b *requestBudgetSession) settleStream(
@@ -607,9 +610,12 @@ func (b *requestBudgetSession) settleStream(
 	if b == nil {
 		return pumpRes.Usage, nil
 	}
+	b.mu.Lock()
+	b.streamStarted = true
+	b.mu.Unlock()
 	forceEstimated := pumpErr != nil || pumpRes.Usage == nil
 	inUsage := convertPortUsageToPricing(pumpRes.Usage, b.media, b.inputTextBytes, pumpRes.EmittedBytes, forceEstimated)
-	return b.settleInternal(ctx, target, requestedModel, inUsage, pumpRes.Usage)
+	return b.settleInternal(ctx, target, requestedModel, inUsage, pumpRes.Usage, true)
 }
 
 func (b *requestBudgetSession) settleInternal(
@@ -618,6 +624,7 @@ func (b *requestBudgetSession) settleInternal(
 	requestedModel string,
 	inUsage pricing.UsageInput,
 	origUsage *port.NormalizedUsage,
+	isStreaming bool,
 ) (*port.NormalizedUsage, error) {
 	b.stopLeaseRenewal()
 
@@ -638,7 +645,7 @@ func (b *requestBudgetSession) settleInternal(
 		}
 	}
 
-	res, err := b.svc.Settle(context.WithoutCancel(ctx), ledger.SettleRequest{
+	settleReq := ledger.SettleRequest{
 		OrgID:            b.orgID,
 		ReservationID:    resID,
 		RequestID:        b.ledgerReqID,
@@ -650,13 +657,24 @@ func (b *requestBudgetSession) settleInternal(
 		LogicalModelSlug: modelSlug,
 		Rate:             rateCardForTarget(target),
 		Usage:            inUsage,
-	})
+	}
+	res, err := b.svc.Settle(context.WithoutCancel(ctx), settleReq)
+	if err != nil && isStreaming && (errors.Is(err, ledger.ErrOverflow) || errors.Is(err, pricing.ErrArithmeticOverflow) || errors.Is(err, ledger.ErrInvalidInput)) {
+		settleReq.Usage = pricing.UsageInput{
+			FallbackTextBytes:    max(int64(0), b.inputTextBytes),
+			FallbackOutputBytes:  max(int64(0), inUsage.FallbackOutputBytes),
+			Media:                b.media,
+			UpstreamUsagePresent: false,
+		}
+		res, err = b.svc.Settle(context.WithoutCancel(ctx), settleReq)
+	}
 	if err != nil {
 		slog.Error("budget ledger settlement failed",
 			"org_id", b.orgID,
 			"reservation_id", resID,
 			"request_id", b.reqID,
 			"ledger_request_id", b.ledgerReqID,
+			"stream_started", isStreaming,
 			"error", err,
 		)
 		return origUsage, err

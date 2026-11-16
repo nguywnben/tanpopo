@@ -32,6 +32,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
+	"github.com/nguywnben/tanpopo/internal/finops/pricing"
 	"github.com/nguywnben/tanpopo/internal/ingress/idempotency"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
@@ -984,9 +985,7 @@ func (h *Handler) executeStreamingNativeAttempt(
 	usageCtx := context.WithoutCancel(hopCtx)
 	finalUsage := acc.Finalize(usageCtx)
 	settledUsage, serr := budgetSess.settle(usageCtx, target, model, finalUsage, pumpRes.emittedBytes, pumpErr != nil)
-	if serr != nil {
-		budgetSess.releaseIfUnsettled()
-	} else {
+	if serr == nil {
 		finalUsage = settledUsage
 	}
 	h.reconcileAdmissionUsage(admLease, &finalUsage)
@@ -2867,6 +2866,13 @@ func finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount i
 		}
 		return baseIn + scaledOut, baseIn, scaledOut, completionCount
 	}
+	if completionCount > 1 {
+		scaledDefaultOut := mulCapNativeInt64(pricing.DefaultHoldOutputTokens, completionCount, 1<<62)
+		if scaledDefaultOut >= (1<<62) || baseIn > (1<<62)-scaledDefaultOut {
+			return 1 << 62, baseIn, 0, completionCount
+		}
+		return baseIn + scaledDefaultOut, baseIn, 0, completionCount
+	}
 	return baseIn, baseIn, 0, completionCount
 }
 
@@ -2880,18 +2886,21 @@ func skipNativeNextJSONValueCountMedia(dec *json.Decoder, parentObjKey, key stri
 	}
 	if s, ok := tok.(string); ok {
 		// Scalar values directly under root keys (even non-array top-level fields) are never discounted.
-		return nativeMediaBlobExcessBytes(false, parentObjKey, key, s), nil
+		imm, _ := nativeMediaBlobExcessBytes(false, parentObjKey, key, s)
+		return imm, nil
 	}
 	return 0, nil
 }
 
 func skipNativeJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, parentKey string, inMediaRoot bool) (int64, error) {
 	type frame struct {
-		isObject    bool
-		expectKey   bool
-		curKey      string
-		objName     string
-		inMediaRoot bool
+		isObject            bool
+		expectKey           bool
+		curKey              string
+		objName             string
+		inMediaRoot         bool
+		disallowedMedia     bool
+		pendingBase64Excess int64
 	}
 	stack := []frame{{
 		isObject:    open == '{',
@@ -2904,6 +2913,12 @@ func skipNativeJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, paren
 	for len(stack) > 0 {
 		tok, err := dec.Token()
 		if err != nil {
+			for i := len(stack) - 1; i >= 0; i-- {
+				f := stack[i]
+				if f.pendingBase64Excess > 0 && !f.disallowedMedia {
+					excess += f.pendingBase64Excess
+				}
+			}
 			return excess, err
 		}
 		top := &stack[len(stack)-1]
@@ -2918,6 +2933,9 @@ func skipNativeJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, paren
 			case '[':
 				stack = append(stack, frame{isObject: false, expectKey: false, curKey: top.curKey, objName: nextObjName, inMediaRoot: top.inMediaRoot})
 			case '}', ']':
+				if top.pendingBase64Excess > 0 && !top.disallowedMedia {
+					excess += top.pendingBase64Excess
+				}
 				stack = stack[:len(stack)-1]
 				if len(stack) > 0 && stack[len(stack)-1].isObject {
 					stack[len(stack)-1].expectKey = true
@@ -2933,7 +2951,23 @@ func skipNativeJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, paren
 			continue
 		}
 		if s, ok := tok.(string); ok {
-			excess += nativeMediaBlobExcessBytes(top.inMediaRoot, top.objName, top.curKey, s)
+			if top.isObject {
+				switch strings.ToLower(strings.TrimSpace(top.curKey)) {
+				case "mimetype", "mime_type", "media_type":
+					if dm := strings.ToLower(strings.TrimSpace(s)); dm != "" && !isDiscountedNativeMediaMIME(dm) {
+						top.disallowedMedia = true
+					}
+				case "type":
+					if dt := strings.ToLower(strings.TrimSpace(s)); strings.Contains(dt, "video") {
+						top.disallowedMedia = true
+					}
+				}
+			}
+			imm, pend := nativeMediaBlobExcessBytes(top.inMediaRoot, top.objName, top.curKey, s)
+			excess += imm
+			if pend > 0 {
+				top.pendingBase64Excess += pend
+			}
 		}
 		if top.isObject {
 			top.expectKey = true
@@ -2942,28 +2976,54 @@ func skipNativeJSONCompositeCountMedia(dec *json.Decoder, open json.Delim, paren
 	return excess, nil
 }
 
-func nativeMediaBlobExcessBytes(inMediaRoot bool, parentObjKey, key, s string) int64 {
+func isDiscountedNativeMediaMIME(mimeType string) bool {
+	slash := strings.IndexByte(mimeType, '/')
+	if slash <= 0 || slash == len(mimeType)-1 {
+		return false
+	}
+	major := mimeType[:slash]
+	switch {
+	case major == "image" || major == "audio":
+		return true
+	case mimeType == "application/pdf" || mimeType == "application/octet-stream":
+		return true
+	default:
+		return false
+	}
+}
+
+func nativeMediaBlobExcessBytes(inMediaRoot bool, parentObjKey, key, s string) (immediate, pendingRawBase64 int64) {
 	const cappedBlobBytes = 1024
 	if !inMediaRoot || len(s) <= cappedBlobBytes {
-		return 0
+		return 0, 0
 	}
 	k := strings.ToLower(strings.TrimSpace(key))
 	pk := strings.ToLower(strings.TrimSpace(parentObjKey))
 	switch k {
 	case "url", "image_url", "file_url":
 		if isNativeMediaURLParentKey(pk) && isStrictNativeMultimodalBase64DataURI(s) {
-			return int64(len(s) - cappedBlobBytes)
+			return int64(len(s) - cappedBlobBytes), 0
 		}
 	case "file_data", "image_base64", "audio_base64", "b64_json":
-		if isNativeMediaPayloadParentKey(pk) && (isStrictNativeMultimodalBase64DataURI(s) || isStrictNativeBase64Payload(s)) {
-			return int64(len(s) - cappedBlobBytes)
+		if isNativeMediaPayloadParentKey(pk) {
+			if isStrictNativeMultimodalBase64DataURI(s) {
+				return int64(len(s) - cappedBlobBytes), 0
+			}
+			if isStrictNativeBase64Payload(s) {
+				return 0, int64(len(s) - cappedBlobBytes)
+			}
 		}
 	case "data":
-		if isNativeMediaContainerKey(pk) && (isStrictNativeMultimodalBase64DataURI(s) || isStrictNativeBase64Payload(s)) {
-			return int64(len(s) - cappedBlobBytes)
+		if isNativeMediaContainerKey(pk) {
+			if isStrictNativeMultimodalBase64DataURI(s) {
+				return int64(len(s) - cappedBlobBytes), 0
+			}
+			if isStrictNativeBase64Payload(s) {
+				return 0, int64(len(s) - cappedBlobBytes)
+			}
 		}
 	}
-	return 0
+	return 0, 0
 }
 
 func isNativeMediaURLParentKey(pk string) bool {
@@ -2977,7 +3037,7 @@ func isNativeMediaURLParentKey(pk string) bool {
 
 func isNativeMediaPayloadParentKey(pk string) bool {
 	switch pk {
-	case "file", "input_file", "document", "image", "image_url", "input_image", "audio", "input_audio", "video", "source", "inlinedata", "inline_data", "content", "parts", "messages", "input", "contents":
+	case "file", "input_file", "document", "image", "image_url", "input_image", "audio", "input_audio", "source", "inlinedata", "inline_data", "content", "parts", "messages", "input", "contents":
 		return true
 	default:
 		return false
@@ -2986,7 +3046,7 @@ func isNativeMediaPayloadParentKey(pk string) bool {
 
 func isNativeMediaContainerKey(pk string) bool {
 	switch pk {
-	case "source", "input_audio", "inlinedata", "inline_data", "image", "audio", "video", "file", "input_file", "document", "image_url":
+	case "source", "input_audio", "inlinedata", "inline_data", "image", "audio", "file", "input_file", "document", "image_url":
 		return true
 	default:
 		return false
@@ -3011,7 +3071,7 @@ func isStrictNativeMultimodalBase64DataURI(s string) bool {
 	major := mimeType[:slash]
 	subtype := mimeType[slash+1:]
 	switch {
-	case major == "image" || major == "audio" || major == "video":
+	case major == "image" || major == "audio":
 	case mimeType == "application/pdf" || mimeType == "application/octet-stream":
 	default:
 		return false

@@ -49,8 +49,6 @@ func (r *OrphanReservationReaper) ReapOnce(ctx context.Context) (int, error) {
 		return 0, ErrInvalidInput
 	}
 
-	r.svc.txMu.Lock()
-
 	now := r.svc.nowMs()
 	type expiredRow struct {
 		ID         string
@@ -61,55 +59,59 @@ func (r *OrphanReservationReaper) ReapOnce(ctx context.Context) (int, error) {
 	}
 	var reclaimed []expiredRow
 
-	err := r.svc.withTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `
-			SELECT id, org_id, request_id, state, hold_micros
-			FROM budget_reservations
-			WHERE state IN (?, ?) AND lease_expires_at_ms <= ?
-			ORDER BY lease_expires_at_ms ASC, id ASC
-			LIMIT ?`,
-			StateReservedHold, StateStreamingAccruing, now, r.batchMax,
-		)
-		if err != nil {
-			return err
-		}
-		var candidates []expiredRow
-		for rows.Next() {
-			var c expiredRow
-			if sErr := rows.Scan(&c.ID, &c.OrgID, &c.RequestID, &c.PrevState, &c.HoldMicros); sErr != nil {
-				_ = rows.Close()
-				return sErr
-			}
-			candidates = append(candidates, c)
-		}
-		if err := rows.Err(); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		_ = rows.Close()
+	err := func() error {
+		r.svc.txMu.Lock()
+		defer r.svc.txMu.Unlock()
 
-		for _, c := range candidates {
-			res, uErr := tx.ExecContext(ctx, `
-				UPDATE budget_reservations
-				SET state = ?, updated_at_ms = ?
-				WHERE org_id = ? AND id = ? AND state IN (?, ?)`,
-				StateExpiredReclaimed, now, c.OrgID, c.ID, StateReservedHold, StateStreamingAccruing,
+		return r.svc.withTx(ctx, func(tx *sql.Tx) error {
+			rows, err := tx.QueryContext(ctx, `
+				SELECT id, org_id, request_id, state, hold_micros
+				FROM budget_reservations
+				WHERE state IN (?, ?) AND lease_expires_at_ms <= ?
+				ORDER BY lease_expires_at_ms ASC, id ASC
+				LIMIT ?`,
+				StateReservedHold, StateStreamingAccruing, now, r.batchMax,
 			)
-			if uErr != nil {
-				return uErr
+			if err != nil {
+				return err
 			}
-			n, _ := res.RowsAffected()
-			if n == 0 {
-				continue
+			var candidates []expiredRow
+			for rows.Next() {
+				var c expiredRow
+				if sErr := rows.Scan(&c.ID, &c.OrgID, &c.RequestID, &c.PrevState, &c.HoldMicros); sErr != nil {
+					_ = rows.Close()
+					return sErr
+				}
+				candidates = append(candidates, c)
 			}
-			if rErr := releaseLinkedHoldsTx(ctx, tx, c.OrgID, c.ID, now); rErr != nil {
-				return rErr
+			if err := rows.Err(); err != nil {
+				_ = rows.Close()
+				return err
 			}
-			reclaimed = append(reclaimed, c)
-		}
-		return nil
-	})
-	r.svc.txMu.Unlock()
+			_ = rows.Close()
+
+			for _, c := range candidates {
+				res, uErr := tx.ExecContext(ctx, `
+					UPDATE budget_reservations
+					SET state = ?, updated_at_ms = ?
+					WHERE org_id = ? AND id = ? AND state IN (?, ?)`,
+					StateExpiredReclaimed, now, c.OrgID, c.ID, StateReservedHold, StateStreamingAccruing,
+				)
+				if uErr != nil {
+					return uErr
+				}
+				n, _ := res.RowsAffected()
+				if n == 0 {
+					continue
+				}
+				if rErr := releaseLinkedHoldsTx(ctx, tx, c.OrgID, c.ID, now); rErr != nil {
+					return rErr
+				}
+				reclaimed = append(reclaimed, c)
+			}
+			return nil
+		})
+	}()
 	if err != nil {
 		return 0, err
 	}
