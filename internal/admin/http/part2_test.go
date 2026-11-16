@@ -2626,7 +2626,7 @@ func TestPart2SecurityAndRemediationRegressions(t *testing.T) {
 		t.Fatalf("expected 422 unverified_external_acknowledgement_required on unsigned install, got %d body=%s", recAckMissing.Code, recAckMissing.Body.String())
 	}
 	recAckOK := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+diffUnsig.InstallationID+"/approve-permissions?org_id="+boot.OrgID, opBTok, etagUnsig, map[string]any{
-		"enable_immediately":            true,
+		"enable_immediately":              true,
 		"acknowledge_unverified_external": true,
 	})
 	if recAckOK.Code != http.StatusOK {
@@ -2673,7 +2673,7 @@ func TestPart2SecurityAndRemediationRegressions(t *testing.T) {
 
 	// opB staged the upgrade on SYSTEM chain (lower seq_no, newer timestamp) -> MUST get 403 self_approval_forbidden!
 	recSelfUp := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insDowngrade.ID+"/approve-permissions?org_id="+boot.OrgID, opBTok, upETag, map[string]any{
-		"enable_immediately":            true,
+		"enable_immediately":              true,
 		"acknowledge_unverified_external": true,
 	})
 	if recSelfUp.Code != http.StatusForbidden || !strings.Contains(recSelfUp.Body.String(), "self_approval_forbidden") {
@@ -2688,7 +2688,7 @@ func TestPart2SecurityAndRemediationRegressions(t *testing.T) {
 		t.Fatalf("expected 422 on verified->unsigned upgrade without ack, got %d body=%s", recUpNoAck.Code, recUpNoAck.Body.String())
 	}
 	recUpOK := h.doBearer(t, http.MethodPost, "/admin/v1/extensions/"+insDowngrade.ID+"/approve-permissions?org_id="+boot.OrgID, opATok, upETag, map[string]any{
-		"enable_immediately":            true,
+		"enable_immediately":              true,
 		"acknowledge_unverified_external": true,
 	})
 	if recUpOK.Code != http.StatusOK {
@@ -3904,5 +3904,284 @@ func TestPart2AdapterSecretSlotsAndConnectionProjectFilterAndExplicitCIDRs(t *te
 		if seen[unwant] {
 			t.Fatalf("unexpected project B connection %s leaked into ?project_id=%s list", unwant, boot.ProjectID)
 		}
+	}
+}
+
+func TestPart2Checkpoint11ConnectionSnapshotRefreshModelModalityAndDeletingPolicy(t *testing.T) {
+	t.Parallel()
+	h := newPart2TestHarness(t, 20)
+	ctx := context.Background()
+	boot, ownerCookie := h.bootstrapOwner(t, "CP11 Regression Org", "cp11-proj")
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" && r.Header.Get("Authorization") != "" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"gpt-4o"}]}`))
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer upstream.Close()
+	upURL, _ := url.Parse(upstream.URL)
+
+	adpID := seedLocalOpenAIAdapter(t, h, upURL.Hostname())
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE extension_versions SET signing_key_fingerprint = ? WHERE package_id = 'tanpopo.local_openai'`, trust.PublicKeyFingerprint(h.rootPub)); err != nil {
+		t.Fatalf("sign seeded local adapter: %v", err)
+	}
+
+	recSec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/secrets", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":         "cp11-api-key",
+		"secret_kind":  "API_KEY",
+		"secret_value": canary.DefaultCanarySecret(),
+	})
+	if recSec.Code != http.StatusCreated {
+		t.Fatalf("POST /secrets code=%d body=%s", recSec.Code, recSec.Body.String())
+	}
+	var secMeta secretMetadataDTO
+	mustDecodeJSON(t, recSec.Body.Bytes(), &secMeta)
+
+	// 1. Invalid modality_kind on POST /models must return 400 invalid_request without SQLite constraint leak.
+	recBadMod := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/models", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":              "bad-modality-model",
+		"display_name":      "Bad Modality",
+		"modality_kind":     "AUDIO_GEN",
+		"context_window":    128000,
+		"max_output_tokens": 4096,
+		"assurance_tier":    "VERIFIED",
+	})
+	if recBadMod.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 invalid_request for unsupported modality_kind, got %d body=%s", recBadMod.Code, recBadMod.Body.String())
+	}
+	var badModErr CanonicalErrorEnvelope
+	mustDecodeJSON(t, recBadMod.Body.Bytes(), &badModErr)
+	if badModErr.Error.Code != "invalid_request" {
+		t.Fatalf("expected error code invalid_request, got %s", badModErr.Error.Code)
+	}
+	if strings.Contains(strings.ToUpper(badModErr.Error.Message), "SQLITE") || strings.Contains(strings.ToUpper(badModErr.Error.Message), "CHECK") {
+		t.Fatalf("unexpected raw SQLite error in message: %q", badModErr.Error.Message)
+	}
+
+	// Create valid model, DRAFT connection, active deployment, and route.
+	recMod := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/models", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":              "gpt-4o",
+		"display_name":      "GPT-4o",
+		"modality_kind":     "CHAT",
+		"context_window":    128000,
+		"max_output_tokens": 16384,
+		"assurance_tier":    "VERIFIED",
+		"capabilities": map[string]any{
+			"tool_calling": true,
+			"streaming":    true,
+		},
+	})
+	if recMod.Code != http.StatusCreated {
+		t.Fatalf("POST /models code=%d body=%s", recMod.Code, recMod.Body.String())
+	}
+	var mod logicalModelDTO
+	mustDecodeJSON(t, recMod.Body.Bytes(), &mod)
+
+	recConn := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":             "cp11-local-conn",
+		"project_id":       boot.ProjectID,
+		"adapter_id":       adpID,
+		"billing_mode":     "SELF_HOSTED_INFRA",
+		"endpoint_url":     upstream.URL,
+		"data_region":      "US",
+		"allow_private_ip": true,
+		"allowed_cidrs":    []string{"127.0.0.1/32"},
+		"secret_bindings":  map[string]string{"api_key": secMeta.CredentialID},
+	})
+	if recConn.Code != http.StatusCreated {
+		t.Fatalf("POST /connections code=%d body=%s", recConn.Code, recConn.Body.String())
+	}
+	var conn providerConnectionDTO
+	mustDecodeJSON(t, recConn.Body.Bytes(), &conn)
+
+	recDep := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"env_id":              boot.EnvID,
+		"logical_model_id":    mod.ID,
+		"connection_id":       conn.ID,
+		"upstream_model_name": "gpt-4o",
+		"data_region":         "US",
+		"rate_card": map[string]any{
+			"input_token_nano_usd":  2500,
+			"output_token_nano_usd": 10000,
+		},
+	})
+	if recDep.Code != http.StatusCreated {
+		t.Fatalf("POST /deployments code=%d body=%s", recDep.Code, recDep.Body.String())
+	}
+	var dep modelDeploymentDTO
+	mustDecodeJSON(t, recDep.Body.Bytes(), &dep)
+
+	recDepPatch := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/deployments/"+dep.ID, ownerCookie, boot.CSRFToken, FormatETag(dep.Version), map[string]any{
+		"state": "ACTIVE_HEALTHY",
+	})
+	if recDepPatch.Code != http.StatusOK {
+		t.Fatalf("PATCH /deployments code=%d body=%s", recDepPatch.Code, recDepPatch.Body.String())
+	}
+
+	recRoute := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":                 "chat-cp11",
+		"env_id":               boot.EnvID,
+		"strategy":             "PRIORITY_FAILOVER",
+		"allowed_data_regions": []string{"US"},
+		"max_failover_hops":    1,
+		"request_timeout_ms":   30000,
+		"targets": []map[string]any{
+			{"deployment_id": dep.ID, "priority_order": 1, "weight": 100},
+		},
+	})
+	if recRoute.Code != http.StatusCreated {
+		t.Fatalf("POST /routes code=%d body=%s", recRoute.Code, recRoute.Body.String())
+	}
+
+	// Before connection test, DRAFT connection must not be selected.
+	recExplainDraft := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes/explain", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"env_id":       boot.EnvID,
+		"target_model": "chat-cp11",
+	})
+	if recExplainDraft.Code != http.StatusOK {
+		t.Fatalf("POST /routes/explain (draft) code=%d body=%s", recExplainDraft.Code, recExplainDraft.Body.String())
+	}
+	var expDraft resolver.ExplainResult
+	mustDecodeJSON(t, recExplainDraft.Body.Bytes(), &expDraft)
+	if len(expDraft.SelectedCandidatesOrdered) != 0 {
+		t.Fatalf("expected 0 selected candidates before connection test, got %+v", expDraft.SelectedCandidatesOrdered)
+	}
+
+	// 2. POST /connections/{id}/test activates connection AND refreshes snapshot automatically (no manual snapshots.Refresh call).
+	recTest := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections/"+conn.ID+"/test", ownerCookie, boot.CSRFToken, "", nil)
+	if recTest.Code != http.StatusOK {
+		t.Fatalf("POST /connections/{id}/test code=%d body=%s", recTest.Code, recTest.Body.String())
+	}
+	var testRes connectionTestResponseDTO
+	mustDecodeJSON(t, recTest.Body.Bytes(), &testRes)
+	if !testRes.Valid {
+		t.Fatalf("expected valid connection test, got %+v", testRes)
+	}
+
+	recExplainActive := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes/explain", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"env_id":       boot.EnvID,
+		"target_model": "chat-cp11",
+	})
+	if recExplainActive.Code != http.StatusOK {
+		t.Fatalf("POST /routes/explain (active) code=%d body=%s", recExplainActive.Code, recExplainActive.Body.String())
+	}
+	var expActive resolver.ExplainResult
+	mustDecodeJSON(t, recExplainActive.Body.Bytes(), &expActive)
+	if len(expActive.SelectedCandidatesOrdered) != 1 || expActive.SelectedCandidatesOrdered[0].DeploymentID != dep.ID {
+		t.Fatalf("expected deployment %s selected immediately after connection test, got %+v", dep.ID, expActive.SelectedCandidatesOrdered)
+	}
+
+	// 3. PATCH /connections/{id} state=DISABLED immediately removes candidate from snapshot/explain.
+	recListConn := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/connections", ownerCookie, "", "", nil)
+	if recListConn.Code != http.StatusOK {
+		t.Fatalf("GET /connections code=%d body=%s", recListConn.Code, recListConn.Body.String())
+	}
+	var connList paginatedListEnvelope[providerConnectionDTO]
+	mustDecodeJSON(t, recListConn.Body.Bytes(), &connList)
+	var curConnVer int64
+	for _, c := range connList.Data {
+		if c.ID == conn.ID {
+			curConnVer = c.Version
+			break
+		}
+	}
+	if curConnVer == 0 {
+		t.Fatalf("connection %s not found in GET /connections", conn.ID)
+	}
+	recDisable := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/connections/"+conn.ID, ownerCookie, boot.CSRFToken, FormatETag(curConnVer), map[string]any{
+		"state": "DISABLED",
+	})
+	if recDisable.Code != http.StatusOK {
+		t.Fatalf("PATCH /connections/{id} disable code=%d body=%s", recDisable.Code, recDisable.Body.String())
+	}
+
+	recExplainDisabled := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes/explain", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"env_id":       boot.EnvID,
+		"target_model": "chat-cp11",
+	})
+	if recExplainDisabled.Code != http.StatusOK {
+		t.Fatalf("POST /routes/explain (disabled) code=%d body=%s", recExplainDisabled.Code, recExplainDisabled.Body.String())
+	}
+	var expDisabled resolver.ExplainResult
+	mustDecodeJSON(t, recExplainDisabled.Body.Bytes(), &expDisabled)
+	if len(expDisabled.SelectedCandidatesOrdered) != 0 {
+		t.Fatalf("expected 0 selected candidates immediately after disabling connection, got %+v", expDisabled.SelectedCandidatesOrdered)
+	}
+
+	// Re-testing disabled connection re-activates it and refreshes snapshot automatically.
+	recReTest := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections/"+conn.ID+"/test", ownerCookie, boot.CSRFToken, "", nil)
+	if recReTest.Code != http.StatusOK {
+		t.Fatalf("POST /connections/{id}/test re-enable code=%d body=%s", recReTest.Code, recReTest.Body.String())
+	}
+	recExplainReEnabled := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes/explain", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"env_id":       boot.EnvID,
+		"target_model": "chat-cp11",
+	})
+	if recExplainReEnabled.Code != http.StatusOK {
+		t.Fatalf("POST /routes/explain (re-enabled) code=%d body=%s", recExplainReEnabled.Code, recExplainReEnabled.Body.String())
+	}
+	var expReEnabled resolver.ExplainResult
+	mustDecodeJSON(t, recExplainReEnabled.Body.Bytes(), &expReEnabled)
+	if len(expReEnabled.SelectedCandidatesOrdered) != 1 || expReEnabled.SelectedCandidatesOrdered[0].DeploymentID != dep.ID {
+		t.Fatalf("expected deployment %s restored immediately after re-test, got %+v", dep.ID, expReEnabled.SelectedCandidatesOrdered)
+	}
+
+	// 4. PUT /policies/{id} must reject DELETING project (both update & create, PROJECT & ENVIRONMENT scopes) and DELETING org with 409 resource_deleting.
+	existingProjPolID := idgen.MustNew(idgen.PrefixPolicy)
+	recCreateProjPol := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+existingProjPolID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":  "PROJECT",
+		"scope_id":    boot.ProjectID,
+		"rpm_ceiling": 500,
+	})
+	if recCreateProjPol.Code != http.StatusOK {
+		t.Fatalf("PUT project policy setup code=%d body=%s", recCreateProjPol.Code, recCreateProjPol.Body.String())
+	}
+
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE projects SET status = 'DELETING' WHERE id = ?`, boot.ProjectID); err != nil {
+		t.Fatalf("mark project DELETING: %v", err)
+	}
+	for _, tc := range []struct {
+		name      string
+		polID     string
+		scopeTier string
+		scopeID   string
+	}{
+		{"existing_project_policy", existingProjPolID, "PROJECT", boot.ProjectID},
+		{"new_project_policy", idgen.MustNew(idgen.PrefixPolicy), "PROJECT", boot.ProjectID},
+		{"new_env_policy", idgen.MustNew(idgen.PrefixPolicy), "ENVIRONMENT", boot.EnvID},
+	} {
+		rec := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+tc.polID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+			"scope_tier":  tc.scopeTier,
+			"scope_id":    tc.scopeID,
+			"rpm_ceiling": 200,
+		})
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("%s expected 409 resource_deleting, got %d body=%s", tc.name, rec.Code, rec.Body.String())
+		}
+		var errEnv CanonicalErrorEnvelope
+		mustDecodeJSON(t, rec.Body.Bytes(), &errEnv)
+		if errEnv.Error.Code != "resource_deleting" {
+			t.Fatalf("%s expected code resource_deleting, got %s", tc.name, errEnv.Error.Code)
+		}
+	}
+
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE organizations SET status = 'DELETING' WHERE id = ?`, boot.OrgID); err != nil {
+		t.Fatalf("mark org DELETING: %v", err)
+	}
+	recOrgDelPol := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+idgen.MustNew(idgen.PrefixPolicy), ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":  "ORGANIZATION",
+		"scope_id":    boot.OrgID,
+		"rpm_ceiling": 100,
+	})
+	if recOrgDelPol.Code != http.StatusConflict {
+		t.Fatalf("DELETING org policy expected 409 resource_deleting, got %d body=%s", recOrgDelPol.Code, recOrgDelPol.Body.String())
+	}
+	var orgErrEnv CanonicalErrorEnvelope
+	mustDecodeJSON(t, recOrgDelPol.Body.Bytes(), &orgErrEnv)
+	if orgErrEnv.Error.Code != "resource_deleting" {
+		t.Fatalf("expected code resource_deleting for org, got %s", orgErrEnv.Error.Code)
 	}
 }

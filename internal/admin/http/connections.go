@@ -272,9 +272,9 @@ func (s *Server) handleGetProviderAdapter(w http.ResponseWriter, r *http.Request
 func scanProviderAdapterSummaryRow(row interface{ Scan(...any) error }) (providerAdapterSummaryDTO, int64, error) {
 	var (
 		id, slug, dialectsJSON, hostsJSON, pkgID, canonicalName, trustTier, installState, permsJSON, semver, execTier, manifestJSON string
-		nativePrefix                                                                                                                 sql.NullString
-		createdMs                                                                                                                    int64
-		entSigned                                                                                                                    int
+		nativePrefix                                                                                                                sql.NullString
+		createdMs                                                                                                                   int64
+		entSigned                                                                                                                   int
 	)
 	if err := row.Scan(
 		&id, &slug, &nativePrefix, &dialectsJSON, &hostsJSON, &createdMs,
@@ -750,6 +750,10 @@ func (s *Server) handleCreateConnection(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
+	if s.snapshots != nil {
+		_ = s.snapshots.Refresh(r.Context())
+	}
+
 	w.Header().Set("ETag", FormatETag(dto.Version))
 	writeJSON(w, http.StatusCreated, dto)
 }
@@ -964,6 +968,9 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading connection fingerprints", true, nil)
 		return
 	}
+	if s.snapshots != nil {
+		_ = s.snapshots.Refresh(r.Context())
+	}
 	w.Header().Set("ETag", FormatETag(dto.Version))
 	writeJSON(w, http.StatusOK, dto)
 }
@@ -1029,6 +1036,9 @@ func (s *Server) handleDeleteConnection(w http.ResponseWriter, r *http.Request) 
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed deleting provider connection", true, nil)
 		}
 		return
+	}
+	if s.snapshots != nil {
+		_ = s.snapshots.Refresh(r.Context())
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -1163,6 +1173,10 @@ func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 			RequestID:    ptrOrNil(requestIDFromContext(r.Context())),
 			MetadataJSON: string(rawMeta),
 		})
+	}
+
+	if s.snapshots != nil {
+		_ = s.snapshots.Refresh(r.Context())
 	}
 
 	writeJSON(w, http.StatusOK, resp)

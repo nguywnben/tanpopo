@@ -102,15 +102,15 @@ type modelDeploymentDTO struct {
 }
 
 type createDeploymentRequest struct {
-	EnvID                string              `json:"env_id"`
-	LogicalModelID       string              `json:"logical_model_id"`
-	ConnectionID         string              `json:"connection_id"`
-	UpstreamModelName    string              `json:"upstream_model_name"`
-	DataRegion           string              `json:"data_region"`
-	ActivateImmediately  *bool               `json:"activate_immediately"`
-	IdleChunkTimeoutMs   int64               `json:"idle_chunk_timeout_ms"`
-	FirstByteTimeoutMs   int64               `json:"first_byte_timeout_ms"`
-	RateCard             *rateCardNanoUSDDTO `json:"rate_card"`
+	EnvID               string              `json:"env_id"`
+	LogicalModelID      string              `json:"logical_model_id"`
+	ConnectionID        string              `json:"connection_id"`
+	UpstreamModelName   string              `json:"upstream_model_name"`
+	DataRegion          string              `json:"data_region"`
+	ActivateImmediately *bool               `json:"activate_immediately"`
+	IdleChunkTimeoutMs  int64               `json:"idle_chunk_timeout_ms"`
+	FirstByteTimeoutMs  int64               `json:"first_byte_timeout_ms"`
+	RateCard            *rateCardNanoUSDDTO `json:"rate_card"`
 }
 
 type updateDeploymentRequest struct {
@@ -284,6 +284,12 @@ func (s *Server) handleCreateAdminModel(w http.ResponseWriter, r *http.Request) 
 			modality = catalog.ModalityChat
 		}
 	}
+	switch modality {
+	case catalog.ModalityChat, catalog.ModalityEmbedding, catalog.ModalityRerank, catalog.ModalityMultimodal:
+	default:
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "modality_kind must be CHAT, EMBEDDING, RERANK, or MULTIMODAL", false, nil)
+		return
+	}
 
 	baseCaps := capabilityProfileToMap(caps, assurance)
 	capsJSON, err := json.Marshal(baseCaps)
@@ -316,7 +322,7 @@ func (s *Server) handleCreateAdminModel(w http.ResponseWriter, r *http.Request) 
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "logical model slug already exists in organization", false, nil)
 			return
 		}
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating logical model", true, nil)
 		return
 	}
 
@@ -701,7 +707,7 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "model deployment already exists", false, nil)
 			return
 		}
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating model deployment", true, nil)
 		return
 	}
 
@@ -1037,10 +1043,10 @@ func (s *Server) resolveDeploymentEnvID(ctx context.Context, orgID, depID string
 
 func (s *Server) loadDeploymentDTO(ctx context.Context, orgID, depID string) (modelDeploymentDTO, sql.NullString, string, error) {
 	var (
-		dto           modelDeploymentDTO
-		pricingJSON   string
-		ownerProj     sql.NullString
-		sharedJSON    string
+		dto         modelDeploymentDTO
+		pricingJSON string
+		ownerProj   sql.NullString
+		sharedJSON  string
 	)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT md.id, md.logical_model_id, md.connection_id, md.upstream_model_name,
