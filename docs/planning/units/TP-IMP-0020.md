@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0020` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | **`READY`** *(Unlocked `2026-11-15` under [`DEC-031`](../../governance/decisions.md) — `100%` of upstream `Dependencies` [`TP-IMP-0016`, `TP-IMP-0019`] = `DONE`; `GAP-01, 08` closed in `M0`; final unit in `DEC-025` batch)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-15` under `DEC-025` / [`DEC-032`](../../governance/decisions.md) by delegated **Gemini 4 Hydrogen** at implementation commit `904ba2a9`, CI Run `43782208080` `completed/success` across Stage 0 + Stage 1; `CGO_ENABLED=0`, `-race`, `BenchmarkResolveRoute` `10,342 ns/op` PASS; fresh independent exact-diff `security-auditor` [`59206f9a`] `PASS` & `code-reviewer` [`31d9454f`] `APPROVE`)* |
 | **Size** | `L` (`internal/routing/resolver/*`, `internal/routing/breaker/*`, `internal/routing/failover/*`, `db/migrations/sqlite/0011_routes.sql` [`0007` spec slot occupied cleanly by earlier migrations `0007`..`0010`]) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Prevents cross-border data-residency failover leaks & governs circuit-breaker state transitions)* |
 | **Technical Owner** | `Staff Distributed Systems / Routing Engineer` |
@@ -19,7 +19,7 @@ Implement Tanpopo's deterministic 6-step routing algorithm per [`routing-and-pol
   - `internal/routing/resolver/resolver.go` (6-step candidate selection algorithm + side-effect-free `Explain(req)` returning per-`ModelDeployment` inclusion/rejection reasons for debugging and future `Dry-Run` UI).
   - `internal/routing/breaker/circuit_breaker.go` (per-`ModelDeployment` sliding-window circuit breaker adhering strictly to canonical `SM-04` states: `PROVISIONED -> ACTIVE_HEALTHY <-> THROTTLED_COOLDOWN | CIRCUIT_OPEN_UNHEALTHY -> HALF_OPEN_PROBING -> DISABLED`, routing upstream `429` with `Retry-After` to `THROTTLED_COOLDOWN`, `500/502/503/timeout` infrastructure faults to `CIRCUIT_OPEN_UNHEALTHY`, and ensuring caller `400/422` validation errors **never** trip the breaker).
   - `internal/routing/failover/executor.go` (sequential candidate retry loop bounded by overall `request_deadline`, enforcing a hard `Data Residency` wall even when every compliant regional target is down — `CT-08`, `INC-04`).
-  - `db/migrations/sqlite/0007_routes.sql` (`route_policies`, `route_targets`).
+  - `db/migrations/sqlite/0011_routes.sql` (`route_policies`, `route_targets`; `0007` spec slot occupied cleanly by `0007..0010`).
 - **Out-of-Scope:** Interactive `Dry-Run Route Explain` Web Console UI (owned by `TP-IMP-0038` in `M3`).
 
 ## 3. Requirements, Dependencies & Design References
@@ -43,7 +43,7 @@ Implement Tanpopo's deterministic 6-step routing algorithm per [`routing-and-pol
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** `RouteResolver` selects exclusively among `ModelDeployment` targets owned by the caller's `org_id` (or `Org`-shared resources explicitly granted to the `Project`); cross-organization connection routing is impossible.
-- **Rollback:** Additive schema `0007_routes.sql`; defaults to direct 1:1 `LogicalModel` routing when custom route rules are absent.
+- **Rollback:** Additive schema `0011_routes.sql` *(slot occupied after `0007..0010`)*; defaults to direct 1:1 `LogicalModel` routing when custom route rules are absent.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0001` (`SM-04` remediation), `TP-IMP-0016`, and `TP-IMP-0019` are complete.
