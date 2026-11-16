@@ -342,6 +342,9 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 	if !s.authorize(w, r, sc, rbac.ActionBudgetWrite, rbac.TargetScope{OrgID: orgID, ProjectID: projID}) {
 		return
 	}
+	if !s.requireActiveOrg(w, r, orgID) {
+		return
+	}
 
 	curDTO, err := s.loadBudgetResourceDTO(r.Context(), orgID, budgetID)
 	if errors.Is(err, port.ErrNotFound) {
@@ -595,7 +598,7 @@ func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionCo
 	var selectExpr, joinSQL string
 	switch groupBy {
 	case "project":
-		selectExpr = `COALESCE(p.name, p.slug, us.project_id)`
+		selectExpr = `COALESCE(p.display_name, p.slug, us.project_id)`
 		joinSQL = `LEFT JOIN projects p ON p.org_id = us.org_id AND p.id = us.project_id`
 	case "env":
 		selectExpr = `COALESCE(e.slug, us.env_id)`

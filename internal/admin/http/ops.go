@@ -210,8 +210,33 @@ func (s *Server) handleGetOverviewSummary(w http.ResponseWriter, r *http.Request
 	}
 
 	var activeHolds int64
-	if err := s.db.QueryRowContext(r.Context(), `SELECT COALESCE(SUM(reserved_hold_micros), 0) FROM budget_ledgers WHERE org_id = ?`, orgID).Scan(&activeHolds); err != nil {
+	holdRows, err := s.db.QueryContext(r.Context(), `SELECT scope_type, scope_id, reserved_hold_micros FROM budget_ledgers WHERE org_id = ?`, orgID)
+	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying active holds", true, nil)
+		return
+	}
+	defer holdRows.Close()
+	allowedProjSet := make(map[string]bool, len(projIDs))
+	for _, pid := range projIDs {
+		allowedProjSet[pid] = true
+	}
+	for holdRows.Next() {
+		var st, sid string
+		var hold int64
+		if scanErr := holdRows.Scan(&st, &sid, &hold); scanErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning active holds", true, nil)
+			return
+		}
+		if !orgWide {
+			resolvedProj := s.resolveBudgetScopeProjectID(r.Context(), orgID, st, sid)
+			if resolvedProj == "" || !allowedProjSet[resolvedProj] {
+				continue
+			}
+		}
+		activeHolds += hold
+	}
+	if err := holdRows.Err(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating active holds", true, nil)
 		return
 	}
 

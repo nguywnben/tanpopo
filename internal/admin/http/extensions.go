@@ -524,6 +524,13 @@ func (s *Server) handleUpgradeExtension(w http.ResponseWriter, r *http.Request) 
 		s.writeInstallerError(w, r, err, curDTO)
 		return
 	}
+	if stageReq == nil {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_extension_package", "extension_error", "empty staged extension package", false, nil)
+		return
+	}
+	stageReq.Source.URI = sourceURI
+	stageReq.Source.ExpectedSHA256 = expectedSHA
+
 	approverOrg := orgID
 	if sc.IsOperator && !actorHasOrgScopedApproverBinding(sc.Actor, orgID) {
 		approverOrg = ""
@@ -533,15 +540,12 @@ func (s *Server) handleUpgradeExtension(w http.ResponseWriter, r *http.Request) 
 		ExpectedVersion: expectedVer,
 		ArchiveReader:   stageReq.ArchiveReader,
 		ArchivePath:     stageReq.ArchivePath,
-		Source: installer.SourceSpec{
-			URI:            sourceURI,
-			ExpectedSHA256: expectedSHA,
-		},
-		Signature:  stageReq.Signature,
-		SBOMDigest: stageReq.SBOMDigest,
-		ActorID:    sc.Actor.PrincipalID,
-		OrgID:      approverOrg,
-		RequestID:  requestIDFromContext(r.Context()),
+		Source:          stageReq.Source,
+		Signature:       stageReq.Signature,
+		SBOMDigest:      stageReq.SBOMDigest,
+		ActorID:         sc.Actor.PrincipalID,
+		OrgID:           approverOrg,
+		RequestID:       requestIDFromContext(r.Context()),
 	})
 	if err != nil {
 		latest, _, _ := s.loadExtensionInstallationDTO(r.Context(), insID)
