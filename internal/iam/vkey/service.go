@@ -282,6 +282,13 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (*CreatedVirt
 		return nil, err
 	}
 
+	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", "system", "virtual_key.created", keyID, map[string]any{
+		"env_id":         params.EnvID,
+		"allowed_planes": planes,
+	}, now); aerr != nil {
+		return nil, aerr
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -441,6 +448,13 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 		return nil, err
 	}
 
+	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", "system", "virtual_key.rotated", params.KeyID, map[string]any{
+		"grace_seconds": params.GraceSeconds,
+		"state":         nextState,
+	}, now); aerr != nil {
+		return nil, aerr
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -590,6 +604,13 @@ func (s *Service) transitionState(ctx context.Context, orgID, keyID string, expe
 		return nil, err
 	}
 
+	if _, aerr := s.emitAuditTx(ctx, tx, orgID, "SYSTEM", "vkey_lifecycle", "virtual_key.state_transition", keyID, map[string]any{
+		"from": curState,
+		"to":   nextState,
+	}, now); aerr != nil {
+		return nil, aerr
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -695,6 +716,17 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 		return nil, err
 	}
 
+	actor := strings.TrimSpace(params.ActorID)
+	if actor == "" {
+		actor = "system"
+	}
+	wroteTxAudit, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, "virtual_key.revoked", params.KeyID, map[string]any{
+		"mode": mode,
+	}, now)
+	if aerr != nil {
+		return nil, aerr
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -709,13 +741,9 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 		s.snapshots.Streams().AbortKey(params.KeyID)
 	}
 
-	if s.auditSink != nil {
+	if s.auditSink != nil && !wroteTxAudit {
 		auditCtx := context.WithoutCancel(ctx)
 		if audID, idErr := idgen.New(idgen.PrefixAudit); idErr == nil {
-			actor := strings.TrimSpace(params.ActorID)
-			if actor == "" {
-				actor = "system"
-			}
 			meta := fmt.Sprintf(`{"mode":%q}`, mode)
 			if syncErr != nil {
 				meta = fmt.Sprintf(`{"mode":%q,"snapshot_sync_pending":true}`, mode)
@@ -726,7 +754,7 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 				OrgID:        &params.OrgID,
 				ActorKind:    "PRINCIPAL",
 				ActorID:      actor,
-				EntryPoint:   "admin_api",
+				EntryPoint:   port.AuditEntryPointAdminAPI,
 				EventType:    "virtual_key.revoked",
 				TargetType:   "virtual_key",
 				TargetID:     params.KeyID,
@@ -837,6 +865,51 @@ func (s *Service) syncSnapshot(ctx context.Context) error {
 		return fmt.Errorf("%w: %w", ErrSnapshotSyncFailed, err)
 	}
 	return nil
+}
+
+func (s *Service) emitAuditTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	orgID, actorKind, actorID, eventType, targetID string,
+	meta map[string]any,
+	now int64,
+) (bool, error) {
+	if s.auditSink == nil {
+		return false, nil
+	}
+	txSink, ok := s.auditSink.(port.TxAuditSink)
+	if !ok {
+		return false, nil
+	}
+	audID, err := idgen.New(idgen.PrefixAudit)
+	if err != nil {
+		return true, err
+	}
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	rawMeta, merr := json.Marshal(meta)
+	if merr != nil {
+		return true, merr
+	}
+	if strings.TrimSpace(actorKind) == "" {
+		actorKind = "PRINCIPAL"
+	}
+	if strings.TrimSpace(actorID) == "" {
+		actorID = "system"
+	}
+	return true, txSink.AppendTx(ctx, tx, port.AuditEvent{
+		ID:           audID,
+		CreatedAtMs:  now,
+		OrgID:        &orgID,
+		ActorKind:    actorKind,
+		ActorID:      actorID,
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    eventType,
+		TargetType:   "virtual_key",
+		TargetID:     targetID,
+		MetadataJSON: string(rawMeta),
+	})
 }
 
 func latestTxEpoch(ctx context.Context, tx *sql.Tx, insertRes sql.Result) int64 {

@@ -141,25 +141,63 @@ func (r *Repository) transitionConnectionStateDB(ctx context.Context, orgID, con
 		case ConnStateSuspendedAdmin, ConnStateAuthExpired:
 			emergency = true
 		}
-		return appendChangelogTx(ctx, tx, &orgID, "provider_connection", connectionID, mutType, emergency, now)
+		if err := appendChangelogTx(ctx, tx, &orgID, "provider_connection", connectionID, mutType, emergency, now); err != nil {
+			return err
+		}
+		if txSink, ok := r.audit.(port.TxAuditSink); ok && (targetState == ConnStateRevoked || targetState == ConnStateSuspendedAdmin || targetState == ConnStateActive) {
+			auditID, idErr := idgen.New(idgen.PrefixAudit)
+			if idErr != nil {
+				return idErr
+			}
+			metaBytes, merr := json.Marshal(map[string]string{
+				"from":   prevState,
+				"to":     targetState,
+				"reason": strings.TrimSpace(reason),
+			})
+			if merr != nil {
+				return merr
+			}
+			if aerr := txSink.AppendTx(ctx, tx, port.AuditEvent{
+				ID:           auditID,
+				CreatedAtMs:  now,
+				OrgID:        &orgID,
+				ActorKind:    "SYSTEM",
+				ActorID:      "catalog",
+				EntryPoint:   port.AuditEntryPointAdminAPI,
+				EventType:    "provider_connection.state_transition",
+				TargetType:   "provider_connection",
+				TargetID:     connectionID,
+				MetadataJSON: string(metaBytes),
+			}); aerr != nil {
+				return aerr
+			}
+		}
+		return nil
 	}); err != nil {
 		return 0, err
 	}
 
 	if r.audit != nil && (targetState == ConnStateRevoked || targetState == ConnStateSuspendedAdmin || targetState == ConnStateActive) {
-		auditID, _ := idgen.New(idgen.PrefixAudit)
-		_ = r.audit.Append(ctx, port.AuditEvent{
-			ID:           auditID,
-			CreatedAtMs:  now,
-			OrgID:        &orgID,
-			ActorKind:    "SYSTEM",
-			ActorID:      "catalog",
-			EntryPoint:   "admin_api",
-			EventType:    "provider_connection.state_transition",
-			TargetType:   "provider_connection",
-			TargetID:     connectionID,
-			MetadataJSON: fmt.Sprintf(`{"from":%q,"to":%q,"reason":%q}`, prevState, targetState, strings.TrimSpace(reason)),
-		})
+		if _, isTx := r.audit.(port.TxAuditSink); !isTx {
+			auditID, _ := idgen.New(idgen.PrefixAudit)
+			metaBytes, _ := json.Marshal(map[string]string{
+				"from":   prevState,
+				"to":     targetState,
+				"reason": strings.TrimSpace(reason),
+			})
+			_ = r.audit.Append(ctx, port.AuditEvent{
+				ID:           auditID,
+				CreatedAtMs:  now,
+				OrgID:        &orgID,
+				ActorKind:    "SYSTEM",
+				ActorID:      "catalog",
+				EntryPoint:   port.AuditEntryPointAdminAPI,
+				EventType:    "provider_connection.state_transition",
+				TargetType:   "provider_connection",
+				TargetID:     connectionID,
+				MetadataJSON: string(metaBytes),
+			})
+		}
 	}
 	return now, nil
 }
@@ -446,7 +484,7 @@ func buildBrokerProbeRequest(
 		CredentialInjections: inj,
 		ActorKind:            "SYSTEM",
 		ActorID:              "catalog_probe",
-		EntryPoint:           "ValidateConnection",
+		EntryPoint:           port.AuditEntryPointAdminAPI,
 		RequestID:            reqID,
 	}
 	return req, broker.HostEgressConstraint{NarrowPolicy: narrowPolicy}, nil

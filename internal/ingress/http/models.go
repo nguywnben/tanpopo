@@ -11,6 +11,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 )
 
 type modelListResponse struct {
@@ -84,7 +85,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 
 	cards := make([]modelCardJSON, 0, len(authorized))
 	for _, m := range authorized {
-		compliantCand := firstPolicyCompliantCandidate(snap, match, eff, reqRegion, m.ID)
+		compliantCand := firstPolicyCompliantCandidate(snap, s.killSwitch, match, eff, reqRegion, m.ID)
 		if compliantCand == nil {
 			continue
 		}
@@ -134,6 +135,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 
 func firstPolicyCompliantCandidate(
 	snap *snapshot.ConfigSnapshot,
+	ks *killswitch.Registry,
 	match snapshot.KeyMatchResult,
 	eff policyengine.EffectivePolicy,
 	reqRegion string,
@@ -152,6 +154,17 @@ func firstPolicyCompliantCandidate(
 		}
 		if cand.Adapter == nil || strings.EqualFold(cand.Adapter.ExtensionState, installer.StateQuarantined) {
 			continue
+		}
+		if ks != nil {
+			if _, blocked := ks.CheckAdmission(killswitch.AdmissionQuery{
+				OrgID:           match.Key.OrgID,
+				ProjectID:       match.Key.ProjectID,
+				VirtualKeyID:    match.Key.ID,
+				ConnectionID:    cand.Connection.ID,
+				PluginInstallID: cand.Adapter.InstallationID,
+			}); blocked {
+				continue
+			}
 		}
 		dec := policyengine.EvaluateEffective(eff, policyengine.EvalRequest{
 			OrgID:                     match.Key.OrgID,

@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -2071,3 +2072,128 @@ permissions:
 		}
 	}
 }
+
+type failingInstallerAuditSink struct {
+	mu   sync.Mutex
+	fail bool
+}
+
+func (f *failingInstallerAuditSink) setFail(v bool) {
+	f.mu.Lock()
+	f.fail = v
+	f.mu.Unlock()
+}
+
+func (f *failingInstallerAuditSink) Append(_ context.Context, _ port.AuditEvent) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail {
+		return errors.New("injected installer audit failure")
+	}
+	return nil
+}
+
+func (f *failingInstallerAuditSink) AppendTx(_ context.Context, _ *sql.Tx, _ port.AuditEvent) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail {
+		return errors.New("injected installer tx audit failure")
+	}
+	return nil
+}
+
+func TestNEG2TransactionalAuditRollbackInstaller(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	tmp := t.TempDir()
+	fc := clock.NewFakeClock(clock.DefaultFakeStart())
+
+	st, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: filepath.Join(tmp, "inst_neg2.db"),
+		NowMs:  func() int64 { return fc.Now().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	opID := idgen.MustNew(idgen.PrefixPrincipal)
+	now := fc.Now().UnixMilli()
+	if _, err := st.RawDB().ExecContext(ctx, `INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms) VALUES (?, NULL, 'HUMAN_LOCAL', 'op_neg2@example.com', 'ACTIVE', 1, ?, ?)`, opID, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RawDB().ExecContext(ctx, `INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms) VALUES ('rb_op_neg2', NULL, ?, 'INSTANCE', 'instance', 'OPERATOR', 1, ?)`, opID, now); err != nil {
+		t.Fatal(err)
+	}
+
+	sink := &failingInstallerAuditSink{}
+	svc, err := NewLifecycleService(ServiceConfig{
+		DB:           st.RawDB(),
+		Audit:        sink,
+		PluginsDir:   filepath.Join(tmp, "plugins"),
+		LockfilePath: filepath.Join(tmp, "tanpopo.lock"),
+		NowMs:        func() int64 { return fc.Now().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wasmBytes := wasmfixtures.EchoTransformWASM()
+	wasmSHA := shaHex(wasmBytes)
+	m := makeWasmManifestYAML("@neg2/rollback-ext", "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.example.com"}, nil, 16)
+	raw, _ := buildTPKGBytes(t, []archiveEntrySpec{
+		{name: "manifest.yaml", body: m},
+		{name: "dist/adapter.wasm", body: wasmBytes},
+	})
+
+	staged, err := svc.StageFreshInstall(ctx, StageInstallRequest{
+		ArchiveReader: bytes.NewReader(raw),
+		Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./neg2.tpkg"},
+		ActorID:       opID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Failing AppendTx during ApproveAndActivate rolls back activation completely.
+	sink.setFail(true)
+	if _, err := svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      staged.Installation.InstallationID,
+		ExpectedVersion:     staged.Installation.Version,
+		ApproverPrincipalID: opID,
+		ActivateImmediately: true,
+	}); err == nil {
+		t.Fatalf("expected ApproveAndActivate to roll back on AppendTx failure")
+	}
+	afterFailApprove, err := svc.GetInstallation(ctx, staged.Installation.InstallationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterFailApprove.State != StatePendingPermissionApproval || afterFailApprove.Version != staged.Installation.Version {
+		t.Fatalf("expected rollback to PENDING_PERMISSION_APPROVAL v%d, got state=%s v%d", staged.Installation.Version, afterFailApprove.State, afterFailApprove.Version)
+	}
+
+	// 2. Succeed with ApproveAndActivate, then inject failure during QuarantineInstallation -> rolls back cleanly.
+	sink.setFail(false)
+	active, err := svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      staged.Installation.InstallationID,
+		ExpectedVersion:     staged.Installation.Version,
+		ApproverPrincipalID: opID,
+		ActivateImmediately: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink.setFail(true)
+	if err := svc.QuarantineInstallation(ctx, active.InstallationID, "compromised plugin", opID); err == nil {
+		t.Fatalf("expected QuarantineInstallation to roll back on AppendTx failure")
+	}
+	afterFailQuar, err := svc.GetInstallation(ctx, active.InstallationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterFailQuar.State != StateEnabledActive || afterFailQuar.Version != active.Version {
+		t.Fatalf("expected rollback to ENABLED_ACTIVE v%d, got state=%s v%d", active.Version, afterFailQuar.State, afterFailQuar.Version)
+	}
+}
+

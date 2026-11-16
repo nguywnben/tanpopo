@@ -1652,7 +1652,7 @@ func (b *BlindHostCredentialBroker) recordAudit(ctx context.Context, req EgressR
 	}
 	entryPoint := strings.TrimSpace(req.EntryPoint)
 	if entryPoint == "" {
-		entryPoint = "blind_broker"
+		entryPoint = port.AuditEntryPointDataPlaneGuard
 	}
 	var reqIDPtr *string
 	if rid := strings.TrimSpace(req.RequestID); rid != "" {

@@ -817,3 +817,107 @@ func TestRevokeAndTransitionsRefreshFailureFailClosedWithoutRollbackOrLostAudit(
 type auditRecorderFunc func(ctx context.Context, ev port.AuditEvent) error
 
 func (f auditRecorderFunc) Append(ctx context.Context, ev port.AuditEvent) error { return f(ctx, ev) }
+
+type failingVKeyTxAuditSink struct {
+	fail atomicBool
+}
+
+type atomicBool struct {
+	mu sync.Mutex
+	v  bool
+}
+
+func (b *atomicBool) Set(val bool) {
+	b.mu.Lock()
+	b.v = val
+	b.mu.Unlock()
+}
+
+func (b *atomicBool) Get() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.v
+}
+
+func (f *failingVKeyTxAuditSink) Append(_ context.Context, _ port.AuditEvent) error {
+	if f.fail.Get() {
+		return errors.New("injected audit write failure")
+	}
+	return nil
+}
+
+func (f *failingVKeyTxAuditSink) AppendTx(_ context.Context, _ *sql.Tx, _ port.AuditEvent) error {
+	if f.fail.Get() {
+		return errors.New("injected tx audit write failure")
+	}
+	return nil
+}
+
+func TestNEG2TransactionalAuditRollback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newVKeyTestHarness(t)
+
+	sink := &failingVKeyTxAuditSink{}
+	svc, err := NewService(ServiceConfig{
+		DB:        h.st.RawDB(),
+		NowMs:     func() int64 { return h.fk.Now().UTC().UnixMilli() },
+		Snapshots: h.mgr,
+		AuditSink: sink,
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	// 1. Failing AppendTx on Create rolls back virtual_keys + config_changelog atomically.
+	sink.fail.Set(true)
+	if _, err := svc.Create(ctx, CreateParams{
+		OrgID:     h.orgAID,
+		ProjectID: h.projAID,
+		EnvID:     h.envProd,
+		Name:      "rollback-create",
+	}); err == nil {
+		t.Fatalf("expected Create to fail closed on AppendTx failure")
+	}
+	var vkCount, chCount int
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM virtual_keys WHERE name = 'rollback-create'`).Scan(&vkCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM config_changelog WHERE entity_kind = 'virtual_key'`).Scan(&chCount); err != nil {
+		t.Fatal(err)
+	}
+	if vkCount != 0 || chCount != 0 {
+		t.Fatalf("expected complete rollback on failed Create audit, got vkCount=%d chCount=%d", vkCount, chCount)
+	}
+
+	// 2. Create succeeds when audit succeeds, then failing AppendTx on Revoke rolls back Revoke completely.
+	sink.fail.Set(false)
+	created, err := svc.Create(ctx, CreateParams{
+		OrgID:     h.orgAID,
+		ProjectID: h.projAID,
+		EnvID:     h.envProd,
+		Name:      "rollback-revoke",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	sink.fail.Set(true)
+	if _, err := svc.Revoke(ctx, RevokeParams{
+		OrgID:           h.orgAID,
+		KeyID:           created.Summary.ID,
+		ExpectedVersion: created.Summary.Version,
+		Mode:            RevokeModeEmergency,
+		ActorID:         "prc_sec",
+	}); err == nil {
+		t.Fatalf("expected Revoke to fail closed on AppendTx failure")
+	}
+	var state string
+	var ver int64
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT state, version FROM virtual_keys WHERE id = ?`, created.Summary.ID).Scan(&state, &ver); err != nil {
+		t.Fatal(err)
+	}
+	if state != snapshot.KeyStateCreatedActive || ver != 1 {
+		t.Fatalf("expected key state CREATED_ACTIVE v1 preserved after rollback, got state=%s ver=%d", state, ver)
+	}
+}
+

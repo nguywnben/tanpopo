@@ -461,6 +461,29 @@ func (m *Manager) Complete(ctx context.Context, req CompleteRequest) (*CompleteR
 		return nil, mapRaceOrErr(err)
 	}
 
+	if m.auditSink != nil {
+		if txSink, ok := m.auditSink.(port.TxAuditSink); ok {
+			audID, idErr := idgen.New(idgen.PrefixAudit)
+			if idErr != nil {
+				return nil, idErr
+			}
+			if aerr := txSink.AppendTx(ctx, tx, port.AuditEvent{
+				ID:           audID,
+				CreatedAtMs:  now,
+				OrgID:        nil,
+				ActorKind:    "SYSTEM",
+				ActorID:      principalID,
+				EntryPoint:   port.AuditEntryPointAdminAPI,
+				EventType:    "instance.bootstrap_completed",
+				TargetType:   "organization",
+				TargetID:     orgID,
+				MetadataJSON: `{"mode":"personal_admin_operator_org_owner"}`,
+			}); aerr != nil {
+				return nil, aerr
+			}
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, mapRaceOrErr(err)
 	}
@@ -468,19 +491,21 @@ func (m *Manager) Complete(ctx context.Context, req CompleteRequest) (*CompleteR
 	m.burnLocked()
 
 	if m.auditSink != nil {
-		if audID, idErr := idgen.New(idgen.PrefixAudit); idErr == nil {
-			_ = m.auditSink.Append(ctx, port.AuditEvent{
-				ID:           audID,
-				CreatedAtMs:  now,
-				OrgID:        nil,
-				ActorKind:    "SYSTEM",
-				ActorID:      principalID,
-				EntryPoint:   "bootstrap",
-				EventType:    "instance.bootstrap_completed",
-				TargetType:   "organization",
-				TargetID:     orgID,
-				MetadataJSON: `{"mode":"personal_admin_operator_org_owner"}`,
-			})
+		if _, isTx := m.auditSink.(port.TxAuditSink); !isTx {
+			if audID, idErr := idgen.New(idgen.PrefixAudit); idErr == nil {
+				_ = m.auditSink.Append(ctx, port.AuditEvent{
+					ID:           audID,
+					CreatedAtMs:  now,
+					OrgID:        nil,
+					ActorKind:    "SYSTEM",
+					ActorID:      principalID,
+					EntryPoint:   port.AuditEntryPointAdminAPI,
+					EventType:    "instance.bootstrap_completed",
+					TargetType:   "organization",
+					TargetID:     orgID,
+					MetadataJSON: `{"mode":"personal_admin_operator_org_owner"}`,
+				})
+			}
 		}
 	}
 
@@ -522,7 +547,7 @@ func (m *Manager) emitAudit(ctx context.Context, now int64, actorKind, actorID, 
 		OrgID:        nil,
 		ActorKind:    actorKind,
 		ActorID:      actorID,
-		EntryPoint:   "bootstrap",
+		EntryPoint:   port.AuditEntryPointAdminAPI,
 		EventType:    eventType,
 		TargetType:   targetType,
 		TargetID:     targetID,

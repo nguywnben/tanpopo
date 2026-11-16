@@ -345,6 +345,13 @@ func (s *Server) resolveTargetsWithPolicy(
 		return nil, false
 	}
 	if len(candidates) > 0 {
+		var ok bool
+		candidates, ok = s.filterCandidatesByKillSwitch(w, reqID, match.Key, candidates)
+		if !ok {
+			return nil, false
+		}
+	}
+	if len(candidates) > 0 {
 		telemetryFromContext(ctx).recordValidatedModel(modelSlug)
 	}
 	return candidates, true

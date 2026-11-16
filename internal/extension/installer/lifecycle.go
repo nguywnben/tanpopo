@@ -651,21 +651,19 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", insID, port.MutationUpsert, false, now); err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("installer: commit StageFreshInstall: %w", err)
-	}
-	committed = true
-	cleanupFinalDir = false
-	cleanupOnErr = false
-
+	wroteTxAudit := false
 	for _, resetOrgID := range resetDowngradeOrg {
-		s.emitAudit(ctx, resetOrgID, req.ActorID, req.RequestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", pkgID, map[string]any{
+		if ok, aerr := s.emitAuditTx(ctx, tx, resetOrgID, req.ActorID, req.RequestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", pkgID, map[string]any{
 			"canonical_name":    vm.Manifest.Metadata.ID,
 			"origin_trust_tier": prov.OriginTrustTier,
 			"enterprise_signed": prov.EnterpriseSigned,
-		})
+		}, now); aerr != nil {
+			return nil, aerr
+		} else if ok {
+			wroteTxAudit = true
+		}
 	}
-	s.emitAudit(ctx, req.TargetOrgID, req.ActorID, req.RequestID, "extension.staged_pending_approval", "extension_installation", insID, map[string]any{
+	if ok, aerr := s.emitAuditTx(ctx, tx, req.TargetOrgID, req.ActorID, req.RequestID, "extension.staged_pending_approval", "extension_installation", insID, map[string]any{
 		"canonical_name":    vm.Manifest.Metadata.ID,
 		"version":           vm.Manifest.Metadata.Version,
 		"origin_trust_tier": prov.OriginTrustTier,
@@ -673,7 +671,36 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 		"execution_tier":    vm.ExecutionTier,
 		"allowed_hosts":     vm.Permissions.AllowedHosts,
 		"secret_slots":      vm.Permissions.SecretSlots,
-	})
+	}, now); aerr != nil {
+		return nil, aerr
+	} else if ok {
+		wroteTxAudit = true
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("installer: commit StageFreshInstall: %w", err)
+	}
+	committed = true
+	cleanupFinalDir = false
+	cleanupOnErr = false
+
+	if !wroteTxAudit {
+		for _, resetOrgID := range resetDowngradeOrg {
+			s.emitAudit(ctx, resetOrgID, req.ActorID, req.RequestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", pkgID, map[string]any{
+				"canonical_name":    vm.Manifest.Metadata.ID,
+				"origin_trust_tier": prov.OriginTrustTier,
+				"enterprise_signed": prov.EnterpriseSigned,
+			})
+		}
+		s.emitAudit(ctx, req.TargetOrgID, req.ActorID, req.RequestID, "extension.staged_pending_approval", "extension_installation", insID, map[string]any{
+			"canonical_name":    vm.Manifest.Metadata.ID,
+			"version":           vm.Manifest.Metadata.Version,
+			"origin_trust_tier": prov.OriginTrustTier,
+			"enterprise_signed": prov.EnterpriseSigned,
+			"execution_tier":    vm.ExecutionTier,
+			"allowed_hosts":     vm.Permissions.AllowedHosts,
+			"secret_slots":      vm.Permissions.SecretSlots,
+		})
+	}
 
 	candSemver := vm.Manifest.Metadata.Version
 	return &StageInstallResult{
@@ -812,6 +839,16 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 	if err := s.preflightLockfile(); err != nil {
 		return nil, err
 	}
+	wroteApproveAudit, aerr := s.emitAuditTx(ctx, tx, req.OrgID, req.ApproverPrincipalID, req.RequestID, "extension.permissions_approved", "extension_installation", req.InstallationID, map[string]any{
+		"canonical_name":    rowData.canonicalName,
+		"activated_version": candInfo.semver,
+		"new_state":         targetState,
+		"allowed_hosts":     vm.Permissions.AllowedHosts,
+		"secret_slots":      vm.Permissions.SecretSlots,
+	}, now)
+	if aerr != nil {
+		return nil, aerr
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("installer: commit ApproveAndActivate: %w", err)
 	}
@@ -825,13 +862,15 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 		return nil, fmt.Errorf("%w: %v", ErrLockfileSyncFailed, lerr)
 	}
 
-	s.emitAudit(ctx, req.OrgID, req.ApproverPrincipalID, req.RequestID, "extension.permissions_approved", "extension_installation", req.InstallationID, map[string]any{
-		"canonical_name":    rowData.canonicalName,
-		"activated_version": candInfo.semver,
-		"new_state":         targetState,
-		"allowed_hosts":     vm.Permissions.AllowedHosts,
-		"secret_slots":      vm.Permissions.SecretSlots,
-	})
+	if !wroteApproveAudit {
+		s.emitAudit(ctx, req.OrgID, req.ApproverPrincipalID, req.RequestID, "extension.permissions_approved", "extension_installation", req.InstallationID, map[string]any{
+			"canonical_name":    rowData.canonicalName,
+			"activated_version": candInfo.semver,
+			"new_state":         targetState,
+			"allowed_hosts":     vm.Permissions.AllowedHosts,
+			"secret_slots":      vm.Permissions.SecretSlots,
+		})
+	}
 
 	return s.GetInstallation(ctx, req.InstallationID)
 }
@@ -1012,6 +1051,28 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 		if _, cerr := appendExtensionChangelogTx(ctx, tx, "extension_installation", req.InstallationID, port.MutationUpsert, false, now); cerr != nil {
 			return nil, cerr
 		}
+		wroteTxAudit := false
+		for _, resetOrgID := range resetDowngradeOrg {
+			if ok, aerr := s.emitAuditTx(ctx, tx, resetOrgID, req.ActorID, req.RequestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", rowData.packageID, map[string]any{
+				"canonical_name":    rowData.canonicalName,
+				"origin_trust_tier": prov.OriginTrustTier,
+				"enterprise_signed": prov.EnterpriseSigned,
+			}, now); aerr != nil {
+				return nil, aerr
+			} else if ok {
+				wroteTxAudit = true
+			}
+		}
+		if ok, aerr := s.emitAuditTx(ctx, tx, req.OrgID, req.ActorID, req.RequestID, "extension.upgrade_pending_reconsent", "extension_installation", req.InstallationID, map[string]any{
+			"canonical_name":    rowData.canonicalName,
+			"active_version":    oldActiveInfo.semver,
+			"candidate_version": vm.Manifest.Metadata.Version,
+			"delta":             delta,
+		}, now); aerr != nil {
+			return nil, aerr
+		} else if ok {
+			wroteTxAudit = true
+		}
 		if cerr := tx.Commit(); cerr != nil {
 			return nil, cerr
 		}
@@ -1019,19 +1080,21 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 		cleanupUpgradeDir = false
 		cleanupOnErr = false
 
-		for _, resetOrgID := range resetDowngradeOrg {
-			s.emitAudit(ctx, resetOrgID, req.ActorID, req.RequestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", rowData.packageID, map[string]any{
+		if !wroteTxAudit {
+			for _, resetOrgID := range resetDowngradeOrg {
+				s.emitAudit(ctx, resetOrgID, req.ActorID, req.RequestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", rowData.packageID, map[string]any{
+					"canonical_name":    rowData.canonicalName,
+					"origin_trust_tier": prov.OriginTrustTier,
+					"enterprise_signed": prov.EnterpriseSigned,
+				})
+			}
+			s.emitAudit(ctx, req.OrgID, req.ActorID, req.RequestID, "extension.upgrade_pending_reconsent", "extension_installation", req.InstallationID, map[string]any{
 				"canonical_name":    rowData.canonicalName,
-				"origin_trust_tier": prov.OriginTrustTier,
-				"enterprise_signed": prov.EnterpriseSigned,
+				"active_version":    oldActiveInfo.semver,
+				"candidate_version": vm.Manifest.Metadata.Version,
+				"delta":             delta,
 			})
 		}
-		s.emitAudit(ctx, "", req.ActorID, req.RequestID, "extension.upgrade_pending_reconsent", "extension_installation", req.InstallationID, map[string]any{
-			"canonical_name":    rowData.canonicalName,
-			"active_version":    oldActiveInfo.semver,
-			"candidate_version": vm.Manifest.Metadata.Version,
-			"delta":             delta,
-		})
 
 		rec, gerr := s.GetInstallation(ctx, req.InstallationID)
 		if gerr != nil {
@@ -1078,6 +1141,27 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 	if err := s.preflightLockfile(); err != nil {
 		return nil, err
 	}
+	wroteUpgradeTxAudit := false
+	for _, resetOrgID := range resetDowngradeOrg {
+		if ok, aerr := s.emitAuditTx(ctx, tx, resetOrgID, req.ActorID, req.RequestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", rowData.packageID, map[string]any{
+			"canonical_name":    rowData.canonicalName,
+			"origin_trust_tier": prov.OriginTrustTier,
+			"enterprise_signed": prov.EnterpriseSigned,
+		}, now); aerr != nil {
+			return nil, aerr
+		} else if ok {
+			wroteUpgradeTxAudit = true
+		}
+	}
+	if ok, aerr := s.emitAuditTx(ctx, tx, req.OrgID, req.ActorID, req.RequestID, "extension.upgraded", "extension_installation", req.InstallationID, map[string]any{
+		"canonical_name":   rowData.canonicalName,
+		"previous_version": oldActiveInfo.semver,
+		"active_version":   candInfo.semver,
+	}, now); aerr != nil {
+		return nil, aerr
+	} else if ok {
+		wroteUpgradeTxAudit = true
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -1100,18 +1184,20 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 		return nil, fmt.Errorf("%w: %v", ErrLockfileSyncFailed, lerr)
 	}
 
-	for _, resetOrgID := range resetDowngradeOrg {
-		s.emitAudit(ctx, resetOrgID, req.ActorID, req.RequestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", rowData.packageID, map[string]any{
-			"canonical_name":    rowData.canonicalName,
-			"origin_trust_tier": prov.OriginTrustTier,
-			"enterprise_signed": prov.EnterpriseSigned,
+	if !wroteUpgradeTxAudit {
+		for _, resetOrgID := range resetDowngradeOrg {
+			s.emitAudit(ctx, resetOrgID, req.ActorID, req.RequestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", rowData.packageID, map[string]any{
+				"canonical_name":    rowData.canonicalName,
+				"origin_trust_tier": prov.OriginTrustTier,
+				"enterprise_signed": prov.EnterpriseSigned,
+			})
+		}
+		s.emitAudit(ctx, req.OrgID, req.ActorID, req.RequestID, "extension.upgraded", "extension_installation", req.InstallationID, map[string]any{
+			"canonical_name":   rowData.canonicalName,
+			"previous_version": oldActiveInfo.semver,
+			"active_version":   candInfo.semver,
 		})
 	}
-	s.emitAudit(ctx, req.OrgID, req.ActorID, req.RequestID, "extension.upgraded", "extension_installation", req.InstallationID, map[string]any{
-		"canonical_name":   rowData.canonicalName,
-		"previous_version": oldActiveInfo.semver,
-		"active_version":   candInfo.semver,
-	})
 
 	rec, gerr := s.GetInstallation(ctx, req.InstallationID)
 	if gerr != nil {
@@ -1218,16 +1304,26 @@ func (s *LifecycleService) RequestActivePermissionReconsent(
 	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, false, now); err != nil {
 		return nil, PermissionDelta{}, err
 	}
+	wroteReconsentAudit, aerr := s.emitAuditTx(ctx, tx, orgID, actorID, requestID, "extension.active_permission_reconsent_requested", "extension_installation", installationID, map[string]any{
+		"canonical_name": rowData.canonicalName,
+		"active_version": activeInfo.semver,
+		"delta":          delta,
+	}, now)
+	if aerr != nil {
+		return nil, PermissionDelta{}, aerr
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, PermissionDelta{}, err
 	}
 	committed = true
 
-	s.emitAudit(ctx, orgID, actorID, requestID, "extension.active_permission_reconsent_requested", "extension_installation", installationID, map[string]any{
-		"canonical_name": rowData.canonicalName,
-		"active_version": activeInfo.semver,
-		"delta":          delta,
-	})
+	if !wroteReconsentAudit {
+		s.emitAudit(ctx, orgID, actorID, requestID, "extension.active_permission_reconsent_requested", "extension_installation", installationID, map[string]any{
+			"canonical_name": rowData.canonicalName,
+			"active_version": activeInfo.semver,
+			"delta":          delta,
+		})
+	}
 
 	rec, gerr := s.GetInstallation(ctx, installationID)
 	if gerr != nil {
@@ -1347,6 +1443,14 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 	if err := s.preflightLockfile(); err != nil {
 		return nil, err
 	}
+	wroteApproveEscAudit, aerr := s.emitAuditTx(ctx, tx, orgID, approverPrincipalID, requestID, "extension.escalated_upgrade_approved", "extension_installation", installationID, map[string]any{
+		"canonical_name":   rowData.canonicalName,
+		"previous_version": oldInfo.semver,
+		"active_version":   candInfo.semver,
+	}, now)
+	if aerr != nil {
+		return nil, aerr
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -1362,11 +1466,13 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 		return nil, fmt.Errorf("%w: %v", ErrLockfileSyncFailed, lerr)
 	}
 
-	s.emitAudit(ctx, orgID, approverPrincipalID, requestID, "extension.escalated_upgrade_approved", "extension_installation", installationID, map[string]any{
-		"canonical_name":   rowData.canonicalName,
-		"previous_version": oldInfo.semver,
-		"active_version":   candInfo.semver,
-	})
+	if !wroteApproveEscAudit {
+		s.emitAudit(ctx, orgID, approverPrincipalID, requestID, "extension.escalated_upgrade_approved", "extension_installation", installationID, map[string]any{
+			"canonical_name":   rowData.canonicalName,
+			"previous_version": oldInfo.semver,
+			"active_version":   candInfo.semver,
+		})
+	}
 	return s.GetInstallation(ctx, installationID)
 }
 
@@ -1420,14 +1526,22 @@ func (s *LifecycleService) RejectEscalatedUpgrade(ctx context.Context, installat
 	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, false, now); err != nil {
 		return nil, err
 	}
+	wroteRejectAudit, aerr := s.emitAuditTx(ctx, tx, orgID, actorID, requestID, "extension.escalated_upgrade_rejected", "extension_installation", installationID, map[string]any{
+		"canonical_name": rowData.canonicalName,
+	}, now)
+	if aerr != nil {
+		return nil, aerr
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	committed = true
 
-	s.emitAudit(ctx, orgID, actorID, requestID, "extension.escalated_upgrade_rejected", "extension_installation", installationID, map[string]any{
-		"canonical_name": rowData.canonicalName,
-	})
+	if !wroteRejectAudit {
+		s.emitAudit(ctx, orgID, actorID, requestID, "extension.escalated_upgrade_rejected", "extension_installation", installationID, map[string]any{
+			"canonical_name": rowData.canonicalName,
+		})
+	}
 	return s.GetInstallation(ctx, installationID)
 }
 
@@ -1539,6 +1653,27 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 	if err := s.preflightLockfile(); err != nil {
 		return nil, err
 	}
+	wroteRollbackTxAudit := false
+	for _, resetOrgID := range resetDowngradeOrg {
+		if ok, aerr := s.emitAuditTx(ctx, tx, resetOrgID, actorID, requestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", rowData.packageID, map[string]any{
+			"canonical_name":    rowData.canonicalName,
+			"origin_trust_tier": restoredTrustTier,
+			"enterprise_signed": targetPrevInfo.enterpriseSigned,
+		}, now); aerr != nil {
+			return nil, aerr
+		} else if ok {
+			wroteRollbackTxAudit = true
+		}
+	}
+	if ok, aerr := s.emitAuditTx(ctx, tx, orgID, actorID, requestID, "extension.rolled_back", "extension_installation", installationID, map[string]any{
+		"canonical_name":   rowData.canonicalName,
+		"rolled_back_from": curActiveInfo.semver,
+		"restored_version": targetPrevInfo.semver,
+	}, now); aerr != nil {
+		return nil, aerr
+	} else if ok {
+		wroteRollbackTxAudit = true
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -1558,18 +1693,20 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 		return nil, fmt.Errorf("%w: %v", ErrLockfileSyncFailed, lerr)
 	}
 
-	for _, resetOrgID := range resetDowngradeOrg {
-		s.emitAudit(ctx, resetOrgID, actorID, requestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", rowData.packageID, map[string]any{
-			"canonical_name":    rowData.canonicalName,
-			"origin_trust_tier": restoredTrustTier,
-			"enterprise_signed": targetPrevInfo.enterpriseSigned,
+	if !wroteRollbackTxAudit {
+		for _, resetOrgID := range resetDowngradeOrg {
+			s.emitAudit(ctx, resetOrgID, actorID, requestID, "extension.org_policy_reset_on_trust_downgrade", "org_extension_policy", rowData.packageID, map[string]any{
+				"canonical_name":    rowData.canonicalName,
+				"origin_trust_tier": restoredTrustTier,
+				"enterprise_signed": targetPrevInfo.enterpriseSigned,
+			})
+		}
+		s.emitAudit(ctx, orgID, actorID, requestID, "extension.rolled_back", "extension_installation", installationID, map[string]any{
+			"canonical_name":   rowData.canonicalName,
+			"rolled_back_from": curActiveInfo.semver,
+			"restored_version": targetPrevInfo.semver,
 		})
 	}
-	s.emitAudit(ctx, orgID, actorID, requestID, "extension.rolled_back", "extension_installation", installationID, map[string]any{
-		"canonical_name":   rowData.canonicalName,
-		"rolled_back_from": curActiveInfo.semver,
-		"restored_version": targetPrevInfo.semver,
-	})
 	return s.GetInstallation(ctx, installationID)
 }
 
@@ -1621,16 +1758,26 @@ func (s *LifecycleService) QuarantineInstallation(ctx context.Context, installat
 	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationQuarantine, true, now); err != nil {
 		return err
 	}
+	wroteQuarantineAudit, aerr := s.emitAuditTx(ctx, tx, "", actorID, "", "extension.quarantined", "extension_installation", installationID, map[string]any{
+		"canonical_name":    rowData.canonicalName,
+		"previous_state":    rowData.state,
+		"quarantine_reason": reason,
+	}, now)
+	if aerr != nil {
+		return aerr
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	committed = true
 
-	s.emitAudit(ctx, "", actorID, "", "extension.quarantined", "extension_installation", installationID, map[string]any{
-		"canonical_name":    rowData.canonicalName,
-		"previous_state":    rowData.state,
-		"quarantine_reason": reason,
-	})
+	if !wroteQuarantineAudit {
+		s.emitAudit(ctx, "", actorID, "", "extension.quarantined", "extension_installation", installationID, map[string]any{
+			"canonical_name":    rowData.canonicalName,
+			"previous_state":    rowData.state,
+			"quarantine_reason": reason,
+		})
+	}
 	return nil
 }
 
@@ -1837,15 +1984,24 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 	if _, err := appendExtensionChangelogTx(ctx, tx, "org_extension_policy", orgID+":"+packageID, port.MutationUpsert, false, now); err != nil {
 		return err
 	}
+	wrotePolicyAudit, aerr := s.emitAuditTx(ctx, tx, orgID, actorID, "", "extension.org_policy_updated", "org_extension_policy", packageID, map[string]any{
+		"enabled":          enabled,
+		"org_owner_opt_in": orgOwnerOptIn,
+	}, now)
+	if aerr != nil {
+		return aerr
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	committed = true
 
-	s.emitAudit(ctx, orgID, actorID, "", "extension.org_policy_updated", "org_extension_policy", packageID, map[string]any{
-		"enabled":          enabled,
-		"org_owner_opt_in": orgOwnerOptIn,
-	})
+	if !wrotePolicyAudit {
+		s.emitAudit(ctx, orgID, actorID, "", "extension.org_policy_updated", "org_extension_policy", packageID, map[string]any{
+			"enabled":          enabled,
+			"org_owner_opt_in": orgOwnerOptIn,
+		})
+	}
 	return nil
 }
 
@@ -1924,6 +2080,12 @@ func (s *LifecycleService) UninstallInstallation(ctx context.Context, installati
 	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationDelete, false, now); err != nil {
 		return err
 	}
+	wroteUninstallAudit, aerr := s.emitAuditTx(ctx, tx, orgID, actorID, "", "extension.uninstalled", "extension_installation", installationID, map[string]any{
+		"canonical_name": rowData.canonicalName,
+	}, now)
+	if aerr != nil {
+		return aerr
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
@@ -1954,9 +2116,11 @@ func (s *LifecycleService) UninstallInstallation(ctx context.Context, installati
 		return fmt.Errorf("%w: %s", ErrLockfileSyncFailed, msg)
 	}
 
-	s.emitAudit(ctx, orgID, actorID, "", "extension.uninstalled", "extension_installation", installationID, map[string]any{
-		"canonical_name": rowData.canonicalName,
-	})
+	if !wroteUninstallAudit {
+		s.emitAudit(ctx, orgID, actorID, "", "extension.uninstalled", "extension_installation", installationID, map[string]any{
+			"canonical_name": rowData.canonicalName,
+		})
+	}
 	return nil
 }
 
@@ -2526,6 +2690,51 @@ func appendExtensionChangelogTx(ctx context.Context, tx *sql.Tx, entityKind, ent
 		return 0, fmt.Errorf("installer: append config_changelog: %w", err)
 	}
 	return res.LastInsertId()
+}
+
+func (s *LifecycleService) emitAuditTx(ctx context.Context, tx *sql.Tx, orgID, actorID, reqID, eventType, targetType, targetID string, meta map[string]any, nowMs int64) (bool, error) {
+	txSink, ok := s.audit.(port.TxAuditSink)
+	if !ok {
+		return false, nil
+	}
+	id, err := idgen.New(idgen.PrefixAudit)
+	if err != nil {
+		return true, err
+	}
+	var orgPtr *string
+	if strings.TrimSpace(orgID) != "" {
+		o := strings.TrimSpace(orgID)
+		orgPtr = &o
+	}
+	var reqPtr *string
+	if strings.TrimSpace(reqID) != "" {
+		r := strings.TrimSpace(reqID)
+		reqPtr = &r
+	}
+	actor := strings.TrimSpace(actorID)
+	if actor == "" {
+		actor = "system"
+	}
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	rawMeta, merr := json.Marshal(meta)
+	if merr != nil {
+		return true, merr
+	}
+	return true, txSink.AppendTx(ctx, tx, port.AuditEvent{
+		ID:           id,
+		CreatedAtMs:  nowMs,
+		OrgID:        orgPtr,
+		ActorKind:    "principal",
+		ActorID:      actor,
+		EntryPoint:   s.auditEntryPoint,
+		EventType:    eventType,
+		TargetType:   targetType,
+		TargetID:     targetID,
+		RequestID:    reqPtr,
+		MetadataJSON: string(rawMeta),
+	})
 }
 
 func (s *LifecycleService) emitAudit(ctx context.Context, orgID, actorID, reqID, eventType, targetType, targetID string, meta map[string]any) {

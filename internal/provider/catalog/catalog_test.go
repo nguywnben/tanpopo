@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -3316,4 +3317,161 @@ adapter:
 		}
 	}
 }
+
+type syncFailingCatalogAuditSink struct {
+	fail atomic.Bool
+}
+
+func (s *syncFailingCatalogAuditSink) Append(context.Context, port.AuditEvent) error {
+	if s.fail.Load() {
+		return errors.New("injected catalog audit failure")
+	}
+	return nil
+}
+
+func (s *syncFailingCatalogAuditSink) AppendTx(context.Context, *sql.Tx, port.AuditEvent) error {
+	if s.fail.Load() {
+		return errors.New("injected catalog tx audit failure")
+	}
+	return nil
+}
+
+func TestNEG2TransactionalAuditRollbackCatalog(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "cat_neg2.db")
+	clk := clock.NewFakeClock(time.UnixMilli(1760000500000))
+	nowMs := func() int64 { return clk.Now().UnixMilli() }
+
+	st, err := sqlitestore.Open(ctx, sqlitestore.Config{DBPath: dbPath, NowMs: nowMs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyID := installer.PublicKeyFingerprint(pub)
+	keyring := installer.TrustedKeyring{RootPublicKeys: map[string]ed25519.PublicKey{keyID: pub}}
+
+	snapMgr, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: st.RawDB(), NowMs: nowMs, Keyring: keyring})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink := &syncFailingCatalogAuditSink{}
+	repo, err := catalog.NewRepository(catalog.Config{
+		DB:        st.RawDB(),
+		NowMs:     nowMs,
+		Snapshots: snapMgr,
+		Audit:     sink,
+		Keyring:   keyring,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst, err := installer.NewLifecycleService(installer.ServiceConfig{
+		DB:           st.RawDB(),
+		Audit:        noopAuditSink{},
+		PluginsDir:   filepath.Join(tmpDir, "plugins"),
+		LockfilePath: filepath.Join(tmpDir, "tanpopo.lock"),
+		Keyring:      keyring,
+		NowMs:        nowMs,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "neg2-cat", DisplayName: "NEG2 Cat"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	approverID := "prc_neg2_op"
+	if _, err := st.RawDB().ExecContext(ctx, `INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms) VALUES (?, ?, 'HUMAN_LOCAL', 'neg2@example.com', 'ACTIVE', 1, 1000, 1000)`, approverID, org.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RawDB().ExecContext(ctx, `INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms) VALUES ('rb_neg2', NULL, ?, 'INSTANCE', 'instance', 'OPERATOR', 1, 1000)`, approverID); err != nil {
+		t.Fatal(err)
+	}
+
+	manifestYAML := `apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@tanpopo/adapter-neg2-cat"
+  name: Neg2 Test
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+permissions:
+  networkEgress:
+    allowedHosts: ["api.example.com"]
+adapter:
+  slug: example
+  baseUrl: "https://api.example.com"
+`
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	_ = tw.WriteHeader(&tar.Header{Name: "manifest.yaml", Mode: 0o644, Size: int64(len(manifestYAML))})
+	_, _ = tw.Write([]byte(manifestYAML))
+	_ = tw.Close()
+	_ = gw.Close()
+	sum := sha256.Sum256(buf.Bytes())
+	hexSum := hex.EncodeToString(sum[:])
+
+	staged, err := inst.StageFreshInstall(ctx, installer.StageInstallRequest{
+		ArchiveReader: bytes.NewReader(buf.Bytes()),
+		Source:        installer.SourceSpec{Kind: "oci", URI: "oci://registry.tanpopo.dev/adapters/neg2@sha256:" + hexSum, ExpectedSHA256: hexSum},
+		Signature:     installer.ProvenanceSignature{PublisherOrRootSig: ed25519.Sign(priv, installer.SignatureSigningPayload("@tanpopo/adapter-neg2-cat", "1.0.0", hexSum))},
+		ActorID:       approverID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved, err := inst.ApproveAndActivate(ctx, installer.ApproveInstallRequest{
+		InstallationID:      staged.Installation.InstallationID,
+		ExpectedVersion:     staged.Installation.Version,
+		ApproverPrincipalID: approverID,
+		ActivateImmediately: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adp, err := repo.CreateProviderAdapter(ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: approved.InstallationID, AdapterSlug: "example", AllowedHosts: []string{"api.example.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := repo.CreateProviderConnection(ctx, catalog.CreateProviderConnectionParams{
+		OrgID: org.ID, AdapterID: adp.ID, Name: "Neg2 Conn", EndpointBaseURL: "https://api.example.com",
+		DataRegion: "us", BillingMode: catalog.BillingModeCommercialAPI, AuthMode: catalog.AuthModeNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	valConn, err := repo.TransitionConnectionState(ctx, org.ID, conn.ID, catalog.ConnStateValidating, conn.Version, "probe")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sink.fail.Store(true)
+	if _, err := repo.TransitionConnectionState(ctx, org.ID, valConn.ID, catalog.ConnStateActive, valConn.Version, "activate"); err == nil {
+		t.Fatalf("expected TransitionConnectionState to roll back when AppendTx fails")
+	}
+	got, err := repo.GetProviderConnection(ctx, org.ID, conn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != catalog.ConnStateValidating || got.Version != valConn.Version {
+		t.Fatalf("expected rollback to VALIDATING v%d, got state=%s v%d", valConn.Version, got.State, got.Version)
+	}
+}
+
 

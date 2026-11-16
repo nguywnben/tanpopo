@@ -288,9 +288,11 @@ type ActiveStreamRegistry struct {
 }
 
 type streamHandle struct {
-	orgID     string
-	projectID string
-	cancel    context.CancelFunc
+	orgID           string
+	projectID       string
+	connectionID    string
+	pluginInstallID string
+	cancel          context.CancelFunc
 }
 
 // NewActiveStreamRegistry constructs an empty ActiveStreamRegistry.
@@ -320,6 +322,22 @@ func (r *ActiveStreamRegistry) Register(orgID, projectID, keyID string, cancel c
 		cancel:    cancel,
 	}
 	return id
+}
+
+// BindTarget attaches the active connectionID and extension installationID to an existing stream handle.
+func (r *ActiveStreamRegistry) BindTarget(keyID string, handleID uint64, connectionID, pluginInstallID string) {
+	if r == nil || keyID == "" || handleID == 0 {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if byStream := r.streams[keyID]; byStream != nil {
+		if h, ok := byStream[handleID]; ok {
+			h.connectionID = connectionID
+			h.pluginInstallID = pluginInstallID
+			byStream[handleID] = h
+		}
+	}
 }
 
 // Unregister removes a finished stream handle cleanly without leaking memory.
@@ -373,6 +391,58 @@ func (r *ActiveStreamRegistry) AbortScope(orgID, projectID string) int {
 	for keyID, byStream := range r.streams {
 		for handleID, h := range byStream {
 			if h.orgID == orgID && (projectID == "" || h.projectID == projectID) {
+				cancels = append(cancels, h.cancel)
+				delete(byStream, handleID)
+			}
+		}
+		if len(byStream) == 0 {
+			delete(r.streams, keyID)
+		}
+	}
+	r.mu.Unlock()
+
+	for _, c := range cancels {
+		c()
+	}
+	return len(cancels)
+}
+
+// AbortConnection cancels all registered active streams bound to connectionID and returns the aborted count.
+func (r *ActiveStreamRegistry) AbortConnection(connectionID string) int {
+	if r == nil || connectionID == "" {
+		return 0
+	}
+	r.mu.Lock()
+	var cancels []context.CancelFunc
+	for keyID, byStream := range r.streams {
+		for handleID, h := range byStream {
+			if h.connectionID == connectionID {
+				cancels = append(cancels, h.cancel)
+				delete(byStream, handleID)
+			}
+		}
+		if len(byStream) == 0 {
+			delete(r.streams, keyID)
+		}
+	}
+	r.mu.Unlock()
+
+	for _, c := range cancels {
+		c()
+	}
+	return len(cancels)
+}
+
+// AbortExtension cancels all registered active streams bound to pluginInstallID and returns the aborted count.
+func (r *ActiveStreamRegistry) AbortExtension(pluginInstallID string) int {
+	if r == nil || pluginInstallID == "" {
+		return 0
+	}
+	r.mu.Lock()
+	var cancels []context.CancelFunc
+	for keyID, byStream := range r.streams {
+		for handleID, h := range byStream {
+			if h.pluginInstallID == pluginInstallID {
 				cancels = append(cancels, h.cancel)
 				delete(byStream, handleID)
 			}

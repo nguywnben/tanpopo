@@ -43,6 +43,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	storageport "github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/telemetry/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -76,6 +77,7 @@ type RuntimeAcquirer func(ctx context.Context, target *snapshot.ResolvedTarget) 
 type Config struct {
 	Snapshots               *snapshot.Manager
 	Broker                  *broker.BlindHostCredentialBroker
+	KillSwitch              *killswitch.Registry
 	Audit                   storageport.AuditSink
 	Idempotency             *idempotency.Guard
 	PolicyEvaluator         *policyengine.Evaluator
@@ -97,6 +99,7 @@ type Config struct {
 type Handler struct {
 	snapshots               *snapshot.Manager
 	broker                  *broker.BlindHostCredentialBroker
+	killSwitch              *killswitch.Registry
 	audit                   storageport.AuditSink
 	idempotency             *idempotency.Guard
 	policyEval              *policyengine.Evaluator
@@ -187,6 +190,7 @@ func NewHandler(cfg Config) (*Handler, error) {
 	return &Handler{
 		snapshots:               cfg.Snapshots,
 		broker:                  cfg.Broker,
+		killSwitch:              cfg.KillSwitch,
 		audit:                   cfg.Audit,
 		idempotency:             cfg.Idempotency,
 		policyEval:              policyEval,
@@ -357,8 +361,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		insp           InspectResult
 		hasInitialInsp bool
 	)
-	rtLoaded, releaseLoaded, rtErr := h.acquireRuntime(streamCtx, initialTarget)
-	if rtErr != nil {
+	if blockedKS, ok := h.bindNativeTargetAndCheckKillSwitch(streamCtx, match.Key, initialTarget); !ok {
+		if len(candidates) <= 1 || (blockedKS != nil && (blockedKS.Level == killswitch.LevelVirtualKey || blockedKS.Level == killswitch.LevelProjectOrOrgFreeze)) {
+			writeKillSwitchError(w, reqID, blockedKS)
+			return
+		}
+	} else if rtLoaded, releaseLoaded, rtErr := h.acquireRuntime(streamCtx, initialTarget); rtErr != nil {
 		if errors.Is(rtErr, context.Canceled) {
 			if r.Context().Err() == nil && streamCtx.Err() != nil {
 				writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key was revoked or suspended before dispatch.", false)
@@ -672,6 +680,9 @@ func (h *Handler) executeNativeHop(
 	budgetSess *nativeBudgetSession,
 ) failover.AttemptResult {
 	clientCtx := r.Context()
+	if abortRes, ok := h.bindNativeHopTargetAndCheckKillSwitch(hopCtx, w, reqID, key, target); !ok {
+		return abortRes
+	}
 	if abortRes, ok := budgetSess.ensureHoldForTarget(hopCtx, w, target); !ok {
 		return abortRes
 	}
@@ -1822,13 +1833,48 @@ func (h *Handler) authenticateNativeRequest(
 		return "", nil, nil, snapshot.KeyMatchResult{}, 0, false
 	}
 
-	streamCtx, cancelStream := context.WithCancel(r.Context())
+	streamCtx, cancelRaw := context.WithCancel(r.Context())
 	targetEnvID := strings.TrimSpace(r.Header.Get("X-Tanpopo-Env-Id"))
-	match, handleID, authErr := h.snapshots.RegisterAuthenticatedStream(rawKey, targetEnvID, cancelStream)
+	match, handleID, authErr := h.snapshots.RegisterAuthenticatedStream(rawKey, targetEnvID, cancelRaw)
 	if authErr != nil {
-		cancelStream()
+		cancelRaw()
 		h.writeSnapshotAuthError(w, reqID, authErr)
 		return "", nil, nil, snapshot.KeyMatchResult{}, 0, false
+	}
+
+	var ksHandleID uint64
+	if h.killSwitch != nil {
+		q := killswitch.AdmissionQuery{
+			OrgID:        match.Key.OrgID,
+			ProjectID:    match.Key.ProjectID,
+			VirtualKeyID: match.Key.ID,
+		}
+		if ks, blocked := h.killSwitch.CheckAdmission(q); blocked {
+			h.snapshots.Streams().Unregister(match.Key.ID, handleID)
+			cancelRaw()
+			writeKillSwitchError(w, reqID, ks)
+			return "", nil, nil, snapshot.KeyMatchResult{}, 0, false
+		}
+		ksHandleID = h.killSwitch.RegisterStream(killswitch.StreamRegistration{
+			OrgID:        match.Key.OrgID,
+			ProjectID:    match.Key.ProjectID,
+			VirtualKeyID: match.Key.ID,
+			Cancel:       cancelRaw,
+		})
+		if ks, blocked := h.killSwitch.CheckAdmission(q); blocked {
+			h.killSwitch.UnregisterStream(ksHandleID)
+			h.snapshots.Streams().Unregister(match.Key.ID, handleID)
+			cancelRaw()
+			writeKillSwitchError(w, reqID, ks)
+			return "", nil, nil, snapshot.KeyMatchResult{}, 0, false
+		}
+	}
+
+	cancelStream := func() {
+		if h.killSwitch != nil && ksHandleID != 0 {
+			h.killSwitch.UnregisterStream(ksHandleID)
+		}
+		cancelRaw()
 	}
 
 	if !planePermitsProvider(match.Key.AllowedPlanes) {
@@ -1843,6 +1889,11 @@ func (h *Handler) authenticateNativeRequest(
 		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key route allowlist denies /native/%s/%s.", dialect, upstreamPath), false)
 		return "", nil, nil, snapshot.KeyMatchResult{}, 0, false
 	}
+	streamCtx = withNativeStreamTargetBinding(streamCtx, nativeStreamTargetBinding{
+		KeyID:            match.Key.ID,
+		SnapshotHandleID: handleID,
+		KSHandleID:       ksHandleID,
+	})
 	return rawKey, streamCtx, cancelStream, match, handleID, true
 }
 
@@ -2879,9 +2930,164 @@ func (h *Handler) resolveNativeTargetsWithPolicy(
 		return nil, false
 	}
 	if len(candidates) > 0 {
+		var ok bool
+		candidates, ok = h.filterNativeCandidatesByKillSwitch(w, reqID, match.Key, candidates)
+		if !ok {
+			return nil, false
+		}
+	}
+	if len(candidates) > 0 {
 		nativeTelemetryFromContext(ctx).recordValidatedModel(modelSlug)
 	}
 	return candidates, true
+}
+
+type nativeStreamTargetContextKey struct{}
+
+type nativeStreamTargetBinding struct {
+	KeyID            string
+	SnapshotHandleID uint64
+	KSHandleID       uint64
+}
+
+func withNativeStreamTargetBinding(ctx context.Context, b nativeStreamTargetBinding) context.Context {
+	return context.WithValue(ctx, nativeStreamTargetContextKey{}, b)
+}
+
+func nativeStreamTargetBindingFromContext(ctx context.Context) (nativeStreamTargetBinding, bool) {
+	if ctx == nil {
+		return nativeStreamTargetBinding{}, false
+	}
+	b, ok := ctx.Value(nativeStreamTargetContextKey{}).(nativeStreamTargetBinding)
+	return b, ok
+}
+
+func writeKillSwitchError(w http.ResponseWriter, reqID string, ks *killswitch.KillSwitch) {
+	if ks == nil {
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "kill_switch_active", "api_error", "Request blocked by emergency kill switch.", false)
+		return
+	}
+	switch ks.Level {
+	case killswitch.LevelVirtualKey:
+		writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key is suspended by emergency kill switch.", false)
+	case killswitch.LevelExtensionInstallation:
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "extension_quarantined", "extension_error", "Target provider adapter extension is halted by emergency kill switch.", false)
+	case killswitch.LevelProviderConnection:
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "provider_connection_killed", "upstream_error", "Target provider connection is halted by emergency kill switch.", false)
+	case killswitch.LevelProjectOrOrgFreeze:
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "tenant_traffic_frozen", "api_error", "Traffic for this organization or project is frozen by emergency kill switch.", false)
+	default:
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "kill_switch_active", "api_error", "Request blocked by emergency kill switch.", false)
+	}
+}
+
+func nativeTargetKillSwitchCoords(target *snapshot.ResolvedTarget) (connID, installID string) {
+	if target == nil {
+		return "", ""
+	}
+	if target.Connection != nil {
+		connID = target.Connection.ID
+	}
+	if target.Adapter != nil {
+		installID = target.Adapter.InstallationID
+	}
+	return connID, installID
+}
+
+func (h *Handler) filterNativeCandidatesByKillSwitch(
+	w http.ResponseWriter,
+	reqID string,
+	key *snapshot.VirtualKeyView,
+	candidates []*resolver.RankedTarget,
+) ([]*resolver.RankedTarget, bool) {
+	if h == nil || h.killSwitch == nil || key == nil || len(candidates) == 0 {
+		return candidates, true
+	}
+	filtered := make([]*resolver.RankedTarget, 0, len(candidates))
+	var firstBlocked *killswitch.KillSwitch
+	for _, cand := range candidates {
+		if cand == nil || cand.Target == nil {
+			continue
+		}
+		connID, installID := nativeTargetKillSwitchCoords(cand.Target)
+		if ks, blocked := h.killSwitch.CheckAdmission(killswitch.AdmissionQuery{
+			OrgID:           key.OrgID,
+			ProjectID:       key.ProjectID,
+			VirtualKeyID:    key.ID,
+			ConnectionID:    connID,
+			PluginInstallID: installID,
+		}); blocked {
+			if firstBlocked == nil {
+				firstBlocked = ks
+			}
+			continue
+		}
+		filtered = append(filtered, cand)
+	}
+	if len(filtered) == 0 && firstBlocked != nil {
+		writeKillSwitchError(w, reqID, firstBlocked)
+		return nil, false
+	}
+	return filtered, true
+}
+
+func (h *Handler) bindNativeTargetAndCheckKillSwitch(
+	ctx context.Context,
+	key *snapshot.VirtualKeyView,
+	target *snapshot.ResolvedTarget,
+) (*killswitch.KillSwitch, bool) {
+	if h == nil || key == nil || target == nil {
+		return nil, true
+	}
+	connID, installID := nativeTargetKillSwitchCoords(target)
+	if binding, ok := nativeStreamTargetBindingFromContext(ctx); ok {
+		if h.snapshots != nil && h.snapshots.Streams() != nil {
+			h.snapshots.Streams().BindTarget(binding.KeyID, binding.SnapshotHandleID, connID, installID)
+		}
+		if h.killSwitch != nil && binding.KSHandleID != 0 {
+			h.killSwitch.UpdateStreamTarget(binding.KSHandleID, connID, installID)
+		}
+	}
+	if h.killSwitch != nil {
+		if ks, blocked := h.killSwitch.CheckAdmission(killswitch.AdmissionQuery{
+			OrgID:           key.OrgID,
+			ProjectID:       key.ProjectID,
+			VirtualKeyID:    key.ID,
+			ConnectionID:    connID,
+			PluginInstallID: installID,
+		}); blocked {
+			return ks, false
+		}
+	}
+	return nil, true
+}
+
+func (h *Handler) bindNativeHopTargetAndCheckKillSwitch(
+	hopCtx context.Context,
+	w http.ResponseWriter,
+	reqID string,
+	key *snapshot.VirtualKeyView,
+	target *snapshot.ResolvedTarget,
+) (failover.AttemptResult, bool) {
+	ks, ok := h.bindNativeTargetAndCheckKillSwitch(hopCtx, key, target)
+	if ok {
+		return failover.AttemptResult{}, true
+	}
+	retryable := ks != nil && (ks.Level == killswitch.LevelProviderConnection || ks.Level == killswitch.LevelExtensionInstallation)
+	status := http.StatusServiceUnavailable
+	if ks != nil && ks.Level == killswitch.LevelVirtualKey {
+		status = http.StatusUnauthorized
+	}
+	ksCopy := *ks
+	return failover.AttemptResult{
+		Succeeded:  false,
+		Retryable:  retryable,
+		Outcome:    breaker.OutcomeCallerError,
+		HTTPStatus: status,
+		FlushFinal: func() {
+			writeKillSwitchError(w, reqID, &ksCopy)
+		},
+	}, false
 }
 
 func estimateNativeTokensFromJSON(raw []byte) (estTotal, baseIn, maxOut int64) {

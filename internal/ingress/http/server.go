@@ -60,6 +60,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/routing/breaker"
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	storageport "github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/telemetry/otel"
 )
@@ -80,18 +81,19 @@ var (
 
 // ServerConfig configures the Data Plane HTTP server fail-closed.
 type ServerConfig struct {
-	Snapshots               *snapshot.Manager
-	Broker                  *broker.BlindHostCredentialBroker
-	FaultGuard              *wasm.FaultGuard
-	PluginsDir              string
-	Audit                   storageport.AuditSink
-	NowMs                   func() int64
-	MaxRequestBodyBytes     int64
-	WasmPoolSize            int
-	DefaultFirstByteTimeout time.Duration
-	SSEHeartbeatInterval    time.Duration
-	IdempotencyDB           *sql.DB
-	IdempotencyTTL          time.Duration
+	Snapshots                *snapshot.Manager
+	Broker                   *broker.BlindHostCredentialBroker
+	FaultGuard               *wasm.FaultGuard
+	KillSwitch               *killswitch.Registry
+	PluginsDir               string
+	Audit                    storageport.AuditSink
+	NowMs                    func() int64
+	MaxRequestBodyBytes      int64
+	WasmPoolSize             int
+	DefaultFirstByteTimeout  time.Duration
+	SSEHeartbeatInterval     time.Duration
+	IdempotencyDB            *sql.DB
+	IdempotencyTTL           time.Duration
 	RemoteMediaPolicy        blob.RemoteMediaPolicy
 	DisableResponses         bool
 	DisableEmbeddings        bool
@@ -166,20 +168,21 @@ func (e *cachedAdapterEntry) release() {
 
 // Server serves Data Plane HTTP inference routes (/v1/chat/completions, /v1/responses, /v1/embeddings, /v1/models, /native/*).
 type Server struct {
-	snapshots         *snapshot.Manager
-	broker            *broker.BlindHostCredentialBroker
-	faultGuard        *wasm.FaultGuard
-	pluginsDir        string
-	audit             storageport.AuditSink
-	nowMs             func() int64
-	maxReqBodyBytes   int64
-	wasmPoolSize      int
-	firstByteTimeout  time.Duration
-	heartbeatInterval time.Duration
-	idempotency       *idempotency.Guard
-	remoteMediaPolicy blob.RemoteMediaPolicy
-	policyEval        *policyengine.Evaluator
-	rateLimiter       ratelimit.RateLimiterPort
+	snapshots               *snapshot.Manager
+	broker                  *broker.BlindHostCredentialBroker
+	faultGuard              *wasm.FaultGuard
+	killSwitch              *killswitch.Registry
+	pluginsDir              string
+	audit                   storageport.AuditSink
+	nowMs                   func() int64
+	maxReqBodyBytes         int64
+	wasmPoolSize            int
+	firstByteTimeout        time.Duration
+	heartbeatInterval       time.Duration
+	idempotency             *idempotency.Guard
+	remoteMediaPolicy       blob.RemoteMediaPolicy
+	policyEval              *policyengine.Evaluator
+	rateLimiter             ratelimit.RateLimiterPort
 	breaker                 *breaker.CircuitBreaker
 	routeResolver           *resolver.Resolver
 	budgetLedger            *ledger.Service
@@ -307,6 +310,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		snapshots:               cfg.Snapshots,
 		broker:                  cfg.Broker,
 		faultGuard:              faultGuard,
+		killSwitch:              cfg.KillSwitch,
 		pluginsDir:              resolvedPluginsDir,
 		audit:                   cfg.Audit,
 		nowMs:                   nowFn,
@@ -343,6 +347,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		nh, nhErr := native.NewHandler(native.Config{
 			Snapshots:               s.snapshots,
 			Broker:                  s.broker,
+			KillSwitch:              s.killSwitch,
 			Audit:                   s.audit,
 			Idempotency:             s.idempotency,
 			PolicyEvaluator:         s.policyEval,

@@ -11,6 +11,7 @@ package port
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 )
 
@@ -257,7 +258,24 @@ type LeaseRepository interface {
 	Get(ctx context.Context, leaseName string) (*DistributedLease, error)
 }
 
+// Canonical audit_events.entry_point values matching SQLite/PostgreSQL CHECK constraints.
+const (
+	AuditEntryPointAdminAPI       = "admin_api"
+	AuditEntryPointCLI            = "cli"
+	AuditEntryPointGitOpsBoot     = "gitops_boot"
+	AuditEntryPointSystemReaper   = "system_reaper"
+	AuditEntryPointDataPlaneGuard = "data_plane_guard"
+)
+
 // AuditSink writes immutable audit events (wired to full hash-chain persistence in TP-IMP-0023).
 type AuditSink interface {
 	Append(ctx context.Context, event AuditEvent) error
 }
+
+// TxAuditSink writes an immutable audit event inside an caller-managed *sql.Tx
+// BEFORE tx.Commit(), enforcing fail-closed transactional audit atomicity (CR-06 / TP-IMP-0023).
+type TxAuditSink interface {
+	AuditSink
+	AppendTx(ctx context.Context, tx *sql.Tx, event AuditEvent) error
+}
+

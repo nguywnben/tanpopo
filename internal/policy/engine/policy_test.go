@@ -1298,3 +1298,96 @@ func (s *sqlitePolicyAuditSink) Append(ctx context.Context, ev port.AuditEvent) 
 	)
 	return err
 }
+
+type togglingTxAuditSink struct {
+	mu   sync.Mutex
+	fail bool
+}
+
+func (t *togglingTxAuditSink) setFail(v bool) {
+	t.mu.Lock()
+	t.fail = v
+	t.mu.Unlock()
+}
+
+func (t *togglingTxAuditSink) Append(_ context.Context, _ port.AuditEvent) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.fail {
+		return errors.New("injected policy audit failure")
+	}
+	return nil
+}
+
+func (t *togglingTxAuditSink) AppendTx(_ context.Context, _ *sql.Tx, _ port.AuditEvent) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.fail {
+		return errors.New("injected policy tx audit failure")
+	}
+	return nil
+}
+
+func TestNEG2TransactionalAuditRollbackPolicy(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	clk := clock.NewFakeClock(time.UnixMilli(1760000400000))
+	nowFn := func() int64 { return clk.Now().UnixMilli() }
+	st, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: filepath.Join(t.TempDir(), "policy_neg2.db"),
+		NowMs:  nowFn,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	sink := &togglingTxAuditSink{fail: true}
+	polStore, err := engine.NewStore(engine.StoreConfig{DB: st.RawDB(), Audit: sink, NowMs: nowFn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "pol-neg2", DisplayName: "Policy NEG2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := polStore.CreatePolicy(ctx, engine.CreatePolicyParams{
+		OrgID: org.ID, ScopeType: snapshot.PolicyScopeOrg, ScopeID: org.ID,
+		PolicyType: snapshot.PolicyTypeRateLimit, FailureMode: snapshot.PolicyFailureClosed,
+		RulesJSON: `{"rpm_limit":10}`, Enabled: true,
+	}); err == nil {
+		t.Fatalf("expected CreatePolicy to roll back when AppendTx fails")
+	}
+	var cnt int
+	if err := st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM policies WHERE org_id = ?`, org.ID).Scan(&cnt); err != nil {
+		t.Fatal(err)
+	}
+	if cnt != 0 {
+		t.Fatalf("expected 0 policies after rollback, got %d", cnt)
+	}
+
+	sink.setFail(false)
+	created, err := polStore.CreatePolicy(ctx, engine.CreatePolicyParams{
+		OrgID: org.ID, ScopeType: snapshot.PolicyScopeOrg, ScopeID: org.ID,
+		PolicyType: snapshot.PolicyTypeRateLimit, FailureMode: snapshot.PolicyFailureClosed,
+		RulesJSON: `{"rpm_limit":10}`, Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sink.setFail(true)
+	newRules := `{"rpm_limit":5}`
+	if _, err := polStore.UpdatePolicy(ctx, org.ID, created.ID, created.Version, engine.UpdatePolicyParams{RulesJSON: &newRules}); err == nil {
+		t.Fatalf("expected UpdatePolicy to roll back when AppendTx fails")
+	}
+	got, err := polStore.GetPolicy(ctx, org.ID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != 1 || got.RulesJSON != `{"rpm_limit":10}` {
+		t.Fatalf("expected UpdatePolicy rollback preserving v1 rules, got %+v", got)
+	}
+}
+

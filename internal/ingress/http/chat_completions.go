@@ -32,6 +32,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -273,6 +274,9 @@ func (s *Server) executeChatCompletionHop(
 	admLease *admissionLease,
 	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
+	if abortRes, ok := s.bindHopTargetAndCheckKillSwitch(hopCtx, w, meta.RequestID, key, target); !ok {
+		return abortRes
+	}
 	if abortRes, ok := budgetSess.ensureHoldForTarget(hopCtx, w, target); !ok {
 		return abortRes
 	}
@@ -703,13 +707,48 @@ func (s *Server) authenticateProviderRequest(
 
 	// DEC-019: Authenticate strictly via snapshot.Manager APIs enforcing CheckServingReady()
 	// and register active cancellation handle atomically before admitting any work.
-	streamCtx, cancelStream := context.WithCancel(r.Context())
+	streamCtx, cancelRaw := context.WithCancel(r.Context())
 	targetEnvID := strings.TrimSpace(r.Header.Get("X-Tanpopo-Env-Id"))
-	match, handleID, authErr := s.snapshots.RegisterAuthenticatedStream(rawKey, targetEnvID, cancelStream)
+	match, handleID, authErr := s.snapshots.RegisterAuthenticatedStream(rawKey, targetEnvID, cancelRaw)
 	if authErr != nil {
-		cancelStream()
+		cancelRaw()
 		s.writeSnapshotAuthError(w, reqID, authErr)
 		return nil, nil, snapshot.KeyMatchResult{}, 0, false
+	}
+
+	var ksHandleID uint64
+	if s.killSwitch != nil {
+		q := killswitch.AdmissionQuery{
+			OrgID:        match.Key.OrgID,
+			ProjectID:    match.Key.ProjectID,
+			VirtualKeyID: match.Key.ID,
+		}
+		if ks, blocked := s.killSwitch.CheckAdmission(q); blocked {
+			s.snapshots.Streams().Unregister(match.Key.ID, handleID)
+			cancelRaw()
+			writeKillSwitchError(w, reqID, ks)
+			return nil, nil, snapshot.KeyMatchResult{}, 0, false
+		}
+		ksHandleID = s.killSwitch.RegisterStream(killswitch.StreamRegistration{
+			OrgID:        match.Key.OrgID,
+			ProjectID:    match.Key.ProjectID,
+			VirtualKeyID: match.Key.ID,
+			Cancel:       cancelRaw,
+		})
+		if ks, blocked := s.killSwitch.CheckAdmission(q); blocked {
+			s.killSwitch.UnregisterStream(ksHandleID)
+			s.snapshots.Streams().Unregister(match.Key.ID, handleID)
+			cancelRaw()
+			writeKillSwitchError(w, reqID, ks)
+			return nil, nil, snapshot.KeyMatchResult{}, 0, false
+		}
+	}
+
+	cancelStream := func() {
+		if s.killSwitch != nil && ksHandleID != 0 {
+			s.killSwitch.UnregisterStream(ksHandleID)
+		}
+		cancelRaw()
 	}
 
 	if !planePermitsProvider(match.Key.AllowedPlanes) {
@@ -724,6 +763,11 @@ func (s *Server) authenticateProviderRequest(
 		writeCanonicalError(w, reqID, http.StatusForbidden, "scope_or_plane_denied", "permission_error", fmt.Sprintf("Virtual Key route allowlist denies %s.", routePath), false)
 		return nil, nil, snapshot.KeyMatchResult{}, 0, false
 	}
+	streamCtx = withStreamTargetBinding(streamCtx, streamTargetBinding{
+		KeyID:            match.Key.ID,
+		SnapshotHandleID: handleID,
+		KSHandleID:       ksHandleID,
+	})
 	telemetryFromContext(r.Context()).recordAuth(match)
 	return streamCtx, cancelStream, match, handleID, true
 }

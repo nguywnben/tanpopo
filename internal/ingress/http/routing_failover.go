@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/declarative"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
@@ -20,8 +21,145 @@ import (
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"go.opentelemetry.io/otel/attribute"
 )
+
+type streamTargetContextKey struct{}
+
+type streamTargetBinding struct {
+	KeyID            string
+	SnapshotHandleID uint64
+	KSHandleID       uint64
+}
+
+func withStreamTargetBinding(ctx context.Context, b streamTargetBinding) context.Context {
+	return context.WithValue(ctx, streamTargetContextKey{}, b)
+}
+
+func streamTargetBindingFromContext(ctx context.Context) (streamTargetBinding, bool) {
+	if ctx == nil {
+		return streamTargetBinding{}, false
+	}
+	b, ok := ctx.Value(streamTargetContextKey{}).(streamTargetBinding)
+	return b, ok
+}
+
+func writeKillSwitchError(w http.ResponseWriter, reqID string, ks *killswitch.KillSwitch) {
+	if ks == nil {
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "kill_switch_active", "api_error", "Request blocked by emergency kill switch.", false)
+		return
+	}
+	switch ks.Level {
+	case killswitch.LevelVirtualKey:
+		writeCanonicalError(w, reqID, http.StatusUnauthorized, "invalid_virtual_key", "authentication_error", "Virtual Key is suspended by emergency kill switch.", false)
+	case killswitch.LevelExtensionInstallation:
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "extension_quarantined", "extension_error", "Target provider adapter extension is halted by emergency kill switch.", false)
+	case killswitch.LevelProviderConnection:
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "provider_connection_killed", "upstream_error", "Target provider connection is halted by emergency kill switch.", false)
+	case killswitch.LevelProjectOrOrgFreeze:
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "tenant_traffic_frozen", "api_error", "Traffic for this organization or project is frozen by emergency kill switch.", false)
+	default:
+		writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "kill_switch_active", "api_error", "Request blocked by emergency kill switch.", false)
+	}
+}
+
+func targetKillSwitchCoords(target *snapshot.ResolvedTarget) (connID, installID string) {
+	if target == nil {
+		return "", ""
+	}
+	if target.Connection != nil {
+		connID = target.Connection.ID
+	}
+	if target.Adapter != nil {
+		installID = target.Adapter.InstallationID
+	}
+	return connID, installID
+}
+
+func (s *Server) filterCandidatesByKillSwitch(
+	w http.ResponseWriter,
+	reqID string,
+	key *snapshot.VirtualKeyView,
+	candidates []*resolver.RankedTarget,
+) ([]*resolver.RankedTarget, bool) {
+	if s == nil || s.killSwitch == nil || key == nil || len(candidates) == 0 {
+		return candidates, true
+	}
+	filtered := make([]*resolver.RankedTarget, 0, len(candidates))
+	var firstBlocked *killswitch.KillSwitch
+	for _, cand := range candidates {
+		if cand == nil || cand.Target == nil {
+			continue
+		}
+		connID, installID := targetKillSwitchCoords(cand.Target)
+		if ks, blocked := s.killSwitch.CheckAdmission(killswitch.AdmissionQuery{
+			OrgID:           key.OrgID,
+			ProjectID:       key.ProjectID,
+			VirtualKeyID:    key.ID,
+			ConnectionID:    connID,
+			PluginInstallID: installID,
+		}); blocked {
+			if firstBlocked == nil {
+				firstBlocked = ks
+			}
+			continue
+		}
+		filtered = append(filtered, cand)
+	}
+	if len(filtered) == 0 && firstBlocked != nil {
+		writeKillSwitchError(w, reqID, firstBlocked)
+		return nil, false
+	}
+	return filtered, true
+}
+
+func (s *Server) bindHopTargetAndCheckKillSwitch(
+	hopCtx context.Context,
+	w http.ResponseWriter,
+	reqID string,
+	key *snapshot.VirtualKeyView,
+	target *snapshot.ResolvedTarget,
+) (failover.AttemptResult, bool) {
+	if s == nil || key == nil || target == nil {
+		return failover.AttemptResult{}, true
+	}
+	connID, installID := targetKillSwitchCoords(target)
+	if binding, ok := streamTargetBindingFromContext(hopCtx); ok {
+		if s.snapshots != nil && s.snapshots.Streams() != nil {
+			s.snapshots.Streams().BindTarget(binding.KeyID, binding.SnapshotHandleID, connID, installID)
+		}
+		if s.killSwitch != nil && binding.KSHandleID != 0 {
+			s.killSwitch.UpdateStreamTarget(binding.KSHandleID, connID, installID)
+		}
+	}
+	if s.killSwitch != nil {
+		if ks, blocked := s.killSwitch.CheckAdmission(killswitch.AdmissionQuery{
+			OrgID:           key.OrgID,
+			ProjectID:       key.ProjectID,
+			VirtualKeyID:    key.ID,
+			ConnectionID:    connID,
+			PluginInstallID: installID,
+		}); blocked {
+			retryable := ks.Level == killswitch.LevelProviderConnection || ks.Level == killswitch.LevelExtensionInstallation
+			status := http.StatusServiceUnavailable
+			if ks.Level == killswitch.LevelVirtualKey {
+				status = http.StatusUnauthorized
+			}
+			ksCopy := *ks
+			return failover.AttemptResult{
+				Succeeded:  false,
+				Retryable:  retryable,
+				Outcome:    breaker.OutcomeCallerError,
+				HTTPStatus: status,
+				FlushFinal: func() {
+					writeKillSwitchError(w, reqID, &ksCopy)
+				},
+			}, false
+		}
+	}
+	return failover.AttemptResult{}, true
+}
 
 func extractChatCapabilities(req *chatCompletionIngressRequest) []string {
 	var caps []string

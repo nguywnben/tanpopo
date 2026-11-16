@@ -167,6 +167,9 @@ func (s *Store) CreatePolicy(ctx context.Context, p CreatePolicyParams) (*Policy
 	if err := appendPolicyChangelogTx(ctx, tx, orgID, policyID, port.MutationUpsert, now); err != nil {
 		return nil, err
 	}
+	if err := s.emitPolicyMutationAuditTx(ctx, tx, orgID, policyID, scopeType, scopeID, policyType, p.ActorKind, p.ActorID, p.EntryPoint, p.RequestID, "policy.created", now); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("policy: commit create: %w", err)
 	}
@@ -270,6 +273,9 @@ func (s *Store) UpdatePolicy(ctx context.Context, orgID, policyID string, expect
 	}
 
 	if err := appendPolicyChangelogTx(ctx, tx, orgID, policyID, port.MutationUpsert, now); err != nil {
+		return nil, err
+	}
+	if err := s.emitPolicyMutationAuditTx(ctx, tx, orgID, policyID, cur.ScopeType, cur.ScopeID, cur.PolicyType, p.ActorKind, p.ActorID, p.EntryPoint, p.RequestID, "policy.updated", now); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -539,6 +545,57 @@ func (s *Store) emitViolationAudit(
 		ActorID:      actorID,
 		EntryPoint:   entryPoint,
 		EventType:    "policy.relaxation_blocked",
+		TargetType:   "policy",
+		TargetID:     policyID,
+		RequestID:    requestID,
+		MetadataJSON: string(metaBytes),
+	})
+}
+
+func (s *Store) emitPolicyMutationAuditTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	orgID, policyID, scopeType, scopeID, policyType, actorKind, actorID, entryPoint string,
+	requestID *string,
+	eventType string,
+	nowMs int64,
+) error {
+	if s.audit == nil {
+		return nil
+	}
+	txSink, ok := s.audit.(port.TxAuditSink)
+	if !ok {
+		return nil
+	}
+	if strings.TrimSpace(actorKind) == "" {
+		actorKind = "PRINCIPAL"
+	}
+	if strings.TrimSpace(actorID) == "" {
+		actorID = "system"
+	}
+	if strings.TrimSpace(entryPoint) == "" {
+		entryPoint = port.AuditEntryPointAdminAPI
+	}
+	audID, idErr := idgen.New(idgen.PrefixAudit)
+	if idErr != nil {
+		return idErr
+	}
+	metaBytes, err := json.Marshal(map[string]string{
+		"scope_type":  scopeType,
+		"scope_id":    scopeID,
+		"policy_type": policyType,
+	})
+	if err != nil {
+		return err
+	}
+	return txSink.AppendTx(ctx, tx, port.AuditEvent{
+		ID:           audID,
+		CreatedAtMs:  nowMs,
+		OrgID:        &orgID,
+		ActorKind:    actorKind,
+		ActorID:      actorID,
+		EntryPoint:   entryPoint,
+		EventType:    eventType,
 		TargetType:   "policy",
 		TargetID:     policyID,
 		RequestID:    requestID,

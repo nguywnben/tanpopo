@@ -197,6 +197,9 @@ func (s *Server) executeResponsesHop(
 	admLease *admissionLease,
 	budgetSess *requestBudgetSession,
 ) failover.AttemptResult {
+	if abortRes, ok := s.bindHopTargetAndCheckKillSwitch(hopCtx, w, meta.RequestID, key, target); !ok {
+		return abortRes
+	}
 	if abortRes, ok := budgetSess.ensureHoldForTarget(hopCtx, w, target); !ok {
 		return abortRes
 	}
