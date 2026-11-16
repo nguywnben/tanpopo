@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0025` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | **`READY`** *(Unlocked `2026-11-16` sequentially under [`DEC-034`](../../governance/decisions.md)/[`DEC-038`](../../governance/decisions.md) after DoR & upstream `Dependencies` [`TP-IMP-0002`, `0012`, `0020`, `0021`, `0024`] = `DONE`)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-16` by delegated **Gemini 4 Hydrogen** under [`DEC-034`](../../governance/decisions.md)/[`DEC-039`](../../governance/decisions.md) at implementation SHA `59595f246753386a2c55a30cf8d556f00e9f3203`, GitHub Actions Run `43948489151` `completed / success` across `Stage 0` + `Stage 1` `macos-15`/`ubuntu-24.04`/`windows-2022`; local `check.go --all`, `go vet ./...`, `tools/spikes`, `CGO_ENABLED=0`, `-race`, `internal/admin/http` `65.8%` cov, `TestOpenAPIRouteAndPayloadConformancePart2`, and fresh independent `code-reviewer` [`6e5d0235`] `APPROVE` + `security-auditor` [`2a52b2c1`] `PASS`)* |
 | **Size** | `L` (`internal/admin/http/extensions.go`, `connections.go`, `models.go`, `routes.go`, `policies.go`, `finops.go`, `traces.go`, `ops.go`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Write-only secrets, extension permission approval, financial chargeback export & Kill-Switch activation)* |
 | **Technical Owner** | `Staff Control-Plane Engineer` |
