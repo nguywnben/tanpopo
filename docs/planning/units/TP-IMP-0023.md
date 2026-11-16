@@ -4,8 +4,8 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0023` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0009`, `TP-IMP-0011`, `TP-IMP-0022` — `GAP-01, 05`)* |
-| **Size** | `L` (`internal/security/audit/*`, `internal/security/killswitch/*`, `db/migrations/sqlite/0010_audit_killswitch.sql`) |
+| **Status** | **`READY`** *(Unlocked `2026-11-16` sequentially under [`DEC-034`](../../governance/decisions.md)/[`DEC-036`](../../governance/decisions.md) after DoR & upstream `Dependencies` [`TP-IMP-0003`, `0009`, `0011`, `0022`] = `DONE`; SQLite migration reconciled from `0010` [`0010_policies.sql`] to sequential `db/migrations/sqlite/0014_audit_killswitch.sql`)* |
+| **Size** | `L` (`internal/security/audit/*`, `internal/security/killswitch/*`, `db/migrations/sqlite/0014_audit_killswitch.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Tamper-evident forensic integrity `TM-13` & emergency security incident containment)* |
 | **Technical Owner** | `Principal Security & Incident Response Engineer` |
 
@@ -19,11 +19,11 @@ Build the two ultimate defensive and forensic governance capabilities of the Con
 ## 2. Scope (In-Scope / Out-of-Scope & Target Paths)
 - **In-Scope (`Files Touched`):**
   - `internal/security/audit/jcs.go` (deterministic `RFC 8785` JSON canonicalizer across map keys, Unicode strings, and integer representations).
-  - `internal/security/audit/logger.go` (gapless monotonic `seq_no` hash-chain writer partitioned by `chain_key` (`org_id` or `"SYSTEM"`), scrubbed through `privacy.Redactor`, enforcing `Fail-Closed` semantics on administrative mutations).
+  - `internal/security/audit/logger.go` (gapless monotonic `seq_no` hash-chain writer partitioned by `chain_key` (`org_id` or `"SYSTEM"`), scrubbed through `privacy.Redactor` hook, enforcing `Fail-Closed` semantics on administrative mutations).
   - `internal/security/audit/verifier.go` (full hash-chain verifier across per-`org_id` and `"SYSTEM"` chains, raising `ALT-AUDIT-TAMPER` immediately upon detecting a single flipped bit or deleted row — `CT-30`, `OPS-AC-08`).
   - `internal/security/killswitch/registry.go` (`InFlightStream` registry indexed by `(org_id, project_id, vkey_id, connection_id, plugin_install_id)` invoking bulk `CancelFunc` callbacks in `< 1s` with audited reason codes when any kill-switch level fires).
   - `internal/security/audit/blastradius.go` (forensic correlation query joining `request_traces_meta` + `audit_events` by `plugin_install_id` / `connection_id` / `vkey_id` across `[from, to]`).
-  - `db/migrations/sqlite/0010_audit_killswitch.sql` (`audit_events` guarded by `BEFORE UPDATE / BEFORE DELETE RAISE(ABORT, 'audit_events_immutable')` triggers, `emergency_kill_switches`).
+  - `db/migrations/sqlite/0014_audit_killswitch.sql` (`audit_events` guarded by `BEFORE UPDATE / BEFORE DELETE RAISE(ABORT, 'audit_events_immutable')` triggers, `emergency_kill_switches`; sequential slot `0014` after `0013_traces_blobs.sql`).
 - **Out-of-Scope:** Multi-node `< 5s` cluster-wide kill-switch fan-out over `Valkey` (owned by `TP-IMP-0040`).
 
 ## 3. Requirements, Dependencies & Design References
@@ -47,7 +47,7 @@ Build the two ultimate defensive and forensic governance capabilities of the Con
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** No role (`ORG_OWNER`, `OPERATOR`, `SECURITY_REVIEWER`) can delete rows from or disable `audit_events`; lifting an active `Kill-Switch` requires appending a new audited event with a non-empty mandatory `reason`.
-- **Rollback:** Additive schema `0010_audit_killswitch.sql`.
+- **Rollback:** Additive schema `0014_audit_killswitch.sql`.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0003` (`CR-06` per-`Org` `JCS` hash-chain lock), `TP-IMP-0009`, `TP-IMP-0011`, and `TP-IMP-0022` are complete.

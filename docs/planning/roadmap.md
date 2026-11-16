@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0021: DONE` | `DEC-034 Active [0021..0030]` | `READY: TP-IMP-0022 [1 / 47]`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `1.26.0-dec-035-0021-done-0022-ready` | **Date:** `2026-11-16`
+> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0022: DONE` | `DEC-034 Active [0021..0030]` | `READY: TP-IMP-0023 [1 / 47]`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.27.0-dec-036-0022-done-0023-ready` | **Date:** `2026-11-16`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **MANDATORY GOVERNANCE NOTICE (`TP-IMP-0005..0021 ACCEPTED — 1 READY [TP-IMP-0022] / 25 BLOCKED`):**
+> - **MANDATORY GOVERNANCE NOTICE (`TP-IMP-0005..0022 ACCEPTED — 1 READY [TP-IMP-0023] / 24 BLOCKED`):**
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
 >   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Following acceptance of **`TP-IMP-0005`**..**`0011`** (`DEC-011`..`DEC-021`), **`TP-IMP-0012`..`0013`** (`DEC-022`..`DEC-024` by delegated Owner **Carbon**), **`TP-IMP-0014`..`0020`** (`DEC-025`..`DEC-032` by delegated **Gemini 4 Hydrogen**), preservation of `DEC-033` as **`REVOKED_BY_OWNER`** (`8cfe2492`, CI `43798260070`), and **`TP-IMP-0021`** acceptance (`DEC-034`/`DEC-035`, `c751d74d`, CI `43811187903`), **`TP-IMP-0001`..`0021` are `DONE` (`21 / 47`)**, **[`TP-IMP-0022`](./units/TP-IMP-0022.md)** is **`READY` (`1 / 47`)** (`0013_traces_blobs.sql`), **`0 / 47` are `READY_FOR_REVIEW`**, and `TP-IMP-0023`..`0047` (`25 / 47`) remain **`BLOCKED`** behind upstream dependency, `REQUIRES_STRONG_REVIEW`, `COND-PO-01`..`05` gates, sequential `DEC-034` progression (`0023`..`0030`), and direct human Product Owner authorization (`0031`..`0047`).
+>   3. Following acceptance of **`TP-IMP-0005`**..**`0011`** (`DEC-011`..`DEC-021`), **`TP-IMP-0012`..`0013`** (`DEC-022`..`DEC-024` by delegated Owner **Carbon**), **`TP-IMP-0014`..`0020`** (`DEC-025`..`DEC-032` by delegated **Gemini 4 Hydrogen**), preservation of `DEC-033` as **`REVOKED_BY_OWNER`** (`8cfe2492`, CI `43798260070`), **`TP-IMP-0021`** acceptance (`DEC-034`/`DEC-035`, `c751d74d`, CI `43811187903`), and **`TP-IMP-0022`** acceptance (`DEC-034`/`DEC-036`, `331113e6`, CI `43825991960`), **`TP-IMP-0001`..`0022` are `DONE` (`22 / 47`)**, **[`TP-IMP-0023`](./units/TP-IMP-0023.md)** is **`READY` (`1 / 47`)** (`0014_audit_killswitch.sql`), **`0 / 47` are `READY_FOR_REVIEW`**, and `TP-IMP-0024`..`0047` (`24 / 47`) remain **`BLOCKED`** behind upstream dependency, `REQUIRES_STRONG_REVIEW`, `COND-PO-01`..`05` gates, sequential `DEC-034` progression (`0024`..`0030`), and direct human Product Owner authorization (`0031`..`0047`).
 
 ---
 

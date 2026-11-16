@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0022` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | **`READY`** *(Unlocked `2026-11-16` sequentially under [`DEC-034`](../../governance/decisions.md)/[`DEC-035`](../../governance/decisions.md) after DoR & upstream `Dependencies` [`TP-IMP-0002`, `0015`, `0021`] = `DONE`; SQLite migration reconciled from `0009` [`0009_idempotency.sql`] to sequential `db/migrations/sqlite/0013_traces_blobs.sql`)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-16` by Gemini 4 Hydrogen under [`DEC-034`](../../governance/decisions.md)/[`DEC-036`](../../governance/decisions.md); final impl commit `331113e611771f6dcdaf017fcf1aa5705872b23f`, GitHub Actions Run `43825991960` `completed / success`, independent `code-reviewer` [`b22a8b2f`] `APPROVE` & `security-auditor` [`ac13ad2c`] `PASS`; SQLite migration `db/migrations/sqlite/0013_traces_blobs.sql`)* |
 | **Size** | `M` (`go.mod`, `internal/telemetry/otel/*`, `internal/telemetry/privacy/*`, `deploy/monitoring/alerts.yaml`, `db/migrations/sqlite/0013_traces_blobs.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(`0-byte` default prompt privacy & hot-path inference protection under OTLP collector blackholes)* |
 | **Technical Owner** | `Staff Observability & Privacy Engineer` |
