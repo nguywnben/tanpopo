@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
@@ -398,7 +399,24 @@ func (r *Registry) StartWatcher(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// CheckAdmission reports whether any active kill switch blocks the queried coordinates.
+func killSwitchPriority(level Level) int {
+	switch level {
+	case LevelVirtualKey:
+		return 1
+	case LevelProjectOrOrgFreeze:
+		return 2
+	case LevelExtensionInstallation:
+		return 3
+	case LevelProviderConnection:
+		return 4
+	default:
+		return 99
+	}
+}
+
+// CheckAdmission reports whether any active kill switch blocks the queried coordinates,
+// returning the highest-precedence match deterministically (VIRTUAL_KEY > PROJECT_OR_ORG_FREEZE >
+// EXTENSION_INSTALLATION > PROVIDER_CONNECTION).
 func (r *Registry) CheckAdmission(q AdmissionQuery) (*KillSwitch, bool) {
 	if r == nil {
 		return nil, false
@@ -406,6 +424,10 @@ func (r *Registry) CheckAdmission(q AdmissionQuery) (*KillSwitch, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	var (
+		best    KillSwitch
+		hasBest bool
+	)
 	for _, ks := range r.active {
 		if !ks.Active {
 			continue
@@ -413,30 +435,36 @@ func (r *Registry) CheckAdmission(q AdmissionQuery) (*KillSwitch, bool) {
 		if ks.OrgID != nil && *ks.OrgID != "" && q.OrgID != *ks.OrgID {
 			continue
 		}
+		matched := false
 		switch ks.Level {
 		case LevelProjectOrOrgFreeze:
-			if (q.OrgID != "" && ks.TargetID == q.OrgID) || (q.ProjectID != "" && ks.TargetID == q.ProjectID) {
-				cp := ks
-				return &cp, true
-			}
+			matched = (q.OrgID != "" && ks.TargetID == q.OrgID) || (q.ProjectID != "" && ks.TargetID == q.ProjectID)
 		case LevelVirtualKey:
-			if q.VirtualKeyID != "" && ks.TargetID == q.VirtualKeyID {
-				cp := ks
-				return &cp, true
-			}
+			matched = q.VirtualKeyID != "" && ks.TargetID == q.VirtualKeyID
 		case LevelProviderConnection:
-			if q.ConnectionID != "" && ks.TargetID == q.ConnectionID {
-				cp := ks
-				return &cp, true
-			}
+			matched = q.ConnectionID != "" && ks.TargetID == q.ConnectionID
 		case LevelExtensionInstallation:
-			if q.PluginInstallID != "" && ks.TargetID == q.PluginInstallID {
-				cp := ks
-				return &cp, true
-			}
+			matched = q.PluginInstallID != "" && ks.TargetID == q.PluginInstallID
+		}
+		if !matched {
+			continue
+		}
+		if !hasBest {
+			best = ks
+			hasBest = true
+			continue
+		}
+		curP := killSwitchPriority(ks.Level)
+		bestP := killSwitchPriority(best.Level)
+		if curP < bestP || (curP == bestP && ks.ID < best.ID) {
+			best = ks
 		}
 	}
-	return nil, false
+	if !hasBest {
+		return nil, false
+	}
+	cp := best
+	return &cp, true
 }
 
 // Trigger activates an emergency kill switch, writes config_changelog (emergency=1) and
@@ -449,7 +477,7 @@ func (r *Registry) Trigger(ctx context.Context, p TriggerParams) (*KillSwitch, e
 	if !isValidLevel(p.Level) || targetID == "" || principalID == "" {
 		return nil, fmt.Errorf("%w: valid level, target_id, and triggered_by_principal_id are required", port.ErrInvalidInput)
 	}
-	if len(reason) < 5 {
+	if utf8.RuneCountInString(reason) < 5 {
 		return nil, fmt.Errorf("%w: kill-switch reason must be at least 5 characters", port.ErrInvalidInput)
 	}
 
@@ -602,7 +630,7 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 	if ksID == "" || principalID == "" || p.ExpectedVersion < 1 {
 		return nil, fmt.Errorf("%w: kill_switch_id, cleared_by_principal_id, and expected_version >= 1 are required", port.ErrInvalidInput)
 	}
-	if len(clearReason) < 5 {
+	if utf8.RuneCountInString(clearReason) < 5 {
 		return nil, fmt.Errorf("%w: clear_reason must be at least 5 characters", port.ErrInvalidInput)
 	}
 
@@ -768,6 +796,40 @@ func (r *Registry) GetInstance(ctx context.Context, killSwitchID string) (*KillS
 		return nil, err
 	}
 	return &ks, nil
+}
+
+// ListInstance returns global instance-scoped kill switches (org_id IS NULL).
+// Callers MUST authorize INSTANCE OPERATOR prior to invoking this method.
+func (r *Registry) ListInstance(ctx context.Context, activeOnly bool) ([]KillSwitch, error) {
+	query := `
+		SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
+		       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
+		       triggered_at_ms, cleared_at_ms
+		FROM emergency_kill_switches
+		WHERE org_id IS NULL`
+	if activeOnly {
+		query += ` AND active = 1`
+	}
+	query += ` ORDER BY triggered_at_ms DESC`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("killswitch: list instance switches: %w", err)
+	}
+	defer rows.Close()
+
+	var out []KillSwitch
+	for rows.Next() {
+		ks, serr := scanKillSwitch(rows)
+		if serr != nil {
+			return nil, serr
+		}
+		out = append(out, ks)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("killswitch: iterate instance switches: %w", err)
+	}
+	return out, nil
 }
 
 // List returns kill switches strictly scoped to non-empty orgID.

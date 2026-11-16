@@ -10,6 +10,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -64,6 +65,10 @@ func (a *memAuditSink) Append(_ context.Context, ev storageport.AuditEvent) erro
 	a.mu.Unlock()
 	_, _ = a.raws.Write(append(line, '\n'))
 	return nil
+}
+
+func (a *memAuditSink) AppendTx(ctx context.Context, _ *sql.Tx, ev storageport.AuditEvent) error {
+	return a.Append(ctx, ev)
 }
 
 func (a *memAuditSink) events() []storageport.AuditEvent {

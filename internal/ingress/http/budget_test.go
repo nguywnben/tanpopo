@@ -1157,7 +1157,7 @@ func TestTP0021_MultiCompletionPreHoldScalesByCompletionCount(t *testing.T) {
 func TestTP0021_TPMReconciliationOrderingAndFMEA04Fallback(t *testing.T) {
 	t.Run("sync_settle_failure_does_not_refund_tpm", func(t *testing.T) {
 		bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 10_000, 100)
-		ps, err := policyengine.NewStore(policyengine.StoreConfig{DB: bh.h.store.RawDB(), NowMs: func() int64 { return bh.h.clk.Now().UnixMilli() }})
+		ps, err := policyengine.NewStore(policyengine.StoreConfig{DB: bh.h.store.RawDB(), Audit: bh.h.audit, NowMs: func() int64 { return bh.h.clk.Now().UnixMilli() }})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1207,7 +1207,7 @@ func TestTP0021_TPMReconciliationOrderingAndFMEA04Fallback(t *testing.T) {
 
 	t.Run("fmea04_stream_abort_reconciles_fallback_tokens_into_tpm", func(t *testing.T) {
 		bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 50_000, 100)
-		ps, err := policyengine.NewStore(policyengine.StoreConfig{DB: bh.h.store.RawDB(), NowMs: func() int64 { return bh.h.clk.Now().UnixMilli() }})
+		ps, err := policyengine.NewStore(policyengine.StoreConfig{DB: bh.h.store.RawDB(), Audit: bh.h.audit, NowMs: func() int64 { return bh.h.clk.Now().UnixMilli() }})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1464,6 +1464,7 @@ func TestTP0021_VideoPayloadNotDiscountedAndMultiCompletionDefaultHoldScalesPoli
 	bh := setupBudgetIngressHarness(t, `{"input_per_1m_nano_usd":1000000000,"output_per_1m_nano_usd":1000000000}`, 100_000, 100)
 	ps, err := policyengine.NewStore(policyengine.StoreConfig{
 		DB:    bh.h.store.RawDB(),
+		Audit: bh.h.audit,
 		NowMs: func() int64 { return bh.h.clk.Now().UnixMilli() },
 	})
 	if err != nil {

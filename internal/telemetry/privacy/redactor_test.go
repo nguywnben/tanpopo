@@ -290,3 +290,19 @@ func TestRedactorPrefixedCookiesAndDebugPayload(t *testing.T) {
 	}
 }
 
+func TestRedactorTPAdmAndTPBootTokens(t *testing.T) {
+	t.Parallel()
+	r := privacy.NewDefaultRedactor()
+	const admTok = "tp_adm_secretAdminToken1234"
+	const bootTok = "tp_boot_bootstrapSecret5678"
+	out := r.SanitizeString("adm=" + admTok + " boot=" + bootTok + " keep=task-1234")
+	for _, secret := range []string{admTok, bootTok} {
+		if strings.Contains(out, secret) {
+			t.Fatalf("expected %q redacted in %q", secret, out)
+		}
+	}
+	if !strings.Contains(out, "task-1234") {
+		t.Fatalf("expected benign token preserved in %q", out)
+	}
+}
+

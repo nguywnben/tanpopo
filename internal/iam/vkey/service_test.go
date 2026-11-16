@@ -64,6 +64,7 @@ func newVKeyTestHarness(t *testing.T) *vkeyTestHarness {
 		DB:        st.RawDB(),
 		NowMs:     func() int64 { return fk.Now().UTC().UnixMilli() },
 		Snapshots: mgr,
+		AuditSink: &syncedAuditRecorder{},
 	})
 	if err != nil {
 		t.Fatalf("vkey.NewService: %v", err)
@@ -445,8 +446,8 @@ func TestVirtualKeySuspendReactivateTTLExpiryAndCanaryHygiene(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Revoke audited key: %v", err)
 	}
-	if len(auditEvents) != 1 || auditEvents[0].EventType != "virtual_key.revoked" {
-		t.Fatalf("expected virtual_key.revoked audit event, got %+v", auditEvents)
+	if len(auditEvents) != 2 || auditEvents[0].EventType != "virtual_key.created" || auditEvents[1].EventType != "virtual_key.revoked" {
+		t.Fatalf("expected virtual_key.created + virtual_key.revoked audit events, got %+v", auditEvents)
 	}
 
 	// Cross-tenant owner_principal_id anti-oracle (AUTH-15): Org B principal or unknown principal
@@ -532,6 +533,7 @@ func TestNewServiceRequiresSnapshotsUnlessDetachedOptIn(t *testing.T) {
 	detached, err := NewService(ServiceConfig{
 		DB:                        h.st.RawDB(),
 		AllowDetachedControlPlane: true,
+		AuditSink:                 &syncedAuditRecorder{},
 	})
 	if err != nil || detached == nil {
 		t.Fatalf("NewService with explicit AllowDetachedControlPlane=true failed: %v", err)
@@ -548,6 +550,10 @@ func (r *syncedAuditRecorder) Append(_ context.Context, ev port.AuditEvent) erro
 	defer r.mu.Unlock()
 	r.events = append(r.events, ev)
 	return nil
+}
+
+func (r *syncedAuditRecorder) AppendTx(ctx context.Context, _ *sql.Tx, ev port.AuditEvent) error {
+	return r.Append(ctx, ev)
 }
 
 func (r *syncedAuditRecorder) Count(eventType string) int {
@@ -722,17 +728,17 @@ func TestRevokeAndTransitionsRefreshFailureFailClosedWithoutRollbackOrLostAudit(
 		t.Fatalf("stale snapshot expected ErrSnapshotStale, got %v", err)
 	}
 
-	// Verify audit metadata explicitly flagged snapshot_sync_pending:true while preserving event.
+	// Verify supplementary audit event explicitly flagged snapshot_sync_pending:true while preserving atomic virtual_key.revoked.
 	auditRec.mu.Lock()
-	lastMeta := ""
+	pendingMeta := ""
 	for _, ev := range auditRec.events {
-		if ev.EventType == "virtual_key.revoked" && ev.TargetID == kRev.Summary.ID {
-			lastMeta = ev.MetadataJSON
+		if ev.EventType == "virtual_key.snapshot_sync_pending" && ev.TargetID == kRev.Summary.ID {
+			pendingMeta = ev.MetadataJSON
 		}
 	}
 	auditRec.mu.Unlock()
-	if !strings.Contains(lastMeta, `"snapshot_sync_pending":true`) {
-		t.Fatalf("expected audit metadata to record snapshot_sync_pending:true, got %q", lastMeta)
+	if !strings.Contains(pendingMeta, `"snapshot_sync_pending":true`) {
+		t.Fatalf("expected audit metadata to record snapshot_sync_pending:true, got %q", pendingMeta)
 	}
 
 	// 4. FinalizeExpiredRotations commits in dbWrite while Refresh fails -> old grace secret invalidated immediately on RAM.
@@ -755,7 +761,7 @@ func TestRevokeAndTransitionsRefreshFailureFailClosedWithoutRollbackOrLostAudit(
 	if err != nil {
 		t.Fatalf("NewManager fin: %v", err)
 	}
-	svcFin, err := NewService(ServiceConfig{DB: dbW2.RawDB(), NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }, Snapshots: mgrFin})
+	svcFin, err := NewService(ServiceConfig{DB: dbW2.RawDB(), NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }, Snapshots: mgrFin, AuditSink: &syncedAuditRecorder{}})
 	if err != nil {
 		t.Fatalf("NewService fin: %v", err)
 	}
@@ -796,7 +802,7 @@ func TestRevokeAndTransitionsRefreshFailureFailClosedWithoutRollbackOrLostAudit(
 	proj3, _ := dbW3.Tenancy().CreateProject(ctx, org3.ID, port.CreateProjectParams{Slug: "seq-proj", DisplayName: "Seq Proj"})
 	env3, _ := dbW3.Tenancy().CreateEnvironment(ctx, org3.ID, proj3.ID, port.CreateEnvironmentParams{Slug: "prod"})
 	mgrSeq, _ := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: dbR3.RawDB(), NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }})
-	svcSeq, _ := NewService(ServiceConfig{DB: dbW3.RawDB(), NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }, Snapshots: mgrSeq})
+	svcSeq, _ := NewService(ServiceConfig{DB: dbW3.RawDB(), NowMs: func() int64 { return fk.Now().UTC().UnixMilli() }, Snapshots: mgrSeq, AuditSink: &syncedAuditRecorder{}})
 	kSeq1, err := svcSeq.Create(ctx, CreateParams{OrgID: org3.ID, ProjectID: proj3.ID, EnvID: env3.ID, Name: "k-seq"})
 	if err != nil {
 		t.Fatalf("Create kSeq1: %v", err)
@@ -817,6 +823,9 @@ func TestRevokeAndTransitionsRefreshFailureFailClosedWithoutRollbackOrLostAudit(
 type auditRecorderFunc func(ctx context.Context, ev port.AuditEvent) error
 
 func (f auditRecorderFunc) Append(ctx context.Context, ev port.AuditEvent) error { return f(ctx, ev) }
+func (f auditRecorderFunc) AppendTx(ctx context.Context, _ *sql.Tx, ev port.AuditEvent) error {
+	return f(ctx, ev)
+}
 
 type failingVKeyTxAuditSink struct {
 	fail atomicBool
@@ -998,5 +1007,21 @@ func (c *capturingTxAuditSink) AppendTx(ctx context.Context, tx *sql.Tx, ev port
 	}
 	*c.events = append(*c.events, ev)
 	return nil
+}
+
+type nonTxVKeyAuditSink struct{}
+
+func (nonTxVKeyAuditSink) Append(context.Context, port.AuditEvent) error { return nil }
+
+func TestVKeyNewServiceRejectsMissingOrNonTxAuditSink(t *testing.T) {
+	t.Parallel()
+	h := newVKeyTestHarness(t)
+
+	if _, err := NewService(ServiceConfig{DB: h.st.RawDB(), Snapshots: h.mgr, AuditSink: nil}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewService nil AuditSink to fail ErrInvalidInput, got %v", err)
+	}
+	if _, err := NewService(ServiceConfig{DB: h.st.RawDB(), Snapshots: h.mgr, AuditSink: nonTxVKeyAuditSink{}}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewService non-TxAuditSink to fail ErrInvalidInput, got %v", err)
+	}
 }
 

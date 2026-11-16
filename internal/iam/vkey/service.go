@@ -131,7 +131,7 @@ type Service struct {
 	db        *sql.DB
 	nowMs     func() int64
 	snapshots *snapshot.Manager
-	auditSink port.AuditSink
+	auditSink port.TxAuditSink
 }
 
 // NewService validates dependencies and constructs a Virtual Key Service.
@@ -142,6 +142,13 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	if cfg.Snapshots == nil && !cfg.AllowDetachedControlPlane {
 		return nil, fmt.Errorf("%w: non-nil snapshot.Manager is required unless AllowDetachedControlPlane is explicitly enabled", port.ErrInvalidInput)
 	}
+	if cfg.AuditSink == nil {
+		return nil, fmt.Errorf("%w: non-nil port.TxAuditSink is required", port.ErrInvalidInput)
+	}
+	txAudit, ok := cfg.AuditSink.(port.TxAuditSink)
+	if !ok {
+		return nil, fmt.Errorf("%w: AuditSink must implement port.TxAuditSink", port.ErrInvalidInput)
+	}
 	nowFn := cfg.NowMs
 	if nowFn == nil {
 		nowFn = func() int64 { return time.Now().UTC().UnixMilli() }
@@ -150,7 +157,7 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 		db:        cfg.DB,
 		nowMs:     nowFn,
 		snapshots: cfg.Snapshots,
-		auditSink: cfg.AuditSink,
+		auditSink: txAudit,
 	}, nil
 }
 
@@ -730,10 +737,9 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 	if actor == "" {
 		actor = "system"
 	}
-	wroteTxAudit, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, port.AuditEntryPointAdminAPI, "virtual_key.revoked", params.KeyID, map[string]any{
+	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, port.AuditEntryPointAdminAPI, "virtual_key.revoked", params.KeyID, map[string]any{
 		"mode": mode,
-	}, now)
-	if aerr != nil {
+	}, now); aerr != nil {
 		return nil, aerr
 	}
 
@@ -751,34 +757,25 @@ func (s *Service) Revoke(ctx context.Context, params RevokeParams) (*VirtualKeyS
 		s.snapshots.Streams().AbortKey(params.KeyID)
 	}
 
-	var auditErr error
-	if s.auditSink != nil && !wroteTxAudit {
-		auditCtx := context.WithoutCancel(ctx)
-		audID, idErr := idgen.New(idgen.PrefixAudit)
-		if idErr != nil {
-			auditErr = idErr
+	if syncErr != nil {
+		var pendingAuditErr error
+		if audID, idErr := idgen.New(idgen.PrefixAudit); idErr != nil {
+			pendingAuditErr = idErr
 		} else {
-			meta := fmt.Sprintf(`{"mode":%q}`, mode)
-			if syncErr != nil {
-				meta = fmt.Sprintf(`{"mode":%q,"snapshot_sync_pending":true}`, mode)
-			}
-			auditErr = s.auditSink.Append(auditCtx, port.AuditEvent{
+			pendingAuditErr = s.auditSink.Append(context.WithoutCancel(ctx), port.AuditEvent{
 				ID:           audID,
 				CreatedAtMs:  now,
 				OrgID:        &params.OrgID,
 				ActorKind:    "PRINCIPAL",
 				ActorID:      actor,
 				EntryPoint:   port.AuditEntryPointAdminAPI,
-				EventType:    "virtual_key.revoked",
+				EventType:    "virtual_key.snapshot_sync_pending",
 				TargetType:   "virtual_key",
 				TargetID:     params.KeyID,
-				MetadataJSON: meta,
+				MetadataJSON: fmt.Sprintf(`{"mode":%q,"snapshot_sync_pending":true}`, mode),
 			})
 		}
-	}
-
-	if combinedErr := errors.Join(syncErr, auditErr); combinedErr != nil {
-		return summary, combinedErr
+		return summary, errors.Join(syncErr, pendingAuditErr)
 	}
 	return summary, nil
 }
@@ -894,11 +891,7 @@ func (s *Service) emitAuditTx(
 	now int64,
 ) (bool, error) {
 	if s.auditSink == nil {
-		return false, nil
-	}
-	txSink, ok := s.auditSink.(port.TxAuditSink)
-	if !ok {
-		return false, nil
+		return false, fmt.Errorf("%w: non-nil port.TxAuditSink is required", port.ErrInvalidInput)
 	}
 	audID, err := idgen.New(idgen.PrefixAudit)
 	if err != nil {
@@ -920,7 +913,7 @@ func (s *Service) emitAuditTx(
 	if strings.TrimSpace(entryPoint) == "" {
 		entryPoint = port.AuditEntryPointAdminAPI
 	}
-	return true, txSink.AppendTx(ctx, tx, port.AuditEvent{
+	return true, s.auditSink.AppendTx(ctx, tx, port.AuditEvent{
 		ID:           audID,
 		CreatedAtMs:  now,
 		OrgID:        &orgID,

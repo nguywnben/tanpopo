@@ -59,6 +59,10 @@ func (a *memAuditSink) Append(_ context.Context, ev storageport.AuditEvent) erro
 	return nil
 }
 
+func (a *memAuditSink) AppendTx(ctx context.Context, _ *sql.Tx, ev storageport.AuditEvent) error {
+	return a.Append(ctx, ev)
+}
+
 type ingressHarness struct {
 	t         *testing.T
 	ctx       context.Context
@@ -1101,7 +1105,9 @@ func newSQLiteAuditSink(t *testing.T, db *sql.DB) *sqliteAuditSink {
 	return &sqliteAuditSink{db: db}
 }
 
-func (s *sqliteAuditSink) Append(ctx context.Context, ev storageport.AuditEvent) error {
+func (s *sqliteAuditSink) insertWithExec(ctx context.Context, exec interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, ev storageport.AuditEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.seq++
@@ -1111,7 +1117,7 @@ func (s *sqliteAuditSink) Append(ctx context.Context, ev storageport.AuditEvent)
 		chainKey = *ev.OrgID
 		orgArg = *ev.OrgID
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err := exec.ExecContext(ctx, `
 		INSERT INTO audit_events (
 			id, created_at_ms, org_id, chain_key, seq_no,
 			actor_kind, actor_id, entry_point, event_type,
@@ -1124,6 +1130,14 @@ func (s *sqliteAuditSink) Append(ctx context.Context, ev storageport.AuditEvent)
 		strings.Repeat("0", 64), strings.Repeat("a", 64),
 	)
 	return err
+}
+
+func (s *sqliteAuditSink) Append(ctx context.Context, ev storageport.AuditEvent) error {
+	return s.insertWithExec(ctx, s.db, ev)
+}
+
+func (s *sqliteAuditSink) AppendTx(ctx context.Context, tx *sql.Tx, ev storageport.AuditEvent) error {
+	return s.insertWithExec(ctx, tx, ev)
 }
 
 func TestChatCompletionsAuditConstraintHostIntersectHeartbeatAndPlaneChecks(t *testing.T) {

@@ -67,10 +67,12 @@ func (s *spyAuditSink) attachDB(t *testing.T, db *sql.DB) {
 	s.mu.Unlock()
 }
 
-func (s *spyAuditSink) Append(ctx context.Context, ev storageport.AuditEvent) error {
+func (s *spyAuditSink) insertWithExec(ctx context.Context, exec interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, ev storageport.AuditEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.db != nil {
+	if exec != nil {
 		s.seq++
 		chainKey := "SYSTEM"
 		var orgArg any
@@ -78,7 +80,7 @@ func (s *spyAuditSink) Append(ctx context.Context, ev storageport.AuditEvent) er
 			chainKey = *ev.OrgID
 			orgArg = *ev.OrgID
 		}
-		if _, err := s.db.ExecContext(ctx, `
+		if _, err := exec.ExecContext(ctx, `
 			INSERT INTO audit_events (
 				id, created_at_ms, org_id, chain_key, seq_no,
 				actor_kind, actor_id, entry_point, event_type,
@@ -96,6 +98,26 @@ func (s *spyAuditSink) Append(ctx context.Context, ev storageport.AuditEvent) er
 	}
 	s.events = append(s.events, ev)
 	return nil
+}
+
+func (s *spyAuditSink) Append(ctx context.Context, ev storageport.AuditEvent) error {
+	if s.db == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.events = append(s.events, ev)
+		return nil
+	}
+	return s.insertWithExec(ctx, s.db, ev)
+}
+
+func (s *spyAuditSink) AppendTx(ctx context.Context, tx *sql.Tx, ev storageport.AuditEvent) error {
+	if s.db == nil || tx == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.events = append(s.events, ev)
+		return nil
+	}
+	return s.insertWithExec(ctx, tx, ev)
 }
 
 func (s *spyAuditSink) LastError() error {
@@ -1166,6 +1188,11 @@ func (s *reentrantSink) Append(ctx context.Context, ev storageport.AuditEvent) e
 	if s.svc != nil && ev.OrgID != nil {
 		_, _ = s.svc.GetReservation(ctx, *ev.OrgID, ev.TargetID)
 	}
+	return nil
+}
+
+func (s *reentrantSink) AppendTx(_ context.Context, _ *sql.Tx, _ storageport.AuditEvent) error {
+	s.events.Add(1)
 	return nil
 }
 

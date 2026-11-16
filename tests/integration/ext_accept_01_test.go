@@ -10,6 +10,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -57,6 +58,10 @@ func (a *auditRecorder) Append(_ context.Context, ev storageport.AuditEvent) err
 	}
 	_, _ = a.buf.Write(append(b, '\n'))
 	return nil
+}
+
+func (a *auditRecorder) AppendTx(ctx context.Context, _ *sql.Tx, ev storageport.AuditEvent) error {
+	return a.Append(ctx, ev)
 }
 
 // TestEXTAccept01_VerticalSliceM1 proves GATE-M1 (EXT-SLICE-M1) end-to-end without editing

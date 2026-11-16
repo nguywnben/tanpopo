@@ -692,3 +692,154 @@ func TestRegistryConcurrentTriggerClearAndRefreshNoLostUpdate(t *testing.T) {
 	}
 	_ = ksFinal
 }
+
+func TestKillSwitchRemediationDeterministicPriorityUTF8AndListInstance(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newKillSwitchHarness(t)
+
+	// 1. UTF-8 rune count validation: 4 Japanese runes = 12 bytes (>5 bytes!) MUST reject; 5 runes MUST succeed.
+	if _, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelVirtualKey, TargetID: h.vkA1ID,
+		Reason: "あいうえ", TriggeredByPrincipalID: h.prnAID,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected 4-rune UTF-8 reason to fail ErrInvalidInput, got %v", err)
+	}
+	ksUTF8, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelVirtualKey, TargetID: h.vkA1ID,
+		Reason: "あいうえお", TriggeredByPrincipalID: h.prnAID,
+	})
+	if err != nil {
+		t.Fatalf("expected 5-rune UTF-8 reason to succeed, got %v", err)
+	}
+	if _, err := h.reg.Clear(ctx, ClearParams{
+		OrgID: &h.orgAID, KillSwitchID: ksUTF8.ID, ExpectedVersion: ksUTF8.Version,
+		ClearedByPrincipalID: h.prnAID, ClearReason: "かきくけ",
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected 4-rune UTF-8 clear_reason to fail ErrInvalidInput, got %v", err)
+	}
+	if _, err := h.reg.Clear(ctx, ClearParams{
+		OrgID: &h.orgAID, KillSwitchID: ksUTF8.ID, ExpectedVersion: ksUTF8.Version,
+		ClearedByPrincipalID: h.prnAID, ClearReason: "かきくけこ",
+	}); err != nil {
+		t.Fatalf("expected 5-rune UTF-8 clear_reason to succeed, got %v", err)
+	}
+
+	// 2. Deterministic CheckAdmission precedence:
+	//    LevelVirtualKey > LevelProjectOrOrgFreeze > LevelExtensionInstallation > LevelProviderConnection.
+	//    Plus tie-breaking on lowest ks.ID when two switches share LevelProjectOrOrgFreeze (org vs project).
+	ksConn, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelProviderConnection, TargetID: h.conn1ID,
+		Reason: "conn switch priority", TriggeredByPrincipalID: h.prnAID,
+	})
+	if err != nil {
+		t.Fatalf("Trigger conn: %v", err)
+	}
+	ksExt, err := h.reg.Trigger(ctx, TriggerParams{
+		Level: LevelExtensionInstallation, TargetID: h.inst1ID,
+		Reason: "ext switch priority", TriggeredByPrincipalID: h.prnInstID,
+	})
+	if err != nil {
+		t.Fatalf("Trigger ext: %v", err)
+	}
+	ksProj, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelProjectOrOrgFreeze, TargetID: h.projA1ID,
+		Reason: "proj freeze priority", TriggeredByPrincipalID: h.prnAID,
+	})
+	if err != nil {
+		t.Fatalf("Trigger proj: %v", err)
+	}
+	ksOrg, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelProjectOrOrgFreeze, TargetID: h.orgAID,
+		Reason: "org freeze priority", TriggeredByPrincipalID: h.prnAID,
+	})
+	if err != nil {
+		t.Fatalf("Trigger org: %v", err)
+	}
+	ksVK, err := h.reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, Level: LevelVirtualKey, TargetID: h.vkA1ID,
+		Reason: "vk switch highest priority", TriggeredByPrincipalID: h.prnAID,
+	})
+	if err != nil {
+		t.Fatalf("Trigger vk: %v", err)
+	}
+
+	q := AdmissionQuery{
+		OrgID:           h.orgAID,
+		ProjectID:       h.projA1ID,
+		VirtualKeyID:    h.vkA1ID,
+		ConnectionID:    h.conn1ID,
+		PluginInstallID: h.inst1ID,
+	}
+	for i := 0; i < 30; i++ {
+		got, blocked := h.reg.CheckAdmission(q)
+		if !blocked || got.ID != ksVK.ID {
+			t.Fatalf("iter %d: expected deterministic LevelVirtualKey winner %s, got %+v blocked=%v", i, ksVK.ID, got, blocked)
+		}
+	}
+
+	// Clear VK -> ProjectOrOrgFreeze wins, tie-breaking deterministically on lexicographically smallest ID.
+	if _, err := h.reg.Clear(ctx, ClearParams{
+		OrgID: &h.orgAID, KillSwitchID: ksVK.ID, ExpectedVersion: ksVK.Version,
+		ClearedByPrincipalID: h.prnAID, ClearReason: "clear vk check next priority",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wantFreezeID := ksProj.ID
+	if ksOrg.ID < wantFreezeID {
+		wantFreezeID = ksOrg.ID
+	}
+	for i := 0; i < 30; i++ {
+		got, blocked := h.reg.CheckAdmission(q)
+		if !blocked || got.ID != wantFreezeID {
+			t.Fatalf("iter %d: expected deterministic freeze winner %s, got %+v blocked=%v", i, wantFreezeID, got, blocked)
+		}
+	}
+
+	// Clear both freeze switches -> ExtensionInstallation wins over ProviderConnection.
+	if _, err := h.reg.Clear(ctx, ClearParams{
+		OrgID: &h.orgAID, KillSwitchID: ksProj.ID, ExpectedVersion: ksProj.Version,
+		ClearedByPrincipalID: h.prnAID, ClearReason: "clear proj switch",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.reg.Clear(ctx, ClearParams{
+		OrgID: &h.orgAID, KillSwitchID: ksOrg.ID, ExpectedVersion: ksOrg.Version,
+		ClearedByPrincipalID: h.prnAID, ClearReason: "clear org switch",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 30; i++ {
+		got, blocked := h.reg.CheckAdmission(q)
+		if !blocked || got.ID != ksExt.ID {
+			t.Fatalf("iter %d: expected deterministic ExtensionInstallation winner %s, got %+v blocked=%v", i, ksExt.ID, got, blocked)
+		}
+	}
+
+	// Clear ExtensionInstallation -> ProviderConnection wins, and ListInstance excludes org switches.
+	if _, err := h.reg.Clear(ctx, ClearParams{
+		KillSwitchID: ksExt.ID, ExpectedVersion: ksExt.Version,
+		ClearedByPrincipalID: h.prnInstID, ClearReason: "clear ext switch",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got, blocked := h.reg.CheckAdmission(q); !blocked || got.ID != ksConn.ID {
+		t.Fatalf("expected ProviderConnection winner %s, got %+v blocked=%v", ksConn.ID, got, blocked)
+	}
+
+	// 3. ListInstance(ctx, activeOnly) lists ONLY instance-scoped (org_id IS NULL) switches.
+	allInst, err := h.reg.ListInstance(ctx, false)
+	if err != nil {
+		t.Fatalf("ListInstance(false): %v", err)
+	}
+	if len(allInst) != 1 || allInst[0].ID != ksExt.ID || allInst[0].OrgID != nil || allInst[0].ClearedAtMs == nil {
+		t.Fatalf("expected strictly the 1 cleared instance switch, got %+v", allInst)
+	}
+	activeInst, err := h.reg.ListInstance(ctx, true)
+	if err != nil {
+		t.Fatalf("ListInstance(true): %v", err)
+	}
+	if len(activeInst) != 0 {
+		t.Fatalf("expected 0 active instance switches, got %+v", activeInst)
+	}
+}

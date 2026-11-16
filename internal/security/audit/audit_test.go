@@ -492,13 +492,16 @@ func TestBlastRadiusQueryCorrelationAndTenantIsolation(t *testing.T) {
 		t.Fatalf("expected paginated Limit=1 audit event kill_switch.triggered via metadata_json.target_id, got %+v", repPaginated.AuditEvents)
 	}
 
-	// Passing reserved SYSTEM chain_key (any casing) without AllowInstanceScope MUST fail closed.
-	for _, reserved := range []string{SystemChainKey, "system"} {
-		if _, err := QueryBlastRadius(ctx, st.RawDB(), BlastRadiusQuery{
-			OrgID:                   reserved,
-			ExtensionInstallationID: "ins_bad_plugin",
-		}); !errors.Is(err, port.ErrInvalidInput) {
-			t.Fatalf("expected OrgID=%q without AllowInstanceScope to fail ErrInvalidInput, got %v", reserved, err)
+	// Passing reserved SYSTEM chain_key (any casing) MUST fail closed unconditionally, even with AllowInstanceScope: true.
+	for _, allowInst := range []bool{false, true} {
+		for _, reserved := range []string{SystemChainKey, "system", " System "} {
+			if _, err := QueryBlastRadius(ctx, st.RawDB(), BlastRadiusQuery{
+				OrgID:                   reserved,
+				AllowInstanceScope:      allowInst,
+				ExtensionInstallationID: "ins_bad_plugin",
+			}); !errors.Is(err, port.ErrInvalidInput) {
+				t.Fatalf("expected OrgID=%q (AllowInstanceScope=%v) to fail ErrInvalidInput, got %v", reserved, allowInst, err)
+			}
 		}
 	}
 }
@@ -521,7 +524,7 @@ func TestLoggerKeyAwareScrubbingAndRequestIDSanitization(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reqWithSecret := "req_01TEST?token=sk-ant-api03-verysecretvalue123"
+	reqWithSecret := "req_01TEST?token=sk-ant-api03-verysecretvalue123&boot=tp_boot_secretValue98765"
 	if err := logger.Append(ctx, port.AuditEvent{
 		OrgID:        &orgA.ID,
 		ActorKind:    "PRINCIPAL",
@@ -531,7 +534,7 @@ func TestLoggerKeyAwareScrubbingAndRequestIDSanitization(t *testing.T) {
 		TargetType:   "connection",
 		TargetID:     "conn_1",
 		RequestID:    &reqWithSecret,
-		MetadataJSON: `{"api_key":"raw_secret_no_prefix","password":"hunter2","credentials":{"access_token":"tok123"},"endpoint":"https://user:secretpass@api.example.com/v1","basic_hdr":"Basic dXNlcjpwYXNz","gh":"ghp_1234567890abcdefghijklmnop","input_tokens":128,"max_tokens":4096,"token_count":256}`,
+		MetadataJSON: `{"api_key":"raw_secret_no_prefix","password":"hunter2","credentials":{"access_token":"tok123"},"endpoint":"https://user:secretpass@api.example.com/v1","basic_hdr":"Basic dXNlcjpwYXNz","gh":"ghp_1234567890abcdefghijklmnop","boot_note":"using tp_boot_secretTokenXYZ999","inline_note":"api_key=rawSecret1 password=rawPass2","input_tokens":128,"max_tokens":4096,"token_count":256}`,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -555,10 +558,10 @@ func TestLoggerKeyAwareScrubbingAndRequestIDSanitization(t *testing.T) {
 		t.Fatalf("List: err=%v len=%d", err, len(events))
 	}
 	ev0 := events[1] // chronological descending; oldest is debug.privacy (seq 1)
-	if ev0.RequestID == nil || strings.Contains(*ev0.RequestID, "sk-ant-") {
+	if ev0.RequestID == nil || strings.Contains(*ev0.RequestID, "sk-ant-") || strings.Contains(*ev0.RequestID, "secretValue98765") {
 		t.Fatalf("expected RequestID scrubbed of secrets, got %v", ev0.RequestID)
 	}
-	for _, leak := range []string{"raw_secret_no_prefix", "hunter2", "tok123", "secretpass", "dXNlcjpwYXNz", "ghp_1234567890"} {
+	for _, leak := range []string{"raw_secret_no_prefix", "hunter2", "tok123", "secretpass", "dXNlcjpwYXNz", "ghp_1234567890", "secretTokenXYZ999", "rawSecret1", "rawPass2"} {
 		if strings.Contains(ev0.MetadataJSON, leak) {
 			t.Fatalf("expected secret %q redacted from audit metadata_json, got %s", leak, ev0.MetadataJSON)
 		}
@@ -570,6 +573,91 @@ func TestLoggerKeyAwareScrubbingAndRequestIDSanitization(t *testing.T) {
 	}
 	if events[0].MetadataJSON != "{}" {
 		t.Fatalf("expected null metadata_json normalized to {}, got %q", events[0].MetadataJSON)
+	}
+}
+
+func TestVerifyAuditChainMalformedChainKeyMismatch(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	st, dbPath := openAuditTestDB(t, fk)
+
+	orgA, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "mismatch-org-a", DisplayName: "Mismatch A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := NewLogger(LoggerConfig{
+		DB:    st.RawDB(),
+		NowMs: func() int64 { return fk.Now().UTC().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := logger.Append(ctx, port.AuditEvent{
+		OrgID:        &orgA.ID,
+		ActorKind:    "PRINCIPAL",
+		ActorID:      "prn_1",
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    "config.mutated",
+		TargetType:   "virtual_key",
+		TargetID:     "vk_1",
+		MetadataJSON: `{"ok":true}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tamperPath := filepath.Join(t.TempDir(), "tamper_chain_mismatch.db")
+	copySQLiteDB(t, st.RawDB(), dbPath, tamperPath)
+
+	dbTamper, err := sql.Open("sqlite", tamperPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dbTamper.Close()
+
+	// Rebuild audit_events without the CHECK constraint and triggers so we can inject a chain_key/org_id mismatch.
+	for _, stmt := range []string{
+		`DROP TRIGGER trg_audit_events_no_update`,
+		`DROP TRIGGER trg_audit_events_no_delete`,
+		`CREATE TABLE audit_events_unconstrained (
+			id VARCHAR(40) NOT NULL,
+			created_at_ms BIGINT NOT NULL,
+			org_id VARCHAR(40),
+			chain_key VARCHAR(40) NOT NULL,
+			seq_no BIGINT NOT NULL,
+			actor_kind VARCHAR(24) NOT NULL,
+			actor_id VARCHAR(64) NOT NULL,
+			entry_point VARCHAR(24) NOT NULL,
+			event_type VARCHAR(64) NOT NULL,
+			target_type VARCHAR(32) NOT NULL,
+			target_id VARCHAR(64) NOT NULL,
+			request_id VARCHAR(40),
+			metadata_json TEXT NOT NULL,
+			prev_hash CHAR(64) NOT NULL,
+			entry_hash CHAR(64) NOT NULL
+		)`,
+		`INSERT INTO audit_events_unconstrained SELECT id, created_at_ms, org_id, chain_key, seq_no, actor_kind, actor_id, entry_point, event_type, target_type, target_id, request_id, metadata_json, prev_hash, entry_hash FROM audit_events`,
+		`DROP TABLE audit_events`,
+		`ALTER TABLE audit_events_unconstrained RENAME TO audit_events`,
+		`UPDATE audit_events SET org_id = NULL WHERE chain_key = '` + orgA.ID + `' AND seq_no = 1`,
+	} {
+		if _, err := dbTamper.ExecContext(ctx, stmt); err != nil {
+			t.Fatalf("tamper setup stmt %q: %v", stmt, err)
+		}
+	}
+
+	var alerts []TamperFinding
+	rep, err := VerifyAuditChain(ctx, dbTamper, VerifyOptions{
+		OnTamper: func(f TamperFinding) { alerts = append(alerts, f) },
+	})
+	if !errors.Is(err, ErrAuditTampered) {
+		t.Fatalf("expected ErrAuditTampered on chain_key/org_id mismatch, got %v", err)
+	}
+	if rep.Valid || len(alerts) == 0 {
+		t.Fatalf("expected TamperFinding alert, got valid=%v alerts=%+v", rep.Valid, alerts)
+	}
+	if alerts[0].AlertCode != AlertAuditTamper || alerts[0].Kind != TamperMalformedRecord || alerts[0].ChainKey != orgA.ID || alerts[0].SeqNo != 1 {
+		t.Fatalf("expected MALFORMED_RECORD ALT-AUDIT-TAMPER at (%s, seq=1), got %+v", orgA.ID, alerts[0])
 	}
 }
 

@@ -543,7 +543,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer clear(outboundBody)
 
 	budgetSess := h.newNativeBudgetSession(match.Key, reqID, rawBody, estBaseIn, estMaxOut, completionCount)
-	if !budgetSess.reserveInitial(streamCtx, w, candidates) {
+	if !budgetSess.reserveInitial(r.Context(), w, candidates) {
 		return
 	}
 	defer budgetSess.releaseIfUnsettled()

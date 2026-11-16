@@ -47,6 +47,9 @@ func TestMain(m *testing.M) {
 type noopAuditSink struct{}
 
 func (noopAuditSink) Append(context.Context, port.AuditEvent) error { return nil }
+func (noopAuditSink) AppendTx(context.Context, *sql.Tx, port.AuditEvent) error {
+	return nil
+}
 
 type testHarness struct {
 	ctx       context.Context
@@ -1556,7 +1559,7 @@ func TestTPBR0202OrgMinPluginTrustAndDisablePolicy(t *testing.T) {
 		PublisherPublicKeys:  map[string]ed25519.PublicKey{"pub": pubPub},
 		EnterprisePublicKeys: map[string]ed25519.PublicKey{"ent": entPub},
 	}
-	repoConfig := catalog.Config{DB: h.store.RawDB(), Keyring: keyring, Snapshots: h.snapshots, NowMs: nowMs}
+	repoConfig := catalog.Config{DB: h.store.RawDB(), Keyring: keyring, Snapshots: h.snapshots, Audit: noopAuditSink{}, NowMs: nowMs}
 	repo, err := catalog.NewRepository(repoConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -3474,4 +3477,26 @@ adapter:
 	}
 }
 
+type nonTxCatAuditSink struct{}
 
+func (nonTxCatAuditSink) Append(context.Context, port.AuditEvent) error { return nil }
+
+func TestCatalogNewRepositoryRejectsMissingOrNonTxAuditSink(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+
+	if _, err := catalog.NewRepository(catalog.Config{
+		DB:        h.store.RawDB(),
+		Snapshots: h.snapshots,
+		Audit:     nil,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewRepository nil Audit to fail ErrInvalidInput, got %v", err)
+	}
+	if _, err := catalog.NewRepository(catalog.Config{
+		DB:        h.store.RawDB(),
+		Snapshots: h.snapshots,
+		Audit:     nonTxCatAuditSink{},
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewRepository non-TxAuditSink to fail ErrInvalidInput, got %v", err)
+	}
+}

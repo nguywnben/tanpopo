@@ -41,6 +41,7 @@ var (
 		{re: regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^@/\s]+)@`), repl: "${1}[REDACTED]@"},
 		{re: regexp.MustCompile(`vk_tp_[A-Za-z0-9_-]+`), repl: "[REDACTED]"},
 		{re: regexp.MustCompile(`tp_adm_[A-Za-z0-9_-]{8,}`), repl: "[REDACTED]"},
+		{re: regexp.MustCompile(`tp_boot_[A-Za-z0-9_-]{8,}`), repl: "[REDACTED]"},
 		{re: regexp.MustCompile(`sk-tp-[A-Za-z0-9._-]+`), repl: "[REDACTED]"},
 		{re: regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{8,}`), repl: "[REDACTED]"},
 		{re: regexp.MustCompile(`sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{12,}`), repl: "[REDACTED]"},
@@ -48,6 +49,7 @@ var (
 		{re: regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{16,}`), repl: "[REDACTED]"},
 		{re: regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}`), repl: "Bearer [REDACTED]"},
 		{re: regexp.MustCompile(`(?i)\bBasic\s+[A-Za-z0-9+/=]{6,}`), repl: "Basic [REDACTED]"},
+		{re: regexp.MustCompile(`(?i)(^|[^A-Za-z0-9._-])(authorization|proxy-authorization|x-api-key|x-goog-api-key|x-tanpopo-virtual-key|api[_-]?key|apikey|client[_-]?secret|secret|password|passwd|access[_-]?token|refresh[_-]?token|bearer[_-]?token|private[_-]?key)\s*[:=]\s*(?:"[^"]*"|[^\s;,&,"']+)`), repl: "${1}${2}=[REDACTED]"},
 	}
 
 	sensitiveAuditKeys = map[string]bool{
@@ -191,6 +193,12 @@ func (l *Logger) Append(ctx context.Context, event port.AuditEvent) error {
 
 // AppendTx writes a hash-chained audit event inside a caller-managed *sql.Tx BEFORE tx.Commit().
 // Callers MUST treat any error as fatal and roll back the enclosing domain transaction (NEG-2).
+//
+// Concurrency invariant (CR-06): AppendTx does not acquire Logger.mu because locking across an
+// external transaction's Commit boundary could deadlock; instead it relies strictly on SQLite WAL
+// write-transaction serialization (db.SetMaxOpenConns(1) with _txlock=immediate configured in
+// internal/storage/sqlite/store.go) so concurrent AppendTx writers cannot interleave chain_key
+// MAX(seq_no) reads. M4 PostgreSQL MVCC adapters MUST acquire a per-chain_key advisory/row lock.
 func (l *Logger) AppendTx(ctx context.Context, tx *sql.Tx, event port.AuditEvent) error {
 	if tx == nil {
 		return fmt.Errorf("%w: non-nil *sql.Tx is required for AppendTx", port.ErrInvalidInput)

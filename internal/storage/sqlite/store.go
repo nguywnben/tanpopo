@@ -88,6 +88,8 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 	}
 	if cfg.AuditSink == nil {
 		cfg.AuditSink = noopAuditSink{}
+	} else if _, ok := cfg.AuditSink.(port.TxAuditSink); !ok {
+		return nil, fmt.Errorf("%w: AuditSink must implement port.TxAuditSink", port.ErrInvalidInput)
 	}
 
 	dsn := buildWALDSN(absPath)
@@ -302,7 +304,7 @@ func (s *Store) InTx(ctx context.Context, fn func(tx port.Tx) error) (err error)
 }
 
 func (s *Store) Tenancy() port.TenancyRepository {
-	return &tenancyRepo{store: s, exec: s.db, nowMs: s.nowMs}
+	return &tenancyRepo{store: s, exec: s.db, nowMs: s.nowMs, auditSink: s.auditSink}
 }
 
 func (s *Store) Changelog() port.ChangelogRepository {
@@ -327,7 +329,7 @@ type sqliteTx struct {
 func (t *sqliteTx) Commit() error   { return t.tx.Commit() }
 func (t *sqliteTx) Rollback() error { return t.tx.Rollback() }
 func (t *sqliteTx) Tenancy() port.TenancyRepository {
-	return &tenancyRepo{exec: t.tx, nowMs: t.nowMs}
+	return &tenancyRepo{exec: t.tx, nowMs: t.nowMs, auditSink: t.auditSink}
 }
 func (t *sqliteTx) Changelog() port.ChangelogRepository {
 	return &changelogRepo{exec: t.tx, nowMs: t.nowMs}

@@ -68,7 +68,7 @@ type UpdatePolicyParams struct {
 // optimistic concurrency, config_changelog notifications, and governance audit logging.
 type Store struct {
 	db    *sql.DB
-	audit port.AuditSink
+	audit port.TxAuditSink
 	nowMs func() int64
 }
 
@@ -84,13 +84,20 @@ func NewStore(cfg StoreConfig) (*Store, error) {
 	if cfg.DB == nil {
 		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", port.ErrInvalidInput)
 	}
+	if cfg.Audit == nil {
+		return nil, fmt.Errorf("%w: non-nil port.TxAuditSink is required", port.ErrInvalidInput)
+	}
+	txAudit, ok := cfg.Audit.(port.TxAuditSink)
+	if !ok {
+		return nil, fmt.Errorf("%w: Audit must implement port.TxAuditSink", port.ErrInvalidInput)
+	}
 	nowFn := cfg.NowMs
 	if nowFn == nil {
 		nowFn = func() int64 { return time.Now().UTC().UnixMilli() }
 	}
 	return &Store{
 		db:    cfg.DB,
-		audit: cfg.Audit,
+		audit: txAudit,
 		nowMs: nowFn,
 	}, nil
 }
@@ -561,11 +568,7 @@ func (s *Store) emitPolicyMutationAuditTx(
 	nowMs int64,
 ) error {
 	if s.audit == nil {
-		return nil
-	}
-	txSink, ok := s.audit.(port.TxAuditSink)
-	if !ok {
-		return nil
+		return fmt.Errorf("%w: non-nil port.TxAuditSink is required", port.ErrInvalidInput)
 	}
 	if strings.TrimSpace(actorKind) == "" {
 		actorKind = "PRINCIPAL"
@@ -588,7 +591,7 @@ func (s *Store) emitPolicyMutationAuditTx(
 	if err != nil {
 		return err
 	}
-	return txSink.AppendTx(ctx, tx, port.AuditEvent{
+	return s.audit.AppendTx(ctx, tx, port.AuditEvent{
 		ID:           audID,
 		CreatedAtMs:  nowMs,
 		OrgID:        &orgID,

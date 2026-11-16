@@ -935,3 +935,89 @@ func TestSQLiteLeaseStaleReleaseAndExpiredGetSemantics(t *testing.T) {
 		t.Fatalf("expected monotonic token=5 on next acquire, got %+v ok=%v err=%v", l5, ok, err)
 	}
 }
+
+type nonTxAuditSink struct{}
+
+func (nonTxAuditSink) Append(context.Context, port.AuditEvent) error { return nil }
+
+type recordingSQLiteTxAuditSink struct {
+	mu     sync.Mutex
+	fail   bool
+	events []port.AuditEvent
+}
+
+func (s *recordingSQLiteTxAuditSink) Append(ctx context.Context, ev port.AuditEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.fail {
+		return errors.New("injected sqlite audit failure")
+	}
+	s.events = append(s.events, ev)
+	return nil
+}
+
+func (s *recordingSQLiteTxAuditSink) AppendTx(ctx context.Context, _ *sql.Tx, ev port.AuditEvent) error {
+	return s.Append(ctx, ev)
+}
+
+func TestSQLiteAuditSinkFailClosedAndTenancyAtomicRollback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Non-TxAuditSink must be rejected fail-closed by Open.
+	if _, err := Open(ctx, Config{
+		DBPath:    filepath.Join(t.TempDir(), "bad-audit.db"),
+		AuditSink: nonTxAuditSink{},
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected Open to reject non-TxAuditSink with ErrInvalidInput, got %v", err)
+	}
+
+	sink := &recordingSQLiteTxAuditSink{}
+	st, err := Open(ctx, Config{
+		DBPath:    filepath.Join(t.TempDir(), "tenancy-audit.db"),
+		AuditSink: sink,
+	})
+	if err != nil {
+		t.Fatalf("Open with TxAuditSink: %v", err)
+	}
+	defer st.Close()
+
+	// CreateOrganization and CreateProject succeed when AppendTx succeeds and emit atomic audit events.
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "audited-org", DisplayName: "Audited Org"})
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+	if _, err := st.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "audited-proj", DisplayName: "Audited Proj"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	sink.mu.Lock()
+	gotCount := len(sink.events)
+	var evTypes []string
+	for _, ev := range sink.events {
+		evTypes = append(evTypes, ev.EventType)
+	}
+	sink.mu.Unlock()
+	if gotCount != 2 || evTypes[0] != "organization.created" || evTypes[1] != "project.created" {
+		t.Fatalf("expected [organization.created, project.created] via AppendTx, got %v", evTypes)
+	}
+
+	// Inject AppendTx failure -> CreateOrganization and CreateProject roll back atomically (no orphan rows).
+	sink.mu.Lock()
+	sink.fail = true
+	sink.mu.Unlock()
+
+	if _, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "rolled-back-org", DisplayName: "RB Org"}); err == nil {
+		t.Fatalf("expected CreateOrganization to fail closed when AppendTx fails")
+	}
+	if _, err := st.Tenancy().GetOrganizationBySlug(ctx, "rolled-back-org"); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected rolled-back-org absent after AppendTx failure, got %v", err)
+	}
+
+	if _, err := st.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "rolled-back-proj", DisplayName: "RB Proj"}); err == nil {
+		t.Fatalf("expected CreateProject to fail closed when AppendTx fails")
+	}
+	if _, err := st.Tenancy().GetProjectBySlug(ctx, org.ID, "rolled-back-proj"); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("expected rolled-back-proj absent after AppendTx failure, got %v", err)
+	}
+}
+

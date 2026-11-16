@@ -149,13 +149,20 @@ type Repository struct {
 	snapshots *snapshot.Manager
 	snapSync  SnapshotRefresher
 	keyring   installer.TrustedKeyring
-	audit     port.AuditSink
+	audit     port.TxAuditSink
 }
 
 // NewRepository validates dependencies and constructs a catalog Repository.
 func NewRepository(cfg Config) (*Repository, error) {
 	if cfg.DB == nil {
 		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", port.ErrInvalidInput)
+	}
+	if cfg.Audit == nil {
+		return nil, fmt.Errorf("%w: non-nil port.TxAuditSink is required", port.ErrInvalidInput)
+	}
+	txAudit, ok := cfg.Audit.(port.TxAuditSink)
+	if !ok {
+		return nil, fmt.Errorf("%w: Audit must implement port.TxAuditSink", port.ErrInvalidInput)
 	}
 	syncer := cfg.SnapshotRefresher
 	if syncer == nil && cfg.Snapshots != nil {
@@ -174,7 +181,7 @@ func NewRepository(cfg Config) (*Repository, error) {
 		snapshots: cfg.Snapshots,
 		snapSync:  syncer,
 		keyring:   cfg.Keyring,
-		audit:     cfg.Audit,
+		audit:     txAudit,
 	}, nil
 }
 
@@ -381,7 +388,13 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 		if err != nil {
 			return mapWriteDBError(err)
 		}
-		return appendChangelogTx(ctx, tx, nil, "provider_adapter", id, port.MutationUpsert, false, now)
+		if err := appendChangelogTx(ctx, tx, nil, "provider_adapter", id, port.MutationUpsert, false, now); err != nil {
+			return err
+		}
+		return r.emitAuditTx(ctx, tx, nil, "provider_adapter.created", "provider_adapter", id, map[string]any{
+			"adapter_slug":    strings.TrimSpace(params.AdapterSlug),
+			"installation_id": params.InstallationID,
+		}, now)
 	}); err != nil {
 		return nil, err
 	}
@@ -452,7 +465,10 @@ func (r *Repository) DeleteProviderAdapter(ctx context.Context, id string) error
 		if rows == 0 {
 			return fmt.Errorf("%w: provider_adapter %q", port.ErrNotFound, id)
 		}
-		return appendChangelogTx(ctx, tx, nil, "provider_adapter", id, port.MutationDelete, false, now)
+		if err := appendChangelogTx(ctx, tx, nil, "provider_adapter", id, port.MutationDelete, false, now); err != nil {
+			return err
+		}
+		return r.emitAuditTx(ctx, tx, nil, "provider_adapter.deleted", "provider_adapter", id, nil, now)
 	}); err != nil {
 		return err
 	}
@@ -653,7 +669,15 @@ func (r *Repository) CreateProviderConnection(ctx context.Context, params Create
 				return mapWriteDBError(err)
 			}
 		}
-		return appendChangelogTx(ctx, tx, &params.OrgID, "provider_connection", id, port.MutationUpsert, false, now)
+		if err := appendChangelogTx(ctx, tx, &params.OrgID, "provider_connection", id, port.MutationUpsert, false, now); err != nil {
+			return err
+		}
+		return r.emitAuditTx(ctx, tx, &params.OrgID, "provider_connection.created", "provider_connection", id, map[string]any{
+			"adapter_id":   params.AdapterID,
+			"billing_mode": params.BillingMode,
+			"auth_mode":    authMode,
+			"state":        ConnStateDraft,
+		}, now)
 	}); err != nil {
 		return nil, err
 	}
@@ -756,7 +780,10 @@ func (r *Repository) DeleteProviderConnection(ctx context.Context, orgID, connec
 		if rows == 0 {
 			return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
 		}
-		return appendChangelogTx(ctx, tx, &orgID, "provider_connection", connectionID, port.MutationDelete, false, now)
+		if err := appendChangelogTx(ctx, tx, &orgID, "provider_connection", connectionID, port.MutationDelete, false, now); err != nil {
+			return err
+		}
+		return r.emitAuditTx(ctx, tx, &orgID, "provider_connection.deleted", "provider_connection", connectionID, nil, now)
 	}); err != nil {
 		return err
 	}
@@ -805,7 +832,13 @@ func (r *Repository) CreateLogicalModel(ctx context.Context, params CreateLogica
 		); err != nil {
 			return mapDBError(err)
 		}
-		return appendChangelogTx(ctx, tx, params.OrgID, "logical_model", id, port.MutationUpsert, false, now)
+		if err := appendChangelogTx(ctx, tx, params.OrgID, "logical_model", id, port.MutationUpsert, false, now); err != nil {
+			return err
+		}
+		return r.emitAuditTx(ctx, tx, params.OrgID, "logical_model.created", "logical_model", id, map[string]any{
+			"canonical_slug": strings.TrimSpace(params.CanonicalSlug),
+			"modality_kind":  params.ModalityKind,
+		}, now)
 	}); err != nil {
 		return nil, err
 	}
@@ -924,7 +957,10 @@ func (r *Repository) DeleteLogicalModel(ctx context.Context, orgID *string, id s
 		if rows == 0 {
 			return fmt.Errorf("%w: logical_model %q", port.ErrNotFound, id)
 		}
-		return appendChangelogTx(ctx, tx, scopedOrgID, "logical_model", id, port.MutationDelete, false, now)
+		if err := appendChangelogTx(ctx, tx, scopedOrgID, "logical_model", id, port.MutationDelete, false, now); err != nil {
+			return err
+		}
+		return r.emitAuditTx(ctx, tx, scopedOrgID, "logical_model.deleted", "logical_model", id, nil, now)
 	}); err != nil {
 		return err
 	}
@@ -1012,7 +1048,15 @@ func (r *Repository) CreateModelDeployment(ctx context.Context, params CreateMod
 		); err != nil {
 			return mapWriteDBError(err)
 		}
-		return appendChangelogTx(ctx, tx, &params.OrgID, "model_deployment", id, port.MutationUpsert, false, now)
+		if err := appendChangelogTx(ctx, tx, &params.OrgID, "model_deployment", id, port.MutationUpsert, false, now); err != nil {
+			return err
+		}
+		return r.emitAuditTx(ctx, tx, &params.OrgID, "model_deployment.created", "model_deployment", id, map[string]any{
+			"connection_id":       params.ConnectionID,
+			"logical_model_id":    params.LogicalModelID,
+			"upstream_model_name": strings.TrimSpace(params.UpstreamModelName),
+			"state":               state,
+		}, now)
 	}); err != nil {
 		return nil, err
 	}
@@ -1124,7 +1168,13 @@ func (r *Repository) UpdateModelDeployment(ctx context.Context, orgID, deploymen
 		if rows == 0 {
 			return fmt.Errorf("%w: concurrent update on model_deployment %q", port.ErrVersionConflict, deploymentID)
 		}
-		return appendChangelogTx(ctx, tx, &orgID, "model_deployment", deploymentID, port.MutationUpsert, false, now)
+		if err := appendChangelogTx(ctx, tx, &orgID, "model_deployment", deploymentID, port.MutationUpsert, false, now); err != nil {
+			return err
+		}
+		return r.emitAuditTx(ctx, tx, &orgID, "model_deployment.updated", "model_deployment", deploymentID, map[string]any{
+			"state":           state,
+			"assurance_level": assurance,
+		}, now)
 	}); err != nil {
 		return nil, err
 	}
@@ -1223,7 +1273,10 @@ func (r *Repository) DeleteModelDeployment(ctx context.Context, orgID, deploymen
 		if rows == 0 {
 			return fmt.Errorf("%w: model_deployment %q", port.ErrNotFound, deploymentID)
 		}
-		return appendChangelogTx(ctx, tx, &orgID, "model_deployment", deploymentID, port.MutationDelete, false, now)
+		if err := appendChangelogTx(ctx, tx, &orgID, "model_deployment", deploymentID, port.MutationDelete, false, now); err != nil {
+			return err
+		}
+		return r.emitAuditTx(ctx, tx, &orgID, "model_deployment.deleted", "model_deployment", deploymentID, nil, now)
 	}); err != nil {
 		return err
 	}
@@ -1552,6 +1605,47 @@ func appendChangelogTx(ctx context.Context, tx *sql.Tx, orgID *string, entityKin
 		orgArg, entityKind, entityID, mutationType, emInt, now,
 	)
 	return mapDBError(err)
+}
+
+func (r *Repository) emitAuditTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	orgID *string,
+	eventType, targetType, targetID string,
+	meta map[string]any,
+	nowMs int64,
+) error {
+	if r.audit == nil {
+		return fmt.Errorf("%w: non-nil port.TxAuditSink is required", port.ErrInvalidInput)
+	}
+	auditID, err := idgen.New(idgen.PrefixAudit)
+	if err != nil {
+		return err
+	}
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	rawMeta, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	var normalizedOrg *string
+	if orgID != nil && strings.TrimSpace(*orgID) != "" {
+		trimmed := strings.TrimSpace(*orgID)
+		normalizedOrg = &trimmed
+	}
+	return r.audit.AppendTx(ctx, tx, port.AuditEvent{
+		ID:           auditID,
+		CreatedAtMs:  nowMs,
+		OrgID:        normalizedOrg,
+		ActorKind:    "SYSTEM",
+		ActorID:      "catalog",
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    eventType,
+		TargetType:   targetType,
+		TargetID:     targetID,
+		MetadataJSON: string(rawMeta),
+	})
 }
 
 func ensureProjectOwnedByOrgTx(ctx context.Context, tx *sql.Tx, orgID, projectID string) error {

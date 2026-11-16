@@ -178,6 +178,29 @@ func verifySingleChain(ctx context.Context, db *sql.DB, chainKey string, onTampe
 			return ChainReport{}, serr
 		}
 
+		// Verify chain_key invariant matches org_id partitioning (NULL -> SYSTEM, non-NULL -> org_id).
+		expectedChainKey := SystemChainKey
+		invalidOrg := false
+		if ev.OrgID != nil {
+			if *ev.OrgID == "" {
+				invalidOrg = true
+			} else {
+				expectedChainKey = *ev.OrgID
+			}
+		}
+		if invalidOrg || ev.ChainKey != expectedChainKey || ev.ChainKey != chainKey {
+			if !chainBroken {
+				emit(TamperFinding{
+					ChainKey: chainKey,
+					SeqNo:    ev.SeqNo,
+					EventID:  ev.ID,
+					Kind:     TamperMalformedRecord,
+					Detail:   fmt.Sprintf("chain_key/org_id mismatch at chain %q seq_no=%d (chain_key=%q, expected=%q)", chainKey, ev.SeqNo, ev.ChainKey, expectedChainKey),
+				})
+				chainBroken = true
+			}
+		}
+
 		// Pinpoint missing sequence numbers (e.g., direct SQL DELETE of seq_no = 250).
 		if ev.SeqNo != expectedSeq {
 			if !chainBroken {

@@ -239,6 +239,7 @@ func TestTP0019_NEG2_TPMBurstAbusePreEgressAndReconciliation(t *testing.T) {
 	nowFn := func() int64 { return h.clk.Now().UnixMilli() }
 	polStore, err := policyengine.NewStore(policyengine.StoreConfig{
 		DB:    h.store.RawDB(),
+		Audit: h.audit,
 		NowMs: nowFn,
 	})
 	if err != nil {
@@ -283,6 +284,7 @@ func TestTP0019_FailClosedCorruptPolicyAndEndpointEnforcement(t *testing.T) {
 	nowFn := func() int64 { return h.clk.Now().UnixMilli() }
 	polStore, err := policyengine.NewStore(policyengine.StoreConfig{
 		DB:    h.store.RawDB(),
+		Audit: h.audit,
 		NowMs: nowFn,
 	})
 	if err != nil {
@@ -438,6 +440,7 @@ func TestTP0019_NativeRateLimitAndPolicyDenial(t *testing.T) {
 	nowFn := func() int64 { return h.clk.Now().UnixMilli() }
 	polStore, err := policyengine.NewStore(policyengine.StoreConfig{
 		DB:    h.store.RawDB(),
+		Audit: h.audit,
 		NowMs: nowFn,
 	})
 	if err != nil {
@@ -481,6 +484,7 @@ func TestTP0019_SecurityAuditAndReviewHardening(t *testing.T) {
 		nowFn := func() int64 { return h.clk.Now().UnixMilli() }
 		polStore, err := policyengine.NewStore(policyengine.StoreConfig{
 			DB:    h.store.RawDB(),
+			Audit: h.audit,
 			NowMs: nowFn,
 		})
 		if err != nil {
@@ -591,7 +595,7 @@ func TestTP0019_SecurityAuditAndReviewHardening(t *testing.T) {
 
 	t.Run("zero_token_unmetered_flagged_no_refund", func(t *testing.T) {
 		h2 := setupIngressHarness(t, 0)
-		ps2, err := policyengine.NewStore(policyengine.StoreConfig{DB: h2.store.RawDB(), NowMs: func() int64 { return h2.clk.Now().UnixMilli() }})
+		ps2, err := policyengine.NewStore(policyengine.StoreConfig{DB: h2.store.RawDB(), Audit: h2.audit, NowMs: func() int64 { return h2.clk.Now().UnixMilli() }})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -617,7 +621,7 @@ func TestTP0019_SecurityAuditAndReviewHardening(t *testing.T) {
 
 	t.Run("max_concurrent_streams_zero_denies", func(t *testing.T) {
 		h3 := setupIngressHarness(t, 0)
-		ps3, err := policyengine.NewStore(policyengine.StoreConfig{DB: h3.store.RawDB(), NowMs: func() int64 { return h3.clk.Now().UnixMilli() }})
+		ps3, err := policyengine.NewStore(policyengine.StoreConfig{DB: h3.store.RawDB(), Audit: h3.audit, NowMs: func() int64 { return h3.clk.Now().UnixMilli() }})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -636,7 +640,7 @@ func TestTP0019_SecurityAuditAndReviewHardening(t *testing.T) {
 
 	t.Run("trust_and_assurance_denial_propagation", func(t *testing.T) {
 		h4 := setupIngressHarness(t, 0)
-		ps4, err := policyengine.NewStore(policyengine.StoreConfig{DB: h4.store.RawDB(), NowMs: func() int64 { return h4.clk.Now().UnixMilli() }})
+		ps4, err := policyengine.NewStore(policyengine.StoreConfig{DB: h4.store.RawDB(), Audit: h4.audit, NowMs: func() int64 { return h4.clk.Now().UnixMilli() }})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -656,7 +660,7 @@ func TestTP0019_SecurityAuditAndReviewHardening(t *testing.T) {
 
 	t.Run("idempotency_replay_and_models_rpm_limited", func(t *testing.T) {
 		h5 := setupIngressHarness(t, 0)
-		ps5, err := policyengine.NewStore(policyengine.StoreConfig{DB: h5.store.RawDB(), NowMs: func() int64 { return h5.clk.Now().UnixMilli() }})
+		ps5, err := policyengine.NewStore(policyengine.StoreConfig{DB: h5.store.RawDB(), Audit: h5.audit, NowMs: func() int64 { return h5.clk.Now().UnixMilli() }})
 		if err != nil {
 			t.Fatal(err)
 		}

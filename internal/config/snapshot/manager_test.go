@@ -761,3 +761,56 @@ func TestSnapshotKillSwitchSyncRetryOnFastPath(t *testing.T) {
 		t.Fatalf("expected steady-state fast-path Refresh not to invoke ksSync again, got %d", syncCalls)
 	}
 }
+
+func TestRegisterKillSwitchSyncDirtyPreservedUntilSyncRegistered(t *testing.T) {
+	t.Parallel()
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	nowMs := fk.Now().UTC().UnixMilli()
+	st, err := sqlite.Open(context.Background(), sqlite.Config{
+		DBPath: filepath.Join(t.TempDir(), "ks_late_reg.db"),
+		NowMs:  func() int64 { return nowMs },
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	ctx := context.Background()
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "ks-late-org", DisplayName: "KS Late Org"})
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+
+	mgr, err := NewManager(ctx, ManagerConfig{
+		DB:    st.RawDB(),
+		NowMs: func() int64 { return nowMs },
+	})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	if _, err := st.Changelog().Append(ctx, port.ChangelogEntry{
+		OrgID: &org.ID, EntityKind: "emergency_kill_switch", EntityID: "ksw_01LATE", MutationType: port.MutationUpsert, Emergency: true, CreatedAtMs: nowMs,
+	}); err != nil {
+		t.Fatalf("Append changelog: %v", err)
+	}
+
+	// Refresh BEFORE RegisterKillSwitchSync must NOT clear killSwitchSyncDirty.
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatalf("pre-register Refresh: %v", err)
+	}
+
+	syncCalls := 0
+	mgr.RegisterKillSwitchSync(func(context.Context) error {
+		syncCalls++
+		return nil
+	})
+	if err := mgr.Refresh(ctx); err != nil {
+		t.Fatalf("post-register Refresh: %v", err)
+	}
+	if syncCalls != 1 {
+		t.Fatalf("expected RegisterKillSwitchSync + Refresh to invoke pending ksSync exactly once, got %d", syncCalls)
+	}
+	// Verify nil clears cleanly without panic.
+	mgr.RegisterKillSwitchSync(nil)
+}

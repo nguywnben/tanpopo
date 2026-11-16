@@ -34,6 +34,10 @@ func (s *spyAuditSink) Append(_ context.Context, ev port.AuditEvent) error {
 	return nil
 }
 
+func (s *spyAuditSink) AppendTx(ctx context.Context, _ *sql.Tx, ev port.AuditEvent) error {
+	return s.Append(ctx, ev)
+}
+
 func TestMergeLayersMonotonicNarrowing(t *testing.T) {
 	t.Parallel()
 
@@ -574,11 +578,11 @@ func TestStoreCreateUpdateGetAndAuditOnRelaxationNEG1(t *testing.T) {
 	if !errors.Is(err, engine.ErrPolicyRelaxationForbidden) {
 		t.Fatalf("expected ErrPolicyRelaxationForbidden, got: %v", err)
 	}
-	if len(audit.events) != 1 || audit.events[0].EventType != "policy.relaxation_blocked" {
-		t.Fatalf("expected policy.relaxation_blocked audit event, got: %+v", audit.events)
+	if len(audit.events) != 2 || audit.events[0].EventType != "policy.created" || audit.events[1].EventType != "policy.relaxation_blocked" {
+		t.Fatalf("expected policy.created + policy.relaxation_blocked audit events, got: %+v", audit.events)
 	}
 	var meta map[string]string
-	_ = json.Unmarshal([]byte(audit.events[0].MetadataJSON), &meta)
+	_ = json.Unmarshal([]byte(audit.events[1].MetadataJSON), &meta)
 	if meta["code"] != "policy_relaxation_forbidden" {
 		t.Fatalf("expected code=policy_relaxation_forbidden in audit metadata, got %+v", meta)
 	}
@@ -1085,7 +1089,7 @@ func TestTP0019_ReviewAndSecurityHardening(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	polStore, err := engine.NewStore(engine.StoreConfig{DB: st.RawDB(), NowMs: nowFn})
+	polStore, err := engine.NewStore(engine.StoreConfig{DB: st.RawDB(), Audit: &spyAuditSink{}, NowMs: nowFn})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1274,7 +1278,9 @@ type sqlitePolicyAuditSink struct {
 	seq int64
 }
 
-func (s *sqlitePolicyAuditSink) Append(ctx context.Context, ev port.AuditEvent) error {
+func (s *sqlitePolicyAuditSink) insertWithExec(ctx context.Context, exec interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, ev port.AuditEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.seq++
@@ -1284,7 +1290,7 @@ func (s *sqlitePolicyAuditSink) Append(ctx context.Context, ev port.AuditEvent) 
 		chainKey = *ev.OrgID
 		orgArg = *ev.OrgID
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err := exec.ExecContext(ctx, `
 		INSERT INTO audit_events (
 			id, created_at_ms, org_id, chain_key, seq_no,
 			actor_kind, actor_id, entry_point, event_type,
@@ -1297,6 +1303,14 @@ func (s *sqlitePolicyAuditSink) Append(ctx context.Context, ev port.AuditEvent) 
 		strings.Repeat("0", 64), strings.Repeat("a", 64),
 	)
 	return err
+}
+
+func (s *sqlitePolicyAuditSink) Append(ctx context.Context, ev port.AuditEvent) error {
+	return s.insertWithExec(ctx, s.db, ev)
+}
+
+func (s *sqlitePolicyAuditSink) AppendTx(ctx context.Context, tx *sql.Tx, ev port.AuditEvent) error {
+	return s.insertWithExec(ctx, tx, ev)
 }
 
 type togglingTxAuditSink struct {
@@ -1391,3 +1405,22 @@ func TestNEG2TransactionalAuditRollbackPolicy(t *testing.T) {
 	}
 }
 
+type nonTxPolicyAuditSink struct{}
+
+func (nonTxPolicyAuditSink) Append(context.Context, port.AuditEvent) error { return nil }
+
+func TestPolicyNewStoreRejectsMissingOrNonTxAuditSink(t *testing.T) {
+	t.Parallel()
+	st, err := sqlite.Open(context.Background(), sqlite.Config{DBPath: filepath.Join(t.TempDir(), "pol_failclosed.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	if _, err := engine.NewStore(engine.StoreConfig{DB: st.RawDB(), Audit: nil}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewStore nil Audit to fail ErrInvalidInput, got %v", err)
+	}
+	if _, err := engine.NewStore(engine.StoreConfig{DB: st.RawDB(), Audit: nonTxPolicyAuditSink{}}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewStore non-TxAuditSink to fail ErrInvalidInput, got %v", err)
+	}
+}

@@ -5,6 +5,7 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -36,6 +37,10 @@ func (s *recordingAuditSink) Append(_ context.Context, ev port.AuditEvent) error
 	defer s.mu.Unlock()
 	s.events = append(s.events, ev)
 	return nil
+}
+
+func (s *recordingAuditSink) AppendTx(ctx context.Context, _ *sql.Tx, ev port.AuditEvent) error {
+	return s.Append(ctx, ev)
 }
 
 func (s *recordingAuditSink) Count(eventType string) int {
@@ -277,6 +282,7 @@ func TestSessionExpirySuspendedPrincipalAndEdgeCases(t *testing.T) {
 		Argon2:         Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32},
 		SessionTTL:     30 * time.Minute,
 		AllowedOrigins: []string{"https://console.tanpopo.local"},
+		AuditSink:      &recordingAuditSink{},
 	})
 	if err != nil {
 		t.Fatalf("NewLocalService: %v", err)
@@ -423,6 +429,7 @@ func TestCrossTenantEmailShadowingCanceledCtxAndLiveRBACReload(t *testing.T) {
 			Window:        5 * time.Minute,
 			BlockDuration: 2 * time.Minute,
 		},
+		AuditSink: &recordingAuditSink{},
 	})
 	if err != nil {
 		t.Fatalf("NewLocalService: %v", err)
@@ -556,6 +563,7 @@ func TestCapacityBoundingBindRoleAndHeaderConflicts(t *testing.T) {
 			BlockDuration:     2 * time.Minute,
 			MaxFailureBuckets: 6,
 		},
+		AuditSink: &recordingAuditSink{},
 	})
 	if err != nil {
 		t.Fatalf("NewLocalService: %v", err)
@@ -722,3 +730,115 @@ func TestCapacityBoundingBindRoleAndHeaderConflicts(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+type authNonTxAuditSink struct{}
+
+func (authNonTxAuditSink) Append(context.Context, port.AuditEvent) error { return nil }
+
+type togglingAuthTxAuditSink struct {
+	mu   sync.Mutex
+	fail bool
+}
+
+func (s *togglingAuthTxAuditSink) setFail(v bool) {
+	s.mu.Lock()
+	s.fail = v
+	s.mu.Unlock()
+}
+
+func (s *togglingAuthTxAuditSink) Append(context.Context, port.AuditEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.fail {
+		return errors.New("injected auth audit failure")
+	}
+	return nil
+}
+
+func (s *togglingAuthTxAuditSink) AppendTx(ctx context.Context, _ *sql.Tx, ev port.AuditEvent) error {
+	return s.Append(ctx, ev)
+}
+
+func TestLocalServiceFailClosedTxAuditAndAtomicRollback(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	fk := clock.NewFakeClock(clock.DefaultFakeStart())
+	st := openAuthTestDB(t, fk)
+
+	if _, err := NewLocalService(ServiceConfig{
+		DB:        st.RawDB(),
+		AuditSink: nil,
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewLocalService with nil AuditSink to fail ErrInvalidInput, got %v", err)
+	}
+	if _, err := NewLocalService(ServiceConfig{
+		DB:        st.RawDB(),
+		AuditSink: authNonTxAuditSink{},
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewLocalService with non-TxAuditSink to fail ErrInvalidInput, got %v", err)
+	}
+
+	sink := &togglingAuthTxAuditSink{fail: true}
+	svc, err := NewLocalService(ServiceConfig{
+		DB:        st.RawDB(),
+		NowMs:     func() int64 { return fk.Now().UTC().UnixMilli() },
+		Argon2:    Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32},
+		AuditSink: sink,
+	})
+	if err != nil {
+		t.Fatalf("NewLocalService: %v", err)
+	}
+
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "auth-rb-org", DisplayName: "Auth RB"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Failing AppendTx during CreatePrincipal must roll back principal row atomically.
+	if _, err := svc.CreatePrincipal(ctx, CreatePrincipalParams{
+		OrgID:      &org.ID,
+		Kind:       PrincipalKindHumanLocal,
+		EmailOrSub: "rb@example.test",
+		Password:   "correct-horse-battery-staple-99",
+	}); err == nil {
+		t.Fatalf("expected CreatePrincipal to fail closed when AppendTx fails")
+	}
+	var prnCount int
+	if err := st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM principals WHERE org_id = ?`, org.ID).Scan(&prnCount); err != nil {
+		t.Fatal(err)
+	}
+	if prnCount != 0 {
+		t.Fatalf("expected 0 principals after CreatePrincipal AppendTx rollback, got %d", prnCount)
+	}
+
+	// Create principal cleanly, then fail AppendTx during BindRole -> role binding rolled back atomically.
+	sink.setFail(false)
+	prc, err := svc.CreatePrincipal(ctx, CreatePrincipalParams{
+		OrgID:      &org.ID,
+		Kind:       PrincipalKindHumanLocal,
+		EmailOrSub: "rb-ok@example.test",
+		Password:   "correct-horse-battery-staple-99",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sink.setFail(true)
+	if _, err := svc.BindRole(ctx, BindRoleParams{
+		OrgID:       &org.ID,
+		PrincipalID: prc.ID,
+		ScopeType:   rbac.ScopeOrg,
+		ScopeID:     org.ID,
+		RoleName:    rbac.RoleOrgOwner,
+	}); err == nil {
+		t.Fatalf("expected BindRole to fail closed when AppendTx fails")
+	}
+	var rbCount int
+	if err := st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM role_bindings WHERE principal_id = ?`, prc.ID).Scan(&rbCount); err != nil {
+		t.Fatal(err)
+	}
+	if rbCount != 0 {
+		t.Fatalf("expected 0 role_bindings after BindRole AppendTx rollback, got %d", rbCount)
+	}
+}
+

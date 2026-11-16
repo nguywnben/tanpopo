@@ -48,6 +48,10 @@ func (a *auditCapture) Append(_ context.Context, ev port.AuditEvent) error {
 	return nil
 }
 
+func (a *auditCapture) AppendTx(ctx context.Context, _ *sql.Tx, ev port.AuditEvent) error {
+	return a.Append(ctx, ev)
+}
+
 func (a *auditCapture) hasEventType(et string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -2197,3 +2201,31 @@ func TestNEG2TransactionalAuditRollbackInstaller(t *testing.T) {
 	}
 }
 
+type nonTxInstallerAuditSink struct{}
+
+func (nonTxInstallerAuditSink) Append(context.Context, port.AuditEvent) error { return nil }
+
+func TestInstallerNewLifecycleServiceRejectsMissingOrNonTxAuditSink(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	st, err := sqlite.Open(context.Background(), sqlite.Config{DBPath: filepath.Join(tmp, "inst_failclosed.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	if _, err := NewLifecycleService(ServiceConfig{
+		DB:         st.RawDB(),
+		PluginsDir: filepath.Join(tmp, "plugins"),
+		Audit:      nil,
+	}); !errors.Is(err, ErrInvalidLifecycleConfig) {
+		t.Fatalf("expected NewLifecycleService nil Audit to fail ErrInvalidLifecycleConfig, got %v", err)
+	}
+	if _, err := NewLifecycleService(ServiceConfig{
+		DB:         st.RawDB(),
+		PluginsDir: filepath.Join(tmp, "plugins"),
+		Audit:      nonTxInstallerAuditSink{},
+	}); !errors.Is(err, ErrInvalidLifecycleConfig) {
+		t.Fatalf("expected NewLifecycleService non-TxAuditSink to fail ErrInvalidLifecycleConfig, got %v", err)
+	}
+}

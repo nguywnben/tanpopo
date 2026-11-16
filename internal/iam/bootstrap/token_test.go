@@ -5,6 +5,7 @@ package bootstrap
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -21,6 +22,13 @@ import (
 	"github.com/nguywnben/tanpopo/internal/testkit/clock"
 	"github.com/nguywnben/tanpopo/internal/testkit/netguard"
 )
+
+type testTxAuditSink struct{}
+
+func (testTxAuditSink) Append(context.Context, port.AuditEvent) error { return nil }
+func (testTxAuditSink) AppendTx(context.Context, *sql.Tx, port.AuditEvent) error {
+	return nil
+}
 
 func TestMain(m *testing.M) {
 	os.Exit(netguard.MustRunHermeticMain(m))
@@ -51,6 +59,7 @@ func TestBootstrapOneTimeConsumeAndBurn(t *testing.T) {
 		TokenPath: tokenPath,
 		NowMs:     func() int64 { return fk.Now().UTC().UnixMilli() },
 		Argon2:    auth.Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32},
+		AuditSink: testTxAuditSink{},
 	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
@@ -118,9 +127,10 @@ func TestBootstrapOneTimeConsumeAndBurn(t *testing.T) {
 
 	// Verify Personal Admin role bindings + local login work end-to-end.
 	authSvc, err := auth.NewLocalService(auth.ServiceConfig{
-		DB:     st.RawDB(),
-		NowMs:  func() int64 { return fk.Now().UTC().UnixMilli() },
-		Argon2: auth.Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32},
+		DB:        st.RawDB(),
+		NowMs:     func() int64 { return fk.Now().UTC().UnixMilli() },
+		Argon2:    auth.Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32},
+		AuditSink: testTxAuditSink{},
 	})
 	if err != nil {
 		t.Fatalf("NewLocalService: %v", err)
@@ -157,6 +167,7 @@ func TestBootstrapConcurrentSingleWinnerRace(t *testing.T) {
 		TokenPath: tokenPath,
 		NowMs:     func() int64 { return fk.Now().UTC().UnixMilli() },
 		Argon2:    auth.Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32},
+		AuditSink: testTxAuditSink{},
 	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
@@ -200,12 +211,19 @@ func TestBootstrapConcurrentSingleWinnerRace(t *testing.T) {
 }
 
 type captureAuditSink struct {
+	mu     sync.Mutex
 	events []port.AuditEvent
 }
 
 func (c *captureAuditSink) Append(_ context.Context, ev port.AuditEvent) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.events = append(c.events, ev)
 	return nil
+}
+
+func (c *captureAuditSink) AppendTx(ctx context.Context, _ *sql.Tx, ev port.AuditEvent) error {
+	return c.Append(ctx, ev)
 }
 
 func TestBootstrapReloadValidationAndInsecurePermissions(t *testing.T) {
@@ -319,6 +337,7 @@ func TestBootstrapReloadValidationAndInsecurePermissions(t *testing.T) {
 		DB:        st3.RawDB(),
 		TokenPath: filepath.Join(t.TempDir(), "short.token"),
 		Argon2:    auth.Argon2Params{Time: 1, MemoryKiB: 1024, Threads: 1, KeyLen: 32},
+		AuditSink: testTxAuditSink{},
 	})
 	if err != nil {
 		t.Fatalf("NewManager 3: %v", err)
@@ -418,4 +437,17 @@ func TestBootstrapWrongTokenThrottlingAndMultiInstanceRace(t *testing.T) {
 	}); !errors.Is(err, ErrBootstrapAlreadyCompleted) {
 		t.Fatalf("mgrA after mgrB Complete expected ErrBootstrapAlreadyCompleted, got %v", err)
 	}
+
+	// Constructor rejects nil or non-TxAuditSink fail-closed.
+	if _, err := NewManager(ManagerConfig{DB: st.RawDB(), TokenPath: tokenPath, AuditSink: nil}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewManager nil AuditSink to fail ErrInvalidInput, got %v", err)
+	}
+	if _, err := NewManager(ManagerConfig{DB: st.RawDB(), TokenPath: tokenPath, AuditSink: nonTxBootAuditSink{}}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected NewManager non-TxAuditSink to fail ErrInvalidInput, got %v", err)
+	}
 }
+
+type nonTxBootAuditSink struct{}
+
+func (nonTxBootAuditSink) Append(context.Context, port.AuditEvent) error { return nil }
+

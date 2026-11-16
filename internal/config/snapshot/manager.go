@@ -561,9 +561,15 @@ func (m *Manager) RegisterKillSwitchSync(fn func(context.Context) error) {
 	if m == nil {
 		return
 	}
+	m.refreshMu.Lock()
 	m.killSwitchSyncMu.Lock()
 	m.killSwitchSync = fn
+	m.killSwitchSyncDirty = fn != nil
 	m.killSwitchSyncMu.Unlock()
+	m.refreshMu.Unlock()
+	if fn != nil {
+		m.Notify()
+	}
 }
 
 // Current returns the active immutable ConfigSnapshot via a single lock-free atomic load.
@@ -867,8 +873,8 @@ func (m *Manager) Refresh(ctx context.Context) error {
 				m.setLastErr(err)
 				return err
 			}
+			m.killSwitchSyncDirty = false
 		}
-		m.killSwitchSyncDirty = false
 	}
 
 	m.lastPollSuccessMs.Store(next.LoadedAtMs)

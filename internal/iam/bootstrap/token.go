@@ -80,14 +80,14 @@ type Manager struct {
 	tokenPath string
 	nowMs     func() int64
 	argon2    auth.Argon2Params
-	auditSink port.AuditSink
+	auditSink port.TxAuditSink
 
-	mu            sync.Mutex
-	hasDigest     bool
-	digest        [32]byte
-	burned        bool
-	failWindowMs  int64
-	failCount     int
+	mu             sync.Mutex
+	hasDigest      bool
+	digest         [32]byte
+	burned         bool
+	failWindowMs   int64
+	failCount      int
 	blockedUntilMs int64
 }
 
@@ -95,6 +95,13 @@ type Manager struct {
 func NewManager(cfg ManagerConfig) (*Manager, error) {
 	if cfg.DB == nil {
 		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", port.ErrInvalidInput)
+	}
+	if cfg.AuditSink == nil {
+		return nil, fmt.Errorf("%w: non-nil port.TxAuditSink is required", port.ErrInvalidInput)
+	}
+	txAudit, ok := cfg.AuditSink.(port.TxAuditSink)
+	if !ok {
+		return nil, fmt.Errorf("%w: AuditSink must implement port.TxAuditSink", port.ErrInvalidInput)
 	}
 	trimmedPath := strings.TrimSpace(cfg.TokenPath)
 	if trimmedPath == "" {
@@ -121,7 +128,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		tokenPath: absPath,
 		nowMs:     nowFn,
 		argon2:    a2,
-		auditSink: cfg.AuditSink,
+		auditSink: txAudit,
 	}, nil
 }
 
@@ -461,27 +468,23 @@ func (m *Manager) Complete(ctx context.Context, req CompleteRequest) (*CompleteR
 		return nil, mapRaceOrErr(err)
 	}
 
-	if m.auditSink != nil {
-		if txSink, ok := m.auditSink.(port.TxAuditSink); ok {
-			audID, idErr := idgen.New(idgen.PrefixAudit)
-			if idErr != nil {
-				return nil, idErr
-			}
-			if aerr := txSink.AppendTx(ctx, tx, port.AuditEvent{
-				ID:           audID,
-				CreatedAtMs:  now,
-				OrgID:        nil,
-				ActorKind:    "SYSTEM",
-				ActorID:      principalID,
-				EntryPoint:   port.AuditEntryPointAdminAPI,
-				EventType:    "instance.bootstrap_completed",
-				TargetType:   "organization",
-				TargetID:     orgID,
-				MetadataJSON: `{"mode":"personal_admin_operator_org_owner"}`,
-			}); aerr != nil {
-				return nil, aerr
-			}
-		}
+	audID, idErr := idgen.New(idgen.PrefixAudit)
+	if idErr != nil {
+		return nil, idErr
+	}
+	if aerr := m.auditSink.AppendTx(ctx, tx, port.AuditEvent{
+		ID:           audID,
+		CreatedAtMs:  now,
+		OrgID:        nil,
+		ActorKind:    "SYSTEM",
+		ActorID:      principalID,
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    "instance.bootstrap_completed",
+		TargetType:   "organization",
+		TargetID:     orgID,
+		MetadataJSON: `{"mode":"personal_admin_operator_org_owner"}`,
+	}); aerr != nil {
+		return nil, aerr
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -489,25 +492,6 @@ func (m *Manager) Complete(ctx context.Context, req CompleteRequest) (*CompleteR
 	}
 
 	m.burnLocked()
-
-	if m.auditSink != nil {
-		if _, isTx := m.auditSink.(port.TxAuditSink); !isTx {
-			if audID, idErr := idgen.New(idgen.PrefixAudit); idErr == nil {
-				_ = m.auditSink.Append(ctx, port.AuditEvent{
-					ID:           audID,
-					CreatedAtMs:  now,
-					OrgID:        nil,
-					ActorKind:    "SYSTEM",
-					ActorID:      principalID,
-					EntryPoint:   port.AuditEntryPointAdminAPI,
-					EventType:    "instance.bootstrap_completed",
-					TargetType:   "organization",
-					TargetID:     orgID,
-					MetadataJSON: `{"mode":"personal_admin_operator_org_owner"}`,
-				})
-			}
-		}
-	}
 
 	return &CompleteResult{
 		OrgID:            orgID,

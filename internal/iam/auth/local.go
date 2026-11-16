@@ -14,6 +14,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -268,7 +269,7 @@ type LocalService struct {
 	maxActiveSessions       int
 	maxSessionsPerPrincipal int
 	rateCfg                 RateLimitConfig
-	auditSink               port.AuditSink
+	auditSink               port.TxAuditSink
 	allowedOrigins          map[string]bool
 	dummyHash               string
 	argonSem                chan struct{}
@@ -284,6 +285,13 @@ type LocalService struct {
 func NewLocalService(cfg ServiceConfig) (*LocalService, error) {
 	if cfg.DB == nil {
 		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", port.ErrInvalidInput)
+	}
+	if cfg.AuditSink == nil {
+		return nil, fmt.Errorf("%w: non-nil port.TxAuditSink is required", port.ErrInvalidInput)
+	}
+	txAudit, ok := cfg.AuditSink.(port.TxAuditSink)
+	if !ok {
+		return nil, fmt.Errorf("%w: AuditSink must implement port.TxAuditSink", port.ErrInvalidInput)
 	}
 	nowFn := cfg.NowMs
 	if nowFn == nil {
@@ -343,7 +351,7 @@ func NewLocalService(cfg ServiceConfig) (*LocalService, error) {
 		maxActiveSessions:       maxSessions,
 		maxSessionsPerPrincipal: maxPerPrincipal,
 		rateCfg:                 rl,
-		auditSink:               cfg.AuditSink,
+		auditSink:               txAudit,
 		allowedOrigins:          origins,
 		dummyHash:               dummy,
 		argonSem:                make(chan struct{}, defaultMaxConcurrentArgon2),
@@ -352,7 +360,8 @@ func NewLocalService(cfg ServiceConfig) (*LocalService, error) {
 	}, nil
 }
 
-// CreatePrincipal hashes the local password with Argon2id and persists a new principal.
+// CreatePrincipal hashes the local password with Argon2id and persists a new principal
+// with an atomic transactional audit event.
 func (s *LocalService) CreatePrincipal(ctx context.Context, params CreatePrincipalParams) (*PrincipalRecord, error) {
 	email := strings.ToLower(strings.TrimSpace(params.EmailOrSub))
 	if email == "" || strings.ContainsAny(email, " \t\r\n") {
@@ -385,10 +394,20 @@ func (s *LocalService) CreatePrincipal(ctx context.Context, params CreatePrincip
 	now := s.nowMs()
 
 	var orgVal any
+	var outOrg *string
 	if params.OrgID != nil && strings.TrimSpace(*params.OrgID) != "" {
-		orgVal = strings.TrimSpace(*params.OrgID)
+		v := strings.TrimSpace(*params.OrgID)
+		orgVal = v
+		outOrg = &v
 	}
-	if _, err := s.db.ExecContext(ctx, `
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("auth: begin CreatePrincipal tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO principals (
 			id, org_id, kind, email_or_sub, password_argon2id, oidc_issuer,
 			status, version, last_login_at_ms, created_at_ms, updated_at_ms
@@ -401,10 +420,37 @@ func (s *LocalService) CreatePrincipal(ctx context.Context, params CreatePrincip
 		return nil, err
 	}
 
-	var outOrg *string
-	if v, ok := orgVal.(string); ok {
-		outOrg = &v
+	audID, err := idgen.New(idgen.PrefixAudit)
+	if err != nil {
+		return nil, err
 	}
+	metaBytes, err := json.Marshal(map[string]string{
+		"kind": kind,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.auditSink.AppendTx(ctx, tx, port.AuditEvent{
+		ID:           audID,
+		CreatedAtMs:  now,
+		OrgID:        outOrg,
+		ActorKind:    "SYSTEM",
+		ActorID:      "auth_local",
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    "principal.created",
+		TargetType:   "principal",
+		TargetID:     id,
+		MetadataJSON: string(metaBytes),
+	}); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return nil, fmt.Errorf("%w: principal already exists", port.ErrAlreadyExists)
+		}
+		return nil, err
+	}
+
 	return &PrincipalRecord{
 		ID:          id,
 		OrgID:       outOrg,
@@ -418,7 +464,8 @@ func (s *LocalService) CreatePrincipal(ctx context.Context, params CreatePrincip
 }
 
 // BindRole assigns one of the 6 canonical RBAC roles to a principal inside a strictly validated scope
-// enforcing canonical CR-04 role-to-scope invariants (OPERATOR<->INSTANCE, ORG_OWNER<->ORG, TEAM_ADMIN<->PROJECT).
+// enforcing canonical CR-04 role-to-scope invariants (OPERATOR<->INSTANCE, ORG_OWNER<->ORG, TEAM_ADMIN<->PROJECT),
+// atomically recording an audit event.
 func (s *LocalService) BindRole(ctx context.Context, params BindRoleParams) (*rbac.RoleBinding, error) {
 	if strings.TrimSpace(params.PrincipalID) == "" || !rbac.IsValidRole(params.RoleName) {
 		return nil, fmt.Errorf("%w: valid principal_id and canonical role_name required", port.ErrInvalidInput)
@@ -460,8 +507,14 @@ func (s *LocalService) BindRole(ctx context.Context, params BindRoleParams) (*rb
 		return nil, fmt.Errorf("%w: invalid scope_type %q", port.ErrInvalidInput, params.ScopeType)
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("auth: begin BindRole tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	var prcOrg sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT org_id FROM principals WHERE id = ?`, params.PrincipalID).Scan(&prcOrg)
+	err = tx.QueryRowContext(ctx, `SELECT org_id FROM principals WHERE id = ?`, params.PrincipalID).Scan(&prcOrg)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, port.ErrNotFound
 	}
@@ -479,7 +532,7 @@ func (s *LocalService) BindRole(ctx context.Context, params BindRoleParams) (*rb
 		}
 		if params.ScopeType == rbac.ScopeProject {
 			var one int
-			pErr := s.db.QueryRowContext(ctx, `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, expectedOrg, params.ScopeID).Scan(&one)
+			pErr := tx.QueryRowContext(ctx, `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, expectedOrg, params.ScopeID).Scan(&one)
 			if errors.Is(pErr, sql.ErrNoRows) {
 				return nil, port.ErrNotFound
 			}
@@ -504,11 +557,45 @@ func (s *LocalService) BindRole(ctx context.Context, params BindRoleParams) (*rb
 		orgCopy = &v
 	}
 
-	if _, err := s.db.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
 		VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
 		rbID, orgVal, params.PrincipalID, params.ScopeType, params.ScopeID, params.RoleName, now,
 	); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return nil, fmt.Errorf("%w: role binding already exists", port.ErrAlreadyExists)
+		}
+		return nil, err
+	}
+
+	audID, err := idgen.New(idgen.PrefixAudit)
+	if err != nil {
+		return nil, err
+	}
+	metaBytes, err := json.Marshal(map[string]string{
+		"principal_id": params.PrincipalID,
+		"scope_type":   params.ScopeType,
+		"scope_id":     params.ScopeID,
+		"role_name":    params.RoleName,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.auditSink.AppendTx(ctx, tx, port.AuditEvent{
+		ID:           audID,
+		CreatedAtMs:  now,
+		OrgID:        orgCopy,
+		ActorKind:    "SYSTEM",
+		ActorID:      "auth_local",
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    "role_binding.created",
+		TargetType:   "role_binding",
+		TargetID:     rbID,
+		MetadataJSON: string(metaBytes),
+	}); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, fmt.Errorf("%w: role binding already exists", port.ErrAlreadyExists)
 		}

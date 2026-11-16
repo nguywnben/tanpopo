@@ -6,6 +6,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -15,9 +16,10 @@ import (
 )
 
 type tenancyRepo struct {
-	store *Store // non-nil on root Store; nil inside an explicit sqliteTx
-	exec  sqlExecQuery
-	nowMs func() int64
+	store     *Store // non-nil on root Store; nil inside an explicit sqliteTx
+	exec      sqlExecQuery
+	nowMs     func() int64
+	auditSink port.AuditSink
 }
 
 func (r *tenancyRepo) withWriteTx(ctx context.Context, fn func(exec sqlExecQuery) error) error {
@@ -47,6 +49,54 @@ func appendChangelogSQL(ctx context.Context, exec sqlExecQuery, orgID *string, e
 		return 0, fmt.Errorf("sqlite: read config_epoch: %w", err)
 	}
 	return epoch, nil
+}
+
+func emitTenancyAuditTx(
+	ctx context.Context,
+	exec sqlExecQuery,
+	auditSink port.AuditSink,
+	orgID *string,
+	eventType, targetType, targetID string,
+	meta map[string]any,
+	now int64,
+) error {
+	if auditSink == nil {
+		return nil
+	}
+	if _, isNoop := auditSink.(noopAuditSink); isNoop {
+		return nil
+	}
+	txSink, ok := auditSink.(port.TxAuditSink)
+	if !ok {
+		return fmt.Errorf("%w: AuditSink must implement port.TxAuditSink", port.ErrInvalidInput)
+	}
+	sqlTx, isTx := exec.(*sql.Tx)
+	if !isTx {
+		return fmt.Errorf("%w: tenancy audit requires an active *sql.Tx", port.ErrInvalidInput)
+	}
+	auditID, err := idgen.New(idgen.PrefixAudit)
+	if err != nil {
+		return err
+	}
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	rawMeta, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	return txSink.AppendTx(ctx, sqlTx, port.AuditEvent{
+		ID:           auditID,
+		CreatedAtMs:  now,
+		OrgID:        orgID,
+		ActorKind:    "SYSTEM",
+		ActorID:      "tenancy",
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    eventType,
+		TargetType:   targetType,
+		TargetID:     targetID,
+		MetadataJSON: string(rawMeta),
+	})
 }
 
 func validateCallerID(id, expectedPrefix string) error {
@@ -91,8 +141,13 @@ func (r *tenancyRepo) CreateOrganization(ctx context.Context, params port.Create
 		); err != nil {
 			return mapSQLiteError(err)
 		}
-		_, err := appendChangelogSQL(ctx, exec, &id, "organization", id, port.MutationUpsert, false, now)
-		return err
+		if _, err := appendChangelogSQL(ctx, exec, &id, "organization", id, port.MutationUpsert, false, now); err != nil {
+			return err
+		}
+		return emitTenancyAuditTx(ctx, exec, r.auditSink, &id, "organization.created", "organization", id, map[string]any{
+			"slug":             params.Slug,
+			"min_plugin_trust": minTrust,
+		}, now)
 	})
 	if err != nil {
 		return nil, err
@@ -226,6 +281,12 @@ func (r *tenancyRepo) UpdateOrganization(ctx context.Context, orgID string, expe
 		if _, err := appendChangelogSQL(ctx, exec, &orgID, "organization", orgID, port.MutationUpsert, false, now); err != nil {
 			return err
 		}
+		if err := emitTenancyAuditTx(ctx, exec, r.auditSink, &orgID, "organization.updated", "organization", orgID, map[string]any{
+			"status":           nextStatus,
+			"min_plugin_trust": nextTrust,
+		}, now); err != nil {
+			return err
+		}
 		updated, err = scanOrganization(exec.QueryRowContext(ctx, `
 			SELECT id, slug, display_name, status, default_data_region,
 			       min_plugin_trust, require_four_eyes_approval, version, created_at_ms, updated_at_ms
@@ -264,8 +325,12 @@ func (r *tenancyRepo) CreateProject(ctx context.Context, orgID string, params po
 		); err != nil {
 			return mapSQLiteError(err)
 		}
-		_, err := appendChangelogSQL(ctx, exec, &orgID, "project", id, port.MutationUpsert, false, now)
-		return err
+		if _, err := appendChangelogSQL(ctx, exec, &orgID, "project", id, port.MutationUpsert, false, now); err != nil {
+			return err
+		}
+		return emitTenancyAuditTx(ctx, exec, r.auditSink, &orgID, "project.created", "project", id, map[string]any{
+			"slug": params.Slug,
+		}, now)
 	})
 	if err != nil {
 		return nil, err
@@ -383,6 +448,11 @@ func (r *tenancyRepo) UpdateProject(ctx context.Context, orgID, projectID string
 		if _, err := appendChangelogSQL(ctx, exec, &orgID, "project", projectID, port.MutationUpsert, false, now); err != nil {
 			return err
 		}
+		if err := emitTenancyAuditTx(ctx, exec, r.auditSink, &orgID, "project.updated", "project", projectID, map[string]any{
+			"status": nextStatus,
+		}, now); err != nil {
+			return err
+		}
 		updated, err = scanProject(exec.QueryRowContext(ctx, `
 			SELECT id, org_id, slug, display_name, status, enforced_region, version, created_at_ms, updated_at_ms
 			FROM projects WHERE org_id = ? AND id = ?`, orgID, projectID))
@@ -422,8 +492,10 @@ func (r *tenancyRepo) DeleteProject(ctx context.Context, orgID, projectID string
 			}
 			return port.ErrVersionConflict
 		}
-		_, err = appendChangelogSQL(ctx, exec, &orgID, "project", projectID, port.MutationDelete, false, now)
-		return err
+		if _, err := appendChangelogSQL(ctx, exec, &orgID, "project", projectID, port.MutationDelete, false, now); err != nil {
+			return err
+		}
+		return emitTenancyAuditTx(ctx, exec, r.auditSink, &orgID, "project.deleted", "project", projectID, nil, now)
 	})
 }
 
@@ -456,8 +528,13 @@ func (r *tenancyRepo) CreateEnvironment(ctx context.Context, orgID, projectID st
 		); err != nil {
 			return mapSQLiteError(err)
 		}
-		_, err := appendChangelogSQL(ctx, exec, &orgID, "environment", id, port.MutationUpsert, false, now)
-		return err
+		if _, err := appendChangelogSQL(ctx, exec, &orgID, "environment", id, port.MutationUpsert, false, now); err != nil {
+			return err
+		}
+		return emitTenancyAuditTx(ctx, exec, r.auditSink, &orgID, "environment.created", "environment", id, map[string]any{
+			"project_id": projectID,
+			"slug":       params.Slug,
+		}, now)
 	})
 	if err != nil {
 		return nil, err
@@ -560,6 +637,12 @@ func (r *tenancyRepo) UpdateEnvironment(ctx context.Context, orgID, envID string
 		if _, err := appendChangelogSQL(ctx, exec, &orgID, "environment", envID, port.MutationUpsert, false, now); err != nil {
 			return err
 		}
+		if err := emitTenancyAuditTx(ctx, exec, r.auditSink, &orgID, "environment.updated", "environment", envID, map[string]any{
+			"slug":                nextSlug,
+			"require_tested_caps": nextTested,
+		}, now); err != nil {
+			return err
+		}
 		updated, err = scanEnvironment(exec.QueryRowContext(ctx, `
 			SELECT id, org_id, project_id, slug, require_tested_caps, version, created_at_ms, updated_at_ms
 			FROM environments WHERE org_id = ? AND id = ?`, orgID, envID))
@@ -599,8 +682,10 @@ func (r *tenancyRepo) DeleteEnvironment(ctx context.Context, orgID, envID string
 			}
 			return port.ErrVersionConflict
 		}
-		_, err = appendChangelogSQL(ctx, exec, &orgID, "environment", envID, port.MutationDelete, false, now)
-		return err
+		if _, err := appendChangelogSQL(ctx, exec, &orgID, "environment", envID, port.MutationDelete, false, now); err != nil {
+			return err
+		}
+		return emitTenancyAuditTx(ctx, exec, r.auditSink, &orgID, "environment.deleted", "environment", envID, nil, now)
 	})
 }
 
