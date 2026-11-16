@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0024` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0009`, `TP-IMP-0023` — `GAP-01, 07, 11`)* |
+| **Status** | **`READY`** *(Unlocked `2026-11-16` sequentially under [`DEC-034`](../../governance/decisions.md)/[`DEC-037`](../../governance/decisions.md) after DoR & upstream `Dependencies` [`TP-IMP-0002`, `0009`, `0023`] = `DONE`)* |
 | **Size** | `L` (`internal/admin/http/server.go`, `bootstrap.go`, `auth.go`, `tenancy.go`, `vkeys.go`, `pagination.go`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Control-plane `/admin/v1/*` surface, `ETag/409` optimistic concurrency control, cursor pagination & per-action authorization)* |
 | **Technical Owner** | `Staff Control-Plane / Security Engineer` |

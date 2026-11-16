@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0023` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-04` |
-| **Status** | **`READY`** *(Unlocked `2026-11-16` sequentially under [`DEC-034`](../../governance/decisions.md)/[`DEC-036`](../../governance/decisions.md) after DoR & upstream `Dependencies` [`TP-IMP-0003`, `0009`, `0011`, `0022`] = `DONE`; SQLite migration reconciled from `0010` [`0010_policies.sql`] to sequential `db/migrations/sqlite/0014_audit_killswitch.sql`)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-16` by **Gemini 4 Hydrogen** under [`DEC-034`](../../governance/decisions.md)/[`DEC-037`](../../governance/decisions.md) at implementation commit `53e0adc916dfd3d146a94f2c19ada6c36c7e35ea`; GitHub Actions CI Run `43881564733` `completed / success` across Stage 0 + Stage 1 `ubuntu-24.04` `unshare --net` + `-race`, `macos-15` `-race -count=3`, `windows-2022` `CGO_ENABLED=0`; fresh independent `code-reviewer` [`5a60c07c`] `APPROVE` & `security-auditor` [`825ba6fd`] `PASS`; SQLite migration `db/migrations/sqlite/0014_audit_killswitch.sql`)* |
 | **Size** | `L` (`internal/security/audit/*`, `internal/security/killswitch/*`, `db/migrations/sqlite/0014_audit_killswitch.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Tamper-evident forensic integrity `TM-13` & emergency security incident containment)* |
 | **Technical Owner** | `Principal Security & Incident Response Engineer` |
