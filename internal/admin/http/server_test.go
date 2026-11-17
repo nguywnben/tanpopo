@@ -173,6 +173,14 @@ func newAdminTestHarness(t *testing.T) *adminTestHarness {
 	}
 
 	pagSecret := []byte("0123456789abcdef0123456789abcdef")
+	lockfilePath := filepath.Join(dir, "tanpopo.lock")
+	if err := os.WriteFile(lockfilePath, []byte("[]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(dir, "tanpopo.yaml")
+	if err := os.WriteFile(configPath, []byte("data_dir: "+dir+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	srv, err := NewServer(ServerConfig{
 		Store:            st,
 		DB:               st.RawDB(),
@@ -185,6 +193,8 @@ func newAdminTestHarness(t *testing.T) *adminTestHarness {
 		Audit:            auditLog,
 		NowMs:            nowFn,
 		PaginationSecret: pagSecret,
+		LockfilePath:     lockfilePath,
+		ConfigPath:       configPath,
 		TokenVerifier: func(_ context.Context, raw string) (*rbac.Actor, *SessionMetadata, error) {
 			h.bearerMu.RLock()
 			actor, ok := h.bearerTokens[raw]

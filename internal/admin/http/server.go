@@ -118,6 +118,7 @@ type ServerConfig struct {
 	MarketplaceCatalog       []MarketplaceCatalogEntry
 	ArchiveResolver          ExtensionArchiveResolver
 	LockfilePath             string
+	ConfigPath               string
 	ProbeRateLimitPerMinute  int
 	Audit                    port.AuditSink
 	NowMs                    func() int64
@@ -233,6 +234,7 @@ type Server struct {
 	marketplace     []MarketplaceCatalogEntry
 	archiveResolver ExtensionArchiveResolver
 	lockfilePath    string
+	configPath      string
 	probeLimiter    *slidingWindowLimiter
 	audit           port.AuditSink
 	txAudit         port.TxAuditSink
@@ -392,6 +394,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		marketplace:     marketplace,
 		archiveResolver: cfg.ArchiveResolver,
 		lockfilePath:    strings.TrimSpace(cfg.LockfilePath),
+		configPath:      strings.TrimSpace(cfg.ConfigPath),
 		probeLimiter:    newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
 		audit:           auditSink,
 		txAudit:         txAudit,

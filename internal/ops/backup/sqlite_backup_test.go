@@ -34,27 +34,27 @@ func (w *testKeyWrapper) WrapArchiveKey(ctx context.Context, key []byte) (string
 func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	ctx := context.Background()
 	if runtime.GOOS != "linux" {
-		if _, err := CreateSQLite(ctx, testSnapshotter{content: []byte("snapshot")}, &testKeyWrapper{}, t.TempDir(), "", 1_795_000_000_000); err == nil {
+		if _, err := CreateSQLite(ctx, testSnapshotter{content: []byte("snapshot")}, &testKeyWrapper{}, t.TempDir(), "", "", 1_795_000_000_000); err == nil {
 			t.Fatal("CreateSQLite returned success without a directory-handle-pinned SQLite path")
 		}
 		return
 	}
 	root := t.TempDir()
 	outputDir := filepath.Join(root, "backups")
-	outputRoot, err := openOutputRoot(outputDir)
+	stagingOutputRoot, err := openOutputRoot(filepath.Join(root, "staging-output"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer outputRoot.Close()
-	unlock, err := lockBackup(outputRoot)
+	defer stagingOutputRoot.Close()
+	unlock, err := lockBackup(stagingOutputRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer unlock()
-	stagingRoot, cleanupStagingRoot, err := openStagingRoot(outputRoot)
+	stagingRoot, cleanupStagingRoot, err := openStagingRoot(stagingOutputRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
+	unlock()
 	t.Cleanup(func() {
 		if err := cleanupStagingRoot(); err != nil {
 			t.Errorf("clean test staging root: %v", err)
@@ -94,9 +94,13 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	if err := os.WriteFile(lockfile, []byte("extension lock manifest"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	config := filepath.Join(root, "tanpopo.yaml")
+	if err := os.WriteFile(config, []byte("data_dir: /var/lib/tanpopo\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	plainDB := []byte("sqlite snapshot contains sensitive row data")
 	keys := &testKeyWrapper{}
-	receipt, err := CreateSQLite(ctx, testSnapshotter{content: plainDB}, keys, outputDir, lockfile, 1_795_000_000_000)
+	receipt, err := CreateSQLite(ctx, testSnapshotter{content: plainDB}, keys, outputDir, lockfile, config, 1_795_000_000_000)
 	if err != nil {
 		t.Fatalf("CreateSQLite: %v", err)
 	}

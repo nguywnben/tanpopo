@@ -56,7 +56,8 @@ type manifest struct {
 	FormatVersion int    `json:"format_version"`
 	CreatedAt     string `json:"created_at"`
 	DatabaseSHA256 string `json:"database_sha256"`
-	LockfileSHA256 string `json:"lockfile_sha256,omitempty"`
+	LockfileSHA256 string `json:"lockfile_sha256"`
+	ConfigSHA256   string `json:"config_sha256"`
 }
 
 type envelopeHeader struct {
@@ -74,9 +75,9 @@ type envelopeHeader struct {
 // CreateSQLite takes a consistent online SQLite snapshot, includes the lockfile
 // when configured, writes a manifest, zstd-frames the tar stream, and seals
 // it in independently authenticated AES-GCM chunks under a random wrapped key.
-func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outputDir, lockfilePath string, nowMs int64) (_ Receipt, resultErr error) {
-	if store == nil || keys == nil || strings.TrimSpace(outputDir) == "" {
-		return Receipt{}, errors.New("backup: snapshotter, key wrapper, and output directory are required")
+func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outputDir, lockfilePath, configPath string, nowMs int64) (_ Receipt, resultErr error) {
+	if store == nil || keys == nil || strings.TrimSpace(outputDir) == "" || strings.TrimSpace(lockfilePath) == "" || strings.TrimSpace(configPath) == "" {
+		return Receipt{}, errors.New("backup: snapshotter, key wrapper, output directory, lockfile, and config file are required")
 	}
 	if runtime.GOOS != "linux" {
 		return Receipt{}, fmt.Errorf("backup: secure SQLite snapshot paths are unsupported on %s", runtime.GOOS)
@@ -153,6 +154,20 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 			return Receipt{}, fmt.Errorf("backup: protect staging directory: %w", err)
 		}
 	}
+	lockfileInfo, err := os.Lstat(lockfilePath)
+	if err != nil {
+		return Receipt{}, fmt.Errorf("backup: inspect extension lockfile: %w", err)
+	}
+	if !lockfileInfo.Mode().IsRegular() || lockfileInfo.Mode()&os.ModeSymlink != 0 {
+		return Receipt{}, errors.New("backup: lockfile must be a regular non-symlink file")
+	}
+	configInfo, err := os.Lstat(configPath)
+	if err != nil {
+		return Receipt{}, fmt.Errorf("backup: inspect server config file: %w", err)
+	}
+	if !configInfo.Mode().IsRegular() || configInfo.Mode()&os.ModeSymlink != 0 {
+		return Receipt{}, errors.New("backup: server config must be a regular non-symlink file")
+	}
 	dbRelPath := "database.sqlite"
 	dbPath := filepath.Join(sqliteStagePath, dbRelPath)
 	if err := store.BackupTo(ctx, dbPath); err != nil {
@@ -162,32 +177,24 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	if err != nil {
 		return Receipt{}, err
 	}
-	lockfileCopy := ""
-	lockfileHash := ""
-	if strings.TrimSpace(lockfilePath) != "" {
-		info, statErr := os.Lstat(lockfilePath)
-		if statErr == nil {
-			if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-				return Receipt{}, errors.New("backup: lockfile must be a regular non-symlink file")
-			}
-			lockfileCopy = "tanpopo.lock"
-			if err := copyFile(ctx, lockfilePath, stageRoot, lockfileCopy, info); err != nil {
-				return Receipt{}, fmt.Errorf("backup: stage extension lockfile: %w", err)
-			}
-			lockfileHash, err = fileSHA256(stageRoot, lockfileCopy)
-			if err != nil {
-				return Receipt{}, err
-			}
-		} else if !errors.Is(statErr, os.ErrNotExist) {
-			return Receipt{}, fmt.Errorf("backup: inspect extension lockfile: %w", statErr)
-		}
+	lockfileCopy := "tanpopo.lock"
+	if err := copyFile(ctx, lockfilePath, stageRoot, lockfileCopy, lockfileInfo); err != nil {
+		return Receipt{}, fmt.Errorf("backup: stage extension lockfile: %w", err)
 	}
-
-	payloadPath := "payload.tar.zst"
-	m := manifest{FormatVersion: 1, CreatedAt: createdAt, DatabaseSHA256: dbHash, LockfileSHA256: lockfileHash}
-	if err := writePayload(ctx, stageRoot, payloadPath, dbRelPath, lockfileCopy, m); err != nil {
+	lockfileHash, err := fileSHA256(stageRoot, lockfileCopy)
+	if err != nil {
 		return Receipt{}, err
 	}
+	configCopy := "tanpopo.yaml"
+	if err := copyFile(ctx, configPath, stageRoot, configCopy, configInfo); err != nil {
+		return Receipt{}, fmt.Errorf("backup: stage server config: %w", err)
+	}
+	configHash, err := fileSHA256(stageRoot, configCopy)
+	if err != nil {
+		return Receipt{}, err
+	}
+
+	m := manifest{FormatVersion: 1, CreatedAt: createdAt, DatabaseSHA256: dbHash, LockfileSHA256: lockfileHash, ConfigSHA256: configHash}
 
 	dataKey := make([]byte, 32)
 	if _, err := rand.Read(dataKey); err != nil {
@@ -215,7 +222,7 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	finalName := "tanpopo-backup-" + backupID + ".tpop.enc"
 	tempArchive := ".tanpopo-backup-" + backupID + ".partial"
 	defer outputRoot.Remove(tempArchive)
-	if err := encryptPayload(ctx, stageRoot, outputRoot, tempArchive, payloadPath, dataKey, noncePrefix, backupID, headerBytes); err != nil {
+	if err := writePayload(ctx, stageRoot, dbRelPath, lockfileCopy, configCopy, m, outputRoot, tempArchive, dataKey, noncePrefix, backupID, headerBytes); err != nil {
 		return Receipt{}, err
 	}
 	if _, err := outputRoot.Lstat(finalName); err == nil {
@@ -429,30 +436,52 @@ func pathForOpenRoot(root *os.Root) (*os.File, string, error) {
 	return dir, filepath.Join(procDir, strconv.FormatUint(uint64(fd), 10)), nil
 }
 
-func writePayload(ctx context.Context, root *os.Root, path, dbPath, lockfilePath string, m manifest) error {
-	out, err := root.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+func writePayload(ctx context.Context, srcRoot *os.Root, dbPath, lockfilePath, configPath string, m manifest, dstRoot *os.Root, destPath string, key, noncePrefix []byte, backupID string, header []byte) error {
+	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("backup: create compressed payload: %w", err)
+		return fmt.Errorf("backup: initialize archive cipher: %w", err)
 	}
-	good := false
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return fmt.Errorf("backup: initialize archive authentication: %w", err)
+	}
+	dst, err := dstRoot.OpenFile(destPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("backup: create encrypted archive: %w", err)
+	}
+	complete := false
 	defer func() {
-		_ = out.Close()
-		if !good {
-			_ = root.Remove(path)
+		_ = dst.Close()
+		if !complete {
+			_ = dstRoot.Remove(destPath)
 		}
 	}()
-	compressed, err := newZstdRawWriter(out)
+	if len(header) > 1<<20 {
+		return errors.New("backup: archive header exceeds size limit")
+	}
+	if _, err := io.WriteString(dst, archiveMagic); err != nil {
+		return fmt.Errorf("backup: write archive magic: %w", err)
+	}
+	if err := binary.Write(dst, binary.BigEndian, uint32(len(header))); err != nil {
+		return fmt.Errorf("backup: write header length: %w", err)
+	}
+	if _, err := dst.Write(header); err != nil {
+		return fmt.Errorf("backup: write archive header: %w", err)
+	}
+	encrypted := &encryptedFrameWriter{ctx: ctx, dst: dst, aead: aead, noncePrefix: noncePrefix, backupID: backupID, header: header, buffer: make([]byte, 0, chunkSize)}
+	compressed, err := newZstdRawWriter(encrypted)
 	if err != nil {
 		return fmt.Errorf("backup: initialize zstd frame: %w", err)
 	}
 	archive := tar.NewWriter(compressed)
-	if err := addArchiveFile(ctx, archive, root, dbPath, "database.sqlite"); err != nil {
+	if err := addArchiveFile(ctx, archive, srcRoot, dbPath, "database.sqlite"); err != nil {
 		return err
 	}
-	if lockfilePath != "" {
-		if err := addArchiveFile(ctx, archive, root, lockfilePath, "tanpopo.lock"); err != nil {
-			return err
-		}
+	if err := addArchiveFile(ctx, archive, srcRoot, lockfilePath, "tanpopo.lock"); err != nil {
+		return err
+	}
+	if err := addArchiveFile(ctx, archive, srcRoot, configPath, "tanpopo.yaml"); err != nil {
+		return err
 	}
 	manifestBytes, err := json.Marshal(m)
 	if err != nil {
@@ -470,13 +499,88 @@ func writePayload(ctx context.Context, root *os.Root, path, dbPath, lockfilePath
 	if err := compressed.Close(); err != nil {
 		return fmt.Errorf("backup: finalize zstd frame: %w", err)
 	}
-	if err := out.Sync(); err != nil {
-		return fmt.Errorf("backup: sync compressed payload: %w", err)
+	if err := encrypted.Close(); err != nil {
+		return err
 	}
-	if err := out.Close(); err != nil {
-		return fmt.Errorf("backup: close compressed payload: %w", err)
+	if err := dst.Sync(); err != nil {
+		return fmt.Errorf("backup: sync encrypted archive: %w", err)
 	}
-	good = true
+	if err := dst.Close(); err != nil {
+		return fmt.Errorf("backup: close encrypted archive: %w", err)
+	}
+	complete = true
+	return nil
+}
+
+type encryptedFrameWriter struct {
+	ctx         context.Context
+	dst         io.Writer
+	aead        cipher.AEAD
+	noncePrefix []byte
+	backupID    string
+	header      []byte
+	buffer      []byte
+	index       uint64
+	closed      bool
+}
+
+func (w *encryptedFrameWriter) Write(p []byte) (int, error) {
+	if w.closed {
+		return 0, errors.New("backup: write after encrypted archive close")
+	}
+	written := 0
+	for len(p) > 0 {
+		if err := w.ctx.Err(); err != nil {
+			return written, err
+		}
+		if len(w.buffer) == chunkSize {
+			if err := w.flushFrame(); err != nil {
+				return written, err
+			}
+		}
+		n := chunkSize - len(w.buffer)
+		if n > len(p) {
+			n = len(p)
+		}
+		w.buffer = append(w.buffer, p[:n]...)
+		p = p[n:]
+		written += n
+	}
+	return written, nil
+}
+
+func (w *encryptedFrameWriter) flushFrame() error {
+	nonce := make([]byte, w.aead.NonceSize())
+	copy(nonce, w.noncePrefix)
+	binary.BigEndian.PutUint64(nonce[len(w.noncePrefix):], w.index)
+	sealed := w.aead.Seal(nil, nonce, w.buffer, chunkAAD(w.backupID, w.index, w.header))
+	if err := binary.Write(w.dst, binary.BigEndian, uint32(len(sealed))); err != nil {
+		return fmt.Errorf("backup: write encrypted frame length: %w", err)
+	}
+	if err := writeAll(w.dst, sealed); err != nil {
+		return fmt.Errorf("backup: write encrypted frame: %w", err)
+	}
+	w.index++
+	w.buffer = w.buffer[:0]
+	return nil
+}
+
+func (w *encryptedFrameWriter) Close() error {
+	if w.closed {
+		return nil
+	}
+	w.closed = true
+	if err := w.ctx.Err(); err != nil {
+		return err
+	}
+	if len(w.buffer) > 0 {
+		if err := w.flushFrame(); err != nil {
+			return err
+		}
+	}
+	if err := binary.Write(w.dst, binary.BigEndian, uint32(0)); err != nil {
+		return fmt.Errorf("backup: write archive end marker: %w", err)
+	}
 	return nil
 }
 
@@ -496,84 +600,6 @@ func addArchiveFile(ctx context.Context, tarWriter *tar.Writer, root *os.Root, p
 	if _, err := io.Copy(tarWriter, contextReader{ctx: ctx, reader: file}); err != nil {
 		return fmt.Errorf("backup: add %q: %w", name, err)
 	}
-	return nil
-}
-
-func encryptPayload(ctx context.Context, srcRoot, dstRoot *os.Root, destPath, payloadPath string, key, noncePrefix []byte, backupID string, header []byte) error {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return fmt.Errorf("backup: initialize archive cipher: %w", err)
-	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return fmt.Errorf("backup: initialize archive authentication: %w", err)
-	}
-	src, err := srcRoot.Open(payloadPath)
-	if err != nil {
-		return fmt.Errorf("backup: open compressed payload: %w", err)
-	}
-	defer src.Close()
-	dst, err := dstRoot.OpenFile(destPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		return fmt.Errorf("backup: create encrypted archive: %w", err)
-	}
-	good := false
-	defer func() {
-		_ = dst.Close()
-		if !good {
-			_ = dstRoot.Remove(destPath)
-		}
-	}()
-	if _, err := io.WriteString(dst, archiveMagic); err != nil {
-		return fmt.Errorf("backup: write archive magic: %w", err)
-	}
-	if len(header) > 1<<20 {
-		return errors.New("backup: archive header exceeds size limit")
-	}
-	if err := binary.Write(dst, binary.BigEndian, uint32(len(header))); err != nil {
-		return fmt.Errorf("backup: write header length: %w", err)
-	}
-	if _, err := dst.Write(header); err != nil {
-		return fmt.Errorf("backup: write archive header: %w", err)
-	}
-	buf := make([]byte, chunkSize)
-	var index uint64
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		n, readErr := io.ReadFull(src, buf)
-		if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
-			return fmt.Errorf("backup: read compressed payload: %w", readErr)
-		}
-		if n > 0 {
-			nonce := make([]byte, aead.NonceSize())
-			copy(nonce, noncePrefix)
-			binary.BigEndian.PutUint64(nonce[len(noncePrefix):], index)
-			aad := chunkAAD(backupID, index, header)
-			sealed := aead.Seal(nil, nonce, buf[:n], aad)
-			if err := binary.Write(dst, binary.BigEndian, uint32(len(sealed))); err != nil {
-				return fmt.Errorf("backup: write encrypted frame length: %w", err)
-			}
-			if _, err := dst.Write(sealed); err != nil {
-				return fmt.Errorf("backup: write encrypted frame: %w", err)
-			}
-			index++
-		}
-		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
-			break
-		}
-	}
-	if err := binary.Write(dst, binary.BigEndian, uint32(0)); err != nil {
-		return fmt.Errorf("backup: write end marker: %w", err)
-	}
-	if err := dst.Sync(); err != nil {
-		return fmt.Errorf("backup: sync encrypted archive: %w", err)
-	}
-	if err := dst.Close(); err != nil {
-		return fmt.Errorf("backup: close encrypted archive: %w", err)
-	}
-	good = true
 	return nil
 }
 
@@ -612,7 +638,7 @@ func copyFile(ctx context.Context, src string, root *os.Root, dst string, expect
 		return err
 	}
 	if !opened.Mode().IsRegular() || !os.SameFile(expected, opened) {
-		return errors.New("backup: lockfile changed while opening; refusing to follow a replacement path")
+		return errors.New("backup: source file changed while opening; refusing to follow a replacement path")
 	}
 	out, err := root.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {

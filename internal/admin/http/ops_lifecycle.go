@@ -104,13 +104,12 @@ func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	lockfilePath := s.lockfilePath
-	if lockfilePath != "" {
-		if _, err := os.Stat(lockfilePath); err != nil && !os.IsNotExist(err) {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "backup_failed", "upstream_error", "failed inspecting extension lockfile", true, nil)
-			return
-		}
+	configPath := s.configPath
+	if strings.TrimSpace(lockfilePath) == "" || strings.TrimSpace(configPath) == "" {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "backup requires configured tanpopo.lock and tanpopo.yaml files", true, nil)
+		return
 	}
-	receipt, err := backup.CreateSQLite(r.Context(), store, s.vault, backupDir, lockfilePath, s.nowMs())
+	receipt, err := backup.CreateSQLite(r.Context(), store, s.vault, backupDir, lockfilePath, configPath, s.nowMs())
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "backup_failed", "upstream_error", "encrypted backup creation failed", true, nil)
 		return
