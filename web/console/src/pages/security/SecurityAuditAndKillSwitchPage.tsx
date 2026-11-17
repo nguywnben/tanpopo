@@ -18,6 +18,7 @@ const securityRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_
 
 export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
   const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [nextAuditCursor, setNextAuditCursor] = useState<string | undefined>();
   const [actionFilter, setActionFilter] = useState('');
   const [level, setLevel] = useState<TargetLevel>('PROJECT');
   const [targetId, setTargetId] = useState('');
@@ -28,6 +29,7 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
   const [verifyResult, setVerifyResult] = useState('');
   const [alertOpen, setAlertOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [message, setMessage] = useState('');
   const authorized = roles.some(role => securityRoles.includes(role));
   const canTrigger = roles.some(role => ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'].includes(role));
@@ -35,11 +37,21 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
 
   async function refresh() {
     setLoading(true); setMessage('');
-    try { setEvents(await listAuditEvents(actionFilter) as AuditEvent[]); }
+    try { const page = await listAuditEvents(actionFilter); setEvents(page.data as AuditEvent[]); setNextAuditCursor(page.nextCursor); }
     catch (error) { setMessage(errorMessage(error)); }
     finally { setLoading(false); }
   }
   useEffect(() => { if (authorized) void refresh(); }, [authorized, actionFilter]);
+
+  async function loadMoreAuditEvents() {
+    if (!nextAuditCursor || loadingMore) return;
+    setLoadingMore(true); setMessage('');
+    try {
+      const page = await listAuditEvents(actionFilter, nextAuditCursor);
+      setEvents(current => [...current, ...page.data as AuditEvent[]]); setNextAuditCursor(page.nextCursor);
+    } catch (error) { setMessage(errorMessage(error)); }
+    finally { setLoadingMore(false); }
+  }
 
   async function previewBlastRadius() {
     if (!targetId.trim() || !['EXTENSION', 'PROVIDER_CONNECTION'].includes(level)) { setBlastRadius(null); return; }
@@ -94,6 +106,7 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
         {key: 'action', header: 'Action'}, {key: 'target_type', header: 'Target type'}, {key: 'target_id', header: 'Target ID'},
         {key: 'event_hash', header: 'Event hash'}, {key: 'metadata', header: 'Metadata', renderCell: row => <Text>{JSON.stringify(row.metadata ?? {})}</Text>},
       ]} />}
+      {!loading && nextAuditCursor ? <Button label={loadingMore ? 'Loading audit records…' : 'Load more audit records'} variant="secondary" isDisabled={loadingMore} onClick={() => void loadMoreAuditEvents()} /> : null}
     </VStack></Section>
   </VStack>;
 }

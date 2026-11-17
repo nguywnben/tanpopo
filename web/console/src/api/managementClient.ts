@@ -131,16 +131,17 @@ export async function listRecentTraces(environmentId: string) {
   return rows.filter(row => Date.parse(row.created_at) >= oneHourAgo);
 }
 
-export async function listTracePage(environmentId: string, model?: string) {
+export async function listTracePage(environmentId: string, model?: string, cursor?: string) {
   const rows: components['schemas']['TraceSummary'][] = [];
-  let cursor: string | undefined;
-  do {
-    const result = await api.GET('/admin/v1/traces', {params: {query: {env_id: environmentId || undefined, model: model || undefined, limit: 100, cursor}}});
+  let nextCursor = cursor;
+  for (let page = 0; page < 2; page += 1) {
+    const result = await api.GET('/admin/v1/traces', {params: {query: {env_id: environmentId || undefined, model: model || undefined, limit: 100, cursor: nextCursor}}});
     if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
     rows.push(...result.data.data);
-    cursor = result.data.next_cursor ?? undefined;
-  } while (cursor && rows.length < 200);
-  return rows.slice(0, 200);
+    nextCursor = result.data.next_cursor ?? undefined;
+    if (!nextCursor) break;
+  }
+  return {data: rows, nextCursor};
 }
 
 export async function getTraceWaterfall(requestId: string) {
@@ -177,10 +178,10 @@ export async function exportUsageChargeback(format: 'csv' | 'json') {
   return new Blob([content], {type: format === 'csv' ? 'text/csv' : 'application/json'});
 }
 
-export async function listAuditEvents(action?: string) {
-  const result = await api.GET('/admin/v1/audit-events', {params: {query: {action: action || undefined, limit: 100}}});
+export async function listAuditEvents(action?: string, cursor?: string) {
+  const result = await api.GET('/admin/v1/audit-events', {params: {query: {action: action || undefined, limit: 100, cursor}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
-  return result.data.data;
+  return {data: result.data.data, nextCursor: result.data.next_cursor ?? undefined};
 }
 
 export async function verifyAuditHashChain() {

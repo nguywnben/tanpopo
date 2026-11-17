@@ -35,7 +35,7 @@ export function OperationsSettingsPage({roles}: {roles: Role[]}) {
     if (readyResult.status === 'fulfilled') setReadiness(readyResult.value); else errors.push(`Readiness probe: ${errorMessage(readyResult.reason)}`);
     if (clusterResult.status === 'fulfilled') setCluster(clusterResult.value); else errors.push(`Cluster status: ${errorMessage(clusterResult.reason)}`);
     if (lockfileResult.status === 'fulfilled') setLockfile(lockfileResult.value); else errors.push(`Extension lockfile: ${errorMessage(lockfileResult.reason)}`);
-    if (backupResult.status === 'fulfilled') setBackups(backupResult.value as AuditEvent[]); else errors.push(`Backup history: ${errorMessage(backupResult.reason)}`);
+    if (backupResult.status === 'fulfilled') setBackups(backupResult.value.data as AuditEvent[]); else errors.push(`Backup history: ${errorMessage(backupResult.reason)}`);
     setMessage(errors.join(' ')); setLoading(false);
   }
   useEffect(() => { if (authorized) void refresh(); }, [authorized]);

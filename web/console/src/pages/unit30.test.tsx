@@ -22,10 +22,10 @@ vi.mock('../api/catalogClient', () => ({getExtensionLockfile: mocks.getExtension
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); Object.defineProperty(window, 'innerWidth', {configurable: true, value: 1024}); });
 beforeEach(() => {
-  mocks.listTracePage.mockResolvedValue([]); mocks.getTraceWaterfall.mockResolvedValue(null);
+  mocks.listTracePage.mockResolvedValue({data: [], nextCursor: undefined}); mocks.getTraceWaterfall.mockResolvedValue(null);
   mocks.listBudgets.mockResolvedValue([]); mocks.getUsageChargebackSummary.mockResolvedValue([]);
   mocks.exportUsageChargeback.mockResolvedValue(new Blob(['report'])); mocks.updateBudget.mockResolvedValue({});
-  mocks.listAuditEvents.mockResolvedValue([]); mocks.verifyAuditHashChain.mockResolvedValue({intact: true, checked_events_count: 0});
+  mocks.listAuditEvents.mockResolvedValue({data: [], nextCursor: undefined}); mocks.verifyAuditHashChain.mockResolvedValue({intact: true, checked_events_count: 0});
   mocks.triggerKillSwitch.mockResolvedValue({config_epoch: 3, affected_entities_count: 2, severed_streams_count: 1});
   mocks.getKillSwitchBlastRadius.mockResolvedValue({organizations: [], projects: [], virtual_keys: [], connections: []});
   mocks.getReadinessProbe.mockResolvedValue({ready: true, status: 'ok', configEpoch: 3, snapshotAgeMs: 5});
@@ -41,7 +41,7 @@ describe('Unit 30 observability and operations screens', () => {
     const trace = {request_id: 'req-1', plane: 'PROVIDER', route_slug: 'safe-route', status_code: 502, error_code: payload,
       usage_accuracy: 'ESTIMATED', total_cost_micros: 3, duration_ms: 42, has_debug_payload: false, created_at: '2026-11-17T00:00:00Z',
       waterfall_stages: [{stage: 'Route', duration_ms: 4, outcome: 'failed'}]} as components['schemas']['TraceSummary'];
-    mocks.listTracePage.mockResolvedValue([trace]); mocks.getTraceWaterfall.mockResolvedValue(trace);
+    mocks.listTracePage.mockResolvedValue({data: [trace], nextCursor: undefined}); mocks.getTraceWaterfall.mockResolvedValue(trace);
     renderTheme(<TracesExplorerPage environmentId="env-1" roles={['DEVELOPER']} />, 'light');
     expect(await screen.findByText('Metadata-Only (0 prompt bytes stored)')).toBeInTheDocument();
     expect(await screen.findByText(payload)).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe('Unit 30 observability and operations screens', () => {
   it('confirms emergency actions and verifies immutable audit records without interpreting payload HTML', async () => {
     const event = {id: 'audit-1', chain_partition: 'org-1', seq_no: 7, actor_id: 'operator-1', action: 'killswitch.triggered',
       metadata: {detail: '<script>alert(1)</script>'}, prev_hash: '0'.repeat(64), event_hash: 'f'.repeat(64), created_at: '2026-11-17T00:00:00Z'};
-    mocks.listAuditEvents.mockResolvedValue([event]);
+    mocks.listAuditEvents.mockResolvedValue({data: [event], nextCursor: undefined});
     renderTheme(<SecurityAuditAndKillSwitchPage roles={['OPERATOR']} />, 'light');
     expect(await screen.findByText('killswitch.triggered')).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
@@ -99,11 +99,36 @@ describe('Unit 30 observability and operations screens', () => {
   });
 
   it('renders the 200-row interaction target without claiming an unmeasured INP result', async () => {
-    mocks.listTracePage.mockResolvedValue(Array.from({length: 200}, (_, index) => ({request_id: `req-${index}`, plane: 'PROVIDER', route_slug: 'route',
-      status_code: 200, error_code: null, usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 1, has_debug_payload: false, created_at: '2026-11-17T00:00:00Z'})));
+    mocks.listTracePage.mockResolvedValue({data: Array.from({length: 200}, (_, index) => ({request_id: `req-${index}`, plane: 'PROVIDER', route_slug: 'route',
+      status_code: 200, error_code: null, usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 1, has_debug_payload: false, created_at: '2026-11-17T00:00:00Z'})), nextCursor: undefined});
     renderTheme(<TracesExplorerPage environmentId="env-1" roles={['DEVELOPER']} />, 'dark');
     expect(await screen.findByText(/TARGET \/ UNVERIFIED/)).toBeInTheDocument();
     expect(await screen.findByText('req-199')).toBeInTheDocument();
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('follows trace and audit cursors when the operator loads more records', async () => {
+    mocks.listTracePage.mockResolvedValueOnce({data: [{request_id: 'req-new', plane: 'PROVIDER', route_slug: 'route', status_code: 200,
+      error_code: 'safe', usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 1, has_debug_payload: false, created_at: '2026-11-17T00:00:00Z'}], nextCursor: 'trace-cursor'})
+      .mockResolvedValueOnce({data: [{request_id: 'req-old', plane: 'PROVIDER', route_slug: 'route', status_code: 500,
+      error_code: 'older_failure', usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 1, has_debug_payload: false, created_at: '2026-11-16T00:00:00Z'}], nextCursor: undefined});
+    renderTheme(<TracesExplorerPage environmentId="env-1" roles={['DEVELOPER']} />, 'light');
+    expect(await screen.findByText('req-new')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Error code'), {target: {value: 'older_failure'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Search traces'}));
+    expect(screen.getByText('No trace records match these filters.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Load more traces'}));
+    expect(await screen.findByText('req-old')).toBeInTheDocument();
+    expect(mocks.listTracePage).toHaveBeenLastCalledWith('env-1', '', 'trace-cursor');
+    cleanup();
+
+    mocks.listAuditEvents.mockResolvedValueOnce({data: [], nextCursor: 'audit-cursor'})
+      .mockResolvedValueOnce({data: [{id: 'audit-old', chain_partition: 'org-1', seq_no: 8, actor_id: 'operator-1', action: 'older.action',
+        metadata: {}, prev_hash: '0'.repeat(64), event_hash: 'f'.repeat(64), created_at: '2026-11-16T00:00:00Z'}], nextCursor: undefined});
+    renderTheme(<SecurityAuditAndKillSwitchPage roles={['OPERATOR']} />, 'light');
+    fireEvent.click(await screen.findByRole('button', {name: 'Load more audit records'}));
+    expect(await screen.findByText('older.action')).toBeInTheDocument();
+    expect(mocks.listAuditEvents).toHaveBeenLastCalledWith('', 'audit-cursor');
     expect(await axeViolations()).toEqual([]);
   });
 

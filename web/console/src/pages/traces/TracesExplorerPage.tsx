@@ -20,7 +20,9 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
   const [model, setModel] = useState('');
   const [appliedError, setAppliedError] = useState('');
   const [selected, setSelected] = useState<Trace | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [message, setMessage] = useState('');
   const mayReadTraces = !roles.includes('FINOPS_VIEWER') || roles.some(role => role !== 'FINOPS_VIEWER');
 
@@ -28,11 +30,22 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
     let active = true;
     if (!mayReadTraces) { setLoading(false); return; }
     setLoading(true); setMessage('');
-    listTracePage(environmentId, model).then(rows => { if (active) setTraces(rows as Trace[]); })
+    listTracePage(environmentId, model).then(page => { if (active) { setTraces(page.data as Trace[]); setNextCursor(page.nextCursor); } })
       .catch(error => { if (active) setMessage(errorMessage(error)); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [environmentId, model, mayReadTraces]);
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true); setMessage('');
+    try {
+      const page = await listTracePage(environmentId, model, nextCursor);
+      setTraces(current => [...current, ...page.data as Trace[]]);
+      setNextCursor(page.nextCursor);
+    } catch (error) { setMessage(errorMessage(error)); }
+    finally { setLoadingMore(false); }
+  }
 
   const visible = useMemo(() => traces.filter(trace => !appliedError || (trace.error_code ?? '').toLowerCase().includes(appliedError.toLowerCase())), [traces, appliedError]);
 
@@ -46,7 +59,7 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
   if (!mayReadTraces) return <Text role="alert">The FINOPS_VIEWER role can access FinOps reports only.</Text>;
   return <VStack gap={4}>
     <Heading level={1}>Request traces</Heading>
-    <Text>Search request IDs, error codes, or models. Trace views contain request metadata only; prompt and completion bytes are not stored.</Text>
+    <Text>Search request IDs, error codes, or models. Trace views contain request metadata only; prompt and completion bytes are not stored. Error-code matches are filtered within loaded pages.</Text>
     <HStack gap={2} wrap="wrap">
       <TextInput label="Request ID" value={requestId} onChange={setRequestId} />
       <TextInput label="Error code" value={errorCode} onChange={setErrorCode} />
@@ -72,6 +85,7 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
           {key: 'usage_accuracy', header: 'Usage accuracy', renderCell: row => <Token label={String(row.usage_accuracy).replaceAll('_', ' ')} color={accuracyColor(String(row.usage_accuracy))} icon={accuracyIcon(String(row.usage_accuracy))} />},
           {key: 'duration_ms', header: 'Duration (ms)'}, {key: 'created_at', header: 'Created'},
         ]} />}
+      {nextCursor ? <Button label={loadingMore ? 'Loading traces…' : 'Load more traces'} variant="secondary" isDisabled={loadingMore} onClick={() => void loadMore()} /> : null}
     </VStack></Section>
   </VStack>;
 }
