@@ -48,7 +48,7 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
       if (generation !== queryGeneration.current) return;
       setTraces(current => [...current, ...page.data as Trace[]]);
       setNextCursor(page.nextCursor);
-    } catch (error) { setMessage(errorMessage(error)); }
+    } catch (error) { if (generation === queryGeneration.current) setMessage(errorMessage(error)); }
     finally { if (generation === queryGeneration.current) setLoadingMore(false); }
   }
 
