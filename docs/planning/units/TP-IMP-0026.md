@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0026` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | **`READY`** *(DoR verified and opened by Product Owner authorization [`DEC-040`](../../governance/decisions.md); upstream `TP-IMP-0005` & `TP-IMP-0024` = `DONE`)* |
+| **Status** | **`DONE`** *(Accepted by [`DEC-042`](../../governance/decisions.md) at `e8a2d083`; exact-SHA CI run `44032642124` succeeded; independent code review had no findings)* |
 | **Size** | `M` (`web/console/*`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Strict adherence to Astryx Design System v0.7.16 & zero-external-request air-gapped operation)* |
 | **Technical Owner** | `Lead Frontend / Design System Engineer` |

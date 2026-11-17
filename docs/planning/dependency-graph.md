@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0025: DONE` | `TP-IMP-0026: READY` via `DEC-040` | `1 READY / 21 BLOCKED`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.31.0-dec-040-0026-ready` | **Date:** `2026-11-17`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0026: DONE` | `0 READY / 21 BLOCKED`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.32.0-dec-042-0026-done` | **Date:** `2026-11-17`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0025` = **`DONE`** (`TP-IMP-0005`..`0011` accepted via `DEC-011`..`DEC-021`; `TP-IMP-0012`..`0013` by **Carbon** via `DEC-022`..`DEC-024`; `TP-IMP-0014`..`0020` by **Gemini 4 Hydrogen** via `DEC-025`..`DEC-032`; `DEC-033 REVOKED_BY_OWNER` `8cfe2492` / CI `43798260070`; `TP-IMP-0021` by **Gemini 4 Hydrogen** under `DEC-034`/`DEC-035` at `c751d74d` / CI `43811187903`; `TP-IMP-0022` by **Gemini 4 Hydrogen** under `DEC-034`/`DEC-036` at `331113e6` / CI `43825991960`; `TP-IMP-0023` by **Gemini 4 Hydrogen** under `DEC-034`/`DEC-037` at `53e0adc9` / CI `43881564733`; `TP-IMP-0024` by **Gemini 4 Hydrogen** under `DEC-034`/`DEC-038` at `0abbbc86` / CI `43900067452`; `TP-IMP-0025` by **Gemini 4 Hydrogen** under `DEC-034`/`DEC-039` at `59595f24` / CI `43948489151`); execution pauses cleanly at **`TP-IMP-0025 = DONE`** per Product Owner stop directive (**`0 / 47` `READY`**, **`0 / 47` `READY_FOR_REVIEW`**), leaving `TP-IMP-0026`..`0047` (`22 / 47`) **`BLOCKED`** awaiting separate Product Owner instruction before opening **`TP-IMP-0026`** (alongside upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, `COND-PO-01`..`05` gates, sequential `DEC-034` progression [`0026`..`0030`], and direct human Product Owner wave authorization [`0031`..`0047`]).
+> - **Live DAG Frontier:** `TP-IMP-0001`..`0026` = **`DONE`** (`TP-IMP-0026` accepted by GPT-6 Luna under [`DEC-041`](../governance/decisions.md)/[`DEC-042`](../governance/decisions.md), implementation `e8a2d083` / CI `44032642124`); prior acceptance evidence for `TP-IMP-0001`..`0025` remains recorded below. **`TP-IMP-0027`..`0047` (`21 / 47`) remain `BLOCKED`** until Unit 26's acceptance record has green CI on `origin/main` and the next unit's DoR is verified; sequential order and the `0031`..`0047` authorization boundary remain in force.
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier (`25 DONE`, `1 READY`, `21 BLOCKED` — `DEC-040`):** **`TP-IMP-0001..0025` are `DONE` (`25 / 47`)**; Product Owner authorization [`DEC-040`](../governance/decisions.md) opens only **[`TP-IMP-0026`](./units/TP-IMP-0026.md)** as **`READY`**, after DoR verification. `TP-IMP-0027..0047` (`21 / 47`) remain `BLOCKED`; `DEC-033` remains **`REVOKED_BY_OWNER`**, and review tiers, `COND-PO-01`..`05`, sequential opening under `DEC-034`, and direct human Product Owner authorization for `0031`..`0047` remain in force.
+> **Live Queue Frontier (`26 DONE`, `0 READY`, `21 BLOCKED` — `DEC-042`):** **`TP-IMP-0001..0026` are `DONE` (`26 / 47`)**. `TP-IMP-0027..0047` (`21 / 47`) remain `BLOCKED` pending the green acceptance CI on `origin/main` for Unit 26 and verification of Unit 27's DoR; review tiers, `COND-PO-01`..`05`, sequential opening under `DEC-041`, and direct human Product Owner authorization for `0031`..`0047` remain in force.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.

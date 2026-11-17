@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0025: DONE` | `DEC-034 Paused Before 0026` | `0 READY / 22 BLOCKED`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `1.30.0-dec-039-0025-done-hold-before-0026` | **Date:** `2026-11-16`
+> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0026: DONE` | `DEC-042` | `0 READY / 21 BLOCKED`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.31.0-dec-042-0026-done` | **Date:** `2026-11-17`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **MANDATORY GOVERNANCE NOTICE (`TP-IMP-0005..0025 ACCEPTED — PAUSED BEFORE 0026 / 0 READY / 22 BLOCKED`):**
+> - **CURRENT GOVERNANCE NOTICE (`TP-IMP-0026 DONE` — `DEC-042`):** Unit 26 is accepted at `e8a2d083` with green CI `44032642124` and an independent review with no findings. Unit 27 remains blocked until the acceptance governance commit is on `origin/main` with green CI and its DoR is verified. Units `0028`..`0030` follow sequentially under `DEC-041`; `0031`..`0047` remain behind their existing Owner and quality gates.
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
 >   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Following acceptance of **`TP-IMP-0005`**..**`0011`** (`DEC-011`..`DEC-021`), **`TP-IMP-0012`..`0013`** (`DEC-022`..`DEC-024` by delegated Owner **Carbon**), **`TP-IMP-0014`..`0020`** (`DEC-025`..`DEC-032` by delegated **Gemini 4 Hydrogen**), preservation of `DEC-033` as **`REVOKED_BY_OWNER`** (`8cfe2492`, CI `43798260070`), **`TP-IMP-0021`** acceptance (`DEC-034`/`DEC-035`, `c751d74d`, CI `43811187903`), **`TP-IMP-0022`** acceptance (`DEC-034`/`DEC-036`, `331113e6`, CI `43825991960`), **`TP-IMP-0023`** acceptance (`DEC-034`/`DEC-037`, `53e0adc9`, CI `43881564733`), **`TP-IMP-0024`** acceptance (`DEC-034`/`DEC-038`, `0abbbc86`, CI `43900067452`), and **`TP-IMP-0025`** acceptance (`DEC-034`/`DEC-039`, `59595f24`, CI `43948489151`), **`TP-IMP-0001`..`0025` are `DONE` (`25 / 47`)**, execution pauses cleanly at `TP-IMP-0025 = DONE` per Product Owner directive (**`0 / 47` `READY`**, **`0 / 47` `READY_FOR_REVIEW`**), and `TP-IMP-0026`..`0047` (`22 / 47`) remain **`BLOCKED`** awaiting a separate Product Owner directive before unlocking **`TP-IMP-0026`** (alongside upstream dependency, `REQUIRES_STRONG_REVIEW`, `COND-PO-01`..`05` gates, sequential `DEC-034` progression [`0026`..`0030`], and direct human Product Owner authorization [`0031`..`0047`]).
+>   3. Current delivery is `TP-IMP-0001`..`0026` = **`DONE` (`26 / 47`)**; Unit 26 acceptance evidence is recorded in [`DEC-042`](../governance/decisions.md). The earlier `DEC-034` pause before Unit 26 has been superseded by the direct Owner delegation in [`DEC-041`](../governance/decisions.md).
 
 ---
 

@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0025: DONE` | `DEC-034 Paused Before 0026` | `0 READY / 22 BLOCKED`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.30.0-dec-039-0025-done-hold-before-0026` | **Date:** `2026-11-16`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0026: DONE` | `DEC-042` | `0 READY / 21 BLOCKED`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.31.0-dec-042-0026-done` | **Date:** `2026-11-17`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0` (`TP-IMP-0001`..`0004`), Milestone `M1` (`TP-IMP-0005`..`0015`, closing `GATE-M1` at `baf154dc` / CI `43745804370`), Wave 2.1 (`TP-IMP-0016`..`0020` via `DEC-025`..`DEC-032`), `TP-IMP-0021` (`DEC-034`/`DEC-035`, `c751d74d` / CI `43811187903`; `DEC-033 REVOKED_BY_OWNER` `8cfe2492` / CI `43798260070`), `TP-IMP-0022` (`DEC-034`/`DEC-036`, `331113e6` / CI `43825991960`), `TP-IMP-0023` (`DEC-034`/`DEC-037`, `53e0adc9` / CI `43881564733`), `TP-IMP-0024` (`DEC-034`/`DEC-038`, `0abbbc86` / CI `43900067452`), and `TP-IMP-0025` (`DEC-034`/`DEC-039`, `59595f24` / CI `43948489151`) are **`DONE` (`25 / 47`)**; execution pauses cleanly at **`TP-IMP-0025 = DONE`** per Product Owner stop instruction (`0 / 47` `READY`, `0 / 47` `READY_FOR_REVIEW`); `22` downstream units `0026`..`0047` remain **`BLOCKED`** awaiting separate Product Owner directive before opening **`TP-IMP-0026`** (alongside upstream `Dependencies`, `REQUIRES_STRONG_REVIEW`, `COND-PO-01`..`05` gates, sequential `DEC-034` progression [`0026`..`0030`], and direct human Product Owner authorization [`0031`..`0047`]).
+> - **Live Status:** Milestone `M0`, Milestone `M1`, Wave 2.1, and Units `TP-IMP-0021`..`0026` are **`DONE` (`26 / 47`)**. Unit 26: `DEC-042`, implementation `e8a2d083`, CI `44032642124`, independent review clear. `TP-IMP-0027`..`0047` remain blocked pending green CI on the Unit 26 acceptance governance commit and subsequent sequential DoR checks; direct Owner authorization remains required for `0031`..`0047`.
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---
