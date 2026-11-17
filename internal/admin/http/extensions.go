@@ -1286,18 +1286,6 @@ func permissionSetFromManifest(manifest installer.ExtensionManifest, executionTi
 			authModes[strings.TrimSpace(auth.ID)] = strings.TrimSpace(auth.Mode)
 		}
 	}
-	for _, slot := range manifest.SecretSlots {
-		name := strings.TrimSpace(slot.Slot)
-		for _, authID := range slot.RequiredForAuthMethods {
-			if mode := authModes[strings.TrimSpace(authID)]; mode != "" {
-				if previous := bindingModes[name]; previous != "" && previous != mode {
-					bindingModes[name] = previous + "," + mode
-				} else {
-					bindingModes[name] = mode
-				}
-			}
-		}
-	}
 	if rawAuth, ok := manifest.Adapter["auth"].([]any); ok {
 		for _, entry := range rawAuth {
 			auth, ok := entry.(map[string]any)
@@ -1313,6 +1301,18 @@ func permissionSetFromManifest(manifest installer.ExtensionManifest, executionTi
 			if name != "" {
 				slotSet[name] = true
 				if mode != "" {
+					bindingModes[name] = mode
+				}
+			}
+		}
+	}
+	for _, slot := range manifest.SecretSlots {
+		name := strings.TrimSpace(slot.Slot)
+		for _, authID := range slot.RequiredForAuthMethods {
+			if mode := authModes[strings.TrimSpace(authID)]; mode != "" {
+				if previous := bindingModes[name]; previous != "" && previous != mode {
+					bindingModes[name] = previous + "," + mode
+				} else {
 					bindingModes[name] = mode
 				}
 			}

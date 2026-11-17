@@ -13,6 +13,7 @@ func TestPermissionSetFromManifestIncludesEscalationFields(t *testing.T) {
 		},
 		Capabilities: []installer.ManifestCap{{AuthMethods: []installer.ManifestAuthMethod{{ID: "signed", Mode: "host_crypto_sign"}}}},
 		SecretSlots:  []installer.ManifestSlotSpec{{Slot: "api_key", RequiredForAuthMethods: []string{"signed"}}},
+		Adapter:      map[string]any{"auth": []any{map[string]any{"secretSlot": "api_key", "mode": "host_blind_inject"}}},
 		Permissions: installer.ManifestPerms{
 			NetworkEgress: installer.ManifestNetworkEgress{AllowedHosts: []string{"API.EXAMPLE.TEST"}, AllowPrivateIP: true, RequireTLS: false},
 			Hooks:         []string{"provider:transform_request"},
@@ -26,7 +27,7 @@ func TestPermissionSetFromManifestIncludesEscalationFields(t *testing.T) {
 	if !candidate.AllowPrivateIP || candidate.RequireTLS || !candidate.InspectRequestBody || candidate.InspectResponseBody {
 		t.Fatalf("network and payload permissions were not preserved: %+v", candidate)
 	}
-	if candidate.SecretBindingModes["api_key"] != "host_crypto_sign" || len(candidate.Hooks) != 1 || candidate.Hooks[0] != "provider:transform_request" {
+	if candidate.SecretBindingModes["api_key"] != "host_blind_inject,host_crypto_sign" || len(candidate.Hooks) != 1 || candidate.Hooks[0] != "provider:transform_request" {
 		t.Fatalf("binding modes or hooks were not preserved: %+v", candidate)
 	}
 	if candidate.MaxMemoryMib != 12 || candidate.MaxCpuMsPerCall != 15 || candidate.MaxStreamChunkCpuMs != 4 {
