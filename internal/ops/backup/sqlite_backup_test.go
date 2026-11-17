@@ -46,15 +46,31 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stagingRoot.Close()
-	staleStage := filepath.Join("/dev/shm", ".tanpopo-backup-0123456789abcdef0123456789abcdef")
-	if err := os.MkdirAll(staleStage, 0o700); err != nil {
+	staleStage := ".tanpopo-backup-0123456789abcdef0123456789abcdef"
+	if err := stagingRoot.Mkdir(staleStage, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(staleStage, "database.sqlite"), []byte("stale plaintext snapshot"), 0o600); err != nil {
+	staleDB, err := stagingRoot.OpenFile(filepath.Join(staleStage, "database.sqlite"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
 		t.Fatal(err)
 	}
-	stalePartial := filepath.Join("/dev/shm", ".tanpopo-backup-fedcba9876543210fedcba9876543210.partial")
-	if err := os.WriteFile(stalePartial, []byte("partial encrypted archive"), 0o600); err != nil {
+	if _, err := staleDB.Write([]byte("stale plaintext snapshot")); err != nil {
+		_ = staleDB.Close()
+		t.Fatal(err)
+	}
+	if err := staleDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stalePartial := ".tanpopo-backup-fedcba9876543210fedcba9876543210.partial"
+	partial, err := stagingRoot.OpenFile(stalePartial, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := partial.Write([]byte("partial encrypted archive")); err != nil {
+		_ = partial.Close()
+		t.Fatal(err)
+	}
+	if err := partial.Close(); err != nil {
 		t.Fatal(err)
 	}
 	lockfile := filepath.Join(root, "tanpopo.lock")
@@ -95,10 +111,10 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	if dirInfo.Mode().Perm() != 0o700 {
 		t.Fatalf("backup directory mode = %o, want 700", dirInfo.Mode().Perm())
 	}
-	if _, err := os.Lstat(staleStage); !os.IsNotExist(err) {
+	if _, err := stagingRoot.Lstat(staleStage); !os.IsNotExist(err) {
 		t.Fatalf("abandoned plaintext staging directory remains: stat err=%v", err)
 	}
-	if _, err := os.Lstat(stalePartial); !os.IsNotExist(err) {
+	if _, err := stagingRoot.Lstat(stalePartial); !os.IsNotExist(err) {
 		t.Fatalf("abandoned partial archive remains: stat err=%v", err)
 	}
 }
