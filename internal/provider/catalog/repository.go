@@ -889,8 +889,11 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			params.CredentialID != nil ||
 			params.AuthMode != nil
 
-		var currentPrimaryCred *string
-		var nextPrimaryCred *string
+		var (
+			currentPrimaryCred    *string
+			explicitPrimaryCred   *string
+			nextPrimaryCred       *string
+		)
 		if curCredID.Valid && curCredID.String != "" {
 			v := curCredID.String
 			currentPrimaryCred = &v
@@ -898,6 +901,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 		}
 		if params.CredentialID != nil {
 			if trimmed := strings.TrimSpace(*params.CredentialID); trimmed != "" {
+			explicitPrimaryCred = &trimmed
 				nextPrimaryCred = &trimmed
 			} else {
 				nextPrimaryCred = nil
@@ -950,10 +954,6 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 				})
 			}
 			seenSlots := make(map[string]struct{}, len(requestedBindings)+1)
-			var explicitCredentialID *string
-			if params.CredentialID != nil {
-				explicitCredentialID = nextPrimaryCred
-			}
 			for _, rawB := range requestedBindings {
 				slot := strings.TrimSpace(rawB.SlotName)
 				credID := strings.TrimSpace(rawB.CredentialID)
@@ -977,7 +977,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 					InjectMode:   mode,
 				})
 			}
-			nextPrimaryCred, err = selectPrimaryCredential(currentPrimaryCred, explicitCredentialID, params.CredentialID != nil, normalizedBindings)
+			nextPrimaryCred, err = selectPrimaryCredential(currentPrimaryCred, explicitPrimaryCred, params.CredentialID != nil, normalizedBindings)
 			if err != nil {
 				return err
 			}
@@ -1016,6 +1016,9 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 		for _, binding := range bindingsToValidate {
 			if binding.SlotName == "api_key" {
 				hasAPIKeySlot = true
+				if explicitPrimaryCred != nil && binding.CredentialID != *explicitPrimaryCred {
+					return fmt.Errorf("%w: credential_id %q conflicts with secret_bindings api_key %q", port.ErrInvalidInput, *explicitPrimaryCred, binding.CredentialID)
+				}
 				break
 			}
 		}

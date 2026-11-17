@@ -1104,6 +1104,12 @@ adapter:
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := h.repo.UpdateProviderConnection(h.ctx, catalog.UpdateProviderConnectionParams{
+		OrgID: orgA, ConnectionID: validConn.ID, ExpectedVersion: validConn.Version,
+		CredentialID: &siblingSecret.ID,
+	}); err == nil || !strings.Contains(err.Error(), "conflicts with secret_bindings api_key") {
+		t.Fatalf("expected explicit primary to conflict with existing api_key binding, got %v", err)
+	}
 	legacyConn, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
 		OrgID:           orgA,
 		OwnerProjectID:  &projA1,
