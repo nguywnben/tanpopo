@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0027` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | **`READY`** *(DoR verified and opened under [`DEC-043`](../../governance/decisions.md); `TP-IMP-0025` and `TP-IMP-0026` are `DONE` on `origin/main`)* |
+| **Status** | **`DONE`** *(Accepted under [`DEC-044`](../../governance/decisions.md) at `fe010fb1c6c2568325b36da91d4ca299d9f21a90`; CI `44042092153` succeeded; independent code and security reviews clear)* |
 | **Size** | `M` (`web/console/src/pages/setup/*`, `login/*`, `overview/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(First-admin onboarding flow, explicit security opt-in for local GPU loopback `CR-10` & show-once secret display)* |
 | **Technical Owner** | `Lead Product / Frontend Engineer` |

@@ -2,10 +2,10 @@
 
 > **MANDATORY COLD-START ENTRYPOINT FOR EVERY NEW EXECUTION SESSION (`ZERO PRIOR CHAT MEMORY REQUIRED`)**
 > - **Baseline ID:** `EXEC-BL-001-APPROVED`
-> **Version:** `2.32.0-dec-043-0027-ready` | **Last Updated:** `2026-11-17` | **Accepted Implementation Baseline:** `e8a2d083` (`TP-IMP-0026 = DONE`, implementation CI `44032642124`, acceptance CI `44034554809`; `DEC-033 REVOKED_BY_OWNER`)
-> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *( `TP-IMP-0001`..`0026` = `DONE` (`26 / 47`); `TP-IMP-0027` = `READY` under `DEC-043` after its dependencies passed DoR; `TP-IMP-0028`..`0030` proceed sequentially under `DEC-041`; `TP-IMP-0031`..`0047` remain blocked behind direct human Product Owner authorization; `DEC-033` remains revoked.)*
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** (`DEC-009`..`DEC-032`, `DEC-034`..`DEC-043`; `DEC-033` `REVOKED_BY_OWNER`) *(`26 / 47` `DONE`, `1 / 47` `READY` (`TP-IMP-0027`), `0 / 47` `READY_FOR_REVIEW`, `20 / 47` `BLOCKED` (`TP-IMP-0028`..`0047`).)*
-> - **CURRENT UNIT STATE (`UNIT_STATES`):** **`26 / 47` `DONE` (`TP-IMP-0001`..`0026`), `0 / 47` `READY_FOR_REVIEW`, `1 / 47` `READY` (`TP-IMP-0027`), `20 / 47` `BLOCKED` (`TP-IMP-0028`..`0047`)
+> **Version:** `2.33.0-dec-044-0027-done` | **Last Updated:** `2026-11-17` | **Accepted Implementation Baseline:** `fe010fb1` (`TP-IMP-0027 = DONE`, CI `44042092153`; `DEC-033 REVOKED_BY_OWNER`)
+> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *( `TP-IMP-0001`..`0027` = `DONE` (`27 / 47`) under `DEC-044`; `TP-IMP-0028`..`0030` proceed sequentially under `DEC-041`; `TP-IMP-0031`..`0047` remain blocked behind direct human Product Owner authorization; `DEC-033` remains revoked.)*
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** (`DEC-009`..`DEC-032`, `DEC-034`..`DEC-044`; `DEC-033` `REVOKED_BY_OWNER`) *(`27 / 47` `DONE`, `0 / 47` `READY`, `0 / 47` `READY_FOR_REVIEW`, `20 / 47` `BLOCKED` (`TP-IMP-0028`..`0047`).)*
+> - **CURRENT UNIT STATE (`UNIT_STATES`):** **`27 / 47` `DONE` (`TP-IMP-0001`..`0027`), `0 / 47` `READY_FOR_REVIEW`, `0 / 47` `READY`, `20 / 47` `BLOCKED` (`TP-IMP-0028`..`0047`)
 
 ---
 
@@ -115,7 +115,7 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 
 ### 4. Dependency-Ordered Execution Queue (`HANDOFF_VERDICT: GO` — `0026` `DONE` · `0027` `READY` · sequential `DEC-041`)
 
-> **Live Status Today:** `TP-IMP-0001`..`0026` are **`DONE`**; `TP-IMP-0027` is **`READY`** via [`DEC-043`](./decisions.md) after Unit 26 implementation and acceptance CI succeeded (`e8a2d083`, runs `44032642124` and `44034554809`) and its DoR was verified. `TP-IMP-0028`..`0047` (`20 / 47`) remain **`BLOCKED`** pending sequential completion; direct human Product Owner unlock remains required for `0031`..`0047`:
+> **Live Status Today:** `TP-IMP-0001`..`0027` are **`DONE`**; Unit 27 was accepted under [`DEC-044`](./decisions.md) at `fe010fb1` with successful CI `44042092153` and independent code/security reviews clear. `TP-IMP-0028`..`0047` (`20 / 47`) remain **`BLOCKED`** pending sequential completion; direct human Product Owner unlock remains required for `0031`..`0047`:
 
 | Wave | Unit ID(s) | Execution Mode | Status / Mandatory Checkpoint Before Next Wave |
 |---|---|---|---|
