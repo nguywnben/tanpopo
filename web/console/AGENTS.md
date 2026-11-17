@@ -44,5 +44,5 @@ RULES:
 
 ## Current Screen Delivery
 
-`TP-IMP-0026` established the Console build, local Figtree, StyleX and `AppShell`; `TP-IMP-0027`..`0028` are accepted. `TP-IMP-0029` is `READY` under `DEC-047` for Routes, Policies, Virtual Keys and RBAC. Keep its route and policy edits ETag-protected, preserve operator drafts on `409`, and require explicit typed confirmation for emergency revoke and route deletion. Unit `0030` remains blocked until Unit `0029` is accepted with green CI.
+`TP-IMP-0026` established the Console build, local Figtree, StyleX and `AppShell`; `TP-IMP-0027`..`0029` are accepted. Unit `0029` was accepted under `DEC-048` after implementation SHA `0da4618bbe516e4f39d3ca6730647f1973800bfc` passed CI `44090789888`. Its routes, policies, virtual keys and RBAC flows retain ETag protection, draft-preserving conflict reconciliation, explicit deny-all model allowlists, and typed confirmation for emergency revoke and route deletion. Unit `0030` remains blocked until opened under the sequential `DEC-041` gate.
 
