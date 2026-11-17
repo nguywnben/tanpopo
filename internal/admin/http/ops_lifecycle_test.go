@@ -53,10 +53,10 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 		t.Fatalf("stale snapshot should report unhealthy node: body=%s err=%v", status.Body.String(), err)
 	}
 
-	backup := h.doBearer(t, http.MethodPost, "/admin/v1/ops/backups", "tok_cr13_operator", "", nil)
+	backupResp := h.doBearer(t, http.MethodPost, "/admin/v1/ops/backups", "tok_cr13_operator", "", nil)
 	if !backup.PlatformSupported() {
-		if backup.Code != http.StatusServiceUnavailable {
-			t.Fatalf("POST backups code=%d; unsupported platform should fail closed: %s", backup.Code, backup.Body.String())
+		if backupResp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("POST backups code=%d; unsupported platform should fail closed: %s", backupResp.Code, backupResp.Body.String())
 		}
 		preflight := h.doBearer(t, http.MethodPost, "/admin/v1/ops/upgrades/preflight", "tok_cr13_operator", "", map[string]any{"target_core_version": "v0.2.0"})
 		if preflight.Code != http.StatusOK {
@@ -64,8 +64,8 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 		}
 		return
 	}
-	if backup.Code != http.StatusCreated {
-		t.Fatalf("POST backups code=%d body=%s", backup.Code, backup.Body.String())
+	if backupResp.Code != http.StatusCreated {
+		t.Fatalf("POST backups code=%d body=%s", backupResp.Code, backupResp.Body.String())
 	}
 	var receipt struct {
 		BackupID        string `json:"backup_id"`
@@ -73,11 +73,11 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 		SHA256Hex       string `json:"sha256_hex"`
 		SizeBytes       int64  `json:"size_bytes"`
 	}
-	if err := json.Unmarshal(backup.Body.Bytes(), &receipt); err != nil {
+	if err := json.Unmarshal(backupResp.Body.Bytes(), &receipt); err != nil {
 		t.Fatalf("decode backup receipt: %v", err)
 	}
 	if receipt.BackupID == "" || receipt.ArchiveFilename == "" || len(receipt.SHA256Hex) != 64 || receipt.SizeBytes <= 0 {
-		t.Fatalf("backup returned incomplete receipt: %s", backup.Body.String())
+		t.Fatalf("backup returned incomplete receipt: %s", backupResp.Body.String())
 	}
 	archivePath := filepath.Join(filepath.Dir(h.st.DBPath()), "backups", receipt.ArchiveFilename)
 	if _, err := os.Stat(archivePath); err != nil {
