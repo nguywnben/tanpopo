@@ -20,11 +20,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,6 +34,8 @@ const (
 	archiveMagic = "TPOPENC1"
 	chunkSize    = 64 * 1024
 )
+
+var backupMu sync.Mutex
 
 type Snapshotter interface {
 	BackupTo(ctx context.Context, destPath string) error
@@ -75,6 +79,11 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	if store == nil || keys == nil || strings.TrimSpace(outputDir) == "" {
 		return Receipt{}, errors.New("backup: snapshotter, key wrapper, and output directory are required")
 	}
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		return Receipt{}, fmt.Errorf("backup: secure SQLite snapshot paths are unsupported on %s", runtime.GOOS)
+	}
+	backupMu.Lock()
+	defer backupMu.Unlock()
 	createdAt := time.UnixMilli(nowMs).UTC().Format(time.RFC3339Nano)
 	backupID, err := randomHexID()
 	if err != nil {
@@ -85,7 +94,15 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, err
 	}
 	defer outputRoot.Close()
-	rootPathFile, sqliteRootPath, err := pathForOpenRoot(outputRoot, outputDir)
+	unlockBackup, err := lockBackup(outputRoot)
+	if err != nil {
+		return Receipt{}, fmt.Errorf("backup: lock output directory: %w", err)
+	}
+	defer unlockBackup()
+	if err := cleanupStaleStaging(outputRoot); err != nil {
+		return Receipt{}, fmt.Errorf("backup: remove abandoned plaintext staging files: %w", err)
+	}
+	rootPathFile, sqliteRootPath, err := pathForOpenRoot(outputRoot)
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -98,23 +115,26 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	if err != nil {
 		return Receipt{}, fmt.Errorf("backup: open protected staging directory: %w", err)
 	}
+	stageCleaned := false
 	defer func() {
-		for _, name := range []string{"database.sqlite", "tanpopo.lock", "payload.tar.gz"} {
-			_ = stageRoot.Remove(name)
+		if !stageCleaned {
+			_ = removeStaging(outputRoot, stageRoot, stageName)
 		}
-		_ = stageRoot.Close()
-		_ = outputRoot.Remove(stageName)
 	}()
 	stageInfo, err := stageRoot.Stat(".")
 	entryInfo, entryErr := outputRoot.Lstat(stageName)
 	if err != nil || entryErr != nil || entryInfo.Mode()&os.ModeSymlink != 0 || !os.SameFile(stageInfo, entryInfo) {
 		return Receipt{}, errors.New("backup: staging directory changed during secure open")
 	}
-	stagePathFile, sqliteStagePath, err := pathForOpenRoot(stageRoot, filepath.Join(sqliteRootPath, stageName))
+	stagePathFile, sqliteStagePath, err := pathForOpenRoot(stageRoot)
 	if err != nil {
 		return Receipt{}, err
 	}
-	defer stagePathFile.Close()
+	defer func() {
+		if stagePathFile != nil {
+			_ = stagePathFile.Close()
+		}
+	}()
 	if runtime.GOOS != "windows" {
 		if err := os.Chmod(sqliteStagePath, 0o700); err != nil {
 			return Receipt{}, fmt.Errorf("backup: protect staging directory: %w", err)
@@ -202,6 +222,16 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	if err != nil {
 		return Receipt{}, fmt.Errorf("backup: inspect published archive: %w", err)
 	}
+	if err := stagePathFile.Close(); err != nil {
+		_ = outputRoot.Remove(finalName)
+		return Receipt{}, fmt.Errorf("backup: close protected staging directory: %w", err)
+	}
+	stagePathFile = nil
+	if err := removeStaging(outputRoot, stageRoot, stageName); err != nil {
+		_ = outputRoot.Remove(finalName)
+		return Receipt{}, fmt.Errorf("backup: remove plaintext staging files: %w", err)
+	}
+	stageCleaned = true
 	return Receipt{BackupID: backupID, ArchiveFilename: finalName, SHA256Hex: archiveHash, SizeBytes: info.Size(), CreatedAt: createdAt}, nil
 }
 
@@ -244,7 +274,7 @@ func openOutputRoot(outputDir string) (*os.Root, error) {
 		return nil, errors.New("backup: output directory changed during secure open")
 	}
 	if runtime.GOOS != "windows" {
-		rootFile, rootPath, pathErr := pathForOpenRoot(root, absOutputDir)
+		rootFile, rootPath, pathErr := pathForOpenRoot(root)
 		if pathErr != nil {
 			_ = root.Close()
 			return nil, pathErr
@@ -263,18 +293,106 @@ func renameRootEntry(rootPath, oldName, newName string) error {
 	return os.Rename(filepath.Join(rootPath, oldName), filepath.Join(rootPath, newName))
 }
 
-func pathForOpenRoot(root *os.Root, fallback string) (*os.File, string, error) {
+func cleanupStaleStaging(root *os.Root) error {
+	entries, err := fs.ReadDir(root.FS(), ".")
+	if err != nil {
+		return err
+	}
+	var cleanupErrs []error
+	for _, entry := range entries {
+		name := entry.Name()
+		if isStagingDirectoryName(name) && entry.IsDir() {
+			if err := removeTree(root, name); err != nil && !errors.Is(err, os.ErrNotExist) {
+				cleanupErrs = append(cleanupErrs, err)
+			}
+			continue
+		}
+		if isStagingPartialName(name) {
+			if err := root.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
+				cleanupErrs = append(cleanupErrs, err)
+			}
+		}
+	}
+	return errors.Join(cleanupErrs...)
+}
+
+func removeStaging(parentRoot, stageRoot *os.Root, stageName string) error {
+	entries, err := fs.ReadDir(stageRoot.FS(), ".")
+	var cleanupErrs []error
+	if err != nil {
+		cleanupErrs = append(cleanupErrs, err)
+	} else {
+		for _, entry := range entries {
+			if err := removeTree(stageRoot, entry.Name()); err != nil && !errors.Is(err, os.ErrNotExist) {
+				cleanupErrs = append(cleanupErrs, err)
+			}
+		}
+	}
+	if err := stageRoot.Close(); err != nil {
+		cleanupErrs = append(cleanupErrs, err)
+	}
+	if err := parentRoot.Remove(stageName); err != nil && !errors.Is(err, os.ErrNotExist) {
+		cleanupErrs = append(cleanupErrs, err)
+	}
+	return errors.Join(cleanupErrs...)
+}
+
+func removeTree(root *os.Root, path string) error {
+	info, err := root.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		entries, err := fs.ReadDir(root.FS(), path)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			child := filepath.ToSlash(filepath.Join(path, entry.Name()))
+			if err := removeTree(root, child); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+	}
+	if err := root.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func isStagingDirectoryName(name string) bool {
+	const prefix = ".tanpopo-backup-"
+	if !strings.HasPrefix(name, prefix) {
+		return false
+	}
+	id := strings.TrimPrefix(name, prefix)
+	if len(id) != 32 {
+		return false
+	}
+	_, err := hex.DecodeString(id)
+	return err == nil
+}
+
+func isStagingPartialName(name string) bool {
+	const suffix = ".partial"
+	if !strings.HasPrefix(name, ".tanpopo-backup-") || !strings.HasSuffix(name, suffix) {
+		return false
+	}
+	id := strings.TrimSuffix(strings.TrimPrefix(name, ".tanpopo-backup-"), suffix)
+	if len(id) != 32 {
+		return false
+	}
+	_, err := hex.DecodeString(id)
+	return err == nil
+}
+
+func pathForOpenRoot(root *os.Root) (*os.File, string, error) {
 	dir, err := root.Open(".")
 	if err != nil {
 		return nil, "", fmt.Errorf("backup: pin output directory: %w", err)
-	}
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		abs, err := filepath.Abs(fallback)
-		if err != nil {
-			_ = dir.Close()
-			return nil, "", fmt.Errorf("backup: resolve output directory: %w", err)
-		}
-		return dir, abs, nil
 	}
 	conn, err := dir.SyscallConn()
 	if err != nil {

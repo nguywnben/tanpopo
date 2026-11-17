@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -32,8 +33,25 @@ func (w *testKeyWrapper) WrapArchiveKey(ctx context.Context, key []byte) (string
 
 func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	ctx := context.Background()
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		if _, err := CreateSQLite(ctx, testSnapshotter{content: []byte("snapshot")}, &testKeyWrapper{}, t.TempDir(), "", 1_795_000_000_000); err == nil {
+			t.Fatal("CreateSQLite returned success without a directory-handle-pinned SQLite path")
+		}
+		return
+	}
 	root := t.TempDir()
 	outputDir := filepath.Join(root, "backups")
+	staleStage := filepath.Join(outputDir, ".tanpopo-backup-0123456789abcdef0123456789abcdef")
+	if err := os.MkdirAll(staleStage, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staleStage, "database.sqlite"), []byte("stale plaintext snapshot"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stalePartial := filepath.Join(outputDir, ".tanpopo-backup-fedcba9876543210fedcba9876543210.partial")
+	if err := os.WriteFile(stalePartial, []byte("partial encrypted archive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	lockfile := filepath.Join(root, "tanpopo.lock")
 	if err := os.WriteFile(lockfile, []byte("extension lock manifest"), 0o600); err != nil {
 		t.Fatal(err)
@@ -71,6 +89,12 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	}
 	if dirInfo.Mode().Perm() != 0o700 {
 		t.Fatalf("backup directory mode = %o, want 700", dirInfo.Mode().Perm())
+	}
+	if _, err := os.Lstat(staleStage); !os.IsNotExist(err) {
+		t.Fatalf("abandoned plaintext staging directory remains: stat err=%v", err)
+	}
+	if _, err := os.Lstat(stalePartial); !os.IsNotExist(err) {
+		t.Fatalf("abandoned partial archive remains: stat err=%v", err)
 	}
 }
 
