@@ -638,6 +638,30 @@ components:
           $ref: "#/components/schemas/RateCardNanoUsd"
         version: { type: integer }
 
+    MarketplaceCatalogEntry:
+      type: object
+      required: [package_id, canonical_name, version, execution_tier, origin_trust_tier, enterprise_signed, source_uri, expected_sha256]
+      properties:
+        package_id: { type: string }
+        canonical_name: { type: string }
+        version: { type: string }
+        execution_tier: { type: string, enum: [declarative, sandboxed_wasm, isolated_sidecar] }
+        origin_trust_tier: { $ref: "#/components/schemas/OriginTrustTier" }
+        enterprise_signed: { type: boolean }
+        source_uri: { type: string }
+        expected_sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        summary: { type: string }
+        capabilities: { type: array, items: { type: string } }
+
+    MarketplaceCatalogResponse:
+      type: object
+      required: [data, offline_cached, has_more]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/MarketplaceCatalogEntry" } }
+        offline_cached: { type: boolean }
+        next_cursor: { type: ["string", "null"] }
+        has_more: { type: boolean }
+
     ExtensionInstallRequest:
       type: object
       required: [source_uri, expected_sha256]
@@ -651,7 +675,7 @@ components:
 
     ExtensionPermissionDiff:
       type: object
-      required: [installation_id, package_id, candidate_version, origin_trust_tier, enterprise_signed, execution_tier, active_allowed_hosts, candidate_allowed_hosts, added_allowed_hosts, removed_allowed_hosts, secret_slots, active_secret_slots, added_secret_slots, quota_escalated, quotas]
+      required: [installation_id, package_id, candidate_version, origin_trust_tier, enterprise_signed, execution_tier, active_allowed_hosts, candidate_allowed_hosts, added_allowed_hosts, removed_allowed_hosts, secret_slots, active_secret_slots, added_secret_slots, quota_escalated, quotas, candidate_permissions, permission_delta, has_escalation]
       properties:
         installation_id: { type: string }
         package_id: { type: string }
@@ -689,6 +713,13 @@ components:
             - { type: "null" }
         quotas:
           $ref: "#/components/schemas/ExtensionQuotas"
+        active_permissions:
+          oneOf:
+            - { $ref: "#/components/schemas/ExtensionPermissionSet" }
+            - { type: "null" }
+        candidate_permissions: { $ref: "#/components/schemas/ExtensionPermissionSet" }
+        permission_delta: { $ref: "#/components/schemas/ExtensionPermissionDelta" }
+        has_escalation: { type: boolean }
 
     ExtensionQuotas:
       type: object
@@ -697,6 +728,37 @@ components:
         max_memory_mib: { type: integer, minimum: 0, maximum: 16 }
         max_cpu_ms_per_call: { type: integer, minimum: 0, maximum: 15 }
         max_stream_chunk_cpu_ms: { type: integer, minimum: 0, maximum: 5 }
+
+    ExtensionPermissionSet:
+      type: object
+      required: [execution_tier]
+      properties:
+        allowed_hosts: { type: array, items: { type: string } }
+        allow_private_ip: { type: boolean }
+        require_tls: { type: boolean }
+        execution_tier: { type: string, enum: [DECLARATIVE_T1, WASM_SANDBOX_T2, ISOLATED_SIDECAR_T3] }
+        secret_slots: { type: array, items: { type: string } }
+        secret_binding_modes: { type: object, additionalProperties: { type: string } }
+        hooks: { type: array, items: { type: string } }
+        max_memory_mib: { type: integer, minimum: 0, maximum: 16 }
+        max_cpu_ms_per_call: { type: integer, minimum: 0, maximum: 15 }
+        max_stream_chunk_cpu_ms: { type: integer, minimum: 0, maximum: 5 }
+        inspect_request_body: { type: boolean }
+        inspect_response_body: { type: boolean }
+
+    ExtensionPermissionDelta:
+      type: object
+      properties:
+        added_hosts: { type: array, items: { type: string } }
+        added_secret_slots: { type: array, items: { type: string } }
+        added_hooks: { type: array, items: { type: string } }
+        binding_mode_changed: { type: boolean }
+        tier_escalated: { type: boolean }
+        private_ip_escalated: { type: boolean }
+        tls_downgraded: { type: boolean }
+        memory_increased: { type: boolean }
+        cpu_quota_increased: { type: boolean }
+        payload_access_escalated: { type: boolean }
 
     ExtensionInstallation:
       type: object
@@ -2102,14 +2164,7 @@ paths:
           description: Catalog entries
           content:
             application/json:
-              schema:
-                type: object
-                required: [data, offline_cached, has_more]
-                properties:
-                  data: { type: array, items: { type: object } }
-                  offline_cached: { type: boolean }
-                  next_cursor: { type: ["string", "null"] }
-                  has_more: { type: boolean }
+              schema: { $ref: "#/components/schemas/MarketplaceCatalogResponse" }
 
   /admin/v1/extensions/install:
     post:

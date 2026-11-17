@@ -140,7 +140,7 @@ export async function deleteDeployment(id: string, etag: string) {
 }
 
 export async function listMarketplaceCatalog() {
-  const rows: Record<string, never>[] = [];
+  const rows: components['schemas']['MarketplaceCatalogEntry'][] = [];
   let cursor: string | undefined;
   let offlineCached = false;
   do {

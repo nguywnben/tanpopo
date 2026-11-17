@@ -63,6 +63,10 @@ type extensionPermissionDiffDTO struct {
 	QuotaEscalated      bool               `json:"quota_escalated"`
 	ActiveQuotas        *extensionQuotasDTO `json:"active_quotas"`
 	Quotas              extensionQuotasDTO `json:"quotas"`
+	ActivePermissions   *installer.PermissionSet `json:"active_permissions"`
+	CandidatePermissions installer.PermissionSet `json:"candidate_permissions"`
+	PermissionDelta     installer.PermissionDelta `json:"permission_delta"`
+	HasEscalation       bool `json:"has_escalation"`
 }
 
 type extensionInstallationDTO struct {
@@ -1199,30 +1203,9 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 			removedHosts = append(removedHosts, h)
 		}
 	}
-	slots := make([]string, 0, len(extManifest.SecretSlots))
-	for _, slot := range extManifest.SecretSlots {
-		if strings.TrimSpace(slot.Slot) != "" {
-			slots = append(slots, slot.Slot)
-		}
-	}
-	sort.Strings(slots)
 	activeSlots := append([]string{}, approvedPerms.SecretSlots...)
 	sort.Strings(activeSlots)
-	approvedSlotSet := make(map[string]bool, len(activeSlots))
-	for _, slot := range activeSlots {
-		approvedSlotSet[slot] = true
-	}
-	addedSlots := make([]string, 0)
-	for _, slot := range slots {
-		if !approvedSlotSet[slot] {
-			addedSlots = append(addedSlots, slot)
-		}
-	}
 
-	candidatePerms := installer.PermissionSet{
-		AllowedHosts: candHosts,
-		SecretSlots:  slots,
-	}
 	var activeQuotas *extensionQuotasDTO
 	if actSemver.Valid {
 		activeQuotas = &extensionQuotasDTO{
@@ -1236,17 +1219,6 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 		value := mapExecutionTierOpenAPI(actExec.String)
 		activeExecutionTier = &value
 	}
-	if extManifest.Runtime != nil && extManifest.Runtime.Quotas != nil {
-		candidatePerms.MaxMemoryMib = extManifest.Runtime.Quotas.MaxMemoryMib
-		candidatePerms.MaxCpuMsPerCall = extManifest.Runtime.Quotas.MaxCpuMsPerCall
-		candidatePerms.MaxStreamChunkCpuMs = extManifest.Runtime.Quotas.MaxStreamChunkCpuMs
-	}
-	candidateQuotas := extensionQuotasDTO{
-		MaxMemoryMib:        candidatePerms.MaxMemoryMib,
-		MaxCPUMsPerCall:     candidatePerms.MaxCpuMsPerCall,
-		MaxStreamChunkCPUMs: candidatePerms.MaxStreamChunkCpuMs,
-	}
-
 	candVerStr := "0.0.0"
 	if targetSemver.Valid && targetSemver.String != "" {
 		candVerStr = targetSemver.String
@@ -1255,8 +1227,23 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 	if targetExec.Valid && targetExec.String != "" {
 		execTierStr = targetExec.String
 	}
-	candidatePerms.ExecutionTier = execTierStr
-	quotaEscalated := hasQuotaEscalation(approvedPerms, candidatePerms)
+	candidatePerms := permissionSetFromManifest(extManifest, execTierStr)
+	permissionDelta := installer.ComputePermissionDelta(approvedPerms, candidatePerms)
+	candHosts = candidatePerms.AllowedHosts
+	slots := candidatePerms.SecretSlots
+	addedHosts = permissionDelta.AddedHosts
+	addedSlots := permissionDelta.AddedSecretSlots
+	quotaEscalated := permissionDelta.MemoryIncreased || permissionDelta.CpuQuotaIncreased
+	candidateQuotas := extensionQuotasDTO{
+		MaxMemoryMib:        candidatePerms.MaxMemoryMib,
+		MaxCPUMsPerCall:     candidatePerms.MaxCpuMsPerCall,
+		MaxStreamChunkCPUMs: candidatePerms.MaxStreamChunkCpuMs,
+	}
+	var activePermissions *installer.PermissionSet
+	if actSemver.Valid {
+		approved := approvedPerms
+		activePermissions = &approved
+	}
 
 	return extensionPermissionDiffDTO{
 		InstallationID:      insID,
@@ -1277,12 +1264,90 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 		QuotaEscalated:      quotaEscalated,
 		ActiveQuotas:        activeQuotas,
 		Quotas:              candidateQuotas,
+		ActivePermissions:   activePermissions,
+		CandidatePermissions: candidatePerms,
+		PermissionDelta:     permissionDelta,
+		HasEscalation:       permissionDelta.HasEscalation(),
 	}, ver, nil
 }
 
-func hasQuotaEscalation(approved, candidate installer.PermissionSet) bool {
-	delta := installer.ComputePermissionDelta(approved, candidate)
-	return delta.MemoryIncreased || delta.CpuQuotaIncreased
+func permissionSetFromManifest(manifest installer.ExtensionManifest, executionTier string) installer.PermissionSet {
+	slotSet := make(map[string]bool)
+	bindingModes := make(map[string]string)
+	for _, slot := range manifest.SecretSlots {
+		name := strings.TrimSpace(slot.Slot)
+		if name != "" {
+			slotSet[name] = true
+		}
+	}
+	authModes := make(map[string]string)
+	for _, capability := range manifest.Capabilities {
+		for _, auth := range capability.AuthMethods {
+			authModes[strings.TrimSpace(auth.ID)] = strings.TrimSpace(auth.Mode)
+		}
+	}
+	for _, slot := range manifest.SecretSlots {
+		name := strings.TrimSpace(slot.Slot)
+		for _, authID := range slot.RequiredForAuthMethods {
+			if mode := authModes[strings.TrimSpace(authID)]; mode != "" {
+				if previous := bindingModes[name]; previous != "" && previous != mode {
+					bindingModes[name] = previous + "," + mode
+				} else {
+					bindingModes[name] = mode
+				}
+			}
+		}
+	}
+	if rawAuth, ok := manifest.Adapter["auth"].([]any); ok {
+		for _, entry := range rawAuth {
+			auth, ok := entry.(map[string]any)
+			if !ok {
+				continue
+			}
+			mode, _ := auth["mode"].(string)
+			name, _ := auth["secretSlot"].(string)
+			if name == "" {
+				name, _ = auth["slot"].(string)
+			}
+			name, mode = strings.TrimSpace(name), strings.TrimSpace(mode)
+			if name != "" {
+				slotSet[name] = true
+				if mode != "" {
+					bindingModes[name] = mode
+				}
+			}
+		}
+	}
+	slots := make([]string, 0, len(slotSet))
+	for name := range slotSet {
+		slots = append(slots, name)
+	}
+	sort.Strings(slots)
+	var maxMemory, maxCPU, maxChunkCPU int
+	if manifest.Runtime != nil && manifest.Runtime.Quotas != nil {
+		maxMemory = manifest.Runtime.Quotas.MaxMemoryMib
+		maxCPU = manifest.Runtime.Quotas.MaxCpuMsPerCall
+		maxChunkCPU = manifest.Runtime.Quotas.MaxStreamChunkCpuMs
+	}
+	inspectRequest, inspectResponse := false, false
+	if manifest.Permissions.PayloadAccess != nil {
+		inspectRequest = manifest.Permissions.PayloadAccess.InspectRequestBody
+		inspectResponse = manifest.Permissions.PayloadAccess.InspectResponseBody
+	}
+	return installer.NormalizePermissionSet(installer.PermissionSet{
+		AllowedHosts:        manifest.Permissions.NetworkEgress.AllowedHosts,
+		AllowPrivateIP:      manifest.Permissions.NetworkEgress.AllowPrivateIP,
+		RequireTLS:          manifest.Permissions.NetworkEgress.RequireTLS,
+		ExecutionTier:       executionTier,
+		SecretSlots:         slots,
+		SecretBindingModes:  bindingModes,
+		Hooks:               manifest.Permissions.Hooks,
+		MaxMemoryMib:        maxMemory,
+		MaxCpuMsPerCall:     maxCPU,
+		MaxStreamChunkCpuMs: maxChunkCPU,
+		InspectRequestBody:  inspectRequest,
+		InspectResponseBody: inspectResponse,
+	})
 }
 
 func (s *Server) writeInstallerError(w http.ResponseWriter, r *http.Request, err error, currentResource any) {

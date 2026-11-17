@@ -617,6 +617,12 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 		t.Fatalf("GET /marketplace/catalog status=%d body=%s", recMkt.Code, recMkt.Body.String())
 	}
 	assertRequiredJSONKeys(t, "GET /marketplace/catalog", recMkt.Body.Bytes(), "data", "offline_cached", "has_more")
+	assertPayloadMatchesSchema(t, doc, "MarketplaceCatalogResponse", recMkt.Body.Bytes())
+	var marketplace marketplaceCatalogResponse
+	mustDecodeJSON(t, recMkt.Body.Bytes(), &marketplace)
+	if len(marketplace.Data) == 0 || marketplace.Data[0].SourceURI == "" || len(marketplace.Data[0].ExpectedSHA256) != 64 {
+		t.Fatalf("marketplace entries must expose a stageable source URI and digest: %+v", marketplace.Data)
+	}
 
 	v1URI := "https://marketplace.tanpopo.dev/contract-1.0.0.tpkg"
 	v1SHA := h.registerSignedProviderTPKG(t, v1URI, "@tanpopo/contract-adapter", "1.0.0", []string{"api.openai.com"}, false, true)

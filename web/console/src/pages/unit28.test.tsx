@@ -32,6 +32,8 @@ describe('Unit 28 catalog and extension workflows', () => {
       execution_tier: 'declarative', active_execution_tier: null, active_allowed_hosts: [], candidate_allowed_hosts: ['api.example.test'],
       added_allowed_hosts: ['api.example.test'], removed_allowed_hosts: [], secret_slots: ['api_key'], active_secret_slots: [], added_secret_slots: ['api_key'],
       quota_escalated: false, active_quotas: null, quotas: {max_memory_mib: 0, max_cpu_ms_per_call: 0, max_stream_chunk_cpu_ms: 0},
+      active_permissions: null, candidate_permissions: {execution_tier: 'DECLARATIVE_T1', allowed_hosts: ['api.example.test'], secret_slots: ['api_key']},
+      permission_delta: {added_hosts: ['api.example.test'], added_secret_slots: ['api_key']}, has_escalation: true,
     };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({data: [{id: 'vision', canonical_name: 'Vision adapter', package_id: '@community/vision', version: '1.2.0', origin_trust_tier: 'verified', enterprise_signed: true, execution_tier: 'declarative', capabilities: ['vision'], source_uri: 'marketplace://@community/vision@1.2.0', expected_sha256: sha256}], has_more: false}))
@@ -183,6 +185,8 @@ describe('Unit 28 catalog and extension workflows', () => {
       enterprise_signed: false, execution_tier: 'sandboxed_wasm', active_execution_tier: null, active_allowed_hosts: [], candidate_allowed_hosts: ['api.example.test'],
       added_allowed_hosts: ['api.example.test'], removed_allowed_hosts: [], secret_slots: ['api_key'], active_secret_slots: [], added_secret_slots: ['api_key'], quota_escalated: false, active_quotas: null,
       quotas: {max_memory_mib: 16, max_cpu_ms_per_call: 25},
+      active_permissions: null, candidate_permissions: {execution_tier: 'WASM_SANDBOX_T2', allowed_hosts: ['api.example.test'], secret_slots: ['api_key'], max_memory_mib: 16, max_cpu_ms_per_call: 15, max_stream_chunk_cpu_ms: 5},
+      permission_delta: {added_hosts: ['api.example.test'], added_secret_slots: ['api_key'], tier_escalated: true}, has_escalation: true,
     };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({data: [], offline_cached: true, has_more: false}))
@@ -198,8 +202,8 @@ describe('Unit 28 catalog and extension workflows', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Stage package'}));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('api.example.test')).toBeInTheDocument();
-    expect(screen.getByText('api_key')).toBeInTheDocument();
+    expect(screen.getAllByText('api.example.test')).not.toHaveLength(0);
+    expect(screen.getAllByText('api_key')).not.toHaveLength(0);
     const audit = await axe.run(document, {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa']}});
     expect(audit.violations.filter(item => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
     const activate = screen.getByRole('button', {name: 'Approve & Activate'});
@@ -233,7 +237,10 @@ describe('Unit 28 catalog and extension workflows', () => {
     const upgradeDiff = {installation_id: 'installed-2', package_id: '@community/upgrade', active_version: '1.0.0', candidate_version: '2.0.0', origin_trust_tier: 'verified', enterprise_signed: true,
       execution_tier: 'sandboxed_wasm', active_execution_tier: 'declarative', active_allowed_hosts: ['api.example.test'], candidate_allowed_hosts: ['api.example.test', 'new.example.test'],
       added_allowed_hosts: ['new.example.test'], removed_allowed_hosts: [], secret_slots: [], active_secret_slots: [], added_secret_slots: [], quota_escalated: true,
-      active_quotas: {max_memory_mib: 8, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3}, quotas: {max_memory_mib: 16, max_cpu_ms_per_call: 15, max_stream_chunk_cpu_ms: 5}};
+      active_quotas: {max_memory_mib: 8, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3}, quotas: {max_memory_mib: 16, max_cpu_ms_per_call: 15, max_stream_chunk_cpu_ms: 5},
+      active_permissions: {execution_tier: 'DECLARATIVE_T1', allowed_hosts: ['api.example.test'], secret_slots: [], max_memory_mib: 8, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3},
+      candidate_permissions: {execution_tier: 'WASM_SANDBOX_T2', allowed_hosts: ['api.example.test', 'new.example.test'], secret_slots: [], max_memory_mib: 16, max_cpu_ms_per_call: 15, max_stream_chunk_cpu_ms: 5},
+      permission_delta: {added_hosts: ['new.example.test'], tier_escalated: true, memory_increased: true, cpu_quota_increased: true}, has_escalation: true};
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({data: [installation], has_more: false}))
       .mockResolvedValueOnce(new Response(JSON.stringify({...upgradeDiff, installation_id: 'installed-2', candidate_version: '1.0.0'}), {status: 200, headers: {'Content-Type': 'application/json', ETag: '"v3"'}}))
@@ -266,7 +273,10 @@ describe('Unit 28 catalog and extension workflows', () => {
     const diff = {installation_id: installation.id, package_id: installation.package_id, active_version: '1.0.0', candidate_version: '2.0.0', origin_trust_tier: 'verified', enterprise_signed: true,
       execution_tier: 'sandboxed_wasm', active_execution_tier: 'sandboxed_wasm', active_allowed_hosts: ['api.example.test'], candidate_allowed_hosts: ['api.example.test'],
       added_allowed_hosts: [], removed_allowed_hosts: [], secret_slots: ['api_key'], active_secret_slots: ['api_key'], added_secret_slots: [], quota_escalated: true,
-      active_quotas: {max_memory_mib: 8, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3}, quotas: {max_memory_mib: 16, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3}};
+      active_quotas: {max_memory_mib: 8, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3}, quotas: {max_memory_mib: 16, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3},
+      active_permissions: {execution_tier: 'WASM_SANDBOX_T2', allowed_hosts: ['api.example.test'], secret_slots: ['api_key'], max_memory_mib: 8, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3},
+      candidate_permissions: {execution_tier: 'WASM_SANDBOX_T2', allowed_hosts: ['api.example.test'], secret_slots: ['api_key'], max_memory_mib: 16, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3},
+      permission_delta: {memory_increased: true}, has_escalation: true};
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({data: [installation], has_more: false}))
       .mockResolvedValueOnce(new Response(JSON.stringify(diff), {status: 200, headers: {'Content-Type': 'application/json', ETag: '"v4"'}}))
@@ -287,6 +297,32 @@ describe('Unit 28 catalog and extension workflows', () => {
     const request = fetchMock.mock.calls[2][0] as Request;
     expect(request.headers.get('If-Match')).toBe('"v4"');
     expect(request.headers.get('X-CSRF-Token')).toBe('csrf-quota');
+  });
+
+  it('shows and gates hook, network, binding-mode, and payload permission escalations', async () => {
+    const installation = {id: 'permissions-installation', package_id: '@community/permissions', state: 'UPDATING_PENDING_RECONSENT', origin_trust_tier: 'verified', enterprise_signed: true, execution_tier: 'sandboxed_wasm', version: 2, active_version: '1.0.0'};
+    const activePermissions = {execution_tier: 'WASM_SANDBOX_T2', allowed_hosts: ['api.example.test'], allow_private_ip: false, require_tls: true, secret_slots: ['api_key'], secret_binding_modes: {api_key: 'host_blind_inject'}, hooks: ['provider:before'], inspect_request_body: false, inspect_response_body: false};
+    const candidatePermissions = {execution_tier: 'WASM_SANDBOX_T2', allowed_hosts: ['api.example.test'], allow_private_ip: true, require_tls: false, secret_slots: ['api_key'], secret_binding_modes: {api_key: 'host_crypto_sign'}, hooks: ['provider:before', 'provider:after'], inspect_request_body: true, inspect_response_body: false};
+    const diff = {installation_id: installation.id, package_id: installation.package_id, active_version: '1.0.0', candidate_version: '2.0.0', origin_trust_tier: 'verified', enterprise_signed: true,
+      execution_tier: 'sandboxed_wasm', active_execution_tier: 'sandboxed_wasm', active_allowed_hosts: ['api.example.test'], candidate_allowed_hosts: ['api.example.test'],
+      added_allowed_hosts: [], removed_allowed_hosts: [], secret_slots: ['api_key'], active_secret_slots: ['api_key'], added_secret_slots: [], quota_escalated: false,
+      active_quotas: {max_memory_mib: 0, max_cpu_ms_per_call: 0, max_stream_chunk_cpu_ms: 0}, quotas: {max_memory_mib: 0, max_cpu_ms_per_call: 0, max_stream_chunk_cpu_ms: 0},
+      active_permissions: activePermissions, candidate_permissions: candidatePermissions,
+      permission_delta: {added_hooks: ['provider:after'], binding_mode_changed: true, private_ip_escalated: true, tls_downgraded: true, payload_access_escalated: true}, has_escalation: true};
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({data: [installation], has_more: false}))
+      .mockResolvedValueOnce(new Response(JSON.stringify(diff), {status: 200, headers: {'Content-Type': 'application/json', ETag: '"v2"'}}));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<InstalledExtensionDetailPage roles={['OPERATOR']} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Review permissions'}));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    for (const label of ['Hook: provider:after', 'Secret binding mode: api_key', 'Private IP access', 'Require TLS', 'Inspect request body']) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+    const approve = screen.getByRole('button', {name: 'Approve permissions and activate'});
+    expect(approve).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(screen.getByLabelText('I reviewed and explicitly consent to the permission changes and resource limits'));
+    expect(approve).not.toHaveAttribute('aria-disabled', 'true');
   });
 
   it('shows extension blast radius in the destructive quarantine alert', async () => {

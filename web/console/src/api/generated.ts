@@ -1652,6 +1652,25 @@ export interface components {
             rate_card: components["schemas"]["RateCardNanoUsd"];
             version: number;
         };
+        MarketplaceCatalogEntry: {
+            package_id: string;
+            canonical_name: string;
+            version: string;
+            /** @enum {string} */
+            execution_tier: "declarative" | "sandboxed_wasm" | "isolated_sidecar";
+            origin_trust_tier: components["schemas"]["OriginTrustTier"];
+            enterprise_signed: boolean;
+            source_uri: string;
+            expected_sha256: string;
+            summary?: string;
+            capabilities?: string[];
+        };
+        MarketplaceCatalogResponse: {
+            data: components["schemas"]["MarketplaceCatalogEntry"][];
+            offline_cached: boolean;
+            next_cursor?: string | null;
+            has_more: boolean;
+        };
         ExtensionInstallRequest: {
             /** @description Marketplace package ref, 40-char commit-pinned git+https URL, local .tpkg path, or digest-pinned oci:// URI. */
             source_uri: string;
@@ -1678,11 +1697,44 @@ export interface components {
             quota_escalated: boolean;
             active_quotas?: components["schemas"]["ExtensionQuotas"] | null;
             quotas: components["schemas"]["ExtensionQuotas"];
+            active_permissions?: components["schemas"]["ExtensionPermissionSet"] | null;
+            candidate_permissions: components["schemas"]["ExtensionPermissionSet"];
+            permission_delta: components["schemas"]["ExtensionPermissionDelta"];
+            has_escalation: boolean;
         };
         ExtensionQuotas: {
             max_memory_mib: number;
             max_cpu_ms_per_call: number;
             max_stream_chunk_cpu_ms: number;
+        };
+        ExtensionPermissionSet: {
+            allowed_hosts?: string[];
+            allow_private_ip?: boolean;
+            require_tls?: boolean;
+            /** @enum {string} */
+            execution_tier: "DECLARATIVE_T1" | "WASM_SANDBOX_T2" | "ISOLATED_SIDECAR_T3";
+            secret_slots?: string[];
+            secret_binding_modes?: {
+                [key: string]: string;
+            };
+            hooks?: string[];
+            max_memory_mib?: number;
+            max_cpu_ms_per_call?: number;
+            max_stream_chunk_cpu_ms?: number;
+            inspect_request_body?: boolean;
+            inspect_response_body?: boolean;
+        };
+        ExtensionPermissionDelta: {
+            added_hosts?: string[];
+            added_secret_slots?: string[];
+            added_hooks?: string[];
+            binding_mode_changed?: boolean;
+            tier_escalated?: boolean;
+            private_ip_escalated?: boolean;
+            tls_downgraded?: boolean;
+            memory_increased?: boolean;
+            cpu_quota_increased?: boolean;
+            payload_access_escalated?: boolean;
         };
         ExtensionInstallation: {
             id: string;
@@ -3428,12 +3480,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        data: Record<string, never>[];
-                        offline_cached: boolean;
-                        next_cursor?: string | null;
-                        has_more: boolean;
-                    };
+                    "application/json": components["schemas"]["MarketplaceCatalogResponse"];
                 };
             };
         };

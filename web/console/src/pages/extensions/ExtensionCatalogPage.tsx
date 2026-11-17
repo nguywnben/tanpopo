@@ -145,7 +145,4 @@ function catalogCapabilities(row: Record<string, unknown>) {
 }
 
 function message(error: unknown) { return error instanceof Error ? error.message : 'The request could not be completed.'; }
-function hasPermissionDelta(value: PermissionDiff) {
-  return value.added_allowed_hosts.length > 0 || value.added_secret_slots.length > 0 || value.quota_escalated || tierRank(value.execution_tier) > tierRank(value.active_execution_tier ?? 'declarative');
-}
-function tierRank(tier: string) { return tier === 'declarative' ? 0 : tier === 'sandboxed_wasm' ? 1 : tier === 'isolated_sidecar' ? 2 : -1; }
+function hasPermissionDelta(value: PermissionDiff) { return value.has_escalation; }
