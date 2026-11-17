@@ -159,7 +159,7 @@ export function SetupWizardPage() {
   }
 
   if (result?.initial_virtual_key) {
-    return <ShowOnceSecretDialog secret={result.initial_virtual_key} onAcknowledge={() => {
+    return <ShowOnceSecretDialog secret={result.initial_virtual_key} model={modelId.trim()} onAcknowledge={() => {
       setResult(null);
       window.location.assign('/overview');
     }} />;

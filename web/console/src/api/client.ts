@@ -86,6 +86,12 @@ export async function getOverviewSummary(window: components['schemas']['Overview
   return result.data;
 }
 
+export async function listUnhealthyDeployments() {
+  const result = await api.GET('/admin/v1/deployments', {params: {query: {status: 'CIRCUIT_OPEN_UNHEALTHY', limit: 50}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
 export async function listActiveAlerts() {
   const result = await api.GET('/admin/v1/alerts/active', {params: {query: {limit: 50}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);

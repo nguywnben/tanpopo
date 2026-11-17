@@ -13,6 +13,7 @@ describe('console shell accessibility', () => {
       .mockResolvedValueOnce(json({data: [{id: 'project-1', org_id: 'org-1', slug: 'sample', name: 'Sample Project', version: 1, created_at: '2026-11-01T00:00:00Z'}], has_more: false}))
       .mockResolvedValueOnce(json({data: [{id: 'env-1', org_id: 'org-1', project_id: 'project-1', slug: 'dev', name: 'Development', created_at: '2026-11-01T00:00:00Z'}]}))
       .mockResolvedValueOnce(json({window: '24h', total_requests: 42, error_rate_ratio: 0.01, p95_overhead_ms: 120, settled_micro_usd: 2500000, active_hold_micros: 500000, active_alerts_count: 0, updated_at: '2026-11-17T00:00:00Z'}))
+      .mockResolvedValueOnce(json({data: [], has_more: false}))
       .mockResolvedValueOnce(json({data: [], has_more: false}));
     vi.stubGlobal('fetch', fetchMock);
     document.documentElement.lang = 'en';

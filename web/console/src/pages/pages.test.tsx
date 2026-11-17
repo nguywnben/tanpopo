@@ -33,7 +33,8 @@ describe('Unit 27 setup, login, and overview pages', () => {
     };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({initialized: false, offline_mode: false, version: '0.1.0'}))
-      .mockResolvedValueOnce(json(bootstrapResponse, 201));
+      .mockResolvedValueOnce(json(bootstrapResponse, 201))
+      .mockResolvedValueOnce(new Response('data: {"choices":[{"delta":{"content":"Hello from Tanpopo"}}]}\n\ndata: [DONE]\n\n', {status: 200, headers: {'Content-Type': 'text/event-stream', 'X-Tanpopo-Request-Id': 'req-first-1'}}));
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
 
@@ -66,6 +67,12 @@ describe('Unit 27 setup, login, and overview pages', () => {
     expect(body.initial_connection).toMatchObject({adapter_id: 'ollama', billing_mode: 'SELF_HOSTED_INFRA', allow_private_ip: true, allowed_cidrs: ['127.0.0.1/32']});
     expect(body.initial_connection.secret_value).toBeUndefined();
     expect(screen.getByRole('button', {name: 'Continue to Overview'})).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', {name: 'Send Test Request'})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Send Test Request'}));
+    expect(await screen.findByText(/First request succeeded/)).toHaveTextContent('req-first-1');
+    const inferenceInit = fetchMock.mock.calls[2][1] as RequestInit;
+    expect(inferenceInit.headers).toMatchObject({'Authorization': 'Bearer vk_tp_live_once'});
+    expect(inferenceInit.headers).not.toHaveProperty('X-CSRF-Token');
     fireEvent.click(screen.getByLabelText('I have securely stored this virtual key'));
     expect(screen.getByRole('button', {name: 'Continue to Overview'})).toBeEnabled();
   });
@@ -77,15 +84,20 @@ describe('Unit 27 setup, login, and overview pages', () => {
       .mockResolvedValueOnce(json({data: [{id: 'project-1', org_id: 'org-1', slug: 'sample', name: 'Sample Project', version: 1, created_at: '2026-11-01T00:00:00Z'}], has_more: false}))
       .mockResolvedValueOnce(json({data: [{id: 'env-1', org_id: 'org-1', project_id: 'project-1', slug: 'dev', name: 'Development', created_at: '2026-11-01T00:00:00Z'}]}))
       .mockResolvedValueOnce(json({window: '24h', total_requests: 120, error_rate_ratio: 0.02, p95_overhead_ms: 95, settled_micro_usd: 1200000, active_hold_micros: 200000, active_alerts_count: 1, updated_at: '2026-11-17T00:00:00Z'}))
-      .mockResolvedValueOnce(json({data: [{id: 'alert-1', alert_code: 'ALT-BUDGET-80', severity: 'TICKET', summary: 'Budget is nearing its limit', remediation_route: '/finops/budgets', triggered_at: '2026-11-17T00:00:00Z'}], has_more: false}));
+      .mockResolvedValueOnce(json({data: [
+        {id: 'alert-1', alert_code: 'ALT-BUDGET-80', severity: 'TICKET', summary: 'Budget is nearing its limit', remediation_route: '/finops/budgets', triggered_at: '2026-11-17T00:00:00Z'},
+        {id: 'alert-2', alert_code: 'ALT-AUDIT-TAMPER', severity: 'PAGE', summary: 'Unsafe remediation metadata', remediation_route: '/\\\\attacker.example', triggered_at: '2026-11-17T00:00:00Z'},
+      ], has_more: false}))
+      .mockResolvedValueOnce(json({data: [{id: 'deployment-1', env_id: 'env-1', logical_model_id: 'model-1', connection_id: 'connection-1', upstream_model_name: 'broken-model', data_region: 'US', state: 'CIRCUIT_OPEN_UNHEALTHY', rate_card: {input_token_nano_usd: 0, output_token_nano_usd: 0}, version: 1}], has_more: false}));
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
 
     expect(await screen.findByText('120')).toBeInTheDocument();
     expect(screen.getByText('Budget is nearing its limit')).toBeInTheDocument();
-    expect(screen.getByRole('button', {name: 'Open remediation'})).toBeInTheDocument();
+    expect(screen.getByText('broken-model · CIRCUIT_OPEN_UNHEALTHY')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', {name: 'Open remediation'})).toHaveLength(1);
     expect(await seriousAxeViolations()).toEqual([]);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
   });
 });
 

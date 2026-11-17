@@ -8,7 +8,7 @@ import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Token} from '@astryxdesign/core/Token';
 import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';
-import {getOverviewSummary, listActiveAlerts} from '../../api/client';
+import {getOverviewSummary, listActiveAlerts, listUnhealthyDeployments} from '../../api/client';
 import type {components} from '../../api/generated';
 
 type Window = components['schemas']['OverviewSummaryResponse']['window'];
@@ -20,6 +20,7 @@ export function OverviewPage() {
   const [timeWindow, setTimeWindow] = useState<Window>('24h');
   const [summary, setSummary] = useState<Summary | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [unhealthyDeployments, setUnhealthyDeployments] = useState<components['schemas']['ModelDeployment'][]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [announcement, setAnnouncement] = useState('');
@@ -30,7 +31,7 @@ export function OverviewPage() {
     let active = true;
     async function refresh() {
       try {
-        const [nextSummary, nextAlerts] = await Promise.all([getOverviewSummary(timeWindow), listActiveAlerts()]);
+        const [nextSummary, nextAlerts, nextDeployments] = await Promise.all([getOverviewSummary(timeWindow), listActiveAlerts(), listUnhealthyDeployments()]);
         if (!active) return;
         const nextIds = new Set(nextAlerts.map(alert => alert.id));
         const arrived = nextAlerts.filter(alert => !seenAlertIds.current.has(alert.id));
@@ -39,6 +40,7 @@ export function OverviewPage() {
         hasLoadedAlerts.current = true;
         setSummary(nextSummary);
         setAlerts(nextAlerts);
+        setUnhealthyDeployments(nextDeployments);
         setError('');
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : 'Overview data could not be loaded.');
@@ -89,6 +91,15 @@ export function OverviewPage() {
         <Heading level={2}>Active alerts</Heading>
         <Token label={String(summary?.active_alerts_count ?? alerts.length)} color={alerts.length ? 'orange' : 'green'} icon={<Icon icon={alerts.length ? 'warning' : 'success'} />} />
       </HStack>
+      {unhealthyDeployments.length ? <VStack gap={2}>
+        <Heading level={2}>Unhealthy model deployments</Heading>
+        {unhealthyDeployments.map(deployment => <Card key={deployment.id} padding={3}>
+          <HStack gap={3} wrap="wrap" vAlign="center">
+            <Text>{deployment.upstream_model_name} · {deployment.state}</Text>
+            <Button label="Review deployments" variant="secondary" onClick={() => window.location.assign('/models')} />
+          </HStack>
+        </Card>)}
+      </VStack> : null}
       {alerts.length === 0 && !loading ? <Card padding={4}><Text>No active alerts. The system has no current remediation items.</Text></Card> : null}
       <VStack gap={3}>
         {alerts.map(alert => <AlertCard key={alert.id} alert={alert} />)}
@@ -100,7 +111,8 @@ export function OverviewPage() {
 
 function AlertCard({alert}: {alert: Alert}) {
   const isPage = alert.severity === 'PAGE';
-  const canNavigate = alert.remediation_route.startsWith('/') && !alert.remediation_route.startsWith('//');
+  const target = new URL(alert.remediation_route, window.location.origin);
+  const canNavigate = alert.remediation_route.startsWith('/') && target.origin === window.location.origin;
   return (
     <Card padding={4}>
       <HStack gap={3} wrap="wrap" vAlign="center">
@@ -109,7 +121,7 @@ function AlertCard({alert}: {alert: Alert}) {
           <Heading level={3}>{alert.summary}</Heading>
           <Text>{alert.alert_code} · {new Date(alert.triggered_at).toLocaleString()}</Text>
         </VStack>
-        {canNavigate ? <Button label="Open remediation" variant="secondary" onClick={() => window.location.assign(alert.remediation_route)} /> : null}
+        {canNavigate ? <Button label="Open remediation" variant="secondary" onClick={() => window.location.assign(`${target.pathname}${target.search}${target.hash}`)} /> : null}
       </HStack>
     </Card>
   );
