@@ -29,6 +29,8 @@ export default defineConfig({
   build: {
     outDir: path.join(rootDir, 'dist'),
     emptyOutDir: true,
+    minify: 'terser',
+    terserOptions: {compress: {passes: 2}, mangle: true, format: {comments: false}},
     rollupOptions: {output: {manualChunks: undefined}},
   },
 });
