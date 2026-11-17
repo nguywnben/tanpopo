@@ -37,7 +37,7 @@ RULES:
 <!-- TANPOPO-HANDOFF:START -->
 ## Tanpopo Cold-Start Agent Navigation & Governance Gate (Gate G4 Stage 2 Approved)
 
-**Current Product Owner directive (`DEC-040`, 2026-11-17):** `TP-IMP-0026` is `READY` after DoR verification. This supersedes the historical hold text below; do not start implementation unless the active task explicitly requests Unit 26. `TP-IMP-0027..0047` remain blocked.
+**Current Product Owner directive (`DEC-041`, 2026-11-17):** GPT-6 Luna is delegated `TP-IMP-0026`..`0030` sequentially. `TP-IMP-0026` is currently `READY` under `DEC-040`; later units stay blocked until their dependencies are `DONE` on `origin/main` and their DoR is verified. This supersedes the historical hold text below. `TP-IMP-0031..0047` remain blocked.
 
 If you are starting a fresh session with no prior chat context (e.g., executing a `TP-IMP-xxxx` unit):
 1. **Read [`docs/governance/execution-baseline.md`](./docs/governance/execution-baseline.md) FIRST** (`EXEC-BL-001-APPROVED`).
