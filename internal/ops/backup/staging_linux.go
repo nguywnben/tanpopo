@@ -3,18 +3,20 @@
 package backup
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 )
 
 const linuxTmpfsMagic = 0x01021994
 
-func openStagingRoot() (*os.Root, func() error, error) {
+func openStagingRoot(outputDir string) (*os.Root, func() error, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs("/dev/shm", &stat); err != nil {
 		return nil, nil, err
@@ -25,11 +27,17 @@ func openStagingRoot() (*os.Root, func() error, error) {
 	if err := verifyNoActiveSwap(); err != nil {
 		return nil, nil, err
 	}
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	namespaceDigest := sha256.Sum256([]byte(filepath.Clean(absOutputDir)))
+	namespace := hex.EncodeToString(namespaceDigest[:])
 	shmRoot, err := os.OpenRoot("/dev/shm")
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := cleanupAbandonedStagingRoots(shmRoot); err != nil {
+	if err := cleanupAbandonedStagingRoots(shmRoot, namespace); err != nil {
 		_ = shmRoot.Close()
 		return nil, nil, err
 	}
@@ -38,7 +46,7 @@ func openStagingRoot() (*os.Root, func() error, error) {
 		_ = shmRoot.Close()
 		return nil, nil, err
 	}
-	privateName := fmt.Sprintf(".tanpopo-backup-%d-%s", os.Geteuid(), privateID)
+	privateName := fmt.Sprintf(".tanpopo-backup-%d-%s-%s", os.Geteuid(), namespace, privateID)
 	if err := shmRoot.Mkdir(privateName, 0o700); err != nil {
 		_ = shmRoot.Close()
 		return nil, nil, err
@@ -74,21 +82,17 @@ func openStagingRoot() (*os.Root, func() error, error) {
 		return nil, nil, errors.New("backup: private tmpfs staging directory changed during secure open")
 	}
 	cleanup := func() error {
-		lockRemoveErr := root.Remove(".tanpopo-backup.lock")
-		if errors.Is(lockRemoveErr, os.ErrNotExist) {
-			lockRemoveErr = nil
-		}
-		return errors.Join(lockRemoveErr, root.Close(), shmRoot.Remove(privateName), shmRoot.Close())
+		return errors.Join(root.Close(), shmRoot.Remove(privateName), shmRoot.Close())
 	}
 	return root, cleanup, nil
 }
 
-func cleanupAbandonedStagingRoots(root *os.Root) error {
+func cleanupAbandonedStagingRoots(root *os.Root, namespace string) error {
 	entries, err := fs.ReadDir(root.FS(), ".")
 	if err != nil {
 		return err
 	}
-	prefix := fmt.Sprintf(".tanpopo-backup-%d-", os.Geteuid())
+	prefix := fmt.Sprintf(".tanpopo-backup-%d-%s-", os.Geteuid(), namespace)
 	for _, entry := range entries {
 		name := entry.Name()
 		if !strings.HasPrefix(name, prefix) {
@@ -122,31 +126,16 @@ func cleanupAbandonedStagingRoots(root *os.Root) error {
 			}
 			return err
 		}
-		unlock, locked, err := tryLockBackup(stageRoot)
-		if err != nil {
-			_ = stageRoot.Close()
-			return fmt.Errorf("backup: inspect abandoned staging lock %q: %w", name, err)
-		}
-		if !locked {
-			_ = stageRoot.Close()
-			continue
-		}
 		children, err := fs.ReadDir(stageRoot.FS(), ".")
 		if err == nil {
 			for _, child := range children {
 				if err := removeTree(stageRoot, child.Name()); err != nil && !errors.Is(err, os.ErrNotExist) {
-					_ = unlock()
 					_ = stageRoot.Close()
 					return fmt.Errorf("backup: clean abandoned staging entry %q: %w", child.Name(), err)
 				}
 			}
 		}
 		if err != nil {
-			_ = unlock()
-			_ = stageRoot.Close()
-			return err
-		}
-		if err := unlock(); err != nil {
 			_ = stageRoot.Close()
 			return err
 		}

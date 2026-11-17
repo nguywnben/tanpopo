@@ -41,7 +41,7 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	}
 	root := t.TempDir()
 	outputDir := filepath.Join(root, "backups")
-	stagingRoot, cleanupStagingRoot, err := openStagingRoot()
+	stagingRoot, cleanupStagingRoot, err := openStagingRoot(outputDir)
 	if err != nil {
 		t.Fatal(err)
 	}
