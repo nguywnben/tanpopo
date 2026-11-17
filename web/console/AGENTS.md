@@ -44,5 +44,5 @@ RULES:
 
 ## Current Screen Delivery
 
-`TP-IMP-0026` established the Console build, local Figtree, StyleX and `AppShell`; `TP-IMP-0027`..`0029` are accepted. Unit `0029` was accepted under `DEC-048` after implementation SHA `0da4618bbe516e4f39d3ca6730647f1973800bfc` passed CI `44090789888`. Its routes, policies, virtual keys and RBAC flows retain ETag protection, draft-preserving conflict reconciliation, explicit deny-all model allowlists, and typed confirmation for emergency revoke and route deletion. Unit `0030` remains blocked until opened under the sequential `DEC-041` gate.
+`TP-IMP-0026` established the Console build, local Figtree, StyleX and `AppShell`; `TP-IMP-0027`..`0029` are accepted. Unit `0029` was accepted under `DEC-048` after acceptance CI `44092664075` passed. Unit `0030` is `READY` under `DEC-049` for Traces, Budgets, Security/Audit/Kill-Switch, and Operations screens. Keep its `CT-27`, exact currency, accessibility, mobile, air-gap, and strong review gates. Unit `0031` remains blocked.
 

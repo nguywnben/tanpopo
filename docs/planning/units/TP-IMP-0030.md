@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0030` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0025`, `TP-IMP-0026` — `GAP-01, 12`)* |
+| **Status** | **`READY`** *(DoR verified and opened under [`DEC-049`](../../governance/decisions.md) after Unit 29 acceptance CI `44092664075`; `TP-IMP-0025`, `TP-IMP-0026`, and sequential predecessor `TP-IMP-0029` are `DONE` on `origin/main`)* |
 | **Size** | `L` (`web/console/src/pages/traces/*`, `finops/*`, `security/*`, `operations/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Stored XSS prevention on trace/audit payloads `CT-27`, strict separation of 3 cost-accuracy labels `UX-GR-05` & Emergency Kill-Switch UX)* |
 | **Technical Owner** | `Lead Frontend / SRE UX Engineer` |
