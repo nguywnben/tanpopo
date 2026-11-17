@@ -213,6 +213,11 @@ func TestValidateBackupConfigRejectsInlineMasterKEK(t *testing.T) {
 		t.Fatalf("validateBackupConfig rejected environment reference: %v", err)
 	}
 
+	writeConfig(t, "key: &inline inline-root-key\nsecurity:\n  master_key: *inline\n")
+	if err := validateBackupConfig(root, "tanpopo.yaml"); err == nil {
+		t.Fatal("validateBackupConfig accepted an aliased inline Master KEK")
+	}
+
 	writeConfig(t, "data_dir: /var/lib/tanpopo\n---\nsecurity:\n  master_kek: leaked-key\n")
 	if err := validateBackupConfig(root, "tanpopo.yaml"); err == nil {
 		t.Fatal("validateBackupConfig accepted multiple YAML documents")

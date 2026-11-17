@@ -723,7 +723,7 @@ func containsInlineMasterKEK(node *yaml.Node, seen map[*yaml.Node]bool) bool {
 			canonicalKey := strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(strings.TrimSpace(key.Value)))
 			switch canonicalKey {
 			case "master_key", "masterkey", "master_kek", "masterkek", "tanpopo_master_key", "tanpopomasterkey":
-				if value.Kind == yaml.ScalarNode && strings.TrimSpace(value.Value) != "" && !isEnvironmentReference(value.Value) {
+				if value.Kind != yaml.ScalarNode || (strings.TrimSpace(value.Value) != "" && !isEnvironmentReference(value.Value)) {
 					return true
 				}
 			}
