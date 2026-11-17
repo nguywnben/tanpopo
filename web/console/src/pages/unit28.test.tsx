@@ -24,6 +24,30 @@ describe('Unit 28 catalog and extension workflows', () => {
     expect(screen.queryByText('Audio tools')).not.toBeInTheDocument();
   });
 
+  it('stages a marketplace row directly and opens its permission review', async () => {
+    rememberCsrfToken('csrf-marketplace');
+    const sha256 = 'd'.repeat(64);
+    const permissionDiff = {
+      installation_id: 'market-installation', package_id: '@community/vision', candidate_version: '1.2.0', origin_trust_tier: 'verified', enterprise_signed: true,
+      execution_tier: 'declarative', active_execution_tier: null, active_allowed_hosts: [], candidate_allowed_hosts: ['api.example.test'],
+      added_allowed_hosts: ['api.example.test'], removed_allowed_hosts: [], secret_slots: ['api_key'], active_secret_slots: [], added_secret_slots: ['api_key'],
+      quota_escalated: false, active_quotas: null, quotas: {max_memory_mib: 0, max_cpu_ms_per_call: 0, max_stream_chunk_cpu_ms: 0},
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({data: [{id: 'vision', canonical_name: 'Vision adapter', package_id: '@community/vision', version: '1.2.0', origin_trust_tier: 'verified', enterprise_signed: true, execution_tier: 'declarative', capabilities: ['vision'], source_uri: 'marketplace://@community/vision@1.2.0', expected_sha256: sha256}], has_more: false}))
+      .mockResolvedValueOnce(json(permissionDiff, 202))
+      .mockResolvedValueOnce(new Response(JSON.stringify(permissionDiff), {status: 200, headers: {'Content-Type': 'application/json', ETag: '"v1"'}}));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ExtensionCatalogPage roles={['OPERATOR']} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Stage for permission review'}));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Active version')).toBeInTheDocument();
+    expect(screen.getByText('Candidate 1.2.0')).toBeInTheDocument();
+    const stageRequest = fetchMock.mock.calls[1][0] as Request;
+    expect(await stageRequest.clone().json()).toEqual({source_uri: 'marketplace://@community/vision@1.2.0', expected_sha256: sha256});
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('maps and validates every integer token and media rate', () => {
     const rates = Object.fromEntries(['input_token_nano_usd', 'output_token_nano_usd', 'cache_read_token_nano_usd', 'cache_write_token_nano_usd', 'reasoning_token_nano_usd', 'image_unit_nano_usd', 'audio_sec_nano_usd', 'document_page_nano_usd'].map((key, index) => [key, String(index + 1)])) as Parameters<typeof buildRateCard>[0];
     expect(buildRateCard(rates, 'COMMERCIAL_API', false)).toEqual({rateCard: {
@@ -156,7 +180,8 @@ describe('Unit 28 catalog and extension workflows', () => {
     rememberCsrfToken('csrf-extension');
     const permissionDiff = {
       installation_id: 'installation-1', package_id: '@community/agent', candidate_version: '2.0.0', origin_trust_tier: 'unverified_external',
-      enterprise_signed: false, execution_tier: 'sandboxed_wasm', added_allowed_hosts: ['api.example.test'], removed_allowed_hosts: [], secret_slots: ['api_key'],
+      enterprise_signed: false, execution_tier: 'sandboxed_wasm', active_execution_tier: null, active_allowed_hosts: [], candidate_allowed_hosts: ['api.example.test'],
+      added_allowed_hosts: ['api.example.test'], removed_allowed_hosts: [], secret_slots: ['api_key'], active_secret_slots: [], added_secret_slots: ['api_key'], quota_escalated: false, active_quotas: null,
       quotas: {max_memory_mib: 16, max_cpu_ms_per_call: 25},
     };
     const fetchMock = vi.fn()
@@ -173,15 +198,15 @@ describe('Unit 28 catalog and extension workflows', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Stage package'}));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Added hosts: api.example.test')).toBeInTheDocument();
-    expect(screen.getByText('Secret slots: api_key')).toBeInTheDocument();
+    expect(screen.getByText('api.example.test')).toBeInTheDocument();
+    expect(screen.getByText('api_key')).toBeInTheDocument();
     const audit = await axe.run(document, {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa']}});
     expect(audit.violations.filter(item => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
     const activate = screen.getByRole('button', {name: 'Approve & Activate'});
     expect(activate).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(screen.getByLabelText('I acknowledge this package is from an unverified external publisher'));
     expect(activate).toHaveAttribute('aria-disabled', 'true');
-    fireEvent.click(screen.getByLabelText('I reviewed and explicitly consent to the requested permission changes'));
+    fireEvent.click(screen.getByLabelText('I reviewed and explicitly consent to the permission changes and resource limits'));
     expect(activate).not.toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(activate);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
@@ -206,7 +231,9 @@ describe('Unit 28 catalog and extension workflows', () => {
     rememberCsrfToken('csrf-upgrade');
     const installation = {id: 'installed-2', package_id: '@community/upgrade', state: 'ENABLED_ACTIVE', origin_trust_tier: 'verified', enterprise_signed: true, execution_tier: 'declarative', version: 3, active_version: '1.0.0', previous_rollback_version: '0.9.0'};
     const upgradeDiff = {installation_id: 'installed-2', package_id: '@community/upgrade', active_version: '1.0.0', candidate_version: '2.0.0', origin_trust_tier: 'verified', enterprise_signed: true,
-      execution_tier: 'sandboxed_wasm', added_allowed_hosts: ['new.example.test'], removed_allowed_hosts: [], secret_slots: [], quotas: {max_memory_mib: 16}};
+      execution_tier: 'sandboxed_wasm', active_execution_tier: 'declarative', active_allowed_hosts: ['api.example.test'], candidate_allowed_hosts: ['api.example.test', 'new.example.test'],
+      added_allowed_hosts: ['new.example.test'], removed_allowed_hosts: [], secret_slots: [], active_secret_slots: [], added_secret_slots: [], quota_escalated: true,
+      active_quotas: {max_memory_mib: 8, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3}, quotas: {max_memory_mib: 16, max_cpu_ms_per_call: 15, max_stream_chunk_cpu_ms: 5}};
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({data: [installation], has_more: false}))
       .mockResolvedValueOnce(new Response(JSON.stringify({...upgradeDiff, installation_id: 'installed-2', candidate_version: '1.0.0'}), {status: 200, headers: {'Content-Type': 'application/json', ETag: '"v3"'}}))
@@ -224,13 +251,42 @@ describe('Unit 28 catalog and extension workflows', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     const approve = screen.getByRole('button', {name: 'Approve permissions and activate'});
     expect(approve).toHaveAttribute('aria-disabled', 'true');
-    fireEvent.click(screen.getByLabelText('I reviewed and explicitly consent to the requested permission changes'));
+    fireEvent.click(screen.getByLabelText('I reviewed and explicitly consent to the permission changes and resource limits'));
     expect(approve).not.toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(approve);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
     const request = fetchMock.mock.calls.find(call => (call[0] as Request).url.endsWith('/approve-permissions'))?.[0] as Request;
     expect(request.headers.get('If-Match')).toBe('"candidate-opaque-xyz"');
     expect(request.headers.get('X-CSRF-Token')).toBe('csrf-upgrade');
+  });
+
+  it('requires explicit acknowledgement for a quota-only escalation', async () => {
+    rememberCsrfToken('csrf-quota');
+    const installation = {id: 'quota-installation', package_id: '@community/quota', state: 'UPDATING_PENDING_RECONSENT', origin_trust_tier: 'verified', enterprise_signed: true, execution_tier: 'sandboxed_wasm', version: 4, active_version: '1.0.0'};
+    const diff = {installation_id: installation.id, package_id: installation.package_id, active_version: '1.0.0', candidate_version: '2.0.0', origin_trust_tier: 'verified', enterprise_signed: true,
+      execution_tier: 'sandboxed_wasm', active_execution_tier: 'sandboxed_wasm', active_allowed_hosts: ['api.example.test'], candidate_allowed_hosts: ['api.example.test'],
+      added_allowed_hosts: [], removed_allowed_hosts: [], secret_slots: ['api_key'], active_secret_slots: ['api_key'], added_secret_slots: [], quota_escalated: true,
+      active_quotas: {max_memory_mib: 8, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3}, quotas: {max_memory_mib: 16, max_cpu_ms_per_call: 10, max_stream_chunk_cpu_ms: 3}};
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({data: [installation], has_more: false}))
+      .mockResolvedValueOnce(new Response(JSON.stringify(diff), {status: 200, headers: {'Content-Type': 'application/json', ETag: '"v4"'}}))
+      .mockResolvedValueOnce(json({...installation, state: 'ENABLED_ACTIVE', version: 5}))
+      .mockResolvedValueOnce(json({data: [{...installation, state: 'ENABLED_ACTIVE', version: 5}], has_more: false}));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<InstalledExtensionDetailPage roles={['OPERATOR']} />);
+    fireEvent.click(await screen.findByRole('button', {name: 'Review permissions'}));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Memory: 8 MiB; CPU per call: 10 ms; CPU per stream chunk: 3 ms')).toBeInTheDocument();
+    expect(screen.getByText('Memory: 16 MiB; CPU per call: 10 ms; CPU per stream chunk: 3 ms')).toBeInTheDocument();
+    const approve = screen.getByRole('button', {name: 'Approve permissions and activate'});
+    expect(approve).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(screen.getByLabelText('I reviewed and explicitly consent to the permission changes and resource limits'));
+    expect(approve).not.toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(approve);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    const request = fetchMock.mock.calls[2][0] as Request;
+    expect(request.headers.get('If-Match')).toBe('"v4"');
+    expect(request.headers.get('X-CSRF-Token')).toBe('csrf-quota');
   });
 
   it('shows extension blast radius in the destructive quarantine alert', async () => {

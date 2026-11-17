@@ -14,6 +14,7 @@ import {VStack} from '@astryxdesign/core/Stack';
 import {approveExtension, getExtensionBlastRadius, getExtensionLockfile, inspectExtensionPermissions, listExtensionInstallations, rollbackExtension, triggerExtensionKillSwitch, uninstallExtension, upgradeExtension} from '../../api/catalogClient';
 import type {components} from '../../api/generated';
 import {StateToken, TrustToken} from '../catalog/StatusToken';
+import {PermissionDiffTable} from './PermissionDiffTable';
 
 type Role = components['schemas']['RbacRole'];
 type Installation = components['schemas']['ExtensionInstallation'] & Record<string, unknown>;
@@ -133,12 +134,8 @@ export function InstalledExtensionDetailPage({roles = []}: {roles?: Role[]}) {
         <Section><VStack gap={3}><Heading level={2}>Origin</Heading><TrustToken trust={diff.origin_trust_tier} /><Text>Origin trust is independent of the publisher signature and execution tier.</Text></VStack></Section>
         <Section><VStack gap={3}><Heading level={2}>Publisher trust</Heading><Text>{diff.enterprise_signed ? 'Enterprise signed' : 'No enterprise signature'}</Text></VStack></Section>
         <Section><VStack gap={3}><Heading level={2}>Execution tier</Heading><StateToken state={diff.execution_tier} /></VStack></Section>
-        <Section><VStack gap={3}><Heading level={2}>Permission delta</Heading>
-          <Text>Added hosts: {diff.added_allowed_hosts.join(', ') || 'None'}</Text><Text>Removed hosts: {diff.removed_allowed_hosts.join(', ') || 'None'}</Text>
-          <Text>Secret slots: {diff.secret_slots.join(', ') || 'None'}</Text>
-          <Text>Quotas: {Object.entries(diff.quotas).map(([key, value]) => `${key}: ${value}`).join(', ') || 'No quota data'}</Text>
-        </VStack></Section>
-        {hasPermissionDelta(diff) ? <CheckboxInput label="I reviewed and explicitly consent to the requested permission changes" value={deltaAcknowledged} onChange={setDeltaAcknowledged} /> : null}
+        <Section><VStack gap={3}><Heading level={2}>Permission delta</Heading><PermissionDiffTable diff={diff} /></VStack></Section>
+        {hasPermissionDelta(diff) ? <CheckboxInput label="I reviewed and explicitly consent to the permission changes and resource limits" value={deltaAcknowledged} onChange={setDeltaAcknowledged} /> : null}
         {diff.origin_trust_tier === 'unverified_external' ? <><Text>Your consent does not waive DEC-004 or TP-BR-0301 compliance requirements.</Text><CheckboxInput label="I acknowledge this unverified external publisher" value={acknowledged} onChange={setAcknowledged} /></> : null}
         {canApprove(roles) ? <Button label="Approve permissions and activate" isDisabled={!etag || (diff.origin_trust_tier === 'unverified_external' && !acknowledged) || (hasPermissionDelta(diff) && !deltaAcknowledged)} onClick={() => void approveReconsent()} /> : <Text role="alert">Your role cannot approve this permission change.</Text>}
       </VStack> : null}
@@ -162,4 +159,7 @@ export function InstalledExtensionDetailPage({roles = []}: {roles?: Role[]}) {
 }
 
 function message(error: unknown) { return error instanceof Error ? error.message : 'The request could not be completed.'; }
-function hasPermissionDelta(value: PermissionDiff) { return value.added_allowed_hosts.length > 0 || value.secret_slots.length > 0 || value.execution_tier !== 'declarative'; }
+function hasPermissionDelta(value: PermissionDiff) {
+  return value.added_allowed_hosts.length > 0 || value.added_secret_slots.length > 0 || value.quota_escalated || tierRank(value.execution_tier) > tierRank(value.active_execution_tier ?? 'declarative');
+}
+function tierRank(tier: string) { return tier === 'declarative' ? 0 : tier === 'sandboxed_wasm' ? 1 : tier === 'isolated_sidecar' ? 2 : -1; }

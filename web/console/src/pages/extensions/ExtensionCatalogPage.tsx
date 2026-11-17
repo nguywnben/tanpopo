@@ -12,6 +12,7 @@ import {VStack} from '@astryxdesign/core/Stack';
 import {approveExtension, inspectExtensionPermissions, listMarketplaceCatalog, stageExtensionInstall} from '../../api/catalogClient';
 import type {components} from '../../api/generated';
 import {StateToken, TrustToken} from '../catalog/StatusToken';
+import {PermissionDiffTable} from './PermissionDiffTable';
 
 type Role = components['schemas']['RbacRole'];
 type PermissionDiff = components['schemas']['ExtensionPermissionDiff'];
@@ -49,6 +50,18 @@ export function ExtensionCatalogPage({roles = []}: {roles?: Role[]}) {
     } catch (failure) { setError(message(failure)); }
   }
 
+  async function stageCatalogEntry(entry: CatalogEntry) {
+    setError(''); setNotice('');
+    if (!entry.source_uri || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
+      setError(`${entry.name} does not have a verified source URI and SHA-256 digest for staging.`);
+      return;
+    }
+    try {
+      const staged = await stageExtensionInstall(entry.source_uri, entry.sha256);
+      await inspectAndOpen(staged.installation_id);
+    } catch (failure) { setError(message(failure)); }
+  }
+
   async function inspectAndOpen(id: string) {
     try {
       const result = await inspectExtensionPermissions(id);
@@ -80,6 +93,7 @@ export function ExtensionCatalogPage({roles = []}: {roles?: Role[]}) {
       {key: 'capabilities', header: 'Capability types', renderCell: row => <Text>{(row.capabilities as string[]).join(', ') || 'No capabilities listed'}</Text>},
       {key: 'execution_tier', header: 'Execution tier', renderCell: row => <StateToken state={String(row.execution_tier)} />},
       {key: 'description', header: 'Description'},
+      ...(canStage(roles) ? [{key: 'actions', header: 'Actions', renderCell: (row: CatalogEntry) => <Button label="Stage for permission review" variant="secondary" isDisabled={!row.source_uri || !/^[a-f0-9]{64}$/.test(row.sha256)} onClick={() => void stageCatalogEntry(row)} />}] : []),
     ]} />
     {canStage(roles) ? <Section><VStack gap={3}><Heading level={2}>Stage a package for review</Heading>
       <form onSubmit={stage}><VStack gap={3}>
@@ -95,13 +109,8 @@ export function ExtensionCatalogPage({roles = []}: {roles?: Role[]}) {
         <Section><VStack gap={3}><Heading level={2}>Origin</Heading><TrustToken trust={review.origin_trust_tier} /><Text>Package source and digest were verified during staging.</Text></VStack></Section>
         <Section><VStack gap={3}><Heading level={2}>Publisher trust</Heading><Text>{review.enterprise_signed ? 'Enterprise signed' : 'No enterprise signature present'}</Text></VStack></Section>
         <Section><VStack gap={3}><Heading level={2}>Execution tier</Heading><StateToken state={review.execution_tier} /></VStack></Section>
-        <Section><VStack gap={3}><Heading level={2}>Requested permissions</Heading>
-          <Text>Added hosts: {review.added_allowed_hosts.join(', ') || 'None'}</Text>
-          <Text>Removed hosts: {review.removed_allowed_hosts.join(', ') || 'None'}</Text>
-          <Text>Secret slots: {review.secret_slots.join(', ') || 'None'}</Text>
-          <Text>Quotas: {Object.entries(review.quotas).map(([key, value]) => `${key}: ${value}`).join(', ') || 'No quota data'}</Text>
-        </VStack></Section>
-        {hasPermissionDelta(review) ? <CheckboxInput label="I reviewed and explicitly consent to the requested permission changes" value={deltaAcknowledged} onChange={setDeltaAcknowledged} /> : null}
+        <Section><VStack gap={3}><Heading level={2}>Requested permissions</Heading><PermissionDiffTable diff={review} /></VStack></Section>
+        {hasPermissionDelta(review) ? <CheckboxInput label="I reviewed and explicitly consent to the permission changes and resource limits" value={deltaAcknowledged} onChange={setDeltaAcknowledged} /> : null}
         {review.origin_trust_tier === 'unverified_external' ? <><Text>Your consent does not waive DEC-004 or TP-BR-0301 compliance requirements.</Text><CheckboxInput label="I acknowledge this package is from an unverified external publisher" value={acknowledged} onChange={setAcknowledged} /></> : null}
         {!canApprove(roles) ? <Text role="alert">Your role cannot approve extension permissions.</Text> : null}
         {canApprove(roles) ? <>
@@ -136,4 +145,7 @@ function catalogCapabilities(row: Record<string, unknown>) {
 }
 
 function message(error: unknown) { return error instanceof Error ? error.message : 'The request could not be completed.'; }
-function hasPermissionDelta(value: PermissionDiff) { return value.added_allowed_hosts.length > 0 || value.secret_slots.length > 0 || value.execution_tier !== 'declarative'; }
+function hasPermissionDelta(value: PermissionDiff) {
+  return value.added_allowed_hosts.length > 0 || value.added_secret_slots.length > 0 || value.quota_escalated || tierRank(value.execution_tier) > tierRank(value.active_execution_tier ?? 'declarative');
+}
+function tierRank(tier: string) { return tier === 'declarative' ? 0 : tier === 'sandboxed_wasm' ? 1 : tier === 'isolated_sidecar' ? 2 : -1; }

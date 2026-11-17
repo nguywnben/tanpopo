@@ -1666,14 +1666,23 @@ export interface components {
             enterprise_signed: boolean;
             /** @enum {string} */
             execution_tier: "declarative" | "sandboxed_wasm" | "isolated_sidecar";
+            /** @enum {string|null} */
+            active_execution_tier?: "declarative" | "sandboxed_wasm" | "isolated_sidecar" | null;
+            active_allowed_hosts: string[];
+            candidate_allowed_hosts: string[];
             added_allowed_hosts: string[];
             removed_allowed_hosts: string[];
             secret_slots: string[];
-            quotas: {
-                max_memory_mib?: number;
-                max_cpu_ms_per_call?: number;
-                max_stream_chunk_cpu_ms?: number;
-            };
+            active_secret_slots: string[];
+            added_secret_slots: string[];
+            quota_escalated: boolean;
+            active_quotas?: components["schemas"]["ExtensionQuotas"] | null;
+            quotas: components["schemas"]["ExtensionQuotas"];
+        };
+        ExtensionQuotas: {
+            max_memory_mib: number;
+            max_cpu_ms_per_call: number;
+            max_stream_chunk_cpu_ms: number;
         };
         ExtensionInstallation: {
             id: string;

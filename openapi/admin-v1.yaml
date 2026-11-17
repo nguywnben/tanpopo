@@ -651,7 +651,7 @@ components:
 
     ExtensionPermissionDiff:
       type: object
-      required: [installation_id, package_id, candidate_version, origin_trust_tier, enterprise_signed, execution_tier, added_allowed_hosts, removed_allowed_hosts, secret_slots, quotas]
+      required: [installation_id, package_id, candidate_version, origin_trust_tier, enterprise_signed, execution_tier, active_allowed_hosts, candidate_allowed_hosts, added_allowed_hosts, removed_allowed_hosts, secret_slots, active_secret_slots, added_secret_slots, quota_escalated, quotas]
       properties:
         installation_id: { type: string }
         package_id: { type: string }
@@ -660,6 +660,13 @@ components:
         origin_trust_tier: { $ref: "#/components/schemas/OriginTrustTier" }
         enterprise_signed: { type: boolean }
         execution_tier: { type: string, enum: [declarative, sandboxed_wasm, isolated_sidecar] }
+        active_execution_tier: { type: [string, "null"], enum: [declarative, sandboxed_wasm, isolated_sidecar, null] }
+        active_allowed_hosts:
+          type: array
+          items: { type: string }
+        candidate_allowed_hosts:
+          type: array
+          items: { type: string }
         added_allowed_hosts:
           type: array
           items: { type: string }
@@ -669,12 +676,27 @@ components:
         secret_slots:
           type: array
           items: { type: string }
+        active_secret_slots:
+          type: array
+          items: { type: string }
+        added_secret_slots:
+          type: array
+          items: { type: string }
+        quota_escalated: { type: boolean }
+        active_quotas:
+          oneOf:
+            - { $ref: "#/components/schemas/ExtensionQuotas" }
+            - { type: "null" }
         quotas:
-          type: object
-          properties:
-            max_memory_mib: { type: integer, maximum: 16 }
-            max_cpu_ms_per_call: { type: integer, maximum: 15 }
-            max_stream_chunk_cpu_ms: { type: integer, maximum: 5 }
+          $ref: "#/components/schemas/ExtensionQuotas"
+
+    ExtensionQuotas:
+      type: object
+      required: [max_memory_mib, max_cpu_ms_per_call, max_stream_chunk_cpu_ms]
+      properties:
+        max_memory_mib: { type: integer, minimum: 0, maximum: 16 }
+        max_cpu_ms_per_call: { type: integer, minimum: 0, maximum: 15 }
+        max_stream_chunk_cpu_ms: { type: integer, minimum: 0, maximum: 5 }
 
     ExtensionInstallation:
       type: object
