@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 )
 
@@ -40,7 +38,7 @@ func openStagingRoot() (*os.Root, func() error, error) {
 		_ = shmRoot.Close()
 		return nil, nil, err
 	}
-	privateName := fmt.Sprintf(".tanpopo-backup-%d-%d-%s", os.Geteuid(), os.Getpid(), privateID)
+	privateName := fmt.Sprintf(".tanpopo-backup-%d-%s", os.Geteuid(), privateID)
 	if err := shmRoot.Mkdir(privateName, 0o700); err != nil {
 		_ = shmRoot.Close()
 		return nil, nil, err
@@ -75,13 +73,12 @@ func openStagingRoot() (*os.Root, func() error, error) {
 		_ = shmRoot.Close()
 		return nil, nil, errors.New("backup: private tmpfs staging directory changed during secure open")
 	}
-	var cleanupOnce sync.Once
-	var cleanupErr error
 	cleanup := func() error {
-		cleanupOnce.Do(func() {
-			cleanupErr = errors.Join(root.Close(), shmRoot.Remove(privateName), shmRoot.Close())
-		})
-		return cleanupErr
+		lockRemoveErr := root.Remove(".tanpopo-backup.lock")
+		if errors.Is(lockRemoveErr, os.ErrNotExist) {
+			lockRemoveErr = nil
+		}
+		return errors.Join(lockRemoveErr, root.Close(), shmRoot.Remove(privateName), shmRoot.Close())
 	}
 	return root, cleanup, nil
 }
@@ -97,13 +94,8 @@ func cleanupAbandonedStagingRoots(root *os.Root) error {
 		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
-		rest := strings.TrimPrefix(name, prefix)
-		pidText, token, ok := strings.Cut(rest, "-")
-		if !ok || len(token) != 32 {
-			continue
-		}
-		pid, err := strconv.Atoi(pidText)
-		if err != nil || pid <= 0 {
+		token := strings.TrimPrefix(name, prefix)
+		if len(token) != 32 {
 			continue
 		}
 		if _, err := hex.DecodeString(token); err != nil {
@@ -123,10 +115,43 @@ func cleanupAbandonedStagingRoots(root *os.Root) error {
 		if !ok || owner.Uid != uint32(os.Geteuid()) {
 			continue
 		}
-		if err := syscall.Kill(pid, 0); err == nil || errors.Is(err, syscall.EPERM) {
+		stageRoot, err := root.OpenRoot(name)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return err
+		}
+		unlock, locked, err := tryLockBackup(stageRoot)
+		if err != nil {
+			_ = stageRoot.Close()
+			return fmt.Errorf("backup: inspect abandoned staging lock %q: %w", name, err)
+		}
+		if !locked {
+			_ = stageRoot.Close()
 			continue
-		} else if !errors.Is(err, syscall.ESRCH) {
-			return fmt.Errorf("backup: inspect staging owner process %d: %w", pid, err)
+		}
+		children, err := fs.ReadDir(stageRoot.FS(), ".")
+		if err == nil {
+			for _, child := range children {
+				if err := removeTree(stageRoot, child.Name()); err != nil && !errors.Is(err, os.ErrNotExist) {
+					_ = unlock()
+					_ = stageRoot.Close()
+					return fmt.Errorf("backup: clean abandoned staging entry %q: %w", child.Name(), err)
+				}
+			}
+		}
+		if err != nil {
+			_ = unlock()
+			_ = stageRoot.Close()
+			return err
+		}
+		if err := unlock(); err != nil {
+			_ = stageRoot.Close()
+			return err
+		}
+		if err := stageRoot.Close(); err != nil {
+			return err
 		}
 		if err := removeTree(root, name); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("backup: remove abandoned staging directory %q: %w", name, err)

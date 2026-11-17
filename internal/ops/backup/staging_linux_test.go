@@ -17,8 +17,8 @@ func TestCleanupAbandonedStagingRootsOnlyRemovesDeadOwners(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	deadName := fmt.Sprintf(".tanpopo-backup-%d-2147483647-%032x", os.Geteuid(), 1)
-	activeName := fmt.Sprintf(".tanpopo-backup-%d-%d-%032x", os.Geteuid(), os.Getpid(), 2)
+	deadName := fmt.Sprintf(".tanpopo-backup-%d-%032x", os.Geteuid(), 1)
+	activeName := fmt.Sprintf(".tanpopo-backup-%d-%032x", os.Geteuid(), 2)
 	for _, name := range []string{deadName, activeName} {
 		if err := root.Mkdir(name, 0o700); err != nil {
 			t.Fatal(err)
@@ -35,7 +35,18 @@ func TestCleanupAbandonedStagingRootsOnlyRemovesDeadOwners(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	activeRoot, err := root.OpenRoot(activeName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock, err := lockBackup(activeRoot)
+	if err != nil {
+		_ = activeRoot.Close()
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
+		unlock()
+		_ = activeRoot.Close()
 		_ = removeTree(root, activeName)
 	})
 	if err := cleanupAbandonedStagingRoots(root); err != nil {
