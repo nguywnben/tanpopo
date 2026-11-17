@@ -5,7 +5,9 @@ package http
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -95,22 +97,49 @@ func (s *Server) handleGetEffectivePolicy(w http.ResponseWriter, r *http.Request
 		scopeTier = "PROJECT"
 		scopeID = projID
 	}
-
-	writePolicyID := "pol_effective_" + scopeID
-	writeVersion := int64(1)
 	scopeDB, scopeErr := mapPolicyScopeTierToDB(scopeTier)
 	if scopeErr != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resolving writable policy scope", true, nil)
 		return
 	}
-	var storedPolicyID string
-	var storedPolicyVersion int64
-	err = s.db.QueryRowContext(r.Context(), `SELECT id, version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ?`, orgID, scopeDB, scopeID).Scan(&storedPolicyID, &storedPolicyVersion)
-	if err == nil {
-		writePolicyID, writeVersion = storedPolicyID, storedPolicyVersion
-	} else if !errors.Is(err, sql.ErrNoRows) {
+
+	writePolicyID := scopePolicyWriteID(orgID, scopeDB, scopeID)
+	writeVersion := int64(1)
+	storedRows, err := s.db.QueryContext(r.Context(), `SELECT id, version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ? ORDER BY policy_type, id`, orgID, scopeDB, scopeID)
+	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resolving writable policy version", true, nil)
 		return
+	}
+	var ids []string
+	var versions []int64
+	for storedRows.Next() {
+		var id string
+		var version int64
+		if err := storedRows.Scan(&id, &version); err != nil {
+			_ = storedRows.Close()
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading writable policy rows", true, nil)
+			return
+		}
+		ids, versions = append(ids, id), append(versions, version)
+	}
+	if err := storedRows.Err(); err != nil {
+		_ = storedRows.Close()
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading writable policy rows", true, nil)
+		return
+	}
+	if err := storedRows.Close(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed closing writable policy rows", true, nil)
+		return
+	}
+	switch len(ids) {
+	case 0:
+	case 1:
+		writePolicyID, writeVersion = ids[0], versions[0]
+	default:
+		writeVersion = 0
+		for _, version := range versions {
+			writeVersion += version
+		}
 	}
 	doc := effectivePolicyToDTO(writePolicyID, scopeTier, scopeID, eff, writeVersion)
 	w.Header().Set("ETag", FormatETag(doc.Version))
@@ -133,6 +162,9 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	orgID, ok := s.resolveTargetOrgID(w, r, sc)
 	if !ok {
+		return
+	}
+	if s.handleScopePolicyUpdate(w, r, sc, orgID, policyID, &req) {
 		return
 	}
 
@@ -343,6 +375,111 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	out := policyRecordToDTO(updated)
 	w.Header().Set("ETag", FormatETag(out.Version))
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleScopePolicyUpdate(w http.ResponseWriter, r *http.Request, sc *authSessionContext, orgID, policyID string, req *policyDocumentDTO) bool {
+	scopeType, err := mapPolicyScopeTierToDB(req.ScopeTier)
+	if err != nil {
+		return false
+	}
+	scopeID := strings.TrimSpace(req.ScopeID)
+	if scopeID == "" && scopeType == snapshot.PolicyScopeOrg {
+		scopeID = orgID
+	}
+	if scopeID == "" || policyID != scopePolicyWriteID(orgID, scopeType, scopeID) {
+		return false
+	}
+	var count int
+	if err := s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ?`, orgID, scopeType, scopeID).Scan(&count); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resolving policy scope", true, nil)
+		return true
+	}
+	if count < 2 {
+		return false
+	}
+	targetScope, ancestorEnvID, ok := s.resolvePolicyTargetScope(w, r, orgID, scopeType, scopeID)
+	if !ok {
+		return true
+	}
+	action := rbac.ActionPolicyProjectWrite
+	if scopeType == snapshot.PolicyScopeOrg {
+		action = rbac.ActionPolicyOrgWrite
+	}
+	if !s.authorize(w, r, sc, action, targetScope) || !s.requireActiveOrgAndProject(w, r, orgID, targetScope.ProjectID) {
+		return true
+	}
+	expectedVersion, ok := requireIfMatch(w, r)
+	if !ok {
+		return true
+	}
+	rulesJSON, err := encodePolicyRulesFromDTO(req)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+		return true
+	}
+	updated, err := s.policies.UpdateScopePolicies(r.Context(), orgID, scopeType, scopeID, expectedVersion, policyengine.UpdatePolicyParams{
+		RulesJSON: &rulesJSON, ActorKind: "PRINCIPAL", ActorID: sc.Actor.PrincipalID, EntryPoint: port.AuditEntryPointAdminAPI,
+		RequestID: ptrOrNil(requestIDFromContext(r.Context())), AncestorProjID: targetScope.ProjectID, AncestorEnvID: ancestorEnvID,
+	})
+	if err != nil {
+		var currentResource any
+		if errors.Is(err, port.ErrVersionConflict) {
+			var currentVersion int64
+			rows, queryErr := s.db.QueryContext(r.Context(), `SELECT version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ?`, orgID, scopeType, scopeID)
+			if queryErr == nil {
+				for rows.Next() {
+					var version int64
+					if rows.Scan(&version) != nil {
+						currentVersion = 0
+						break
+					}
+					currentVersion += version
+				}
+				if rows.Err() != nil {
+					currentVersion = 0
+				}
+				_ = rows.Close()
+			}
+			projID, envID := "", ""
+			if scopeType == snapshot.PolicyScopeProject {
+				projID = scopeID
+			} else if scopeType == snapshot.PolicyScopeEnv {
+				envID, projID = scopeID, targetScope.ProjectID
+			}
+			if currentVersion > 0 {
+				if effective, _, viewErr := s.computeEffectivePolicyWithVersionSQL(r.Context(), orgID, projID, envID); viewErr == nil {
+					currentResource = effectivePolicyToDTO(policyID, mapPolicyScopeDBToTier(scopeType), scopeID, effective, currentVersion)
+				}
+			}
+		}
+		s.writePolicyStoreError(w, r, err, currentResource)
+		return true
+	}
+	if s.snapshots != nil {
+		_ = s.snapshots.Refresh(r.Context())
+	}
+	projID, envID := "", ""
+	scopeTier := mapPolicyScopeDBToTier(scopeType)
+	if scopeType == snapshot.PolicyScopeProject {
+		projID = scopeID
+	} else if scopeType == snapshot.PolicyScopeEnv {
+		envID, projID = scopeID, targetScope.ProjectID
+	}
+	effective, _, err := s.computeEffectivePolicyWithVersionSQL(r.Context(), orgID, projID, envID)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "policy saved but effective view could not be refreshed", true, nil)
+		return true
+	}
+	doc := effectivePolicyToDTO(policyID, scopeTier, scopeID, effective, updated.Version)
+	w.Header().Set("ETag", FormatETag(doc.Version))
+	writeJSON(w, http.StatusOK, doc)
+	return true
+}
+
+func scopePolicyWriteID(orgID, scopeType, scopeID string) string {
+	digest := sha256.Sum256([]byte(orgID + "\x00" + scopeType + "\x00" + scopeID))
+	encoding := base32.NewEncoding("0123456789abcdefghjkmnpqrstvwxyz").WithPadding(base32.NoPadding)
+	return "pol_" + strings.ToLower(encoding.EncodeToString(digest[:16]))
 }
 
 func (s *Server) computeEffectivePolicySQL(ctx context.Context, orgID, projID, envID string) (policyengine.EffectivePolicy, error) {

@@ -336,6 +336,106 @@ func getPolicyTx(ctx context.Context, tx *sql.Tx, orgID, policyID string) (*Poli
 	return &rec, nil
 }
 
+// UpdateScopePolicies atomically replaces the rules on every policy row in a scope.
+// The Admin effective-policy document is a scope-wide view; updating only one
+// row would leave stale same-scope rules active in the other rows.
+func (s *Store) UpdateScopePolicies(ctx context.Context, orgID, scopeType, scopeID string, expectedVersion int64, p UpdatePolicyParams) (*PolicyRecord, error) {
+	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(scopeType) == "" || strings.TrimSpace(scopeID) == "" || expectedVersion < 1 || p.RulesJSON == nil {
+		return nil, ErrInvalidPolicyInput
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("policy: begin scope update: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	type scopeRow struct {
+		id, policyType, failureMode string
+		enabled                    bool
+		version                    int64
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id, policy_type, failure_mode, enabled, version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ? ORDER BY policy_type, id`, orgID, scopeType, scopeID)
+	if err != nil {
+		return nil, fmt.Errorf("policy: list scope rows: %w", err)
+	}
+	var existing []scopeRow
+	var scopeVersion int64
+	for rows.Next() {
+		var row scopeRow
+		var enabled int
+		if err := rows.Scan(&row.id, &row.policyType, &row.failureMode, &enabled, &row.version); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("policy: scan scope row: %w", err)
+		}
+		row.enabled = enabled != 0
+		scopeVersion += row.version
+		existing = append(existing, row)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, fmt.Errorf("policy: iterate scope rows: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if len(existing) < 2 {
+		return nil, ErrInvalidPolicyInput
+	}
+	if scopeVersion != expectedVersion {
+		return nil, port.ErrVersionConflict
+	}
+	parsed, err := snapshot.ParsePolicyRulesJSONStrict(*p.RulesJSON)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidPolicyInput, err)
+	}
+
+	for _, row := range existing {
+		if row.enabled {
+			ancestors, ancestorFailClosed, err := loadAncestorLayersTx(ctx, tx, orgID, scopeType, scopeID, p.AncestorProjID, p.AncestorEnvID, row.id)
+			if err != nil {
+				return nil, err
+			}
+			candidate := CandidatePolicy{ScopeType: scopeType, ScopeID: scopeID, PolicyType: row.policyType, FailureMode: row.failureMode, Rules: parsed}
+			if err := ValidateChildPolicyWithinAncestors(ancestors, ancestorFailClosed, candidate); err != nil {
+				_ = tx.Rollback()
+				if errors.Is(err, ErrPolicyRelaxationForbidden) {
+					s.emitViolationAudit(ctx, orgID, row.id, scopeType, scopeID, p.ActorKind, p.ActorID, p.EntryPoint, p.RequestID, err.Error())
+				}
+				return nil, err
+			}
+		}
+	}
+
+	now := s.nowMs()
+	var result *PolicyRecord
+	for _, row := range existing {
+		res, err := tx.ExecContext(ctx, `UPDATE policies SET rules_json = ?, version = version + 1, updated_at_ms = ? WHERE org_id = ? AND id = ? AND version = ?`, *p.RulesJSON, now, orgID, row.id, row.version)
+		if err != nil {
+			return nil, fmt.Errorf("policy: update scope row: %w", err)
+		}
+		if affected, _ := res.RowsAffected(); affected != 1 {
+			return nil, port.ErrVersionConflict
+		}
+		if err := appendPolicyChangelogTx(ctx, tx, orgID, row.id, port.MutationUpsert, now); err != nil {
+			return nil, err
+		}
+		if err := s.emitPolicyMutationAuditTx(ctx, tx, orgID, row.id, scopeType, scopeID, row.policyType, p.ActorKind, p.ActorID, p.EntryPoint, p.RequestID, "policy.updated", now); err != nil {
+			return nil, err
+		}
+		if result == nil {
+			result = &PolicyRecord{ID: row.id, OrgID: orgID, ScopeType: scopeType, ScopeID: scopeID, PolicyType: row.policyType, FailureMode: row.failureMode, RulesJSON: *p.RulesJSON, ParsedRules: parsed, Enabled: row.enabled}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("policy: commit scope update: %w", err)
+	}
+	if result != nil {
+		result.Version = scopeVersion + int64(len(existing))
+		result.UpdatedAtMs = now
+	}
+	return result, nil
+}
+
 func loadAncestorLayersTx(
 	ctx context.Context,
 	tx *sql.Tx,

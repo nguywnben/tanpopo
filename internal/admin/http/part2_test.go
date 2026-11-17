@@ -1298,6 +1298,17 @@ func TestPart2PoliciesRoutesModelsAndOCC(t *testing.T) {
 	t.Parallel()
 	h := newPart2TestHarness(t, 20)
 	boot, ownerCookie := h.bootstrapOwner(t, "Policy Org", "pol-proj")
+	for i := 0; i < 2; i++ {
+		rec := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/policies/effective", ownerCookie, "", "", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET empty effective policy code=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var emptyEffective policyDocumentDTO
+		mustDecodeJSON(t, rec.Body.Bytes(), &emptyEffective)
+		if len(emptyEffective.ID) > 40 || emptyEffective.ID != scopePolicyWriteID(boot.OrgID, snapshot.PolicyScopeOrg, boot.OrgID) {
+			t.Fatalf("empty effective policy must expose stable bounded write id, got %q", emptyEffective.ID)
+		}
+	}
 
 	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
 	recConn := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
@@ -1402,6 +1413,89 @@ func TestPart2PoliciesRoutesModelsAndOCC(t *testing.T) {
 	mustDecodeJSON(t, recEffectiveOrg.Body.Bytes(), &effectiveOrg)
 	if effectiveOrg.ID != orgPolID || effectiveOrg.Version != 2 || recEffectiveOrg.Header().Get("ETag") != `"v2"` {
 		t.Fatalf("effective policy must carry the writable row id/version; got id=%q version=%d etag=%q", effectiveOrg.ID, effectiveOrg.Version, recEffectiveOrg.Header().Get("ETag"))
+	}
+
+	// A scope can contain multiple policy rows. The effective document must use
+	// a stable aggregate ID/ETag and a write must update all rows atomically.
+	if _, err := h.st.RawDB().ExecContext(context.Background(), `
+		INSERT INTO policies (id, org_id, scope_type, scope_id, policy_type, failure_mode, rules_json, enabled, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'ORG', ?, 'RATE_LIMIT', 'FAIL_CLOSED', '{"rpm_ceiling":200}', 1, 1, ?, ?)
+	`, idgen.MustNew(idgen.PrefixPolicy), boot.OrgID, boot.OrgID, h.fk.Now().UnixMilli(), h.fk.Now().UnixMilli()); err != nil {
+		t.Fatalf("insert duplicate-scope policy row: %v", err)
+	}
+	recAggregate := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/policies/effective", ownerCookie, "", "", nil)
+	if recAggregate.Code != http.StatusOK {
+		t.Fatalf("GET aggregate effective policy code=%d body=%s", recAggregate.Code, recAggregate.Body.String())
+	}
+	var aggregate policyDocumentDTO
+	mustDecodeJSON(t, recAggregate.Body.Bytes(), &aggregate)
+	if len(aggregate.ID) > 40 || aggregate.ID != scopePolicyWriteID(boot.OrgID, snapshot.PolicyScopeOrg, boot.OrgID) || aggregate.Version != 3 || recAggregate.Header().Get("ETag") != `"v3"` {
+		t.Fatalf("aggregate policy must use stable bounded ID and summed version, got id=%q version=%d etag=%q", aggregate.ID, aggregate.Version, recAggregate.Header().Get("ETag"))
+	}
+	recAggregateUpdate := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+aggregate.ID, ownerCookie, boot.CSRFToken, recAggregate.Header().Get("ETag"), map[string]any{
+		"scope_tier": "ORGANIZATION", "scope_id": boot.OrgID,
+		"allowed_data_regions": []string{"US"}, "allowed_models": []string{"prod-assistant"},
+		"min_plugin_trust": "OFFICIAL_ONLY", "min_capability_assurance": "VERIFIED", "rpm_ceiling": 80,
+	})
+	if recAggregateUpdate.Code != http.StatusOK {
+		t.Fatalf("PUT aggregate policy code=%d body=%s", recAggregateUpdate.Code, recAggregateUpdate.Body.String())
+	}
+	var updatedRows int
+	var minVersion, maxVersion int64
+	if err := h.st.RawDB().QueryRowContext(context.Background(), `SELECT COUNT(*), MIN(version), MAX(version) FROM policies WHERE org_id = ? AND scope_type = 'ORG' AND scope_id = ? AND rules_json = ?`, boot.OrgID, boot.OrgID, `{"allowed_data_regions":["US"],"allowed_models":["prod-assistant"],"min_capability_assurance":"VERIFIED","min_plugin_trust":"OFFICIAL_ONLY","rpm_ceiling":80}`).Scan(&updatedRows, &minVersion, &maxVersion); err != nil {
+		t.Fatalf("query updated scope policies: %v", err)
+	}
+	if updatedRows != 2 || minVersion != 2 || maxVersion != 3 {
+		t.Fatalf("scope policy update must update each row and preserve per-row versions, rows=%d versions=%d..%d", updatedRows, minVersion, maxVersion)
+	}
+	recStaleAggregate := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+aggregate.ID, ownerCookie, boot.CSRFToken, recAggregate.Header().Get("ETag"), map[string]any{
+		"scope_tier": "ORGANIZATION", "scope_id": boot.OrgID,
+		"allowed_data_regions": []string{"US"}, "allowed_models": []string{"prod-assistant"},
+		"min_plugin_trust": "OFFICIAL_ONLY", "min_capability_assurance": "VERIFIED", "rpm_ceiling": 80,
+	})
+	if recStaleAggregate.Code != http.StatusConflict {
+		t.Fatalf("stale aggregate ETag must conflict, got %d body=%s", recStaleAggregate.Code, recStaleAggregate.Body.String())
+	}
+	var staleEnvelope CanonicalErrorEnvelope
+	mustDecodeJSON(t, recStaleAggregate.Body.Bytes(), &staleEnvelope)
+	currentResource, ok := staleEnvelope.Error.CurrentResource.(map[string]any)
+	if !ok || currentResource["id"] != aggregate.ID || currentResource["version"] != float64(5) || recStaleAggregate.Header().Get("ETag") != `"v5"` {
+		t.Fatalf("stale aggregate conflict must return current scope resource/version, resource=%+v etag=%q", staleEnvelope.Error.CurrentResource, recStaleAggregate.Header().Get("ETag"))
+	}
+
+	// Relaxing a project model allowlist beneath the organization policy must
+	// fail closed and persist a violation audit after rolling back the write tx.
+	for _, id := range []string{idgen.MustNew(idgen.PrefixPolicy), idgen.MustNew(idgen.PrefixPolicy)} {
+		if _, err := h.st.RawDB().ExecContext(context.Background(), `
+			INSERT INTO policies (id, org_id, scope_type, scope_id, policy_type, failure_mode, rules_json, enabled, version, created_at_ms, updated_at_ms)
+			VALUES (?, ?, 'PROJECT', ?, 'MODEL_ALLOWLIST', 'FAIL_CLOSED', '{"allowed_models":["prod-assistant"]}', 1, 1, ?, ?)
+		`, id, boot.OrgID, boot.ProjectID, h.fk.Now().UnixMilli(), h.fk.Now().UnixMilli()); err != nil {
+			t.Fatalf("insert project scope policy row: %v", err)
+		}
+	}
+	var auditsBefore int
+	if err := h.st.RawDB().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM audit_events WHERE org_id = ? AND event_type = 'policy.relaxation_blocked'`, boot.OrgID).Scan(&auditsBefore); err != nil {
+		t.Fatalf("count policy violation audits before aggregate update: %v", err)
+	}
+	recProjectEffective := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/policies/effective?project_id="+boot.ProjectID, ownerCookie, "", "", nil)
+	if recProjectEffective.Code != http.StatusOK {
+		t.Fatalf("GET project effective policy code=%d body=%s", recProjectEffective.Code, recProjectEffective.Body.String())
+	}
+	var projectEffective policyDocumentDTO
+	mustDecodeJSON(t, recProjectEffective.Body.Bytes(), &projectEffective)
+	recProjectRelax := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+projectEffective.ID, ownerCookie, boot.CSRFToken, recProjectEffective.Header().Get("ETag"), map[string]any{
+		"scope_tier": "PROJECT", "scope_id": boot.ProjectID,
+		"allowed_models": []string{"*"}, "min_plugin_trust": "OFFICIAL_ONLY", "min_capability_assurance": "VERIFIED",
+	})
+	if recProjectRelax.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("aggregate project policy relaxation must fail closed, got %d body=%s", recProjectRelax.Code, recProjectRelax.Body.String())
+	}
+	var auditsAfter int
+	if err := h.st.RawDB().QueryRowContext(context.Background(), `SELECT COUNT(*) FROM audit_events WHERE org_id = ? AND event_type = 'policy.relaxation_blocked'`, boot.OrgID).Scan(&auditsAfter); err != nil {
+		t.Fatalf("count policy violation audits after aggregate update: %v", err)
+	}
+	if auditsAfter != auditsBefore+1 {
+		t.Fatalf("rejected aggregate relaxation must emit one violation audit, before=%d after=%d", auditsBefore, auditsAfter)
 	}
 
 	recBadWeight := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
