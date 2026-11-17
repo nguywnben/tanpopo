@@ -939,12 +939,17 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 					bySlot[binding.SlotName] = binding
 				}
 				requestedBindings = make([]SecretBindingInput, 0, len(bySlot))
-				for _, binding := range bySlot { requestedBindings = append(requestedBindings, binding) }
+				for _, binding := range bySlot {
+					requestedBindings = append(requestedBindings, binding)
+				}
+				sort.Slice(requestedBindings, func(i, j int) bool {
+					return requestedBindings[i].SlotName < requestedBindings[j].SlotName
+				})
 			}
 			seenSlots := make(map[string]struct{}, len(requestedBindings)+1)
-			var credForReplace *string
+			var explicitCredentialID *string
 			if params.CredentialID != nil {
-				credForReplace = nextPrimaryCred
+				explicitCredentialID = nextPrimaryCred
 			}
 			for _, rawB := range requestedBindings {
 				slot := strings.TrimSpace(rawB.SlotName)
@@ -954,9 +959,6 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 				}
 				if _, dup := seenSlots[slot]; dup {
 					return fmt.Errorf("%w: duplicate secret binding slot_name %q", port.ErrInvalidInput, slot)
-				}
-				if slot == "api_key" && credForReplace != nil && credID != *credForReplace {
-					return fmt.Errorf("%w: credential_id %q conflicts with secret_bindings api_key %q", port.ErrInvalidInput, *credForReplace, credID)
 				}
 				mode := strings.TrimSpace(rawB.InjectMode)
 				if mode == "" {
@@ -971,12 +973,11 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 					CredentialID: credID,
 					InjectMode:   mode,
 				})
-				if slot == "api_key" || credForReplace == nil {
-					v := credID
-					credForReplace = &v
-				}
 			}
-			nextPrimaryCred = credForReplace
+			nextPrimaryCred, err = selectPrimaryCredential(explicitCredentialID, normalizedBindings)
+			if err != nil {
+				return err
+			}
 			if params.AuthMode == nil {
 				if len(normalizedBindings) == 0 {
 					nextAuthMode = AuthModeNone
@@ -1148,6 +1149,35 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 		return nil, err
 	}
 	return r.GetProviderConnection(ctx, params.OrgID, params.ConnectionID)
+}
+
+func selectPrimaryCredential(explicitCredentialID *string, bindings []SecretBindingInput) (*string, error) {
+	var (
+		apiKeyCredentialID   *string
+		fallbackCredentialID *string
+		fallbackSlot         string
+	)
+	for _, binding := range bindings {
+		credentialID := binding.CredentialID
+		if binding.SlotName == "api_key" {
+			if explicitCredentialID != nil && credentialID != *explicitCredentialID {
+				return nil, fmt.Errorf("%w: credential_id %q conflicts with secret_bindings api_key %q", port.ErrInvalidInput, *explicitCredentialID, credentialID)
+			}
+			apiKeyCredentialID = &credentialID
+			continue
+		}
+		if fallbackCredentialID == nil || binding.SlotName < fallbackSlot {
+			fallbackCredentialID = &credentialID
+			fallbackSlot = binding.SlotName
+		}
+	}
+	if apiKeyCredentialID != nil {
+		return apiKeyCredentialID, nil
+	}
+	if explicitCredentialID != nil {
+		return explicitCredentialID, nil
+	}
+	return fallbackCredentialID, nil
 }
 
 // DeleteProviderConnection deletes an unreferenced ProviderConnection, returning port.ErrResourceInUse (409)
