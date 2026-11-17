@@ -918,16 +918,26 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			requestedBindings := params.SecretBindings
 			if params.MergeBindings {
 				rows, err := tx.QueryContext(ctx, `SELECT slot_name, credential_id, inject_mode FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ?`, params.OrgID, params.ConnectionID)
-				if err != nil { return mapReadDBError(err) }
+				if err != nil {
+					return mapDBError(err)
+				}
 				bySlot := make(map[string]SecretBindingInput)
 				for rows.Next() {
 					var current SecretBindingInput
-					if err := rows.Scan(&current.SlotName, &current.CredentialID, &current.InjectMode); err != nil { rows.Close(); return mapReadDBError(err) }
+					if err := rows.Scan(&current.SlotName, &current.CredentialID, &current.InjectMode); err != nil {
+						rows.Close()
+						return mapDBError(err)
+					}
 					bySlot[current.SlotName] = current
 				}
-				if err := rows.Err(); err != nil { rows.Close(); return mapReadDBError(err) }
+				if err := rows.Err(); err != nil {
+					rows.Close()
+					return mapDBError(err)
+				}
 				rows.Close()
-				for _, binding := range params.SecretBindings { bySlot[binding.SlotName] = binding }
+				for _, binding := range params.SecretBindings {
+					bySlot[binding.SlotName] = binding
+				}
 				requestedBindings = make([]SecretBindingInput, 0, len(bySlot))
 				for _, binding := range bySlot { requestedBindings = append(requestedBindings, binding) }
 			}
