@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
@@ -181,6 +182,20 @@ func newAdminTestHarness(t *testing.T) *adminTestHarness {
 	if err := os.WriteFile(configPath, []byte("data_dir: "+dir+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	pluginsDir := filepath.Join(dir, "plugins")
+	if err := os.MkdirAll(pluginsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	instSvc, err := installer.NewLifecycleService(installer.ServiceConfig{
+		DB:           st.RawDB(),
+		Audit:        auditLog,
+		PluginsDir:   pluginsDir,
+		LockfilePath: lockfilePath,
+		NowMs:        nowFn,
+	})
+	if err != nil {
+		t.Fatalf("installer.NewLifecycleService: %v", err)
+	}
 	srv, err := NewServer(ServerConfig{
 		Store:            st,
 		DB:               st.RawDB(),
@@ -190,6 +205,7 @@ func newAdminTestHarness(t *testing.T) *adminTestHarness {
 		Vault:            vlt,
 		Snapshots:        snapshots,
 		KillSwitch:       ksReg,
+		Installer:        instSvc,
 		Audit:            auditLog,
 		NowMs:            nowFn,
 		PaginationSecret: pagSecret,

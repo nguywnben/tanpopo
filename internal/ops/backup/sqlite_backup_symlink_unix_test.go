@@ -25,6 +25,10 @@ func TestCreateSQLiteRejectsSymlinkDestinationsAndLockfiles(t *testing.T) {
 	if err := os.WriteFile(config, []byte("data_dir: /var/lib/tanpopo\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	artifactDir := filepath.Join(root, "plugins")
+	if err := os.Mkdir(artifactDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	outside := filepath.Join(root, "outside")
 	if err := os.Mkdir(outside, 0o700); err != nil {
 		t.Fatal(err)
@@ -33,7 +37,7 @@ func TestCreateSQLiteRejectsSymlinkDestinationsAndLockfiles(t *testing.T) {
 	if err := os.Symlink(outside, linkedOutput); err != nil {
 		t.Fatalf("create backup directory symlink: %v", err)
 	}
-	if _, err := CreateSQLite(ctx, store, keys, linkedOutput, lockfile, config, 1_795_000_000_000); err == nil {
+	if _, err := CreateSQLite(ctx, store, keys, linkedOutput, lockfile, config, artifactDir, 1_795_000_000_000); err == nil {
 		t.Fatal("CreateSQLite accepted a symlink backup directory")
 	}
 
@@ -49,7 +53,13 @@ func TestCreateSQLiteRejectsSymlinkDestinationsAndLockfiles(t *testing.T) {
 	if err := os.Symlink(plainLockfile, linkedLockfile); err != nil {
 		t.Fatalf("create lockfile symlink: %v", err)
 	}
-	if _, err := CreateSQLite(ctx, store, keys, realOutput, linkedLockfile, config, 1_795_000_000_000); err == nil {
+	if _, err := CreateSQLite(ctx, store, keys, realOutput, linkedLockfile, config, artifactDir, 1_795_000_000_000); err == nil {
 		t.Fatal("CreateSQLite accepted a symlink lockfile")
+	}
+	if err := os.Symlink(plainLockfile, filepath.Join(artifactDir, "linked.wasm")); err != nil {
+		t.Fatalf("create extension artifact symlink: %v", err)
+	}
+	if _, err := CreateSQLite(ctx, store, keys, realOutput, lockfile, config, artifactDir, 1_795_000_000_000); err == nil {
+		t.Fatal("CreateSQLite accepted a symlink extension artifact")
 	}
 }

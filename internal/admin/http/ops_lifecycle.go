@@ -109,11 +109,11 @@ func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Requ
 	}
 	lockfilePath := s.lockfilePath
 	configPath := s.configPath
-	if strings.TrimSpace(lockfilePath) == "" || strings.TrimSpace(configPath) == "" {
-		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "backup requires configured tanpopo.lock and tanpopo.yaml files", true, nil)
+	if strings.TrimSpace(lockfilePath) == "" || strings.TrimSpace(configPath) == "" || s.installer == nil || strings.TrimSpace(s.installer.ArtifactRoot()) == "" {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "backup requires configured tanpopo.lock, tanpopo.yaml, and extension artifact store", true, nil)
 		return
 	}
-	receipt, err := backup.CreateSQLite(r.Context(), store, s.vault, backupDir, lockfilePath, configPath, s.nowMs())
+	receipt, err := backup.CreateSQLite(r.Context(), store, s.vault, backupDir, lockfilePath, configPath, s.installer.ArtifactRoot(), s.nowMs())
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "backup_failed", "upstream_error", "encrypted backup creation failed", true, nil)
 		return

@@ -53,6 +53,10 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 		t.Fatalf("stale snapshot should report unhealthy node: body=%s err=%v", status.Body.String(), err)
 	}
 
+	artifactPath := filepath.Join(h.srv.installer.ArtifactRoot(), "sample.wasm")
+	if err := os.WriteFile(artifactPath, []byte("pinned test extension"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	backupResp := h.doBearer(t, http.MethodPost, "/admin/v1/ops/backups", "tok_cr13_operator", "", nil)
 	if !backup.PlatformSupported() {
 		if backupResp.Code != http.StatusServiceUnavailable {

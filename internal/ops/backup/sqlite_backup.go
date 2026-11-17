@@ -53,11 +53,22 @@ type Receipt struct {
 }
 
 type manifest struct {
-	FormatVersion int    `json:"format_version"`
-	CreatedAt     string `json:"created_at"`
-	DatabaseSHA256 string `json:"database_sha256"`
-	LockfileSHA256 string `json:"lockfile_sha256"`
-	ConfigSHA256   string `json:"config_sha256"`
+	FormatVersion  int              `json:"format_version"`
+	CreatedAt      string           `json:"created_at"`
+	DatabaseSHA256 string           `json:"database_sha256"`
+	LockfileSHA256 string           `json:"lockfile_sha256"`
+	ConfigSHA256   string           `json:"config_sha256"`
+	Artifacts      []artifactDigest `json:"artifacts"`
+}
+
+type artifactDigest struct {
+	Path      string `json:"path"`
+	SHA256Hex string `json:"sha256_hex"`
+}
+
+type artifactFile struct {
+	Path      string
+	SHA256Hex string
 }
 
 type envelopeHeader struct {
@@ -75,9 +86,9 @@ type envelopeHeader struct {
 // CreateSQLite takes a consistent online SQLite snapshot, includes the lockfile
 // when configured, writes a manifest, zstd-frames the tar stream, and seals
 // it in independently authenticated AES-GCM chunks under a random wrapped key.
-func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outputDir, lockfilePath, configPath string, nowMs int64) (_ Receipt, resultErr error) {
-	if store == nil || keys == nil || strings.TrimSpace(outputDir) == "" || strings.TrimSpace(lockfilePath) == "" || strings.TrimSpace(configPath) == "" {
-		return Receipt{}, errors.New("backup: snapshotter, key wrapper, output directory, lockfile, and config file are required")
+func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outputDir, lockfilePath, configPath, artifactDir string, nowMs int64) (_ Receipt, resultErr error) {
+	if store == nil || keys == nil || strings.TrimSpace(outputDir) == "" || strings.TrimSpace(lockfilePath) == "" || strings.TrimSpace(configPath) == "" || strings.TrimSpace(artifactDir) == "" {
+		return Receipt{}, errors.New("backup: snapshotter, key wrapper, output directory, lockfile, config file, and artifact directory are required")
 	}
 	if runtime.GOOS != "linux" {
 		return Receipt{}, fmt.Errorf("backup: secure SQLite snapshot paths are unsupported on %s", runtime.GOOS)
@@ -168,6 +179,19 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	if !configInfo.Mode().IsRegular() || configInfo.Mode()&os.ModeSymlink != 0 {
 		return Receipt{}, errors.New("backup: server config must be a regular non-symlink file")
 	}
+	artifactRoot, err := os.OpenRoot(artifactDir)
+	if err != nil {
+		return Receipt{}, fmt.Errorf("backup: open extension artifact root: %w", err)
+	}
+	defer artifactRoot.Close()
+	artifactRootInfo, err := artifactRoot.Stat(".")
+	if err != nil || !artifactRootInfo.IsDir() {
+		return Receipt{}, errors.New("backup: extension artifact root must be a directory")
+	}
+	artifacts, err := collectArtifactFiles(ctx, artifactRoot)
+	if err != nil {
+		return Receipt{}, err
+	}
 	dbRelPath := "database.sqlite"
 	dbPath := filepath.Join(sqliteStagePath, dbRelPath)
 	if err := store.BackupTo(ctx, dbPath); err != nil {
@@ -194,7 +218,11 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, err
 	}
 
-	m := manifest{FormatVersion: 1, CreatedAt: createdAt, DatabaseSHA256: dbHash, LockfileSHA256: lockfileHash, ConfigSHA256: configHash}
+	artifactDigests := make([]artifactDigest, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		artifactDigests = append(artifactDigests, artifactDigest{Path: "extensions/" + artifact.Path, SHA256Hex: artifact.SHA256Hex})
+	}
+	m := manifest{FormatVersion: 1, CreatedAt: createdAt, DatabaseSHA256: dbHash, LockfileSHA256: lockfileHash, ConfigSHA256: configHash, Artifacts: artifactDigests}
 
 	dataKey := make([]byte, 32)
 	if _, err := rand.Read(dataKey); err != nil {
@@ -222,7 +250,7 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	finalName := "tanpopo-backup-" + backupID + ".tpop.enc"
 	tempArchive := ".tanpopo-backup-" + backupID + ".partial"
 	defer outputRoot.Remove(tempArchive)
-	if err := writePayload(ctx, stageRoot, dbRelPath, lockfileCopy, configCopy, m, outputRoot, tempArchive, dataKey, noncePrefix, backupID, headerBytes); err != nil {
+	if err := writePayload(ctx, stageRoot, dbRelPath, lockfileCopy, configCopy, artifactRoot, artifacts, m, outputRoot, tempArchive, dataKey, noncePrefix, backupID, headerBytes); err != nil {
 		return Receipt{}, err
 	}
 	if _, err := outputRoot.Lstat(finalName); err == nil {
@@ -436,7 +464,7 @@ func pathForOpenRoot(root *os.Root) (*os.File, string, error) {
 	return dir, filepath.Join(procDir, strconv.FormatUint(uint64(fd), 10)), nil
 }
 
-func writePayload(ctx context.Context, srcRoot *os.Root, dbPath, lockfilePath, configPath string, m manifest, dstRoot *os.Root, destPath string, key, noncePrefix []byte, backupID string, header []byte) error {
+func writePayload(ctx context.Context, srcRoot *os.Root, dbPath, lockfilePath, configPath string, artifactRoot *os.Root, artifacts []artifactFile, m manifest, dstRoot *os.Root, destPath string, key, noncePrefix []byte, backupID string, header []byte) error {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return fmt.Errorf("backup: initialize archive cipher: %w", err)
@@ -474,14 +502,19 @@ func writePayload(ctx context.Context, srcRoot *os.Root, dbPath, lockfilePath, c
 		return fmt.Errorf("backup: initialize zstd frame: %w", err)
 	}
 	archive := tar.NewWriter(compressed)
-	if err := addArchiveFile(ctx, archive, srcRoot, dbPath, "database.sqlite"); err != nil {
+	if err := addArchiveFile(ctx, archive, srcRoot, dbPath, "database.sqlite", ""); err != nil {
 		return err
 	}
-	if err := addArchiveFile(ctx, archive, srcRoot, lockfilePath, "tanpopo.lock"); err != nil {
+	if err := addArchiveFile(ctx, archive, srcRoot, lockfilePath, "tanpopo.lock", ""); err != nil {
 		return err
 	}
-	if err := addArchiveFile(ctx, archive, srcRoot, configPath, "tanpopo.yaml"); err != nil {
+	if err := addArchiveFile(ctx, archive, srcRoot, configPath, "tanpopo.yaml", ""); err != nil {
 		return err
+	}
+	for _, artifact := range artifacts {
+		if err := addArchiveFile(ctx, archive, artifactRoot, artifact.Path, "extensions/"+artifact.Path, artifact.SHA256Hex); err != nil {
+			return err
+		}
 	}
 	manifestBytes, err := json.Marshal(m)
 	if err != nil {
@@ -584,7 +617,7 @@ func (w *encryptedFrameWriter) Close() error {
 	return nil
 }
 
-func addArchiveFile(ctx context.Context, tarWriter *tar.Writer, root *os.Root, path, name string) error {
+func addArchiveFile(ctx context.Context, tarWriter *tar.Writer, root *os.Root, path, name, expectedSHA256 string) error {
 	file, err := root.Open(path)
 	if err != nil {
 		return fmt.Errorf("backup: open staged file %q: %w", name, err)
@@ -597,10 +630,53 @@ func addArchiveFile(ctx context.Context, tarWriter *tar.Writer, root *os.Root, p
 	if err := tarWriter.WriteHeader(&tar.Header{Name: name, Mode: 0o600, Size: info.Size(), Typeflag: tar.TypeReg}); err != nil {
 		return fmt.Errorf("backup: write %q header: %w", name, err)
 	}
-	if _, err := io.Copy(tarWriter, contextReader{ctx: ctx, reader: file}); err != nil {
+	h := sha256.New()
+	if _, err := io.Copy(tarWriter, io.TeeReader(contextReader{ctx: ctx, reader: file}, h)); err != nil {
 		return fmt.Errorf("backup: add %q: %w", name, err)
 	}
+	if expectedSHA256 != "" && hex.EncodeToString(h.Sum(nil)) != expectedSHA256 {
+		return fmt.Errorf("backup: extension artifact %q changed while creating archive", name)
+	}
 	return nil
+}
+
+func collectArtifactFiles(ctx context.Context, root *os.Root) ([]artifactFile, error) {
+	var artifacts []artifactFile
+	err := fs.WalkDir(root.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == "." {
+			return nil
+		}
+		info, err := root.Lstat(path)
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("backup: extension artifact %q is a symlink", path)
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("backup: extension artifact %q is not a regular file", path)
+		}
+		name := filepath.ToSlash(path)
+		digest, err := fileSHA256(root, path)
+		if err != nil {
+			return err
+		}
+		artifacts = append(artifacts, artifactFile{Path: name, SHA256Hex: digest})
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("backup: enumerate extension artifacts: %w", err)
+	}
+	return artifacts, nil
 }
 
 func chunkAAD(backupID string, index uint64, header []byte) []byte {
