@@ -21,6 +21,7 @@ type Tab = 'keys' | 'members';
 
 const roles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER', 'FINOPS_VIEWER', 'DEVELOPER'];
 const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
+const memberReadRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
 
 export function AccessAndKeysPage({projectId, environmentId, currentPrincipalId, actorRoles}: {projectId: string; environmentId: string; currentPrincipalId: string; actorRoles: Role[]}) {
   const [tab, setTab] = useState<Tab>('keys');
@@ -45,19 +46,34 @@ export function AccessAndKeysPage({projectId, environmentId, currentPrincipalId,
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [draftRoles, setDraftRoles] = useState<Role[]>([]);
   const canManage = actorRoles.some(role => manageRoles.includes(role));
+  const canReadMembers = actorRoles.some(role => memberReadRoles.includes(role));
   const canEmergencyRevoke = canManage || actorRoles.includes('SECURITY_REVIEWER');
 
   const refresh = useCallback(async () => {
     if (!projectId || !environmentId) { setKeys([]); setMembers([]); setTraces([]); setLoading(false); return; }
     setLoading(true); setError('');
-    try {
-      const [nextKeys, nextMembers, recent, models, deployments] = await Promise.all([listVirtualKeys(projectId, environmentId), listMembers(), listRecentTraces(environmentId), listAdminModels(), listDeployments(environmentId)]);
-      setKeys(nextKeys as Key[]); setMembers(nextMembers as Member[]); setTraces(recent);
-      const activeModelIDs = new Set(deployments.map(deployment => deployment.logical_model_id));
-      setAvailableModels(models.filter(model => activeModelIDs.has(model.id)));
-    } catch (failure) { setError(message(failure)); }
-    finally { setLoading(false); }
-  }, [projectId, environmentId]);
+    const results = await Promise.allSettled([
+      listVirtualKeys(projectId, environmentId),
+      canReadMembers ? listMembers() : Promise.resolve([] as Member[]),
+      listRecentTraces(environmentId), listAdminModels(), listDeployments(environmentId),
+    ] as const);
+    const failures: string[] = [];
+    const [keysResult, membersResult, tracesResult, modelsResult, deploymentsResult] = results;
+    if (keysResult.status === 'fulfilled') setKeys(keysResult.value as Key[]); else failures.push(`Virtual keys: ${message(keysResult.reason)}`);
+    if (membersResult.status === 'fulfilled') setMembers(membersResult.value as Member[]);
+    else if (canReadMembers) failures.push(`Members: ${message(membersResult.reason)}`);
+    if (tracesResult.status === 'fulfilled') setTraces(tracesResult.value);
+    else failures.push(`Trace summary: ${message(tracesResult.reason)}`);
+    if (modelsResult.status === 'fulfilled' && deploymentsResult.status === 'fulfilled') {
+      const activeModelIDs = new Set(deploymentsResult.value.map(deployment => deployment.logical_model_id));
+      setAvailableModels(modelsResult.value.filter(model => activeModelIDs.has(model.id)));
+    } else {
+      if (modelsResult.status === 'rejected') failures.push(`Models: ${message(modelsResult.reason)}`);
+      if (deploymentsResult.status === 'rejected') failures.push(`Deployments: ${message(deploymentsResult.reason)}`);
+    }
+    setError(failures.join(' '));
+    setLoading(false);
+  }, [projectId, environmentId, canReadMembers]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -134,7 +150,7 @@ export function AccessAndKeysPage({projectId, environmentId, currentPrincipalId,
         ]} />}
         <Text>Emergency revoke request volume is based on the latest trace records from this environment, limited to the last hour.</Text>
       </VStack></Section>
-    </> : <>
+    </> : !canReadMembers ? <Text role="status">Your role can view virtual keys but does not have access to member records.</Text> : <>
       <Section><VStack gap={3}><Heading level={2}>Add a member</Heading>
         {!canManage ? <Text role="status">Your role has read-only member access.</Text> : null}
         <TextInput label="Member email" type="email" value={memberEmail} onChange={setMemberEmail} isDisabled={!canManage || busy} />

@@ -24,7 +24,7 @@ type policyDocumentDTO struct {
 	ScopeTier              string                       `json:"scope_tier"`
 	ScopeID                string                       `json:"scope_id"`
 	AllowedDataRegions     []string                     `json:"allowed_data_regions"`
-	AllowedModels          []string                     `json:"allowed_models,omitempty"`
+	AllowedModels          *[]string                    `json:"allowed_models,omitempty"`
 	MinPluginTrust         string                       `json:"min_plugin_trust"`
 	MinCapabilityAssurance string                       `json:"min_capability_assurance"`
 	RPMCeiling             *int64                       `json:"rpm_ceiling,omitempty"`
@@ -672,9 +672,9 @@ func inferPolicyTypeFromDTO(dto *policyDocumentDTO) string {
 
 func encodePolicyRulesFromDTO(dto *policyDocumentDTO) (string, error) {
 	payload := make(map[string]any)
-	if len(dto.AllowedModels) > 0 {
-		models := make([]string, 0, len(dto.AllowedModels))
-		for _, raw := range dto.AllowedModels {
+	if dto.AllowedModels != nil {
+		models := make([]string, 0, len(*dto.AllowedModels))
+		for _, raw := range *dto.AllowedModels {
 			model := strings.TrimSpace(raw)
 			if model == "" {
 				return "", errors.New("allowed_models must not contain empty entries")
@@ -758,18 +758,20 @@ func effectivePolicyToDTO(id, scopeTier, scopeID string, eff policyengine.Effect
 	}
 }
 
-func effectiveModelAllowlist(eff policyengine.EffectivePolicy) []string {
+func effectiveModelAllowlist(eff policyengine.EffectivePolicy) *[]string {
 	if !eff.HasAllowedModels {
-		return []string{"*"}
+		return nil
 	}
-	return append([]string(nil), eff.AllowedModels...)
+	models := append([]string{}, eff.AllowedModels...)
+	return &models
 }
 
-func recordModelAllowlist(r snapshot.PolicyRulesView) []string {
+func recordModelAllowlist(r snapshot.PolicyRulesView) *[]string {
 	if !r.HasAllowedModels {
-		return []string{"*"}
+		return nil
 	}
-	return append([]string(nil), r.AllowedModels...)
+	models := append([]string{}, r.AllowedModels...)
+	return &models
 }
 
 func policyRecordToDTO(rec *policyengine.PolicyRecord) policyDocumentDTO {

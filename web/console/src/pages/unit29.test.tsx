@@ -35,7 +35,8 @@ describe('Unit 29 routing and access safety', () => {
     apiMocks.listAdminModels.mockResolvedValue([logicalModel]);
     apiMocks.getEffectivePolicy.mockResolvedValue({policy: {allowed_data_regions: ['EU']}, etag: '"v1"'});
     apiMocks.listRecentTraces.mockResolvedValue([]);
-    apiMocks.updateRoute.mockRejectedValue(Object.assign(new Error('optimistic_lock_conflict'), {status: 409, currentResource: {...route, slug: 'server-route'}}));
+    const latest = {...route, slug: 'server-route', version: 5};
+    apiMocks.updateRoute.mockRejectedValueOnce(Object.assign(new Error('optimistic_lock_conflict'), {status: 409, currentResource: latest})).mockResolvedValue({...latest, slug: 'my-unsaved-route', version: 6});
 
     renderInMain(<RoutesPage projectId="project-1" environmentId="env-1" roles={['ORG_OWNER']} />);
     fireEvent.click(await screen.findByRole('button', {name: 'Edit prod-route'}));
@@ -48,13 +49,16 @@ describe('Unit 29 routing and access safety', () => {
     expect(screen.getByText(/server-route/)).toBeInTheDocument();
     expect(await allAxeViolations()).toEqual([]);
     expect(apiMocks.updateRoute).toHaveBeenCalledWith(route, expect.objectContaining({slug: 'my-unsaved-route'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Use latest version and keep draft'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save route'}));
+    await waitFor(() => expect(apiMocks.updateRoute).toHaveBeenLastCalledWith(latest, expect.objectContaining({slug: 'my-unsaved-route'})));
   });
 
   it('creates a weighted route only after its fallback weights total 100 percent', async () => {
     apiMocks.listRoutesForEnvironment.mockResolvedValue([]);
     apiMocks.listDeployments.mockResolvedValue([deployment, secondDeployment]);
     apiMocks.listAdminModels.mockResolvedValue([logicalModel]);
-    apiMocks.getEffectivePolicy.mockResolvedValue({policy: {allowed_data_regions: ['EU']}, etag: '"v1"'});
+    apiMocks.getEffectivePolicy.mockResolvedValue({policy: {allowed_data_regions: ['EU', 'US', 'APAC', 'ON_PREM']}, etag: '"v1"'});
     apiMocks.listRecentTraces.mockResolvedValue([]);
     apiMocks.createRoute.mockResolvedValue(route);
 
@@ -72,7 +76,7 @@ describe('Unit 29 routing and access safety', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Create route'}));
     await waitFor(() => expect(apiMocks.createRoute).toHaveBeenCalledWith(expect.objectContaining({slug: 'weighted-route', strategy: 'WEIGHTED', targets: [
       {deployment_id: 'dep-1', priority_order: 1, weight: 50}, {deployment_id: 'dep-2', priority_order: 2, weight: 50},
-    ]})));
+    ], allowed_data_regions: []})));
   });
 
   it('warns when a selected fallback lacks tool calling and offers the supported route strategies', async () => {
@@ -114,6 +118,37 @@ describe('Unit 29 routing and access safety', () => {
     fireEvent.change(screen.getByLabelText('Allowed model slugs (comma-separated)'), {target: {value: '*'}});
     expect(screen.getByText(/cannot be widened/)).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Save policy'})).toHaveAttribute('aria-disabled', 'true');
+    expect(await allAxeViolations()).toEqual([]);
+  });
+
+  it('adopts a conflicted policy revision while preserving the edited draft', async () => {
+    const initial = policy('ENVIRONMENT', 'env-1', ['EU'], []);
+    const latest = {...initial, version: 2};
+    apiMocks.getEffectivePolicy.mockResolvedValue({policy: initial, etag: '"v1"'});
+    apiMocks.updatePolicy.mockRejectedValueOnce(Object.assign(new Error('optimistic_lock_conflict'), {status: 409, currentResource: latest})).mockResolvedValue({policy: latest, etag: '"v2"'});
+    renderInMain(<PoliciesPage projectId="project-1" environmentId="env-1" roles={['TEAM_ADMIN']} />);
+    expect(await screen.findByLabelText('Allowed model slugs (comma-separated)')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('Minimum plugin trust'), {target: {value: 'OFFICIAL_ONLY'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Save policy'}));
+    expect(await screen.findByText('Policy changed by another administrator')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Use latest version and keep draft'}));
+    expect(screen.getByLabelText('Allowed model slugs (comma-separated)')).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', {name: 'Save policy'}));
+    await waitFor(() => expect(apiMocks.updatePolicy).toHaveBeenLastCalledWith(expect.objectContaining({version: 2}), '"v2"', expect.objectContaining({allowed_models: [], min_plugin_trust: 'OFFICIAL_ONLY', version: 2})));
+    expect(apiMocks.updatePolicy).toHaveBeenNthCalledWith(1, expect.anything(), '"v1"', expect.anything());
+  });
+
+  it('loads virtual keys for developers without requesting member records', async () => {
+    apiMocks.listVirtualKeys.mockResolvedValue([accessKey]);
+    apiMocks.listRecentTraces.mockResolvedValue([]);
+    apiMocks.listAdminModels.mockResolvedValue([]);
+    apiMocks.listDeployments.mockResolvedValue([]);
+    renderInMain(<AccessAndKeysPage projectId="project-1" environmentId="env-1" currentPrincipalId="dev-1" actorRoles={['DEVELOPER']} />);
+    expect(await screen.findByText('vk_tp_prod_')).toBeInTheDocument();
+    expect(apiMocks.listMembers).not.toHaveBeenCalled();
+    expect(await allAxeViolations()).toEqual([]);
+    fireEvent.click(screen.getByRole('button', {name: 'Members and roles'}));
+    expect(await screen.findByText(/can view virtual keys but does not have access to member records/)).toBeInTheDocument();
     expect(await allAxeViolations()).toEqual([]);
   });
 

@@ -75,6 +75,18 @@ export function PoliciesPage({projectId, environmentId, roles}: {projectId: stri
     } finally { setBusy(false); }
   }
 
+  function useLatestPolicyRevision() {
+    if (!draft || !conflict?.current || typeof conflict.current !== 'object' || !('id' in conflict.current) || !('version' in conflict.current)) return;
+    const latest = conflict.current as Policy;
+    if (latest.scope_tier !== editingScope || !Number.isInteger(latest.version) || latest.version < 1) return;
+    if (editingScope === 'ORGANIZATION') { setOrganizationPolicy(latest); setOrganizationEtag(`"v${latest.version}"`); }
+    else if (editingScope === 'PROJECT') { setProjectPolicy(latest); setProjectEtag(`"v${latest.version}"`); }
+    else { setPolicy(latest); setEnvironmentEtag(`"v${latest.version}"`); }
+    setEtag(`"v${latest.version}"`);
+    setDraft({...draft, id: latest.id, scope_tier: latest.scope_tier, scope_id: latest.scope_id, version: latest.version});
+    setConflict(null);
+  }
+
   const rows = policy ? [
     {id: 'scope', rule: 'Active scope', value: `${policy.scope_tier} · ${policy.scope_id}`, provenance: 'Current API resource'},
     {id: 'regions', rule: 'Allowed data regions', value: (policy.allowed_data_regions ?? []).join(', ') || 'None configured', provenance: regionSource(organizationPolicy, projectPolicy, policy)},
@@ -125,9 +137,9 @@ export function PoliciesPage({projectId, environmentId, roles}: {projectId: stri
         <Text>Regions outside the parent scope allowlist stay locked. You can remove an allowed region to tighten this scope.</Text>
         <TextInput label="Allowed model slugs (comma-separated)" value={(draft.allowed_models ?? ['*']).join(', ')} onChange={value => {
           const models = value.split(',').map(item => item.trim()).filter(Boolean);
-          setDraft({...draft, allowed_models: models.length ? models : ['*']});
+          setDraft({...draft, allowed_models: models});
         }} isDisabled={!canEditPolicy || busy} />
-        {modelDraftRelaxesParent ? <Text role="alert">Model allowlists are inherited from parent scopes and cannot be widened here.</Text> : <Text>Use * for all models. Child scopes may only keep or narrow an inherited allowlist.</Text>}
+        {modelDraftRelaxesParent ? <Text role="alert">Model allowlists are inherited from parent scopes and cannot be widened here.</Text> : <Text>Leave blank to deny all models. Use * for all models. Child scopes may only keep or narrow an inherited allowlist.</Text>}
         <Heading level={3}>Guardrail extensions</Heading>
         {(draft.guardrail_hooks ?? []).length ? <Table data={draft.guardrail_hooks ?? []} idKey="extension_id" density="compact" columns={[{key: 'extension_id', header: 'Extension'}, {key: 'failure_posture', header: 'Failure posture'}, {key: 'action', header: 'Action', renderCell: row => <Button label={`Remove guardrail ${String(row.extension_id)}`} variant="ghost" isDisabled={!canEditPolicy || busy || parentPolicy?.guardrail_hooks?.some(hook => hook.extension_id === row.extension_id)} onClick={() => setDraft({...draft, guardrail_hooks: (draft.guardrail_hooks ?? []).filter(hook => hook.extension_id !== row.extension_id)})} />}]} /> : <Text>No guardrail extensions are attached at this scope.</Text>}
         <TextInput label="Guardrail extension ID" value={hookExtensionId} onChange={setHookExtensionId} isDisabled={!canEditPolicy || busy} />
@@ -157,7 +169,7 @@ export function PoliciesPage({projectId, environmentId, roles}: {projectId: stri
     {conflict ? <Dialog isOpen onOpenChange={open => { if (!open) setConflict(null); }} purpose="required" width={720} padding={5}>
       <VStack gap={3}><DialogHeader title="Policy changed by another administrator" /><Text role="alert">{conflict.message}. Your draft remains available for comparison and editing.</Text>
         <HStack gap={3} wrap="wrap"><Section><VStack gap={2}><Heading level={3}>Your draft</Heading><Text>{JSON.stringify(draft, null, 2)}</Text></VStack></Section><Section><VStack gap={2}><Heading level={3}>Current server version</Heading><Text>{JSON.stringify(conflict.current ?? {}, null, 2)}</Text></VStack></Section></HStack>
-        <Button label="Continue editing draft" variant="secondary" onClick={() => setConflict(null)} />
+        <Button label="Use latest version and keep draft" variant="secondary" onClick={useLatestPolicyRevision} isDisabled={!draft || !conflict.current || typeof conflict.current !== 'object' || !('id' in conflict.current) || !('version' in conflict.current) || (conflict.current as Policy).scope_tier !== editingScope} />
       </VStack>
     </Dialog> : null}
     {confirmGuardrail ? <Dialog isOpen onOpenChange={open => { if (!open) setConfirmGuardrail(false); }} purpose="required" width={520} padding={5}>

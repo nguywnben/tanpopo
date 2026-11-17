@@ -88,7 +88,15 @@ export function RoutesPage({projectId, environmentId, roles}: {projectId: string
 
   function currentPayload(): components['schemas']['RouteUpsertRequest'] {
     return {slug: slug.trim(), env_id: environmentId, strategy, max_failover_hops: maxHops, request_timeout_ms: timeout,
-      allowed_data_regions: allowedRegions, targets: targets.map((target, index) => ({...target, priority_order: index + 1}))};
+      allowed_data_regions: editing?.allowed_data_regions ?? [], targets: targets.map((target, index) => ({...target, priority_order: index + 1}))};
+  }
+
+  function useLatestRouteVersion() {
+    if (!conflict?.current || typeof conflict.current !== 'object' || !('id' in conflict.current) || !('version' in conflict.current)) return;
+    const latest = conflict.current as Route;
+    if (editing?.id === latest.id) setEditing(latest);
+    if (deleteTarget?.id === latest.id) setDeleteTarget(latest);
+    setConflict(null);
   }
 
   async function saveRoute() {
@@ -172,7 +180,7 @@ export function RoutesPage({projectId, environmentId, roles}: {projectId: string
     {conflict ? <Dialog isOpen onOpenChange={open => { if (!open) setConflict(null); }} purpose="required" width={720} padding={5}>
       <VStack gap={3}><DialogHeader title="Route changed by another administrator" /><Text role="alert">{conflict.message}. Your draft is still in the form; compare it with the latest server version before applying changes.</Text>
         <HStack gap={3} wrap="wrap"><Section><VStack gap={2}><Heading level={3}>Your draft</Heading><Text>{JSON.stringify(currentPayload(), null, 2)}</Text></VStack></Section><Section><VStack gap={2}><Heading level={3}>Current server version</Heading><Text>{JSON.stringify(conflict.current ?? {}, null, 2)}</Text></VStack></Section></HStack>
-        <Button label="Continue editing draft" variant="secondary" onClick={() => setConflict(null)} />
+        <Button label="Use latest version and keep draft" variant="secondary" onClick={useLatestRouteVersion} isDisabled={!conflict.current || typeof conflict.current !== 'object' || !('id' in conflict.current) || !('version' in conflict.current)} />
       </VStack>
     </Dialog> : null}
   </VStack>;

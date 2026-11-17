@@ -1370,7 +1370,7 @@ func TestPart2PoliciesRoutesModelsAndOCC(t *testing.T) {
 	}
 	var createdOrgPolicy policyDocumentDTO
 	mustDecodeJSON(t, recOrgPol.Body.Bytes(), &createdOrgPolicy)
-	if len(createdOrgPolicy.AllowedModels) != 1 || createdOrgPolicy.AllowedModels[0] != "prod-assistant" {
+	if createdOrgPolicy.AllowedModels == nil || len(*createdOrgPolicy.AllowedModels) != 1 || (*createdOrgPolicy.AllowedModels)[0] != "prod-assistant" {
 		t.Fatalf("organization policy response lost model allowlist: %+v", createdOrgPolicy.AllowedModels)
 	}
 
@@ -1461,6 +1461,31 @@ func TestPart2PoliciesRoutesModelsAndOCC(t *testing.T) {
 	currentResource, ok := staleEnvelope.Error.CurrentResource.(map[string]any)
 	if !ok || currentResource["id"] != aggregate.ID || currentResource["version"] != float64(5) || recStaleAggregate.Header().Get("ETag") != `"v5"` {
 		t.Fatalf("stale aggregate conflict must return current scope resource/version, resource=%+v etag=%q", staleEnvelope.Error.CurrentResource, recStaleAggregate.Header().Get("ETag"))
+	}
+	recDenyAll := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+aggregate.ID, ownerCookie, boot.CSRFToken, `"v5"`, map[string]any{
+		"scope_tier": "ORGANIZATION", "scope_id": boot.OrgID,
+		"allowed_data_regions": []string{"US"}, "allowed_models": []string{},
+		"min_plugin_trust": "OFFICIAL_ONLY", "min_capability_assurance": "VERIFIED", "rpm_ceiling": 80,
+	})
+	if recDenyAll.Code != http.StatusOK {
+		t.Fatalf("PUT deny-all model policy code=%d body=%s", recDenyAll.Code, recDenyAll.Body.String())
+	}
+	recDenyAllEffective := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/policies/effective", ownerCookie, "", "", nil)
+	var denyAllEffective policyDocumentDTO
+	mustDecodeJSON(t, recDenyAllEffective.Body.Bytes(), &denyAllEffective)
+	if denyAllEffective.AllowedModels == nil || len(*denyAllEffective.AllowedModels) != 0 {
+		t.Fatalf("effective deny-all allowlist must remain explicit and empty: %+v", denyAllEffective.AllowedModels)
+	}
+	denyAllEffective.MinPluginTrust = "VERIFIED_ONLY"
+	recUnrelatedUpdate := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+aggregate.ID, ownerCookie, boot.CSRFToken, recDenyAllEffective.Header().Get("ETag"), denyAllEffective)
+	if recUnrelatedUpdate.Code != http.StatusOK {
+		t.Fatalf("updating another field on deny-all policy code=%d body=%s", recUnrelatedUpdate.Code, recUnrelatedUpdate.Body.String())
+	}
+	recPreservedDenyAll := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/policies/effective", ownerCookie, "", "", nil)
+	var preservedDenyAll policyDocumentDTO
+	mustDecodeJSON(t, recPreservedDenyAll.Body.Bytes(), &preservedDenyAll)
+	if preservedDenyAll.AllowedModels == nil || len(*preservedDenyAll.AllowedModels) != 0 {
+		t.Fatalf("editing another policy field must preserve deny-all models, got %+v", preservedDenyAll.AllowedModels)
 	}
 
 	// Relaxing a project model allowlist beneath the organization policy must
