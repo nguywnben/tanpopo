@@ -77,12 +77,12 @@ describe('Unit 30 observability and operations screens', () => {
     expect(document.querySelector('script')).toBeNull();
     fireEvent.click(screen.getByRole('button', {name: 'Verify hash chain'}));
     expect(await screen.findByText('Integrity verified across 0 audit records.')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Target ID'), {target: {value: 'project-1'}});
+    fireEvent.change(screen.getByLabelText('Target ID'), {target: {value: 'project-id'}});
     fireEvent.change(screen.getByLabelText('Reason (at least 5 characters)'), {target: {value: 'incident response'}});
-    fireEvent.change(screen.getByLabelText('Type target ID to confirm'), {target: {value: 'project-1'}});
+    fireEvent.change(screen.getByLabelText('Project confirmation slug'), {target: {value: 'project-slug'}});
     fireEvent.click(screen.getByRole('button', {name: 'Review emergency kill switch'}));
     fireEvent.click(screen.getByRole('button', {name: 'Trigger kill switch'}));
-    await waitFor(() => expect(mocks.triggerKillSwitch).toHaveBeenCalledWith(expect.objectContaining({target_level: 'PROJECT', target_id: 'project-1', reason: 'incident response'})));
+    await waitFor(() => expect(mocks.triggerKillSwitch).toHaveBeenCalledWith(expect.objectContaining({target_level: 'PROJECT', target_id: 'project-id', confirm_slug: 'project-slug', reason: 'incident response'})));
     expect(await axeViolations()).toEqual([]);
   });
 

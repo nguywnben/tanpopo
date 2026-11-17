@@ -31,6 +31,7 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
   const [message, setMessage] = useState('');
   const authorized = roles.some(role => securityRoles.includes(role));
   const canTrigger = roles.some(role => ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'].includes(role));
+  const requiresSlugConfirmation = level === 'PROJECT';
 
   async function refresh() {
     setLoading(true); setMessage('');
@@ -77,9 +78,9 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
         {blastRadius ? <Text role="status">Blast radius: {blastRadius.organizations.length} organizations, {blastRadius.projects.length} projects, {blastRadius.virtual_keys.length} virtual keys, {blastRadius.connections.length} connections.</Text> : null}
         {!['EXTENSION', 'PROVIDER_CONNECTION'].includes(level) ? <Text>Blast-radius preview is not available for this target type in the Admin API.</Text> : null}
         <TextInput label="Reason (at least 5 characters)" value={reason} onChange={setReason} />
-        <TextInput label="Type target ID to confirm" value={confirmSlug} onChange={setConfirmSlug} />
+        {requiresSlugConfirmation ? <TextInput label="Project confirmation slug" value={confirmSlug} onChange={setConfirmSlug} /> : null}
         <CheckboxInput label="Abort active streams" value={abortStreams} onChange={setAbortStreams} />
-        <Button label="Review emergency kill switch" variant="destructive" isDisabled={!targetId.trim() || reason.trim().length < 5 || confirmSlug.trim() !== targetId.trim()} onClick={() => setAlertOpen(true)} />
+        <Button label="Review emergency kill switch" variant="destructive" isDisabled={!targetId.trim() || reason.trim().length < 5 || (requiresSlugConfirmation && !confirmSlug.trim())} onClick={() => setAlertOpen(true)} />
       </>}
     </VStack></Section>
     <AlertDialog isOpen={alertOpen} onOpenChange={setAlertOpen} title="Confirm emergency kill switch"
