@@ -320,7 +320,15 @@ export const operationPolicy = {
     "csrf": true,
     "ifMatch": false
   },
+  "GET /admin/v1/kill-switches": {
+    "csrf": false,
+    "ifMatch": false
+  },
   "POST /admin/v1/kill-switches": {
+    "csrf": true,
+    "ifMatch": false
+  },
+  "DELETE /admin/v1/kill-switches/{switchId}": {
     "csrf": true,
     "ifMatch": false
   },

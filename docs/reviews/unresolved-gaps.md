@@ -185,7 +185,7 @@
 ---
 
 ### `CR-13` — Close Unit 30 Admin API, RBAC, and Telemetry Contract Gaps (`TP-IMP-0030` / `COND-PO-05`)
-- **Status:** **`PROPOSED — PRODUCT OWNER DECISION REQUIRED`** *(Filed under `COND-PO-05` after code review of the Unit 30 implementation at `c46ff9690892d93ecde1fa34061c4dc7b116f529`; no contract or acceptance criteria have been changed.)*
+- **Status:** **`APPROVED — OPTION A` (`DEC-050`)** *(Product Owner approved on `2026-11-17`; preserve all `v0.1` acceptance criteria and implement the serving API/RBAC capabilities required to meet them.)*
 - **Impacted Artifacts & Units:** [`openapi/admin-v1.yaml`](../../openapi/admin-v1.yaml), [`internal/admin/http/server.go`](../../internal/admin/http/server.go), [`internal/iam/rbac/authorizer.go`](../../internal/iam/rbac/authorizer.go), [`TP-IMP-0030`](../planning/units/TP-IMP-0030.md), and its `SCR-11`, `SCR-12`, `SCR-14`, `SCR-16` screens.
 - **Empirical Evidence:** The Unit 30 acceptance scope cannot be implemented against the current service contract without guessing or weakening required behavior:
   1. `POST /admin/v1/kill-switches` exists, but there is no list/clear operation; thus an operator cannot inspect and clear active switches.

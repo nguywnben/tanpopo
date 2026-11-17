@@ -17,6 +17,7 @@ import (
 type BlastRadiusQuery struct {
 	OrgID                   string
 	AllowInstanceScope      bool // Enables instance-wide correlation for OPERATOR incident response when OrgID is empty.
+	ProjectID               string
 	ExtensionInstallationID string
 	ConnectionID            string
 	VirtualKeyID            string
@@ -76,8 +77,9 @@ func QueryBlastRadius(ctx context.Context, db *sql.DB, q BlastRadiusQuery) (*Bla
 	extID := strings.TrimSpace(q.ExtensionInstallationID)
 	connID := strings.TrimSpace(q.ConnectionID)
 	vkID := strings.TrimSpace(q.VirtualKeyID)
-	if extID == "" && connID == "" && vkID == "" {
-		return nil, fmt.Errorf("%w: at least one of extension_installation_id, connection_id, or virtual_key_id is required", port.ErrInvalidInput)
+	projectID := strings.TrimSpace(q.ProjectID)
+	if extID == "" && connID == "" && vkID == "" && projectID == "" {
+		return nil, fmt.Errorf("%w: at least one blast-radius target is required", port.ErrInvalidInput)
 	}
 	if q.ToMs > 0 && q.FromMs > q.ToMs {
 		return nil, fmt.Errorf("%w: from_ms (%d) cannot exceed to_ms (%d)", port.ErrInvalidInput, q.FromMs, q.ToMs)
@@ -105,6 +107,10 @@ func QueryBlastRadius(ctx context.Context, db *sql.DB, q BlastRadiusQuery) (*Bla
 	if vkID != "" {
 		conds = append(conds, "virtual_key_id = ?")
 		args = append(args, vkID)
+	}
+	if projectID != "" {
+		conds = append(conds, "project_id = ?")
+		args = append(args, projectID)
 	}
 	if q.FromMs > 0 {
 		conds = append(conds, "created_at_ms >= ?")
@@ -205,7 +211,7 @@ func QueryBlastRadius(ctx context.Context, db *sql.DB, q BlastRadiusQuery) (*Bla
 	}
 
 	// Correlate relevant audit_events strictly respecting tenant boundary.
-	auditEvents, err := queryBlastRadiusAuditEvents(ctx, db, q, orgID, extID, connID, vkID, limit)
+	auditEvents, err := queryBlastRadiusAuditEvents(ctx, db, q, orgID, extID, connID, vkID, projectID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +235,7 @@ func queryBlastRadiusAuditEvents(
 	ctx context.Context,
 	db *sql.DB,
 	q BlastRadiusQuery,
-	orgID, extID, connID, vkID string,
+	orgID, extID, connID, vkID, projectID string,
 	limit int,
 ) ([]StoredEvent, error) {
 	var conds []string
@@ -256,6 +262,9 @@ func queryBlastRadiusAuditEvents(
 	}
 	if vkID != "" {
 		targetIDs = append(targetIDs, vkID)
+	}
+	if projectID != "" {
+		targetIDs = append(targetIDs, projectID)
 	}
 	placeholders := strings.Repeat("?,", len(targetIDs))
 	placeholders = placeholders[:len(placeholders)-1]

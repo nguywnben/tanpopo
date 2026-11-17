@@ -1143,6 +1143,12 @@ func TestSixRoleRBACMatrixAndAntiSelfEscalation(t *testing.T) {
 	if rec := h.doBearer(t, http.MethodPost, "/admin/v1/projects", "tok_finops", "", map[string]any{"slug": "x", "name": "X"}); rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for FINOPS_VIEWER creating project, got %d", rec.Code)
 	}
+	if err := rbac.Authorize(finActor, rbac.ActionTraceReadMeta, rbac.TargetScope{OrgID: boot.OrgID, ProjectID: boot.ProjectID}); !errors.Is(err, rbac.ErrPermissionDenied) {
+		t.Fatalf("FINOPS_VIEWER must NOT have ActionTraceReadMeta, got err=%v", err)
+	}
+	if rec := h.doBearer(t, http.MethodGet, "/admin/v1/traces?env_id="+boot.EnvID, "tok_finops", "", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for FINOPS_VIEWER reading trace metadata through Admin API, got %d body=%s", rec.Code, rec.Body.String())
+	}
 
 	// DEVELOPER can create project virtual key, cannot read/write members.
 	devActor := &rbac.Actor{

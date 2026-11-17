@@ -79,6 +79,7 @@ export function FinOpsBudgetsPage({projectId, roles}: {projectId: string; roles:
       {loading ? <Text role="status">Loading usage summary…</Text> : <Table aria-label="Chargeback summary" data={rows as Array<Record<string, unknown>>} columns={[
         {key: 'group_key', header: 'Project'}, {key: 'exact_micro_usd', header: 'Exact', renderCell: row => <HStack gap={2}><Token label="EXACT" color="green" icon="checkDouble" /><Text>{formatMicroUSD(row.exact_micro_usd as number)}</Text></HStack>},
         {key: 'estimated_micro_usd', header: 'Estimated', renderCell: row => <HStack gap={2}><Token label="ESTIMATED" color="cyan" icon="wrench" /><Text>{formatMicroUSD(row.estimated_micro_usd as number)}</Text></HStack>},
+        {key: 'exact_request_count', header: 'Exact requests'}, {key: 'estimated_request_count', header: 'Estimated requests'},
         {key: 'unmetered_request_count', header: 'Unmetered', renderCell: row => <HStack gap={2}><Token label="UNMETERED_FLAGGED" color="orange" icon="warning" /><Text>{String(row.unmetered_request_count)}</Text></HStack>},
       ]} />}
     </VStack></Section>

@@ -946,12 +946,32 @@ components:
 
     UsageChargebackRow:
       type: object
-      required: [group_key, exact_micro_usd, estimated_micro_usd, unmetered_request_count]
+      required: [group_key, exact_micro_usd, estimated_micro_usd, exact_request_count, estimated_request_count, unmetered_request_count]
       properties:
         group_key: { type: string }
         exact_micro_usd: { type: integer }
         estimated_micro_usd: { type: integer }
+        exact_request_count: { type: integer, minimum: 0 }
+        estimated_request_count: { type: integer, minimum: 0 }
         unmetered_request_count: { type: integer }
+
+    KillSwitchResource:
+      type: object
+      required: [id, level, target_id, active, abort_active_streams, reason, triggered_by_principal_id, version, triggered_at_ms]
+      properties:
+        id: { type: string }
+        org_id: { type: [string, "null"] }
+        level: { type: string, enum: [VIRTUAL_KEY, PROVIDER_CONNECTION, EXTENSION_INSTALLATION, PROJECT_OR_ORG_FREEZE] }
+        target_id: { type: string }
+        active: { type: boolean }
+        abort_active_streams: { type: boolean }
+        reason: { type: string }
+        triggered_by_principal_id: { type: string }
+        cleared_by_principal_id: { type: [string, "null"] }
+        clear_reason: { type: [string, "null"] }
+        version: { type: integer, minimum: 1 }
+        triggered_at_ms: { type: integer }
+        cleared_at_ms: { type: [integer, "null"] }
 
     ApprovalRequestResource:
       type: object
@@ -3057,6 +3077,29 @@ paths:
                   first_broken_seq_no: { type: ["integer", "null"] }
 
   /admin/v1/kill-switches:
+    get:
+      tags: [SecurityCenter]
+      operationId: listKillSwitches
+      summary: List active organization or instance kill switches for incident recovery (SCR-14)
+      parameters:
+        - name: active_only
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+        - name: org_id
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Kill switches visible to the authorized principal
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/KillSwitchResource" } }
     post:
       tags: [SecurityCenter]
       operationId: triggerKillSwitch
@@ -3082,16 +3125,48 @@ paths:
                   severed_streams_count: { type: integer }
                   affected_entities_count: { type: integer }
 
+  /admin/v1/kill-switches/{switchId}:
+    delete:
+      tags: [SecurityCenter]
+      operationId: clearKillSwitch
+      summary: Clear an active emergency kill switch with audited reason and version check (SCR-14)
+      parameters:
+        - name: switchId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: org_id
+          in: query
+          required: false
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_version, clear_reason]
+              properties:
+                expected_version: { type: integer, minimum: 1 }
+                clear_reason: { type: string, minLength: 5 }
+      responses:
+        "200":
+          description: Kill switch cleared and audited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KillSwitchResource" }
+
   /admin/v1/blast-radius:
     get:
       tags: [SecurityCenter]
       operationId: queryBlastRadius
-      summary: Enumerate Keys, Projects, and Connections that traversed a quarantined Extension or compromised Connection (SCR-14)
+      summary: Preview affected resources for an Extension, Provider Connection, Project, or Virtual Key (SCR-14)
       parameters:
         - name: target_type
           in: query
           required: true
-          schema: { type: string, enum: [EXTENSION, PROVIDER_CONNECTION] }
+          schema: { type: string, enum: [EXTENSION, PROVIDER_CONNECTION, PROJECT, VIRTUAL_KEY] }
         - name: target_id
           in: query
           required: true
@@ -3218,7 +3293,17 @@ paths:
                 properties:
                   current_epoch: { type: integer }
                   storage_engine: { type: string, enum: [sqlite_wal, postgres] }
-                  nodes: { type: array, items: { type: object } }
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                      required: [wal_bytes]
+                      properties:
+                        id: { type: string }
+                        config_epoch: { type: integer }
+                        snapshot_age_ms: { type: integer }
+                        health: { type: string }
+                        wal_bytes: { type: integer, minimum: 0 }
 
   /admin/v1/ops/backups:
     post:

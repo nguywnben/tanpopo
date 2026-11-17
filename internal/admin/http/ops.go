@@ -12,6 +12,7 @@ import (
 	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,6 +77,11 @@ type killSwitchTriggerResponseDTO struct {
 	ConfigEpoch           int64 `json:"config_epoch"`
 	SeveredStreamsCount   int   `json:"severed_streams_count"`
 	AffectedEntitiesCount int   `json:"affected_entities_count"`
+}
+
+type clearKillSwitchRequestDTO struct {
+	ExpectedVersion int64  `json:"expected_version"`
+	ClearReason     string `json:"clear_reason"`
 }
 
 type blastRadiusResponseDTO struct {
@@ -919,6 +925,146 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+func (s *Server) handleListKillSwitches(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	activeOnly := true
+	if raw := strings.TrimSpace(r.URL.Query().Get("active_only")); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "active_only must be true or false", false, nil)
+			return
+		}
+		activeOnly = parsed
+	}
+	qOrg := strings.TrimSpace(r.URL.Query().Get("org_id"))
+	instanceOnly := sc.IsOperator && qOrg == "" && sc.OrgID == ""
+	if instanceOnly {
+		if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{}) {
+			return
+		}
+		if s.killSwitch == nil {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "kill_switch_unavailable", "upstream_error", "kill-switch registry is not configured", true, nil)
+			return
+		}
+		switches, err := s.killSwitch.ListInstance(r.Context(), activeOnly)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing instance kill switches", true, nil)
+			return
+		}
+		if switches == nil {
+			switches = []killswitch.KillSwitch{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": switches})
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
+		return
+	}
+	if s.killSwitch == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "kill_switch_unavailable", "upstream_error", "kill-switch registry is not configured", true, nil)
+		return
+	}
+	switches, err := s.killSwitch.ListWithFilter(r.Context(), killswitch.ListFilter{OrgID: orgID, AllowInstanceScope: sc.IsOperator, ActiveOnly: activeOnly})
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing kill switches", true, nil)
+		return
+	}
+	if switches == nil {
+		switches = []killswitch.KillSwitch{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": switches})
+}
+
+func (s *Server) handleClearKillSwitch(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	if !requireJSONContentType(w, r) {
+		return
+	}
+	var req clearKillSwitchRequestDTO
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	if req.ExpectedVersion < 1 || len([]rune(strings.TrimSpace(req.ClearReason))) < 5 {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "expected_version >= 1 and clear_reason (>= 5 characters) are required", false, nil)
+		return
+	}
+	if s.killSwitch == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "kill_switch_unavailable", "upstream_error", "kill-switch registry is not configured", true, nil)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("switchId"))
+	qOrg := strings.TrimSpace(r.URL.Query().Get("org_id"))
+	instanceOnly := sc.IsOperator && qOrg == "" && sc.OrgID == ""
+	var orgID string
+	var ks *killswitch.KillSwitch
+	var err error
+	if instanceOnly {
+		if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{}) {
+			return
+		}
+		ks, err := s.killSwitch.GetInstance(r.Context(), id)
+	} else {
+		orgID, ok = s.resolveTargetOrgID(w, r, sc)
+		if !ok {
+			return
+		}
+		if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{OrgID: orgID}) {
+			return
+		}
+		ks, err = s.killSwitch.Get(r.Context(), orgID, id)
+	}
+	if errors.Is(err, port.ErrNotFound) {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "kill switch not found", false, nil)
+		return
+	}
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading kill switch", true, nil)
+		return
+	}
+	if ks.Version != req.ExpectedVersion {
+		writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "kill switch version changed; reload before clearing", false, map[string]any{"current_version": ks.Version})
+		return
+	}
+	var orgPtr *string
+	if !instanceOnly {
+		orgPtr = &orgID
+	}
+	cleared, err := s.killSwitch.Clear(r.Context(), killswitch.ClearParams{
+		OrgID: orgPtr, KillSwitchID: id, ExpectedVersion: req.ExpectedVersion,
+		ClearedByPrincipalID: sc.Actor.PrincipalID, ClearReason: req.ClearReason,
+		EntryPoint: port.AuditEntryPointAdminAPI, RequestID: ptrOrNil(requestIDFromContext(r.Context())),
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, killswitch.ErrPermissionDenied), errors.Is(err, rbac.ErrPermissionDenied):
+			writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "insufficient role permission", false, nil)
+		case errors.Is(err, port.ErrNotFound):
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "kill switch not found", false, nil)
+		case errors.Is(err, port.ErrVersionConflict):
+			writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "kill switch version changed; reload before clearing", false, nil)
+		case errors.Is(err, killswitch.ErrAlreadyCleared):
+			writeErrorEnvelope(w, r, http.StatusConflict, "kill_switch_already_cleared", "conflict_error", err.Error(), false, nil)
+		default:
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed clearing kill switch", true, nil)
+		}
+		return
+	}
+	if s.snapshots != nil {
+		_ = s.snapshots.Refresh(r.Context())
+	}
+	writeJSON(w, http.StatusOK, cleared)
+}
+
 func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) {
 	sc, ok := s.authenticate(w, r)
 	if !ok {
@@ -930,8 +1076,8 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "target_type and target_id are required", false, nil)
 		return
 	}
-	if tType != "EXTENSION" && tType != "PROVIDER_CONNECTION" {
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "target_type must be EXTENSION or PROVIDER_CONNECTION", false, nil)
+	if tType != "EXTENSION" && tType != "PROVIDER_CONNECTION" && tType != "PROJECT" && tType != "VIRTUAL_KEY" {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "target_type must be EXTENSION, PROVIDER_CONNECTION, PROJECT, or VIRTUAL_KEY", false, nil)
 		return
 	}
 
@@ -949,6 +1095,38 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 	if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID}) {
 		return
 	}
+	var targetProjectID string
+	switch tType {
+	case "PROJECT":
+		var rowOrg string
+		err := s.db.QueryRowContext(r.Context(), `SELECT org_id FROM projects WHERE id = ? AND status NOT IN ('DELETING', 'PENDING_ERASURE')`, targetID).Scan(&rowOrg)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && rowOrg != orgID) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+			return
+		}
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating project", true, nil)
+			return
+		}
+		targetProjectID = targetID
+		if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, ProjectID: targetProjectID}) {
+			return
+		}
+	case "VIRTUAL_KEY":
+		var rowOrg string
+		err := s.db.QueryRowContext(r.Context(), `SELECT org_id, project_id FROM virtual_keys WHERE id = ?`, targetID).Scan(&rowOrg, &targetProjectID)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && rowOrg != orgID) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
+			return
+		}
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating virtual key", true, nil)
+			return
+		}
+		if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, ProjectID: targetProjectID}) {
+			return
+		}
+	}
 
 	sinceStr := strings.TrimSpace(r.URL.Query().Get("since"))
 	if sinceStr == "" {
@@ -964,6 +1142,7 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 	q := audit.BlastRadiusQuery{
 		OrgID:              orgID,
 		AllowInstanceScope: allowInstanceScope,
+		ProjectID:          targetProjectID,
 		FromMs:             nowMs - dur.Milliseconds(),
 		ToMs:               nowMs,
 	}
@@ -972,6 +1151,10 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 		q.ExtensionInstallationID = targetID
 	case "PROVIDER_CONNECTION":
 		q.ConnectionID = targetID
+	case "PROJECT":
+		q.ProjectID = targetID
+	case "VIRTUAL_KEY":
+		q.VirtualKeyID = targetID
 	}
 
 	report, err := audit.QueryBlastRadius(r.Context(), s.db, q)
@@ -1003,9 +1186,17 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 	if projs == nil {
 		projs = []string{}
 	}
+	if tType == "PROJECT" {
+		projs = appendUniqueString(projs, targetID)
+		sort.Strings(projs)
+	}
 	vks := report.AffectedVirtualKeys
 	if vks == nil {
 		vks = []string{}
+	}
+	if tType == "VIRTUAL_KEY" {
+		vks = appendUniqueString(vks, targetID)
+		sort.Strings(vks)
 	}
 
 	writeJSON(w, http.StatusOK, blastRadiusResponseDTO{
@@ -1014,6 +1205,15 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 		VirtualKeys:   vks,
 		Connections:   connections,
 	})
+}
+
+func appendUniqueString(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
 }
 
 func mapKillSwitchLevel(raw string) (killswitch.Level, bool) {

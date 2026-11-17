@@ -196,7 +196,22 @@ export async function triggerKillSwitch(payload: components['schemas']['KillSwit
   return result.data;
 }
 
-export async function getKillSwitchBlastRadius(target_type: 'EXTENSION' | 'PROVIDER_CONNECTION', target_id: string) {
+export async function listKillSwitches() {
+  const result = await api.GET('/admin/v1/kill-switches', {params: {query: {active_only: true}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
+export async function clearKillSwitch(item: components['schemas']['KillSwitchResource'], clear_reason: string) {
+  const result = await api.DELETE('/admin/v1/kill-switches/{switchId}', {
+    params: {path: {switchId: item.id}, query: {org_id: item.org_id ?? undefined}},
+    body: {expected_version: item.version, clear_reason},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function getKillSwitchBlastRadius(target_type: 'PROJECT' | 'VIRTUAL_KEY' | 'EXTENSION' | 'PROVIDER_CONNECTION', target_id: string) {
   const result = await api.GET('/admin/v1/blast-radius', {params: {query: {target_type, target_id}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;

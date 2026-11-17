@@ -491,8 +491,15 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		// Group K: Audit Log, Hash-Chain Verification, Kill Switch & Blast Radius
 		{Method: http.MethodPost, Path: "/admin/v1/audit-events/verify", Action: rbac.ActionAuditReadVerify, Handler: s.handleVerifyAuditHashChain},
 		{Method: http.MethodGet, Path: "/admin/v1/audit-events", Action: rbac.ActionAuditReadVerify, Handler: s.handleListAuditEvents},
+		{Method: http.MethodGet, Path: "/admin/v1/kill-switches", Action: rbac.ActionKillSwitchTrigger, Handler: s.handleListKillSwitches},
 		{Method: http.MethodPost, Path: "/admin/v1/kill-switches", Action: rbac.ActionKillSwitchTrigger, Handler: s.handleTriggerKillSwitch},
+		{Method: http.MethodDelete, Path: "/admin/v1/kill-switches/{switchId}", Action: rbac.ActionKillSwitchTrigger, Handler: s.handleClearKillSwitch},
 		{Method: http.MethodGet, Path: "/admin/v1/blast-radius", Action: rbac.ActionAuditReadVerify, Handler: s.handleQueryBlastRadius},
+
+		// Group L: Minimum reusable Unit 32 lifecycle core required by Unit 30 Operations.
+		{Method: http.MethodGet, Path: "/admin/v1/ops/cluster-status", Action: rbac.ActionOpsRead, Handler: s.handleGetClusterOpsStatus},
+		{Method: http.MethodPost, Path: "/admin/v1/ops/backups", Action: rbac.ActionOpsWrite, Handler: s.handleCreateEncryptedBackup},
+		{Method: http.MethodPost, Path: "/admin/v1/ops/upgrades/preflight", Action: rbac.ActionOpsWrite, Handler: s.handleRunUpgradePreflight},
 	}
 
 	if err := rbac.ValidateRoutePermissions(s.Routes()); err != nil {

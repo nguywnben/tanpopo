@@ -8,16 +8,18 @@ import {Table} from '@astryxdesign/core/Table';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
-import {getKillSwitchBlastRadius, listAuditEvents, triggerKillSwitch, verifyAuditHashChain} from '../../api/managementClient';
+import {clearKillSwitch, getKillSwitchBlastRadius, listAuditEvents, listKillSwitches, triggerKillSwitch, verifyAuditHashChain} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 
 type Role = components['schemas']['RbacRole'];
 type TargetLevel = components['schemas']['KillSwitchTriggerRequest']['target_level'];
 type AuditEvent = components['schemas']['AuditEventResource'] & Record<string, unknown>;
+type KillSwitch = components['schemas']['KillSwitchResource'];
 const securityRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
 
 export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
   const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [killSwitches, setKillSwitches] = useState<KillSwitch[]>([]);
   const [nextAuditCursor, setNextAuditCursor] = useState<string | undefined>();
   const [actionFilter, setActionFilter] = useState('');
   const [level, setLevel] = useState<TargetLevel>('PROJECT');
@@ -26,6 +28,9 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
   const [confirmSlug, setConfirmSlug] = useState('');
   const [abortStreams, setAbortStreams] = useState(true);
   const [blastRadius, setBlastRadius] = useState<{organizations: string[]; projects: string[]; virtual_keys: string[]; connections: string[]}|null>(null);
+  const [clearTarget, setClearTarget] = useState<KillSwitch|null>(null);
+  const [clearReason, setClearReason] = useState('');
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [verifyResult, setVerifyResult] = useState('');
   const [alertOpen, setAlertOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -40,7 +45,10 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
     const generation = ++auditGeneration.current;
     setLoading(true); setMessage('');
     setEvents([]); setNextAuditCursor(undefined); setLoadingMore(false);
-    try { const page = await listAuditEvents(actionFilter); if (generation === auditGeneration.current) { setEvents(page.data as AuditEvent[]); setNextAuditCursor(page.nextCursor); } }
+    try {
+      const [page, activeSwitches] = await Promise.all([listAuditEvents(actionFilter), listKillSwitches()]);
+      if (generation === auditGeneration.current) { setEvents(page.data as AuditEvent[]); setNextAuditCursor(page.nextCursor); setKillSwitches(activeSwitches as KillSwitch[]); }
+    }
     catch (error) { if (generation === auditGeneration.current) setMessage(errorMessage(error)); }
     finally { if (generation === auditGeneration.current) setLoading(false); }
   }
@@ -59,9 +67,16 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
   }
 
   async function previewBlastRadius() {
-    if (!targetId.trim() || !['EXTENSION', 'PROVIDER_CONNECTION'].includes(level)) { setBlastRadius(null); return; }
-    try { setBlastRadius(await getKillSwitchBlastRadius(level as 'EXTENSION' | 'PROVIDER_CONNECTION', targetId.trim())); }
+    if (!targetId.trim()) { setBlastRadius(null); return; }
+    try { setBlastRadius(await getKillSwitchBlastRadius(level as 'PROJECT' | 'VIRTUAL_KEY' | 'EXTENSION' | 'PROVIDER_CONNECTION', targetId.trim())); }
     catch (error) { setBlastRadius(null); setMessage(`Blast-radius preview unavailable: ${errorMessage(error)}`); }
+  }
+
+  async function confirmClearKillSwitch() {
+    if (!clearTarget || clearReason.trim().length < 5) return;
+    setClearDialogOpen(false); setMessage('');
+    try { await clearKillSwitch(clearTarget, clearReason.trim()); setClearTarget(null); setClearReason(''); setMessage('Kill switch cleared and recorded in the immutable audit log.'); await refresh(); }
+    catch (error) { setMessage(`Kill switch could not be cleared: ${errorMessage(error)}`); }
   }
 
   async function verifyChain() {
@@ -91,9 +106,8 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
           <option value="VIRTUAL_KEY">Virtual key</option><option value="PROJECT">Project</option><option value="PROVIDER_CONNECTION">Provider connection</option><option value="EXTENSION">Extension</option>
         </select>
         <TextInput label="Target ID" value={targetId} onChange={value => { setTargetId(value); setBlastRadius(null); }} />
-        <Button label="Preview blast radius" variant="secondary" isDisabled={!targetId.trim() || !['EXTENSION', 'PROVIDER_CONNECTION'].includes(level)} onClick={() => void previewBlastRadius()} />
+        <Button label="Preview blast radius" variant="secondary" isDisabled={!targetId.trim()} onClick={() => void previewBlastRadius()} />
         {blastRadius ? <Text role="status">Blast radius: {blastRadius.organizations.length} organizations, {blastRadius.projects.length} projects, {blastRadius.virtual_keys.length} virtual keys, {blastRadius.connections.length} connections.</Text> : null}
-        {!['EXTENSION', 'PROVIDER_CONNECTION'].includes(level) ? <Text>Blast-radius preview is not available for this target type in the Admin API.</Text> : null}
         <TextInput label="Reason (at least 5 characters)" value={reason} onChange={setReason} />
         {requiresSlugConfirmation ? <TextInput label="Project confirmation slug" value={confirmSlug} onChange={setConfirmSlug} /> : null}
         <CheckboxInput label="Abort active streams" value={abortStreams} onChange={setAbortStreams} />
@@ -103,6 +117,24 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
     <AlertDialog isOpen={alertOpen} onOpenChange={setAlertOpen} title="Confirm emergency kill switch"
       description={`Trigger ${level.replaceAll('_', ' ')} for ${targetId}. ${abortStreams ? 'Active streams will be aborted.' : 'Active streams will not be aborted.'} This action is recorded in the immutable audit log.`}
       actionLabel="Trigger kill switch" actionVariant="destructive" onAction={() => void confirmKillSwitch()} />
+    <AlertDialog isOpen={clearDialogOpen} onOpenChange={setClearDialogOpen} title="Clear emergency kill switch"
+      description={`Clear the active ${clearTarget?.level ?? ''} switch for ${clearTarget?.target_id ?? ''}? This action is recorded in the immutable audit log.`}
+      actionLabel="Clear kill switch" actionVariant="destructive" onAction={() => void confirmClearKillSwitch()} />
+    <Section><VStack gap={3}><Heading level={2}>Active kill switches</Heading>
+      {clearTarget ? <><Text>Clear {clearTarget.level} for {clearTarget.target_id}</Text>
+        <TextInput label="Reason for clearing (at least 5 characters)" value={clearReason} onChange={setClearReason} />
+        <Button label="Review kill switch clearing" variant="destructive" isDisabled={clearReason.trim().length < 5} onClick={() => setClearDialogOpen(true)} />
+        <Button label="Cancel clearing" variant="secondary" onClick={() => { setClearTarget(null); setClearReason(''); }} />
+      </> : null}
+      {loading ? <Text role="status">Loading active kill switches…</Text> : killSwitches.length === 0 ? <Text role="status">No active kill switches.</Text> :
+        <Table aria-label="Active kill switches" data={killSwitches as Array<Record<string, unknown>>} columns={[
+          {key: 'level', header: 'Level'}, {key: 'target_id', header: 'Target'}, {key: 'reason', header: 'Trigger reason'},
+          {key: 'version', header: 'Version'}, {key: 'actions', header: 'Actions', renderCell: row => {
+            const item = killSwitches.find(candidate => candidate.id === row.id);
+            return <Button label="Clear" variant="destructive" isDisabled={!canTrigger || !item} onClick={() => { if (item) { setClearTarget(item); setClearReason(''); } }} />;
+          }},
+        ]} />}
+    </VStack></Section>
     <Section><VStack gap={3}><Heading level={2}>Immutable audit log</Heading>
       <HStack gap={2} wrap="wrap"><TextInput label="Filter by action" value={actionFilter} onChange={setActionFilter} /><Button label="Verify hash chain" variant="secondary" onClick={() => void verifyChain()} /></HStack>
       {verifyResult ? <Text role="status">{verifyResult}</Text> : null}

@@ -13,7 +13,7 @@ import {OperationsSettingsPage} from './operations/OperationsSettingsPage';
 const mocks = vi.hoisted(() => ({
   listTracePage: vi.fn(), getTraceWaterfall: vi.fn(), listBudgets: vi.fn(), getUsageChargebackSummary: vi.fn(),
   exportUsageChargeback: vi.fn(), updateBudget: vi.fn(), listAuditEvents: vi.fn(), verifyAuditHashChain: vi.fn(),
-  triggerKillSwitch: vi.fn(), getKillSwitchBlastRadius: vi.fn(), getReadinessProbe: vi.fn(),
+  triggerKillSwitch: vi.fn(), listKillSwitches: vi.fn(), clearKillSwitch: vi.fn(), getKillSwitchBlastRadius: vi.fn(), getReadinessProbe: vi.fn(),
   getClusterOpsStatus: vi.fn(), createEncryptedBackup: vi.fn(), runUpgradePreflight: vi.fn(), getExtensionLockfile: vi.fn(),
 }));
 
@@ -26,10 +26,11 @@ beforeEach(() => {
   mocks.listBudgets.mockResolvedValue([]); mocks.getUsageChargebackSummary.mockResolvedValue([]);
   mocks.exportUsageChargeback.mockResolvedValue(new Blob(['report'])); mocks.updateBudget.mockResolvedValue({});
   mocks.listAuditEvents.mockResolvedValue({data: [], nextCursor: undefined}); mocks.verifyAuditHashChain.mockResolvedValue({intact: true, checked_events_count: 0});
+  mocks.listKillSwitches.mockResolvedValue([]); mocks.clearKillSwitch.mockResolvedValue({});
   mocks.triggerKillSwitch.mockResolvedValue({config_epoch: 3, affected_entities_count: 2, severed_streams_count: 1});
   mocks.getKillSwitchBlastRadius.mockResolvedValue({organizations: [], projects: [], virtual_keys: [], connections: []});
   mocks.getReadinessProbe.mockResolvedValue({ready: true, status: 'ok', configEpoch: 3, snapshotAgeMs: 5});
-  mocks.getClusterOpsStatus.mockResolvedValue({current_epoch: 3, storage_engine: 'sqlite_wal', nodes: []});
+  mocks.getClusterOpsStatus.mockResolvedValue({current_epoch: 3, storage_engine: 'sqlite_wal', nodes: [{id: 'standalone', wal_bytes: 8192}]});
   mocks.createEncryptedBackup.mockResolvedValue({archive_filename: 'backup.tpop.enc', sha256_hex: 'a'.repeat(64)});
   mocks.runUpgradePreflight.mockResolvedValue({compatible: true, state: 'READY_TO_UPGRADE', blocking_extensions: []});
   mocks.getExtensionLockfile.mockResolvedValue({lockfileVersion: 1, extensions: {'@tanpopo/adapter': {version: '1.2.0', digest: 'sha256:abc'}}});
@@ -90,7 +91,7 @@ describe('Unit 30 observability and operations screens', () => {
     renderTheme(<OperationsSettingsPage roles={['OPERATOR']} />, 'dark');
     expect(await screen.findByText('Ready')).toBeInTheDocument();
     expect(screen.getByText(/@tanpopo\/adapter/)).toBeInTheDocument();
-    expect(screen.getByText(/WAL disk footprint is not provided/)).toBeInTheDocument();
+    expect(await screen.findByText('Node 1 WAL disk footprint: 8,192 bytes')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Target core version'), {target: {value: 'v0.2.0'}});
     fireEvent.click(screen.getByRole('button', {name: 'Run upgrade preflight'}));
     await waitFor(() => expect(mocks.runUpgradePreflight).toHaveBeenCalledWith('v0.2.0'));
@@ -158,6 +159,22 @@ describe('Unit 30 observability and operations screens', () => {
     expect(await screen.findByRole('heading', {name: 'Emergency kill switch'})).toBeInTheDocument();
     expect(screen.getByLabelText('Target ID')).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Review emergency kill switch'})).toBeInTheDocument();
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('previews the four-level blast radius and clears an active kill switch with an audited reason', async () => {
+    mocks.listKillSwitches.mockResolvedValue([{id: 'switch-1', org_id: 'org-1', level: 'PROJECT_OR_ORG_FREEZE', target_id: 'project-1', active: true,
+      abort_active_streams: true, reason: 'incident', triggered_by_principal_id: 'operator', version: 2, triggered_at_ms: 10}]);
+    renderTheme(<SecurityAuditAndKillSwitchPage roles={['OPERATOR']} />, 'light');
+    expect(await screen.findByText('PROJECT_OR_ORG_FREEZE')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Target ID'), {target: {value: 'project-1'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Preview blast radius'}));
+    await waitFor(() => expect(mocks.getKillSwitchBlastRadius).toHaveBeenCalledWith('PROJECT', 'project-1'));
+    fireEvent.click(screen.getByRole('button', {name: 'Clear'}));
+    fireEvent.change(screen.getByLabelText('Reason for clearing (at least 5 characters)'), {target: {value: 'incident resolved'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Review kill switch clearing'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Clear kill switch'}));
+    await waitFor(() => expect(mocks.clearKillSwitch).toHaveBeenCalledWith(expect.objectContaining({id: 'switch-1', version: 2}), 'incident resolved'));
     expect(await axeViolations()).toEqual([]);
   });
 });

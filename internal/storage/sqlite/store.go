@@ -201,6 +201,21 @@ func (s *Store) RawDB() *sql.DB {
 	return s.db
 }
 
+// DBPath returns the canonical on-disk database path used by local operational services.
+func (s *Store) DBPath() string { return s.dbPath }
+
+// WALBytes reports the current SQLite WAL file size, returning zero when no WAL file exists.
+func (s *Store) WALBytes() (int64, error) {
+	info, err := os.Stat(s.dbPath + "-wal")
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("sqlite: inspect WAL file: %w", err)
+	}
+	return info.Size(), nil
+}
+
 // ErrWALCheckpointBusy indicates PRAGMA wal_checkpoint(TRUNCATE) could not flush
 // all WAL frames because an active reader/snapshot held a WAL read mark.
 var ErrWALCheckpointBusy = errors.New("sqlite: WAL checkpoint blocked by busy reader or incomplete frames")
