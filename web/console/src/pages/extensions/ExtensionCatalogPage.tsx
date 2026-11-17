@@ -15,13 +15,15 @@ import {StateToken, TrustToken} from '../catalog/StatusToken';
 
 type Role = components['schemas']['RbacRole'];
 type PermissionDiff = components['schemas']['ExtensionPermissionDiff'];
-type CatalogEntry = {id: string; name: string; package_id: string; version: string; origin_trust_tier: 'official' | 'verified' | 'unverified_external'; enterprise_signed: boolean; execution_tier: PermissionDiff['execution_tier']; description: string; source_uri: string; sha256: string};
+type CatalogEntry = {id: string; name: string; package_id: string; version: string; origin_trust_tier: 'official' | 'verified' | 'unverified_external'; enterprise_signed: boolean; execution_tier: PermissionDiff['execution_tier']; capabilities: string[]; description: string; source_uri: string; sha256: string};
 const canStage = (roles: Role[]) => roles.includes('OPERATOR');
 const canApprove = (roles: Role[]) => roles.some(role => ['OPERATOR', 'ORG_OWNER', 'SECURITY_REVIEWER'].includes(role));
 
 export function ExtensionCatalogPage({roles = []}: {roles?: Role[]}) {
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [filter, setFilter] = useState('ALL');
+  const [capabilityFilter, setCapabilityFilter] = useState('ALL');
+  const [publisherFilter, setPublisherFilter] = useState('ALL');
   const [query, setQuery] = useState('');
   const [sourceUri, setSourceUri] = useState('');
   const [sha256, setSha256] = useState('');
@@ -33,7 +35,10 @@ export function ExtensionCatalogPage({roles = []}: {roles?: Role[]}) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   useEffect(() => { listMarketplaceCatalog().then(result => setCatalog(result.data.map(toCatalogEntry).filter((item): item is CatalogEntry => item !== null))).catch(failure => setError(message(failure))); }, []);
-  const visible = useMemo(() => catalog.filter(item => (filter === 'ALL' || item.origin_trust_tier === filter) && `${item.name} ${item.package_id} ${item.description}`.toLowerCase().includes(query.toLowerCase())), [catalog, filter, query]);
+  const visible = useMemo(() => catalog.filter(item => (filter === 'ALL' || item.origin_trust_tier === filter) &&
+    (capabilityFilter === 'ALL' || item.capabilities.includes(capabilityFilter)) &&
+    (publisherFilter === 'ALL' || (publisherFilter === 'SIGNED' ? item.enterprise_signed : !item.enterprise_signed)) &&
+    `${item.name} ${item.package_id} ${item.description} ${item.capabilities.join(' ')}`.toLowerCase().includes(query.toLowerCase())), [catalog, filter, capabilityFilter, publisherFilter, query]);
 
   async function stage(event: FormEvent) {
     event.preventDefault(); setError(''); setNotice('');
@@ -66,10 +71,13 @@ export function ExtensionCatalogPage({roles = []}: {roles?: Role[]}) {
     {error ? <Text role="alert">{error}</Text> : null}{notice ? <Text role="status">{notice}</Text> : null}
     <TextInput label="Search extensions" type="search" value={query} onChange={setQuery} />
     <label>Origin trust filter<select aria-label="Origin trust filter" value={filter} onChange={event => setFilter(event.target.value)}><option value="ALL">All origins</option><option value="official">Official</option><option value="verified">Verified</option><option value="unverified_external">Unverified external</option></select></label>
+    <label>Capability type filter<select aria-label="Capability type filter" value={capabilityFilter} onChange={event => setCapabilityFilter(event.target.value)}><option value="ALL">All capabilities</option>{[...new Set(catalog.flatMap(item => item.capabilities))].sort().map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+    <label>Enterprise signature filter<select aria-label="Enterprise signature filter" value={publisherFilter} onChange={event => setPublisherFilter(event.target.value)}><option value="ALL">All publisher signatures</option><option value="SIGNED">Enterprise signed</option><option value="UNSIGNED">No enterprise signature</option></select></label>
     <Table data={visible} density="compact" dividers="rows" columns={[
       {key: 'name', header: 'Package'}, {key: 'package_id', header: 'Package ID'}, {key: 'version', header: 'Version'},
       {key: 'origin_trust_tier', header: 'Origin', renderCell: row => <TrustToken trust={row.origin_trust_tier as CatalogEntry['origin_trust_tier']} />},
       {key: 'publisher', header: 'Publisher trust', renderCell: row => <Text>{row.enterprise_signed ? 'Enterprise signed' : 'No enterprise signature'}</Text>},
+      {key: 'capabilities', header: 'Capability types', renderCell: row => <Text>{(row.capabilities as string[]).join(', ') || 'No capabilities listed'}</Text>},
       {key: 'execution_tier', header: 'Execution tier', renderCell: row => <StateToken state={String(row.execution_tier)} />},
       {key: 'description', header: 'Description'},
     ]} />
@@ -94,7 +102,7 @@ export function ExtensionCatalogPage({roles = []}: {roles?: Role[]}) {
           <Text>Quotas: {Object.entries(review.quotas).map(([key, value]) => `${key}: ${value}`).join(', ') || 'No quota data'}</Text>
         </VStack></Section>
         {hasPermissionDelta(review) ? <CheckboxInput label="I reviewed and explicitly consent to the requested permission changes" value={deltaAcknowledged} onChange={setDeltaAcknowledged} /> : null}
-        {review.origin_trust_tier === 'unverified_external' ? <CheckboxInput label="I acknowledge this package is from an unverified external publisher" value={acknowledged} onChange={setAcknowledged} /> : null}
+        {review.origin_trust_tier === 'unverified_external' ? <><Text>Your consent does not waive DEC-004 or TP-BR-0301 compliance requirements.</Text><CheckboxInput label="I acknowledge this package is from an unverified external publisher" value={acknowledged} onChange={setAcknowledged} /></> : null}
         {!canApprove(roles) ? <Text role="alert">Your role cannot approve extension permissions.</Text> : null}
         {canApprove(roles) ? <>
           <Button label="Approve, keep disabled" variant="secondary" isDisabled={!etag || (review.origin_trust_tier === 'unverified_external' && !acknowledged) || (hasPermissionDelta(review) && !deltaAcknowledged)} onClick={() => void approve(false)} />
@@ -108,14 +116,23 @@ export function ExtensionCatalogPage({roles = []}: {roles?: Role[]}) {
 function toCatalogEntry(value: unknown): CatalogEntry | null {
   if (!value || typeof value !== 'object') return null;
   const row = value as Record<string, unknown>;
-  if (typeof row.name !== 'string' || typeof row.package_id !== 'string') return null;
+  const canonicalName = typeof row.canonical_name === 'string' ? row.canonical_name : row.name;
+  if (typeof canonicalName !== 'string' || typeof row.package_id !== 'string') return null;
   const trust = row.origin_trust_tier;
   if (trust !== 'official' && trust !== 'verified' && trust !== 'unverified_external') return null;
   const tier = row.execution_tier;
   if (tier !== 'declarative' && tier !== 'sandboxed_wasm' && tier !== 'isolated_sidecar') return null;
-  return {id: String(row.id ?? row.package_id), name: row.name, package_id: row.package_id, version: String(row.version ?? 'Unknown'), origin_trust_tier: trust,
-    enterprise_signed: row.enterprise_signed === true, execution_tier: tier, description: typeof row.description === 'string' ? row.description : 'No description provided.',
-    source_uri: typeof row.source_uri === 'string' ? row.source_uri : '', sha256: typeof row.sha256 === 'string' ? row.sha256 : ''};
+  return {id: String(row.id ?? row.package_id), name: canonicalName, package_id: row.package_id, version: String(row.version ?? 'Unknown'), origin_trust_tier: trust,
+    enterprise_signed: row.enterprise_signed === true, execution_tier: tier, capabilities: catalogCapabilities(row), description: typeof row.summary === 'string' ? row.summary : typeof row.description === 'string' ? row.description : 'No description provided.',
+    source_uri: typeof row.source_uri === 'string' ? row.source_uri : '', sha256: typeof row.expected_sha256 === 'string' ? row.expected_sha256 : typeof row.sha256 === 'string' ? row.sha256 : ''};
+}
+
+function catalogCapabilities(row: Record<string, unknown>) {
+  const raw = row.capability_types ?? row.capabilities ?? row.capability_type;
+  if (Array.isArray(raw)) return raw.filter((item): item is string => typeof item === 'string');
+  if (typeof raw === 'string') return [raw];
+  if (raw && typeof raw === 'object') return Object.entries(raw).filter(([, enabled]) => enabled === true).map(([name]) => name);
+  return [];
 }
 
 function message(error: unknown) { return error instanceof Error ? error.message : 'The request could not be completed.'; }

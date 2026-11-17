@@ -279,6 +279,7 @@ type UpdateProviderConnectionParams struct {
 	CredentialID    *string
 	AuthMode        *string
 	ReplaceBindings bool
+	MergeBindings   bool
 	SecretBindings  []SecretBindingInput
 	AuditActorKind  string
 	AuditActorID    string
@@ -883,7 +884,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 		mutatingNetworkOrSecrets := params.EndpointBaseURL != nil ||
 			params.AllowPrivateIP != nil ||
 			params.AllowedCIDRs != nil ||
-			params.ReplaceBindings ||
+			params.ReplaceBindings || params.MergeBindings ||
 			params.CredentialID != nil ||
 			params.AuthMode != nil
 
@@ -913,13 +914,29 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			normalizedBindings []SecretBindingInput
 			bindingsToValidate []SecretBindingInput
 		)
-		if params.ReplaceBindings {
-			seenSlots := make(map[string]struct{}, len(params.SecretBindings)+1)
+		if params.ReplaceBindings || params.MergeBindings {
+			requestedBindings := params.SecretBindings
+			if params.MergeBindings {
+				rows, err := tx.QueryContext(ctx, `SELECT slot_name, credential_id, inject_mode FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ?`, params.OrgID, params.ConnectionID)
+				if err != nil { return mapReadDBError(err) }
+				bySlot := make(map[string]SecretBindingInput)
+				for rows.Next() {
+					var current SecretBindingInput
+					if err := rows.Scan(&current.SlotName, &current.CredentialID, &current.InjectMode); err != nil { rows.Close(); return mapReadDBError(err) }
+					bySlot[current.SlotName] = current
+				}
+				if err := rows.Err(); err != nil { rows.Close(); return mapReadDBError(err) }
+				rows.Close()
+				for _, binding := range params.SecretBindings { bySlot[binding.SlotName] = binding }
+				requestedBindings = make([]SecretBindingInput, 0, len(bySlot))
+				for _, binding := range bySlot { requestedBindings = append(requestedBindings, binding) }
+			}
+			seenSlots := make(map[string]struct{}, len(requestedBindings)+1)
 			var credForReplace *string
 			if params.CredentialID != nil {
 				credForReplace = nextPrimaryCred
 			}
-			for _, rawB := range params.SecretBindings {
+			for _, rawB := range requestedBindings {
 				slot := strings.TrimSpace(rawB.SlotName)
 				credID := strings.TrimSpace(rawB.CredentialID)
 				if slot == "" || credID == "" {
@@ -1028,7 +1045,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			}
 		}
 
-		if params.ReplaceBindings {
+		if params.ReplaceBindings || params.MergeBindings {
 			if _, err := tx.ExecContext(ctx, `
 				DELETE FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ?`,
 				params.OrgID, params.ConnectionID,
@@ -1125,9 +1142,18 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 
 // DeleteProviderConnection deletes an unreferenced ProviderConnection, returning port.ErrResourceInUse (409)
 // if any ModelDeployment references it (NEG-3).
-func (r *Repository) DeleteProviderConnection(ctx context.Context, orgID, connectionID string) error {
+func (r *Repository) DeleteProviderConnection(ctx context.Context, orgID, connectionID string, expectedVersion int64) error {
+	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(connectionID) == "" || expectedVersion < 1 {
+		return fmt.Errorf("%w: org_id, connection_id, and expected_version >= 1 are required", port.ErrInvalidInput)
+	}
 	now := r.nowMs()
 	if err := r.withTx(ctx, func(tx *sql.Tx) error {
+		var currentVersion int64
+		if err := tx.QueryRowContext(ctx, `SELECT version FROM provider_connections WHERE org_id = ? AND id = ?`, orgID, connectionID).Scan(&currentVersion); err != nil {
+			if errors.Is(err, sql.ErrNoRows) { return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID) }
+			return mapDBError(err)
+		}
+		if currentVersion != expectedVersion { return port.ErrVersionConflict }
 		var inUse int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM model_deployments WHERE org_id = ? AND connection_id = ?`, orgID, connectionID).Scan(&inUse); err != nil {
 			return mapDBError(err)
@@ -1135,7 +1161,7 @@ func (r *Repository) DeleteProviderConnection(ctx context.Context, orgID, connec
 		if inUse > 0 {
 			return fmt.Errorf("%w: provider_connection %q is referenced by %d model_deployments", port.ErrResourceInUse, connectionID, inUse)
 		}
-		res, err := tx.ExecContext(ctx, `DELETE FROM provider_connections WHERE org_id = ? AND id = ?`, orgID, connectionID)
+		res, err := tx.ExecContext(ctx, `DELETE FROM provider_connections WHERE org_id = ? AND id = ? AND version = ?`, orgID, connectionID, expectedVersion)
 		if err != nil {
 			return mapDeleteDBError(err)
 		}

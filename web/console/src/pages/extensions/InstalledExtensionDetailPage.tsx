@@ -30,6 +30,7 @@ export function InstalledExtensionDetailPage({roles = []}: {roles?: Role[]}) {
   const [source, setSource] = useState('');
   const [sha, setSha] = useState('');
   const [reason, setReason] = useState('');
+  const [confirmSlug, setConfirmSlug] = useState('');
   const [confirmAction, setConfirmAction] = useState<'rollback' | 'quarantine' | 'uninstall' | null>(null);
   const [alertOpen, setAlertOpen] = useState(false);
   const [impact, setImpact] = useState<{projects: string[]; connections: string[]}>({projects: [], connections: []});
@@ -73,7 +74,7 @@ export function InstalledExtensionDetailPage({roles = []}: {roles?: Role[]}) {
   }
 
   async function prepareAction(row: Installation, action: 'rollback' | 'quarantine' | 'uninstall') {
-    setSelected(row); setReason(''); setError(''); setImpact({projects: [], connections: []});
+    setSelected(row); setReason(''); setConfirmSlug(''); setError(''); setImpact({projects: [], connections: []});
     if (action === 'rollback' || action === 'quarantine') {
       try { const result = await getExtensionBlastRadius(row.id); setImpact({projects: result.projects, connections: result.connections}); }
       catch (failure) { setError(message(failure)); return; }
@@ -82,11 +83,11 @@ export function InstalledExtensionDetailPage({roles = []}: {roles?: Role[]}) {
   }
 
   async function confirm() {
-    if (!selected || !confirmAction || reason.trim().length < 5) return;
+    if (!selected || !confirmAction || reason.trim().length < 5 || (confirmAction === 'quarantine' && confirmSlug !== selected.package_id)) return;
     setError('');
     try {
       if (confirmAction === 'rollback') await rollbackExtension(selected.id, `"v${selected.version}"`, reason);
-      if (confirmAction === 'quarantine') await triggerExtensionKillSwitch(selected.id, reason);
+      if (confirmAction === 'quarantine') await triggerExtensionKillSwitch(selected.id, reason, confirmSlug);
       if (confirmAction === 'uninstall') await uninstallExtension(selected.id, `"v${selected.version}"`);
       setAlertOpen(false); setConfirmAction(null); setReason(''); await reload(); setNotice(confirmAction === 'quarantine' ? 'Extension quarantined and active streams cut off.' : `${confirmAction[0].toUpperCase()}${confirmAction.slice(1)} completed.`);
     } catch (failure) { setAlertOpen(false); setError(message(failure)); }
@@ -138,7 +139,7 @@ export function InstalledExtensionDetailPage({roles = []}: {roles?: Role[]}) {
           <Text>Quotas: {Object.entries(diff.quotas).map(([key, value]) => `${key}: ${value}`).join(', ') || 'No quota data'}</Text>
         </VStack></Section>
         {hasPermissionDelta(diff) ? <CheckboxInput label="I reviewed and explicitly consent to the requested permission changes" value={deltaAcknowledged} onChange={setDeltaAcknowledged} /> : null}
-        {diff.origin_trust_tier === 'unverified_external' ? <CheckboxInput label="I acknowledge this unverified external publisher" value={acknowledged} onChange={setAcknowledged} /> : null}
+        {diff.origin_trust_tier === 'unverified_external' ? <><Text>Your consent does not waive DEC-004 or TP-BR-0301 compliance requirements.</Text><CheckboxInput label="I acknowledge this unverified external publisher" value={acknowledged} onChange={setAcknowledged} /></> : null}
         {canApprove(roles) ? <Button label="Approve permissions and activate" isDisabled={!etag || (diff.origin_trust_tier === 'unverified_external' && !acknowledged) || (hasPermissionDelta(diff) && !deltaAcknowledged)} onClick={() => void approveReconsent()} /> : <Text role="alert">Your role cannot approve this permission change.</Text>}
       </VStack> : null}
     </Dialog>
@@ -149,8 +150,9 @@ export function InstalledExtensionDetailPage({roles = []}: {roles?: Role[]}) {
         {confirmAction === 'quarantine' ? <Text>Disable this extension immediately and cut off its active streams.</Text> : null}
         {confirmAction === 'uninstall' ? <Text>Remove the extension or discard its staged candidate. The API will preserve it if active connections still reference it.</Text> : null}
         {(confirmAction === 'rollback' || confirmAction === 'quarantine') ? <Text>Affected projects: {impact.projects.join(', ') || 'None'}. Affected connections: {impact.connections.join(', ') || 'None'}.</Text> : null}
+        {confirmAction === 'quarantine' ? <TextInput label="Type the exact package ID to confirm quarantine" value={confirmSlug} onChange={setConfirmSlug} isRequired /> : null}
         <TextInput label="Reason (at least 5 characters)" value={reason} onChange={setReason} isRequired />
-        <Button label={`Review ${confirmAction} confirmation`} variant="secondary" isDisabled={reason.trim().length < 5} onClick={() => setAlertOpen(true)} />
+        <Button label={`Review ${confirmAction} confirmation`} variant="secondary" isDisabled={reason.trim().length < 5 || (confirmAction === 'quarantine' && confirmSlug !== selected.package_id)} onClick={() => setAlertOpen(true)} />
       </VStack> : null}
     </Dialog>
     <AlertDialog isOpen={alertOpen} onOpenChange={setAlertOpen} title={`Confirm ${confirmAction ?? 'extension action'}`}

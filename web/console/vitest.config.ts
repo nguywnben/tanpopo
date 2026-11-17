@@ -19,6 +19,7 @@ export default defineConfig({
   plugins: [stylex, react()],
   test: {
     environment: 'jsdom',
+    fileParallelism: false,
     setupFiles: ['./src/test-setup.ts'],
     restoreMocks: true,
   },

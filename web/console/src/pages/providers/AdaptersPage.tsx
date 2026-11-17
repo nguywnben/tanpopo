@@ -16,9 +16,13 @@ export function AdaptersPage() {
   const [adapters, setAdapters] = useState<Adapter[]>([]);
   const [selected, setSelected] = useState<Adapter | null>(null);
   const [query, setQuery] = useState('');
+  const [protocol, setProtocol] = useState('ALL');
+  const [executionTier, setExecutionTier] = useState('ALL');
   const [error, setError] = useState('');
   useEffect(() => { listProviderAdapters().then(setAdapters).catch(failure => setError(message(failure))); }, []);
-  const visible = useMemo(() => adapters.filter(adapter => `${adapter.name} ${adapter.wire_protocol ?? ''} ${adapter.execution_tier}`.toLowerCase().includes(query.toLowerCase())), [adapters, query]);
+  const visible = useMemo(() => adapters.filter(adapter => (protocol === 'ALL' || adapter.wire_protocol === protocol) &&
+    (executionTier === 'ALL' || adapter.execution_tier === executionTier) &&
+    `${adapter.name} ${adapter.wire_protocol ?? ''} ${adapter.execution_tier}`.toLowerCase().includes(query.toLowerCase())), [adapters, query, protocol, executionTier]);
   async function inspect(adapter: Adapter) {
     setError(''); setSelected(adapter);
     try { setSelected(await getProviderAdapter(adapter.id) as Adapter); }
@@ -29,6 +33,8 @@ export function AdaptersPage() {
     <Text>Installed protocol adapters and their declared connection requirements.</Text>
     {error ? <Text role="alert">{error}</Text> : null}
     <TextInput label="Search adapters" type="search" value={query} onChange={setQuery} />
+    <label>Wire protocol filter<select aria-label="Wire protocol filter" value={protocol} onChange={event => setProtocol(event.target.value)}><option value="ALL">All protocols</option>{[...new Set(adapters.map(adapter => adapter.wire_protocol).filter((value): value is string => Boolean(value)))].sort().map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+    <label>Execution tier filter<select aria-label="Execution tier filter" value={executionTier} onChange={event => setExecutionTier(event.target.value)}><option value="ALL">All execution tiers</option>{[...new Set(adapters.map(adapter => adapter.execution_tier))].sort().map(value => <option key={value} value={value}>{value}</option>)}</select></label>
     <Table data={visible} density="compact" dividers="rows" hasHover columns={[
       {key: 'name', header: 'Adapter', renderCell: row => <Button label={String(row.name)} variant="ghost" onClick={() => void inspect(row as Adapter)} />},
       {key: 'wire_protocol', header: 'Protocol'},

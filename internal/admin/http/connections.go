@@ -927,7 +927,7 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 		AllowPrivateIP:  req.AllowPrivateIP,
 		AllowedCIDRs:    nextCIDRsPtr,
 		State:           nextStatePtr,
-		ReplaceBindings: replaceBindings,
+		MergeBindings:   replaceBindings,
 		SecretBindings:  nextBindings,
 		AuditActorKind:  "PRINCIPAL",
 		AuditActorID:    sc.Actor.PrincipalID,
@@ -1026,10 +1026,17 @@ func (s *Server) handleDeleteConnection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := s.catalog.DeleteProviderConnection(r.Context(), orgID, connID); err != nil {
+	if err := s.catalog.DeleteProviderConnection(r.Context(), orgID, connID, expectedVer); err != nil {
 		switch {
 		case errors.Is(err, port.ErrNotFound):
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+		case errors.Is(err, port.ErrVersionConflict):
+			current, getErr := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
+			if getErr == nil {
+				currentDTO, dtoErr := s.buildProviderConnectionDTO(r.Context(), current)
+				if dtoErr == nil { writeOptimisticConflict(w, r, current.Version, currentDTO); return }
+			}
+			writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "provider connection changed; reload before retrying", false, nil)
 		case errors.Is(err, port.ErrResourceInUse):
 			writeErrorEnvelope(w, r, http.StatusConflict, "connection_referenced_by_deployments", "conflict_error", "connection is referenced by active model deployments", false, curDTO)
 		default:

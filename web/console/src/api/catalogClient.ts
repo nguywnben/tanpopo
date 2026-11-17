@@ -2,9 +2,15 @@ import type {components} from './generated';
 import {api, apiError} from './client';
 
 export async function listProviderAdapters() {
-  const result = await api.GET('/admin/v1/provider-adapters', {params: {query: {limit: 100}}});
-  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
-  return result.data.data;
+  const rows: components['schemas']['ProviderAdapterSummary'][] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await api.GET('/admin/v1/provider-adapters', {params: {query: {limit: 100, cursor}}});
+    if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+    rows.push(...result.data.data);
+    cursor = result.data.next_cursor ?? undefined;
+  } while (cursor);
+  return rows;
 }
 
 export async function getProviderAdapter(id: string) {
@@ -14,15 +20,27 @@ export async function getProviderAdapter(id: string) {
 }
 
 export async function listConnections() {
-  const result = await api.GET('/admin/v1/connections', {params: {query: {limit: 100}}});
-  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
-  return result.data.data;
+  const rows: components['schemas']['ProviderConnection'][] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await api.GET('/admin/v1/connections', {params: {query: {limit: 100, cursor}}});
+    if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+    rows.push(...result.data.data);
+    cursor = result.data.next_cursor ?? undefined;
+  } while (cursor);
+  return rows;
 }
 
 export async function listSecretMetadata() {
-  const result = await api.GET('/admin/v1/secrets', {params: {query: {limit: 100}}});
-  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
-  return result.data.data;
+  const rows: components['schemas']['SecretMetadata'][] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await api.GET('/admin/v1/secrets', {params: {query: {limit: 100, cursor}}});
+    if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+    rows.push(...result.data.data);
+    cursor = result.data.next_cursor ?? undefined;
+  } while (cursor);
+  return rows;
 }
 
 export async function createSecret(payload: components['schemas']['SecretCreateRequest']) {
@@ -43,6 +61,27 @@ export async function updateConnection(id: string, etag: string, payload: {state
   return result.data;
 }
 
+export async function deleteConnection(id: string, etag: string) {
+  const result = await api.DELETE('/admin/v1/connections/{connectionId}', {params: {path: {connectionId: id}, header: {'If-Match': etag}}});
+  if (!result.response.ok) throw apiError(result.response, result.error);
+}
+
+export async function listRoutes() {
+  const rows: components['schemas']['RouteResource'][] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await api.GET('/admin/v1/routes', {params: {query: {limit: 100, cursor}}});
+    if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+    rows.push(...result.data.data);
+    cursor = result.data.next_cursor ?? undefined;
+  } while (cursor);
+  return rows;
+}
+
+export async function listAllRoutes() {
+  return listRoutes();
+}
+
 export async function testConnection(id: string) {
   const result = await api.POST('/admin/v1/connections/{connectionId}/test', {params: {path: {connectionId: id}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
@@ -50,9 +89,15 @@ export async function testConnection(id: string) {
 }
 
 export async function listAdminModels() {
-  const result = await api.GET('/admin/v1/models', {params: {query: {limit: 100}}});
-  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
-  return result.data.data;
+  const rows: components['schemas']['LogicalModel'][] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await api.GET('/admin/v1/models', {params: {query: {limit: 100, cursor}}});
+    if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+    rows.push(...result.data.data);
+    cursor = result.data.next_cursor ?? undefined;
+  } while (cursor);
+  return rows;
 }
 
 export async function createAdminModel(payload: components['schemas']['LogicalModel']) {
@@ -62,9 +107,19 @@ export async function createAdminModel(payload: components['schemas']['LogicalMo
 }
 
 export async function listDeployments(envId?: string) {
-  const result = await api.GET('/admin/v1/deployments', {params: {query: {env_id: envId, limit: 100}}});
-  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
-  return result.data.data;
+  const rows: components['schemas']['ModelDeployment'][] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await api.GET('/admin/v1/deployments', {params: {query: {env_id: envId, limit: 100, cursor}}});
+    if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+    rows.push(...result.data.data);
+    cursor = result.data.next_cursor ?? undefined;
+  } while (cursor);
+  return rows;
+}
+
+export async function listAllDeployments() {
+  return listDeployments();
 }
 
 export async function createDeployment(payload: {env_id: string; logical_model_id: string; connection_id: string; upstream_model_name: string; data_region: components['schemas']['DataRegion']; activate_immediately: boolean; rate_card: components['schemas']['RateCardNanoUsd']}) {
@@ -79,16 +134,35 @@ export async function updateDeployment(id: string, etag: string, payload: {state
   return result.data;
 }
 
+export async function deleteDeployment(id: string, etag: string) {
+  const result = await api.DELETE('/admin/v1/deployments/{deploymentId}', {params: {path: {deploymentId: id}, header: {'If-Match': etag}}});
+  if (!result.response.ok) throw apiError(result.response, result.error);
+}
+
 export async function listMarketplaceCatalog() {
-  const result = await api.GET('/admin/v1/marketplace/catalog', {params: {query: {limit: 100}}});
-  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
-  return result.data;
+  const rows: Record<string, never>[] = [];
+  let cursor: string | undefined;
+  let offlineCached = false;
+  do {
+    const result = await api.GET('/admin/v1/marketplace/catalog', {params: {query: {limit: 100, cursor}}});
+    if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+    rows.push(...result.data.data);
+    offlineCached ||= result.data.offline_cached;
+    cursor = result.data.next_cursor ?? undefined;
+  } while (cursor);
+  return {data: rows, offline_cached: offlineCached, has_more: false};
 }
 
 export async function listExtensionInstallations() {
-  const result = await api.GET('/admin/v1/extensions/installations', {params: {query: {limit: 100}}});
-  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
-  return result.data.data;
+  const rows: components['schemas']['ExtensionInstallation'][] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await api.GET('/admin/v1/extensions/installations', {params: {query: {limit: 100, cursor}}});
+    if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+    rows.push(...result.data.data);
+    cursor = result.data.next_cursor ?? undefined;
+  } while (cursor);
+  return rows;
 }
 
 export async function inspectExtensionPermissions(id: string) {
@@ -145,8 +219,8 @@ export async function rollbackExtension(id: string, etag: string, reason: string
   return result.data;
 }
 
-export async function triggerExtensionKillSwitch(id: string, reason: string) {
-  const result = await api.POST('/admin/v1/kill-switches', {body: {target_level: 'EXTENSION', target_id: id, abort_active_streams: true, reason}});
+export async function triggerExtensionKillSwitch(id: string, reason: string, confirmSlug: string) {
+  const result = await api.POST('/admin/v1/kill-switches', {body: {target_level: 'EXTENSION', target_id: id, confirm_slug: confirmSlug, abort_active_streams: true, reason}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;
 }

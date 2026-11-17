@@ -768,7 +768,10 @@ adapter:
 	if err := h.repo.DeleteProviderAdapter(h.ctx, adp.ID); !errors.Is(err, port.ErrResourceInUse) {
 		t.Fatalf("expected ErrResourceInUse deleting referenced adapter, got %v", err)
 	}
-	if err := h.repo.DeleteProviderConnection(h.ctx, orgA, conn.ID); !errors.Is(err, port.ErrResourceInUse) {
+	if err := h.repo.DeleteProviderConnection(h.ctx, orgA, conn.ID, conn.Version+1); !errors.Is(err, port.ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict for a stale delete ETag, got %v", err)
+	}
+	if err := h.repo.DeleteProviderConnection(h.ctx, orgA, conn.ID, conn.Version); !errors.Is(err, port.ErrResourceInUse) {
 		t.Fatalf("expected ErrResourceInUse deleting referenced connection, got %v", err)
 	}
 	if err := h.repo.DeleteLogicalModel(h.ctx, nil, lm.ID); !errors.Is(err, port.ErrResourceInUse) {
@@ -792,7 +795,7 @@ adapter:
 	if err := h.repo.DeleteModelDeployment(h.ctx, orgA, depl.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.repo.DeleteProviderConnection(h.ctx, orgA, conn.ID); err != nil {
+	if err := h.repo.DeleteProviderConnection(h.ctx, orgA, conn.ID, revoked.Version); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.repo.DeleteProviderAdapter(h.ctx, adp.ID); err != nil {
@@ -981,6 +984,8 @@ runtime:
 secretSlots:
   - slot: "api_key"
     requiredForAuthMethods: ["api_key"]
+  - slot: "organization"
+    requiredForAuthMethods: ["api_key"]
 permissions:
   networkEgress:
     allowedHosts: ["api.example.com", "127.0.0.1"]
@@ -1089,6 +1094,23 @@ adapter:
 	if err != nil {
 		t.Fatal(err)
 	}
+	organizationSecret, err := h.vault.SealSecret(h.ctx, vault.SealSecretParams{
+		OrgID: orgA, OwnerProjectID: &projA1, Name: "projA1-organization-secret", SecretKind: vault.SecretKindAPIKey, Plaintext: []byte("sk-projA1-organization"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedConn, err := h.repo.UpdateProviderConnection(h.ctx, catalog.UpdateProviderConnectionParams{
+		OrgID: orgA, ConnectionID: validConn.ID, ExpectedVersion: validConn.Version, MergeBindings: true,
+		SecretBindings: []catalog.SecretBindingInput{{SlotName: "organization", CredentialID: organizationSecret.ID}},
+	})
+	if err != nil {
+		t.Fatalf("merge a single secret slot: %v", err)
+	}
+	if len(updatedConn.SecretBindings) != 2 {
+		t.Fatalf("partial slot rotation dropped an existing binding: got %#v", updatedConn.SecretBindings)
+	}
+	validConn = updatedConn
 	if _, err := h.repo.TransitionConnectionState(h.ctx, orgA, validConn.ID, catalog.ConnStateValidating, validConn.Version, "test"); err != nil {
 		t.Fatal(err)
 	}
