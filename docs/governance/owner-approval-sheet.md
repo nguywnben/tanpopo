@@ -1,9 +1,9 @@
 # Consolidated Product Owner Approval Sheet (`Pre-Build Gate Closure`) — Tanpopo
 
 > **Actionable Decision Sign-Off Artifact — Pre-Build Closure, Wave 1.1–2.1 Acceptance (`TP-IMP-0005`..`0020`) & `DEC-034` Batch (`0021`..`0030`)**
-> - **Document ID:** `GOV-OAS-01` | **Version:** `1.28.0-dec-042-0026-done` | **Date:** `2026-11-17`
-> - **Current Governance Posture:** **`APPROVED_BY_OWNER` (`Stage 1 M0 = DONE` | `Stage 2 Handoff = GO` | `TP-IMP-0005..0026 = DONE [DEC-011..032, DEC-035..042]` | `DEC-025 = Gemini 4 Hydrogen Delegation [0014..0020, Completed]` | `DEC-033 = REVOKED_BY_OWNER [Preserved in Git History]` | `DEC-034 = Gemini 4 Hydrogen Delegation [0021..0030]` | `DEC-041 = GPT-6 Luna Delegation [0026..0030, Sequential]` | `CR-11 = IMPLEMENTED & VERIFIED [DEC-012]` | `CR-12 Option A = APPROVED [DEC-017]` | `ACTIVE_QUEUE = 0 / 47 READY; 26 DONE; 21 BLOCKED [TP-IMP-0027..0047]`)**
-> - **Recorded Product Owner & Delegated Owner Rulings (`2026-11-14`–`2026-11-17` — `DEC-009`..`DEC-042` [`DEC-033 REVOKED`]):**
+> - **Document ID:** `GOV-OAS-01` | **Version:** `1.29.0-dec-043-0027-ready` | **Date:** `2026-11-17`
+> - **Current Governance Posture:** **`APPROVED_BY_OWNER` (`Stage 1 M0 = DONE` | `Stage 2 Handoff = GO` | `TP-IMP-0005..0026 = DONE [DEC-011..032, DEC-035..042]` | `TP-IMP-0027 = READY [DEC-043]` | `DEC-025 = Gemini 4 Hydrogen Delegation [0014..0020, Completed]` | `DEC-033 = REVOKED_BY_OWNER` | `DEC-041 = GPT-6 Luna Delegation [0026..0030, Sequential]` | `ACTIVE_QUEUE = 1 READY; 26 DONE; 20 BLOCKED [TP-IMP-0028..0047]`)**
+> - **Recorded Product Owner & Delegated Owner Rulings (`2026-11-14`–`2026-11-17` — `DEC-009`..`DEC-043` [`DEC-033 REVOKED`]):**
 >   1. **Track A (`18 items`):** **`APPROVED` (`CONFIRMED_BY_OWNER`)** across all recommended options.
 >   2. **Track B (`15 items`):** **`APPROVED_WITH_CONDITIONS` (`CONFIRMED_BY_OWNER`)** across all recommended options (`Apache-2.0`, phased scope, 3-tier sandbox, security/crypto, SQL/Valkey schemas, MCP `2025-03-26` JSON-RPC), bound to 5 mandatory conditions **`COND-PO-01`..`COND-PO-05`** recorded in [`decisions.md`](./decisions.md).
 >   3. **Stage 1 (`M0`: `TP-IMP-0001`..`0004`):** **`APPROVED & COMPLETED`** (`eb01661` + Stage 2 reconciliation; isolated offline `SPIKE-01..04` verified locally with zero paid external AI calls).
@@ -39,7 +39,7 @@ To respect Product Owner review bandwidth without hiding high-stakes trade-offs,
 - **Track B — High-Impact Individual Review Decisions (`15 items` — Security, Cryptography, Data Model, Wire Protocol, Licensing, or Scope Impact):** Architectural choices affecting sandboxing, secret handling, multi-tenant SQL/Valkey schemas, open-source licensing, `v0.1` provider scope, and permission to execute code in `SPIKE-01..04`. **Recommended options are clearly stated, and each item should be consciously confirmed.**
 
 > [!IMPORTANT]
-> **Binding Governance Conditions (`COND-PO-01`..`05`, `DEC-010`..`DEC-042`; `DEC-033 REVOKED_BY_OWNER`):** Both Track A and Track B are confirmed in [`decisions.md`](./decisions.md), `HANDOFF_VERDICT` is **`GO`**, **`TP-IMP-0005`..`0026` are accepted as `DONE` (`26 / 47`)**. Under **[`DEC-041`](./decisions.md)**, `TP-IMP-0027`..`0030` advance sequentially after each prior unit is on `origin/main` with green CI and the next DoR is verified; **`TP-IMP-0027` remains blocked until Unit 26's acceptance governance CI is green**. **`DEC-033`** remains **`REVOKED_BY_OWNER`**; **`TP-IMP-0031`..`0047`** remain **`BLOCKED`** behind direct human Product Owner authorization, and no AI agent may ever tag or publish releases (`GATE-REL-07`).
+> **Binding Governance Conditions (`COND-PO-01`..`05`, `DEC-010`..`DEC-043`; `DEC-033 REVOKED_BY_OWNER`):** Both tracks remain approved, `HANDOFF_VERDICT` is **`GO`**, `TP-IMP-0005`..`0026` are `DONE`, and `TP-IMP-0027` is `READY` under sequential delegation [`DEC-041`](./decisions.md)/[`DEC-043`](./decisions.md) after its DoR passed. Units `0028`..`0030` remain blocked until previous-unit completion and DoR checks; `0031`..`0047` remain blocked behind direct human Product Owner authorization. No AI agent may tag or publish releases (`GATE-REL-07).
 
 ---
 

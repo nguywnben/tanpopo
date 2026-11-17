@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0027` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0025`, `TP-IMP-0026` — `GAP-01, 10, 12`)* |
+| **Status** | **`READY`** *(DoR verified and opened under [`DEC-043`](../../governance/decisions.md); `TP-IMP-0025` and `TP-IMP-0026` are `DONE` on `origin/main`)* |
 | **Size** | `M` (`web/console/src/pages/setup/*`, `login/*`, `overview/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(First-admin onboarding flow, explicit security opt-in for local GPU loopback `CR-10` & show-once secret display)* |
 | **Technical Owner** | `Lead Product / Frontend Engineer` |

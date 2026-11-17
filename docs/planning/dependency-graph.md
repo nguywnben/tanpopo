@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0026: DONE` | `0 READY / 21 BLOCKED`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.32.0-dec-042-0026-done` | **Date:** `2026-11-17`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0026: DONE` | `TP-IMP-0027: READY` | `1 READY / 20 BLOCKED`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.33.0-dec-043-0027-ready` | **Date:** `2026-11-17`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0026` = **`DONE`** (`TP-IMP-0026` accepted by GPT-6 Luna under [`DEC-041`](../governance/decisions.md)/[`DEC-042`](../governance/decisions.md), implementation `e8a2d083` / CI `44032642124`); prior acceptance evidence for `TP-IMP-0001`..`0025` remains recorded below. **`TP-IMP-0027`..`0047` (`21 / 47`) remain `BLOCKED`** until Unit 26's acceptance record has green CI on `origin/main` and the next unit's DoR is verified; sequential order and the `0031`..`0047` authorization boundary remain in force.
+> - **Live DAG Frontier:** `TP-IMP-0001`..`0026` = **`DONE`** (`TP-IMP-0026` accepted under [`DEC-042`](../governance/decisions.md), implementation `e8a2d083` / CI `44032642124`, acceptance CI `44034554809`); **`TP-IMP-0027` = `READY`** under [`DEC-043`](../governance/decisions.md) after DoR verification; `TP-IMP-0028`..`0047` (`20 / 47`) remain blocked behind sequential dependencies and existing authorization gates.
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier (`26 DONE`, `0 READY`, `21 BLOCKED` — `DEC-042`):** **`TP-IMP-0001..0026` are `DONE` (`26 / 47`)**. `TP-IMP-0027..0047` (`21 / 47`) remain `BLOCKED` pending the green acceptance CI on `origin/main` for Unit 26 and verification of Unit 27's DoR; review tiers, `COND-PO-01`..`05`, sequential opening under `DEC-041`, and direct human Product Owner authorization for `0031`..`0047` remain in force.
+> **Live Queue Frontier (`26 DONE`, `1 READY`, `20 BLOCKED` — `DEC-043`):** `TP-IMP-0001..0026` are `DONE`; `TP-IMP-0027` is `READY` after its DoR passed under `DEC-043`. `TP-IMP-0028`..`0047` remain blocked; review tiers, `COND-PO-01`..`05`, sequential opening under `DEC-041`, and direct human Product Owner authorization for `0031`..`0047` remain in force.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.
