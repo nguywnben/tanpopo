@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0029` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0025`, `TP-IMP-0026` — `GAP-01, 12`)* |
+| **Status** | **`READY`** *(DoR verified and opened under [`DEC-047`](../../governance/decisions.md) after Unit 28 acceptance CI `44075974179`; `TP-IMP-0025`, `TP-IMP-0026`, and sequential predecessor `TP-IMP-0028` are `DONE` on `origin/main`)* |
 | **Size** | `M` (`web/console/src/pages/routes/*`, `policies/*`, `access/*`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Destructive action confirmation guardrail `UX-GR-06` & monotonic policy inheritance visualization)* |
 | **Technical Owner** | `Lead Frontend / Product Engineer` |
