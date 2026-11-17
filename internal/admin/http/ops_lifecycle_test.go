@@ -4,11 +4,13 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 )
@@ -28,13 +30,26 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 	var cluster struct {
 		Nodes []struct {
 			WALBytes int64 `json:"wal_bytes"`
+			Health   string `json:"health"`
 		} `json:"nodes"`
 	}
 	if err := json.Unmarshal(status.Body.Bytes(), &cluster); err != nil {
 		t.Fatalf("decode cluster status: %v", err)
 	}
-	if len(cluster.Nodes) != 1 || cluster.Nodes[0].WALBytes < 0 {
+	if len(cluster.Nodes) != 1 || cluster.Nodes[0].WALBytes < 0 || cluster.Nodes[0].Health == "" {
 		t.Fatalf("expected measured non-negative WAL bytes, got %s", status.Body.String())
+	}
+	if err := h.snapshots.Refresh(context.Background()); err != nil {
+		t.Fatalf("refresh config snapshot: %v", err)
+	}
+	status = h.doBearer(t, http.MethodGet, "/admin/v1/ops/cluster-status", "tok_cr13_operator", "", nil)
+	if err := json.Unmarshal(status.Body.Bytes(), &cluster); err != nil || len(cluster.Nodes) != 1 || cluster.Nodes[0].Health != "ok" {
+		t.Fatalf("fresh snapshot should report healthy node: body=%s err=%v", status.Body.String(), err)
+	}
+	h.fk.Advance(time.Minute)
+	status = h.doBearer(t, http.MethodGet, "/admin/v1/ops/cluster-status", "tok_cr13_operator", "", nil)
+	if err := json.Unmarshal(status.Body.Bytes(), &cluster); err != nil || len(cluster.Nodes) != 1 || cluster.Nodes[0].Health != "unhealthy" {
+		t.Fatalf("stale snapshot should report unhealthy node: body=%s err=%v", status.Body.String(), err)
 	}
 
 	backup := h.doBearer(t, http.MethodPost, "/admin/v1/ops/backups", "tok_cr13_operator", "", nil)

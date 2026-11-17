@@ -99,7 +99,7 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 }
 
 func TestChunkAADAuthenticatesEnvelopeHeader(t *testing.T) {
-	first := chunkAAD("backup-id", 3, []byte(`{"format_version":1,"compression":"gzip"}`))
+	first := chunkAAD("backup-id", 3, []byte(`{"format_version":1,"compression":"zstd"}`))
 	modified := chunkAAD("backup-id", 3, []byte(`{"format_version":1,"compression":"other"}`))
 	if bytes.Equal(first, modified) {
 		t.Fatal("changing envelope metadata did not change the chunk authentication data")

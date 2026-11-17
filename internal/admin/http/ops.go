@@ -1012,7 +1012,7 @@ func (s *Server) handleClearKillSwitch(w http.ResponseWriter, r *http.Request) {
 		if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{}) {
 			return
 		}
-		ks, err := s.killSwitch.GetInstance(r.Context(), id)
+		ks, err = s.killSwitch.GetInstance(r.Context(), id)
 	} else {
 		orgID, ok = s.resolveTargetOrgID(w, r, sc)
 		if !ok {

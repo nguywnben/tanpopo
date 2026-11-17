@@ -7,7 +7,6 @@ package backup
 
 import (
 	"archive/tar"
-	"compress/gzip"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -73,9 +72,9 @@ type envelopeHeader struct {
 }
 
 // CreateSQLite takes a consistent online SQLite snapshot, includes the lockfile
-// when configured, writes a manifest, gzip-compresses the tar stream, and seals
+// when configured, writes a manifest, zstd-frames the tar stream, and seals
 // it in independently authenticated AES-GCM chunks under a random wrapped key.
-func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outputDir, lockfilePath string, nowMs int64) (Receipt, error) {
+func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outputDir, lockfilePath string, nowMs int64) (_ Receipt, resultErr error) {
 	if store == nil || keys == nil || strings.TrimSpace(outputDir) == "" {
 		return Receipt{}, errors.New("backup: snapshotter, key wrapper, and output directory are required")
 	}
@@ -118,7 +117,9 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	stageCleaned := false
 	defer func() {
 		if !stageCleaned {
-			_ = removeStaging(outputRoot, stageRoot, stageName)
+			if cleanupErr := removeStaging(outputRoot, stageRoot, stageName); cleanupErr != nil {
+				resultErr = errors.Join(resultErr, fmt.Errorf("backup: remove plaintext staging files: %w", cleanupErr))
+			}
 		}
 	}()
 	stageInfo, err := stageRoot.Stat(".")
@@ -170,7 +171,7 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		}
 	}
 
-	payloadPath := "payload.tar.gz"
+	payloadPath := "payload.tar.zst"
 	m := manifest{FormatVersion: 1, CreatedAt: createdAt, DatabaseSHA256: dbHash, LockfileSHA256: lockfileHash}
 	if err := writePayload(ctx, stageRoot, payloadPath, dbRelPath, lockfileCopy, m); err != nil {
 		return Receipt{}, err
@@ -190,7 +191,7 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, fmt.Errorf("backup: generate archive nonce prefix: %w", err)
 	}
 	header := envelopeHeader{
-		FormatVersion: 1, BackupID: backupID, CreatedAt: createdAt, Compression: "gzip",
+		FormatVersion: 1, BackupID: backupID, CreatedAt: createdAt, Compression: "zstd",
 		KeyID: keyID, WrappedKeyNonce: base64.RawStdEncoding.EncodeToString(wrappedNonce),
 		WrappedKey: base64.RawStdEncoding.EncodeToString(wrappedKey),
 		NoncePrefix: base64.RawStdEncoding.EncodeToString(noncePrefix), ChunkSize: chunkSize,
@@ -423,7 +424,10 @@ func writePayload(ctx context.Context, root *os.Root, path, dbPath, lockfilePath
 			_ = root.Remove(path)
 		}
 	}()
-	compressed := gzip.NewWriter(out)
+	compressed, err := newZstdRawWriter(out)
+	if err != nil {
+		return fmt.Errorf("backup: initialize zstd frame: %w", err)
+	}
 	archive := tar.NewWriter(compressed)
 	if err := addArchiveFile(ctx, archive, root, dbPath, "database.sqlite"); err != nil {
 		return err
@@ -447,7 +451,7 @@ func writePayload(ctx context.Context, root *os.Root, path, dbPath, lockfilePath
 		return fmt.Errorf("backup: finalize tar payload: %w", err)
 	}
 	if err := compressed.Close(); err != nil {
-		return fmt.Errorf("backup: finalize gzip payload: %w", err)
+		return fmt.Errorf("backup: finalize zstd frame: %w", err)
 	}
 	if err := out.Sync(); err != nil {
 		return fmt.Errorf("backup: sync compressed payload: %w", err)

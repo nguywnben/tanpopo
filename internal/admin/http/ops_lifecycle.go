@@ -13,9 +13,9 @@ import (
 	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
-	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/ops/backup"
 	"github.com/nguywnben/tanpopo/internal/ops/upgrade"
+	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
@@ -64,10 +64,17 @@ func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Reques
 			epoch = current.Epoch
 		}
 	}
+	health := "unknown"
+	if s.snapshots != nil {
+		health = "ok"
+		if readinessErr := s.snapshots.CheckServingReady(); readinessErr != nil {
+			health = "unhealthy"
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"current_epoch": epoch,
 		"storage_engine": "sqlite_wal",
-		"nodes": []map[string]any{{"id": "standalone", "config_epoch": epoch, "health": "ok", "wal_bytes": walBytes}},
+		"nodes": []map[string]any{{"id": "standalone", "config_epoch": epoch, "health": health, "wal_bytes": walBytes}},
 	})
 }
 

@@ -905,7 +905,11 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 		t.Fatalf("GET /blast-radius PROJECT status=%d body=%s", recProjectBR.Code, recProjectBR.Body.String())
 	}
 	assertRequiredJSONKeys(t, "GET /blast-radius PROJECT", recProjectBR.Body.Bytes(), "organizations", "projects", "virtual_keys", "connections")
-	recVKeyBR := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=VIRTUAL_KEY&target_id="+bootResp.InitialVirtualKey.ID, ownerCookie, "", "", nil)
+	var initialVirtualKeyID string
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT id FROM virtual_keys WHERE project_id = ? LIMIT 1`, boot.ProjectID).Scan(&initialVirtualKeyID); err != nil {
+		t.Fatalf("load bootstrap virtual key for blast-radius contract test: %v", err)
+	}
+	recVKeyBR := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=VIRTUAL_KEY&target_id="+initialVirtualKeyID, ownerCookie, "", "", nil)
 	if recVKeyBR.Code != http.StatusOK {
 		t.Fatalf("GET /blast-radius VIRTUAL_KEY status=%d body=%s", recVKeyBR.Code, recVKeyBR.Body.String())
 	}
