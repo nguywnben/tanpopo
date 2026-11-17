@@ -48,5 +48,6 @@ export function routeForPath(path: string): ConsoleRoute | undefined {
 }
 
 export function canAccessRoute(route: ConsoleRoute, roles: Role[]) {
+  if (route.path === '/login') return true;
   return route.roles.some(role => roles.includes(role));
 }

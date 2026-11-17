@@ -1,5 +1,5 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {clearCsrfToken, getAdminSession, rememberCsrfToken, request} from './client';
+import {api, clearCsrfToken, getAdminSession, listProjects, rememberCsrfToken} from './client';
 
 afterEach(() => {
   clearCsrfToken();
@@ -17,10 +17,12 @@ describe('typed Admin API client', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await getAdminSession();
-    await request('/admin/v1/projects', 'get');
+    await listProjects();
 
-    expect(fetchMock.mock.calls[0][1]).toMatchObject({credentials: 'same-origin', method: 'GET'});
-    const nextHeaders = new Headers(fetchMock.mock.calls[1][1]?.headers);
+    const sessionRequest = fetchMock.mock.calls[0][0] as Request;
+    const projectRequest = fetchMock.mock.calls[1][0] as Request;
+    expect(sessionRequest).toMatchObject({credentials: 'same-origin', method: 'GET'});
+    const nextHeaders = projectRequest.headers;
     expect(nextHeaders.get('X-CSRF-Token')).toBeNull();
   });
 
@@ -29,19 +31,20 @@ describe('typed Admin API client', () => {
     vi.stubGlobal('fetch', fetchMock);
     rememberCsrfToken('csrf-test-token');
 
-    await request('/admin/v1/projects/{projectId}', 'put', {
-      pathParams: {projectId: 'project/one'}, ifMatch: '"v3"', body: {name: 'Updated'},
+    await api.PUT('/admin/v1/organizations/{orgId}/extension-policies', {
+      params: {path: {orgId: 'org-1'}, header: {'If-Match': '"v3"'}},
+      body: {min_plugin_trust: 'VERIFIED_ONLY', policies: []},
     });
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const headers = new Headers(init.headers);
-    expect(url).toBe('/admin/v1/projects/project%2Fone');
+    const request = fetchMock.mock.calls[0][0] as Request;
+    const headers = request.headers;
+    expect(request.url).toBe('http://localhost:3000/admin/v1/organizations/org-1/extension-policies');
     expect(headers.get('X-CSRF-Token')).toBe('csrf-test-token');
     expect(headers.get('If-Match')).toBe('"v3"');
-    expect(init.credentials).toBe('same-origin');
+    expect(request.credentials).toBe('same-origin');
   });
 
   it('refuses writes before a session CSRF token is available', async () => {
-    await expect(request('/admin/v1/auth/logout', 'post')).rejects.toThrow('CSRF token');
+    await expect(api.POST('/admin/v1/auth/logout')).rejects.toThrow('CSRF token');
   });
 });

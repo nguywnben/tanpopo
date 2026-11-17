@@ -1,4 +1,4 @@
-import {render, screen, waitFor} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import axe from 'axe-core';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import App from '../App';
@@ -20,8 +20,18 @@ describe('console shell accessibility', () => {
     expect(await screen.findByRole('heading', {name: 'Overview'})).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('Project')).toHaveValue('project-1'));
     expect(screen.getByLabelText('Environment')).toHaveValue('env-1');
+    expect(screen.getByRole('link', {name: 'Emergency controls'})).toHaveAttribute('href', '/security/kill-switches');
+    fireEvent.keyDown(window, {key: 'k', ctrlKey: true});
+    expect(await screen.findByRole('dialog', {name: 'Tanpopo navigation and commands'})).toBeInTheDocument();
     const results = await axe.run(document, {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa']}});
     expect(results.violations.filter(item => item.impact === 'critical' || item.impact === 'serious')).toEqual([]);
+  });
+
+  it('shows a usable offline shell when the same-origin API is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Network unavailable')));
+    render(<App />);
+    expect(await screen.findByText('Running in Local Network / Offline Mode')).toBeInTheDocument();
+    expect(screen.getByText('The console is offline. Local assets remain available.')).toBeInTheDocument();
   });
 });
 

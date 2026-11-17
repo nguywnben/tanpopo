@@ -29,4 +29,9 @@ describe('console information architecture', () => {
     expect(security && canAccessRoute(security, ['SECURITY_REVIEWER'])).toBe(true);
     expect(security && canAccessRoute(security, ['FINOPS_VIEWER'])).toBe(false);
   });
+
+  it('keeps sign-in reachable without an authenticated role', () => {
+    const login = routeForPath('/login');
+    expect(login && canAccessRoute(login, [])).toBe(true);
+  });
 });
