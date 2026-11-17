@@ -1,5 +1,6 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {api, clearCsrfToken, completeBootstrap, getAdminSession, getBootstrapStatus, listProjects, loginAdmin, rememberCsrfToken} from './client';
+import {approveExtension, updateConnection} from './catalogClient';
 
 afterEach(() => {
   clearCsrfToken();
@@ -104,5 +105,23 @@ describe('typed Admin API client', () => {
     rememberCsrfToken('csrf-session-token');
     await api.POST('/admin/v1/auth/logout');
     expect((fetchMock.mock.calls[0][0] as Request).headers.get('X-CSRF-Token')).toBe('csrf-session-token');
+  });
+
+  it('sends CSRF and If-Match from typed connection and extension operations', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({id: 'connection-1', version: 4}), {status: 200, headers: {'Content-Type': 'application/json'}}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({id: 'extension-1', state: 'ENABLED_ACTIVE'}), {status: 200, headers: {'Content-Type': 'application/json'}}));
+    vi.stubGlobal('fetch', fetchMock);
+    rememberCsrfToken('csrf-unit28');
+
+    await updateConnection('connection-1', '"v4"', {state: 'DISABLED'});
+    await approveExtension('extension-1', '"v7"', true, false);
+
+    const connectionRequest = fetchMock.mock.calls[0][0] as Request;
+    const approvalRequest = fetchMock.mock.calls[1][0] as Request;
+    expect(connectionRequest.headers.get('If-Match')).toBe('"v4"');
+    expect(connectionRequest.headers.get('X-CSRF-Token')).toBe('csrf-unit28');
+    expect(approvalRequest.headers.get('If-Match')).toBe('"v7"');
+    expect(approvalRequest.headers.get('X-CSRF-Token')).toBe('csrf-unit28');
   });
 });

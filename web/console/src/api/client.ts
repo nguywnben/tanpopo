@@ -44,12 +44,12 @@ api.use({
   },
 });
 
-function apiError(response: Response, error: unknown) {
+export function apiError(response: Response, error: unknown) {
   const detail = error && typeof error === 'object' && 'error' in error
     ? (error as components['schemas']['CanonicalErrorEnvelope']).error
     : undefined;
   const failure = new Error(detail?.message ?? `Admin API request failed (${response.status}).`);
-  Object.assign(failure, {status: response.status, code: detail?.code});
+  Object.assign(failure, {status: response.status, code: detail?.code, currentResource: detail?.current_resource});
   return failure;
 }
 

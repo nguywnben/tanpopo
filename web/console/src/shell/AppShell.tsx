@@ -2,14 +2,13 @@ import {lazy, Suspense, useEffect, useMemo, useState} from 'react';
 import {AppShell as AstryxAppShell} from '@astryxdesign/core/AppShell';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
-import {Heading} from '@astryxdesign/core/Heading';
 import {Icon} from '@astryxdesign/core/Icon';
 import type {IconName} from '@astryxdesign/core/Icon';
 import * as stylex from '@stylexjs/stylex';
 import {SideNav, SideNavHeading, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {Text} from '@astryxdesign/core/Text';
 import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
-import {HStack, VStack} from '@astryxdesign/core/Stack';
+import {HStack} from '@astryxdesign/core/Stack';
 import {getAdminSession, listProjects, listEnvironments} from '../api/client';
 import type {components} from '../api/generated';
 import {canAccessRoute, routeForPath, navigationGroups, type ConsoleRoute} from './routes';
@@ -22,7 +21,7 @@ type Environment = components['schemas']['Environment'];
 type Command = {id: string; label: string};
 
 const CommandPalette = lazy(() => import('@astryxdesign/core/CommandPalette').then(module => ({default: module.CommandPalette})));
-const OverviewPage = lazy(() => import('../pages/overview/OverviewPage').then(module => ({default: module.OverviewPage})));
+const PageContent = lazy(() => import('./PageContent').then(module => ({default: module.PageContent})));
 
 const navIcons: Record<ConsoleRoute['icon'], IconName> = {
   overview: 'info',
@@ -123,8 +122,6 @@ export function ConsoleShell() {
     bootstrap: () => commands,
     search: (query: string) => commands.filter(command => command.label.toLocaleLowerCase().includes(query.toLocaleLowerCase())),
   }), [commands]);
-  const activeProject = projects.find(project => project.id === projectId);
-  const activeEnvironment = environments.find(environment => environment.id === environmentId);
   const canUseEmergencyControls = roles.some(role => emergencyRoles.includes(role));
 
   useEffect(() => {
@@ -198,21 +195,12 @@ export function ConsoleShell() {
           }}
         />
       </Suspense>
-      {route.path === '/overview' && !loading && !loadError && canAccessRoute(route, roles)
-        ? <Suspense fallback={<Text role="status">Loading overview…</Text>}><OverviewPage /></Suspense>
-        : <VStack gap={4}>
-          <Heading level={1}>{route.label}</Heading>
-          {loading ? <Text role="status">Loading console context…</Text> : null}
-          {!loading && loadError ? <Text role="status">{offline ? 'The console is offline. Local assets remain available.' : 'Console context could not be loaded.'}</Text> : null}
-          {!loading && !loadError && projects.length === 0 ? <Text role="status">No projects are available for this account.</Text> : null}
-          {!loading && !loadError && projects.length > 0 ? (
-            <Text>
-              {activeProject?.name ?? 'Project'}{activeEnvironment ? ` / ${activeEnvironment.name}` : ''}
-              {session ? ` · ${session.roles.join(', ')}` : ''}
-            </Text>
-          ) : null}
-          {!canAccessRoute(route, roles) && !loading ? <Text role="alert">Your account does not have access to this section.</Text> : null}
-        </VStack>}
+      {loading ? <Text role="status">Loading console context…</Text>
+        : loadError ? <Text role="status">{offline ? 'The console is offline. Local assets remain available.' : 'Console context could not be loaded.'}</Text>
+          : <Suspense fallback={<Text role="status">Loading console section…</Text>}>
+            <PageContent route={route} pathname={pathname} roles={roles} loading={false} loadError={false} offline={offline}
+              projects={projects} environments={environments} projectId={projectId} environmentId={environmentId} session={session} />
+          </Suspense>}
     </AstryxAppShell>
   );
 }

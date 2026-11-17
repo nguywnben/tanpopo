@@ -4,10 +4,10 @@ import {Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Stack';
 import {Theme} from '@astryxdesign/core/theme';
 import {themes, defaultThemeSlug} from '../astryx-themes';
-import {ConsoleShell} from './shell/AppShell';
 
 const SetupWizardPage = lazy(() => import('./pages/setup/SetupWizardPage').then(module => ({default: module.SetupWizardPage})));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage').then(module => ({default: module.LoginPage})));
+const ConsoleShell = lazy(() => import('./shell/AppShell').then(module => ({default: module.ConsoleShell})));
 
 class ConsoleErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean}> {
   state = {hasError: false};
@@ -37,7 +37,7 @@ function PageRouter() {
   }, []);
   if (pathname === '/setup') return <Suspense fallback={<Text role="status">Loading first-run setup…</Text>}><SetupWizardPage /></Suspense>;
   if (pathname === '/login') return <Suspense fallback={<Text role="status">Loading sign-in…</Text>}><LoginPage /></Suspense>;
-  return <ConsoleShell />;
+  return <Suspense fallback={<Text role="status">Loading console…</Text>}><ConsoleShell /></Suspense>;
 }
 
 export default App;

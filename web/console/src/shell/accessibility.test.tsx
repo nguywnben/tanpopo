@@ -1,9 +1,9 @@
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {cleanup, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import axe from 'axe-core';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import App from '../App';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('console shell accessibility', () => {
   it('provides labeled context controls and has no serious axe violations', async () => {
@@ -34,7 +34,7 @@ describe('console shell accessibility', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Network unavailable')));
     render(<App />);
     expect(await screen.findByText('Running in Local Network / Offline Mode')).toBeInTheDocument();
-    expect(screen.getByText('The console is offline. Local assets remain available.')).toBeInTheDocument();
+    expect(await screen.findByText('The console is offline. Local assets remain available.', {}, {timeout: 5000})).toBeInTheDocument();
   });
 });
 
