@@ -889,9 +889,11 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			params.CredentialID != nil ||
 			params.AuthMode != nil
 
+		var currentPrimaryCred *string
 		var nextPrimaryCred *string
 		if curCredID.Valid && curCredID.String != "" {
 			v := curCredID.String
+			currentPrimaryCred = &v
 			nextPrimaryCred = &v
 		}
 		if params.CredentialID != nil {
@@ -975,7 +977,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 					InjectMode:   mode,
 				})
 			}
-			nextPrimaryCred, err = selectPrimaryCredential(explicitCredentialID, normalizedBindings)
+			nextPrimaryCred, err = selectPrimaryCredential(currentPrimaryCred, explicitCredentialID, params.CredentialID != nil, normalizedBindings)
 			if err != nil {
 				return err
 			}
@@ -1152,7 +1154,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 	return r.GetProviderConnection(ctx, params.OrgID, params.ConnectionID)
 }
 
-func selectPrimaryCredential(explicitCredentialID *string, bindings []SecretBindingInput) (*string, error) {
+func selectPrimaryCredential(currentCredentialID, explicitCredentialID *string, explicitCredentialSet bool, bindings []SecretBindingInput) (*string, error) {
 	var (
 		apiKeyCredentialID   *string
 		fallbackCredentialID *string
@@ -1177,6 +1179,9 @@ func selectPrimaryCredential(explicitCredentialID *string, bindings []SecretBind
 	}
 	if explicitCredentialID != nil {
 		return explicitCredentialID, nil
+	}
+	if !explicitCredentialSet && currentCredentialID != nil {
+		return currentCredentialID, nil
 	}
 	return fallbackCredentialID, nil
 }

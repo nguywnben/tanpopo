@@ -19,7 +19,7 @@ func TestSelectPrimaryCredentialPrefersAPIKeyRegardlessOfSlotOrder(t *testing.T)
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := selectPrimaryCredential(nil, tc.bindings)
+			got, err := selectPrimaryCredential(nil, nil, false, tc.bindings)
 			if err != nil {
 				t.Fatalf("selectPrimaryCredential() error = %v", err)
 			}
@@ -33,7 +33,19 @@ func TestSelectPrimaryCredentialPrefersAPIKeyRegardlessOfSlotOrder(t *testing.T)
 func TestSelectPrimaryCredentialKeepsExplicitConflictCheck(t *testing.T) {
 	explicit := "credential-explicit"
 	bindings := []SecretBindingInput{{SlotName: "api_key", CredentialID: "credential-api"}}
-	if _, err := selectPrimaryCredential(&explicit, bindings); !errors.Is(err, port.ErrInvalidInput) {
+	if _, err := selectPrimaryCredential(nil, &explicit, true, bindings); !errors.Is(err, port.ErrInvalidInput) {
 		t.Fatalf("expected explicit credential conflict to remain ErrInvalidInput, got %v", err)
+	}
+}
+
+func TestSelectPrimaryCredentialPreservesLegacyPrimaryOnSecondaryBindingMerge(t *testing.T) {
+	current := "credential-legacy"
+	bindings := []SecretBindingInput{{SlotName: "organization", CredentialID: "credential-org"}}
+	got, err := selectPrimaryCredential(&current, nil, false, bindings)
+	if err != nil {
+		t.Fatalf("selectPrimaryCredential() error = %v", err)
+	}
+	if got == nil || *got != current {
+		t.Fatalf("primary credential = %v, want preserved legacy credential %q", got, current)
 	}
 }
