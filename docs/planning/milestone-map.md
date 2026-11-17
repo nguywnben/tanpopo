@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0027: DONE` | `0 READY / 20 BLOCKED`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.33.0-dec-044-0027-done` | **Date:** `2026-11-17`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0027: DONE` | `TP-IMP-0028: READY` | `1 READY / 19 BLOCKED`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.34.0-dec-045-0028-ready` | **Date:** `2026-11-17`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0`, Milestone `M1`, Wave 2.1, and Units `TP-IMP-0021`..`0027` are **`DONE` (`27 / 47`)**. Unit 27: `DEC-044`, implementation `fe010fb1`, CI `44042092153`, independent code/security reviews clear. `TP-IMP-0028`..`0047` remain blocked pending sequential gates, with direct Owner authorization still required for `0031`..`0047`.
+> - **Live Status:** Milestone `M0`, Milestone `M1`, Wave 2.1, and Units `TP-IMP-0021`..`0027` are **`DONE` (`27 / 47`)**. Unit 27: `DEC-044`, implementation `fe010fb1`, CI `44042092153`, acceptance CI `44043662461`, independent code/security reviews clear. Unit `TP-IMP-0028` is **`READY`** under `DEC-045`; `TP-IMP-0029`..`0047` remain blocked pending sequential gates, with direct Owner authorization still required for `0031`..`0047`.
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---

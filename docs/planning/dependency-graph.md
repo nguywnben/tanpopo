@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0027: DONE` | `0 READY / 20 BLOCKED`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.34.0-dec-044-0027-done` | **Date:** `2026-11-17`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0027: DONE` | `TP-IMP-0028: READY` | `1 READY / 19 BLOCKED`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.35.0-dec-045-0028-ready` | **Date:** `2026-11-17`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0027` = **`DONE`** (Unit 27 accepted under [`DEC-044`](../governance/decisions.md), implementation `fe010fb1` / CI `44042092153`); `TP-IMP-0028`..`0047` (`20 / 47`) remain blocked pending sequential DoR checks and existing authorization gates.
+> - **Live DAG Frontier:** `TP-IMP-0001`..`0027` = **`DONE`** (Unit 27 accepted under [`DEC-044`](../governance/decisions.md), implementation `fe010fb1` / CI `44042092153` / acceptance CI `44043662461`); `TP-IMP-0028` = **`READY`** under [`DEC-045`](../governance/decisions.md) after DoR verification; `TP-IMP-0029`..`0047` (`19 / 47`) remain blocked behind sequential dependencies and existing authorization gates.
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -48,7 +48,7 @@ flowchart TD
         U25["TP-IMP-0025: Admin API Part 2 (Plugins, Routes, FinOps, Ops)"]
         U26["TP-IMP-0026: Astryx Console Setup, Figtree Local & AppShell"]
         U27["TP-IMP-0027: UI SCR-01..02 (DONE — Setup Wizard & Overview)"]
-        U28["TP-IMP-0028: UI SCR-03..07 (Providers, Models & Plugins)"]
+        U28["TP-IMP-0028: UI SCR-03..07 (READY — Providers, Models & Plugins)"]
         U29["TP-IMP-0029: UI SCR-08, 09, 13 (Routes, Policies & Keys)"]
         U30["TP-IMP-0030: UI SCR-11, 12, 14, 16 (Traces, FinOps, Sec, Ops)"]
         U31["TP-IMP-0031: Unified tanpopo CLI & Embedded SPA Binary"]
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier (`27 DONE`, `0 READY`, `20 BLOCKED` — `DEC-044`):** `TP-IMP-0001..0027` are `DONE`; `TP-IMP-0028`..`0047` remain blocked pending the next sequential DoR unlock under `DEC-041`. Review tiers, `COND-PO-01`..`05`, and direct human Product Owner authorization for `0031`..`0047` remain in force.
+> **Live Queue Frontier (`27 DONE`, `1 READY`, `19 BLOCKED` — `DEC-045`):** `TP-IMP-0001..0027` are `DONE`; `TP-IMP-0028` is `READY` after DoR verification; `TP-IMP-0029`..`0047` remain blocked under sequential opening in `DEC-041`. Review tiers, `COND-PO-01`..`05`, and direct human Product Owner authorization for `0031`..`0047` remain in force.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.
