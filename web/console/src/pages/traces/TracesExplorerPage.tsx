@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Section} from '@astryxdesign/core/Section';
@@ -24,10 +24,13 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [message, setMessage] = useState('');
+  const queryGeneration = useRef(0);
   const mayReadTraces = !roles.includes('FINOPS_VIEWER') || roles.some(role => role !== 'FINOPS_VIEWER');
 
   useEffect(() => {
     let active = true;
+    queryGeneration.current += 1;
+    setTraces([]); setNextCursor(undefined); setLoadingMore(false);
     if (!mayReadTraces) { setLoading(false); return; }
     setLoading(true); setMessage('');
     listTracePage(environmentId, model).then(page => { if (active) { setTraces(page.data as Trace[]); setNextCursor(page.nextCursor); } })
@@ -38,13 +41,15 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
 
   async function loadMore() {
     if (!nextCursor || loadingMore) return;
+    const generation = queryGeneration.current;
     setLoadingMore(true); setMessage('');
     try {
       const page = await listTracePage(environmentId, model, nextCursor);
+      if (generation !== queryGeneration.current) return;
       setTraces(current => [...current, ...page.data as Trace[]]);
       setNextCursor(page.nextCursor);
     } catch (error) { setMessage(errorMessage(error)); }
-    finally { setLoadingMore(false); }
+    finally { if (generation === queryGeneration.current) setLoadingMore(false); }
   }
 
   const visible = useMemo(() => traces.filter(trace => !appliedError || (trace.error_code ?? '').toLowerCase().includes(appliedError.toLowerCase())), [traces, appliedError]);
@@ -85,7 +90,7 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
           {key: 'usage_accuracy', header: 'Usage accuracy', renderCell: row => <Token label={String(row.usage_accuracy).replaceAll('_', ' ')} color={accuracyColor(String(row.usage_accuracy))} icon={accuracyIcon(String(row.usage_accuracy))} />},
           {key: 'duration_ms', header: 'Duration (ms)'}, {key: 'created_at', header: 'Created'},
         ]} />}
-      {nextCursor ? <Button label={loadingMore ? 'Loading traces…' : 'Load more traces'} variant="secondary" isDisabled={loadingMore} onClick={() => void loadMore()} /> : null}
+      {!loading && nextCursor ? <Button label={loadingMore ? 'Loading traces…' : 'Load more traces'} variant="secondary" isDisabled={loadingMore} onClick={() => void loadMore()} /> : null}
     </VStack></Section>
   </VStack>;
 }

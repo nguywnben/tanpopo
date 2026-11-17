@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {AlertDialog} from '@astryxdesign/core/AlertDialog';
 import {Button} from '@astryxdesign/core/Button';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
@@ -31,26 +31,31 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [message, setMessage] = useState('');
+  const auditGeneration = useRef(0);
   const authorized = roles.some(role => securityRoles.includes(role));
   const canTrigger = roles.some(role => ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'].includes(role));
   const requiresSlugConfirmation = level === 'PROJECT';
 
   async function refresh() {
+    const generation = ++auditGeneration.current;
     setLoading(true); setMessage('');
-    try { const page = await listAuditEvents(actionFilter); setEvents(page.data as AuditEvent[]); setNextAuditCursor(page.nextCursor); }
-    catch (error) { setMessage(errorMessage(error)); }
-    finally { setLoading(false); }
+    setEvents([]); setNextAuditCursor(undefined); setLoadingMore(false);
+    try { const page = await listAuditEvents(actionFilter); if (generation === auditGeneration.current) { setEvents(page.data as AuditEvent[]); setNextAuditCursor(page.nextCursor); } }
+    catch (error) { if (generation === auditGeneration.current) setMessage(errorMessage(error)); }
+    finally { if (generation === auditGeneration.current) setLoading(false); }
   }
   useEffect(() => { if (authorized) void refresh(); }, [authorized, actionFilter]);
 
   async function loadMoreAuditEvents() {
-    if (!nextAuditCursor || loadingMore) return;
+    if (!nextAuditCursor || loading || loadingMore) return;
+    const generation = auditGeneration.current;
     setLoadingMore(true); setMessage('');
     try {
       const page = await listAuditEvents(actionFilter, nextAuditCursor);
+      if (generation !== auditGeneration.current) return;
       setEvents(current => [...current, ...page.data as AuditEvent[]]); setNextAuditCursor(page.nextCursor);
-    } catch (error) { setMessage(errorMessage(error)); }
-    finally { setLoadingMore(false); }
+    } catch (error) { if (generation === auditGeneration.current) setMessage(errorMessage(error)); }
+    finally { if (generation === auditGeneration.current) setLoadingMore(false); }
   }
 
   async function previewBlastRadius() {
