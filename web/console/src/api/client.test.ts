@@ -26,7 +26,7 @@ describe('typed Admin API client', () => {
     expect(nextHeaders.get('X-CSRF-Token')).toBeNull();
   });
 
-  it('adds CSRF and If-Match to writes without persisting credentials', async () => {
+  it('forwards If-Match through the typed client and adds session CSRF', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, {status: 204}));
     vi.stubGlobal('fetch', fetchMock);
     rememberCsrfToken('csrf-test-token');
@@ -44,7 +44,47 @@ describe('typed Admin API client', () => {
     expect(request.credentials).toBe('same-origin');
   });
 
-  it('refuses writes before a session CSRF token is available', async () => {
+  it('rejects an ETag-protected operation when the client request omits If-Match', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const putWithoutHeaders = api.PUT as unknown as (path: string, options: unknown) => Promise<unknown>;
+
+    await expect(putWithoutHeaders('/admin/v1/organizations/{orgId}/extension-policies', {
+      params: {path: {orgId: 'org-1'}},
+      body: {min_plugin_trust: 'VERIFIED_ONLY', policies: []},
+    })).rejects.toThrow('If-Match ETag');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not require or attach CSRF on the OpenAPI pre-auth login and bootstrap operations', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, {status: 204}));
+    vi.stubGlobal('fetch', fetchMock);
+    rememberCsrfToken('csrf-existing-session');
+
+    await api.POST('/admin/v1/auth/login', {body: {email: 'admin@example.test', password: 'password'}});
+    await api.POST('/admin/v1/bootstrap/complete', {body: {
+      bootstrap_token: 'b'.repeat(32),
+      owner_email: 'owner@example.test',
+      owner_password: 'long-enough-password',
+      org_name: 'Example Organization',
+      project_name: 'Example Project',
+      master_kek_backup_acknowledged: true,
+    }});
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [input] of fetchMock.mock.calls) {
+      expect((input as Request).headers.get('X-CSRF-Token')).toBeNull();
+    }
+  });
+
+  it('requires CSRF for session mutations and attaches the in-memory session token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, {status: 204}));
+    vi.stubGlobal('fetch', fetchMock);
     await expect(api.POST('/admin/v1/auth/logout')).rejects.toThrow('CSRF token');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    rememberCsrfToken('csrf-session-token');
+    await api.POST('/admin/v1/auth/logout');
+    expect((fetchMock.mock.calls[0][0] as Request).headers.get('X-CSRF-Token')).toBe('csrf-session-token');
   });
 });

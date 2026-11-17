@@ -1,5 +1,6 @@
 import createClient from 'openapi-fetch';
 import type {components, paths} from './generated';
+import {operationPolicy} from './operation-policy.generated';
 
 export const api = createClient<paths>({
   baseUrl: typeof window === 'undefined' ? '' : window.location.origin,
@@ -8,6 +9,17 @@ export const api = createClient<paths>({
 });
 
 let csrfToken: string | undefined;
+
+const operationMatchers = Object.entries(operationPolicy).map(([operation, policy]) => {
+  const [method, route] = operation.split(' ', 2);
+  const pattern = route.split('/').map(segment => segment.startsWith('{') && segment.endsWith('}') ? '[^/]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('/');
+  return {method, pattern: new RegExp(`^${pattern}$`), policy};
+});
+
+function policyFor(request: Request) {
+  const pathname = new URL(request.url).pathname;
+  return operationMatchers.find(operation => operation.method === request.method.toUpperCase() && operation.pattern.test(pathname))?.policy;
+}
 
 export function rememberCsrfToken(token: string) {
   csrfToken = token;
@@ -19,9 +31,14 @@ export function clearCsrfToken() {
 
 api.use({
   onRequest({request}) {
-    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method.toUpperCase())) return request;
-    if (!csrfToken) throw new Error('A CSRF token is required for state-changing requests.');
+    const method = request.method.toUpperCase();
+    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return request;
+    const policy = policyFor(request);
+    if (!policy) throw new Error(`No OpenAPI security policy is defined for ${method} ${new URL(request.url).pathname}.`);
     const headers = new Headers(request.headers);
+    if (policy.ifMatch && !headers.has('If-Match')) throw new Error('An If-Match ETag is required for this Admin API operation.');
+    if (!policy.csrf) return request;
+    if (!csrfToken) throw new Error('A CSRF token is required for state-changing requests.');
     headers.set('X-CSRF-Token', csrfToken);
     return new Request(request, {headers});
   },
