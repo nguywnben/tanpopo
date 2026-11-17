@@ -48,3 +48,11 @@ func TestPermissionSetFromManifestIncludesEscalationFields(t *testing.T) {
 		t.Fatalf("expected full permission expansion to be represented, got %+v", delta)
 	}
 }
+
+func TestFirstInstallSidecarTierRequiresPermissionConsent(t *testing.T) {
+	approved := permissionDiffBaseline(installer.PermissionSet{}, false)
+	candidate := installer.PermissionSet{ExecutionTier: installer.ExecutionTierIsolatedSidecarT3}
+	if delta := installer.ComputePermissionDelta(approved, candidate); !delta.HasEscalation() || !delta.TierEscalated {
+		t.Fatalf("first sidecar install must be treated as an escalation from the no-extension baseline: %+v", delta)
+	}
+}

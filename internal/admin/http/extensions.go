@@ -1228,7 +1228,7 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 		execTierStr = targetExec.String
 	}
 	candidatePerms := permissionSetFromManifest(extManifest, execTierStr)
-	permissionDelta := installer.ComputePermissionDelta(approvedPerms, candidatePerms)
+	permissionDelta := installer.ComputePermissionDelta(permissionDiffBaseline(approvedPerms, actSemver.Valid), candidatePerms)
 	candHosts = candidatePerms.AllowedHosts
 	slots := candidatePerms.SecretSlots
 	addedHosts = permissionDelta.AddedHosts
@@ -1255,20 +1255,27 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 		ExecutionTier:       mapExecutionTierOpenAPI(execTierStr),
 		ActiveExecutionTier: activeExecutionTier,
 		ActiveAllowedHosts:  appHosts,
-		CandidateAllowedHosts: candHosts,
-		AddedAllowedHosts:   addedHosts,
-		RemovedAllowedHosts: removedHosts,
-		SecretSlots:         slots,
-		ActiveSecretSlots:   activeSlots,
-		AddedSecretSlots:    addedSlots,
-		QuotaEscalated:      quotaEscalated,
-		ActiveQuotas:        activeQuotas,
-		Quotas:              candidateQuotas,
-		ActivePermissions:   activePermissions,
+		CandidateAllowedHosts:  candHosts,
+		AddedAllowedHosts:      addedHosts,
+		RemovedAllowedHosts:    removedHosts,
+		SecretSlots:            slots,
+		ActiveSecretSlots:      activeSlots,
+		AddedSecretSlots:       addedSlots,
+		QuotaEscalated:         quotaEscalated,
+		ActiveQuotas:           activeQuotas,
+		Quotas:                 candidateQuotas,
+		ActivePermissions:      activePermissions,
 		CandidatePermissions: candidatePerms,
-		PermissionDelta:     permissionDelta,
-		HasEscalation:       permissionDelta.HasEscalation(),
+		PermissionDelta:        permissionDelta,
+		HasEscalation:          permissionDelta.HasEscalation(),
 	}, ver, nil
+}
+
+func permissionDiffBaseline(approved installer.PermissionSet, hasActiveVersion bool) installer.PermissionSet {
+	if !hasActiveVersion && approved.ExecutionTier == "" {
+		approved.ExecutionTier = installer.ExecutionTierDeclarativeT1
+	}
+	return approved
 }
 
 func permissionSetFromManifest(manifest installer.ExtensionManifest, executionTier string) installer.PermissionSet {
