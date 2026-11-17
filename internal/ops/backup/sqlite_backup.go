@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -74,50 +75,57 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	if store == nil || keys == nil || strings.TrimSpace(outputDir) == "" {
 		return Receipt{}, errors.New("backup: snapshotter, key wrapper, and output directory are required")
 	}
-	absOutputDir, err := filepath.Abs(outputDir)
-	if err != nil {
-		return Receipt{}, fmt.Errorf("backup: resolve output directory: %w", err)
-	}
-	if info, statErr := os.Lstat(absOutputDir); statErr == nil {
-		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			return Receipt{}, errors.New("backup: output directory must be a real directory, not a symlink")
-		}
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return Receipt{}, fmt.Errorf("backup: inspect output directory: %w", statErr)
-	}
-	if err := os.MkdirAll(absOutputDir, 0o700); err != nil {
-		return Receipt{}, fmt.Errorf("backup: create output directory: %w", err)
-	}
-	info, err := os.Lstat(absOutputDir)
-	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return Receipt{}, errors.New("backup: output directory changed or is not a real directory")
-	}
-	if runtime.GOOS != "windows" {
-		if err := os.Chmod(absOutputDir, 0o700); err != nil {
-			return Receipt{}, fmt.Errorf("backup: protect output directory: %w", err)
-		}
-	}
-	workDir, err := os.MkdirTemp(absOutputDir, ".tanpopo-backup-")
-	if err != nil {
-		return Receipt{}, fmt.Errorf("backup: create staging directory: %w", err)
-	}
-	defer os.RemoveAll(workDir)
-	if runtime.GOOS != "windows" {
-		if err := os.Chmod(workDir, 0o700); err != nil {
-			return Receipt{}, fmt.Errorf("backup: protect staging directory: %w", err)
-		}
-	}
-
 	createdAt := time.UnixMilli(nowMs).UTC().Format(time.RFC3339Nano)
 	backupID, err := randomHexID()
 	if err != nil {
 		return Receipt{}, err
 	}
-	dbPath := filepath.Join(workDir, "database.sqlite")
+	outputRoot, err := openOutputRoot(outputDir)
+	if err != nil {
+		return Receipt{}, err
+	}
+	defer outputRoot.Close()
+	rootPathFile, sqliteRootPath, err := pathForOpenRoot(outputRoot, outputDir)
+	if err != nil {
+		return Receipt{}, err
+	}
+	defer rootPathFile.Close()
+	stageName := ".tanpopo-backup-" + backupID
+	if err := outputRoot.Mkdir(stageName, 0o700); err != nil {
+		return Receipt{}, fmt.Errorf("backup: create protected staging directory: %w", err)
+	}
+	stageRoot, err := outputRoot.OpenRoot(stageName)
+	if err != nil {
+		return Receipt{}, fmt.Errorf("backup: open protected staging directory: %w", err)
+	}
+	defer func() {
+		for _, name := range []string{"database.sqlite", "tanpopo.lock", "payload.tar.gz"} {
+			_ = stageRoot.Remove(name)
+		}
+		_ = stageRoot.Close()
+		_ = outputRoot.Remove(stageName)
+	}()
+	stageInfo, err := stageRoot.Stat(".")
+	entryInfo, entryErr := outputRoot.Lstat(stageName)
+	if err != nil || entryErr != nil || entryInfo.Mode()&os.ModeSymlink != 0 || !os.SameFile(stageInfo, entryInfo) {
+		return Receipt{}, errors.New("backup: staging directory changed during secure open")
+	}
+	stagePathFile, sqliteStagePath, err := pathForOpenRoot(stageRoot, filepath.Join(sqliteRootPath, stageName))
+	if err != nil {
+		return Receipt{}, err
+	}
+	defer stagePathFile.Close()
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(sqliteStagePath, 0o700); err != nil {
+			return Receipt{}, fmt.Errorf("backup: protect staging directory: %w", err)
+		}
+	}
+	dbRelPath := "database.sqlite"
+	dbPath := filepath.Join(sqliteStagePath, dbRelPath)
 	if err := store.BackupTo(ctx, dbPath); err != nil {
 		return Receipt{}, fmt.Errorf("backup: create online SQLite snapshot: %w", err)
 	}
-	dbHash, err := fileSHA256(dbPath)
+	dbHash, err := fileSHA256(stageRoot, dbRelPath)
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -129,11 +137,11 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 			if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 				return Receipt{}, errors.New("backup: lockfile must be a regular non-symlink file")
 			}
-			lockfileCopy = filepath.Join(workDir, "tanpopo.lock")
-			if err := copyFile(ctx, lockfilePath, lockfileCopy, info); err != nil {
+			lockfileCopy = "tanpopo.lock"
+			if err := copyFile(ctx, lockfilePath, stageRoot, lockfileCopy, info); err != nil {
 				return Receipt{}, fmt.Errorf("backup: stage extension lockfile: %w", err)
 			}
-			lockfileHash, err = fileSHA256(lockfileCopy)
+			lockfileHash, err = fileSHA256(stageRoot, lockfileCopy)
 			if err != nil {
 				return Receipt{}, err
 			}
@@ -142,9 +150,9 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		}
 	}
 
-	payloadPath := filepath.Join(workDir, "payload.tar.gz")
+	payloadPath := "payload.tar.gz"
 	m := manifest{FormatVersion: 1, CreatedAt: createdAt, DatabaseSHA256: dbHash, LockfileSHA256: lockfileHash}
-	if err := writePayload(ctx, payloadPath, dbPath, lockfileCopy, m); err != nil {
+	if err := writePayload(ctx, stageRoot, payloadPath, dbRelPath, lockfileCopy, m); err != nil {
 		return Receipt{}, err
 	}
 
@@ -172,37 +180,121 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, fmt.Errorf("backup: encode archive header: %w", err)
 	}
 	finalName := "tanpopo-backup-" + backupID + ".tpop.enc"
-	tempArchive := filepath.Join(workDir, finalName+".partial")
-	if err := encryptPayload(ctx, tempArchive, payloadPath, dataKey, noncePrefix, backupID, headerBytes); err != nil {
+	tempArchive := ".tanpopo-backup-" + backupID + ".partial"
+	defer outputRoot.Remove(tempArchive)
+	if err := encryptPayload(ctx, stageRoot, outputRoot, tempArchive, payloadPath, dataKey, noncePrefix, backupID, headerBytes); err != nil {
 		return Receipt{}, err
 	}
-	finalPath := filepath.Join(outputDir, finalName)
-	if _, err := os.Lstat(finalPath); err == nil {
+	if _, err := outputRoot.Lstat(finalName); err == nil {
 		return Receipt{}, errors.New("backup: destination archive already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Receipt{}, fmt.Errorf("backup: inspect archive destination: %w", err)
 	}
-	if err := os.Rename(tempArchive, finalPath); err != nil {
+	if err := renameRootEntry(sqliteRootPath, tempArchive, finalName); err != nil {
 		return Receipt{}, fmt.Errorf("backup: publish encrypted archive: %w", err)
 	}
-	if runtime.GOOS != "windows" {
-		if err := os.Chmod(finalPath, 0o600); err != nil {
-			_ = os.Remove(finalPath)
-			return Receipt{}, fmt.Errorf("backup: protect encrypted archive: %w", err)
-		}
-	}
-	archiveHash, err := fileSHA256(finalPath)
+	archiveHash, err := fileSHA256(outputRoot, finalName)
 	if err != nil {
-		_ = os.Remove(finalPath)
+		_ = outputRoot.Remove(finalName)
 		return Receipt{}, err
 	}
-	info, err := os.Stat(finalPath)
+	info, err := outputRoot.Stat(finalName)
 	if err != nil {
 		return Receipt{}, fmt.Errorf("backup: inspect published archive: %w", err)
 	}
 	return Receipt{BackupID: backupID, ArchiveFilename: finalName, SHA256Hex: archiveHash, SizeBytes: info.Size(), CreatedAt: createdAt}, nil
 }
 
-func writePayload(ctx context.Context, path, dbPath, lockfilePath string, m manifest) error {
-	out, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+func openOutputRoot(outputDir string) (*os.Root, error) {
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return nil, fmt.Errorf("backup: resolve output directory: %w", err)
+	}
+	parentRoot, err := os.OpenRoot(filepath.Dir(absOutputDir))
+	if err != nil {
+		return nil, fmt.Errorf("backup: open output parent directory: %w", err)
+	}
+	defer parentRoot.Close()
+	base := filepath.Base(absOutputDir)
+	if base == "." || base == string(filepath.Separator) || base == ".." {
+		return nil, errors.New("backup: invalid output directory name")
+	}
+	info, err := parentRoot.Lstat(base)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := parentRoot.Mkdir(base, 0o700); err != nil {
+			return nil, fmt.Errorf("backup: create output directory: %w", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("backup: inspect output directory: %w", err)
+	} else if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return nil, errors.New("backup: output directory must be a real directory, not a symlink")
+	}
+	root, err := parentRoot.OpenRoot(base)
+	if err != nil {
+		return nil, fmt.Errorf("backup: open output directory: %w", err)
+	}
+	openedInfo, err := root.Stat(".")
+	if err != nil {
+		_ = root.Close()
+		return nil, fmt.Errorf("backup: inspect opened output directory: %w", err)
+	}
+	entryInfo, err := parentRoot.Lstat(base)
+	if err != nil || entryInfo.Mode()&os.ModeSymlink != 0 || !os.SameFile(openedInfo, entryInfo) {
+		_ = root.Close()
+		return nil, errors.New("backup: output directory changed during secure open")
+	}
+	if runtime.GOOS != "windows" {
+		rootFile, rootPath, pathErr := pathForOpenRoot(root, absOutputDir)
+		if pathErr != nil {
+			_ = root.Close()
+			return nil, pathErr
+		}
+		chmodErr := os.Chmod(rootPath, 0o700)
+		_ = rootFile.Close()
+		if chmodErr != nil {
+			_ = root.Close()
+			return nil, fmt.Errorf("backup: protect output directory: %w", chmodErr)
+		}
+	}
+	return root, nil
+}
+
+func renameRootEntry(rootPath, oldName, newName string) error {
+	return os.Rename(filepath.Join(rootPath, oldName), filepath.Join(rootPath, newName))
+}
+
+func pathForOpenRoot(root *os.Root, fallback string) (*os.File, string, error) {
+	dir, err := root.Open(".")
+	if err != nil {
+		return nil, "", fmt.Errorf("backup: pin output directory: %w", err)
+	}
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		abs, err := filepath.Abs(fallback)
+		if err != nil {
+			_ = dir.Close()
+			return nil, "", fmt.Errorf("backup: resolve output directory: %w", err)
+		}
+		return dir, abs, nil
+	}
+	conn, err := dir.SyscallConn()
+	if err != nil {
+		_ = dir.Close()
+		return nil, "", fmt.Errorf("backup: pin output directory handle: %w", err)
+	}
+	var fd uintptr
+	if err := conn.Control(func(raw uintptr) { fd = raw }); err != nil {
+		_ = dir.Close()
+		return nil, "", fmt.Errorf("backup: read output directory handle: %w", err)
+	}
+	procDir := "/proc/self/fd"
+	if runtime.GOOS == "darwin" {
+		procDir = "/dev/fd"
+	}
+	return dir, filepath.Join(procDir, strconv.FormatUint(uint64(fd), 10)), nil
+}
+
+func writePayload(ctx context.Context, root *os.Root, path, dbPath, lockfilePath string, m manifest) error {
+	out, err := root.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("backup: create compressed payload: %w", err)
 	}
@@ -210,16 +302,16 @@ func writePayload(ctx context.Context, path, dbPath, lockfilePath string, m mani
 	defer func() {
 		_ = out.Close()
 		if !good {
-			_ = os.Remove(path)
+			_ = root.Remove(path)
 		}
 	}()
 	compressed := gzip.NewWriter(out)
 	archive := tar.NewWriter(compressed)
-	if err := addArchiveFile(ctx, archive, dbPath, "database.sqlite"); err != nil {
+	if err := addArchiveFile(ctx, archive, root, dbPath, "database.sqlite"); err != nil {
 		return err
 	}
 	if lockfilePath != "" {
-		if err := addArchiveFile(ctx, archive, lockfilePath, "tanpopo.lock"); err != nil {
+		if err := addArchiveFile(ctx, archive, root, lockfilePath, "tanpopo.lock"); err != nil {
 			return err
 		}
 	}
@@ -249,8 +341,8 @@ func writePayload(ctx context.Context, path, dbPath, lockfilePath string, m mani
 	return nil
 }
 
-func addArchiveFile(ctx context.Context, tarWriter *tar.Writer, path, name string) error {
-	file, err := os.Open(path)
+func addArchiveFile(ctx context.Context, tarWriter *tar.Writer, root *os.Root, path, name string) error {
+	file, err := root.Open(path)
 	if err != nil {
 		return fmt.Errorf("backup: open staged file %q: %w", name, err)
 	}
@@ -268,7 +360,7 @@ func addArchiveFile(ctx context.Context, tarWriter *tar.Writer, path, name strin
 	return nil
 }
 
-func encryptPayload(ctx context.Context, destPath, payloadPath string, key, noncePrefix []byte, backupID string, header []byte) error {
+func encryptPayload(ctx context.Context, srcRoot, dstRoot *os.Root, destPath, payloadPath string, key, noncePrefix []byte, backupID string, header []byte) error {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return fmt.Errorf("backup: initialize archive cipher: %w", err)
@@ -277,12 +369,12 @@ func encryptPayload(ctx context.Context, destPath, payloadPath string, key, nonc
 	if err != nil {
 		return fmt.Errorf("backup: initialize archive authentication: %w", err)
 	}
-	src, err := os.Open(payloadPath)
+	src, err := srcRoot.Open(payloadPath)
 	if err != nil {
 		return fmt.Errorf("backup: open compressed payload: %w", err)
 	}
 	defer src.Close()
-	dst, err := os.OpenFile(destPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	dst, err := dstRoot.OpenFile(destPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("backup: create encrypted archive: %w", err)
 	}
@@ -290,7 +382,7 @@ func encryptPayload(ctx context.Context, destPath, payloadPath string, key, nonc
 	defer func() {
 		_ = dst.Close()
 		if !good {
-			_ = os.Remove(destPath)
+			_ = dstRoot.Remove(destPath)
 		}
 	}()
 	if _, err := io.WriteString(dst, archiveMagic); err != nil {
@@ -357,8 +449,8 @@ func chunkAAD(backupID string, index uint64, header []byte) []byte {
 	return append(aad, headerDigest[:]...)
 }
 
-func fileSHA256(path string) (string, error) {
-	f, err := os.Open(path)
+func fileSHA256(root *os.Root, path string) (string, error) {
+	f, err := root.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("backup: open file for checksum: %w", err)
 	}
@@ -370,7 +462,7 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func copyFile(ctx context.Context, src, dst string, expected os.FileInfo) error {
+func copyFile(ctx context.Context, src string, root *os.Root, dst string, expected os.FileInfo) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -383,7 +475,7 @@ func copyFile(ctx context.Context, src, dst string, expected os.FileInfo) error 
 	if !opened.Mode().IsRegular() || !os.SameFile(expected, opened) {
 		return errors.New("backup: lockfile changed while opening; refusing to follow a replacement path")
 	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	out, err := root.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
@@ -391,11 +483,11 @@ func copyFile(ctx context.Context, src, dst string, expected os.FileInfo) error 
 	syncErr := out.Sync()
 	closeErr := out.Close()
 	if copyErr != nil {
-		_ = os.Remove(dst)
+		_ = root.Remove(dst)
 		return copyErr
 	}
 	if syncErr != nil {
-		_ = os.Remove(dst)
+		_ = root.Remove(dst)
 		return syncErr
 	}
 	return closeErr
