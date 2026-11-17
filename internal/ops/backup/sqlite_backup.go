@@ -723,7 +723,7 @@ func containsInlineMasterKEK(node *yaml.Node, seen map[*yaml.Node]bool) bool {
 			canonicalKey := strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(strings.TrimSpace(key.Value)))
 			switch canonicalKey {
 			case "master_key", "masterkey", "master_kek", "masterkek", "tanpopo_master_key", "tanpopomasterkey":
-				if value.Kind != yaml.ScalarNode || (strings.TrimSpace(value.Value) != "" && !isEnvironmentReference(value.Value)) {
+				if isInlineMasterKEKValue(value, make(map[*yaml.Node]bool)) {
 					return true
 				}
 			}
@@ -742,6 +742,21 @@ func containsInlineMasterKEK(node *yaml.Node, seen map[*yaml.Node]bool) bool {
 		return containsInlineMasterKEK(node.Alias, seen)
 	}
 	return false
+}
+
+func isInlineMasterKEKValue(node *yaml.Node, seen map[*yaml.Node]bool) bool {
+	if node == nil || seen[node] {
+		return true
+	}
+	seen[node] = true
+	if node.Kind == yaml.AliasNode {
+		return isInlineMasterKEKValue(node.Alias, seen)
+	}
+	if node.Kind != yaml.ScalarNode {
+		return true
+	}
+	value := strings.TrimSpace(node.Value)
+	return value != "" && !isEnvironmentReference(value)
 }
 
 func isEnvironmentReference(value string) bool {
