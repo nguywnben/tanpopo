@@ -275,7 +275,6 @@ func TestAC1DeclarativeAdapter4EntityHierarchyAndBlindBrokerValidation(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	manifestYAML := fmt.Sprintf(`
 apiVersion: tanpopo.dev/extension/v1alpha1
 kind: DeclarativeProviderAdapter
@@ -1016,6 +1015,17 @@ adapter:
 	if err != nil {
 		t.Fatal(err)
 	}
+	siblingProjectID := projA2.ID
+	siblingSecret, err := h.vault.SealSecret(h.ctx, vault.SealSecretParams{
+		OrgID:          orgA,
+		OwnerProjectID: &siblingProjectID,
+		Name:           "projA2-secret",
+		SecretKind:     vault.SecretKindAPIKey,
+		Plaintext:      []byte("sk-projA2-secret"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// 1. Project-owned secret CANNOT bind to org-wide connection (OwnerProjectID == nil) or downward-shared connection.
 	if _, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
@@ -1093,6 +1103,41 @@ adapter:
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	legacyConn, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID:           orgA,
+		OwnerProjectID:  &projA1,
+		AdapterID:       adp.ID,
+		CredentialID:    &projSecret.ID,
+		Name:            "Legacy Primary Connection",
+		EndpointBaseURL: "https://api.example.com",
+		DataRegion:      "us",
+		BillingMode:     catalog.BillingModeCommercialAPI,
+		AuthMode:        catalog.AuthModeAPIKey,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx, `DELETE FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ? AND slot_name = 'api_key'`, orgA, legacyConn.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.UpdateProviderConnection(h.ctx, catalog.UpdateProviderConnectionParams{
+		OrgID: orgA, ConnectionID: legacyConn.ID, ExpectedVersion: legacyConn.Version,
+		CredentialID: &siblingSecret.ID, MergeBindings: true,
+		SecretBindings: []catalog.SecretBindingInput{{SlotName: "organization", CredentialID: projSecret.ID}},
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("expected explicit out-of-scope primary credential to be rejected on partial merge, got %v", err)
+	}
+	legacyMerged, err := h.repo.UpdateProviderConnection(h.ctx, catalog.UpdateProviderConnectionParams{
+		OrgID: orgA, ConnectionID: legacyConn.ID, ExpectedVersion: legacyConn.Version,
+		MergeBindings: true,
+		SecretBindings: []catalog.SecretBindingInput{{SlotName: "organization", CredentialID: projSecret.ID}},
+	})
+	if err != nil {
+		t.Fatalf("merge into legacy connection without api_key binding: %v", err)
+	}
+	if legacyMerged.CredentialID == nil || *legacyMerged.CredentialID != projSecret.ID {
+		t.Fatalf("legacy primary credential changed during secondary-slot merge: got %v, want %q", legacyMerged.CredentialID, projSecret.ID)
 	}
 	organizationSecret, err := h.vault.SealSecret(h.ctx, vault.SealSecretParams{
 		OrgID: orgA, OwnerProjectID: &projA1, Name: "projA1-organization-secret", SecretKind: vault.SecretKindAPIKey, Plaintext: []byte("sk-projA1-organization"),

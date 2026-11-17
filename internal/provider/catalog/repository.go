@@ -998,15 +998,11 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			if qerr != nil {
 				return mapDBError(qerr)
 			}
-			hasAPIKeySlot := false
 			for rows.Next() {
 				var b SecretBindingInput
 				if serr := rows.Scan(&b.SlotName, &b.CredentialID, &b.InjectMode); serr != nil {
 					_ = rows.Close()
 					return mapDBError(serr)
-				}
-				if b.SlotName == "api_key" {
-					hasAPIKeySlot = true
 				}
 				bindingsToValidate = append(bindingsToValidate, b)
 			}
@@ -1015,13 +1011,20 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 				return mapDBError(rerr)
 			}
 			_ = rows.Close()
-			if !hasAPIKeySlot && nextPrimaryCred != nil && *nextPrimaryCred != "" {
-				bindingsToValidate = append(bindingsToValidate, SecretBindingInput{
-					SlotName:     "api_key",
-					CredentialID: *nextPrimaryCred,
-					InjectMode:   InjectModeHostBlind,
-				})
+		}
+		hasAPIKeySlot := false
+		for _, binding := range bindingsToValidate {
+			if binding.SlotName == "api_key" {
+				hasAPIKeySlot = true
+				break
 			}
+		}
+		if !hasAPIKeySlot && nextPrimaryCred != nil && *nextPrimaryCred != "" {
+			bindingsToValidate = append(bindingsToValidate, SecretBindingInput{
+				SlotName:     "api_key",
+				CredentialID: *nextPrimaryCred,
+				InjectMode:   InjectModeHostBlind,
+			})
 		}
 
 		if nextAuthMode == AuthModeNone && (nextPrimaryCred != nil || len(bindingsToValidate) > 0) {
