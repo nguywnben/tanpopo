@@ -1,10 +1,13 @@
-import {Component, type ReactNode} from 'react';
+import {Component, lazy, Suspense, useEffect, useState, type ReactNode} from 'react';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Stack';
 import {Theme} from '@astryxdesign/core/theme';
 import {themes, defaultThemeSlug} from '../astryx-themes';
 import {ConsoleShell} from './shell/AppShell';
+
+const SetupWizardPage = lazy(() => import('./pages/setup/SetupWizardPage').then(module => ({default: module.SetupWizardPage})));
+const LoginPage = lazy(() => import('./pages/auth/LoginPage').then(module => ({default: module.LoginPage})));
 
 class ConsoleErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean}> {
   state = {hasError: false};
@@ -22,9 +25,19 @@ class ConsoleErrorBoundary extends Component<{children: ReactNode}, {hasError: b
 }
 
 export function App() {
-  return (
-    <Theme theme={themes[defaultThemeSlug]}><ConsoleErrorBoundary><ConsoleShell /></ConsoleErrorBoundary></Theme>
-  );
+  return <Theme theme={themes[defaultThemeSlug]}><ConsoleErrorBoundary><PageRouter /></ConsoleErrorBoundary></Theme>;
+}
+
+function PageRouter() {
+  const [pathname, setPathname] = useState(window.location.pathname);
+  useEffect(() => {
+    const updatePath = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', updatePath);
+    return () => window.removeEventListener('popstate', updatePath);
+  }, []);
+  if (pathname === '/setup') return <Suspense fallback={<Text role="status">Loading first-run setup…</Text>}><SetupWizardPage /></Suspense>;
+  if (pathname === '/login') return <Suspense fallback={<Text role="status">Loading sign-in…</Text>}><LoginPage /></Suspense>;
+  return <ConsoleShell />;
 }
 
 export default App;

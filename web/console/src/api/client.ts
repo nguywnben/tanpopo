@@ -60,6 +60,38 @@ export async function getAdminSession(): Promise<components['schemas']['AdminSes
   return result.data;
 }
 
+export async function getBootstrapStatus(): Promise<components['schemas']['BootstrapStatusResponse']> {
+  const result = await api.GET('/admin/v1/bootstrap/status');
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function completeBootstrap(payload: components['schemas']['BootstrapCompleteRequest']) {
+  const result = await api.POST('/admin/v1/bootstrap/complete', {body: payload});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  rememberCsrfToken(result.data.csrf_token);
+  return result.data;
+}
+
+export async function loginAdmin(email: string, password: string) {
+  const result = await api.POST('/admin/v1/auth/login', {body: {email, password}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  rememberCsrfToken(result.data.csrf_token);
+  return result.data;
+}
+
+export async function getOverviewSummary(window: components['schemas']['OverviewSummaryResponse']['window']) {
+  const result = await api.GET('/admin/v1/overview/summary', {params: {query: {window}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function listActiveAlerts() {
+  const result = await api.GET('/admin/v1/alerts/active', {params: {query: {limit: 50}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
 export async function listProjects() {
   const result = await api.GET('/admin/v1/projects', {params: {query: {limit: 200}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);

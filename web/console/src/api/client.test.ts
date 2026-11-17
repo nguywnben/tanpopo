@@ -1,5 +1,5 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {api, clearCsrfToken, getAdminSession, listProjects, rememberCsrfToken} from './client';
+import {api, clearCsrfToken, completeBootstrap, getAdminSession, getBootstrapStatus, listProjects, loginAdmin, rememberCsrfToken} from './client';
 
 afterEach(() => {
   clearCsrfToken();
@@ -75,6 +75,24 @@ describe('typed Admin API client', () => {
     for (const [input] of fetchMock.mock.calls) {
       expect((input as Request).headers.get('X-CSRF-Token')).toBeNull();
     }
+  });
+
+  it('uses typed bootstrap and login helpers, then retains CSRF for later session mutations', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({initialized: false, offline_mode: false}), {status: 200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({org_id: 'org-1', project_id: 'project-1', env_id: 'env-1', owner_principal_id: 'owner-1', csrf_token: 'bootstrap-csrf'}), {status: 201}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({principal_id: 'owner-1', email: 'owner@example.test', roles: ['ORG_OWNER'], csrf_token: 'login-csrf', expires_at: '2026-12-01T00:00:00Z'}), {status: 200}))
+      .mockResolvedValueOnce(new Response(null, {status: 204}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getBootstrapStatus();
+    await completeBootstrap({bootstrap_token: 'bootstrap-token', owner_email: 'owner@example.test', owner_password: 'long-password-123', org_name: 'Example Org', project_name: 'default', master_kek_backup_acknowledged: true});
+    await loginAdmin('owner@example.test', 'long-password-123');
+    await api.POST('/admin/v1/auth/logout');
+
+    expect((fetchMock.mock.calls[1][0] as Request).headers.get('X-CSRF-Token')).toBeNull();
+    expect((fetchMock.mock.calls[2][0] as Request).headers.get('X-CSRF-Token')).toBeNull();
+    expect((fetchMock.mock.calls[3][0] as Request).headers.get('X-CSRF-Token')).toBe('login-csrf');
   });
 
   it('requires CSRF for session mutations and attaches the in-memory session token', async () => {
