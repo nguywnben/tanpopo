@@ -662,9 +662,9 @@ func (s *Server) validateRouteUpsert(w http.ResponseWriter, r *http.Request, sc 
 		return nil, false
 	}
 	switch strategy {
-	case snapshot.RouteStrategyPriorityFailover, snapshot.RouteStrategyWeighted, snapshot.RouteStrategyLowestCost:
+	case snapshot.RouteStrategyPriorityFailover, snapshot.RouteStrategyWeighted, snapshot.RouteStrategyWeightedRR, snapshot.RouteStrategyLowestCost, snapshot.RouteStrategyLowestLatency:
 	default:
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "strategy must be PRIORITY_FAILOVER, WEIGHTED, or LOWEST_COST", false, nil)
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "strategy must be PRIORITY_FAILOVER, WEIGHTED, WEIGHTED_ROUND_ROBIN, LOWEST_COST, or LOWEST_LATENCY_EWMA", false, nil)
 		return nil, false
 	}
 
@@ -758,7 +758,7 @@ func (s *Server) validateRouteUpsert(w http.ResponseWriter, r *http.Request, sc 
 			prio = i + 1
 		}
 		weight := tgt.Weight
-		if strategy != snapshot.RouteStrategyWeighted && weight == 0 {
+		if strategy != snapshot.RouteStrategyWeighted && strategy != snapshot.RouteStrategyWeightedRR && weight == 0 {
 			weight = 100
 		}
 		weightSum += tgt.Weight
@@ -810,7 +810,7 @@ func (s *Server) validateRouteUpsert(w http.ResponseWriter, r *http.Request, sc 
 			Weight:        weight,
 		})
 	}
-	if strategy == snapshot.RouteStrategyWeighted && weightSum != 100 {
+	if (strategy == snapshot.RouteStrategyWeighted || strategy == snapshot.RouteStrategyWeightedRR) && weightSum != 100 {
 		writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_weight_sum", "invalid_request_error", fmt.Sprintf("WEIGHTED route target weights must sum to 100 (got %d)", weightSum), false, nil)
 		return nil, false
 	}
@@ -884,9 +884,13 @@ func (s *Server) loadRouteResourceDTO(ctx context.Context, orgID, routeID string
 
 func mapRouteStrategyOpenAPI(s string) string {
 	switch strings.ToUpper(strings.TrimSpace(s)) {
-	case snapshot.RouteStrategyWeightedRR, snapshot.RouteStrategyWeighted:
+	case snapshot.RouteStrategyWeightedRR:
+		return snapshot.RouteStrategyWeightedRR
+	case snapshot.RouteStrategyWeighted:
 		return snapshot.RouteStrategyWeighted
-	case snapshot.RouteStrategyLowestCost, snapshot.RouteStrategyLowestLatency:
+	case snapshot.RouteStrategyLowestLatency:
+		return snapshot.RouteStrategyLowestLatency
+	case snapshot.RouteStrategyLowestCost:
 		return snapshot.RouteStrategyLowestCost
 	default:
 		return snapshot.RouteStrategyPriorityFailover

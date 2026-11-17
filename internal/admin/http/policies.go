@@ -22,6 +22,7 @@ type policyDocumentDTO struct {
 	ScopeTier              string                       `json:"scope_tier"`
 	ScopeID                string                       `json:"scope_id"`
 	AllowedDataRegions     []string                     `json:"allowed_data_regions"`
+	AllowedModels          []string                     `json:"allowed_models,omitempty"`
 	MinPluginTrust         string                       `json:"min_plugin_trust"`
 	MinCapabilityAssurance string                       `json:"min_capability_assurance"`
 	RPMCeiling             *int64                       `json:"rpm_ceiling,omitempty"`
@@ -75,7 +76,7 @@ func (s *Server) handleGetEffectivePolicy(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	eff, maxVer, err := s.computeEffectivePolicyWithVersionSQL(r.Context(), orgID, projID, envID)
+	eff, _, err := s.computeEffectivePolicyWithVersionSQL(r.Context(), orgID, projID, envID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
 		return
@@ -95,7 +96,23 @@ func (s *Server) handleGetEffectivePolicy(w http.ResponseWriter, r *http.Request
 		scopeID = projID
 	}
 
-	doc := effectivePolicyToDTO("pol_effective_"+scopeID, scopeTier, scopeID, eff, maxVer)
+	writePolicyID := "pol_effective_" + scopeID
+	writeVersion := int64(1)
+	scopeDB, scopeErr := mapPolicyScopeTierToDB(scopeTier)
+	if scopeErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resolving writable policy scope", true, nil)
+		return
+	}
+	var storedPolicyID string
+	var storedPolicyVersion int64
+	err = s.db.QueryRowContext(r.Context(), `SELECT id, version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ?`, orgID, scopeDB, scopeID).Scan(&storedPolicyID, &storedPolicyVersion)
+	if err == nil {
+		writePolicyID, writeVersion = storedPolicyID, storedPolicyVersion
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resolving writable policy version", true, nil)
+		return
+	}
+	doc := effectivePolicyToDTO(writePolicyID, scopeTier, scopeID, eff, writeVersion)
 	w.Header().Set("ETag", FormatETag(doc.Version))
 	writeJSON(w, http.StatusOK, doc)
 }
@@ -518,6 +535,17 @@ func inferPolicyTypeFromDTO(dto *policyDocumentDTO) string {
 
 func encodePolicyRulesFromDTO(dto *policyDocumentDTO) (string, error) {
 	payload := make(map[string]any)
+	if len(dto.AllowedModels) > 0 {
+		models := make([]string, 0, len(dto.AllowedModels))
+		for _, raw := range dto.AllowedModels {
+			model := strings.TrimSpace(raw)
+			if model == "" {
+				return "", errors.New("allowed_models must not contain empty entries")
+			}
+			models = append(models, model)
+		}
+		payload["allowed_models"] = models
+	}
 	if len(dto.AllowedDataRegions) > 0 {
 		regions := make([]string, 0, len(dto.AllowedDataRegions))
 		for _, r := range dto.AllowedDataRegions {
@@ -582,6 +610,7 @@ func effectivePolicyToDTO(id, scopeTier, scopeID string, eff policyengine.Effect
 		ScopeTier:              scopeTier,
 		ScopeID:                scopeID,
 		AllowedDataRegions:     regions,
+		AllowedModels:          effectiveModelAllowlist(eff),
 		MinPluginTrust:         minTrust,
 		MinCapabilityAssurance: minAssurance,
 		RPMCeiling:             eff.RPMLimit,
@@ -590,6 +619,20 @@ func effectivePolicyToDTO(id, scopeTier, scopeID string, eff policyengine.Effect
 		GuardrailHooks:         hooks,
 		Version:                version,
 	}
+}
+
+func effectiveModelAllowlist(eff policyengine.EffectivePolicy) []string {
+	if !eff.HasAllowedModels {
+		return []string{"*"}
+	}
+	return append([]string(nil), eff.AllowedModels...)
+}
+
+func recordModelAllowlist(r snapshot.PolicyRulesView) []string {
+	if !r.HasAllowedModels {
+		return []string{"*"}
+	}
+	return append([]string(nil), r.AllowedModels...)
 }
 
 func policyRecordToDTO(rec *policyengine.PolicyRecord) policyDocumentDTO {
@@ -615,6 +658,7 @@ func policyRecordToDTO(rec *policyengine.PolicyRecord) policyDocumentDTO {
 		ScopeTier:              mapPolicyScopeDBToTier(rec.ScopeType),
 		ScopeID:                rec.ScopeID,
 		AllowedDataRegions:     regions,
+		AllowedModels:          recordModelAllowlist(r),
 		MinPluginTrust:         minTrust,
 		MinCapabilityAssurance: minAssurance,
 		RPMCeiling:             r.RPMLimit,

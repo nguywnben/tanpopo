@@ -1755,7 +1755,7 @@ export interface components {
             slug: string;
             env_id: string;
             /** @enum {string} */
-            strategy: "PRIORITY_FAILOVER" | "WEIGHTED" | "LOWEST_COST";
+            strategy: "PRIORITY_FAILOVER" | "WEIGHTED" | "WEIGHTED_ROUND_ROBIN" | "LOWEST_COST" | "LOWEST_LATENCY_EWMA";
             allowed_data_regions?: components["schemas"]["DataRegion"][];
             /** @default 3 */
             max_failover_hops: number;
@@ -1801,6 +1801,7 @@ export interface components {
             scope_tier: "INSTANCE" | "ORGANIZATION" | "PROJECT" | "ENVIRONMENT";
             scope_id: string;
             allowed_data_regions: components["schemas"]["DataRegion"][];
+            allowed_models?: string[];
             /** @enum {string} */
             min_plugin_trust: "OFFICIAL_ONLY" | "VERIFIED_OR_ENTERPRISE_SIGNED" | "VERIFIED_ONLY" | "ANY_APPROVED";
             /** @enum {string} */

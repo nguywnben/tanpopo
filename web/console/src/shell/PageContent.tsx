@@ -15,6 +15,9 @@ const ConnectionsPage = lazy(() => import('../pages/providers/ConnectionsPage').
 const ModelsCatalogPage = lazy(() => import('../pages/models/ModelsCatalogPage').then(module => ({default: module.ModelsCatalogPage})));
 const ExtensionCatalogPage = lazy(() => import('../pages/extensions/ExtensionCatalogPage').then(module => ({default: module.ExtensionCatalogPage})));
 const InstalledExtensionDetailPage = lazy(() => import('../pages/extensions/InstalledExtensionDetailPage').then(module => ({default: module.InstalledExtensionDetailPage})));
+const RoutesPage = lazy(() => import('../pages/routes/RoutesPage').then(module => ({default: module.RoutesPage})));
+const PoliciesPage = lazy(() => import('../pages/policies/PoliciesPage').then(module => ({default: module.PoliciesPage})));
+const AccessAndKeysPage = lazy(() => import('../pages/access/AccessAndKeysPage').then(module => ({default: module.AccessAndKeysPage})));
 
 export function PageContent({route, pathname, roles, loading, loadError, offline, projects, environments, projectId, environmentId, session}: {
   route: ConsoleRoute; pathname: string; roles: Role[]; loading: boolean; loadError: boolean; offline: boolean;
@@ -34,6 +37,9 @@ export function PageContent({route, pathname, roles, loading, loadError, offline
       ? <InstalledExtensionDetailPage roles={roles} />
       : <ExtensionCatalogPage roles={roles} />}
   </Suspense>;
+  if (pathname.startsWith('/routes')) return <Suspense fallback={<Text role="status">Loading routes…</Text>}><RoutesPage projectId={projectId} environmentId={environmentId} roles={roles} /></Suspense>;
+  if (pathname.startsWith('/policies')) return <Suspense fallback={<Text role="status">Loading policies…</Text>}><PoliciesPage projectId={projectId} environmentId={environmentId} roles={roles} /></Suspense>;
+  if (pathname.startsWith('/access/')) return <Suspense fallback={<Text role="status">Loading access records…</Text>}><AccessAndKeysPage projectId={projectId} environmentId={environmentId} currentPrincipalId={session?.principal_id ?? ''} actorRoles={roles} /></Suspense>;
   if (projects.length === 0) return <VStack gap={4}><Heading level={1}>{route.label}</Heading><Text role="status">No projects are available for this account.</Text></VStack>;
   const activeProject = projects.find(project => project.id === projectId);
   const activeEnvironment = environments.find(environment => environment.id === environmentId);

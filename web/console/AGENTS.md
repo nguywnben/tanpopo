@@ -39,6 +39,10 @@ RULES:
 - Read [`../../AGENTS.md`](../../AGENTS.md), [`../../CONSTRAINTS.md`](../../CONSTRAINTS.md), and [`../../docs/ux/design-system-integration.md`](../../docs/ux/design-system-integration.md) (`SPEC-UX-04`) before modifying Web Console files.
 - **Unified Local CLI Invocation (inside `web/console/` after `npm ci --ignore-scripts`):** run `npm run astryx -- <cmd>` (per `@astryxdesign/cli@0.7.16` *Working with AI* pattern; e.g. `npm run astryx -- doctor`, `npm run astryx -- component <Name>`, `npm run astryx -- template <id>`) or `npx --no -- @astryxdesign/cli <cmd>`.
 - **Preserve `neutral` Theme:** keep [`astryx-themes.js`](./astryx-themes.js) unmodified (`defaultThemeSlug = "neutral"`); never run `astryx theme eject` and never add `:root` overrides.
-- **Zero Custom CSS Inside `src/` & Zero External Runtime Requests:** `scripts/ci/check.go` (`no-custom-css-in-src`) forbids any `.css` files under `web/console/src/` and `air-gap-no-google-fonts` forbids external font URLs. Local `Figtree` font aliasing (`@astryxdesign/theme-neutral/fonts.css` -> `web/console/assets/fonts/local-figtree-fonts.css` + local `.woff2` files), Vite + StyleX compiler wiring, and screen scaffolding are deferred to `TP-IMP-0026`.
+- **Zero Custom CSS Inside `src/` & Zero External Runtime Requests:** `scripts/ci/check.go` (`no-custom-css-in-src`) forbids any `.css` files under `web/console/src/` and `air-gap-no-google-fonts` forbids external font URLs. Local `Figtree` font aliasing, Vite, and StyleX were established in `TP-IMP-0026`; subsequent screens must keep using those assets and compiler settings.
 - **English-Only UI Copy (`ISS-008`) & Strict Floor Guard:** zero raw `<div>`/`<span>` tags, zero TypeScript/lint suppressions, and `Badge` strictly for numeric counts.
+
+## Current Screen Delivery
+
+`TP-IMP-0026` established the Console build, local Figtree, StyleX and `AppShell`; `TP-IMP-0027`..`0028` are accepted. `TP-IMP-0029` is `READY` under `DEC-047` for Routes, Policies, Virtual Keys and RBAC. Keep its route and policy edits ETag-protected, preserve operator drafts on `409`, and require explicit typed confirmation for emergency revoke and route deletion. Unit `0030` remains blocked until Unit `0029` is accepted with green CI.
 

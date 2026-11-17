@@ -791,7 +791,7 @@ components:
       properties:
         slug: { type: string, minLength: 1 }
         env_id: { type: string }
-        strategy: { type: string, enum: [PRIORITY_FAILOVER, WEIGHTED, LOWEST_COST] }
+        strategy: { type: string, enum: [PRIORITY_FAILOVER, WEIGHTED, WEIGHTED_ROUND_ROBIN, LOWEST_COST, LOWEST_LATENCY_EWMA] }
         allowed_data_regions:
           type: array
           items: { $ref: "#/components/schemas/DataRegion" }
@@ -860,6 +860,9 @@ components:
         allowed_data_regions:
           type: array
           items: { $ref: "#/components/schemas/DataRegion" }
+        allowed_models:
+          type: array
+          items: { type: string, minLength: 1 }
         min_plugin_trust:
           type: string
           enum: [OFFICIAL_ONLY, VERIFIED_OR_ENTERPRISE_SIGNED, VERIFIED_ONLY, ANY_APPROVED]

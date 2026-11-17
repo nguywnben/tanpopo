@@ -22,6 +22,7 @@ import (
 	"net/netip"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1348,6 +1349,7 @@ func TestPart2PoliciesRoutesModelsAndOCC(t *testing.T) {
 		"scope_tier":               "ORGANIZATION",
 		"scope_id":                 boot.OrgID,
 		"allowed_data_regions":     []string{"EU"},
+		"allowed_models":           []string{"prod-assistant"},
 		"min_plugin_trust":         "OFFICIAL_ONLY",
 		"min_capability_assurance": "VERIFIED",
 		"rpm_ceiling":              100,
@@ -1355,12 +1357,18 @@ func TestPart2PoliciesRoutesModelsAndOCC(t *testing.T) {
 	if recOrgPol.Code != http.StatusOK {
 		t.Fatalf("PUT org policy code=%d body=%s", recOrgPol.Code, recOrgPol.Body.String())
 	}
+	var createdOrgPolicy policyDocumentDTO
+	mustDecodeJSON(t, recOrgPol.Body.Bytes(), &createdOrgPolicy)
+	if len(createdOrgPolicy.AllowedModels) != 1 || createdOrgPolicy.AllowedModels[0] != "prod-assistant" {
+		t.Fatalf("organization policy response lost model allowlist: %+v", createdOrgPolicy.AllowedModels)
+	}
 
 	projPolID := idgen.MustNew(idgen.PrefixPolicy)
 	recRelax := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/policies/"+projPolID, ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
 		"scope_tier":               "PROJECT",
 		"scope_id":                 boot.ProjectID,
 		"allowed_data_regions":     []string{"US"},
+		"allowed_models":           []string{"*"},
 		"min_plugin_trust":         "ANY_APPROVED",
 		"min_capability_assurance": "DECLARED",
 		"rpm_ceiling":              500,
@@ -1378,12 +1386,22 @@ func TestPart2PoliciesRoutesModelsAndOCC(t *testing.T) {
 		"scope_tier":               "ORGANIZATION",
 		"scope_id":                 boot.OrgID,
 		"allowed_data_regions":     []string{"US"},
+		"allowed_models":           []string{"prod-assistant"},
 		"min_plugin_trust":         "OFFICIAL_ONLY",
 		"min_capability_assurance": "VERIFIED",
 		"rpm_ceiling":              100,
 	})
 	if recOrgPol2.Code != http.StatusOK {
 		t.Fatalf("PUT org policy v2 code=%d body=%s", recOrgPol2.Code, recOrgPol2.Body.String())
+	}
+	recEffectiveOrg := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/policies/effective", ownerCookie, "", "", nil)
+	if recEffectiveOrg.Code != http.StatusOK {
+		t.Fatalf("GET effective organization policy code=%d body=%s", recEffectiveOrg.Code, recEffectiveOrg.Body.String())
+	}
+	var effectiveOrg policyDocumentDTO
+	mustDecodeJSON(t, recEffectiveOrg.Body.Bytes(), &effectiveOrg)
+	if effectiveOrg.ID != orgPolID || effectiveOrg.Version != 2 || recEffectiveOrg.Header().Get("ETag") != `"v2"` {
+		t.Fatalf("effective policy must carry the writable row id/version; got id=%q version=%d etag=%q", effectiveOrg.ID, effectiveOrg.Version, recEffectiveOrg.Header().Get("ETag"))
 	}
 
 	recBadWeight := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
@@ -1394,6 +1412,21 @@ func TestPart2PoliciesRoutesModelsAndOCC(t *testing.T) {
 	})
 	if recBadWeight.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 invalid_weight_sum, got %d body=%s", recBadWeight.Code, recBadWeight.Body.String())
+	}
+
+	for i, strategy := range []string{"WEIGHTED_ROUND_ROBIN", "LOWEST_LATENCY_EWMA"} {
+		rec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
+			"slug": "strategy-" + strconv.Itoa(i), "env_id": boot.EnvID, "strategy": strategy,
+			"targets": []map[string]any{{"deployment_id": dep.ID, "priority_order": 1, "weight": 100}},
+		})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("POST /routes strategy=%s code=%d body=%s", strategy, rec.Code, rec.Body.String())
+		}
+		var created routeResourceDTO
+		mustDecodeJSON(t, rec.Body.Bytes(), &created)
+		if created.Strategy != strategy {
+			t.Fatalf("strategy round trip mismatch: got %q want %q", created.Strategy, strategy)
+		}
 	}
 
 	recNoIfMatch := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/connections/"+conn.ID, ownerCookie, boot.CSRFToken, "", map[string]any{"name": "renamed"})
