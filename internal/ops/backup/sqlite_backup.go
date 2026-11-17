@@ -78,7 +78,7 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	if store == nil || keys == nil || strings.TrimSpace(outputDir) == "" {
 		return Receipt{}, errors.New("backup: snapshotter, key wrapper, and output directory are required")
 	}
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+	if runtime.GOOS != "linux" {
 		return Receipt{}, fmt.Errorf("backup: secure SQLite snapshot paths are unsupported on %s", runtime.GOOS)
 	}
 	backupMu.Lock()
@@ -93,12 +93,20 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, err
 	}
 	defer outputRoot.Close()
-	unlockBackup, err := lockBackup(outputRoot)
+	stagingRoot, err := openStagingRoot()
+	if err != nil {
+		return Receipt{}, fmt.Errorf("backup: open volatile staging filesystem: %w", err)
+	}
+	defer stagingRoot.Close()
+	unlockBackup, err := lockBackup(stagingRoot)
 	if err != nil {
 		return Receipt{}, fmt.Errorf("backup: lock output directory: %w", err)
 	}
 	defer unlockBackup()
 	if err := cleanupStaleStaging(outputRoot); err != nil {
+		return Receipt{}, fmt.Errorf("backup: remove abandoned backup staging files: %w", err)
+	}
+	if err := cleanupStaleStaging(stagingRoot); err != nil {
 		return Receipt{}, fmt.Errorf("backup: remove abandoned plaintext staging files: %w", err)
 	}
 	rootPathFile, sqliteRootPath, err := pathForOpenRoot(outputRoot)
@@ -107,23 +115,23 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	}
 	defer rootPathFile.Close()
 	stageName := ".tanpopo-backup-" + backupID
-	if err := outputRoot.Mkdir(stageName, 0o700); err != nil {
+	if err := stagingRoot.Mkdir(stageName, 0o700); err != nil {
 		return Receipt{}, fmt.Errorf("backup: create protected staging directory: %w", err)
 	}
-	stageRoot, err := outputRoot.OpenRoot(stageName)
+	stageRoot, err := stagingRoot.OpenRoot(stageName)
 	if err != nil {
 		return Receipt{}, fmt.Errorf("backup: open protected staging directory: %w", err)
 	}
 	stageCleaned := false
 	defer func() {
 		if !stageCleaned {
-			if cleanupErr := removeStaging(outputRoot, stageRoot, stageName); cleanupErr != nil {
+			if cleanupErr := removeStaging(stagingRoot, stageRoot, stageName); cleanupErr != nil {
 				resultErr = errors.Join(resultErr, fmt.Errorf("backup: remove plaintext staging files: %w", cleanupErr))
 			}
 		}
 	}()
 	stageInfo, err := stageRoot.Stat(".")
-	entryInfo, entryErr := outputRoot.Lstat(stageName)
+	entryInfo, entryErr := stagingRoot.Lstat(stageName)
 	if err != nil || entryErr != nil || entryInfo.Mode()&os.ModeSymlink != 0 || !os.SameFile(stageInfo, entryInfo) {
 		return Receipt{}, errors.New("backup: staging directory changed during secure open")
 	}
@@ -228,7 +236,7 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, fmt.Errorf("backup: close protected staging directory: %w", err)
 	}
 	stagePathFile = nil
-	if err := removeStaging(outputRoot, stageRoot, stageName); err != nil {
+	if err := removeStaging(stagingRoot, stageRoot, stageName); err != nil {
 		_ = outputRoot.Remove(finalName)
 		return Receipt{}, fmt.Errorf("backup: remove plaintext staging files: %w", err)
 	}

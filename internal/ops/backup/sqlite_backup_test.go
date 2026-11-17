@@ -33,7 +33,7 @@ func (w *testKeyWrapper) WrapArchiveKey(ctx context.Context, key []byte) (string
 
 func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	ctx := context.Background()
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+	if runtime.GOOS != "linux" {
 		if _, err := CreateSQLite(ctx, testSnapshotter{content: []byte("snapshot")}, &testKeyWrapper{}, t.TempDir(), "", 1_795_000_000_000); err == nil {
 			t.Fatal("CreateSQLite returned success without a directory-handle-pinned SQLite path")
 		}
@@ -41,14 +41,19 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	}
 	root := t.TempDir()
 	outputDir := filepath.Join(root, "backups")
-	staleStage := filepath.Join(outputDir, ".tanpopo-backup-0123456789abcdef0123456789abcdef")
+	stagingRoot, err := openStagingRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stagingRoot.Close()
+	staleStage := filepath.Join("/dev/shm", ".tanpopo-backup-0123456789abcdef0123456789abcdef")
 	if err := os.MkdirAll(staleStage, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(staleStage, "database.sqlite"), []byte("stale plaintext snapshot"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stalePartial := filepath.Join(outputDir, ".tanpopo-backup-fedcba9876543210fedcba9876543210.partial")
+	stalePartial := filepath.Join("/dev/shm", ".tanpopo-backup-fedcba9876543210fedcba9876543210.partial")
 	if err := os.WriteFile(stalePartial, []byte("partial encrypted archive"), 0o600); err != nil {
 		t.Fatal(err)
 	}
