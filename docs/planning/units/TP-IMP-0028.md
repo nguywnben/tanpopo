@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0028` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | **`READY`** *(DoR verified and opened under [`DEC-045`](../../governance/decisions.md) after `TP-IMP-0027` acceptance CI `44043662461`; `TP-IMP-0025` and `TP-IMP-0026` are `DONE` on `origin/main`)* |
+| **Status** | **`DONE`** *(Accepted under [`DEC-046`](../../governance/decisions.md); implementation `d20acea69d96d4e994eff48ed1b08fb9769a893f`; acceptance CI `44074397701` green on the exact SHA; independent code-reviewer and security-auditor reviews clear)* |
 | **Size** | `L` (`web/console/src/pages/providers/*`, `connections/*`, `models/*`, `extensions/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Core security UX guardrails `UX-GR-01..04`: no blind one-click install & 3-axis trust separation)* |
 | **Technical Owner** | `Lead Product / Security UX Engineer` |
