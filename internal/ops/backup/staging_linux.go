@@ -3,20 +3,18 @@
 package backup
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 )
 
 const linuxTmpfsMagic = 0x01021994
 
-func openStagingRoot(outputDir string) (*os.Root, func() error, error) {
+func openStagingRoot(outputRoot *os.Root) (*os.Root, func() error, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs("/dev/shm", &stat); err != nil {
 		return nil, nil, err
@@ -27,12 +25,15 @@ func openStagingRoot(outputDir string) (*os.Root, func() error, error) {
 	if err := verifyNoActiveSwap(); err != nil {
 		return nil, nil, err
 	}
-	absOutputDir, err := filepath.Abs(outputDir)
+	outputInfo, err := outputRoot.Stat(".")
 	if err != nil {
 		return nil, nil, err
 	}
-	namespaceDigest := sha256.Sum256([]byte(filepath.Clean(absOutputDir)))
-	namespace := hex.EncodeToString(namespaceDigest[:])
+	identity, ok := outputInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return nil, nil, errors.New("backup: output directory identity is unavailable")
+	}
+	namespace := fmt.Sprintf("%x-%x", uint64(identity.Dev), identity.Ino)
 	shmRoot, err := os.OpenRoot("/dev/shm")
 	if err != nil {
 		return nil, nil, err

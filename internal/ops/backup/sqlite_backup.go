@@ -98,7 +98,7 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, fmt.Errorf("backup: lock output directory: %w", err)
 	}
 	defer unlockBackup()
-	stagingRoot, cleanupStagingRoot, err := openStagingRoot(outputDir)
+	stagingRoot, cleanupStagingRoot, err := openStagingRoot(outputRoot)
 	if err != nil {
 		return Receipt{}, fmt.Errorf("backup: open volatile staging filesystem: %w", err)
 	}
