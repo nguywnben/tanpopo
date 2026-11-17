@@ -18,6 +18,10 @@ const InstalledExtensionDetailPage = lazy(() => import('../pages/extensions/Inst
 const RoutesPage = lazy(() => import('../pages/routes/RoutesPage').then(module => ({default: module.RoutesPage})));
 const PoliciesPage = lazy(() => import('../pages/policies/PoliciesPage').then(module => ({default: module.PoliciesPage})));
 const AccessAndKeysPage = lazy(() => import('../pages/access/AccessAndKeysPage').then(module => ({default: module.AccessAndKeysPage})));
+const TracesExplorerPage = lazy(() => import('../pages/traces/TracesExplorerPage').then(module => ({default: module.TracesExplorerPage})));
+const FinOpsBudgetsPage = lazy(() => import('../pages/finops/FinOpsBudgetsPage').then(module => ({default: module.FinOpsBudgetsPage})));
+const SecurityAuditAndKillSwitchPage = lazy(() => import('../pages/security/SecurityAuditAndKillSwitchPage').then(module => ({default: module.SecurityAuditAndKillSwitchPage})));
+const OperationsSettingsPage = lazy(() => import('../pages/operations/OperationsSettingsPage').then(module => ({default: module.OperationsSettingsPage})));
 
 export function PageContent({route, pathname, roles, loading, loadError, offline, projects, environments, projectId, environmentId, session}: {
   route: ConsoleRoute; pathname: string; roles: Role[]; loading: boolean; loadError: boolean; offline: boolean;
@@ -40,6 +44,10 @@ export function PageContent({route, pathname, roles, loading, loadError, offline
   if (pathname.startsWith('/routes')) return <Suspense fallback={<Text role="status">Loading routes…</Text>}><RoutesPage projectId={projectId} environmentId={environmentId} roles={roles} /></Suspense>;
   if (pathname.startsWith('/policies')) return <Suspense fallback={<Text role="status">Loading policies…</Text>}><PoliciesPage projectId={projectId} environmentId={environmentId} roles={roles} /></Suspense>;
   if (pathname.startsWith('/access/')) return <Suspense fallback={<Text role="status">Loading access records…</Text>}><AccessAndKeysPage projectId={projectId} environmentId={environmentId} currentPrincipalId={session?.principal_id ?? ''} actorRoles={roles} /></Suspense>;
+  if (pathname.startsWith('/observability/traces')) return <Suspense fallback={<Text role="status">Loading request traces…</Text>}><TracesExplorerPage environmentId={environmentId} roles={roles} /></Suspense>;
+  if (pathname.startsWith('/finops/')) return <Suspense fallback={<Text role="status">Loading FinOps reports…</Text>}><FinOpsBudgetsPage projectId={projectId} roles={roles} /></Suspense>;
+  if (pathname.startsWith('/security/')) return <Suspense fallback={<Text role="status">Loading security center…</Text>}><SecurityAuditAndKillSwitchPage roles={roles} /></Suspense>;
+  if (pathname.startsWith('/ops/') || pathname.startsWith('/settings/')) return <Suspense fallback={<Text role="status">Loading operations…</Text>}><OperationsSettingsPage roles={roles} /></Suspense>;
   if (projects.length === 0) return <VStack gap={4}><Heading level={1}>{route.label}</Heading><Text role="status">No projects are available for this account.</Text></VStack>;
   const activeProject = projects.find(project => project.id === projectId);
   const activeEnvironment = environments.find(environment => environment.id === environmentId);
