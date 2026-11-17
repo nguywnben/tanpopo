@@ -188,3 +188,33 @@ func TestCollectArtifactFilesIsStableAndHashesContents(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateBackupConfigRejectsInlineMasterKEK(t *testing.T) {
+	rootPath := t.TempDir()
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	writeConfig := func(t *testing.T, contents string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(rootPath, "tanpopo.yaml"), []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeConfig(t, "security:\n  master_key: inline-root-key\n")
+	if err := validateBackupConfig(root, "tanpopo.yaml"); err == nil {
+		t.Fatal("validateBackupConfig accepted inline Master KEK material")
+	}
+
+	writeConfig(t, "security:\n  master_key: ${ENV:TANPOPO_MASTER_KEY}\n")
+	if err := validateBackupConfig(root, "tanpopo.yaml"); err != nil {
+		t.Fatalf("validateBackupConfig rejected environment reference: %v", err)
+	}
+
+	writeConfig(t, "data_dir: /var/lib/tanpopo\n---\nsecurity:\n  master_kek: leaked-key\n")
+	if err := validateBackupConfig(root, "tanpopo.yaml"); err == nil {
+		t.Fatal("validateBackupConfig accepted multiple YAML documents")
+	}
+}

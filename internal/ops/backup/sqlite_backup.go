@@ -27,6 +27,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -212,6 +214,9 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	configCopy := "tanpopo.yaml"
 	if err := copyFile(ctx, configPath, stageRoot, configCopy, configInfo); err != nil {
 		return Receipt{}, fmt.Errorf("backup: stage server config: %w", err)
+	}
+	if err := validateBackupConfig(stageRoot, configCopy); err != nil {
+		return Receipt{}, err
 	}
 	configHash, err := fileSHA256(stageRoot, configCopy)
 	if err != nil {
@@ -677,6 +682,71 @@ func collectArtifactFiles(ctx context.Context, root *os.Root) ([]artifactFile, e
 		return nil, fmt.Errorf("backup: enumerate extension artifacts: %w", err)
 	}
 	return artifacts, nil
+}
+
+func validateBackupConfig(root *os.Root, path string) error {
+	f, err := root.Open(path)
+	if err != nil {
+		return fmt.Errorf("backup: open staged config for validation: %w", err)
+	}
+	defer f.Close()
+	const maxConfigBytes = 4 << 20
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxConfigBytes {
+		return errors.New("backup: server config must be a regular YAML file no larger than 4 MiB")
+	}
+	var doc yaml.Node
+	decoder := yaml.NewDecoder(io.LimitReader(f, maxConfigBytes+1))
+	if err := decoder.Decode(&doc); err != nil {
+		return fmt.Errorf("backup: parse server config: %w", err)
+	}
+	var extra yaml.Node
+	if err := decoder.Decode(&extra); err == nil {
+		return errors.New("backup: server config must contain exactly one YAML document")
+	} else if !errors.Is(err, io.EOF) {
+		return fmt.Errorf("backup: parse server config: %w", err)
+	}
+	if containsInlineMasterKEK(&doc, make(map[*yaml.Node]bool)) {
+		return errors.New("backup: refusing to archive config containing inline Master KEK material; use TANPOPO_MASTER_KEY or TANPOPO_MASTER_KEY_FILE")
+	}
+	return nil
+}
+
+func containsInlineMasterKEK(node *yaml.Node, seen map[*yaml.Node]bool) bool {
+	if node == nil || seen[node] {
+		return false
+	}
+	seen[node] = true
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key, value := node.Content[i], node.Content[i+1]
+			canonicalKey := strings.ToLower(strings.NewReplacer("-", "_", ".", "_").Replace(strings.TrimSpace(key.Value)))
+			switch canonicalKey {
+			case "master_key", "masterkey", "master_kek", "masterkek", "tanpopo_master_key", "tanpopomasterkey":
+				if value.Kind == yaml.ScalarNode && strings.TrimSpace(value.Value) != "" && !isEnvironmentReference(value.Value) {
+					return true
+				}
+			}
+			if containsInlineMasterKEK(value, seen) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, child := range node.Content {
+		if containsInlineMasterKEK(child, seen) {
+			return true
+		}
+	}
+	if node.Kind == yaml.AliasNode {
+		return containsInlineMasterKEK(node.Alias, seen)
+	}
+	return false
+}
+
+func isEnvironmentReference(value string) bool {
+	value = strings.TrimSpace(value)
+	return strings.HasPrefix(value, "${ENV:") && strings.HasSuffix(value, "}") && len(value) > len("${ENV:}")
 }
 
 func chunkAAD(backupID string, index uint64, header []byte) []byte {
