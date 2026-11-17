@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0030` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | **`READY`** *(DoR verified and opened under [`DEC-049`](../../governance/decisions.md) after Unit 29 acceptance CI `44092664075`; `TP-IMP-0025`, `TP-IMP-0026`, and sequential predecessor `TP-IMP-0029` are `DONE` on `origin/main`)* |
+| **Status** | **`READY_FOR_REVIEW`** *(Implementation and independent reviews recorded under [`DEC-051`](../../governance/decisions.md); implementation SHA `010731c06af7d18b0d0f0936bc6a6962b891f74f`; local Go quality gates pass, but Actions run `44149725403` has a failed Ubuntu hermetic gate, so acceptance remains pending)* |
 | **Size** | `L` (`web/console/src/pages/traces/*`, `finops/*`, `security/*`, `operations/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Stored XSS prevention on trace/audit payloads `CT-27`, strict separation of 3 cost-accuracy labels `UX-GR-05` & Emergency Kill-Switch UX)* |
 | **Technical Owner** | `Lead Frontend / SRE UX Engineer` |

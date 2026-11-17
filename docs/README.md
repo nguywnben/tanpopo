@@ -1,7 +1,7 @@
 # Tanpopo Documentation & Context Hub (`English-First Canonical Edition`)
 
-> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | GATE G4: APPROVED | TP-IMP-0001..0025: DONE | TP-IMP-0026: READY via DEC-040 | 1 READY / 21 BLOCKED`)**
-> - **Current frontier:** `TP-IMP-0026` is the only `READY` unit under [`DEC-040`](./governance/decisions.md); older hold/count text in historical governance summaries is superseded by this directive.
+> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | TP-IMP-0001..0029: DONE | TP-IMP-0030: READY_FOR_REVIEW via DEC-051 | 1 READY_FOR_REVIEW / 17 BLOCKED`)**
+> - **Current frontier:** `TP-IMP-0030` is `READY_FOR_REVIEW` under [`DEC-051`](./governance/decisions.md); Actions run `44149725403` has a failed Ubuntu hermetic Go gate, so Unit 30 is not accepted. Units `TP-IMP-0031`..`0047` remain blocked.
 > - **Gate G0 (ASTRA A00 — Context Intake & Baseline):** `COMPLETED`
 > - **Gate G1 (ASTRA A01 — Product Discovery):** **`APPROVED` *(`CONFIRMED_BY_OWNER` — `DEC-009`)* **
 > - **Baseline A02 (ASTRA A02 — Business Analysis):** **`APPROVED` *(`SM-01..09` & `BA-OQ-001..05` closed in `TP-IMP-0001`)* **
@@ -27,11 +27,11 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | **0D** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`Historical A08`):** Independent A08 horizontal + 8 vertical-slice adversarial audit (`AUD-001`..`030`) whose blocking items were closed in `M0`. | Historical audit provenance for `CR-01`..`10`. |
 | **0E** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01` (`13 / 13 M0 Gaps CLOSED · CR-11 & CR-12 APPROVED`):** Change Requests **`CR-01`..`CR-12`** and `M0`/`M1` closure evidence. | Verifying how each audit/implementation gap was resolved. |
 
-### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `25 DONE, 0 READY, 22 BLOCKED`)
+### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `29 DONE, 0 READY, 1 READY_FOR_REVIEW, 17 BLOCKED`)
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
-| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all **47 execution units (`TP-IMP-0001`..`0047`)** (`0001..0025 = DONE`, **`0026..0047 = BLOCKED`** [`0 READY`; `0 READY_FOR_REVIEW`; `DEC-033` remains `REVOKED_BY_OWNER`; paused before `0026` awaiting separate directive under `DEC-034`]), `REQUIRES_STRONG_REVIEW` flags (`37/47`), and links to [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | When checking unit readiness, dependencies, or locating a `UNIT_ID` spec. |
+| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all **47 execution units (`TP-IMP-0001`..`0047`)** (`0001..0029 = DONE`; `0030 = READY_FOR_REVIEW` under `DEC-051`; `0031..0047 = BLOCKED`), `REQUIRES_STRONG_REVIEW` flags (`37/47`), and links to [`docs/planning/units/TP-IMP-0001.md`](./planning/units/TP-IMP-0001.md) .. [`TP-IMP-0047.md`](./planning/units/TP-IMP-0047.md). | When checking unit readiness, dependencies, or locating a `UNIT_ID` spec. |
 | **0G** | [`docs/planning/roadmap.md`](./planning/roadmap.md) & [`docs/planning/milestone-map.md`](./planning/milestone-map.md) | **`PLAN-RM-01` & `PLAN-MS-01`:** 9 dependency-driven phases (`EP-00`..`09`), program blockers, trunk/worktree/canary rollout strategy, capacity & uncertainty ranges, and milestone gates `GATE-M0`..`GATE-M5`. | Program coordination, milestone gate checks, and capacity planning. |
 | **0H** | [`docs/planning/dependency-graph.md`](./planning/dependency-graph.md) | **`PLAN-DAG-01`:** Verified acyclic 47-node Mermaid DAG ($u < v$), critical path, 4 parallel `git worktree` expansion points, conditional First 5 Units, and hermetic cross-OS build/test procedures. | Parallel worktree scheduling and build/test environment setup. |
 

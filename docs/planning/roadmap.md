@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0027: DONE` | `TP-IMP-0028: READY` | `1 READY / 19 BLOCKED`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `1.34.0-dec-045-0028-ready` | **Date:** `2026-11-17`
+> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0029: DONE` | `TP-IMP-0030: READY_FOR_REVIEW` | `1 READY_FOR_REVIEW / 17 BLOCKED`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.35.0-dec-051-0030-review` | **Date:** `2026-11-17`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **CURRENT GOVERNANCE NOTICE (`TP-IMP-0027 DONE`; `TP-IMP-0028 READY`):** Unit 27 is accepted under `DEC-044` at `fe010fb1` with green CI `44042092153` and acceptance CI `44043662461`; independent code/security reviews clear. Unit 28 is open under `DEC-045` after its DoR passed; units `0029`..`0030` remain sequential under `DEC-041`, and `0031`..`0047` remain behind existing Owner and quality gates.
+> - **CURRENT GOVERNANCE NOTICE (`TP-IMP-0029 DONE`; `TP-IMP-0030 READY_FOR_REVIEW`):** Units `0001`..`0029` are accepted on `origin/main`; Unit 29 acceptance CI `44092664075` is green. Unit 30 is at implementation SHA `010731c06af7d18b0d0f0936bc6a6962b891f74f` under `DEC-051`; independent reviews are recorded, while Actions run `44149725403` has a failed Ubuntu hermetic Go gate. Units `0031`..`0047` remain blocked under their existing authorization and quality gates.
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
 >   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Current delivery is `TP-IMP-0001`..`0027` = **`DONE` (`27 / 47`)** under [`DEC-044`](../governance/decisions.md); `TP-IMP-0028` = **`READY`** under [`DEC-045`](../governance/decisions.md). Units `0029`..`0047` remain blocked pending sequential gates and existing Owner authorization boundaries.
+>   3. Current delivery is `TP-IMP-0001`..`0029` = **`DONE` (`29 / 47`)** under [`DEC-048`](../governance/decisions.md); `TP-IMP-0030` = **`READY_FOR_REVIEW`** under [`DEC-051`](../governance/decisions.md), with Ubuntu CI still failed on run `44149725403`. Units `0031`..`0047` remain blocked pending sequential gates and existing Owner authorization boundaries.
 
 ---
 
