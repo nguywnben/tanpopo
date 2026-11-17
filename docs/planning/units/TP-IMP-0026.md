@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0026` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | **`BLOCKED`** *(Paused before `TP-IMP-0026` awaiting separate Product Owner directive under [`DEC-034`](../../governance/decisions.md) — upstream `TP-IMP-0005` & `TP-IMP-0024` = `DONE`)* |
+| **Status** | **`READY`** *(DoR verified and opened by Product Owner authorization [`DEC-040`](../../governance/decisions.md); upstream `TP-IMP-0005` & `TP-IMP-0024` = `DONE`)* |
 | **Size** | `M` (`web/console/*`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Strict adherence to Astryx Design System v0.7.16 & zero-external-request air-gapped operation)* |
 | **Technical Owner** | `Lead Frontend / Design System Engineer` |

@@ -1,6 +1,7 @@
 # Tanpopo Documentation & Context Hub (`English-First Canonical Edition`)
 
-> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | GATE G4: APPROVED | TP-IMP-0001..0025: DONE | DEC-034 Paused Before 0026 | 0 READY / 22 BLOCKED`)**
+> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | GATE G4: APPROVED | TP-IMP-0001..0025: DONE | TP-IMP-0026: READY via DEC-040 | 1 READY / 21 BLOCKED`)**
+> - **Current frontier:** `TP-IMP-0026` is the only `READY` unit under [`DEC-040`](./governance/decisions.md); older hold/count text in historical governance summaries is superseded by this directive.
 > - **Gate G0 (ASTRA A00 — Context Intake & Baseline):** `COMPLETED`
 > - **Gate G1 (ASTRA A01 — Product Discovery):** **`APPROVED` *(`CONFIRMED_BY_OWNER` — `DEC-009`)* **
 > - **Baseline A02 (ASTRA A02 — Business Analysis):** **`APPROVED` *(`SM-01..09` & `BA-OQ-001..05` closed in `TP-IMP-0001`)* **
