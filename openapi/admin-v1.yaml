@@ -3163,6 +3163,10 @@ paths:
       operationId: queryBlastRadius
       summary: Preview affected resources for an Extension, Provider Connection, Project, or Virtual Key (SCR-14)
       parameters:
+        - name: org_id
+          in: query
+          required: false
+          schema: { type: string }
         - name: target_type
           in: query
           required: true

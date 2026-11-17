@@ -82,7 +82,7 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 		t.Fatalf("expected computed compatible preflight result, got %s", preflight.Body.String())
 	}
 	var preflightAuditCount int
-	if err := h.st.RawDB().QueryRow(`SELECT COUNT(*) FROM audit_events WHERE event_type = 'ops.upgrade_preflight' AND target_id = 'v0.2.0'`).Scan(&preflightAuditCount); err != nil {
+	if err := h.st.RawDB().QueryRow(`SELECT COUNT(*) FROM audit_events WHERE event_type = 'ops.upgrade_preflight_ran' AND target_id = 'v0.2.0'`).Scan(&preflightAuditCount); err != nil {
 		t.Fatalf("query preflight audit event: %v", err)
 	}
 	if preflightAuditCount != 1 {

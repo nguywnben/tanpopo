@@ -74,15 +74,30 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	if store == nil || keys == nil || strings.TrimSpace(outputDir) == "" {
 		return Receipt{}, errors.New("backup: snapshotter, key wrapper, and output directory are required")
 	}
-	if err := os.MkdirAll(outputDir, 0o700); err != nil {
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return Receipt{}, fmt.Errorf("backup: resolve output directory: %w", err)
+	}
+	if info, statErr := os.Lstat(absOutputDir); statErr == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return Receipt{}, errors.New("backup: output directory must be a real directory, not a symlink")
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return Receipt{}, fmt.Errorf("backup: inspect output directory: %w", statErr)
+	}
+	if err := os.MkdirAll(absOutputDir, 0o700); err != nil {
 		return Receipt{}, fmt.Errorf("backup: create output directory: %w", err)
 	}
+	info, err := os.Lstat(absOutputDir)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return Receipt{}, errors.New("backup: output directory changed or is not a real directory")
+	}
 	if runtime.GOOS != "windows" {
-		if err := os.Chmod(outputDir, 0o700); err != nil {
+		if err := os.Chmod(absOutputDir, 0o700); err != nil {
 			return Receipt{}, fmt.Errorf("backup: protect output directory: %w", err)
 		}
 	}
-	workDir, err := os.MkdirTemp(outputDir, ".tanpopo-backup-")
+	workDir, err := os.MkdirTemp(absOutputDir, ".tanpopo-backup-")
 	if err != nil {
 		return Receipt{}, fmt.Errorf("backup: create staging directory: %w", err)
 	}
@@ -115,7 +130,7 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 				return Receipt{}, errors.New("backup: lockfile must be a regular non-symlink file")
 			}
 			lockfileCopy = filepath.Join(workDir, "tanpopo.lock")
-			if err := copyFile(ctx, lockfilePath, lockfileCopy); err != nil {
+			if err := copyFile(ctx, lockfilePath, lockfileCopy, info); err != nil {
 				return Receipt{}, fmt.Errorf("backup: stage extension lockfile: %w", err)
 			}
 			lockfileHash, err = fileSHA256(lockfileCopy)
@@ -304,7 +319,7 @@ func encryptPayload(ctx context.Context, destPath, payloadPath string, key, nonc
 			nonce := make([]byte, aead.NonceSize())
 			copy(nonce, noncePrefix)
 			binary.BigEndian.PutUint64(nonce[len(noncePrefix):], index)
-			aad := chunkAAD(backupID, index)
+			aad := chunkAAD(backupID, index, header)
 			sealed := aead.Seal(nil, nonce, buf[:n], aad)
 			if err := binary.Write(dst, binary.BigEndian, uint32(len(sealed))); err != nil {
 				return fmt.Errorf("backup: write encrypted frame length: %w", err)
@@ -331,13 +346,15 @@ func encryptPayload(ctx context.Context, destPath, payloadPath string, key, nonc
 	return nil
 }
 
-func chunkAAD(backupID string, index uint64) []byte {
-	aad := make([]byte, 0, len(archiveMagic)+len(backupID)+8)
+func chunkAAD(backupID string, index uint64, header []byte) []byte {
+	headerDigest := sha256.Sum256(header)
+	aad := make([]byte, 0, len(archiveMagic)+len(backupID)+8+len(headerDigest))
 	aad = append(aad, archiveMagic...)
 	aad = append(aad, backupID...)
 	var counter [8]byte
 	binary.BigEndian.PutUint64(counter[:], index)
-	return append(aad, counter[:]...)
+	aad = append(aad, counter[:]...)
+	return append(aad, headerDigest[:]...)
 }
 
 func fileSHA256(path string) (string, error) {
@@ -353,12 +370,19 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func copyFile(ctx context.Context, src, dst string) error {
+func copyFile(ctx context.Context, src, dst string, expected os.FileInfo) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
+	opened, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	if !opened.Mode().IsRegular() || !os.SameFile(expected, opened) {
+		return errors.New("backup: lockfile changed while opening; refusing to follow a replacement path")
+	}
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err

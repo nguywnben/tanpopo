@@ -4748,6 +4748,7 @@ export interface operations {
     queryBlastRadius: {
         parameters: {
             query: {
+                org_id?: string;
                 target_type: "EXTENSION" | "PROVIDER_CONNECTION" | "PROJECT" | "VIRTUAL_KEY";
                 target_id: string;
                 since?: string;

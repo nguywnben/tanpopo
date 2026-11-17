@@ -81,9 +81,19 @@ func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Requ
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "encrypted SQLite backup dependencies are unavailable", true, nil)
 		return
 	}
-	backupDir := filepath.Join(filepath.Dir(store.DBPath()), "backups")
-	if err := os.MkdirAll(backupDir, 0o700); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "backup_failed", "upstream_error", "failed creating protected backup directory", true, nil)
+	dataDir, err := filepath.EvalSymlinks(filepath.Dir(store.DBPath()))
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "backup_failed", "upstream_error", "failed resolving the SQLite data directory", true, nil)
+		return
+	}
+	backupDir := filepath.Join(dataDir, "backups")
+	if info, err := os.Lstat(backupDir); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "backup destination must be a real directory under the SQLite data directory", true, nil)
+			return
+		}
+	} else if !os.IsNotExist(err) {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "backup_failed", "upstream_error", "failed inspecting protected backup directory", true, nil)
 		return
 	}
 	lockfilePath := s.lockfilePath
@@ -96,6 +106,12 @@ func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Requ
 	receipt, err := backup.CreateSQLite(r.Context(), store, s.vault, backupDir, lockfilePath, s.nowMs())
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "backup_failed", "upstream_error", "encrypted backup creation failed", true, nil)
+		return
+	}
+	resolvedBackupDir, err := filepath.EvalSymlinks(backupDir)
+	if err != nil || filepath.Clean(resolvedBackupDir) != filepath.Clean(backupDir) {
+		_ = os.Remove(filepath.Join(backupDir, receipt.ArchiveFilename))
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "backup_failed", "upstream_error", "backup destination changed during the operation", true, nil)
 		return
 	}
 	if err := s.appendOpsAudit(r, sc.Actor.PrincipalID, "ops.backup_created", receipt.BackupID, map[string]any{
@@ -156,7 +172,7 @@ func (s *Server) handleRunUpgradePreflight(w http.ResponseWriter, r *http.Reques
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
 		return
 	}
-	if err := s.appendOpsAudit(r, sc.Actor.PrincipalID, "ops.upgrade_preflight", req.TargetCoreVersion, map[string]any{
+	if err := s.appendOpsAudit(r, sc.Actor.PrincipalID, "ops.upgrade_preflight_ran", req.TargetCoreVersion, map[string]any{
 		"compatible":                result.Compatible,
 		"state":                     result.State,
 		"blocking_extension_count": len(result.BlockingExtensions),
