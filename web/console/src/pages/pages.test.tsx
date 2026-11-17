@@ -115,6 +115,15 @@ describe('Unit 27 setup, login, and overview pages', () => {
     expect(screen.getByRole('button', {name: 'Continue to Overview'})).toHaveAttribute('aria-disabled', 'true');
     expect(fetchMock.mock.calls[0][1]).toMatchObject({credentials: 'omit'});
   });
+
+  it('does not accept a partial inference response when the SSE completion marker is missing', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n', {status: 200, headers: {'Content-Type': 'text/event-stream'}}));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ShowOnceSecretDialog secret={{id: 'vk1', name: 'Initial key', project_id: 'p1', env_id: 'e1', key_prefix: 'vk_', last_four: '1234', state: 'CREATED_ACTIVE', version: 1, created_at: '2026-11-17T00:00:00Z', secret_key: 'vk_tp_once'}} model="llama3.2" onAcknowledge={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', {name: 'Send Test Request'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('stream ended before completion');
+    expect(screen.getByRole('button', {name: 'Continue to Overview'})).toHaveAttribute('aria-disabled', 'true');
+  });
 });
 
 function json(value: unknown, status = 200) {

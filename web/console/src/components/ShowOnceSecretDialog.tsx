@@ -43,6 +43,7 @@ export function ShowOnceSecretDialog({secret, model, onAcknowledge}: {secret: Se
       const decoder = new TextDecoder();
       let buffer = '';
       let text = '';
+      let streamCompleted = false;
       while (true) {
         const {done, value} = await reader.read();
         if (done) break;
@@ -52,7 +53,11 @@ export function ShowOnceSecretDialog({secret, model, onAcknowledge}: {secret: Se
         for (const line of lines) {
           if (!line.startsWith('data:')) continue;
           const data = line.slice(5).trim();
-          if (!data || data === '[DONE]') continue;
+          if (!data) continue;
+          if (data === '[DONE]') {
+            streamCompleted = true;
+            continue;
+          }
           try {
             const chunk = JSON.parse(data) as {choices?: Array<{delta?: {content?: string}}>};
             const delta = chunk.choices?.[0]?.delta?.content;
@@ -63,6 +68,7 @@ export function ShowOnceSecretDialog({secret, model, onAcknowledge}: {secret: Se
           }
         }
       }
+      if (!streamCompleted) throw new Error('The first request stream ended before completion. Check the model route and try again.');
       if (!text.trim()) throw new Error('The first request completed without a response. Check the model route and try again.');
       setTestResult({text, requestId: response.headers.get('x-tanpopo-request-id') ?? 'not provided', latencyMs: Math.round(performance.now() - started), verified: true});
     } catch (cause) {
