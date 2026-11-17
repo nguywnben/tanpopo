@@ -49,7 +49,7 @@ func TestCreateSQLiteRejectsSymlinkDestinationsAndLockfiles(t *testing.T) {
 	if err := os.WriteFile(plainLockfile, []byte("lockfile"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	linkedLockfile := filepath.Join(root, "tanpopo.lock")
+	linkedLockfile := filepath.Join(root, "linked-lockfile")
 	if err := os.Symlink(plainLockfile, linkedLockfile); err != nil {
 		t.Fatalf("create lockfile symlink: %v", err)
 	}

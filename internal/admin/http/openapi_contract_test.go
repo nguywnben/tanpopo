@@ -426,9 +426,9 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	h := newPart2TestHarness(t, 20)
 	ctx := context.Background()
 
-	// Verify exact 68 MVP v0.1 Control Plane routes and 100% OpenAPI conformance.
-	if got := len(h.srv.Routes()); got != 68 {
-		t.Fatalf("expected 68 registered Part 1+2 routes, got %d", got)
+	// Verify exact 73 MVP v0.1 Control Plane routes and 100% OpenAPI conformance.
+	if got := len(h.srv.Routes()); got != 73 {
+		t.Fatalf("expected 73 registered Part 1+2 routes, got %d", got)
 	}
 	for _, rt := range h.srv.Routes() {
 		pathItem, ok := doc.Paths[rt.Path]
@@ -810,7 +810,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	mustDecodeJSON(t, recUsage.Body.Bytes(), &usageCounts)
 	var foundExactCounts bool
 	for _, row := range usageCounts.Data {
-		if row.GroupKey == boot.ProjectID {
+		if row.GroupKey == "contract-proj" {
 			if row.ExactRequestCount != 1 || row.EstimatedRequestCount != 0 {
 				t.Fatalf("exact and estimated request counts must remain separate, got %+v", row)
 			}
@@ -905,11 +905,11 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 		t.Fatalf("GET /blast-radius PROJECT status=%d body=%s", recProjectBR.Code, recProjectBR.Body.String())
 	}
 	assertRequiredJSONKeys(t, "GET /blast-radius PROJECT", recProjectBR.Body.Bytes(), "organizations", "projects", "virtual_keys", "connections")
-	var initialVirtualKeyID string
-	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT id FROM virtual_keys WHERE project_id = ? LIMIT 1`, boot.ProjectID).Scan(&initialVirtualKeyID); err != nil {
-		t.Fatalf("load bootstrap virtual key for blast-radius contract test: %v", err)
+	initialVKey, err := h.vkeys.Create(ctx, mustVKeyCreateParams(boot.OrgID, boot.ProjectID, boot.EnvID, boot.OwnerPrincipalID, "blast-radius-contract"))
+	if err != nil {
+		t.Fatalf("create virtual key for blast-radius contract test: %v", err)
 	}
-	recVKeyBR := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=VIRTUAL_KEY&target_id="+initialVirtualKeyID, ownerCookie, "", "", nil)
+	recVKeyBR := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=VIRTUAL_KEY&target_id="+initialVKey.Summary.ID, ownerCookie, "", "", nil)
 	if recVKeyBR.Code != http.StatusOK {
 		t.Fatalf("GET /blast-radius VIRTUAL_KEY status=%d body=%s", recVKeyBR.Code, recVKeyBR.Body.String())
 	}
@@ -1062,4 +1062,3 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 		t.Fatalf("DELETE /extensions/{id} status=%d body=%s", recDelExt.Code, recDelExt.Body.String())
 	}
 }
-

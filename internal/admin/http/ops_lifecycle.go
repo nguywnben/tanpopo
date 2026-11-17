@@ -55,7 +55,7 @@ func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var epoch int64
-	if err := s.db.QueryRowContext(r.Context(), `SELECT COALESCE(MAX(seq_no), 0) FROM config_changelog`).Scan(&epoch); err != nil {
+	if err := s.db.QueryRowContext(r.Context(), `SELECT COALESCE(MAX(config_epoch), 0) FROM config_changelog`).Scan(&epoch); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading current configuration epoch", true, nil)
 		return
 	}
@@ -72,9 +72,9 @@ func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"current_epoch": epoch,
+		"current_epoch":  epoch,
 		"storage_engine": "sqlite_wal",
-		"nodes": []map[string]any{{"id": "standalone", "config_epoch": epoch, "health": health, "wal_bytes": walBytes}},
+		"nodes":          []map[string]any{{"id": "standalone", "config_epoch": epoch, "health": health, "wal_bytes": walBytes}},
 	})
 }
 
@@ -183,8 +183,8 @@ func (s *Server) handleRunUpgradePreflight(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := s.appendOpsAudit(r, sc.Actor.PrincipalID, "ops.upgrade_preflight_ran", req.TargetCoreVersion, map[string]any{
-		"compatible":                result.Compatible,
-		"state":                     result.State,
+		"compatible":               result.Compatible,
+		"state":                    result.State,
 		"blocking_extension_count": len(result.BlockingExtensions),
 	}); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "audit_failed", "upstream_error", "preflight result could not be recorded", true, nil)
@@ -212,4 +212,3 @@ func (s *Server) appendOpsAudit(r *http.Request, actorID, eventType, targetID st
 		MetadataJSON: string(metadataJSON),
 	})
 }
-

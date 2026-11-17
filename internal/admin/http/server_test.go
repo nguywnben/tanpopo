@@ -393,9 +393,9 @@ func TestAllAdminRoutesHaveExplicitPermission(t *testing.T) {
 	h := newAdminTestHarness(t)
 
 	allowedPublic := map[string]bool{
-		"GET /admin/v1/bootstrap/status":   true,
+		"GET /admin/v1/bootstrap/status":    true,
 		"POST /admin/v1/bootstrap/complete": true,
-		"POST /admin/v1/auth/login":        true,
+		"POST /admin/v1/auth/login":         true,
 	}
 
 	routes := h.srv.Routes()
@@ -2444,5 +2444,3 @@ func TestAdminRemediationRegressionSuite(t *testing.T) {
 		t.Fatalf("expected killSwitch.RefreshFromDB to evict deleted org2 kill switch from memory")
 	}
 }
-
-

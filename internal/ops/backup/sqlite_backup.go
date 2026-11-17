@@ -47,11 +47,11 @@ type KeyWrapper interface {
 }
 
 type Receipt struct {
-	BackupID       string `json:"backup_id"`
+	BackupID        string `json:"backup_id"`
 	ArchiveFilename string `json:"archive_filename"`
-	SHA256Hex      string `json:"sha256_hex"`
-	SizeBytes      int64  `json:"size_bytes"`
-	CreatedAt      string `json:"created_at"`
+	SHA256Hex       string `json:"sha256_hex"`
+	SizeBytes       int64  `json:"size_bytes"`
+	CreatedAt       string `json:"created_at"`
 }
 
 type manifest struct {
@@ -245,7 +245,7 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	header := envelopeHeader{
 		FormatVersion: 1, BackupID: backupID, CreatedAt: createdAt, Compression: "zstd",
 		KeyID: keyID, WrappedKeyNonce: base64.RawStdEncoding.EncodeToString(wrappedNonce),
-		WrappedKey: base64.RawStdEncoding.EncodeToString(wrappedKey),
+		WrappedKey:  base64.RawStdEncoding.EncodeToString(wrappedKey),
 		NoncePrefix: base64.RawStdEncoding.EncodeToString(noncePrefix), ChunkSize: chunkSize,
 	}
 	headerBytes, err := json.Marshal(header)
@@ -838,4 +838,3 @@ func (r contextReader) Read(p []byte) (int, error) {
 	}
 	return r.reader.Read(p)
 }
-

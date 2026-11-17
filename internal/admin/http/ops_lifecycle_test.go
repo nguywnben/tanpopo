@@ -30,7 +30,7 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 	}
 	var cluster struct {
 		Nodes []struct {
-			WALBytes int64 `json:"wal_bytes"`
+			WALBytes int64  `json:"wal_bytes"`
 			Health   string `json:"health"`
 		} `json:"nodes"`
 	}
