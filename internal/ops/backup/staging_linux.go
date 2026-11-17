@@ -7,55 +7,76 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"syscall"
 )
 
 const linuxTmpfsMagic = 0x01021994
 
-func openStagingRoot() (*os.Root, error) {
+func openStagingRoot() (*os.Root, func() error, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs("/dev/shm", &stat); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if uint64(stat.Type) != linuxTmpfsMagic {
-		return nil, errors.New("/dev/shm is not a volatile tmpfs")
+		return nil, nil, errors.New("/dev/shm is not a volatile tmpfs")
 	}
 	if err := verifyNoActiveSwap(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	shmRoot, err := os.OpenRoot("/dev/shm")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer shmRoot.Close()
-	privateName := fmt.Sprintf("tanpopo-backup-%d", os.Geteuid())
-	info, err := shmRoot.Lstat(privateName)
-	if errors.Is(err, os.ErrNotExist) {
-		if err := shmRoot.Mkdir(privateName, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
-			return nil, err
-		}
-		info, err = shmRoot.Lstat(privateName)
-	}
+	privateID, err := randomHexID()
 	if err != nil {
-		return nil, err
+		_ = shmRoot.Close()
+		return nil, nil, err
+	}
+	privateName := fmt.Sprintf(".tanpopo-backup-%d-%s", os.Geteuid(), privateID)
+	if err := shmRoot.Mkdir(privateName, 0o700); err != nil {
+		_ = shmRoot.Close()
+		return nil, nil, err
+	}
+	info, err := shmRoot.Lstat(privateName)
+	if err != nil {
+		_ = shmRoot.Remove(privateName)
+		_ = shmRoot.Close()
+		return nil, nil, err
 	}
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0o700 {
-		return nil, errors.New("backup: private tmpfs staging directory must be a mode 0700 real directory")
+		_ = shmRoot.Remove(privateName)
+		_ = shmRoot.Close()
+		return nil, nil, errors.New("backup: private tmpfs staging directory must be a mode 0700 real directory")
 	}
 	owner, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || owner.Uid != uint32(os.Geteuid()) {
-		return nil, errors.New("backup: private tmpfs staging directory is owned by another user")
+		_ = shmRoot.Remove(privateName)
+		_ = shmRoot.Close()
+		return nil, nil, errors.New("backup: private tmpfs staging directory is owned by another user")
 	}
 	root, err := shmRoot.OpenRoot(privateName)
 	if err != nil {
-		return nil, err
+		_ = shmRoot.Remove(privateName)
+		_ = shmRoot.Close()
+		return nil, nil, err
 	}
 	openedInfo, err := root.Stat(".")
 	if err != nil || !os.SameFile(info, openedInfo) {
 		_ = root.Close()
-		return nil, errors.New("backup: private tmpfs staging directory changed during secure open")
+		_ = shmRoot.Remove(privateName)
+		_ = shmRoot.Close()
+		return nil, nil, errors.New("backup: private tmpfs staging directory changed during secure open")
 	}
-	return root, nil
+	var cleanupOnce sync.Once
+	var cleanupErr error
+	cleanup := func() error {
+		cleanupOnce.Do(func() {
+			cleanupErr = errors.Join(root.Close(), shmRoot.Remove(privateName), shmRoot.Close())
+		})
+		return cleanupErr
+	}
+	return root, cleanup, nil
 }
 
 func verifyNoActiveSwap() error {

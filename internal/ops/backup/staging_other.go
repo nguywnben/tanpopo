@@ -7,6 +7,6 @@ import (
 	"os"
 )
 
-func openStagingRoot() (*os.Root, error) {
-	return nil, errors.New("backup: volatile staging filesystem is unsupported")
+func openStagingRoot() (*os.Root, func() error, error) {
+	return nil, nil, errors.New("backup: volatile staging filesystem is unsupported")
 }

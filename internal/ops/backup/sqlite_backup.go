@@ -93,21 +93,25 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, err
 	}
 	defer outputRoot.Close()
-	stagingRoot, err := openStagingRoot()
+	stagingRoot, cleanupStagingRoot, err := openStagingRoot()
 	if err != nil {
 		return Receipt{}, fmt.Errorf("backup: open volatile staging filesystem: %w", err)
 	}
-	defer stagingRoot.Close()
-	unlockBackup, err := lockBackup(stagingRoot)
+	stagingRootCleaned := false
+	defer func() {
+		if !stagingRootCleaned {
+			if cleanupErr := cleanupStagingRoot(); cleanupErr != nil {
+				resultErr = errors.Join(resultErr, fmt.Errorf("backup: remove private staging directory: %w", cleanupErr))
+			}
+		}
+	}()
+	unlockBackup, err := lockBackup(outputRoot)
 	if err != nil {
 		return Receipt{}, fmt.Errorf("backup: lock output directory: %w", err)
 	}
 	defer unlockBackup()
 	if err := cleanupStaleStaging(outputRoot); err != nil {
 		return Receipt{}, fmt.Errorf("backup: remove abandoned backup staging files: %w", err)
-	}
-	if err := cleanupStaleStaging(stagingRoot); err != nil {
-		return Receipt{}, fmt.Errorf("backup: remove abandoned plaintext staging files: %w", err)
 	}
 	rootPathFile, sqliteRootPath, err := pathForOpenRoot(outputRoot)
 	if err != nil {
@@ -241,6 +245,11 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, fmt.Errorf("backup: remove plaintext staging files: %w", err)
 	}
 	stageCleaned = true
+	if err := cleanupStagingRoot(); err != nil {
+		_ = outputRoot.Remove(finalName)
+		return Receipt{}, fmt.Errorf("backup: remove private staging directory: %w", err)
+	}
+	stagingRootCleaned = true
 	return Receipt{BackupID: backupID, ArchiveFilename: finalName, SHA256Hex: archiveHash, SizeBytes: info.Size(), CreatedAt: createdAt}, nil
 }
 

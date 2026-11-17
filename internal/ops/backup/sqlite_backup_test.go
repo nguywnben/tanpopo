@@ -41,11 +41,15 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	}
 	root := t.TempDir()
 	outputDir := filepath.Join(root, "backups")
-	stagingRoot, err := openStagingRoot()
+	stagingRoot, cleanupStagingRoot, err := openStagingRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer stagingRoot.Close()
+	t.Cleanup(func() {
+		if err := cleanupStagingRoot(); err != nil {
+			t.Errorf("clean test staging root: %v", err)
+		}
+	})
 	staleStage := ".tanpopo-backup-0123456789abcdef0123456789abcdef"
 	if err := stagingRoot.Mkdir(staleStage, 0o700); err != nil {
 		t.Fatal(err)
@@ -72,6 +76,9 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	}
 	if err := partial.Close(); err != nil {
 		t.Fatal(err)
+	}
+	if err := cleanupStaleStaging(stagingRoot); err != nil {
+		t.Fatalf("cleanup abandoned staging data: %v", err)
 	}
 	lockfile := filepath.Join(root, "tanpopo.lock")
 	if err := os.WriteFile(lockfile, []byte("extension lock manifest"), 0o600); err != nil {
