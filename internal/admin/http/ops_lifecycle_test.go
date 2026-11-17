@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
+	"github.com/nguywnben/tanpopo/internal/ops/backup"
 )
 
 func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
@@ -53,6 +54,16 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 	}
 
 	backup := h.doBearer(t, http.MethodPost, "/admin/v1/ops/backups", "tok_cr13_operator", "", nil)
+	if !backup.PlatformSupported() {
+		if backup.Code != http.StatusServiceUnavailable {
+			t.Fatalf("POST backups code=%d; unsupported platform should fail closed: %s", backup.Code, backup.Body.String())
+		}
+		preflight := h.doBearer(t, http.MethodPost, "/admin/v1/ops/upgrades/preflight", "tok_cr13_operator", "", map[string]any{"target_core_version": "v0.2.0"})
+		if preflight.Code != http.StatusOK {
+			t.Fatalf("POST preflight code=%d body=%s", preflight.Code, preflight.Body.String())
+		}
+		return
+	}
 	if backup.Code != http.StatusCreated {
 		t.Fatalf("POST backups code=%d body=%s", backup.Code, backup.Body.String())
 	}

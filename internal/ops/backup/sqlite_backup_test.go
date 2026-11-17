@@ -8,7 +8,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
@@ -33,9 +32,9 @@ func (w *testKeyWrapper) WrapArchiveKey(ctx context.Context, key []byte) (string
 
 func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	ctx := context.Background()
-	if runtime.GOOS != "linux" {
+	if !PlatformSupported() {
 		if _, err := CreateSQLite(ctx, testSnapshotter{content: []byte("snapshot")}, &testKeyWrapper{}, t.TempDir(), "", "", 1_795_000_000_000); err == nil {
-			t.Fatal("CreateSQLite returned success without a directory-handle-pinned SQLite path")
+			t.Fatal("CreateSQLite returned success without secure volatile staging support")
 		}
 		return
 	}

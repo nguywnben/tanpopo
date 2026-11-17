@@ -14,6 +14,13 @@ import (
 
 const linuxTmpfsMagic = 0x01021994
 
+// PlatformSupported reports whether the operating system has the verified
+// volatile staging primitives required for encrypted backup creation.
+func PlatformSupported() bool {
+	var stat syscall.Statfs_t
+	return syscall.Statfs("/dev/shm", &stat) == nil && uint64(stat.Type) == linuxTmpfsMagic && verifyNoActiveSwap() == nil
+}
+
 func openStagingRoot(outputRoot *os.Root) (*os.Root, func() error, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs("/dev/shm", &stat); err != nil {

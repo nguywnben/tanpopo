@@ -83,6 +83,10 @@ func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Requ
 	if !ok || !s.requireInstanceOperator(w, r, sc, rbac.ActionOpsWrite) {
 		return
 	}
+	if !backup.PlatformSupported() {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "encrypted backup requires Linux volatile staging support", true, nil)
+		return
+	}
 	store, ok := s.storage.(sqliteSnapshotter)
 	if !ok || s.vault == nil {
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "encrypted SQLite backup dependencies are unavailable", true, nil)
