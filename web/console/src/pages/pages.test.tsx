@@ -1,9 +1,11 @@
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {cleanup, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import axe from 'axe-core';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import App from '../App';
+import {ShowOnceSecretDialog} from '../components/ShowOnceSecretDialog';
 
 afterEach(() => {
+  cleanup();
   window.history.replaceState({}, '', '/');
   vi.unstubAllGlobals();
 });
@@ -98,6 +100,20 @@ describe('Unit 27 setup, login, and overview pages', () => {
     expect(screen.getAllByRole('button', {name: 'Open remediation'})).toHaveLength(1);
     expect(await seriousAxeViolations()).toEqual([]);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
+  });
+
+  it('keeps setup incomplete when the first inference stream fails after a partial token', async () => {
+    const stream = new ReadableStream<Uint8Array>({start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'));
+      controller.error(new Error('stream interrupted'));
+    }});
+    const fetchMock = vi.fn().mockResolvedValue(new Response(stream, {status: 200, headers: {'Content-Type': 'text/event-stream'}}));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ShowOnceSecretDialog secret={{id: 'vk1', name: 'Initial key', project_id: 'p1', env_id: 'e1', key_prefix: 'vk_', last_four: '1234', state: 'CREATED_ACTIVE', version: 1, created_at: '2026-11-17T00:00:00Z', secret_key: 'vk_tp_once'}} model="llama3.2" onAcknowledge={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', {name: 'Send Test Request'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('stream interrupted');
+    expect(screen.getByRole('button', {name: 'Continue to Overview'})).toHaveAttribute('aria-disabled', 'true');
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({credentials: 'omit'});
   });
 });
 

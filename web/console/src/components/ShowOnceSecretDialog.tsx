@@ -13,7 +13,7 @@ export function ShowOnceSecretDialog({secret, model, onAcknowledge}: {secret: Se
   const [copyMessage, setCopyMessage] = useState('');
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState('');
-  const [testResult, setTestResult] = useState<{text: string; requestId: string; latencyMs: number} | null>(null);
+  const [testResult, setTestResult] = useState<{text: string; requestId: string; latencyMs: number; verified: boolean} | null>(null);
   async function copySecret() {
     try {
       await navigator.clipboard.writeText(secret.secret_key);
@@ -31,6 +31,7 @@ export function ShowOnceSecretDialog({secret, model, onAcknowledge}: {secret: Se
     try {
       const response = await fetch('/v1/chat/completions', {
         method: 'POST',
+        credentials: 'omit',
         headers: {'Authorization': `Bearer ${secret.secret_key}`, 'Content-Type': 'application/json'},
         body: JSON.stringify({model, messages: [{role: 'user', content: 'Reply with a short greeting.'}], stream: true, max_tokens: 32}),
       });
@@ -56,15 +57,16 @@ export function ShowOnceSecretDialog({secret, model, onAcknowledge}: {secret: Se
             const chunk = JSON.parse(data) as {choices?: Array<{delta?: {content?: string}}>};
             const delta = chunk.choices?.[0]?.delta?.content;
             if (delta) text += delta;
-            setTestResult({text, requestId: response.headers.get('x-tanpopo-request-id') ?? 'not provided', latencyMs: Math.round(performance.now() - started)});
+            setTestResult({text, requestId: response.headers.get('x-tanpopo-request-id') ?? 'not provided', latencyMs: Math.round(performance.now() - started), verified: false});
           } catch {
             throw new Error('The first request returned an unreadable streaming response.');
           }
         }
       }
       if (!text.trim()) throw new Error('The first request completed without a response. Check the model route and try again.');
-      setTestResult({text, requestId: response.headers.get('x-tanpopo-request-id') ?? 'not provided', latencyMs: Math.round(performance.now() - started)});
+      setTestResult({text, requestId: response.headers.get('x-tanpopo-request-id') ?? 'not provided', latencyMs: Math.round(performance.now() - started), verified: true});
     } catch (cause) {
+      setTestResult(null);
       setTestError(cause instanceof Error ? cause.message : 'The first request failed. Check the model route and try again.');
     } finally {
       setTesting(false);
@@ -86,11 +88,11 @@ export function ShowOnceSecretDialog({secret, model, onAcknowledge}: {secret: Se
         <Button label={testing ? 'Sending test request…' : 'Send Test Request'} variant="primary" isLoading={testing} onClick={sendTestRequest} />
         {testError ? <Text role="alert">{testError}</Text> : null}
         {testResult ? <VStack gap={1}>
-          <Text role="status">First request succeeded in {testResult.latencyMs} ms · Request ID: {testResult.requestId}</Text>
+          <Text role="status">{testResult.verified ? `First request succeeded in ${testResult.latencyMs} ms · Request ID: ${testResult.requestId}` : 'Receiving the first response…'}</Text>
           <Text>{testResult.text}</Text>
         </VStack> : null}
         <CheckboxInput label="I have securely stored this virtual key" value={acknowledged} onChange={setAcknowledged} />
-        <Button label="Continue to Overview" variant="primary" isDisabled={!acknowledged || !testResult || testing} onClick={onAcknowledge} />
+        <Button label="Continue to Overview" variant="primary" isDisabled={!acknowledged || !testResult?.verified || testing} onClick={onAcknowledge} />
       </VStack>
     </Dialog>
   );
