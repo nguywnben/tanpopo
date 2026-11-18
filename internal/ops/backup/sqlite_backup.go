@@ -92,8 +92,11 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	if store == nil || keys == nil || strings.TrimSpace(outputDir) == "" || strings.TrimSpace(lockfilePath) == "" || strings.TrimSpace(configPath) == "" || strings.TrimSpace(artifactDir) == "" {
 		return Receipt{}, errors.New("backup: snapshotter, key wrapper, output directory, lockfile, config file, and artifact directory are required")
 	}
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		return createSQLiteMemory(ctx, store, keys, outputDir, lockfilePath, configPath, artifactDir, nowMs)
+	}
 	if runtime.GOOS != "linux" {
-		return Receipt{}, fmt.Errorf("backup: secure SQLite snapshot paths are unsupported on %s", runtime.GOOS)
+		return Receipt{}, fmt.Errorf("backup: secure SQLite snapshots are unsupported on %s", runtime.GOOS)
 	}
 	backupMu.Lock()
 	defer backupMu.Unlock()

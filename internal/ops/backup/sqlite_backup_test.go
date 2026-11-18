@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -20,6 +21,13 @@ func (s testSnapshotter) BackupTo(ctx context.Context, path string) error {
 		return err
 	}
 	return os.WriteFile(path, s.content, 0o600)
+}
+
+func (s testSnapshotter) BackupBytes(ctx context.Context) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return append([]byte(nil), s.content...), nil
 }
 
 type testKeyWrapper struct{ key []byte }
@@ -34,10 +42,8 @@ func (w *testKeyWrapper) WrapArchiveKey(ctx context.Context, key []byte) (string
 
 func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	ctx := context.Background()
-	if !PlatformSupported() {
-		if _, err := CreateSQLite(ctx, testSnapshotter{content: []byte("snapshot")}, &testKeyWrapper{}, t.TempDir(), "", "", "", 1_795_000_000_000); err == nil {
-			t.Fatal("CreateSQLite returned success without secure volatile staging support")
-		}
+	t.Run("in-memory portable snapshot", testCreateSQLiteMemoryProducesProtectedEncryptedArchive)
+	if runtime.GOOS != "linux" {
 		return
 	}
 	root := t.TempDir()
@@ -146,6 +152,44 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	}
 	if _, err := stagingRoot.Lstat(stalePartial); !os.IsNotExist(err) {
 		t.Fatalf("abandoned partial archive remains: stat err=%v", err)
+	}
+}
+
+func testCreateSQLiteMemoryProducesProtectedEncryptedArchive(t *testing.T) {
+	t.Helper()
+	root := t.TempDir()
+	outputDir := filepath.Join(root, "backups")
+	lockfile := filepath.Join(root, "tanpopo.lock")
+	config := filepath.Join(root, "tanpopo.yaml")
+	artifactDir := filepath.Join(root, "plugins")
+	if err := os.MkdirAll(artifactDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	plainDB := []byte("SQLite snapshot contains private backup data")
+	artifact := []byte("pinned extension artifact")
+	for path, data := range map[string][]byte{lockfile: []byte("extension lock manifest"), config: []byte("data_dir: /var/lib/tanpopo\n"), filepath.Join(artifactDir, "sample.wasm"): artifact} {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keys := &testKeyWrapper{}
+	createBackup := createSQLiteMemory
+	if runtime.GOOS != "linux" {
+		createBackup = CreateSQLite
+	}
+	receipt, err := createBackup(context.Background(), testSnapshotter{content: plainDB}, keys, outputDir, lockfile, config, artifactDir, 1_795_000_000_000)
+	if err != nil {
+		t.Fatalf("createSQLiteMemory: %v", err)
+	}
+	archive, err := os.ReadFile(filepath.Join(outputDir, receipt.ArchiveFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(archive, []byte(archiveMagic)) || bytes.Contains(archive, plainDB) || bytes.Contains(archive, artifact) || bytes.Contains(archive, keys.key) {
+		t.Fatal("in-memory backup did not produce a protected encrypted archive")
+	}
+	if len(receipt.SHA256Hex) != 64 || receipt.SizeBytes != int64(len(archive)) || len(keys.key) != 32 {
+		t.Fatalf("incomplete backup receipt/key: receipt=%+v key-bytes=%d", receipt, len(keys.key))
 	}
 }
 

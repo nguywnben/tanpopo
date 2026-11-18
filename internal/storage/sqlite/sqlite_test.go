@@ -4,6 +4,7 @@
 package sqlite
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -462,6 +463,14 @@ func TestSQLiteNetworkFSRejectionBackupToCrashReopenLeasesAndCRUD(t *testing.T) 
 	if err := st.BackupTo(ctx, backupPath); !errors.Is(err, port.ErrAlreadyExists) {
 		t.Fatalf("BackupTo existing file expected ErrAlreadyExists, got %v", err)
 	}
+	memorySnapshot, err := st.BackupBytes(ctx)
+	if err != nil {
+		t.Fatalf("BackupBytes: %v", err)
+	}
+	if !bytes.HasPrefix(memorySnapshot, []byte("SQLite format 3\x00")) {
+		t.Fatal("BackupBytes did not serialize a SQLite database")
+	}
+	clear(memorySnapshot)
 
 	// Verify Audit() & Append changelog direct calls.
 	if err := st.Audit().Append(ctx, port.AuditEvent{ID: idgen.MustNew(idgen.PrefixAudit)}); err != nil {
@@ -1204,5 +1213,3 @@ func TestSQLiteTenancyAuditAllMutationsAndFailClosedRollback(t *testing.T) {
 		t.Fatalf("expected ErrInvalidInput when exec is *sql.DB instead of *sql.Tx, got %v", err)
 	}
 }
-
-

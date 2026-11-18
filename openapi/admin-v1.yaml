@@ -3297,8 +3297,8 @@ paths:
                 properties:
                   current_epoch: { type: integer }
                   storage_engine: { type: string, enum: [sqlite_wal, postgres] }
-                  backup_supported: { type: boolean, description: "True only when encrypted plaintext staging prerequisites are verified. v0.1 currently supports Linux hosts with /dev/shm tmpfs and swap disabled." }
-                  backup_unavailable_reason: { type: string, description: "Empty when backup_supported is true; otherwise explains the fail-closed platform prerequisite." }
+                  backup_supported: { type: boolean, description: "True for supported Linux hosts with verified /dev/shm tmpfs and swap disabled, and for macOS/Windows hosts using in-memory SQLite snapshots." }
+                  backup_unavailable_reason: { type: string, description: "Empty when backup_supported is true; otherwise explains why this host cannot create a protected backup." }
                   nodes:
                     type: array
                     items:
@@ -3316,7 +3316,7 @@ paths:
       tags: [DevToolsAndOps]
       operationId: triggerEncryptedBackup
       summary: Trigger hot Master-KEK-sealed .tpop.enc backup archive (OPERATOR only) (SCR-16)
-      description: "Backup creation is available only on Linux hosts where /dev/shm is verified as volatile tmpfs and swap is disabled. Other platforms return 503; the Operations UI reports this limitation and disables the action."
+      description: "Backup creation uses verified /dev/shm tmpfs with swap disabled on Linux, and an in-memory SQLite online snapshot on macOS and Windows; plaintext database snapshots are never staged on disk on those hosts. Unsupported platforms return 503."
       parameters:
         - $ref: "#/components/parameters/CsrfTokenHeader"
         - $ref: "#/components/parameters/IdempotencyKeyHeader"

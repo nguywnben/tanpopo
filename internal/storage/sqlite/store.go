@@ -5,7 +5,9 @@ package sqlite
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -17,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
+	moderncsqlite "modernc.org/sqlite"
 
 	sqlitemigrations "github.com/nguywnben/tanpopo/db/migrations/sqlite"
 	"github.com/nguywnben/tanpopo/internal/storage/migrate"
@@ -280,6 +282,85 @@ func (s *Store) BackupTo(ctx context.Context, destPath string) error {
 		}
 	}
 	return nil
+}
+
+// BackupBytes creates a transactionally consistent SQLite hot snapshot in a
+// shared in-memory database and serializes it without writing plaintext to a
+// temporary filesystem. The returned bytes contain plaintext and callers must
+// clear them as soon as the encrypted archive has been written.
+func (s *Store) BackupBytes(ctx context.Context) ([]byte, error) {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		return nil, fmt.Errorf("sqlite: generate in-memory backup id: %w", err)
+	}
+	uri := "file:tanpopo-backup-" + hex.EncodeToString(id[:]) + "?mode=memory&cache=shared"
+	dstDB, err := sql.Open("sqlite", uri)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: open in-memory backup database: %w", err)
+	}
+	defer dstDB.Close()
+	dstConn, err := dstDB.Conn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: connect in-memory backup database: %w", err)
+	}
+	defer dstConn.Close()
+	srcConn, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: connect source for in-memory backup: %w", err)
+	}
+	defer srcConn.Close()
+	var snapshot []byte
+	err = srcConn.Raw(func(srcDriverConn any) error {
+		creator, ok := srcDriverConn.(interface {
+			NewBackup(string) (*moderncsqlite.Backup, error)
+		})
+		if !ok {
+			return errors.New("sqlite: driver does not support online in-memory backup")
+		}
+		backup, err := creator.NewBackup(uri)
+		if err != nil {
+			return fmt.Errorf("sqlite: initialize in-memory online backup: %w", err)
+		}
+		finished := false
+		defer func() {
+			if !finished {
+				_ = backup.Finish()
+			}
+		}()
+		for {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			more, err := backup.Step(128)
+			if err != nil {
+				return fmt.Errorf("sqlite: copy online backup pages: %w", err)
+			}
+			if !more {
+				break
+			}
+		}
+		if err := backup.Finish(); err != nil {
+			finished = true
+			return fmt.Errorf("sqlite: finish in-memory online backup: %w", err)
+		}
+		finished = true
+		return dstConn.Raw(func(dstDriverConn any) error {
+			serializer, ok := dstDriverConn.(interface{ Serialize() ([]byte, error) })
+			if !ok {
+				return errors.New("sqlite: driver does not support in-memory serialization")
+			}
+			snapshot, err = serializer.Serialize()
+			return err
+		})
+	})
+	if err != nil {
+		clear(snapshot)
+		return nil, err
+	}
+	if len(snapshot) == 0 {
+		return nil, errors.New("sqlite: in-memory online backup produced an empty snapshot")
+	}
+	return snapshot, nil
 }
 
 // BeginTx starts an immediate write-safe SQLite transaction.
