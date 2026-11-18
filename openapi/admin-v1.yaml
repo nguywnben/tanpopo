@@ -3041,6 +3041,10 @@ paths:
           in: query
           required: false
           schema: { type: string }
+        - name: chain_partition
+          in: query
+          required: false
+          schema: { type: string }
         - $ref: "#/components/parameters/LimitParam"
         - $ref: "#/components/parameters/CursorParam"
       responses:

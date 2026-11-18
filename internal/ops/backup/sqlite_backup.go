@@ -108,15 +108,11 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	if err != nil {
 		return Receipt{}, err
 	}
-	outputRoot, err := openOutputRoot(outputDir)
+	outputRoot, unlockBackup, err := openLockedOutputRoot(outputDir)
 	if err != nil {
 		return Receipt{}, err
 	}
 	defer outputRoot.Close()
-	unlockBackup, err := lockBackup(outputRoot)
-	if err != nil {
-		return Receipt{}, fmt.Errorf("backup: lock output directory: %w", err)
-	}
 	defer unlockBackup()
 	lockfileInfo, err := os.Lstat(lockfilePath)
 	if err != nil {
@@ -299,7 +295,7 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 	return Receipt{BackupID: backupID, ArchiveFilename: finalName, SHA256Hex: archiveHash, SizeBytes: info.Size(), CreatedAt: createdAt}, nil
 }
 
-func openOutputRoot(outputDir string) (*os.Root, error) {
+func openRawOutputRoot(outputDir string) (*os.Root, error) {
 	absOutputDir, err := filepath.Abs(outputDir)
 	if err != nil {
 		return nil, fmt.Errorf("backup: resolve output directory: %w", err)
@@ -337,24 +333,55 @@ func openOutputRoot(outputDir string) (*os.Root, error) {
 		_ = root.Close()
 		return nil, errors.New("backup: output directory changed during secure open")
 	}
+	return root, nil
+}
+
+func secureOpenedOutputRoot(root *os.Root) error {
 	if err := secureOutputRoot(root); err != nil {
-		_ = root.Close()
-		return nil, fmt.Errorf("backup: secure output directory permissions: %w", err)
+		return fmt.Errorf("backup: secure output directory permissions: %w", err)
 	}
 	if runtime.GOOS != "windows" {
 		rootFile, rootPath, pathErr := pathForOpenRoot(root)
 		if pathErr != nil {
-			_ = root.Close()
-			return nil, pathErr
+			return pathErr
 		}
 		chmodErr := os.Chmod(rootPath, 0o700)
 		_ = rootFile.Close()
 		if chmodErr != nil {
-			_ = root.Close()
-			return nil, fmt.Errorf("backup: protect output directory: %w", chmodErr)
+			return fmt.Errorf("backup: protect output directory: %w", chmodErr)
 		}
 	}
+	return nil
+}
+
+func openOutputRoot(outputDir string) (*os.Root, error) {
+	root, err := openRawOutputRoot(outputDir)
+	if err != nil {
+		return nil, err
+	}
+	if err := secureOpenedOutputRoot(root); err != nil {
+		_ = root.Close()
+		return nil, err
+	}
 	return root, nil
+}
+
+func openLockedOutputRoot(outputDir string) (*os.Root, func(), error) {
+	root, err := openRawOutputRoot(outputDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	unlockBackup, err := lockBackup(root)
+	if err != nil {
+		_ = root.Close()
+		return nil, nil, fmt.Errorf("backup: lock output directory: %w", err)
+	}
+	if err := secureOpenedOutputRoot(root); err != nil {
+		unlockBackup()
+		_ = root.Close()
+		return nil, nil, err
+	}
+	return root, unlockBackup, nil
 }
 
 func renameRootEntry(rootPath, oldName, newName string) error {
@@ -618,6 +645,7 @@ func (w *encryptedFrameWriter) Close() error {
 		return nil
 	}
 	w.closed = true
+	defer clear(w.buffer[:cap(w.buffer)])
 	if err := w.ctx.Err(); err != nil {
 		return err
 	}

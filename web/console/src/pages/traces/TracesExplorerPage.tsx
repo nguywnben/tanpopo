@@ -26,6 +26,7 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
   const [loadingMore, setLoadingMore] = useState(false);
   const [message, setMessage] = useState('');
   const queryGeneration = useRef(0);
+  const selectionGeneration = useRef(0);
   const mayReadTraces = !roles.includes('FINOPS_VIEWER') || roles.some(role => role !== 'FINOPS_VIEWER');
 
   useEffect(() => {
@@ -56,15 +57,24 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
   const visible = useMemo(() => traces.filter(trace => !appliedError || (trace.error_code ?? '').toLowerCase().includes(appliedError.toLowerCase())), [traces, appliedError]);
 
   async function search() {
+    const generation = ++selectionGeneration.current;
     setMessage(''); setAppliedError(errorCode.trim());
     if (!requestId.trim()) { setSelected(null); return; }
-    try { setSelected(await getTraceWaterfall(requestId.trim()) as Trace); }
-    catch (error) { setSelected(null); setMessage(errorMessage(error)); }
+    try {
+      const detail = await getTraceWaterfall(requestId.trim()) as Trace;
+      if (generation === selectionGeneration.current) setSelected(detail);
+    } catch (error) {
+      if (generation === selectionGeneration.current) { setSelected(null); setMessage(errorMessage(error)); }
+    }
   }
 
   const selectTrace = useCallback((trace: Trace) => {
-    setRequestId(String(trace.request_id));
-    void getTraceWaterfall(String(trace.request_id)).then(setSelected).catch(error => setMessage(errorMessage(error)));
+    const generation = ++selectionGeneration.current;
+    const id = String(trace.request_id);
+    setRequestId(id);
+    void getTraceWaterfall(id)
+      .then(detail => { if (generation === selectionGeneration.current) setSelected(detail as Trace); })
+      .catch(error => { if (generation === selectionGeneration.current) setMessage(errorMessage(error)); });
   }, []);
 
   if (!mayReadTraces) return <Text role="alert">The FINOPS_VIEWER role can access FinOps reports only.</Text>;

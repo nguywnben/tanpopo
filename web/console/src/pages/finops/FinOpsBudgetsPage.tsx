@@ -88,7 +88,11 @@ export function FinOpsBudgetsPage({projectId, roles}: {projectId: string; roles:
 
 export function formatMicroUSD(value: number) {
   if (!Number.isSafeInteger(value)) return 'Unavailable: unsafe integer amount';
-  const amount = BigInt(value); const whole = amount / 1_000_000n; const fraction = String(amount % 1_000_000n).padStart(6, '0');
-  return `$${whole.toLocaleString('en-US')}.${fraction}`;
+  const amount = BigInt(value);
+  const sign = amount < 0n ? '-' : '';
+  const abs = amount < 0n ? -amount : amount;
+  const whole = abs / 1_000_000n;
+  const fraction = String(abs % 1_000_000n).padStart(6, '0');
+  return `${sign}$${whole.toLocaleString('en-US')}.${fraction}`;
 }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : 'The request could not be completed.'; }

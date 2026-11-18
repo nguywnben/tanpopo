@@ -35,6 +35,10 @@ func TestWindowsOutputACLProtectsExistingArchiveAndDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	wantAceCount := uint16(2)
+	if serviceSID.Equals(systemSID) {
+		wantAceCount = 1
+	}
 	for i, path := range []string{dir, archivePath} {
 		isDir := i == 0
 		file, err := os.Open(path)
@@ -50,8 +54,8 @@ func TestWindowsOutputACLProtectsExistingArchiveAndDirectory(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read DACL entries for %q: %v", path, err)
 		}
-		if dacl == nil || dacl.AceCount != 2 {
-			t.Fatalf("%q DACL has %v ACEs; want exactly service-account and SYSTEM ACEs", path, dacl)
+		if dacl == nil || dacl.AceCount != wantAceCount {
+			t.Fatalf("%q DACL has %v ACEs; want %d ACE(s) for service account and SYSTEM", path, dacl, wantAceCount)
 		}
 		expectedFlags := uint8(0)
 		if isDir {
@@ -73,12 +77,16 @@ func TestWindowsOutputACLProtectsExistingArchiveAndDirectory(t *testing.T) {
 				t.Fatalf("%q ACE %d mask=%#x; want %#x", path, idx, ace.Mask, uint32(windowsFileAllAccess))
 			}
 			aceSID := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
-			switch {
-			case aceSID.Equals(serviceSID):
+			matched := false
+			if aceSID.Equals(serviceSID) {
 				sawService = true
-			case aceSID.Equals(systemSID):
+				matched = true
+			}
+			if aceSID.Equals(systemSID) {
 				sawSystem = true
-			default:
+				matched = true
+			}
+			if !matched {
 				t.Fatalf("%q ACE %d grants access to unexpected SID %v", path, idx, aceSID)
 			}
 		}

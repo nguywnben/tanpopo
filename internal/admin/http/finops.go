@@ -336,10 +336,6 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if foreignOrgExists || expectedVer != 1 {
-			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
-			return
-		}
 		if req.HardLimitMicros == nil || *req.HardLimitMicros < 0 {
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "non-negative hard_limit_micros is required", false, nil)
 			return
@@ -352,6 +348,10 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		thresholds, okThresh := normalizeAndValidateThresholds(req.SoftWarningPercents)
 		if !okThresh {
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "soft_warning_percents values must be integers between 1 and 100", false, nil)
+			return
+		}
+		if foreignOrgExists || expectedVer != 1 {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
 			return
 		}
 		threshJSONBytes, err := json.Marshal(thresholds)
@@ -851,9 +851,9 @@ func (s *Server) countScopeUnmeteredRequests(ctx context.Context, orgID, scopeTy
 
 func (s *Server) loadBudgetResourceDTO(ctx context.Context, orgID, budgetID string) (budgetResourceDTO, error) {
 	var (
-		id, scopeType, scopeID, periodKind, threshJSON    string
-		hardLimit, reservedHold, exactMicros, estMicros   int64
-		carryover, ver                                    int64
+		id, scopeType, scopeID, periodKind, threshJSON  string
+		hardLimit, reservedHold, exactMicros, estMicros int64
+		carryover, ver                                  int64
 	)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, scope_type, scope_id, period_kind, hard_limit_micros,

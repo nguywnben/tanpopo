@@ -66,7 +66,32 @@ describe('Unit 30 observability and operations screens', () => {
     expect(screen.getByRole('button', {name: 'Save limit'})).toHaveAttribute('aria-disabled', 'true');
     expect(await axeViolations()).toEqual([]);
     expect(formatMicroUSD(1)).toBe('$0.000001'); expect(formatMicroUSD(1000001)).toBe('$1.000001');
+    expect(formatMicroUSD(-100)).toBe('-$0.000100'); expect(formatMicroUSD(-1500000)).toBe('-$1.500000');
     expect(formatMicroUSD(Number.MAX_SAFE_INTEGER + 1)).toContain('unsafe integer');
+  });
+
+  it('ignores stale trace waterfall responses when switching traces quickly', async () => {
+    const t1 = {request_id: 'req-slow', plane: 'PROVIDER', route_slug: 'route-a', status_code: 200, error_code: null,
+      usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 10, has_debug_payload: false, created_at: '2026-11-17T00:00:00Z',
+      waterfall_stages: [{stage: 'SlowStage', duration_ms: 10, outcome: 'ok'}]} as components['schemas']['TraceSummary'];
+    const t2 = {request_id: 'req-fast', plane: 'PROVIDER', route_slug: 'route-b', status_code: 200, error_code: null,
+      usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 5, has_debug_payload: false, created_at: '2026-11-17T00:00:01Z',
+      waterfall_stages: [{stage: 'FastStage', duration_ms: 5, outcome: 'ok'}]} as components['schemas']['TraceSummary'];
+    mocks.listTracePage.mockResolvedValue({data: [t1, t2], nextCursor: undefined});
+    let resolveSlow!: (value: components['schemas']['TraceSummary']) => void;
+    let resolveFast!: (value: components['schemas']['TraceSummary']) => void;
+    mocks.getTraceWaterfall
+      .mockReturnValueOnce(new Promise(resolve => { resolveSlow = resolve; }))
+      .mockReturnValueOnce(new Promise(resolve => { resolveFast = resolve; }));
+
+    renderTheme(<TracesExplorerPage environmentId="env-1" roles={['DEVELOPER']} />, 'light');
+    fireEvent.click(await screen.findByRole('button', {name: 'req-slow'}));
+    fireEvent.click(screen.getByRole('button', {name: 'req-fast'}));
+    resolveFast(t2);
+    expect(await screen.findByText('Request waterfall: req-fast')).toBeInTheDocument();
+    resolveSlow(t1);
+    await waitFor(() => expect(screen.queryByText('Request waterfall: req-slow')).not.toBeInTheDocument());
+    expect(screen.getByText('Request waterfall: req-fast')).toBeInTheDocument();
   });
 
   it('confirms emergency actions and verifies immutable audit records without interpreting payload HTML', async () => {
@@ -90,6 +115,7 @@ describe('Unit 30 observability and operations screens', () => {
   it('shows readiness, backup history, lockfile pins and upgrade preflight to operators', async () => {
     renderTheme(<OperationsSettingsPage roles={['OPERATOR']} />, 'dark');
     expect(await screen.findByText('Ready')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.listAuditEvents).toHaveBeenCalledWith('ops.backup_created', undefined, 'SYSTEM'));
     expect(screen.getByText(/@tanpopo\/adapter/)).toBeInTheDocument();
     expect(await screen.findByText('Node 1 WAL disk footprint: 8,192 bytes')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Target core version'), {target: {value: 'v0.2.0'}});

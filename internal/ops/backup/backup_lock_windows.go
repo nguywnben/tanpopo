@@ -192,7 +192,9 @@ func privateWindowsACL(directory bool) (*windows.ACL, error) {
 	}
 	entries := []windows.EXPLICIT_ACCESS{
 		{AccessPermissions: windowsFileAllAccess, AccessMode: windows.GRANT_ACCESS, Inheritance: inherit, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(serviceSID)}},
-		{AccessPermissions: windowsFileAllAccess, AccessMode: windows.GRANT_ACCESS, Inheritance: inherit, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(systemSID)}},
+	}
+	if !serviceSID.Equals(systemSID) {
+		entries = append(entries, windows.EXPLICIT_ACCESS{AccessPermissions: windowsFileAllAccess, AccessMode: windows.GRANT_ACCESS, Inheritance: inherit, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(systemSID)}})
 	}
 	return windows.ACLFromEntries(entries, nil)
 }
@@ -227,7 +229,11 @@ func publishMemoryArchive(root *os.Root, tempName, finalName string) error {
 	if err != nil {
 		return err
 	}
-	nameBytes := (len(finalUTF16) - 1) * 2
+	nameChars := len(finalUTF16) - 1
+	if nameChars <= 0 || nameChars > windows.MAX_LONG_PATH {
+		return errors.New("backup: invalid final Windows backup filename length")
+	}
+	nameBytes := nameChars * 2
 	var layout struct {
 		ReplaceIfExists uint32
 		RootDirectory   windows.Handle
@@ -244,6 +250,6 @@ func publishMemoryArchive(root *os.Root, tempName, finalName string) error {
 	})(unsafe.Pointer(&buffer[0]))
 	info.RootDirectory = dirHandle
 	info.FileNameLength = uint32(nameBytes)
-	copy((*[windows.MAX_LONG_PATH]uint16)(unsafe.Pointer(&info.FileName[0]))[:len(finalUTF16)-1], finalUTF16[:len(finalUTF16)-1])
+	copy(unsafe.Slice(&info.FileName[0], nameChars), finalUTF16[:nameChars])
 	return windows.NtSetInformationFile(fileHandle, &iosb, &buffer[0], uint32(len(buffer)), windows.FileRenameInformation)
 }

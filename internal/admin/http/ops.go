@@ -569,23 +569,45 @@ func (s *Server) handleListAuditEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	orgID, ok := s.resolveTargetOrgID(w, r, sc)
-	if !ok {
-		return
+	partitionFilter := strings.TrimSpace(r.URL.Query().Get("chain_partition"))
+	var orgID string
+	var chainKey string
+	if strings.EqualFold(partitionFilter, audit.SystemChainKey) {
+		if !sc.IsOperator {
+			writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "INSTANCE_OPERATOR role required for system audit partition", false, nil)
+			return
+		}
+		if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
+			orgID = qOrg
+		} else {
+			orgID = sc.OrgID
+		}
+		if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
+			return
+		}
+		chainKey = audit.SystemChainKey
+	} else {
+		orgID, ok = s.resolveTargetOrgID(w, r, sc)
+		if !ok {
+			return
+		}
+		if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
+			return
+		}
+		chainKey, ok = s.resolveAuditChainPartition(w, r, sc, orgID)
+		if !ok {
+			return
+		}
 	}
-	if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
-		return
-	}
-
-	chainKey, ok := s.resolveAuditChainPartition(w, r, sc, orgID)
-	if !ok {
-		return
+	cursorScope := orgID
+	if cursorScope == "" {
+		cursorScope = audit.SystemChainKey
 	}
 	actorFilter := strings.TrimSpace(r.URL.Query().Get("actor"))
 	actionFilter := strings.TrimSpace(r.URL.Query().Get("action"))
 
 	filterHash := sha256HexString("audit_events|" + chainKey + "|" + actorFilter + "|" + actionFilter)
-	limit, cur, ok := parsePageParams(w, r, s.cursorSecret, "audit_events", orgID, filterHash)
+	limit, cur, ok := parsePageParams(w, r, s.cursorSecret, "audit_events", cursorScope, filterHash)
 	if !ok {
 		return
 	}
@@ -672,7 +694,7 @@ func (s *Server) handleListAuditEvents(w http.ResponseWriter, r *http.Request) {
 	var nextCursor *string
 	if hasMore && len(items) > 0 {
 		last := items[len(items)-1]
-		tok, curErr := encodePaginationCursor(s.cursorSecret, "audit_events", orgID, filterHash, last.SeqNo, last.ID)
+		tok, curErr := encodePaginationCursor(s.cursorSecret, "audit_events", cursorScope, filterHash, last.SeqNo, last.ID)
 		if curErr != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding cursor", true, nil)
 			return
@@ -1082,7 +1104,7 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 	}
 
 	qOrg := strings.TrimSpace(r.URL.Query().Get("org_id"))
-	allowInstanceScope := tType == "EXTENSION" && sc.IsOperator && qOrg == ""
+	allowInstanceScope := tType == "EXTENSION" && sc.IsOperator && sc.OrgID == "" && qOrg == ""
 	var orgID string
 	if allowInstanceScope {
 		orgID = ""
@@ -1097,6 +1119,30 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 	}
 	var targetProjectID string
 	switch tType {
+	case "EXTENSION":
+		if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
+			return
+		}
+	case "PROVIDER_CONNECTION":
+		var rowOrg string
+		var ownerProj sql.NullString
+		err := s.db.QueryRowContext(r.Context(), `SELECT org_id, owner_project_id FROM provider_connections WHERE id = ?`, targetID).Scan(&rowOrg, &ownerProj)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating provider connection", true, nil)
+			return
+		}
+		if err == nil {
+			if rowOrg != orgID {
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
+				return
+			}
+			if ownerProj.Valid && ownerProj.String != "" {
+				targetProjectID = ownerProj.String
+			}
+			if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, ProjectID: targetProjectID}) {
+				return
+			}
+		}
 	case "PROJECT":
 		var rowOrg string
 		err := s.db.QueryRowContext(r.Context(), `SELECT org_id FROM projects WHERE id = ? AND status NOT IN ('DELETING', 'PENDING_ERASURE')`, targetID).Scan(&rowOrg)

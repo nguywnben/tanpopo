@@ -4605,6 +4605,7 @@ export interface operations {
             query?: {
                 actor?: string;
                 action?: string;
+                chain_partition?: string;
                 limit?: components["parameters"]["LimitParam"];
                 /** @description HMAC-signed org_id-bound opaque pagination cursor. */
                 cursor?: components["parameters"]["CursorParam"];

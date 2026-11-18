@@ -43,15 +43,11 @@ func createSQLiteMemory(ctx context.Context, store Snapshotter, keys KeyWrapper,
 	if err != nil {
 		return Receipt{}, err
 	}
-	outputRoot, err := openOutputRoot(outputDir)
+	outputRoot, unlockBackup, err := openLockedOutputRoot(outputDir)
 	if err != nil {
 		return Receipt{}, err
 	}
 	defer outputRoot.Close()
-	unlockBackup, err := lockBackup(outputRoot)
-	if err != nil {
-		return Receipt{}, fmt.Errorf("backup: lock output directory: %w", err)
-	}
 	defer unlockBackup()
 	if err := cleanupStaleStaging(outputRoot); err != nil {
 		return Receipt{}, err

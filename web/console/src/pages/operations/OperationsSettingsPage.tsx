@@ -29,7 +29,7 @@ export function OperationsSettingsPage({roles}: {roles: Role[]}) {
   async function refresh() {
     setLoading(true); setMessage('');
     const [readyResult, clusterResult, lockfileResult, backupResult] = await Promise.allSettled([
-      getReadinessProbe(), getClusterOpsStatus(), getExtensionLockfile(), listAuditEvents('ops.backup_created'),
+      getReadinessProbe(), getClusterOpsStatus(), getExtensionLockfile(), listAuditEvents('ops.backup_created', undefined, 'SYSTEM'),
     ]);
     const errors: string[] = [];
     if (readyResult.status === 'fulfilled') setReadiness(readyResult.value); else errors.push(`Readiness probe: ${errorMessage(readyResult.reason)}`);

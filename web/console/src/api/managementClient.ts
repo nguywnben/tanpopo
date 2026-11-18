@@ -178,8 +178,8 @@ export async function exportUsageChargeback(format: 'csv' | 'json') {
   return new Blob([content], {type: format === 'csv' ? 'text/csv' : 'application/json'});
 }
 
-export async function listAuditEvents(action?: string, cursor?: string) {
-  const result = await api.GET('/admin/v1/audit-events', {params: {query: {action: action || undefined, limit: 100, cursor}}});
+export async function listAuditEvents(action?: string, cursor?: string, chainPartition?: string) {
+  const result = await api.GET('/admin/v1/audit-events', {params: {query: {action: action || undefined, chain_partition: chainPartition || undefined, limit: 100, cursor}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return {data: result.data.data, nextCursor: result.data.next_cursor ?? undefined};
 }

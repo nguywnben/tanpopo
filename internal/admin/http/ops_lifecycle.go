@@ -131,7 +131,7 @@ func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Requ
 	}
 	resolvedBackupDir, err := filepath.EvalSymlinks(backupDir)
 	if err != nil || filepath.Clean(resolvedBackupDir) != filepath.Clean(backupDir) {
-		_ = os.Remove(filepath.Join(backupDir, receipt.ArchiveFilename))
+		removePinnedBackupArchive(dataDir, receipt.ArchiveFilename)
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "backup_failed", "upstream_error", "backup destination changed during the operation", true, nil)
 		return
 	}
@@ -140,11 +140,25 @@ func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Requ
 		"sha256_hex":       receipt.SHA256Hex,
 		"size_bytes":       receipt.SizeBytes,
 	}); err != nil {
-		_ = os.Remove(filepath.Join(backupDir, receipt.ArchiveFilename))
+		removePinnedBackupArchive(dataDir, receipt.ArchiveFilename)
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "audit_failed", "upstream_error", "backup was rolled back because its audit record could not be written", true, nil)
 		return
 	}
 	writeJSON(w, http.StatusCreated, receipt)
+}
+
+func removePinnedBackupArchive(dataDir, filename string) {
+	root, err := os.OpenRoot(dataDir)
+	if err != nil {
+		return
+	}
+	defer root.Close()
+	bRoot, err := root.OpenRoot("backups")
+	if err != nil {
+		return
+	}
+	defer bRoot.Close()
+	_ = bRoot.Remove(filename)
 }
 
 func (s *Server) handleRunUpgradePreflight(w http.ResponseWriter, r *http.Request) {

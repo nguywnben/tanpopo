@@ -14,6 +14,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/ops/backup"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
@@ -125,5 +126,131 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 	}
 	if preflightAuditCount != 1 {
 		t.Fatalf("expected one immutable preflight audit event, got %d", preflightAuditCount)
+	}
+
+	sysEvents := h.doBearer(t, http.MethodGet, "/admin/v1/audit-events?chain_partition=SYSTEM&action=ops.upgrade_preflight_ran", "tok_cr13_operator", "", nil)
+	if sysEvents.Code != http.StatusOK {
+		t.Fatalf("instance OPERATOR GET /audit-events?chain_partition=SYSTEM code=%d body=%s", sysEvents.Code, sysEvents.Body.String())
+	}
+	var sysEventList struct {
+		Data []struct {
+			Action         string `json:"action"`
+			ChainPartition string `json:"chain_partition"`
+			TargetID       string `json:"target_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(sysEvents.Body.Bytes(), &sysEventList); err != nil || len(sysEventList.Data) != 1 || sysEventList.Data[0].ChainPartition != "SYSTEM" || sysEventList.Data[0].TargetID != "v0.2.0" {
+		t.Fatalf("expected SYSTEM audit event for ops.upgrade_preflight_ran, got body=%s err=%v", sysEvents.Body.String(), err)
+	}
+	if backup.PlatformSupported() {
+		backupEvents := h.doBearer(t, http.MethodGet, "/admin/v1/audit-events?chain_partition=SYSTEM&action=ops.backup_created", "tok_cr13_operator", "", nil)
+		if backupEvents.Code != http.StatusOK {
+			t.Fatalf("instance OPERATOR GET backup history code=%d body=%s", backupEvents.Code, backupEvents.Body.String())
+		}
+		var backupList struct {
+			Data []struct {
+				TargetID string `json:"target_id"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(backupEvents.Body.Bytes(), &backupList); err != nil || len(backupList.Data) != 1 || backupList.Data[0].TargetID != receipt.BackupID {
+			t.Fatalf("expected ops.backup_created in SYSTEM partition matching %s, got body=%s err=%v", receipt.BackupID, backupEvents.Body.String(), err)
+		}
+	}
+}
+
+func TestBlastRadiusAndBudgetCrossTenantHardening(t *testing.T) {
+	h := newPart2TestHarness(t, 100)
+	bootA, ownerCookieA := h.bootstrapOwner(t, "org-alpha", "proj-alpha")
+	ctx := context.Background()
+	orgB, err := h.st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "org-beta", DisplayName: "Org Beta"})
+	if err != nil {
+		t.Fatalf("CreateOrganization orgB: %v", err)
+	}
+	projB, err := h.st.Tenancy().CreateProject(ctx, orgB.ID, port.CreateProjectParams{Slug: "proj-beta", DisplayName: "Proj Beta"})
+	if err != nil {
+		t.Fatalf("CreateProject projB: %v", err)
+	}
+	envB, err := h.st.Tenancy().CreateEnvironment(ctx, orgB.ID, projB.ID, port.CreateEnvironmentParams{Slug: "prod-beta"})
+	if err != nil {
+		t.Fatalf("CreateEnvironment envB: %v", err)
+	}
+
+	// Cross-tenant non-operator querying SYSTEM partition is rejected with 403.
+	orgOwnerOnlyTok := "tok_org_a_owner_only"
+	h.registerBearerToken(orgOwnerOnlyTok, &rbac.Actor{
+		PrincipalID:     "prc_org_a_owner_only",
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		SessionOrgID:    &bootA.OrgID,
+		Bindings:        []rbac.RoleBinding{{OrgID: &bootA.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: bootA.OrgID, RoleName: rbac.RoleOrgOwner}},
+	})
+	recSysDenied := h.doBearer(t, http.MethodGet, "/admin/v1/audit-events?chain_partition=SYSTEM&action=ops.backup_created", orgOwnerOnlyTok, "", nil)
+	if recSysDenied.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-operator SYSTEM audit list, got %d body=%s", recSysDenied.Code, recSysDenied.Body.String())
+	}
+
+	// Org-bound operator (SessionOrgID != "") cannot obtain multi-org instance blast radius.
+	orgOpTok := "tok_org_bound_op"
+	h.registerBearerToken(orgOpTok, &rbac.Actor{
+		PrincipalID:     bootA.OwnerPrincipalID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		SessionOrgID:    &bootA.OrgID,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	})
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO request_traces_meta (
+			request_id, created_at_ms, started_at_ms, org_id, project_id, env_id, virtual_key_id, connection_id,
+			extension_installation_id, entry_point, route_slug, http_status, proxy_overhead_us, total_duration_ms, waterfall_stages_json
+		) VALUES ('trc_org_b', ?, ?, ?, ?, ?, 'vk_b', 'conn_b', 'ext_shared', 'unified_http', 'gpt-4o', 200, 100, 10, '[]')`,
+		h.fk.Now().UnixMilli(), h.fk.Now().UnixMilli()-10, orgB.ID, projB.ID, envB.ID,
+	); err != nil {
+		t.Fatalf("insert trace in org B: %v", err)
+	}
+	recOrgOpBR := h.doBearer(t, http.MethodGet, "/admin/v1/blast-radius?target_type=EXTENSION&target_id=ext_shared", orgOpTok, "", nil)
+	if recOrgOpBR.Code != http.StatusOK {
+		t.Fatalf("org-bound operator blast-radius code=%d body=%s", recOrgOpBR.Code, recOrgOpBR.Body.String())
+	}
+	var brOrgOp blastRadiusResponseDTO
+	mustDecodeJSON(t, recOrgOpBR.Body.Bytes(), &brOrgOp)
+	if len(brOrgOp.Organizations) != 0 {
+		t.Fatalf("org-bound operator must remain restricted to session org, got orgs=%v", brOrgOp.Organizations)
+	}
+
+	// Org A probing Org B's real PROVIDER_CONNECTION in blast-radius gets 404.
+	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
+	nowMs := h.fk.Now().UnixMilli()
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO provider_connections (id, org_id, owner_project_id, shared_project_ids_json, adapter_id, name, endpoint_base_url, allow_private_ip, data_region, billing_mode, state, version, created_at_ms, updated_at_ms)
+		VALUES ('conn_foreign_b', ?, ?, '[]', ?, 'Foreign Conn', 'https://api.openai.com/v1', 0, 'US', 'COMMERCIAL_API', 'ACTIVE', 1, ?, ?)`,
+		orgB.ID, projB.ID, adpID, nowMs, nowMs,
+	); err != nil {
+		t.Fatalf("insert foreign provider_connection: %v", err)
+	}
+	recConnForeign := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=PROVIDER_CONNECTION&target_id=conn_foreign_b", ownerCookieA, "", "", nil)
+	if recConnForeign.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for foreign PROVIDER_CONNECTION blast-radius, got %d body=%s", recConnForeign.Code, recConnForeign.Body.String())
+	}
+
+	// PUT /budgets/{id} validates input fields before checking foreignOrgExists (no 404 vs 400 oracle).
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO budget_ledgers (id, org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms, hard_limit_micros, soft_alert_thresholds_pct_json, version, created_at_ms, updated_at_ms)
+		VALUES ('bgt_foreign_b', ?, 'ORG', ?, 'MONTHLY', 1, 2, 1000, '[80]', 1, ?, ?)`,
+		orgB.ID, orgB.ID, nowMs, nowMs,
+	); err != nil {
+		t.Fatalf("insert foreign budget: %v", err)
+	}
+	recForeignInvalid := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/budgets/bgt_foreign_b", ownerCookieA, bootA.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":        "PROJECT",
+		"scope_id":          bootA.ProjectID,
+		"hard_limit_micros": -1,
+		"period":            "MONTHLY",
+	})
+	recMissingInvalid := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/budgets/bgt_nonexistent", ownerCookieA, bootA.CSRFToken, `"v1"`, map[string]any{
+		"scope_tier":        "PROJECT",
+		"scope_id":          bootA.ProjectID,
+		"hard_limit_micros": -1,
+		"period":            "MONTHLY",
+	})
+	if recForeignInvalid.Code != http.StatusBadRequest || recMissingInvalid.Code != http.StatusBadRequest {
+		t.Fatalf("expected uniform 400 invalid_request for invalid payload regardless of foreign budget existence (foreign=%d missing=%d)", recForeignInvalid.Code, recMissingInvalid.Code)
 	}
 }
