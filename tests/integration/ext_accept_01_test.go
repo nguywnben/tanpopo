@@ -176,8 +176,7 @@ func TestEXTAccept01_FullLifecycleProcessContract(t *testing.T) {
 	assertCoreInvariant("startup")
 
 	// Mandatory step 1: scaffold, run the offline contract suite, and pack from
-	// outside the Core source tree. The current scaffold CLI may not yet allow
-	// choosing the required @acme-cloud namespace; keep that assertion explicit.
+	// outside the Core source tree under the required Acme Cloud namespace.
 	extensionDir := filepath.Join(work, "external-adapter")
 	runCLI := func(args ...string) ([]byte, error) {
 		t.Helper()
@@ -185,7 +184,7 @@ func TestEXTAccept01_FullLifecycleProcessContract(t *testing.T) {
 		c.Dir = work
 		return c.CombinedOutput()
 	}
-	if out, runErr := runCLI("plugin", "init", "regional-llm-adapter", "--dir", extensionDir); runErr != nil {
+	if out, runErr := runCLI("plugin", "init", "regional-llm-adapter", "--namespace", "acme-cloud", "--dir", extensionDir); runErr != nil {
 		t.Errorf("step 1: tanpopo plugin init: %v\n%s", runErr, out)
 	} else {
 		manifest, readErr := os.ReadFile(filepath.Join(extensionDir, "manifest.yaml"))
