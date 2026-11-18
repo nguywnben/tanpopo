@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -26,7 +27,16 @@ func TestWindowsOutputACLProtectsExistingArchiveAndDirectory(t *testing.T) {
 		t.Fatalf("secure output root and existing archive: %v", err)
 	}
 	defer root.Close()
-	for _, path := range []string{dir, archivePath} {
+	serviceSID, err := currentWindowsServiceSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	systemSID, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, path := range []string{dir, archivePath} {
+		isDir := i == 0
 		file, err := os.Open(path)
 		if err != nil {
 			t.Fatal(err)
@@ -43,6 +53,38 @@ func TestWindowsOutputACLProtectsExistingArchiveAndDirectory(t *testing.T) {
 		if dacl == nil || dacl.AceCount != 2 {
 			t.Fatalf("%q DACL has %v ACEs; want exactly service-account and SYSTEM ACEs", path, dacl)
 		}
+		expectedFlags := uint8(0)
+		if isDir {
+			expectedFlags = windows.CONTAINER_INHERIT_ACE | windows.OBJECT_INHERIT_ACE
+		}
+		var sawService, sawSystem bool
+		for idx := uint32(0); idx < uint32(dacl.AceCount); idx++ {
+			var ace *windows.ACCESS_ALLOWED_ACE
+			if err := windows.GetAce(dacl, idx, &ace); err != nil {
+				t.Fatalf("read ACE %d for %q: %v", idx, path, err)
+			}
+			if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE {
+				t.Fatalf("%q ACE %d type=%d; want ACCESS_ALLOWED_ACE_TYPE", path, idx, ace.Header.AceType)
+			}
+			if ace.Header.AceFlags != expectedFlags {
+				t.Fatalf("%q ACE %d flags=%#x; want %#x", path, idx, ace.Header.AceFlags, expectedFlags)
+			}
+			if ace.Mask != windowsFileAllAccess {
+				t.Fatalf("%q ACE %d mask=%#x; want %#x", path, idx, ace.Mask, uint32(windowsFileAllAccess))
+			}
+			aceSID := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+			switch {
+			case aceSID.Equals(serviceSID):
+				sawService = true
+			case aceSID.Equals(systemSID):
+				sawSystem = true
+			default:
+				t.Fatalf("%q ACE %d grants access to unexpected SID %v", path, idx, aceSID)
+			}
+		}
+		if !sawService || !sawSystem {
+			t.Fatalf("%q DACL missing required SIDs (service=%t system=%t)", path, sawService, sawSystem)
+		}
 		control, _, err := sd.Control()
 		if err != nil {
 			t.Fatalf("read security descriptor control flags for %q: %v", path, err)
@@ -53,10 +95,6 @@ func TestWindowsOutputACLProtectsExistingArchiveAndDirectory(t *testing.T) {
 		owner, _, err := sd.Owner()
 		if err != nil {
 			t.Fatalf("read owner for %q: %v", path, err)
-		}
-		serviceSID, err := currentWindowsServiceSID()
-		if err != nil {
-			t.Fatal(err)
 		}
 		if !owner.Equals(serviceSID) {
 			t.Fatalf("%q owner %v does not match the backup service account %v", path, owner, serviceSID)

@@ -18,7 +18,10 @@ const linuxTmpfsMagic = 0x01021994
 // volatile staging primitives required for encrypted backup creation.
 func PlatformSupported() bool {
 	var stat syscall.Statfs_t
-	return syscall.Statfs("/dev/shm", &stat) == nil && uint64(stat.Type) == linuxTmpfsMagic && verifyNoActiveSwap() == nil
+	if err := syscall.Statfs("/dev/shm", &stat); err != nil {
+		return false
+	}
+	return verifyNoActiveSwap() == nil && verifyVolatileStagingPreconditions(uint64(stat.Type), nil, true) == nil
 }
 
 func PlatformSupportUnavailableReason() string {
@@ -30,10 +33,11 @@ func openStagingRoot(outputRoot *os.Root) (*os.Root, func() error, error) {
 	if err := syscall.Statfs("/dev/shm", &stat); err != nil {
 		return nil, nil, err
 	}
-	if uint64(stat.Type) != linuxTmpfsMagic {
-		return nil, nil, errors.New("/dev/shm is not a volatile tmpfs")
+	swapData, err := os.ReadFile("/proc/swaps")
+	if err != nil {
+		return nil, nil, fmt.Errorf("backup: verify swap is disabled for plaintext staging: %w", err)
 	}
-	if err := verifyNoActiveSwap(); err != nil {
+	if err := verifyVolatileStagingPreconditions(uint64(stat.Type), swapData, false); err != nil {
 		return nil, nil, err
 	}
 	outputInfo, err := outputRoot.Stat(".")
@@ -166,8 +170,26 @@ func verifyNoActiveSwap() error {
 	if err != nil {
 		return fmt.Errorf("backup: verify swap is disabled for plaintext staging: %w", err)
 	}
-	if len(strings.Split(strings.TrimSpace(string(data)), "\n")) > 1 {
+	return verifyProcSwapsDisabled(data)
+}
+
+func verifyProcSwapsDisabled(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return errors.New("backup: /proc/swaps is empty; cannot verify swap is disabled for plaintext staging")
+	}
+	if len(strings.Split(trimmed, "\n")) > 1 {
 		return errors.New("backup: plaintext staging requires swap to be disabled")
 	}
 	return nil
+}
+
+func verifyVolatileStagingPreconditions(fsType uint64, swapData []byte, skipSwapCheck bool) error {
+	if fsType != linuxTmpfsMagic {
+		return errors.New("/dev/shm is not a volatile tmpfs")
+	}
+	if skipSwapCheck {
+		return nil
+	}
+	return verifyProcSwapsDisabled(swapData)
 }

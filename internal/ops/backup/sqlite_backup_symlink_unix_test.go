@@ -9,6 +9,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -37,8 +38,8 @@ func TestCreateSQLiteRejectsSymlinkDestinationsAndLockfiles(t *testing.T) {
 	if err := os.Symlink(outside, linkedOutput); err != nil {
 		t.Fatalf("create backup directory symlink: %v", err)
 	}
-	if _, err := CreateSQLite(ctx, store, keys, linkedOutput, lockfile, config, artifactDir, 1_795_000_000_000); err == nil {
-		t.Fatal("CreateSQLite accepted a symlink backup directory")
+	if _, err := CreateSQLite(ctx, store, keys, linkedOutput, lockfile, config, artifactDir, 1_795_000_000_000); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("CreateSQLite err=%v; want symlink rejection for backup directory", err)
 	}
 
 	realOutput := filepath.Join(root, "real-backups")
@@ -53,13 +54,13 @@ func TestCreateSQLiteRejectsSymlinkDestinationsAndLockfiles(t *testing.T) {
 	if err := os.Symlink(plainLockfile, linkedLockfile); err != nil {
 		t.Fatalf("create lockfile symlink: %v", err)
 	}
-	if _, err := CreateSQLite(ctx, store, keys, realOutput, linkedLockfile, config, artifactDir, 1_795_000_000_000); err == nil {
-		t.Fatal("CreateSQLite accepted a symlink lockfile")
+	if _, err := CreateSQLite(ctx, store, keys, realOutput, linkedLockfile, config, artifactDir, 1_795_000_000_000); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("CreateSQLite err=%v; want symlink rejection for lockfile", err)
 	}
 	if err := os.Symlink(plainLockfile, filepath.Join(artifactDir, "linked.wasm")); err != nil {
 		t.Fatalf("create extension artifact symlink: %v", err)
 	}
-	if _, err := CreateSQLite(ctx, store, keys, realOutput, lockfile, config, artifactDir, 1_795_000_000_000); err == nil {
-		t.Fatal("CreateSQLite accepted a symlink extension artifact")
+	if _, err := CreateSQLite(ctx, store, keys, realOutput, lockfile, config, artifactDir, 1_795_000_000_000); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("CreateSQLite err=%v; want symlink rejection for extension artifact", err)
 	}
 }

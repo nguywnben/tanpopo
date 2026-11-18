@@ -55,3 +55,37 @@ func TestCleanupAbandonedStagingRootsOnlyRemovesMatchingNamespace(t *testing.T) 
 		t.Fatalf("other output namespace was removed: %v", err)
 	}
 }
+
+func TestVerifyVolatileStagingPreconditionsFailClosed(t *testing.T) {
+	headerOnly := []byte("Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n")
+	if err := verifyVolatileStagingPreconditions(linuxTmpfsMagic, headerOnly, false); err != nil {
+		t.Fatalf("swap-off tmpfs preconditions should pass: %v", err)
+	}
+	activeSwap := []byte("Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swap.img                               file            1048572 0       -2\n")
+	if err := verifyVolatileStagingPreconditions(linuxTmpfsMagic, activeSwap, false); err == nil {
+		t.Fatal("active swap was unexpectedly accepted for plaintext staging")
+	}
+	if err := verifyVolatileStagingPreconditions(linuxTmpfsMagic, nil, false); err == nil {
+		t.Fatal("empty /proc/swaps was unexpectedly accepted for plaintext staging")
+	}
+	if err := verifyVolatileStagingPreconditions(0xef53, headerOnly, false); err == nil {
+		t.Fatal("non-tmpfs /dev/shm was unexpectedly accepted for plaintext staging")
+	}
+}
+
+func TestOpenStagingRootFailsClosedWhenHostUnsupported(t *testing.T) {
+	if PlatformSupported() {
+		return
+	}
+	outputRoot, err := openOutputRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer outputRoot.Close()
+	if _, cleanup, err := openStagingRoot(outputRoot); err == nil {
+		if cleanup != nil {
+			_ = cleanup()
+		}
+		t.Fatal("openStagingRoot unexpectedly succeeded on a host without swap-off tmpfs preconditions")
+	}
+}

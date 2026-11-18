@@ -171,6 +171,12 @@ func currentWindowsServiceSID() (*windows.SID, error) {
 	return user.User.Sid, nil
 }
 
+// windowsFileAllAccess is Win32 FILE_ALL_ACCESS (STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0x1ff).
+// Passing concrete file/directory rights instead of GENERIC_ALL keeps directory
+// ACLs at one inheritable ACE per trustee rather than splitting into separate
+// directory-only and INHERIT_ONLY generic ACEs on NTFS.
+const windowsFileAllAccess = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0x1ff
+
 func privateWindowsACL(directory bool) (*windows.ACL, error) {
 	serviceSID, err := currentWindowsServiceSID()
 	if err != nil {
@@ -185,8 +191,8 @@ func privateWindowsACL(directory bool) (*windows.ACL, error) {
 		inherit = windows.CONTAINER_INHERIT_ACE | windows.OBJECT_INHERIT_ACE
 	}
 	entries := []windows.EXPLICIT_ACCESS{
-		{AccessPermissions: windows.GENERIC_ALL, AccessMode: windows.GRANT_ACCESS, Inheritance: inherit, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(serviceSID)}},
-		{AccessPermissions: windows.GENERIC_ALL, AccessMode: windows.GRANT_ACCESS, Inheritance: inherit, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(systemSID)}},
+		{AccessPermissions: windowsFileAllAccess, AccessMode: windows.GRANT_ACCESS, Inheritance: inherit, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(serviceSID)}},
+		{AccessPermissions: windowsFileAllAccess, AccessMode: windows.GRANT_ACCESS, Inheritance: inherit, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(systemSID)}},
 	}
 	return windows.ACLFromEntries(entries, nil)
 }

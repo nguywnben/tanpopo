@@ -45,60 +45,65 @@ func (w *testKeyWrapper) WrapArchiveKey(ctx context.Context, key []byte) (string
 func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	ctx := context.Background()
 	t.Run("in-memory portable snapshot", testCreateSQLiteMemoryProducesProtectedEncryptedArchive)
+	t.Run("cleanup stale staging entries", func(t *testing.T) {
+		stagingRoot, err := os.OpenRoot(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stagingRoot.Close()
+		staleStage := ".tanpopo-backup-0123456789abcdef0123456789abcdef"
+		if err := stagingRoot.Mkdir(staleStage, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		staleDB, err := stagingRoot.OpenFile(filepath.Join(staleStage, "database.sqlite"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := staleDB.Write([]byte("stale plaintext snapshot")); err != nil {
+			_ = staleDB.Close()
+			t.Fatal(err)
+		}
+		if err := staleDB.Close(); err != nil {
+			t.Fatal(err)
+		}
+		stalePartial := ".tanpopo-backup-fedcba9876543210fedcba9876543210.partial"
+		partial, err := stagingRoot.OpenFile(stalePartial, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := partial.Write([]byte("partial encrypted archive")); err != nil {
+			_ = partial.Close()
+			t.Fatal(err)
+		}
+		if err := partial.Close(); err != nil {
+			t.Fatal(err)
+		}
+		unrelated := "keep-me.tpop.enc"
+		keepFile, err := stagingRoot.OpenFile(unrelated, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := keepFile.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := cleanupStaleStaging(stagingRoot); err != nil {
+			t.Fatalf("cleanup abandoned staging data: %v", err)
+		}
+		if _, err := stagingRoot.Lstat(staleStage); !os.IsNotExist(err) {
+			t.Fatalf("abandoned plaintext staging directory remains: stat err=%v", err)
+		}
+		if _, err := stagingRoot.Lstat(stalePartial); !os.IsNotExist(err) {
+			t.Fatalf("abandoned partial archive remains: stat err=%v", err)
+		}
+		if _, err := stagingRoot.Lstat(unrelated); err != nil {
+			t.Fatalf("unrelated archive removed during stale cleanup: %v", err)
+		}
+	})
 	if runtime.GOOS != "linux" {
 		return
 	}
 	root := t.TempDir()
 	outputDir := filepath.Join(root, "backups")
-	stagingOutputRoot, err := openOutputRoot(filepath.Join(root, "staging-output"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stagingOutputRoot.Close()
-	unlock, err := lockBackup(stagingOutputRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	stagingRoot, cleanupStagingRoot, err := openStagingRoot(stagingOutputRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	unlock()
-	t.Cleanup(func() {
-		if err := cleanupStagingRoot(); err != nil {
-			t.Errorf("clean test staging root: %v", err)
-		}
-	})
-	staleStage := ".tanpopo-backup-0123456789abcdef0123456789abcdef"
-	if err := stagingRoot.Mkdir(staleStage, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	staleDB, err := stagingRoot.OpenFile(filepath.Join(staleStage, "database.sqlite"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := staleDB.Write([]byte("stale plaintext snapshot")); err != nil {
-		_ = staleDB.Close()
-		t.Fatal(err)
-	}
-	if err := staleDB.Close(); err != nil {
-		t.Fatal(err)
-	}
-	stalePartial := ".tanpopo-backup-fedcba9876543210fedcba9876543210.partial"
-	partial, err := stagingRoot.OpenFile(stalePartial, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := partial.Write([]byte("partial encrypted archive")); err != nil {
-		_ = partial.Close()
-		t.Fatal(err)
-	}
-	if err := partial.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := cleanupStaleStaging(stagingRoot); err != nil {
-		t.Fatalf("cleanup abandoned staging data: %v", err)
-	}
 	lockfile := filepath.Join(root, "tanpopo.lock")
 	if err := os.WriteFile(lockfile, []byte("extension lock manifest"), 0o600); err != nil {
 		t.Fatal(err)
@@ -117,44 +122,78 @@ func TestCreateSQLiteProducesProtectedEncryptedArchive(t *testing.T) {
 	}
 	plainDB := []byte("sqlite snapshot contains sensitive row data")
 	keys := &testKeyWrapper{}
-	receipt, err := CreateSQLite(ctx, testSnapshotter{content: plainDB}, keys, outputDir, lockfile, config, artifactDir, 1_795_000_000_000)
-	if err != nil {
-		t.Fatalf("CreateSQLite: %v", err)
+	if !PlatformSupported() {
+		t.Run("linux fail-closed without swap-off tmpfs host", func(t *testing.T) {
+			if _, err := CreateSQLite(ctx, testSnapshotter{content: plainDB}, keys, outputDir, lockfile, config, artifactDir, 1_795_000_000_000); err == nil {
+				t.Fatal("CreateSQLite unexpectedly succeeded on a host without verified swap-off /dev/shm tmpfs staging")
+			}
+			matches, err := filepath.Glob(filepath.Join(outputDir, "*.tpop.enc"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(matches) != 0 {
+				t.Fatalf("fail-closed backup left encrypted archives: %v", matches)
+			}
+		})
+		return
 	}
-	if receipt.ArchiveFilename == "" || len(receipt.SHA256Hex) != 64 || receipt.SizeBytes <= 0 || len(keys.key) != 32 {
-		t.Fatalf("incomplete encrypted backup receipt/key: receipt=%+v key-bytes=%d", receipt, len(keys.key))
-	}
-	archivePath := filepath.Join(outputDir, receipt.ArchiveFilename)
-	archive, err := os.ReadFile(archivePath)
-	if err != nil {
-		t.Fatalf("read archive: %v", err)
-	}
-	if !bytes.HasPrefix(archive, []byte(archiveMagic)) {
-		t.Fatalf("archive does not have the canonical encrypted format header")
-	}
-	if bytes.Contains(archive, plainDB) || bytes.Contains(archive, artifact) || bytes.Contains(archive, keys.key) {
-		t.Fatal("archive contains plaintext database, extension artifact content, or raw archive data key")
-	}
-	info, err := os.Stat(archivePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("archive mode = %o, want 600", info.Mode().Perm())
-	}
-	dirInfo, err := os.Stat(outputDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dirInfo.Mode().Perm() != 0o700 {
-		t.Fatalf("backup directory mode = %o, want 700", dirInfo.Mode().Perm())
-	}
-	if _, err := stagingRoot.Lstat(staleStage); !os.IsNotExist(err) {
-		t.Fatalf("abandoned plaintext staging directory remains: stat err=%v", err)
-	}
-	if _, err := stagingRoot.Lstat(stalePartial); !os.IsNotExist(err) {
-		t.Fatalf("abandoned partial archive remains: stat err=%v", err)
-	}
+	t.Run("linux qualified host tmpfs staging", func(t *testing.T) {
+		stagingOutputRoot, err := openOutputRoot(filepath.Join(root, "staging-output"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stagingOutputRoot.Close()
+		unlock, err := lockBackup(stagingOutputRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stagingRoot, cleanupStagingRoot, err := openStagingRoot(stagingOutputRoot)
+		if err != nil {
+			unlock()
+			t.Fatal(err)
+		}
+		unlock()
+		t.Cleanup(func() {
+			if err := cleanupStagingRoot(); err != nil {
+				t.Errorf("clean test staging root: %v", err)
+			}
+		})
+		if _, err := stagingRoot.Stat("."); err != nil {
+			t.Fatalf("stat open staging root: %v", err)
+		}
+		receipt, err := CreateSQLite(ctx, testSnapshotter{content: plainDB}, keys, outputDir, lockfile, config, artifactDir, 1_795_000_000_000)
+		if err != nil {
+			t.Fatalf("CreateSQLite: %v", err)
+		}
+		if receipt.ArchiveFilename == "" || len(receipt.SHA256Hex) != 64 || receipt.SizeBytes <= 0 || len(keys.key) != 32 {
+			t.Fatalf("incomplete encrypted backup receipt/key: receipt=%+v key-bytes=%d", receipt, len(keys.key))
+		}
+		archivePath := filepath.Join(outputDir, receipt.ArchiveFilename)
+		archive, err := os.ReadFile(archivePath)
+		if err != nil {
+			t.Fatalf("read archive: %v", err)
+		}
+		if !bytes.HasPrefix(archive, []byte(archiveMagic)) {
+			t.Fatalf("archive does not have the canonical encrypted format header")
+		}
+		if bytes.Contains(archive, plainDB) || bytes.Contains(archive, artifact) || bytes.Contains(archive, keys.key) {
+			t.Fatal("archive contains plaintext database, extension artifact content, or raw archive data key")
+		}
+		info, err := os.Stat(archivePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("archive mode = %o, want 600", info.Mode().Perm())
+		}
+		dirInfo, err := os.Stat(outputDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if dirInfo.Mode().Perm() != 0o700 {
+			t.Fatalf("backup directory mode = %o, want 700", dirInfo.Mode().Perm())
+		}
+	})
 }
 
 func testCreateSQLiteMemoryProducesProtectedEncryptedArchive(t *testing.T) {

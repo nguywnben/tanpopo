@@ -118,6 +118,33 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, fmt.Errorf("backup: lock output directory: %w", err)
 	}
 	defer unlockBackup()
+	lockfileInfo, err := os.Lstat(lockfilePath)
+	if err != nil {
+		return Receipt{}, fmt.Errorf("backup: inspect extension lockfile: %w", err)
+	}
+	if !lockfileInfo.Mode().IsRegular() || lockfileInfo.Mode()&os.ModeSymlink != 0 {
+		return Receipt{}, errors.New("backup: lockfile must be a regular non-symlink file")
+	}
+	configInfo, err := os.Lstat(configPath)
+	if err != nil {
+		return Receipt{}, fmt.Errorf("backup: inspect server config file: %w", err)
+	}
+	if !configInfo.Mode().IsRegular() || configInfo.Mode()&os.ModeSymlink != 0 {
+		return Receipt{}, errors.New("backup: server config must be a regular non-symlink file")
+	}
+	artifactRoot, err := os.OpenRoot(artifactDir)
+	if err != nil {
+		return Receipt{}, fmt.Errorf("backup: open extension artifact root: %w", err)
+	}
+	defer artifactRoot.Close()
+	artifactRootInfo, err := artifactRoot.Stat(".")
+	if err != nil || !artifactRootInfo.IsDir() {
+		return Receipt{}, errors.New("backup: extension artifact root must be a directory")
+	}
+	artifacts, err := collectArtifactFiles(ctx, artifactRoot)
+	if err != nil {
+		return Receipt{}, err
+	}
 	stagingRoot, cleanupStagingRoot, err := openStagingRoot(outputRoot)
 	if err != nil {
 		return Receipt{}, fmt.Errorf("backup: open volatile staging filesystem: %w", err)
@@ -172,33 +199,6 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		if err := os.Chmod(sqliteStagePath, 0o700); err != nil {
 			return Receipt{}, fmt.Errorf("backup: protect staging directory: %w", err)
 		}
-	}
-	lockfileInfo, err := os.Lstat(lockfilePath)
-	if err != nil {
-		return Receipt{}, fmt.Errorf("backup: inspect extension lockfile: %w", err)
-	}
-	if !lockfileInfo.Mode().IsRegular() || lockfileInfo.Mode()&os.ModeSymlink != 0 {
-		return Receipt{}, errors.New("backup: lockfile must be a regular non-symlink file")
-	}
-	configInfo, err := os.Lstat(configPath)
-	if err != nil {
-		return Receipt{}, fmt.Errorf("backup: inspect server config file: %w", err)
-	}
-	if !configInfo.Mode().IsRegular() || configInfo.Mode()&os.ModeSymlink != 0 {
-		return Receipt{}, errors.New("backup: server config must be a regular non-symlink file")
-	}
-	artifactRoot, err := os.OpenRoot(artifactDir)
-	if err != nil {
-		return Receipt{}, fmt.Errorf("backup: open extension artifact root: %w", err)
-	}
-	defer artifactRoot.Close()
-	artifactRootInfo, err := artifactRoot.Stat(".")
-	if err != nil || !artifactRootInfo.IsDir() {
-		return Receipt{}, errors.New("backup: extension artifact root must be a directory")
-	}
-	artifacts, err := collectArtifactFiles(ctx, artifactRoot)
-	if err != nil {
-		return Receipt{}, err
 	}
 	dbRelPath := "database.sqlite"
 	dbPath := filepath.Join(sqliteStagePath, dbRelPath)
