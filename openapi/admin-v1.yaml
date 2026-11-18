@@ -64,7 +64,7 @@ components:
       type: apiKey
       in: cookie
       name: __Host-tanpopo_admin_session
-      description: HttpOnly; Secure; SameSite=Strict admin session cookie; state-mutating calls MUST supply X-CSRF-Token.
+      description: HttpOnly; Secure; SameSite=Lax admin session cookie; state-mutating calls MUST supply X-CSRF-Token and a valid Origin.
 
   parameters:
     ApiVersionHeader:
@@ -1167,6 +1167,21 @@ paths:
       summary: Terminate admin session and revoke any active Playground ephemeral keys (SCR-01)
       parameters:
         - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [flow, token_endpoint, client_id, resource]
+              properties:
+                flow: { type: string, enum: [authorization_code_pkce, client_credentials, device_code] }
+                authorization_endpoint: { type: string, format: uri }
+                token_endpoint: { type: string, format: uri }
+                device_authorization_endpoint: { type: string, format: uri }
+                client_id: { type: string, minLength: 1, maxLength: 512 }
+                scopes: { type: array, items: { type: string, minLength: 1 }, maxItems: 64 }
+                resource: { type: string, format: uri }
       responses:
         "204":
           description: Logged out cleanly
@@ -2024,6 +2039,21 @@ paths:
           required: true
           schema: { type: string }
         - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [flow, token_endpoint, client_id, resource]
+              properties:
+                flow: { type: string, enum: [authorization_code_pkce, client_credentials, device_code] }
+                authorization_endpoint: { type: string, format: uri }
+                token_endpoint: { type: string, format: uri }
+                device_authorization_endpoint: { type: string, format: uri }
+                client_id: { type: string, minLength: 1, maxLength: 512 }
+                scopes: { type: array, items: { type: string, minLength: 1 }, maxItems: 64 }
+                resource: { type: string, format: uri }
       responses:
         "200":
           description: OAuth authorization URL or RFC 8628 device code metadata
@@ -2033,12 +2063,14 @@ paths:
                 type: object
                 required: [flow, state, expires_at]
                 properties:
-                  flow: { type: string, enum: [authorization_code_pkce, device_code] }
+                  flow: { type: string, enum: [authorization_code_pkce, client_credentials, device_code] }
                   authorization_url: { type: string, format: uri }
                   verification_uri: { type: string, format: uri }
                   user_code: { type: string }
                   state: { type: string }
                   expires_at: { type: string, format: date-time }
+                  poll_interval_ms: { type: integer, minimum: 1 }
+                  status: { type: string, enum: [completed, authorization_pending] }
 
   /admin/v1/oauth/callback:
     get:
@@ -2057,6 +2089,28 @@ paths:
       responses:
         "302":
           description: Redirects back to /providers/connections (never echoes raw tokens)
+
+  /admin/v1/oauth/device/poll:
+    post:
+      tags: [SecretsAndConnections]
+      operationId: pollConnectionOAuthDevice
+      summary: Poll an authenticated RFC 8628 device authorization session
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state: { type: string, minLength: 32, maxLength: 128 }
+      responses:
+        "200": { description: Device authorization completed }
+        "202": { description: Authorization is pending }
+        "400": { description: Invalid, expired, or replayed OAuth state }
+        "429": { description: Polling interval has not elapsed }
 
   # ==================== GROUP F: MODELS & DEPLOYMENTS (SCR-01, SCR-02, SCR-05) ====================
   /admin/v1/models:

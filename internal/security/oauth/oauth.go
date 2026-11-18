@@ -33,12 +33,12 @@ const (
 )
 
 var (
-	ErrInvalidOAuthInput = errors.New("oauth: invalid input")
-	ErrInvalidOAuthState = errors.New("oauth: invalid or expired authorization state")
-	ErrInvalidGrant      = errors.New("oauth: upstream grant is invalid")
+	ErrInvalidOAuthInput    = errors.New("oauth: invalid input")
+	ErrInvalidOAuthState    = errors.New("oauth: invalid or expired authorization state")
+	ErrInvalidGrant         = errors.New("oauth: upstream grant is invalid")
 	ErrAuthorizationPending = errors.New("oauth: device authorization is pending")
-	ErrSlowDown            = errors.New("oauth: device authorization polling is too frequent")
-	ErrTokenAudience     = errors.New("oauth: token audience mismatch")
+	ErrSlowDown             = errors.New("oauth: device authorization polling is too frequent")
+	ErrTokenAudience        = errors.New("oauth: token audience mismatch")
 )
 
 type TokenResponse struct {

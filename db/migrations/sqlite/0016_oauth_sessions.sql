@@ -61,6 +61,7 @@ CREATE TABLE oauth_authorization_sessions (
     UNIQUE (id),
     FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id) ON DELETE CASCADE,
     CHECK (expires_at_ms > created_at_ms),
+    CHECK (device_code IS NULL),
     CHECK ((grant_type IN ('AUTHORIZATION_CODE_PKCE', 'DEVICE_CODE') AND sealed_code_verifier IS NOT NULL AND verifier_nonce IS NOT NULL)
         OR (grant_type = 'CLIENT_CREDENTIALS' AND sealed_code_verifier IS NULL AND verifier_nonce IS NULL))
 );

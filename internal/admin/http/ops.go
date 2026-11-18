@@ -543,6 +543,42 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 		}
 	}
 
+	// 4. OAuth credentials requiring reauthorization (ALT-OAUTH-EXPIRY / INC-05).
+	oRows, oErr := s.db.QueryContext(ctx, `
+		SELECT ots.credential_id, pc.id, pc.owner_project_id, pc.shared_project_ids_json, ots.updated_at_ms
+		FROM oauth_token_states ots
+		JOIN connection_secret_bindings b ON b.org_id=ots.org_id AND b.credential_id=ots.credential_id AND b.slot_name='oauth_access_token'
+		JOIN provider_connections pc ON pc.org_id=b.org_id AND pc.id=b.connection_id
+		WHERE ots.org_id=? AND ots.state='AUTH_EXPIRED_REAUTH_REQUIRED'`, orgID)
+	if oErr != nil {
+		return nil, oErr
+	}
+	for oRows.Next() {
+		var credentialID, connectionID, sharedJSON string
+		var ownerProject sql.NullString
+		var updated int64
+		if scanErr := oRows.Scan(&credentialID, &connectionID, &ownerProject, &sharedJSON, &updated); scanErr != nil {
+			_ = oRows.Close()
+			return nil, scanErr
+		}
+		if !orgWide {
+			visible, visErr := connectionVisibleToAnyProject(ownerProject, sharedJSON, allowedProjSet)
+			if visErr != nil {
+				_ = oRows.Close()
+				return nil, visErr
+			}
+			if !visible {
+				continue
+			}
+		}
+		alerts = append(alerts, alertItemDTO{ID: "alt_oauth_" + credentialID, AlertCode: "ALT-OAUTH-EXPIRY", Severity: "PAGE", Summary: "OAuth connection requires reauthorization", RemediationRoute: "/providers/connections", TriggeredAt: formatTimeRFC3339Ms(updated)})
+	}
+	if err := oRows.Err(); err != nil {
+		_ = oRows.Close()
+		return nil, err
+	}
+	_ = oRows.Close()
+
 	sort.Slice(alerts, func(i, j int) bool {
 		return alerts[i].ID < alerts[j].ID
 	})

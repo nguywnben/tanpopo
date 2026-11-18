@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 // Package auth implements Argon2id local administrator password hashing,
-// brute-force login rate limiting, HttpOnly/SameSite=Strict/Secure admin session
+// brute-force login rate limiting, HttpOnly/SameSite=Lax/Secure admin session
 // cookies with double-submit X-CSRF-Token verification, and strict Control/Data
 // credential-plane isolation (AUTH-02, AUTH-03, AUTH-07 / TP-IMP-0009).
 package auth
@@ -615,7 +615,7 @@ func (s *LocalService) BindRole(ctx context.Context, params BindRoleParams) (*rb
 
 // Login authenticates local email/password credentials across the instance (or disambiguates by
 // verifying against matching tenant candidates without cross-tenant email shadowing), enforces
-// multi-bucket brute-force throttling (AUTH-02), and mints an HttpOnly; SameSite=Strict; Secure
+// multi-bucket brute-force throttling (AUTH-02), and mints an HttpOnly; SameSite=Lax; Secure
 // session cookie alongside a random double-submit X-CSRF-Token.
 func (s *LocalService) Login(ctx context.Context, clientIP, email, password string) (*SessionInfo, *http.Cookie, error) {
 	return s.LoginForOrg(ctx, clientIP, "", email, password)
@@ -839,7 +839,7 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(s.sessionTTL.Seconds()),
 	}
 

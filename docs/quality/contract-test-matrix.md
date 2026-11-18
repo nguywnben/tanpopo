@@ -93,7 +93,7 @@ Every extension package across the 3 public `origin_trust_tier` tiers (`official
 
 | Test ID | AuthN / AuthZ Surface | Positive & Negative Test Scenarios | Mandatory Pass Criteria |
 |---|---|---|---|
-| **`AUTH-01`** | **Admin `OIDC + PKCE` Login** | Authenticate to Control Plane via `FakeOAuthIdP` using `Authorization Code + PKCE (S256)` with `state` and `nonce` verification. | Establishes valid admin session with `HttpOnly; Secure; SameSite=Strict` cookies and maps OIDC group claims to exact 6-role RBAC bindings. |
+| **`AUTH-01`** | **Admin `OIDC + PKCE` Login** | Authenticate to Control Plane via `FakeOAuthIdP` using `Authorization Code + PKCE (S256)` with `state` and `nonce` verification. | Establishes valid admin session with `HttpOnly; Secure; SameSite=Lax` cookies and maps OIDC group claims to exact 6-role RBAC bindings. |
 | **`AUTH-02`** | **Expired / Forged OIDC JWT & Brute Force** | Present expired (`exp`), clock-skewed, bad-`JWKS`-signature, or wrong-`iss`/`aud` JWTs, or fire 30 consecutive failed logins. | All invalid/expired JWTs fail `401`; brute-force attempts hit `429 Retry-After` rate limiting and emit audit events. |
 | **`AUTH-03`** | **`CSRF` Protection** | Browser carrying a valid admin session cookie sends `POST /admin/v1/virtual-keys` missing `X-CSRF-Token` or carrying a foreign `Origin` header. | Hard-rejected with `403 csrf_validation_failed` and `0` state mutations. |
 | **`AUTH-04`** | **`Virtual Key` & Environment Scope** | Call `/v1/chat/completions` using a valid `vk_tp_staging_...` key against a `staging` route vs. a `prod`-only route. | Constant-time `SHA-256` digest comparison; matching environment succeeds (`200`), mismatched environment fails immediately (`403 environment_scope_denied`). |

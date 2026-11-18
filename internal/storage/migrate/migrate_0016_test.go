@@ -67,6 +67,7 @@ func TestSQLiteMigration0016OAuthStateFreshAndUpgrade(t *testing.T) {
 	for _, stmt := range []string{
 		`INSERT INTO oauth_authorization_sessions (id, org_id, principal_id, target_kind, target_id, grant_type, state, code_challenge_method, session_status, expires_at_ms, created_at_ms) VALUES ('oas_bad_plain', 'org_seed', 'prc_seed', 'PROVIDER_CONNECTION', 'con_seed', 'AUTHORIZATION_CODE_PKCE', 'state-plain', 'plain', 'PENDING', ?, ?)`,
 		`INSERT INTO oauth_authorization_sessions (id, org_id, principal_id, target_kind, target_id, grant_type, state, session_status, expires_at_ms, created_at_ms) VALUES ('oas_bad_grant', 'org_seed', 'prc_seed', 'PROVIDER_CONNECTION', 'con_seed', 'IMPLICIT', 'state-grant', 'PENDING', ?, ?)`,
+		`INSERT INTO oauth_authorization_sessions (id, org_id, principal_id, target_kind, target_id, grant_type, state, sealed_code_verifier, verifier_nonce, device_code, session_status, expires_at_ms, created_at_ms) VALUES ('oas_bad_device', 'org_seed', 'prc_seed', 'PROVIDER_CONNECTION', 'con_seed', 'DEVICE_CODE', 'state-device', x'01', x'02', 'raw-device-code', 'PENDING', ?, ?)`,
 	} {
 		if _, err := upgrade.ExecContext(ctx, stmt, now+60000, now); err == nil {
 			t.Fatalf("expected contract constraint failure for %s", stmt)
