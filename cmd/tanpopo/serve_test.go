@@ -361,10 +361,10 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	defer closeRuntime()
 	t.Cleanup(func() {
 		// Windows runners can briefly retain a SQLite file handle during process
-		// teardown. Retry removal so the test distinguishes that short OS delay
-		// from a runtime that actually leaked the database connection.
+		// teardown. Allow up to five seconds for the OS to release it, while still
+		// failing if the runtime keeps the database connection open.
 		var removeErr error
-		for attempt := 0; attempt < 20; attempt++ {
+		for attempt := 0; attempt < 100; attempt++ {
 			removeErr = os.RemoveAll(dataDir)
 			if removeErr == nil {
 				return

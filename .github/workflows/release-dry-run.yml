@@ -86,7 +86,7 @@ jobs:
       - name: Attest packaged artifacts with GitHub OIDC provenance
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
-          subject-path: dist/*
+          subject-path: dist/**/*
 
       - name: Verify every attested subject and trusted source identity
         env:
@@ -94,7 +94,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for subject in dist/*; do
+          find dist -type f -print0 > "$RUNNER_TEMP/tanpopo-attestation-subjects.nul"
+          mapfile -d '' -t subjects < "$RUNNER_TEMP/tanpopo-attestation-subjects.nul"
+          if ((${#subjects[@]} == 0)); then
+            echo "no artifact files found under dist/" >&2
+            exit 1
+          fi
+          for subject in "${subjects[@]}"; do
             gh attestation verify "$subject" \
               --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-dry-run.yml" \
