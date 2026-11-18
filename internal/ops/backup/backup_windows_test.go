@@ -31,7 +31,7 @@ func TestWindowsOutputACLProtectsExistingArchiveAndDirectory(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		sd, err := windows.GetSecurityInfo(windows.Handle(file.Fd()), windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION)
+		sd, err := windows.GetSecurityInfo(windows.Handle(file.Fd()), windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
 		_ = file.Close()
 		if err != nil {
 			t.Fatalf("read DACL for %q: %v", path, err)
@@ -42,6 +42,24 @@ func TestWindowsOutputACLProtectsExistingArchiveAndDirectory(t *testing.T) {
 		}
 		if dacl == nil || dacl.AceCount != 2 {
 			t.Fatalf("%q DACL has %v ACEs; want exactly service-account and SYSTEM ACEs", path, dacl)
+		}
+		control, _, err := sd.Control()
+		if err != nil {
+			t.Fatalf("read security descriptor control flags for %q: %v", path, err)
+		}
+		if control&windows.SE_DACL_PROTECTED == 0 {
+			t.Fatalf("%q DACL is not protected from inherited ACEs", path)
+		}
+		owner, _, err := sd.Owner()
+		if err != nil {
+			t.Fatalf("read owner for %q: %v", path, err)
+		}
+		serviceSID, err := currentWindowsServiceSID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !owner.Equals(serviceSID) {
+			t.Fatalf("%q owner %v does not match the backup service account %v", path, owner, serviceSID)
 		}
 	}
 }

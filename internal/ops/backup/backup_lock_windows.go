@@ -71,7 +71,7 @@ func secureWindowsOutputRoot(root *os.Root) error {
 	// Deny new directory handles that can add, remove, or link files while
 	// existing child ACLs are inspected and hardened. If a conflicting writable
 	// handle already exists, fail closed before changing any child ACL.
-	handle, err := windows.CreateFile(windows.StringToUTF16Ptr(rootPath), windows.WRITE_DAC|windows.READ_CONTROL, windows.FILE_SHARE_READ, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	handle, err := windows.CreateFile(windows.StringToUTF16Ptr(rootPath), windows.WRITE_DAC|windows.WRITE_OWNER|windows.READ_CONTROL, windows.FILE_SHARE_READ, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,11 @@ func secureWindowsOutputRoot(root *os.Root) error {
 	if err != nil {
 		return err
 	}
-	if err := windows.SetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil); err != nil {
+	owner, err := currentWindowsServiceSID()
+	if err != nil {
+		return err
+	}
+	if err := windows.SetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, owner, nil, acl, nil); err != nil {
 		return err
 	}
 	return secureExistingWindowsChildren(root)
@@ -113,7 +117,7 @@ func secureExistingWindowsChildren(root *os.Root) error {
 
 func secureWindowsChild(root *os.Root, name string, expected os.FileInfo) error {
 	path := filepath.Join(root.Name(), name)
-	handle, err := windows.CreateFile(windows.StringToUTF16Ptr(path), windows.WRITE_DAC|windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	handle, err := windows.CreateFile(windows.StringToUTF16Ptr(path), windows.WRITE_DAC|windows.WRITE_OWNER|windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
 	if err != nil {
 		return err
 	}
@@ -134,7 +138,11 @@ func secureWindowsChild(root *os.Root, name string, expected os.FileInfo) error 
 	if err != nil {
 		return err
 	}
-	return windows.SetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
+	owner, err := currentWindowsServiceSID()
+	if err != nil {
+		return err
+	}
+	return windows.SetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, owner, nil, acl, nil)
 }
 
 func secureOutputFile(root *os.Root, name string) error {
@@ -150,13 +158,21 @@ func secureOutputFile(root *os.Root, name string) error {
 
 func secureOutputRoot(root *os.Root) error { return secureWindowsOutputRoot(root) }
 
-func privateWindowsACL(directory bool) (*windows.ACL, error) {
+func currentWindowsServiceSID() (*windows.SID, error) {
 	token, err := windows.OpenCurrentProcessToken()
 	if err != nil {
 		return nil, err
 	}
 	defer token.Close()
 	user, err := token.GetTokenUser()
+	if err != nil {
+		return nil, err
+	}
+	return user.User.Sid, nil
+}
+
+func privateWindowsACL(directory bool) (*windows.ACL, error) {
+	serviceSID, err := currentWindowsServiceSID()
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +185,7 @@ func privateWindowsACL(directory bool) (*windows.ACL, error) {
 		inherit = windows.CONTAINER_INHERIT_ACE | windows.OBJECT_INHERIT_ACE
 	}
 	entries := []windows.EXPLICIT_ACCESS{
-		{AccessPermissions: windows.GENERIC_ALL, AccessMode: windows.GRANT_ACCESS, Inheritance: inherit, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(user.User.Sid)}},
+		{AccessPermissions: windows.GENERIC_ALL, AccessMode: windows.GRANT_ACCESS, Inheritance: inherit, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(serviceSID)}},
 		{AccessPermissions: windows.GENERIC_ALL, AccessMode: windows.GRANT_ACCESS, Inheritance: inherit, Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(systemSID)}},
 	}
 	return windows.ACLFromEntries(entries, nil)
