@@ -784,7 +784,7 @@ func (s *Server) handleQuarantineExtension(w http.ResponseWriter, r *http.Reques
 	}
 	if err := s.installer.QuarantineInstallationIfVersion(r.Context(), insID, expectedVer, reason, sc.Actor.PrincipalID); err != nil {
 		latest, _, _ := s.loadExtensionInstallationDTO(r.Context(), insID)
-		if errors.Is(err, port.ErrVersionConflict) && requestSwitch != nil && (latest == nil || latest.State != installer.StateQuarantined) {
+		if errors.Is(err, port.ErrVersionConflict) && requestSwitch != nil && latest.State != installer.StateQuarantined {
 			_, clearErr := s.killSwitch.Clear(r.Context(), killswitch.ClearParams{
 				KillSwitchID: requestSwitch.ID, ExpectedVersion: requestSwitch.Version,
 				ClearedByPrincipalID: sc.Actor.PrincipalID,

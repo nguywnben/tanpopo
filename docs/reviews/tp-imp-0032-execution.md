@@ -6,7 +6,7 @@
 - Governance state: `READY` under `DEC-061`
 - Implementation branch: persistent `develop`
 - Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest pushed checkpoint: `fb587d1` (Unit 32 review/CI checkpoint; follow-up acceptance fixes are being prepared)
+- Latest pushed checkpoint: `264ae68` (EU-only live route, calibrated $1 settlements, and backup restore WAL fixture)
 - Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
 
 ## Work performed
@@ -49,7 +49,7 @@
 - Current patch moves Data Plane initialization before Admin in the unified role, exposes a tenant-scoped runtime acquisition method backed by the approved snapshot adapter loader/cache, and wires the Admin connection probe through that factory. Control-plane-only mode remains fail-closed without a runtime. The live acceptance now fails on missing runtime rather than skipping. `git diff --check` passes; Cloud Go/gofmt launchers remain unavailable, so compile/test/format gates require CI.
 - CI run [44353491329](https://github.com/nguywnben/tanpopo/actions/runs/44353491329) on `10c8ae2` passed Stage 0 and exposed a compile-time wrong error sentinel (`port.ErrNotFound`) in the new snapshot lookup helper. It is replaced with contextual lookup errors; the failed run was on the preceding checkpoint and the correction requires a new complete run.
 - CI run [44353932018](https://github.com/nguywnben/tanpopo/actions/runs/44353932018) on `3895364` compiled the runtime fix and exposed two real acceptance failures: the EU-only route included a US deployment (now removed from its target set), and the restored vault fixture omitted its required WAL checkpoint hook (now backed by the restored SQLite store). The new exact and estimated settlements use matched 38/13 token counts and a rate card intended to produce $1.00 each; verify the summary on the next run.
-- Checkpoint `4de1abf` also adds the manifest-bound Admin adapter registration contract, updates OpenAPI and the registered route count to 75, and removes the live test's SQLite seed. Its CI and fresh code/security reviews are pending.
+- Checkpoint `4de1abf` also adds the manifest-bound Admin adapter registration contract, updates OpenAPI and the registered route count to 75, and removes the live test's SQLite seed. CI run [44356369334](https://github.com/nguywnben/tanpopo/actions/runs/44356369334) passed Stage 0 and all three OS jobs caught a compile error because the installation DTO is returned by value, not pointer; the stale-race cleanup now checks its state value directly.
 - Follow-up local fixes remove the US deployment from the EU route, open the restored archive through the SQLite store so shredding retains the required WAL checkpoint hook, and set balanced per-million rates (`19,607,843,137,254` input / `19,607,843,137,257` output nano-USD) so the 38/13 token exact and estimated settlements each total exactly `$1.00` after integer pricing.
 - Next: push this wiring fix and inspect all CI jobs, including the Windows teardown retry. Close remaining DoD gaps and obtain fresh independent code and security reviews on the final diff before merge.
 
