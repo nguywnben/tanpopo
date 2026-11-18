@@ -30,7 +30,7 @@ beforeEach(() => {
   mocks.triggerKillSwitch.mockResolvedValue({config_epoch: 3, affected_entities_count: 2, severed_streams_count: 1});
   mocks.getKillSwitchBlastRadius.mockResolvedValue({organizations: [], projects: [], virtual_keys: [], connections: []});
   mocks.getReadinessProbe.mockResolvedValue({ready: true, status: 'ok', configEpoch: 3, snapshotAgeMs: 5});
-  mocks.getClusterOpsStatus.mockResolvedValue({current_epoch: 3, storage_engine: 'sqlite_wal', nodes: [{id: 'standalone', wal_bytes: 8192}]});
+  mocks.getClusterOpsStatus.mockResolvedValue({current_epoch: 3, storage_engine: 'sqlite_wal', backup_supported: true, backup_unavailable_reason: '', nodes: [{id: 'standalone', wal_bytes: 8192}]});
   mocks.createEncryptedBackup.mockResolvedValue({archive_filename: 'backup.tpop.enc', sha256_hex: 'a'.repeat(64)});
   mocks.runUpgradePreflight.mockResolvedValue({compatible: true, state: 'READY_TO_UPGRADE', blocking_extensions: []});
   mocks.getExtensionLockfile.mockResolvedValue({lockfileVersion: 1, extensions: {'@tanpopo/adapter': {version: '1.2.0', digest: 'sha256:abc'}}});
@@ -96,6 +96,18 @@ describe('Unit 30 observability and operations screens', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Run upgrade preflight'}));
     await waitFor(() => expect(mocks.runUpgradePreflight).toHaveBeenCalledWith('v0.2.0'));
     expect(await screen.findByText('Ready to upgrade')).toBeInTheDocument();
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('explains and disables encrypted backups when secure staging is unavailable', async () => {
+    mocks.getClusterOpsStatus.mockResolvedValue({current_epoch: 3, storage_engine: 'sqlite_wal', backup_supported: false,
+      backup_unavailable_reason: 'Encrypted backups require Linux /dev/shm tmpfs staging with swap disabled.',
+      nodes: [{id: 'standalone', wal_bytes: 8192}]});
+    renderTheme(<OperationsSettingsPage roles={['OPERATOR']} />, 'dark');
+    expect(await screen.findByText('Encrypted backups require Linux /dev/shm tmpfs staging with swap disabled.')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Create encrypted backup'})).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(screen.getByRole('button', {name: 'Create encrypted backup'}));
+    expect(mocks.createEncryptedBackup).not.toHaveBeenCalled();
     expect(await axeViolations()).toEqual([]);
   });
 

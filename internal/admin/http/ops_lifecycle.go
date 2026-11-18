@@ -71,11 +71,21 @@ func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Reques
 			health = "unhealthy"
 		}
 	}
+	backupSupported, backupReason := backupAvailability()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"current_epoch":  epoch,
-		"storage_engine": "sqlite_wal",
-		"nodes":          []map[string]any{{"id": "standalone", "config_epoch": epoch, "health": health, "wal_bytes": walBytes}},
+		"current_epoch":             epoch,
+		"storage_engine":            "sqlite_wal",
+		"backup_supported":          backupSupported,
+		"backup_unavailable_reason": backupReason,
+		"nodes":                     []map[string]any{{"id": "standalone", "config_epoch": epoch, "health": health, "wal_bytes": walBytes}},
 	})
+}
+
+func backupAvailability() (bool, string) {
+	if backup.PlatformSupported() {
+		return true, ""
+	}
+	return false, "Encrypted backups require Linux /dev/shm tmpfs staging with swap disabled."
 }
 
 func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Request) {
@@ -83,8 +93,9 @@ func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Requ
 	if !ok || !s.requireInstanceOperator(w, r, sc, rbac.ActionOpsWrite) {
 		return
 	}
-	if !backup.PlatformSupported() {
-		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "encrypted backup requires Linux volatile staging support", true, nil)
+	backupSupported, backupReason := backupAvailability()
+	if !backupSupported {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", backupReason, true, nil)
 		return
 	}
 	store, ok := s.storage.(sqliteSnapshotter)

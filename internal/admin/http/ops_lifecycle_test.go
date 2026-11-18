@@ -29,7 +29,9 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 		t.Fatalf("GET cluster status code=%d body=%s", status.Code, status.Body.String())
 	}
 	var cluster struct {
-		Nodes []struct {
+		BackupSupported bool   `json:"backup_supported"`
+		BackupReason    string `json:"backup_unavailable_reason"`
+		Nodes           []struct {
 			WALBytes int64  `json:"wal_bytes"`
 			Health   string `json:"health"`
 		} `json:"nodes"`
@@ -39,6 +41,12 @@ func TestCR13InstanceOpsHandlersReturnCompletedResults(t *testing.T) {
 	}
 	if len(cluster.Nodes) != 1 || cluster.Nodes[0].WALBytes < 0 || cluster.Nodes[0].Health == "" {
 		t.Fatalf("expected measured non-negative WAL bytes, got %s", status.Body.String())
+	}
+	if cluster.BackupSupported != backup.PlatformSupported() {
+		t.Fatalf("backup_supported=%t; platform support=%t", cluster.BackupSupported, backup.PlatformSupported())
+	}
+	if cluster.BackupSupported == (cluster.BackupReason != "") {
+		t.Fatalf("backup availability reason should be present exactly when backup is unavailable: %+v", cluster)
 	}
 	if err := h.snapshots.Refresh(context.Background()); err != nil {
 		t.Fatalf("refresh config snapshot: %v", err)

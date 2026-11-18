@@ -13,11 +13,15 @@ import (
 )
 
 func TestCleanupAbandonedStagingRootsOnlyRemovesMatchingNamespace(t *testing.T) {
-	root, err := os.OpenRoot("/dev/shm")
+	root, err := os.OpenRoot(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root.Close()
+	t.Cleanup(func() {
+		if err := root.Close(); err != nil {
+			t.Errorf("close fixture root: %v", err)
+		}
+	})
 	staleNamespace := strings.Repeat("a", 64)
 	otherNamespace := strings.Repeat("b", 64)
 	staleName := fmt.Sprintf(".tanpopo-backup-%d-%s-%032x", os.Geteuid(), staleNamespace, 1)

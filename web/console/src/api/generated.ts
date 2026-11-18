@@ -1254,7 +1254,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Trigger hot Master-KEK-sealed .tpop.enc backup archive (OPERATOR only) (SCR-16) */
+        /**
+         * Trigger hot Master-KEK-sealed .tpop.enc backup archive (OPERATOR only) (SCR-16)
+         * @description Backup creation is available only on Linux hosts where /dev/shm is verified as volatile tmpfs and swap is disabled. Other platforms return 503; the Operations UI reports this limitation and disables the action.
+         */
         post: operations["triggerEncryptedBackup"];
         delete?: never;
         options?: never;
@@ -4914,6 +4917,10 @@ export interface operations {
                         current_epoch: number;
                         /** @enum {string} */
                         storage_engine: "sqlite_wal" | "postgres";
+                        /** @description True only when encrypted plaintext staging prerequisites are verified. v0.1 currently supports Linux hosts with /dev/shm tmpfs and swap disabled. */
+                        backup_supported: boolean;
+                        /** @description Empty when backup_supported is true; otherwise explains the fail-closed platform prerequisite. */
+                        backup_unavailable_reason: string;
                         nodes: {
                             id?: string;
                             config_epoch?: number;

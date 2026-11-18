@@ -76,7 +76,8 @@ export function OperationsSettingsPage({roles}: {roles: Role[]}) {
     </VStack></Section>
     <Section><VStack gap={3}><Heading level={2}>Encrypted backups</Heading>
       <Text>Backups are sealed as .tpop.enc archives. History is read from immutable audit events.</Text>
-      <Button label="Create encrypted backup" variant="primary" isDisabled={busy} onClick={() => void backup()} />
+      {cluster?.backup_supported === false ? <Text role="status">{cluster.backup_unavailable_reason || 'Encrypted backups require Linux volatile staging support.'}</Text> : null}
+      <Button label="Create encrypted backup" variant="primary" isDisabled={busy || cluster?.backup_supported !== true} onClick={() => void backup()} />
       {backups.length ? <Table aria-label="Backup history" data={backups as Array<Record<string, unknown>>} columns={[
         {key: 'created_at', header: 'Created'}, {key: 'actor_id', header: 'Created by'}, {key: 'target_id', header: 'Backup ID'},
         {key: 'metadata', header: 'Receipt', renderCell: row => <Text>{JSON.stringify(row.metadata ?? {})}</Text>},

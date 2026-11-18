@@ -502,7 +502,7 @@ func writePayload(ctx context.Context, srcRoot *os.Root, dbPath, lockfilePath, c
 		return fmt.Errorf("backup: write archive header: %w", err)
 	}
 	encrypted := &encryptedFrameWriter{ctx: ctx, dst: dst, aead: aead, noncePrefix: noncePrefix, backupID: backupID, header: header, buffer: make([]byte, 0, chunkSize)}
-	compressed, err := newZstdRawWriter(encrypted)
+	compressed, err := newZstdWriter(encrypted)
 	if err != nil {
 		return fmt.Errorf("backup: initialize zstd frame: %w", err)
 	}
