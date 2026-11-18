@@ -254,7 +254,8 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		adminServer, err := adminhttp.NewServer(adminhttp.ServerConfig{
 			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
-			Installer: installerService, Broker: blindBroker, Audit: auditLog, Version: version,
+			Installer: installerService, ArchiveResolver: newServeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv)),
+			Broker: blindBroker, Audit: auditLog, Version: version,
 		})
 		if err != nil {
 			cleanup()
@@ -281,6 +282,19 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		mux.Handle("/metrics", dataServer.MetricsHandler())
 	}
 	return mux, cleanup, nil
+}
+
+func newServeArchiveResolver(root string) adminhttp.ExtensionArchiveResolver {
+	if strings.TrimSpace(root) == "" {
+		return nil
+	}
+	resolver, err := installer.NewLocalMarketplaceArchiveResolver(root)
+	if err != nil {
+		return func(context.Context, string, string) (*installer.StageInstallRequest, func(), error) {
+			return nil, nil, err
+		}
+	}
+	return resolver.Resolve
 }
 
 func allowedOrigins(addr string) []string {

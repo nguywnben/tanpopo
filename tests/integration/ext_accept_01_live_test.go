@@ -23,13 +23,11 @@ import (
 	"github.com/nguywnben/tanpopo/internal/testkit/netguard"
 )
 
-// TestEXTAccept01_LiveBootstrapAuthenticationAndFailClosedInstall exercises
+// TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval exercises
 // authenticated behavior against the actual single-binary serve process. It
 // proves bootstrap-token consumption, owner login/session, CSRF enforcement,
-// and that installation cannot return success when the live runtime has no
-// archive resolver. It does not claim the extension lifecycle or routing
-// acceptance steps that require an archive resolver and configured providers.
-func TestEXTAccept01_LiveBootstrapAuthenticationAndFailClosedInstall(t *testing.T) {
+// and a local archive install/approval through the configured runtime resolver.
+func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 	root := filepath.Clean(filepath.Join("..", ".."))
 	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
 		t.Fatalf("locate Tanpopo module: %v", err)
@@ -56,6 +54,10 @@ func TestEXTAccept01_LiveBootstrapAuthenticationAndFailClosedInstall(t *testing.
 	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	dataDir := filepath.Join(work, "data")
+	marketplaceDir := filepath.Join(work, "marketplace")
+	if err := os.MkdirAll(marketplaceDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	logFile, err := os.Create(filepath.Join(work, "serve.log"))
 	if err != nil {
 		t.Fatal(err)
@@ -67,6 +69,7 @@ func TestEXTAccept01_LiveBootstrapAuthenticationAndFailClosedInstall(t *testing.
 		"TANPOPO_DATA_DIR="+dataDir,
 		"TANPOPO_MASTER_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"TANPOPO_MASTER_KEY_FILE=",
+		"TANPOPO_MARKETPLACE_ARCHIVE_ROOT="+marketplaceDir,
 		"TANPOPO_TEST_HERMETIC=1",
 	)
 	server.Stdout, server.Stderr = logFile, logFile
@@ -196,10 +199,24 @@ func TestEXTAccept01_LiveBootstrapAuthenticationAndFailClosedInstall(t *testing.
 		t.Fatalf("blast-radius response must return all four initialized scopes: err=%v body=%s", err, blastRadius.Body)
 	}
 
+	// Build a real .tpkg with the standalone CLI, then install and approve it
+	// through the live Admin API and its constrained local marketplace resolver.
+	extensionDir := filepath.Join(work, "regional-llm-adapter")
+	init := exec.Command(binary, "plugin", "init", "regional-llm-adapter", "--namespace", "acme-cloud", "--dir", extensionDir)
+	init.Dir = work
+	if output, err := init.CombinedOutput(); err != nil {
+		t.Fatalf("scaffold external adapter: %v\n%s", err, output)
+	}
+	archivePath := filepath.Join(marketplaceDir, "regional-llm-adapter.tpkg")
+	pack := exec.Command(binary, "plugin", "pack", extensionDir, "--out", archivePath)
+	pack.Dir = work
+	if output, err := pack.CombinedOutput(); err != nil {
+		t.Fatalf("pack external adapter: %v\n%s", err, output)
+	}
 	installURL := baseURL + "/admin/v1/extensions/install"
 	installBody := map[string]string{
-		"source_uri": "https://marketplace.tanpopo.dev/acme-0.1.0.tpkg",
-		"expected_sha256": strings.Repeat("a", 64),
+		"source_uri": "tanpopo-local://regional-llm-adapter.tpkg",
+		"expected_sha256": fileSHA256(t, archivePath),
 	}
 	missingCSRF := liveJSONRequest(t, client, http.MethodPost, installURL, installBody, []*http.Cookie{loginCookie}, baseURL)
 	if missingCSRF.Code != http.StatusForbidden {
@@ -207,21 +224,32 @@ func TestEXTAccept01_LiveBootstrapAuthenticationAndFailClosedInstall(t *testing.
 	}
 	assertProcessInvariant("CSRF rejection")
 
-	// The production binary currently constructs the lifecycle service without an
-	// archive resolver. Confirm the authenticated, CSRF-valid request fails closed
-	// instead of recording a staged installation or returning a false success.
 	withCSRF := liveJSONRequest(t, client, http.MethodPost, installURL, installBody, []*http.Cookie{loginCookie}, baseURL, loginResult.CSRFToken)
-	if withCSRF.Code != http.StatusServiceUnavailable {
-		t.Fatalf("install without configured archive resolver: want fail-closed 503, got %d: %s", withCSRF.Code, withCSRF.Body)
+	if withCSRF.Code != http.StatusAccepted {
+		t.Fatalf("stage local extension archive: want 202, got %d: %s", withCSRF.Code, withCSRF.Body)
 	}
-	assertProcessInvariant("fail-closed install")
+	var staged struct {
+		InstallationID string `json:"installation_id"`
+	}
+	if err := json.Unmarshal([]byte(withCSRF.Body), &staged); err != nil || staged.InstallationID == "" || withCSRF.ETag == "" {
+		t.Fatalf("stage response lacks installation ID or ETag: err=%v etag=%q body=%s", err, withCSRF.ETag, withCSRF.Body)
+	}
+	assertProcessInvariant("stage extension")
+	approvalHeaders := map[string]string{"If-Match": withCSRF.ETag}
+	approved := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/approve-permissions", approvePermissionsRequest{
+		EnableImmediately: true, AcknowledgeUnverifiedExternal: true,
+	}, []*http.Cookie{loginCookie}, baseURL, approvalHeaders, loginResult.CSRFToken)
+	if approved.Code != http.StatusOK || !strings.Contains(approved.Body, `"state":"ENABLED_ACTIVE"`) {
+		t.Fatalf("approve staged external extension: want active 200, got %d: %s", approved.Code, approved.Body)
+	}
+	assertProcessInvariant("extension permission approval")
 
 	installations := liveJSONRequest(t, client, http.MethodGet, baseURL+"/admin/v1/extensions/installations", nil, []*http.Cookie{loginCookie}, baseURL)
 	if installations.Code != http.StatusOK {
-		t.Fatalf("list installations after rejected install: want 200, got %d: %s", installations.Code, installations.Body)
+		t.Fatalf("list installations after approval: want 200, got %d: %s", installations.Code, installations.Body)
 	}
-	if strings.Contains(installations.Body, "acme-0.1.0") {
-		t.Fatalf("rejected install created an installation record: %s", installations.Body)
+	if !strings.Contains(installations.Body, staged.InstallationID) {
+		t.Fatalf("approved install missing from installations list: %s", installations.Body)
 	}
 	assertProcessInvariant("post-install state check")
 
@@ -235,10 +263,15 @@ func TestEXTAccept01_LiveBootstrapAuthenticationAndFailClosedInstall(t *testing.
 type liveResponse struct {
 	Code int
 	Body string
+	ETag string
 	Cookies []*http.Cookie
 }
 
 func liveJSONRequest(t *testing.T, client *http.Client, method, target string, body any, cookies []*http.Cookie, origin string, csrf ...string) liveResponse {
+	return liveJSONRequestWithHeaders(t, client, method, target, body, cookies, origin, nil, csrf...)
+}
+
+func liveJSONRequestWithHeaders(t *testing.T, client *http.Client, method, target string, body any, cookies []*http.Cookie, origin string, headers map[string]string, csrf ...string) liveResponse {
 	t.Helper()
 	var payload io.Reader
 	if body != nil {
@@ -258,6 +291,9 @@ func liveJSONRequest(t *testing.T, client *http.Client, method, target string, b
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 	if len(csrf) > 0 && csrf[0] != "" {
 		req.Header.Set("X-CSRF-Token", csrf[0])
 	}
@@ -273,7 +309,7 @@ func liveJSONRequest(t *testing.T, client *http.Client, method, target string, b
 	if err != nil {
 		t.Fatalf("read %s response: %v", target, err)
 	}
-	return liveResponse{Code: resp.StatusCode, Body: string(raw), Cookies: resp.Cookies()}
+	return liveResponse{Code: resp.StatusCode, Body: string(raw), ETag: resp.Header.Get("ETag"), Cookies: resp.Cookies()}
 }
 
 func findLiveSessionCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {

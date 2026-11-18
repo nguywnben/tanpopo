@@ -6,7 +6,7 @@
 - Governance state: `READY` under `DEC-061`
 - Implementation branch: persistent `develop`
 - Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest pushed checkpoint: `fdc92a3ae9e515ef442771ba3cf434db7491bea5` (newer checkpoint in progress)
+- Latest pushed checkpoint: `d891e6b965e47eaa3710d8f79a4699c3f5c72691` (resolver and live-install changes are in the current local diff)
 - Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
 
 ## Work performed
@@ -17,6 +17,8 @@
 - **Zeno** added the initial live-process EXT-ACCEPT-01 process contract test. It checks scaffolding, process identity and API surface availability; its comments explicitly leave authenticated lifecycle and routing outcomes unproven.
 - **Carver** added a live binary test covering bootstrap, owner login/session, CSRF enforcement, a four-scope blast-radius response, and fail-closed behavior when the live runtime has no extension archive resolver.
 - **Pasteur** supplied the acceptance-gap checklist used to plan concurrent backup, shredding, drain, upgrade-preflight, and insecure-KEK tests.
+- **Curie** added focused tests for readiness and graceful shutdown while an SSE response is active, plus incompatible-upgrade preflight output and no-side-effect checks.
+- **Mencius** implemented the opt-in local marketplace archive resolver, including path confinement, symlink/type rejection, and a digest-verified private snapshot. **GPT-6 Luna** is integrating the resolver into the live bootstrap/install acceptance flow.
 
 ## Verification evidence
 
@@ -26,11 +28,13 @@
 - CI run [44335158522](https://github.com/nguywnben/tanpopo/actions/runs/44335158522) passed Stage 0 but failed Stage 1 because of compile errors in the new CLI. Those compile errors were fixed in `626ed18`.
 - CI run [44335944731](https://github.com/nguywnben/tanpopo/actions/runs/44335944731) passed Stage 0. Ubuntu Stage 1 exposed a stale support-bundle assertion for the old doctor report and two live tests building `.` instead of `./cmd/tanpopo`; these are being corrected in the next checkpoint. macOS and Windows results were still running at the time of this record.
 - CI run [44336743635](https://github.com/nguywnben/tanpopo/actions/runs/44336743635) passed Stage 0, then failed Stage 1 on all three operating systems because the live EXT-ACCEPT-01 contract found that `plugin init` could not scaffold the required `@acme-cloud` namespace. It also confirms the earlier implementation and quality gates pass before reaching that acceptance assertion. The CLI now accepts a validated `--namespace`, and an online-backup acceptance test is being added; this diff has not yet been run by CI.
+- CI run [44338227474](https://github.com/nguywnben/tanpopo/actions/runs/44338227474) passed Stage 0 and Ubuntu/macOS Stage 1. Windows Stage 1 failed when `t.TempDir` cleanup could not remove `tanpopo.db` after `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; the Go test itself emitted no assertion failure. This is under investigation as a Windows handle cleanup issue. The run's online backup acceptance test passed on Ubuntu/macOS.
+- CI run [44339674223](https://github.com/nguywnben/tanpopo/actions/runs/44339674223) is checking the SSE drain and blocked-preflight tests on the pushed `d891e6b` checkpoint; results are pending.
 
 ## Acceptance gaps still open
 
 - Complete the ten-step EXT-ACCEPT-01 workflow with actual extension install/approval, update/re-consent/rollback, EU routing and exact/estimated settlements, quarantine timing, and populated blast-radius evidence. Route probes and fail-closed install checks do not satisfy these steps.
-- Complete the ten-step EXT-ACCEPT-01 workflow with authenticated extension installation/approval, EU routing and ledger verification, update/re-consent/rollback, quarantine timing, and populated blast-radius results. The current process test only probes API surfaces and is not acceptance proof.
-- Add and run the required concurrent online-backup/restore, project shred plus KEK rotation, graceful SSE drain, incompatible-upgrade no-side-effect, and insecure KEK startup/doctor acceptance tests. The concurrent online-backup test is now in the local uncommitted diff.
+- Complete the ten-step EXT-ACCEPT-01 workflow with EU routing and exact/estimated ledger verification, update/re-consent/rollback, quarantine timing, and populated blast-radius results. A live archive stage/permission-approval flow is now being added to the process test.
+- Complete project shred plus KEK rotation and insecure KEK startup/doctor acceptance tests. The concurrent online-backup/restore and graceful SSE drain / incompatible-upgrade preflight tests are in the current implementation diff; they still require CI confirmation.
 - Validate the full implementation against the Unit 32 DoD and obtain final independent code and security reviews on the exact final diff.
 - Merge only after all four required Stage 0/Stage 1 checks pass, then verify acceptance CI and the DONE record on the resulting `origin/main` SHA.
