@@ -21,6 +21,8 @@ coverage/
 
 # Production & Build outputs
 dist/
+!internal/webui/dist/
+!internal/webui/dist/**
 !sdk/templates/tier2-wasm/dist/
 !sdk/templates/tier2-wasm/dist/adapter.wasm
 !extensions/official/*/dist/
