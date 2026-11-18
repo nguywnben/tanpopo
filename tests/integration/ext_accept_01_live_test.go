@@ -236,7 +236,7 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 	}
 	assertProcessInvariant("stage extension")
 	approvalHeaders := map[string]string{"If-Match": withCSRF.ETag}
-	approved := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/approve-permissions", approvePermissionsRequest{
+	approved := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/approve-permissions", liveApprovePermissionsRequest{
 		EnableImmediately: true, AcknowledgeUnverifiedExternal: true,
 	}, []*http.Cookie{loginCookie}, baseURL, approvalHeaders, loginResult.CSRFToken)
 	if approved.Code != http.StatusOK || !strings.Contains(approved.Body, `"state":"ENABLED_ACTIVE"`) {
@@ -265,6 +265,11 @@ type liveResponse struct {
 	Body string
 	ETag string
 	Cookies []*http.Cookie
+}
+
+type liveApprovePermissionsRequest struct {
+	EnableImmediately            bool `json:"enable_immediately"`
+	AcknowledgeUnverifiedExternal bool `json:"acknowledge_unverified_external"`
 }
 
 func liveJSONRequest(t *testing.T, client *http.Client, method, target string, body any, cookies []*http.Cookie, origin string, csrf ...string) liveResponse {

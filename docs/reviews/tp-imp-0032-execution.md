@@ -6,7 +6,7 @@
 - Governance state: `READY` under `DEC-061`
 - Implementation branch: persistent `develop`
 - Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest pushed checkpoint: `83402c3` (concurrent-backup snapshot synchronization is in the current local diff)
+- Latest pushed checkpoint: `ff07a2e` (live test compile fix is in the current local diff)
 - Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
 
 ## Work performed
@@ -30,6 +30,7 @@
 - CI run [44336743635](https://github.com/nguywnben/tanpopo/actions/runs/44336743635) passed Stage 0, then failed Stage 1 on all three operating systems because the live EXT-ACCEPT-01 contract found that `plugin init` could not scaffold the required `@acme-cloud` namespace. It also confirms the earlier implementation and quality gates pass before reaching that acceptance assertion. The CLI now accepts a validated `--namespace`, and an online-backup acceptance test is being added; this diff has not yet been run by CI.
 - CI run [44338227474](https://github.com/nguywnben/tanpopo/actions/runs/44338227474) passed Stage 0 and Ubuntu/macOS Stage 1. Windows Stage 1 failed when `t.TempDir` cleanup could not remove `tanpopo.db` after `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; the Go test itself emitted no assertion failure. This is under investigation as a Windows handle cleanup issue. The run's online backup acceptance test passed on Ubuntu/macOS.
 - CI run [44339674223](https://github.com/nguywnben/tanpopo/actions/runs/44339674223) passed Windows Stage 1, while macOS Stage 1 exposed that the online snapshot could start before any concurrent writer had committed its first ledger/audit pair. The test now waits for all 20 workers to commit before starting the backup, then keeps all writers active during snapshot and requires at least 20 of each record in the restore. Ubuntu results were still running when recorded.
+- CI run [44340464974](https://github.com/nguywnben/tanpopo/actions/runs/44340464974) caught a compile error in the new live install test: its approval request type was defined only in another Go package. A test-local request type now fixes the reference. macOS and Windows jobs were still running at the time of the compile failure.
 
 ## Acceptance gaps still open
 
