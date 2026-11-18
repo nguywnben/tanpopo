@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
 > **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0029: DONE` | `TP-IMP-0030: READY_FOR_REVIEW` | `1 READY_FOR_REVIEW / 17 BLOCKED`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.41.0-dec-052-0030-review` | **Date:** `2026-11-18`
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.44.0-dec-056-0030-review` | **Date:** `2026-11-18`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0029` = **`DONE`**; Unit 29 acceptance CI `44092664075` is green under [`DEC-048`](../governance/decisions.md); Unit `TP-IMP-0030` is **`READY_FOR_REVIEW`** under [`DEC-052`](../governance/decisions.md) at `c39581df`; PR run `44226510663` is green across all existing gates; `TP-IMP-0031`..`0047` (`17 / 47`) remain blocked behind their existing gates.
+> - **Live DAG Frontier:** `TP-IMP-0001`..`0029` = **`DONE`**; Unit 29 acceptance CI `44092664075` is green under [`DEC-048`](../governance/decisions.md); Unit `TP-IMP-0030` is **`READY_FOR_REVIEW`** under [`DEC-057`](../governance/decisions.md) at `bea8165`; implementation PR run `44242994741` has Stage 0 green; Stage 1 failed on Ubuntu, Windows, and macOS; step logs are unavailable; `TP-IMP-0031`..`0047` (`17 / 47`) remain blocked behind their existing gates.
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier (`29 DONE`, `1 READY_FOR_REVIEW`, `17 BLOCKED` — `DEC-052`):** `TP-IMP-0001..0029` are `DONE`; `TP-IMP-0030` is `READY_FOR_REVIEW` with PR run `44226510663` green and acceptance CI on `origin/main` pending; `TP-IMP-0031`..`0047` remain blocked behind sequential and existing authorization gates. Review tiers, `COND-PO-01`..`05`, and direct human Product Owner authorization for `0031`..`0047` remain in force.
+> **Live Queue Frontier (`29 DONE`, `1 READY_FOR_REVIEW`, `17 BLOCKED` — `DEC-057`):** `TP-IMP-0001..0029` are `DONE`; `TP-IMP-0030` is `READY_FOR_REVIEW` with implementation PR run `44242994741` failed on `bea8165` (Stage 0 green; Stage 1 failures on Ubuntu, Windows, and macOS; step logs unavailable); synchronized review and acceptance CI on `origin/main` pending; `TP-IMP-0031`..`0047` remain blocked behind sequential and existing authorization gates. Review tiers, `COND-PO-01`..`05`, and direct human Product Owner authorization for `0031`..`0047` remain in force.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.

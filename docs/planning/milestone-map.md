@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
 > **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0029: DONE` | `TP-IMP-0030: READY_FOR_REVIEW` | `1 READY_FOR_REVIEW / 17 BLOCKED`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.38.0-dec-052-0030-review` | **Date:** `2026-11-18`
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.41.0-dec-056-0030-review` | **Date:** `2026-11-18`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0`, Milestone `M1`, Wave 2.1, and Units `TP-IMP-0021`..`0029` are **`DONE` (`29 / 47`)**. Unit 29: `DEC-048`, implementation CI `44090789888`, acceptance CI `44092664075` green, independent code-review clear. Unit `TP-IMP-0030` is **`READY_FOR_REVIEW`** under `DEC-052` at `c39581df`; PR run `44226510663` passes all existing gates. `TP-IMP-0031`..`0047` remain subject to their existing gates, including direct Owner authorization for `0031`..`0047`.
+> - **Live Status:** Milestone `M0`, Milestone `M1`, Wave 2.1, and Units `TP-IMP-0021`..`0029` are **`DONE` (`29 / 47`)**. Unit 29: `DEC-048`, implementation CI `44090789888`, acceptance CI `44092664075` green, independent code-review clear. Unit `TP-IMP-0030` is **`READY_FOR_REVIEW`** under `DEC-057` at `bea8165`; implementation PR run `44242994741` has Stage 0 green; Stage 1 failed on Ubuntu, Windows, and macOS; step logs are unavailable. `TP-IMP-0031`..`0047` remain subject to their existing gates, including direct Owner authorization for `0031`..`0047`.
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---
