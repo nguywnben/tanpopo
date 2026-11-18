@@ -366,6 +366,24 @@ func TestBlindBrokerEnforcesResolvedSlotBindingMode(t *testing.T) {
 	}
 }
 
+func TestBlindBrokerOAuthSlotMissingResolverAudienceFailsClosed(t *testing.T) {
+	t.Parallel()
+	h := newBrokerHarness(t, nil)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer srv.Close()
+	audience := srv.URL
+	meta, err := h.vs.SealSecret(context.Background(), vault.SealSecretParams{OrgID: h.orgID, Name: "OAuth token set", SecretKind: vault.SecretKindOAuth2TokenSet, BoundAudience: &audience, Plaintext: []byte("sealed-token-set")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.resolver.put(&ResolvedSlot{OrgID: h.orgID, ConnectionID: h.connID, SlotName: "oauth_access_token", SecretID: meta.ID, InjectMode: InjectModeHostBlind, BoundAudience: nil, AllowedHosts: []string{srv.Listener.Addr().String()}, AllowPrivateIP: true, AllowedCIDRs: []string{"127.0.0.1/32"}})
+	_, err = h.broker.Execute(context.Background(), EgressRequest{OrgID: h.orgID, ConnectionID: h.connID, Method: http.MethodGet, TargetURL: srv.URL + "/resource", CredentialInjections: []CredentialInjection{{SecretSlotName: "oauth_access_token", Location: TargetBearer, FieldName: "Authorization", ValuePrefix: "Bearer "}}, RequestID: "oauth-missing-audience"})
+	var brokerErr *Error
+	if !errors.As(err, &brokerErr) || !errors.Is(err, ErrAudienceMismatch) {
+		t.Fatalf("Execute error=%v, want fail-closed audience mismatch", err)
+	}
+}
+
 func TestBlindBrokerNEG1_CT14_BlocksUnapprovedHostPreDNS(t *testing.T) {
 	t.Parallel()
 
@@ -1557,7 +1575,6 @@ func TestBlindBrokerZeroSlotTrustBoundaryAndNoSelfDeclaredPolicyBypass(t *testin
 	assertNoCanaryInEvents(t, h.scanner, h.audit.snapshot())
 }
 
-
 type callbackVaultUnsealer struct {
 	inner    VaultUnsealer
 	onUnseal func()
@@ -2007,5 +2024,3 @@ func TestSecretScrubberConcurrentZeroizeNoRace(t *testing.T) {
 		wg.Wait()
 	}
 }
-
-

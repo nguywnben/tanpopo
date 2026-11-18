@@ -775,6 +775,9 @@ func (b *BlindHostCredentialBroker) sendOutbound(ctx context.Context, req Egress
 
 			injectionValue := unsealed.Plaintext
 			if unsealed.SecretKind == vault.SecretKindOAuth2TokenSet {
+				if item.slot.BoundAudience == nil || strings.TrimSpace(*item.slot.BoundAudience) == "" {
+					return &Error{HTTPStatus: http.StatusForbidden, Code: "credential_audience_mismatch", Message: "OAuth credential has no target resource binding", Err: ErrAudienceMismatch}
+				}
 				if b.oauthTokens == nil {
 					return fmt.Errorf("broker: OAuth token provider is unavailable")
 				}
