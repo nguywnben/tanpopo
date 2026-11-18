@@ -8,12 +8,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
+	"github.com/spf13/cobra"
 )
 
 func TestDoctorCommandReportsEightEnvironmentalChecksAsJSON(t *testing.T) {
@@ -57,6 +58,38 @@ func TestDoctorCommandReportsEightEnvironmentalChecksAsJSON(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(rootDir, "tanpopo.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("doctor mutated its data root: %v", err)
 	}
+}
+
+func TestDoctorRejectsInsecureMasterKEKFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		return // Windows uses ACL-based key-file checks, covered by the Windows keyfile tests.
+	}
+	rootDir := t.TempDir()
+	keyPath := filepath.Join(rootDir, "master.key")
+	if err := os.WriteFile(keyPath, []byte("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(keyPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TANPOPO_MASTER_KEY", "")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", keyPath)
+	checks := make(map[string]string)
+	for _, check := range mustCollectDoctorReport(t, rootDir).Checks {
+		checks[check.Name] = check.Status
+	}
+	if checks["master-kek-ready"] != "fail" {
+		t.Fatalf("doctor accepted insecure Master KEK permissions: %#v", checks)
+	}
+}
+
+func mustCollectDoctorReport(t *testing.T, root string) doctorReportDocument {
+	t.Helper()
+	report, err := collectDoctorReport(t.Context(), root, nil)
+	if err != nil {
+		t.Fatalf("collect doctor report: %v", err)
+	}
+	return report
 }
 
 func TestDoctorDoesNotProbeNonLoopbackTANPOPOURL(t *testing.T) {

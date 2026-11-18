@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -325,6 +326,26 @@ func TestReadinessRejectsWrongButValidMasterKEK(t *testing.T) {
 	handler.ServeHTTP(probe, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if probe.Code != http.StatusServiceUnavailable {
 		t.Fatalf("readiness returned %d with wrong Master KEK", probe.Code)
+	}
+}
+
+func TestServeRefusesInsecureMasterKEKFileBeforeListening(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		return // Windows uses ACL-based key-file checks, covered by platform-specific tests.
+	}
+	root := t.TempDir()
+	keyPath := filepath.Join(root, "master.key")
+	if err := os.WriteFile(keyPath, []byte("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(keyPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(root, "data"))
+	t.Setenv("TANPOPO_MASTER_KEY", "")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", keyPath)
+	if err := serve(context.Background(), "all", "127.0.0.1:0"); !errors.Is(err, vault.ErrInsecureKeyfilePermissions) {
+		t.Fatalf("serve should reject insecure Master KEK permissions before binding a listener, got %v", err)
 	}
 }
 

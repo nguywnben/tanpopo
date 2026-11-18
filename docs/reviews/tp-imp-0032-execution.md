@@ -6,7 +6,7 @@
 - Governance state: `READY` under `DEC-061`
 - Implementation branch: persistent `develop`
 - Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest pushed checkpoint before the current local diff: `c2f00a3` (live extension update/re-consent/rollback assertions and operator contract documentation)
+- Latest pushed checkpoint: `7bbcf85` (operator quarantine API with atomic ETag checking and verified stream-abort barrier)
 - Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
 
 ## Work performed
@@ -40,7 +40,8 @@
 - Added OpenAPI and RBAC coverage, plus live acceptance assertions for quarantine and all four blast-radius response scopes.
 - `git diff --check` passed. The Cloud Go launcher remains unusable, so these changes still require the repository's Actions checks.
 - CI run [44347742188](https://github.com/nguywnben/tanpopo/actions/runs/44347742188) on `bb2d896` exposed a stale OpenAPI conformance assertion (`73` routes expected; `74` registered after quarantine was added) on Ubuntu, macOS, and Windows. This assertion is updated to `74` in the current local diff. The Windows job did not reproduce the earlier database temp-directory cleanup failure.
-- **Turing** (**code-reviewer**) found that the first quarantine version checked `If-Match` before, but not inside, the lifecycle transaction and could skip/assume an aborting kill switch. **Linnaeus** (**security-auditor**) independently flagged the stream-barrier issue. The current local diff adds an atomic expected-version lifecycle method and re-verifies/executes the active abort barrier on idempotent requests; focused regression tests cover stale ETags, late registered streams, and fail-closed handling of a non-aborting switch. Full independent reviews must be repeated on the final diff.
+- **Turing** (**code-reviewer**) found that the first quarantine version checked `If-Match` before, but not inside, the lifecycle transaction and could skip/assume an aborting kill switch. **Linnaeus** (**security-auditor**) independently flagged the stream-barrier issue. Commit `7bbcf85` adds an atomic expected-version lifecycle method and re-verifies/executes the active abort barrier on idempotent requests; focused regression tests cover stale ETags, late registered streams, and fail-closed handling of a non-aborting switch. Full independent reviews must be repeated on the final diff.
+- Current local tests add a `<1s` assertion around the live quarantine API and verify both `tanpopo doctor` and production server startup reject a POSIX Master KEK file with `0644` permissions. The full CI run for `7bbcf85` is ongoing; Windows reproduced the earlier `t.TempDir` cleanup failure in `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken` after the stale OpenAPI route-count issue was fixed.
 - Next: checkpoint the route-count correction and review fixes, then finish EXT-ACCEPT-01 routing/settlement/quarantine-timing evidence and the remaining shredding/KEK startup and doctor acceptance gaps. Obtain fresh independent code and security reviews on the final diff before any merge.
 
 ## Acceptance gaps still open

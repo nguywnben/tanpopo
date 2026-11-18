@@ -300,9 +300,13 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 		t.Fatalf("rollback did not restore the previous active version: %s", rolledBack.Body)
 	}
 	assertProcessInvariant("rollback")
+	quarantineStarted := time.Now()
 	quarantined := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/quarantine", liveRollbackExtensionRequest{
 		Reason: "Acceptance quarantine verification",
 	}, []*http.Cookie{loginCookie}, baseURL, map[string]string{"If-Match": rolledBack.ETag}, loginResult.CSRFToken)
+	if elapsed := time.Since(quarantineStarted); elapsed >= time.Second {
+		t.Fatalf("quarantine API exceeded the <1s acceptance bound: %s", elapsed)
+	}
 	if quarantined.Code != http.StatusOK || !strings.Contains(quarantined.Body, `"state":"QUARANTINED"`) {
 		t.Fatalf("quarantine extension: want quarantined 200, got %d: %s", quarantined.Code, quarantined.Body)
 	}
