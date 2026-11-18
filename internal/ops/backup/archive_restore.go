@@ -281,7 +281,47 @@ func verifyRestoredAuditChain(ctx context.Context, dbPath string) error {
 		return fmt.Errorf("backup: open restored SQLite snapshot for audit verification: %w", err)
 	}
 	defer db.Close()
-	report, err := audit.VerifyAuditChain(ctx, db, audit.VerifyOptions{})
+	orgRows, err := db.QueryContext(ctx, `SELECT id FROM organizations ORDER BY id`)
+	if err != nil {
+		return fmt.Errorf("backup: list organizations for audit verification: %w", err)
+	}
+	var orgIDs []string
+	for orgRows.Next() {
+		var orgID string
+		if err := orgRows.Scan(&orgID); err != nil {
+			_ = orgRows.Close()
+			return fmt.Errorf("backup: read organization for audit verification: %w", err)
+		}
+		orgIDs = append(orgIDs, orgID)
+	}
+	if err := orgRows.Err(); err != nil {
+		_ = orgRows.Close()
+		return fmt.Errorf("backup: iterate organizations for audit verification: %w", err)
+	}
+	if err := orgRows.Close(); err != nil {
+		return fmt.Errorf("backup: close organization audit query: %w", err)
+	}
+	var report *audit.VerifyReport
+	if len(orgIDs) == 0 {
+		report, err = audit.VerifyAuditChain(ctx, db, audit.VerifyOptions{})
+	} else {
+		chainKeys := append([]string(nil), orgIDs...)
+		var hasSystemChain int
+		if err := db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM audit_events WHERE chain_key = 'SYSTEM')`).Scan(&hasSystemChain); err != nil {
+			return fmt.Errorf("backup: inspect SYSTEM audit chain: %w", err)
+		}
+		if hasSystemChain != 0 {
+			chainKeys = append(chainKeys, audit.SystemChainKey)
+		}
+		report, err = audit.VerifyAuditChain(ctx, db, audit.VerifyOptions{ChainKeys: chainKeys})
+		if err == nil {
+			for _, orgID := range orgIDs {
+				if chain, ok := report.Chains[orgID]; !ok || chain.VerifiedCount == 0 {
+					return fmt.Errorf("backup: initialized organization %q has no verifiable audit history", orgID)
+				}
+			}
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("backup: restored audit chain verification failed: %w", err)
 	}

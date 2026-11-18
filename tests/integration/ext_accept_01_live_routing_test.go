@@ -376,6 +376,13 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	if route.Code != http.StatusCreated {
 		t.Fatalf("create EU-constrained route: got %d: %s", route.Code, route.Body)
 	}
+	explanation := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/routes/explain", map[string]any{
+		"env_id": bootResult.EnvID, "target_model": "accept-eu-only", "data_region": "EU",
+		"dialect": "openai_compatible", "estimated_input_tokens": 38, "max_output_tokens": 13,
+	}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
+	if explanation.Code != http.StatusOK || strings.Contains(explanation.Body, `"selected_candidates_ordered":[]`) {
+		t.Fatalf("EU route must resolve to an eligible deployment before ingress: got %d: %s", explanation.Code, explanation.Body)
+	}
 
 	key := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/virtual-keys", map[string]any{
 		"name": "live EU routing key", "project_id": bootResult.ProjectID, "env_id": bootResult.EnvID,
@@ -411,7 +418,8 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		t.Fatalf("response with authoritative provider usage must classify EXACT, got %q", accuracy)
 	}
 	assertCore("exact settlement")
-	if accuracy := callChat("accept estimated provider usage"); accuracy != "ESTIMATED" {
+	estimatedPrompt := "estimated" + strings.Repeat("x", 103) // ceil(112 UTF-8 bytes / 3) = 38 tokens.
+	if accuracy := callChat(estimatedPrompt); accuracy != "ESTIMATED" {
 		t.Fatalf("provider response without usage counters must classify ESTIMATED, got %q", accuracy)
 	}
 	assertCore("estimated settlement")

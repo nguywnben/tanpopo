@@ -783,7 +783,11 @@ func (s *Server) handleQuarantineExtension(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := s.installer.QuarantineInstallationIfVersion(r.Context(), insID, expectedVer, reason, sc.Actor.PrincipalID); err != nil {
-		latest, _, _ := s.loadExtensionInstallationDTO(r.Context(), insID)
+		latest, _, latestErr := s.loadExtensionInstallationDTO(r.Context(), insID)
+		if errors.Is(err, port.ErrVersionConflict) && requestSwitch != nil && latestErr != nil {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_state_reload_failed", "upstream_error", "quarantine outcome could not be confirmed; emergency barrier remains active", true, nil)
+			return
+		}
 		if errors.Is(err, port.ErrVersionConflict) && requestSwitch != nil && latest.State != installer.StateQuarantined {
 			_, clearErr := s.killSwitch.Clear(r.Context(), killswitch.ClearParams{
 				KillSwitchID: requestSwitch.ID, ExpectedVersion: requestSwitch.Version,
@@ -800,7 +804,10 @@ func (s *Server) handleQuarantineExtension(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if s.snapshots != nil {
-		_ = s.snapshots.Refresh(r.Context())
+		if err := s.snapshots.Refresh(r.Context()); err != nil {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_snapshot_refresh_failed", "upstream_error", "extension quarantine committed but its serving snapshot could not be refreshed; emergency barrier remains active", true, nil)
+			return
+		}
 	}
 	quarantined, _, err := s.loadExtensionInstallationDTO(r.Context(), insID)
 	if err != nil {
