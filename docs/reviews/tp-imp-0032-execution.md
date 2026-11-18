@@ -3,15 +3,15 @@
 ## Current checkpoint
 
 - Unit: `TP-IMP-0032`
-- Governance state: `READY` under `DEC-061`
+- Governance state: `DONE` under `DEC-062`
 - Implementation branch: persistent `develop`
-- Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest implementation checkpoint: `42fc584` (full Unit 32 code and follow-up review remediations) on persistent `develop` / draft PR #6.
-- Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
+- PR: [#6](https://github.com/nguywnben/tanpopo/pull/6), merged to `main`
+- Implementation head: `c58f6413581988764e50729f558af0bb1ec2938b`; merge SHA on main: `5888680eb7bd509d8df02cfe11bdd35f3572521f`.
+- Acceptance state: **DONE** after final reviews and four green PR checks, followed by four green post-merge checks on the actual main SHA.
 
 ## Work performed
 
-- **GPT-6 Luna** is implementing the Unit 32 CLI and lifecycle integration, coordinating verification, and will record acceptance only after review and CI evidence.
+- **GPT-6 Luna** implemented and accepted Unit 32 under delegated authority in `DEC-060`, coordinating verification and governance synchronization.
 - **McClintock** implemented the ordered eight-check doctor contract and declarative GitOps reconciliation package.
 - **Parfit** implemented authenticated encrypted archive verification and restore, including platform-specific private staging and atomic publication.
 - **Zeno** added the initial live-process EXT-ACCEPT-01 process contract test. It checks scaffolding, process identity and API surface availability; its comments explicitly leave authenticated lifecycle and routing outcomes unproven.
@@ -64,12 +64,12 @@
 - GitHub Actions run [44370172974](https://github.com/nguywnben/tanpopo/actions/runs/44370172974) is running the required four checks on implementation checkpoint `42fc584`; a documentation refresh will require verification on its resulting PR SHA as well.
 - Local verification after these changes: targeted live EXT-ACCEPT-01 passed; `go test -count=1 ./internal/ops/backup ./internal/security/vault ./internal/cli/ops ./cmd/tanpopo ./tests/integration` passed; Windows `GOOS=windows GOARCH=amd64 go test -c ./internal/ops/backup` passed. Final race/full-suite CI and independent review are still pending.
 - Follow-up local fixes remove the US deployment from the EU route, open the restored archive through the SQLite store so shredding retains the required WAL checkpoint hook, and estimate output usage from generated text fields rather than the serialized JSON envelope. The live fixture now calibrates 64 estimated input tokens and 13 output tokens at integer micro-USD rates, proving exactly `$1.00` for both EXACT and ESTIMATED settlements.
-- Next: run the complete race and repository quality gates, update this record with final SHA and results, obtain fresh independent code and security reviews on the exact final diff, then satisfy the PR and post-merge CI gates.
+## Final acceptance evidence
 
-## Acceptance gaps still open
+- PR run [44370678391](https://github.com/nguywnben/tanpopo/actions/runs/44370678391) passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows for implementation SHA `c58f6413581988764e50729f558af0bb1ec2938b`.
+- Post-merge run [44371811698](https://github.com/nguywnben/tanpopo/actions/runs/44371811698) passed all four required jobs on main merge SHA `5888680eb7bd509d8df02cfe11bdd35f3572521f`.
+- Final independent review of the exact implementation diff: **Euler** (**code-reviewer**) APPROVE; **Pascal** (**security-auditor**) PASS with no blocking findings. Pascal recorded one LOW non-blocking note: if quarantine returns a definite invalid-state transition, a request-created kill switch may remain active; the note and cleanup recommendation are retained for follow-up.
+- **Banach** (**test-engineer**) contributed live-binary routing, exact/estimated usage settlement, and populated blast-radius acceptance coverage. **GPT-6 Luna** implemented and accepted the unit.
+- Governance records were updated under `DEC-062`; Unit 33 DoR was confirmed (`TP-IMP-0032` and M2 Units `0016`..`0032` DONE), and Unit 33 is the sole `READY` unit.
 
-- Reconfirm live routing, exact/estimated ledger, quarantine timing, and all four populated blast-radius assertions on the final CI SHA.
-- Confirm the archive-backed post-shred restore, KEK rotation/retirement, and doctor/startup insecure-KEK tests pass on all required operating systems.
-- The concurrent online-backup/restore and graceful SSE drain / incompatible-upgrade preflight tests have prior Linux/macOS evidence but require confirmation on the final CI SHA.
-- Validate the full implementation against the Unit 32 DoD and obtain final independent code and security reviews on the exact final diff.
-- Merge only after all four required Stage 0/Stage 1 checks pass, then verify acceptance CI and the DONE record on the resulting `origin/main` SHA.
+No tag or release was created.

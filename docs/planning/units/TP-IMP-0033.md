@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0033` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product` — **Gate `GATE-M2`**) · `EP-06` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0032` — `GAP-01`)* |
+| **Status** | **`READY`** *(DoR verified under `DEC-062`; `TP-IMP-0032` and all M2 units `0016`..`0032` are DONE on main)* |
 | **Size** | `M` (`deploy/docker/*`, `deploy/compose/*`, `deploy/systemd/*`, `.goreleaser.yaml`, `scripts/release/verify-artifacts.sh`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Core software supply chain, rootless `nonroot` OCI container & `MVP v0.1` exit gate)* |
 | **Technical Owner** | `Release & Platform Security Engineer` |
