@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -1225,6 +1226,7 @@ func TestSQLiteBehavioralDiagnosticsBackupRestoreAndFilesystemEdges(t *testing.T
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
+	t.Cleanup(func() { _ = st.Close() })
 	absExpected, err := filepath.Abs(dbPath)
 	if err != nil {
 		t.Fatalf("filepath.Abs: %v", err)
@@ -1250,8 +1252,12 @@ func TestSQLiteBehavioralDiagnosticsBackupRestoreAndFilesystemEdges(t *testing.T
 	if err := os.WriteFile(fileNotDir, []byte("x"), 0o600); err != nil {
 		t.Fatalf("WriteFile not-a-dir: %v", err)
 	}
-	if _, err := (&Store{dbPath: filepath.Join(fileNotDir, "sub.db")}).WALBytes(); err == nil {
-		t.Fatalf("expected WALBytes() error when parent path is a regular file")
+	if runtime.GOOS != "windows" {
+		// On POSIX, statting <regular-file>/sub.db-wal returns ENOTDIR (not ErrNotExist);
+		// on Windows, ERROR_PATH_NOT_FOUND maps to fs.ErrNotExist so WALBytes returns (0, nil).
+		if _, err := (&Store{dbPath: filepath.Join(fileNotDir, "sub.db")}).WALBytes(); err == nil {
+			t.Fatalf("expected WALBytes() error when parent path is a regular file")
+		}
 	}
 
 	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "diag-org", DisplayName: "Diag Org"})
