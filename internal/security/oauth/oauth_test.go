@@ -67,6 +67,14 @@ func TestRequestTokenReturnsOnlySanitizedErrorsAndZeroizableTokens(t *testing.T)
 			_, _ = w.Write([]byte(`{"error":"invalid_grant","error_description":"` + secretValue + `"}`))
 			return
 		}
+		if r.URL.Path == "/missing-type" {
+			_, _ = w.Write([]byte(`{"access_token":"access-value","expires_in":3600}`))
+			return
+		}
+		if r.URL.Path == "/unsupported-type" {
+			_, _ = w.Write([]byte(`{"access_token":"access-value","token_type":"MAC","expires_in":3600}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"access_token":"access-value","refresh_token":"next-refresh","token_type":"Bearer","expires_in":3600}`))
 	}))
 	defer server.Close()
@@ -91,10 +99,19 @@ func TestRequestTokenReturnsOnlySanitizedErrorsAndZeroizableTokens(t *testing.T)
 	if err.Error() == secretValue {
 		t.Fatal("secret leaked through error")
 	}
+	for _, path := range []string{"/missing-type", "/unsupported-type"} {
+		invalidEndpoint, _ := url.Parse(server.URL + path)
+		if tokens, err := RequestToken(context.Background(), server.Client(), invalidEndpoint, fields); err == nil {
+			if tokens != nil {
+				tokens.Zeroize()
+			}
+			t.Fatalf("accepted non-Bearer token response at %s", path)
+		}
+	}
 }
 
 func TestTokenSetKeepsResourceAndConnectionBinding(t *testing.T) {
-	resp := &TokenResponse{AccessToken: []byte("a"), RefreshToken: []byte("r"), ExpiresIn: 60}
+	resp := &TokenResponse{AccessToken: []byte("a"), RefreshToken: []byte("r"), TokenType: "Bearer", ExpiresIn: 60}
 	raw, err := tokenSetJSON(resp, "https://idp.example/token", "client", "con_1", "read", "https://api.example/", GrantAuthorizationCodePKCE, time.UnixMilli(1000))
 	if err != nil {
 		t.Fatal(err)

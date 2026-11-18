@@ -167,9 +167,12 @@ func RequestToken(ctx context.Context, client *http.Client, endpoint *url.URL, f
 	if wire.Error != "" || wire.AccessToken == "" || wire.ExpiresIn < 0 {
 		return nil, fmt.Errorf("oauth: token response is missing required fields")
 	}
+	if !strings.EqualFold(strings.TrimSpace(wire.TokenType), "Bearer") {
+		return nil, fmt.Errorf("oauth: token response uses an unsupported token type")
+	}
 	return &TokenResponse{
 		AccessToken: []byte(wire.AccessToken), RefreshToken: []byte(wire.RefreshToken),
-		TokenType: wire.TokenType, Scope: wire.Scope, ExpiresIn: wire.ExpiresIn,
+		TokenType: "Bearer", Scope: wire.Scope, ExpiresIn: wire.ExpiresIn,
 	}, nil
 }
 
@@ -202,7 +205,7 @@ func (t *TokenSet) Zeroize() {
 }
 
 func tokenSetJSON(tokens *TokenResponse, tokenURL, clientID, connectionID, scope, resource, grantType string, now time.Time) ([]byte, error) {
-	if tokens == nil || len(tokens.AccessToken) == 0 || tokens.ExpiresIn <= 0 {
+	if tokens == nil || len(tokens.AccessToken) == 0 || tokens.ExpiresIn <= 0 || !strings.EqualFold(strings.TrimSpace(tokens.TokenType), "Bearer") {
 		return nil, fmt.Errorf("%w: access token and positive expiry are required", ErrInvalidOAuthInput)
 	}
 	if grantType != GrantAuthorizationCodePKCE && grantType != GrantClientCredentials && grantType != GrantDeviceCode {
@@ -219,7 +222,7 @@ func tokenSetJSON(tokens *TokenResponse, tokenURL, clientID, connectionID, scope
 
 func DecodeTokenSet(raw []byte) (*TokenSet, error) {
 	var set TokenSet
-	if err := json.Unmarshal(raw, &set); err != nil || len(set.AccessToken) == 0 || set.TokenURL == "" || set.ClientID == "" || (set.GrantType != GrantAuthorizationCodePKCE && set.GrantType != GrantClientCredentials && set.GrantType != GrantDeviceCode) {
+	if err := json.Unmarshal(raw, &set); err != nil || len(set.AccessToken) == 0 || set.TokenURL == "" || set.ClientID == "" || !strings.EqualFold(strings.TrimSpace(set.TokenType), "Bearer") || (set.GrantType != GrantAuthorizationCodePKCE && set.GrantType != GrantClientCredentials && set.GrantType != GrantDeviceCode) {
 		set.Zeroize()
 		return nil, fmt.Errorf("oauth: invalid encrypted token-set payload")
 	}
