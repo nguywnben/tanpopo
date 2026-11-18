@@ -125,6 +125,111 @@ func TestReadinessFailsImmediatelyAfterDrainStartsButLivenessStaysHealthy(t *tes
 	}
 }
 
+func TestGracefulShutdownLetsActiveSSEStreamFinish(t *testing.T) {
+	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "data"))
+	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", "")
+	runtimeCtx, cancelRuntime := context.WithCancel(context.Background())
+	appHandler, closeRuntime, err := buildRuntime(runtimeCtx, "all", "127.0.0.1:8080")
+	if err != nil {
+		cancelRuntime()
+		t.Fatalf("build runtime: %v", err)
+	}
+	t.Cleanup(func() {
+		cancelRuntime()
+		closeRuntime()
+	})
+
+	streamStarted := make(chan struct{})
+	finishStream := make(chan struct{})
+	handler := http.NewServeMux()
+	handler.HandleFunc("/test/stream", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if _, writeErr := io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"in progress\"}}]}\n\n"); writeErr != nil {
+			return
+		}
+		w.(http.Flusher).Flush()
+		close(streamStarted)
+		<-finishStream
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	})
+	handler.Handle("/", appHandler)
+	server := httptest.NewUnstartedServer(handler)
+	server.Start()
+	t.Cleanup(server.Close)
+
+	client := netguard.NewHTTPClient()
+	client.Timeout = 5 * time.Second
+	t.Cleanup(client.CloseIdleConnections)
+	streamResult := make(chan struct {
+		body string
+		err  error
+	}, 1)
+	go func() {
+		resp, getErr := client.Get(server.URL + "/test/stream")
+		if getErr != nil {
+			streamResult <- struct {
+				body string
+				err  error
+			}{err: getErr}
+			return
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		streamResult <- struct {
+			body string
+			err  error
+		}{body: string(body), err: readErr}
+	}()
+	select {
+	case <-streamStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("SSE handler did not emit its first frame")
+	}
+
+	cancelRuntime()
+	ready, err := client.Get(server.URL + "/readyz")
+	if err != nil {
+		t.Fatalf("request readiness while draining: %v", err)
+	}
+	_ = ready.Body.Close()
+	if ready.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("readiness during drain=%d, want %d", ready.StatusCode, http.StatusServiceUnavailable)
+	}
+
+	shutdownDone := make(chan error, 1)
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancelShutdown()
+	go func() { shutdownDone <- server.Config.Shutdown(shutdownCtx) }()
+	select {
+	case err := <-shutdownDone:
+		t.Fatalf("graceful shutdown returned before active SSE stream finished: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(finishStream)
+	select {
+	case result := <-streamResult:
+		if result.err != nil {
+			t.Fatalf("read drained SSE stream: %v", result.err)
+		}
+		if !strings.Contains(result.body, "in progress") || !strings.Contains(result.body, "data: [DONE]") {
+			t.Fatalf("graceful drain did not preserve stream frames and terminal marker: %q", result.body)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("SSE stream did not finish after release")
+	}
+	select {
+	case err := <-shutdownDone:
+		if err != nil {
+			t.Fatalf("graceful shutdown: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("graceful shutdown did not complete after the SSE stream finished")
+	}
+}
+
 func TestControlPlaneRoleDoesNotMountDataPlane(t *testing.T) {
 	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "data"))
 	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
