@@ -140,7 +140,8 @@ func TestEXTAccept01_FullLifecycleProcessContract(t *testing.T) {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 	})
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := netguard.NewHTTPClient()
+	client.Timeout = 2 * time.Second
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		resp, reqErr := client.Get(baseURL + "/readyz")

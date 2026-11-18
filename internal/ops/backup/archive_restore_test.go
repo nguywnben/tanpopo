@@ -58,10 +58,16 @@ func (k *archiveTestKeys) UnwrapArchiveKey(_ context.Context, keyID string, nonc
 }
 
 func TestVerifyAndRestoreSQLiteArchive(t *testing.T) {
-	if !PlatformSupported() {
-		t.Skip(PlatformSupportUnavailableReason())
-	}
 	archivePath, keys := makeTestSQLiteArchive(t)
+	if !PlatformSupported() {
+		if _, err := Verify(context.Background(), archivePath, keys); err == nil || err.Error() != PlatformSupportUnavailableReason() {
+			t.Fatalf("Verify did not fail closed on unsupported platform: %v", err)
+		}
+		if _, err := Restore(context.Background(), archivePath, filepath.Join(t.TempDir(), "restored"), keys); err == nil || err.Error() != PlatformSupportUnavailableReason() {
+			t.Fatalf("Restore did not fail closed on unsupported platform: %v", err)
+		}
+		return
+	}
 	verified, err := Verify(context.Background(), archivePath, keys)
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
@@ -91,10 +97,13 @@ func TestVerifyAndRestoreSQLiteArchive(t *testing.T) {
 }
 
 func TestVerifyRejectsTamperedEncryptedArchive(t *testing.T) {
-	if !PlatformSupported() {
-		t.Skip(PlatformSupportUnavailableReason())
-	}
 	archivePath, keys := makeTestSQLiteArchive(t)
+	if !PlatformSupported() {
+		if _, err := Verify(context.Background(), archivePath, keys); err == nil || err.Error() != PlatformSupportUnavailableReason() {
+			t.Fatalf("Verify did not fail closed on unsupported platform: %v", err)
+		}
+		return
+	}
 	archive, err := os.ReadFile(archivePath)
 	if err != nil {
 		t.Fatal(err)
