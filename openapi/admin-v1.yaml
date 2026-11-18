@@ -668,7 +668,7 @@ components:
       properties:
         source_uri:
           type: string
-          description: Marketplace package ref, 40-char commit-pinned git+https URL, local .tpkg path, or digest-pinned oci:// URI.
+          description: Marketplace package reference. When TANPOPO_MARKETPLACE_ARCHIVE_ROOT is configured, tanpopo-local://<filename>.tpkg resolves only a single archive filename inside that directory and is verified against expected_sha256 before installation.
         expected_sha256:
           type: string
           pattern: "^[a-f0-9]{64}$"

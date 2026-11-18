@@ -50,6 +50,8 @@ tanpopo config reconcile --desired ./config/tanpopo.yaml \
 
 `config reconcile` rejects inline secret values and malformed `${ENV:NAME}` references, validates every lockfile package digest, and atomically replaces only the applied configuration. It never rewrites `tanpopo.lock`. Reconciliation fails closed if an artifact path is missing or its SHA-256 differs from the lock.
 
+For a self-hosted local package mirror, set `TANPOPO_MARKETPLACE_ARCHIVE_ROOT` to an operator-managed directory containing `.tpkg` files before starting `tanpopo serve`. The Admin API accepts `tanpopo-local://<filename>.tpkg` with the archive's lowercase SHA-256. It rejects nested paths, symlinks, non-regular files, oversized archives, and digest mismatches. The resolver is disabled when the variable is unset; package staging and permission approval remain separate authenticated steps.
+
 ## 3. Interactive First-Run Setup (`allow_private_ip` & Break-Glass) vs. Headless GitOps
 
 1. **Interactive Browser Bootstrap (`SCR-01`, `UJ-01` — Default for Solo & Small Teams):**

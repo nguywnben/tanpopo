@@ -244,6 +244,63 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 	}
 	assertProcessInvariant("extension permission approval")
 
+	// Stage a version with a broader egress permission. It must remain pending
+	// until an explicit re-consent, after which rollback returns to the prior pin.
+	manifestPath := filepath.Join(extensionDir, "manifest.yaml")
+	manifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedManifest := strings.Replace(string(manifest), `version: "0.1.0"`, `version: "0.2.0"`, 1)
+	updatedManifest = strings.Replace(updatedManifest, `      - "api.openai.com"`, `      - "api.openai.com"`+"\n"+`      - "eu-api.acme.test"`, 1)
+	if updatedManifest == string(manifest) || !strings.Contains(updatedManifest, `version: "0.2.0"`) || !strings.Contains(updatedManifest, `- "eu-api.acme.test"`) {
+		t.Fatal("could not construct version 0.2.0 manifest with an added egress host")
+	}
+	if err := os.WriteFile(manifestPath, []byte(updatedManifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	upgradeArchive := filepath.Join(marketplaceDir, "regional-llm-adapter-v2.tpkg")
+	packUpgrade := exec.Command(binary, "plugin", "pack", extensionDir, "--out", upgradeArchive)
+	packUpgrade.Dir = work
+	if output, err := packUpgrade.CombinedOutput(); err != nil {
+		t.Fatalf("pack escalated adapter version: %v\n%s", err, output)
+	}
+	upgradeBody := map[string]string{
+		"source_uri": "tanpopo-local://regional-llm-adapter-v2.tpkg",
+		"expected_sha256": fileSHA256(t, upgradeArchive),
+	}
+	upgrade := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/upgrade", upgradeBody, []*http.Cookie{loginCookie}, baseURL, map[string]string{"If-Match": approved.ETag}, loginResult.CSRFToken)
+	if upgrade.Code != http.StatusAccepted {
+		t.Fatalf("stage permission-escalating upgrade: want 202 pending re-consent, got %d: %s", upgrade.Code, upgrade.Body)
+	}
+	var permissionDiff struct {
+		CandidateVersion string   `json:"candidate_version"`
+		ActiveVersion    *string  `json:"active_version"`
+		HasEscalation    bool     `json:"has_escalation"`
+		AddedHosts       []string `json:"added_allowed_hosts"`
+	}
+	if err := json.Unmarshal([]byte(upgrade.Body), &permissionDiff); err != nil || permissionDiff.CandidateVersion != "0.2.0" || permissionDiff.ActiveVersion == nil || *permissionDiff.ActiveVersion != "0.1.0" || !permissionDiff.HasEscalation || len(permissionDiff.AddedHosts) != 1 || permissionDiff.AddedHosts[0] != "eu-api.acme.test" {
+		t.Fatalf("upgrade did not expose the required permission escalation: err=%v diff=%+v body=%s", err, permissionDiff, upgrade.Body)
+	}
+	assertProcessInvariant("pending re-consent")
+	reconsented := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/approve-permissions", liveApprovePermissionsRequest{
+		EnableImmediately: true, AcknowledgeUnverifiedExternal: true,
+	}, []*http.Cookie{loginCookie}, baseURL, map[string]string{"If-Match": upgrade.ETag}, loginResult.CSRFToken)
+	if reconsented.Code != http.StatusOK || !strings.Contains(reconsented.Body, `"state":"ENABLED_ACTIVE"`) {
+		t.Fatalf("re-consent to escalated permissions: want active 200, got %d: %s", reconsented.Code, reconsented.Body)
+	}
+	assertProcessInvariant("permission re-consent")
+	rolledBack := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/rollback", liveRollbackExtensionRequest{
+		Reason: "Acceptance rollback verification",
+	}, []*http.Cookie{loginCookie}, baseURL, map[string]string{"If-Match": reconsented.ETag}, loginResult.CSRFToken)
+	if rolledBack.Code != http.StatusOK {
+		t.Fatalf("rollback escalated adapter: want 200, got %d: %s", rolledBack.Code, rolledBack.Body)
+	}
+	if !strings.Contains(rolledBack.Body, `"active_version":"0.1.0"`) {
+		t.Fatalf("rollback did not restore the previous active version: %s", rolledBack.Body)
+	}
+	assertProcessInvariant("rollback")
+
 	installations := liveJSONRequest(t, client, http.MethodGet, baseURL+"/admin/v1/extensions/installations", nil, []*http.Cookie{loginCookie}, baseURL)
 	if installations.Code != http.StatusOK {
 		t.Fatalf("list installations after approval: want 200, got %d: %s", installations.Code, installations.Body)
@@ -270,6 +327,10 @@ type liveResponse struct {
 type liveApprovePermissionsRequest struct {
 	EnableImmediately            bool `json:"enable_immediately"`
 	AcknowledgeUnverifiedExternal bool `json:"acknowledge_unverified_external"`
+}
+
+type liveRollbackExtensionRequest struct {
+	Reason string `json:"reason"`
 }
 
 func liveJSONRequest(t *testing.T, client *http.Client, method, target string, body any, cookies []*http.Cookie, origin string, csrf ...string) liveResponse {

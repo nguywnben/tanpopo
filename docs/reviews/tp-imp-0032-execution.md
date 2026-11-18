@@ -6,7 +6,7 @@
 - Governance state: `READY` under `DEC-061`
 - Implementation branch: persistent `develop`
 - Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest pushed checkpoint: `ff07a2e` (live test compile fix is in the current local diff)
+- Latest pushed checkpoint: `a2b2a6a` (live extension update/re-consent/rollback assertions and operator contract documentation are in the current local diff)
 - Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
 
 ## Work performed
@@ -31,11 +31,12 @@
 - CI run [44338227474](https://github.com/nguywnben/tanpopo/actions/runs/44338227474) passed Stage 0 and Ubuntu/macOS Stage 1. Windows Stage 1 failed when `t.TempDir` cleanup could not remove `tanpopo.db` after `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; the Go test itself emitted no assertion failure. This is under investigation as a Windows handle cleanup issue. The run's online backup acceptance test passed on Ubuntu/macOS.
 - CI run [44339674223](https://github.com/nguywnben/tanpopo/actions/runs/44339674223) passed Windows Stage 1, while macOS Stage 1 exposed that the online snapshot could start before any concurrent writer had committed its first ledger/audit pair. The test now waits for all 20 workers to commit before starting the backup, then keeps all writers active during snapshot and requires at least 20 of each record in the restore. Ubuntu results were still running when recorded.
 - CI run [44340464974](https://github.com/nguywnben/tanpopo/actions/runs/44340464974) caught a compile error in the new live install test: its approval request type was defined only in another Go package. A test-local request type now fixes the reference. macOS and Windows jobs were still running at the time of the compile failure.
+- CI run [44341017802](https://github.com/nguywnben/tanpopo/actions/runs/44341017802) passed all four required checks on `a2b2a6a` (Stage 0 and Stage 1 on Ubuntu, macOS, and Windows). It covers local archive staging and initial permission approval; it does not cover the later live upgrade/re-consent/rollback assertions or OpenAPI/operator-doc edits now in the local diff.
 
 ## Acceptance gaps still open
 
 - Complete the ten-step EXT-ACCEPT-01 workflow with actual extension install/approval, update/re-consent/rollback, EU routing and exact/estimated settlements, quarantine timing, and populated blast-radius evidence. Route probes and fail-closed install checks do not satisfy these steps.
-- Complete the ten-step EXT-ACCEPT-01 workflow with EU routing and exact/estimated ledger verification, update/re-consent/rollback, quarantine timing, and populated blast-radius results. A live archive stage/permission-approval flow is now being added to the process test.
+- Complete the ten-step EXT-ACCEPT-01 workflow with EU routing and exact/estimated ledger verification, quarantine timing, and populated blast-radius results. The live process test now exercises archive staging, permission approval, permission escalation/re-consent, rollback, and CSRF/ETag checks.
 - Complete project shred plus KEK rotation and insecure KEK startup/doctor acceptance tests. The concurrent online-backup/restore and graceful SSE drain / incompatible-upgrade preflight tests are in the current implementation diff; they still require CI confirmation.
 - Validate the full implementation against the Unit 32 DoD and obtain final independent code and security reviews on the exact final diff.
 - Merge only after all four required Stage 0/Stage 1 checks pass, then verify acceptance CI and the DONE record on the resulting `origin/main` SHA.
