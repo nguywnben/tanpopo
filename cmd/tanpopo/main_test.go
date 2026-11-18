@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -34,5 +35,18 @@ func TestTanpopoRootCLIPluginFlow(t *testing.T) {
 		if code := run(args, &stdout, &stderr); code != 0 {
 			t.Fatalf("command %v failed with code=%d: out=%q err=%q", args, code, stdout.String(), stderr.String())
 		}
+	}
+}
+
+func TestTanpopoRootSupportBundleCommand(t *testing.T) {
+	root := t.TempDir()
+	output := filepath.Join(t.TempDir(), "diagnostic.tar.gz")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"support-bundle", "--root", root, "-o", output}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("support-bundle failed: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(output); err != nil {
+		t.Fatalf("bundle missing: %v", err)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nguywnben/tanpopo/internal/cli/plugin"
+	"github.com/nguywnben/tanpopo/internal/cli/support"
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
 )
 
@@ -69,6 +70,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			Stdout:       stdout,
 			Stderr:       stderr,
 		}),
+		support.NewCommand(support.Options{RootDir: ".", Stdout: stdout}),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
