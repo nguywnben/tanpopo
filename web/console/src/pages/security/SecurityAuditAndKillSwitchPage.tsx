@@ -128,22 +128,22 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
         <Button label="Cancel clearing" variant="secondary" onClick={() => { setClearTarget(null); setClearReason(''); }} />
       </> : null}
       {loading ? <Text role="status">Loading active kill switches…</Text> : killSwitches.length === 0 ? <Text role="status">No active kill switches.</Text> :
-        <div {...stylex.props(styles.tableViewport)}><Table aria-label="Active kill switches" data={killSwitches as Array<Record<string, unknown>>} columns={[
+        <VStack gap={0} xstyle={styles.tableViewport}><Table aria-label="Active kill switches" data={killSwitches as Array<Record<string, unknown>>} columns={[
           {key: 'level', header: 'Level'}, {key: 'target_id', header: 'Target'}, {key: 'reason', header: 'Trigger reason'},
           {key: 'version', header: 'Version'}, {key: 'actions', header: 'Actions', renderCell: row => {
             const item = killSwitches.find(candidate => candidate.id === row.id);
             return <Button label="Clear" variant="destructive" isDisabled={!canTrigger || !item} onClick={() => { if (item) { setClearTarget(item); setClearReason(''); } }} />;
           }},
-        ]} /></div>}
+        ]} /></VStack>}
     </VStack></Section>
     <Section><VStack gap={3}><Heading level={2}>Immutable audit log</Heading>
       <HStack gap={2} wrap="wrap"><TextInput label="Filter by action" value={actionFilter} onChange={setActionFilter} /><Button label="Verify hash chain" variant="secondary" onClick={() => void verifyChain()} /></HStack>
       {verifyResult ? <Text role="status">{verifyResult}</Text> : null}
-      {loading ? <Text role="status">Loading audit records…</Text> : <div {...stylex.props(styles.tableViewport)}><Table aria-label="Immutable audit records" data={events as Array<Record<string, unknown>>} columns={[
+      {loading ? <Text role="status">Loading audit records…</Text> : <VStack gap={0} xstyle={styles.tableViewport}><Table aria-label="Immutable audit records" data={events as Array<Record<string, unknown>>} columns={[
         {key: 'seq_no', header: 'Sequence'}, {key: 'created_at', header: 'Timestamp'}, {key: 'actor_id', header: 'Actor'},
         {key: 'action', header: 'Action'}, {key: 'target_type', header: 'Target type'}, {key: 'target_id', header: 'Target ID'},
         {key: 'event_hash', header: 'Event hash'}, {key: 'metadata', header: 'Metadata', renderCell: row => <Text>{JSON.stringify(row.metadata ?? {})}</Text>},
-      ]} /></div>}
+      ]} /></VStack>}
       {!loading && nextAuditCursor ? <Button label={loadingMore ? 'Loading audit records…' : 'Load more audit records'} variant="secondary" isDisabled={loadingMore} onClick={() => void loadMoreAuditEvents()} /> : null}
     </VStack></Section>
   </VStack>;

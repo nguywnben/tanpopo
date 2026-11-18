@@ -100,13 +100,13 @@ const TraceResults = memo(function TraceResults({loading, traces, nextCursor, lo
     {loading ? <Text role="status">Loading traces…</Text> : traces.length === 0 ? <Text role="status">No trace records match these filters.</Text> :
       <>
       <Text role="status">Showing {Math.min(shownRows, traces.length)} of {traces.length} matching trace records.</Text>
-      <div {...stylex.props(styles.tableViewport)}><Table aria-label="Request traces" data={traces.slice(0, shownRows) as Array<Record<string, unknown>>} columns={[
+      <VStack gap={0} xstyle={styles.tableViewport}><Table aria-label="Request traces" data={traces.slice(0, shownRows) as Array<Record<string, unknown>>} columns={[
         {key: 'request_id', header: 'Request ID', renderCell: row => <Button label={String(row.request_id)} variant="ghost" onClick={() => onSelect(row as Trace)} />},
         {key: 'route_slug', header: 'Route'}, {key: 'status_code', header: 'Status'},
         {key: 'error_code', header: 'Error code', renderCell: row => String(row.error_code ?? '—')},
         {key: 'usage_accuracy', header: 'Usage accuracy', renderCell: row => <Token label={String(row.usage_accuracy).replaceAll('_', ' ')} color={accuracyColor(String(row.usage_accuracy))} icon={accuracyIcon(String(row.usage_accuracy))} />},
         {key: 'duration_ms', header: 'Duration (ms)'}, {key: 'created_at', header: 'Created'},
-      ]} /></div>
+      ]} /></VStack>
       {shownRows < traces.length ? <Button label="Show more traces" variant="secondary" onClick={() => setShownRows(count => Math.min(count + 10, traces.length))} /> : null}
       </>}
     {!loading && nextCursor ? <Button label={loadingMore ? 'Loading traces…' : 'Load more traces'} variant="secondary" isDisabled={loadingMore} onClick={onLoadMore} /> : null}
