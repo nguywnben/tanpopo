@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0031` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0014`, `TP-IMP-0025`, `TP-IMP-0027`, `TP-IMP-0028`, `TP-IMP-0029`, `TP-IMP-0030` — `GAP-01, 13`)* |
+| **Status** | **`READY`** *(DoR verified; opened sequentially by Product Owner delegation `DEC-060` after all dependencies and Unit 30 post-merge CI passed)* |
 | **Size** | `M` (`cmd/tanpopo/*`, `internal/cli/*`, `internal/webui/embed.go`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Unified single binary `tanpopo`, offline break-glass recovery & zero-leak diagnostic `support-bundle` `OPS-AC-10`)* |
 | **Technical Owner** | `Developer Experience & Systems Lead` |

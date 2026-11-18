@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0030: DONE` | `0 READY / 0 READY_FOR_REVIEW / 17 BLOCKED`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.45.0-dec-059-0030-done` | **Date:** `2026-11-18`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0030: DONE` | `0031 READY / 0 READY_FOR_REVIEW / 0032..0047 BLOCKED`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.46.0-dec-060-0031-ready` | **Date:** `2026-11-18`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** `TP-IMP-0001`..`0030` = **`DONE` (`30 / 47`)**; under [`DEC-058`](../governance/decisions.md) & [`DEC-059`](../governance/decisions.md), **Gemini 4 Hydrogen** completed CI remediation and accepted `TP-IMP-0030` (`CR-13` Option A) at implementation SHA `38846e4a27cfd6f795656f248cee1bc1beee2944` (PR #3 CI run `44263375798` `100%` green across Stage 0 + all 3 OS runners, `code-reviewer` [`22029cb0`] `APPROVE`, `security-auditor` [`7ac7d58e`] `PASS`); `TP-IMP-0031`..`0047` (`17 / 47`) remain **`BLOCKED`** behind their existing gates (Units 31/32 unopened; no tags/releases per `GATE-REL-07`).
+> - **Live DAG Frontier:** Units `0001`..`0030` are DONE. Unit 30 is verified on main SHA `7079ccc43658e0ebe96d5761b588f24e34473eb3`; post-merge Actions run `44266685476` attempt 2 passed Stage 0 and all three Stage 1 OS jobs. `DEC-060` delegates `0031`..`0035` to GPT-6 Luna sequentially using persistent `develop` and per-unit PRs; `0031` is READY and `0032`..`0047` remain blocked. No tags/releases (`GATE-REL-07`).
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -51,7 +51,7 @@ flowchart TD
         U28["TP-IMP-0028: UI SCR-03..07 (DONE — Providers, Models & Plugins)"]
         U29["TP-IMP-0029: UI SCR-08, 09, 13 (DONE — Routes, Policies & Keys)"]
         U30["TP-IMP-0030: UI SCR-11, 12, 14, 16 (DONE — Traces, FinOps, Sec, Ops)"]
-        U31["TP-IMP-0031: Unified tanpopo CLI & Embedded SPA Binary"]
+        U31["TP-IMP-0031: Unified tanpopo CLI & Embedded SPA Binary (READY — DEC-060)"]
         U32["TP-IMP-0032: Doctor, GitOps, Backup, Shredding & Preflight"]
         U33["TP-IMP-0033: Multi-OS Installers, OCI, SBOM & Cosign"]
     end
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier (`30 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `17 BLOCKED` — `DEC-058`/`DEC-059`):** `TP-IMP-0001..0030` are `DONE`; under [`DEC-058`](../governance/decisions.md) & [`DEC-059`](../governance/decisions.md), `TP-IMP-0030` (`CR-13` Option A) was accepted by **Gemini 4 Hydrogen** at implementation SHA `38846e4a27cfd6f795656f248cee1bc1beee2944` (PR #3 CI run `44263375798` `100%` green across Stage 0 + `ubuntu-24.04` / `windows-2022` / `macos-15`, `code-reviewer` `APPROVE`, `security-auditor` `PASS`); `TP-IMP-0031`..`0047` remain blocked behind sequential and existing authorization gates. Review tiers, `COND-PO-01`..`05`, and direct human Product Owner authorization for `0031`..`0047` remain in force.
+> **Live Queue Frontier (`30 DONE`, `1 READY`, `0 READY_FOR_REVIEW`, `16 BLOCKED` — `DEC-060`):** `TP-IMP-0001..0030` are DONE; Unit 30 is verified on main SHA `7079ccc43658e0ebe96d5761b588f24e34473eb3` with post-merge Actions run `44266685476` attempt 2 green across all four jobs. Under `DEC-060`, GPT-6 Luna executes `0031` → `0032` → `0033` → `0034` → `0035`; Unit 31 alone is READY. Units 32–35 open only after prior DONE on main with green acceptance CI and DoR confirmation; Units 36–47 remain blocked. Use `develop` → PR → independent review and four checks → merge → verify main. No tags/releases.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.
