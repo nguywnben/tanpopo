@@ -384,10 +384,11 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		t.Fatalf("create ingress virtual key: got %d: %s", key.Code, key.Body)
 	}
 	var keyResult struct {
+		ID        string `json:"id"`
 		SecretKey string `json:"secret_key"`
 	}
-	if err := json.Unmarshal([]byte(key.Body), &keyResult); err != nil || keyResult.SecretKey == "" {
-		t.Fatalf("virtual-key response lacks its one-time secret: err=%v body=%s", err, key.Body)
+	if err := json.Unmarshal([]byte(key.Body), &keyResult); err != nil || keyResult.ID == "" || keyResult.SecretKey == "" {
+		t.Fatalf("virtual-key response lacks its ID or one-time secret: err=%v body=%s", err, key.Body)
 	}
 
 	callChat := func(content string) string {
@@ -440,6 +441,24 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		t.Fatalf("live ledger does not prove separate positive exact and estimated settlements: %+v", ledger.Data)
 	}
 	assertCore("usage ledger verification")
+
+	radiusResponse := liveJSONRequest(t, client, http.MethodGet, baseURL+"/admin/v1/blast-radius?target_type=EXTENSION&target_id="+staged.InstallationID, nil, []*http.Cookie{cookie}, baseURL)
+	if radiusResponse.Code != http.StatusOK {
+		t.Fatalf("query populated extension blast radius: got %d: %s", radiusResponse.Code, radiusResponse.Body)
+	}
+	var radius struct {
+		Organizations []string `json:"organizations"`
+		Projects      []string `json:"projects"`
+		VirtualKeys   []string `json:"virtual_keys"`
+		Connections   []string `json:"connections"`
+	}
+	if err := json.Unmarshal([]byte(radiusResponse.Body), &radius); err != nil {
+		t.Fatalf("decode extension blast radius: %v: %s", err, radiusResponse.Body)
+	}
+	if len(radius.Organizations) != 1 || radius.Organizations[0] != bootResult.OrgID || len(radius.Projects) != 1 || radius.Projects[0] != bootResult.ProjectID || len(radius.VirtualKeys) != 1 || radius.VirtualKeys[0] != keyResult.ID || len(radius.Connections) != 1 || radius.Connections[0] != euConnection {
+		t.Fatalf("blast radius must report the live EU request's org, project, virtual key, and connection: %+v", radius)
+	}
+	assertCore("populated four-scope blast-radius verification")
 }
 
 func hostPort(t *testing.T, rawURL string) string {
