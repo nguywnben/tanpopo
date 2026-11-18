@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0029: DONE` | `TP-IMP-0030: READY` | `1 READY / 17 BLOCKED`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.36.0-dec-049-0030-ready` | **Date:** `2026-11-17`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0030: DONE` | `0 READY / 0 READY_FOR_REVIEW / 17 BLOCKED`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.42.0-dec-059-0030-done` | **Date:** `2026-11-18`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0`, Milestone `M1`, Wave 2.1, and Units `TP-IMP-0021`..`0029` are **`DONE` (`29 / 47`)**. Unit 29: `DEC-048`, implementation CI `44090789888`, acceptance CI `44092664075` green, independent code-review clear. Unit `TP-IMP-0030` is **`READY`** under `DEC-049`; `TP-IMP-0031`..`0047` remain subject to their existing gates, including direct Owner authorization for `0031`..`0047`.
+> - **Live Status:** Milestone `M0`, Milestone `M1`, Wave 2.1, and Units `TP-IMP-0021`..`0030` are **`DONE` (`30 / 47`)**. Unit 30 (`CR-13` Option A per `DEC-050`) was accepted under [`DEC-058`](../governance/decisions.md) / [`DEC-059`](../governance/decisions.md) by **Gemini 4 Hydrogen** at implementation SHA `38846e4a27cfd6f795656f248cee1bc1beee2944` (PR #3 CI run `44263375798` `100%` green across Stage 0 + `ubuntu-24.04` / `windows-2022` / `macos-15`, `code-reviewer` `APPROVE`, `security-auditor` `PASS`). `TP-IMP-0031`..`0047` (`17 / 47`) remain **`BLOCKED`** subject to their existing gates, including direct Owner authorization for `0031`..`0047` (Units 31/32 unopened; no tags/releases per `GATE-REL-07`).
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---

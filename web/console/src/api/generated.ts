@@ -1115,11 +1115,29 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List active organization or instance kill switches for incident recovery (SCR-14) */
+        get: operations["listKillSwitches"];
         put?: never;
         /** Trigger 4-level emergency Kill-Switch (VIRTUAL_KEY | PROJECT | PROVIDER_CONNECTION | EXTENSION) (< 1s single-node / < 5s HA TARGET / UNVERIFIED) (SCR-07, SCR-14) */
         post: operations["triggerKillSwitch"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/kill-switches/{switchId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Clear an active emergency kill switch with audited reason and version check (SCR-14) */
+        delete: operations["clearKillSwitch"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1132,7 +1150,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Enumerate Keys, Projects, and Connections that traversed a quarantined Extension or compromised Connection (SCR-14) */
+        /** Preview affected resources for an Extension, Provider Connection, Project, or Virtual Key (SCR-14) */
         get: operations["queryBlastRadius"];
         put?: never;
         post?: never;
@@ -1236,7 +1254,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Trigger hot Master-KEK-sealed .tpop.enc backup archive (OPERATOR only) (SCR-16) */
+        /**
+         * Trigger hot Master-KEK-sealed .tpop.enc backup archive (OPERATOR only) (SCR-16)
+         * @description Backup creation uses verified /dev/shm tmpfs with swap disabled on Linux, and an in-memory SQLite online snapshot on macOS/Windows. macOS relies on OS-encrypted swap; Windows requires NtfsEncryptPagingFile=1 to have been applied before the current boot (the registry key must predate boot by at least two minutes). Plaintext database snapshots are never staged as files on those hosts. Unsupported or unprotected hosts return 503.
+         */
         post: operations["triggerEncryptedBackup"];
         delete?: never;
         options?: never;
@@ -1875,7 +1896,25 @@ export interface components {
             group_key: string;
             exact_micro_usd: number;
             estimated_micro_usd: number;
+            exact_request_count: number;
+            estimated_request_count: number;
             unmetered_request_count: number;
+        };
+        KillSwitchResource: {
+            id: string;
+            org_id?: string | null;
+            /** @enum {string} */
+            level: "VIRTUAL_KEY" | "PROVIDER_CONNECTION" | "EXTENSION_INSTALLATION" | "PROJECT_OR_ORG_FREEZE";
+            target_id: string;
+            active: boolean;
+            abort_active_streams: boolean;
+            reason: string;
+            triggered_by_principal_id: string;
+            cleared_by_principal_id?: string | null;
+            clear_reason?: string | null;
+            version: number;
+            triggered_at_ms: number;
+            cleared_at_ms?: number | null;
         };
         ApprovalRequestResource: {
             id: string;
@@ -4566,6 +4605,7 @@ export interface operations {
             query?: {
                 actor?: string;
                 action?: string;
+                chain_partition?: string;
                 limit?: components["parameters"]["LimitParam"];
                 /** @description HMAC-signed org_id-bound opaque pagination cursor. */
                 cursor?: components["parameters"]["CursorParam"];
@@ -4618,6 +4658,31 @@ export interface operations {
             };
         };
     };
+    listKillSwitches: {
+        parameters: {
+            query?: {
+                active_only?: boolean;
+                org_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Kill switches visible to the authorized principal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["KillSwitchResource"][];
+                    };
+                };
+            };
+        };
+    };
     triggerKillSwitch: {
         parameters: {
             query?: never;
@@ -4650,10 +4715,45 @@ export interface operations {
             };
         };
     };
+    clearKillSwitch: {
+        parameters: {
+            query?: {
+                org_id?: string;
+            };
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                switchId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_version: number;
+                    clear_reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Kill switch cleared and audited */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KillSwitchResource"];
+                };
+            };
+        };
+    };
     queryBlastRadius: {
         parameters: {
             query: {
-                target_type: "EXTENSION" | "PROVIDER_CONNECTION";
+                org_id?: string;
+                target_type: "EXTENSION" | "PROVIDER_CONNECTION" | "PROJECT" | "VIRTUAL_KEY";
                 target_id: string;
                 since?: string;
             };
@@ -4818,7 +4918,17 @@ export interface operations {
                         current_epoch: number;
                         /** @enum {string} */
                         storage_engine: "sqlite_wal" | "postgres";
-                        nodes: Record<string, never>[];
+                        /** @description True on Linux with verified /dev/shm tmpfs and swap disabled; on macOS with OS-encrypted swap; and on Windows when NtfsEncryptPagingFile=1 was applied before the current boot. macOS and Windows use in-memory SQLite snapshots. */
+                        backup_supported: boolean;
+                        /** @description Empty when backup_supported is true; otherwise explains the missing secure staging or encrypted-paging prerequisite. */
+                        backup_unavailable_reason: string;
+                        nodes: {
+                            id?: string;
+                            config_epoch?: number;
+                            snapshot_age_ms?: number;
+                            health?: string;
+                            wal_bytes: number;
+                        }[];
                     };
                 };
             };

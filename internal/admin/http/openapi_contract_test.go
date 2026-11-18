@@ -426,9 +426,9 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	h := newPart2TestHarness(t, 20)
 	ctx := context.Background()
 
-	// Verify exact 68 MVP v0.1 Control Plane routes and 100% OpenAPI conformance.
-	if got := len(h.srv.Routes()); got != 68 {
-		t.Fatalf("expected 68 registered Part 1+2 routes, got %d", got)
+	// Verify exact 73 MVP v0.1 Control Plane routes and 100% OpenAPI conformance.
+	if got := len(h.srv.Routes()); got != 73 {
+		t.Fatalf("expected 73 registered Part 1+2 routes, got %d", got)
 	}
 	for _, rt := range h.srv.Routes() {
 		pathItem, ok := doc.Paths[rt.Path]
@@ -804,6 +804,22 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 		t.Fatalf("expected UsageChargebackRow items")
 	}
 	assertPayloadMatchesSchema(t, doc, "UsageChargebackRow", usageList.Data[0])
+	var usageCounts struct {
+		Data []usageChargebackRowDTO `json:"data"`
+	}
+	mustDecodeJSON(t, recUsage.Body.Bytes(), &usageCounts)
+	var foundExactCounts bool
+	for _, row := range usageCounts.Data {
+		if row.GroupKey == "contract-proj" {
+			if row.ExactRequestCount != 1 || row.EstimatedRequestCount != 0 {
+				t.Fatalf("exact and estimated request counts must remain separate, got %+v", row)
+			}
+			foundExactCounts = true
+		}
+	}
+	if !foundExactCounts {
+		t.Fatalf("usage summary omitted the test project's exact request counts: %+v", usageCounts.Data)
+	}
 
 	recTr := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/traces/req_ct_1", ownerCookie, "", "", nil)
 	if recTr.Code != http.StatusOK {
@@ -861,6 +877,48 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 		t.Fatalf("POST /kill-switches status=%d body=%s", recKS.Code, recKS.Body.String())
 	}
 	assertRequiredJSONKeys(t, "POST /kill-switches", recKS.Body.Bytes(), "config_epoch", "severed_streams_count", "affected_entities_count")
+	recKSList := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/kill-switches?active_only=true", ownerCookie, "", "", nil)
+	if recKSList.Code != http.StatusOK {
+		t.Fatalf("GET /kill-switches status=%d body=%s", recKSList.Code, recKSList.Body.String())
+	}
+	var activeSwitches struct {
+		Data []struct {
+			ID      string `json:"id"`
+			Version int64  `json:"version"`
+			Active  bool   `json:"active"`
+		} `json:"data"`
+	}
+	mustDecodeJSON(t, recKSList.Body.Bytes(), &activeSwitches)
+	if len(activeSwitches.Data) == 0 || !activeSwitches.Data[0].Active {
+		t.Fatalf("expected a listed active switch, got %s", recKSList.Body.String())
+	}
+	recClear := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/kill-switches/"+activeSwitches.Data[0].ID, ownerCookie, boot.CSRFToken, "", map[string]any{
+		"expected_version": activeSwitches.Data[0].Version,
+		"clear_reason":     "contract test recovery",
+	})
+	if recClear.Code != http.StatusOK {
+		t.Fatalf("DELETE /kill-switches/{id} status=%d body=%s", recClear.Code, recClear.Body.String())
+	}
+	assertPayloadMatchesSchema(t, doc, "KillSwitchResource", recClear.Body.Bytes())
+	recProjectBR := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=PROJECT&target_id="+boot.ProjectID, ownerCookie, "", "", nil)
+	if recProjectBR.Code != http.StatusOK {
+		t.Fatalf("GET /blast-radius PROJECT status=%d body=%s", recProjectBR.Code, recProjectBR.Body.String())
+	}
+	assertRequiredJSONKeys(t, "GET /blast-radius PROJECT", recProjectBR.Body.Bytes(), "organizations", "projects", "virtual_keys", "connections")
+	initialVKey, err := h.vkeys.Create(ctx, mustVKeyCreateParams(boot.OrgID, boot.ProjectID, boot.EnvID, boot.OwnerPrincipalID, "blast-radius-contract"))
+	if err != nil {
+		t.Fatalf("create virtual key for blast-radius contract test: %v", err)
+	}
+	recVKeyBR := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=VIRTUAL_KEY&target_id="+initialVKey.Summary.ID, ownerCookie, "", "", nil)
+	if recVKeyBR.Code != http.StatusOK {
+		t.Fatalf("GET /blast-radius VIRTUAL_KEY status=%d body=%s", recVKeyBR.Code, recVKeyBR.Body.String())
+	}
+	assertRequiredJSONKeys(t, "GET /blast-radius VIRTUAL_KEY", recVKeyBR.Body.Bytes(), "organizations", "projects", "virtual_keys", "connections")
+	recExtensionBR := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=EXTENSION&target_id="+extDiff.InstallationID, ownerCookie, "", "", nil)
+	if recExtensionBR.Code != http.StatusOK {
+		t.Fatalf("GET /blast-radius EXTENSION status=%d body=%s", recExtensionBR.Code, recExtensionBR.Body.String())
+	}
+	assertRequiredJSONKeys(t, "GET /blast-radius EXTENSION", recExtensionBR.Body.Bytes(), "organizations", "projects", "virtual_keys", "connections")
 
 	recBR := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=PROVIDER_CONNECTION&target_id="+conn.ID, ownerCookie, "", "", nil)
 	if recBR.Code != http.StatusOK {
@@ -960,7 +1018,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	if recExpCSV.Code != http.StatusOK {
 		t.Fatalf("GET /usage/export?format=csv status=%d body=%s", recExpCSV.Code, recExpCSV.Body.String())
 	}
-	if !strings.Contains(recExpCSV.Body.String(), "group_key,exact_micro_usd,estimated_micro_usd,unmetered_request_count") {
+	if !strings.Contains(recExpCSV.Body.String(), "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count") {
 		t.Fatalf("unexpected CSV header: %s", recExpCSV.Body.String())
 	}
 
@@ -1004,4 +1062,3 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 		t.Fatalf("DELETE /extensions/{id} status=%d body=%s", recDelExt.Code, recDelExt.Body.String())
 	}
 }
-

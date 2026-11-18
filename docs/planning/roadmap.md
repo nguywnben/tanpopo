@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0027: DONE` | `TP-IMP-0028: READY` | `1 READY / 19 BLOCKED`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `1.34.0-dec-045-0028-ready` | **Date:** `2026-11-17`
+> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0030: DONE` | `0 READY / 0 READY_FOR_REVIEW / 17 BLOCKED`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.40.0-dec-059-0030-done` | **Date:** `2026-11-18`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **CURRENT GOVERNANCE NOTICE (`TP-IMP-0027 DONE`; `TP-IMP-0028 READY`):** Unit 27 is accepted under `DEC-044` at `fe010fb1` with green CI `44042092153` and acceptance CI `44043662461`; independent code/security reviews clear. Unit 28 is open under `DEC-045` after its DoR passed; units `0029`..`0030` remain sequential under `DEC-041`, and `0031`..`0047` remain behind existing Owner and quality gates.
+> - **CURRENT GOVERNANCE NOTICE (`TP-IMP-0001..0030 DONE`; `0031..0047 BLOCKED`):** Units `0001`..`0030` (`30 / 47`) are **`DONE`**: under [`DEC-058`](../governance/decisions.md) & [`DEC-059`](../governance/decisions.md), **Gemini 4 Hydrogen** remediated all PR #3 Stage 1 CI failures and accepted `TP-IMP-0030` (`CR-13` Option A per `DEC-050`) at final implementation SHA `38846e4a27cfd6f795656f248cee1bc1beee2944` (PR #3 CI run `44263375798` `100%` green across Stage 0 + all 3 OS runners, `code-reviewer` [`22029cb0`] `APPROVE`, `security-auditor` [`7ac7d58e`] `PASS`). Units `0031`..`0047` remain **`BLOCKED`** under their existing authorization and quality gates (Units 31/32 unopened; no tags/releases per `GATE-REL-07`).
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
 >   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Current delivery is `TP-IMP-0001`..`0027` = **`DONE` (`27 / 47`)** under [`DEC-044`](../governance/decisions.md); `TP-IMP-0028` = **`READY`** under [`DEC-045`](../governance/decisions.md). Units `0029`..`0047` remain blocked pending sequential gates and existing Owner authorization boundaries.
+>   3. Current delivery is `TP-IMP-0001`..`0030` = **`DONE` (`30 / 47`)** under [`DEC-011`](../governance/decisions.md)..[`DEC-059`](../governance/decisions.md); `0 / 47` `READY`; `0 / 47` `READY_FOR_REVIEW`. Units `0031`..`0047` remain **`BLOCKED`** pending sequential gates and existing Owner authorization boundaries.
 
 ---
 

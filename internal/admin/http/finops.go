@@ -49,6 +49,8 @@ type usageChargebackRowDTO struct {
 	GroupKey              string `json:"group_key"`
 	ExactMicroUSD         int64  `json:"exact_micro_usd"`
 	EstimatedMicroUSD     int64  `json:"estimated_micro_usd"`
+	ExactRequestCount     int64  `json:"exact_request_count"`
+	EstimatedRequestCount int64  `json:"estimated_request_count"`
 	UnmeteredRequestCount int64  `json:"unmetered_request_count"`
 }
 
@@ -334,10 +336,6 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if foreignOrgExists || expectedVer != 1 {
-			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
-			return
-		}
 		if req.HardLimitMicros == nil || *req.HardLimitMicros < 0 {
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "non-negative hard_limit_micros is required", false, nil)
 			return
@@ -350,6 +348,10 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		thresholds, okThresh := normalizeAndValidateThresholds(req.SoftWarningPercents)
 		if !okThresh {
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "soft_warning_percents values must be integers between 1 and 100", false, nil)
+			return
+		}
+		if foreignOrgExists || expectedVer != 1 {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
 			return
 		}
 		threshJSONBytes, err := json.Marshal(thresholds)
@@ -623,7 +625,7 @@ func (s *Server) handleExportUsage(w http.ResponseWriter, r *http.Request) {
 
 	var buf bytes.Buffer
 	cw := csv.NewWriter(&buf)
-	if err := cw.Write([]string{"group_key", "exact_micro_usd", "estimated_micro_usd", "unmetered_request_count"}); err != nil {
+	if err := cw.Write([]string{"group_key", "exact_micro_usd", "estimated_micro_usd", "exact_request_count", "estimated_request_count", "unmetered_request_count"}); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding CSV header", true, nil)
 		return
 	}
@@ -632,6 +634,8 @@ func (s *Server) handleExportUsage(w http.ResponseWriter, r *http.Request) {
 			sanitizeCSVCell(row.GroupKey),
 			strconv.FormatInt(row.ExactMicroUSD, 10),
 			strconv.FormatInt(row.EstimatedMicroUSD, 10),
+			strconv.FormatInt(row.ExactRequestCount, 10),
+			strconv.FormatInt(row.EstimatedRequestCount, 10),
 			strconv.FormatInt(row.UnmeteredRequestCount, 10),
 		}); err != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding CSV row", true, nil)
@@ -757,6 +761,8 @@ func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionCo
 		SELECT %s AS grp_key,
 		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'EXACT' THEN us.total_cost_micros ELSE 0 END), 0),
 		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'ESTIMATED' THEN us.total_cost_micros ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'EXACT' THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'ESTIMATED' THEN 1 ELSE 0 END), 0),
 		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'UNMETERED_FLAGGED' THEN 1 ELSE 0 END), 0)
 		FROM usage_settlements us
 		%s
@@ -773,7 +779,7 @@ func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionCo
 	out := make([]usageChargebackRowDTO, 0)
 	for rows.Next() {
 		var r usageChargebackRowDTO
-		if scanErr := rows.Scan(&r.GroupKey, &r.ExactMicroUSD, &r.EstimatedMicroUSD, &r.UnmeteredRequestCount); scanErr != nil {
+		if scanErr := rows.Scan(&r.GroupKey, &r.ExactMicroUSD, &r.EstimatedMicroUSD, &r.ExactRequestCount, &r.EstimatedRequestCount, &r.UnmeteredRequestCount); scanErr != nil {
 			return nil, scanErr
 		}
 		out = append(out, r)
@@ -845,9 +851,9 @@ func (s *Server) countScopeUnmeteredRequests(ctx context.Context, orgID, scopeTy
 
 func (s *Server) loadBudgetResourceDTO(ctx context.Context, orgID, budgetID string) (budgetResourceDTO, error) {
 	var (
-		id, scopeType, scopeID, periodKind, threshJSON    string
-		hardLimit, reservedHold, exactMicros, estMicros   int64
-		carryover, ver                                    int64
+		id, scopeType, scopeID, periodKind, threshJSON  string
+		hardLimit, reservedHold, exactMicros, estMicros int64
+		carryover, ver                                  int64
 	)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, scope_type, scope_id, period_kind, hard_limit_micros,

@@ -24,10 +24,14 @@ describe('console information architecture', () => {
   it('limits operational navigation to roles authorized by the information architecture', () => {
     const operations = routeForPath('/ops/health');
     const security = routeForPath('/security/audit-log');
+    const traces = routeForPath('/observability/traces');
+    const finops = routeForPath('/finops/budgets');
     expect(operations && canAccessRoute(operations, ['OPERATOR'])).toBe(true);
     expect(operations && canAccessRoute(operations, ['DEVELOPER'])).toBe(false);
     expect(security && canAccessRoute(security, ['SECURITY_REVIEWER'])).toBe(true);
     expect(security && canAccessRoute(security, ['FINOPS_VIEWER'])).toBe(false);
+    expect(traces && canAccessRoute(traces, ['FINOPS_VIEWER'])).toBe(false);
+    expect(finops && canAccessRoute(finops, ['FINOPS_VIEWER'])).toBe(true);
   });
 
   it('keeps sign-in reachable without an authenticated role', () => {

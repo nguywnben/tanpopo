@@ -77,6 +77,9 @@ func TestSixRoleRBACMatrixAndFailClosedGuards(t *testing.T) {
 	if err := Authorize(finops, ActionSecretReadMeta, TargetScope{OrgID: orgA, ProjectID: projA1}); !errors.Is(err, ErrPermissionDenied) {
 		t.Fatalf("FINOPS_VIEWER secret read metadata expected ErrPermissionDenied, got %v", err)
 	}
+	if err := Authorize(finops, ActionTraceReadMeta, TargetScope{OrgID: orgA, ProjectID: projA1}); !errors.Is(err, ErrPermissionDenied) {
+		t.Fatalf("FINOPS_VIEWER trace metadata expected ErrPermissionDenied, got %v", err)
+	}
 	if err := Authorize(finops, ActionSessionSelf, TargetScope{OrgID: orgA}); err != nil {
 		t.Fatalf("FINOPS_VIEWER ActionSessionSelf expected nil, got %v", err)
 	}

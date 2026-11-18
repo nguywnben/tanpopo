@@ -192,9 +192,9 @@ func TestMigrateFailedSQLPersistsDirtyStateAndRejectsBadInputs(t *testing.T) {
 	}
 	// Verify non-.sql files and subdirectories are ignored cleanly.
 	withExtrasFS := fstest.MapFS{
-		"README.md":       {Data: []byte("ignore me")},
-		"sub/0002_s.sql":  {Data: []byte("SELECT 1;")},
-		"0001_valid.sql":  {Data: []byte("CREATE TABLE v (id TEXT);")},
+		"README.md":      {Data: []byte("ignore me")},
+		"sub/0002_s.sql": {Data: []byte("SELECT 1;")},
+		"0001_valid.sql": {Data: []byte("CREATE TABLE v (id TEXT);")},
 	}
 	loadedExtras, err := LoadMigrations(withExtrasFS)
 	if err != nil || len(loadedExtras) != 1 || loadedExtras[0].Version != 1 {
@@ -213,5 +213,24 @@ func TestMigrateFailedSQLPersistsDirtyStateAndRejectsBadInputs(t *testing.T) {
 	}
 	if !errors.Is(de, port.ErrDirtyMigration) {
 		t.Fatalf("expected DirtyError to unwrap to ErrDirtyMigration")
+	}
+
+	deNoCause := &DirtyError{Version: 2, Name: "y", Reason: "dirty"}
+	if !errors.Is(deNoCause, port.ErrDirtyMigration) || !strings.Contains(deNoCause.Error(), "reason=dirty") {
+		t.Fatalf("unexpected nil-cause DirtyError behavior: %v", deNoCause)
+	}
+	deSameCause := &DirtyError{Version: 3, Name: "z", Reason: "dirty", Cause: port.ErrDirtyMigration}
+	if !errors.Is(deSameCause, port.ErrDirtyMigration) {
+		t.Fatalf("expected DirtyError with ErrDirtyMigration cause to unwrap cleanly")
+	}
+
+	rawEmptyDB := openTestSQLite(t)
+	if _, err := ReadApplied(ctx, rawEmptyDB); err == nil {
+		t.Fatalf("expected ReadApplied on uninitialized DB to fail cleanly")
+	}
+	cancelledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := Apply(cancelledCtx, rawEmptyDB, fixedFS, nil); err == nil {
+		t.Fatalf("expected Apply on cancelled context to fail cleanly")
 	}
 }

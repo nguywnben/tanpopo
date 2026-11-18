@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
@@ -173,6 +174,28 @@ func newAdminTestHarness(t *testing.T) *adminTestHarness {
 	}
 
 	pagSecret := []byte("0123456789abcdef0123456789abcdef")
+	lockfilePath := filepath.Join(dir, "tanpopo.lock")
+	if err := os.WriteFile(lockfilePath, []byte("[]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(dir, "tanpopo.yaml")
+	if err := os.WriteFile(configPath, []byte("data_dir: "+dir+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pluginsDir := filepath.Join(dir, "plugins")
+	if err := os.MkdirAll(pluginsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	instSvc, err := installer.NewLifecycleService(installer.ServiceConfig{
+		DB:           st.RawDB(),
+		Audit:        auditLog,
+		PluginsDir:   pluginsDir,
+		LockfilePath: lockfilePath,
+		NowMs:        nowFn,
+	})
+	if err != nil {
+		t.Fatalf("installer.NewLifecycleService: %v", err)
+	}
 	srv, err := NewServer(ServerConfig{
 		Store:            st,
 		DB:               st.RawDB(),
@@ -182,9 +205,12 @@ func newAdminTestHarness(t *testing.T) *adminTestHarness {
 		Vault:            vlt,
 		Snapshots:        snapshots,
 		KillSwitch:       ksReg,
+		Installer:        instSvc,
 		Audit:            auditLog,
 		NowMs:            nowFn,
 		PaginationSecret: pagSecret,
+		LockfilePath:     lockfilePath,
+		ConfigPath:       configPath,
 		TokenVerifier: func(_ context.Context, raw string) (*rbac.Actor, *SessionMetadata, error) {
 			h.bearerMu.RLock()
 			actor, ok := h.bearerTokens[raw]
@@ -367,9 +393,9 @@ func TestAllAdminRoutesHaveExplicitPermission(t *testing.T) {
 	h := newAdminTestHarness(t)
 
 	allowedPublic := map[string]bool{
-		"GET /admin/v1/bootstrap/status":   true,
+		"GET /admin/v1/bootstrap/status":    true,
 		"POST /admin/v1/bootstrap/complete": true,
-		"POST /admin/v1/auth/login":        true,
+		"POST /admin/v1/auth/login":         true,
 	}
 
 	routes := h.srv.Routes()
@@ -1142,6 +1168,12 @@ func TestSixRoleRBACMatrixAndAntiSelfEscalation(t *testing.T) {
 	h.registerBearerToken("tok_finops", finActor)
 	if rec := h.doBearer(t, http.MethodPost, "/admin/v1/projects", "tok_finops", "", map[string]any{"slug": "x", "name": "X"}); rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for FINOPS_VIEWER creating project, got %d", rec.Code)
+	}
+	if err := rbac.Authorize(finActor, rbac.ActionTraceReadMeta, rbac.TargetScope{OrgID: boot.OrgID, ProjectID: boot.ProjectID}); !errors.Is(err, rbac.ErrPermissionDenied) {
+		t.Fatalf("FINOPS_VIEWER must NOT have ActionTraceReadMeta, got err=%v", err)
+	}
+	if rec := h.doBearer(t, http.MethodGet, "/admin/v1/traces?env_id="+boot.EnvID, "tok_finops", "", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for FINOPS_VIEWER reading trace metadata through Admin API, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	// DEVELOPER can create project virtual key, cannot read/write members.
@@ -2412,5 +2444,3 @@ func TestAdminRemediationRegressionSuite(t *testing.T) {
 		t.Fatalf("expected killSwitch.RefreshFromDB to evict deleted org2 kill switch from memory")
 	}
 }
-
-

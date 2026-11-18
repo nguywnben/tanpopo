@@ -308,7 +308,6 @@ var rolePermissions = map[string]map[Action]bool{
 		ActionRouteRead:      true,
 		ActionRouteExplain:   true,
 		ActionPolicyRead:     true,
-		ActionTraceReadMeta:  true,
 		ActionBudgetRead:     true,
 	},
 	RoleDeveloper: {

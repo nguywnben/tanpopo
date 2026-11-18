@@ -115,6 +115,52 @@ func newVaultTestEnv(t *testing.T, ttl time.Duration) *vaultTestEnv {
 	}
 }
 
+func TestArchiveKeyWrapUnwrapAndFailures(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 0)
+	plain := random32Key(t)
+	keyID, nonce, ciphertext, err := env.vault.WrapArchiveKey(ctx, plain)
+	if err != nil {
+		t.Fatalf("WrapArchiveKey: %v", err)
+	}
+	if keyID != "kek_v1" || len(nonce) != NonceSizeBytes || len(ciphertext) != KeySizeBytes+16 {
+		t.Fatalf("unexpected wrapped archive key shape: keyID=%q nonce=%d ciphertext=%d", keyID, len(nonce), len(ciphertext))
+	}
+	opened, err := env.vault.UnwrapArchiveKey(ctx, keyID, nonce, ciphertext)
+	if err != nil {
+		t.Fatalf("UnwrapArchiveKey: %v", err)
+	}
+	if !bytes.Equal(opened, plain) {
+		t.Fatal("unwrapped archive data key does not match input")
+	}
+	clear(opened)
+
+	if _, err := env.vault.kek.UnwrapArchiveKey(ctx, "missing-kek", nonce, ciphertext); !errors.Is(err, ErrKEKNotFound) {
+		t.Fatalf("UnwrapArchiveKey missing key error = %v, want ErrKEKNotFound", err)
+	}
+	tampered := append([]byte(nil), ciphertext...)
+	tampered[0] ^= 0x80
+	if _, err := env.vault.UnwrapArchiveKey(ctx, keyID, nonce, tampered); err == nil {
+		t.Fatal("UnwrapArchiveKey accepted modified ciphertext")
+	}
+	if _, _, err := env.vault.kek.WrapArchiveKey(ctx, keyID, []byte("short")); err == nil {
+		t.Fatal("WrapArchiveKey accepted a non-256-bit archive data key")
+	}
+	canceledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, _, err := env.vault.kek.WrapArchiveKey(canceledCtx, keyID, plain); !errors.Is(err, context.Canceled) {
+		t.Fatalf("WrapArchiveKey canceled error = %v, want context.Canceled", err)
+	}
+	if _, err := env.vault.kek.UnwrapArchiveKey(canceledCtx, keyID, nonce, ciphertext); !errors.Is(err, context.Canceled) {
+		t.Fatalf("UnwrapArchiveKey canceled error = %v, want context.Canceled", err)
+	}
+	env.kek.Close()
+	if _, _, _, err := env.vault.WrapArchiveKey(ctx, plain); !errors.Is(err, ErrInvalidMasterKey) {
+		t.Fatalf("WrapArchiveKey without active KEK error = %v, want ErrInvalidMasterKey", err)
+	}
+}
+
 func TestVaultSealMetadataCanaryZeroHitsOnDiskAC1(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -3028,7 +3074,3 @@ func TestVaultTxEnsureAndSealPaths(t *testing.T) {
 		t.Fatalf("idempotent EnsureProjectDEKTx: %v", err)
 	}
 }
-
-
-
-

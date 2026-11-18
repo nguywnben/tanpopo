@@ -359,6 +359,16 @@ type LifecycleService struct {
 	nowMs           func() int64
 }
 
+// ArtifactRoot returns the service-owned root containing verified extension
+// artifacts. Callers must still reject symlinks and non-regular files when
+// exporting the tree.
+func (s *LifecycleService) ArtifactRoot() string {
+	if s == nil {
+		return ""
+	}
+	return s.pluginsDir
+}
+
 // NewLifecycleService constructs a LifecycleService fail-closed on missing DB, Audit, or PluginsDir.
 func NewLifecycleService(cfg ServiceConfig) (*LifecycleService, error) {
 	if cfg.DB == nil {

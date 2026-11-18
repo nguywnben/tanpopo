@@ -54,6 +54,8 @@ type KEKProvider interface {
 	ActiveKeyID(ctx context.Context) (string, error)
 	WrapDEK(ctx context.Context, kekKeyID, orgID string, dekVersion int64, plaintextDEK []byte) (nonce, ciphertext []byte, err error)
 	UnwrapDEK(ctx context.Context, kekKeyID, orgID string, dekVersion int64, nonce, ciphertext []byte) ([]byte, error)
+	WrapArchiveKey(ctx context.Context, kekKeyID string, plaintextKey []byte) (nonce, ciphertext []byte, err error)
+	UnwrapArchiveKey(ctx context.Context, kekKeyID string, nonce, ciphertext []byte) ([]byte, error)
 }
 
 // StaticKEKProvider manages one active and zero or more staged/previous 256-bit Master KEKs in memory.
@@ -177,6 +179,43 @@ func (p *StaticKEKProvider) UnwrapDEK(ctx context.Context, kekKeyID, orgID strin
 	defer clear(kekCopy)
 
 	out, err := openAESGCM(kekCopy, aad, nonce, ciphertext)
+	if err != nil {
+		return nil, err
+	}
+	if err := validate256BitKey(out); err != nil {
+		clear(out)
+		return nil, err
+	}
+	return out, nil
+}
+
+// WrapArchiveKey seals a random backup data key with archive-specific authenticated context.
+func (p *StaticKEKProvider) WrapArchiveKey(ctx context.Context, kekKeyID string, plaintextKey []byte) ([]byte, []byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	if err := validate256BitKey(plaintextKey); err != nil {
+		return nil, nil, err
+	}
+	kekCopy, err := p.copyKey(kekKeyID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer clear(kekCopy)
+	return sealAESGCM(kekCopy, []byte("tanpopo:backup-data-key:v1:"+kekKeyID), plaintextKey)
+}
+
+// UnwrapArchiveKey opens a backup data key using the same archive-specific context.
+func (p *StaticKEKProvider) UnwrapArchiveKey(ctx context.Context, kekKeyID string, nonce, ciphertext []byte) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	kekCopy, err := p.copyKey(kekKeyID)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(kekCopy)
+	out, err := openAESGCM(kekCopy, []byte("tanpopo:backup-data-key:v1:"+kekKeyID), nonce, ciphertext)
 	if err != nil {
 		return nil, err
 	}

@@ -14,7 +14,7 @@
 //   - Top-level JSON body org_id anti-spoofing rejection (403) prioritizing
 //     authenticated session org context via rbac.ResolveSessionOrgID (AUTH-13).
 //   - Uniform 404 resource_not_found across tenants (AUTH-15), ETag/"vN"
-//     + If-Match 428/409 optimistic locking with current_resource reconciliation,
+//   - If-Match 428/409 optimistic locking with current_resource reconciliation,
 //     and HMAC-SHA256 org-bound keyset cursor pagination (GAP-11).
 package http
 
@@ -79,16 +79,16 @@ type SessionMetadata struct {
 
 // MarketplaceCatalogEntry describes an available marketplace extension package for GET /marketplace/catalog.
 type MarketplaceCatalogEntry struct {
-	PackageID            string   `json:"package_id"`
-	CanonicalName        string   `json:"canonical_name"`
-	Version              string   `json:"version"`
-	ExecutionTier        string   `json:"execution_tier"`
-	OriginTrustTier      string   `json:"origin_trust_tier"`
-	EnterpriseSigned     bool     `json:"enterprise_signed"`
-	SourceURI            string   `json:"source_uri"`
-	ExpectedSHA256       string   `json:"expected_sha256"`
-	Summary              string   `json:"summary,omitempty"`
-	Capabilities         []string `json:"capabilities,omitempty"`
+	PackageID        string   `json:"package_id"`
+	CanonicalName    string   `json:"canonical_name"`
+	Version          string   `json:"version"`
+	ExecutionTier    string   `json:"execution_tier"`
+	OriginTrustTier  string   `json:"origin_trust_tier"`
+	EnterpriseSigned bool     `json:"enterprise_signed"`
+	SourceURI        string   `json:"source_uri"`
+	ExpectedSHA256   string   `json:"expected_sha256"`
+	Summary          string   `json:"summary,omitempty"`
+	Capabilities     []string `json:"capabilities,omitempty"`
 }
 
 // ExtensionArchiveResolver resolves staged archive streams + provenance metadata for Control Plane installs/upgrades.
@@ -100,34 +100,35 @@ type rawDBProvider interface {
 
 // ServerConfig configures the Control Plane Admin HTTP server fail-closed.
 type ServerConfig struct {
-	Store                    port.Store
-	DB                       *sql.DB
-	Bootstrap                *bootstrap.Manager
-	Auth                     *auth.LocalService
-	VKeys                    *vkey.Service
-	Vault                    *vault.Store
-	Ledgers                  *ledger.Service
-	Snapshots                *snapshot.Manager
-	KillSwitch               *killswitch.Registry
-	Catalog                  *catalog.Repository
-	Installer                *installer.LifecycleService
-	Policies                 *policyengine.Store
-	RouteResolver            *resolver.Resolver
-	Broker                   *broker.BlindHostCredentialBroker
-	ProviderRuntime          extport.ProviderRuntime
-	MarketplaceCatalog       []MarketplaceCatalogEntry
-	ArchiveResolver          ExtensionArchiveResolver
-	LockfilePath             string
-	ProbeRateLimitPerMinute  int
-	Audit                    port.AuditSink
-	NowMs                    func() int64
-	MaxRequestBodyBytes      int64
-	PaginationSecret         []byte
-	TokenVerifier            BearerTokenVerifier
-	HostResolver             egress.HostResolver
-	BlockedAdminPorts        []int
-	OfflineMode              bool
-	Version                  string
+	Store                   port.Store
+	DB                      *sql.DB
+	Bootstrap               *bootstrap.Manager
+	Auth                    *auth.LocalService
+	VKeys                   *vkey.Service
+	Vault                   *vault.Store
+	Ledgers                 *ledger.Service
+	Snapshots               *snapshot.Manager
+	KillSwitch              *killswitch.Registry
+	Catalog                 *catalog.Repository
+	Installer               *installer.LifecycleService
+	Policies                *policyengine.Store
+	RouteResolver           *resolver.Resolver
+	Broker                  *broker.BlindHostCredentialBroker
+	ProviderRuntime         extport.ProviderRuntime
+	MarketplaceCatalog      []MarketplaceCatalogEntry
+	ArchiveResolver         ExtensionArchiveResolver
+	LockfilePath            string
+	ConfigPath              string
+	ProbeRateLimitPerMinute int
+	Audit                   port.AuditSink
+	NowMs                   func() int64
+	MaxRequestBodyBytes     int64
+	PaginationSecret        []byte
+	TokenVerifier           BearerTokenVerifier
+	HostResolver            egress.HostResolver
+	BlockedAdminPorts       []int
+	OfflineMode             bool
+	Version                 string
 }
 
 type routeEntry struct {
@@ -139,8 +140,8 @@ type routeEntry struct {
 }
 
 const (
-	maxProbeLimiterBuckets      = 4096
-	probeLimiterSweepThreshold  = 256
+	maxProbeLimiterBuckets     = 4096
+	probeLimiterSweepThreshold = 256
 )
 
 type slidingWindowLimiter struct {
@@ -233,6 +234,7 @@ type Server struct {
 	marketplace     []MarketplaceCatalogEntry
 	archiveResolver ExtensionArchiveResolver
 	lockfilePath    string
+	configPath      string
 	probeLimiter    *slidingWindowLimiter
 	audit           port.AuditSink
 	txAudit         port.TxAuditSink
@@ -392,6 +394,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		marketplace:     marketplace,
 		archiveResolver: cfg.ArchiveResolver,
 		lockfilePath:    strings.TrimSpace(cfg.LockfilePath),
+		configPath:      strings.TrimSpace(cfg.ConfigPath),
 		probeLimiter:    newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
 		audit:           auditSink,
 		txAudit:         txAudit,
@@ -491,8 +494,15 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		// Group K: Audit Log, Hash-Chain Verification, Kill Switch & Blast Radius
 		{Method: http.MethodPost, Path: "/admin/v1/audit-events/verify", Action: rbac.ActionAuditReadVerify, Handler: s.handleVerifyAuditHashChain},
 		{Method: http.MethodGet, Path: "/admin/v1/audit-events", Action: rbac.ActionAuditReadVerify, Handler: s.handleListAuditEvents},
+		{Method: http.MethodGet, Path: "/admin/v1/kill-switches", Action: rbac.ActionKillSwitchTrigger, Handler: s.handleListKillSwitches},
 		{Method: http.MethodPost, Path: "/admin/v1/kill-switches", Action: rbac.ActionKillSwitchTrigger, Handler: s.handleTriggerKillSwitch},
+		{Method: http.MethodDelete, Path: "/admin/v1/kill-switches/{switchId}", Action: rbac.ActionKillSwitchTrigger, Handler: s.handleClearKillSwitch},
 		{Method: http.MethodGet, Path: "/admin/v1/blast-radius", Action: rbac.ActionAuditReadVerify, Handler: s.handleQueryBlastRadius},
+
+		// Group L: Minimum reusable Unit 32 lifecycle core required by Unit 30 Operations.
+		{Method: http.MethodGet, Path: "/admin/v1/ops/cluster-status", Action: rbac.ActionOpsRead, Handler: s.handleGetClusterOpsStatus},
+		{Method: http.MethodPost, Path: "/admin/v1/ops/backups", Action: rbac.ActionOpsWrite, Handler: s.handleCreateEncryptedBackup},
+		{Method: http.MethodPost, Path: "/admin/v1/ops/upgrades/preflight", Action: rbac.ActionOpsWrite, Handler: s.handleRunUpgradePreflight},
 	}
 
 	if err := rbac.ValidateRoutePermissions(s.Routes()); err != nil {
@@ -946,27 +956,40 @@ func (s *Server) decodeJSONAndCheckOrgSpoofing(w http.ResponseWriter, r *http.Re
 	}
 
 	if sc != nil {
-		if rawOrg, hasOrg := topLevel["org_id"]; hasOrg && !bytes.Equal(bytes.TrimSpace(rawOrg), []byte("null")) {
-			var bodyOrg string
-			if err := json.Unmarshal(rawOrg, &bodyOrg); err != nil {
-				writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "org_id must be a string", false, nil)
-				return false
+		var matchedKeys []string
+		for k := range topLevel {
+			if strings.EqualFold(k, "org_id") {
+				matchedKeys = append(matchedKeys, k)
 			}
-			bodyOrg = strings.TrimSpace(bodyOrg)
-			expectedOrg := sc.OrgID
-			if sc.IsOperator {
-				if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
-					expectedOrg = qOrg
+		}
+		if len(matchedKeys) > 1 {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "duplicate org_id fields in request payload", false, nil)
+			return false
+		}
+		if len(matchedKeys) == 1 {
+			rawOrg := topLevel[matchedKeys[0]]
+			if !bytes.Equal(bytes.TrimSpace(rawOrg), []byte("null")) {
+				var bodyOrg string
+				if err := json.Unmarshal(rawOrg, &bodyOrg); err != nil {
+					writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "org_id must be a string", false, nil)
+					return false
 				}
-			}
-			if bodyOrg != "" && (!sc.IsOperator || expectedOrg != "") && bodyOrg != expectedOrg {
-				s.emitSecurityAudit(r.Context(), sc, "security.org_id_spoofing_blocked", map[string]any{
-					"spoofed_org_id": bodyOrg,
-					"session_org_id": expectedOrg,
-					"path":           r.URL.Path,
-				})
-				writeErrorEnvelope(w, r, http.StatusForbidden, "org_id_spoofing_forbidden", "permission_error", "request body org_id cannot override authenticated session organization", false, nil)
-				return false
+				bodyOrg = strings.TrimSpace(bodyOrg)
+				expectedOrg := sc.OrgID
+				if sc.IsOperator {
+					if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
+						expectedOrg = qOrg
+					}
+				}
+				if bodyOrg != "" && (!sc.IsOperator || expectedOrg != "") && bodyOrg != expectedOrg {
+					s.emitSecurityAudit(r.Context(), sc, "security.org_id_spoofing_blocked", map[string]any{
+						"spoofed_org_id": bodyOrg,
+						"session_org_id": expectedOrg,
+						"path":           r.URL.Path,
+					})
+					writeErrorEnvelope(w, r, http.StatusForbidden, "org_id_spoofing_forbidden", "permission_error", "request body org_id cannot override authenticated session organization", false, nil)
+					return false
+				}
 			}
 		}
 	}

@@ -11,13 +11,16 @@ export type ConsoleRoute = {
 };
 
 const everyRole: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER', 'FINOPS_VIEWER', 'DEVELOPER'];
-const securityRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER', 'DEVELOPER'];
-const operationsRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
+const traceRoles: Role[] = everyRole.filter(role => role !== 'FINOPS_VIEWER');
+const financeRoles: Role[] = [...everyRole];
+const securityRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
+const operationsRoles: Role[] = ['OPERATOR'];
 
 export const navigationGroups: {title: string; routes: ConsoleRoute[]}[] = [
   {title: 'Overview & Observability', routes: [
     {path: '/overview', label: 'Overview', roles: everyRole, icon: 'overview', enabled: true},
-    {path: '/observability/traces', aliases: ['/finops/budgets', '/finops/chargeback'], label: 'Observability & FinOps', roles: everyRole, icon: 'observability', enabled: true},
+    {path: '/observability/traces', label: 'Request traces', roles: traceRoles, icon: 'observability', enabled: true},
+    {path: '/finops/budgets', aliases: ['/finops/chargeback'], label: 'FinOps budgets & chargeback', roles: financeRoles, icon: 'observability', enabled: true},
   ]},
   {title: 'Model Gateway & Routing', routes: [
     {path: '/providers/adapters', aliases: ['/providers/connections', '/models'], label: 'Providers, Connections & Models', roles: everyRole, icon: 'catalog', enabled: true},

@@ -130,3 +130,113 @@ export async function listRecentTraces(environmentId: string) {
   const oneHourAgo = Date.now() - 60 * 60 * 1000;
   return rows.filter(row => Date.parse(row.created_at) >= oneHourAgo);
 }
+
+export async function listTracePage(environmentId: string, model?: string, cursor?: string) {
+  const rows: components['schemas']['TraceSummary'][] = [];
+  let nextCursor = cursor;
+  for (let page = 0; page < 2; page += 1) {
+    const result = await api.GET('/admin/v1/traces', {params: {query: {env_id: environmentId || undefined, model: model || undefined, limit: 100, cursor: nextCursor}}});
+    if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+    rows.push(...result.data.data);
+    nextCursor = result.data.next_cursor ?? undefined;
+    if (!nextCursor) break;
+  }
+  return {data: rows, nextCursor};
+}
+
+export async function getTraceWaterfall(requestId: string) {
+  const result = await api.GET('/admin/v1/traces/{requestId}', {params: {path: {requestId}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function listBudgets(projectId?: string) {
+  const result = await api.GET('/admin/v1/budgets', {params: {query: {project_id: projectId || undefined, limit: 100}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
+export async function updateBudget(budget: components['schemas']['BudgetResource'], hardLimitMicros: number) {
+  const result = await api.PUT('/admin/v1/budgets/{budgetId}', {
+    params: {path: {budgetId: budget.id}, header: {'If-Match': `"v${budget.version}"`}},
+    body: {scope_tier: budget.scope_tier, scope_id: budget.scope_id, hard_limit_micros: hardLimitMicros, period: budget.period, soft_warning_percents: budget.soft_warning_percents},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function getUsageChargebackSummary(groupBy: 'project' | 'env' | 'key' | 'model') {
+  const result = await api.GET('/admin/v1/usage/summary', {params: {query: {group_by: groupBy}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
+export async function exportUsageChargeback(format: 'csv' | 'json') {
+  const result = await api.GET('/admin/v1/usage/export', {params: {query: {format, group_by: 'project'}}});
+  if (!result.response.ok || result.data === undefined) throw apiError(result.response, result.error);
+  const content = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
+  return new Blob([content], {type: format === 'csv' ? 'text/csv' : 'application/json'});
+}
+
+export async function listAuditEvents(action?: string, cursor?: string, chainPartition?: string) {
+  const result = await api.GET('/admin/v1/audit-events', {params: {query: {action: action || undefined, chain_partition: chainPartition || undefined, limit: 100, cursor}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return {data: result.data.data, nextCursor: result.data.next_cursor ?? undefined};
+}
+
+export async function verifyAuditHashChain() {
+  const result = await api.POST('/admin/v1/audit-events/verify');
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function triggerKillSwitch(payload: components['schemas']['KillSwitchTriggerRequest']) {
+  const result = await api.POST('/admin/v1/kill-switches', {body: payload});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function listKillSwitches() {
+  const result = await api.GET('/admin/v1/kill-switches', {params: {query: {active_only: true}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
+export async function clearKillSwitch(item: components['schemas']['KillSwitchResource'], clear_reason: string) {
+  const result = await api.DELETE('/admin/v1/kill-switches/{switchId}', {
+    params: {path: {switchId: item.id}, query: {org_id: item.org_id ?? undefined}},
+    body: {expected_version: item.version, clear_reason},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function getKillSwitchBlastRadius(target_type: 'PROJECT' | 'VIRTUAL_KEY' | 'EXTENSION' | 'PROVIDER_CONNECTION', target_id: string) {
+  const result = await api.GET('/admin/v1/blast-radius', {params: {query: {target_type, target_id}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function getClusterOpsStatus() {
+  const result = await api.GET('/admin/v1/ops/cluster-status');
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function createEncryptedBackup() {
+  const result = await api.POST('/admin/v1/ops/backups');
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function runUpgradePreflight(targetCoreVersion: string) {
+  const result = await api.POST('/admin/v1/ops/upgrades/preflight', {body: {target_core_version: targetCoreVersion}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function getReadinessProbe() {
+  const response = await fetch(new URL('/readyz', window.location.origin), {credentials: 'same-origin', headers: {Accept: 'application/json'}});
+  const data = await response.json() as {status?: string; config_epoch?: number; snapshot_age_ms?: number};
+  return {ready: response.ok && data.status === 'ok', status: data.status ?? (response.ok ? 'unknown' : `HTTP ${response.status}`), configEpoch: data.config_epoch, snapshotAgeMs: data.snapshot_age_ms};
+}

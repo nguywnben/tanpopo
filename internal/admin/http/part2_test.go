@@ -1043,7 +1043,7 @@ func TestPart2CSVFormulaInjectionSanitization(t *testing.T) {
 		t.Fatalf("expected %d CSV rows, got %d", 1+len(dangerous), len(records))
 	}
 	header := records[0]
-	wantHeader := []string{"group_key", "exact_micro_usd", "estimated_micro_usd", "unmetered_request_count"}
+	wantHeader := []string{"group_key", "exact_micro_usd", "estimated_micro_usd", "exact_request_count", "estimated_request_count", "unmetered_request_count"}
 	for i := range wantHeader {
 		if header[i] != wantHeader[i] {
 			t.Fatalf("CSV header[%d]=%q want %q", i, header[i], wantHeader[i])
@@ -1054,8 +1054,8 @@ func TestPart2CSVFormulaInjectionSanitization(t *testing.T) {
 		if !strings.HasPrefix(cell, "'") {
 			t.Fatalf("formula injection cell %q was not prefixed with leading apostrophe", cell)
 		}
-		if row[1] != "1200" || row[2] != "800" || row[3] != "1" {
-			t.Fatalf("expected strictly separated exact=1200 est=800 unmetered=1, got %v", row)
+		if row[1] != "1200" || row[2] != "800" || row[3] != "1" || row[4] != "1" || row[5] != "1" {
+			t.Fatalf("expected strictly separated exact=1200/1 request, est=800/1 request, unmetered=1, got %v", row)
 		}
 	}
 }
