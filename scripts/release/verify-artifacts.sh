@@ -151,7 +151,7 @@ if [[ "$CONSOLE_HTML" != *"/assets/"* ]]; then
   exit 1
 fi
 
-APP_PIDS="$(docker top "$CONTAINER" -eo pid=,comm= | awk '$2 == "tanpopo" { print $1 }')"
+APP_PIDS="$(docker top "$CONTAINER" -eo pid,comm | awk 'NR > 1 && $2 == "tanpopo" { print $1 }')"
 if [[ ! "$APP_PIDS" =~ ^[0-9]+$ ]]; then
   echo "could not identify exactly one Tanpopo process in the container" >&2
   exit 1
