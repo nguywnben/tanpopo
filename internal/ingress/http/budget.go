@@ -600,9 +600,9 @@ func (b *requestBudgetSession) settleSync(
 	return b.settleInternal(ctx, target, requestedModel, inUsage, usage, false)
 }
 
-// estimatedOutputTextBytes counts user-facing text fields in the normalized
-// response. Counting the serialized JSON envelope would charge metadata,
-// field names, and IDs as generated tokens when the provider omits usage.
+// estimatedOutputTextBytes counts generated text, refusal text, and serialized
+// tool arguments in the normalized response. Counting the whole JSON envelope
+// would charge metadata, field names, and IDs as generated tokens.
 func estimatedOutputTextBytes(response []byte) int64 {
 	var decoded any
 	if json.Unmarshal(response, &decoded) != nil {
@@ -624,7 +624,7 @@ func estimatedOutputTextBytes(response []byte) int64 {
 		case map[string]any:
 			var total int64
 			for key, item := range value {
-				isText := key == "content" || key == "text"
+				isText := key == "content" || key == "text" || key == "arguments" || key == "refusal"
 				total += count(item, isText)
 			}
 			return total

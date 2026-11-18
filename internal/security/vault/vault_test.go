@@ -195,6 +195,154 @@ func TestVerifyAllDEKEnvelopesAuthenticatesOrgAndProjectKeys(t *testing.T) {
 	}
 }
 
+func TestVerifyAllDEKEnvelopesRejectsOrphanProjectEnvelope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 0)
+	db := env.sqlite.RawDB()
+	db.SetMaxOpenConns(1)
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys=OFF`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO project_encryption_keys
+		(org_id, project_id, org_dek_version, nonce, wrapped_project_dek, dek_version, created_at_ms, rotated_at_ms)
+		VALUES ('orphan-org', 'orphan-project', 1, zeroblob(12), zeroblob(48), 1, 1, 1)`); err != nil {
+		t.Fatalf("seed orphan project envelope fixture: %v", err)
+	}
+	if err := env.vault.VerifyAllDEKEnvelopes(ctx); err == nil {
+		t.Fatal("orphan project DEK envelope without an organization envelope passed verification")
+	}
+}
+
+func TestVerifyAllDEKEnvelopesValidatesStoreAndEmptyDatabase(t *testing.T) {
+	ctx := context.Background()
+	if err := (*Store)(nil).VerifyAllDEKEnvelopes(ctx); err == nil {
+		t.Fatal("nil vault store passed DEK envelope verification")
+	}
+	env := newVaultTestEnv(t, 0)
+	if err := (&Store{kek: env.kek}).VerifyAllDEKEnvelopes(ctx); err == nil {
+		t.Fatal("vault without a database passed DEK envelope verification")
+	}
+	if err := (&Store{db: env.sqlite.RawDB()}).VerifyAllDEKEnvelopes(ctx); err == nil {
+		t.Fatal("vault without a KEK provider passed DEK envelope verification")
+	}
+	if err := env.vault.VerifyAllDEKEnvelopes(ctx); err != nil {
+		t.Fatalf("empty vault database should have no invalid envelopes: %v", err)
+	}
+}
+
+func TestVerifyAllDEKEnvelopesRejectsProjectTableQueryFailure(t *testing.T) {
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 0)
+	if _, err := env.sqlite.RawDB().ExecContext(ctx, `DROP TABLE project_encryption_keys`); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.vault.VerifyAllDEKEnvelopes(ctx); err == nil {
+		t.Fatal("verification succeeded after the project DEK table was removed")
+	}
+}
+
+func TestVerifyAllDEKEnvelopesRejectsMalformedOrganizationKeyRows(t *testing.T) {
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 0)
+	db := env.sqlite.RawDB()
+	db.SetMaxOpenConns(1)
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys=OFF`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `DROP TABLE org_encryption_keys`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE org_encryption_keys (org_id TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO org_encryption_keys VALUES (NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.vault.VerifyAllDEKEnvelopes(ctx); err == nil {
+		t.Fatal("malformed null organization key row passed envelope verification")
+	}
+}
+
+func TestVerifyAllDEKEnvelopesRejectsMalformedProjectKeyRows(t *testing.T) {
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 0)
+	db := env.sqlite.RawDB()
+	db.SetMaxOpenConns(1)
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys=OFF`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `DROP TABLE project_encryption_keys`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE project_encryption_keys (org_id TEXT, project_id TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO project_encryption_keys VALUES (NULL, NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.vault.VerifyAllDEKEnvelopes(ctx); err == nil {
+		t.Fatal("malformed null project key row passed envelope verification")
+	}
+}
+
+func TestVerifyAllDEKEnvelopesHonorsCancellationAndDatabaseErrors(t *testing.T) {
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 0)
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "verify-canceled-org", DisplayName: "Verify Canceled Org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.vault.EnsureOrgDEK(ctx, org.ID); err != nil {
+		t.Fatal(err)
+	}
+	canceledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := env.vault.VerifyAllDEKEnvelopes(canceledCtx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled envelope verification error=%v, want context.Canceled", err)
+	}
+	if err := env.sqlite.RawDB().Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.vault.VerifyAllDEKEnvelopes(ctx); err == nil {
+		t.Fatal("closed database passed DEK envelope verification")
+	}
+}
+
+type cancelAtErrContext struct {
+	context.Context
+	calls    int
+	cancelAt int
+}
+
+func (c *cancelAtErrContext) Err() error {
+	c.calls++
+	if c.calls >= c.cancelAt {
+		return context.Canceled
+	}
+	return nil
+}
+
+func TestVerifyAllDEKEnvelopesChecksCancellationBetweenOrgAndProjectKeys(t *testing.T) {
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 0)
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "verify-project-cancel-org", DisplayName: "Verify Project Cancel Org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := env.sqlite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "verify-project-cancel", DisplayName: "Verify Project Cancel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.vault.EnsureProjectDEK(ctx, org.ID, project.ID); err != nil {
+		t.Fatal(err)
+	}
+	canceled := &cancelAtErrContext{Context: ctx, cancelAt: 2}
+	if err := env.vault.VerifyAllDEKEnvelopes(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled project-envelope verification error=%v, want context.Canceled", err)
+	}
+}
+
 func TestVaultServingReadinessTracksActiveKEK(t *testing.T) {
 	env := newVaultTestEnv(t, 0)
 	if err := env.vault.CheckServingReady(context.Background()); err != nil {

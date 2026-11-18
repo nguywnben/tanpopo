@@ -18,3 +18,10 @@ func TestEstimatedOutputTextBytesCountsNestedResponseText(t *testing.T) {
 		t.Fatalf("estimated nested output text bytes=%d, want 10", got)
 	}
 }
+
+func TestEstimatedOutputTextBytesCountsToolArgumentsAndRefusals(t *testing.T) {
+	response := []byte(`{"choices":[{"message":{"refusal":"cannot help","tool_calls":[{"function":{"arguments":"{\"ok\":true}"}}]}}]}`)
+	if got := estimatedOutputTextBytes(response); got != 22 {
+		t.Fatalf("estimated tool/refusal text bytes=%d, want 22", got)
+	}
+}

@@ -111,6 +111,69 @@ func TestRestoreRejectsInvalidAuditChainBeforePublication(t *testing.T) {
 	}
 }
 
+func TestRestoreAuditVerificationRejectsUnexpectedChainPartition(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "restore-audit.sqlite")
+	store, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	org, err := store.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "valid-chain-org", DisplayName: "Valid Chain Org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := audit.NewLogger(audit.LoggerConfig{DB: store.RawDB()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := logger.Append(ctx, port.AuditEvent{
+		OrgID: &org.ID, ActorKind: "SYSTEM", ActorID: "restore-test", EntryPoint: "cli",
+		EventType: "restore.test", TargetType: "organization", TargetID: org.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RawDB().ExecContext(ctx, `INSERT INTO audit_events
+		(id, created_at_ms, org_id, chain_key, seq_no, actor_kind, actor_id, entry_point, event_type, target_type, target_id, metadata_json, prev_hash, entry_hash)
+		VALUES ('aud_unexpected', 1, 'unexpected-chain', 'unexpected-chain', 1, 'SYSTEM', 'restore-test', 'cli', 'bad.partition', 'organization', 'none', '{}', printf('%064d', 0), printf('%064d', 0))`); err != nil {
+		t.Fatalf("seed unexpected audit partition: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyRestoredAuditChain(ctx, dbPath); err == nil {
+		t.Fatal("restore audit verification accepted a chain partition unrelated to an organization or SYSTEM")
+	}
+}
+
+func TestRestoreSQLiteIntegrityRejectsForeignKeyViolations(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "foreign-key-check.sqlite")
+	store, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := store.RawDB()
+	db.SetMaxOpenConns(1)
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys=OFF`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE restore_fk_parent (id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE restore_fk_child (parent_id INTEGER REFERENCES restore_fk_parent(id))`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO restore_fk_child(parent_id) VALUES (99)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifySQLiteForeignKeys(ctx, dbPath); err == nil {
+		t.Fatal("restore foreign-key verification accepted a broken reference")
+	}
+}
+
 func TestVerifyRejectsTamperedEncryptedArchive(t *testing.T) {
 	archivePath, keys := makeTestSQLiteArchive(t)
 	if !PlatformSupported() {

@@ -282,6 +282,9 @@ func decodeAndValidate(ctx context.Context, archivePath string, keys KeyUnwrappe
 	if err := verifySQLiteIntegrity(ctx, databasePath); err != nil {
 		return Verification{}, err
 	}
+	if err := verifySQLiteForeignKeys(ctx, databasePath); err != nil {
+		return Verification{}, err
+	}
 	if err := verifyRestoredAuditChain(ctx, databasePath); err != nil {
 		return Verification{}, err
 	}
@@ -314,24 +317,45 @@ func verifyRestoredAuditChain(ctx context.Context, dbPath string) error {
 	if err := orgRows.Close(); err != nil {
 		return fmt.Errorf("backup: close organization audit query: %w", err)
 	}
+	allowedChains := make(map[string]struct{}, len(orgIDs)+1)
+	for _, orgID := range orgIDs {
+		allowedChains[orgID] = struct{}{}
+	}
+	allowedChains[audit.SystemChainKey] = struct{}{}
+	chainRows, err := db.QueryContext(ctx, `SELECT DISTINCT chain_key FROM audit_events ORDER BY chain_key`)
+	if err != nil {
+		return fmt.Errorf("backup: list audit chain partitions: %w", err)
+	}
+	var chainKeys []string
+	for chainRows.Next() {
+		var chainKey string
+		if err := chainRows.Scan(&chainKey); err != nil {
+			_ = chainRows.Close()
+			return fmt.Errorf("backup: read audit chain partition: %w", err)
+		}
+		if _, ok := allowedChains[chainKey]; !ok {
+			_ = chainRows.Close()
+			return fmt.Errorf("backup: audit chain partition %q does not match any organization or SYSTEM", chainKey)
+		}
+		chainKeys = append(chainKeys, chainKey)
+	}
+	if err := chainRows.Err(); err != nil {
+		_ = chainRows.Close()
+		return fmt.Errorf("backup: iterate audit chain partitions: %w", err)
+	}
+	if err := chainRows.Close(); err != nil {
+		return fmt.Errorf("backup: close audit partition query: %w", err)
+	}
 	var report *audit.VerifyReport
-	if len(orgIDs) == 0 {
+	if len(chainKeys) == 0 {
 		report, err = audit.VerifyAuditChain(ctx, db, audit.VerifyOptions{})
 	} else {
-		chainKeys := append([]string(nil), orgIDs...)
-		var hasSystemChain int
-		if err := db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM audit_events WHERE chain_key = 'SYSTEM')`).Scan(&hasSystemChain); err != nil {
-			return fmt.Errorf("backup: inspect SYSTEM audit chain: %w", err)
-		}
-		if hasSystemChain != 0 {
-			chainKeys = append(chainKeys, audit.SystemChainKey)
-		}
 		report, err = audit.VerifyAuditChain(ctx, db, audit.VerifyOptions{ChainKeys: chainKeys})
-		if err == nil {
-			for _, orgID := range orgIDs {
-				if chain, ok := report.Chains[orgID]; !ok || chain.VerifiedCount == 0 {
-					return fmt.Errorf("backup: initialized organization %q has no verifiable audit history", orgID)
-				}
+	}
+	if err == nil {
+		for _, orgID := range orgIDs {
+			if chain, ok := report.Chains[orgID]; !ok || chain.VerifiedCount == 0 {
+				return fmt.Errorf("backup: initialized organization %q has no verifiable audit history", orgID)
 			}
 		}
 	}
@@ -678,6 +702,33 @@ func verifySQLiteIntegrity(ctx context.Context, dbPath string) error {
 	}
 	if count != 1 {
 		return fmt.Errorf("backup: SQLite integrity check returned %d rows, want one", count)
+	}
+	return nil
+}
+
+func verifySQLiteForeignKeys(ctx context.Context, dbPath string) error {
+	db, err := openImmutableSQLiteDB(dbPath)
+	if err != nil {
+		return fmt.Errorf("backup: open restored SQLite snapshot for foreign-key verification: %w", err)
+	}
+	defer db.Close()
+	rows, err := db.QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		return fmt.Errorf("backup: run SQLite foreign-key check: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var table string
+		var rowID sql.NullInt64
+		var parent string
+		var constraintID int64
+		if err := rows.Scan(&table, &rowID, &parent, &constraintID); err != nil {
+			return fmt.Errorf("backup: read SQLite foreign-key violation: %w", err)
+		}
+		return fmt.Errorf("backup: SQLite foreign-key violation in %q (row=%v parent=%q constraint=%d)", table, rowID, parent, constraintID)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("backup: iterate SQLite foreign-key check: %w", err)
 	}
 	return nil
 }

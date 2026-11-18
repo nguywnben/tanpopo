@@ -43,32 +43,38 @@ func (s *Store) VerifyAllDEKEnvelopes(ctx context.Context) error {
 		} else {
 			clear(dek)
 		}
-		projectRows, err := s.db.QueryContext(ctx, `SELECT project_id FROM project_encryption_keys WHERE org_id = ? ORDER BY project_id`, orgID)
-		if err != nil {
-			return fmt.Errorf("vault: list project DEK envelopes for organization %q: %w", orgID, err)
-		}
-		var projectIDs []string
-		for projectRows.Next() {
-			var projectID string
-			if err := projectRows.Scan(&projectID); err != nil {
-				_ = projectRows.Close()
-				return fmt.Errorf("vault: read project DEK envelope key: %w", err)
-			}
-			projectIDs = append(projectIDs, projectID)
-		}
-		if err := projectRows.Err(); err != nil {
+	}
+	// Enumerate project envelopes independently so a malformed/orphaned row
+	// cannot hide behind an organization-key-driven nested scan.
+	projectRows, err := s.db.QueryContext(ctx, `SELECT org_id, project_id FROM project_encryption_keys ORDER BY org_id, project_id`)
+	if err != nil {
+		return fmt.Errorf("vault: list project DEK envelopes: %w", err)
+	}
+	type projectKey struct{ orgID, projectID string }
+	var projects []projectKey
+	for projectRows.Next() {
+		var project projectKey
+		if err := projectRows.Scan(&project.orgID, &project.projectID); err != nil {
 			_ = projectRows.Close()
-			return fmt.Errorf("vault: iterate project DEK envelopes: %w", err)
+			return fmt.Errorf("vault: read project DEK envelope key: %w", err)
 		}
-		if err := projectRows.Close(); err != nil {
-			return fmt.Errorf("vault: close project DEK query: %w", err)
+		projects = append(projects, project)
+	}
+	if err := projectRows.Err(); err != nil {
+		_ = projectRows.Close()
+		return fmt.Errorf("vault: iterate project DEK envelopes: %w", err)
+	}
+	if err := projectRows.Close(); err != nil {
+		return fmt.Errorf("vault: close project DEK query: %w", err)
+	}
+	for _, project := range projects {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-		for _, projectID := range projectIDs {
-			if _, _, dek, err := s.loadProjectDEKReadOnly(ctx, orgID, projectID); err != nil {
-				return fmt.Errorf("vault: verify project %q DEK envelope for organization %q: %w", projectID, orgID, err)
-			} else {
-				clear(dek)
-			}
+		if _, _, dek, err := s.loadProjectDEKReadOnly(ctx, project.orgID, project.projectID); err != nil {
+			return fmt.Errorf("vault: verify project %q DEK envelope for organization %q: %w", project.projectID, project.orgID, err)
+		} else {
+			clear(dek)
 		}
 	}
 	s.EvictAllDEKs()

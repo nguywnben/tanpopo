@@ -18,7 +18,10 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/finops/pricing"
+	ingresshttp "github.com/nguywnben/tanpopo/internal/ingress/http"
+	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
+	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
@@ -39,6 +42,10 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 		t.Fatal(err)
 	}
 	defer store.Close()
+	org, err := store.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "backup-ac1-org", DisplayName: "Backup AC1 Org"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	logger, err := audit.NewLogger(audit.LoggerConfig{DB: store.RawDB()})
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +88,7 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 				}
 				requestID := fmt.Sprintf("bk_%02d_%02d", worker, write)
 				_, settleErr := ledgerService.Settle(ctx, ledger.SettleRequest{
-					OrgID: "org_backup_ac1", RequestID: requestID, ProjectID: "prj_backup_ac1",
+					OrgID: org.ID, RequestID: requestID, ProjectID: "prj_backup_ac1",
 					EnvID: "env_backup_ac1", VirtualKeyID: "vky_backup_ac1", Plane: ledger.PlaneProvider,
 					Rate:  pricing.RateCard{InputPer1MNanoUSD: 1_000_000, OutputPer1MNanoUSD: 2_000_000, BillingMode: pricing.BillingModeCommercialAPI},
 					Usage: pricing.UsageInput{InputTokens: 100, OutputTokens: 25, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact},
@@ -93,7 +100,7 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 					}
 					return
 				}
-				orgID, auditRequest := "org_backup_ac1", requestID
+				orgID, auditRequest := org.ID, requestID
 				if auditErr := logger.Append(ctx, port.AuditEvent{
 					OrgID: &orgID, ActorKind: "OPERATOR", ActorID: "backup-acceptance",
 					EntryPoint: "cli", EventType: "backup.acceptance.write", TargetType: "settlement",
@@ -307,6 +314,39 @@ func TestEncryptedArchiveRestoreTracksProjectShredAndKEKRetirement(t *testing.T)
 	if err != nil {
 		t.Fatalf("initialize active Data Plane snapshot before DR-03 rotation: %v", err)
 	}
+	dataPlaneCtx, stopDataPlane := context.WithCancel(ctx)
+	watcherDone := make(chan struct{})
+	go func() {
+		defer close(watcherDone)
+		dataPlane.StartWatcher(dataPlaneCtx, 50*time.Millisecond)
+	}()
+	defer func() {
+		stopDataPlane()
+		<-watcherDone
+	}()
+	catalogRepo, err := catalog.NewRepository(catalog.Config{DB: store.RawDB(), Snapshots: dataPlane, Audit: auditLogger})
+	if err != nil {
+		t.Fatalf("initialize active Data Plane catalog: %v", err)
+	}
+	dataPlaneBroker, err := broker.NewBlindBroker(broker.Config{
+		Resolver: catalogRepo, PolicyResolver: catalogRepo, Vault: keyVault,
+		UnsealCap: vault.MintUnsealCapabilityForBroker(), Audit: auditLogger,
+	})
+	if err != nil {
+		t.Fatalf("initialize active Data Plane broker: %v", err)
+	}
+	ledgerService, err := ledger.NewService(ledger.Config{DB: store.RawDB(), Audit: auditLogger})
+	if err != nil {
+		t.Fatalf("initialize active Data Plane ledger: %v", err)
+	}
+	activeDataPlane, err := ingresshttp.NewServer(ingresshttp.ServerConfig{
+		Snapshots: dataPlane, Broker: dataPlaneBroker, Audit: auditLogger,
+		IdempotencyDB: store.RawDB(), BudgetLedger: ledgerService,
+	})
+	if err != nil {
+		t.Fatalf("initialize active Data Plane before DR-03 rotation: %v", err)
+	}
+	defer func() { _ = activeDataPlane.Close(context.Background()) }()
 	rewrap, err := keyVault.RewrapAllOrgDEKs(ctx, "kek_v1", "kek_v2")
 	if err != nil {
 		t.Fatalf("rewrap organization DEKs for DR-03: %v", err)
@@ -314,11 +354,15 @@ func TestEncryptedArchiveRestoreTracksProjectShredAndKEKRetirement(t *testing.T)
 	if rewrap.ConfigEpoch < 1 {
 		t.Fatalf("KEK rotation did not emit a restrictive configuration epoch: %+v", rewrap)
 	}
-	if err := dataPlane.Refresh(ctx); err != nil {
-		t.Fatalf("refresh active Data Plane after KEK rotation: %v", err)
-	}
-	if current := dataPlane.Current(); current == nil || current.Epoch < rewrap.ConfigEpoch {
-		t.Fatalf("old KEK must remain available until the active Data Plane reaches rotation epoch %d; current=%v", rewrap.ConfigEpoch, current)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if current := dataPlane.Current(); current != nil && current.Epoch >= rewrap.ConfigEpoch {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("old KEK must remain available until the active single-node Data Plane watcher reaches rotation epoch %d; current=%v", rewrap.ConfigEpoch, dataPlane.Current())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if err := kekV1.RetireKey("kek_v1"); err != nil {
 		t.Fatalf("retire old KEK: %v", err)
