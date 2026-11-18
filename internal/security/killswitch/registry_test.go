@@ -885,3 +885,52 @@ func TestKillSwitchRemediationDeterministicPriorityUTF8AndListInstance(t *testin
 	}
 	_ = ksWithCount
 }
+
+func TestEnsureActiveAbortBarrierReabortsAndRejectsNonAbortingSwitch(t *testing.T) {
+	t.Run("abort enabled switch severs streams registered later", func(t *testing.T) {
+		h := newKillSwitchHarness(t)
+		ctx := context.Background()
+		abort := true
+		if _, err := h.reg.Trigger(ctx, TriggerParams{
+			Level: LevelExtensionInstallation, TargetID: h.inst1ID, Reason: "quarantine extension",
+			TriggeredByPrincipalID: h.prnInstID, AbortActiveStreams: &abort,
+		}); err != nil {
+			t.Fatalf("trigger extension barrier: %v", err)
+		}
+		streamCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		h.reg.RegisterStream(StreamRegistration{PluginInstallID: h.inst1ID, Cancel: cancel})
+		severed, err := h.reg.EnsureActiveAbortBarrier(ctx, LevelExtensionInstallation, h.inst1ID, nil)
+		if err != nil || severed != 1 {
+			t.Fatalf("ensure abort barrier: severed=%d err=%v", severed, err)
+		}
+		select {
+		case <-streamCtx.Done():
+		default:
+			t.Fatal("active stream survived successful abort barrier")
+		}
+	})
+
+	t.Run("active switch without abort flag fails closed", func(t *testing.T) {
+		h := newKillSwitchHarness(t)
+		ctx := context.Background()
+		abort := false
+		if _, err := h.reg.Trigger(ctx, TriggerParams{
+			Level: LevelExtensionInstallation, TargetID: h.inst1ID, Reason: "manual hold switch",
+			TriggeredByPrincipalID: h.prnInstID, AbortActiveStreams: &abort,
+		}); err != nil {
+			t.Fatalf("trigger non-aborting switch: %v", err)
+		}
+		streamCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		h.reg.RegisterStream(StreamRegistration{PluginInstallID: h.inst1ID, Cancel: cancel})
+		if severed, err := h.reg.EnsureActiveAbortBarrier(ctx, LevelExtensionInstallation, h.inst1ID, nil); !errors.Is(err, ErrAbortBarrierDisabled) || severed != 0 {
+			t.Fatalf("expected fail-closed non-aborting switch, severed=%d err=%v", severed, err)
+		}
+		select {
+		case <-streamCtx.Done():
+			t.Fatal("stream should remain untouched when barrier verification fails")
+		default:
+		}
+	})
+}

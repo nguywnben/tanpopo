@@ -1609,6 +1609,19 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 // emits an emergency config_changelog entry (MUTATION='QUARANTINE', emergency=1), and records a
 // high-severity AuditEvent. Exported for fault_guard integration in TP-IMP-0013 (FMEA-05).
 func (s *LifecycleService) QuarantineInstallation(ctx context.Context, installationID, reason, actorID string) error {
+	return s.quarantineInstallation(ctx, installationID, 0, reason, actorID)
+}
+
+// QuarantineInstallationIfVersion applies quarantine only if the caller's ETag
+// version still matches the installation row inside the mutation transaction.
+func (s *LifecycleService) QuarantineInstallationIfVersion(ctx context.Context, installationID string, expectedVersion int64, reason, actorID string) error {
+	if expectedVersion < 1 {
+		return fmt.Errorf("%w: expected installation version must be positive", port.ErrInvalidInput)
+	}
+	return s.quarantineInstallation(ctx, installationID, expectedVersion, reason, actorID)
+}
+
+func (s *LifecycleService) quarantineInstallation(ctx context.Context, installationID string, expectedVersion int64, reason, actorID string) error {
 	if strings.TrimSpace(installationID) == "" || strings.TrimSpace(reason) == "" {
 		return fmt.Errorf("%w: installation_id and quarantine reason are required", port.ErrInvalidInput)
 	}
@@ -1630,6 +1643,9 @@ func (s *LifecycleService) QuarantineInstallation(ctx context.Context, installat
 	rowData, err := loadInstallationForTx(ctx, tx, installationID)
 	if err != nil {
 		return err
+	}
+	if expectedVersion > 0 && rowData.version != expectedVersion {
+		return port.ErrVersionConflict
 	}
 	if rowData.state == StateQuarantined {
 		return nil // idempotent quarantine

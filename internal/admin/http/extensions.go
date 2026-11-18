@@ -765,19 +765,20 @@ func (s *Server) handleQuarantineExtension(w http.ResponseWriter, r *http.Reques
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "kill_switch_unavailable", "upstream_error", "extension quarantine requires the emergency kill-switch registry", true, nil)
 		return
 	}
-	if cur.State != installer.StateQuarantined {
-		abortStreams := true
-		_, _, killErr := s.killSwitch.TriggerWithSeveredCount(r.Context(), killswitch.TriggerParams{
-			Level: killswitch.LevelExtensionInstallation, TargetID: insID, Reason: reason,
-			TriggeredByPrincipalID: sc.Actor.PrincipalID, EntryPoint: port.AuditEntryPointAdminAPI,
-			RequestID: ptrOrNil(requestIDFromContext(r.Context())), AbortActiveStreams: &abortStreams,
-		})
-		if killErr != nil && !errors.Is(killErr, killswitch.ErrAlreadyActive) {
-			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_kill_switch_failed", "upstream_error", "extension quarantine could not establish its emergency stream barrier", true, nil)
-			return
-		}
+	abortStreams := true
+	_, _, killErr := s.killSwitch.TriggerWithSeveredCount(r.Context(), killswitch.TriggerParams{
+		Level: killswitch.LevelExtensionInstallation, TargetID: insID, Reason: reason,
+		TriggeredByPrincipalID: sc.Actor.PrincipalID, EntryPoint: port.AuditEntryPointAdminAPI,
+		RequestID: ptrOrNil(requestIDFromContext(r.Context())), AbortActiveStreams: &abortStreams,
+	})
+	if errors.Is(killErr, killswitch.ErrAlreadyActive) {
+		_, killErr = s.killSwitch.EnsureActiveAbortBarrier(r.Context(), killswitch.LevelExtensionInstallation, insID, nil)
 	}
-	if err := s.installer.QuarantineInstallation(r.Context(), insID, reason, sc.Actor.PrincipalID); err != nil {
+	if killErr != nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_kill_switch_failed", "upstream_error", "extension quarantine could not establish its emergency stream barrier", true, nil)
+		return
+	}
+	if err := s.installer.QuarantineInstallationIfVersion(r.Context(), insID, expectedVer, reason, sc.Actor.PrincipalID); err != nil {
 		latest, _, _ := s.loadExtensionInstallationDTO(r.Context(), insID)
 		s.writeInstallerError(w, r, err, latest)
 		return

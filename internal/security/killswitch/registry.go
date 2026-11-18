@@ -36,9 +36,10 @@ const (
 
 // Canonical kill-switch error sentinels.
 var (
-	ErrAlreadyCleared   = errors.New("killswitch: kill switch is already cleared")
-	ErrAlreadyActive    = errors.New("killswitch: matching active kill switch already exists")
-	ErrPermissionDenied = errors.New("killswitch: insufficient role permission")
+	ErrAlreadyCleared       = errors.New("killswitch: kill switch is already cleared")
+	ErrAlreadyActive        = errors.New("killswitch: matching active kill switch already exists")
+	ErrAbortBarrierDisabled = errors.New("killswitch: active switch does not abort streams")
+	ErrPermissionDenied     = errors.New("killswitch: insufficient role permission")
 )
 
 // KillSwitch represents a persisted emergency_kill_switches record.
@@ -643,6 +644,64 @@ func (r *Registry) TriggerWithSeveredCount(ctx context.Context, p TriggerParams)
 	}
 
 	return &ks, abortedCount, nil
+}
+
+// EnsureActiveAbortBarrier verifies that a matching active kill switch is configured
+// to abort streams, then aborts any matching streams still registered. The registry
+// lock serializes this check with Trigger and Clear in this process.
+func (r *Registry) EnsureActiveAbortBarrier(ctx context.Context, level Level, targetID string, orgID *string) (int, error) {
+	targetID = strings.TrimSpace(targetID)
+	if !isValidLevel(level) || targetID == "" {
+		return 0, fmt.Errorf("%w: valid level and target_id are required", port.ErrInvalidInput)
+	}
+	var scopeOrg string
+	if orgID != nil {
+		scopeOrg = strings.TrimSpace(*orgID)
+	}
+	if scopeOrg == "" && level != LevelExtensionInstallation {
+		return 0, fmt.Errorf("%w: org_id is required for kill-switch level %s", port.ErrInvalidInput, level)
+	}
+
+	r.syncMu.Lock()
+	defer r.syncMu.Unlock()
+
+	var row *sql.Row
+	if scopeOrg == "" {
+		row = r.db.QueryRowContext(ctx, `
+			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
+			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
+			       triggered_at_ms, cleared_at_ms
+		FROM emergency_kill_switches
+		WHERE org_id IS NULL AND level = ? AND target_id = ? AND active = 1
+		ORDER BY triggered_at_ms DESC LIMIT 1`, string(level), targetID)
+	} else {
+		row = r.db.QueryRowContext(ctx, `
+			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
+			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
+			       triggered_at_ms, cleared_at_ms
+		FROM emergency_kill_switches
+		WHERE org_id = ? AND level = ? AND target_id = ? AND active = 1
+		ORDER BY triggered_at_ms DESC LIMIT 1`, scopeOrg, string(level), targetID)
+	}
+	ks, err := scanKillSwitch(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, port.ErrNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	if !ks.AbortActiveStreams {
+		return 0, ErrAbortBarrierDisabled
+	}
+
+	streamsAborted := 0
+	if r.streams != nil {
+		streamsAborted = r.streams.AbortMatching(level, scopeOrg, targetID)
+	}
+	if r.onAbort != nil {
+		r.onAbort(level, scopeOrg, targetID)
+	}
+	return streamsAborted, nil
 }
 
 // Clear lifts an active emergency kill switch under optimistic locking and records
