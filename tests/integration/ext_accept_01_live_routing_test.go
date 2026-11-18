@@ -451,7 +451,9 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	}
 	assertCore("exact settlement")
 	estimatedPrompt := "estimated" + strings.Repeat("x", 100) // The 192-byte JSON request estimates 64 input tokens; the 38-byte completion estimates 13 output tokens.
-	_ = callChat(estimatedPrompt)                             // Assert estimated settlement from the persisted ledger below.
+	if accuracy := callChat(estimatedPrompt); accuracy != "ESTIMATED" {
+		t.Fatalf("provider response without usage counters must classify ESTIMATED after ledger settlement, got %q", accuracy)
+	}
 	assertCore("estimated settlement")
 
 	if got := euRequests.Load(); got != 2 {
