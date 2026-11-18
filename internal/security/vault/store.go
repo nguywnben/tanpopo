@@ -17,13 +17,13 @@ import (
 
 // Supported secret_kind constants matching sqlite_schema.sql and postgres_schema.sql CHECK constraints.
 const (
-	SecretKindAPIKey           = "API_KEY"
-	SecretKindOAuth2TokenSet   = "OAUTH2_TOKEN_SET"
-	SecretKindHMACSecret       = "HMAC_SECRET"
-	SecretKindAWSSigV4Key      = "AWS_SIGV4_KEY"
-	SecretKindMTLSClientCert   = "MTLS_CLIENT_CERT"
-	SecretKindWebhookHMAC      = "WEBHOOK_HMAC_SECRET"
-	SecretKindOCIRegistryAuth  = "OCI_REGISTRY_AUTH"
+	SecretKindAPIKey          = "API_KEY"
+	SecretKindOAuth2TokenSet  = "OAUTH2_TOKEN_SET"
+	SecretKindHMACSecret      = "HMAC_SECRET"
+	SecretKindAWSSigV4Key     = "AWS_SIGV4_KEY"
+	SecretKindMTLSClientCert  = "MTLS_CLIENT_CERT"
+	SecretKindWebhookHMAC     = "WEBHOOK_HMAC_SECRET"
+	SecretKindOCIRegistryAuth = "OCI_REGISTRY_AUTH"
 )
 
 func isValidSecretKind(kind string) bool {
@@ -179,6 +179,40 @@ type Store struct {
 	nowMs     func() int64
 	postShred func(ctx context.Context) error
 	shredSem  chan struct{}
+}
+
+// CheckServingReady confirms that the vault still has an active Master KEK.
+func (s *Store) CheckServingReady(ctx context.Context) error {
+	if s == nil || s.kek == nil {
+		return fmt.Errorf("vault is not initialized")
+	}
+	activeKeyID, err := s.kek.ActiveKeyID(ctx)
+	if err != nil {
+		return fmt.Errorf("active Master KEK is unavailable: %w", err)
+	}
+	if strings.TrimSpace(activeKeyID) == "" {
+		return fmt.Errorf("active Master KEK is unavailable")
+	}
+	var orgID, envelopeKeyID string
+	var dekVersion int64
+	var nonce, wrapped []byte
+	err = s.db.QueryRowContext(ctx, `SELECT org_id, kek_key_id, dek_version, nonce, wrapped_org_dek
+		FROM org_encryption_keys ORDER BY org_id LIMIT 1`).Scan(&orgID, &envelopeKeyID, &dekVersion, &nonce, &wrapped)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil // A new standalone instance has no persisted Org DEK to verify yet.
+	}
+	if err != nil {
+		return fmt.Errorf("read persisted vault key envelope: %w", err)
+	}
+	if envelopeKeyID != activeKeyID {
+		return fmt.Errorf("active Master KEK does not match the persisted vault key envelope")
+	}
+	dek, err := s.kek.UnwrapDEK(ctx, envelopeKeyID, orgID, dekVersion, nonce, wrapped)
+	if err != nil {
+		return fmt.Errorf("active Master KEK cannot unwrap persisted vault key material")
+	}
+	clear(dek)
+	return nil
 }
 
 // NewStore validates dependencies and constructs a Vault Store fail-closed.

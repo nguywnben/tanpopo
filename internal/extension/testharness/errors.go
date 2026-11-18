@@ -17,8 +17,10 @@ import (
 const (
 	ExitOK         = 0
 	ExitValidation = 2
+	ExitNetwork    = 10
 	ExitSecurity   = 14
 	ExitContract   = 22
+	ExitInternal   = 30
 )
 
 // ExitError pairs a failure with its canonical SPEC-OPS-04 exit code.

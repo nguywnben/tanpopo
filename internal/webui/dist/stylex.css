@@ -1,0 +1,71 @@
+.x14i3s5s {
+  border-color: var(--color-border);
+}
+
+.xh6dtrn {
+  border-radius: var(--radius-element);
+}
+
+.x1y0btm7 {
+  border-style: solid;
+}
+
+.xmkeg23 {
+  border-width: 1px;
+}
+
+.x1txdalj {
+  gap: var(--spacing-2);
+}
+
+.xce4md1 {
+  padding-block: var(--spacing-2);
+}
+
+.xrrkdod {
+  padding-inline: var(--spacing-3);
+}
+
+.x6s0dn4:not(#\#) {
+  align-items: center;
+}
+
+.xk7eln3:not(#\#) {
+  background-color: var(--color-surface);
+}
+
+.x9f619:not(#\#) {
+  box-sizing: border-box;
+}
+
+.x1tgivj0:not(#\#) {
+  color: var(--color-text-primary);
+}
+
+.x78zum5:not(#\#) {
+  display: flex;
+}
+
+.x1a02dak:not(#\#) {
+  flex-wrap: wrap;
+}
+
+.xjb2p0i:not(#\#) {
+  font-family: inherit;
+}
+
+.x193iq5w:not(#\#):not(#\#) {
+  max-width: 100%;
+}
+
+.xeuugli:not(#\#):not(#\#) {
+  min-width: 0;
+}
+
+.xw2csxc:not(#\#):not(#\#) {
+  overflow-x: auto;
+}
+
+.xh8yej3:not(#\#):not(#\#) {
+  width: 100%;
+}

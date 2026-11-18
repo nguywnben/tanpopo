@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0030: DONE` | `0 READY / 0 READY_FOR_REVIEW / 17 BLOCKED`)**
+> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0030: DONE` | `0031 READY` | `0032..0047 BLOCKED`)**
 > - **Document ID:** `PLAN-RM-01` | **Version:** `1.40.0-dec-059-0030-done` | **Date:** `2026-11-18`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **CURRENT GOVERNANCE NOTICE (`TP-IMP-0001..0030 DONE`; `0031..0047 BLOCKED`):** Units `0001`..`0030` (`30 / 47`) are **`DONE`**: under [`DEC-058`](../governance/decisions.md) & [`DEC-059`](../governance/decisions.md), **Gemini 4 Hydrogen** remediated all PR #3 Stage 1 CI failures and accepted `TP-IMP-0030` (`CR-13` Option A per `DEC-050`) at final implementation SHA `38846e4a27cfd6f795656f248cee1bc1beee2944` (PR #3 CI run `44263375798` `100%` green across Stage 0 + all 3 OS runners, `code-reviewer` [`22029cb0`] `APPROVE`, `security-auditor` [`7ac7d58e`] `PASS`). Units `0031`..`0047` remain **`BLOCKED`** under their existing authorization and quality gates (Units 31/32 unopened; no tags/releases per `GATE-REL-07`).
+> - **CURRENT GOVERNANCE NOTICE:** Unit 30 is DONE on main SHA `7079ccc43658e0ebe96d5761b588f24e34473eb3`; post-merge Actions run `44266685476` attempt 2 is green on all four required jobs. `DEC-060` delegates Units 31–35 sequentially to GPT-6 Luna using `develop` → per-unit PR, independent reviews, four CI checks, merge, and post-merge verification. Unit 31 is READY; Units 32–35 open only after each predecessor is DONE on main; Units 36–47 remain blocked. No tags/releases (`GATE-REL-07`).
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
 >   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Current delivery is `TP-IMP-0001`..`0030` = **`DONE` (`30 / 47`)** under [`DEC-011`](../governance/decisions.md)..[`DEC-059`](../governance/decisions.md); `0 / 47` `READY`; `0 / 47` `READY_FOR_REVIEW`. Units `0031`..`0047` remain **`BLOCKED`** pending sequential gates and existing Owner authorization boundaries.
+>   3. Current delivery is `TP-IMP-0001`..`0030` = DONE; Unit `0031` is READY under `DEC-060`; `0032`..`0047` remain blocked. The active sequential batch uses persistent `develop` → per-unit PR, independent review, four checks, merge, and post-merge verification.
 
 ---
 
@@ -69,7 +69,7 @@ Each Epic owns an independent source-package boundary adhering to the **Acyclic 
 1. **Trunk-Based Development with Short-Lived Unit Branches (`Trunk-Based + Short-Lived Unit Branches`):**
    - Each `TP-IMP-xxxx` unit executes on an isolated short-lived branch `feat/tp-imp-xxxx-<slug>` (or an isolated `git worktree` directory when running parallel AI coding agents across independent units).
    - Target PR size: `150–450` lines of testable logic; merge into `main` immediately upon passing `Stage 0..3 CI` and risk-appropriate review (`STANDARD_REVIEW` vs `REQUIRES_STRONG_REVIEW`).
-   - Commit messages follow [`git-workflow-and-versioning`](../../.agents/skills/git-workflow-and-versioning/SKILL.md) (`DEC-008` as amended by `DEC-014` & `DEC-016`: standard `<type>: <short description>` or `<type>(<scope>): <short description>`, with `step <NN>` retired and every verified commit pushed immediately to `origin/main` without force-pushing or tagging/releasing).
+   - Conventional Commits remain required. For Units 31–35, `DEC-060` supersedes direct push: use persistent `develop` → per-unit PR → required independent review + Stage 0 and Stage 1 Ubuntu/macOS/Windows checks → merge → verify all four checks on actual `origin/main` SHA.
 2. **Feature Flags for In-Progress Protocol Planes (`Feature Flags`):**
    - When incrementally merging `v0.2` (`MCP Hub`, `Authorized OAuth`) or `v0.3` (`A2A Plane`, `Tier-3 Sidecar`, `Response Cache`) units into `main`, incomplete endpoints and UI navigation items default to `OFF` behind `features.enable_mcp_plane = false` and `features.enable_a2a_plane = false` (both `ON` and `OFF` states are tested in CI; flags are removed within one minor version post-GA).
 3. **Error-Budget-Gated Canary Rollout (`Canary Rollout & Error-Budget Gate`):**

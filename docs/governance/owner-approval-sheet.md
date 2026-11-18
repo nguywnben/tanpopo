@@ -1,8 +1,8 @@
 # Consolidated Product Owner Approval Sheet (`Pre-Build Gate Closure`) — Tanpopo
 
 > **Actionable Decision Sign-Off Artifact — Pre-Build Closure, Wave 1.1–2.1 Acceptance (`TP-IMP-0005`..`0020`) & `DEC-034` Batch (`0021`..`0030`)**
-> - **Document ID:** `GOV-OAS-01` | **Version:** `1.31.0-dec-045-0028-ready` | **Date:** `2026-11-17`
-> - **Current Governance Posture:** **`APPROVED_BY_OWNER` (`Stage 1 M0 = DONE` | `Stage 2 Handoff = GO` | `TP-IMP-0005..0027 = DONE [DEC-011..032, DEC-035..044]` | `TP-IMP-0028 = READY [DEC-045]` | `DEC-025 = Gemini 4 Hydrogen Delegation [0014..0020, Completed]` | `DEC-033 = REVOKED_BY_OWNER` | `DEC-041 = GPT-6 Luna Delegation [0026..0030, Sequential]` | `ACTIVE_QUEUE = 1 READY; 27 DONE; 19 BLOCKED [TP-IMP-0029..0047]`)**
+> - **Document ID:** `GOV-OAS-01` | **Version:** `1.32.0-dec-060` | **Date:** `2026-11-18`
+> - **Current Governance Posture:** `APPROVED_BY_OWNER`; Units `0001`..`0030` DONE; Unit `0031` READY; Units `0032`..`0047` blocked. Active `DEC-060` delegates Units `0031`..`0035` to GPT-6 Luna sequentially via persistent `develop` → per-unit PR → review and four CI checks → merge → main verification. `DEC-033` remains revoked; `GATE-REL-07` prohibits tags/releases.
 > - **Recorded Product Owner & Delegated Owner Rulings (`2026-11-14`–`2026-11-17` — `DEC-009`..`DEC-045` [`DEC-033 REVOKED`]):**
 >   1. **Track A (`18 items`):** **`APPROVED` (`CONFIRMED_BY_OWNER`)** across all recommended options.
 >   2. **Track B (`15 items`):** **`APPROVED_WITH_CONDITIONS` (`CONFIRMED_BY_OWNER`)** across all recommended options (`Apache-2.0`, phased scope, 3-tier sandbox, security/crypto, SQL/Valkey schemas, MCP `2025-03-26` JSON-RPC), bound to 5 mandatory conditions **`COND-PO-01`..`COND-PO-05`** recorded in [`decisions.md`](./decisions.md).

@@ -194,6 +194,17 @@ func TestArgon2idSessionCSRFAndPlaneIsolation(t *testing.T) {
 		t.Fatalf("Admin session cookie on /v1/* expected ErrInvalidCredentialPlane, got %v", err)
 	}
 
+	// Local break-glass recovery bumps principal version so sessions in another
+	// running process are revoked on their next authenticated request.
+	if _, err := st.RawDB().ExecContext(ctx, `UPDATE principals SET version = version + 1 WHERE id = ?`, prc.ID); err != nil {
+		t.Fatalf("bump principal version: %v", err)
+	}
+	reqStaleVersion := httptest.NewRequest(http.MethodGet, "https://gateway.local/admin/v1/auth/session", nil)
+	reqStaleVersion.AddCookie(cookie)
+	if _, _, err := svc.AuthenticateAdminHTTPRequest(reqStaleVersion); !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("expected principal version change to revoke session, got %v", err)
+	}
+
 	// Logout invalidates session.
 	svc.Logout(cookie.Value)
 	reqAfterLogout := httptest.NewRequest(http.MethodGet, "https://gateway.local/admin/v1/auth/session", nil)
@@ -841,4 +852,3 @@ func TestLocalServiceFailClosedTxAuditAndAtomicRollback(t *testing.T) {
 		t.Fatalf("expected 0 role_bindings after BindRole AppendTx rollback, got %d", rbCount)
 	}
 }
-

@@ -161,6 +161,48 @@ func TestArchiveKeyWrapUnwrapAndFailures(t *testing.T) {
 	}
 }
 
+func TestVaultServingReadinessTracksActiveKEK(t *testing.T) {
+	env := newVaultTestEnv(t, 0)
+	if err := env.vault.CheckServingReady(context.Background()); err != nil {
+		t.Fatalf("healthy vault reported not ready: %v", err)
+	}
+	org, err := env.sqlite.Tenancy().CreateOrganization(context.Background(), port.CreateOrgParams{Slug: "ready-org", DisplayName: "Ready Org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.vault.EnsureOrgDEK(context.Background(), org.ID); err != nil {
+		t.Fatalf("create persisted Org DEK: %v", err)
+	}
+	env.kek.Close()
+	if err := env.vault.CheckServingReady(context.Background()); err == nil {
+		t.Fatal("vault without an active Master KEK reported ready")
+	}
+}
+
+func TestVaultServingReadinessRejectsWrongButValidKEK(t *testing.T) {
+	env := newVaultTestEnv(t, 0)
+	org, err := env.sqlite.Tenancy().CreateOrganization(context.Background(), port.CreateOrgParams{Slug: "wrong-key-org", DisplayName: "Wrong Key Org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.vault.EnsureOrgDEK(context.Background(), org.ID); err != nil {
+		t.Fatalf("create persisted Org DEK: %v", err)
+	}
+	wrongKEK, err := NewStaticKEKProvider("kek_v1", random32Key(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wrongKEK.Close()
+	wrongVault, err := NewStore(Config{DB: env.sqlite.RawDB(), KEK: wrongKEK, PostShredHook: env.sqlite.CheckpointWAL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wrongVault.Close()
+	if err := wrongVault.CheckServingReady(context.Background()); err == nil {
+		t.Fatal("vault with a wrong but valid Master KEK reported ready")
+	}
+}
+
 func TestVaultSealMetadataCanaryZeroHitsOnDiskAC1(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
