@@ -60,6 +60,7 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 	const workers = 20
 	start := make(chan struct{})
 	ready := make(chan struct{}, workers)
+	firstWrite := make(chan error, workers)
 	stop := make(chan struct{})
 	var writers sync.WaitGroup
 	var failures sync.Map
@@ -84,6 +85,9 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 				})
 				if settleErr != nil {
 					failures.Store(requestID, settleErr)
+					if write == 0 {
+						firstWrite <- settleErr
+					}
 					return
 				}
 				orgID, auditRequest := "org_backup_ac1", requestID
@@ -93,7 +97,13 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 					TargetID: requestID, RequestID: &auditRequest,
 				}); auditErr != nil {
 					failures.Store(requestID, auditErr)
+					if write == 0 {
+						firstWrite <- auditErr
+					}
 					return
+				}
+				if write == 0 {
+					firstWrite <- nil
 				}
 				select {
 				case <-stop:
@@ -107,6 +117,13 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 		<-ready
 	}
 	close(start)
+	for i := 0; i < workers; i++ {
+		if writeErr := <-firstWrite; writeErr != nil {
+			close(stop)
+			writers.Wait()
+			t.Fatalf("concurrent writer failed before online snapshot: %v", writeErr)
+		}
+	}
 
 	archiveDir := filepath.Join(root, "backups")
 	receipt, err := CreateSQLite(ctx, store, newArchiveTestKeys(), archiveDir, lockPath, configPath, artifactDir, time.Now().UTC().UnixMilli())
@@ -140,8 +157,8 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM audit_events").Scan(&audits); err != nil {
 		t.Fatal(err)
 	}
-	if settlements == 0 || audits == 0 {
-		t.Fatalf("restored snapshot lost ledger/audit rows: settlements=%d audit_events=%d", settlements, audits)
+	if settlements < workers || audits < workers {
+		t.Fatalf("restored concurrent snapshot lost committed ledger/audit rows: settlements=%d audit_events=%d want at least %d of each", settlements, audits, workers)
 	}
 	verified, err := audit.VerifyAuditChain(ctx, db, audit.VerifyOptions{})
 	if err != nil || !verified.Valid {
