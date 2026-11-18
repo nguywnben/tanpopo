@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -178,13 +179,19 @@ func TestResetLocalOwnerIsAuditedAndInvalidatesSessions(t *testing.T) {
 	}
 }
 
-func TestResetLocalOwnerRequiresReadableRestrictedMasterKey(t *testing.T) {
+func TestResetLocalOwnerRejectsInsecureMasterKeyFile(t *testing.T) {
 	keyPath := filepath.Join(t.TempDir(), "master.key")
-	if err := os.WriteFile(keyPath, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(keyPath, 0o644); err != nil {
-		t.Fatal(err)
+	if runtime.GOOS == "windows" {
+		// Windows does not expose POSIX mode bits. Use a directory to exercise
+		// the platform-independent non-regular key-file rejection path.
+		keyPath = t.TempDir()
+	} else {
+		if err := os.WriteFile(keyPath, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(keyPath, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Setenv("TANPOPO_MASTER_KEY_FILE", keyPath)
 	t.Setenv("TANPOPO_MASTER_KEY", "")
