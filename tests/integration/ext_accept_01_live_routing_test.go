@@ -311,8 +311,9 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	}
 	var adapters struct {
 		Data []struct {
-			ID   string `json:"id"`
-			Slug string `json:"slug"`
+			ID        string `json:"id"`
+			Slug      string `json:"slug"`
+			PackageID string `json:"package_id"`
 		} `json:"data"`
 	}
 	adapterList := liveJSONRequest(t, client, http.MethodGet, baseURL+"/admin/v1/provider-adapters", nil, []*http.Cookie{cookie}, baseURL)
@@ -321,7 +322,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	}
 	var adapterID string
 	for _, adapter := range adapters.Data {
-		if adapter.Slug == "live-routing-adapter" {
+		if adapter.Slug == "live-routing-adapter" && adapter.PackageID == staged.PackageID {
 			adapterID = adapter.ID
 			break
 		}
@@ -344,6 +345,8 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		t.Fatalf("secret create response lacks credential ID: err=%v body=%s", err, secret.Body)
 	}
 
+	// Both regional connections below explicitly reference the adapter installed
+	// and pinned above, so streaming and update traffic traverses this extension.
 	createConnection := func(name, endpoint, region string) string {
 		t.Helper()
 		conn := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/connections", map[string]any{
@@ -595,6 +598,19 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	}, []*http.Cookie{cookie}, baseURL, map[string]string{"If-Match": approved.ETag}, loginResult.CSRFToken)
 	if escalated.Code != http.StatusAccepted || !strings.Contains(escalated.Body, `"has_escalation":true`) {
 		t.Fatalf("permission-expanding live upgrade must wait for re-consent: got %d: %s", escalated.Code, escalated.Body)
+	}
+	pendingTrafficStart := successfulTraffic.Load()
+	pendingDeadline := time.Now().Add(2 * time.Second)
+	for successfulTraffic.Load() == pendingTrafficStart && time.Now().Before(pendingDeadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if successfulTraffic.Load() == pendingTrafficStart {
+		t.Fatal("no inference succeeded while the extension upgrade was pending re-consent")
+	}
+	select {
+	case trafficErr := <-trafficErrors:
+		t.Fatalf("inference failed while the extension upgrade was pending re-consent: %v", trafficErr)
+	default:
 	}
 	var escalation struct {
 		ActiveVersion    *string `json:"active_version"`
