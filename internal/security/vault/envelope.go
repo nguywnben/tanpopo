@@ -68,6 +68,21 @@ func OrgSecretAAD(orgID, credentialID, secretKind string) ([]byte, error) {
 	return []byte("tanpopo:v1:cred:" + orgID + ":" + credentialID + ":" + secretKind), nil
 }
 
+// OAuthSessionAAD binds encrypted transient OAuth material to one organization and
+// authorization session without treating that material as a reusable credential.
+func OAuthSessionAAD(orgID, sessionID, purpose string) ([]byte, error) {
+	if err := validateAADSegment("org_id", orgID); err != nil {
+		return nil, err
+	}
+	if err := validateAADSegment("session_id", sessionID); err != nil {
+		return nil, err
+	}
+	if err := validateAADSegment("purpose", purpose); err != nil {
+		return nil, err
+	}
+	return []byte("tanpopo:v1:oauth-session:" + orgID + ":" + sessionID + ":" + purpose), nil
+}
+
 // ProjectRecordAAD builds Canonical AAD Formula 2 (SPEC-SEC-03 / ARCH-DATA-01 Section 3.1):
 // "tanpopo:v1:proj:" + org_id + ":" + project_id + ":" + record_kind + ":" + record_id.
 func ProjectRecordAAD(orgID, projectID, recordKind, recordID string) ([]byte, error) {

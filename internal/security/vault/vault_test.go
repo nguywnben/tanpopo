@@ -3298,3 +3298,33 @@ func TestVaultTxEnsureAndSealPaths(t *testing.T) {
 		t.Fatalf("idempotent EnsureProjectDEKTx: %v", err)
 	}
 }
+
+func TestVaultOAuthSessionValueUsesOrgDEKAndSessionBoundAAD(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, time.Minute)
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "oauth-session", DisplayName: "OAuth Session"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := idgen.MustNew(idgen.PrefixOAuthSession)
+	plain := []byte("pkce-verifier-sensitive")
+	nonce, ciphertext, err := env.vault.SealOAuthSessionValue(ctx, org.ID, id, "code_verifier", plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(ciphertext, plain) {
+		t.Fatal("OAuth verifier appears as plaintext in ciphertext")
+	}
+	got, err := env.vault.UnsealOAuthSessionValue(ctx, org.ID, id, "code_verifier", nonce, ciphertext)
+	if err != nil || !bytes.Equal(got, plain) {
+		t.Fatalf("unseal = %q, err=%v", got, err)
+	}
+	clear(got)
+	if _, err := env.vault.UnsealOAuthSessionValue(ctx, org.ID, id, "device_code", nonce, ciphertext); err == nil {
+		t.Fatal("ciphertext must not decrypt under another purpose")
+	}
+	if _, err := env.vault.UnsealOAuthSessionValue(ctx, org.ID, id+"x", "code_verifier", nonce, ciphertext); err == nil {
+		t.Fatal("ciphertext must not decrypt under another session")
+	}
+}

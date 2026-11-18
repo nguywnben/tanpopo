@@ -930,6 +930,64 @@ func (s *Store) UnsealProjectBlob(ctx context.Context, orgID, projectID, recordK
 	return openAESGCM(dek, aad, nonce, ciphertext)
 }
 
+// SealOAuthSessionValue encrypts short-lived OAuth protocol material under the Org DEK,
+// with AAD bound to the exact authorization session and field purpose.
+func (s *Store) SealOAuthSessionValue(ctx context.Context, orgID, sessionID, purpose string, plaintext []byte) (nonce, ciphertext []byte, err error) {
+	if len(plaintext) == 0 {
+		return nil, nil, fmt.Errorf("%w: OAuth session value cannot be empty", ErrInvalidInput)
+	}
+	aad, err := OAuthSessionAAD(orgID, sessionID, purpose)
+	if err != nil {
+		return nil, nil, err
+	}
+	pt := append([]byte(nil), plaintext...)
+	defer clear(pt)
+	now := s.nowMs()
+	gen := s.cache.generation()
+	var stage dekCacheStage
+	defer stage.clear()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("vault: begin OAuth session seal: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	_, dek, err := s.ensureOrgDEKTx(ctx, tx, orgID, now, &stage)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer clear(dek)
+	nonce, ciphertext, err = sealAESGCM(dek, aad, pt)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, nil, fmt.Errorf("vault: commit OAuth session seal: %w", err)
+	}
+	committed = true
+	stage.commit(s.cache, now, gen)
+	return nonce, ciphertext, nil
+}
+
+// UnsealOAuthSessionValue decrypts transient protocol material only for the matching session
+// and purpose. Callers must clear the returned plaintext as soon as it is consumed.
+func (s *Store) UnsealOAuthSessionValue(ctx context.Context, orgID, sessionID, purpose string, nonce, ciphertext []byte) ([]byte, error) {
+	aad, err := OAuthSessionAAD(orgID, sessionID, purpose)
+	if err != nil {
+		return nil, err
+	}
+	_, dek, err := s.loadOrgDEKReadOnly(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(dek)
+	return openAESGCM(dek, aad, nonce, ciphertext)
+}
+
 // RewrapAllOrgDEKs performs online Master KEK rotation from oldKEKID to newKEKID by atomically
 // re-wrapping org_encryption_keys rows without touching project_encryption_keys or secret_credentials,
 // appending KEY_ROTATE to config_changelog, and evicting old-KEK cached Org DEKs from RAM (DR-03 / AC-2).

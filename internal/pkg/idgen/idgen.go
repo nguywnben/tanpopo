@@ -46,6 +46,7 @@ const (
 	PrefixWebhook          = "whk"
 	PrefixAgent            = "agt"
 	PrefixTask             = "tsk"
+	PrefixOAuthSession     = "oas"
 )
 
 var canonicalPrefixes = []string{
@@ -53,7 +54,7 @@ var canonicalPrefixes = []string{
 	PrefixExtension, PrefixExtensionVersion, PrefixInstallation, PrefixAdapter, PrefixConnection,
 	PrefixLogicalModel, PrefixDeployment, PrefixPolicy, PrefixRoute, PrefixBudget,
 	PrefixReservation, PrefixSettlement, PrefixTrace, PrefixAudit, PrefixKillSwitch,
-	PrefixMCP, PrefixApproval, PrefixWebhook, PrefixAgent, PrefixTask,
+	PrefixMCP, PrefixApproval, PrefixWebhook, PrefixAgent, PrefixTask, PrefixOAuthSession,
 }
 
 var (

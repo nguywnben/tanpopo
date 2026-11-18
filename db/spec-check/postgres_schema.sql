@@ -352,12 +352,13 @@ CREATE TABLE oauth_authorization_sessions (
                           CHECK (grant_type IN ('AUTHORIZATION_CODE_PKCE', 'DEVICE_CODE', 'CLIENT_CREDENTIALS')),
     state                 VARCHAR(128) NOT NULL UNIQUE,
     code_challenge_method VARCHAR(16) NOT NULL DEFAULT 'S256' CHECK (code_challenge_method = 'S256'),
-    sealed_code_verifier  BYTEA,        -- PKCE code_verifier AEAD-sealed
+    sealed_code_verifier  BYTEA,        -- PKCE verifier or device_code AEAD-sealed
     verifier_nonce        BYTEA,
     device_code           VARCHAR(255), -- RFC 8628 device_code
     user_code             VARCHAR(64),
     verification_uri      TEXT,
     poll_interval_ms      INTEGER,
+    last_poll_at_ms       BIGINT,
     bound_resource_uri    TEXT,
     session_status        VARCHAR(24) NOT NULL DEFAULT 'PENDING'
                           CHECK (session_status IN ('PENDING', 'COMPLETED', 'EXPIRED', 'CONSUMED', 'FAILED')),

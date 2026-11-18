@@ -344,6 +344,7 @@ CREATE TABLE oauth_authorization_sessions (
     user_code             VARCHAR(64),
     verification_uri      TEXT,
     poll_interval_ms      INTEGER,
+    last_poll_at_ms       BIGINT,
     bound_resource_uri    TEXT,
     session_status        VARCHAR(24) NOT NULL DEFAULT 'PENDING'
                           CHECK (session_status IN ('PENDING', 'COMPLETED', 'EXPIRED', 'CONSUMED', 'FAILED')),
