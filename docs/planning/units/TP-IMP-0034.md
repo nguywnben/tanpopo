@@ -5,7 +5,7 @@
 | **Unit ID** | `TP-IMP-0034` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
 | **Status** | **`READY`** *(Opened under `DEC-063`; DoR verified: `TP-IMP-0003`, `TP-IMP-0010`, and `TP-IMP-0024` are DONE; `GAP-01` and `GAP-04` are closed; predecessor Unit 33 is DONE on main with green acceptance CI)* |
-| **Size** | `L` (`internal/security/oauth/*`, `internal/admin/http/oauth.go`, `db/migrations/sqlite/0011_oauth_sessions.sql`) |
+| **Size** | `L` (`internal/security/oauth/*`, `internal/admin/http/oauth.go`, `db/migrations/sqlite/0016_oauth_sessions.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(OAuth 2.1 authorization flows, `RFC 8707` cross-audience token-theft prevention, `FMEA-08` refresh stampede protection & `DEC-004` compliance)* |
 | **Technical Owner** | `Principal Identity & Security Engineer` |
 
@@ -28,6 +28,7 @@ Implement the Host-managed **`Authorized OAuth 2.1`** coordinator (`TP-FR-0205`,
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0205`, `TP-BR-0301`..`0304`, `DEC-004`, `SM-03`, `CT-19`, `AUTH-09`, `AUTH-10`, `AUTH-16`, `FMEA-08`, `INC-05`.
 - **Dependencies:** `TP-IMP-0010`, `TP-IMP-0024`.
+- **Implementation decisions:** [`DEC-064`](../../governance/decisions.md) assigns the next additive migration slot (`0016`, since `0011`..`0015` are already in use) and requires OAuth API paths to match `openapi/admin-v1.yaml`, including adding the missing device-poll operation.
 - **Design Refs:** [`authentication-connections.md`](../../specifications/authentication-connections.md) (`SPEC-EXT-03`), [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md) Section 3.3, [`nonfunctional-slo.md`](../../quality/nonfunctional-slo.md) (`FMEA-08`), [`contract-test-matrix.md`](../../quality/contract-test-matrix.md) (`CT-19`, `AUTH-09`, `AUTH-10`, `AUTH-16`).
 
 ## 4. API, Wire & Data Contracts
@@ -47,7 +48,7 @@ Implement the Host-managed **`Authorized OAuth 2.1`** coordinator (`TP-FR-0205`,
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** `access_token`, `refresh_token`, and `code_verifier` values are sealed under `AEAD AAD` with transient plaintext byte slices zeroed immediately after use; `0` token bytes appear in post-callback UI redirect URLs.
-- **Rollback:** Additive `0011_oauth_sessions.sql` migration; `OAUTH2` connections can be set to `DISABLED` without affecting `API_KEY` connections.
+- **Rollback:** Additive `0016_oauth_sessions.sql` migration; `OAUTH2` connections can be set to `DISABLED` without affecting `API_KEY` connections.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0003` (`oauth_authorization_sessions` DDL), `TP-IMP-0010`, and `TP-IMP-0024` are complete.
