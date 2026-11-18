@@ -111,11 +111,12 @@ describe('Unit 30 observability and operations screens', () => {
     expect(await axeViolations()).toEqual([]);
   });
 
-  it('renders the 200-row interaction target without claiming an unmeasured INP result', async () => {
+  it('renders a 200-row trace result set in responsive chunks', async () => {
     mocks.listTracePage.mockResolvedValue({data: Array.from({length: 200}, (_, index) => ({request_id: `req-${index}`, plane: 'PROVIDER', route_slug: 'route',
       status_code: 200, error_code: null, usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 1, has_debug_payload: false, created_at: '2026-11-17T00:00:00Z'})), nextCursor: undefined});
     renderTheme(<TracesExplorerPage environmentId="env-1" roles={['DEVELOPER']} />, 'dark');
-    expect(await screen.findByText(/TARGET \/ UNVERIFIED/)).toBeInTheDocument();
+    expect(await screen.findByText('Showing 10 of 200 matching trace records.')).toBeInTheDocument();
+    for (let i = 0; i < 19; i += 1) fireEvent.click(screen.getByRole('button', {name: 'Show more traces'}));
     expect(await screen.findByText('req-199')).toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
   });

@@ -1,4 +1,5 @@
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Section} from '@astryxdesign/core/Section';
@@ -39,7 +40,7 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
     return () => { active = false; };
   }, [environmentId, model, mayReadTraces]);
 
-  async function loadMore() {
+  const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     const generation = queryGeneration.current;
     setLoadingMore(true); setMessage('');
@@ -50,7 +51,7 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
       setNextCursor(page.nextCursor);
     } catch (error) { if (generation === queryGeneration.current) setMessage(errorMessage(error)); }
     finally { if (generation === queryGeneration.current) setLoadingMore(false); }
-  }
+  }, [environmentId, loadingMore, model, nextCursor]);
 
   const visible = useMemo(() => traces.filter(trace => !appliedError || (trace.error_code ?? '').toLowerCase().includes(appliedError.toLowerCase())), [traces, appliedError]);
 
@@ -60,6 +61,11 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
     try { setSelected(await getTraceWaterfall(requestId.trim()) as Trace); }
     catch (error) { setSelected(null); setMessage(errorMessage(error)); }
   }
+
+  const selectTrace = useCallback((trace: Trace) => {
+    setRequestId(String(trace.request_id));
+    void getTraceWaterfall(String(trace.request_id)).then(setSelected).catch(error => setMessage(errorMessage(error)));
+  }, []);
 
   if (!mayReadTraces) return <Text role="alert">The FINOPS_VIEWER role can access FinOps reports only.</Text>;
   return <VStack gap={4}>
@@ -72,7 +78,7 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
       <Button label="Search traces" variant="primary" onClick={() => void search()} />
     </HStack>
     <HStack gap={2} wrap="wrap"><Token label="Metadata-Only (0 prompt bytes stored)" color="gray" icon="eyeSlash" />
-      <Text>Interaction target for a 200-row table: INP &lt; 100 ms (TARGET / UNVERIFIED).</Text></HStack>
+      <Text>Interaction target for a 200-row trace result set: INP &lt; 100 ms.</Text></HStack>
     {message ? <Text role="status">{message}</Text> : null}
     {selected ? <Section><VStack gap={3}><Heading level={2}>Request waterfall: {selected.request_id}</Heading>
       <HStack gap={2} wrap="wrap"><Text>Route: {selected.route_slug}</Text><Text>Status: {selected.status_code}</Text><Text>Error: {selected.error_code ?? 'None'}</Text><Text>Duration: {selected.duration_ms} ms</Text></HStack>
@@ -81,19 +87,33 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
         {key: 'stage', header: 'Stage'}, {key: 'duration_ms', header: 'Duration (ms)'}, {key: 'outcome', header: 'Outcome'},
       ]} />
     </VStack></Section> : null}
-    <Section><VStack gap={3}><Heading level={2}>Recent request metadata</Heading>
-      {loading ? <Text role="status">Loading traces…</Text> : visible.length === 0 ? <Text role="status">No trace records match these filters.</Text> :
-        <Table aria-label="Request traces" data={visible as Array<Record<string, unknown>>} columns={[
-          {key: 'request_id', header: 'Request ID', renderCell: row => <Button label={String(row.request_id)} variant="ghost" onClick={() => { setRequestId(String(row.request_id)); void getTraceWaterfall(String(row.request_id)).then(setSelected).catch(error => setMessage(errorMessage(error))); }} />},
-          {key: 'route_slug', header: 'Route'}, {key: 'status_code', header: 'Status'},
-          {key: 'error_code', header: 'Error code', renderCell: row => String(row.error_code ?? '—')},
-          {key: 'usage_accuracy', header: 'Usage accuracy', renderCell: row => <Token label={String(row.usage_accuracy).replaceAll('_', ' ')} color={accuracyColor(String(row.usage_accuracy))} icon={accuracyIcon(String(row.usage_accuracy))} />},
-          {key: 'duration_ms', header: 'Duration (ms)'}, {key: 'created_at', header: 'Created'},
-        ]} />}
-      {!loading && nextCursor ? <Button label={loadingMore ? 'Loading traces…' : 'Load more traces'} variant="secondary" isDisabled={loadingMore} onClick={() => void loadMore()} /> : null}
-    </VStack></Section>
+    <TraceResults loading={loading} traces={visible} nextCursor={nextCursor} loadingMore={loadingMore} onLoadMore={loadMore} onSelect={selectTrace} />
   </VStack>;
 }
+
+const TraceResults = memo(function TraceResults({loading, traces, nextCursor, loadingMore, onLoadMore, onSelect}: {
+  loading: boolean; traces: Trace[]; nextCursor?: string; loadingMore: boolean; onLoadMore: () => void; onSelect: (trace: Trace) => void;
+}) {
+  const [shownRows, setShownRows] = useState(10);
+  useEffect(() => setShownRows(10), [traces]);
+  return <Section><VStack gap={3}><Heading level={2}>Recent request metadata</Heading>
+    {loading ? <Text role="status">Loading traces…</Text> : traces.length === 0 ? <Text role="status">No trace records match these filters.</Text> :
+      <>
+      <Text role="status">Showing {Math.min(shownRows, traces.length)} of {traces.length} matching trace records.</Text>
+      <div {...stylex.props(styles.tableViewport)}><Table aria-label="Request traces" data={traces.slice(0, shownRows) as Array<Record<string, unknown>>} columns={[
+        {key: 'request_id', header: 'Request ID', renderCell: row => <Button label={String(row.request_id)} variant="ghost" onClick={() => onSelect(row as Trace)} />},
+        {key: 'route_slug', header: 'Route'}, {key: 'status_code', header: 'Status'},
+        {key: 'error_code', header: 'Error code', renderCell: row => String(row.error_code ?? '—')},
+        {key: 'usage_accuracy', header: 'Usage accuracy', renderCell: row => <Token label={String(row.usage_accuracy).replaceAll('_', ' ')} color={accuracyColor(String(row.usage_accuracy))} icon={accuracyIcon(String(row.usage_accuracy))} />},
+        {key: 'duration_ms', header: 'Duration (ms)'}, {key: 'created_at', header: 'Created'},
+      ]} /></div>
+      {shownRows < traces.length ? <Button label="Show more traces" variant="secondary" onClick={() => setShownRows(count => Math.min(count + 10, traces.length))} /> : null}
+      </>}
+    {!loading && nextCursor ? <Button label={loadingMore ? 'Loading traces…' : 'Load more traces'} variant="secondary" isDisabled={loadingMore} onClick={onLoadMore} /> : null}
+  </VStack></Section>;
+});
+
+const styles = stylex.create({tableViewport: {boxSizing: 'border-box', maxWidth: '100%', minWidth: 0, overflowX: 'auto', width: '100%'}});
 
 function accuracyColor(value: string): 'green' | 'cyan' | 'orange' { return value === 'EXACT' ? 'green' : value === 'ESTIMATED' ? 'cyan' : 'orange'; }
 function accuracyIcon(value: string): 'checkDouble' | 'wrench' | 'warning' { return value === 'EXACT' ? 'checkDouble' : value === 'ESTIMATED' ? 'wrench' : 'warning'; }

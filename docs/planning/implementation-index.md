@@ -1,7 +1,7 @@
 # Implementation Units Master Index (`47` Units) — Tanpopo
 
-> **Execution Orchestration Master Index (Gate G4 Approved · `TP-IMP-0029` `DONE` [`DEC-048`] · `TP-IMP-0030` `READY_FOR_REVIEW` [`DEC-052`] · `DEC-033` `REVOKED_BY_OWNER` — `29 DONE`, `0 READY`, `1 READY_FOR_REVIEW`, `17 BLOCKED`)**
-> - **Document ID:** `PLAN-IDX-01` | **Version:** `1.42.0-dec-052-0030-review` | **Last Updated:** `2026-11-18`
+> **Execution Orchestration Master Index (Gate G4 Approved · `TP-IMP-0029` `DONE` [`DEC-048`] · `TP-IMP-0030` `READY_FOR_REVIEW` [`DEC-053`] · `DEC-033` `REVOKED_BY_OWNER` — `29 DONE`, `0 READY`, `1 READY_FOR_REVIEW`, `17 BLOCKED`)**
+> - **Document ID:** `PLAN-IDX-01` | **Version:** `1.43.0-dec-053-0030-review` | **Last Updated:** `2026-11-18`
 > - **Current frontier:** `TP-IMP-0001..0029` = `DONE`; Unit 29 acceptance CI `44092664075` is green; Unit 30 is `READY_FOR_REVIEW` under [`DEC-052`](../governance/decisions.md) after final implementation and independent review. PR run `44226510663` is green across all existing gates; do not record `DONE` before acceptance CI on `origin/main`. `TP-IMP-0031..0047` remain `BLOCKED` (`29 DONE`, `1 READY_FOR_REVIEW`, `17 BLOCKED`).
 > - **Mandatory Pre-Execution Reading Before Starting Any `UNIT_ID`:** [`docs/governance/execution-baseline.md`](../governance/execution-baseline.md) (`EXEC-BL-001-APPROVED` — Global Engineering Conventions & Execution Handoff Contract) and [`docs/reviews/execution-readiness.md`](../reviews/execution-readiness.md) (`REV-RDY-01` — Stage 2 `GO` Verdict & Evidence Boundaries).
 > - **Honest Readiness Status Rules (`Honest Readiness Status`):**
