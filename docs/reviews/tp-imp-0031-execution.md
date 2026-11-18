@@ -14,13 +14,15 @@
 - Added an HTTP handler with SPA history fallback, API path exclusion, missing-asset 404 behavior, content security and anti-framing headers, immutable caching for hashed assets, gzip negotiation, and matching `HEAD` representation metadata.
 - Added tests for security headers, SPA fallback, API and asset 404s, gzip quality values, cache headers, and `HEAD` behavior.
 - Added a `tanpopo support-bundle -o` command that collects bounded config, lock, metrics, and log inputs; applies structured metadata redaction, strips Master Key assignments from malformed/plain-text inputs, scans the final archive, enforces owner-only file modes, and refuses symlinked or replaced log-directory/file inputs and output collisions.
+- Added the first remote read-only CLI command groups for `config`, `provider`, `model`, `route`, `key`, `budget`, `audit`, and `killswitch`, including JSON/table/YAML serialization, canonical exit codes, terminal escape sanitization, and a default SSRF-guarded Admin API client. This is a checkpoint only; command coverage and route-explain behavior still need completion.
 - Moved the reusable canary scanner into `internal/security/canary` so production code follows the repository rule against importing `internal/testkit`.
 - Reviewer findings on gzip quality parsing, `Vary`, `HEAD` lengths, and bundle inclusion were addressed before approval.
 - Windows CI follow-up: the POSIX mode-bit assertion is now conditional on non-Windows systems; Windows creates support archives with a protected owner-only DACL supplied at file creation, verifies that ACL before writing, and has ACL tests for both creation and final bundle output. The rooted-directory regression accepts Windows' refusal to rename an open directory only after confirming the original directory identity remains at the path.
 
 ## Verification Evidence
 
-- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -count=1 ./...` — passed after the final code changes.
+- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -count=1 ./...`, `go run ./scripts/ci/check.go --all`, and targeted race/build/vet checks — passed before the final Windows ACL creator/integration-test refinement; these whole-repo gates must be rerun on the current diff.
+- Focused CLI checkpoint: `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test ./cmd/tanpopo ./internal/cli/... ./internal/extension/testharness` — passed after the command-tree checkpoint.
 - `go run ./scripts/ci/check.go --all` — passed.
 - `go test -race ./internal/webui/... ./internal/cli/support/... ./internal/security/canary/...` — passed.
 - `CGO_ENABLED=0 go build ./cmd/tanpopo` — passed.
@@ -31,7 +33,7 @@
 
 ## Remaining Unit 31 Scope
 
-The full CLI command tree and output contract, fully wired single-binary Data Plane/Admin API/Console server, local-only owner recovery, support-bundle doctor/probe diagnostics, and their required acceptance tests remain outstanding. Do not mark TP-IMP-0031 `DONE` until those items and all required GitHub checks are verified.
+The expanded CLI command tree and output contract, fully wired single-binary Data Plane/Admin API/Console server, local-only owner recovery, support-bundle doctor/probe diagnostics, and their required acceptance tests remain outstanding. Do not mark TP-IMP-0031 `DONE` until those items and all required GitHub checks are verified.
 
 ## Delivery Blocker
 

@@ -5,7 +5,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nguywnben/tanpopo/internal/cli/plugin"
+	"github.com/nguywnben/tanpopo/internal/cli/remote"
 	"github.com/nguywnben/tanpopo/internal/cli/support"
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
 )
@@ -72,15 +72,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}),
 		support.NewCommand(support.Options{RootDir: ".", Stdout: stdout}),
 	)
+	for _, command := range remote.NewCommands(remote.Options{
+		OutputFormat: &outputFmt,
+		Stdout:       stdout,
+		Stderr:       stderr,
+	}) {
+		rootCmd.AddCommand(command)
+	}
 
 	if err := rootCmd.Execute(); err != nil {
-		code := testharness.ExitValidation
-		var ex *testharness.ExitError
-		if errors.As(err, &ex) && ex.Code != 0 {
-			code = ex.Code
-		}
 		_, _ = fmt.Fprintf(stderr, "tanpopo: %s\n", testharness.SanitizeTerminalText(err.Error()))
-		return code
+		return testharness.CodeOf(err)
 	}
 	return testharness.ExitOK
 }
