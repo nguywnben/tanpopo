@@ -1256,7 +1256,7 @@ export interface paths {
         put?: never;
         /**
          * Trigger hot Master-KEK-sealed .tpop.enc backup archive (OPERATOR only) (SCR-16)
-         * @description Backup creation is available only on Linux hosts where /dev/shm is verified as volatile tmpfs and swap is disabled. Other platforms return 503; the Operations UI reports this limitation and disables the action.
+         * @description Backup creation uses verified /dev/shm tmpfs with swap disabled on Linux, and an in-memory SQLite online snapshot on macOS/Windows. macOS relies on OS-encrypted swap; Windows requires NtfsEncryptPagingFile=1 to have been applied before the current boot (the registry key must predate boot by at least two minutes). Plaintext database snapshots are never staged as files on those hosts. Unsupported or unprotected hosts return 503.
          */
         post: operations["triggerEncryptedBackup"];
         delete?: never;
@@ -4917,9 +4917,9 @@ export interface operations {
                         current_epoch: number;
                         /** @enum {string} */
                         storage_engine: "sqlite_wal" | "postgres";
-                        /** @description True only when encrypted plaintext staging prerequisites are verified. v0.1 currently supports Linux hosts with /dev/shm tmpfs and swap disabled. */
+                        /** @description True on Linux with verified /dev/shm tmpfs and swap disabled; on macOS with OS-encrypted swap; and on Windows when NtfsEncryptPagingFile=1 was applied before the current boot. macOS and Windows use in-memory SQLite snapshots. */
                         backup_supported: boolean;
-                        /** @description Empty when backup_supported is true; otherwise explains the fail-closed platform prerequisite. */
+                        /** @description Empty when backup_supported is true; otherwise explains the missing secure staging or encrypted-paging prerequisite. */
                         backup_unavailable_reason: string;
                         nodes: {
                             id?: string;
