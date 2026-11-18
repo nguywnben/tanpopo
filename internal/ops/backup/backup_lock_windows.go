@@ -7,7 +7,11 @@ package backup
 
 import (
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -43,7 +47,19 @@ func windowsPagingFileEncryptionEnabled() bool {
 	}
 	defer key.Close()
 	value, valueType, err := key.GetIntegerValue("NtfsEncryptPagingFile")
-	return err == nil && valueType == registry.DWORD && value == 1
+	if err != nil {
+		return false
+	}
+	info, err := key.Stat()
+	if err != nil {
+		return false
+	}
+	bootTime := time.Now().Add(-windows.DurationSinceBoot())
+	return windowsPagingFileEncryptionApplied(value, valueType, info.ModTime(), bootTime)
+}
+
+func windowsPagingFileEncryptionApplied(value uint64, valueType uint32, registryModified, bootTime time.Time) bool {
+	return valueType == registry.DWORD && value == 1 && registryModified.Before(bootTime.Add(-2*time.Minute))
 }
 
 func secureWindowsOutputRoot(root *os.Root) error {
@@ -52,7 +68,10 @@ func secureWindowsOutputRoot(root *os.Root) error {
 	if err != nil {
 		return err
 	}
-	handle, err := windows.CreateFile(windows.StringToUTF16Ptr(rootPath), windows.WRITE_DAC|windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	// Deny new directory handles that can add, remove, or link files while
+	// existing child ACLs are inspected and hardened. If a conflicting writable
+	// handle already exists, fail closed before changing any child ACL.
+	handle, err := windows.CreateFile(windows.StringToUTF16Ptr(rootPath), windows.WRITE_DAC|windows.READ_CONTROL, windows.FILE_SHARE_READ, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 	if err != nil {
 		return err
 	}
@@ -66,7 +85,67 @@ func secureWindowsOutputRoot(root *os.Root) error {
 	if err != nil {
 		return err
 	}
+	if err := windows.SetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil); err != nil {
+		return err
+	}
+	return secureExistingWindowsChildren(root)
+}
+
+func secureExistingWindowsChildren(root *os.Root) error {
+	entries, err := fs.ReadDir(root.FS(), ".")
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		info, err := root.Lstat(entry.Name())
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || info.IsDir() || !info.Mode().IsRegular() {
+			return fmt.Errorf("backup: unexpected non-regular entry %q in Windows backup directory", entry.Name())
+		}
+		if err := secureWindowsChild(root, entry.Name(), info); err != nil {
+			return fmt.Errorf("backup: secure existing backup entry %q: %w", entry.Name(), err)
+		}
+	}
+	return nil
+}
+
+func secureWindowsChild(root *os.Root, name string, expected os.FileInfo) error {
+	path := filepath.Join(root.Name(), name)
+	handle, err := windows.CreateFile(windows.StringToUTF16Ptr(path), windows.WRITE_DAC|windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		return err
+	}
+	file := os.NewFile(uintptr(handle), path)
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(expected, opened) {
+		return errors.New("backup: existing output entry changed while securing its Windows ACL")
+	}
+	var info windows.ByHandleFileInformation
+	if err := windows.GetFileInformationByHandle(handle, &info); err != nil {
+		return err
+	}
+	if info.NumberOfLinks != 1 {
+		return errors.New("backup: output files with hard links outside the backup directory are not allowed")
+	}
+	acl, err := privateWindowsACL(false)
+	if err != nil {
+		return err
+	}
 	return windows.SetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
+}
+
+func secureOutputFile(root *os.Root, name string) error {
+	info, err := root.Lstat(name)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("backup: output archive must be a regular non-symlink file")
+	}
+	return secureWindowsChild(root, name, info)
 }
 
 func secureOutputRoot(root *os.Root) error { return secureWindowsOutputRoot(root) }

@@ -210,6 +210,9 @@ func writeMemoryPayload(ctx context.Context, database, lockfile, config []byte, 
 			_ = dstRoot.Remove(destPath)
 		}
 	}()
+	if err := secureOutputFile(dstRoot, destPath); err != nil {
+		return fmt.Errorf("backup: protect encrypted archive ACL: %w", err)
+	}
 	if _, err := io.WriteString(dst, archiveMagic); err != nil {
 		return err
 	}

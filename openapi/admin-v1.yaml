@@ -3297,7 +3297,7 @@ paths:
                 properties:
                   current_epoch: { type: integer }
                   storage_engine: { type: string, enum: [sqlite_wal, postgres] }
-                  backup_supported: { type: boolean, description: "True on Linux with verified /dev/shm tmpfs and swap disabled; on macOS with the OS-encrypted swap; and on Windows when NTFS paging-file encryption is enabled, using in-memory SQLite snapshots." }
+                  backup_supported: { type: boolean, description: "True on Linux with verified /dev/shm tmpfs and swap disabled; on macOS with OS-encrypted swap; and on Windows when NtfsEncryptPagingFile=1 was applied before the current boot. macOS and Windows use in-memory SQLite snapshots." }
                   backup_unavailable_reason: { type: string, description: "Empty when backup_supported is true; otherwise explains the missing secure staging or encrypted-paging prerequisite." }
                   nodes:
                     type: array
@@ -3316,7 +3316,7 @@ paths:
       tags: [DevToolsAndOps]
       operationId: triggerEncryptedBackup
       summary: Trigger hot Master-KEK-sealed .tpop.enc backup archive (OPERATOR only) (SCR-16)
-      description: "Backup creation uses verified /dev/shm tmpfs with swap disabled on Linux, and an in-memory SQLite online snapshot on macOS/Windows. macOS relies on OS-encrypted swap; Windows requires NtfsEncryptPagingFile=1 so paged memory is protected. Plaintext database snapshots are never staged as files on those hosts. Unsupported or unprotected hosts return 503."
+      description: "Backup creation uses verified /dev/shm tmpfs with swap disabled on Linux, and an in-memory SQLite online snapshot on macOS/Windows. macOS relies on OS-encrypted swap; Windows requires NtfsEncryptPagingFile=1 to have been applied before the current boot (the registry key must predate boot by at least two minutes). Plaintext database snapshots are never staged as files on those hosts. Unsupported or unprotected hosts return 503."
       parameters:
         - $ref: "#/components/parameters/CsrfTokenHeader"
         - $ref: "#/components/parameters/IdempotencyKeyHeader"

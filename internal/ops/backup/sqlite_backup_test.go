@@ -8,6 +8,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -194,6 +196,53 @@ func TestChunkAADAuthenticatesEnvelopeHeader(t *testing.T) {
 	modified := chunkAAD("backup-id", 3, []byte(`{"format_version":1,"compression":"other"}`))
 	if bytes.Equal(first, modified) {
 		t.Fatal("changing envelope metadata did not change the chunk authentication data")
+	}
+}
+
+func TestPublishMemoryArchiveIsAtomicAndDoesNotReplace(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	write := func(name, content string) error {
+		f, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		_, writeErr := f.Write([]byte(content))
+		return errors.Join(writeErr, f.Close())
+	}
+	if err := write(".backup.partial", "complete ciphertext"); err != nil {
+		t.Fatal(err)
+	}
+	if err := publishMemoryArchive(root, ".backup.partial", "backup.tpop.enc"); err != nil {
+		t.Fatalf("publish completed archive: %v", err)
+	}
+	if _, err := root.Lstat(".backup.partial"); !os.IsNotExist(err) {
+		t.Fatalf("partial archive remains after publication: %v", err)
+	}
+	read := func(name string) ([]byte, error) {
+		f, err := root.Open(name)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		return io.ReadAll(f)
+	}
+	published, err := read("backup.tpop.enc")
+	if err != nil || string(published) != "complete ciphertext" {
+		t.Fatalf("published archive=%q err=%v", published, err)
+	}
+	if err := write(".backup.partial", "replacement"); err != nil {
+		t.Fatal(err)
+	}
+	if err := publishMemoryArchive(root, ".backup.partial", "backup.tpop.enc"); err == nil {
+		t.Fatal("publish unexpectedly replaced an existing archive")
+	}
+	unchanged, err := read("backup.tpop.enc")
+	if err != nil || string(unchanged) != "complete ciphertext" {
+		t.Fatalf("existing archive changed: %q err=%v", unchanged, err)
 	}
 }
 
