@@ -21,6 +21,10 @@ func PlatformSupported() bool {
 	return syscall.Statfs("/dev/shm", &stat) == nil && uint64(stat.Type) == linuxTmpfsMagic && verifyNoActiveSwap() == nil
 }
 
+func PlatformSupportUnavailableReason() string {
+	return "Encrypted backups require verified /dev/shm tmpfs staging with swap disabled."
+}
+
 func openStagingRoot(outputRoot *os.Root) (*os.Root, func() error, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs("/dev/shm", &stat); err != nil {

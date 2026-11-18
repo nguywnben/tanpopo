@@ -3297,8 +3297,8 @@ paths:
                 properties:
                   current_epoch: { type: integer }
                   storage_engine: { type: string, enum: [sqlite_wal, postgres] }
-                  backup_supported: { type: boolean, description: "True for supported Linux hosts with verified /dev/shm tmpfs and swap disabled, and for macOS/Windows hosts using in-memory SQLite snapshots." }
-                  backup_unavailable_reason: { type: string, description: "Empty when backup_supported is true; otherwise explains why this host cannot create a protected backup." }
+                  backup_supported: { type: boolean, description: "True on Linux with verified /dev/shm tmpfs and swap disabled; on macOS with the OS-encrypted swap; and on Windows when NTFS paging-file encryption is enabled, using in-memory SQLite snapshots." }
+                  backup_unavailable_reason: { type: string, description: "Empty when backup_supported is true; otherwise explains the missing secure staging or encrypted-paging prerequisite." }
                   nodes:
                     type: array
                     items:
@@ -3316,7 +3316,7 @@ paths:
       tags: [DevToolsAndOps]
       operationId: triggerEncryptedBackup
       summary: Trigger hot Master-KEK-sealed .tpop.enc backup archive (OPERATOR only) (SCR-16)
-      description: "Backup creation uses verified /dev/shm tmpfs with swap disabled on Linux, and an in-memory SQLite online snapshot on macOS and Windows; plaintext database snapshots are never staged on disk on those hosts. Unsupported platforms return 503."
+      description: "Backup creation uses verified /dev/shm tmpfs with swap disabled on Linux, and an in-memory SQLite online snapshot on macOS/Windows. macOS relies on OS-encrypted swap; Windows requires NtfsEncryptPagingFile=1 so paged memory is protected. Plaintext database snapshots are never staged as files on those hosts. Unsupported or unprotected hosts return 503."
       parameters:
         - $ref: "#/components/parameters/CsrfTokenHeader"
         - $ref: "#/components/parameters/IdempotencyKeyHeader"

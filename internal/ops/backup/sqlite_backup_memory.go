@@ -117,8 +117,18 @@ func createSQLiteMemory(ctx context.Context, store Snapshotter, keys KeyWrapper,
 		return Receipt{}, err
 	}
 	finalName := "tanpopo-backup-" + backupID + ".tpop.enc"
-	if err := writeMemoryPayload(ctx, database, lockfile, config, artifactRoot, artifacts, m, outputRoot, finalName, dataKey, noncePrefix, backupID, headerBytes); err != nil {
+	tempName := ".tanpopo-backup-" + backupID + ".partial"
+	defer outputRoot.Remove(tempName)
+	if err := writeMemoryPayload(ctx, database, lockfile, config, artifactRoot, artifacts, m, outputRoot, tempName, dataKey, noncePrefix, backupID, headerBytes); err != nil {
 		return Receipt{}, err
+	}
+	if _, err := outputRoot.Lstat(finalName); err == nil {
+		return Receipt{}, errors.New("backup: destination archive already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Receipt{}, fmt.Errorf("backup: inspect archive destination: %w", err)
+	}
+	if err := publishMemoryArchive(outputRoot, tempName, finalName); err != nil {
+		return Receipt{}, fmt.Errorf("backup: publish encrypted archive: %w", err)
 	}
 	archiveHash, err := fileSHA256(outputRoot, finalName)
 	if err != nil {

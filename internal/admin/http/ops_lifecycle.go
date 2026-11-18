@@ -85,7 +85,7 @@ func backupAvailability() (bool, string) {
 	if backup.PlatformSupported() {
 		return true, ""
 	}
-	return false, "Encrypted backups require Linux /dev/shm tmpfs staging with swap disabled."
+	return false, backup.PlatformSupportUnavailableReason()
 }
 
 func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Request) {

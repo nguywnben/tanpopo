@@ -93,6 +93,9 @@ func CreateSQLite(ctx context.Context, store Snapshotter, keys KeyWrapper, outpu
 		return Receipt{}, errors.New("backup: snapshotter, key wrapper, output directory, lockfile, config file, and artifact directory are required")
 	}
 	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		if !PlatformSupported() {
+			return Receipt{}, errors.New(PlatformSupportUnavailableReason())
+		}
 		return createSQLiteMemory(ctx, store, keys, outputDir, lockfilePath, configPath, artifactDir, nowMs)
 	}
 	if runtime.GOOS != "linux" {
@@ -333,6 +336,10 @@ func openOutputRoot(outputDir string) (*os.Root, error) {
 	if err != nil || entryInfo.Mode()&os.ModeSymlink != 0 || !os.SameFile(openedInfo, entryInfo) {
 		_ = root.Close()
 		return nil, errors.New("backup: output directory changed during secure open")
+	}
+	if err := secureOutputRoot(root); err != nil {
+		_ = root.Close()
+		return nil, fmt.Errorf("backup: secure output directory permissions: %w", err)
 	}
 	if runtime.GOOS != "windows" {
 		rootFile, rootPath, pathErr := pathForOpenRoot(root)

@@ -173,11 +173,7 @@ func testCreateSQLiteMemoryProducesProtectedEncryptedArchive(t *testing.T) {
 		}
 	}
 	keys := &testKeyWrapper{}
-	createBackup := createSQLiteMemory
-	if runtime.GOOS != "linux" {
-		createBackup = CreateSQLite
-	}
-	receipt, err := createBackup(context.Background(), testSnapshotter{content: plainDB}, keys, outputDir, lockfile, config, artifactDir, 1_795_000_000_000)
+	receipt, err := createSQLiteMemory(context.Background(), testSnapshotter{content: plainDB}, keys, outputDir, lockfile, config, artifactDir, 1_795_000_000_000)
 	if err != nil {
 		t.Fatalf("createSQLiteMemory: %v", err)
 	}
