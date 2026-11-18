@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/nguywnben/tanpopo/internal/security/audit"
 	_ "modernc.org/sqlite"
 )
 
@@ -259,7 +260,35 @@ func decodeAndValidate(ctx context.Context, archivePath string, keys KeyUnwrappe
 	if err := verifySQLiteIntegrity(ctx, databasePath); err != nil {
 		return Verification{}, err
 	}
+	if err := verifyRestoredAuditChain(ctx, databasePath); err != nil {
+		return Verification{}, err
+	}
 	return Verification{BackupID: header.BackupID, CreatedAt: header.CreatedAt, Files: extracted.count}, nil
+}
+
+func verifyRestoredAuditChain(ctx context.Context, dbPath string) error {
+	abs, err := filepath.Abs(dbPath)
+	if err != nil {
+		return fmt.Errorf("backup: resolve restored database path for audit verification: %w", err)
+	}
+	urlPath := filepath.ToSlash(abs)
+	if runtime.GOOS == "windows" {
+		urlPath = "/" + urlPath
+	}
+	dsn := (&url.URL{Scheme: "file", Path: urlPath}).String() + "?mode=ro&immutable=1"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return fmt.Errorf("backup: open restored SQLite snapshot for audit verification: %w", err)
+	}
+	defer db.Close()
+	report, err := audit.VerifyAuditChain(ctx, db, audit.VerifyOptions{})
+	if err != nil {
+		return fmt.Errorf("backup: restored audit chain verification failed: %w", err)
+	}
+	if report == nil || !report.Valid {
+		return errors.New("backup: restored audit chain verification returned an invalid report")
+	}
+	return nil
 }
 
 func validateEnvelopeHeader(h envelopeHeader) error {

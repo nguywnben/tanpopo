@@ -10,14 +10,15 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
-	_ "modernc.org/sqlite"
+	"github.com/nguywnben/tanpopo/internal/security/audit"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
+	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 )
 
 type archiveTestKeys struct{ kek []byte }
@@ -96,6 +97,20 @@ func TestVerifyAndRestoreSQLiteArchive(t *testing.T) {
 	}
 }
 
+func TestRestoreRejectsInvalidAuditChainBeforePublication(t *testing.T) {
+	archivePath, keys := makeTestSQLiteArchiveWithTamperedAudit(t)
+	if !PlatformSupported() {
+		return
+	}
+	destination := filepath.Join(t.TempDir(), "restored")
+	if _, err := Restore(context.Background(), archivePath, destination, keys); err == nil {
+		t.Fatal("Restore published an archive with a tampered audit chain")
+	}
+	if _, err := os.Lstat(destination); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("invalid audit chain must fail before restore publication, stat err=%v", err)
+	}
+}
+
 func TestVerifyRejectsTamperedEncryptedArchive(t *testing.T) {
 	archivePath, keys := makeTestSQLiteArchive(t)
 	if !PlatformSupported() {
@@ -151,18 +166,44 @@ func TestArchiveEntryValidationRejectsTraversalLinksAndOversize(t *testing.T) {
 }
 
 func makeTestSQLiteArchive(t *testing.T) (string, *archiveTestKeys) {
+	return makeTestSQLiteArchiveVariant(t, false)
+}
+
+func makeTestSQLiteArchiveWithTamperedAudit(t *testing.T) (string, *archiveTestKeys) {
+	return makeTestSQLiteArchiveVariant(t, true)
+}
+
+func makeTestSQLiteArchiveVariant(t *testing.T, tamperAudit bool) (string, *archiveTestKeys) {
 	t.Helper()
 	root := t.TempDir()
 	dbPath := filepath.Join(root, "source.sqlite")
-	db, err := sql.Open("sqlite", dbPath)
+	store, err := sqlite.Open(context.Background(), sqlite.Config{DBPath: dbPath})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE backup_fixture (id INTEGER PRIMARY KEY, value TEXT); INSERT INTO backup_fixture(value) VALUES ('verified snapshot')`); err != nil {
-		_ = db.Close()
+	if _, err := store.RawDB().Exec(`CREATE TABLE backup_fixture (id INTEGER PRIMARY KEY, value TEXT); INSERT INTO backup_fixture(value) VALUES ('verified snapshot')`); err != nil {
+		_ = store.Close()
 		t.Fatal(err)
 	}
-	if err := db.Close(); err != nil {
+	logger, err := audit.NewLogger(audit.LoggerConfig{DB: store.RawDB()})
+	if err != nil {
+		_ = store.Close()
+		t.Fatal(err)
+	}
+	if err := logger.Append(context.Background(), port.AuditEvent{
+		ActorKind: "SYSTEM", ActorID: "backup-restore-test", EntryPoint: "cli",
+		EventType: "backup.restore.fixture", TargetType: "backup", TargetID: "fixture",
+	}); err != nil {
+		_ = store.Close()
+		t.Fatal(err)
+	}
+	if tamperAudit {
+		if _, err := store.RawDB().Exec(`DROP TRIGGER trg_audit_events_no_update; UPDATE audit_events SET entry_hash = printf('%064d', 0)`); err != nil {
+			_ = store.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
 	databaseBytes, err := os.ReadFile(dbPath)

@@ -6,7 +6,7 @@
 - Governance state: `READY` under `DEC-061`
 - Implementation branch: persistent `develop`
 - Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest pushed checkpoint: `264ae68` (EU-only live route, calibrated $1 settlements, and backup restore WAL fixture)
+- Latest pushed checkpoint: `84b57a6` (runtime/compiler corrections; CI exposed a common live-routing 503)
 - Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
 
 ## Work performed
@@ -50,8 +50,10 @@
 - CI run [44353491329](https://github.com/nguywnben/tanpopo/actions/runs/44353491329) on `10c8ae2` passed Stage 0 and exposed a compile-time wrong error sentinel (`port.ErrNotFound`) in the new snapshot lookup helper. It is replaced with contextual lookup errors; the failed run was on the preceding checkpoint and the correction requires a new complete run.
 - CI run [44353932018](https://github.com/nguywnben/tanpopo/actions/runs/44353932018) on `3895364` compiled the runtime fix and exposed two real acceptance failures: the EU-only route included a US deployment (now removed from its target set), and the restored vault fixture omitted its required WAL checkpoint hook (now backed by the restored SQLite store). The new exact and estimated settlements use matched 38/13 token counts and a rate card intended to produce $1.00 each; verify the summary on the next run.
 - Checkpoint `4de1abf` also adds the manifest-bound Admin adapter registration contract, updates OpenAPI and the registered route count to 75, and removes the live test's SQLite seed. CI run [44356369334](https://github.com/nguywnben/tanpopo/actions/runs/44356369334) passed Stage 0 and all three OS jobs caught a compile error because the installation DTO is returned by value, not pointer; the stale-race cleanup now checks its state value directly.
+- CI run [44357043793](https://github.com/nguywnben/tanpopo/actions/runs/44357043793) on `84b57a6` passed Stage 0 but failed Stage 1 on Ubuntu, macOS, and Windows at the same live chat acceptance: ingress returned 503 before the exact-usage assertion. The failure output omitted the response body. The local test now captures a bounded response body to identify the product error, adds a US deployment, and asserts that an EU-constrained route rejects the mixed EU/US candidate set with `residency_policy_violation` before creating the EU-only route. No implementation root cause is claimed until the body is available.
+- **Cicero** (**code-reviewer**) and **Pascal** (**security-auditor**) reviewed `264ae68`. Cicero required evidence that cross-region route candidates are rejected and that restore validates the audit chain before publication. Pascal identified a stale manifest/version race during provider-adapter registration. The current uncommitted changes add the mixed-region negative route case, immutable audit-chain verification before restore publication with a tampered-chain regression fixture, and transactionally bind adapter registration to the expected active version and manifest capability. Fresh review is required after these changes stabilize.
 - Follow-up local fixes remove the US deployment from the EU route, open the restored archive through the SQLite store so shredding retains the required WAL checkpoint hook, and set balanced per-million rates (`19,607,843,137,254` input / `19,607,843,137,257` output nano-USD) so the 38/13 token exact and estimated settlements each total exactly `$1.00` after integer pricing.
-- Next: push this wiring fix and inspect all CI jobs, including the Windows teardown retry. Close remaining DoD gaps and obtain fresh independent code and security reviews on the final diff before merge.
+- Next: push the diagnostic acceptance and security fixes, inspect all CI jobs, and resolve the live 503 using the newly captured response. Close remaining DoD gaps and obtain fresh independent code and security reviews on the final diff before merge.
 
 ## Acceptance gaps still open
 

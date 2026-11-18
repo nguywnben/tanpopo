@@ -159,10 +159,15 @@ func (s *Server) handleCreateProviderAdapter(w http.ResponseWriter, r *http.Requ
 		nativePrefix = &value
 	}
 	adapter, err := s.catalog.CreateProviderAdapter(r.Context(), catalog.CreateProviderAdapterParams{
-		InstallationID: req.InstallationID, AdapterSlug: declared.AdapterSlug, NativePrefix: nativePrefix,
+		InstallationID: req.InstallationID, ExpectedActiveVersionID: *installation.ActiveVersionID,
+		AdapterSlug: declared.AdapterSlug, NativePrefix: nativePrefix,
 		SupportedDialects: declared.SupportedDialects, AllowedHosts: req.AllowedHosts,
 	})
 	if err != nil {
+		if errors.Is(err, port.ErrVersionConflict) {
+			writeErrorEnvelope(w, r, http.StatusConflict, "extension_version_changed", "conflict_error", "active extension version changed during adapter registration; retry with the current manifest", false, nil)
+			return
+		}
 		if errors.Is(err, port.ErrInvalidInput) {
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
 			return

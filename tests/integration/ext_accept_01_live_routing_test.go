@@ -6,6 +6,7 @@ package integration_test
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -320,7 +321,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		return result.ID
 	}
 	euConnection := createConnection("EU local deterministic fake", euURL, "EU")
-	createConnection("US local deterministic fake", usURL, "US")
+	usConnection := createConnection("US local deterministic fake", usURL, "US")
 
 	model := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/models", map[string]any{
 		"slug": "live-routing-chat", "display_name": "Live Routing Chat", "context_window": 4096,
@@ -355,7 +356,17 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		return result.ID
 	}
 	euDeployment := createDeployment(euConnection, "EU")
-	createConnection("US local deterministic fake", usURL, "US")
+	usDeployment := createDeployment(usConnection, "US")
+	blockedCrossRegionRoute := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/routes", map[string]any{
+		"slug": "accept-reject-cross-region", "env_id": bootResult.EnvID, "strategy": "PRIORITY_FAILOVER",
+		"allowed_data_regions": []string{"EU"}, "targets": []map[string]any{
+			{"deployment_id": euDeployment, "priority_order": 1, "weight": 50},
+			{"deployment_id": usDeployment, "priority_order": 2, "weight": 50},
+		},
+	}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
+	if blockedCrossRegionRoute.Code != http.StatusUnprocessableEntity || !strings.Contains(blockedCrossRegionRoute.Body, `"code":"residency_policy_violation"`) {
+		t.Fatalf("EU-constrained route must reject a US deployment candidate: got %d: %s", blockedCrossRegionRoute.Code, blockedCrossRegionRoute.Body)
+	}
 	route := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/routes", map[string]any{
 		"slug": "accept-eu-only", "env_id": bootResult.EnvID, "strategy": "PRIORITY_FAILOVER",
 		"allowed_data_regions": []string{"EU"}, "targets": []map[string]any{
@@ -391,7 +402,8 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("live chat completion returned %d (content=%q)", resp.StatusCode, content)
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			t.Fatalf("live chat completion returned %d (content=%q body=%q)", resp.StatusCode, content, body)
 		}
 		return resp.Header.Get("X-Tanpopo-Usage-Accuracy")
 	}

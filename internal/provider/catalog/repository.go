@@ -202,6 +202,7 @@ type ProviderAdapter struct {
 type CreateProviderAdapterParams struct {
 	ID                string
 	InstallationID    string
+	ExpectedActiveVersionID string
 	AdapterSlug       string
 	NativePrefix      *string
 	SupportedDialects []string
@@ -390,6 +391,38 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 		if gov.ActiveVersionID == "" {
 			return fmt.Errorf("%w: extension installation %q has no active SM-01 version", port.ErrInvalidInput, params.InstallationID)
 		}
+		if params.ExpectedActiveVersionID != "" && gov.ActiveVersionID != params.ExpectedActiveVersionID {
+			return port.ErrVersionConflict
+		}
+		if params.ExpectedActiveVersionID != "" {
+			var manifestJSON string
+			if err := tx.QueryRowContext(ctx, `SELECT manifest_json FROM extension_versions WHERE id = ? AND package_id = (SELECT package_id FROM extension_installations WHERE id = ?)`, gov.ActiveVersionID, params.InstallationID).Scan(&manifestJSON); err != nil {
+				return mapDBError(err)
+			}
+			var manifest installer.ExtensionManifest
+			if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
+				return fmt.Errorf("%w: active provider adapter manifest is invalid", port.ErrInvalidInput)
+			}
+			declared := false
+			for _, capability := range manifest.Capabilities {
+				if capability.Type != "provider_adapter" || capability.AdapterSlug != params.AdapterSlug {
+					continue
+				}
+				declaredPrefix := strings.TrimSpace(capability.NativePassthroughPrefix)
+				requestedPrefix := ""
+				if params.NativePrefix != nil {
+					requestedPrefix = strings.TrimSpace(*params.NativePrefix)
+				}
+				if declaredPrefix != requestedPrefix || !sameStrings(capability.SupportedDialects, params.SupportedDialects) {
+					return fmt.Errorf("%w: adapter metadata does not match its active manifest capability", port.ErrInvalidInput)
+				}
+				declared = true
+				break
+			}
+			if !declared {
+				return fmt.Errorf("%w: adapter slug is not declared by the active manifest", port.ErrInvalidInput)
+			}
+		}
 		approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
 		if err != nil {
 			return fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
@@ -425,6 +458,18 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 		return nil, err
 	}
 	return r.GetProviderAdapter(ctx, id)
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // GetProviderAdapter fetches a ProviderAdapter by ID.
