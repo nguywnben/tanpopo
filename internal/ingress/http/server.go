@@ -834,11 +834,11 @@ func (s *Server) AcquireProviderRuntime(ctx context.Context, orgID, connectionID
 	}
 	conn, ok := snap.LookupProviderConnection(orgID, connectionID)
 	if !ok {
-		return nil, nil, port.ErrNotFound
+		return nil, nil, fmt.Errorf("provider connection %q is not present in the active snapshot", connectionID)
 	}
 	adapter, ok := snap.LookupProviderAdapter(conn.AdapterID)
 	if !ok {
-		return nil, nil, port.ErrNotFound
+		return nil, nil, fmt.Errorf("provider adapter %q is not present in the active snapshot", conn.AdapterID)
 	}
 	entry, err := s.getOrLoadAdapterRuntime(ctx, &snapshot.ResolvedTarget{Connection: conn, Adapter: adapter})
 	if err != nil {
