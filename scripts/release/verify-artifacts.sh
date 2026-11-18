@@ -14,7 +14,7 @@ require() {
   fi
 }
 
-for tool in cosign cyclonedx-gomod cyclonedx-npm docker go govulncheck goreleaser openssl python3 trivy curl; do
+for tool in cosign cyclonedx-gomod cyclonedx-npm docker go govulncheck goreleaser npm openssl python3 trivy curl; do
   require "$tool"
 done
 
@@ -26,15 +26,33 @@ fi
 DIST_DIR="$ROOT_DIR/dist"
 mkdir -p "$DIST_DIR"
 TMP_DIR="$(mktemp -d)"
+VERIFY_STARTED_ON="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+export VERIFY_STARTED_ON
 IMAGE="tanpopo:artifact-verification"
-VOLUME="tanpopo-artifact-verification-$$"
 CONTAINER=""
+COMPOSE_PROJECT=""
 cleanup() {
   if [[ -n "$CONTAINER" ]]; then docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; fi
-  docker volume rm "$VOLUME" >/dev/null 2>&1 || true
+  if [[ -n "$COMPOSE_PROJECT" ]]; then
+    TANPOPO_MASTER_KEY_FILE="$TMP_DIR/master.key" docker compose \
+      --project-name "$COMPOSE_PROJECT" \
+      --file deploy/compose/docker-compose.standalone.yml \
+      --file "$TMP_DIR/compose.override.yml" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  fi
+  if [[ -d "$TMP_DIR/webui-dist" ]]; then
+    rm -rf "$ROOT_DIR/internal/webui/dist"
+    mv "$TMP_DIR/webui-dist" "$ROOT_DIR/internal/webui/dist"
+  fi
   rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT
+
+echo "Building the Web Console from its locked npm dependency graph"
+npm --prefix web/console run build
+cp -a "$ROOT_DIR/internal/webui/dist" "$TMP_DIR/webui-dist"
+rm -rf "$ROOT_DIR/internal/webui/dist"
+mkdir -p "$ROOT_DIR/internal/webui/dist"
+cp -a "$ROOT_DIR/web/console/dist/." "$ROOT_DIR/internal/webui/dist/"
 
 echo "Building all supported release targets without publishing artifacts"
 goreleaser build --snapshot --clean
@@ -48,12 +66,16 @@ fi
 
 echo "Generating CycloneDX SBOMs for Go and npm dependencies"
 cyclonedx-gomod app -json -output "$DIST_DIR/sbom-go.cdx.json" -main cmd/tanpopo .
-cyclonedx-npm --output-format JSON --output-file "$DIST_DIR/sbom-web.cdx.json" --ignore-npm-errors
+cyclonedx-npm --output-format JSON --output-file "$DIST_DIR/sbom-web.cdx.json" web/console/package.json
 test -s "$DIST_DIR/sbom-go.cdx.json"
 test -s "$DIST_DIR/sbom-web.cdx.json"
+node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(!Array.isArray(b.components)||b.components.length===0)process.exit(1)' "$DIST_DIR/sbom-web.cdx.json"
 
 echo "Checking reachable Go vulnerabilities"
 govulncheck ./...
+
+echo "Running the live EXT-ACCEPT-01 production-binary suite"
+TANPOPO_TEST_HERMETIC=1 go test -count=1 ./tests/integration -run '^TestEXTAccept01_'
 
 echo "Building hardened rootless OCI image"
 docker build --pull --file deploy/docker/Dockerfile --tag "$IMAGE" .
@@ -63,23 +85,40 @@ echo "Scanning OCI image for Critical and High vulnerabilities"
 trivy image --severity CRITICAL,HIGH --exit-code 1 "$IMAGE"
 
 echo "Checking standalone Compose configuration"
-install -m 0600 /dev/null "$TMP_DIR/master.key"
+openssl rand -hex 32 > "$TMP_DIR/master.key"
+chmod 0400 "$TMP_DIR/master.key"
+if [[ "$(stat -c '%u' "$TMP_DIR/master.key")" != 65532 ]]; then
+  if [[ "$(id -u)" == 0 ]]; then
+    chown 65532:65532 "$TMP_DIR/master.key"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo chown 65532:65532 "$TMP_DIR/master.key"
+  else
+    echo "Compose secret verification needs sudo to map the key owner to UID 65532" >&2
+    exit 2
+  fi
+fi
 TANPOPO_MASTER_KEY_FILE="$TMP_DIR/master.key" docker compose \
   --file deploy/compose/docker-compose.standalone.yml config --quiet
-echo "Starting rootless read-only container and checking readiness"
-docker volume create "$VOLUME" >/dev/null
-SMOKE_KEK="$(openssl rand -hex 32)"
+cat > "$TMP_DIR/compose.override.yml" <<EOF
+services:
+  tanpopo:
+    image: $IMAGE
+    ports:
+      - !override "127.0.0.1::8080"
+EOF
+echo "Starting the hardened standalone Compose service and checking secret access"
+COMPOSE_PROJECT="tanpopo-artifact-verification-$$"
 STARTED_MS="$(python3 -c 'import time; print(int(time.monotonic() * 1000))')"
-CONTAINER="$(docker run --detach --read-only --cap-drop=ALL \
-  --security-opt=no-new-privileges:true \
-  --tmpfs /tmp:rw,noexec,nosuid,size=16m,uid=65532,gid=65532 \
-  --volume "$VOLUME:/var/lib/tanpopo" \
-  --publish 127.0.0.1::8080 \
-  --env TANPOPO_DATA_DIR=/var/lib/tanpopo \
-  --env TANPOPO_MASTER_KEY="$SMOKE_KEK" \
-  "$IMAGE")"
-unset SMOKE_KEK
-HOST_PORT="$(docker port "$CONTAINER" 8080/tcp | sed -E 's/.*:([0-9]+)$/\1/' | head -n1)"
+TANPOPO_MASTER_KEY_FILE="$TMP_DIR/master.key" docker compose \
+  --project-name "$COMPOSE_PROJECT" \
+  --file deploy/compose/docker-compose.standalone.yml \
+  --file "$TMP_DIR/compose.override.yml" up --detach
+CONTAINER="$(docker compose --project-name "$COMPOSE_PROJECT" \
+  --file deploy/compose/docker-compose.standalone.yml \
+  --file "$TMP_DIR/compose.override.yml" ps --quiet tanpopo)"
+HOST_PORT="$(docker compose --project-name "$COMPOSE_PROJECT" \
+  --file deploy/compose/docker-compose.standalone.yml \
+  --file "$TMP_DIR/compose.override.yml" port tanpopo 8080 | sed -E 's/.*:([0-9]+)$/\1/' | head -n1)"
 if [[ ! "$HOST_PORT" =~ ^[0-9]+$ ]]; then
   echo "Docker did not publish a loopback smoke-test port" >&2
   exit 1
@@ -106,17 +145,15 @@ if (( STARTUP_MS >= 3000 )); then
   exit 1
 fi
 curl --fail --silent "http://127.0.0.1:${HOST_PORT}/healthz" >/dev/null
+CONSOLE_HTML="$(curl --fail --silent "http://127.0.0.1:${HOST_PORT}/")"
+if [[ "$CONSOLE_HTML" != *"/assets/"* ]]; then
+  echo "rootless image did not serve the built Web Console bundle" >&2
+  exit 1
+fi
 
-RSS_BYTES="$(docker stats --no-stream --format '{{.MemUsage}}' "$CONTAINER" | python3 -c '
-import re, sys
-value = sys.stdin.read().split(" / ", 1)[0].strip()
-match = re.fullmatch(r"([0-9.]+)([KMG]?i?B)", value)
-if not match:
-    raise SystemExit(f"cannot parse Docker memory usage: {value!r}")
-factor = {"B": 1, "KB": 1000, "MB": 1000**2, "GB": 1000**3, "KiB": 1024, "MiB": 1024**2, "GiB": 1024**3}[match.group(2)]
-print(int(float(match.group(1)) * factor))
-')"
-echo "Container idle RSS: ${RSS_BYTES} bytes (target < 134217728 bytes)"
+CONTAINER_PID="$(docker inspect --format '{{.State.Pid}}' "$CONTAINER")"
+RSS_BYTES="$(awk '/^VmRSS:/ {print $2 * 1024}' "/proc/${CONTAINER_PID}/status")"
+echo "Tanpopo process idle RSS: ${RSS_BYTES} bytes (target < 134217728 bytes)"
 if (( RSS_BYTES >= 134217728 )); then
   echo "container idle RSS target exceeded" >&2
   exit 1
@@ -133,14 +170,60 @@ cosign generate-key-pair --output-key-prefix "$TMP_DIR/cosign"
 for sbom in "$DIST_DIR/sbom-go.cdx.json" "$DIST_DIR/sbom-web.cdx.json"; do
   signature="$TMP_DIR/$(basename "$sbom").sig"
   cosign sign-blob --yes --key "$TMP_DIR/cosign.key" \
+    --tlog-upload=false \
     --output-signature "$signature" "$sbom"
-  cosign verify-blob --key "$TMP_DIR/cosign.pub" \
+  cosign verify-blob --private-infrastructure --key "$TMP_DIR/cosign.pub" \
     --signature "$signature" "$sbom"
 done
 test -s "$DIST_DIR/SHA256SUMS"
 cosign sign-blob --yes --key "$TMP_DIR/cosign.key" \
+  --tlog-upload=false \
   --output-signature "$TMP_DIR/SHA256SUMS.sig" "$DIST_DIR/SHA256SUMS"
-cosign verify-blob --key "$TMP_DIR/cosign.pub" \
+cosign verify-blob --private-infrastructure --key "$TMP_DIR/cosign.pub" \
   --signature "$TMP_DIR/SHA256SUMS.sig" "$DIST_DIR/SHA256SUMS"
+
+echo "Generating and locally verifying SLSA provenance for SHA256SUMS"
+python3 - "$TMP_DIR/slsa-provenance.json" <<'PY'
+import datetime, json, os, subprocess, sys
+sha = os.environ.get("GITHUB_SHA") or subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+repo = os.environ.get("GITHUB_REPOSITORY", "unknown/unknown")
+workflow = os.environ.get("GITHUB_WORKFLOW", "local-release-artifact-dry-run")
+ref = os.environ.get("GITHUB_REF", "local")
+run_id = os.environ.get("GITHUB_RUN_ID", "local")
+subject = subprocess.check_output(["sha256sum", "dist/SHA256SUMS"], text=True).split()[0]
+predicate = {
+    "builder": {"id": "https://github.com/" + repo + "/actions/workflows/release-dry-run.yml"},
+    "buildType": "https://github.com/" + repo + "/actions/workflows/release-dry-run.yml@v1",
+    "invocation": {
+        "configSource": {
+            "uri": "git+https://github.com/" + repo,
+            "digest": {"gitCommit": sha},
+            "entryPoint": workflow,
+        },
+        "parameters": {"repository": repo, "ref": ref, "commit": sha, "runId": run_id},
+        "environment": {"runner": "github-hosted-ubuntu-24.04", "workflow": workflow},
+    },
+    "metadata": {
+        "buildInvocationID": run_id,
+        "buildStartedOn": os.environ["VERIFY_STARTED_ON"],
+        "buildFinishedOn": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "completeness": {"parameters": True, "environment": True, "materials": True},
+        "reproducible": False,
+    },
+    "materials": [{"uri": "git+https://github.com/" + repo, "digest": {"gitCommit": sha}}],
+}
+statement = {"_type": "https://in-toto.io/Statement/v0.1", "subject": [{"name": "dist/SHA256SUMS", "digest": {"sha256": subject}}], "predicateType": "https://slsa.dev/provenance/v0.2", "predicate": predicate}
+with open(sys.argv[1], "w", encoding="utf-8") as output:
+    json.dump(statement, output, sort_keys=True)
+PY
+cosign attest-blob --yes --tlog-upload=false --type slsaprovenance \
+  --predicate "$TMP_DIR/slsa-provenance.json" \
+  --key "$TMP_DIR/cosign.key" \
+  --output-signature "$TMP_DIR/SHA256SUMS.attestation.sig" \
+  --output-attestation "$TMP_DIR/SHA256SUMS.attestation.json" \
+  "$DIST_DIR/SHA256SUMS"
+cosign verify-blob-attestation --private-infrastructure --key "$TMP_DIR/cosign.pub" \
+  --signature "$TMP_DIR/SHA256SUMS.attestation.sig" \
+  --type slsaprovenance "$DIST_DIR/SHA256SUMS"
 
 echo "Artifact verification completed. No artifacts were published or tagged."

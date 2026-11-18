@@ -1744,6 +1744,8 @@ paths:
   # ==================== GROUP E: ADAPTERS, WRITE-ONLY SECRETS & CONNECTIONS (SCR-03, SCR-04) ====================
   /admin/v1/provider-adapters:
     post:
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
       tags: [SecretsAndConnections]
       operationId: registerProviderAdapter
       summary: Register an installed adapter using only its approved egress scope
