@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0030` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | **`READY_FOR_REVIEW`** *(PO handover `DEC-058` transferred `TP-IMP-0030` + `CR-13` Option A from GPT-6 Luna to **Gemini 4 Hydrogen** at PR #3 / `wip/tp-imp-0030-luna` SHA `026b75be`, CI run `44244282646`; remediating Ubuntu staging/swap test, Windows ACL count, and macOS storage `-race` coverage; final synchronized review and acceptance on `origin/main` pending)* |
+| **Status** | **`DONE`** *(Accepted under [`DEC-058` / `DEC-059`](../../governance/decisions.md) by **Gemini 4 Hydrogen**; `CR-13` Option A [`DEC-050`] implemented & verified; final implementation SHA `38846e4a27cfd6f795656f248cee1bc1beee2944`, PR #3 CI run `44263375798` `100%` green across Stage 0 + `ubuntu-24.04` / `windows-2022` / `macos-15`; fresh `code-reviewer` [`22029cb0`] `APPROVE` & `security-auditor` [`7ac7d58e`] `PASS`; Units 31/32 remain unopened)* |
 | **Size** | `L` (`web/console/src/pages/traces/*`, `finops/*`, `security/*`, `operations/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Stored XSS prevention on trace/audit payloads `CT-27`, strict separation of 3 cost-accuracy labels `UX-GR-05` & Emergency Kill-Switch UX)* |
 | **Technical Owner** | `Lead Frontend / SRE UX Engineer` |

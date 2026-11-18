@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0029: DONE` | `TP-IMP-0030: READY_FOR_REVIEW` | `1 READY_FOR_REVIEW / 17 BLOCKED`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `1.39.0-dec-056-0030-review` | **Date:** `2026-11-18`
+> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0030: DONE` | `0 READY / 0 READY_FOR_REVIEW / 17 BLOCKED`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.40.0-dec-059-0030-done` | **Date:** `2026-11-18`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **CURRENT GOVERNANCE NOTICE (`TP-IMP-0029 DONE`; `TP-IMP-0030 READY_FOR_REVIEW`):** Units `0001`..`0029` are accepted on `origin/main`; Unit 29 acceptance CI `44092664075` is green. Unit 30 is at implementation SHA `bea8165` under `DEC-057`; implementation PR run `44242994741` has Stage 0 green; Stage 1 failed on Ubuntu, Windows, and macOS; step logs are unavailable. Final synchronized review and acceptance on `origin/main` remain pending. Units `0031`..`0047` remain blocked under their existing authorization and quality gates.
+> - **CURRENT GOVERNANCE NOTICE (`TP-IMP-0001..0030 DONE`; `0031..0047 BLOCKED`):** Units `0001`..`0030` (`30 / 47`) are **`DONE`**: under [`DEC-058`](../governance/decisions.md) & [`DEC-059`](../governance/decisions.md), **Gemini 4 Hydrogen** remediated all PR #3 Stage 1 CI failures and accepted `TP-IMP-0030` (`CR-13` Option A per `DEC-050`) at final implementation SHA `38846e4a27cfd6f795656f248cee1bc1beee2944` (PR #3 CI run `44263375798` `100%` green across Stage 0 + all 3 OS runners, `code-reviewer` [`22029cb0`] `APPROVE`, `security-auditor` [`7ac7d58e`] `PASS`). Units `0031`..`0047` remain **`BLOCKED`** under their existing authorization and quality gates (Units 31/32 unopened; no tags/releases per `GATE-REL-07`).
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
 >   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Current delivery is `TP-IMP-0001`..`0029` = **`DONE` (`29 / 47`)** under [`DEC-048`](../governance/decisions.md); `TP-IMP-0030` = **`READY_FOR_REVIEW`** under [`DEC-057`](../governance/decisions.md), with implementation PR run `44242994741` failed on `bea8165` (Stage 0 green; Stage 1 failures on Ubuntu, Windows, and macOS; step logs unavailable) and acceptance on `origin/main` pending. Units `0031`..`0047` remain blocked pending sequential gates and existing Owner authorization boundaries.
+>   3. Current delivery is `TP-IMP-0001`..`0030` = **`DONE` (`30 / 47`)** under [`DEC-011`](../governance/decisions.md)..[`DEC-059`](../governance/decisions.md); `0 / 47` `READY`; `0 / 47` `READY_FOR_REVIEW`. Units `0031`..`0047` remain **`BLOCKED`** pending sequential gates and existing Owner authorization boundaries.
 
 ---
 

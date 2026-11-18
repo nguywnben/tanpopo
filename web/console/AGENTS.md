@@ -44,5 +44,5 @@ RULES:
 
 ## Current Screen Delivery
 
-`TP-IMP-0026` established the Console build, local Figtree, StyleX and `AppShell`; `TP-IMP-0027`..`0029` are accepted. Unit `0029` was accepted under `DEC-048` after acceptance CI `44092664075` passed. Unit `0030` is `READY` under `DEC-049` for Traces, Budgets, Security/Audit/Kill-Switch, and Operations screens. Keep its `CT-27`, exact currency, accessibility, mobile, air-gap, and strong review gates. Unit `0031` remains blocked.
+`TP-IMP-0026` established the Console build, local Figtree, StyleX and `AppShell`; `TP-IMP-0027`..`0030` are accepted (`0026..0029` under `DEC-042`, `044`, `046`, `048`; Unit `0030` Traces, Budgets, Security/Audit/Kill-Switch, and Operations under `DEC-058`/`DEC-059` at `38846e4`, PR CI `44263375798`). Keep its `CT-27`, exact currency, accessibility, mobile, air-gap, and strong review gates. Unit `0031` remains blocked.
 
