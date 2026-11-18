@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0031` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-05` |
-| **Status** | **`READY`** *(DoR verified; opened sequentially by Product Owner delegation `DEC-060` after all dependencies and Unit 30 post-merge CI passed)* |
+| **Status** | **`DONE`** *(Accepted under `DEC-061`; PR #4 merged to `main` at `6eb603aea20926f326d5c8acdc129a029ded0d39`; PR run `44318018781` and post-merge run `44319629695` passed all four required checks)* |
 | **Size** | `M` (`cmd/tanpopo/*`, `internal/cli/*`, `internal/webui/embed.go`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Unified single binary `tanpopo`, offline break-glass recovery & zero-leak diagnostic `support-bundle` `OPS-AC-10`)* |
 | **Technical Owner** | `Developer Experience & Systems Lead` |
@@ -30,7 +30,7 @@ Unify the entire product into **a single executable binary `tanpopo`** (`ADR-000
 - **Requirements Refs:** `TP-FR-0903`, `TP-FR-1001`, `TP-NFR-1002`, `ADR-0001`, `ADR-0004`, `CT-27`, `UX-AC-08`, `OPS-AC-10`, `INC-01`, `CR-09`, `CR-10`, `GAP-13`.
 - **Dependencies:** `TP-IMP-0014`, `TP-IMP-0025`, `TP-IMP-0027`, `TP-IMP-0028`, `TP-IMP-0029`, `TP-IMP-0030`.
 - **Design Refs:** [`developer-experience.md`](../../operations/developer-experience.md) (`SPEC-OPS-04`), [`ADR-0001`](../../architecture/adr/0001-core-runtime-and-modular-monolith.md), [`unresolved-gaps.md`](../../reviews/unresolved-gaps.md) (`CR-09`, `CR-10`).
-- **Execution / Review Record:** [`TP-IMP-0031 execution checkpoint`](../../reviews/tp-imp-0031-execution.md). Status remains `READY` until all scope, DoD, reviews, and main CI acceptance evidence are complete.
+- **Execution / Review Record:** [`TP-IMP-0031 execution checkpoint`](../../reviews/tp-imp-0031-execution.md). Acceptance record: [`DEC-061`](../../governance/decisions.md#DEC-061); implementation PR [#4](https://github.com/nguywnben/tanpopo/pull/4); main SHA `6eb603aea20926f326d5c8acdc129a029ded0d39`; acceptance CI [run `44319629695`](https://github.com/nguywnben/tanpopo/actions/runs/44319629695). Independent final code reviewers **Franklin** and **Hubble** approved.
 
 ## 4. API, Wire & Data Contracts
 - **Automation-Safe Output Contract:** When `--output json` is specified, `stdout` emits strictly a single valid JSON object/array (routing all progress/warning messages to `stderr`) so downstream `jq` pipelines never break.
