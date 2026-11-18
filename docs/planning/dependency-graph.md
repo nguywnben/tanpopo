@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0031: DONE` | `0032 READY / 0 READY_FOR_REVIEW / 0033..0047 BLOCKED`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.47.0-dec-061-0031-done-0032-ready` | **Date:** `2026-11-18`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0032: DONE` | `0033 READY / 0 READY_FOR_REVIEW / 0034..0047 BLOCKED`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.48.0-dec-062-0032-done-0033-ready` | **Date:** `2026-11-18`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** Units `0001`..`0031` are DONE. Unit 31 is verified on main SHA `6eb603aea20926f326d5c8acdc129a029ded0d39`; post-merge Actions run `44319629695` passed all four required jobs. `DEC-060` delegates `0031`..`0035` to GPT-6 Luna sequentially using persistent `develop` and per-unit PRs; `0032` is READY and `0033`..`0047` remain blocked. No tags/releases (`GATE-REL-07`).
+> - **Live DAG Frontier:** Units `0001`..`0032` are DONE. Unit 32 is verified on main SHA `5888680eb7bd509d8df02cfe11bdd35f3572521f`; post-merge Actions run `44371811698` passed all four required jobs. `DEC-060` delegates `0031`..`0035` to GPT-6 Luna sequentially using persistent `develop` and per-unit PRs; `0033` is READY and `0034`..`0047` remain blocked. No tags/releases (`GATE-REL-07`).
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -52,8 +52,8 @@ flowchart TD
         U29["TP-IMP-0029: UI SCR-08, 09, 13 (DONE — Routes, Policies & Keys)"]
         U30["TP-IMP-0030: UI SCR-11, 12, 14, 16 (DONE — Traces, FinOps, Sec, Ops)"]
         U31["TP-IMP-0031: Unified tanpopo CLI & Embedded SPA Binary (DONE — DEC-061)"]
-        U32["TP-IMP-0032: Doctor, GitOps, Backup, Shredding & Preflight (READY — DEC-061)"]
-        U33["TP-IMP-0033: Multi-OS Installers, OCI, SBOM & Cosign"]
+        U32["TP-IMP-0032: Doctor, GitOps, Backup, Shredding & Preflight (DONE — DEC-062)"]
+        U33["TP-IMP-0033: Multi-OS Installers, OCI, SBOM & Cosign (READY — DEC-062)"]
     end
 
     subgraph M3["M3: v0.2 OAuth 2.1, Marketplace & MCP Hub"]
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier (`31 DONE`, `1 READY`, `0 READY_FOR_REVIEW`, `15 BLOCKED` — `DEC-061`):** `TP-IMP-0001..0031` are DONE; Unit 31 is verified on main SHA `6eb603aea20926f326d5c8acdc129a029ded0d39` with post-merge Actions run `44319629695` green across all four jobs. Under `DEC-060`, GPT-6 Luna executes `0032` → `0033` → `0034` → `0035`; Unit 32 alone is READY. Units 33–35 open only after prior DONE on main with green acceptance CI and DoR confirmation; Units 36–47 remain blocked. Use `develop` → PR → independent review and four checks → merge → verify main. No tags/releases.
+> **Live Queue Frontier (`32 DONE`, `1 READY`, `0 READY_FOR_REVIEW`, `14 BLOCKED` — `DEC-062`):** `TP-IMP-0001..0032` are DONE; Unit 32 is verified on main SHA `5888680eb7bd509d8df02cfe11bdd35f3572521f` with post-merge Actions run `44371811698` green across all four jobs. Under `DEC-060`, GPT-6 Luna executes `0033` → `0034` → `0035`; Unit 33 alone is READY. Units 34–35 open only after their predecessor is DONE on main with green acceptance CI and DoR confirmation; Units 36–47 remain blocked. Use `develop` → PR → independent review and four checks → merge → verify main. No tags/releases.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.
