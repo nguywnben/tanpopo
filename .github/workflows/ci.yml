@@ -34,7 +34,7 @@ jobs:
       - name: Setup Go 1.24
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: "1.24.x"
+          go-version: "1.26.x"
           cache-dependency-path: |
             go.mod
             tools/spikes/go.mod
@@ -93,7 +93,7 @@ jobs:
       - name: Setup Go 1.24
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: "1.24.x"
+          go-version: "1.26.x"
           cache-dependency-path: go.mod
 
       - name: Setup Node.js 22

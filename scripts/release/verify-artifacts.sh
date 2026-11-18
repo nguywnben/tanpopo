@@ -26,8 +26,6 @@ fi
 DIST_DIR="$ROOT_DIR/dist"
 mkdir -p "$DIST_DIR"
 TMP_DIR="$(mktemp -d)"
-VERIFY_STARTED_ON="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-export VERIFY_STARTED_ON
 IMAGE="tanpopo:artifact-verification"
 CONTAINER=""
 COMPOSE_PROJECT=""
@@ -65,17 +63,17 @@ if [[ "$ARCHIVE_COUNT" != 5 ]]; then
 fi
 
 echo "Generating CycloneDX SBOMs for Go and npm dependencies"
-cyclonedx-gomod app -json -output "$DIST_DIR/sbom-go.cdx.json" -main cmd/tanpopo .
+cyclonedx-gomod app -json -licenses -assert-licenses -output "$DIST_DIR/sbom-go.cdx.json" -main cmd/tanpopo .
 cyclonedx-npm --output-format JSON --output-file "$DIST_DIR/sbom-web.cdx.json" web/console/package.json
 test -s "$DIST_DIR/sbom-go.cdx.json"
 test -s "$DIST_DIR/sbom-web.cdx.json"
-node -e 'const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(!Array.isArray(b.components)||b.components.length===0)process.exit(1)' "$DIST_DIR/sbom-web.cdx.json"
+python3 scripts/release/check-sbom-licenses.py "$DIST_DIR/sbom-go.cdx.json" "$DIST_DIR/sbom-web.cdx.json"
 
 echo "Checking reachable Go vulnerabilities"
 govulncheck ./...
 
 echo "Running the live EXT-ACCEPT-01 production-binary suite"
-TANPOPO_TEST_HERMETIC=1 go test -count=1 ./tests/integration -run '^TestEXTAccept01_'
+TANPOPO_TEST_HERMETIC=1 go test -count=1 -v ./tests/integration -run '^TestEXTAccept01_'
 
 echo "Building hardened rootless OCI image"
 docker build --pull --file deploy/docker/Dockerfile --tag "$IMAGE" .
@@ -182,48 +180,4 @@ cosign sign-blob --yes --key "$TMP_DIR/cosign.key" \
 cosign verify-blob --private-infrastructure --key "$TMP_DIR/cosign.pub" \
   --signature "$TMP_DIR/SHA256SUMS.sig" "$DIST_DIR/SHA256SUMS"
 
-echo "Generating and locally verifying SLSA provenance for SHA256SUMS"
-python3 - "$TMP_DIR/slsa-provenance.json" <<'PY'
-import datetime, json, os, subprocess, sys
-sha = os.environ.get("GITHUB_SHA") or subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-repo = os.environ.get("GITHUB_REPOSITORY", "unknown/unknown")
-workflow = os.environ.get("GITHUB_WORKFLOW", "local-release-artifact-dry-run")
-ref = os.environ.get("GITHUB_REF", "local")
-run_id = os.environ.get("GITHUB_RUN_ID", "local")
-subject = subprocess.check_output(["sha256sum", "dist/SHA256SUMS"], text=True).split()[0]
-predicate = {
-    "builder": {"id": "https://github.com/" + repo + "/actions/workflows/release-dry-run.yml"},
-    "buildType": "https://github.com/" + repo + "/actions/workflows/release-dry-run.yml@v1",
-    "invocation": {
-        "configSource": {
-            "uri": "git+https://github.com/" + repo,
-            "digest": {"gitCommit": sha},
-            "entryPoint": workflow,
-        },
-        "parameters": {"repository": repo, "ref": ref, "commit": sha, "runId": run_id},
-        "environment": {"runner": "github-hosted-ubuntu-24.04", "workflow": workflow},
-    },
-    "metadata": {
-        "buildInvocationID": run_id,
-        "buildStartedOn": os.environ["VERIFY_STARTED_ON"],
-        "buildFinishedOn": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "completeness": {"parameters": True, "environment": True, "materials": True},
-        "reproducible": False,
-    },
-    "materials": [{"uri": "git+https://github.com/" + repo, "digest": {"gitCommit": sha}}],
-}
-statement = {"_type": "https://in-toto.io/Statement/v0.1", "subject": [{"name": "dist/SHA256SUMS", "digest": {"sha256": subject}}], "predicateType": "https://slsa.dev/provenance/v0.2", "predicate": predicate}
-with open(sys.argv[1], "w", encoding="utf-8") as output:
-    json.dump(statement, output, sort_keys=True)
-PY
-cosign attest-blob --yes --tlog-upload=false --type slsaprovenance \
-  --predicate "$TMP_DIR/slsa-provenance.json" \
-  --key "$TMP_DIR/cosign.key" \
-  --output-signature "$TMP_DIR/SHA256SUMS.attestation.sig" \
-  --output-attestation "$TMP_DIR/SHA256SUMS.attestation.json" \
-  "$DIST_DIR/SHA256SUMS"
-cosign verify-blob-attestation --private-infrastructure --key "$TMP_DIR/cosign.pub" \
-  --signature "$TMP_DIR/SHA256SUMS.attestation.sig" \
-  --type slsaprovenance "$DIST_DIR/SHA256SUMS"
-
-echo "Artifact verification completed. No artifacts were published or tagged."
+echo "Artifact verification completed. GitHub OIDC provenance is generated and verified by the workflow; no release artifact or tag is published."
