@@ -1,0 +1,38 @@
+# Copyright 2026 The Tanpopo Authors.
+# Licensed under the Apache License, Version 2.0.
+
+services:
+  tanpopo:
+    image: tanpopo:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    user: "65532:65532"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    restart: unless-stopped
+    environment:
+      TANPOPO_DATA_DIR: /var/lib/tanpopo
+      TANPOPO_MASTER_KEY_FILE: /run/secrets/master-kek
+    secrets:
+      - source: master-kek
+        target: master-kek
+        mode: 0400
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - tanpopo-data:/var/lib/tanpopo
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,uid=65532,gid=65532
+    stop_grace_period: 30s
+
+volumes:
+  tanpopo-data:
+
+secrets:
+  master-kek:
+    file: ${TANPOPO_MASTER_KEY_FILE:?Set TANPOPO_MASTER_KEY_FILE to a host key file with mode 0600}

@@ -393,7 +393,11 @@ export interface paths {
         /** Cursor-paginated list of installed Provider Adapters (SCR-03) */
         get: operations["listProviderAdapters"];
         put?: never;
-        post?: never;
+        /**
+         * Register an installed adapter using only its approved egress scope
+         * @description Requires an instance OPERATOR. The catalog rejects hosts outside the installation's approved SM-01 permissions.
+         */
+        post: operations["registerProviderAdapter"];
         delete?: never;
         options?: never;
         head?: never;
@@ -689,6 +693,23 @@ export interface paths {
         put?: never;
         /** Stage version upgrade; halts in UPDATING_PENDING_RECONSENT if permissions expand (SCR-07) */
         post: operations["upgradeExtension"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/extensions/{installationId}/quarantine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Immediately quarantine an extension installation after optimistic version check */
+        post: operations["quarantineExtension"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1693,7 +1714,7 @@ export interface components {
             has_more: boolean;
         };
         ExtensionInstallRequest: {
-            /** @description Marketplace package ref, 40-char commit-pinned git+https URL, local .tpkg path, or digest-pinned oci:// URI. */
+            /** @description Marketplace package reference. When TANPOPO_MARKETPLACE_ARCHIVE_ROOT is configured, tanpopo-local://<filename>.tpkg resolves only a single archive filename inside that directory and is verified against expected_sha256 before installation. */
             source_uri: string;
             expected_sha256: string;
         };
@@ -2945,6 +2966,66 @@ export interface operations {
             };
         };
     };
+    registerProviderAdapter: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    installation_id: string;
+                    adapter_slug: string;
+                    allowed_hosts: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Provider adapter registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        installation_id: string;
+                        adapter_slug: string;
+                        native_prefix?: string | null;
+                        supported_dialects: string[];
+                        allowed_hosts: string[];
+                        version: number;
+                    };
+                };
+            };
+            /** @description invalid_request or host outside approved permissions */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description instance operator permission required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description provider adapter already registered */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getProviderAdapter: {
         parameters: {
             query?: never;
@@ -3716,6 +3797,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExtensionPermissionDiff"];
+                };
+            };
+        };
+    };
+    quarantineExtension: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Optimistic concurrency revision ETag (e.g., '"v3"'). Stale values return 409 optimistic_lock_conflict. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                installationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Extension quarantined and serving configuration refreshed */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionInstallation"];
+                };
+            };
+            /** @description Caller lacks extension quarantine permission */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Optimistic lock conflict or invalid state transition */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
                 };
             };
         };

@@ -1,0 +1,39 @@
+# Copyright 2026 The Tanpopo Authors.
+# Licensed under the Apache License, Version 2.0.
+
+[Unit]
+Description=Tanpopo self-hosted AI Gateway
+Documentation=https://github.com/nguywnben/tanpopo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tanpopo
+Group=tanpopo
+StateDirectory=tanpopo
+StateDirectoryMode=0700
+UMask=0077
+Environment=TANPOPO_DATA_DIR=/var/lib/tanpopo
+Environment=TANPOPO_MASTER_KEY_FILE=%d/master-kek
+LoadCredential=master-kek:/etc/tanpopo/master.key
+ExecStart=/usr/bin/tanpopo serve --listen 0.0.0.0:8080
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/tanpopo
+
+[Install]
+WantedBy=multi-user.target

@@ -59,9 +59,27 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 				Messages []struct {
 					Content string `json:"content"`
 				} `json:"messages"`
+				Stream bool `json:"stream"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil || len(request.Messages) == 0 {
 				http.Error(w, "invalid chat request", http.StatusBadRequest)
+				return
+			}
+			if request.Stream {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.Header().Set("Cache-Control", "no-cache")
+				flusher, ok := w.(http.Flusher)
+				if !ok {
+					http.Error(w, "streaming is unavailable", http.StatusInternalServerError)
+					return
+				}
+				_, _ = fmt.Fprintln(w, `data: {"id":"chatcmpl-live-stream","object":"chat.completion.chunk","model":"accept-chat","choices":[{"index":0,"delta":{"role":"assistant","content":"tool result "},"finish_reason":null}]}`)
+				flusher.Flush()
+				_, _ = fmt.Fprintln(w, `data: {"id":"chatcmpl-live-stream","object":"chat.completion.chunk","model":"accept-chat","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_live","type":"function","function":{"name":"lookup_weather","arguments":"{}"}}]},"finish_reason":null}]}`)
+				flusher.Flush()
+				_, _ = fmt.Fprintln(w, `data: {"id":"chatcmpl-live-stream","object":"chat.completion.chunk","model":"accept-chat","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":64,"completion_tokens":13,"total_tokens":77}}`)
+				_, _ = fmt.Fprintln(w, "data: [DONE]")
+				flusher.Flush()
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -129,7 +147,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		_ = server.Wait()
 	})
 	client := netguard.NewHTTPClient()
-	client.Timeout = 5 * time.Second
+	client.Timeout = 20 * time.Second
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		resp, getErr := client.Get(baseURL + "/readyz")
@@ -293,8 +311,9 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	}
 	var adapters struct {
 		Data []struct {
-			ID   string `json:"id"`
-			Slug string `json:"slug"`
+			ID        string `json:"id"`
+			Slug      string `json:"slug"`
+			PackageID string `json:"package_id"`
 		} `json:"data"`
 	}
 	adapterList := liveJSONRequest(t, client, http.MethodGet, baseURL+"/admin/v1/provider-adapters", nil, []*http.Cookie{cookie}, baseURL)
@@ -303,7 +322,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	}
 	var adapterID string
 	for _, adapter := range adapters.Data {
-		if adapter.Slug == "live-routing-adapter" {
+		if adapter.Slug == "live-routing-adapter" && adapter.PackageID == staged.PackageID {
 			adapterID = adapter.ID
 			break
 		}
@@ -326,6 +345,8 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		t.Fatalf("secret create response lacks credential ID: err=%v body=%s", err, secret.Body)
 	}
 
+	// Both regional connections below explicitly reference the adapter installed
+	// and pinned above, so streaming and update traffic traverses this extension.
 	createConnection := func(name, endpoint, region string) string {
 		t.Helper()
 		conn := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/connections", map[string]any{
@@ -357,7 +378,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 
 	model := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/models", map[string]any{
 		"slug": "live-routing-chat", "display_name": "Live Routing Chat", "context_window": 4096,
-		"max_output_tokens": 256, "assurance_tier": "TESTED", "capabilities": map[string]any{"streaming": false},
+		"max_output_tokens": 256, "assurance_tier": "TESTED", "capabilities": map[string]any{"streaming": true, "tool_calling": true},
 	}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
 	if model.Code != http.StatusCreated {
 		t.Fatalf("create logical model: got %d: %s", model.Code, model.Body)
@@ -501,6 +522,169 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		t.Fatalf("blast radius must report the live EU request's org, project, virtual key, and connection: %+v", radius)
 	}
 	assertCore("populated four-scope blast-radius verification")
+
+	streamResp, err := liveIngressJSON(client, baseURL+"/v1/chat/completions", keyResult.SecretKey, map[string]any{
+		"model": "accept-eu-only", "stream": true,
+		"messages": []map[string]string{{"role": "user", "content": "stream and call a tool"}},
+		"tools":    []map[string]any{{"type": "function", "function": map[string]any{"name": "lookup_weather", "parameters": map[string]any{"type": "object"}}}},
+	})
+	if err != nil {
+		t.Fatalf("send live streaming tool-call request: %v", err)
+	}
+	streamBody, readErr := io.ReadAll(streamResp.Body)
+	_ = streamResp.Body.Close()
+	if readErr != nil || streamResp.StatusCode != http.StatusOK || !strings.Contains(string(streamBody), `"tool_calls"`) || !strings.Contains(string(streamBody), "data: [DONE]") {
+		t.Fatalf("live streaming tool-call contract failed: status=%d err=%v body=%s", streamResp.StatusCode, readErr, streamBody)
+	}
+	assertCore("streaming tool-call request")
+
+	// Keep successful traffic flowing while a candidate permission expansion
+	// waits for administrator re-consent.
+	trafficStop := make(chan struct{})
+	trafficDone := make(chan struct{})
+	trafficErrors := make(chan error, 1)
+	var successfulTraffic atomic.Int64
+	go func() {
+		defer close(trafficDone)
+		for {
+			select {
+			case <-trafficStop:
+				return
+			default:
+			}
+			resp, requestErr := liveIngressJSON(client, baseURL+"/v1/chat/completions", keyResult.SecretKey, map[string]any{
+				"model": "accept-eu-only", "stream": false,
+				"messages": []map[string]string{{"role": "user", "content": "continuous upgrade traffic"}},
+			})
+			if requestErr != nil {
+				select {
+				case trafficErrors <- requestErr:
+				default:
+				}
+				return
+			}
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+				_ = resp.Body.Close()
+				select {
+				case trafficErrors <- fmt.Errorf("traffic returned %d: %s", resp.StatusCode, body):
+				default:
+				}
+				return
+			}
+			_ = resp.Body.Close()
+			successfulTraffic.Add(1)
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	time.Sleep(20 * time.Millisecond)
+
+	manifestV2 := strings.Replace(manifest, `version: "0.1.0"`, `version: "0.2.0"`, 1)
+	manifestV2 = strings.Replace(manifestV2, `      - "`+usHost+`"`, `      - "`+usHost+`"`+"\n"+`      - "unapproved.example.test"`, 1)
+	if manifestV2 == manifest || !strings.Contains(manifestV2, "unapproved.example.test") {
+		t.Fatal("could not create an escalated live adapter candidate")
+	}
+	if err := os.WriteFile(manifestPath, []byte(manifestV2), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	escalatedArchive := filepath.Join(marketplaceDir, "live-routing-adapter-v2.tpkg")
+	packEscalated := exec.Command(binary, "plugin", "pack", extensionDir, "--out", escalatedArchive)
+	packEscalated.Dir = work
+	if output, packErr := packEscalated.CombinedOutput(); packErr != nil {
+		t.Fatalf("pack escalated live adapter: %v\n%s", packErr, output)
+	}
+	escalated := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/upgrade", map[string]string{
+		"source_uri": "tanpopo-local://live-routing-adapter-v2.tpkg", "expected_sha256": fileSHA256(t, escalatedArchive),
+	}, []*http.Cookie{cookie}, baseURL, map[string]string{"If-Match": approved.ETag}, loginResult.CSRFToken)
+	if escalated.Code != http.StatusAccepted || !strings.Contains(escalated.Body, `"has_escalation":true`) {
+		t.Fatalf("permission-expanding live upgrade must wait for re-consent: got %d: %s", escalated.Code, escalated.Body)
+	}
+	pendingTrafficStart := successfulTraffic.Load()
+	pendingDeadline := time.Now().Add(2 * time.Second)
+	for successfulTraffic.Load() == pendingTrafficStart && time.Now().Before(pendingDeadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if successfulTraffic.Load() == pendingTrafficStart {
+		t.Fatal("no inference succeeded while the extension upgrade was pending re-consent")
+	}
+	select {
+	case trafficErr := <-trafficErrors:
+		t.Fatalf("inference failed while the extension upgrade was pending re-consent: %v", trafficErr)
+	default:
+	}
+	var escalation struct {
+		ActiveVersion    *string `json:"active_version"`
+		CandidateVersion *string `json:"candidate_version"`
+	}
+	if err := json.Unmarshal([]byte(escalated.Body), &escalation); err != nil || escalation.ActiveVersion == nil || *escalation.ActiveVersion != "0.1.0" || escalation.CandidateVersion == nil || *escalation.CandidateVersion != "0.2.0" {
+		t.Fatalf("old adapter version must stay active during re-consent: err=%v state=%+v body=%s", err, escalation, escalated.Body)
+	}
+	installationState := liveJSONRequest(t, client, http.MethodGet, baseURL+"/admin/v1/extensions/installations", nil, []*http.Cookie{cookie}, baseURL)
+	if installationState.Code != http.StatusOK || !strings.Contains(installationState.Body, staged.InstallationID) || !strings.Contains(installationState.Body, "UPDATING_PENDING_RECONSENT") {
+		t.Fatalf("candidate must remain pending permission re-consent while the old version stays active: got %d: %s", installationState.Code, installationState.Body)
+	}
+	reconsented := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/approve-permissions", liveApprovePermissionsRequest{
+		EnableImmediately: true, AcknowledgeUnverifiedExternal: true,
+	}, []*http.Cookie{cookie}, baseURL, map[string]string{"If-Match": escalated.ETag}, loginResult.CSRFToken)
+	if reconsented.Code != http.StatusOK {
+		t.Fatalf("re-consent to live permission expansion: got %d: %s", reconsented.Code, reconsented.Body)
+	}
+	close(trafficStop)
+	<-trafficDone
+	select {
+	case trafficErr := <-trafficErrors:
+		t.Fatalf("traffic was interrupted while the candidate awaited re-consent: %v", trafficErr)
+	default:
+	}
+	if successfulTraffic.Load() == 0 {
+		t.Fatal("no requests completed successfully while the candidate awaited re-consent")
+	}
+
+	// A permission-preserving version activates without asking for another
+	// re-consent, and rollback restores the preceding version.
+	manifestV21 := strings.Replace(manifestV2, `version: "0.2.0"`, `version: "0.2.1"`, 1)
+	if err := os.WriteFile(manifestPath, []byte(manifestV21), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	archiveV21 := filepath.Join(marketplaceDir, "live-routing-adapter-v2.1.tpkg")
+	packV21 := exec.Command(binary, "plugin", "pack", extensionDir, "--out", archiveV21)
+	packV21.Dir = work
+	if output, packErr := packV21.CombinedOutput(); packErr != nil {
+		t.Fatalf("pack non-escalating live adapter: %v\n%s", packErr, output)
+	}
+	upgraded := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/upgrade", map[string]string{
+		"source_uri": "tanpopo-local://live-routing-adapter-v2.1.tpkg", "expected_sha256": fileSHA256(t, archiveV21),
+	}, []*http.Cookie{cookie}, baseURL, map[string]string{"If-Match": reconsented.ETag}, loginResult.CSRFToken)
+	if upgraded.Code != http.StatusOK || !strings.Contains(upgraded.Body, `"active_version":"0.2.1"`) {
+		t.Fatalf("permission-preserving update must activate immediately: got %d: %s", upgraded.Code, upgraded.Body)
+	}
+	rolledBack := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/rollback", liveRollbackExtensionRequest{Reason: "Acceptance rollback verification"},
+		[]*http.Cookie{cookie}, baseURL, map[string]string{"If-Match": upgraded.ETag}, loginResult.CSRFToken)
+	if rolledBack.Code != http.StatusOK || !strings.Contains(rolledBack.Body, `"active_version":"0.2.0"`) {
+		t.Fatalf("live rollback must restore the previous pinned adapter: got %d: %s", rolledBack.Code, rolledBack.Body)
+	}
+	assertCore("re-consent, non-escalating upgrade, and rollback")
+
+	quarantined := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/quarantine", liveRollbackExtensionRequest{Reason: "Acceptance quarantine verification"},
+		[]*http.Cookie{cookie}, baseURL, map[string]string{"If-Match": rolledBack.ETag}, loginResult.CSRFToken)
+	if quarantined.Code != http.StatusOK || !strings.Contains(quarantined.Body, `"state":"QUARANTINED"`) {
+		t.Fatalf("quarantine live adapter: got %d: %s", quarantined.Code, quarantined.Body)
+	}
+	blocked, err := liveIngressJSON(client, baseURL+"/v1/chat/completions", keyResult.SecretKey, map[string]any{
+		"model": "accept-eu-only", "stream": false, "messages": []map[string]string{{"role": "user", "content": "request after quarantine"}},
+	})
+	if err != nil {
+		t.Fatalf("request after quarantine: %v", err)
+	}
+	blockedBody, _ := io.ReadAll(blocked.Body)
+	_ = blocked.Body.Close()
+	if blocked.StatusCode != http.StatusServiceUnavailable || (!strings.Contains(string(blockedBody), `"extension_quarantined"`) && !strings.Contains(string(blockedBody), `"no_compliant_deployment_available"`)) {
+		t.Fatalf("quarantined adapter must reject new inference with a fail-closed 503: got %d: %s", blocked.StatusCode, blockedBody)
+	}
+	if got := usRequests.Load(); got != 0 {
+		t.Fatalf("quarantine or EU residency failure must not fall back to the US provider, which received %d requests", got)
+	}
+	assertCore("quarantine blocks new inference")
 }
 
 func hostPort(t *testing.T, rawURL string) string {

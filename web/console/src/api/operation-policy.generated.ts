@@ -112,6 +112,10 @@ export const operationPolicy = {
     "csrf": false,
     "ifMatch": false
   },
+  "POST /admin/v1/provider-adapters": {
+    "csrf": true,
+    "ifMatch": false
+  },
   "GET /admin/v1/provider-adapters/{adapterId}": {
     "csrf": false,
     "ifMatch": false
@@ -201,6 +205,10 @@ export const operationPolicy = {
     "ifMatch": true
   },
   "POST /admin/v1/extensions/{installationId}/upgrade": {
+    "csrf": true,
+    "ifMatch": true
+  },
+  "POST /admin/v1/extensions/{installationId}/quarantine": {
     "csrf": true,
     "ifMatch": true
   },

@@ -1,0 +1,53 @@
+# Copyright 2026 The Tanpopo Authors.
+# Licensed under the Apache License, Version 2.0.
+
+version: 2
+project_name: tanpopo
+
+builds:
+  - id: tanpopo
+    main: ./cmd/tanpopo
+    binary: tanpopo
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .Date }}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: tanpopo-archive
+    builds:
+      - tanpopo
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: SHA256SUMS
+  algorithm: sha256
+
+snapshot:
+  version_template: '{{ incpatch .Version }}-snapshot'
+
+changelog:
+  disable: true
+

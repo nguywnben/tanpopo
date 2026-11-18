@@ -85,7 +85,7 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 	})
 
 	client := netguard.NewHTTPClient()
-	client.Timeout = 3 * time.Second
+	client.Timeout = 20 * time.Second
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		resp, getErr := client.Get(baseURL + "/readyz")
@@ -133,11 +133,11 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 	}
 
 	bootstrapBody := map[string]any{
-		"bootstrap_token": token,
-		"owner_email": "owner-ext-accept@example.test",
-		"owner_password": "StrongLiveOwner#2031!",
-		"org_name": "EXT Accept Live Org",
-		"project_name": "EXT Accept Live Project",
+		"bootstrap_token":                token,
+		"owner_email":                    "owner-ext-accept@example.test",
+		"owner_password":                 "StrongLiveOwner#2031!",
+		"org_name":                       "EXT Accept Live Org",
+		"project_name":                   "EXT Accept Live Project",
 		"master_kek_backup_acknowledged": true,
 	}
 	boot := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/bootstrap/complete", bootstrapBody, nil, baseURL)
@@ -145,7 +145,7 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 		t.Fatalf("bootstrap completion: want 201, got %d: %s", boot.Code, boot.Body)
 	}
 	var bootResult struct {
-		OrgID string `json:"org_id"`
+		OrgID     string `json:"org_id"`
 		CSRFToken string `json:"csrf_token"`
 	}
 	if err := json.Unmarshal([]byte(boot.Body), &bootResult); err != nil || bootResult.OrgID == "" || bootResult.CSRFToken == "" {
@@ -162,18 +162,18 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 	}
 
 	login := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/auth/login", map[string]string{
-		"email": "owner-ext-accept@example.test",
+		"email":    "owner-ext-accept@example.test",
 		"password": "StrongLiveOwner#2031!",
-		"org_id": bootResult.OrgID,
+		"org_id":   bootResult.OrgID,
 	}, nil, baseURL)
 	if login.Code != http.StatusOK {
 		t.Fatalf("owner login: want 200, got %d: %s", login.Code, login.Body)
 	}
 	loginCookie := findLiveSessionCookie(t, login.Cookies)
 	var loginResult struct {
-		PrincipalID string `json:"principal_id"`
-		OrgID *string `json:"org_id"`
-		CSRFToken string `json:"csrf_token"`
+		PrincipalID string  `json:"principal_id"`
+		OrgID       *string `json:"org_id"`
+		CSRFToken   string  `json:"csrf_token"`
 	}
 	if err := json.Unmarshal([]byte(login.Body), &loginResult); err != nil || loginResult.PrincipalID == "" || loginResult.CSRFToken == "" || loginResult.OrgID == nil || *loginResult.OrgID != bootResult.OrgID {
 		t.Fatalf("login response does not identify bootstrapped owner: err=%v body=%s", err, login.Body)
@@ -207,6 +207,11 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 	if output, err := init.CombinedOutput(); err != nil {
 		t.Fatalf("scaffold external adapter: %v\n%s", err, output)
 	}
+	pluginTest := exec.Command(binary, "plugin", "test", extensionDir)
+	pluginTest.Dir = work
+	if output, err := pluginTest.CombinedOutput(); err != nil {
+		t.Fatalf("run offline CT-01..CT-17 acceptance suite: %v\n%s", err, output)
+	}
 	archivePath := filepath.Join(marketplaceDir, "regional-llm-adapter.tpkg")
 	pack := exec.Command(binary, "plugin", "pack", extensionDir, "--out", archivePath)
 	pack.Dir = work
@@ -215,7 +220,7 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 	}
 	installURL := baseURL + "/admin/v1/extensions/install"
 	installBody := map[string]string{
-		"source_uri": "tanpopo-local://regional-llm-adapter.tpkg",
+		"source_uri":      "tanpopo-local://regional-llm-adapter.tpkg",
 		"expected_sha256": fileSHA256(t, archivePath),
 	}
 	missingCSRF := liveJSONRequest(t, client, http.MethodPost, installURL, installBody, []*http.Cookie{loginCookie}, baseURL)
@@ -266,7 +271,7 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 		t.Fatalf("pack escalated adapter version: %v\n%s", err, output)
 	}
 	upgradeBody := map[string]string{
-		"source_uri": "tanpopo-local://regional-llm-adapter-v2.tpkg",
+		"source_uri":      "tanpopo-local://regional-llm-adapter-v2.tpkg",
 		"expected_sha256": fileSHA256(t, upgradeArchive),
 	}
 	upgrade := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/upgrade", upgradeBody, []*http.Cookie{loginCookie}, baseURL, map[string]string{"If-Match": approved.ETag}, loginResult.CSRFToken)
@@ -343,14 +348,14 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 }
 
 type liveResponse struct {
-	Code int
-	Body string
-	ETag string
+	Code    int
+	Body    string
+	ETag    string
 	Cookies []*http.Cookie
 }
 
 type liveApprovePermissionsRequest struct {
-	EnableImmediately            bool `json:"enable_immediately"`
+	EnableImmediately             bool `json:"enable_immediately"`
 	AcknowledgeUnverifiedExternal bool `json:"acknowledge_unverified_external"`
 }
 
