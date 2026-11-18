@@ -57,9 +57,10 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 		t.Fatal(err)
 	}
 
-	const workers, writesPerWorker = 20, 8
+	const workers = 20
 	start := make(chan struct{})
 	ready := make(chan struct{}, workers)
+	stop := make(chan struct{})
 	var writers sync.WaitGroup
 	var failures sync.Map
 	for worker := 0; worker < workers; worker++ {
@@ -68,7 +69,12 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 			defer writers.Done()
 			ready <- struct{}{}
 			<-start
-			for write := 0; write < writesPerWorker; write++ {
+			for write := 0; ; write++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
 				requestID := fmt.Sprintf("bk_%02d_%02d", worker, write)
 				_, settleErr := ledgerService.Settle(ctx, ledger.SettleRequest{
 					OrgID: "org_backup_ac1", RequestID: requestID, ProjectID: "prj_backup_ac1",
@@ -89,6 +95,11 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 					failures.Store(requestID, auditErr)
 					return
 				}
+				select {
+				case <-stop:
+					return
+				default:
+				}
 			}
 		}(worker)
 	}
@@ -99,10 +110,11 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 
 	archiveDir := filepath.Join(root, "backups")
 	receipt, err := CreateSQLite(ctx, store, newArchiveTestKeys(), archiveDir, lockPath, configPath, artifactDir, time.Now().UTC().UnixMilli())
+	close(stop)
+	writers.Wait()
 	if err != nil {
 		t.Fatalf("online CreateSQLite: %v", err)
 	}
-	writers.Wait()
 	failures.Range(func(key, value any) bool {
 		t.Errorf("concurrent writer %v failed: %v", key, value)
 		return true
