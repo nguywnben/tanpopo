@@ -601,21 +601,23 @@ func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expect
 	if err != nil {
 		return nil, fmt.Errorf("vault: begin tx: %w", err)
 	}
-	meta, activate, err := s.RotateSecretTx(ctx, tx, orgID, secretID, expectedVersion, params)
+	meta, finish, err := s.RotateSecretTx(ctx, tx, orgID, secretID, expectedVersion, params)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
+		finish(false)
 		return nil, fmt.Errorf("vault: commit RotateSecret: %w", err)
 	}
-	activate()
+	finish(true)
 	return meta, nil
 }
 
 // RotateSecretTx rotates a write-only credential inside a caller-managed transaction.
-// The returned closure activates staged DEK cache changes only after the caller commits.
-func (s *Store) RotateSecretTx(ctx context.Context, tx *sql.Tx, orgID, secretID string, expectedVersion int64, params RotateSecretParams) (*SecretMetadata, func(), error) {
+// The returned closure must be called with true after commit or false after rollback;
+// this activates staged DEK cache changes only on commit and zeroizes the staging buffer.
+func (s *Store) RotateSecretTx(ctx context.Context, tx *sql.Tx, orgID, secretID string, expectedVersion int64, params RotateSecretParams) (*SecretMetadata, func(bool), error) {
 	if tx == nil {
 		return nil, nil, fmt.Errorf("%w: tx is required", ErrInvalidInput)
 	}
@@ -634,7 +636,12 @@ func (s *Store) RotateSecretTx(ctx context.Context, tx *sql.Tx, orgID, secretID 
 	fingerprint := computeKeyFingerprint(orgID, secretID, pt)
 	gen := s.cache.generation()
 	var stage dekCacheStage
-	defer stage.clear()
+	keepStage := false
+	defer func() {
+		if !keepStage {
+			stage.clear()
+		}
+	}()
 
 	var (
 		name        string
@@ -720,7 +727,7 @@ func (s *Store) RotateSecretTx(ctx context.Context, tx *sql.Tx, orgID, secretID 
 		return nil, nil, err
 	}
 
-	return &SecretMetadata{
+	meta := &SecretMetadata{
 		ID:             secretID,
 		OrgID:          orgID,
 		OwnerProjectID: cloneStringPtr(ownerProj),
@@ -731,7 +738,19 @@ func (s *Store) RotateSecretTx(ctx context.Context, tx *sql.Tx, orgID, secretID 
 		Version:        curVersion + 1,
 		CreatedAtMs:    createdAtMs,
 		UpdatedAtMs:    now,
-	}, func() { stage.commit(s.cache, now, gen) }, nil
+	}
+	keepStage = true
+	finished := false
+	return meta, func(committed bool) {
+		if finished {
+			return
+		}
+		finished = true
+		if committed {
+			stage.commit(s.cache, now, gen)
+		}
+		stage.clear()
+	}, nil
 }
 
 // GetSecretMetadata fetches write-only secret metadata strictly scoped to orgID.

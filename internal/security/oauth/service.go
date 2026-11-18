@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,12 +47,14 @@ type Service struct {
 	resolver  egress.HostResolver
 	redirect  string
 	allowHTTP bool
+	nodeID    string
 	refreshes singleflight.Group
 }
 
 type StartInput struct {
 	OrgID                  string
 	PrincipalID            string
+	BrowserSessionHash     string
 	ConnectionID           string
 	Flow                   string   `json:"flow"`
 	AuthorizationEndpoint  string   `json:"authorization_endpoint"`
@@ -74,9 +77,10 @@ type StartResult struct {
 }
 
 type PollInput struct {
-	OrgID       string
-	PrincipalID string
-	State       string
+	OrgID              string
+	PrincipalID        string
+	BrowserSessionHash string
+	State              string
 }
 
 type sessionPayload struct {
@@ -98,6 +102,14 @@ func (p *sessionPayload) zeroize() {
 	p.Verifier, p.DeviceCode = nil, nil
 }
 
+func validSessionHash(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
 func NewService(cfg ServiceConfig) (*Service, error) {
 	if cfg.DB == nil || cfg.Vault == nil || cfg.Audit == nil {
 		return nil, fmt.Errorf("oauth: db, vault, and transactional audit sink are required")
@@ -117,12 +129,16 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	if redirect.Path != "/admin/v1/oauth/callback" {
 		return nil, fmt.Errorf("oauth: callback redirect URI path must be /admin/v1/oauth/callback")
 	}
-	return &Service{db: cfg.DB, vault: cfg.Vault, cap: cfg.UnsealCapability, audit: cfg.Audit, nowMs: cfg.NowMs, resolver: cfg.HostResolver, redirect: redirect.String(), allowHTTP: cfg.AllowLoopbackHTTP}, nil
+	nodeID, err := newOpaqueID()
+	if err != nil {
+		return nil, fmt.Errorf("oauth: create refresh node identity: %w", err)
+	}
+	return &Service{db: cfg.DB, vault: cfg.Vault, cap: cfg.UnsealCapability, audit: cfg.Audit, nowMs: cfg.NowMs, resolver: cfg.HostResolver, redirect: redirect.String(), allowHTTP: cfg.AllowLoopbackHTTP, nodeID: nodeID}, nil
 }
 
 func (s *Service) Start(ctx context.Context, in StartInput) (*StartResult, error) {
-	if ctx == nil || strings.TrimSpace(in.OrgID) == "" || strings.TrimSpace(in.PrincipalID) == "" || strings.TrimSpace(in.ConnectionID) == "" {
-		return nil, fmt.Errorf("%w: authenticated organization, principal, and connection are required", ErrInvalidOAuthInput)
+	if ctx == nil || strings.TrimSpace(in.OrgID) == "" || strings.TrimSpace(in.PrincipalID) == "" || strings.TrimSpace(in.ConnectionID) == "" || !validSessionHash(in.BrowserSessionHash) {
+		return nil, fmt.Errorf("%w: authenticated organization, principal, browser session, and connection are required", ErrInvalidOAuthInput)
 	}
 	in.ClientID = strings.TrimSpace(in.ClientID)
 	in.Resource = strings.TrimSpace(in.Resource)
@@ -241,7 +257,7 @@ func (s *Service) startPKCE(ctx context.Context, in StartInput, conn *connection
 	}
 	now := s.nowMs()
 	expires := now + MaxAuthorizationTTL.Milliseconds()
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO oauth_authorization_sessions (id, org_id, project_id, principal_id, target_kind, target_id, grant_type, state, sealed_code_verifier, verifier_nonce, bound_resource_uri, session_status, expires_at_ms, created_at_ms) VALUES (?, ?, ?, ?, 'PROVIDER_CONNECTION', ?, 'AUTHORIZATION_CODE_PKCE', ?, ?, ?, ?, 'PENDING', ?, ?)`, sessionID, in.OrgID, nullableString(conn.projectID), in.PrincipalID, in.ConnectionID, state, ciphertext, nonce, in.Resource, expires, now); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO oauth_authorization_sessions (id, org_id, project_id, principal_id, browser_session_hash, target_kind, target_id, grant_type, state, sealed_code_verifier, verifier_nonce, bound_resource_uri, session_status, expires_at_ms, created_at_ms) VALUES (?, ?, ?, ?, ?, 'PROVIDER_CONNECTION', ?, 'AUTHORIZATION_CODE_PKCE', ?, ?, ?, ?, 'PENDING', ?, ?)`, sessionID, in.OrgID, nullableString(conn.projectID), in.PrincipalID, in.BrowserSessionHash, in.ConnectionID, state, ciphertext, nonce, in.Resource, expires, now); err != nil {
 		return nil, fmt.Errorf("oauth: persist authorization session: %w", err)
 	}
 	query := authURL.Query()
@@ -338,7 +354,7 @@ func (s *Service) startClientCredentials(ctx context.Context, in StartInput, con
 	if tokens.RefreshToken == nil {
 		// Client-credential tokens do not refresh; they are reacquired before expiry.
 	}
-	if err := s.persistTokens(ctx, in.OrgID, in.PrincipalID, in.ConnectionID, conn, tokenURL.String(), in.ClientID, scope, in.Resource, tokens); err != nil {
+	if err := s.persistTokens(ctx, in.OrgID, in.PrincipalID, in.ConnectionID, conn, tokenURL.String(), in.ClientID, scope, in.Resource, GrantClientCredentials, "", tokens); err != nil {
 		return nil, err
 	}
 	now := s.nowMs()
@@ -432,17 +448,17 @@ func (s *Service) startDevice(ctx context.Context, in StartInput, conn *connecti
 	}
 	now := s.nowMs()
 	expires := now + wire.ExpiresIn*1000
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO oauth_authorization_sessions (id, org_id, project_id, principal_id, target_kind, target_id, grant_type, state, sealed_code_verifier, verifier_nonce, verification_uri, poll_interval_ms, bound_resource_uri, session_status, expires_at_ms, created_at_ms) VALUES (?, ?, ?, ?, 'PROVIDER_CONNECTION', ?, 'DEVICE_CODE', ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)`, sessionID, in.OrgID, nullableString(conn.projectID), in.PrincipalID, in.ConnectionID, state, ciphertext, nonce, verifyURL.String(), wire.Interval*1000, in.Resource, expires, now); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO oauth_authorization_sessions (id, org_id, project_id, principal_id, browser_session_hash, target_kind, target_id, grant_type, state, sealed_code_verifier, verifier_nonce, verification_uri, poll_interval_ms, bound_resource_uri, session_status, expires_at_ms, created_at_ms) VALUES (?, ?, ?, ?, ?, 'PROVIDER_CONNECTION', ?, 'DEVICE_CODE', ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)`, sessionID, in.OrgID, nullableString(conn.projectID), in.PrincipalID, in.BrowserSessionHash, in.ConnectionID, state, ciphertext, nonce, verifyURL.String(), wire.Interval*1000, in.Resource, expires, now); err != nil {
 		return nil, fmt.Errorf("oauth: persist device authorization session")
 	}
 	return &StartResult{Flow: "device_code", State: state, VerificationURI: verifyURL.String(), UserCode: wire.UserCode, PollIntervalMs: wire.Interval * 1000, ExpiresAt: time.UnixMilli(expires).UTC().Format(time.RFC3339)}, nil
 }
 
-func (s *Service) Callback(ctx context.Context, orgID, principalID, state, code string) error {
-	if ctx == nil || strings.TrimSpace(orgID) == "" || strings.TrimSpace(principalID) == "" || strings.TrimSpace(state) == "" || strings.TrimSpace(code) == "" {
+func (s *Service) Callback(ctx context.Context, orgID, principalID, browserSessionHash, state, code string) error {
+	if ctx == nil || strings.TrimSpace(orgID) == "" || strings.TrimSpace(principalID) == "" || !validSessionHash(browserSessionHash) || strings.TrimSpace(state) == "" || strings.TrimSpace(code) == "" {
 		return ErrInvalidOAuthState
 	}
-	row, err := s.consumeSession(ctx, orgID, principalID, state, GrantAuthorizationCodePKCE)
+	row, err := s.consumeSession(ctx, orgID, principalID, browserSessionHash, state, GrantAuthorizationCodePKCE)
 	if err != nil {
 		return err
 	}
@@ -494,7 +510,7 @@ func (s *Service) Callback(ctx context.Context, orgID, principalID, state, code 
 		return err
 	}
 	defer tokens.Zeroize()
-	return s.persistTokens(ctx, orgID, principalID, payload.ConnectionID, conn, tokenURL.String(), payload.ClientID, payload.Scopes, payload.Resource, tokens)
+	return s.persistTokens(ctx, orgID, principalID, payload.ConnectionID, conn, tokenURL.String(), payload.ClientID, payload.Scopes, payload.Resource, GrantAuthorizationCodePKCE, "", tokens)
 }
 
 type sessionRow struct {
@@ -504,7 +520,7 @@ type sessionRow struct {
 	pollIntervalMs    int64
 }
 
-func (s *Service) consumeSession(ctx context.Context, orgID, principalID, state, grant string) (*sessionRow, error) {
+func (s *Service) consumeSession(ctx context.Context, orgID, principalID, browserSessionHash, state, grant string) (*sessionRow, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -516,7 +532,7 @@ func (s *Service) consumeSession(ctx context.Context, orgID, principalID, state,
 	var targetKind, targetID string
 	var grantType string
 	var pollInterval sql.NullInt64
-	err = tx.QueryRowContext(ctx, `SELECT id, target_kind, target_id, grant_type, sealed_code_verifier, verifier_nonce, bound_resource_uri, poll_interval_ms, session_status, expires_at_ms FROM oauth_authorization_sessions WHERE org_id = ? AND principal_id = ? AND state = ?`, orgID, principalID, state).Scan(&row.id, &targetKind, &targetID, &grantType, &row.ciphertext, &row.nonce, &row.resource, &pollInterval, &status, &expires)
+	err = tx.QueryRowContext(ctx, `SELECT id, target_kind, target_id, grant_type, sealed_code_verifier, verifier_nonce, bound_resource_uri, poll_interval_ms, session_status, expires_at_ms FROM oauth_authorization_sessions WHERE org_id = ? AND principal_id = ? AND browser_session_hash = ? AND state = ?`, orgID, principalID, browserSessionHash, state).Scan(&row.id, &targetKind, &targetID, &grantType, &row.ciphertext, &row.nonce, &row.resource, &pollInterval, &status, &expires)
 	if err != nil || targetKind != "PROVIDER_CONNECTION" || grantType != grant || status != "PENDING" || s.nowMs() >= expires {
 		return nil, ErrInvalidOAuthState
 	}
@@ -552,7 +568,7 @@ func zeroValues(v url.Values) {
 // PollDevice exchanges one RFC 8628 device code. Session ownership is checked on every poll,
 // polling cadence is enforced by the database, and the device code itself exists only sealed.
 func (s *Service) PollDevice(ctx context.Context, in PollInput) (*StartResult, error) {
-	if ctx == nil || strings.TrimSpace(in.OrgID) == "" || strings.TrimSpace(in.PrincipalID) == "" || strings.TrimSpace(in.State) == "" {
+	if ctx == nil || strings.TrimSpace(in.OrgID) == "" || strings.TrimSpace(in.PrincipalID) == "" || !validSessionHash(in.BrowserSessionHash) || strings.TrimSpace(in.State) == "" {
 		return nil, ErrInvalidOAuthState
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -564,7 +580,7 @@ func (s *Service) PollDevice(ctx context.Context, in PollInput) (*StartResult, e
 	var status string
 	var expires int64
 	var lastPoll sql.NullInt64
-	err = tx.QueryRowContext(ctx, `SELECT id, target_id, sealed_code_verifier, verifier_nonce, bound_resource_uri, poll_interval_ms, last_poll_at_ms, session_status, expires_at_ms FROM oauth_authorization_sessions WHERE org_id = ? AND principal_id = ? AND state = ? AND grant_type = 'DEVICE_CODE'`, in.OrgID, in.PrincipalID, in.State).Scan(&row.id, &row.connectionID, &row.ciphertext, &row.nonce, &row.resource, &row.pollIntervalMs, &lastPoll, &status, &expires)
+	err = tx.QueryRowContext(ctx, `SELECT id, target_id, sealed_code_verifier, verifier_nonce, bound_resource_uri, poll_interval_ms, last_poll_at_ms, session_status, expires_at_ms FROM oauth_authorization_sessions WHERE org_id = ? AND principal_id = ? AND browser_session_hash = ? AND state = ? AND grant_type = 'DEVICE_CODE'`, in.OrgID, in.PrincipalID, in.BrowserSessionHash, in.State).Scan(&row.id, &row.connectionID, &row.ciphertext, &row.nonce, &row.resource, &row.pollIntervalMs, &lastPoll, &status, &expires)
 	if err != nil || status != "PENDING" || s.nowMs() >= expires {
 		return nil, ErrInvalidOAuthState
 	}
@@ -572,12 +588,19 @@ func (s *Service) PollDevice(ctx context.Context, in PollInput) (*StartResult, e
 	if lastPoll.Valid && now-lastPoll.Int64 < row.pollIntervalMs {
 		return nil, ErrSlowDown
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE oauth_authorization_sessions SET last_poll_at_ms = ? WHERE org_id = ? AND id = ? AND session_status = 'PENDING'`, now, in.OrgID, row.id); err != nil {
+	claim, err := tx.ExecContext(ctx, `UPDATE oauth_authorization_sessions SET last_poll_at_ms = ?, session_status = 'POLLING' WHERE org_id = ? AND id = ? AND session_status = 'PENDING'`, now, in.OrgID, row.id)
+	if err != nil {
 		return nil, err
+	}
+	if n, _ := claim.RowsAffected(); n != 1 {
+		return nil, ErrInvalidOAuthState
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	defer func() {
+		_, _ = s.db.ExecContext(context.Background(), `UPDATE oauth_authorization_sessions SET session_status='PENDING' WHERE org_id=? AND id=? AND session_status='POLLING'`, in.OrgID, row.id)
+	}()
 	defer clear(row.nonce)
 	defer clear(row.ciphertext)
 	plain, err := s.vault.UnsealOAuthSessionValue(ctx, in.OrgID, row.id, "session_payload", row.nonce, row.ciphertext)
@@ -617,27 +640,27 @@ func (s *Service) PollDevice(ctx context.Context, in PollInput) (*StartResult, e
 	defer zeroValues(fields)
 	tokens, err := RequestToken(ctx, client, tokenURL, fields)
 	if errors.Is(err, ErrAuthorizationPending) {
+		_, _ = s.db.ExecContext(ctx, `UPDATE oauth_authorization_sessions SET session_status = 'PENDING' WHERE org_id = ? AND id = ? AND session_status = 'POLLING'`, in.OrgID, row.id)
 		return &StartResult{Flow: "device_code", State: in.State, Status: "authorization_pending", PollIntervalMs: row.pollIntervalMs}, ErrAuthorizationPending
 	}
 	if errors.Is(err, ErrSlowDown) {
-		_, _ = s.db.ExecContext(ctx, `UPDATE oauth_authorization_sessions SET poll_interval_ms = poll_interval_ms + 5000 WHERE org_id = ? AND id = ? AND session_status = 'PENDING'`, in.OrgID, row.id)
+		_, _ = s.db.ExecContext(ctx, `UPDATE oauth_authorization_sessions SET poll_interval_ms = poll_interval_ms + 5000, session_status = 'PENDING' WHERE org_id = ? AND id = ? AND session_status = 'POLLING'`, in.OrgID, row.id)
 		return nil, ErrSlowDown
 	}
 	if err != nil {
+		_, _ = s.db.ExecContext(context.Background(), `UPDATE oauth_authorization_sessions SET session_status = 'FAILED' WHERE org_id = ? AND id = ? AND session_status = 'POLLING'`, in.OrgID, row.id)
 		return nil, err
 	}
 	defer tokens.Zeroize()
-	if _, err := s.db.ExecContext(ctx, `UPDATE oauth_authorization_sessions SET session_status = 'COMPLETED' WHERE org_id = ? AND id = ? AND session_status = 'PENDING'`, in.OrgID, row.id); err != nil {
-		return nil, err
-	}
-	if err := s.persistTokens(ctx, in.OrgID, in.PrincipalID, payload.ConnectionID, conn, tokenURL.String(), payload.ClientID, payload.Scopes, payload.Resource, tokens); err != nil {
+	if err := s.persistTokens(ctx, in.OrgID, in.PrincipalID, payload.ConnectionID, conn, tokenURL.String(), payload.ClientID, payload.Scopes, payload.Resource, GrantDeviceCode, row.id, tokens); err != nil {
+		_, _ = s.db.ExecContext(context.Background(), `UPDATE oauth_authorization_sessions SET session_status = 'FAILED' WHERE org_id = ? AND id = ? AND session_status = 'POLLING'`, in.OrgID, row.id)
 		return nil, err
 	}
 	return &StartResult{Flow: "device_code", State: in.State, Status: "completed"}, nil
 }
 
-func (s *Service) persistTokens(ctx context.Context, orgID, principalID, connectionID string, conn *connectionContext, tokenURL, clientID, scope, resource string, tokens *TokenResponse) error {
-	serialized, err := tokenSetJSON(tokens, tokenURL, clientID, connectionID, scope, resource, time.UnixMilli(s.nowMs()))
+func (s *Service) persistTokens(ctx context.Context, orgID, principalID, connectionID string, conn *connectionContext, tokenURL, clientID, scope, resource, grantType, deviceSessionID string, tokens *TokenResponse) error {
+	serialized, err := tokenSetJSON(tokens, tokenURL, clientID, connectionID, scope, resource, grantType, time.UnixMilli(s.nowMs()))
 	if err != nil {
 		return err
 	}
@@ -657,10 +680,12 @@ func (s *Service) persistTokens(ctx context.Context, orgID, principalID, connect
 			return err
 		}
 		defer tx.Rollback()
-		_, activate, err := s.vault.RotateSecretTx(ctx, tx, orgID, existingID, meta.Version, vault.RotateSecretParams{Plaintext: serialized, BoundAudience: &resource})
+		_, finish, err := s.vault.RotateSecretTx(ctx, tx, orgID, existingID, meta.Version, vault.RotateSecretParams{Plaintext: serialized, BoundAudience: &resource})
 		if err != nil {
 			return err
 		}
+		committed := false
+		defer func() { finish(committed) }()
 		now := s.nowMs()
 		if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_token_states (org_id, credential_id, bound_principal_id, state, granted_scopes, bound_resource_uri, access_expires_at_ms, updated_at_ms) VALUES (?, ?, ?, 'TOKEN_VALID', ?, ?, ?, ?) ON CONFLICT(org_id, credential_id) DO UPDATE SET bound_principal_id=excluded.bound_principal_id, state='TOKEN_VALID', granted_scopes=excluded.granted_scopes, bound_resource_uri=excluded.bound_resource_uri, access_expires_at_ms=excluded.access_expires_at_ms, last_refresh_error=NULL, version=oauth_token_states.version+1, updated_at_ms=excluded.updated_at_ms`, orgID, existingID, principalID, scope, resource, now+tokens.ExpiresIn*1000, now); err != nil {
 			return err
@@ -668,10 +693,19 @@ func (s *Service) persistTokens(ctx context.Context, orgID, principalID, connect
 		if err := s.audit.AppendTx(ctx, tx, port.AuditEvent{CreatedAtMs: now, OrgID: &orgID, ActorKind: "PRINCIPAL", ActorID: principalID, EntryPoint: port.AuditEntryPointAdminAPI, EventType: "oauth.authorization_completed", TargetType: "provider_connection", TargetID: connectionID, MetadataJSON: `{"grant_type":"authorized_oauth","resource_bound":true}`}); err != nil {
 			return err
 		}
+		if deviceSessionID != "" {
+			res, err := tx.ExecContext(ctx, `UPDATE oauth_authorization_sessions SET session_status='COMPLETED' WHERE org_id=? AND id=? AND session_status='POLLING'`, orgID, deviceSessionID)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n != 1 {
+				return ErrInvalidOAuthState
+			}
+		}
 		if err := tx.Commit(); err != nil {
 			return err
 		}
-		activate()
+		committed = true
 		return nil
 	}
 	credentialID, err := idgen.New(idgen.PrefixSecret)
@@ -697,6 +731,15 @@ func (s *Service) persistTokens(ctx context.Context, orgID, principalID, connect
 	if err := s.audit.AppendTx(ctx, tx, port.AuditEvent{CreatedAtMs: now, OrgID: &orgID, ActorKind: "PRINCIPAL", ActorID: principalID, EntryPoint: port.AuditEntryPointAdminAPI, EventType: "oauth.authorization_completed", TargetType: "provider_connection", TargetID: connectionID, MetadataJSON: `{"grant_type":"authorized_oauth","resource_bound":true}`}); err != nil {
 		return err
 	}
+	if deviceSessionID != "" {
+		res, err := tx.ExecContext(ctx, `UPDATE oauth_authorization_sessions SET session_status='COMPLETED' WHERE org_id=? AND id=? AND session_status='POLLING'`, orgID, deviceSessionID)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return ErrInvalidOAuthState
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
@@ -706,12 +749,12 @@ func (s *Service) persistTokens(ctx context.Context, orgID, principalID, connect
 
 // AccessToken returns a copy of a target-bound bearer token and serializes refreshes by
 // credential id. The caller must clear the returned byte slice after injection.
-func (s *Service) AccessToken(ctx context.Context, orgID, credentialID string) ([]byte, error) {
-	if ctx == nil || strings.TrimSpace(orgID) == "" || strings.TrimSpace(credentialID) == "" {
+func (s *Service) AccessToken(ctx context.Context, orgID, credentialID, expectedResource string) ([]byte, error) {
+	if ctx == nil || strings.TrimSpace(orgID) == "" || strings.TrimSpace(credentialID) == "" || strings.TrimSpace(expectedResource) == "" {
 		return nil, ErrInvalidOAuthInput
 	}
-	v, err, _ := s.refreshes.Do(orgID+"/"+credentialID, func() (any, error) {
-		return s.resolveAccessToken(ctx, orgID, credentialID)
+	v, err, _ := s.refreshes.Do(orgID+"/"+credentialID+"/"+expectedResource, func() (any, error) {
+		return s.resolveAccessToken(ctx, orgID, credentialID, expectedResource)
 	})
 	if err != nil {
 		return nil, err
@@ -719,12 +762,12 @@ func (s *Service) AccessToken(ctx context.Context, orgID, credentialID string) (
 	return append([]byte(nil), v.([]byte)...), nil
 }
 
-func (s *Service) resolveAccessToken(ctx context.Context, orgID, credentialID string) ([]byte, error) {
+func (s *Service) resolveAccessToken(ctx context.Context, orgID, credentialID, expectedResource string) ([]byte, error) {
 	secret, err := s.vault.UnsealWithCapability(ctx, s.cap, orgID, credentialID)
 	if err != nil {
 		return nil, fmt.Errorf("oauth: token credential unavailable")
 	}
-	defer secret.Zeroize()
+	defer func() { secret.Zeroize() }()
 	if secret.SecretKind != vault.SecretKindOAuth2TokenSet {
 		return nil, fmt.Errorf("oauth: credential is not an OAuth token set")
 	}
@@ -732,10 +775,50 @@ func (s *Service) resolveAccessToken(ctx context.Context, orgID, credentialID st
 	if err != nil {
 		return nil, err
 	}
-	defer tokens.Zeroize()
+	defer func() { tokens.Zeroize() }()
 	var bound string
-	err = s.db.QueryRowContext(ctx, `SELECT bound_resource_uri FROM oauth_token_states WHERE org_id = ? AND credential_id = ? AND state IN ('TOKEN_VALID','REFRESH_GRACE_DEGRADED')`, orgID, credentialID).Scan(&bound)
-	if err != nil || bound == "" || bound != tokens.Resource || secret.BoundAudience == nil || *secret.BoundAudience != bound {
+	err = s.db.QueryRowContext(ctx, `SELECT bound_resource_uri FROM oauth_token_states WHERE org_id = ? AND credential_id = ? AND state IN ('TOKEN_VALID','REFRESH_GRACE_DEGRADED','REFRESHING_SINGLEFLIGHT')`, orgID, credentialID).Scan(&bound)
+	if err != nil || bound == "" || bound != expectedResource || bound != tokens.Resource || secret.BoundAudience == nil || *secret.BoundAudience != bound {
+		return nil, ErrTokenAudience
+	}
+	if s.nowMs() < tokens.ExpiresAtMs-RefreshSkew.Milliseconds() {
+		return append([]byte(nil), tokens.AccessToken...), nil
+	}
+	var leaseToken string
+	for {
+		var acquired bool
+		leaseToken, acquired, err = s.acquireRefreshLease(ctx, orgID, credentialID)
+		if err != nil {
+			return nil, err
+		}
+		if acquired {
+			break
+		}
+		if token, waitErr := s.waitForRefresh(ctx, orgID, credentialID, expectedResource); waitErr == nil {
+			return token, nil
+		} else if !errors.Is(waitErr, ErrRefreshBusy) {
+			return nil, waitErr
+		}
+	}
+	defer s.releaseRefreshLease(orgID, credentialID, leaseToken)
+	// A previous instance may have completed between our first Vault read and lease
+	// acquisition. Reload under the lease so a rotated one-time refresh token is never reused.
+	latest, err := s.vault.UnsealWithCapability(ctx, s.cap, orgID, credentialID)
+	if err != nil {
+		return nil, fmt.Errorf("oauth: token credential unavailable")
+	}
+	secret.Zeroize()
+	secret = latest
+	if secret.SecretKind != vault.SecretKindOAuth2TokenSet {
+		return nil, fmt.Errorf("oauth: credential is not an OAuth token set")
+	}
+	latestTokens, err := DecodeTokenSet(secret.Plaintext)
+	if err != nil {
+		return nil, err
+	}
+	tokens.Zeroize()
+	tokens = latestTokens
+	if tokens.Resource != bound || bound != expectedResource || secret.BoundAudience == nil || *secret.BoundAudience != bound {
 		return nil, ErrTokenAudience
 	}
 	if s.nowMs() < tokens.ExpiresAtMs-RefreshSkew.Milliseconds() {
@@ -755,7 +838,31 @@ func (s *Service) resolveAccessToken(ctx context.Context, orgID, credentialID st
 		return nil, err
 	}
 	var fields url.Values
+	refreshFinished := false
 	if len(tokens.RefreshToken) == 0 {
+		if tokens.GrantType != GrantClientCredentials {
+			now := s.nowMs()
+			tx, txErr := s.db.BeginTx(ctx, nil)
+			if txErr != nil {
+				return nil, txErr
+			}
+			defer tx.Rollback()
+			if _, txErr = tx.ExecContext(ctx, `UPDATE oauth_token_states SET state='AUTH_EXPIRED_REAUTH_REQUIRED', last_refresh_error='refresh_token_unavailable', version=version+1, updated_at_ms=? WHERE org_id=? AND credential_id=?`, now, orgID, credentialID); txErr != nil {
+				return nil, txErr
+			}
+			orgCopy := orgID
+			if txErr = s.audit.AppendTx(ctx, tx, port.AuditEvent{CreatedAtMs: now, OrgID: &orgCopy, ActorKind: "SYSTEM", ActorID: "oauth-refresh", EntryPoint: port.AuditEntryPointSystemReaper, EventType: "ALT-OAUTH-EXPIRY", TargetType: "secret_credential", TargetID: credentialID, MetadataJSON: `{"reason":"refresh_token_unavailable","retry_count":0}`}); txErr != nil {
+				return nil, txErr
+			}
+			if _, txErr = tx.ExecContext(ctx, `DELETE FROM oauth_token_leases WHERE org_id=? AND credential_id=? AND lease_token=?`, orgID, credentialID, leaseToken); txErr != nil {
+				return nil, txErr
+			}
+			if txErr = tx.Commit(); txErr != nil {
+				return nil, txErr
+			}
+			refreshFinished = true
+			return nil, ErrInvalidGrant
+		}
 		fields, err = s.formClientCredentials(ctx, orgID, connID, tokens.ClientID, tokens.Scope, bound)
 	} else {
 		fields = url.Values{"grant_type": {"refresh_token"}, "refresh_token": {string(tokens.RefreshToken)}, "client_id": {tokens.ClientID}, "resource": {bound}}
@@ -773,10 +880,9 @@ func (s *Service) resolveAccessToken(ctx context.Context, orgID, credentialID st
 	}
 	defer zeroValues(fields)
 	refreshStarted := s.nowMs()
-	if _, err := s.db.ExecContext(ctx, `UPDATE oauth_token_states SET state='REFRESHING_SINGLEFLIGHT', version=version+1, updated_at_ms=? WHERE org_id=? AND credential_id=? AND state IN ('TOKEN_VALID','REFRESH_GRACE_DEGRADED')`, refreshStarted, orgID, credentialID); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE oauth_token_states SET state='REFRESHING_SINGLEFLIGHT', version=version+1, updated_at_ms=? WHERE org_id=? AND credential_id=? AND state IN ('TOKEN_VALID','REFRESH_GRACE_DEGRADED','REFRESHING_SINGLEFLIGHT')`, refreshStarted, orgID, credentialID); err != nil {
 		return nil, err
 	}
-	refreshFinished := false
 	defer func() {
 		if !refreshFinished {
 			_, _ = s.db.ExecContext(context.Background(), `UPDATE oauth_token_states SET state='REFRESH_GRACE_DEGRADED', last_refresh_error='transient_refresh_failure', version=version+1, updated_at_ms=? WHERE org_id=? AND credential_id=? AND state='REFRESHING_SINGLEFLIGHT'`, s.nowMs(), orgID, credentialID)
@@ -785,12 +891,25 @@ func (s *Service) resolveAccessToken(ctx context.Context, orgID, credentialID st
 	refreshed, err := RequestToken(ctx, client, endpoint, fields)
 	if errors.Is(err, ErrInvalidGrant) {
 		now := s.nowMs()
-		_, _ = s.db.ExecContext(ctx, `UPDATE oauth_token_states SET state='AUTH_EXPIRED_REAUTH_REQUIRED', last_refresh_error='invalid_grant', version=version+1, updated_at_ms=? WHERE org_id=? AND credential_id=?`, now, orgID, credentialID)
-		refreshFinished = true
+		tx, txErr := s.db.BeginTx(ctx, nil)
+		if txErr != nil {
+			return nil, txErr
+		}
+		defer tx.Rollback()
+		if _, txErr = tx.ExecContext(ctx, `UPDATE oauth_token_states SET state='AUTH_EXPIRED_REAUTH_REQUIRED', last_refresh_error='invalid_grant', version=version+1, updated_at_ms=? WHERE org_id=? AND credential_id=?`, now, orgID, credentialID); txErr != nil {
+			return nil, txErr
+		}
 		orgCopy := orgID
-		if auditErr := s.audit.Append(ctx, port.AuditEvent{CreatedAtMs: now, OrgID: &orgCopy, ActorKind: "SYSTEM", ActorID: "oauth-refresh", EntryPoint: port.AuditEntryPointSystemReaper, EventType: "ALT-OAUTH-EXPIRY", TargetType: "secret_credential", TargetID: credentialID, MetadataJSON: `{"reason":"invalid_grant","retry_count":0}`}); auditErr != nil {
+		if auditErr := s.audit.AppendTx(ctx, tx, port.AuditEvent{CreatedAtMs: now, OrgID: &orgCopy, ActorKind: "SYSTEM", ActorID: "oauth-refresh", EntryPoint: port.AuditEntryPointSystemReaper, EventType: "ALT-OAUTH-EXPIRY", TargetType: "secret_credential", TargetID: credentialID, MetadataJSON: `{"reason":"invalid_grant","retry_count":0}`}); auditErr != nil {
 			return nil, fmt.Errorf("oauth: persist reauthorization alert: %w", auditErr)
 		}
+		if _, txErr = tx.ExecContext(ctx, `DELETE FROM oauth_token_leases WHERE org_id=? AND credential_id=? AND lease_token=?`, orgID, credentialID, leaseToken); txErr != nil {
+			return nil, txErr
+		}
+		if txErr = tx.Commit(); txErr != nil {
+			return nil, txErr
+		}
+		refreshFinished = true
 		return nil, ErrInvalidGrant
 	}
 	if err != nil {
@@ -800,7 +919,7 @@ func (s *Service) resolveAccessToken(ctx context.Context, orgID, credentialID st
 	if len(refreshed.RefreshToken) == 0 {
 		refreshed.RefreshToken = append([]byte(nil), tokens.RefreshToken...)
 	}
-	encoded, err := tokenSetJSON(refreshed, tokens.TokenURL, tokens.ClientID, connID, refreshed.Scope, bound, time.UnixMilli(s.nowMs()))
+	encoded, err := tokenSetJSON(refreshed, tokens.TokenURL, tokens.ClientID, connID, refreshed.Scope, bound, tokens.GrantType, time.UnixMilli(s.nowMs()))
 	if err != nil {
 		return nil, err
 	}
@@ -814,18 +933,84 @@ func (s *Service) resolveAccessToken(ctx context.Context, orgID, credentialID st
 		return nil, err
 	}
 	defer tx.Rollback()
-	_, activate, err := s.vault.RotateSecretTx(ctx, tx, orgID, credentialID, meta.Version, vault.RotateSecretParams{Plaintext: encoded, BoundAudience: &bound})
+	_, finish, err := s.vault.RotateSecretTx(ctx, tx, orgID, credentialID, meta.Version, vault.RotateSecretParams{Plaintext: encoded, BoundAudience: &bound})
 	if err != nil {
 		return nil, err
 	}
+	committed := false
+	defer func() { finish(committed) }()
 	now := s.nowMs()
 	if _, err = tx.ExecContext(ctx, `UPDATE oauth_token_states SET state='TOKEN_VALID', access_expires_at_ms=?, last_refresh_error=NULL, version=version+1, updated_at_ms=? WHERE org_id=? AND credential_id=?`, now+refreshed.ExpiresIn*1000, now, orgID, credentialID); err != nil {
+		return nil, err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM oauth_token_leases WHERE org_id=? AND credential_id=? AND lease_token=?`, orgID, credentialID, leaseToken); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	activate()
+	committed = true
 	refreshFinished = true
 	return append([]byte(nil), refreshed.AccessToken...), nil
+}
+
+func (s *Service) acquireRefreshLease(ctx context.Context, orgID, credentialID string) (string, bool, error) {
+	leaseToken, err := newOpaqueID()
+	if err != nil {
+		return "", false, err
+	}
+	now := s.nowMs()
+	res, err := s.db.ExecContext(ctx, `INSERT INTO oauth_token_leases (org_id, credential_id, lease_owner_node_id, lease_token, acquired_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(org_id, credential_id) DO UPDATE SET lease_owner_node_id=excluded.lease_owner_node_id, lease_token=excluded.lease_token, acquired_at_ms=excluded.acquired_at_ms, expires_at_ms=excluded.expires_at_ms WHERE oauth_token_leases.expires_at_ms <= ?`, orgID, credentialID, s.nodeID, leaseToken, now, now+30_000, now)
+	if err != nil {
+		return "", false, err
+	}
+	n, err := res.RowsAffected()
+	return leaseToken, n == 1, err
+}
+
+func (s *Service) releaseRefreshLease(orgID, credentialID, leaseToken string) {
+	_, _ = s.db.ExecContext(context.Background(), `DELETE FROM oauth_token_leases WHERE org_id=? AND credential_id=? AND lease_token=?`, orgID, credentialID, leaseToken)
+}
+
+func (s *Service) waitForRefresh(ctx context.Context, orgID, credentialID, expectedResource string) ([]byte, error) {
+	deadline := time.NewTimer(35 * time.Second)
+	defer deadline.Stop()
+	tick := time.NewTicker(40 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		var state string
+		var expires sql.NullInt64
+		var bound string
+		if err := s.db.QueryRowContext(ctx, `SELECT state, access_expires_at_ms, bound_resource_uri FROM oauth_token_states WHERE org_id=? AND credential_id=?`, orgID, credentialID).Scan(&state, &expires, &bound); err != nil {
+			return nil, err
+		}
+		if bound != expectedResource {
+			return nil, ErrTokenAudience
+		}
+		if state == "AUTH_EXPIRED_REAUTH_REQUIRED" || state == "REAUTH_REQUIRED" {
+			return nil, ErrInvalidGrant
+		}
+		if expires.Valid && s.nowMs() < expires.Int64-RefreshSkew.Milliseconds() {
+			secret, err := s.vault.UnsealWithCapability(ctx, s.cap, orgID, credentialID)
+			if err == nil {
+				defer secret.Zeroize()
+				if secret.SecretKind == vault.SecretKindOAuth2TokenSet {
+					set, decErr := DecodeTokenSet(secret.Plaintext)
+					if decErr == nil {
+						defer set.Zeroize()
+						if set.ExpiresAtMs == expires.Int64 && set.Resource == expectedResource && secret.BoundAudience != nil && *secret.BoundAudience == expectedResource {
+							return append([]byte(nil), set.AccessToken...), nil
+						}
+					}
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-deadline.C:
+			return nil, ErrRefreshBusy
+		case <-tick.C:
+		}
+	}
 }

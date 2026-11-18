@@ -407,6 +407,18 @@ func TestOpenAPIRouteAndPayloadConformancePart1(t *testing.T) {
 	assertPayloadMatchesSchema(t, doc, "CryptoShredReceipt", recDelProj.Body.Bytes())
 }
 
+func TestOpenAPIOAuthRequestBodyIsOnlyOnOAuthStart(t *testing.T) {
+	doc := loadAdminOpenAPISpec(t)
+	logout := doc.Paths["/admin/v1/auth/logout"]["post"].(map[string]any)
+	if _, ok := logout["requestBody"]; ok {
+		t.Fatal("logout operation must not declare the OAuth start request body")
+	}
+	start := doc.Paths["/admin/v1/connections/{connectionId}/oauth/start"]["post"].(map[string]any)
+	if _, ok := start["requestBody"]; !ok {
+		t.Fatal("OAuth start operation must declare its request body")
+	}
+}
+
 func assertRequiredJSONKeys(t *testing.T, label string, rawJSON []byte, keys ...string) {
 	t.Helper()
 	var obj map[string]any

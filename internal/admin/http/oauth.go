@@ -4,11 +4,14 @@
 package http
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
 
+	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/security/oauth"
 )
@@ -26,6 +29,10 @@ type oauthStartRequest struct {
 func (s *Server) handleStartConnectionOAuth(w http.ResponseWriter, r *http.Request) {
 	if s.oauth == nil {
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "oauth_unavailable", "server_error", "OAuth service is unavailable", true, nil)
+		return
+	}
+	browserSessionHash, ok := oauthBrowserSessionHash(w, r)
+	if !ok {
 		return
 	}
 	sc, ok := s.authenticate(w, r)
@@ -50,7 +57,7 @@ func (s *Server) handleStartConnectionOAuth(w http.ResponseWriter, r *http.Reque
 	if !decodePublicJSON(w, r, &req) {
 		return
 	}
-	result, err := s.oauth.Start(r.Context(), oauth.StartInput{OrgID: orgID, PrincipalID: sc.Actor.PrincipalID, ConnectionID: connID, Flow: req.Flow, AuthorizationEndpoint: req.AuthorizationEndpoint, TokenEndpoint: req.TokenEndpoint, DeviceAuthorizationURL: req.DeviceAuthorizationEndpoint, ClientID: req.ClientID, Scopes: req.Scopes, Resource: req.Resource})
+	result, err := s.oauth.Start(r.Context(), oauth.StartInput{OrgID: orgID, PrincipalID: sc.Actor.PrincipalID, BrowserSessionHash: browserSessionHash, ConnectionID: connID, Flow: req.Flow, AuthorizationEndpoint: req.AuthorizationEndpoint, TokenEndpoint: req.TokenEndpoint, DeviceAuthorizationURL: req.DeviceAuthorizationEndpoint, ClientID: req.ClientID, Scopes: req.Scopes, Resource: req.Resource})
 	if err != nil {
 		writeOAuthError(w, r, err)
 		return
@@ -62,6 +69,10 @@ func (s *Server) handleStartConnectionOAuth(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	if s.oauth == nil {
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "oauth_unavailable", "server_error", "OAuth service is unavailable", true, nil)
+		return
+	}
+	browserSessionHash, ok := oauthBrowserSessionHash(w, r)
+	if !ok {
 		return
 	}
 	sc, ok := s.authenticate(w, r)
@@ -86,7 +97,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: nullableSQLString(projectID)}) {
 		return
 	}
-	if err := s.oauth.Callback(r.Context(), orgID, sc.Actor.PrincipalID, state, code); err != nil {
+	if err := s.oauth.Callback(r.Context(), orgID, sc.Actor.PrincipalID, browserSessionHash, state, code); err != nil {
 		writeOAuthError(w, r, err)
 		return
 	}
@@ -97,6 +108,10 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleOAuthDevicePoll(w http.ResponseWriter, r *http.Request) {
 	if s.oauth == nil {
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "oauth_unavailable", "server_error", "OAuth service is unavailable", true, nil)
+		return
+	}
+	browserSessionHash, ok := oauthBrowserSessionHash(w, r)
+	if !ok {
 		return
 	}
 	sc, ok := s.authenticate(w, r)
@@ -122,7 +137,7 @@ func (s *Server) handleOAuthDevicePoll(w http.ResponseWriter, r *http.Request) {
 	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID, ProjectID: nullableSQLString(projectID)}) {
 		return
 	}
-	result, err := s.oauth.PollDevice(r.Context(), oauth.PollInput{OrgID: orgID, PrincipalID: sc.Actor.PrincipalID, State: req.State})
+	result, err := s.oauth.PollDevice(r.Context(), oauth.PollInput{OrgID: orgID, PrincipalID: sc.Actor.PrincipalID, BrowserSessionHash: browserSessionHash, State: req.State})
 	if err != nil && !errors.Is(err, oauth.ErrAuthorizationPending) {
 		writeOAuthError(w, r, err)
 		return
@@ -133,6 +148,22 @@ func (s *Server) handleOAuthDevicePoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// OAuth handshakes must stay on the same authenticated browser session that started them.
+// Bearer clients cannot safely receive the top-level callback cookie binding.
+func oauthBrowserSessionHash(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "" {
+		writeErrorEnvelope(w, r, http.StatusUnauthorized, "invalid_credential_plane", "authentication_error", "OAuth browser session is required", false, nil)
+		return "", false
+	}
+	cookie, err := r.Cookie(auth.SessionCookieName)
+	if err != nil || cookie.Value == "" {
+		writeErrorEnvelope(w, r, http.StatusUnauthorized, "unauthenticated", "authentication_error", "OAuth browser session is required", false, nil)
+		return "", false
+	}
+	sum := sha256.Sum256([]byte(cookie.Value))
+	return hex.EncodeToString(sum[:]), true
 }
 
 func nullableSQLString(v sql.NullString) string {

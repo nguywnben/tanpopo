@@ -15,10 +15,13 @@
 
 - **DEC-064** assigns `0016_oauth_sessions.sql` as the next migration because `0011_routes.sql` and `0012`..`0015` are already used. Existing migration history remains immutable.
 - Implement the OAuth start and callback routes declared by `openapi/admin-v1.yaml`; add an OpenAPI operation for RFC 8628 device polling, which the current API contract lacks.
-- Keep upstream OAuth HTTP clients behind `SSRFGuardDialer`, bind state to the authenticated principal, organization, and connection, and keep token plaintext out of persistence, API responses, redirects, and logs.
+- Keep upstream OAuth HTTP clients behind `SSRFGuardDialer`, bind state to the authenticated principal, organization, connection, and exact browser cookie session, and keep token plaintext out of persistence, API responses, redirects, and logs.
+- **DEC-066** records final review remediations: persist grant type in Vault; require reauthorization for expired PKCE/device grants without refresh tokens; coordinate refresh with `oauth_token_leases`, reload token state after acquisition, and pass the expected RFC 8707 resource into token resolution; atomically claim and complete device polls with token persistence; reject bearer-authenticated browser handshakes; and test 200 concurrent broker calls plus audience mismatch.
 
 ## Scope and required evidence
 
 Implement Authorization Code + PKCE S256, Client Credentials, and authorized RFC 8628 Device Flow; persist short-lived authorization state; seal token pairs in Vault; serialize token refresh per credential; bind tokens to the exact RFC 8707 resource; stop retrying `invalid_grant`, mark reauthorization required, and emit the required alert. Add migration, OpenAPI, HTTP, repository, concurrency, state-replay, audience-mismatch, and token-redaction coverage required by the unit spec (`CT-19`, `AUTH-09`, `AUTH-10`, `AUTH-16`, `FMEA-08`).
 
-Final implementation SHA, CI run links, reviewer names/verdicts, merge SHA, and post-merge acceptance CI will be added after those results are available. Unit 35 remains blocked until Unit 34 is DONE on main with green acceptance CI.
+Windows CI exposed a SQLite file-handle teardown failure in `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; cleanup now allows a bounded 30-second Windows teardown window and still fails if the runtime retains the database handle. The required checks will be rerun on the final diff.
+
+Final implementation SHA, CI run links, independent reviewer names/verdicts, merge SHA, and post-merge acceptance CI will be added after those results are available. Unit 35 remains blocked until Unit 34 is DONE on main with green acceptance CI.

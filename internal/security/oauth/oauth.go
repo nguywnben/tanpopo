@@ -39,6 +39,7 @@ var (
 	ErrAuthorizationPending = errors.New("oauth: device authorization is pending")
 	ErrSlowDown             = errors.New("oauth: device authorization polling is too frequent")
 	ErrTokenAudience        = errors.New("oauth: token audience mismatch")
+	ErrRefreshBusy          = errors.New("oauth: token refresh is active on another instance")
 )
 
 type TokenResponse struct {
@@ -184,6 +185,7 @@ type TokenSet struct {
 	TokenURL     string `json:"token_url"`
 	ClientID     string `json:"client_id"`
 	ConnectionID string `json:"connection_id"`
+	GrantType    string `json:"grant_type"`
 	Scope        string `json:"scope,omitempty"`
 	Resource     string `json:"resource,omitempty"`
 	ExpiresAtMs  int64  `json:"expires_at_ms"`
@@ -199,13 +201,16 @@ func (t *TokenSet) Zeroize() {
 	t.RefreshToken = nil
 }
 
-func tokenSetJSON(tokens *TokenResponse, tokenURL, clientID, connectionID, scope, resource string, now time.Time) ([]byte, error) {
+func tokenSetJSON(tokens *TokenResponse, tokenURL, clientID, connectionID, scope, resource, grantType string, now time.Time) ([]byte, error) {
 	if tokens == nil || len(tokens.AccessToken) == 0 || tokens.ExpiresIn <= 0 {
 		return nil, fmt.Errorf("%w: access token and positive expiry are required", ErrInvalidOAuthInput)
 	}
+	if grantType != GrantAuthorizationCodePKCE && grantType != GrantClientCredentials && grantType != GrantDeviceCode {
+		return nil, fmt.Errorf("%w: invalid OAuth grant type", ErrInvalidOAuthInput)
+	}
 	set := TokenSet{
 		AccessToken: append([]byte(nil), tokens.AccessToken...), RefreshToken: append([]byte(nil), tokens.RefreshToken...),
-		TokenType: tokens.TokenType, TokenURL: tokenURL, ClientID: clientID, ConnectionID: connectionID, Scope: scope,
+		TokenType: tokens.TokenType, TokenURL: tokenURL, ClientID: clientID, ConnectionID: connectionID, GrantType: grantType, Scope: scope,
 		Resource: resource, ExpiresAtMs: now.Add(time.Duration(tokens.ExpiresIn) * time.Second).UnixMilli(),
 	}
 	defer set.Zeroize()
@@ -214,7 +219,7 @@ func tokenSetJSON(tokens *TokenResponse, tokenURL, clientID, connectionID, scope
 
 func DecodeTokenSet(raw []byte) (*TokenSet, error) {
 	var set TokenSet
-	if err := json.Unmarshal(raw, &set); err != nil || len(set.AccessToken) == 0 || set.TokenURL == "" || set.ClientID == "" {
+	if err := json.Unmarshal(raw, &set); err != nil || len(set.AccessToken) == 0 || set.TokenURL == "" || set.ClientID == "" || (set.GrantType != GrantAuthorizationCodePKCE && set.GrantType != GrantClientCredentials && set.GrantType != GrantDeviceCode) {
 		set.Zeroize()
 		return nil, fmt.Errorf("oauth: invalid encrypted token-set payload")
 	}

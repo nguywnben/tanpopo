@@ -194,7 +194,7 @@ type VaultUnsealer interface {
 // OAuthTokenProvider resolves an encrypted OAuth token-set credential into a short-lived
 // resource-bound access token immediately before the broker injects it.
 type OAuthTokenProvider interface {
-	AccessToken(ctx context.Context, orgID, credentialID string) ([]byte, error)
+	AccessToken(ctx context.Context, orgID, credentialID, expectedResource string) ([]byte, error)
 }
 
 // Config configures BlindHostCredentialBroker fail-closed.
@@ -778,7 +778,7 @@ func (b *BlindHostCredentialBroker) sendOutbound(ctx context.Context, req Egress
 				if b.oauthTokens == nil {
 					return fmt.Errorf("broker: OAuth token provider is unavailable")
 				}
-				accessToken, tokenErr := b.oauthTokens.AccessToken(ctx, req.OrgID, item.slot.SecretID)
+				accessToken, tokenErr := b.oauthTokens.AccessToken(ctx, req.OrgID, item.slot.SecretID, *item.slot.BoundAudience)
 				if tokenErr != nil {
 					return fmt.Errorf("broker: OAuth access token unavailable")
 				}

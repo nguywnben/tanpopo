@@ -1167,21 +1167,6 @@ paths:
       summary: Terminate admin session and revoke any active Playground ephemeral keys (SCR-01)
       parameters:
         - $ref: "#/components/parameters/CsrfTokenHeader"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [flow, token_endpoint, client_id, resource]
-              properties:
-                flow: { type: string, enum: [authorization_code_pkce, client_credentials, device_code] }
-                authorization_endpoint: { type: string, format: uri }
-                token_endpoint: { type: string, format: uri }
-                device_authorization_endpoint: { type: string, format: uri }
-                client_id: { type: string, minLength: 1, maxLength: 512 }
-                scopes: { type: array, items: { type: string, minLength: 1 }, maxItems: 64 }
-                resource: { type: string, format: uri }
       responses:
         "204":
           description: Logged out cleanly

@@ -3328,3 +3328,64 @@ func TestVaultOAuthSessionValueUsesOrgDEKAndSessionBoundAAD(t *testing.T) {
 		t.Fatal("ciphertext must not decrypt under another session")
 	}
 }
+
+func TestVaultRotateSecretTxChangesCiphertextOnlyAfterCommit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, time.Minute)
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "rotate-tx", DisplayName: "Rotate Tx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := env.vault.SealSecret(ctx, SealSecretParams{OrgID: org.ID, Name: "rotate-tx", SecretKind: SecretKindAPIKey, Plaintext: []byte("before")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.vault.EvictAllDEKs()
+	tx, err := env.sqlite.RawDB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, finish, err := env.vault.RotateSecretTx(ctx, tx, org.ID, meta.ID, meta.Version, RotateSecretParams{Plaintext: []byte("after")})
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if rotated.Version != meta.Version+1 {
+		t.Fatalf("rotated version=%d, want %d", rotated.Version, meta.Version+1)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	finish(false)
+	before, err := env.vault.UnsealWithCapability(ctx, MintUnsealCapabilityForBroker(), org.ID, meta.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before.Plaintext) != "before" {
+		t.Fatalf("rolled-back value=%q", before.Plaintext)
+	}
+	before.Zeroize()
+	env.vault.EvictAllDEKs()
+	tx, err = env.sqlite.RawDB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, finish, err = env.vault.RotateSecretTx(ctx, tx, org.ID, meta.ID, meta.Version, RotateSecretParams{Plaintext: []byte("after")})
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	finish(true)
+	after, err := env.vault.UnsealWithCapability(ctx, MintUnsealCapabilityForBroker(), org.ID, meta.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer after.Zeroize()
+	if string(after.Plaintext) != "after" || after.Version != rotated.Version {
+		t.Fatalf("committed value=%q version=%d", after.Plaintext, after.Version)
+	}
+}

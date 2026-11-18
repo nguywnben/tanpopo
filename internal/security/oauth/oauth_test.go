@@ -95,7 +95,7 @@ func TestRequestTokenReturnsOnlySanitizedErrorsAndZeroizableTokens(t *testing.T)
 
 func TestTokenSetKeepsResourceAndConnectionBinding(t *testing.T) {
 	resp := &TokenResponse{AccessToken: []byte("a"), RefreshToken: []byte("r"), ExpiresIn: 60}
-	raw, err := tokenSetJSON(resp, "https://idp.example/token", "client", "con_1", "read", "https://api.example/", time.UnixMilli(1000))
+	raw, err := tokenSetJSON(resp, "https://idp.example/token", "client", "con_1", "read", "https://api.example/", GrantAuthorizationCodePKCE, time.UnixMilli(1000))
 	if err != nil {
 		t.Fatal(err)
 	}

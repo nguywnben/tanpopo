@@ -346,6 +346,7 @@ CREATE TABLE oauth_authorization_sessions (
     org_id                VARCHAR(40) NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     project_id            VARCHAR(40),
     principal_id          VARCHAR(40) NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    browser_session_hash  CHAR(64) NOT NULL CHECK (length(browser_session_hash) = 64),
     target_kind           VARCHAR(24) NOT NULL CHECK (target_kind IN ('PROVIDER_CONNECTION', 'MCP_SERVER')),
     target_id             VARCHAR(40) NOT NULL,
     grant_type            VARCHAR(32) NOT NULL
@@ -361,7 +362,7 @@ CREATE TABLE oauth_authorization_sessions (
     last_poll_at_ms       BIGINT,
     bound_resource_uri    TEXT,
     session_status        VARCHAR(24) NOT NULL DEFAULT 'PENDING'
-                          CHECK (session_status IN ('PENDING', 'COMPLETED', 'EXPIRED', 'CONSUMED', 'FAILED')),
+                          CHECK (session_status IN ('PENDING', 'POLLING', 'COMPLETED', 'EXPIRED', 'CONSUMED', 'FAILED')),
     expires_at_ms         BIGINT NOT NULL,
     created_at_ms         BIGINT NOT NULL,
     PRIMARY KEY (org_id, id),

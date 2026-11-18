@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
+	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
@@ -59,7 +61,7 @@ func TestAccessTokenSingleflightRefreshesOnceForTwoHundredCallers(t *testing.T) 
 		go func() {
 			ready.Done()
 			<-start
-			token, err := fx.service.AccessToken(context.Background(), fx.orgID, fx.credentialID)
+			token, err := fx.service.AccessToken(context.Background(), fx.orgID, fx.credentialID, "https://resource.example/")
 			if err == nil {
 				if string(token) != "access-after" {
 					err = errors.New("caller received a token other than the refreshed token")
@@ -91,6 +93,60 @@ func TestAccessTokenSingleflightRefreshesOnceForTwoHundredCallers(t *testing.T) 
 	if got := refreshCalls.Load(); got != 1 {
 		t.Fatalf("refresh endpoint calls = %d, want exactly one for %d concurrent callers", got, callers)
 	}
+	wrongAudienceToken, wrongAudienceErr := fx.service.AccessToken(context.Background(), fx.orgID, fx.credentialID, "https://another-resource.example/")
+	clear(wrongAudienceToken)
+	if !errors.Is(wrongAudienceErr, ErrTokenAudience) {
+		t.Fatalf("AccessToken wrong expected resource error=%v, want ErrTokenAudience", wrongAudienceErr)
+	}
+}
+
+func TestRefreshLeaseCoordinatesIndependentServiceInstances(t *testing.T) {
+	var refreshCalls atomic.Int32
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		refreshCalls.Add(1)
+		entered <- struct{}{}
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"leased-access","refresh_token":"leased-refresh","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer server.Close()
+	fx := newRefreshFixture(t, server.URL, "https://resource.example/")
+	second, err := NewService(ServiceConfig{DB: fx.db, Vault: fx.vault, UnsealCapability: fx.capability, Audit: fx.audit, NowMs: fx.service.nowMs, HostResolver: egress.NewStdHostResolver(), AllowLoopbackHTTP: true, RedirectURI: "http://127.0.0.1/admin/v1/oauth/callback"})
+	if err != nil {
+		t.Fatalf("create second service instance: %v", err)
+	}
+	results := make(chan error, 2)
+	go func() {
+		token, err := fx.service.AccessToken(context.Background(), fx.orgID, fx.credentialID, "https://resource.example/")
+		clear(token)
+		results <- err
+	}()
+	go func() {
+		token, err := second.AccessToken(context.Background(), fx.orgID, fx.credentialID, "https://resource.example/")
+		clear(token)
+		results <- err
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no refresh request reached server")
+	}
+	select {
+	case <-entered:
+		t.Fatal("second service instance sent a duplicate rotating refresh request")
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Errorf("AccessToken: %v", err)
+		}
+	}
+	if got := refreshCalls.Load(); got != 1 {
+		t.Fatalf("refresh calls=%d, want one across independent service instances", got)
+	}
 }
 
 func TestAccessTokenInvalidGrantExpiresAuthAndAuditsWithoutRetry(t *testing.T) {
@@ -104,7 +160,7 @@ func TestAccessTokenInvalidGrantExpiresAuthAndAuditsWithoutRetry(t *testing.T) {
 	defer server.Close()
 
 	fx := newRefreshFixture(t, server.URL, "https://resource.example/")
-	token, err := fx.service.AccessToken(context.Background(), fx.orgID, fx.credentialID)
+	token, err := fx.service.AccessToken(context.Background(), fx.orgID, fx.credentialID, "https://resource.example/")
 	clear(token)
 	if !errors.Is(err, ErrInvalidGrant) {
 		t.Fatalf("AccessToken error = %v, want ErrInvalidGrant", err)
@@ -134,12 +190,51 @@ func TestAccessTokenInvalidGrantExpiresAuthAndAuditsWithoutRetry(t *testing.T) {
 	}
 
 	// Once transitioned out of TOKEN_VALID, another caller must not retry the upstream grant.
-	_, secondErr := fx.service.AccessToken(context.Background(), fx.orgID, fx.credentialID)
+	_, secondErr := fx.service.AccessToken(context.Background(), fx.orgID, fx.credentialID, "https://resource.example/")
 	if secondErr == nil {
 		t.Fatal("AccessToken succeeded after invalid_grant expired the authorization")
 	}
 	if got := refreshCalls.Load(); got != 1 {
 		t.Fatalf("subsequent call retried upstream after invalid_grant: calls=%d", got)
+	}
+}
+
+func TestAuthorizationCodeGrantWithoutRefreshTokenRequiresReauthorization(t *testing.T) {
+	var tokenCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		tokenCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"wrongly-reacquired","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer server.Close()
+	fx := newRefreshFixture(t, server.URL, "https://resource.example/")
+	meta, err := fx.vault.GetSecretMetadata(context.Background(), fx.orgID, fx.credentialID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := tokenSetJSON(&TokenResponse{AccessToken: []byte("access-before"), TokenType: "Bearer", ExpiresIn: 3600}, server.URL, "oauth-client", fx.connectionID, "read", "https://resource.example/", GrantAuthorizationCodePKCE, time.UnixMilli(1_800_000_000_000-3_600_000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(encoded)
+	resource := "https://resource.example/"
+	if _, err := fx.vault.RotateSecret(context.Background(), fx.orgID, fx.credentialID, meta.Version, vault.RotateSecretParams{Plaintext: encoded, BoundAudience: &resource}); err != nil {
+		t.Fatal(err)
+	}
+	token, err := fx.service.AccessToken(context.Background(), fx.orgID, fx.credentialID, "https://resource.example/")
+	clear(token)
+	if !errors.Is(err, ErrInvalidGrant) {
+		t.Fatalf("AccessToken error=%v, want ErrInvalidGrant", err)
+	}
+	if got := tokenCalls.Load(); got != 0 {
+		t.Fatalf("token endpoint calls=%d, want no silent client_credentials fallback", got)
+	}
+	var state string
+	if err := fx.db.QueryRow(`SELECT state FROM oauth_token_states WHERE org_id=? AND credential_id=?`, fx.orgID, fx.credentialID).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != "AUTH_EXPIRED_REAUTH_REQUIRED" {
+		t.Fatalf("token state=%q, want reauthorization required", state)
 	}
 }
 
@@ -163,7 +258,7 @@ func TestAuthorizationCallbackBindsPrincipalAndConsumesStateOnce(t *testing.T) {
 
 	fx := newRefreshFixture(t, server.URL+"/token", "https://resource.example/")
 	started, err := fx.service.Start(context.Background(), StartInput{
-		OrgID: fx.orgID, PrincipalID: fx.principalID, ConnectionID: fx.connectionID,
+		OrgID: fx.orgID, PrincipalID: fx.principalID, BrowserSessionHash: strings.Repeat("a", 64), ConnectionID: fx.connectionID,
 		Flow: GrantAuthorizationCodePKCE, AuthorizationEndpoint: server.URL + "/authorize",
 		TokenEndpoint: server.URL + "/token", ClientID: "oauth-client", Resource: "https://resource.example/",
 	})
@@ -180,11 +275,14 @@ func TestAuthorizationCallbackBindsPrincipalAndConsumesStateOnce(t *testing.T) {
 	if got := authURL.Query().Get("state"); got != started.State || got == "" {
 		t.Fatalf("authorization URL state = %q, Start state = %q", got, started.State)
 	}
+	if err := fx.service.Callback(context.Background(), fx.orgID, fx.principalID, strings.Repeat("b", 64), started.State, "one-time-code"); !errors.Is(err, ErrInvalidOAuthState) {
+		t.Fatalf("callback from another browser session error = %v, want ErrInvalidOAuthState", err)
+	}
 
-	if err := fx.service.Callback(context.Background(), fx.orgID, idgen.MustNew(idgen.PrefixPrincipal), started.State, "one-time-code"); !errors.Is(err, ErrInvalidOAuthState) {
+	if err := fx.service.Callback(context.Background(), fx.orgID, idgen.MustNew(idgen.PrefixPrincipal), strings.Repeat("a", 64), started.State, "one-time-code"); !errors.Is(err, ErrInvalidOAuthState) {
 		t.Fatalf("callback with another principal error = %v, want ErrInvalidOAuthState", err)
 	}
-	if err := fx.service.Callback(context.Background(), idgen.MustNew(idgen.PrefixOrg), fx.principalID, started.State, "one-time-code"); !errors.Is(err, ErrInvalidOAuthState) {
+	if err := fx.service.Callback(context.Background(), idgen.MustNew(idgen.PrefixOrg), fx.principalID, strings.Repeat("a", 64), started.State, "one-time-code"); !errors.Is(err, ErrInvalidOAuthState) {
 		t.Fatalf("callback with another organization error = %v, want ErrInvalidOAuthState", err)
 	}
 	var savedPrincipal, savedTargetKind, savedGrant, savedStatus string
@@ -194,10 +292,10 @@ func TestAuthorizationCallbackBindsPrincipalAndConsumesStateOnce(t *testing.T) {
 	if savedPrincipal != fx.principalID || savedTargetKind != "PROVIDER_CONNECTION" || savedGrant != GrantAuthorizationCodePKCE || savedStatus != "PENDING" {
 		t.Fatalf("saved state mismatch before callback: principal=%q target=%q grant=%q status=%q", savedPrincipal, savedTargetKind, savedGrant, savedStatus)
 	}
-	if err := fx.service.Callback(context.Background(), fx.orgID, fx.principalID, started.State, "one-time-code"); err != nil {
+	if err := fx.service.Callback(context.Background(), fx.orgID, fx.principalID, strings.Repeat("a", 64), started.State, "one-time-code"); err != nil {
 		t.Fatalf("first callback for valid pending session: %v", err)
 	}
-	if err := fx.service.Callback(context.Background(), fx.orgID, fx.principalID, started.State, "one-time-code"); !errors.Is(err, ErrInvalidOAuthState) {
+	if err := fx.service.Callback(context.Background(), fx.orgID, fx.principalID, strings.Repeat("a", 64), started.State, "one-time-code"); !errors.Is(err, ErrInvalidOAuthState) {
 		t.Fatalf("replayed callback error = %v, want ErrInvalidOAuthState", err)
 	}
 	if got := tokenCalls.Load(); got != 1 {
@@ -229,7 +327,7 @@ func TestDeviceFlowSealsDeviceCodeAndCompletesOnAuthorizedPoll(t *testing.T) {
 	}))
 	defer server.Close()
 	fx := newRefreshFixture(t, server.URL+"/token", "https://resource.example/")
-	started, err := fx.service.Start(context.Background(), StartInput{OrgID: fx.orgID, PrincipalID: fx.principalID, ConnectionID: fx.connectionID, Flow: GrantDeviceCode, TokenEndpoint: server.URL + "/token", DeviceAuthorizationURL: server.URL + "/device", ClientID: "device-client", Resource: "https://resource.example/"})
+	started, err := fx.service.Start(context.Background(), StartInput{OrgID: fx.orgID, PrincipalID: fx.principalID, BrowserSessionHash: strings.Repeat("a", 64), ConnectionID: fx.connectionID, Flow: GrantDeviceCode, TokenEndpoint: server.URL + "/token", DeviceAuthorizationURL: server.URL + "/device", ClientID: "device-client", Resource: "https://resource.example/"})
 	if err != nil {
 		t.Fatalf("Start device flow: %v", err)
 	}
@@ -245,13 +343,16 @@ func TestDeviceFlowSealsDeviceCodeAndCompletesOnAuthorizedPoll(t *testing.T) {
 	if len(sealed) == 0 || len(nonce) == 0 {
 		t.Fatal("device code was not persisted in an AEAD envelope")
 	}
-	if _, err := fx.service.PollDevice(context.Background(), PollInput{OrgID: fx.orgID, PrincipalID: fx.principalID, State: started.State}); !errors.Is(err, ErrAuthorizationPending) {
+	if _, err := fx.service.PollDevice(context.Background(), PollInput{OrgID: fx.orgID, PrincipalID: fx.principalID, BrowserSessionHash: strings.Repeat("a", 64), State: started.State}); !errors.Is(err, ErrAuthorizationPending) {
 		t.Fatalf("first device poll error=%v, want authorization_pending", err)
+	}
+	if _, err := fx.service.PollDevice(context.Background(), PollInput{OrgID: fx.orgID, PrincipalID: fx.principalID, BrowserSessionHash: strings.Repeat("b", 64), State: started.State}); !errors.Is(err, ErrInvalidOAuthState) {
+		t.Fatalf("device poll from another browser session error=%v, want ErrInvalidOAuthState", err)
 	}
 	if _, err := fx.db.Exec(`UPDATE oauth_authorization_sessions SET last_poll_at_ms=created_at_ms-poll_interval_ms WHERE org_id=? AND id=?`, fx.orgID, sessionID); err != nil {
 		t.Fatal(err)
 	}
-	result, err := fx.service.PollDevice(context.Background(), PollInput{OrgID: fx.orgID, PrincipalID: fx.principalID, State: started.State})
+	result, err := fx.service.PollDevice(context.Background(), PollInput{OrgID: fx.orgID, PrincipalID: fx.principalID, BrowserSessionHash: strings.Repeat("a", 64), State: started.State})
 	if err != nil || result == nil || result.Status != "completed" {
 		t.Fatalf("authorized device poll result=%+v err=%v", result, err)
 	}
@@ -264,6 +365,37 @@ func TestDeviceFlowSealsDeviceCodeAndCompletesOnAuthorizedPoll(t *testing.T) {
 	}
 }
 
+func TestDevicePollSetupFailureReleasesClaimForRetry(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/device" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"device_code":"device-secret-value","user_code":"USER-1234","verification_uri":"http://` + r.Host + `/activate","expires_in":300,"interval":5}`))
+			return
+		}
+		t.Errorf("token endpoint should not be reached after setup failure")
+	}))
+	defer server.Close()
+	fx := newRefreshFixture(t, server.URL+"/token", "https://resource.example/")
+	started, err := fx.service.Start(context.Background(), StartInput{OrgID: fx.orgID, PrincipalID: fx.principalID, BrowserSessionHash: strings.Repeat("a", 64), ConnectionID: fx.connectionID, Flow: GrantDeviceCode, TokenEndpoint: server.URL + "/token", DeviceAuthorizationURL: server.URL + "/device", ClientID: "device-client", Resource: "https://resource.example/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.db.Exec(`UPDATE provider_adapters SET allowed_hosts_json='[]' WHERE id=(SELECT adapter_id FROM provider_connections WHERE org_id=? AND id=?)`, fx.orgID, fx.connectionID); err != nil {
+		t.Fatal(err)
+	}
+	_, err = fx.service.PollDevice(context.Background(), PollInput{OrgID: fx.orgID, PrincipalID: fx.principalID, BrowserSessionHash: strings.Repeat("a", 64), State: started.State})
+	if err == nil {
+		t.Fatal("expected setup failure after poll claim")
+	}
+	var status string
+	if err := fx.db.QueryRow(`SELECT session_status FROM oauth_authorization_sessions WHERE org_id=? AND state=?`, fx.orgID, started.State).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "PENDING" {
+		t.Fatalf("session status=%q, want PENDING after retryable setup failure", status)
+	}
+}
+
 type refreshFixture struct {
 	db           *sql.DB
 	service      *Service
@@ -271,6 +403,9 @@ type refreshFixture struct {
 	principalID  string
 	connectionID string
 	credentialID string
+	vault        *vault.Store
+	capability   vault.UnsealCapability
+	audit        *audit.Logger
 }
 
 func newRefreshFixture(t *testing.T, tokenEndpoint, resource string) *refreshFixture {
@@ -336,7 +471,7 @@ func newRefreshFixture(t *testing.T, tokenEndpoint, resource string) *refreshFix
 		t.Fatalf("insert provider connection: %v", err)
 	}
 	capability := vault.MintUnsealCapabilityForBroker()
-	encoded, err := tokenSetJSON(&TokenResponse{AccessToken: []byte("access-before"), RefreshToken: []byte("refresh-before"), TokenType: "Bearer", ExpiresIn: 3600}, tokenEndpoint, "oauth-client", connectionID, "read", resource, time.UnixMilli(now-3600_000))
+	encoded, err := tokenSetJSON(&TokenResponse{AccessToken: []byte("access-before"), RefreshToken: []byte("refresh-before"), TokenType: "Bearer", ExpiresIn: 3600}, tokenEndpoint, "oauth-client", connectionID, "read", resource, GrantAuthorizationCodePKCE, time.UnixMilli(now-3600_000))
 	if err != nil {
 		t.Fatalf("encode token set: %v", err)
 	}
@@ -356,5 +491,83 @@ func newRefreshFixture(t *testing.T, tokenEndpoint, resource string) *refreshFix
 	if err != nil {
 		t.Fatalf("create OAuth service: %v", err)
 	}
-	return &refreshFixture{db: db, service: service, orgID: orgID, principalID: principalID, connectionID: connectionID, credentialID: meta.ID}
+	return &refreshFixture{db: db, service: service, orgID: orgID, principalID: principalID, connectionID: connectionID, credentialID: meta.ID, vault: vs, capability: capability, audit: logger}
+}
+
+type oauthBrokerTestResolver struct{ slot *broker.ResolvedSlot }
+
+func (r oauthBrokerTestResolver) ResolveSlot(_ context.Context, orgID, connectionID, slotName string) (*broker.ResolvedSlot, error) {
+	if orgID != r.slot.OrgID || connectionID != r.slot.ConnectionID || slotName != r.slot.SlotName {
+		return nil, errors.New("slot not found")
+	}
+	return r.slot, nil
+}
+func (r oauthBrokerTestResolver) ResolveConnectionPolicy(_ context.Context, _, _ string) (*egress.Policy, error) {
+	return &egress.Policy{AllowedHosts: append([]string(nil), r.slot.AllowedHosts...), AllowPrivateIP: true, AllowedCIDRs: []string{"127.0.0.0/8"}, RequireTLS: false}, nil
+}
+
+func TestBlindBrokerRefreshesOnceForTwoHundredConcurrentCallsAndRejectsOtherResource(t *testing.T) {
+	var refreshCalls atomic.Int32
+	var targetCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/token" {
+			refreshCalls.Add(1)
+			if err := r.ParseForm(); err != nil {
+				t.Errorf("parse refresh: %v", err)
+			}
+			if r.Form.Get("grant_type") != "refresh_token" || r.Form.Get("refresh_token") != "refresh-before" {
+				t.Errorf("unexpected refresh request: %v", r.Form)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"access-after","refresh_token":"refresh-after","token_type":"Bearer","expires_in":3600}`))
+			return
+		}
+		targetCalls.Add(1)
+		if got := r.Header.Get("Authorization"); got != "Bearer access-after" {
+			t.Errorf("injected auth=%q", got)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer other.Close()
+	resource := server.URL + "/"
+	fx := newRefreshFixture(t, server.URL+"/token", resource)
+	allowedHosts := []string{strings.TrimPrefix(server.URL, "http://"), strings.TrimPrefix(other.URL, "http://")}
+	resolver := oauthBrokerTestResolver{slot: &broker.ResolvedSlot{OrgID: fx.orgID, ConnectionID: fx.connectionID, SlotName: "oauth_access_token", SecretID: fx.credentialID, InjectMode: broker.InjectModeHostBlind, BoundAudience: &resource, AllowedHosts: allowedHosts, AllowPrivateIP: true, AllowedCIDRs: []string{"127.0.0.0/8"}, RequireTLS: false}}
+	br, err := broker.NewBlindBroker(broker.Config{Resolver: resolver, PolicyResolver: resolver, Vault: fx.vault, OAuthTokens: fx.service, UnsealCap: fx.capability, Audit: fx.audit, HostResolver: egress.NewStdHostResolver()})
+	if err != nil {
+		t.Fatalf("create broker: %v", err)
+	}
+	request := func(target string, n int) error {
+		resp, err := br.Execute(context.Background(), broker.EgressRequest{OrgID: fx.orgID, ConnectionID: fx.connectionID, Method: http.MethodGet, TargetURL: target, CredentialInjections: []broker.CredentialInjection{{SecretSlotName: "oauth_access_token", Location: broker.TargetBearer, FieldName: "Authorization", ValuePrefix: "Bearer "}}, RequestID: fmt.Sprintf("oauth-%d", n)})
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("broker status %d", resp.StatusCode)
+		}
+		return nil
+	}
+	const callers = 200
+	start := make(chan struct{})
+	results := make(chan error, callers)
+	for i := 0; i < callers; i++ {
+		go func(i int) { <-start; results <- request(server.URL+"/resource", i) }(i)
+	}
+	close(start)
+	for i := 0; i < callers; i++ {
+		if err := <-results; err != nil {
+			t.Errorf("broker caller: %v", err)
+		}
+	}
+	if got := refreshCalls.Load(); got != 1 {
+		t.Fatalf("OAuth refresh requests=%d, want one", got)
+	}
+	if got := targetCalls.Load(); got != callers {
+		t.Fatalf("resource requests=%d, want %d", got, callers)
+	}
+	if err := request(other.URL+"/resource", callers+1); err == nil {
+		t.Fatal("broker accepted a token for a different resource")
+	}
 }
