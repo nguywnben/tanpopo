@@ -359,6 +359,20 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 		t.Fatalf("build data-plane runtime: %v", err)
 	}
 	defer closeRuntime()
+	t.Cleanup(func() {
+		// Windows runners can briefly retain a SQLite file handle during process
+		// teardown. Retry removal so the test distinguishes that short OS delay
+		// from a runtime that actually leaked the database connection.
+		var removeErr error
+		for attempt := 0; attempt < 20; attempt++ {
+			removeErr = os.RemoveAll(dataDir)
+			if removeErr == nil {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		t.Errorf("runtime left data directory locked after close: %v", removeErr)
+	})
 	for _, path := range []string{"/admin/v1/unknown", "/"} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
