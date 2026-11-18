@@ -12,15 +12,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/nguywnben/tanpopo/internal/extension/testharness"
-	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
+	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
+	"github.com/nguywnben/tanpopo/internal/extension/testharness"
 	"github.com/nguywnben/tanpopo/internal/ops/backup"
 	"github.com/nguywnben/tanpopo/internal/ops/gitops"
 	"github.com/nguywnben/tanpopo/internal/ops/upgrade"
@@ -249,13 +250,13 @@ func newBackupCommand(opts Options) *cobra.Command {
 }
 
 func openBackupRuntime(ctx context.Context, dbPath string) (*sqlite.Store, *vault.Store, func(), error) {
+	dbInfo, err := os.Lstat(dbPath)
+	if err != nil || !dbInfo.Mode().IsRegular() || dbInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, nil, nil, errors.New("backup requires an existing regular database")
+	}
 	kek, err := openKEK()
 	if err != nil {
 		return nil, nil, nil, err
-	}
-	dbInfo, err := os.Lstat(dbPath)
-	if err != nil || !dbInfo.Mode().IsRegular() || dbInfo.Mode()&os.ModeSymlink != 0 {
-		return upgrade.PreflightResult{}, errors.New("preflight requires an existing regular database and will not create one")
 	}
 	store, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath, SkipMigrate: true})
 	if err != nil {
@@ -329,7 +330,11 @@ func runPreflight(ctx context.Context, dbPath, lockfilePath, targetVersion strin
 	if err != nil {
 		return upgrade.PreflightResult{}, fmt.Errorf("read immutable tanpopo.lock: %w", err)
 	}
-	store, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath})
+	dbInfo, err := os.Lstat(dbPath)
+	if err != nil || !dbInfo.Mode().IsRegular() || dbInfo.Mode()&os.ModeSymlink != 0 {
+		return upgrade.PreflightResult{}, errors.New("preflight requires an existing regular database and will not create one")
+	}
+	store, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath, SkipMigrate: true})
 	if err != nil {
 		return upgrade.PreflightResult{}, err
 	}

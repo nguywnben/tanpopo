@@ -40,6 +40,23 @@ Consequently:
 
 ---
 
+### 1.3. Single-Node CLI Backup and Recovery
+
+Use the unified binary for local encrypted archives. The output directory is protected and each archive receives a generated `.tpop.enc` filename:
+
+```bash
+tanpopo backup create --output-dir ./data/backups \
+  --lockfile ./data/tanpopo.lock --config ./data/tanpopo.yaml \
+  --artifact-dir ./data/plugins
+tanpopo backup verify --archive ./data/backups/<archive>.tpop.enc
+tanpopo backup restore --archive ./data/backups/<archive>.tpop.enc \
+  --destination ./restore-drill
+```
+
+`verify` authenticates every encrypted frame, checks the manifest and artifact digests, and runs SQLite integrity validation before returning a receipt. `restore` validates the complete archive in private staging and publishes it into a new destination atomically. It refuses an existing destination. The archive contains only the wrapped random data key; the `Master KEK` remains in operator custody and must be supplied from the configured environment or protected key file.
+
+`tanpopo vault rotate-kek --new-kek-id <id> --new-key-env <ENV_NAME>` re-wraps organization DEKs and reports the resulting config epoch. Before restarting, persist `TANPOPO_MASTER_KEY_ID` and `TANPOPO_MASTER_KEY` with the new key. Verify cache epochs, then retire the old key and discard pre-rotation archives that still depend on it.
+
 ## 2. Tiered Retention Policy & Tenant Crypto-Shredding (`C1..C4`)
 
 ### 2.1. Default Privacy-Preserving Retention Windows (`TP-NFR-0501`, `TP-BR-0802`)

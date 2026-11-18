@@ -38,6 +38,18 @@ Prior to binding traffic sockets on startup (or via `tanpopo doctor`), `tanpopo`
 
 ---
 
+The CLI emits these eight checks in stable order as JSON, YAML, or a table. Supply every archive named by a non-empty lockfile to verify its pinned digest:
+
+```bash
+tanpopo doctor --output json \
+  --artifact @acme-cloud/adapter=./artifacts/acme-adapter.tpkg
+tanpopo config reconcile --desired ./config/tanpopo.yaml \
+  --applied ./data/tanpopo.applied.yaml --lockfile ./data/tanpopo.lock \
+  --artifact @acme-cloud/adapter=./artifacts/acme-adapter.tpkg
+```
+
+`config reconcile` rejects inline secret values and malformed `${ENV:NAME}` references, validates every lockfile package digest, and atomically replaces only the applied configuration. It never rewrites `tanpopo.lock`. Reconciliation fails closed if an artifact path is missing or its SHA-256 differs from the lock.
+
 ## 3. Interactive First-Run Setup (`allow_private_ip` & Break-Glass) vs. Headless GitOps
 
 1. **Interactive Browser Bootstrap (`SCR-01`, `UJ-01` — Default for Solo & Small Teams):**

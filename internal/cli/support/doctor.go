@@ -131,17 +131,23 @@ func collectDoctorReport(ctx context.Context, root string, artifactPaths map[str
 			if parseErr != nil {
 				return opsdoctor.StatusFail
 			}
-			if delta := time.Since(expected); delta > 30*time.Second || delta < -30*time.Second {
+			if delta := time.Since(expected); delta > 5*time.Second || delta < -5*time.Second {
 				return opsdoctor.StatusFail
 			}
 			return opsdoctor.StatusPass
 		},
 		PortsAvailable: func(context.Context) opsdoctor.Status {
-			listener, listenErr := net.Listen("tcp", listen)
-			if listenErr != nil {
-				return opsdoctor.StatusFail
+			addresses := []string{listen}
+			if admin := strings.TrimSpace(os.Getenv("TANPOPO_ADMIN_LISTEN_ADDR")); admin != "" {
+				addresses = append(addresses, admin)
 			}
-			_ = listener.Close()
+			for _, address := range addresses {
+				listener, listenErr := net.Listen("tcp", address)
+				if listenErr != nil {
+					return opsdoctor.StatusFail
+				}
+				_ = listener.Close()
+			}
 			return opsdoctor.StatusPass
 		},
 		MasterKEKReady: func(context.Context) opsdoctor.Status {
@@ -153,7 +159,7 @@ func collectDoctorReport(ctx context.Context, root string, artifactPaths map[str
 			if keyErr != nil {
 				return opsdoctor.StatusFail
 			}
-			_ = key.Close()
+			key.Close()
 			return opsdoctor.StatusPass
 		},
 		StorageFSLock: func(probeCtx context.Context) opsdoctor.Status {
@@ -206,11 +212,6 @@ func collectDoctorReport(ctx context.Context, root string, artifactPaths map[str
 			return opsdoctor.StatusPass
 		},
 		TLSPosture: func(context.Context) opsdoctor.Status {
-			cert := strings.TrimSpace(os.Getenv("TANPOPO_TLS_CERT_FILE"))
-			key := strings.TrimSpace(os.Getenv("TANPOPO_TLS_KEY_FILE"))
-			if cert != "" && key != "" && regularNonSymlink(cert) && regularNonSymlink(key) {
-				return opsdoctor.StatusPass
-			}
 			host, _, splitErr := net.SplitHostPort(listen)
 			if splitErr == nil && (host == "localhost" || (net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback())) {
 				return opsdoctor.StatusWarn
@@ -218,12 +219,16 @@ func collectDoctorReport(ctx context.Context, root string, artifactPaths map[str
 			return opsdoctor.StatusFail
 		},
 		EgressDNSSSRF: func(context.Context) opsdoctor.Status {
-			policy := egress.Policy{AllowedHosts: []string{"doctor-probe.invalid"}, RequireTLS: true}
-			if _, validateErr := policy.ValidateTargetURL("https://doctor-probe.invalid/health"); validateErr != nil {
-				return opsdoctor.StatusFail
-			}
-			if _, validateErr := policy.ValidateTargetURL("http://127.0.0.1/"); validateErr == nil {
-				return opsdoctor.StatusFail
+			blockedPorts := map[int]bool{8080: true, 9090: true}
+			for _, target := range []string{
+				"http://169.254.169.254/latest/meta-data/",
+				"http://[fd00:ec2::254]/latest/meta-data/",
+				"http://127.0.0.1:8080/healthz",
+				"http://127.0.0.1:9090/metrics",
+			} {
+				if egress.ValidateStaticEndpointURL(context.Background(), target, true, nil, blockedPorts) == nil {
+					return opsdoctor.StatusFail
+				}
 			}
 			return opsdoctor.StatusPass
 		},
