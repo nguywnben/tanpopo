@@ -115,6 +115,7 @@ type ServerConfig struct {
 	RouteResolver           *resolver.Resolver
 	Broker                  *broker.BlindHostCredentialBroker
 	ProviderRuntime         extport.ProviderRuntime
+	ProviderRuntimeFactory  func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	MarketplaceCatalog      []MarketplaceCatalogEntry
 	ArchiveResolver         ExtensionArchiveResolver
 	LockfilePath            string
@@ -230,10 +231,11 @@ type Server struct {
 	policies        *policyengine.Store
 	routeResolver   *resolver.Resolver
 	broker          *broker.BlindHostCredentialBroker
-	providerRuntime extport.ProviderRuntime
-	marketplace     []MarketplaceCatalogEntry
-	archiveResolver ExtensionArchiveResolver
-	lockfilePath    string
+	providerRuntime        extport.ProviderRuntime
+	providerRuntimeFactory func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
+	marketplace            []MarketplaceCatalogEntry
+	archiveResolver        ExtensionArchiveResolver
+	lockfilePath           string
 	configPath      string
 	probeLimiter    *slidingWindowLimiter
 	audit           port.AuditSink
@@ -390,7 +392,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		policies:        policyStore,
 		routeResolver:   routeResolver,
 		broker:          cfg.Broker,
-		providerRuntime: cfg.ProviderRuntime,
+		providerRuntime:        cfg.ProviderRuntime,
+		providerRuntimeFactory: cfg.ProviderRuntimeFactory,
 		marketplace:     marketplace,
 		archiveResolver: cfg.ArchiveResolver,
 		lockfilePath:    strings.TrimSpace(cfg.LockfilePath),

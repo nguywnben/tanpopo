@@ -822,6 +822,31 @@ func (s *Server) getOrLoadAdapterRuntime(ctx context.Context, target *snapshot.R
 	return entry, nil
 }
 
+// AcquireProviderRuntime returns the approved runtime for a tenant-scoped connection.
+// The caller must invoke the returned release function after completing the operation.
+func (s *Server) AcquireProviderRuntime(ctx context.Context, orgID, connectionID string) (port.ProviderRuntime, func(), error) {
+	if s == nil || s.snapshots == nil {
+		return nil, nil, fmt.Errorf("%w: runtime server unavailable", ErrInvalidServerConfig)
+	}
+	snap := s.snapshots.Current()
+	if snap == nil {
+		return nil, nil, fmt.Errorf("%w: configuration snapshot unavailable", port.ErrExecutionFault)
+	}
+	conn, ok := snap.LookupProviderConnection(orgID, connectionID)
+	if !ok {
+		return nil, nil, port.ErrNotFound
+	}
+	adapter, ok := snap.LookupProviderAdapter(conn.AdapterID)
+	if !ok {
+		return nil, nil, port.ErrNotFound
+	}
+	entry, err := s.getOrLoadAdapterRuntime(ctx, &snapshot.ResolvedTarget{Connection: conn, Adapter: adapter})
+	if err != nil {
+		return nil, nil, err
+	}
+	return entry.rt, entry.release, nil
+}
+
 func adapterRuntimeScopeKey(tier string, adp *snapshot.ProviderAdapterView, conn *snapshot.ProviderConnectionView) string {
 	var adpHosts []string
 	if adp != nil {

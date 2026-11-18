@@ -21,6 +21,7 @@ import (
 	adminhttp "github.com/nguywnben/tanpopo/internal/admin/http"
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
+	extport "github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
@@ -229,6 +230,24 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
+	var dataServer *ingresshttp.Server
+	if role == "all" || role == "data-plane" {
+		dataServer, err = ingresshttp.NewServer(ingresshttp.ServerConfig{
+			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
+		})
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize Data Plane: %w", err)
+		}
+		closeDataServer = func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = dataServer.Close(shutdownCtx)
+		}
+		dataServerReady = dataServer.CheckServingReady
+		mux.Handle("/v1/", dataServer)
+		mux.Handle("/metrics", dataServer.MetricsHandler())
+	}
 	if role == "all" || role == "control-plane" {
 		bootstrapManager, err := bootstrap.NewManager(bootstrap.ManagerConfig{
 			DB: db, TokenPath: envOr("TANPOPO_BOOTSTRAP_TOKEN_FILE", filepath.Join(dataDir, "bootstrap.token")), AuditSink: auditLog,
@@ -251,11 +270,15 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize virtual keys: %w", err)
 		}
+		var providerRuntimeFactory func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
+		if dataServer != nil {
+			providerRuntimeFactory = dataServer.AcquireProviderRuntime
+		}
 		adminServer, err := adminhttp.NewServer(adminhttp.ServerConfig{
 			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
 			Installer: installerService, ArchiveResolver: newServeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv)),
-			Broker: blindBroker, Audit: auditLog, Version: version,
+			Broker: blindBroker, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
 		})
 		if err != nil {
 			cleanup()
@@ -263,23 +286,6 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		}
 		mux.Handle("/admin/v1/", adminServer)
 		mux.Handle("/", webui.Handler())
-	}
-	if role == "all" || role == "data-plane" {
-		dataServer, err := ingresshttp.NewServer(ingresshttp.ServerConfig{
-			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
-		})
-		if err != nil {
-			cleanup()
-			return nil, nil, fmt.Errorf("initialize Data Plane: %w", err)
-		}
-		closeDataServer = func() {
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			_ = dataServer.Close(shutdownCtx)
-		}
-		dataServerReady = dataServer.CheckServingReady
-		mux.Handle("/v1/", dataServer)
-		mux.Handle("/metrics", dataServer.MetricsHandler())
 	}
 	return mux, cleanup, nil
 }

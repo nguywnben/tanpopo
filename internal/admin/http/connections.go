@@ -1095,8 +1095,24 @@ func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.broker == nil || s.providerRuntime == nil {
+	if s.broker == nil || (s.providerRuntime == nil && s.providerRuntimeFactory == nil) {
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "probe_runtime_unavailable", "upstream_error", "connection validation broker or extension runtime unavailable", true, nil)
+		return
+	}
+	runtime := s.providerRuntime
+	var releaseRuntime func()
+	if s.providerRuntimeFactory != nil {
+		runtime, releaseRuntime, err = s.providerRuntimeFactory(r.Context(), orgID, connID)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "probe_runtime_unavailable", "upstream_error", "connection validation runtime unavailable", true, nil)
+			return
+		}
+		if releaseRuntime != nil {
+			defer releaseRuntime()
+		}
+	}
+	if runtime == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "probe_runtime_unavailable", "upstream_error", "connection validation runtime unavailable", true, nil)
 		return
 	}
 
@@ -1105,9 +1121,9 @@ func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 
 	switch cur.State {
 	case catalog.ConnStateDraft, catalog.ConnStateAuthExpired, catalog.ConnStateSuspendedAdmin:
-		verdict, _, err = s.catalog.ValidateConnection(r.Context(), orgID, connID, s.providerRuntime, s.broker)
+		verdict, _, err = s.catalog.ValidateConnection(r.Context(), orgID, connID, runtime, s.broker)
 	case catalog.ConnStateActive, catalog.ConnStateDegraded:
-		verdict, err = s.probeActiveConnection(r.Context(), orgID, cur)
+		verdict, err = s.probeActiveConnection(r.Context(), orgID, cur, runtime)
 	default:
 		writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", fmt.Sprintf("cannot test connection in state %s", cur.State), false, nil)
 		return
@@ -1216,7 +1232,7 @@ func classifySafeProbeError(err error) (string, string) {
 	return "upstream_unreachable", "upstream connection could not be reached"
 }
 
-func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *catalog.ProviderConnection) (*extport.ValidationVerdict, error) {
+func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *catalog.ProviderConnection, runtime extport.ProviderRuntime) (*extport.ValidationVerdict, error) {
 	probeReqID, err := idgen.New(idgen.PrefixTrace)
 	if err != nil {
 		probeReqID = "trc_probe_" + cur.ID
@@ -1232,7 +1248,7 @@ func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *c
 	for _, b := range cur.SecretBindings {
 		slotNames = append(slotNames, b.SlotName)
 	}
-	probeSpec, err := s.providerRuntime.BuildValidationProbe(ctx, extport.ValidationProbeInput{
+	probeSpec, err := runtime.BuildValidationProbe(ctx, extport.ValidationProbeInput{
 		RequestID:       probeReqID,
 		ConfigJSON:      string(mergedCfg),
 		SecretSlotNames: slotNames,
@@ -1293,7 +1309,7 @@ func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *c
 			flatHdrs[k] = strings.Join(vals, ", ")
 		}
 	}
-	verdict, err := s.providerRuntime.VerifyValidationResult(ctx, extport.ValidationResultInput{
+	verdict, err := runtime.VerifyValidationResult(ctx, extport.ValidationResultInput{
 		RequestID:        probeReqID,
 		HTTPStatus:       int32(egressResp.StatusCode),
 		SanitizedHeaders: flatHdrs,

@@ -321,7 +321,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		}
 		tested := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/connections/"+result.ID+"/test", nil, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
 		if tested.Code == http.StatusServiceUnavailable && strings.Contains(tested.Body, `"code":"probe_runtime_unavailable"`) {
-			t.Skipf("live route/inference scenario requires the serve runtime to expose the provider validation broker and extension runtime; POST /admin/v1/connections/{id}/test returned 503 probe_runtime_unavailable: %s", tested.Body)
+			t.Fatalf("serve must expose the approved provider runtime to the Admin API; POST /admin/v1/connections/{id}/test returned 503: %s", tested.Body)
 		}
 		if tested.Code != http.StatusOK || !strings.Contains(tested.Body, `"valid":true`) {
 			t.Fatalf("validate %s provider connection: got %d: %s", region, tested.Code, tested.Body)

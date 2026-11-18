@@ -6,7 +6,7 @@
 - Governance state: `READY` under `DEC-061`
 - Implementation branch: persistent `develop`
 - Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest pushed checkpoint: `a195082` (Windows SQLite teardown retry for the data-plane runtime test)
+- Latest pushed checkpoint: `b460902b9fd9cc8573d618b1aef6eb6640b9f281` (live EU routing and archive/shred acceptance coverage)
 - Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
 
 ## Work performed
@@ -19,7 +19,7 @@
 - **Pasteur** supplied the acceptance-gap checklist used to plan concurrent backup, shredding, drain, upgrade-preflight, and insecure-KEK tests.
 - **Curie** added focused tests for readiness and graceful shutdown while an SSE response is active, plus incompatible-upgrade preflight output and no-side-effect checks.
 - **Mencius** implemented the opt-in local marketplace archive resolver, including path confinement, symlink/type rejection, and a digest-verified private snapshot. **GPT-6 Luna** is integrating the resolver into the live bootstrap/install acceptance flow.
-- **Banach** (**test-engineer**) added a separate real-binary EXT-ACCEPT-01 scenario that configures EU-only routing through Admin API, sends exact and estimated usage requests to local deterministic provider endpoints, verifies persisted ledger classifications, and checks the binary PID/SHA invariant. This test is currently untracked and has not run in CI.
+- **Banach** (**test-engineer**) added a separate real-binary EXT-ACCEPT-01 scenario that configures EU-only routing through Admin API, sends exact and estimated usage requests to local deterministic provider endpoints, verifies persisted ledger classifications, and checks the binary PID/SHA invariant. The test is committed on `develop`; the initial run exposed missing runtime wiring from the unified binary's Admin API to its approved Data Plane extension runtime.
 
 ## Verification evidence
 
@@ -44,11 +44,13 @@
 - CI run [44347742188](https://github.com/nguywnben/tanpopo/actions/runs/44347742188) on `bb2d896` exposed a stale OpenAPI conformance assertion (`73` routes expected; `74` registered after quarantine was added) on Ubuntu, macOS, and Windows. This assertion is updated to `74` in the current local diff. The Windows job did not reproduce the earlier database temp-directory cleanup failure.
 - **Turing** (**code-reviewer**) found that the first quarantine version checked `If-Match` before, but not inside, the lifecycle transaction and could skip/assume an aborting kill switch. **Linnaeus** (**security-auditor**) independently flagged the stream-barrier issue. Commit `7bbcf85` adds an atomic expected-version lifecycle method and re-verifies/executes the active abort barrier on idempotent requests; focused regression tests cover stale ETags, late registered streams, and fail-closed handling of a non-aborting switch. Full independent reviews must be repeated on the final diff.
 - CI run [44349279446](https://github.com/nguywnben/tanpopo/actions/runs/44349279446) on `7bbcf85`: Stage 0 and Ubuntu passed; Windows failed again during `t.TempDir` cleanup in `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; macOS was still running when recorded. The retry is included in `a195082` and awaits CI.
-- Next: review and checkpoint the new end-to-end EU/ledger and archive/shred tests, inspect CI including Windows teardown retry, then close any remaining DoD gaps. Obtain fresh independent code and security reviews on the final diff before any merge.
+- CI run [44351606499](https://github.com/nguywnben/tanpopo/actions/runs/44351606499) on `b460902` failed Stage 0 because the new live acceptance used a forbidden `t.Skipf` when connection probing returned `probe_runtime_unavailable`. This was a real product wiring gap: `serve` created Admin before Data Plane and did not supply the approved provider runtime to Admin.
+- Current patch moves Data Plane initialization before Admin in the unified role, exposes a tenant-scoped runtime acquisition method backed by the approved snapshot adapter loader/cache, and wires the Admin connection probe through that factory. Control-plane-only mode remains fail-closed without a runtime. The live acceptance now fails on missing runtime rather than skipping. `git diff --check` passes; Cloud Go/gofmt launchers remain unavailable, so compile/test/format gates require CI.
+- Next: push this wiring fix and inspect all CI jobs, including the Windows teardown retry. Close remaining DoD gaps and obtain fresh independent code and security reviews on the final diff before merge.
 
 ## Acceptance gaps still open
 
-- Confirm all live routing, exact/estimated ledger, quarantine timing, and populated blast-radius assertions pass on the new binary-backed tests; the new local test attempts the first three and the existing live test currently checks only the four blast-radius response fields are initialized.
+- Confirm all live routing, exact/estimated ledger, quarantine timing, and populated blast-radius assertions pass on the new binary-backed tests; the existing live test currently checks only that the four blast-radius response fields are initialized.
 - Confirm the archive-backed post-shred restore, KEK rotation/retirement, and doctor/startup insecure-KEK tests pass on all required operating systems.
 - The concurrent online-backup/restore and graceful SSE drain / incompatible-upgrade preflight tests have prior Linux/macOS evidence but require confirmation on the final CI SHA.
 - Validate the full implementation against the Unit 32 DoD and obtain final independent code and security reviews on the exact final diff.
