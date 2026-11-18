@@ -341,7 +341,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		resp := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/deployments", map[string]any{
 			"env_id": bootResult.EnvID, "logical_model_id": modelResult.ID, "connection_id": connID,
 			"upstream_model_name": "accept-chat", "data_region": region,
-			"rate_card": map[string]any{"input_token_nano_usd": 19607843137254902, "output_token_nano_usd": 19607843137254902},
+			"rate_card": map[string]any{"input_token_nano_usd": 19607843137254, "output_token_nano_usd": 19607843137257},
 		}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
 		if resp.Code != http.StatusCreated {
 			t.Fatalf("create %s deployment: got %d: %s", region, resp.Code, resp.Body)
