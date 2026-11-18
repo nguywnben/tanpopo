@@ -248,6 +248,7 @@ type Server struct {
 	blockedPorts    map[int]bool
 	offlineMode     bool
 	version         string
+	quarantineMu    sync.Mutex
 
 	routes  []routeEntry
 	handler http.Handler
@@ -378,34 +379,34 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	marketplace := append([]MarketplaceCatalogEntry(nil), cfg.MarketplaceCatalog...)
 
 	s := &Server{
-		db:              db,
-		storage:         cfg.Store,
-		bootstrap:       cfg.Bootstrap,
-		auth:            cfg.Auth,
-		vkeys:           cfg.VKeys,
-		vault:           cfg.Vault,
-		ledgers:         ledgerSvc,
-		snapshots:       cfg.Snapshots,
-		killSwitch:      cfg.KillSwitch,
-		catalog:         catalogRepo,
-		installer:       cfg.Installer,
-		policies:        policyStore,
-		routeResolver:   routeResolver,
-		broker:          cfg.Broker,
+		db:                     db,
+		storage:                cfg.Store,
+		bootstrap:              cfg.Bootstrap,
+		auth:                   cfg.Auth,
+		vkeys:                  cfg.VKeys,
+		vault:                  cfg.Vault,
+		ledgers:                ledgerSvc,
+		snapshots:              cfg.Snapshots,
+		killSwitch:             cfg.KillSwitch,
+		catalog:                catalogRepo,
+		installer:              cfg.Installer,
+		policies:               policyStore,
+		routeResolver:          routeResolver,
+		broker:                 cfg.Broker,
 		providerRuntime:        cfg.ProviderRuntime,
 		providerRuntimeFactory: cfg.ProviderRuntimeFactory,
-		marketplace:     marketplace,
-		archiveResolver: cfg.ArchiveResolver,
-		lockfilePath:    strings.TrimSpace(cfg.LockfilePath),
-		configPath:      strings.TrimSpace(cfg.ConfigPath),
-		probeLimiter:    newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
-		audit:           auditSink,
-		txAudit:         txAudit,
-		nowMs:           nowFn,
-		maxBodyBytes:    maxBody,
-		cursorSecret:    cursorSecret,
-		tokenVerifier:   cfg.TokenVerifier,
-		hostResolver:    hostResolver,
+		marketplace:             marketplace,
+		archiveResolver:         cfg.ArchiveResolver,
+		lockfilePath:            strings.TrimSpace(cfg.LockfilePath),
+		configPath:              strings.TrimSpace(cfg.ConfigPath),
+		probeLimiter:            newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
+		audit:                   auditSink,
+		txAudit:                 txAudit,
+		nowMs:                   nowFn,
+		maxBodyBytes:            maxBody,
+		cursorSecret:            cursorSecret,
+		tokenVerifier:           cfg.TokenVerifier,
+		hostResolver:            hostResolver,
 		blockedPorts:    blockedPorts,
 		offlineMode:     cfg.OfflineMode,
 		version:         version,
@@ -442,6 +443,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 
 		// Group E: Provider Adapters, Write-Only Secrets & Connections
 		{Method: http.MethodGet, Path: "/admin/v1/provider-adapters", Action: rbac.ActionConnectionRead, Handler: s.handleListProviderAdapters},
+		{Method: http.MethodPost, Path: "/admin/v1/provider-adapters", Action: rbac.ActionConnectionWrite, Handler: s.handleCreateProviderAdapter},
 		{Method: http.MethodGet, Path: "/admin/v1/provider-adapters/{adapterId}", Action: rbac.ActionConnectionRead, Handler: s.handleGetProviderAdapter},
 		{Method: http.MethodGet, Path: "/admin/v1/secrets", Action: rbac.ActionSecretReadMeta, Handler: s.handleListSecrets},
 		{Method: http.MethodPost, Path: "/admin/v1/secrets", Action: rbac.ActionSecretWrite, Handler: s.handleCreateSecret},

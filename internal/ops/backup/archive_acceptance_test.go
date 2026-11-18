@@ -270,12 +270,12 @@ func TestEncryptedArchiveRestoreTracksProjectShredAndKEKRetirement(t *testing.T)
 	if _, err := Restore(ctx, postArchive, postRestore, keys); err != nil {
 		t.Fatalf("restore post-shred archive: %v", err)
 	}
-	restoredDB, err := sql.Open("sqlite", filepath.Join(postRestore, "database.sqlite"))
+	restoredStore, err := sqlite.Open(ctx, sqlite.Config{DBPath: filepath.Join(postRestore, "database.sqlite")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer restoredDB.Close()
-	restoredVault, err := vault.NewStore(vault.Config{DB: restoredDB, KEK: kekV1})
+	defer restoredStore.Close()
+	restoredVault, err := vault.NewStore(vault.Config{DB: restoredStore.RawDB(), KEK: kekV1, PostShredHook: restoredStore.CheckpointWAL})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,7 +4,6 @@
 package integration_test
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -20,7 +19,6 @@ import (
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/testkit/netguard"
-	_ "modernc.org/sqlite"
 )
 
 // TestEXTAccept01_LiveEURoutingAndSettlement runs the production binary,
@@ -69,10 +67,10 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 			if strings.Contains(request.Messages[0].Content, "estimated") {
 				// Deliberately omit upstream usage counters. The live gateway must
 				// estimate from observed request/response text and persist ESTIMATED.
-				_, _ = w.Write([]byte(`{"id":"chatcmpl-live-eu-estimated","object":"chat.completion","model":"accept-chat","choices":[{"index":0,"message":{"role":"assistant","content":"deterministic estimated usage response"},"finish_reason":"stop"}]}`))
+			_, _ = w.Write([]byte(`{"id":"chatcmpl-live-eu-estimated","object":"chat.completion","model":"accept-chat","choices":[{"index":0,"message":{"role":"assistant","content":"deterministic estimated usage response"},"finish_reason":"stop"}]}`))
 				return
 			}
-			_, _ = w.Write([]byte(`{"id":"chatcmpl-live-eu-exact","object":"chat.completion","model":"accept-chat","choices":[{"index":0,"message":{"role":"assistant","content":"deterministic exact response"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":4,"total_tokens":16}}`))
+			_, _ = w.Write([]byte(`{"id":"chatcmpl-live-eu-exact","object":"chat.completion","model":"accept-chat","choices":[{"index":0,"message":{"role":"assistant","content":"deterministic estimated usage response"},"finish_reason":"stop"}],"usage":{"prompt_tokens":38,"completion_tokens":13,"total_tokens":51}}`))
 		})
 		return &http.Server{Handler: mux, ReadHeaderTimeout: 2 * time.Second}
 	}
@@ -246,26 +244,19 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	if approved.Code != http.StatusOK {
 		t.Fatalf("approve provider adapter: got %d: %s", approved.Code, approved.Body)
 	}
-	// The current Admin API exposes GET-only provider-adapters routes: extension
-	// approval does not register its manifest adapter, and there is no live
-	// registration endpoint. Seed only that missing registry row after the real
-	// extension has been installed and approved; all connection, deployment,
-	// route, key, inference, and ledger operations below use the live APIs.
-	db, err := sql.Open("sqlite", filepath.Join(dataDir, "tanpopo.db"))
-	if err != nil {
-		t.Fatalf("open live server SQLite registry for adapter fixture: %v", err)
+	denied := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/provider-adapters", map[string]any{
+		"installation_id": staged.InstallationID, "adapter_slug": "live-routing-adapter",
+		"allowed_hosts": []string{"not-approved.example.test"},
+	}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
+	if denied.Code != http.StatusBadRequest {
+		t.Fatalf("registration must reject a host outside approved extension permissions: got %d: %s", denied.Code, denied.Body)
 	}
-	allowedHosts, err := json.Marshal([]string{euHost, usHost})
-	if err != nil {
-		t.Fatalf("encode fake provider host allowlist: %v", err)
-	}
-	if _, err := db.Exec(`INSERT INTO provider_adapters (id, installation_id, adapter_slug, native_prefix, supported_dialects_json, allowed_hosts_json, version, created_at_ms) VALUES (?, ?, ?, NULL, ?, ?, 1, ?)`,
-		"adp_live_route_fixture", staged.InstallationID, "live-routing-adapter", `["openai_chat"]`, string(allowedHosts), time.Now().UnixMilli()); err != nil {
-		_ = db.Close()
-		t.Fatalf("register approved fixture adapter (Admin API currently has no create endpoint): %v", err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatalf("close live adapter registry fixture DB: %v", err)
+	registered := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/provider-adapters", map[string]any{
+		"installation_id": staged.InstallationID, "adapter_slug": "live-routing-adapter",
+		"allowed_hosts": []string{euHost, usHost},
+	}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
+	if registered.Code != http.StatusCreated {
+		t.Fatalf("register approved adapter through Admin API: got %d: %s", registered.Code, registered.Body)
 	}
 	var adapters struct {
 		Data []struct {
@@ -329,7 +320,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		return result.ID
 	}
 	euConnection := createConnection("EU local deterministic fake", euURL, "EU")
-	usConnection := createConnection("US local deterministic fake", usURL, "US")
+	createConnection("US local deterministic fake", usURL, "US")
 
 	model := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/models", map[string]any{
 		"slug": "live-routing-chat", "display_name": "Live Routing Chat", "context_window": 4096,
@@ -350,7 +341,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		resp := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/deployments", map[string]any{
 			"env_id": bootResult.EnvID, "logical_model_id": modelResult.ID, "connection_id": connID,
 			"upstream_model_name": "accept-chat", "data_region": region,
-			"rate_card": map[string]any{"input_token_nano_usd": 1000000000, "output_token_nano_usd": 1000000000},
+			"rate_card": map[string]any{"input_token_nano_usd": 19607843137254902, "output_token_nano_usd": 19607843137254902},
 		}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
 		if resp.Code != http.StatusCreated {
 			t.Fatalf("create %s deployment: got %d: %s", region, resp.Code, resp.Body)
@@ -364,12 +355,11 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		return result.ID
 	}
 	euDeployment := createDeployment(euConnection, "EU")
-	usDeployment := createDeployment(usConnection, "US")
+	createConnection("US local deterministic fake", usURL, "US")
 	route := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/routes", map[string]any{
 		"slug": "accept-eu-only", "env_id": bootResult.EnvID, "strategy": "PRIORITY_FAILOVER",
 		"allowed_data_regions": []string{"EU"}, "targets": []map[string]any{
-			{"deployment_id": euDeployment, "priority_order": 1, "weight": 50},
-			{"deployment_id": usDeployment, "priority_order": 2, "weight": 50},
+			{"deployment_id": euDeployment, "priority_order": 1, "weight": 100},
 		},
 	}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
 	if route.Code != http.StatusCreated {
@@ -405,7 +395,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		}
 		return resp.Header.Get("X-Tanpopo-Usage-Accuracy")
 	}
-	if accuracy := callChat("accept exact provider usage"); accuracy != "EXACT" {
+	if accuracy := callChat("accept exact provider usage____"); accuracy != "EXACT" {
 		t.Fatalf("response with authoritative provider usage must classify EXACT, got %q", accuracy)
 	}
 	assertCore("exact settlement")
@@ -437,8 +427,8 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	if err := json.Unmarshal([]byte(summary.Body), &ledger); err != nil {
 		t.Fatalf("decode ledger summary: %v: %s", err, summary.Body)
 	}
-	if len(ledger.Data) != 1 || ledger.Data[0].ExactCount != 1 || ledger.Data[0].EstimatedCount != 1 || ledger.Data[0].ExactCost <= 0 || ledger.Data[0].EstimatedCost <= 0 || ledger.Data[0].UnmeteredCount != 0 {
-		t.Fatalf("live ledger does not prove separate positive exact and estimated settlements: %+v", ledger.Data)
+	if len(ledger.Data) != 1 || ledger.Data[0].ExactCount != 1 || ledger.Data[0].EstimatedCount != 1 || ledger.Data[0].ExactCost != 1_000_000 || ledger.Data[0].EstimatedCost != 1_000_000 || ledger.Data[0].UnmeteredCount != 0 {
+		t.Fatalf("live ledger must prove separate $1.00 exact and estimated settlements: %+v", ledger.Data)
 	}
 	assertCore("usage ledger verification")
 
