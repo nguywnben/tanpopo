@@ -78,6 +78,9 @@ func TestCreateBundleRedactsAndRestrictsArchivePermissions(t *testing.T) {
 		}
 	}
 	text := all.String()
+	if !strings.Contains(text, `"name":"data_root","status":"ok"`) || !strings.Contains(text, `"name":"extension_lock_inventory","status":"missing"`) {
+		t.Fatalf("support bundle omitted the doctor health report: %s", text)
+	}
 	for _, value := range []string{secret, "yaml-secret-material", "plain-secret-material", "password@example.test", "Bearer secret-token-value", "private prompt"} {
 		if strings.Contains(text, value) {
 			t.Errorf("archive leaked %q", value)
@@ -111,8 +114,16 @@ func TestCreateBundleSkipsSymlinkedLogDirectory(t *testing.T) {
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
+	hdr, err := tr.Next()
+	if err != nil || hdr.Name != "doctor.json" {
+		t.Fatalf("expected only the local doctor report, got member=%v err=%v", hdr, err)
+	}
+	doctor, err := io.ReadAll(tr)
+	if err != nil || !strings.Contains(string(doctor), `"name":"logs_directory","status":"unsafe_path"`) {
+		t.Fatalf("expected symlink warning in doctor report: %s err=%v", doctor, err)
+	}
 	if _, err := tr.Next(); err != io.EOF {
-		t.Fatalf("unexpected archive member: %v", err)
+		t.Fatalf("unexpected archive member after doctor report: %v", err)
 	}
 }
 

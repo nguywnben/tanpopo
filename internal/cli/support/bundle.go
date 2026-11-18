@@ -38,9 +38,10 @@ const (
 
 // Options configures local diagnostics collection.
 type Options struct {
-	RootDir string
-	Output  string
-	Stdout  io.Writer
+	RootDir      string
+	Output       string
+	OutputFormat *string
+	Stdout       io.Writer
 }
 
 // NewCommand creates `tanpopo support-bundle -o <archive>`.
@@ -50,6 +51,13 @@ func NewCommand(opts Options) *cobra.Command {
 		Short: "Create a locally redacted diagnostic archive",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			format := "table"
+			if opts.OutputFormat != nil {
+				format = strings.ToLower(strings.TrimSpace(*opts.OutputFormat))
+			}
+			if format != "json" && format != "yaml" && format != "table" {
+				return errors.New("--output must be table, json, or yaml")
+			}
 			if strings.TrimSpace(opts.RootDir) == "" {
 				opts.RootDir = "."
 			}
@@ -60,12 +68,27 @@ func NewCommand(opts Options) *cobra.Command {
 				return fmt.Errorf("create support bundle: %w", err)
 			}
 			if opts.Stdout != nil {
-				_, _ = fmt.Fprintln(opts.Stdout, opts.Output)
+				switch format {
+				case "json":
+					if err := json.NewEncoder(opts.Stdout).Encode(map[string]string{"archive": opts.Output}); err != nil {
+						return fmt.Errorf("write support bundle result: %w", err)
+					}
+				case "yaml":
+					if err := yaml.NewEncoder(opts.Stdout).Encode(map[string]string{"archive": opts.Output}); err != nil {
+						return fmt.Errorf("write support bundle result: %w", err)
+					}
+				case "table", "":
+					if _, err := fmt.Fprintln(opts.Stdout, opts.Output); err != nil {
+						return fmt.Errorf("write support bundle result: %w", err)
+					}
+				default:
+					return errors.New("unsupported output format")
+				}
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&opts.Output, "output", "o", opts.Output, "Output .tar.gz archive path")
+	cmd.Flags().StringVarP(&opts.Output, "archive", "o", opts.Output, "Output .tar.gz archive path")
 	cmd.Flags().StringVar(&opts.RootDir, "root", opts.RootDir, "Tanpopo data/config root")
 	return cmd
 }
@@ -94,6 +117,10 @@ func CreateBundle(ctx context.Context, root, destination string) error {
 	}
 	redactor := privacy.NewDefaultRedactor()
 	scanner := canary.NewScanner()
+	doctorData, err := doctorReport(ctx, root)
+	if err != nil {
+		return fmt.Errorf("collect local doctor report: %w", err)
+	}
 	files := []inputFile{{name: "tanpopo.yaml"}, {name: "tanpopo.lock"}, {name: "metrics.prom"}}
 	var logRoots []*os.Root
 	defer func() {
@@ -142,6 +169,11 @@ func CreateBundle(ctx context.Context, root, destination string) error {
 	}
 	var members []bundleMember
 	var totalBytes int64
+	if err := scanner.Check("doctor.json", doctorData); err != nil {
+		return err
+	}
+	members = append(members, bundleMember{name: "doctor.json", data: doctorData})
+	totalBytes += int64(len(doctorData))
 	for _, input := range files {
 		if err := ctx.Err(); err != nil {
 			return err

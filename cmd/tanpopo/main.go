@@ -5,12 +5,18 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
+	admincli "github.com/nguywnben/tanpopo/internal/cli/admin"
 	"github.com/nguywnben/tanpopo/internal/cli/plugin"
 	"github.com/nguywnben/tanpopo/internal/cli/remote"
 	"github.com/nguywnben/tanpopo/internal/cli/support"
@@ -25,10 +31,17 @@ var (
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := runWithContext(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	return runWithContext(context.Background(), args, stdout, stderr)
+}
+
+func runWithContext(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	var (
 		outputFmt   string
 		showVersion bool
@@ -41,8 +54,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if showVersion {
-				_, _ = fmt.Fprintf(stdout, "tanpopo version %s (commit=%s built=%s)\n", version, commit, date)
-				return nil
+				return writeVersion(stdout, outputFmt)
 			}
 			return cmd.Help()
 		},
@@ -50,6 +62,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	rootCmd.SetOut(stdout)
 	rootCmd.SetErr(stderr)
 	rootCmd.SetArgs(args)
+	rootCmd.SetContext(ctx)
 
 	rootCmd.PersistentFlags().StringVar(&outputFmt, "output", "table", "Output format (table|json|yaml)")
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Print version information")
@@ -58,19 +71,22 @@ func run(args []string, stdout, stderr io.Writer) int {
 		Use:   "version",
 		Short: "Print version information",
 		Args:  cobra.NoArgs,
-		Run: func(_ *cobra.Command, _ []string) {
-			_, _ = fmt.Fprintf(stdout, "tanpopo version %s (commit=%s built=%s)\n", version, commit, date)
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return writeVersion(stdout, outputFmt)
 		},
 	}
 
 	rootCmd.AddCommand(
 		versionCmd,
+		newServeCommand(),
+		admincli.NewCommand(stdout, &outputFmt),
 		plugin.NewCommand(plugin.Options{
 			OutputFormat: &outputFmt,
 			Stdout:       stdout,
 			Stderr:       stderr,
 		}),
-		support.NewCommand(support.Options{RootDir: ".", Stdout: stdout}),
+		support.NewCommand(support.Options{RootDir: envOr("TANPOPO_DATA_DIR", "data"), OutputFormat: &outputFmt, Stdout: stdout}),
+		support.NewDoctorCommand(support.Options{RootDir: envOr("TANPOPO_DATA_DIR", "data"), OutputFormat: &outputFmt, Stdout: stdout}),
 	)
 	for _, command := range remote.NewCommands(remote.Options{
 		OutputFormat: &outputFmt,
@@ -85,4 +101,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return testharness.CodeOf(err)
 	}
 	return testharness.ExitOK
+}
+
+func writeVersion(stdout io.Writer, format string) error {
+	switch format {
+	case "json":
+		return json.NewEncoder(stdout).Encode(map[string]string{"version": version, "commit": commit, "built": date})
+	case "yaml":
+		return yaml.NewEncoder(stdout).Encode(map[string]string{"version": version, "commit": commit, "built": date})
+	case "table", "":
+		_, err := fmt.Fprintf(stdout, "tanpopo version %s (commit=%s built=%s)\n", version, commit, date)
+		return err
+	default:
+		return &testharness.ExitError{Code: testharness.ExitValidation, Message: "--output must be table, json, or yaml"}
+	}
 }

@@ -5,6 +5,7 @@
 package remote
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,9 +57,7 @@ func NewCommands(opts Options) []*cobra.Command {
 
 	route := group("route", "Inspect and explain routes")
 	route.AddCommand(getCommand(opts, endpoint{"list", "List routes", "/admin/v1/routes"}))
-	route.AddCommand(&cobra.Command{Use: "explain", Short: "Explain a route decision", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		return fmt.Errorf("route explain requires a request payload; use the Admin API endpoint /admin/v1/routes/explain")
-	}})
+	route.AddCommand(explainCommand(opts))
 
 	key := group("key", "Inspect virtual keys")
 	key.AddCommand(getCommand(opts, endpoint{"list", "List virtual keys", "/admin/v1/virtual-keys"}))
@@ -68,7 +67,7 @@ func NewCommands(opts Options) []*cobra.Command {
 
 	audit := group("audit", "Inspect and verify the audit chain")
 	audit.AddCommand(getCommand(opts, endpoint{"list", "List audit events", "/admin/v1/audit-events"}))
-	audit.AddCommand(getCommand(opts, endpoint{"verify", "Verify the audit chain", "/admin/v1/audit-events/verify"}))
+	audit.AddCommand(apiCommand(opts, endpoint{"verify", "Verify the audit chain", "/admin/v1/audit-events/verify"}, http.MethodPost))
 
 	killswitch := group("killswitch", "Inspect active kill switches")
 	killswitch.AddCommand(getCommand(opts, endpoint{"list", "List active kill switches", "/admin/v1/kill-switches"}))
@@ -80,56 +79,106 @@ func group(use, short string) *cobra.Command {
 }
 
 func getCommand(opts Options, ep endpoint) *cobra.Command {
+	return apiCommand(opts, ep, http.MethodGet)
+}
+
+func apiCommand(opts Options, ep endpoint, method string) *cobra.Command {
 	return &cobra.Command{Use: ep.use, Short: ep.short, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		base, token, org := lookup(opts, "TANPOPO_URL"), lookup(opts, "TANPOPO_ADMIN_TOKEN"), lookup(opts, "TANPOPO_ORG")
-		if token == "" {
-			return cliError(testharness.ExitSecurity, "TANPOPO_ADMIN_TOKEN is required for Admin API access", nil)
-		}
-		parsed, err := url.Parse(base)
-		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-			return cliError(testharness.ExitValidation, "TANPOPO_URL must be an http(s) URL without user info, query, or fragment", err)
-		}
-		apiURL := strings.TrimRight(base, "/") + ep.path
-		req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, apiURL, nil)
-		if err != nil {
-			return cliError(testharness.ExitValidation, "invalid Admin API request", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		if org != "" {
-			req.Header.Set("X-Tanpopo-Org-Id", org)
-		}
-		client := opts.Client
-		if client == nil {
-			client, err = adminClient(parsed)
-			if err != nil {
-				return cliError(testharness.ExitValidation, "could not configure guarded Admin API client", err)
-			}
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return cliError(testharness.ExitNetwork, "Admin API request failed", err)
-		}
-		defer resp.Body.Close()
-		body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-		if err != nil {
-			return cliError(testharness.ExitNetwork, "could not read Admin API response", err)
-		}
-		if len(body) > maxResponseBytes {
-			return cliError(testharness.ExitContract, "Admin API response exceeds the 4 MiB CLI limit", nil)
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return statusError(resp.StatusCode)
-		}
-		var value any
-		if err := json.Unmarshal(body, &value); err != nil {
-			return cliError(testharness.ExitContract, "Admin API returned invalid JSON", err)
-		}
-		format := strings.ToLower(strings.TrimSpace(outputFormat(opts)))
-		if err := writeValue(opts.Stdout, format, value); err != nil {
-			return cliError(testharness.ExitInternal, "could not format Admin API response", err)
-		}
-		return nil
+		return runRequest(cmd, opts, ep, method, nil)
 	}}
+}
+
+func explainCommand(opts Options) *cobra.Command {
+	var payload string
+	cmd := &cobra.Command{
+		Use:   "explain",
+		Short: "Explain a route decision from a JSON request payload",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if strings.TrimSpace(payload) == "" {
+				return cliError(testharness.ExitValidation, "--payload is required", nil)
+			}
+			var decoded json.RawMessage
+			if !json.Valid([]byte(payload)) {
+				return cliError(testharness.ExitValidation, "--payload must contain valid JSON", nil)
+			}
+			decoded = json.RawMessage(payload)
+			return runRequest(cmd, opts, endpoint{"explain", "Explain a route decision", "/admin/v1/routes/explain"}, http.MethodPost, decoded)
+		},
+	}
+	cmd.Flags().StringVar(&payload, "payload", "", "JSON request payload for route evaluation")
+	return cmd
+}
+
+func runRequest(cmd *cobra.Command, opts Options, ep endpoint, method string, payload []byte) error {
+	if len(payload) > 1<<20 {
+		return cliError(testharness.ExitValidation, "Admin API request payload exceeds the 1 MiB CLI limit", nil)
+	}
+	format := strings.ToLower(strings.TrimSpace(outputFormat(opts)))
+	if format != "json" && format != "yaml" && format != "table" {
+		return cliError(testharness.ExitValidation, "--output must be table, json, or yaml", nil)
+	}
+	base, token, org := lookup(opts, "TANPOPO_URL"), lookup(opts, "TANPOPO_ADMIN_TOKEN"), lookup(opts, "TANPOPO_ORG")
+	if token == "" {
+		return cliError(testharness.ExitSecurity, "TANPOPO_ADMIN_TOKEN is required for Admin API access", nil)
+	}
+	parsed, err := url.Parse(base)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return cliError(testharness.ExitValidation, "TANPOPO_URL must be an http(s) URL without user info, query, or fragment", err)
+	}
+	if parsed.Scheme == "http" && !isLoopbackHost(parsed.Hostname()) {
+		return cliError(testharness.ExitSecurity, "TANPOPO_URL must use HTTPS except for a local loopback Admin API", nil)
+	}
+	apiURL := strings.TrimRight(base, "/") + ep.path
+	req, err := http.NewRequestWithContext(cmd.Context(), method, apiURL, bytes.NewReader(payload))
+	if err != nil {
+		return cliError(testharness.ExitValidation, "invalid Admin API request", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	if org != "" {
+		req.Header.Set("X-Tanpopo-Org-Id", org)
+	}
+	if len(payload) > 0 {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	client := opts.Client
+	if client == nil {
+		client, err = adminClient(parsed)
+		if err != nil {
+			return cliError(testharness.ExitValidation, "could not configure guarded Admin API client", err)
+		}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return cliError(testharness.ExitNetwork, "Admin API request failed", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return cliError(testharness.ExitNetwork, "could not read Admin API response", err)
+	}
+	if len(body) > maxResponseBytes {
+		return cliError(testharness.ExitContract, "Admin API response exceeds the 4 MiB CLI limit", nil)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return statusError(resp.StatusCode)
+	}
+	var value any
+	if err := json.Unmarshal(body, &value); err != nil {
+		return cliError(testharness.ExitContract, "Admin API returned invalid JSON", err)
+	}
+	if err := writeValue(opts.Stdout, format, value); err != nil {
+		return cliError(testharness.ExitInternal, "could not format Admin API response", err)
+	}
+	return nil
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.IsLoopback()
 }
 
 func adminClient(target *url.URL) (*http.Client, error) {
@@ -165,7 +214,7 @@ func adminClient(target *url.URL) (*http.Client, error) {
 	return egress.NewGuardedHTTPClient(egress.ClientConfig{
 		Policy:                   policy,
 		Timeout:                  10 * time.Second,
-		MaxRedirects:             0,
+		MaxRedirects:             -1,
 		DenyCrossOriginRedirects: true,
 	})
 }
@@ -246,7 +295,11 @@ func writeTable(out io.Writer, value any) error {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	if _, err := fmt.Fprintln(w, strings.Join(keys, "\t")); err != nil {
+	header := make([]string, len(keys))
+	for i, key := range keys {
+		header[i] = sanitize.Terminal(key)
+	}
+	if _, err := fmt.Fprintln(w, strings.Join(header, "\t")); err != nil {
 		return err
 	}
 	for _, row := range rows {

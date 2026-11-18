@@ -71,9 +71,43 @@ func TestReadCommandRequiresTokenAndUsesCanonicalExitCodes(t *testing.T) {
 	}
 }
 
+func TestAuditVerifyUsesPost(t *testing.T) {
+	var gotMethod, gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		_, _ = w.Write([]byte(`{"intact":true}`))
+	}))
+	defer server.Close()
+	format := "json"
+	var output bytes.Buffer
+	cmd := rootForTest(t, Options{
+		OutputFormat: &format,
+		Stdout:       &output,
+		Client:       server.Client(),
+		LookupEnv: func(key string) (string, bool) {
+			if key == "TANPOPO_URL" {
+				return server.URL, true
+			}
+			if key == "TANPOPO_ADMIN_TOKEN" {
+				return "test-token", true
+			}
+			return "", false
+		},
+	})
+	cmd.SetArgs([]string{"audit", "verify"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute audit verify: %v", err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/admin/v1/audit-events/verify" {
+		t.Fatalf("audit verify used %s %s", gotMethod, gotPath)
+	}
+}
+
 func TestTableOutputStripsTerminalEscapes(t *testing.T) {
 	var output bytes.Buffer
-	if err := writeValue(&output, "table", map[string]any{"data": []any{map[string]any{"name": "safe\x1b]52;c;clipboard\x07"}}}); err != nil {
+	if err := writeValue(&output, "table", map[string]any{"data": []any{map[string]any{
+		"name": "safe\x1b]52;c;clipboard\x07", "\x1b[31mfield\x1b[0m": "unsafe header",
+	}}}); err != nil {
 		t.Fatal(err)
 	}
 	if strings.ContainsRune(output.String(), '\x1b') {

@@ -435,6 +435,30 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.rootRouter.ServeHTTP(w, r)
 }
 
+// CheckServingReady reports whether the Data Plane's plugin runtime and plugin storage are available.
+func (s *Server) CheckServingReady(ctx context.Context) error {
+	if s == nil || s.closed.Load() {
+		return fmt.Errorf("plugin engine is not initialized")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.wasmCache == nil || strings.TrimSpace(s.pluginsDir) == "" {
+		return fmt.Errorf("plugin engine is not initialized")
+	}
+	info, err := os.Stat(s.pluginsDir)
+	if err != nil {
+		return fmt.Errorf("plugin storage is unavailable: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("plugin storage is unavailable")
+	}
+	if _, err := os.ReadDir(s.pluginsDir); err != nil {
+		return fmt.Errorf("plugin storage is unavailable: %w", err)
+	}
+	return nil
+}
+
 // Close releases all cached Wasm runtimes and shared wazero compilation caches.
 func (s *Server) Close(ctx context.Context) error {
 	if s == nil {

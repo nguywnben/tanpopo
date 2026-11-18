@@ -52,12 +52,12 @@ const (
 	DefaultRateLimitWindow     = 5 * time.Minute
 	DefaultRateLimitLockWindow = 5 * time.Minute
 
-	defaultMaxFailureBuckets      = 10_000
-	defaultMaxActiveSessions      = 50_000
+	defaultMaxFailureBuckets       = 10_000
+	defaultMaxActiveSessions       = 50_000
 	defaultMaxSessionsPerPrincipal = 32
-	defaultMaxConcurrentArgon2    = 16
-	globalAcctLimitMult           = 3
-	maxCandidatePrincipals        = 50
+	defaultMaxConcurrentArgon2     = 16
+	globalAcctLimitMult            = 3
+	maxCandidatePrincipals         = 50
 )
 
 // Canonical authentication error sentinels.
@@ -192,15 +192,15 @@ type SessionInfo struct {
 
 // PrincipalRecord represents a persisted principal row in SQLite.
 type PrincipalRecord struct {
-	ID             string
-	OrgID          *string
-	Kind           string
-	EmailOrSub     string
-	Status         string
-	Version        int64
-	LastLoginAtMs  *int64
-	CreatedAtMs    int64
-	UpdatedAtMs    int64
+	ID            string
+	OrgID         *string
+	Kind          string
+	EmailOrSub    string
+	Status        string
+	Version       int64
+	LastLoginAtMs *int64
+	CreatedAtMs   int64
+	UpdatedAtMs   int64
 }
 
 // CreatePrincipalParams specifies fields for persisting a local or service principal.
@@ -243,14 +243,15 @@ type ServiceConfig struct {
 }
 
 type storedSession struct {
-	digest      [32]byte
-	principalID string
-	email       string
-	orgID       *string
-	roles       []string
-	bindings    []rbac.RoleBinding
-	csrfToken   string
-	expiresAtMs int64
+	digest           [32]byte
+	principalID      string
+	principalVersion int64
+	email            string
+	orgID            *string
+	roles            []string
+	bindings         []rbac.RoleBinding
+	csrfToken        string
+	expiresAtMs      int64
 }
 
 type failureBucket struct {
@@ -651,10 +652,11 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 	}
 
 	type principalCandidate struct {
-		id     string
-		orgID  *string
-		status string
-		pwHash string
+		id      string
+		orgID   *string
+		status  string
+		version int64
+		pwHash  string
 	}
 	var (
 		rows *sql.Rows
@@ -662,7 +664,7 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 	)
 	if normOrg != "" {
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT id, org_id, status, COALESCE(password_argon2id, '')
+			SELECT id, org_id, status, version, COALESCE(password_argon2id, '')
 			FROM principals
 			WHERE kind = ? AND email_or_sub = ? AND org_id = ?
 			LIMIT 2`,
@@ -670,7 +672,7 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 		)
 	} else {
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT id, org_id, status, COALESCE(password_argon2id, '')
+			SELECT id, org_id, status, version, COALESCE(password_argon2id, '')
 			FROM principals
 			WHERE kind = ? AND email_or_sub = ?
 			ORDER BY (org_id IS NULL) DESC, created_at_ms ASC, id ASC
@@ -686,7 +688,7 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 	for rows.Next() {
 		var c principalCandidate
 		var orgNS sql.NullString
-		if scanErr := rows.Scan(&c.id, &orgNS, &c.status, &c.pwHash); scanErr != nil {
+		if scanErr := rows.Scan(&c.id, &orgNS, &c.status, &c.version, &c.pwHash); scanErr != nil {
 			_ = rows.Close()
 			return nil, nil, fmt.Errorf("auth: scan principal: %w", scanErr)
 		}
@@ -768,14 +770,15 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 	digest := sha256.Sum256([]byte(sessionToken))
 
 	stored := &storedSession{
-		digest:      digest,
-		principalID: matched.id,
-		email:       normEmail,
-		orgID:       matched.orgID,
-		roles:       roles,
-		bindings:    bindings,
-		csrfToken:   csrfToken,
-		expiresAtMs: expiresAtMs,
+		digest:           digest,
+		principalID:      matched.id,
+		principalVersion: matched.version,
+		email:            normEmail,
+		orgID:            matched.orgID,
+		roles:            roles,
+		bindings:         bindings,
+		csrfToken:        csrfToken,
+		expiresAtMs:      expiresAtMs,
 	}
 
 	s.sessMu.Lock()
@@ -879,6 +882,7 @@ func (s *LocalService) AuthenticateAdminHTTPRequest(r *http.Request) (*rbac.Acto
 		return nil, nil, ErrUnauthenticated
 	}
 	principalID := sess.principalID
+	sessVersion := sess.principalVersion
 	email := sess.email
 	var orgCopy *string
 	if sess.orgID != nil {
@@ -902,7 +906,8 @@ func (s *LocalService) AuthenticateAdminHTTPRequest(r *http.Request) (*rbac.Acto
 	// Re-verify principal remains ACTIVE in DB; only wipe sessions when principal is missing or inactive
 	// (never on transient DB errors or request cancellation).
 	var dbStatus string
-	statusErr := s.db.QueryRowContext(r.Context(), `SELECT status FROM principals WHERE id = ?`, principalID).Scan(&dbStatus)
+	var dbVersion int64
+	statusErr := s.db.QueryRowContext(r.Context(), `SELECT status, version FROM principals WHERE id = ?`, principalID).Scan(&dbStatus, &dbVersion)
 	if statusErr != nil {
 		if errors.Is(statusErr, sql.ErrNoRows) {
 			s.RevokePrincipalSessions(principalID)
@@ -913,6 +918,10 @@ func (s *LocalService) AuthenticateAdminHTTPRequest(r *http.Request) (*rbac.Acto
 	if dbStatus != PrincipalStatusActive {
 		s.RevokePrincipalSessions(principalID)
 		return nil, nil, ErrPrincipalInactive
+	}
+	if dbVersion != sessVersion {
+		s.RevokePrincipalSessions(principalID)
+		return nil, nil, ErrUnauthenticated
 	}
 
 	// Reload live RBAC bindings from DB so role downgrades or removals take effect immediately.
