@@ -6,7 +6,7 @@
 - Governance state: `READY` under `DEC-061`
 - Implementation branch: persistent `develop`
 - Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest pushed checkpoint: `b460902b9fd9cc8573d618b1aef6eb6640b9f281` (live EU routing and archive/shred acceptance coverage)
+- Latest pushed checkpoint: `4de1abf` (Admin runtime wiring, explicit adapter registration, stale-barrier cleanup, and final acceptance assertions)
 - Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
 
 ## Work performed
@@ -20,6 +20,7 @@
 - **Curie** added focused tests for readiness and graceful shutdown while an SSE response is active, plus incompatible-upgrade preflight output and no-side-effect checks.
 - **Mencius** implemented the opt-in local marketplace archive resolver, including path confinement, symlink/type rejection, and a digest-verified private snapshot. **GPT-6 Luna** is integrating the resolver into the live bootstrap/install acceptance flow.
 - **Banach** (**test-engineer**) added a separate real-binary EXT-ACCEPT-01 scenario that configures EU-only routing through Admin API, sends exact and estimated usage requests to local deterministic provider endpoints, verifies persisted ledger classifications, and checks the binary PID/SHA invariant. The test is committed on `develop`; the initial run exposed missing runtime wiring from the unified binary's Admin API to its approved Data Plane extension runtime.
+- **Euler** (**code-reviewer**) and **Feynman** (**security-auditor**) reviewed the `10c8ae2` checkpoint. Euler required the acceptance to avoid a direct SQLite adapter seed and assert the exact $1 settlement amounts. Feynman found that a stale quarantine race could leave its newly created kill switch active. The current diff adds a CSRF-protected, instance-operator-only adapter registration endpoint that derives dialects/native prefix from the approved active manifest and lets the catalog constrain hosts to SM-01 approval; the test no longer writes SQLite directly. It asserts $1.00 for both exact and estimated records. Quarantine now serializes authorized requests and conditionally clears only its request-created switch after a version conflict when the installation did not become quarantined. These findings require fresh review on the current final diff.
 
 ## Verification evidence
 
@@ -47,6 +48,8 @@
 - CI run [44351606499](https://github.com/nguywnben/tanpopo/actions/runs/44351606499) on `b460902` failed Stage 0 because the new live acceptance used a forbidden `t.Skipf` when connection probing returned `probe_runtime_unavailable`. This was a real product wiring gap: `serve` created Admin before Data Plane and did not supply the approved provider runtime to Admin.
 - Current patch moves Data Plane initialization before Admin in the unified role, exposes a tenant-scoped runtime acquisition method backed by the approved snapshot adapter loader/cache, and wires the Admin connection probe through that factory. Control-plane-only mode remains fail-closed without a runtime. The live acceptance now fails on missing runtime rather than skipping. `git diff --check` passes; Cloud Go/gofmt launchers remain unavailable, so compile/test/format gates require CI.
 - CI run [44353491329](https://github.com/nguywnben/tanpopo/actions/runs/44353491329) on `10c8ae2` passed Stage 0 and exposed a compile-time wrong error sentinel (`port.ErrNotFound`) in the new snapshot lookup helper. It is replaced with contextual lookup errors; the failed run was on the preceding checkpoint and the correction requires a new complete run.
+- CI run [44353932018](https://github.com/nguywnben/tanpopo/actions/runs/44353932018) on `3895364` compiled the runtime fix and exposed two real acceptance failures: the EU-only route included a US deployment (now removed from its target set), and the restored vault fixture omitted its required WAL checkpoint hook (now backed by the restored SQLite store). The new exact and estimated settlements use matched 38/13 token counts and a rate card intended to produce $1.00 each; verify the summary on the next run.
+- Checkpoint `4de1abf` also adds the manifest-bound Admin adapter registration contract, updates OpenAPI and the registered route count to 75, and removes the live test's SQLite seed. Its CI and fresh code/security reviews are pending.
 - Next: push this wiring fix and inspect all CI jobs, including the Windows teardown retry. Close remaining DoD gaps and obtain fresh independent code and security reviews on the final diff before merge.
 
 ## Acceptance gaps still open
