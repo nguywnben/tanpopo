@@ -1,0 +1,57 @@
+# Copyright 2026 The Tanpopo Authors.
+# Licensed under the Apache License, Version 2.0.
+
+name: Release Artifact Dry Run
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-artifacts:
+    name: Cross-platform, OCI, SBOM & signing dry run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Go 1.24
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: go.mod
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: web/console/package-lock.json
+
+      - name: Install release verification tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/goreleaser/goreleaser/v2@v2.6.1
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.8.0
+          go install github.com/sigstore/cosign/v2/cmd/cosign@v2.4.1
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install github.com/aquasecurity/trivy/cmd/trivy@v0.58.1
+          npm install --global --ignore-scripts @cyclonedx/cyclonedx-npm@4.1.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Download and audit web dependencies
+        working-directory: web/console
+        run: |
+          npm ci --ignore-scripts
+          npm audit --omit=dev --audit-level=high
+
+      - name: Verify release artifacts without publishing
+        run: bash scripts/release/verify-artifacts.sh
