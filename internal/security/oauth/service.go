@@ -64,7 +64,7 @@ type StartInput struct {
 
 type StartResult struct {
 	Flow             string `json:"flow"`
-	State            string `json:"state"`
+	State            string `json:"state,omitempty"`
 	AuthorizationURL string `json:"authorization_url,omitempty"`
 	VerificationURI  string `json:"verification_uri,omitempty"`
 	UserCode         string `json:"user_code,omitempty"`
@@ -342,11 +342,7 @@ func (s *Service) startClientCredentials(ctx context.Context, in StartInput, con
 		return nil, err
 	}
 	now := s.nowMs()
-	state, err := NewState()
-	if err != nil {
-		return nil, err
-	}
-	return &StartResult{Flow: "client_credentials", State: state, Status: "completed", ExpiresAt: time.UnixMilli(now + tokens.ExpiresIn*1000).UTC().Format(time.RFC3339)}, nil
+	return &StartResult{Flow: "client_credentials", Status: "completed", ExpiresAt: time.UnixMilli(now + tokens.ExpiresIn*1000).UTC().Format(time.RFC3339)}, nil
 }
 
 type deviceAuthorizationResponse struct {
@@ -465,6 +461,9 @@ func (s *Service) Callback(ctx context.Context, orgID, principalID, state, code 
 	conn, err := s.loadConnection(ctx, orgID, payload.ConnectionID)
 	if err != nil {
 		return err
+	}
+	if conn.authMode != "OAUTH2" || conn.state == "REVOKED" || conn.state == "ARCHIVED" || conn.state == "SUSPENDED_BY_ADMIN" {
+		return fmt.Errorf("oauth: connection no longer accepts OAuth authorization")
 	}
 	tokenURL, err := ValidateEndpoint(payload.TokenURL, conn.allowedHosts, s.resolver, s.allowHTTP)
 	if err != nil {

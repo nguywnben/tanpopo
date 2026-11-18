@@ -2061,7 +2061,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [flow, state, expires_at]
+                required: [flow, expires_at]
                 properties:
                   flow: { type: string, enum: [authorization_code_pkce, client_credentials, device_code] }
                   authorization_url: { type: string, format: uri }

@@ -43,12 +43,12 @@ func TestIDGen10000MonotonicAndCollisionFreeAC2(t *testing.T) {
 	}
 }
 
-func TestIDGenAll26CanonicalPrefixesAndRoundTrip(t *testing.T) {
+func TestIDGenAll27CanonicalPrefixesAndRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	prefixes := AllPrefixes()
-	if len(prefixes) != 26 {
-		t.Fatalf("expected 26 canonical prefixes, got %d", len(prefixes))
+	if len(prefixes) != 27 {
+		t.Fatalf("expected 27 canonical prefixes, got %d", len(prefixes))
 	}
 
 	fixedTime := time.Date(2026, 11, 14, 18, 0, 0, 123000000, time.UTC)
@@ -178,9 +178,9 @@ func TestIDGenValidationAndNegativeCases(t *testing.T) {
 		"bad_0123456789abcdefghjkmnpqrs",
 		"org_short",
 		"org_0123456789abcdefghjkmnpqrs!", // invalid char '!'
-		"org_ilou0123456789abcdefghjkmn", // invalid Crockford chars i/l/o/u
-		"org_zzzzzzzzzzzzzzzzzzzzzzzzzz", // top padding overflow
-		"org_00000000000000000000000000", // version != 7
+		"org_ilou0123456789abcdefghjkmn",  // invalid Crockford chars i/l/o/u
+		"org_zzzzzzzzzzzzzzzzzzzzzzzzzz",  // top padding overflow
+		"org_00000000000000000000000000",  // version != 7
 	} {
 		if Valid(badID) {
 			t.Fatalf("expected Valid(%q) == false", badID)

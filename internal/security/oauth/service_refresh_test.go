@@ -205,6 +205,65 @@ func TestAuthorizationCallbackBindsPrincipalAndConsumesStateOnce(t *testing.T) {
 	}
 }
 
+func TestDeviceFlowSealsDeviceCodeAndCompletesOnAuthorizedPoll(t *testing.T) {
+	var tokenCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/device" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"device_code":"device-secret-value","user_code":"USER-1234","verification_uri":"http://` + r.Host + `/activate","expires_in":300,"interval":5}`))
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse device token request: %v", err)
+		}
+		if got := r.Form.Get("device_code"); got != "device-secret-value" {
+			t.Errorf("device_code=%q", got)
+		}
+		if tokenCalls.Add(1) == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"authorization_pending"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"device-access","refresh_token":"device-refresh","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer server.Close()
+	fx := newRefreshFixture(t, server.URL+"/token", "https://resource.example/")
+	started, err := fx.service.Start(context.Background(), StartInput{OrgID: fx.orgID, PrincipalID: fx.principalID, ConnectionID: fx.connectionID, Flow: GrantDeviceCode, TokenEndpoint: server.URL + "/token", DeviceAuthorizationURL: server.URL + "/device", ClientID: "device-client", Resource: "https://resource.example/"})
+	if err != nil {
+		t.Fatalf("Start device flow: %v", err)
+	}
+	var sessionID string
+	var deviceCode sql.NullString
+	var sealed, nonce []byte
+	if err := fx.db.QueryRow(`SELECT id,device_code,sealed_code_verifier,verifier_nonce FROM oauth_authorization_sessions WHERE org_id=? AND state=?`, fx.orgID, started.State).Scan(&sessionID, &deviceCode, &sealed, &nonce); err != nil {
+		t.Fatal(err)
+	}
+	if deviceCode.Valid {
+		t.Fatalf("raw device code persisted: %q", deviceCode.String)
+	}
+	if len(sealed) == 0 || len(nonce) == 0 {
+		t.Fatal("device code was not persisted in an AEAD envelope")
+	}
+	if _, err := fx.service.PollDevice(context.Background(), PollInput{OrgID: fx.orgID, PrincipalID: fx.principalID, State: started.State}); !errors.Is(err, ErrAuthorizationPending) {
+		t.Fatalf("first device poll error=%v, want authorization_pending", err)
+	}
+	if _, err := fx.db.Exec(`UPDATE oauth_authorization_sessions SET last_poll_at_ms=created_at_ms-poll_interval_ms WHERE org_id=? AND id=?`, fx.orgID, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	result, err := fx.service.PollDevice(context.Background(), PollInput{OrgID: fx.orgID, PrincipalID: fx.principalID, State: started.State})
+	if err != nil || result == nil || result.Status != "completed" {
+		t.Fatalf("authorized device poll result=%+v err=%v", result, err)
+	}
+	if tokenCalls.Load() != 2 {
+		t.Fatalf("token endpoint calls=%d, want pending plus completion", tokenCalls.Load())
+	}
+	var state string
+	if err := fx.db.QueryRow(`SELECT session_status FROM oauth_authorization_sessions WHERE org_id=? AND id=?`, fx.orgID, sessionID).Scan(&state); err != nil || state != "COMPLETED" {
+		t.Fatalf("device session status=%q err=%v", state, err)
+	}
+}
+
 type refreshFixture struct {
 	db           *sql.DB
 	service      *Service
