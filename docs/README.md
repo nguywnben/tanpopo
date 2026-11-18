@@ -1,7 +1,7 @@
 # Tanpopo Documentation & Context Hub (`English-First Canonical Edition`)
 
 > **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | TP-IMP-0001..0029: DONE | TP-IMP-0030: READY_FOR_REVIEW via DEC-052 | 1 READY_FOR_REVIEW / 17 BLOCKED`)**
-> - **Current frontier:** `TP-IMP-0030` is `READY_FOR_REVIEW` under [`DEC-052`](./governance/decisions.md), implementation SHA `c39581df84a9879aef29fff7ff98d3a1948ca29a`; Actions run `44224778435` fails the Windows Go quality gate. Unit 30 is not accepted. Units `TP-IMP-0031`..`0047` remain blocked.
+> - **Current frontier:** `TP-IMP-0030` is `READY_FOR_REVIEW` under [`DEC-052`](./governance/decisions.md), implementation SHA `c39581df84a9879aef29fff7ff98d3a1948ca29a`; PR run `44226510663` is green across all existing gates. Unit 30 remains unaccepted until the final SHA is on `origin/main` with green acceptance CI. Units `TP-IMP-0031`..`0047` remain blocked.
 > - **Gate G0 (ASTRA A00 — Context Intake & Baseline):** `COMPLETED`
 > - **Gate G1 (ASTRA A01 — Product Discovery):** **`APPROVED` *(`CONFIRMED_BY_OWNER` — `DEC-009`)* **
 > - **Baseline A02 (ASTRA A02 — Business Analysis):** **`APPROVED` *(`SM-01..09` & `BA-OQ-001..05` closed in `TP-IMP-0001`)* **
@@ -22,10 +22,10 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
 | **0A** | [`docs/governance/execution-baseline.md`](./governance/execution-baseline.md) | **`EXEC-BL-001-APPROVED` (`HANDOFF: GO` · `TP-IMP-0005..0008: DONE` · `READY: TP-IMP-0009, 0010`):** Mandatory cold-start entrypoint (`Zero Prior Chat Context Required`); locks the global technical dictionary, source-of-truth precedence, post-handoff verification conditions (`COND-PO-01..05`), `CR` protocol, and 7-part completion report contract. | **Read first in every new engineering/agent session.** |
-| **0B** | [`docs/governance/owner-approval-sheet.md`](./governance/owner-approval-sheet.md) | **`GOV-OAS-01` (`STAGES 1 & 2 + CR-12 Option A APPROVED`):** Consolidated Product Owner Approval Sheet recording Track A (`18` items), Track B (`15` items + `COND-PO-01..05`), Stage 1 `M0` (`DEC-009`), Stage 2 Handoff (`DEC-010`), `TP-IMP-0005..0008` (`DEC-011`..`018`), and `CR-11`/`CR-12`. | Reference for Product Owner gate rulings and conditions. |
+| **0B** | [`docs/governance/owner-approval-sheet.md`](./governance/owner-approval-sheet.md) | **`GOV-OAS-01` (`STAGES 1 & 2 + CR-12 Option A APPROVED`):** Consolidated Product Owner Approval Sheet recording Track A (`18` items), Track B (`15` items + `COND-PO-01..05`), Stage 1 `M0` (`DEC-009`), Stage 2 Handoff (`DEC-010`), `TP-IMP-0005..0008` (`DEC-011`..`018`), and `CR-11`/`CR-12`; see [`DEC-050`](./governance/decisions.md) for later CR-13 Option A approval. | Reference for Product Owner gate rulings and conditions. |
 | **0C** | [`docs/reviews/execution-readiness.md`](./reviews/execution-readiness.md) | **`REV-RDY-01` (`STAGE 2: GO`):** Calibrated Delivery Readiness Audit distinguishing local/CI `M0`–`Wave 1.3` verification from remaining `UNVERIFIED` gates (`PostgreSQL 16`, macOS/Windows OS isolation, Stage 2–4 CI, full Gateway SLOs). | Auditing `Gate G4` evidence boundaries and `TP-IMP-0009`/`0010` dispatch readiness. |
 | **0D** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`Historical A08`):** Independent A08 horizontal + 8 vertical-slice adversarial audit (`AUD-001`..`030`) whose blocking items were closed in `M0`. | Historical audit provenance for `CR-01`..`10`. |
-| **0E** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01` (`13 / 13 M0 Gaps CLOSED · CR-11 & CR-12 APPROVED`):** Change Requests **`CR-01`..`CR-12`** and `M0`/`M1` closure evidence. | Verifying how each audit/implementation gap was resolved. |
+| **0E** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01` (`13 / 13 M0 Gaps CLOSED · CR-11 & CR-12 APPROVED · CR-13 OPTION A APPROVED/IMPLEMENTED; PR CI green`):** Change Requests **`CR-01`..`CR-13`** and `M0`/`M1` closure evidence. | Verifying how each audit/implementation gap was resolved. |
 
 ### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `29 DONE, 0 READY, 1 READY_FOR_REVIEW, 17 BLOCKED`)
 
@@ -158,7 +158,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | `docs/operations/*` (`4` files) | **SRE Operations & CLI DX** | `installer-upgrades.md`, `backups-recovery.md`, `monitoring-incidents.md`, `developer-experience.md`. |
 | `docs/security/*` (`3` files) | **Security & Tenant Isolation** | `threat-model.md`, `plugin-sandbox-and-supply-chain.md`, `secrets-and-tenant-isolation.md`. |
 | `docs/quality/*` (`4` files) | **QA, Hermetic CI, SLOs & Gates** | `contract-test-matrix.md`, `test-strategy.md`, `nonfunctional-slo.md`, `release-readiness.md`. |
-| `docs/reviews/*` (`3` files) | **Independent Audits & Readiness** | `integrated-audit.md` (`Historical A08`), `unresolved-gaps.md` (`13/13 M0 CLOSED`, `CR-11 & CR-12 APPROVED`), `execution-readiness.md` (`Stage 2: GO`). |
+| `docs/reviews/*` (`3` files) | **Independent Audits & Readiness** | `integrated-audit.md` (`Historical A08`), `unresolved-gaps.md` (`13/13 M0 CLOSED`, `CR-11 & CR-12 APPROVED`, `CR-13 Option A approved/implemented; PR CI green`), `execution-readiness.md` (`Stage 2: GO`). |
 | `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and `units/TP-IMP-0001.md`..`TP-IMP-0047.md` (`0001..0020 = DONE`, `0 READY`, `0021..0047 = BLOCKED`). |
 | `buf.yaml`, `proto/`, `openapi/`, `db/spec-check/`, `tools/spikes/` | **`M0` Contracts & Isolated Spikes** | Machine-verified `runtime.proto`, `dataplane-v1.yaml`, `admin-v1.yaml`, `sqlite_schema.sql` (live), `postgres_schema.sql` (static parity), and pure-Go `SPIKE-01..04`. |
 
