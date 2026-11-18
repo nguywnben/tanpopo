@@ -6,29 +6,32 @@ package support
 import (
 	"bytes"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
+	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 )
 
-func TestDoctorCommandReportsLoopbackHealthProbesAsJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/healthz":
-			w.WriteHeader(http.StatusOK)
-		case "/readyz":
-			w.WriteHeader(http.StatusServiceUnavailable)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-	t.Setenv("TANPOPO_URL", server.URL)
+func TestDoctorCommandReportsEightEnvironmentalChecksAsJSON(t *testing.T) {
+	t.Setenv("TANPOPO_LISTEN_ADDR", "127.0.0.1:0")
+	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", "")
+	t.Setenv("TANPOPO_EXPECTED_TIME", time.Now().UTC().Format(time.RFC3339))
 	rootDir := t.TempDir()
+	store, err := sqlite.Open(t.Context(), sqlite.Config{DBPath: filepath.Join(rootDir, "tanpopo.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lockfile.WriteAtomic(filepath.Join(rootDir, "tanpopo.lock"), lockfile.NewEmpty(time.Now().UTC())); err != nil {
+		t.Fatal(err)
+	}
 	var output bytes.Buffer
 	format := "json"
 	root := &cobra.Command{Use: "tanpopo"}
@@ -48,7 +51,7 @@ func TestDoctorCommandReportsLoopbackHealthProbesAsJSON(t *testing.T) {
 	if len(report.Checks) != 8 {
 		t.Fatalf("doctor returned %d checks; want the eight SPEC-OPS-01 checks: %#v", len(report.Checks), statuses)
 	}
-	if statuses["egress-dns-ssrf"] != "pass" || statuses["tls-posture"] != "warn" {
+	if statuses["egress-dns-ssrf"] != "pass" || statuses["tls-posture"] != "warn" || statuses["master-kek-ready"] != "pass" {
 		t.Fatalf("unexpected environmental doctor results: %#v", statuses)
 	}
 	if _, err := os.Stat(filepath.Join(rootDir, "tanpopo.yaml")); !os.IsNotExist(err) {

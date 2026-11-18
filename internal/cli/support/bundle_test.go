@@ -7,6 +7,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -119,8 +120,9 @@ func TestCreateBundleSkipsSymlinkedLogDirectory(t *testing.T) {
 		t.Fatalf("expected only the local doctor report, got member=%v err=%v", hdr, err)
 	}
 	doctor, err := io.ReadAll(tr)
-	if err != nil || !strings.Contains(string(doctor), `"name":"logs_directory","status":"unsafe_path"`) {
-		t.Fatalf("expected symlink warning in doctor report: %s err=%v", doctor, err)
+	var report doctorReportDocument
+	if err != nil || json.Unmarshal(doctor, &report) != nil || len(report.Checks) != 8 {
+		t.Fatalf("expected the eight-check doctor report without archived symlink content: %s err=%v", doctor, err)
 	}
 	if _, err := tr.Next(); err != io.EOF {
 		t.Fatalf("unexpected archive member after doctor report: %v", err)

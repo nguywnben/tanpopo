@@ -62,15 +62,16 @@ func NewDoctorCommand(opts Options) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("collect local doctor report: %w", err)
 			}
+			var outputErr error
 			format := "table"
 			if opts.OutputFormat != nil {
 				format = strings.ToLower(strings.TrimSpace(*opts.OutputFormat))
 			}
 			switch format {
 			case "json":
-				return json.NewEncoder(opts.Stdout).Encode(report)
+				outputErr = json.NewEncoder(opts.Stdout).Encode(report)
 			case "yaml":
-				return yaml.NewEncoder(opts.Stdout).Encode(report)
+				outputErr = yaml.NewEncoder(opts.Stdout).Encode(report)
 			case "table", "":
 				w := tabwriter.NewWriter(opts.Stdout, 0, 0, 2, ' ', 0)
 				if _, err := fmt.Fprintln(w, "CHECK	STATUS"); err != nil {
@@ -82,10 +83,19 @@ func NewDoctorCommand(opts Options) *cobra.Command {
 						return err
 					}
 				}
-				return w.Flush()
+				outputErr = w.Flush()
 			default:
 				return errors.New("--output must be table, json, or yaml")
 			}
+			if outputErr != nil {
+				return outputErr
+			}
+			for _, check := range report.Checks {
+				if check.Status == strings.ToLower(string(opsdoctor.StatusFail)) {
+					return errors.New("doctor found failing preflight checks")
+				}
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&opts.RootDir, "root", opts.RootDir, "Tanpopo data/config root")
@@ -259,11 +269,6 @@ func parseDoctorArtifactPaths(items []string) (map[string]string, error) {
 func sha256Hex(data []byte) string {
 	digest := sha256.Sum256(data)
 	return hex.EncodeToString(digest[:])
-}
-
-func regularNonSymlink(path string) bool {
-	info, err := os.Lstat(path)
-	return err == nil && info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0
 }
 
 func pathStatus(path string, directory bool) string {

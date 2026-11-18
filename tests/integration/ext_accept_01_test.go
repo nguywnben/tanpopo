@@ -102,7 +102,7 @@ func TestEXTAccept01_FullLifecycleProcessContract(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		binary += ".exe"
 	}
-	build := exec.Command("go", "build", "-o", binary, ".")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/tanpopo")
 	build.Dir = root
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build single Tanpopo executable: %v\n%s", err, output)

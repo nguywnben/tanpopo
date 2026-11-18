@@ -39,7 +39,7 @@ func TestEXTAccept01_LiveBootstrapAuthenticationAndFailClosedInstall(t *testing.
 	if runtime.GOOS == "windows" {
 		binary += ".exe"
 	}
-	build := exec.Command("go", "build", "-o", binary, ".")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/tanpopo")
 	build.Dir = root
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build Tanpopo binary: %v\n%s", err, output)
