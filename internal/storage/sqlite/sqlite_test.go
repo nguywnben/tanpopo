@@ -1213,3 +1213,168 @@ func TestSQLiteTenancyAuditAllMutationsAndFailClosedRollback(t *testing.T) {
 		t.Fatalf("expected ErrInvalidInput when exec is *sql.DB instead of *sql.Tx, got %v", err)
 	}
 }
+
+func TestSQLiteBehavioralDiagnosticsBackupRestoreAndFilesystemEdges(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// 1. Fresh DB with zero tenancy mutations has LatestEpoch == 0.
+	dbDir := t.TempDir()
+	dbPath := filepath.Join(dbDir, "store", "tanpopo.db")
+	st, err := Open(ctx, Config{DBPath: dbPath})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	absExpected, err := filepath.Abs(dbPath)
+	if err != nil {
+		t.Fatalf("filepath.Abs: %v", err)
+	}
+	if got := st.DBPath(); got != absExpected {
+		t.Fatalf("DBPath() = %q, want %q", got, absExpected)
+	}
+	if epoch, err := st.Changelog().LatestEpoch(ctx); err != nil || epoch != 0 {
+		t.Fatalf("fresh DB LatestEpoch() = %d, err=%v; want 0, nil", epoch, err)
+	}
+
+	// Empty-DB list calls succeed cleanly with nil/empty slice.
+	if orgs, err := st.Tenancy().ListOrganizations(ctx, 10); err != nil || len(orgs) != 0 {
+		t.Fatalf("empty ListOrganizations = %+v, err=%v", orgs, err)
+	}
+
+	// 2. WALBytes reports absent WAL as 0, non-zero active WAL after writes, and propagates non-NotExist stat errors.
+	absentStore := &Store{dbPath: filepath.Join(dbDir, "absent", "missing.db")}
+	if walBytes, err := absentStore.WALBytes(); err != nil || walBytes != 0 {
+		t.Fatalf("absent WALBytes() = %d, err=%v; want 0, nil", walBytes, err)
+	}
+	fileNotDir := filepath.Join(dbDir, "not-a-dir")
+	if err := os.WriteFile(fileNotDir, []byte("x"), 0o600); err != nil {
+		t.Fatalf("WriteFile not-a-dir: %v", err)
+	}
+	if _, err := (&Store{dbPath: filepath.Join(fileNotDir, "sub.db")}).WALBytes(); err == nil {
+		t.Fatalf("expected WALBytes() error when parent path is a regular file")
+	}
+
+	org, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "diag-org", DisplayName: "Diag Org"})
+	if err != nil {
+		t.Fatalf("CreateOrganization: %v", err)
+	}
+	prj, err := st.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "diag-prj", DisplayName: "Diag Prj"})
+	if err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	if walBytes, err := st.WALBytes(); err != nil || walBytes == 0 {
+		t.Fatalf("expected non-zero WALBytes() after writes, got %d (err=%v)", walBytes, err)
+	}
+
+	// 3. BackupBytes creates a portable snapshot that restores into an independent readable Store.
+	snapBytes, err := st.BackupBytes(ctx)
+	if err != nil {
+		t.Fatalf("BackupBytes: %v", err)
+	}
+	restoredPath := filepath.Join(dbDir, "restored", "tanpopo.db")
+	if err := os.MkdirAll(filepath.Dir(restoredPath), 0o700); err != nil {
+		t.Fatalf("MkdirAll restored: %v", err)
+	}
+	if err := os.WriteFile(restoredPath, snapBytes, 0o600); err != nil {
+		clear(snapBytes)
+		t.Fatalf("WriteFile restored snapshot: %v", err)
+	}
+	clear(snapBytes)
+
+	restored, err := Open(ctx, Config{DBPath: restoredPath})
+	if err != nil {
+		t.Fatalf("Open restored snapshot: %v", err)
+	}
+	defer restored.Close()
+	if gotPrj, err := restored.Tenancy().GetProjectBySlug(ctx, org.ID, prj.Slug); err != nil || gotPrj.ID != prj.ID {
+		t.Fatalf("restored snapshot missing project %q: got=%+v err=%v", prj.Slug, gotPrj, err)
+	}
+
+	// BackupBytes fails cleanly on cancelled context or closed DB.
+	cancelledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := st.BackupBytes(cancelledCtx); err == nil {
+		t.Fatalf("expected BackupBytes to fail on cancelled context")
+	}
+	if err := st.BackupTo(ctx, filepath.Join(fileNotDir, "backup.db")); err == nil {
+		t.Fatalf("expected BackupTo to fail when parent path is a regular file")
+	}
+	// Verify DeleteProject nonexistent ID returns ErrNotFound.
+	if err := st.Tenancy().DeleteProject(ctx, org.ID, "prj_missing", 1); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("DeleteProject missing expected ErrNotFound, got %v", err)
+	}
+
+	// Close main store and verify BackupBytes/BackupTo fail closed on closed pool.
+	if err := st.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if _, err := st.BackupBytes(ctx); err == nil {
+		t.Fatalf("expected BackupBytes to fail on closed store")
+	}
+	if err := st.BackupTo(ctx, filepath.Join(dbDir, "closed-backup.db")); err == nil {
+		t.Fatalf("expected BackupTo to fail on closed store")
+	}
+
+	// 4. verifyWALPragmas rejects low busy_timeout and disabled secure_delete.
+	pragmaPath := filepath.Join(dbDir, "pragma-check.db")
+	pragmaDB, err := sql.Open("sqlite", pragmaPath)
+	if err != nil {
+		t.Fatalf("sql.Open pragma-check: %v", err)
+	}
+	defer pragmaDB.Close()
+	if _, err := pragmaDB.ExecContext(ctx, "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=1; PRAGMA busy_timeout=10; PRAGMA secure_delete=0;"); err != nil {
+		t.Fatalf("configure pragmaDB: %v", err)
+	}
+	if err := verifyWALPragmas(ctx, pragmaDB); err == nil || !strings.Contains(err.Error(), "busy_timeout") {
+		t.Fatalf("expected busy_timeout pragma error, got %v", err)
+	}
+	if _, err := pragmaDB.ExecContext(ctx, "PRAGMA busy_timeout=5000;"); err != nil {
+		t.Fatalf("set busy_timeout=5000: %v", err)
+	}
+	if err := verifyWALPragmas(ctx, pragmaDB); err == nil || !strings.Contains(err.Error(), "secure_delete") {
+		t.Fatalf("expected secure_delete pragma error, got %v", err)
+	}
+
+	// 5. Open rejects when parent path is a regular file, and on symlinked companions or dangling ancestor symlinks.
+	if _, err := Open(ctx, Config{DBPath: filepath.Join(fileNotDir, "cant-create.db")}); err == nil {
+		t.Fatalf("expected Open to fail when parent dir is a regular file")
+	}
+
+	symTestDir := t.TempDir()
+	realSub := filepath.Join(symTestDir, "real")
+	if err := os.MkdirAll(realSub, 0o700); err != nil {
+		t.Fatalf("MkdirAll realSub: %v", err)
+	}
+	walSymDB := filepath.Join(realSub, "wal-sym.db")
+	if symErr := os.Symlink(filepath.Join(realSub, "evil-wal"), walSymDB+"-wal"); symErr == nil {
+		if _, err := Open(ctx, Config{DBPath: walSymDB}); !errors.Is(err, port.ErrNetworkFilesystem) {
+			t.Fatalf("expected Open to reject symlinked -wal with ErrNetworkFilesystem, got %v", err)
+		}
+		shmSymDB := filepath.Join(realSub, "shm-sym.db")
+		if err := os.Symlink(filepath.Join(realSub, "evil-shm"), shmSymDB+"-shm"); err != nil {
+			t.Fatalf("Symlink shm: %v", err)
+		}
+		if _, err := Open(ctx, Config{DBPath: shmSymDB}); !errors.Is(err, port.ErrNetworkFilesystem) {
+			t.Fatalf("expected Open to reject symlinked -shm with ErrNetworkFilesystem, got %v", err)
+		}
+
+		// Valid symlinked directory resolves cleanly through existingAncestorDir; dangling symlinked ancestor fails closed.
+		linkDir := filepath.Join(symTestDir, "dir-link")
+		if err := os.Symlink(realSub, linkDir); err != nil {
+			t.Fatalf("Symlink dir-link: %v", err)
+		}
+		symAncDB, err := Open(ctx, Config{DBPath: filepath.Join(linkDir, "nested", "ok.db")})
+		if err != nil {
+			t.Fatalf("expected Open through resolved local symlinked ancestor dir to succeed, got %v", err)
+		}
+		_ = symAncDB.Close()
+
+		danglingDir := filepath.Join(symTestDir, "dangling-dir")
+		if err := os.Symlink(filepath.Join(symTestDir, "no-such-dir"), danglingDir); err != nil {
+			t.Fatalf("Symlink dangling-dir: %v", err)
+		}
+		if _, err := Open(ctx, Config{DBPath: filepath.Join(danglingDir, "sub", "bad.db")}); !errors.Is(err, port.ErrNetworkFilesystem) {
+			t.Fatalf("expected Open with dangling ancestor symlink to fail with ErrNetworkFilesystem, got %v", err)
+		}
+	}
+}
