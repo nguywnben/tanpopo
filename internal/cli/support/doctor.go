@@ -5,10 +5,13 @@ package support
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -23,7 +26,11 @@ import (
 	"gopkg.in/yaml.v3"
 
 	clisanitize "github.com/nguywnben/tanpopo/internal/cli/sanitize"
+	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
+	opsdoctor "github.com/nguywnben/tanpopo/internal/ops/doctor"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/security/vault"
+	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 )
 
 type doctorCheck struct {
@@ -41,12 +48,17 @@ func NewDoctorCommand(opts Options) *cobra.Command {
 	if strings.TrimSpace(opts.RootDir) == "" {
 		opts.RootDir = envOr("TANPOPO_DATA_DIR", "data")
 	}
+	var artifacts []string
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check local Tanpopo files and service health",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			report, err := collectDoctorReport(cmd.Context(), opts.RootDir)
+			paths, err := parseDoctorArtifactPaths(artifacts)
+			if err != nil {
+				return err
+			}
+			report, err := collectDoctorReport(cmd.Context(), opts.RootDir, paths)
 			if err != nil {
 				return fmt.Errorf("collect local doctor report: %w", err)
 			}
@@ -77,29 +89,25 @@ func NewDoctorCommand(opts Options) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&opts.RootDir, "root", opts.RootDir, "Tanpopo data/config root")
+	cmd.Flags().StringArrayVar(&artifacts, "artifact", nil, "Pinned extension archive as extension-id=path (repeat for each lock entry)")
 	return cmd
 }
 
 func doctorReport(ctx context.Context, root string) ([]byte, error) {
-	report, err := collectDoctorReport(ctx, root)
+	report, err := collectDoctorReport(ctx, root, nil)
 	if err != nil {
 		return nil, err
 	}
 	return json.Marshal(report)
 }
 
-func collectDoctorReport(ctx context.Context, root string) (doctorReportDocument, error) {
+func collectDoctorReport(ctx context.Context, root string, artifactPaths map[string]string) (doctorReportDocument, error) {
 	if err := ctx.Err(); err != nil {
 		return doctorReportDocument{}, err
 	}
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return doctorReportDocument{}, err
-	}
-	rootInfo, rootErr := os.Stat(root)
-	rootStatus := "ok"
-	if rootErr != nil || !rootInfo.IsDir() {
-		rootStatus = "unavailable"
 	}
 	dbPath := strings.TrimSpace(os.Getenv("TANPOPO_DB_PATH"))
 	if dbPath == "" {
@@ -109,22 +117,148 @@ func collectDoctorReport(ctx context.Context, root string) (doctorReportDocument
 	if lockPath == "" {
 		lockPath = filepath.Join(root, "tanpopo.lock")
 	}
-	checks := []doctorCheck{{Name: "data_root", Status: rootStatus}}
-	for _, item := range []struct {
-		name string
-		path string
-		dir  bool
-	}{
-		{name: "sqlite_database", path: dbPath},
-		{name: "configuration", path: filepath.Join(root, "tanpopo.yaml")},
-		{name: "extension_lock_inventory", path: lockPath},
-		{name: "prometheus_metrics", path: filepath.Join(root, "metrics.prom")},
-		{name: "logs_directory", path: filepath.Join(root, "logs"), dir: true},
-	} {
-		checks = append(checks, doctorCheck{Name: item.name, Status: pathStatus(item.path, item.dir)})
+	listen := strings.TrimSpace(os.Getenv("TANPOPO_LISTEN_ADDR"))
+	if listen == "" {
+		listen = "127.0.0.1:8080"
 	}
-	checks = append(checks, probeLocalHealth(ctx)...)
+	probes := opsdoctor.Probes{
+		ClockSkew: func(context.Context) opsdoctor.Status {
+			value := strings.TrimSpace(os.Getenv("TANPOPO_EXPECTED_TIME"))
+			if value == "" {
+				return opsdoctor.StatusWarn
+			}
+			expected, parseErr := time.Parse(time.RFC3339, value)
+			if parseErr != nil {
+				return opsdoctor.StatusFail
+			}
+			if delta := time.Since(expected); delta > 30*time.Second || delta < -30*time.Second {
+				return opsdoctor.StatusFail
+			}
+			return opsdoctor.StatusPass
+		},
+		PortsAvailable: func(context.Context) opsdoctor.Status {
+			listener, listenErr := net.Listen("tcp", listen)
+			if listenErr != nil {
+				return opsdoctor.StatusFail
+			}
+			_ = listener.Close()
+			return opsdoctor.StatusPass
+		},
+		MasterKEKReady: func(context.Context) opsdoctor.Status {
+			keyID := strings.TrimSpace(os.Getenv("TANPOPO_MASTER_KEY_ID"))
+			if keyID == "" {
+				keyID = "kek_v1"
+			}
+			key, keyErr := vault.LoadStaticKEKFromEnv(keyID, os.LookupEnv)
+			if keyErr != nil {
+				return opsdoctor.StatusFail
+			}
+			_ = key.Close()
+			return opsdoctor.StatusPass
+		},
+		StorageFSLock: func(probeCtx context.Context) opsdoctor.Status {
+			info, statErr := os.Stat(root)
+			if statErr != nil || !info.IsDir() {
+				return opsdoctor.StatusFail
+			}
+			free, freeErr := diskFreeBytes(root)
+			if freeErr != nil || free < 1<<30 {
+				return opsdoctor.StatusFail
+			}
+			dbInfo, dbErr := os.Lstat(dbPath)
+			if dbErr != nil || !dbInfo.Mode().IsRegular() || dbInfo.Mode()&os.ModeSymlink != 0 {
+				return opsdoctor.StatusFail
+			}
+			store, openErr := sqlite.Open(probeCtx, sqlite.Config{DBPath: dbPath, SkipMigrate: true})
+			if openErr != nil {
+				return opsdoctor.StatusFail
+			}
+			defer store.Close()
+			var mode string
+			if queryErr := store.RawDB().QueryRowContext(probeCtx, "PRAGMA journal_mode").Scan(&mode); queryErr != nil || !strings.EqualFold(mode, "wal") {
+				return opsdoctor.StatusFail
+			}
+			return opsdoctor.StatusPass
+		},
+		BundleLockfileIntegrity: func(context.Context) opsdoctor.Status {
+			data, readErr := os.ReadFile(lockPath)
+			if readErr != nil {
+				return opsdoctor.StatusFail
+			}
+			locked, parseErr := lockfile.ParseBytes(data)
+			if parseErr != nil || locked == nil || len(artifactPaths) != len(locked.Extensions) {
+				return opsdoctor.StatusFail
+			}
+			for packageID := range locked.Extensions {
+				artifactPath, ok := artifactPaths[packageID]
+				if !ok {
+					return opsdoctor.StatusFail
+				}
+				info, statErr := os.Lstat(artifactPath)
+				if statErr != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+					return opsdoctor.StatusFail
+				}
+				raw, readErr := os.ReadFile(artifactPath)
+				if readErr != nil || locked.VerifyArtifactDigest(packageID, sha256Hex(raw)) != nil {
+					return opsdoctor.StatusFail
+				}
+			}
+			return opsdoctor.StatusPass
+		},
+		TLSPosture: func(context.Context) opsdoctor.Status {
+			cert := strings.TrimSpace(os.Getenv("TANPOPO_TLS_CERT_FILE"))
+			key := strings.TrimSpace(os.Getenv("TANPOPO_TLS_KEY_FILE"))
+			if cert != "" && key != "" && regularNonSymlink(cert) && regularNonSymlink(key) {
+				return opsdoctor.StatusPass
+			}
+			host, _, splitErr := net.SplitHostPort(listen)
+			if splitErr == nil && (host == "localhost" || (net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback())) {
+				return opsdoctor.StatusWarn
+			}
+			return opsdoctor.StatusFail
+		},
+		EgressDNSSSRF: func(context.Context) opsdoctor.Status {
+			policy := egress.Policy{AllowedHosts: []string{"doctor-probe.invalid"}, RequireTLS: true}
+			if _, validateErr := policy.ValidateTargetURL("https://doctor-probe.invalid/health"); validateErr != nil {
+				return opsdoctor.StatusFail
+			}
+			if _, validateErr := policy.ValidateTargetURL("http://127.0.0.1/"); validateErr == nil {
+				return opsdoctor.StatusFail
+			}
+			return opsdoctor.StatusPass
+		},
+	}
+	checks := make([]doctorCheck, 0, 8)
+	for _, check := range opsdoctor.Run(ctx, probes).Checks {
+		checks = append(checks, doctorCheck{Name: check.ID, Status: strings.ToLower(string(check.Status))})
+	}
 	return doctorReportDocument{SchemaVersion: "1", Checks: checks}, nil
+}
+
+func parseDoctorArtifactPaths(items []string) (map[string]string, error) {
+	paths := make(map[string]string, len(items))
+	for _, item := range items {
+		id, path, ok := strings.Cut(item, "=")
+		id, path = strings.TrimSpace(id), strings.TrimSpace(path)
+		if !ok || id == "" || path == "" || strings.Contains(path, "=") {
+			return nil, errors.New("--artifact must use extension-id=path")
+		}
+		if _, duplicate := paths[id]; duplicate {
+			return nil, errors.New("--artifact extension IDs must be unique")
+		}
+		paths[id] = path
+	}
+	return paths, nil
+}
+
+func sha256Hex(data []byte) string {
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
+}
+
+func regularNonSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0
 }
 
 func pathStatus(path string, directory bool) string {

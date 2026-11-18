@@ -78,7 +78,7 @@ func TestCreateBundleRedactsAndRestrictsArchivePermissions(t *testing.T) {
 		}
 	}
 	text := all.String()
-	if !strings.Contains(text, `"name":"data_root","status":"ok"`) || !strings.Contains(text, `"name":"extension_lock_inventory","status":"missing"`) {
+	if !strings.Contains(text, `"name":"storage-fs-lock"`) || !strings.Contains(text, `"name":"egress-dns-ssrf","status":"pass"`) {
 		t.Fatalf("support bundle omitted the doctor health report: %s", text)
 	}
 	for _, value := range []string{secret, "yaml-secret-material", "plain-secret-material", "password@example.test", "Bearer secret-token-value", "private prompt"} {

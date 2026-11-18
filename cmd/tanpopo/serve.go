@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -45,6 +46,9 @@ func newServeCommand() *cobra.Command {
 			if role != "all" && role != "data-plane" && role != "control-plane" {
 				return &testharness.ExitError{Code: testharness.ExitValidation, Message: fmt.Sprintf("invalid --role %q; expected all, data-plane, or control-plane", role)}
 			}
+			if _, err := drainTimeoutFromEnv(os.LookupEnv); err != nil {
+				return &testharness.ExitError{Code: testharness.ExitValidation, Message: "invalid drain timeout configuration", Cause: err}
+			}
 			if err := serve(cmd.Context(), role, listen); err != nil {
 				return &testharness.ExitError{Code: testharness.ExitInternal, Message: "serve failed", Cause: err}
 			}
@@ -57,6 +61,10 @@ func newServeCommand() *cobra.Command {
 }
 
 func serve(ctx context.Context, role, listen string) error {
+	drainTimeout, err := drainTimeoutFromEnv(os.LookupEnv)
+	if err != nil {
+		return err
+	}
 	handler, closeRuntime, err := buildRuntime(ctx, role, listen)
 	if err != nil {
 		return err
@@ -75,7 +83,7 @@ func serve(ctx context.Context, role, listen string) error {
 	go func() { done <- server.Serve(listener) }()
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			_ = server.Close()
@@ -92,6 +100,21 @@ func serve(ctx context.Context, role, listen string) error {
 		}
 		return err
 	}
+}
+
+const defaultDrainTimeout = 90 * time.Second
+const maxDrainTimeout = 300 * time.Second
+
+func drainTimeoutFromEnv(lookup func(string) (string, bool)) (time.Duration, error) {
+	raw, ok := lookup("TANPOPO_DRAIN_TIMEOUT")
+	if !ok || strings.TrimSpace(raw) == "" {
+		return defaultDrainTimeout, nil
+	}
+	timeout, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil || timeout < 0 || timeout > maxDrainTimeout {
+		return 0, fmt.Errorf("TANPOPO_DRAIN_TIMEOUT must be between 0s and %s", maxDrainTimeout)
+	}
+	return timeout, nil
 }
 
 func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(), error) {
@@ -147,14 +170,18 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	}()
 	var closeDataServer func()
 	var dataServerReady func(context.Context) error
+	var cleanupOnce sync.Once
 	cleanup := func() {
-		if closeDataServer != nil {
-			closeDataServer()
-		}
-		cancelRuntime()
-		<-watcherDone
-		closeKeys()
-		closeStore()
+		cleanupOnce.Do(func() {
+			if closeDataServer != nil {
+				closeDataServer()
+			}
+			cancelRuntime()
+			<-watcherDone
+			vaultStore.Close()
+			closeKeys()
+			closeStore()
+		})
 	}
 	killSwitch, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{DB: db, Audit: auditLog, Streams: killswitch.NewStreamRegistry()})
 	if err != nil {

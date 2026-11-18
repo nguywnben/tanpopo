@@ -11,12 +11,14 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
 	admincli "github.com/nguywnben/tanpopo/internal/cli/admin"
+	opscli "github.com/nguywnben/tanpopo/internal/cli/ops"
 	"github.com/nguywnben/tanpopo/internal/cli/plugin"
 	"github.com/nguywnben/tanpopo/internal/cli/remote"
 	"github.com/nguywnben/tanpopo/internal/cli/support"
@@ -88,6 +90,13 @@ func runWithContext(ctx context.Context, args []string, stdout, stderr io.Writer
 		support.NewCommand(support.Options{RootDir: envOr("TANPOPO_DATA_DIR", "data"), OutputFormat: &outputFmt, Stdout: stdout}),
 		support.NewDoctorCommand(support.Options{RootDir: envOr("TANPOPO_DATA_DIR", "data"), OutputFormat: &outputFmt, Stdout: stdout}),
 	)
+	rootCmd.AddCommand(opscli.NewCommands(opscli.Options{
+		DBPath:       envOr("TANPOPO_DB_PATH", filepath.Join(envOr("TANPOPO_DATA_DIR", "data"), "tanpopo.db")),
+		DataRoot:     envOr("TANPOPO_DATA_DIR", "data"),
+		LockfilePath: envOr("TANPOPO_LOCK_FILE", filepath.Join(envOr("TANPOPO_DATA_DIR", "data"), "tanpopo.lock")),
+		OutputFormat: &outputFmt,
+		Stdout:       stdout,
+	})...)
 	for _, command := range remote.NewCommands(remote.Options{
 		OutputFormat: &outputFmt,
 		Stdout:       stdout,

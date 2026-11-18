@@ -45,8 +45,11 @@ func TestDoctorCommandReportsLoopbackHealthProbesAsJSON(t *testing.T) {
 	for _, check := range report.Checks {
 		statuses[check.Name] = check.Status
 	}
-	if statuses["process_liveness"] != "ok" || statuses["service_readiness"] != "not_ready" {
-		t.Fatalf("unexpected health probe results: %#v", statuses)
+	if len(report.Checks) != 8 {
+		t.Fatalf("doctor returned %d checks; want the eight SPEC-OPS-01 checks: %#v", len(report.Checks), statuses)
+	}
+	if statuses["egress-dns-ssrf"] != "pass" || statuses["tls-posture"] != "warn" {
+		t.Fatalf("unexpected environmental doctor results: %#v", statuses)
 	}
 	if _, err := os.Stat(filepath.Join(rootDir, "tanpopo.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("doctor mutated its data root: %v", err)

@@ -23,6 +23,40 @@ import (
 	"github.com/nguywnben/tanpopo/internal/testkit/netguard"
 )
 
+func TestDrainTimeoutFromEnvIsBounded(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		ok    bool
+		want  time.Duration
+	}{
+		{name: "default", want: defaultDrainTimeout, ok: true},
+		{name: "zero disables wait", value: "0s", want: 0, ok: true},
+		{name: "configured", value: "2m", want: 2 * time.Minute, ok: true},
+		{name: "maximum", value: "300s", want: maxDrainTimeout, ok: true},
+		{name: "above maximum", value: "301s"},
+		{name: "negative", value: "-1s"},
+		{name: "invalid", value: "later"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lookup := func(string) (string, bool) {
+				if tt.name == "default" {
+					return "", false
+				}
+				return tt.value, true
+			}
+			got, err := drainTimeoutFromEnv(lookup)
+			if (err == nil) != tt.ok {
+				t.Fatalf("drainTimeoutFromEnv() err=%v, want success=%t", err, tt.ok)
+			}
+			if err == nil && got != tt.want {
+				t.Fatalf("drainTimeoutFromEnv()=%s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(netguard.MustRunHermeticMain(m))
 }
@@ -63,6 +97,31 @@ func TestUnifiedRuntimeRoutesDataPlaneAdminAndEmbeddedConsole(t *testing.T) {
 	handler.ServeHTTP(unknown, httptest.NewRequest(http.MethodGet, "/admin/v1/not-a-route", nil))
 	if unknown.Header().Get("Content-Type") == "text/html" {
 		t.Fatal("unknown Admin API path fell through to the console")
+	}
+}
+
+func TestReadinessFailsImmediatelyAfterDrainStartsButLivenessStaysHealthy(t *testing.T) {
+	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "data"))
+	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", "")
+	ctx, cancel := context.WithCancel(context.Background())
+	handler, closeRuntime, err := buildRuntime(ctx, "all", "127.0.0.1:8080")
+	if err != nil {
+		cancel()
+		t.Fatalf("build runtime: %v", err)
+	}
+	defer closeRuntime()
+	cancel()
+
+	ready := httptest.NewRecorder()
+	handler.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusServiceUnavailable {
+		t.Fatalf("readiness returned %d after drain began", ready.Code)
+	}
+	live := httptest.NewRecorder()
+	handler.ServeHTTP(live, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if live.Code != http.StatusOK {
+		t.Fatalf("liveness returned %d while process was draining", live.Code)
 	}
 }
 
