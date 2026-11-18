@@ -15,10 +15,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -77,6 +80,164 @@ func TestEXTAccept01_VerticalSliceM1(t *testing.T) {
 			runEXTSliceM1ForTier(t, tier)
 		})
 	}
+}
+
+// TestEXTAccept01_FullLifecycleProcessContract pins the process-level boundary
+// required by the ten-step acceptance flow. It exercises the currently available
+// offline SDK commands and checks that the live server and all required Admin API
+// surfaces remain reachable without replacing the Core process or binary.
+//
+// Endpoint probes are deliberately not treated as proof of lifecycle behavior:
+// the authenticated install/approval, EU routing/ledger, upgrade/rollback,
+// quarantine timing, and forensic result assertions remain runtime dependencies
+// until the corresponding live workflow can be driven end to end here.
+func TestEXTAccept01_FullLifecycleProcessContract(t *testing.T) {
+	t.Helper()
+	root := filepath.Clean(filepath.Join("..", ".."))
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		t.Fatalf("locate Tanpopo module from integration test directory: %v", err)
+	}
+	work := t.TempDir()
+	binary := filepath.Join(work, "tanpopo")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
+	build := exec.Command("go", "build", "-o", binary, "./cmd/tanpopo")
+	build.Dir = root
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build single Tanpopo executable: %v\n%s", err, output)
+	}
+	binaryBytes, err := os.ReadFile(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialDigest := sha256.Sum256(binaryBytes)
+	initialSHA := hex.EncodeToString(initialDigest[:])
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	_ = listener.Close()
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	dataDir := filepath.Join(work, "data")
+	cmd := exec.Command(binary, "serve", "--role=all", "--listen", fmt.Sprintf("127.0.0.1:%d", port))
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(),
+		"TANPOPO_DATA_DIR="+dataDir,
+		"TANPOPO_MASTER_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"TANPOPO_MASTER_KEY_FILE=",
+		"TANPOPO_TEST_HERMETIC=1",
+	)
+	var serverOutput bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &serverOutput, &serverOutput
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start Tanpopo Core process: %v", err)
+	}
+	pid := cmd.Process.Pid
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	client := netguard.NewHTTPClient()
+	client.Timeout = 2 * time.Second
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		resp, reqErr := client.Get(baseURL + "/readyz")
+		if reqErr == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Tanpopo did not become ready; pid=%d output=%s", pid, serverOutput.String())
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	assertCoreInvariant := func(step string) {
+		t.Helper()
+		if cmd.ProcessState != nil {
+			t.Fatalf("step %s: Core process exited (pid=%d): %s", step, pid, serverOutput.String())
+		}
+		if got := cmd.Process.Pid; got != pid {
+			t.Fatalf("step %s: Core PID changed from %d to %d", step, pid, got)
+		}
+		current, readErr := os.ReadFile(binary)
+		if readErr != nil {
+			t.Fatalf("step %s: read Core executable: %v", step, readErr)
+		}
+		gotSHA := sha256.Sum256(current)
+		if hex.EncodeToString(gotSHA[:]) != initialSHA {
+			t.Fatalf("step %s: Core executable SHA-256 changed", step)
+		}
+	}
+	assertCoreInvariant("startup")
+
+	// Mandatory step 1: scaffold, run the offline contract suite, and pack from
+	// outside the Core source tree under the required Acme Cloud namespace.
+	extensionDir := filepath.Join(work, "external-adapter")
+	runCLI := func(args ...string) ([]byte, error) {
+		t.Helper()
+		c := exec.Command(binary, args...)
+		c.Dir = work
+		return c.CombinedOutput()
+	}
+	if out, runErr := runCLI("plugin", "init", "regional-llm-adapter", "--namespace", "acme-cloud", "--dir", extensionDir); runErr != nil {
+		t.Errorf("step 1: tanpopo plugin init: %v\n%s", runErr, out)
+	} else {
+		manifest, readErr := os.ReadFile(filepath.Join(extensionDir, "manifest.yaml"))
+		if readErr != nil {
+			t.Errorf("step 1: read generated manifest: %v", readErr)
+		} else if !strings.Contains(string(manifest), "@acme-cloud/regional-llm-adapter") {
+			t.Errorf("step 1 contract dependency: plugin init must scaffold exact package @acme-cloud/regional-llm-adapter; current manifest does not")
+		}
+		if out, runErr := runCLI("plugin", "test", extensionDir); runErr != nil {
+			t.Errorf("step 1: tanpopo plugin test (CT-01..CT-17): %v\n%s", runErr, out)
+		}
+		if out, runErr := runCLI("plugin", "pack", extensionDir, "--out", filepath.Join(work, "acme-0.2.0.tpkg")); runErr != nil {
+			t.Errorf("step 1: tanpopo plugin pack: %v\n%s", runErr, out)
+		}
+	}
+	assertCoreInvariant("step 1")
+
+	// Steps 2-9 require authenticated state-changing workflows. Probe the
+	// canonical API surfaces from the running process and reject missing routes;
+	// status codes such as 401/403/405 are expected here because this probe does
+	// not impersonate an authenticated administrator.
+	apiSurfaces := []struct{ step, method, path string }{
+		{"2 pending permission approval", http.MethodGet, "/admin/v1/extensions/installations"},
+		{"3 permission approval and lock pin", http.MethodGet, "/admin/v1/extensions/lockfile"},
+		{"4 connection/route/budget setup", http.MethodGet, "/admin/v1/routes"},
+		{"5 inference and exact settlement", http.MethodPost, "/v1/chat/completions"},
+		{"6 EU fail-closed and estimated settlement", http.MethodPost, "/v1/chat/completions"},
+		{"7 pending reconsent", http.MethodPost, "/admin/v1/extensions/install"},
+		{"8 rollback", http.MethodPost, "/admin/v1/extensions/installation-contract/rollback"},
+		{"9 quarantine and blast-radius", http.MethodGet, "/admin/v1/blast-radius?target_type=extension&target_id=contract"},
+	}
+	for _, surface := range apiSurfaces {
+		req, reqErr := http.NewRequest(surface.method, baseURL+surface.path, nil)
+		if reqErr != nil {
+			t.Errorf("step %s: construct API probe: %v", surface.step, reqErr)
+			continue
+		}
+		resp, reqErr := client.Do(req)
+		if reqErr != nil {
+			t.Errorf("step %s: API contract unavailable: %v", surface.step, reqErr)
+			continue
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			t.Errorf("step %s: required API route %s %s is not mounted", surface.step, surface.method, surface.path)
+		}
+		assertCoreInvariant(surface.step)
+	}
+
+	// Mandatory step 10: unchanged executable and still-serving process after
+	// every lifecycle operation. Full behavioral assertions above remain gated
+	// on authenticated bootstrap/session, ledger setup, and lifecycle APIs.
+	assertCoreInvariant("step 10")
 }
 
 func runEXTSliceM1ForTier(t *testing.T, tier string) {

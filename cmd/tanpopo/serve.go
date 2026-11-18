@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -20,7 +21,9 @@ import (
 	adminhttp "github.com/nguywnben/tanpopo/internal/admin/http"
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
+	extport "github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
+	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
@@ -31,6 +34,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
+	telemetry "github.com/nguywnben/tanpopo/internal/telemetry/otel"
 	"github.com/nguywnben/tanpopo/internal/webui"
 )
 
@@ -45,6 +49,9 @@ func newServeCommand() *cobra.Command {
 			if role != "all" && role != "data-plane" && role != "control-plane" {
 				return &testharness.ExitError{Code: testharness.ExitValidation, Message: fmt.Sprintf("invalid --role %q; expected all, data-plane, or control-plane", role)}
 			}
+			if _, err := drainTimeoutFromEnv(os.LookupEnv); err != nil {
+				return &testharness.ExitError{Code: testharness.ExitValidation, Message: "invalid drain timeout configuration", Cause: err}
+			}
 			if err := serve(cmd.Context(), role, listen); err != nil {
 				return &testharness.ExitError{Code: testharness.ExitInternal, Message: "serve failed", Cause: err}
 			}
@@ -57,6 +64,10 @@ func newServeCommand() *cobra.Command {
 }
 
 func serve(ctx context.Context, role, listen string) error {
+	drainTimeout, err := drainTimeoutFromEnv(os.LookupEnv)
+	if err != nil {
+		return err
+	}
 	handler, closeRuntime, err := buildRuntime(ctx, role, listen)
 	if err != nil {
 		return err
@@ -75,7 +86,7 @@ func serve(ctx context.Context, role, listen string) error {
 	go func() { done <- server.Serve(listener) }()
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			_ = server.Close()
@@ -92,6 +103,21 @@ func serve(ctx context.Context, role, listen string) error {
 		}
 		return err
 	}
+}
+
+const defaultDrainTimeout = 90 * time.Second
+const maxDrainTimeout = 300 * time.Second
+
+func drainTimeoutFromEnv(lookup func(string) (string, bool)) (time.Duration, error) {
+	raw, ok := lookup("TANPOPO_DRAIN_TIMEOUT")
+	if !ok || strings.TrimSpace(raw) == "" {
+		return defaultDrainTimeout, nil
+	}
+	timeout, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil || timeout < 0 || timeout > maxDrainTimeout {
+		return 0, fmt.Errorf("TANPOPO_DRAIN_TIMEOUT must be between 0s and %s", maxDrainTimeout)
+	}
+	return timeout, nil
 }
 
 func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(), error) {
@@ -121,6 +147,11 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		closeStore()
 		return nil, nil, fmt.Errorf("initialize audit logger: %w", err)
 	}
+	ledgerService, err := ledger.NewService(ledger.Config{DB: db, Audit: auditLog})
+	if err != nil {
+		closeStore()
+		return nil, nil, fmt.Errorf("initialize usage ledger: %w", err)
+	}
 	kek, err := vault.LoadStaticKEKFromEnv("kek_v1", os.LookupEnv)
 	if err != nil {
 		closeStore()
@@ -147,14 +178,24 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	}()
 	var closeDataServer func()
 	var dataServerReady func(context.Context) error
+	var telemetryPipeline *telemetry.Pipeline
+	var cleanupOnce sync.Once
 	cleanup := func() {
-		if closeDataServer != nil {
-			closeDataServer()
-		}
-		cancelRuntime()
-		<-watcherDone
-		closeKeys()
-		closeStore()
+		cleanupOnce.Do(func() {
+			if closeDataServer != nil {
+				closeDataServer()
+			}
+			if telemetryPipeline != nil {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				_ = telemetryPipeline.Shutdown(shutdownCtx)
+				cancel()
+			}
+			cancelRuntime()
+			<-watcherDone
+			vaultStore.Close()
+			closeKeys()
+			closeStore()
+		})
 	}
 	killSwitch, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{DB: db, Audit: auditLog, Streams: killswitch.NewStreamRegistry()})
 	if err != nil {
@@ -202,6 +243,33 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
+	var dataServer *ingresshttp.Server
+	if role == "all" || role == "data-plane" {
+		telemetryPipeline, err = telemetry.NewPipeline(telemetry.PipelineConfig{
+			ServiceName: "tanpopo", ServiceVersion: version, DB: db, Vault: vaultStore,
+		})
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize telemetry pipeline: %w", err)
+		}
+		dataServer, err = ingresshttp.NewServer(ingresshttp.ServerConfig{
+			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
+			BudgetLedger: ledgerService,
+			Telemetry:    telemetryPipeline,
+		})
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize Data Plane: %w", err)
+		}
+		closeDataServer = func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = dataServer.Close(shutdownCtx)
+		}
+		dataServerReady = dataServer.CheckServingReady
+		mux.Handle("/v1/", dataServer)
+		mux.Handle("/metrics", dataServer.MetricsHandler())
+	}
 	if role == "all" || role == "control-plane" {
 		bootstrapManager, err := bootstrap.NewManager(bootstrap.ManagerConfig{
 			DB: db, TokenPath: envOr("TANPOPO_BOOTSTRAP_TOKEN_FILE", filepath.Join(dataDir, "bootstrap.token")), AuditSink: auditLog,
@@ -224,10 +292,15 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize virtual keys: %w", err)
 		}
+		var providerRuntimeFactory func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
+		if dataServer != nil {
+			providerRuntimeFactory = dataServer.AcquireProviderRuntime
+		}
 		adminServer, err := adminhttp.NewServer(adminhttp.ServerConfig{
-			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys,
+			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys, Ledgers: ledgerService,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
-			Installer: installerService, Broker: blindBroker, Audit: auditLog, Version: version,
+			Installer: installerService, ArchiveResolver: newServeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv)),
+			Broker: blindBroker, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
 		})
 		if err != nil {
 			cleanup()
@@ -236,24 +309,20 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		mux.Handle("/admin/v1/", adminServer)
 		mux.Handle("/", webui.Handler())
 	}
-	if role == "all" || role == "data-plane" {
-		dataServer, err := ingresshttp.NewServer(ingresshttp.ServerConfig{
-			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
-		})
-		if err != nil {
-			cleanup()
-			return nil, nil, fmt.Errorf("initialize Data Plane: %w", err)
-		}
-		closeDataServer = func() {
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			_ = dataServer.Close(shutdownCtx)
-		}
-		dataServerReady = dataServer.CheckServingReady
-		mux.Handle("/v1/", dataServer)
-		mux.Handle("/metrics", dataServer.MetricsHandler())
-	}
 	return mux, cleanup, nil
+}
+
+func newServeArchiveResolver(root string) adminhttp.ExtensionArchiveResolver {
+	if strings.TrimSpace(root) == "" {
+		return nil
+	}
+	resolver, err := installer.NewLocalMarketplaceArchiveResolver(root)
+	if err != nil {
+		return func(context.Context, string, string) (*installer.StageInstallRequest, func(), error) {
+			return nil, nil, err
+		}
+	}
+	return resolver.Resolve
 }
 
 func allowedOrigins(addr string) []string {

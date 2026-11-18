@@ -401,7 +401,14 @@ func TestInstallerAC1FullLifecycleAndFastRollback(t *testing.T) {
 	}
 
 	// 4. Emergency Quarantine (exported for fault_guard in TP-IMP-0013) emits emergency=1 changelog.
-	if err := h.svc.QuarantineInstallation(ctx, rolledBack.InstallationID, "exceeded 20 traps / 60s (FMEA-05)", "fault_guard"); err != nil {
+	if err := h.svc.QuarantineInstallationIfVersion(ctx, rolledBack.InstallationID, rolledBack.Version-1, "stale quarantine request", "fault_guard"); !errors.Is(err, port.ErrVersionConflict) {
+		t.Fatalf("expected stale quarantine ETag to conflict, got %v", err)
+	}
+	stillActive, err := h.svc.GetInstallation(ctx, rolledBack.InstallationID)
+	if err != nil || stillActive.Version != rolledBack.Version || stillActive.State != StateEnabledActive {
+		t.Fatalf("stale quarantine changed installation: %+v err=%v", stillActive, err)
+	}
+	if err := h.svc.QuarantineInstallationIfVersion(ctx, rolledBack.InstallationID, rolledBack.Version, "exceeded 20 traps / 60s (FMEA-05)", "fault_guard"); err != nil {
 		t.Fatalf("QuarantineInstallation: %v", err)
 	}
 	qRec, err := h.svc.GetInstallation(ctx, rolledBack.InstallationID)

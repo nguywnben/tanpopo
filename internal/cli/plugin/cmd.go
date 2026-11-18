@@ -67,9 +67,10 @@ func validateOutputFormat(fmtName string) error {
 
 func newInitCmd(opts Options) *cobra.Command {
 	var (
-		tier  string
-		dir   string
-		force bool
+		tier      string
+		namespace string
+		dir       string
+		force     bool
 	)
 	cmd := &cobra.Command{
 		Use:   "init <name>",
@@ -80,10 +81,11 @@ func newInitCmd(opts Options) *cobra.Command {
 				return err
 			}
 			res, err := testharness.ScaffoldExtension(testharness.ScaffoldOptions{
-				Name:  args[0],
-				Tier:  tier,
-				Dir:   dir,
-				Force: force,
+				Name:      args[0],
+				Namespace: namespace,
+				Tier:      tier,
+				Dir:       dir,
+				Force:     force,
 			})
 			if err != nil {
 				return err
@@ -92,6 +94,7 @@ func newInitCmd(opts Options) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&tier, "tier", "1", "Extension execution tier (1|declarative or 2|wasm)")
+	cmd.Flags().StringVar(&namespace, "namespace", "example", "Package namespace (without @)")
 	cmd.Flags().StringVarP(&dir, "dir", "o", "", "Target directory (defaults to ./<name>)")
 	cmd.Flags().BoolVar(&force, "force", false, "Overwrite non-empty target directory")
 	return cmd

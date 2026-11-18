@@ -668,7 +668,7 @@ components:
       properties:
         source_uri:
           type: string
-          description: Marketplace package ref, 40-char commit-pinned git+https URL, local .tpkg path, or digest-pinned oci:// URI.
+          description: Marketplace package reference. When TANPOPO_MARKETPLACE_ARCHIVE_ROOT is configured, tanpopo-local://<filename>.tpkg resolves only a single archive filename inside that directory and is verified against expected_sha256 before installation.
         expected_sha256:
           type: string
           pattern: "^[a-f0-9]{64}$"
@@ -1743,6 +1743,42 @@ paths:
 
   # ==================== GROUP E: ADAPTERS, WRITE-ONLY SECRETS & CONNECTIONS (SCR-03, SCR-04) ====================
   /admin/v1/provider-adapters:
+    post:
+      tags: [SecretsAndConnections]
+      operationId: registerProviderAdapter
+      summary: Register an installed adapter using only its approved egress scope
+      description: Requires an instance OPERATOR. The catalog rejects hosts outside the installation's approved SM-01 permissions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [installation_id, adapter_slug, allowed_hosts]
+              description: Adapter slug must match a provider_adapter capability in the active manifest; dialects and native prefix are taken from that manifest.
+              properties:
+                installation_id: { type: string, minLength: 1 }
+                adapter_slug: { type: string, minLength: 1 }
+                allowed_hosts: { type: array, minItems: 1, items: { type: string } }
+      responses:
+        "201":
+          description: Provider adapter registered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, installation_id, adapter_slug, supported_dialects, allowed_hosts, version]
+                properties:
+                  id: { type: string }
+                  installation_id: { type: string }
+                  adapter_slug: { type: string }
+                  native_prefix: { type: [string, "null"] }
+                  supported_dialects: { type: array, items: { type: string } }
+                  allowed_hosts: { type: array, items: { type: string } }
+                  version: { type: integer, minimum: 1 }
+        "400": { description: invalid_request or host outside approved permissions }
+        "403": { description: instance operator permission required }
+        "409": { description: provider adapter already registered }
     get:
       tags: [SecretsAndConnections]
       operationId: listProviderAdapters
@@ -2334,6 +2370,46 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ExtensionPermissionDiff" }
+
+  /admin/v1/extensions/{installationId}/quarantine:
+    post:
+      tags: [ExtensionsAndMarketplace]
+      operationId: quarantineExtension
+      summary: Immediately quarantine an extension installation after optimistic version check
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5 }
+      responses:
+        "200":
+          description: Extension quarantined and serving configuration refreshed
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtensionInstallation" }
+        "403":
+          description: Caller lacks extension quarantine permission
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: Optimistic lock conflict or invalid state transition
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
 
   /admin/v1/extensions/{installationId}/rollback:
     post:

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
@@ -1018,6 +1019,10 @@ func (s *Server) handleClearKillSwitch(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "expected_version >= 1 and clear_reason (>= 5 characters) are required", false, nil)
 		return
 	}
+	// Serialize clear with the quarantine transaction so an operator cannot
+	// remove the abort barrier while the installation is still serving-active.
+	s.quarantineMu.Lock()
+	defer s.quarantineMu.Unlock()
 	if s.killSwitch == nil {
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "kill_switch_unavailable", "upstream_error", "kill-switch registry is not configured", true, nil)
 		return
@@ -1061,6 +1066,23 @@ func (s *Server) handleClearKillSwitch(w http.ResponseWriter, r *http.Request) {
 	if ks.Version != req.ExpectedVersion {
 		writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "kill switch version changed; reload before clearing", false, map[string]any{"current_version": ks.Version})
 		return
+	}
+	if ks.Level == killswitch.LevelExtensionInstallation {
+		installation, _, loadErr := s.loadExtensionInstallationDTO(r.Context(), ks.TargetID)
+		if errors.Is(loadErr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
+			return
+		}
+		if loadErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading extension installation before clearing quarantine barrier", true, nil)
+			return
+		}
+		if installation.State == installer.StateQuarantined && s.snapshots != nil {
+			if err := s.snapshots.Refresh(r.Context()); err != nil {
+				writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_snapshot_refresh_failed", "upstream_error", "serving snapshot could not confirm quarantine; emergency barrier remains active", true, nil)
+				return
+			}
+		}
 	}
 	var orgPtr *string
 	if !instanceOnly {

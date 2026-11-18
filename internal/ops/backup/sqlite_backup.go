@@ -46,6 +46,12 @@ type KeyWrapper interface {
 	WrapArchiveKey(ctx context.Context, plaintextKey []byte) (keyID string, nonce, ciphertext []byte, err error)
 }
 
+// KeyUnwrapper opens only the archive data key recorded in an archive header.
+// Implementations retain custody of the Master KEK and never return it.
+type KeyUnwrapper interface {
+	UnwrapArchiveKey(ctx context.Context, keyID string, nonce, ciphertext []byte) ([]byte, error)
+}
+
 type Receipt struct {
 	BackupID        string `json:"backup_id"`
 	ArchiveFilename string `json:"archive_filename"`

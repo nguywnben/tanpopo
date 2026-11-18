@@ -18,10 +18,11 @@ var validPluginSlugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
 
 // ScaffoldOptions configures `tanpopo plugin init`.
 type ScaffoldOptions struct {
-	Name  string
-	Tier  string
-	Dir   string
-	Force bool
+	Name      string
+	Namespace string
+	Tier      string
+	Dir       string
+	Force     bool
 }
 
 // ScaffoldResult reports files created by ScaffoldExtension.
@@ -70,7 +71,14 @@ func ScaffoldExtension(opts ScaffoldOptions) (*ScaffoldResult, error) {
 		return nil, validationErr("create target plugin directory", err)
 	}
 
-	extID := "@example/" + name
+	namespace := strings.TrimSpace(opts.Namespace)
+	if namespace == "" {
+		namespace = "example"
+	}
+	if !validPluginSlugRe.MatchString(namespace) || strings.Contains(namespace, "..") {
+		return nil, validationErr(fmt.Sprintf("invalid plugin namespace %q", opts.Namespace), nil)
+	}
+	extID := "@" + namespace + "/" + name
 	var createdFiles []string
 
 	err = fs.WalkDir(sdk.EmbeddedAssets, tmplRoot, func(path string, d fs.DirEntry, wErr error) error {

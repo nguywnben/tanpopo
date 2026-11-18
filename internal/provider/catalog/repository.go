@@ -200,12 +200,13 @@ type ProviderAdapter struct {
 
 // CreateProviderAdapterParams configures CreateProviderAdapter.
 type CreateProviderAdapterParams struct {
-	ID                string
-	InstallationID    string
-	AdapterSlug       string
-	NativePrefix      *string
-	SupportedDialects []string
-	AllowedHosts      []string
+	ID                      string
+	InstallationID          string
+	ExpectedActiveVersionID string
+	AdapterSlug             string
+	NativePrefix            *string
+	SupportedDialects       []string
+	AllowedHosts            []string
 }
 
 // SecretBindingInput declares one slot binding in connection_secret_bindings.
@@ -390,6 +391,38 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 		if gov.ActiveVersionID == "" {
 			return fmt.Errorf("%w: extension installation %q has no active SM-01 version", port.ErrInvalidInput, params.InstallationID)
 		}
+		if params.ExpectedActiveVersionID != "" && gov.ActiveVersionID != params.ExpectedActiveVersionID {
+			return port.ErrVersionConflict
+		}
+		if params.ExpectedActiveVersionID != "" {
+			var manifestJSON string
+			if err := tx.QueryRowContext(ctx, `SELECT manifest_json FROM extension_versions WHERE id = ? AND package_id = (SELECT package_id FROM extension_installations WHERE id = ?)`, gov.ActiveVersionID, params.InstallationID).Scan(&manifestJSON); err != nil {
+				return mapDBError(err)
+			}
+			var manifest installer.ExtensionManifest
+			if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
+				return fmt.Errorf("%w: active provider adapter manifest is invalid", port.ErrInvalidInput)
+			}
+			declared := false
+			for _, capability := range manifest.Capabilities {
+				if capability.Type != "provider_adapter" || capability.AdapterSlug != params.AdapterSlug {
+					continue
+				}
+				declaredPrefix := strings.TrimSpace(capability.NativePassthroughPrefix)
+				requestedPrefix := ""
+				if params.NativePrefix != nil {
+					requestedPrefix = strings.TrimSpace(*params.NativePrefix)
+				}
+				if declaredPrefix != requestedPrefix || !sameStrings(capability.SupportedDialects, params.SupportedDialects) {
+					return fmt.Errorf("%w: adapter metadata does not match its active manifest capability", port.ErrInvalidInput)
+				}
+				declared = true
+				break
+			}
+			if !declared {
+				return fmt.Errorf("%w: adapter slug is not declared by the active manifest", port.ErrInvalidInput)
+			}
+		}
 		approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
 		if err != nil {
 			return fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
@@ -425,6 +458,18 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 		return nil, err
 	}
 	return r.GetProviderAdapter(ctx, id)
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // GetProviderAdapter fetches a ProviderAdapter by ID.
@@ -890,9 +935,9 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			params.AuthMode != nil
 
 		var (
-			currentPrimaryCred    *string
-			explicitPrimaryCred   *string
-			nextPrimaryCred       *string
+			currentPrimaryCred  *string
+			explicitPrimaryCred *string
+			nextPrimaryCred     *string
 		)
 		if curCredID.Valid && curCredID.String != "" {
 			v := curCredID.String
@@ -901,7 +946,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 		}
 		if params.CredentialID != nil {
 			if trimmed := strings.TrimSpace(*params.CredentialID); trimmed != "" {
-			explicitPrimaryCred = &trimmed
+				explicitPrimaryCred = &trimmed
 				nextPrimaryCred = &trimmed
 			} else {
 				nextPrimaryCred = nil
@@ -1202,10 +1247,14 @@ func (r *Repository) DeleteProviderConnection(ctx context.Context, orgID, connec
 	if err := r.withTx(ctx, func(tx *sql.Tx) error {
 		var currentVersion int64
 		if err := tx.QueryRowContext(ctx, `SELECT version FROM provider_connections WHERE org_id = ? AND id = ?`, orgID, connectionID).Scan(&currentVersion); err != nil {
-			if errors.Is(err, sql.ErrNoRows) { return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID) }
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
+			}
 			return mapDBError(err)
 		}
-		if currentVersion != expectedVersion { return port.ErrVersionConflict }
+		if currentVersion != expectedVersion {
+			return port.ErrVersionConflict
+		}
 		var inUse int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM model_deployments WHERE org_id = ? AND connection_id = ?`, orgID, connectionID).Scan(&inUse); err != nil {
 			return mapDBError(err)

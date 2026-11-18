@@ -85,6 +85,107 @@ type updateConnectionRequest struct {
 	SecretBindings map[string]string `json:"secret_bindings"`
 }
 
+type createProviderAdapterRequest struct {
+	InstallationID string   `json:"installation_id"`
+	AdapterSlug    string   `json:"adapter_slug"`
+	AllowedHosts   []string `json:"allowed_hosts"`
+}
+
+func (s *Server) handleCreateProviderAdapter(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID}) {
+		return
+	}
+	if !sc.IsOperator {
+		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "registering a provider adapter requires an instance OPERATOR", false, nil)
+		return
+	}
+	if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
+		return
+	}
+	var req createProviderAdapterRequest
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	if s.catalog == nil || s.installer == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "provider_catalog_unavailable", "upstream_error", "provider catalog or extension installer is not configured", true, nil)
+		return
+	}
+	installation, err := s.installer.GetInstallation(r.Context(), req.InstallationID)
+	if err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
+			return
+		}
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading extension installation", true, nil)
+		return
+	}
+	if installation.State != installer.StateEnabledActive || installation.ActiveVersionID == nil {
+		writeErrorEnvelope(w, r, http.StatusConflict, "extension_not_active", "conflict_error", "provider adapters can only be registered from an active approved extension", false, nil)
+		return
+	}
+	var manifestJSON string
+	if err := s.db.QueryRowContext(r.Context(), `SELECT manifest_json FROM extension_versions WHERE id = ? AND package_id = ?`, *installation.ActiveVersionID, installation.PackageID).Scan(&manifestJSON); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading active extension manifest", true, nil)
+		return
+	}
+	var manifest installer.ExtensionManifest
+	if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "extension_manifest_invalid", "extension_error", "active extension manifest is invalid", false, nil)
+		return
+	}
+	var declared *installer.ManifestCap
+	for i := range manifest.Capabilities {
+		capability := &manifest.Capabilities[i]
+		if capability.Type == "provider_adapter" && capability.AdapterSlug == req.AdapterSlug {
+			declared = capability
+			break
+		}
+	}
+	if declared == nil {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "adapter_capability_not_declared", "invalid_request_error", "adapter_slug must match a provider_adapter capability in the active manifest", false, nil)
+		return
+	}
+	var nativePrefix *string
+	if strings.TrimSpace(declared.NativePassthroughPrefix) != "" {
+		value := declared.NativePassthroughPrefix
+		nativePrefix = &value
+	}
+	adapter, err := s.catalog.CreateProviderAdapter(r.Context(), catalog.CreateProviderAdapterParams{
+		InstallationID: req.InstallationID, ExpectedActiveVersionID: *installation.ActiveVersionID,
+		AdapterSlug: declared.AdapterSlug, NativePrefix: nativePrefix,
+		SupportedDialects: declared.SupportedDialects, AllowedHosts: req.AllowedHosts,
+	})
+	if err != nil {
+		if errors.Is(err, port.ErrVersionConflict) {
+			writeErrorEnvelope(w, r, http.StatusConflict, "extension_version_changed", "conflict_error", "active extension version changed during adapter registration; retry with the current manifest", false, nil)
+			return
+		}
+		if errors.Is(err, port.ErrInvalidInput) {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+			return
+		}
+		if errors.Is(err, port.ErrAlreadyExists) {
+			writeErrorEnvelope(w, r, http.StatusConflict, "resource_conflict", "conflict_error", "provider adapter is already registered", false, nil)
+			return
+		}
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed registering provider adapter", true, nil)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"id": adapter.ID, "installation_id": adapter.InstallationID, "adapter_slug": adapter.AdapterSlug,
+		"native_prefix": adapter.NativePrefix, "supported_dialects": adapter.SupportedDialects,
+		"allowed_hosts": adapter.AllowedHosts, "version": adapter.Version,
+	})
+}
+
 type connectionTestResponseDTO struct {
 	Valid            bool     `json:"valid"`
 	LatencyMs        int64    `json:"latency_ms"`
@@ -1095,8 +1196,24 @@ func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.broker == nil || s.providerRuntime == nil {
+	if s.broker == nil || (s.providerRuntime == nil && s.providerRuntimeFactory == nil) {
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "probe_runtime_unavailable", "upstream_error", "connection validation broker or extension runtime unavailable", true, nil)
+		return
+	}
+	runtime := s.providerRuntime
+	var releaseRuntime func()
+	if s.providerRuntimeFactory != nil {
+		runtime, releaseRuntime, err = s.providerRuntimeFactory(r.Context(), orgID, connID)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "probe_runtime_unavailable", "upstream_error", "connection validation runtime unavailable", true, nil)
+			return
+		}
+		if releaseRuntime != nil {
+			defer releaseRuntime()
+		}
+	}
+	if runtime == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "probe_runtime_unavailable", "upstream_error", "connection validation runtime unavailable", true, nil)
 		return
 	}
 
@@ -1105,9 +1222,9 @@ func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 
 	switch cur.State {
 	case catalog.ConnStateDraft, catalog.ConnStateAuthExpired, catalog.ConnStateSuspendedAdmin:
-		verdict, _, err = s.catalog.ValidateConnection(r.Context(), orgID, connID, s.providerRuntime, s.broker)
+		verdict, _, err = s.catalog.ValidateConnection(r.Context(), orgID, connID, runtime, s.broker)
 	case catalog.ConnStateActive, catalog.ConnStateDegraded:
-		verdict, err = s.probeActiveConnection(r.Context(), orgID, cur)
+		verdict, err = s.probeActiveConnection(r.Context(), orgID, cur, runtime)
 	default:
 		writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "invalid_state_transition", "invalid_request_error", fmt.Sprintf("cannot test connection in state %s", cur.State), false, nil)
 		return
@@ -1216,7 +1333,7 @@ func classifySafeProbeError(err error) (string, string) {
 	return "upstream_unreachable", "upstream connection could not be reached"
 }
 
-func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *catalog.ProviderConnection) (*extport.ValidationVerdict, error) {
+func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *catalog.ProviderConnection, runtime extport.ProviderRuntime) (*extport.ValidationVerdict, error) {
 	probeReqID, err := idgen.New(idgen.PrefixTrace)
 	if err != nil {
 		probeReqID = "trc_probe_" + cur.ID
@@ -1232,7 +1349,7 @@ func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *c
 	for _, b := range cur.SecretBindings {
 		slotNames = append(slotNames, b.SlotName)
 	}
-	probeSpec, err := s.providerRuntime.BuildValidationProbe(ctx, extport.ValidationProbeInput{
+	probeSpec, err := runtime.BuildValidationProbe(ctx, extport.ValidationProbeInput{
 		RequestID:       probeReqID,
 		ConfigJSON:      string(mergedCfg),
 		SecretSlotNames: slotNames,
@@ -1293,7 +1410,7 @@ func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *c
 			flatHdrs[k] = strings.Join(vals, ", ")
 		}
 	}
-	verdict, err := s.providerRuntime.VerifyValidationResult(ctx, extport.ValidationResultInput{
+	verdict, err := runtime.VerifyValidationResult(ctx, extport.ValidationResultInput{
 		RequestID:        probeReqID,
 		HTTPStatus:       int32(egressResp.StatusCode),
 		SanitizedHeaders: flatHdrs,

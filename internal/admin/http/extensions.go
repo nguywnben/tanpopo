@@ -20,6 +20,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/trust"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
@@ -45,28 +46,28 @@ type extensionQuotasDTO struct {
 }
 
 type extensionPermissionDiffDTO struct {
-	InstallationID      string             `json:"installation_id"`
-	PackageID           string             `json:"package_id"`
-	ActiveVersion       *string            `json:"active_version"`
-	CandidateVersion    string             `json:"candidate_version"`
-	OriginTrustTier     string             `json:"origin_trust_tier"`
-	EnterpriseSigned    bool               `json:"enterprise_signed"`
-	ExecutionTier       string             `json:"execution_tier"`
-	ActiveExecutionTier *string            `json:"active_execution_tier"`
-	ActiveAllowedHosts  []string           `json:"active_allowed_hosts"`
-	CandidateAllowedHosts []string         `json:"candidate_allowed_hosts"`
-	AddedAllowedHosts   []string           `json:"added_allowed_hosts"`
-	RemovedAllowedHosts []string           `json:"removed_allowed_hosts"`
-	SecretSlots         []string           `json:"secret_slots"`
-	ActiveSecretSlots   []string           `json:"active_secret_slots"`
-	AddedSecretSlots    []string           `json:"added_secret_slots"`
-	QuotaEscalated      bool               `json:"quota_escalated"`
-	ActiveQuotas        *extensionQuotasDTO `json:"active_quotas"`
-	Quotas              extensionQuotasDTO `json:"quotas"`
-	ActivePermissions   *installer.PermissionSet `json:"active_permissions"`
-	CandidatePermissions installer.PermissionSet `json:"candidate_permissions"`
-	PermissionDelta     installer.PermissionDelta `json:"permission_delta"`
-	HasEscalation       bool `json:"has_escalation"`
+	InstallationID        string                    `json:"installation_id"`
+	PackageID             string                    `json:"package_id"`
+	ActiveVersion         *string                   `json:"active_version"`
+	CandidateVersion      string                    `json:"candidate_version"`
+	OriginTrustTier       string                    `json:"origin_trust_tier"`
+	EnterpriseSigned      bool                      `json:"enterprise_signed"`
+	ExecutionTier         string                    `json:"execution_tier"`
+	ActiveExecutionTier   *string                   `json:"active_execution_tier"`
+	ActiveAllowedHosts    []string                  `json:"active_allowed_hosts"`
+	CandidateAllowedHosts []string                  `json:"candidate_allowed_hosts"`
+	AddedAllowedHosts     []string                  `json:"added_allowed_hosts"`
+	RemovedAllowedHosts   []string                  `json:"removed_allowed_hosts"`
+	SecretSlots           []string                  `json:"secret_slots"`
+	ActiveSecretSlots     []string                  `json:"active_secret_slots"`
+	AddedSecretSlots      []string                  `json:"added_secret_slots"`
+	QuotaEscalated        bool                      `json:"quota_escalated"`
+	ActiveQuotas          *extensionQuotasDTO       `json:"active_quotas"`
+	Quotas                extensionQuotasDTO        `json:"quotas"`
+	ActivePermissions     *installer.PermissionSet  `json:"active_permissions"`
+	CandidatePermissions  installer.PermissionSet   `json:"candidate_permissions"`
+	PermissionDelta       installer.PermissionDelta `json:"permission_delta"`
+	HasEscalation         bool                      `json:"has_escalation"`
 }
 
 type extensionInstallationDTO struct {
@@ -84,7 +85,7 @@ type extensionInstallationDTO struct {
 }
 
 type approvePermissionsRequest struct {
-	EnableImmediately           bool `json:"enable_immediately"`
+	EnableImmediately             bool `json:"enable_immediately"`
 	AcknowledgeUnverifiedExternal bool `json:"acknowledge_unverified_external"`
 }
 
@@ -706,6 +707,117 @@ func (s *Server) handleRollbackExtension(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *Server) handleQuarantineExtension(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	insID := strings.TrimSpace(r.PathValue("installationId"))
+	if insID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
+		return
+	}
+	var req rollbackExtensionRequest
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionExtensionQuarantine, rbac.TargetScope{OrgID: orgID}) {
+		return
+	}
+	if !sc.IsOperator {
+		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "global extension quarantine requires an instance OPERATOR", false, nil)
+		return
+	}
+	if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
+		return
+	}
+	// Serialize authorized quarantine requests so a request-created barrier
+	// cannot be mistaken for a concurrent quarantine request's barrier.
+	s.quarantineMu.Lock()
+	defer s.quarantineMu.Unlock()
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if len([]rune(reason)) < 5 {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "reason must be at least 5 characters", false, nil)
+		return
+	}
+	if s.installer == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "extension_installer_unavailable", "extension_error", "extension installer is not configured", true, nil)
+		return
+	}
+	cur, _, err := s.loadExtensionInstallationDTO(r.Context(), insID)
+	if errors.Is(err, port.ErrNotFound) {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
+		return
+	}
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading extension installation", true, nil)
+		return
+	}
+	if cur.Version != expectedVer {
+		writeOptimisticConflict(w, r, cur.Version, cur)
+		return
+	}
+	if s.killSwitch == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "kill_switch_unavailable", "upstream_error", "extension quarantine requires the emergency kill-switch registry", true, nil)
+		return
+	}
+	abortStreams := true
+	requestSwitch, _, killErr := s.killSwitch.TriggerWithSeveredCount(r.Context(), killswitch.TriggerParams{
+		Level: killswitch.LevelExtensionInstallation, TargetID: insID, Reason: reason,
+		TriggeredByPrincipalID: sc.Actor.PrincipalID, EntryPoint: port.AuditEntryPointAdminAPI,
+		RequestID: ptrOrNil(requestIDFromContext(r.Context())), AbortActiveStreams: &abortStreams,
+	})
+	if errors.Is(killErr, killswitch.ErrAlreadyActive) {
+		_, killErr = s.killSwitch.EnsureActiveAbortBarrier(r.Context(), killswitch.LevelExtensionInstallation, insID, nil)
+	}
+	if killErr != nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_kill_switch_failed", "upstream_error", "extension quarantine could not establish its emergency stream barrier", true, nil)
+		return
+	}
+	if err := s.installer.QuarantineInstallationIfVersion(r.Context(), insID, expectedVer, reason, sc.Actor.PrincipalID); err != nil {
+		latest, _, latestErr := s.loadExtensionInstallationDTO(r.Context(), insID)
+		if errors.Is(err, port.ErrVersionConflict) && requestSwitch != nil && latestErr != nil {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_state_reload_failed", "upstream_error", "quarantine outcome could not be confirmed; emergency barrier remains active", true, nil)
+			return
+		}
+		if errors.Is(err, port.ErrVersionConflict) && requestSwitch != nil && latest.State != installer.StateQuarantined {
+			_, clearErr := s.killSwitch.Clear(r.Context(), killswitch.ClearParams{
+				KillSwitchID: requestSwitch.ID, ExpectedVersion: requestSwitch.Version,
+				ClearedByPrincipalID: sc.Actor.PrincipalID,
+				ClearReason:          "quarantine lost installation version race; remove request-created barrier",
+				EntryPoint:           port.AuditEntryPointAdminAPI, RequestID: ptrOrNil(requestIDFromContext(r.Context())),
+			})
+			if clearErr != nil {
+				writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_barrier_cleanup_failed", "upstream_error", "stale quarantine was rejected but its request-created emergency barrier could not be cleared", true, nil)
+				return
+			}
+		}
+		s.writeInstallerError(w, r, err, latest)
+		return
+	}
+	if s.snapshots != nil {
+		if err := s.snapshots.Refresh(r.Context()); err != nil {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_snapshot_refresh_failed", "upstream_error", "extension quarantine committed but its serving snapshot could not be refreshed; emergency barrier remains active", true, nil)
+			return
+		}
+	}
+	quarantined, _, err := s.loadExtensionInstallationDTO(r.Context(), insID)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading quarantined extension", true, nil)
+		return
+	}
+	w.Header().Set("ETag", FormatETag(quarantined.Version))
+	writeJSON(w, http.StatusOK, quarantined)
+}
+
 func (s *Server) handleUninstallOrDiscardExtension(w http.ResponseWriter, r *http.Request) {
 	sc, ok := s.authenticate(w, r)
 	if !ok {
@@ -1246,28 +1358,28 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 	}
 
 	return extensionPermissionDiffDTO{
-		InstallationID:      insID,
-		PackageID:           pkgID,
-		ActiveVersion:       sqlNullStrPtr(actSemver),
-		CandidateVersion:    candVerStr,
-		OriginTrustTier:     trust,
-		EnterpriseSigned:    targetEnt,
-		ExecutionTier:       mapExecutionTierOpenAPI(execTierStr),
-		ActiveExecutionTier: activeExecutionTier,
-		ActiveAllowedHosts:  appHosts,
-		CandidateAllowedHosts:  candHosts,
-		AddedAllowedHosts:      addedHosts,
-		RemovedAllowedHosts:    removedHosts,
-		SecretSlots:            slots,
-		ActiveSecretSlots:      activeSlots,
-		AddedSecretSlots:       addedSlots,
-		QuotaEscalated:         quotaEscalated,
-		ActiveQuotas:           activeQuotas,
-		Quotas:                 candidateQuotas,
-		ActivePermissions:      activePermissions,
-		CandidatePermissions: candidatePerms,
-		PermissionDelta:        permissionDelta,
-		HasEscalation:          permissionDelta.HasEscalation(),
+		InstallationID:        insID,
+		PackageID:             pkgID,
+		ActiveVersion:         sqlNullStrPtr(actSemver),
+		CandidateVersion:      candVerStr,
+		OriginTrustTier:       trust,
+		EnterpriseSigned:      targetEnt,
+		ExecutionTier:         mapExecutionTierOpenAPI(execTierStr),
+		ActiveExecutionTier:   activeExecutionTier,
+		ActiveAllowedHosts:    appHosts,
+		CandidateAllowedHosts: candHosts,
+		AddedAllowedHosts:     addedHosts,
+		RemovedAllowedHosts:   removedHosts,
+		SecretSlots:           slots,
+		ActiveSecretSlots:     activeSlots,
+		AddedSecretSlots:      addedSlots,
+		QuotaEscalated:        quotaEscalated,
+		ActiveQuotas:          activeQuotas,
+		Quotas:                candidateQuotas,
+		ActivePermissions:     activePermissions,
+		CandidatePermissions:  candidatePerms,
+		PermissionDelta:       permissionDelta,
+		HasEscalation:         permissionDelta.HasEscalation(),
 	}, ver, nil
 }
 

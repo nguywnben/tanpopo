@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -22,6 +23,40 @@ import (
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 	"github.com/nguywnben/tanpopo/internal/testkit/netguard"
 )
+
+func TestDrainTimeoutFromEnvIsBounded(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		ok    bool
+		want  time.Duration
+	}{
+		{name: "default", want: defaultDrainTimeout, ok: true},
+		{name: "zero disables wait", value: "0s", want: 0, ok: true},
+		{name: "configured", value: "2m", want: 2 * time.Minute, ok: true},
+		{name: "maximum", value: "300s", want: maxDrainTimeout, ok: true},
+		{name: "above maximum", value: "301s"},
+		{name: "negative", value: "-1s"},
+		{name: "invalid", value: "later"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lookup := func(string) (string, bool) {
+				if tt.name == "default" {
+					return "", false
+				}
+				return tt.value, true
+			}
+			got, err := drainTimeoutFromEnv(lookup)
+			if (err == nil) != tt.ok {
+				t.Fatalf("drainTimeoutFromEnv() err=%v, want success=%t", err, tt.ok)
+			}
+			if err == nil && got != tt.want {
+				t.Fatalf("drainTimeoutFromEnv()=%s, want %s", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestMain(m *testing.M) {
 	os.Exit(netguard.MustRunHermeticMain(m))
@@ -63,6 +98,136 @@ func TestUnifiedRuntimeRoutesDataPlaneAdminAndEmbeddedConsole(t *testing.T) {
 	handler.ServeHTTP(unknown, httptest.NewRequest(http.MethodGet, "/admin/v1/not-a-route", nil))
 	if unknown.Header().Get("Content-Type") == "text/html" {
 		t.Fatal("unknown Admin API path fell through to the console")
+	}
+}
+
+func TestReadinessFailsImmediatelyAfterDrainStartsButLivenessStaysHealthy(t *testing.T) {
+	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "data"))
+	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", "")
+	ctx, cancel := context.WithCancel(context.Background())
+	handler, closeRuntime, err := buildRuntime(ctx, "all", "127.0.0.1:8080")
+	if err != nil {
+		cancel()
+		t.Fatalf("build runtime: %v", err)
+	}
+	defer closeRuntime()
+	cancel()
+
+	ready := httptest.NewRecorder()
+	handler.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusServiceUnavailable {
+		t.Fatalf("readiness returned %d after drain began", ready.Code)
+	}
+	live := httptest.NewRecorder()
+	handler.ServeHTTP(live, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if live.Code != http.StatusOK {
+		t.Fatalf("liveness returned %d while process was draining", live.Code)
+	}
+}
+
+func TestGracefulShutdownLetsActiveSSEStreamFinish(t *testing.T) {
+	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "data"))
+	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", "")
+	runtimeCtx, cancelRuntime := context.WithCancel(context.Background())
+	appHandler, closeRuntime, err := buildRuntime(runtimeCtx, "all", "127.0.0.1:8080")
+	if err != nil {
+		cancelRuntime()
+		t.Fatalf("build runtime: %v", err)
+	}
+	t.Cleanup(func() {
+		cancelRuntime()
+		closeRuntime()
+	})
+
+	streamStarted := make(chan struct{})
+	finishStream := make(chan struct{})
+	handler := http.NewServeMux()
+	handler.HandleFunc("/test/stream", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if _, writeErr := io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"in progress\"}}]}\n\n"); writeErr != nil {
+			return
+		}
+		w.(http.Flusher).Flush()
+		close(streamStarted)
+		<-finishStream
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	})
+	handler.Handle("/", appHandler)
+	server := httptest.NewUnstartedServer(handler)
+	server.Start()
+	t.Cleanup(server.Close)
+
+	client := netguard.NewHTTPClient()
+	client.Timeout = 5 * time.Second
+	t.Cleanup(client.CloseIdleConnections)
+	streamResult := make(chan struct {
+		body string
+		err  error
+	}, 1)
+	go func() {
+		resp, getErr := client.Get(server.URL + "/test/stream")
+		if getErr != nil {
+			streamResult <- struct {
+				body string
+				err  error
+			}{err: getErr}
+			return
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		streamResult <- struct {
+			body string
+			err  error
+		}{body: string(body), err: readErr}
+	}()
+	select {
+	case <-streamStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("SSE handler did not emit its first frame")
+	}
+
+	cancelRuntime()
+	ready, err := client.Get(server.URL + "/readyz")
+	if err != nil {
+		t.Fatalf("request readiness while draining: %v", err)
+	}
+	_ = ready.Body.Close()
+	if ready.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("readiness during drain=%d, want %d", ready.StatusCode, http.StatusServiceUnavailable)
+	}
+
+	shutdownDone := make(chan error, 1)
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancelShutdown()
+	go func() { shutdownDone <- server.Config.Shutdown(shutdownCtx) }()
+	select {
+	case err := <-shutdownDone:
+		t.Fatalf("graceful shutdown returned before active SSE stream finished: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(finishStream)
+	select {
+	case result := <-streamResult:
+		if result.err != nil {
+			t.Fatalf("read drained SSE stream: %v", result.err)
+		}
+		if !strings.Contains(result.body, "in progress") || !strings.Contains(result.body, "data: [DONE]") {
+			t.Fatalf("graceful drain did not preserve stream frames and terminal marker: %q", result.body)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("SSE stream did not finish after release")
+	}
+	select {
+	case err := <-shutdownDone:
+		if err != nil {
+			t.Fatalf("graceful shutdown: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("graceful shutdown did not complete after the SSE stream finished")
 	}
 }
 
@@ -164,6 +329,26 @@ func TestReadinessRejectsWrongButValidMasterKEK(t *testing.T) {
 	}
 }
 
+func TestServeRefusesInsecureMasterKEKFileBeforeListening(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		return // Windows uses ACL-based key-file checks, covered by platform-specific tests.
+	}
+	root := t.TempDir()
+	keyPath := filepath.Join(root, "master.key")
+	if err := os.WriteFile(keyPath, []byte("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(keyPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(root, "data"))
+	t.Setenv("TANPOPO_MASTER_KEY", "")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", keyPath)
+	if err := serve(context.Background(), "all", "127.0.0.1:0"); !errors.Is(err, vault.ErrInsecureKeyfilePermissions) {
+		t.Fatalf("serve should reject insecure Master KEK permissions before binding a listener, got %v", err)
+	}
+}
+
 func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "data")
 	t.Setenv("TANPOPO_DATA_DIR", dataDir)
@@ -174,6 +359,20 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 		t.Fatalf("build data-plane runtime: %v", err)
 	}
 	defer closeRuntime()
+	t.Cleanup(func() {
+		// Windows runners can briefly retain a SQLite file handle during process
+		// teardown. Retry removal so the test distinguishes that short OS delay
+		// from a runtime that actually leaked the database connection.
+		var removeErr error
+		for attempt := 0; attempt < 20; attempt++ {
+			removeErr = os.RemoveAll(dataDir)
+			if removeErr == nil {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		t.Errorf("runtime left data directory locked after close: %v", removeErr)
+	})
 	for _, path := range []string{"/admin/v1/unknown", "/"} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
