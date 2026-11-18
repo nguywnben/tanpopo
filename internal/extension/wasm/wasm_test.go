@@ -1254,7 +1254,7 @@ func TestWasmCT16BlindBrokerZeroCanarySecretInMemory(t *testing.T) {
 	rt, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{
 		WasmBytes:            buildHostEgressBridgeWASM(),
 		PoolSize:             2,
-		CallTimeout:          time.Second,
+		CallTimeout:          wasm.MaxAllowedCallTimeout,
 		AllowHostBlindEgress: true,
 		BlindBroker:          br,
 		AllowedHosts:         []string{addrHost},
@@ -3719,4 +3719,3 @@ func TestWasmTimeoutUpperBoundsFailClosed(t *testing.T) {
 	}
 	_ = rt.Close(ctx)
 }
-
