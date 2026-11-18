@@ -1,13 +1,13 @@
 # TP-IMP-0031 Execution Checkpoint
 
-**Status:** `READY` — implementation is in progress. This checkpoint does not satisfy Unit 31 DoD and does not accept the unit.
+**Status:** `DONE` — accepted under `DEC-061` after PR #4 merged and all four post-merge CI jobs passed on `origin/main`.
 
 ## Participants
 
 - Implementer: **GPT-6 Luna**.
 - Independent reviewers: **Lovelace** (`code-reviewer`), who returned **APPROVE** for the embedded-console checkpoint only; **Noether** (`code-reviewer`), who reviewed the earlier expanded CLI/support-bundle diff and returned **APPROVE** after requested changes; **Sagan** (`code-reviewer`), who returned **APPROVE** for Windows archive hardening and reviewed the expanded Unit 31 diff; **Avicenna** (`code-reviewer`), who reviewed the readiness update and required persisted-key verification; **Franklin** (`code-reviewer`), who returned **APPROVE** after the KEK and owner-scope regressions were addressed; and **Hubble** (`code-reviewer`), who returned **APPROVE** on the final Windows-specific test correction.
 - Test strategy contributor: **Dalton** (`test-engineer`), who mapped acceptance coverage for the server composition, local owner recovery, diagnostics bundle, and standalone binary. The implementation and required tests remain owned by **GPT-6 Luna**.
-- Acceptor: **GPT-6 Luna**, delegated by `DEC-060`; acceptance is pending all Unit 31 requirements, DoD, required CI, and merge verification.
+- Acceptor: **GPT-6 Luna**, delegated by `DEC-060`; accepted Unit 31 under `DEC-061` after confirming the Unit 31 DoD, final independent review, PR checks, merge, and post-merge main CI.
 
 ## Completed Checkpoint
 
@@ -26,8 +26,12 @@
 
 ## Verification Evidence
 
-- Earlier full-suite and quality-gate evidence predates the current runtime and recovery changes and is not acceptance evidence for this diff.
-- Focused readiness check: `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -count=1 ./cmd/tanpopo ./internal/security/vault ./internal/ingress/http` — passed after the final readiness changes.
+- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go run ./scripts/ci/check.go --all` — passed.
+- `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -count=1 ./...` — passed on rerun after one timing-sensitive failure in `TestTP0021_StreamingLeaseRenewalPreventsPrematureReclaim`.
+- `go test -race ./cmd/tanpopo ./internal/cli/... ./internal/iam/auth ./internal/security/vault ./internal/security/broker ./internal/config/snapshot ./internal/admin/http ./internal/ingress/http` — passed.
+- Windows amd64 and macOS arm64 command-package cross-compiles, `go vet` for the changed packages, and focused Windows test-package cross-compilation — passed.
+- GitHub PR run [`44318018781`](https://github.com/nguywnben/tanpopo/actions/runs/44318018781) passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows for implementation SHA `c8ee35d720525b3d32a48e5d96495d59c5be6a27`.
+- Post-merge GitHub run [`44319629695`](https://github.com/nguywnben/tanpopo/actions/runs/44319629695) passed all four required jobs on main SHA `6eb603aea20926f326d5c8acdc129a029ded0d39`.
 - Independent review: **Lovelace** (`code-reviewer`) — **APPROVE**, limited to this checkpoint.
 - Expanded diff review: **Noether** (`code-reviewer`) — **APPROVE**, with all requested changes addressed.
 - Windows ACL review: **Sagan** (`code-reviewer`) — **APPROVE**.
@@ -36,10 +40,10 @@
 - Final review: **Franklin** (`code-reviewer`) — **APPROVE**. The review confirmed the owner recovery role binding is constrained to the principal's organization and the regression test prevents issuing a recovery credential for a mismatched binding. The reviewer noted as optional that readiness verifies the first persisted Org key envelope rather than scanning all organizations.
 - Final Windows test review: **Hubble** (`code-reviewer`) — **APPROVE**. Confirmed that POSIX mode-bit enforcement remains covered on POSIX, Windows exercises non-regular key-file rejection, and owner recovery remains constrained to matching organization scope.
 
-## Acceptance Still Pending
+## Acceptance Record
 
-Commit `610c9c9` is pushed to PR #4. The repo quality gate, full pure-Go test suite, broad race tests, Windows/macOS cross-compilation, `go vet`, and independent review approval passed before the final Windows-only test correction. One full-suite attempt hit the existing timing-sensitive ingress lease-renewal test (`TestTP0021_StreamingLeaseRenewalPreventsPrematureReclaim`); an immediate full-suite rerun passed. CI run `44316505917` passed Stage 0 and Ubuntu Stage 1; its Windows Stage 1 failed only on the POSIX mode-bit assumption described above, and macOS Stage 1 was still running when this checkpoint was written. The platform-specific correction, final review, and CI checks on the corrected SHA remain pending. Do not mark TP-IMP-0031 `DONE` until all required checks and post-merge CI pass.
+Implementation commit `c8ee35d720525b3d32a48e5d96495d59c5be6a27` was merged via PR #4 at main SHA `6eb603aea20926f326d5c8acdc129a029ded0d39`. All four PR checks passed in run `44318018781`; all four post-merge checks passed in run `44319629695`. **Franklin** approved the complete implementation including the owner-scope regression; **Hubble** approved the final Windows test correction. Unit 31 is accepted as `DONE` under `DEC-061` by **GPT-6 Luna**.
 
 ## Delivery Status
 
-GitHub API access is restored. Draft PR #4 is open at commit `610c9c9f3e3e97d7ccd1961f12a3b452270d05e2` (full link: https://github.com/nguywnben/tanpopo/pull/4). Run `44316505917` is validating that commit; the Windows test correction is the only local change not yet pushed. The prior Windows failures from run `44301886133` were addressed with a protected owner-only DACL and a Windows-equivalent rooted-directory assertion.
+GitHub API access is restored. PR [#4](https://github.com/nguywnben/tanpopo/pull/4) merged successfully. Final implementation SHA: `c8ee35d720525b3d32a48e5d96495d59c5be6a27`; main acceptance SHA: `6eb603aea20926f326d5c8acdc129a029ded0d39`; PR CI: [run `44318018781`](https://github.com/nguywnben/tanpopo/actions/runs/44318018781); post-merge CI: [run `44319629695`](https://github.com/nguywnben/tanpopo/actions/runs/44319629695). `develop` was fast-forwarded to the merged main SHA. Unit 32 DoR was confirmed, and its status is proposed as `READY` under `DEC-061`; implementation must wait until this governance acceptance is merged and verified on main.

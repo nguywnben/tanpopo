@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0032` |
 | **Milestone / Epic** | `M2` (`MVP v0.1 Core Product`) · `EP-06` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0008`, `TP-IMP-0011`, `TP-IMP-0031` — `GAP-01, 05`)* |
+| **Status** | **`READY`** *(DoR confirmed under `DEC-061`; dependencies `TP-IMP-0001`, `0003`, `0008`, `0011`, and `0031` are DONE; `GAP-01` and `GAP-05` are closed)* |
 | **Size** | `L` (`internal/ops/health/*`, `doctor/*`, `gitops/*`, `backup/*`, `erasure/*`, `upgrade/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Online backup separated from `Master KEK`, `< 60s` cryptographic shredding & `SM-08` upgrade safety)* |
 | **Technical Owner** | `Principal SRE / Storage Reliability Engineer` |
