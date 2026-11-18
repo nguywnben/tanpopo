@@ -367,13 +367,13 @@ func writeArchive(destination string, members []bundleMember, scanner *canary.Sc
 	if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(destination), ".tanpopo-support-*.tmp")
+	tmp, err := createArchiveTemp(filepath.Dir(destination))
 	if err != nil {
 		return err
 	}
 	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }()
-	if err = tmp.Chmod(0o600); err != nil {
+	if err = secureArchiveFile(tmp); err != nil {
 		_ = tmp.Close()
 		return err
 	}

@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -43,7 +44,8 @@ func TestCreateBundleRedactsAndRestrictsArchivePermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		got := info.Mode().Perm()
 		t.Fatalf("archive mode=%#o, want 0600", got)
 	}
 	f, err := os.Open(archive)
@@ -157,6 +159,10 @@ func TestRootedLogOpenSurvivesDirectoryPathReplacement(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(logs, "recent.log"), []byte("inside-root"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	originalDir, err := os.Lstat(logs)
+	if err != nil {
+		t.Fatal(err)
+	}
 	root, err := os.OpenRoot(logs)
 	if err != nil {
 		t.Fatal(err)
@@ -170,11 +176,17 @@ func TestRootedLogOpenSurvivesDirectoryPathReplacement(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(outside, "recent.log"), []byte("outside-root"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(logs, filepath.Join(parent, "logs-original")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(outside, logs); err != nil {
-		t.Fatal(err)
+	if err := os.Rename(logs, filepath.Join(parent, "logs-original")); err == nil {
+		if err := os.Symlink(outside, logs); err != nil {
+			t.Fatal(err)
+		}
+	} else if runtime.GOOS != "windows" {
+		t.Fatalf("replace opened directory on %s: %v", runtime.GOOS, err)
+	} else {
+		currentDir, statErr := os.Lstat(logs)
+		if statErr != nil || !os.SameFile(originalDir, currentDir) {
+			t.Fatalf("Windows prevented replacement but directory identity changed: stat=%v", statErr)
+		}
 	}
 	f, err := openRootedInput(root, "recent.log", expected)
 	if err != nil {
