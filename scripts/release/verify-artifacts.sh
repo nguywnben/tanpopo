@@ -63,6 +63,7 @@ if [[ "$ARCHIVE_COUNT" != 5 ]]; then
 fi
 
 echo "Generating CycloneDX SBOMs for Go and npm dependencies"
+python3 -m unittest scripts/release/test_check_sbom_licenses.py
 cyclonedx-gomod app -json -licenses -assert-licenses -output "$DIST_DIR/sbom-go.cdx.json" -main cmd/tanpopo .
 cyclonedx-npm --output-format JSON --output-file "$DIST_DIR/sbom-web.cdx.json" web/console/package.json
 test -s "$DIST_DIR/sbom-go.cdx.json"
@@ -85,6 +86,7 @@ trivy image --severity CRITICAL,HIGH --exit-code 1 "$IMAGE"
 echo "Checking standalone Compose configuration"
 openssl rand -hex 32 > "$TMP_DIR/master.key"
 chmod 0400 "$TMP_DIR/master.key"
+export TANPOPO_MASTER_KEY_FILE="$TMP_DIR/master.key"
 if [[ "$(stat -c '%u' "$TMP_DIR/master.key")" != 65532 ]]; then
   if [[ "$(id -u)" == 0 ]]; then
     chown 65532:65532 "$TMP_DIR/master.key"
@@ -95,7 +97,7 @@ if [[ "$(stat -c '%u' "$TMP_DIR/master.key")" != 65532 ]]; then
     exit 2
   fi
 fi
-TANPOPO_MASTER_KEY_FILE="$TMP_DIR/master.key" docker compose \
+docker compose \
   --file deploy/compose/docker-compose.standalone.yml config --quiet
 cat > "$TMP_DIR/compose.override.yml" <<EOF
 services:
@@ -107,7 +109,7 @@ EOF
 echo "Starting the hardened standalone Compose service and checking secret access"
 COMPOSE_PROJECT="tanpopo-artifact-verification-$$"
 STARTED_MS="$(python3 -c 'import time; print(int(time.monotonic() * 1000))')"
-TANPOPO_MASTER_KEY_FILE="$TMP_DIR/master.key" docker compose \
+docker compose \
   --project-name "$COMPOSE_PROJECT" \
   --file deploy/compose/docker-compose.standalone.yml \
   --file "$TMP_DIR/compose.override.yml" up --detach
@@ -149,8 +151,12 @@ if [[ "$CONSOLE_HTML" != *"/assets/"* ]]; then
   exit 1
 fi
 
-CONTAINER_PID="$(docker inspect --format '{{.State.Pid}}' "$CONTAINER")"
-RSS_BYTES="$(awk '/^VmRSS:/ {print $2 * 1024}' "/proc/${CONTAINER_PID}/status")"
+APP_PIDS="$(docker top "$CONTAINER" -eo pid=,comm= | awk '$2 == "tanpopo" { print $1 }')"
+if [[ ! "$APP_PIDS" =~ ^[0-9]+$ ]]; then
+  echo "could not identify exactly one Tanpopo process in the container" >&2
+  exit 1
+fi
+RSS_BYTES="$(awk '/^VmRSS:/ {print $2 * 1024}' "/proc/${APP_PIDS}/status")"
 echo "Tanpopo process idle RSS: ${RSS_BYTES} bytes (target < 134217728 bytes)"
 if (( RSS_BYTES >= 134217728 )); then
   echo "container idle RSS target exceeded" >&2
