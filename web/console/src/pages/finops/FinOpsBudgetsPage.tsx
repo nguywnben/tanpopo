@@ -51,7 +51,7 @@ export function FinOpsBudgetsPage({projectId, roles}: {projectId: string; roles:
       const blob = await exportUsageChargeback(format);
       const href = URL.createObjectURL(blob);
       const anchor = document.createElement('a'); anchor.href = href; anchor.download = `tanpopo-chargeback.${format}`;
-      anchor.click(); URL.revokeObjectURL(href); setMessage(`${format.toUpperCase()} chargeback export downloaded.`);
+      anchor.click(); window.setTimeout(() => URL.revokeObjectURL(href), 1000); setMessage(`${format.toUpperCase()} chargeback export downloaded.`);
     } catch (error) { setMessage(errorMessage(error)); }
     finally { setBusy(false); }
   }

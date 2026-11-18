@@ -564,40 +564,45 @@ func (s *Server) resolveAuditChainPartition(w http.ResponseWriter, r *http.Reque
 	return "", false
 }
 
-func (s *Server) handleListAuditEvents(w http.ResponseWriter, r *http.Request) {
-	sc, ok := s.authenticate(w, r)
-	if !ok {
-		return
-	}
+func (s *Server) resolveAuditReadPartition(w http.ResponseWriter, r *http.Request, sc *authSessionContext, isCollectionList bool) (orgID string, chainKey string, ok bool) {
 	partitionFilter := strings.TrimSpace(r.URL.Query().Get("chain_partition"))
-	var orgID string
-	var chainKey string
 	if strings.EqualFold(partitionFilter, audit.SystemChainKey) {
 		if !sc.IsOperator {
 			writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "INSTANCE_OPERATOR role required for system audit partition", false, nil)
-			return
+			return "", "", false
 		}
 		if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
 			orgID = qOrg
 		} else {
 			orgID = sc.OrgID
 		}
-		if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
-			return
+		if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, IsCollectionList: isCollectionList}) {
+			return "", "", false
 		}
-		chainKey = audit.SystemChainKey
-	} else {
-		orgID, ok = s.resolveTargetOrgID(w, r, sc)
-		if !ok {
-			return
-		}
-		if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}) {
-			return
-		}
-		chainKey, ok = s.resolveAuditChainPartition(w, r, sc, orgID)
-		if !ok {
-			return
-		}
+		return orgID, audit.SystemChainKey, true
+	}
+	orgID, ok = s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return "", "", false
+	}
+	if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, IsCollectionList: isCollectionList}) {
+		return "", "", false
+	}
+	chainKey, ok = s.resolveAuditChainPartition(w, r, sc, orgID)
+	if !ok {
+		return "", "", false
+	}
+	return orgID, chainKey, true
+}
+
+func (s *Server) handleListAuditEvents(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	orgID, chainKey, ok := s.resolveAuditReadPartition(w, r, sc, true)
+	if !ok {
+		return
 	}
 	cursorScope := orgID
 	if cursorScope == "" {
@@ -714,14 +719,7 @@ func (s *Server) handleVerifyAuditHashChain(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	orgID, ok := s.resolveTargetOrgID(w, r, sc)
-	if !ok {
-		return
-	}
-	if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID}) {
-		return
-	}
-	chainKey, ok := s.resolveAuditChainPartition(w, r, sc, orgID)
+	_, chainKey, ok := s.resolveAuditReadPartition(w, r, sc, false)
 	if !ok {
 		return
 	}
@@ -1044,6 +1042,13 @@ func (s *Server) handleClearKillSwitch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ks, err = s.killSwitch.Get(r.Context(), orgID, id)
+		if errors.Is(err, port.ErrNotFound) && sc.IsOperator && qOrg == "" {
+			if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{}) {
+				return
+			}
+			instanceOnly = true
+			ks, err = s.killSwitch.GetInstance(r.Context(), id)
+		}
 	}
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "kill switch not found", false, nil)
@@ -1126,22 +1131,27 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 	case "PROVIDER_CONNECTION":
 		var rowOrg string
 		var ownerProj sql.NullString
-		err := s.db.QueryRowContext(r.Context(), `SELECT org_id, owner_project_id FROM provider_connections WHERE id = ?`, targetID).Scan(&rowOrg, &ownerProj)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating provider connection", true, nil)
-			return
-		}
-		if err == nil {
-			if rowOrg != orgID {
+		err := s.db.QueryRowContext(r.Context(), `SELECT org_id, owner_project_id FROM provider_connections WHERE id = ? AND org_id = ?`, targetID, orgID).Scan(&rowOrg, &ownerProj)
+		if errors.Is(err, sql.ErrNoRows) {
+			var traceProjID string
+			traceErr := s.db.QueryRowContext(r.Context(), `SELECT project_id FROM request_traces_meta WHERE org_id = ? AND connection_id = ? LIMIT 1`, orgID, targetID).Scan(&traceProjID)
+			if errors.Is(traceErr, sql.ErrNoRows) {
 				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
 				return
 			}
-			if ownerProj.Valid && ownerProj.String != "" {
-				targetProjectID = ownerProj.String
-			}
-			if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, ProjectID: targetProjectID}) {
+			if traceErr != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating provider connection", true, nil)
 				return
 			}
+			targetProjectID = traceProjID
+		} else if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating provider connection", true, nil)
+			return
+		} else if ownerProj.Valid && ownerProj.String != "" {
+			targetProjectID = ownerProj.String
+		}
+		if !s.authorize(w, r, sc, rbac.ActionAuditReadVerify, rbac.TargetScope{OrgID: orgID, ProjectID: targetProjectID}) {
+			return
 		}
 	case "PROJECT":
 		var rowOrg string

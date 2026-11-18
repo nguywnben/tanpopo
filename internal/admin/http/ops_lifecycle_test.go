@@ -14,6 +14,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/ops/backup"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
@@ -215,7 +216,7 @@ func TestBlastRadiusAndBudgetCrossTenantHardening(t *testing.T) {
 		t.Fatalf("org-bound operator must remain restricted to session org, got orgs=%v", brOrgOp.Organizations)
 	}
 
-	// Org A probing Org B's real PROVIDER_CONNECTION in blast-radius gets 404.
+	// Both Org B's real PROVIDER_CONNECTION and a nonexistent connection ID return uniform 404 to Org A (no existence oracle).
 	adpID := seedLocalOpenAIAdapter(t, h, "127.0.0.1")
 	nowMs := h.fk.Now().UnixMilli()
 	if _, err := h.st.RawDB().ExecContext(ctx, `
@@ -226,8 +227,74 @@ func TestBlastRadiusAndBudgetCrossTenantHardening(t *testing.T) {
 		t.Fatalf("insert foreign provider_connection: %v", err)
 	}
 	recConnForeign := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=PROVIDER_CONNECTION&target_id=conn_foreign_b", ownerCookieA, "", "", nil)
-	if recConnForeign.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 for foreign PROVIDER_CONNECTION blast-radius, got %d body=%s", recConnForeign.Code, recConnForeign.Body.String())
+	recConnMissing := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/blast-radius?target_type=PROVIDER_CONNECTION&target_id=conn_does_not_exist", ownerCookieA, "", "", nil)
+	if recConnForeign.Code != http.StatusNotFound || recConnMissing.Code != http.StatusNotFound {
+		t.Fatalf("expected uniform 404 for foreign and missing PROVIDER_CONNECTION blast-radius, got foreign=%d missing=%d", recConnForeign.Code, recConnMissing.Code)
+	}
+
+	// Instance operator without SessionOrgID can verify SYSTEM audit hash chain; non-operator gets 403.
+	instOpTok := "tok_inst_op_verify"
+	h.registerBearerToken(instOpTok, &rbac.Actor{
+		PrincipalID:     bootA.OwnerPrincipalID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{ScopeType: rbac.ScopeInstance, ScopeID: "instance", RoleName: rbac.RoleOperator}},
+	})
+	recSysVerifyOp := h.doBearer(t, http.MethodPost, "/admin/v1/audit-events/verify?chain_partition=SYSTEM", instOpTok, "", nil)
+	if recSysVerifyOp.Code != http.StatusOK {
+		t.Fatalf("expected 200 verifying SYSTEM audit chain for instance operator, got %d body=%s", recSysVerifyOp.Code, recSysVerifyOp.Body.String())
+	}
+	recSysVerifyDenied := h.doBearer(t, http.MethodPost, "/admin/v1/audit-events/verify?chain_partition=SYSTEM", orgOwnerOnlyTok, "", nil)
+	if recSysVerifyDenied.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 verifying SYSTEM audit chain for non-operator, got %d body=%s", recSysVerifyDenied.Code, recSysVerifyDenied.Body.String())
+	}
+
+	// Org-bound operator session (cookie) can clear an instance-scoped EXTENSION kill switch without ?org_id=.
+	var extInstallID string
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT installation_id FROM provider_adapters WHERE id = ?`, adpID).Scan(&extInstallID); err != nil {
+		t.Fatalf("lookup extension installation_id: %v", err)
+	}
+	_, _, trigErr := h.killSwitch.TriggerWithSeveredCount(ctx, killswitch.TriggerParams{
+		OrgID: nil, Level: killswitch.LevelExtensionInstallation, TargetID: extInstallID,
+		Reason: "instance security freeze", TriggeredByPrincipalID: bootA.OwnerPrincipalID,
+	})
+	if trigErr != nil {
+		t.Fatalf("trigger instance extension kill switch: %v", trigErr)
+	}
+	instSwitches, err := h.killSwitch.ListInstance(ctx, true)
+	if err != nil || len(instSwitches) != 1 {
+		t.Fatalf("expected 1 active instance switch, got len=%d err=%v", len(instSwitches), err)
+	}
+	recClearInst := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/kill-switches/"+instSwitches[0].ID, ownerCookieA, bootA.CSRFToken, "", map[string]any{
+		"expected_version": instSwitches[0].Version,
+		"clear_reason":     "resolved instance-level issue",
+	})
+	if recClearInst.Code != http.StatusOK {
+		t.Fatalf("expected 200 clearing instance kill switch from operator cookie session, got %d body=%s", recClearInst.Code, recClearInst.Body.String())
+	}
+
+	// Case-variant Org_ID spoofing in JSON payload still triggers 403 org_id_spoofing_forbidden.
+	recCaseSpoof := h.doBearer(t, http.MethodPost, "/admin/v1/kill-switches", orgOwnerOnlyTok, "", map[string]any{
+		"Org_ID":       orgB.ID,
+		"target_level": "PROJECT",
+		"target_id":    bootA.ProjectID,
+		"confirm_slug": "proj-alpha",
+		"reason":       "case-variant spoof check",
+	})
+	if recCaseSpoof.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 on case-variant Org_ID spoofing, got %d body=%s", recCaseSpoof.Code, recCaseSpoof.Body.String())
+	}
+
+	// Low-privilege DEVELOPER calling DELETE /organizations/{orgId} without If-Match receives 403 RBAC before 428 precondition_required.
+	devTok := "tok_org_a_developer"
+	h.registerBearerToken(devTok, &rbac.Actor{
+		PrincipalID:     "prc_org_a_developer",
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		SessionOrgID:    &bootA.OrgID,
+		Bindings:        []rbac.RoleBinding{{OrgID: &bootA.OrgID, ScopeType: rbac.ScopeProject, ScopeID: bootA.ProjectID, RoleName: rbac.RoleDeveloper}},
+	})
+	recDelDenied := h.doBearer(t, http.MethodDelete, "/admin/v1/organizations/"+bootA.OrgID, devTok, "", nil)
+	if recDelDenied.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 RBAC denial before 428 precondition check on DELETE organization, got %d body=%s", recDelDenied.Code, recDelDenied.Body.String())
 	}
 
 	// PUT /budgets/{id} validates input fields before checking foreignOrgExists (no 404 vs 400 oracle).

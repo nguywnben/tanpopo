@@ -17,27 +17,34 @@ const linuxTmpfsMagic = 0x01021994
 // PlatformSupported reports whether the operating system has the verified
 // volatile staging primitives required for encrypted backup creation.
 func PlatformSupported() bool {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs("/dev/shm", &stat); err != nil {
-		return false
-	}
-	return verifyNoActiveSwap() == nil && verifyVolatileStagingPreconditions(uint64(stat.Type), nil, true) == nil
+	return verifyLinuxVolatileStaging() == nil
 }
 
 func PlatformSupportUnavailableReason() string {
 	return "Encrypted backups require verified /dev/shm tmpfs staging with swap disabled."
 }
 
-func openStagingRoot(outputRoot *os.Root) (*os.Root, func() error, error) {
+func verifyLinuxVolatileStaging() error {
+	shmInfo, err := os.Lstat("/dev/shm")
+	if err != nil {
+		return fmt.Errorf("backup: inspect /dev/shm volatile staging: %w", err)
+	}
+	if !shmInfo.IsDir() || shmInfo.Mode()&os.ModeSymlink != 0 {
+		return errors.New("backup: /dev/shm must be a real non-symlink directory")
+	}
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs("/dev/shm", &stat); err != nil {
-		return nil, nil, err
+		return err
 	}
 	swapData, err := os.ReadFile("/proc/swaps")
 	if err != nil {
-		return nil, nil, fmt.Errorf("backup: verify swap is disabled for plaintext staging: %w", err)
+		return fmt.Errorf("backup: verify swap is disabled for plaintext staging: %w", err)
 	}
-	if err := verifyVolatileStagingPreconditions(uint64(stat.Type), swapData, false); err != nil {
+	return verifyVolatileStagingPreconditions(uint64(stat.Type), swapData, false)
+}
+
+func openStagingRoot(outputRoot *os.Root) (*os.Root, func() error, error) {
+	if err := verifyLinuxVolatileStaging(); err != nil {
 		return nil, nil, err
 	}
 	outputInfo, err := outputRoot.Stat(".")

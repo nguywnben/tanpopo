@@ -191,7 +191,7 @@ export async function uninstallExtension(id: string, etag: string) {
 }
 
 export async function getExtensionLockfile() {
-  const result = await api.GET('/admin/v1/extensions/lockfile');
+  const result = await api.GET('/admin/v1/extensions/lockfile', {headers: {Accept: 'application/json'}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;
 }

@@ -97,15 +97,15 @@ export function TracesExplorerPage({environmentId, roles}: {environmentId: strin
         {key: 'stage', header: 'Stage'}, {key: 'duration_ms', header: 'Duration (ms)'}, {key: 'outcome', header: 'Outcome'},
       ]} />
     </VStack></Section> : null}
-    <TraceResults loading={loading} traces={visible} nextCursor={nextCursor} loadingMore={loadingMore} onLoadMore={loadMore} onSelect={selectTrace} />
+    <TraceResults loading={loading} traces={visible} nextCursor={nextCursor} loadingMore={loadingMore} resetKey={`${environmentId}\0${model}\0${appliedError}`} onLoadMore={loadMore} onSelect={selectTrace} />
   </VStack>;
 }
 
-const TraceResults = memo(function TraceResults({loading, traces, nextCursor, loadingMore, onLoadMore, onSelect}: {
-  loading: boolean; traces: Trace[]; nextCursor?: string; loadingMore: boolean; onLoadMore: () => void; onSelect: (trace: Trace) => void;
+const TraceResults = memo(function TraceResults({loading, traces, nextCursor, loadingMore, resetKey, onLoadMore, onSelect}: {
+  loading: boolean; traces: Trace[]; nextCursor?: string; loadingMore: boolean; resetKey: string; onLoadMore: () => void; onSelect: (trace: Trace) => void;
 }) {
   const [shownRows, setShownRows] = useState(10);
-  useEffect(() => setShownRows(10), [traces]);
+  useEffect(() => setShownRows(10), [resetKey]);
   return <Section><VStack gap={3}><Heading level={2}>Recent request metadata</Heading>
     {loading ? <Text role="status">Loading traces…</Text> : traces.length === 0 ? <Text role="status">No trace records match these filters.</Text> :
       <>

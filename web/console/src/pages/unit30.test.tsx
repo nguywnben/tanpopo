@@ -137,13 +137,73 @@ describe('Unit 30 observability and operations screens', () => {
     expect(await axeViolations()).toEqual([]);
   });
 
-  it('renders a 200-row trace result set in responsive chunks', async () => {
-    mocks.listTracePage.mockResolvedValue({data: Array.from({length: 200}, (_, index) => ({request_id: `req-${index}`, plane: 'PROVIDER', route_slug: 'route',
-      status_code: 200, error_code: null, usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 1, has_debug_payload: false, created_at: '2026-11-17T00:00:00Z'})), nextCursor: undefined});
+  it('blocks FINOPS_VIEWER with role=alert on Traces, Security, and Operations pages', async () => {
+    renderTheme(<TracesExplorerPage environmentId="env-1" roles={['FINOPS_VIEWER']} />, 'light');
+    expect(screen.getByRole('alert')).toHaveTextContent('FINOPS_VIEWER');
+    expect(mocks.listTracePage).not.toHaveBeenCalled();
+    expect(await axeViolations()).toEqual([]); cleanup();
+
+    renderTheme(<SecurityAuditAndKillSwitchPage roles={['FINOPS_VIEWER']} />, 'light');
+    expect(screen.getByRole('alert')).toHaveTextContent('Your role does not have access to the security center.');
+    expect(mocks.listAuditEvents).not.toHaveBeenCalled();
+    expect(await axeViolations()).toEqual([]); cleanup();
+
+    renderTheme(<OperationsSettingsPage roles={['FINOPS_VIEWER']} />, 'light');
+    expect(screen.getByRole('alert')).toHaveTextContent('OPERATOR');
+    expect(mocks.getClusterOpsStatus).not.toHaveBeenCalled();
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('escapes CT-27 XSS payloads across trace and audit fields including waterfall stages and actor/target IDs', async () => {
+    const xss = '<svg onload=alert(1)>';
+    const xssTrace = {request_id: `req-${xss}`, plane: 'PROVIDER', route_slug: `route-${xss}`, status_code: 500, error_code: xss,
+      usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 9, has_debug_payload: false, created_at: '2026-11-17T00:00:00Z',
+      waterfall_stages: [{stage: `Stage-${xss}`, duration_ms: 3, outcome: `fail-${xss}`}]} as components['schemas']['TraceSummary'];
+    mocks.listTracePage.mockResolvedValue({data: [xssTrace], nextCursor: undefined});
+    mocks.getTraceWaterfall.mockResolvedValue(xssTrace);
+    renderTheme(<TracesExplorerPage environmentId="env-1" roles={['DEVELOPER']} />, 'light');
+    fireEvent.click(await screen.findByRole('button', {name: `req-${xss}`}));
+    expect(await screen.findByText(`Request waterfall: req-${xss}`)).toBeInTheDocument();
+    expect(screen.getByText(`Stage-${xss}`)).toBeInTheDocument();
+    expect(screen.getByText(`fail-${xss}`)).toBeInTheDocument();
+    expect(document.querySelector('svg[onload]')).toBeNull();
+    cleanup();
+
+    const xssEvent = {id: 'audit-xss', chain_partition: 'org-1', seq_no: 9, actor_id: `actor-${xss}`, action: `action.${xss}`,
+      target_id: `target-${xss}`, metadata: {payload: xss}, prev_hash: '0'.repeat(64), event_hash: 'f'.repeat(64), created_at: '2026-11-17T00:00:00Z'};
+    mocks.listAuditEvents.mockResolvedValue({data: [xssEvent], nextCursor: undefined});
+    renderTheme(<SecurityAuditAndKillSwitchPage roles={['SECURITY_REVIEWER']} />, 'dark');
+    expect(await screen.findByText(`actor-${xss}`)).toBeInTheDocument();
+    expect(screen.getByText(`action.${xss}`)).toBeInTheDocument();
+    expect(screen.getByText(`target-${xss}`)).toBeInTheDocument();
+    expect(document.querySelector('svg[onload]')).toBeNull();
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('renders and filters a 200-row trace result set in 10-row increments and preserves shownRows on cursor load-more', async () => {
+    const page1 = Array.from({length: 200}, (_, index) => ({request_id: `req-${index}`, plane: 'PROVIDER', route_slug: 'route',
+      status_code: 200, error_code: index % 2 === 0 ? 'upstream_timeout' : null, usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 1,
+      has_debug_payload: false, created_at: '2026-11-17T00:00:00Z'})) as components['schemas']['TraceSummary'][];
+    const page2 = [{request_id: 'req-200', plane: 'PROVIDER', route_slug: 'route', status_code: 502, error_code: 'bad_gateway',
+      usage_accuracy: 'EXACT', total_cost_micros: 0, duration_ms: 2, has_debug_payload: false, created_at: '2026-11-16T00:00:00Z'}] as components['schemas']['TraceSummary'][];
+    mocks.listTracePage
+      .mockResolvedValueOnce({data: page1, nextCursor: 'next-200'})
+      .mockResolvedValueOnce({data: page2, nextCursor: undefined});
     renderTheme(<TracesExplorerPage environmentId="env-1" roles={['DEVELOPER']} />, 'dark');
     expect(await screen.findByText('Showing 10 of 200 matching trace records.')).toBeInTheDocument();
-    for (let i = 0; i < 19; i += 1) fireEvent.click(screen.getByRole('button', {name: 'Show more traces'}));
-    expect(await screen.findByText('req-199')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Show more traces'}));
+    expect(screen.getByText('Showing 20 of 200 matching trace records.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'Load more traces'}));
+    expect(await screen.findByText('Showing 20 of 201 matching trace records.')).toBeInTheDocument();
+    for (let i = 0; i < 19; i += 1) {
+      const btn = screen.queryByRole('button', {name: 'Show more traces'});
+      if (!btn) break;
+      fireEvent.click(btn);
+    }
+    expect(await screen.findByText('req-200')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Error code'), {target: {value: 'bad_gateway'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Search traces'}));
+    expect(await screen.findByText('Showing 1 of 1 matching trace records.')).toBeInTheDocument();
     expect(await axeViolations()).toEqual([]);
   });
 

@@ -251,16 +251,15 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
 		return
 	}
+	if !s.authorize(w, r, sc, rbac.ActionOrgDelete, rbac.TargetScope{OrgID: orgID}) {
+		return
+	}
 	expectedVer, ok := requireIfMatch(w, r)
 	if !ok {
 		return
 	}
 	var req destructiveConfirmRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
-		return
-	}
-
-	if !s.authorize(w, r, sc, rbac.ActionOrgDelete, rbac.TargetScope{OrgID: orgID}) {
 		return
 	}
 	if len(strings.TrimSpace(req.Reason)) < 5 {
@@ -492,10 +491,10 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 			}
 			w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
 			s.emitSecurityAudit(r.Context(), sc, "organization.snapshot_sync_pending", map[string]any{
-				"org_id":       orgID,
-				"shred_epoch":  shredEpoch,
-				"fenced_keys":  len(activeKeyIDs),
-				"error":        refErr.Error(),
+				"org_id":      orgID,
+				"shred_epoch": shredEpoch,
+				"fenced_keys": len(activeKeyIDs),
+				"error":       refErr.Error(),
 			})
 		}
 	}
@@ -959,10 +958,10 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			}
 			w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
 			s.emitSecurityAudit(r.Context(), sc, "project.snapshot_sync_pending", map[string]any{
-				"project_id":   projectID,
-				"shred_epoch":  shredEpoch,
-				"fenced_keys":  len(activeKeyIDs),
-				"error":        refErr.Error(),
+				"project_id":  projectID,
+				"shred_epoch": shredEpoch,
+				"fenced_keys": len(activeKeyIDs),
+				"error":       refErr.Error(),
 			})
 		}
 	}

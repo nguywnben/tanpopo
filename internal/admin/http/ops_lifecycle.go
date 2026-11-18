@@ -233,6 +233,7 @@ func (s *Server) appendOpsAudit(r *http.Request, actorID, eventType, targetID st
 	return s.audit.Append(r.Context(), port.AuditEvent{
 		ID: auditID, CreatedAtMs: s.nowMs(), ActorKind: "PRINCIPAL",
 		ActorID: actorID, EntryPoint: port.AuditEntryPointAdminAPI,
+		RequestID: ptrOrNil(requestIDFromContext(r.Context())),
 		EventType: eventType, TargetType: "instance_ops", TargetID: targetID,
 		MetadataJSON: string(metadataJSON),
 	})
