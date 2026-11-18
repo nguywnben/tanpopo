@@ -94,7 +94,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -d '' -t subjects < <(find dist -type f -print0)
+          find dist -type f -print0 > "$RUNNER_TEMP/tanpopo-attestation-subjects.nul"
+          mapfile -d '' -t subjects < "$RUNNER_TEMP/tanpopo-attestation-subjects.nul"
           if ((${#subjects[@]} == 0)); then
             echo "no artifact files found under dist/" >&2
             exit 1
