@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0034` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0010`, `TP-IMP-0024` — `GAP-01, 04`)* |
+| **Status** | **`READY`** *(Opened under `DEC-063`; DoR verified: `TP-IMP-0003`, `TP-IMP-0010`, and `TP-IMP-0024` are DONE; `GAP-01` and `GAP-04` are closed; predecessor Unit 33 is DONE on main with green acceptance CI)* |
 | **Size** | `L` (`internal/security/oauth/*`, `internal/admin/http/oauth.go`, `db/migrations/sqlite/0011_oauth_sessions.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(OAuth 2.1 authorization flows, `RFC 8707` cross-audience token-theft prevention, `FMEA-08` refresh stampede protection & `DEC-004` compliance)* |
 | **Technical Owner** | `Principal Identity & Security Engineer` |
