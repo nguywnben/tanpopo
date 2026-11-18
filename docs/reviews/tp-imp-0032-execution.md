@@ -6,7 +6,7 @@
 - Governance state: `READY` under `DEC-061`
 - Implementation branch: persistent `develop`
 - Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest pushed checkpoint: `7bbcf85` (operator quarantine API with atomic ETag checking and verified stream-abort barrier)
+- Latest pushed checkpoint: `a195082` (Windows SQLite teardown retry for the data-plane runtime test)
 - Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
 
 ## Work performed
@@ -19,6 +19,7 @@
 - **Pasteur** supplied the acceptance-gap checklist used to plan concurrent backup, shredding, drain, upgrade-preflight, and insecure-KEK tests.
 - **Curie** added focused tests for readiness and graceful shutdown while an SSE response is active, plus incompatible-upgrade preflight output and no-side-effect checks.
 - **Mencius** implemented the opt-in local marketplace archive resolver, including path confinement, symlink/type rejection, and a digest-verified private snapshot. **GPT-6 Luna** is integrating the resolver into the live bootstrap/install acceptance flow.
+- **Banach** (**test-engineer**) added a separate real-binary EXT-ACCEPT-01 scenario that configures EU-only routing through Admin API, sends exact and estimated usage requests to local deterministic provider endpoints, verifies persisted ledger classifications, and checks the binary PID/SHA invariant. This test is currently untracked and has not run in CI.
 
 ## Verification evidence
 
@@ -36,19 +37,19 @@
 
 ## Current local changes (not yet pushed)
 
-- Added an authenticated `POST /admin/v1/extensions/{installationId}/quarantine` operation. It requires CSRF, `If-Match`, an instance `OPERATOR`, and a reason; establishes the extension kill-switch barrier before changing installation state, then refreshes snapshots and returns the updated ETag.
-- Added OpenAPI and RBAC coverage, plus live acceptance assertions for quarantine and all four blast-radius response scopes.
-- `git diff --check` passed. The Cloud Go launcher remains unusable, so these changes still require the repository's Actions checks.
+- Added an encrypted archive acceptance test that creates a real Master-KEK-wrapped pre-shred backup, shreds P1, creates and restores a post-shred backup, verifies P1 remains unreadable and P2 readable, rotates/re-wraps Org DEKs, retires the old KEK, and verifies the historical archive becomes unreadable.
+- Added the live EU routing and exact/estimated settlement test in `tests/integration/ext_accept_01_live_routing_test.go`; it needs review and CI verification.
+- Added tests for insecure key-file rejection by `tanpopo doctor` and production startup, a `<1s` live quarantine assertion, and retryable Windows test teardown.
+- `git diff --check` passed. The Cloud Go launcher remains unusable, so these changes require repository Actions checks.
 - CI run [44347742188](https://github.com/nguywnben/tanpopo/actions/runs/44347742188) on `bb2d896` exposed a stale OpenAPI conformance assertion (`73` routes expected; `74` registered after quarantine was added) on Ubuntu, macOS, and Windows. This assertion is updated to `74` in the current local diff. The Windows job did not reproduce the earlier database temp-directory cleanup failure.
 - **Turing** (**code-reviewer**) found that the first quarantine version checked `If-Match` before, but not inside, the lifecycle transaction and could skip/assume an aborting kill switch. **Linnaeus** (**security-auditor**) independently flagged the stream-barrier issue. Commit `7bbcf85` adds an atomic expected-version lifecycle method and re-verifies/executes the active abort barrier on idempotent requests; focused regression tests cover stale ETags, late registered streams, and fail-closed handling of a non-aborting switch. Full independent reviews must be repeated on the final diff.
-- Current local tests add a `<1s` assertion around the live quarantine API, verify `tanpopo doctor` and production server startup reject a POSIX Master KEK file with `0644` permissions, and retry the Windows test's data-directory cleanup for up to one second after runtime shutdown. They have not yet run in CI.
-- CI run [44349279446](https://github.com/nguywnben/tanpopo/actions/runs/44349279446) on `7bbcf85`: Stage 0 and Ubuntu passed; Windows failed again during `t.TempDir` cleanup in `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; macOS was still running when recorded. The cleanup retry is in the next local checkpoint so a persistent handle leak still fails the test.
-- Next: checkpoint the route-count correction and review fixes, then finish EXT-ACCEPT-01 routing/settlement/quarantine-timing evidence and the remaining shredding/KEK startup and doctor acceptance gaps. Obtain fresh independent code and security reviews on the final diff before any merge.
+- CI run [44349279446](https://github.com/nguywnben/tanpopo/actions/runs/44349279446) on `7bbcf85`: Stage 0 and Ubuntu passed; Windows failed again during `t.TempDir` cleanup in `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; macOS was still running when recorded. The retry is included in `a195082` and awaits CI.
+- Next: review and checkpoint the new end-to-end EU/ledger and archive/shred tests, inspect CI including Windows teardown retry, then close any remaining DoD gaps. Obtain fresh independent code and security reviews on the final diff before any merge.
 
 ## Acceptance gaps still open
 
-- Complete the ten-step EXT-ACCEPT-01 workflow with actual extension install/approval, update/re-consent/rollback, EU routing and exact/estimated settlements, quarantine timing, and populated blast-radius evidence. Route probes and fail-closed install checks do not satisfy these steps.
-- Complete the ten-step EXT-ACCEPT-01 workflow with EU routing and exact/estimated ledger verification, quarantine timing, and populated blast-radius results. The live process test now exercises archive staging, permission approval, permission escalation/re-consent, rollback, and CSRF/ETag checks.
-- Complete project shred plus KEK rotation and insecure KEK startup/doctor acceptance tests. The concurrent online-backup/restore and graceful SSE drain / incompatible-upgrade preflight tests are in the current implementation diff; they still require CI confirmation.
+- Confirm all live routing, exact/estimated ledger, quarantine timing, and populated blast-radius assertions pass on the new binary-backed tests; the new local test attempts the first three and the existing live test currently checks only the four blast-radius response fields are initialized.
+- Confirm the archive-backed post-shred restore, KEK rotation/retirement, and doctor/startup insecure-KEK tests pass on all required operating systems.
+- The concurrent online-backup/restore and graceful SSE drain / incompatible-upgrade preflight tests have prior Linux/macOS evidence but require confirmation on the final CI SHA.
 - Validate the full implementation against the Unit 32 DoD and obtain final independent code and security reviews on the exact final diff.
 - Merge only after all four required Stage 0/Stage 1 checks pass, then verify acceptance CI and the DONE record on the resulting `origin/main` SHA.
