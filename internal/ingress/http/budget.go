@@ -596,8 +596,42 @@ func (b *requestBudgetSession) settleSync(
 	if b == nil {
 		return usage, nil
 	}
-	inUsage := convertPortUsageToPricing(usage, b.media, b.inputTextBytes, int64(len(finalBody)), false)
+	inUsage := convertPortUsageToPricing(usage, b.media, b.inputTextBytes, estimatedOutputTextBytes(finalBody), false)
 	return b.settleInternal(ctx, target, requestedModel, inUsage, usage, false)
+}
+
+// estimatedOutputTextBytes counts user-facing text fields in the normalized
+// response. Counting the serialized JSON envelope would charge metadata,
+// field names, and IDs as generated tokens when the provider omits usage.
+func estimatedOutputTextBytes(response []byte) int64 {
+	var decoded any
+	if json.Unmarshal(response, &decoded) != nil {
+		return 0
+	}
+	var count func(any, bool) int64
+	count = func(value any, textField bool) int64 {
+		switch value := value.(type) {
+		case string:
+			if textField {
+				return int64(len(value))
+			}
+		case []any:
+			var total int64
+			for _, item := range value {
+				total += count(item, textField)
+			}
+			return total
+		case map[string]any:
+			var total int64
+			for key, item := range value {
+				isText := key == "content" || key == "text"
+				total += count(item, isText)
+			}
+			return total
+		}
+		return 0
+	}
+	return count(decoded, false)
 }
 
 func (b *requestBudgetSession) settleStream(

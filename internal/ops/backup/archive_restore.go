@@ -28,6 +28,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
+	"github.com/nguywnben/tanpopo/internal/security/vault"
 	_ "modernc.org/sqlite"
 )
 
@@ -56,6 +57,11 @@ type RestoreReceipt struct {
 	Path      string `json:"path"`
 }
 
+// RestoreOptions controls optional cryptographic validation of restored secrets.
+type RestoreOptions struct {
+	VerifySecretsDecrypt bool
+}
+
 // Verify authenticates, decrypts, decompresses, and validates a v1 .tpop.enc
 // archive, including its manifest hashes and SQLite integrity. The supplied
 // key service unwraps only the archive data key; the Master KEK stays in its
@@ -78,6 +84,13 @@ func Verify(ctx context.Context, archivePath string, keys KeyUnwrapper) (Verific
 // Restore verifies an archive completely before atomically publishing its
 // files into a new destination directory. The destination must not exist.
 func Restore(ctx context.Context, archivePath, destination string, keys KeyUnwrapper) (RestoreReceipt, error) {
+	return RestoreWithOptions(ctx, archivePath, destination, keys, RestoreOptions{})
+}
+
+// RestoreWithOptions verifies an archive before atomically publishing it. When
+// VerifySecretsDecrypt is set, it trial-unwraps all persisted Org and Project
+// DEK envelopes using the same KEK provider used to open the archive.
+func RestoreWithOptions(ctx context.Context, archivePath, destination string, keys KeyUnwrapper, options RestoreOptions) (RestoreReceipt, error) {
 	if ctx == nil || strings.TrimSpace(archivePath) == "" || strings.TrimSpace(destination) == "" || keys == nil {
 		return RestoreReceipt{}, errors.New("backup: context, archive path, destination, and key unwrapper are required")
 	}
@@ -116,6 +129,15 @@ func Restore(ctx context.Context, archivePath, destination string, keys KeyUnwra
 	verified, err := decodeAndValidate(ctx, archivePath, keys, scratch)
 	if err != nil {
 		return RestoreReceipt{}, err
+	}
+	if options.VerifySecretsDecrypt {
+		kek, ok := keys.(vault.KEKProvider)
+		if !ok {
+			return RestoreReceipt{}, errors.New("backup: secret-envelope verification requires a KEK provider")
+		}
+		if err := verifyRestoredSecretEnvelopes(ctx, filepath.Join(scratch.Name(), "database.sqlite"), kek); err != nil {
+			return RestoreReceipt{}, err
+		}
 	}
 
 	stageID, err := randomHexID()
@@ -267,16 +289,7 @@ func decodeAndValidate(ctx context.Context, archivePath string, keys KeyUnwrappe
 }
 
 func verifyRestoredAuditChain(ctx context.Context, dbPath string) error {
-	abs, err := filepath.Abs(dbPath)
-	if err != nil {
-		return fmt.Errorf("backup: resolve restored database path for audit verification: %w", err)
-	}
-	urlPath := filepath.ToSlash(abs)
-	if runtime.GOOS == "windows" {
-		urlPath = "/" + urlPath
-	}
-	dsn := (&url.URL{Scheme: "file", Path: urlPath}).String() + "?mode=ro&immutable=1"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := openImmutableSQLiteDB(dbPath)
 	if err != nil {
 		return fmt.Errorf("backup: open restored SQLite snapshot for audit verification: %w", err)
 	}
@@ -329,6 +342,44 @@ func verifyRestoredAuditChain(ctx context.Context, dbPath string) error {
 		return errors.New("backup: restored audit chain verification returned an invalid report")
 	}
 	return nil
+}
+
+func verifyRestoredSecretEnvelopes(ctx context.Context, dbPath string, kek vault.KEKProvider) error {
+	db, err := openImmutableSQLiteDB(dbPath)
+	if err != nil {
+		return fmt.Errorf("backup: open restored SQLite snapshot for secret verification: %w", err)
+	}
+	defer db.Close()
+	keyVault, err := vault.NewStore(vault.Config{
+		DB: db, KEK: kek,
+		// This verifier performs read-only unwraps and never invokes shred operations.
+		PostShredHook: func(context.Context) error { return nil },
+	})
+	if err != nil {
+		return fmt.Errorf("backup: initialize restored vault verifier: %w", err)
+	}
+	defer keyVault.Close()
+	if err := keyVault.VerifyAllDEKEnvelopes(ctx); err != nil {
+		return fmt.Errorf("backup: restored secret-envelope verification failed: %w", err)
+	}
+	return nil
+}
+
+func openImmutableSQLiteDB(dbPath string) (*sql.DB, error) {
+	abs, err := filepath.Abs(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve restored database path: %w", err)
+	}
+	urlPath := filepath.ToSlash(abs)
+	if runtime.GOOS == "windows" {
+		urlPath = "/" + urlPath
+	}
+	dsn := (&url.URL{Scheme: "file", Path: urlPath}).String() + "?mode=ro&immutable=1"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
 func validateEnvelopeHeader(h envelopeHeader) error {

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/finops/pricing"
@@ -82,7 +83,7 @@ func TestOnlineBackupRestoresLedgerAndAuditDuringConcurrentWriters(t *testing.T)
 				_, settleErr := ledgerService.Settle(ctx, ledger.SettleRequest{
 					OrgID: "org_backup_ac1", RequestID: requestID, ProjectID: "prj_backup_ac1",
 					EnvID: "env_backup_ac1", VirtualKeyID: "vky_backup_ac1", Plane: ledger.PlaneProvider,
-					Rate: pricing.RateCard{InputPer1MNanoUSD: 1_000_000, OutputPer1MNanoUSD: 2_000_000, BillingMode: pricing.BillingModeCommercialAPI},
+					Rate:  pricing.RateCard{InputPer1MNanoUSD: 1_000_000, OutputPer1MNanoUSD: 2_000_000, BillingMode: pricing.BillingModeCommercialAPI},
 					Usage: pricing.UsageInput{InputTokens: 100, OutputTokens: 25, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact},
 				})
 				if settleErr != nil {
@@ -191,6 +192,16 @@ func TestEncryptedArchiveRestoreTracksProjectShredAndKEKRetirement(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	auditLogger, err := audit.NewLogger(audit.LoggerConfig{DB: store.RawDB()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := auditLogger.Append(ctx, port.AuditEvent{
+		OrgID: &org.ID, ActorKind: "SYSTEM", ActorID: "archive-acceptance",
+		EntryPoint: "cli", EventType: "backup.acceptance.org_created", TargetType: "organization", TargetID: org.ID,
+	}); err != nil {
+		t.Fatalf("append initialized organization audit history: %v", err)
+	}
 	kekV1, err := vault.NewStaticKEKProvider("kek_v1", []byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
 		t.Fatal(err)
@@ -267,7 +278,7 @@ func TestEncryptedArchiveRestoreTracksProjectShredAndKEKRetirement(t *testing.T)
 		t.Fatalf("verify post-shred archive: %v", err)
 	}
 	postRestore := filepath.Join(root, "post-shred-restore")
-	if _, err := Restore(ctx, postArchive, postRestore, keys); err != nil {
+	if _, err := RestoreWithOptions(ctx, postArchive, postRestore, kekV1, RestoreOptions{VerifySecretsDecrypt: true}); err != nil {
 		t.Fatalf("restore post-shred archive: %v", err)
 	}
 	restoredStore, err := sqlite.Open(ctx, sqlite.Config{DBPath: filepath.Join(postRestore, "database.sqlite")})
@@ -292,8 +303,22 @@ func TestEncryptedArchiveRestoreTracksProjectShredAndKEKRetirement(t *testing.T)
 	if err := kekV1.RegisterKey("kek_v2", []byte("abcdef0123456789abcdef0123456789"), true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := keyVault.RewrapAllOrgDEKs(ctx, "kek_v1", "kek_v2"); err != nil {
+	dataPlane, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: store.RawDB()})
+	if err != nil {
+		t.Fatalf("initialize active Data Plane snapshot before DR-03 rotation: %v", err)
+	}
+	rewrap, err := keyVault.RewrapAllOrgDEKs(ctx, "kek_v1", "kek_v2")
+	if err != nil {
 		t.Fatalf("rewrap organization DEKs for DR-03: %v", err)
+	}
+	if rewrap.ConfigEpoch < 1 {
+		t.Fatalf("KEK rotation did not emit a restrictive configuration epoch: %+v", rewrap)
+	}
+	if err := dataPlane.Refresh(ctx); err != nil {
+		t.Fatalf("refresh active Data Plane after KEK rotation: %v", err)
+	}
+	if current := dataPlane.Current(); current == nil || current.Epoch < rewrap.ConfigEpoch {
+		t.Fatalf("old KEK must remain available until the active Data Plane reaches rotation epoch %d; current=%v", rewrap.ConfigEpoch, current)
 	}
 	if err := kekV1.RetireKey("kek_v1"); err != nil {
 		t.Fatalf("retire old KEK: %v", err)

@@ -94,7 +94,7 @@ Every runbook enforces a strict safety invariant: **restore and verify in local 
   3. Verify archive integrity and restore `.tpop.enc`:
      ```bash
      tanpopo backup verify ./backup-latest.tpop.enc
-     tanpopo backup restore ./backup-latest.tpop.enc --data-dir /var/lib/tanpopo --verify-secrets-decrypt
+     tanpopo backup restore --archive ./backup-latest.tpop.enc --destination /var/lib/tanpopo --verify-secrets-decrypt
      ```
      *(`--verify-secrets-decrypt` trial-unwraps `Org DEK` and `Project DEK` envelopes and runs `VerifyAuditChain` across every `chain_key` in `audit_events` without printing any secret material to `stdout`/`stderr`.)*
   4. Boot locally via `tanpopo serve --role=all --listen 127.0.0.1:8080`, run `tanpopo doctor` to verify `/readyz = 200` and `tanpopo.lock` package digests, then reopen Reverse Proxy ingress.

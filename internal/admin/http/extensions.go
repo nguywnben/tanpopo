@@ -46,28 +46,28 @@ type extensionQuotasDTO struct {
 }
 
 type extensionPermissionDiffDTO struct {
-	InstallationID      string             `json:"installation_id"`
-	PackageID           string             `json:"package_id"`
-	ActiveVersion       *string            `json:"active_version"`
-	CandidateVersion    string             `json:"candidate_version"`
-	OriginTrustTier     string             `json:"origin_trust_tier"`
-	EnterpriseSigned    bool               `json:"enterprise_signed"`
-	ExecutionTier       string             `json:"execution_tier"`
-	ActiveExecutionTier *string            `json:"active_execution_tier"`
-	ActiveAllowedHosts  []string           `json:"active_allowed_hosts"`
-	CandidateAllowedHosts []string         `json:"candidate_allowed_hosts"`
-	AddedAllowedHosts   []string           `json:"added_allowed_hosts"`
-	RemovedAllowedHosts []string           `json:"removed_allowed_hosts"`
-	SecretSlots         []string           `json:"secret_slots"`
-	ActiveSecretSlots   []string           `json:"active_secret_slots"`
-	AddedSecretSlots    []string           `json:"added_secret_slots"`
-	QuotaEscalated      bool               `json:"quota_escalated"`
-	ActiveQuotas        *extensionQuotasDTO `json:"active_quotas"`
-	Quotas              extensionQuotasDTO `json:"quotas"`
-	ActivePermissions   *installer.PermissionSet `json:"active_permissions"`
-	CandidatePermissions installer.PermissionSet `json:"candidate_permissions"`
-	PermissionDelta     installer.PermissionDelta `json:"permission_delta"`
-	HasEscalation       bool `json:"has_escalation"`
+	InstallationID        string                    `json:"installation_id"`
+	PackageID             string                    `json:"package_id"`
+	ActiveVersion         *string                   `json:"active_version"`
+	CandidateVersion      string                    `json:"candidate_version"`
+	OriginTrustTier       string                    `json:"origin_trust_tier"`
+	EnterpriseSigned      bool                      `json:"enterprise_signed"`
+	ExecutionTier         string                    `json:"execution_tier"`
+	ActiveExecutionTier   *string                   `json:"active_execution_tier"`
+	ActiveAllowedHosts    []string                  `json:"active_allowed_hosts"`
+	CandidateAllowedHosts []string                  `json:"candidate_allowed_hosts"`
+	AddedAllowedHosts     []string                  `json:"added_allowed_hosts"`
+	RemovedAllowedHosts   []string                  `json:"removed_allowed_hosts"`
+	SecretSlots           []string                  `json:"secret_slots"`
+	ActiveSecretSlots     []string                  `json:"active_secret_slots"`
+	AddedSecretSlots      []string                  `json:"added_secret_slots"`
+	QuotaEscalated        bool                      `json:"quota_escalated"`
+	ActiveQuotas          *extensionQuotasDTO       `json:"active_quotas"`
+	Quotas                extensionQuotasDTO        `json:"quotas"`
+	ActivePermissions     *installer.PermissionSet  `json:"active_permissions"`
+	CandidatePermissions  installer.PermissionSet   `json:"candidate_permissions"`
+	PermissionDelta       installer.PermissionDelta `json:"permission_delta"`
+	HasEscalation         bool                      `json:"has_escalation"`
 }
 
 type extensionInstallationDTO struct {
@@ -85,7 +85,7 @@ type extensionInstallationDTO struct {
 }
 
 type approvePermissionsRequest struct {
-	EnableImmediately           bool `json:"enable_immediately"`
+	EnableImmediately             bool `json:"enable_immediately"`
 	AcknowledgeUnverifiedExternal bool `json:"acknowledge_unverified_external"`
 }
 
@@ -792,8 +792,8 @@ func (s *Server) handleQuarantineExtension(w http.ResponseWriter, r *http.Reques
 			_, clearErr := s.killSwitch.Clear(r.Context(), killswitch.ClearParams{
 				KillSwitchID: requestSwitch.ID, ExpectedVersion: requestSwitch.Version,
 				ClearedByPrincipalID: sc.Actor.PrincipalID,
-				ClearReason: "quarantine lost installation version race; remove request-created barrier",
-				EntryPoint: port.AuditEntryPointAdminAPI, RequestID: ptrOrNil(requestIDFromContext(r.Context())),
+				ClearReason:          "quarantine lost installation version race; remove request-created barrier",
+				EntryPoint:           port.AuditEntryPointAdminAPI, RequestID: ptrOrNil(requestIDFromContext(r.Context())),
 			})
 			if clearErr != nil {
 				writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_barrier_cleanup_failed", "upstream_error", "stale quarantine was rejected but its request-created emergency barrier could not be cleared", true, nil)
@@ -1358,28 +1358,28 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 	}
 
 	return extensionPermissionDiffDTO{
-		InstallationID:      insID,
-		PackageID:           pkgID,
-		ActiveVersion:       sqlNullStrPtr(actSemver),
-		CandidateVersion:    candVerStr,
-		OriginTrustTier:     trust,
-		EnterpriseSigned:    targetEnt,
-		ExecutionTier:       mapExecutionTierOpenAPI(execTierStr),
-		ActiveExecutionTier: activeExecutionTier,
-		ActiveAllowedHosts:  appHosts,
-		CandidateAllowedHosts:  candHosts,
-		AddedAllowedHosts:      addedHosts,
-		RemovedAllowedHosts:    removedHosts,
-		SecretSlots:            slots,
-		ActiveSecretSlots:      activeSlots,
-		AddedSecretSlots:       addedSlots,
-		QuotaEscalated:         quotaEscalated,
-		ActiveQuotas:           activeQuotas,
-		Quotas:                 candidateQuotas,
-		ActivePermissions:      activePermissions,
-		CandidatePermissions: candidatePerms,
-		PermissionDelta:        permissionDelta,
-		HasEscalation:          permissionDelta.HasEscalation(),
+		InstallationID:        insID,
+		PackageID:             pkgID,
+		ActiveVersion:         sqlNullStrPtr(actSemver),
+		CandidateVersion:      candVerStr,
+		OriginTrustTier:       trust,
+		EnterpriseSigned:      targetEnt,
+		ExecutionTier:         mapExecutionTierOpenAPI(execTierStr),
+		ActiveExecutionTier:   activeExecutionTier,
+		ActiveAllowedHosts:    appHosts,
+		CandidateAllowedHosts: candHosts,
+		AddedAllowedHosts:     addedHosts,
+		RemovedAllowedHosts:   removedHosts,
+		SecretSlots:           slots,
+		ActiveSecretSlots:     activeSlots,
+		AddedSecretSlots:      addedSlots,
+		QuotaEscalated:        quotaEscalated,
+		ActiveQuotas:          activeQuotas,
+		Quotas:                candidateQuotas,
+		ActivePermissions:     activePermissions,
+		CandidatePermissions:  candidatePerms,
+		PermissionDelta:       permissionDelta,
+		HasEscalation:         permissionDelta.HasEscalation(),
 	}, ver, nil
 }
 

@@ -161,6 +161,40 @@ func TestArchiveKeyWrapUnwrapAndFailures(t *testing.T) {
 	}
 }
 
+func TestVerifyAllDEKEnvelopesAuthenticatesOrgAndProjectKeys(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, 0)
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "verify-envelope-org", DisplayName: "Verify Envelope Org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := env.sqlite.Tenancy().CreateProject(ctx, org.ID, port.CreateProjectParams{Slug: "verify-envelope-project", DisplayName: "Verify Envelope Project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.vault.EnsureProjectDEK(ctx, org.ID, project.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.vault.VerifyAllDEKEnvelopes(ctx); err != nil {
+		t.Fatalf("valid organization and project envelopes rejected: %v", err)
+	}
+
+	wrongKEK, err := NewStaticKEKProvider("kek_v1", random32Key(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wrongKEK.Close()
+	wrongVault, err := NewStore(Config{DB: env.sqlite.RawDB(), KEK: wrongKEK, PostShredHook: env.sqlite.CheckpointWAL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wrongVault.Close()
+	if err := wrongVault.VerifyAllDEKEnvelopes(ctx); err == nil {
+		t.Fatal("wrong Master KEK accepted the organization/project DEK envelopes")
+	}
+}
+
 func TestVaultServingReadinessTracksActiveKEK(t *testing.T) {
 	env := newVaultTestEnv(t, 0)
 	if err := env.vault.CheckServingReady(context.Background()); err != nil {

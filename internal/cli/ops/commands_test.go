@@ -46,6 +46,16 @@ func TestLifecycleCommandTreeExposesRequiredCommands(t *testing.T) {
 			t.Errorf("backup command tree is missing %s", child)
 		}
 	}
+	for _, group := range commands {
+		if group.Name() != "backup" {
+			continue
+		}
+		for _, child := range group.Commands() {
+			if child.Name() == "restore" && child.Flags().Lookup("verify-secrets-decrypt") == nil {
+				t.Error("backup restore is missing --verify-secrets-decrypt")
+			}
+		}
+	}
 }
 
 func TestUpgradePreflightDoesNotCreateMissingDatabase(t *testing.T) {

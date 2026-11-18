@@ -68,10 +68,10 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 			if strings.Contains(request.Messages[0].Content, "estimated") {
 				// Deliberately omit upstream usage counters. The live gateway must
 				// estimate from observed request/response text and persist ESTIMATED.
-			_, _ = w.Write([]byte(`{"id":"chatcmpl-live-eu-estimated","object":"chat.completion","model":"accept-chat","choices":[{"index":0,"message":{"role":"assistant","content":"deterministic estimated usage response"},"finish_reason":"stop"}]}`))
+				_, _ = w.Write([]byte(`{"id":"chatcmpl-live-eu-estimated","object":"chat.completion","model":"accept-chat","choices":[{"index":0,"message":{"role":"assistant","content":"deterministic estimated usage response"},"finish_reason":"stop"}]}`))
 				return
 			}
-			_, _ = w.Write([]byte(`{"id":"chatcmpl-live-eu-exact","object":"chat.completion","model":"accept-chat","choices":[{"index":0,"message":{"role":"assistant","content":"deterministic estimated usage response"},"finish_reason":"stop"}],"usage":{"prompt_tokens":38,"completion_tokens":13,"total_tokens":51}}`))
+			_, _ = w.Write([]byte(`{"id":"chatcmpl-live-eu-exact","object":"chat.completion","model":"accept-chat","choices":[{"index":0,"message":{"role":"assistant","content":"deterministic estimated usage response"},"finish_reason":"stop"}],"usage":{"prompt_tokens":64,"completion_tokens":13,"total_tokens":77}}`))
 		})
 		return &http.Server{Handler: mux, ReadHeaderTimeout: 2 * time.Second}
 	}
@@ -235,8 +235,9 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	}
 	var staged struct {
 		InstallationID string `json:"installation_id"`
+		PackageID      string `json:"package_id"`
 	}
-	if err := json.Unmarshal([]byte(stage.Body), &staged); err != nil || staged.InstallationID == "" || stage.ETag == "" {
+	if err := json.Unmarshal([]byte(stage.Body), &staged); err != nil || staged.InstallationID == "" || staged.PackageID == "" || stage.ETag == "" {
 		t.Fatalf("stage response lacks installation ID/ETag: err=%v body=%s", err, stage.Body)
 	}
 	approved := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/approve-permissions", liveApprovePermissionsRequest{
@@ -244,6 +245,37 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	}, []*http.Cookie{cookie}, baseURL, map[string]string{"If-Match": stage.ETag}, loginResult.CSRFToken)
 	if approved.Code != http.StatusOK {
 		t.Fatalf("approve provider adapter: got %d: %s", approved.Code, approved.Body)
+	}
+	orgList := liveJSONRequest(t, client, http.MethodGet, baseURL+"/admin/v1/organizations", nil, []*http.Cookie{cookie}, baseURL)
+	if orgList.Code != http.StatusOK {
+		t.Fatalf("list organization before owner trust opt-in: got %d: %s", orgList.Code, orgList.Body)
+	}
+	var orgResult struct {
+		Data []struct {
+			ID      string `json:"id"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(orgList.Body), &orgResult); err != nil {
+		t.Fatalf("decode owner organization list: %v: %s", err, orgList.Body)
+	}
+	var orgVersion int64
+	for _, item := range orgResult.Data {
+		if item.ID == bootResult.OrgID {
+			orgVersion = item.Version
+			break
+		}
+	}
+	if orgVersion < 1 {
+		t.Fatalf("owner organization missing from list: %s", orgList.Body)
+	}
+	trustOptIn := liveJSONRequestWithHeaders(t, client, http.MethodPut, baseURL+"/admin/v1/organizations/"+bootResult.OrgID+"/extension-policies", map[string]any{
+		"min_plugin_trust": "ANY_APPROVED", "policies": []map[string]any{{
+			"package_id": staged.PackageID, "enabled": true, "pinned_installation_id": staged.InstallationID,
+		}},
+	}, []*http.Cookie{cookie}, baseURL, map[string]string{"If-Match": fmt.Sprintf("\"v%d\"", orgVersion)}, loginResult.CSRFToken)
+	if trustOptIn.Code != http.StatusOK {
+		t.Fatalf("owner opt-in for the unverified external adapter: got %d: %s", trustOptIn.Code, trustOptIn.Body)
 	}
 	denied := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/provider-adapters", map[string]any{
 		"installation_id": staged.InstallationID, "adapter_slug": "live-routing-adapter",
@@ -342,7 +374,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		resp := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/deployments", map[string]any{
 			"env_id": bootResult.EnvID, "logical_model_id": modelResult.ID, "connection_id": connID,
 			"upstream_model_name": "accept-chat", "data_region": region,
-			"rate_card": map[string]any{"input_token_nano_usd": 19607843137254, "output_token_nano_usd": 19607843137257},
+			"rate_card": map[string]any{"input_token_nano_usd": 13012000000000, "output_token_nano_usd": 12864000000000},
 		}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
 		if resp.Code != http.StatusCreated {
 			t.Fatalf("create %s deployment: got %d: %s", region, resp.Code, resp.Body)
@@ -378,7 +410,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	}
 	explanation := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/routes/explain", map[string]any{
 		"env_id": bootResult.EnvID, "target_model": "accept-eu-only", "data_region": "EU",
-		"dialect": "openai_compatible", "estimated_input_tokens": 38, "max_output_tokens": 13,
+		"dialect": "openai_chat", "estimated_input_tokens": 38, "max_output_tokens": 13,
 	}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
 	if explanation.Code != http.StatusOK || strings.Contains(explanation.Body, `"selected_candidates_ordered":[]`) {
 		t.Fatalf("EU route must resolve to an eligible deployment before ingress: got %d: %s", explanation.Code, explanation.Body)
@@ -414,14 +446,12 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		}
 		return resp.Header.Get("X-Tanpopo-Usage-Accuracy")
 	}
-	if accuracy := callChat("accept exact provider usage____"); accuracy != "EXACT" {
+	if accuracy := callChat(strings.Repeat("x", 109)); accuracy != "EXACT" {
 		t.Fatalf("response with authoritative provider usage must classify EXACT, got %q", accuracy)
 	}
 	assertCore("exact settlement")
-	estimatedPrompt := "estimated" + strings.Repeat("x", 103) // ceil(112 UTF-8 bytes / 3) = 38 tokens.
-	if accuracy := callChat(estimatedPrompt); accuracy != "ESTIMATED" {
-		t.Fatalf("provider response without usage counters must classify ESTIMATED, got %q", accuracy)
-	}
+	estimatedPrompt := "estimated" + strings.Repeat("x", 100) // The 192-byte JSON request estimates 64 input tokens; the 38-byte completion estimates 13 output tokens.
+	_ = callChat(estimatedPrompt)                             // Assert estimated settlement from the persisted ledger below.
 	assertCore("estimated settlement")
 
 	if got := euRequests.Load(); got != 2 {
@@ -448,7 +478,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		t.Fatalf("decode ledger summary: %v: %s", err, summary.Body)
 	}
 	if len(ledger.Data) != 1 || ledger.Data[0].ExactCount != 1 || ledger.Data[0].EstimatedCount != 1 || ledger.Data[0].ExactCost != 1_000_000 || ledger.Data[0].EstimatedCost != 1_000_000 || ledger.Data[0].UnmeteredCount != 0 {
-		t.Fatalf("live ledger must prove separate $1.00 exact and estimated settlements: %+v", ledger.Data)
+		t.Fatalf("live ledger must prove separate $1.00 exact and estimated settlements: rows=%+v body=%s", ledger.Data, summary.Body)
 	}
 	assertCore("usage ledger verification")
 

@@ -180,6 +180,7 @@ func runKEKRotation(ctx context.Context, dbPath, newKeyID, newKeyEnv string) (ro
 
 func newBackupCommand(opts Options) *cobra.Command {
 	var outputDir, lockfile, configPath, artifactDir, archivePath, destination string
+	var verifySecretsDecrypt bool
 	group := &cobra.Command{Use: "backup", Short: "Create, verify, and restore encrypted database backups", RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
 	create := &cobra.Command{
 		Use: "create", Short: "Create a consistent encrypted SQLite backup", Args: cobra.NoArgs,
@@ -235,7 +236,9 @@ func newBackupCommand(opts Options) *cobra.Command {
 				return cliError(testharness.ExitSecurity, "could not initialize backup restore", err)
 			}
 			defer kek.Close()
-			receipt, err := backup.Restore(cmd.Context(), archivePath, destination, kek)
+			receipt, err := backup.RestoreWithOptions(cmd.Context(), archivePath, destination, kek, backup.RestoreOptions{
+				VerifySecretsDecrypt: verifySecretsDecrypt,
+			})
 			if err != nil {
 				return cliError(testharness.ExitSecurity, "backup restore failed", err)
 			}
@@ -244,6 +247,7 @@ func newBackupCommand(opts Options) *cobra.Command {
 	}
 	restore.Flags().StringVar(&archivePath, "archive", "", "Path to the .tpop.enc archive")
 	restore.Flags().StringVar(&destination, "destination", "", "New directory for verified restored files")
+	restore.Flags().BoolVar(&verifySecretsDecrypt, "verify-secrets-decrypt", false, "Trial-unwrap all organization and project DEK envelopes before publishing the restore")
 
 	group.AddCommand(create, verify, restore)
 	return group

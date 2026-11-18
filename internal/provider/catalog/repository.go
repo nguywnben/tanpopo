@@ -200,13 +200,13 @@ type ProviderAdapter struct {
 
 // CreateProviderAdapterParams configures CreateProviderAdapter.
 type CreateProviderAdapterParams struct {
-	ID                string
-	InstallationID    string
+	ID                      string
+	InstallationID          string
 	ExpectedActiveVersionID string
-	AdapterSlug       string
-	NativePrefix      *string
-	SupportedDialects []string
-	AllowedHosts      []string
+	AdapterSlug             string
+	NativePrefix            *string
+	SupportedDialects       []string
+	AllowedHosts            []string
 }
 
 // SecretBindingInput declares one slot binding in connection_secret_bindings.
@@ -935,9 +935,9 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			params.AuthMode != nil
 
 		var (
-			currentPrimaryCred    *string
-			explicitPrimaryCred   *string
-			nextPrimaryCred       *string
+			currentPrimaryCred  *string
+			explicitPrimaryCred *string
+			nextPrimaryCred     *string
 		)
 		if curCredID.Valid && curCredID.String != "" {
 			v := curCredID.String
@@ -946,7 +946,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 		}
 		if params.CredentialID != nil {
 			if trimmed := strings.TrimSpace(*params.CredentialID); trimmed != "" {
-			explicitPrimaryCred = &trimmed
+				explicitPrimaryCred = &trimmed
 				nextPrimaryCred = &trimmed
 			} else {
 				nextPrimaryCred = nil
@@ -1247,10 +1247,14 @@ func (r *Repository) DeleteProviderConnection(ctx context.Context, orgID, connec
 	if err := r.withTx(ctx, func(tx *sql.Tx) error {
 		var currentVersion int64
 		if err := tx.QueryRowContext(ctx, `SELECT version FROM provider_connections WHERE org_id = ? AND id = ?`, orgID, connectionID).Scan(&currentVersion); err != nil {
-			if errors.Is(err, sql.ErrNoRows) { return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID) }
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
+			}
 			return mapDBError(err)
 		}
-		if currentVersion != expectedVersion { return port.ErrVersionConflict }
+		if currentVersion != expectedVersion {
+			return port.ErrVersionConflict
+		}
 		var inUse int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM model_deployments WHERE org_id = ? AND connection_id = ?`, orgID, connectionID).Scan(&inUse); err != nil {
 			return mapDBError(err)

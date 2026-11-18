@@ -23,6 +23,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	extport "github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
+	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
@@ -33,6 +34,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
+	telemetry "github.com/nguywnben/tanpopo/internal/telemetry/otel"
 	"github.com/nguywnben/tanpopo/internal/webui"
 )
 
@@ -145,6 +147,11 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		closeStore()
 		return nil, nil, fmt.Errorf("initialize audit logger: %w", err)
 	}
+	ledgerService, err := ledger.NewService(ledger.Config{DB: db, Audit: auditLog})
+	if err != nil {
+		closeStore()
+		return nil, nil, fmt.Errorf("initialize usage ledger: %w", err)
+	}
 	kek, err := vault.LoadStaticKEKFromEnv("kek_v1", os.LookupEnv)
 	if err != nil {
 		closeStore()
@@ -171,11 +178,17 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	}()
 	var closeDataServer func()
 	var dataServerReady func(context.Context) error
+	var telemetryPipeline *telemetry.Pipeline
 	var cleanupOnce sync.Once
 	cleanup := func() {
 		cleanupOnce.Do(func() {
 			if closeDataServer != nil {
 				closeDataServer()
+			}
+			if telemetryPipeline != nil {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				_ = telemetryPipeline.Shutdown(shutdownCtx)
+				cancel()
 			}
 			cancelRuntime()
 			<-watcherDone
@@ -232,8 +245,17 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	})
 	var dataServer *ingresshttp.Server
 	if role == "all" || role == "data-plane" {
+		telemetryPipeline, err = telemetry.NewPipeline(telemetry.PipelineConfig{
+			ServiceName: "tanpopo", ServiceVersion: version, DB: db, Vault: vaultStore,
+		})
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize telemetry pipeline: %w", err)
+		}
 		dataServer, err = ingresshttp.NewServer(ingresshttp.ServerConfig{
 			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
+			BudgetLedger: ledgerService,
+			Telemetry:    telemetryPipeline,
 		})
 		if err != nil {
 			cleanup()
@@ -275,7 +297,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 			providerRuntimeFactory = dataServer.AcquireProviderRuntime
 		}
 		adminServer, err := adminhttp.NewServer(adminhttp.ServerConfig{
-			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys,
+			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys, Ledgers: ledgerService,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
 			Installer: installerService, ArchiveResolver: newServeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv)),
 			Broker: blindBroker, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
