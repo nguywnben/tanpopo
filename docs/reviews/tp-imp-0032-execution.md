@@ -6,7 +6,7 @@
 - Governance state: `READY` under `DEC-061`
 - Implementation branch: persistent `develop`
 - Draft PR: [#6](https://github.com/nguywnben/tanpopo/pull/6)
-- Latest pushed checkpoint: `a2b2a6a` (live extension update/re-consent/rollback assertions and operator contract documentation are in the current local diff)
+- Latest pushed checkpoint before the current local diff: `c2f00a3` (live extension update/re-consent/rollback assertions and operator contract documentation)
 - Acceptance state: **IN PROGRESS**. This record does not claim `DONE`.
 
 ## Work performed
@@ -32,6 +32,14 @@
 - CI run [44339674223](https://github.com/nguywnben/tanpopo/actions/runs/44339674223) passed Windows Stage 1, while macOS Stage 1 exposed that the online snapshot could start before any concurrent writer had committed its first ledger/audit pair. The test now waits for all 20 workers to commit before starting the backup, then keeps all writers active during snapshot and requires at least 20 of each record in the restore. Ubuntu results were still running when recorded.
 - CI run [44340464974](https://github.com/nguywnben/tanpopo/actions/runs/44340464974) caught a compile error in the new live install test: its approval request type was defined only in another Go package. A test-local request type now fixes the reference. macOS and Windows jobs were still running at the time of the compile failure.
 - CI run [44341017802](https://github.com/nguywnben/tanpopo/actions/runs/44341017802) passed all four required checks on `a2b2a6a` (Stage 0 and Stage 1 on Ubuntu, macOS, and Windows). It covers local archive staging and initial permission approval; it does not cover the later live upgrade/re-consent/rollback assertions or OpenAPI/operator-doc edits now in the local diff.
+- CI run [44346144897](https://github.com/nguywnben/tanpopo/actions/runs/44346144897) ran on `c2f00a3`: Stage 0, Ubuntu, and macOS passed; Windows failed during `t.TempDir` cleanup because `tanpopo.db` was still held open after `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`. No assertion failed in that test. The same Windows cleanup failure was observed in run `44338227474` and the Windows job passed in `44339674223`; treat it as a flaky teardown symptom pending a clean repeat, not as a waived gate.
+
+## Current local changes (not yet pushed)
+
+- Added an authenticated `POST /admin/v1/extensions/{installationId}/quarantine` operation. It requires CSRF, `If-Match`, an instance `OPERATOR`, and a reason; establishes the extension kill-switch barrier before changing installation state, then refreshes snapshots and returns the updated ETag.
+- Added OpenAPI and RBAC coverage, plus live acceptance assertions for quarantine and all four blast-radius response scopes.
+- `git diff --check` passed. The Cloud Go launcher remains unusable, so these changes still require the repository's Actions checks.
+- Next: checkpoint this diff on persistent `develop`, inspect the new CI result (including the Windows teardown repeat), then finish EXT-ACCEPT-01 routing/settlement/quarantine-timing evidence and the remaining shredding/KEK startup and doctor acceptance gaps. Obtain fresh independent code and security reviews on the final diff before any merge.
 
 ## Acceptance gaps still open
 

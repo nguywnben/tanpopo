@@ -74,6 +74,7 @@ const (
 	ActionExtensionRead        Action = "extension:read"
 	ActionExtensionStage       Action = "extension:stage_install"
 	ActionExtensionApprove     Action = "extension:approve_capability"
+	ActionExtensionQuarantine  Action = "extension:quarantine"
 	ActionExtensionOrgPolicy   Action = "extension:write_org_policy"
 	ActionRouteRead            Action = "route:read"
 	ActionRouteWrite           Action = "route:write"
@@ -173,6 +174,7 @@ var rolePermissions = map[string]map[Action]bool{
 		ActionExtensionRead:       true,
 		ActionExtensionStage:      true,
 		ActionExtensionApprove:    true,
+		ActionExtensionQuarantine: true,
 		ActionExtensionOrgPolicy:  true,
 		ActionRouteRead:           true,
 		ActionRouteWrite:          true,

@@ -48,6 +48,9 @@ func TestSixRoleRBACMatrixAndFailClosedGuards(t *testing.T) {
 	if err := Authorize(op, ActionOrgCreate, TargetScope{}); err != nil {
 		t.Fatalf("OPERATOR ActionOrgCreate should succeed: %v", err)
 	}
+	if err := Authorize(op, ActionExtensionQuarantine, TargetScope{}); err != nil {
+		t.Fatalf("OPERATOR ActionExtensionQuarantine should succeed: %v", err)
+	}
 	ownerA := mkActor(RoleOrgOwner, ScopeOrg, orgA, &orgA)
 	if err := Authorize(ownerA, ActionOrgCreate, TargetScope{}); !errors.Is(err, ErrPermissionDenied) {
 		t.Fatalf("ORG_OWNER ActionOrgCreate expected ErrPermissionDenied, got %v", err)
@@ -59,7 +62,7 @@ func TestSixRoleRBACMatrixAndFailClosedGuards(t *testing.T) {
 	// NEG-2 / AUTH-11: DEVELOPER and FINOPS_VIEWER receive 403 on plugin approvals, secret writes, and policy writes.
 	for _, role := range []string{RoleDeveloper, RoleFinOpsViewer} {
 		actor := mkActor(role, ScopeOrg, orgA, &orgA)
-		for _, deniedAct := range []Action{ActionExtensionApprove, ActionSecretWrite, ActionPolicyOrgWrite, ActionBudgetWrite, ActionVKeyCreate} {
+		for _, deniedAct := range []Action{ActionExtensionApprove, ActionExtensionQuarantine, ActionSecretWrite, ActionPolicyOrgWrite, ActionBudgetWrite, ActionVKeyCreate} {
 			if err := Authorize(actor, deniedAct, TargetScope{OrgID: orgA, ProjectID: projA1}); !errors.Is(err, ErrPermissionDenied) {
 				t.Fatalf("role %s action %s expected ErrPermissionDenied, got %v", role, deniedAct, err)
 			}

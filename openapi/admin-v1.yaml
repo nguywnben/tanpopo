@@ -2335,6 +2335,46 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ExtensionPermissionDiff" }
 
+  /admin/v1/extensions/{installationId}/quarantine:
+    post:
+      tags: [ExtensionsAndMarketplace]
+      operationId: quarantineExtension
+      summary: Immediately quarantine an extension installation after optimistic version check
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5 }
+      responses:
+        "200":
+          description: Extension quarantined and serving configuration refreshed
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtensionInstallation" }
+        "403":
+          description: Caller lacks extension quarantine permission
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: Optimistic lock conflict or invalid state transition
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
   /admin/v1/extensions/{installationId}/rollback:
     post:
       tags: [ExtensionsAndMarketplace]

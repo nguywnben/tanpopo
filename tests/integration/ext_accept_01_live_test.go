@@ -300,6 +300,27 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 		t.Fatalf("rollback did not restore the previous active version: %s", rolledBack.Body)
 	}
 	assertProcessInvariant("rollback")
+	quarantined := liveJSONRequestWithHeaders(t, client, http.MethodPost, baseURL+"/admin/v1/extensions/"+staged.InstallationID+"/quarantine", liveRollbackExtensionRequest{
+		Reason: "Acceptance quarantine verification",
+	}, []*http.Cookie{loginCookie}, baseURL, map[string]string{"If-Match": rolledBack.ETag}, loginResult.CSRFToken)
+	if quarantined.Code != http.StatusOK || !strings.Contains(quarantined.Body, `"state":"QUARANTINED"`) {
+		t.Fatalf("quarantine extension: want quarantined 200, got %d: %s", quarantined.Code, quarantined.Body)
+	}
+	assertProcessInvariant("quarantine")
+	quarantineRadius := liveJSONRequest(t, client, http.MethodGet, baseURL+"/admin/v1/blast-radius?target_type=EXTENSION&target_id="+staged.InstallationID, nil, []*http.Cookie{loginCookie}, baseURL)
+	if quarantineRadius.Code != http.StatusOK {
+		t.Fatalf("blast radius after quarantine: want 200, got %d: %s", quarantineRadius.Code, quarantineRadius.Body)
+	}
+	var radius struct {
+		Organizations []string `json:"organizations"`
+		Projects      []string `json:"projects"`
+		VirtualKeys   []string `json:"virtual_keys"`
+		Connections   []string `json:"connections"`
+	}
+	if err := json.Unmarshal([]byte(quarantineRadius.Body), &radius); err != nil || radius.Organizations == nil || radius.Projects == nil || radius.VirtualKeys == nil || radius.Connections == nil {
+		t.Fatalf("blast-radius response lacks all four scopes: err=%v body=%s", err, quarantineRadius.Body)
+	}
+	assertProcessInvariant("quarantine blast-radius query")
 
 	installations := liveJSONRequest(t, client, http.MethodGet, baseURL+"/admin/v1/extensions/installations", nil, []*http.Cookie{loginCookie}, baseURL)
 	if installations.Code != http.StatusOK {
