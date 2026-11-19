@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -177,7 +178,11 @@ func RequestToken(ctx context.Context, client *http.Client, endpoint *url.URL, f
 }
 
 func isLoopbackHost(host string) bool {
-	return host == "localhost" || strings.HasPrefix(host, "127.") || host == "::1" || host == "[::1]"
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
 
 // TokenSet is serialized only inside the envelope-encrypted Vault credential.

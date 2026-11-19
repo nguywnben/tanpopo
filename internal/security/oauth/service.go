@@ -123,7 +123,7 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	}
 	// OAuth loopback redirect URIs are permitted by the native-app profile; this exception
 	// does not apply to outbound authorization, token, or device endpoints.
-	if redirect.Scheme != "https" && !(redirect.Scheme == "http" && isLoopbackHost(redirect.Hostname())) {
+	if redirect.Scheme != "https" && !(cfg.AllowLoopbackHTTP && redirect.Scheme == "http" && isLoopbackHost(redirect.Hostname())) {
 		return nil, fmt.Errorf("oauth: callback redirect URI must use HTTPS")
 	}
 	if redirect.Path != "/admin/v1/oauth/callback" {

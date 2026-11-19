@@ -149,6 +149,33 @@ func TestRefreshLeaseCoordinatesIndependentServiceInstances(t *testing.T) {
 	}
 }
 
+func TestNewServiceRequiresHTTPSExceptForHermeticLoopback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	fx := newRefreshFixture(t, server.URL, "https://resource.example/")
+	config := ServiceConfig{
+		DB: fx.db, Vault: fx.vault, UnsealCapability: fx.capability, Audit: fx.audit,
+		NowMs: fx.service.nowMs, HostResolver: egress.NewStdHostResolver(),
+		RedirectURI: "http://127.0.0.1/admin/v1/oauth/callback",
+	}
+	if _, err := NewService(config); err == nil {
+		t.Fatal("HTTP loopback callback was accepted outside hermetic mode")
+	}
+	config.AllowLoopbackHTTP = true
+	if _, err := NewService(config); err != nil {
+		t.Fatalf("hermetic loopback callback rejected: %v", err)
+	}
+	config.RedirectURI = "http://127.attacker.example/admin/v1/oauth/callback"
+	if _, err := NewService(config); err == nil {
+		t.Fatal("non-loopback hostname with a 127 prefix was accepted as a hermetic callback")
+	}
+	config.AllowLoopbackHTTP = false
+	config.RedirectURI = "https://oauth.example.test/admin/v1/oauth/callback"
+	if _, err := NewService(config); err != nil {
+		t.Fatalf("HTTPS callback rejected: %v", err)
+	}
+}
+
 func TestAccessTokenInvalidGrantExpiresAuthAndAuditsWithoutRetry(t *testing.T) {
 	var refreshCalls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
