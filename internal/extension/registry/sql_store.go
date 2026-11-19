@@ -20,6 +20,9 @@ type SQLStore struct {
 	now func() time.Time
 }
 
+var _ IndexStore = (*SQLStore)(nil)
+var _ RevocationStore = (*SQLStore)(nil)
+
 func NewSQLStore(db *sql.DB, now func() time.Time) (*SQLStore, error) {
 	if db == nil {
 		return nil, errors.New("registry: database is required")

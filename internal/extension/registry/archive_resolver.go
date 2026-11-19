@@ -25,15 +25,16 @@ type RegistryCredentialResolver interface {
 // index, then snapshots their digest-verified bytes into a private temp file for
 // the existing installer lifecycle.
 type OCIArchiveResolver struct {
-	Client      *OCIClient
-	Index       IndexStore
-	Credentials RegistryCredentialResolver
+	Client             *OCIClient
+	ClientForRegistry  func(context.Context, string) (*OCIClient, error)
+	Index              IndexStore
+	Credentials        RegistryCredentialResolver
 }
 
 // Resolve returns an installer request backed by a private verified snapshot.
 // The caller must invoke the cleanup function after the installer consumes it.
 func (r *OCIArchiveResolver) Resolve(ctx context.Context, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
-	if r == nil || r.Client == nil || r.Index == nil {
+	if r == nil || (r.Client == nil && r.ClientForRegistry == nil) || r.Index == nil {
 		return nil, nil, fmt.Errorf("%w: OCI archive resolver is not configured", ErrInvalidOCIReference)
 	}
 	registryHost, _, digest, err := parseOCIReference(sourceURI)
@@ -66,7 +67,17 @@ func (r *OCIArchiveResolver) Resolve(ctx context.Context, sourceURI, expectedSHA
 			return nil, nil, fmt.Errorf("resolve registry credentials: %w", err)
 		}
 	}
-	body, err := r.Client.Pull(ctx, sourceURI, credentials)
+	client := r.Client
+	if r.ClientForRegistry != nil {
+		client, err = r.ClientForRegistry(ctx, registryHost)
+		if err != nil {
+			return nil, nil, fmt.Errorf("configure guarded OCI client: %w", err)
+		}
+	}
+	if client == nil {
+		return nil, nil, fmt.Errorf("%w: guarded OCI client is not configured", ErrInvalidOCIReference)
+	}
+	body, err := client.Pull(ctx, sourceURI, credentials)
 	if err != nil {
 		return nil, nil, err
 	}
