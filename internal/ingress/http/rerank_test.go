@@ -38,7 +38,7 @@ func TestFinalizeRerankJSONValidatesAndReturnsRequestedDocuments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := finalizeRerankJSON(req.Model, req, port.NormalizedInferenceResponse{NormalizedResponseJSON: []byte(`{"id":"rr-1","results":[{"index":1,"relevance_score":0.91}]}`), UpstreamModelID: "ranker-v1", Usage: &port.MediaUsage{InputTokens: 3, OutputTokens: 2, RerankSearchUnits: 4}})
+	response, err := finalizeRerankJSON(req.Model, req, port.NormalizedInferenceResponse{NormalizedResponseJSON: []byte(`{"id":"rr-1","results":[{"index":1,"relevance_score":0.91}]}`), UpstreamModelID: "ranker-v1", Usage: &port.NormalizedUsage{InputTokens: 3, OutputTokens: 2, MediaUsage: &port.MediaUsage{RerankSearchUnits: 4}}})
 	if err != nil {
 		t.Fatal(err)
 	}
