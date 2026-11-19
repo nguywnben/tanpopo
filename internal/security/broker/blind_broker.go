@@ -1548,6 +1548,9 @@ func intersectPolicies(policies []egress.Policy) (egress.Policy, error) {
 		if p.RequireTLS {
 			merged.RequireTLS = true
 		}
+		if p.RequirePrivateForHTTP {
+			merged.RequirePrivateForHTTP = true
+		}
 		for _, h := range p.SensitiveHeaders {
 			trimmed := strings.TrimSpace(h)
 			if trimmed == "" {

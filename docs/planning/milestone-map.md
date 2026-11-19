@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0031: DONE` | `1 READY / 0 READY_FOR_REVIEW / 15 BLOCKED`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.42.0-dec-059-0030-done` | **Date:** `2026-11-18`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0035: DONE` | `1 READY / 0 READY_FOR_REVIEW / 11 BLOCKED`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.43.0-dec-072-0036-ready` | **Date:** `2026-11-19`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Milestone `M0`, Milestone `M1`, Wave 2.1, and Units `TP-IMP-0021`..`0031` are **`DONE` (`31 / 47`)**. Unit 30 (`CR-13` Option A per `DEC-050`) remains accepted under [`DEC-058`](../governance/decisions.md) / [`DEC-059`](../governance/decisions.md) by **Gemini 4 Hydrogen**. Unit 31 is accepted under [`DEC-061`](../governance/decisions.md) at main SHA `6eb603aea20926f326d5c8acdc129a029ded0d39` (PR #4; post-merge Actions `44319629695`; reviewers **Franklin** and **Hubble**). Unit `0032` is **`READY`** under `DEC-061`; Units `0033`..`0047` (`15 / 47`) remain **`BLOCKED`** subject to their existing gates (no tags/releases per `GATE-REL-07).
+> - **Live Status:** Units `TP-IMP-0001`..`0035` are **`DONE` (`35 / 47`)**. Unit 30 (`CR-13` Option A per `DEC-050`) remains accepted under [`DEC-058`](../governance/decisions.md) / [`DEC-059`](../governance/decisions.md). Unit 35 is accepted under [`DEC-071`](../governance/decisions.md) at main SHA `0a264c40ebb7288d849df14a466931cae2b1fab5` (PR #14; post-merge Actions `44468902234`; reviewers **Euclid** and **Lagrange**). Unit `0036` is **`READY`** under `DEC-072`; Units `0037`..`0047` (`11 / 47`) remain **`BLOCKED`** pending sequential gates (no tags/releases per `GATE-REL-07`).
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---

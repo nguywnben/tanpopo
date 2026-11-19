@@ -29,6 +29,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
 	ingresshttp "github.com/nguywnben/tanpopo/internal/ingress/http"
+	mcphub "github.com/nguywnben/tanpopo/internal/ingress/mcp/hub"
 	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
@@ -271,8 +272,9 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		return nil, nil, fmt.Errorf("initialize marketplace registry store: %w", err)
 	}
 	marketplaceDone = startMarketplaceRuntime(runtimeCtx, registryStore, installerService, snaps, auditLog)
+	brokerResolver := planeBrokerResolver{provider: catalogRepo, mcp: mcphub.BrokerResolver{DB: db}}
 	blindBroker, err := broker.NewBlindBroker(broker.Config{
-		Resolver: catalogRepo, PolicyResolver: catalogRepo, Vault: vaultStore,
+		Resolver: brokerResolver, PolicyResolver: brokerResolver, Vault: vaultStore,
 		UnsealCap: brokerUnsealCap, Audit: auditLog, OAuthTokens: oauthService,
 	})
 	if err != nil {
@@ -280,6 +282,17 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		return nil, nil, fmt.Errorf("initialize credential broker: %w", err)
 	}
 	mux := http.NewServeMux()
+	if role == "all" || role == "data-plane" {
+		mcpServer, serverErr := mcphub.NewServer(mcphub.Config{
+			DB: db, Snapshots: snaps, Broker: blindBroker, Audit: auditLog,
+			Upstream: &mcphub.BrokerClient{Broker: blindBroker},
+		})
+		if serverErr != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize MCP Governance Hub: %w", serverErr)
+		}
+		mux.Handle("/mcp", mcpServer)
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

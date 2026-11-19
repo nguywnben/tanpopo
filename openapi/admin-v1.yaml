@@ -887,15 +887,16 @@ components:
 
     McpServerResource:
       type: object
-      required: [id, slug, name, transport, endpoint_url, state, tool_count, version]
+      required: [id, project_id, slug, name, transport, endpoint_url, state, tool_count, version]
       properties:
         id: { type: string }
+        project_id: { type: string }
         slug: { type: string }
         name: { type: string }
-        transport: { type: string, enum: [streamable_http, isolated_sidecar] }
+        transport: { type: string, enum: [streamable_http] }
         endpoint_url: { type: string }
         allow_private_ip: { type: boolean, default: false }
-        state: { type: string, enum: [ACTIVE, SCHEMA_DRIFT_LOCKED, DISABLED] }
+        state: { type: string, enum: [ACTIVE, SCHEMA_DRIFT_LOCKED, SUSPENDED, DISABLED] }
         tool_count: { type: integer }
         version: { type: integer }
 
@@ -2709,7 +2710,7 @@ paths:
     post:
       tags: [MCPAndA2A]
       operationId: registerMcpServer
-      summary: Register Streamable HTTP or Sidecar MCP Server (raw shell stdio forbidden) (SCR-10 — v0.2)
+      summary: Register Streamable HTTP MCP Server with explicit private-network egress consent (SCR-10 — v0.2)
       parameters:
         - $ref: "#/components/parameters/CsrfTokenHeader"
       requestBody:
@@ -2718,13 +2719,17 @@ paths:
           application/json:
             schema:
               type: object
-              required: [slug, name, transport, endpoint_url]
+              required: [project_id, slug, name, transport, endpoint_url]
               properties:
-                slug: { type: string }
+                project_id: { type: string }
+                slug: { type: string, minLength: 1, maxLength: 64, pattern: "^[a-z0-9][a-z0-9-]*$" }
                 name: { type: string }
-                transport: { type: string, enum: [streamable_http, isolated_sidecar] }
+                transport: { type: string, enum: [streamable_http] }
                 endpoint_url: { type: string, format: uri }
                 allow_private_ip: { type: boolean, default: false }
+                allowed_cidrs:
+                  type: array
+                  items: { type: string }
                 credential_id: { type: ["string", "null"] }
       responses:
         "201":
@@ -2734,6 +2739,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/McpServerResource" }
+        "400":
+          description: Invalid server registration or egress consent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "403":
+          description: Insufficient project scope or invalid browser CSRF token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
 
   /admin/v1/mcp/servers/{serverId}/sync-tools:
     post:
@@ -2758,6 +2773,16 @@ paths:
                   synced_count: { type: integer }
                   drifted_count: { type: integer }
                   tools: { type: array, items: { type: object } }
+        "403":
+          description: Insufficient project scope or invalid browser CSRF token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "502":
+          description: Upstream synchronization failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
 
   /admin/v1/mcp/tools/{toolId}/approve-schema:
     post:
@@ -2790,6 +2815,115 @@ paths:
           content:
             application/json:
               schema: { type: object }
+        "403":
+          description: Insufficient project scope or invalid browser CSRF token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: Stale schema hash or resource version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "428":
+          description: If-Match is required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/mcp/tools/{toolId}/grants:
+    get:
+      tags: [MCPAndA2A]
+      operationId: listMcpToolGrants
+      summary: List environment and Virtual Key grants for one MCP tool
+      parameters:
+        - name: toolId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Tool grants scoped to the authenticated organization and project
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, project_id, env_id, virtual_key_id, version, created_at_ms]
+                      properties:
+                        id: { type: string }
+                        project_id: { type: string }
+                        env_id: { type: string }
+                        virtual_key_id: { type: string }
+                        version: { type: integer }
+                        created_at_ms: { type: integer }
+        "403":
+          description: Insufficient project scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+    post:
+      tags: [MCPAndA2A]
+      operationId: createMcpToolGrant
+      summary: Grant a namespaced MCP tool to an allowed Virtual Key in an environment
+      parameters:
+        - name: toolId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [env_id, virtual_key_id]
+              properties:
+                env_id: { type: string }
+                virtual_key_id: { type: string }
+      responses:
+        "201":
+          description: MCP tool grant created
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { type: object }
+        "403":
+          description: Insufficient project scope or invalid browser CSRF token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: Tool is not explicitly allowed by the Virtual Key or grant already exists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/mcp/grants/{grantId}:
+    delete:
+      tags: [MCPAndA2A]
+      operationId: revokeMcpToolGrant
+      summary: Revoke one project-scoped MCP tool grant
+      parameters:
+        - name: grantId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "204": { description: MCP tool grant revoked }
+        "403":
+          description: Insufficient project scope or invalid browser CSRF token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
 
   /admin/v1/a2a/agents:
     get:

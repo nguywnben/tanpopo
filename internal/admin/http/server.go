@@ -491,6 +491,15 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodGet, Path: "/admin/v1/policies/effective", Action: rbac.ActionPolicyRead, Handler: s.handleGetEffectivePolicy},
 		{Method: http.MethodPut, Path: "/admin/v1/policies/{policyId}", Action: rbac.ActionPolicyProjectWrite, Handler: s.handleUpdatePolicy},
 
+		// Group I: MCP Governance Hub
+		{Method: http.MethodGet, Path: "/admin/v1/mcp/servers", Action: rbac.ActionMCPRead, Handler: s.handleListMCPServers},
+		{Method: http.MethodPost, Path: "/admin/v1/mcp/servers", Action: rbac.ActionMCPWrite, Handler: s.handleRegisterMCPServer},
+		{Method: http.MethodPost, Path: "/admin/v1/mcp/servers/{serverId}/sync-tools", Action: rbac.ActionMCPWrite, Handler: s.handleSyncMCPTools},
+		{Method: http.MethodPost, Path: "/admin/v1/mcp/tools/{toolId}/approve-schema", Action: rbac.ActionMCPSchemaApprove, Handler: s.handleApproveMCPSchema},
+		{Method: http.MethodGet, Path: "/admin/v1/mcp/tools/{toolId}/grants", Action: rbac.ActionMCPRead, Handler: s.handleListMCPToolGrants},
+		{Method: http.MethodPost, Path: "/admin/v1/mcp/tools/{toolId}/grants", Action: rbac.ActionMCPWrite, Handler: s.handleCreateMCPToolGrant},
+		{Method: http.MethodDelete, Path: "/admin/v1/mcp/grants/{grantId}", Action: rbac.ActionMCPWrite, Handler: s.handleDeleteMCPToolGrant},
+
 		// Group D: Control Plane Overview & Active Alerts
 		{Method: http.MethodGet, Path: "/admin/v1/overview/summary", Action: rbac.ActionBudgetRead, Handler: s.handleGetOverviewSummary},
 		{Method: http.MethodGet, Path: "/admin/v1/alerts/active", Action: rbac.ActionBudgetRead, Handler: s.handleListActiveAlerts},

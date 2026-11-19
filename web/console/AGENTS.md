@@ -44,5 +44,5 @@ RULES:
 
 ## Current Screen Delivery
 
-`TP-IMP-0026` established the Console build, local Figtree, StyleX and `AppShell`; `TP-IMP-0027`..`0030` are accepted. Unit 30 is DONE on `origin/main` `7079ccc` and post-merge run `44266685476` attempt 2 passed all four jobs. Under `DEC-060`, GPT-6 Luna is executing Units 31–35 sequentially via `develop` → PR; Unit 31 is READY. Preserve `CT-27`, exact currency, accessibility, mobile, air-gap, and strong review gates.
+`TP-IMP-0026` established the Console build, local Figtree, StyleX and `AppShell`; `TP-IMP-0027`..`0030` are accepted. Under `DEC-072`, GPT-6 Luna is executing Units 36–38 sequentially via `develop` → PR; Unit 36 is READY. Preserve the existing interface system, `CT-27`, exact currency, accessibility, mobile, air-gap, and review gates. Unit 38 UI scope uses the current console; a broader redesign is outside this batch.
 
