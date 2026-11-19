@@ -1,6 +1,6 @@
 # TP-IMP-0035 Execution Checkpoint
 
-**Status:** `READY` under `DEC-070`; implementation is in progress on the persistent `develop` branch and draft PR [#14](https://github.com/nguywnben/tanpopo/pull/14).
+**Status:** `DONE` under `DEC-071`; implementation PR [#14](https://github.com/nguywnben/tanpopo/pull/14) merged to `origin/main` at `05b00a523f2390ea0ae21562dd125372aee4329f`. Post-merge CI run [44465461524](https://github.com/nguywnben/tanpopo/actions/runs/44465461524) and artifact/attestation run [44465461513](https://github.com/nguywnben/tanpopo/actions/runs/44465461513) passed.
 
 ## Ownership
 
@@ -91,9 +91,9 @@
 - Final independent **Euclid** (**code-reviewer**) review approved `03a8fab` with no blockers. Final **Lagrange** (**security-auditor**) review found a MEDIUM blocker: if feed URLs are absent or key configuration is invalid, startup skipped reconciliation of durable revocation actions. **GPT-6 Luna** changed runtime startup to reconcile the durable queue independently of feed polling. **Euclid** then found that a transient reconciliation failure would not retry while polling was disabled; the runtime now retries reconciliation every 10 minutes in that state, with `TestMarketplaceRuntimeRetriesPendingActionsWithoutFeedPolling` covering immediate success and failure followed by retry. A fresh **Lagrange** review found that one persistently failing action could starve later critical revocations; `reconcileLocked` now collects per-action errors while continuing through the durable queue, and `TestRevocationWatcherContinuesAfterOneActionFails` verifies that the failed action remains pending while a later action completes. Focused and full tests pass. **Euclid** and **Lagrange** re-reviewed PR #14 at `efec05b5ba9355f66577825e7cda2a0934170433` and approved the complete diff with no remaining findings.
 - **GPT-6 Luna** committed the reviewed remediation as `0ebf14b140b333f9e32264cfae572509aa5d45c4` and pushed it to `develop` / PR #14. Both **Euclid** and **Lagrange** approved the complete code remediation diff. The full local quality gate and hermetic Go suite passed before commit. GitHub Actions for the new head, the final acceptance record, merge, and post-merge CI remain pending. Unit 35 remains `READY`; no later unit, tag, or release is open.
 
-## Remaining work
+### Final acceptance checkpoint (2026-11-19)
 
-1. Reverify the production private OCI credential, signed-feed polling, revocation quarantine, active-stream fencing, and `INC-03` audit paths in the final diff.
-2. Complete full local verification and all four required PR checks on the final pushed diff, including cross-platform Windows cleanup coverage.
-3. Obtain fresh **Euclid** (**code-reviewer**) and **Lagrange** (**security-auditor**) reviews of the exact final diff, fix blocking findings, and rerun changed checks/reviews.
-4. Merge PR #14 only after required gates and reviews pass; record acceptance on `develop`, merge to `main`, and verify post-merge CI and Unit 35 `DONE` on the accepted main SHA.
+- **GPT-6 Luna** completed Unit 35 under delegated Product Owner authority `DEC-060` and recorded acceptance in `DEC-071`. PR [#14](https://github.com/nguywnben/tanpopo/pull/14) merged from persistent `develop`; final reviewed head was `cb86e1d19569736275e15f8a5bd9bafe30d9b932`, and merge SHA on `origin/main` is `05b00a523f2390ea0ae21562dd125372aee4329f`.
+- All four post-merge Stage 0/Stage 1 checks passed on that main SHA in run [44465461524](https://github.com/nguywnben/tanpopo/actions/runs/44465461524). Release artifact dry run, signed SBOM/artifact verification, and trusted-main OIDC attestation passed in [run 44465461513](https://github.com/nguywnben/tanpopo/actions/runs/44465461513). No tag or release was created.
+- Final independent review on PR #14: **Euclid** (**code-reviewer**) APPROVE and **Lagrange** (**security-auditor**) APPROVE. **Leibniz** (**test-engineer**) contributed route and runtime acceptance tests; **Laplace** contributed AWS Bedrock; **Planck** contributed Azure OpenAI; **Wegener** and **Jason** (**test-engineer**) investigated Windows cleanup behavior. **GPT-6 Luna** implemented and accepted the unit.
+- Units 31–35 are DONE on main. Units 36–47 remain BLOCKED; Unit 36 was not opened. `develop` is fast-forward synchronized with `origin/main`. `GATE-REL-07` was observed; no tag or release was created.

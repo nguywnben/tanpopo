@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0035` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
-| **Status** | **`READY`** *(Opened under `DEC-070`; DoR verified on main: `TP-IMP-0011`, `TP-IMP-0018`, and `TP-IMP-0034` are DONE; `GAP-01`, `GAP-04`, and `GAP-09` are CLOSED; approved `CR-01` schedules Bedrock, Azure OpenAI, and `/v1/rerank` in v0.2.)* |
+| **Status** | **`DONE`** *(Accepted under `DEC-071`; implementation PR #14 final reviewed head `cb86e1d`; merged to `origin/main` at `05b00a523f2390ea0ae21562dd125372aee4329f`; all four post-merge jobs passed in CI `44465461524`; artifact and trusted-main attestation run `44465461513` succeeded; **Euclid** code review APPROVE and **Lagrange** security review APPROVE.)* |
 | **Size** | `L` (`internal/extension/registry/*`, `internal/ingress/http/rerank.go`, `extensions/official/aws-bedrock/*`, `azure-openai/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Remote index signature verification, automated CVE package quarantine via `revocations.json` & `AWS SigV4` signing inside `BlindBroker`)* |
 | **Technical Owner** | `Platform Ecosystem & Supply-Chain Lead` |
