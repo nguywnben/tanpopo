@@ -408,6 +408,25 @@ func TestInstallerAC1FullLifecycleAndFastRollback(t *testing.T) {
 	if err != nil || stillActive.Version != rolledBack.Version || stillActive.State != StateEnabledActive {
 		t.Fatalf("stale quarantine changed installation: %+v err=%v", stillActive, err)
 	}
+	outboxErr := errors.New("transactional webhook outbox unavailable")
+	h.svc.recordQuarantineEventTx = func(_ context.Context, tx *sql.Tx, installationID, packageID, state string) error {
+		if installationID != rolledBack.InstallationID || packageID == "" || state != StateQuarantined {
+			t.Fatalf("unexpected quarantine event args: installation=%q package=%q state=%q", installationID, packageID, state)
+		}
+		var count int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM extension_installations WHERE id=? AND state=?`, installationID, StateQuarantined).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("quarantine outbox callback must share mutation transaction, count=%d err=%v", count, err)
+		}
+		return outboxErr
+	}
+	if err := h.svc.QuarantineInstallationIfVersion(ctx, rolledBack.InstallationID, rolledBack.Version, "outbox rollback test", "fault_guard"); !errors.Is(err, outboxErr) {
+		t.Fatalf("expected outbox failure to abort quarantine, got %v", err)
+	}
+	stillActive, err = h.svc.GetInstallation(ctx, rolledBack.InstallationID)
+	if err != nil || stillActive.Version != rolledBack.Version || stillActive.State != StateEnabledActive {
+		t.Fatalf("failed outbox write committed quarantine: %+v err=%v", stillActive, err)
+	}
+	h.svc.recordQuarantineEventTx = nil
 	if err := h.svc.QuarantineInstallationIfVersion(ctx, rolledBack.InstallationID, rolledBack.Version, "exceeded 20 traps / 60s (FMEA-05)", "fault_guard"); err != nil {
 		t.Fatalf("QuarantineInstallation: %v", err)
 	}

@@ -241,6 +241,7 @@ func TestBrokerClientDoesNotForwardCallerHeaders(t *testing.T) {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	request.Header.Set(sessionHeader, session.Get(sessionHeader))
+	request.Header.Set("Idempotency-Key", "mcp-call-unique-01")
 	request.Header.Set("Cookie", "session=caller-cookie")
 	request.Header.Set("X-Caller-Private", "caller-arbitrary-header")
 	response := httptest.NewRecorder()
@@ -262,6 +263,9 @@ func TestBrokerClientDoesNotForwardCallerHeaders(t *testing.T) {
 		}
 		if headers.Get("Content-Type") != "application/json" || !strings.Contains(headers.Get("Accept"), "application/json") {
 			t.Errorf("upstream request %d missing BrokerClient protocol headers: %v", i, headers)
+		}
+		if i == len(outboundHeaders)-1 && headers.Get("Idempotency-Key") != "mcp-call-unique-01" {
+			t.Errorf("tools/call did not propagate validated idempotency key: %v", headers)
 		}
 	}
 }

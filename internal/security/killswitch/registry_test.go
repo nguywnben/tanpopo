@@ -182,6 +182,51 @@ func newKillSwitchHarness(t *testing.T) *ksHarness {
 	}
 }
 
+func TestTriggerWebhookOutboxFailureRollsBackKillSwitch(t *testing.T) {
+	h := newKillSwitchHarness(t)
+	ctx := context.Background()
+	wantErr := errors.New("outbox unavailable")
+	var callbackCalled bool
+	reg, err := NewRegistry(ctx, RegistryConfig{
+		DB: h.st.RawDB(), Audit: h.logger,
+		RecordWebhookTx: func(_ context.Context, tx *sql.Tx, orgID, projectID, eventKey, eventType string, payload []byte) error {
+			callbackCalled = true
+			if orgID != h.orgAID || projectID != h.projA1ID || eventKey == "" || eventType != "kill_switch.triggered" || len(payload) == 0 {
+				t.Fatalf("unexpected webhook event args: org=%q project=%q key=%q type=%q payload=%s", orgID, projectID, eventKey, eventType, payload)
+			}
+			var count int
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM emergency_kill_switches WHERE target_id=? AND active=1`, h.vkA1ID).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			if count != 1 {
+				t.Fatalf("outbox callback must run in trigger transaction, visible rows=%d", count)
+			}
+			return wantErr
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	_, err = reg.Trigger(ctx, TriggerParams{
+		OrgID: &h.orgAID, ProjectID: h.projA1ID,
+		Level: LevelVirtualKey, TargetID: h.vkA1ID,
+		Reason: "test outbox rollback", TriggeredByPrincipalID: h.prnAID,
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Trigger error = %v, want %v", err, wantErr)
+	}
+	if !callbackCalled {
+		t.Fatal("expected transactional webhook callback")
+	}
+	var count int
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM emergency_kill_switches WHERE target_id=? AND active=1`, h.vkA1ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("failed outbox write must roll back kill switch, active rows=%d", count)
+	}
+}
+
 func TestAC2ExtensionKillSwitchSeversMatched4Of8StreamsUnder1s(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

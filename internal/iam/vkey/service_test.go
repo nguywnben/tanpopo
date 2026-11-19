@@ -174,6 +174,7 @@ func TestVirtualKeyGraceRotationAndExpiry(t *testing.T) {
 		ProjectID: h.projAID,
 		EnvID:     h.envProd,
 		Name:      "prod-key",
+		ActorID:   "issuer-a",
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -185,6 +186,7 @@ func TestVirtualKeyGraceRotationAndExpiry(t *testing.T) {
 		KeyID:           k1.Summary.ID,
 		ExpectedVersion: 1,
 		GraceSeconds:    300,
+		ActorID:         "issuer-b",
 	})
 	if err != nil {
 		t.Fatalf("Rotate: %v", err)
@@ -194,6 +196,11 @@ func TestVirtualKeyGraceRotationAndExpiry(t *testing.T) {
 	}
 	if k2.SecretKey == k1.SecretKey {
 		t.Fatalf("rotated secret must differ from previous secret")
+	}
+	oldMatch, oldErr := h.mgr.Current().AuthenticateKey(k1.SecretKey, h.envProd, h.fk.Now().UTC().UnixMilli())
+	newMatch, newErr := h.mgr.Current().AuthenticateKey(k2.SecretKey, h.envProd, h.fk.Now().UTC().UnixMilli())
+	if oldErr != nil || oldMatch.Key.PreviousKeyRecipientPrincipalID == nil || *oldMatch.Key.PreviousKeyRecipientPrincipalID != "issuer-a" || newErr != nil || newMatch.Key.ActiveKeyRecipientPrincipalID == nil || *newMatch.Key.ActiveKeyRecipientPrincipalID != "issuer-b" {
+		t.Fatalf("key generation recipients not preserved across rotation: old=%+v new=%+v errors=%v/%v", oldMatch, newMatch, oldErr, newErr)
 	}
 
 	// Both K1 and K2 succeed within 300s grace window (e.g. T + 150s).
@@ -1115,5 +1122,3 @@ func TestVKeyUpdateAndRevokeWithReceipt(t *testing.T) {
 		t.Fatalf("expected ErrInvalidStateTransition updating revoked key, got %v", err)
 	}
 }
-
-

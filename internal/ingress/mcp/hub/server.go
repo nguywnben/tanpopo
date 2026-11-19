@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/ingress/mcp/approval"
+	"github.com/nguywnben/tanpopo/internal/ingress/mcp/firewall"
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/schema_pin"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
@@ -51,7 +53,7 @@ type ToolDefinition struct {
 type UpstreamClient interface {
 	ListTools(context.Context, serverRecord) ([]ToolDefinition, error)
 	CallTool(context.Context, serverRecord, string, json.RawMessage) (json.RawMessage, error)
-	VerifyAndCallTool(context.Context, serverRecord, string, json.RawMessage, string, schema_pin.Definition) (schema_pin.Verification, json.RawMessage, error)
+	VerifyAndCallTool(context.Context, serverRecord, string, json.RawMessage, string, schema_pin.Definition, firewall.Class) (schema_pin.Verification, json.RawMessage, error)
 }
 
 // Config contains the minimum dependencies for the MCP Hub.
@@ -65,6 +67,10 @@ type Config struct {
 	CursorKey  []byte
 	SessionTTL time.Duration
 	BodyLimit  int64
+	// ApprovalWait bounds interactive holds. Zero selects the protocol maximum.
+	ApprovalWait time.Duration
+	// RecordApprovalPendingTx persists the notification in the approval creation transaction.
+	RecordApprovalPendingTx func(context.Context, *sql.Tx, string, approval.Binding) error
 }
 
 type session struct {
@@ -83,6 +89,8 @@ type session struct {
 type Server struct {
 	cfg             Config
 	catalog         *catalog
+	approvals       *approval.Store
+	riskLimiter     *firewall.Limiter
 	cursor          []byte
 	mu              sync.Mutex
 	sessions        map[string]session
@@ -110,6 +118,21 @@ func NewServer(cfg Config) (*Server, error) {
 	if cfg.BodyLimit <= 0 || cfg.BodyLimit > maxJSONRPCBytes {
 		cfg.BodyLimit = maxJSONRPCBytes
 	}
+	if cfg.ApprovalWait <= 0 || cfg.ApprovalWait > approval.MaxSynchronousWait {
+		cfg.ApprovalWait = approval.MaxSynchronousWait
+	}
+	txAudit, ok := cfg.Audit.(port.TxAuditSink)
+	if !ok {
+		return nil, errors.New("MCP Hub requires transactional audit support for approvals")
+	}
+	approvals, err := approval.NewStore(approval.Config{DB: cfg.DB, Audit: txAudit, Now: cfg.Now, RecordPendingEventTx: cfg.RecordApprovalPendingTx})
+	if err != nil {
+		return nil, err
+	}
+	limiter, err := firewall.NewLimiter(firewall.LimiterConfig{Limit: 60, Window: time.Minute, MaxEntries: 4096, Now: cfg.Now})
+	if err != nil {
+		return nil, err
+	}
 	key := append([]byte(nil), cfg.CursorKey...)
 	if len(key) < 32 {
 		key = make([]byte, 32)
@@ -117,7 +140,7 @@ func NewServer(cfg Config) (*Server, error) {
 			return nil, fmt.Errorf("initialize MCP cursor key: %w", err)
 		}
 	}
-	return &Server{cfg: cfg, catalog: cat, cursor: key, sessions: make(map[string]session), requests: make(map[string]map[string]context.CancelFunc), toolCallsByKey: make(map[string]int)}, nil
+	return &Server{cfg: cfg, catalog: cat, approvals: approvals, riskLimiter: limiter, cursor: key, sessions: make(map[string]session), requests: make(map[string]map[string]context.CancelFunc), toolCallsByKey: make(map[string]int)}, nil
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -135,6 +158,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.Header().Set("Allow", "POST, GET, DELETE")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// RunApprovalMaintenance periodically removes expired previews and prunes old request rows.
+func (s *Server) RunApprovalMaintenance(ctx context.Context) {
+	if s == nil || s.approvals == nil {
+		return
+	}
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		_ = s.approvals.CleanupExpired(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 
@@ -202,13 +242,16 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx, finish, admitted := s.trackRequest(r.Context(), r.Header.Get(sessionHeader), string(req.ID), identity.scope.KeyID, limit)
 		if admitted {
-			result = s.callTool(ctx, identity, r.Header.Get(sessionHeader), req)
+			result = s.callTool(ctx, identity, r, req)
 			finish()
 		} else {
 			result = rpcFailure(req.ID, -32000, "too_many_concurrent_calls", nil)
 		}
 	default:
 		result = rpcFailure(req.ID, -32601, "Method not found", nil)
+	}
+	if result.Error != nil && writeInvocationError(w, result.Error.Message) {
+		return
 	}
 	writeRPC(w, http.StatusOK, result)
 }
@@ -533,6 +576,7 @@ func (s *Server) listTools(ctx context.Context, id identity, req request) respon
 	if err != nil {
 		return rpcFailure(req.ID, -32603, "Internal error", nil)
 	}
+	tools = withApprovalStatusTool(tools)
 	scopeKey := id.scope.OrgID + ":" + id.scope.ProjectID + ":" + id.scope.EnvID + ":" + id.scope.KeyID
 	start := 0
 	if params.Cursor != "" {
@@ -571,42 +615,89 @@ func (s *Server) listTools(ctx context.Context, id identity, req request) respon
 	return rpcResponse(req.ID, result)
 }
 
-func (s *Server) callTool(ctx context.Context, id identity, sessionID string, req request) response {
-	var params struct {
-		Name      string          `json:"name"`
-		Arguments json.RawMessage `json:"arguments"`
-		Meta      struct {
-			ProgressToken json.RawMessage `json:"progressToken"`
-		} `json:"_meta"`
-	}
-	if json.Unmarshal(req.Params, &params) != nil || len(req.Params) == 0 || params.Name == "" || len(params.Arguments) == 0 {
+func (s *Server) callTool(ctx context.Context, id identity, r *http.Request, req request) response {
+	var params toolCallParams
+	if json.Unmarshal(req.Params, &params) != nil || params.Name == "" || len(params.Arguments) == 0 || !validProgressToken(params.Meta.ProgressToken) {
 		return rpcFailure(req.ID, -32602, "Invalid params", nil)
 	}
-	slug, rawName, ok := splitToolName(params.Name)
-	if !ok {
-		return rpcFailure(req.ID, -32602, "Invalid namespaced tool name", nil)
+	if key := r.Header.Get("Idempotency-Key"); key != "" {
+		if !validIdempotencyKey(key) {
+			return rpcFailure(req.ID, -32602, "Invalid Idempotency-Key", nil)
+		}
+		ctx = context.WithValue(ctx, idempotencyContextKey{}, key)
 	}
-	record, err := s.catalog.getGrantedTool(ctx, id.scope, slug, rawName)
+	token, err := params.replayToken()
 	if err != nil {
-		return rpcFailure(req.ID, -32003, "tool_access_denied", nil)
+		return rpcFailure(req.ID, -32602, "Invalid approval token", nil)
 	}
-	if record.DriftLocked {
-		return rpcFailure(req.ID, -32003, "schema_hash_drift_blocked", nil)
+	if params.Meta.Mode != "" && params.Meta.Mode != "async" && params.Meta.Mode != "sync" {
+		return rpcFailure(req.ID, -32602, "Invalid approval mode", nil)
 	}
-	if record.Server.Transport != "STREAMABLE_HTTP" {
-		return rpcFailure(req.ID, -32003, "unsupported_transport", nil)
+	if params.Name == approvalStatusTool {
+		target, reply := s.checkApproval(ctx, id.scope, req.ID, params, token)
+		if reply != nil {
+			return *reply
+		}
+		params = target
 	}
-	if s.cfg.Upstream == nil {
-		return rpcFailure(req.ID, -32603, "Internal error", nil)
+	sessionID := r.Header.Get(sessionHeader)
+	record, fail := s.prepareTool(ctx, id.scope, req.ID, params)
+	if fail != nil {
+		return *fail
 	}
-	if err := validateArgumentsContext(ctx, record.Schema, params.Arguments); err != nil {
-		return rpcFailure(req.ID, -32602, "Invalid tool arguments", nil)
+	class := firewall.NormalizeClass(record.SideEffectClass)
+	if !s.riskLimiter.Allow(class, id.scope.KeyID) {
+		return rpcFailure(req.ID, -32000, "rate_limit_exceeded", nil)
 	}
-	if !validProgressToken(params.Meta.ProgressToken) {
-		return rpcFailure(req.ID, -32602, "Invalid progress token", nil)
+	if class == firewall.Destructive {
+		canonicalArguments, err := approval.CanonicalizeArguments(params.Arguments)
+		if err != nil {
+			return rpcFailure(req.ID, -32602, "Invalid tool arguments", nil)
+		}
+		// Validate the exact canonical bytes that the approval digest commits to
+		// and the upstream will receive. Ordinary mutating calls retain caller bytes.
+		params.Arguments = canonicalArguments
+		revalidated, fail := s.prepareTool(ctx, id.scope, req.ID, params)
+		if fail != nil {
+			return *fail
+		}
+		record = revalidated
 	}
-	s.publishProgress(sessionID, params.Meta.ProgressToken, 0, 2)
-	verification, result, err := s.cfg.Upstream.VerifyAndCallTool(ctx, record.Server, record.Name, params.Arguments, record.ApprovedHash, definitionFromStored(record))
+	binding := approval.Binding{OrgID: id.scope.OrgID, ProjectID: id.scope.ProjectID, VirtualKeyID: id.scope.KeyID,
+		ServerSlug: record.Server.Slug, ToolName: record.Name, Arguments: params.Arguments,
+		ServerID: record.Server.ID, ToolID: record.ID, ApprovedSchemaHash: record.ApprovedHash}
+	syncApproved := false
+	if class == firewall.Destructive && token == "" {
+		var reply *response
+		token, reply = s.requestApproval(ctx, id, sessionID, req.ID, params, binding)
+		if reply != nil {
+			return *reply
+		}
+
+		// The decision may arrive after the key, grant, or pinned schema changed.
+		current, err := s.authenticate(r)
+		if err != nil || s.validateSession(r, current) != nil {
+			return rpcFailure(req.ID, -32003, "tool_access_denied", nil)
+		}
+		fresh, fail := s.prepareTool(ctx, current.scope, req.ID, params)
+		if fail != nil {
+			return *fail
+		}
+		if fresh.ID != record.ID || fresh.Server.ID != record.Server.ID || fresh.ApprovedHash != record.ApprovedHash {
+			return rpcFailure(req.ID, -32003, "approval_target_changed", nil)
+		}
+		record = fresh
+		syncApproved = true
+	}
+	if token != "" {
+		if _, err := s.approvals.Consume(ctx, token, binding); err != nil {
+			return s.approvalFailure(ctx, req.ID, binding, record, err)
+		}
+	}
+	if !syncApproved {
+		s.publishProgress(sessionID, params.Meta.ProgressToken, 0, 2)
+	}
+	verification, result, err := s.cfg.Upstream.VerifyAndCallTool(ctx, record.Server, record.Name, params.Arguments, record.ApprovedHash, definitionFromStored(record), class)
 	if err != nil {
 		if errors.Is(err, schema_pin.ErrInvalidDefinition) || errors.Is(err, schema_pin.ErrSchemaTooLarge) || errors.Is(err, schema_pin.ErrApprovedHash) {
 			observedHash := verification.Hash
@@ -621,6 +712,9 @@ func (s *Server) callTool(ctx context.Context, id identity, sessionID string, re
 			}
 			return rpcFailure(req.ID, -32003, "schema_hash_drift_blocked", nil)
 		}
+		if !firewall.RetryAllowed(class, errors.Is(err, firewall.ErrAmbiguousSideEffectTimeout)) {
+			return rpcFailure(req.ID, -32000, firewall.AmbiguousSideEffectTimeoutCode, nil)
+		}
 		return rpcFailure(req.ID, -32000, "tool_call_failed", nil)
 	}
 	if verification.Drift || verification.Hash != record.ObservedHash {
@@ -632,7 +726,11 @@ func (s *Server) callTool(ctx context.Context, id identity, sessionID string, re
 		}
 		return rpcFailure(req.ID, -32003, "schema_hash_drift_blocked", map[string]any{"approved": record.ApprovedHash, "observed": verification.Hash, "diff": verification.Diff})
 	}
-	s.publishProgress(sessionID, params.Meta.ProgressToken, 1, 2)
+	if syncApproved {
+		s.publishProgress(sessionID, params.Meta.ProgressToken, approvalProgressTotal, approvalProgressTotal)
+	} else {
+		s.publishProgress(sessionID, params.Meta.ProgressToken, 1, 2)
+	}
 	if len(result) > maxToolBytes {
 		return rpcFailure(req.ID, -32000, "upstream_response_too_large", nil)
 	}

@@ -65,31 +65,33 @@ type ScopeKey struct {
 // VirtualKeyView is an immutable, hash-only Data Plane view of a Virtual Key.
 // It contains zero plaintext key material.
 type VirtualKeyView struct {
-	ID                    string
-	OrgID                 string
-	ProjectID             string
-	EnvID                 string
-	OwnerPrincipalID      *string
-	Name                  string
-	KeyPrefix             string
-	LastFour              string
-	ActiveKeyHash         [32]byte
-	PreviousKeyHash       [32]byte
-	HasPreviousKeyHash    bool
-	GraceExpiresAtMs      *int64
-	State                 string
-	AllowedPlanes         string
-	AllowedModels         []string
-	AllowedRoutes         []string
-	AllowedMCPTools       []string
-	RPMLimit              *int64
-	TPMLimit              *int64
-	MaxConcurrentStreams  int64
-	IsEphemeralPlayground bool
-	ExpiresAtMs           *int64
-	RevokedAtMs           *int64
-	RevocationMode        *string
-	Version               int64
+	ID                              string
+	OrgID                           string
+	ProjectID                       string
+	EnvID                           string
+	OwnerPrincipalID                *string
+	ActiveKeyRecipientPrincipalID   *string
+	PreviousKeyRecipientPrincipalID *string
+	Name                            string
+	KeyPrefix                       string
+	LastFour                        string
+	ActiveKeyHash                   [32]byte
+	PreviousKeyHash                 [32]byte
+	HasPreviousKeyHash              bool
+	GraceExpiresAtMs                *int64
+	State                           string
+	AllowedPlanes                   string
+	AllowedModels                   []string
+	AllowedRoutes                   []string
+	AllowedMCPTools                 []string
+	RPMLimit                        *int64
+	TPMLimit                        *int64
+	MaxConcurrentStreams            int64
+	IsEphemeralPlayground           bool
+	ExpiresAtMs                     *int64
+	RevokedAtMs                     *int64
+	RevocationMode                  *string
+	Version                         int64
 }
 
 // EffectiveConfig captures immutable read-only tenant/project/environment settings
@@ -1191,7 +1193,7 @@ func loadVirtualKeysSQL(ctx context.Context, tx *sql.Tx) (
 ) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT
-			id, org_id, project_id, env_id, owner_principal_id, name,
+			id, org_id, project_id, env_id, owner_principal_id, active_key_recipient_principal_id, previous_key_recipient_principal_id, name,
 			key_prefix, last_four, active_key_hash, previous_key_hash, grace_expires_at_ms,
 			state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
 			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
@@ -1208,14 +1210,14 @@ func loadVirtualKeysSQL(ctx context.Context, tx *sql.Tx) (
 
 	for rows.Next() {
 		var v VirtualKeyView
-		var ownerID, revMode sql.NullString
+		var ownerID, activeRecipient, previousRecipient, revMode sql.NullString
 		var activeBytes, prevBytes []byte
 		var graceMs, rpmLim, tpmLim, expMs, revMs sql.NullInt64
 		var ephInt int64
 		var modelsJSON, routesJSON, mcpJSON string
 
 		if scanErr := rows.Scan(
-			&v.ID, &v.OrgID, &v.ProjectID, &v.EnvID, &ownerID, &v.Name,
+			&v.ID, &v.OrgID, &v.ProjectID, &v.EnvID, &ownerID, &activeRecipient, &previousRecipient, &v.Name,
 			&v.KeyPrefix, &v.LastFour, &activeBytes, &prevBytes, &graceMs,
 			&v.State, &v.AllowedPlanes, &modelsJSON, &routesJSON, &mcpJSON,
 			&rpmLim, &tpmLim, &v.MaxConcurrentStreams, &ephInt,
@@ -1227,6 +1229,14 @@ func loadVirtualKeysSQL(ctx context.Context, tx *sql.Tx) (
 		if ownerID.Valid {
 			s := ownerID.String
 			v.OwnerPrincipalID = &s
+		}
+		if activeRecipient.Valid {
+			s := activeRecipient.String
+			v.ActiveKeyRecipientPrincipalID = &s
+		}
+		if previousRecipient.Valid {
+			s := previousRecipient.String
+			v.PreviousKeyRecipientPrincipalID = &s
 		}
 		if revMode.Valid {
 			s := revMode.String

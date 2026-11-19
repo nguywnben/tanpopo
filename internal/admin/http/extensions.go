@@ -775,7 +775,8 @@ func (s *Server) handleQuarantineExtension(w http.ResponseWriter, r *http.Reques
 		TriggeredByPrincipalID: sc.Actor.PrincipalID, EntryPoint: port.AuditEntryPointAdminAPI,
 		RequestID: ptrOrNil(requestIDFromContext(r.Context())), AbortActiveStreams: &abortStreams,
 	})
-	if errors.Is(killErr, killswitch.ErrAlreadyActive) {
+	alreadyActive := errors.Is(killErr, killswitch.ErrAlreadyActive)
+	if alreadyActive {
 		_, killErr = s.killSwitch.EnsureActiveAbortBarrier(r.Context(), killswitch.LevelExtensionInstallation, insID, nil)
 	}
 	if killErr != nil {

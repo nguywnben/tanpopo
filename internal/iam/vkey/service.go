@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	base62Alphabet      = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-	randomKeyBodyLen    = 32
-	maxGraceSeconds     = int64(259200) // 72 hours max grace window per SCR-13
-	defaultMaxStreams   = int64(50)
+	base62Alphabet    = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	randomKeyBodyLen  = 32
+	maxGraceSeconds   = int64(259200) // 72 hours max grace window per SCR-13
+	defaultMaxStreams = int64(50)
 )
 
 // Revocation modes matching virtual_keys.revocation_mode CHECK constraint.
@@ -313,13 +313,13 @@ func (s *Service) CreateTx(ctx context.Context, tx *sql.Tx, params CreateParams)
 
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO virtual_keys (
-			id, org_id, project_id, env_id, owner_principal_id, name,
+			id, org_id, project_id, env_id, owner_principal_id, active_key_recipient_principal_id, name,
 			key_prefix, last_four, active_key_hash, previous_key_hash, grace_expires_at_ms,
 			state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
 			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
 			expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'CREATED_ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?, ?)`,
-		keyID, params.OrgID, params.ProjectID, params.EnvID, ownerVal, strings.TrimSpace(params.Name),
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'CREATED_ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?, ?)`,
+		keyID, params.OrgID, params.ProjectID, params.EnvID, ownerVal, nullableActor(params.ActorID), strings.TrimSpace(params.Name),
 		prefix, lastFour, digest[:], planes, string(modelsJSON), string(routesJSON), string(mcpJSON),
 		nullInt64Ptr(params.RPMLimit), nullInt64Ptr(params.TPMLimit), maxStreams, ephInt,
 		nullInt64Ptr(params.ExpiresAtMs), now, now,
@@ -405,22 +405,37 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Acquire the key row before reading its current recipient. Approval decisions
+	// use the same row lock so a concurrent rotation and four-eyes check have a
+	// single transaction order.
+	locked, err := tx.ExecContext(ctx, `UPDATE virtual_keys SET id=id WHERE org_id=? AND id=?`, params.OrgID, params.KeyID)
+	if err != nil {
+		return nil, err
+	}
+	lockCount, err := locked.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if lockCount != 1 {
+		return nil, port.ErrNotFound
+	}
 
 	var (
-		envID      string
-		curState   string
-		curVer     int64
-		curHash    []byte
-		curExpMs   sql.NullInt64
-		envSlug    string
+		envID        string
+		curState     string
+		curVer       int64
+		curHash      []byte
+		curRecipient sql.NullString
+		curExpMs     sql.NullInt64
+		envSlug      string
 	)
 	err = tx.QueryRowContext(ctx, `
-		SELECT vk.env_id, vk.state, vk.version, vk.active_key_hash, vk.expires_at_ms, e.slug
+		SELECT vk.env_id, vk.state, vk.version, vk.active_key_hash, vk.expires_at_ms, e.slug, vk.active_key_recipient_principal_id
 		FROM virtual_keys vk
 		JOIN environments e ON e.org_id = vk.org_id AND e.id = vk.env_id
 		WHERE vk.org_id = ? AND vk.id = ?`,
 		params.OrgID, params.KeyID,
-	).Scan(&envID, &curState, &curVer, &curHash, &curExpMs, &envSlug)
+	).Scan(&envID, &curState, &curVer, &curHash, &curExpMs, &envSlug, &curRecipient)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, port.ErrNotFound
 	}
@@ -448,18 +463,21 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 	nextState := snapshot.KeyStateCreatedActive
 	var prevHashVal any
 	var graceVal any
+	var previousRecipient any
 	if params.GraceSeconds > 0 {
 		nextState = snapshot.KeyStateRotatingDualValid
 		prevHashVal = curHash
+		previousRecipient = nullableActor(curRecipient.String)
 		graceVal = now + params.GraceSeconds*1000
 	}
 
 	res, err := tx.ExecContext(ctx, `
 		UPDATE virtual_keys
 		SET key_prefix = ?, last_four = ?, active_key_hash = ?, previous_key_hash = ?,
+		    active_key_recipient_principal_id = ?, previous_key_recipient_principal_id = ?,
 		    grace_expires_at_ms = ?, state = ?, version = version + 1, updated_at_ms = ?
 		WHERE org_id = ? AND id = ? AND version = ?`,
-		prefix, lastFour, newDigest[:], prevHashVal, graceVal, nextState, now,
+		prefix, lastFour, newDigest[:], prevHashVal, nullableActor(params.ActorID), previousRecipient, graceVal, nextState, now,
 		params.OrgID, params.KeyID, params.ExpectedVersion,
 	)
 	if err != nil {
@@ -1204,12 +1222,12 @@ func randomBase62(length int) (string, error) {
 
 func scanVirtualKeySummary(row interface{ Scan(...any) error }) (*VirtualKeySummary, error) {
 	var (
-		s                                  VirtualKeySummary
-		ownerID, revMode                   sql.NullString
-		rpmLim, tpmLim, graceMs, expMs     sql.NullInt64
-		revMs                              sql.NullInt64
-		ephInt                             int64
-		modelsJSON, routesJSON, mcpJSON    string
+		s                               VirtualKeySummary
+		ownerID, revMode                sql.NullString
+		rpmLim, tpmLim, graceMs, expMs  sql.NullInt64
+		revMs                           sql.NullInt64
+		ephInt                          int64
+		modelsJSON, routesJSON, mcpJSON string
 	)
 	err := row.Scan(
 		&s.ID, &s.OrgID, &s.ProjectID, &s.EnvID, &ownerID, &s.Name,
@@ -1263,6 +1281,13 @@ func nullInt64Ptr(p *int64) any {
 		return nil
 	}
 	return *p
+}
+
+func nullableActor(id string) any {
+	if strings.TrimSpace(id) == "" {
+		return nil
+	}
+	return strings.TrimSpace(id)
 }
 
 func normalizeAllowedPlanes(raw string) (string, error) {

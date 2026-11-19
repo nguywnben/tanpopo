@@ -58,6 +58,9 @@ func TestSixRoleRBACMatrixAndFailClosedGuards(t *testing.T) {
 	if err := Authorize(ownerA, ActionBudgetWrite, TargetScope{OrgID: orgA, ProjectID: projA1}); err != nil {
 		t.Fatalf("ORG_OWNER ActionBudgetWrite in OrgA should succeed: %v", err)
 	}
+	if err := Authorize(ownerA, ActionWebhookWrite, TargetScope{OrgID: orgA, ProjectID: projA1}); err != nil {
+		t.Fatalf("ORG_OWNER ActionWebhookWrite in OrgA should succeed: %v", err)
+	}
 
 	// NEG-2 / AUTH-11: DEVELOPER and FINOPS_VIEWER receive 403 on plugin approvals, secret writes, and policy writes.
 	for _, role := range []string{RoleDeveloper, RoleFinOpsViewer} {
@@ -97,12 +100,12 @@ func TestSixRoleRBACMatrixAndFailClosedGuards(t *testing.T) {
 	// SECURITY_REVIEWER approves plugin capabilities, reads/verifies audit, emergency-revokes keys,
 	// but cannot write secrets or install extensions.
 	secRev := mkActor(RoleSecurityReviewer, ScopeOrg, orgA, &orgA)
-	for _, allowed := range []Action{ActionExtensionApprove, ActionAuditReadVerify, ActionVKeyRevoke, ActionKillSwitchTrigger, ActionApprovalDecide} {
+	for _, allowed := range []Action{ActionExtensionApprove, ActionAuditReadVerify, ActionVKeyRevoke, ActionKillSwitchTrigger, ActionApprovalDecide, ActionWebhookRead} {
 		if err := Authorize(secRev, allowed, TargetScope{OrgID: orgA, ProjectID: projA1}); err != nil {
 			t.Fatalf("SECURITY_REVIEWER %s expected nil, got %v", allowed, err)
 		}
 	}
-	for _, denied := range []Action{ActionSecretWrite, ActionExtensionStage, ActionBudgetWrite} {
+	for _, denied := range []Action{ActionSecretWrite, ActionExtensionStage, ActionBudgetWrite, ActionWebhookWrite} {
 		if err := Authorize(secRev, denied, TargetScope{OrgID: orgA, ProjectID: projA1}); !errors.Is(err, ErrPermissionDenied) {
 			t.Fatalf("SECURITY_REVIEWER %s expected ErrPermissionDenied, got %v", denied, err)
 		}
@@ -110,6 +113,14 @@ func TestSixRoleRBACMatrixAndFailClosedGuards(t *testing.T) {
 
 	// TEAM_ADMIN project isolation: can manage projA1, denied on projA2 and Org-owned secrets (ProjectID == "").
 	teamAdmin := mkActor(RoleTeamAdmin, ScopeProject, projA1, &orgA)
+	for _, action := range []Action{ActionWebhookRead, ActionWebhookWrite, ActionApprovalRead, ActionApprovalDecide} {
+		if err := Authorize(teamAdmin, action, TargetScope{OrgID: orgA, ProjectID: projA1}); err != nil {
+			t.Fatalf("TEAM_ADMIN project webhook permission %s expected nil, got %v", action, err)
+		}
+		if err := Authorize(teamAdmin, action, TargetScope{OrgID: orgA, ProjectID: projA2}); !errors.Is(err, ErrPermissionDenied) {
+			t.Fatalf("TEAM_ADMIN sibling webhook permission %s expected ErrPermissionDenied, got %v", action, err)
+		}
+	}
 	if err := Authorize(teamAdmin, ActionSecretWrite, TargetScope{OrgID: orgA, ProjectID: projA1}); err != nil {
 		t.Fatalf("TEAM_ADMIN projA1 secret write expected nil, got %v", err)
 	}

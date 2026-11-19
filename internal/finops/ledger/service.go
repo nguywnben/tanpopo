@@ -85,19 +85,19 @@ func (e *BudgetExceededError) Unwrap() error { return ErrBudgetExceeded }
 
 // AlertEvent represents a budget threshold or unmetered-spend alert linked to runbook INC-01.
 type AlertEvent struct {
-	Code            string
-	Runbook         string
-	OrgID           string
-	LedgerID        string
-	ScopeType       string
-	ScopeID         string
-	ThresholdPct    int
-	UtilizationPct  int
-	RequestID       string
-	SettlementID    string
-	DeploymentID    string
-	LogicalModel    string
-	OccurredAtMs    int64
+	Code           string
+	Runbook        string
+	OrgID          string
+	LedgerID       string
+	ScopeType      string
+	ScopeID        string
+	ThresholdPct   int
+	UtilizationPct int
+	RequestID      string
+	SettlementID   string
+	DeploymentID   string
+	LogicalModel   string
+	OccurredAtMs   int64
 }
 
 // AlertSink receives soft-threshold (ALT-BUDGET-*) and unmetered-spend (ALT-UNMETERED-SPEND) events.
@@ -117,32 +117,33 @@ func (f AlertSinkFunc) EmitBudgetAlert(ctx context.Context, ev AlertEvent) {
 
 // Config configures the two-phase budget ledger Service.
 type Config struct {
-	DB         *sql.DB
-	Audit      storageport.AuditSink
-	Alerts     AlertSink
-	NowMs      func() int64
-	LeaseTTLMs int64
+	DB          *sql.DB
+	Audit       storageport.AuditSink
+	Alerts      AlertSink
+	AlertOutbox func(context.Context, *sql.Tx, AlertEvent) error
+	NowMs       func() int64
+	LeaseTTLMs  int64
 }
 
 // BudgetLedger mirrors a row in budget_ledgers.
 type BudgetLedger struct {
-	ID                       string
-	OrgID                    string
-	ScopeType                string
-	ScopeID                  string
-	PeriodKind               string
-	PeriodStartMs            int64
-	PeriodEndMs              int64
-	HardLimitMicros          int64
-	ReservedHoldMicros       int64
-	SettledExactMicros       int64
-	SettledEstimatedMicros   int64
-	NegativeCarryoverMicros  int64
-	SoftAlertThresholdsPct   []int
-	LastAlertedThresholdPct  int
-	Version                  int64
-	CreatedAtMs              int64
-	UpdatedAtMs              int64
+	ID                      string
+	OrgID                   string
+	ScopeType               string
+	ScopeID                 string
+	PeriodKind              string
+	PeriodStartMs           int64
+	PeriodEndMs             int64
+	HardLimitMicros         int64
+	ReservedHoldMicros      int64
+	SettledExactMicros      int64
+	SettledEstimatedMicros  int64
+	NegativeCarryoverMicros int64
+	SoftAlertThresholdsPct  []int
+	LastAlertedThresholdPct int
+	Version                 int64
+	CreatedAtMs             int64
+	UpdatedAtMs             int64
 }
 
 // AvailableBalance returns remaining spendable headroom (may be negative under carryover AC-3).
@@ -232,11 +233,12 @@ type SettlementResult struct {
 
 // Service manages atomic two-phase integer micro-USD budget accounting over SQLite/SQL DB.
 type Service struct {
-	db         *sql.DB
-	audit      storageport.AuditSink
-	alerts     AlertSink
-	nowMs      func() int64
-	leaseTTLMs int64
+	db          *sql.DB
+	audit       storageport.AuditSink
+	alerts      AlertSink
+	alertOutbox func(context.Context, *sql.Tx, AlertEvent) error
+	nowMs       func() int64
+	leaseTTLMs  int64
 
 	txMu sync.Mutex
 
@@ -258,11 +260,12 @@ func NewService(cfg Config) (*Service, error) {
 		ttl = DefaultLeaseTTLMs
 	}
 	return &Service{
-		db:         cfg.DB,
-		audit:      cfg.Audit,
-		alerts:     cfg.Alerts,
-		nowMs:      nowFn,
-		leaseTTLMs: ttl,
+		db:          cfg.DB,
+		audit:       cfg.Audit,
+		alerts:      cfg.Alerts,
+		alertOutbox: cfg.AlertOutbox,
+		nowMs:       nowFn,
+		leaseTTLMs:  ttl,
 	}, nil
 }
 
@@ -996,6 +999,11 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 			for i := range alertsToEmit {
 				if alertsToEmit[i].SettlementID == "" {
 					alertsToEmit[i].SettlementID = setID
+				}
+				if s.alertOutbox != nil && strings.HasPrefix(alertsToEmit[i].Code, "ALT-BUDGET-") {
+					if err := s.alertOutbox(ctx, tx, alertsToEmit[i]); err != nil {
+						return fmt.Errorf("ledger: persist budget alert outbox: %w", err)
+					}
 				}
 			}
 

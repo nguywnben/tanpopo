@@ -359,28 +359,30 @@ type InstallationRecord struct {
 
 // ServiceConfig configures LifecycleService fail-closed.
 type ServiceConfig struct {
-	DB               *sql.DB
-	Audit            port.AuditSink
-	AuditEntryPoint  string // optional; defaults to "admin_api" (must match audit_events.entry_point CHECK)
-	PluginsDir       string
-	LockfilePath     string
-	Keyring          TrustedKeyring
-	ValidationPolicy ValidationPolicy
-	NowMs            func() int64
+	DB                      *sql.DB
+	Audit                   port.AuditSink
+	AuditEntryPoint         string // optional; defaults to "admin_api" (must match audit_events.entry_point CHECK)
+	PluginsDir              string
+	LockfilePath            string
+	Keyring                 TrustedKeyring
+	ValidationPolicy        ValidationPolicy
+	NowMs                   func() int64
+	RecordQuarantineEventTx func(context.Context, *sql.Tx, string, string, string) error
 }
 
 // LifecycleService manages extension extraction, validation, provenance/org trust checks,
 // SM-01 consent transitions, upgrade escalation fencing, rollback, quarantine, and tanpopo.lock.
 type LifecycleService struct {
-	mu              sync.Mutex
-	db              *sql.DB
-	audit           port.AuditSink
-	auditEntryPoint string
-	pluginsDir      string
-	lockfilePath    string
-	keyring         TrustedKeyring
-	valPolicy       ValidationPolicy
-	nowMs           func() int64
+	mu                      sync.Mutex
+	db                      *sql.DB
+	audit                   port.AuditSink
+	auditEntryPoint         string
+	pluginsDir              string
+	lockfilePath            string
+	keyring                 TrustedKeyring
+	valPolicy               ValidationPolicy
+	nowMs                   func() int64
+	recordQuarantineEventTx func(context.Context, *sql.Tx, string, string, string) error
 }
 
 // ArtifactRoot returns the service-owned root containing verified extension
@@ -429,14 +431,15 @@ func NewLifecycleService(cfg ServiceConfig) (*LifecycleService, error) {
 		nowFn = func() int64 { return time.Now().UTC().UnixMilli() }
 	}
 	return &LifecycleService{
-		db:              cfg.DB,
-		audit:           cfg.Audit,
-		auditEntryPoint: entryPoint,
-		pluginsDir:      canonPluginsDir,
-		lockfilePath:    strings.TrimSpace(cfg.LockfilePath),
-		keyring:         cfg.Keyring,
-		valPolicy:       valPolicy,
-		nowMs:           nowFn,
+		db:                      cfg.DB,
+		audit:                   cfg.Audit,
+		auditEntryPoint:         entryPoint,
+		pluginsDir:              canonPluginsDir,
+		lockfilePath:            strings.TrimSpace(cfg.LockfilePath),
+		keyring:                 cfg.Keyring,
+		valPolicy:               valPolicy,
+		nowMs:                   nowFn,
+		recordQuarantineEventTx: cfg.RecordQuarantineEventTx,
 	}, nil
 }
 
@@ -1699,6 +1702,11 @@ func (s *LifecycleService) quarantineInstallation(ctx context.Context, installat
 		"quarantine_reason": reason,
 	}, now); aerr != nil {
 		return aerr
+	}
+	if s.recordQuarantineEventTx != nil {
+		if err := s.recordQuarantineEventTx(ctx, tx, installationID, rowData.packageID, StateQuarantined); err != nil {
+			return fmt.Errorf("installer: record quarantine webhook event: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return err

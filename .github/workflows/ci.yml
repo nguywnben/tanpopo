@@ -103,6 +103,10 @@ jobs:
           cache: npm
           cache-dependency-path: web/console/package-lock.json
 
+      - name: Install Web Console and MCP reference-client test dependencies
+        working-directory: web/console
+        run: npm ci --ignore-scripts
+
       - name: Download & Verify Go Module Dependencies (Before Offline Hermetic Tests)
         shell: bash
         run: |

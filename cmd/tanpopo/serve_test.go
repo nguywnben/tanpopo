@@ -5,7 +5,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -376,39 +379,160 @@ func TestServeRefusesInsecureMasterKEKFileBeforeListening(t *testing.T) {
 }
 
 func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T) {
-	dataDir := filepath.Join(t.TempDir(), "data")
-	t.Setenv("TANPOPO_DATA_DIR", dataDir)
-	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	t.Setenv("TANPOPO_MASTER_KEY_FILE", "")
+	const parentDirEnv = "TANPOPO_TEST_DATA_PLANE_PARENT_DIR"
+	const nonceEnv = "TANPOPO_TEST_DATA_PLANE_NONCE"
+	if isDataPlaneRuntimeChildInvocation() {
+		if nonce := os.Getenv(nonceEnv); nonce != "" {
+			testDataPlaneRoleRuntimeChild(t, os.Getenv("TANPOPO_DATA_DIR"), os.Getenv(parentDirEnv), nonce)
+			return
+		}
+	}
+	parentDir := t.TempDir()
+	dataDir := filepath.Join(parentDir, "data")
+	readyPath := filepath.Join(parentDir, "shutdown.ready")
+	releasePath := filepath.Join(parentDir, "shutdown.release")
+	logPath := filepath.Join(parentDir, "child.log")
+	challengePath := filepath.Join(parentDir, "shutdown.challenge")
+	nonceBytes := make([]byte, 32)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		t.Fatalf("generate child handshake: %v", err)
+	}
+	nonce := hex.EncodeToString(nonceBytes)
+	if err := os.WriteFile(challengePath, []byte(nonce), 0o600); err != nil {
+		t.Fatalf("write child handshake: %v", err)
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken$")
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		t.Fatalf("create child log: %v", err)
+	}
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.Env = testEnvWithOverrides(os.Environ(), map[string]string{
+		parentDirEnv:                   parentDir,
+		nonceEnv:                       nonce,
+		"TANPOPO_DATA_DIR":             dataDir,
+		"TANPOPO_PLUGINS_DIR":          filepath.Join(dataDir, "plugins"),
+		"TANPOPO_DB_PATH":              filepath.Join(dataDir, "tanpopo.db"),
+		"TANPOPO_LOCK_FILE":            filepath.Join(dataDir, "tanpopo.lock"),
+		"TANPOPO_BOOTSTRAP_TOKEN_FILE": filepath.Join(dataDir, "bootstrap.token"),
+		"TANPOPO_MASTER_KEY":           "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		"TANPOPO_MASTER_KEY_FILE":      "",
+		"TANPOPO_TEST_HERMETIC":        "1",
+	})
+	if err := cmd.Start(); err != nil {
+		_ = logFile.Close()
+		t.Fatalf("start data-plane runtime child: %v", err)
+	}
+	_ = logFile.Close()
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- cmd.Wait() }()
+	waited := false
+	defer func() {
+		if waited {
+			return
+		}
+		_ = os.WriteFile(releasePath, []byte("release"), 0o600)
+		select {
+		case <-waitDone:
+		case <-time.After(10 * time.Second):
+			_ = cmd.Process.Kill()
+			<-waitDone
+		}
+	}()
+
+	deadline := time.Now().Add(30 * time.Second)
+	ready := false
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(readyPath); err == nil {
+			ready = true
+			break
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("check child shutdown marker: %v", err)
+		}
+		select {
+		case err := <-waitDone:
+			waited = true
+			t.Fatalf("data-plane runtime child exited before shutdown check: %v\n%s", err, readTestLog(logPath))
+		default:
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !ready {
+		_ = os.WriteFile(releasePath, []byte("release"), 0o600)
+		select {
+		case err := <-waitDone:
+			waited = true
+			t.Fatalf("data-plane runtime child did not reach shutdown check: %v\n%s", err, readTestLog(logPath))
+		case <-time.After(10 * time.Second):
+			_ = cmd.Process.Kill()
+			<-waitDone
+			waited = true
+			t.Fatalf("data-plane runtime child did not reach shutdown check\n%s", readTestLog(logPath))
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "tanpopo.db")); err != nil {
+		_ = os.WriteFile(releasePath, []byte("release"), 0o600)
+		<-waitDone
+		waited = true
+		t.Fatalf("child did not create its SQLite database: %v\n%s", err, readTestLog(logPath))
+	}
+	// The child has shut down the runtime and dropped its local references but
+	// remains alive. Deletion here verifies SQLite released the file handles
+	// before process exit; subprocess isolation keeps repeated runs independent.
+	var removeErr error
+	for attempt := 0; attempt < 600; attempt++ {
+		removeErr = os.RemoveAll(dataDir)
+		if removeErr == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	_ = os.WriteFile(releasePath, []byte("release"), 0o600)
+	childErr := <-waitDone
+	waited = true
+	if childErr != nil {
+		t.Fatalf("data-plane runtime child failed: %v\n%s", childErr, readTestLog(logPath))
+	}
+	if removeErr != nil {
+		t.Fatalf("runtime left data directory locked after shutdown: %v\n%s", removeErr, readTestLog(logPath))
+	}
+}
+
+func isDataPlaneRuntimeChildInvocation() bool {
+	const selector = "^TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken$"
+	for i, arg := range os.Args {
+		if arg == "-test.run="+selector || (arg == "-test.run" && i+1 < len(os.Args) && os.Args[i+1] == selector) {
+			return true
+		}
+	}
+	return false
+}
+
+func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce string) {
+	parentAbs, err := filepath.Abs(parentDir)
+	tempAbs, tempErr := filepath.Abs(os.TempDir())
+	if err != nil || tempErr != nil || !filepath.IsAbs(parentDir) || filepath.Clean(dataDir) != filepath.Join(parentAbs, "data") {
+		t.Fatalf("child data directory is outside its temporary parent: parent=%q data=%q", parentDir, dataDir)
+	}
+	rel, err := filepath.Rel(tempAbs, parentAbs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		t.Fatalf("child parent directory is outside the system temp root: parent=%q temp=%q", parentAbs, tempAbs)
+	}
+	challenge, err := os.ReadFile(filepath.Join(parentDir, "shutdown.challenge"))
+	if err != nil || string(challenge) != nonce {
+		t.Fatalf("child handshake is invalid: %v", err)
+	}
+	if filepath.Clean(os.Getenv("TANPOPO_DB_PATH")) != filepath.Join(parentAbs, "data", "tanpopo.db") ||
+		filepath.Clean(os.Getenv("TANPOPO_PLUGINS_DIR")) != filepath.Join(parentAbs, "data", "plugins") ||
+		filepath.Clean(os.Getenv("TANPOPO_LOCK_FILE")) != filepath.Join(parentAbs, "data", "tanpopo.lock") ||
+		filepath.Clean(os.Getenv("TANPOPO_BOOTSTRAP_TOKEN_FILE")) != filepath.Join(parentAbs, "data", "bootstrap.token") {
+		t.Fatal("child runtime paths are not confined to the temporary data directory")
+	}
 	handler, closeRuntime, err := buildRuntime(context.Background(), "data-plane", "127.0.0.1:8080")
 	if err != nil {
 		t.Fatalf("build data-plane runtime: %v", err)
 	}
-	t.Cleanup(func() {
-		if err := closeRuntimeAndReleaseReferences(&closeRuntime, &handler); err != nil {
-			t.Errorf("runtime shutdown returned error: %v\nactive goroutine functions:\n%s", err, runtimeGoroutineFunctionNames())
-		}
-		// modernc SQLite's Windows file handle can outlive sql.DB.Close until the
-		// driver's finalizable connection wrapper is collected.
-		runtime.GC()
-		// Windows runners can briefly retain a SQLite file handle after database
-		// Close returns. Allow the OS's file-handle teardown to settle, while still
-		// failing if the runtime keeps the database connection open. Re-collect
-		// finalizable modernc wrappers during the bounded retry window; one forced
-		// collection before the loop is not deterministic on Windows.
-		var removeErr error
-		for attempt := 0; attempt < 600; attempt++ {
-			if attempt > 0 && attempt%10 == 0 {
-				runtime.GC()
-			}
-			removeErr = os.RemoveAll(dataDir)
-			if removeErr == nil {
-				return
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
-		t.Errorf("runtime left data directory locked after close: %v", removeErr)
-	})
 	for _, path := range []string{"/admin/v1/unknown", "/"} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
@@ -419,6 +543,55 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	if _, err := os.Stat(filepath.Join(dataDir, "bootstrap.token")); !os.IsNotExist(err) {
 		t.Fatalf("data-plane role created an unused bootstrap token: err=%v", err)
 	}
+	if err := closeRuntime(); err != nil {
+		t.Fatalf("runtime shutdown returned error: %v\nactive goroutine functions:\n%s", err, runtimeGoroutineFunctionNames())
+	}
+	handler = nil
+	closeRuntime = nil
+	runtime.GC()
+	if err := os.WriteFile(filepath.Join(parentDir, "shutdown.ready"), []byte("ready"), 0o600); err != nil {
+		t.Fatalf("write child shutdown marker: %v", err)
+	}
+	deadline := time.Now().Add(40 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(filepath.Join(parentDir, "shutdown.release")); err == nil {
+			return
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("check parent release marker: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for parent cleanup assertion")
+}
+
+func testEnvWithOverrides(env []string, overrides map[string]string) []string {
+	result := make([]string, 0, len(env)+len(overrides))
+	allowed := map[string]struct{}{
+		"PATH": {}, "SYSTEMROOT": {}, "WINDIR": {}, "TEMP": {}, "TMP": {}, "TMPDIR": {},
+		"TANPOPO_TEST_HERMETIC": {},
+	}
+	for _, entry := range env {
+		name, _, _ := strings.Cut(entry, "=")
+		name = strings.ToUpper(name)
+		if _, replace := overrides[name]; replace {
+			continue
+		}
+		if _, keep := allowed[name]; keep {
+			result = append(result, entry)
+		}
+	}
+	for name, value := range overrides {
+		result = append(result, name+"="+value)
+	}
+	return result
+}
+
+func readTestLog(path string) string {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Sprintf("(could not read child log: %v)", err)
+	}
+	return string(content)
 }
 
 func runtimeGoroutineFunctionNames() string {
@@ -440,18 +613,6 @@ func runtimeGoroutineFunctionNames() string {
 		}
 	}
 	return out.String()
-}
-
-func closeRuntimeAndReleaseReferences(closeRuntime *func() error, handler *http.Handler) error {
-	var closeErr error
-	if closeRuntime != nil && *closeRuntime != nil {
-		closeErr = (*closeRuntime)()
-		*closeRuntime = nil
-	}
-	if handler != nil {
-		*handler = nil
-	}
-	return closeErr
 }
 
 func TestStandaloneBinaryServesWithoutSourceAssets(t *testing.T) {

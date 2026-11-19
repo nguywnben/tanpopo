@@ -207,6 +207,7 @@ type AdmissionQuery struct {
 // TriggerParams parameterizes activation of a persistent 4-level emergency kill switch.
 type TriggerParams struct {
 	OrgID                  *string
+	ProjectID              string
 	Level                  Level
 	TargetID               string
 	Reason                 string
@@ -241,21 +242,23 @@ type ListFilter struct {
 
 // RegistryConfig configures the 4-level Emergency Kill-Switch Registry.
 type RegistryConfig struct {
-	DB      *sql.DB
-	Audit   port.AuditSink
-	NowMs   func() int64
-	Streams *StreamRegistry
-	OnAbort func(level Level, orgID, targetID string) // Optional external aborter hook (e.g., snapshot.ActiveStreamRegistry).
+	DB              *sql.DB
+	Audit           port.AuditSink
+	NowMs           func() int64
+	Streams         *StreamRegistry
+	OnAbort         func(level Level, orgID, targetID string) // Optional external aborter hook (e.g., snapshot.ActiveStreamRegistry).
+	RecordWebhookTx func(context.Context, *sql.Tx, string, string, string, string, []byte) error
 }
 
 // Registry persists emergency_kill_switches, enforces transactional audit + config_changelog
 // atomicity, serves O(1)/lock-fast CheckAdmission lookups, and severs active SSE streams in < 1s.
 type Registry struct {
-	db      *sql.DB
-	audit   port.TxAuditSink
-	nowMs   func() int64
-	streams *StreamRegistry
-	onAbort func(level Level, orgID, targetID string)
+	db              *sql.DB
+	audit           port.TxAuditSink
+	nowMs           func() int64
+	streams         *StreamRegistry
+	onAbort         func(level Level, orgID, targetID string)
+	recordWebhookTx func(context.Context, *sql.Tx, string, string, string, string, []byte) error
 
 	syncMu      sync.Mutex // Serializes DB-to-active-map sync across Trigger/Clear/RefreshFromDB before releasing for stream aborts.
 	mu          sync.RWMutex
@@ -284,12 +287,13 @@ func NewRegistry(ctx context.Context, cfg RegistryConfig) (*Registry, error) {
 		streams = NewStreamRegistry()
 	}
 	r := &Registry{
-		db:      cfg.DB,
-		audit:   txAudit,
-		nowMs:   nowFn,
-		streams: streams,
-		onAbort: cfg.OnAbort,
-		active:  make(map[string]KillSwitch),
+		db:              cfg.DB,
+		audit:           txAudit,
+		nowMs:           nowFn,
+		streams:         streams,
+		onAbort:         cfg.OnAbort,
+		recordWebhookTx: cfg.RecordWebhookTx,
+		active:          make(map[string]KillSwitch),
 	}
 	if err := r.RefreshFromDB(ctx); err != nil {
 		return nil, err
@@ -609,6 +613,18 @@ func (r *Registry) TriggerWithSeveredCount(ctx context.Context, p TriggerParams)
 		"abort_active_streams": abortStreams,
 	}, now); err != nil {
 		return nil, 0, err
+	}
+	if r.recordWebhookTx != nil && (orgID != "" || p.Level == LevelExtensionInstallation) {
+		payload, marshalErr := json.Marshal(map[string]any{
+			"kill_switch_id": ksID, "target_level": string(p.Level), "target_id": targetID,
+			"abort_active_streams": abortStreams,
+		})
+		if marshalErr != nil {
+			return nil, 0, fmt.Errorf("killswitch: marshal webhook event: %w", marshalErr)
+		}
+		if err := r.recordWebhookTx(ctx, tx, orgID, p.ProjectID, ksID, "kill_switch.triggered", payload); err != nil {
+			return nil, 0, fmt.Errorf("killswitch: record webhook event: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

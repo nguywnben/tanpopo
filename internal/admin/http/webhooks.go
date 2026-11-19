@@ -1,0 +1,220 @@
+// Copyright 2026 The Tanpopo Authors.
+// Licensed under the Apache License, Version 2.0.
+
+package http
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/nguywnben/tanpopo/internal/iam/rbac"
+	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/security/broker"
+	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/security/vault"
+)
+
+type webhookResource struct {
+	ID           string   `json:"id"`
+	OrgID        string   `json:"org_id"`
+	ProjectID    *string  `json:"project_id"`
+	TargetOrigin string   `json:"target_origin"` // Receiver paths and query strings may contain secrets.
+	Events       []string `json:"events"`
+	Enabled      bool     `json:"enabled"`
+	Version      int64    `json:"version"`
+	CreatedMs    int64    `json:"created_at_ms"`
+}
+
+func readWebhook(row governanceRow) (webhookResource, error) {
+	var item webhookResource
+	var rawURL, events string
+	err := row.Scan(&item.ID, &item.OrgID, &item.ProjectID, &rawURL, &events, &item.Enabled, &item.Version, &item.CreatedMs)
+	if err != nil {
+		return item, err
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return item, err
+	}
+	item.TargetOrigin = u.Scheme + "://" + u.Host
+	err = json.Unmarshal([]byte(events), &item.Events)
+	return item, err
+}
+
+func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	org, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	scope, args, ok := governanceListScope(w, r, sc, org, rbac.ActionWebhookRead, "project_id")
+	if !ok {
+		return
+	}
+	query := `SELECT id,org_id,project_id,target_url,event_types_json,enabled,version,created_at_ms
+		FROM webhook_subscriptions WHERE org_id=?` + scope
+	governancePage(s, w, r, "webhooks", org, "", query, "created_at_ms", "id", append([]any{org}, args...), readWebhook, func(v webhookResource) (int64, string) { return v.CreatedMs, v.ID })
+}
+
+func validWebhookEvents(events []string) bool {
+	seen := map[string]bool{}
+	if len(events) == 0 {
+		return false
+	}
+	for _, e := range events {
+		switch e {
+		case "budget.threshold", "mcp.approval.pending", "extension.quarantined", "kill_switch.triggered":
+		default:
+			return false
+		}
+		if seen[e] {
+			return false
+		}
+		seen[e] = true
+	}
+	return true
+}
+
+func (s *Server) validateWebhookTarget(ctx context.Context, raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(raw, "#") {
+		return nil, egress.ErrInvalidPolicy
+	}
+	port := u.Port()
+	if port == "" {
+		port = "443"
+	}
+	policy := egress.Policy{AllowedHosts: []string{net.JoinHostPort(u.Hostname(), port)}, RequireTLS: true}
+	if _, err = policy.ValidateTargetURL(raw); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err = validateEndpointSSRF(ctx, raw, false, s.hostResolver, s.blockedPorts); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+func (s *Server) handleCreateWebhook(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	org, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	var req struct {
+		ProjectID    string   `json:"project_id"`
+		TargetURL    string   `json:"target_url"`
+		Events       []string `json:"events"`
+		CredentialID string   `json:"signing_credential_id"`
+	}
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	// SCR-12 restricts subscription configuration to budget administrators in
+	// the target scope. Both permissions must come from a binding in that scope.
+	target := rbac.TargetScope{OrgID: org, ProjectID: req.ProjectID}
+	if !s.authorize(w, r, sc, rbac.ActionWebhookWrite, target) || !s.authorize(w, r, sc, rbac.ActionBudgetWrite, target) {
+		return
+	}
+	if !validWebhookEvents(req.Events) || strings.TrimSpace(req.CredentialID) == "" {
+		writeErrorEnvelope(w, r, 400, "invalid_request", "invalid_request_error", "a signing credential and a nonempty list of unique supported events are required", false, nil)
+		return
+	}
+	if !s.requireActiveOrgAndProject(w, r, org, req.ProjectID) {
+		return
+	}
+	targetURL, err := s.validateWebhookTarget(r.Context(), req.TargetURL)
+	if err != nil {
+		writeConnectionSSRFError(w, r, err)
+		return
+	}
+	id, err := idgen.New(idgen.PrefixWebhook)
+	if err != nil {
+		mcpInternal(w, r, "failed generating subscription ID")
+		return
+	}
+	ctx := r.Context()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		mcpInternal(w, r, "failed starting webhook registration")
+		return
+	}
+	defer tx.Rollback()
+	var subscriptions int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM webhook_subscriptions WHERE org_id=? AND enabled=1`, org).Scan(&subscriptions); err != nil {
+		mcpInternal(w, r, "failed checking webhook quota")
+		return
+	}
+	if subscriptions >= 100 {
+		writeErrorEnvelope(w, r, 429, "webhook_subscription_limit", "rate_limit_error", "organization webhook subscription limit reached", false, nil)
+		return
+	}
+
+	var audience *string
+	err = tx.QueryRowContext(ctx, `SELECT bound_audience FROM secret_credentials
+		WHERE org_id=? AND id=? AND secret_kind=? AND owner_project_id IS ?`, org, req.CredentialID, vault.SecretKindWebhookHMAC, nullableString(req.ProjectID)).Scan(&audience)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "signing credential unavailable in this scope", false, nil)
+		return
+	}
+	if err != nil {
+		mcpInternal(w, r, "failed checking signing credential")
+		return
+	}
+	if matches, _ := broker.AudienceMatches(targetURL, audience); !matches {
+		writeErrorEnvelope(w, r, 400, "credential_audience_mismatch", "invalid_request_error", "signing credential is not bound to this target", false, nil)
+		return
+	}
+	fullTarget := []byte(req.TargetURL)
+	defer clear(fullTarget)
+	var ownerProject *string
+	if req.ProjectID != "" {
+		ownerProject = &req.ProjectID
+	}
+	targetSecret, activateTargetSecret, err := s.vault.SealSecretTx(ctx, tx, vault.SealSecretParams{
+		OrgID: org, OwnerProjectID: ownerProject, SecretKind: vault.SecretKindWebhookHMAC,
+		BoundAudience: &req.TargetURL, Name: "webhook target " + id, Plaintext: fullTarget,
+	})
+	if err != nil {
+		mcpInternal(w, r, "failed sealing webhook target")
+		return
+	}
+	now := s.nowMs()
+	events, err := json.Marshal(req.Events)
+	if err != nil {
+		mcpInternal(w, r, "failed encoding subscription events")
+		return
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO webhook_subscriptions(id,org_id,project_id,name,target_url,target_url_credential_id,signing_secret_credential_id,event_types_json,created_at_ms,updated_at_ms)
+		VALUES(?,?,?,?,?,?,?,?,?,?)`, id, org, nullableString(req.ProjectID), id, targetURL.Scheme+"://"+targetURL.Host, targetSecret.ID, req.CredentialID, string(events), now, now)
+	if err != nil {
+		mcpInternal(w, r, "failed saving webhook registration")
+		return
+	}
+	err = s.appendMCPAuditTx(r, tx, org, sc.Actor.PrincipalID, "webhook.registered", "webhook_subscription", id, nil)
+	if err != nil || tx.Commit() != nil {
+		mcpInternal(w, r, "failed committing webhook registration and audit")
+		return
+	}
+	activateTargetSecret()
+	w.Header().Set("ETag", FormatETag(1))
+	writeJSON(w, http.StatusCreated, webhookResource{
+		ID: id, OrgID: org, ProjectID: ptrOrNil(req.ProjectID),
+		TargetOrigin: targetURL.Scheme + "://" + targetURL.Host, Events: req.Events,
+		Enabled: true, Version: 1, CreatedMs: now,
+	})
+}

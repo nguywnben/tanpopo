@@ -12,10 +12,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/nguywnben/tanpopo/internal/ingress/mcp/firewall"
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/schema_pin"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 )
@@ -26,6 +28,20 @@ type BrokerClient struct {
 	Broker  *broker.BlindHostCredentialBroker
 	Timeout time.Duration
 	seq     atomic.Uint64
+}
+
+type idempotencyContextKey struct{}
+
+func validIdempotencyKey(key string) bool {
+	if len(key) == 0 || len(key) > 128 {
+		return false
+	}
+	for i := 0; i < len(key); i++ {
+		if key[i] < 0x21 || key[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 const defaultMCPUpstreamTimeout = 30 * time.Second
@@ -105,7 +121,7 @@ func (c *BrokerClient) listToolsInSession(ctx context.Context, server serverReco
 	return nil, errors.New("upstream tools/list exceeded pagination limit")
 }
 
-func (c *BrokerClient) VerifyAndCallTool(ctx context.Context, server serverRecord, name string, arguments json.RawMessage, approvedHash string, approved schema_pin.Definition) (schema_pin.Verification, json.RawMessage, error) {
+func (c *BrokerClient) VerifyAndCallTool(ctx context.Context, server serverRecord, name string, arguments json.RawMessage, approvedHash string, approved schema_pin.Definition, class firewall.Class) (schema_pin.Verification, json.RawMessage, error) {
 	if c == nil || c.Broker == nil || server.Transport != "STREAMABLE_HTTP" {
 		return schema_pin.Verification{}, nil, errors.New("MCP broker client is unavailable or transport unsupported")
 	}
@@ -142,7 +158,8 @@ func (c *BrokerClient) VerifyAndCallTool(ctx context.Context, server serverRecor
 	if err != nil || verification.Drift {
 		return verification, nil, err
 	}
-	reply, err := c.rpc(ctx, server, "tools/call", map[string]any{"name": name, "arguments": arguments}, init.SessionID)
+	idempotencyKey, _ := ctx.Value(idempotencyContextKey{}).(string)
+	reply, err := c.invoke(ctx, server, name, arguments, init.SessionID, class, idempotencyKey)
 	if err != nil {
 		return verification, nil, err
 	}
@@ -166,19 +183,53 @@ func (c *BrokerClient) CallTool(ctx context.Context, server serverRecord, name s
 	if _, err := c.notify(ctx, server, "notifications/initialized", map[string]any{}, init.SessionID); err != nil {
 		return nil, err
 	}
-	reply, err := c.rpc(ctx, server, "tools/call", map[string]any{"name": name, "arguments": arguments}, init.SessionID)
+	reply, err := c.invoke(ctx, server, name, arguments, init.SessionID, firewall.Mutating, "")
 	return reply.Result, err
 }
 
-func (c *BrokerClient) rpc(ctx context.Context, server serverRecord, method string, params any, sessionID string) (upstreamReply, error) {
+var errUpstreamTransport = errors.New("MCP upstream transport failed")
+
+func (c *BrokerClient) invoke(ctx context.Context, server serverRecord, name string, arguments json.RawMessage, sessionID string, class firewall.Class, idempotencyKey string) (upstreamReply, error) {
+	params := map[string]any{"name": name, "arguments": arguments}
+	if firewall.RetryAllowed(class, true) {
+		return c.rpc(ctx, server, "tools/call", params, sessionID, idempotencyKey)
+	}
+	var dispatched atomic.Bool
+	callCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	callCtx = httptrace.WithClientTrace(callCtx, &httptrace.ClientTrace{
+		WroteHeaders: func() { dispatched.Store(true) },
+		// The broker can follow a redirect. Stop a second transmission after
+		// any headers of the original invocation have gone on the wire.
+		GetConn: func(string) {
+			if dispatched.Load() {
+				cancel()
+			}
+		},
+	})
+	reply, err := c.rpc(callCtx, server, "tools/call", params, sessionID, idempotencyKey)
+	if dispatched.Load() && errors.Is(err, errUpstreamTransport) {
+		return upstreamReply{}, firewall.ErrAmbiguousSideEffectTimeout
+	}
+	return reply, err
+}
+
+func (c *BrokerClient) rpc(ctx context.Context, server serverRecord, method string, params any, sessionID string, idempotencyKey ...string) (upstreamReply, error) {
 	id := c.seq.Add(1)
 	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
 	if err != nil {
 		return upstreamReply{}, err
 	}
-	reply, err := c.send(ctx, server, body, sessionID)
+	key := ""
+	if len(idempotencyKey) > 0 {
+		key = idempotencyKey[0]
+	}
+	reply, err := c.sendWithIdempotency(ctx, server, body, sessionID, key)
 	if err != nil {
 		return upstreamReply{}, err
+	}
+	if method == "tools/call" && (reply.Status == http.StatusBadGateway || reply.Status == http.StatusGatewayTimeout) {
+		return upstreamReply{}, errUpstreamTransport
 	}
 	if reply.Status != http.StatusOK {
 		return upstreamReply{}, fmt.Errorf("MCP upstream returned HTTP %d", reply.Status)
@@ -231,6 +282,10 @@ func (c *BrokerClient) notify(ctx context.Context, server serverRecord, method s
 }
 
 func (c *BrokerClient) send(ctx context.Context, server serverRecord, body []byte, sessionID string) (upstreamReply, error) {
+	return c.sendWithIdempotency(ctx, server, body, sessionID, "")
+}
+
+func (c *BrokerClient) sendWithIdempotency(ctx context.Context, server serverRecord, body []byte, sessionID, idempotencyKey string) (upstreamReply, error) {
 	if len(body) > maxJSONRPCBytes {
 		return upstreamReply{}, errors.New("MCP upstream request exceeds body limit")
 	}
@@ -242,19 +297,22 @@ func (c *BrokerClient) send(ctx context.Context, server serverRecord, body []byt
 	if sessionID != "" {
 		headers[sessionHeader] = sessionID
 	}
+	if idempotencyKey != "" {
+		headers["Idempotency-Key"] = idempotencyKey
+	}
 	stream, err := c.Broker.ExecuteStreamWithHostConstraint(ctx, broker.EgressRequest{
 		OrgID: server.OrgID, ConnectionID: server.ID, Method: http.MethodPost, TargetURL: server.Endpoint,
 		SafeHeaders: headers, BodyBytes: body, CredentialInjections: injections,
 		ActorKind: "SYSTEM", ActorID: "mcp_hub", EntryPoint: "data_plane_guard",
 	}, broker.HostEgressConstraint{})
 	if err != nil {
-		return upstreamReply{}, errors.New("MCP upstream request failed")
+		return upstreamReply{}, errUpstreamTransport
 	}
 	defer stream.Body.Close()
 	payload, err := io.ReadAll(io.LimitReader(stream.Body, maxToolBytes+1))
 	if err != nil {
 		clear(payload)
-		return upstreamReply{}, errors.New("MCP upstream response read failed")
+		return upstreamReply{}, errUpstreamTransport
 	}
 	if len(payload) > maxToolBytes {
 		clear(payload)
