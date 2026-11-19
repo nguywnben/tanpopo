@@ -39,9 +39,10 @@ func TestIndexSyncerPersistsVerifiedIndexAndServesCacheOffline(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	entryJSON := `[{"package_slug":"community/adapter","version":"1.2.3","digest":"` + digest + `","oci_uri":"oci://registry.example.com/community/adapter@sha256:` + digest + `"}]`
 	rawFeed := signedEnvelope(t, FeedIndex, 1, now.Add(time.Hour), entryJSON, "root", privateKey)
+	feedBody := rawFeed
 	client := &http.Client{Transport: registryRoundTripper(func(req *http.Request) (*http.Response, error) {
 		if req.URL.String() == "https://index.example.com/index.json" {
-			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(string(rawFeed))), Request: req}, nil
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(string(feedBody))), Request: req}, nil
 		}
 		return nil, errors.New("offline")
 	})}
@@ -51,6 +52,13 @@ func TestIndexSyncerPersistsVerifiedIndexAndServesCacheOffline(t *testing.T) {
 	fresh, err := syncer.Sync(context.Background())
 	if err != nil || fresh.FromCache || fresh.SyncError != nil || len(fresh.Entries) != 1 || store.serial != 1 {
 		t.Fatalf("fresh verified index result=%+v serial=%d err=%v", fresh, store.serial, err)
+	}
+	feedBody = append([]byte(nil), rawFeed...)
+	feedBody[len(feedBody)-3] ^= 1
+	syncer.URL = "https://index.example.com/index.json"
+	forged, err := syncer.Sync(context.Background())
+	if err != nil || !forged.FromCache || !errors.Is(forged.SyncError, ErrInvalidSignature) || store.serial != 1 {
+		t.Fatalf("forged feed must preserve cached verified index: result=%+v serial=%d err=%v", forged, store.serial, err)
 	}
 	syncer.URL = "https://index.example.com/unavailable.json"
 	offline, err := syncer.Sync(context.Background())

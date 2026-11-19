@@ -23,8 +23,11 @@
 ### Resumed checkpoint (2026-11-19)
 
 - **GPT-6 Luna** resumed implementation on persistent `develop`; no independent reviewer has participated yet. The required `code-reviewer` and `security-auditor` reviews remain pending on the final diff.
+- **Wegener (test-engineer)** independently inspected the Windows cleanup failure from run `44443971551` without changing code. The 30-second persistent SQLite file lock may indicate a real lifecycle cleanup defect; one subsequent Windows pass is insufficient to call it a flake. A repeated targeted Windows run and handle-lifecycle diagnosis are still needed before classifying it.
+- Added a Windows-only supplemental CI step to repeat `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken` five times. It retains all existing checks and assertions; the first result on a new workflow run is pending.
 - Actions run `44443097126` on `f982073` exposed a real migration test regression: the OAuth migration test incorrectly required migration 0016 to remain the newest migration after Unit 35 added 0017. Commit `62943bd04116e088c60b4f931c594a1f5f2dcaf4` scopes the OAuth fresh/upgrade fixture through migration 0016 while preserving the exact upgrade assertions. Run `44443482247` on that checkpoint has Stage 0 green; all three Stage 1 jobs were still running at this checkpoint.
 - Added an `IndexSyncer` that verifies and persists signed monotonic index feeds, returns cached verified entries on fetch or validation failure, and exposes the sync failure as `SyncError`; focused tests cover fresh sync and offline cache use. This is not yet wired into the runtime marketplace/installer path.
+- Run `44443971551` on `38d3e96` exposed a Windows-only database file-handle cleanup failure in the existing `cmd/tanpopo` test `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; the same test passes on Windows in run `44444232411` on `f0388a8`, so this has not reproduced and no implementation change was made for it. Stage 0 and Windows were green on `f0388a8`; Ubuntu and macOS were still running.
 - Unit 35 remains in progress. Production wiring for the marketplace pull path and revocation watcher, concrete quarantine/stream-fence/`INC-03` actions, official Bedrock and Azure adapters, rerank provider contract coverage, final acceptance evidence, and independent reviews remain open.
 
 ## Remaining work
