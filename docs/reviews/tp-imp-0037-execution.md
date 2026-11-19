@@ -1,6 +1,6 @@
 # TP-IMP-0037 Execution Checkpoint
 
-**Status:** Implementation complete; local verification, independent reviews, PR checks, and release artifact dry run pass. Unit 37 remains `READY_FOR_REVIEW` until merge and post-merge CI on `origin/main` pass.
+**Status:** Implementation complete; the final Windows cleanup-test correction passed independent review and local verification. CI on the final pushed SHA remains pending. Unit 37 remains `READY_FOR_REVIEW` until merge and post-merge CI on `origin/main` pass.
 
 ## Authority and ownership
 
@@ -10,12 +10,13 @@
 - Independent review corrections: **James** (`code-reviewer`) and **Laplace** (`security-auditor`).
 - Final review on the hardened diff: **Faraday** (`code-reviewer`) APPROVE and **Plato** (`security-auditor`) PASS.
 - Windows CI correction reviews: **Archimedes**, **Anscombe**, **Erdos**, **Newton**, and **Boyle** (`code-reviewer`); **Lagrange**, **Avicenna**, **McClintock**, **Volta**, and **Fermat** (`security-auditor`). Final delta review: **Boyle** APPROVE and **Fermat** PASS. Their findings led to an explicitly test-only, Tier-2 WASM timeout override that is disclosed in the report and never promotes `TESTED` badges.
+- Final Windows cleanup-harness review: **Herschel** (`code-reviewer`) APPROVE; **Descartes** (`security-auditor`) PASS after the child environment and fixture-path isolation correction.
 
 ## Baseline and branch
 
 - Working branch: `develop`.
 - `origin/main` baseline: `b17a2fc65f3ce139507897244d2897a73e187b34`.
-- Working branch and PR head are both `develop` at `54c7ed0e8fc6f63298971ad798a5940fb26ac4b2`.
+- Working branch is `develop`; the last pushed PR head is `b56dfd262741fb0029fff716a48a9c2abe67808b`. A focused Windows test correction is being prepared on the same branch.
 - PR [#18](https://github.com/nguywnben/tanpopo/pull/18) is open from `develop` to `main`. No Unit 38 work has started.
 
 ## Implemented checkpoint
@@ -37,11 +38,12 @@
 - `go run ./scripts/ci/check.go --all` and `git diff --check` passed on the current implementation.
 - Local full Go tests and the targeted Bedrock/harness tests pass with the reviewed Windows correction. Its final code and security reviews are **Boyle** APPROVE and **Fermat** PASS.
 - First PR CI run [`44548907596`](https://github.com/nguywnben/tanpopo/actions/runs/44548907596): Stage 0, Ubuntu Stage 1, macOS Stage 1, and the release artifact dry run passed; Windows Stage 1 failed at the Bedrock timeout described above. The test-only correction is included in the current PR head and verified by the subsequent run.
-- On PR head `54c7ed0e8fc6f63298971ad798a5940fb26ac4b2`, CI run [`44553416497`](https://github.com/nguywnben/tanpopo/actions/runs/44553416497) passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows. The first Windows attempt had one failure in five repetitions of `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`, after 30 seconds of failing to remove its temporary SQLite file because Windows reported it in use. The exact same Windows job was rerun without code changes; all five repetitions passed. This classifies the first result as a transient Windows file-lock flake, not a reproducible runtime defect. The release artifact dry run [`44553416472`](https://github.com/nguywnben/tanpopo/actions/runs/44553416472) also passed.
+- On PR head `54c7ed0e8fc6f63298971ad798a5940fb26ac4b2`, a Windows rerun passed after one of five iterations had timed out while removing a SQLite file. On the next head `b56dfd262741fb0029fff716a48a9c2abe67808b`, CI run [`44556604510`](https://github.com/nguywnben/tanpopo/actions/runs/44556604510) reproduced the timeout. That evidence did not distinguish a runtime handle leak from a test cleanup issue. The revised fixture runs route and shutdown assertions in a child process, drops runtime references, and keeps that process alive while the parent verifies database deletion; only then does it release the child. The subprocess receives only required platform/test variables and explicitly rooted data paths. **Herschel** (code-reviewer) APPROVE and **Descartes** (security-auditor) PASS on the final diff. Focused tests passed five repetitions and under `-race` locally. Awaiting CI on the pushed correction. The release artifact dry run [`44556604509`](https://github.com/nguywnben/tanpopo/actions/runs/44556604509) passed.
 - The official fixture is pinned to `@modelcontextprotocol/sdk` `1.32.2`. Scripted fixtures do not establish support for untested Claude Code, Cursor, or Codex releases.
 - No live PostgreSQL server was available, so PostgreSQL runtime behavior has static review and fail-closed unit coverage, not a live integration run.
 
 ## Next steps
 
-1. Mark PR #18 ready and merge under `DEC-072`.
-2. Verify the merge SHA, Unit 37 acceptance record, and green post-merge CI on `origin/main`; synchronize `develop` before checking Unit 38 DoR.
+1. Complete code and security review of the Windows test correction; push it to `develop` and resolve any new CI findings.
+2. Mark PR #18 ready and merge under `DEC-072` after required checks pass.
+3. Verify the merge SHA, Unit 37 acceptance record, and green post-merge CI on `origin/main`; synchronize `develop` before checking Unit 38 DoR.
