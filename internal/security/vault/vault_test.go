@@ -3329,6 +3329,60 @@ func TestVaultOAuthSessionValueUsesOrgDEKAndSessionBoundAAD(t *testing.T) {
 	}
 }
 
+func TestVaultOAuthSessionAndRotateInputValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, orgID, sessionID, purpose string
+	}{
+		{name: "empty organization", orgID: "", sessionID: "session", purpose: "state"},
+		{name: "invalid session separator", orgID: "org", sessionID: "session:other", purpose: "state"},
+		{name: "empty purpose", orgID: "org", sessionID: "session", purpose: "  "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := OAuthSessionAAD(tc.orgID, tc.sessionID, tc.purpose); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("OAuthSessionAAD error = %v, want ErrInvalidInput", err)
+			}
+		})
+	}
+
+	ctx := context.Background()
+	env := newVaultTestEnv(t, time.Minute)
+	if _, _, err := env.vault.SealOAuthSessionValue(ctx, "org", "session", "state", nil); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("empty OAuth session value error = %v, want ErrInvalidInput", err)
+	}
+	if _, _, err := env.vault.SealOAuthSessionValue(ctx, "org:invalid", "session", "state", []byte("value")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("invalid OAuth session AAD error = %v, want ErrInvalidInput", err)
+	}
+	if _, err := env.vault.UnsealOAuthSessionValue(ctx, "org", "session\ninvalid", "state", []byte("nonce"), []byte("ciphertext")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("invalid OAuth session AAD error = %v, want ErrInvalidInput", err)
+	}
+
+	if _, _, err := env.vault.RotateSecretTx(ctx, nil, "org", "secret", 1, RotateSecretParams{Plaintext: []byte("value")}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("nil transaction error = %v, want ErrInvalidInput", err)
+	}
+	tx, err := env.sqlite.RawDB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for _, tc := range []struct {
+		name, orgID, secretID string
+		version               int64
+		plaintext             []byte
+	}{
+		{name: "blank organization", orgID: " ", secretID: "secret", version: 1, plaintext: []byte("value")},
+		{name: "invalid version", orgID: "org", secretID: "secret", version: 0, plaintext: []byte("value")},
+		{name: "empty plaintext", orgID: "org", secretID: "secret", version: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, err := env.vault.RotateSecretTx(ctx, tx, tc.orgID, tc.secretID, tc.version, RotateSecretParams{Plaintext: tc.plaintext}); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("RotateSecretTx error = %v, want ErrInvalidInput", err)
+			}
+		})
+	}
+}
+
 func TestVaultRotateSecretTxChangesCiphertextOnlyAfterCommit(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

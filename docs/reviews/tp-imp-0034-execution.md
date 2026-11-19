@@ -16,6 +16,7 @@
 - Implemented by **GPT-6 Luna** under the active delegation in `DEC-060`; accepted by **GPT-6 Luna** after the required independent reviews and main CI gates pass.
 - Final code review on PR #11 SHA `e26d99d4b13cffd918e066ac1646017a44655969`: **Maxwell** (**code-reviewer**) — **APPROVE**, no required or optional findings.
 - Final security review on the same SHA: **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings; one Low observation remains that Go string copies of upstream token/client-secret values cannot be zeroized. Reviewers did not run tests; execution evidence is tracked separately below.
+- **Popper** (**test-engineer**) contributed the OAuth refresh and concurrency test plan and tests; the final CI runs exercise those tests on the accepted diff.
 
 ## Contract reconciliation
 
@@ -30,4 +31,4 @@ Implement Authorization Code + PKCE S256, Client Credentials, and authorized RFC
 
 Windows CI exposed a SQLite file-handle teardown failure in `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; cleanup now allows a bounded 30-second Windows teardown window and still fails if the runtime retains the database handle. The required checks will be rerun on the final diff.
 
-The final cross-platform CI run and artifact dry run are being tracked against the current PR #11 head. The merge SHA and post-merge acceptance CI will be recorded after merge. Unit 35 remains blocked until Unit 34 is DONE on main with green acceptance CI.
+The final cross-platform CI run exposed a Vault package coverage shortfall; focused validation cases are being added for the new OAuth session and transactional rotation APIs. The artifact dry run is tracked on the current PR #11 head. The merge SHA and post-merge acceptance CI will be recorded after merge. Unit 35 remains blocked until Unit 34 is DONE on main with green acceptance CI.
