@@ -24,7 +24,7 @@ func (r fixedRegistryCredentials) CredentialsForRegistry(_ context.Context, orgI
 	if orgID != "org_test" || host != r.host {
 		return nil, ErrRegistryAuthScope
 	}
-	return &RegistryCredentials{RegistryHost: host, Username: "robot", Password: "opaque-token"}, nil
+	return &RegistryCredentials{RegistryHost: host, Username: []byte("robot"), Password: []byte("opaque-token")}, nil
 }
 
 func TestOCIArchiveResolverStagesOnlyVerifiedIndexedArtifact(t *testing.T) {

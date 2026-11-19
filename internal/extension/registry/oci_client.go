@@ -25,8 +25,19 @@ var (
 
 type RegistryCredentials struct {
 	RegistryHost string
-	Username     string
-	Password     string
+	Username     []byte
+	Password     []byte
+}
+
+// Zeroize clears the credential buffers after a registry operation.
+func (c *RegistryCredentials) Zeroize() {
+	if c == nil {
+		return
+	}
+	clear(c.Username)
+	clear(c.Password)
+	c.Username = nil
+	c.Password = nil
 }
 
 type OCIClient struct {
@@ -45,7 +56,7 @@ func (c *OCIClient) Pull(ctx context.Context, rawRef string, credentials *Regist
 	if err != nil {
 		return nil, err
 	}
-	if credentials != nil && (!strings.EqualFold(strings.TrimSpace(credentials.RegistryHost), registryHost) || credentials.Username == "" || credentials.Password == "") {
+	if credentials != nil && (!strings.EqualFold(strings.TrimSpace(credentials.RegistryHost), registryHost) || len(credentials.Username) == 0 || len(credentials.Password) == 0) {
 		return nil, ErrRegistryAuthScope
 	}
 	endpoint := "https://" + registryHost + "/v2/" + repository + "/blobs/sha256:" + digest
@@ -55,7 +66,8 @@ func (c *OCIClient) Pull(ctx context.Context, rawRef string, credentials *Regist
 	}
 	request.Header.Set("Accept", "application/octet-stream")
 	if credentials != nil {
-		request.SetBasicAuth(credentials.Username, credentials.Password)
+		request.SetBasicAuth(string(credentials.Username), string(credentials.Password))
+		defer request.Header.Del("Authorization")
 	}
 	guarded := *c.HTTPClient
 	guarded.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }

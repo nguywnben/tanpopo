@@ -143,11 +143,11 @@ func TestOCIClientPinsDigestAndScopesCredentialsToRegistry(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body)), Request: req}, nil
 	})}}
 	ref := "oci://registry.example.com/team/adapter@sha256:" + hex.EncodeToString(digest[:])
-	got, err := client.Pull(context.Background(), ref, &RegistryCredentials{RegistryHost: "registry.example.com", Username: "bot", Password: "token"})
+	got, err := client.Pull(context.Background(), ref, &RegistryCredentials{RegistryHost: "registry.example.com", Username: []byte("bot"), Password: []byte("token")})
 	if err != nil || !bytes.Equal(got, body) {
 		t.Fatalf("pinned artifact pull failed: got=%q err=%v", got, err)
 	}
-	if _, err := client.Pull(context.Background(), ref, &RegistryCredentials{RegistryHost: "other.example.com", Username: "bot", Password: "token"}); !errors.Is(err, ErrRegistryAuthScope) {
+	if _, err := client.Pull(context.Background(), ref, &RegistryCredentials{RegistryHost: "other.example.com", Username: []byte("bot"), Password: []byte("token")}); !errors.Is(err, ErrRegistryAuthScope) {
 		t.Fatalf("credentials for another registry must be rejected, got %v", err)
 	}
 	if _, err := client.Pull(context.Background(), "oci://registry.example.com/team/adapter:latest", nil); !errors.Is(err, ErrInvalidOCIReference) {

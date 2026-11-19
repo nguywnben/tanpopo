@@ -43,3 +43,23 @@ func TestConfiguredMarketplaceKeyringAndGuardedFeedClient(t *testing.T) {
 		t.Fatalf("valid feed URL did not get guarded client: client=%v err=%v", client, err)
 	}
 }
+
+func TestParseOCIRegistryAuthRequiresExactUnescapedFields(t *testing.T) {
+	username, password, err := parseOCIRegistryAuth([]byte(`{"username":"robot","password":"token:part"}`))
+	if err != nil || string(username) != "robot" || string(password) != "token:part" {
+		t.Fatalf("parse OCI credentials username=%q password=%q err=%v", username, password, err)
+	}
+	clear(username)
+	clear(password)
+	for _, raw := range []string{
+		`{"username":"robot"}`,
+		`{"username":"robot","password":"x","password":"y"}`,
+		`{"username":"robot","password":"x",}`,
+		`{"username":"robot","password":"x","extra":"y"}`,
+		`{"username":"ro\"bot","password":"x"}`,
+	} {
+		if _, _, err := parseOCIRegistryAuth([]byte(raw)); err == nil {
+			t.Errorf("invalid OCI registry credential object accepted: %s", raw)
+		}
+	}
+}

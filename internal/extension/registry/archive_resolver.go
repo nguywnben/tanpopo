@@ -80,6 +80,7 @@ func (r *OCIArchiveResolver) Resolve(ctx context.Context, orgID, sourceURI, expe
 		if err != nil {
 			return nil, nil, fmt.Errorf("resolve registry credentials: %w", err)
 		}
+		defer credentials.Zeroize()
 	}
 	client, err := r.guardedClientForRegistry(ctx, registryHost)
 	if err != nil {

@@ -333,7 +333,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		adminServer, err := adminhttp.NewServer(adminhttp.ServerConfig{
 			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys, Ledgers: ledgerService,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
-			Installer: installerService, ArchiveResolver: newRuntimeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv), registryStore),
+			Installer: installerService, ArchiveResolver: newRuntimeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv), registryStore, vaultOCIRegistryCredentialResolver{db: db, vault: vaultStore, cap: brokerUnsealCap}),
 			Broker: blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
 		})
 		if err != nil {
@@ -361,9 +361,9 @@ func newServeArchiveResolver(root string) adminhttp.ExtensionArchiveResolver {
 	}
 }
 
-func newRuntimeArchiveResolver(root string, index registry.IndexStore) adminhttp.ExtensionArchiveResolver {
+func newRuntimeArchiveResolver(root string, index registry.IndexStore, credentials registry.RegistryCredentialResolver) adminhttp.ExtensionArchiveResolver {
 	local := newServeArchiveResolver(root)
-	oci := registry.NewOCIArchiveResolver(index, nil, egress.NewStdHostResolver())
+	oci := registry.NewOCIArchiveResolver(index, credentials, egress.NewStdHostResolver())
 	return func(ctx context.Context, orgID, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(sourceURI)), "oci://") {
 			return oci.Resolve(ctx, orgID, sourceURI, expectedSHA256)
