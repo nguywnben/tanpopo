@@ -65,6 +65,28 @@ func TestSSRFGuardAllowsConfiguredLoopbackLANTarget(t *testing.T) {
 	}
 }
 
+func TestRequirePrivateForHTTPBlocksPublicResolvedAddress(t *testing.T) {
+	t.Parallel()
+	resolver := &mockResolver{fn: func(_ int64, _ string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
+	}}
+	client, err := NewGuardedHTTPClient(ClientConfig{
+		Policy: Policy{AllowedHosts: []string{"mcp.example.test"}, AllowPrivateIP: true,
+			AllowedCIDRs: []string{"127.0.0.1/32"}, AllowedPorts: []int{80}, RequirePrivateForHTTP: true},
+		Resolver: resolver,
+	})
+	if err != nil {
+		t.Fatalf("NewGuardedHTTPClient: %v", err)
+	}
+	resp, err := client.Get("http://mcp.example.test/mcp")
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	if !errors.Is(err, ErrPrivateIPBlocked) {
+		t.Fatalf("plain HTTP to a public address returned %v, want ErrPrivateIPBlocked", err)
+	}
+}
+
 func TestSSRFGuardBlocksUnapprovedHostPreDNS_NEG1_CT14(t *testing.T) {
 	t.Parallel()
 

@@ -144,12 +144,13 @@ var (
 
 // Policy defines default-deny outbound allowlisting and connect-time IP constraints.
 type Policy struct {
-	AllowedHosts     []string
-	AllowPrivateIP   bool
-	AllowedCIDRs     []string
-	AllowedPorts     []int
-	RequireTLS       bool
-	SensitiveHeaders []string
+	AllowedHosts          []string
+	AllowPrivateIP        bool
+	AllowedCIDRs          []string
+	AllowedPorts          []int
+	RequireTLS            bool
+	RequirePrivateForHTTP bool
+	SensitiveHeaders      []string
 }
 
 type parsedHostEntry struct {
@@ -806,6 +807,14 @@ func (d *SSRFGuardDialer) checkConnectIP(ip netip.Addr, port int) error {
 				isPrivateOrSpecial = true
 				break
 			}
+		}
+	}
+	if d.policy.raw.RequirePrivateForHTTP && !unmapped.IsPrivate() && !unmapped.IsLoopback() {
+		return &Error{
+			HTTPStatus: http.StatusForbidden,
+			Code:       "egress_private_ip_blocked",
+			Message:    fmt.Sprintf("plain HTTP is restricted to an explicitly allowed private address; got %s", unmapped),
+			Err:        ErrPrivateIPBlocked,
 		}
 	}
 

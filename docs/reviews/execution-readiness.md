@@ -1,10 +1,10 @@
 # Final Delivery Readiness Audit (`ASTRA A10` — Gate G4 Stage 2 Handoff Approved) — Tanpopo
 
-> **Independent Governance Verdict Document (ASTRA A10 + `M0` + `M1` + `Wave 2.1` + `TP-IMP-0021..0025` [`DEC-011`..`DEC-032`, `DEC-034`..`DEC-039`; `DEC-033 REVOKED_BY_OWNER`])**
-> - **Report ID:** `REV-RDY-01` | **Version:** `2.30.0-dec-039-0025-done-hold-before-0026` | **Audit Date:** `2026-11-16`
+> **Independent Governance Verdict Document (ASTRA A10 + M0–M3 execution, `DEC-033 REVOKED_BY_OWNER`)**
+> - **Report ID:** `REV-RDY-01` | **Version:** `2.31.0-dec-072-mcp-batch-open` | **Audit Date:** `2026-11-19`
 > - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
-> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** *(Gate G4 Stage 2 approved via `DEC-010`; `TP-IMP-0005`..`0020` [`DEC-011`..`DEC-032`] & `TP-IMP-0021`..`0025` [`DEC-034`..`DEC-039`] are **`DONE` (`25 / 47`)**; **`DEC-033`** remains **`REVOKED_BY_OWNER`** [`8cfe2492`, CI `43798260070`]; under **`DEC-034`** [`2026-11-16`] **Gemini 4 Hydrogen** accepted **`TP-IMP-0021`** via **`DEC-035`** [`c751d74d`, CI `43811187903`], **`TP-IMP-0022`** via **`DEC-036`** [`331113e6`, CI `43825991960`], **`TP-IMP-0023`** via **`DEC-037`** [`53e0adc9`, CI `43881564733`], **`TP-IMP-0024`** via **`DEC-038`** [`0abbbc86`, CI `43900067452`], and **`TP-IMP-0025`** via **`DEC-039`** [`59595f24`, CI `43948489151`], pausing cleanly before **`TP-IMP-0026`** awaiting separate Product Owner directive)*
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` (`25 / 47` units `DONE` [`0001..0025`] · `0 / 47` `READY_FOR_REVIEW` · `0 / 47` `READY` · `22 / 47` `BLOCKED` [`0026..0047`] behind Owner pause before `0026`, upstream dependencies, review gates, & direct Owner unlock [`0031..0047`])**
+> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0035` DONE; Unit 35 acceptance is recorded on main `0a264c40ebb7288d849df14a466931cae2b1fab5`; post-merge CI `44468902234` and artifact/trusted-main attestation `44468902362` succeeded. `DEC-033` remains `REVOKED_BY_OWNER`.)
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` under `DEC-072`** (`35 / 47` DONE · `1 / 47` READY (`0036`) · `0 READY_FOR_REVIEW` · `11 / 47` BLOCKED (`0037`..`0047`)).
 
 ---
 
@@ -15,9 +15,9 @@ On `2026-11-14`, across two sequential governance rulings (`DEC-009` and `DEC-01
 2. **Approved & Reviewed Milestone `M0` (`TP-IMP-0001`..`0004` = `DONE`, `eb01661`):** Closed specification gaps `GAP-01`..`13`, compiled `proto/tanpopo/extension/v1/runtime.proto` and `openapi/*.yaml`, verified `db/spec-check/sqlite_schema.sql` live on `modernc.org/sqlite` (with static parity checks on `postgres_schema.sql`), and executed isolated offline spikes `SPIKE-01`..`04` in `tools/spikes/` ([`spike-results.md`](../architecture/spike-results.md)).
 3. **Approved Gate G4 Stage 2 (`DEC-010` — `HANDOFF_VERDICT = GO`)** after reconciling `spike-results.md` `UNIT_ID` cross-references, calibrating `PostgreSQL 16` / microbenchmark / local-vs-CI claims strictly to actual evidence, and locking explicit `AC`s for in-flight Wasm cancellation, timeout, tainted-module replacement, pool recovery, and bounded resource consumption into [`TP-IMP-0013.md`](../planning/units/TP-IMP-0013.md).
 
-**Strict Boundaries of This Handoff (`DEC-010`, `DEC-034`..`DEC-039`):**
-- **Clean Halt Before `TP-IMP-0026`:** Under [`DEC-034`](../governance/decisions.md)..[`DEC-039`](../governance/decisions.md), **`TP-IMP-0025` is `DONE`** and the queue pauses cleanly with **`0 / 47` `READY`** (`0 / 47` `READY_FOR_REVIEW`); **[`TP-IMP-0026`](../planning/units/TP-IMP-0026.md)** (`Web Console Foundation`) and `TP-IMP-0027`..`0047` (`22` units) remain **`BLOCKED`** awaiting separate Product Owner directive to unlock `0026`..`0030` under `DEC-034` while preserving all `Dependencies`, `REQUIRES_STRONG_REVIEW`, and `DoD` gates.
-- **Delegated Acceptance & Release Boundary (`DEC-060`):** GPT-6 Luna may implement, coordinate independent reviews, and accept Units 31–35 sequentially under the active Product Owner delegation. Other units remain blocked by their own authorization and dependency gates. No tags or public releases (`GATE-REL-07`).
+**Strict Boundaries of This Handoff (`DEC-060`, `DEC-072`):**
+- **Active Sequential Batch:** **GPT-6 Luna** is authorized under `DEC-072` to implement, coordinate independent reviews, merge PRs, and accept Units 36–38 sequentially. Unit 36 is READY; Unit 37 opens only after Unit 36 is DONE on main with green acceptance CI and its DoR passes; Unit 38 follows the same gate after Unit 37.
+- **Release Boundary:** Unit 39 and later work remain outside this delegation. No tags or public releases (`GATE-REL-07`).
 
 ---
 
@@ -32,7 +32,7 @@ On `2026-11-14`, across two sequential governance rulings (`DEC-009` and `DEC-01
 | **Gate G3 (`ADR-0001`..`0006` + `SPIKE-01`..`04`)** | `6` ADRs + `4` Spikes | `ACCEPTED` / `VERIFIED_IN_SPIKE` (`COND-PO-01..05`) | [`docs/architecture/adr/*`](../architecture/adr/README.md), [`spike-results.md`](../architecture/spike-results.md) | **YES** (`Track A & B`) |
 | **Audit Gate A08 (`CR-01`..`10` & `GAP-01`..`13`)** | `10` CRs / `13` Gaps | **`REMEDIATED_IN_M0` (`13 / 13 CLOSED`)** | [`unresolved-gaps.md`](./unresolved-gaps.md), `TP-IMP-0001..0004` | **YES** (`CR-01..10` Approved) |
 | **Gate G4 Stage 1 (`M0`: `TP-IMP-0001`..`0004`)** | `4 / 4` `M0` Units | **`APPROVED & DONE`** | [`implementation-index.md`](../planning/implementation-index.md), `tools/spikes/*` | **YES** (`DEC-009`) |
-| **Gate G4 Stage 2 (`M1+` Handoff and `DEC-060` Batch)** | `31 DONE`, `1 READY`, `15 BLOCKED` | **`APPROVED` (`HANDOFF_VERDICT = GO`)** | Unit 31 main SHA `6eb603a`, Actions `44319629695` green; Unit 32 DoR / `DEC-061` | **YES** (`DEC-010`, `DEC-060`, `DEC-061`) |
+| **Gate G4 Stage 2 (`M1+` Handoff; `DEC-060` / `DEC-072`)** | `35 DONE`, `1 READY`, `11 BLOCKED` | **`APPROVED` (`HANDOFF_VERDICT = GO`)** | Unit 35 main SHA `0a264c4`; Actions `44468902234` green; Unit 36 DoR passed and opened by `DEC-072` | **YES** (`DEC-010`, `DEC-060`, `DEC-072`) |
 
 ---
 
@@ -55,11 +55,11 @@ Every check below strictly separates **what has been verified locally in `M0`** 
 
 ---
 
-## 4. `TP-IMP-0005`..`0025` Acceptance (`DEC-011`..`DEC-032`, `DEC-035`..`DEC-039`) & `DEC-034` Pause Boundary (`0 READY` / `22 BLOCKED`)
+## 4. `TP-IMP-0005`..`0025` Acceptance (`DEC-011`..`DEC-032`, `DEC-035`..`DEC-039`) & Active Sequential Delivery (`1 READY` / `11 BLOCKED`)
 
 | Verification Check | Status | Concrete Evidence |
 |---|---|---|
 | **Governance Gate (`HANDOFF_VERDICT`)** | **`GO`** | Approved in `DEC-010`..`DEC-032`, `DEC-034`..`DEC-039` ([`decisions.md`](../governance/decisions.md); `DEC-033` remains `REVOKED_BY_OWNER`). |
 | **`TP-IMP-0005`..`0025` Acceptance Status** | **`DONE` *(Accepted `DEC-011`..`DEC-032`, `DEC-035`..`DEC-039`)* ** | `0005`..`0011` (`DEC-011`..`DEC-021`); `0012`..`0013` by **Carbon** (`DEC-022`..`DEC-024`); `0014`..`0020` by **Gemini 4 Hydrogen** (`DEC-025`..`DEC-032`); `0021` by **Gemini 4 Hydrogen (`DEC-034`/`DEC-035`)** at `c751d74d` (CI `43811187903`); `0022` by **Gemini 4 Hydrogen (`DEC-034`/`DEC-036`)** at `331113e6` (CI `43825991960`); `0023` by **Gemini 4 Hydrogen (`DEC-034`/`DEC-037`)** at `53e0adc9` (CI `43881564733`); `0024` by **Gemini 4 Hydrogen (`DEC-034`/`DEC-038`)** at `0abbbc86` (CI `43900067452`); **`0025` by Gemini 4 Hydrogen (`DEC-034`/`DEC-039`)** at `59595f246753386a2c55a30cf8d556f00e9f3203` (CI Run `43948489151` `completed / success`; `DEC-033` revocation `8cfe2492`, CI Run `43798260070`; fresh `code-reviewer` [`6e5d0235`] `APPROVE` & `security-auditor` [`2a52b2c1`] `PASS`). |
-| **Active `READY` Queue** | **`1 / 47` (`TP-IMP-0032`)** | Unit 32 is READY under `DEC-061`; Units 33–35 unlock sequentially after predecessor DONE on main with green post-merge CI. Units 36–47 remain blocked. |
-| **Execution Dispatch Verdict** | **`ACTIVE_DEC-060_BATCH`** | Sequential execution `0031` → `0032` → `0033` → `0034` → `0035` via persistent `develop`; each unit needs independent review at its tier, four green PR checks, merge, and post-merge CI verification before the next opens. No tags/releases (`GATE-REL-07`). |
+| **Active `READY` Queue** | **`1 / 47` (`TP-IMP-0036`)** | Units `0001`..`0035` are DONE. Unit 36 is READY under `DEC-072` after its DoR and Unit 35 post-merge CI were verified; Units `0037`..`0038` open sequentially after predecessor DONE on main with green acceptance CI. Units `0037`..`0047` are currently blocked. |
+| **Execution Dispatch Verdict** | **`ACTIVE_DEC-072_BATCH`** | Sequential execution `0036` → `0037` → `0038` via persistent `develop`; each unit needs independent review at its tier, four green PR checks, merge, and post-merge CI verification before the next opens. No tags/releases (`GATE-REL-07`). |
