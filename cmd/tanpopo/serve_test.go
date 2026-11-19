@@ -622,12 +622,26 @@ func runtimeGoroutineFunctionNames() string {
 		if strings.HasPrefix(line, "\t") || line == "" {
 			continue
 		}
-		if open := strings.IndexByte(line, '('); open > 0 {
-			out.WriteString(line[:open])
+		if name := runtimeFunctionName(line); name != "" {
+			out.WriteString(name)
 			out.WriteString("()\n")
 		}
 	}
 	return out.String()
+}
+
+func runtimeFunctionName(frame string) string {
+	if open := strings.LastIndexByte(frame, '('); open > 0 {
+		return frame[:open]
+	}
+	return ""
+}
+
+func TestRuntimeFunctionNameKeepsMethodAndReceiver(t *testing.T) {
+	got := runtimeFunctionName("database/sql.(*DB).connection(0xc000, 0x1)")
+	if want := "database/sql.(*DB).connection"; got != want {
+		t.Fatalf("runtimeFunctionName() = %q, want %q", got, want)
+	}
 }
 
 func TestStandaloneBinaryServesWithoutSourceAssets(t *testing.T) {
