@@ -241,7 +241,7 @@ func awsCanonicalHeaders(req *http.Request, requested []string) (canonical, sign
 		value = strings.Join(strings.Fields(value), " ")
 		lines = append(lines, name+":"+value)
 	}
-	return strings.Join(lines, ""), strings.Join(names, ";"), nil
+	return strings.Join(lines, "\n"), strings.Join(names, ";"), nil
 }
 
 func awsCanonicalURI(u *url.URL) string {
