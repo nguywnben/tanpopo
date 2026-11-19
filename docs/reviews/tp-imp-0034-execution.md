@@ -21,7 +21,7 @@
 - Final code review on PR #11 SHA `b7959c5abdce016ef3221da86a86e79ab5f52585`: **Maxwell** (**code-reviewer** subagent; report signature **GPT-6 Luna**) — **APPROVE**, no actionable findings.
 - Final security review on that SHA: **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings; the same Low observation remains. Reviewers did not run tests; CI provides the test evidence below.
 - Follow-up review of the added Vault regression tests on PR #11 SHA `73c52d99e486902e5f8389f76ce79d88eb317aee`: **Maxwell** (**code-reviewer** subagent; report signature **GPT-6 Luna**) — **APPROVE**, no actionable findings; **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings and the same Low observation. No implementation code changed in this test-only update.
-- The next coverage-only update adds checks for unknown-organization OAuth unseal and idempotent cache-stage completion; independent review and CI are pending on the new PR head.
+- Follow-up review of the added Vault edge cases on PR #11 SHA `6d17c6d2f563708fd8681eac799527795ba552a6`: **Maxwell** (**code-reviewer** subagent; report signature **GPT-6 Luna**) — **APPROVE**, no actionable findings; **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings and the same Low observation. This update contains tests and execution-record text only; CI evidence is tracked below.
 - **Popper** (**test-engineer**) contributed the OAuth refresh and concurrency test plan and tests; the final CI runs exercise those tests on the accepted diff.
 
 ## Contract reconciliation
