@@ -428,7 +428,7 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 			return fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
 		}
 		for _, reqHost := range params.AllowedHosts {
-			if !hostPatternPermittedByApproved(reqHost, approved.AllowedHosts) {
+			if !hostPatternPermittedByApproved(reqHost, approved.AllowedHosts, approved.EndpointHostSuffixes) {
 				return fmt.Errorf("%w: adapter allowed_host %q exceeds SM-01 approved networkEgress.allowedHosts", port.ErrInvalidInput, reqHost)
 			}
 		}
@@ -2457,8 +2457,8 @@ func validateEndpointAndPermissions(
 	if !urlHostPermittedByList(u, adapterHosts) {
 		return fmt.Errorf("%w: endpoint host %q denied by adapter allowed_hosts", wrapSentinel, u.Hostname())
 	}
-	if !urlHostPermittedByList(u, approved.AllowedHosts) {
-		return fmt.Errorf("%w: endpoint host %q denied by SM-01 approved networkEgress.allowedHosts", wrapSentinel, u.Hostname())
+	if !urlHostPermittedByList(u, approved.AllowedHosts) && !urlHostPermittedByEndpointSuffix(u, approved.EndpointHostSuffixes) {
+		return fmt.Errorf("%w: endpoint host %q denied by SM-01 approved host policy", wrapSentinel, u.Hostname())
 	}
 	if approved.RequireTLS && u.Scheme != "https" {
 		return fmt.Errorf("%w: endpoint scheme %q violates SM-01 approved requireTls=true", wrapSentinel, u.Scheme)
@@ -2467,6 +2467,19 @@ func validateEndpointAndPermissions(
 		return fmt.Errorf("%w: allow_private_ip=true denied by SM-01 approved networkEgress.allowPrivateIp=false", wrapSentinel)
 	}
 	return nil
+}
+
+func urlHostPermittedByEndpointSuffix(u *url.URL, suffixes []string) bool {
+	if u == nil {
+		return false
+	}
+	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(host, suffix) && len(host) > len(suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func slotPermittedByApproved(slotName, injectMode string, approved installer.PermissionSet, wrapSentinel error) error {
@@ -2538,8 +2551,8 @@ func splitHostAndOptionalPort(raw string) (hostname, port string, ok bool) {
 	return strings.ToLower(trimmed), "", true
 }
 
-func hostPatternPermittedByApproved(candidate string, approved []string) bool {
-	if len(approved) == 0 {
+func hostPatternPermittedByApproved(candidate string, approved, suffixes []string) bool {
+	if len(approved) == 0 && len(suffixes) == 0 {
 		return false
 	}
 	candHost, candPort, ok := splitHostAndOptionalPort(candidate)
@@ -2552,6 +2565,11 @@ func hostPatternPermittedByApproved(candidate string, approved []string) bool {
 			continue
 		}
 		if apPort == "" || apPort == candPort {
+			return true
+		}
+	}
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(candHost, suffix) && len(candHost) > len(suffix) {
 			return true
 		}
 	}

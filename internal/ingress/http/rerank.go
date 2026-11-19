@@ -27,8 +27,8 @@ type rerankDocument struct {
 }
 
 type rerankIngressRequest struct {
-	Model          string
-	Query          string
+	Model           string
+	Query           string
 	Documents       []rerankDocument
 	TopN            *int
 	ReturnDocuments bool
@@ -107,8 +107,8 @@ func parseStrictRerankRequest(raw []byte) (*rerankIngressRequest, error) {
 
 func finalizeRerankJSON(requestedModel string, request *rerankIngressRequest, norm port.NormalizedInferenceResponse) ([]byte, error) {
 	var payload struct {
-		ID      string `json:"id"`
-		Model   string `json:"model"`
+		ID      string           `json:"id"`
+		Model   string           `json:"model"`
 		Usage   map[string]int64 `json:"usage,omitempty"`
 		Results []struct {
 			Index          int      `json:"index"`
@@ -238,7 +238,15 @@ func (s *Server) executeRerankHop(w http.ResponseWriter, clientCtx, hopCtx conte
 		return classifyRuntimeLoadAttemptError(w, s, meta.RequestID, err)
 	}
 	defer runtime.release()
-	_, egressReq, constraint, err := s.transformAndBuildEgress(hopCtx, meta, key, target, runtime, rawBody, nil, nil, "rerank")
+	offload, offloadErr := blob.OffloadEndpointMultimodalRequest(
+		hopCtx, meta.RequestID, rawBody, target.Deployment.UpstreamModelName, false,
+		s.maxReqBodyBytes, s.remoteMediaPolicy, "none",
+	)
+	if offloadErr != nil {
+		return failover.AttemptResult{Succeeded: false, Retryable: false, Outcome: breaker.OutcomeCallerError, HTTPStatus: http.StatusBadRequest, FlushFinal: func() { s.writeBlobError(w, meta.RequestID, offloadErr) }}
+	}
+	defer offload.Scrub()
+	_, egressReq, constraint, err := s.transformAndBuildEgress(hopCtx, meta, key, target, runtime, offload.NormalizedJSON, offload.BlobRefs, offload.HostBlobs, "rerank")
 	if err != nil {
 		return s.classifyPreparedAttemptError(w, clientCtx, hopCtx, meta.RequestID, err)
 	}
@@ -256,16 +264,23 @@ func (s *Server) executeRerankHop(w http.ResponseWriter, clientCtx, hopCtx conte
 	}
 	body, err := finalizeRerankJSON(req.Model, req, normalized)
 	if err != nil {
-		return failover.AttemptResult{Succeeded: false, Retryable: true, Outcome: breaker.OutcomeSystemFault, HTTPStatus: http.StatusBadGateway, FlushFinal: func() { writeCanonicalError(w, meta.RequestID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Normalized rerank payload failed schema validation.", false) }}
+		return failover.AttemptResult{Succeeded: false, Retryable: true, Outcome: breaker.OutcomeSystemFault, HTTPStatus: http.StatusBadGateway, FlushFinal: func() {
+			writeCanonicalError(w, meta.RequestID, http.StatusBadGateway, "upstream_malformed_response", "upstream_error", "Normalized rerank payload failed schema validation.", false)
+		}}
 	}
 	usage, err := budgetSess.settleSync(hopCtx, target, req.Model, normalized.Usage, nil)
 	if err != nil {
 		budgetSess.releaseIfUnsettled()
-		return failover.AttemptResult{Succeeded: false, Retryable: false, Outcome: breaker.OutcomeCallerError, HTTPStatus: http.StatusServiceUnavailable, FlushFinal: func() { writeCanonicalError(w, meta.RequestID, http.StatusServiceUnavailable, "budget_ledger_unavailable", "api_error", "Budget ledger settlement failed; failing closed to prevent unbilled response delivery.", false) }}
+		return failover.AttemptResult{Succeeded: false, Retryable: false, Outcome: breaker.OutcomeCallerError, HTTPStatus: http.StatusServiceUnavailable, FlushFinal: func() {
+			writeCanonicalError(w, meta.RequestID, http.StatusServiceUnavailable, "budget_ledger_unavailable", "api_error", "Budget ledger settlement failed; failing closed to prevent unbilled response delivery.", false)
+		}}
 	}
 	if usage != nil {
 		s.reconcileAdmissionUsage(admLease, usage)
 		s.recordSettledUsageTelemetry(hopCtx, req.Model, usage)
+		if s.usageObserver != nil {
+			s.usageObserver(UsageRecord{RequestID: meta.RequestID, Route: "/v1/rerank", Model: req.Model, Stream: false, Usage: usage})
+		}
 	}
 	writeSettledJSONResponse(w, hopCtx, meta.RequestID, usage, body, idemClaim)
 	return failover.AttemptResult{Succeeded: true, Outcome: breaker.OutcomeSuccess, HTTPStatus: http.StatusOK}

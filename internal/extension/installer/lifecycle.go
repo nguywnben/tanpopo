@@ -111,18 +111,19 @@ func IsValidSM01Transition(from, to string) bool {
 
 // PermissionSet represents the normalized capability set P governed by consent & escalation algebra (CT-18).
 type PermissionSet struct {
-	AllowedHosts        []string          `json:"allowed_hosts,omitempty"`
-	AllowPrivateIP      bool              `json:"allow_private_ip,omitempty"`
-	RequireTLS          bool              `json:"require_tls,omitempty"`
-	ExecutionTier       string            `json:"execution_tier"`
-	SecretSlots         []string          `json:"secret_slots,omitempty"`
-	SecretBindingModes  map[string]string `json:"secret_binding_modes,omitempty"`
-	Hooks               []string          `json:"hooks,omitempty"`
-	MaxMemoryMib        int               `json:"max_memory_mib,omitempty"`
-	MaxCpuMsPerCall     int               `json:"max_cpu_ms_per_call,omitempty"`
-	MaxStreamChunkCpuMs int               `json:"max_stream_chunk_cpu_ms,omitempty"`
-	InspectRequestBody  bool              `json:"inspect_request_body,omitempty"`
-	InspectResponseBody bool              `json:"inspect_response_body,omitempty"`
+	AllowedHosts         []string          `json:"allowed_hosts,omitempty"`
+	EndpointHostSuffixes []string          `json:"endpoint_host_suffixes,omitempty"`
+	AllowPrivateIP       bool              `json:"allow_private_ip,omitempty"`
+	RequireTLS           bool              `json:"require_tls,omitempty"`
+	ExecutionTier        string            `json:"execution_tier"`
+	SecretSlots          []string          `json:"secret_slots,omitempty"`
+	SecretBindingModes   map[string]string `json:"secret_binding_modes,omitempty"`
+	Hooks                []string          `json:"hooks,omitempty"`
+	MaxMemoryMib         int               `json:"max_memory_mib,omitempty"`
+	MaxCpuMsPerCall      int               `json:"max_cpu_ms_per_call,omitempty"`
+	MaxStreamChunkCpuMs  int               `json:"max_stream_chunk_cpu_ms,omitempty"`
+	InspectRequestBody   bool              `json:"inspect_request_body,omitempty"`
+	InspectResponseBody  bool              `json:"inspect_response_body,omitempty"`
 }
 
 // NormalizePermissionSet canonicalizes host casing and sorts slice sets deterministically.
@@ -139,6 +140,18 @@ func NormalizePermissionSet(p PermissionSet) PermissionSet {
 			}
 		}
 		sort.Strings(out.AllowedHosts)
+	}
+	if len(p.EndpointHostSuffixes) > 0 {
+		seen := make(map[string]bool, len(p.EndpointHostSuffixes))
+		out.EndpointHostSuffixes = make([]string, 0, len(p.EndpointHostSuffixes))
+		for _, suffix := range p.EndpointHostSuffixes {
+			canonical := strings.ToLower(strings.TrimSpace(suffix))
+			if canonical != "" && !seen[canonical] {
+				seen[canonical] = true
+				out.EndpointHostSuffixes = append(out.EndpointHostSuffixes, canonical)
+			}
+		}
+		sort.Strings(out.EndpointHostSuffixes)
 	}
 	if len(p.SecretSlots) > 0 {
 		seen := make(map[string]bool, len(p.SecretSlots))
@@ -175,21 +188,23 @@ func NormalizePermissionSet(p PermissionSet) PermissionSet {
 
 // PermissionDelta reports any capability expansion DeltaP = P_new \ P_approved (CT-18).
 type PermissionDelta struct {
-	AddedHosts             []string `json:"added_hosts,omitempty"`
-	AddedSecretSlots       []string `json:"added_secret_slots,omitempty"`
-	AddedHooks             []string `json:"added_hooks,omitempty"`
-	BindingModeChanged     bool     `json:"binding_mode_changed,omitempty"`
-	TierEscalated          bool     `json:"tier_escalated,omitempty"`
-	PrivateIPEscalated     bool     `json:"private_ip_escalated,omitempty"`
-	TLSDowngraded          bool     `json:"tls_downgraded,omitempty"`
-	MemoryIncreased        bool     `json:"memory_increased,omitempty"`
-	CpuQuotaIncreased      bool     `json:"cpu_quota_increased,omitempty"`
-	PayloadAccessEscalated bool     `json:"payload_access_escalated,omitempty"`
+	AddedHosts                []string `json:"added_hosts,omitempty"`
+	AddedEndpointHostSuffixes []string `json:"added_endpoint_host_suffixes,omitempty"`
+	AddedSecretSlots          []string `json:"added_secret_slots,omitempty"`
+	AddedHooks                []string `json:"added_hooks,omitempty"`
+	BindingModeChanged        bool     `json:"binding_mode_changed,omitempty"`
+	TierEscalated             bool     `json:"tier_escalated,omitempty"`
+	PrivateIPEscalated        bool     `json:"private_ip_escalated,omitempty"`
+	TLSDowngraded             bool     `json:"tls_downgraded,omitempty"`
+	MemoryIncreased           bool     `json:"memory_increased,omitempty"`
+	CpuQuotaIncreased         bool     `json:"cpu_quota_increased,omitempty"`
+	PayloadAccessEscalated    bool     `json:"payload_access_escalated,omitempty"`
 }
 
 // HasEscalation reports whether DeltaP != empty set.
 func (d PermissionDelta) HasEscalation() bool {
 	return len(d.AddedHosts) > 0 ||
+		len(d.AddedEndpointHostSuffixes) > 0 ||
 		len(d.AddedSecretSlots) > 0 ||
 		len(d.AddedHooks) > 0 ||
 		d.BindingModeChanged ||
@@ -228,6 +243,15 @@ func ComputePermissionDelta(approved, candidate PermissionSet) PermissionDelta {
 	for _, h := range c.AllowedHosts {
 		if !aHosts[h] {
 			delta.AddedHosts = append(delta.AddedHosts, h)
+		}
+	}
+	aSuffixes := make(map[string]bool, len(a.EndpointHostSuffixes))
+	for _, suffix := range a.EndpointHostSuffixes {
+		aSuffixes[suffix] = true
+	}
+	for _, suffix := range c.EndpointHostSuffixes {
+		if !aSuffixes[suffix] {
+			delta.AddedEndpointHostSuffixes = append(delta.AddedEndpointHostSuffixes, suffix)
 		}
 	}
 

@@ -1136,7 +1136,7 @@ adapter:
 	}
 	legacyMerged, err := h.repo.UpdateProviderConnection(h.ctx, catalog.UpdateProviderConnectionParams{
 		OrgID: orgA, ConnectionID: legacyConn.ID, ExpectedVersion: legacyConn.Version,
-		MergeBindings: true,
+		MergeBindings:  true,
 		SecretBindings: []catalog.SecretBindingInput{{SlotName: "organization", CredentialID: projSecret.ID}},
 	})
 	if err != nil {
@@ -1615,6 +1615,76 @@ adapter:
 	}
 	if _, err := h.store.RawDB().ExecContext(h.ctx, `UPDATE extension_installations SET active_version_id = ? WHERE id = ?`, origActiveVer, installID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAdapterMayApproveExactEndpointWithinSignedAzureResourceSuffix(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	orgID, projectID, approverID := h.createOrgProjectApprover(t, "azure-exact-host")
+	manifest := `apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+metadata:
+  id: "@tanpopo/azure-endpoint-test"
+  name: "Azure Endpoint Host Test"
+  version: "1.0.0"
+  license: "Apache-2.0"
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0"
+runtime:
+  tier: "declarative"
+capabilities:
+  - type: "provider_adapter"
+    adapterSlug: "azure-openai"
+    supportedDialects: ["azure_openai", "openai_chat"]
+permissions:
+  networkEgress:
+    allowedHosts: ["tanpopo-resource.openai.azure.com"]
+    allowPrivateIp: false
+    requireTls: true
+adapter:
+  slug: "azure-openai"
+  endpointHostSuffixes: [".openai.azure.com"]
+`
+	installationID := h.installDeclarativePackage(t, "@tanpopo/azure-endpoint-test", approverID, manifest)
+	adapter, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: installationID, AdapterSlug: "azure-openai",
+		SupportedDialects: []string{"azure_openai", "openai_chat"},
+		AllowedHosts:      []string{"customer-resource.openai.azure.com"},
+	})
+	if err != nil {
+		t.Fatalf("approve exact organization Azure host: %v", err)
+	}
+	if adapter.AllowedHosts[0] != "customer-resource.openai.azure.com" {
+		t.Fatalf("adapter host approval broadened or changed: %v", adapter.AllowedHosts)
+	}
+	connection, err := h.repo.CreateProviderConnection(h.ctx, catalog.CreateProviderConnectionParams{
+		OrgID: orgID, OwnerProjectID: &projectID, AdapterID: adapter.ID,
+		Name: "customer-azure-resource", EndpointBaseURL: "https://customer-resource.openai.azure.com",
+		DataRegion: "us", BillingMode: catalog.BillingModeCommercialAPI, AuthMode: catalog.AuthModeNone,
+	})
+	if err != nil || connection.EndpointBaseURL != "https://customer-resource.openai.azure.com" {
+		t.Fatalf("exact suffix-scoped Azure provider connection rejected: conn=%+v err=%v", connection, err)
+	}
+	connection, err = h.repo.TransitionConnectionState(h.ctx, orgID, connection.ID, catalog.ConnStateValidating, connection.Version, "validate exact resource host")
+	if err != nil {
+		t.Fatalf("transition exact-host connection to validating: %v", err)
+	}
+	connection, err = h.repo.TransitionConnectionState(h.ctx, orgID, connection.ID, catalog.ConnStateActive, connection.Version, "activate exact resource host")
+	if err != nil {
+		t.Fatalf("activate exact-host connection: %v", err)
+	}
+	policy, err := h.repo.ResolveConnectionPolicy(h.ctx, orgID, connection.ID)
+	if err != nil || len(policy.AllowedHosts) != 1 || policy.AllowedHosts[0] != "customer-resource.openai.azure.com" || len(policy.AllowedPorts) != 1 || policy.AllowedPorts[0] != 443 || !policy.RequireTLS {
+		t.Fatalf("connection policy must stay exact-host TLS-only: policy=%+v err=%v", policy, err)
+	}
+	if _, err := h.repo.CreateProviderAdapter(h.ctx, catalog.CreateProviderAdapterParams{
+		InstallationID: installationID, AdapterSlug: "azure-openai",
+		SupportedDialects: []string{"azure_openai", "openai_chat"},
+		AllowedHosts:      []string{"customer.openai.azure.com.attacker.test"},
+	}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("lookalike Azure host should not be approved: %v", err)
 	}
 }
 

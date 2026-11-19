@@ -483,6 +483,24 @@ permissions:
 	}
 }
 
+func TestEndpointHostSuffixPermissionIsValidatedAndEscalates(t *testing.T) {
+	validated, err := validatedEndpointHostSuffixes(map[string]any{"endpointHostSuffixes": []any{".openai.azure.com"}})
+	if err != nil || len(validated) != 1 || validated[0] != ".openai.azure.com" {
+		t.Fatalf("valid endpoint suffix rejected: %v %v", validated, err)
+	}
+	for _, invalid := range [][]any{{"*.openai.azure.com"}, {"openai.azure.com"}, {".bad..example"}, {".openai.azure.com:443"}} {
+		if _, err := validatedEndpointHostSuffixes(map[string]any{"endpointHostSuffixes": invalid}); !errors.Is(err, ErrManifestInvalid) {
+			t.Errorf("invalid endpoint suffix accepted: %v (err=%v)", invalid, err)
+		}
+	}
+	approved := PermissionSet{EndpointHostSuffixes: []string{".openai.azure.com"}}
+	candidate := PermissionSet{EndpointHostSuffixes: []string{".openai.azure.com", ".example.net"}}
+	delta := ComputePermissionDelta(approved, candidate)
+	if !delta.HasEscalation() || len(delta.AddedEndpointHostSuffixes) != 1 || delta.AddedEndpointHostSuffixes[0] != ".example.net" {
+		t.Fatalf("endpoint suffix expansion should require re-consent: %+v", delta)
+	}
+}
+
 func TestInstallerNEG2_CT03_CT05_CT20_IntegrityNamespaceAndOrgTrustPolicy(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

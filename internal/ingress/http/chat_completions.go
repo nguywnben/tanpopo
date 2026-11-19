@@ -1357,6 +1357,20 @@ func buildHostNarrowPolicy(perms installer.PermissionSet, adp *snapshot.Provider
 		adpHosts = adp.AllowedHosts
 	}
 	hosts := intersectAllowedHosts(perms.AllowedHosts, adpHosts)
+	if conn != nil && adp != nil && len(perms.EndpointHostSuffixes) > 0 {
+		if endpoint, err := url.Parse(strings.TrimSpace(conn.EndpointBaseURL)); err == nil && endpoint.Hostname() != "" {
+			hostname := strings.ToLower(endpoint.Hostname())
+			if endpointHostMatchesSuffix(hostname, perms.EndpointHostSuffixes) {
+				// A suffix in a signed adapter manifest never becomes an egress wildcard:
+				// it only lifts the manifest's fixture host when both the operator-created
+				// adapter and this connection name the same exact endpoint authority.
+				if exact := intersectAllowedHosts([]string{strings.ToLower(endpoint.Host)}, adpHosts); len(exact) > 0 {
+					hosts = append(hosts, exact...)
+					sort.Strings(hosts)
+				}
+			}
+		}
+	}
 
 	var allowedPorts []int
 	var allowPriv bool
@@ -1380,6 +1394,16 @@ func buildHostNarrowPolicy(perms installer.PermissionSet, adp *snapshot.Provider
 		AllowedCIDRs:   allowedCIDRs,
 		RequireTLS:     perms.RequireTLS,
 	}
+}
+
+func endpointHostMatchesSuffix(host string, suffixes []string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(host, suffix) && len(host) > len(suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func mapCredentialInjections(specs []port.CredentialInjectInstruction, bindings map[string]*snapshot.ConnectionSecretBindingView) ([]broker.CredentialInjection, error) {
