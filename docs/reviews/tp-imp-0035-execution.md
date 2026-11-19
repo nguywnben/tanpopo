@@ -5,7 +5,7 @@
 ## Ownership
 
 - Implementer: **GPT-6 Luna**.
-- Independent reviewers: pending final diff; the required `code-reviewer` and `security-auditor` reviews have not yet been run.
+- Independent reviewers: interim reviews on `2a9b40ad827515d16cfbb62ee40f97525a64fecd` by **Euclid** (**code-reviewer**) and **Lagrange** (**security-auditor**) found blockers; both must review the final diff after remediation.
 - Acceptor: **GPT-6 Luna**, under the Product Owner delegation in `DEC-060`.
 
 ## Current checkpoint
@@ -35,14 +35,24 @@
 - Run `44443971551` on `38d3e96` exposed a Windows-only database file-handle cleanup failure in the existing `cmd/tanpopo` test `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; the same test passes on Windows in run `44444232411` on `f0388a8`, so this has not reproduced and no implementation change was made for it. Stage 0 and Windows were green on `f0388a8`; Ubuntu and macOS were still running.
 - Unit 35 remains in progress. Production wiring for the marketplace pull path and revocation watcher, concrete quarantine/stream-fence/`INC-03` actions, official Bedrock and Azure adapters, rerank provider contract coverage, final acceptance evidence, and independent reviews remain open.
 
+### Continuation checkpoint (2026-11-19, after quota pause)
+
+- **GPT-6 Luna** resumed from PR [#14](https://github.com/nguywnben/tanpopo/pull/14), keeping the persistent `develop` branch. Verified `origin/main` at `04ed998b7720b946f107b8e7c55ff6c403606049` (merge of Unit 35 READY governance PR #13), PR #14 still open/draft, and local author/committer identity as **Nguyễn Công Ben <nben940665@gmail.com>** before commits.
+- The Windows cleanup repeat in run [`44447087372`](https://github.com/nguywnben/tanpopo/actions/runs/44447087372) failed 2 of 5 attempts at `cmd/tanpopo/serve_test.go:410`, with Windows reporting the SQLite `tanpopo.db` file remains open after runtime close and repeated GC. The original deletion assertion and 30-second retry remain. This is still unresolved and no production lifecycle code was changed based on speculation.
+- **Euclid** (**code-reviewer**) and **Lagrange** (**security-auditor**) independently reviewed the `2a9b40a` diff. Findings: runtime marketplace/revocation wiring and production enforcement were absent; official Bedrock/Azure packages and their contract tests were absent; rerank output omitted `search_units`; and public arbitrary-client fallbacks could bypass SSRF policy. No final sign-off has been granted.
+- Follow-up commits on `develop`: `02b9ebe` maps normalized rerank media billing to `usage.search_units` and adds a regression assertion; `3931563` replaces exported arbitrary OCI client fallbacks with an internal exact-authority guarded transport factory; `e0f4db2` routes Admin OCI installs through the verified-index resolver; `e6dd8a7` adds optional signed index/revocation feed polling, guarded HTTPS feed clients, durable watcher retries, quarantine, active-stream abort, and an `INC-03` audit event; `5dc1785` corrects rerank mapping to read the nested `NormalizedUsage.MediaUsage` field.
+- The production feed runtime reads public configuration from `TANPOPO_MARKETPLACE_INDEX_URL`, `TANPOPO_MARKETPLACE_REVOCATIONS_URL`, and `TANPOPO_MARKETPLACE_FEED_PUBLIC_KEYS` (JSON object of key IDs to base64 Ed25519 public keys). New runtime configuration tests are present. Private OCI vault credential resolution and official Bedrock/Azure adapter packages remain open.
+- CI on `e0f4db2` failed on macOS and Ubuntu because the rerank patch referenced `RerankSearchUnits` at the wrong level of `NormalizedUsage`; corrected in `5dc1785`. CI for `e6dd8a7` is running; its source predates that correction. The latest pushed head is `5dc17852aebde1d8b576fd061f904245405793ca`; obtain a fresh successful run on that SHA before treating these edits as verified.
+- Current reviewers recorded in this batch: **Wegener** (**test-engineer**), **Euclid** (**code-reviewer**), and **Lagrange** (**security-auditor**). The interim review findings remain blockers; rerun both strong reviews on the complete final diff.
+
 ## Remaining work
 
-1. Complete the private OCI Distribution client with host-scoped credentials, digest verification, and guarded transport tests.
-2. Integrate signed revocation feed persistence and automatic quarantine, stream fencing, and `INC-03` alerting.
+1. Complete production private OCI credential resolution from organization-scoped Vault secrets, with zeroization and scope tests; complete signed-index polling/runtime configuration and guarded transport tests.
+2. Verify the production revocation poller, quarantine, stream fencing, and incident alert behavior end to end; audit-event emission is wired but does not yet have acceptance coverage.
 3. Implement Bedrock SigV4 and Azure OpenAI official adapters without exposing credentials to extensions.
 4. Wire the SQL-backed watcher to the production installer, active-stream fencing, and incident alert sink; add end-to-end quarantine tests proving runtime streams stop.
 5. Implement the Bedrock and Azure OpenAI official adapters and their package contract tests; add rerank adapter contract coverage.
-6. Run all Unit 35 gates, obtain both independent reviews on the final diff, fix findings, and re-run affected checks/reviews.
+6. Resolve the repeated Windows SQLite file-lock failure with evidence, run all Unit 35 gates, obtain both independent reviews on the final diff, fix findings, and re-run affected checks/reviews.
 7. Merge PR #14 only after the required four CI checks and reviews pass; then record Unit 35 acceptance in a governance PR and verify post-merge CI on `main`.
 
 No review participation beyond **GPT-6 Luna** has been recorded for this checkpoint.
