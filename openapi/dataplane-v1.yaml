@@ -1049,7 +1049,7 @@ paths:
     post:
       tags: [UnifiedInference]
       operationId: rerankDocuments
-      summary: Unified document reranking endpoint (Scheduled in v0.2 per CR-01)
+      summary: Unified document reranking endpoint
       parameters:
         - $ref: "#/components/parameters/RequestIdHeader"
         - $ref: "#/components/parameters/TimeoutMsHeader"
@@ -1073,6 +1073,11 @@ paths:
                 $ref: "#/components/schemas/RerankResponse"
         "400":
           description: capability_not_supported
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "401":
+          description: invalid_virtual_key
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
