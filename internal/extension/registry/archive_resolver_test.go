@@ -33,7 +33,7 @@ func TestOCIArchiveResolverStagesOnlyVerifiedIndexedArtifact(t *testing.T) {
 	digest := hex.EncodeToString(digestBytes[:])
 	ref := "oci://registry.example.com/team/adapter@sha256:" + digest
 	store := &memoryIndexStore{entries: []IndexEntry{{PackageSlug: "team/adapter", Version: "1.0.0", Digest: digest, OCIURI: ref}}}
-	client := &OCIClient{HTTPClient: &http.Client{Transport: registryRoundTripper(func(req *http.Request) (*http.Response, error) {
+	client := &OCIClient{httpClient: &http.Client{Transport: registryRoundTripper(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Host != "registry.example.com" || req.URL.Path != "/v2/team/adapter/blobs/sha256:"+digest {
 			t.Fatalf("unexpected OCI request: %s", req.URL)
 		}

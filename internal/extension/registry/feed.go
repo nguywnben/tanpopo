@@ -17,8 +17,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nguywnben/tanpopo/internal/security/egress"
 )
 
 const MaxFeedBytes = 8 << 20
@@ -186,10 +189,10 @@ func DecodeRevocationEntries(feed *VerifiedFeed) ([]RevocationEntry, error) {
 	return entries, nil
 }
 
-// FetchSignedFeed fetches one HTTPS resource through the caller-provided HTTP
-// client (which must use the configured SSRFGuard transport). Redirects are
+// fetchSignedFeed fetches one HTTPS resource through an internally constructed
+// exact-host SSRFGuard transport. Redirects are
 // rejected to prevent moving a trusted feed request to another authority.
-func FetchSignedFeed(ctx context.Context, client *http.Client, rawURL string) ([]byte, error) {
+func fetchSignedFeed(ctx context.Context, client *http.Client, rawURL string) ([]byte, error) {
 	if client == nil {
 		return nil, fmt.Errorf("%w: guarded HTTP client is required", ErrInvalidFeed)
 	}
@@ -219,6 +222,27 @@ func FetchSignedFeed(ctx context.Context, client *http.Client, rawURL string) ([
 		return nil, fmt.Errorf("%w: feed exceeds size limit", ErrInvalidFeed)
 	}
 	return body, nil
+}
+
+func guardedFeedClient(rawURL string) (*http.Client, error) {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+		return nil, fmt.Errorf("%w: feed URL must use HTTPS without credentials or fragments", ErrInvalidFeed)
+	}
+	port := 443
+	if rawPort := u.Port(); rawPort != "" {
+		port, err = strconv.Atoi(rawPort)
+		if err != nil || port < 1 || port > 65535 {
+			return nil, fmt.Errorf("%w: feed URL has an invalid port", ErrInvalidFeed)
+		}
+	}
+	return egress.NewGuardedHTTPClient(egress.ClientConfig{
+		Policy:                   egress.Policy{AllowedHosts: []string{u.Hostname()}, AllowedPorts: []int{port}, RequireTLS: true},
+		Resolver:                 egress.NewStdHostResolver(),
+		Timeout:                  30 * time.Second,
+		MaxRedirects:             0,
+		DenyCrossOriginRedirects: true,
+	})
 }
 
 func validOCIURI(raw, digest string) bool {

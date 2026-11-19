@@ -151,5 +151,5 @@ func (r *OCIArchiveResolver) guardedClientForRegistry(ctx context.Context, autho
 	if err != nil {
 		return nil, err
 	}
-	return &OCIClient{HTTPClient: client}, nil
+	return &OCIClient{httpClient: client}, nil
 }

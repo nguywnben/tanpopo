@@ -17,7 +17,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 )
 
-func TestConfiguredMarketplaceKeyringAndGuardedFeedClient(t *testing.T) {
+func TestConfiguredMarketplaceKeyring(t *testing.T) {
 	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -38,15 +38,6 @@ func TestConfiguredMarketplaceKeyringAndGuardedFeedClient(t *testing.T) {
 		if _, err := configuredMarketplaceKeyring(raw); err == nil {
 			t.Errorf("invalid public key configuration accepted: %q", raw)
 		}
-	}
-	if _, err := guardedFeedClient("http://feeds.example.test/index.json"); err == nil {
-		t.Fatal("plain HTTP feed URL accepted")
-	}
-	if _, err := guardedFeedClient("https://user:password@feeds.example.test/index.json"); err == nil {
-		t.Fatal("credential-bearing feed URL accepted")
-	}
-	if client, err := guardedFeedClient("https://feeds.example.test/index.json"); err != nil || client == nil || client.Transport == nil {
-		t.Fatalf("valid feed URL did not get guarded client: client=%v err=%v", client, err)
 	}
 }
 

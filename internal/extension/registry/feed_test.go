@@ -125,6 +125,22 @@ func TestFeedEntryValidationRequiresImmutableOCIAndKnownSeverity(t *testing.T) {
 	}
 }
 
+func TestGuardedFeedClientRequiresExactHTTPSAuthority(t *testing.T) {
+	for _, raw := range []string{
+		"http://feeds.example.test/index.json",
+		"https://user:password@feeds.example.test/index.json",
+		"https://feeds.example.test/index.json#fragment",
+	} {
+		if _, err := guardedFeedClient(raw); err == nil {
+			t.Errorf("unsafe signed feed URL accepted: %q", raw)
+		}
+	}
+	client, err := guardedFeedClient("https://feeds.example.test:9443/index.json")
+	if err != nil || client == nil || client.Transport == nil {
+		t.Fatalf("valid HTTPS feed URL did not produce guarded transport: client=%v err=%v", client, err)
+	}
+}
+
 type registryRoundTripper func(*http.Request) (*http.Response, error)
 
 func (fn registryRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) { return fn(req) }
@@ -132,7 +148,7 @@ func (fn registryRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 func TestOCIClientPinsDigestAndScopesCredentialsToRegistry(t *testing.T) {
 	body := []byte("verified artifact")
 	digest := sha256.Sum256(body)
-	client := &OCIClient{HTTPClient: &http.Client{Transport: registryRoundTripper(func(req *http.Request) (*http.Response, error) {
+	client := &OCIClient{httpClient: &http.Client{Transport: registryRoundTripper(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Scheme != "https" || req.URL.Host != "registry.example.com" || req.URL.Path != "/v2/team/adapter/blobs/sha256:"+hex.EncodeToString(digest[:]) {
 			t.Fatalf("unexpected registry request URL: %s", req.URL)
 		}
@@ -158,14 +174,14 @@ func TestOCIClientPinsDigestAndScopesCredentialsToRegistry(t *testing.T) {
 func TestOCIClientRejectsDigestMismatchAndOversize(t *testing.T) {
 	body := []byte("unexpected bytes")
 	wrongDigest := sha256.Sum256([]byte("expected bytes"))
-	client := &OCIClient{MaxBytes: int64(len(body)), HTTPClient: &http.Client{Transport: registryRoundTripper(func(req *http.Request) (*http.Response, error) {
+	client := &OCIClient{maxBytes: int64(len(body)), httpClient: &http.Client{Transport: registryRoundTripper(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body)), Request: req}, nil
 	})}}
 	ref := "oci://registry.example.com/team/adapter@sha256:" + hex.EncodeToString(wrongDigest[:])
 	if _, err := client.Pull(context.Background(), ref, nil); err == nil {
 		t.Fatal("digest mismatch accepted")
 	}
-	client.MaxBytes = int64(len(body) - 1)
+	client.maxBytes = int64(len(body) - 1)
 	actualDigest := sha256.Sum256(body)
 	if _, err := client.Pull(context.Background(), "oci://registry.example.com/team/adapter@sha256:"+hex.EncodeToString(actualDigest[:]), nil); !errors.Is(err, ErrArtifactTooLarge) {
 		t.Fatalf("oversized blob must fail, got %v", err)

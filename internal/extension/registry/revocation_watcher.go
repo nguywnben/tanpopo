@@ -41,24 +41,32 @@ type RevocationActions interface {
 }
 
 type RevocationWatcher struct {
-	Client  *http.Client
-	URL     string
-	Keys    Keyring
-	Store   RevocationStore
-	Actions RevocationActions
-	Now     func() time.Time
-	mu      sync.Mutex
+	URL          string
+	Keys         Keyring
+	Store        RevocationStore
+	Actions      RevocationActions
+	Now          func() time.Time
+	clientForURL func(string) (*http.Client, error)
+	mu           sync.Mutex
 }
 
-// Poll fetches and verifies the configured signed feed through its injected
+// Poll fetches and verifies the configured signed feed through an exact-host
 // SSRF-guarded client, then retries all durable pending enforcement actions.
 func (w *RevocationWatcher) Poll(ctx context.Context) error {
-	if w == nil || w.Client == nil || w.Store == nil || w.Actions == nil || w.Now == nil {
+	if w == nil || w.Store == nil || w.Actions == nil || w.Now == nil {
 		return ErrRevocationWatcherUnavailable
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	raw, err := FetchSignedFeed(ctx, w.Client, w.URL)
+	clientForURL := w.clientForURL
+	if clientForURL == nil {
+		clientForURL = guardedFeedClient
+	}
+	client, err := clientForURL(w.URL)
+	if err != nil {
+		return errors.Join(err, w.reconcileLocked(ctx))
+	}
+	raw, err := fetchSignedFeed(ctx, client, w.URL)
 	if err != nil {
 		return errors.Join(err, w.reconcileLocked(ctx))
 	}

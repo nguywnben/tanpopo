@@ -41,15 +41,14 @@ func (c *RegistryCredentials) Zeroize() {
 }
 
 type OCIClient struct {
-	// HTTPClient must use the application's SSRFGuard transport and allowlist.
-	HTTPClient *http.Client
-	MaxBytes   int64
+	httpClient *http.Client
+	maxBytes   int64
 }
 
 // Pull fetches an OCI blob by immutable digest. Credentials are attached only
 // when their recorded registry authority exactly matches the reference.
 func (c *OCIClient) Pull(ctx context.Context, rawRef string, credentials *RegistryCredentials) ([]byte, error) {
-	if c == nil || c.HTTPClient == nil {
+	if c == nil || c.httpClient == nil {
 		return nil, fmt.Errorf("%w: guarded HTTP client is required", ErrInvalidOCIReference)
 	}
 	registryHost, repository, digest, err := parseOCIReference(rawRef)
@@ -69,7 +68,7 @@ func (c *OCIClient) Pull(ctx context.Context, rawRef string, credentials *Regist
 		request.SetBasicAuth(string(credentials.Username), string(credentials.Password))
 		defer request.Header.Del("Authorization")
 	}
-	guarded := *c.HTTPClient
+	guarded := *c.httpClient
 	guarded.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	response, err := guarded.Do(request)
 	if err != nil {
@@ -79,7 +78,7 @@ func (c *OCIClient) Pull(ctx context.Context, rawRef string, credentials *Regist
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("registry: OCI registry returned HTTP %d", response.StatusCode)
 	}
-	limit := c.MaxBytes
+	limit := c.maxBytes
 	if limit <= 0 || limit > installer.MaxArchiveCompressedBytes {
 		limit = installer.MaxArchiveCompressedBytes
 	}

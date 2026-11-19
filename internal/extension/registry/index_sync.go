@@ -28,21 +28,29 @@ type IndexSnapshot struct {
 }
 
 type IndexSyncer struct {
-	Client *http.Client
-	URL    string
-	Keys   Keyring
-	Store  IndexStore
-	Now    func() time.Time
+	URL            string
+	Keys           Keyring
+	Store          IndexStore
+	Now            func() time.Time
+	clientForURL   func(string) (*http.Client, error)
 }
 
 // Sync verifies and persists a fresh index when reachable. On network or feed
 // verification failure it returns the last durable cache and the failure for
 // observability, preserving offline marketplace availability.
 func (s *IndexSyncer) Sync(ctx context.Context) (IndexSnapshot, error) {
-	if s == nil || s.Client == nil || s.Store == nil || s.Now == nil {
+	if s == nil || s.Store == nil || s.Now == nil {
 		return IndexSnapshot{}, fmt.Errorf("%w: index sync is not configured", ErrInvalidFeed)
 	}
-	raw, syncErr := FetchSignedFeed(ctx, s.Client, s.URL)
+	clientForURL := s.clientForURL
+	if clientForURL == nil {
+		clientForURL = guardedFeedClient
+	}
+	client, syncErr := clientForURL(s.URL)
+	if syncErr != nil {
+		return s.cachedAfterSyncFailure(ctx, syncErr)
+	}
+	raw, syncErr := fetchSignedFeed(ctx, client, s.URL)
 	if syncErr == nil {
 		var serial int64
 		serial, syncErr = s.Store.LastIndexSerial(ctx)
@@ -61,6 +69,10 @@ func (s *IndexSyncer) Sync(ctx context.Context) (IndexSnapshot, error) {
 			}
 		}
 	}
+	return s.cachedAfterSyncFailure(ctx, syncErr)
+}
+
+func (s *IndexSyncer) cachedAfterSyncFailure(ctx context.Context, syncErr error) (IndexSnapshot, error) {
 	cached, cacheErr := s.Store.CachedIndex(ctx)
 	if cacheErr != nil {
 		return IndexSnapshot{}, errors.Join(fmt.Errorf("marketplace index sync: %w", syncErr), fmt.Errorf("read cached marketplace index: %w", cacheErr))

@@ -47,7 +47,15 @@ func TestIndexSyncerPersistsVerifiedIndexAndServesCacheOffline(t *testing.T) {
 		return nil, errors.New("offline")
 	})}
 	store := &memoryIndexStore{}
-	syncer := &IndexSyncer{Client: client, URL: "https://index.example.com/index.json", Keys: Keyring{"root": publicKey}, Store: store, Now: func() time.Time { return now }}
+	syncer := &IndexSyncer{
+		URL: "https://index.example.com/index.json", Keys: Keyring{"root": publicKey}, Store: store, Now: func() time.Time { return now},
+		clientForURL: func(raw string) (*http.Client, error) {
+			if raw != "https://index.example.com/index.json" {
+				t.Fatalf("unexpected index URL passed to client factory: %q", raw)
+			}
+			return client, nil
+		},
+	}
 
 	fresh, err := syncer.Sync(context.Background())
 	if err != nil || fresh.FromCache || fresh.SyncError != nil || len(fresh.Entries) != 1 || store.serial != 1 {

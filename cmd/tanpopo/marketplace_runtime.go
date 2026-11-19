@@ -13,10 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
-	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +21,6 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/extension/registry"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
-	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
@@ -49,28 +45,14 @@ func startMarketplaceRuntime(ctx context.Context, store *registry.SQLStore, life
 		close(done)
 		return done
 	}
-	indexClient, indexErr := guardedFeedClient(indexURL)
-	if indexURL != "" && indexErr != nil {
-		log.Printf("marketplace index polling disabled: invalid feed URL: %v", indexErr)
-		indexURL = ""
-	}
-	revocationClient, revocationErr := guardedFeedClient(revocationsURL)
-	if revocationsURL != "" && revocationErr != nil {
-		log.Printf("marketplace revocation polling disabled: invalid feed URL: %v", revocationErr)
-		revocationsURL = ""
-	}
-	if indexURL == "" && revocationsURL == "" {
-		close(done)
-		return done
-	}
 	var indexSyncer *registry.IndexSyncer
 	if indexURL != "" {
-		indexSyncer = &registry.IndexSyncer{Client: indexClient, URL: indexURL, Keys: keys, Store: store, Now: time.Now}
+		indexSyncer = &registry.IndexSyncer{URL: indexURL, Keys: keys, Store: store, Now: time.Now}
 	}
 	var revocationWatcher *registry.RevocationWatcher
 	if revocationsURL != "" {
 		revocationWatcher = &registry.RevocationWatcher{
-			Client: revocationClient, URL: revocationsURL, Keys: keys, Store: store, Now: time.Now,
+			URL: revocationsURL, Keys: keys, Store: store, Now: time.Now,
 			Actions: runtimeRevocationActions{installer: lifecycle, snapshots: snaps, audit: audit},
 		}
 	}
@@ -126,27 +108,6 @@ func configuredMarketplaceKeyring(raw string) (registry.Keyring, error) {
 		keys[id] = ed25519.PublicKey(decoded)
 	}
 	return keys, nil
-}
-
-func guardedFeedClient(rawURL string) (*http.Client, error) {
-	u, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
-		return nil, errors.New("feed URL must use HTTPS and contain no credentials or fragment")
-	}
-	port := 443
-	if rawPort := u.Port(); rawPort != "" {
-		port, err = strconv.Atoi(rawPort)
-		if err != nil || port < 1 || port > 65535 {
-			return nil, errors.New("feed URL has an invalid port")
-		}
-	}
-	return egress.NewGuardedHTTPClient(egress.ClientConfig{
-		Policy:                   egress.Policy{AllowedHosts: []string{u.Hostname()}, AllowedPorts: []int{port}, RequireTLS: true},
-		Resolver:                 egress.NewStdHostResolver(),
-		Timeout:                  30 * time.Second,
-		MaxRedirects:             0,
-		DenyCrossOriginRedirects: true,
-	})
 }
 
 type runtimeRevocationActions struct {
