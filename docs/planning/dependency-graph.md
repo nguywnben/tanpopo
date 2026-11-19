@@ -3,7 +3,7 @@
 > **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0035: DONE` | `0036..0047 BLOCKED`)**
 > - **Document ID:** `PLAN-DAG-01` | **Version:** `1.52.0-dec-071-0035-done` | **Date:** `2026-11-19`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** Units `0001`..`0035` are DONE. Unit 35 is verified on main SHA `05b00a523f2390ea0ae21562dd125372aee4329f`; post-merge CI run `44465461524` passed all four required jobs and artifact/attestation run `44465461513` succeeded. The `DEC-060` batch for Units `0031`..`0035` is complete; `0036`..`0047` remain blocked pending sequential DoR. No tags/releases (`GATE-REL-07`).
+> - **Live DAG Frontier:** Units `0001`..`0035` are DONE. Unit 35 is verified on main SHA `05b00a523f2390ea0ae21562dd125372aee4329f`; post-merge CI run `44465461524` passed all four required jobs and artifact/attestation run `44465461513` succeeded. The `DEC-060` batch for Units `0031`..`0035` is complete. Unit 36 remains unopened and unauthorized outside that delegation; Units `0037`..`0047` remain blocked pending sequential DoR. No tags/releases (`GATE-REL-07`).
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier (`35 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `12 BLOCKED` — `DEC-071`):** `TP-IMP-0001..0035` are DONE. Unit 35 acceptance is recorded on main SHA `05b00a523f2390ea0ae21562dd125372aee4329f`, with four green post-merge jobs in CI run `44465461524` and artifact/attestation run `44465461513`. Units 36–47 remain blocked pending their own sequential DoR. The `DEC-060` batch is complete. No tags/releases.
+> **Live Queue Frontier (`35 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `12 BLOCKED` — `DEC-071`):** `TP-IMP-0001..0035` are DONE. Unit 35 acceptance is recorded on main SHA `05b00a523f2390ea0ae21562dd125372aee4329f`, with four green post-merge jobs in CI run `44465461524` and artifact/attestation run `44465461513`. Unit 36 remains unopened and unauthorized outside `DEC-060`; Units 37–47 remain blocked pending their own sequential DoR. No tags/releases.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.
