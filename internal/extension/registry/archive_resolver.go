@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 )
@@ -18,7 +19,7 @@ import (
 var ErrOCIArtifactNotIndexed = errors.New("registry: OCI artifact is not present in the verified marketplace index")
 
 type RegistryCredentialResolver interface {
-	CredentialsForRegistry(context.Context, string) (*RegistryCredentials, error)
+	CredentialsForRegistry(context.Context, string, string) (*RegistryCredentials, error)
 }
 
 // OCIArchiveResolver resolves only artifacts present in the durable verified
@@ -33,9 +34,12 @@ type OCIArchiveResolver struct {
 
 // Resolve returns an installer request backed by a private verified snapshot.
 // The caller must invoke the cleanup function after the installer consumes it.
-func (r *OCIArchiveResolver) Resolve(ctx context.Context, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
+func (r *OCIArchiveResolver) Resolve(ctx context.Context, orgID, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
 	if r == nil || (r.Client == nil && r.ClientForRegistry == nil) || r.Index == nil {
 		return nil, nil, fmt.Errorf("%w: OCI archive resolver is not configured", ErrInvalidOCIReference)
+	}
+	if strings.TrimSpace(orgID) == "" {
+		return nil, nil, fmt.Errorf("%w: organization scope is required", ErrInvalidOCIReference)
 	}
 	registryHost, _, digest, err := parseOCIReference(sourceURI)
 	if err != nil {
@@ -62,7 +66,7 @@ func (r *OCIArchiveResolver) Resolve(ctx context.Context, sourceURI, expectedSHA
 	}
 	var credentials *RegistryCredentials
 	if r.Credentials != nil {
-		credentials, err = r.Credentials.CredentialsForRegistry(ctx, registryHost)
+		credentials, err = r.Credentials.CredentialsForRegistry(ctx, orgID, registryHost)
 		if err != nil {
 			return nil, nil, fmt.Errorf("resolve registry credentials: %w", err)
 		}

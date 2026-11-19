@@ -20,8 +20,8 @@ type fixedRegistryCredentials struct {
 	host string
 }
 
-func (r fixedRegistryCredentials) CredentialsForRegistry(_ context.Context, host string) (*RegistryCredentials, error) {
-	if host != r.host {
+func (r fixedRegistryCredentials) CredentialsForRegistry(_ context.Context, orgID, host string) (*RegistryCredentials, error) {
+	if orgID != "org_test" || host != r.host {
 		return nil, ErrRegistryAuthScope
 	}
 	return &RegistryCredentials{RegistryHost: host, Username: "robot", Password: "opaque-token"}, nil
@@ -52,7 +52,7 @@ func TestOCIArchiveResolverStagesOnlyVerifiedIndexedArtifact(t *testing.T) {
 		},
 		Index: store, Credentials: fixedRegistryCredentials{host: "registry.example.com"},
 	}
-	request, cleanup, err := resolver.Resolve(context.Background(), ref, digest)
+	request, cleanup, err := resolver.Resolve(context.Background(), "org_test", ref, digest)
 	if err != nil {
 		t.Fatalf("Resolve indexed artifact: %v", err)
 	}
@@ -69,11 +69,11 @@ func TestOCIArchiveResolverStagesOnlyVerifiedIndexedArtifact(t *testing.T) {
 	if err != nil || !bytes.Equal(file, body) {
 		t.Fatalf("staged archive content=%q err=%v", file, err)
 	}
-	if _, _, err := resolver.Resolve(context.Background(), ref, hex.EncodeToString(make([]byte, sha256.Size))); err == nil {
+	if _, _, err := resolver.Resolve(context.Background(), "org_test", ref, hex.EncodeToString(make([]byte, sha256.Size))); err == nil {
 		t.Fatal("digest mismatch accepted")
 	}
 	store.entries = nil
-	if _, _, err := resolver.Resolve(context.Background(), ref, digest); err != ErrOCIArtifactNotIndexed {
+	if _, _, err := resolver.Resolve(context.Background(), "org_test", ref, digest); err != ErrOCIArtifactNotIndexed {
 		t.Fatalf("artifact outside verified index must be rejected, got %v", err)
 	}
 }

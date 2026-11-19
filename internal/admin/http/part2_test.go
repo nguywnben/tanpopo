@@ -347,7 +347,7 @@ func newPart2TestHarness(t *testing.T, probeLimitPerMin int) *part2Harness {
 				Capabilities:     []string{"provider_adapter"},
 			},
 		},
-		ArchiveResolver: func(_ context.Context, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
+		ArchiveResolver: func(_ context.Context, _ string, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
 			h.archivesMu.RLock()
 			entry, ok := h.archives[sourceURI]
 			h.archivesMu.RUnlock()

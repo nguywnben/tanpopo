@@ -386,6 +386,7 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	}
 	t.Cleanup(func() {
 		closeRuntime()
+		closeRuntime = nil
 		handler = nil
 		// modernc SQLite's Windows file handle can outlive sql.DB.Close until the
 		// driver's finalizable connection wrapper is collected.

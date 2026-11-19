@@ -92,8 +92,8 @@ type MarketplaceCatalogEntry struct {
 	Capabilities     []string `json:"capabilities,omitempty"`
 }
 
-// ExtensionArchiveResolver resolves staged archive streams + provenance metadata for Control Plane installs/upgrades.
-type ExtensionArchiveResolver func(ctx context.Context, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error)
+// ExtensionArchiveResolver resolves an organization-scoped staged archive and provenance metadata.
+type ExtensionArchiveResolver func(ctx context.Context, orgID, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error)
 
 type rawDBProvider interface {
 	RawDB() *sql.DB

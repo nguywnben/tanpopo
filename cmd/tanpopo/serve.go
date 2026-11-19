@@ -341,11 +341,13 @@ func newServeArchiveResolver(root string) adminhttp.ExtensionArchiveResolver {
 	}
 	resolver, err := installer.NewLocalMarketplaceArchiveResolver(root)
 	if err != nil {
-		return func(context.Context, string, string) (*installer.StageInstallRequest, func(), error) {
+		return func(context.Context, string, string, string) (*installer.StageInstallRequest, func(), error) {
 			return nil, nil, err
 		}
 	}
-	return resolver.Resolve
+	return func(ctx context.Context, _ string, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
+		return resolver.Resolve(ctx, sourceURI, expectedSHA256)
+	}
 }
 
 func allowedOrigins(addr string) []string {

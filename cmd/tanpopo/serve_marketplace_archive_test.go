@@ -23,7 +23,7 @@ func TestServeArchiveResolverIsOptInAndUsesConfiguredRoot(t *testing.T) {
 	}
 	resolve := newServeArchiveResolver(root)
 	digest := sha256.Sum256(archive)
-	req, cleanup, err := resolve(context.Background(), "tanpopo-local://adapter.tpkg", hex.EncodeToString(digest[:]))
+	req, cleanup, err := resolve(context.Background(), "org_test", "tanpopo-local://adapter.tpkg", hex.EncodeToString(digest[:]))
 	if err != nil {
 		t.Fatalf("configured resolver: %v", err)
 	}
