@@ -488,6 +488,19 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	owners := "not captured"
+	if removeErr != nil {
+		if discovered, ownerErr := fileLockOwners(filepath.Join(dataDir, "tanpopo.db")); ownerErr != nil {
+			owners = fmt.Sprintf("lookup failed: %v", ownerErr)
+		} else {
+			owners = discovered
+		}
+		if child, childErr := os.ReadFile(readyPath); childErr == nil {
+			owners += fmt.Sprintf("; child process %s", strings.TrimSpace(string(child)))
+		} else {
+			owners += fmt.Sprintf("; child identity unavailable: %v", childErr)
+		}
+	}
 	_ = os.WriteFile(releasePath, []byte("release"), 0o600)
 	childErr := <-waitDone
 	waited = true
@@ -507,9 +520,9 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 			time.Sleep(50 * time.Millisecond)
 		}
 		if postExitErr == nil {
-			t.Fatalf("runtime left data directory locked until child process exit: before exit: %v; removal succeeded after exit\n%s", removeErr, readTestLog(logPath))
+			t.Fatalf("runtime left data directory locked until child process exit: before exit: %v; removal succeeded after exit; Windows file-lock owners: %s\n%s", removeErr, owners, readTestLog(logPath))
 		}
-		t.Fatalf("runtime left data directory locked after shutdown: before exit: %v; after exit: %v\n%s", removeErr, postExitErr, readTestLog(logPath))
+		t.Fatalf("runtime left data directory locked after shutdown: before exit: %v; after exit: %v; Windows file-lock owners: %s\n%s", removeErr, postExitErr, owners, readTestLog(logPath))
 	}
 }
 
@@ -564,7 +577,7 @@ func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce strin
 	closeRuntime = nil
 	runtime.GC()
 	fmt.Fprintf(os.Stderr, "post-shutdown goroutine functions:\n%s", runtimeGoroutineFunctionNames())
-	if err := os.WriteFile(filepath.Join(parentDir, "shutdown.ready"), []byte("ready"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(parentDir, "shutdown.ready"), []byte(fmt.Sprintf("pid=%d", os.Getpid())), 0o600); err != nil {
 		t.Fatalf("write child shutdown marker: %v", err)
 	}
 	deadline := time.Now().Add(40 * time.Second)

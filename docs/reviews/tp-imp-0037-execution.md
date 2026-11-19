@@ -1,6 +1,6 @@
 # TP-IMP-0037 Execution Checkpoint
 
-**Status:** PR #18 implementation merged at `a57d295462c1d0c6a5b1438aeb9c593cc295f756`; post-merge Windows cleanup CI failed twice on that SHA. Unit 37 remains `READY_FOR_REVIEW` until all required post-merge checks on `origin/main` pass.
+**Status:** PR #18 implementation merged at `a57d295462c1d0c6a5b1438aeb9c593cc295f756`; corrective PR #19 merged at `8c7e9a4310fe5d2f43a5ff4ee5a17cd7b6ee4a14`. Post-merge run `44598496963` failed only the Windows runtime cleanup regression. Unit 37 remains `READY_FOR_REVIEW` until all required post-merge checks on `origin/main` pass.
 
 ## Authority and ownership
 
@@ -11,12 +11,13 @@
 - Final review on the hardened diff: **Faraday** (`code-reviewer`) APPROVE and **Plato** (`security-auditor`) PASS.
 - Windows CI correction reviews: **Archimedes**, **Anscombe**, **Erdos**, **Newton**, and **Boyle** (`code-reviewer`); **Lagrange**, **Avicenna**, **McClintock**, **Volta**, and **Fermat** (`security-auditor`). Final delta review: **Boyle** APPROVE and **Fermat** PASS. Their findings led to an explicitly test-only, Tier-2 WASM timeout override that is disclosed in the report and never promotes `TESTED` badges.
 - Final Windows cleanup-harness review: **Herschel** (`code-reviewer`) APPROVE; **Descartes** (`security-auditor`) PASS after the child environment and fixture-path isolation correction.
+- Post-merge root-cause investigation: **Noether** (`test-engineer`) found no concrete unclosed SQL rows or missing worker join and recommended identifying the Windows file-lock owner before changing production shutdown behavior.
 
 ## Baseline and branch
 
 - Working branch: `develop`.
 - PR #18 was based on `origin/main` at `b17a2fc65f3ce139507897244d2897a73e187b34` and merged from `develop` at `15e3708fee394543b9d83ecdc4d4ec6ca50b3193`.
-- Current `origin/main` is `a57d295462c1d0c6a5b1438aeb9c593cc295f756`. The corrective follow-up is being prepared on the persistent `develop` branch. No Unit 38 work has started.
+- Current `origin/main` and persistent `develop` are both `8c7e9a4310fe5d2f43a5ff4ee5a17cd7b6ee4a14`. The next test-only diagnostic follow-up is being prepared on `develop`. No Unit 38 work has started.
 
 ## Implemented checkpoint
 
@@ -45,8 +46,8 @@
 
 ## Next steps
 
-1. Complete code and security review of the post-merge Windows diagnostic follow-up; push it to `develop` and resolve CI findings.
-2. Once the Windows cleanup defect is corrected, obtain fresh strong reviews, verify required CI, and merge the correction PR under `DEC-072`.
+1. Complete code and security review of the Windows file-lock owner diagnostic, push it to `develop`, and inspect the next Windows CI failure if reproduced.
+2. Make an implementation change only after CI identifies the handle owner; then obtain fresh strong reviews and verify required CI before merging under `DEC-072`.
 3. Verify green post-merge CI on `origin/main`, record Unit 37 acceptance, then synchronize `develop` before checking Unit 38 DoR.
 
 ## Post-merge Windows cleanup follow-up (2026-11-19)
@@ -62,4 +63,6 @@
 - On `de551fee609688848d0f89d588599c647a9762fe`, the isolated Store.Close test passed on macOS, but the runtime shutdown regression failed on macOS before its alive-process check: `Store.Close` reported one active SQLite connection. The log parser had truncated function names at the first `(`, hiding method names. **GPT-6 Luna** now preserves receiver/method names and adds a parser regression test so the next macOS failure can identify the active `database/sql` operation. This diagnostic delta and its platform CI are pending review/results.
 - On the same SHA, Windows passed its entire Stage 1 job, including the isolated Store.Close test's five open/close/remove cycles and all five runtime child-process cleanup iterations. This narrows the active-connection failure to an intermittent/runtime path not reproduced by the isolated store lifecycle; it does not yet establish a clean all-platform gate because macOS failed.
 - Run [`44595404350`](https://github.com/nguywnben/tanpopo/actions/runs/44595404350) on `b251757d3efe1f7a12a518f82987ac07d10e36a1` passed Stage 0, macOS Stage 1, and Windows' isolated Store.Close test, but Windows full Go tests stopped at `TestMissingSecretZeroizerFailsClosed` because `t.TempDir` could not remove `webhook.db`; the runtime stress step was skipped. This was another test in the shared webhook SQLite helper and a different test name from the earlier cleanup warning. **GPT-6 Luna** changed the helper to report any in-use connection, close the DB, and retry removal for a bounded two seconds; a persistent lock still fails the test. The complete webhook package passed three local repetitions.
+- Post-merge run [`44598496963`](https://github.com/nguywnben/tanpopo/actions/runs/44598496963) on main `8c7e9a4310fe5d2f43a5ff4ee5a17cd7b6ee4a14` passed Stage 0, Ubuntu, and macOS; Windows failed the five-repeat runtime cleanup step on iterations 3 and 5. The DB remained locked during 30 seconds of pre-exit retries and became removable after the test child exited. The release artifact dry run [`44598497172`](https://github.com/nguywnben/tanpopo/actions/runs/44598497172) passed. **Noether** (**test-engineer**) found no specific unclosed row or missing runtime worker join; the evidence did not justify changing production shutdown.
+- **GPT-6 Luna** added test-only Windows Restart Manager diagnostics for the next occurrence. The diagnostic registers only the temporary SQLite DB path, reports lock-owner process IDs/names and the child PID, and runs after the mandatory pre-exit removal assertion fails but before the child is released. A successful post-exit removal still fails the test. The diagnostic uses a unique random session key and has a non-Windows stub. Local full `go test -v ./...`, focused cleanup test (`-count=5`), `go run ./scripts/ci/check.go --all`, `git diff --check`, and Windows cross-compilation passed. Final independent review of this diff: **Franklin** (**code-reviewer**) APPROVE and **Dewey** (**security-auditor**) PASS. The next Windows CI run must identify whether the process holding the handle is the test child or an external process before any production fix is made.
 - No Unit 38 implementation has started, and Unit 37 is not accepted until the post-merge Windows gate is green.
