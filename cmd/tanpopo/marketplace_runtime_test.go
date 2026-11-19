@@ -8,10 +8,14 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/extension/registry"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
@@ -110,5 +114,71 @@ func TestVaultOCIRegistryCredentialResolverIsOrganizationAndAuthorityScoped(t *t
 	}
 	if credentials, err := resolver.CredentialsForRegistry(ctx, otherOrg.ID, registryHost); err != nil || credentials != nil {
 		t.Fatalf("credential crossed organization boundary: credentials=%v err=%v", credentials, err)
+	}
+}
+
+type recordedMarketplaceQuarantine struct {
+	installationID string
+	reason         string
+	actorID        string
+}
+
+func (r *recordedMarketplaceQuarantine) QuarantineInstallation(_ context.Context, installationID, reason, actorID string) error {
+	r.installationID, r.reason, r.actorID = installationID, reason, actorID
+	return nil
+}
+
+type recordedMarketplaceAudit struct{ events []port.AuditEvent }
+
+func (r *recordedMarketplaceAudit) Append(_ context.Context, event port.AuditEvent) error {
+	r.events = append(r.events, event)
+	return nil
+}
+
+func TestRuntimeRevocationActionsQuarantineAbortStreamsAndEmitINC03(t *testing.T) {
+	ctx := context.Background()
+	store, err := sqlite.Open(ctx, sqlite.Config{DBPath: filepath.Join(t.TempDir(), "tanpopo.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	snaps, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: store.RawDB()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+	handle := snaps.Streams().Register("org_test", "project_test", "key_test", cancelStream)
+	snaps.Streams().BindTarget("key_test", handle, "connection_test", "installation_test")
+	quarantine := &recordedMarketplaceQuarantine{}
+	audit := &recordedMarketplaceAudit{}
+	actions := runtimeRevocationActions{installer: quarantine, snapshots: snaps, audit: audit}
+	target := registry.RevocationTarget{
+		InstallationID: "installation_test", PackageSlug: "community/bad-adapter",
+		VersionOrSHA256: "1.0.0", Severity: "CRITICAL", Reason: "confirmed vulnerable",
+	}
+	if err := actions.QuarantineInstallation(ctx, target); err != nil {
+		t.Fatal(err)
+	}
+	if quarantine.installationID != target.InstallationID || quarantine.actorID != "system_reaper" || !strings.Contains(quarantine.reason, target.Reason) {
+		t.Fatalf("unexpected quarantine call: %+v", quarantine)
+	}
+	if err := actions.SeverInstallationStreams(ctx, target); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-streamCtx.Done():
+	default:
+		t.Fatal("revoked installation stream was not aborted")
+	}
+	if err := actions.EmitINC03(ctx, target); err != nil {
+		t.Fatal(err)
+	}
+	if len(audit.events) != 1 || audit.events[0].EventType != "INC-03" || audit.events[0].TargetID != target.InstallationID {
+		t.Fatalf("INC-03 audit event missing or misdirected: %+v", audit.events)
+	}
+	var metadata map[string]string
+	if err := json.Unmarshal([]byte(audit.events[0].MetadataJSON), &metadata); err != nil || metadata["incident"] != "INC-03" || metadata["package_slug"] != target.PackageSlug {
+		t.Fatalf("INC-03 audit metadata malformed: %s err=%v", audit.events[0].MetadataJSON, err)
 	}
 }

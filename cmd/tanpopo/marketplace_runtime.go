@@ -111,7 +111,9 @@ func configuredMarketplaceKeyring(raw string) (registry.Keyring, error) {
 }
 
 type runtimeRevocationActions struct {
-	installer *installer.LifecycleService
+	installer interface {
+		QuarantineInstallation(context.Context, string, string, string) error
+	}
 	snapshots *snapshot.Manager
 	audit     port.AuditSink
 }
