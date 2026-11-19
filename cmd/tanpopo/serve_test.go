@@ -567,7 +567,7 @@ func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce strin
 func testEnvWithOverrides(env []string, overrides map[string]string) []string {
 	result := make([]string, 0, len(env)+len(overrides))
 	allowed := map[string]struct{}{
-		"PATH": {}, "SYSTEMROOT": {}, "WINDIR": {}, "TEMP": {}, "TMP": {},
+		"PATH": {}, "SYSTEMROOT": {}, "WINDIR": {}, "TEMP": {}, "TMP": {}, "TMPDIR": {},
 		"TANPOPO_TEST_HERMETIC": {},
 	}
 	for _, entry := range env {
