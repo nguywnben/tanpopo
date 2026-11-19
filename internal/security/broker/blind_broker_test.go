@@ -867,7 +867,7 @@ func TestBlindBrokerHeaderBasicHMACAndErrorScrubbing(t *testing.T) {
 	}
 	h.scanner.AssertClean(t, canary.NamedData{Source: "query_param_err", Data: []byte(qpErr.Error())})
 
-	// E. Unsupported AWS_SIGV4 returns 422 in v0.1 cleanly (out-of-scope -> TP-IMP-0035)
+	// E. AWS_SIGV4 fails closed when the untrusted adapter omits its signing scope.
 	_, sigV4Err := h.broker.Execute(ctx, EgressRequest{
 		OrgID:        h.orgID,
 		ConnectionID: h.connID,
@@ -884,8 +884,8 @@ func TestBlindBrokerHeaderBasicHMACAndErrorScrubbing(t *testing.T) {
 			},
 		},
 	})
-	if !errors.Is(sigV4Err, ErrUnsupportedSigningAlgorithm) {
-		t.Fatalf("expected ErrUnsupportedSigningAlgorithm for AWS_SIGV4 in v0.1, got %v", sigV4Err)
+	if !errors.Is(sigV4Err, ErrInvalidEgressRequest) {
+		t.Fatalf("expected invalid AWS SigV4 scope to fail closed, got %v", sigV4Err)
 	}
 
 	// F. Zero-value UnsealCapability fails closed inside Vault.

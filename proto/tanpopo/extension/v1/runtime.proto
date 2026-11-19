@@ -98,11 +98,11 @@ message BlobRef {
 // HostCryptoSignSpec instructs the Host Blind Broker to sign canonical payload bytes using a vault-sealed secret slot.
 message HostCryptoSignSpec {
   SigningAlgorithm algorithm = 1;          // HMAC_SHA256, AWS_SIGV4, or RSA_SHA256
-  bytes canonical_payload = 2;             // Canonical string/payload constructed by Guest from non-secret request metadata
+  bytes canonical_payload = 2;             // HMAC/RSA payload from Guest; SigV4 canonicalizes the final Host request and ignores this field
   SignatureEncoding output_encoding = 3;   // Output encoding for HMAC_SHA256 / RSA_SHA256 signatures
   string aws_region = 4;                   // Target AWS region (required when algorithm == SIGNING_ALGORITHM_AWS_SIGV4)
   string aws_service = 5;                  // Target AWS service, e.g., "bedrock" (required when algorithm == SIGNING_ALGORITHM_AWS_SIGV4)
-  int64 signing_timestamp_epoch_sec = 6;   // UTC epoch timestamp anchored by Host clock-skew guard
+  int64 signing_timestamp_epoch_sec = 6;   // Legacy hint; SigV4 uses the trusted Host clock for its timestamp
   repeated string signed_headers = 7;      // Lowercase header names included in the canonical signing string
 }
 

@@ -506,12 +506,12 @@ components:
       properties:
         name: { type: string, minLength: 1 }
         project_id: { type: ["string", "null"] }
-        secret_kind: { type: string, enum: [API_KEY, HMAC_SECRET, OAUTH_CLIENT_SECRET, WEBHOOK_SECRET] }
+        secret_kind: { type: string, enum: [API_KEY, HMAC_SECRET, OAUTH_CLIENT_SECRET, WEBHOOK_SECRET, AWS_SIGV4_KEY, OCI_REGISTRY_AUTH, MTLS_CLIENT_CERT] }
         secret_value:
           type: string
           minLength: 1
           writeOnly: true
-          description: Write-only raw credential sealed immediately under Org/Project DEK with canonical AEAD AAD.
+          description: Write-only raw credential sealed immediately under Org/Project DEK with canonical AEAD AAD. AWS_SIGV4_KEY must be JSON with access_key_id and secret_access_key, and may include session_token.
 
     SecretMetadata:
       type: object
