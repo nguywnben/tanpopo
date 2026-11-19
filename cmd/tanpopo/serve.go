@@ -22,6 +22,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	extport "github.com/nguywnben/tanpopo/internal/extension/port"
+	"github.com/nguywnben/tanpopo/internal/extension/registry"
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
@@ -36,7 +37,6 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/oauth"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
-	"github.com/nguywnben/tanpopo/internal/extension/registry"
 	telemetry "github.com/nguywnben/tanpopo/internal/telemetry/otel"
 	"github.com/nguywnben/tanpopo/internal/webui"
 )
@@ -175,6 +175,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	}
 	runtimeCtx, cancelRuntime := context.WithCancel(ctx)
 	watcherDone := make(chan struct{})
+	var marketplaceDone <-chan struct{}
 	go func() {
 		defer close(watcherDone)
 		snaps.StartWatcher(runtimeCtx, time.Second)
@@ -195,6 +196,9 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 			}
 			cancelRuntime()
 			<-watcherDone
+			if marketplaceDone != nil {
+				<-marketplaceDone
+			}
 			vaultStore.Close()
 			closeKeys()
 			closeStore()
@@ -245,6 +249,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		cleanup()
 		return nil, nil, fmt.Errorf("initialize marketplace registry store: %w", err)
 	}
+	marketplaceDone = startMarketplaceRuntime(runtimeCtx, registryStore, installerService, snaps, auditLog)
 	blindBroker, err := broker.NewBlindBroker(broker.Config{
 		Resolver: catalogRepo, PolicyResolver: catalogRepo, Vault: vaultStore,
 		UnsealCap: brokerUnsealCap, Audit: auditLog, OAuthTokens: oauthService,
