@@ -392,9 +392,14 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 		runtime.GC()
 		// Windows runners can briefly retain a SQLite file handle after database
 		// Close returns. Allow the OS's file-handle teardown to settle, while still
-		// failing if the runtime keeps the database connection open.
+		// failing if the runtime keeps the database connection open. Re-collect
+		// finalizable modernc wrappers during the bounded retry window; one forced
+		// collection before the loop is not deterministic on Windows.
 		var removeErr error
 		for attempt := 0; attempt < 600; attempt++ {
+			if attempt > 0 && attempt%10 == 0 {
+				runtime.GC()
+			}
 			removeErr = os.RemoveAll(dataDir)
 			if removeErr == nil {
 				return

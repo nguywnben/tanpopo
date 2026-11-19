@@ -61,7 +61,7 @@ func TestOCIArchiveResolverStagesOnlyVerifiedIndexedArtifact(t *testing.T) {
 	if err != nil || !bytes.Equal(file, body) {
 		t.Fatalf("staged archive content=%q err=%v", file, err)
 	}
-	if _, err := resolver.Resolve(context.Background(), ref, hex.EncodeToString(make([]byte, sha256.Size))); err == nil {
+	if _, _, err := resolver.Resolve(context.Background(), ref, hex.EncodeToString(make([]byte, sha256.Size))); err == nil {
 		t.Fatal("digest mismatch accepted")
 	}
 	store.entries = nil
