@@ -3,12 +3,12 @@
 ## Current checkpoint
 
 - Unit: `TP-IMP-0034`
-- Governance state: `READY` under `DEC-063`.
-- Implementation branch: persistent `develop`, synchronized to `origin/main` at `c1dab09599c08250873b71cf8445ba9adc78de6b` after the Unit 33 acceptance PR merged.
-- Unit 33 predecessor: DONE on `origin/main`; four required post-merge CI checks passed in run `44411945678`. Artifact/provenance verification is tracked in run `44411945857`.
+- Governance state: `DONE` under `DEC-069`; Unit 35 remains blocked until the acceptance governance CI passes on main.
+- Implementation branch: persistent `develop`, fast-forward synchronized to `origin/main` merge SHA `e4a6fd37564f06c131be9432c9a8f4c0643d175a` after PR #11 merged.
+- Unit 33 predecessor: DONE on `origin/main`; Unit 34 implementation PR #11 merged at main SHA `e4a6fd37564f06c131be9432c9a8f4c0643d175a`.
 - DoR: verified on `origin/main`: `TP-IMP-0003`, `TP-IMP-0010`, and `TP-IMP-0024` are DONE; `GAP-01` and `GAP-04` are CLOSED.
 - Implementer and delegated acceptor: **GPT-6 Luna** under `DEC-060`.
-- Review tier: `REQUIRES_STRONG_REVIEW`; final independent **code-reviewer** and **security-auditor** reviews required.
+- Review tier: `REQUIRES_STRONG_REVIEW`; final independent reviews passed on the exact PR #11 implementation head.
 - No tag/release will be created (`GATE-REL-07`).
 
 ## Execution and independent review attribution
@@ -22,7 +22,8 @@
 - Final security review on that SHA: **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings; the same Low observation remains. Reviewers did not run tests; CI provides the test evidence below.
 - Follow-up review of the added Vault regression tests on PR #11 SHA `73c52d99e486902e5f8389f76ce79d88eb317aee`: **Maxwell** (**code-reviewer** subagent; report signature **GPT-6 Luna**) — **APPROVE**, no actionable findings; **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings and the same Low observation. No implementation code changed in this test-only update.
 - Follow-up review of the added Vault edge cases on PR #11 SHA `6d17c6d2f563708fd8681eac799527795ba552a6`: **Maxwell** (**code-reviewer** subagent; report signature **GPT-6 Luna**) — **APPROVE**, no actionable findings; **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings and the same Low observation. This update contains tests and execution-record text only; CI evidence is tracked below.
-- The release artifact dry run exposed that a public listener without `TANPOPO_OAUTH_REDIRECT_URI` caused runtime startup to fail. **DEC-068** makes the OAuth coordinator optional until an explicit HTTPS callback is configured while preserving `503 oauth_unavailable` and fail-closed broker behavior; a runtime regression test covers public startup and OAuth unavailability. Final independent review and CI are pending on this updated diff.
+- The release artifact dry run exposed that a public listener without `TANPOPO_OAUTH_REDIRECT_URI` caused runtime startup to fail. **DEC-068** makes the OAuth coordinator optional until an explicit HTTPS callback is configured while preserving `503 oauth_unavailable` and fail-closed broker behavior; a runtime regression test covers public startup and OAuth unavailability.
+- Final independent code review on PR #11 SHA `1d88da49a4279229602bd1c3dc24112397f45865`: **Turing** (**code-reviewer**) — **APPROVE**, no actionable findings. Final security review on the same SHA: **Noether** (**security-auditor**) — **PASS**, zero Critical/High/Medium/Low findings. Reviewers did not run tests; CI run `44430250831` passed all four required jobs and artifact dry-run `44430250788` completed successfully on the same SHA.
 - **Popper** (**test-engineer**) contributed the OAuth refresh and concurrency test plan and tests; the final CI runs exercise those tests on the accepted diff.
 
 ## Contract reconciliation
@@ -36,6 +37,6 @@
 
 Implement Authorization Code + PKCE S256, Client Credentials, and authorized RFC 8628 Device Flow; persist short-lived authorization state; seal token pairs in Vault; serialize token refresh per credential; bind tokens to the exact RFC 8707 resource; stop retrying `invalid_grant`, mark reauthorization required, and emit the required alert. Add migration, OpenAPI, HTTP, repository, concurrency, state-replay, audience-mismatch, and token-redaction coverage required by the unit spec (`CT-19`, `AUTH-09`, `AUTH-10`, `AUTH-16`, `FMEA-08`).
 
-Windows CI exposed a SQLite file-handle teardown failure in `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; cleanup now allows a bounded 30-second Windows teardown window and still fails if the runtime retains the database handle. The required checks will be rerun on the final diff.
+Windows CI exposed a SQLite file-handle teardown failure; the test now permits a bounded 30-second Windows teardown window and still fails if the runtime retains the database handle. The Vault coverage shortfall was resolved by adding focused validation cases for OAuth sessions and transactional token rotation. The public-listener artifact smoke failure was resolved under `DEC-068`; the runtime stays available without OAuth callback configuration while OAuth endpoints return `503 oauth_unavailable` and broker resolution fails closed. The final callback review also restricted HTTP callbacks to exact loopback addresses in hermetic tests only.
 
-The final cross-platform CI run exposed a Vault package coverage shortfall; focused validation cases are being added for the new OAuth session and transactional rotation APIs. The artifact dry run is tracked on the current PR #11 head. The merge SHA and post-merge acceptance CI will be recorded after merge. Unit 35 remains blocked until Unit 34 is DONE on main with green acceptance CI.
+Final implementation evidence: PR #11 head `1d88da49a4279229602bd1c3dc24112397f45865`; four PR checks in run [`44430250831`](https://github.com/nguywnben/tanpopo/actions/runs/44430250831) and artifact dry-run [`44430250788`](https://github.com/nguywnben/tanpopo/actions/runs/44430250788) succeeded. **Turing** (**code-reviewer**) APPROVE and **Noether** (**security-auditor**) PASS with zero findings on the final diff. PR #11 merged to main at `e4a6fd37564f06c131be9432c9a8f4c0643d175a`; post-merge four-job CI [`44432591862`](https://github.com/nguywnben/tanpopo/actions/runs/44432591862) and artifact/attestation [`44432591826`](https://github.com/nguywnben/tanpopo/actions/runs/44432591826) succeeded. **GPT-6 Luna** implemented and accepted Unit 34; **Maxwell** and **Heisenberg** contributed earlier code/security reviews; **Popper** (**test-engineer**) contributed the concurrency test plan; **Turing** and **Noether** delivered final reviews. Unit 35 DoR is verified; its READY transition remains gated on this acceptance governance PR passing CI on main. No tag or release was created.

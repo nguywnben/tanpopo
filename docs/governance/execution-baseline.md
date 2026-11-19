@@ -2,10 +2,10 @@
 
 > **MANDATORY COLD-START ENTRYPOINT FOR EVERY NEW EXECUTION SESSION (`ZERO PRIOR CHAT MEMORY REQUIRED`)**
 > - **Baseline ID:** `EXEC-BL-001-APPROVED`
-> **Version:** `2.47.0-dec-063-0033-done-0034-ready` | **Last Updated:** `2026-11-18` | **Accepted Implementation Baseline:** `1c5ee582f704155a82876ee8cd7ea9eed8091134` (`TP-IMP-0033` DONE; post-merge CI run `44406466341` green on all four required jobs)
-> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0033` DONE; `TP-IMP-0034` READY under `DEC-063`; `0035`..`0047` BLOCKED). Unit 33 post-merge CI run `44406466341` passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows; artifact/provenance run `44406466424` succeeded on the same main SHA.
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** through `DEC-063` (`33 DONE`, `1 READY`, `0 READY_FOR_REVIEW`, `13 BLOCKED`; `DEC-033` remains revoked).
-> - **CURRENT UNIT STATE (`UNIT_STATES`):** `33 / 47` DONE (`0001`..`0033`), `1 / 47` READY (`0034`), `0 READY_FOR_REVIEW`, `13 / 47` BLOCKED (`0035`..`0047`).
+> **Version:** `2.48.0-dec-069-0034-done-0035-blocked` | **Last Updated:** `2026-11-19` | **Accepted Implementation Baseline:** `e4a6fd37564f06c131be9432c9a8f4c0643d175a` (`TP-IMP-0034` DONE; post-merge CI run `44432591862` green on all four required jobs)
+> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0034` DONE; `TP-IMP-0035`..`0047` BLOCKED pending sequential opening). Unit 34 post-merge CI run `44432591862` passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows; artifact/attestation run `44432591826` succeeded on the same main SHA.
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** through `DEC-069` (`34 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `13 BLOCKED`; `DEC-033` remains revoked).
+> - **CURRENT UNIT STATE (`UNIT_STATES`):** `34 / 47` DONE (`0001`..`0034`), `0 / 47` READY, `0 READY_FOR_REVIEW`, `13 / 47` BLOCKED (`0035`..`0047`).
 
 ---
 
@@ -115,7 +115,7 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 
 ### 4. Dependency-Ordered Execution Queue (`HANDOFF_VERDICT: GO` — `0030` `DONE` · `0031..0047` `BLOCKED`)
 
-> **Live Status Today:** `TP-IMP-0001`..`0033` are DONE; Unit 33 is verified on `origin/main` `1c5ee582f704155a82876ee8cd7ea9eed8091134` with post-merge CI run `44406466341` green across Stage 0 + Stage 1 Ubuntu/macOS/Windows and artifact/provenance run `44406466424` successful. Under `DEC-060`, GPT-6 Luna executes `0033`..`0035` sequentially through `develop` → PR. Unit 34 is READY under `DEC-063`; `0035`..`0047` remain blocked until DoR and predecessor acceptance.
+> **Live Status Today:** `TP-IMP-0001`..`0034` are DONE; Unit 34 is verified on `origin/main` `e4a6fd37564f06c131be9432c9a8f4c0643d175a` with post-merge CI run `44432591862` green across Stage 0 + Stage 1 Ubuntu/macOS/Windows and artifact/attestation run `44432591826` successful. Under `DEC-060`, GPT-6 Luna executes Unit 35 next through persistent `develop` → PR. Unit 35 DoR is verified, but it remains blocked until this Unit 34 acceptance record is on main with green CI.
 
 | Wave | Unit ID(s) | Execution Mode | Status / Mandatory Checkpoint Before Next Wave |
 |---|---|---|---|
@@ -127,7 +127,7 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 | **Wave 1.5** | [`TP-IMP-0011`](../planning/units/TP-IMP-0011.md) → [`TP-IMP-0012`](../planning/units/TP-IMP-0012.md) **\|\|** [`TP-IMP-0013`](../planning/units/TP-IMP-0013.md) → [`TP-IMP-0014`](../planning/units/TP-IMP-0014.md) → [`TP-IMP-0015`](../planning/units/TP-IMP-0015.md) | **`0011..0015` = `DONE`** (`GATE-M1` Closed) | **`0011` = `DONE` (`DEC-021`, `4cb12ce8`, CI `43684854935`)** · **`0012` = `DONE` (`DEC-023`, `b5f548ae`, CI `43707209233`)** · **`0013` = `DONE` (`DEC-024`, `dea06fbc`, CI `43724587829`)** · **`0014` = `DONE` (`DEC-025`/`DEC-026`, `6924ea30`, CI `43732602287`, `code-reviewer` [`d83959e2`] `APPROVE`)** · **`0015` = `DONE` (`DEC-025`/`DEC-027`, `baf154dc`, CI `43745804370`, `FuzzSSEParser` 30s `559,328` execs, `TestEXTAccept01_VerticalSliceM1`, `code-reviewer` [`5e3e6453`] & `security-auditor` [`363b1896`] `APPROVE`, closing `GATE-M1`)**. |
 | **Wave 2.1 (`M2`)** | [`TP-IMP-0016`](../planning/units/TP-IMP-0016.md) → [`0017`](../planning/units/TP-IMP-0017.md) → [`0018`](../planning/units/TP-IMP-0018.md) → [`0019`](../planning/units/TP-IMP-0019.md) → [`0020`](../planning/units/TP-IMP-0020.md) | **`0016..0020` = `DONE`** (`DEC-025` batch completed cleanly at `0020`) | **`0016` = `DONE` (`DEC-028`, `f14989b0`, CI `43752413362`, `code-reviewer` [`51145b49`] & `security-auditor` [`8dfc27cb`])** · **`0017` = `DONE` (`DEC-029`, `1217270c`, CI `43758814840`, `code-reviewer` [`eea14add`] + `CR-01` sign-off)** · **`0018` = `DONE` (`DEC-030`, `fba66814`, CI `43766468056`, `code-reviewer` [`9d49b519`] `APPROVE`)** · **`0019` = `DONE` (`DEC-031`, `6c313e8f`, CI `43772630305`, `code-reviewer` [`eac61e5f`] & `security-auditor` [`26305d32`] `PASS`)** · **`0020` = `DONE` (`DEC-032`, `904ba2a9`, CI `43782208080`, `security-auditor` [`59206f9a`] `PASS` & `code-reviewer` [`31d9454f`] `APPROVE`)**. |
 | **Wave 2.2 (`M2` — `DEC-041` / `DEC-058` / `DEC-059`)** | `TP-IMP-0021`..`0030` | Sequential UI batch complete; all ten units DONE on main with CI and accepted governance records. |
-| **Wave 2.3 (`DEC-060`)** | `TP-IMP-0031` → `0032` → `0033` → `0034` → `0035` | Sequential GPT-6 Luna batch via persistent `develop`; one unit READY at a time, with per-unit PR, required review tier, four green checks, merge, and post-merge main verification. Current: Unit 33 DONE under `DEC-063`; Unit 34 READY. |
+| **Wave 2.3 (`DEC-060`)** | `TP-IMP-0031` → `0032` → `0033` → `0034` → `0035` | Sequential GPT-6 Luna batch via persistent `develop`; one unit READY at a time, with per-unit PR, required review tier, four green checks, merge, and post-merge main verification. Current: Unit 34 DONE under `DEC-069`; Unit 35 remains BLOCKED until the acceptance governance CI passes on main. |
 
 ---
 

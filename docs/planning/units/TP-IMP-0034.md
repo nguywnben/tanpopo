@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0034` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
-| **Status** | **`READY`** *(Opened under `DEC-063`; DoR verified: `TP-IMP-0003`, `TP-IMP-0010`, and `TP-IMP-0024` are DONE; `GAP-01` and `GAP-04` are closed; predecessor Unit 33 is DONE on main with green acceptance CI)* |
+| **Status** | **`DONE`** *(Accepted under `DEC-069`; PR #11 implementation head `1d88da49a4279229602bd1c3dc24112397f45865`, merged on main at `e4a6fd37564f06c131be9432c9a8f4c0643d175a`; final strong reviews passed; four post-merge checks green in CI run `44432591862`; artifact dry-run and attestation run `44432591826` succeeded)* |
 | **Size** | `L` (`internal/security/oauth/*`, `internal/admin/http/oauth.go`, `db/migrations/sqlite/0016_oauth_sessions.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(OAuth 2.1 authorization flows, `RFC 8707` cross-audience token-theft prevention, `FMEA-08` refresh stampede protection & `DEC-004` compliance)* |
 | **Technical Owner** | `Principal Identity & Security Engineer` |

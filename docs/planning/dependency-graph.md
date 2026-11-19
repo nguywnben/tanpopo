@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0033: DONE` | `0034 READY / 0 READY_FOR_REVIEW / 0035..0047 BLOCKED`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.49.0-dec-063-0033-done-0034-ready` | **Date:** `2026-11-18`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0034: DONE` | `0 READY / 0 READY_FOR_REVIEW / 0035..0047 BLOCKED`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.50.0-dec-069-0034-done-0035-blocked` | **Date:** `2026-11-19`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** Units `0001`..`0033` are DONE. Unit 33 is verified on main SHA `1c5ee582f704155a82876ee8cd7ea9eed8091134`; post-merge CI run `44406466341` passed all four required jobs and artifact/provenance run `44406466424` succeeded. `DEC-060` delegates `0031`..`0035` to GPT-6 Luna sequentially using persistent `develop` and per-unit PRs; `0034` is READY and `0035`..`0047` remain blocked. No tags/releases (`GATE-REL-07`).
+> - **Live DAG Frontier:** Units `0001`..`0034` are DONE. Unit 34 is verified on main SHA `e4a6fd37564f06c131be9432c9a8f4c0643d175a`; post-merge CI run `44432591862` passed all four required jobs and artifact/attestation run `44432591826` succeeded. `DEC-060` delegates `0031`..`0035` to GPT-6 Luna sequentially using persistent `develop` and per-unit PRs; `0035`..`0047` remain blocked pending the Unit 34 acceptance governance CI and their own DoR. No tags/releases (`GATE-REL-07`).
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -57,7 +57,7 @@ flowchart TD
     end
 
     subgraph M3["M3: v0.2 OAuth 2.1, Marketplace & MCP Hub"]
-        U34["TP-IMP-0034: Authorized OAuth 2.1 Single-Flight Broker"]
+        U34["TP-IMP-0034: Authorized OAuth 2.1 Single-Flight Broker (DONE — DEC-069)"]
         U35["TP-IMP-0035: Marketplace Index, OCI Puller & Bedrock/Azure"]
         U36["TP-IMP-0036: MCP Hub Core & JCS schema_hash Pinning"]
         U37["TP-IMP-0037: MCP HITL Destructive Approval & Webhooks"]
@@ -127,7 +127,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier (`33 DONE`, `1 READY`, `0 READY_FOR_REVIEW`, `13 BLOCKED` — `DEC-063`):** `TP-IMP-0001..0033` are DONE; Unit 33 is verified on main SHA `1c5ee582f704155a82876ee8cd7ea9eed8091134` with post-merge CI run `44406466341` green and artifact/provenance run `44406466424` successful. Under `DEC-060`, GPT-6 Luna executes `0034` → `0035`; Unit 34 alone is READY. Unit 35 opens only after Unit 34 is DONE on main with green acceptance CI and its DoR confirmed; Units 36–47 remain blocked. Use `develop` → PR → independent review and four checks → merge → verify main. No tags/releases.
+> **Live Queue Frontier (`34 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `13 BLOCKED` — `DEC-069`):** `TP-IMP-0001..0034` are DONE; Unit 34 is verified on main SHA `e4a6fd37564f06c131be9432c9a8f4c0643d175a` with post-merge CI run `44432591862` green and artifact/attestation run `44432591826` successful. Unit 35 DoR is verified and its READY transition will follow the Unit 34 acceptance governance CI on main. Units 35–47 remain blocked. Under `DEC-060`, GPT-6 Luna continues sequentially through persistent `develop` and per-unit PRs. Use `develop` → PR → independent review and four checks → merge → verify main. No tags/releases.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.
