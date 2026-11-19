@@ -126,7 +126,10 @@ func finalizeRerankJSON(requestedModel string, request *rerankIngressRequest, no
 		payload.Model = requestedModel
 	}
 	if norm.Usage != nil {
-		payload.Usage = map[string]int64{"total_tokens": norm.Usage.InputTokens + norm.Usage.OutputTokens}
+		payload.Usage = map[string]int64{
+			"search_units": int64(norm.Usage.RerankSearchUnits),
+			"total_tokens": norm.Usage.InputTokens + norm.Usage.OutputTokens,
+		}
 	}
 	limit := len(request.Documents)
 	if request.TopN != nil && *request.TopN < limit {

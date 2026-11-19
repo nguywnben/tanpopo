@@ -38,21 +38,22 @@ func TestFinalizeRerankJSONValidatesAndReturnsRequestedDocuments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := finalizeRerankJSON(req.Model, req, port.NormalizedInferenceResponse{NormalizedResponseJSON: []byte(`{"id":"rr-1","results":[{"index":1,"relevance_score":0.91}]}`), UpstreamModelID: "ranker-v1"})
+	response, err := finalizeRerankJSON(req.Model, req, port.NormalizedInferenceResponse{NormalizedResponseJSON: []byte(`{"id":"rr-1","results":[{"index":1,"relevance_score":0.91}]}`), UpstreamModelID: "ranker-v1", Usage: &port.MediaUsage{InputTokens: 3, OutputTokens: 2, RerankSearchUnits: 4}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var got struct {
-		Model   string `json:"model"`
+		Model   string           `json:"model"`
+		Usage   map[string]int64 `json:"usage"`
 		Results []struct {
-			Index    int            `json:"index"`
+			Index    int               `json:"index"`
 			Document map[string]string `json:"document"`
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(response, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Model != "ranker-v1" || len(got.Results) != 1 || got.Results[0].Index != 1 || got.Results[0].Document["text"] != "second" {
+	if got.Model != "ranker-v1" || len(got.Results) != 1 || got.Results[0].Index != 1 || got.Results[0].Document["text"] != "second" || got.Usage["search_units"] != 4 || got.Usage["total_tokens"] != 5 {
 		t.Fatalf("unexpected normalized rerank response: %s", response)
 	}
 	for _, raw := range []string{
