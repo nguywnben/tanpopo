@@ -16,8 +16,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 )
 
 func signedEnvelope(t *testing.T, kind FeedKind, serial int64, expires time.Time, entries string, keyID string, private ed25519.PrivateKey) []byte {
@@ -247,5 +250,58 @@ func TestRevocationWatcherPersistsAndRetriesCriticalEnforcement(t *testing.T) {
 	want := []string{"quarantine:ins_1", "sever:ins_1", "quarantine:ins_1", "sever:ins_1", "inc03:ins_1"}
 	if fmt.Sprint(actions.events) != fmt.Sprint(want) {
 		t.Fatalf("unexpected enforcement order: got %v want %v", actions.events, want)
+	}
+}
+
+func TestSQLStoreCachesIndexAndDurablyQueuesMatchingRevocations(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	store, err := sqlite.Open(ctx, sqlite.Config{DBPath: filepath.Join(t.TempDir(), "registry.db"), NowMs: func() int64 { return now.UnixMilli() }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	db := store.RawDB()
+	if _, err := db.ExecContext(ctx, `INSERT INTO extension_packages (id, canonical_name, extension_kind, publisher_id, origin_trust_tier, created_at_ms) VALUES ('ext_registry_1', '@community/bad-adapter', 'PROVIDER_ADAPTER', 'publisher', 'verified', ?)`, now.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO extension_versions (id, package_id, semver, contract_version, core_version_range, execution_tier, bundle_sha256, source_uri, manifest_json, created_at_ms) VALUES ('exv_registry_1', 'ext_registry_1', '1.0.0', '0.1', '>=0.1.0', 'DECLARATIVE_T1', ?, 'oci://registry.example.com/team/adapter@sha256:`+fmt.Sprintf("%064x", 1)+`', '{}', ?)`, fmt.Sprintf("%064x", 1), now.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO extension_installations (id, package_id, active_version_id, state, approved_permissions_json, version, created_at_ms, updated_at_ms) VALUES ('ins_registry_1', 'ext_registry_1', 'exv_registry_1', 'ENABLED_ACTIVE', '{}', 1, ?, ?)`, now.UnixMilli(), now.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	registryStore, err := NewSQLStore(db, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := fmt.Sprintf("%064x", 1)
+	index := []IndexEntry{{PackageSlug: "@community/bad-adapter", Version: "1.0.0", Digest: digest, OCIURI: "oci://registry.example.com/team/adapter@sha256:" + digest}}
+	if err := registryStore.ApplyIndexFeed(ctx, 2, now.Add(time.Hour), index); err != nil {
+		t.Fatal(err)
+	}
+	cached, err := registryStore.CachedIndex(ctx)
+	if err != nil || len(cached) != 1 || cached[0].Digest != digest {
+		t.Fatalf("signed index cache not available: cached=%+v err=%v", cached, err)
+	}
+	entries := []RevocationEntry{{PackageSlug: "community/bad-adapter", VersionOrSHA256: "1.0.0", Severity: "CRITICAL_MALICIOUS", Reason: "confirmed compromise"}}
+	if err := registryStore.ApplyRevocationFeed(ctx, 4, now.Add(time.Hour), entries); err != nil {
+		t.Fatal(err)
+	}
+	if serial, err := registryStore.LastRevocationSerial(ctx); err != nil || serial != 4 {
+		t.Fatalf("revocation serial not persisted: serial=%d err=%v", serial, err)
+	}
+	pending, err := registryStore.PendingRevocationActions(ctx)
+	if err != nil || len(pending) != 1 || pending[0].InstallationID != "ins_registry_1" || pending[0].PackageSlug != "@community/bad-adapter" {
+		t.Fatalf("matching active installation was not queued: pending=%+v err=%v", pending, err)
+	}
+	if err := registryStore.CompleteRevocationAction(ctx, pending[0].ActionID); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := registryStore.PendingRevocationActions(ctx); err != nil || len(again) != 0 {
+		t.Fatalf("completed action is still pending: actions=%+v err=%v", again, err)
+	}
+	if err := registryStore.ApplyRevocationFeed(ctx, 4, now.Add(time.Hour), entries); !errors.Is(err, ErrFeedRollback) {
+		t.Fatalf("replayed serial must be rejected, got %v", err)
 	}
 }
