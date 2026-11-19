@@ -716,13 +716,7 @@ func (m *Manager) StartWatcher(ctx context.Context, interval time.Duration) {
 			return
 		}
 		refreshParent := context.WithoutCancel(ctx)
-		var refreshCtx context.Context
-		var cancel context.CancelFunc
-		if deadline, ok := ctx.Deadline(); ok {
-			refreshCtx, cancel = context.WithDeadline(refreshParent, deadline)
-		} else {
-			refreshCtx, cancel = context.WithTimeout(refreshParent, watcherRefreshTimeout)
-		}
+		refreshCtx, cancel := context.WithTimeout(refreshParent, watcherRefreshTimeout)
 		defer cancel()
 		_ = m.Refresh(refreshCtx)
 	}

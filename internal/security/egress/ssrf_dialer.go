@@ -12,6 +12,7 @@ package egress
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -92,14 +93,14 @@ func NewStdHostResolver() HostResolver {
 var (
 	// Unconditionally blocked prefixes (NEVER permitted even when AllowPrivateIP == true).
 	unconditionalMetadataPrefixes = []netip.Prefix{
-		netip.MustParsePrefix("169.254.0.0/16"),   // IPv4 link-local & AWS/GCP/Azure IMDS
+		netip.MustParsePrefix("169.254.0.0/16"),     // IPv4 link-local & AWS/GCP/Azure IMDS
 		netip.MustParsePrefix("100.100.100.200/32"), // Alibaba Cloud metadata endpoint
-		netip.MustParsePrefix("0.0.0.0/8"),        // RFC 1122 unspecified / local host routing alias
-		netip.MustParsePrefix("::/128"),           // IPv6 unspecified
-		netip.MustParsePrefix("fe80::/10"),        // IPv6 link-local
-		netip.MustParsePrefix("fd00:ec2::254/128"), // AWS EC2 IPv6 metadata endpoint
-		netip.MustParsePrefix("224.0.0.0/4"),      // IPv4 multicast
-		netip.MustParsePrefix("ff00::/8"),         // IPv6 multicast
+		netip.MustParsePrefix("0.0.0.0/8"),          // RFC 1122 unspecified / local host routing alias
+		netip.MustParsePrefix("::/128"),             // IPv6 unspecified
+		netip.MustParsePrefix("fe80::/10"),          // IPv6 link-local
+		netip.MustParsePrefix("fd00:ec2::254/128"),  // AWS EC2 IPv6 metadata endpoint
+		netip.MustParsePrefix("224.0.0.0/4"),        // IPv4 multicast
+		netip.MustParsePrefix("ff00::/8"),           // IPv6 multicast
 	}
 
 	// Non-public IP ranges blocked unless AllowPrivateIP == true AND matched by narrowed AllowedCIDRs.
@@ -1006,7 +1007,9 @@ type ClientConfig struct {
 	MaxRedirects             int
 	DenyCrossOriginRedirects bool
 	Resolver                 HostResolver
-	ControlHook              func(network, address string, c syscall.RawConn) error
+	// RootCAs optionally supplies an explicit TLS trust pool. When nil, system roots are used.
+	RootCAs     *x509.CertPool
+	ControlHook func(network, address string, c syscall.RawConn) error
 }
 
 type policyCheckingRoundTripper struct {
@@ -1074,6 +1077,7 @@ func NewGuardedHTTPClient(cfg ClientConfig) (*http.Client, error) {
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
+			RootCAs:    cfg.RootCAs,
 		},
 	}
 

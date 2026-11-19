@@ -47,6 +47,7 @@ const (
 )
 
 var bedrockTestCertificate tls.Certificate
+var bedrockTestRootCAs *x509.CertPool
 
 type bedrockCassette struct {
 	Config                   map[string]any `yaml:"config"`
@@ -95,26 +96,13 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "generate Bedrock test certificate:", err)
 		os.Exit(1)
 	}
-	trustDir, err := os.MkdirTemp("", "tanpopo-bedrock-test-ca-")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "create Bedrock test trust directory:", err)
-		os.Exit(1)
-	}
-	trustPath := filepath.Join(trustDir, "bedrock-root.pem")
-	if err := os.WriteFile(trustPath, certPEM, 0o600); err != nil {
-		fmt.Fprintln(os.Stderr, "write Bedrock test root:", err)
-		_ = os.RemoveAll(trustDir)
-		os.Exit(1)
-	}
-	if err := os.Setenv("SSL_CERT_FILE", trustPath); err != nil {
-		fmt.Fprintln(os.Stderr, "configure Bedrock test trust root:", err)
-		_ = os.RemoveAll(trustDir)
+	bedrockTestRootCAs = x509.NewCertPool()
+	if !bedrockTestRootCAs.AppendCertsFromPEM(certPEM) {
+		fmt.Fprintln(os.Stderr, "load Bedrock test root certificate")
 		os.Exit(1)
 	}
 	bedrockTestCertificate = cert
-	code := netguard.MustRunHermeticMain(m)
-	_ = os.RemoveAll(trustDir)
-	os.Exit(code)
+	os.Exit(netguard.MustRunHermeticMain(m))
 }
 
 func TestBedrockOfflineCassetteContractHarness(t *testing.T) {
@@ -239,7 +227,7 @@ func TestBedrockCassetteUsesBlindBrokerSigV4CanonicalAuthorization(t *testing.T)
 	clock := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
 	blindBroker, err := broker.NewBlindBroker(broker.Config{Resolver: resolver, PolicyResolver: resolver, Vault: store,
 		UnsealCap: vault.MintUnsealCapabilityForBroker(), Audit: bedrockAudit{}, NowMs: func() int64 { return clock.UnixMilli() },
-		HostResolver: bedrockHostResolver{}, ControlHook: netguard.Control})
+		HostResolver: bedrockHostResolver{}, ControlHook: netguard.Control, TLSRootCAs: bedrockTestRootCAs})
 	if err != nil {
 		t.Fatalf("NewBlindBroker: %v", err)
 	}

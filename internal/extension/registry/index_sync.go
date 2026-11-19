@@ -15,7 +15,7 @@ import (
 type IndexStore interface {
 	LastIndexSerial(context.Context) (int64, error)
 	ApplyIndexFeed(context.Context, int64, time.Time, []IndexEntry) error
-	CachedIndex(context.Context) ([]IndexEntry, error)
+	CachedIndex(context.Context) ([]IndexEntry, time.Time, error)
 }
 
 // IndexSnapshot reports whether the returned entries came from a fresh signed
@@ -28,11 +28,11 @@ type IndexSnapshot struct {
 }
 
 type IndexSyncer struct {
-	URL            string
-	Keys           Keyring
-	Store          IndexStore
-	Now            func() time.Time
-	clientForURL   func(string) (*http.Client, error)
+	URL          string
+	Keys         Keyring
+	Store        IndexStore
+	Now          func() time.Time
+	clientForURL func(string) (*http.Client, error)
 }
 
 // Sync verifies and persists a fresh index when reachable. On network or feed
@@ -73,12 +73,15 @@ func (s *IndexSyncer) Sync(ctx context.Context) (IndexSnapshot, error) {
 }
 
 func (s *IndexSyncer) cachedAfterSyncFailure(ctx context.Context, syncErr error) (IndexSnapshot, error) {
-	cached, cacheErr := s.Store.CachedIndex(ctx)
+	cached, expiresAt, cacheErr := s.Store.CachedIndex(ctx)
 	if cacheErr != nil {
 		return IndexSnapshot{}, errors.Join(fmt.Errorf("marketplace index sync: %w", syncErr), fmt.Errorf("read cached marketplace index: %w", cacheErr))
 	}
 	if len(cached) == 0 {
 		return IndexSnapshot{}, fmt.Errorf("marketplace index has no verified cache: %w", syncErr)
+	}
+	if expiresAt.IsZero() || !s.Now().UTC().Before(expiresAt) {
+		return IndexSnapshot{}, errors.Join(fmt.Errorf("marketplace index cache is expired: %w", ErrFeedExpired), syncErr)
 	}
 	return IndexSnapshot{Entries: cached, FromCache: true, SyncError: syncErr}, nil
 }

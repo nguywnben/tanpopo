@@ -78,21 +78,29 @@ func (s *SQLStore) ApplyIndexFeed(ctx context.Context, serial int64, expiresAt t
 	return tx.Commit()
 }
 
-func (s *SQLStore) CachedIndex(ctx context.Context) ([]IndexEntry, error) {
+func (s *SQLStore) CachedIndex(ctx context.Context) ([]IndexEntry, time.Time, error) {
+	var expiresAtMS int64
+	err := s.db.QueryRowContext(ctx, `SELECT feed_expires_at_ms FROM marketplace_feed_cursors WHERE feed_kind = ?`, string(FeedIndex)).Scan(&expiresAtMS)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, time.Time{}, nil
+	}
+	if err != nil {
+		return nil, time.Time{}, err
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT package_slug, version, digest, oci_uri FROM marketplace_index_entries ORDER BY package_slug, version`)
 	if err != nil {
-		return nil, err
+		return nil, time.Time{}, err
 	}
 	defer rows.Close()
 	var entries []IndexEntry
 	for rows.Next() {
 		var entry IndexEntry
 		if err := rows.Scan(&entry.PackageSlug, &entry.Version, &entry.Digest, &entry.OCIURI); err != nil {
-			return nil, err
+			return nil, time.Time{}, err
 		}
 		entries = append(entries, entry)
 	}
-	return entries, rows.Err()
+	return entries, time.UnixMilli(expiresAtMS).UTC(), rows.Err()
 }
 
 func (s *SQLStore) ApplyRevocationFeed(ctx context.Context, serial int64, expiresAt time.Time, entries []RevocationEntry) error {
@@ -154,7 +162,7 @@ func (s *SQLStore) ApplyRevocationFeed(ctx context.Context, serial int64, expire
 				VALUES (?, ?, ?, ?, ?, ?, ?)
 				ON CONFLICT(installation_id, package_slug, version_or_sha256) DO UPDATE SET severity = excluded.severity, reason = excluded.reason
 				WHERE extension_revocation_actions.completed_at_ms IS NULL`,
-					revocationActionID(installationID, packageSlug, selector), installationID, packageSlug, selector, entry.Severity, entry.Reason, s.now().UnixMilli()); err != nil {
+				revocationActionID(installationID, packageSlug, selector), installationID, packageSlug, selector, entry.Severity, entry.Reason, s.now().UnixMilli()); err != nil {
 				return err
 			}
 		}

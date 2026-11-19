@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -216,6 +217,7 @@ type Config struct {
 	AllowCrossOriginRedirects bool
 	HostResolver              egress.HostResolver
 	ControlHook               func(network, address string, c syscall.RawConn) error
+	TLSRootCAs                *x509.CertPool
 }
 
 // EgressRequest represents an adapter-produced intermediate HTTP request carrying zero
@@ -277,6 +279,7 @@ type BlindHostCredentialBroker struct {
 	allowCrossOriginRedirects bool
 	hostResolver              egress.HostResolver
 	controlHook               func(network, address string, c syscall.RawConn) error
+	tlsRootCAs                *x509.CertPool
 }
 
 // NewBlindBroker constructs a BlindHostCredentialBroker, failing closed on missing dependencies.
@@ -331,6 +334,7 @@ func NewBlindBroker(cfg Config) (*BlindHostCredentialBroker, error) {
 		allowCrossOriginRedirects: cfg.AllowCrossOriginRedirects,
 		hostResolver:              cfg.HostResolver,
 		controlHook:               cfg.ControlHook,
+		tlsRootCAs:                cfg.TLSRootCAs,
 	}, nil
 }
 
@@ -868,6 +872,7 @@ func (b *BlindHostCredentialBroker) sendOutbound(ctx context.Context, req Egress
 		DenyCrossOriginRedirects: !b.allowCrossOriginRedirects,
 		Resolver:                 b.hostResolver,
 		ControlHook:              effectiveControlHook,
+		RootCAs:                  b.tlsRootCAs,
 	}
 	if streaming {
 		clientCfg.ResponseHeaderTimeout = timeout

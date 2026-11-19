@@ -62,6 +62,10 @@ permissions:
 adapter:
   slug: "azure-openai"
   nativePrefix: "/native/azure-openai"
+  # This limits adapter URL construction. Actual connections remain gated by
+  # the organization's exact approved connection host allowlist.
+  endpointHostSuffixes:
+    - ".openai.azure.com"
   wireProtocol: "openai_chat_v1"
   baseUrl: "https://tanpopo-resource.openai.azure.com"
   supportedDialects:

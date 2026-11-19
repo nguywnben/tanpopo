@@ -55,20 +55,21 @@ var (
 
 // Spec defines the finite declarative configuration compiled into an immutable Engine.
 type Spec struct {
-	ID                string              `yaml:"id" json:"id"`
-	Slug              string              `yaml:"slug" json:"slug"`
-	NativePrefix      string              `yaml:"nativePrefix" json:"native_prefix"`
-	SupportedDialects []string            `yaml:"supportedDialects" json:"supported_dialects"`
-	AllowedHosts      []string            `yaml:"allowedHosts" json:"allowed_hosts"`
-	DefaultBaseURL    string              `yaml:"defaultBaseUrl" json:"default_base_url"`
-	AuthBindings      []AuthBindingSpec   `yaml:"authBindings" json:"auth_bindings"`
-	ValidationProbe   ValidationProbeSpec `yaml:"validationProbe" json:"validation_probe"`
-	RequestMapping    RequestMappingSpec  `yaml:"requestMapping" json:"request_mapping"`
-	ResponseMapping   ResponseMappingSpec `yaml:"responseMapping" json:"response_mapping"`
-	StreamMapping     StreamMappingSpec   `yaml:"streamMapping" json:"stream_mapping"`
-	ErrorMapping      ErrorMappingSpec    `yaml:"errorMapping" json:"error_mapping"`
-	NativeMapping     NativeMappingSpec   `yaml:"nativeMapping" json:"native_mapping"`
-	canonicalOpenAI   bool
+	ID                   string              `yaml:"id" json:"id"`
+	Slug                 string              `yaml:"slug" json:"slug"`
+	NativePrefix         string              `yaml:"nativePrefix" json:"native_prefix"`
+	SupportedDialects    []string            `yaml:"supportedDialects" json:"supported_dialects"`
+	AllowedHosts         []string            `yaml:"allowedHosts" json:"allowed_hosts"`
+	EndpointHostSuffixes []string            `yaml:"endpointHostSuffixes" json:"endpoint_host_suffixes"`
+	DefaultBaseURL       string              `yaml:"defaultBaseUrl" json:"default_base_url"`
+	AuthBindings         []AuthBindingSpec   `yaml:"authBindings" json:"auth_bindings"`
+	ValidationProbe      ValidationProbeSpec `yaml:"validationProbe" json:"validation_probe"`
+	RequestMapping       RequestMappingSpec  `yaml:"requestMapping" json:"request_mapping"`
+	ResponseMapping      ResponseMappingSpec `yaml:"responseMapping" json:"response_mapping"`
+	StreamMapping        StreamMappingSpec   `yaml:"streamMapping" json:"stream_mapping"`
+	ErrorMapping         ErrorMappingSpec    `yaml:"errorMapping" json:"error_mapping"`
+	NativeMapping        NativeMappingSpec   `yaml:"nativeMapping" json:"native_mapping"`
+	canonicalOpenAI      bool
 }
 
 // AuthBindingSpec declares how a Host Vault secret slot binds to outbound HTTP credentials.
@@ -95,6 +96,7 @@ type RequestMappingSpec struct {
 	PathTemplate           string            `yaml:"pathTemplate" json:"path_template"`
 	ResponsesPathTemplate  string            `yaml:"responsesPathTemplate" json:"responses_path_template"`
 	EmbeddingsPathTemplate string            `yaml:"embeddingsPathTemplate" json:"embeddings_path_template"`
+	RerankPathTemplate     string            `yaml:"rerankPathTemplate" json:"rerank_path_template"`
 	StaticHeaders          map[string]string `yaml:"staticHeaders" json:"static_headers"`
 	FieldRenames           map[string]string `yaml:"fieldRenames" json:"field_renames"`
 	FieldDefaults          map[string]any    `yaml:"fieldDefaults" json:"field_defaults"`
@@ -104,21 +106,27 @@ type RequestMappingSpec struct {
 
 // UsagePathSpec specifies dot-paths for extracting the 5-component NormalizedUsage counters.
 type UsagePathSpec struct {
-	InputTokens      string `yaml:"inputTokens" json:"input_tokens"`
-	OutputTokens     string `yaml:"outputTokens" json:"output_tokens"`
-	CacheReadTokens  string `yaml:"cacheReadTokens" json:"cache_read_tokens"`
-	CacheWriteTokens string `yaml:"cacheWriteTokens" json:"cache_write_tokens"`
-	ReasoningTokens  string `yaml:"reasoningTokens" json:"reasoning_tokens"`
+	InputTokens       string `yaml:"inputTokens" json:"input_tokens"`
+	OutputTokens      string `yaml:"outputTokens" json:"output_tokens"`
+	CacheReadTokens   string `yaml:"cacheReadTokens" json:"cache_read_tokens"`
+	CacheWriteTokens  string `yaml:"cacheWriteTokens" json:"cache_write_tokens"`
+	ReasoningTokens   string `yaml:"reasoningTokens" json:"reasoning_tokens"`
+	RerankSearchUnits string `yaml:"rerankSearchUnits" json:"rerank_search_units"`
 }
 
 // ResponseMappingSpec defines finite dot-path extraction for synchronous responses.
 type ResponseMappingSpec struct {
-	ModelPath        string        `yaml:"modelPath" json:"model_path"`
-	FinishReasonPath string        `yaml:"finishReasonPath" json:"finish_reason_path"`
-	ContentPath      string        `yaml:"contentPath" json:"content_path"`
-	RolePath         string        `yaml:"rolePath" json:"role_path"`
-	ToolCallsPath    string        `yaml:"toolCallsPath" json:"tool_calls_path"`
-	UsagePaths       UsagePathSpec `yaml:"usagePaths" json:"usage_paths"`
+	ModelPath          string        `yaml:"modelPath" json:"model_path"`
+	FinishReasonPath   string        `yaml:"finishReasonPath" json:"finish_reason_path"`
+	ContentPath        string        `yaml:"contentPath" json:"content_path"`
+	RolePath           string        `yaml:"rolePath" json:"role_path"`
+	ToolCallsPath      string        `yaml:"toolCallsPath" json:"tool_calls_path"`
+	RerankIDPath       string        `yaml:"rerankIdPath" json:"rerank_id_path"`
+	RerankResultsPath  string        `yaml:"rerankResultsPath" json:"rerank_results_path"`
+	RerankIndexPath    string        `yaml:"rerankIndexPath" json:"rerank_index_path"`
+	RerankScorePath    string        `yaml:"rerankScorePath" json:"rerank_score_path"`
+	RerankDocumentPath string        `yaml:"rerankDocumentPath" json:"rerank_document_path"`
+	UsagePaths         UsagePathSpec `yaml:"usagePaths" json:"usage_paths"`
 }
 
 // StreamMappingSpec defines bounded SSE frame parsing and delta normalization.
@@ -196,21 +204,22 @@ type manifestSlot struct {
 }
 
 type adapterBlock struct {
-	Slug              string               `yaml:"slug"`
-	NativePrefix      string               `yaml:"nativePrefix"`
-	BaseURL           string               `yaml:"baseUrl"`
-	BaseURLTemplate   string               `yaml:"baseUrlTemplate"`
-	WireProtocol      string               `yaml:"wireProtocol"`
-	UsageExtraction   manifestUsagePaths   `yaml:"usageExtraction"`
-	SupportedDialects []string             `yaml:"supportedDialects"`
-	Endpoints         map[string]string    `yaml:"endpoints"`
-	Auth              []manifestAuthRule   `yaml:"auth"`
-	ValidationProbe   *ValidationProbeSpec `yaml:"validationProbe"`
-	RequestMapping    *RequestMappingSpec  `yaml:"requestMapping"`
-	ResponseMapping   *ResponseMappingSpec `yaml:"responseMapping"`
-	StreamMapping     *StreamMappingSpec   `yaml:"streamMapping"`
-	ErrorMapping      *ErrorMappingSpec    `yaml:"errorMapping"`
-	NativeMapping     *NativeMappingSpec   `yaml:"nativeMapping"`
+	Slug                 string               `yaml:"slug"`
+	NativePrefix         string               `yaml:"nativePrefix"`
+	BaseURL              string               `yaml:"baseUrl"`
+	BaseURLTemplate      string               `yaml:"baseUrlTemplate"`
+	WireProtocol         string               `yaml:"wireProtocol"`
+	UsageExtraction      manifestUsagePaths   `yaml:"usageExtraction"`
+	SupportedDialects    []string             `yaml:"supportedDialects"`
+	EndpointHostSuffixes []string             `yaml:"endpointHostSuffixes"`
+	Endpoints            map[string]string    `yaml:"endpoints"`
+	Auth                 []manifestAuthRule   `yaml:"auth"`
+	ValidationProbe      *ValidationProbeSpec `yaml:"validationProbe"`
+	RequestMapping       *RequestMappingSpec  `yaml:"requestMapping"`
+	ResponseMapping      *ResponseMappingSpec `yaml:"responseMapping"`
+	StreamMapping        *StreamMappingSpec   `yaml:"streamMapping"`
+	ErrorMapping         *ErrorMappingSpec    `yaml:"errorMapping"`
+	NativeMapping        *NativeMappingSpec   `yaml:"nativeMapping"`
 }
 
 type manifestUsagePaths struct {
@@ -305,12 +314,13 @@ func specFromAdapterBlock(env manifestEnvelope) (Spec, error) {
 		baseURL = strings.TrimSpace(ab.BaseURL)
 	}
 	spec := Spec{
-		ID:                strings.TrimSpace(env.Metadata.ID),
-		Slug:              slug,
-		NativePrefix:      strings.TrimSpace(ab.NativePrefix),
-		SupportedDialects: append([]string(nil), ab.SupportedDialects...),
-		AllowedHosts:      append([]string(nil), env.Permissions.NetworkEgress.AllowedHosts...),
-		DefaultBaseURL:    baseURL,
+		ID:                   strings.TrimSpace(env.Metadata.ID),
+		Slug:                 slug,
+		NativePrefix:         strings.TrimSpace(ab.NativePrefix),
+		SupportedDialects:    append([]string(nil), ab.SupportedDialects...),
+		AllowedHosts:         append([]string(nil), env.Permissions.NetworkEgress.AllowedHosts...),
+		EndpointHostSuffixes: append([]string(nil), ab.EndpointHostSuffixes...),
+		DefaultBaseURL:       baseURL,
 	}
 	if ab.ValidationProbe != nil {
 		spec.ValidationProbe = *ab.ValidationProbe
@@ -639,7 +649,7 @@ func isReservedOrProhibitedHeader(name string) bool {
 	}
 }
 
-func validateBaseURL(raw string, allowedHosts map[string]struct{}) error {
+func validateBaseURL(raw string, allowedHosts map[string]struct{}, suffixes []string) error {
 	if strings.TrimSpace(raw) == "" {
 		return nil
 	}
@@ -647,14 +657,58 @@ func validateBaseURL(raw string, allowedHosts map[string]struct{}) error {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
 		return fmt.Errorf("%w: invalid defaultBaseUrl %q", ErrInvalidDeclarativeSpec, raw)
 	}
-	if len(allowedHosts) > 0 {
+	if len(allowedHosts) > 0 || len(suffixes) > 0 {
 		hostname := strings.ToLower(u.Hostname())
 		hostPort := strings.ToLower(u.Host)
 		_, okHost := allowedHosts[hostname]
 		_, okHostPort := allowedHosts[hostPort]
-		if !okHost && !okHostPort {
+		if !okHost && !okHostPort && !hostMatchesSuffix(hostname, suffixes) {
 			return fmt.Errorf("%w: defaultBaseUrl host %q not permitted by allowedHosts", ErrInvalidDeclarativeSpec, hostPort)
 		}
 	}
 	return nil
+}
+
+func validateEndpointHostSuffixes(raw []string) ([]string, error) {
+	out := make([]string, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, entry := range raw {
+		suffix := strings.ToLower(strings.TrimSpace(entry))
+		if !strings.HasPrefix(suffix, ".") || len(suffix) < 2 || strings.HasPrefix(suffix, "..") || strings.HasSuffix(suffix, ".") {
+			return nil, fmt.Errorf("%w: endpoint host suffix must be a dotted DNS suffix", ErrInvalidDeclarativeSpec)
+		}
+		if _, err := validateAllowedHostPattern(suffix[1:]); err != nil || strings.Contains(suffix, ":") {
+			return nil, fmt.Errorf("%w: invalid endpoint host suffix %q", ErrInvalidDeclarativeSpec, entry)
+		}
+		labels := strings.Split(suffix[1:], ".")
+		if len(labels) < 2 {
+			return nil, fmt.Errorf("%w: endpoint host suffix must contain a registrable domain", ErrInvalidDeclarativeSpec)
+		}
+		for _, label := range labels {
+			if label == "" || label[0] == '-' || label[len(label)-1] == '-' {
+				return nil, fmt.Errorf("%w: malformed endpoint host suffix %q", ErrInvalidDeclarativeSpec, entry)
+			}
+			for _, ch := range label {
+				if !(ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '-') {
+					return nil, fmt.Errorf("%w: malformed endpoint host suffix %q", ErrInvalidDeclarativeSpec, entry)
+				}
+			}
+		}
+		if _, exists := seen[suffix]; exists {
+			continue
+		}
+		seen[suffix] = struct{}{}
+		out = append(out, suffix)
+	}
+	return out, nil
+}
+
+func hostMatchesSuffix(hostname string, suffixes []string) bool {
+	hostname = strings.ToLower(strings.TrimSpace(hostname))
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(hostname, suffix) && len(hostname) > len(suffix) {
+			return true
+		}
+	}
+	return false
 }

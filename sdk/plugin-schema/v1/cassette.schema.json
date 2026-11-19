@@ -34,7 +34,8 @@
         "validation_probe",
         "native_passthrough",
         "usage_extraction",
-        "guardrail"
+        "guardrail",
+        "rerank"
       ]
     },
     "config": {

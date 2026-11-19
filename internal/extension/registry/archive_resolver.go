@@ -33,13 +33,14 @@ type OCIArchiveResolver struct {
 	index             IndexStore
 	credentials       RegistryCredentialResolver
 	resolver          egress.HostResolver
+	now               func() time.Time
 	clientForRegistry func(context.Context, string) (*OCIClient, error)
 }
 
 // NewOCIArchiveResolver creates an OCI resolver whose production transport is
 // constructed with the exact registry authority as its SSRF allowlist.
 func NewOCIArchiveResolver(index IndexStore, credentials RegistryCredentialResolver, hostResolver egress.HostResolver) *OCIArchiveResolver {
-	return &OCIArchiveResolver{index: index, credentials: credentials, resolver: hostResolver}
+	return &OCIArchiveResolver{index: index, credentials: credentials, resolver: hostResolver, now: time.Now}
 }
 
 // Resolve returns an installer request backed by a private verified snapshot.
@@ -60,9 +61,16 @@ func (r *OCIArchiveResolver) Resolve(ctx context.Context, orgID, sourceURI, expe
 	if err != nil || subtle.ConstantTimeCompare(want, pinned) != 1 {
 		return nil, nil, fmt.Errorf("%w: expected digest does not match pinned OCI reference", installer.ErrDigestMismatch)
 	}
-	entries, err := r.index.CachedIndex(ctx)
+	entries, expiresAt, err := r.index.CachedIndex(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load verified marketplace index: %w", err)
+	}
+	now := time.Now
+	if r.now != nil {
+		now = r.now
+	}
+	if expiresAt.IsZero() || !now().UTC().Before(expiresAt) {
+		return nil, nil, ErrFeedExpired
 	}
 	indexed := false
 	for _, entry := range entries {
@@ -82,7 +90,7 @@ func (r *OCIArchiveResolver) Resolve(ctx context.Context, orgID, sourceURI, expe
 		}
 		defer credentials.Zeroize()
 	}
-	client, err := r.guardedClientForRegistry(ctx, registryHost)
+	client, err := r.guardedClientForRegistry(ctx, registryHost, credentials)
 	if err != nil {
 		return nil, nil, fmt.Errorf("configure guarded OCI client: %w", err)
 	}
@@ -125,31 +133,46 @@ func (r *OCIArchiveResolver) Resolve(ctx context.Context, orgID, sourceURI, expe
 	}
 	return &installer.StageInstallRequest{
 		ArchivePath: archivePath,
-		Source: installer.SourceSpec{Kind: installer.SourceKindOCI, URI: sourceURI, ExpectedSHA256: digest},
+		Source:      installer.SourceSpec{Kind: installer.SourceKindOCI, URI: sourceURI, ExpectedSHA256: digest},
 	}, cleanup, nil
 }
 
-func (r *OCIArchiveResolver) guardedClientForRegistry(ctx context.Context, authority string) (*OCIClient, error) {
+func (r *OCIArchiveResolver) guardedClientForRegistry(ctx context.Context, authority string, credentials *RegistryCredentials) (*OCIClient, error) {
 	if r.clientForRegistry != nil {
 		return r.clientForRegistry(ctx, authority)
 	}
-	u, err := url.Parse("https://" + authority)
-	if err != nil || u.Hostname() == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-		return nil, ErrInvalidOCIReference
-	}
-	port := 443
-	if rawPort := u.Port(); rawPort != "" {
-		port, err = strconv.Atoi(rawPort)
-		if err != nil || port < 1 || port > 65535 {
-			return nil, ErrInvalidOCIReference
-		}
+	policy, err := ociRegistryEgressPolicy(authority, credentials)
+	if err != nil {
+		return nil, err
 	}
 	client, err := egress.NewGuardedHTTPClient(egress.ClientConfig{
-		Policy: egress.Policy{AllowedHosts: []string{u.Hostname()}, AllowedPorts: []int{port}, RequireTLS: true},
-		Resolver: r.resolver, Timeout: 30 * time.Second, MaxRedirects: 0, DenyCrossOriginRedirects: true,
+		Policy: policy, Resolver: r.resolver, Timeout: 30 * time.Second, MaxRedirects: 0, DenyCrossOriginRedirects: true,
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &OCIClient{httpClient: client}, nil
+}
+
+func ociRegistryEgressPolicy(authority string, credentials *RegistryCredentials) (egress.Policy, error) {
+	u, err := url.Parse("https://" + authority)
+	if err != nil || u.Hostname() == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return egress.Policy{}, ErrInvalidOCIReference
+	}
+	port := 443
+	if rawPort := u.Port(); rawPort != "" {
+		port, err = strconv.Atoi(rawPort)
+		if err != nil || port < 1 || port > 65535 {
+			return egress.Policy{}, ErrInvalidOCIReference
+		}
+	}
+	policy := egress.Policy{AllowedHosts: []string{u.Hostname()}, AllowedPorts: []int{port}, RequireTLS: true}
+	if credentials != nil && len(credentials.AllowedCIDRs) > 0 {
+		if !strings.EqualFold(strings.TrimSpace(credentials.RegistryHost), authority) {
+			return egress.Policy{}, ErrRegistryAuthScope
+		}
+		policy.AllowPrivateIP = true
+		policy.AllowedCIDRs = append([]string(nil), credentials.AllowedCIDRs...)
+	}
+	return policy, nil
 }

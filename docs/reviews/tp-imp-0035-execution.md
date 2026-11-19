@@ -4,9 +4,10 @@
 
 ## Ownership
 
-- Implementer: **GPT-6 Luna**.
-- Adapter implementation contributors: **Laplace** (AWS Bedrock) and **Planck** (Azure OpenAI); their changes are pending integration and verification.
-- Independent reviewers: interim reviews on `2a9b40ad827515d16cfbb62ee40f97525a64fecd` by **Euclid** (**code-reviewer**) and **Lagrange** (**security-auditor**) found blockers; both must review the final diff after remediation.
+- Implementer and acceptor: **GPT-6 Luna**.
+- Adapter implementation contributors: **Laplace** (AWS Bedrock) and **Planck** (Azure OpenAI).
+- Test-engineer contributors: **Wegener** and **Jason** (Windows runtime cleanup investigation), and **Leibniz** (SQLite-backed revocation acceptance and rerank route coverage).
+- Independent reviewers: **Euclid** (**code-reviewer**) and **Lagrange** (**security-auditor**) reviewed interim diffs and found blockers; both must review the final diff after remediation.
 - Acceptor: **GPT-6 Luna**, under the Product Owner delegation in `DEC-060`.
 
 ## Current checkpoint
@@ -63,6 +64,16 @@
 - The macOS job in `44456418695` then exposed a second Bedrock test-fixture issue: its generated CA was added to `SSL_CERT_FILE` from inside the test, after the platform's certificate roots could already have been initialized. **GPT-6 Luna** now creates the ephemeral root and sets `SSL_CERT_FILE` in package `TestMain` before `netguard` or tests run; the focused TLS/SigV4 test passed three consecutive local runs. This correction is pending CI.
 - Current adapter integration: Azure OpenAI remains in the shared contract test from **Planck**'s package; Bedrock has now been added by **GPT-6 Luna** from **Laplace**'s package. Azure's exact-host manifest still does not support arbitrary customer resource hostnames under the current exact-host egress policy; this documented limitation must be resolved or accepted before Unit 35 can be accepted.
 - **GPT-6 Luna** is the implementer and intended acceptor. **Laplace** (AWS Bedrock) and **Planck** (Azure OpenAI) are implementation contributors. **Euclid** (**code-reviewer**) and **Lagrange** (**security-auditor**) still owe independent reviews on the final diff. The Unit remains `READY` / in progress; no acceptance decision is recorded.
+
+### Continuation checkpoint (2026-11-19, resumed after quota pause)
+
+- **GPT-6 Luna** fetched GitHub and verified PR [#14](https://github.com/nguywnben/tanpopo/pull/14) is open/draft from `develop`, with `origin/main` at `04ed998b7720b946f107b8e7c55ff6c403606049` and `origin/develop` at `49c5392c63cb93509be6ff1303a91080f22e1573`. The commit identity remains **Nguyễn Công Ben <nben940665@gmail.com>**.
+- Actions run [`44457278526`](https://github.com/nguywnben/tanpopo/actions/runs/44457278526) passed Stage 0 and Ubuntu. macOS and Windows passed `check.go --all`, then failed `TestBedrockCassetteUsesBlindBrokerSigV4CanonicalAuthorization`: their trust stores did not load the test-generated CA through `SSL_CERT_FILE`. **GPT-6 Luna** changed the test to pass an explicit, certificate-verifying trust pool through the guarded egress broker. The Bedrock package test passes locally with this fix; new cross-platform CI is pending.
+- The same local diff now carries the independent review remediations: index cache expiry is persisted and enforced for offline installs; OCI private CIDRs can only be granted by an organization Vault credential bound to the exact registry authority; malformed/fractional rerank billing values fail closed; and `TransformResponse` maps rerank result indices, scores, optional documents, and search units.
+- Added the official Cohere v2 rerank adapter with eight offline cassettes, exact `api.cohere.com` egress, host-side API-key injection, request mapping to `/v2/rerank`, and deterministic packaging checks. The declarative engine, test harness, security egress/broker packages, and Bedrock/Azure/Cohere adapter tests all pass locally.
+- Azure resource URLs now accept only a DNS subdomain of `.openai.azure.com` for adapter URL construction, with lookalike suffix rejection. This does not widen the signed `networkEgress.allowedHosts` or the connection's exact host allowlist; the organization must approve the specific resource hostname in the provider connection. Focused Azure tests pass.
+- **Leibniz** (**test-engineer**) is adding an end-to-end authenticated `/v1/rerank` route test; integration and verification remain pending. **Euclid** (**code-reviewer**) and **Lagrange** (**security-auditor**) must rerun their independent reviews on the final diff after all changes land.
+- Unit 35 remains `READY` / implementation in progress. No acceptance decision is recorded. The full quality gate, full Go test suite, final reviews, required four PR checks, acceptance record, and post-merge CI on `main` remain outstanding.
 
 ### Continuation checkpoint (2026-11-19, adapter and Windows follow-up)
 

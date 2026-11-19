@@ -194,7 +194,9 @@ type fakeRevocationStore struct {
 	pending []RevocationTarget
 }
 
-func (s *fakeRevocationStore) LastRevocationSerial(context.Context) (int64, error) { return s.serial, nil }
+func (s *fakeRevocationStore) LastRevocationSerial(context.Context) (int64, error) {
+	return s.serial, nil
+}
 func (s *fakeRevocationStore) ApplyRevocationFeed(_ context.Context, serial int64, _ time.Time, entries []RevocationEntry) error {
 	s.serial = serial
 	s.entries = append([]RevocationEntry(nil), entries...)
@@ -220,8 +222,8 @@ func (s *fakeRevocationStore) CompleteRevocationAction(_ context.Context, id str
 }
 
 type fakeRevocationActions struct {
-	events          []string
-	failStreamOnce  bool
+	events         []string
+	failStreamOnce bool
 }
 
 func (a *fakeRevocationActions) QuarantineInstallation(_ context.Context, target RevocationTarget) error {
@@ -299,9 +301,9 @@ func TestSQLStoreCachesIndexAndDurablyQueuesMatchingRevocations(t *testing.T) {
 	if serial, err := registryStore.LastIndexSerial(ctx); err != nil || serial != 2 {
 		t.Fatalf("index serial not persisted: serial=%d err=%v", serial, err)
 	}
-	cached, err := registryStore.CachedIndex(ctx)
-	if err != nil || len(cached) != 1 || cached[0].Digest != digest {
-		t.Fatalf("signed index cache not available: cached=%+v err=%v", cached, err)
+	cached, expiresAt, err := registryStore.CachedIndex(ctx)
+	if err != nil || len(cached) != 1 || cached[0].Digest != digest || !expiresAt.Equal(now.Add(time.Hour)) {
+		t.Fatalf("signed index cache not available: cached=%+v expiresAt=%s err=%v", cached, expiresAt, err)
 	}
 	entries := []RevocationEntry{{PackageSlug: "community/bad-adapter", VersionOrSHA256: "1.0.0", Severity: "CRITICAL_MALICIOUS", Reason: "confirmed compromise"}}
 	if err := registryStore.ApplyRevocationFeed(ctx, 4, now.Add(time.Hour), entries); err != nil {

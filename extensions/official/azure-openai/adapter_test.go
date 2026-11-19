@@ -66,14 +66,24 @@ func TestAzureDeploymentRequestContract(t *testing.T) {
 	if got.SafeHeaders["api-key"] != "" {
 		t.Fatalf("credential leaked into safe headers: %+v", got.SafeHeaders)
 	}
-	_, err = runtime.TransformRequest(context.Background(), port.TransformRequestInput{
-		RequestID:             "azure-other-resource-denied",
+	custom, err := runtime.TransformRequest(context.Background(), port.TransformRequestInput{
+		RequestID:             "azure-organization-resource",
 		ConfigJSON:            `{"endpoint_base_url":"https://customer-resource.openai.azure.com"}`,
 		NormalizedRequestJSON: []byte(`{"model":"gpt-4o-prod","messages":[{"role":"user","content":"hello"}]}`),
 		SecretSlotRefs:        map[string]string{"api_key": "slot_ref:api_key"},
 	})
-	if err == nil {
-		t.Fatal("caller-configured Azure resource outside the exact manifest host was unexpectedly allowed")
+	if err != nil || custom.TargetURL != "https://customer-resource.openai.azure.com/openai/deployments/gpt-4o-prod/chat/completions?api-version=2024-10-21" {
+		t.Fatalf("valid organization Azure resource was not mapped: target=%q err=%v", custom.TargetURL, err)
+	}
+	for _, endpoint := range []string{"https://customer-resource.openai.azure.com.attacker.test", "https://openai.azure.com", "https://azure.com"} {
+		_, err = runtime.TransformRequest(context.Background(), port.TransformRequestInput{
+			RequestID: "azure-invalid-resource", ConfigJSON: `{"endpoint_base_url":"` + endpoint + `"}`,
+			NormalizedRequestJSON: []byte(`{"model":"gpt-4o-prod","messages":[{"role":"user","content":"hello"}]}`),
+			SecretSlotRefs:        map[string]string{"api_key": "slot_ref:api_key"},
+		})
+		if err == nil {
+			t.Errorf("invalid Azure endpoint host unexpectedly allowed: %q", endpoint)
+		}
 	}
 
 	report, err := testharness.TestExtension(context.Background(), testharness.TestOptions{Dir: "."})

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/netip"
 	"os"
 	"strings"
 	"time"
@@ -26,9 +27,9 @@ import (
 )
 
 const (
-	marketplaceIndexURLEnv      = "TANPOPO_MARKETPLACE_INDEX_URL"
+	marketplaceIndexURLEnv       = "TANPOPO_MARKETPLACE_INDEX_URL"
 	marketplaceRevocationsURLEnv = "TANPOPO_MARKETPLACE_REVOCATIONS_URL"
-	marketplaceFeedKeysEnv      = "TANPOPO_MARKETPLACE_FEED_PUBLIC_KEYS"
+	marketplaceFeedKeysEnv       = "TANPOPO_MARKETPLACE_FEED_PUBLIC_KEYS"
 )
 
 func startMarketplaceRuntime(ctx context.Context, store *registry.SQLStore, lifecycle *installer.LifecycleService, snaps *snapshot.Manager, audit port.AuditSink) <-chan struct{} {
@@ -119,9 +120,9 @@ type runtimeRevocationActions struct {
 }
 
 type vaultOCIRegistryCredentialResolver struct {
-	db      *sql.DB
-	vault   *vault.Store
-	cap     vault.UnsealCapability
+	db    *sql.DB
+	vault *vault.Store
+	cap   vault.UnsealCapability
 }
 
 func (r vaultOCIRegistryCredentialResolver) CredentialsForRegistry(ctx context.Context, orgID, registryHost string) (*registry.RegistryCredentials, error) {
@@ -159,14 +160,14 @@ func (r vaultOCIRegistryCredentialResolver) CredentialsForRegistry(ctx context.C
 	if secret.OrgID != orgID || secret.OwnerProjectID != nil || secret.SecretKind != vault.SecretKindOCIRegistryAuth || secret.BoundAudience == nil || *secret.BoundAudience != registryHost {
 		return nil, errors.New("unsealed registry credential metadata does not match its organization and registry authority")
 	}
-	username, password, err := parseOCIRegistryAuth(secret.Plaintext)
+	username, password, allowedCIDRs, err := parseOCIRegistryAuth(secret.Plaintext)
 	if err != nil {
 		return nil, errors.New("stored OCI registry credentials are malformed")
 	}
-	return &registry.RegistryCredentials{RegistryHost: registryHost, Username: username, Password: password}, nil
+	return &registry.RegistryCredentials{RegistryHost: registryHost, Username: username, Password: password, AllowedCIDRs: allowedCIDRs}, nil
 }
 
-func parseOCIRegistryAuth(raw []byte) (outUsername, outPassword []byte, err error) {
+func parseOCIRegistryAuth(raw []byte) (outUsername, outPassword []byte, allowedCIDRs []string, err error) {
 	var username, password []byte
 	defer func() {
 		if err != nil {
@@ -176,7 +177,7 @@ func parseOCIRegistryAuth(raw []byte) (outUsername, outPassword []byte, err erro
 	}()
 	index := skipRegistryJSONSpace(raw, 0)
 	if index >= len(raw) || raw[index] != '{' {
-		return nil, nil, errors.New("registry credentials must be an object")
+		return nil, nil, nil, errors.New("registry credentials must be an object")
 	}
 	index++
 	seen := map[string]bool{}
@@ -185,37 +186,48 @@ func parseOCIRegistryAuth(raw []byte) (outUsername, outPassword []byte, err erro
 		index = skipRegistryJSONSpace(raw, index)
 		if index < len(raw) && raw[index] == '}' {
 			if afterComma {
-				return nil, nil, errors.New("trailing comma in registry credential object")
+				return nil, nil, nil, errors.New("trailing comma in registry credential object")
 			}
 			index++
 			break
 		}
 		keyBytes, next, parseErr := readRegistryJSONString(raw, index)
 		if parseErr != nil {
-			return nil, nil, parseErr
+			return nil, nil, nil, parseErr
 		}
 		key := string(keyBytes)
 		clear(keyBytes)
 		index = skipRegistryJSONSpace(raw, next)
 		if index >= len(raw) || raw[index] != ':' || seen[key] {
-			return nil, nil, errors.New("invalid registry credential field")
+			return nil, nil, nil, errors.New("invalid registry credential field")
 		}
 		seen[key] = true
 		afterComma = false
-		value, next, parseErr := readRegistryJSONString(raw, skipRegistryJSONSpace(raw, index+1))
-		if parseErr != nil {
-			return nil, nil, parseErr
-		}
 		switch key {
 		case "username":
+			value, next, parseErr := readRegistryJSONString(raw, skipRegistryJSONSpace(raw, index+1))
+			if parseErr != nil {
+				return nil, nil, nil, parseErr
+			}
 			username = value
+			index = skipRegistryJSONSpace(raw, next)
 		case "password":
+			value, next, parseErr := readRegistryJSONString(raw, skipRegistryJSONSpace(raw, index+1))
+			if parseErr != nil {
+				return nil, nil, nil, parseErr
+			}
 			password = value
+			index = skipRegistryJSONSpace(raw, next)
+		case "allowed_cidrs":
+			cidrs, next, parseErr := readRegistryCIDRArray(raw, skipRegistryJSONSpace(raw, index+1))
+			if parseErr != nil {
+				return nil, nil, nil, parseErr
+			}
+			allowedCIDRs = cidrs
+			index = skipRegistryJSONSpace(raw, next)
 		default:
-			clear(value)
-			return nil, nil, errors.New("unknown registry credential field")
+			return nil, nil, nil, errors.New("unknown registry credential field")
 		}
-		index = skipRegistryJSONSpace(raw, next)
 		if index < len(raw) && raw[index] == ',' {
 			index++
 			afterComma = true
@@ -225,14 +237,53 @@ func parseOCIRegistryAuth(raw []byte) (outUsername, outPassword []byte, err erro
 			index++
 			break
 		}
-		return nil, nil, errors.New("malformed registry credential object")
+		return nil, nil, nil, errors.New("malformed registry credential object")
 	}
 	if skipRegistryJSONSpace(raw, index) != len(raw) || len(username) == 0 || len(password) == 0 {
 		clear(username)
 		clear(password)
-		return nil, nil, errors.New("incomplete registry credentials")
+		return nil, nil, nil, errors.New("incomplete registry credentials")
 	}
-	return username, password, nil
+	return username, password, allowedCIDRs, nil
+}
+
+func readRegistryCIDRArray(raw []byte, start int) ([]string, int, error) {
+	if start >= len(raw) || raw[start] != '[' {
+		return nil, start, errors.New("allowed_cidrs must be an array of CIDR strings")
+	}
+	index := start + 1
+	var cidrs []string
+	afterComma := false
+	for {
+		index = skipRegistryJSONSpace(raw, index)
+		if index < len(raw) && raw[index] == ']' {
+			if afterComma {
+				return nil, index, errors.New("trailing comma in allowed_cidrs")
+			}
+			return cidrs, index + 1, nil
+		}
+		value, next, err := readRegistryJSONString(raw, index)
+		if err != nil {
+			return nil, index, err
+		}
+		prefix, err := netip.ParsePrefix(string(value))
+		clear(value)
+		if err != nil || prefix.Bits() == 0 {
+			return nil, index, errors.New("allowed_cidrs must contain valid, non-wildcard CIDRs")
+		}
+		cidrs = append(cidrs, prefix.Masked().String())
+		afterComma = false
+		index = skipRegistryJSONSpace(raw, next)
+		if index < len(raw) && raw[index] == ',' {
+			index++
+			afterComma = true
+			continue
+		}
+		if index < len(raw) && raw[index] == ']' {
+			return cidrs, index + 1, nil
+		}
+		return nil, index, errors.New("malformed allowed_cidrs array")
+	}
 }
 
 func readRegistryJSONString(raw []byte, start int) ([]byte, int, error) {

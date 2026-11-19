@@ -257,17 +257,17 @@ func extractBool(v any) (bool, bool) {
 	return b, ok
 }
 
-func renderEndpointURL(baseURL string, parts []templatePart, implicitOpenAIPath bool, vars map[string]string, allowedHosts map[string]struct{}, budget *stepBudget) (string, error) {
+func renderEndpointURL(baseURL string, parts []templatePart, implicitOpenAIPath bool, vars map[string]string, allowedHosts map[string]struct{}, suffixes []string, budget *stepBudget) (string, error) {
 	baseParsed, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil || (baseParsed.Scheme != "http" && baseParsed.Scheme != "https") || baseParsed.Hostname() == "" || baseParsed.User != nil {
 		return "", fmt.Errorf("%w: invalid endpoint_base_url %q", ErrInvalidDeclarativeSpec, baseURL)
 	}
-	if len(allowedHosts) > 0 {
+	if len(allowedHosts) > 0 || len(suffixes) > 0 {
 		hostname := strings.ToLower(baseParsed.Hostname())
 		hostPort := strings.ToLower(baseParsed.Host)
 		_, okHost := allowedHosts[hostname]
 		_, okHostPort := allowedHosts[hostPort]
-		if !okHost && !okHostPort {
+		if !okHost && !okHostPort && !hostMatchesSuffix(hostname, suffixes) {
 			return "", fmt.Errorf("%w: endpoint host %q is outside adapter allowedHosts", ErrInvalidDeclarativeSpec, baseParsed.Host)
 		}
 	}

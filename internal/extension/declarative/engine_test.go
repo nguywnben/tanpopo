@@ -141,6 +141,53 @@ func TestDeclarativeOpenAIRoundTripAndCR09StreamUsage(t *testing.T) {
 	}
 }
 
+func TestDeclarativeRerankMapsProviderRequestResponseAndExactUnits(t *testing.T) {
+	spec := DefaultOpenAICompatibleSpec("cohere-rerank", []string{"api.cohere.com"})
+	spec.RequestMapping.RerankPathTemplate = "/v2/rerank"
+	spec.ResponseMapping.RerankResultsPath = "results"
+	spec.ResponseMapping.UsagePaths.RerankSearchUnits = "billed_units.search_units"
+	eng, err := CompileSpec(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := eng.TransformRequest(context.Background(), port.TransformRequestInput{
+		RequestID: "rerank-req", ConfigJSON: `{"endpoint_base_url":"https://api.cohere.com","_tanpopo_modality":"rerank"}`,
+		NormalizedRequestJSON: []byte(`{"model":"rerank-v3.5","query":"what is tanpopo?","documents":["A","B"]}`),
+		SecretSlotRefs:        map[string]string{"api_key": "sec_cohere"},
+	})
+	if err != nil {
+		t.Fatalf("TransformRequest rerank: %v", err)
+	}
+	if request.Method != http.MethodPost || request.TargetURL != "https://api.cohere.com/v2/rerank" || !bytes.Contains(request.BodyBytes, []byte(`"documents":["A","B"]`)) {
+		t.Fatalf("unexpected rerank request: %+v body=%s", request, request.BodyBytes)
+	}
+	response, err := eng.TransformResponse(context.Background(), port.TransformResponseInput{
+		RequestID: "rerank-req", HTTPStatus: http.StatusOK, Modality: "RERANK",
+		RawResponseBody: []byte(`{"id":"rerank-1","results":[{"index":1,"relevance_score":0.91,"document":{"text":"B"}}],"billed_units":{"search_units":2}}`),
+	})
+	if err != nil {
+		t.Fatalf("TransformResponse rerank: %v", err)
+	}
+	var normalized map[string]any
+	if err := json.Unmarshal(response.NormalizedResponseJSON, &normalized); err != nil {
+		t.Fatal(err)
+	}
+	results, ok := normalized["results"].([]any)
+	if !ok || len(results) != 1 || normalized["id"] != "rerank-1" || response.Usage == nil || response.Usage.MediaUsage == nil || response.Usage.MediaUsage.RerankSearchUnits != 2 {
+		t.Fatalf("rerank response or billing units missing: payload=%s usage=%+v", response.NormalizedResponseJSON, response.Usage)
+	}
+	for _, invalid := range []string{
+		`{"id":"bad","results":[{"index":-1,"relevance_score":0.2}]}`,
+		`{"id":"bad","results":[{"index":0,"relevance_score":"high"}]}`,
+		`{"id":"bad","results":[]}`,
+		`{"id":"bad","results":[{"index":0,"relevance_score":0.2}],"billed_units":{"search_units":2.5}}`,
+	} {
+		if _, err := eng.TransformResponse(context.Background(), port.TransformResponseInput{RequestID: "rerank-bad", HTTPStatus: 200, Modality: "RERANK", RawResponseBody: []byte(invalid)}); !errors.Is(err, ErrUpstreamMalformedResponse) {
+			t.Errorf("invalid rerank result accepted (%s): %v", invalid, err)
+		}
+	}
+}
+
 func TestDeclarativeManifestYAMLParsingAndSafetyGuards(t *testing.T) {
 	t.Parallel()
 	yamlDoc := `

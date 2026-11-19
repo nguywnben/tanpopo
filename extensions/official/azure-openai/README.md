@@ -25,3 +25,8 @@ TANPOPO_TEST_HERMETIC=1 CGO_ENABLED=0 go test ./extensions/official/azure-openai
 ```
 
 The cassette runner executes local loopback exchanges and verifies blind auth injection, sync and stream normalization, error mapping, and native passthrough without contacting Azure.
+# Azure OpenAI Official Adapter
+
+Use an organization resource endpoint such as `https://<resource>.openai.azure.com` as `endpoint_base_url`. The adapter validates that the hostname is a proper subdomain of `.openai.azure.com`; lookalike suffixes and the bare parent domain are rejected.
+
+This URL validation only constructs an upstream request. The data-plane broker still requires the organization's provider connection to approve the exact resource hostname and port, so this suffix rule does not add a wildcard egress grant. Do not create a provider connection with a broad host pattern.

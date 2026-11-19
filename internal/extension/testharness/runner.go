@@ -58,28 +58,31 @@ type UpstreamRecordedExchange struct {
 
 // ExpectedOutput holds contract assertions for 2xx sync or streaming responses.
 type ExpectedOutput struct {
-	Model                             string `yaml:"model,omitempty" json:"model,omitempty"`
-	FinishReason                      string `yaml:"finish_reason,omitempty" json:"finish_reason,omitempty"`
-	Content                           string `yaml:"content,omitempty" json:"content,omitempty"`
-	ContentContains                   string `yaml:"content_contains,omitempty" json:"content_contains,omitempty"`
-	ToolCallsCount                    *int   `yaml:"tool_calls_count,omitempty" json:"tool_calls_count,omitempty"`
-	ToolCallName                      string `yaml:"tool_call_name,omitempty" json:"tool_call_name,omitempty"`
-	ToolCallArguments                 string `yaml:"tool_call_arguments,omitempty" json:"tool_call_arguments,omitempty"`
-	RequireStreamCompleted            bool   `yaml:"require_stream_completed,omitempty" json:"require_stream_completed,omitempty"`
-	RequireUsage                      bool   `yaml:"require_usage,omitempty" json:"require_usage,omitempty"`
-	InputTokens                       *int64 `yaml:"input_tokens,omitempty" json:"input_tokens,omitempty"`
-	OutputTokens                      *int64 `yaml:"output_tokens,omitempty" json:"output_tokens,omitempty"`
-	CacheReadTokens                   *int64 `yaml:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty"`
-	ReasoningTokens                   *int64 `yaml:"reasoning_tokens,omitempty" json:"reasoning_tokens,omitempty"`
-	RequireStreamOptionsIncludeUsage  bool   `yaml:"require_stream_options_include_usage,omitempty" json:"require_stream_options_include_usage,omitempty"`
+	Model                            string `yaml:"model,omitempty" json:"model,omitempty"`
+	FinishReason                     string `yaml:"finish_reason,omitempty" json:"finish_reason,omitempty"`
+	Content                          string `yaml:"content,omitempty" json:"content,omitempty"`
+	ContentContains                  string `yaml:"content_contains,omitempty" json:"content_contains,omitempty"`
+	ToolCallsCount                   *int   `yaml:"tool_calls_count,omitempty" json:"tool_calls_count,omitempty"`
+	ToolCallName                     string `yaml:"tool_call_name,omitempty" json:"tool_call_name,omitempty"`
+	ToolCallArguments                string `yaml:"tool_call_arguments,omitempty" json:"tool_call_arguments,omitempty"`
+	RequireStreamCompleted           bool   `yaml:"require_stream_completed,omitempty" json:"require_stream_completed,omitempty"`
+	RequireUsage                     bool   `yaml:"require_usage,omitempty" json:"require_usage,omitempty"`
+	InputTokens                      *int64 `yaml:"input_tokens,omitempty" json:"input_tokens,omitempty"`
+	OutputTokens                     *int64 `yaml:"output_tokens,omitempty" json:"output_tokens,omitempty"`
+	CacheReadTokens                  *int64 `yaml:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty"`
+	ReasoningTokens                  *int64 `yaml:"reasoning_tokens,omitempty" json:"reasoning_tokens,omitempty"`
+	RerankResultsCount               *int   `yaml:"rerank_results_count,omitempty" json:"rerank_results_count,omitempty"`
+	RerankFirstIndex                 *int   `yaml:"rerank_first_index,omitempty" json:"rerank_first_index,omitempty"`
+	RerankSearchUnits                *int32 `yaml:"rerank_search_units,omitempty" json:"rerank_search_units,omitempty"`
+	RequireStreamOptionsIncludeUsage bool   `yaml:"require_stream_options_include_usage,omitempty" json:"require_stream_options_include_usage,omitempty"`
 }
 
 // ExpectedCanonicalError holds contract assertions for 4xx/5xx normalized error responses.
 type ExpectedCanonicalError struct {
-	CanonicalCode       string   `yaml:"canonical_code" json:"canonical_code"`
-	ErrorType           string   `yaml:"error_type,omitempty" json:"error_type,omitempty"`
-	RetryablePreStream  *bool    `yaml:"retryable_pre_stream,omitempty" json:"retryable_pre_stream,omitempty"`
-	TriggerReauth       *bool    `yaml:"trigger_reauth,omitempty" json:"trigger_reauth,omitempty"`
+	CanonicalCode         string   `yaml:"canonical_code" json:"canonical_code"`
+	ErrorType             string   `yaml:"error_type,omitempty" json:"error_type,omitempty"`
+	RetryablePreStream    *bool    `yaml:"retryable_pre_stream,omitempty" json:"retryable_pre_stream,omitempty"`
+	TriggerReauth         *bool    `yaml:"trigger_reauth,omitempty" json:"trigger_reauth,omitempty"`
 	MessageMustNotContain []string `yaml:"message_must_not_contain,omitempty" json:"message_must_not_contain,omitempty"`
 }
 
@@ -385,11 +388,34 @@ func loadAndValidateCassette(path string) (Cassette, error) {
 func isSupportedCassetteCapability(c string) bool {
 	switch c {
 	case "chat_completion", "chat_stream", "tool_calling", "error_normalization",
-		"validation_probe", "native_passthrough", "usage_extraction", "guardrail":
+		"validation_probe", "native_passthrough", "usage_extraction", "guardrail", "rerank":
 		return true
 	default:
 		return false
 	}
+}
+
+func cassetteModality(capability string) string {
+	if capability == "rerank" {
+		return "RERANK"
+	}
+	return "text"
+}
+
+func cassetteConfigWithModality(raw []byte, capability string) string {
+	if capability != "rerank" {
+		return string(raw)
+	}
+	var cfg map[string]any
+	if json.Unmarshal(raw, &cfg) != nil || cfg == nil {
+		cfg = map[string]any{}
+	}
+	cfg["_tanpopo_modality"] = "rerank"
+	encoded, err := json.Marshal(cfg)
+	if err != nil {
+		return string(raw)
+	}
+	return string(encoded)
 }
 
 func resolveCassetteSecrets(rawSlots map[string]string) (resolved map[string]string, slotRefs map[string]string, scanner *SecretLeakScanner) {
@@ -442,7 +468,7 @@ func runCassetteCase(
 	// Step 1: Adapter builds UpstreamHttpSpec WITHOUT receiving any plaintext secret!
 	spec, err := rt.TransformRequest(ctx, port.TransformRequestInput{
 		RequestID:             "test_" + cas.CaseID,
-		ConfigJSON:            string(cfgBytes),
+		ConfigJSON:            cassetteConfigWithModality(cfgBytes, cas.Capability),
 		NormalizedRequestJSON: reqBytes,
 		SecretSlotRefs:        slotRefs,
 	})
@@ -538,7 +564,7 @@ func runCassetteCase(
 		HTTPStatus:       int32(httpResp.StatusCode),
 		SanitizedHeaders: sanitizedHeaders,
 		RawResponseBody:  rawBody,
-		Modality:         "text",
+		Modality:         cassetteModality(cas.Capability),
 	})
 	if err != nil {
 		if leakErr := scanner.Check("TransformResponse err", err.Error()); leakErr != nil {
@@ -1029,6 +1055,25 @@ func assertSyncOutput(cas Cassette, resp port.NormalizedInferenceResponse, scann
 	if exp.ContentContains != "" && !strings.Contains(actualContent, exp.ContentContains) {
 		return contractErr(fmt.Sprintf("%s: expected content containing %q, got %q", cas.CaseID, exp.ContentContains, actualContent), nil)
 	}
+	if exp.RerankResultsCount != nil || exp.RerankFirstIndex != nil {
+		results, ok := doc["results"].([]any)
+		if !ok {
+			return contractErr(fmt.Sprintf("%s: normalized rerank results are missing", cas.CaseID), nil)
+		}
+		if exp.RerankResultsCount != nil && len(results) != *exp.RerankResultsCount {
+			return contractErr(fmt.Sprintf("%s: expected %d rerank results, got %d", cas.CaseID, *exp.RerankResultsCount, len(results)), nil)
+		}
+		if exp.RerankFirstIndex != nil {
+			if len(results) == 0 {
+				return contractErr(fmt.Sprintf("%s: expected first rerank result", cas.CaseID), nil)
+			}
+			first, _ := results[0].(map[string]any)
+			idx, ok := first["index"].(float64)
+			if !ok || int(idx) != *exp.RerankFirstIndex {
+				return contractErr(fmt.Sprintf("%s: expected first rerank index %d", cas.CaseID, *exp.RerankFirstIndex), nil)
+			}
+		}
+	}
 
 	if exp.ToolCallsCount != nil {
 		tcSlice, _ := msg["tool_calls"].([]any)
@@ -1063,7 +1108,7 @@ func assertSyncOutput(cas Cassette, resp port.NormalizedInferenceResponse, scann
 }
 
 func assertUsage(caseID string, exp *ExpectedOutput, usage *port.NormalizedUsage) error {
-	if !exp.RequireUsage && exp.InputTokens == nil && exp.OutputTokens == nil {
+	if !exp.RequireUsage && exp.InputTokens == nil && exp.OutputTokens == nil && exp.RerankSearchUnits == nil {
 		return nil
 	}
 	if usage == nil {
@@ -1080,6 +1125,9 @@ func assertUsage(caseID string, exp *ExpectedOutput, usage *port.NormalizedUsage
 	}
 	if exp.ReasoningTokens != nil && usage.ReasoningTokens != *exp.ReasoningTokens {
 		return contractErr(fmt.Sprintf("%s: expected reasoning_tokens %d, got %d", caseID, *exp.ReasoningTokens, usage.ReasoningTokens), nil)
+	}
+	if exp.RerankSearchUnits != nil && (usage.MediaUsage == nil || usage.MediaUsage.RerankSearchUnits != *exp.RerankSearchUnits) {
+		return contractErr(fmt.Sprintf("%s: expected rerank_search_units %d", caseID, *exp.RerankSearchUnits), nil)
 	}
 	return nil
 }

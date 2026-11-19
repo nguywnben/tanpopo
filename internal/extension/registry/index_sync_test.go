@@ -17,18 +17,20 @@ import (
 )
 
 type memoryIndexStore struct {
-	serial  int64
-	entries []IndexEntry
+	serial    int64
+	expiresAt time.Time
+	entries   []IndexEntry
 }
 
 func (s *memoryIndexStore) LastIndexSerial(context.Context) (int64, error) { return s.serial, nil }
-func (s *memoryIndexStore) ApplyIndexFeed(_ context.Context, serial int64, _ time.Time, entries []IndexEntry) error {
+func (s *memoryIndexStore) ApplyIndexFeed(_ context.Context, serial int64, expiresAt time.Time, entries []IndexEntry) error {
 	s.serial = serial
+	s.expiresAt = expiresAt
 	s.entries = append([]IndexEntry(nil), entries...)
 	return nil
 }
-func (s *memoryIndexStore) CachedIndex(context.Context) ([]IndexEntry, error) {
-	return append([]IndexEntry(nil), s.entries...), nil
+func (s *memoryIndexStore) CachedIndex(context.Context) ([]IndexEntry, time.Time, error) {
+	return append([]IndexEntry(nil), s.entries...), s.expiresAt, nil
 }
 
 func TestIndexSyncerPersistsVerifiedIndexAndServesCacheOffline(t *testing.T) {
@@ -49,7 +51,7 @@ func TestIndexSyncerPersistsVerifiedIndexAndServesCacheOffline(t *testing.T) {
 	})}
 	store := &memoryIndexStore{}
 	syncer := &IndexSyncer{
-		URL: "https://index.example.com/index.json", Keys: Keyring{"root": publicKey}, Store: store, Now: func() time.Time { return now},
+		URL: "https://index.example.com/index.json", Keys: Keyring{"root": publicKey}, Store: store, Now: func() time.Time { return now },
 		clientForURL: func(raw string) (*http.Client, error) {
 			u, parseErr := url.Parse(raw)
 			if parseErr != nil || u.Scheme != "https" || u.Host != "index.example.com" || u.User != nil {
@@ -74,5 +76,9 @@ func TestIndexSyncerPersistsVerifiedIndexAndServesCacheOffline(t *testing.T) {
 	offline, err := syncer.Sync(context.Background())
 	if err != nil || !offline.FromCache || offline.SyncError == nil || len(offline.Entries) != 1 || offline.Entries[0].Digest != digest {
 		t.Fatalf("offline cache result=%+v err=%v", offline, err)
+	}
+	now = now.Add(2 * time.Hour)
+	if _, err := syncer.Sync(context.Background()); !errors.Is(err, ErrFeedExpired) {
+		t.Fatalf("expired offline cache should not authorize new index operations, got %v", err)
 	}
 }

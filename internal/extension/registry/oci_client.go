@@ -27,6 +27,7 @@ type RegistryCredentials struct {
 	RegistryHost string
 	Username     []byte
 	Password     []byte
+	AllowedCIDRs []string
 }
 
 // Zeroize clears the credential buffers after a registry operation.
@@ -38,6 +39,7 @@ func (c *RegistryCredentials) Zeroize() {
 	clear(c.Password)
 	c.Username = nil
 	c.Password = nil
+	c.AllowedCIDRs = nil
 }
 
 type OCIClient struct {
