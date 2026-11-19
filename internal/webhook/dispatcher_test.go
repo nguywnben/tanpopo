@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -40,12 +41,30 @@ func openWebhookDB(t *testing.T) *sql.DB {
 
 func openWebhookDBWithJournal(t *testing.T, journal string, busyTimeoutMs int) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "webhook.db")+"?_pragma=busy_timeout("+strconv.Itoa(busyTimeoutMs)+")&_pragma=journal_mode("+journal+")")
+	dbDir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dbDir, "webhook.db")+"?_pragma=busy_timeout("+strconv.Itoa(busyTimeoutMs)+")&_pragma=journal_mode("+journal+")")
 	if err != nil {
 		t.Fatal(err)
 	}
 	db.SetMaxOpenConns(8)
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() {
+		stats := db.Stats()
+		if stats.InUse != 0 {
+			t.Errorf("webhook test left %d SQLite connection(s) in use at cleanup", stats.InUse)
+		}
+		if err := db.Close(); err != nil {
+			t.Errorf("close webhook test database: %v", err)
+		}
+		var removeErr error
+		for attempt := 0; attempt < 40; attempt++ {
+			removeErr = os.RemoveAll(dbDir)
+			if removeErr == nil {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		t.Errorf("remove webhook test database directory after close: %v", removeErr)
+	})
 	for _, ddl := range []string{
 		`CREATE TABLE organizations (id TEXT PRIMARY KEY)`,
 		`CREATE TABLE secret_credentials (id TEXT NOT NULL, org_id TEXT NOT NULL, owner_project_id TEXT, bound_audience TEXT, PRIMARY KEY(org_id,id))`,
