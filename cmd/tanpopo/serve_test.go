@@ -495,7 +495,21 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 		t.Fatalf("data-plane runtime child failed: %v\n%s", childErr, readTestLog(logPath))
 	}
 	if removeErr != nil {
-		t.Fatalf("runtime left data directory locked after shutdown: %v\n%s", removeErr, readTestLog(logPath))
+		// Distinguish a handle tied to the still-running child from a transient
+		// or external Windows sharing violation. A post-exit success is diagnostic
+		// only: the runtime must release its files before the process exits.
+		var postExitErr error
+		for attempt := 0; attempt < 40; attempt++ {
+			postExitErr = os.RemoveAll(dataDir)
+			if postExitErr == nil {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		if postExitErr == nil {
+			t.Fatalf("runtime left data directory locked until child process exit: before exit: %v; removal succeeded after exit\n%s", removeErr, readTestLog(logPath))
+		}
+		t.Fatalf("runtime left data directory locked after shutdown: before exit: %v; after exit: %v\n%s", removeErr, postExitErr, readTestLog(logPath))
 	}
 }
 
@@ -549,6 +563,7 @@ func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce strin
 	handler = nil
 	closeRuntime = nil
 	runtime.GC()
+	fmt.Fprintf(os.Stderr, "post-shutdown goroutine functions:\n%s", runtimeGoroutineFunctionNames())
 	if err := os.WriteFile(filepath.Join(parentDir, "shutdown.ready"), []byte("ready"), 0o600); err != nil {
 		t.Fatalf("write child shutdown marker: %v", err)
 	}
@@ -607,12 +622,26 @@ func runtimeGoroutineFunctionNames() string {
 		if strings.HasPrefix(line, "\t") || line == "" {
 			continue
 		}
-		if open := strings.IndexByte(line, '('); open > 0 {
-			out.WriteString(line[:open])
+		if name := runtimeFunctionName(line); name != "" {
+			out.WriteString(name)
 			out.WriteString("()\n")
 		}
 	}
 	return out.String()
+}
+
+func runtimeFunctionName(frame string) string {
+	if open := strings.LastIndexByte(frame, '('); open > 0 {
+		return frame[:open]
+	}
+	return ""
+}
+
+func TestRuntimeFunctionNameKeepsMethodAndReceiver(t *testing.T) {
+	got := runtimeFunctionName("database/sql.(*DB).connection(0xc000, 0x1)")
+	if want := "database/sql.(*DB).connection"; got != want {
+		t.Fatalf("runtimeFunctionName() = %q, want %q", got, want)
+	}
 }
 
 func TestStandaloneBinaryServesWithoutSourceAssets(t *testing.T) {

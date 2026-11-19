@@ -1,6 +1,6 @@
 # TP-IMP-0037 Execution Checkpoint
 
-**Status:** Implementation complete; the final Windows cleanup-test correction passed independent review and local verification. CI on the final pushed SHA remains pending. Unit 37 remains `READY_FOR_REVIEW` until merge and post-merge CI on `origin/main` pass.
+**Status:** PR #18 implementation merged at `a57d295462c1d0c6a5b1438aeb9c593cc295f756`; post-merge Windows cleanup CI failed twice on that SHA. Unit 37 remains `READY_FOR_REVIEW` until all required post-merge checks on `origin/main` pass.
 
 ## Authority and ownership
 
@@ -15,9 +15,8 @@
 ## Baseline and branch
 
 - Working branch: `develop`.
-- `origin/main` baseline: `b17a2fc65f3ce139507897244d2897a73e187b34`.
-- Working branch is `develop`; the last pushed PR head is `b56dfd262741fb0029fff716a48a9c2abe67808b`. A focused Windows test correction is being prepared on the same branch.
-- PR [#18](https://github.com/nguywnben/tanpopo/pull/18) is open from `develop` to `main`. No Unit 38 work has started.
+- PR #18 was based on `origin/main` at `b17a2fc65f3ce139507897244d2897a73e187b34` and merged from `develop` at `15e3708fee394543b9d83ecdc4d4ec6ca50b3193`.
+- Current `origin/main` is `a57d295462c1d0c6a5b1438aeb9c593cc295f756`. The corrective follow-up is being prepared on the persistent `develop` branch. No Unit 38 work has started.
 
 ## Implemented checkpoint
 
@@ -46,6 +45,21 @@
 
 ## Next steps
 
-1. Complete code and security review of the Windows test correction; push it to `develop` and resolve any new CI findings.
-2. Mark PR #18 ready and merge under `DEC-072` after required checks pass.
-3. Verify the merge SHA, Unit 37 acceptance record, and green post-merge CI on `origin/main`; synchronize `develop` before checking Unit 38 DoR.
+1. Complete code and security review of the post-merge Windows diagnostic follow-up; push it to `develop` and resolve CI findings.
+2. Once the Windows cleanup defect is corrected, obtain fresh strong reviews, verify required CI, and merge the correction PR under `DEC-072`.
+3. Verify green post-merge CI on `origin/main`, record Unit 37 acceptance, then synchronize `develop` before checking Unit 38 DoR.
+
+## Post-merge Windows cleanup follow-up (2026-11-19)
+
+- PR [#18](https://github.com/nguywnben/tanpopo/pull/18) merged at `a57d295462c1d0c6a5b1438aeb9c593cc295f756`. The pre-merge four required CI checks passed on `15e3708`, but post-merge CI run [44582855626](https://github.com/nguywnben/tanpopo/actions/runs/44582855626) failed the repeated Windows runtime cleanup regression on the merged SHA. Rerunning the failed Windows job also failed: four of five child-process iterations passed and one could not remove `data/tanpopo.db` while the child process remained alive.
+- **GPT-6 Luna** added a diagnostic retry after child exit. If the pre-exit removal fails but removal succeeds after exit, the test reports that timing while still failing the pre-exit release requirement. This is diagnostic correlation, not proof of which process owned the handle. The focused Linux test passed five repetitions; Windows CI remains pending.
+- Independent review of commit `b071115a5513c6d343f36e8520572ab1f518a1e0`: **Herschel** (**code-reviewer**) APPROVE and **Descartes** (**security-auditor**) PASS. **Herschel** noted that post-exit success is correlated with process exit but cannot establish handle ownership, since an external sharing violation might also resolve during that interval. **GPT-6 Luna** and both agents therefore treat this as diagnostic evidence only; the pre-exit assertion remains required.
+- Draft PR [#19](https://github.com/nguywnben/tanpopo/pull/19), commit `04e9a70269c2e9fb3d40c950ab43d1658e276c46`, passed Stage 0, Ubuntu Stage 1, and macOS Stage 1. Windows Stage 1 failed three of five subprocess iterations with the new diagnostic: removal failed while the child was alive and succeeded immediately after child exit. The run was `44587808332`. This confirms a reliable pre-exit handle lifetime defect, though the OS message alone cannot name the handle owner.
+- Follow-up run [`44590144954`](https://github.com/nguywnben/tanpopo/actions/runs/44590144954) passed Ubuntu and macOS. Its first Windows attempt stopped earlier at a `webhook.db` temporary-directory cleanup sharing violation; rerunning that Windows job passed the full Go suite, then failed the runtime cleanup check once in five iterations. The failure again cleared immediately after child exit, and the child listed only the Go test harness goroutines after runtime shutdown.
+- **Pasteur** (**test-engineer**) inspected runtime worker shutdown and startup query lifetimes. No missing worker join or unclosed row was evident; an unfinalized SQLite statement remains a hypothesis, not a confirmed cause. **GPT-6 Luna** added an isolated repeated `sqlite.Open` → `Store.Close` → immediate directory-removal test; it passed five local repetitions. Windows CI for this isolation test is pending.
+- On commit `23cacdab5c18e6780a4cdd020d659f3c6197a96f`, final diagnostic review was **Herschel** (**code-reviewer**) APPROVE and **Noether** (**security-auditor**) PASS. The security review confirmed the output logs only goroutine function names and does not include stack arguments, file paths, environment values, or secrets.
+- Fresh reviews of the isolated Store.Close test at `de551fee609688848d0f89d588599c647a9762fe`: **Hypatia** (**code-reviewer**) APPROVE and **Mendel** (**security-auditor**) PASS. The parser correction described below is a subsequent diff and needs its own review.
+- On `de551fee609688848d0f89d588599c647a9762fe`, the isolated Store.Close test passed on macOS, but the runtime shutdown regression failed on macOS before its alive-process check: `Store.Close` reported one active SQLite connection. The log parser had truncated function names at the first `(`, hiding method names. **GPT-6 Luna** now preserves receiver/method names and adds a parser regression test so the next macOS failure can identify the active `database/sql` operation. This diagnostic delta and its platform CI are pending review/results.
+- On the same SHA, Windows passed its entire Stage 1 job, including the isolated Store.Close test's five open/close/remove cycles and all five runtime child-process cleanup iterations. This narrows the active-connection failure to an intermittent/runtime path not reproduced by the isolated store lifecycle; it does not yet establish a clean all-platform gate because macOS failed.
+- Run [`44595404350`](https://github.com/nguywnben/tanpopo/actions/runs/44595404350) on `b251757d3efe1f7a12a518f82987ac07d10e36a1` passed Stage 0, macOS Stage 1, and Windows' isolated Store.Close test, but Windows full Go tests stopped at `TestMissingSecretZeroizerFailsClosed` because `t.TempDir` could not remove `webhook.db`; the runtime stress step was skipped. This was another test in the shared webhook SQLite helper and a different test name from the earlier cleanup warning. **GPT-6 Luna** changed the helper to report any in-use connection, close the DB, and retry removal for a bounded two seconds; a persistent lock still fails the test. The complete webhook package passed three local repetitions.
+- No Unit 38 implementation has started, and Unit 37 is not accepted until the post-merge Windows gate is green.

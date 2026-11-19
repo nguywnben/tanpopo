@@ -61,6 +61,23 @@ func TestStoreCloseReportsActiveSQLRows(t *testing.T) {
 	}
 }
 
+func TestStoreCloseReleasesDatabaseFilesWhileProcessRemainsAlive(t *testing.T) {
+	for attempt := 0; attempt < 5; attempt++ {
+		dataDir := filepath.Join(t.TempDir(), "data")
+		dbPath := filepath.Join(dataDir, "tanpopo.db")
+		st, err := Open(context.Background(), Config{DBPath: dbPath})
+		if err != nil {
+			t.Fatalf("Open attempt %d: %v", attempt+1, err)
+		}
+		if err := st.Close(); err != nil {
+			t.Fatalf("Close attempt %d: %v", attempt+1, err)
+		}
+		if err := os.RemoveAll(dataDir); err != nil {
+			t.Fatalf("remove database files after Close attempt %d while process remains alive: %v", attempt+1, err)
+		}
+	}
+}
+
 func TestSQLiteOpenWALPragmasMigrationAndChangelogAC1(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
