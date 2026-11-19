@@ -4,6 +4,8 @@
 package registry
 
 import (
+	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -12,6 +14,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -115,5 +119,52 @@ func TestFeedEntryValidationRequiresImmutableOCIAndKnownSeverity(t *testing.T) {
 	revocations.Entries = json.RawMessage(`[ {"package_slug":"acme/adapter","version_or_sha256":"1.2.3","severity":"UNKNOWN","reason":"x"} ]`)
 	if _, err := DecodeRevocationEntries(revocations); err == nil {
 		t.Fatal("unknown advisory severity accepted")
+	}
+}
+
+type registryRoundTripper func(*http.Request) (*http.Response, error)
+
+func (fn registryRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) { return fn(req) }
+
+func TestOCIClientPinsDigestAndScopesCredentialsToRegistry(t *testing.T) {
+	body := []byte("verified artifact")
+	digest := sha256.Sum256(body)
+	client := &OCIClient{HTTPClient: &http.Client{Transport: registryRoundTripper(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Scheme != "https" || req.URL.Host != "registry.example.com" || req.URL.Path != "/v2/team/adapter/blobs/sha256:"+hex.EncodeToString(digest[:]) {
+			t.Fatalf("unexpected registry request URL: %s", req.URL)
+		}
+		user, password, ok := req.BasicAuth()
+		if !ok || user != "bot" || password != "token" {
+			t.Fatalf("registry credentials missing or malformed")
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body)), Request: req}, nil
+	})}}
+	ref := "oci://registry.example.com/team/adapter@sha256:" + hex.EncodeToString(digest[:])
+	got, err := client.Pull(context.Background(), ref, &RegistryCredentials{RegistryHost: "registry.example.com", Username: "bot", Password: "token"})
+	if err != nil || !bytes.Equal(got, body) {
+		t.Fatalf("pinned artifact pull failed: got=%q err=%v", got, err)
+	}
+	if _, err := client.Pull(context.Background(), ref, &RegistryCredentials{RegistryHost: "other.example.com", Username: "bot", Password: "token"}); !errors.Is(err, ErrRegistryAuthScope) {
+		t.Fatalf("credentials for another registry must be rejected, got %v", err)
+	}
+	if _, err := client.Pull(context.Background(), "oci://registry.example.com/team/adapter:latest", nil); !errors.Is(err, ErrInvalidOCIReference) {
+		t.Fatalf("mutable tag must be rejected, got %v", err)
+	}
+}
+
+func TestOCIClientRejectsDigestMismatchAndOversize(t *testing.T) {
+	body := []byte("unexpected bytes")
+	wrongDigest := sha256.Sum256([]byte("expected bytes"))
+	client := &OCIClient{MaxBytes: int64(len(body)), HTTPClient: &http.Client{Transport: registryRoundTripper(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body)), Request: req}, nil
+	})}}
+	ref := "oci://registry.example.com/team/adapter@sha256:" + hex.EncodeToString(wrongDigest[:])
+	if _, err := client.Pull(context.Background(), ref, nil); err == nil {
+		t.Fatal("digest mismatch accepted")
+	}
+	client.MaxBytes = int64(len(body) - 1)
+	actualDigest := sha256.Sum256(body)
+	if _, err := client.Pull(context.Background(), "oci://registry.example.com/team/adapter@sha256:"+hex.EncodeToString(actualDigest[:]), nil); !errors.Is(err, ErrArtifactTooLarge) {
+		t.Fatalf("oversized blob must fail, got %v", err)
 	}
 }
