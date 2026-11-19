@@ -5,6 +5,7 @@
 ## Ownership
 
 - Implementer: **GPT-6 Luna**.
+- Adapter implementation contributors: **Laplace** (AWS Bedrock) and **Planck** (Azure OpenAI); their changes are pending integration and verification.
 - Independent reviewers: interim reviews on `2a9b40ad827515d16cfbb62ee40f97525a64fecd` by **Euclid** (**code-reviewer**) and **Lagrange** (**security-auditor**) found blockers; both must review the final diff after remediation.
 - Acceptor: **GPT-6 Luna**, under the Product Owner delegation in `DEC-060`.
 
@@ -44,6 +45,13 @@
 - The production feed runtime reads public configuration from `TANPOPO_MARKETPLACE_INDEX_URL`, `TANPOPO_MARKETPLACE_REVOCATIONS_URL`, and `TANPOPO_MARKETPLACE_FEED_PUBLIC_KEYS` (JSON object of key IDs to base64 Ed25519 public keys). Registry credentials use `OCI_REGISTRY_AUTH`, omit `project_id`, bind `bound_audience` to the exact registry authority, and contain the strict JSON fields `username` and `password`. Runtime configuration and parser tests are present. Official Bedrock/Azure adapter packages and their cassette/contract tests remain open.
 - CI on `e0f4db2` failed on macOS and Ubuntu because rerank code referenced `RerankSearchUnits` at the wrong level of `NormalizedUsage`; corrected in `5dc1785`. Run [`44448867756`](https://github.com/nguywnben/tanpopo/actions/runs/44448867756) on `5dc1785` passed Ubuntu but failed the 5× Windows cleanup repeat on attempts 3 and 5; the normal Windows suite passed. Its macOS job was still running at the last check. The latest pushed head is `4a26d0aeeb2572d2cb3b48dea95987760f3b7a7a`; CI [`44449591285`](https://github.com/nguywnben/tanpopo/actions/runs/44449591285) was running on that SHA.
 - Current reviewers recorded in this batch: **Wegener** (**test-engineer**), **Euclid** (**code-reviewer**), and **Lagrange** (**security-auditor**). The interim review findings remain blockers; rerun both strong reviews on the complete final diff.
+
+### Continuation checkpoint (2026-11-19, resumed session)
+
+- **GPT-6 Luna** fetched and verified `origin/main` at `04ed998b7720b946f107b8e7c55ff6c403606049`, `develop` / PR #14 at `1cf19d25e50bf9681ec372638f1c5b29f1143051`, and the correct local commit identity. The local `origin/develop` tracking ref was stale; the GitHub branch API and `git ls-remote` both confirmed the actual branch head before pushing.
+- Run [`44450949599`](https://github.com/nguywnben/tanpopo/actions/runs/44450949599) on `1cf19d2` exposed a test-only failure on Ubuntu and macOS: the offline-cache case changes the feed URL path, but its client-factory test double required the original path. The assertion now preserves HTTPS, exact host, and no-userinfo checks while accepting the alternate path. The correction is commit `fde31eb51244f2fdd074bf8741b96587d4ef49b2` on the same persistent `develop` branch and PR #14. Run [`44451567495`](https://github.com/nguywnben/tanpopo/actions/runs/44451567495) has Stage 0 green; the three Stage 1 platform jobs are in progress.
+- **Laplace** is implementing the Bedrock adapter package and contract cassettes; **Planck** is implementing the Azure OpenAI adapter package and contract cassettes in separate package scopes. Their contributions are not yet integrated or verified. **GPT-6 Luna** remains responsible for integration, all acceptance evidence, governance updates, and acceptance.
+- The current unit remains `READY` / implementation in progress. Do not mark `READY_FOR_REVIEW` or `DONE` until both adapter packages, runtime acceptance coverage, rerank provider contract coverage, all required CI gates, and fresh independent final reviews are complete.
 
 ## Remaining work
 
