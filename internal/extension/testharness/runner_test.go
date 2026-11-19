@@ -25,6 +25,21 @@ func TestMain(m *testing.M) {
 	os.Exit(netguard.MustRunHermeticMain(m))
 }
 
+func TestTestExtensionRejectsInvalidTestOnlyStreamTimeout(t *testing.T) {
+	for _, timeout := range []time.Duration{-time.Nanosecond, time.Second + time.Nanosecond} {
+		if _, err := testharness.TestExtension(context.Background(), testharness.TestOptions{
+			Dir: t.TempDir(), TestOnlyStreamChunkTimeout: timeout,
+		}); err == nil {
+			t.Fatalf("TestExtension accepted invalid test-only timeout %s", timeout)
+		}
+	}
+	if _, err := testharness.TestExtensionWithRuntime(context.Background(), testharness.TestOptions{
+		Dir: t.TempDir(), TestOnlyStreamChunkTimeout: 250 * time.Millisecond,
+	}, nil, nil, nil, time.Now()); err == nil {
+		t.Fatal("TestExtensionWithRuntime accepted an override that it cannot apply to the supplied runtime")
+	}
+}
+
 func TestAC1Tier1AndTier2LifecycleAndReproducibility(t *testing.T) {
 	ctx := context.Background()
 
@@ -47,6 +62,13 @@ func TestAC1Tier1AndTier2LifecycleAndReproducibility(t *testing.T) {
 			})
 			if err != nil {
 				t.Fatalf("ScaffoldExtension(tier=%s): %v", tc.tier, err)
+			}
+			if tc.tier == "1" {
+				if _, err := testharness.TestExtension(ctx, testharness.TestOptions{
+					Dir: workDir, TestOnlyStreamChunkTimeout: 250 * time.Millisecond,
+				}); err == nil {
+					t.Fatal("Tier-1 declarative extension accepted a WASM-only test timeout override")
+				}
 			}
 			if scaf.ExtensionID != "@example/"+tc.name {
 				t.Fatalf("unexpected extension id %q", scaf.ExtensionID)
@@ -403,4 +425,3 @@ expected_normalized_output:
 		t.Fatalf("SanitizeTerminalText = %q, want %q", clean, want)
 	}
 }
-

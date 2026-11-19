@@ -9,13 +9,14 @@
 - Initial review corrections: **Galileo** (`code-reviewer`) and **Harvey** (`security-auditor`).
 - Independent review corrections: **James** (`code-reviewer`) and **Laplace** (`security-auditor`).
 - Final review on the hardened diff: **Faraday** (`code-reviewer`) APPROVE and **Plato** (`security-auditor`) PASS.
+- Windows CI correction reviews: **Archimedes**, **Anscombe**, **Erdos**, **Newton**, and **Boyle** (`code-reviewer`); **Lagrange**, **Avicenna**, **McClintock**, **Volta**, and **Fermat** (`security-auditor`). Final delta review: **Boyle** APPROVE and **Fermat** PASS. Their findings led to an explicitly test-only, Tier-2 WASM timeout override that is disclosed in the report and never promotes `TESTED` badges.
 
 ## Baseline and branch
 
 - Working branch: `develop`.
 - `origin/main` at last fetch: `b17a2fc65f3ce139507897244d2897a73e187b34`.
 - Local `develop` is based on that main SHA; `origin/develop` is its ancestor and is four commits behind main. Push can fast-forward the existing `develop` branch.
-- No Unit 37 PR is open yet. No Unit 38 work has started.
+- Draft PR [#18](https://github.com/nguywnben/tanpopo/pull/18) is open from `develop` to `main`. Its current remote head is `6109c66523d21782b0f7772a0e8fe4ececd154ee`; the locally reviewed Windows test harness correction is not yet committed/pushed. No Unit 38 work has started.
 
 ## Implemented checkpoint
 
@@ -25,6 +26,7 @@
 - Made budget, kill-switch, extension-quarantine, and pending-approval events transactional with their state changes. Removed shared-tenant stream counts from notification payloads.
 - Forced tenant RLS on PostgreSQL webhook queue data. PostgreSQL dispatcher startup explicitly assumes and verifies `tanpopo_webhook_worker`, discarding the connection if role verification fails. The runbook grants only required credential metadata columns. The current `serve` runtime remains SQLite and is documented as not yet PostgreSQL/RLS validated.
 - Added per-organization transaction locks for approval and webhook admission bounds, current active/previous key-recipient self-approval checks, migrations `0019`/`0020`, and aligned SQLite/PostgreSQL schema snapshots. Dispatcher-owned SQLite enqueue retries are bounded and clean up failed commit transactions on the same connection. Governance records include DEC-075 through DEC-080.
+- Windows Stage 1 initially failed only in `TestBedrockOfflineCassetteContractHarness`: stream chunk 4 hit the 50 ms watchdog at 83 ms hosted-runner time. DEC-081 keeps production quotas unchanged and adds a capped Tier-2-WASM test-only override; the report discloses its exact duration, no capability receives `TESTED`, and Tier 1/supplied-runtime uses are rejected.
 
 ## Verification completed
 
@@ -33,11 +35,13 @@
 - Full `go test ./...` passed on the current implementation with `CGO_ENABLED=0`, `TANPOPO_TEST_HERMETIC=1`, and `umask 0022`.
 - Race tests passed for `internal/admin/http`, MCP approval/hub, `internal/iam/vkey`, and `internal/webhook`. An earlier webhook race attempt exposed SQLite busy contention in the concurrency fixture; bounded retry and the commit cleanup regression were added, then the webhook package race test passed.
 - `go run ./scripts/ci/check.go --all` and `git diff --check` passed on the current implementation.
+- Local full Go tests and the targeted Bedrock/harness tests pass with the reviewed Windows correction. Its final code and security reviews are **Boyle** APPROVE and **Fermat** PASS.
+- First PR CI run [`44548907596`](https://github.com/nguywnben/tanpopo/actions/runs/44548907596): Stage 0, Ubuntu Stage 1, macOS Stage 1, and the release artifact dry run passed; Windows Stage 1 failed at the Bedrock timeout described above. The correction is pending push and a fresh four-job run.
 - The official fixture is pinned to `@modelcontextprotocol/sdk` `1.32.2`. Scripted fixtures do not establish support for untested Claude Code, Cursor, or Codex releases.
 - No live PostgreSQL server was available, so PostgreSQL runtime behavior has static review and fail-closed unit coverage, not a live integration run.
 
 ## Next steps
 
-1. Record current repo-local Git author and committer identities; commit the reviewed checkpoint on `develop` and push the fast-forwarded branch.
-2. Open/update the Unit 37 PR to `main`, monitor all four required Ubuntu/macOS/Windows Stage 0/Stage 1 checks, and resolve any CI findings.
-3. Merge under `DEC-072`, verify DONE and green post-merge CI on the resulting `origin/main` SHA, then synchronize `develop` before checking Unit 38 DoR.
+1. Record current repo-local Git author and committer identities; commit the reviewed Windows CI correction on `develop` and push it to update PR #18.
+2. Monitor the new run through all four required Stage 0/Stage 1 checks and the release artifact dry run; resolve any new CI findings.
+3. When checks pass, mark PR #18 ready and merge under `DEC-072`; verify DONE and green post-merge CI on the resulting `origin/main` SHA, then synchronize `develop` before checking Unit 38 DoR.

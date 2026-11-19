@@ -90,6 +90,9 @@ type ExpectedCanonicalError struct {
 type TestOptions struct {
 	Dir          string
 	CassettePath string
+	// TestOnlyStreamChunkTimeout provides scheduler headroom to platform CI
+	// fixtures. It never changes an extension manifest or production runtime.
+	TestOnlyStreamChunkTimeout time.Duration
 }
 
 // CaseResult summarizes one executed cassette contract test.
@@ -104,25 +107,31 @@ type CaseResult struct {
 
 // TestReport summarizes offline extension contract test results and promoted capability badges.
 type TestReport struct {
-	ExtensionID      string            `json:"extension_id" yaml:"extension_id"`
-	Version          string            `json:"version" yaml:"version"`
-	ExecutionTier    string            `json:"execution_tier" yaml:"execution_tier"`
-	Status           string            `json:"status" yaml:"status"`
-	ExitCode         int               `json:"exit_code" yaml:"exit_code"`
-	CasesPassed      int               `json:"cases_passed" yaml:"cases_passed"`
-	CasesFailed      int               `json:"cases_failed" yaml:"cases_failed"`
-	DurationMs       int64             `json:"duration_ms" yaml:"duration_ms"`
-	CapabilityBadges map[string]string `json:"capability_badges" yaml:"capability_badges"`
-	SchemaRef        string            `json:"schema_ref" yaml:"schema_ref"`
-	Cases            []CaseResult      `json:"cases" yaml:"cases"`
+	ExtensionID                string            `json:"extension_id" yaml:"extension_id"`
+	Version                    string            `json:"version" yaml:"version"`
+	ExecutionTier              string            `json:"execution_tier" yaml:"execution_tier"`
+	Status                     string            `json:"status" yaml:"status"`
+	ExitCode                   int               `json:"exit_code" yaml:"exit_code"`
+	CasesPassed                int               `json:"cases_passed" yaml:"cases_passed"`
+	CasesFailed                int               `json:"cases_failed" yaml:"cases_failed"`
+	DurationMs                 int64             `json:"duration_ms" yaml:"duration_ms"`
+	TestOnlyStreamChunkTimeout string            `json:"test_only_stream_chunk_timeout,omitempty" yaml:"test_only_stream_chunk_timeout,omitempty"`
+	CapabilityBadges           map[string]string `json:"capability_badges" yaml:"capability_badges"`
+	SchemaRef                  string            `json:"schema_ref" yaml:"schema_ref"`
+	Cases                      []CaseResult      `json:"cases" yaml:"cases"`
 }
 
 // TestExtension validates an extension directory, instantiates its isolated Tier-1/Tier-2 runtime,
 // replays offline contract cassettes strictly inside loopback (127.0.0.1), scans all outputs
 // with SecretLeakScanner, and promotes verified capabilities from DECLARED to TESTED.
+// A test-only timeout override suppresses all TESTED promotions because it does
+// not verify the manifest's production execution quota.
 func TestExtension(ctx context.Context, opts TestOptions) (*TestReport, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if opts.TestOnlyStreamChunkTimeout < 0 || opts.TestOnlyStreamChunkTimeout > wasm.MaxAllowedStreamChunkTimeout {
+		return nil, fmt.Errorf("test-only stream chunk timeout must be within [0,%s]", wasm.MaxAllowedStreamChunkTimeout)
 	}
 	start := time.Now()
 
@@ -130,18 +139,21 @@ func TestExtension(ctx context.Context, opts TestOptions) (*TestReport, error) {
 	if err != nil {
 		return nil, err
 	}
+	if opts.TestOnlyStreamChunkTimeout > 0 && vm.ExecutionTier != installer.ExecutionTierWasmSandboxT2 {
+		return nil, errors.New("test-only stream chunk timeout override requires a Tier-2 WASM extension")
+	}
 	absDir, err := filepath.EvalSymlinks(opts.Dir)
 	if err != nil {
 		return nil, validationErr("resolve extension directory", err)
 	}
 
-	rt, closeRT, err := buildIsolatedRuntime(ctx, absDir, vm, wasmBytes)
+	rt, closeRT, err := buildIsolatedRuntime(ctx, absDir, vm, wasmBytes, opts.TestOnlyStreamChunkTimeout)
 	if err != nil {
 		return nil, err
 	}
 	defer closeRT()
 
-	return TestExtensionWithRuntime(ctx, opts, valReport, vm, rt, start)
+	return testExtensionWithRuntime(ctx, opts, valReport, vm, rt, start, opts.TestOnlyStreamChunkTimeout > 0)
 }
 
 // TestExtensionWithRuntime executes offline cassette replay against an explicitly provided
@@ -153,6 +165,24 @@ func TestExtensionWithRuntime(
 	vm *installer.ValidatedManifest,
 	rt port.ProviderRuntime,
 	start time.Time,
+) (*TestReport, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if opts.TestOnlyStreamChunkTimeout != 0 {
+		return nil, errors.New("test-only stream timeout override requires TestExtension to build the runtime")
+	}
+	return testExtensionWithRuntime(ctx, opts, valReport, vm, rt, start, false)
+}
+
+func testExtensionWithRuntime(
+	ctx context.Context,
+	opts TestOptions,
+	valReport *ValidationReport,
+	vm *installer.ValidatedManifest,
+	rt port.ProviderRuntime,
+	start time.Time,
+	testOnlyTimeoutApplied bool,
 ) (*TestReport, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -231,7 +261,7 @@ func TestExtensionWithRuntime(
 	}
 
 	for capName, st := range capStats {
-		if st.passed > 0 && st.failed == 0 {
+		if !testOnlyTimeoutApplied && st.passed > 0 && st.failed == 0 {
 			badges[capName] = "TESTED"
 		}
 	}
@@ -242,24 +272,29 @@ func TestExtensionWithRuntime(
 		overallStatus = "FAILED"
 		exitCode = CodeOf(firstErr)
 	}
+	testOnlyTimeout := ""
+	if testOnlyTimeoutApplied {
+		testOnlyTimeout = opts.TestOnlyStreamChunkTimeout.String()
+	}
 
 	report := &TestReport{
-		ExtensionID:      valReport.ExtensionID,
-		Version:          valReport.Version,
-		ExecutionTier:    valReport.ExecutionTier,
-		Status:           overallStatus,
-		ExitCode:         exitCode,
-		CasesPassed:      passed,
-		CasesFailed:      failed,
-		DurationMs:       time.Since(start).Milliseconds(),
-		CapabilityBadges: badges,
-		SchemaRef:        cassetteSchemaAssetPath,
-		Cases:            results,
+		ExtensionID:                valReport.ExtensionID,
+		Version:                    valReport.Version,
+		ExecutionTier:              valReport.ExecutionTier,
+		Status:                     overallStatus,
+		ExitCode:                   exitCode,
+		CasesPassed:                passed,
+		CasesFailed:                failed,
+		DurationMs:                 time.Since(start).Milliseconds(),
+		TestOnlyStreamChunkTimeout: testOnlyTimeout,
+		CapabilityBadges:           badges,
+		SchemaRef:                  cassetteSchemaAssetPath,
+		Cases:                      results,
 	}
 	return report, firstErr
 }
 
-func buildIsolatedRuntime(ctx context.Context, absDir string, vm *installer.ValidatedManifest, wasmBytes []byte) (port.ProviderRuntime, func(), error) {
+func buildIsolatedRuntime(ctx context.Context, absDir string, vm *installer.ValidatedManifest, wasmBytes []byte, testOnlyStreamChunkTimeout time.Duration) (port.ProviderRuntime, func(), error) {
 	switch vm.ExecutionTier {
 	case installer.ExecutionTierDeclarativeT1:
 		raw, err := os.ReadFile(filepath.Join(absDir, "manifest.yaml"))
@@ -289,6 +324,9 @@ func buildIsolatedRuntime(ctx context.Context, absDir string, vm *installer.Vali
 			if vm.Manifest.Runtime.Quotas.MaxStreamChunkCpuMs > 0 {
 				chunkTimeout = time.Duration(vm.Manifest.Runtime.Quotas.MaxStreamChunkCpuMs) * time.Millisecond
 			}
+		}
+		if testOnlyStreamChunkTimeout > 0 {
+			chunkTimeout = testOnlyStreamChunkTimeout
 		}
 		var slots []string
 		for _, s := range vm.Manifest.SecretSlots {

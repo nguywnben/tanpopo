@@ -106,12 +106,22 @@ func TestMain(m *testing.M) {
 }
 
 func TestBedrockOfflineCassetteContractHarness(t *testing.T) {
-	report, err := testharness.TestExtension(context.Background(), testharness.TestOptions{Dir: "."})
+	report, err := testharness.TestExtension(context.Background(), testharness.TestOptions{
+		Dir: ".", TestOnlyStreamChunkTimeout: 250 * time.Millisecond,
+	})
 	if err != nil {
 		t.Fatalf("TestExtension: %v (report=%+v)", err, report)
 	}
 	if report.Status != "PASSED" || report.CasesPassed != 9 || report.CasesFailed != 0 {
 		t.Fatalf("unexpected Bedrock cassette report: %+v", report)
+	}
+	if report.TestOnlyStreamChunkTimeout != "250ms" {
+		t.Fatalf("test report did not disclose the test-only timeout override: %+v", report)
+	}
+	for capability, badge := range report.CapabilityBadges {
+		if badge == "TESTED" {
+			t.Fatalf("test-only timeout override promoted %s to TESTED", capability)
+		}
 	}
 	packDir := t.TempDir()
 	first, err := testharness.PackExtension(context.Background(), ".", filepath.Join(packDir, "bedrock-a.tpkg"))
