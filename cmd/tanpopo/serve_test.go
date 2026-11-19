@@ -381,6 +381,12 @@ func TestServeRefusesInsecureMasterKEKFileBeforeListening(t *testing.T) {
 func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T) {
 	const parentDirEnv = "TANPOPO_TEST_DATA_PLANE_PARENT_DIR"
 	const nonceEnv = "TANPOPO_TEST_DATA_PLANE_NONCE"
+	if isDataPlaneRuntimeChildInvocation() {
+		if nonce := os.Getenv(nonceEnv); nonce != "" {
+			testDataPlaneRoleRuntimeChild(t, os.Getenv("TANPOPO_DATA_DIR"), os.Getenv(parentDirEnv), nonce)
+			return
+		}
+	}
 	parentDir := t.TempDir()
 	dataDir := filepath.Join(parentDir, "data")
 	readyPath := filepath.Join(parentDir, "shutdown.ready")
@@ -395,7 +401,7 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	if err := os.WriteFile(challengePath, []byte(nonce), 0o600); err != nil {
 		t.Fatalf("write child handshake: %v", err)
 	}
-	cmd := exec.Command(os.Args[0], "-test.run=^TestDataPlaneRoleRuntimeChildProcess$")
+	cmd := exec.Command(os.Args[0], "-test.run=^TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken$")
 	logFile, err := os.Create(logPath)
 	if err != nil {
 		t.Fatalf("create child log: %v", err)
@@ -493,15 +499,17 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	}
 }
 
-func TestDataPlaneRoleRuntimeChildProcess(t *testing.T) {
-	const parentDirEnv = "TANPOPO_TEST_DATA_PLANE_PARENT_DIR"
-	const nonceEnv = "TANPOPO_TEST_DATA_PLANE_NONCE"
-	nonce := os.Getenv(nonceEnv)
-	if nonce == "" {
-		t.Skip("only run as the isolated data-plane test child")
+func isDataPlaneRuntimeChildInvocation() bool {
+	const selector = "^TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken$"
+	for i, arg := range os.Args {
+		if arg == "-test.run="+selector || (arg == "-test.run" && i+1 < len(os.Args) && os.Args[i+1] == selector) {
+			return true
+		}
 	}
-	parentDir := os.Getenv(parentDirEnv)
-	dataDir := os.Getenv("TANPOPO_DATA_DIR")
+	return false
+}
+
+func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce string) {
 	parentAbs, err := filepath.Abs(parentDir)
 	tempAbs, tempErr := filepath.Abs(os.TempDir())
 	if err != nil || tempErr != nil || !filepath.IsAbs(parentDir) || filepath.Clean(dataDir) != filepath.Join(parentAbs, "data") {
