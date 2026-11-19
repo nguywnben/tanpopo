@@ -14,8 +14,10 @@
 ## Execution and independent review attribution
 
 - Implemented by **GPT-6 Luna** under the active delegation in `DEC-060`; accepted by **GPT-6 Luna** after the required independent reviews and main CI gates pass.
-- Final code review on PR #11 SHA `e26d99d4b13cffd918e066ac1646017a44655969`: **Maxwell** (**code-reviewer**) — **APPROVE**, no required or optional findings.
-- Final security review on the same SHA: **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings; one Low observation remains that Go string copies of upstream token/client-secret values cannot be zeroized. Reviewers did not run tests; execution evidence is tracked separately below.
+- Initial code review on PR #11 SHA `e26d99d4b13cffd918e066ac1646017a44655969`: **Maxwell** (**code-reviewer**) — **APPROVE**, no required or optional findings.
+- Initial security review on the same SHA: **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings; one Low observation remains that Go string copies of upstream token/client-secret values cannot be zeroized.
+- Follow-up code review on PR #11 SHA `19497ac39c204d7a5be0bd1055c7cb18d6856add`: **Maxwell** (**code-reviewer**) — **REQUEST CHANGES** only to correct the stale review attribution in this record; no implementation or test findings.
+- Follow-up security review on that SHA: **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings and the same Low observation. Reviewers did not run tests; execution evidence is tracked separately below.
 - **Popper** (**test-engineer**) contributed the OAuth refresh and concurrency test plan and tests; the final CI runs exercise those tests on the accepted diff.
 
 ## Contract reconciliation
