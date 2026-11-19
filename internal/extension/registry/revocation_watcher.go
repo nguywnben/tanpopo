@@ -135,22 +135,26 @@ func (w *RevocationWatcher) reconcileLocked(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("load pending revocation actions: %w", err)
 	}
+	var actionErrors []error
 	for _, target := range pending {
 		if target.Severity != "CRITICAL" && target.Severity != "CRITICAL_MALICIOUS" {
 			continue
 		}
 		if err := w.Actions.QuarantineInstallation(ctx, target); err != nil {
-			return fmt.Errorf("quarantine revoked installation %s: %w", target.InstallationID, err)
+			actionErrors = append(actionErrors, fmt.Errorf("quarantine revoked installation %s: %w", target.InstallationID, err))
+			continue
 		}
 		if err := w.Actions.SeverInstallationStreams(ctx, target); err != nil {
-			return fmt.Errorf("sever revoked installation streams %s: %w", target.InstallationID, err)
+			actionErrors = append(actionErrors, fmt.Errorf("sever revoked installation streams %s: %w", target.InstallationID, err))
+			continue
 		}
 		if err := w.Actions.EmitINC03(ctx, target); err != nil {
-			return fmt.Errorf("emit INC-03 for installation %s: %w", target.InstallationID, err)
+			actionErrors = append(actionErrors, fmt.Errorf("emit INC-03 for installation %s: %w", target.InstallationID, err))
+			continue
 		}
 		if err := w.Store.CompleteRevocationAction(ctx, target.ActionID); err != nil {
-			return fmt.Errorf("complete revocation action %s: %w", target.ActionID, err)
+			actionErrors = append(actionErrors, fmt.Errorf("complete revocation action %s: %w", target.ActionID, err))
 		}
 	}
-	return nil
+	return errors.Join(actionErrors...)
 }

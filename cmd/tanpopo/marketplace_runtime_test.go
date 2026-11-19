@@ -14,9 +14,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -52,6 +54,82 @@ func TestConfiguredMarketplaceKeyring(t *testing.T) {
 			t.Errorf("invalid public key configuration accepted: %q", raw)
 		}
 	}
+}
+
+func TestMarketplaceRuntimeRetriesPendingActionsWithoutFeedPolling(t *testing.T) {
+	target := registry.RevocationTarget{ActionID: "action-1", InstallationID: "install-1", Severity: "CRITICAL"}
+	for _, failFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("fail_first_%t", failFirst), func(t *testing.T) {
+			store := &runtimeRevocationStore{pending: []registry.RevocationTarget{target}, completed: make(chan string, 1)}
+			actions := &runtimeRevocationActionsProbe{}
+			actions.failFirst.Store(failFirst)
+			watcher := &registry.RevocationWatcher{Store: store, Actions: actions, Now: time.Now}
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				runMarketplaceRuntimeWithInterval(ctx, nil, watcher, false, time.Millisecond)
+				close(done)
+			}()
+			select {
+			case id := <-store.completed:
+				if id != target.ActionID {
+					t.Fatalf("completed action = %q, want %q", id, target.ActionID)
+				}
+			case <-time.After(2 * time.Second):
+				cancel()
+				<-done
+				t.Fatal("pending action was not reconciled")
+			}
+			cancel()
+			<-done
+			if failFirst && actions.quarantineCalls.Load() < 2 {
+				t.Fatalf("quarantine calls = %d, want retry after transient failure", actions.quarantineCalls.Load())
+			}
+			if actions.severed.Load() != 1 || actions.alerted.Load() != 1 {
+				t.Fatalf("pending action was not fully reconciled: severed=%d alerted=%d", actions.severed.Load(), actions.alerted.Load())
+			}
+		})
+	}
+}
+
+type runtimeRevocationStore struct {
+	pending   []registry.RevocationTarget
+	completed chan string
+}
+
+func (*runtimeRevocationStore) LastRevocationSerial(context.Context) (int64, error) { return 0, nil }
+func (*runtimeRevocationStore) ApplyRevocationFeed(context.Context, int64, time.Time, []registry.RevocationEntry) error {
+	return nil
+}
+func (s *runtimeRevocationStore) PendingRevocationActions(context.Context) ([]registry.RevocationTarget, error) {
+	return append([]registry.RevocationTarget(nil), s.pending...), nil
+}
+func (s *runtimeRevocationStore) CompleteRevocationAction(_ context.Context, id string) error {
+	s.pending = nil
+	s.completed <- id
+	return nil
+}
+
+type runtimeRevocationActionsProbe struct {
+	quarantineCalls atomic.Int32
+	severed         atomic.Int32
+	alerted         atomic.Int32
+	failFirst       atomic.Bool
+}
+
+func (a *runtimeRevocationActionsProbe) QuarantineInstallation(context.Context, registry.RevocationTarget) error {
+	if a.quarantineCalls.Add(1) == 1 && a.failFirst.Load() {
+		return errors.New("temporary quarantine failure")
+	}
+	return nil
+}
+func (a *runtimeRevocationActionsProbe) SeverInstallationStreams(context.Context, registry.RevocationTarget) error {
+	a.severed.Add(1)
+	return nil
+}
+func (a *runtimeRevocationActionsProbe) EmitINC03(context.Context, registry.RevocationTarget) error {
+	a.alerted.Add(1)
+	return nil
 }
 
 func TestParseOCIRegistryAuthRequiresExactUnescapedFields(t *testing.T) {

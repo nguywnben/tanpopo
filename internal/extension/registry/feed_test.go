@@ -224,10 +224,14 @@ func (s *fakeRevocationStore) CompleteRevocationAction(_ context.Context, id str
 type fakeRevocationActions struct {
 	events         []string
 	failStreamOnce bool
+	failQuarantine map[string]bool
 }
 
 func (a *fakeRevocationActions) QuarantineInstallation(_ context.Context, target RevocationTarget) error {
 	a.events = append(a.events, "quarantine:"+target.InstallationID)
+	if a.failQuarantine[target.InstallationID] {
+		return errors.New("quarantine unavailable")
+	}
 	return nil
 }
 func (a *fakeRevocationActions) SeverInstallationStreams(_ context.Context, target RevocationTarget) error {
@@ -268,6 +272,25 @@ func TestRevocationWatcherPersistsAndRetriesCriticalEnforcement(t *testing.T) {
 	want := []string{"quarantine:ins_1", "sever:ins_1", "quarantine:ins_1", "sever:ins_1", "inc03:ins_1"}
 	if fmt.Sprint(actions.events) != fmt.Sprint(want) {
 		t.Fatalf("unexpected enforcement order: got %v want %v", actions.events, want)
+	}
+}
+
+func TestRevocationWatcherContinuesAfterOneActionFails(t *testing.T) {
+	first := RevocationTarget{ActionID: "action-1", InstallationID: "ins_blocked", Severity: "CRITICAL"}
+	second := RevocationTarget{ActionID: "action-2", InstallationID: "ins_healthy", Severity: "CRITICAL_MALICIOUS"}
+	store := &fakeRevocationStore{pending: []RevocationTarget{first, second}}
+	actions := &fakeRevocationActions{failQuarantine: map[string]bool{"ins_blocked": true}}
+	watcher := &RevocationWatcher{Store: store, Actions: actions, Now: time.Now}
+
+	if err := watcher.Reconcile(context.Background()); err == nil {
+		t.Fatal("reconciliation must report the failed action")
+	}
+	if len(store.pending) != 1 || store.pending[0].ActionID != first.ActionID {
+		t.Fatalf("pending actions = %+v, want only failed action %q", store.pending, first.ActionID)
+	}
+	want := []string{"quarantine:ins_blocked", "quarantine:ins_healthy", "sever:ins_healthy", "inc03:ins_healthy"}
+	if fmt.Sprint(actions.events) != fmt.Sprint(want) {
+		t.Fatalf("later critical action was starved: got %v want %v", actions.events, want)
 	}
 }
 

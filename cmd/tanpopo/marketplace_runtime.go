@@ -37,53 +37,59 @@ func startMarketplaceRuntime(ctx context.Context, store *registry.SQLStore, life
 	keys, keyErr := configuredMarketplaceKeyring(os.Getenv(marketplaceFeedKeysEnv))
 	indexURL := strings.TrimSpace(os.Getenv(marketplaceIndexURLEnv))
 	revocationsURL := strings.TrimSpace(os.Getenv(marketplaceRevocationsURLEnv))
-	if indexURL == "" && revocationsURL == "" {
-		close(done)
-		return done
-	}
-	if keyErr != nil {
+	pollFeeds := keyErr == nil && (indexURL != "" || revocationsURL != "")
+	if keyErr != nil && (indexURL != "" || revocationsURL != "") {
 		log.Printf("marketplace feed polling disabled: invalid public key configuration: %v", keyErr)
-		close(done)
-		return done
 	}
 	var indexSyncer *registry.IndexSyncer
-	if indexURL != "" {
+	if pollFeeds && indexURL != "" {
 		indexSyncer = &registry.IndexSyncer{URL: indexURL, Keys: keys, Store: store, Now: time.Now}
 	}
-	var revocationWatcher *registry.RevocationWatcher
-	if revocationsURL != "" {
-		revocationWatcher = &registry.RevocationWatcher{
-			URL: revocationsURL, Keys: keys, Store: store, Now: time.Now,
-			Actions: runtimeRevocationActions{installer: lifecycle, snapshots: snaps, audit: audit},
-		}
+	revocationWatcher := &registry.RevocationWatcher{
+		URL: revocationsURL, Keys: keys, Store: store, Now: time.Now,
+		Actions: runtimeRevocationActions{installer: lifecycle, snapshots: snaps, audit: audit},
 	}
 	go func() {
 		defer close(done)
-		run := func() {
-			if indexSyncer != nil {
-				if _, err := indexSyncer.Sync(ctx); err != nil {
-					log.Printf("marketplace index sync failed; serving verified cache when available: %v", err)
-				}
-			}
-			if revocationWatcher != nil {
-				if err := revocationWatcher.Poll(ctx); err != nil {
-					log.Printf("marketplace revocation poll failed; pending actions remain durable: %v", err)
-				}
-			}
-		}
-		run()
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				run()
-			}
-		}
+		runMarketplaceRuntime(ctx, indexSyncer, revocationWatcher, pollFeeds)
 	}()
 	return done
+}
+
+func runMarketplaceRuntime(ctx context.Context, indexSyncer *registry.IndexSyncer, revocationWatcher *registry.RevocationWatcher, pollFeeds bool) {
+	runMarketplaceRuntimeWithInterval(ctx, indexSyncer, revocationWatcher, pollFeeds, 10*time.Minute)
+}
+
+func runMarketplaceRuntimeWithInterval(ctx context.Context, indexSyncer *registry.IndexSyncer, revocationWatcher *registry.RevocationWatcher, pollFeeds bool, interval time.Duration) {
+	run := func() {
+		if err := revocationWatcher.Reconcile(ctx); err != nil {
+			log.Printf("marketplace revocation reconciliation failed; pending actions remain durable: %v", err)
+		}
+		if !pollFeeds {
+			return
+		}
+		if indexSyncer != nil {
+			if _, err := indexSyncer.Sync(ctx); err != nil {
+				log.Printf("marketplace index sync failed; serving verified cache when available: %v", err)
+			}
+		}
+		if revocationWatcher.URL != "" {
+			if err := revocationWatcher.Poll(ctx); err != nil {
+				log.Printf("marketplace revocation poll failed; pending actions remain durable: %v", err)
+			}
+		}
+	}
+	run()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
+	}
 }
 
 func configuredMarketplaceKeyring(raw string) (registry.Keyring, error) {
