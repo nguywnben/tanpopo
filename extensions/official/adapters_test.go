@@ -50,6 +50,7 @@ func TestOfficialAdaptersContractAndPackaging(t *testing.T) {
 		{dir: "openai-compatible", id: "@tanpopo/openai-compatible", wantTier: installer.ExecutionTierDeclarativeT1},
 		{dir: "ollama", id: "@tanpopo/ollama", wantTier: installer.ExecutionTierDeclarativeT1},
 		{dir: "azure-openai", id: "@tanpopo/azure-openai", wantTier: installer.ExecutionTierDeclarativeT1},
+		{dir: "aws-bedrock", id: "@tanpopo/aws-bedrock", wantTier: installer.ExecutionTierWasmSandboxT2},
 	}
 
 	for _, tc := range adapters {
@@ -1016,5 +1017,3 @@ func TestRound2AdapterAndSchemaRegressions(t *testing.T) {
 		}
 	})
 }
-
-

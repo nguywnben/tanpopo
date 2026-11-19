@@ -24,9 +24,10 @@ import (
 
 // Default staleness and polling bounds per ADR-0006.
 const (
-	DefaultPollInterval = 250 * time.Millisecond
-	DefaultMaxStaleMs   = int64(10_000)
-	maxRawKeyStackBytes = 256
+	DefaultPollInterval   = 250 * time.Millisecond
+	DefaultMaxStaleMs     = int64(10_000)
+	maxRawKeyStackBytes   = 256
+	watcherRefreshTimeout = 10 * time.Second
 )
 
 // Canonical Virtual Key states matching SM-05 and SQLite/PostgreSQL CHECK constraints.
@@ -710,15 +711,30 @@ func (m *Manager) StartWatcher(ctx context.Context, interval time.Duration) {
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	refresh := func() {
+		if ctx.Err() != nil {
+			return
+		}
+		refreshParent := context.WithoutCancel(ctx)
+		var refreshCtx context.Context
+		var cancel context.CancelFunc
+		if deadline, ok := ctx.Deadline(); ok {
+			refreshCtx, cancel = context.WithDeadline(refreshParent, deadline)
+		} else {
+			refreshCtx, cancel = context.WithTimeout(refreshParent, watcherRefreshTimeout)
+		}
+		defer cancel()
+		_ = m.Refresh(refreshCtx)
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-m.wakeCh:
-			_ = m.Refresh(ctx)
+			refresh()
 		case <-ticker.C:
-			_ = m.Refresh(ctx)
+			refresh()
 		}
 	}
 }

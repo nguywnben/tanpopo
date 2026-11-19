@@ -1,0 +1,26 @@
+case_id: "aws_bedrock_native_converse"
+description: "Native Bedrock Converse is inspected and receives a host-side signing instruction while preserving the response body."
+capability: "native_passthrough"
+config:
+  aws_region: "us-east-1"
+  endpoint_base_url: "https://bedrock-runtime.us-east-1.amazonaws.com"
+  upstream_path: "model/anthropic.claude-3-5-sonnet-20241022-v2%3A0/converse"
+  dialect: "bedrock_converse"
+secret_slots:
+  aws_credentials: "__CANARY_SECRET__"
+normalized_input:
+  modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  messages:
+    - role: "user"
+      content:
+        - text: "Say pong"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  expected_upstream_headers:
+    content-type: "application/json"
+  raw_body: '{"native":"bedrock-converse"}'
+expected_normalized_output:
+  model: "bedrock-native"
+  content_contains: "bedrock-converse"

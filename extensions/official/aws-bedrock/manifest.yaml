@@ -1,0 +1,90 @@
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: ExtensionManifest
+
+metadata:
+  id: "@tanpopo/aws-bedrock"
+  name: "AWS Bedrock Official Adapter"
+  version: "0.1.0"
+  license: "Apache-2.0"
+  originTrustTier: "official"
+  description: "Tier-2 WebAssembly adapter translating OpenAI chat requests to Amazon Bedrock Converse with host-only AWS SigV4 signing."
+
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0 <0.3.0"
+
+runtime:
+  tier: "sandboxed_wasm"
+  entrypoint: "dist/adapter.wasm"
+  sha256: "a541986fc5b502e365c7fc691d4cb018b6241a10ffb141b04f2d1fab1dcee378"
+  quotas:
+    maxMemoryMib: 16
+    maxCpuMsPerCall: 50
+    maxStreamChunkCpuMs: 50
+
+capabilities:
+  - type: "provider_adapter"
+    adapterSlug: "aws-bedrock"
+    supportedDialects:
+      - "bedrock_converse"
+      - "openai_chat"
+    nativePassthroughPrefix: "/native/aws-bedrock"
+    allowedNativePaths:
+      - "^model/.+/converse$"
+      - "^model/.+/converse-stream$"
+    authMethods:
+      - id: "aws_sigv4"
+        mode: "host_crypto_sign"
+        headerName: "Authorization"
+
+secretSlots:
+  - slot: "aws_credentials"
+    requiredForAuthMethods:
+      - "aws_sigv4"
+
+permissions:
+  networkEgress:
+    allowedHosts:
+      - "bedrock-runtime.us-east-1.amazonaws.com"
+      - "bedrock-runtime.us-east-2.amazonaws.com"
+      - "bedrock-runtime.us-west-1.amazonaws.com"
+      - "bedrock-runtime.us-west-2.amazonaws.com"
+      - "bedrock-runtime.af-south-1.amazonaws.com"
+      - "bedrock-runtime.ap-east-1.amazonaws.com"
+      - "bedrock-runtime.ap-northeast-1.amazonaws.com"
+      - "bedrock-runtime.ap-northeast-2.amazonaws.com"
+      - "bedrock-runtime.ap-northeast-3.amazonaws.com"
+      - "bedrock-runtime.ap-south-1.amazonaws.com"
+      - "bedrock-runtime.ap-south-2.amazonaws.com"
+      - "bedrock-runtime.ap-southeast-1.amazonaws.com"
+      - "bedrock-runtime.ap-southeast-2.amazonaws.com"
+      - "bedrock-runtime.ap-southeast-3.amazonaws.com"
+      - "bedrock-runtime.ap-southeast-4.amazonaws.com"
+      - "bedrock-runtime.ca-central-1.amazonaws.com"
+      - "bedrock-runtime.eu-central-1.amazonaws.com"
+      - "bedrock-runtime.eu-central-2.amazonaws.com"
+      - "bedrock-runtime.eu-north-1.amazonaws.com"
+      - "bedrock-runtime.eu-south-1.amazonaws.com"
+      - "bedrock-runtime.eu-south-2.amazonaws.com"
+      - "bedrock-runtime.eu-west-1.amazonaws.com"
+      - "bedrock-runtime.eu-west-2.amazonaws.com"
+      - "bedrock-runtime.eu-west-3.amazonaws.com"
+      - "bedrock-runtime.il-central-1.amazonaws.com"
+      - "bedrock-runtime.me-central-1.amazonaws.com"
+      - "bedrock-runtime.me-south-1.amazonaws.com"
+      - "bedrock-runtime.sa-east-1.amazonaws.com"
+    allowPrivateIp: false
+    requireTls: true
+  hooks:
+    - "provider:build_validation_probe"
+    - "provider:verify_validation_result"
+    - "provider:transform_request"
+    - "provider:transform_response"
+    - "provider:transform_stream_chunk"
+    - "provider:normalize_error"
+    - "provider:extract_usage"
+    - "provider:inspect_native_request"
+  payloadAccess:
+    inspectRequestBody: true
+    inspectResponseBody: true
+    maxInlineMetadataBytes: 65536

@@ -1,0 +1,23 @@
+case_id: "aws_bedrock_error_429"
+description: "Bedrock throttling normalizes as a retryable rate limit."
+capability: "error_normalization"
+config:
+  aws_region: "us-east-1"
+secret_slots:
+  aws_credentials: "__CANARY_SECRET__"
+normalized_input:
+  model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  messages:
+    - role: "user"
+      content: "Say pong"
+upstream_recorded_exchange:
+  status: 429
+  headers:
+    content-type: "application/json"
+    retry-after: "3"
+  raw_body: '{"message":"Too many requests.","__type":"ThrottlingException"}'
+expected_canonical_error:
+  canonical_code: "rate_limit_exceeded"
+  error_type: "rate_limit_error"
+  retryable_pre_stream: true
+  trigger_reauth: false

@@ -53,6 +53,14 @@
 - **Laplace** is implementing the Bedrock adapter package and contract cassettes; **Planck** is implementing the Azure OpenAI adapter package and contract cassettes in separate package scopes. Their contributions are not yet integrated or verified. **GPT-6 Luna** remains responsible for integration, all acceptance evidence, governance updates, and acceptance.
 - The current unit remains `READY` / implementation in progress. Do not mark `READY_FOR_REVIEW` or `DONE` until both adapter packages, runtime acceptance coverage, rerank provider contract coverage, all required CI gates, and fresh independent final reviews are complete.
 
+### Continuation checkpoint (2026-11-19, quota resumed)
+
+- **Laplace** completed the AWS Bedrock package in the isolated `extensions/official/aws-bedrock/` scope. The Wasm SHA-256 is `a541986fc5b502e365c7fc691d4cb018b6241a10ffb141b04f2d1fab1dcee378`; Laplace reported nine cassette cases and local package/adapter tests passing. **GPT-6 Luna** added the package to the shared official-adapter packaging contract test. Parent verification and CI are pending.
+- Run [`44454847682`](https://github.com/nguywnben/tanpopo/actions/runs/44454847682) on `ff7d8abcf8ece3c80ee4307bc3e02417cbfae197` passed Stage 0 but failed the same data-plane runtime cleanup test on macOS and Windows. The logs show `Store.Close` saw one active SQLite connection; the sanitized goroutine stack was in modernc SQLite transaction rollback. A local probe reproduced that `snapshot.Manager.StartWatcher` could return from a context-canceled refresh before `database/sql` finished releasing its SQLite connection.
+- **GPT-6 Luna** changed snapshot watcher polling so an in-flight refresh finishes on a bounded context before watcher shutdown, and added `TestWatcherCancellationWaitsForActiveSQLiteRefresh`. The targeted snapshot and runtime cleanup tests passed 10 consecutive runs each on Go 1.26.11. The runtime shutdown diagnostics now preserve transient stage observations only when `Store.Close` reports an error, avoiding a false failure when a connection drains during watcher shutdown. The fix is not yet committed or covered by Actions.
+- Current adapter integration: Azure OpenAI remains in the shared contract test from **Planck**'s package; Bedrock has now been added by **GPT-6 Luna** from **Laplace**'s package. Azure's exact-host manifest still does not support arbitrary customer resource hostnames under the current exact-host egress policy; this documented limitation must be resolved or accepted before Unit 35 can be accepted.
+- **GPT-6 Luna** is the implementer and intended acceptor. **Laplace** (AWS Bedrock) and **Planck** (Azure OpenAI) are implementation contributors. **Euclid** (**code-reviewer**) and **Lagrange** (**security-auditor**) still owe independent reviews on the final diff. The Unit remains `READY` / in progress; no acceptance decision is recorded.
+
 ### Continuation checkpoint (2026-11-19, adapter and Windows follow-up)
 
 - **Planck** completed the Azure OpenAI package in commit `30d6547dabc5fb67cc90f9a5f98e3838b919571f`: eight offline cassettes cover sync, stream usage, tool calls, auth/throttle/server errors, and native passthrough. The shared official adapter contract test includes the package. Windows Stage 1 in run [`44453337309`](https://github.com/nguywnben/tanpopo/actions/runs/44453337309) ran the Azure cassettes and package test successfully. The manifest intentionally pins an exact sample Azure resource host because wildcard egress is forbidden; arbitrary tenant hostname support remains a documented deployment limitation and must be resolved or explicitly accepted before Unit 35 acceptance.
@@ -62,12 +70,8 @@
 
 ## Remaining work
 
-1. Complete acceptance coverage for production private OCI credential resolution from organization-scoped Vault secrets, signed-index polling/runtime configuration, and guarded transport.
-2. Verify the production revocation poller, quarantine, stream fencing, and incident alert behavior end to end; audit-event emission is wired but does not yet have acceptance coverage.
-3. Implement Bedrock SigV4 and Azure OpenAI official adapters without exposing credentials to extensions.
-4. Wire the SQL-backed watcher to the production installer, active-stream fencing, and incident alert sink; add end-to-end quarantine tests proving runtime streams stop.
-5. Implement the Bedrock and Azure OpenAI official adapters and their package contract tests; add rerank adapter contract coverage.
-6. Resolve the repeated Windows SQLite file-lock failure with evidence, run all Unit 35 gates, obtain both independent reviews on the final diff, fix findings, and re-run affected checks/reviews.
-7. Merge PR #14 only after the required four CI checks and reviews pass; then record Unit 35 acceptance in a governance PR and verify post-merge CI on `main`.
-
-No review participation beyond **GPT-6 Luna** has been recorded for this checkpoint.
+1. Complete and verify the production private OCI credential, signed-feed polling, revocation quarantine, active-stream fencing, and `INC-03` audit acceptance paths.
+2. Verify Bedrock and Azure OpenAI official adapter package contracts and complete `/v1/rerank` provider contract coverage; resolve Azure's exact-host deployment limitation without weakening SSRF controls.
+3. Run the full quality gate and all four required platform checks on the final diff, including the Windows database cleanup repeat.
+4. Obtain fresh **Euclid** (**code-reviewer**) and **Lagrange** (**security-auditor**) reviews of the exact final diff, fix blocking findings, and rerun changed checks/reviews.
+5. Merge PR #14 only after the required gates and reviews pass; record acceptance on `develop`, merge to `main`, and verify post-merge CI and the Unit 35 DONE record on the accepted main SHA.

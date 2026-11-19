@@ -187,22 +187,41 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	var shutdownErr error
 	cleanup := func() error {
 		cleanupOnce.Do(func() {
+			lastActiveDBStage := ""
+			lastActiveDBConnections := 0
+			recordActiveDBConnections := func(stage string) {
+				if inUse := db.Stats().InUse; inUse > 0 {
+					lastActiveDBStage = stage
+					lastActiveDBConnections = inUse
+				}
+			}
+			recordActiveDBConnections("shutdown start")
 			if closeDataServer != nil {
 				shutdownErr = errors.Join(shutdownErr, closeDataServer())
+				recordActiveDBConnections("after data server close")
 			}
 			if telemetryPipeline != nil {
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				shutdownErr = errors.Join(shutdownErr, telemetryPipeline.Shutdown(shutdownCtx))
 				cancel()
+				recordActiveDBConnections("after telemetry shutdown")
 			}
 			cancelRuntime()
 			<-watcherDone
+			recordActiveDBConnections("after snapshot watcher shutdown")
 			if marketplaceDone != nil {
 				<-marketplaceDone
+				recordActiveDBConnections("after marketplace watcher shutdown")
 			}
 			vaultStore.Close()
 			closeKeys()
-			shutdownErr = errors.Join(shutdownErr, store.Close())
+			recordActiveDBConnections("before SQLite close")
+			if err := store.Close(); err != nil {
+				if lastActiveDBStage != "" {
+					shutdownErr = errors.Join(shutdownErr, fmt.Errorf("sqlite: last observed %d active connection(s) at %s", lastActiveDBConnections, lastActiveDBStage))
+				}
+				shutdownErr = errors.Join(shutdownErr, err)
+			}
 		})
 		return shutdownErr
 	}

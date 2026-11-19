@@ -23,6 +23,29 @@ func TestMain(m *testing.M) {
 	os.Exit(netguard.MustRunHermeticMain(m))
 }
 
+func TestWatcherCancellationWaitsForActiveSQLiteRefresh(t *testing.T) {
+	st := openTestSQLite(t, clock.NewFakeClock(time.Unix(1_700_000_000, 0)))
+	manager, err := NewManager(context.Background(), ManagerConfig{DB: st.RawDB()})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	for attempt := 0; attempt < 20; attempt++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			manager.StartWatcher(ctx, time.Nanosecond)
+		}()
+		time.Sleep(time.Millisecond)
+		cancel()
+		<-done
+		if inUse := st.RawDB().Stats().InUse; inUse != 0 {
+			t.Fatalf("watcher returned with %d SQLite connection(s) still in use on attempt %d", inUse, attempt+1)
+		}
+	}
+}
+
 func openTestSQLite(t *testing.T, fk *clock.FakeClock) *sqlite.Store {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "snapshot.db")

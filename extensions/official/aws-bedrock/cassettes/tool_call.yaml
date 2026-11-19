@@ -1,0 +1,36 @@
+case_id: "aws_bedrock_tool_call"
+description: "Bedrock toolUse content is normalized to an OpenAI function tool call."
+capability: "tool_calling"
+config:
+  aws_region: "us-east-1"
+secret_slots:
+  aws_credentials: "__CANARY_SECRET__"
+normalized_input:
+  model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  messages:
+    - role: "user"
+      content: "What is the weather?"
+  tools:
+    - type: "function"
+      function:
+        name: "get_weather"
+        description: "Look up weather."
+        parameters:
+          type: "object"
+          properties:
+            city:
+              type: "string"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  raw_body: '{"output":{"message":{"role":"assistant","content":[{"toolUse":{"toolUseId":"tooluse_1","name":"get_weather","input":{"city":"Oslo"}}}]}},"stopReason":"tool_use","usage":{"inputTokens":9,"outputTokens":5,"totalTokens":14}}'
+expected_normalized_output:
+  finish_reason: "tool_calls"
+  content: ""
+  tool_calls_count: 1
+  tool_call_name: "get_weather"
+  tool_call_arguments: '{"city":"Oslo"}'
+  require_usage: true
+  input_tokens: 9
+  output_tokens: 5
