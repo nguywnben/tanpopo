@@ -280,6 +280,9 @@ func TestSQLStoreCachesIndexAndDurablyQueuesMatchingRevocations(t *testing.T) {
 	if err := registryStore.ApplyIndexFeed(ctx, 2, now.Add(time.Hour), index); err != nil {
 		t.Fatal(err)
 	}
+	if serial, err := registryStore.LastIndexSerial(ctx); err != nil || serial != 2 {
+		t.Fatalf("index serial not persisted: serial=%d err=%v", serial, err)
+	}
 	cached, err := registryStore.CachedIndex(ctx)
 	if err != nil || len(cached) != 1 || cached[0].Digest != digest {
 		t.Fatalf("signed index cache not available: cached=%+v err=%v", cached, err)

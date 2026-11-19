@@ -34,6 +34,10 @@ func (s *SQLStore) LastRevocationSerial(ctx context.Context) (int64, error) {
 	return s.lastSerial(ctx, FeedRevocation)
 }
 
+func (s *SQLStore) LastIndexSerial(ctx context.Context) (int64, error) {
+	return s.lastSerial(ctx, FeedIndex)
+}
+
 func (s *SQLStore) lastSerial(ctx context.Context, kind FeedKind) (int64, error) {
 	var serial int64
 	err := s.db.QueryRowContext(ctx, `SELECT version_serial FROM marketplace_feed_cursors WHERE feed_kind = ?`, string(kind)).Scan(&serial)
