@@ -214,7 +214,7 @@ func awsCanonicalHeaders(req *http.Request, requested []string) (canonical, sign
 	}
 	for _, header := range requested {
 		header = strings.ToLower(strings.TrimSpace(header))
-		if !isValidHTTPToken(header) || isProhibitedFramingOrHopHeader(header) || header == "authorization" {
+		if !isValidHTTPToken(header) || (header != "host" && isProhibitedFramingOrHopHeader(header)) || header == "authorization" {
 			return "", "", fmt.Errorf("%w: invalid AWS signed header", ErrInvalidEgressRequest)
 		}
 		set[header] = struct{}{}
