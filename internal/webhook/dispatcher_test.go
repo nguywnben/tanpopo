@@ -56,7 +56,7 @@ func openWebhookDBWithJournal(t *testing.T, journal string, busyTimeoutMs int) *
 			t.Errorf("close webhook test database: %v", err)
 		}
 		var removeErr error
-		for attempt := 0; attempt < 40; attempt++ {
+		for attempt := 0; attempt < 200; attempt++ {
 			removeErr = os.RemoveAll(dbDir)
 			if removeErr == nil {
 				return
