@@ -43,14 +43,12 @@ func TestOCIArchiveResolverStagesOnlyVerifiedIndexedArtifact(t *testing.T) {
 		}
 		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body)), Request: req}, nil
 	})}}
-	resolver := &OCIArchiveResolver{
-		ClientForRegistry: func(_ context.Context, host string) (*OCIClient, error) {
+	resolver := NewOCIArchiveResolver(store, fixedRegistryCredentials{host: "registry.example.com"}, nil)
+	resolver.clientForRegistry = func(_ context.Context, host string) (*OCIClient, error) {
 			if host != "registry.example.com" {
 				t.Fatalf("guarded client requested for unexpected registry %q", host)
 			}
 			return client, nil
-		},
-		Index: store, Credentials: fixedRegistryCredentials{host: "registry.example.com"},
 	}
 	request, cleanup, err := resolver.Resolve(context.Background(), "org_test", ref, digest)
 	if err != nil {
