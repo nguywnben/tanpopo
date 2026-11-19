@@ -10,11 +10,11 @@
 
 ## Current checkpoint
 
-- PR head at this checkpoint: `78f6d61ca8d3721db34c8a4d7ef09930fd95c69f`.
+- The current working checkpoint includes the later rerank and OCI commits on `develop`; the exact PR head and its Actions run are recorded on GitHub.
 - The first implementation slice adds a signed feed envelope verifier with Ed25519 domain separation, expiry and strictly increasing serial checks, typed marketplace/revocation entry validation, immutable OCI digest validation, bounded HTTPS retrieval through an injected guarded HTTP client, and focused tests.
 - The `POST /v1/rerank` ingress path now includes strict input validation, authenticated routing with rate limits/idempotency/budget settlement, response validation, and optional document return behavior. Focused parser and response contract tests are included.
 - A digest-pinned OCI blob puller now uses only an injected guarded HTTP client, bounds the archive size, verifies the downloaded SHA-256, rejects redirects and mutable tags, and scopes basic auth to the exact registry authority. Focused transport tests use an in-memory round tripper.
-- CI at `da626b1e18f31a20cab915eb1c20387ff14b7655` found a missing `context` import in the feed fetch helper on Ubuntu and macOS. The import was fixed in `78f6d61`; Stage 0 and all three Stage 1 jobs are green on `78f6d61`. The rerank changes added after that run need their own CI result.
+- CI at `da626b1e18f31a20cab915eb1c20387ff14b7655` found a missing `context` import in the feed fetch helper on Ubuntu and macOS. The import was fixed in `78f6d61`; Stage 0 and all three Stage 1 jobs passed on that head. Later rerank and OCI changes are being checked by Actions on the latest PR head.
 - Go tooling in the Cloud shell is a wrapper that rejects standard Go flags; use the repository Actions workflow for Go verification.
 
 ## Remaining work
