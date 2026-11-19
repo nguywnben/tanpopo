@@ -140,7 +140,8 @@ func TestBedrockCassetteUsesBlindBrokerSigV4CanonicalAuthorization(t *testing.T)
 		_, _ = w.Write([]byte(cassette.UpstreamRecordedExchange.RawBody))
 	})
 	defer server.Close()
-	authority := awsHost
+	serverPort := server.Listener.Addr().(*net.TCPAddr).Port
+	authority := fmt.Sprintf("%s:%d", awsHost, serverPort)
 	cassette.Config["endpoint_base_url"] = "https://" + authority
 
 	validation, vm, wasmBytes, err := testharness.ValidateExtensionDir(ctx, ".")
@@ -156,7 +157,7 @@ func TestBedrockCassetteUsesBlindBrokerSigV4CanonicalAuthorization(t *testing.T)
 	}
 	runtime, err := wasm.NewRuntime(ctx, wasm.RuntimeConfig{WasmBytes: wasmBytes, InstallationID: "test:aws-bedrock", PoolSize: 1,
 		MemoryLimitPages: wasm.DefaultMemoryLimitPages, ABIMode: wasm.ABIModeCanonicalEnvelope,
-		AllowedHosts: vm.Manifest.Permissions.NetworkEgress.AllowedHosts, ApprovedSecretSlots: slots})
+		AllowedHosts: []string{authority}, ApprovedSecretSlots: slots})
 	if err != nil {
 		t.Fatalf("wasm.NewRuntime: %v", err)
 	}
@@ -427,7 +428,7 @@ func newBedrockTLSServer(t *testing.T, handler http.HandlerFunc) *httptest.Serve
 	}
 	t.Setenv("SSL_CERT_FILE", trustPath)
 	server := httptest.NewUnstartedServer(handler)
-	server.Listener, err = net.Listen("tcp", "127.0.0.1:443")
+	server.Listener, err = net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
