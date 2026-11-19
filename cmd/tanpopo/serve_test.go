@@ -385,9 +385,7 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 		t.Fatalf("build data-plane runtime: %v", err)
 	}
 	t.Cleanup(func() {
-		closeRuntime()
-		closeRuntime = nil
-		handler = nil
+		closeRuntimeAndReleaseReferences(&closeRuntime, &handler)
 		// modernc SQLite's Windows file handle can outlive sql.DB.Close until the
 		// driver's finalizable connection wrapper is collected.
 		runtime.GC()
@@ -418,6 +416,16 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	}
 	if _, err := os.Stat(filepath.Join(dataDir, "bootstrap.token")); !os.IsNotExist(err) {
 		t.Fatalf("data-plane role created an unused bootstrap token: err=%v", err)
+	}
+}
+
+func closeRuntimeAndReleaseReferences(closeRuntime *func(), handler *http.Handler) {
+	if closeRuntime != nil && *closeRuntime != nil {
+		(*closeRuntime)()
+		*closeRuntime = nil
+	}
+	if handler != nil {
+		*handler = nil
 	}
 }
 
