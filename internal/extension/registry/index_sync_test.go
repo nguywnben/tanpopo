@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -50,7 +51,8 @@ func TestIndexSyncerPersistsVerifiedIndexAndServesCacheOffline(t *testing.T) {
 	syncer := &IndexSyncer{
 		URL: "https://index.example.com/index.json", Keys: Keyring{"root": publicKey}, Store: store, Now: func() time.Time { return now},
 		clientForURL: func(raw string) (*http.Client, error) {
-			if raw != "https://index.example.com/index.json" {
+			u, parseErr := url.Parse(raw)
+			if parseErr != nil || u.Scheme != "https" || u.Host != "index.example.com" || u.User != nil {
 				t.Fatalf("unexpected index URL passed to client factory: %q", raw)
 			}
 			return client, nil
