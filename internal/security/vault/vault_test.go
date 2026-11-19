@@ -3316,6 +3316,9 @@ func TestVaultOAuthSessionValueUsesOrgDEKAndSessionBoundAAD(t *testing.T) {
 	if bytes.Contains(ciphertext, plain) {
 		t.Fatal("OAuth verifier appears as plaintext in ciphertext")
 	}
+	if _, err := env.vault.UnsealOAuthSessionValue(ctx, "missing-org", id, "code_verifier", nonce, ciphertext); err == nil {
+		t.Fatal("unseal for an organization without a DEK must fail closed")
+	}
 	got, err := env.vault.UnsealOAuthSessionValue(ctx, org.ID, id, "code_verifier", nonce, ciphertext)
 	if err != nil || !bytes.Equal(got, plain) {
 		t.Fatalf("unseal = %q, err=%v", got, err)
@@ -3426,6 +3429,7 @@ func TestVaultRotateSecretTxChangesCiphertextOnlyAfterCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	finish(false)
+	finish(false) // completion is idempotent after the first cache-stage cleanup.
 	before, err := env.vault.UnsealWithCapability(ctx, MintUnsealCapabilityForBroker(), org.ID, meta.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -3448,6 +3452,7 @@ func TestVaultRotateSecretTxChangesCiphertextOnlyAfterCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	finish(true)
+	finish(true) // a repeated completion must not apply the cache stage twice.
 	after, err := env.vault.UnsealWithCapability(ctx, MintUnsealCapabilityForBroker(), org.ID, meta.ID)
 	if err != nil {
 		t.Fatal(err)
