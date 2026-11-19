@@ -81,7 +81,7 @@ func TestVaultOCIRegistryCredentialResolverIsOrganizationAndAuthorityScoped(t *t
 		t.Fatal(err)
 	}
 	defer kek.Close()
-	vaultStore, err := vault.NewStore(vault.Config{DB: store.RawDB(), KEK: kek})
+	vaultStore, err := vault.NewStore(vault.Config{DB: store.RawDB(), KEK: kek, PostShredHook: store.CheckpointWAL})
 	if err != nil {
 		t.Fatal(err)
 	}
