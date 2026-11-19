@@ -36,6 +36,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/oauth"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
+	"github.com/nguywnben/tanpopo/internal/extension/registry"
 	telemetry "github.com/nguywnben/tanpopo/internal/telemetry/otel"
 	"github.com/nguywnben/tanpopo/internal/webui"
 )
@@ -239,6 +240,11 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		cleanup()
 		return nil, nil, fmt.Errorf("initialize extension installer: %w", err)
 	}
+	registryStore, err := registry.NewSQLStore(db, time.Now)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("initialize marketplace registry store: %w", err)
+	}
 	blindBroker, err := broker.NewBlindBroker(broker.Config{
 		Resolver: catalogRepo, PolicyResolver: catalogRepo, Vault: vaultStore,
 		UnsealCap: brokerUnsealCap, Audit: auditLog, OAuthTokens: oauthService,
@@ -322,7 +328,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		adminServer, err := adminhttp.NewServer(adminhttp.ServerConfig{
 			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys, Ledgers: ledgerService,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
-			Installer: installerService, ArchiveResolver: newServeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv)),
+			Installer: installerService, ArchiveResolver: newRuntimeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv), registryStore),
 			Broker: blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
 		})
 		if err != nil {
@@ -347,6 +353,20 @@ func newServeArchiveResolver(root string) adminhttp.ExtensionArchiveResolver {
 	}
 	return func(ctx context.Context, _ string, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
 		return resolver.Resolve(ctx, sourceURI, expectedSHA256)
+	}
+}
+
+func newRuntimeArchiveResolver(root string, index registry.IndexStore) adminhttp.ExtensionArchiveResolver {
+	local := newServeArchiveResolver(root)
+	oci := registry.NewOCIArchiveResolver(index, nil, egress.NewStdHostResolver())
+	return func(ctx context.Context, orgID, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(sourceURI)), "oci://") {
+			return oci.Resolve(ctx, orgID, sourceURI, expectedSHA256)
+		}
+		if local == nil {
+			return nil, nil, installer.ErrMarketplaceArchiveResolverUnavailable
+		}
+		return local(ctx, orgID, sourceURI, expectedSHA256)
 	}
 }
 
