@@ -66,7 +66,7 @@ func newServeCommand() *cobra.Command {
 	return cmd
 }
 
-func serve(ctx context.Context, role, listen string) error {
+func serve(ctx context.Context, role, listen string) (serveErr error) {
 	drainTimeout, err := drainTimeoutFromEnv(os.LookupEnv)
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func serve(ctx context.Context, role, listen string) error {
 	if err != nil {
 		return err
 	}
-	defer closeRuntime()
+	defer func() { serveErr = errors.Join(serveErr, closeRuntime()) }()
 	listener, err := net.Listen("tcp", listen)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", listen, err)
@@ -123,7 +123,7 @@ func drainTimeoutFromEnv(lookup func(string) (string, bool)) (time.Duration, err
 	return timeout, nil
 }
 
-func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(), error) {
+func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func() error, error) {
 	if role != "all" && role != "data-plane" && role != "control-plane" {
 		return nil, nil, fmt.Errorf("invalid service role %q", role)
 	}
@@ -180,18 +180,19 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		defer close(watcherDone)
 		snaps.StartWatcher(runtimeCtx, time.Second)
 	}()
-	var closeDataServer func()
+	var closeDataServer func() error
 	var dataServerReady func(context.Context) error
 	var telemetryPipeline *telemetry.Pipeline
 	var cleanupOnce sync.Once
-	cleanup := func() {
+	var shutdownErr error
+	cleanup := func() error {
 		cleanupOnce.Do(func() {
 			if closeDataServer != nil {
-				closeDataServer()
+				shutdownErr = errors.Join(shutdownErr, closeDataServer())
 			}
 			if telemetryPipeline != nil {
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				_ = telemetryPipeline.Shutdown(shutdownCtx)
+				shutdownErr = errors.Join(shutdownErr, telemetryPipeline.Shutdown(shutdownCtx))
 				cancel()
 			}
 			cancelRuntime()
@@ -201,8 +202,9 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 			}
 			vaultStore.Close()
 			closeKeys()
-			closeStore()
+			shutdownErr = errors.Join(shutdownErr, store.Close())
 		})
+		return shutdownErr
 	}
 	killSwitch, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{DB: db, Audit: auditLog, Streams: killswitch.NewStreamRegistry()})
 	if err != nil {
@@ -295,10 +297,10 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize Data Plane: %w", err)
 		}
-		closeDataServer = func() {
+		closeDataServer = func() error {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			_ = dataServer.Close(shutdownCtx)
+			return dataServer.Close(shutdownCtx)
 		}
 		dataServerReady = dataServer.CheckServingReady
 		mux.Handle("/v1/", dataServer)

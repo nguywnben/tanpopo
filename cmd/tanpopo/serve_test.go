@@ -385,7 +385,9 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 		t.Fatalf("build data-plane runtime: %v", err)
 	}
 	t.Cleanup(func() {
-		closeRuntimeAndReleaseReferences(&closeRuntime, &handler)
+		if err := closeRuntimeAndReleaseReferences(&closeRuntime, &handler); err != nil {
+			t.Errorf("runtime shutdown returned error: %v", err)
+		}
 		// modernc SQLite's Windows file handle can outlive sql.DB.Close until the
 		// driver's finalizable connection wrapper is collected.
 		runtime.GC()
@@ -419,14 +421,16 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	}
 }
 
-func closeRuntimeAndReleaseReferences(closeRuntime *func(), handler *http.Handler) {
+func closeRuntimeAndReleaseReferences(closeRuntime *func() error, handler *http.Handler) error {
+	var closeErr error
 	if closeRuntime != nil && *closeRuntime != nil {
-		(*closeRuntime)()
+		closeErr = (*closeRuntime)()
 		*closeRuntime = nil
 	}
 	if handler != nil {
 		*handler = nil
 	}
+	return closeErr
 }
 
 func TestStandaloneBinaryServesWithoutSourceAssets(t *testing.T) {
