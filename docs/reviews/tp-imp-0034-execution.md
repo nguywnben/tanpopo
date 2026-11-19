@@ -20,6 +20,7 @@
 - Follow-up security review on that SHA: **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings and the same Low observation. Reviewers did not run tests; execution evidence is tracked separately below.
 - Final code review on PR #11 SHA `b7959c5abdce016ef3221da86a86e79ab5f52585`: **Maxwell** (**code-reviewer** subagent; report signature **GPT-6 Luna**) — **APPROVE**, no actionable findings.
 - Final security review on that SHA: **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings; the same Low observation remains. Reviewers did not run tests; CI provides the test evidence below.
+- Follow-up review of the added Vault regression tests on PR #11 SHA `73c52d99e486902e5f8389f76ce79d88eb317aee`: **Maxwell** (**code-reviewer** subagent; report signature **GPT-6 Luna**) — **APPROVE**, no actionable findings; **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings and the same Low observation. No implementation code changed in this test-only update.
 - **Popper** (**test-engineer**) contributed the OAuth refresh and concurrency test plan and tests; the final CI runs exercise those tests on the accepted diff.
 
 ## Contract reconciliation
