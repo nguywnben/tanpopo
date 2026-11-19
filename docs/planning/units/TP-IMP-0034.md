@@ -28,8 +28,13 @@ Implement the Host-managed **`Authorized OAuth 2.1`** coordinator (`TP-FR-0205`,
 ## 3. Requirements, Dependencies & Design References
 - **Requirements Refs:** `TP-FR-0205`, `TP-BR-0301`..`0304`, `DEC-004`, `SM-03`, `CT-19`, `AUTH-09`, `AUTH-10`, `AUTH-16`, `FMEA-08`, `INC-05`.
 - **Dependencies:** `TP-IMP-0010`, `TP-IMP-0024`.
-- **Implementation decisions:** [`DEC-064`](../../governance/decisions.md) assigns the next additive migration slot (`0016`, since `0011`..`0015` are already in use) and requires OAuth API paths to match `openapi/admin-v1.yaml`, including adding the missing device-poll operation.
+- **Implementation decisions:** [`DEC-064`](../../governance/decisions.md) assigns the next additive migration slot (`0016`, since `0011`..`0015` are already in use) and requires OAuth API paths to match `openapi/admin-v1.yaml`, including adding the missing device-poll operation. [`DEC-068`](../../governance/decisions.md) keeps the HTTP runtime available when the optional public OAuth callback URI is unset while leaving OAuth endpoints unavailable and broker resolution fail-closed.
 - **Design Refs:** [`authentication-connections.md`](../../specifications/authentication-connections.md) (`SPEC-EXT-03`), [`secrets-and-tenant-isolation.md`](../../security/secrets-and-tenant-isolation.md) Section 3.3, [`nonfunctional-slo.md`](../../quality/nonfunctional-slo.md) (`FMEA-08`), [`contract-test-matrix.md`](../../quality/contract-test-matrix.md) (`CT-19`, `AUTH-09`, `AUTH-10`, `AUTH-16`).
+
+### Runtime callback configuration
+- Set `TANPOPO_OAUTH_REDIRECT_URI` to the externally reachable HTTPS callback at `/admin/v1/oauth/callback` to enable OAuth in a deployment.
+- If it is unset, Tanpopo continues serving non-OAuth APIs; OAuth Admin endpoints return `503 oauth_unavailable`, and broker token resolution fails closed. An explicitly configured invalid callback remains a startup error.
+- Hermetic tests may derive an HTTP callback from a loopback listener; normal runtime configurations never use this exception.
 
 ## 4. API, Wire & Data Contracts
 - **Anti-`state`-Swap & `PKCE` Downgrade Prevention Invariant:** Reject any configuration specifying `code_challenge_method = "plain"` or unencrypted `http://` endpoints (except loopback in hermetic test mode); callback and device poll succeed only from the exact authenticated browser cookie session that initiated the state. Store only a SHA-256 hash of the session cookie; bearer authentication cannot complete these browser handshakes.

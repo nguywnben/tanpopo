@@ -211,26 +211,25 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		return nil, nil, fmt.Errorf("initialize provider catalog: %w", err)
 	}
 	redirectURI := strings.TrimSpace(os.Getenv("TANPOPO_OAUTH_REDIRECT_URI"))
-	if redirectURI == "" {
-		host, port, splitErr := net.SplitHostPort(listen)
-		if splitErr != nil {
-			cleanup()
-			return nil, nil, fmt.Errorf("TANPOPO_OAUTH_REDIRECT_URI is required when listen address is not host:port")
-		}
-		host = strings.Trim(host, "[]")
-		ip := net.ParseIP(host)
-		if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-			cleanup()
-			return nil, nil, fmt.Errorf("TANPOPO_OAUTH_REDIRECT_URI must be configured with HTTPS for non-loopback listeners")
-		}
-		redirectURI = "http://" + net.JoinHostPort(host, port) + "/admin/v1/oauth/callback"
-	}
 	allowHermeticHTTP := strings.TrimSpace(os.Getenv("TANPOPO_TEST_HERMETIC")) == "1"
+	if redirectURI == "" && allowHermeticHTTP {
+		host, port, splitErr := net.SplitHostPort(listen)
+		if splitErr == nil {
+			host = strings.Trim(host, "[]")
+			ip := net.ParseIP(host)
+			if host == "localhost" || (ip != nil && ip.IsLoopback()) {
+				redirectURI = "http://" + net.JoinHostPort(host, port) + "/admin/v1/oauth/callback"
+			}
+		}
+	}
 	brokerUnsealCap := vault.MintUnsealCapabilityForBroker()
-	oauthService, err := oauth.NewService(oauth.ServiceConfig{DB: db, Vault: vaultStore, UnsealCapability: brokerUnsealCap, Audit: auditLog, HostResolver: egress.NewStdHostResolver(), RedirectURI: redirectURI, AllowLoopbackHTTP: allowHermeticHTTP})
-	if err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("initialize OAuth coordinator: %w", err)
+	var oauthService *oauth.Service
+	if redirectURI != "" {
+		oauthService, err = oauth.NewService(oauth.ServiceConfig{DB: db, Vault: vaultStore, UnsealCapability: brokerUnsealCap, Audit: auditLog, HostResolver: egress.NewStdHostResolver(), RedirectURI: redirectURI, AllowLoopbackHTTP: allowHermeticHTTP})
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize OAuth coordinator: %w", err)
+		}
 	}
 	lockfile := envOr("TANPOPO_LOCK_FILE", filepath.Join(dataDir, "tanpopo.lock"))
 	installerService, err := installer.NewLifecycleService(installer.ServiceConfig{

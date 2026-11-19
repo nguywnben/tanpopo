@@ -101,6 +101,32 @@ func TestUnifiedRuntimeRoutesDataPlaneAdminAndEmbeddedConsole(t *testing.T) {
 	}
 }
 
+func TestRuntimeWithoutPublicOAuthRedirectStillServesAndFailsOAuthClosed(t *testing.T) {
+	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "data"))
+	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", "")
+	t.Setenv("TANPOPO_TEST_HERMETIC", "0")
+	t.Setenv("TANPOPO_OAUTH_REDIRECT_URI", "")
+
+	handler, closeRuntime, err := buildRuntime(context.Background(), "all", "0.0.0.0:8080")
+	if err != nil {
+		t.Fatalf("build public runtime without OAuth callback configuration: %v", err)
+	}
+	defer closeRuntime()
+
+	ready := httptest.NewRecorder()
+	handler.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusOK {
+		t.Fatalf("public runtime readiness returned %d: %s", ready.Code, ready.Body.String())
+	}
+
+	callback := httptest.NewRecorder()
+	handler.ServeHTTP(callback, httptest.NewRequest(http.MethodGet, "/admin/v1/oauth/callback", nil))
+	if callback.Code != http.StatusServiceUnavailable || !strings.Contains(callback.Body.String(), "oauth_unavailable") {
+		t.Fatalf("OAuth callback without explicit HTTPS URI returned %d: %s", callback.Code, callback.Body.String())
+	}
+}
+
 func TestReadinessFailsImmediatelyAfterDrainStartsButLivenessStaysHealthy(t *testing.T) {
 	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "data"))
 	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
