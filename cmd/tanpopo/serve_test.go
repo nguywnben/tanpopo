@@ -358,8 +358,12 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	if err != nil {
 		t.Fatalf("build data-plane runtime: %v", err)
 	}
-	defer closeRuntime()
 	t.Cleanup(func() {
+		closeRuntime()
+		handler = nil
+		// modernc SQLite's Windows file handle can outlive sql.DB.Close until the
+		// driver's finalizable connection wrapper is collected.
+		runtime.GC()
 		// Windows runners can briefly retain a SQLite file handle after database
 		// Close returns. Allow the OS's file-handle teardown to settle, while still
 		// failing if the runtime keeps the database connection open.
