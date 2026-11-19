@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0036` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
-| **Status** | `READY` *(Opened by `DEC-072` after verifying `TP-IMP-0010`, `TP-IMP-0019`, `TP-IMP-0034`, and sequential predecessor `TP-IMP-0035` are DONE on `origin/main`; Unit 35 post-merge CI `44468902234` is green on `0a264c40ebb7288d849df14a466931cae2b1fab5`.)* |
+| **Status** | `DONE` *(Accepted by **GPT-6 Luna** under `DEC-074`; PR #16 implementation `d3259f36ca10c8b0bbd3d63af9678ea082048578`; merged to `origin/main` at `a3a0ef1b94d4986d7bac0d601566d8f249f87013`; all four post-merge checks passed in CI `44494912921`.)* |
 | **Size** | `L` (`internal/ingress/mcp/hub/*`, `internal/ingress/mcp/schema_pin/*`, `db/migrations/sqlite/0018_mcp_hub.sql` per `DEC-073`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Tool-plane trust boundary `TB-6`, `Rug-Pull / Tool Poisoning TM-07` defense & per-tool ACL isolation)* |
 | **Technical Owner** | `Principal Agentic & MCP Security Architect` |

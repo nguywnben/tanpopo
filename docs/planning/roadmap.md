@@ -1,12 +1,12 @@
 # Master Implementation Roadmap & End-to-End Epic Decomposition — Tanpopo
 
-> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0035: DONE` | `0036 READY` | `0037..0047 BLOCKED`)**
-> - **Document ID:** `PLAN-RM-01` | **Version:** `1.41.0-dec-072-0036-ready` | **Date:** `2026-11-19`
+> **Technical Program Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0036: DONE` | `0037 READY` | `0038..0047 BLOCKED`)**
+> - **Document ID:** `PLAN-RM-01` | **Version:** `1.42.0-dec-074-0036-done` | **Date:** `2026-11-19`
 > - **Authors:** Technical Program Manager, Staff Engineer & QA Lead
-> - **CURRENT GOVERNANCE NOTICE:** Unit 35 is DONE on main SHA `0a264c40ebb7288d849df14a466931cae2b1fab5`; post-merge Actions run `44468902234` is green on all four required jobs. `DEC-060` covered Units 31–35 and is complete. `DEC-072` delegates Units 36–38 sequentially to GPT-6 Luna using persistent `develop` → per-unit PR, independent reviews, four CI checks, merge, and post-merge verification. Unit 36 is READY; Units 37–38 open only after each predecessor is DONE on main; Units 37–47 remain blocked. No tags/releases (`GATE-REL-07`).
+> - **CURRENT GOVERNANCE NOTICE:** Unit 36 is DONE on main SHA `a3a0ef1b94d4986d7bac0d601566d8f249f87013`; post-merge Actions run `44494912921` is green on all four required jobs. `DEC-060` covered Units 31–35 and is complete. `DEC-072` delegates Units 36–38 sequentially to GPT-6 Luna using persistent `develop` → per-unit PR, independent reviews, four CI checks, merge, and post-merge verification. Unit 37 is READY; Unit 38 opens only after 37 is DONE on main; Units 38–47 remain blocked. No tags/releases (`GATE-REL-07`).
 >   1. On `2026-11-14`, the Product Owner approved **Gate G1 (`SD-G1-01`..`05`)**, **Gate G2 (`TD-G2-01`..`06`, `BA-OQ-001`..`05`)**, **Gate G3 (`ADR-0001`..`0006`)**, and **`CR-01`..`10`** (`DEC-009` + `COND-PO-01`..`05` in [`decisions.md`](../governance/decisions.md)), authorizing **Milestone `M0` (`TP-IMP-0001`..`0004`)**.
 >   2. All 4 `M0` units (`TP-IMP-0001`..`0004`) are **`DONE`**, closing all `13 / 13` specification gaps in [`unresolved-gaps.md`](../reviews/unresolved-gaps.md) and locking `POC-01` & `POC-02` in [`spike-results.md`](../architecture/spike-results.md).
->   3. Current delivery is `TP-IMP-0001`..`0035` = DONE; Unit `0036` is READY under `DEC-072`; `0037`..`0047` remain blocked. The active sequential batch uses persistent `develop` → per-unit PR, independent review, four checks, merge, and post-merge verification.
+>   3. Current delivery is `TP-IMP-0001`..`0036` = DONE; Unit `0037` is READY under `DEC-074`; `0038`..`0047` remain blocked. The active sequential batch uses persistent `develop` → per-unit PR, independent review, four checks, merge, and post-merge verification.
 
 ---
 

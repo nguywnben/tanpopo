@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0035: DONE` | `0036 READY` | `0037..0047 BLOCKED`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.53.0-dec-072-0036-ready` | **Date:** `2026-11-19`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0036: DONE` | `0037 READY` | `0038..0047 BLOCKED`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.54.0-dec-074-0036-done-0037-ready` | **Date:** `2026-11-19`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** Units `0001`..`0035` are DONE. Unit 35 acceptance and DEC-072 are on main SHA `0a264c40ebb7288d849df14a466931cae2b1fab5`; post-merge CI `44468902234` passed all four required jobs and artifact/attestation `44468902362` succeeded. Unit 36 is READY under `DEC-072`; Units `0037`..`0047` remain blocked pending sequential DoR. No tags/releases (`GATE-REL-07`).
+> - **Live DAG Frontier:** Units `0001`..`0036` are DONE. Unit 36 acceptance under `DEC-074` is on main SHA `a3a0ef1b94d4986d7bac0d601566d8f249f87013`; post-merge CI `44494912921` passed all four required jobs. Unit 37 is READY under `DEC-074`; Units `0038`..`0047` remain blocked pending sequential DoR. No tags/releases (`GATE-REL-07`).
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -59,8 +59,8 @@ flowchart TD
     subgraph M3["M3: v0.2 OAuth 2.1, Marketplace & MCP Hub"]
         U34["TP-IMP-0034: Authorized OAuth 2.1 Single-Flight Broker (DONE — DEC-069)"]
         U35["TP-IMP-0035: Marketplace Index, OCI Puller & Bedrock/Azure (DONE — DEC-071)"]
-        U36["TP-IMP-0036: MCP Hub Core & JCS schema_hash Pinning (READY — DEC-072)"]
-        U37["TP-IMP-0037: MCP HITL Destructive Approval & Webhooks"]
+        U36["TP-IMP-0036: MCP Hub Core & JCS schema_hash Pinning (DONE — DEC-074)"]
+        U37["TP-IMP-0037: MCP HITL Destructive Approval & Webhooks (READY — DEC-074)"]
         U38["TP-IMP-0038: Route Explain, Playground & MCP/Approval UI"]
     end
 
@@ -128,7 +128,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier (`35 DONE`, `1 READY`, `0 READY_FOR_REVIEW`, `11 BLOCKED` — `DEC-072`):** `TP-IMP-0001..0035` are DONE. Unit 35 acceptance and the new batch delegation are recorded on main SHA `0a264c40ebb7288d849df14a466931cae2b1fab5`; post-merge CI `44468902234` passed all four required jobs and artifact/attestation `44468902362` succeeded. Unit 36 is READY after DoR verification; Units 37–47 remain blocked pending sequential DoR. No tags/releases.
+> **Live Queue Frontier (`36 DONE`, `1 READY`, `0 READY_FOR_REVIEW`, `10 BLOCKED` — `DEC-074`):** `TP-IMP-0001..0036` are DONE. Unit 36 acceptance is recorded at main SHA `a3a0ef1b94d4986d7bac0d601566d8f249f87013`; post-merge CI `44494912921` passed all four required jobs. Unit 37 is READY after DoR verification; Units 38–47 remain blocked pending sequential DoR. No tags/releases.
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.

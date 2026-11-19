@@ -2,10 +2,10 @@
 
 > **MANDATORY COLD-START ENTRYPOINT FOR EVERY NEW EXECUTION SESSION (`ZERO PRIOR CHAT MEMORY REQUIRED`)**
 > - **Baseline ID:** `EXEC-BL-001-APPROVED`
-> **Version:** `2.51.0-dec-072-mcp-batch-open` | **Last Updated:** `2026-11-19` | **Accepted Implementation Baseline:** `0a264c40ebb7288d849df14a466931cae2b1fab5` (`DEC-071` + `DEC-072`; Unit 35 post-merge CI `44468902234` green)
-> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0035` DONE; `0036` READY; `0037`..`0047` BLOCKED). Unit 35 post-merge CI `44468902234` passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows; artifact and trusted-main attestation `44468902362` succeeded on the same main SHA.
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** through `DEC-072` (`35 DONE`, `1 READY`, `0 READY_FOR_REVIEW`, `11 BLOCKED`; `DEC-033` remains revoked).
-> - **CURRENT UNIT STATE (`UNIT_STATES`):** `35 / 47` DONE (`0001`..`0035`), `1 / 47` READY (`0036`), `0 READY_FOR_REVIEW`, `11 / 47` BLOCKED (`0037`..`0047`).
+> **Version:** `2.52.0-dec-074-mcp-0036-done` | **Last Updated:** `2026-11-19` | **Accepted Implementation Baseline:** `a3a0ef1b94d4986d7bac0d601566d8f249f87013` (`DEC-074`; Unit 36 post-merge CI `44494912921` green)
+> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0036` DONE; `0037` READY; `0038`..`0047` BLOCKED). Unit 36 post-merge CI `44494912921` passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows.
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** through `DEC-074` (`36 DONE`, `1 READY`, `0 READY_FOR_REVIEW`, `10 BLOCKED`; `DEC-033` remains revoked).
+> - **CURRENT UNIT STATE (`UNIT_STATES`):** `36 / 47` DONE (`0001`..`0036`), `1 / 47` READY (`0037`), `0 READY_FOR_REVIEW`, `10 / 47` BLOCKED (`0038`..`0047`).
 
 ---
 
@@ -16,7 +16,7 @@ If you are an Engineering Coding Agent starting a fresh session with **zero prio
 1. **Verify `HANDOFF_VERDICT` at the top of this file and the Stage-Gate table in [`docs/governance/decisions.md`](./decisions.md):**
    - If `HANDOFF_VERDICT` is **`NO_GO`** or `Gate G4` is not marked **`APPROVED`** by the Product Owner: **STOP IMMEDIATELY (`ABORT SAFELY`)**. **Never infer approval from the mere existence of specification or planning files!**
 2. **Verify the unit's own status and upstream `Dependencies` in [`docs/planning/implementation-index.md`](../planning/implementation-index.md):**
-   - Execute only the current unit explicitly marked `READY` in the implementation index, after verifying its dependencies and DoR. `DEC-060` governs Units 31–35; `DEC-072` governs Units 36–38. Units unlock strictly one at a time after predecessor `DONE` on `origin/main` and green post-merge CI. Units 37–47 remain blocked. Never skip review gates.
+   - Execute only the current unit explicitly marked `READY` in the implementation index, after verifying its dependencies and DoR. `DEC-060` governs Units 31–35; `DEC-072` governs Units 36–38. Units unlock strictly one at a time after predecessor `DONE` on `origin/main` and green post-merge CI. Unit 37 is READY under `DEC-074`; Units 38–47 remain blocked. Never skip review gates.
 3. **Load Selective, Focused Context Only (Prevent Context Window Flooding):**
    - Read in strict order: (a) [`AGENTS.md`](../../AGENTS.md) → (b) this `execution-baseline.md` → (c) the target unit spec [`docs/planning/units/TP-IMP-xxxx.md`](../planning/TP-IMP-0007.md) → (d) **only** the specific sections cited under Section 3 (`Design Refs`) of that unit.
 4. **Hard Public-Release & Owner-Acceptance Boundary (`DEC-010`, `DEC-022`, `DEC-025`, `DEC-033 REVOKED`, `DEC-034`, `DEC-041`, `DEC-050`, `DEC-058`, `DEC-059`, `DEC-060`, `DEC-072`):**
@@ -113,9 +113,9 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 
 ---
 
-### 4. Dependency-Ordered Execution Queue (`HANDOFF_VERDICT: GO` — `0035` `DONE` · `0036` `READY` · `0037..0047` `BLOCKED`)
+### 4. Dependency-Ordered Execution Queue (`HANDOFF_VERDICT: GO` — `0036` `DONE` · `0037` `READY` · `0038..0047` `BLOCKED`)
 
-> **Live Status Today:** `TP-IMP-0001`..`0035` are DONE. Unit 35 is accepted under `DEC-071`, with governance synchronized on `origin/main` `0a264c40ebb7288d849df14a466931cae2b1fab5`; post-merge CI `44468902234` passed Stage 0 + Stage 1 Ubuntu/macOS/Windows and artifact/attestation `44468902362` succeeded. Under `DEC-072`, Unit 36 DoR is verified and it is READY. Units 37–47 remain blocked pending their own sequential DoR.
+> **Live Status Today:** `TP-IMP-0001`..`0036` are DONE. Unit 36 is accepted under `DEC-074` at `origin/main` `a3a0ef1b94d4986d7bac0d601566d8f249f87013`; post-merge CI `44494912921` passed Stage 0 + Stage 1 Ubuntu/macOS/Windows. Under `DEC-074`, Unit 37 DoR is verified and it is READY. Units 38–47 remain blocked pending their own sequential DoR.
 
 | Wave | Unit ID(s) | Execution Mode | Status / Mandatory Checkpoint Before Next Wave |
 |---|---|---|---|
@@ -128,7 +128,7 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 | **Wave 2.1 (`M2`)** | [`TP-IMP-0016`](../planning/units/TP-IMP-0016.md) → [`0017`](../planning/units/TP-IMP-0017.md) → [`0018`](../planning/units/TP-IMP-0018.md) → [`0019`](../planning/units/TP-IMP-0019.md) → [`0020`](../planning/units/TP-IMP-0020.md) | **`0016..0020` = `DONE`** (`DEC-025` batch completed cleanly at `0020`) | **`0016` = `DONE` (`DEC-028`, `f14989b0`, CI `43752413362`, `code-reviewer` [`51145b49`] & `security-auditor` [`8dfc27cb`])** · **`0017` = `DONE` (`DEC-029`, `1217270c`, CI `43758814840`, `code-reviewer` [`eea14add`] + `CR-01` sign-off)** · **`0018` = `DONE` (`DEC-030`, `fba66814`, CI `43766468056`, `code-reviewer` [`9d49b519`] `APPROVE`)** · **`0019` = `DONE` (`DEC-031`, `6c313e8f`, CI `43772630305`, `code-reviewer` [`eac61e5f`] & `security-auditor` [`26305d32`] `PASS`)** · **`0020` = `DONE` (`DEC-032`, `904ba2a9`, CI `43782208080`, `security-auditor` [`59206f9a`] `PASS` & `code-reviewer` [`31d9454f`] `APPROVE`)**. |
 | **Wave 2.2 (`M2` — `DEC-041` / `DEC-058` / `DEC-059`)** | `TP-IMP-0021`..`0030` | Sequential UI batch complete; all ten units DONE on main with CI and accepted governance records. |
 | **Wave 2.3 (`DEC-060`)** | `TP-IMP-0031` → `0032` → `0033` → `0034` → `0035` | Sequential GPT-6 Luna batch via persistent `develop`; per-unit PR, required review tier, four green checks, merge, and post-merge main verification. Complete: Units 31–35 DONE; Unit 35 acceptance record is on main `0a264c40` with post-merge CI `44468902234` and artifact/attestation `44468902362` green. |
-| **Wave 3.1 (`DEC-072`)** | `TP-IMP-0036` → `0037` → `0038` | Sequential GPT-6 Luna batch via persistent `develop`; per-unit PR, required review tier, four green checks, merge, and post-merge main verification. Unit 36 is READY after verifying dependencies `0010`, `0019`, `0034` and predecessor 35 DONE with green CI; Units 37–38 unlock only after their predecessor is DONE on main with green acceptance CI and their DoR is met. |
+| **Wave 3.1 (`DEC-072`)** | `TP-IMP-0036` → `0037` → `0038` | Sequential GPT-6 Luna batch via persistent `develop`; per-unit PR, required review tier, four green checks, merge, and post-merge main verification. Unit 36 is DONE under `DEC-074` on main `a3a0ef1` with green CI `44494912921`; Unit 37 is READY after its DoR was verified; Unit 38 remains blocked until Unit 37 is DONE on main with green acceptance CI and its DoR is met. |
 
 ---
 
