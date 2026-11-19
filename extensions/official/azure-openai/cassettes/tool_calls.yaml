@@ -1,0 +1,38 @@
+case_id: "azure_openai_tool_calling"
+description: "Verifies Azure OpenAI function tool-call extraction and JSON argument integrity."
+capability: "tool_calling"
+config:
+  endpoint_base_url: "https://tanpopo-resource.openai.azure.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gpt-4o-prod"
+  stream: false
+  messages:
+    - role: "user"
+      content: "Check Tokyo weather."
+  tools:
+    - type: "function"
+      function:
+        name: "get_weather"
+        parameters:
+          type: "object"
+          properties:
+            city:
+              type: "string"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  expected_upstream_headers:
+    api-key: "__CANARY_SECRET__"
+  raw_body: '{"id":"chatcmpl-az-tool-1","object":"chat.completion","model":"gpt-4o-prod","choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_az_1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Tokyo\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":32,"completion_tokens":14}}'
+expected_normalized_output:
+  model: "gpt-4o-prod"
+  finish_reason: "tool_calls"
+  tool_calls_count: 1
+  tool_call_name: "get_weather"
+  tool_call_arguments: '{"city":"Tokyo"}'
+  require_usage: true
+  input_tokens: 32
+  output_tokens: 14

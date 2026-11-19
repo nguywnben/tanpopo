@@ -49,6 +49,7 @@ func TestOfficialAdaptersContractAndPackaging(t *testing.T) {
 		{dir: "gemini", id: "@tanpopo/gemini", wantTier: installer.ExecutionTierWasmSandboxT2},
 		{dir: "openai-compatible", id: "@tanpopo/openai-compatible", wantTier: installer.ExecutionTierDeclarativeT1},
 		{dir: "ollama", id: "@tanpopo/ollama", wantTier: installer.ExecutionTierDeclarativeT1},
+		{dir: "azure-openai", id: "@tanpopo/azure-openai", wantTier: installer.ExecutionTierDeclarativeT1},
 	}
 
 	for _, tc := range adapters {
