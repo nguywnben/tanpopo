@@ -3361,11 +3361,25 @@ func TestVaultOAuthSessionAndRotateInputValidation(t *testing.T) {
 	if _, _, err := env.vault.RotateSecretTx(ctx, nil, "org", "secret", 1, RotateSecretParams{Plaintext: []byte("value")}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("nil transaction error = %v, want ErrInvalidInput", err)
 	}
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "rotate-validation", DisplayName: "Rotate Validation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := env.vault.SealSecret(ctx, SealSecretParams{OrgID: org.ID, Name: "rotation", SecretKind: SecretKindAPIKey, Plaintext: []byte("secret")})
+	if err != nil {
+		t.Fatal(err)
+	}
 	tx, err := env.sqlite.RawDB().BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
+	if _, _, err := env.vault.RotateSecretTx(ctx, tx, org.ID, "missing-secret", 1, RotateSecretParams{Plaintext: []byte("value")}); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("missing credential error = %v, want port.ErrNotFound", err)
+	}
+	if _, _, err := env.vault.RotateSecretTx(ctx, tx, org.ID, meta.ID, meta.Version+1, RotateSecretParams{Plaintext: []byte("value")}); !errors.Is(err, port.ErrVersionConflict) {
+		t.Fatalf("stale credential version error = %v, want port.ErrVersionConflict", err)
+	}
 	for _, tc := range []struct {
 		name, orgID, secretID string
 		version               int64
