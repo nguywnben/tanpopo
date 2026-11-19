@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0035` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0011`, `TP-IMP-0018`, `TP-IMP-0034` — `GAP-01, 04, 09`)* |
+| **Status** | `BLOCKED` *(DoR verified: `TP-IMP-0011`, `TP-IMP-0018`, and `TP-IMP-0034` are DONE; `GAP-01`, `GAP-04`, and `GAP-09` are CLOSED. Open only after Unit 34 acceptance governance CI is green on main.)* |
 | **Size** | `L` (`internal/extension/registry/*`, `internal/ingress/http/rerank.go`, `extensions/official/aws-bedrock/*`, `azure-openai/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Remote index signature verification, automated CVE package quarantine via `revocations.json` & `AWS SigV4` signing inside `BlindBroker`)* |
 | **Technical Owner** | `Platform Ecosystem & Supply-Chain Lead` |
