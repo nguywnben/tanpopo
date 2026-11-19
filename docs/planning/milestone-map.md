@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0035: DONE` | `1 READY / 0 READY_FOR_REVIEW / 11 BLOCKED`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.43.0-dec-072-0036-ready` | **Date:** `2026-11-19`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0036: DONE` | `1 READY / 0 READY_FOR_REVIEW / 10 BLOCKED`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.44.0-dec-074-0036-done` | **Date:** `2026-11-19`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Units `TP-IMP-0001`..`0035` are **`DONE` (`35 / 47`)**. Unit 30 (`CR-13` Option A per `DEC-050`) remains accepted under [`DEC-058`](../governance/decisions.md) / [`DEC-059`](../governance/decisions.md). Unit 35 is accepted under [`DEC-071`](../governance/decisions.md) at main SHA `0a264c40ebb7288d849df14a466931cae2b1fab5` (PR #14; post-merge Actions `44468902234`; reviewers **Euclid** and **Lagrange**). Unit `0036` is **`READY`** under `DEC-072`; Units `0037`..`0047` (`11 / 47`) remain **`BLOCKED`** pending sequential gates (no tags/releases per `GATE-REL-07`).
+> - **Live Status:** Units `TP-IMP-0001`..`0036` are **`DONE` (`36 / 47`)**. Unit 30 (`CR-13` Option A per `DEC-050`) remains accepted under [`DEC-058`](../governance/decisions.md) / [`DEC-059`](../governance/decisions.md). Unit 36 is accepted under [`DEC-074`](../governance/decisions.md) at main SHA `a3a0ef1b94d4986d7bac0d601566d8f249f87013` (PR #16; post-merge Actions `44494912921`; reviewers **Euler** and **Bohr**). Unit `0037` is **`READY`** under `DEC-074`; Units `0038`..`0047` (`10 / 47`) remain **`BLOCKED`** pending sequential gates (no tags/releases per `GATE-REL-07`).
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---

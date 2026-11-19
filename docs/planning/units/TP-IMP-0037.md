@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0037` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0023`, `TP-IMP-0036` — `GAP-01, 08`)* |
+| **Status** | `READY` *(Opened under `DEC-074` after verifying `TP-IMP-0023` and `TP-IMP-0036` are DONE on `origin/main`; `GAP-01, 08` are CLOSED and `CR-08, 09` are approved.)* |
 | **Size** | `L` (`internal/ingress/mcp/firewall/*`, `internal/ingress/mcp/approval/*`, `internal/webhook/*`, `db/migrations/sqlite/0013_approvals_webhooks.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Duplicate side-effect prevention `FMEA-02`, 5-tuple parameter-hash-bound HITL approvals & SSRF-guarded HMAC Webhooks)* |
 | **Technical Owner** | `Principal Security / Agent Governance Engineer` |
