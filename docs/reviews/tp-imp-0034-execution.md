@@ -11,6 +11,12 @@
 - Review tier: `REQUIRES_STRONG_REVIEW`; final independent **code-reviewer** and **security-auditor** reviews required.
 - No tag/release will be created (`GATE-REL-07`).
 
+## Execution and independent review attribution
+
+- Implemented by **GPT-6 Luna** under the active delegation in `DEC-060`; accepted by **GPT-6 Luna** after the required independent reviews and main CI gates pass.
+- Final code review on PR #11 SHA `e26d99d4b13cffd918e066ac1646017a44655969`: **Maxwell** (**code-reviewer**) — **APPROVE**, no required or optional findings.
+- Final security review on the same SHA: **Heisenberg** (**security-auditor**) — **PASS**, zero Critical/High/Medium findings; one Low observation remains that Go string copies of upstream token/client-secret values cannot be zeroized. Reviewers did not run tests; execution evidence is tracked separately below.
+
 ## Contract reconciliation
 
 - **DEC-064** assigns `0016_oauth_sessions.sql` as the next migration because `0011_routes.sql` and `0012`..`0015` are already used. Existing migration history remains immutable.
@@ -24,4 +30,4 @@ Implement Authorization Code + PKCE S256, Client Credentials, and authorized RFC
 
 Windows CI exposed a SQLite file-handle teardown failure in `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`; cleanup now allows a bounded 30-second Windows teardown window and still fails if the runtime retains the database handle. The required checks will be rerun on the final diff.
 
-Final implementation SHA, CI run links, independent reviewer names/verdicts, merge SHA, and post-merge acceptance CI will be added after those results are available. Unit 35 remains blocked until Unit 34 is DONE on main with green acceptance CI.
+The final cross-platform CI run and artifact dry run are being tracked against the current PR #11 head. The merge SHA and post-merge acceptance CI will be recorded after merge. Unit 35 remains blocked until Unit 34 is DONE on main with green acceptance CI.
