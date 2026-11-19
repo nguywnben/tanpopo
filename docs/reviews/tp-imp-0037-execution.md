@@ -1,6 +1,6 @@
 # TP-IMP-0037 Execution Checkpoint
 
-**Status:** Implementation complete; local verification and independent final review pass. Unit 37 remains `READY_FOR_REVIEW` until PR checks, merge, and post-merge CI on `origin/main` pass.
+**Status:** Implementation complete; local verification, independent reviews, PR checks, and release artifact dry run pass. Unit 37 remains `READY_FOR_REVIEW` until merge and post-merge CI on `origin/main` pass.
 
 ## Authority and ownership
 
@@ -14,9 +14,9 @@
 ## Baseline and branch
 
 - Working branch: `develop`.
-- `origin/main` at last fetch: `b17a2fc65f3ce139507897244d2897a73e187b34`.
-- Local `develop` is based on that main SHA; `origin/develop` is its ancestor and is four commits behind main. Push can fast-forward the existing `develop` branch.
-- Draft PR [#18](https://github.com/nguywnben/tanpopo/pull/18) is open from `develop` to `main`. Its current remote head is `6109c66523d21782b0f7772a0e8fe4ececd154ee`; the locally reviewed Windows test harness correction is not yet committed/pushed. No Unit 38 work has started.
+- `origin/main` baseline: `b17a2fc65f3ce139507897244d2897a73e187b34`.
+- Working branch and PR head are both `develop` at `54c7ed0e8fc6f63298971ad798a5940fb26ac4b2`.
+- PR [#18](https://github.com/nguywnben/tanpopo/pull/18) is open from `develop` to `main`. No Unit 38 work has started.
 
 ## Implemented checkpoint
 
@@ -36,12 +36,12 @@
 - Race tests passed for `internal/admin/http`, MCP approval/hub, `internal/iam/vkey`, and `internal/webhook`. An earlier webhook race attempt exposed SQLite busy contention in the concurrency fixture; bounded retry and the commit cleanup regression were added, then the webhook package race test passed.
 - `go run ./scripts/ci/check.go --all` and `git diff --check` passed on the current implementation.
 - Local full Go tests and the targeted Bedrock/harness tests pass with the reviewed Windows correction. Its final code and security reviews are **Boyle** APPROVE and **Fermat** PASS.
-- First PR CI run [`44548907596`](https://github.com/nguywnben/tanpopo/actions/runs/44548907596): Stage 0, Ubuntu Stage 1, macOS Stage 1, and the release artifact dry run passed; Windows Stage 1 failed at the Bedrock timeout described above. The correction is pending push and a fresh four-job run.
+- First PR CI run [`44548907596`](https://github.com/nguywnben/tanpopo/actions/runs/44548907596): Stage 0, Ubuntu Stage 1, macOS Stage 1, and the release artifact dry run passed; Windows Stage 1 failed at the Bedrock timeout described above. The test-only correction is included in the current PR head and verified by the subsequent run.
+- On PR head `54c7ed0e8fc6f63298971ad798a5940fb26ac4b2`, CI run [`44553416497`](https://github.com/nguywnben/tanpopo/actions/runs/44553416497) passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows. The first Windows attempt had one failure in five repetitions of `TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken`, after 30 seconds of failing to remove its temporary SQLite file because Windows reported it in use. The exact same Windows job was rerun without code changes; all five repetitions passed. This classifies the first result as a transient Windows file-lock flake, not a reproducible runtime defect. The release artifact dry run [`44553416472`](https://github.com/nguywnben/tanpopo/actions/runs/44553416472) also passed.
 - The official fixture is pinned to `@modelcontextprotocol/sdk` `1.32.2`. Scripted fixtures do not establish support for untested Claude Code, Cursor, or Codex releases.
 - No live PostgreSQL server was available, so PostgreSQL runtime behavior has static review and fail-closed unit coverage, not a live integration run.
 
 ## Next steps
 
-1. Record current repo-local Git author and committer identities; commit the reviewed Windows CI correction on `develop` and push it to update PR #18.
-2. Monitor the new run through all four required Stage 0/Stage 1 checks and the release artifact dry run; resolve any new CI findings.
-3. When checks pass, mark PR #18 ready and merge under `DEC-072`; verify DONE and green post-merge CI on the resulting `origin/main` SHA, then synchronize `develop` before checking Unit 38 DoR.
+1. Mark PR #18 ready and merge under `DEC-072`.
+2. Verify the merge SHA, Unit 37 acceptance record, and green post-merge CI on `origin/main`; synchronize `develop` before checking Unit 38 DoR.
