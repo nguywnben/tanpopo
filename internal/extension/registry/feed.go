@@ -6,6 +6,7 @@ package registry
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/subtle"
 	"encoding/base64"
