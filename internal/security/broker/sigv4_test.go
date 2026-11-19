@@ -4,7 +4,9 @@
 package broker
 
 import (
+	"io"
 	"net/http"
+	"strings"
 	"strings"
 	"testing"
 	"time"
@@ -53,5 +55,34 @@ func TestSignAWSSigV4RejectsMalformedCredentialsAndNonTLS(t *testing.T) {
 				t.Fatal("invalid signing input accepted")
 			}
 		})
+	}
+}
+
+func TestSignAWSSigV4PreservesRequestBodyAndRejectsAmbiguousSecrets(t *testing.T) {
+	const body = `{"inputText":"hello"}`
+	req, err := http.NewRequest(http.MethodPost, "https://bedrock.us-east-1.amazonaws.com/model", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	credentials := []byte(`{"access_key_id":"AKIDEXAMPLE","secret_access_key":"wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY","session_token":"session-token-123"}`)
+	_, err = signAWSSigV4(req, credentials, &CryptoSignSpec{Algorithm: SigningAWSSigV4, AWSRegion: "us-east-1", AWSService: "bedrock"}, time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(req.Body)
+	if err != nil || string(got) != body {
+		t.Fatalf("signing changed outbound body: got=%q err=%v", got, err)
+	}
+	if req.Header.Get("X-Amz-Security-Token") != "session-token-123" {
+		t.Fatal("session token header was not injected")
+	}
+	for _, malformed := range []string{
+		`{"access_key_id":"AKIDEXAMPLE","access_key_id":"OTHER","secret_access_key":"wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"}`,
+		`{"access_key_id":"AKIDEXAMPLE","secret_access_key":"wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",}`,
+		`{"access_key_id":"AKIDEXAMPLE","secret_access_key":"wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY","extra":"x"}`,
+	} {
+		if _, err := decodeAWSCredentials([]byte(malformed)); err == nil {
+			t.Errorf("ambiguous credential document accepted: %s", malformed)
+		}
 	}
 }
