@@ -22,6 +22,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	extport "github.com/nguywnben/tanpopo/internal/extension/port"
+	"github.com/nguywnben/tanpopo/internal/extension/registry"
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
@@ -65,7 +66,7 @@ func newServeCommand() *cobra.Command {
 	return cmd
 }
 
-func serve(ctx context.Context, role, listen string) error {
+func serve(ctx context.Context, role, listen string) (serveErr error) {
 	drainTimeout, err := drainTimeoutFromEnv(os.LookupEnv)
 	if err != nil {
 		return err
@@ -74,7 +75,7 @@ func serve(ctx context.Context, role, listen string) error {
 	if err != nil {
 		return err
 	}
-	defer closeRuntime()
+	defer func() { serveErr = errors.Join(serveErr, closeRuntime()) }()
 	listener, err := net.Listen("tcp", listen)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", listen, err)
@@ -122,7 +123,7 @@ func drainTimeoutFromEnv(lookup func(string) (string, bool)) (time.Duration, err
 	return timeout, nil
 }
 
-func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(), error) {
+func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func() error, error) {
 	if role != "all" && role != "data-plane" && role != "control-plane" {
 		return nil, nil, fmt.Errorf("invalid service role %q", role)
 	}
@@ -174,30 +175,55 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	}
 	runtimeCtx, cancelRuntime := context.WithCancel(ctx)
 	watcherDone := make(chan struct{})
+	var marketplaceDone <-chan struct{}
 	go func() {
 		defer close(watcherDone)
 		snaps.StartWatcher(runtimeCtx, time.Second)
 	}()
-	var closeDataServer func()
+	var closeDataServer func() error
 	var dataServerReady func(context.Context) error
 	var telemetryPipeline *telemetry.Pipeline
 	var cleanupOnce sync.Once
-	cleanup := func() {
+	var shutdownErr error
+	cleanup := func() error {
 		cleanupOnce.Do(func() {
+			lastActiveDBStage := ""
+			lastActiveDBConnections := 0
+			recordActiveDBConnections := func(stage string) {
+				if inUse := db.Stats().InUse; inUse > 0 {
+					lastActiveDBStage = stage
+					lastActiveDBConnections = inUse
+				}
+			}
+			recordActiveDBConnections("shutdown start")
 			if closeDataServer != nil {
-				closeDataServer()
+				shutdownErr = errors.Join(shutdownErr, closeDataServer())
+				recordActiveDBConnections("after data server close")
 			}
 			if telemetryPipeline != nil {
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				_ = telemetryPipeline.Shutdown(shutdownCtx)
+				shutdownErr = errors.Join(shutdownErr, telemetryPipeline.Shutdown(shutdownCtx))
 				cancel()
+				recordActiveDBConnections("after telemetry shutdown")
 			}
 			cancelRuntime()
 			<-watcherDone
+			recordActiveDBConnections("after snapshot watcher shutdown")
+			if marketplaceDone != nil {
+				<-marketplaceDone
+				recordActiveDBConnections("after marketplace watcher shutdown")
+			}
 			vaultStore.Close()
 			closeKeys()
-			closeStore()
+			recordActiveDBConnections("before SQLite close")
+			if err := store.Close(); err != nil {
+				if lastActiveDBStage != "" {
+					shutdownErr = errors.Join(shutdownErr, fmt.Errorf("sqlite: last observed %d active connection(s) at %s", lastActiveDBConnections, lastActiveDBStage))
+				}
+				shutdownErr = errors.Join(shutdownErr, err)
+			}
 		})
+		return shutdownErr
 	}
 	killSwitch, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{DB: db, Audit: auditLog, Streams: killswitch.NewStreamRegistry()})
 	if err != nil {
@@ -239,6 +265,12 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		cleanup()
 		return nil, nil, fmt.Errorf("initialize extension installer: %w", err)
 	}
+	registryStore, err := registry.NewSQLStore(db, time.Now)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("initialize marketplace registry store: %w", err)
+	}
+	marketplaceDone = startMarketplaceRuntime(runtimeCtx, registryStore, installerService, snaps, auditLog)
 	blindBroker, err := broker.NewBlindBroker(broker.Config{
 		Resolver: catalogRepo, PolicyResolver: catalogRepo, Vault: vaultStore,
 		UnsealCap: brokerUnsealCap, Audit: auditLog, OAuthTokens: oauthService,
@@ -284,10 +316,10 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize Data Plane: %w", err)
 		}
-		closeDataServer = func() {
+		closeDataServer = func() error {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			_ = dataServer.Close(shutdownCtx)
+			return dataServer.Close(shutdownCtx)
 		}
 		dataServerReady = dataServer.CheckServingReady
 		mux.Handle("/v1/", dataServer)
@@ -322,7 +354,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		adminServer, err := adminhttp.NewServer(adminhttp.ServerConfig{
 			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys, Ledgers: ledgerService,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
-			Installer: installerService, ArchiveResolver: newServeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv)),
+			Installer: installerService, ArchiveResolver: newRuntimeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv), registryStore, vaultOCIRegistryCredentialResolver{db: db, vault: vaultStore, cap: brokerUnsealCap}),
 			Broker: blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
 		})
 		if err != nil {
@@ -341,11 +373,27 @@ func newServeArchiveResolver(root string) adminhttp.ExtensionArchiveResolver {
 	}
 	resolver, err := installer.NewLocalMarketplaceArchiveResolver(root)
 	if err != nil {
-		return func(context.Context, string, string) (*installer.StageInstallRequest, func(), error) {
+		return func(context.Context, string, string, string) (*installer.StageInstallRequest, func(), error) {
 			return nil, nil, err
 		}
 	}
-	return resolver.Resolve
+	return func(ctx context.Context, _ string, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
+		return resolver.Resolve(ctx, sourceURI, expectedSHA256)
+	}
+}
+
+func newRuntimeArchiveResolver(root string, index registry.IndexStore, credentials registry.RegistryCredentialResolver) adminhttp.ExtensionArchiveResolver {
+	local := newServeArchiveResolver(root)
+	oci := registry.NewOCIArchiveResolver(index, credentials, egress.NewStdHostResolver())
+	return func(ctx context.Context, orgID, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(sourceURI)), "oci://") {
+			return oci.Resolve(ctx, orgID, sourceURI, expectedSHA256)
+		}
+		if local == nil {
+			return nil, nil, installer.ErrMarketplaceArchiveResolverUnavailable
+		}
+		return local(ctx, orgID, sourceURI, expectedSHA256)
+	}
 }
 
 func allowedOrigins(addr string) []string {

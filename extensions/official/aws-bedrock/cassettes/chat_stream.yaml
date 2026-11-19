@@ -1,0 +1,31 @@
+case_id: "aws_bedrock_chat_stream"
+description: "Offline AWS EventStream cassette checks split-frame parsing, normalized SSE text, completion, and trailing token usage."
+capability: "chat_stream"
+config:
+  aws_region: "us-east-1"
+secret_slots:
+  aws_credentials: "__CANARY_SECRET__"
+normalized_input:
+  model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  stream: true
+  messages:
+    - role: "user"
+      content: "Say hello"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/vnd.amazon.eventstream"
+  expected_upstream_headers:
+    accept: "application/vnd.amazon.eventstream"
+  raw_sse_chunks:
+    - "base64:AAAA"
+    - "base64:dgAAAFKW1freDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcADG1lc3NhZ2VTdGFydA06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbnsicm9sZSI6ImFzc2lzdGFudCJ9HMa+GA=="
+    - "base64:AAAApAAAAFcViiJoDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcAEWNvbnRlbnRCbG9ja0RlbHRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29ueyJjb250ZW50QmxvY2tJbmRleCI6MCwiZGVsdGEiOnsidGV4dCI6IkhlbGxvIGZyb20gQmVkcm9jayJ9fZZbxZw="
+    - "base64:AAAAegAAAFHKLEZlDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcAC21lc3NhZ2VTdG9wDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29ueyJzdG9wUmVhc29uIjoiZW5kX3R1cm4ifT3DO/o="
+    - "base64:AAAAnAAAAE7gsHnvDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcACG1ldGFkYXRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29ueyJ1c2FnZSI6eyJpbnB1dFRva2VucyI6MTIsIm91dHB1dFRva2VucyI6NCwidG90YWxUb2tlbnMiOjE2fX30PuPL"
+expected_normalized_output:
+  content: "Hello from Bedrock"
+  require_stream_completed: true
+  require_usage: true
+  input_tokens: 12
+  output_tokens: 4

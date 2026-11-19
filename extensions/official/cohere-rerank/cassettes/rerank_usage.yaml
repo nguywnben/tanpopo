@@ -1,0 +1,22 @@
+case_id: "cohere_rerank_usage"
+description: "Reports exact search units independently from text token counts."
+capability: "rerank"
+config:
+  endpoint_base_url: "https://api.cohere.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "rerank-v3.5"
+  query: "usage test"
+  documents: ["one", "two", "three", "four"]
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  expected_upstream_headers:
+    Authorization: "Bearer __CANARY_SECRET__"
+  raw_body: '{"id":"rr-4","results":[{"index":3,"relevance_score":0.65}],"billed_units":{"search_units":4}}'
+expected_normalized_output:
+  rerank_results_count: 1
+  rerank_first_index: 3
+  rerank_search_units: 4

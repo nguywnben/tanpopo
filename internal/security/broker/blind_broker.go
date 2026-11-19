@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -216,6 +217,7 @@ type Config struct {
 	AllowCrossOriginRedirects bool
 	HostResolver              egress.HostResolver
 	ControlHook               func(network, address string, c syscall.RawConn) error
+	TLSRootCAs                *x509.CertPool
 }
 
 // EgressRequest represents an adapter-produced intermediate HTTP request carrying zero
@@ -277,6 +279,7 @@ type BlindHostCredentialBroker struct {
 	allowCrossOriginRedirects bool
 	hostResolver              egress.HostResolver
 	controlHook               func(network, address string, c syscall.RawConn) error
+	tlsRootCAs                *x509.CertPool
 }
 
 // NewBlindBroker constructs a BlindHostCredentialBroker, failing closed on missing dependencies.
@@ -331,6 +334,7 @@ func NewBlindBroker(cfg Config) (*BlindHostCredentialBroker, error) {
 		allowCrossOriginRedirects: cfg.AllowCrossOriginRedirects,
 		hostResolver:              cfg.HostResolver,
 		controlHook:               cfg.ControlHook,
+		tlsRootCAs:                cfg.TLSRootCAs,
 	}, nil
 }
 
@@ -774,6 +778,9 @@ func (b *BlindHostCredentialBroker) sendOutbound(ctx context.Context, req Egress
 			}
 
 			injectionValue := unsealed.Plaintext
+			if item.inj.CryptoSign != nil && item.inj.CryptoSign.Algorithm == SigningAWSSigV4 && unsealed.SecretKind != vault.SecretKindAWSSigV4Key {
+				return &Error{HTTPStatus: http.StatusForbidden, Code: "credential_kind_mismatch", Message: "AWS SigV4 signing requires an AWS signing key secret", Err: ErrInvalidEgressRequest}
+			}
 			if unsealed.SecretKind == vault.SecretKindOAuth2TokenSet {
 				if item.slot.BoundAudience == nil || strings.TrimSpace(*item.slot.BoundAudience) == "" {
 					return &Error{HTTPStatus: http.StatusForbidden, Code: "credential_audience_mismatch", Message: "OAuth credential has no target resource binding", Err: ErrAudienceMismatch}
@@ -793,12 +800,15 @@ func (b *BlindHostCredentialBroker) sendOutbound(ctx context.Context, req Egress
 			}
 			scrubber.addSecret(unsealed.Plaintext)
 			scrubber.addSecret(injectionValue)
-			hdrName, aerr := applyCredentialInjection(httpReq, item.inj, injectionValue, scrubber)
+			hdrName, aerr := applyCredentialInjection(httpReq, item.inj, injectionValue, scrubber, time.UnixMilli(b.nowMs()).UTC())
 			if aerr != nil {
 				return aerr
 			}
 			if hdrName != "" {
 				injectedSensitiveHeaders = append(injectedSensitiveHeaders, hdrName)
+			}
+			if item.inj.CryptoSign != nil && item.inj.CryptoSign.Algorithm == SigningAWSSigV4 && httpReq.Header.Get("X-Amz-Security-Token") != "" {
+				injectedSensitiveHeaders = append(injectedSensitiveHeaders, "X-Amz-Security-Token")
 			}
 			if err := b.recordAudit(ctx, req, "broker.credential_egress_authorized", map[string]any{
 				"slot_name":      item.inj.SecretSlotName,
@@ -862,6 +872,7 @@ func (b *BlindHostCredentialBroker) sendOutbound(ctx context.Context, req Egress
 		DenyCrossOriginRedirects: !b.allowCrossOriginRedirects,
 		Resolver:                 b.hostResolver,
 		ControlHook:              effectiveControlHook,
+		RootCAs:                  b.tlsRootCAs,
 	}
 	if streaming {
 		clientCfg.ResponseHeaderTimeout = timeout
@@ -1245,7 +1256,14 @@ func validateOutboundHeadersAndInjections(safeHeaders map[string]string, injecti
 						Err:        ErrInvalidEgressRequest,
 					}
 				}
-			case SigningAWSSigV4, SigningRSASHA256:
+			case SigningAWSSigV4:
+				if !awsScopePattern.MatchString(inj.CryptoSign.AWSRegion) || !strings.Contains(inj.CryptoSign.AWSRegion, "-") || !awsScopePattern.MatchString(inj.CryptoSign.AWSService) {
+					return &Error{HTTPStatus: http.StatusBadRequest, Code: "invalid_crypto_sign", Message: "AWS SigV4 requires a valid region and service", Err: ErrInvalidEgressRequest}
+				}
+				if !strings.EqualFold(field, "Authorization") || inj.ValuePrefix != "" {
+					return &Error{HTTPStatus: http.StatusBadRequest, Code: "invalid_crypto_sign", Message: "AWS SigV4 must write the Authorization header without a prefix", Err: ErrInvalidEgressRequest}
+				}
+			case SigningRSASHA256:
 				return &Error{
 					HTTPStatus: http.StatusUnprocessableEntity,
 					Code:       "unsupported_signing_algorithm",
@@ -1289,7 +1307,7 @@ func isCookieHeader(name string) bool {
 	return strings.EqualFold(name, "cookie") || strings.EqualFold(name, "set-cookie")
 }
 
-func applyCredentialInjection(req *http.Request, inj CredentialInjection, secret []byte, scrubber *secretScrubber) (string, error) {
+func applyCredentialInjection(req *http.Request, inj CredentialInjection, secret []byte, scrubber *secretScrubber, now time.Time) (string, error) {
 	field := strings.TrimSpace(inj.FieldName)
 	switch inj.Location {
 	case TargetBearer:
@@ -1355,11 +1373,21 @@ func applyCredentialInjection(req *http.Request, inj CredentialInjection, secret
 		return "", nil
 
 	case TargetHostCryptoSign:
-		sig, err := signHMACSHA256(secret, inj.CryptoSign)
+		var sig string
+		var err error
+		if inj.CryptoSign != nil && inj.CryptoSign.Algorithm == SigningAWSSigV4 {
+			sig, err = signAWSSigV4(req, secret, inj.CryptoSign, now)
+		} else {
+			sig, err = signHMACSHA256(secret, inj.CryptoSign)
+		}
 		if err != nil {
 			return "", err
 		}
 		req.Header.Set(field, inj.ValuePrefix+sig)
+		scrubber.addSecret([]byte(sig))
+		if token := req.Header.Get("X-Amz-Security-Token"); token != "" {
+			scrubber.addSecret([]byte(token))
+		}
 		return field, nil
 
 	default:

@@ -381,6 +381,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	}
 
 	s.mux.HandleFunc("/v1/chat/completions", s.handleChatCompletions)
+	s.mux.HandleFunc("/v1/rerank", s.handleRerank)
 	if !cfg.DisableResponses {
 		s.mux.HandleFunc("/v1/responses", s.handleResponses)
 	}

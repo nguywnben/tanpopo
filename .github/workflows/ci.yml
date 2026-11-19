@@ -190,6 +190,14 @@ jobs:
           go test -v -count=3 ./internal/testkit/...
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Repeat Windows runtime database cleanup regression test
+        if: matrix.os == 'windows-2022'
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED = '0'
+          go test -v -count=5 -run '^TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken$' ./cmd/tanpopo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Verify tanpopo CLI Version Stub Under CGO_ENABLED=0 (macOS & Windows)
         if: matrix.os != 'ubuntu-24.04'
         shell: pwsh

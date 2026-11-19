@@ -206,7 +206,7 @@ func (s *Server) handleStageExtensionInstall(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	stageReq, cleanup, err := s.archiveResolver(r.Context(), sourceURI, expectedSHA)
+	stageReq, cleanup, err := s.archiveResolver(r.Context(), orgID, sourceURI, expectedSHA)
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -556,7 +556,7 @@ func (s *Server) handleUpgradeExtension(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	stageReq, cleanup, err := s.archiveResolver(r.Context(), sourceURI, expectedSHA)
+	stageReq, cleanup, err := s.archiveResolver(r.Context(), orgID, sourceURI, expectedSHA)
 	if cleanup != nil {
 		defer cleanup()
 	}

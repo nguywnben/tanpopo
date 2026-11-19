@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/netip"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -20,17 +21,17 @@ import (
 
 // Supported extension manifest constants (SPEC-EXT-01 / SPEC-EXT-02 / CR-02, CR-03, CR-05).
 const (
-	CanonicalAPIVersion      = "tanpopo.dev/extension/v1alpha1"
-	KindExtensionManifest    = "ExtensionManifest"
-	KindDeclarativeAdapter   = "DeclarativeProviderAdapter"
-	ActiveContractVersion    = "0.1"
-	ActiveCoreSemver         = "0.1.0"
-	DefaultMaxYAMLDepth      = 32
-	DefaultMaxYAMLNodes      = 10000
-	DefaultMaxYAMLAliases        = 64
-	MaxAllowedMemoryMibLimit     = 64
-	MaxAllowedCpuMsPerCall       = 5000
-	MaxAllowedStreamChunkCpuMs   = 1000
+	CanonicalAPIVersion        = "tanpopo.dev/extension/v1alpha1"
+	KindExtensionManifest      = "ExtensionManifest"
+	KindDeclarativeAdapter     = "DeclarativeProviderAdapter"
+	ActiveContractVersion      = "0.1"
+	ActiveCoreSemver           = "0.1.0"
+	DefaultMaxYAMLDepth        = 32
+	DefaultMaxYAMLNodes        = 10000
+	DefaultMaxYAMLAliases      = 64
+	MaxAllowedMemoryMibLimit   = 64
+	MaxAllowedCpuMsPerCall     = 5000
+	MaxAllowedStreamChunkCpuMs = 1000
 )
 
 // Canonical SQL/system execution tiers matching extension_versions.execution_tier CHECK constraints.
@@ -597,20 +598,25 @@ func ValidateManifestStruct(m ExtensionManifest, policy ValidationPolicy, archiv
 
 	scope, _, _ := strings.Cut(id, "/")
 	publisherID := strings.TrimPrefix(scope, "@")
+	endpointHostSuffixes, err := validatedEndpointHostSuffixes(m.Adapter)
+	if err != nil {
+		return nil, err
+	}
 
 	permSet := NormalizePermissionSet(PermissionSet{
-		AllowedHosts:        m.Permissions.NetworkEgress.AllowedHosts,
-		AllowPrivateIP:      m.Permissions.NetworkEgress.AllowPrivateIP,
-		RequireTLS:          m.Permissions.NetworkEgress.RequireTLS,
-		ExecutionTier:       execTier,
-		SecretSlots:         slots,
-		SecretBindingModes:  bindingModes,
-		Hooks:               m.Permissions.Hooks,
-		MaxMemoryMib:        maxMem,
-		MaxCpuMsPerCall:     maxCpuMs,
-		MaxStreamChunkCpuMs: maxChunkCpuMs,
-		InspectRequestBody:  inspectReq,
-		InspectResponseBody: inspectResp,
+		AllowedHosts:         m.Permissions.NetworkEgress.AllowedHosts,
+		EndpointHostSuffixes: endpointHostSuffixes,
+		AllowPrivateIP:       m.Permissions.NetworkEgress.AllowPrivateIP,
+		RequireTLS:           m.Permissions.NetworkEgress.RequireTLS,
+		ExecutionTier:        execTier,
+		SecretSlots:          slots,
+		SecretBindingModes:   bindingModes,
+		Hooks:                m.Permissions.Hooks,
+		MaxMemoryMib:         maxMem,
+		MaxCpuMsPerCall:      maxCpuMs,
+		MaxStreamChunkCpuMs:  maxChunkCpuMs,
+		InspectRequestBody:   inspectReq,
+		InspectResponseBody:  inspectResp,
 	})
 
 	return &ValidatedManifest{
@@ -621,6 +627,56 @@ func ValidateManifestStruct(m ExtensionManifest, policy ValidationPolicy, archiv
 		RequiresRootSignature: IsReservedTanpopoNamespace(id),
 		Permissions:           permSet,
 	}, nil
+}
+
+func validatedEndpointHostSuffixes(adapter map[string]any) ([]string, error) {
+	if len(adapter) == 0 {
+		return nil, nil
+	}
+	raw, exists := adapter["endpointHostSuffixes"]
+	if !exists {
+		return nil, nil
+	}
+	values, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: adapter.endpointHostSuffixes must be a list", ErrManifestInvalid)
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, item := range values {
+		suffix, ok := item.(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: adapter.endpointHostSuffixes entries must be strings", ErrManifestInvalid)
+		}
+		suffix = strings.ToLower(strings.TrimSpace(suffix))
+		if len(suffix) < 3 || suffix[0] != '.' || strings.ContainsAny(suffix, "*:/@?#\\\x00 \t\r\n") || strings.HasSuffix(suffix, ".") {
+			return nil, fmt.Errorf("%w: invalid adapter.endpointHostSuffix %q", ErrManifestInvalid, suffix)
+		}
+		labels := strings.Split(suffix[1:], ".")
+		if len(labels) < 2 {
+			return nil, fmt.Errorf("%w: endpoint host suffix must contain at least two DNS labels", ErrManifestInvalid)
+		}
+		for _, label := range labels {
+			if len(label) > 63 || label == "" || label[0] == '-' || label[len(label)-1] == '-' {
+				return nil, fmt.Errorf("%w: invalid DNS suffix label in %q", ErrManifestInvalid, suffix)
+			}
+			for _, ch := range label {
+				if !(ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '-') {
+					return nil, fmt.Errorf("%w: invalid DNS suffix label in %q", ErrManifestInvalid, suffix)
+				}
+			}
+		}
+		if len(suffix) > 254 {
+			return nil, fmt.Errorf("%w: endpoint host suffix is too long", ErrManifestInvalid)
+		}
+		if _, exists := seen[suffix]; exists {
+			continue
+		}
+		seen[suffix] = struct{}{}
+		out = append(out, suffix)
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 func validateAdapterBlockSafe(adapter map[string]any, execTier string) error {
@@ -903,4 +959,3 @@ func isForbiddenNativeHeader(lower string) bool {
 		return strings.HasPrefix(lower, "x-tanpopo-")
 	}
 }
-

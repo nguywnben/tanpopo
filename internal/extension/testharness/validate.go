@@ -37,10 +37,10 @@ const (
 )
 
 var (
-	schemaIDRe      = regexp.MustCompile(`^@[a-z0-9][a-z0-9-]{0,62}/[a-z0-9][a-z0-9._-]{0,62}$`)
-	schemaSemverRe  = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
-	schemaSHA256Re  = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	schemaHostNoWC  = regexp.MustCompile(`^[^*?\s/\\@?#%]+$`)
+	schemaIDRe     = regexp.MustCompile(`^@[a-z0-9][a-z0-9-]{0,62}/[a-z0-9][a-z0-9._-]{0,62}$`)
+	schemaSemverRe = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
+	schemaSHA256Re = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	schemaHostNoWC = regexp.MustCompile(`^[^*?\s/\\@?#%]+$`)
 )
 
 // ValidationReport summarizes structural, schema, security, and runtime verification of an extension.
@@ -290,6 +290,7 @@ func declaredCapabilityBadges(m installer.ExtensionManifest) map[string]string {
 			badges["chat_stream"] = "DECLARED"
 			badges["tool_calling"] = "DECLARED"
 			badges["error_normalization"] = "DECLARED"
+			badges["rerank"] = "DECLARED"
 		case "guardrail_policy":
 			badges["guardrail"] = "DECLARED"
 		case "auth_driver":

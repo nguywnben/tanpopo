@@ -49,6 +49,18 @@ func openTempStore(t *testing.T, fc *clock.FakeClock) *Store {
 	return st
 }
 
+func TestStoreCloseReportsActiveSQLRows(t *testing.T) {
+	st := openTempStore(t, nil)
+	rows, err := st.RawDB().QueryContext(context.Background(), `SELECT 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if err := st.Close(); err == nil || !strings.Contains(err.Error(), "active connection") {
+		t.Fatalf("Close should report the outstanding SQL rows, got %v", err)
+	}
+}
+
 func TestSQLiteOpenWALPragmasMigrationAndChangelogAC1(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

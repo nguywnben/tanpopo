@@ -1,0 +1,24 @@
+case_id: "aws_bedrock_error_403"
+description: "Bedrock permission failures normalize to reauthentication without exposing credential material."
+capability: "error_normalization"
+config:
+  aws_region: "us-east-1"
+secret_slots:
+  aws_credentials: "__CANARY_SECRET__"
+normalized_input:
+  model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  messages:
+    - role: "user"
+      content: "Say pong"
+upstream_recorded_exchange:
+  status: 403
+  headers:
+    content-type: "application/json"
+  raw_body: '{"message":"The security token included in the request is invalid.","__type":"UnrecognizedClientException"}'
+expected_canonical_error:
+  canonical_code: "authentication_error"
+  error_type: "authentication_error"
+  retryable_pre_stream: false
+  trigger_reauth: true
+  message_must_not_contain:
+    - "__CANARY_SECRET__"

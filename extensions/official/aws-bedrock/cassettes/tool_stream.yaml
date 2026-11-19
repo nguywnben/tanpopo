@@ -1,0 +1,42 @@
+case_id: "aws_bedrock_tool_stream"
+description: "AWS EventStream toolUse start and incremental input become OpenAI function-call deltas."
+capability: "chat_stream"
+config:
+  aws_region: "us-east-1"
+secret_slots:
+  aws_credentials: "__CANARY_SECRET__"
+normalized_input:
+  model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  stream: true
+  messages:
+    - role: "user"
+      content: "What is the weather?"
+  tools:
+    - type: "function"
+      function:
+        name: "get_weather"
+        description: "Look up weather."
+        parameters:
+          type: "object"
+          properties:
+            city:
+              type: "string"
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/vnd.amazon.eventstream"
+  expected_upstream_headers:
+    accept: "application/vnd.amazon.eventstream"
+  raw_sse_chunks:
+    - "base64:AAAAdgAAAFKW1freDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcADG1lc3NhZ2VTdGFydA06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbnsicm9sZSI6ImFzc2lzdGFudCJ9HMa+GA=="
+    - "base64:AAAAyAAAAFdJSLgkDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcAEWNvbnRlbnRCbG9ja1N0YXJ0DTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29ueyJjb250ZW50QmxvY2tJbmRleCI6MCwic3RhcnQiOnsidG9vbFVzZSI6eyJ0b29sVXNlSWQiOiJ0b29sdXNlX3N0cmVhbV8xIiwibmFtZSI6ImdldF93ZWF0aGVyIn19fU1XSko="
+    - "base64:AAAAqQAAAFftGubZDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcAEWNvbnRlbnRCbG9ja0RlbHRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29ueyJjb250ZW50QmxvY2tJbmRleCI6MCwiZGVsdGEiOnsidG9vbFVzZSI6eyJpbnB1dCI6IntcImNpdHlcIjoifX19Pa9YiQ=="
+    - "base64:AAAAqAAAAFfQes9pDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcAEWNvbnRlbnRCbG9ja0RlbHRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29ueyJjb250ZW50QmxvY2tJbmRleCI6MCwiZGVsdGEiOnsidG9vbFVzZSI6eyJpbnB1dCI6IlwiT3Nsb1wifSJ9fX3osrNo"
+    - "base64:AAAAegAAAFHKLEZlDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcAC21lc3NhZ2VTdG9wDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29ueyJzdG9wUmVhc29uIjoidG9vbF91c2Uiff+3G4c="
+    - "base64:AAAAmwAAAE5SkKX/DTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcACG1ldGFkYXRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29ueyJ1c2FnZSI6eyJpbnB1dFRva2VucyI6Nywib3V0cHV0VG9rZW5zIjozLCJ0b3RhbFRva2VucyI6MTB9fYwNfj8="
+expected_normalized_output:
+  content_contains: ""
+  require_stream_completed: true
+  require_usage: true
+  input_tokens: 7
+  output_tokens: 3

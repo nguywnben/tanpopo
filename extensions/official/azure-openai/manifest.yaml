@@ -1,0 +1,132 @@
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+
+metadata:
+  id: "@tanpopo/azure-openai"
+  name: "Azure OpenAI Official Adapter"
+  version: "0.1.0"
+  license: "Apache-2.0"
+  originTrustTier: "official"
+  description: "Official Tanpopo Tier-1 declarative adapter for Azure OpenAI chat completions with deployment routing, api-version pinning, blind api-key injection, OpenAI-compatible SSE, and scoped native passthrough."
+
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0 <0.3.0"
+
+runtime:
+  tier: "declarative"
+
+capabilities:
+  - type: "provider_adapter"
+    adapterSlug: "azure-openai"
+    supportedDialects:
+      - "azure_openai"
+      - "openai_chat"
+    nativePassthroughPrefix: "/native/azure-openai"
+    allowedNativePaths:
+      - "^openai/deployments/[^/]+/chat/completions$"
+      - "^openai/models$"
+    allowedNativeHeaders:
+      - "api-key"
+      - "azureml-model-deployment"
+    authMethods:
+      - id: "azure_api_key"
+        mode: "host_blind_inject"
+        headerName: "api-key"
+
+secretSlots:
+  - slot: "api_key"
+    requiredForAuthMethods:
+      - "azure_api_key"
+
+permissions:
+  networkEgress:
+    allowedHosts:
+      - "tanpopo-resource.openai.azure.com"
+    allowPrivateIp: false
+    requireTls: true
+  hooks:
+    - "provider:build_validation_probe"
+    - "provider:verify_validation_result"
+    - "provider:transform_request"
+    - "provider:transform_response"
+    - "provider:transform_stream_chunk"
+    - "provider:normalize_error"
+    - "provider:extract_usage"
+    - "provider:inspect_native_request"
+  payloadAccess:
+    inspectRequestBody: true
+    inspectResponseBody: true
+    maxInlineMetadataBytes: 65536
+
+adapter:
+  slug: "azure-openai"
+  nativePrefix: "/native/azure-openai"
+  # This limits adapter URL construction. Actual connections remain gated by
+  # the organization's exact approved connection host allowlist.
+  endpointHostSuffixes:
+    - ".openai.azure.com"
+  wireProtocol: "openai_chat_v1"
+  baseUrl: "https://tanpopo-resource.openai.azure.com"
+  supportedDialects:
+    - "azure_openai"
+    - "openai_chat"
+  endpoints:
+    models: "/openai/models?api-version=2024-10-21"
+    chat: "/openai/deployments/{model}/chat/completions?api-version=2024-10-21"
+  auth:
+    - id: "azure_api_key"
+      secretSlot: "api_key"
+      mode: "host_blind_inject"
+      headerName: "api-key"
+      valuePrefix: ""
+  requestMapping:
+    method: "POST"
+    pathTemplate: "/openai/deployments/{model}/chat/completions?api-version=2024-10-21"
+    injectStreamUsage: true
+  validationProbe:
+    method: "GET"
+    pathTemplate: "/openai/models?api-version=2024-10-21"
+    successStatuses:
+      - 200
+    modelsArrayPath: "data"
+    modelIdField: "id"
+  responseMapping:
+    modelPath: "model"
+    finishReasonPath: "choices.0.finish_reason"
+    contentPath: "choices.0.message.content"
+    rolePath: "choices.0.message.role"
+    toolCallsPath: "choices.0.message.tool_calls"
+    usagePaths:
+      inputTokens: "usage.prompt_tokens"
+      outputTokens: "usage.completion_tokens"
+      cacheReadTokens: "usage.prompt_tokens_details.cached_tokens"
+      reasoningTokens: "usage.completion_tokens_details.reasoning_tokens"
+  streamMapping:
+    doneSentinel: "[DONE]"
+    deltaContentPath: "choices.0.delta.content"
+    deltaToolCallsPath: "choices.0.delta.tool_calls"
+    finishReasonPath: "choices.0.finish_reason"
+    modelPath: "model"
+    usagePaths:
+      inputTokens: "usage.prompt_tokens"
+      outputTokens: "usage.completion_tokens"
+      cacheReadTokens: "usage.prompt_tokens_details.cached_tokens"
+      reasoningTokens: "usage.completion_tokens_details.reasoning_tokens"
+    errorMessagePath: "error.message"
+  nativeMapping:
+    modelPath: "model"
+    streamPath: "stream"
+    maxTokensPath: "max_tokens"
+  errorMapping:
+    reauthStatuses:
+      - 401
+      - 403
+    retryableStatuses:
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+    messagePath: "error.message"
+    codePath: "error.code"

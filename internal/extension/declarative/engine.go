@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -21,21 +22,23 @@ import (
 var _ port.ProviderRuntime = (*Engine)(nil)
 
 type compiledUsagePaths struct {
-	inputTokens      parsedPath
-	outputTokens     parsedPath
-	cacheReadTokens  parsedPath
-	cacheWriteTokens parsedPath
-	reasoningTokens  parsedPath
+	inputTokens       parsedPath
+	outputTokens      parsedPath
+	cacheReadTokens   parsedPath
+	cacheWriteTokens  parsedPath
+	reasoningTokens   parsedPath
+	rerankSearchUnits parsedPath
 }
 
 // Engine is the immutable compiled Tier-1 Declarative Adapter runtime.
 type Engine struct {
-	id                string
-	slug              string
-	nativePrefix      string
-	supportedDialects []string
-	allowedHosts      map[string]struct{}
-	defaultBaseURL    string
+	id                   string
+	slug                 string
+	nativePrefix         string
+	supportedDialects    []string
+	allowedHosts         map[string]struct{}
+	endpointHostSuffixes []string
+	defaultBaseURL       string
 
 	authBindings  map[string]port.CredentialInjectInstruction
 	authSlotOrder []string
@@ -55,6 +58,8 @@ type Engine struct {
 	responsesDefaultOpenAIPath  bool
 	embeddingsPathParts         []templatePart
 	embeddingsDefaultOpenAIPath bool
+	rerankPathParts             []templatePart
+	rerankDefaultOpenAIPath     bool
 	staticHeaders               map[string]string
 	renames                     []compiledRename
 	defaults                    []compiledDefault
@@ -63,12 +68,17 @@ type Engine struct {
 	forceStreamUsage            bool
 	canonicalOpenAI             bool
 
-	respModelPath        parsedPath
-	respFinishReasonPath parsedPath
-	respContentPath      parsedPath
-	respRolePath         parsedPath
-	respToolCallsPath    parsedPath
-	respUsagePaths       compiledUsagePaths
+	respModelPath          parsedPath
+	respFinishReasonPath   parsedPath
+	respContentPath        parsedPath
+	respRolePath           parsedPath
+	respToolCallsPath      parsedPath
+	respRerankIDPath       parsedPath
+	respRerankResultsPath  parsedPath
+	respRerankIndexPath    parsedPath
+	respRerankScorePath    parsedPath
+	respRerankDocumentPath parsedPath
+	respUsagePaths         compiledUsagePaths
 
 	streamDoneSentinel       string
 	streamDeltaContentPath   parsedPath
@@ -101,7 +111,11 @@ func CompileSpec(spec Spec) (*Engine, error) {
 		}
 		allowedHosts[h] = struct{}{}
 	}
-	if err := validateBaseURL(spec.DefaultBaseURL, allowedHosts); err != nil {
+	suffixes, err := validateEndpointHostSuffixes(spec.EndpointHostSuffixes)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateBaseURL(spec.DefaultBaseURL, allowedHosts, suffixes); err != nil {
 		return nil, err
 	}
 
@@ -111,6 +125,7 @@ func CompileSpec(spec Spec) (*Engine, error) {
 		nativePrefix:                strings.TrimSpace(spec.NativePrefix),
 		supportedDialects:           append([]string(nil), spec.SupportedDialects...),
 		allowedHosts:                allowedHosts,
+		endpointHostSuffixes:        suffixes,
 		defaultBaseURL:              strings.TrimSpace(spec.DefaultBaseURL),
 		authBindings:                make(map[string]port.CredentialInjectInstruction, len(spec.AuthBindings)),
 		staticHeaders:               make(map[string]string, len(spec.RequestMapping.StaticHeaders)),
@@ -267,6 +282,14 @@ func (e *Engine) compileRequestMapping(rm RequestMappingSpec) error {
 	if err != nil {
 		return err
 	}
+	rerankTmpl := strings.TrimSpace(rm.RerankPathTemplate)
+	if rerankTmpl == "" {
+		rerankTmpl = "/v2/rerank"
+	}
+	e.rerankPathParts, err = validateTemplateString(rerankTmpl, true)
+	if err != nil {
+		return err
+	}
 
 	ruleCount := len(rm.StaticHeaders) + len(rm.FieldRenames) + len(rm.FieldDefaults) + len(rm.DropFields)
 	if ruleCount > MaxOperatorSteps {
@@ -363,6 +386,9 @@ func compileUsagePaths(spec UsagePathSpec, fallback UsagePathSpec) (compiledUsag
 	if out.reasoningTokens, err = parseDotPath(pick(spec.ReasoningTokens, fallback.ReasoningTokens)); err != nil {
 		return out, err
 	}
+	if out.rerankSearchUnits, err = parseDotPath(pick(spec.RerankSearchUnits, fallback.RerankSearchUnits)); err != nil {
+		return out, err
+	}
 	return out, nil
 }
 
@@ -388,6 +414,23 @@ func (e *Engine) compileResponseMapping(rm ResponseMappingSpec) error {
 	}
 	if e.respToolCallsPath, err = parseDotPath(orDefault(rm.ToolCallsPath, "choices.0.message.tool_calls")); err != nil {
 		return err
+	}
+	if e.respRerankIDPath, err = parseDotPath(orDefault(rm.RerankIDPath, "id")); err != nil {
+		return err
+	}
+	if e.respRerankResultsPath, err = parseDotPath(orDefault(rm.RerankResultsPath, "results")); err != nil {
+		return err
+	}
+	if e.respRerankIndexPath, err = parseDotPath(orDefault(rm.RerankIndexPath, "index")); err != nil {
+		return err
+	}
+	if e.respRerankScorePath, err = parseDotPath(orDefault(rm.RerankScorePath, "relevance_score")); err != nil {
+		return err
+	}
+	if strings.TrimSpace(rm.RerankDocumentPath) != "" {
+		if e.respRerankDocumentPath, err = parseDotPath(rm.RerankDocumentPath); err != nil {
+			return err
+		}
 	}
 	e.respUsagePaths, err = compileUsagePaths(rm.UsagePaths, UsagePathSpec{
 		InputTokens:     "usage.prompt_tokens",
@@ -542,7 +585,7 @@ func (e *Engine) BuildValidationProbe(ctx context.Context, in port.ValidationPro
 	if err != nil {
 		return port.UpstreamHttpSpec{}, err
 	}
-	targetURL, err := renderEndpointURL(baseURL, e.probePathParts, e.probeDefaultOpenAIPath, vars, e.allowedHosts, budget)
+	targetURL, err := renderEndpointURL(baseURL, e.probePathParts, e.probeDefaultOpenAIPath, vars, e.allowedHosts, e.endpointHostSuffixes, budget)
 	if err != nil {
 		return port.UpstreamHttpSpec{}, err
 	}
@@ -677,9 +720,12 @@ func (e *Engine) TransformRequest(ctx context.Context, in port.TransformRequestI
 	case "embeddings":
 		pathParts = e.embeddingsPathParts
 		implicitOpenAI = e.embeddingsDefaultOpenAIPath
+	case "rerank":
+		pathParts = e.rerankPathParts
+		implicitOpenAI = e.rerankDefaultOpenAIPath
 	}
 
-	targetURL, err := renderEndpointURL(baseURL, pathParts, implicitOpenAI, vars, e.allowedHosts, budget)
+	targetURL, err := renderEndpointURL(baseURL, pathParts, implicitOpenAI, vars, e.allowedHosts, e.endpointHostSuffixes, budget)
 	if err != nil {
 		return port.UpstreamHttpSpec{}, err
 	}
@@ -781,6 +827,8 @@ func (e *Engine) TransformResponse(ctx context.Context, in port.TransformRespons
 		return e.transformEmbeddingsResponse(rawMap, budget)
 	case "RESPONSES":
 		return e.transformResponsesResponse(rawMap, budget)
+	case "RERANK":
+		return e.transformRerankResponse(rawMap, in.RequestID, budget)
 	}
 
 	modelID := e.extractStringPath(rawMap, e.respModelPath, budget)
@@ -921,6 +969,94 @@ func (e *Engine) transformEmbeddingsResponse(rawMap map[string]any, budget *step
 		UpstreamModelID:        modelID,
 		FinishReason:           "stop",
 	}, nil
+}
+
+func (e *Engine) transformRerankResponse(rawMap map[string]any, requestID string, budget *stepBudget) (port.NormalizedInferenceResponse, error) {
+	id := e.extractStringPath(rawMap, e.respRerankIDPath, budget)
+	if id == "" {
+		id = requestID
+	}
+	rawResults, found, err := getByPath(rawMap, e.respRerankResultsPath, budget)
+	if err != nil {
+		return port.NormalizedInferenceResponse{}, err
+	}
+	results, ok := rawResults.([]any)
+	if !found || !ok || len(results) == 0 || len(results) > 4096 {
+		return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+	}
+	if err := budget.consume(len(results)); err != nil {
+		return port.NormalizedInferenceResponse{}, err
+	}
+	normalizedResults := make([]map[string]any, 0, len(results))
+	for _, raw := range results {
+		if _, ok := raw.(map[string]any); !ok {
+			return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+		}
+		indexValue, hasIndex, err := getByPath(raw, e.respRerankIndexPath, budget)
+		if err != nil {
+			return port.NormalizedInferenceResponse{}, err
+		}
+		index, validIndex := extractInt64(indexValue)
+		if !hasIndex || !validIndex || index < 0 {
+			return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+		}
+		scoreValue, hasScore, err := getByPath(raw, e.respRerankScorePath, budget)
+		if err != nil {
+			return port.NormalizedInferenceResponse{}, err
+		}
+		score, validScore := extractFloat64(scoreValue)
+		if !hasScore || !validScore || math.IsNaN(score) || math.IsInf(score, 0) {
+			return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+		}
+		result := map[string]any{"index": index, "relevance_score": score}
+		if len(e.respRerankDocumentPath.tokens) > 0 {
+			document, found, err := getByPath(raw, e.respRerankDocumentPath, budget)
+			if err != nil {
+				return port.NormalizedInferenceResponse{}, err
+			}
+			if found && document != nil {
+				if _, ok := document.(map[string]any); !ok {
+					return port.NormalizedInferenceResponse{}, ErrUpstreamMalformedResponse
+				}
+				result["document"] = document
+			}
+		}
+		normalizedResults = append(normalizedResults, result)
+	}
+	usage, err := extractUsageFromMap(rawMap, e.respUsagePaths, budget)
+	if err != nil {
+		return port.NormalizedInferenceResponse{}, err
+	}
+	normalizedUsage := map[string]any{}
+	if usage.MediaUsage != nil && usage.MediaUsage.RerankSearchUnits > 0 {
+		normalizedUsage["rerank_search_units"] = usage.MediaUsage.RerankSearchUnits
+	}
+	payload := map[string]any{"id": id, "results": normalizedResults, "usage": normalizedUsage}
+	modelID := e.extractStringPath(rawMap, e.respModelPath, budget)
+	if modelID != "" {
+		payload["model"] = modelID
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return port.NormalizedInferenceResponse{}, fmt.Errorf("%w: marshal normalized rerank response: %v", port.ErrExecutionFault, err)
+	}
+	return port.NormalizedInferenceResponse{NormalizedResponseJSON: body, Usage: usage, UpstreamModelID: modelID}, nil
+}
+
+func extractFloat64(v any) (float64, bool) {
+	switch value := v.(type) {
+	case json.Number:
+		f, err := value.Float64()
+		return f, err == nil
+	case float64:
+		return value, true
+	case int64:
+		return float64(value), true
+	case int:
+		return float64(value), true
+	default:
+		return 0, false
+	}
 }
 
 func (e *Engine) transformResponsesResponse(rawMap map[string]any, budget *stepBudget) (port.NormalizedInferenceResponse, error) {
@@ -1219,20 +1355,49 @@ func extractUsageFromMap(root any, paths compiledUsagePaths, budget *stepBudget)
 	if err != nil {
 		return nil, err
 	}
-
-	accuracy := port.UsageAccuracyUnmeteredFlagged
-	if hasIn || hasOut || hasCR || hasCW || hasReas {
-		accuracy = port.UsageAccuracyExact
+	rerankUnits, hasRerank, err := readStrictNonnegativeInt(paths.rerankSearchUnits, root, budget)
+	if err != nil {
+		return nil, err
+	}
+	if rerankUnits > math.MaxInt32 {
+		return nil, ErrUpstreamMalformedResponse
 	}
 
-	return &port.NormalizedUsage{
+	accuracy := port.UsageAccuracyUnmeteredFlagged
+	if hasIn || hasOut || hasCR || hasCW || hasReas || hasRerank {
+		accuracy = port.UsageAccuracyExact
+	}
+	usage := &port.NormalizedUsage{
 		InputTokens:      inTok,
 		OutputTokens:     outTok,
 		CacheReadTokens:  cacheRead,
 		CacheWriteTokens: cacheWrite,
 		ReasoningTokens:  reasoning,
 		Accuracy:         accuracy,
-	}, nil
+	}
+	if hasRerank {
+		usage.MediaUsage = &port.MediaUsage{RerankSearchUnits: int32(rerankUnits)}
+	}
+	return usage, nil
+}
+
+func readStrictNonnegativeInt(path parsedPath, root any, budget *stepBudget) (int64, bool, error) {
+	if len(path.tokens) == 0 {
+		return 0, false, nil
+	}
+	value, found, err := getByPath(root, path, budget)
+	if err != nil || !found {
+		return 0, false, err
+	}
+	number, ok := value.(json.Number)
+	if !ok {
+		return 0, false, ErrUpstreamMalformedResponse
+	}
+	parsed, err := number.Int64()
+	if err != nil || parsed < 0 {
+		return 0, false, ErrUpstreamMalformedResponse
+	}
+	return parsed, true, nil
 }
 
 // TransformStreamChunk implements bounded SSE chunk parsing & incremental usage emission.

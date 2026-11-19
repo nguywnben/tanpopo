@@ -1,0 +1,33 @@
+case_id: "azure_openai_chat_stream"
+description: "Exercises OpenAI-compatible Azure SSE chunks, terminal usage, and api-key header injection."
+capability: "chat_stream"
+config:
+  endpoint_base_url: "https://tanpopo-resource.openai.azure.com"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gpt-4o-prod"
+  stream: true
+  messages:
+    - role: "user"
+      content: "Say hello."
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "text/event-stream"
+  expected_upstream_headers:
+    api-key: "__CANARY_SECRET__"
+  raw_sse_chunks:
+    - "base64:ZGF0YTogeyJpZCI6ImNoYXRjbXBsLWF6LXN0cmVhbS0xIiwibW9kZWwiOiJncHQtNG8tcHJvZCIsImNob2ljZXMiOlt7ImluZGV4IjowLCJkZWx0YSI6eyJjb250ZW50IjoiSGVsbG8ifSwiZmluaXNoX3JlYXNvb24iOm51bGx9XX0KCg=="
+    - "base64:ZGF0YTogeyJpZCI6ImNoYXRjbXBsLWF6LXN0cmVhbS0xIiwibW9kZWwiOiJncHQtNG8tcHJvZCIsImNob2ljZXMiOlt7ImluZGV4IjowLCJkZWx0YSI6eyJjb250ZW50IjoiIGZyb20gQXp1cmUuIn0sImZpbmlzaF9yZWFzb24iOm51bGx9XX0KCg=="
+    - "base64:ZGF0YTogeyJpZCI6ImNoYXRjbXBsLWF6LXN0cmVhbS0xIiwibW9kZWwiOiJncHQtNG8tcHJvZCIsImNob2ljZXMiOlt7ImluZGV4IjowLCJkZWx0YSI6e30sImZpbmlzaF9yZWFzb24iOiJzdG9wIn1dfQoK"
+    - "base64:ZGF0YTogeyJpZCI6ImNoYXRjbXBsLWF6LXN0cmVhbS0xIiwibW9kZWwiOiJncHQtNG8tcHJvZCIsImNob2ljZXMiOltdLCJ1c2FnZSI6eyJwcm9tcHRfdG9rZW5zIjoxMiwiY29tcGxldGlvbl90b2tlbnMiOjV9fQoK"
+    - "base64:ZGF0YTogW0RPTkVdCgo="
+expected_normalized_output:
+  model: "gpt-4o-prod"
+  content_contains: "Hello from Azure."
+  require_stream_completed: true
+  require_stream_options_include_usage: true
+  require_usage: true
+  input_tokens: 12
+  output_tokens: 5

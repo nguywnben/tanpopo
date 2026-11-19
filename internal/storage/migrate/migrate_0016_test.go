@@ -6,6 +6,7 @@ package migrate
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io/fs"
 	"strings"
 	"testing"
@@ -21,12 +22,24 @@ func TestSQLiteMigration0016OAuthStateFreshAndUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(all) != 16 || all[len(all)-1].Version != 16 {
-		t.Fatalf("expected ordered migrations through 0016, got %d entries; last=%+v", len(all), all[len(all)-1])
+	if len(all) < 16 || all[15].Version != 16 {
+		t.Fatalf("expected ordered migrations through 0016, got %d entries", len(all))
+	}
+	migration16FS := fstest.MapFS{}
+	for _, entry := range all {
+		if entry.Version > 16 {
+			continue
+		}
+		name := fmt.Sprintf("%04d_%s.sql", entry.Version, entry.Name)
+		data, err := fs.ReadFile(sqlitemigrations.FS, name)
+		if err != nil {
+			t.Fatalf("read migration %s: %v", name, err)
+		}
+		migration16FS[name] = &fstest.MapFile{Data: data}
 	}
 
 	fresh := openTestSQLite(t)
-	if _, err := Apply(ctx, fresh, sqlitemigrations.FS, func() int64 { return 1760000000000 }); err != nil {
+	if _, err := Apply(ctx, fresh, migration16FS, func() int64 { return 1760000000000 }); err != nil {
 		t.Fatalf("fresh Apply through 0016: %v", err)
 	}
 	assertOAuthMigrationObjects(t, fresh)
@@ -50,7 +63,7 @@ func TestSQLiteMigration0016OAuthStateFreshAndUpgrade(t *testing.T) {
 	if err != nil || pre.LatestVersion != 15 {
 		t.Fatalf("pre-upgrade summary = %+v, err=%v", pre, err)
 	}
-	post, err := Apply(ctx, upgrade, sqlitemigrations.FS, func() int64 { return 1760000001000 })
+	post, err := Apply(ctx, upgrade, migration16FS, func() int64 { return 1760000001000 })
 	if err != nil || post.LatestVersion != 16 || post.NewlyApplied != 1 {
 		t.Fatalf("upgrade summary = %+v, err=%v", post, err)
 	}

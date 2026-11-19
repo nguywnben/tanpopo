@@ -1,0 +1,27 @@
+case_id: "azure_openai_native_chat_passthrough"
+description: "Exercises native Azure deployment chat routing, untouched request body, and blind api-key injection."
+capability: "native_passthrough"
+config:
+  endpoint_base_url: "https://tanpopo-resource.openai.azure.com"
+  dialect: "azure_openai"
+  upstream_path: "openai/deployments/gpt-4o-prod/chat/completions?api-version=2024-10-21"
+secret_slots:
+  api_key: "__CANARY_SECRET__"
+normalized_input:
+  model: "gpt-4o-prod"
+  messages:
+    - role: "user"
+      content: "Return native response."
+upstream_recorded_exchange:
+  status: 200
+  headers:
+    content-type: "application/json"
+  expected_upstream_headers:
+    api-key: "__CANARY_SECRET__"
+  raw_body: '{"id":"chatcmpl-az-native-1","model":"gpt-4o-prod","choices":[{"index":0,"message":{"role":"assistant","content":"Native Azure response."},"finish_reason":"stop"}],"usage":{"prompt_tokens":9,"completion_tokens":4}}'
+expected_normalized_output:
+  model: "gpt-4o-prod"
+  content_contains: "Native Azure response."
+  require_usage: true
+  input_tokens: 9
+  output_tokens: 4

@@ -155,8 +155,8 @@ type BlobRef struct {
 	SHA256Hex  string `json:"sha256_hex"`
 }
 
-// HostCryptoSignSpec instructs the Host Blind Broker to sign canonical payload bytes
-// using a vault-sealed secret slot.
+// HostCryptoSignSpec instructs the Host Blind Broker to sign with a vault-sealed
+// secret slot. AWS SigV4 canonicalizes the final HTTP request inside the Host.
 type HostCryptoSignSpec struct {
 	Algorithm               SigningAlgorithm  `json:"algorithm"`
 	CanonicalPayload        []byte            `json:"canonical_payload,omitempty"`

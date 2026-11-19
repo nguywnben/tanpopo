@@ -1,0 +1,86 @@
+apiVersion: tanpopo.dev/extension/v1alpha1
+kind: DeclarativeProviderAdapter
+
+metadata:
+  id: "@tanpopo/cohere-rerank"
+  name: "Cohere Rerank Official Adapter"
+  version: "0.1.0"
+  license: "Apache-2.0"
+  originTrustTier: "official"
+  description: "Official Tier-1 Cohere v2 rerank adapter with blind API-key injection, exact search-unit reporting, and strict response normalization."
+
+compatibility:
+  contractVersion: "0.1"
+  coreVersionRange: ">=0.1.0 <0.3.0"
+
+runtime:
+  tier: "declarative"
+
+capabilities:
+  - type: "provider_adapter"
+    adapterSlug: "cohere-rerank"
+    supportedDialects: ["cohere_rerank_v2"]
+    authMethods:
+      - id: "cohere_api_key"
+        mode: "host_blind_inject"
+        headerName: "Authorization"
+
+secretSlots:
+  - slot: "api_key"
+    requiredForAuthMethods: ["cohere_api_key"]
+
+permissions:
+  networkEgress:
+    allowedHosts: ["api.cohere.com"]
+    allowPrivateIp: false
+    requireTls: true
+  hooks:
+    - "provider:build_validation_probe"
+    - "provider:verify_validation_result"
+    - "provider:transform_request"
+    - "provider:transform_response"
+    - "provider:normalize_error"
+    - "provider:extract_usage"
+  payloadAccess:
+    inspectRequestBody: true
+    inspectResponseBody: true
+    maxInlineMetadataBytes: 65536
+
+adapter:
+  slug: "cohere-rerank"
+  wireProtocol: "openai_chat_v1"
+  baseUrl: "https://api.cohere.com"
+  supportedDialects: ["cohere_rerank_v2"]
+  endpoints:
+    models: "/v1/models"
+    rerank: "/v2/rerank"
+  auth:
+    - id: "cohere_api_key"
+      secretSlot: "api_key"
+      mode: "host_blind_inject"
+      headerName: "Authorization"
+      valuePrefix: "Bearer "
+  requestMapping:
+    method: "POST"
+    pathTemplate: "/v2/rerank"
+    rerankPathTemplate: "/v2/rerank"
+  validationProbe:
+    method: "GET"
+    pathTemplate: "/v1/models?endpoint=rerank"
+    successStatuses: [200]
+    modelsArrayPath: "models"
+    modelIdField: "name"
+  responseMapping:
+    modelPath: "model"
+    rerankIdPath: "id"
+    rerankResultsPath: "results"
+    rerankIndexPath: "index"
+    rerankScorePath: "relevance_score"
+    rerankDocumentPath: "document"
+    usagePaths:
+      rerankSearchUnits: "billed_units.search_units"
+  errorMapping:
+    reauthStatuses: [401, 403]
+    retryableStatuses: [429, 500, 502, 503, 504]
+    messagePath: "message"
+    codePath: "code"

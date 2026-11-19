@@ -385,16 +385,22 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 		t.Fatalf("build data-plane runtime: %v", err)
 	}
 	t.Cleanup(func() {
-		closeRuntime()
-		handler = nil
+		if err := closeRuntimeAndReleaseReferences(&closeRuntime, &handler); err != nil {
+			t.Errorf("runtime shutdown returned error: %v\nactive goroutine functions:\n%s", err, runtimeGoroutineFunctionNames())
+		}
 		// modernc SQLite's Windows file handle can outlive sql.DB.Close until the
 		// driver's finalizable connection wrapper is collected.
 		runtime.GC()
 		// Windows runners can briefly retain a SQLite file handle after database
 		// Close returns. Allow the OS's file-handle teardown to settle, while still
-		// failing if the runtime keeps the database connection open.
+		// failing if the runtime keeps the database connection open. Re-collect
+		// finalizable modernc wrappers during the bounded retry window; one forced
+		// collection before the loop is not deterministic on Windows.
 		var removeErr error
 		for attempt := 0; attempt < 600; attempt++ {
+			if attempt > 0 && attempt%10 == 0 {
+				runtime.GC()
+			}
 			removeErr = os.RemoveAll(dataDir)
 			if removeErr == nil {
 				return
@@ -413,6 +419,39 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	if _, err := os.Stat(filepath.Join(dataDir, "bootstrap.token")); !os.IsNotExist(err) {
 		t.Fatalf("data-plane role created an unused bootstrap token: err=%v", err)
 	}
+}
+
+func runtimeGoroutineFunctionNames() string {
+	stacks := make([]byte, 64<<10)
+	n := runtime.Stack(stacks, true)
+	var out strings.Builder
+	for _, line := range strings.Split(string(stacks[:n]), "\n") {
+		if strings.HasPrefix(line, "goroutine ") {
+			out.WriteString(line)
+			out.WriteByte('\n')
+			continue
+		}
+		if strings.HasPrefix(line, "\t") || line == "" {
+			continue
+		}
+		if open := strings.IndexByte(line, '('); open > 0 {
+			out.WriteString(line[:open])
+			out.WriteString("()\n")
+		}
+	}
+	return out.String()
+}
+
+func closeRuntimeAndReleaseReferences(closeRuntime *func() error, handler *http.Handler) error {
+	var closeErr error
+	if closeRuntime != nil && *closeRuntime != nil {
+		closeErr = (*closeRuntime)()
+		*closeRuntime = nil
+	}
+	if handler != nil {
+		*handler = nil
+	}
+	return closeErr
 }
 
 func TestStandaloneBinaryServesWithoutSourceAssets(t *testing.T) {
