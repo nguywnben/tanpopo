@@ -507,11 +507,14 @@ components:
         name: { type: string, minLength: 1 }
         project_id: { type: ["string", "null"] }
         secret_kind: { type: string, enum: [API_KEY, HMAC_SECRET, OAUTH_CLIENT_SECRET, WEBHOOK_SECRET, AWS_SIGV4_KEY, OCI_REGISTRY_AUTH, MTLS_CLIENT_CERT] }
+        bound_audience:
+          type: ["string", "null"]
+          description: For OCI_REGISTRY_AUTH, the exact registry host authority including a non-default port; use an organization-scoped secret by omitting project_id.
         secret_value:
           type: string
           minLength: 1
           writeOnly: true
-          description: Write-only raw credential sealed immediately under Org/Project DEK with canonical AEAD AAD. AWS_SIGV4_KEY must be JSON with access_key_id and secret_access_key, and may include session_token.
+          description: Write-only raw credential sealed immediately under Org/Project DEK with canonical AEAD AAD. AWS_SIGV4_KEY must be JSON with access_key_id and secret_access_key, and may include session_token. OCI_REGISTRY_AUTH must be an organization-scoped JSON object with unescaped username and password string values; both fields are required.
 
     SecretMetadata:
       type: object
