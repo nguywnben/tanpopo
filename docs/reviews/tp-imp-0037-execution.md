@@ -1,6 +1,6 @@
 # TP-IMP-0037 Execution Checkpoint
 
-**Status:** Implementation complete; the final Windows cleanup-test correction passed independent review and local verification. CI on the final pushed SHA remains pending. Unit 37 remains `READY_FOR_REVIEW` until merge and post-merge CI on `origin/main` pass.
+**Status:** PR #18 implementation merged at `a57d295462c1d0c6a5b1438aeb9c593cc295f756`; post-merge Windows cleanup CI failed twice on that SHA. Unit 37 remains `READY_FOR_REVIEW` until all required post-merge checks on `origin/main` pass.
 
 ## Authority and ownership
 
@@ -15,9 +15,8 @@
 ## Baseline and branch
 
 - Working branch: `develop`.
-- `origin/main` baseline: `b17a2fc65f3ce139507897244d2897a73e187b34`.
-- Working branch is `develop`; the last pushed PR head is `b56dfd262741fb0029fff716a48a9c2abe67808b`. A focused Windows test correction is being prepared on the same branch.
-- PR [#18](https://github.com/nguywnben/tanpopo/pull/18) is open from `develop` to `main`. No Unit 38 work has started.
+- PR #18 was based on `origin/main` at `b17a2fc65f3ce139507897244d2897a73e187b34` and merged from `develop` at `15e3708fee394543b9d83ecdc4d4ec6ca50b3193`.
+- Current `origin/main` is `a57d295462c1d0c6a5b1438aeb9c593cc295f756`. The corrective follow-up is being prepared on the persistent `develop` branch. No Unit 38 work has started.
 
 ## Implemented checkpoint
 
@@ -46,6 +45,12 @@
 
 ## Next steps
 
-1. Complete code and security review of the Windows test correction; push it to `develop` and resolve any new CI findings.
-2. Mark PR #18 ready and merge under `DEC-072` after required checks pass.
-3. Verify the merge SHA, Unit 37 acceptance record, and green post-merge CI on `origin/main`; synchronize `develop` before checking Unit 38 DoR.
+1. Complete code and security review of the post-merge Windows diagnostic follow-up; push it to `develop` and resolve CI findings.
+2. Once the Windows cleanup defect is corrected, obtain fresh strong reviews, verify required CI, and merge the correction PR under `DEC-072`.
+3. Verify green post-merge CI on `origin/main`, record Unit 37 acceptance, then synchronize `develop` before checking Unit 38 DoR.
+
+## Post-merge Windows cleanup follow-up (2026-11-19)
+
+- PR [#18](https://github.com/nguywnben/tanpopo/pull/18) merged at `a57d295462c1d0c6a5b1438aeb9c593cc295f756`. The pre-merge four required CI checks passed on `15e3708`, but post-merge CI run [44582855626](https://github.com/nguywnben/tanpopo/actions/runs/44582855626) failed the repeated Windows runtime cleanup regression on the merged SHA. Rerunning the failed Windows job also failed: four of five child-process iterations passed and one could not remove `data/tanpopo.db` while the child process remained alive.
+- **GPT-6 Luna** added a diagnostic retry after child exit. If the pre-exit removal fails but removal succeeds after exit, the test now reports that distinction while still failing the pre-exit release requirement. This should distinguish a handle tied to the child process from an external or transient Windows sharing violation. The focused Linux test passed five repetitions; Windows CI and independent diff review remain pending.
+- **Herschel** and **Descartes** provided read-only root-cause investigation; this was not a formal review of the diagnostic diff. No Unit 38 implementation has started, and Unit 37 is not accepted until the post-merge Windows gate is green.

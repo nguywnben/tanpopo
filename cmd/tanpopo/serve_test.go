@@ -495,7 +495,21 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 		t.Fatalf("data-plane runtime child failed: %v\n%s", childErr, readTestLog(logPath))
 	}
 	if removeErr != nil {
-		t.Fatalf("runtime left data directory locked after shutdown: %v\n%s", removeErr, readTestLog(logPath))
+		// Distinguish a handle tied to the still-running child from a transient
+		// or external Windows sharing violation. A post-exit success is diagnostic
+		// only: the runtime must release its files before the process exits.
+		var postExitErr error
+		for attempt := 0; attempt < 40; attempt++ {
+			postExitErr = os.RemoveAll(dataDir)
+			if postExitErr == nil {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		if postExitErr == nil {
+			t.Fatalf("runtime left data directory locked until child process exit: before exit: %v; removal succeeded after exit\n%s", removeErr, readTestLog(logPath))
+		}
+		t.Fatalf("runtime left data directory locked after shutdown: before exit: %v; after exit: %v\n%s", removeErr, postExitErr, readTestLog(logPath))
 	}
 }
 
