@@ -1,0 +1,43 @@
+# TP-IMP-0037 Execution Checkpoint
+
+**Status:** Implementation complete; local verification and independent final review pass. Unit 37 remains `READY_FOR_REVIEW` until PR checks, merge, and post-merge CI on `origin/main` pass.
+
+## Authority and ownership
+
+- Product Owner delegation: `DEC-072`.
+- Implementer and delegated acceptor: **GPT-6 Luna**.
+- Initial review corrections: **Galileo** (`code-reviewer`) and **Harvey** (`security-auditor`).
+- Independent review corrections: **James** (`code-reviewer`) and **Laplace** (`security-auditor`).
+- Final review on the hardened diff: **Faraday** (`code-reviewer`) APPROVE and **Plato** (`security-auditor`) PASS.
+
+## Baseline and branch
+
+- Working branch: `develop`.
+- `origin/main` at last fetch: `b17a2fc65f3ce139507897244d2897a73e187b34`.
+- Local `develop` is based on that main SHA; `origin/develop` is its ancestor and is four commits behind main. Push can fast-forward the existing `develop` branch.
+- No Unit 37 PR is open yet. No Unit 38 work has started.
+
+## Implemented checkpoint
+
+- Added the MCP side-effect firewall and synchronous/asynchronous approval workflow with exact argument canonicalization, key-recipient-aware Four-Eyes checks, reviewer-safe argument previews, single-use replay protection, and invalidation when server/tool/schema context changes.
+- Added Admin approval endpoints and OpenAPI contracts, including required decision reasons and transactional audit records. Pending approval webhook events are recorded with approval creation in one transaction; admission is capped at 1,000 per organization and 100 per virtual key, with 30-day expiry cleanup.
+- Added sealed webhook receiver URLs, audience checks, redirect blocking, HMAC signing, stable event fan-out, bounded retries, tenant queue limits, and retention measured from terminal transition.
+- Made budget, kill-switch, extension-quarantine, and pending-approval events transactional with their state changes. Removed shared-tenant stream counts from notification payloads.
+- Forced tenant RLS on PostgreSQL webhook queue data. PostgreSQL dispatcher startup explicitly assumes and verifies `tanpopo_webhook_worker`, discarding the connection if role verification fails. The runbook grants only required credential metadata columns. The current `serve` runtime remains SQLite and is documented as not yet PostgreSQL/RLS validated.
+- Added per-organization transaction locks for approval and webhook admission bounds, current active/previous key-recipient self-approval checks, migrations `0019`/`0020`, and aligned SQLite/PostgreSQL schema snapshots. Dispatcher-owned SQLite enqueue retries are bounded and clean up failed commit transactions on the same connection. Governance records include DEC-075 through DEC-080.
+
+## Verification completed
+
+- Focused regression tests passed for rotation self-approval, public synchronous Admin API approval while MCP waits, SDK asynchronous approval/Admin API/exact replay, concurrent approval admission, concurrent webhook capacity admission, PostgreSQL role fail-closed behavior, busy commit cleanup, and webhook retention. Queue-capacity/role tests passed 10 repetitions; webhook race tests passed.
+- `npm ci --ignore-scripts` and `npm audit --audit-level=high` passed; audit reported zero vulnerabilities.
+- Full `go test ./...` passed on the current implementation with `CGO_ENABLED=0`, `TANPOPO_TEST_HERMETIC=1`, and `umask 0022`.
+- Race tests passed for `internal/admin/http`, MCP approval/hub, `internal/iam/vkey`, and `internal/webhook`. An earlier webhook race attempt exposed SQLite busy contention in the concurrency fixture; bounded retry and the commit cleanup regression were added, then the webhook package race test passed.
+- `go run ./scripts/ci/check.go --all` and `git diff --check` passed on the current implementation.
+- The official fixture is pinned to `@modelcontextprotocol/sdk` `1.32.2`. Scripted fixtures do not establish support for untested Claude Code, Cursor, or Codex releases.
+- No live PostgreSQL server was available, so PostgreSQL runtime behavior has static review and fail-closed unit coverage, not a live integration run.
+
+## Next steps
+
+1. Record current repo-local Git author and committer identities; commit the reviewed checkpoint on `develop` and push the fast-forwarded branch.
+2. Open/update the Unit 37 PR to `main`, monitor all four required Ubuntu/macOS/Windows Stage 0/Stage 1 checks, and resolve any CI findings.
+3. Merge under `DEC-072`, verify DONE and green post-merge CI on the resulting `origin/main` SHA, then synchronize `develop` before checking Unit 38 DoR.

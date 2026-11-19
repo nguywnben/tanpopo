@@ -39,12 +39,12 @@ const (
 
 // Canonical authorization errors.
 var (
-	ErrUnauthenticated         = errors.New("rbac: unauthenticated principal")
-	ErrInvalidCredentialPlane  = errors.New("rbac: invalid_credential_plane")
-	ErrPermissionDenied        = errors.New("rbac: insufficient_role_permission")
-	ErrResourceNotFound        = errors.New("rbac: resource_not_found")
-	ErrInvalidRouteMetadata    = errors.New("rbac: unguarded_admin_route")
-	ErrInvalidInput            = errors.New("rbac: invalid authorization input")
+	ErrUnauthenticated        = errors.New("rbac: unauthenticated principal")
+	ErrInvalidCredentialPlane = errors.New("rbac: invalid_credential_plane")
+	ErrPermissionDenied       = errors.New("rbac: insufficient_role_permission")
+	ErrResourceNotFound       = errors.New("rbac: resource_not_found")
+	ErrInvalidRouteMetadata   = errors.New("rbac: unguarded_admin_route")
+	ErrInvalidInput           = errors.New("rbac: invalid authorization input")
 )
 
 // Action identifies a strongly typed Control Plane operation.
@@ -52,53 +52,55 @@ type Action string
 
 // Canonical Control Plane actions mapped to /admin/v1/* endpoints (SCR-01..16).
 const (
-	ActionSessionSelf          Action = "auth:session_self"
-	ActionOrgCreate            Action = "org:create"
-	ActionOrgRead              Action = "org:read"
-	ActionOrgDelete            Action = "org:delete"
-	ActionProjectRead          Action = "project:read"
-	ActionProjectWrite         Action = "project:write"
-	ActionEnvironmentWrite     Action = "environment:write"
-	ActionMemberRead           Action = "member:read"
-	ActionMemberWrite          Action = "member:write"
-	ActionVKeyRead             Action = "virtual_key:read"
-	ActionVKeyCreate           Action = "virtual_key:create"
-	ActionVKeyRotate           Action = "virtual_key:rotate"
-	ActionVKeyRevoke           Action = "virtual_key:revoke"
-	ActionSecretReadMeta       Action = "secret:read_metadata"
-	ActionSecretWrite          Action = "secret:write"
-	ActionConnectionRead       Action = "connection:read"
-	ActionConnectionWrite      Action = "connection:write"
-	ActionModelRead            Action = "model:read"
-	ActionModelWrite           Action = "model:write"
-	ActionExtensionRead        Action = "extension:read"
-	ActionExtensionStage       Action = "extension:stage_install"
-	ActionExtensionApprove     Action = "extension:approve_capability"
-	ActionExtensionQuarantine  Action = "extension:quarantine"
-	ActionExtensionOrgPolicy   Action = "extension:write_org_policy"
-	ActionRouteRead            Action = "route:read"
-	ActionRouteWrite           Action = "route:write"
-	ActionRouteExplain         Action = "route:explain"
-	ActionPolicyRead           Action = "policy:read"
-	ActionPolicyInstanceWrite  Action = "policy:write_instance"
-	ActionPolicyOrgWrite       Action = "policy:write_org"
-	ActionPolicyProjectWrite   Action = "policy:write_project"
-	ActionMCPRead              Action = "mcp:read"
-	ActionMCPWrite             Action = "mcp:write"
-	ActionMCPSchemaApprove     Action = "mcp:approve_schema"
-	ActionTraceReadMeta        Action = "trace:read_metadata"
-	ActionTraceReadDebugBlob   Action = "trace:read_debug_blob"
-	ActionBudgetRead           Action = "budget:read"
-	ActionBudgetWrite          Action = "budget:write"
-	ActionApprovalRead         Action = "approval:read"
-	ActionApprovalDecide       Action = "approval:decide"
-	ActionAuditReadVerify      Action = "audit:read_and_verify"
-	ActionKillSwitchTrigger    Action = "kill_switch:trigger"
-	ActionPlaygroundCreate     Action = "playground:create_session"
-	ActionOpsRead              Action = "ops:read"
-	ActionOpsWrite             Action = "ops:admin_execute"
-	ActionSupportBundleExport  Action = "ops:export_support_bundle"
-	ActionRetentionWrite       Action = "ops:write_retention"
+	ActionSessionSelf         Action = "auth:session_self"
+	ActionOrgCreate           Action = "org:create"
+	ActionOrgRead             Action = "org:read"
+	ActionOrgDelete           Action = "org:delete"
+	ActionProjectRead         Action = "project:read"
+	ActionProjectWrite        Action = "project:write"
+	ActionEnvironmentWrite    Action = "environment:write"
+	ActionMemberRead          Action = "member:read"
+	ActionMemberWrite         Action = "member:write"
+	ActionVKeyRead            Action = "virtual_key:read"
+	ActionVKeyCreate          Action = "virtual_key:create"
+	ActionVKeyRotate          Action = "virtual_key:rotate"
+	ActionVKeyRevoke          Action = "virtual_key:revoke"
+	ActionSecretReadMeta      Action = "secret:read_metadata"
+	ActionSecretWrite         Action = "secret:write"
+	ActionConnectionRead      Action = "connection:read"
+	ActionConnectionWrite     Action = "connection:write"
+	ActionModelRead           Action = "model:read"
+	ActionModelWrite          Action = "model:write"
+	ActionExtensionRead       Action = "extension:read"
+	ActionExtensionStage      Action = "extension:stage_install"
+	ActionExtensionApprove    Action = "extension:approve_capability"
+	ActionExtensionQuarantine Action = "extension:quarantine"
+	ActionExtensionOrgPolicy  Action = "extension:write_org_policy"
+	ActionRouteRead           Action = "route:read"
+	ActionRouteWrite          Action = "route:write"
+	ActionRouteExplain        Action = "route:explain"
+	ActionPolicyRead          Action = "policy:read"
+	ActionPolicyInstanceWrite Action = "policy:write_instance"
+	ActionPolicyOrgWrite      Action = "policy:write_org"
+	ActionPolicyProjectWrite  Action = "policy:write_project"
+	ActionMCPRead             Action = "mcp:read"
+	ActionMCPWrite            Action = "mcp:write"
+	ActionMCPSchemaApprove    Action = "mcp:approve_schema"
+	ActionTraceReadMeta       Action = "trace:read_metadata"
+	ActionTraceReadDebugBlob  Action = "trace:read_debug_blob"
+	ActionBudgetRead          Action = "budget:read"
+	ActionBudgetWrite         Action = "budget:write"
+	ActionApprovalRead        Action = "approval:read"
+	ActionApprovalDecide      Action = "approval:decide"
+	ActionWebhookRead         Action = "webhook:read"
+	ActionWebhookWrite        Action = "webhook:write"
+	ActionAuditReadVerify     Action = "audit:read_and_verify"
+	ActionKillSwitchTrigger   Action = "kill_switch:trigger"
+	ActionPlaygroundCreate    Action = "playground:create_session"
+	ActionOpsRead             Action = "ops:read"
+	ActionOpsWrite            Action = "ops:admin_execute"
+	ActionSupportBundleExport Action = "ops:export_support_bundle"
+	ActionRetentionWrite      Action = "ops:write_retention"
 )
 
 var allRoles = map[string]bool{
@@ -192,6 +194,8 @@ var rolePermissions = map[string]map[Action]bool{
 		ActionBudgetWrite:         true,
 		ActionApprovalRead:        true,
 		ActionApprovalDecide:      true,
+		ActionWebhookRead:         true,
+		ActionWebhookWrite:        true,
 		ActionAuditReadVerify:     true,
 		ActionKillSwitchTrigger:   true,
 		ActionPlaygroundCreate:    true,
@@ -238,6 +242,8 @@ var rolePermissions = map[string]map[Action]bool{
 		ActionBudgetWrite:        true,
 		ActionApprovalRead:       true,
 		ActionApprovalDecide:     true,
+		ActionWebhookRead:        true,
+		ActionWebhookWrite:       true,
 		ActionAuditReadVerify:    true,
 		ActionKillSwitchTrigger:  true,
 		ActionPlaygroundCreate:   true,
@@ -270,6 +276,10 @@ var rolePermissions = map[string]map[Action]bool{
 		ActionTraceReadMeta:      true,
 		ActionBudgetRead:         true,
 		ActionBudgetWrite:        true,
+		ActionApprovalRead:       true,
+		ActionApprovalDecide:     true,
+		ActionWebhookRead:        true,
+		ActionWebhookWrite:       true,
 		ActionKillSwitchTrigger:  true,
 		ActionPlaygroundCreate:   true,
 	},
@@ -295,6 +305,7 @@ var rolePermissions = map[string]map[Action]bool{
 		ActionBudgetRead:         true,
 		ActionApprovalRead:       true,
 		ActionApprovalDecide:     true,
+		ActionWebhookRead:        true,
 		ActionAuditReadVerify:    true,
 		ActionKillSwitchTrigger:  true,
 	},

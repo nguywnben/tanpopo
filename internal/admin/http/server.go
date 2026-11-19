@@ -95,6 +95,9 @@ type MarketplaceCatalogEntry struct {
 // ExtensionArchiveResolver resolves an organization-scoped staged archive and provenance metadata.
 type ExtensionArchiveResolver func(ctx context.Context, orgID, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error)
 
+// WebhookEnqueue persists a redacted organization-scoped event for outbound delivery.
+type WebhookEnqueue func(ctx context.Context, orgID, projectID, eventType string, payload json.RawMessage) error
+
 type rawDBProvider interface {
 	RawDB() *sql.DB
 }
@@ -120,6 +123,7 @@ type ServerConfig struct {
 	ProviderRuntimeFactory  func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	MarketplaceCatalog      []MarketplaceCatalogEntry
 	ArchiveResolver         ExtensionArchiveResolver
+	WebhookEnqueue          WebhookEnqueue
 	LockfilePath            string
 	ConfigPath              string
 	ProbeRateLimitPerMinute int
@@ -238,6 +242,7 @@ type Server struct {
 	providerRuntimeFactory func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	marketplace            []MarketplaceCatalogEntry
 	archiveResolver        ExtensionArchiveResolver
+	webhookEnqueue         WebhookEnqueue
 	lockfilePath           string
 	configPath             string
 	probeLimiter           *slidingWindowLimiter
@@ -401,6 +406,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		providerRuntimeFactory: cfg.ProviderRuntimeFactory,
 		marketplace:            marketplace,
 		archiveResolver:        cfg.ArchiveResolver,
+		webhookEnqueue:         cfg.WebhookEnqueue,
 		lockfilePath:           strings.TrimSpace(cfg.LockfilePath),
 		configPath:             strings.TrimSpace(cfg.ConfigPath),
 		probeLimiter:           newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
@@ -513,7 +519,12 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodGet, Path: "/admin/v1/usage/summary", Action: rbac.ActionBudgetRead, Handler: s.handleGetUsageSummary},
 		{Method: http.MethodGet, Path: "/admin/v1/usage/export", Action: rbac.ActionBudgetRead, Handler: s.handleExportUsage},
 
-		// Group K: Audit Log, Hash-Chain Verification, Kill Switch & Blast Radius
+		{Method: http.MethodGet, Path: "/admin/v1/webhooks", Action: rbac.ActionWebhookRead, Handler: s.handleListWebhooks},
+		{Method: http.MethodPost, Path: "/admin/v1/webhooks", Action: rbac.ActionWebhookWrite, Handler: s.handleCreateWebhook},
+
+		// Group K: Approvals, Audit Log, Hash-Chain Verification, Kill Switch & Blast Radius
+		{Method: http.MethodGet, Path: "/admin/v1/approvals", Action: rbac.ActionApprovalRead, Handler: s.handleListApprovals},
+		{Method: http.MethodPost, Path: "/admin/v1/approvals/{approvalId}/decide", Action: rbac.ActionApprovalDecide, Handler: s.handleDecideApproval},
 		{Method: http.MethodPost, Path: "/admin/v1/audit-events/verify", Action: rbac.ActionAuditReadVerify, Handler: s.handleVerifyAuditHashChain},
 		{Method: http.MethodGet, Path: "/admin/v1/audit-events", Action: rbac.ActionAuditReadVerify, Handler: s.handleListAuditEvents},
 		{Method: http.MethodGet, Path: "/admin/v1/kill-switches", Action: rbac.ActionKillSwitchTrigger, Handler: s.handleListKillSwitches},

@@ -939,6 +939,7 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 
 	_, severedCount, err := s.killSwitch.TriggerWithSeveredCount(r.Context(), killswitch.TriggerParams{
 		OrgID:                  ksOrg,
+		ProjectID:              scopeProj,
 		Level:                  level,
 		TargetID:               targetID,
 		Reason:                 reason,
@@ -962,7 +963,6 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 		}
 		return
 	}
-
 	configEpoch := int64(0)
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())

@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
 	ingresshttp "github.com/nguywnben/tanpopo/internal/ingress/http"
+	"github.com/nguywnben/tanpopo/internal/ingress/mcp/approval"
 	mcphub "github.com/nguywnben/tanpopo/internal/ingress/mcp/hub"
 	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
@@ -39,6 +41,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 	telemetry "github.com/nguywnben/tanpopo/internal/telemetry/otel"
+	"github.com/nguywnben/tanpopo/internal/webhook"
 	"github.com/nguywnben/tanpopo/internal/webui"
 )
 
@@ -151,11 +154,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		closeStore()
 		return nil, nil, fmt.Errorf("initialize audit logger: %w", err)
 	}
-	ledgerService, err := ledger.NewService(ledger.Config{DB: db, Audit: auditLog})
-	if err != nil {
-		closeStore()
-		return nil, nil, fmt.Errorf("initialize usage ledger: %w", err)
-	}
+	var ledgerService *ledger.Service
 	kek, err := vault.LoadStaticKEKFromEnv("kek_v1", os.LookupEnv)
 	if err != nil {
 		closeStore()
@@ -176,6 +175,9 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	}
 	runtimeCtx, cancelRuntime := context.WithCancel(ctx)
 	watcherDone := make(chan struct{})
+	var webhookDone chan struct{}
+	var closeWebhookDispatcher func() error
+	var approvalMaintenanceDone chan struct{}
 	var marketplaceDone <-chan struct{}
 	go func() {
 		defer close(watcherDone)
@@ -208,6 +210,15 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 				recordActiveDBConnections("after telemetry shutdown")
 			}
 			cancelRuntime()
+			if webhookDone != nil {
+				<-webhookDone
+			}
+			if closeWebhookDispatcher != nil {
+				shutdownErr = errors.Join(shutdownErr, closeWebhookDispatcher())
+			}
+			if approvalMaintenanceDone != nil {
+				<-approvalMaintenanceDone
+			}
 			<-watcherDone
 			recordActiveDBConnections("after snapshot watcher shutdown")
 			if marketplaceDone != nil {
@@ -226,12 +237,6 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		})
 		return shutdownErr
 	}
-	killSwitch, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{DB: db, Audit: auditLog, Streams: killswitch.NewStreamRegistry()})
-	if err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("initialize kill switches: %w", err)
-	}
-	snaps.RegisterKillSwitchSync(killSwitch.RefreshFromDB)
 	catalogRepo, err := catalog.NewRepository(catalog.Config{DB: db, Snapshots: snaps, Audit: auditLog})
 	if err != nil {
 		cleanup()
@@ -250,6 +255,94 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		}
 	}
 	brokerUnsealCap := vault.MintUnsealCapabilityForBroker()
+	webhookDispatcher, err := webhook.New(webhook.Config{
+		// This binary runtime currently opens SQLite. A PostgreSQL runtime must
+		// inject its dedicated dispatcher pool and opt into role/RLS validation.
+		DB: db, Postgres: false, Resolver: egress.NewStdHostResolver(),
+		Unseal: func(ctx context.Context, orgID, credentialID string) ([]byte, func(), error) {
+			secret, unsealErr := vaultStore.UnsealWithCapability(ctx, brokerUnsealCap, orgID, credentialID)
+			if unsealErr != nil {
+				return nil, nil, unsealErr
+			}
+			if secret.SecretKind != vault.SecretKindWebhookHMAC {
+				secret.Zeroize()
+				return nil, nil, errors.New("webhook signing credential has an invalid kind")
+			}
+			return secret.Plaintext, secret.Zeroize, nil
+		},
+	})
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("initialize webhook dispatcher: %w", err)
+	}
+	closeWebhookDispatcher = webhookDispatcher.Close
+	killSwitch, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{
+		DB: db, Audit: auditLog, Streams: killswitch.NewStreamRegistry(),
+		RecordWebhookTx: func(ctx context.Context, tx *sql.Tx, orgID, projectID, eventKey, eventType string, payload []byte) error {
+			if orgID == "" {
+				var body struct {
+					TargetID string `json:"target_id"`
+				}
+				if err := json.Unmarshal(payload, &body); err != nil || body.TargetID == "" {
+					return fmt.Errorf("resolve extension kill-switch target")
+				}
+				return recordExtensionWebhookOutbox(ctx, tx, webhookDispatcher, body.TargetID, "kill_switch:"+eventKey, eventType, payload)
+			}
+			return webhookDispatcher.RecordEventTx(ctx, tx, webhook.Event{
+				ID: webhook.StableEventID("kill_switch:" + eventKey), OrgID: orgID,
+				ProjectID: projectID, Type: eventType, Payload: payload,
+			})
+		},
+	})
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("initialize kill switches: %w", err)
+	}
+	snaps.RegisterKillSwitchSync(killSwitch.RefreshFromDB)
+	ledgerService, err = ledger.NewService(ledger.Config{
+		DB: db, Audit: auditLog,
+		AlertOutbox: func(ctx context.Context, tx *sql.Tx, ev ledger.AlertEvent) error {
+			var scopeType, scopeID string
+			var projectID string
+			if err := tx.QueryRowContext(ctx, `SELECT scope_type,scope_id FROM budget_ledgers WHERE org_id=? AND id=?`, ev.OrgID, ev.LedgerID).Scan(&scopeType, &scopeID); err != nil {
+				return err
+			}
+			switch scopeType {
+			case "PROJECT":
+				projectID = scopeID
+			case "ENV":
+				if err := tx.QueryRowContext(ctx, `SELECT project_id FROM environments WHERE org_id=? AND id=?`, ev.OrgID, scopeID).Scan(&projectID); err != nil {
+					return err
+				}
+			case "VIRTUAL_KEY":
+				if err := tx.QueryRowContext(ctx, `SELECT project_id FROM virtual_keys WHERE org_id=? AND id=?`, ev.OrgID, scopeID).Scan(&projectID); err != nil {
+					return err
+				}
+			}
+			payload, marshalErr := json.Marshal(map[string]any{
+				"code": ev.Code, "ledger_id": ev.LedgerID, "scope_type": ev.ScopeType,
+				"scope_id": ev.ScopeID, "threshold_pct": ev.ThresholdPct,
+				"utilization_pct": ev.UtilizationPct, "request_id": ev.RequestID,
+				"occurred_at_ms": ev.OccurredAtMs,
+			})
+			if marshalErr != nil {
+				return marshalErr
+			}
+			if scopeType != "ORG" && projectID == "" {
+				return fmt.Errorf("resolve project for budget alert scope %s", scopeType)
+			}
+			return webhookDispatcher.RecordEventTx(ctx, tx, webhook.Event{ID: webhook.StableEventID("budget:" + ev.LedgerID + ":" + ev.Code), OrgID: ev.OrgID, ProjectID: projectID, Type: "budget.threshold", Payload: payload})
+		},
+	})
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("initialize usage ledger: %w", err)
+	}
+	webhookDone = make(chan struct{})
+	go func() {
+		defer close(webhookDone)
+		_ = webhookDispatcher.Run(runtimeCtx)
+	}()
 	var oauthService *oauth.Service
 	if redirectURI != "" {
 		oauthService, err = oauth.NewService(oauth.ServiceConfig{DB: db, Vault: vaultStore, UnsealCapability: brokerUnsealCap, Audit: auditLog, HostResolver: egress.NewStdHostResolver(), RedirectURI: redirectURI, AllowLoopbackHTTP: allowHermeticHTTP})
@@ -261,6 +354,13 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	lockfile := envOr("TANPOPO_LOCK_FILE", filepath.Join(dataDir, "tanpopo.lock"))
 	installerService, err := installer.NewLifecycleService(installer.ServiceConfig{
 		DB: db, Audit: auditLog, AuditEntryPoint: "admin_api", PluginsDir: pluginsDir, LockfilePath: lockfile,
+		RecordQuarantineEventTx: func(ctx context.Context, tx *sql.Tx, installationID, packageID, state string) error {
+			payload, err := json.Marshal(map[string]any{"installation_id": installationID, "package_id": packageID, "state": state})
+			if err != nil {
+				return err
+			}
+			return recordExtensionWebhookOutbox(ctx, tx, webhookDispatcher, installationID, "extension.quarantined:"+installationID, "extension.quarantined", payload)
+		},
 	})
 	if err != nil {
 		cleanup()
@@ -286,11 +386,24 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		mcpServer, serverErr := mcphub.NewServer(mcphub.Config{
 			DB: db, Snapshots: snaps, Broker: blindBroker, Audit: auditLog,
 			Upstream: &mcphub.BrokerClient{Broker: blindBroker},
+			RecordApprovalPendingTx: func(ctx context.Context, tx *sql.Tx, requestID string, binding approval.Binding) error {
+				payload, marshalErr := json.Marshal(map[string]string{"approval_request_id": requestID})
+				if marshalErr != nil {
+					return marshalErr
+				}
+				return webhookDispatcher.RecordEventTx(ctx, tx, webhook.Event{ID: webhook.StableEventID("mcp.approval.pending:" + requestID), OrgID: binding.OrgID, ProjectID: binding.ProjectID,
+					Type: "mcp.approval.pending", Payload: payload})
+			},
 		})
 		if serverErr != nil {
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize MCP Governance Hub: %w", serverErr)
 		}
+		approvalMaintenanceDone = make(chan struct{})
+		go func() {
+			defer close(approvalMaintenanceDone)
+			mcpServer.RunApprovalMaintenance(runtimeCtx)
+		}()
 		mux.Handle("/mcp", mcpServer)
 	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -368,6 +481,10 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys, Ledgers: ledgerService,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
 			Installer: installerService, ArchiveResolver: newRuntimeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv), registryStore, vaultOCIRegistryCredentialResolver{db: db, vault: vaultStore, cap: brokerUnsealCap}),
+			WebhookEnqueue: func(ctx context.Context, orgID, projectID, eventType string, payload json.RawMessage) error {
+				_, enqueueErr := webhookDispatcher.Enqueue(ctx, webhook.Event{OrgID: orgID, ProjectID: projectID, Type: eventType, Payload: payload})
+				return enqueueErr
+			},
 			Broker: blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
 		})
 		if err != nil {
@@ -378,6 +495,32 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		mux.Handle("/", webui.Handler())
 	}
 	return mux, cleanup, nil
+}
+
+func recordExtensionWebhookOutbox(ctx context.Context, tx *sql.Tx, dispatcher *webhook.Dispatcher, installationID, eventKey, eventType string, payload []byte) error {
+	rows, err := tx.QueryContext(ctx, `SELECT org_id FROM org_extension_policies WHERE package_id=(SELECT package_id FROM extension_installations WHERE id=?) AND enabled=1
+		UNION SELECT pc.org_id FROM provider_connections pc JOIN provider_adapters pa ON pa.id=pc.adapter_id WHERE pa.installation_id=? ORDER BY 1`, installationID, installationID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var orgIDs []string
+	for rows.Next() {
+		var orgID string
+		if err := rows.Scan(&orgID); err != nil {
+			return err
+		}
+		orgIDs = append(orgIDs, orgID)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, orgID := range orgIDs {
+		if err := dispatcher.RecordEventTx(ctx, tx, webhook.Event{ID: webhook.StableEventID(eventKey + ":" + orgID), OrgID: orgID, Type: eventType, Payload: payload}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newServeArchiveResolver(root string) adminhttp.ExtensionArchiveResolver {

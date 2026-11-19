@@ -977,6 +977,27 @@ components:
         triggered_at_ms: { type: integer }
         cleared_at_ms: { type: [integer, "null"] }
 
+    WebhookEvents:
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        type: string
+        enum: [budget.threshold, mcp.approval.pending, extension.quarantined, kill_switch.triggered]
+
+    WebhookSubscriptionResource:
+      type: object
+      required: [id, org_id, project_id, target_origin, events, enabled, version, created_at_ms]
+      properties:
+        id: { type: string }
+        org_id: { type: string }
+        project_id: { type: [string, "null"] }
+        target_origin: { type: string, format: uri, description: "Receiver origin. The receiver path and query are private." }
+        events: { $ref: "#/components/schemas/WebhookEvents" }
+        enabled: { type: boolean }
+        version: { type: integer, minimum: 1 }
+        created_at_ms: { type: integer }
+
     ApprovalRequestResource:
       type: object
       required: [id, action_kind, state, approval_binding_hash, requested_by, created_at, expires_at, version]
@@ -985,9 +1006,9 @@ components:
         org_id: { type: ["string", "null"] }
         project_id: { type: ["string", "null"] }
         action_kind: { type: string, enum: [MCP_DESTRUCTIVE_TOOL, EXTENSION_ESCALATION, BUDGET_CEILING_OVERRIDE] }
-        state: { type: string, enum: [PENDING, APPROVED, CONSUMED, REJECTED, EXPIRED] }
+        state: { type: string, enum: [PENDING, APPROVED, CONSUMED, REJECTED, EXPIRED, CANCELLED] }
         approval_binding_hash: { type: string, pattern: "^[a-f0-9]{64}$" }
-        payload_preview_json: { type: string }
+        payload_preview_json: { type: string, description: "MCP server and tool identifiers encoded as JSON." }
         requested_by: { type: string }
         decided_by: { type: ["string", "null"] }
         created_at: { type: string, format: date-time }
@@ -3186,7 +3207,7 @@ paths:
                 type: object
                 required: [data, has_more]
                 properties:
-                  data: { type: array, items: { type: object } }
+                  data: { type: array, items: { $ref: "#/components/schemas/WebhookSubscriptionResource" } }
                   next_cursor: { type: ["string", "null"] }
                   has_more: { type: boolean }
     post:
@@ -3203,27 +3224,45 @@ paths:
               type: object
               required: [target_url, events, signing_credential_id]
               properties:
-                target_url: { type: string, format: uri }
-                events: { type: array, items: { type: string } }
-                signing_credential_id: { type: string }
+                project_id: { type: string, description: "Omit for an organization subscription. The signing credential must have the same owner scope." }
+                target_url: { type: string, format: uri, writeOnly: true, description: "Public HTTPS receiver without userinfo or fragment." }
+                events: { $ref: "#/components/schemas/WebhookEvents" }
+                signing_credential_id: { type: string, writeOnly: true, description: "ID of a WEBHOOK_HMAC_SECRET credential." }
       responses:
         "201":
           description: Webhook subscription created
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
           content:
             application/json:
-              schema: { type: object }
+              schema: { $ref: "#/components/schemas/WebhookSubscriptionResource" }
+        "400":
+          description: Invalid target, event list, or credential audience
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "403":
+          description: Insufficient permission or invalid session CSRF
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "404":
+          description: Project or signing credential unavailable in this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
 
   # ==================== GROUP K: SECURITY CENTER — APPROVALS, AUDIT & KILL-SWITCH (SCR-14) ====================
   /admin/v1/approvals:
     get:
       tags: [SecurityCenter]
       operationId: listApprovalRequests
-      summary: Cursor-paginated HITL Approval Queue (SM-06) (SCR-14)
+      summary: List MCP approval requests within the authenticated organization and authorized projects
       parameters:
         - name: status
           in: query
           required: false
-          schema: { type: string, enum: [PENDING, APPROVED, CONSUMED, REJECTED, EXPIRED] }
+          schema: { type: string, enum: [PENDING, APPROVED, CONSUMED, REJECTED, EXPIRED, CANCELLED] }
         - $ref: "#/components/parameters/LimitParam"
         - $ref: "#/components/parameters/CursorParam"
       responses:
@@ -3243,7 +3282,7 @@ paths:
     post:
       tags: [SecurityCenter]
       operationId: decideApprovalRequest
-      summary: Approve or reject pending MCP destructive tool call or extension escalation (Four-Eyes enforced — AUTH-12) (SCR-14)
+      summary: Approve or reject a pending MCP tool call using its observed binding hash and version
       parameters:
         - name: approvalId
           in: path
@@ -3257,7 +3296,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [decision, expected_binding_hash]
+              required: [decision, expected_binding_hash, reason]
               properties:
                 decision: { type: string, enum: [APPROVE, REJECT] }
                 expected_binding_hash: { type: string, pattern: "^[a-f0-9]{64}$" }
@@ -3271,12 +3310,27 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ApprovalRequestResource" }
         "403":
-          description: 403 self_approval_forbidden
+          description: Insufficient permission, invalid session CSRF, self_approval_forbidden, or parameter_hash_mismatch
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
         "409":
           description: 409 approval_already_decided_or_expired or optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "400":
+          description: Invalid decision or If-Match header
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "404":
+          description: Approval unavailable in this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "428":
+          description: If-Match header required
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }

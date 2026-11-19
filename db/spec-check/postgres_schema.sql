@@ -229,6 +229,8 @@ CREATE TABLE virtual_keys (
     project_id              VARCHAR(40) NOT NULL,
     env_id                  VARCHAR(40) NOT NULL,
     owner_principal_id      VARCHAR(40) REFERENCES principals(id) ON DELETE SET NULL,
+    active_key_recipient_principal_id VARCHAR(40),
+    previous_key_recipient_principal_id VARCHAR(40),
     name                    VARCHAR(128) NOT NULL,
     key_prefix              VARCHAR(24) NOT NULL CHECK (key_prefix LIKE 'vk_tp_%'),
     last_four               CHAR(4) NOT NULL,
@@ -872,7 +874,12 @@ CREATE TABLE approval_requests (
                              )),
     requester_virtual_key_id VARCHAR(40),
     requester_principal_id   VARCHAR(40) REFERENCES principals(id) ON DELETE SET NULL,
+    requester_credential_principal_id VARCHAR(40),
+    approved_mcp_server_id VARCHAR(40),
+    approved_mcp_tool_id VARCHAR(40),
+    approved_schema_sha256 CHAR(64),
     target_identifier        VARCHAR(160) NOT NULL,
+    payload_preview_json     TEXT NOT NULL,
     params_jcs_sha256        CHAR(64) NOT NULL,
     state                    VARCHAR(24) NOT NULL DEFAULT 'PENDING'
                              CHECK (state IN ('PENDING', 'APPROVED', 'CONSUMED', 'REJECTED', 'EXPIRED', 'CANCELLED')),
@@ -921,6 +928,7 @@ CREATE TABLE webhook_subscriptions (
     project_id                   VARCHAR(40),
     name                         VARCHAR(128) NOT NULL,
     target_url                   TEXT NOT NULL,
+    target_url_credential_id     VARCHAR(40) NOT NULL,
     allow_private_ip             BOOLEAN NOT NULL DEFAULT FALSE,
     allowed_cidrs_json           JSONB NOT NULL DEFAULT '[]'::jsonb,
     signing_secret_credential_id VARCHAR(40) NOT NULL,
@@ -932,7 +940,8 @@ CREATE TABLE webhook_subscriptions (
     PRIMARY KEY (org_id, id),
     UNIQUE (id),
     FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (org_id, signing_secret_credential_id) REFERENCES secret_credentials(org_id, id) ON DELETE RESTRICT
+    FOREIGN KEY (org_id, signing_secret_credential_id) REFERENCES secret_credentials(org_id, id) ON DELETE RESTRICT,
+    FOREIGN KEY (org_id, target_url_credential_id) REFERENCES secret_credentials(org_id, id) ON DELETE RESTRICT
 );
 
 CREATE TABLE webhook_deliveries (
@@ -950,10 +959,24 @@ CREATE TABLE webhook_deliveries (
     last_error         TEXT,
     created_at_ms      BIGINT NOT NULL,
     delivered_at_ms    BIGINT,
+    terminal_at_ms     BIGINT,
     PRIMARY KEY (org_id, id),
     UNIQUE (id),
     FOREIGN KEY (org_id, subscription_id) REFERENCES webhook_subscriptions(org_id, id) ON DELETE CASCADE
 );
+
+CREATE UNIQUE INDEX idx_webhook_delivery_event_subscription ON webhook_deliveries (org_id, subscription_id, event_id);
+CREATE TABLE webhook_event_outbox (
+    id VARCHAR(40) PRIMARY KEY,
+    org_id VARCHAR(40) NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id VARCHAR(40),
+    event_type VARCHAR(64) NOT NULL,
+    payload_json JSONB NOT NULL,
+    created_at_ms BIGINT NOT NULL,
+    dispatched_at_ms BIGINT,
+    FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id) ON DELETE CASCADE
+);
+CREATE INDEX idx_webhook_event_outbox_pending ON webhook_event_outbox (created_at_ms, id) WHERE dispatched_at_ms IS NULL;
 
 -- -----------------------------------------------------------------------------
 -- 25. Two-Phase Budget Ledger, Valkey Checkpoints, Settlements & Rollups
@@ -1356,8 +1379,8 @@ CREATE POLICY tenant_isolation ON virtual_keys
 ALTER TABLE secret_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE secret_credentials FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON secret_credentials
-    USING (org_id = current_setting('app.current_org_id', true))
-    WITH CHECK (org_id = current_setting('app.current_org_id', true));
+    USING (org_id = current_setting('app.current_org_id', true) OR current_user = 'tanpopo_webhook_worker')
+    WITH CHECK (org_id = current_setting('app.current_org_id', true) OR current_user = 'tanpopo_webhook_worker');
 
 ALTER TABLE oauth_token_states ENABLE ROW LEVEL SECURITY;
 ALTER TABLE oauth_token_states FORCE ROW LEVEL SECURITY;
@@ -1464,14 +1487,20 @@ CREATE POLICY tenant_isolation ON a2a_tasks
 ALTER TABLE webhook_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE webhook_subscriptions FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON webhook_subscriptions
-    USING (org_id = current_setting('app.current_org_id', true))
-    WITH CHECK (org_id = current_setting('app.current_org_id', true));
+    USING (org_id = current_setting('app.current_org_id', true) OR current_user = 'tanpopo_webhook_worker')
+    WITH CHECK (org_id = current_setting('app.current_org_id', true) OR current_user = 'tanpopo_webhook_worker');
 
 ALTER TABLE webhook_deliveries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE webhook_deliveries FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON webhook_deliveries
-    USING (org_id = current_setting('app.current_org_id', true))
-    WITH CHECK (org_id = current_setting('app.current_org_id', true));
+    USING (org_id = current_setting('app.current_org_id', true) OR current_user = 'tanpopo_webhook_worker')
+    WITH CHECK (org_id = current_setting('app.current_org_id', true) OR current_user = 'tanpopo_webhook_worker');
+
+ALTER TABLE webhook_event_outbox ENABLE ROW LEVEL SECURITY;
+ALTER TABLE webhook_event_outbox FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON webhook_event_outbox
+    USING (org_id = current_setting('app.current_org_id', true) OR current_user = 'tanpopo_webhook_worker')
+    WITH CHECK (org_id = current_setting('app.current_org_id', true) OR current_user = 'tanpopo_webhook_worker');
 
 ALTER TABLE budget_ledgers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE budget_ledgers FORCE ROW LEVEL SECURITY;

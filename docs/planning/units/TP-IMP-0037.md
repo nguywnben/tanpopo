@@ -4,8 +4,8 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0037` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
-| **Status** | `READY` *(Opened under `DEC-074` after verifying `TP-IMP-0023` and `TP-IMP-0036` are DONE on `origin/main`; `GAP-01, 08` are CLOSED and `CR-08, 09` are approved.)* |
-| **Size** | `L` (`internal/ingress/mcp/firewall/*`, `internal/ingress/mcp/approval/*`, `internal/webhook/*`, `db/migrations/sqlite/0013_approvals_webhooks.sql`) |
+| **Status** | `READY` *(Opened under `DEC-074` after verifying `TP-IMP-0023` and `TP-IMP-0036` are DONE on `origin/main`; `GAP-01, 08` are CLOSED and `CR-08, 09` are approved. Review corrections are recorded in `DEC-079`.)* |
+| **Size** | `L` (`internal/ingress/mcp/firewall/*`, `internal/ingress/mcp/approval/*`, `internal/webhook/*`, `db/migrations/sqlite/0019_approvals_webhooks.sql` per `DEC-075` and `0020_mcp_approval_credential_audience.sql` per `DEC-076`; the earlier `0013` slot is occupied by traces/blobs) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Duplicate side-effect prevention `FMEA-02`, 5-tuple parameter-hash-bound HITL approvals & SSRF-guarded HMAC Webhooks)* |
 | **Technical Owner** | `Principal Security / Agent Governance Engineer` |
 
@@ -24,8 +24,10 @@ Complete execution-safety controls for MCP tool invocations alongside the outbou
   - `internal/ingress/mcp/firewall/classifier.go` (enforcing `0` retries on `mutating`/`destructive` tools plus dedicated rate limits for high-risk tool calls).
   - `internal/ingress/mcp/approval/workflow.go` (`SM-06` state machine: `PENDING -> APPROVED -> CONSUMED | REJECTED | EXPIRED`, verifying exact 5-tuple `JCS` hash equality on replay — rejecting any mismatch with **`parameter_hash_mismatch`** per `CT-22`).
   - `internal/webhook/dispatcher.go` (bounded exponential-backoff async delivery queue routed through `SSRFGuardDialer`, signing `HMAC-SHA256(secret, timestamp + "." + raw_body)`).
+  - `internal/security/killswitch/registry.go` and `internal/extension/installer/lifecycle.go` (write kill-switch and extension-quarantine notifications into the same transaction as the state mutation).
   - `internal/admin/http/mcp_approvals.go` & `webhooks.go` (`/admin/v1/mcp/*`, `/admin/v1/approvals/*`, `/admin/v1/webhooks/*`).
-  - `db/migrations/sqlite/0013_approvals_webhooks.sql` (`approval_requests` supporting nullable `org_id`/`project_id` for Instance-scoped approvals, `webhook_subscriptions`, `webhook_deliveries` — 100% aligned with `TP-IMP-0003`).
+  - `db/migrations/sqlite/0019_approvals_webhooks.sql` (`approval_requests` with bounded redacted invocation preview, `webhook_subscriptions` with a sealed target URL credential, and `webhook_deliveries`; migration slot 0013 is already occupied).
+  - `db/migrations/sqlite/0020_mcp_approval_credential_audience.sql` (active/previous key-generation recipients and the approved MCP server/tool/schema context for Four-Eyes enforcement and async replay).
 - **Out-of-Scope:** Inter-agent `A2A` task lifecycle state machine (`SM-09` decoupled per `CR-08` and covered in `TP-IMP-0042`).
 
 ## 3. Requirements, Dependencies & Design References
@@ -49,8 +51,11 @@ Complete execution-safety controls for MCP tool invocations alongside the outbou
 
 ## 7. Security Invariants & Rollback Plan
 - **Security Invariant:** `Webhook` signing secrets are stored in `vault` under `AEAD AAD`; outbound Webhook payloads pass through `privacy.Redactor` to prevent leaking sensitive fields to external Slack/PagerDuty channels.
-- **Rollback:** Additive `0013_approvals_webhooks.sql` migration.
+- **Queue Bounds:** Pending outbox events and pending/retry deliveries are capped at `5,000` per organization. Terminal deliveries are retained for `30` days from their terminal transition; dispatched outbox records are retained for `30` days. Cleanup preserves pending and retryable work.
+- **Approval Bounds:** At most `1,000` live approvals per organization and `100` per virtual key. Admission and an independent hourly maintenance loop clear expired previews and token hashes; expired records are pruned after `30` days while immutable audit events remain.
+- **PostgreSQL Worker Scope:** `webhook_event_outbox`, subscriptions, deliveries, and encrypted credential metadata enforce tenant RLS. The cross-tenant dispatcher uses the separately provisioned `tanpopo_webhook_worker` role with least-privilege grants in the [worker runbook](../../operations/postgres-webhook-worker.md), and refuses PostgreSQL startup unless the dedicated DB handle has assumed that role.
+- **Rollback:** Additive `0019_approvals_webhooks.sql` and `0020_mcp_approval_credential_audience.sql` migrations.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0001` & `TP-IMP-0002` (locking `SM-06` decoupled from `SM-09` & `CR-08` JSON-RPC contracts), `TP-IMP-0023`, and `TP-IMP-0036` are complete.
-- **DoD:** `CT-22`, `CT-36` (`MCP 2025-03-26` HITL approval client compatibility per `COND-PO-04`), `FMEA-02`, and Webhook HMAC/SSRF suites passing under `-race`, with `REQUIRES_STRONG_REVIEW` sign-off achieved.
+- **DoD:** `CT-22`, `CT-36` (`MCP 2025-03-26` Streamable HTTP, public MCP/SSE, signed approval webhook, Admin API decision, and exact replay), `FMEA-02`, and Webhook HMAC/SSRF suites passing under `-race`, with `REQUIRES_STRONG_REVIEW` sign-off achieved. The integration fixture exercises approval and replay through the official MCP SDK; scripted protocol fixtures are not evidence of compatibility with untested vendor client versions.

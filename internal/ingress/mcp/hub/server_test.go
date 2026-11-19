@@ -20,6 +20,8 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
+	"github.com/nguywnben/tanpopo/internal/ingress/mcp/approval"
+	"github.com/nguywnben/tanpopo/internal/ingress/mcp/firewall"
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/schema_pin"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
@@ -65,7 +67,7 @@ func (u *fakeUpstream) CallTool(context.Context, serverRecord, string, json.RawM
 	return json.RawMessage(`{"content":[{"type":"text","text":"ok"}]}`), nil
 }
 
-func (u *fakeUpstream) VerifyAndCallTool(ctx context.Context, _ serverRecord, name string, arguments json.RawMessage, approvedHash string, approved schema_pin.Definition) (schema_pin.Verification, json.RawMessage, error) {
+func (u *fakeUpstream) VerifyAndCallTool(ctx context.Context, _ serverRecord, name string, arguments json.RawMessage, approvedHash string, approved schema_pin.Definition, _ firewall.Class) (schema_pin.Verification, json.RawMessage, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	for _, current := range u.definitions {
@@ -571,6 +573,10 @@ type hubTestSetup struct {
 }
 
 func newHubTestSetup(t *testing.T, count int, drift bool) *hubTestSetup {
+	return newHubTestSetupWithPendingRecorder(t, count, drift, nil)
+}
+
+func newHubTestSetupWithPendingRecorder(t *testing.T, count int, drift bool, recorder func(context.Context, *sql.Tx, string, approval.Binding) error) *hubTestSetup {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -650,7 +656,7 @@ func newHubTestSetup(t *testing.T, count int, drift bool) *hubTestSetup {
 		}
 		upstream.definitions = append(upstream.definitions, ToolDefinition{Name: name, Description: description, InputSchema: inputSchema})
 	}
-	server, err := NewServer(Config{DB: db, Snapshots: manager, Broker: &broker.BlindHostCredentialBroker{}, Audit: auditSink, Upstream: upstream, Now: func() time.Time { return now }, CursorKey: []byte(strings.Repeat("k", 32))})
+	server, err := NewServer(Config{DB: db, Snapshots: manager, Broker: &broker.BlindHostCredentialBroker{}, Audit: auditSink, Upstream: upstream, Now: func() time.Time { return now }, CursorKey: []byte(strings.Repeat("k", 32)), RecordApprovalPendingTx: recorder})
 	if err != nil {
 		t.Fatal(err)
 	}
