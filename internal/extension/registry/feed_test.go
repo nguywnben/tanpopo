@@ -168,3 +168,84 @@ func TestOCIClientRejectsDigestMismatchAndOversize(t *testing.T) {
 		t.Fatalf("oversized blob must fail, got %v", err)
 	}
 }
+
+type fakeRevocationStore struct {
+	serial  int64
+	entries []RevocationEntry
+	pending []RevocationTarget
+}
+
+func (s *fakeRevocationStore) LastRevocationSerial(context.Context) (int64, error) { return s.serial, nil }
+func (s *fakeRevocationStore) ApplyRevocationFeed(_ context.Context, serial int64, _ time.Time, entries []RevocationEntry) error {
+	s.serial = serial
+	s.entries = append([]RevocationEntry(nil), entries...)
+	for _, entry := range entries {
+		if entry.Severity == "CRITICAL" || entry.Severity == "CRITICAL_MALICIOUS" {
+			s.pending = append(s.pending, RevocationTarget{ActionID: "action-1", InstallationID: "ins_1", PackageSlug: entry.PackageSlug, VersionOrSHA256: entry.VersionOrSHA256, Severity: entry.Severity, Reason: entry.Reason})
+		}
+	}
+	return nil
+}
+func (s *fakeRevocationStore) PendingRevocationActions(context.Context) ([]RevocationTarget, error) {
+	return append([]RevocationTarget(nil), s.pending...), nil
+}
+func (s *fakeRevocationStore) CompleteRevocationAction(_ context.Context, id string) error {
+	filtered := s.pending[:0]
+	for _, target := range s.pending {
+		if target.ActionID != id {
+			filtered = append(filtered, target)
+		}
+	}
+	s.pending = filtered
+	return nil
+}
+
+type fakeRevocationActions struct {
+	events          []string
+	failStreamOnce  bool
+}
+
+func (a *fakeRevocationActions) QuarantineInstallation(_ context.Context, target RevocationTarget) error {
+	a.events = append(a.events, "quarantine:"+target.InstallationID)
+	return nil
+}
+func (a *fakeRevocationActions) SeverInstallationStreams(_ context.Context, target RevocationTarget) error {
+	a.events = append(a.events, "sever:"+target.InstallationID)
+	if a.failStreamOnce {
+		a.failStreamOnce = false
+		return errors.New("stream fence unavailable")
+	}
+	return nil
+}
+func (a *fakeRevocationActions) EmitINC03(_ context.Context, target RevocationTarget) error {
+	a.events = append(a.events, "inc03:"+target.InstallationID)
+	return nil
+}
+
+func TestRevocationWatcherPersistsAndRetriesCriticalEnforcement(t *testing.T) {
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	raw := signedEnvelope(t, FeedRevocation, 4, now.Add(time.Hour), `[{"package_slug":"community/bad-adapter","version_or_sha256":"1.0.0","severity":"CRITICAL_MALICIOUS","reason":"confirmed malicious package"}]`, "root", private)
+	store := &fakeRevocationStore{serial: 3}
+	actions := &fakeRevocationActions{failStreamOnce: true}
+	watcher := &RevocationWatcher{Keys: Keyring{"root": private.Public().(ed25519.PublicKey)}, Store: store, Actions: actions, Now: func() time.Time { return now }}
+	if err := watcher.ImportVerifiedBytes(context.Background(), raw); err == nil {
+		t.Fatal("stream fence failure must keep the durable action pending")
+	}
+	if store.serial != 4 || len(store.pending) != 1 {
+		t.Fatalf("verified feed/action not durably staged: serial=%d pending=%+v", store.serial, store.pending)
+	}
+	if err := watcher.Reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.pending) != 0 {
+		t.Fatalf("action was not completed after retry: %+v", store.pending)
+	}
+	want := []string{"quarantine:ins_1", "sever:ins_1", "quarantine:ins_1", "sever:ins_1", "inc03:ins_1"}
+	if fmt.Sprint(actions.events) != fmt.Sprint(want) {
+		t.Fatalf("unexpected enforcement order: got %v want %v", actions.events, want)
+	}
+}
