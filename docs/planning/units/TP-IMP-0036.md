@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0036` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0010`, `TP-IMP-0019`, `TP-IMP-0034` — `GAP-01`)* |
+| **Status** | `BLOCKED` *(Dependencies `TP-IMP-0010`, `TP-IMP-0019`, and `TP-IMP-0034` are DONE. Unit 36 is outside the sequential delegation in `DEC-060`; no decision has opened or authorized it.)* |
 | **Size** | `L` (`internal/ingress/mcp/hub/*`, `internal/ingress/mcp/schema_pin/*`, `db/migrations/sqlite/0012_mcp_hub.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Tool-plane trust boundary `TB-6`, `Rug-Pull / Tool Poisoning TM-07` defense & per-tool ACL isolation)* |
 | **Technical Owner** | `Principal Agentic & MCP Security Architect` |
