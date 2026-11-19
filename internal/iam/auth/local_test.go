@@ -131,12 +131,12 @@ func TestArgon2idSessionCSRFAndPlaneIsolation(t *testing.T) {
 	}
 	_ = op1
 
-	// Login issues HttpOnly; SameSite=Strict; Secure session cookie + CSRF token.
+	// Login issues HttpOnly; SameSite=Lax; Secure session cookie + CSRF token.
 	sess, cookie, err := svc.Login(ctx, "198.51.100.10", "owner@example.test", ownerPass)
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
-	if cookie.Name != SessionCookieName || !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode {
+	if cookie.Name != SessionCookieName || !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteLaxMode {
 		t.Fatalf("cookie security flags missing: %+v", cookie)
 	}
 	if len(sess.CSRFToken) < MinCSRFTokenLength {

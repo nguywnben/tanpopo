@@ -191,6 +191,12 @@ type VaultUnsealer interface {
 	UnsealWithCapability(ctx context.Context, cap vault.UnsealCapability, orgID, secretID string) (*vault.UnsealedSecret, error)
 }
 
+// OAuthTokenProvider resolves an encrypted OAuth token-set credential into a short-lived
+// resource-bound access token immediately before the broker injects it.
+type OAuthTokenProvider interface {
+	AccessToken(ctx context.Context, orgID, credentialID, expectedResource string) ([]byte, error)
+}
+
 // Config configures BlindHostCredentialBroker fail-closed.
 type Config struct {
 	Resolver CredentialBindingResolver
@@ -200,6 +206,7 @@ type Config struct {
 	// and fails closed if neither resolves an authoritative policy.
 	PolicyResolver            ConnectionPolicyResolver
 	Vault                     VaultUnsealer
+	OAuthTokens               OAuthTokenProvider
 	UnsealCap                 vault.UnsealCapability
 	Audit                     port.AuditSink
 	NowMs                     func() int64
@@ -260,6 +267,7 @@ type BlindHostCredentialBroker struct {
 	policyResolver            ConnectionPolicyResolver
 	hasExplicitPolicyResolver bool
 	vault                     VaultUnsealer
+	oauthTokens               OAuthTokenProvider
 	unsealCap                 vault.UnsealCapability
 	audit                     port.AuditSink
 	nowMs                     func() int64
@@ -313,6 +321,7 @@ func NewBlindBroker(cfg Config) (*BlindHostCredentialBroker, error) {
 		policyResolver:            policyResolver,
 		hasExplicitPolicyResolver: explicitPolicyResolver,
 		vault:                     cfg.Vault,
+		oauthTokens:               cfg.OAuthTokens,
 		unsealCap:                 cfg.UnsealCap,
 		audit:                     cfg.Audit,
 		nowMs:                     nowFn,
@@ -764,8 +773,27 @@ func (b *BlindHostCredentialBroker) sendOutbound(ctx context.Context, req Egress
 				}
 			}
 
+			injectionValue := unsealed.Plaintext
+			if unsealed.SecretKind == vault.SecretKindOAuth2TokenSet {
+				if item.slot.BoundAudience == nil || strings.TrimSpace(*item.slot.BoundAudience) == "" {
+					return &Error{HTTPStatus: http.StatusForbidden, Code: "credential_audience_mismatch", Message: "OAuth credential has no target resource binding", Err: ErrAudienceMismatch}
+				}
+				if b.oauthTokens == nil {
+					return fmt.Errorf("broker: OAuth token provider is unavailable")
+				}
+				accessToken, tokenErr := b.oauthTokens.AccessToken(ctx, req.OrgID, item.slot.SecretID, *item.slot.BoundAudience)
+				if tokenErr != nil {
+					return fmt.Errorf("broker: OAuth access token unavailable")
+				}
+				defer clear(accessToken)
+				if len(accessToken) == 0 {
+					return fmt.Errorf("broker: OAuth access token is empty")
+				}
+				injectionValue = accessToken
+			}
 			scrubber.addSecret(unsealed.Plaintext)
-			hdrName, aerr := applyCredentialInjection(httpReq, item.inj, unsealed.Plaintext, scrubber)
+			scrubber.addSecret(injectionValue)
+			hdrName, aerr := applyCredentialInjection(httpReq, item.inj, injectionValue, scrubber)
 			if aerr != nil {
 				return aerr
 			}
@@ -2068,4 +2096,3 @@ func (r *scrubbingStreamReader) Close() error {
 	})
 	return r.closeErr
 }
-

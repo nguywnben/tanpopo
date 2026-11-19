@@ -3298,3 +3298,167 @@ func TestVaultTxEnsureAndSealPaths(t *testing.T) {
 		t.Fatalf("idempotent EnsureProjectDEKTx: %v", err)
 	}
 }
+
+func TestVaultOAuthSessionValueUsesOrgDEKAndSessionBoundAAD(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, time.Minute)
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "oauth-session", DisplayName: "OAuth Session"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := idgen.MustNew(idgen.PrefixOAuthSession)
+	plain := []byte("pkce-verifier-sensitive")
+	nonce, ciphertext, err := env.vault.SealOAuthSessionValue(ctx, org.ID, id, "code_verifier", plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(ciphertext, plain) {
+		t.Fatal("OAuth verifier appears as plaintext in ciphertext")
+	}
+	if _, err := env.vault.UnsealOAuthSessionValue(ctx, "missing-org", id, "code_verifier", nonce, ciphertext); err == nil {
+		t.Fatal("unseal for an organization without a DEK must fail closed")
+	}
+	got, err := env.vault.UnsealOAuthSessionValue(ctx, org.ID, id, "code_verifier", nonce, ciphertext)
+	if err != nil || !bytes.Equal(got, plain) {
+		t.Fatalf("unseal = %q, err=%v", got, err)
+	}
+	clear(got)
+	if _, err := env.vault.UnsealOAuthSessionValue(ctx, org.ID, id, "device_code", nonce, ciphertext); err == nil {
+		t.Fatal("ciphertext must not decrypt under another purpose")
+	}
+	if _, err := env.vault.UnsealOAuthSessionValue(ctx, org.ID, id+"x", "code_verifier", nonce, ciphertext); err == nil {
+		t.Fatal("ciphertext must not decrypt under another session")
+	}
+}
+
+func TestVaultOAuthSessionAndRotateInputValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, orgID, sessionID, purpose string
+	}{
+		{name: "empty organization", orgID: "", sessionID: "session", purpose: "state"},
+		{name: "invalid session separator", orgID: "org", sessionID: "session:other", purpose: "state"},
+		{name: "empty purpose", orgID: "org", sessionID: "session", purpose: "  "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := OAuthSessionAAD(tc.orgID, tc.sessionID, tc.purpose); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("OAuthSessionAAD error = %v, want ErrInvalidInput", err)
+			}
+		})
+	}
+
+	ctx := context.Background()
+	env := newVaultTestEnv(t, time.Minute)
+	if _, _, err := env.vault.SealOAuthSessionValue(ctx, "org", "session", "state", nil); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("empty OAuth session value error = %v, want ErrInvalidInput", err)
+	}
+	if _, _, err := env.vault.SealOAuthSessionValue(ctx, "org:invalid", "session", "state", []byte("value")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("invalid OAuth session AAD error = %v, want ErrInvalidInput", err)
+	}
+	if _, err := env.vault.UnsealOAuthSessionValue(ctx, "org", "session\ninvalid", "state", []byte("nonce"), []byte("ciphertext")); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("invalid OAuth session AAD error = %v, want ErrInvalidInput", err)
+	}
+
+	if _, _, err := env.vault.RotateSecretTx(ctx, nil, "org", "secret", 1, RotateSecretParams{Plaintext: []byte("value")}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("nil transaction error = %v, want ErrInvalidInput", err)
+	}
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "rotate-validation", DisplayName: "Rotate Validation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := env.vault.SealSecret(ctx, SealSecretParams{OrgID: org.ID, Name: "rotation", SecretKind: SecretKindAPIKey, Plaintext: []byte("secret")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := env.sqlite.RawDB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, _, err := env.vault.RotateSecretTx(ctx, tx, org.ID, "missing-secret", 1, RotateSecretParams{Plaintext: []byte("value")}); !errors.Is(err, port.ErrNotFound) {
+		t.Fatalf("missing credential error = %v, want port.ErrNotFound", err)
+	}
+	if _, _, err := env.vault.RotateSecretTx(ctx, tx, org.ID, meta.ID, meta.Version+1, RotateSecretParams{Plaintext: []byte("value")}); !errors.Is(err, port.ErrVersionConflict) {
+		t.Fatalf("stale credential version error = %v, want port.ErrVersionConflict", err)
+	}
+	for _, tc := range []struct {
+		name, orgID, secretID string
+		version               int64
+		plaintext             []byte
+	}{
+		{name: "blank organization", orgID: " ", secretID: "secret", version: 1, plaintext: []byte("value")},
+		{name: "invalid version", orgID: "org", secretID: "secret", version: 0, plaintext: []byte("value")},
+		{name: "empty plaintext", orgID: "org", secretID: "secret", version: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, err := env.vault.RotateSecretTx(ctx, tx, tc.orgID, tc.secretID, tc.version, RotateSecretParams{Plaintext: tc.plaintext}); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("RotateSecretTx error = %v, want ErrInvalidInput", err)
+			}
+		})
+	}
+}
+
+func TestVaultRotateSecretTxChangesCiphertextOnlyAfterCommit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := newVaultTestEnv(t, time.Minute)
+	org, err := env.sqlite.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "rotate-tx", DisplayName: "Rotate Tx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := env.vault.SealSecret(ctx, SealSecretParams{OrgID: org.ID, Name: "rotate-tx", SecretKind: SecretKindAPIKey, Plaintext: []byte("before")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.vault.EvictAllDEKs()
+	tx, err := env.sqlite.RawDB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, finish, err := env.vault.RotateSecretTx(ctx, tx, org.ID, meta.ID, meta.Version, RotateSecretParams{Plaintext: []byte("after")})
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if rotated.Version != meta.Version+1 {
+		t.Fatalf("rotated version=%d, want %d", rotated.Version, meta.Version+1)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	finish(false)
+	finish(false) // completion is idempotent after the first cache-stage cleanup.
+	before, err := env.vault.UnsealWithCapability(ctx, MintUnsealCapabilityForBroker(), org.ID, meta.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before.Plaintext) != "before" {
+		t.Fatalf("rolled-back value=%q", before.Plaintext)
+	}
+	before.Zeroize()
+	env.vault.EvictAllDEKs()
+	tx, err = env.sqlite.RawDB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, finish, err = env.vault.RotateSecretTx(ctx, tx, org.ID, meta.ID, meta.Version, RotateSecretParams{Plaintext: []byte("after")})
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	finish(true)
+	finish(true) // a repeated completion must not apply the cache stage twice.
+	after, err := env.vault.UnsealWithCapability(ctx, MintUnsealCapabilityForBroker(), org.ID, meta.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer after.Zeroize()
+	if string(after.Plaintext) != "after" || after.Version != rotated.Version {
+		t.Fatalf("committed value=%q version=%d", after.Plaintext, after.Version)
+	}
+}

@@ -597,11 +597,35 @@ func (s *Store) SealSecretTx(ctx context.Context, tx *sql.Tx, params SealSecretP
 
 // RotateSecret replaces ciphertext using a fresh 96-bit CSPRNG nonce under optimistic concurrency control.
 func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expectedVersion int64, params RotateSecretParams) (*SecretMetadata, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vault: begin tx: %w", err)
+	}
+	meta, finish, err := s.RotateSecretTx(ctx, tx, orgID, secretID, expectedVersion, params)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		finish(false)
+		return nil, fmt.Errorf("vault: commit RotateSecret: %w", err)
+	}
+	finish(true)
+	return meta, nil
+}
+
+// RotateSecretTx rotates a write-only credential inside a caller-managed transaction.
+// The returned closure must be called with true after commit or false after rollback;
+// this activates staged DEK cache changes only on commit and zeroizes the staging buffer.
+func (s *Store) RotateSecretTx(ctx context.Context, tx *sql.Tx, orgID, secretID string, expectedVersion int64, params RotateSecretParams) (*SecretMetadata, func(bool), error) {
+	if tx == nil {
+		return nil, nil, fmt.Errorf("%w: tx is required", ErrInvalidInput)
+	}
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(secretID) == "" || expectedVersion < 1 {
-		return nil, fmt.Errorf("%w: org_id, secret_id, and expected_version >= 1 required", ErrInvalidInput)
+		return nil, nil, fmt.Errorf("%w: org_id, secret_id, and expected_version >= 1 required", ErrInvalidInput)
 	}
 	if len(params.Plaintext) == 0 {
-		return nil, fmt.Errorf("%w: new plaintext cannot be empty", ErrInvalidInput)
+		return nil, nil, fmt.Errorf("%w: new plaintext cannot be empty", ErrInvalidInput)
 	}
 
 	pt := make([]byte, len(params.Plaintext))
@@ -612,16 +636,10 @@ func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expect
 	fingerprint := computeKeyFingerprint(orgID, secretID, pt)
 	gen := s.cache.generation()
 	var stage dekCacheStage
-	defer stage.clear()
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("vault: begin tx: %w", err)
-	}
-	committed := false
+	keepStage := false
 	defer func() {
-		if !committed {
-			_ = tx.Rollback()
+		if !keepStage {
+			stage.clear()
 		}
 	}()
 
@@ -632,6 +650,7 @@ func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expect
 		createdAtMs int64
 		projNull    sql.NullString
 		audNull     sql.NullString
+		err         error
 	)
 	if err := tx.QueryRowContext(ctx, `
 		SELECT owner_project_id, name, secret_kind, bound_audience, version, created_at_ms
@@ -639,10 +658,10 @@ func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expect
 		WHERE org_id = ? AND id = ?`,
 		orgID, secretID,
 	).Scan(&projNull, &name, &kind, &audNull, &curVersion, &createdAtMs); err != nil {
-		return nil, mapVaultSQLiteError(err, false)
+		return nil, nil, mapVaultSQLiteError(err, false)
 	}
 	if curVersion != expectedVersion {
-		return nil, port.ErrVersionConflict
+		return nil, nil, port.ErrVersionConflict
 	}
 
 	var ownerProj *string
@@ -668,7 +687,7 @@ func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expect
 		aad, err = ProjectRecordAAD(orgID, *ownerProj, RecordKindCred, secretID)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var dek []byte
@@ -678,13 +697,13 @@ func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expect
 		_, _, dek, err = s.ensureProjectDEKTx(ctx, tx, orgID, *ownerProj, now, &stage)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer clear(dek)
 
 	nonce, ciphertext, err := sealAESGCM(dek, aad, pt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	res, err := tx.ExecContext(ctx, `
@@ -694,27 +713,21 @@ func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expect
 		nonce, ciphertext, nullStringPtr(nextAudience), fingerprint, now, orgID, secretID, expectedVersion,
 	)
 	if err != nil {
-		return nil, mapVaultSQLiteError(err, false)
+		return nil, nil, mapVaultSQLiteError(err, false)
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if affected == 0 {
-		return nil, port.ErrVersionConflict
+		return nil, nil, port.ErrVersionConflict
 	}
 
 	if _, err := appendVaultChangelogTx(ctx, tx, orgID, "secret_credential", secretID, port.MutationUpsert, false, now); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("vault: commit RotateSecret: %w", err)
-	}
-	committed = true
-	stage.commit(s.cache, now, gen)
-
-	return &SecretMetadata{
+	meta := &SecretMetadata{
 		ID:             secretID,
 		OrgID:          orgID,
 		OwnerProjectID: cloneStringPtr(ownerProj),
@@ -725,6 +738,18 @@ func (s *Store) RotateSecret(ctx context.Context, orgID, secretID string, expect
 		Version:        curVersion + 1,
 		CreatedAtMs:    createdAtMs,
 		UpdatedAtMs:    now,
+	}
+	keepStage = true
+	finished := false
+	return meta, func(committed bool) {
+		if finished {
+			return
+		}
+		finished = true
+		if committed {
+			stage.commit(s.cache, now, gen)
+		}
+		stage.clear()
 	}, nil
 }
 
@@ -927,6 +952,64 @@ func (s *Store) UnsealProjectBlob(ctx context.Context, orgID, projectID, recordK
 	}
 	defer clear(dek)
 
+	return openAESGCM(dek, aad, nonce, ciphertext)
+}
+
+// SealOAuthSessionValue encrypts short-lived OAuth protocol material under the Org DEK,
+// with AAD bound to the exact authorization session and field purpose.
+func (s *Store) SealOAuthSessionValue(ctx context.Context, orgID, sessionID, purpose string, plaintext []byte) (nonce, ciphertext []byte, err error) {
+	if len(plaintext) == 0 {
+		return nil, nil, fmt.Errorf("%w: OAuth session value cannot be empty", ErrInvalidInput)
+	}
+	aad, err := OAuthSessionAAD(orgID, sessionID, purpose)
+	if err != nil {
+		return nil, nil, err
+	}
+	pt := append([]byte(nil), plaintext...)
+	defer clear(pt)
+	now := s.nowMs()
+	gen := s.cache.generation()
+	var stage dekCacheStage
+	defer stage.clear()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("vault: begin OAuth session seal: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	_, dek, err := s.ensureOrgDEKTx(ctx, tx, orgID, now, &stage)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer clear(dek)
+	nonce, ciphertext, err = sealAESGCM(dek, aad, pt)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, nil, fmt.Errorf("vault: commit OAuth session seal: %w", err)
+	}
+	committed = true
+	stage.commit(s.cache, now, gen)
+	return nonce, ciphertext, nil
+}
+
+// UnsealOAuthSessionValue decrypts transient protocol material only for the matching session
+// and purpose. Callers must clear the returned plaintext as soon as it is consumed.
+func (s *Store) UnsealOAuthSessionValue(ctx context.Context, orgID, sessionID, purpose string, nonce, ciphertext []byte) ([]byte, error) {
+	aad, err := OAuthSessionAAD(orgID, sessionID, purpose)
+	if err != nil {
+		return nil, err
+	}
+	_, dek, err := s.loadOrgDEKReadOnly(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(dek)
 	return openAESGCM(dek, aad, nonce, ciphertext)
 }
 

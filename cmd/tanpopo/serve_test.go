@@ -101,6 +101,32 @@ func TestUnifiedRuntimeRoutesDataPlaneAdminAndEmbeddedConsole(t *testing.T) {
 	}
 }
 
+func TestRuntimeWithoutPublicOAuthRedirectStillServesAndFailsOAuthClosed(t *testing.T) {
+	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "data"))
+	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", "")
+	t.Setenv("TANPOPO_TEST_HERMETIC", "0")
+	t.Setenv("TANPOPO_OAUTH_REDIRECT_URI", "")
+
+	handler, closeRuntime, err := buildRuntime(context.Background(), "all", "0.0.0.0:8080")
+	if err != nil {
+		t.Fatalf("build public runtime without OAuth callback configuration: %v", err)
+	}
+	defer closeRuntime()
+
+	ready := httptest.NewRecorder()
+	handler.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusOK {
+		t.Fatalf("public runtime readiness returned %d: %s", ready.Code, ready.Body.String())
+	}
+
+	callback := httptest.NewRecorder()
+	handler.ServeHTTP(callback, httptest.NewRequest(http.MethodGet, "/admin/v1/oauth/callback", nil))
+	if callback.Code != http.StatusServiceUnavailable || !strings.Contains(callback.Body.String(), "oauth_unavailable") {
+		t.Fatalf("OAuth callback without explicit HTTPS URI returned %d: %s", callback.Code, callback.Body.String())
+	}
+}
+
 func TestReadinessFailsImmediatelyAfterDrainStartsButLivenessStaysHealthy(t *testing.T) {
 	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "data"))
 	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
@@ -358,13 +384,17 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	if err != nil {
 		t.Fatalf("build data-plane runtime: %v", err)
 	}
-	defer closeRuntime()
 	t.Cleanup(func() {
-		// Windows runners can briefly retain a SQLite file handle during process
-		// teardown. Allow up to five seconds for the OS to release it, while still
+		closeRuntime()
+		handler = nil
+		// modernc SQLite's Windows file handle can outlive sql.DB.Close until the
+		// driver's finalizable connection wrapper is collected.
+		runtime.GC()
+		// Windows runners can briefly retain a SQLite file handle after database
+		// Close returns. Allow the OS's file-handle teardown to settle, while still
 		// failing if the runtime keeps the database connection open.
 		var removeErr error
-		for attempt := 0; attempt < 100; attempt++ {
+		for attempt := 0; attempt < 600; attempt++ {
 			removeErr = os.RemoveAll(dataDir)
 			if removeErr == nil {
 				return

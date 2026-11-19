@@ -50,6 +50,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
+	"github.com/nguywnben/tanpopo/internal/security/oauth"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
@@ -114,6 +115,7 @@ type ServerConfig struct {
 	Policies                *policyengine.Store
 	RouteResolver           *resolver.Resolver
 	Broker                  *broker.BlindHostCredentialBroker
+	OAuth                   *oauth.Service
 	ProviderRuntime         extport.ProviderRuntime
 	ProviderRuntimeFactory  func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	MarketplaceCatalog      []MarketplaceCatalogEntry
@@ -217,38 +219,39 @@ func (l *slidingWindowLimiter) Allow(key string, nowMs int64) bool {
 
 // Server serves /admin/v1/* Control Plane REST endpoints.
 type Server struct {
-	db              *sql.DB
-	storage         port.Store
-	bootstrap       *bootstrap.Manager
-	auth            *auth.LocalService
-	vkeys           *vkey.Service
-	vault           *vault.Store
-	ledgers         *ledger.Service
-	snapshots       *snapshot.Manager
-	killSwitch      *killswitch.Registry
-	catalog         *catalog.Repository
-	installer       *installer.LifecycleService
-	policies        *policyengine.Store
-	routeResolver   *resolver.Resolver
-	broker          *broker.BlindHostCredentialBroker
+	db                     *sql.DB
+	storage                port.Store
+	bootstrap              *bootstrap.Manager
+	auth                   *auth.LocalService
+	vkeys                  *vkey.Service
+	vault                  *vault.Store
+	ledgers                *ledger.Service
+	snapshots              *snapshot.Manager
+	killSwitch             *killswitch.Registry
+	catalog                *catalog.Repository
+	installer              *installer.LifecycleService
+	policies               *policyengine.Store
+	routeResolver          *resolver.Resolver
+	broker                 *broker.BlindHostCredentialBroker
+	oauth                  *oauth.Service
 	providerRuntime        extport.ProviderRuntime
 	providerRuntimeFactory func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	marketplace            []MarketplaceCatalogEntry
 	archiveResolver        ExtensionArchiveResolver
 	lockfilePath           string
-	configPath      string
-	probeLimiter    *slidingWindowLimiter
-	audit           port.AuditSink
-	txAudit         port.TxAuditSink
-	nowMs           func() int64
-	maxBodyBytes    int64
-	cursorSecret    []byte
-	tokenVerifier   BearerTokenVerifier
-	hostResolver    egress.HostResolver
-	blockedPorts    map[int]bool
-	offlineMode     bool
-	version         string
-	quarantineMu    sync.Mutex
+	configPath             string
+	probeLimiter           *slidingWindowLimiter
+	audit                  port.AuditSink
+	txAudit                port.TxAuditSink
+	nowMs                  func() int64
+	maxBodyBytes           int64
+	cursorSecret           []byte
+	tokenVerifier          BearerTokenVerifier
+	hostResolver           egress.HostResolver
+	blockedPorts           map[int]bool
+	offlineMode            bool
+	version                string
+	quarantineMu           sync.Mutex
 
 	routes  []routeEntry
 	handler http.Handler
@@ -393,23 +396,24 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		policies:               policyStore,
 		routeResolver:          routeResolver,
 		broker:                 cfg.Broker,
+		oauth:                  cfg.OAuth,
 		providerRuntime:        cfg.ProviderRuntime,
 		providerRuntimeFactory: cfg.ProviderRuntimeFactory,
-		marketplace:             marketplace,
-		archiveResolver:         cfg.ArchiveResolver,
-		lockfilePath:            strings.TrimSpace(cfg.LockfilePath),
-		configPath:              strings.TrimSpace(cfg.ConfigPath),
-		probeLimiter:            newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
-		audit:                   auditSink,
-		txAudit:                 txAudit,
-		nowMs:                   nowFn,
-		maxBodyBytes:            maxBody,
-		cursorSecret:            cursorSecret,
-		tokenVerifier:           cfg.TokenVerifier,
-		hostResolver:            hostResolver,
-		blockedPorts:    blockedPorts,
-		offlineMode:     cfg.OfflineMode,
-		version:         version,
+		marketplace:            marketplace,
+		archiveResolver:        cfg.ArchiveResolver,
+		lockfilePath:           strings.TrimSpace(cfg.LockfilePath),
+		configPath:             strings.TrimSpace(cfg.ConfigPath),
+		probeLimiter:           newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
+		audit:                  auditSink,
+		txAudit:                txAudit,
+		nowMs:                  nowFn,
+		maxBodyBytes:           maxBody,
+		cursorSecret:           cursorSecret,
+		tokenVerifier:          cfg.TokenVerifier,
+		hostResolver:           hostResolver,
+		blockedPorts:           blockedPorts,
+		offlineMode:            cfg.OfflineMode,
+		version:                version,
 	}
 
 	s.routes = []routeEntry{
@@ -453,6 +457,9 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodPatch, Path: "/admin/v1/connections/{connectionId}", Action: rbac.ActionConnectionWrite, Handler: s.handleUpdateConnection},
 		{Method: http.MethodDelete, Path: "/admin/v1/connections/{connectionId}", Action: rbac.ActionConnectionWrite, Handler: s.handleDeleteConnection},
 		{Method: http.MethodPost, Path: "/admin/v1/connections/{connectionId}/test", Action: rbac.ActionConnectionWrite, Handler: s.handleTestConnection},
+		{Method: http.MethodPost, Path: "/admin/v1/connections/{connectionId}/oauth/start", Action: rbac.ActionConnectionWrite, Handler: s.handleStartConnectionOAuth},
+		{Method: http.MethodGet, Path: "/admin/v1/oauth/callback", Action: rbac.ActionConnectionWrite, Handler: s.handleOAuthCallback},
+		{Method: http.MethodPost, Path: "/admin/v1/oauth/device/poll", Action: rbac.ActionConnectionWrite, Handler: s.handleOAuthDevicePoll},
 
 		// Group F: Logical Models & Model Deployments
 		{Method: http.MethodGet, Path: "/admin/v1/models", Action: rbac.ActionModelRead, Handler: s.handleListAdminModels},

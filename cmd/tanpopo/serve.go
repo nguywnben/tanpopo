@@ -31,7 +31,9 @@ import (
 	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
+	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
+	"github.com/nguywnben/tanpopo/internal/security/oauth"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 	telemetry "github.com/nguywnben/tanpopo/internal/telemetry/otel"
@@ -208,6 +210,27 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		cleanup()
 		return nil, nil, fmt.Errorf("initialize provider catalog: %w", err)
 	}
+	redirectURI := strings.TrimSpace(os.Getenv("TANPOPO_OAUTH_REDIRECT_URI"))
+	allowHermeticHTTP := strings.TrimSpace(os.Getenv("TANPOPO_TEST_HERMETIC")) == "1"
+	if redirectURI == "" && allowHermeticHTTP {
+		host, port, splitErr := net.SplitHostPort(listen)
+		if splitErr == nil {
+			host = strings.Trim(host, "[]")
+			ip := net.ParseIP(host)
+			if host == "localhost" || (ip != nil && ip.IsLoopback()) {
+				redirectURI = "http://" + net.JoinHostPort(host, port) + "/admin/v1/oauth/callback"
+			}
+		}
+	}
+	brokerUnsealCap := vault.MintUnsealCapabilityForBroker()
+	var oauthService *oauth.Service
+	if redirectURI != "" {
+		oauthService, err = oauth.NewService(oauth.ServiceConfig{DB: db, Vault: vaultStore, UnsealCapability: brokerUnsealCap, Audit: auditLog, HostResolver: egress.NewStdHostResolver(), RedirectURI: redirectURI, AllowLoopbackHTTP: allowHermeticHTTP})
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize OAuth coordinator: %w", err)
+		}
+	}
 	lockfile := envOr("TANPOPO_LOCK_FILE", filepath.Join(dataDir, "tanpopo.lock"))
 	installerService, err := installer.NewLifecycleService(installer.ServiceConfig{
 		DB: db, Audit: auditLog, AuditEntryPoint: "admin_api", PluginsDir: pluginsDir, LockfilePath: lockfile,
@@ -218,7 +241,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	}
 	blindBroker, err := broker.NewBlindBroker(broker.Config{
 		Resolver: catalogRepo, PolicyResolver: catalogRepo, Vault: vaultStore,
-		UnsealCap: vault.MintUnsealCapabilityForBroker(), Audit: auditLog,
+		UnsealCap: brokerUnsealCap, Audit: auditLog, OAuthTokens: oauthService,
 	})
 	if err != nil {
 		cleanup()
@@ -300,7 +323,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys, Ledgers: ledgerService,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
 			Installer: installerService, ArchiveResolver: newServeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv)),
-			Broker: blindBroker, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
+			Broker: blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
 		})
 		if err != nil {
 			cleanup()

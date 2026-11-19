@@ -407,6 +407,18 @@ func TestOpenAPIRouteAndPayloadConformancePart1(t *testing.T) {
 	assertPayloadMatchesSchema(t, doc, "CryptoShredReceipt", recDelProj.Body.Bytes())
 }
 
+func TestOpenAPIOAuthRequestBodyIsOnlyOnOAuthStart(t *testing.T) {
+	doc := loadAdminOpenAPISpec(t)
+	logout := doc.Paths["/admin/v1/auth/logout"]["post"].(map[string]any)
+	if _, ok := logout["requestBody"]; ok {
+		t.Fatal("logout operation must not declare the OAuth start request body")
+	}
+	start := doc.Paths["/admin/v1/connections/{connectionId}/oauth/start"]["post"].(map[string]any)
+	if _, ok := start["requestBody"]; !ok {
+		t.Fatal("OAuth start operation must declare its request body")
+	}
+}
+
 func assertRequiredJSONKeys(t *testing.T, label string, rawJSON []byte, keys ...string) {
 	t.Helper()
 	var obj map[string]any
@@ -426,9 +438,9 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	h := newPart2TestHarness(t, 20)
 	ctx := context.Background()
 
-	// Verify exact 75 MVP v0.1 Control Plane routes and 100% OpenAPI conformance.
-	if got := len(h.srv.Routes()); got != 75 {
-		t.Fatalf("expected 75 registered Part 1+2 routes, got %d", got)
+	// Verify all registered v0.2 Control Plane routes and 100% OpenAPI conformance.
+	if got := len(h.srv.Routes()); got != 78 {
+		t.Fatalf("expected 78 registered Control Plane routes, got %d", got)
 	}
 	for _, rt := range h.srv.Routes() {
 		pathItem, ok := doc.Paths[rt.Path]
