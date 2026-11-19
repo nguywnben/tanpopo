@@ -46,6 +46,8 @@ const (
 	connID  = "conn_bedrock_contract"
 )
 
+var bedrockTestCertificate tls.Certificate
+
 type bedrockCassette struct {
 	Config                   map[string]any `yaml:"config"`
 	NormalizedInput          map[string]any `yaml:"normalized_input"`
@@ -87,7 +89,33 @@ func (bedrockAudit) Append(context.Context, storageport.AuditEvent) error { retu
 
 type bedrockHostResolver struct{}
 
-func TestMain(m *testing.M) { os.Exit(netguard.MustRunHermeticMain(m)) }
+func TestMain(m *testing.M) {
+	cert, certPEM, err := generateBedrockTLSCertificate()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "generate Bedrock test certificate:", err)
+		os.Exit(1)
+	}
+	trustDir, err := os.MkdirTemp("", "tanpopo-bedrock-test-ca-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "create Bedrock test trust directory:", err)
+		os.Exit(1)
+	}
+	trustPath := filepath.Join(trustDir, "bedrock-root.pem")
+	if err := os.WriteFile(trustPath, certPEM, 0o600); err != nil {
+		fmt.Fprintln(os.Stderr, "write Bedrock test root:", err)
+		_ = os.RemoveAll(trustDir)
+		os.Exit(1)
+	}
+	if err := os.Setenv("SSL_CERT_FILE", trustPath); err != nil {
+		fmt.Fprintln(os.Stderr, "configure Bedrock test trust root:", err)
+		_ = os.RemoveAll(trustDir)
+		os.Exit(1)
+	}
+	bedrockTestCertificate = cert
+	code := netguard.MustRunHermeticMain(m)
+	_ = os.RemoveAll(trustDir)
+	os.Exit(code)
+}
 
 func TestBedrockOfflineCassetteContractHarness(t *testing.T) {
 	report, err := testharness.TestExtension(context.Background(), testharness.TestOptions{Dir: "."})
@@ -400,9 +428,21 @@ func newBedrockTestVault(t *testing.T, credential, authority string) (*vault.Sto
 
 func newBedrockTLSServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	server := httptest.NewUnstartedServer(handler)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
+	}
+	server.Listener = listener
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{bedrockTestCertificate}, MinVersion: tls.VersionTLS12}
+	server.StartTLS()
+	return server
+}
+
+func generateBedrockTLSCertificate() (tls.Certificate, []byte, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, nil, err
 	}
 	now := time.Now()
 	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: awsHost}, DNSNames: []string{awsHost},
@@ -410,29 +450,17 @@ func newBedrockTLSServer(t *testing.T, handler http.HandlerFunc) *httptest.Serve
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, BasicConstraintsValid: true, IsCA: true}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {
-		t.Fatal(err)
+		return tls.Certificate{}, nil, err
 	}
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
-		t.Fatal(err)
+		return tls.Certificate{}, nil, err
 	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
-		t.Fatal(err)
+		return tls.Certificate{}, nil, err
 	}
-	trustPath := filepath.Join(t.TempDir(), "bedrock-root.pem")
-	if err := os.WriteFile(trustPath, certPEM, 0600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("SSL_CERT_FILE", trustPath)
-	server := httptest.NewUnstartedServer(handler)
-	server.Listener, err = net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
-	server.StartTLS()
-	return server
+	return cert, certPEM, nil
 }
