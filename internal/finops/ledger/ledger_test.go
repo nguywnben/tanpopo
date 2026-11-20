@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -160,7 +161,8 @@ func openLedgerFixture(t *testing.T, initialMs int64) (*sqlite.Store, *ledger.Se
 	auditSink := &spyAuditSink{}
 	alertSink := &spyAlertSink{}
 
-	dbPath := filepath.Join(t.TempDir(), "finops_ledger.db")
+	dbDir := t.TempDir()
+	dbPath := filepath.Join(dbDir, "finops_ledger.db")
 	st, err := sqlite.Open(context.Background(), sqlite.Config{
 		DBPath:    dbPath,
 		NowMs:     clock.Load,
@@ -169,7 +171,23 @@ func openLedgerFixture(t *testing.T, initialMs int64) (*sqlite.Store, *ledger.Se
 	if err != nil {
 		t.Fatalf("open sqlite store: %v", err)
 	}
-	t.Cleanup(func() { _ = st.Close() })
+	t.Cleanup(func() {
+		if inUse := st.RawDB().Stats().InUse; inUse != 0 {
+			t.Errorf("ledger test left %d SQLite connection(s) in use at cleanup", inUse)
+		}
+		if err := st.Close(); err != nil {
+			t.Errorf("close ledger test database: %v", err)
+		}
+		var removeErr error
+		for attempt := 0; attempt < 200; attempt++ {
+			removeErr = os.RemoveAll(dbDir)
+			if removeErr == nil {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		t.Errorf("remove ledger test database directory after close: %v", removeErr)
+	})
 	auditSink.attachDB(t, st.RawDB())
 	t.Cleanup(func() {
 		if err := auditSink.LastError(); err != nil {
@@ -1561,7 +1579,7 @@ func TestLedgerValidationAndEdgePaths(t *testing.T) {
 	}
 	if _, err := svc.Settle(ctx, ledger.SettleRequest{
 		OrgID: "org_finops_01", ReservationID: rSet.ID, RequestID: "req_rel_after_settle",
-		Rate: pricing.RateCard{InputPer1MNanoUSD: 1_000_000_000, BillingMode: pricing.BillingModeCommercialAPI},
+		Rate:  pricing.RateCard{InputPer1MNanoUSD: 1_000_000_000, BillingMode: pricing.BillingModeCommercialAPI},
 		Usage: pricing.UsageInput{InputTokens: 10, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact},
 	}); err != nil {
 		t.Fatal(err)
@@ -1571,7 +1589,7 @@ func TestLedgerValidationAndEdgePaths(t *testing.T) {
 	}
 	if _, err := svc.Settle(ctx, ledger.SettleRequest{
 		OrgID: "org_finops_01", ReservationID: rSet.ID, RequestID: "req_rel_after_settle",
-		Rate: pricing.RateCard{InputPer1MNanoUSD: 1_000_000_000, BillingMode: pricing.BillingModeCommercialAPI},
+		Rate:  pricing.RateCard{InputPer1MNanoUSD: 1_000_000_000, BillingMode: pricing.BillingModeCommercialAPI},
 		Usage: pricing.UsageInput{InputTokens: 10, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyEstimated},
 	}); err != nil {
 		t.Fatal(err)
@@ -1661,7 +1679,7 @@ func TestLedgerValidationAndEdgePaths(t *testing.T) {
 	if _, err := svc.Settle(sctx, ledger.SettleRequest{
 		OrgID: "org_finops_01", ProjectID: "p1", EnvID: "e1", VirtualKeyID: "k1",
 		RequestID: "req_canceled_settle", Plane: ledger.PlaneProvider,
-		Rate: pricing.RateCard{InputPer1MNanoUSD: 1_000_000_000, BillingMode: pricing.BillingModeCommercialAPI},
+		Rate:  pricing.RateCard{InputPer1MNanoUSD: 1_000_000_000, BillingMode: pricing.BillingModeCommercialAPI},
 		Usage: pricing.UsageInput{InputTokens: 10, UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact},
 	}); err == nil {
 		t.Fatalf("expected canceled Settle to return error")
@@ -1670,5 +1688,3 @@ func TestLedgerValidationAndEdgePaths(t *testing.T) {
 		t.Fatalf("expected GetLedger to succeed immediately after failed Settle without txMu deadlock, got %v", err)
 	}
 }
-
-
