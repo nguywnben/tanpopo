@@ -1,9 +1,9 @@
 # Milestone Map, Release Exit Criteria & Phase Integration Gates — Tanpopo
 
-> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0037: DONE` | `1 READY / 0 READY_FOR_REVIEW / 9 BLOCKED`)**
-> - **Document ID:** `PLAN-MS-01` | **Version:** `1.46.0-dec-084-0038-ready` | **Date:** `2026-11-20`
+> **Milestone Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0038: DONE` | `0 READY / 0 READY_FOR_REVIEW / 9 BLOCKED`)**
+> - **Document ID:** `PLAN-MS-01` | **Version:** `1.47.0-dec-085-0038-done` | **Date:** `2026-11-20`
 > - **Authors:** Technical Program Manager & QA Lead
-> - **Live Status:** Units `TP-IMP-0001`..`0037` are **`DONE` (`37 / 47`)** and Unit `0038` is **`READY`**. Unit 30 (`CR-13` Option A per `DEC-050`) remains accepted under [`DEC-058`](../governance/decisions.md) / [`DEC-059`](../governance/decisions.md). Unit 36 is accepted under [`DEC-074`](../governance/decisions.md) at main SHA `a3a0ef1b94d4986d7bac0d601566d8f249f87013` (PR #16; post-merge Actions `44494912921`; reviewers **Euler** and **Bohr**). Unit `0037` is **`DONE`** under `DEC-083` at main `95c6c2e` (post-merge CI `44674333547`); Units `0039`..`0047` (`9 / 47`) remain **`BLOCKED`** pending sequential DoR (no tags/releases per `GATE-REL-07`).
+> - **Live Status:** Units `TP-IMP-0001`..`0038` are **`DONE` (`38 / 47`)**. Unit 30 (`CR-13` Option A per `DEC-050`) remains accepted under [`DEC-058`](../governance/decisions.md) / [`DEC-059`](../governance/decisions.md). Unit 36 is accepted under [`DEC-074`](../governance/decisions.md) at main SHA `a3a0ef1b94d4986d7bac0d601566d8f249f87013` (PR #16; post-merge Actions `44494912921`; reviewers **Euler** and **Bohr**). Unit `0037` is **`DONE`** under `DEC-083` at main `95c6c2e` (post-merge CI `44674333547`). Unit `0038` is **`DONE`** under `DEC-085` at main `7c5538ff` (PR #23; post-merge CI `44695353169`; reviewer **Noether**). Units `0039`..`0047` (`9 / 47`) remain **`BLOCKED`** pending sequential DoR (no tags/releases per `GATE-REL-07`).
 > - **Cross-References:** [`roadmap.md`](./roadmap.md), [`dependency-graph.md`](./dependency-graph.md), [`implementation-index.md`](./implementation-index.md), [`release-scope.md`](../product/release-scope.md), and [`release-readiness.md`](../quality/release-readiness.md).
 
 ---
