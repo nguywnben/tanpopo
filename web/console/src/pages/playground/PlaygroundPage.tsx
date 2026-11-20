@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
 import {Send, Square, Trash2} from 'lucide-react';
+import {formatTime} from '../../i18n/format';
 import {listRoutesForEnvironment} from '../../api/managementClient';
 import {createPlaygroundSession, getTraceWaterfall} from '../../api/managementClient';
 import type {components} from '../../api/generated';
@@ -183,7 +184,7 @@ export function PlaygroundPage({
         {session ? (
           <div className="tp-page-actions">
             <span className="tp-muted mono">
-              {`Cap ${formatMicroUSD(session.max_budget_micros)} · expires ${new Date(session.expires_at).toLocaleTimeString()}`}
+              {`Cap ${formatMicroUSD(session.max_budget_micros)} · expires ${formatTime(session.expires_at)}`}
             </span>
             <Button
               variant="secondary"

@@ -12,6 +12,7 @@ import {PlaygroundPage} from './playground/PlaygroundPage';
 import {SetupPage} from './setup/SetupPage';
 import {SelectField, formatMicroUSD} from '../ui/primitives';
 import {MultiSelectField} from '../ui/MultiSelectField';
+import {I18nProvider} from '../i18n/I18nProvider';
 
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -22,9 +23,11 @@ function jsonResponse(body: unknown, status = 200, headers: Record<string, strin
 
 function wrap(ui: React.ReactNode) {
   return (
-    <ThemeProvider>
-      <RouterProvider>{ui}</RouterProvider>
-    </ThemeProvider>
+    <I18nProvider>
+      <ThemeProvider>
+        <RouterProvider>{ui}</RouterProvider>
+      </ThemeProvider>
+    </I18nProvider>
   );
 }
 

@@ -3,6 +3,7 @@ import {Banner as AstryxBanner} from '@astryxdesign/core/Banner';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {RouterProvider, useRouter} from './router/RouterContext';
 import {ThemeProvider} from './styles/theme';
+import {I18nProvider} from './i18n/I18nProvider';
 
 const SetupPage = lazy(() => import('./pages/setup/SetupPage').then(mod => ({default: mod.SetupPage})));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage').then(mod => ({default: mod.LoginPage})));
@@ -40,13 +41,15 @@ class ConsoleErrorBoundary extends Component<{children: ReactNode}, {hasError: b
 
 export function App() {
   return (
-    <ThemeProvider>
-      <RouterProvider>
-        <ConsoleErrorBoundary>
-          <RootSwitch />
-        </ConsoleErrorBoundary>
-      </RouterProvider>
-    </ThemeProvider>
+    <I18nProvider>
+      <ThemeProvider>
+        <RouterProvider>
+          <ConsoleErrorBoundary>
+            <RootSwitch />
+          </ConsoleErrorBoundary>
+        </RouterProvider>
+      </ThemeProvider>
+    </I18nProvider>
   );
 }
 

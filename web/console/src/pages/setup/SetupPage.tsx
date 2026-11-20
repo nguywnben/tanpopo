@@ -7,6 +7,7 @@ import {Link, useRouter} from '../../router/RouterContext';
 import {useTheme} from '../../styles/theme';
 import {Banner, Button, CheckboxField, CodeBlock, IconButton, KeyValueList, SelectField, TanpopoMark, TextField} from '../../ui/primitives';
 import {Modal} from '../../ui/Overlays';
+import {LanguagePicker, useI18n} from '../../i18n/I18nProvider';
 
 type BootstrapForm = components['schemas']['BootstrapCompleteRequest'];
 type InitialConnection = NonNullable<BootstrapForm['initial_connection']>;
@@ -32,6 +33,7 @@ const providerPresets = [
 export function SetupPage() {
   const {navigate} = useRouter();
   const {theme, toggleTheme} = useTheme();
+  const {t} = useI18n();
   const [step, setStep] = useState(0);
   const [initialized, setInitialized] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -213,9 +215,12 @@ export function SetupPage() {
               <TanpopoMark size={24} />
               <span style={{fontWeight: 700, fontSize: '1rem'}}>Tanpopo</span>
             </div>
-            <IconButton label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>
-              {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
-            </IconButton>
+            <div className="tp-auth-tools">
+              <LanguagePicker />
+              <IconButton label={t(theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')} onClick={toggleTheme}>
+                {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+              </IconButton>
+            </div>
           </div>
           <div className="tp-stack-sm">
             <h1>Instance setup</h1>
@@ -226,12 +231,6 @@ export function SetupPage() {
             orientation="vertical"
             label="Setup steps"
             density="compact"
-            onStepClick={index => {
-              if (index < step) {
-                setStep(index);
-                setError('');
-              }
-            }}
           >
             {steps.map((item, index) => (
               <Step

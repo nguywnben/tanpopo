@@ -4,10 +4,12 @@ import {loginAdmin} from '../../api/client';
 import {Link, useRouter} from '../../router/RouterContext';
 import {useTheme} from '../../styles/theme';
 import {Banner, Button, IconButton, TanpopoMark, TextField} from '../../ui/primitives';
+import {LanguagePicker, useI18n} from '../../i18n/I18nProvider';
 
 export function LoginPage() {
   const {navigate} = useRouter();
   const {theme, toggleTheme} = useTheme();
+  const {t} = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -38,21 +40,24 @@ export function LoginPage() {
             <TanpopoMark size={24} />
             <span style={{fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.02em'}}>Tanpopo</span>
           </div>
-          <IconButton label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>
-            {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
-          </IconButton>
+          <div className="tp-auth-tools">
+            <LanguagePicker />
+            <IconButton label={t(theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')} onClick={toggleTheme}>
+              {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+            </IconButton>
+          </div>
         </div>
 
         <div className="tp-stack-sm">
-          <h1>Sign in</h1>
-          <p className="tp-muted">Use your local administrator credentials to access the control plane.</p>
+          <h1>{t('Sign in')}</h1>
+          <p className="tp-muted">{t('Use your local administrator credentials to access the control plane.')}</p>
         </div>
 
-        {error ? <Banner tone="danger" title="Sign-in failed">{error}</Banner> : null}
+        {error ? <Banner tone="danger" title={t('Sign-in failed')}>{error}</Banner> : null}
 
         <form className="tp-stack" onSubmit={handleSubmit}>
           <TextField
-            label="Email address"
+            label={t('Email address')}
             type="email"
             autoComplete="username"
             required
@@ -61,7 +66,7 @@ export function LoginPage() {
             onChange={event => setEmail(event.target.value)}
           />
           <TextField
-            label="Password"
+            label={t('Password')}
             type="password"
             autoComplete="current-password"
             required
@@ -70,13 +75,13 @@ export function LoginPage() {
             onChange={event => setPassword(event.target.value)}
           />
           <Button type="submit" variant="primary" loading={busy} disabled={!email.trim() || !password}>
-            {busy ? 'Signing in…' : 'Sign in'}
+            {t(busy ? 'Signing in…' : 'Sign in')}
           </Button>
         </form>
 
         <hr className="tp-divider" />
         <p className="tp-muted">
-          New instance? <Link href="/setup" className="tp-link">Run first-time setup</Link>
+          {t('New instance?')} <Link href="/setup" className="tp-link">{t('Run first-time setup')}</Link>
         </p>
       </div>
     </main>

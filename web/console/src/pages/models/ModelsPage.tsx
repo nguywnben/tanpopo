@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useState, type FormEvent} from 'react';
 import {Plus} from 'lucide-react';
+import {formatNumber} from '../../i18n/format';
 import {
   createAdminModel,
   createDeployment,
@@ -465,7 +466,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                 width: '18%',
                 render: row => (
                   <span className="mono">
-                    {row.context_window.toLocaleString('en-US')} / {row.max_output_tokens.toLocaleString('en-US')}
+                    {formatNumber(row.context_window)} / {formatNumber(row.max_output_tokens)}
                   </span>
                 ),
               },

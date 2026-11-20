@@ -68,6 +68,20 @@ func assertViolationsContainRule(t *testing.T, root string, opts checkOptions, w
 	t.Fatalf("expected violation rule %q, got %v", wantRule, violations)
 }
 
+func assertNoViolationsForRule(t *testing.T, root string, opts checkOptions, forbiddenRule string) {
+	t.Helper()
+	opts.rootDir = root
+	violations, err := runChecks(opts)
+	if err != nil {
+		t.Fatalf("unexpected execution error: %v", err)
+	}
+	for _, violation := range violations {
+		if violation.Rule == forbiddenRule {
+			t.Fatalf("unexpected violation for rule %q: %v", forbiddenRule, violation)
+		}
+	}
+}
+
 func TestFloorGuardRejectsAllNegativeFixtures(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -350,6 +364,10 @@ func TestLicenseLockfilesUILayoutAndCanary(t *testing.T) {
 		writeTestFile(t, root, "web/console/src/legacy.tsx", "export const ok = true;\n")
 		writeTestFile(t, root, "web/console/src/App.tsx", "export const title = 'Xin ch" + "\u00e0" + "o';\n")
 		assertViolationsContainRule(t, root, checkOptions{uiLayout: true}, "english-ui-copy")
+
+		writeTestFile(t, root, "web/console/src/App.tsx", "export const title = 'English source';\n")
+		writeTestFile(t, root, "web/console/src/i18n/catalog.ts", "export const sourceCatalog = { greeting: 'Hello' };\nexport const messages = { vi: { greeting: 'Xin chào' } };\n")
+		assertNoViolationsForRule(t, root, checkOptions{uiLayout: true}, "english-ui-copy")
 	})
 
 	t.Run("redacts canary secret without printing raw value", func(t *testing.T) {

@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
 import {ArrowRight, RefreshCw} from 'lucide-react';
+import {formatDateAndTime, formatNumber, formatTime} from '../../i18n/format';
 import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {getOverviewSummary, listActiveAlerts, listUnhealthyDeployments} from '../../api/client';
@@ -61,9 +62,9 @@ export function OverviewPage() {
 
   const kpis = summary
     ? [
-        {label: 'Requests', value: summary.total_requests.toLocaleString('en-US'), detail: `Window: ${summary.window}`},
+        {label: 'Requests', value: formatNumber(summary.total_requests), detail: `Window: ${summary.window}`},
         {label: 'Error rate', value: `${(summary.error_rate_ratio * 100).toFixed(2)}%`, detail: 'Internal & upstream'},
-        {label: 'p95 proxy overhead', value: `${summary.p95_overhead_ms.toLocaleString('en-US')} ms`, detail: 'Gateway added latency'},
+        {label: 'p95 proxy overhead', value: `${formatNumber(summary.p95_overhead_ms)} ms`, detail: 'Gateway added latency'},
         {
           label: 'Settled spend',
           value: formatMicroUSD(summary.settled_micro_usd),
@@ -79,7 +80,7 @@ export function OverviewPage() {
           <h1>Overview</h1>
           <p className="tp-page-subtitle">
             {summary
-              ? `Updated ${new Date(summary.updated_at).toLocaleTimeString()} · ${summary.unmetered_request_count ?? 0} unmetered requests`
+              ? `Updated ${formatTime(summary.updated_at)} · ${formatNumber(summary.unmetered_request_count ?? 0)} unmetered requests`
               : 'Live gateway posture and remediation queue.'}
           </p>
         </div>
@@ -169,7 +170,7 @@ export function OverviewPage() {
                       <span style={{fontWeight: 600}}>{alert.summary}</span>
                     </div>
                     <span className="tp-muted mono">
-                      {alert.alert_code} · {new Date(alert.triggered_at).toLocaleString()}
+                      {alert.alert_code} · {formatDateAndTime(alert.triggered_at)}
                     </span>
                   </div>
                   {safeInternal ? (

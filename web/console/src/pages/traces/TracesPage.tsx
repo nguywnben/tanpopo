@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {EyeOff, Search} from 'lucide-react';
+import {formatDateAndTime, formatNumber, formatTime} from '../../i18n/format';
 import {getTraceWaterfall, listTracePage} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {DataTable} from '../../ui/DataTable';
@@ -200,14 +201,14 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
               id: 'duration',
               header: 'Duration',
               width: '10%',
-              render: row => <span className="num">{row.duration_ms.toLocaleString('en-US')} ms</span>,
+              render: row => <span className="num">{formatNumber(row.duration_ms)} ms</span>,
             },
             {
               id: 'created',
               header: 'Timestamp',
               width: '14%',
               hideOnMobile: false,
-              render: row => <span className="num tp-muted">{new Date(row.created_at).toLocaleTimeString()}</span>,
+              render: row => <span className="num tp-muted">{formatTime(row.created_at)}</span>,
             },
           ]}
         />
@@ -260,8 +261,8 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
                     </div>
                   ),
                 },
-                {label: 'Total duration', value: `${selected.duration_ms.toLocaleString('en-US')} ms`, mono: true},
-                {label: 'Recorded at', value: new Date(selected.created_at).toLocaleString()},
+                {label: 'Total duration', value: `${formatNumber(selected.duration_ms)} ms`, mono: true},
+                {label: 'Recorded at', value: formatDateAndTime(selected.created_at)},
               ]}
             />
 

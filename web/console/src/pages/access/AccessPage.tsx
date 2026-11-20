@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useState, type FormEvent} from 'react';
 import {Plus, UserPlus} from 'lucide-react';
+import {formatDateAndTime} from '../../i18n/format';
 import {listAdminModels, listDeployments} from '../../api/catalogClient';
 import {
   createMember,
@@ -288,7 +289,7 @@ export function AccessPage({
               {id: 'name', header: 'Name', primary: true, width: '30%', render: row => <span style={{fontWeight: 600}}>{row.name}</span>},
               {id: 'key', header: 'Prefix / Last 4', width: '20%', render: row => <span className="mono">{row.key_prefix}…{row.last_four}</span>},
               {id: 'state', header: 'State', width: '16%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
-              {id: 'created', header: 'Created', width: '22%', render: row => <span className="num tp-muted">{new Date(row.created_at).toLocaleString()}</span>},
+              {id: 'created', header: 'Created', width: '22%', render: row => <span className="num tp-muted">{formatDateAndTime(row.created_at)}</span>},
               {
                 id: 'actions',
                 header: 'Actions',

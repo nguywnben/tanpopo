@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useState, type FormEvent} from 'react';
 import {Archive, Plus, RefreshCw, ShieldCheck} from 'lucide-react';
+import {formatDateAndTime, formatDate} from '../../i18n/format';
 import {getExtensionLockfile, listSecretMetadata} from '../../api/catalogClient';
 import {
   createEncryptedBackup,
@@ -275,7 +276,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
             emptyTitle="No backup receipts recorded"
             emptyDescription="Backup receipts are recorded as immutable SYSTEM audit events."
             columns={[
-              {id: 'created', header: 'Created', primary: true, width: '24%', render: row => <span className="num">{new Date(row.created_at).toLocaleString()}</span>},
+              {id: 'created', header: 'Created', primary: true, width: '24%', render: row => <span className="num">{formatDateAndTime(row.created_at)}</span>},
               {id: 'actor', header: 'Triggered by', width: '20%', render: row => <span className="mono">{row.actor_id}</span>},
               {id: 'target', header: 'Backup ID', width: '22%', render: row => <span className="mono">{row.target_id}</span>},
               {id: 'meta', header: 'Receipt metadata', width: '34%', render: row => <span className="mono tp-muted">{JSON.stringify(row.metadata ?? {})}</span>},
@@ -347,7 +348,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
               {id: 'origin', header: 'Receiver origin', primary: true, width: '32%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.target_origin}</span>},
               {id: 'events', header: 'Subscribed events', width: '40%', render: row => <span className="mono tp-muted">{row.events.join(', ')}</span>},
               {id: 'state', header: 'State', width: '14%', render: row => <StatusPill tone={row.enabled ? 'ok' : 'neutral'} label={row.enabled ? 'Enabled' : 'Disabled'} />},
-              {id: 'created', header: 'Created', width: '14%', render: row => <span className="num tp-muted">{new Date(row.created_at_ms).toLocaleDateString()}</span>},
+              {id: 'created', header: 'Created', width: '14%', render: row => <span className="num tp-muted">{formatDate(row.created_at_ms)}</span>},
             ]}
           />
         </section>

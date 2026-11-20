@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {CheckCircle2, ShieldAlert, ShieldCheck} from 'lucide-react';
+import {formatDateAndTime, formatTime} from '../../i18n/format';
 import {
   clearKillSwitch,
   decideApproval,
@@ -276,7 +277,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
                       />
                       <span className="mono" style={{fontWeight: 600}}>{item.requested_by}</span>
                     </div>
-                    <span className="tp-muted num">Expires {new Date(item.expires_at).toLocaleString()}</span>
+                    <span className="tp-muted num">Expires {formatDateAndTime(item.expires_at)}</span>
                   </div>
 
                   {item.schema_drift_locked ? (
@@ -394,7 +395,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
                   </div>
                 ),
               },
-              {id: 'time', header: 'Time', width: '12%', render: row => <span className="num tp-muted">{new Date(row.created_at).toLocaleTimeString()}</span>},
+              {id: 'time', header: 'Time', width: '12%', render: row => <span className="num tp-muted">{formatTime(row.created_at)}</span>},
               {
                 id: 'inspect',
                 header: 'Detail',
@@ -524,7 +525,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
             <KeyValueList
               items={[
                 {label: 'Sequence', value: `#${inspectedEvent.seq_no}`, mono: true},
-                {label: 'Timestamp', value: new Date(inspectedEvent.created_at).toLocaleString()},
+                {label: 'Timestamp', value: formatDateAndTime(inspectedEvent.created_at)},
                 {label: 'Actor ID', value: inspectedEvent.actor_id, mono: true},
                 {label: 'Action', value: inspectedEvent.action, mono: true},
                 {label: 'Target', value: `${inspectedEvent.target_type} / ${inspectedEvent.target_id}`, mono: true},

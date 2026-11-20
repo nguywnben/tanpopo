@@ -10,6 +10,7 @@ import {Badge as AstryxBadge} from '@astryxdesign/core/Badge';
 import {Banner as AstryxBanner} from '@astryxdesign/core/Banner';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {CheckboxInput as AstryxCheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {formatMinorCurrency} from '../i18n/format';
 import {CodeBlock as AstryxCodeBlock} from '@astryxdesign/core/CodeBlock';
 import type {DropdownMenuOption} from '@astryxdesign/core/DropdownMenu';
 import {EmptyState as AstryxEmptyState} from '@astryxdesign/core/EmptyState';
@@ -533,11 +534,5 @@ export function formatLabel(raw: string): string {
 }
 
 export function formatMicroUSD(value: number): string {
-  if (!Number.isSafeInteger(value)) return 'Unavailable';
-  const amount = BigInt(value);
-  const sign = amount < 0n ? '-' : '';
-  const abs = amount < 0n ? -amount : amount;
-  const whole = abs / 1_000_000n;
-  const fraction = String(abs % 1_000_000n).padStart(6, '0');
-  return `${sign}$${whole.toLocaleString('en-US')}.${fraction}`;
+  return formatMinorCurrency(value, 'USD', 6);
 }

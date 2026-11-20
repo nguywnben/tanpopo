@@ -1407,14 +1407,21 @@ func checkUILayout(rootDir string) ([]Violation, error) {
 		}
 
 		lines := strings.Split(text, "\n")
+		inLocalizedMessageCatalog := false
 		for i, line := range lines {
-			if vnDiacriticRe.MatchString(line) {
+			if strings.Contains(line, "export const messages") {
+				inLocalizedMessageCatalog = true
+			}
+			// Translations belong in the explicit locale message table. Keep the English source
+			// catalog English while allowing translated copy in the locale catalog itself.
+			localizedCatalogLine := strings.HasSuffix(rel, "/src/i18n/catalog.ts") && inLocalizedMessageCatalog
+			if vnDiacriticRe.MatchString(line) && !localizedCatalogLine {
 				violations = append(violations, Violation{
 					Check:   "ui-layout",
 					Rule:    "english-ui-copy",
 					File:    rel,
 					Line:    i + 1,
-					Message: "non-English Vietnamese text found in web/console/src (ISS-008)",
+					Message: "non-English UI copy must live in the locale message catalog and the English source catalog must remain English (ISS-008)",
 				})
 			}
 			if externalAssetURLRe.MatchString(line) {

@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useState} from 'react';
 import {Download} from 'lucide-react';
+import {formatNumber} from '../../i18n/format';
 import {exportUsageChargeback, getUsageChargebackSummary, listBudgets, updateBudget} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {useRouter} from '../../router/RouterContext';
@@ -134,7 +135,7 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
           {label: 'Exact settled', value: formatMicroUSD(totalExact), detail: 'Provider-reported usage'},
           {label: 'Estimated settled', value: formatMicroUSD(totalEstimated), detail: 'Fallback token estimation'},
           {label: 'Active holds', value: formatMicroUSD(totalHolds), detail: 'In-flight pre-egress leases'},
-          {label: 'Unmetered requests', value: totalUnmetered.toLocaleString('en-US'), detail: 'Flagged for audit review'},
+          {label: 'Unmetered requests', value: formatNumber(totalUnmetered), detail: 'Flagged for audit review'},
         ]}
       />
 

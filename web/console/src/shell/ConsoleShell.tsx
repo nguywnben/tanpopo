@@ -20,7 +20,6 @@ import {
   X,
 } from 'lucide-react';
 import {CommandPalette} from '@astryxdesign/core/CommandPalette';
-import {Kbd} from '@astryxdesign/core/Kbd';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {createStaticSource, type SearchableItem} from '@astryxdesign/core/Typeahead';
@@ -31,6 +30,7 @@ import {Link, useRouter} from '../router/RouterContext';
 import {useTheme} from '../styles/theme';
 import {Banner, Button, CountPill, IconButton, TanpopoMark} from '../ui/primitives';
 import {canAccessRoute, navigationGroups, quickCommands, routeForPath, type ConsoleRoute, type NavIconKey, type Role} from './routes';
+import {LanguagePicker, useI18n} from '../i18n/I18nProvider';
 
 const WorkspaceRouter = lazy(() => import('./WorkspaceRouter').then(mod => ({default: mod.WorkspaceRouter})));
 
@@ -60,6 +60,7 @@ function NavIcon({icon}: {icon: NavIconKey}) {
 }
 
 export function ConsoleShell() {
+  const {t} = useI18n();
   const {pathname, navigate} = useRouter();
   const {theme, toggleTheme} = useTheme();
   const [session, setSession] = useState<Session | null>(null);
@@ -221,29 +222,29 @@ export function ConsoleShell() {
 
   return (
     <div className="tp-shell">
-      <a className="skip-link" href="#main-content">Skip to main content</a>
+      <a className="skip-link" href="#main-content">{t('Skip to main content')}</a>
 
       {railOpen ? (
         <button
           type="button"
           className="tp-rail-backdrop"
-          aria-label="Close navigation menu"
+          aria-label={t('Close navigation menu')}
           onClick={() => setRailOpen(false)}
         />
       ) : null}
 
-      <aside className="tp-rail" data-open={railOpen ? 'true' : 'false'} aria-label="Tanpopo console navigation">
+      <aside className="tp-rail" data-open={railOpen ? 'true' : 'false'} aria-label={t('Tanpopo console navigation')}>
         <div className="tp-rail-header">
           <Link href="/overview" className="tp-brand">
             <TanpopoMark size={22} />
             <span>Tanpopo</span>
           </Link>
-          <IconButton label="Close navigation" className="tp-mobile-only" onClick={() => setRailOpen(false)}>
+          <IconButton label={t('Close navigation')} className="tp-mobile-only" onClick={() => setRailOpen(false)}>
             <X size={16} aria-hidden="true" />
           </IconButton>
         </div>
 
-        <nav className="tp-rail-scroll" aria-label="Primary sections">
+        <nav className="tp-rail-scroll" aria-label={t('Primary sections')}>
           {visibleGroups.map(group => (
             <div key={group.title} className="tp-nav-group">
               <div className="tp-nav-group-title">{group.title}</div>
@@ -272,10 +273,10 @@ export function ConsoleShell() {
         <div className="tp-rail-footer">
           <div className="tp-account-row">
             <div className="tp-account-meta">
-              <div className="tp-account-email" aria-label="Signed-in account">{session?.email ?? 'Admin session'}</div>
+              <div className="tp-account-email" aria-label={t('Signed-in account')}>{session?.email ?? t('Admin session')}</div>
               <div className="tp-account-role">{roles.length > 0 ? roles.join(', ') : 'Authenticating'}</div>
             </div>
-            <IconButton label="Sign out" disabled={signingOut || !session} onClick={() => void handleSignOut()}>
+            <IconButton label={t('Sign out')} disabled={signingOut || !session} onClick={() => void handleSignOut()}>
               <LogOut size={15} aria-hidden="true" />
             </IconButton>
           </div>
@@ -286,7 +287,7 @@ export function ConsoleShell() {
         <header className="tp-topbar">
           <div className="tp-topbar-left">
             <IconButton
-              label="Open navigation menu"
+              label={t('Open navigation menu')}
               className="tp-mobile-only"
               aria-expanded={railOpen}
               onClick={() => setRailOpen(open => !open)}
@@ -296,16 +297,16 @@ export function ConsoleShell() {
 
             <div className="tp-scope-group" role="group" aria-label="Active workspace scope">
               <div className="tp-scope-field">
-                <span className="tp-scope-label" aria-hidden="true">Project</span>
+              <span className="tp-scope-label" aria-hidden="true">{t('Project')}</span>
                 <Selector
                   id="project-context"
-                  label="Project"
+                  label={t('Project')}
                   isLabelHidden
                   size="sm"
                   variant="input"
                   options={projectOptions}
                   value={projectId}
-                  placeholder="No project"
+                  placeholder={t('No project')}
                   isDisabled={loading || projects.length === 0}
                   hasSearch={projects.length > 8}
                   onChange={next => setProjectId(next)}
@@ -313,16 +314,16 @@ export function ConsoleShell() {
                 />
               </div>
               <div className="tp-scope-field">
-                <span className="tp-scope-label" aria-hidden="true">Env</span>
+              <span className="tp-scope-label" aria-hidden="true">{t('Env')}</span>
                 <Selector
                   id="environment-context"
-                  label="Env"
+                  label={t('Env')}
                   isLabelHidden
                   size="sm"
                   variant="input"
                   options={environmentOptions}
                   value={environmentId}
-                  placeholder="No env"
+                  placeholder={t('No env')}
                   isDisabled={loading || environments.length === 0}
                   hasSearch={environments.length > 8}
                   onChange={next => setEnvironmentId(next)}
@@ -339,8 +340,7 @@ export function ConsoleShell() {
               onClick={() => setPaletteOpen(true)}
             >
               <Search size={14} aria-hidden="true" />
-              <span>Jump</span>
-              <Kbd keys="mod+k" />
+              <span>{t('Jump')}</span>
             </Button>
 
             {canUseEmergency ? (
@@ -354,12 +354,13 @@ export function ConsoleShell() {
                   aria-hidden="true"
                   style={activeSwitches === 0 ? {color: 'var(--tp-status-error)'} : undefined}
                 />
-                <span>Kill Switch</span>
+                <span>{t('Kill Switch')}</span>
                 {activeSwitches > 0 ? <CountPill count={activeSwitches} /> : null}
               </Button>
             ) : null}
 
-            <IconButton label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>
+            <LanguagePicker className="tp-language-picker tp-topbar-language" />
+            <IconButton label={t(theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')} onClick={toggleTheme}>
               {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
             </IconButton>
           </div>
@@ -367,8 +368,8 @@ export function ConsoleShell() {
 
         <main id="main-content" className="tp-content" tabIndex={-1}>
           {offline ? (
-            <Banner tone="warn" title="Offline or unreachable control plane">
-              Local console assets remain available. Retry when the Tanpopo server is reachable.
+            <Banner tone="warn" title={t('Offline or unreachable control plane')}>
+              {t('Local console assets remain available. Retry when the Tanpopo server is reachable.')}
             </Banner>
           ) : null}
 
@@ -379,11 +380,11 @@ export function ConsoleShell() {
               <Skeleton width="100%" height={140} radius={2} index={2} />
             </div>
           ) : loadError ? (
-            <Banner tone="danger" title="Console context unavailable">
-              {offline ? 'The console is offline. Local assets remain available.' : 'Unable to load session and project scope from /admin/v1.'}
+            <Banner tone="danger" title={t('Console context unavailable')}>
+              {offline ? t('The console is offline. Local assets remain available.') : t('Unable to load session and project scope from /admin/v1.')}
             </Banner>
           ) : (
-            <Suspense fallback={<p className="tp-muted" role="status">Loading section…</p>}>
+            <Suspense fallback={<p className="tp-muted" role="status">{t('Loading section…')}</p>}>
               <WorkspaceRouter
                 route={route}
                 pathname={pathname}
@@ -403,8 +404,8 @@ export function ConsoleShell() {
         isOpen={paletteOpen}
         onOpenChange={setPaletteOpen}
         searchSource={paletteSource}
-        label="Quick jump"
-        emptySearchText="No matching sections available for your role."
+        label={t('Quick jump')}
+        emptySearchText={t('No matching sections available for your role.')}
         width={560}
         onValueChange={path => {
           if (path) navigate(path);
