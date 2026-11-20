@@ -210,13 +210,15 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
               <SelectField
                 label="Group by"
                 value={groupBy}
-                onChange={event => setGroupBy(event.target.value as GroupBy)}
-              >
-                <option value="project">Project</option>
-                <option value="env">Environment</option>
-                <option value="key">Virtual Key</option>
-                <option value="model">Model</option>
-              </SelectField>
+                width={180}
+                onChange={next => setGroupBy(next as GroupBy)}
+                options={[
+                  {value: 'project', label: 'Project'},
+                  {value: 'env', label: 'Environment'},
+                  {value: 'key', label: 'Virtual Key'},
+                  {value: 'model', label: 'Model'},
+                ]}
+              />
             }
           />
           <DataTable

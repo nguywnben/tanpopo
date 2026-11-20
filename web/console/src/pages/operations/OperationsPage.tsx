@@ -13,11 +13,11 @@ import {
 import type {components} from '../../api/generated';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
+import {MultiSelectField} from '../../ui/MultiSelectField';
 import {Drawer} from '../../ui/Overlays';
 import {
   Banner,
   Button,
-  CheckboxField,
   CodeBlock,
   MetricStrip,
   SectionHeader,
@@ -363,25 +363,25 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
           <SelectField
             label="Signing credential (WEBHOOK_HMAC_SECRET)"
             value={webhookSecretId}
-            onChange={event => setWebhookSecretId(event.target.value)}
+            onChange={setWebhookSecretId}
             hint={hmacSecrets.length === 0 ? 'Seal a WEBHOOK_HMAC_SECRET credential in Providers → Vault Secrets first.' : undefined}
-          >
-            <option value="">Select signing secret</option>
-            {hmacSecrets.map(s => (
-              <option key={s.credential_id} value={s.credential_id}>{s.name} ({s.trailing_fingerprint})</option>
-            ))}
-          </SelectField>
-          <div className="tp-stack-sm">
-            <span className="tp-label">Events</span>
-            {webhookEventOptions.map(ev => (
-              <CheckboxField
-                key={ev}
-                label={ev}
-                checked={webhookEvents.includes(ev)}
-                onChange={checked => setWebhookEvents(curr => (checked ? [...curr, ev] : curr.filter(item => item !== ev)))}
-              />
-            ))}
-          </div>
+            options={[
+              {value: '', label: 'Select signing secret'},
+              ...hmacSecrets.map(s => ({
+                value: s.credential_id,
+                label: `${s.name} (${s.trailing_fingerprint})`,
+              })),
+            ]}
+          />
+          <MultiSelectField
+            label="Events"
+            placeholder="Select webhook events"
+            hasSelectAll
+            hasClear
+            value={webhookEvents}
+            options={webhookEventOptions.map(ev => ({value: ev, label: ev}))}
+            onChange={next => setWebhookEvents(next as WebhookEvent[])}
+          />
           <div className="tp-row" style={{justifyContent: 'flex-end'}}>
             <Button variant="secondary" onClick={() => setWebhookOpen(false)}>Cancel</Button>
             <Button type="submit" variant="primary" loading={busy} disabled={!webhookUrl.trim() || !webhookSecretId || webhookEvents.length === 0}>

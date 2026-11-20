@@ -14,25 +14,6 @@ if (!HTMLDialogElement.prototype.close) {
   };
 }
 
-if (typeof HTMLElement !== 'undefined') {
-  if (!('showPopover' in HTMLElement.prototype)) {
-    Object.defineProperty(HTMLElement.prototype, 'showPopover', {
-      configurable: true,
-      value() {
-        this.setAttribute('data-popover-open', 'true');
-      },
-    });
-  }
-  if (!('hidePopover' in HTMLElement.prototype)) {
-    Object.defineProperty(HTMLElement.prototype, 'hidePopover', {
-      configurable: true,
-      value() {
-        this.removeAttribute('data-popover-open');
-      },
-    });
-  }
-}
-
 if (typeof window !== 'undefined' && !window.matchMedia) {
   window.matchMedia = (query: string) =>
     ({

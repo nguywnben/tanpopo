@@ -509,20 +509,32 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               <TextField label="Search adapters" type="search" value={adapterQuery} onChange={event => setAdapterQuery(event.target.value)} />
             </div>
             <div className="tp-toolbar-field">
-              <SelectField label="Wire protocol" value={protocolFilter} onChange={event => setProtocolFilter(event.target.value)}>
-                <option value="ALL">All protocols</option>
-                {[...new Set(adapters.map(a => a.wire_protocol).filter((v): v is string => Boolean(v)))].sort().map(v => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </SelectField>
+              <SelectField
+                label="Wire protocol"
+                value={protocolFilter}
+                onChange={setProtocolFilter}
+                options={[
+                  {value: 'ALL', label: 'All protocols'},
+                  ...[...new Set(adapters.map(a => a.wire_protocol).filter((v): v is string => Boolean(v)))].sort().map(v => ({
+                    value: v,
+                    label: v,
+                  })),
+                ]}
+              />
             </div>
             <div className="tp-toolbar-field">
-              <SelectField label="Execution tier" value={tierFilter} onChange={event => setTierFilter(event.target.value)}>
-                <option value="ALL">All tiers</option>
-                {[...new Set(adapters.map(a => a.execution_tier))].sort().map(v => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </SelectField>
+              <SelectField
+                label="Execution tier"
+                value={tierFilter}
+                onChange={setTierFilter}
+                options={[
+                  {value: 'ALL', label: 'All tiers'},
+                  ...[...new Set(adapters.map(a => a.execution_tier))].sort().map(v => ({
+                    value: v,
+                    label: v,
+                  })),
+                ]}
+              />
             </div>
           </div>
 
@@ -602,42 +614,52 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
           <SelectField
             label="Provider adapter"
             value={adapterId}
-            onChange={event => {
-              setAdapterId(event.target.value);
+            placeholder="Select provider adapter"
+            onChange={next => {
+              setAdapterId(next);
               setBindings({});
             }}
-          >
-            {adapters.filter(a => a.installation_state === 'ENABLED_ACTIVE').map(item => (
-              <option key={item.id} value={item.id}>{item.name} ({item.id})</option>
-            ))}
-          </SelectField>
+            options={adapters
+              .filter(a => a.installation_state === 'ENABLED_ACTIVE')
+              .map(item => ({value: item.id, label: `${item.name} (${item.id})`}))}
+          />
           <TextField label="Endpoint URL" type="url" required value={endpoint} onChange={event => setEndpoint(event.target.value)} />
           <div className="tp-grid-2">
-            <SelectField label="Billing mode" value={billingMode} onChange={event => setBillingMode(event.target.value as typeof billingMode)}>
-              <option value="COMMERCIAL_API">Commercial API</option>
-              <option value="SELF_HOSTED_INFRA">Self-hosted infra</option>
-            </SelectField>
-            <SelectField label="Data region" value={region} onChange={event => setRegion(event.target.value as typeof region)}>
-              <option value="US">US</option>
-              <option value="EU">EU</option>
-              <option value="APAC">APAC</option>
-              <option value="ON_PREM">ON_PREM</option>
-            </SelectField>
+            <SelectField
+              label="Billing mode"
+              value={billingMode}
+              onChange={next => setBillingMode(next as typeof billingMode)}
+              options={[
+                {value: 'COMMERCIAL_API', label: 'Commercial API'},
+                {value: 'SELF_HOSTED_INFRA', label: 'Self-hosted infra'},
+              ]}
+            />
+            <SelectField
+              label="Data region"
+              value={region}
+              onChange={next => setRegion(next as typeof region)}
+              options={[
+                {value: 'US', label: 'US'},
+                {value: 'EU', label: 'EU'},
+                {value: 'APAC', label: 'APAC'},
+                {value: 'ON_PREM', label: 'ON_PREM'},
+              ]}
+            />
           </div>
           {activeAdapterSlots.map(slot => (
             <SelectField
               key={slot}
               label={`Credential for ${slot}`}
               value={bindings[slot] ?? ''}
-              onChange={event => setBindings(curr => ({...curr, [slot]: event.target.value}))}
-            >
-              <option value="">No credential</option>
-              {secrets.map(secret => (
-                <option key={secret.credential_id} value={secret.credential_id}>
-                  {secret.name} · {secret.trailing_fingerprint}
-                </option>
-              ))}
-            </SelectField>
+              onChange={next => setBindings(curr => ({...curr, [slot]: next}))}
+              options={[
+                {value: '', label: 'No credential'},
+                ...secrets.map(secret => ({
+                  value: secret.credential_id,
+                  label: `${secret.name} · ${secret.trailing_fingerprint}`,
+                })),
+              ]}
+            />
           ))}
           <CheckboxField
             label="Allow private or loopback upstream"
@@ -685,15 +707,15 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               key={slot}
               label={`Rotate ${slot}`}
               value={draftBindings[slot] ?? ''}
-              onChange={event => setDraftBindings(curr => ({...curr, [slot]: event.target.value}))}
-            >
-              <option value="">Keep current binding</option>
-              {secrets.map(secret => (
-                <option key={secret.credential_id} value={secret.credential_id}>
-                  {secret.name} · {secret.trailing_fingerprint}
-                </option>
-              ))}
-            </SelectField>
+              onChange={next => setDraftBindings(curr => ({...curr, [slot]: next}))}
+              options={[
+                {value: '', label: 'Keep current binding'},
+                ...secrets.map(secret => ({
+                  value: secret.credential_id,
+                  label: `${secret.name} · ${secret.trailing_fingerprint}`,
+                })),
+              ]}
+            />
           ))}
           <div className="tp-row" style={{justifyContent: 'flex-end'}}>
             <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
@@ -710,12 +732,17 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       >
         <form className="tp-stack" onSubmit={handleSealSecret}>
           <TextField label="Credential name" required value={secretName} onChange={event => setSecretName(event.target.value)} />
-          <SelectField label="Secret kind" value={secretKind} onChange={event => setSecretKind(event.target.value as typeof secretKind)}>
-            <option value="API_KEY">API Key</option>
-            <option value="AWS_IAM_CREDENTIALS">AWS IAM Credentials</option>
-            <option value="WEBHOOK_HMAC_SECRET">Webhook HMAC Secret</option>
-            <option value="TLS_CLIENT_CERT">TLS Client Certificate</option>
-          </SelectField>
+          <SelectField
+            label="Secret kind"
+            value={secretKind}
+            onChange={next => setSecretKind(next as typeof secretKind)}
+            options={[
+              {value: 'API_KEY', label: 'API Key'},
+              {value: 'AWS_IAM_CREDENTIALS', label: 'AWS IAM Credentials'},
+              {value: 'WEBHOOK_HMAC_SECRET', label: 'Webhook HMAC Secret'},
+              {value: 'TLS_CLIENT_CERT', label: 'TLS Client Certificate'},
+            ]}
+          />
           <TextField
             label="Secret value"
             type="password"

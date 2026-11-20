@@ -406,25 +406,40 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
               <TextField label="Search catalog" type="search" value={query} onChange={event => setQuery(event.target.value)} />
             </div>
             <div className="tp-toolbar-field">
-              <SelectField label="Origin trust" value={trustFilter} onChange={event => setTrustFilter(event.target.value)}>
-                <option value="ALL">All origins</option>
-                <option value="official">Official</option>
-                <option value="verified">Verified</option>
-                <option value="unverified_external">Unverified external</option>
-              </SelectField>
+              <SelectField
+                label="Origin trust"
+                value={trustFilter}
+                onChange={setTrustFilter}
+                options={[
+                  {value: 'ALL', label: 'All origins'},
+                  {value: 'official', label: 'Official'},
+                  {value: 'verified', label: 'Verified'},
+                  {value: 'unverified_external', label: 'Unverified external'},
+                ]}
+              />
             </div>
             <div className="tp-toolbar-field">
-              <SelectField label="Capability" value={capFilter} onChange={event => setCapFilter(event.target.value)}>
-                <option value="ALL">All capabilities</option>
-                {[...new Set(catalog.flatMap(item => item.capabilities))].sort().map(v => <option key={v} value={v}>{v}</option>)}
-              </SelectField>
+              <SelectField
+                label="Capability"
+                value={capFilter}
+                onChange={setCapFilter}
+                options={[
+                  {value: 'ALL', label: 'All capabilities'},
+                  ...[...new Set(catalog.flatMap(item => item.capabilities))].sort().map(v => ({value: v, label: v})),
+                ]}
+              />
             </div>
             <div className="tp-toolbar-field">
-              <SelectField label="Publisher signature" value={sigFilter} onChange={event => setSigFilter(event.target.value)}>
-                <option value="ALL">All publishers</option>
-                <option value="SIGNED">Enterprise signed</option>
-                <option value="UNSIGNED">Unsigned</option>
-              </SelectField>
+              <SelectField
+                label="Publisher signature"
+                value={sigFilter}
+                onChange={setSigFilter}
+                options={[
+                  {value: 'ALL', label: 'All publishers'},
+                  {value: 'SIGNED', label: 'Enterprise signed'},
+                  {value: 'UNSIGNED', label: 'Unsigned'},
+                ]}
+              />
             </div>
           </div>
 

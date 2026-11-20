@@ -1,11 +1,9 @@
 import {
   Children,
   isValidElement,
-  useId,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
 import {Badge as AstryxBadge} from '@astryxdesign/core/Badge';
@@ -16,11 +14,13 @@ import {CodeBlock as AstryxCodeBlock} from '@astryxdesign/core/CodeBlock';
 import type {DropdownMenuOption} from '@astryxdesign/core/DropdownMenu';
 import {EmptyState as AstryxEmptyState} from '@astryxdesign/core/EmptyState';
 import {IconButton as AstryxIconButton} from '@astryxdesign/core/IconButton';
+import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {MoreMenu as AstryxMoreMenu} from '@astryxdesign/core/MoreMenu';
 import {StatusDot, type StatusDotVariant} from '@astryxdesign/core/StatusDot';
 import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {TextArea as AstryxTextArea} from '@astryxdesign/core/TextArea';
 import {TextInput as AstryxTextInput, type TextInputType} from '@astryxdesign/core/TextInput';
+export {SelectField, type SelectFieldOption, type SelectOption} from './SelectField';
 
 export type StatusTone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral';
 
@@ -225,34 +225,6 @@ export function TextField({
       data-max={max}
       data-step={step}
     />
-  );
-}
-
-export function SelectField({
-  label,
-  hint,
-  error,
-  id,
-  className = '',
-  children,
-  ...rest
-}: SelectHTMLAttributes<HTMLSelectElement> & {
-  label: string;
-  hint?: string;
-  error?: string;
-}) {
-  const autoId = useId();
-  const fieldId = id ?? autoId;
-  const descIds = [hint ? `${fieldId}-hint` : '', error ? `${fieldId}-err` : ''].filter(Boolean).join(' ') || undefined;
-  return (
-    <div className={`tp-field ${className}`.trim()}>
-      <label className="tp-label" htmlFor={fieldId}>{label}</label>
-      <select id={fieldId} className="tp-select" aria-describedby={descIds} aria-invalid={error ? true : undefined} {...rest}>
-        {children}
-      </select>
-      {hint ? <p id={`${fieldId}-hint`} className="tp-hint">{hint}</p> : null}
-      {error ? <p id={`${fieldId}-err`} className="tp-field-error" role="alert">{error}</p> : null}
-    </div>
   );
 }
 
@@ -499,14 +471,13 @@ export function EmptyState({
 
 export function KeyValueList({items}: {items: Array<{label: string; value: ReactNode; mono?: boolean}>}) {
   return (
-    <dl className="tp-kv-list">
+    <MetadataList columns="single" label={{position: 'top'}} className="tp-metadata-list">
       {items.map(item => (
-        <div key={item.label} className="tp-kv-item">
-          <dt className="tp-kv-term">{item.label}</dt>
-          <dd className={`tp-kv-desc ${item.mono ? 'mono' : ''}`.trim()}>{item.value}</dd>
-        </div>
+        <MetadataListItem key={item.label} label={item.label}>
+          <span className={`tp-kv-value ${item.mono ? 'mono' : ''}`.trim()}>{item.value}</span>
+        </MetadataListItem>
       ))}
-    </dl>
+    </MetadataList>
   );
 }
 

@@ -246,17 +246,15 @@
     white-space: nowrap;
   }
 
-  .tp-scope-select {
-    height: 28px;
-    padding: 0 0.625rem;
-    border: 1px solid var(--tp-border-strong);
-    border-radius: var(--tp-radius-md);
-    background: var(--tp-bg-surface);
-    color: var(--tp-ink-primary);
-    font-size: 0.8125rem;
-    font-weight: 500;
+  .tp-scope-selector {
     min-width: 0;
-    max-width: 156px;
+    width: auto;
+    max-width: min(172px, 44vw);
+  }
+
+  .tp-scope-selector [role='combobox'] {
+    min-width: 108px;
+    max-width: 100%;
   }
 
   .tp-content {

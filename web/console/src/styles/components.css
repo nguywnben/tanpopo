@@ -40,7 +40,7 @@
     max-width: 100%;
   }
 
-  /* Native Select Field (aligned to Astryx Neutral TextInput geometry & tokens) */
+  /* Shared Field Labels & Hints for composite sections */
   .tp-field {
     display: flex;
     flex-direction: column;
@@ -69,29 +69,17 @@
     overflow-wrap: anywhere;
   }
 
-  .tp-select {
-    width: 100%;
+  /* Ensure Astryx Selector, MultiSelector, and Typeahead stay cleanly constrained in narrow grids & popovers */
+  [data-astryx-theme='neutral'] .astryx-selector,
+  [data-astryx-theme='neutral'] .astryx-multi-selector,
+  [data-astryx-theme='neutral'] .astryx-typeahead {
     min-width: 0;
     max-width: 100%;
-    min-height: 32px;
-    padding: 0.3125rem 0.625rem;
-    border: 1px solid var(--tp-border-strong);
-    border-radius: var(--tp-radius-md);
-    background: var(--tp-bg-surface);
-    color: var(--tp-ink-primary);
-    font-size: var(--text-body-size, 0.875rem);
-    line-height: 1.4;
   }
 
-  .tp-select:focus-visible {
-    outline: 2px solid var(--tp-accent);
-    outline-offset: 2px;
-  }
-
-  .tp-select:disabled {
-    background: var(--tp-bg-subtle);
-    color: var(--tp-ink-disabled);
-    cursor: not-allowed;
+  [data-astryx-theme='neutral'] .astryx-selector-popup,
+  [data-astryx-theme='neutral'] .astryx-typeahead-dropdown {
+    max-width: calc(100vw - 16px);
   }
 
   .tp-btn-content {
@@ -412,37 +400,14 @@
     border-bottom: 0;
   }
 
-  /* Key-Value Summary List */
-  .tp-kv-list {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-3);
+  /* Astryx MetadataList responsive wrapping */
+  .tp-metadata-list {
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
   }
 
-  .tp-kv-item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    padding-bottom: var(--space-2);
-    border-bottom: 1px solid var(--tp-border-subtle);
-  }
-
-  .tp-kv-item:last-child {
-    border-bottom: 0;
-    padding-bottom: 0;
-  }
-
-  .tp-kv-term {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--tp-ink-secondary);
-  }
-
-  .tp-kv-desc {
-    font-size: 0.875rem;
-    color: var(--tp-ink-primary);
+  .tp-kv-value {
     overflow-wrap: anywhere;
     word-break: break-word;
   }
@@ -474,39 +439,6 @@
     justify-content: flex-end;
     gap: var(--space-2);
     width: 100%;
-  }
-
-  /* Command Palette List */
-  .tp-palette-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    max-height: 320px;
-    overflow-y: auto;
-  }
-
-  .tp-palette-item {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border: 0;
-    border-radius: var(--tp-radius-md);
-    background: transparent;
-    color: var(--tp-ink-primary);
-    text-align: left;
-    font-size: 0.875rem;
-    cursor: pointer;
-  }
-
-  .tp-palette-item:hover,
-  .tp-palette-item[data-active='true'] {
-    background: var(--tp-bg-selected);
   }
 
   /* Neutral Waterfall Bar (semantic error only on failed stages) */

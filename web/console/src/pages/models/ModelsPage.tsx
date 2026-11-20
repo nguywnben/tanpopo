@@ -12,6 +12,7 @@ import {
 } from '../../api/catalogClient';
 import type {components} from '../../api/generated';
 import {DataTable} from '../../ui/DataTable';
+import {MultiSelectField} from '../../ui/MultiSelectField';
 import {ConfirmDialog, Drawer} from '../../ui/Overlays';
 import {
   Banner,
@@ -310,21 +311,32 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
         <section className="tp-section">
           <div className="tp-toolbar">
             <div className="tp-toolbar-field">
-              <SelectField label="Data region" value={regionFilter} onChange={event => setRegionFilter(event.target.value)}>
-                <option value="ALL">All regions</option>
-                <option value="US">US</option>
-                <option value="EU">EU</option>
-                <option value="APAC">APAC</option>
-                <option value="ON_PREM">ON_PREM</option>
-              </SelectField>
+              <SelectField
+                label="Data region"
+                value={regionFilter}
+                onChange={setRegionFilter}
+                options={[
+                  {value: 'ALL', label: 'All regions'},
+                  {value: 'US', label: 'US'},
+                  {value: 'EU', label: 'EU'},
+                  {value: 'APAC', label: 'APAC'},
+                  {value: 'ON_PREM', label: 'ON_PREM'},
+                ]}
+              />
             </div>
             <div className="tp-toolbar-field">
-              <SelectField label="Health state" value={healthFilter} onChange={event => setHealthFilter(event.target.value)}>
-                <option value="ALL">All states</option>
-                {[...new Set(deployments.map(d => d.state))].sort().map(s => (
-                  <option key={s} value={s}>{formatOperationalState(s)}</option>
-                ))}
-              </SelectField>
+              <SelectField
+                label="Health state"
+                value={healthFilter}
+                onChange={setHealthFilter}
+                options={[
+                  {value: 'ALL', label: 'All states'},
+                  ...[...new Set(deployments.map(d => d.state))].sort().map(s => ({
+                    value: s,
+                    label: formatOperationalState(s),
+                  })),
+                ]}
+              />
             </div>
           </div>
 
@@ -401,20 +413,28 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
               <TextField label="Search models" type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} />
             </div>
             <div className="tp-toolbar-field">
-              <SelectField label="Assurance tier" value={assuranceFilter} onChange={event => setAssuranceFilter(event.target.value)}>
-                <option value="ALL">All tiers</option>
-                <option value="DECLARED">DECLARED</option>
-                <option value="TESTED">TESTED</option>
-                <option value="VERIFIED">VERIFIED</option>
-              </SelectField>
+              <SelectField
+                label="Assurance tier"
+                value={assuranceFilter}
+                onChange={setAssuranceFilter}
+                options={[
+                  {value: 'ALL', label: 'All tiers'},
+                  {value: 'DECLARED', label: 'DECLARED'},
+                  {value: 'TESTED', label: 'TESTED'},
+                  {value: 'VERIFIED', label: 'VERIFIED'},
+                ]}
+              />
             </div>
             <div className="tp-toolbar-field">
-              <SelectField label="Capability" value={capFilter} onChange={event => setCapFilter(event.target.value)}>
-                <option value="ALL">All capabilities</option>
-                {capabilityNames.map(cap => (
-                  <option key={cap} value={cap}>{cap.replaceAll('_', ' ')}</option>
-                ))}
-              </SelectField>
+              <SelectField
+                label="Capability"
+                value={capFilter}
+                onChange={setCapFilter}
+                options={[
+                  {value: 'ALL', label: 'All capabilities'},
+                  ...capabilityNames.map(cap => ({value: cap, label: cap.replaceAll('_', ' ')})),
+                ]}
+              />
             </div>
           </div>
 
@@ -474,22 +494,27 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
           <TextField label="Display name" required value={displayName} onChange={event => setDisplayName(event.target.value)} />
           <TextField label="Canonical model slug" required value={slug} onChange={event => setSlug(event.target.value)} />
           <div className="tp-grid-2">
-            <TextField label="Context window (tokens)" inputMode="numeric" required value={contextWindow} onChange={event => setContextWindow(event.target.value)} />
+            <TextField label="Context tokens" inputMode="numeric" required value={contextWindow} onChange={event => setContextWindow(event.target.value)} />
             <TextField label="Max output tokens" inputMode="numeric" required value={maxOutput} onChange={event => setMaxOutput(event.target.value)} />
           </div>
-          <div className="tp-stack-sm">
-            <h3>Declared capabilities</h3>
-            <div className="tp-grid-2">
-              {capabilityNames.map(cap => (
-                <CheckboxField
-                  key={cap}
-                  label={cap.replaceAll('_', ' ')}
-                  checked={capabilities[cap]}
-                  onChange={checked => setCapabilities(curr => ({...curr, [cap]: checked}))}
-                />
-              ))}
-            </div>
-          </div>
+          <MultiSelectField
+            label="Declared capabilities"
+            placeholder="Select model capabilities"
+            hasSelectAll
+            hasClear
+            hasSearch
+            value={capabilityNames.filter(cap => capabilities[cap])}
+            options={capabilityNames.map(cap => ({value: cap, label: cap.replaceAll('_', ' ')}))}
+            onChange={selected => {
+              const selectedSet = new Set(selected);
+              setCapabilities(
+                Object.fromEntries(capabilityNames.map(cap => [cap, selectedSet.has(cap)])) as Record<
+                  (typeof capabilityNames)[number],
+                  boolean
+                >,
+              );
+            }}
+          />
           <div className="tp-row" style={{justifyContent: 'flex-end'}}>
             <Button variant="secondary" onClick={() => setModelDrawerOpen(false)}>Cancel</Button>
             <Button type="submit" variant="primary" loading={busy}>Register model</Button>
@@ -504,12 +529,20 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
         subtitle="All pricing rates use exact non-negative integer nano-USD values."
       >
         <form className="tp-stack" onSubmit={handleCreateDeployment}>
-          <SelectField label="Logical model" value={selectedModel} onChange={event => setSelectedModel(event.target.value)}>
-            {models.map(item => <option key={item.id} value={item.id}>{item.slug}</option>)}
-          </SelectField>
-          <SelectField label="Provider connection" value={selectedConnection} onChange={event => setSelectedConnection(event.target.value)}>
-            {connections.map(item => <option key={item.id} value={item.id}>{item.name} ({item.billing_mode})</option>)}
-          </SelectField>
+          <SelectField
+            label="Logical model"
+            value={selectedModel}
+            placeholder="Select logical model"
+            onChange={setSelectedModel}
+            options={models.map(item => ({value: item.id, label: item.slug}))}
+          />
+          <SelectField
+            label="Provider connection"
+            value={selectedConnection}
+            placeholder="Select provider connection"
+            onChange={setSelectedConnection}
+            options={connections.map(item => ({value: item.id, label: `${item.name} (${item.billing_mode})`}))}
+          />
           <TextField label="Upstream model name" required value={upstreamName} onChange={event => setUpstreamName(event.target.value)} />
           <div className="tp-grid-2">
             {rateFields.map(([key, label]) => (

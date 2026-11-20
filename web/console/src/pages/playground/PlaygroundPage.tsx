@@ -4,6 +4,7 @@ import {listRoutesForEnvironment} from '../../api/managementClient';
 import {createPlaygroundSession, getTraceWaterfall} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {useRouter} from '../../router/RouterContext';
+import {RouteTypeahead} from '../../ui/RouteTypeahead';
 import {Banner, Button, CodeBlock, SectionHeader, StatusPill, Tabs, TextAreaField, TextField, formatMicroUSD, stateTone} from '../../ui/primitives';
 
 type Role = components['schemas']['RbacRole'];
@@ -218,21 +219,21 @@ export function PlaygroundPage({
         <div className="tp-stack">
           <div className="tp-surface tp-surface-pad tp-stack">
             <div className="tp-grid-3">
-              <TextField
+              <RouteTypeahead
                 label="Model or route slug"
-                list="tanpopo-routes-list"
+                suggestions={availableRoutes}
                 placeholder="e.g. primary-chat"
                 value={model}
                 disabled={busy}
-                onChange={event => setModel(event.target.value)}
+                onChange={setModel}
               />
-              <TextField
+              <RouteTypeahead
                 label="Comparison model (optional)"
-                list="tanpopo-routes-list"
+                suggestions={availableRoutes}
                 placeholder="Side-by-side compare"
                 value={compareModel}
                 disabled={busy}
-                onChange={event => setCompareModel(event.target.value)}
+                onChange={setCompareModel}
               />
               {!session ? (
                 <TextField
@@ -247,9 +248,6 @@ export function PlaygroundPage({
                 />
               ) : null}
             </div>
-            <datalist id="tanpopo-routes-list">
-              {availableRoutes.map(slug => <option key={slug} value={slug} />)}
-            </datalist>
 
             <section className="tp-section" aria-label="Conversation transcript">
               {messages.length === 0 ? (

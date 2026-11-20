@@ -8,8 +8,10 @@ import {ConsoleShell} from '../shell/ConsoleShell';
 import {LoginPage} from './auth/LoginPage';
 import {buildRateCard, ModelsPage} from './models/ModelsPage';
 import {OverviewPage} from './overview/OverviewPage';
+import {PlaygroundPage} from './playground/PlaygroundPage';
 import {SetupPage} from './setup/SetupPage';
-import {formatMicroUSD} from '../ui/primitives';
+import {SelectField, formatMicroUSD} from '../ui/primitives';
+import {MultiSelectField} from '../ui/MultiSelectField';
 
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -248,6 +250,152 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
     expect(screen.getAllByText('Healthy').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Circuit open').length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', {name: 'Actions for gpt-4o-mini-2026'}).length).toBeGreaterThan(0);
+
+    const audit = await axe.run(container);
+    expect(audit.violations).toEqual([]);
+  });
+
+  it('switches Project and Env via official Astryx Selector including No env option', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const req = input instanceof Request ? input : new Request(typeof input === 'string' ? input : input.toString());
+      const pathname = new URL(req.url, window.location.origin).pathname;
+      if (pathname === '/admin/v1/auth/session') {
+        return jsonResponse({
+          principal_id: 'usr_1',
+          email: 'ops@tanpopo.local',
+          org_id: 'org_1',
+          roles: ['OPERATOR', 'ORG_OWNER'],
+          csrf_token: 'csrf-token-123',
+          expires_at: '2026-11-21T00:00:00Z',
+        });
+      }
+      if (pathname === '/admin/v1/projects') {
+        return jsonResponse({
+          data: [
+            {id: 'proj_1', org_id: 'org_1', slug: 'default', name: 'Default Project', state: 'ACTIVE', created_at: '2026-11-20T00:00:00Z'},
+            {id: 'proj_2', org_id: 'org_1', slug: 'edge', name: 'Edge Project', state: 'ACTIVE', created_at: '2026-11-20T00:00:00Z'},
+          ],
+          has_more: false,
+        });
+      }
+      if (pathname === '/admin/v1/projects/proj_1/environments') {
+        return jsonResponse({
+          data: [
+            {id: 'env_1', project_id: 'proj_1', slug: 'prod', name: 'Production', created_at: '2026-11-20T00:00:00Z'},
+            {id: 'env_2', project_id: 'proj_1', slug: 'staging', name: 'Staging', created_at: '2026-11-20T00:00:00Z'},
+          ],
+          has_more: false,
+        });
+      }
+      if (pathname === '/admin/v1/projects/proj_2/environments') {
+        return jsonResponse({
+          data: [{id: 'env_edge', project_id: 'proj_2', slug: 'canary', name: 'Canary', created_at: '2026-11-20T00:00:00Z'}],
+          has_more: false,
+        });
+      }
+      if (pathname === '/admin/v1/kill-switches') return jsonResponse({data: [], has_more: false});
+      if (pathname === '/admin/v1/approvals') return jsonResponse({data: [], has_more: false});
+      if (pathname === '/admin/v1/overview/summary') {
+        return jsonResponse({
+          window: '24h',
+          total_requests: 0,
+          error_rate_ratio: 0,
+          p95_overhead_ms: 1,
+          settled_micro_usd: 0,
+          active_hold_micros: 0,
+          active_alerts_count: 0,
+          unmetered_request_count: 0,
+          sync_lag_warning: false,
+          updated_at: '2026-11-20T08:00:00Z',
+        });
+      }
+      if (pathname === '/admin/v1/alerts/active') return jsonResponse({data: [], has_more: false});
+      if (pathname === '/admin/v1/deployments') return jsonResponse({data: [], has_more: false});
+      return jsonResponse({}, 404);
+    });
+
+    const {container} = render(wrap(<ConsoleShell />));
+    const envTrigger = await screen.findByRole('combobox', {name: /Env/i});
+    await waitFor(() => expect(envTrigger).toHaveTextContent('Production'));
+
+    fireEvent.click(envTrigger);
+    const noEnvOpt = await screen.findByRole('option', {name: 'No env'});
+    fireEvent.click(noEnvOpt);
+    await waitFor(() => expect(envTrigger).toHaveTextContent('No env'));
+
+    const projectTrigger = screen.getByRole('combobox', {name: /Project/i});
+    fireEvent.click(projectTrigger);
+    fireEvent.click(await screen.findByRole('option', {name: 'Edge Project'}));
+    await waitFor(() => expect(envTrigger).toHaveTextContent('Canary'));
+
+    const audit = await axe.run(container);
+    expect(audit.violations).toEqual([]);
+  });
+
+  it('supports Astryx Typeahead suggestions and free-form route slugs in PlaygroundPage', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/admin/v1/routes')) {
+        return jsonResponse({
+          data: [
+            {id: 'rt_1', env_id: 'env_1', slug: 'primary-chat', strategy: 'PRIORITY_FAILOVER', max_failover_hops: 2, timeout_ms: 60000, targets: [], version: 1},
+            {id: 'rt_2', env_id: 'env_1', slug: 'fast-triage', strategy: 'LOWEST_LATENCY_EWMA', max_failover_hops: 1, timeout_ms: 30000, targets: [], version: 1},
+          ],
+          has_more: false,
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const {container} = render(wrap(<PlaygroundPage pathname="/devtools/playground" projectId="proj_1" environmentId="env_1" roles={['ORG_OWNER']} />));
+    await waitFor(() => expect(screen.getAllByText('primary-chat').length).toBeGreaterThan(0));
+
+    // Enter a free-form custom slug in Comparison model (optional)
+    const compareInput = screen.getByRole('combobox', {name: /Comparison model/i});
+    fireEvent.focus(compareInput);
+    fireEvent.change(compareInput, {target: {value: 'custom-experimental-route'}});
+    fireEvent.blur(compareInput);
+
+    await waitFor(() => expect(screen.getAllByText('custom-experimental-route').length).toBeGreaterThan(0));
+
+    const audit = await axe.run(container);
+    expect(audit.violations).toEqual([]);
+  });
+
+  it('renders SelectField and MultiSelectField with validation status and zero axe violations', async () => {
+    const onSelect = vi.fn();
+    const onMulti = vi.fn();
+    const {container} = render(
+      wrap(
+        <div className="tp-stack">
+          <SelectField
+            label="Failure posture"
+            value="FAIL_OPEN"
+            error="Parent guardrail is FAIL_CLOSED and cannot be relaxed."
+            onChange={onSelect}
+            options={[
+              {value: 'FAIL_CLOSED', label: 'FAIL_CLOSED'},
+              {value: 'FAIL_OPEN', label: 'FAIL_OPEN'},
+            ]}
+          />
+          <MultiSelectField
+            label="Events"
+            value={['budget.threshold_reached']}
+            onChange={onMulti}
+            hasSelectAll
+            options={[
+              {value: 'budget.threshold_reached', label: 'budget.threshold_reached'},
+              {value: 'kill_switch.activated', label: 'kill_switch.activated'},
+            ]}
+          />
+        </div>,
+      ),
+    );
+    expect(screen.getByText('Parent guardrail is FAIL_CLOSED and cannot be relaxed.')).toBeInTheDocument();
+    const multiTrigger = screen.getByRole('combobox', {name: /Events/i});
+    fireEvent.click(multiTrigger);
+    fireEvent.click(await screen.findByRole('option', {name: 'kill_switch.activated'}));
+    expect(onMulti).toHaveBeenCalledWith(['budget.threshold_reached', 'kill_switch.activated']);
 
     const audit = await axe.run(container);
     expect(audit.violations).toEqual([]);

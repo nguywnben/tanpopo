@@ -305,19 +305,25 @@ export function SetupPage() {
               />
               {addConnection ? (
                 <>
-                  <SelectField label="Provider adapter" value={providerKey} onChange={event => choosePreset(event.target.value)}>
-                    {providerPresets.map(item => (
-                      <option key={item.key} value={item.key}>{item.label}</option>
-                    ))}
-                  </SelectField>
+                  <SelectField
+                    label="Provider adapter"
+                    value={providerKey}
+                    onChange={choosePreset}
+                    options={providerPresets.map(item => ({value: item.key, label: item.label}))}
+                  />
                   <div className="tp-grid-2">
                     <TextField label="Connection name" value={connectionName} onChange={event => setConnectionName(event.target.value)} />
-                    <SelectField label="Data region" value={region} onChange={event => setRegion(event.target.value as DataRegion)}>
-                      <option value="US">US</option>
-                      <option value="EU">EU</option>
-                      <option value="APAC">APAC</option>
-                      <option value="ON_PREM">ON_PREM</option>
-                    </SelectField>
+                    <SelectField
+                      label="Data region"
+                      value={region}
+                      onChange={next => setRegion(next as DataRegion)}
+                      options={[
+                        {value: 'US', label: 'US'},
+                        {value: 'EU', label: 'EU'},
+                        {value: 'APAC', label: 'APAC'},
+                        {value: 'ON_PREM', label: 'ON_PREM'},
+                      ]}
+                    />
                   </div>
                   <TextField label="Provider URL" type="url" value={endpoint} onChange={event => setEndpoint(event.target.value)} />
                   <TextField label="Upstream model name" value={modelId} onChange={event => setModelId(event.target.value)} />

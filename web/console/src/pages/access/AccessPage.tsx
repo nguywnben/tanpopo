@@ -14,6 +14,7 @@ import {
 import type {components} from '../../api/generated';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
+import {MultiSelectField} from '../../ui/MultiSelectField';
 import {ConfirmDialog, Drawer, Modal} from '../../ui/Overlays';
 import {
   Banner,
@@ -374,19 +375,18 @@ export function AccessPage({
         <form className="tp-stack" onSubmit={handleIssueKey}>
           <TextField label="Key name" required value={keyName} onChange={event => setKeyName(event.target.value)} />
           <div className="tp-stack-sm">
-            <span className="tp-label">Allowed models</span>
-            <CheckboxField label="All models (*)" checked={allowedModels.includes('*')} onChange={checked => setAllowedModels(checked ? ['*'] : [])} />
-            {availableModels.map(model => (
-              <CheckboxField
-                key={model.id}
-                label={model.slug}
-                checked={allowedModels.includes('*') || allowedModels.includes(model.slug)}
-                disabled={allowedModels.includes('*')}
-                onChange={checked =>
-                  setAllowedModels(curr => (checked ? [...curr.filter(v => v !== '*'), model.slug] : curr.filter(v => v !== model.slug)))
-                }
+            <CheckboxField label="Allow all models (*)" checked={allowedModels.includes('*')} onChange={checked => setAllowedModels(checked ? ['*'] : [])} />
+            {!allowedModels.includes('*') ? (
+              <MultiSelectField
+                label="Allowed models"
+                placeholder="Choose allowed models"
+                hasSearch
+                hasClear
+                value={allowedModels}
+                options={availableModels.map(model => ({value: model.slug, label: model.slug}))}
+                onChange={setAllowedModels}
               />
-            ))}
+            ) : null}
           </div>
           <TextField
             label="Allowed MCP tools (comma-separated, server__tool)"
@@ -452,11 +452,20 @@ export function AccessPage({
         <SelectField
           label="Revocation mode"
           value={revokeMode}
-          onChange={event => setRevokeMode(event.target.value as typeof revokeMode)}
-        >
-          <option value="GRACEFUL_DRAIN" disabled={!canManage}>Graceful drain (allow active streams to finish)</option>
-          <option value="EMERGENCY_ABORT_STREAMS" disabled={!canEmergencyRevoke}>Emergency security revoke (abort active streams)</option>
-        </SelectField>
+          onChange={next => setRevokeMode(next as typeof revokeMode)}
+          options={[
+            {
+              value: 'GRACEFUL_DRAIN',
+              label: 'Graceful drain (allow active streams to finish)',
+              disabled: !canManage,
+            },
+            {
+              value: 'EMERGENCY_ABORT_STREAMS',
+              label: 'Emergency security revoke (abort active streams)',
+              disabled: !canEmergencyRevoke,
+            },
+          ]}
+        />
         {revokeMode === 'EMERGENCY_ABORT_STREAMS' ? (
           <>
             <Banner tone="danger">Emergency revocation terminates active streams immediately and is irreversible.</Banner>
@@ -483,17 +492,14 @@ export function AccessPage({
       >
         <form className="tp-stack" onSubmit={handleAddMember}>
           <TextField label="Member email" type="email" required value={memberEmail} onChange={event => setMemberEmail(event.target.value)} />
-          <div className="tp-stack-sm">
-            <span className="tp-label">Assign roles</span>
-            {allRoles.map(role => (
-              <CheckboxField
-                key={role}
-                label={role.replaceAll('_', ' ')}
-                checked={memberRoles.includes(role)}
-                onChange={checked => setMemberRoles(curr => (checked ? [...curr, role] : curr.filter(item => item !== role)))}
-              />
-            ))}
-          </div>
+          <MultiSelectField
+            label="Assign roles"
+            placeholder="Select roles"
+            hasClear
+            value={memberRoles}
+            options={allRoles.map(role => ({value: role, label: role.replaceAll('_', ' ')}))}
+            onChange={next => setMemberRoles(next as Role[])}
+          />
           <div className="tp-row" style={{justifyContent: 'flex-end'}}>
             <Button variant="secondary" onClick={() => setAddMemberOpen(false)}>Cancel</Button>
             <Button type="submit" variant="primary" loading={busy} disabled={!memberEmail.includes('@') || memberRoles.length === 0}>
@@ -521,15 +527,18 @@ export function AccessPage({
             {editingMember.id === currentPrincipalId ? (
               <Banner tone="info">Self-service privilege grants are disabled. You cannot add new roles to your own account.</Banner>
             ) : null}
-            {allRoles.map(role => (
-              <CheckboxField
-                key={role}
-                label={role.replaceAll('_', ' ')}
-                checked={draftRoles.includes(role)}
-                disabled={busy || (editingMember.id === currentPrincipalId && !editingMember.roles.includes(role))}
-                onChange={checked => setDraftRoles(curr => (checked ? [...curr, role] : curr.filter(item => item !== role)))}
-              />
-            ))}
+            <MultiSelectField
+              label="Assigned roles"
+              placeholder="Select roles"
+              disabled={busy}
+              value={draftRoles}
+              options={allRoles.map(role => ({
+                value: role,
+                label: role.replaceAll('_', ' '),
+                disabled: editingMember.id === currentPrincipalId && !editingMember.roles.includes(role),
+              }))}
+              onChange={next => setDraftRoles(next as Role[])}
+            />
           </div>
         ) : null}
       </Modal>

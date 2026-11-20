@@ -9,7 +9,7 @@ Read [`../../AGENTS.md`](../../AGENTS.md), [`../../CONSTRAINTS.md`](../../CONSTR
   - `tokens.css`: Neutral surface/border/ink aliases sourced directly from `@astryxdesign/theme-neutral` (light & dark synchronized via `light-dark()`). Must remain LF-encoded and contain zero retired beige/ochre hex literals.
   - `base.css`, `layout.css`, `components.css`: Structural responsive shell, flat hairline metric strip, responsive operational tables, and utility stacks.
   - `theme.tsx`: Root Astryx `<Theme theme={themes[defaultThemeSlug]} mode={theme}>` + light/dark mode persistence (`localStorage` + `prefers-color-scheme`) covering both pre-login (`/setup`, `/login`) and post-login screens.
-- `src/ui/` — Thin Tanpopo adapters over official `@astryxdesign/core/*` components (`primitives.tsx`, `Overlays.tsx`) plus responsive desktop-table / mobile-stacked-row `DataTable.tsx`.
+- `src/ui/` — Thin Tanpopo adapters over official `@astryxdesign/core/*` components (`primitives.tsx`, `SelectField.tsx`, `MultiSelectField.tsx`, `RouteTypeahead.tsx`, `Overlays.tsx`) plus responsive desktop-table / mobile-stacked-row `DataTable.tsx`.
 - `src/router/` — Zero-dependency HTML5 History SPA router (`RouterContext.tsx`).
 - `src/api/` — OpenAPI 3.1 generated types (`generated.ts`), security policy (`operation-policy.generated.ts`), and CSRF/If-Match-enforcing `openapi-fetch` clients (`client.ts`, `catalogClient.ts`, `managementClient.ts`).
 - `src/shell/` — 4-domain operational navigation (`routes.ts`, `ConsoleShell.tsx`, `WorkspaceRouter.tsx`).

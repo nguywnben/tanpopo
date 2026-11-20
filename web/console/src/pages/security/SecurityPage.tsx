@@ -436,16 +436,17 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
         <SelectField
           label="Target level"
           value={level}
-          onChange={event => {
-            setLevel(event.target.value as TargetLevel);
+          onChange={next => {
+            setLevel(next as TargetLevel);
             setBlastRadius(null);
           }}
-        >
-          <option value="VIRTUAL_KEY">Virtual key</option>
-          <option value="PROJECT">Project</option>
-          <option value="PROVIDER_CONNECTION">Provider connection</option>
-          <option value="EXTENSION">Extension</option>
-        </SelectField>
+          options={[
+            {value: 'VIRTUAL_KEY', label: 'Virtual key'},
+            {value: 'PROJECT', label: 'Project'},
+            {value: 'PROVIDER_CONNECTION', label: 'Provider connection'},
+            {value: 'EXTENSION', label: 'Extension'},
+          ]}
+        />
         <div className="tp-toolbar">
           <div className="tp-toolbar-field">
             <TextField
