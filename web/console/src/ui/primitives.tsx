@@ -25,18 +25,18 @@ export type StatusTone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral';
 
 export function TanpopoMark({size = 22}: {size?: number}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="2.75" fill="var(--tp-ink-primary)" />
-      <path
-        d="M12 3v4.2M12 16.8V21M3 12h4.2M16.8 12H21M5.64 5.64l2.97 2.97M15.39 15.39l2.97 2.97M18.36 5.64l-2.97 2.97M8.61 15.39l-2.97 2.97"
-        stroke="var(--tp-ink-primary)"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-      />
-      <circle cx="12" cy="3" r="1.15" fill="var(--tp-ink-secondary)" />
-      <circle cx="21" cy="12" r="1.15" fill="var(--tp-ink-secondary)" />
-      <circle cx="12" cy="21" r="1.15" fill="var(--tp-ink-secondary)" />
-      <circle cx="3" cy="12" r="1.15" fill="var(--tp-ink-secondary)" />
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="0.375" y="0.375" width="15.25" height="15.25" rx="3.4" fill="#141417" stroke="#2c2c32" strokeWidth="0.75" />
+      <circle cx="7.5" cy="8.5" r="1.7" fill="#ffffff" />
+      <g stroke="#ffffff" strokeWidth="1.25" strokeLinecap="round">
+        <line x1="7.5" y1="5.2" x2="7.5" y2="3.0" />
+        <line x1="4.64" y1="6.85" x2="2.74" y2="5.75" />
+        <line x1="4.64" y1="10.15" x2="2.74" y2="11.25" />
+        <line x1="7.5" y1="11.8" x2="7.5" y2="14.0" />
+        <line x1="10.36" y1="10.15" x2="12.26" y2="11.25" />
+      </g>
+      <line x1="10.35" y1="6.85" x2="11.2" y2="6.36" stroke="#a1a1aa" strokeWidth="1.1" strokeLinecap="round" />
+      <circle cx="13.05" cy="5.3" r="1.3" fill="#ffffff" />
     </svg>
   );
 }

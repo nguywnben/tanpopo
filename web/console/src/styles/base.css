@@ -82,6 +82,15 @@
     border: 0;
   }
 
+  /* Synchronized Light/Dark switch: disable per-control color transitions for the commit frame
+     so canvas, shell, tables, forms, icons, and portaled overlays repaint in one atomic frame. */
+  html[data-theme-switching='true'],
+  html[data-theme-switching='true'] *,
+  html[data-theme-switching='true'] *::before,
+  html[data-theme-switching='true'] *::after {
+    transition: none !important;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
