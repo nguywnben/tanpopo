@@ -8,19 +8,11 @@ import {useTheme} from '../../styles/theme';
 import {Banner, Button, CheckboxField, CodeBlock, IconButton, KeyValueList, SelectField, TanpopoMark, TextField} from '../../ui/primitives';
 import {Modal} from '../../ui/Overlays';
 import {LanguagePicker, useI18n} from '../../i18n/I18nProvider';
-import {translateUi} from '../../i18n/translate';
 
 type BootstrapForm = components['schemas']['BootstrapCompleteRequest'];
 type InitialConnection = NonNullable<BootstrapForm['initial_connection']>;
 type DataRegion = components['schemas']['DataRegion'];
 type CreatedSecret = components['schemas']['VirtualKeyCreatedResponse'];
-
-const steps = [
-  {title: 'Owner account', summary: 'Bootstrap token & initial tenant'},
-  {title: 'First connection', summary: 'Optional upstream provider'},
-  {title: 'Key custody', summary: 'Master KEK backup confirmation'},
-  {title: 'Review', summary: 'Initialize instance'},
-];
 
 const providerPresets = [
   {key: 'openai', adapter: 'openai', label: 'OpenAI', billing: 'COMMERCIAL_API' as const, url: 'https://api.openai.com/v1', model: 'gpt-4o-mini'},
@@ -35,6 +27,12 @@ export function SetupPage() {
   const {navigate} = useRouter();
   const {theme, toggleTheme} = useTheme();
   const {t} = useI18n();
+  const steps = [
+    {title: t('Owner account'), summary: t('Bootstrap token & initial tenant')},
+    {title: t('First connection'), summary: t('Optional upstream provider')},
+    {title: t('Key custody'), summary: t('Master KEK backup confirmation')},
+    {title: t('Review'), summary: t('Initialize instance')},
+  ];
   const [step, setStep] = useState(0);
   const [initialized, setInitialized] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -237,8 +235,8 @@ export function SetupPage() {
               <Step
                 key={item.title}
                 step={index}
-                label={translateUi(item.title)}
-                description={translateUi(item.summary)}
+                label={item.title}
+                description={item.summary}
                 isDisabled={index > step}
               />
             ))}

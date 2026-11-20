@@ -835,5 +835,13 @@
   "Streaming…": "Потоковая передача…",
   "You": "Вы",
   "Default": "По умолчанию",
-  "Unavailable": "Недоступно"
+  "Unavailable": "Недоступно",
+  "Owner account": "Учетная запись владельца",
+  "Bootstrap token & initial tenant": "Токен начальной настройки и первый тенант",
+  "First connection": "Первое подключение",
+  "Optional upstream provider": "Необязательный вышестоящий провайдер",
+  "Key custody": "Хранение ключей",
+  "Master KEK backup confirmation": "Подтверждение резервной копии главного KEK",
+  "Review": "Проверка",
+  "Initialize instance": "Инициализировать экземпляр"
 }

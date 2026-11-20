@@ -47,8 +47,12 @@ describe('console locale catalogs', () => {
 
   it('persists a manual choice and returns to browser-selected Auto', () => {
     render(<I18nProvider><LocaleProbe /></I18nProvider>);
-    const picker = screen.getByRole('combobox');
-    fireEvent.change(picker, {target: {value: 'vi'}});
+    const picker = screen.getByRole('combobox', {name: 'Language'});
+    fireEvent.keyDown(picker, {key: 'ArrowDown'});
+    for (let index = 0; index <= localeOrder.indexOf('vi'); index++) {
+      fireEvent.keyDown(picker, {key: 'ArrowDown'});
+    }
+    fireEvent.keyDown(picker, {key: 'Enter'});
     expect(screen.getByText('vi')).toBeInTheDocument();
     expect(localStorage.getItem('tanpopo.console.locale')).toBe('vi');
     expect(document.documentElement.lang).toBe('vi');
@@ -56,7 +60,12 @@ describe('console locale catalogs', () => {
     cleanup();
     render(<I18nProvider><LocaleProbe /></I18nProvider>);
     expect(screen.getByText('vi')).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox'), {target: {value: 'auto'}});
+    const reopened = screen.getByRole('combobox', {name: 'Language'});
+    fireEvent.keyDown(reopened, {key: 'ArrowDown'});
+    for (let index = 0; index <= localeOrder.indexOf('vi'); index++) {
+      fireEvent.keyDown(reopened, {key: 'ArrowUp'});
+    }
+    fireEvent.keyDown(reopened, {key: 'Enter'});
     expect(localStorage.getItem('tanpopo.console.locale')).toBe('auto');
     expect(screen.getByText('en')).toBeInTheDocument();
   });

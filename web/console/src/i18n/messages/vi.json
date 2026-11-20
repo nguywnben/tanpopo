@@ -835,5 +835,13 @@
   "Streaming…": "Đang truyền trực tuyến…",
   "You": "Bạn",
   "Default": "Mặc định",
-  "Unavailable": "Không khả dụng"
+  "Unavailable": "Không khả dụng",
+  "Owner account": "Tài khoản chủ sở hữu",
+  "Bootstrap token & initial tenant": "Mã khởi động và tenant ban đầu",
+  "First connection": "Kết nối đầu tiên",
+  "Optional upstream provider": "Nhà cung cấp thượng nguồn tùy chọn",
+  "Key custody": "Bảo quản khóa",
+  "Master KEK backup confirmation": "Xác nhận sao lưu KEK chính",
+  "Review": "Rà soát",
+  "Initialize instance": "Khởi tạo phiên bản"
 }

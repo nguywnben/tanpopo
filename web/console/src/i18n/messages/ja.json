@@ -835,5 +835,13 @@
   "Streaming…": "ストリーミング中…",
   "You": "あなた",
   "Default": "デフォルト",
-  "Unavailable": "利用不可"
+  "Unavailable": "利用不可",
+  "Owner account": "所有者アカウント",
+  "Bootstrap token & initial tenant": "ブートストラップトークンと初期テナント",
+  "First connection": "最初の接続",
+  "Optional upstream provider": "任意の上流プロバイダー",
+  "Key custody": "鍵の保管",
+  "Master KEK backup confirmation": "マスターKEKバックアップの確認",
+  "Review": "確認",
+  "Initialize instance": "インスタンスを初期化"
 }

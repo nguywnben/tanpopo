@@ -1,4 +1,5 @@
 import {createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from 'react';
+import {Selector} from '@astryxdesign/core/Selector';
 import {localeNames, localeOrder, type Locale} from './catalog';
 import {loadLocaleMessages} from './messages';
 import {setActiveLocale} from './locale-state';
@@ -71,13 +72,20 @@ export function useI18n() {
 
 export function LanguagePicker({className}: {className?: string}) {
   const {preference, setPreference, t} = useI18n();
+  const options = useMemo(() => [
+    {value: 'auto', label: 'Auto'},
+    ...localeOrder.map(locale => ({value: locale, label: localeNames[locale]})),
+  ], [t]);
   return (
-    <label className={className ?? 'tp-language-picker'}>
-      <span className="sr-only">{t('Language')}</span>
-      <select aria-label={t('Language')} value={preference} onChange={event => setPreference(event.target.value as Preference)}>
-        <option value="auto">{t('Auto')}</option>
-        {localeOrder.map(locale => <option key={locale} value={locale}>{localeNames[locale]}</option>)}
-      </select>
-    </label>
+    <Selector
+      label={t('Language')}
+      isLabelHidden
+      size="sm"
+      variant="input"
+      options={options}
+      value={preference}
+      onChange={next => setPreference(next as Preference)}
+      containerClassName={className ?? 'tp-language-picker'}
+    />
   );
 }

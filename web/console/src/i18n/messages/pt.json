@@ -835,5 +835,13 @@
   "Streaming…": "Transmitindo…",
   "You": "Você",
   "Default": "Padrão",
-  "Unavailable": "Indisponível"
+  "Unavailable": "Indisponível",
+  "Owner account": "Conta proprietária",
+  "Bootstrap token & initial tenant": "Token de inicialização e tenant inicial",
+  "First connection": "Primeira conexão",
+  "Optional upstream provider": "Provedor upstream opcional",
+  "Key custody": "Custódia de chaves",
+  "Master KEK backup confirmation": "Confirmação do backup da KEK mestre",
+  "Review": "Revisão",
+  "Initialize instance": "Inicializar instância"
 }

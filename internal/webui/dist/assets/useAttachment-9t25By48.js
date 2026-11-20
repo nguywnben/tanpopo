@@ -1,1 +1,0 @@
-import{r as e,B as n}from"./index-C8D0-U_X.js";function r(r,u,l){!function(r,u,l){const s=e.useRef(null);n(()=>{const e=r.map(e=>e.current),n=s.current;null!=n&&n.key===l&&e.every((e,r)=>e===n.nodes[r])||(n?.release(),s.current=e.every(e=>null!=e)?{nodes:e,key:l,release:u(e)}:null)}),n(()=>()=>{s.current?.release(),s.current=null},[])}([r],([e])=>u(e),l)}export{r as u};

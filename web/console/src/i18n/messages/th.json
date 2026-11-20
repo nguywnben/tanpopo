@@ -835,5 +835,13 @@
   "Streaming…": "กำลังสตรีม…",
   "You": "คุณ",
   "Default": "ค่าเริ่มต้น",
-  "Unavailable": "ไม่พร้อมใช้งาน"
+  "Unavailable": "ไม่พร้อมใช้งาน",
+  "Owner account": "บัญชีเจ้าของ",
+  "Bootstrap token & initial tenant": "โทเค็นเริ่มต้นและ tenant แรก",
+  "First connection": "การเชื่อมต่อครั้งแรก",
+  "Optional upstream provider": "ผู้ให้บริการต้นทางที่ไม่บังคับ",
+  "Key custody": "การดูแลกุญแจ",
+  "Master KEK backup confirmation": "ยืนยันการสำรองข้อมูล Master KEK",
+  "Review": "ตรวจสอบ",
+  "Initialize instance": "เริ่มต้นใช้งานอินสแตนซ์"
 }

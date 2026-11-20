@@ -835,5 +835,13 @@
   "Streaming…": "스트리밍 중…",
   "You": "사용자",
   "Default": "기본값",
-  "Unavailable": "사용할 수 없음"
+  "Unavailable": "사용할 수 없음",
+  "Owner account": "소유자 계정",
+  "Bootstrap token & initial tenant": "부트스트랩 토큰 및 초기 테넌트",
+  "First connection": "첫 연결",
+  "Optional upstream provider": "선택적 업스트림 공급자",
+  "Key custody": "키 보관",
+  "Master KEK backup confirmation": "마스터 KEK 백업 확인",
+  "Review": "검토",
+  "Initialize instance": "인스턴스 초기화"
 }

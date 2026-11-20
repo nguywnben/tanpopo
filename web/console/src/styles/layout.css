@@ -412,18 +412,18 @@
     gap: var(--space-2);
   }
 
-  .tp-language-picker select {
-    max-width: 9rem;
-    min-height: 2.25rem;
-    padding: 0 var(--space-2);
-    border: 1px solid var(--tp-border-subtle);
-    border-radius: var(--tp-radius-sm);
-    background: var(--tp-bg-surface);
-    color: var(--tp-ink-primary);
-    font: inherit;
+  .tp-language-picker {
+    min-width: 0;
+    width: auto;
+    max-width: min(12rem, 42vw);
   }
 
-  .tp-topbar-language select {
+  .tp-language-picker [role='combobox'] {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .tp-topbar-language [role='combobox'] {
     min-height: 2rem;
   }
 

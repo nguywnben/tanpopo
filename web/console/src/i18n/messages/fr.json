@@ -835,5 +835,13 @@
   "Streaming…": "Diffusion…",
   "You": "Vous",
   "Default": "Par défaut",
-  "Unavailable": "Indisponible"
+  "Unavailable": "Indisponible",
+  "Owner account": "Compte propriétaire",
+  "Bootstrap token & initial tenant": "Jeton d’amorçage et tenant initial",
+  "First connection": "Première connexion",
+  "Optional upstream provider": "Fournisseur amont facultatif",
+  "Key custody": "Conservation des clés",
+  "Master KEK backup confirmation": "Confirmation de sauvegarde de la KEK principale",
+  "Review": "Vérification",
+  "Initialize instance": "Initialiser l’instance"
 }

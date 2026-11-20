@@ -835,5 +835,13 @@
   "Streaming…": "Mengalirkan…",
   "You": "Anda",
   "Default": "Bawaan",
-  "Unavailable": "Tidak tersedia"
+  "Unavailable": "Tidak tersedia",
+  "Owner account": "Akun pemilik",
+  "Bootstrap token & initial tenant": "Token bootstrap dan tenant awal",
+  "First connection": "Koneksi pertama",
+  "Optional upstream provider": "Penyedia hulu opsional",
+  "Key custody": "Penyimpanan kunci",
+  "Master KEK backup confirmation": "Konfirmasi cadangan KEK master",
+  "Review": "Tinjau",
+  "Initialize instance": "Inisialisasi instance"
 }

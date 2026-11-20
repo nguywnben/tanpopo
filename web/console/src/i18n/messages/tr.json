@@ -835,5 +835,13 @@
   "Streaming…": "Akış sürüyor…",
   "You": "Siz",
   "Default": "Varsayılan",
-  "Unavailable": "Kullanılamıyor"
+  "Unavailable": "Kullanılamıyor",
+  "Owner account": "Sahip hesabı",
+  "Bootstrap token & initial tenant": "Önyükleme belirteci ve ilk kiracı",
+  "First connection": "İlk bağlantı",
+  "Optional upstream provider": "İsteğe bağlı üst sağlayıcı",
+  "Key custody": "Anahtar saklama",
+  "Master KEK backup confirmation": "Ana KEK yedekleme onayı",
+  "Review": "İnceleme",
+  "Initialize instance": "Örneği başlat"
 }

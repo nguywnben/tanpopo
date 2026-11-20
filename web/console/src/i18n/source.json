@@ -835,5 +835,13 @@
   "Your role can inspect Virtual Keys but does not have permission to list organization members.": "Your role can inspect Virtual Keys but does not have permission to list organization members.",
   "Your role cannot approve extension permissions.": "Your role cannot approve extension permissions.",
   "Your role cannot create Playground sessions.": "Your role cannot create Playground sessions.",
-  "Your role does not have access to the security center.": "Your role does not have access to the security center."
+  "Your role does not have access to the security center.": "Your role does not have access to the security center.",
+  "Owner account": "Owner account",
+  "Bootstrap token & initial tenant": "Bootstrap token & initial tenant",
+  "First connection": "First connection",
+  "Optional upstream provider": "Optional upstream provider",
+  "Key custody": "Key custody",
+  "Master KEK backup confirmation": "Master KEK backup confirmation",
+  "Review": "Review",
+  "Initialize instance": "Initialize instance"
 }

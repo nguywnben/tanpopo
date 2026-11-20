@@ -835,5 +835,13 @@
   "Streaming…": "正在流式传输…",
   "You": "你",
   "Default": "默认",
-  "Unavailable": "不可用"
+  "Unavailable": "不可用",
+  "Owner account": "所有者账户",
+  "Bootstrap token & initial tenant": "引导令牌和初始租户",
+  "First connection": "首次连接",
+  "Optional upstream provider": "可选的上游提供商",
+  "Key custody": "密钥托管",
+  "Master KEK backup confirmation": "主 KEK 备份确认",
+  "Review": "审核",
+  "Initialize instance": "初始化实例"
 }

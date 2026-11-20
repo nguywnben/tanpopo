@@ -835,5 +835,13 @@
   "Streaming…": "正在串流…",
   "You": "您",
   "Default": "預設",
-  "Unavailable": "無法使用"
+  "Unavailable": "無法使用",
+  "Owner account": "擁有者帳戶",
+  "Bootstrap token & initial tenant": "引導權杖與初始租戶",
+  "First connection": "首次連線",
+  "Optional upstream provider": "選用的上游供應商",
+  "Key custody": "金鑰保管",
+  "Master KEK backup confirmation": "主要 KEK 備份確認",
+  "Review": "審查",
+  "Initialize instance": "初始化執行個體"
 }
