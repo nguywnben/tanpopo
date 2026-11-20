@@ -92,3 +92,11 @@
 - CI [`44671574614`](https://github.com/nguywnben/tanpopo/actions/runs/44671574614) on PR head `dd6047fc48174419b6b740a9a085ec76b7c48fb2` completed successfully across Stage 0 and Stage 1 on Ubuntu, macOS, and Windows. The Windows Stage 1 full Go quality gate and `Repeat Windows runtime database cleanup regression test` passed; the regression verifies the database can be removed with the child process alive. At the time of this CI run, Unit 37 acceptance still required green post-merge CI on the eventual merge SHA and an acceptance record on `origin/main`.
 
 - Post-merge checkpoint: **GPT-6 Luna** fast-forwarded persistent `develop` to `origin/main` merge commit `95c6c2e2381911d8097230283ef766510ccb4151` after PR #20 merged. CI [`44674333547`](https://github.com/nguywnben/tanpopo/actions/runs/44674333547) passed all four jobs on that exact main SHA. Unit 37 is accepted DONE under `DEC-083`; Unit 38 remains unopened pending its separate DoR decision.
+
+
+## Acceptance governance and Unit 38 handoff
+
+- **GPT-6 Luna** accepted Unit 37 under `DEC-083`. Implementation PR [#20](https://github.com/nguywnben/tanpopo/pull/20) merged at `95c6c2e`; acceptance governance PR [#21](https://github.com/nguywnben/tanpopo/pull/21) merged at `d7999240b00c1370bfd84286b1c9f5350be9c2f0`.
+- Post-merge CI [`44678817933`](https://github.com/nguywnben/tanpopo/actions/runs/44678817933) passed all four required jobs on `d7999240`. The Windows job passed the full Go gate and repeated cleanup regression, preserving the assertion that `tanpopo.db` is removable while the child process remains alive.
+- The reviewed Unit 37 implementation commits, including the SQLite shutdown correction, are present in `origin/main`; the attached checkpoint diff is already represented there. No patch replay was needed.
+- Under `DEC-084`, Unit 38 DoR passed (`0020`, `0029`, `0030`, `0037` DONE; `GAP-01`/`07` CLOSED; `CR-10` approved). Unit 38 is READY; begin implementation after the opening decision is on main with green required CI.

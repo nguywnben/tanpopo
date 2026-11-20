@@ -2,10 +2,10 @@
 
 > **MANDATORY COLD-START ENTRYPOINT FOR EVERY NEW EXECUTION SESSION (`ZERO PRIOR CHAT MEMORY REQUIRED`)**
 > - **Baseline ID:** `EXEC-BL-001-APPROVED`
-> **Version:** `2.53.0-dec-083-mcp-0037-done` | **Last Updated:** `2026-11-20` | **Accepted Implementation Baseline:** `95c6c2e2381911d8097230283ef766510ccb4151` (`DEC-083`; Unit 37 post-merge CI `44674333547` green)
-> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0037` DONE; `0038`..`0047` BLOCKED pending sequential DoR). Unit 37 is accepted under `DEC-083` at main `95c6c2e2381911d8097230283ef766510ccb4151`; post-merge CI `44674333547` passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows.
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** through `DEC-083` (`37 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `10 BLOCKED`; `DEC-033` remains revoked).
-> - **CURRENT UNIT STATE (`UNIT_STATES`):** `37 / 47` DONE (`0001`..`0037`), `0 / 47` READY, `0 READY_FOR_REVIEW`, `10 / 47` BLOCKED (`0038`..`0047`).
+> **Version:** `2.54.0-dec-084-mcp-0038-ready` | **Last Updated:** `2026-11-20` | **Accepted Implementation Baseline:** `d7999240b00c1370bfd84286b1c9f5350be9c2f0` (`DEC-084`; Unit 37 acceptance CI `44678817933` green)
+> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0037` DONE; `0038` READY; `0039`..`0047` BLOCKED pending sequential DoR). Unit 37 acceptance governance is on main `d7999240b00c1370bfd84286b1c9f5350be9c2f0`; post-merge CI `44678817933` passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows.
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** through `DEC-084` (`37 DONE`, `1 READY`, `0 READY_FOR_REVIEW`, `9 BLOCKED`; `DEC-033` remains revoked).
+> - **CURRENT UNIT STATE (`UNIT_STATES`):** `37 / 47` DONE (`0001`..`0037`), `1 / 47` READY (`0038`), `0 READY_FOR_REVIEW`, `9 / 47` BLOCKED (`0039`..`0047`).
 
 ---
 
@@ -113,9 +113,9 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 
 ---
 
-### 4. Dependency-Ordered Execution Queue (`HANDOFF_VERDICT: GO` — `0036..0037` `DONE` · `0038..0047` `BLOCKED`)
+### 4. Dependency-Ordered Execution Queue (`HANDOFF_VERDICT: GO` — `0036..0037` `DONE` · `0038` `READY` · `0039..0047` `BLOCKED`)
 
-> **Live Status Today:** `TP-IMP-0001`..`0037` are DONE. Unit 37 is accepted under `DEC-083` at `origin/main` `95c6c2e2381911d8097230283ef766510ccb4151`; post-merge CI `44674333547` passed all four required jobs. Units 38–47 remain blocked pending their sequential DoR.
+> **Live Status Today:** `TP-IMP-0001`..`0037` are DONE. Unit 37 acceptance is recorded under `DEC-083`; governance main SHA `d7999240b00c1370bfd84286b1c9f5350be9c2f0` passed all four required jobs in CI `44678817933`. Unit 38 is READY under `DEC-084`; Units 39–47 remain blocked pending their sequential DoR.
 
 | Wave | Unit ID(s) | Execution Mode | Status / Mandatory Checkpoint Before Next Wave |
 |---|---|---|---|
@@ -128,7 +128,7 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 | **Wave 2.1 (`M2`)** | [`TP-IMP-0016`](../planning/units/TP-IMP-0016.md) → [`0017`](../planning/units/TP-IMP-0017.md) → [`0018`](../planning/units/TP-IMP-0018.md) → [`0019`](../planning/units/TP-IMP-0019.md) → [`0020`](../planning/units/TP-IMP-0020.md) | **`0016..0020` = `DONE`** (`DEC-025` batch completed cleanly at `0020`) | **`0016` = `DONE` (`DEC-028`, `f14989b0`, CI `43752413362`, `code-reviewer` [`51145b49`] & `security-auditor` [`8dfc27cb`])** · **`0017` = `DONE` (`DEC-029`, `1217270c`, CI `43758814840`, `code-reviewer` [`eea14add`] + `CR-01` sign-off)** · **`0018` = `DONE` (`DEC-030`, `fba66814`, CI `43766468056`, `code-reviewer` [`9d49b519`] `APPROVE`)** · **`0019` = `DONE` (`DEC-031`, `6c313e8f`, CI `43772630305`, `code-reviewer` [`eac61e5f`] & `security-auditor` [`26305d32`] `PASS`)** · **`0020` = `DONE` (`DEC-032`, `904ba2a9`, CI `43782208080`, `security-auditor` [`59206f9a`] `PASS` & `code-reviewer` [`31d9454f`] `APPROVE`)**. |
 | **Wave 2.2 (`M2` — `DEC-041` / `DEC-058` / `DEC-059`)** | `TP-IMP-0021`..`0030` | Sequential UI batch complete; all ten units DONE on main with CI and accepted governance records. |
 | **Wave 2.3 (`DEC-060`)** | `TP-IMP-0031` → `0032` → `0033` → `0034` → `0035` | Sequential GPT-6 Luna batch via persistent `develop`; per-unit PR, required review tier, four green checks, merge, and post-merge main verification. Complete: Units 31–35 DONE; Unit 35 acceptance record is on main `0a264c40` with post-merge CI `44468902234` and artifact/attestation `44468902362` green. |
-| **Wave 3.1 (`DEC-072`)** | `TP-IMP-0036` → `0037` → `0038` | Sequential GPT-6 Luna batch via persistent `develop`; per-unit PR, required review tier, four green checks, merge, and post-merge main verification. Unit 36 is DONE under `DEC-074` on main `a3a0ef1` with green CI `44494912921`; Unit 37 is DONE under `DEC-083` at main `95c6c2e`; post-merge CI `44674333547` passed. Unit 38 remains blocked until its DoR is verified and a separate opening decision is recorded. |
+| **Wave 3.1 (`DEC-072`)** | `TP-IMP-0036` → `0037` → `0038` | Sequential GPT-6 Luna batch via persistent `develop`; per-unit PR, required review tier, four green checks, merge, and post-merge main verification. Unit 36 is DONE under `DEC-074` on main `a3a0ef1` with green CI `44494912921`; Unit 37 is DONE under `DEC-083`; acceptance governance is at main `d7999240`, with CI `44678817933` green. Unit 38 is READY under `DEC-084` after its DoR passed; Unit 39 remains blocked. |
 
 ---
 

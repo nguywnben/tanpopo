@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0038` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1` — **Gate `GATE-M3`**) · `EP-07` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0020`, `TP-IMP-0029`, `TP-IMP-0030`, `TP-IMP-0037` — `GAP-01, 07`)* |
+| **Status** | `READY` *(DoR verified under `DEC-084`: dependencies `TP-IMP-0020`, `0029`, `0030`, `0037` are DONE; `GAP-01, 07` are CLOSED; `CR-10` is approved.)* |
 | **Size** | `L` (`internal/admin/http/route_explain.go`, `playground.go`, `web/console/src/pages/mcp/*`, `playground/*`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Cost-capped ephemeral Playground sessions `CR-10` & strict Astryx Design System compliance)* |
 | **Technical Owner** | `Lead Developer Experience & Frontend Engineer` |
@@ -51,5 +51,5 @@ Deliver the interactive Web Console and CLI developer/governance tooling for `v0
 - **Rollback:** `Playground` can be disabled cleanly in locked-down production environments via `console.playground.enabled = false`.
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
-- **DoR:** `TP-IMP-0020`, `TP-IMP-0029`, `TP-IMP-0030`, and `TP-IMP-0037` are complete.
+- **DoR:** `TP-IMP-0020`, `TP-IMP-0029`, `TP-IMP-0030`, and `TP-IMP-0037` are complete. Verified on `origin/main` `d7999240b00c1370bfd84286b1c9f5350be9c2f0` under `DEC-084`; `GAP-01` and `GAP-07` are CLOSED and `CR-10` is approved. Implementation starts only after `DEC-084` is merged with green required CI.
 - **DoD:** All Gate `GATE-M3` (`v0.2`) exit criteria satisfied, `astryx doctor --built dist` at `0 fail`, and `axe-core` accessibility audits clean.
