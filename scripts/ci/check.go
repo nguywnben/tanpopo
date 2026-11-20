@@ -1407,10 +1407,15 @@ func checkUILayout(rootDir string) ([]Violation, error) {
 		}
 
 		lines := strings.Split(text, "\n")
+		inLocaleNameTable := false
 		for i, line := range lines {
-			// Translations belong in the explicit locale message table. Keep the English source
-			// catalog English while allowing translated copy in the locale catalog itself.
-			localizedCatalogLine := strings.Contains(rel, "/src/i18n/messages/") && strings.HasSuffix(rel, ".json")
+			// Translations belong in locale message catalogs. Native language names are also
+			// intentional in the picker; allow only that metadata table in catalog.ts.
+			if strings.HasSuffix(rel, "/src/i18n/catalog.ts") && strings.Contains(line, "export const localeNames") {
+				inLocaleNameTable = true
+			}
+			localizedCatalogLine := strings.Contains(rel, "/src/i18n/messages/") && strings.HasSuffix(rel, ".json") ||
+				strings.HasSuffix(rel, "/src/i18n/catalog.ts") && inLocaleNameTable
 			if vnDiacriticRe.MatchString(line) && !localizedCatalogLine {
 				violations = append(violations, Violation{
 					Check:   "ui-layout",
@@ -1419,6 +1424,9 @@ func checkUILayout(rootDir string) ([]Violation, error) {
 					Line:    i + 1,
 					Message: "non-English UI copy must live in the locale message catalog and the English source catalog must remain English (ISS-008)",
 				})
+			}
+			if inLocaleNameTable && strings.TrimSpace(line) == "};" {
+				inLocaleNameTable = false
 			}
 			if externalAssetURLRe.MatchString(line) {
 				violations = append(violations, Violation{

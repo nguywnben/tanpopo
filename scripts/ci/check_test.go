@@ -366,9 +366,13 @@ func TestLicenseLockfilesUILayoutAndCanary(t *testing.T) {
 		assertViolationsContainRule(t, root, checkOptions{uiLayout: true}, "english-ui-copy")
 
 		writeTestFile(t, root, "web/console/src/App.tsx", "export const title = 'English source';\n")
+		writeTestFile(t, root, "web/console/src/i18n/catalog.ts", "export const localeNames = {\n  vi: 'Tiếng Việt',\n};\n")
 		writeTestFile(t, root, "web/console/src/i18n/source.json", "{\"greeting\":\"Hello\"}\n")
 		writeTestFile(t, root, "web/console/src/i18n/messages/vi.json", "{\"greeting\":\"Xin chào\"}\n")
 		assertNoViolationsForRule(t, root, checkOptions{uiLayout: true}, "english-ui-copy")
+
+		writeTestFile(t, root, "web/console/src/i18n/catalog.ts", "export const localeNames = {\n  vi: 'Tiếng Việt',\n};\nexport const unexpected = 'Xin chào';\n")
+		assertViolationsContainRule(t, root, checkOptions{uiLayout: true}, "english-ui-copy")
 	})
 
 	t.Run("redacts canary secret without printing raw value", func(t *testing.T) {
