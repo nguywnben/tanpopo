@@ -1,4 +1,5 @@
 import {getActiveLocale} from './locale-state';
+import {translateUi} from './translate';
 
 export function activeLocale() {
   return getActiveLocale();
@@ -29,7 +30,7 @@ export function formatCurrency(value: number, currency: string): string {
 }
 
 export function formatMinorCurrency(micros: number, currency: string, fractionDigits: number): string {
-  if (!Number.isSafeInteger(micros)) return 'Unavailable';
+  if (!Number.isSafeInteger(micros)) return translateUi('Unavailable');
   const value = BigInt(micros);
   const negative = value < 0n;
   const absolute = negative ? -value : value;

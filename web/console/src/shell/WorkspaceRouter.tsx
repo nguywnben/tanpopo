@@ -41,7 +41,7 @@ export function WorkspaceRouter({
   if (!allowed) {
     return (
       <Banner tone="danger" title="Access restricted">
-        Your assigned roles ({roles.join(', ') || 'none'}) do not permit access to {route.label}.
+        Your assigned roles ({roles.join(', ') || 'None'}) do not permit access to {route.label}.
       </Banner>
     );
   }

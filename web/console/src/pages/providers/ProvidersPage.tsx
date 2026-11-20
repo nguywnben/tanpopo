@@ -686,7 +686,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       <Drawer
         open={editing !== null}
         onClose={() => { setEditing(null); setConflictServer(null); }}
-        title={`Edit ${editing?.name ?? 'connection'}`}
+        title={`Edit ${editing?.name ?? 'Connection'}`}
         subtitle="Rotate individual secret slots without exposing existing plaintext."
       >
         {conflictServer ? (
@@ -761,7 +761,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       <Modal
         open={oauthTarget !== null}
         onClose={() => setOauthTarget(null)}
-        title={`Authorize ${oauthTarget?.name ?? 'connection'} (OAuth 2.1 PKCE)`}
+        title={`Authorize ${oauthTarget?.name ?? 'Connection'} (OAuth 2.1 PKCE)`}
         subtitle="Uses a one-time PKCE S256 verifier and seals provider tokens in the vault."
       >
         <form className="tp-stack" onSubmit={handleStartOAuth}>

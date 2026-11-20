@@ -371,7 +371,7 @@ export function AccessPage({
         open={issueOpen}
         onClose={() => setIssueOpen(false)}
         title="Issue Virtual Key"
-        subtitle={`Bound to environment ${environmentId || 'none'}. Plaintext secret is displayed once.`}
+        subtitle={`Bound to environment ${environmentId || 'None'}. Plaintext secret is displayed once.`}
       >
         <form className="tp-stack" onSubmit={handleIssueKey}>
           <TextField label="Key name" required value={keyName} onChange={event => setKeyName(event.target.value)} />

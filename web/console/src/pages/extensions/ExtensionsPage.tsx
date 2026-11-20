@@ -14,6 +14,7 @@ import {
   upgradeExtension,
 } from '../../api/catalogClient';
 import type {components} from '../../api/generated';
+import {translateUi} from '../../i18n/translate';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
 import {ConfirmDialog, Drawer, Modal} from '../../ui/Overlays';
@@ -540,7 +541,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         onClose={() => setReviewDiff(null)}
         size="lg"
         title="Extension permission review"
-        subtitle={reviewDiff ? `${reviewDiff.package_id} · ${reviewDiff.active_version ?? 'new'} → ${reviewDiff.candidate_version}` : undefined}
+        subtitle={reviewDiff ? `${reviewDiff.package_id} · ${reviewDiff.active_version ?? 'New'} → ${reviewDiff.candidate_version}` : undefined}
         footer={
           approver ? (
             <>
@@ -602,7 +603,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
               ? `Restore previous known-good version ${actionTarget.row.previous_rollback_version ?? ''}. Affected projects: ${actionTarget.impact.projects.join(', ') || 'None'}.`
               : 'Remove this extension or discard its staged candidate.'
         }
-        confirmLabel={`Confirm ${actionTarget?.kind ?? 'action'}`}
+        confirmLabel={`Confirm ${actionTarget?.kind ?? 'Action'}`}
         requireMatch={actionTarget?.kind === 'quarantine' ? actionTarget.row.package_id : undefined}
         matchLabel="Type the exact package ID to confirm quarantine"
         busy={busy || actionReason.trim().length < 5}
@@ -699,7 +700,7 @@ function boolDiffRow(id: string, permission: string, active: boolean | undefined
 }
 
 function formatQuotas(p: components['schemas']['ExtensionPermissionSet']) {
-  const fmt = (val: number | undefined, unit: string) => (!val ? 'default' : `${val} ${unit}`);
+  const fmt = (val: number | undefined, unit: string) => (!val ? translateUi('Default') : `${val} ${unit}`);
   return `Mem ${fmt(p.max_memory_mib, 'MiB')} · Call ${fmt(p.max_cpu_ms_per_call, 'ms')} · Chunk ${fmt(p.max_stream_chunk_cpu_ms, 'ms')}`;
 }
 

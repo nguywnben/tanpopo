@@ -7,14 +7,16 @@ const supportedLocales = ['zh-Hans', 'zh-Hant', 'de', 'en', 'es', 'fr', 'id', 'i
 const translatedProps = new Set([
   'aria-label', 'label', 'title', 'subtitle', 'description', 'summary', 'placeholder', 'header',
   'ariaLabel', 'emptyTitle', 'emptyDescription', 'confirmLabel', 'cancelLabel', 'tooltip', 'helperText', 'section', 'rule', 'value',
-  'matchLabel', 'hint', 'emptySearchText', 'suggestionDescription',
+  'matchLabel', 'hint', 'emptySearchText', 'suggestionDescription', 'change', 'activeVal', 'candidateVal',
 ]);
 const translatedAttributes = new Set([...translatedProps].filter(name => name !== 'rule' && name !== 'value'));
 const ignoredTags = new Set(['code', 'pre', 'script', 'style', 'textarea']);
+const translatedValueWords = new Set(['None', 'No', 'Yes', 'Enabled', 'Disabled', 'Ready', 'Skipped', 'Added', 'Removed', 'Expanded', 'Changed', 'Reduced']);
 
 function isCopy(value: string, allowSingleWord = false): boolean {
   const text = value.trim();
   if (!text || text.length < 2 || text.length > 800 || /\n|\r|https?:\/\//i.test(text) || /^\/(?:admin|v1|mcp)\//i.test(text)) return false;
+  if (text === 'context_tokens' || text === 'tools' || text === 'vision') return false;
   if (text.startsWith('Tanpopo console mount element') || text === 'Default Organization' || text === 'Primary connection' || text === '(prefers-color-scheme: dark)') return false;
   if (/^[\d\s.,:%/$#_+()=-]+$/.test(text) || /^([A-Z][A-Z\d_:-]*|[a-z][\w-]*\/[\w./-]+)$/.test(text)) return false;
   if (!allowSingleWord && !/\s/.test(text)) return false;
@@ -29,6 +31,13 @@ function isInsideFunction(node: ts.Node): boolean {
   for (let parent = node.parent; parent; parent = parent.parent) {
     if (ts.isFunctionLike(parent)) return true;
     if (ts.isSourceFile(parent)) return false;
+  }
+  return false;
+}
+
+function isWithin(node: ts.Node, ancestor: ts.Node): boolean {
+  for (let current: ts.Node | undefined = node; current; current = current.parent) {
+    if (current === ancestor) return true;
   }
   return false;
 }
@@ -49,6 +58,7 @@ function translateNestedCopy(expression: ts.Expression, sf: ts.SourceFile): stri
     if (ts.isStringLiteral(node) && isCopy(node.text, true)) {
       let skip = false;
       for (let parent = node.parent; parent && parent !== expression; parent = parent.parent) {
+        if (ts.isConditionalExpression(parent) && isWithin(node, parent.condition)) { skip = true; break; }
         if (ts.isCallExpression(parent) && ['t', 'translateUi'].includes(parent.expression.getText(sf))) { skip = true; break; }
       }
       if (!skip) edits.push({start: node.getStart(sf), end: node.getEnd(), text: `translateUi(${JSON.stringify(node.text)})`});
@@ -118,23 +128,42 @@ function editsForFile(source: string, fileName: string, root: string, emit: bool
       }
     } else if (ts.isPropertyAssignment(node) && isInsideFunction(node) && translatedProps.has(node.name.getText(sf).replace(/^['"]|['"]$/g, '')) && ts.isStringLiteral(node.initializer)) {
       const propName = node.name.getText(sf).replace(/^['"]|['"]$/g, '');
-      if (isCopy(node.initializer.text, propName !== 'value' && propName !== 'rule')) add(node.initializer.text, node.initializer.getStart(sf), node.initializer.getEnd(), `translateUi(${JSON.stringify(node.initializer.text)})`);
+      const valueLikeProp = ['value', 'activeVal', 'candidateVal'].includes(propName);
+      const allowSingleWord = propName !== 'rule' && (!valueLikeProp || translatedValueWords.has(node.initializer.text));
+      if (isCopy(node.initializer.text, allowSingleWord)) add(node.initializer.text, node.initializer.getStart(sf), node.initializer.getEnd(), `translateUi(${JSON.stringify(node.initializer.text)})`);
     } else if (ts.isReturnStatement(node) && node.expression && ts.isStringLiteral(node.expression) && isCopy(node.expression.text)) {
       add(node.expression.text, node.expression.getStart(sf), node.expression.getEnd(), `translateUi(${JSON.stringify(node.expression.text)})`);
-    } else if (ts.isStringLiteral(node) && isCopy(node.text) && !ts.isReturnStatement(node.parent) && !ts.isJsxExpression(node.parent) && !ts.isJsxAttribute(node.parent) && !ts.isPropertyAssignment(node.parent)) {
+    } else if (ts.isStringLiteral(node) && !ts.isReturnStatement(node.parent) && !ts.isJsxExpression(node.parent) && !ts.isJsxAttribute(node.parent) && !ts.isPropertyAssignment(node.parent)) {
       let skip = false;
+      let allowSingleWord = false;
       for (let parent = node.parent; parent && !ts.isSourceFile(parent); parent = parent.parent) {
+        if (ts.isConditionalExpression(parent) && isWithin(node, parent.condition)) { skip = true; break; }
         if (emit && ts.isTemplateExpression(parent)) { skip = true; break; }
         if (ts.isCallExpression(parent) && ['t', 'translateUi'].includes(parent.expression.getText(sf))) { skip = true; break; }
         if (ts.isCallExpression(parent) && parent.expression.getText(sf) === 'useState') { skip = true; break; }
         if (ts.isJsxAttribute(parent)) {
           if (parent.name.getText(sf) === 'code' || !translatedAttributes.has(parent.name.getText(sf))) { skip = true; break; }
         }
-        if (ts.isPropertyAssignment(parent)) { skip = true; break; }
+        if (ts.isJsxExpression(parent)) {
+          if (ts.isJsxAttribute(parent.parent)) {
+            const attributeName = parent.parent.name.getText(sf);
+            if (!translatedAttributes.has(attributeName)) { skip = true; break; }
+            allowSingleWord = true;
+          } else {
+            allowSingleWord = true;
+          }
+        }
+        if (ts.isPropertyAssignment(parent)) {
+          const propertyName = parent.name.getText(sf).replace(/^['"]|['"]$/g, '');
+          const valueLikeProp = ['value', 'activeVal', 'candidateVal'].includes(propertyName);
+          const valueWord = valueLikeProp && translatedValueWords.has(node.text);
+          if (!translatedProps.has(propertyName) || propertyName === 'rule' || valueLikeProp && !valueWord) { skip = true; break; }
+          allowSingleWord = true;
+        }
         if (ts.isJsxElement(parent) && ignoredTags.has(parent.openingElement.tagName.getText(sf).toLowerCase())) { skip = true; break; }
         if (ts.isJsxSelfClosingElement(parent) && ignoredTags.has(parent.tagName.getText(sf).toLowerCase())) { skip = true; break; }
       }
-      if (!skip) add(node.text, node.getStart(sf), node.getEnd(), `translateUi(${JSON.stringify(node.text)})`);
+      if (!skip && isCopy(node.text, allowSingleWord)) add(node.text, node.getStart(sf), node.getEnd(), `translateUi(${JSON.stringify(node.text)})`);
     }
     ts.forEachChild(node, visit);
   };
@@ -190,6 +219,16 @@ export function extractLocaleKeys(root: string): string[] {
       ts.forEachChild(node, collectCalls);
     };
     collectCalls(sf);
+  }
+  const formatterPath = path.join(sourceRoot, 'i18n/format.ts');
+  if (fs.existsSync(formatterPath)) {
+    const formatter = fs.readFileSync(formatterPath, 'utf8');
+    const sf = ts.createSourceFile(formatterPath, formatter, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const collectFormatterMessages = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && node.expression.getText(sf) === 'translateUi' && ts.isStringLiteral(node.arguments[0])) keys.add(node.arguments[0].text);
+      ts.forEachChild(node, collectFormatterMessages);
+    };
+    collectFormatterMessages(sf);
   }
   return [...keys].sort();
 }
