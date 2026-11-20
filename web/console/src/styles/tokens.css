@@ -1,64 +1,74 @@
-/* Tanpopo Console v2 Design Tokens — Warm Daylight Precision & Obsidian Dark */
+/* Tanpopo Console v2 — Refined Astryx Neutral Token System (Bright Light & Crisp Dark) */
+@layer reset, astryx-base, astryx-theme, tokens, base, layout, components;
+
 @layer tokens {
-  :root {
-    --font-sans: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  :root,
+  [data-astryx-theme='neutral'] {
+    --tp-font-sans: var(--font-family-body, Figtree, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif);
+    --tp-font-mono: var(--font-family-code, ui-monospace, 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace);
 
-    /* Surfaces */
-    --bg-canvas: #f7f6f2;
-    --bg-surface: #ffffff;
-    --bg-subtle: #f1efe9;
-    --bg-hover: #ebe8e0;
-    --bg-active: #e4dfd4;
-    --bg-rail: #f3f1eb;
-    --bg-code: #f5f3ee;
-    --bg-backdrop: rgba(17, 20, 26, 0.48);
+    /* Bright, clean neutral canvas & subtle surface hierarchy (overrides heavy #f1f1f1 wash) */
+    --color-background-body: light-dark(#fafafb, #111113);
+    --color-background-surface: light-dark(#ffffff, #18181b);
+    --color-background-card: light-dark(#ffffff, #18181b);
+    --color-background-popover: light-dark(#ffffff, #1f1f23);
+    --color-background-muted: light-dark(#f4f4f6, #222226);
 
-    /* Borders */
-    --border-subtle: #e3dfd6;
-    --border-default: #cfc9bc;
-    --border-strong: #a7a092;
+    /* Deliberate neutral interactive states (hover / selected / pressed) */
+    --color-neutral: light-dark(rgba(15, 23, 42, 0.055), rgba(255, 255, 255, 0.085));
+    --color-overlay-hover: light-dark(rgba(15, 23, 42, 0.035), rgba(255, 255, 255, 0.055));
+    --color-overlay-pressed: light-dark(rgba(15, 23, 42, 0.07), rgba(255, 255, 255, 0.1));
 
-    /* Ink */
-    --ink-primary: #15181e;
-    --ink-secondary: #4c5361;
-    --ink-muted: #666e7d;
-    --ink-inverse: #ffffff;
+    /* Whisper-thin hairlines & crisp control borders */
+    --color-border: light-dark(rgba(15, 23, 42, 0.08), rgba(255, 255, 255, 0.09));
+    --color-border-emphasized: light-dark(rgba(15, 23, 42, 0.16), rgba(255, 255, 255, 0.18));
 
-    /* Brand Accent (Tanpopo Ochre / Ink) */
-    --brand-accent: #b26508;
-    --brand-accent-bright: #d48312;
-    --brand-accent-soft: #fdf4e4;
-    --brand-accent-border: #f0cf99;
-    --action-primary-bg: #181c24;
-    --action-primary-hover: #282f3c;
-    --action-primary-ink: #ffffff;
+    /* High-clarity neutral typography & primary accent */
+    --color-text-primary: light-dark(#111113, #f4f4f5);
+    --color-text-secondary: light-dark(#52525b, #a1a1aa);
+    --color-text-disabled: light-dark(#a1a1aa, #52525b);
+    --color-icon-primary: light-dark(#18181b, #f4f4f5);
+    --color-icon-secondary: light-dark(#52525b, #a1a1aa);
+    --color-accent: light-dark(#18181b, #f4f4f5);
+    --color-on-accent: light-dark(#ffffff, #111113);
 
-    /* Semantic Status (always paired with icon + text) */
-    --status-ok-ink: #126b40;
-    --status-ok-bg: #ecf9f1;
-    --status-ok-border: #a7e4c2;
+    /* Semantic surfaces & destructive actions; text colors inherit restrained Astryx Neutral tokens */
+    --color-success: light-dark(#16a34a, #22c55e);
+    --color-success-muted: light-dark(#f0fdf4, rgba(34, 197, 94, 0.14));
+    --color-on-success-muted: light-dark(#166534, #bbf7d0);
 
-    --status-warn-ink: #8f4f00;
-    --status-warn-bg: #fef7e6;
-    --status-warn-border: #f3ce84;
+    --color-warning: light-dark(#d97706, #f59e0b);
+    --color-warning-muted: light-dark(#fffbeb, rgba(245, 158, 11, 0.14));
+    --color-on-warning-muted: light-dark(#92400e, #fde68a);
 
-    --status-danger-ink: #b11f18;
-    --status-danger-bg: #fef1f0;
-    --status-danger-border: #f5bcb7;
-    --action-danger-bg: #b42318;
-    --action-danger-hover: #912018;
+    --color-error: light-dark(#dc2626, #ef4444);
+    --color-error-muted: light-dark(#fef2f2, rgba(239, 68, 68, 0.16));
+    --color-on-error-muted: light-dark(#b91c1c, #fecaca);
 
-    --status-info-ink: #1e4b8a;
-    --status-info-bg: #eef5ff;
-    --status-info-border: #b8d3fa;
+    /* Tanpopo layout token aliases */
+    --tp-bg-canvas: var(--color-background-body);
+    --tp-bg-surface: var(--color-background-surface);
+    --tp-bg-rail: light-dark(#ffffff, #141417);
+    --tp-bg-subtle: var(--color-background-muted);
+    --tp-bg-hover: var(--color-overlay-hover);
+    --tp-bg-selected: var(--color-neutral);
+    --tp-bg-pressed: var(--color-overlay-pressed);
+    --tp-bg-backdrop: var(--color-overlay, light-dark(#00000073, #000000cc));
 
-    --status-neutral-ink: #434a57;
-    --status-neutral-bg: #f1f2f4;
-    --status-neutral-border: #d5d8de;
+    --tp-border-subtle: var(--color-border);
+    --tp-border-strong: var(--color-border-emphasized);
 
-    /* Focus Ring */
-    --focus-ring: #b26508;
+    --tp-ink-primary: var(--color-text-primary);
+    --tp-ink-secondary: var(--color-text-secondary);
+    --tp-ink-disabled: var(--color-text-disabled);
+    --tp-accent: var(--color-accent);
+    --tp-on-accent: var(--color-on-accent);
+
+    --tp-status-warn-text: var(--color-text-warning);
+    --tp-status-error: var(--color-error);
+    --tp-status-error-text: var(--color-text-error);
+    --tp-status-error-bg: var(--color-error-muted);
+    --tp-status-error-border: light-dark(rgba(220, 38, 38, 0.28), rgba(239, 68, 68, 0.42));
 
     /* Spacing Scale (4px base) */
     --space-1: 0.25rem;
@@ -70,69 +80,16 @@
     --space-8: 2rem;
 
     /* Radii */
-    --radius-sm: 4px;
-    --radius-md: 6px;
-    --radius-lg: 8px;
-    --radius-pill: 999px;
+    --tp-radius-sm: var(--radius-inner, 0.375rem);
+    --tp-radius-md: var(--radius-element, 0.625rem);
+    --tp-radius-lg: var(--radius-container, 0.75rem);
+    --tp-radius-pill: var(--radius-full, 9999px);
 
-    /* Elevation (subtle only for overlays) */
-    --shadow-overlay: 0 12px 32px rgba(15, 19, 28, 0.14), 0 2px 6px rgba(15, 19, 28, 0.08);
+    /* Elevation */
+    --tp-shadow-overlay: var(--shadow-med, 0 4px 12px rgba(0, 0, 0, 0.12));
 
     /* Shell Metrics */
-    --rail-width: 236px;
+    --rail-width: 240px;
     --topbar-height: 52px;
-  }
-
-  [data-theme='dark'] {
-    --bg-canvas: #0e1116;
-    --bg-surface: #151921;
-    --bg-subtle: #1c222d;
-    --bg-hover: #242b38;
-    --bg-active: #2c3545;
-    --bg-rail: #12161d;
-    --bg-code: #10141b;
-    --bg-backdrop: rgba(4, 6, 10, 0.72);
-
-    --border-subtle: #252c3a;
-    --border-default: #333c4e;
-    --border-strong: #4d586e;
-
-    --ink-primary: #f1f3f7;
-    --ink-secondary: #a8b0bf;
-    --ink-muted: #848e9f;
-    --ink-inverse: #111419;
-
-    --brand-accent: #f0ab35;
-    --brand-accent-bright: #f5be58;
-    --brand-accent-soft: #2a2112;
-    --brand-accent-border: #61471b;
-    --action-primary-bg: #ebb03d;
-    --action-primary-hover: #f5c056;
-    --action-primary-ink: #12151a;
-
-    --status-ok-ink: #6ee7a8;
-    --status-ok-bg: #11261b;
-    --status-ok-border: #1e5237;
-
-    --status-warn-ink: #f7c768;
-    --status-warn-bg: #292010;
-    --status-warn-border: #634a1c;
-
-    --status-danger-ink: #fca5a1;
-    --status-danger-bg: #2c1415;
-    --status-danger-border: #6d2626;
-    --action-danger-bg: #d9382e;
-    --action-danger-hover: #ef4b40;
-
-    --status-info-ink: #93c5fd;
-    --status-info-bg: #132136;
-    --status-info-border: #244675;
-
-    --status-neutral-ink: #cbd2df;
-    --status-neutral-bg: #1e2430;
-    --status-neutral-border: #363f50;
-
-    --focus-ring: #f0ab35;
-    --shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.48), 0 2px 8px rgba(0, 0, 0, 0.3);
   }
 }

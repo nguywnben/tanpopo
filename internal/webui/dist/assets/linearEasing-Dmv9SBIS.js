@@ -1,0 +1,1 @@
+const n=34;function t(n){return Math.max(2,Math.ceil(n/1e3*60)+1)}function e(n,e){const o=t(n),r=[];for(let t=0;t<o;t++){const a=e(t/(o-1)*n);r.push(String(Math.round(1e4*a)/1e4))}return`linear(${r.join(", ")})`}export{n as L,e as l,t as s};

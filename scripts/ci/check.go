@@ -1278,7 +1278,7 @@ func checkCanaryAndSecrets(rootDir string) ([]Violation, error) {
 var (
 	vnDiacriticRe       = regexp.MustCompile("[\u00e0-\u00e3\u00e8-\u00ea\u00ec-\u00ed\u00f2-\u00f5\u00f9-\u00fa\u00fd\u0103\u0111\u0129\u0169\u01a1\u01b0\u1ea0-\u1ef9\u00c0-\u00c3\u00c8-\u00ca\u00cc-\u00cd\u00d2-\u00d5\u00d9-\u00da\u00dd\u0102\u0110\u0128\u0168\u01a0\u01af]")
 	externalAssetURLRe  = regexp.MustCompile(`(?i)https?://(?:fonts\.googleapis\.com|fonts\.gstatic\.com|cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com)`)
-	legacyStackImportRe = regexp.MustCompile(`@astryxdesign/|@stylexjs/`)
+	legacyOchreHexRe    = regexp.MustCompile(`(?i)#(?:f7f6f2|f3f1eb|f1efe9|b26508|d48312|f0ab35|ebb03d)\b`)
 	rootOverflowHackRe  = regexp.MustCompile(`(?is)(?:^|[}\s,])(?:html|body)(?:\s*,\s*(?:html|body))*\s*\{[^}]*overflow-x\s*:\s*(?:hidden|clip)`)
 )
 
@@ -1296,12 +1296,12 @@ func checkUILayout(rootDir string) ([]Violation, error) {
 		})
 	} else {
 		s := string(tokensRaw)
-		if !strings.Contains(s, "--bg-canvas") || !strings.Contains(s, "--ink-primary") {
+		if !strings.Contains(s, "--tp-bg-canvas") || !strings.Contains(s, "--tp-ink-primary") {
 			violations = append(violations, Violation{
 				Check:   "ui-layout",
 				Rule:    "design-tokens-incomplete",
 				File:    "web/console/src/styles/tokens.css",
-				Message: "web/console/src/styles/tokens.css must define core semantic tokens (--bg-canvas, --ink-primary)",
+				Message: "web/console/src/styles/tokens.css must define Astryx Neutral bridge tokens (--tp-bg-canvas, --tp-ink-primary)",
 			})
 		}
 		if strings.Contains(s, "\r\n") {
@@ -1314,14 +1314,44 @@ func checkUILayout(rootDir string) ([]Violation, error) {
 		}
 	}
 
-	pkgPath := filepath.Join(rootDir, "web", "console", "package.json")
-	if pkgRaw, pkgErr := os.ReadFile(pkgPath); pkgErr == nil {
-		if legacyStackImportRe.Match(pkgRaw) {
+	themesPath := filepath.Join(rootDir, "web", "console", "src", "astryx-themes.ts")
+	themesRaw, themesErr := os.ReadFile(themesPath)
+	if themesErr != nil {
+		violations = append(violations, Violation{
+			Check:   "ui-layout",
+			Rule:    "astryx-neutral-theme-record",
+			File:    "web/console/src/astryx-themes.ts",
+			Message: fmt.Sprintf("missing CLI-generated Astryx Neutral theme module: %v (DEC-087)", themesErr),
+		})
+	} else {
+		ts := string(themesRaw)
+		if strings.Contains(ts, "\r\n") {
 			violations = append(violations, Violation{
 				Check:   "ui-layout",
-				Rule:    "no-legacy-astryx-stack",
+				Rule:    "astryx-themes-must-be-lf",
+				File:    "web/console/src/astryx-themes.ts",
+				Message: "web/console/src/astryx-themes.ts must use LF line endings",
+			})
+		}
+		if !strings.Contains(ts, "@astryxdesign/theme-neutral") || !strings.Contains(ts, "defaultThemeSlug") || (!strings.Contains(ts, `"neutral"`) && !strings.Contains(ts, `'neutral'`)) {
+			violations = append(violations, Violation{
+				Check:   "ui-layout",
+				Rule:    "astryx-neutral-theme-record",
+				File:    "web/console/src/astryx-themes.ts",
+				Message: "web/console/src/astryx-themes.ts must register @astryxdesign/theme-neutral with defaultThemeSlug = \"neutral\" (DEC-087)",
+			})
+		}
+	}
+
+	pkgPath := filepath.Join(rootDir, "web", "console", "package.json")
+	if pkgRaw, pkgErr := os.ReadFile(pkgPath); pkgErr == nil {
+		pkgStr := string(pkgRaw)
+		if !strings.Contains(pkgStr, `"@astryxdesign/core"`) || !strings.Contains(pkgStr, `"@astryxdesign/theme-neutral"`) {
+			violations = append(violations, Violation{
+				Check:   "ui-layout",
+				Rule:    "astryx-neutral-deps",
 				File:    "web/console/package.json",
-				Message: "legacy @astryxdesign/* or @stylexjs/* dependencies are retired by ADR-0007 / DEC-086",
+				Message: "web/console/package.json must declare @astryxdesign/core and @astryxdesign/theme-neutral (ADR-0007 / DEC-087)",
 			})
 		}
 	}
@@ -1396,13 +1426,13 @@ func checkUILayout(rootDir string) ([]Violation, error) {
 					Message: "external CDN or font URLs are forbidden in web/console/src (air-gap / CR-10)",
 				})
 			}
-			if legacyStackImportRe.MatchString(line) {
+			if strings.HasSuffix(strings.ToLower(d.Name()), ".css") && legacyOchreHexRe.MatchString(line) {
 				violations = append(violations, Violation{
 					Check:   "ui-layout",
-					Rule:    "no-legacy-astryx-stack",
+					Rule:    "no-legacy-ochre-palette",
 					File:    rel,
 					Line:    i + 1,
-					Message: "legacy @astryxdesign/* or @stylexjs/* import is retired by ADR-0007 / DEC-086",
+					Message: "retired warm beige/ochre hex color found in CSS; use Astryx Neutral tokens (DEC-087)",
 				})
 			}
 		}

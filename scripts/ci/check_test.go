@@ -24,17 +24,20 @@ func seedCleanRepo(t *testing.T) string {
 	writeTestFile(t, root, "internal/security/vault/vault.go", "package vault\nimport _ \"github.com/nguywnben/tanpopo/internal/storage/port\"\n")
 	writeTestFile(t, root, "web/console/package.json", `{
   "name": "tanpopo-console",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
+    "@astryxdesign/core": "0.7.16",
+    "@astryxdesign/theme-neutral": "0.7.16",
     "lucide-react": "^0.544.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   }
 }`)
 	writeTestFile(t, root, "web/console/package-lock.json", `{"name":"tanpopo-console","lockfileVersion":3,"packages":{"":{"license":"Apache-2.0"},"node_modules/react":{"license":"MIT"}}}`)
-	writeTestFile(t, root, "web/console/src/styles/tokens.css", ":root {\n  --bg-canvas: #f7f6f2;\n  --ink-primary: #15181e;\n}\n")
+	writeTestFile(t, root, "web/console/src/astryx-themes.ts", "import neutral from \"@astryxdesign/theme-neutral/built\";\nexport const themes = { neutral } as const;\nexport type ThemeSlug = keyof typeof themes;\nexport const defaultThemeSlug: ThemeSlug = \"neutral\";\n")
+	writeTestFile(t, root, "web/console/src/styles/tokens.css", ":root {\n  --tp-bg-canvas: var(--color-background-body);\n  --tp-ink-primary: var(--color-text-primary);\n}\n")
 	writeTestFile(t, root, "web/console/src/App.tsx", "export function App() { return null; }\n")
 	return root
 }
@@ -324,19 +327,23 @@ func TestLicenseLockfilesUILayoutAndCanary(t *testing.T) {
 		assertViolationsContainRule(t, root, checkOptions{lockfiles: true}, "single-npm-lockfile")
 	})
 
-	t.Run("rejects root overflow-x hidden, CRLF tokens, legacy stack imports, external CDN URLs, and Vietnamese UI copy", func(t *testing.T) {
+	t.Run("rejects root overflow-x hidden, CRLF tokens, retired beige/ochre palette, missing Astryx neutral theme, external CDN URLs, and Vietnamese UI copy", func(t *testing.T) {
 		root := seedCleanRepo(t)
-		writeTestFile(t, root, "web/console/src/styles/tokens.css", ":root {\r\n  --bg-canvas: #f7f6f2;\r\n  --ink-primary: #15181e;\r\n}\r\n")
+		writeTestFile(t, root, "web/console/src/styles/tokens.css", ":root {\r\n  --tp-bg-canvas: var(--color-background-body);\r\n  --tp-ink-primary: var(--color-text-primary);\r\n}\r\n")
 		assertViolationsContainRule(t, root, checkOptions{uiLayout: true}, "tokens-must-be-lf")
 
-		writeTestFile(t, root, "web/console/src/styles/tokens.css", ":root {\n  --bg-canvas: #f7f6f2;\n  --ink-primary: #15181e;\n}\n")
+		writeTestFile(t, root, "web/console/src/styles/tokens.css", ":root {\n  --tp-bg-canvas: var(--color-background-body);\n  --tp-ink-primary: var(--color-text-primary);\n}\n")
 		writeTestFile(t, root, "web/console/src/styles/bad.css", "html, body {\n  overflow-x: hidden;\n}\n")
 		assertViolationsContainRule(t, root, checkOptions{uiLayout: true}, "no-root-overflow-x-hidden")
 
-		writeTestFile(t, root, "web/console/src/styles/bad.css", "body { margin: 0; }\n")
-		writeTestFile(t, root, "web/console/src/legacy.tsx", "import {Button} from '@astryxdesign/core/Button';\nexport const B = Button;\n")
-		assertViolationsContainRule(t, root, checkOptions{uiLayout: true}, "no-legacy-astryx-stack")
+		writeTestFile(t, root, "web/console/src/styles/bad.css", ".accent { border-left: 2px solid #d48312; }\n")
+		assertViolationsContainRule(t, root, checkOptions{uiLayout: true}, "no-legacy-ochre-palette")
 
+		writeTestFile(t, root, "web/console/src/styles/bad.css", "body { margin: 0; }\n")
+		writeTestFile(t, root, "web/console/src/astryx-themes.ts", "export const themes = {} as const;\n")
+		assertViolationsContainRule(t, root, checkOptions{uiLayout: true}, "astryx-neutral-theme-record")
+
+		writeTestFile(t, root, "web/console/src/astryx-themes.ts", "import neutral from \"@astryxdesign/theme-neutral/built\";\nexport const themes = { neutral } as const;\nexport type ThemeSlug = keyof typeof themes;\nexport const defaultThemeSlug: ThemeSlug = \"neutral\";\n")
 		writeTestFile(t, root, "web/console/src/legacy.tsx", "export const fontUrl = 'https://fonts.googleapis.com/css2?family=Inter';\n")
 		assertViolationsContainRule(t, root, checkOptions{uiLayout: true}, "air-gap-no-external-assets")
 

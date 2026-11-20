@@ -4,7 +4,7 @@ import {getTraceWaterfall, listTracePage} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {DataTable} from '../../ui/DataTable';
 import {Drawer} from '../../ui/Overlays';
-import {Banner, Button, KeyValueList, SectionHeader, StatusPill, TextField, formatMicroUSD, stateTone} from '../../ui/primitives';
+import {Banner, Button, KeyValueList, SectionHeader, StatusPill, TextField, formatMicroUSD, formatOperationalState, stateTone} from '../../ui/primitives';
 
 type Trace = components['schemas']['TraceSummary'];
 type Role = components['schemas']['RbacRole'];
@@ -118,7 +118,7 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
           <p className="tp-page-subtitle">Metadata-only execution telemetry. Zero prompt or completion bytes stored.</p>
         </div>
         <div className="tp-page-actions">
-          <span className="tp-status" data-tone="neutral">
+          <span className="tp-meta-tag">
             <EyeOff size={13} aria-hidden="true" />
             <span>Metadata-Only</span>
           </span>
@@ -166,6 +166,7 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="tp-table-link-btn"
                   onClick={event => {
                     event.stopPropagation();
                     setRequestId(row.request_id);
@@ -193,7 +194,7 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
               id: 'accuracy',
               header: 'Metering',
               width: '14%',
-              render: row => <StatusPill tone={stateTone(row.usage_accuracy)} label={row.usage_accuracy.replaceAll('_', ' ')} />,
+              render: row => <StatusPill tone={stateTone(row.usage_accuracy)} label={formatOperationalState(row.usage_accuracy)} />,
             },
             {
               id: 'duration',
@@ -254,7 +255,7 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
                   label: 'Usage accuracy & Cost',
                   value: (
                     <div className="tp-row">
-                      <StatusPill tone={stateTone(selected.usage_accuracy)} label={selected.usage_accuracy.replaceAll('_', ' ')} />
+                      <StatusPill tone={stateTone(selected.usage_accuracy)} label={formatOperationalState(selected.usage_accuracy)} />
                       <span className="mono">{formatMicroUSD(selected.total_cost_micros)}</span>
                     </div>
                   ),
@@ -277,12 +278,16 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
                         <div className="tp-row" style={{justifyContent: 'space-between'}}>
                           <span className="mono" style={{fontWeight: 600}}>{stage.stage}</span>
                           <div className="tp-row">
-                            <StatusPill tone={stateTone(stage.outcome)} label={stage.outcome} />
+                            <StatusPill tone={stateTone(stage.outcome)} label={formatOperationalState(stage.outcome)} />
                             <span className="mono">{stage.duration_ms} ms</span>
                           </div>
                         </div>
                         <div className="tp-waterfall-bar-track" aria-hidden="true">
-                          <div className="tp-waterfall-bar-fill" style={{width: `${widthPct}%`}} />
+                          <div
+                            className="tp-waterfall-bar-fill"
+                            data-tone={stateTone(stage.outcome) === 'danger' ? 'danger' : undefined}
+                            style={{width: `${widthPct}%`}}
+                          />
                         </div>
                       </li>
                     );

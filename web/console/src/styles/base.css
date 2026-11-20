@@ -1,24 +1,18 @@
 @layer base {
-  *,
-  *::before,
-  *::after {
-    box-sizing: border-box;
-  }
-
   html {
-    font-family: var(--font-sans);
+    font-family: var(--tp-font-sans);
     font-size: 16px;
     line-height: 1.5;
-    color: var(--ink-primary);
-    background-color: var(--bg-canvas);
+    color: var(--tp-ink-primary);
+    background-color: var(--tp-bg-canvas);
     -webkit-text-size-adjust: 100%;
   }
 
   body {
     margin: 0;
     min-height: 100dvh;
-    color: var(--ink-primary);
-    background-color: var(--bg-canvas);
+    color: var(--tp-ink-primary);
+    background-color: var(--tp-bg-canvas);
     font-feature-settings: 'cv02', 'cv03', 'cv04';
   }
 
@@ -27,82 +21,45 @@
     width: 100%;
   }
 
-  h1,
-  h2,
-  h3,
-  h4,
-  p,
-  ul,
-  ol,
-  dl,
-  dd,
-  figure,
-  pre {
-    margin: 0;
-  }
-
-  h1 {
+  .tp-content h1,
+  .tp-auth-page h1 {
     font-size: 1.375rem;
     line-height: 1.25;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: -0.02em;
-    color: var(--ink-primary);
+    color: var(--tp-ink-primary);
   }
 
-  h2 {
+  .tp-content h2,
+  .tp-auth-page h2 {
     font-size: 0.9375rem;
     line-height: 1.35;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: -0.01em;
-    color: var(--ink-primary);
+    color: var(--tp-ink-primary);
   }
 
-  h3 {
+  .tp-content h3,
+  .tp-auth-page h3 {
     font-size: 0.875rem;
     line-height: 1.4;
     font-weight: 600;
-    color: var(--ink-primary);
+    color: var(--tp-ink-primary);
   }
 
-  a {
-    color: var(--brand-accent);
-    text-decoration: none;
-  }
-
-  a:hover {
+  .tp-link {
+    color: var(--tp-ink-primary);
     text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: var(--tp-border-strong);
   }
 
-  button,
-  input,
-  select,
-  textarea {
-    font: inherit;
-    color: inherit;
-  }
-
-  button {
-    cursor: pointer;
-  }
-
-  button:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-
-  :focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
-  }
-
-  code,
-  pre,
-  kbd {
-    font-family: var(--font-mono);
+  .tp-link:hover {
+    text-decoration-color: var(--tp-ink-primary);
   }
 
   .mono {
-    font-family: var(--font-mono);
+    font-family: var(--tp-font-mono);
     font-size: 0.8125rem;
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
@@ -123,6 +80,15 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+
+  /* Synchronized Light/Dark switch: disable per-control color transitions for the commit frame
+     so canvas, shell, tables, forms, icons, and portaled overlays repaint in one atomic frame. */
+  html[data-theme-switching='true'],
+  html[data-theme-switching='true'] *,
+  html[data-theme-switching='true'] *::before,
+  html[data-theme-switching='true'] *::after {
+    transition: none !important;
   }
 
   @media (prefers-reduced-motion: reduce) {

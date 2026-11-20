@@ -1,4 +1,5 @@
 import type {ReactNode} from 'react';
+import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {EmptyState} from './primitives';
 
 export type DataColumn<T> = {
@@ -34,10 +35,10 @@ export function DataTable<T>({
   if (loading && rows.length === 0) {
     return (
       <div className="tp-surface tp-surface-pad tp-stack" role="status" aria-busy="true" aria-label={`Loading ${ariaLabel}`}>
-        <div className="tp-skeleton" style={{width: '45%'}} />
-        <div className="tp-skeleton" style={{width: '100%'}} />
-        <div className="tp-skeleton" style={{width: '92%'}} />
-        <div className="tp-skeleton" style={{width: '78%'}} />
+        <Skeleton width="42%" height={18} radius={1} index={0} />
+        <Skeleton width="100%" height={16} radius={1} index={1} />
+        <Skeleton width="92%" height={16} radius={1} index={2} />
+        <Skeleton width="78%" height={16} radius={1} index={3} />
       </div>
     );
   }

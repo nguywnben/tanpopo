@@ -19,13 +19,17 @@ import {
   Terminal,
   X,
 } from 'lucide-react';
+import {CommandPalette} from '@astryxdesign/core/CommandPalette';
+import {Kbd} from '@astryxdesign/core/Kbd';
+import {Selector} from '@astryxdesign/core/Selector';
+import {Skeleton} from '@astryxdesign/core/Skeleton';
+import {createStaticSource, type SearchableItem} from '@astryxdesign/core/Typeahead';
 import {getAdminSession, listEnvironments, listProjects, logoutAdmin} from '../api/client';
 import {listKillSwitches, listPendingApprovals} from '../api/managementClient';
 import type {components} from '../api/generated';
 import {Link, useRouter} from '../router/RouterContext';
 import {useTheme} from '../styles/theme';
-import {Banner, Button, CountPill, IconButton, TanpopoMark, TextField} from '../ui/primitives';
-import {Modal} from '../ui/Overlays';
+import {Banner, Button, CountPill, IconButton, TanpopoMark} from '../ui/primitives';
 import {canAccessRoute, navigationGroups, quickCommands, routeForPath, type ConsoleRoute, type NavIconKey, type Role} from './routes';
 
 const WorkspaceRouter = lazy(() => import('./WorkspaceRouter').then(mod => ({default: mod.WorkspaceRouter})));
@@ -68,7 +72,6 @@ export function ConsoleShell() {
   const [loadError, setLoadError] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [paletteQuery, setPaletteQuery] = useState('');
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const [activeSwitches, setActiveSwitches] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
@@ -124,7 +127,11 @@ export function ConsoleShell() {
   }, [navigate]);
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId) {
+      setEnvironments([]);
+      setEnvironmentId('');
+      return;
+    }
     let active = true;
     setEnvironments([]);
     setEnvironmentId('');
@@ -146,7 +153,6 @@ export function ConsoleShell() {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        setPaletteQuery('');
         setPaletteOpen(open => !open);
       }
       if (event.key === 'Escape' && railOpen) {
@@ -169,14 +175,34 @@ export function ConsoleShell() {
     [roles],
   );
 
-  const availableCommands = useMemo(() => {
-    const q = paletteQuery.trim().toLowerCase();
-    return quickCommands.filter(
-      cmd =>
-        cmd.roles.some(role => roles.includes(role)) &&
-        (!q || cmd.label.toLowerCase().includes(q) || cmd.section.toLowerCase().includes(q) || cmd.path.toLowerCase().includes(q)),
-    );
-  }, [paletteQuery, roles]);
+  const projectOptions = useMemo(
+    () => [
+      {value: '', label: 'No project'},
+      ...projects.map(project => ({value: project.id, label: project.name})),
+    ],
+    [projects],
+  );
+
+  const environmentOptions = useMemo(
+    () => [
+      {value: '', label: 'No env'},
+      ...environments.map(env => ({value: env.id, label: env.name})),
+    ],
+    [environments],
+  );
+
+  const paletteSource = useMemo(() => {
+    const items: Array<SearchableItem<{group: string; path: string}>> = quickCommands
+      .filter(cmd => cmd.roles.some(role => roles.includes(role)))
+      .map(cmd => ({
+        id: cmd.path,
+        label: cmd.label,
+        auxiliaryData: {group: cmd.section, path: cmd.path},
+      }));
+    return createStaticSource(items, {
+      keywords: item => [item.auxiliaryData?.group ?? '', item.auxiliaryData?.path ?? ''],
+    });
+  }, [roles]);
 
   const canUseEmergency = roles.some(role => emergencyRoles.includes(role));
   const securityBadgeCount = pendingApprovals + activeSwitches;
@@ -209,7 +235,7 @@ export function ConsoleShell() {
       <aside className="tp-rail" data-open={railOpen ? 'true' : 'false'} aria-label="Tanpopo console navigation">
         <div className="tp-rail-header">
           <Link href="/overview" className="tp-brand">
-            <TanpopoMark size={20} />
+            <TanpopoMark size={22} />
             <span>Tanpopo</span>
           </Link>
           <IconButton label="Close navigation" className="tp-mobile-only" onClick={() => setRailOpen(false)}>
@@ -235,7 +261,7 @@ export function ConsoleShell() {
                       <NavIcon icon={item.icon} />
                       <span className="tp-nav-link-label">{item.label}</span>
                     </span>
-                    {badge !== undefined ? <CountPill count={badge} tone={activeSwitches > 0 ? 'danger' : 'warn'} /> : null}
+                    {badge !== undefined ? <CountPill count={badge} /> : null}
                   </Link>
                 );
               })}
@@ -270,34 +296,38 @@ export function ConsoleShell() {
 
             <div className="tp-scope-group" role="group" aria-label="Active workspace scope">
               <div className="tp-scope-field">
-                <label className="tp-scope-label" htmlFor="project-context">Project</label>
-                <select
+                <span className="tp-scope-label" aria-hidden="true">Project</span>
+                <Selector
                   id="project-context"
-                  className="tp-scope-select"
+                  label="Project"
+                  isLabelHidden
+                  size="sm"
+                  variant="input"
+                  options={projectOptions}
                   value={projectId}
-                  disabled={loading || projects.length === 0}
-                  onChange={event => setProjectId(event.target.value)}
-                >
-                  <option value="">No project</option>
-                  {projects.map(project => (
-                    <option key={project.id} value={project.id}>{project.name}</option>
-                  ))}
-                </select>
+                  placeholder="No project"
+                  isDisabled={loading || projects.length === 0}
+                  hasSearch={projects.length > 8}
+                  onChange={next => setProjectId(next)}
+                  containerClassName="tp-scope-selector"
+                />
               </div>
               <div className="tp-scope-field">
-                <label className="tp-scope-label" htmlFor="environment-context">Env</label>
-                <select
+                <span className="tp-scope-label" aria-hidden="true">Env</span>
+                <Selector
                   id="environment-context"
-                  className="tp-scope-select"
+                  label="Env"
+                  isLabelHidden
+                  size="sm"
+                  variant="input"
+                  options={environmentOptions}
                   value={environmentId}
-                  disabled={loading || environments.length === 0}
-                  onChange={event => setEnvironmentId(event.target.value)}
-                >
-                  <option value="">No env</option>
-                  {environments.map(env => (
-                    <option key={env.id} value={env.id}>{env.name}</option>
-                  ))}
-                </select>
+                  placeholder="No env"
+                  isDisabled={loading || environments.length === 0}
+                  hasSearch={environments.length > 8}
+                  onChange={next => setEnvironmentId(next)}
+                  containerClassName="tp-scope-selector"
+                />
               </div>
             </div>
           </div>
@@ -306,25 +336,26 @@ export function ConsoleShell() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => {
-                setPaletteQuery('');
-                setPaletteOpen(true);
-              }}
+              onClick={() => setPaletteOpen(true)}
             >
               <Search size={14} aria-hidden="true" />
               <span>Jump</span>
-              <kbd className="tp-kbd">Ctrl K</kbd>
+              <Kbd keys="mod+k" />
             </Button>
 
             {canUseEmergency ? (
               <Button
-                variant={activeSwitches > 0 ? 'danger' : 'danger-outline'}
+                variant={activeSwitches > 0 ? 'danger' : 'secondary'}
                 size="sm"
                 onClick={() => navigate('/security/kill-switches')}
               >
-                <ShieldAlert size={14} aria-hidden="true" />
+                <ShieldAlert
+                  size={14}
+                  aria-hidden="true"
+                  style={activeSwitches === 0 ? {color: 'var(--tp-status-error)'} : undefined}
+                />
                 <span>Kill Switch</span>
-                {activeSwitches > 0 ? <CountPill count={activeSwitches} tone="danger" /> : null}
+                {activeSwitches > 0 ? <CountPill count={activeSwitches} /> : null}
               </Button>
             ) : null}
 
@@ -343,9 +374,9 @@ export function ConsoleShell() {
 
           {loading ? (
             <div className="tp-surface tp-surface-pad tp-stack" role="status" aria-busy="true">
-              <div className="tp-skeleton" style={{width: '32%'}} />
-              <div className="tp-skeleton" style={{width: '100%', height: 64}} />
-              <div className="tp-skeleton" style={{width: '100%', height: 140}} />
+              <Skeleton width="32%" height={20} radius={1} index={0} />
+              <Skeleton width="100%" height={64} radius={2} index={1} />
+              <Skeleton width="100%" height={140} radius={2} index={2} />
             </div>
           ) : loadError ? (
             <Banner tone="danger" title="Console context unavailable">
@@ -368,42 +399,17 @@ export function ConsoleShell() {
         </main>
       </div>
 
-      <Modal
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        title="Quick jump"
-        subtitle="Navigate to any console workflow or view."
-      >
-        <TextField
-          label="Filter destinations"
-          type="search"
-          placeholder="Routes, traces, kill switches, playground…"
-          value={paletteQuery}
-          autoFocus
-          onChange={event => setPaletteQuery(event.target.value)}
-        />
-        {availableCommands.length === 0 ? (
-          <p className="tp-muted" role="status">No matching sections available for your role.</p>
-        ) : (
-          <ul className="tp-palette-list" aria-label="Available destinations">
-            {availableCommands.map(cmd => (
-              <li key={cmd.id}>
-                <button
-                  type="button"
-                  className="tp-palette-item"
-                  onClick={() => {
-                    setPaletteOpen(false);
-                    navigate(cmd.path);
-                  }}
-                >
-                  <span>{cmd.label}</span>
-                  <span className="tp-muted">{cmd.section}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Modal>
+      <CommandPalette
+        isOpen={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        searchSource={paletteSource}
+        label="Quick jump"
+        emptySearchText="No matching sections available for your role."
+        width={560}
+        onValueChange={path => {
+          if (path) navigate(path);
+        }}
+      />
     </div>
   );
 }

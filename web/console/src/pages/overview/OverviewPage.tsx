@@ -1,9 +1,11 @@
 import {useEffect, useRef, useState} from 'react';
 import {ArrowRight, RefreshCw} from 'lucide-react';
+import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';
+import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {getOverviewSummary, listActiveAlerts, listUnhealthyDeployments} from '../../api/client';
 import type {components} from '../../api/generated';
 import {useRouter} from '../../router/RouterContext';
-import {Banner, Button, EmptyState, MetricStrip, SectionHeader, StatusPill, formatMicroUSD} from '../../ui/primitives';
+import {Banner, Button, EmptyState, MetricStrip, SectionHeader, StatusPill, formatMicroUSD, formatOperationalState} from '../../ui/primitives';
 
 type WindowRange = components['schemas']['OverviewSummaryResponse']['window'];
 type Summary = components['schemas']['OverviewSummaryResponse'];
@@ -83,19 +85,16 @@ export function OverviewPage() {
         </div>
 
         <div className="tp-page-actions">
-          <div className="tp-segmented" role="group" aria-label="Overview time window">
+          <SegmentedControl
+            size="sm"
+            label="Overview time window"
+            value={timeWindow}
+            onChange={next => setTimeWindow(next as WindowRange)}
+          >
             {windows.map(item => (
-              <button
-                key={item}
-                type="button"
-                className="tp-segmented-btn"
-                aria-pressed={timeWindow === item}
-                onClick={() => setTimeWindow(item)}
-              >
-                {item}
-              </button>
+              <SegmentedControlItem key={item} value={item} label={item} />
             ))}
-          </div>
+          </SegmentedControl>
           <Button variant="secondary" size="sm" onClick={() => void refresh(timeWindow)}>
             <RefreshCw size={14} aria-hidden="true" />
             <span>Refresh</span>
@@ -115,7 +114,7 @@ export function OverviewPage() {
 
       {loading && !summary ? (
         <div className="tp-surface tp-surface-pad tp-stack" role="status" aria-busy="true">
-          <div className="tp-skeleton" style={{width: '100%', height: 64}} />
+          <Skeleton width="100%" height={64} radius={2} />
         </div>
       ) : summary ? (
         <MetricStrip items={kpis} />
@@ -126,7 +125,6 @@ export function OverviewPage() {
           <SectionHeader
             title="Circuit-open deployments"
             count={unhealthy.length}
-            countTone="danger"
             actions={
               <Button variant="secondary" size="sm" onClick={() => navigate('/models')}>
                 <span>Inspect deployments</span>
@@ -141,7 +139,7 @@ export function OverviewPage() {
                   <span className="mono" style={{fontWeight: 600}}>{dep.upstream_model_name}</span>
                   <span className="tp-muted">Region {dep.data_region} · Connection {dep.connection_id}</span>
                 </div>
-                <StatusPill tone="danger" label={dep.state.replaceAll('_', ' ')} />
+                <StatusPill tone="danger" label={formatOperationalState(dep.state)} />
               </li>
             ))}
           </ul>
@@ -152,7 +150,6 @@ export function OverviewPage() {
         <SectionHeader
           title="Active alerts"
           count={summary?.active_alerts_count ?? alerts.length}
-          countTone={alerts.length > 0 ? 'warn' : 'neutral'}
         />
         {alerts.length === 0 && !loading ? (
           <EmptyState

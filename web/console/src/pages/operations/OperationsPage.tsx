@@ -13,11 +13,11 @@ import {
 import type {components} from '../../api/generated';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
+import {MultiSelectField} from '../../ui/MultiSelectField';
 import {Drawer} from '../../ui/Overlays';
 import {
   Banner,
   Button,
-  CheckboxField,
   CodeBlock,
   MetricStrip,
   SectionHeader,
@@ -25,6 +25,7 @@ import {
   StatusPill,
   Tabs,
   TextField,
+  formatOperationalState,
   stateTone,
 } from '../../ui/primitives';
 
@@ -242,7 +243,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
                 {id: 'id', header: 'Node ID', primary: true, width: '32%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.id ?? 'unknown'}</span>},
                 {id: 'epoch', header: 'Config epoch', width: '20%', render: row => <span className="mono">{row.config_epoch ?? '—'}</span>},
                 {id: 'age', header: 'Snapshot age', width: '24%', render: row => <span className="num">{row.snapshot_age_ms ?? 0} ms</span>},
-                {id: 'health', header: 'Health', width: '24%', render: row => <StatusPill tone={stateTone(row.health ?? 'unknown')} label={row.health ?? 'unknown'} />},
+                {id: 'health', header: 'Health', width: '24%', render: row => <StatusPill tone={stateTone(row.health ?? 'unknown')} label={formatOperationalState(row.health ?? 'unknown')} />},
               ]}
             />
           </section>
@@ -345,7 +346,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
             columns={[
               {id: 'origin', header: 'Receiver origin', primary: true, width: '32%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.target_origin}</span>},
               {id: 'events', header: 'Subscribed events', width: '40%', render: row => <span className="mono tp-muted">{row.events.join(', ')}</span>},
-              {id: 'state', header: 'State', width: '14%', render: row => <StatusPill tone={row.enabled ? 'ok' : 'neutral'} label={row.enabled ? 'ENABLED' : 'DISABLED'} />},
+              {id: 'state', header: 'State', width: '14%', render: row => <StatusPill tone={row.enabled ? 'ok' : 'neutral'} label={row.enabled ? 'Enabled' : 'Disabled'} />},
               {id: 'created', header: 'Created', width: '14%', render: row => <span className="num tp-muted">{new Date(row.created_at_ms).toLocaleDateString()}</span>},
             ]}
           />
@@ -363,25 +364,25 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
           <SelectField
             label="Signing credential (WEBHOOK_HMAC_SECRET)"
             value={webhookSecretId}
-            onChange={event => setWebhookSecretId(event.target.value)}
+            onChange={setWebhookSecretId}
             hint={hmacSecrets.length === 0 ? 'Seal a WEBHOOK_HMAC_SECRET credential in Providers → Vault Secrets first.' : undefined}
-          >
-            <option value="">Select signing secret</option>
-            {hmacSecrets.map(s => (
-              <option key={s.credential_id} value={s.credential_id}>{s.name} ({s.trailing_fingerprint})</option>
-            ))}
-          </SelectField>
-          <div className="tp-stack-sm">
-            <span className="tp-label">Events</span>
-            {webhookEventOptions.map(ev => (
-              <CheckboxField
-                key={ev}
-                label={ev}
-                checked={webhookEvents.includes(ev)}
-                onChange={checked => setWebhookEvents(curr => (checked ? [...curr, ev] : curr.filter(item => item !== ev)))}
-              />
-            ))}
-          </div>
+            options={[
+              {value: '', label: 'Select signing secret'},
+              ...hmacSecrets.map(s => ({
+                value: s.credential_id,
+                label: `${s.name} (${s.trailing_fingerprint})`,
+              })),
+            ]}
+          />
+          <MultiSelectField
+            label="Events"
+            placeholder="Select webhook events"
+            hasSelectAll
+            hasClear
+            value={webhookEvents}
+            options={webhookEventOptions.map(ev => ({value: ev, label: ev}))}
+            onChange={next => setWebhookEvents(next as WebhookEvent[])}
+          />
           <div className="tp-row" style={{justifyContent: 'flex-end'}}>
             <Button variant="secondary" onClick={() => setWebhookOpen(false)}>Cancel</Button>
             <Button type="submit" variant="primary" loading={busy} disabled={!webhookUrl.trim() || !webhookSecretId || webhookEvents.length === 0}>

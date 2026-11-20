@@ -8,6 +8,11 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   root: rootDir,
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@astryxdesign/theme-neutral/fonts.css': path.join(rootDir, 'assets/fonts/local-figtree-fonts.css'),
+    },
+  },
   build: {
     outDir: path.join(rootDir, 'dist'),
     emptyOutDir: true,

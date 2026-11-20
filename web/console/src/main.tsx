@@ -1,6 +1,8 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
-import '../assets/fonts/local-figtree-fonts.css';
+import '@astryxdesign/core/reset.css';
+import '@astryxdesign/core/astryx.css';
+import './astryx-themes';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/layout.css';

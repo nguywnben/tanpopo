@@ -11,7 +11,7 @@ import {
 import type {components} from '../../api/generated';
 import {DataTable} from '../../ui/DataTable';
 import {Drawer, Modal} from '../../ui/Overlays';
-import {Banner, Button, CheckboxField, SectionHeader, SelectField, StatusPill, TextField, stateTone} from '../../ui/primitives';
+import {Banner, Button, CheckboxField, SectionHeader, SelectField, StatusPill, TextField, formatOperationalState, stateTone} from '../../ui/primitives';
 
 type Role = components['schemas']['RbacRole'];
 type McpServer = components['schemas']['McpServerResource'];
@@ -194,7 +194,7 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
               ),
             },
             {id: 'endpoint', header: 'Endpoint', width: '30%', render: row => <span className="mono">{row.endpoint_url}</span>},
-            {id: 'state', header: 'Schema state', width: '18%', render: row => <StatusPill tone={stateTone(row.state)} label={row.state} />},
+            {id: 'state', header: 'Schema state', width: '18%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
             {id: 'tools', header: 'Tools', width: '10%', render: row => <span className="num">{row.tool_count}</span>},
             {
               id: 'actions',
@@ -260,13 +260,16 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
                       <div style={{flex: '1 1 130px', minWidth: 0}}>
                         <SelectField
                           label={`Virtual key for ${row.name}`}
+                          isLabelHidden
+                          size="sm"
                           value={selectedKeys[row.id] ?? ''}
                           disabled={!canManage || busy}
-                          onChange={event => setSelectedKeys(curr => ({...curr, [row.id]: event.target.value}))}
-                        >
-                          <option value="">Select key</option>
-                          {keys.map(key => <option key={key.id} value={key.id}>{key.name} (…{key.last_four})</option>)}
-                        </SelectField>
+                          onChange={next => setSelectedKeys(curr => ({...curr, [row.id]: next}))}
+                          options={[
+                            {value: '', label: 'Select key'},
+                            ...keys.map(key => ({value: key.id, label: `${key.name} (…${key.last_four})`})),
+                          ]}
+                        />
                       </div>
                       <Button
                         variant="secondary"
@@ -320,11 +323,16 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
               <span className="tp-label">Observed SHA-256 schema hash</span>
               <span className="mono">{schemaModal.tool.schema_hash}</span>
             </div>
-            <SelectField label="Risk classification" value={riskTier} onChange={event => setRiskTier(event.target.value as typeof riskTier)}>
-              <option value="read_only">read_only (no HITL required)</option>
-              <option value="mutating">mutating (audited mutation)</option>
-              <option value="destructive">destructive (mandatory HITL approval)</option>
-            </SelectField>
+            <SelectField
+              label="Risk classification"
+              value={riskTier}
+              onChange={next => setRiskTier(next as typeof riskTier)}
+              options={[
+                {value: 'read_only', label: 'read_only (no HITL required)'},
+                {value: 'mutating', label: 'mutating (audited mutation)'},
+                {value: 'destructive', label: 'destructive (mandatory HITL approval)'},
+              ]}
+            />
             <TextField label="Review justification (optional)" value={justification} onChange={event => setJustification(event.target.value)} />
             <div className="tp-row" style={{justifyContent: 'flex-end'}}>
               <Button variant="secondary" onClick={() => setSchemaModal(null)}>Cancel</Button>

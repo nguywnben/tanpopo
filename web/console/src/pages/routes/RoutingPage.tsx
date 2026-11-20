@@ -15,17 +15,20 @@ import type {components} from '../../api/generated';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
 import {ConfirmDialog, Drawer, Modal} from '../../ui/Overlays';
+import {RouteTypeahead} from '../../ui/RouteTypeahead';
 import {
   Banner,
   Button,
   CheckboxField,
   CodeBlock,
   KeyValueList,
+  RowActionsMenu,
   SectionHeader,
   SelectField,
   StatusPill,
   Tabs,
   TextField,
+  formatOperationalState,
   stateTone,
 } from '../../ui/primitives';
 
@@ -409,13 +412,13 @@ export function RoutingPage({
               {
                 id: 'health',
                 header: 'Target health',
-                width: '20%',
+                width: '28%',
                 render: row => (
                   <div className="tp-row">
                     {row.targets.map(t => {
                       const dep = deploymentById.get(t.deployment_id);
                       const label = dep?.state ?? 'UNAVAILABLE';
-                      return <StatusPill key={t.deployment_id} tone={stateTone(label)} label={label.replaceAll('_', ' ')} />;
+                      return <StatusPill key={t.deployment_id} tone={stateTone(label)} label={formatOperationalState(label)} />;
                     })}
                   </div>
                 ),
@@ -423,13 +426,17 @@ export function RoutingPage({
               {
                 id: 'actions',
                 header: 'Actions',
-                width: '18%',
+                width: '10%',
                 render: row =>
                   canManage ? (
-                    <div className="tp-row">
-                      <Button variant="secondary" size="sm" onClick={() => openEditRoute(row)}>Edit</Button>
-                      <Button variant="danger-outline" size="sm" onClick={() => setDeleteTarget(row)}>Delete</Button>
-                    </div>
+                    <RowActionsMenu
+                      label={`Actions for ${row.slug}`}
+                      items={[
+                        {id: 'edit', label: 'Edit route', onClick: () => openEditRoute(row)},
+                        {type: 'divider' as const},
+                        {id: 'delete', label: 'Delete route', variant: 'destructive' as const, onClick: () => setDeleteTarget(row)},
+                      ]}
+                    />
                   ) : null,
               },
             ]}
@@ -443,22 +450,25 @@ export function RoutingPage({
             <h2>Dry-run route simulator</h2>
             <p className="tp-muted">Evaluates live routing rules without upstream egress or budget holds.</p>
             <div className="tp-grid-2">
-              <TextField
+              <RouteTypeahead
                 label="Target model or route slug"
+                suggestions={[...routes.map(r => r.slug), ...models.map(m => m.slug)]}
                 placeholder="e.g. gpt-4o-mini or primary-chat"
+                suggestionDescription="Configured route or model"
                 value={explainModel}
                 disabled={explainBusy}
-                onChange={event => setExplainModel(event.target.value)}
+                onChange={setExplainModel}
               />
               <SelectField
                 label="Data residency"
                 value={explainRegion}
                 disabled={explainBusy}
-                onChange={event => setExplainRegion(event.target.value as DataRegion | '')}
-              >
-                <option value="">Choose region</option>
-                {explainRegionChoices.map(reg => <option key={reg} value={reg}>{reg}</option>)}
-              </SelectField>
+                onChange={next => setExplainRegion(next as DataRegion | '')}
+                options={[
+                  {value: '', label: 'Choose region'},
+                  ...explainRegionChoices.map(reg => ({value: reg, label: reg})),
+                ]}
+              />
             </div>
             <div className="tp-row">
               {(['tools', 'vision', 'context_tokens'] as const).map(cap => (
@@ -523,17 +533,19 @@ export function RoutingPage({
                 <SelectField
                   label="Scope to edit"
                   value={editScope}
-                  onChange={event => {
-                    const next = event.target.value as PolicyScope;
+                  width={200}
+                  onChange={nextValue => {
+                    const next = nextValue as PolicyScope;
                     setEditScope(next);
                     const nextPol = next === 'ORGANIZATION' ? orgPolicy : next === 'PROJECT' ? projPolicy : envPolicy;
                     if (nextPol) setPolicyDraft(nextPol);
                   }}
-                >
-                  <option value="ORGANIZATION">Organization</option>
-                  <option value="PROJECT">Project</option>
-                  <option value="ENVIRONMENT">Environment</option>
-                </SelectField>
+                  options={[
+                    {value: 'ORGANIZATION', label: 'Organization'},
+                    {value: 'PROJECT', label: 'Project'},
+                    {value: 'ENVIRONMENT', label: 'Environment'},
+                  ]}
+                />
               }
             />
 
@@ -580,22 +592,20 @@ export function RoutingPage({
                   label="Minimum plugin trust"
                   value={policyDraft.min_plugin_trust}
                   disabled={!canEditPolicy || busy}
-                  onChange={event => setPolicyDraft({...policyDraft, min_plugin_trust: event.target.value as Policy['min_plugin_trust']})}
-                >
-                  {trustLevels.filter(level => trustRank[level] >= trustRank[parentTrust]).map(level => (
-                    <option key={level} value={level}>{level.replaceAll('_', ' ')}</option>
-                  ))}
-                </SelectField>
+                  onChange={next => setPolicyDraft({...policyDraft, min_plugin_trust: next as Policy['min_plugin_trust']})}
+                  options={trustLevels
+                    .filter(level => trustRank[level] >= trustRank[parentTrust])
+                    .map(level => ({value: level, label: level.replaceAll('_', ' ')}))}
+                />
                 <SelectField
                   label="Minimum capability assurance"
                   value={policyDraft.min_capability_assurance}
                   disabled={!canEditPolicy || busy}
-                  onChange={event => setPolicyDraft({...policyDraft, min_capability_assurance: event.target.value as Policy['min_capability_assurance']})}
-                >
-                  {(['VERIFIED', 'TESTED', 'DECLARED'] as const)
+                  onChange={next => setPolicyDraft({...policyDraft, min_capability_assurance: next as Policy['min_capability_assurance']})}
+                  options={(['VERIFIED', 'TESTED', 'DECLARED'] as const)
                     .filter(level => assuranceRank[level] >= assuranceRank[parentAssurance])
-                    .map(level => <option key={level} value={level}>{level}</option>)}
-                </SelectField>
+                    .map(level => ({value: level, label: level}))}
+                />
               </div>
 
               <div className="tp-grid-3">
@@ -638,7 +648,7 @@ export function RoutingPage({
                         <li key={hook.extension_id} className="tp-list-item">
                           <div className="tp-row">
                             <span className="mono">{hook.extension_id}</span>
-                            <StatusPill tone={stateTone(hook.failure_posture)} label={hook.failure_posture} />
+                            <StatusPill tone={stateTone(hook.failure_posture)} label={formatOperationalState(hook.failure_posture)} />
                           </div>
                           <Button
                             variant="ghost"
@@ -667,11 +677,12 @@ export function RoutingPage({
                         value={hookPosture}
                         disabled={busy}
                         error={hookRelaxesParent ? 'Parent guardrail is FAIL_CLOSED and cannot be relaxed.' : undefined}
-                        onChange={event => setHookPosture(event.target.value as 'FAIL_CLOSED' | 'FAIL_OPEN')}
-                      >
-                        <option value="FAIL_CLOSED">FAIL_CLOSED</option>
-                        <option value="FAIL_OPEN">FAIL_OPEN</option>
-                      </SelectField>
+                        onChange={next => setHookPosture(next as 'FAIL_CLOSED' | 'FAIL_OPEN')}
+                        options={[
+                          {value: 'FAIL_CLOSED', label: 'FAIL_CLOSED'},
+                          {value: 'FAIL_OPEN', label: 'FAIL_OPEN'},
+                        ]}
+                      />
                     </div>
                     <Button
                       variant="secondary"
@@ -737,15 +748,14 @@ export function RoutingPage({
           label="Routing strategy"
           value={strategy}
           disabled={busy}
-          onChange={event => {
-            const next = event.target.value as Strategy;
+          onChange={nextValue => {
+            const next = nextValue as Strategy;
             setStrategy(next);
             if (isWeighted(next) && targets.length > 0) setTargets(distributeWeights(targets.map(t => ({...t}))));
             if (!isWeighted(next)) setTargets(targets.map(({weight: _w, ...rest}) => rest));
           }}
-        >
-          {strategies.map(item => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}
-        </SelectField>
+          options={strategies.map(item => ({value: item, label: item.replaceAll('_', ' ')}))}
+        />
         <div className="tp-grid-2">
           <TextField label="Max failover hops (1–3)" type="number" min={1} max={3} value={maxHops} disabled={busy} onChange={event => setMaxHops(Number(event.target.value) || 1)} />
           <TextField label="Request timeout (ms)" type="number" min={500} max={300000} value={timeoutMs} disabled={busy} onChange={event => setTimeoutMs(Number(event.target.value) || 60000)} />
@@ -753,12 +763,18 @@ export function RoutingPage({
 
         <div className="tp-toolbar">
           <div className="tp-toolbar-field">
-            <SelectField label="Add deployment target" value={selectedDep} disabled={busy} onChange={event => setSelectedDep(event.target.value)}>
-              <option value="">Select deployment</option>
-              {deployments.filter(d => !targets.some(t => t.deployment_id === d.id)).map(d => (
-                <option key={d.id} value={d.id}>{d.upstream_model_name} ({d.data_region} · {d.state})</option>
-              ))}
-            </SelectField>
+            <SelectField
+              label="Add deployment target"
+              value={selectedDep}
+              disabled={busy}
+              onChange={setSelectedDep}
+              options={[
+                {value: '', label: 'Select deployment'},
+                ...deployments
+                  .filter(d => !targets.some(t => t.deployment_id === d.id))
+                  .map(d => ({value: d.id, label: `${d.upstream_model_name} (${d.data_region} · ${formatOperationalState(d.state)})`})),
+              ]}
+            />
           </div>
           <Button
             variant="secondary"
