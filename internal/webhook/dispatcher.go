@@ -632,6 +632,10 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	d.runStarted = true
 	d.mu.Unlock()
 	defer func() { d.mu.Lock(); d.running = false; d.mu.Unlock() }()
+	if ctx.Err() != nil {
+		d.StopClaiming()
+		return nil
+	}
 	workerCtx, cancelWorkers := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancelWorkers()
 	var workers sync.WaitGroup
