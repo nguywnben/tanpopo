@@ -218,8 +218,8 @@ func (d *Dispatcher) Close() error {
 	return err
 }
 
-// StopClaiming establishes the dispatcher shutdown boundary. A claim commit
-// already holding claimMu finishes before this returns; later commits roll back.
+// StopClaiming establishes the dispatcher shutdown boundary. A claim transaction
+// already holding claimMu finishes before this returns; later claims do not start.
 func (d *Dispatcher) StopClaiming() {
 	if d == nil {
 		return
@@ -230,18 +230,10 @@ func (d *Dispatcher) StopClaiming() {
 }
 
 func (d *Dispatcher) commitClaim(ctx context.Context, tx *sql.Tx) (bool, error) {
-	d.claimMu.Lock()
-	defer d.claimMu.Unlock()
-	if d.claimsStopped || ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return false, nil
 	}
 	return true, tx.Commit()
-}
-
-func (d *Dispatcher) claimStopped() bool {
-	d.claimMu.Lock()
-	defer d.claimMu.Unlock()
-	return d.claimsStopped
 }
 
 // lockDatabase serializes complete transactions when PostgreSQL mode pins the
@@ -645,7 +637,14 @@ func (d *Dispatcher) worker(ctx context.Context) {
 // claim atomically advances the queue lease and attempt count. Expired leases are
 // eligible again after process loss, so the persistent queue remains recoverable.
 func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
-	if ctx.Err() != nil || d.claimStopped() {
+	if ctx.Err() != nil {
+		return nil, nil
+	}
+	// Keep the shutdown boundary around the complete bounded transaction so
+	// shutdown cannot cancel SQLite while UPDATE ... RETURNING owns a statement.
+	d.claimMu.Lock()
+	defer d.claimMu.Unlock()
+	if d.claimsStopped || ctx.Err() != nil {
 		return nil, nil
 	}
 	unlock := d.lockDatabase()
@@ -653,8 +652,8 @@ func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
 	// Do not cancel an in-flight SQLite UPDATE ... RETURNING during shutdown.
 	// modernc SQLite can leave its prepared statement alive when cancellation races
 	// row delivery, keeping the database file locked after the pool closes. Complete
-	// the bounded operation; the synchronized claim boundary then rolls it back if
-	// shutdown began before commit.
+	// the bounded operation; canceled claims roll back, and shutdown waits for this
+	// transaction before allowing the store to close.
 	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Limits.RequestTimeout)
 	defer cancel()
 	tx, err := d.db.BeginTx(claimCtx, nil)
