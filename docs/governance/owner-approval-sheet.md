@@ -1,8 +1,8 @@
 # Consolidated Product Owner Approval Sheet (`Pre-Build Gate Closure`) — Tanpopo
 
 > **Actionable Decision Sign-Off Artifact — Pre-Build Closure, Wave 1.1–2.1 Acceptance (`TP-IMP-0005`..`0020`) & `DEC-034` Batch (`0021`..`0030`)**
-> - **Document ID:** `GOV-OAS-01` | **Version:** `1.36.0-dec-083` | **Date:** `2026-11-20`
-> - **Current Governance Posture:** `APPROVED_BY_OWNER`; Units `0001`..`0037` DONE under `DEC-083`; Unit 37 main `95c6c2e2381911d8097230283ef766510ccb4151` has green post-merge CI `44674333547`; Units `0038`..`0047` blocked pending sequential DoR. Unit 38 remains unopened. `DEC-060` for Units `0031`..`0035` is complete. Active `DEC-072` delegates Units `0036`..`0038` to GPT-6 Luna sequentially via persistent `develop` → per-unit PR → review and four CI checks → merge → main verification. `DEC-033` remains revoked; `GATE-REL-07` prohibits tags/releases.
+> - **Document ID:** `GOV-OAS-01` | **Version:** `1.37.0-dec-084` | **Date:** `2026-11-20`
+> - **Current Governance Posture:** `APPROVED_BY_OWNER`; Units `0001`..`0037` DONE; Unit 37 acceptance governance is on main `d7999240b00c1370bfd84286b1c9f5350be9c2f0` with green CI `44678817933`; Unit 38 READY under `DEC-084`; Units `0039`..`0047` remain blocked. `DEC-060` for Units `0031`..`0035` is complete. Active `DEC-072` delegates Units `0036`..`0038` to GPT-6 Luna sequentially via persistent `develop` → per-unit PR → review and four CI checks → merge → main verification. `DEC-033` remains revoked; `GATE-REL-07` prohibits tags/releases.
 > - **Recorded Product Owner & Delegated Owner Rulings (`2026-11-14`–`2026-11-17` — `DEC-009`..`DEC-045` [`DEC-033 REVOKED`]):**
 >   1. **Track A (`18 items`):** **`APPROVED` (`CONFIRMED_BY_OWNER`)** across all recommended options.
 >   2. **Track B (`15 items`):** **`APPROVED_WITH_CONDITIONS` (`CONFIRMED_BY_OWNER`)** across all recommended options (`Apache-2.0`, phased scope, 3-tier sandbox, security/crypto, SQL/Valkey schemas, MCP `2025-03-26` JSON-RPC), bound to 5 mandatory conditions **`COND-PO-01`..`COND-PO-05`** recorded in [`decisions.md`](./decisions.md).
