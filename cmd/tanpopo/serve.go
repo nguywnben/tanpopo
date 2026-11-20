@@ -183,6 +183,7 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 	watcherDone := make(chan struct{})
 	var webhookDone chan struct{}
 	var closeWebhookDispatcher func() error
+	var webhookDispatcher *webhook.Dispatcher
 	var approvalMaintenanceDone chan struct{}
 	var marketplaceDone <-chan struct{}
 	go func() {
@@ -214,6 +215,9 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 				shutdownErr = errors.Join(shutdownErr, telemetryPipeline.Shutdown(shutdownCtx))
 				cancel()
 				recordActiveDBConnections("after telemetry shutdown")
+			}
+			if webhookDispatcher != nil {
+				webhookDispatcher.StopClaiming()
 			}
 			cancelRuntime()
 			if webhookDone != nil {
@@ -264,7 +268,7 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 		}
 	}
 	brokerUnsealCap := vault.MintUnsealCapabilityForBroker()
-	webhookDispatcher, err := webhook.New(webhook.Config{
+	webhookDispatcher, err = webhook.New(webhook.Config{
 		// This binary runtime currently opens SQLite. A PostgreSQL runtime must
 		// inject its dedicated dispatcher pool and opt into role/RLS validation.
 		DB: db, Postgres: false, Resolver: egress.NewStdHostResolver(),

@@ -277,6 +277,7 @@ func TestCanceledClaimRollsBackAttemptLease(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	d.cfg.Now = func() time.Time {
 		cancel()
+		d.StopClaiming()
 		return time.Now()
 	}
 	item, err := d.claim(ctx)

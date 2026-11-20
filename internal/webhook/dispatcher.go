@@ -91,16 +91,18 @@ type Event struct {
 
 // Dispatcher is a persistent bounded webhook queue and worker pool.
 type Dispatcher struct {
-	cfg         Config
-	db          dispatcherDB
-	workerConn  *sql.Conn
-	pinned      bool
-	redactor    *privacy.Redactor
-	mu          sync.Mutex
-	dbMu        sync.Mutex
-	cleanupMu   sync.Mutex
-	lastCleanup time.Time
-	running     bool
+	cfg           Config
+	db            dispatcherDB
+	workerConn    *sql.Conn
+	pinned        bool
+	redactor      *privacy.Redactor
+	mu            sync.Mutex
+	dbMu          sync.Mutex
+	cleanupMu     sync.Mutex
+	claimMu       sync.Mutex
+	claimsStopped bool
+	lastCleanup   time.Time
+	running       bool
 }
 
 var (
@@ -213,6 +215,32 @@ func (d *Dispatcher) Close() error {
 	err := errors.Join(resetErr, d.workerConn.Close())
 	d.workerConn = nil
 	return err
+}
+
+// StopClaiming establishes the dispatcher shutdown boundary. A claim commit
+// already holding claimMu finishes before this returns; later commits roll back.
+func (d *Dispatcher) StopClaiming() {
+	if d == nil {
+		return
+	}
+	d.claimMu.Lock()
+	d.claimsStopped = true
+	d.claimMu.Unlock()
+}
+
+func (d *Dispatcher) commitClaim(ctx context.Context, tx *sql.Tx) (bool, error) {
+	d.claimMu.Lock()
+	defer d.claimMu.Unlock()
+	if d.claimsStopped || ctx.Err() != nil {
+		return false, nil
+	}
+	return true, tx.Commit()
+}
+
+func (d *Dispatcher) claimStopped() bool {
+	d.claimMu.Lock()
+	defer d.claimMu.Unlock()
+	return d.claimsStopped
 }
 
 // lockDatabase serializes complete transactions when PostgreSQL mode pins the
@@ -559,6 +587,8 @@ func (d *Dispatcher) cleanupTerminal(ctx context.Context) {
 // Run starts the bounded worker pool and runs until ctx is canceled. A dispatcher
 // instance may only have one active Run call at a time.
 func (d *Dispatcher) Run(ctx context.Context) error {
+	stopOnContextCancel := context.AfterFunc(ctx, d.StopClaiming)
+	defer stopOnContextCancel()
 	d.mu.Lock()
 	if d.running {
 		d.mu.Unlock()
@@ -614,7 +644,7 @@ func (d *Dispatcher) worker(ctx context.Context) {
 // claim atomically advances the queue lease and attempt count. Expired leases are
 // eligible again after process loss, so the persistent queue remains recoverable.
 func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || d.claimStopped() {
 		return nil, nil
 	}
 	unlock := d.lockDatabase()
@@ -650,8 +680,12 @@ func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
 			return nil, nil
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			if err := tx.Commit(); err != nil {
+			committed, err := d.commitClaim(ctx, tx)
+			if err != nil {
 				return nil, err
+			}
+			if !committed {
+				return nil, nil
 			}
 			return nil, nil
 		}
@@ -668,20 +702,25 @@ func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
 		if ctx.Err() != nil {
 			return nil, nil
 		}
-		if commitErr := tx.Commit(); commitErr != nil {
+		committed, commitErr := d.commitClaim(ctx, tx)
+		if commitErr != nil {
 			return nil, commitErr
+		}
+		if !committed {
+			return nil, nil
 		}
 		d.fail(ctx, item, "subscription unavailable", 0)
 		return nil, nil
 	}
-	if ctx.Err() != nil {
-		return nil, nil
-	}
-	if err := tx.Commit(); err != nil {
+	committed, err := d.commitClaim(ctx, tx)
+	if err != nil {
 		if ctx.Err() != nil {
 			return nil, nil
 		}
 		return nil, err
+	}
+	if !committed {
+		return nil, nil
 	}
 	return &item, nil
 }
