@@ -115,7 +115,7 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 
 ### 4. Dependency-Ordered Execution Queue (`HANDOFF_VERDICT: GO` — `0036..0037` `DONE` · `0038..0047` `BLOCKED`)
 
-> **Live Status Today:** `TP-IMP-0001`..`0036` are DONE. Unit 36 is accepted under `DEC-074` at `origin/main` `a3a0ef1b94d4986d7bac0d601566d8f249f87013`; post-merge CI `44494912921` passed Stage 0 + Stage 1 Ubuntu/macOS/Windows. Under `DEC-074`, Unit 37 DoR is verified and it is READY. Units 38–47 remain blocked pending their own sequential DoR.
+> **Live Status Today:** `TP-IMP-0001`..`0037` are DONE. Unit 37 is accepted under `DEC-083` at `origin/main` `95c6c2e2381911d8097230283ef766510ccb4151`; post-merge CI `44674333547` passed all four required jobs. Units 38–47 remain blocked pending their sequential DoR.
 
 | Wave | Unit ID(s) | Execution Mode | Status / Mandatory Checkpoint Before Next Wave |
 |---|---|---|---|

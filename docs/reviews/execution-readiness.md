@@ -3,8 +3,8 @@
 > **Independent Governance Verdict Document (ASTRA A10 + M0–M3 execution, `DEC-033 REVOKED_BY_OWNER`)**
 > - **Report ID:** `REV-RDY-01` | **Version:** `2.33.0-dec-083-unit-37-done` | **Audit Date:** `2026-11-20`
 > - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
-> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0036` DONE; Unit 36 acceptance is recorded on main `a3a0ef1b94d4986d7bac0d601566d8f249f87013`; post-merge CI `44494912921` succeeded. Unit 37 is DONE under `DEC-083` at main `95c6c2e2381911d8097230283ef766510ccb4151`; post-merge CI `44674333547` succeeded. `DEC-033` remains `REVOKED_BY_OWNER`.)
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` under `DEC-074`** (`37 / 47` DONE · `0 READY` · `0 READY_FOR_REVIEW` · `10 / 47` BLOCKED (`0038`..`0047`)).
+> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0037` DONE; Unit 37 is accepted under `DEC-083` at main `95c6c2e2381911d8097230283ef766510ccb4151`; post-merge CI `44674333547` succeeded. `DEC-033` remains `REVOKED_BY_OWNER`.)
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` under `DEC-083`** (`37 / 47` DONE · `0 READY` · `0 READY_FOR_REVIEW` · `10 / 47` BLOCKED (`0038`..`0047`)).
 
 ---
 
@@ -55,7 +55,7 @@ Every check below strictly separates **what has been verified locally in `M0`** 
 
 ---
 
-## 4. `TP-IMP-0005`..`0025` Acceptance (`DEC-011`..`DEC-032`, `DEC-035`..`DEC-039`) & Active Sequential Delivery (`1 READY` / `10 BLOCKED`)
+## 4. `TP-IMP-0005`..`0025` Acceptance (`DEC-011`..`DEC-032`, `DEC-035`..`DEC-039`) & Active Sequential Delivery (`0 READY` / `10 BLOCKED`)
 
 | Verification Check | Status | Concrete Evidence |
 |---|---|---|

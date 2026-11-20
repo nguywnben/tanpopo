@@ -17,7 +17,7 @@
 
 - Working branch: `develop`.
 - PR #18 was based on `origin/main` at `b17a2fc65f3ce139507897244d2897a73e187b34` and merged from `develop` at `15e3708fee394543b9d83ecdc4d4ec6ca50b3193`.
-- `origin/main` remains `8c7e9a4310fe5d2f43a5ff4ee5a17cd7b6ee4a14`. Draft PR #20 is the Unit 37 follow-up from persistent `develop`; its checkpoint updates and CI/review results are recorded below. No Unit 38 work has started.
+- `origin/main` is `95c6c2e2381911d8097230283ef766510ccb4151` after PR #20 merged. Unit 37 acceptance and post-merge CI are recorded above and below. No Unit 38 implementation had started at this checkpoint.
 
 ## Implemented checkpoint
 
