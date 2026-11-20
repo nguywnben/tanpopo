@@ -1,36 +1,36 @@
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import react from '@vitejs/plugin-react';
-import stylexPlugin from '@stylexjs/rollup-plugin';
 import {defineConfig} from 'vite';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const sourceDir = path.join(rootDir, 'src');
-const stylex = stylexPlugin({
-  fileName: 'stylex.css',
-  unstable_moduleResolution: {type: 'commonJS', rootDir: sourceDir},
-});
-const originalTransform = stylex.transform;
-if (typeof originalTransform === 'function') {
-  stylex.transform = function (code, id, ...args) {
-    if (!id.startsWith(`${sourceDir}${path.sep}`)) return null;
-    return originalTransform.call(this, code, id, ...args);
-  };
-}
 
 export default defineConfig({
   root: rootDir,
-  plugins: [react(), stylex],
-  resolve: {
-    alias: {
-      '@astryxdesign/theme-neutral/fonts.css': path.join(rootDir, 'assets/fonts/local-figtree-fonts.css'),
-    },
-  },
+  plugins: [react()],
   build: {
     outDir: path.join(rootDir, 'dist'),
     emptyOutDir: true,
     minify: 'terser',
-    terserOptions: {compress: {passes: 2}, mangle: true, format: {comments: false}},
-    rollupOptions: {output: {manualChunks: undefined}},
+    terserOptions: {
+      compress: {passes: 2},
+      mangle: true,
+      format: {comments: false},
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/admin': 'http://127.0.0.1:8080',
+      '/v1': 'http://127.0.0.1:8080',
+      '/mcp': 'http://127.0.0.1:8080',
+      '/readyz': 'http://127.0.0.1:8080',
+      '/healthz': 'http://127.0.0.1:8080',
+    },
   },
 });

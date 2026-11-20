@@ -74,7 +74,21 @@ func TestHandlerServesGzipHashedAssetsAndImmutableCache(t *testing.T) {
 }
 
 func TestHandlerGzipNegotiationHonorsQualityAndHead(t *testing.T) {
-	asset := "/assets/index-BuV-_Co6.js"
+	var asset string
+	if err := fs.WalkDir(BundleFS(), ".", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(name, "assets/index-") && strings.HasSuffix(name, ".js") && hashedAsset.MatchString(name) {
+			asset = "/" + name
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if asset == "" {
+		t.Fatal("no hashed index JS asset in embedded bundle")
+	}
 	original, err := fs.ReadFile(BundleFS(), strings.TrimPrefix(asset, "/"))
 	if err != nil {
 		t.Fatal(err)

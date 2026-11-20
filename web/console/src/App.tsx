@@ -1,13 +1,11 @@
-import {Component, lazy, Suspense, useEffect, useState, type ReactNode} from 'react';
-import {Heading} from '@astryxdesign/core/Heading';
-import {Text} from '@astryxdesign/core/Text';
-import {VStack} from '@astryxdesign/core/Stack';
-import {Theme} from '@astryxdesign/core/theme';
-import {themes, defaultThemeSlug} from '../astryx-themes';
+import {Component, lazy, Suspense, type ReactNode} from 'react';
+import {RouterProvider, useRouter} from './router/RouterContext';
+import {ThemeProvider} from './styles/theme';
+import {Banner, Button} from './ui/primitives';
 
-const SetupWizardPage = lazy(() => import('./pages/setup/SetupWizardPage').then(module => ({default: module.SetupWizardPage})));
-const LoginPage = lazy(() => import('./pages/auth/LoginPage').then(module => ({default: module.LoginPage})));
-const ConsoleShell = lazy(() => import('./shell/AppShell').then(module => ({default: module.ConsoleShell})));
+const SetupPage = lazy(() => import('./pages/setup/SetupPage').then(mod => ({default: mod.SetupPage})));
+const LoginPage = lazy(() => import('./pages/auth/LoginPage').then(mod => ({default: mod.LoginPage})));
+const ConsoleShell = lazy(() => import('./shell/ConsoleShell').then(mod => ({default: mod.ConsoleShell})));
 
 class ConsoleErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean}> {
   state = {hasError: false};
@@ -18,26 +16,55 @@ class ConsoleErrorBoundary extends Component<{children: ReactNode}, {hasError: b
 
   render() {
     if (this.state.hasError) {
-      return <VStack gap={4} padding={4}><Heading level={1}>Console unavailable</Heading><Text role="alert">The console encountered an unexpected error. Reload the page to try again.</Text></VStack>;
+      return (
+        <main className="tp-auth-page">
+          <div className="tp-auth-panel">
+            <h1>Console unavailable</h1>
+            <Banner tone="danger" title="Unexpected interface error">
+              The console encountered an unexpected error. Reload the page to recover.
+            </Banner>
+            <Button variant="primary" onClick={() => window.location.reload()}>Reload console</Button>
+          </div>
+        </main>
+      );
     }
     return this.props.children;
   }
 }
 
 export function App() {
-  return <Theme theme={themes[defaultThemeSlug]}><ConsoleErrorBoundary><PageRouter /></ConsoleErrorBoundary></Theme>;
+  return (
+    <ThemeProvider>
+      <RouterProvider>
+        <ConsoleErrorBoundary>
+          <RootSwitch />
+        </ConsoleErrorBoundary>
+      </RouterProvider>
+    </ThemeProvider>
+  );
 }
 
-function PageRouter() {
-  const [pathname, setPathname] = useState(window.location.pathname);
-  useEffect(() => {
-    const updatePath = () => setPathname(window.location.pathname);
-    window.addEventListener('popstate', updatePath);
-    return () => window.removeEventListener('popstate', updatePath);
-  }, []);
-  if (pathname === '/setup') return <Suspense fallback={<Text role="status">Loading first-run setup…</Text>}><SetupWizardPage /></Suspense>;
-  if (pathname === '/login') return <Suspense fallback={<Text role="status">Loading sign-in…</Text>}><LoginPage /></Suspense>;
-  return <Suspense fallback={<Text role="status">Loading console…</Text>}><ConsoleShell /></Suspense>;
+function RootSwitch() {
+  const {pathname} = useRouter();
+  if (pathname === '/setup') {
+    return (
+      <Suspense fallback={<main className="tp-auth-page"><p className="tp-muted" role="status">Loading setup…</p></main>}>
+        <SetupPage />
+      </Suspense>
+    );
+  }
+  if (pathname === '/login') {
+    return (
+      <Suspense fallback={<main className="tp-auth-page"><p className="tp-muted" role="status">Loading sign-in…</p></main>}>
+        <LoginPage />
+      </Suspense>
+    );
+  }
+  return (
+    <Suspense fallback={<main className="tp-auth-page"><p className="tp-muted" role="status">Loading console…</p></main>}>
+      <ConsoleShell />
+    </Suspense>
+  );
 }
 
 export default App;

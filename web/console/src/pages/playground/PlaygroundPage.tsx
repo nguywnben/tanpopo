@@ -1,146 +1,370 @@
-import {useRef, useState} from 'react';
-import {Button} from '@astryxdesign/core/Button';
-import {Heading} from '@astryxdesign/core/Heading';
-import {Section} from '@astryxdesign/core/Section';
-import {Text} from '@astryxdesign/core/Text';
-import {TextInput} from '@astryxdesign/core/TextInput';
-import {HStack, VStack} from '@astryxdesign/core/Stack';
+import {useEffect, useRef, useState} from 'react';
+import {Send, Square, Trash2} from 'lucide-react';
+import {listRoutesForEnvironment} from '../../api/managementClient';
 import {createPlaygroundSession, getTraceWaterfall} from '../../api/managementClient';
 import type {components} from '../../api/generated';
+import {useRouter} from '../../router/RouterContext';
+import {Banner, Button, CodeBlock, SectionHeader, StatusPill, Tabs, TextAreaField, TextField, formatMicroUSD, stateTone} from '../../ui/primitives';
 
 type Role = components['schemas']['RbacRole'];
-type Message = {role: 'user' | 'assistant'; content: string};
 type Trace = components['schemas']['TraceSummary'];
+type Turn = {role: 'user' | 'assistant'; content: string};
+
 const allowedRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'DEVELOPER'];
 
-export function PlaygroundPage({projectId, environmentId, roles}: {projectId: string; environmentId: string; roles: Role[]}) {
+export function PlaygroundPage({
+  pathname,
+  projectId,
+  environmentId,
+  roles,
+}: {
+  pathname: string;
+  projectId: string;
+  environmentId: string;
+  roles: Role[];
+}) {
+  const {navigate} = useRouter();
+  const activeTab = pathname.startsWith('/devtools/sdk-snippets') ? 'snippets' : 'chat';
+
+  const [availableRoutes, setAvailableRoutes] = useState<string[]>([]);
   const [model, setModel] = useState('');
-  const [comparisonModel, setComparisonModel] = useState('');
-  const [prompt, setPrompt] = useState('');
+  const [compareModel, setCompareModel] = useState('');
   const [budget, setBudget] = useState(500000);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [prompt, setPrompt] = useState('');
+  const [messages, setMessages] = useState<Turn[]>([]);
   const [comparison, setComparison] = useState<{primary: string; secondary: string} | null>(null);
-  const [primaryRequestId, setPrimaryRequestId] = useState('');
-  const [comparisonRequestId, setComparisonRequestId] = useState('');
+  const [primaryReqId, setPrimaryReqId] = useState('');
+  const [compareReqId, setCompareReqId] = useState('');
   const [primaryTrace, setPrimaryTrace] = useState<Trace | null>(null);
-  const [comparisonTrace, setComparisonTrace] = useState<Trace | null>(null);
+  const [compareTrace, setCompareTrace] = useState<Trace | null>(null);
   const [session, setSession] = useState<components['schemas']['PlaygroundSessionResponse'] | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+
   const authorized = roles.some(role => allowedRoles.includes(role));
 
-  async function send() {
-    if (!projectId || !environmentId || !model.trim() || !prompt.trim() || busy) return;
-    setBusy(true); setMessage('');
-    setComparison(null);
-    setPrimaryRequestId(''); setComparisonRequestId(''); setPrimaryTrace(null); setComparisonTrace(null);
-    const controller = new AbortController(); abortRef.current = controller;
-    const userMessage: Message = {role: 'user', content: prompt.trim()};
-    const next = [...messages, userMessage]; setMessages([...next, {role: 'assistant', content: ''}]); setPrompt('');
-    try {
-      const currentSession = session ?? await createPlaygroundSession({project_id: projectId, env_id: environmentId, ttl_seconds: 900, max_budget_micros: budget});
-      setSession(currentSession);
-      const response = await fetch('/v1/chat/completions', {
-        method: 'POST', cache: 'no-store', credentials: 'omit', signal: controller.signal,
-        headers: {'Authorization': `Bearer ${currentSession.ephemeral_virtual_key}`, 'Content-Type': 'application/json', 'Accept': 'text/event-stream'},
-        body: JSON.stringify({model: model.trim(), messages: next, stream: true}),
+  useEffect(() => {
+    if (!environmentId) return;
+    listRoutesForEnvironment(environmentId)
+      .then(rows => {
+        const slugs = rows.map(r => r.slug);
+        setAvailableRoutes(slugs);
+        setModel(curr => curr || slugs[0] || '');
+      })
+      .catch(() => {
+        // Manual model entry remains available.
       });
-      if (!response.ok || !response.body) throw new Error(`Playground request failed (${response.status}).`);
-      const requestId = response.headers.get('X-Tanpopo-Request-Id')?.trim() ?? '';
-      setPrimaryRequestId(requestId);
-      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let answer = '';
-      while (true) {
-        const chunk = await reader.read();
-        if (chunk.done) break;
-        buffer += decoder.decode(chunk.value, {stream: true});
-        const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
-        for (const line of lines) {
-          if (!line.startsWith('data:')) continue;
-          const payload = line.slice(5).trim();
-          if (!payload || payload === '[DONE]') continue;
-          const event = JSON.parse(payload) as {choices?: {delta?: {content?: string}}[]};
-          answer += event.choices?.[0]?.delta?.content ?? '';
-          setMessages([...next, {role: 'assistant', content: answer}]);
-        }
+  }, [environmentId]);
+
+  async function streamCompletion(
+    ephemeralKey: string,
+    targetModel: string,
+    history: Turn[],
+    signal: AbortSignal,
+    onDelta: (fullText: string) => void,
+  ): Promise<{text: string; requestId: string}> {
+    const response = await fetch('/v1/chat/completions', {
+      method: 'POST',
+      cache: 'no-store',
+      credentials: 'omit',
+      signal,
+      headers: {
+        Authorization: `Bearer ${ephemeralKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify({model: targetModel, messages: history, stream: true}),
+    });
+    if (!response.ok || !response.body) {
+      throw new Error(`Playground inference failed (${response.status}).`);
+    }
+    const requestId = response.headers.get('X-Tanpopo-Request-Id')?.trim() ?? '';
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let text = '';
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        const parsed = JSON.parse(payload) as {choices?: Array<{delta?: {content?: string}}>};
+        text += parsed.choices?.[0]?.delta?.content ?? '';
+        onDelta(text);
       }
-      setMessages([...next, {role: 'assistant', content: answer}]);
-      if (requestId) setPrimaryTrace(await loadTrace(requestId));
-      if (comparisonModel.trim() && comparisonModel.trim() !== model.trim()) {
-        const compareResponse = await fetch('/v1/chat/completions', {
-          method: 'POST', cache: 'no-store', credentials: 'omit', signal: controller.signal,
-          headers: {'Authorization': `Bearer ${currentSession.ephemeral_virtual_key}`, 'Content-Type': 'application/json', 'Accept': 'text/event-stream'},
-          body: JSON.stringify({model: comparisonModel.trim(), messages: next, stream: true}),
-        });
-        if (!compareResponse.ok || !compareResponse.body) throw new Error(`Comparison request failed (${compareResponse.status}).`);
-        const comparisonId = compareResponse.headers.get('X-Tanpopo-Request-Id')?.trim() ?? '';
-        setComparisonRequestId(comparisonId);
-        const compareReader = compareResponse.body.getReader(); const compareDecoder = new TextDecoder(); let compareBuffer = ''; let comparisonText = '';
-        setComparison({primary: answer, secondary: ''});
-        while (true) {
-          const chunk = await compareReader.read();
-          if (chunk.done) break;
-          compareBuffer += compareDecoder.decode(chunk.value, {stream: true});
-          const lines = compareBuffer.split('\n'); compareBuffer = lines.pop() ?? '';
-          for (const line of lines) {
-            if (!line.startsWith('data:')) continue;
-            const payload = line.slice(5).trim();
-            if (!payload || payload === '[DONE]') continue;
-            const event = JSON.parse(payload) as {choices?: {delta?: {content?: string}}[]};
-            comparisonText += event.choices?.[0]?.delta?.content ?? '';
-            setComparison({primary: answer, secondary: comparisonText});
-          }
-        }
-        setComparison({primary: answer, secondary: comparisonText});
-        if (comparisonId) setComparisonTrace(await loadTrace(comparisonId));
-      }
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) setMessage(error instanceof Error ? error.message : 'Playground request failed.');
-    } finally { abortRef.current = null; setBusy(false); }
+    }
+    return {text, requestId};
   }
 
-  if (!authorized) return <Text role="alert">Your role cannot create Playground sessions.</Text>;
-  return <VStack gap={4}>
-    <Heading level={1}>Playground</Heading>
-    <Text>Requests use a short-lived Virtual Key with a per-session hard spend ceiling. Prompts and responses remain in this browser tab only.</Text>
-    {!environmentId ? <Text role="status">Select an environment to start a Playground session.</Text> : null}
-    {session ? <Text role="status">Session expires {session.expires_at}; hard spend ceiling ${ (session.max_budget_micros / 1_000_000).toFixed(2) }.</Text> : null}
-    {message ? <Text role="alert">{message}</Text> : null}
-    <Section><VStack gap={3}><Heading level={2}>Model request</Heading>
-      <TextInput label="Model or route slug" value={model} onChange={setModel} isDisabled={busy} />
-      <TextInput label="Comparison model (optional)" value={comparisonModel} onChange={setComparisonModel} isDisabled={busy} />
-      {!session ? <TextInput label="Maximum session budget (micro-USD)" value={String(budget)} onChange={value => setBudget(Number(value) || 0)} isDisabled={busy} /> : null}
-      {!session && (budget < 1000 || budget > 5000000) ? <Text role="alert">Choose a budget between 1,000 and 5,000,000 micro-USD.</Text> : null}
-      {messages.length ? <ol aria-label="Conversation transcript">{messages.map((item, index) => <li key={`${item.role}-${index}`}><Text><strong>{item.role === 'user' ? 'You' : 'Assistant'}:</strong> {item.content || (busy && item.role === 'assistant' ? 'Waiting for stream…' : '')}</Text></li>)}</ol> : <Text>No conversation turns are stored on the server. Enter a prompt to begin.</Text>}
-      <label htmlFor="playground-prompt">Prompt</label>
-      <textarea id="playground-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} rows={5} disabled={busy} />
-      {comparison ? <HStack gap={3} wrap="wrap"><Section><VStack gap={2}><Heading level={3}>{model}</Heading><Text>{comparison.primary}</Text></VStack></Section><Section><VStack gap={2}><Heading level={3}>{comparisonModel}</Heading><Text>{comparison.secondary || 'Waiting for comparison stream…'}</Text></VStack></Section></HStack> : null}
-      {primaryRequestId || comparisonRequestId ? <Section><VStack gap={2}><Heading level={2}>Execution traces</Heading>
-        {primaryRequestId ? <TraceSummary label="Primary" requestId={primaryRequestId} trace={primaryTrace} /> : null}
-        {comparisonRequestId ? <TraceSummary label="Comparison" requestId={comparisonRequestId} trace={comparisonTrace} /> : null}
-      </VStack></Section> : null}
-      <HStack gap={2}><Button label={busy ? comparisonModel.trim() ? 'Streaming comparison…' : 'Streaming…' : 'Send'} variant="primary" isDisabled={busy || !environmentId || !model.trim() || !prompt.trim() || (!session && (budget < 1000 || budget > 5000000))} onClick={() => void send()} />
-        {busy ? <Button label="Cancel stream" variant="secondary" onClick={() => abortRef.current?.abort()} /> : null}
-        {session && !busy ? <Button label="End session" variant="ghost" onClick={() => { setSession(null); setMessages([]); setMessage('Session key removed from this tab. Signing out also revokes active Playground keys.'); }} /> : null}
-      </HStack>
-    </VStack></Section>
-  </VStack>;
+  async function handleSend() {
+    if (!projectId || !environmentId || !model.trim() || !prompt.trim() || busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    setComparison(null);
+    setPrimaryReqId('');
+    setCompareReqId('');
+    setPrimaryTrace(null);
+    setCompareTrace(null);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const nextHistory: Turn[] = [...messages, {role: 'user', content: prompt.trim()}];
+    setMessages([...nextHistory, {role: 'assistant', content: ''}]);
+    setPrompt('');
+
+    try {
+      const activeSession =
+        session ??
+        (await createPlaygroundSession({
+          project_id: projectId,
+          env_id: environmentId,
+          ttl_seconds: 900,
+          max_budget_micros: budget,
+        }));
+      setSession(activeSession);
+
+      const primary = await streamCompletion(
+        activeSession.ephemeral_virtual_key,
+        model.trim(),
+        nextHistory,
+        controller.signal,
+        text => setMessages([...nextHistory, {role: 'assistant', content: text}]),
+      );
+      setMessages([...nextHistory, {role: 'assistant', content: primary.text}]);
+      setPrimaryReqId(primary.requestId);
+      if (primary.requestId) setPrimaryTrace(await pollTrace(primary.requestId));
+
+      if (compareModel.trim() && compareModel.trim() !== model.trim()) {
+        setComparison({primary: primary.text, secondary: ''});
+        const secondary = await streamCompletion(
+          activeSession.ephemeral_virtual_key,
+          compareModel.trim(),
+          nextHistory,
+          controller.signal,
+          text => setComparison({primary: primary.text, secondary: text}),
+        );
+        setComparison({primary: primary.text, secondary: secondary.text});
+        setCompareReqId(secondary.requestId);
+        if (secondary.requestId) setCompareTrace(await pollTrace(secondary.requestId));
+      }
+    } catch (cause) {
+      if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
+        setError(cause instanceof Error ? cause.message : 'Playground request failed.');
+      }
+    } finally {
+      abortRef.current = null;
+      setBusy(false);
+    }
+  }
+
+  if (!authorized) {
+    return <Banner tone="danger" title="Access restricted">Your role cannot create Playground sessions.</Banner>;
+  }
+
+  const origin = typeof window === 'undefined' ? 'http://localhost:8080' : window.location.origin;
+  const snippetModel = model.trim() || 'gpt-4o-mini';
+
+  return (
+    <div className="tp-stack">
+      <div className="tp-page-head">
+        <div className="tp-page-head-text">
+          <h1>Playground</h1>
+          <p className="tp-page-subtitle">Ephemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.</p>
+        </div>
+        {session ? (
+          <div className="tp-page-actions">
+            <StatusPill tone="info" label={`Cap ${formatMicroUSD(session.max_budget_micros)} · expires ${new Date(session.expires_at).toLocaleTimeString()}`} />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setSession(null);
+                setMessages([]);
+                setComparison(null);
+                setNotice('Ephemeral session key cleared from this tab. Signing out revokes active Playground keys.');
+              }}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+              <span>End session</span>
+            </Button>
+          </div>
+        ) : null}
+      </div>
+
+      <Tabs
+        label="Developer tools"
+        activeId={activeTab}
+        onSelect={id => navigate(id === 'snippets' ? '/devtools/sdk-snippets' : '/devtools/playground')}
+        items={[
+          {id: 'chat', label: 'Live Playground'},
+          {id: 'snippets', label: 'SDK Snippets'},
+        ]}
+      />
+
+      {!environmentId ? <Banner tone="info">Select an active environment in the top bar to start a Playground session.</Banner> : null}
+      {error ? <Banner tone="danger">{error}</Banner> : null}
+      {notice ? <Banner tone="ok">{notice}</Banner> : null}
+
+      {activeTab === 'chat' ? (
+        <div className="tp-stack">
+          <div className="tp-surface tp-surface-pad tp-stack">
+            <div className="tp-grid-3">
+              <TextField
+                label="Model or route slug"
+                list="tanpopo-routes-list"
+                placeholder="e.g. primary-chat"
+                value={model}
+                disabled={busy}
+                onChange={event => setModel(event.target.value)}
+              />
+              <TextField
+                label="Comparison model (optional)"
+                list="tanpopo-routes-list"
+                placeholder="Side-by-side compare"
+                value={compareModel}
+                disabled={busy}
+                onChange={event => setCompareModel(event.target.value)}
+              />
+              {!session ? (
+                <TextField
+                  label="Session budget cap (micro-USD)"
+                  type="number"
+                  min={1000}
+                  max={5000000}
+                  value={budget}
+                  disabled={busy}
+                  error={budget < 1000 || budget > 5000000 ? 'Range: 1,000 to 5,000,000 micro-USD.' : undefined}
+                  onChange={event => setBudget(Number(event.target.value) || 0)}
+                />
+              ) : null}
+            </div>
+            <datalist id="tanpopo-routes-list">
+              {availableRoutes.map(slug => <option key={slug} value={slug} />)}
+            </datalist>
+
+            <section className="tp-section" aria-label="Conversation transcript">
+              {messages.length === 0 ? (
+                <p className="tp-muted">No turns yet. Send a prompt below to mint an ephemeral key and stream from `/v1/chat/completions`.</p>
+              ) : (
+                <ol className="tp-list">
+                  {messages.map((turn, index) => (
+                    <li key={`${turn.role}-${index}`} className="tp-list-item" style={{flexDirection: 'column', alignItems: 'stretch'}}>
+                      <span className="tp-label">{turn.role === 'user' ? 'You' : model || 'Assistant'}</span>
+                      <div style={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>
+                        {turn.content || (busy && turn.role === 'assistant' ? 'Streaming…' : '')}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+
+            {comparison ? (
+              <div className="tp-grid-2">
+                <div className="tp-surface tp-surface-pad tp-stack-sm">
+                  <h3>{model}</h3>
+                  <div style={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{comparison.primary}</div>
+                </div>
+                <div className="tp-surface tp-surface-pad tp-stack-sm">
+                  <h3>{compareModel}</h3>
+                  <div style={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{comparison.secondary || 'Streaming comparison…'}</div>
+                </div>
+              </div>
+            ) : null}
+
+            <TextAreaField
+              id="playground-prompt"
+              label="Prompt"
+              rows={4}
+              placeholder="Enter a test prompt…"
+              value={prompt}
+              disabled={busy}
+              onChange={event => setPrompt(event.target.value)}
+            />
+
+            <div className="tp-row">
+              <Button
+                variant="primary"
+                loading={busy}
+                disabled={!environmentId || !model.trim() || !prompt.trim() || (!session && (budget < 1000 || budget > 5000000))}
+                onClick={() => void handleSend()}
+              >
+                <Send size={14} aria-hidden="true" />
+                <span>{busy ? 'Streaming…' : 'Send'}</span>
+              </Button>
+              {busy ? (
+                <Button variant="secondary" onClick={() => abortRef.current?.abort()}>
+                  <Square size={14} aria-hidden="true" />
+                  <span>Cancel stream</span>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          {primaryReqId || compareReqId ? (
+            <section className="tp-section">
+              <SectionHeader title="Execution traces" />
+              <ul className="tp-list">
+                {primaryReqId ? <TraceRow label="Primary" requestId={primaryReqId} trace={primaryTrace} /> : null}
+                {compareReqId ? <TraceRow label="Comparison" requestId={compareReqId} trace={compareTrace} /> : null}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      ) : (
+        <div className="tp-stack">
+          <CodeBlock
+            title="cURL (/v1/chat/completions)"
+            code={`curl ${origin}/v1/chat/completions \\\n  -H "Authorization: Bearer $TANPOPO_VIRTUAL_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${snippetModel}","messages":[{"role":"user","content":"Hello"}],"stream":true}'`}
+          />
+          <CodeBlock
+            title="Python (OpenAI SDK)"
+            code={`from openai import OpenAI\n\nclient = OpenAI(base_url="${origin}/v1", api_key=os.environ["TANPOPO_VIRTUAL_KEY"])\nstream = client.chat.completions.create(\n    model="${snippetModel}",\n    messages=[{"role": "user", "content": "Hello"}],\n    stream=True,\n)\nfor chunk in stream:\n    print(chunk.choices[0].delta.content or "", end="")`}
+          />
+          <CodeBlock
+            title="TypeScript (OpenAI SDK)"
+            code={`import OpenAI from "openai";\n\nconst client = new OpenAI({ baseURL: "${origin}/v1", apiKey: process.env.TANPOPO_VIRTUAL_KEY });\nconst res = await client.chat.completions.create({\n  model: "${snippetModel}",\n  messages: [{ role: "user", content: "Hello" }],\n  stream: true,\n});`}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
-async function loadTrace(requestId: string): Promise<Trace | null> {
+function TraceRow({label, requestId, trace}: {label: string; requestId: string; trace: Trace | null}) {
+  return (
+    <li className="tp-list-item">
+      <div className="tp-stack-sm" style={{minWidth: 0, flex: '1 1 220px'}}>
+        <span style={{fontWeight: 600}}>{label} · <span className="mono">{requestId}</span></span>
+        <span className="tp-muted mono">
+          {trace
+            ? `route ${trace.route_slug} · HTTP ${trace.status_code} · ${formatMicroUSD(trace.total_cost_micros)} · ${trace.duration_ms} ms`
+            : 'Trace metadata pending…'}
+        </span>
+      </div>
+      {trace ? <StatusPill tone={stateTone(trace.usage_accuracy)} label={trace.usage_accuracy} /> : null}
+    </li>
+  );
+}
+
+async function pollTrace(requestId: string): Promise<Trace | null> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    try { return await getTraceWaterfall(requestId) as Trace; }
-    catch (error) {
-      const status = error && typeof error === 'object' && 'status' in error ? Number(error.status) : 0;
+    try {
+      return await getTraceWaterfall(requestId);
+    } catch (cause) {
+      const status = cause && typeof cause === 'object' && 'status' in cause ? Number(cause.status) : 0;
       if (status !== 404 || attempt === 4) return null;
       await new Promise(resolve => window.setTimeout(resolve, 150));
     }
   }
   return null;
-}
-
-function TraceSummary({label, requestId, trace}: {label: string; requestId: string; trace: Trace | null}) {
-  return <Text role="status">{label} request {requestId}: {trace
-    ? `route ${trace.route_slug}, status ${trace.status_code}, ${trace.usage_accuracy.toLowerCase()} usage, $${(trace.total_cost_micros / 1_000_000).toFixed(6)}, ${trace.duration_ms} ms`
-    : 'trace metadata is not available yet.'}</Text>;
 }

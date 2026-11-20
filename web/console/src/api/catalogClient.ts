@@ -49,6 +49,13 @@ export async function createSecret(payload: components['schemas']['SecretCreateR
   return result.data;
 }
 
+export async function deleteSecret(credentialId: string, etag: string) {
+  const result = await api.DELETE('/admin/v1/secrets/{credentialId}', {
+    params: {path: {credentialId}, header: {'If-Match': etag}},
+  });
+  if (!result.response.ok) throw apiError(result.response, result.error);
+}
+
 export async function createConnection(payload: components['schemas']['ProviderConnectionCreateRequest']) {
   const result = await api.POST('/admin/v1/connections', {body: payload});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);

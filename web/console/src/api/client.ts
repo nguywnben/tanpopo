@@ -80,6 +80,14 @@ export async function loginAdmin(email: string, password: string) {
   return result.data;
 }
 
+export async function logoutAdmin() {
+  const result = await api.POST('/admin/v1/auth/logout');
+  clearCsrfToken();
+  if (!result.response.ok && result.response.status !== 204 && result.response.status !== 401) {
+    throw apiError(result.response, result.error);
+  }
+}
+
 export async function getOverviewSummary(window: components['schemas']['OverviewSummaryResponse']['window']) {
   const result = await api.GET('/admin/v1/overview/summary', {params: {query: {window}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
