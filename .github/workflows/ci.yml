@@ -227,11 +227,15 @@ jobs:
           echo "macOS -race ./internal/security/vault/... statement coverage: ${VAULT_COV}%"
           awk -v cov="$VAULT_COV" 'BEGIN { if (cov + 0 < 90.0) { printf "Vault coverage %.1f%% < 90.0%% TP-IMP-0008 DoD threshold\n", cov; exit 1 } }'
 
-      - name: Run Web Console npm ci --ignore-scripts & Astryx Doctor Across All OS Runners
+      - name: Verify Web Console TypeScript, Tests & Production Bundle Across All OS Runners
         working-directory: web/console
         shell: pwsh
         run: |
           npm ci --ignore-scripts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npx --no -- @astryxdesign/cli doctor
+          npm run typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
