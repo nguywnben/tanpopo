@@ -1,6 +1,6 @@
 # Constraints (`CONSTRAINTS.md`)
 
-> Last reviewed: `2026-11-14` · Governs all Tanpopo Core (`Go >= 1.24`), Web Console (`web/console/`), and CI changes (`SPEC-QA-04`, `TP-IMP-0005`).
+> Last reviewed: `2026-11-20` · Governs all Tanpopo Core (`Go >= 1.24`), Web Console (`web/console/`, `ADR-0007` / `DEC-086`), and CI changes (`SPEC-QA-04`, `TP-IMP-0005`).
 > Do not weaken rules, remove checks, or add unapproved suppressions to make a change pass.
 
 ## Floor (always enforced, `scripts/ci/check.go`)
@@ -10,7 +10,7 @@
 - No unfinished stubs or empty catches: `throw new Error("not implemented")`, `panic("not implemented")`, empty `catch {}`
 - No `http.DefaultClient`, `http.DefaultTransport`, `http.Get`/`Post`/`PostForm`/`Head`, `&http.Client{}` without non-nil `Transport`, `&http.Transport{}` without non-nil `DialContext`, bare `net.Dial`/`DialTimeout`/`DialTCP`/`DialUDP`/`DialIP`, `tls.Dial`/`DialWithDialer`, `&tls.Dialer{}` without non-nil `NetDialer`, `&net.Dialer{}` without non-nil `Control`, or zero-value `var`/`new()` allocations of `http.Client`/`http.Transport`/`net.Dialer`/`tls.Dialer` inside `cmd/`, `internal/`, or `tests/` outside the strictly scoped `internal/testkit/netguard` exceptions (`E3`/`E4`) (all network egress must route through injected SSRF-guarded / `netguard`-guarded clients and dialers)
 - No imports from `github.com/nguywnben/tanpopo/tools/spikes` inside `cmd/` or `internal/`, and zero production imports of `internal/testkit` outside `_test.go`
-- No raw HTML `<div>` or `<span>` elements, custom `.css` files, `:root` overrides, `theme eject` edits to `web/console/astryx-themes.js`, or non-English copy inside `web/console/src/`
+- No legacy `@astryxdesign/*` or `@stylexjs/*` imports/dependencies, no `overflow-x: hidden`/`clip` hacks on `html` or `body`, no external CDN/font URLs, and no non-English copy inside `web/console/src/` (`ADR-0007` / `DEC-086`)
 - No secrets or canary tokens in source files (`sk-tp-canary-*`, `sk-tp-live-*`, private PEM keys) and never log matched secret values
 - No competing JavaScript lockfiles (`yarn.lock`, `pnpm-lock.yaml`, `bun.lock`, `bun.lockb`) and never run `npm ci` without `--ignore-scripts`
 - No copyleft (`GPL`, `AGPL`, `SSPL`) dependencies (`.agents/plugin.json` metadata is explicitly allowlisted under its upstream `MIT` license compatible with `Apache-2.0`)
@@ -22,9 +22,9 @@
 |---|---|---|---|
 | Pure-Go static binary | Builds with `0` errors under `CGO_ENABLED=0 -mod=readonly -trimpath` | `go run ./scripts/ci/check.go --pure-go-build` | every task end, Stage 1 CI |
 | One-way package DAG | `0` import cycles; strict layer order `pkg <- storage <- security <- config <- domain <- edge <- cli <- cmd` | `go run ./scripts/ci/check.go --dag` | every task end, Stage 0 CI |
-| Floor Guard & stubs | `0` banned suppressions, skips, unguarded `net/http`/`net.Dial`/`Dialer` defaults, `tools/spikes` imports, or raw HTML `div`/`span` | `go run ./scripts/ci/check.go --floor-guard` | every task end, Stage 0 CI |
+| Floor Guard & stubs | `0` banned suppressions, skips, unguarded `net/http`/`net.Dial`/`Dialer` defaults, or `tools/spikes` imports | `go run ./scripts/ci/check.go --floor-guard` | every task end, Stage 0 CI |
 | Licensing & lockfiles | Root `LICENSE` + `web/console/package.json` aligned to `Apache-2.0`; `0` GPL/AGPL/SSPL deps; single `package-lock.json` | `go run ./scripts/ci/check.go --license --lockfiles` | every task end, Stage 0 CI |
-| Astryx UI baseline | `defaultThemeSlug = "neutral"` unmodified; `0` failures in doctor check; English UI strings | `go run ./scripts/ci/check.go --ui-layout` and `cd web/console && npm run astryx -- doctor` (or `npx --no -- @astryxdesign/cli doctor`) | every UI edit, Stage 0/1 CI |
+| Console v2 UI baseline | Semantic tokens present (`LF`); `0` `html`/`body` `overflow-x` hacks; `0` external asset URLs; `0` legacy Astryx/StyleX refs; English UI copy; `<= 250 KB` gzip initial JS; `0` TypeScript/Vitest/`axe-core` errors | `go run ./scripts/ci/check.go --ui-layout` and `cd web/console && npm run typecheck && npm test && npm run build` | every UI edit, Stage 0/1 CI |
 | Canary & secret hygiene | `0` unredacted secret or canary leaks in `cmd/`, `internal/`, `scripts/`, `web/console/` | `go run ./scripts/ci/check.go --canary` | every edit, Stage 0 CI |
 | Go unit tests (pure-Go) | `100%` pass rate with `CGO_ENABLED=0` and `TANPOPO_TEST_HERMETIC=1` | `go test -v ./...` | every task end, Stage 1 CI |
 | Go race detector | `100%` pass rate with `-race` on C-toolchain environments (`ubuntu-24.04`, `macos-15`) | `go test -v -race ./...` | Stage 1 CI (Linux/macOS) |

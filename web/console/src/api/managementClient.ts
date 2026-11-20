@@ -82,6 +82,47 @@ export async function createMcpToolGrant(toolId: string, envId: string, virtualK
   return result.data;
 }
 
+export async function approveMcpToolSchema(
+  toolId: string,
+  version: number,
+  payload: {expected_schema_hash: string; risk_tier: 'read_only' | 'mutating' | 'destructive'; justification?: string},
+) {
+  const result = await api.POST('/admin/v1/mcp/tools/{toolId}/approve-schema', {
+    params: {path: {toolId}, header: {'If-Match': versionTag(version)}},
+    body: payload,
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function listMcpToolGrants(toolId: string) {
+  const result = await api.GET('/admin/v1/mcp/tools/{toolId}/grants', {params: {path: {toolId}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
+export async function revokeMcpToolGrant(grantId: string) {
+  const result = await api.DELETE('/admin/v1/mcp/grants/{grantId}', {params: {path: {grantId}}});
+  if (!result.response.ok) throw apiError(result.response, result.error);
+}
+
+export async function listWebhooks() {
+  const result = await api.GET('/admin/v1/webhooks', {params: {query: {limit: 100}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
+export async function createWebhook(payload: {
+  project_id?: string;
+  target_url: string;
+  events: components['schemas']['WebhookEvents'];
+  signing_credential_id: string;
+}) {
+  const result = await api.POST('/admin/v1/webhooks', {body: payload});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
 export async function listPendingApprovals() {
   const result = await api.GET('/admin/v1/approvals', {params: {query: {status: 'PENDING', limit: 100}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
@@ -297,5 +338,5 @@ export async function runUpgradePreflight(targetCoreVersion: string) {
 export async function getReadinessProbe() {
   const response = await fetch(new URL('/readyz', window.location.origin), {credentials: 'same-origin', headers: {Accept: 'application/json'}});
   const data = await response.json() as {status?: string; config_epoch?: number; snapshot_age_ms?: number};
-  return {ready: response.ok && data.status === 'ok', status: data.status ?? (response.ok ? 'unknown' : `HTTP ${response.status}`), configEpoch: data.config_epoch, snapshotAgeMs: data.snapshot_age_ms};
+  return {ready: response.ok && (data.status === 'ok' || data.status === 'ready'), status: data.status ?? (response.ok ? 'unknown' : `HTTP ${response.status}`), configEpoch: data.config_epoch, snapshotAgeMs: data.snapshot_age_ms};
 }

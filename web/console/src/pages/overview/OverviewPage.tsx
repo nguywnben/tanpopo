@@ -1,132 +1,196 @@
 import {useEffect, useRef, useState} from 'react';
-import {Banner} from '@astryxdesign/core/Banner';
-import {Button} from '@astryxdesign/core/Button';
-import {Card} from '@astryxdesign/core/Card';
-import {Grid} from '@astryxdesign/core/Grid';
-import {Heading, Text} from '@astryxdesign/core/Text';
-import {HStack, VStack} from '@astryxdesign/core/Stack';
-import {Icon} from '@astryxdesign/core/Icon';
-import {Token} from '@astryxdesign/core/Token';
-import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';
+import {ArrowRight, RefreshCw} from 'lucide-react';
 import {getOverviewSummary, listActiveAlerts, listUnhealthyDeployments} from '../../api/client';
 import type {components} from '../../api/generated';
+import {useRouter} from '../../router/RouterContext';
+import {Banner, Button, EmptyState, MetricStrip, SectionHeader, StatusPill, formatMicroUSD} from '../../ui/primitives';
 
-type Window = components['schemas']['OverviewSummaryResponse']['window'];
+type WindowRange = components['schemas']['OverviewSummaryResponse']['window'];
 type Summary = components['schemas']['OverviewSummaryResponse'];
-type Alert = components['schemas']['AlertItem'];
-const windows: Window[] = ['1h', '24h', '7d', '30d'];
+type AlertItem = components['schemas']['AlertItem'];
+type Deployment = components['schemas']['ModelDeployment'];
+
+const windows: WindowRange[] = ['1h', '24h', '7d', '30d'];
 
 export function OverviewPage() {
-  const [timeWindow, setTimeWindow] = useState<Window>('24h');
+  const {navigate} = useRouter();
+  const [timeWindow, setTimeWindow] = useState<WindowRange>('24h');
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [unhealthyDeployments, setUnhealthyDeployments] = useState<components['schemas']['ModelDeployment'][]>([]);
-  const [error, setError] = useState('');
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [unhealthy, setUnhealthy] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const seenAlertIds = useRef(new Set<string>());
-  const hasLoadedAlerts = useRef(false);
+  const loadedOnce = useRef(false);
+
+  async function refresh(windowKey: WindowRange, isBackground = false) {
+    if (!isBackground) setLoading(true);
+    try {
+      const [nextSummary, nextAlerts, nextUnhealthy] = await Promise.all([
+        getOverviewSummary(windowKey),
+        listActiveAlerts(),
+        listUnhealthyDeployments(),
+      ]);
+      const arrived = nextAlerts.filter(item => !seenAlertIds.current.has(item.id));
+      if (loadedOnce.current && arrived.length > 0) {
+        setAnnouncement(`${arrived.length} new active alert${arrived.length === 1 ? '' : 's'}.`);
+      }
+      seenAlertIds.current = new Set(nextAlerts.map(item => item.id));
+      loadedOnce.current = true;
+      setSummary(nextSummary);
+      setAlerts(nextAlerts);
+      setUnhealthy(nextUnhealthy);
+      setError('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Overview telemetry could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    let active = true;
-    async function refresh() {
-      try {
-        const [nextSummary, nextAlerts, nextDeployments] = await Promise.all([getOverviewSummary(timeWindow), listActiveAlerts(), listUnhealthyDeployments()]);
-        if (!active) return;
-        const nextIds = new Set(nextAlerts.map(alert => alert.id));
-        const arrived = nextAlerts.filter(alert => !seenAlertIds.current.has(alert.id));
-        if (hasLoadedAlerts.current && arrived.length > 0) setAnnouncement(`${arrived.length} new active alert${arrived.length === 1 ? '' : 's'}.`);
-        seenAlertIds.current = nextIds;
-        hasLoadedAlerts.current = true;
-        setSummary(nextSummary);
-        setAlerts(nextAlerts);
-        setUnhealthyDeployments(nextDeployments);
-        setError('');
-      } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : 'Overview data could not be loaded.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    setLoading(true);
-    void refresh();
-    const timer = globalThis.setInterval(() => { void refresh(); }, 5000);
-    return () => { active = false; globalThis.clearInterval(timer); };
+    void refresh(timeWindow);
+    const interval = window.setInterval(() => {
+      void refresh(timeWindow, true);
+    }, 10000);
+    return () => window.clearInterval(interval);
   }, [timeWindow]);
 
-  const metrics = summary ? [
-    {label: 'Requests', value: summary.total_requests.toLocaleString(), detail: `In the last ${summary.window}`},
-    {label: 'Error rate', value: `${(summary.error_rate_ratio * 100).toFixed(2)}%`, detail: 'Internal and upstream'},
-    {label: 'p95 proxy overhead', value: `${summary.p95_overhead_ms.toLocaleString()} ms`, detail: 'Request latency'},
-    {label: 'Settled spend', value: formatMicroUSD(summary.settled_micro_usd), detail: `Active holds: ${formatMicroUSD(summary.active_hold_micros)}`},
-  ] : [];
+  const kpis = summary
+    ? [
+        {label: 'Requests', value: summary.total_requests.toLocaleString('en-US'), detail: `Window: ${summary.window}`},
+        {label: 'Error rate', value: `${(summary.error_rate_ratio * 100).toFixed(2)}%`, detail: 'Internal & upstream'},
+        {label: 'p95 proxy overhead', value: `${summary.p95_overhead_ms.toLocaleString('en-US')} ms`, detail: 'Gateway added latency'},
+        {
+          label: 'Settled spend',
+          value: formatMicroUSD(summary.settled_micro_usd),
+          detail: `Active holds: ${formatMicroUSD(summary.active_hold_micros)}`,
+        },
+      ]
+    : [];
 
   return (
-    <VStack gap={5}>
-      <HStack gap={3} wrap="wrap" vAlign="center">
-        <VStack gap={0}>
-          <Heading level={1}>Overview</Heading>
-          <Text>System posture and actionable alerts</Text>
-        </VStack>
-        <SegmentedControl label="Overview time window" value={timeWindow} onChange={value => {
-          if (windows.includes(value as Window)) setTimeWindow(value as Window);
-        }}>
-          {windows.map(item => <SegmentedControlItem key={item} value={item} label={item} />)}
-        </SegmentedControl>
-      </HStack>
-      <Text aria-live="polite" role="status">{announcement}</Text>
-      {summary?.sync_lag_warning ? <Banner status="warning" title="Telemetry sync is delayed" description="Some recent spans were dropped. The summary may not include all recent requests." collapsible={false} /> : null}
-      {error ? <Banner status="error" title="Overview could not refresh" description={error} collapsible={false} /> : null}
-      {loading && !summary ? <Text role="status">Loading system posture…</Text> : null}
-      {summary ? <Grid gap={3} columns={{minWidth: 240, max: 4}}>
-        {metrics.map(metric => <Card key={metric.label} padding={4}>
-          <VStack gap={2}>
-            <Text type="label">{metric.label}</Text>
-            <Heading level={2}>{metric.value}</Heading>
-            <Text>{metric.detail}</Text>
-          </VStack>
-        </Card>)}
-      </Grid> : null}
-      <HStack gap={2} vAlign="center">
-        <Heading level={2}>Active alerts</Heading>
-        <Token label={String(summary?.active_alerts_count ?? alerts.length)} color={alerts.length ? 'orange' : 'green'} icon={<Icon icon={alerts.length ? 'warning' : 'success'} />} />
-      </HStack>
-      {unhealthyDeployments.length ? <VStack gap={2}>
-        <Heading level={2}>Unhealthy model deployments</Heading>
-        {unhealthyDeployments.map(deployment => <Card key={deployment.id} padding={3}>
-          <HStack gap={3} wrap="wrap" vAlign="center">
-            <Text>{deployment.upstream_model_name} · {deployment.state}</Text>
-            <Button label="Review deployments" variant="secondary" onClick={() => window.location.assign('/models')} />
-          </HStack>
-        </Card>)}
-      </VStack> : null}
-      {alerts.length === 0 && !loading ? <Card padding={4}><Text>No active alerts. The system has no current remediation items.</Text></Card> : null}
-      <VStack gap={3}>
-        {alerts.map(alert => <AlertCard key={alert.id} alert={alert} />)}
-      </VStack>
-      {summary ? <Text>Updated {new Date(summary.updated_at).toLocaleTimeString()} · {summary.unmetered_request_count ?? 0} unmetered requests</Text> : null}
-    </VStack>
-  );
-}
+    <div className="tp-stack">
+      <div className="tp-page-head">
+        <div className="tp-page-head-text">
+          <h1>Overview</h1>
+          <p className="tp-page-subtitle">
+            {summary
+              ? `Updated ${new Date(summary.updated_at).toLocaleTimeString()} · ${summary.unmetered_request_count ?? 0} unmetered requests`
+              : 'Live gateway posture and remediation queue.'}
+          </p>
+        </div>
 
-function AlertCard({alert}: {alert: Alert}) {
-  const isPage = alert.severity === 'PAGE';
-  const target = new URL(alert.remediation_route, window.location.origin);
-  const canNavigate = alert.remediation_route.startsWith('/') && target.origin === window.location.origin;
-  return (
-    <Card padding={4}>
-      <HStack gap={3} wrap="wrap" vAlign="center">
-        <Token label={isPage ? 'Page' : 'Ticket'} color={isPage ? 'red' : 'yellow'} icon={<Icon icon={isPage ? 'error' : 'warning'} />} />
-        <VStack gap={1}>
-          <Heading level={3}>{alert.summary}</Heading>
-          <Text>{alert.alert_code} · {new Date(alert.triggered_at).toLocaleString()}</Text>
-        </VStack>
-        {canNavigate ? <Button label="Open remediation" variant="secondary" onClick={() => window.location.assign(`${target.pathname}${target.search}${target.hash}`)} /> : null}
-      </HStack>
-    </Card>
-  );
-}
+        <div className="tp-page-actions">
+          <div className="tp-segmented" role="group" aria-label="Overview time window">
+            {windows.map(item => (
+              <button
+                key={item}
+                type="button"
+                className="tp-segmented-btn"
+                aria-pressed={timeWindow === item}
+                onClick={() => setTimeWindow(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => void refresh(timeWindow)}>
+            <RefreshCw size={14} aria-hidden="true" />
+            <span>Refresh</span>
+          </Button>
+        </div>
+      </div>
 
-function formatMicroUSD(value: number): string {
-  return `$${(value / 1_000_000).toFixed(2)}`;
+      <span className="sr-only" role="status" aria-live="polite">{announcement}</span>
+
+      {summary?.sync_lag_warning ? (
+        <Banner tone="warn" title="Telemetry sync delayed">
+          Recent spans were dropped under load. Summary metrics may lag behind live traffic.
+        </Banner>
+      ) : null}
+
+      {error ? <Banner tone="danger" title="Refresh failed">{error}</Banner> : null}
+
+      {loading && !summary ? (
+        <div className="tp-surface tp-surface-pad tp-stack" role="status" aria-busy="true">
+          <div className="tp-skeleton" style={{width: '100%', height: 64}} />
+        </div>
+      ) : summary ? (
+        <MetricStrip items={kpis} />
+      ) : null}
+
+      {unhealthy.length > 0 ? (
+        <section className="tp-section" aria-label="Unhealthy deployments">
+          <SectionHeader
+            title="Circuit-open deployments"
+            count={unhealthy.length}
+            countTone="danger"
+            actions={
+              <Button variant="secondary" size="sm" onClick={() => navigate('/models')}>
+                <span>Inspect deployments</span>
+                <ArrowRight size={14} aria-hidden="true" />
+              </Button>
+            }
+          />
+          <ul className="tp-list">
+            {unhealthy.map(dep => (
+              <li key={dep.id} className="tp-list-item">
+                <div className="tp-stack-sm" style={{minWidth: 0, flex: '1 1 200px'}}>
+                  <span className="mono" style={{fontWeight: 600}}>{dep.upstream_model_name}</span>
+                  <span className="tp-muted">Region {dep.data_region} · Connection {dep.connection_id}</span>
+                </div>
+                <StatusPill tone="danger" label={dep.state.replaceAll('_', ' ')} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="tp-section" aria-label="Active alerts">
+        <SectionHeader
+          title="Active alerts"
+          count={summary?.active_alerts_count ?? alerts.length}
+          countTone={alerts.length > 0 ? 'warn' : 'neutral'}
+        />
+        {alerts.length === 0 && !loading ? (
+          <EmptyState
+            title="All systems nominal"
+            description="No active operational alerts or pending remediation items."
+          />
+        ) : (
+          <ul className="tp-list">
+            {alerts.map(alert => {
+              const target = new URL(alert.remediation_route, window.location.origin);
+              const safeInternal = alert.remediation_route.startsWith('/') && target.origin === window.location.origin;
+              return (
+                <li key={alert.id} className="tp-list-item">
+                  <div className="tp-stack-sm" style={{minWidth: 0, flex: '1 1 240px'}}>
+                    <div className="tp-row">
+                      <StatusPill tone={alert.severity === 'PAGE' ? 'danger' : 'warn'} label={alert.severity} />
+                      <span style={{fontWeight: 600}}>{alert.summary}</span>
+                    </div>
+                    <span className="tp-muted mono">
+                      {alert.alert_code} · {new Date(alert.triggered_at).toLocaleString()}
+                    </span>
+                  </div>
+                  {safeInternal ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => navigate(`${target.pathname}${target.search}${target.hash}`)}
+                    >
+                      <span>Remediate</span>
+                      <ArrowRight size={14} aria-hidden="true" />
+                    </Button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
 }
