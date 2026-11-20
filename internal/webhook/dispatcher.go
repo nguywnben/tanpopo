@@ -103,6 +103,7 @@ type Dispatcher struct {
 	claimsStopped bool
 	lastCleanup   time.Time
 	running       bool
+	runStarted    bool
 }
 
 var (
@@ -584,17 +585,16 @@ func (d *Dispatcher) cleanupTerminal(ctx context.Context) {
 	}
 }
 
-// Run starts the bounded worker pool and runs until ctx is canceled. A dispatcher
-// instance may only have one active Run call at a time.
+// Run starts the bounded worker pool and runs until ctx is canceled. Dispatcher
+// instances are one-shot because shutdown permanently closes the claim boundary.
 func (d *Dispatcher) Run(ctx context.Context) error {
-	stopOnContextCancel := context.AfterFunc(ctx, d.StopClaiming)
-	defer stopOnContextCancel()
 	d.mu.Lock()
-	if d.running {
+	if d.running || d.runStarted {
 		d.mu.Unlock()
-		return errors.New("webhook: dispatcher already running")
+		return errors.New("webhook: dispatcher can only run once")
 	}
 	d.running = true
+	d.runStarted = true
 	d.mu.Unlock()
 	defer func() { d.mu.Lock(); d.running = false; d.mu.Unlock() }()
 	var workers sync.WaitGroup
@@ -603,6 +603,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		go func() { defer workers.Done(); d.worker(ctx) }()
 	}
 	<-ctx.Done()
+	d.StopClaiming()
 	workers.Wait()
 	return nil
 }
@@ -649,10 +650,11 @@ func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
 	}
 	unlock := d.lockDatabase()
 	defer unlock()
-	// Do not let runtime shutdown cancel an in-flight SQLite UPDATE ... RETURNING.
-	// modernc SQLite may leave that prepared statement alive when cancellation races
+	// Do not cancel an in-flight SQLite UPDATE ... RETURNING during shutdown.
+	// modernc SQLite can leave its prepared statement alive when cancellation races
 	// row delivery, keeping the database file locked after the pool closes. Complete
-	// the bounded claim operation, then roll it back if shutdown began before commit.
+	// the bounded operation; the synchronized claim boundary then rolls it back if
+	// shutdown began before commit.
 	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Limits.RequestTimeout)
 	defer cancel()
 	tx, err := d.db.BeginTx(claimCtx, nil)

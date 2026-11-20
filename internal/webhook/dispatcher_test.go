@@ -294,6 +294,21 @@ func TestCanceledClaimRollsBackAttemptLease(t *testing.T) {
 	}
 }
 
+func TestDispatcherRunIsOneShot(t *testing.T) {
+	db := openWebhookDB(t)
+	d := testDispatcher(t, db, resolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+		return nil, nil
+	}), 3)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := d.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Run(t.Context()); err == nil {
+		t.Fatal("second Run succeeded after shutdown closed the claim boundary")
+	}
+}
+
 func TestFanoutChecksRemainingCapacityForAllSubscriptions(t *testing.T) {
 	db := openWebhookDB(t)
 	insertSubscription(t, db, "https://hooks.example.test/path", false, `[]`)
