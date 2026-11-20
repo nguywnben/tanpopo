@@ -644,6 +644,9 @@ func TestEnqueueScopeAndEventFilter(t *testing.T) {
 func TestWorkerRejectsMetadataAndCrossOriginRedirectWithoutLeakingTarget(t *testing.T) {
 	t.Run("metadata", func(t *testing.T) {
 		db := openWebhookDB(t)
+		// The worker and assertions share this database. Keep a single pooled
+		// handle so Windows can remove the fixture after worker shutdown.
+		db.SetMaxOpenConns(1)
 		insertSubscription(t, db, "http://hooks.test:8080/hook?token=private", false, `[]`)
 		d := testDispatcher(t, db, resolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
 			return []netip.Addr{netip.MustParseAddr("169.254.169.254")}, nil
