@@ -11,7 +11,7 @@ const apiMocks = vi.hoisted(() => ({
   listRoutesForEnvironment: vi.fn(), createRoute: vi.fn(), updateRoute: vi.fn(), deleteRoute: vi.fn(),
   getEffectivePolicy: vi.fn(), updatePolicy: vi.fn(), listVirtualKeys: vi.fn(), createVirtualKey: vi.fn(),
   rotateVirtualKey: vi.fn(), revokeVirtualKey: vi.fn(), listMembers: vi.fn(), createMember: vi.fn(),
-  updateMemberRoles: vi.fn(), listRecentTraces: vi.fn(), listDeployments: vi.fn(), listAdminModels: vi.fn(),
+  updateMemberRoles: vi.fn(), listRecentTraces: vi.fn(), listDeployments: vi.fn(), listAdminModels: vi.fn(), explainRouteDecision: vi.fn(),
 }));
 type Role = components['schemas']['RbacRole'];
 
@@ -29,6 +29,25 @@ const accessKey: components['schemas']['VirtualKeySummary'] = {id: 'key-1', name
 const policy = (scope_tier: components['schemas']['PolicyDocument']['scope_tier'], scope_id: string, regions: components['schemas']['PolicyDocument']['allowed_data_regions'], models: string[]): components['schemas']['PolicyDocument'] => ({id: `policy-${scope_tier}`, scope_tier, scope_id, allowed_data_regions: regions, allowed_models: models, min_plugin_trust: 'VERIFIED_ONLY', min_capability_assurance: 'TESTED', version: 1});
 
 describe('Unit 29 routing and access safety', () => {
+  it('passes the selected data residency constraint to dry-run route explain', async () => {
+    apiMocks.listRoutesForEnvironment.mockResolvedValue([]);
+    apiMocks.listDeployments.mockResolvedValue([deployment]);
+    apiMocks.listAdminModels.mockResolvedValue([logicalModel]);
+    apiMocks.getEffectivePolicy.mockResolvedValue({policy: {allowed_data_regions: ['EU']}, etag: '"v1"'});
+    apiMocks.listRecentTraces.mockResolvedValue([]);
+    apiMocks.explainRouteDecision.mockResolvedValue({dry_run: true, route_slug: 'prod-route'});
+    renderInMain(<RoutesPage projectId="project-1" environmentId="env-1" roles={['ORG_OWNER']} />);
+
+    fireEvent.change(await screen.findByLabelText('Target model or route slug'), {target: {value: 'prod-assistant'}});
+    fireEvent.change(screen.getByLabelText('Data residency'), {target: {value: 'EU'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Explain route'}));
+
+    await waitFor(() => expect(apiMocks.explainRouteDecision).toHaveBeenCalledWith(expect.objectContaining({
+      env_id: 'env-1', target_model: 'prod-assistant', data_region: 'EU',
+    })));
+    expect(await screen.findByText(/Dry-run result:/)).toBeInTheDocument();
+  });
+
   it('preserves the route draft and shows the current server resource on a 409', async () => {
     apiMocks.listRoutesForEnvironment.mockResolvedValue([route]);
     apiMocks.listDeployments.mockResolvedValue([deployment]);

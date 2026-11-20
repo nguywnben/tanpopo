@@ -543,6 +543,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/oauth/device/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Poll an authenticated RFC 8628 device authorization session */
+        post: operations["pollConnectionOAuthDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/models": {
         parameters: {
             query?: never;
@@ -864,7 +881,7 @@ export interface paths {
         /** List registered MCP Servers (SCR-10 — v0.2) */
         get: operations["listMcpServers"];
         put?: never;
-        /** Register Streamable HTTP or Sidecar MCP Server (raw shell stdio forbidden) (SCR-10 — v0.2) */
+        /** Register Streamable HTTP MCP Server with explicit private-network egress consent (SCR-10 — v0.2) */
         post: operations["registerMcpServer"];
         delete?: never;
         options?: never;
@@ -901,6 +918,41 @@ export interface paths {
         /** Pin or re-approve MCP tool JCS schema_hash and risk classification (read_only | mutating | destructive) (SCR-10 — v0.2) */
         post: operations["approveMcpToolSchema"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/mcp/tools/{toolId}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List environment and Virtual Key grants for one MCP tool */
+        get: operations["listMcpToolGrants"];
+        put?: never;
+        /** Grant a namespaced MCP tool to an allowed Virtual Key in an environment */
+        post: operations["createMcpToolGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/mcp/grants/{grantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke one project-scoped MCP tool grant */
+        delete: operations["revokeMcpToolGrant"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1068,7 +1120,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Cursor-paginated HITL Approval Queue (SM-06) (SCR-14) */
+        /** List MCP approval requests within the authenticated organization and authorized projects */
         get: operations["listApprovalRequests"];
         put?: never;
         post?: never;
@@ -1087,7 +1139,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve or reject pending MCP destructive tool call or extension escalation (Four-Eyes enforced — AUTH-12) (SCR-14) */
+        /** Approve or reject a pending MCP tool call using its observed binding hash and version */
         post: operations["decideApprovalRequest"];
         delete?: never;
         options?: never;
@@ -1581,8 +1633,10 @@ export interface components {
             name: string;
             project_id?: string | null;
             /** @enum {string} */
-            secret_kind: "API_KEY" | "HMAC_SECRET" | "OAUTH_CLIENT_SECRET" | "WEBHOOK_SECRET";
-            /** @description Write-only raw credential sealed immediately under Org/Project DEK with canonical AEAD AAD. */
+            secret_kind: "API_KEY" | "HMAC_SECRET" | "OAUTH_CLIENT_SECRET" | "WEBHOOK_SECRET" | "AWS_SIGV4_KEY" | "OCI_REGISTRY_AUTH" | "MTLS_CLIENT_CERT";
+            /** @description For OCI_REGISTRY_AUTH, the exact registry host authority including a non-default port; use an organization-scoped secret by omitting project_id. */
+            bound_audience?: string | null;
+            /** @description Write-only raw credential sealed immediately under Org/Project DEK with canonical AEAD AAD. AWS_SIGV4_KEY must be JSON with access_key_id and secret_access_key, and may include session_token. OCI_REGISTRY_AUTH must be an organization-scoped JSON object with unescaped username and password string values; both fields are required. */
             secret_value: string;
         };
         /** @description Strictly zero plaintext fields — exposes only opaque credential_id and irreversible trailing fingerprint. */
@@ -1860,15 +1914,16 @@ export interface components {
         };
         McpServerResource: {
             id: string;
+            project_id: string;
             slug: string;
             name: string;
             /** @enum {string} */
-            transport: "streamable_http" | "isolated_sidecar";
+            transport: "streamable_http";
             endpoint_url: string;
             /** @default false */
             allow_private_ip: boolean;
             /** @enum {string} */
-            state: "ACTIVE" | "SCHEMA_DRIFT_LOCKED" | "DISABLED";
+            state: "ACTIVE" | "SCHEMA_DRIFT_LOCKED" | "SUSPENDED" | "DISABLED";
             tool_count: number;
             version: number;
         };
@@ -1937,6 +1992,21 @@ export interface components {
             triggered_at_ms: number;
             cleared_at_ms?: number | null;
         };
+        WebhookEvents: ("budget.threshold" | "mcp.approval.pending" | "extension.quarantined" | "kill_switch.triggered")[];
+        WebhookSubscriptionResource: {
+            id: string;
+            org_id: string;
+            project_id: string | null;
+            /**
+             * Format: uri
+             * @description Receiver origin. The receiver path and query are private.
+             */
+            target_origin: string;
+            events: components["schemas"]["WebhookEvents"];
+            enabled: boolean;
+            version: number;
+            created_at_ms: number;
+        };
         ApprovalRequestResource: {
             id: string;
             org_id?: string | null;
@@ -1944,8 +2014,9 @@ export interface components {
             /** @enum {string} */
             action_kind: "MCP_DESTRUCTIVE_TOOL" | "EXTENSION_ESCALATION" | "BUDGET_CEILING_OVERRIDE";
             /** @enum {string} */
-            state: "PENDING" | "APPROVED" | "CONSUMED" | "REJECTED" | "EXPIRED";
+            state: "PENDING" | "APPROVED" | "CONSUMED" | "REJECTED" | "EXPIRED" | "CANCELLED";
             approval_binding_hash: string;
+            /** @description MCP server and tool identifiers encoded as JSON. */
             payload_preview_json?: string;
             requested_by: string;
             decided_by?: string | null;
@@ -1954,6 +2025,8 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
             version: number;
+            /** @description True when the MCP tool schema has drifted; approval is blocked until its schema is reviewed. */
+            schema_drift_locked: boolean;
         };
         AuditEventResource: {
             id: string;
@@ -3339,7 +3412,24 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    flow: "authorization_code_pkce" | "client_credentials" | "device_code";
+                    /** Format: uri */
+                    authorization_endpoint?: string;
+                    /** Format: uri */
+                    token_endpoint: string;
+                    /** Format: uri */
+                    device_authorization_endpoint?: string;
+                    client_id: string;
+                    scopes?: string[];
+                    /** Format: uri */
+                    resource: string;
+                };
+            };
+        };
         responses: {
             /** @description OAuth authorization URL or RFC 8628 device code metadata */
             200: {
@@ -3349,15 +3439,18 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        flow: "authorization_code_pkce" | "device_code";
+                        flow: "authorization_code_pkce" | "client_credentials" | "device_code";
                         /** Format: uri */
                         authorization_url?: string;
                         /** Format: uri */
                         verification_uri?: string;
                         user_code?: string;
-                        state: string;
+                        state?: string;
                         /** Format: date-time */
                         expires_at: string;
+                        poll_interval_ms?: number;
+                        /** @enum {string} */
+                        status?: "completed" | "authorization_pending";
                     };
                 };
             };
@@ -3377,6 +3470,54 @@ export interface operations {
         responses: {
             /** @description Redirects back to /providers/connections (never echoes raw tokens) */
             302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    pollConnectionOAuthDevice: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    state: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Device authorization completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authorization is pending */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Polling interval has not elapsed */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4217,14 +4358,16 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    project_id: string;
                     slug: string;
                     name: string;
                     /** @enum {string} */
-                    transport: "streamable_http" | "isolated_sidecar";
+                    transport: "streamable_http";
                     /** Format: uri */
                     endpoint_url: string;
                     /** @default false */
                     allow_private_ip?: boolean;
+                    allowed_cidrs?: string[];
                     credential_id?: string | null;
                 };
             };
@@ -4238,6 +4381,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["McpServerResource"];
+                };
+            };
+            /** @description Invalid server registration or egress consent */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Insufficient project scope or invalid browser CSRF token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
                 };
             };
         };
@@ -4267,6 +4428,24 @@ export interface operations {
                         drifted_count: number;
                         tools: Record<string, never>[];
                     };
+                };
+            };
+            /** @description Insufficient project scope or invalid browser CSRF token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Upstream synchronization failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
                 };
             };
         };
@@ -4304,6 +4483,156 @@ export interface operations {
                 };
                 content: {
                     "application/json": Record<string, never>;
+                };
+            };
+            /** @description Insufficient project scope or invalid browser CSRF token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Stale schema hash or resource version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description If-Match is required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    listMcpToolGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                toolId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tool grants scoped to the authenticated organization and project */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            project_id: string;
+                            env_id: string;
+                            virtual_key_id: string;
+                            version: number;
+                            created_at_ms: number;
+                        }[];
+                    };
+                };
+            };
+            /** @description Insufficient project scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    createMcpToolGrant: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                toolId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    env_id: string;
+                    virtual_key_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description MCP tool grant created */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Insufficient project scope or invalid browser CSRF token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Tool is not explicitly allowed by the Virtual Key or grant already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    revokeMcpToolGrant: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                grantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MCP tool grant revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Insufficient project scope or invalid browser CSRF token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
                 };
             };
         };
@@ -4609,7 +4938,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        data: Record<string, never>[];
+                        data: components["schemas"]["WebhookSubscriptionResource"][];
                         next_cursor?: string | null;
                         has_more: boolean;
                     };
@@ -4630,9 +4959,15 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** Format: uri */
+                    /** @description Omit for an organization subscription. The signing credential must have the same owner scope. */
+                    project_id?: string;
+                    /**
+                     * Format: uri
+                     * @description Public HTTPS receiver without userinfo or fragment.
+                     */
                     target_url: string;
-                    events: string[];
+                    events: components["schemas"]["WebhookEvents"];
+                    /** @description ID of a WEBHOOK_HMAC_SECRET credential. */
                     signing_credential_id: string;
                 };
             };
@@ -4641,10 +4976,38 @@ export interface operations {
             /** @description Webhook subscription created */
             201: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["WebhookSubscriptionResource"];
+                };
+            };
+            /** @description Invalid target, event list, or credential audience */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Insufficient permission or invalid session CSRF */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Project or signing credential unavailable in this scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
                 };
             };
         };
@@ -4652,7 +5015,7 @@ export interface operations {
     listApprovalRequests: {
         parameters: {
             query?: {
-                status?: "PENDING" | "APPROVED" | "CONSUMED" | "REJECTED" | "EXPIRED";
+                status?: "PENDING" | "APPROVED" | "CONSUMED" | "REJECTED" | "EXPIRED" | "CANCELLED";
                 limit?: components["parameters"]["LimitParam"];
                 /** @description HMAC-signed org_id-bound opaque pagination cursor. */
                 cursor?: components["parameters"]["CursorParam"];
@@ -4698,7 +5061,7 @@ export interface operations {
                     /** @enum {string} */
                     decision: "APPROVE" | "REJECT";
                     expected_binding_hash: string;
-                    reason?: string;
+                    reason: string;
                 };
             };
         };
@@ -4713,8 +5076,26 @@ export interface operations {
                     "application/json": components["schemas"]["ApprovalRequestResource"];
                 };
             };
-            /** @description 403 self_approval_forbidden */
+            /** @description Invalid decision or If-Match header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Insufficient permission, invalid session CSRF, self_approval_forbidden, or parameter_hash_mismatch */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Approval unavailable in this scope */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4724,6 +5105,15 @@ export interface operations {
             };
             /** @description 409 approval_already_decided_or_expired or optimistic_lock_conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description If-Match header required */
+            428: {
                 headers: {
                     [name: string]: unknown;
                 };

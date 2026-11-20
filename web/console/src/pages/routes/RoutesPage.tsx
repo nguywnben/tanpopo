@@ -10,7 +10,7 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 import {Token} from '@astryxdesign/core/Token';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {listAdminModels, listDeployments} from '../../api/catalogClient';
-import {createRoute, deleteRoute, getEffectivePolicy, listRecentTraces, listRoutesForEnvironment, updateRoute} from '../../api/managementClient';
+import {createRoute, deleteRoute, explainRouteDecision, getEffectivePolicy, listRecentTraces, listRoutesForEnvironment, updateRoute} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 
 type Role = components['schemas']['RbacRole'];
@@ -43,7 +43,13 @@ export function RoutesPage({projectId, environmentId, roles}: {projectId: string
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [explainModel, setExplainModel] = useState('');
+  const [explainRegion, setExplainRegion] = useState<components['schemas']['DataRegion'] | ''>('');
+  const [explainCapabilities, setExplainCapabilities] = useState<string[]>([]);
+  const [explainResult, setExplainResult] = useState<unknown>(null);
+  const [explainBusy, setExplainBusy] = useState(false);
   const canManage = roles.some(role => manageRoles.includes(role));
+  const explainRegionAllowed = Boolean(explainRegion) && (allowedRegions.length === 0 || allowedRegions.includes(explainRegion as components['schemas']['DataRegion']));
 
   const refresh = useCallback(async () => {
     if (!environmentId) { setRoutes([]); setDeployments([]); setRecentTraces([]); setLoading(false); return; }
@@ -122,6 +128,17 @@ export function RoutesPage({projectId, environmentId, roles}: {projectId: string
     } finally { setBusy(false); }
   }
 
+  async function explainRoute() {
+    if (!environmentId || !explainModel.trim() || !explainRegionAllowed) return;
+    setExplainBusy(true); setError(''); setExplainResult(null);
+    try {
+      const result = await explainRouteDecision({env_id: environmentId, target_model: explainModel.trim(), data_region: explainRegion as components['schemas']['DataRegion'], dialect: 'openai_compatible', required_capabilities: explainCapabilities, estimated_input_tokens: 512, max_output_tokens: 1024});
+      if (!result.dry_run) throw new Error('The route explain response did not confirm dry-run mode.');
+      setExplainResult(result);
+    } catch (failure) { setError(message(failure)); }
+    finally { setExplainBusy(false); }
+  }
+
 
   const totalWeight = targets.reduce((sum, target) => sum + (target.weight ?? 0), 0);
   const deploymentById = new Map(deployments.map(deployment => [deployment.id, deployment]));
@@ -133,6 +150,16 @@ export function RoutesPage({projectId, environmentId, roles}: {projectId: string
     {!environmentId ? <Text role="status">Select an environment to manage routes.</Text> : null}
     {error ? <Text role="alert">{error}</Text> : null}
     {allowedRegions.length > 0 ? <Text>Inherited data residency allows: {allowedRegions.join(', ')}. Routes cannot widen these regions.</Text> : <Text>Effective policy currently reports no allowed data regions.</Text>}
+    <Section><VStack gap={3}><Heading level={2}>Dry-run route explain</Heading>
+      <Text>Evaluate the same deterministic routing rules without sending a request to a provider or creating a budget hold.</Text>
+      <TextInput label="Target model or route slug" value={explainModel} onChange={setExplainModel} isDisabled={explainBusy} />
+      <label>Data residency<select aria-label="Data residency" required value={explainRegion} disabled={explainBusy} onChange={event => setExplainRegion(event.target.value as components['schemas']['DataRegion'] | '')}>
+        <option value="">Choose a data residency region</option>{(allowedRegions.length > 0 ? allowedRegions : ['EU', 'US', 'APAC', 'ON_PREM'] as components['schemas']['DataRegion'][]).map(region => <option key={region} value={region}>{region}</option>)}
+      </select></label>
+      <HStack gap={3} wrap="wrap">{(['tools', 'vision', 'context_tokens'] as const).map(capability => <label key={capability}><input type="checkbox" checked={explainCapabilities.includes(capability)} onChange={event => setExplainCapabilities(current => event.target.checked ? [...current, capability] : current.filter(item => item !== capability))} /> {capability}</label>)}</HStack>
+      <Button label={explainBusy ? 'Explaining…' : 'Explain route'} variant="secondary" isDisabled={explainBusy || !environmentId || !explainModel.trim() || !explainRegionAllowed} onClick={() => void explainRoute()} />
+      {explainResult ? <Text role="status">Dry-run result: {JSON.stringify(explainResult)}</Text> : null}
+    </VStack></Section>
     <Section><VStack gap={3}>
       <Heading level={2}>{editing ? `Edit ${editing.slug}` : 'Create route'}</Heading>
       {!canManage ? <Text role="status">Only Organization Owners and Team Admins can change routes.</Text> : null}

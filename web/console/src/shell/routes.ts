@@ -28,14 +28,14 @@ export const navigationGroups: {title: string; routes: ConsoleRoute[]}[] = [
   ]},
   {title: 'Ecosystem & Agents', routes: [
     {path: '/extensions/marketplace', aliases: ['/extensions/installed', '/extensions/lockfile'], label: 'Extension Marketplace & Installed Plugins', roles: everyRole, icon: 'extensions', enabled: true},
-    {path: '/mcp/servers', aliases: ['/mcp/tools', '/a2a/agents', '/a2a/tasks'], label: 'MCP Tools & A2A Agents', roles: everyRole, icon: 'agents', enabled: false},
+    {path: '/mcp/servers', aliases: ['/mcp/tools'], label: 'MCP Hub', roles: everyRole, icon: 'agents', enabled: true},
   ]},
   {title: 'Access & Security', routes: [
     {path: '/access/virtual-keys', aliases: ['/access/members', '/access/roles'], label: 'API Keys, Users & Teams', roles: everyRole, icon: 'access', enabled: true},
     {path: '/security/approvals', aliases: ['/security/audit-log', '/security/kill-switches'], label: 'Security, Approvals & Kill-Switches', roles: securityRoles, icon: 'security', enabled: true},
   ]},
   {title: 'Developer Tools & System', routes: [
-    {path: '/devtools/playground', aliases: ['/devtools/api-explorer', '/devtools/sdk-snippets', '/devtools/diagnostics'], label: 'Developer Tools', roles: securityRoles, icon: 'developer', enabled: true},
+    {path: '/devtools/playground', aliases: ['/devtools/api-explorer', '/devtools/sdk-snippets', '/devtools/diagnostics'], label: 'Developer Tools & Playground', roles: ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'DEVELOPER'], icon: 'developer', enabled: true},
     {path: '/ops/health', aliases: ['/ops/backups', '/ops/upgrades', '/settings/residency-retention'], label: 'Operations & Settings', roles: operationsRoles, icon: 'operations', enabled: true},
   ]},
 ];

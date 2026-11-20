@@ -6,6 +6,7 @@ package remote
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -102,6 +103,39 @@ func TestAuditVerifyUsesPost(t *testing.T) {
 		t.Fatalf("audit verify used %s %s", gotMethod, gotPath)
 	}
 }
+
+func TestRouteExplainUsesPOSTAndPreservesMachineOutput(t *testing.T) {
+	var gotMethod, gotPath, gotBody string
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		var body bytes.Buffer
+		_, _ = body.ReadFrom(r.Body)
+		gotBody = body.String()
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"dry_run":true,"route_slug":"safe-route"}`)), Request: r}, nil
+	})}
+	format := "json"
+	var stdout, stderr bytes.Buffer
+	cmd := rootForTest(t, Options{OutputFormat: &format, Stdout: &stdout, Stderr: &stderr, Client: client, LookupEnv: func(key string) (string, bool) {
+		values := map[string]string{"TANPOPO_URL": "https://admin.example.test", "TANPOPO_ADMIN_TOKEN": "test-token"}
+		value, ok := values[key]
+		return value, ok
+	}})
+	cmd.SetArgs([]string{"route", "explain", "--payload", `{"env_id":"env_test","target_model":"safe-route","estimated_input_tokens":64,"max_output_tokens":32}`})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/admin/v1/routes/explain" || !strings.Contains(gotBody, `"target_model":"safe-route"`) {
+		t.Fatalf("unexpected route explain request: %s %s %q", gotMethod, gotPath, gotBody)
+	}
+	var output map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil || output["dry_run"] != true || stderr.Len() != 0 {
+		t.Fatalf("unexpected explain output=%q stderr=%q err=%v", stdout.String(), stderr.String(), err)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
 
 func TestTableOutputStripsTerminalEscapes(t *testing.T) {
 	var output bytes.Buffer

@@ -11,9 +11,10 @@ describe('console information architecture', () => {
     expect(routeForPath('/extensions/lockfile')?.path).toBe('/extensions/marketplace');
   });
 
-  it('keeps roadmap MCP and A2A navigation hidden until its release wave', () => {
+  it('exposes the Unit 38 MCP Hub route while keeping A2A routes out of this release wave', () => {
     const roadmap = navigationGroups.flatMap(group => group.routes).find(route => route.path === '/mcp/servers');
-    expect(roadmap?.enabled).toBe(false);
+    expect(roadmap?.enabled).toBe(true);
+    expect(roadmap?.aliases).not.toContain('/a2a/agents');
   });
 
   it('uses only the six canonical API roles', () => {
