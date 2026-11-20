@@ -267,6 +267,10 @@ func TestPostgresDispatcherDiscardsConnectionAfterRoleVerificationFailure(t *tes
 
 func TestRunCancellationStopsClaimBeforeCommitGate(t *testing.T) {
 	db := openWebhookDB(t)
+	// This test exercises cancellation around a single worker's claim. Keep the
+	// SQLite pool to one connection so Windows can close the database file
+	// deterministically after Run has drained its worker during cleanup.
+	db.SetMaxOpenConns(1)
 	insertSubscription(t, db, "https://hooks.example.test/path", false, `[]`)
 	d := testDispatcher(t, db, resolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
 		return nil, nil
