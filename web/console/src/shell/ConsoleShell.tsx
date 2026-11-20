@@ -320,11 +320,15 @@ export function ConsoleShell() {
 
             {canUseEmergency ? (
               <Button
-                variant={activeSwitches > 0 ? 'danger' : 'danger-outline'}
+                variant={activeSwitches > 0 ? 'danger' : 'secondary'}
                 size="sm"
                 onClick={() => navigate('/security/kill-switches')}
               >
-                <ShieldAlert size={14} aria-hidden="true" />
+                <ShieldAlert
+                  size={14}
+                  aria-hidden="true"
+                  style={activeSwitches === 0 ? {color: 'var(--tp-status-error)'} : undefined}
+                />
                 <span>Kill Switch</span>
                 {activeSwitches > 0 ? <CountPill count={activeSwitches} tone="danger" /> : null}
               </Button>

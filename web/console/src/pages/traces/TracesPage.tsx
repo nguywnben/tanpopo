@@ -4,7 +4,7 @@ import {getTraceWaterfall, listTracePage} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {DataTable} from '../../ui/DataTable';
 import {Drawer} from '../../ui/Overlays';
-import {Banner, Button, KeyValueList, SectionHeader, StatusPill, TextField, formatMicroUSD, stateTone} from '../../ui/primitives';
+import {Banner, Button, KeyValueList, SectionHeader, StatusPill, TextField, formatMicroUSD, formatOperationalState, stateTone} from '../../ui/primitives';
 
 type Trace = components['schemas']['TraceSummary'];
 type Role = components['schemas']['RbacRole'];
@@ -118,7 +118,10 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
           <p className="tp-page-subtitle">Metadata-only execution telemetry. Zero prompt or completion bytes stored.</p>
         </div>
         <div className="tp-page-actions">
-          <StatusPill tone="neutral" icon={<EyeOff size={13} aria-hidden="true" />} label="Metadata-Only" />
+          <span className="tp-meta-tag">
+            <EyeOff size={13} aria-hidden="true" />
+            <span>Metadata-Only</span>
+          </span>
         </div>
       </div>
 
@@ -163,6 +166,7 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="tp-table-link-btn"
                   onClick={event => {
                     event.stopPropagation();
                     setRequestId(row.request_id);
@@ -190,7 +194,7 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
               id: 'accuracy',
               header: 'Metering',
               width: '14%',
-              render: row => <StatusPill tone={stateTone(row.usage_accuracy)} label={row.usage_accuracy.replaceAll('_', ' ')} />,
+              render: row => <StatusPill tone={stateTone(row.usage_accuracy)} label={formatOperationalState(row.usage_accuracy)} />,
             },
             {
               id: 'duration',
@@ -251,7 +255,7 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
                   label: 'Usage accuracy & Cost',
                   value: (
                     <div className="tp-row">
-                      <StatusPill tone={stateTone(selected.usage_accuracy)} label={selected.usage_accuracy.replaceAll('_', ' ')} />
+                      <StatusPill tone={stateTone(selected.usage_accuracy)} label={formatOperationalState(selected.usage_accuracy)} />
                       <span className="mono">{formatMicroUSD(selected.total_cost_micros)}</span>
                     </div>
                   ),

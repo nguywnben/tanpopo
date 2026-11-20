@@ -17,11 +17,13 @@ import {
   Banner,
   Button,
   CheckboxField,
+  RowActionsMenu,
   SectionHeader,
   SelectField,
   StatusPill,
   Tabs,
   TextField,
+  formatOperationalState,
   stateTone,
 } from '../../ui/primitives';
 
@@ -320,7 +322,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
               <SelectField label="Health state" value={healthFilter} onChange={event => setHealthFilter(event.target.value)}>
                 <option value="ALL">All states</option>
                 {[...new Set(deployments.map(d => d.state))].sort().map(s => (
-                  <option key={s} value={s}>{s.replaceAll('_', ' ')}</option>
+                  <option key={s} value={s}>{formatOperationalState(s)}</option>
                 ))}
               </SelectField>
             </div>
@@ -339,7 +341,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                 id: 'upstream',
                 header: 'Upstream model',
                 primary: true,
-                width: '24%',
+                width: '28%',
                 render: row => (
                   <div className="tp-stack-sm">
                     <span className="mono" style={{fontWeight: 600}}>{row.upstream_model_name}</span>
@@ -347,9 +349,14 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                   </div>
                 ),
               },
-              {id: 'conn', header: 'Connection', width: '16%', render: row => <span className="mono">{row.connection_id}</span>},
+              {id: 'conn', header: 'Connection', width: '18%', render: row => <span className="mono">{row.connection_id}</span>},
               {id: 'region', header: 'Region', width: '10%', render: row => <span>{row.data_region}</span>},
-              {id: 'state', header: 'Health', width: '16%', render: row => <StatusPill tone={stateTone(row.state)} label={row.state.replaceAll('_', ' ')} />},
+              {
+                id: 'state',
+                header: 'Health',
+                width: '18%',
+                render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />,
+              },
               {
                 id: 'rates',
                 header: 'In / Out (nano-USD)',
@@ -363,15 +370,25 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
               {
                 id: 'actions',
                 header: 'Actions',
-                width: '16%',
+                width: '8%',
                 render: row =>
                   canManage ? (
-                    <div className="tp-row">
-                      {row.state !== 'DISABLED' ? (
-                        <Button variant="secondary" size="sm" disabled={busy} onClick={() => void openDeploymentAction(row, 'disable')}>Disable</Button>
-                      ) : null}
-                      <Button variant="danger-outline" size="sm" disabled={busy} onClick={() => void openDeploymentAction(row, 'delete')}>Delete</Button>
-                    </div>
+                    <RowActionsMenu
+                      label={`Actions for ${row.upstream_model_name}`}
+                      disabled={busy}
+                      items={[
+                        ...(row.state !== 'DISABLED'
+                          ? [{id: 'disable', label: 'Disable deployment', onClick: () => void openDeploymentAction(row, 'disable')}]
+                          : []),
+                        ...(row.state !== 'DISABLED' ? [{type: 'divider' as const}] : []),
+                        {
+                          id: 'delete',
+                          label: 'Delete deployment',
+                          variant: 'destructive' as const,
+                          onClick: () => void openDeploymentAction(row, 'delete'),
+                        },
+                      ]}
+                    />
                   ) : null,
               },
             ]}
@@ -421,7 +438,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                   </div>
                 ),
               },
-              {id: 'assurance', header: 'Assurance', width: '14%', render: row => <StatusPill tone={stateTone(row.assurance_tier)} label={row.assurance_tier} />},
+              {id: 'assurance', header: 'Assurance', width: '14%', render: row => <StatusPill tone={stateTone(row.assurance_tier)} label={formatOperationalState(row.assurance_tier)} />},
               {
                 id: 'limits',
                 header: 'Context / Output',

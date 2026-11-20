@@ -1,35 +1,80 @@
-/* Tanpopo Console v2 — Astryx Neutral Token Bridge (Light & Dark synchronized) */
+/* Tanpopo Console v2 — Refined Astryx Neutral Token System (Bright Light & Crisp Dark) */
 @layer reset, astryx-base, astryx-theme, tokens, base, layout, components;
 
 @layer tokens {
-  :root {
+  :root,
+  [data-astryx-theme='neutral'] {
     --tp-font-sans: var(--font-family-body, Figtree, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif);
     --tp-font-mono: var(--font-family-code, ui-monospace, 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace);
 
-    /* Neutral Surfaces — sourced from @astryxdesign/theme-neutral */
-    --tp-bg-canvas: var(--color-background-body, light-dark(#f1f1f1, #1b1b1b));
-    --tp-bg-surface: var(--color-background-surface, light-dark(#ffffff, #262626));
-    --tp-bg-subtle: var(--color-background-muted, light-dark(#f1f1f1, #1b1b1b));
-    --tp-bg-hover: var(--color-overlay-hover, light-dark(#0000000d, #ffffff0d));
-    --tp-bg-selected: var(--color-neutral, light-dark(#0000000f, #ffffff1a));
-    --tp-bg-pressed: var(--color-overlay-pressed, light-dark(#0000001a, #ffffff1a));
-    --tp-bg-backdrop: var(--color-overlay, light-dark(#00000080, #000000cc));
+    /* Bright, clean neutral canvas & subtle surface hierarchy (overrides heavy #f1f1f1 wash) */
+    --color-background-body: light-dark(#fafafb, #111113);
+    --color-background-surface: light-dark(#ffffff, #18181b);
+    --color-background-card: light-dark(#ffffff, #18181b);
+    --color-background-popover: light-dark(#ffffff, #1f1f23);
+    --color-background-muted: light-dark(#f4f4f6, #222226);
 
-    /* Neutral Borders */
-    --tp-border-subtle: var(--color-border, light-dark(#00000014, #ffffff1a));
-    --tp-border-strong: var(--color-border-emphasized, light-dark(#d4d4d4, #525252));
+    /* Deliberate neutral interactive states (hover / selected / pressed) */
+    --color-neutral: light-dark(rgba(15, 23, 42, 0.055), rgba(255, 255, 255, 0.085));
+    --color-overlay-hover: light-dark(rgba(15, 23, 42, 0.035), rgba(255, 255, 255, 0.055));
+    --color-overlay-pressed: light-dark(rgba(15, 23, 42, 0.07), rgba(255, 255, 255, 0.1));
 
-    /* Neutral Ink & Accent */
-    --tp-ink-primary: var(--color-text-primary, light-dark(#000000, #ffffff));
-    --tp-ink-secondary: var(--color-text-secondary, light-dark(#474747, #9e9e9e));
-    --tp-ink-disabled: var(--color-text-disabled, light-dark(#919191, #525252));
-    --tp-accent: var(--color-accent, light-dark(#1b1b1b, #f1f1f1));
-    --tp-on-accent: var(--color-on-accent, light-dark(#ffffff, #111111));
+    /* Whisper-thin hairlines & crisp control borders */
+    --color-border: light-dark(rgba(15, 23, 42, 0.08), rgba(255, 255, 255, 0.09));
+    --color-border-emphasized: light-dark(rgba(15, 23, 42, 0.16), rgba(255, 255, 255, 0.18));
 
-    /* Semantic Status (alerts, errors, warnings, destructive actions only) */
-    --tp-status-error: var(--color-error, light-dark(#c9303a, #ff705d));
-    --tp-status-error-text: var(--color-text-error, light-dark(#c0262c, #ffaea7));
-    --tp-status-error-muted: var(--color-error-muted, light-dark(#ffc4be, #ff98903d));
+    /* High-clarity neutral typography & primary accent */
+    --color-text-primary: light-dark(#111113, #f4f4f5);
+    --color-text-secondary: light-dark(#52525b, #a1a1aa);
+    --color-text-disabled: light-dark(#a1a1aa, #52525b);
+    --color-icon-primary: light-dark(#18181b, #f4f4f5);
+    --color-icon-secondary: light-dark(#52525b, #a1a1aa);
+    --color-accent: light-dark(#18181b, #f4f4f5);
+    --color-on-accent: light-dark(#ffffff, #111113);
+
+    /* Semantic palette — calm green for Healthy, amber for warning, bold red strictly for incidents/destructive */
+    --color-success: light-dark(#16a34a, #22c55e);
+    --color-text-success: light-dark(#15803d, #86efac);
+    --color-success-muted: light-dark(#f0fdf4, rgba(34, 197, 94, 0.14));
+    --color-on-success-muted: light-dark(#166534, #bbf7d0);
+
+    --color-warning: light-dark(#d97706, #f59e0b);
+    --color-text-warning: light-dark(#92400e, #fcd34d);
+    --color-warning-muted: light-dark(#fffbeb, rgba(245, 158, 11, 0.14));
+    --color-on-warning-muted: light-dark(#92400e, #fde68a);
+
+    --color-error: light-dark(#dc2626, #ef4444);
+    --color-text-error: light-dark(#b91c1c, #fca5a5);
+    --color-error-muted: light-dark(#fef2f2, rgba(239, 68, 68, 0.16));
+    --color-on-error-muted: light-dark(#b91c1c, #fecaca);
+
+    /* Tanpopo layout token aliases */
+    --tp-bg-canvas: var(--color-background-body);
+    --tp-bg-surface: var(--color-background-surface);
+    --tp-bg-rail: light-dark(#ffffff, #141417);
+    --tp-bg-subtle: var(--color-background-muted);
+    --tp-bg-hover: var(--color-overlay-hover);
+    --tp-bg-selected: var(--color-neutral);
+    --tp-bg-pressed: var(--color-overlay-pressed);
+    --tp-bg-backdrop: var(--color-overlay, light-dark(#00000073, #000000cc));
+
+    --tp-border-subtle: var(--color-border);
+    --tp-border-strong: var(--color-border-emphasized);
+
+    --tp-ink-primary: var(--color-text-primary);
+    --tp-ink-secondary: var(--color-text-secondary);
+    --tp-ink-disabled: var(--color-text-disabled);
+    --tp-accent: var(--color-accent);
+    --tp-on-accent: var(--color-on-accent);
+
+    --tp-status-ok-text: var(--color-text-success);
+    --tp-status-warn-text: var(--color-text-warning);
+    --tp-status-warn-bg: var(--color-warning-muted);
+    --tp-status-warn-border: light-dark(rgba(217, 119, 6, 0.28), rgba(245, 158, 11, 0.34));
+    --tp-status-error: var(--color-error);
+    --tp-status-error-text: var(--color-text-error);
+    --tp-status-error-bg: var(--color-error-muted);
+    --tp-status-error-border: light-dark(rgba(220, 38, 38, 0.28), rgba(239, 68, 68, 0.42));
 
     /* Spacing Scale (4px base) */
     --space-1: 0.25rem;
@@ -40,17 +85,17 @@
     --space-6: 1.5rem;
     --space-8: 2rem;
 
-    /* Radii — sourced from @astryxdesign/theme-neutral */
+    /* Radii */
     --tp-radius-sm: var(--radius-inner, 0.375rem);
     --tp-radius-md: var(--radius-element, 0.625rem);
     --tp-radius-lg: var(--radius-container, 0.75rem);
     --tp-radius-pill: var(--radius-full, 9999px);
 
     /* Elevation */
-    --tp-shadow-overlay: var(--shadow-med, 0 4px 12px rgba(0, 0, 0, 0.14));
+    --tp-shadow-overlay: var(--shadow-med, 0 4px 12px rgba(0, 0, 0, 0.12));
 
     /* Shell Metrics */
-    --rail-width: 244px;
+    --rail-width: 240px;
     --topbar-height: 52px;
   }
 }

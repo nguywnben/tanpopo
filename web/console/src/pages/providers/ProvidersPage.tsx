@@ -24,11 +24,13 @@ import {
   Button,
   CheckboxField,
   KeyValueList,
+  RowActionsMenu,
   SectionHeader,
   SelectField,
   StatusPill,
   Tabs,
   TextField,
+  formatOperationalState,
   stateTone,
 } from '../../ui/primitives';
 
@@ -410,11 +412,11 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               },
               {id: 'adapter', header: 'Adapter', width: '13%', render: row => <span className="mono">{row.adapter_id}</span>},
               {id: 'region', header: 'Region / Billing', width: '15%', render: row => <span>{row.data_region} · {row.billing_mode === 'SELF_HOSTED_INFRA' ? 'Self-hosted' : 'Commercial'}</span>},
-              {id: 'state', header: 'State', width: '12%', render: row => <StatusPill tone={stateTone(row.state)} label={row.state} />},
+              {id: 'state', header: 'State', width: '14%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
               {
                 id: 'creds',
                 header: 'Vault fingerprints',
-                width: '16%',
+                width: '22%',
                 render: row => (
                   <span className="mono tp-muted">
                     {Object.entries(row.secret_slot_fingerprints).map(([slot, fp]) => `${slot}: ${fp}`).join(', ') || 'None bound'}
@@ -424,35 +426,38 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               {
                 id: 'actions',
                 header: 'Actions',
-                width: '20%',
+                width: '12%',
                 render: row => {
                   const supportsOAuth = adapters.find(a => a.id === row.adapter_id)?.supported_auth_methods?.includes('oauth2_pkce');
                   if (!canManage) return <span className="tp-muted">Read-only</span>;
                   return (
-                    <div className="tp-row">
-                      <Button variant="secondary" size="sm" disabled={busy} onClick={() => void handleProbe(row)}>Probe</Button>
-                      {supportsOAuth ? (
-                        <Button variant="secondary" size="sm" disabled={busy} onClick={() => setOauthTarget(row)}>OAuth</Button>
-                      ) : null}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => {
-                          setEditing(row);
-                          setDraftName(row.name);
-                          setDraftEndpoint(row.endpoint_url);
-                          setDraftBindings({});
-                          setConflictServer(null);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      {row.state !== 'DISABLED' ? (
-                        <Button variant="ghost" size="sm" disabled={busy} onClick={() => void handleDisable(row)}>Disable</Button>
-                      ) : null}
-                      <Button variant="danger-outline" size="sm" disabled={busy} onClick={() => void openDeleteConnection(row)}>Delete</Button>
-                    </div>
+                    <RowActionsMenu
+                      label={`Actions for ${row.name}`}
+                      disabled={busy}
+                      items={[
+                        {id: 'probe', label: 'Probe connection', onClick: () => void handleProbe(row)},
+                        ...(supportsOAuth ? [{id: 'oauth', label: 'Configure OAuth', onClick: () => setOauthTarget(row)}] : []),
+                        {
+                          id: 'edit',
+                          label: 'Edit connection',
+                          onClick: () => {
+                            setEditing(row);
+                            setDraftName(row.name);
+                            setDraftEndpoint(row.endpoint_url);
+                            setDraftBindings({});
+                            setConflictServer(null);
+                          },
+                        },
+                        ...(row.state !== 'DISABLED' ? [{id: 'disable', label: 'Disable connection', onClick: () => void handleDisable(row)}] : []),
+                        {type: 'divider' as const},
+                        {
+                          id: 'delete',
+                          label: 'Delete connection',
+                          variant: 'destructive' as const,
+                          onClick: () => void openDeleteConnection(row),
+                        },
+                      ]}
+                    />
                   );
                 },
               },

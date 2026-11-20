@@ -23,11 +23,13 @@ import {
   CheckboxField,
   CodeBlock,
   KeyValueList,
+  RowActionsMenu,
   SectionHeader,
   SelectField,
   StatusPill,
   Tabs,
   TextField,
+  formatOperationalState,
   stateTone,
 } from '../../ui/primitives';
 
@@ -363,28 +365,32 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                   </div>
                 ),
               },
-              {id: 'state', header: 'Lifecycle', width: '15%', render: row => <StatusPill tone={stateTone(row.state)} label={row.state.replaceAll('_', ' ')} />},
-              {id: 'origin', header: 'Origin', width: '14%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={row.origin_trust_tier.replaceAll('_', ' ')} />},
-              {id: 'sig', header: 'Publisher', width: '13%', render: row => <span>{row.enterprise_signed ? 'Enterprise signed' : 'Unsigned'}</span>},
-              {id: 'tier', header: 'Execution tier', width: '14%', render: row => <span className="mono">{row.execution_tier}</span>},
+              {id: 'state', header: 'Lifecycle', width: '16%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
+              {id: 'origin', header: 'Origin', width: '16%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={formatOperationalState(row.origin_trust_tier)} />},
+              {id: 'sig', header: 'Publisher', width: '15%', render: row => <span>{row.enterprise_signed ? 'Enterprise signed' : 'Unsigned'}</span>},
+              {id: 'tier', header: 'Execution tier', width: '19%', render: row => <span className="mono">{row.execution_tier}</span>},
               {
                 id: 'actions',
                 header: 'Actions',
-                width: '22%',
+                width: '12%',
                 render: row => (
-                  <div className="tp-row">
-                    <Button variant="secondary" size="sm" onClick={() => void openReview(row.id, 'upgrade')}>Permissions</Button>
-                    {operator ? (
-                      <>
-                        <Button variant="ghost" size="sm" onClick={() => { setUpgradeTarget(row); setUpgradeUri(''); setUpgradeSha(''); }}>Upgrade</Button>
-                        {row.previous_rollback_version ? (
-                          <Button variant="ghost" size="sm" onClick={() => void prepareLifecycleAction(row, 'rollback')}>Rollback</Button>
-                        ) : null}
-                        <Button variant="danger-outline" size="sm" onClick={() => void prepareLifecycleAction(row, 'quarantine')}>Quarantine</Button>
-                        <Button variant="ghost" size="sm" onClick={() => void prepareLifecycleAction(row, 'uninstall')}>Uninstall</Button>
-                      </>
-                    ) : null}
-                  </div>
+                  <RowActionsMenu
+                    label={`Actions for ${row.package_id}`}
+                    items={[
+                      {id: 'permissions', label: 'Review permissions', onClick: () => void openReview(row.id, 'upgrade')},
+                      ...(operator
+                        ? [
+                            {id: 'upgrade', label: 'Upgrade package', onClick: () => { setUpgradeTarget(row); setUpgradeUri(''); setUpgradeSha(''); }},
+                            ...(row.previous_rollback_version
+                              ? [{id: 'rollback', label: 'Rollback version', onClick: () => void prepareLifecycleAction(row, 'rollback')}]
+                              : []),
+                            {type: 'divider' as const},
+                            {id: 'quarantine', label: 'Quarantine package', variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'quarantine')},
+                            {id: 'uninstall', label: 'Uninstall package', variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'uninstall')},
+                          ]
+                        : []),
+                    ]}
+                  />
                 ),
               },
             ]}

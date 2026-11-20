@@ -6,7 +6,7 @@ import {RouterProvider} from '../router/RouterContext';
 import {ThemeProvider} from '../styles/theme';
 import {ConsoleShell} from '../shell/ConsoleShell';
 import {LoginPage} from './auth/LoginPage';
-import {buildRateCard} from './models/ModelsPage';
+import {buildRateCard, ModelsPage} from './models/ModelsPage';
 import {OverviewPage} from './overview/OverviewPage';
 import {SetupPage} from './setup/SetupPage';
 import {formatMicroUSD} from '../ui/primitives';
@@ -187,5 +187,69 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
 
     fireEvent.click(screen.getByRole('button', {name: 'Sign out'}));
     await waitFor(() => expect(loggedOut).toBe(true));
+  });
+
+  it('renders ModelsPage with Healthy and full Circuit open statuses, row action menu, and zero axe violations', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/admin/v1/models')) {
+        return jsonResponse({
+          data: [
+            {
+              id: 'm1',
+              slug: 'gpt-4o-mini',
+              display_name: 'GPT-4o Mini',
+              context_window: 128000,
+              max_output_tokens: 16384,
+              assurance_tier: 'VERIFIED',
+              capabilities: {streaming: true, tool_calling: true, parallel_tool_calls: false, strict_json_schema: true, json_object: true, vision: false, audio_input: false, document_input: false, reasoning: false, prompt_caching: false, embeddings: false, rerank: false},
+            },
+          ],
+          has_more: false,
+        });
+      }
+      if (url.includes('/admin/v1/deployments')) {
+        return jsonResponse({
+          data: [
+            {
+              id: 'dpl_1',
+              env_id: 'env_1',
+              logical_model_id: 'm1',
+              connection_id: 'con_1',
+              upstream_model_name: 'gpt-4o-mini-2026',
+              data_region: 'US',
+              state: 'ACTIVE_HEALTHY',
+              version: 1,
+              rate_card: {input_token_nano_usd: 150, output_token_nano_usd: 600, cache_read_token_nano_usd: 0, cache_write_token_nano_usd: 0, reasoning_token_nano_usd: 0, image_unit_nano_usd: 0, audio_sec_nano_usd: 0, document_page_nano_usd: 0, self_hosted_zero_rate: false},
+            },
+            {
+              id: 'dpl_2',
+              env_id: 'env_1',
+              logical_model_id: 'm1',
+              connection_id: 'con_2',
+              upstream_model_name: 'claude-3-7-sonnet',
+              data_region: 'EU',
+              state: 'CIRCUIT_OPEN_UNHEALTHY',
+              version: 2,
+              rate_card: {input_token_nano_usd: 3000, output_token_nano_usd: 15000, cache_read_token_nano_usd: 0, cache_write_token_nano_usd: 0, reasoning_token_nano_usd: 0, image_unit_nano_usd: 0, audio_sec_nano_usd: 0, document_page_nano_usd: 0, self_hosted_zero_rate: false},
+            },
+          ],
+          has_more: false,
+        });
+      }
+      if (url.includes('/admin/v1/connections')) {
+        return jsonResponse({data: [], has_more: false});
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const {container} = render(wrap(<ModelsPage environmentId="env_1" roles={['ORG_OWNER']} />));
+    await screen.findAllByText('gpt-4o-mini-2026');
+    expect(screen.getAllByText('Healthy').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Circuit open').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', {name: 'Actions for gpt-4o-mini-2026'}).length).toBeGreaterThan(0);
+
+    const audit = await axe.run(container);
+    expect(audit.violations).toEqual([]);
   });
 });

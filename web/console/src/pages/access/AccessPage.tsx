@@ -20,11 +20,13 @@ import {
   Button,
   CheckboxField,
   CodeBlock,
+  RowActionsMenu,
   SectionHeader,
   SelectField,
   StatusPill,
   Tabs,
   TextField,
+  formatOperationalState,
   stateTone,
 } from '../../ui/primitives';
 
@@ -282,34 +284,35 @@ export function AccessPage({
             emptyDescription="Issue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic."
             emptyAction={canManage && environmentId ? <Button variant="primary" size="sm" onClick={() => setIssueOpen(true)}>Issue key</Button> : undefined}
             columns={[
-              {id: 'name', header: 'Name', primary: true, width: '22%', render: row => <span style={{fontWeight: 600}}>{row.name}</span>},
-              {id: 'key', header: 'Prefix / Last 4', width: '18%', render: row => <span className="mono">{row.key_prefix}…{row.last_four}</span>},
-              {id: 'state', header: 'State', width: '16%', render: row => <StatusPill tone={stateTone(row.state)} label={row.state.replaceAll('_', ' ')} />},
-              {id: 'created', header: 'Created', width: '20%', render: row => <span className="num tp-muted">{new Date(row.created_at).toLocaleString()}</span>},
+              {id: 'name', header: 'Name', primary: true, width: '30%', render: row => <span style={{fontWeight: 600}}>{row.name}</span>},
+              {id: 'key', header: 'Prefix / Last 4', width: '20%', render: row => <span className="mono">{row.key_prefix}…{row.last_four}</span>},
+              {id: 'state', header: 'State', width: '16%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
+              {id: 'created', header: 'Created', width: '22%', render: row => <span className="num tp-muted">{new Date(row.created_at).toLocaleString()}</span>},
               {
                 id: 'actions',
                 header: 'Actions',
-                width: '24%',
-                render: row => (
-                  <div className="tp-row">
-                    <Button variant="secondary" size="sm" disabled={!canManage || row.state === 'REVOKED'} onClick={() => setRotateTarget(row)}>
-                      Rotate
-                    </Button>
-                    <Button
-                      variant="danger-outline"
-                      size="sm"
-                      disabled={(!canManage && !canEmergencyRevoke) || row.state === 'REVOKED'}
-                      onClick={() => {
-                        setRevokeTarget(row);
-                        setRevokeMode(canManage ? 'GRACEFUL_DRAIN' : 'EMERGENCY_ABORT_STREAMS');
-                        setRevokeConfirmName('');
-                        setRevokeReason('');
-                      }}
-                    >
-                      Revoke
-                    </Button>
-                  </div>
-                ),
+                width: '12%',
+                render: row =>
+                  row.state !== 'REVOKED' && (canManage || canEmergencyRevoke) ? (
+                    <RowActionsMenu
+                      label={`Actions for ${row.name}`}
+                      items={[
+                        ...(canManage ? [{id: 'rotate', label: 'Rotate key', onClick: () => setRotateTarget(row)}] : []),
+                        ...(canManage ? [{type: 'divider' as const}] : []),
+                        {
+                          id: 'revoke',
+                          label: 'Revoke key',
+                          variant: 'destructive' as const,
+                          onClick: () => {
+                            setRevokeTarget(row);
+                            setRevokeMode(canManage ? 'GRACEFUL_DRAIN' : 'EMERGENCY_ABORT_STREAMS');
+                            setRevokeConfirmName('');
+                            setRevokeReason('');
+                          },
+                        },
+                      ]}
+                    />
+                  ) : null,
               },
             ]}
           />
@@ -334,7 +337,7 @@ export function AccessPage({
                 width: '36%',
                 render: row => (
                   <div className="tp-row">
-                    {row.roles.map(role => <StatusPill key={role} tone="info" label={role.replaceAll('_', ' ')} />)}
+                    {row.roles.map(role => <span key={role} className="tp-meta-tag">{role.replaceAll('_', ' ')}</span>)}
                   </div>
                 ),
               },

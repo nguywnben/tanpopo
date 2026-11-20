@@ -1,4 +1,45 @@
 @layer components {
+  /* Astryx Neutral Button & Badge Visual Hierarchy Refinements (applied globally) */
+  [data-astryx-theme='neutral'] .astryx-button[data-variant='secondary'] {
+    background-color: var(--tp-bg-surface);
+    border: 1px solid var(--tp-border-strong);
+    color: var(--tp-ink-primary);
+  }
+
+  [data-astryx-theme='neutral'] .astryx-button[data-variant='secondary']:hover:not([aria-disabled='true']) {
+    background-color: var(--tp-bg-subtle);
+  }
+
+  [data-astryx-theme='neutral'] .astryx-button[data-variant='destructive'] {
+    background-color: var(--tp-status-error);
+    color: #ffffff;
+  }
+
+  [data-astryx-theme='neutral'] .astryx-badge[data-variant='neutral'] {
+    background-color: var(--tp-bg-selected);
+    color: var(--tp-ink-secondary);
+    font-weight: 500;
+  }
+
+  /* Destructive outline refinement for calm resting states (e.g. Kill Switch with 0 active switches) */
+  [data-astryx-theme='neutral'] .astryx-button.tp-btn-danger-outline {
+    background-color: var(--tp-bg-surface);
+    border: 1px solid var(--tp-status-error-border);
+    color: var(--tp-status-error-text);
+  }
+
+  [data-astryx-theme='neutral'] .astryx-button.tp-btn-danger-outline:hover:not([aria-disabled='true']) {
+    background-color: var(--tp-status-error-bg);
+  }
+
+  /* Quiet inline link-style button for flush-left primary table cells (e.g. Request ID) */
+  [data-astryx-theme='neutral'] .astryx-button.tp-table-link-btn {
+    padding-inline: 0.25rem;
+    margin-inline-start: -0.25rem;
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+
   /* Native Select Field (aligned to Astryx Neutral TextInput geometry & tokens) */
   .tp-field {
     display: flex;
@@ -53,17 +94,74 @@
     cursor: not-allowed;
   }
 
-  /* Destructive outline refinement on Astryx secondary buttons (e.g. Kill Switch rest state) */
-  .tp-btn-danger-outline {
-    border-color: var(--color-border-error, var(--tp-status-error)) !important;
-    color: var(--tp-status-error-text) !important;
-  }
-
   .tp-btn-content {
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
     min-width: 0;
+  }
+
+  /* Lightweight Semantic Status Indicator (official Astryx StatusDot + crisp typography) */
+  .tp-status-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4375rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.35;
+    max-width: 100%;
+    color: var(--tp-ink-secondary);
+  }
+
+  .tp-status-inline[data-tone='ok'] {
+    color: var(--tp-status-ok-text);
+  }
+
+  .tp-status-inline[data-tone='info'] {
+    color: var(--tp-ink-primary);
+  }
+
+  .tp-status-inline[data-tone='neutral'] {
+    color: var(--tp-ink-secondary);
+  }
+
+  .tp-status-inline[data-tone='warn'] {
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--tp-radius-pill);
+    background: var(--tp-status-warn-bg);
+    border: 1px solid var(--tp-status-warn-border);
+    color: var(--tp-status-warn-text);
+    font-weight: 600;
+    font-size: 0.75rem;
+  }
+
+  .tp-status-inline[data-tone='danger'] {
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--tp-radius-pill);
+    background: var(--tp-status-error-bg);
+    border: 1px solid var(--tp-status-error-border);
+    color: var(--tp-status-error-text);
+    font-weight: 600;
+    font-size: 0.75rem;
+  }
+
+  .tp-status-label {
+    white-space: nowrap;
+  }
+
+  /* Quiet hairline tag for metadata/role labels without heavy color fill */
+  .tp-meta-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.1875rem 0.5625rem;
+    border-radius: var(--tp-radius-pill);
+    border: 1px solid var(--tp-border-subtle);
+    background: var(--tp-bg-surface);
+    color: var(--tp-ink-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    max-width: 100%;
   }
 
   /* Astryx TabList wrapper ensuring zero overflow on narrow viewports */
@@ -112,7 +210,7 @@
 
   .tp-metric-label {
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--tp-ink-secondary);
   }
 
@@ -188,10 +286,10 @@
   }
 
   .tp-table thead th {
-    padding: 0.625rem 0.875rem;
+    padding: 0.5625rem 0.875rem;
     text-align: left;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--tp-ink-secondary);
     background: var(--tp-bg-subtle);
     border-bottom: 1px solid var(--tp-border-subtle);
@@ -266,7 +364,7 @@
 
   .tp-mobile-kv-label {
     font-size: 0.6875rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--tp-ink-secondary);
   }
 
@@ -338,7 +436,7 @@
 
   .tp-kv-term {
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--tp-ink-secondary);
   }
 
@@ -452,7 +550,7 @@
   .tp-stack-sm {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--space-1);
     min-width: 0;
     max-width: 100%;
   }

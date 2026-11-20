@@ -11,7 +11,7 @@ import {
 import type {components} from '../../api/generated';
 import {DataTable} from '../../ui/DataTable';
 import {Drawer, Modal} from '../../ui/Overlays';
-import {Banner, Button, CheckboxField, SectionHeader, SelectField, StatusPill, TextField, stateTone} from '../../ui/primitives';
+import {Banner, Button, CheckboxField, SectionHeader, SelectField, StatusPill, TextField, formatOperationalState, stateTone} from '../../ui/primitives';
 
 type Role = components['schemas']['RbacRole'];
 type McpServer = components['schemas']['McpServerResource'];
@@ -194,7 +194,7 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
               ),
             },
             {id: 'endpoint', header: 'Endpoint', width: '30%', render: row => <span className="mono">{row.endpoint_url}</span>},
-            {id: 'state', header: 'Schema state', width: '18%', render: row => <StatusPill tone={stateTone(row.state)} label={row.state} />},
+            {id: 'state', header: 'Schema state', width: '18%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
             {id: 'tools', header: 'Tools', width: '10%', render: row => <span className="num">{row.tool_count}</span>},
             {
               id: 'actions',

@@ -21,11 +21,13 @@ import {
   CheckboxField,
   CodeBlock,
   KeyValueList,
+  RowActionsMenu,
   SectionHeader,
   SelectField,
   StatusPill,
   Tabs,
   TextField,
+  formatOperationalState,
   stateTone,
 } from '../../ui/primitives';
 
@@ -409,13 +411,13 @@ export function RoutingPage({
               {
                 id: 'health',
                 header: 'Target health',
-                width: '20%',
+                width: '28%',
                 render: row => (
                   <div className="tp-row">
                     {row.targets.map(t => {
                       const dep = deploymentById.get(t.deployment_id);
                       const label = dep?.state ?? 'UNAVAILABLE';
-                      return <StatusPill key={t.deployment_id} tone={stateTone(label)} label={label.replaceAll('_', ' ')} />;
+                      return <StatusPill key={t.deployment_id} tone={stateTone(label)} label={formatOperationalState(label)} />;
                     })}
                   </div>
                 ),
@@ -423,13 +425,17 @@ export function RoutingPage({
               {
                 id: 'actions',
                 header: 'Actions',
-                width: '18%',
+                width: '10%',
                 render: row =>
                   canManage ? (
-                    <div className="tp-row">
-                      <Button variant="secondary" size="sm" onClick={() => openEditRoute(row)}>Edit</Button>
-                      <Button variant="danger-outline" size="sm" onClick={() => setDeleteTarget(row)}>Delete</Button>
-                    </div>
+                    <RowActionsMenu
+                      label={`Actions for ${row.slug}`}
+                      items={[
+                        {id: 'edit', label: 'Edit route', onClick: () => openEditRoute(row)},
+                        {type: 'divider' as const},
+                        {id: 'delete', label: 'Delete route', variant: 'destructive' as const, onClick: () => setDeleteTarget(row)},
+                      ]}
+                    />
                   ) : null,
               },
             ]}

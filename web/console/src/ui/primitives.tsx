@@ -8,18 +8,19 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
-import {AlertTriangle, CheckCircle2, Info, ShieldAlert} from 'lucide-react';
 import {Badge as AstryxBadge} from '@astryxdesign/core/Badge';
 import {Banner as AstryxBanner} from '@astryxdesign/core/Banner';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {CheckboxInput as AstryxCheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {CodeBlock as AstryxCodeBlock} from '@astryxdesign/core/CodeBlock';
+import type {DropdownMenuOption} from '@astryxdesign/core/DropdownMenu';
 import {EmptyState as AstryxEmptyState} from '@astryxdesign/core/EmptyState';
 import {IconButton as AstryxIconButton} from '@astryxdesign/core/IconButton';
+import {MoreMenu as AstryxMoreMenu} from '@astryxdesign/core/MoreMenu';
+import {StatusDot, type StatusDotVariant} from '@astryxdesign/core/StatusDot';
 import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {TextArea as AstryxTextArea} from '@astryxdesign/core/TextArea';
 import {TextInput as AstryxTextInput, type TextInputType} from '@astryxdesign/core/TextInput';
-import {Token as AstryxToken, type TokenColor} from '@astryxdesign/core/Token';
 
 export type StatusTone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral';
 
@@ -132,6 +133,28 @@ export function IconButton({
       className={className || undefined}
       style={style}
       aria-expanded={ariaExpanded}
+    />
+  );
+}
+
+export function RowActionsMenu({
+  label,
+  items,
+  disabled = false,
+}: {
+  label: string;
+  items: DropdownMenuOption[];
+  disabled?: boolean;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <AstryxMoreMenu
+      label={label}
+      items={items}
+      variant="ghost"
+      size="sm"
+      alignment="end"
+      isDisabled={disabled}
     />
   );
 }
@@ -303,12 +326,12 @@ export function CheckboxField({
   );
 }
 
-const tokenColorMap: Record<StatusTone, TokenColor> = {
-  ok: 'green',
-  warn: 'yellow',
-  danger: 'red',
-  info: 'blue',
-  neutral: 'gray',
+const dotVariantMap: Record<StatusTone, StatusDotVariant> = {
+  ok: 'success',
+  warn: 'warning',
+  danger: 'error',
+  info: 'accent',
+  neutral: 'neutral',
 };
 
 export function StatusPill({
@@ -320,18 +343,11 @@ export function StatusPill({
   label: string;
   icon?: ReactNode;
 }) {
-  const DefaultIcon =
-    tone === 'ok' ? CheckCircle2 :
-    tone === 'warn' ? AlertTriangle :
-    tone === 'danger' ? ShieldAlert :
-    Info;
   return (
-    <AstryxToken
-      size="sm"
-      color={tokenColorMap[tone]}
-      icon={icon ?? <DefaultIcon size={13} strokeWidth={2} aria-hidden="true" />}
-      label={label}
-    />
+    <span className="tp-status-inline" data-tone={tone}>
+      {icon ?? <StatusDot variant={dotVariantMap[tone]} label={label} aria-hidden="true" />}
+      <span className="tp-status-label">{label}</span>
+    </span>
   );
 }
 
@@ -499,13 +515,52 @@ export function stateTone(state: string): StatusTone {
   if (['ACTIVE', 'ACTIVE_HEALTHY', 'ENABLED_ACTIVE', 'CREATED_ACTIVE', 'VERIFIED', 'OFFICIAL', 'EXACT', 'APPROVED', 'OK', 'HEALTHY'].includes(normalized)) {
     return 'ok';
   }
-  if (['THROTTLED_COOLDOWN', 'DRAINING_MAINTENANCE', 'STAGED', 'PENDING', 'PENDING_APPROVAL', 'ROTATING_GRACE', 'ESTIMATED', 'TESTED', 'UNVERIFIED_EXTERNAL', 'DRIFT_LOCKED'].includes(normalized)) {
+  if (['THROTTLED_COOLDOWN', 'DRAINING_MAINTENANCE', 'STAGED', 'PENDING', 'PENDING_APPROVAL', 'ROTATING_GRACE', 'ESTIMATED', 'TESTED', 'UNVERIFIED_EXTERNAL', 'DRIFT_LOCKED', 'DEGRADED'].includes(normalized)) {
     return 'warn';
   }
-  if (['CIRCUIT_OPEN_UNHEALTHY', 'DISABLED', 'REVOKED', 'QUARANTINED', 'FAILED', 'REJECTED', 'UNMETERED_FLAGGED', 'FAIL_CLOSED'].includes(normalized)) {
+  if (['CIRCUIT_OPEN_UNHEALTHY', 'REVOKED', 'QUARANTINED', 'FAILED', 'REJECTED', 'UNMETERED_FLAGGED', 'FAIL_CLOSED'].includes(normalized)) {
     return 'danger';
   }
+  if (['DISABLED', 'PROVISIONED', 'DECLARED', 'DRAFT', 'INACTIVE'].includes(normalized)) {
+    return 'neutral';
+  }
   return 'info';
+}
+
+const operationalStateLabels: Record<string, string> = {
+  ACTIVE_HEALTHY: 'Healthy',
+  CIRCUIT_OPEN_UNHEALTHY: 'Circuit open',
+  THROTTLED_COOLDOWN: 'Cooldown',
+  DRAINING_MAINTENANCE: 'Draining',
+  HALF_OPEN_PROBING: 'Probing',
+  DISABLED: 'Disabled',
+  PROVISIONED: 'Provisioned',
+  CREATED_ACTIVE: 'Active',
+  ENABLED_ACTIVE: 'Active',
+  ROTATING_GRACE: 'Rotating',
+  REVOKED: 'Revoked',
+  ACTIVE: 'Active',
+  DEGRADED: 'Degraded',
+  EXACT: 'Exact',
+  ESTIMATED: 'Estimated',
+  UNMETERED_FLAGGED: 'Unmetered',
+  VERIFIED: 'Verified',
+  TESTED: 'Tested',
+  DECLARED: 'Declared',
+  OFFICIAL: 'Official',
+  UNVERIFIED_EXTERNAL: 'Unverified',
+  PENDING_APPROVAL: 'Pending approval',
+  DRIFT_LOCKED: 'Drift locked',
+  QUARANTINED: 'Quarantined',
+  FAIL_CLOSED: 'Fail closed',
+  OK: 'OK',
+  FAILED: 'Failed',
+};
+
+export function formatOperationalState(raw: string): string {
+  const key = raw.toUpperCase();
+  if (key in operationalStateLabels) return operationalStateLabels[key];
+  return formatLabel(raw);
 }
 
 export function formatLabel(raw: string): string {

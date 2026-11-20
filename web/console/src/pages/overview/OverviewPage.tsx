@@ -5,7 +5,7 @@ import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {getOverviewSummary, listActiveAlerts, listUnhealthyDeployments} from '../../api/client';
 import type {components} from '../../api/generated';
 import {useRouter} from '../../router/RouterContext';
-import {Banner, Button, EmptyState, MetricStrip, SectionHeader, StatusPill, formatMicroUSD} from '../../ui/primitives';
+import {Banner, Button, EmptyState, MetricStrip, SectionHeader, StatusPill, formatMicroUSD, formatOperationalState} from '../../ui/primitives';
 
 type WindowRange = components['schemas']['OverviewSummaryResponse']['window'];
 type Summary = components['schemas']['OverviewSummaryResponse'];
@@ -140,7 +140,7 @@ export function OverviewPage() {
                   <span className="mono" style={{fontWeight: 600}}>{dep.upstream_model_name}</span>
                   <span className="tp-muted">Region {dep.data_region} · Connection {dep.connection_id}</span>
                 </div>
-                <StatusPill tone="danger" label={dep.state.replaceAll('_', ' ')} />
+                <StatusPill tone="danger" label={formatOperationalState(dep.state)} />
               </li>
             ))}
           </ul>
