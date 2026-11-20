@@ -2,9 +2,9 @@
 
 > **Business Analysis Document (Phase ASTRA A02 — `DRAFT / UNLOCKED SCOPE`)**
 > - **Version:** `0.1.0-a02-draft`
-> - **Last Updated:** `2026-11-11`
+> - **Last Updated:** `2026-11-20`
 > - **Authored By:** Lead Business Analyst & Product Architect
-> - **Governance Status:** **Unlocked-scope draft (`DRAFT`)** because **Gate G1** in [`docs/governance/decisions.md`](../governance/decisions.md) is currently in `READY_FOR_REVIEW` status (awaiting formal Product Owner approval). Core definitions originating from the foundational vision retain the `CONFIRMED_BY_OWNER` tag; detailed domain-modeling concepts carry the `PROPOSED` tag.
+> - **Governance Status:** Gate G1 was approved under `DEC-009`. This glossary remains a working draft for detailed domain-modeling concepts tagged `PROPOSED`; foundational terminology retains the `CONFIRMED_BY_OWNER` tag. Current batch readiness and execution status are tracked in [`execution-readiness.md`](../reviews/execution-readiness.md).
 
 ---
 

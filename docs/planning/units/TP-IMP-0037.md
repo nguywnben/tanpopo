@@ -4,12 +4,19 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0037` |
 | **Milestone / Epic** | `M3` (`v0.2 MCP Governance & Authorized OAuth 2.1`) · `EP-07` |
-| **Status** | `READY` *(Opened under `DEC-074` after verifying `TP-IMP-0023` and `TP-IMP-0036` are DONE on `origin/main`; `GAP-01, 08` are CLOSED and `CR-08, 09` are approved. Review corrections are recorded in `DEC-079`.)* |
+| **Status** | `DONE` *(Accepted under `DEC-083`; PR #20 merged at `95c6c2e2381911d8097230283ef766510ccb4151`; post-merge CI `44674333547` passed all four required checks.)* |
 | **Size** | `L` (`internal/ingress/mcp/firewall/*`, `internal/ingress/mcp/approval/*`, `internal/webhook/*`, `db/migrations/sqlite/0019_approvals_webhooks.sql` per `DEC-075` and `0020_mcp_approval_credential_audience.sql` per `DEC-076`; the earlier `0013` slot is occupied by traces/blobs) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Duplicate side-effect prevention `FMEA-02`, 5-tuple parameter-hash-bound HITL approvals & SSRF-guarded HMAC Webhooks)* |
 | **Technical Owner** | `Principal Security / Agent Governance Engineer` |
 
 ---
+
+## Acceptance Record
+
+- **GPT-6 Luna** implemented and accepted this unit under `DEC-072` / `DEC-083`.
+- Implementation PR [#20](https://github.com/nguywnben/tanpopo/pull/20), reviewed head `975e43720caad648f34445abe95e8db14f53c637`, merged to `origin/main` at `95c6c2e2381911d8097230283ef766510ccb4151`.
+- PR CI [`44673011997`](https://github.com/nguywnben/tanpopo/actions/runs/44673011997) and post-merge CI [`44674333547`](https://github.com/nguywnben/tanpopo/actions/runs/44674333547) passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows. The Windows job passed five repeated child-alive database removal checks.
+- Final strong review: **Dewey** (**code-reviewer**) APPROVE; **Maxwell** (**security-auditor**) PASS.
 
 ## 1. Intent
 Complete execution-safety controls for MCP tool invocations alongside the outbound event notification subsystem (`TP-FR-0403`, `TP-FR-0404`, `TP-FR-0803`, `CR-08`, `CR-09`):

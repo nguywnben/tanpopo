@@ -1,7 +1,7 @@
 # Tanpopo Documentation & Context Hub (`English-First Canonical Edition`)
 
-> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | TP-IMP-0001..0036: DONE | 0037: READY | 0038..0047: BLOCKED`)**
-> - **Current frontier:** Units `0001`..`0036` are DONE. Unit 36 is verified at main SHA `a3a0ef1b94d4986d7bac0d601566d8f249f87013`; post-merge Actions run `44494912921` passed Stage 0 and Stage 1 Ubuntu/macOS/Windows. Under `DEC-072`, GPT-6 Luna executes Units `0036`..`0038` sequentially; Unit 37 is READY under `DEC-074` and Unit 38 opens only after 37 is DONE on main with green acceptance CI. Use persistent `develop` → per-unit PR, independent review, four checks, merge, and post-merge verification. No tags/releases (`GATE-REL-07`).
+> **Repository Governance & Readiness Status (`HANDOFF_VERDICT: GO | TP-IMP-0001..0037: DONE | 0038..0047: BLOCKED`)**
+> - **Current frontier:** Units `0001`..`0037` are DONE. Unit 37 is accepted under `DEC-083` at main SHA `95c6c2e2381911d8097230283ef766510ccb4151`; post-merge Actions run `44674333547` passed all four required jobs. Under `DEC-072`, GPT-6 Luna executes Units `0036`..`0038` sequentially; Unit 38 remains blocked until its DoR is verified and it is opened by a separate decision. Use persistent `develop` → per-unit PR, independent review, four checks, merge, and post-merge verification. No tags/releases (`GATE-REL-07`).
 > - **Gate G0 (ASTRA A00 — Context Intake & Baseline):** `COMPLETED`
 > - **Gate G1 (ASTRA A01 — Product Discovery):** **`APPROVED` *(`CONFIRMED_BY_OWNER` — `DEC-009`)* **
 > - **Baseline A02 (ASTRA A02 — Business Analysis):** **`APPROVED` *(`SM-01..09` & `BA-OQ-001..05` closed in `TP-IMP-0001`)* **
@@ -9,7 +9,7 @@
 > - **Baseline A04 (ASTRA A04 — Extension Platform & Connectivity Specs):** **`APPROVED_WITH_CONDITIONS`** *(`runtime.proto` & `POC-01/02` verified locally in `TP-IMP-0002, 0004`; `COND-PO-01, 04, 05`).*
 > - **Gate G3 (ASTRA A05–A07 — Architecture, UX/Ops, Security, Reliability & Release Gates):** **`APPROVED_WITH_CONDITIONS`** *(`ADR-0001..0006` `ACCEPTED`, `openapi/*.yaml` & `sqlite_schema.sql` verified locally, `postgres_schema.sql` static parity checked with live PG 16 DDL gated in `TP-IMP-0039`, `SPIKE-01..04` documented in [`spike-results.md`](./architecture/spike-results.md); bound to `COND-PO-01..05`).*
 > - **Audit Gate A08 (ASTRA A08 — Independent Specification Completeness Audit):** **`REMEDIATED_IN_M0` *(`13 / 13` Gaps Closed)*** — See [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md).
-> - **Gate G4 & Engineering Handoff (`DEC-009`..`DEC-074`, `DEC-033 REVOKED_BY_OWNER`):** **`APPROVED` | `DELIVERY HANDOFF VERDICT = GO`** — Units `0001`..`0036` are DONE; `0037` is READY under `DEC-074`; `0038`..`0047` remain blocked behind sequential dependencies and review gates.
+> - **Gate G4 & Engineering Handoff (`DEC-009`..`DEC-083`, `DEC-033 REVOKED_BY_OWNER`):** **`APPROVED` | `DELIVERY HANDOFF VERDICT = GO`** — Units `0001`..`0037` are DONE under `DEC-083`; Unit 37 main SHA `95c6c2e2381911d8097230283ef766510ccb4151` has green post-merge CI `44674333547`; `0038`..`0047` remain blocked behind sequential dependencies and review gates.
 
 ---
 
@@ -21,17 +21,17 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
-| **0A** | [`docs/governance/execution-baseline.md`](./governance/execution-baseline.md) | **`EXEC-BL-001-APPROVED` (`HANDOFF: GO` · `TP-IMP-0005..0008: DONE` · `READY: TP-IMP-0009, 0010`):** Mandatory cold-start entrypoint (`Zero Prior Chat Context Required`); locks the global technical dictionary, source-of-truth precedence, post-handoff verification conditions (`COND-PO-01..05`), `CR` protocol, and 7-part completion report contract. | **Read first in every new engineering/agent session.** |
+| **0A** | [`docs/governance/execution-baseline.md`](./governance/execution-baseline.md) | **`EXEC-BL-001-APPROVED` (`HANDOFF: GO` · `TP-IMP-0001..0037: DONE` · `READY: none`):** Mandatory cold-start entrypoint (`Zero Prior Chat Context Required`); locks the global technical dictionary, source-of-truth precedence, post-handoff verification conditions (`COND-PO-01..05`), `CR` protocol, and 7-part completion report contract. | **Read first in every new engineering/agent session.** |
 | **0B** | [`docs/governance/owner-approval-sheet.md`](./governance/owner-approval-sheet.md) | **`GOV-OAS-01` (`STAGES 1 & 2 + CR-12 Option A APPROVED`):** Consolidated Product Owner Approval Sheet recording Track A (`18` items), Track B (`15` items + `COND-PO-01..05`), Stage 1 `M0` (`DEC-009`), Stage 2 Handoff (`DEC-010`), `TP-IMP-0005..0008` (`DEC-011`..`018`), and `CR-11`/`CR-12`; see [`DEC-050`](./governance/decisions.md) for later CR-13 Option A approval. | Reference for Product Owner gate rulings and conditions. |
 | **0C** | [`docs/reviews/execution-readiness.md`](./reviews/execution-readiness.md) | **`REV-RDY-01` (`STAGE 2: GO`):** Calibrated Delivery Readiness Audit distinguishing local/CI `M0`–`Wave 1.3` verification from remaining `UNVERIFIED` gates (`PostgreSQL 16`, macOS/Windows OS isolation, Stage 2–4 CI, full Gateway SLOs). | Auditing `Gate G4` evidence boundaries and `TP-IMP-0009`/`0010` dispatch readiness. |
 | **0D** | [`docs/reviews/integrated-audit.md`](./reviews/integrated-audit.md) | **`REV-AUD-01` (`Historical A08`):** Independent A08 horizontal + 8 vertical-slice adversarial audit (`AUD-001`..`030`) whose blocking items were closed in `M0`. | Historical audit provenance for `CR-01`..`10`. |
 | **0E** | [`docs/reviews/unresolved-gaps.md`](./reviews/unresolved-gaps.md) | **`REV-GAP-01` (`13 / 13 M0 Gaps CLOSED · CR-11..CR-13 IMPLEMENTED_AND_VERIFIED`):** Change Requests **`CR-01`..`CR-13`** and `M0`/`M1`/`M2` closure evidence. | Verifying how each audit/implementation gap was resolved. |
 
-### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `36 DONE, 1 READY, 0 READY_FOR_REVIEW, 10 BLOCKED`)
+### 1.0B. Multi-Tier Implementation Plan & 47 Execution Units (`docs/planning/` — `37 DONE, 0 READY, 0 READY_FOR_REVIEW, 10 BLOCKED`)
 
 | Order | Path | Core Content | When to Read |
 |---|---|---|---|
-| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all 47 units: `0001..0036 = DONE`, `0037 = READY` under `DEC-074`, `0038..0047 = BLOCKED`; includes review tiers and unit specs. | When checking readiness, dependencies, or locating a `UNIT_ID`. |
+| **0F** | [`docs/planning/implementation-index.md`](./planning/implementation-index.md) | **`PLAN-IDX-01`:** Master table of all 47 units: `0001..0037 = DONE` under `DEC-083`, `0038..0047 = BLOCKED`; includes review tiers and unit specs. | When checking readiness, dependencies, or locating a `UNIT_ID`. |
 | **0G** | [`docs/planning/roadmap.md`](./planning/roadmap.md) & [`docs/planning/milestone-map.md`](./planning/milestone-map.md) | **`PLAN-RM-01` & `PLAN-MS-01`:** 9 dependency-driven phases (`EP-00`..`09`), program blockers, trunk/worktree/canary rollout strategy, capacity & uncertainty ranges, and milestone gates `GATE-M0`..`GATE-M5`. | Program coordination, milestone gate checks, and capacity planning. |
 | **0H** | [`docs/planning/dependency-graph.md`](./planning/dependency-graph.md) | **`PLAN-DAG-01`:** Verified acyclic 47-node Mermaid DAG ($u < v$), critical path, 4 parallel `git worktree` expansion points, conditional First 5 Units, and hermetic cross-OS build/test procedures. | Parallel worktree scheduling and build/test environment setup. |
 
@@ -159,7 +159,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 | `docs/security/*` (`3` files) | **Security & Tenant Isolation** | `threat-model.md`, `plugin-sandbox-and-supply-chain.md`, `secrets-and-tenant-isolation.md`. |
 | `docs/quality/*` (`4` files) | **QA, Hermetic CI, SLOs & Gates** | `contract-test-matrix.md`, `test-strategy.md`, `nonfunctional-slo.md`, `release-readiness.md`. |
 | `docs/reviews/*` (`3` files) | **Independent Audits & Readiness** | `integrated-audit.md` (`Historical A08`), `unresolved-gaps.md` (`13/13 M0 CLOSED`, `CR-11..CR-13 IMPLEMENTED_AND_VERIFIED`), `execution-readiness.md` (`Stage 2: GO`). |
-| `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and unit specs (`0001..0036 = DONE`, `0037 = READY`, `0038..0047 = BLOCKED`). |
+| `docs/planning/*` (`51` files) | **Implementation Plan & Units** | `roadmap.md`, `milestone-map.md`, `dependency-graph.md`, `implementation-index.md`, and unit specs (`0001..0037 = DONE`, `0038..0047 = BLOCKED`). |
 | `buf.yaml`, `proto/`, `openapi/`, `db/spec-check/`, `tools/spikes/` | **`M0` Contracts & Isolated Spikes** | Machine-verified `runtime.proto`, `dataplane-v1.yaml`, `admin-v1.yaml`, `sqlite_schema.sql` (live), `postgres_schema.sql` (static parity), and pure-Go `SPIKE-01..04`. |
 
 ---
@@ -176,7 +176,7 @@ Every fresh session MUST begin with the Governance, Readiness, and Execution Bas
 
 ---
 
-## 4. Current Git Posture (`HANDOFF = GO | TP-IMP-0005..0008 = DONE | READY = TP-IMP-0009, 0010`)
+## 4. Current Git Posture (`HANDOFF = GO | TP-IMP-0001..0037 = DONE | READY = none`)
 
-- **Active Branch:** `main` (tracked against `origin/main`).
+- **Active Delivery Branch:** Persistent `develop` (tracked against `origin/develop`) for the DEC-072 batch; governance acceptance PR #21 is in flight to `main`.
 - **Official Tanpopo Artifacts:** `111` English Markdown files in `docs/`, root [`README.md`](../README.md), [`AGENTS.md`](../AGENTS.md), `buf.yaml`, `proto/`, `openapi/`, `db/spec-check/`, and isolated `tools/spikes/` — **zero modifications to `src/*`, `package.json`, `package-lock.json`, `astryx-themes.js`, or third-party `.agents/*` files prior to `TP-IMP-0005`**.

@@ -1,8 +1,8 @@
 # Assumptions, Working Hypotheses & Open Repository Issues — Tanpopo
 
 > **Canonical Assumptions & Issues Log — Updated Through Pre-Build Closure & A10 Readiness Audit**
-> - **Last Updated:** `2026-11-14`
-> - **Current Gate Status:** **Gate G1, Gate G2, Gate G3 & Gate G4: `READY_FOR_REVIEW / BLOCKED`** | **Audit A08: `FAIL` ([`unresolved-gaps.md`](../reviews/unresolved-gaps.md))** | **A10 Delivery Handoff: `NO_GO` ([`execution-readiness.md`](../reviews/execution-readiness.md), [`owner-approval-sheet.md`](./owner-approval-sheet.md))**
+> - **Last Updated:** `2026-11-20`
+> - **Current Gate Status:** **Gate G1 & G2: `APPROVED`; Gate G3 and Gate G4: `APPROVED_WITH_CONDITIONS` / `APPROVED (HANDOFF: GO)`** under `DEC-009`, `DEC-010`, and `DEC-083` | **Audit A08: `REMEDIATED_IN_M0` (`13/13` gaps closed)** ([`unresolved-gaps.md`](../reviews/unresolved-gaps.md)) | **A10 Delivery Handoff: `GO`; Units `0001`..`0037` are DONE, `0038`..`0047` remain blocked pending sequential DoR** ([`execution-readiness.md`](../reviews/execution-readiness.md), [`owner-approval-sheet.md`](./owner-approval-sheet.md))
 > - **Purpose:** Maintain a transparent boundary between **unvalidated working hypotheses (`ASSUMED`)** and **verified repository facts (`VERIFIED_IN_REPO` / `CONFIRMED_BY_OWNER`)**, linking every hypothesis to time-boxed PoC protocols (`SPIKE-01`..`04` in [`system-design.md`](../architecture/system-design.md)), ADRs (`ADR-0001`..`0006`), A07 verification suites (`SPEC-SEC-*`, `SPEC-QA-*`), and concrete repository discrepancies (`ISS-001`..`007`).
 
 ---
