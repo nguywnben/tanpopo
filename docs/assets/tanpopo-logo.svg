@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-label="Tanpopo Logo">
+  <rect width="512" height="512" fill="#141417"/>
+  <!-- Central resilient gateway hub -->
+  <circle cx="242" cy="268" r="44" fill="#ffffff"/>
+  <!-- 5 anchored dandelion spokes (60-degree architectural intervals) -->
+  <g stroke="#ffffff" stroke-width="26" stroke-linecap="round">
+    <line x1="242" y1="196" x2="242" y2="136"/>
+    <line x1="179.6" y1="232" x2="127.7" y2="202"/>
+    <line x1="179.6" y1="304" x2="127.7" y2="334"/>
+    <line x1="242" y1="340" x2="242" y2="400"/>
+    <line x1="304.4" y1="304" x2="356.3" y2="334"/>
+  </g>
+  <!-- Anchored pappus seed tips -->
+  <g fill="#a1a1aa">
+    <circle cx="242" cy="96" r="18"/>
+    <circle cx="93" cy="182" r="18"/>
+    <circle cx="93" cy="354" r="18"/>
+    <circle cx="242" cy="440" r="18"/>
+    <circle cx="391" cy="354" r="18"/>
+  </g>
+  <!-- 1 detached drifting dandelion seed at upper-right (outbound route / extension dispersion) -->
+  <line x1="334" y1="215" x2="376" y2="190.8" stroke="#a1a1aa" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="412" cy="170" r="24" fill="#ffffff"/>
+</svg>

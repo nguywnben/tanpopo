@@ -235,7 +235,7 @@ export function ConsoleShell() {
       <aside className="tp-rail" data-open={railOpen ? 'true' : 'false'} aria-label="Tanpopo console navigation">
         <div className="tp-rail-header">
           <Link href="/overview" className="tp-brand">
-            <TanpopoMark size={20} />
+            <TanpopoMark size={22} />
             <span>Tanpopo</span>
           </Link>
           <IconButton label="Close navigation" className="tp-mobile-only" onClick={() => setRailOpen(false)}>
