@@ -595,6 +595,9 @@ func (d *Dispatcher) worker(ctx context.Context) {
 		default:
 		}
 		d.dispatchOutbox(ctx)
+		if ctx.Err() != nil {
+			return
+		}
 		item, err := d.claim(ctx)
 		if err == nil && item != nil {
 			d.deliver(ctx, *item)
@@ -611,14 +614,31 @@ func (d *Dispatcher) worker(ctx context.Context) {
 // claim atomically advances the queue lease and attempt count. Expired leases are
 // eligible again after process loss, so the persistent queue remains recoverable.
 func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
+	if ctx.Err() != nil {
+		return nil, nil
+	}
 	unlock := d.lockDatabase()
 	defer unlock()
+	// Do not let runtime shutdown cancel an in-flight SQLite UPDATE ... RETURNING.
+	// modernc SQLite may leave that prepared statement alive when cancellation races
+	// row delivery, keeping the database file locked after the pool closes. Complete
+	// the bounded claim operation, then roll it back if shutdown began before commit.
+	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Limits.RequestTimeout)
+	defer cancel()
+	tx, err := d.db.BeginTx(claimCtx, nil)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
 	now := d.cfg.Now().UnixMilli()
 	lease := now + (d.cfg.Limits.RequestTimeout + d.cfg.Limits.LeaseSafety).Milliseconds()
-	_, _ = d.db.ExecContext(ctx, d.bind(`UPDATE webhook_deliveries SET status = ?, last_error = ?, terminal_at_ms = ?
+	_, _ = tx.ExecContext(claimCtx, d.bind(`UPDATE webhook_deliveries SET status = ?, last_error = ?, terminal_at_ms = ?
 		WHERE attempt_count >= ? AND status IN (?, ?) AND next_attempt_at_ms <= ?`),
 		statusDead, "attempt limit exhausted", now, d.cfg.Limits.MaxAttempts, statusPending, statusRetry, now)
-	row := d.db.QueryRowContext(ctx, d.bind(`UPDATE webhook_deliveries SET attempt_count = attempt_count + 1, next_attempt_at_ms = ?
+	row := tx.QueryRowContext(claimCtx, d.bind(`UPDATE webhook_deliveries SET attempt_count = attempt_count + 1, next_attempt_at_ms = ?
 		WHERE id = (SELECT q.id FROM webhook_deliveries q JOIN webhook_subscriptions s
 		ON s.org_id=q.org_id AND s.id=q.subscription_id WHERE s.enabled = ? AND q.status IN (?, ?)
 		AND q.attempt_count < ? AND q.next_attempt_at_ms <= ? ORDER BY q.next_attempt_at_ms, q.created_at_ms, q.id LIMIT 1)
@@ -626,12 +646,18 @@ func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
 		lease, true, statusPending, statusRetry, d.cfg.Limits.MaxAttempts, now, statusPending, statusRetry, now)
 	var item delivery
 	if err := row.Scan(&item.id, &item.orgID, &item.subscriptionID, &item.eventID, &item.eventType, &item.payload, &item.attempt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) || ctx.Err() != nil {
+		if ctx.Err() != nil {
+			return nil, nil
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
 			return nil, nil
 		}
 		return nil, err
 	}
-	err := d.db.QueryRowContext(ctx, d.bind(`SELECT s.target_url, s.signing_secret_credential_id, s.target_url_credential_id, s.allow_private_ip, s.allowed_cidrs_json,
+	err = tx.QueryRowContext(claimCtx, d.bind(`SELECT s.target_url, s.signing_secret_credential_id, s.target_url_credential_id, s.allow_private_ip, s.allowed_cidrs_json,
 		COALESCE(s.project_id,''), COALESCE(c.bound_audience,''), COALESCE(t.bound_audience,'')
 		FROM webhook_subscriptions s JOIN secret_credentials c ON c.org_id=s.org_id AND c.id=s.signing_secret_credential_id
 		JOIN secret_credentials t ON t.org_id=s.org_id AND t.id=s.target_url_credential_id
@@ -639,8 +665,23 @@ func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
 		AND (c.owner_project_id=s.project_id OR (c.owner_project_id IS NULL AND s.project_id IS NULL))
 		AND (t.owner_project_id=s.project_id OR (t.owner_project_id IS NULL AND s.project_id IS NULL))`), item.orgID, item.subscriptionID, true).Scan(&item.target, &item.credential, &item.targetCredential, &item.allowPrivate, &item.allowedCIDRs, &item.projectID, &item.boundAudience, &item.targetAudience)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil
+		}
+		if commitErr := tx.Commit(); commitErr != nil {
+			return nil, commitErr
+		}
 		d.fail(ctx, item, "subscription unavailable", 0)
 		return nil, nil
+	}
+	if ctx.Err() != nil {
+		return nil, nil
+	}
+	if err := tx.Commit(); err != nil {
+		if ctx.Err() != nil {
+			return nil, nil
+		}
+		return nil, err
 	}
 	return &item, nil
 }

@@ -265,6 +265,34 @@ func TestPostgresDispatcherDiscardsConnectionAfterRoleVerificationFailure(t *tes
 	}
 }
 
+func TestCanceledClaimRollsBackAttemptLease(t *testing.T) {
+	db := openWebhookDB(t)
+	insertSubscription(t, db, "https://hooks.example.test/path", false, `[]`)
+	d := testDispatcher(t, db, resolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+		return nil, nil
+	}), 3)
+	if _, err := d.Enqueue(t.Context(), Event{ID: "cancelled-claim", OrgID: "org_test", Type: "budget.threshold", Payload: json.RawMessage(`{"ok":true}`)}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	d.cfg.Now = func() time.Time {
+		cancel()
+		return time.Now()
+	}
+	item, err := d.claim(ctx)
+	if err != nil || item != nil {
+		t.Fatalf("claim during shutdown = (%v, %v), want (nil, nil)", item, err)
+	}
+	var attempts int
+	var status string
+	if err := db.QueryRow(`SELECT attempt_count, status FROM webhook_deliveries WHERE event_id='cancelled-claim'`).Scan(&attempts, &status); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 0 || status != statusPending {
+		t.Fatalf("shutdown consumed a delivery attempt: attempts=%d status=%s", attempts, status)
+	}
+}
+
 func TestFanoutChecksRemainingCapacityForAllSubscriptions(t *testing.T) {
 	db := openWebhookDB(t)
 	insertSubscription(t, db, "https://hooks.example.test/path", false, `[]`)

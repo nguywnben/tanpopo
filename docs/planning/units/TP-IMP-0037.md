@@ -44,6 +44,7 @@ Complete execution-safety controls for MCP tool invocations alongside the outbou
 - **`AC-2` (`CT-22` Sync & Async JSON-RPC Approval Flow):** End-to-end verification covers both `< 60s` synchronous hold approval and timeout fallback to an asynchronous JSON-RPC approval token, receiving a valid HMAC-signed `Webhook` notification, approving via the Admin API, and replaying the exact call successfully once.
 - **`NEG-1` (`CT-22` Parameter or Key Bait-and-Switch):** Requesting approval with `{"env": "dev"}` and subsequently replaying the approved token with `{"env": "prod"}` (or under a different `virtual_key_id`) is hard-rejected with **`parameter_hash_mismatch`** and logged as a security audit event.
 - **`NEG-2` (`Webhook SSRF`):** Registering a Webhook target pointing to `http://169.254.169.254/...` or `http://127.0.0.1:6379` is hard-blocked by `SSRFGuardDialer`.
+- **`AC-3` (Runtime SQLite Shutdown):** If shutdown begins while the webhook worker is claiming a delivery, the claim statement closes before the SQLite pool; a canceled pre-commit claim rolls back without consuming an attempt, and Windows can remove `tanpopo.db` while the child process remains alive in all five repeated cleanup runs.
 
 ## 6. Test Commands & Required Evidence
 - Pure Go (`CGO_ENABLED=0`): `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -v ./internal/ingress/mcp/... ./internal/webhook/...` *(PowerShell: `$env:CGO_ENABLED='0'; $env:TANPOPO_TEST_HERMETIC='1'; go test -v ./internal/ingress/mcp/... ./internal/webhook/...`)*
@@ -58,4 +59,4 @@ Complete execution-safety controls for MCP tool invocations alongside the outbou
 
 ## 8. Definition of Ready (DoR) & Definition of Done (DoD)
 - **DoR:** `TP-IMP-0001` & `TP-IMP-0002` (locking `SM-06` decoupled from `SM-09` & `CR-08` JSON-RPC contracts), `TP-IMP-0023`, and `TP-IMP-0036` are complete.
-- **DoD:** `CT-22`, `CT-36` (`MCP 2025-03-26` Streamable HTTP, public MCP/SSE, signed approval webhook, Admin API decision, and exact replay), `FMEA-02`, and Webhook HMAC/SSRF suites passing under `-race`, with `REQUIRES_STRONG_REVIEW` sign-off achieved. The integration fixture exercises approval and replay through the official MCP SDK; scripted protocol fixtures are not evidence of compatibility with untested vendor client versions.
+- **DoD:** `CT-22`, `CT-36` (`MCP 2025-03-26` Streamable HTTP, public MCP/SSE, signed approval webhook, Admin API decision, and exact replay), `FMEA-02`, Webhook HMAC/SSRF suites, and `AC-3` runtime shutdown cleanup passing under their required platform/race gates, with `REQUIRES_STRONG_REVIEW` sign-off achieved. The integration fixture exercises approval and replay through the official MCP SDK; scripted protocol fixtures are not evidence of compatibility with untested vendor client versions.
