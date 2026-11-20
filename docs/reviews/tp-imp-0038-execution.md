@@ -10,7 +10,7 @@
 
 ## Implementation and review
 
-- Base SHA: `bb0fcd295c0e6191578211c15548d0ebd068b71d`; fetched `origin/develop` is at the same SHA.
+- Base SHA: `bb0fcd295c0e6191578211c15548d0ebd068b71d`. Implementation commit `b383e49217de8a71b0631437d1b77e68af0120f3` is pushed to `origin/develop`.
 - Implementer: **GPT-6 Luna**. Independent reviewer: **Noether** (`code-reviewer`), final verdict APPROVE. Acceptance owner: **GPT-6 Luna**, pending required PR and post-merge CI.
 - `POST /admin/v1/playground/sessions` now creates an owner-bound ephemeral key, applies TTL and budget limits, enforces a `TOTAL_LIFETIME` virtual-key ledger through the exact key expiry (including month rollover), and revokes the key if ledger setup fails.
 - Route Explain requires a data-residency selection, constrains it to inherited policy when present, and includes it in the dry-run request.
@@ -32,7 +32,7 @@
 
 ## GitHub checkpoint and remaining release gate
 
-- No Unit 38 implementation PR exists yet. Unit 38 is not DONE.
-- Fetching public `origin/main` and `origin/develop` succeeded; both are based at `bb0fcd295c0e6191578211c15548d0ebd068b71d`.
-- Push/PR creation is blocked by missing write authentication: `GH_TOKEN` is rejected as invalid; with `GH_TOKEN` unset, `gh auth status` reports no login; no SSH authentication agent is available. Direct push and PR creation cannot be completed until the GitHub credential connection is restored.
-- After publishing the checkpoint to `develop`, open the Unit 38 PR to `main`, wait for the four required checks, merge under `DEC-060`, record acceptance, sync `develop`, and verify all four post-merge jobs on the exact main SHA. Do not open Unit 39 or create a tag/release.
+- No Unit 38 implementation PR exists yet. Public GitHub API inspection found no open PR; the compare page is [main...develop](https://github.com/nguywnben/tanpopo/compare/main...develop?expand=1). Unit 38 is not DONE.
+- Fetching public `origin/main` and `origin/develop` succeeded. Main remains `bb0fcd295c0e6191578211c15548d0ebd068b71d`; the tested implementation checkpoint is verified on `origin/develop` at `b383e49217de8a71b0631437d1b77e68af0120f3`.
+- Push succeeded, but PR creation is blocked by GitHub CLI authentication: `GH_TOKEN` is rejected as invalid, and `gh pr create` with `GH_TOKEN` unset reports no login. Restore the GitHub CLI credential in the Codex Cloud environment, then open the PR from the compare page or CLI.
+- After opening the PR, wait for the four required checks, merge under `DEC-060`, record acceptance, sync `develop`, and verify all four post-merge jobs on the exact main SHA. Do not open Unit 39 or create a tag/release.
