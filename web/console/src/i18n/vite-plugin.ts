@@ -233,6 +233,10 @@ export function extractLocaleKeys(root: string): string[] {
   return [...keys].sort();
 }
 
+export function isI18nSourceFile(file: string): boolean {
+  return file.replaceAll('\\', '/').includes('/i18n/');
+}
+
 export function i18nPlugin(): Plugin {
   const root = path.resolve(process.cwd());
   return {
@@ -262,7 +266,7 @@ export function i18nPlugin(): Plugin {
     },
     transform(source, id) {
       const file = id.split('?')[0];
-      if (!/\.tsx$/.test(file) || file.includes(`${path.sep}i18n${path.sep}`) || file.endsWith('.test.tsx')) return null;
+      if (!/\.tsx$/.test(file) || isI18nSourceFile(file) || file.endsWith('.test.tsx')) return null;
       const result = editsForFile(source, file, root, true);
       return result.code === source ? null : {code: result.code, map: null};
     },
