@@ -5,6 +5,7 @@ package http
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -187,4 +188,47 @@ func TestAdminMCPApprovalDecisions(t *testing.T) {
 	}
 	path = queue + "/" + expired.ID + "/decide"
 	expectAdminStatus(t, decide("reviewer", FormatETag(1)), 409, "approval_already_decided_or_expired")
+}
+
+func TestAdminMCPApprovalQueueBlocksDriftedSchema(t *testing.T) {
+	h := newPart2TestHarness(t, 20)
+	boot, _ := h.bootstrapOwner(t, "Approval Drift Org", "approval-drift-project")
+	ctx := t.Context()
+	key, err := h.vkeys.Create(ctx, mustVKeyCreateParams(boot.OrgID, boot.ProjectID, boot.EnvID, boot.OwnerPrincipalID, "approval-drift-key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.st.RawDB().ExecContext(ctx, `INSERT INTO mcp_servers(id,org_id,project_id,server_slug,display_name,transport_kind,endpoint_url,allow_private_ip,allowed_cidrs_json,pinning_mode,status,version,created_at_ms,updated_at_ms)
+		VALUES('mcp_drift_server',?,?, 'drift-server','Drift server','STREAMABLE_HTTP','https://mcp.example.test',0,'[]','STRICT_LOCK','ACTIVE',1,?,?)`, boot.OrgID, boot.ProjectID, h.fk.Now().UnixMilli(), h.fk.Now().UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.st.RawDB().ExecContext(ctx, `INSERT INTO mcp_tools(id,org_id,mcp_server_id,tool_name,side_effect_class,approved_schema_sha256,observed_schema_sha256,schema_drift_locked,tool_schema_json,version,created_at_ms,updated_at_ms)
+		VALUES('mcp_drift_tool',?,'mcp_drift_server','delete','destructive',?,?,1,'{}',1,?,?)`, boot.OrgID, strings.Repeat("a", 64), strings.Repeat("b", 64), h.fk.Now().UnixMilli(), h.fk.Now().UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := approval.NewStore(approval.Config{DB: h.st.RawDB(), Audit: h.auditLog, Now: h.fk.Now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := store.Create(ctx, approval.Binding{OrgID: boot.OrgID, ProjectID: boot.ProjectID, VirtualKeyID: key.Summary.ID, ServerSlug: "drift-server", ToolName: "delete", Arguments: json.RawMessage(`{"id":"doc-1"}`)}, "", h.fk.Now().Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewer, err := h.authSvc.CreatePrincipal(ctx, auth.CreatePrincipalParams{OrgID: &boot.OrgID, Kind: auth.PrincipalKindHumanLocal, EmailOrSub: "drift-reviewer@example.test", Password: "StrongReviewerPass#2026!"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.registerBearerToken("drift-reviewer", &rbac.Actor{PrincipalID: reviewer.ID, SessionOrgID: &boot.OrgID, CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings: []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleSecurityReviewer}}})
+	queue := h.doBearer(t, http.MethodGet, "/admin/v1/approvals?status=PENDING", "drift-reviewer", "", nil)
+	expectAdminStatus(t, queue, http.StatusOK, "")
+	var page paginatedListEnvelope[approvalResource]
+	mustDecodeJSON(t, queue.Body.Bytes(), &page)
+	if len(page.Data) != 1 || !page.Data[0].SchemaDriftLocked {
+		t.Fatalf("drift warning missing from approval queue: %+v", page.Data)
+	}
+	decision := h.doBearer(t, http.MethodPost, "/admin/v1/approvals/"+created.ID+"/decide", "drift-reviewer", FormatETag(1), map[string]any{"decision": "APPROVE", "expected_binding_hash": page.Data[0].Hash, "reason": "review drift"})
+	expectAdminStatus(t, decision, http.StatusConflict, "mcp_schema_drift_blocked")
 }

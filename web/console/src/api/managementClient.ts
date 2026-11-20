@@ -44,6 +44,65 @@ export async function deleteRoute(route: Route) {
   if (!result.response.ok) throw apiError(result.response, result.error);
 }
 
+export async function explainRouteDecision(payload: components['schemas']['RouteExplainRequest']) {
+  const result = await api.POST('/admin/v1/routes/explain', {body: payload});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function createPlaygroundSession(payload: components['schemas']['PlaygroundSessionCreateRequest']) {
+  const result = await api.POST('/admin/v1/playground/sessions', {body: payload});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function listMcpServers() {
+  const result = await api.GET('/admin/v1/mcp/servers', {params: {query: {limit: 100}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
+export async function registerMcpServer(payload: {project_id: string; slug: string; name: string; transport: 'streamable_http'; endpoint_url: string; allow_private_ip?: boolean}) {
+  const result = await api.POST('/admin/v1/mcp/servers', {body: payload});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function syncMcpServerTools(serverId: string) {
+  const result = await api.POST('/admin/v1/mcp/servers/{serverId}/sync-tools', {params: {path: {serverId}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function createMcpToolGrant(toolId: string, envId: string, virtualKeyId: string) {
+  const result = await api.POST('/admin/v1/mcp/tools/{toolId}/grants', {
+    params: {path: {toolId}}, body: {env_id: envId, virtual_key_id: virtualKeyId},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function listPendingApprovals() {
+  const result = await api.GET('/admin/v1/approvals', {params: {query: {status: 'PENDING', limit: 100}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
+export async function decideApproval(item: components['schemas']['ApprovalRequestResource'], decision: 'APPROVE' | 'REJECT', reason: string) {
+  const result = await api.POST('/admin/v1/approvals/{approvalId}/decide', {
+    params: {path: {approvalId: item.id}, header: {'If-Match': `"v${item.version}"`}},
+    body: {decision, expected_binding_hash: item.approval_binding_hash, reason},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function startConnectionOAuth(connectionId: string, payload: {flow: 'authorization_code_pkce' | 'device_code' | 'client_credentials'; authorization_endpoint?: string; token_endpoint: string; device_authorization_endpoint?: string; client_id: string; scopes?: string[]; resource: string}) {
+  const result = await api.POST('/admin/v1/connections/{connectionId}/oauth/start', {params: {path: {connectionId}}, body: payload});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
 export async function getEffectivePolicy(projectId?: string, environmentId?: string) {
   const result = await api.GET('/admin/v1/policies/effective', {params: {query: {project_id: projectId || undefined, env_id: environmentId || undefined}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);

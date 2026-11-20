@@ -7,8 +7,9 @@ import {Section} from '@astryxdesign/core/Section';
 import {Table} from '@astryxdesign/core/Table';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {VStack} from '@astryxdesign/core/Stack';
+import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {createConnection, createSecret, deleteConnection, listAllDeployments, listAllRoutes, listConnections, listProviderAdapters, listSecretMetadata, testConnection, updateConnection} from '../../api/catalogClient';
+import {startConnectionOAuth} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {StateToken} from '../catalog/StatusToken';
 
@@ -39,6 +40,12 @@ export function ConnectionsPage({roles = [], projectId}: {roles?: Role[]; projec
   const [deleteRoutes, setDeleteRoutes] = useState<string[]>([]);
   const [allowPrivateIp, setAllowPrivateIp] = useState(false);
   const [cidrs, setCidrs] = useState('');
+  const [oauthTarget, setOAuthTarget] = useState<Connection | null>(null);
+  const [oauthAuthorizationEndpoint, setOAuthAuthorizationEndpoint] = useState('');
+  const [oauthTokenEndpoint, setOAuthTokenEndpoint] = useState('');
+  const [oauthClientId, setOAuthClientId] = useState('');
+  const [oauthScopes, setOAuthScopes] = useState('');
+  const [oauthResource, setOAuthResource] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const mutable = canManage(roles);
@@ -51,6 +58,9 @@ export function ConnectionsPage({roles = [], projectId}: {roles?: Role[]; projec
     setAdapterId(current => current || initialAdapter?.id || '');
   }
   useEffect(() => { reload().catch(failure => setError(message(failure))); }, []);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('oauth') === 'connected') setNotice('OAuth authorization completed. Tokens were sealed in the write-only vault.');
+  }, []);
 
   async function sealSecret(event: FormEvent) {
     event.preventDefault(); setError(''); setNotice('');
@@ -81,6 +91,21 @@ export function ConnectionsPage({roles = [], projectId}: {roles?: Role[]; projec
     setError('');
     try { const result = await testConnection(connection.id); setNotice(result.valid ? `Connection verified in ${result.latency_ms} ms.` : result.sanitized_message ?? result.failure_code ?? 'Connection probe failed.'); }
     catch (failure) { setError(message(failure)); }
+  }
+
+  async function authorizeConnection(event: FormEvent) {
+    event.preventDefault();
+    if (!oauthTarget) return;
+    setError(''); setNotice('');
+    try {
+      const started = await startConnectionOAuth(oauthTarget.id, {
+        flow: 'authorization_code_pkce', authorization_endpoint: oauthAuthorizationEndpoint.trim(),
+        token_endpoint: oauthTokenEndpoint.trim(), client_id: oauthClientId.trim(),
+        scopes: oauthScopes.split(/[,\s]+/).map(scope => scope.trim()).filter(Boolean), resource: oauthResource.trim(),
+      });
+      if (!started.authorization_url) throw new Error('The OAuth broker did not return an authorization URL.');
+      window.location.assign(started.authorization_url);
+    } catch (failure) { setError(message(failure)); }
   }
 
   async function disable(connection: Connection) {
@@ -141,8 +166,20 @@ export function ConnectionsPage({roles = [], projectId}: {roles?: Role[]; projec
       {key: 'name', header: 'Connection'}, {key: 'adapter_id', header: 'Adapter'}, {key: 'billing_mode', header: 'Billing mode'},
       {key: 'data_region', header: 'Data region'}, {key: 'state', header: 'State', renderCell: row => <StateToken state={String(row.state)} />},
       {key: 'credentials', header: 'Credential metadata', renderCell: row => <Text>{Object.entries(row.secret_slot_fingerprints as Record<string, string>).map(([slot, fingerprint]) => `${slot}: ${fingerprint}`).join(', ') || 'No secret slots bound'}</Text>},
-      {key: 'actions', header: 'Actions', renderCell: row => <VStack gap={1}>{mutable ? <Button label="Test connection" variant="secondary" onClick={() => void probe(row as Connection)} /> : null}{mutable ? <Button label="Edit connection" variant="secondary" onClick={() => editConnection(row as Connection)} /> : null}{mutable && row.state !== 'DISABLED' ? <Button label="Disable" variant="secondary" onClick={() => void disable(row as Connection)} /> : null}{mutable ? <Button label="Delete connection" variant="secondary" onClick={() => void prepareDelete(row as Connection)} /> : null}</VStack>},
+      {key: 'actions', header: 'Actions', renderCell: row => { const connection = row as Connection; const supportsOAuth = adapters.find(adapter => adapter.id === connection.adapter_id)?.supported_auth_methods?.includes('oauth2_pkce'); return <VStack gap={1}>{mutable ? <Button label="Test connection" variant="secondary" onClick={() => void probe(connection)} /> : null}{mutable && supportsOAuth ? <Button label={`Authorize ${connection.name} with provider`} variant="secondary" onClick={() => setOAuthTarget(connection)} /> : null}{mutable ? <Button label="Edit connection" variant="secondary" onClick={() => editConnection(connection)} /> : null}{mutable && row.state !== 'DISABLED' ? <Button label="Disable" variant="secondary" onClick={() => void disable(connection)} /> : null}{mutable ? <Button label="Delete connection" variant="secondary" onClick={() => void prepareDelete(connection)} /> : null}</VStack>; }},
     ]} />
+    {oauthTarget && mutable ? <Section><VStack gap={3}><Heading level={2}>Authorize {oauthTarget.name} with OAuth 2.1</Heading>
+      <Text>PKCE uses a one-time verifier and state nonce. Tanpopo seals provider tokens in the write-only vault and returns only connection status.</Text>
+      <form onSubmit={authorizeConnection}><VStack gap={3}>
+        <TextInput label="Authorization endpoint" type="url" value={oauthAuthorizationEndpoint} onChange={setOAuthAuthorizationEndpoint} isRequired />
+        <TextInput label="Token endpoint" type="url" value={oauthTokenEndpoint} onChange={setOAuthTokenEndpoint} isRequired />
+        <TextInput label="OAuth client ID" value={oauthClientId} onChange={setOAuthClientId} isRequired />
+        <TextInput label="Least-privilege scopes (comma or space separated)" value={oauthScopes} onChange={setOAuthScopes} isRequired />
+        <TextInput label="RFC 8707 resource URI" type="url" value={oauthResource} onChange={setOAuthResource} isRequired />
+        <HStack gap={2}><Button label="Authorize with Provider" type="submit" isDisabled={!oauthAuthorizationEndpoint.trim() || !oauthTokenEndpoint.trim() || !oauthClientId.trim() || !oauthScopes.trim() || !oauthResource.trim()} />
+          <Button label="Cancel authorization setup" variant="secondary" onClick={() => setOAuthTarget(null)} /></HStack>
+      </VStack></form>
+    </VStack></Section> : null}
     {editingConnection && mutable ? <Section><VStack gap={3}><Heading level={2}>Edit {editingConnection.name}</Heading>
       {error ? <Text role="alert">{error}</Text> : null}
       <form onSubmit={saveConnectionChanges}><VStack gap={3}>

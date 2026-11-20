@@ -9,18 +9,21 @@ import {Table} from '@astryxdesign/core/Table';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
-import {clearKillSwitch, getKillSwitchBlastRadius, listAuditEvents, listKillSwitches, triggerKillSwitch, verifyAuditHashChain} from '../../api/managementClient';
+import {clearKillSwitch, decideApproval, getKillSwitchBlastRadius, listAuditEvents, listKillSwitches, listPendingApprovals, triggerKillSwitch, verifyAuditHashChain} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 
 type Role = components['schemas']['RbacRole'];
 type TargetLevel = components['schemas']['KillSwitchTriggerRequest']['target_level'];
 type AuditEvent = components['schemas']['AuditEventResource'] & Record<string, unknown>;
 type KillSwitch = components['schemas']['KillSwitchResource'];
+type Approval = components['schemas']['ApprovalRequestResource'];
 const securityRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
+const approvalRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
 
 export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [killSwitches, setKillSwitches] = useState<KillSwitch[]>([]);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
   const [nextAuditCursor, setNextAuditCursor] = useState<string | undefined>();
   const [actionFilter, setActionFilter] = useState('');
   const [level, setLevel] = useState<TargetLevel>('PROJECT');
@@ -40,6 +43,7 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
   const auditGeneration = useRef(0);
   const authorized = roles.some(role => securityRoles.includes(role));
   const canTrigger = roles.some(role => ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'].includes(role));
+  const canReviewApprovals = roles.some(role => approvalRoles.includes(role));
   const requiresSlugConfirmation = level === 'PROJECT';
 
   async function refresh() {
@@ -47,8 +51,8 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
     setLoading(true); setMessage('');
     setEvents([]); setNextAuditCursor(undefined); setLoadingMore(false);
     try {
-      const [page, activeSwitches] = await Promise.all([listAuditEvents(actionFilter), listKillSwitches()]);
-      if (generation === auditGeneration.current) { setEvents(page.data as AuditEvent[]); setNextAuditCursor(page.nextCursor); setKillSwitches(activeSwitches as KillSwitch[]); }
+      const [page, activeSwitches, pendingApprovals] = await Promise.all([listAuditEvents(actionFilter), listKillSwitches(), canReviewApprovals ? listPendingApprovals() : Promise.resolve([])]);
+      if (generation === auditGeneration.current) { setEvents(page.data as AuditEvent[]); setNextAuditCursor(page.nextCursor); setKillSwitches(activeSwitches as KillSwitch[]); setApprovals(pendingApprovals as Approval[]); }
     }
     catch (error) { if (generation === auditGeneration.current) setMessage(errorMessage(error)); }
     finally { if (generation === auditGeneration.current) setLoading(false); }
@@ -95,6 +99,12 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
     } catch (error) { setMessage(errorMessage(error)); }
   }
 
+  async function reviewApproval(item: Approval, decision: 'APPROVE' | 'REJECT') {
+    setMessage('');
+    try { await decideApproval(item, decision, `Reviewed by ${decision.toLowerCase()} action in Tanpopo Console.`); await refresh(); setMessage(`Approval ${decision.toLowerCase()}d and recorded in the audit log.`); }
+    catch (error) { setMessage(errorMessage(error)); }
+  }
+
   if (!authorized) return <Text role="alert">Your role does not have access to the security center.</Text>;
   return <VStack gap={4}>
     <Heading level={1}>Security center</Heading>
@@ -135,6 +145,19 @@ export function SecurityAuditAndKillSwitchPage({roles}: {roles: Role[]}) {
             return <Button label="Clear" variant="destructive" isDisabled={!canTrigger || !item} onClick={() => { if (item) { setClearTarget(item); setClearReason(''); } }} />;
           }},
         ]} /></VStack>}
+    </VStack></Section>
+    <Section><VStack gap={3}><Heading level={2}>MCP approval queue</Heading>
+      {!canReviewApprovals ? <Text role="status">Only Organization Owners, Team Admins, and Security Reviewers can decide pending approvals.</Text>
+        : loading ? <Text role="status">Loading pending approvals…</Text>
+          : approvals.length === 0 ? <Text role="status">No pending approvals.</Text>
+            : <VStack gap={2}>{approvals.map(item => <Section key={item.id}><VStack gap={2}>
+              <Text>{item.action_kind} · Requested by {item.requested_by} · Expires {item.expires_at}</Text>
+              <Text>Canonical argument preview (escaped plain text): {item.payload_preview_json ?? 'No argument preview was stored.'}</Text>
+              <Text>Binding hash: {item.approval_binding_hash}</Text>
+              {item.schema_drift_locked ? <Text role="alert">The MCP tool schema has drifted. Re-approve the observed schema before approving this call.</Text> : null}
+              <HStack gap={2}><Button label="Approve request" variant="primary" isDisabled={item.schema_drift_locked} onClick={() => void reviewApproval(item, 'APPROVE')} />
+                <Button label="Reject request" variant="destructive" onClick={() => void reviewApproval(item, 'REJECT')} /></HStack>
+            </VStack></Section>)}</VStack>}
     </VStack></Section>
     <Section><VStack gap={3}><Heading level={2}>Immutable audit log</Heading>
       <HStack gap={2} wrap="wrap"><TextInput label="Filter by action" value={actionFilter} onChange={setActionFilter} /><Button label="Verify hash chain" variant="secondary" onClick={() => void verifyChain()} /></HStack>

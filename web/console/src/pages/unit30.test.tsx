@@ -13,7 +13,7 @@ import {OperationsSettingsPage} from './operations/OperationsSettingsPage';
 const mocks = vi.hoisted(() => ({
   listTracePage: vi.fn(), getTraceWaterfall: vi.fn(), listBudgets: vi.fn(), getUsageChargebackSummary: vi.fn(),
   exportUsageChargeback: vi.fn(), updateBudget: vi.fn(), listAuditEvents: vi.fn(), verifyAuditHashChain: vi.fn(),
-  triggerKillSwitch: vi.fn(), listKillSwitches: vi.fn(), clearKillSwitch: vi.fn(), getKillSwitchBlastRadius: vi.fn(), getReadinessProbe: vi.fn(),
+  triggerKillSwitch: vi.fn(), listKillSwitches: vi.fn(), listPendingApprovals: vi.fn(), decideApproval: vi.fn(), clearKillSwitch: vi.fn(), getKillSwitchBlastRadius: vi.fn(), getReadinessProbe: vi.fn(),
   getClusterOpsStatus: vi.fn(), createEncryptedBackup: vi.fn(), runUpgradePreflight: vi.fn(), getExtensionLockfile: vi.fn(),
 }));
 
@@ -27,6 +27,7 @@ beforeEach(() => {
   mocks.exportUsageChargeback.mockResolvedValue(new Blob(['report'])); mocks.updateBudget.mockResolvedValue({});
   mocks.listAuditEvents.mockResolvedValue({data: [], nextCursor: undefined}); mocks.verifyAuditHashChain.mockResolvedValue({intact: true, checked_events_count: 0});
   mocks.listKillSwitches.mockResolvedValue([]); mocks.clearKillSwitch.mockResolvedValue({});
+  mocks.listPendingApprovals.mockResolvedValue([]); mocks.decideApproval.mockResolvedValue({});
   mocks.triggerKillSwitch.mockResolvedValue({config_epoch: 3, affected_entities_count: 2, severed_streams_count: 1});
   mocks.getKillSwitchBlastRadius.mockResolvedValue({organizations: [], projects: [], virtual_keys: [], connections: []});
   mocks.getReadinessProbe.mockResolvedValue({ready: true, status: 'ok', configEpoch: 3, snapshotAgeMs: 5});
@@ -112,6 +113,32 @@ describe('Unit 30 observability and operations screens', () => {
     expect(await axeViolations()).toEqual([]);
   });
 
+  it('shows drifted MCP arguments as text and disables approval until schema review', async () => {
+    const approval = {id: 'approval-1', org_id: 'org-1', project_id: 'project-1', action_kind: 'MCP_DESTRUCTIVE_TOOL', state: 'PENDING',
+      approval_binding_hash: 'a'.repeat(64), payload_preview_json: '<img src=x onerror=alert(1)>', requested_by: 'requester-1', decided_by: null,
+      created_at: '2026-11-17T00:00:00Z', expires_at: '2026-11-17T00:05:00Z', version: 1, schema_drift_locked: true} as components['schemas']['ApprovalRequestResource'];
+    mocks.listPendingApprovals.mockResolvedValue([approval]);
+    renderTheme(<SecurityAuditAndKillSwitchPage roles={['SECURITY_REVIEWER']} />, 'light');
+    expect(await screen.findByText(/MCP_DESTRUCTIVE_TOOL/)).toBeInTheDocument();
+    expect(screen.getAllByText(text => text.includes(approval.payload_preview_json!)).length).toBeGreaterThan(0);
+    expect(document.querySelector('img')).toBeNull();
+    expect(screen.getByText('The MCP tool schema has drifted. Re-approve the observed schema before approving this call.')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Approve request'})).toHaveAttribute('aria-disabled', 'true');
+    expect(await axeViolations()).toEqual([]);
+  });
+
+  it('shows approval success after refreshing the queue', async () => {
+    const approval = {id: 'approval-2', action_kind: 'MCP_DESTRUCTIVE_TOOL', state: 'PENDING', approval_binding_hash: 'b'.repeat(64),
+      payload_preview_json: '{"server_id":"docs","tool_id":"delete"}', requested_by: 'requester-2', created_at: '2026-11-17T00:00:00Z',
+      expires_at: '2026-11-17T00:05:00Z', version: 3, schema_drift_locked: false} as components['schemas']['ApprovalRequestResource'];
+    mocks.listPendingApprovals.mockResolvedValueOnce([approval]).mockResolvedValueOnce([]);
+    renderTheme(<SecurityAuditAndKillSwitchPage roles={['SECURITY_REVIEWER']} />, 'light');
+    fireEvent.click(await screen.findByRole('button', {name: 'Approve request'}));
+    expect(await screen.findByText('Approval approved and recorded in the audit log.')).toBeInTheDocument();
+    expect(mocks.decideApproval).toHaveBeenCalledWith(approval, 'APPROVE', 'Reviewed by approve action in Tanpopo Console.');
+    expect(mocks.listPendingApprovals).toHaveBeenCalledTimes(2);
+  });
+
   it('shows readiness, backup history, lockfile pins and upgrade preflight to operators', async () => {
     renderTheme(<OperationsSettingsPage roles={['OPERATOR']} />, 'dark');
     expect(await screen.findByText('Ready')).toBeInTheDocument();
@@ -139,17 +166,17 @@ describe('Unit 30 observability and operations screens', () => {
 
   it('blocks FINOPS_VIEWER with role=alert on Traces, Security, and Operations pages', async () => {
     renderTheme(<TracesExplorerPage environmentId="env-1" roles={['FINOPS_VIEWER']} />, 'light');
-    expect(screen.getByRole('alert')).toHaveTextContent('FINOPS_VIEWER');
+    expect(screen.getByText('The FINOPS_VIEWER role can access FinOps reports only.')).toBeInTheDocument();
     expect(mocks.listTracePage).not.toHaveBeenCalled();
     expect(await axeViolations()).toEqual([]); cleanup();
 
     renderTheme(<SecurityAuditAndKillSwitchPage roles={['FINOPS_VIEWER']} />, 'light');
-    expect(screen.getByRole('alert')).toHaveTextContent('Your role does not have access to the security center.');
+    expect(screen.getByText('Your role does not have access to the security center.')).toBeInTheDocument();
     expect(mocks.listAuditEvents).not.toHaveBeenCalled();
     expect(await axeViolations()).toEqual([]); cleanup();
 
     renderTheme(<OperationsSettingsPage roles={['FINOPS_VIEWER']} />, 'light');
-    expect(screen.getByRole('alert')).toHaveTextContent('OPERATOR');
+    expect(screen.getByText('Instance operations are available to the OPERATOR role only.')).toBeInTheDocument();
     expect(mocks.getClusterOpsStatus).not.toHaveBeenCalled();
     expect(await axeViolations()).toEqual([]);
   });

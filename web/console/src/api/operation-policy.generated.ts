@@ -160,6 +160,10 @@ export const operationPolicy = {
     "csrf": false,
     "ifMatch": false
   },
+  "POST /admin/v1/oauth/device/poll": {
+    "csrf": true,
+    "ifMatch": false
+  },
   "GET /admin/v1/models": {
     "csrf": false,
     "ifMatch": false
@@ -267,6 +271,18 @@ export const operationPolicy = {
   "POST /admin/v1/mcp/tools/{toolId}/approve-schema": {
     "csrf": true,
     "ifMatch": true
+  },
+  "GET /admin/v1/mcp/tools/{toolId}/grants": {
+    "csrf": false,
+    "ifMatch": false
+  },
+  "POST /admin/v1/mcp/tools/{toolId}/grants": {
+    "csrf": true,
+    "ifMatch": false
+  },
+  "DELETE /admin/v1/mcp/grants/{grantId}": {
+    "csrf": true,
+    "ifMatch": false
   },
   "GET /admin/v1/a2a/agents": {
     "csrf": false,

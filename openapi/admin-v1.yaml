@@ -1000,7 +1000,7 @@ components:
 
     ApprovalRequestResource:
       type: object
-      required: [id, action_kind, state, approval_binding_hash, requested_by, created_at, expires_at, version]
+      required: [id, action_kind, state, approval_binding_hash, requested_by, created_at, expires_at, version, schema_drift_locked]
       properties:
         id: { type: string }
         org_id: { type: ["string", "null"] }
@@ -1014,6 +1014,7 @@ components:
         created_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }
         version: { type: integer }
+        schema_drift_locked: { type: boolean, description: "True when the MCP tool schema has drifted; approval is blocked until its schema is reviewed." }
 
     AuditEventResource:
       type: object

@@ -27,6 +27,7 @@ type approvalResource struct {
 	CreatedAt            string         `json:"created_at"`
 	ExpiresAt            string         `json:"expires_at"`
 	Version              int64          `json:"version"`
+	SchemaDriftLocked    bool           `json:"schema_drift_locked"`
 	createdMs, expiresMs int64
 	selfRequested        bool
 }
@@ -40,7 +41,10 @@ const effectiveApprovalState = `CASE WHEN a.state IN ('PENDING','APPROVED') AND 
 const approvalSelect = `SELECT a.id,a.org_id,k.project_id,` + effectiveApprovalState + `,a.params_jcs_sha256,a.payload_preview_json,
 	COALESCE(a.requester_principal_id,k.id),a.decided_by_principal_id,a.created_at_ms,a.expires_at_ms,a.version,
 	(COALESCE(a.requester_principal_id,'')=? OR COALESCE(a.requester_credential_principal_id,'')=? OR COALESCE(k.owner_principal_id,'')=?
-	 OR COALESCE(k.active_key_recipient_principal_id,'')=? OR COALESCE(k.previous_key_recipient_principal_id,'')=?)
+	 OR COALESCE(k.active_key_recipient_principal_id,'')=? OR COALESCE(k.previous_key_recipient_principal_id,'')=?),
+	EXISTS(SELECT 1 FROM mcp_tools t JOIN mcp_servers ms ON ms.org_id=t.org_id AND ms.id=t.mcp_server_id
+	 WHERE t.org_id=a.org_id AND ms.server_slug=json_extract(a.target_identifier,'$.server_slug')
+	 AND t.tool_name=json_extract(a.target_identifier,'$.tool_name') AND t.schema_drift_locked=1)
 	FROM approval_requests a JOIN virtual_keys k ON k.org_id=a.org_id AND k.id=a.requester_virtual_key_id
 	WHERE a.org_id=? AND a.action_kind='MCP_DESTRUCTIVE_CALL' AND (a.project_id IS NULL OR a.project_id=k.project_id)`
 
@@ -48,7 +52,7 @@ type governanceRow interface{ Scan(...any) error }
 
 func readApproval(row governanceRow) (approvalResource, error) {
 	var a approvalResource
-	err := row.Scan(&a.ID, &a.OrgID, &a.ProjectID, &a.State, &a.Hash, &a.Target, &a.RequestedBy, &a.DecidedBy, &a.createdMs, &a.expiresMs, &a.Version, &a.selfRequested)
+	err := row.Scan(&a.ID, &a.OrgID, &a.ProjectID, &a.State, &a.Hash, &a.Target, &a.RequestedBy, &a.DecidedBy, &a.createdMs, &a.expiresMs, &a.Version, &a.selfRequested, &a.SchemaDriftLocked)
 	a.ActionKind = "MCP_DESTRUCTIVE_TOOL"
 	a.CreatedAt = formatTimeRFC3339Ms(a.createdMs)
 	a.ExpiresAt = formatTimeRFC3339Ms(a.expiresMs)
@@ -238,6 +242,10 @@ func (s *Server) handleDecideApproval(w http.ResponseWriter, r *http.Request) {
 	if a.Hash != req.Hash {
 		s.denyApprovalDecision(w, r, tx, a, actor, "mcp.approval_binding_mismatch",
 			approval.CodeParameterHashMismatch, "approval binding differs from the reviewed request")
+		return
+	}
+	if a.SchemaDriftLocked && req.Decision == approval.DecisionApprove {
+		writeErrorEnvelope(w, r, http.StatusConflict, "mcp_schema_drift_blocked", "conflict_error", "MCP schema drift must be reviewed and re-approved before this call can be approved", false, nil)
 		return
 	}
 
