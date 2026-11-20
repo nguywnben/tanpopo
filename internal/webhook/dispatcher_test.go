@@ -659,6 +659,9 @@ func TestWorkerRejectsMetadataAndCrossOriginRedirectWithoutLeakingTarget(t *test
 	})
 	t.Run("cross-origin redirect", func(t *testing.T) {
 		db := openWebhookDB(t)
+		// The worker test polls and delivers against one SQLite database. Keep a
+		// single pooled handle so Windows can remove the fixture after shutdown.
+		db.SetMaxOpenConns(1)
 		var destinationHits atomic.Int32
 		destination := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { destinationHits.Add(1) }))
 		defer destination.Close()
