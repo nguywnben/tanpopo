@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -576,7 +578,13 @@ func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce strin
 			fmt.Fprintf(os.Stderr, "pre-close SQLite statement inspection failed: %v\n", inspectErr)
 			return
 		}
-		fmt.Fprintf(os.Stderr, "pre-close SQLite statements (%d): %q\n", len(statements), statements)
+		statementIDs := make([]string, 0, len(statements))
+		for _, statement := range statements {
+			digest := sha256.Sum256([]byte(statement))
+			statementIDs = append(statementIDs, hex.EncodeToString(digest[:8]))
+		}
+		sort.Strings(statementIDs)
+		fmt.Fprintf(os.Stderr, "pre-close SQLite statement IDs (%d): %v\n", len(statementIDs), statementIDs)
 	})
 	if err != nil {
 		t.Fatalf("build data-plane runtime: %v", err)

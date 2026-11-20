@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"unsafe"
 
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 	"modernc.org/libc"
@@ -31,7 +30,7 @@ func sqliteOpenStatements(conn *sql.Conn) ([]string, error) {
 			return fmt.Errorf("modernc SQLite connection layout changed")
 		}
 		driverDB := uintptr(dbField.Uint())
-		tls := (*libc.TLS)(unsafe.Pointer(tlsField.Pointer()))
+		tls := (*libc.TLS)(tlsField.UnsafePointer())
 		if driverDB == 0 || tls == nil {
 			return fmt.Errorf("SQLite connection is already closed")
 		}
