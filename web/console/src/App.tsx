@@ -3,7 +3,7 @@ import {Banner as AstryxBanner} from '@astryxdesign/core/Banner';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {RouterProvider, useRouter} from './router/RouterContext';
 import {ThemeProvider} from './styles/theme';
-import {I18nProvider} from './i18n/I18nProvider';
+import {I18nProvider, useI18n} from './i18n/I18nProvider';
 
 const SetupPage = lazy(() => import('./pages/setup/SetupPage').then(mod => ({default: mod.SetupPage})));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage').then(mod => ({default: mod.LoginPage})));
@@ -54,6 +54,7 @@ export function App() {
 }
 
 function RootSwitch() {
+  useI18n();
   const {pathname} = useRouter();
   if (pathname === '/setup') {
     return (

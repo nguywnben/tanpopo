@@ -1407,14 +1407,10 @@ func checkUILayout(rootDir string) ([]Violation, error) {
 		}
 
 		lines := strings.Split(text, "\n")
-		inLocalizedMessageCatalog := false
 		for i, line := range lines {
-			if strings.Contains(line, "export const messages") {
-				inLocalizedMessageCatalog = true
-			}
 			// Translations belong in the explicit locale message table. Keep the English source
 			// catalog English while allowing translated copy in the locale catalog itself.
-			localizedCatalogLine := strings.HasSuffix(rel, "/src/i18n/catalog.ts") && inLocalizedMessageCatalog
+			localizedCatalogLine := strings.Contains(rel, "/src/i18n/messages/") && strings.HasSuffix(rel, ".json")
 			if vnDiacriticRe.MatchString(line) && !localizedCatalogLine {
 				violations = append(violations, Violation{
 					Check:   "ui-layout",

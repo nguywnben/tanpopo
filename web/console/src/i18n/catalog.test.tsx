@@ -1,8 +1,10 @@
 import {cleanup, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, describe, expect, it} from 'vitest';
-import {localeNames, localeOrder, messages, sourceCatalog} from './catalog';
+import {localeNames, localeOrder, sourceCatalog} from './catalog';
 import {I18nProvider, LanguagePicker, localeForLanguageTag, resolveBrowserLocale, useI18n} from './I18nProvider';
 import {formatDateAndTime, formatNumber} from './format';
+import {loadLocaleMessages} from './messages';
+import {setActiveLocale} from './locale-state';
 
 function LocaleProbe() {
   const {locale} = useI18n();
@@ -20,15 +22,16 @@ describe('console locale catalogs', () => {
     expect(Object.keys(localeNames)).toEqual(localeOrder);
   });
 
-  it('contains every source key in every shipped locale and preserves interpolation tokens', () => {
+  it('contains exactly every source key in every shipped locale and preserves interpolation tokens', async () => {
     const keys = Object.keys(sourceCatalog).sort();
     for (const locale of localeOrder) {
-      const catalog = messages[locale];
+      const catalog = await loadLocaleMessages(locale);
+      expect(Object.keys(catalog).sort(), `${locale}: key parity`).toEqual(locale === 'en' ? [] : keys);
       for (const key of keys) {
-        const translated = catalog[key as keyof typeof sourceCatalog] ?? (locale === 'en' ? sourceCatalog[key as keyof typeof sourceCatalog] : undefined);
+        const translated = catalog[key] ?? (locale === 'en' ? sourceCatalog[key] : undefined);
         expect(translated, `${locale}: ${key}`).toBeTruthy();
         const placeholders = (value: string) => [...value.matchAll(/\{([\w.]+)\}/g)].map(match => match[1]).sort();
-        expect(placeholders(translated ?? '')).toEqual(placeholders(sourceCatalog[key as keyof typeof sourceCatalog]));
+        expect(placeholders(translated ?? '')).toEqual(placeholders(sourceCatalog[key]));
       }
     }
   });
@@ -59,9 +62,11 @@ describe('console locale catalogs', () => {
   });
 
   it('formats counts and dates using the active locale', () => {
+    setActiveLocale('de');
     document.documentElement.lang = 'de';
     expect(formatNumber(1234567.5)).toBe('1.234.567,5');
     expect(formatDateAndTime('2026-11-20T08:00:00Z')).toBe(new Intl.DateTimeFormat('de', {dateStyle: 'medium', timeStyle: 'short'}).format(new Date('2026-11-20T08:00:00Z')));
     document.documentElement.lang = 'en';
+    setActiveLocale('en');
   });
 });

@@ -11,6 +11,7 @@ import {Banner as AstryxBanner} from '@astryxdesign/core/Banner';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {CheckboxInput as AstryxCheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {formatMinorCurrency} from '../i18n/format';
+import {translateUi} from '../i18n/translate';
 import {CodeBlock as AstryxCodeBlock} from '@astryxdesign/core/CodeBlock';
 import type {DropdownMenuOption} from '@astryxdesign/core/DropdownMenu';
 import {EmptyState as AstryxEmptyState} from '@astryxdesign/core/EmptyState';
@@ -525,8 +526,8 @@ const operationalStateLabels: Record<string, string> = {
 
 export function formatOperationalState(raw: string): string {
   const key = raw.toUpperCase();
-  if (key in operationalStateLabels) return operationalStateLabels[key];
-  return formatLabel(raw);
+  if (key in operationalStateLabels) return translateUi(operationalStateLabels[key]);
+  return translateUi(formatLabel(raw));
 }
 
 export function formatLabel(raw: string): string {

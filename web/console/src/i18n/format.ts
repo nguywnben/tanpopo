@@ -1,8 +1,7 @@
-import type {Locale} from './catalog';
+import {getActiveLocale} from './locale-state';
 
-export function activeLocale(): Locale {
-  const value = typeof document === 'undefined' ? 'en' : document.documentElement.lang;
-  return (value || 'en') as Locale;
+export function activeLocale() {
+  return getActiveLocale();
 }
 
 export function formatNumber(value: number, options?: Intl.NumberFormatOptions): string {

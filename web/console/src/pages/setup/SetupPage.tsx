@@ -8,6 +8,7 @@ import {useTheme} from '../../styles/theme';
 import {Banner, Button, CheckboxField, CodeBlock, IconButton, KeyValueList, SelectField, TanpopoMark, TextField} from '../../ui/primitives';
 import {Modal} from '../../ui/Overlays';
 import {LanguagePicker, useI18n} from '../../i18n/I18nProvider';
+import {translateUi} from '../../i18n/translate';
 
 type BootstrapForm = components['schemas']['BootstrapCompleteRequest'];
 type InitialConnection = NonNullable<BootstrapForm['initial_connection']>;
@@ -236,8 +237,8 @@ export function SetupPage() {
               <Step
                 key={item.title}
                 step={index}
-                label={item.title}
-                description={item.summary}
+                label={translateUi(item.title)}
+                description={translateUi(item.summary)}
                 isDisabled={index > step}
               />
             ))}

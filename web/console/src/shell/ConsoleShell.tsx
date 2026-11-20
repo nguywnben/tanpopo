@@ -31,6 +31,7 @@ import {useTheme} from '../styles/theme';
 import {Banner, Button, CountPill, IconButton, TanpopoMark} from '../ui/primitives';
 import {canAccessRoute, navigationGroups, quickCommands, routeForPath, type ConsoleRoute, type NavIconKey, type Role} from './routes';
 import {LanguagePicker, useI18n} from '../i18n/I18nProvider';
+import {translateUi} from '../i18n/translate';
 
 const WorkspaceRouter = lazy(() => import('./WorkspaceRouter').then(mod => ({default: mod.WorkspaceRouter})));
 
@@ -197,8 +198,8 @@ export function ConsoleShell() {
       .filter(cmd => cmd.roles.some(role => roles.includes(role)))
       .map(cmd => ({
         id: cmd.path,
-        label: cmd.label,
-        auxiliaryData: {group: cmd.section, path: cmd.path},
+        label: translateUi(cmd.label),
+        auxiliaryData: {group: translateUi(cmd.section), path: cmd.path},
       }));
     return createStaticSource(items, {
       keywords: item => [item.auxiliaryData?.group ?? '', item.auxiliaryData?.path ?? ''],
@@ -247,7 +248,7 @@ export function ConsoleShell() {
         <nav className="tp-rail-scroll" aria-label={t('Primary sections')}>
           {visibleGroups.map(group => (
             <div key={group.title} className="tp-nav-group">
-              <div className="tp-nav-group-title">{group.title}</div>
+              <div className="tp-nav-group-title">{translateUi(group.title)}</div>
               {group.routes.map(item => {
                 const isActive = route.path === item.path;
                 const badge = item.path === '/security/approvals' && securityBadgeCount > 0 ? securityBadgeCount : undefined;
@@ -260,7 +261,7 @@ export function ConsoleShell() {
                   >
                     <span className="tp-nav-link-main">
                       <NavIcon icon={item.icon} />
-                      <span className="tp-nav-link-label">{item.label}</span>
+                      <span className="tp-nav-link-label">{translateUi(item.label)}</span>
                     </span>
                     {badge !== undefined ? <CountPill count={badge} /> : null}
                   </Link>

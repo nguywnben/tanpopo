@@ -1,5 +1,8 @@
 import {createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from 'react';
-import {localeNames, localeOrder, messages, sourceCatalog, type Locale} from './catalog';
+import {localeNames, localeOrder, type Locale} from './catalog';
+import {loadLocaleMessages} from './messages';
+import {setActiveLocale} from './locale-state';
+import {setLocaleMessages, translateUi} from './translate';
 
 const STORAGE_KEY = 'tanpopo.console.locale';
 type Preference = Locale | 'auto';
@@ -34,7 +37,10 @@ function initialPreference(): Preference {
 
 export function I18nProvider({children}: {children: ReactNode}) {
   const [preference, setPreferenceState] = useState<Preference>(initialPreference);
-  const locale = preference === 'auto' ? resolveBrowserLocale(navigator.languages?.length ? navigator.languages : [navigator.language]) : preference;
+  const browserLanguages = typeof navigator === 'undefined' ? [] : navigator.languages?.length ? navigator.languages : [navigator.language];
+  const locale = preference === 'auto' ? resolveBrowserLocale(browserLanguages) : preference;
+  const [translationRevision, setTranslationRevision] = useState(0);
+  setActiveLocale(locale);
   const setPreference = useCallback((next: Preference) => {
     setPreferenceState(next);
     try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* In-memory preference still applies. */ }
@@ -42,13 +48,17 @@ export function I18nProvider({children}: {children: ReactNode}) {
 
   useEffect(() => {
     document.documentElement.lang = locale;
+    let current = true;
+    setLocaleMessages(locale, {});
+    loadLocaleMessages(locale).then(catalog => {
+      if (!current) return;
+      setLocaleMessages(locale, catalog);
+      setTranslationRevision(value => value + 1);
+    });
+    return () => { current = false; };
   }, [locale]);
 
-  const t = useCallback((key: string) => {
-    const source = sourceCatalog[key as keyof typeof sourceCatalog];
-    if (source === undefined) return key;
-    return messages[locale][key as keyof typeof sourceCatalog] ?? source;
-  }, [locale]);
+  const t = useCallback((key: string) => translateUi(key), [translationRevision]);
   const value = useMemo(() => ({locale, preference, setPreference, t}), [locale, preference, setPreference, t]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
