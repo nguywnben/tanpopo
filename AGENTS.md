@@ -3,14 +3,15 @@
 Project-specific guidance for AI coding agents.
 
 <!-- TANPOPO-CONSOLE:START -->
-## Tanpopo Web Console v2 (`ADR-0007`, `DEC-086`)
+## Tanpopo Web Console v2 — Astryx Neutral (`ADR-0007`, `DEC-086`, `DEC-087`)
 
-- **Stack:** React 19 + TypeScript 5.9 (strict) + Vite 7 + Layered Semantic CSS (`@layer tokens, base, layout, components` under `web/console/src/styles/`) + `lucide-react` icons + OpenAPI-typed `openapi-fetch` client (`src/api/`). Legacy `@astryxdesign/*` and `@stylexjs/*` packages are retired.
-- **Visual Direction:** Warm Daylight Precision (light default with hairline structure, Warm Stone canvas, Ink primary CTA, Tanpopo Ochre active indicator, and Obsidian Dark mode via `data-theme="dark"`).
+- **Stack:** React 19 + TypeScript 5.9 (strict) + Vite 7 + official `@astryxdesign/core` & `@astryxdesign/theme-neutral` (`web/console/src/astryx-themes.ts`, generated via `astryx theme add neutral`) + Astryx Neutral token-bridged layered layout CSS (`@layer reset, astryx-base, astryx-theme, tokens, base, layout, components` under `web/console/src/styles/`) + `lucide-react` icons + OpenAPI-typed `openapi-fetch` client (`src/api/`).
+- **Visual Direction:** Astryx Neutral (restrained neutral light & dark modes synchronized via root `<Theme theme={themes[defaultThemeSlug]} mode={theme}>` covering both pre-login `/setup`/`/login` and post-login workspaces). Zero beige/ochre surfaces and zero decorative colored stripes/bars; neutral selected states; semantic colors reserved for warnings, errors, success states, and destructive actions.
 - **Rules:**
-  - Zero nested cards, zero decorative badges (`CountPill` for numeric counts, `StatusPill` for semantic icon+label status only), concise single `<h1>` per page, and `tabular-nums` monospace for IDs, hashes, durations, and integer micro-USD / nano-USD amounts.
+  - Prefer official `@astryxdesign/core/*` components (`Button`, `IconButton`, `TextInput`, `TextArea`, `CheckboxInput`, `Banner`, `Badge`, `Token`, `TabList`/`Tab`, `SegmentedControl`, `Stepper`, `Dialog`/`AlertDialog`, `Drawer`, `CodeBlock`, `EmptyState`, `Skeleton`, `Kbd`) over custom duplicates; build specialized operational patterns (responsive stacked mobile tables, sidebar rail, metric strip) strictly on Astryx Neutral CSS tokens.
+  - Zero nested cards, zero decorative badges (`CountPill`/`Badge` for numeric counts, `StatusPill`/`Token` for semantic icon+label status only), concise single `<h1>` per page, and `tabular-nums` monospace for IDs, hashes, durations, and integer micro-USD / nano-USD amounts.
   - **Zero horizontal scrollbar at page level** (`document.documentElement.scrollWidth <= document.documentElement.clientWidth`) across `320`, `375`, `768`, `1024`, `1440`, and `1920` CSS px. **Never** use `overflow-x: hidden` or `overflow-x: clip` on `html` or `body` (enforced by `scripts/ci/check.go --ui-layout`).
-  - **Air-Gap / Offline:** Bundle local `Figtree` fonts (`web/console/assets/fonts/`) and tree-shaken SVG icons; `0` external runtime requests or CDN URLs.
+  - **Air-Gap / Offline:** Alias `@astryxdesign/theme-neutral/fonts.css` to local `web/console/assets/fonts/local-figtree-fonts.css` in `vite.config.ts` and `vitest.config.ts`, and bundle tree-shaken SVG icons; `0` external runtime requests or CDN URLs.
   - **English-Only UI Copy (`ISS-008`) & Strict Accessibility:** Meet `WCAG 2.2 AA` (`0` `axe-core` violations), preserve all CSRF (`X-CSRF-Token`) and optimistic concurrency (`If-Match`) API guards, and keep initial JS bundle `<= 250 KB` gzip.
 - **Commands (inside `web/console/` after `npm ci --ignore-scripts`):**
   - `npm run typecheck` — strict TypeScript check (`tsc --noEmit`)

@@ -1,5 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {ArrowRight, RefreshCw} from 'lucide-react';
+import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';
+import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {getOverviewSummary, listActiveAlerts, listUnhealthyDeployments} from '../../api/client';
 import type {components} from '../../api/generated';
 import {useRouter} from '../../router/RouterContext';
@@ -83,19 +85,16 @@ export function OverviewPage() {
         </div>
 
         <div className="tp-page-actions">
-          <div className="tp-segmented" role="group" aria-label="Overview time window">
+          <SegmentedControl
+            size="sm"
+            label="Overview time window"
+            value={timeWindow}
+            onChange={next => setTimeWindow(next as WindowRange)}
+          >
             {windows.map(item => (
-              <button
-                key={item}
-                type="button"
-                className="tp-segmented-btn"
-                aria-pressed={timeWindow === item}
-                onClick={() => setTimeWindow(item)}
-              >
-                {item}
-              </button>
+              <SegmentedControlItem key={item} value={item} label={item} />
             ))}
-          </div>
+          </SegmentedControl>
           <Button variant="secondary" size="sm" onClick={() => void refresh(timeWindow)}>
             <RefreshCw size={14} aria-hidden="true" />
             <span>Refresh</span>
@@ -115,7 +114,7 @@ export function OverviewPage() {
 
       {loading && !summary ? (
         <div className="tp-surface tp-surface-pad tp-stack" role="status" aria-busy="true">
-          <div className="tp-skeleton" style={{width: '100%', height: 64}} />
+          <Skeleton width="100%" height={64} radius={2} />
         </div>
       ) : summary ? (
         <MetricStrip items={kpis} />

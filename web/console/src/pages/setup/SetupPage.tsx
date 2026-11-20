@@ -1,9 +1,11 @@
 import {useEffect, useMemo, useState, type FormEvent} from 'react';
-import {Check} from 'lucide-react';
+import {Moon, Sun} from 'lucide-react';
+import {Step, Stepper} from '@astryxdesign/core/Stepper';
 import {completeBootstrap, getBootstrapStatus} from '../../api/client';
 import type {components} from '../../api/generated';
 import {Link, useRouter} from '../../router/RouterContext';
-import {Banner, Button, CheckboxField, CodeBlock, KeyValueList, SelectField, TanpopoMark, TextField} from '../../ui/primitives';
+import {useTheme} from '../../styles/theme';
+import {Banner, Button, CheckboxField, CodeBlock, IconButton, KeyValueList, SelectField, TanpopoMark, TextField} from '../../ui/primitives';
 import {Modal} from '../../ui/Overlays';
 
 type BootstrapForm = components['schemas']['BootstrapCompleteRequest'];
@@ -29,6 +31,7 @@ const providerPresets = [
 
 export function SetupPage() {
   const {navigate} = useRouter();
+  const {theme, toggleTheme} = useTheme();
   const [step, setStep] = useState(0);
   const [initialized, setInitialized] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -204,46 +207,44 @@ export function SetupPage() {
   return (
     <main className="tp-auth-page">
       <div className="tp-setup-shell">
-        <div className="tp-stack">
-          <div className="tp-row">
-            <TanpopoMark size={24} />
-            <span style={{fontWeight: 700, fontSize: '1rem'}}>Tanpopo</span>
+        <div className="tp-setup-rail">
+          <div className="tp-auth-head">
+            <div className="tp-row">
+              <TanpopoMark size={24} />
+              <span style={{fontWeight: 700, fontSize: '1rem'}}>Tanpopo</span>
+            </div>
+            <IconButton label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>
+              {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+            </IconButton>
           </div>
           <div className="tp-stack-sm">
             <h1>Instance setup</h1>
             <p className="tp-muted">Claim this self-hosted gateway and provision its initial owner and route.</p>
           </div>
-          <ol className="tp-stepper" aria-label="Setup steps">
-            {steps.map((item, index) => {
-              const state = index === step ? 'active' : index < step ? 'done' : 'upcoming';
-              return (
-                <li key={item.title}>
-                  <button
-                    type="button"
-                    className="tp-step-btn"
-                    data-state={state}
-                    disabled={index > step}
-                    onClick={() => {
-                      if (index < step) {
-                        setStep(index);
-                        setError('');
-                      }
-                    }}
-                  >
-                    <span className="tp-step-num" aria-hidden="true">
-                      {state === 'done' ? <Check size={13} /> : index + 1}
-                    </span>
-                    <span className="tp-checkbox-text">
-                      <span style={{fontWeight: 600, fontSize: '0.875rem'}}>{item.title}</span>
-                      <span className="tp-hint">{item.summary}</span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
+          <Stepper
+            activeStep={step}
+            orientation="vertical"
+            label="Setup steps"
+            density="compact"
+            onStepClick={index => {
+              if (index < step) {
+                setStep(index);
+                setError('');
+              }
+            }}
+          >
+            {steps.map((item, index) => (
+              <Step
+                key={item.title}
+                step={index}
+                label={item.title}
+                description={item.summary}
+                isDisabled={index > step}
+              />
+            ))}
+          </Stepper>
           <p className="tp-muted">
-            Already initialized? <Link href="/login">Sign in</Link>
+            Already initialized? <Link href="/login" className="tp-link">Sign in</Link>
           </p>
         </div>
 
@@ -282,6 +283,7 @@ export function SetupPage() {
                   type="password"
                   autoComplete="new-password"
                   value={passwordConfirm}
+                  hint="Re-enter your owner password."
                   onChange={event => setPasswordConfirm(event.target.value)}
                 />
               </div>

@@ -118,10 +118,7 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
           <p className="tp-page-subtitle">Metadata-only execution telemetry. Zero prompt or completion bytes stored.</p>
         </div>
         <div className="tp-page-actions">
-          <span className="tp-status" data-tone="neutral">
-            <EyeOff size={13} aria-hidden="true" />
-            <span>Metadata-Only</span>
-          </span>
+          <StatusPill tone="neutral" icon={<EyeOff size={13} aria-hidden="true" />} label="Metadata-Only" />
         </div>
       </div>
 
@@ -282,7 +279,11 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
                           </div>
                         </div>
                         <div className="tp-waterfall-bar-track" aria-hidden="true">
-                          <div className="tp-waterfall-bar-fill" style={{width: `${widthPct}%`}} />
+                          <div
+                            className="tp-waterfall-bar-fill"
+                            data-tone={stateTone(stage.outcome) === 'danger' ? 'danger' : undefined}
+                            style={{width: `${widthPct}%`}}
+                          />
                         </div>
                       </li>
                     );

@@ -19,6 +19,8 @@ import {
   Terminal,
   X,
 } from 'lucide-react';
+import {Kbd} from '@astryxdesign/core/Kbd';
+import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {getAdminSession, listEnvironments, listProjects, logoutAdmin} from '../api/client';
 import {listKillSwitches, listPendingApprovals} from '../api/managementClient';
 import type {components} from '../api/generated';
@@ -313,7 +315,7 @@ export function ConsoleShell() {
             >
               <Search size={14} aria-hidden="true" />
               <span>Jump</span>
-              <kbd className="tp-kbd">Ctrl K</kbd>
+              <Kbd keys="mod+k" />
             </Button>
 
             {canUseEmergency ? (
@@ -343,9 +345,9 @@ export function ConsoleShell() {
 
           {loading ? (
             <div className="tp-surface tp-surface-pad tp-stack" role="status" aria-busy="true">
-              <div className="tp-skeleton" style={{width: '32%'}} />
-              <div className="tp-skeleton" style={{width: '100%', height: 64}} />
-              <div className="tp-skeleton" style={{width: '100%', height: 140}} />
+              <Skeleton width="32%" height={20} radius={1} index={0} />
+              <Skeleton width="100%" height={64} radius={2} index={1} />
+              <Skeleton width="100%" height={140} radius={2} index={2} />
             </div>
           ) : loadError ? (
             <Banner tone="danger" title="Console context unavailable">

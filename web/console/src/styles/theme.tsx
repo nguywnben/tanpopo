@@ -1,6 +1,8 @@
 import {createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from 'react';
+import {Theme} from '@astryxdesign/core/theme';
+import {defaultThemeSlug, themes} from '../astryx-themes';
 
-type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark';
 
 type ThemeContextValue = {
   theme: ThemeMode;
@@ -38,7 +40,13 @@ export function ThemeProvider({children}: {children: ReactNode}) {
   }, []);
 
   const value = useMemo(() => ({theme, toggleTheme}), [theme, toggleTheme]);
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      <Theme theme={themes[defaultThemeSlug]} mode={theme}>
+        {children}
+      </Theme>
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme() {

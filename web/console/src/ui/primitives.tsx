@@ -1,24 +1,51 @@
-import {useId, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes} from 'react';
-import {AlertCircle, AlertTriangle, Check, CheckCircle2, Copy, Info, ShieldAlert} from 'lucide-react';
+import {
+  Children,
+  isValidElement,
+  useId,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react';
+import {AlertTriangle, CheckCircle2, Info, ShieldAlert} from 'lucide-react';
+import {Badge as AstryxBadge} from '@astryxdesign/core/Badge';
+import {Banner as AstryxBanner} from '@astryxdesign/core/Banner';
+import {Button as AstryxButton} from '@astryxdesign/core/Button';
+import {CheckboxInput as AstryxCheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {CodeBlock as AstryxCodeBlock} from '@astryxdesign/core/CodeBlock';
+import {EmptyState as AstryxEmptyState} from '@astryxdesign/core/EmptyState';
+import {IconButton as AstryxIconButton} from '@astryxdesign/core/IconButton';
+import {Tab, TabList} from '@astryxdesign/core/TabList';
+import {TextArea as AstryxTextArea} from '@astryxdesign/core/TextArea';
+import {TextInput as AstryxTextInput, type TextInputType} from '@astryxdesign/core/TextInput';
+import {Token as AstryxToken, type TokenColor} from '@astryxdesign/core/Token';
 
 export type StatusTone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral';
 
 export function TanpopoMark({size = 22}: {size?: number}) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="2.75" fill="var(--brand-accent-bright)" />
+      <circle cx="12" cy="12" r="2.75" fill="var(--tp-ink-primary)" />
       <path
         d="M12 3v4.2M12 16.8V21M3 12h4.2M16.8 12H21M5.64 5.64l2.97 2.97M15.39 15.39l2.97 2.97M18.36 5.64l-2.97 2.97M8.61 15.39l-2.97 2.97"
-        stroke="var(--ink-primary)"
+        stroke="var(--tp-ink-primary)"
         strokeWidth="1.75"
         strokeLinecap="round"
       />
-      <circle cx="12" cy="3" r="1.15" fill="var(--brand-accent)" />
-      <circle cx="21" cy="12" r="1.15" fill="var(--brand-accent)" />
-      <circle cx="12" cy="21" r="1.15" fill="var(--brand-accent)" />
-      <circle cx="3" cy="12" r="1.15" fill="var(--brand-accent)" />
+      <circle cx="12" cy="3" r="1.15" fill="var(--tp-ink-secondary)" />
+      <circle cx="21" cy="12" r="1.15" fill="var(--tp-ink-secondary)" />
+      <circle cx="12" cy="21" r="1.15" fill="var(--tp-ink-secondary)" />
+      <circle cx="3" cy="12" r="1.15" fill="var(--tp-ink-secondary)" />
     </svg>
   );
+}
+
+function extractText(node: ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractText).filter(Boolean).join(' ').trim();
+  if (isValidElement<{children?: ReactNode}>(node)) return extractText(node.props.children);
+  return '';
 }
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-outline';
@@ -31,24 +58,54 @@ export function Button({
   children,
   disabled,
   type = 'button',
-  ...rest
+  onClick,
+  'aria-label': ariaLabel,
+  id,
+  name,
+  value,
+  form,
+  title,
+  style,
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   size?: 'sm' | 'md';
   loading?: boolean;
 }) {
-  const variantClass = `tp-btn-${variant}`;
-  const sizeClass = size === 'sm' ? 'tp-btn-sm' : '';
+  const astryxVariant =
+    variant === 'danger' ? 'destructive' :
+    variant === 'danger-outline' ? 'secondary' :
+    variant;
+  const computedClass =
+    variant === 'danger-outline'
+      ? `tp-btn-danger-outline ${className}`.trim()
+      : className || undefined;
+
+  const isPlainText =
+    typeof children === 'string' ||
+    typeof children === 'number' ||
+    (Array.isArray(children) && Children.toArray(children).every(child => typeof child === 'string' || typeof child === 'number'));
+
+  const textLabel = ariaLabel ?? (extractText(children) || 'Action');
+
   return (
-    <button
+    <AstryxButton
       type={type}
-      className={`tp-btn ${variantClass} ${sizeClass} ${className}`.trim()}
-      disabled={disabled || loading}
-      aria-busy={loading || undefined}
-      {...rest}
+      variant={astryxVariant}
+      size={size}
+      label={textLabel}
+      isDisabled={Boolean(disabled)}
+      isLoading={loading}
+      onClick={onClick}
+      className={computedClass}
+      id={id}
+      name={name}
+      value={value}
+      form={form}
+      tooltip={title}
+      style={style}
     >
-      {children}
-    </button>
+      {isPlainText ? undefined : <span className="tp-btn-content">{children}</span>}
+    </AstryxButton>
   );
 }
 
@@ -57,14 +114,29 @@ export function IconButton({
   className = '',
   children,
   type = 'button',
-  ...rest
+  disabled,
+  onClick,
+  style,
+  'aria-expanded': ariaExpanded,
 }: ButtonHTMLAttributes<HTMLButtonElement> & {label: string}) {
   return (
-    <button type={type} aria-label={label} title={label} className={`tp-icon-btn ${className}`.trim()} {...rest}>
-      {children}
-    </button>
+    <AstryxIconButton
+      type={type}
+      label={label}
+      tooltip={label}
+      icon={children}
+      variant="ghost"
+      size="sm"
+      isDisabled={Boolean(disabled)}
+      onClick={onClick}
+      className={className || undefined}
+      style={style}
+      aria-expanded={ariaExpanded}
+    />
   );
 }
+
+const allowedTextTypes = new Set<TextInputType>(['text', 'password', 'email', 'search', 'tel', 'url']);
 
 export function TextField({
   label,
@@ -72,22 +144,64 @@ export function TextField({
   error,
   id,
   className = '',
-  ...rest
+  type = 'text',
+  value,
+  onChange,
+  placeholder,
+  required,
+  disabled,
+  readOnly,
+  autoFocus,
+  autoComplete,
+  name,
+  min,
+  max,
+  step,
+  inputMode,
 }: InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   hint?: string;
   error?: string;
 }) {
-  const autoId = useId();
-  const fieldId = id ?? autoId;
-  const descIds = [hint ? `${fieldId}-hint` : '', error ? `${fieldId}-err` : ''].filter(Boolean).join(' ') || undefined;
+  const isNumber = type === 'number';
+  const mappedType: TextInputType = allowedTextTypes.has(type as TextInputType) ? (type as TextInputType) : 'text';
+  const resolvedInputMode = inputMode ?? (isNumber ? 'decimal' : undefined);
+  const stringValue = value === undefined || value === null ? '' : String(value);
+
   return (
-    <div className={`tp-field ${className}`.trim()}>
-      <label className="tp-label" htmlFor={fieldId}>{label}</label>
-      <input id={fieldId} className="tp-input" aria-describedby={descIds} aria-invalid={error ? true : undefined} {...rest} />
-      {hint ? <p id={`${fieldId}-hint`} className="tp-hint">{hint}</p> : null}
-      {error ? <p id={`${fieldId}-err`} className="tp-field-error" role="alert">{error}</p> : null}
-    </div>
+    <AstryxTextInput
+      id={id}
+      label={label}
+      type={mappedType}
+      inputMode={resolvedInputMode}
+      value={stringValue}
+      onChange={(_, event) => {
+        if (!onChange) return;
+        if (isNumber && min !== undefined && event.target.value !== '') {
+          const parsed = Number(event.target.value);
+          if (!Number.isNaN(parsed) && typeof min === 'number' && parsed < min) {
+            onChange(event);
+            return;
+          }
+        }
+        onChange(event);
+      }}
+      placeholder={placeholder}
+      description={hint}
+      status={error ? {type: 'error', message: error} : undefined}
+      isRequired={Boolean(required)}
+      isDisabled={Boolean(disabled)}
+      isReadOnly={Boolean(readOnly)}
+      hasAutoFocus={Boolean(autoFocus)}
+      autoComplete={autoComplete}
+      htmlName={name}
+      width="100%"
+      size="md"
+      containerClassName={className || undefined}
+      data-min={min}
+      data-max={max}
+      data-step={step}
+    />
   );
 }
 
@@ -125,22 +239,39 @@ export function TextAreaField({
   error,
   id,
   className = '',
-  ...rest
+  value,
+  onChange,
+  placeholder,
+  rows,
+  required,
+  disabled,
+  readOnly,
+  autoFocus,
+  name,
 }: TextareaHTMLAttributes<HTMLTextAreaElement> & {
   label: string;
   hint?: string;
   error?: string;
 }) {
-  const autoId = useId();
-  const fieldId = id ?? autoId;
-  const descIds = [hint ? `${fieldId}-hint` : '', error ? `${fieldId}-err` : ''].filter(Boolean).join(' ') || undefined;
+  const stringValue = value === undefined || value === null ? '' : String(value);
   return (
-    <div className={`tp-field ${className}`.trim()}>
-      <label className="tp-label" htmlFor={fieldId}>{label}</label>
-      <textarea id={fieldId} className="tp-textarea" aria-describedby={descIds} aria-invalid={error ? true : undefined} {...rest} />
-      {hint ? <p id={`${fieldId}-hint`} className="tp-hint">{hint}</p> : null}
-      {error ? <p id={`${fieldId}-err`} className="tp-field-error" role="alert">{error}</p> : null}
-    </div>
+    <AstryxTextArea
+      id={id}
+      label={label}
+      value={stringValue}
+      onChange={(_, event) => onChange?.(event)}
+      placeholder={placeholder}
+      rows={rows}
+      description={hint}
+      status={error ? {type: 'error', message: error} : undefined}
+      isRequired={Boolean(required)}
+      isDisabled={Boolean(disabled)}
+      isReadOnly={Boolean(readOnly)}
+      hasAutoFocus={Boolean(autoFocus)}
+      htmlName={name}
+      width="100%"
+      containerClassName={className || undefined}
+    />
   );
 }
 
@@ -159,41 +290,54 @@ export function CheckboxField({
   onChange: (checked: boolean) => void;
   id?: string;
 }) {
-  const autoId = useId();
-  const fieldId = id ?? autoId;
   return (
-    <label className="tp-checkbox-row" htmlFor={fieldId}>
-      <input
-        id={fieldId}
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={event => onChange(event.target.checked)}
-      />
-      <span className="tp-checkbox-text">
-        <span>{label}</span>
-        {description ? <span className="tp-hint">{description}</span> : null}
-      </span>
-    </label>
+    <AstryxCheckboxInput
+      id={id}
+      label={label}
+      description={description}
+      value={checked}
+      isDisabled={Boolean(disabled)}
+      onChange={next => onChange(next)}
+      size="sm"
+    />
   );
 }
 
-export function StatusPill({tone = 'neutral', label}: {tone?: StatusTone; label: string}) {
-  const Icon =
+const tokenColorMap: Record<StatusTone, TokenColor> = {
+  ok: 'green',
+  warn: 'yellow',
+  danger: 'red',
+  info: 'blue',
+  neutral: 'gray',
+};
+
+export function StatusPill({
+  tone = 'neutral',
+  label,
+  icon,
+}: {
+  tone?: StatusTone;
+  label: string;
+  icon?: ReactNode;
+}) {
+  const DefaultIcon =
     tone === 'ok' ? CheckCircle2 :
     tone === 'warn' ? AlertTriangle :
     tone === 'danger' ? ShieldAlert :
     Info;
   return (
-    <span className="tp-status" data-tone={tone}>
-      <Icon size={13} strokeWidth={2} aria-hidden="true" />
-      <span>{label}</span>
-    </span>
+    <AstryxToken
+      size="sm"
+      color={tokenColorMap[tone]}
+      icon={icon ?? <DefaultIcon size={13} strokeWidth={2} aria-hidden="true" />}
+      label={label}
+    />
   );
 }
 
 export function CountPill({count, tone = 'neutral'}: {count: number; tone?: 'neutral' | 'warn' | 'danger'}) {
-  return <span className="tp-count" data-tone={tone}>{count}</span>;
+  const variant = tone === 'danger' ? 'error' : tone === 'warn' ? 'warning' : 'neutral';
+  return <AstryxBadge variant={variant} label={count} />;
 }
 
 export function Banner({
@@ -207,21 +351,25 @@ export function Banner({
   children?: ReactNode;
   action?: ReactNode;
 }) {
-  const Icon =
-    tone === 'ok' ? CheckCircle2 :
-    tone === 'warn' ? AlertTriangle :
-    tone === 'danger' ? AlertCircle :
-    Info;
-  const role = tone === 'danger' || tone === 'warn' ? 'alert' : 'status';
+  const status =
+    tone === 'ok' ? 'success' :
+    tone === 'warn' ? 'warning' :
+    tone === 'danger' ? 'error' :
+    'info';
+  const resolvedTitle = title ?? (children ?? 'Notice');
+  const resolvedDescription = title ? children : undefined;
+  const role = tone === 'danger' || tone === 'warn' ? 'alert' : undefined;
+
   return (
-    <div className="tp-banner" data-tone={tone} role={role}>
-      <Icon size={16} strokeWidth={2} style={{flexShrink: 0, marginTop: 2}} aria-hidden="true" />
-      <div className="tp-banner-body">
-        {title ? <div className="tp-banner-title">{title}</div> : null}
-        {children ? <div>{children}</div> : null}
-      </div>
-      {action ? <div>{action}</div> : null}
-    </div>
+    <AstryxBanner
+      status={status}
+      title={resolvedTitle}
+      description={resolvedDescription}
+      endContent={action}
+      container="card"
+      collapsible={false}
+      role={role}
+    />
   );
 }
 
@@ -251,20 +399,24 @@ export function Tabs({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="tp-tabs" role="tablist" aria-label={label}>
-      {items.map(item => (
-        <button
-          key={item.id}
-          type="button"
-          role="tab"
-          aria-selected={activeId === item.id}
-          className="tp-tab"
-          onClick={() => onSelect(item.id)}
-        >
-          <span>{item.label}</span>
-          {item.count !== undefined && item.count > 0 ? <CountPill count={item.count} tone={item.countTone} /> : null}
-        </button>
-      ))}
+    <div className="tp-tabs-wrap">
+      <TabList
+        role="tablist"
+        aria-label={label}
+        value={activeId}
+        onChange={onSelect}
+        hasDivider
+        overflow="auto"
+      >
+        {items.map(item => (
+          <Tab
+            key={item.id}
+            value={item.id}
+            label={item.label}
+            endContent={item.count !== undefined && item.count > 0 ? <CountPill count={item.count} tone={item.countTone} /> : undefined}
+          />
+        ))}
+      </TabList>
     </div>
   );
 }
@@ -298,28 +450,17 @@ export function CodeBlock({
   title?: string;
   code: string;
 }) {
-  const [copied, setCopied] = useState(false);
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setCopied(false);
-    }
-  }
-
   return (
-    <div className="tp-code-wrap">
-      <div className="tp-code-head">
-        <span>{title ?? 'Output'}</span>
-        <Button variant="ghost" size="sm" onClick={() => void handleCopy()}>
-          {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-          <span>{copied ? 'Copied' : 'Copy'}</span>
-        </Button>
-      </div>
-      <pre className="tp-code-pre">{code}</pre>
+    <div className="tp-code-container">
+      <AstryxCodeBlock
+        code={code}
+        title={title}
+        width="100%"
+        isWrapped
+        maxHeight={380}
+        hasCopyButton
+        size="sm"
+      />
     </div>
   );
 }
@@ -334,10 +475,8 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="tp-empty" role="status">
-      <h3>{title}</h3>
-      {description ? <p className="tp-muted">{description}</p> : null}
-      {action ? <div>{action}</div> : null}
+    <div className="tp-empty-wrap">
+      <AstryxEmptyState title={title} description={description} actions={action} isCompact headingLevel={3} />
     </div>
   );
 }

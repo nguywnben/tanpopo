@@ -1,14 +1,15 @@
-# Tanpopo Web Console Guidelines (`ADR-0007`, `DEC-086`)
+# Tanpopo Web Console Guidelines (`ADR-0007`, `DEC-086`, `DEC-087`)
 
 Read [`../../AGENTS.md`](../../AGENTS.md), [`../../CONSTRAINTS.md`](../../CONSTRAINTS.md), and [`../../docs/architecture/adr/0007-tanpopo-console-v2-design-system.md`](../../docs/architecture/adr/0007-tanpopo-console-v2-design-system.md) before modifying Web Console files.
 
 ## Architecture & Directory Layout
 
-- `src/styles/` — Layered semantic CSS (`@layer tokens, base, layout, components`):
-  - `tokens.css`: Warm Daylight Precision (light) + Obsidian Dark (`[data-theme="dark"]`) semantic tokens. Must remain LF-encoded.
-  - `base.css`, `layout.css`, `components.css`: Structural layout & accessible component primitives.
-  - `theme.tsx`: Light/dark theme state provider (`localStorage` + `prefers-color-scheme`).
-- `src/ui/` — Reusable accessible primitives (`primitives.tsx`, `DataTable.tsx`, `Overlays.tsx`).
+- `src/astryx-themes.ts` — CLI-generated Astryx Neutral theme registry (`npm run astryx -- theme add neutral`). Must remain LF-encoded.
+- `src/styles/` — Astryx Neutral token-bridged layered CSS (`@layer reset, astryx-base, astryx-theme, tokens, base, layout, components`):
+  - `tokens.css`: Neutral surface/border/ink aliases sourced directly from `@astryxdesign/theme-neutral` (light & dark synchronized via `light-dark()`). Must remain LF-encoded and contain zero retired beige/ochre hex literals.
+  - `base.css`, `layout.css`, `components.css`: Structural responsive shell, flat hairline metric strip, responsive operational tables, and utility stacks.
+  - `theme.tsx`: Root Astryx `<Theme theme={themes[defaultThemeSlug]} mode={theme}>` + light/dark mode persistence (`localStorage` + `prefers-color-scheme`) covering both pre-login (`/setup`, `/login`) and post-login screens.
+- `src/ui/` — Thin Tanpopo adapters over official `@astryxdesign/core/*` components (`primitives.tsx`, `Overlays.tsx`) plus responsive desktop-table / mobile-stacked-row `DataTable.tsx`.
 - `src/router/` — Zero-dependency HTML5 History SPA router (`RouterContext.tsx`).
 - `src/api/` — OpenAPI 3.1 generated types (`generated.ts`), security policy (`operation-policy.generated.ts`), and CSRF/If-Match-enforcing `openapi-fetch` clients (`client.ts`, `catalogClient.ts`, `managementClient.ts`).
 - `src/shell/` — 4-domain operational navigation (`routes.ts`, `ConsoleShell.tsx`, `WorkspaceRouter.tsx`).
@@ -16,10 +17,11 @@ Read [`../../AGENTS.md`](../../AGENTS.md), [`../../CONSTRAINTS.md`](../../CONSTR
 
 ## Mandatory Quality & Responsive Rules
 
-1. **Zero Page-Level Horizontal Overflow:** Every primary screen must maintain `document.documentElement.scrollWidth <= document.documentElement.clientWidth` at `320`, `375`, `768`, `1024`, `1440`, and `1920` CSS px — including long data strings, open sidebars, open modals/drawers, and long logs/JSON. Never apply `overflow-x: hidden` or `overflow-x: clip` to `html` or `body`.
-2. **Operational Ergonomics:** No nested cards, no decorative badges (counts and semantic status indicators only), scannable responsive tables (stacked key-value rows below `768px`), and slide-over drawers for secondary details and forms.
-3. **Security & Offline Operation:** Preserve mandatory `X-CSRF-Token` and `If-Match` OpenAPI guards, RBAC route/action visibility, write-only credential handling, English-only UI copy (`ISS-008`), local `Figtree` font assets (`0` external runtime requests), and `npm ci --ignore-scripts`.
-4. **Verification Gate:** Run inside `web/console/`:
+1. **Astryx Neutral Standard:** Use official `@astryxdesign/core/*` components everywhere suitable, and use Astryx Neutral tokens for domain-specific layouts. Keep active states strictly neutral (no colored decorative stripes/bars); reserve semantic colors for warnings, errors, success indicators, and destructive actions.
+2. **Zero Page-Level Horizontal Overflow:** Every primary screen must maintain `document.documentElement.scrollWidth <= document.documentElement.clientWidth` at `320`, `375`, `768`, `1024`, `1440`, and `1920` CSS px — including long data strings, open sidebars, open modals/drawers, and long logs/JSON. Never apply `overflow-x: hidden` or `overflow-x: clip` to `html` or `body`.
+3. **Operational Ergonomics:** No nested cards, no decorative badges (counts and semantic status tokens only), scannable responsive tables (stacked key-value rows below `768px`), and Astryx `Drawer` / `Dialog` / `AlertDialog` overlays for secondary details, forms, and confirmations.
+4. **Security & Offline Operation:** Preserve mandatory `X-CSRF-Token` and `If-Match` OpenAPI guards, RBAC route/action visibility, write-only credential handling, English-only UI copy (`ISS-008`), Vite/Vitest local font aliasing (`@astryxdesign/theme-neutral/fonts.css` -> `assets/fonts/local-figtree-fonts.css` for `0` external runtime requests), and `npm ci --ignore-scripts`.
+5. **Verification Gate:** Run inside `web/console/`:
    ```bash
    npm run typecheck
    npm test

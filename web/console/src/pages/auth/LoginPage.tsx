@@ -1,10 +1,13 @@
 import {useState, type FormEvent} from 'react';
+import {Moon, Sun} from 'lucide-react';
 import {loginAdmin} from '../../api/client';
 import {Link, useRouter} from '../../router/RouterContext';
-import {Banner, Button, TanpopoMark, TextField} from '../../ui/primitives';
+import {useTheme} from '../../styles/theme';
+import {Banner, Button, IconButton, TanpopoMark, TextField} from '../../ui/primitives';
 
 export function LoginPage() {
   const {navigate} = useRouter();
+  const {theme, toggleTheme} = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -30,9 +33,14 @@ export function LoginPage() {
   return (
     <main className="tp-auth-page">
       <div className="tp-auth-panel">
-        <div className="tp-row">
-          <TanpopoMark size={24} />
-          <span style={{fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.02em'}}>Tanpopo</span>
+        <div className="tp-auth-head">
+          <div className="tp-row">
+            <TanpopoMark size={24} />
+            <span style={{fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.02em'}}>Tanpopo</span>
+          </div>
+          <IconButton label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>
+            {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+          </IconButton>
         </div>
 
         <div className="tp-stack-sm">
@@ -68,7 +76,7 @@ export function LoginPage() {
 
         <hr className="tp-divider" />
         <p className="tp-muted">
-          New instance? <Link href="/setup">Run first-time setup</Link>
+          New instance? <Link href="/setup" className="tp-link">Run first-time setup</Link>
         </p>
       </div>
     </main>

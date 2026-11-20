@@ -1,6 +1,9 @@
-import {useEffect, useId, useRef, useState, type ReactNode} from 'react';
-import {X} from 'lucide-react';
-import {Button, IconButton, TextField} from './primitives';
+import {useEffect, useState, type ReactNode} from 'react';
+import {AlertDialog} from '@astryxdesign/core/AlertDialog';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {Drawer as AstryxDrawer, DrawerHeader} from '@astryxdesign/core/Drawer';
+import {Layout, LayoutContent, LayoutFooter} from '@astryxdesign/core/Layout';
+import {Button, TextField} from './primitives';
 
 export function Modal({
   open,
@@ -21,56 +24,41 @@ export function Modal({
   footer?: ReactNode;
   children: ReactNode;
 }) {
-  const titleId = useId();
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialogRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && dismissible) onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      previous?.focus();
-    };
-  }, [open, dismissible, onClose]);
-
-  if (!open) return null;
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && dismissible) onClose();
+  };
 
   return (
-    <div
-      className="tp-overlay"
-      onMouseDown={event => {
-        if (dismissible && event.target === event.currentTarget) onClose();
-      }}
+    <Dialog
+      isOpen={open}
+      onOpenChange={handleOpenChange}
+      width={size === 'lg' ? 720 : 540}
+      maxHeight="85dvh"
+      purpose={dismissible ? 'info' : 'required'}
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className="tp-modal"
-        data-size={size}
-      >
-        <div className="tp-dialog-head">
-          <div className="tp-dialog-title-group">
-            <h2 id={titleId}>{title}</h2>
-            {subtitle ? <p className="tp-muted">{subtitle}</p> : null}
-          </div>
-          {dismissible ? (
-            <IconButton label="Close dialog" onClick={onClose}>
-              <X size={16} aria-hidden="true" />
-            </IconButton>
-          ) : null}
-        </div>
-        <div className="tp-dialog-body">{children}</div>
-        {footer ? <div className="tp-dialog-foot">{footer}</div> : null}
-      </div>
-    </div>
+      <Layout
+        header={
+          <DialogHeader
+            title={title}
+            subtitle={subtitle}
+            hasDivider
+            onOpenChange={dismissible ? handleOpenChange : undefined}
+          />
+        }
+        content={
+          <LayoutContent>
+            <div className="tp-overlay-body">{children}</div>
+          </LayoutContent>
+        }
+        footer={
+          footer ? (
+            <LayoutFooter hasDivider>
+              <div className="tp-overlay-footer">{footer}</div>
+            </LayoutFooter>
+          ) : undefined
+        }
+      />
+    </Dialog>
   );
 }
 
@@ -91,54 +79,42 @@ export function Drawer({
   footer?: ReactNode;
   children: ReactNode;
 }) {
-  const titleId = useId();
-  const drawerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    drawerRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      previous?.focus();
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) onClose();
+  };
 
   return (
-    <div
-      className="tp-drawer-overlay"
-      onMouseDown={event => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <AstryxDrawer
+      isOpen={open}
+      onOpenChange={handleOpenChange}
+      side="end"
+      width={size === 'lg' ? 640 : 480}
+      label={title}
+      purpose="info"
     >
-      <div
-        ref={drawerRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className="tp-drawer"
-        data-size={size}
-      >
-        <div className="tp-dialog-head">
-          <div className="tp-dialog-title-group">
-            <h2 id={titleId}>{title}</h2>
-            {subtitle ? <p className="tp-muted">{subtitle}</p> : null}
-          </div>
-          <IconButton label="Close panel" onClick={onClose}>
-            <X size={16} aria-hidden="true" />
-          </IconButton>
-        </div>
-        <div className="tp-dialog-body">{children}</div>
-        {footer ? <div className="tp-dialog-foot">{footer}</div> : null}
-      </div>
-    </div>
+      <Layout
+        header={
+          <DrawerHeader
+            title={title}
+            subtitle={subtitle}
+            hasDivider
+            onOpenChange={handleOpenChange}
+          />
+        }
+        content={
+          <LayoutContent>
+            <div className="tp-overlay-body">{children}</div>
+          </LayoutContent>
+        }
+        footer={
+          footer ? (
+            <LayoutFooter hasDivider>
+              <div className="tp-overlay-footer">{footer}</div>
+            </LayoutFooter>
+          ) : undefined
+        }
+      />
+    </AstryxDrawer>
   );
 }
 
@@ -172,6 +148,25 @@ export function ConfirmDialog({
   useEffect(() => {
     if (open) setTyped('');
   }, [open]);
+
+  if (!requireMatch && !children) {
+    return (
+      <AlertDialog
+        isOpen={open}
+        onOpenChange={nextOpen => {
+          if (!nextOpen && !busy) onClose();
+        }}
+        title={title}
+        description={description}
+        cancelLabel="Cancel"
+        actionLabel={confirmLabel}
+        actionVariant={confirmVariant === 'danger' ? 'destructive' : 'primary'}
+        isActionLoading={busy}
+        onAction={onConfirm}
+        width={440}
+      />
+    );
+  }
 
   const canConfirm = !busy && (!requireMatch || typed === requireMatch);
 
