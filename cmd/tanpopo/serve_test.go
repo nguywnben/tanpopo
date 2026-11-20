@@ -6,6 +6,8 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -17,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -488,9 +491,23 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	owners := "not captured"
+	if removeErr != nil {
+		if discovered, ownerErr := fileLockOwners(filepath.Join(dataDir, "tanpopo.db")); ownerErr != nil {
+			owners = fmt.Sprintf("lookup failed: %v", ownerErr)
+		} else {
+			owners = discovered
+		}
+		if child, childErr := os.ReadFile(readyPath); childErr == nil {
+			owners += fmt.Sprintf("; child process %s", strings.TrimSpace(string(child)))
+		} else {
+			owners += fmt.Sprintf("; child identity unavailable: %v", childErr)
+		}
+	}
 	_ = os.WriteFile(releasePath, []byte("release"), 0o600)
 	childErr := <-waitDone
 	waited = true
+	t.Logf("data-plane runtime child diagnostics:\n%s", readTestLog(logPath))
 	if childErr != nil {
 		t.Fatalf("data-plane runtime child failed: %v\n%s", childErr, readTestLog(logPath))
 	}
@@ -507,9 +524,9 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 			time.Sleep(50 * time.Millisecond)
 		}
 		if postExitErr == nil {
-			t.Fatalf("runtime left data directory locked until child process exit: before exit: %v; removal succeeded after exit\n%s", removeErr, readTestLog(logPath))
+			t.Fatalf("runtime left data directory locked until child process exit: before exit: %v; removal succeeded after exit; Windows file-lock owners: %s\n%s", removeErr, owners, readTestLog(logPath))
 		}
-		t.Fatalf("runtime left data directory locked after shutdown: before exit: %v; after exit: %v\n%s", removeErr, postExitErr, readTestLog(logPath))
+		t.Fatalf("runtime left data directory locked after shutdown: before exit: %v; after exit: %v; Windows file-lock owners: %s\n%s", removeErr, postExitErr, owners, readTestLog(logPath))
 	}
 }
 
@@ -543,7 +560,32 @@ func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce strin
 		filepath.Clean(os.Getenv("TANPOPO_BOOTSTRAP_TOKEN_FILE")) != filepath.Join(parentAbs, "data", "bootstrap.token") {
 		t.Fatal("child runtime paths are not confined to the temporary data directory")
 	}
-	handler, closeRuntime, err := buildRuntime(context.Background(), "data-plane", "127.0.0.1:8080")
+	var runtimeDB *sql.DB
+	handler, closeRuntime, err := buildRuntimeWithBeforeSQLiteClose(context.Background(), "data-plane", "127.0.0.1:8080", func(db *sql.DB) {
+		runtimeDB = db
+		stats := db.Stats()
+		fmt.Fprintf(os.Stderr, "pre-close SQLite pool: open=%d in_use=%d idle=%d\n", stats.OpenConnections, stats.InUse, stats.Idle)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		conn, inspectErr := db.Conn(ctx)
+		if inspectErr != nil {
+			fmt.Fprintf(os.Stderr, "pre-close SQLite connection inspection failed: %v\n", inspectErr)
+			return
+		}
+		defer conn.Close()
+		statements, inspectErr := sqliteOpenStatements(conn)
+		if inspectErr != nil {
+			fmt.Fprintf(os.Stderr, "pre-close SQLite statement inspection failed: %v\n", inspectErr)
+			return
+		}
+		statementIDs := make([]string, 0, len(statements))
+		for _, statement := range statements {
+			digest := sha256.Sum256([]byte(statement))
+			statementIDs = append(statementIDs, hex.EncodeToString(digest[:8]))
+		}
+		sort.Strings(statementIDs)
+		fmt.Fprintf(os.Stderr, "pre-close SQLite statement IDs (%d): %v\n", len(statementIDs), statementIDs)
+	})
 	if err != nil {
 		t.Fatalf("build data-plane runtime: %v", err)
 	}
@@ -560,11 +602,13 @@ func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce strin
 	if err := closeRuntime(); err != nil {
 		t.Fatalf("runtime shutdown returned error: %v\nactive goroutine functions:\n%s", err, runtimeGoroutineFunctionNames())
 	}
+	stats := runtimeDB.Stats()
+	fmt.Fprintf(os.Stderr, "post-close SQLite pool: open=%d in_use=%d idle=%d\n", stats.OpenConnections, stats.InUse, stats.Idle)
 	handler = nil
 	closeRuntime = nil
 	runtime.GC()
 	fmt.Fprintf(os.Stderr, "post-shutdown goroutine functions:\n%s", runtimeGoroutineFunctionNames())
-	if err := os.WriteFile(filepath.Join(parentDir, "shutdown.ready"), []byte("ready"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(parentDir, "shutdown.ready"), []byte(fmt.Sprintf("pid=%d", os.Getpid())), 0o600); err != nil {
 		t.Fatalf("write child shutdown marker: %v", err)
 	}
 	deadline := time.Now().Add(40 * time.Second)

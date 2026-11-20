@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
@@ -41,6 +42,14 @@ const (
 	maxOutstandingPerOrg = 5000
 	maxRequestTime       = 2 * time.Minute
 	maxBackoffTime       = 24 * time.Hour
+)
+
+const (
+	claimGateActive int32 = iota
+	claimGateCommitting
+	claimGateStopping
+	claimGateStopAfterCommit
+	claimGateStopped
 )
 
 // SecretUnsealer returns credential plaintext and the function that must erase it.
@@ -91,16 +100,21 @@ type Event struct {
 
 // Dispatcher is a persistent bounded webhook queue and worker pool.
 type Dispatcher struct {
-	cfg         Config
-	db          dispatcherDB
-	workerConn  *sql.Conn
-	pinned      bool
-	redactor    *privacy.Redactor
-	mu          sync.Mutex
-	dbMu        sync.Mutex
-	cleanupMu   sync.Mutex
-	lastCleanup time.Time
-	running     bool
+	cfg           Config
+	db            dispatcherDB
+	workerConn    *sql.Conn
+	pinned        bool
+	redactor      *privacy.Redactor
+	mu            sync.Mutex
+	dbMu          sync.Mutex
+	cleanupMu     sync.Mutex
+	claimMu       sync.Mutex
+	claimGate             atomic.Int32
+	beforeClaimCommit     func()
+	afterClaimCommitGate func()
+	lastCleanup   time.Time
+	running       bool
+	runStarted    bool
 }
 
 var (
@@ -213,6 +227,54 @@ func (d *Dispatcher) Close() error {
 	err := errors.Join(resetErr, d.workerConn.Close())
 	d.workerConn = nil
 	return err
+}
+
+// StopClaiming establishes an atomic boundary against claim commit. If shutdown
+// wins before the commit gate, the claim rolls back. A commit that already won
+// the gate completes before this method returns; later claims do not start.
+func (d *Dispatcher) StopClaiming() {
+	if d == nil {
+		return
+	}
+	for {
+		switch state := d.claimGate.Load(); state {
+		case claimGateActive:
+			if d.claimGate.CompareAndSwap(claimGateActive, claimGateStopping) {
+				goto waitForClaim
+			}
+		case claimGateCommitting:
+			if d.claimGate.CompareAndSwap(claimGateCommitting, claimGateStopAfterCommit) {
+				goto waitForClaim
+			}
+		case claimGateStopping, claimGateStopAfterCommit, claimGateStopped:
+			goto waitForClaim
+		}
+	}
+
+waitForClaim:
+	d.claimMu.Lock()
+	d.claimGate.Store(claimGateStopped)
+	d.claimMu.Unlock()
+}
+
+func (d *Dispatcher) commitClaim(ctx context.Context, tx *sql.Tx) (bool, error) {
+	if ctx.Err() != nil {
+		return false, nil
+	}
+	if d.beforeClaimCommit != nil {
+		d.beforeClaimCommit()
+	}
+	if !d.claimGate.CompareAndSwap(claimGateActive, claimGateCommitting) {
+		return false, nil
+	}
+	if d.afterClaimCommitGate != nil {
+		d.afterClaimCommitGate()
+	}
+	err := tx.Commit()
+	if !d.claimGate.CompareAndSwap(claimGateCommitting, claimGateActive) {
+		d.claimGate.Store(claimGateStopped)
+	}
+	return true, err
 }
 
 // lockDatabase serializes complete transactions when PostgreSQL mode pins the
@@ -556,23 +618,30 @@ func (d *Dispatcher) cleanupTerminal(ctx context.Context) {
 	}
 }
 
-// Run starts the bounded worker pool and runs until ctx is canceled. A dispatcher
-// instance may only have one active Run call at a time.
+// Run starts the bounded worker pool and runs until ctx is canceled. Dispatcher
+// instances are one-shot because shutdown permanently closes the claim boundary.
+// Parent cancellation requests shutdown; StopClaiming establishes its boundary
+// before the detached worker context is canceled, so SQLite claims can close cleanly.
 func (d *Dispatcher) Run(ctx context.Context) error {
 	d.mu.Lock()
-	if d.running {
+	if d.running || d.runStarted {
 		d.mu.Unlock()
-		return errors.New("webhook: dispatcher already running")
+		return errors.New("webhook: dispatcher can only run once")
 	}
 	d.running = true
+	d.runStarted = true
 	d.mu.Unlock()
 	defer func() { d.mu.Lock(); d.running = false; d.mu.Unlock() }()
+	workerCtx, cancelWorkers := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancelWorkers()
 	var workers sync.WaitGroup
 	workers.Add(d.cfg.Limits.Workers)
 	for i := 0; i < d.cfg.Limits.Workers; i++ {
-		go func() { defer workers.Done(); d.worker(ctx) }()
+		go func() { defer workers.Done(); d.worker(workerCtx) }()
 	}
 	<-ctx.Done()
+	d.StopClaiming()
+	cancelWorkers()
 	workers.Wait()
 	return nil
 }
@@ -595,6 +664,9 @@ func (d *Dispatcher) worker(ctx context.Context) {
 		default:
 		}
 		d.dispatchOutbox(ctx)
+		if ctx.Err() != nil {
+			return
+		}
 		item, err := d.claim(ctx)
 		if err == nil && item != nil {
 			d.deliver(ctx, *item)
@@ -611,14 +683,39 @@ func (d *Dispatcher) worker(ctx context.Context) {
 // claim atomically advances the queue lease and attempt count. Expired leases are
 // eligible again after process loss, so the persistent queue remains recoverable.
 func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
+	if ctx.Err() != nil {
+		return nil, nil
+	}
+	// Keep the shutdown boundary around the complete bounded transaction so
+	// shutdown cannot cancel SQLite while UPDATE ... RETURNING owns a statement.
+	d.claimMu.Lock()
+	defer d.claimMu.Unlock()
+	if d.claimGate.Load() != claimGateActive || ctx.Err() != nil {
+		return nil, nil
+	}
 	unlock := d.lockDatabase()
 	defer unlock()
+	// Do not cancel an in-flight SQLite UPDATE ... RETURNING during shutdown.
+	// modernc SQLite can leave its prepared statement alive when cancellation races
+	// row delivery, keeping the database file locked after the pool closes. Complete
+	// the bounded operation; canceled claims roll back, and shutdown waits for this
+	// transaction before allowing the store to close.
+	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Limits.RequestTimeout)
+	defer cancel()
+	tx, err := d.db.BeginTx(claimCtx, nil)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
 	now := d.cfg.Now().UnixMilli()
 	lease := now + (d.cfg.Limits.RequestTimeout + d.cfg.Limits.LeaseSafety).Milliseconds()
-	_, _ = d.db.ExecContext(ctx, d.bind(`UPDATE webhook_deliveries SET status = ?, last_error = ?, terminal_at_ms = ?
+	_, _ = tx.ExecContext(claimCtx, d.bind(`UPDATE webhook_deliveries SET status = ?, last_error = ?, terminal_at_ms = ?
 		WHERE attempt_count >= ? AND status IN (?, ?) AND next_attempt_at_ms <= ?`),
 		statusDead, "attempt limit exhausted", now, d.cfg.Limits.MaxAttempts, statusPending, statusRetry, now)
-	row := d.db.QueryRowContext(ctx, d.bind(`UPDATE webhook_deliveries SET attempt_count = attempt_count + 1, next_attempt_at_ms = ?
+	row := tx.QueryRowContext(claimCtx, d.bind(`UPDATE webhook_deliveries SET attempt_count = attempt_count + 1, next_attempt_at_ms = ?
 		WHERE id = (SELECT q.id FROM webhook_deliveries q JOIN webhook_subscriptions s
 		ON s.org_id=q.org_id AND s.id=q.subscription_id WHERE s.enabled = ? AND q.status IN (?, ?)
 		AND q.attempt_count < ? AND q.next_attempt_at_ms <= ? ORDER BY q.next_attempt_at_ms, q.created_at_ms, q.id LIMIT 1)
@@ -626,12 +723,22 @@ func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
 		lease, true, statusPending, statusRetry, d.cfg.Limits.MaxAttempts, now, statusPending, statusRetry, now)
 	var item delivery
 	if err := row.Scan(&item.id, &item.orgID, &item.subscriptionID, &item.eventID, &item.eventType, &item.payload, &item.attempt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) || ctx.Err() != nil {
+		if ctx.Err() != nil {
+			return nil, nil
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			committed, err := d.commitClaim(ctx, tx)
+			if err != nil {
+				return nil, err
+			}
+			if !committed {
+				return nil, nil
+			}
 			return nil, nil
 		}
 		return nil, err
 	}
-	err := d.db.QueryRowContext(ctx, d.bind(`SELECT s.target_url, s.signing_secret_credential_id, s.target_url_credential_id, s.allow_private_ip, s.allowed_cidrs_json,
+	err = tx.QueryRowContext(claimCtx, d.bind(`SELECT s.target_url, s.signing_secret_credential_id, s.target_url_credential_id, s.allow_private_ip, s.allowed_cidrs_json,
 		COALESCE(s.project_id,''), COALESCE(c.bound_audience,''), COALESCE(t.bound_audience,'')
 		FROM webhook_subscriptions s JOIN secret_credentials c ON c.org_id=s.org_id AND c.id=s.signing_secret_credential_id
 		JOIN secret_credentials t ON t.org_id=s.org_id AND t.id=s.target_url_credential_id
@@ -639,7 +746,27 @@ func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
 		AND (c.owner_project_id=s.project_id OR (c.owner_project_id IS NULL AND s.project_id IS NULL))
 		AND (t.owner_project_id=s.project_id OR (t.owner_project_id IS NULL AND s.project_id IS NULL))`), item.orgID, item.subscriptionID, true).Scan(&item.target, &item.credential, &item.targetCredential, &item.allowPrivate, &item.allowedCIDRs, &item.projectID, &item.boundAudience, &item.targetAudience)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil
+		}
+		committed, commitErr := d.commitClaim(ctx, tx)
+		if commitErr != nil {
+			return nil, commitErr
+		}
+		if !committed {
+			return nil, nil
+		}
 		d.fail(ctx, item, "subscription unavailable", 0)
+		return nil, nil
+	}
+	committed, err := d.commitClaim(ctx, tx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !committed {
 		return nil, nil
 	}
 	return &item, nil

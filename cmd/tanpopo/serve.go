@@ -128,6 +128,12 @@ func drainTimeoutFromEnv(lookup func(string) (string, bool)) (time.Duration, err
 }
 
 func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func() error, error) {
+	return buildRuntimeWithBeforeSQLiteClose(ctx, role, listen, nil)
+}
+
+// buildRuntimeWithBeforeSQLiteClose exposes the last quiescent SQLite state to
+// shutdown tests. Production callers use buildRuntime and install no observer.
+func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string, beforeSQLiteClose func(*sql.DB)) (http.Handler, func() error, error) {
 	if role != "all" && role != "data-plane" && role != "control-plane" {
 		return nil, nil, fmt.Errorf("invalid service role %q", role)
 	}
@@ -177,6 +183,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 	watcherDone := make(chan struct{})
 	var webhookDone chan struct{}
 	var closeWebhookDispatcher func() error
+	var webhookDispatcher *webhook.Dispatcher
 	var approvalMaintenanceDone chan struct{}
 	var marketplaceDone <-chan struct{}
 	go func() {
@@ -209,6 +216,9 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 				cancel()
 				recordActiveDBConnections("after telemetry shutdown")
 			}
+			if webhookDispatcher != nil {
+				webhookDispatcher.StopClaiming()
+			}
 			cancelRuntime()
 			if webhookDone != nil {
 				<-webhookDone
@@ -228,6 +238,9 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 			vaultStore.Close()
 			closeKeys()
 			recordActiveDBConnections("before SQLite close")
+			if beforeSQLiteClose != nil {
+				beforeSQLiteClose(db)
+			}
 			if err := store.Close(); err != nil {
 				if lastActiveDBStage != "" {
 					shutdownErr = errors.Join(shutdownErr, fmt.Errorf("sqlite: last observed %d active connection(s) at %s", lastActiveDBConnections, lastActiveDBStage))
@@ -255,7 +268,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 		}
 	}
 	brokerUnsealCap := vault.MintUnsealCapabilityForBroker()
-	webhookDispatcher, err := webhook.New(webhook.Config{
+	webhookDispatcher, err = webhook.New(webhook.Config{
 		// This binary runtime currently opens SQLite. A PostgreSQL runtime must
 		// inject its dedicated dispatcher pool and opt into role/RLS validation.
 		DB: db, Postgres: false, Resolver: egress.NewStdHostResolver(),
