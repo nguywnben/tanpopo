@@ -1,6 +1,6 @@
 # TP-IMP-0038 Execution Checkpoint
 
-**Status:** Implementation is complete locally on `develop`; Unit 38 remains `READY` under `DEC-084` until its PR is merged and post-merge CI passes. No `DONE` claim is made.
+**Status:** **`DONE`** under `DEC-085`. PR #23 merged into `main` at `7c5538ff9e9c6530e505c07f77382d9647b039b1`; all four required post-merge CI jobs passed on that SHA.
 
 ## DoR evidence
 
@@ -10,8 +10,8 @@
 
 ## Implementation and review
 
-- Base SHA: `bb0fcd295c0e6191578211c15548d0ebd068b71d`. Implementation commit `b383e49217de8a71b0631437d1b77e68af0120f3` is pushed to `origin/develop`.
-- Implementer: **GPT-6 Luna**. Independent reviewer: **Noether** (`code-reviewer`), final verdict APPROVE. Acceptance owner: **GPT-6 Luna**, pending required PR and post-merge CI.
+- Base SHA: `bb0fcd295c0e6191578211c15548d0ebd068b71d`. Implementation commit `b383e49217de8a71b0631437d1b77e68af0120f3` and CI correction `60120d01ecbd5496f2ff542465d4378c5eaa6991` were merged via PR #23.
+- Implementer and delegated acceptance owner: **GPT-6 Luna**. Independent final reviewer: **Noether** (`code-reviewer`), APPROVE on the final diff, including the early-cancellation CI correction.
 - `POST /admin/v1/playground/sessions` now creates an owner-bound ephemeral key, applies TTL and budget limits, enforces a `TOTAL_LIFETIME` virtual-key ledger through the exact key expiry (including month rollover), and revokes the key if ledger setup fails.
 - Route Explain requires a data-residency selection, constrains it to inherited policy when present, and includes it in the dry-run request.
 - Playground streams with an ephemeral key and `credentials: omit`; prompts stay in browser memory. It supports comparison, captures both `X-Tanpopo-Request-Id` values, and shows matching Admin API trace summaries.
@@ -30,9 +30,9 @@
 - Temporary Chromium Playwright journeys passed: OAuth PKCE initiation/redirect; MCP register/sync/grant; approval schema-drift blocking, escaped preview and approval; Playground comparison with both traces and no cookies. A paced 100-chunk stream rendered all chunks at 115 tokens/s from first to last token (107 assistant DOM updates); a 2,000-token stream canceled at 19 rendered characters.
 - `git diff --check` — clean.
 
-## GitHub checkpoint and remaining release gate
+## Acceptance and GitHub evidence
 
-- No Unit 38 implementation PR exists yet. Public GitHub API inspection found no open PR; the compare page is [main...develop](https://github.com/nguywnben/tanpopo/compare/main...develop?expand=1). Unit 38 is not DONE.
-- Fetching public `origin/main` and `origin/develop` succeeded. Main remains `bb0fcd295c0e6191578211c15548d0ebd068b71d`; the tested implementation checkpoint is verified on `origin/develop` at `b383e49217de8a71b0631437d1b77e68af0120f3`.
-- Push succeeded, but PR creation is blocked by GitHub CLI authentication: `GH_TOKEN` is rejected as invalid, and `gh pr create` with `GH_TOKEN` unset reports no login. Restore the GitHub CLI credential in the Codex Cloud environment, then open the PR from the compare page or CLI.
-- After opening the PR, wait for the four required checks, merge under `DEC-060`, record acceptance, sync `develop`, and verify all four post-merge jobs on the exact main SHA. Do not open Unit 39 or create a tag/release.
+- Implementation PR [#23](https://github.com/nguywnben/tanpopo/pull/23) merged at `7c5538ff9e9c6530e505c07f77382d9647b039b1`. **GPT-6 Luna** implemented and accepted Unit 38 under `DEC-072`/`DEC-085`; **Noether** (`code-reviewer`) approved the final diff.
+- PR CI [run 44693349787](https://github.com/nguywnben/tanpopo/actions/runs/44693349787) passed Stage 0 and Stage 1 on Ubuntu, macOS, and Windows. Windows passed the repeated runtime database cleanup regression. Release Artifact Dry Run [run 44693349866](https://github.com/nguywnben/tanpopo/actions/runs/44693349866) completed successfully without publishing.
+- Post-merge CI [run 44695353169](https://github.com/nguywnben/tanpopo/actions/runs/44695353169) passed all four required jobs on the actual `origin/main` SHA `7c5538ff9e9c6530e505c07f77382d9647b039b1`.
+- `develop` was fast-forwarded to the verified main SHA before this governance acceptance update. `DEC-085`, the implementation index, dependency graph, milestone map, readiness summary, and this execution record capture Unit 38 as DONE. Units 39–47 remain BLOCKED. No tag or release was created under `GATE-REL-07`.
