@@ -278,7 +278,7 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
                         <div className="tp-row" style={{justifyContent: 'space-between'}}>
                           <span className="mono" style={{fontWeight: 600}}>{stage.stage}</span>
                           <div className="tp-row">
-                            <StatusPill tone={stateTone(stage.outcome)} label={stage.outcome} />
+                            <StatusPill tone={stateTone(stage.outcome)} label={formatOperationalState(stage.outcome)} />
                             <span className="mono">{stage.duration_ms} ms</span>
                           </div>
                         </div>

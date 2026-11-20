@@ -4,7 +4,7 @@ import {exportUsageChargeback, getUsageChargebackSummary, listBudgets, updateBud
 import type {components} from '../../api/generated';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
-import {Banner, Button, MetricStrip, SectionHeader, SelectField, StatusPill, Tabs, TextField, formatMicroUSD} from '../../ui/primitives';
+import {Banner, Button, MetricStrip, SectionHeader, SelectField, StatusPill, Tabs, TextField, formatMicroUSD, formatOperationalState} from '../../ui/primitives';
 
 type Budget = components['schemas']['BudgetResource'];
 type Chargeback = components['schemas']['UsageChargebackRow'];
@@ -236,7 +236,7 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
                 width: '22%',
                 render: row => (
                   <div className="tp-row">
-                    <StatusPill tone="ok" label="EXACT" />
+                    <StatusPill tone="ok" label={formatOperationalState('EXACT')} />
                     <span className="mono">{formatMicroUSD(row.exact_micro_usd)}</span>
                   </div>
                 ),
@@ -247,7 +247,7 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
                 width: '22%',
                 render: row => (
                   <div className="tp-row">
-                    <StatusPill tone="info" label="ESTIMATED" />
+                    <StatusPill tone="warn" label={formatOperationalState('ESTIMATED')} />
                     <span className="mono">{formatMicroUSD(row.estimated_micro_usd)}</span>
                   </div>
                 ),
@@ -259,7 +259,7 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
                 width: '18%',
                 render: row => (
                   <div className="tp-row">
-                    {row.unmetered_request_count > 0 ? <StatusPill tone="danger" label="UNMETERED_FLAGGED" /> : null}
+                    {row.unmetered_request_count > 0 ? <StatusPill tone="danger" label={formatOperationalState('UNMETERED_FLAGGED')} /> : null}
                     <span className="num">{row.unmetered_request_count}</span>
                   </div>
                 ),

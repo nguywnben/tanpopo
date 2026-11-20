@@ -16,7 +16,6 @@ import {EmptyState as AstryxEmptyState} from '@astryxdesign/core/EmptyState';
 import {IconButton as AstryxIconButton} from '@astryxdesign/core/IconButton';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {MoreMenu as AstryxMoreMenu} from '@astryxdesign/core/MoreMenu';
-import {StatusDot, type StatusDotVariant} from '@astryxdesign/core/StatusDot';
 import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {TextArea as AstryxTextArea} from '@astryxdesign/core/TextArea';
 import {TextInput as AstryxTextInput, type TextInputType} from '@astryxdesign/core/TextInput';
@@ -298,34 +297,22 @@ export function CheckboxField({
   );
 }
 
-const dotVariantMap: Record<StatusTone, StatusDotVariant> = {
-  ok: 'success',
-  warn: 'warning',
-  danger: 'error',
-  info: 'accent',
-  neutral: 'neutral',
-};
-
 export function StatusPill({
   tone = 'neutral',
   label,
-  icon,
 }: {
   tone?: StatusTone;
   label: string;
-  icon?: ReactNode;
 }) {
   return (
-    <span className="tp-status-inline" data-tone={tone}>
-      {icon ?? <StatusDot variant={dotVariantMap[tone]} label={label} aria-hidden="true" />}
-      <span className="tp-status-label">{label}</span>
+    <span className="tp-status-text" data-tone={tone}>
+      {label}
     </span>
   );
 }
 
-export function CountPill({count, tone = 'neutral'}: {count: number; tone?: 'neutral' | 'warn' | 'danger'}) {
-  const variant = tone === 'danger' ? 'error' : tone === 'warn' ? 'warning' : 'neutral';
-  return <AstryxBadge variant={variant} label={count} />;
+export function CountPill({count}: {count: number}) {
+  return <AstryxBadge variant="neutral" label={count} />;
 }
 
 export function Banner({
@@ -382,7 +369,7 @@ export function Tabs({
   onSelect,
 }: {
   label: string;
-  items: Array<{id: string; label: string; count?: number; countTone?: 'neutral' | 'warn' | 'danger'}>;
+  items: Array<{id: string; label: string; count?: number}>;
   activeId: string;
   onSelect: (id: string) => void;
 }) {
@@ -401,7 +388,7 @@ export function Tabs({
             key={item.id}
             value={item.id}
             label={item.label}
-            endContent={item.count !== undefined && item.count > 0 ? <CountPill count={item.count} tone={item.countTone} /> : undefined}
+            endContent={item.count !== undefined && item.count > 0 ? <CountPill count={item.count} /> : undefined}
           />
         ))}
       </TabList>
@@ -412,19 +399,17 @@ export function Tabs({
 export function SectionHeader({
   title,
   count,
-  countTone,
   actions,
 }: {
   title: string;
   count?: number;
-  countTone?: 'neutral' | 'warn' | 'danger';
   actions?: ReactNode;
 }) {
   return (
     <div className="tp-section-head">
       <div className="tp-section-head-left">
         <h2>{title}</h2>
-        {count !== undefined ? <CountPill count={count} tone={countTone} /> : null}
+        {count !== undefined ? <CountPill count={count} /> : null}
       </div>
       {actions ? <div className="tp-row">{actions}</div> : null}
     </div>
@@ -505,6 +490,7 @@ const operationalStateLabels: Record<string, string> = {
   DRAINING_MAINTENANCE: 'Draining',
   HALF_OPEN_PROBING: 'Probing',
   DISABLED: 'Disabled',
+  ENABLED: 'Enabled',
   PROVISIONED: 'Provisioned',
   CREATED_ACTIVE: 'Active',
   ENABLED_ACTIVE: 'Active',
@@ -524,6 +510,7 @@ const operationalStateLabels: Record<string, string> = {
   DRIFT_LOCKED: 'Drift locked',
   QUARANTINED: 'Quarantined',
   FAIL_CLOSED: 'Fail closed',
+  FAIL_OPEN: 'Fail open',
   OK: 'OK',
   FAILED: 'Failed',
 };

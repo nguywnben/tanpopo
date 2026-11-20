@@ -97,7 +97,7 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
           p95_overhead_ms: 3,
           settled_micro_usd: 4_500_000,
           active_hold_micros: 120_000,
-          active_alerts_count: 1,
+          active_alerts_count: 2,
           unmetered_request_count: 0,
           sync_lag_warning: false,
           updated_at: '2026-11-20T08:00:00Z',
@@ -114,12 +114,35 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
               remediation_route: '/finops/budgets',
               triggered_at: '2026-11-20T07:55:00Z',
             },
+            {
+              id: 'alt-2',
+              severity: 'TICKET',
+              alert_code: 'ALT-CIRCUIT-OPEN',
+              summary: 'Anthropic EU failover circuit opened.',
+              remediation_route: '/models',
+              triggered_at: '2026-11-20T07:50:00Z',
+            },
           ],
           has_more: false,
         });
       }
       if (url.includes('/admin/v1/deployments')) {
-        return jsonResponse({data: [], has_more: false});
+        return jsonResponse({
+          data: [
+            {
+              id: 'dpl_1',
+              env_id: 'env_1',
+              logical_model_id: 'm1',
+              connection_id: 'con_1',
+              upstream_model_name: 'claude-3-7-sonnet',
+              data_region: 'EU',
+              state: 'CIRCUIT_OPEN_UNHEALTHY',
+              version: 1,
+              rate_card: {input_token_nano_usd: 0, output_token_nano_usd: 0, cache_read_token_nano_usd: 0, cache_write_token_nano_usd: 0, reasoning_token_nano_usd: 0, image_unit_nano_usd: 0, audio_sec_nano_usd: 0, document_page_nano_usd: 0, self_hosted_zero_rate: false},
+            },
+          ],
+          has_more: false,
+        });
       }
       return jsonResponse({}, 404);
     });
@@ -128,6 +151,15 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
     await screen.findByText('1,420');
     expect(screen.getByText('$4.500000')).toBeInTheDocument();
     expect(screen.getByText('Production project reached 95% monthly budget.')).toBeInTheDocument();
+    expect(screen.getByText('PAGE')).toHaveClass('tp-status-text');
+    expect(screen.getByText('TICKET')).toHaveClass('tp-status-text');
+    expect(screen.getByText('Circuit open')).toHaveClass('tp-status-text');
+    // Every section header counter uses unified neutral gray Astryx Badge
+    const badges = [...container.querySelectorAll('.astryx-badge')];
+    expect(badges.length).toBeGreaterThanOrEqual(2);
+    expect(badges.every(b => b.getAttribute('data-variant') === 'neutral')).toBe(true);
+    // Zero StatusDot markers inside status/severity labels
+    expect(container.querySelectorAll('.astryx-status-dot').length).toBe(0);
 
     const audit = await axe.run(container);
     expect(audit.violations).toEqual([]);

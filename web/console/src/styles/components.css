@@ -19,6 +19,12 @@
     background-color: var(--tp-bg-selected);
     color: var(--tp-ink-secondary);
     font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-astryx-theme='neutral'] .astryx-button[data-variant='destructive'] .astryx-badge[data-variant='neutral'] {
+    background-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
   }
 
   /* Destructive outline refinement for calm resting states (e.g. Kill Switch with 0 active switches) */
@@ -89,52 +95,36 @@
     min-width: 0;
   }
 
-  /* Lightweight Semantic Status Indicator (official Astryx StatusDot + crisp typography) */
-  .tp-status-inline {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4375rem;
+  /* Compact Typographic Status & Severity Labels (no dots, borders, fills, or rounded frames) */
+  .tp-status-text {
+    display: inline-block;
     font-size: 0.8125rem;
     font-weight: 500;
     line-height: 1.35;
+    white-space: nowrap;
     max-width: 100%;
     color: var(--tp-ink-secondary);
   }
 
-  .tp-status-inline[data-tone='ok'] {
-    color: var(--tp-status-ok-text);
-  }
-
-  .tp-status-inline[data-tone='info'] {
-    color: var(--tp-ink-primary);
-  }
-
-  .tp-status-inline[data-tone='neutral'] {
+  .tp-status-text[data-tone='ok'],
+  .tp-status-text[data-tone='neutral'] {
     color: var(--tp-ink-secondary);
+    font-weight: 500;
   }
 
-  .tp-status-inline[data-tone='warn'] {
-    padding: 0.125rem 0.5rem;
-    border-radius: var(--tp-radius-pill);
-    background: var(--tp-status-warn-bg);
-    border: 1px solid var(--tp-status-warn-border);
+  .tp-status-text[data-tone='info'] {
+    color: var(--tp-ink-primary);
+    font-weight: 500;
+  }
+
+  .tp-status-text[data-tone='warn'] {
     color: var(--tp-status-warn-text);
     font-weight: 600;
-    font-size: 0.75rem;
   }
 
-  .tp-status-inline[data-tone='danger'] {
-    padding: 0.125rem 0.5rem;
-    border-radius: var(--tp-radius-pill);
-    background: var(--tp-status-error-bg);
-    border: 1px solid var(--tp-status-error-border);
+  .tp-status-text[data-tone='danger'] {
     color: var(--tp-status-error-text);
     font-weight: 600;
-    font-size: 0.75rem;
-  }
-
-  .tp-status-label {
-    white-space: nowrap;
   }
 
   /* Quiet hairline tag for metadata/role labels without heavy color fill */

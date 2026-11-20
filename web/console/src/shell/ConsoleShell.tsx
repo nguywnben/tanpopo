@@ -261,7 +261,7 @@ export function ConsoleShell() {
                       <NavIcon icon={item.icon} />
                       <span className="tp-nav-link-label">{item.label}</span>
                     </span>
-                    {badge !== undefined ? <CountPill count={badge} tone={activeSwitches > 0 ? 'danger' : 'warn'} /> : null}
+                    {badge !== undefined ? <CountPill count={badge} /> : null}
                   </Link>
                 );
               })}
@@ -355,7 +355,7 @@ export function ConsoleShell() {
                   style={activeSwitches === 0 ? {color: 'var(--tp-status-error)'} : undefined}
                 />
                 <span>Kill Switch</span>
-                {activeSwitches > 0 ? <CountPill count={activeSwitches} tone="danger" /> : null}
+                {activeSwitches > 0 ? <CountPill count={activeSwitches} /> : null}
               </Button>
             ) : null}
 

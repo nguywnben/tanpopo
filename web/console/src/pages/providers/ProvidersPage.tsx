@@ -559,8 +559,8 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               },
               {id: 'protocol', header: 'Protocol', width: '18%', render: row => <span className="mono">{row.wire_protocol ?? '—'}</span>},
               {id: 'tier', header: 'Execution tier', width: '18%', render: row => <span className="mono">{row.execution_tier}</span>},
-              {id: 'trust', header: 'Origin trust', width: '18%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={row.origin_trust_tier} />},
-              {id: 'state', header: 'State', width: '18%', render: row => <StatusPill tone={stateTone(row.installation_state)} label={row.installation_state} />},
+              {id: 'trust', header: 'Origin trust', width: '18%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={formatOperationalState(row.origin_trust_tier)} />},
+              {id: 'state', header: 'State', width: '18%', render: row => <StatusPill tone={stateTone(row.installation_state)} label={formatOperationalState(row.installation_state)} />},
             ]}
           />
         </section>
@@ -592,7 +592,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             items={[
               {label: 'Package ID', value: inspectedAdapter.package_id, mono: true},
               {label: 'Version', value: inspectedAdapter.version, mono: true},
-              {label: 'Origin trust', value: <StatusPill tone={stateTone(inspectedAdapter.origin_trust_tier)} label={inspectedAdapter.origin_trust_tier} />},
+              {label: 'Origin trust', value: <StatusPill tone={stateTone(inspectedAdapter.origin_trust_tier)} label={formatOperationalState(inspectedAdapter.origin_trust_tier)} />},
               {label: 'Enterprise signed', value: inspectedAdapter.enterprise_signed ? 'Yes' : 'No'},
               {label: 'Execution tier', value: inspectedAdapter.execution_tier, mono: true},
               {label: 'Supported auth methods', value: (inspectedAdapter.supported_auth_methods ?? []).join(', ') || 'None declared', mono: true},

@@ -26,6 +26,7 @@ import {
   StatusPill,
   Tabs,
   TextField,
+  formatLabel,
 } from '../../ui/primitives';
 
 type Role = components['schemas']['RbacRole'];
@@ -242,8 +243,8 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
           else navigate('/security/approvals');
         }}
         items={[
-          {id: 'approvals', label: 'Approval Queue', count: approvals.length, countTone: 'warn'},
-          {id: 'kill-switches', label: 'Kill Switches', count: killSwitches.length, countTone: 'danger'},
+          {id: 'approvals', label: 'Approval Queue', count: approvals.length},
+          {id: 'kill-switches', label: 'Kill Switches', count: killSwitches.length},
           {id: 'audit', label: 'Audit Log'},
         ]}
       />
@@ -253,7 +254,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
 
       {activeTab === 'approvals' ? (
         <section className="tp-section">
-          <SectionHeader title="Pending MCP approvals" count={approvals.length} countTone={approvals.length > 0 ? 'warn' : 'neutral'} />
+          <SectionHeader title="Pending MCP approvals" count={approvals.length} />
           {!canReviewApprovals ? (
             <Banner tone="info">Only Organization Owners, Team Admins, and Security Reviewers can decide pending approvals.</Banner>
           ) : loading && approvals.length === 0 ? (
@@ -269,7 +270,10 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
                 <li key={item.id} className="tp-list-item" style={{flexDirection: 'column', alignItems: 'stretch'}}>
                   <div className="tp-row" style={{justifyContent: 'space-between'}}>
                     <div className="tp-row">
-                      <StatusPill tone={item.schema_drift_locked ? 'danger' : 'warn'} label={item.schema_drift_locked ? 'SCHEMA DRIFT LOCKED' : item.action_kind} />
+                      <StatusPill
+                        tone={item.schema_drift_locked ? 'danger' : 'warn'}
+                        label={item.schema_drift_locked ? 'Schema drift locked' : formatLabel(item.action_kind)}
+                      />
                       <span className="mono" style={{fontWeight: 600}}>{item.requested_by}</span>
                     </div>
                     <span className="tp-muted num">Expires {new Date(item.expires_at).toLocaleString()}</span>
@@ -309,7 +313,6 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
           <SectionHeader
             title="Active kill switches"
             count={killSwitches.length}
-            countTone={killSwitches.length > 0 ? 'danger' : 'neutral'}
           />
           <DataTable
             ariaLabel="Active kill switches"
@@ -319,7 +322,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
             emptyTitle="No active kill switches"
             emptyDescription="All Virtual Keys, Projects, Connections, and Extensions are operating normally."
             columns={[
-              {id: 'level', header: 'Level', primary: true, width: '18%', render: row => <StatusPill tone="danger" label={row.level} />},
+              {id: 'level', header: 'Level', primary: true, width: '18%', render: row => <StatusPill tone="danger" label={formatLabel(row.level)} />},
               {id: 'target', header: 'Target ID', width: '24%', render: row => <span className="mono">{row.target_id}</span>},
               {id: 'reason', header: 'Trigger reason', width: '32%', render: row => <span>{row.reason}</span>},
               {id: 'ver', header: 'Rev', width: '10%', render: row => <span className="mono">v{row.version}</span>},

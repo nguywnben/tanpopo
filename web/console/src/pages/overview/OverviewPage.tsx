@@ -125,7 +125,6 @@ export function OverviewPage() {
           <SectionHeader
             title="Circuit-open deployments"
             count={unhealthy.length}
-            countTone="danger"
             actions={
               <Button variant="secondary" size="sm" onClick={() => navigate('/models')}>
                 <span>Inspect deployments</span>
@@ -151,7 +150,6 @@ export function OverviewPage() {
         <SectionHeader
           title="Active alerts"
           count={summary?.active_alerts_count ?? alerts.length}
-          countTone={alerts.length > 0 ? 'warn' : 'neutral'}
         />
         {alerts.length === 0 && !loading ? (
           <EmptyState

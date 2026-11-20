@@ -25,6 +25,7 @@ import {
   StatusPill,
   Tabs,
   TextField,
+  formatOperationalState,
   stateTone,
 } from '../../ui/primitives';
 
@@ -242,7 +243,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
                 {id: 'id', header: 'Node ID', primary: true, width: '32%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.id ?? 'unknown'}</span>},
                 {id: 'epoch', header: 'Config epoch', width: '20%', render: row => <span className="mono">{row.config_epoch ?? '—'}</span>},
                 {id: 'age', header: 'Snapshot age', width: '24%', render: row => <span className="num">{row.snapshot_age_ms ?? 0} ms</span>},
-                {id: 'health', header: 'Health', width: '24%', render: row => <StatusPill tone={stateTone(row.health ?? 'unknown')} label={row.health ?? 'unknown'} />},
+                {id: 'health', header: 'Health', width: '24%', render: row => <StatusPill tone={stateTone(row.health ?? 'unknown')} label={formatOperationalState(row.health ?? 'unknown')} />},
               ]}
             />
           </section>
@@ -345,7 +346,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
             columns={[
               {id: 'origin', header: 'Receiver origin', primary: true, width: '32%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.target_origin}</span>},
               {id: 'events', header: 'Subscribed events', width: '40%', render: row => <span className="mono tp-muted">{row.events.join(', ')}</span>},
-              {id: 'state', header: 'State', width: '14%', render: row => <StatusPill tone={row.enabled ? 'ok' : 'neutral'} label={row.enabled ? 'ENABLED' : 'DISABLED'} />},
+              {id: 'state', header: 'State', width: '14%', render: row => <StatusPill tone={row.enabled ? 'ok' : 'neutral'} label={row.enabled ? 'Enabled' : 'Disabled'} />},
               {id: 'created', header: 'Created', width: '14%', render: row => <span className="num tp-muted">{new Date(row.created_at_ms).toLocaleDateString()}</span>},
             ]}
           />

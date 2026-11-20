@@ -648,7 +648,7 @@ export function RoutingPage({
                         <li key={hook.extension_id} className="tp-list-item">
                           <div className="tp-row">
                             <span className="mono">{hook.extension_id}</span>
-                            <StatusPill tone={stateTone(hook.failure_posture)} label={hook.failure_posture} />
+                            <StatusPill tone={stateTone(hook.failure_posture)} label={formatOperationalState(hook.failure_posture)} />
                           </div>
                           <Button
                             variant="ghost"

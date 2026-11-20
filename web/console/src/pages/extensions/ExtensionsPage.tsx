@@ -463,7 +463,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                   </div>
                 ),
               },
-              {id: 'origin', header: 'Origin', width: '15%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={row.origin_trust_tier.replaceAll('_', ' ')} />},
+              {id: 'origin', header: 'Origin', width: '15%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={formatOperationalState(row.origin_trust_tier)} />},
               {id: 'sig', header: 'Signature', width: '14%', render: row => <span>{row.enterprise_signed ? 'Enterprise signed' : 'None'}</span>},
               {id: 'tier', header: 'Tier', width: '15%', render: row => <span className="mono">{row.execution_tier}</span>},
               {id: 'caps', header: 'Capabilities', width: '14%', render: row => <span className="tp-muted">{row.capabilities.join(', ') || '—'}</span>},
@@ -563,7 +563,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
           <>
             <KeyValueList
               items={[
-                {label: 'Origin trust', value: <StatusPill tone={stateTone(reviewDiff.origin_trust_tier)} label={reviewDiff.origin_trust_tier} />},
+                {label: 'Origin trust', value: <StatusPill tone={stateTone(reviewDiff.origin_trust_tier)} label={formatOperationalState(reviewDiff.origin_trust_tier)} />},
                 {label: 'Publisher signature', value: reviewDiff.enterprise_signed ? 'Enterprise signed' : 'Unsigned'},
                 {label: 'Execution tier', value: reviewDiff.execution_tier, mono: true},
               ]}
