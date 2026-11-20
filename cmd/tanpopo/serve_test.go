@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -504,6 +505,7 @@ func TestDataPlaneRoleDoesNotMountControlPlaneOrMintBootstrapToken(t *testing.T)
 	_ = os.WriteFile(releasePath, []byte("release"), 0o600)
 	childErr := <-waitDone
 	waited = true
+	t.Logf("data-plane runtime child diagnostics:\n%s", readTestLog(logPath))
 	if childErr != nil {
 		t.Fatalf("data-plane runtime child failed: %v\n%s", childErr, readTestLog(logPath))
 	}
@@ -556,7 +558,26 @@ func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce strin
 		filepath.Clean(os.Getenv("TANPOPO_BOOTSTRAP_TOKEN_FILE")) != filepath.Join(parentAbs, "data", "bootstrap.token") {
 		t.Fatal("child runtime paths are not confined to the temporary data directory")
 	}
-	handler, closeRuntime, err := buildRuntime(context.Background(), "data-plane", "127.0.0.1:8080")
+	var runtimeDB *sql.DB
+	handler, closeRuntime, err := buildRuntimeWithBeforeSQLiteClose(context.Background(), "data-plane", "127.0.0.1:8080", func(db *sql.DB) {
+		runtimeDB = db
+		stats := db.Stats()
+		fmt.Fprintf(os.Stderr, "pre-close SQLite pool: open=%d in_use=%d idle=%d\n", stats.OpenConnections, stats.InUse, stats.Idle)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		conn, inspectErr := db.Conn(ctx)
+		if inspectErr != nil {
+			fmt.Fprintf(os.Stderr, "pre-close SQLite connection inspection failed: %v\n", inspectErr)
+			return
+		}
+		defer conn.Close()
+		statements, inspectErr := sqliteOpenStatements(conn)
+		if inspectErr != nil {
+			fmt.Fprintf(os.Stderr, "pre-close SQLite statement inspection failed: %v\n", inspectErr)
+			return
+		}
+		fmt.Fprintf(os.Stderr, "pre-close SQLite statements (%d): %q\n", len(statements), statements)
+	})
 	if err != nil {
 		t.Fatalf("build data-plane runtime: %v", err)
 	}
@@ -573,6 +594,8 @@ func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce strin
 	if err := closeRuntime(); err != nil {
 		t.Fatalf("runtime shutdown returned error: %v\nactive goroutine functions:\n%s", err, runtimeGoroutineFunctionNames())
 	}
+	stats := runtimeDB.Stats()
+	fmt.Fprintf(os.Stderr, "post-close SQLite pool: open=%d in_use=%d idle=%d\n", stats.OpenConnections, stats.InUse, stats.Idle)
 	handler = nil
 	closeRuntime = nil
 	runtime.GC()
