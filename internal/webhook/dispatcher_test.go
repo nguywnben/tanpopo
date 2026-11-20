@@ -265,7 +265,7 @@ func TestPostgresDispatcherDiscardsConnectionAfterRoleVerificationFailure(t *tes
 	}
 }
 
-func TestCanceledClaimRollsBackAttemptLease(t *testing.T) {
+func TestRunCancellationStopsClaimBeforeCommitGate(t *testing.T) {
 	db := openWebhookDB(t)
 	insertSubscription(t, db, "https://hooks.example.test/path", false, `[]`)
 	d := testDispatcher(t, db, resolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
@@ -275,13 +275,25 @@ func TestCanceledClaimRollsBackAttemptLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
-	d.cfg.Now = func() time.Time {
+	d.beforeClaimCommit = func() {
 		cancel()
-		return time.Now()
+		deadline := time.Now().Add(time.Second)
+		for d.claimGate.Load() == claimGateActive && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		if d.claimGate.Load() != claimGateStopping {
+			t.Errorf("Run cancellation did not win the claim gate before timeout; state=%d", d.claimGate.Load())
+		}
 	}
-	item, err := d.claim(ctx)
-	if err != nil || item != nil {
-		t.Fatalf("claim during shutdown = (%v, %v), want (nil, nil)", item, err)
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("dispatcher Run did not finish after cancellation")
 	}
 	var attempts int
 	var status string
@@ -289,7 +301,94 @@ func TestCanceledClaimRollsBackAttemptLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	if attempts != 0 || status != statusPending {
+		t.Fatalf("shutdown consumed a canceled delivery attempt: attempts=%d status=%s", attempts, status)
+	}
+}
+
+func TestStopClaimingWinsClaimCommitGate(t *testing.T) {
+	db := openWebhookDB(t)
+	insertSubscription(t, db, "https://hooks.example.test/path", false, `[]`)
+	d := testDispatcher(t, db, resolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+		return nil, nil
+	}), 3)
+	if _, err := d.Enqueue(t.Context(), Event{ID: "stopped-claim", OrgID: "org_test", Type: "budget.threshold", Payload: json.RawMessage(`{"ok":true}`)}); err != nil {
+		t.Fatal(err)
+	}
+	stopped := make(chan struct{})
+	d.beforeClaimCommit = func() {
+		go func() {
+			d.StopClaiming()
+			close(stopped)
+		}()
+		deadline := time.Now().Add(time.Second)
+		for d.claimGate.Load() == claimGateActive && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		if d.claimGate.Load() != claimGateStopping {
+			t.Errorf("StopClaiming did not win the commit gate before timeout; state=%d", d.claimGate.Load())
+		}
+	}
+	item, err := d.claim(t.Context())
+	if err != nil || item != nil {
+		t.Fatalf("claim after shutdown won commit gate = (%v, %v), want (nil, nil)", item, err)
+	}
+	var attempts int
+	var status string
+	if err := db.QueryRow(`SELECT attempt_count, status FROM webhook_deliveries WHERE event_id='stopped-claim'`).Scan(&attempts, &status); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 0 || status != statusPending {
 		t.Fatalf("shutdown consumed a delivery attempt: attempts=%d status=%s", attempts, status)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("StopClaiming did not finish after the claim transaction rolled back")
+	}
+}
+
+func TestClaimCommitGateWinsBeforeStopClaiming(t *testing.T) {
+	db := openWebhookDB(t)
+	insertSubscription(t, db, "https://hooks.example.test/path", false, `[]`)
+	d := testDispatcher(t, db, resolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+		return nil, nil
+	}), 3)
+	if _, err := d.Enqueue(t.Context(), Event{ID: "committing-claim", OrgID: "org_test", Type: "budget.threshold", Payload: json.RawMessage(`{"ok":true}`)}); err != nil {
+		t.Fatal(err)
+	}
+	stopped := make(chan struct{})
+	d.afterClaimCommitGate = func() {
+		go func() {
+			d.StopClaiming()
+			close(stopped)
+		}()
+		deadline := time.Now().Add(time.Second)
+		for d.claimGate.Load() == claimGateCommitting && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		if d.claimGate.Load() != claimGateStopAfterCommit {
+			t.Errorf("StopClaiming did not wait behind an already-started commit; state=%d", d.claimGate.Load())
+		}
+	}
+	item, err := d.claim(t.Context())
+	if err != nil || item == nil {
+		t.Fatalf("claim whose commit gate won = (%v, %v), want a committed claim", item, err)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("StopClaiming did not finish after the in-flight claim committed")
+	}
+	var attempts int
+	if err := db.QueryRow(`SELECT attempt_count FROM webhook_deliveries WHERE event_id='committing-claim'`).Scan(&attempts); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 1 {
+		t.Fatalf("in-flight committed claim attempts = %d, want 1", attempts)
+	}
+	item, err = d.claim(t.Context())
+	if err != nil || item != nil {
+		t.Fatalf("claim after StopClaiming = (%v, %v), want (nil, nil)", item, err)
 	}
 }
 

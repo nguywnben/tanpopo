@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
@@ -41,6 +42,14 @@ const (
 	maxOutstandingPerOrg = 5000
 	maxRequestTime       = 2 * time.Minute
 	maxBackoffTime       = 24 * time.Hour
+)
+
+const (
+	claimGateActive int32 = iota
+	claimGateCommitting
+	claimGateStopping
+	claimGateStopAfterCommit
+	claimGateStopped
 )
 
 // SecretUnsealer returns credential plaintext and the function that must erase it.
@@ -100,7 +109,9 @@ type Dispatcher struct {
 	dbMu          sync.Mutex
 	cleanupMu     sync.Mutex
 	claimMu       sync.Mutex
-	claimsStopped bool
+	claimGate             atomic.Int32
+	beforeClaimCommit     func()
+	afterClaimCommitGate func()
 	lastCleanup   time.Time
 	running       bool
 	runStarted    bool
@@ -218,14 +229,31 @@ func (d *Dispatcher) Close() error {
 	return err
 }
 
-// StopClaiming establishes the dispatcher shutdown boundary. A claim transaction
-// already holding claimMu finishes before this returns; later claims do not start.
+// StopClaiming establishes an atomic boundary against claim commit. If shutdown
+// wins before the commit gate, the claim rolls back. A commit that already won
+// the gate completes before this method returns; later claims do not start.
 func (d *Dispatcher) StopClaiming() {
 	if d == nil {
 		return
 	}
+	for {
+		switch state := d.claimGate.Load(); state {
+		case claimGateActive:
+			if d.claimGate.CompareAndSwap(claimGateActive, claimGateStopping) {
+				goto waitForClaim
+			}
+		case claimGateCommitting:
+			if d.claimGate.CompareAndSwap(claimGateCommitting, claimGateStopAfterCommit) {
+				goto waitForClaim
+			}
+		case claimGateStopping, claimGateStopAfterCommit, claimGateStopped:
+			goto waitForClaim
+		}
+	}
+
+waitForClaim:
 	d.claimMu.Lock()
-	d.claimsStopped = true
+	d.claimGate.Store(claimGateStopped)
 	d.claimMu.Unlock()
 }
 
@@ -233,7 +261,20 @@ func (d *Dispatcher) commitClaim(ctx context.Context, tx *sql.Tx) (bool, error) 
 	if ctx.Err() != nil {
 		return false, nil
 	}
-	return true, tx.Commit()
+	if d.beforeClaimCommit != nil {
+		d.beforeClaimCommit()
+	}
+	if !d.claimGate.CompareAndSwap(claimGateActive, claimGateCommitting) {
+		return false, nil
+	}
+	if d.afterClaimCommitGate != nil {
+		d.afterClaimCommitGate()
+	}
+	err := tx.Commit()
+	if !d.claimGate.CompareAndSwap(claimGateCommitting, claimGateActive) {
+		d.claimGate.Store(claimGateStopped)
+	}
+	return true, err
 }
 
 // lockDatabase serializes complete transactions when PostgreSQL mode pins the
@@ -579,6 +620,8 @@ func (d *Dispatcher) cleanupTerminal(ctx context.Context) {
 
 // Run starts the bounded worker pool and runs until ctx is canceled. Dispatcher
 // instances are one-shot because shutdown permanently closes the claim boundary.
+// Parent cancellation requests shutdown; StopClaiming establishes its boundary
+// before the detached worker context is canceled, so SQLite claims can close cleanly.
 func (d *Dispatcher) Run(ctx context.Context) error {
 	d.mu.Lock()
 	if d.running || d.runStarted {
@@ -589,13 +632,16 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	d.runStarted = true
 	d.mu.Unlock()
 	defer func() { d.mu.Lock(); d.running = false; d.mu.Unlock() }()
+	workerCtx, cancelWorkers := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancelWorkers()
 	var workers sync.WaitGroup
 	workers.Add(d.cfg.Limits.Workers)
 	for i := 0; i < d.cfg.Limits.Workers; i++ {
-		go func() { defer workers.Done(); d.worker(ctx) }()
+		go func() { defer workers.Done(); d.worker(workerCtx) }()
 	}
 	<-ctx.Done()
 	d.StopClaiming()
+	cancelWorkers()
 	workers.Wait()
 	return nil
 }
@@ -644,7 +690,7 @@ func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
 	// shutdown cannot cancel SQLite while UPDATE ... RETURNING owns a statement.
 	d.claimMu.Lock()
 	defer d.claimMu.Unlock()
-	if d.claimsStopped || ctx.Err() != nil {
+	if d.claimGate.Load() != claimGateActive || ctx.Err() != nil {
 		return nil, nil
 	}
 	unlock := d.lockDatabase()
