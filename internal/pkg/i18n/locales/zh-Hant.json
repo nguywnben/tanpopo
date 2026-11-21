@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "不支援的 Content-Type 標頭，請依規定傳送 application/json 或 multipart/form-data。",
   "api.error.unverified_external_acknowledgement_required": "繼續前請確認您瞭解安裝未驗證外部套件的資安風險。",
   "api.error.vault_unavailable": "此伺服器的密鑰保險庫目前無法使用。",
-  "api.error.webhook_subscription_limit": "已達此組織允許的 Webhook 訂閱數量上限。"
+  "api.error.webhook_subscription_limit": "已達此組織允許的 Webhook 訂閱數量上限。",
+  "cli.ops.db.migrate.err.dirty": "資料庫遷移狀態處於髒狀態（dirty）。",
+  "cli.ops.db.migrate.err.failed": "資料庫引擎遷移失敗。",
+  "cli.ops.db.migrate.err.parity": "遷移後一致性校驗失敗並已回滾。",
+  "cli.ops.db.migrate.err.required": "必須提供 --from 與 --to 參數。",
+  "cli.ops.db.migrate.err.security": "PostgreSQL 角色違反最小權限要求。",
+  "cli.ops.db.migrate.short": "將 SQLite WAL 資料庫無損遷移至 PostgreSQL 16+。",
+  "cli.ops.db.short": "檢查或遷移資料庫儲存引擎。",
+  "cli.ops.db.migrate.flag.from": "來源 SQLite WAL 資料庫路徑或 sqlite:// DSN",
+  "cli.ops.db.migrate.flag.to": "目標 PostgreSQL 16+ 連線 DSN",
+  "cli.ops.db.migrate.flag.verify": "提交前驗證行數、micro-USD 總和、JCS 稽核雜湊鏈與 Vault 信封"
 }

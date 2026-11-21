@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "Intestazione Content-Type non supportata. Invia application/json o multipart/form-data.",
   "api.error.unverified_external_acknowledgement_required": "Conferma i rischi di sicurezza dell'installazione di un pacchetto esterno non verificato.",
   "api.error.vault_unavailable": "Il vault dei segreti non è disponibile su questo server.",
-  "api.error.webhook_subscription_limit": "Hai raggiunto il limite massimo di sottoscrizioni webhook per questa organizzazione."
+  "api.error.webhook_subscription_limit": "Hai raggiunto il limite massimo di sottoscrizioni webhook per questa organizzazione.",
+  "cli.ops.db.migrate.err.dirty": "Registro migrazioni in stato dirty.",
+  "cli.ops.db.migrate.err.failed": "Migrazione del motore database non riuscita.",
+  "cli.ops.db.migrate.err.parity": "Verifica di parita post-migrazione fallita e annullata.",
+  "cli.ops.db.migrate.err.required": "--from e --to sono obbligatori.",
+  "cli.ops.db.migrate.err.security": "Il ruolo PostgreSQL viola il privilegio minimo.",
+  "cli.ops.db.migrate.short": "Migra un database SQLite WAL a PostgreSQL 16+.",
+  "cli.ops.db.short": "Ispeziona o migra il motore di archiviazione del database.",
+  "cli.ops.db.migrate.flag.from": "Percorso del database SQLite WAL sorgente o DSN sqlite://",
+  "cli.ops.db.migrate.flag.to": "DSN di connessione PostgreSQL 16+ di destinazione",
+  "cli.ops.db.migrate.flag.verify": "Verifica conteggi righe, somme micro-USD, catene JCS di audit e buste Vault prima del commit"
 }

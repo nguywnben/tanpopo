@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
@@ -174,6 +176,7 @@ type Config struct {
 // online KEK re-wrapping, and Project/Org Crypto-Shredding.
 type Store struct {
 	db        *sql.DB
+	dialect   port.Dialect
 	kek       KEKProvider
 	cache     *dekCache
 	nowMs     func() int64
@@ -196,13 +199,39 @@ func (s *Store) CheckServingReady(ctx context.Context) error {
 	var orgID, envelopeKeyID string
 	var dekVersion int64
 	var nonce, wrapped []byte
-	err = s.db.QueryRowContext(ctx, `SELECT org_id, kek_key_id, dek_version, nonce, wrapped_org_dek
-		FROM org_encryption_keys ORDER BY org_id LIMIT 1`).Scan(&orgID, &envelopeKeyID, &dekVersion, &nonce, &wrapped)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil // A new standalone instance has no persisted Org DEK to verify yet.
-	}
-	if err != nil {
-		return fmt.Errorf("read persisted vault key envelope: %w", err)
+	if s.effectiveDialect(ctx) == port.DialectPostgres {
+		orgIDs, oerr := s.listPGOrgIDs(ctx)
+		if oerr != nil {
+			return fmt.Errorf("read persisted vault key envelope: %w", oerr)
+		}
+		found := false
+		for _, candidate := range orgIDs {
+			qerr := s.withOrgReadTx(ctx, candidate, func(q sqlQueryRowExecutor, _ port.Dialect) error {
+				return q.QueryRowContext(ctx, `
+					SELECT org_id, kek_key_id, dek_version, nonce, wrapped_org_dek
+					FROM org_encryption_keys WHERE org_id = $1`, candidate,
+				).Scan(&orgID, &envelopeKeyID, &dekVersion, &nonce, &wrapped)
+			})
+			if qerr == nil {
+				found = true
+				break
+			}
+			if !errors.Is(qerr, sql.ErrNoRows) {
+				return fmt.Errorf("read persisted vault key envelope: %w", qerr)
+			}
+		}
+		if !found {
+			return nil
+		}
+	} else {
+		err = s.db.QueryRowContext(ctx, `SELECT org_id, kek_key_id, dek_version, nonce, wrapped_org_dek
+			FROM org_encryption_keys ORDER BY org_id LIMIT 1`).Scan(&orgID, &envelopeKeyID, &dekVersion, &nonce, &wrapped)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil // A new standalone instance has no persisted Org DEK to verify yet.
+		}
+		if err != nil {
+			return fmt.Errorf("read persisted vault key envelope: %w", err)
+		}
 	}
 	if envelopeKeyID != activeKeyID {
 		return fmt.Errorf("active Master KEK does not match the persisted vault key envelope")
@@ -238,6 +267,7 @@ func NewStore(cfg Config) (*Store, error) {
 	}
 	return &Store{
 		db:        cfg.DB,
+		dialect:   port.DetectDialect(context.Background(), cfg.DB),
 		kek:       cfg.KEK,
 		cache:     cache,
 		nowMs:     nowFn,
@@ -283,7 +313,10 @@ func (s *Store) PendingShredCleanups() int {
 // PendingShredCleanupsContext returns the count of durably persisted pending shred WAL cleanups.
 func (s *Store) PendingShredCleanupsContext(ctx context.Context) (int, error) {
 	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM vault_pending_shred_cleanups`).Scan(&count); err != nil {
+	err := s.withOperatorReadTx(ctx, func(q sqlQueryRowExecutor, _ port.Dialect) error {
+		return q.QueryRowContext(ctx, `SELECT COUNT(*) FROM vault_pending_shred_cleanups`).Scan(&count)
+	})
+	if err != nil {
 		return 0, fmt.Errorf("vault: count pending shred cleanups: %w", err)
 	}
 	return count, nil
@@ -297,10 +330,15 @@ func (s *Store) FlushPendingShredCleanups(ctx context.Context) error {
 	}
 	defer s.releaseShredSlot()
 
-	observed, err := queryPendingCleanupTuples(ctx, s.db,
-		`SELECT scope_key, org_id, shred_epoch, target_generation FROM vault_pending_shred_cleanups ORDER BY shred_epoch ASC`,
-	)
-	if err != nil {
+	d := s.effectiveDialect(ctx)
+	var observed []pendingCleanupTuple
+	if err := s.withOperatorReadTx(ctx, func(q sqlQueryRowExecutor, _ port.Dialect) error {
+		var qerr error
+		observed, qerr = queryPendingCleanupTuples(ctx, q,
+			`SELECT scope_key, org_id, shred_epoch, target_generation FROM vault_pending_shred_cleanups ORDER BY shred_epoch ASC`,
+		)
+		return qerr
+	}); err != nil {
 		return fmt.Errorf("vault: inspect pending shred cleanups: %w", err)
 	}
 	if len(observed) == 0 {
@@ -313,7 +351,7 @@ func (s *Store) FlushPendingShredCleanups(ctx context.Context) error {
 	}
 	now := s.nowMs()
 	return s.inPostShredCleanupTx(ctx, func(ctxTx *sql.Tx) error {
-		return clearPendingTuplesTx(ctx, ctxTx, observed, now)
+		return clearPendingTuplesDialectTx(ctx, ctxTx, d, observed, now)
 	})
 }
 
@@ -324,12 +362,14 @@ func (s *Store) GetOrgKeyMetadata(ctx context.Context, orgID string) (*OrgKeyMet
 		return nil, fmt.Errorf("%w: org_id required", ErrInvalidInput)
 	}
 	var m OrgKeyMetadata
-	err := s.db.QueryRowContext(ctx, `
-		SELECT org_id, kek_key_id, dek_version, key_generation, created_at_ms, rotated_at_ms
-		FROM org_encryption_keys
-		WHERE org_id = ?`, orgID).Scan(
-		&m.OrgID, &m.KEKKeyID, &m.DEKVersion, &m.KeyGeneration, &m.CreatedAtMs, &m.RotatedAtMs,
-	)
+	err := s.withOrgReadTx(ctx, orgID, func(q sqlQueryRowExecutor, d port.Dialect) error {
+		return q.QueryRowContext(ctx, port.Rebind(d, `
+			SELECT org_id, kek_key_id, dek_version, key_generation, created_at_ms, rotated_at_ms
+			FROM org_encryption_keys
+			WHERE org_id = ?`), orgID).Scan(
+			&m.OrgID, &m.KEKKeyID, &m.DEKVersion, &m.KeyGeneration, &m.CreatedAtMs, &m.RotatedAtMs,
+		)
+	})
 	if err != nil {
 		return nil, mapVaultSQLiteError(err, false)
 	}
@@ -343,12 +383,14 @@ func (s *Store) GetProjectKeyMetadata(ctx context.Context, orgID, projectID stri
 		return nil, fmt.Errorf("%w: org_id and project_id required", ErrInvalidInput)
 	}
 	var m ProjectKeyMetadata
-	err := s.db.QueryRowContext(ctx, `
-		SELECT org_id, project_id, org_dek_version, dek_version, key_generation, created_at_ms, rotated_at_ms
-		FROM project_encryption_keys
-		WHERE org_id = ? AND project_id = ?`, orgID, projectID).Scan(
-		&m.OrgID, &m.ProjectID, &m.OrgDEKVersion, &m.DEKVersion, &m.KeyGeneration, &m.CreatedAtMs, &m.RotatedAtMs,
-	)
+	err := s.withOrgReadTx(ctx, orgID, func(q sqlQueryRowExecutor, d port.Dialect) error {
+		return q.QueryRowContext(ctx, port.Rebind(d, `
+			SELECT org_id, project_id, org_dek_version, dek_version, key_generation, created_at_ms, rotated_at_ms
+			FROM project_encryption_keys
+			WHERE org_id = ? AND project_id = ?`), orgID, projectID).Scan(
+			&m.OrgID, &m.ProjectID, &m.OrgDEKVersion, &m.DEKVersion, &m.KeyGeneration, &m.CreatedAtMs, &m.RotatedAtMs,
+		)
+	})
 	if err != nil {
 		return nil, mapVaultSQLiteError(err, false)
 	}
@@ -564,11 +606,12 @@ func (s *Store) SealSecretTx(ctx context.Context, tx *sql.Tx, params SealSecretP
 		return nil, nil, err
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	d := s.effectiveDialect(ctx)
+	if _, err := tx.ExecContext(ctx, port.Rebind(d, `
 		INSERT INTO secret_credentials (
 			id, org_id, owner_project_id, name, secret_kind, aead_alg,
 			nonce, ciphertext, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, 'AES-256-GCM', ?, ?, ?, ?, 1, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, 'AES-256-GCM', ?, ?, ?, ?, 1, ?, ?)`),
 		id, params.OrgID, nullStringPtr(ownerProj), params.Name, params.SecretKind,
 		nonce, ciphertext, nullStringPtr(params.BoundAudience), fingerprint, now, now,
 	); err != nil {
@@ -576,7 +619,7 @@ func (s *Store) SealSecretTx(ctx context.Context, tx *sql.Tx, params SealSecretP
 		return nil, nil, mapVaultSQLiteError(err, false)
 	}
 
-	if _, err := appendVaultChangelogTx(ctx, tx, params.OrgID, "secret_credential", id, port.MutationUpsert, false, now); err != nil {
+	if _, err := appendVaultChangelogTx(ctx, tx, d, params.OrgID, "secret_credential", id, port.MutationUpsert, false, now); err != nil {
 		stage.clear()
 		return nil, nil, err
 	}
@@ -628,6 +671,11 @@ func (s *Store) RotateSecretTx(ctx context.Context, tx *sql.Tx, orgID, secretID 
 		return nil, nil, fmt.Errorf("%w: new plaintext cannot be empty", ErrInvalidInput)
 	}
 
+	if err := s.setOrgRLSTx(ctx, tx, orgID); err != nil {
+		return nil, nil, err
+	}
+	d := s.effectiveDialect(ctx)
+
 	pt := make([]byte, len(params.Plaintext))
 	copy(pt, params.Plaintext)
 	defer clear(pt)
@@ -652,10 +700,10 @@ func (s *Store) RotateSecretTx(ctx context.Context, tx *sql.Tx, orgID, secretID 
 		audNull     sql.NullString
 		err         error
 	)
-	if err := tx.QueryRowContext(ctx, `
+	if err := tx.QueryRowContext(ctx, port.Rebind(d, `
 		SELECT owner_project_id, name, secret_kind, bound_audience, version, created_at_ms
 		FROM secret_credentials
-		WHERE org_id = ? AND id = ?`,
+		WHERE org_id = ? AND id = ?`),
 		orgID, secretID,
 	).Scan(&projNull, &name, &kind, &audNull, &curVersion, &createdAtMs); err != nil {
 		return nil, nil, mapVaultSQLiteError(err, false)
@@ -706,10 +754,10 @@ func (s *Store) RotateSecretTx(ctx context.Context, tx *sql.Tx, orgID, secretID 
 		return nil, nil, err
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, port.Rebind(d, `
 		UPDATE secret_credentials
 		SET nonce = ?, ciphertext = ?, bound_audience = ?, key_fingerprint = ?, version = version + 1, updated_at_ms = ?
-		WHERE org_id = ? AND id = ? AND version = ?`,
+		WHERE org_id = ? AND id = ? AND version = ?`),
 		nonce, ciphertext, nullStringPtr(nextAudience), fingerprint, now, orgID, secretID, expectedVersion,
 	)
 	if err != nil {
@@ -723,7 +771,7 @@ func (s *Store) RotateSecretTx(ctx context.Context, tx *sql.Tx, orgID, secretID 
 		return nil, nil, port.ErrVersionConflict
 	}
 
-	if _, err := appendVaultChangelogTx(ctx, tx, orgID, "secret_credential", secretID, port.MutationUpsert, false, now); err != nil {
+	if _, err := appendVaultChangelogTx(ctx, tx, d, orgID, "secret_credential", secretID, port.MutationUpsert, false, now); err != nil {
 		return nil, nil, err
 	}
 
@@ -758,10 +806,22 @@ func (s *Store) GetSecretMetadata(ctx context.Context, orgID, secretID string) (
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(secretID) == "" {
 		return nil, fmt.Errorf("%w: org_id and secret_id required", ErrInvalidInput)
 	}
-	return scanSecretMetadata(s.db.QueryRowContext(ctx, `
-		SELECT id, org_id, owner_project_id, name, secret_kind, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
-		FROM secret_credentials
-		WHERE org_id = ? AND id = ?`, orgID, secretID))
+	var out *SecretMetadata
+	err := s.withOrgReadTx(ctx, orgID, func(q sqlQueryRowExecutor, d port.Dialect) error {
+		m, merr := scanSecretMetadata(q.QueryRowContext(ctx, port.Rebind(d, `
+			SELECT id, org_id, owner_project_id, name, secret_kind, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
+			FROM secret_credentials
+			WHERE org_id = ? AND id = ?`), orgID, secretID))
+		if merr != nil {
+			return merr
+		}
+		out = m
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // ListSecrets returns write-only metadata for all secrets belonging to orgID (optionally filtered to projectID).
@@ -772,37 +832,43 @@ func (s *Store) ListSecrets(ctx context.Context, orgID string, projectID *string
 	if projectID != nil && strings.TrimSpace(*projectID) == "" {
 		return nil, fmt.Errorf("%w: project_id cannot be blank when provided", ErrInvalidInput)
 	}
-	var (
-		rows *sql.Rows
-		err  error
-	)
-	if projectID == nil {
-		rows, err = s.db.QueryContext(ctx, `
-			SELECT id, org_id, owner_project_id, name, secret_kind, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
-			FROM secret_credentials
-			WHERE org_id = ?
-			ORDER BY id ASC`, orgID)
-	} else {
-		rows, err = s.db.QueryContext(ctx, `
-			SELECT id, org_id, owner_project_id, name, secret_kind, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
-			FROM secret_credentials
-			WHERE org_id = ? AND owner_project_id = ?
-			ORDER BY id ASC`, orgID, *projectID)
-	}
-	if err != nil {
-		return nil, mapVaultSQLiteError(err, false)
-	}
-	defer rows.Close()
-
 	var out []SecretMetadata
-	for rows.Next() {
-		item, serr := scanSecretMetadata(rows)
-		if serr != nil {
-			return nil, serr
+	err := s.withOrgReadTx(ctx, orgID, func(q sqlQueryRowExecutor, d port.Dialect) error {
+		var (
+			rows *sql.Rows
+			rerr error
+		)
+		if projectID == nil {
+			rows, rerr = q.QueryContext(ctx, port.Rebind(d, `
+				SELECT id, org_id, owner_project_id, name, secret_kind, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
+				FROM secret_credentials
+				WHERE org_id = ?
+				ORDER BY id ASC`), orgID)
+		} else {
+			rows, rerr = q.QueryContext(ctx, port.Rebind(d, `
+				SELECT id, org_id, owner_project_id, name, secret_kind, bound_audience, key_fingerprint, version, created_at_ms, updated_at_ms
+				FROM secret_credentials
+				WHERE org_id = ? AND owner_project_id = ?
+				ORDER BY id ASC`), orgID, *projectID)
 		}
-		out = append(out, *item)
+		if rerr != nil {
+			return mapVaultSQLiteError(rerr, false)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			item, serr := scanSecretMetadata(rows)
+			if serr != nil {
+				return serr
+			}
+			out = append(out, *item)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // UnsealWithCapability decrypts a stored secret strictly when presented a validly minted UnsealCapability.
@@ -824,12 +890,14 @@ func (s *Store) UnsealWithCapability(ctx context.Context, cap UnsealCapability, 
 		audNull    sql.NullString
 		version    int64
 	)
-	if err := s.db.QueryRowContext(ctx, `
-		SELECT owner_project_id, secret_kind, aead_alg, nonce, ciphertext, bound_audience, version
-		FROM secret_credentials
-		WHERE org_id = ? AND id = ?`,
-		orgID, secretID,
-	).Scan(&projNull, &kind, &aeadAlg, &nonce, &ciphertext, &audNull, &version); err != nil {
+	if err := s.withOrgReadTx(ctx, orgID, func(q sqlQueryRowExecutor, d port.Dialect) error {
+		return q.QueryRowContext(ctx, port.Rebind(d, `
+			SELECT owner_project_id, secret_kind, aead_alg, nonce, ciphertext, bound_audience, version
+			FROM secret_credentials
+			WHERE org_id = ? AND id = ?`),
+			orgID, secretID,
+		).Scan(&projNull, &kind, &aeadAlg, &nonce, &ciphertext, &audNull, &version)
+	}); err != nil {
 		return nil, mapVaultSQLiteError(err, false)
 	}
 	if aeadAlg != "AES-256-GCM" {
@@ -1029,6 +1097,7 @@ func (s *Store) RewrapAllOrgDEKs(ctx context.Context, oldKEKID, newKEKID string)
 	}
 
 	now := s.nowMs()
+	d := s.effectiveDialect(ctx)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return summary, fmt.Errorf("vault: begin tx: %w", err)
@@ -1046,30 +1115,75 @@ func (s *Store) RewrapAllOrgDEKs(ctx context.Context, oldKEKID, newKEKID string)
 		nonce      []byte
 		wrapped    []byte
 	}
-	rows, err := tx.QueryContext(ctx, `
-		SELECT org_id, dek_version, nonce, wrapped_org_dek
-		FROM org_encryption_keys
-		WHERE kek_key_id = ?
-		ORDER BY org_id ASC`, oldKEKID)
-	if err != nil {
-		return summary, mapVaultSQLiteError(err, false)
-	}
 	var pending []orgKeyRow
-	for rows.Next() {
-		var r orgKeyRow
-		if scanErr := rows.Scan(&r.orgID, &r.dekVersion, &r.nonce, &r.wrapped); scanErr != nil {
-			_ = rows.Close()
-			return summary, scanErr
+	if d == port.DialectPostgres {
+		if serr := s.setOperatorRLSTx(ctx, tx); serr != nil {
+			return summary, serr
 		}
-		pending = append(pending, r)
-	}
-	if rerr := rows.Err(); rerr != nil {
+		orgRows, oerr := tx.QueryContext(ctx, `SELECT id FROM organizations ORDER BY id ASC`)
+		if oerr != nil {
+			return summary, mapVaultSQLiteError(oerr, false)
+		}
+		var orgIDs []string
+		for orgRows.Next() {
+			var oid string
+			if serr := orgRows.Scan(&oid); serr != nil {
+				_ = orgRows.Close()
+				return summary, serr
+			}
+			orgIDs = append(orgIDs, oid)
+		}
+		if rerr := orgRows.Err(); rerr != nil {
+			_ = orgRows.Close()
+			return summary, rerr
+		}
+		_ = orgRows.Close()
+
+		for _, oid := range orgIDs {
+			if serr := s.setOrgRLSTx(ctx, tx, oid); serr != nil {
+				return summary, serr
+			}
+			var r orgKeyRow
+			rerr := tx.QueryRowContext(ctx, `
+				SELECT org_id, dek_version, nonce, wrapped_org_dek
+				FROM org_encryption_keys
+				WHERE org_id = $1 AND kek_key_id = $2`, oid, oldKEKID).Scan(&r.orgID, &r.dekVersion, &r.nonce, &r.wrapped)
+			if errors.Is(rerr, sql.ErrNoRows) {
+				continue
+			}
+			if rerr != nil {
+				return summary, mapVaultSQLiteError(rerr, false)
+			}
+			pending = append(pending, r)
+		}
+	} else {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT org_id, dek_version, nonce, wrapped_org_dek
+			FROM org_encryption_keys
+			WHERE kek_key_id = ?
+			ORDER BY org_id ASC`, oldKEKID)
+		if err != nil {
+			return summary, mapVaultSQLiteError(err, false)
+		}
+		for rows.Next() {
+			var r orgKeyRow
+			if scanErr := rows.Scan(&r.orgID, &r.dekVersion, &r.nonce, &r.wrapped); scanErr != nil {
+				_ = rows.Close()
+				return summary, scanErr
+			}
+			pending = append(pending, r)
+		}
+		if rerr := rows.Err(); rerr != nil {
+			_ = rows.Close()
+			return summary, rerr
+		}
 		_ = rows.Close()
-		return summary, rerr
 	}
-	_ = rows.Close()
 
 	for _, r := range pending {
+		if serr := s.setOrgRLSTx(ctx, tx, r.orgID); serr != nil {
+			return summary, serr
+		}
 		if err := s.rewrapSingleOrgTx(ctx, tx, oldKEKID, newKEKID, r.orgID, r.dekVersion, r.nonce, r.wrapped, now); err != nil {
 			return summary, err
 		}
@@ -1077,16 +1191,9 @@ func (s *Store) RewrapAllOrgDEKs(ctx context.Context, oldKEKID, newKEKID string)
 	}
 
 	if summary.Rewrapped > 0 {
-		res, err := tx.ExecContext(ctx,
-			`INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (NULL, 'master_kek', ?, ?, 0, ?)`,
-			newKEKID, port.MutationKeyRotate, now,
-		)
-		if err != nil {
-			return summary, mapVaultSQLiteError(err, false)
-		}
-		epoch, err := res.LastInsertId()
-		if err != nil {
-			return summary, err
+		epoch, cerr := appendVaultChangelogTx(ctx, tx, d, "", "master_kek", newKEKID, port.MutationKeyRotate, false, now)
+		if cerr != nil {
+			return summary, cerr
 		}
 		summary.ConfigEpoch = epoch
 	}
@@ -1113,10 +1220,10 @@ func (s *Store) rewrapSingleOrgTx(ctx context.Context, tx *sql.Tx, oldKEKID, new
 		return err
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, s.q(ctx, `
 		UPDATE org_encryption_keys
 		SET kek_key_id = ?, nonce = ?, wrapped_org_dek = ?, rotated_at_ms = ?
-		WHERE org_id = ? AND kek_key_id = ? AND dek_version = ?`,
+		WHERE org_id = ? AND kek_key_id = ? AND dek_version = ?`),
 		newKEKID, newNonce, newWrapped, now, orgID, oldKEKID, dekVersion,
 	)
 	if err != nil {
@@ -1157,6 +1264,7 @@ func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string, re
 	s.cache.evictProject(orgID, projectID)
 
 	now := s.nowMs()
+	d := s.effectiveDialect(ctx)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("vault: begin tx: %w", err)
@@ -1167,12 +1275,15 @@ func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string, re
 			_ = tx.Rollback()
 		}
 	}()
+	if err := s.setOrgRLSTx(ctx, tx, orgID); err != nil {
+		return err
+	}
 
-	reqStatus, reqErr := lookupShredRequestTx(ctx, tx, orgID, req.RequestID, projKey, req.ExpectedGeneration)
+	reqStatus, reqErr := lookupShredRequestTx(ctx, tx, d, orgID, req.RequestID, projKey, req.ExpectedGeneration)
 	if reqErr != nil {
 		return reqErr
 	}
-	if done, doneErr := isCompletedWithoutPendingTx(ctx, tx, reqStatus, projKey, req.ExpectedGeneration, req.RequestID); doneErr != nil {
+	if done, doneErr := isCompletedWithoutPendingTx(ctx, tx, d, reqStatus, projKey, req.ExpectedGeneration, req.RequestID); doneErr != nil {
 		return doneErr
 	} else if done {
 		_ = tx.Rollback()
@@ -1181,7 +1292,7 @@ func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string, re
 	}
 
 	res, err := tx.ExecContext(ctx,
-		`DELETE FROM project_encryption_keys WHERE org_id = ? AND project_id = ? AND key_generation = ?`,
+		port.Rebind(d, `DELETE FROM project_encryption_keys WHERE org_id = ? AND project_id = ? AND key_generation = ?`),
 		orgID, projectID, req.ExpectedGeneration,
 	)
 	if err != nil {
@@ -1197,14 +1308,14 @@ func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string, re
 		clearTargetGen int64
 	)
 	if affected > 0 {
-		shredEpoch, cerr := appendVaultChangelogTx(ctx, tx, orgID, "project_encryption_key", projectID, port.MutationShred, true, now)
+		shredEpoch, cerr := appendVaultChangelogTx(ctx, tx, d, orgID, "project_encryption_key", projectID, port.MutationShred, true, now)
 		if cerr != nil {
 			return cerr
 		}
-		if perr := recordPendingShredTx(ctx, tx, projKey, orgID, &projectID, shredEpoch, req.ExpectedGeneration, now); perr != nil {
+		if perr := recordPendingShredTx(ctx, tx, d, projKey, orgID, &projectID, shredEpoch, req.ExpectedGeneration, now); perr != nil {
 			return perr
 		}
-		if uerr := upsertShredRequestExec(ctx, tx, req.RequestID, projKey, orgID, &projectID, req.ExpectedGeneration, shredStatusPendingCleanup, now); uerr != nil {
+		if uerr := upsertShredRequestExec(ctx, tx, d, req.RequestID, projKey, orgID, &projectID, req.ExpectedGeneration, shredStatusPendingCleanup, now); uerr != nil {
 			return uerr
 		}
 		if cerr := tx.Commit(); cerr != nil {
@@ -1216,7 +1327,7 @@ func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string, re
 	} else {
 		var liveGen int64
 		lerr := tx.QueryRowContext(ctx,
-			`SELECT key_generation FROM project_encryption_keys WHERE org_id = ? AND project_id = ?`,
+			port.Rebind(d, `SELECT key_generation FROM project_encryption_keys WHERE org_id = ? AND project_id = ?`),
 			orgID, projectID,
 		).Scan(&liveGen)
 		if lerr == nil {
@@ -1231,7 +1342,7 @@ func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string, re
 			pendingTargetGen int64
 		)
 		qerr := tx.QueryRowContext(ctx,
-			`SELECT shred_epoch, target_generation FROM vault_pending_shred_cleanups WHERE scope_key = ?`,
+			port.Rebind(d, `SELECT shred_epoch, target_generation FROM vault_pending_shred_cleanups WHERE scope_key = ?`),
 			projKey,
 		).Scan(&projEpoch, &pendingTargetGen)
 		switch {
@@ -1246,12 +1357,12 @@ func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string, re
 		case !errors.Is(qerr, sql.ErrNoRows):
 			return mapVaultSQLiteError(qerr, false)
 		default:
-			if gerr := checkGenerationNotSupersededTx(ctx, tx, projKey, req.ExpectedGeneration, req.RequestID); gerr != nil {
+			if gerr := checkGenerationNotSupersededTx(ctx, tx, d, projKey, req.ExpectedGeneration, req.RequestID); gerr != nil {
 				return gerr
 			}
 			var orgEpoch int64
 			oerr := tx.QueryRowContext(ctx,
-				`SELECT shred_epoch FROM vault_pending_shred_cleanups WHERE scope_key = ?`,
+				port.Rebind(d, `SELECT shred_epoch FROM vault_pending_shred_cleanups WHERE scope_key = ?`),
 				orgKey,
 			).Scan(&orgEpoch)
 			switch {
@@ -1277,12 +1388,12 @@ func (s *Store) ShredProjectDEK(ctx context.Context, orgID, projectID string, re
 	}
 	return s.inPostShredCleanupTx(ctx, func(ctxTx *sql.Tx) error {
 		if _, cerr := ctxTx.ExecContext(ctx,
-			`DELETE FROM vault_pending_shred_cleanups WHERE scope_key = ? AND shred_epoch = ?`,
+			port.Rebind(d, `DELETE FROM vault_pending_shred_cleanups WHERE scope_key = ? AND shred_epoch = ?`),
 			projKey, clearEpoch,
 		); cerr != nil {
 			return fmt.Errorf("vault: clear pending shred cleanup: %w", cerr)
 		}
-		return completeProjectShredTx(ctx, ctxTx, req.RequestID, projKey, orgID, &projectID, clearTargetGen, s.nowMs())
+		return completeProjectShredTx(ctx, ctxTx, d, req.RequestID, projKey, orgID, &projectID, clearTargetGen, s.nowMs())
 	})
 }
 
@@ -1307,6 +1418,7 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string, req ShredRequest)
 	s.cache.evictOrg(orgID)
 
 	now := s.nowMs()
+	d := s.effectiveDialect(ctx)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("vault: begin tx: %w", err)
@@ -1317,12 +1429,15 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string, req ShredRequest)
 			_ = tx.Rollback()
 		}
 	}()
+	if err := s.setOrgRLSTx(ctx, tx, orgID); err != nil {
+		return err
+	}
 
-	reqStatus, reqErr := lookupShredRequestTx(ctx, tx, orgID, req.RequestID, orgKey, req.ExpectedGeneration)
+	reqStatus, reqErr := lookupShredRequestTx(ctx, tx, d, orgID, req.RequestID, orgKey, req.ExpectedGeneration)
 	if reqErr != nil {
 		return reqErr
 	}
-	if done, doneErr := isCompletedWithoutPendingTx(ctx, tx, reqStatus, orgKey, req.ExpectedGeneration, req.RequestID); doneErr != nil {
+	if done, doneErr := isCompletedWithoutPendingTx(ctx, tx, d, reqStatus, orgKey, req.ExpectedGeneration, req.RequestID); doneErr != nil {
 		return doneErr
 	} else if done {
 		_ = tx.Rollback()
@@ -1332,7 +1447,7 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string, req ShredRequest)
 
 	// Execute fenced DELETE on org_encryption_keys FIRST so stale retries never touch secret_credentials!
 	res, err := tx.ExecContext(ctx,
-		`DELETE FROM org_encryption_keys WHERE org_id = ? AND key_generation = ?`,
+		port.Rebind(d, `DELETE FROM org_encryption_keys WHERE org_id = ? AND key_generation = ?`),
 		orgID, req.ExpectedGeneration,
 	)
 	if err != nil {
@@ -1345,17 +1460,17 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string, req ShredRequest)
 
 	var clearMaxEpoch int64
 	if affected > 0 {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM secret_credentials WHERE org_id = ?`, orgID); err != nil {
+		if _, err := tx.ExecContext(ctx, port.Rebind(d, `DELETE FROM secret_credentials WHERE org_id = ?`), orgID); err != nil {
 			return mapVaultSQLiteError(err, true)
 		}
-		shredEpoch, cerr := appendVaultChangelogTx(ctx, tx, orgID, "org_encryption_key", orgID, port.MutationShred, true, now)
+		shredEpoch, cerr := appendVaultChangelogTx(ctx, tx, d, orgID, "org_encryption_key", orgID, port.MutationShred, true, now)
 		if cerr != nil {
 			return cerr
 		}
-		if perr := recordPendingShredTx(ctx, tx, orgKey, orgID, nil, shredEpoch, req.ExpectedGeneration, now); perr != nil {
+		if perr := recordPendingShredTx(ctx, tx, d, orgKey, orgID, nil, shredEpoch, req.ExpectedGeneration, now); perr != nil {
 			return perr
 		}
-		if uerr := upsertShredRequestExec(ctx, tx, req.RequestID, orgKey, orgID, nil, req.ExpectedGeneration, shredStatusPendingCleanup, now); uerr != nil {
+		if uerr := upsertShredRequestExec(ctx, tx, d, req.RequestID, orgKey, orgID, nil, req.ExpectedGeneration, shredStatusPendingCleanup, now); uerr != nil {
 			return uerr
 		}
 		if cerr := tx.Commit(); cerr != nil {
@@ -1366,7 +1481,7 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string, req ShredRequest)
 	} else {
 		var liveGen int64
 		lerr := tx.QueryRowContext(ctx,
-			`SELECT key_generation FROM org_encryption_keys WHERE org_id = ?`,
+			port.Rebind(d, `SELECT key_generation FROM org_encryption_keys WHERE org_id = ?`),
 			orgID,
 		).Scan(&liveGen)
 		if lerr == nil {
@@ -1381,7 +1496,7 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string, req ShredRequest)
 			pendingTargetGen int64
 		)
 		qerr := tx.QueryRowContext(ctx,
-			`SELECT shred_epoch, target_generation FROM vault_pending_shred_cleanups WHERE scope_key = ?`,
+			port.Rebind(d, `SELECT shred_epoch, target_generation FROM vault_pending_shred_cleanups WHERE scope_key = ?`),
 			orgKey,
 		).Scan(&orgEpoch, &pendingTargetGen)
 		switch {
@@ -1392,7 +1507,7 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string, req ShredRequest)
 			// Include any older child project shred epochs under the same org.
 			var maxEpoch sql.NullInt64
 			if merr := tx.QueryRowContext(ctx,
-				`SELECT MAX(shred_epoch) FROM vault_pending_shred_cleanups WHERE org_id = ?`,
+				port.Rebind(d, `SELECT MAX(shred_epoch) FROM vault_pending_shred_cleanups WHERE org_id = ?`),
 				orgID,
 			).Scan(&maxEpoch); merr != nil {
 				return mapVaultSQLiteError(merr, false)
@@ -1408,7 +1523,7 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string, req ShredRequest)
 		default:
 			var maxEpoch sql.NullInt64
 			merr := tx.QueryRowContext(ctx,
-				`SELECT MAX(shred_epoch) FROM vault_pending_shred_cleanups WHERE org_id = ?`,
+				port.Rebind(d, `SELECT MAX(shred_epoch) FROM vault_pending_shred_cleanups WHERE org_id = ?`),
 				orgID,
 			).Scan(&maxEpoch)
 			if merr != nil {
@@ -1423,7 +1538,7 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string, req ShredRequest)
 				}
 				return port.ErrNotFound
 			}
-			if gerr := checkGenerationNotSupersededTx(ctx, tx, orgKey, req.ExpectedGeneration, req.RequestID); gerr != nil {
+			if gerr := checkGenerationNotSupersededTx(ctx, tx, d, orgKey, req.ExpectedGeneration, req.RequestID); gerr != nil {
 				return gerr
 			}
 			return port.ErrNotFound
@@ -1436,17 +1551,17 @@ func (s *Store) ShredOrgDEK(ctx context.Context, orgID string, req ShredRequest)
 	}
 	return s.inPostShredCleanupTx(ctx, func(ctxTx *sql.Tx) error {
 		cleared, rerr := queryPendingCleanupTuples(ctx, ctxTx,
-			`SELECT scope_key, org_id, shred_epoch, target_generation FROM vault_pending_shred_cleanups WHERE org_id = ? AND shred_epoch <= ?`,
+			port.Rebind(d, `SELECT scope_key, org_id, shred_epoch, target_generation FROM vault_pending_shred_cleanups WHERE org_id = ? AND shred_epoch <= ?`),
 			orgID, clearMaxEpoch,
 		)
 		if rerr != nil {
 			return fmt.Errorf("vault: inspect cleared org shred cleanups: %w", rerr)
 		}
 		nowDone := s.nowMs()
-		if err := upsertShredRequestExec(ctx, ctxTx, req.RequestID, orgKey, orgID, nil, req.ExpectedGeneration, shredStatusCompleted, nowDone); err != nil {
+		if err := upsertShredRequestExec(ctx, ctxTx, d, req.RequestID, orgKey, orgID, nil, req.ExpectedGeneration, shredStatusCompleted, nowDone); err != nil {
 			return err
 		}
-		return clearPendingTuplesTx(ctx, ctxTx, cleared, nowDone)
+		return clearPendingTuplesDialectTx(ctx, ctxTx, d, cleared, nowDone)
 	})
 }
 
@@ -1505,6 +1620,10 @@ func (st *dekCacheStage) clear() {
 }
 
 func (s *Store) ensureOrgDEKTx(ctx context.Context, tx *sql.Tx, orgID string, now int64, stage *dekCacheStage) (int64, []byte, error) {
+	if err := s.setOrgRLSTx(ctx, tx, orgID); err != nil {
+		return 0, nil, err
+	}
+	d := s.effectiveDialect(ctx)
 	var (
 		kekKeyID   string
 		nonce      []byte
@@ -1512,14 +1631,14 @@ func (s *Store) ensureOrgDEKTx(ctx context.Context, tx *sql.Tx, orgID string, no
 		dekVersion int64
 		keyGen     int64
 	)
-	err := tx.QueryRowContext(ctx, `
+	err := tx.QueryRowContext(ctx, port.Rebind(d, `
 		SELECT kek_key_id, nonce, wrapped_org_dek, dek_version, key_generation
 		FROM org_encryption_keys
-		WHERE org_id = ?`, orgID).Scan(&kekKeyID, &nonce, &wrapped, &dekVersion, &keyGen)
+		WHERE org_id = ?`), orgID).Scan(&kekKeyID, &nonce, &wrapped, &dekVersion, &keyGen)
 	if errors.Is(err, sql.ErrNoRows) {
 		var pendingMarker int
 		perr := tx.QueryRowContext(ctx,
-			`SELECT 1 FROM vault_pending_shred_cleanups WHERE org_id = ? LIMIT 1`,
+			port.Rebind(d, `SELECT 1 FROM vault_pending_shred_cleanups WHERE org_id = ? LIMIT 1`),
 			orgID,
 		).Scan(&pendingMarker)
 		if perr == nil {
@@ -1544,15 +1663,15 @@ func (s *Store) ensureOrgDEKTx(ctx context.Context, tx *sql.Tx, orgID string, no
 		}
 		var insertedGen int64
 		won, ierr := inSavepointTx(ctx, tx, "sp_org_dek_mint", func() (bool, error) {
-			nextGen, gerr := nextKeyGenerationTx(ctx, tx, orgPendingShredKey(orgID), orgID, nil, now)
+			nextGen, gerr := nextKeyGenerationDialectTx(ctx, tx, d, orgPendingShredKey(orgID), orgID, nil, now)
 			if gerr != nil {
 				return false, gerr
 			}
-			res, err := tx.ExecContext(ctx, `
+			res, err := tx.ExecContext(ctx, port.Rebind(d, `
 				INSERT INTO org_encryption_keys (
 					org_id, kek_key_id, aead_alg, nonce, wrapped_org_dek, dek_version, key_generation, created_at_ms, rotated_at_ms
 				) VALUES (?, ?, 'AES-256-GCM', ?, ?, 1, ?, ?, ?)
-				ON CONFLICT(org_id) DO NOTHING`,
+				ON CONFLICT(org_id) DO NOTHING`),
 				orgID, activeKEKID, wrapNonce, wrapCT, nextGen, now, now,
 			)
 			if err != nil {
@@ -1576,10 +1695,10 @@ func (s *Store) ensureOrgDEKTx(ctx context.Context, tx *sql.Tx, orgID string, no
 			return 1, freshDEK, nil
 		}
 		clear(freshDEK)
-		if rerr := tx.QueryRowContext(ctx, `
+		if rerr := tx.QueryRowContext(ctx, port.Rebind(d, `
 			SELECT kek_key_id, nonce, wrapped_org_dek, dek_version, key_generation
 			FROM org_encryption_keys
-			WHERE org_id = ?`, orgID).Scan(&kekKeyID, &nonce, &wrapped, &dekVersion, &keyGen); rerr != nil {
+			WHERE org_id = ?`), orgID).Scan(&kekKeyID, &nonce, &wrapped, &dekVersion, &keyGen); rerr != nil {
 			return 0, nil, mapVaultSQLiteError(rerr, false)
 		}
 	} else if err != nil {
@@ -1610,6 +1729,7 @@ func (s *Store) ensureProjectDEKTx(ctx context.Context, tx *sql.Tx, orgID, proje
 		return 0, 0, nil, err
 	}
 	defer clear(orgDEK)
+	d := s.effectiveDialect(ctx)
 
 	var (
 		rowOrgDEKVer int64
@@ -1618,14 +1738,14 @@ func (s *Store) ensureProjectDEKTx(ctx context.Context, tx *sql.Tx, orgID, proje
 		projDEKVer   int64
 		projKeyGen   int64
 	)
-	err = tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, port.Rebind(d, `
 		SELECT org_dek_version, nonce, wrapped_project_dek, dek_version, key_generation
 		FROM project_encryption_keys
-		WHERE org_id = ? AND project_id = ?`, orgID, projectID).Scan(&rowOrgDEKVer, &nonce, &wrapped, &projDEKVer, &projKeyGen)
+		WHERE org_id = ? AND project_id = ?`), orgID, projectID).Scan(&rowOrgDEKVer, &nonce, &wrapped, &projDEKVer, &projKeyGen)
 	if errors.Is(err, sql.ErrNoRows) {
 		var pendingMarker int
 		perr := tx.QueryRowContext(ctx,
-			`SELECT 1 FROM vault_pending_shred_cleanups WHERE scope_key IN (?, ?) LIMIT 1`,
+			port.Rebind(d, `SELECT 1 FROM vault_pending_shred_cleanups WHERE scope_key IN (?, ?) LIMIT 1`),
 			projectPendingShredKey(orgID, projectID),
 			orgPendingShredKey(orgID),
 		).Scan(&pendingMarker)
@@ -1652,15 +1772,15 @@ func (s *Store) ensureProjectDEKTx(ctx context.Context, tx *sql.Tx, orgID, proje
 		}
 		var insertedGen int64
 		won, ierr := inSavepointTx(ctx, tx, "sp_proj_dek_mint", func() (bool, error) {
-			nextGen, gerr := nextKeyGenerationTx(ctx, tx, projectPendingShredKey(orgID, projectID), orgID, &projectID, now)
+			nextGen, gerr := nextKeyGenerationDialectTx(ctx, tx, d, projectPendingShredKey(orgID, projectID), orgID, &projectID, now)
 			if gerr != nil {
 				return false, gerr
 			}
-			res, err := tx.ExecContext(ctx, `
+			res, err := tx.ExecContext(ctx, port.Rebind(d, `
 				INSERT INTO project_encryption_keys (
 					org_id, project_id, org_dek_version, aead_alg, nonce, wrapped_project_dek, dek_version, key_generation, created_at_ms, rotated_at_ms
 				) VALUES (?, ?, ?, 'AES-256-GCM', ?, ?, 1, ?, ?, ?)
-				ON CONFLICT(org_id, project_id) DO NOTHING`,
+				ON CONFLICT(org_id, project_id) DO NOTHING`),
 				orgID, projectID, orgDEKVer, wrapNonce, wrapCT, nextGen, now, now,
 			)
 			if err != nil {
@@ -1684,10 +1804,10 @@ func (s *Store) ensureProjectDEKTx(ctx context.Context, tx *sql.Tx, orgID, proje
 			return orgDEKVer, 1, freshPDEK, nil
 		}
 		clear(freshPDEK)
-		if rerr := tx.QueryRowContext(ctx, `
+		if rerr := tx.QueryRowContext(ctx, port.Rebind(d, `
 			SELECT org_dek_version, nonce, wrapped_project_dek, dek_version, key_generation
 			FROM project_encryption_keys
-			WHERE org_id = ? AND project_id = ?`, orgID, projectID).Scan(&rowOrgDEKVer, &nonce, &wrapped, &projDEKVer, &projKeyGen); rerr != nil {
+			WHERE org_id = ? AND project_id = ?`), orgID, projectID).Scan(&rowOrgDEKVer, &nonce, &wrapped, &projDEKVer, &projKeyGen); rerr != nil {
 			return 0, 0, nil, mapVaultSQLiteError(rerr, false)
 		}
 	} else if err != nil {
@@ -1720,6 +1840,26 @@ func (s *Store) ensureProjectDEKTx(ctx context.Context, tx *sql.Tx, orgID, proje
 }
 
 func (s *Store) loadOrgDEKReadOnly(ctx context.Context, orgID string) (int64, []byte, error) {
+	var (
+		ver int64
+		dek []byte
+	)
+	err := s.withOrgReadTx(ctx, orgID, func(q sqlQueryRowExecutor, d port.Dialect) error {
+		v, k, derr := s.loadOrgDEKWithExec(ctx, q, d, orgID)
+		if derr != nil {
+			return derr
+		}
+		ver = v
+		dek = k
+		return nil
+	})
+	if err != nil {
+		return 0, nil, err
+	}
+	return ver, dek, nil
+}
+
+func (s *Store) loadOrgDEKWithExec(ctx context.Context, q sqlQueryRowExecutor, dialect port.Dialect, orgID string) (int64, []byte, error) {
 	now := s.nowMs()
 	gen := s.cache.generation()
 	var (
@@ -1729,10 +1869,10 @@ func (s *Store) loadOrgDEKReadOnly(ctx context.Context, orgID string) (int64, []
 		dekVersion int64
 		keyGen     int64
 	)
-	if err := s.db.QueryRowContext(ctx, `
+	if err := q.QueryRowContext(ctx, port.Rebind(dialect, `
 		SELECT kek_key_id, nonce, wrapped_org_dek, dek_version, key_generation
 		FROM org_encryption_keys
-		WHERE org_id = ?`, orgID).Scan(&kekKeyID, &nonce, &wrapped, &dekVersion, &keyGen); err != nil {
+		WHERE org_id = ?`), orgID).Scan(&kekKeyID, &nonce, &wrapped, &dekVersion, &keyGen); err != nil {
 		return 0, nil, mapVaultSQLiteError(err, false)
 	}
 	if cachedKEK, cachedVer, cachedKeyGen, cp, ok := s.cache.getOrgDEK(orgID, now); ok {
@@ -1750,6 +1890,28 @@ func (s *Store) loadOrgDEKReadOnly(ctx context.Context, orgID string) (int64, []
 }
 
 func (s *Store) loadProjectDEKReadOnly(ctx context.Context, orgID, projectID string) (int64, int64, []byte, error) {
+	var (
+		orgVer  int64
+		projVer int64
+		dek     []byte
+	)
+	err := s.withOrgReadTx(ctx, orgID, func(q sqlQueryRowExecutor, d port.Dialect) error {
+		ov, pv, k, derr := s.loadProjectDEKWithExec(ctx, q, d, orgID, projectID)
+		if derr != nil {
+			return derr
+		}
+		orgVer = ov
+		projVer = pv
+		dek = k
+		return nil
+	})
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	return orgVer, projVer, dek, nil
+}
+
+func (s *Store) loadProjectDEKWithExec(ctx context.Context, q sqlQueryRowExecutor, dialect port.Dialect, orgID, projectID string) (int64, int64, []byte, error) {
 	now := s.nowMs()
 	gen := s.cache.generation()
 	var (
@@ -1759,10 +1921,10 @@ func (s *Store) loadProjectDEKReadOnly(ctx context.Context, orgID, projectID str
 		projDEKVer   int64
 		projKeyGen   int64
 	)
-	if err := s.db.QueryRowContext(ctx, `
+	if err := q.QueryRowContext(ctx, port.Rebind(dialect, `
 		SELECT org_dek_version, nonce, wrapped_project_dek, dek_version, key_generation
 		FROM project_encryption_keys
-		WHERE org_id = ? AND project_id = ?`, orgID, projectID).Scan(&rowOrgDEKVer, &nonce, &wrapped, &projDEKVer, &projKeyGen); err != nil {
+		WHERE org_id = ? AND project_id = ?`), orgID, projectID).Scan(&rowOrgDEKVer, &nonce, &wrapped, &projDEKVer, &projKeyGen); err != nil {
 		return 0, 0, nil, mapVaultSQLiteError(err, false)
 	}
 	if cachedOrgV, cachedProjV, cachedKeyGen, cp, ok := s.cache.getProjectDEK(orgID, projectID, now); ok {
@@ -1772,7 +1934,7 @@ func (s *Store) loadProjectDEKReadOnly(ctx context.Context, orgID, projectID str
 		clear(cp)
 	}
 
-	_, orgDEK, err := s.loadOrgDEKReadOnly(ctx, orgID)
+	_, orgDEK, err := s.loadOrgDEKWithExec(ctx, q, dialect, orgID)
 	if err != nil {
 		return 0, 0, nil, err
 	}
@@ -1794,10 +1956,10 @@ func (s *Store) loadProjectDEKReadOnly(ctx context.Context, orgID, projectID str
 	return rowOrgDEKVer, projDEKVer, unwrapped, nil
 }
 
-func checkGenerationNotSupersededTx(ctx context.Context, tx *sql.Tx, scopeKey string, expectedGen int64, requestID string) error {
+func checkGenerationNotSupersededTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, scopeKey string, expectedGen int64, requestID string) error {
 	var lastGen int64
 	err := tx.QueryRowContext(ctx,
-		`SELECT last_generation FROM vault_key_generations WHERE scope_key = ?`,
+		port.Rebind(dialect, `SELECT last_generation FROM vault_key_generations WHERE scope_key = ?`),
 		scopeKey,
 	).Scan(&lastGen)
 	if err == nil && lastGen > expectedGen {
@@ -1809,14 +1971,29 @@ func checkGenerationNotSupersededTx(ctx context.Context, tx *sql.Tx, scopeKey st
 	return nil
 }
 
-func appendVaultChangelogTx(ctx context.Context, tx *sql.Tx, orgID, entityKind, entityID, mutationType string, emergency bool, now int64) (int64, error) {
+func appendVaultChangelogTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, orgID, entityKind, entityID, mutationType string, emergency bool, now int64) (int64, error) {
+	var orgArg any
+	if strings.TrimSpace(orgID) != "" {
+		orgArg = orgID
+	}
+	if dialect == port.DialectPostgres {
+		var epoch int64
+		err := tx.QueryRowContext(ctx,
+			`INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES ($1, $2, $3, $4, $5, $6) RETURNING config_epoch`,
+			orgArg, entityKind, entityID, mutationType, emergency, now,
+		).Scan(&epoch)
+		if err != nil {
+			return 0, mapVaultSQLiteError(err, false)
+		}
+		return epoch, nil
+	}
 	emInt := 0
 	if emergency {
 		emInt = 1
 	}
 	res, err := tx.ExecContext(ctx,
 		`INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)`,
-		orgID, entityKind, entityID, mutationType, emInt, now,
+		orgArg, entityKind, entityID, mutationType, emInt, now,
 	)
 	if err != nil {
 		return 0, mapVaultSQLiteError(err, false)
@@ -1829,19 +2006,23 @@ func appendVaultChangelogTx(ctx context.Context, tx *sql.Tx, orgID, entityKind, 
 }
 
 func nextKeyGenerationTx(ctx context.Context, tx *sql.Tx, scopeKey, orgID string, projectID *string, now int64) (int64, error) {
-	if _, err := tx.ExecContext(ctx, `
+	return nextKeyGenerationDialectTx(ctx, tx, port.DialectSQLite, scopeKey, orgID, projectID, now)
+}
+
+func nextKeyGenerationDialectTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, scopeKey, orgID string, projectID *string, now int64) (int64, error) {
+	if _, err := tx.ExecContext(ctx, port.Rebind(dialect, `
 		INSERT INTO vault_key_generations (scope_key, org_id, project_id, last_generation, updated_at_ms)
 		VALUES (?, ?, ?, 1, ?)
 		ON CONFLICT(scope_key) DO UPDATE SET
 			last_generation = vault_key_generations.last_generation + 1,
-			updated_at_ms   = excluded.updated_at_ms`,
+			updated_at_ms   = excluded.updated_at_ms`),
 		scopeKey, orgID, nullStringPtr(projectID), now,
 	); err != nil {
 		return 0, mapVaultSQLiteError(err, false)
 	}
 	var gen int64
 	if err := tx.QueryRowContext(ctx,
-		`SELECT last_generation FROM vault_key_generations WHERE scope_key = ?`,
+		port.Rebind(dialect, `SELECT last_generation FROM vault_key_generations WHERE scope_key = ?`),
 		scopeKey,
 	).Scan(&gen); err != nil {
 		return 0, mapVaultSQLiteError(err, false)
@@ -1899,17 +2080,21 @@ func queryPendingCleanupTuples(ctx context.Context, q sqlQueryExecutor, query st
 }
 
 func clearPendingTuplesTx(ctx context.Context, tx *sql.Tx, tuples []pendingCleanupTuple, now int64) error {
+	return clearPendingTuplesDialectTx(ctx, tx, port.DialectSQLite, tuples, now)
+}
+
+func clearPendingTuplesDialectTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, tuples []pendingCleanupTuple, now int64) error {
 	for _, pt := range tuples {
 		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM vault_pending_shred_cleanups WHERE scope_key = ? AND shred_epoch = ?`,
+			port.Rebind(dialect, `DELETE FROM vault_pending_shred_cleanups WHERE scope_key = ? AND shred_epoch = ?`),
 			pt.scopeKey, pt.epoch,
 		); err != nil {
 			return mapVaultSQLiteError(err, false)
 		}
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, port.Rebind(dialect, `
 			UPDATE vault_shred_requests
 			SET status = ?, updated_at_ms = ?
-			WHERE org_id = ? AND scope_key = ? AND target_generation = ? AND status = ?`,
+			WHERE org_id = ? AND scope_key = ? AND target_generation = ? AND status = ?`),
 			shredStatusCompleted, now, pt.orgID, pt.scopeKey, pt.targetGeneration, shredStatusPendingCleanup,
 		); err != nil {
 			return mapVaultSQLiteError(err, false)
@@ -1929,6 +2114,9 @@ func (s *Store) inPostShredCleanupTx(ctx context.Context, fn func(tx *sql.Tx) er
 			_ = ctxTx.Rollback()
 		}
 	}()
+	if err := s.setOperatorRLSTx(ctx, ctxTx); err != nil {
+		return err
+	}
 	if err := fn(ctxTx); err != nil {
 		return err
 	}
@@ -1939,16 +2127,16 @@ func (s *Store) inPostShredCleanupTx(ctx context.Context, fn func(tx *sql.Tx) er
 	return nil
 }
 
-func isCompletedWithoutPendingTx(ctx context.Context, tx *sql.Tx, reqStatus, scopeKey string, expectedGen int64, requestID string) (bool, error) {
+func isCompletedWithoutPendingTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, reqStatus, scopeKey string, expectedGen int64, requestID string) (bool, error) {
 	if reqStatus != shredStatusCompleted {
 		return false, nil
 	}
-	if err := checkGenerationNotSupersededTx(ctx, tx, scopeKey, expectedGen, requestID); err != nil {
+	if err := checkGenerationNotSupersededTx(ctx, tx, dialect, scopeKey, expectedGen, requestID); err != nil {
 		return false, err
 	}
 	var marker int
 	err := tx.QueryRowContext(ctx,
-		`SELECT 1 FROM vault_pending_shred_cleanups WHERE scope_key = ? AND target_generation = ? LIMIT 1`,
+		port.Rebind(dialect, `SELECT 1 FROM vault_pending_shred_cleanups WHERE scope_key = ? AND target_generation = ? LIMIT 1`),
 		scopeKey, expectedGen,
 	).Scan(&marker)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1957,14 +2145,14 @@ func isCompletedWithoutPendingTx(ctx context.Context, tx *sql.Tx, reqStatus, sco
 	return false, mapVaultSQLiteError(err, false)
 }
 
-func lookupShredRequestTx(ctx context.Context, tx *sql.Tx, orgID, requestID, scopeKey string, expectedGen int64) (string, error) {
+func lookupShredRequestTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, orgID, requestID, scopeKey string, expectedGen int64) (string, error) {
 	var (
 		recScope     string
 		recTargetGen int64
 		recStatus    string
 	)
 	err := tx.QueryRowContext(ctx,
-		`SELECT scope_key, target_generation, status FROM vault_shred_requests WHERE org_id = ? AND request_id = ?`,
+		port.Rebind(dialect, `SELECT scope_key, target_generation, status FROM vault_shred_requests WHERE org_id = ? AND request_id = ?`),
 		orgID, requestID,
 	).Scan(&recScope, &recTargetGen, &recStatus)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1984,14 +2172,14 @@ type sqlExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-func upsertShredRequestExec(ctx context.Context, exec sqlExecutor, requestID, scopeKey, orgID string, projectID *string, targetGen int64, status string, now int64) error {
-	if _, err := exec.ExecContext(ctx, `
+func upsertShredRequestExec(ctx context.Context, exec sqlExecutor, dialect port.Dialect, requestID, scopeKey, orgID string, projectID *string, targetGen int64, status string, now int64) error {
+	if _, err := exec.ExecContext(ctx, port.Rebind(dialect, `
 		INSERT INTO vault_shred_requests (
 			org_id, request_id, scope_key, project_id, target_generation, status, created_at_ms, updated_at_ms
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(org_id, request_id) DO UPDATE SET
 			status        = excluded.status,
-			updated_at_ms = excluded.updated_at_ms`,
+			updated_at_ms = excluded.updated_at_ms`),
 		orgID, requestID, scopeKey, nullStringPtr(projectID), targetGen, status, now, now,
 	); err != nil {
 		return mapVaultSQLiteError(err, false)
@@ -1999,21 +2187,21 @@ func upsertShredRequestExec(ctx context.Context, exec sqlExecutor, requestID, sc
 	return nil
 }
 
-func completeProjectShredTx(ctx context.Context, tx *sql.Tx, requestID, scopeKey, orgID string, projectID *string, targetGen, now int64) error {
-	if err := upsertShredRequestExec(ctx, tx, requestID, scopeKey, orgID, projectID, targetGen, shredStatusCompleted, now); err != nil {
+func completeProjectShredTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, requestID, scopeKey, orgID string, projectID *string, targetGen, now int64) error {
+	if err := upsertShredRequestExec(ctx, tx, dialect, requestID, scopeKey, orgID, projectID, targetGen, shredStatusCompleted, now); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `
+	_, err := tx.ExecContext(ctx, port.Rebind(dialect, `
 		UPDATE vault_shred_requests
 		SET status = ?, updated_at_ms = ?
-		WHERE org_id = ? AND scope_key = ? AND target_generation = ? AND status = ?`,
+		WHERE org_id = ? AND scope_key = ? AND target_generation = ? AND status = ?`),
 		shredStatusCompleted, now, orgID, scopeKey, targetGen, shredStatusPendingCleanup,
 	)
 	return mapVaultSQLiteError(err, false)
 }
 
-func recordPendingShredTx(ctx context.Context, tx *sql.Tx, scopeKey, orgID string, projectID *string, shredEpoch, targetGen, now int64) error {
-	_, err := tx.ExecContext(ctx, `
+func recordPendingShredTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, scopeKey, orgID string, projectID *string, shredEpoch, targetGen, now int64) error {
+	_, err := tx.ExecContext(ctx, port.Rebind(dialect, `
 		INSERT INTO vault_pending_shred_cleanups (
 			scope_key, org_id, project_id, shred_epoch, target_generation, created_at_ms, updated_at_ms
 		) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -2021,7 +2209,7 @@ func recordPendingShredTx(ctx context.Context, tx *sql.Tx, scopeKey, orgID strin
 			shred_epoch       = excluded.shred_epoch,
 			target_generation = excluded.target_generation,
 			updated_at_ms     = excluded.updated_at_ms
-		WHERE excluded.shred_epoch > vault_pending_shred_cleanups.shred_epoch`,
+		WHERE excluded.shred_epoch > vault_pending_shred_cleanups.shred_epoch`),
 		scopeKey, orgID, nullStringPtr(projectID), shredEpoch, targetGen, now, now,
 	)
 	if err != nil {
@@ -2078,6 +2266,20 @@ func mapVaultSQLiteError(err error, isDelete bool) error {
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.ErrNotFound
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23505":
+			return fmt.Errorf("%w: %v", port.ErrAlreadyExists, err)
+		case "23503":
+			if isDelete {
+				return fmt.Errorf("%w: %v", port.ErrResourceInUse, err)
+			}
+			return fmt.Errorf("%w: %v", port.ErrNotFound, err)
+		case "23514", "22001", "23502", "42501":
+			return fmt.Errorf("%w: %w: %v", port.ErrInvalidInput, ErrInvalidInput, err)
+		}
 	}
 	msg := err.Error()
 	switch {

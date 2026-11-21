@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,5 +98,52 @@ func TestDoctorDoesNotProbeNonLoopbackTANPOPOURL(t *testing.T) {
 	checks := probeLocalHealth(t.Context())
 	if len(checks) != 2 || checks[0].Status != "not_probed_nonlocal" || checks[1].Status != "not_probed_nonlocal" {
 		t.Fatalf("non-loopback URL was not excluded from probes: %#v", checks)
+	}
+}
+
+func TestDoctorPostgresStorageRoleCheck(t *testing.T) {
+	rootDir := t.TempDir()
+	t.Setenv("TANPOPO_STORAGE_ENGINE", "postgresql")
+	badChecks := make(map[string]string)
+	for _, check := range mustCollectDoctorReport(t, rootDir).Checks {
+		badChecks[check.Name] = check.Status
+	}
+	if badChecks["storage-fs-lock"] != "fail" {
+		t.Fatalf("expected invalid TANPOPO_STORAGE_ENGINE to fail storage-fs-lock, got %#v", badChecks)
+	}
+
+	t.Setenv("TANPOPO_STORAGE_ENGINE", "postgres")
+	t.Setenv("TANPOPO_PG_DSN", "")
+
+	checks := make(map[string]string)
+	for _, check := range mustCollectDoctorReport(t, rootDir).Checks {
+		checks[check.Name] = check.Status
+	}
+	if checks["storage-fs-lock"] != "fail" {
+		t.Fatalf("expected empty PG DSN to fail storage-fs-lock, got %#v", checks)
+	}
+
+	adminDSN := strings.TrimSpace(os.Getenv("TANPOPO_TEST_PG_ADMIN_DSN"))
+	if adminDSN != "" {
+		t.Setenv("TANPOPO_PG_DSN", adminDSN)
+		adminChecks := make(map[string]string)
+		for _, check := range mustCollectDoctorReport(t, rootDir).Checks {
+			adminChecks[check.Name] = check.Status
+		}
+		if adminChecks["storage-fs-lock"] != "fail" {
+			t.Fatalf("expected SUPERUSER PG DSN to fail storage-fs-lock, got %#v", adminChecks)
+		}
+	}
+
+	appDSN := strings.TrimSpace(os.Getenv("TANPOPO_TEST_PG_DSN"))
+	if appDSN != "" {
+		t.Setenv("TANPOPO_PG_DSN", appDSN)
+		appChecks := make(map[string]string)
+		for _, check := range mustCollectDoctorReport(t, rootDir).Checks {
+			appChecks[check.Name] = check.Status
+		}
+		if appChecks["storage-fs-lock"] != "pass" {
+			t.Fatalf("expected non-SUPERUSER non-BYPASSRLS PG DSN to pass storage-fs-lock, got %#v", appChecks)
+		}
 	}
 }

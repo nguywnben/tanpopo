@@ -1,9 +1,9 @@
 # Acyclic Dependency Graph (`DAG`), Critical Path, Environment Workflow & Execution Order — Tanpopo
 
-> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0038: DONE` | `0039..0047 BLOCKED`)**
-> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.57.0-dec-085-0038-done` | **Date:** `2026-11-20`
+> **Dependency Orchestration & Build Infrastructure Plan (`HANDOFF_VERDICT: GO` | `TP-IMP-0001..0039: DONE` | `0040..0047 BLOCKED`)**
+> - **Document ID:** `PLAN-DAG-01` | **Version:** `1.58.0-dec-088-0039-done` | **Date:** `2026-11-21`
 > - **Authors:** Staff Engineer, Technical Program Manager & QA Lead
-> - **Live DAG Frontier:** Units `0001`..`0038` are DONE. Unit 38 acceptance under `DEC-085` is on main SHA `7c5538ff9e9c6530e505c07f77382d9647b039b1`; four required post-merge jobs passed in CI `44695353169`. Units `0039`..`0047` remain blocked. No tags/releases (`GATE-REL-07`).
+> - **Live DAG Frontier:** Units `0001`..`0039` are DONE. Unit 39 acceptance under `DEC-088` advances `develop` → `main` (`TP-IMP-0039`: PostgreSQL 16+ driver, monthly partitions, `(org_id, id)` keys, `FORCE RLS`, `Dual-DB` CI suite, `tanpopo db migrate-engine`). Units `0040`..`0047` remain blocked pending sequential DoR. No tags/releases (`GATE-REL-07`).
 > - **Mathematical Acyclicity Proof (`Verified Acyclic`):** Every dependency edge `TP-IMP-u -> TP-IMP-v` across all `47` units satisfies the strict monotonic index invariant `u < v`, proving the graph is a **Directed Acyclic Graph (`DAG` — `0` cycles, `0` orphan dependency IDs)**.
 
 ---
@@ -128,7 +128,7 @@ When executing concurrently across multiple AI Coding Agents (one dedicated `git
 
 ### 2.3. Conditional Execution Order of the First 5 Units (`Conditional First 5 Units`)
 
-> **Live Queue Frontier (`38 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `9 BLOCKED` — `DEC-085`):** Units `TP-IMP-0001..0038` are DONE; Unit 38 acceptance is on main `7c5538ff` with post-merge CI `44695353169` green. Units `0039`..`0047` remain blocked pending sequential DoR. No tags/releases.
+> **Live Queue Frontier (`39 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `8 BLOCKED` — `DEC-088`):** Units `TP-IMP-0001..0039` are DONE (`b6dc1d15` Console v2 on `main`; Unit 39 `DEC-088` via PR #29). Units `0040`..`0047` remain blocked pending sequential DoR (`0040`..`0042` authorized to **Gemini 4 Hydrogen**). No tags/releases (`GATE-REL-07`).
 > **Original Gate G1–G4 Sequence Reference (Preserved for Auditability):**
 
 1. **[`TP-IMP-0001`](./units/TP-IMP-0001.md)** *(Sequential #1)* — Spec Closure Batch A: Remediate `SM-01`..`09` state-machine dead ends, author missing `AC`s for `TP-FR-0701`, `0702`, `0901`, and align `v0.1` exit gates.

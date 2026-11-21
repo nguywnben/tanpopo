@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "ไม่รองรับส่วนหัว Content-Type นี้ กรุณาส่งแบบ application/json หรือ multipart/form-data",
   "api.error.unverified_external_acknowledgement_required": "กรุณารับทราบความเสี่ยงด้านความปลอดภัยของการติดตั้งแพ็กเกจภายนอกที่ยังไม่ยืนยันเพื่อดำเนินการต่อ",
   "api.error.vault_unavailable": "ตู้นิรภัยความลับไม่พร้อมใช้งานบนเซิร์ฟเวอร์นี้",
-  "api.error.webhook_subscription_limit": "องค์กรนี้มีจำนวนการสมัครรับ Webhook ถึงขีดจำกัดสูงสุดแล้ว"
+  "api.error.webhook_subscription_limit": "องค์กรนี้มีจำนวนการสมัครรับ Webhook ถึงขีดจำกัดสูงสุดแล้ว",
+  "cli.ops.db.migrate.err.dirty": "บันทึกการย้ายฐานข้อมูลอยู่ในสถานะ dirty",
+  "cli.ops.db.migrate.err.failed": "การย้ายเอนจินฐานข้อมูลล้มเหลว",
+  "cli.ops.db.migrate.err.parity": "การตรวจสอบความเท่าเทียมหลังการย้ายล้มเหลวและย้อนกลับแล้ว",
+  "cli.ops.db.migrate.err.required": "ต้องระบุ --from และ --to",
+  "cli.ops.db.migrate.err.security": "บทบาท PostgreSQL ละเมิดข้อกำหนดสิทธิ์ขั้นต่ำ",
+  "cli.ops.db.migrate.short": "ย้ายฐานข้อมูล SQLite WAL ไปยัง PostgreSQL 16+",
+  "cli.ops.db.short": "ตรวจสอบหรือย้ายเอนจินจัดเก็บฐานข้อมูล",
+  "cli.ops.db.migrate.flag.from": "เส้นทางฐานข้อมูล SQLite WAL ต้นทางหรือ sqlite:// DSN",
+  "cli.ops.db.migrate.flag.to": "DSN การเชื่อมต่อ PostgreSQL 16+ ปลายทาง",
+  "cli.ops.db.migrate.flag.verify": "ตรวจสอบจำนวนแถว ผลรวม micro-USD ห่วงโซ่แฮช JCS และซอง Vault ก่อน commit"
 }

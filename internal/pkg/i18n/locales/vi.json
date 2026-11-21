@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "Header Content-Type không được hỗ trợ. Hãy gửi application/json hoặc multipart/form-data theo đúng yêu cầu.",
   "api.error.unverified_external_acknowledgement_required": "Hãy xác nhận chấp nhận rủi ro bảo mật khi cài đặt gói bên ngoài chưa xác minh để tiếp tục.",
   "api.error.vault_unavailable": "Kho bí mật hiện không khả dụng trên máy chủ này.",
-  "api.error.webhook_subscription_limit": "Tổ chức này đã đạt giới hạn tối đa số lượng đăng ký webhook."
+  "api.error.webhook_subscription_limit": "Tổ chức này đã đạt giới hạn tối đa số lượng đăng ký webhook.",
+  "cli.ops.db.migrate.err.dirty": "So cai migration dang o trang thai dirty.",
+  "cli.ops.db.migrate.err.failed": "Chuyen doi engine co so du lieu that bai.",
+  "cli.ops.db.migrate.err.parity": "Kiem tra doi chieu sau chuyen doi that bai va da rollback.",
+  "cli.ops.db.migrate.err.required": "Bat buoc phai cung cap --from va --to.",
+  "cli.ops.db.migrate.err.security": "Role PostgreSQL vi pham nguyen tac toi thieu quyen.",
+  "cli.ops.db.migrate.short": "Chuyen doi co so du lieu SQLite WAL sang PostgreSQL 16+.",
+  "cli.ops.db.short": "Kiem tra hoac chuyen doi engine luu tru co so du lieu.",
+  "cli.ops.db.migrate.flag.from": "Đường dẫn cơ sở dữ liệu SQLite WAL nguồn hoặc sqlite:// DSN",
+  "cli.ops.db.migrate.flag.to": "DSN kết nối PostgreSQL 16+ đích",
+  "cli.ops.db.migrate.flag.verify": "Kiểm tra số dòng, tổng micro-USD, chuỗi băm kiểm toán JCS và phong bì Vault trước khi commit"
 }

@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "Nicht unterstützter Content-Type-Header. Senden Sie wie erwartet application/json oder multipart/form-data.",
   "api.error.unverified_external_acknowledgement_required": "Bestätigen Sie die Sicherheitsrisiken eines unverifizierten externen Pakets, um fortzufahren.",
   "api.error.vault_unavailable": "Der Geheimnistresor ist auf diesem Server nicht verfügbar.",
-  "api.error.webhook_subscription_limit": "Die maximale Anzahl an Webhook-Abonnements für diese Organisation wurde erreicht."
+  "api.error.webhook_subscription_limit": "Die maximale Anzahl an Webhook-Abonnements für diese Organisation wurde erreicht.",
+  "cli.ops.db.migrate.err.dirty": "Migrationsprotokoll ist inkonsistent (dirty).",
+  "cli.ops.db.migrate.err.failed": "Migration der Datenbank-Engine fehlgeschlagen.",
+  "cli.ops.db.migrate.err.parity": "Paritaetspruefung nach Migration fehlgeschlagen (Rollback ausgefuehrt).",
+  "cli.ops.db.migrate.err.required": "--from und --to sind erforderlich.",
+  "cli.ops.db.migrate.err.security": "PostgreSQL-Rolle verletzt das Least-Privilege-Prinzip.",
+  "cli.ops.db.migrate.short": "SQLite-WAL-Datenbank nach PostgreSQL 16+ migrieren.",
+  "cli.ops.db.short": "Datenbank-Speicher-Engine pruefen oder migrieren.",
+  "cli.ops.db.migrate.flag.from": "Quellpfad der SQLite-WAL-Datenbank oder sqlite://-DSN",
+  "cli.ops.db.migrate.flag.to": "Ziel-PostgreSQL-16+-Verbindungs-DSN",
+  "cli.ops.db.migrate.flag.verify": "Zeilenzahlen, Mikro-USD-Summen, JCS-Audit-Hash-Ketten und Vault-Umschläge vor dem Commit prüfen"
 }

@@ -121,93 +121,151 @@ func QueryBlastRadius(ctx context.Context, db *sql.DB, q BlastRadiusQuery) (*Bla
 		args = append(args, q.ToMs)
 	}
 
+	dialect := port.DetectDialect(ctx, db)
 	whereClause := strings.Join(conds, " AND ")
-
-	var totalCount int64
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_traces_meta WHERE `+whereClause, args...).Scan(&totalCount); err != nil {
-		return nil, fmt.Errorf("audit: count blast radius traces: %w", err)
-	}
-
-	// Compute full distinct affected resource dimensions across the complete unpaginated predicate.
-	distinctSQL := `
-		SELECT DISTINCT org_id, project_id, env_id, virtual_key_id, selected_deployment_id
-		FROM request_traces_meta
-		WHERE ` + whereClause
-	distRows, err := db.QueryContext(ctx, distinctSQL, args...)
-	if err != nil {
-		return nil, fmt.Errorf("audit: query blast radius affected dimensions: %w", err)
-	}
-	defer distRows.Close()
 
 	orgSet := make(map[string]struct{})
 	projSet := make(map[string]struct{})
 	envSet := make(map[string]struct{})
 	vkSet := make(map[string]struct{})
 	depSet := make(map[string]struct{})
-	for distRows.Next() {
-		var (
-			dOrg, dProj, dEnv string
-			dVK, dDep         sql.NullString
-		)
-		if serr := distRows.Scan(&dOrg, &dProj, &dEnv, &dVK, &dDep); serr != nil {
-			return nil, fmt.Errorf("audit: scan blast radius affected dimensions: %w", serr)
-		}
-		orgSet[dOrg] = struct{}{}
-		projSet[dProj] = struct{}{}
-		envSet[dEnv] = struct{}{}
-		if dVK.Valid && dVK.String != "" {
-			vkSet[dVK.String] = struct{}{}
-		}
-		if dDep.Valid && dDep.String != "" {
-			depSet[dDep.String] = struct{}{}
-		}
+
+	type traceExec interface {
+		QueryRowContext(context.Context, string, ...any) *sql.Row
+		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 	}
-	if err := distRows.Err(); err != nil {
-		return nil, fmt.Errorf("audit: iterate blast radius affected dimensions: %w", err)
-	}
-
-	traceSQL := `
-		SELECT request_id, created_at_ms, org_id, project_id, env_id, virtual_key_id,
-		       entry_point, route_slug, selected_deployment_id, connection_id,
-		       extension_installation_id, extension_version_id, http_status, canonical_error_code
-		FROM request_traces_meta
-		WHERE ` + whereClause + `
-		ORDER BY created_at_ms DESC
-		LIMIT ?`
-	traceArgs := append(append([]any(nil), args...), limit)
-
-	rows, err := db.QueryContext(ctx, traceSQL, traceArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("audit: query blast radius traces: %w", err)
-	}
-	defer rows.Close()
-
-	var traces []TraceHit
-
-	for rows.Next() {
-		var (
-			hit                                               TraceHit
-			vkNS, routeNS, depNS, connNS, extNS, verNS, errNS sql.NullString
-		)
-		if serr := rows.Scan(
-			&hit.RequestID, &hit.CreatedAtMs, &hit.OrgID, &hit.ProjectID, &hit.EnvID, &vkNS,
-			&hit.EntryPoint, &routeNS, &depNS, &connNS,
-			&extNS, &verNS, &hit.HTTPStatus, &errNS,
-		); serr != nil {
-			return nil, fmt.Errorf("audit: scan blast radius trace: %w", serr)
+	collectTraces := func(exec traceExec) (int64, []TraceHit, error) {
+		var cnt int64
+		if err := exec.QueryRowContext(ctx, port.Rebind(dialect, `SELECT COUNT(*) FROM request_traces_meta WHERE `+whereClause), args...).Scan(&cnt); err != nil {
+			return 0, nil, fmt.Errorf("audit: count blast radius traces: %w", err)
 		}
-		hit.VirtualKeyID = nullToPtr(vkNS)
-		hit.RouteSlug = nullToPtr(routeNS)
-		hit.SelectedDeploymentID = nullToPtr(depNS)
-		hit.ConnectionID = nullToPtr(connNS)
-		hit.ExtensionInstallationID = nullToPtr(extNS)
-		hit.ExtensionVersionID = nullToPtr(verNS)
-		hit.CanonicalErrorCode = nullToPtr(errNS)
+		distinctSQL := port.Rebind(dialect, `
+			SELECT DISTINCT org_id, project_id, env_id, virtual_key_id, selected_deployment_id
+			FROM request_traces_meta
+			WHERE `+whereClause)
+		distRows, err := exec.QueryContext(ctx, distinctSQL, args...)
+		if err != nil {
+			return 0, nil, fmt.Errorf("audit: query blast radius affected dimensions: %w", err)
+		}
+		for distRows.Next() {
+			var (
+				dOrg, dProj, dEnv string
+				dVK, dDep         sql.NullString
+			)
+			if serr := distRows.Scan(&dOrg, &dProj, &dEnv, &dVK, &dDep); serr != nil {
+				_ = distRows.Close()
+				return 0, nil, fmt.Errorf("audit: scan blast radius affected dimensions: %w", serr)
+			}
+			orgSet[dOrg] = struct{}{}
+			projSet[dProj] = struct{}{}
+			envSet[dEnv] = struct{}{}
+			if dVK.Valid && dVK.String != "" {
+				vkSet[dVK.String] = struct{}{}
+			}
+			if dDep.Valid && dDep.String != "" {
+				depSet[dDep.String] = struct{}{}
+			}
+		}
+		if err := distRows.Err(); err != nil {
+			_ = distRows.Close()
+			return 0, nil, fmt.Errorf("audit: iterate blast radius affected dimensions: %w", err)
+		}
+		_ = distRows.Close()
 
-		traces = append(traces, hit)
+		traceSQL := port.Rebind(dialect, `
+			SELECT request_id, created_at_ms, org_id, project_id, env_id, virtual_key_id,
+			       entry_point, route_slug, selected_deployment_id, connection_id,
+			       extension_installation_id, extension_version_id, http_status, canonical_error_code
+			FROM request_traces_meta
+			WHERE `+whereClause+`
+			ORDER BY created_at_ms DESC
+			LIMIT ?`)
+		traceArgs := append(append([]any(nil), args...), limit)
+		rows, err := exec.QueryContext(ctx, traceSQL, traceArgs...)
+		if err != nil {
+			return 0, nil, fmt.Errorf("audit: query blast radius traces: %w", err)
+		}
+		defer rows.Close()
+
+		var hits []TraceHit
+		for rows.Next() {
+			var (
+				hit                                               TraceHit
+				vkNS, routeNS, depNS, connNS, extNS, verNS, errNS sql.NullString
+			)
+			if serr := rows.Scan(
+				&hit.RequestID, &hit.CreatedAtMs, &hit.OrgID, &hit.ProjectID, &hit.EnvID, &vkNS,
+				&hit.EntryPoint, &routeNS, &depNS, &connNS,
+				&extNS, &verNS, &hit.HTTPStatus, &errNS,
+			); serr != nil {
+				return 0, nil, fmt.Errorf("audit: scan blast radius trace: %w", serr)
+			}
+			hit.VirtualKeyID = nullToPtr(vkNS)
+			hit.RouteSlug = nullToPtr(routeNS)
+			hit.SelectedDeploymentID = nullToPtr(depNS)
+			hit.ConnectionID = nullToPtr(connNS)
+			hit.ExtensionInstallationID = nullToPtr(extNS)
+			hit.ExtensionVersionID = nullToPtr(verNS)
+			hit.CanonicalErrorCode = nullToPtr(errNS)
+			hits = append(hits, hit)
+		}
+		if err := rows.Err(); err != nil {
+			return 0, nil, fmt.Errorf("audit: iterate blast radius traces: %w", err)
+		}
+		return cnt, hits, nil
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("audit: iterate blast radius traces: %w", err)
+
+	var (
+		totalCount int64
+		traces     []TraceHit
+	)
+	if dialect == port.DialectPostgres {
+		tx, berr := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if berr != nil {
+			return nil, fmt.Errorf("audit: begin blast radius trace tx: %w", berr)
+		}
+		defer func() { _ = tx.Rollback() }()
+		if orgID != "" {
+			if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'false', true), set_config('app.current_org_id', $1, true)`, orgID); serr != nil {
+				return nil, fmt.Errorf("audit: set app.current_org_id: %w", serr)
+			}
+			cnt, hits, cerr := collectTraces(tx)
+			if cerr != nil {
+				return nil, cerr
+			}
+			totalCount, traces = cnt, hits
+		} else {
+			orgIDs, lerr := listBlastRadiusOrgIDsPG(ctx, tx)
+			if lerr != nil {
+				return nil, lerr
+			}
+			for _, oid := range orgIDs {
+				if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'false', true), set_config('app.current_org_id', $1, true)`, oid); serr != nil {
+					return nil, fmt.Errorf("audit: set app.current_org_id(%s): %w", oid, serr)
+				}
+				cnt, hits, cerr := collectTraces(tx)
+				if cerr != nil {
+					return nil, cerr
+				}
+				totalCount += cnt
+				traces = append(traces, hits...)
+			}
+			sort.Slice(traces, func(i, j int) bool {
+				if traces[i].CreatedAtMs != traces[j].CreatedAtMs {
+					return traces[i].CreatedAtMs > traces[j].CreatedAtMs
+				}
+				return traces[i].RequestID > traces[j].RequestID
+			})
+			if len(traces) > limit {
+				traces = traces[:limit]
+			}
+		}
+	} else {
+		cnt, hits, cerr := collectTraces(db)
+		if cerr != nil {
+			return nil, cerr
+		}
+		totalCount, traces = cnt, hits
 	}
 
 	// Correlate relevant audit_events strictly respecting tenant boundary.
@@ -266,9 +324,14 @@ func queryBlastRadiusAuditEvents(
 	if projectID != "" {
 		targetIDs = append(targetIDs, projectID)
 	}
+	dialect := port.DetectDialect(ctx, db)
+	jsonTargetExpr := "json_extract(metadata_json, '$.target_id')"
+	if dialect == port.DialectPostgres {
+		jsonTargetExpr = "metadata_json->>'target_id'"
+	}
 	placeholders := strings.Repeat("?,", len(targetIDs))
 	placeholders = placeholders[:len(placeholders)-1]
-	conds = append(conds, "(target_id IN ("+placeholders+") OR (target_type = 'emergency_kill_switch' AND json_extract(metadata_json, '$.target_id') IN ("+placeholders+")))")
+	conds = append(conds, "(target_id IN ("+placeholders+") OR (target_type = 'emergency_kill_switch' AND "+jsonTargetExpr+" IN ("+placeholders+")))")
 	for _, tid := range targetIDs {
 		args = append(args, tid)
 	}
@@ -285,34 +348,144 @@ func queryBlastRadiusAuditEvents(
 		args = append(args, q.ToMs)
 	}
 
-	query := `
+	query := port.Rebind(dialect, `
 		SELECT id, created_at_ms, org_id, chain_key, seq_no,
 		       actor_kind, actor_id, entry_point, event_type, target_type, target_id,
 		       request_id, metadata_json, prev_hash, entry_hash
 		FROM audit_events
-		WHERE ` + strings.Join(conds, " AND ") + `
+		WHERE `+strings.Join(conds, " AND ")+`
 		ORDER BY created_at_ms DESC, seq_no DESC
-		LIMIT ?`
+		LIMIT ?`)
 	args = append(args, limit)
 
-	rows, err := db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("audit: query blast radius audit events: %w", err)
+	scanEvents := func(rows *sql.Rows) ([]StoredEvent, error) {
+		defer rows.Close()
+		var list []StoredEvent
+		for rows.Next() {
+			ev, serr := scanStoredEvent(rows)
+			if serr != nil {
+				return nil, serr
+			}
+			list = append(list, ev)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("audit: iterate blast radius audit events: %w", err)
+		}
+		return list, nil
 	}
-	defer rows.Close()
 
+	if dialect != port.DialectPostgres {
+		rows, err := db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("audit: query blast radius audit events: %w", err)
+		}
+		return scanEvents(rows)
+	}
+
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("audit: begin blast radius audit tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if orgID != "" {
+		opVal := "false"
+		if q.AllowInstanceScope && extID != "" {
+			opVal = "true"
+		}
+		if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', $1, true), set_config('app.current_org_id', $2, true)`, opVal, orgID); serr != nil {
+			return nil, fmt.Errorf("audit: set blast radius audit scope: %w", serr)
+		}
+		rows, err := tx.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("audit: query blast radius audit events: %w", err)
+		}
+		return scanEvents(rows)
+	}
+
+	orgIDs, lerr := listBlastRadiusOrgIDsPG(ctx, tx)
+	if lerr != nil {
+		return nil, lerr
+	}
+
+	seen := make(map[string]struct{})
 	var events []StoredEvent
-	for rows.Next() {
-		ev, serr := scanStoredEvent(rows)
+	appendUnique := func(batch []StoredEvent) {
+		for _, ev := range batch {
+			if _, ok := seen[ev.ID]; ok {
+				continue
+			}
+			seen[ev.ID] = struct{}{}
+			events = append(events, ev)
+		}
+	}
+
+	// 1. Collect SYSTEM (org_id IS NULL) events under operator RLS.
+	if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.current_org_id', '', true), set_config('app.is_instance_operator', 'true', true)`); serr != nil {
+		return nil, fmt.Errorf("audit: set operator audit scope: %w", serr)
+	}
+	sysRows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("audit: query SYSTEM blast radius audit events: %w", err)
+	}
+	sysBatch, serr := scanEvents(sysRows)
+	if serr != nil {
+		return nil, serr
+	}
+	appendUnique(sysBatch)
+
+	// 2. Collect tenant events per organization under FORCE RLS.
+	for _, oid := range orgIDs {
+		if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'false', true), set_config('app.current_org_id', $1, true)`, oid); serr != nil {
+			return nil, fmt.Errorf("audit: set org audit scope(%s): %w", oid, serr)
+		}
+		oRows, err := tx.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("audit: query org blast radius audit events(%s): %w", oid, err)
+		}
+		oBatch, serr := scanEvents(oRows)
 		if serr != nil {
 			return nil, serr
 		}
-		events = append(events, ev)
+		appendUnique(oBatch)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("audit: iterate blast radius audit events: %w", err)
+
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].CreatedAtMs != events[j].CreatedAtMs {
+			return events[i].CreatedAtMs > events[j].CreatedAtMs
+		}
+		if events[i].SeqNo != events[j].SeqNo {
+			return events[i].SeqNo > events[j].SeqNo
+		}
+		return events[i].ID > events[j].ID
+	})
+	if len(events) > limit {
+		events = events[:limit]
 	}
 	return events, nil
+}
+
+func listBlastRadiusOrgIDsPG(ctx context.Context, tx *sql.Tx) ([]string, error) {
+	if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.current_org_id', '', true), set_config('app.is_instance_operator', 'true', true)`); serr != nil {
+		return nil, fmt.Errorf("audit: set operator org list scope: %w", serr)
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM organizations ORDER BY id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("audit: list organizations for blast radius: %w", err)
+	}
+	defer rows.Close()
+	var orgIDs []string
+	for rows.Next() {
+		var oid string
+		if serr := rows.Scan(&oid); serr != nil {
+			return nil, serr
+		}
+		orgIDs = append(orgIDs, oid)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return orgIDs, nil
 }
 
 func nullToPtr(n sql.NullString) *string {

@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "Encabezado Content-Type no admitido. Envía application/json o multipart/form-data.",
   "api.error.unverified_external_acknowledgement_required": "Reconoce los riesgos de seguridad de instalar un paquete externo no verificado para continuar.",
   "api.error.vault_unavailable": "La bóveda de secretos no está disponible en este servidor.",
-  "api.error.webhook_subscription_limit": "Has alcanzado el número máximo de suscripciones webhook para esta organización."
+  "api.error.webhook_subscription_limit": "Has alcanzado el número máximo de suscripciones webhook para esta organización.",
+  "cli.ops.db.migrate.err.dirty": "El registro de migraciones esta en estado sucio.",
+  "cli.ops.db.migrate.err.failed": "Fallo la migracion del motor de base de datos.",
+  "cli.ops.db.migrate.err.parity": "Fallo la verificacion de paridad posterior a la migracion y se revirtio.",
+  "cli.ops.db.migrate.err.required": "--from y --to son obligatorios.",
+  "cli.ops.db.migrate.err.security": "El rol de PostgreSQL incumple el minimo privilegio.",
+  "cli.ops.db.migrate.short": "Migrar una base de datos SQLite WAL a PostgreSQL 16+.",
+  "cli.ops.db.short": "Inspeccionar o migrar el motor de almacenamiento de base de datos.",
+  "cli.ops.db.migrate.flag.from": "Ruta de base de datos SQLite WAL de origen o DSN sqlite://",
+  "cli.ops.db.migrate.flag.to": "DSN de conexión PostgreSQL 16+ de destino",
+  "cli.ops.db.migrate.flag.verify": "Verificar conteos de filas, sumas micro-USD, cadenas JCS de auditoría y sobres Vault antes del commit"
 }

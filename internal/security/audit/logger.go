@@ -148,9 +148,10 @@ type LoggerConfig struct {
 // It implements both port.AuditSink and port.TxAuditSink for fail-closed transactional atomicity.
 type Logger struct {
 	db          *sql.DB
+	dialect     port.Dialect
 	nowMs       func() int64
 	scrubString func(string) string
-	mu          sync.Mutex // Serializes standalone Append transactions; never locked inside AppendTx.
+	mu          sync.Mutex // Serializes standalone SQLite Append transactions; PG uses per-chain_key pg_advisory_xact_lock.
 }
 
 var _ port.TxAuditSink = (*Logger)(nil)
@@ -166,6 +167,7 @@ func NewLogger(cfg LoggerConfig) (*Logger, error) {
 	}
 	return &Logger{
 		db:          cfg.DB,
+		dialect:     port.DetectDialect(context.Background(), cfg.DB),
 		nowMs:       nowFn,
 		scrubString: cfg.ScrubString,
 	}, nil
@@ -173,8 +175,10 @@ func NewLogger(cfg LoggerConfig) (*Logger, error) {
 
 // Append persists a single hash-chained audit event inside its own transaction.
 func (l *Logger) Append(ctx context.Context, event port.AuditEvent) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.dialect != port.DialectPostgres {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 
 	tx, err := l.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -224,17 +228,32 @@ func (l *Logger) appendWithTx(ctx context.Context, tx *sql.Tx, ev port.AuditEven
 		reqArg = *normalized.RequestID
 	}
 
+	if l.dialect == port.DialectPostgres {
+		if normalized.OrgID != nil {
+			if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.current_org_id', $1, true)`, *normalized.OrgID); serr != nil {
+				return fmt.Errorf("audit: set app.current_org_id: %w", serr)
+			}
+		} else {
+			if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true)`); serr != nil {
+				return fmt.Errorf("audit: set app.is_instance_operator: %w", serr)
+			}
+		}
+		if _, lerr := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('audit:' || $1, 0))`, chainKey); lerr != nil {
+			return fmt.Errorf("audit: acquire chain lock for %q: %w", chainKey, lerr)
+		}
+	}
+
 	// Read current chain tip (MAX seq_no + its entry_hash) inside this transaction.
 	var (
 		lastSeq  sql.NullInt64
 		lastHash sql.NullString
 	)
-	err = tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, port.Rebind(l.dialect, `
 		SELECT seq_no, entry_hash
 		FROM audit_events
 		WHERE chain_key = ?
 		ORDER BY seq_no DESC
-		LIMIT 1`,
+		LIMIT 1`),
 		chainKey,
 	).Scan(&lastSeq, &lastHash)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -254,12 +273,12 @@ func (l *Logger) appendWithTx(ctx context.Context, tx *sql.Tx, ev port.AuditEven
 	}
 	entryHash := ComputeEntryHash(chainKey, nextSeq, prevHash, envelopeBytes)
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(l.dialect, `
 		INSERT INTO audit_events (
 			id, created_at_ms, org_id, chain_key, seq_no,
 			actor_kind, actor_id, entry_point, event_type, target_type, target_id,
 			request_id, metadata_json, prev_hash, entry_hash
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		normalized.ID, normalized.CreatedAtMs, orgArg, chainKey, nextSeq,
 		normalized.ActorKind, normalized.ActorID, normalized.EntryPoint, normalized.EventType, normalized.TargetType, normalized.TargetID,
 		reqArg, string(canonMeta), prevHash, entryHash,
@@ -549,7 +568,33 @@ func ListEvents(ctx context.Context, db *sql.DB, filter ListFilter) ([]StoredEve
 	query += ` ORDER BY seq_no DESC LIMIT ?`
 	args = append(args, limit)
 
-	rows, err := db.QueryContext(ctx, query, args...)
+	dialect := port.DetectDialect(ctx, db)
+	query = port.Rebind(dialect, query)
+
+	var (
+		rows *sql.Rows
+		tx   *sql.Tx
+		err  error
+	)
+	if dialect == port.DialectPostgres {
+		tx, err = db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return nil, fmt.Errorf("audit: begin list tx: %w", err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		if chainKey == SystemChainKey {
+			if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true)`); serr != nil {
+				return nil, fmt.Errorf("audit: set app.is_instance_operator: %w", serr)
+			}
+		} else {
+			if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.current_org_id', $1, true)`, chainKey); serr != nil {
+				return nil, fmt.Errorf("audit: set app.current_org_id: %w", serr)
+			}
+		}
+		rows, err = tx.QueryContext(ctx, query, args...)
+	} else {
+		rows, err = db.QueryContext(ctx, query, args...)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("audit: list events: %w", err)
 	}

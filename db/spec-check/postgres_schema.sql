@@ -30,7 +30,7 @@ $$;
 -- -----------------------------------------------------------------------------
 -- 0. Schema Migration Ledger (TP-IMP-0007 / TP-IMP-0039 / FMEA-06)
 -- -----------------------------------------------------------------------------
-CREATE TABLE schema_migrations (
+CREATE TABLE IF NOT EXISTS schema_migrations (
     version         BIGINT PRIMARY KEY,
     name            VARCHAR(128) NOT NULL,
     checksum_sha256 CHAR(64) NOT NULL,
@@ -495,6 +495,38 @@ CREATE TABLE extension_revocations (
     UNIQUE (package_slug, version_or_sha256)
 );
 
+CREATE TABLE marketplace_feed_cursors (
+    feed_kind          VARCHAR(24) PRIMARY KEY CHECK (feed_kind IN ('index', 'revocations')),
+    version_serial     BIGINT NOT NULL CHECK (version_serial > 0),
+    feed_expires_at_ms BIGINT NOT NULL,
+    updated_at_ms      BIGINT NOT NULL
+);
+
+CREATE TABLE marketplace_index_entries (
+    package_slug  VARCHAR(160) NOT NULL,
+    version       VARCHAR(64) NOT NULL,
+    digest        CHAR(64) NOT NULL CHECK (length(digest) = 64),
+    oci_uri       TEXT NOT NULL,
+    updated_at_ms BIGINT NOT NULL,
+    PRIMARY KEY (package_slug, version)
+);
+
+CREATE TABLE extension_revocation_actions (
+    id                VARCHAR(40) PRIMARY KEY,
+    installation_id   VARCHAR(40) NOT NULL REFERENCES extension_installations(id) ON DELETE CASCADE,
+    package_slug      VARCHAR(160) NOT NULL,
+    version_or_sha256 VARCHAR(128) NOT NULL,
+    severity          VARCHAR(32) NOT NULL CHECK (severity IN ('CRITICAL', 'CRITICAL_MALICIOUS')),
+    reason            TEXT NOT NULL,
+    created_at_ms     BIGINT NOT NULL,
+    completed_at_ms   BIGINT,
+    UNIQUE (installation_id, package_slug, version_or_sha256)
+);
+
+CREATE INDEX idx_extension_revocation_actions_pending
+    ON extension_revocation_actions (created_at_ms)
+    WHERE completed_at_ms IS NULL;
+
 -- -----------------------------------------------------------------------------
 -- 16. Provider Adapters (4-Entity Model Chain #1 — CR-04)
 -- -----------------------------------------------------------------------------
@@ -741,6 +773,7 @@ CREATE TABLE mcp_servers (
     org_id             VARCHAR(40) NOT NULL,
     project_id         VARCHAR(40) NOT NULL,
     server_slug        VARCHAR(64) NOT NULL CHECK (server_slug NOT LIKE '%!_!_%' ESCAPE '!'),
+    display_name       VARCHAR(128) NOT NULL CHECK (length(trim(display_name)) > 0),
     transport_kind     VARCHAR(24) NOT NULL CHECK (transport_kind IN ('STREAMABLE_HTTP', 'SIDECAR_STDIO')),
     endpoint_url       TEXT NOT NULL,
     allow_private_ip   BOOLEAN NOT NULL DEFAULT FALSE,
@@ -790,6 +823,7 @@ CREATE TABLE mcp_tool_grants (
     created_at_ms           BIGINT NOT NULL,
     PRIMARY KEY (org_id, id),
     UNIQUE (id),
+    UNIQUE (org_id, project_id, env_id, virtual_key_id, mcp_tool_id),
     FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id) ON DELETE CASCADE,
     FOREIGN KEY (org_id, env_id) REFERENCES environments(org_id, id) ON DELETE CASCADE,
     FOREIGN KEY (org_id, virtual_key_id) REFERENCES virtual_keys(org_id, id) ON DELETE CASCADE,
@@ -1155,7 +1189,7 @@ CREATE TABLE debug_payload_blobs (
     project_id             VARCHAR(40) NOT NULL,
     aead_alg               VARCHAR(32) NOT NULL DEFAULT 'AES-256-GCM' CHECK (aead_alg = 'AES-256-GCM'),
     nonce                  BYTEA NOT NULL,
-    encrypted_payload_aead BYTEA NOT NULL, -- <= 256 KiB; Project DEK AAD = "tanpopo:v1:proj:" + org_id + ":" + project_id + ":debug_blob:" + request_id
+    encrypted_payload_aead BYTEA NOT NULL CHECK (octet_length(encrypted_payload_aead) <= 262144), -- <= 256 KiB; Project DEK AAD = "tanpopo:v1:proj:" + org_id + ":" + project_id + ":debug_blob:" + request_id
     created_at_ms          BIGINT NOT NULL,
     expires_at_ms          BIGINT NOT NULL CHECK (expires_at_ms > created_at_ms AND expires_at_ms <= created_at_ms + 259200000),
     PRIMARY KEY (org_id, project_id, request_id),
@@ -1213,11 +1247,15 @@ CREATE TABLE emergency_kill_switches (
     reason                    TEXT NOT NULL CHECK (LENGTH(reason) >= 5),
     triggered_by_principal_id VARCHAR(40) NOT NULL REFERENCES principals(id) ON DELETE RESTRICT,
     cleared_by_principal_id   VARCHAR(40) REFERENCES principals(id) ON DELETE RESTRICT,
-    clear_reason              TEXT,
+    clear_reason              TEXT CHECK (clear_reason IS NULL OR LENGTH(clear_reason) >= 5),
     version                   BIGINT NOT NULL DEFAULT 1 CHECK (version >= 1),
     triggered_at_ms           BIGINT NOT NULL,
     cleared_at_ms             BIGINT
 );
+
+CREATE UNIQUE INDEX idx_killswitches_active_unique
+    ON emergency_kill_switches (level, target_id, COALESCE(org_id, ''))
+    WHERE active = TRUE;
 
 CREATE TABLE config_changelog (
     config_epoch  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

@@ -791,3 +791,20 @@ func copyFile(source, destination string) error {
 	}
 	return closeErr
 }
+
+func TestServeFailsClosedOnPostgresAndInvalidStorageEngine(t *testing.T) {
+	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "data"))
+	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("TANPOPO_MASTER_KEY_FILE", "")
+
+	t.Setenv("TANPOPO_STORAGE_ENGINE", "postgresql")
+	if _, _, err := buildRuntime(context.Background(), "all", "127.0.0.1:8080"); err == nil {
+		t.Fatalf("expected error for invalid TANPOPO_STORAGE_ENGINE")
+	}
+
+	t.Setenv("TANPOPO_STORAGE_ENGINE", "postgres")
+	t.Setenv("TANPOPO_PG_DSN", "")
+	if _, _, err := buildRuntime(context.Background(), "all", "127.0.0.1:8080"); err == nil {
+		t.Fatalf("expected fail-closed error when postgres runtime is selected without DSN")
+	}
+}

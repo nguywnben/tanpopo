@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "Unsupported Content-Type header. Send application/json or multipart/form-data as expected.",
   "api.error.unverified_external_acknowledgement_required": "Acknowledge the security risks of installing an unverified external package to continue.",
   "api.error.vault_unavailable": "The secret vault is unavailable on this server.",
-  "api.error.webhook_subscription_limit": "You have reached the maximum number of webhook subscriptions for this organization."
+  "api.error.webhook_subscription_limit": "You have reached the maximum number of webhook subscriptions for this organization.",
+  "cli.ops.db.migrate.err.dirty": "Database migration ledger is dirty.",
+  "cli.ops.db.migrate.err.failed": "Database engine migration failed.",
+  "cli.ops.db.migrate.err.parity": "Post-migration parity verification failed and rolled back.",
+  "cli.ops.db.migrate.err.required": "--from and --to are required.",
+  "cli.ops.db.migrate.err.security": "PostgreSQL role violates least-privilege requirement.",
+  "cli.ops.db.migrate.short": "Migrate a SQLite WAL database into PostgreSQL 16+.",
+  "cli.ops.db.short": "Inspect or migrate the database storage engine.",
+  "cli.ops.db.migrate.flag.from": "Source SQLite WAL database path or sqlite:// DSN",
+  "cli.ops.db.migrate.flag.to": "Target PostgreSQL 16+ connection DSN",
+  "cli.ops.db.migrate.flag.verify": "Verify post-migration row counts, micro-USD sums, JCS audit hash chains, and Vault envelopes before commit"
 }

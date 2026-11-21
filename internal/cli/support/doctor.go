@@ -31,6 +31,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
+	"github.com/nguywnben/tanpopo/internal/storage/postgres"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 )
 
@@ -182,6 +183,28 @@ func collectDoctorReport(ctx context.Context, root string, artifactPaths map[str
 			free, freeErr := diskFreeBytes(root)
 			if freeErr != nil || free < 1<<30 {
 				return opsdoctor.StatusFail
+			}
+			pgDSN := strings.TrimSpace(os.Getenv("TANPOPO_PG_DSN"))
+			engine := strings.ToLower(strings.TrimSpace(os.Getenv("TANPOPO_STORAGE_ENGINE")))
+			switch engine {
+			case "", "sqlite", "postgres":
+			default:
+				return opsdoctor.StatusFail
+			}
+			if engine == "postgres" || (engine == "" && pgDSN != "") {
+				if pgDSN == "" {
+					return opsdoctor.StatusFail
+				}
+				pgStore, pgErr := postgres.Open(probeCtx, postgres.Options{
+					DSN:                      pgDSN,
+					SkipMigrate:              true,
+					PartitionLookaheadMonths: -1,
+				})
+				if pgErr != nil {
+					return opsdoctor.StatusFail
+				}
+				_ = pgStore.Close()
+				return opsdoctor.StatusPass
 			}
 			dbInfo, dbErr := os.Lstat(dbPath)
 			if dbErr != nil || !dbInfo.Mode().IsRegular() || dbInfo.Mode()&os.ModeSymlink != 0 {

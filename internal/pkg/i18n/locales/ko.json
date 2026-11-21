@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "지원하지 않는 Content-Type 헤더입니다. application/json 또는 multipart/form-data 형식으로 전송하세요.",
   "api.error.unverified_external_acknowledgement_required": "계속하려면 미검증 외부 패키지 설치의 보안 위험을 확인하고 동의하세요.",
   "api.error.vault_unavailable": "이 서버에서는 시크릿 볼트를 사용할 수 없습니다.",
-  "api.error.webhook_subscription_limit": "이 조직의 최대 웹훅 구독 수에 도달했습니다."
+  "api.error.webhook_subscription_limit": "이 조직의 최대 웹훅 구독 수에 도달했습니다.",
+  "cli.ops.db.migrate.err.dirty": "마이그레이션 상태가 dirty 상태입니다.",
+  "cli.ops.db.migrate.err.failed": "데이터베이스 엔진 마이그레이션에 실패했습니다.",
+  "cli.ops.db.migrate.err.parity": "마이그레이션 후 정합성 검증에 실패하여 롤백되었습니다.",
+  "cli.ops.db.migrate.err.required": "--from 및 --to 옵션이 필요합니다.",
+  "cli.ops.db.migrate.err.security": "PostgreSQL 역할이 최소 권한 요구 사항을 위반했습니다.",
+  "cli.ops.db.migrate.short": "SQLite WAL 데이터베이스를 PostgreSQL 16+로 마이그레이션합니다.",
+  "cli.ops.db.short": "데이터베이스 스토리지 엔진을 검사하거나 마이그레이션합니다.",
+  "cli.ops.db.migrate.flag.from": "원본 SQLite WAL 데이터베이스 경로 또는 sqlite:// DSN",
+  "cli.ops.db.migrate.flag.to": "대상 PostgreSQL 16+ 연결 DSN",
+  "cli.ops.db.migrate.flag.verify": "커밋 전에 행 수, micro-USD 합계, JCS 감사 해시 체인 및 Vault 봉투를 검증합니다"
 }

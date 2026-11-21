@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "Неподдерживаемый заголовок Content-Type. Используйте application/json или multipart/form-data.",
   "api.error.unverified_external_acknowledgement_required": "Подтвердите понимание рисков безопасности установки непроверенного внешнего пакета.",
   "api.error.vault_unavailable": "Хранилище секретов недоступно на этом сервере.",
-  "api.error.webhook_subscription_limit": "Достигнут лимит подписок вебхуков для этой организации."
+  "api.error.webhook_subscription_limit": "Достигнут лимит подписок вебхуков для этой организации.",
+  "cli.ops.db.migrate.err.dirty": "Журнал миграций находится в грязном состоянии.",
+  "cli.ops.db.migrate.err.failed": "Ошибка миграции движка базы данных.",
+  "cli.ops.db.migrate.err.parity": "Проверка паритета после миграции не пройдена, выполнен откат.",
+  "cli.ops.db.migrate.err.required": "Необходимо указать --from и --to.",
+  "cli.ops.db.migrate.err.security": "Роль PostgreSQL нарушает принцип минимальных привилегий.",
+  "cli.ops.db.migrate.short": "Миграция базы данных SQLite WAL в PostgreSQL 16+.",
+  "cli.ops.db.short": "Проверка или миграция движка хранения базы данных.",
+  "cli.ops.db.migrate.flag.from": "Путь к исходной базе SQLite WAL или sqlite:// DSN",
+  "cli.ops.db.migrate.flag.to": "Целевой DSN подключения PostgreSQL 16+",
+  "cli.ops.db.migrate.flag.verify": "Проверять количество строк, суммы micro-USD, JCS-цепочки аудита и конверты Vault перед фиксацией"
 }

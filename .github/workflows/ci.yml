@@ -171,9 +171,9 @@ jobs:
           TOTAL_COV=$(go tool cover -func=/tmp/testkit-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
           echo "Linux -race -count=3 ./internal/testkit/... statement coverage: ${TOTAL_COV}%"
           awk -v cov="$TOTAL_COV" 'BEGIN { if (cov + 0 < 90.0) { printf "Coverage %.1f%% < 90.0%% DoD threshold\n", cov; exit 1 } }'
-          go test -v -race -count=1 -coverprofile=/tmp/storage-linux.cov ./internal/storage/...
+          go test -v -race -count=1 -coverprofile=/tmp/storage-linux.cov ./internal/storage/sqlite/... ./internal/storage/migrate/...
           STORAGE_COV=$(go tool cover -func=/tmp/storage-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
-          echo "Linux -race ./internal/storage/... statement coverage: ${STORAGE_COV}%"
+          echo "Linux -race ./internal/storage/sqlite+migrate statement coverage: ${STORAGE_COV}%"
           awk -v cov="$STORAGE_COV" 'BEGIN { if (cov + 0 < 85.0) { printf "Storage coverage %.1f%% < 85.0%% TP-IMP-0007 DoD threshold\n", cov; exit 1 } }'
           go test -v -race -count=1 -coverprofile=/tmp/vault-linux.cov ./internal/security/vault/...
           VAULT_COV=$(go tool cover -func=/tmp/vault-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
@@ -218,9 +218,9 @@ jobs:
           TOTAL_COV=$(go tool cover -func=/tmp/testkit-macos.cov | awk '/^total:/ {print $NF}' | tr -d '%')
           echo "macOS -race -count=3 ./internal/testkit/... statement coverage: ${TOTAL_COV}%"
           awk -v cov="$TOTAL_COV" 'BEGIN { if (cov + 0 < 90.0) { printf "Coverage %.1f%% < 90.0%% DoD threshold\n", cov; exit 1 } }'
-          go test -v -race -count=1 -coverprofile=/tmp/storage-macos.cov ./internal/storage/...
+          go test -v -race -count=1 -coverprofile=/tmp/storage-macos.cov ./internal/storage/sqlite/... ./internal/storage/migrate/...
           STORAGE_COV=$(go tool cover -func=/tmp/storage-macos.cov | awk '/^total:/ {print $NF}' | tr -d '%')
-          echo "macOS -race ./internal/storage/... statement coverage: ${STORAGE_COV}%"
+          echo "macOS -race ./internal/storage/sqlite+migrate statement coverage: ${STORAGE_COV}%"
           awk -v cov="$STORAGE_COV" 'BEGIN { if (cov + 0 < 85.0) { printf "Storage coverage %.1f%% < 85.0%% TP-IMP-0007 DoD threshold\n", cov; exit 1 } }'
           go test -v -race -count=1 -coverprofile=/tmp/vault-macos.cov ./internal/security/vault/...
           VAULT_COV=$(go tool cover -func=/tmp/vault-macos.cov | awk '/^total:/ {print $NF}' | tr -d '%')
@@ -239,3 +239,50 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  stage2-dual-db-postgres:
+    name: Stage 2 — Dual-DB PostgreSQL 16+ & CT-32 Parity
+    runs-on: ubuntu-24.04
+    needs: [stage0-contract-floor-supply-chain]
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: tanpopo_pg_admin
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Go 1.24
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: go.mod
+
+      - name: Provision Non-Privileged PostgreSQL Role & Test Database
+        run: |
+          set -euo pipefail
+          ADMIN_DSN="postgres://postgres:tanpopo_pg_admin@127.0.0.1:5432/postgres?sslmode=disable"
+          psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "CREATE ROLE tanpopo_app WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD 'tanpopo_app_secret';"
+          psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "CREATE DATABASE tanpopo_test OWNER tanpopo_app;"
+
+      - name: Run Live PostgreSQL 16+ Dual-DB, FORCE RLS, CT-29/30/32 & FMEA-06 Suite (-race)
+        env:
+          TANPOPO_REQUIRE_POSTGRES_TESTS: "1"
+          TANPOPO_TEST_PG_DSN: "postgres://tanpopo_app:tanpopo_app_secret@127.0.0.1:5432/tanpopo_test?sslmode=disable"
+          TANPOPO_TEST_PG_ADMIN_DSN: "postgres://postgres:tanpopo_pg_admin@127.0.0.1:5432/tanpopo_test?sslmode=disable"
+        run: |
+          set -euo pipefail
+          go test -v -race -coverprofile=pg-storage.cov ./internal/storage/postgres/...
+          go tool cover -func=pg-storage.cov | awk '/^total:/ {pct=$NF; sub(/%/,"",pct); if (pct+0 < 85.0) { printf "postgres storage coverage %.1f%% < 85.0%%\n", pct; exit 1 }}'
+          go test -v -race ./internal/finops/ledger/... ./internal/security/audit/... ./internal/security/vault/... ./internal/ops/migrate/... ./internal/cli/support/... ./internal/cli/ops/...
