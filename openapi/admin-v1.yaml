@@ -875,6 +875,9 @@ components:
         rpm_ceiling: { type: ["integer", "null"] }
         tpm_ceiling: { type: ["integer", "null"] }
         max_concurrent_streams: { type: ["integer", "null"] }
+        response_cache_enabled: { type: ["boolean", "null"] }
+        response_cache_ttl_seconds: { type: ["integer", "null"] }
+        response_cache_max_entry_bytes: { type: ["integer", "null"] }
         guardrail_hooks:
           type: array
           items:
@@ -1015,6 +1018,26 @@ components:
         expires_at: { type: string, format: date-time }
         version: { type: integer }
         schema_drift_locked: { type: boolean, description: "True when the MCP tool schema has drifted; approval is blocked until its schema is reviewed." }
+
+    AdminChangeRequestResource:
+      type: object
+      required: [id, action_type, target_type, target_id, payload_jcs_json, payload_sha256, initiator_principal_id, state, version, expires_at_ms, created_at_ms]
+      properties:
+        id: { type: string }
+        org_id: { type: ["string", "null"] }
+        action_type: { type: string, enum: [EXTENSION_ACTIVATE_EXTERNAL, VAULT_ROTATE_ROOT_KEY, VAULT_DESTROY_ROOT_KEY, KILL_SWITCH_CLEAR] }
+        target_type: { type: string }
+        target_id: { type: string }
+        payload_jcs_json: { type: string }
+        payload_sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        initiator_principal_id: { type: string }
+        approver_principal_id: { type: ["string", "null"] }
+        state: { type: string, enum: [PENDING_SECOND_APPROVER, APPROVED_APPLIED, REJECTED, EXPIRED, CANCELLED] }
+        decision_reason: { type: ["string", "null"] }
+        version: { type: integer }
+        expires_at_ms: { type: integer, format: int64 }
+        created_at_ms: { type: integer, format: int64 }
+        decided_at_ms: { type: ["integer", "null"], format: int64 }
 
     AuditEventResource:
       type: object
@@ -1168,6 +1191,34 @@ paths:
       responses:
         "302":
           description: Redirect to /overview
+
+  /admin/v1/auth/oidc/refresh:
+    post:
+      tags: [BootstrapAndAuth]
+      operationId: refreshAdminOidcSession
+      summary: Refresh Enterprise OIDC SSO session and re-sync RBAC group role bindings
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token: { type: string }
+                id_token: { type: string }
+      responses:
+        "200":
+          description: Refreshed OIDC session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSessionResponse" }
+        "401":
+          description: Invalid or expired OIDC token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
 
   /admin/v1/auth/session:
     get:
@@ -3332,6 +3383,100 @@ paths:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
         "428":
           description: If-Match header required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/change-requests:
+    get:
+      tags: [SecurityCenter]
+      operationId: listAdminChangeRequests
+      summary: List Four-Eyes dual-control change requests within caller scope
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema: { type: string, enum: [PENDING_SECOND_APPROVER, APPROVED_APPLIED, REJECTED, EXPIRED, CANCELLED] }
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: List of change requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminChangeRequestResource" } }
+    post:
+      tags: [SecurityCenter]
+      operationId: initiateAdminChangeRequest
+      summary: Initiate a high-impact administrative mutation under Four-Eyes Dual Control
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action_type, target_type, target_id]
+              properties:
+                action_type: { type: string, enum: [EXTENSION_ACTIVATE_EXTERNAL, VAULT_ROTATE_ROOT_KEY, VAULT_DESTROY_ROOT_KEY, KILL_SWITCH_CLEAR] }
+                target_type: { type: string }
+                target_id: { type: string }
+                payload: { type: object }
+      responses:
+        "202":
+          description: Queued pending second administrator approval
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminChangeRequestResource" }
+        "400":
+          description: Invalid change request payload
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/change-requests/{requestId}/decide:
+    post:
+      tags: [SecurityCenter]
+      operationId: decideAdminChangeRequest
+      summary: Second-administrator approve or reject decision for a pending Four-Eyes change request
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [APPROVE, REJECT] }
+                reason: { type: string }
+      responses:
+        "200":
+          description: Change request decided and executed atomically on approval
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminChangeRequestResource" }
+        "403":
+          description: 403 self_approval_forbidden or insufficient role permission
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: Version conflict or invalid state transition
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }

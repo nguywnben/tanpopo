@@ -68,9 +68,13 @@ type EffectivePolicy struct {
 	RPMLimit               *int64
 	TPMLimit               *int64
 	MaxConcurrentStreams   *int64
-	MaxContextTokens       *int64
-	MaxRequestBodyBytes    *int64
-	GuardrailHooks         []snapshot.GuardrailHookSpec
+	MaxContextTokens           *int64
+	MaxRequestBodyBytes        *int64
+	GuardrailHooks             []snapshot.GuardrailHookSpec
+	HasResponseCache           bool
+	ResponseCacheEnabled       bool
+	ResponseCacheTTLSeconds    *int64
+	ResponseCacheMaxEntryBytes *int64
 
 	allowedModelsSet         map[string]struct{}
 	deniedModelsSet          map[string]struct{}
@@ -204,6 +208,18 @@ func MergeLayers(layers ...ScopedLayer) EffectivePolicy {
 		out.MaxConcurrentStreams = minPtr(out.MaxConcurrentStreams, r.MaxConcurrentStreams)
 		out.MaxContextTokens = minPtr(out.MaxContextTokens, r.MaxContextTokens)
 		out.MaxRequestBodyBytes = minPtr(out.MaxRequestBodyBytes, r.MaxRequestBodyBytes)
+		out.ResponseCacheTTLSeconds = minPtr(out.ResponseCacheTTLSeconds, r.ResponseCacheTTLSeconds)
+		out.ResponseCacheMaxEntryBytes = minPtr(out.ResponseCacheMaxEntryBytes, r.ResponseCacheMaxEntryBytes)
+
+		// Opt-in Response Cache: defaults to disabled; any layer setting enabled=false forces disabled.
+		if r.HasResponseCache {
+			if !out.HasResponseCache {
+				out.HasResponseCache = true
+				out.ResponseCacheEnabled = r.ResponseCacheEnabled
+			} else if !r.ResponseCacheEnabled {
+				out.ResponseCacheEnabled = false
+			}
+		}
 
 		// 5. Ordered GuardrailHooks concatenation: ancestor hooks cannot be stripped;
 		// child mentioning the same extension can only tighten posture FAIL_OPEN -> FAIL_CLOSED.
@@ -529,6 +545,15 @@ func ValidateChildPolicyWithinAncestors(ancestors []ScopedLayer, ancestorFailure
 		return err
 	}
 	if err := checkChildCapWithinAncestor("max_request_body_bytes", ancEff.MaxRequestBodyBytes, cr.MaxRequestBodyBytes); err != nil {
+		return err
+	}
+	if ancEff.HasResponseCache && !ancEff.ResponseCacheEnabled && cr.HasResponseCache && cr.ResponseCacheEnabled {
+		return fmt.Errorf("%w: child cannot enable response cache when ancestor disables it", ErrPolicyRelaxationForbidden)
+	}
+	if err := checkChildCapWithinAncestor("ttl_seconds", ancEff.ResponseCacheTTLSeconds, cr.ResponseCacheTTLSeconds); err != nil {
+		return err
+	}
+	if err := checkChildCapWithinAncestor("max_entry_bytes", ancEff.ResponseCacheMaxEntryBytes, cr.ResponseCacheMaxEntryBytes); err != nil {
 		return err
 	}
 

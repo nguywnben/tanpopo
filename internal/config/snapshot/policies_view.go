@@ -72,8 +72,12 @@ type PolicyRulesView struct {
 	TPMLimit               *int64
 	MaxConcurrentStreams   *int64
 	MaxContextTokens       *int64
-	MaxRequestBodyBytes    *int64
-	GuardrailHooks         []GuardrailHookSpec
+	MaxRequestBodyBytes        *int64
+	GuardrailHooks             []GuardrailHookSpec
+	HasResponseCache           bool
+	ResponseCacheEnabled       bool
+	ResponseCacheTTLSeconds    *int64
+	ResponseCacheMaxEntryBytes *int64
 }
 
 // Clone returns a deep copy of PolicyRulesView.
@@ -99,6 +103,8 @@ func (r PolicyRulesView) Clone() PolicyRulesView {
 	cp.MaxConcurrentStreams = cloneInt64Ptr(r.MaxConcurrentStreams)
 	cp.MaxContextTokens = cloneInt64Ptr(r.MaxContextTokens)
 	cp.MaxRequestBodyBytes = cloneInt64Ptr(r.MaxRequestBodyBytes)
+	cp.ResponseCacheTTLSeconds = cloneInt64Ptr(r.ResponseCacheTTLSeconds)
+	cp.ResponseCacheMaxEntryBytes = cloneInt64Ptr(r.ResponseCacheMaxEntryBytes)
 	if len(r.GuardrailHooks) > 0 {
 		cp.GuardrailHooks = append([]GuardrailHookSpec(nil), r.GuardrailHooks...)
 	}
@@ -189,9 +195,15 @@ type rawPolicyRulesJSON struct {
 	TPMLimit               *int64              `json:"tpm_limit"`
 	TPMCeilingAlias        *int64              `json:"tpm_ceiling"`
 	MaxConcurrentStreams   *int64              `json:"max_concurrent_streams"`
-	MaxContextTokens       *int64              `json:"max_context_tokens"`
-	MaxRequestBodyBytes    *int64              `json:"max_request_body_bytes"`
-	GuardrailHooks         []GuardrailHookSpec `json:"guardrail_hooks"`
+	MaxContextTokens           *int64              `json:"max_context_tokens"`
+	MaxRequestBodyBytes        *int64              `json:"max_request_body_bytes"`
+	GuardrailHooks             []GuardrailHookSpec `json:"guardrail_hooks"`
+	ResponseCacheEnabled            *bool               `json:"response_cache_enabled"`
+	EnabledAlias                    *bool               `json:"enabled"`
+	ResponseCacheTTLSeconds         *int64              `json:"response_cache_ttl_seconds"`
+	TTLSecondsAlias                 *int64              `json:"ttl_seconds"`
+	ResponseCacheMaxEntryBytes      *int64              `json:"max_entry_bytes"`
+	ResponseCacheMaxEntryBytesAlias *int64              `json:"response_cache_max_entry_bytes"`
 }
 
 // ParsePolicyRulesJSONStrict validates and decodes a policies.rules_json document fail-closed.
@@ -296,6 +308,26 @@ func ParsePolicyRulesJSONStrict(raw string) (PolicyRulesView, error) {
 		return PolicyRulesView{}, err
 	}
 
+	if doc.ResponseCacheEnabled != nil && doc.EnabledAlias != nil && *doc.ResponseCacheEnabled != *doc.EnabledAlias {
+		return PolicyRulesView{}, fmt.Errorf("conflicting values for response_cache_enabled and enabled")
+	}
+	rcEnabled := doc.ResponseCacheEnabled
+	if rcEnabled == nil {
+		rcEnabled = doc.EnabledAlias
+	}
+	if rcEnabled != nil {
+		out.HasResponseCache = true
+		out.ResponseCacheEnabled = *rcEnabled
+	}
+	out.ResponseCacheTTLSeconds, err = coalescePositiveLimit(doc.ResponseCacheTTLSeconds, doc.TTLSecondsAlias, "ttl_seconds")
+	if err != nil {
+		return PolicyRulesView{}, err
+	}
+	out.ResponseCacheMaxEntryBytes, err = coalescePositiveLimit(doc.ResponseCacheMaxEntryBytesAlias, doc.ResponseCacheMaxEntryBytes, "max_entry_bytes")
+	if err != nil {
+		return PolicyRulesView{}, err
+	}
+
 	for _, h := range doc.GuardrailHooks {
 		extID := strings.TrimSpace(h.ExtensionID)
 		if extID == "" {
@@ -347,6 +379,17 @@ func coalesceNonNegativeLimit(primary, alias *int64, field string) (*int64, erro
 		v = alias
 	}
 	return validateNonNegativeLimit(v, field)
+}
+
+func coalescePositiveLimit(primary, alias *int64, field string) (*int64, error) {
+	if primary != nil && alias != nil && *primary != *alias {
+		return nil, fmt.Errorf("conflicting values for %s and alias", field)
+	}
+	v := primary
+	if v == nil {
+		v = alias
+	}
+	return validatePositiveLimit(v, field)
 }
 
 func validateNonNegativeLimit(v *int64, field string) (*int64, error) {

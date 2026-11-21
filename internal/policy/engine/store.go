@@ -395,7 +395,18 @@ func (s *Store) UpdateScopePolicies(ctx context.Context, orgID, scopeType, scope
 		return nil, fmt.Errorf("%w: %v", ErrInvalidPolicyInput, err)
 	}
 
+	targetRows := make([]scopeRow, 0, len(existing))
 	for _, row := range existing {
+		if row.policyType == snapshot.PolicyTypeResponseCache && !parsed.HasResponseCache {
+			continue
+		}
+		targetRows = append(targetRows, row)
+	}
+	if len(targetRows) == 0 {
+		return nil, ErrInvalidPolicyInput
+	}
+
+	for _, row := range targetRows {
 		if row.enabled {
 			ancestors, ancestorFailClosed, err := loadAncestorLayersTx(ctx, tx, s.dialect, orgID, scopeType, scopeID, p.AncestorProjID, p.AncestorEnvID, row.id)
 			if err != nil {
@@ -415,7 +426,7 @@ func (s *Store) UpdateScopePolicies(ctx context.Context, orgID, scopeType, scope
 	now := s.nowMs()
 	var result *PolicyRecord
 	updSQL := port.Rebind(s.dialect, `UPDATE policies SET rules_json = ?, version = version + 1, updated_at_ms = ? WHERE org_id = ? AND id = ? AND version = ?`)
-	for _, row := range existing {
+	for _, row := range targetRows {
 		res, err := tx.ExecContext(ctx, updSQL, *p.RulesJSON, now, orgID, row.id, row.version)
 		if err != nil {
 			return nil, fmt.Errorf("policy: update scope row: %w", err)
@@ -437,7 +448,7 @@ func (s *Store) UpdateScopePolicies(ctx context.Context, orgID, scopeType, scope
 		return nil, fmt.Errorf("policy: commit scope update: %w", err)
 	}
 	if result != nil {
-		result.Version = scopeVersion + int64(len(existing))
+		result.Version = scopeVersion + int64(len(targetRows))
 		result.UpdatedAtMs = now
 	}
 	return result, nil

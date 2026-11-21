@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/auth/oidc/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Enterprise OIDC SSO session and re-sync RBAC group role bindings */
+        post: operations["refreshAdminOidcSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/auth/session": {
         parameters: {
             query?: never;
@@ -1147,6 +1164,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Four-Eyes dual-control change requests within caller scope */
+        get: operations["listAdminChangeRequests"];
+        put?: never;
+        /** Initiate a high-impact administrative mutation under Four-Eyes Dual Control */
+        post: operations["initiateAdminChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/change-requests/{requestId}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Second-administrator approve or reject decision for a pending Four-Eyes change request */
+        post: operations["decideAdminChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/audit-events": {
         parameters: {
             query?: never;
@@ -1905,6 +1957,9 @@ export interface components {
             rpm_ceiling?: number | null;
             tpm_ceiling?: number | null;
             max_concurrent_streams?: number | null;
+            response_cache_enabled?: boolean | null;
+            response_cache_ttl_seconds?: number | null;
+            response_cache_max_entry_bytes?: number | null;
             guardrail_hooks?: {
                 extension_id: string;
                 /** @enum {string} */
@@ -2027,6 +2082,28 @@ export interface components {
             version: number;
             /** @description True when the MCP tool schema has drifted; approval is blocked until its schema is reviewed. */
             schema_drift_locked: boolean;
+        };
+        AdminChangeRequestResource: {
+            id: string;
+            org_id?: string | null;
+            /** @enum {string} */
+            action_type: "EXTENSION_ACTIVATE_EXTERNAL" | "VAULT_ROTATE_ROOT_KEY" | "VAULT_DESTROY_ROOT_KEY" | "KILL_SWITCH_CLEAR";
+            target_type: string;
+            target_id: string;
+            payload_jcs_json: string;
+            payload_sha256: string;
+            initiator_principal_id: string;
+            approver_principal_id?: string | null;
+            /** @enum {string} */
+            state: "PENDING_SECOND_APPROVER" | "APPROVED_APPLIED" | "REJECTED" | "EXPIRED" | "CANCELLED";
+            decision_reason?: string | null;
+            version: number;
+            /** Format: int64 */
+            expires_at_ms: number;
+            /** Format: int64 */
+            created_at_ms: number;
+            /** Format: int64 */
+            decided_at_ms?: number | null;
         };
         AuditEventResource: {
             id: string;
@@ -2245,6 +2322,45 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    refreshAdminOidcSession: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    refresh_token?: string;
+                    id_token?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Refreshed OIDC session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSessionResponse"];
+                };
+            };
+            /** @description Invalid or expired OIDC token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
             };
         };
     };
@@ -5114,6 +5230,128 @@ export interface operations {
             };
             /** @description If-Match header required */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    listAdminChangeRequests: {
+        parameters: {
+            query?: {
+                state?: "PENDING_SECOND_APPROVER" | "APPROVED_APPLIED" | "REJECTED" | "EXPIRED" | "CANCELLED";
+                limit?: components["parameters"]["LimitParam"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of change requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AdminChangeRequestResource"][];
+                    };
+                };
+            };
+        };
+    };
+    initiateAdminChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    action_type: "EXTENSION_ACTIVATE_EXTERNAL" | "VAULT_ROTATE_ROOT_KEY" | "VAULT_DESTROY_ROOT_KEY" | "KILL_SWITCH_CLEAR";
+                    target_type: string;
+                    target_id: string;
+                    payload?: Record<string, never>;
+                };
+            };
+        };
+        responses: {
+            /** @description Queued pending second administrator approval */
+            202: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminChangeRequestResource"];
+                };
+            };
+            /** @description Invalid change request payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    decideAdminChangeRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Optimistic concurrency revision ETag (e.g., '"v3"'). Stale values return 409 optimistic_lock_conflict. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "APPROVE" | "REJECT";
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Change request decided and executed atomically on approval */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminChangeRequestResource"];
+                };
+            };
+            /** @description 403 self_approval_forbidden or insufficient role permission */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Version conflict or invalid state transition */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

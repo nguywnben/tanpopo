@@ -51,6 +51,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/ingress/blob"
+	"github.com/nguywnben/tanpopo/internal/ingress/cache"
 	"github.com/nguywnben/tanpopo/internal/ingress/idempotency"
 	"github.com/nguywnben/tanpopo/internal/ingress/native"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
@@ -108,6 +109,7 @@ type ServerConfig struct {
 	UsageObserver            func(UsageRecord)
 	NativeUsageObserver      func(native.UsageRecord)
 	Telemetry                *otel.Pipeline
+	ResponseCache            *cache.ExactCache
 }
 
 // UsageRecord captures normalized usage telemetry from Data Plane inference endpoints.
@@ -190,6 +192,7 @@ type Server struct {
 	usageObserver           func(UsageRecord)
 	nativeHandler           *native.Handler
 	telemetry               *otel.Pipeline
+	responseCache           *cache.ExactCache
 
 	wasmCache wazero.CompilationCache
 
@@ -328,6 +331,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		defaultHoldOutputTokens: cfg.DefaultHoldOutputTokens,
 		usageObserver:           cfg.UsageObserver,
 		telemetry:               cfg.Telemetry,
+		responseCache:           cfg.ResponseCache,
 		wasmCache:               wazero.NewCompilationCache(),
 		runtimes:                make(map[runtimeCacheKey]*cachedAdapterEntry),
 		mux:                     http.NewServeMux(),

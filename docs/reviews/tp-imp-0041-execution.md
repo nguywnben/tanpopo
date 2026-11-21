@@ -1,0 +1,35 @@
+# `TP-IMP-0041` Execution & Verification Report — Enterprise OIDC SSO, Four-Eyes Dual Control, Cloud KMS / Vault Transit, Workload Identity & Opt-In Exact Response Cache
+
+> **Unit:** `TP-IMP-0041` (`M4` / `EP-08` · `REQUIRES_STRONG_REVIEW`)
+> **Branch / Workflow:** `develop` -> PR -> `main` (under `DEC-088` & `DEC-090`)
+> **Author:** `Gemini 4 Hydrogen`
+> **Independent Strong Reviewers:**
+> - `code-reviewer` (`b8ea9fb57d9a13f1e95f77da6eb86d26`): **`APPROVE`** (Critical: 0, Required Changes: 0)
+> - `security-auditor` (`5d1618df5322f1d3fd50acec9d04ad78`): **`PASS`** (Critical: 0, High: 0, Medium: 0, Low: 0)
+
+---
+
+## 1. Delivered Scope
+
+1. **Enterprise OIDC SSO Federation (`TP-FR-0504`, `AUTH-01`, `AC-1`, `NEG-1`):**
+   - [`internal/iam/oidc/provider.go`](../../internal/iam/oidc/provider.go), [`internal/iam/auth/local.go`](../../internal/iam/auth/local.go), [`internal/admin/http/auth.go`](../../internal/admin/http/auth.go), [`internal/admin/http/server.go`](../../internal/admin/http/server.go): Implemented Authorization Code + PKCE (`S256`) SSO via `GET /admin/v1/auth/oidc/start`, `GET /admin/v1/auth/oidc/callback`, and `POST /admin/v1/auth/oidc/refresh`.
+   - Enforces `HttpOnly; SameSite=Lax` HMAC-SHA256 login-state cookie binding (`tanpopo_oidc_state` / `__Host-tanpopo_oidc_state`), SSRF-guarded `JWKS` cache/rotation, pure-Go `RS256` & `ES256` verification, hard rejection of `alg="none"`, symmetric HMAC, embedded `jwk`/`jku`/`x5u`/`crit`, unknown `kid`, wrong `iss`/`aud`/`azp`/`nonce`/`exp`, deterministic group-to-6-role reconciliation with automatic RBAC revocation on refresh, anti-`OPERATOR`-escalation mapping guard, and strict caller `principalID` + `CredentialPlaneAdminOIDC` pinning on `/auth/oidc/refresh`.
+2. **Four-Eyes Dual Control (`AUTH-12`, `AC-2`):**
+   - [`internal/security/foureyes/service.go`](../../internal/security/foureyes/service.go), [`internal/admin/http/change_requests.go`](../../internal/admin/http/change_requests.go), [`internal/admin/http/ops.go`](../../internal/admin/http/ops.go), [`internal/admin/http/tenancy.go`](../../internal/admin/http/tenancy.go), [`db/migrations/sqlite/0021_enterprise_security_cache.sql`](../../db/migrations/sqlite/0021_enterprise_security_cache.sql): Implemented `admin_change_requests` dual control with SQLite + PostgreSQL 16 `FORCE RLS` parity (`SetOrgRLSTx`/`SetOperatorRLSTx`), RFC 8785 JCS + SHA-256 payload verification, initiator != approver (`403 self_approval_forbidden`), claim-before-apply with cancel-safe rollback (`context.WithoutCancel`) so failed downstream mutations stay `PENDING_SECOND_APPROVER`, action-specific RBAC & cross-tenant ownership checks (`VAULT_DESTROY_ROOT_KEY`, `VAULT_ROTATE_ROOT_KEY`, `EXTENSION_ACTIVATE_EXTERNAL`, `KILL_SWITCH_CLEAR`), `202 Accepted` deferral on kill-switch clear / org delete / project delete when `require_four_eyes_approval = 1` (reading vault `KeyGeneration` directly), and shared `verifyKillSwitchClearBarrier` under `s.quarantineMu`.
+3. **External Cloud KMS / Vault Transit & Per-Project Root Keys (`CR-12`, `DEC-017`, `AC-3`):**
+   - [`internal/security/vault/{kek.go,store.go}`](../../internal/security/vault/store.go), [`internal/security/vault/kms/{aws.go,gcp.go,vault_transit.go,router.go}`](../../internal/security/vault/kms/router.go): Added `ProjectRootKeyProvider`, `TPKMSv1\x00` envelope wrapping inside `project_encryption_keys.wrapped_project_dek`, `AWS KMS` (SigV4 + `TLSRootCAs` plumbing), `GCP Cloud KMS` REST v1, and `HashiCorp Vault Transit` adapters routed strictly through `egress.NewGuardedHTTPClient`. `BindProjectExternalRootKey` releases TX1 prior to outbound KMS HTTP calls and commits under optimistic `dek_version` checks; destroying a single project's external root key renders pre-shred cold backups undecryptable without impacting sibling projects or rotating Master KEK.
+4. **Keyless Workload Identity Federation (`TP-FR-0206`):**
+   - [`internal/security/broker/workload_identity.go`](../../internal/security/broker/workload_identity.go): Implemented AWS IRSA (`AssumeRoleWithWebIdentity`) and GCP STS Token Exchange + IAM `generateAccessToken` with `egress.HostMatches` allowlist gating before outbound calls, `AllowedTokenRoots` path confinement (defaulting to `/var/run/secrets` + `EvalSymlinks`/`Lstat`/`File.Stat()` regular-file checks), and bounded zeroizing credential cache.
+5. **Opt-In Exact-Match Response Cache (`CR-09`, `CT-28`, `FMEA-03`, `AC-3`):**
+   - [`internal/config/snapshot/policies_view.go`](../../internal/config/snapshot/policies_view.go), [`internal/policy/engine/{merge.go,store.go}`](../../internal/policy/engine/merge.go), [`internal/admin/http/policies.go`](../../internal/admin/http/policies.go), [`internal/ingress/cache/exact_cache.go`](../../internal/ingress/cache/exact_cache.go), [`internal/ingress/http/{server.go,chat_completions.go}`](../../internal/ingress/http/chat_completions.go), [`cmd/tanpopo/serve.go`](../../cmd/tanpopo/serve.go), [`openapi/admin-v1.yaml`](../../openapi/admin-v1.yaml): Added default-disabled `RESPONSE_CACHE` policy tier with OpenAPI/HTTP DTO support (`response_cache_enabled`, `response_cache_ttl_seconds`, `response_cache_max_entry_bytes`), `UpdateScopePolicies` row preservation, Project DEK AES-256-GCM encrypted `response_cache_entries` (`FORCE RLS`), `ComputePolicyRevision` hashing all `EffectivePolicy` fields including full `GuardrailHooks`, `temperature == 0` / non-streaming / `Cache-Control: no-store` bypass, and error/tool-call exclusion (`X-Tanpopo-Cache: HIT | MISS | BYPASS`).
+
+---
+
+## 2. Independent Verification & Test Evidence
+
+- **Static Quality Gates (`CGO_ENABLED=0 go run ./scripts/ci/check.go --all`):** **`PASS`** (`0` errors).
+- **Go Vet (`go vet ./...`):** **`PASS`** (`0` issues).
+- **Spikes (`cd tools/spikes && CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -count=1 ./...`):** **`PASS`** (`1.151s`).
+- **Full Hermetic Short Suite (`CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -short ./...`):** **`PASS`** across all Go packages.
+- **Web Console Build, Embedded Sync & Tests:** `npm --prefix web/console run typecheck && build && sync:embed` (`188.50 KB / 250 KB` gzip initial JS; `internal/webui/dist/` synced) + `npm --prefix web/console test` (`6 passed`, `32 passed`, including `axe-core` `0` violations).
+- **Live PostgreSQL 16 (`FORCE RLS` / `NOBYPASSRLS`) + 3-Shard Valkey Cluster (`127.0.0.1:7001..7003`) `-race` Suite:** **`PASS`** across all packages (`internal/config/snapshot` `49.399s`, `internal/security/foureyes` `5.629s`, `internal/admin/http` `100.329s`, `internal/storage/*`, `internal/ops/migrate` `32.259s`, `cmd/tanpopo` `71.135s`, `internal/iam/*`, `internal/security/*`, `internal/policy/*`, `internal/ingress/*`), verifying live PG16 `FORCE RLS` parity (`TestTPIMP0041DualDB_FourEyesAndResponseCacheForceRLS/sqlite` & `/postgres16_force_rls`), HTTP OIDC & Four-Eyes flows (`tp0041_enterprise_test.go`), KMS crypto-shredding (`kms_test.go`), Workload Identity (`workload_identity_test.go`), and exact-match response caching (`exact_cache_test.go`, `response_cache_e2e_test.go`).

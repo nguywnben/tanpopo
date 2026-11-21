@@ -14,6 +14,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/security/foureyes"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
@@ -292,6 +293,47 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 	if strings.TrimSpace(req.ConfirmSlug) != org.Slug {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "confirm_slug_mismatch", "invalid_request_error", "confirm_slug must exactly match organization slug", false, nil)
 		return
+	}
+	if s.fourEyes != nil {
+		needFE, feErr := s.fourEyes.RequiresFourEyes(r.Context(), &orgID)
+		if feErr != nil && !errors.Is(feErr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking four-eyes policy", true, nil)
+			return
+		}
+		if needFE {
+			keyGen := int64(1)
+			if s.vault != nil {
+				meta, merr := s.vault.GetOrgKeyMetadata(r.Context(), orgID)
+				if merr != nil && !errors.Is(merr, port.ErrNotFound) {
+					writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading organization encryption key metadata", true, nil)
+					return
+				}
+				if merr == nil && meta != nil && meta.KeyGeneration > 0 {
+					keyGen = meta.KeyGeneration
+				}
+			}
+			payloadBytes, _ := json.Marshal(map[string]any{
+				"expected_generation": keyGen,
+				"confirm_slug":        req.ConfirmSlug,
+				"reason":              strings.TrimSpace(req.Reason),
+			})
+			cr, crErr := s.fourEyes.Initiate(r.Context(), foureyes.InitiateParams{
+				OrgID:                &orgID,
+				ActionType:           foureyes.ActionVaultDestroyRootKey,
+				TargetType:           "org_encryption_key",
+				TargetID:             orgID,
+				PayloadJSON:          payloadBytes,
+				InitiatorPrincipalID: sc.Actor.PrincipalID,
+				RequestID:            ptrOrNil(requestIDFromContext(r.Context())),
+			})
+			if crErr != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initiating four-eyes organization shred request", true, nil)
+				return
+			}
+			w.Header().Set("ETag", FormatETag(cr.Version))
+			writeJSON(w, http.StatusAccepted, cr)
+			return
+		}
 	}
 
 	now := s.nowMs()
@@ -747,6 +789,47 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.ConfirmSlug) != prj.Slug {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "confirm_slug_mismatch", "invalid_request_error", "confirm_slug must exactly match project slug", false, nil)
 		return
+	}
+	if s.fourEyes != nil {
+		needFE, feErr := s.fourEyes.RequiresFourEyes(r.Context(), &orgID)
+		if feErr != nil && !errors.Is(feErr, port.ErrNotFound) {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking four-eyes policy", true, nil)
+			return
+		}
+		if needFE {
+			keyGen := int64(1)
+			if s.vault != nil {
+				meta, merr := s.vault.GetProjectKeyMetadata(r.Context(), orgID, projectID)
+				if merr != nil && !errors.Is(merr, port.ErrNotFound) {
+					writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading project encryption key metadata", true, nil)
+					return
+				}
+				if merr == nil && meta != nil && meta.KeyGeneration > 0 {
+					keyGen = meta.KeyGeneration
+				}
+			}
+			payloadBytes, _ := json.Marshal(map[string]any{
+				"expected_generation": keyGen,
+				"confirm_slug":        req.ConfirmSlug,
+				"reason":              strings.TrimSpace(req.Reason),
+			})
+			cr, crErr := s.fourEyes.Initiate(r.Context(), foureyes.InitiateParams{
+				OrgID:                &orgID,
+				ActionType:           foureyes.ActionVaultDestroyRootKey,
+				TargetType:           "project_encryption_key",
+				TargetID:             projectID,
+				PayloadJSON:          payloadBytes,
+				InitiatorPrincipalID: sc.Actor.PrincipalID,
+				RequestID:            ptrOrNil(requestIDFromContext(r.Context())),
+			})
+			if crErr != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initiating four-eyes project shred request", true, nil)
+				return
+			}
+			w.Header().Set("ETag", FormatETag(cr.Version))
+			writeJSON(w, http.StatusAccepted, cr)
+			return
+		}
 	}
 
 	now := s.nowMs()

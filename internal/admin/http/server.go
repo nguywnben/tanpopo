@@ -41,6 +41,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
+	"github.com/nguywnben/tanpopo/internal/iam/oidc"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
 	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
@@ -50,6 +51,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/security/foureyes"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/oauth"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
@@ -109,6 +111,8 @@ type ServerConfig struct {
 	DB                      *sql.DB
 	Bootstrap               *bootstrap.Manager
 	Auth                    *auth.LocalService
+	OIDC                    *oidc.Provider
+	FourEyes                *foureyes.Service
 	VKeys                   *vkey.Service
 	Vault                   *vault.Store
 	Ledgers                 *ledger.Service
@@ -230,6 +234,8 @@ type Server struct {
 	storage                port.Store
 	bootstrap              *bootstrap.Manager
 	auth                   *auth.LocalService
+	oidc                   *oidc.Provider
+	fourEyes               *foureyes.Service
 	vkeys                  *vkey.Service
 	vault                  *vault.Store
 	ledgers                *ledger.Service
@@ -390,12 +396,27 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 
 	marketplace := append([]MarketplaceCatalogEntry(nil), cfg.MarketplaceCatalog...)
 
+	fourEyesSvc := cfg.FourEyes
+	if fourEyesSvc == nil && txAudit != nil {
+		var feErr error
+		fourEyesSvc, feErr = foureyes.NewService(foureyes.Config{
+			DB:        db,
+			AuditSink: txAudit,
+			NowMs:     nowFn,
+		})
+		if feErr != nil {
+			return nil, fmt.Errorf("%w: initialize four-eyes service: %w", ErrInvalidServerConfig, feErr)
+		}
+	}
+
 	s := &Server{
 		db:                     db,
 		dialect:                port.DetectDialect(context.Background(), db),
 		storage:                cfg.Store,
 		bootstrap:              cfg.Bootstrap,
 		auth:                   cfg.Auth,
+		oidc:                   cfg.OIDC,
+		fourEyes:               fourEyesSvc,
 		vkeys:                  cfg.VKeys,
 		vault:                  cfg.Vault,
 		ledgers:                ledgerSvc,
@@ -433,6 +454,9 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodGet, Path: "/admin/v1/bootstrap/status", Public: true, Handler: s.handleBootstrapStatus},
 		{Method: http.MethodPost, Path: "/admin/v1/bootstrap/complete", Public: true, Handler: s.handleBootstrapComplete},
 		{Method: http.MethodPost, Path: "/admin/v1/auth/login", Public: true, Handler: s.handleAuthLogin},
+		{Method: http.MethodGet, Path: "/admin/v1/auth/oidc/start", Public: true, Handler: s.handleAuthOIDCStart},
+		{Method: http.MethodGet, Path: "/admin/v1/auth/oidc/callback", Public: true, Handler: s.handleAuthOIDCCallback},
+		{Method: http.MethodPost, Path: "/admin/v1/auth/oidc/refresh", Action: rbac.ActionSessionSelf, Handler: s.handleAuthOIDCRefresh},
 		{Method: http.MethodGet, Path: "/admin/v1/auth/session", Action: rbac.ActionSessionSelf, Handler: s.handleAuthSession},
 		{Method: http.MethodPost, Path: "/admin/v1/auth/logout", Action: rbac.ActionSessionSelf, Handler: s.handleAuthLogout},
 
@@ -531,6 +555,9 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		// Group K: Approvals, Audit Log, Hash-Chain Verification, Kill Switch & Blast Radius
 		{Method: http.MethodGet, Path: "/admin/v1/approvals", Action: rbac.ActionApprovalRead, Handler: s.handleListApprovals},
 		{Method: http.MethodPost, Path: "/admin/v1/approvals/{approvalId}/decide", Action: rbac.ActionApprovalDecide, Handler: s.handleDecideApproval},
+		{Method: http.MethodGet, Path: "/admin/v1/change-requests", Action: rbac.ActionApprovalRead, Handler: s.handleListChangeRequests},
+		{Method: http.MethodPost, Path: "/admin/v1/change-requests", Action: rbac.ActionApprovalDecide, Handler: s.handleInitiateChangeRequest},
+		{Method: http.MethodPost, Path: "/admin/v1/change-requests/{requestId}/decide", Action: rbac.ActionApprovalDecide, Handler: s.handleDecideChangeRequest},
 		{Method: http.MethodPost, Path: "/admin/v1/audit-events/verify", Action: rbac.ActionAuditReadVerify, Handler: s.handleVerifyAuditHashChain},
 		{Method: http.MethodGet, Path: "/admin/v1/audit-events", Action: rbac.ActionAuditReadVerify, Handler: s.handleListAuditEvents},
 		{Method: http.MethodGet, Path: "/admin/v1/kill-switches", Action: rbac.ActionKillSwitchTrigger, Handler: s.handleListKillSwitches},
