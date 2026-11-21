@@ -256,5 +256,20 @@
   "cli.ops.db.short": "Veritabani depolama motorunu inceleyin veya gecirin.",
   "cli.ops.db.migrate.flag.from": "Kaynak SQLite WAL veritabanı yolu veya sqlite:// DSN",
   "cli.ops.db.migrate.flag.to": "Hedef PostgreSQL 16+ bağlantı DSN'si",
-  "cli.ops.db.migrate.flag.verify": "Commit öncesinde satır sayılarını, mikro-USD toplamlarını, JCS denetim karma zincirlerini ve Vault zarflarını doğrula"
+  "cli.ops.db.migrate.flag.verify": "Commit öncesinde satır sayılarını, mikro-USD toplamlarını, JCS denetim karma zincirlerini ve Vault zarflarını doğrula",
+  "cli.admin.verify_state.short": "Denetim karma zincirlerini doğrula, sahipsiz bekletmeleri temizle ve Valkey küme durumunu yeniden kur",
+  "cli.admin.verify_state.flag.db": "SQLite veritabanı dosyası yolu",
+  "cli.admin.verify_state.flag.pg_dsn": "PostgreSQL 16+ bağlantı DSN",
+  "cli.admin.verify_state.flag.valkey_addrs": "Virgülle ayrılmış Valkey küme adresleri",
+  "cli.admin.verify_state.flag.valkey_username": "Valkey ACL kullanıcı adı",
+  "cli.admin.verify_state.flag.valkey_password": "Valkey ACL parolası",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Valkey bağlantılarında TLS zorunlu tut",
+  "cli.admin.verify_state.flag.check_audit": "Tüm kiracılarda değişmez denetim karma zincirlerini doğrula",
+  "cli.admin.verify_state.flag.reconcile_orphans": "Önbelleği yeniden kurmadan önce süresi dolmuş bütçe bekletmelerini geri al",
+  "cli.admin.verify_state.flag.rebuild_valkey": "Valkey içindeki etkin bütçe bekletmelerini SQL/PostgreSQL durumundan yeniden oluştur",
+  "cli.admin.verify_state.err.store_required": "--db (SQLite) veya --pg-dsn (PostgreSQL) belirtin.",
+  "cli.admin.verify_state.err.valkey_required": "Valkey durumunu yeniden oluşturmak için --valkey-addrs gereklidir.",
+  "cli.admin.verify_state.err.tampered": "Denetim karma zinciri doğrulaması başarısız oldu: müdahale tespit edildi.",
+  "cli.admin.verify_state.err.failed": "Çalışma durumu doğrulaması başarısız oldu",
+  "cli.admin.verify_state.output": "Durum denetimi {{status}} (motor={{engine}} denetim_olayı={{events}} temizlenen={{orphans}} valkey_onarımı={{restored}})"
 }

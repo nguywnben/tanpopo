@@ -34,6 +34,9 @@ func Handler() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "same-origin")
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			loc := i18n.ResolveAcceptLanguage(r.Header.Get("Accept-Language"))
 			w.Header().Set("Allow", "GET, HEAD")

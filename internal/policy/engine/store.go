@@ -64,12 +64,13 @@ type UpdatePolicyParams struct {
 	AncestorEnvID  string
 }
 
-// Store persists scoped policies in SQLite with write-time Monotonic Narrowing,
+// Store persists scoped policies in SQLite/PostgreSQL with write-time Monotonic Narrowing,
 // optimistic concurrency, config_changelog notifications, and governance audit logging.
 type Store struct {
-	db    *sql.DB
-	audit port.TxAuditSink
-	nowMs func() int64
+	db      *sql.DB
+	dialect port.Dialect
+	audit   port.TxAuditSink
+	nowMs   func() int64
 }
 
 // StoreConfig configures the policy Store.
@@ -79,7 +80,7 @@ type StoreConfig struct {
 	NowMs func() int64
 }
 
-// NewStore constructs a transactional SQLite policy Store.
+// NewStore constructs a transactional dual-DB policy Store.
 func NewStore(cfg StoreConfig) (*Store, error) {
 	if cfg.DB == nil {
 		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", port.ErrInvalidInput)
@@ -96,9 +97,10 @@ func NewStore(cfg StoreConfig) (*Store, error) {
 		nowFn = func() int64 { return time.Now().UTC().UnixMilli() }
 	}
 	return &Store{
-		db:    cfg.DB,
-		audit: txAudit,
-		nowMs: nowFn,
+		db:      cfg.DB,
+		dialect: port.DetectDialect(context.Background(), cfg.DB),
+		audit:   txAudit,
+		nowMs:   nowFn,
 	}, nil
 }
 
@@ -132,8 +134,11 @@ func (s *Store) CreatePolicy(ctx context.Context, p CreatePolicyParams) (*Policy
 		return nil, fmt.Errorf("policy: begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return nil, err
+	}
 
-	ancestors, ancFailClosed, err := loadAncestorLayersTx(ctx, tx, orgID, scopeType, scopeID, p.AncestorProjID, p.AncestorEnvID, "")
+	ancestors, ancFailClosed, err := loadAncestorLayersTx(ctx, tx, s.dialect, orgID, scopeType, scopeID, p.AncestorProjID, p.AncestorEnvID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -153,17 +158,13 @@ func (s *Store) CreatePolicy(ctx context.Context, p CreatePolicyParams) (*Policy
 	}
 
 	now := s.nowMs()
-	enabledInt := 0
-	if p.Enabled {
-		enabledInt = 1
-	}
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `
 		INSERT INTO policies (
 			id, org_id, scope_type, scope_id, policy_type,
 			failure_mode, rules_json, enabled, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
 		policyID, orgID, scopeType, scopeID, policyType,
-		failMode, p.RulesJSON, enabledInt, now, now,
+		failMode, p.RulesJSON, port.BoolVal(s.dialect, p.Enabled), now, now,
 	); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, port.ErrAlreadyExists
@@ -171,7 +172,7 @@ func (s *Store) CreatePolicy(ctx context.Context, p CreatePolicyParams) (*Policy
 		return nil, fmt.Errorf("policy: insert policy: %w", err)
 	}
 
-	if err := appendPolicyChangelogTx(ctx, tx, orgID, policyID, port.MutationUpsert, now); err != nil {
+	if err := appendPolicyChangelogTx(ctx, tx, s.dialect, orgID, policyID, port.MutationUpsert, now); err != nil {
 		return nil, err
 	}
 	if err := s.emitPolicyMutationAuditTx(ctx, tx, orgID, policyID, scopeType, scopeID, policyType, p.ActorKind, p.ActorID, p.EntryPoint, p.RequestID, "policy.created", now); err != nil {
@@ -208,8 +209,11 @@ func (s *Store) UpdatePolicy(ctx context.Context, orgID, policyID string, expect
 		return nil, fmt.Errorf("policy: begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return nil, err
+	}
 
-	cur, err := getPolicyTx(ctx, tx, orgID, policyID)
+	cur, err := getPolicyTx(ctx, tx, s.dialect, orgID, policyID)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +244,7 @@ func (s *Store) UpdatePolicy(ctx context.Context, orgID, policyID string, expect
 	}
 
 	if nextEnabled {
-		ancestors, ancFailClosed, err := loadAncestorLayersTx(ctx, tx, orgID, cur.ScopeType, cur.ScopeID, p.AncestorProjID, p.AncestorEnvID, cur.ID)
+		ancestors, ancFailClosed, err := loadAncestorLayersTx(ctx, tx, s.dialect, orgID, cur.ScopeType, cur.ScopeID, p.AncestorProjID, p.AncestorEnvID, cur.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -261,15 +265,11 @@ func (s *Store) UpdatePolicy(ctx context.Context, orgID, policyID string, expect
 	}
 
 	now := s.nowMs()
-	enabledInt := 0
-	if nextEnabled {
-		enabledInt = 1
-	}
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `
 		UPDATE policies
 		SET failure_mode = ?, rules_json = ?, enabled = ?, version = version + 1, updated_at_ms = ?
-		WHERE org_id = ? AND id = ? AND version = ?`,
-		nextFailMode, nextRulesJSON, enabledInt, now, orgID, policyID, expectedVersion,
+		WHERE org_id = ? AND id = ? AND version = ?`),
+		nextFailMode, nextRulesJSON, port.BoolVal(s.dialect, nextEnabled), now, orgID, policyID, expectedVersion,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("policy: update policy: %w", err)
@@ -279,7 +279,7 @@ func (s *Store) UpdatePolicy(ctx context.Context, orgID, policyID string, expect
 		return nil, port.ErrVersionConflict
 	}
 
-	if err := appendPolicyChangelogTx(ctx, tx, orgID, policyID, port.MutationUpsert, now); err != nil {
+	if err := appendPolicyChangelogTx(ctx, tx, s.dialect, orgID, policyID, port.MutationUpsert, now); err != nil {
 		return nil, err
 	}
 	if err := s.emitPolicyMutationAuditTx(ctx, tx, orgID, policyID, cur.ScopeType, cur.ScopeID, cur.PolicyType, p.ActorKind, p.ActorID, p.EntryPoint, p.RequestID, "policy.updated", now); err != nil {
@@ -305,22 +305,25 @@ func (s *Store) GetPolicy(ctx context.Context, orgID, policyID string) (*PolicyR
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	return getPolicyTx(ctx, tx, orgID, policyID)
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return nil, err
+	}
+	return getPolicyTx(ctx, tx, s.dialect, orgID, policyID)
 }
 
-func getPolicyTx(ctx context.Context, tx *sql.Tx, orgID, policyID string) (*PolicyRecord, error) {
+func getPolicyTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, orgID, policyID string) (*PolicyRecord, error) {
 	var (
-		rec        PolicyRecord
-		enabledInt int64
+		rec         PolicyRecord
+		enabledBool port.FlexBool
 	)
-	err := tx.QueryRowContext(ctx, `
+	err := tx.QueryRowContext(ctx, port.Rebind(dialect, `
 		SELECT id, org_id, scope_type, scope_id, policy_type,
 		       failure_mode, rules_json, enabled, version, created_at_ms, updated_at_ms
 		FROM policies
-		WHERE org_id = ? AND id = ?`, orgID, policyID,
+		WHERE org_id = ? AND id = ?`), orgID, policyID,
 	).Scan(
 		&rec.ID, &rec.OrgID, &rec.ScopeType, &rec.ScopeID, &rec.PolicyType,
-		&rec.FailureMode, &rec.RulesJSON, &enabledInt, &rec.Version, &rec.CreatedAtMs, &rec.UpdatedAtMs,
+		&rec.FailureMode, &rec.RulesJSON, &enabledBool, &rec.Version, &rec.CreatedAtMs, &rec.UpdatedAtMs,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, port.ErrNotFound
@@ -328,7 +331,7 @@ func getPolicyTx(ctx context.Context, tx *sql.Tx, orgID, policyID string) (*Poli
 	if err != nil {
 		return nil, fmt.Errorf("policy: query policy: %w", err)
 	}
-	rec.Enabled = enabledInt != 0
+	rec.Enabled = bool(enabledBool)
 	rec.ParsedRules, err = snapshot.ParsePolicyRulesJSONStrict(rec.RulesJSON)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrPolicyEngineUnavailable, err)
@@ -348,13 +351,16 @@ func (s *Store) UpdateScopePolicies(ctx context.Context, orgID, scopeType, scope
 		return nil, fmt.Errorf("policy: begin scope update: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return nil, err
+	}
 
 	type scopeRow struct {
 		id, policyType, failureMode string
 		enabled                    bool
 		version                    int64
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id, policy_type, failure_mode, enabled, version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ? ORDER BY policy_type, id`, orgID, scopeType, scopeID)
+	rows, err := tx.QueryContext(ctx, port.Rebind(s.dialect, `SELECT id, policy_type, failure_mode, enabled, version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ? ORDER BY policy_type, id`), orgID, scopeType, scopeID)
 	if err != nil {
 		return nil, fmt.Errorf("policy: list scope rows: %w", err)
 	}
@@ -362,12 +368,12 @@ func (s *Store) UpdateScopePolicies(ctx context.Context, orgID, scopeType, scope
 	var scopeVersion int64
 	for rows.Next() {
 		var row scopeRow
-		var enabled int
+		var enabled port.FlexBool
 		if err := rows.Scan(&row.id, &row.policyType, &row.failureMode, &enabled, &row.version); err != nil {
 			_ = rows.Close()
 			return nil, fmt.Errorf("policy: scan scope row: %w", err)
 		}
-		row.enabled = enabled != 0
+		row.enabled = bool(enabled)
 		scopeVersion += row.version
 		existing = append(existing, row)
 	}
@@ -391,7 +397,7 @@ func (s *Store) UpdateScopePolicies(ctx context.Context, orgID, scopeType, scope
 
 	for _, row := range existing {
 		if row.enabled {
-			ancestors, ancestorFailClosed, err := loadAncestorLayersTx(ctx, tx, orgID, scopeType, scopeID, p.AncestorProjID, p.AncestorEnvID, row.id)
+			ancestors, ancestorFailClosed, err := loadAncestorLayersTx(ctx, tx, s.dialect, orgID, scopeType, scopeID, p.AncestorProjID, p.AncestorEnvID, row.id)
 			if err != nil {
 				return nil, err
 			}
@@ -408,15 +414,16 @@ func (s *Store) UpdateScopePolicies(ctx context.Context, orgID, scopeType, scope
 
 	now := s.nowMs()
 	var result *PolicyRecord
+	updSQL := port.Rebind(s.dialect, `UPDATE policies SET rules_json = ?, version = version + 1, updated_at_ms = ? WHERE org_id = ? AND id = ? AND version = ?`)
 	for _, row := range existing {
-		res, err := tx.ExecContext(ctx, `UPDATE policies SET rules_json = ?, version = version + 1, updated_at_ms = ? WHERE org_id = ? AND id = ? AND version = ?`, *p.RulesJSON, now, orgID, row.id, row.version)
+		res, err := tx.ExecContext(ctx, updSQL, *p.RulesJSON, now, orgID, row.id, row.version)
 		if err != nil {
 			return nil, fmt.Errorf("policy: update scope row: %w", err)
 		}
 		if affected, _ := res.RowsAffected(); affected != 1 {
 			return nil, port.ErrVersionConflict
 		}
-		if err := appendPolicyChangelogTx(ctx, tx, orgID, row.id, port.MutationUpsert, now); err != nil {
+		if err := appendPolicyChangelogTx(ctx, tx, s.dialect, orgID, row.id, port.MutationUpsert, now); err != nil {
 			return nil, err
 		}
 		if err := s.emitPolicyMutationAuditTx(ctx, tx, orgID, row.id, scopeType, scopeID, row.policyType, p.ActorKind, p.ActorID, p.EntryPoint, p.RequestID, "policy.updated", now); err != nil {
@@ -439,6 +446,7 @@ func (s *Store) UpdateScopePolicies(ctx context.Context, orgID, scopeType, scope
 func loadAncestorLayersTx(
 	ctx context.Context,
 	tx *sql.Tx,
+	dialect port.Dialect,
 	orgID, childScopeType, childScopeID, hintProjID, hintEnvID, excludePolicyID string,
 ) ([]ScopedLayer, bool, error) {
 	var layers []ScopedLayer
@@ -446,7 +454,7 @@ func loadAncestorLayersTx(
 
 	// Load and validate organization existence and baseline min_plugin_trust.
 	var orgMinTrust string
-	err := tx.QueryRowContext(ctx, `SELECT min_plugin_trust FROM organizations WHERE id = ?`, orgID).Scan(&orgMinTrust)
+	err := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT min_plugin_trust FROM organizations WHERE id = ?`), orgID).Scan(&orgMinTrust)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, port.ErrNotFound
 	}
@@ -474,7 +482,7 @@ func loadAncestorLayersTx(
 		}
 	case snapshot.PolicyScopeProject:
 		var exists int
-		qerr := tx.QueryRowContext(ctx, `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, childScopeID).Scan(&exists)
+		qerr := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`), orgID, childScopeID).Scan(&exists)
 		if errors.Is(qerr, sql.ErrNoRows) {
 			return nil, false, port.ErrNotFound
 		}
@@ -488,7 +496,7 @@ func loadAncestorLayersTx(
 	case snapshot.PolicyScopeEnv:
 		envID = childScopeID
 		var pid string
-		qerr := tx.QueryRowContext(ctx, `SELECT project_id FROM environments WHERE org_id = ? AND id = ?`, orgID, envID).Scan(&pid)
+		qerr := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT project_id FROM environments WHERE org_id = ? AND id = ?`), orgID, envID).Scan(&pid)
 		if errors.Is(qerr, sql.ErrNoRows) {
 			return nil, false, port.ErrNotFound
 		}
@@ -504,7 +512,7 @@ func loadAncestorLayersTx(
 		}
 	case snapshot.PolicyScopeVirtualKey:
 		var pid, eid string
-		qerr := tx.QueryRowContext(ctx, `SELECT project_id, env_id FROM virtual_keys WHERE org_id = ? AND id = ?`, orgID, childScopeID).Scan(&pid, &eid)
+		qerr := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT project_id, env_id FROM virtual_keys WHERE org_id = ? AND id = ?`), orgID, childScopeID).Scan(&pid, &eid)
 		if errors.Is(qerr, sql.ErrNoRows) {
 			return nil, false, port.ErrNotFound
 		}
@@ -525,7 +533,7 @@ func loadAncestorLayersTx(
 
 	if projID != "" && ScopeHierarchyRank(childScopeType) >= ScopeHierarchyRank(snapshot.PolicyScopeProject) {
 		var enforcedReg sql.NullString
-		qerr := tx.QueryRowContext(ctx, `SELECT enforced_region FROM projects WHERE org_id = ? AND id = ?`, orgID, projID).Scan(&enforcedReg)
+		qerr := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT enforced_region FROM projects WHERE org_id = ? AND id = ?`), orgID, projID).Scan(&enforcedReg)
 		if qerr != nil && !errors.Is(qerr, sql.ErrNoRows) {
 			return nil, false, fmt.Errorf("policy: load project enforced_region: %w", qerr)
 		}
@@ -543,12 +551,12 @@ func loadAncestorLayersTx(
 	}
 
 	if envID != "" && ScopeHierarchyRank(childScopeType) >= ScopeHierarchyRank(snapshot.PolicyScopeEnv) {
-		var reqTested int64
-		qerr := tx.QueryRowContext(ctx, `SELECT require_tested_caps FROM environments WHERE org_id = ? AND id = ?`, orgID, envID).Scan(&reqTested)
+		var reqTested port.FlexBool
+		qerr := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT require_tested_caps FROM environments WHERE org_id = ? AND id = ?`), orgID, envID).Scan(&reqTested)
 		if qerr != nil && !errors.Is(qerr, sql.ErrNoRows) {
 			return nil, false, fmt.Errorf("policy: load environment require_tested_caps: %w", qerr)
 		}
-		if qerr == nil && reqTested != 0 {
+		if qerr == nil && bool(reqTested) {
 			layers = append(layers, ScopedLayer{
 				ScopeType: snapshot.PolicyScopeEnv,
 				ScopeID:   envID,
@@ -559,10 +567,10 @@ func loadAncestorLayersTx(
 	}
 
 	// Load persisted enabled policies strictly above childScopeType.
-	rows, err := tx.QueryContext(ctx, `
+	rows, err := tx.QueryContext(ctx, port.Rebind(dialect, `
 		SELECT id, scope_type, scope_id, policy_type, failure_mode, rules_json
 		FROM policies
-		WHERE org_id = ? AND enabled = 1 AND scope_type IN ('ORG', 'PROJECT', 'ENV')`, orgID)
+		WHERE org_id = ? AND enabled = `+port.BoolExpr(dialect, true)+` AND scope_type IN ('ORG', 'PROJECT', 'ENV')`), orgID)
 	if err != nil {
 		return nil, false, fmt.Errorf("policy: query ancestor policies: %w", err)
 	}
@@ -606,13 +614,8 @@ func loadAncestorLayersTx(
 	return layers, ancFailClosed, nil
 }
 
-func appendPolicyChangelogTx(ctx context.Context, tx *sql.Tx, orgID, policyID, mutation string, nowMs int64) error {
-	_, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'policy', ?, ?, 0, ?)`,
-		orgID, policyID, mutation, nowMs,
-	)
-	if err != nil {
+func appendPolicyChangelogTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, orgID, policyID, mutation string, nowMs int64) error {
+	if _, err := port.AppendConfigChangelogTx(ctx, tx, dialect, orgID, "policy", policyID, mutation, false, nowMs); err != nil {
 		return fmt.Errorf("policy: append config_changelog: %w", err)
 	}
 	return nil

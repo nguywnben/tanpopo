@@ -231,7 +231,7 @@ func packageTier(relPkg string) (int, bool) {
 		"internal/iam", "internal/extension", "internal/provider", "internal/policy",
 		"internal/ratelimit", "internal/routing", "internal/finops", "internal/telemetry", "internal/webhook"):
 		return 5, true
-	case hasAnyPrefix(p, "internal/ingress", "internal/admin", "internal/webui", "internal/ops"):
+	case hasAnyPrefix(p, "internal/ingress", "internal/admin", "internal/webui", "internal/ops", "internal/cluster"):
 		return 6, true
 	case p == "internal/cli" || strings.HasPrefix(p, "internal/cli/"):
 		return 7, true

@@ -506,6 +506,7 @@ type localKeyFence struct {
 // and aborts active SSE streams immediately on emergency revocations/shreds.
 type Manager struct {
 	db                  *sql.DB
+	dialect             port.Dialect
 	nowMs               func() int64
 	maxStaleMs          int64
 	streams             *ActiveStreamRegistry
@@ -523,6 +524,7 @@ type Manager struct {
 	killSwitchSyncMu    sync.RWMutex
 	killSwitchSync      func(context.Context) error
 	killSwitchSyncDirty bool
+	clusterReadyGate    atomic.Pointer[func() error]
 }
 
 // NewManager initializes a ConfigSnapshot Manager and loads an initial snapshot if ctx is ready.
@@ -544,6 +546,7 @@ func NewManager(ctx context.Context, cfg ManagerConfig) (*Manager, error) {
 	}
 	m := &Manager{
 		db:             cfg.DB,
+		dialect:        port.DetectDialect(ctx, cfg.DB),
 		nowMs:          nowFn,
 		maxStaleMs:     maxStale,
 		streams:        streams,
@@ -556,6 +559,19 @@ func NewManager(ctx context.Context, cfg ManagerConfig) (*Manager, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+// SetClusterReadyGate installs an optional distributed readiness/circuit-breaker check
+// enforced inside CheckServingReady (FMEA-07 > 10s stale-node shedding).
+func (m *Manager) SetClusterReadyGate(fn func() error) {
+	if m == nil {
+		return
+	}
+	if fn == nil {
+		m.clusterReadyGate.Store(nil)
+		return
+	}
+	m.clusterReadyGate.Store(&fn)
 }
 
 // RegisterKillSwitchSync registers a callback invoked during Refresh whenever emergency_kill_switch
@@ -645,6 +661,11 @@ func (m *Manager) CheckServingReady() error {
 	}
 	if m.IsStale() {
 		return ErrSnapshotStale
+	}
+	if gate := m.clusterReadyGate.Load(); gate != nil && *gate != nil {
+		if err := (*gate)(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -790,6 +811,11 @@ func (m *Manager) Refresh(ctx context.Context) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if err := setOperatorRLSTx(ctx, tx, m.dialect); err != nil {
+		m.setLastErr(err)
+		return err
+	}
+
 	var latestEpoch sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `SELECT MAX(config_epoch) FROM config_changelog`).Scan(&latestEpoch); err != nil {
 		m.setLastErr(err)
@@ -811,30 +837,83 @@ func (m *Manager) Refresh(ctx context.Context) error {
 
 	var emergencies []changelogEmergency
 	if cur != nil && targetEpoch > prevEpoch {
-		emergencies, err = readEmergencyEventsSinceSQL(ctx, tx, prevEpoch)
+		emergencies, err = readEmergencyEventsSinceSQL(ctx, tx, m.dialect, prevEpoch)
 		if err != nil {
 			m.setLastErr(err)
 			return err
 		}
 	}
 
-	effective, err := loadEffectiveConfigsSQL(ctx, tx)
-	if err != nil {
-		m.setLastErr(err)
-		return err
+	var (
+		effective map[ScopeKey]*EffectiveConfig
+		byActive  map[[32]byte]*VirtualKeyView
+		byPrev    map[[32]byte]*VirtualKeyView
+		byID      map[string]*VirtualKeyView
+		providers *ProviderCatalogView
+		policies  *PolicyCatalogView
+		routes    *RouteCatalogView
+	)
+	if m.dialect == port.DialectPostgres {
+		orgIDs, lerr := listOrgIDsTx(ctx, tx)
+		if lerr != nil {
+			m.setLastErr(lerr)
+			return lerr
+		}
+		effective = make(map[ScopeKey]*EffectiveConfig)
+		byActive = make(map[[32]byte]*VirtualKeyView)
+		byPrev = make(map[[32]byte]*VirtualKeyView)
+		byID = make(map[string]*VirtualKeyView)
+		providers = newProviderCatalogView()
+		if err := loadAdaptersSQL(ctx, tx, providers); err != nil {
+			m.setLastErr(err)
+			return err
+		}
+		if err := loadLogicalModelsSQL(ctx, tx, providers); err != nil {
+			m.setLastErr(err)
+			return err
+		}
+		policies = &PolicyCatalogView{byScope: make(map[PolicyScopeKey][]*PolicyRecordView)}
+		routes = &RouteCatalogView{byID: make(map[string]*RoutePolicyView), byKey: make(map[RouteLookupKey]*RoutePolicyView)}
+
+		for _, oid := range orgIDs {
+			if serr := setOrgRLSTx(ctx, tx, m.dialect, oid); serr != nil {
+				m.setLastErr(serr)
+				return serr
+			}
+			if eerr := loadEffectiveConfigsIntoSQL(ctx, tx, effective); eerr != nil {
+				m.setLastErr(eerr)
+				return eerr
+			}
+			if verr := loadVirtualKeysIntoSQL(ctx, tx, byActive, byPrev, byID); verr != nil {
+				m.setLastErr(verr)
+				return verr
+			}
+			if perr := loadProviderCatalogScopedSQL(ctx, tx, m.dialect, providers, m.keyring); perr != nil {
+				m.setLastErr(perr)
+				return perr
+			}
+			loadPoliciesIntoSQL(ctx, tx, m.dialect, policies)
+			loadRoutesIntoSQL(ctx, tx, routes)
+		}
+	} else {
+		effective, err = loadEffectiveConfigsSQL(ctx, tx)
+		if err != nil {
+			m.setLastErr(err)
+			return err
+		}
+		byActive, byPrev, byID, err = loadVirtualKeysSQL(ctx, tx)
+		if err != nil {
+			m.setLastErr(err)
+			return err
+		}
+		providers, err = loadProviderCatalogSQL(ctx, tx, m.keyring)
+		if err != nil {
+			m.setLastErr(err)
+			return err
+		}
+		policies = loadPoliciesSQL(ctx, tx)
+		routes = loadRoutesSQL(ctx, tx)
 	}
-	byActive, byPrev, byID, err := loadVirtualKeysSQL(ctx, tx)
-	if err != nil {
-		m.setLastErr(err)
-		return err
-	}
-	providers, err := loadProviderCatalogSQL(ctx, tx, m.keyring)
-	if err != nil {
-		m.setLastErr(err)
-		return err
-	}
-	policies := loadPoliciesSQL(ctx, tx)
-	routes := loadRoutesSQL(ctx, tx)
 	if err := tx.Commit(); err != nil {
 		m.setLastErr(err)
 		return fmt.Errorf("snapshot: commit read tx: %w", err)
@@ -1110,12 +1189,13 @@ type changelogEmergency struct {
 	Emergency    bool
 }
 
-func readEmergencyEventsSinceSQL(ctx context.Context, tx *sql.Tx, afterEpoch int64) ([]changelogEmergency, error) {
-	rows, err := tx.QueryContext(ctx, `
+func readEmergencyEventsSinceSQL(ctx context.Context, tx *sql.Tx, d port.Dialect, afterEpoch int64) ([]changelogEmergency, error) {
+	query := fmt.Sprintf(`
 		SELECT COALESCE(org_id, ''), entity_kind, entity_id, mutation_type, emergency
 		FROM config_changelog
-		WHERE config_epoch > ? AND (emergency = 1 OR mutation_type IN ('REVOKE', 'SHRED') OR entity_kind = 'emergency_kill_switch')
-		ORDER BY config_epoch ASC`, afterEpoch)
+		WHERE config_epoch > ? AND (emergency = %s OR mutation_type IN ('REVOKE', 'SHRED') OR entity_kind = 'emergency_kill_switch')
+		ORDER BY config_epoch ASC`, sqlBoolExpr(d, true))
+	rows, err := tx.QueryContext(ctx, port.Rebind(d, query), afterEpoch)
 	if err != nil {
 		return nil, fmt.Errorf("snapshot: query emergency changelog deltas: %w", err)
 	}
@@ -1124,11 +1204,11 @@ func readEmergencyEventsSinceSQL(ctx context.Context, tx *sql.Tx, afterEpoch int
 	var events []changelogEmergency
 	for rows.Next() {
 		var ev changelogEmergency
-		var emInt int64
-		if scanErr := rows.Scan(&ev.OrgID, &ev.EntityKind, &ev.EntityID, &ev.MutationType, &emInt); scanErr != nil {
+		var emBool flexBool
+		if scanErr := rows.Scan(&ev.OrgID, &ev.EntityKind, &ev.EntityID, &ev.MutationType, &emBool); scanErr != nil {
 			return nil, fmt.Errorf("snapshot: scan emergency changelog delta: %w", scanErr)
 		}
-		ev.Emergency = emInt != 0
+		ev.Emergency = bool(emBool)
 		events = append(events, ev)
 	}
 	if err := rows.Err(); err != nil {
@@ -1138,6 +1218,14 @@ func readEmergencyEventsSinceSQL(ctx context.Context, tx *sql.Tx, afterEpoch int
 }
 
 func loadEffectiveConfigsSQL(ctx context.Context, tx *sql.Tx) (map[ScopeKey]*EffectiveConfig, error) {
+	out := make(map[ScopeKey]*EffectiveConfig)
+	if err := loadEffectiveConfigsIntoSQL(ctx, tx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func loadEffectiveConfigsIntoSQL(ctx context.Context, tx *sql.Tx, out map[ScopeKey]*EffectiveConfig) error {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT
 			o.id, o.slug, o.status, o.default_data_region, o.min_plugin_trust, o.require_four_eyes_approval,
@@ -1147,21 +1235,20 @@ func loadEffectiveConfigsSQL(ctx context.Context, tx *sql.Tx) (map[ScopeKey]*Eff
 		JOIN projects p ON p.org_id = e.org_id AND p.id = e.project_id
 		JOIN organizations o ON o.id = e.org_id`)
 	if err != nil {
-		return nil, fmt.Errorf("snapshot: query effective configs: %w", err)
+		return fmt.Errorf("snapshot: query effective configs: %w", err)
 	}
 	defer rows.Close()
 
-	out := make(map[ScopeKey]*EffectiveConfig)
 	for rows.Next() {
 		var cfg EffectiveConfig
 		var defaultReg, enforcedReg sql.NullString
-		var fourEyesInt, testedCapsInt int64
+		var fourEyesBool, testedCapsBool flexBool
 		if scanErr := rows.Scan(
-			&cfg.OrgID, &cfg.OrgSlug, &cfg.OrgStatus, &defaultReg, &cfg.MinPluginTrust, &fourEyesInt,
+			&cfg.OrgID, &cfg.OrgSlug, &cfg.OrgStatus, &defaultReg, &cfg.MinPluginTrust, &fourEyesBool,
 			&cfg.ProjectID, &cfg.ProjectSlug, &cfg.ProjectStatus, &enforcedReg,
-			&cfg.EnvID, &cfg.EnvSlug, &testedCapsInt,
+			&cfg.EnvID, &cfg.EnvSlug, &testedCapsBool,
 		); scanErr != nil {
-			return nil, fmt.Errorf("snapshot: scan effective config: %w", scanErr)
+			return fmt.Errorf("snapshot: scan effective config: %w", scanErr)
 		}
 		if defaultReg.Valid {
 			v := defaultReg.String
@@ -1171,8 +1258,8 @@ func loadEffectiveConfigsSQL(ctx context.Context, tx *sql.Tx) (map[ScopeKey]*Eff
 			v := enforcedReg.String
 			cfg.EnforcedRegion = &v
 		}
-		cfg.RequireFourEyesApproval = fourEyesInt != 0
-		cfg.RequireTestedCaps = testedCapsInt != 0
+		cfg.RequireFourEyesApproval = bool(fourEyesBool)
+		cfg.RequireTestedCaps = bool(testedCapsBool)
 		out[ScopeKey{
 			OrgID:     cfg.OrgID,
 			ProjectID: cfg.ProjectID,
@@ -1180,9 +1267,9 @@ func loadEffectiveConfigsSQL(ctx context.Context, tx *sql.Tx) (map[ScopeKey]*Eff
 		}] = &cfg
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("snapshot: iterate effective configs: %w", err)
+		return fmt.Errorf("snapshot: iterate effective configs: %w", err)
 	}
-	return out, nil
+	return nil
 }
 
 func loadVirtualKeysSQL(ctx context.Context, tx *sql.Tx) (
@@ -1191,6 +1278,20 @@ func loadVirtualKeysSQL(ctx context.Context, tx *sql.Tx) (
 	byID map[string]*VirtualKeyView,
 	err error,
 ) {
+	byActive = make(map[[32]byte]*VirtualKeyView)
+	byPrev = make(map[[32]byte]*VirtualKeyView)
+	byID = make(map[string]*VirtualKeyView)
+	err = loadVirtualKeysIntoSQL(ctx, tx, byActive, byPrev, byID)
+	return byActive, byPrev, byID, err
+}
+
+func loadVirtualKeysIntoSQL(
+	ctx context.Context,
+	tx *sql.Tx,
+	byActive map[[32]byte]*VirtualKeyView,
+	byPrev map[[32]byte]*VirtualKeyView,
+	byID map[string]*VirtualKeyView,
+) error {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT
 			id, org_id, project_id, env_id, owner_principal_id, active_key_recipient_principal_id, previous_key_recipient_principal_id, name,
@@ -1200,30 +1301,26 @@ func loadVirtualKeysSQL(ctx context.Context, tx *sql.Tx) (
 			expires_at_ms, revoked_at_ms, revocation_mode, version
 		FROM virtual_keys`)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("snapshot: query virtual keys: %w", err)
+		return fmt.Errorf("snapshot: query virtual keys: %w", err)
 	}
 	defer rows.Close()
-
-	byActive = make(map[[32]byte]*VirtualKeyView)
-	byPrev = make(map[[32]byte]*VirtualKeyView)
-	byID = make(map[string]*VirtualKeyView)
 
 	for rows.Next() {
 		var v VirtualKeyView
 		var ownerID, activeRecipient, previousRecipient, revMode sql.NullString
 		var activeBytes, prevBytes []byte
 		var graceMs, rpmLim, tpmLim, expMs, revMs sql.NullInt64
-		var ephInt int64
+		var ephBool flexBool
 		var modelsJSON, routesJSON, mcpJSON string
 
 		if scanErr := rows.Scan(
 			&v.ID, &v.OrgID, &v.ProjectID, &v.EnvID, &ownerID, &activeRecipient, &previousRecipient, &v.Name,
 			&v.KeyPrefix, &v.LastFour, &activeBytes, &prevBytes, &graceMs,
 			&v.State, &v.AllowedPlanes, &modelsJSON, &routesJSON, &mcpJSON,
-			&rpmLim, &tpmLim, &v.MaxConcurrentStreams, &ephInt,
+			&rpmLim, &tpmLim, &v.MaxConcurrentStreams, &ephBool,
 			&expMs, &revMs, &revMode, &v.Version,
 		); scanErr != nil {
-			return nil, nil, nil, fmt.Errorf("snapshot: scan virtual key: %w", scanErr)
+			return fmt.Errorf("snapshot: scan virtual key: %w", scanErr)
 		}
 
 		if ownerID.Valid {
@@ -1262,15 +1359,15 @@ func loadVirtualKeysSQL(ctx context.Context, tx *sql.Tx) (
 			n := revMs.Int64
 			v.RevokedAtMs = &n
 		}
-		v.IsEphemeralPlayground = ephInt != 0
+		v.IsEphemeralPlayground = bool(ephBool)
 		if v.AllowedModels, err = parseJSONStringSliceStrict(modelsJSON); err != nil {
-			return nil, nil, nil, fmt.Errorf("snapshot: decode virtual_key %q allowed_models_json: %w", v.ID, err)
+			return fmt.Errorf("snapshot: decode virtual_key %q allowed_models_json: %w", v.ID, err)
 		}
 		if v.AllowedRoutes, err = parseJSONStringSliceStrict(routesJSON); err != nil {
-			return nil, nil, nil, fmt.Errorf("snapshot: decode virtual_key %q allowed_routes_json: %w", v.ID, err)
+			return fmt.Errorf("snapshot: decode virtual_key %q allowed_routes_json: %w", v.ID, err)
 		}
 		if v.AllowedMCPTools, err = parseJSONStringSliceStrict(mcpJSON); err != nil {
-			return nil, nil, nil, fmt.Errorf("snapshot: decode virtual_key %q allowed_mcp_tools_json: %w", v.ID, err)
+			return fmt.Errorf("snapshot: decode virtual_key %q allowed_mcp_tools_json: %w", v.ID, err)
 		}
 
 		if len(activeBytes) == 32 {
@@ -1285,7 +1382,7 @@ func loadVirtualKeysSQL(ctx context.Context, tx *sql.Tx) (
 		byID[v.ID] = &v
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, nil, fmt.Errorf("snapshot: iterate virtual keys: %w", err)
+		return fmt.Errorf("snapshot: iterate virtual keys: %w", err)
 	}
-	return byActive, byPrev, byID, nil
+	return nil
 }

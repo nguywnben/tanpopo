@@ -406,6 +406,9 @@ func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 // DB returns a database/sql *sql.DB backed by the Store's pgxpool.
 func (s *Store) DB() *sql.DB { return s.db }
 
+// RawDB returns the database/sql *sql.DB bridge for Store consumers expecting RawDB().
+func (s *Store) RawDB() *sql.DB { return s.db }
+
 // Partitions returns the monthly RANGE partition lifecycle manager.
 func (s *Store) Partitions() *PartitionManager { return s.partitions }
 

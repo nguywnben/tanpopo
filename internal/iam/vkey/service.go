@@ -149,14 +149,17 @@ type ServiceConfig struct {
 	Snapshots                 *snapshot.Manager
 	AllowDetachedControlPlane bool
 	AuditSink                 port.AuditSink
+	OnChange                  func(context.Context, snapshot.ChangeEvent) // Optional Layer 1 Valkey Pub/Sub broadcast hook.
 }
 
 // Service manages SM-05 Virtual Key persistence, hashing, rotation, and revocation.
 type Service struct {
 	db        *sql.DB
+	dialect   port.Dialect
 	nowMs     func() int64
 	snapshots *snapshot.Manager
 	auditSink port.TxAuditSink
+	onChange  func(context.Context, snapshot.ChangeEvent)
 }
 
 // NewService validates dependencies and constructs a Virtual Key Service.
@@ -180,9 +183,11 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	}
 	return &Service{
 		db:        cfg.DB,
+		dialect:   port.DetectDialect(context.Background(), cfg.DB),
 		nowMs:     nowFn,
 		snapshots: cfg.Snapshots,
 		auditSink: txAudit,
+		onChange:  cfg.OnChange,
 	}, nil
 }
 
@@ -195,13 +200,20 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (*CreatedVirt
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	created, err := s.CreateTx(ctx, tx, params)
+	created, epoch, err := s.createTxWithEpoch(ctx, tx, params)
 	if err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	s.publishChange(ctx, snapshot.ChangeEvent{
+		ConfigEpoch:  epoch,
+		OrgID:        params.OrgID,
+		EntityKind:   "virtual_key",
+		EntityID:     created.Summary.ID,
+		MutationType: port.MutationUpsert,
+	})
 	if syncErr := s.syncSnapshot(ctx); syncErr != nil {
 		return created, syncErr
 	}
@@ -211,18 +223,26 @@ func (s *Service) Create(ctx context.Context, params CreateParams) (*CreatedVirt
 // CreateTx creates a Virtual Key inside caller-supplied tx without refreshing ConfigSnapshot
 // (callers MUST refresh ConfigSnapshot or call SyncSnapshot after tx commits).
 func (s *Service) CreateTx(ctx context.Context, tx *sql.Tx, params CreateParams) (*CreatedVirtualKey, error) {
+	created, _, err := s.createTxWithEpoch(ctx, tx, params)
+	return created, err
+}
+
+func (s *Service) createTxWithEpoch(ctx context.Context, tx *sql.Tx, params CreateParams) (*CreatedVirtualKey, int64, error) {
 	if tx == nil {
-		return nil, fmt.Errorf("%w: tx is required", port.ErrInvalidInput)
+		return nil, 0, fmt.Errorf("%w: tx is required", port.ErrInvalidInput)
 	}
 	if strings.TrimSpace(params.OrgID) == "" || strings.TrimSpace(params.ProjectID) == "" ||
 		strings.TrimSpace(params.EnvID) == "" || strings.TrimSpace(params.Name) == "" {
-		return nil, fmt.Errorf("%w: org_id, project_id, env_id, and name are required", port.ErrInvalidInput)
+		return nil, 0, fmt.Errorf("%w: org_id, project_id, env_id, and name are required", port.ErrInvalidInput)
 	}
 	if params.RPMLimit != nil && *params.RPMLimit <= 0 {
-		return nil, fmt.Errorf("%w: rpm_limit must be > 0", port.ErrInvalidInput)
+		return nil, 0, fmt.Errorf("%w: rpm_limit must be > 0", port.ErrInvalidInput)
 	}
 	if params.TPMLimit != nil && *params.TPMLimit <= 0 {
-		return nil, fmt.Errorf("%w: tpm_limit must be > 0", port.ErrInvalidInput)
+		return nil, 0, fmt.Errorf("%w: tpm_limit must be > 0", port.ErrInvalidInput)
+	}
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, params.OrgID); err != nil {
+		return nil, 0, err
 	}
 
 	maxStreams := params.MaxConcurrentStreams
@@ -231,7 +251,7 @@ func (s *Service) CreateTx(ctx context.Context, tx *sql.Tx, params CreateParams)
 	}
 	planes, err := normalizeAllowedPlanes(params.AllowedPlanes)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	models := params.AllowedModels
 	if len(models) == 0 {
@@ -248,42 +268,42 @@ func (s *Service) CreateTx(ctx context.Context, tx *sql.Tx, params CreateParams)
 
 	modelsJSON, err := json.Marshal(models)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	routesJSON, err := json.Marshal(routes)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	mcpJSON, err := json.Marshal(mcpTools)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	keyID, err := idgen.New(idgen.PrefixVirtualKey)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	now := s.nowMs()
 	if params.ExpiresAtMs != nil && *params.ExpiresAtMs <= now {
-		return nil, fmt.Errorf("%w: expires_at_ms must be in the future", port.ErrInvalidInput)
+		return nil, 0, fmt.Errorf("%w: expires_at_ms must be in the future", port.ErrInvalidInput)
 	}
 
 	var envSlug string
-	if scanErr := tx.QueryRowContext(ctx, `
+	if scanErr := tx.QueryRowContext(ctx, port.Rebind(s.dialect, `
 		SELECT slug FROM environments
-		WHERE org_id = ? AND project_id = ? AND id = ?`,
+		WHERE org_id = ? AND project_id = ? AND id = ?`),
 		params.OrgID, params.ProjectID, params.EnvID,
 	).Scan(&envSlug); scanErr != nil {
 		if errors.Is(scanErr, sql.ErrNoRows) {
-			return nil, port.ErrNotFound
+			return nil, 0, port.ErrNotFound
 		}
-		return nil, scanErr
+		return nil, 0, scanErr
 	}
 
 	rawSecret, prefix, lastFour, digest, err := generateVirtualKey(envSlug)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer clear(digest[:])
 
@@ -292,47 +312,39 @@ func (s *Service) CreateTx(ctx context.Context, tx *sql.Tx, params CreateParams)
 	if params.OwnerPrincipalID != nil && strings.TrimSpace(*params.OwnerPrincipalID) != "" {
 		v := strings.TrimSpace(*params.OwnerPrincipalID)
 		var ownerOK int
-		if ownerErr := tx.QueryRowContext(ctx, `
-			SELECT 1 FROM principals WHERE id = ? AND org_id = ?`,
+		if ownerErr := tx.QueryRowContext(ctx, port.Rebind(s.dialect, `
+			SELECT 1 FROM principals WHERE id = ? AND org_id = ?`),
 			v, params.OrgID,
 		).Scan(&ownerOK); ownerErr != nil {
 			if errors.Is(ownerErr, sql.ErrNoRows) {
 				// Return uniform 404 resource_not_found on cross-org or missing principal IDs (AUTH-15).
-				return nil, port.ErrNotFound
+				return nil, 0, port.ErrNotFound
 			}
-			return nil, fmt.Errorf("vkey: verify owner_principal_id: %w", ownerErr)
+			return nil, 0, fmt.Errorf("vkey: verify owner_principal_id: %w", ownerErr)
 		}
 		ownerVal = v
 		ownerCopy = &v
 	}
 
-	ephInt := 0
-	if params.IsEphemeralPlayground {
-		ephInt = 1
-	}
-
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `
 		INSERT INTO virtual_keys (
 			id, org_id, project_id, env_id, owner_principal_id, active_key_recipient_principal_id, name,
 			key_prefix, last_four, active_key_hash, previous_key_hash, grace_expires_at_ms,
 			state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
 			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
 			expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'CREATED_ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'CREATED_ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?, ?)`),
 		keyID, params.OrgID, params.ProjectID, params.EnvID, ownerVal, nullableActor(params.ActorID), strings.TrimSpace(params.Name),
 		prefix, lastFour, digest[:], planes, string(modelsJSON), string(routesJSON), string(mcpJSON),
-		nullInt64Ptr(params.RPMLimit), nullInt64Ptr(params.TPMLimit), maxStreams, ephInt,
+		nullInt64Ptr(params.RPMLimit), nullInt64Ptr(params.TPMLimit), maxStreams, port.BoolVal(s.dialect, params.IsEphemeralPlayground),
 		nullInt64Ptr(params.ExpiresAtMs), now, now,
 	); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
-		params.OrgID, keyID, port.MutationUpsert, now,
-	); err != nil {
-		return nil, err
+	epoch, err := port.AppendConfigChangelogTx(ctx, tx, s.dialect, params.OrgID, "virtual_key", keyID, port.MutationUpsert, false, now)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	actor := strings.TrimSpace(params.ActorID)
@@ -343,7 +355,7 @@ func (s *Service) CreateTx(ctx context.Context, tx *sql.Tx, params CreateParams)
 		"env_id":         params.EnvID,
 		"allowed_planes": planes,
 	}, now); aerr != nil {
-		return nil, aerr
+		return nil, 0, aerr
 	}
 
 	return &CreatedVirtualKey{
@@ -371,7 +383,7 @@ func (s *Service) CreateTx(ctx context.Context, tx *sql.Tx, params CreateParams)
 			UpdatedAtMs:           now,
 		},
 		SecretKey: rawSecret,
-	}, nil
+	}, epoch, nil
 }
 
 // Get fetches read-safe Virtual Key metadata scoped strictly to orgID (AUTH-15).
@@ -379,14 +391,26 @@ func (s *Service) Get(ctx context.Context, orgID, keyID string) (*VirtualKeySumm
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(keyID) == "" {
 		return nil, fmt.Errorf("%w: org_id and key_id required", port.ErrInvalidInput)
 	}
-	return scanVirtualKeySummary(s.db.QueryRowContext(ctx, `
+	q := port.Rebind(s.dialect, `
 		SELECT
 			id, org_id, project_id, env_id, owner_principal_id, name,
 			key_prefix, last_four, state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
 			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
 			grace_expires_at_ms, expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
 		FROM virtual_keys
-		WHERE org_id = ? AND id = ?`, orgID, keyID))
+		WHERE org_id = ? AND id = ?`)
+	if s.dialect != port.DialectPostgres {
+		return scanVirtualKeySummary(s.db.QueryRowContext(ctx, q, orgID, keyID))
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return nil, err
+	}
+	return scanVirtualKeySummary(tx.QueryRowContext(ctx, q, orgID, keyID))
 }
 
 // Rotate transitions a key to ROTATING_DUAL_VALID (or replaces active hash immediately if graceSeconds == 0)
@@ -405,10 +429,13 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, params.OrgID); err != nil {
+		return nil, err
+	}
 	// Acquire the key row before reading its current recipient. Approval decisions
 	// use the same row lock so a concurrent rotation and four-eyes check have a
 	// single transaction order.
-	locked, err := tx.ExecContext(ctx, `UPDATE virtual_keys SET id=id WHERE org_id=? AND id=?`, params.OrgID, params.KeyID)
+	locked, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE virtual_keys SET id=id WHERE org_id=? AND id=?`), params.OrgID, params.KeyID)
 	if err != nil {
 		return nil, err
 	}
@@ -429,11 +456,11 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 		curExpMs     sql.NullInt64
 		envSlug      string
 	)
-	err = tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, port.Rebind(s.dialect, `
 		SELECT vk.env_id, vk.state, vk.version, vk.active_key_hash, vk.expires_at_ms, e.slug, vk.active_key_recipient_principal_id
 		FROM virtual_keys vk
 		JOIN environments e ON e.org_id = vk.org_id AND e.id = vk.env_id
-		WHERE vk.org_id = ? AND vk.id = ?`,
+		WHERE vk.org_id = ? AND vk.id = ?`),
 		params.OrgID, params.KeyID,
 	).Scan(&envID, &curState, &curVer, &curHash, &curExpMs, &envSlug, &curRecipient)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -471,12 +498,12 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 		graceVal = now + params.GraceSeconds*1000
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `
 		UPDATE virtual_keys
 		SET key_prefix = ?, last_four = ?, active_key_hash = ?, previous_key_hash = ?,
 		    active_key_recipient_principal_id = ?, previous_key_recipient_principal_id = ?,
 		    grace_expires_at_ms = ?, state = ?, version = version + 1, updated_at_ms = ?
-		WHERE org_id = ? AND id = ? AND version = ?`,
+		WHERE org_id = ? AND id = ? AND version = ?`),
 		prefix, lastFour, newDigest[:], prevHashVal, nullableActor(params.ActorID), previousRecipient, graceVal, nextState, now,
 		params.OrgID, params.KeyID, params.ExpectedVersion,
 	)
@@ -491,24 +518,19 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 		return nil, port.ErrVersionConflict
 	}
 
-	resEpoch, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
-		params.OrgID, params.KeyID, port.MutationUpsert, now,
-	)
+	committedEpoch, err := port.AppendConfigChangelogTx(ctx, tx, s.dialect, params.OrgID, "virtual_key", params.KeyID, port.MutationUpsert, false, now)
 	if err != nil {
 		return nil, err
 	}
-	committedEpoch := latestTxEpoch(ctx, tx, resEpoch)
 
-	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, `
+	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, port.Rebind(s.dialect, `
 		SELECT
 			id, org_id, project_id, env_id, owner_principal_id, name,
 			key_prefix, last_four, state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
 			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
 			grace_expires_at_ms, expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
 		FROM virtual_keys
-		WHERE org_id = ? AND id = ?`, params.OrgID, params.KeyID))
+		WHERE org_id = ? AND id = ?`), params.OrgID, params.KeyID))
 	if err != nil {
 		return nil, err
 	}
@@ -527,6 +549,13 @@ func (s *Service) Rotate(ctx context.Context, params RotateParams) (*CreatedVirt
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	s.publishChange(ctx, snapshot.ChangeEvent{
+		ConfigEpoch:  committedEpoch,
+		OrgID:        params.OrgID,
+		EntityKind:   "virtual_key",
+		EntityID:     params.KeyID,
+		MutationType: port.MutationUpsert,
+	})
 
 	rotated := &CreatedVirtualKey{
 		Summary:   *summary,
@@ -590,14 +619,17 @@ func (s *Service) transitionState(ctx context.Context, orgID, keyID string, expe
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return nil, err
+	}
 
 	var (
 		curState string
 		curVer   int64
 		curExpMs sql.NullInt64
 	)
-	err = tx.QueryRowContext(ctx, `
-		SELECT state, version, expires_at_ms FROM virtual_keys WHERE org_id = ? AND id = ?`,
+	err = tx.QueryRowContext(ctx, port.Rebind(s.dialect, `
+		SELECT state, version, expires_at_ms FROM virtual_keys WHERE org_id = ? AND id = ?`),
 		orgID, keyID,
 	).Scan(&curState, &curVer, &curExpMs)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -626,17 +658,17 @@ func (s *Service) transitionState(ctx context.Context, orgID, keyID string, expe
 
 	var res sql.Result
 	if nextState == snapshot.KeyStateCreatedActive {
-		res, err = tx.ExecContext(ctx, `
+		res, err = tx.ExecContext(ctx, port.Rebind(s.dialect, `
 			UPDATE virtual_keys
 			SET state = ?, previous_key_hash = NULL, grace_expires_at_ms = NULL, version = version + 1, updated_at_ms = ?
-			WHERE org_id = ? AND id = ? AND version = ?`,
+			WHERE org_id = ? AND id = ? AND version = ?`),
 			nextState, now, orgID, keyID, expectedVersion,
 		)
 	} else {
-		res, err = tx.ExecContext(ctx, `
+		res, err = tx.ExecContext(ctx, port.Rebind(s.dialect, `
 			UPDATE virtual_keys
 			SET state = ?, version = version + 1, updated_at_ms = ?
-			WHERE org_id = ? AND id = ? AND version = ?`,
+			WHERE org_id = ? AND id = ? AND version = ?`),
 			nextState, now, orgID, keyID, expectedVersion,
 		)
 	}
@@ -651,24 +683,19 @@ func (s *Service) transitionState(ctx context.Context, orgID, keyID string, expe
 		return nil, port.ErrVersionConflict
 	}
 
-	resEpoch, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
-		orgID, keyID, port.MutationUpsert, now,
-	)
+	committedEpoch, err := port.AppendConfigChangelogTx(ctx, tx, s.dialect, orgID, "virtual_key", keyID, port.MutationUpsert, false, now)
 	if err != nil {
 		return nil, err
 	}
-	committedEpoch := latestTxEpoch(ctx, tx, resEpoch)
 
-	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, `
+	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, port.Rebind(s.dialect, `
 		SELECT
 			id, org_id, project_id, env_id, owner_principal_id, name,
 			key_prefix, last_four, state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
 			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
 			grace_expires_at_ms, expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
 		FROM virtual_keys
-		WHERE org_id = ? AND id = ?`, orgID, keyID))
+		WHERE org_id = ? AND id = ?`), orgID, keyID))
 	if err != nil {
 		return nil, err
 	}
@@ -683,6 +710,13 @@ func (s *Service) transitionState(ctx context.Context, orgID, keyID string, expe
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	s.publishChange(ctx, snapshot.ChangeEvent{
+		ConfigEpoch:  committedEpoch,
+		OrgID:        orgID,
+		EntityKind:   "virtual_key",
+		EntityID:     keyID,
+		MutationType: port.MutationUpsert,
+	})
 
 	if syncErr := s.syncSnapshot(ctx); syncErr != nil {
 		if (nextState == snapshot.KeyStateSuspended || nextState == snapshot.KeyStateQuotaPaused) && s.snapshots != nil {
@@ -718,15 +752,18 @@ func (s *Service) Update(ctx context.Context, params UpdateParams) (*VirtualKeyS
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, params.OrgID); err != nil {
+		return nil, err
+	}
 
-	cur, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, `
+	cur, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, port.Rebind(s.dialect, `
 		SELECT
 			id, org_id, project_id, env_id, owner_principal_id, name,
 			key_prefix, last_four, state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
 			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
 			grace_expires_at_ms, expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
 		FROM virtual_keys
-		WHERE org_id = ? AND id = ?`, params.OrgID, params.KeyID))
+		WHERE org_id = ? AND id = ?`), params.OrgID, params.KeyID))
 	if err != nil {
 		return nil, err
 	}
@@ -783,11 +820,11 @@ func (s *Service) Update(ctx context.Context, params UpdateParams) (*VirtualKeyS
 		return nil, err
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `
 		UPDATE virtual_keys
 		SET name = ?, rpm_limit = ?, tpm_limit = ?, max_concurrent_streams = ?,
 		    allowed_models_json = ?, allowed_mcp_tools_json = ?, version = version + 1, updated_at_ms = ?
-		WHERE org_id = ? AND id = ? AND version = ?`,
+		WHERE org_id = ? AND id = ? AND version = ?`),
 		nextName, nullInt64Ptr(nextRPM), nullInt64Ptr(nextTPM), nextStreams,
 		string(modelsJSON), string(mcpJSON), now,
 		params.OrgID, params.KeyID, params.ExpectedVersion,
@@ -803,22 +840,19 @@ func (s *Service) Update(ctx context.Context, params UpdateParams) (*VirtualKeyS
 		return nil, port.ErrVersionConflict
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
-		params.OrgID, params.KeyID, port.MutationUpsert, now,
-	); err != nil {
+	committedEpoch, err := port.AppendConfigChangelogTx(ctx, tx, s.dialect, params.OrgID, "virtual_key", params.KeyID, port.MutationUpsert, false, now)
+	if err != nil {
 		return nil, err
 	}
 
-	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, `
+	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, port.Rebind(s.dialect, `
 		SELECT
 			id, org_id, project_id, env_id, owner_principal_id, name,
 			key_prefix, last_four, state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
 			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
 			grace_expires_at_ms, expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
 		FROM virtual_keys
-		WHERE org_id = ? AND id = ?`, params.OrgID, params.KeyID))
+		WHERE org_id = ? AND id = ?`), params.OrgID, params.KeyID))
 	if err != nil {
 		return nil, err
 	}
@@ -837,6 +871,13 @@ func (s *Service) Update(ctx context.Context, params UpdateParams) (*VirtualKeyS
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	s.publishChange(ctx, snapshot.ChangeEvent{
+		ConfigEpoch:  committedEpoch,
+		OrgID:        params.OrgID,
+		EntityKind:   "virtual_key",
+		EntityID:     params.KeyID,
+		MutationType: port.MutationUpsert,
+	})
 	if syncErr := s.syncSnapshot(ctx); syncErr != nil {
 		return summary, syncErr
 	}
@@ -873,13 +914,16 @@ func (s *Service) RevokeWithReceipt(ctx context.Context, params RevokeParams) (*
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, params.OrgID); err != nil {
+		return nil, err
+	}
 
 	var (
 		curState string
 		curVer   int64
 	)
-	err = tx.QueryRowContext(ctx, `
-		SELECT state, version FROM virtual_keys WHERE org_id = ? AND id = ?`,
+	err = tx.QueryRowContext(ctx, port.Rebind(s.dialect, `
+		SELECT state, version FROM virtual_keys WHERE org_id = ? AND id = ?`),
 		params.OrgID, params.KeyID,
 	).Scan(&curState, &curVer)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -900,11 +944,11 @@ func (s *Service) RevokeWithReceipt(ctx context.Context, params RevokeParams) (*
 		return nil, fmt.Errorf("%w: cannot revoke key in state %s", ErrInvalidStateTransition, curState)
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `
 		UPDATE virtual_keys
 		SET state = ?, previous_key_hash = NULL, grace_expires_at_ms = NULL,
 		    revoked_at_ms = ?, revocation_mode = ?, version = version + 1, updated_at_ms = ?
-		WHERE org_id = ? AND id = ? AND version = ?`,
+		WHERE org_id = ? AND id = ? AND version = ?`),
 		snapshot.KeyStateRevoked, now, mode, now, params.OrgID, params.KeyID, params.ExpectedVersion,
 	)
 	if err != nil {
@@ -918,28 +962,19 @@ func (s *Service) RevokeWithReceipt(ctx context.Context, params RevokeParams) (*
 		return nil, port.ErrVersionConflict
 	}
 
-	emInt := 0
-	if emergency {
-		emInt = 1
-	}
-	resEpoch, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'virtual_key', ?, ?, ?, ?)`,
-		params.OrgID, params.KeyID, port.MutationRevoke, emInt, now,
-	)
+	committedEpoch, err := port.AppendConfigChangelogTx(ctx, tx, s.dialect, params.OrgID, "virtual_key", params.KeyID, port.MutationRevoke, emergency, now)
 	if err != nil {
 		return nil, err
 	}
-	committedEpoch := latestTxEpoch(ctx, tx, resEpoch)
 
-	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, `
+	summary, err := scanVirtualKeySummary(tx.QueryRowContext(ctx, port.Rebind(s.dialect, `
 		SELECT
 			id, org_id, project_id, env_id, owner_principal_id, name,
 			key_prefix, last_four, state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
 			rpm_limit, tpm_limit, max_concurrent_streams, is_ephemeral_playground,
 			grace_expires_at_ms, expires_at_ms, revoked_at_ms, revocation_mode, version, created_at_ms, updated_at_ms
 		FROM virtual_keys
-		WHERE org_id = ? AND id = ?`, params.OrgID, params.KeyID))
+		WHERE org_id = ? AND id = ?`), params.OrgID, params.KeyID))
 	if err != nil {
 		return nil, err
 	}
@@ -961,6 +996,15 @@ func (s *Service) RevokeWithReceipt(ctx context.Context, params RevokeParams) (*
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+
+	s.publishChange(ctx, snapshot.ChangeEvent{
+		ConfigEpoch:  committedEpoch,
+		OrgID:        params.OrgID,
+		EntityKind:   "virtual_key",
+		EntityID:     params.KeyID,
+		MutationType: port.MutationRevoke,
+		Emergency:    emergency,
+	})
 
 	severed := 0
 	if emergency && s.snapshots != nil && s.snapshots.Streams() != nil {
@@ -1012,43 +1056,85 @@ func (s *Service) FinalizeExpiredRotations(ctx context.Context) (int, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	rows, err := tx.QueryContext(ctx, `
-		SELECT org_id, id FROM virtual_keys
-		WHERE state = 'ROTATING_DUAL_VALID' AND grace_expires_at_ms IS NOT NULL AND grace_expires_at_ms <= ?`, now)
-	if err != nil {
-		return 0, err
-	}
 	type keyRef struct{ orgID, id string }
 	var due []keyRef
-	for rows.Next() {
-		var r keyRef
-		if scanErr := rows.Scan(&r.orgID, &r.id); scanErr != nil {
-			_ = rows.Close()
-			return 0, fmt.Errorf("vkey: scan expired rotation: %w", scanErr)
+	if s.dialect == port.DialectPostgres {
+		orgIDs, err := port.ListOrgIDsTx(ctx, tx, s.dialect)
+		if err != nil {
+			return 0, fmt.Errorf("vkey: list org ids: %w", err)
 		}
-		due = append(due, r)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return 0, fmt.Errorf("vkey: iterate expired rotations: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		return 0, fmt.Errorf("vkey: close expired rotations cursor: %w", err)
+		for _, orgID := range orgIDs {
+			if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+				return 0, err
+			}
+			rows, err := tx.QueryContext(ctx, port.Rebind(s.dialect, `
+				SELECT id FROM virtual_keys
+				WHERE org_id = ? AND state = 'ROTATING_DUAL_VALID' AND grace_expires_at_ms IS NOT NULL AND grace_expires_at_ms <= ?`),
+				orgID, now)
+			if err != nil {
+				return 0, err
+			}
+			for rows.Next() {
+				var keyID string
+				if scanErr := rows.Scan(&keyID); scanErr != nil {
+					_ = rows.Close()
+					return 0, fmt.Errorf("vkey: scan expired rotation: %w", scanErr)
+				}
+				due = append(due, keyRef{orgID: orgID, id: keyID})
+			}
+			if err := rows.Err(); err != nil {
+				_ = rows.Close()
+				return 0, fmt.Errorf("vkey: iterate expired rotations: %w", err)
+			}
+			if err := rows.Close(); err != nil {
+				return 0, fmt.Errorf("vkey: close expired rotations cursor: %w", err)
+			}
+		}
+	} else {
+		rows, err := tx.QueryContext(ctx, port.Rebind(s.dialect, `
+			SELECT org_id, id FROM virtual_keys
+			WHERE state = 'ROTATING_DUAL_VALID' AND grace_expires_at_ms IS NOT NULL AND grace_expires_at_ms <= ?`), now)
+		if err != nil {
+			return 0, err
+		}
+		for rows.Next() {
+			var r keyRef
+			if scanErr := rows.Scan(&r.orgID, &r.id); scanErr != nil {
+				_ = rows.Close()
+				return 0, fmt.Errorf("vkey: scan expired rotation: %w", scanErr)
+			}
+			due = append(due, r)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return 0, fmt.Errorf("vkey: iterate expired rotations: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return 0, fmt.Errorf("vkey: close expired rotations cursor: %w", err)
+		}
 	}
 	if len(due) == 0 {
 		return 0, nil
 	}
 
+	type finalizedEvent struct {
+		ref   keyRef
+		epoch int64
+	}
 	var (
 		committedEpoch int64
 		finalized      []keyRef
+		events         []finalizedEvent
 	)
 	for _, r := range due {
-		updRes, err := tx.ExecContext(ctx, `
+		if err := port.SetOrgRLSTx(ctx, tx, s.dialect, r.orgID); err != nil {
+			return 0, err
+		}
+		updRes, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `
 			UPDATE virtual_keys
 			SET state = 'CREATED_ACTIVE', previous_key_hash = NULL, grace_expires_at_ms = NULL,
 			    version = version + 1, updated_at_ms = ?
-			WHERE org_id = ? AND id = ? AND state = 'ROTATING_DUAL_VALID' AND grace_expires_at_ms IS NOT NULL AND grace_expires_at_ms <= ?`,
+			WHERE org_id = ? AND id = ? AND state = 'ROTATING_DUAL_VALID' AND grace_expires_at_ms IS NOT NULL AND grace_expires_at_ms <= ?`),
 			now, r.orgID, r.id, now,
 		)
 		if err != nil {
@@ -1061,21 +1147,18 @@ func (s *Service) FinalizeExpiredRotations(ctx context.Context) (int, error) {
 		if affected == 0 {
 			continue
 		}
-		resEpoch, err := tx.ExecContext(ctx, `
-			INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-			VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
-			r.orgID, r.id, port.MutationUpsert, now,
-		)
+		epoch, err := port.AppendConfigChangelogTx(ctx, tx, s.dialect, r.orgID, "virtual_key", r.id, port.MutationUpsert, false, now)
 		if err != nil {
 			return 0, err
 		}
-		committedEpoch = latestTxEpoch(ctx, tx, resEpoch)
+		committedEpoch = epoch
 		if _, aerr := s.emitAuditTx(ctx, tx, r.orgID, "SYSTEM", "system_reaper", port.AuditEntryPointSystemReaper, "virtual_key.rotation_finalized", r.id, map[string]any{
 			"reason": "grace_period_expired",
 		}, now); aerr != nil {
 			return 0, aerr
 		}
 		finalized = append(finalized, r)
+		events = append(events, finalizedEvent{ref: r, epoch: epoch})
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -1083,6 +1166,15 @@ func (s *Service) FinalizeExpiredRotations(ctx context.Context) (int, error) {
 	}
 	if len(finalized) == 0 {
 		return 0, nil
+	}
+	for _, ev := range events {
+		s.publishChange(ctx, snapshot.ChangeEvent{
+			ConfigEpoch:  ev.epoch,
+			OrgID:        ev.ref.orgID,
+			EntityKind:   "virtual_key",
+			EntityID:     ev.ref.id,
+			MutationType: port.MutationUpsert,
+		})
 	}
 	if syncErr := s.syncSnapshot(ctx); syncErr != nil {
 		if s.snapshots != nil {
@@ -1093,6 +1185,12 @@ func (s *Service) FinalizeExpiredRotations(ctx context.Context) (int, error) {
 		return len(finalized), syncErr
 	}
 	return len(finalized), nil
+}
+
+func (s *Service) publishChange(ctx context.Context, ev snapshot.ChangeEvent) {
+	if s != nil && s.onChange != nil {
+		s.onChange(ctx, ev)
+	}
 }
 
 func (s *Service) syncSnapshot(ctx context.Context) error {
@@ -1148,19 +1246,6 @@ func (s *Service) emitAuditTx(
 		TargetID:     targetID,
 		MetadataJSON: string(rawMeta),
 	})
-}
-
-func latestTxEpoch(ctx context.Context, tx *sql.Tx, insertRes sql.Result) int64 {
-	if insertRes != nil {
-		if id, err := insertRes.LastInsertId(); err == nil && id > 0 {
-			return id
-		}
-	}
-	var epoch sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `SELECT MAX(config_epoch) FROM config_changelog`).Scan(&epoch); err == nil && epoch.Valid {
-		return epoch.Int64
-	}
-	return 0
 }
 
 func generateVirtualKey(envSlug string) (rawSecret, keyPrefix, lastFour string, digest [32]byte, err error) {
@@ -1226,13 +1311,13 @@ func scanVirtualKeySummary(row interface{ Scan(...any) error }) (*VirtualKeySumm
 		ownerID, revMode                sql.NullString
 		rpmLim, tpmLim, graceMs, expMs  sql.NullInt64
 		revMs                           sql.NullInt64
-		ephInt                          int64
+		ephBool                         port.FlexBool
 		modelsJSON, routesJSON, mcpJSON string
 	)
 	err := row.Scan(
 		&s.ID, &s.OrgID, &s.ProjectID, &s.EnvID, &ownerID, &s.Name,
 		&s.KeyPrefix, &s.LastFour, &s.State, &s.AllowedPlanes, &modelsJSON, &routesJSON, &mcpJSON,
-		&rpmLim, &tpmLim, &s.MaxConcurrentStreams, &ephInt,
+		&rpmLim, &tpmLim, &s.MaxConcurrentStreams, &ephBool,
 		&graceMs, &expMs, &revMs, &revMode, &s.Version, &s.CreatedAtMs, &s.UpdatedAtMs,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1269,7 +1354,7 @@ func scanVirtualKeySummary(row interface{ Scan(...any) error }) (*VirtualKeySumm
 		n := revMs.Int64
 		s.RevokedAtMs = &n
 	}
-	s.IsEphemeralPlayground = ephInt != 0
+	s.IsEphemeralPlayground = bool(ephBool)
 	_ = json.Unmarshal([]byte(modelsJSON), &s.AllowedModels)
 	_ = json.Unmarshal([]byte(routesJSON), &s.AllowedRoutes)
 	_ = json.Unmarshal([]byte(mcpJSON), &s.AllowedMCPTools)

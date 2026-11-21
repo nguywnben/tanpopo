@@ -256,5 +256,20 @@
   "cli.ops.db.short": "Inspect or migrate the database storage engine.",
   "cli.ops.db.migrate.flag.from": "Source SQLite WAL database path or sqlite:// DSN",
   "cli.ops.db.migrate.flag.to": "Target PostgreSQL 16+ connection DSN",
-  "cli.ops.db.migrate.flag.verify": "Verify post-migration row counts, micro-USD sums, JCS audit hash chains, and Vault envelopes before commit"
+  "cli.ops.db.migrate.flag.verify": "Verify post-migration row counts, micro-USD sums, JCS audit hash chains, and Vault envelopes before commit",
+  "cli.admin.verify_state.short": "Verify audit hash chains, reconcile orphaned holds, and rebuild Valkey cluster state",
+  "cli.admin.verify_state.flag.db": "Path to the SQLite database file",
+  "cli.admin.verify_state.flag.pg_dsn": "PostgreSQL 16+ connection DSN",
+  "cli.admin.verify_state.flag.valkey_addrs": "Comma-separated Valkey cluster addresses",
+  "cli.admin.verify_state.flag.valkey_username": "Valkey ACL username",
+  "cli.admin.verify_state.flag.valkey_password": "Valkey ACL password",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Require TLS when connecting to Valkey",
+  "cli.admin.verify_state.flag.check_audit": "Verify immutable audit hash chains across all tenants",
+  "cli.admin.verify_state.flag.reconcile_orphans": "Reclaim expired budget reservation holds before rebuilding cache state",
+  "cli.admin.verify_state.flag.rebuild_valkey": "Reconstruct active budget holds in Valkey from SQL/PostgreSQL state",
+  "cli.admin.verify_state.err.store_required": "Provide --db (SQLite) or --pg-dsn (PostgreSQL).",
+  "cli.admin.verify_state.err.valkey_required": "--valkey-addrs is required when rebuilding Valkey state.",
+  "cli.admin.verify_state.err.tampered": "Audit hash chain verification failed: tamper detected.",
+  "cli.admin.verify_state.err.failed": "Operational state verification failed",
+  "cli.admin.verify_state.output": "State check {{status}} (engine={{engine}} audit_events={{events}} orphans_reconciled={{orphans}} valkey_holds_restored={{restored}})"
 }

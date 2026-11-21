@@ -132,7 +132,7 @@ func (s *Server) handleCreateProviderAdapter(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var manifestJSON string
-	if err := s.db.QueryRowContext(r.Context(), `SELECT manifest_json FROM extension_versions WHERE id = ? AND package_id = ?`, *installation.ActiveVersionID, installation.PackageID).Scan(&manifestJSON); err != nil {
+	if err := s.db.QueryRowContext(r.Context(), s.rebind(`SELECT manifest_json FROM extension_versions WHERE id = ? AND package_id = ?`), *installation.ActiveVersionID, installation.PackageID).Scan(&manifestJSON); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading active extension manifest", true, nil)
 		return
 	}
@@ -265,7 +265,7 @@ func (s *Server) handleListProviderAdapters(w http.ResponseWriter, r *http.Reque
 		       ep.id, ep.canonical_name, ep.origin_trust_tier,
 		       ei.state, ei.approved_permissions_json,
 		       COALESCE(ev.semver, '1.0.0'), COALESCE(ev.execution_tier, 'DECLARATIVE_T1'),
-		       COALESCE(ev.enterprise_signed, 0), COALESCE(ev.manifest_json, '{}')
+		       COALESCE(ev.enterprise_signed, ` + port.BoolExpr(s.dialect, false) + `), COALESCE(ev.manifest_json, '{}')
 		FROM provider_adapters pa
 		JOIN extension_installations ei ON ei.id = pa.installation_id
 		JOIN extension_packages ep ON ep.id = ei.package_id
@@ -278,7 +278,7 @@ func (s *Server) handleListProviderAdapters(w http.ResponseWriter, r *http.Reque
 	q.WriteString(` ORDER BY pa.created_at_ms DESC, pa.id DESC LIMIT ?`)
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
+	rows, err := s.db.QueryContext(r.Context(), s.rebind(q.String()), args...)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing provider adapters", true, nil)
 		return
@@ -347,17 +347,17 @@ func (s *Server) handleGetProviderAdapter(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	row := s.db.QueryRowContext(r.Context(), `
+	row := s.db.QueryRowContext(r.Context(), s.rebind(`
 		SELECT pa.id, pa.adapter_slug, pa.native_prefix, pa.supported_dialects_json, pa.allowed_hosts_json, pa.created_at_ms,
 		       ep.id, ep.canonical_name, ep.origin_trust_tier,
 		       ei.state, ei.approved_permissions_json,
 		       COALESCE(ev.semver, '1.0.0'), COALESCE(ev.execution_tier, 'DECLARATIVE_T1'),
-		       COALESCE(ev.enterprise_signed, 0), COALESCE(ev.manifest_json, '{}')
+		       COALESCE(ev.enterprise_signed, `+port.BoolExpr(s.dialect, false)+`), COALESCE(ev.manifest_json, '{}')
 		FROM provider_adapters pa
 		JOIN extension_installations ei ON ei.id = pa.installation_id
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions ev ON ev.id = COALESCE(ei.active_version_id, ei.candidate_version_id)
-		WHERE pa.id = ?`, adapterID)
+		WHERE pa.id = ?`), adapterID)
 	dto, _, err := scanProviderAdapterSummaryRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider adapter not found", false, nil)
@@ -375,7 +375,7 @@ func scanProviderAdapterSummaryRow(row interface{ Scan(...any) error }) (provide
 		id, slug, dialectsJSON, hostsJSON, pkgID, canonicalName, trustTier, installState, permsJSON, semver, execTier, manifestJSON string
 		nativePrefix                                                                                                                sql.NullString
 		createdMs                                                                                                                   int64
-		entSigned                                                                                                                   int
+		entSigned                                                                                                                   port.FlexBool
 	)
 	if err := row.Scan(
 		&id, &slug, &nativePrefix, &dialectsJSON, &hostsJSON, &createdMs,
@@ -432,7 +432,7 @@ func scanProviderAdapterSummaryRow(row interface{ Scan(...any) error }) (provide
 		Version:              semver,
 		ExecutionTier:        mapExecutionTierOpenAPI(execTier),
 		OriginTrustTier:      trustTier,
-		EnterpriseSigned:     entSigned != 0,
+		EnterpriseSigned:     bool(entSigned),
 		InstallationState:    mapExtensionStateOpenAPI(installState),
 		WireProtocol:         wireProtocol,
 		SupportedAuthMethods: authMethods,
@@ -527,98 +527,103 @@ func (s *Server) handleListConnections(w http.ResponseWriter, r *http.Request) {
 		q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
 		args = append(args, batchLimit)
 
-		rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-		if err != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing provider connections", true, nil)
-			return
-		}
-
 		sqlCount := 0
-		for rows.Next() {
-			sqlCount++
-			var (
-				id, sharedJSON, adapterID, name, endpointURL, dataRegion, billingMode, state string
-				projNS, credNS                                                               sql.NullString
-				allowPriv                                                                    int
-				ver, createdMs                                                               int64
-			)
-			if scanErr := rows.Scan(
-				&id, &projNS, &sharedJSON, &adapterID, &credNS, &name,
-				&endpointURL, &allowPriv, &dataRegion, &billingMode, &state,
-				&ver, &createdMs,
-			); scanErr != nil {
-				_ = rows.Close()
-				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning provider connection", true, nil)
-				return
+		var errCode, errType, errMsg string
+		qErr := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+			rows, err := dbq.QueryContext(r.Context(), s.rebind(q.String()), args...)
+			if err != nil {
+				errCode, errType, errMsg = "internal_error", "upstream_error", "failed listing provider connections"
+				return err
 			}
-			batchCreatedMs = createdMs
-			batchLastID = id
-			sharedProjIDs, shErr := parseSharedProjectIDsJSON(sharedJSON)
-			if shErr != nil {
-				_ = rows.Close()
-				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
-				return
-			}
-			if !orgWide {
-				vis, visErr := connectionVisibleToAnyProject(projNS, sharedJSON, allowedProjects)
-				if visErr != nil {
-					_ = rows.Close()
-					writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
-					return
+			defer rows.Close()
+			for rows.Next() {
+				sqlCount++
+				var (
+					id, sharedJSON, adapterID, name, endpointURL, dataRegion, billingMode, state string
+					projNS, credNS                                                               sql.NullString
+					allowPriv                                                                    port.FlexBool
+					ver, createdMs                                                               int64
+				)
+				if scanErr := rows.Scan(
+					&id, &projNS, &sharedJSON, &adapterID, &credNS, &name,
+					&endpointURL, &allowPriv, &dataRegion, &billingMode, &state,
+					&ver, &createdMs,
+				); scanErr != nil {
+					errCode, errType, errMsg = "internal_error", "upstream_error", "failed scanning provider connection"
+					return scanErr
 				}
-				if !vis {
-					continue
+				batchCreatedMs = createdMs
+				batchLastID = id
+				sharedProjIDs, shErr := parseSharedProjectIDsJSON(sharedJSON)
+				if shErr != nil {
+					errCode, errType, errMsg = "internal_error", "upstream_error", "failed parsing connection visibility metadata"
+					return shErr
+				}
+				if !orgWide {
+					vis, visErr := connectionVisibleToAnyProject(projNS, sharedJSON, allowedProjects)
+					if visErr != nil {
+						errCode, errType, errMsg = "internal_error", "upstream_error", "failed parsing connection visibility metadata"
+						return visErr
+					}
+					if !vis {
+						continue
+					}
+				}
+				if projFilter != "" {
+					vis, visErr := connectionVisibleToAnyProject(projNS, sharedJSON, filterProjSet)
+					if visErr != nil {
+						errCode, errType, errMsg = "internal_error", "upstream_error", "failed parsing connection visibility metadata"
+						return visErr
+					}
+					if !vis {
+						continue
+					}
+				}
+				var projPtr, credPtr *string
+				if projNS.Valid {
+					v := projNS.String
+					projPtr = &v
+				}
+				if credNS.Valid && credNS.String != "" {
+					v := credNS.String
+					credPtr = &v
+				}
+				items = append(items, rowItem{
+					dto: providerConnectionDTO{
+						ID:                     id,
+						ProjectID:              projPtr,
+						SharedProjectIDs:       sharedProjIDs,
+						Name:                   name,
+						AdapterID:              adapterID,
+						BillingMode:            billingMode,
+						EndpointURL:            endpointURL,
+						DataRegion:             dataRegion,
+						AllowPrivateIP:         bool(allowPriv),
+						State:                  mapConnectionStateOpenAPI(state),
+						SecretSlotFingerprints: map[string]string{},
+						Version:                ver,
+						CreatedAt:              formatTimeRFC3339Ms(createdMs),
+					},
+					primaryCredID: credPtr,
+					createdMs:     createdMs,
+				})
+				if len(items) >= limit+1 {
+					break
 				}
 			}
-			if projFilter != "" {
-				vis, visErr := connectionVisibleToAnyProject(projNS, sharedJSON, filterProjSet)
-				if visErr != nil {
-					_ = rows.Close()
-					writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed parsing connection visibility metadata", true, nil)
-					return
-				}
-				if !vis {
-					continue
-				}
+			if rerr := rows.Err(); rerr != nil {
+				errCode, errType, errMsg = "internal_error", "upstream_error", "failed iterating provider connections"
+				return rerr
 			}
-			var projPtr, credPtr *string
-			if projNS.Valid {
-				v := projNS.String
-				projPtr = &v
+			return nil
+		})
+		if qErr != nil {
+			if errMsg == "" {
+				errCode, errType, errMsg = "internal_error", "upstream_error", "failed listing provider connections"
 			}
-			if credNS.Valid && credNS.String != "" {
-				v := credNS.String
-				credPtr = &v
-			}
-			items = append(items, rowItem{
-				dto: providerConnectionDTO{
-					ID:                     id,
-					ProjectID:              projPtr,
-					SharedProjectIDs:       sharedProjIDs,
-					Name:                   name,
-					AdapterID:              adapterID,
-					BillingMode:            billingMode,
-					EndpointURL:            endpointURL,
-					DataRegion:             dataRegion,
-					AllowPrivateIP:         allowPriv != 0,
-					State:                  mapConnectionStateOpenAPI(state),
-					SecretSlotFingerprints: map[string]string{},
-					Version:                ver,
-					CreatedAt:              formatTimeRFC3339Ms(createdMs),
-				},
-				primaryCredID: credPtr,
-				createdMs:     createdMs,
-			})
-			if len(items) >= limit+1 {
-				break
-			}
-		}
-		if rerr := rows.Err(); rerr != nil {
-			_ = rows.Close()
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating provider connections", true, nil)
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, errCode, errType, errMsg, true, nil)
 			return
 		}
-		_ = rows.Close()
 
 		if !needFilter || sqlCount < batchLimit {
 			break
@@ -1449,39 +1454,45 @@ func (s *Server) buildProviderConnectionDTO(ctx context.Context, conn *catalog.P
 
 func (s *Server) loadConnectionSlotFingerprints(ctx context.Context, orgID, connID string, primaryCredID *string) (map[string]string, error) {
 	out := make(map[string]string)
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT csb.slot_name, sc.key_fingerprint
-		FROM connection_secret_bindings csb
-		JOIN secret_credentials sc ON sc.org_id = csb.org_id AND sc.id = csb.credential_id
-		WHERE csb.org_id = ? AND csb.connection_id = ?
-		ORDER BY csb.slot_name ASC`,
-		orgID, connID,
-	)
+	err := s.withOrgReadTx(ctx, orgID, func(dbq adminDBQuerier) error {
+		rows, err := dbq.QueryContext(ctx, s.rebind(`
+			SELECT csb.slot_name, sc.key_fingerprint
+			FROM connection_secret_bindings csb
+			JOIN secret_credentials sc ON sc.org_id = csb.org_id AND sc.id = csb.credential_id
+			WHERE csb.org_id = ? AND csb.connection_id = ?
+			ORDER BY csb.slot_name ASC`),
+			orgID, connID,
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var slot, fp string
+			if scanErr := rows.Scan(&slot, &fp); scanErr != nil {
+				return scanErr
+			}
+			out[slot] = formatTrailingFingerprint(fp)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if _, hasAPIKey := out["api_key"]; !hasAPIKey && primaryCredID != nil && *primaryCredID != "" {
+			var fp string
+			err := dbq.QueryRowContext(ctx, s.rebind(`
+				SELECT key_fingerprint FROM secret_credentials WHERE org_id = ? AND id = ?`),
+				orgID, *primaryCredID,
+			).Scan(&fp)
+			if err == nil {
+				out["api_key"] = formatTrailingFingerprint(fp)
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var slot, fp string
-		if scanErr := rows.Scan(&slot, &fp); scanErr != nil {
-			return nil, scanErr
-		}
-		out[slot] = formatTrailingFingerprint(fp)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if _, hasAPIKey := out["api_key"]; !hasAPIKey && primaryCredID != nil && *primaryCredID != "" {
-		var fp string
-		err := s.db.QueryRowContext(ctx, `
-			SELECT key_fingerprint FROM secret_credentials WHERE org_id = ? AND id = ?`,
-			orgID, *primaryCredID,
-		).Scan(&fp)
-		if err == nil {
-			out["api_key"] = formatTrailingFingerprint(fp)
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
-		}
 	}
 	return out, nil
 }

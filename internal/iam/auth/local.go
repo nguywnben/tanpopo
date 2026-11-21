@@ -264,6 +264,7 @@ type failureBucket struct {
 // brute-force throttling, and Control/Data credential-plane separation.
 type LocalService struct {
 	db                      *sql.DB
+	dialect                 port.Dialect
 	nowMs                   func() int64
 	argon2                  Argon2Params
 	sessionTTL              time.Duration
@@ -346,6 +347,7 @@ func NewLocalService(cfg ServiceConfig) (*LocalService, error) {
 
 	return &LocalService{
 		db:                      cfg.DB,
+		dialect:                 port.DetectDialect(context.Background(), cfg.DB),
 		nowMs:                   nowFn,
 		argon2:                  a2,
 		sessionTTL:              sessTTL,
@@ -407,12 +409,21 @@ func (s *LocalService) CreatePrincipal(ctx context.Context, params CreatePrincip
 		return nil, fmt.Errorf("auth: begin CreatePrincipal tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if outOrg != nil {
+		if err := port.SetOrgRLSTx(ctx, tx, s.dialect, *outOrg); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+			return nil, err
+		}
+	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `
 		INSERT INTO principals (
 			id, org_id, kind, email_or_sub, password_argon2id, oidc_issuer,
 			status, version, last_login_at_ms, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, NULL, 'ACTIVE', 1, NULL, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, NULL, 'ACTIVE', 1, NULL, ?, ?)`),
 		id, orgVal, kind, email, pwHash, now, now,
 	); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
@@ -514,8 +525,43 @@ func (s *LocalService) BindRole(ctx context.Context, params BindRoleParams) (*rb
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if params.ScopeType == rbac.ScopeInstance {
+		if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := port.SetOrgRLSTx(ctx, tx, s.dialect, expectedOrg); err != nil {
+			return nil, err
+		}
+	}
+
 	var prcOrg sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT org_id FROM principals WHERE id = ?`, params.PrincipalID).Scan(&prcOrg)
+	err = tx.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT org_id FROM principals WHERE id = ?`), params.PrincipalID).Scan(&prcOrg)
+	if errors.Is(err, sql.ErrNoRows) && s.dialect == port.DialectPostgres && params.ScopeType == rbac.ScopeInstance {
+		orgIDs, listErr := port.ListOrgIDsTx(ctx, tx, s.dialect)
+		if listErr != nil {
+			return nil, listErr
+		}
+		foundInOrg := false
+		for _, oid := range orgIDs {
+			if err := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); err != nil {
+				return nil, err
+			}
+			var tmp sql.NullString
+			qerr := tx.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT org_id FROM principals WHERE id = ?`), params.PrincipalID).Scan(&tmp)
+			if qerr == nil {
+				foundInOrg = true
+				break
+			}
+			if !errors.Is(qerr, sql.ErrNoRows) {
+				return nil, fmt.Errorf("auth: lookup principal: %w", qerr)
+			}
+		}
+		if foundInOrg {
+			return nil, fmt.Errorf("%w: INSTANCE role cannot be bound to org-scoped principal", port.ErrInvalidInput)
+		}
+		return nil, port.ErrNotFound
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, port.ErrNotFound
 	}
@@ -533,7 +579,7 @@ func (s *LocalService) BindRole(ctx context.Context, params BindRoleParams) (*rb
 		}
 		if params.ScopeType == rbac.ScopeProject {
 			var one int
-			pErr := tx.QueryRowContext(ctx, `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, expectedOrg, params.ScopeID).Scan(&one)
+			pErr := tx.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`), expectedOrg, params.ScopeID).Scan(&one)
 			if errors.Is(pErr, sql.ErrNoRows) {
 				return nil, port.ErrNotFound
 			}
@@ -558,9 +604,9 @@ func (s *LocalService) BindRole(ctx context.Context, params BindRoleParams) (*rb
 		orgCopy = &v
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `
 		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
-		VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, 1, ?)`),
 		rbID, orgVal, params.PrincipalID, params.ScopeType, params.ScopeID, params.RoleName, now,
 	); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
@@ -658,51 +704,137 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 		version int64
 		pwHash  string
 	}
-	var (
-		rows *sql.Rows
-		err  error
-	)
-	if normOrg != "" {
-		rows, err = s.db.QueryContext(ctx, `
-			SELECT id, org_id, status, version, COALESCE(password_argon2id, '')
-			FROM principals
-			WHERE kind = ? AND email_or_sub = ? AND org_id = ?
-			LIMIT 2`,
-			PrincipalKindHumanLocal, normEmail, normOrg,
-		)
-	} else {
-		rows, err = s.db.QueryContext(ctx, `
-			SELECT id, org_id, status, version, COALESCE(password_argon2id, '')
-			FROM principals
-			WHERE kind = ? AND email_or_sub = ?
-			ORDER BY (org_id IS NULL) DESC, created_at_ms ASC, id ASC
-			LIMIT ?`,
-			PrincipalKindHumanLocal, normEmail, maxCandidatePrincipals,
-		)
-	}
-	if err != nil {
-		return nil, nil, fmt.Errorf("auth: query principals: %w", err)
+	scanCandidateRows := func(rows *sql.Rows, target *[]principalCandidate) error {
+		for rows.Next() {
+			var c principalCandidate
+			var orgNS sql.NullString
+			if scanErr := rows.Scan(&c.id, &orgNS, &c.status, &c.version, &c.pwHash); scanErr != nil {
+				return fmt.Errorf("auth: scan principal: %w", scanErr)
+			}
+			if orgNS.Valid {
+				v := orgNS.String
+				c.orgID = &v
+			}
+			*target = append(*target, c)
+		}
+		if rowsErr := rows.Err(); rowsErr != nil {
+			return fmt.Errorf("auth: iterate principals: %w", rowsErr)
+		}
+		return nil
 	}
 
 	var candidates []principalCandidate
-	for rows.Next() {
-		var c principalCandidate
-		var orgNS sql.NullString
-		if scanErr := rows.Scan(&c.id, &orgNS, &c.status, &c.version, &c.pwHash); scanErr != nil {
-			_ = rows.Close()
-			return nil, nil, fmt.Errorf("auth: scan principal: %w", scanErr)
+	if s.dialect != port.DialectPostgres {
+		var (
+			rows *sql.Rows
+			err  error
+		)
+		if normOrg != "" {
+			rows, err = s.db.QueryContext(ctx, `
+				SELECT id, org_id, status, version, COALESCE(password_argon2id, '')
+				FROM principals
+				WHERE kind = ? AND email_or_sub = ? AND org_id = ?
+				LIMIT 2`,
+				PrincipalKindHumanLocal, normEmail, normOrg,
+			)
+		} else {
+			rows, err = s.db.QueryContext(ctx, `
+				SELECT id, org_id, status, version, COALESCE(password_argon2id, '')
+				FROM principals
+				WHERE kind = ? AND email_or_sub = ?
+				ORDER BY (org_id IS NULL) DESC, created_at_ms ASC, id ASC
+				LIMIT ?`,
+				PrincipalKindHumanLocal, normEmail, maxCandidatePrincipals,
+			)
 		}
-		if orgNS.Valid {
-			v := orgNS.String
-			c.orgID = &v
+		if err != nil {
+			return nil, nil, fmt.Errorf("auth: query principals: %w", err)
 		}
-		candidates = append(candidates, c)
-	}
-	if rowsErr := rows.Err(); rowsErr != nil {
+		scanErr := scanCandidateRows(rows, &candidates)
 		_ = rows.Close()
-		return nil, nil, fmt.Errorf("auth: iterate principals: %w", rowsErr)
+		if scanErr != nil {
+			return nil, nil, scanErr
+		}
+	} else {
+		tx, txErr := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if txErr != nil {
+			return nil, nil, fmt.Errorf("auth: begin query principals tx: %w", txErr)
+		}
+		defer func() { _ = tx.Rollback() }()
+
+		if normOrg != "" {
+			if err := port.SetOrgRLSTx(ctx, tx, s.dialect, normOrg); err != nil {
+				return nil, nil, err
+			}
+			rows, err := tx.QueryContext(ctx, port.Rebind(s.dialect, `
+				SELECT id, org_id, status, version, COALESCE(password_argon2id, '')
+				FROM principals
+				WHERE kind = ? AND email_or_sub = ? AND org_id = ?
+				LIMIT 2`),
+				PrincipalKindHumanLocal, normEmail, normOrg,
+			)
+			if err != nil {
+				return nil, nil, fmt.Errorf("auth: query principals: %w", err)
+			}
+			scanErr := scanCandidateRows(rows, &candidates)
+			_ = rows.Close()
+			if scanErr != nil {
+				return nil, nil, scanErr
+			}
+		} else {
+			if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+				return nil, nil, err
+			}
+			opRows, err := tx.QueryContext(ctx, port.Rebind(s.dialect, `
+				SELECT id, org_id, status, version, COALESCE(password_argon2id, '')
+				FROM principals
+				WHERE kind = ? AND email_or_sub = ? AND org_id IS NULL
+				ORDER BY created_at_ms ASC, id ASC
+				LIMIT ?`),
+				PrincipalKindHumanLocal, normEmail, maxCandidatePrincipals,
+			)
+			if err != nil {
+				return nil, nil, fmt.Errorf("auth: query principals: %w", err)
+			}
+			scanErr := scanCandidateRows(opRows, &candidates)
+			_ = opRows.Close()
+			if scanErr != nil {
+				return nil, nil, scanErr
+			}
+			if len(candidates) < maxCandidatePrincipals {
+				orgIDs, err := port.ListOrgIDsTx(ctx, tx, s.dialect)
+				if err != nil {
+					return nil, nil, err
+				}
+				for _, oid := range orgIDs {
+					rem := maxCandidatePrincipals - len(candidates)
+					if rem <= 0 {
+						break
+					}
+					if err := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); err != nil {
+						return nil, nil, err
+					}
+					orgRows, err := tx.QueryContext(ctx, port.Rebind(s.dialect, `
+						SELECT id, org_id, status, version, COALESCE(password_argon2id, '')
+						FROM principals
+						WHERE kind = ? AND email_or_sub = ? AND org_id = ?
+						ORDER BY created_at_ms ASC, id ASC
+						LIMIT ?`),
+						PrincipalKindHumanLocal, normEmail, oid, rem,
+					)
+					if err != nil {
+						return nil, nil, fmt.Errorf("auth: query org principals: %w", err)
+					}
+					scanErr := scanCandidateRows(orgRows, &candidates)
+					_ = orgRows.Close()
+					if scanErr != nil {
+						return nil, nil, scanErr
+					}
+				}
+			}
+		}
+		_ = tx.Rollback()
 	}
-	_ = rows.Close()
 
 	if len(candidates) == 0 {
 		if err := s.verifyPasswordBounded(ctx, password, s.dummyHash); err != nil {
@@ -745,13 +877,36 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 		return nil, nil, ErrPrincipalInactive
 	}
 
-	bindings, roles, err := s.loadBindings(ctx, matched.id)
+	bindings, roles, err := s.loadBindings(ctx, matched.id, matched.orgID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if _, err := s.db.ExecContext(ctx, `UPDATE principals SET last_login_at_ms = ? WHERE id = ?`, now, matched.id); err != nil {
-		return nil, nil, err
+	if s.dialect != port.DialectPostgres {
+		if _, err := s.db.ExecContext(ctx, `UPDATE principals SET last_login_at_ms = ? WHERE id = ?`, now, matched.id); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		updTx, txErr := s.db.BeginTx(ctx, nil)
+		if txErr != nil {
+			return nil, nil, txErr
+		}
+		if matched.orgID != nil && strings.TrimSpace(*matched.orgID) != "" {
+			err = port.SetOrgRLSTx(ctx, updTx, s.dialect, strings.TrimSpace(*matched.orgID))
+		} else {
+			err = port.SetOperatorRLSTx(ctx, updTx, s.dialect)
+		}
+		if err == nil {
+			_, err = updTx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE principals SET last_login_at_ms = ? WHERE id = ?`), now, matched.id)
+		}
+		if err == nil {
+			err = updTx.Commit()
+		} else {
+			_ = updTx.Rollback()
+		}
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	// Never clear ipKey on single-account success so valid low-priv logins cannot reset IP throttling.
@@ -907,7 +1062,26 @@ func (s *LocalService) AuthenticateAdminHTTPRequest(r *http.Request) (*rbac.Acto
 	// (never on transient DB errors or request cancellation).
 	var dbStatus string
 	var dbVersion int64
-	statusErr := s.db.QueryRowContext(r.Context(), `SELECT status, version FROM principals WHERE id = ?`, principalID).Scan(&dbStatus, &dbVersion)
+	statusQuery := port.Rebind(s.dialect, `SELECT status, version FROM principals WHERE id = ?`)
+	var statusErr error
+	if s.dialect != port.DialectPostgres {
+		statusErr = s.db.QueryRowContext(r.Context(), statusQuery, principalID).Scan(&dbStatus, &dbVersion)
+	} else {
+		tx, txErr := s.db.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
+		if txErr != nil {
+			statusErr = txErr
+		} else {
+			if orgCopy != nil && strings.TrimSpace(*orgCopy) != "" {
+				statusErr = port.SetOrgRLSTx(r.Context(), tx, s.dialect, strings.TrimSpace(*orgCopy))
+			} else {
+				statusErr = port.SetOperatorRLSTx(r.Context(), tx, s.dialect)
+			}
+			if statusErr == nil {
+				statusErr = tx.QueryRowContext(r.Context(), statusQuery, principalID).Scan(&dbStatus, &dbVersion)
+			}
+			_ = tx.Rollback()
+		}
+	}
 	if statusErr != nil {
 		if errors.Is(statusErr, sql.ErrNoRows) {
 			s.RevokePrincipalSessions(principalID)
@@ -925,7 +1099,7 @@ func (s *LocalService) AuthenticateAdminHTTPRequest(r *http.Request) (*rbac.Acto
 	}
 
 	// Reload live RBAC bindings from DB so role downgrades or removals take effect immediately.
-	liveBindings, liveRoles, bindErr := s.loadBindings(r.Context(), principalID)
+	liveBindings, liveRoles, bindErr := s.loadBindings(r.Context(), principalID, orgCopy)
 	if bindErr != nil {
 		return nil, nil, fmt.Errorf("auth: reload principal bindings: %w", bindErr)
 	}
@@ -1020,37 +1194,97 @@ func (s *LocalService) RevokeAllSessions() {
 	s.sessMu.Unlock()
 }
 
-func (s *LocalService) loadBindings(ctx context.Context, principalID string) ([]rbac.RoleBinding, []string, error) {
-	rows, err := s.db.QueryContext(ctx, `
+func (s *LocalService) loadBindings(ctx context.Context, principalID string, orgID *string) ([]rbac.RoleBinding, []string, error) {
+	query := port.Rebind(s.dialect, `
 		SELECT id, org_id, principal_id, scope_type, scope_id, role_name
 		FROM role_bindings
 		WHERE principal_id = ?
-		ORDER BY created_at_ms ASC, id ASC`, principalID)
+		ORDER BY created_at_ms ASC, id ASC`)
+
+	scanRows := func(rows *sql.Rows, seenID map[string]bool, seenRoles map[string]bool, bindings *[]rbac.RoleBinding, roles *[]string) error {
+		for rows.Next() {
+			var b rbac.RoleBinding
+			var orgNS sql.NullString
+			if scanErr := rows.Scan(&b.ID, &orgNS, &b.PrincipalID, &b.ScopeType, &b.ScopeID, &b.RoleName); scanErr != nil {
+				return scanErr
+			}
+			if seenID[b.ID] {
+				continue
+			}
+			seenID[b.ID] = true
+			if orgNS.Valid {
+				v := orgNS.String
+				b.OrgID = &v
+			}
+			*bindings = append(*bindings, b)
+			if !seenRoles[b.RoleName] {
+				seenRoles[b.RoleName] = true
+				*roles = append(*roles, b.RoleName)
+			}
+		}
+		return rows.Err()
+	}
+
+	var bindings []rbac.RoleBinding
+	seenID := make(map[string]bool)
+	seenRoles := make(map[string]bool)
+	var roles []string
+
+	if s.dialect != port.DialectPostgres {
+		rows, err := s.db.QueryContext(ctx, query, principalID)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer rows.Close()
+		if err := scanRows(rows, seenID, seenRoles, &bindings, &roles); err != nil {
+			return nil, nil, err
+		}
+		return bindings, roles, nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = tx.Rollback() }()
 
-	var bindings []rbac.RoleBinding
-	seenRoles := make(map[string]bool)
-	var roles []string
-	for rows.Next() {
-		var b rbac.RoleBinding
-		var orgNS sql.NullString
-		if scanErr := rows.Scan(&b.ID, &orgNS, &b.PrincipalID, &b.ScopeType, &b.ScopeID, &b.RoleName); scanErr != nil {
-			return nil, nil, scanErr
-		}
-		if orgNS.Valid {
-			v := orgNS.String
-			b.OrgID = &v
-		}
-		bindings = append(bindings, b)
-		if !seenRoles[b.RoleName] {
-			seenRoles[b.RoleName] = true
-			roles = append(roles, b.RoleName)
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return nil, nil, err
+	}
+	opRows, err := tx.QueryContext(ctx, query, principalID)
+	if err != nil {
+		return nil, nil, err
+	}
+	scanErr := scanRows(opRows, seenID, seenRoles, &bindings, &roles)
+	_ = opRows.Close()
+	if scanErr != nil {
+		return nil, nil, scanErr
+	}
+
+	var orgIDs []string
+	if orgID != nil && strings.TrimSpace(*orgID) != "" {
+		orgIDs = []string{strings.TrimSpace(*orgID)}
+	} else {
+		orgIDs, err = port.ListOrgIDsTx(ctx, tx, s.dialect)
+		if err != nil {
+			return nil, nil, err
 		}
 	}
-	return bindings, roles, rows.Err()
+	for _, oid := range orgIDs {
+		if err := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); err != nil {
+			return nil, nil, err
+		}
+		orgRows, err := tx.QueryContext(ctx, query, principalID)
+		if err != nil {
+			return nil, nil, err
+		}
+		scanErr := scanRows(orgRows, seenID, seenRoles, &bindings, &roles)
+		_ = orgRows.Close()
+		if scanErr != nil {
+			return nil, nil, scanErr
+		}
+	}
+	return bindings, roles, nil
 }
 
 type rateBucketCheck struct {

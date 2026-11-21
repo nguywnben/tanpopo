@@ -63,7 +63,9 @@ func (s *Server) handleGetEffectivePolicy(w http.ResponseWriter, r *http.Request
 		projID = derivedProj
 	} else if projID != "" {
 		var exists int
-		err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, projID).Scan(&exists)
+		err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(r.Context(), s.rebind(`SELECT 1 FROM projects WHERE org_id = ? AND id = ?`), orgID, projID).Scan(&exists)
+		})
 		if errors.Is(err, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 			return
@@ -105,30 +107,28 @@ func (s *Server) handleGetEffectivePolicy(w http.ResponseWriter, r *http.Request
 
 	writePolicyID := scopePolicyWriteID(orgID, scopeDB, scopeID)
 	writeVersion := int64(1)
-	storedRows, err := s.db.QueryContext(r.Context(), `SELECT id, version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ? ORDER BY policy_type, id`, orgID, scopeDB, scopeID)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resolving writable policy version", true, nil)
-		return
-	}
 	var ids []string
 	var versions []int64
-	for storedRows.Next() {
-		var id string
-		var version int64
-		if err := storedRows.Scan(&id, &version); err != nil {
-			_ = storedRows.Close()
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading writable policy rows", true, nil)
-			return
+	if err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		storedRows, qerr := q.QueryContext(r.Context(), s.rebind(`SELECT id, version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ? ORDER BY policy_type, id`), orgID, scopeDB, scopeID)
+		if qerr != nil {
+			return qerr
 		}
-		ids, versions = append(ids, id), append(versions, version)
-	}
-	if err := storedRows.Err(); err != nil {
-		_ = storedRows.Close()
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading writable policy rows", true, nil)
-		return
-	}
-	if err := storedRows.Close(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed closing writable policy rows", true, nil)
+		defer func() { _ = storedRows.Close() }()
+		for storedRows.Next() {
+			var id string
+			var version int64
+			if serr := storedRows.Scan(&id, &version); serr != nil {
+				return serr
+			}
+			ids, versions = append(ids, id), append(versions, version)
+		}
+		if ierr := storedRows.Err(); ierr != nil {
+			return ierr
+		}
+		return storedRows.Close()
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resolving writable policy version", true, nil)
 		return
 	}
 	switch len(ids) {
@@ -179,11 +179,13 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Check if policy exists; foreign-org rows follow the create/auth path and return uniform 404 after RBAC + validation (AUTH-15).
 	var existingOrgID, existingScopeType, existingScopeID string
-	err := s.db.QueryRowContext(r.Context(), `
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
 		SELECT org_id, scope_type, scope_id
 		FROM policies
-		WHERE id = ?`, policyID,
-	).Scan(&existingOrgID, &existingScopeType, &existingScopeID)
+		WHERE id = ?`), policyID,
+		).Scan(&existingOrgID, &existingScopeType, &existingScopeID)
+	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking policy", true, nil)
 		return
@@ -326,6 +328,12 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		if s.snapshots != nil {
 			_ = s.snapshots.Refresh(r.Context())
 		}
+		s.publishChange(r.Context(), snapshot.ChangeEvent{
+			OrgID:        orgID,
+			EntityKind:   "policy",
+			EntityID:     rec.ID,
+			MutationType: port.MutationUpsert,
+		})
 		out := policyRecordToDTO(rec)
 		w.Header().Set("ETag", FormatETag(out.Version))
 		writeJSON(w, http.StatusOK, out)
@@ -371,6 +379,12 @@ func (s *Server) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "policy",
+		EntityID:     updated.ID,
+		MutationType: port.MutationUpsert,
+	})
 
 	out := policyRecordToDTO(updated)
 	w.Header().Set("ETag", FormatETag(out.Version))
@@ -390,7 +404,9 @@ func (s *Server) handleScopePolicyUpdate(w http.ResponseWriter, r *http.Request,
 		return false
 	}
 	var count int
-	if err := s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ?`, orgID, scopeType, scopeID).Scan(&count); err != nil {
+	if err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT COUNT(*) FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ?`), orgID, scopeType, scopeID).Scan(&count)
+	}); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resolving policy scope", true, nil)
 		return true
 	}
@@ -425,21 +441,25 @@ func (s *Server) handleScopePolicyUpdate(w http.ResponseWriter, r *http.Request,
 		var currentResource any
 		if errors.Is(err, port.ErrVersionConflict) {
 			var currentVersion int64
-			rows, queryErr := s.db.QueryContext(r.Context(), `SELECT version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ?`, orgID, scopeType, scopeID)
-			if queryErr == nil {
+			_ = s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+				rows, queryErr := dbq.QueryContext(r.Context(), s.rebind(`SELECT version FROM policies WHERE org_id = ? AND scope_type = ? AND scope_id = ?`), orgID, scopeType, scopeID)
+				if queryErr != nil {
+					return queryErr
+				}
+				defer rows.Close()
 				for rows.Next() {
 					var version int64
 					if rows.Scan(&version) != nil {
 						currentVersion = 0
-						break
+						return nil
 					}
 					currentVersion += version
 				}
 				if rows.Err() != nil {
 					currentVersion = 0
 				}
-				_ = rows.Close()
-			}
+				return nil
+			})
 			projID, envID := "", ""
 			if scopeType == snapshot.PolicyScopeProject {
 				projID = scopeID
@@ -458,6 +478,12 @@ func (s *Server) handleScopePolicyUpdate(w http.ResponseWriter, r *http.Request,
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "policy",
+		EntityID:     policyID,
+		MutationType: port.MutationUpsert,
+	})
 	projID, envID := "", ""
 	scopeTier := mapPolicyScopeDBToTier(scopeType)
 	if scopeType == snapshot.PolicyScopeProject {
@@ -490,86 +516,91 @@ func (s *Server) computeEffectivePolicySQL(ctx context.Context, orgID, projID, e
 func (s *Server) computeEffectivePolicyWithVersionSQL(ctx context.Context, orgID, projID, envID string) (policyengine.EffectivePolicy, int64, error) {
 	var minTrust string
 	var orgVer int64
-	err := s.db.QueryRowContext(ctx, `SELECT min_plugin_trust, version FROM organizations WHERE id = ?`, orgID).Scan(&minTrust, &orgVer)
-	if errors.Is(err, sql.ErrNoRows) {
-		return policyengine.EffectivePolicy{}, 0, port.ErrNotFound
-	}
-	if err != nil {
-		return policyengine.EffectivePolicy{}, 0, err
-	}
-
 	var layers []policyengine.ScopedLayer
-	if strings.TrimSpace(minTrust) != "" {
-		layers = append(layers, policyengine.ScopedLayer{
-			ScopeType: snapshot.PolicyScopeOrg,
-			ScopeID:   orgID,
-			Baseline:  true,
-			Rules:     snapshot.PolicyRulesView{MinPluginTrust: minTrust},
-		})
-	}
-	if projID != "" {
-		var enforcedReg sql.NullString
-		if qerr := s.db.QueryRowContext(ctx, `SELECT enforced_region FROM projects WHERE org_id = ? AND id = ?`, orgID, projID).Scan(&enforcedReg); qerr == nil && enforcedReg.Valid && strings.TrimSpace(enforcedReg.String) != "" {
-			layers = append(layers, policyengine.ScopedLayer{
-				ScopeType: snapshot.PolicyScopeProject,
-				ScopeID:   projID,
-				Baseline:  true,
-				Rules: snapshot.PolicyRulesView{
-					HasAllowedDataRegions: true,
-					AllowedDataRegions:    []string{strings.ToUpper(strings.TrimSpace(enforcedReg.String))},
-				},
-			})
-		}
-	}
-	if envID != "" {
-		var reqTested int
-		if qerr := s.db.QueryRowContext(ctx, `SELECT require_tested_caps FROM environments WHERE org_id = ? AND id = ?`, orgID, envID).Scan(&reqTested); qerr == nil && reqTested != 0 {
-			layers = append(layers, policyengine.ScopedLayer{
-				ScopeType: snapshot.PolicyScopeEnv,
-				ScopeID:   envID,
-				Baseline:  true,
-				Rules:     snapshot.PolicyRulesView{MinCapabilityAssurance: policyengine.AssuranceTested},
-			})
-		}
-	}
+	var maxVer int64
 
-	maxVer := orgVer
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT scope_type, scope_id, rules_json, version
-		FROM policies
-		WHERE org_id = ? AND enabled = 1 AND scope_type IN ('ORG', 'PROJECT', 'ENV')`, orgID,
-	)
+	err := s.withOrgReadTx(ctx, orgID, func(dbq adminDBQuerier) error {
+		qerr := dbq.QueryRowContext(ctx, s.rebind(`SELECT min_plugin_trust, version FROM organizations WHERE id = ?`), orgID).Scan(&minTrust, &orgVer)
+		if errors.Is(qerr, sql.ErrNoRows) {
+			return port.ErrNotFound
+		}
+		if qerr != nil {
+			return qerr
+		}
+
+		if strings.TrimSpace(minTrust) != "" {
+			layers = append(layers, policyengine.ScopedLayer{
+				ScopeType: snapshot.PolicyScopeOrg,
+				ScopeID:   orgID,
+				Baseline:  true,
+				Rules:     snapshot.PolicyRulesView{MinPluginTrust: minTrust},
+			})
+		}
+		if projID != "" {
+			var enforcedReg sql.NullString
+			if perr := dbq.QueryRowContext(ctx, s.rebind(`SELECT enforced_region FROM projects WHERE org_id = ? AND id = ?`), orgID, projID).Scan(&enforcedReg); perr == nil && enforcedReg.Valid && strings.TrimSpace(enforcedReg.String) != "" {
+				layers = append(layers, policyengine.ScopedLayer{
+					ScopeType: snapshot.PolicyScopeProject,
+					ScopeID:   projID,
+					Baseline:  true,
+					Rules: snapshot.PolicyRulesView{
+						HasAllowedDataRegions: true,
+						AllowedDataRegions:    []string{strings.ToUpper(strings.TrimSpace(enforcedReg.String))},
+					},
+				})
+			}
+		}
+		if envID != "" {
+			var reqTested port.FlexBool
+			if eerr := dbq.QueryRowContext(ctx, s.rebind(`SELECT require_tested_caps FROM environments WHERE org_id = ? AND id = ?`), orgID, envID).Scan(&reqTested); eerr == nil && bool(reqTested) {
+				layers = append(layers, policyengine.ScopedLayer{
+					ScopeType: snapshot.PolicyScopeEnv,
+					ScopeID:   envID,
+					Baseline:  true,
+					Rules:     snapshot.PolicyRulesView{MinCapabilityAssurance: policyengine.AssuranceTested},
+				})
+			}
+		}
+
+		maxVer = orgVer
+		rows, rerr := dbq.QueryContext(ctx, s.rebind(`
+			SELECT scope_type, scope_id, rules_json, version
+			FROM policies
+			WHERE org_id = ? AND enabled = `+port.BoolExpr(s.dialect, true)+` AND scope_type IN ('ORG', 'PROJECT', 'ENV')`), orgID,
+		)
+		if rerr != nil {
+			return rerr
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var st, sid, rj string
+			var ver int64
+			if scanErr := rows.Scan(&st, &sid, &rj, &ver); scanErr != nil {
+				return scanErr
+			}
+			match := (st == snapshot.PolicyScopeOrg && sid == orgID) ||
+				(st == snapshot.PolicyScopeProject && projID != "" && sid == projID) ||
+				(st == snapshot.PolicyScopeEnv && envID != "" && sid == envID)
+			if !match {
+				continue
+			}
+			parsed, perr := snapshot.ParsePolicyRulesJSONStrict(rj)
+			if perr != nil {
+				return perr
+			}
+			if ver > maxVer {
+				maxVer = ver
+			}
+			layers = append(layers, policyengine.ScopedLayer{
+				ScopeType: st,
+				ScopeID:   sid,
+				Rules:     parsed,
+			})
+		}
+		return rows.Err()
+	})
 	if err != nil {
-		return policyengine.EffectivePolicy{}, 0, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var st, sid, rj string
-		var ver int64
-		if scanErr := rows.Scan(&st, &sid, &rj, &ver); scanErr != nil {
-			return policyengine.EffectivePolicy{}, 0, scanErr
-		}
-		match := (st == snapshot.PolicyScopeOrg && sid == orgID) ||
-			(st == snapshot.PolicyScopeProject && projID != "" && sid == projID) ||
-			(st == snapshot.PolicyScopeEnv && envID != "" && sid == envID)
-		if !match {
-			continue
-		}
-		parsed, perr := snapshot.ParsePolicyRulesJSONStrict(rj)
-		if perr != nil {
-			return policyengine.EffectivePolicy{}, 0, perr
-		}
-		if ver > maxVer {
-			maxVer = ver
-		}
-		layers = append(layers, policyengine.ScopedLayer{
-			ScopeType: st,
-			ScopeID:   sid,
-			Rules:     parsed,
-		})
-	}
-	if err := rows.Err(); err != nil {
 		return policyengine.EffectivePolicy{}, 0, err
 	}
 	return policyengine.MergeLayers(layers...), maxVer, nil
@@ -585,7 +616,9 @@ func (s *Server) resolvePolicyTargetScope(w http.ResponseWriter, r *http.Request
 		return rbac.TargetScope{OrgID: orgID}, "", true
 	case snapshot.PolicyScopeProject:
 		var exists int
-		err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, scopeID).Scan(&exists)
+		err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+			return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT 1 FROM projects WHERE org_id = ? AND id = ?`), orgID, scopeID).Scan(&exists)
+		})
 		if errors.Is(err, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 			return rbac.TargetScope{}, "", false

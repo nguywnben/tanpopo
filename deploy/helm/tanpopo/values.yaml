@@ -1,0 +1,95 @@
+image:
+  repository: ghcr.io/nguywnben/tanpopo
+  tag: "0.40.0"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+postgres:
+  secretName: tanpopo-postgres
+  dsnKey: dsn
+
+valkey:
+  addrs: "valkey-cluster.tanpopo.svc.cluster.local:6379"
+  username: "tanpopo"
+  secretName: tanpopo-valkey
+  passwordKey: password
+  requireTLS: true
+  replicasHint: 3
+
+masterKey:
+  secretName: tanpopo-master-key
+  fileName: master.key
+
+controlPlane:
+  replicaCount: 2
+  port: 8080
+  pdb:
+    enabled: true
+    minAvailable: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 8080
+
+dataPlane:
+  replicaCount: 3
+  port: 8080
+  terminationGracePeriodSeconds: 300
+  drainTimeout: "90s"
+  preStopSleepSeconds: 5
+  pdb:
+    enabled: true
+    minAvailable: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  service:
+    type: ClusterIP
+    port: 8080
+
+networkPolicy:
+  enabled: true
+  postgresPort: 5432
+  valkeyPort: 6379
+  valkeyClusterBusPort: 16379
+  allowPublicEgressHTTPS: true
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  scrapeTimeout: 10s
+  labels: {}

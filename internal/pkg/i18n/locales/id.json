@@ -256,5 +256,20 @@
   "cli.ops.db.short": "Periksa atau migrasikan mesin penyimpanan basis data.",
   "cli.ops.db.migrate.flag.from": "Jalur basis data SQLite WAL sumber atau DSN sqlite://",
   "cli.ops.db.migrate.flag.to": "DSN koneksi PostgreSQL 16+ tujuan",
-  "cli.ops.db.migrate.flag.verify": "Verifikasi jumlah baris, total mikro-USD, rantai hash audit JCS, dan amplop Vault sebelum commit"
+  "cli.ops.db.migrate.flag.verify": "Verifikasi jumlah baris, total mikro-USD, rantai hash audit JCS, dan amplop Vault sebelum commit",
+  "cli.admin.verify_state.short": "Verifikasi rantai hash audit, rekonsiliasi hold yatim, dan bangun ulang status klaster Valkey",
+  "cli.admin.verify_state.flag.db": "Jalur ke berkas basis data SQLite",
+  "cli.admin.verify_state.flag.pg_dsn": "DSN koneksi PostgreSQL 16+",
+  "cli.admin.verify_state.flag.valkey_addrs": "Alamat klaster Valkey dipisahkan koma",
+  "cli.admin.verify_state.flag.valkey_username": "Nama pengguna ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_password": "Kata sandi ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Wajibkan TLS saat terhubung ke Valkey",
+  "cli.admin.verify_state.flag.check_audit": "Verifikasi rantai hash audit tetap pada semua tenant",
+  "cli.admin.verify_state.flag.reconcile_orphans": "Reklamasi hold anggaran kedaluwarsa sebelum membangun ulang cache",
+  "cli.admin.verify_state.flag.rebuild_valkey": "Bangun ulang hold anggaran aktif di Valkey dari SQL/PostgreSQL",
+  "cli.admin.verify_state.err.store_required": "Berikan --db (SQLite) atau --pg-dsn (PostgreSQL).",
+  "cli.admin.verify_state.err.valkey_required": "--valkey-addrs wajib diisi saat membangun ulang status Valkey.",
+  "cli.admin.verify_state.err.tampered": "Verifikasi rantai hash audit gagal: manipulasi terdeteksi.",
+  "cli.admin.verify_state.err.failed": "Verifikasi status operasional gagal",
+  "cli.admin.verify_state.output": "Pemeriksaan status {{status}} (mesin={{engine}} audit={{events}} yatim={{orphans}} valkey_pulih={{restored}})"
 }

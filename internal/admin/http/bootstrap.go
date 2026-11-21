@@ -147,8 +147,8 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		err := s.db.QueryRowContext(r.Context(), `
-			SELECT id FROM provider_adapters WHERE id = ? OR adapter_slug = ? LIMIT 1`,
+		err := s.db.QueryRowContext(r.Context(), s.rebind(`
+			SELECT id FROM provider_adapters WHERE id = ? OR adapter_slug = ? LIMIT 1`),
 			strings.TrimSpace(ic.AdapterID), strings.TrimSpace(ic.AdapterID),
 		).Scan(&resolvedAdapterID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -337,26 +337,29 @@ func (s *Server) provisionInitialBootstrapTopologyTx(
 	if credIDPtr == nil {
 		authMode = "NONE"
 	}
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return "", "", "", nil, nil, err
+	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, s.rebind(`
 		INSERT INTO provider_connections (
 			id, org_id, owner_project_id, adapter_id, credential_id, name,
 			endpoint_base_url, allow_private_ip, allowed_cidrs_json, data_region,
 			billing_mode, auth_mode, state, shared_project_ids_json, config_json,
 			version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', '[]', '{}', 1, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', '[]', '{}', 1, ?, ?)`),
 		connID, orgID, projectID, adapterID, nullStrPtr(credIDPtr), strings.TrimSpace(ic.Name),
-		strings.TrimSpace(ic.EndpointURL), boolToInt(ic.AllowPrivateIP), cidrsJSON, ic.DataRegion,
+		strings.TrimSpace(ic.EndpointURL), port.BoolVal(s.dialect, ic.AllowPrivateIP), cidrsJSON, ic.DataRegion,
 		ic.BillingMode, authMode, now, now,
 	); err != nil {
 		return "", "", "", nil, nil, err
 	}
 
 	if credIDPtr != nil {
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, s.rebind(`
 			INSERT INTO connection_secret_bindings (
 				org_id, connection_id, slot_name, credential_id, inject_mode, created_at_ms
-			) VALUES (?, ?, 'api_key', ?, 'HOST_BLIND_INJECT', ?)`,
+			) VALUES (?, ?, 'api_key', ?, 'HOST_BLIND_INJECT', ?)`),
 			orgID, connID, *credIDPtr, now,
 		); err != nil {
 			return "", "", "", nil, nil, err
@@ -365,11 +368,11 @@ func (s *Server) provisionInitialBootstrapTopologyTx(
 
 	modelSlug := strings.TrimSpace(ic.ModelID)
 	var logicalModelID string
-	err = tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, s.rebind(`
 		SELECT id FROM logical_models
 		WHERE canonical_slug = ? AND (org_id = ? OR org_id IS NULL)
 		ORDER BY (org_id IS NOT NULL) DESC
-		LIMIT 1`,
+		LIMIT 1`),
 		modelSlug, orgID,
 	).Scan(&logicalModelID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -377,11 +380,11 @@ func (s *Server) provisionInitialBootstrapTopologyTx(
 		if err != nil {
 			return "", "", "", nil, nil, err
 		}
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, s.rebind(`
 			INSERT INTO logical_models (
 				id, org_id, canonical_slug, modality_kind, context_window, max_output_tokens,
 				base_capabilities_json, version, created_at_ms, updated_at_ms
-			) VALUES (?, ?, ?, 'CHAT', 128000, 8192, '{"streaming":"VERIFIED"}', 1, ?, ?)`,
+			) VALUES (?, ?, ?, 'CHAT', 128000, 8192, '{"streaming":"VERIFIED"}', 1, ?, ?)`),
 			logicalModelID, orgID, modelSlug, now, now,
 		); err != nil {
 			return "", "", "", nil, nil, err
@@ -391,43 +394,39 @@ func (s *Server) provisionInitialBootstrapTopologyTx(
 	}
 
 	pricingJSON := `{"input_token_nano_usd":0,"output_token_nano_usd":0}`
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, s.rebind(`
 		INSERT INTO model_deployments (
 			id, org_id, connection_id, logical_model_id, upstream_model_name,
 			native_dialect, capability_overrides_json, assurance_level,
 			pricing_nano_usd_json, state, cooldown_until_ms,
 			connect_timeout_ms, first_byte_timeout_ms, idle_chunk_timeout_ms,
 			version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, NULL, '{}', 'DECLARED', ?, 'ACTIVE_HEALTHY', NULL, 5000, 30000, 15000, 1, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, NULL, '{}', 'DECLARED', ?, 'ACTIVE_HEALTHY', NULL, 5000, 30000, 15000, 1, ?, ?)`),
 		deployID, orgID, connID, logicalModelID, modelSlug, pricingJSON, now, now,
 	); err != nil {
 		return "", "", "", nil, nil, err
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, s.rebind(`
 		INSERT INTO route_policies (
 			id, org_id, project_id, env_id, route_slug, strategy,
 			max_failover_hops, required_region, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, 'default', 'PRIORITY_FAILOVER', 3, ?, 1, ?, ?)`,
+		) VALUES (?, ?, ?, ?, 'default', 'PRIORITY_FAILOVER', 3, ?, 1, ?, ?)`),
 		routeID, orgID, projectID, envID, ic.DataRegion, now, now,
 	); err != nil {
 		return "", "", "", nil, nil, err
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, s.rebind(`
 		INSERT INTO route_targets (
 			org_id, route_id, deployment_id, priority_order, weight
-		) VALUES (?, ?, ?, 1, 100)`,
+		) VALUES (?, ?, ?, 1, 100)`),
 		orgID, routeID, deployID,
 	); err != nil {
 		return "", "", "", nil, nil, err
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'route_policy', ?, 'UPSERT', 0, ?)`,
-		orgID, routeID, now,
-	); err != nil {
+	if _, err := s.appendChangelogTx(ctx, tx, orgID, "route_policy", routeID, port.MutationUpsert, false, now); err != nil {
 		return "", "", "", nil, nil, err
 	}
 

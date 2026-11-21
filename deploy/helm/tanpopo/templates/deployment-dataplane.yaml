@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tanpopo.fullname" . }}-dataplane
+  labels:
+    {{- include "tanpopo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: data-plane
+spec:
+  {{- if not .Values.dataPlane.autoscaling.enabled }}
+  replicas: {{ .Values.dataPlane.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "tanpopo.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: data-plane
+  template:
+    metadata:
+      labels:
+        {{- include "tanpopo.labels" . | nindent 8 }}
+        app.kubernetes.io/component: data-plane
+    spec:
+      serviceAccountName: {{ include "tanpopo.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.dataPlane.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: tanpopo-dataplane
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - serve
+            - --role=data-plane
+            - --listen=0.0.0.0:{{ .Values.dataPlane.port }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.dataPlane.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "tanpopo.fullname" . }}-config
+          env:
+            - name: TANPOPO_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: TANPOPO_PG_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.secretName }}
+                  key: {{ .Values.postgres.dsnKey }}
+            - name: TANPOPO_VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.valkey.secretName }}
+                  key: {{ .Values.valkey.passwordKey }}
+                  optional: true
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - sleep {{ .Values.dataPlane.preStopSleepSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 2
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /var/lib/tanpopo
+            - name: master-key
+              mountPath: /var/run/tanpopo/keys
+              readOnly: true
+          resources:
+            {{- toYaml .Values.dataPlane.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+        - name: master-key
+          secret:
+            secretName: {{ .Values.masterKey.secretName }}
+            defaultMode: 0400

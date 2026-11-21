@@ -44,18 +44,27 @@ func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Reques
 	if !ok || !s.requireInstanceOperator(w, r, sc, rbac.ActionOpsRead) {
 		return
 	}
-	reporter, ok := s.storage.(sqliteWALReporter)
-	if !ok {
-		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "WAL status is unavailable for this storage backend", true, nil)
-		return
-	}
-	walBytes, err := reporter.WALBytes()
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "failed reading SQLite WAL status", true, nil)
-		return
+	storageEngine := "sqlite_wal"
+	var walBytes int64
+	if s.dialect == port.DialectPostgres {
+		storageEngine = "postgresql"
+	} else {
+		reporter, ok := s.storage.(sqliteWALReporter)
+		if !ok {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "WAL status is unavailable for this storage backend", true, nil)
+			return
+		}
+		var werr error
+		walBytes, werr = reporter.WALBytes()
+		if werr != nil {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "failed reading SQLite WAL status", true, nil)
+			return
+		}
 	}
 	var epoch int64
-	if err := s.db.QueryRowContext(r.Context(), `SELECT COALESCE(MAX(config_epoch), 0) FROM config_changelog`).Scan(&epoch); err != nil {
+	if err := s.withOperatorReadTx(r.Context(), func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), `SELECT COALESCE(MAX(config_epoch), 0) FROM config_changelog`).Scan(&epoch)
+	}); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading current configuration epoch", true, nil)
 		return
 	}
@@ -72,12 +81,16 @@ func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	backupSupported, backupReason := backupAvailability()
+	nodeID := "standalone"
+	if s.dialect == port.DialectPostgres {
+		nodeID = "primary"
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"current_epoch":             epoch,
-		"storage_engine":            "sqlite_wal",
+		"storage_engine":            storageEngine,
 		"backup_supported":          backupSupported,
 		"backup_unavailable_reason": backupReason,
-		"nodes":                     []map[string]any{{"id": "standalone", "config_epoch": epoch, "health": health, "wal_bytes": walBytes}},
+		"nodes":                     []map[string]any{{"id": nodeID, "config_epoch": epoch, "health": health, "wal_bytes": walBytes}},
 	})
 }
 

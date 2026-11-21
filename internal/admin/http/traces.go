@@ -150,28 +150,36 @@ func (s *Server) handleListTraces(w http.ResponseWriter, r *http.Request) {
 		LIMIT ?`
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), query, args...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing traces", true, nil)
-		return
-	}
-	defer rows.Close()
-
 	type trRow struct {
 		dto       traceSummaryDTO
 		createdMs int64
 	}
 	var items []trRow
-	for rows.Next() {
-		dto, createdMs, scanErr := scanTraceSummaryRow(rows)
-		if scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning trace", true, nil)
-			return
+	var scanErr error
+	if err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		rows, qerr := q.QueryContext(r.Context(), s.rebind(query), args...)
+		if qerr != nil {
+			return qerr
 		}
-		items = append(items, trRow{dto: dto, createdMs: createdMs})
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			dto, createdMs, serr := scanTraceSummaryRow(rows)
+			if serr != nil {
+				scanErr = serr
+				return nil
+			}
+			items = append(items, trRow{dto: dto, createdMs: createdMs})
+		}
+		if ierr := rows.Err(); ierr != nil {
+			return ierr
+		}
+		return rows.Close()
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing traces", true, nil)
+		return
 	}
-	if err := rows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating traces", true, nil)
+	if scanErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning trace", true, nil)
 		return
 	}
 
@@ -260,12 +268,14 @@ func (s *Server) handleGetTraceDebugPayload(w http.ResponseWriter, r *http.Reque
 		nonce, ciphertext []byte
 		expiresAtMs       int64
 	)
-	err := s.db.QueryRowContext(r.Context(), `
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
 		SELECT org_id, project_id, nonce, encrypted_payload_aead, expires_at_ms
 		FROM debug_payload_blobs
 		WHERE org_id = ? AND request_id = ?
-		ORDER BY created_at_ms DESC LIMIT 1`, orgID, reqID,
-	).Scan(&blobOrgID, &projID, &nonce, &ciphertext, &expiresAtMs)
+		ORDER BY created_at_ms DESC LIMIT 1`), orgID, reqID,
+		).Scan(&blobOrgID, &projID, &nonce, &ciphertext, &expiresAtMs)
+	})
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && blobOrgID != orgID) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "debug payload not found", false, nil)
 		return
@@ -338,7 +348,13 @@ func (s *Server) handleGetTraceDebugPayload(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) loadTraceByRequestID(ctx context.Context, orgID, reqID string) (traceSummaryDTO, string, error) {
 	nowMs := s.nowMs()
-	rows, err := s.db.QueryContext(ctx, `
+	var (
+		dto       traceSummaryDTO
+		createdMs int64
+		projID    string
+	)
+	err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		rows, qerr := q.QueryContext(ctx, s.rebind(`
 		SELECT t.request_id, t.created_at_ms, t.project_id, t.env_id, t.virtual_key_id,
 		       t.entry_point, t.route_slug, t.selected_deployment_id, t.http_status,
 		       t.canonical_error_code, t.ttft_ms, t.total_duration_ms, t.waterfall_stages_json,
@@ -349,29 +365,33 @@ func (s *Server) loadTraceByRequestID(ctx context.Context, orgID, reqID string) 
 		FROM request_traces_meta t
 		LEFT JOIN provider_connections pc ON pc.org_id = t.org_id AND pc.id = t.connection_id
 		WHERE t.org_id = ? AND t.request_id = ?
-		ORDER BY t.created_at_ms DESC LIMIT 1`, nowMs, orgID, reqID,
-	)
-	if err != nil {
-		return traceSummaryDTO{}, "", err
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		if rerr := rows.Err(); rerr != nil {
-			return traceSummaryDTO{}, "", rerr
+		ORDER BY t.created_at_ms DESC LIMIT 1`), nowMs, orgID, reqID,
+		)
+		if qerr != nil {
+			return qerr
 		}
-		return traceSummaryDTO{}, "", port.ErrNotFound
-	}
-	var (
-		dto       traceSummaryDTO
-		createdMs int64
-		projID    string
-	)
-	dto, createdMs, projID, err = scanTraceSummaryRowWithProject(rows)
-	_ = createdMs
+		defer func() { _ = rows.Close() }()
+		if !rows.Next() {
+			if rerr := rows.Err(); rerr != nil {
+				return rerr
+			}
+			return port.ErrNotFound
+		}
+		var serr error
+		dto, createdMs, projID, serr = scanTraceSummaryRowWithProject(rows)
+		_ = createdMs
+		if serr != nil {
+			return serr
+		}
+		if ierr := rows.Err(); ierr != nil {
+			return ierr
+		}
+		return rows.Close()
+	})
 	if err != nil {
 		return traceSummaryDTO{}, "", err
 	}
-	return dto, projID, rows.Err()
+	return dto, projID, nil
 }
 
 func scanTraceSummaryRow(rows *sql.Rows) (traceSummaryDTO, int64, error) {
@@ -381,17 +401,18 @@ func scanTraceSummaryRow(rows *sql.Rows) (traceSummaryDTO, int64, error) {
 
 func scanTraceSummaryRowWithProject(rows *sql.Rows) (traceSummaryDTO, int64, string, error) {
 	var (
-		reqID, projID, envID, entryPoint, stagesJSON        string
-		vkID, routeSlug, depID, errCode, dataReg, accuracy  sql.NullString
-		ttftMs                                              sql.NullInt64
-		createdMs, totalDurMs, costMicros                   int64
-		httpStatus, hasBlobInt                              int
+		reqID, projID, envID, entryPoint, stagesJSON       string
+		vkID, routeSlug, depID, errCode, dataReg, accuracy sql.NullString
+		ttftMs                                             sql.NullInt64
+		createdMs, totalDurMs, costMicros                  int64
+		httpStatus                                         int
+		hasBlob                                            port.FlexBool
 	)
 	if err := rows.Scan(
 		&reqID, &createdMs, &projID, &envID, &vkID,
 		&entryPoint, &routeSlug, &depID, &httpStatus,
 		&errCode, &ttftMs, &totalDurMs, &stagesJSON,
-		&dataReg, &accuracy, &costMicros, &hasBlobInt,
+		&dataReg, &accuracy, &costMicros, &hasBlob,
 	); err != nil {
 		return traceSummaryDTO{}, 0, "", err
 	}
@@ -438,7 +459,7 @@ func scanTraceSummaryRowWithProject(rows *sql.Rows) (traceSummaryDTO, int64, str
 		TotalCostMicros: costMicros,
 		TTFTMs:          ttftPtr,
 		DurationMs:      float64(totalDurMs),
-		HasDebugPayload: hasBlobInt == 1,
+		HasDebugPayload: bool(hasBlob),
 		WaterfallStages: stages,
 		CreatedAt:       formatTimeRFC3339Ms(createdMs),
 	}, createdMs, projID, nil

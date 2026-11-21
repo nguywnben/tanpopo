@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	mcphub "github.com/nguywnben/tanpopo/internal/ingress/mcp/hub"
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/schema_pin"
@@ -26,6 +27,17 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
+
+func isMCPUniqueErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "unique")
+}
 
 type mcpServerDTO struct {
 	ID           string `json:"id"`
@@ -65,7 +77,7 @@ func (s *Server) handleListMCPServers(w http.ResponseWriter, r *http.Request) {
 	}
 	projectIDs := actorProjectIDs(sc.Actor, orgID)
 	orgWide := actorHasOrgScopeBinding(sc.Actor, orgID)
-	q := `SELECT s.id,s.project_id,s.server_slug,s.display_name,s.transport_kind,s.endpoint_url,s.allow_private_ip,CASE WHEN EXISTS(SELECT 1 FROM mcp_tools d WHERE d.org_id=s.org_id AND d.mcp_server_id=s.id AND d.schema_drift_locked=1) THEN 'SCHEMA_DRIFT_LOCKED' ELSE s.status END,s.version,(SELECT COUNT(*) FROM mcp_tools t WHERE t.org_id=s.org_id AND t.mcp_server_id=s.id) FROM mcp_servers s WHERE s.org_id=?`
+	q := `SELECT s.id,s.project_id,s.server_slug,s.display_name,s.transport_kind,s.endpoint_url,s.allow_private_ip,CASE WHEN EXISTS(SELECT 1 FROM mcp_tools d WHERE d.org_id=s.org_id AND d.mcp_server_id=s.id AND d.schema_drift_locked=` + port.BoolExpr(s.dialect, true) + `) THEN 'SCHEMA_DRIFT_LOCKED' ELSE s.status END,s.version,(SELECT COUNT(*) FROM mcp_tools t WHERE t.org_id=s.org_id AND t.mcp_server_id=s.id) FROM mcp_servers s WHERE s.org_id=?`
 	args := []any{orgID}
 	if !orgWide {
 		if len(projectIDs) == 0 {
@@ -78,29 +90,36 @@ func (s *Server) handleListMCPServers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	q += ` ORDER BY s.server_slug,s.id`
-	rows, err := s.db.QueryContext(r.Context(), q, args...)
-	if err != nil {
-		mcpInternal(w, r, "failed listing MCP servers")
+	items := []mcpServerDTO{}
+	scanFailed := false
+	err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		rows, err := dbq.QueryContext(r.Context(), s.rebind(q), args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var d mcpServerDTO
+			var priv port.FlexBool
+			if err := rows.Scan(&d.ID, &d.ProjectID, &d.Slug, &d.Name, &d.Transport, &d.EndpointURL, &priv, &d.State, &d.Version, &d.ToolCount); err != nil {
+				scanFailed = true
+				return err
+			}
+			d.Transport = "streamable_http"
+			d.AllowPrivate = bool(priv)
+			if d.State == "ACTIVE" {
+				d.State = "ACTIVE"
+			}
+			items = append(items, d)
+		}
+		return rows.Err()
+	})
+	if scanFailed {
+		mcpInternal(w, r, "failed reading MCP servers")
 		return
 	}
-	defer rows.Close()
-	items := []mcpServerDTO{}
-	for rows.Next() {
-		var d mcpServerDTO
-		var priv int
-		if err := rows.Scan(&d.ID, &d.ProjectID, &d.Slug, &d.Name, &d.Transport, &d.EndpointURL, &priv, &d.State, &d.Version, &d.ToolCount); err != nil {
-			mcpInternal(w, r, "failed reading MCP servers")
-			return
-		}
-		d.Transport = "streamable_http"
-		d.AllowPrivate = priv != 0
-		if d.State == "ACTIVE" {
-			d.State = "ACTIVE"
-		}
-		items = append(items, d)
-	}
-	if rows.Err() != nil {
-		mcpInternal(w, r, "failed reading MCP servers")
+	if err != nil {
+		mcpInternal(w, r, "failed listing MCP servers")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": items, "has_more": false, "next_cursor": nil})
@@ -126,7 +145,9 @@ func (s *Server) handleRegisterMCPServer(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var exists int
-	if err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id=? AND id=?`, orgID, req.ProjectID).Scan(&exists); err != nil {
+	if err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT 1 FROM projects WHERE org_id=? AND id=?`), orgID, req.ProjectID).Scan(&exists)
+	}); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "project not found", false, nil)
 		} else {
@@ -169,7 +190,9 @@ func (s *Server) handleRegisterMCPServer(w http.ResponseWriter, r *http.Request)
 		credential = strings.TrimSpace(*req.CredentialID)
 		if credential != "" {
 			var found int
-			err = s.db.QueryRowContext(r.Context(), `SELECT 1 FROM secret_credentials WHERE org_id=? AND id=? AND owner_project_id=?`, orgID, credential, req.ProjectID).Scan(&found)
+			err = s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+				return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT 1 FROM secret_credentials WHERE org_id=? AND id=? AND owner_project_id=?`), orgID, credential, req.ProjectID).Scan(&found)
+			})
 			if err != nil {
 				writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "credential not found", false, nil)
 				return
@@ -189,9 +212,13 @@ func (s *Server) handleRegisterMCPServer(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defer tx.Rollback()
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO mcp_servers(id,org_id,project_id,server_slug,display_name,transport_kind,endpoint_url,allow_private_ip,allowed_cidrs_json,credential_id,pinning_mode,status,version,created_at_ms,updated_at_ms) VALUES(?,?,?,?,?,?,?,?,?,?,'STRICT_LOCK','ACTIVE',1,?,?)`, id, orgID, req.ProjectID, req.Slug, req.Name, transport, parsed.String(), req.AllowPrivate, string(cidrs), nullableString(credential), now, now)
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		mcpInternal(w, r, "failed setting organization scope")
+		return
+	}
+	_, err = tx.ExecContext(r.Context(), s.rebind(`INSERT INTO mcp_servers(id,org_id,project_id,server_slug,display_name,transport_kind,endpoint_url,allow_private_ip,allowed_cidrs_json,credential_id,pinning_mode,status,version,created_at_ms,updated_at_ms) VALUES(?,?,?,?,?,?,?,?,?,?,'STRICT_LOCK','ACTIVE',1,?,?)`), id, orgID, req.ProjectID, req.Slug, req.Name, transport, parsed.String(), port.BoolVal(s.dialect, req.AllowPrivate), string(cidrs), nullableString(credential), now, now)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		if isMCPUniqueErr(err) {
 			writeErrorEnvelope(w, r, 409, "resource_conflict", "conflict_error", "MCP server slug already exists in project", false, nil)
 		} else {
 			mcpInternal(w, r, "failed registering MCP server")
@@ -225,7 +252,11 @@ func (s *Server) handleSyncMCPTools(w http.ResponseWriter, r *http.Request) {
 	}
 	serverID := r.PathValue("serverId")
 	var srv syncServer
-	err := s.db.QueryRowContext(r.Context(), `SELECT id,org_id,project_id,server_slug,transport_kind,endpoint_url,allow_private_ip,allowed_cidrs_json,COALESCE(credential_id,'') FROM mcp_servers WHERE org_id=? AND id=?`, orgID, serverID).Scan(&srv.ID, &srv.OrgID, &srv.ProjectID, &srv.Slug, &srv.Transport, &srv.Endpoint, &srv.Private, &srv.CIDRs, &srv.Credential)
+	var priv port.FlexBool
+	err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT id,org_id,project_id,server_slug,transport_kind,endpoint_url,allow_private_ip,allowed_cidrs_json,COALESCE(credential_id,'') FROM mcp_servers WHERE org_id=? AND id=?`), orgID, serverID).Scan(&srv.ID, &srv.OrgID, &srv.ProjectID, &srv.Slug, &srv.Transport, &srv.Endpoint, &priv, &srv.CIDRs, &srv.Credential)
+	})
+	srv.Private = bool(priv)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "MCP server not found", false, nil)
 		return
@@ -295,36 +326,41 @@ func (s *Server) handleSyncMCPTools(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var id, approved, oldObserved string
-		var locked int
+		var locked port.FlexBool
 		var version int64
 		tx, txErr := s.db.BeginTx(r.Context(), nil)
 		if txErr != nil {
 			mcpInternal(w, r, "failed starting MCP tool sync transaction")
 			return
 		}
-		err = tx.QueryRowContext(r.Context(), `SELECT id,approved_schema_sha256,observed_schema_sha256,schema_drift_locked,version FROM mcp_tools WHERE org_id=? AND mcp_server_id=? AND tool_name=?`, orgID, serverID, tool.Name).Scan(&id, &approved, &oldObserved, &locked, &version)
+		if rlsErr := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); rlsErr != nil {
+			_ = tx.Rollback()
+			mcpInternal(w, r, "failed setting organization scope")
+			return
+		}
+		err = tx.QueryRowContext(r.Context(), s.rebind(`SELECT id,approved_schema_sha256,observed_schema_sha256,schema_drift_locked,version FROM mcp_tools WHERE org_id=? AND mcp_server_id=? AND tool_name=?`), orgID, serverID, tool.Name).Scan(&id, &approved, &oldObserved, &locked, &version)
 		if errors.Is(err, sql.ErrNoRows) {
 			id, err = idgen.New(idgen.PrefixMCP)
 			if err == nil {
-				_, err = tx.ExecContext(r.Context(), `INSERT INTO mcp_tools(id,org_id,mcp_server_id,tool_name,side_effect_class,approved_schema_sha256,observed_schema_sha256,schema_drift_locked,tool_schema_json,version,created_at_ms,updated_at_ms) VALUES(?,?,?,?, 'mutating',?,?,1,?,1,?,?)`, id, orgID, serverID, tool.Name, strings.Repeat("0", 64), hash, string(storedToolSchema), s.nowMs(), s.nowMs())
+				_, err = tx.ExecContext(r.Context(), s.rebind(`INSERT INTO mcp_tools(id,org_id,mcp_server_id,tool_name,side_effect_class,approved_schema_sha256,observed_schema_sha256,schema_drift_locked,tool_schema_json,version,created_at_ms,updated_at_ms) VALUES(?,?,?,?, 'mutating',?,?,`+port.BoolExpr(s.dialect, true)+`,?,1,?,?)`), id, orgID, serverID, tool.Name, strings.Repeat("0", 64), hash, string(storedToolSchema), s.nowMs(), s.nowMs())
 			}
 			approved = strings.Repeat("0", 64)
-			locked = 1
+			locked = true
 			version = 1
 			if err == nil {
 				err = s.appendMCPAuditTx(r, tx, orgID, sc.Actor.PrincipalID, "mcp.tool_discovered", "mcp_tool", id, map[string]any{"server_id": serverID, "tool_name": tool.Name, "observed_schema_hash": hash, "approval_required": true})
 			}
 		} else if err == nil {
 			if approved != hash && oldObserved != hash {
-				locked = 1
+				locked = true
 				drifted++
-				_, err = tx.ExecContext(r.Context(), `UPDATE mcp_tools SET observed_schema_sha256=?,schema_drift_locked=1,version=version+1,tool_schema_json=?,updated_at_ms=? WHERE org_id=? AND id=?`, hash, string(storedToolSchema), s.nowMs(), orgID, id)
+				_, err = tx.ExecContext(r.Context(), s.rebind(`UPDATE mcp_tools SET observed_schema_sha256=?,schema_drift_locked=`+port.BoolExpr(s.dialect, true)+`,version=version+1,tool_schema_json=?,updated_at_ms=? WHERE org_id=? AND id=?`), hash, string(storedToolSchema), s.nowMs(), orgID, id)
 				version++
 				if err == nil {
 					err = s.appendMCPAuditTx(r, tx, orgID, sc.Actor.PrincipalID, "mcp.tool_schema_drift_detected", "mcp_tool", id, map[string]any{"server_id": serverID, "tool_name": tool.Name, "approved_schema_hash": approved, "observed_schema_hash": hash})
 				}
 			} else if approved == hash && oldObserved != hash {
-				_, err = tx.ExecContext(r.Context(), `UPDATE mcp_tools SET observed_schema_sha256=?,tool_schema_json=?,updated_at_ms=? WHERE org_id=? AND id=?`, hash, string(storedToolSchema), s.nowMs(), orgID, id)
+				_, err = tx.ExecContext(r.Context(), s.rebind(`UPDATE mcp_tools SET observed_schema_sha256=?,tool_schema_json=?,updated_at_ms=? WHERE org_id=? AND id=?`), hash, string(storedToolSchema), s.nowMs(), orgID, id)
 			}
 		}
 		if err != nil {
@@ -337,9 +373,9 @@ func (s *Server) handleSyncMCPTools(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if approved != hash {
-			locked = 1
+			locked = true
 		}
-		out = append(out, synced{id, tool.Name, hash, locked != 0, version})
+		out = append(out, synced{id, tool.Name, hash, bool(locked), version})
 	}
 	writeJSON(w, 200, map[string]any{"synced_count": len(out), "drifted_count": drifted, "tools": out})
 }
@@ -350,9 +386,12 @@ func (s *Server) lockInvalidMCPToolSchema(r *http.Request, orgID, serverID, tool
 		return err
 	}
 	defer tx.Rollback()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		return err
+	}
 	var id, observed string
 	newlyDiscovered := false
-	err = tx.QueryRowContext(r.Context(), `SELECT id,observed_schema_sha256 FROM mcp_tools WHERE org_id=? AND mcp_server_id=? AND tool_name=?`, orgID, serverID, toolName).Scan(&id, &observed)
+	err = tx.QueryRowContext(r.Context(), s.rebind(`SELECT id,observed_schema_sha256 FROM mcp_tools WHERE org_id=? AND mcp_server_id=? AND tool_name=?`), orgID, serverID, toolName).Scan(&id, &observed)
 	if errors.Is(err, sql.ErrNoRows) {
 		id, err = idgen.New(idgen.PrefixMCP)
 		if err != nil {
@@ -364,7 +403,7 @@ func (s *Server) lockInvalidMCPToolSchema(r *http.Request, orgID, serverID, tool
 			return marshalErr
 		}
 		stored := string(storedJSON)
-		_, err = tx.ExecContext(r.Context(), `INSERT INTO mcp_tools(id,org_id,mcp_server_id,tool_name,side_effect_class,approved_schema_sha256,observed_schema_sha256,schema_drift_locked,tool_schema_json,version,created_at_ms,updated_at_ms) VALUES(?,?,?,?, 'mutating',?,?,1,?,1,?,?)`, id, orgID, serverID, toolName, sentinel, sentinel, stored, s.nowMs(), s.nowMs())
+		_, err = tx.ExecContext(r.Context(), s.rebind(`INSERT INTO mcp_tools(id,org_id,mcp_server_id,tool_name,side_effect_class,approved_schema_sha256,observed_schema_sha256,schema_drift_locked,tool_schema_json,version,created_at_ms,updated_at_ms) VALUES(?,?,?,?, 'mutating',?,?,`+port.BoolExpr(s.dialect, true)+`,?,1,?,?)`), id, orgID, serverID, toolName, sentinel, sentinel, stored, s.nowMs(), s.nowMs())
 		if err != nil {
 			return err
 		}
@@ -378,7 +417,7 @@ func (s *Server) lockInvalidMCPToolSchema(r *http.Request, orgID, serverID, tool
 		if marshalErr != nil {
 			return marshalErr
 		}
-		if _, err := tx.ExecContext(r.Context(), `UPDATE mcp_tools SET schema_drift_locked=1,tool_schema_json=?,version=version+1,updated_at_ms=? WHERE org_id=? AND id=?`, string(storedJSON), s.nowMs(), orgID, id); err != nil {
+		if _, err := tx.ExecContext(r.Context(), s.rebind(`UPDATE mcp_tools SET schema_drift_locked=`+port.BoolExpr(s.dialect, true)+`,tool_schema_json=?,version=version+1,updated_at_ms=? WHERE org_id=? AND id=?`), string(storedJSON), s.nowMs(), orgID, id); err != nil {
 			return err
 		}
 	}
@@ -400,7 +439,9 @@ func (s *Server) handleApproveMCPSchema(w http.ResponseWriter, r *http.Request) 
 	}
 	toolID := r.PathValue("toolId")
 	var projectID, serverID, toolName string
-	err := s.db.QueryRowContext(r.Context(), `SELECT srv.project_id,t.mcp_server_id,t.tool_name FROM mcp_tools t JOIN mcp_servers srv ON srv.org_id=t.org_id AND srv.id=t.mcp_server_id WHERE t.org_id=? AND t.id=?`, orgID, toolID).Scan(&projectID, &serverID, &toolName)
+	err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT srv.project_id,t.mcp_server_id,t.tool_name FROM mcp_tools t JOIN mcp_servers srv ON srv.org_id=t.org_id AND srv.id=t.mcp_server_id WHERE t.org_id=? AND t.id=?`), orgID, toolID).Scan(&projectID, &serverID, &toolName)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "MCP tool not found", false, nil)
 		return
@@ -431,7 +472,9 @@ func (s *Server) handleApproveMCPSchema(w http.ResponseWriter, r *http.Request) 
 	var observed string
 	var schemaJSON string
 	var version int64
-	err = s.db.QueryRowContext(r.Context(), `SELECT observed_schema_sha256,version,tool_schema_json FROM mcp_tools WHERE org_id=? AND id=?`, orgID, toolID).Scan(&observed, &version, &schemaJSON)
+	err = s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT observed_schema_sha256,version,tool_schema_json FROM mcp_tools WHERE org_id=? AND id=?`), orgID, toolID).Scan(&observed, &version, &schemaJSON)
+	})
 	if err != nil {
 		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "MCP tool not found", false, nil)
 		return
@@ -466,7 +509,11 @@ func (s *Server) handleApproveMCPSchema(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(r.Context(), `UPDATE mcp_tools SET approved_schema_sha256=observed_schema_sha256,schema_drift_locked=0,side_effect_class=?,version=version+1,updated_at_ms=? WHERE org_id=? AND id=? AND version=? AND observed_schema_sha256=?`, req.Risk, s.nowMs(), orgID, toolID, expected, req.Expected)
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		mcpInternal(w, r, "failed setting organization scope")
+		return
+	}
+	res, err := tx.ExecContext(r.Context(), s.rebind(`UPDATE mcp_tools SET approved_schema_sha256=observed_schema_sha256,schema_drift_locked=`+port.BoolExpr(s.dialect, false)+`,side_effect_class=?,version=version+1,updated_at_ms=? WHERE org_id=? AND id=? AND version=? AND observed_schema_sha256=?`), req.Risk, s.nowMs(), orgID, toolID, expected, req.Expected)
 	if err != nil {
 		mcpInternal(w, r, "failed approving MCP schema")
 		return
@@ -508,7 +555,9 @@ func (s *Server) handleListMCPToolGrants(w http.ResponseWriter, r *http.Request)
 	}
 	toolID := strings.TrimSpace(r.PathValue("toolId"))
 	var projectID string
-	err := s.db.QueryRowContext(r.Context(), `SELECT s.project_id FROM mcp_tools t JOIN mcp_servers s ON s.org_id=t.org_id AND s.id=t.mcp_server_id WHERE t.org_id=? AND t.id=?`, orgID, toolID).Scan(&projectID)
+	err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT s.project_id FROM mcp_tools t JOIN mcp_servers s ON s.org_id=t.org_id AND s.id=t.mcp_server_id WHERE t.org_id=? AND t.id=?`), orgID, toolID).Scan(&projectID)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "MCP tool not found", false, nil)
 		return
@@ -520,23 +569,30 @@ func (s *Server) handleListMCPToolGrants(w http.ResponseWriter, r *http.Request)
 	if !s.authorize(w, r, sc, rbac.ActionMCPRead, rbac.TargetScope{OrgID: orgID, ProjectID: projectID}) {
 		return
 	}
-	rows, err := s.db.QueryContext(r.Context(), `SELECT id,project_id,env_id,virtual_key_id,version,created_at_ms FROM mcp_tool_grants WHERE org_id=? AND project_id=? AND mcp_tool_id=? ORDER BY env_id,virtual_key_id,id`, orgID, projectID, toolID)
-	if err != nil {
-		mcpInternal(w, r, "failed listing MCP tool grants")
+	grants := make([]mcpToolGrantDTO, 0)
+	scanFailed := false
+	err = s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		rows, err := dbq.QueryContext(r.Context(), s.rebind(`SELECT id,project_id,env_id,virtual_key_id,version,created_at_ms FROM mcp_tool_grants WHERE org_id=? AND project_id=? AND mcp_tool_id=? ORDER BY env_id,virtual_key_id,id`), orgID, projectID, toolID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var grant mcpToolGrantDTO
+			if err := rows.Scan(&grant.ID, &grant.ProjectID, &grant.EnvironmentID, &grant.VirtualKeyID, &grant.Version, &grant.CreatedAtMs); err != nil {
+				scanFailed = true
+				return err
+			}
+			grants = append(grants, grant)
+		}
+		return rows.Err()
+	})
+	if scanFailed {
+		mcpInternal(w, r, "failed reading MCP tool grants")
 		return
 	}
-	defer rows.Close()
-	grants := make([]mcpToolGrantDTO, 0)
-	for rows.Next() {
-		var grant mcpToolGrantDTO
-		if err := rows.Scan(&grant.ID, &grant.ProjectID, &grant.EnvironmentID, &grant.VirtualKeyID, &grant.Version, &grant.CreatedAtMs); err != nil {
-			mcpInternal(w, r, "failed reading MCP tool grants")
-			return
-		}
-		grants = append(grants, grant)
-	}
-	if err := rows.Err(); err != nil {
-		mcpInternal(w, r, "failed reading MCP tool grants")
+	if err != nil {
+		mcpInternal(w, r, "failed listing MCP tool grants")
 		return
 	}
 	writeJSON(w, 200, map[string]any{"data": grants})
@@ -553,7 +609,9 @@ func (s *Server) handleCreateMCPToolGrant(w http.ResponseWriter, r *http.Request
 	}
 	toolID := strings.TrimSpace(r.PathValue("toolId"))
 	var projectID, serverSlug, toolName string
-	err := s.db.QueryRowContext(r.Context(), `SELECT s.project_id,s.server_slug,t.tool_name FROM mcp_tools t JOIN mcp_servers s ON s.org_id=t.org_id AND s.id=t.mcp_server_id WHERE t.org_id=? AND t.id=?`, orgID, toolID).Scan(&projectID, &serverSlug, &toolName)
+	err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT s.project_id,s.server_slug,t.tool_name FROM mcp_tools t JOIN mcp_servers s ON s.org_id=t.org_id AND s.id=t.mcp_server_id WHERE t.org_id=? AND t.id=?`), orgID, toolID).Scan(&projectID, &serverSlug, &toolName)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "MCP tool not found", false, nil)
 		return
@@ -577,13 +635,17 @@ func (s *Server) handleCreateMCPToolGrant(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var exists int
-	if err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM environments WHERE org_id=? AND project_id=? AND id=?`, orgID, projectID, req.EnvironmentID).Scan(&exists); err != nil {
+	if err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT 1 FROM environments WHERE org_id=? AND project_id=? AND id=?`), orgID, projectID, req.EnvironmentID).Scan(&exists)
+	}); err != nil {
 		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "environment not found", false, nil)
 		return
 	}
 	var planes, allowedJSON, state string
 	var expires sql.NullInt64
-	err = s.db.QueryRowContext(r.Context(), `SELECT allowed_planes,allowed_mcp_tools_json,state,expires_at_ms FROM virtual_keys WHERE org_id=? AND project_id=? AND env_id=? AND id=?`, orgID, projectID, req.EnvironmentID, req.VirtualKeyID).Scan(&planes, &allowedJSON, &state, &expires)
+	err = s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT allowed_planes,allowed_mcp_tools_json,state,expires_at_ms FROM virtual_keys WHERE org_id=? AND project_id=? AND env_id=? AND id=?`), orgID, projectID, req.EnvironmentID, req.VirtualKeyID).Scan(&planes, &allowedJSON, &state, &expires)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
 		return
@@ -609,8 +671,12 @@ func (s *Server) handleCreateMCPToolGrant(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(r.Context(), `INSERT INTO mcp_tool_grants(id,org_id,project_id,env_id,virtual_key_id,mcp_tool_id,granted_by_principal_id,version,created_at_ms) VALUES(?,?,?,?,?,?,?,1,?)`, id, orgID, projectID, req.EnvironmentID, req.VirtualKeyID, toolID, sc.Actor.PrincipalID, now); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		mcpInternal(w, r, "failed setting organization scope")
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), s.rebind(`INSERT INTO mcp_tool_grants(id,org_id,project_id,env_id,virtual_key_id,mcp_tool_id,granted_by_principal_id,version,created_at_ms) VALUES(?,?,?,?,?,?,?,1,?)`), id, orgID, projectID, req.EnvironmentID, req.VirtualKeyID, toolID, sc.Actor.PrincipalID, now); err != nil {
+		if isMCPUniqueErr(err) {
 			writeErrorEnvelope(w, r, 409, "resource_conflict", "conflict_error", "MCP tool grant already exists", false, nil)
 		} else {
 			mcpInternal(w, r, "failed creating MCP tool grant")
@@ -640,7 +706,9 @@ func (s *Server) handleDeleteMCPToolGrant(w http.ResponseWriter, r *http.Request
 	}
 	grantID := strings.TrimSpace(r.PathValue("grantId"))
 	var projectID, toolID string
-	err := s.db.QueryRowContext(r.Context(), `SELECT project_id,mcp_tool_id FROM mcp_tool_grants WHERE org_id=? AND id=?`, orgID, grantID).Scan(&projectID, &toolID)
+	err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(r.Context(), s.rebind(`SELECT project_id,mcp_tool_id FROM mcp_tool_grants WHERE org_id=? AND id=?`), orgID, grantID).Scan(&projectID, &toolID)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "MCP tool grant not found", false, nil)
 		return
@@ -658,7 +726,11 @@ func (s *Server) handleDeleteMCPToolGrant(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(r.Context(), `DELETE FROM mcp_tool_grants WHERE org_id=? AND id=?`, orgID, grantID); err != nil {
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		mcpInternal(w, r, "failed setting organization scope")
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), s.rebind(`DELETE FROM mcp_tool_grants WHERE org_id=? AND id=?`), orgID, grantID); err != nil {
 		mcpInternal(w, r, "failed deleting MCP tool grant")
 		return
 	}

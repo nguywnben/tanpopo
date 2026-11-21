@@ -91,11 +91,11 @@ func (r *Repository) transitionConnectionStateDB(ctx context.Context, orgID, con
 
 	now := r.nowMs()
 	var prevState string
-	if err := r.withTx(ctx, func(tx *sql.Tx) error {
+	if err := r.withOrgTx(ctx, orgID, func(tx *sql.Tx) error {
 		var currentVer int64
-		err := tx.QueryRowContext(ctx, `
+		err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `
 			SELECT state, version FROM provider_connections
-			WHERE org_id = ? AND id = ?`, orgID, connectionID,
+			WHERE org_id = ? AND id = ?`), orgID, connectionID,
 		).Scan(&prevState, &currentVer)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
@@ -115,10 +115,10 @@ func (r *Repository) transitionConnectionStateDB(ctx context.Context, orgID, con
 			}
 		}
 
-		res, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `
 			UPDATE provider_connections
 			SET state = ?, version = version + 1, updated_at_ms = ?
-			WHERE org_id = ? AND id = ? AND version = ?`,
+			WHERE org_id = ? AND id = ? AND version = ?`),
 			targetState, now, orgID, connectionID, expectedVersion,
 		)
 		if err != nil {
@@ -141,7 +141,7 @@ func (r *Repository) transitionConnectionStateDB(ctx context.Context, orgID, con
 		case ConnStateSuspendedAdmin, ConnStateAuthExpired:
 			emergency = true
 		}
-		if err := appendChangelogTx(ctx, tx, &orgID, "provider_connection", connectionID, mutType, emergency, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, &orgID, "provider_connection", connectionID, mutType, emergency, now); err != nil {
 			return err
 		}
 		auditID, idErr := idgen.New(idgen.PrefixAudit)
@@ -211,7 +211,9 @@ func (r *Repository) ValidateConnection(
 		cur.CredentialID == nil && len(cur.SecretBindings) == 0 {
 		return nil, nil, fmt.Errorf("%w: auth_mode %s requires bound credential slot before validation", port.ErrInvalidInput, cur.AuthMode)
 	}
-	if aerr := r.ensureConnectionAuthorized(ctx, r.db, orgID, connectionID, ErrConnectionNotReady); aerr != nil {
+	if aerr := r.withOrgReadTx(ctx, orgID, func(q dbQuerier) error {
+		return r.ensureConnectionAuthorized(ctx, q, orgID, connectionID, ErrConnectionNotReady)
+	}); aerr != nil {
 		verdict := extport.ValidationVerdict{
 			Valid:            false,
 			FailureCode:      "authorization_revoked",

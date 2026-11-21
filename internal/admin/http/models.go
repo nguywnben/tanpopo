@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/provider/catalog"
@@ -168,37 +170,45 @@ func (s *Server) handleListAdminModels(w http.ResponseWriter, r *http.Request) {
 	q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing logical models", true, nil)
-		return
-	}
-	defer rows.Close()
-
 	type modelRow struct {
 		dto       logicalModelDTO
 		createdMs int64
 	}
 	var items []modelRow
-	for rows.Next() {
-		var (
-			id, slug, capsJSON string
-			ctxWin, maxOut     int64
-			createdMs          int64
-		)
-		if scanErr := rows.Scan(&id, &slug, &ctxWin, &maxOut, &capsJSON, &createdMs); scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning logical model", true, nil)
-			return
+	var scanErr error
+	if err := s.withOrgReadTx(r.Context(), orgID, func(qdb adminDBQuerier) error {
+		rows, qerr := qdb.QueryContext(r.Context(), s.rebind(q.String()), args...)
+		if qerr != nil {
+			return qerr
 		}
-		var capsMap map[string]string
-		if strings.TrimSpace(capsJSON) != "" {
-			_ = json.Unmarshal([]byte(capsJSON), &capsMap)
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var (
+				id, slug, capsJSON string
+				ctxWin, maxOut     int64
+				createdMs          int64
+			)
+			if serr := rows.Scan(&id, &slug, &ctxWin, &maxOut, &capsJSON, &createdMs); serr != nil {
+				scanErr = serr
+				return nil
+			}
+			var capsMap map[string]string
+			if strings.TrimSpace(capsJSON) != "" {
+				_ = json.Unmarshal([]byte(capsJSON), &capsMap)
+			}
+			dto := toLogicalModelDTO(id, slug, slug, ctxWin, maxOut, "", capsMap)
+			items = append(items, modelRow{dto: dto, createdMs: createdMs})
 		}
-		dto := toLogicalModelDTO(id, slug, slug, ctxWin, maxOut, "", capsMap)
-		items = append(items, modelRow{dto: dto, createdMs: createdMs})
+		if ierr := rows.Err(); ierr != nil {
+			return ierr
+		}
+		return rows.Close()
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing logical models", true, nil)
+		return
 	}
-	if err := rows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating logical models", true, nil)
+	if scanErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning logical model", true, nil)
 		return
 	}
 
@@ -310,15 +320,20 @@ func (s *Server) handleCreateAdminModel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping logical model tx", true, nil)
+		return
+	}
 
-	if _, err := tx.ExecContext(r.Context(), `
+	if _, err := tx.ExecContext(r.Context(), s.rebind(`
 		INSERT INTO logical_models (
 			id, org_id, canonical_slug, modality_kind, context_window,
 			max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
 		modelID, orgID, slug, modality, req.ContextWindow, req.MaxOutputTokens, string(capsJSON), now, now,
 	); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		var pgErr *pgconn.PgError
+		if (errors.As(err, &pgErr) && pgErr.Code == "23505") || strings.Contains(strings.ToLower(err.Error()), "unique") {
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "logical model slug already exists in organization", false, nil)
 			return
 		}
@@ -341,6 +356,12 @@ func (s *Server) handleCreateAdminModel(w http.ResponseWriter, r *http.Request) 
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "logical_model",
+		EntityID:     modelID,
+		MutationType: port.MutationUpsert,
+	})
 
 	w.Header().Set("ETag", FormatETag(1))
 	writeJSON(w, http.StatusCreated, toLogicalModelDTO(modelID, slug, displayName, req.ContextWindow, req.MaxOutputTokens, assurance, baseCaps))
@@ -440,12 +461,6 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		q.WriteString(` ORDER BY md.created_at_ms DESC, md.id DESC LIMIT ?`)
 		args = append(args, batchLimit)
 
-		rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-		if err != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing deployments", true, nil)
-			return
-		}
-
 		type rawDepRow struct {
 			id           string
 			modelID      string
@@ -462,19 +477,31 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 			createdMs    int64
 		}
 		rawRows := make([]rawDepRow, 0, batchLimit)
-		for rows.Next() {
-			var rrow rawDepRow
-			if scanErr := rows.Scan(&rrow.id, &rrow.modelID, &rrow.connID, &rrow.upstreamName, &rrow.pricingJSON, &rrow.state, &rrow.idleTO, &rrow.fbTO, &rrow.ver, &rrow.createdMs, &rrow.dataRegion, &rrow.ownerProj, &rrow.sharedJSON); scanErr != nil {
-				_ = rows.Close()
-				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning deployment", true, nil)
-				return
+		var scanErr error
+		if err := s.withOrgReadTx(r.Context(), orgID, func(qdb adminDBQuerier) error {
+			rows, qerr := qdb.QueryContext(r.Context(), s.rebind(q.String()), args...)
+			if qerr != nil {
+				return qerr
 			}
-			rawRows = append(rawRows, rrow)
+			defer func() { _ = rows.Close() }()
+			for rows.Next() {
+				var rrow rawDepRow
+				if serr := rows.Scan(&rrow.id, &rrow.modelID, &rrow.connID, &rrow.upstreamName, &rrow.pricingJSON, &rrow.state, &rrow.idleTO, &rrow.fbTO, &rrow.ver, &rrow.createdMs, &rrow.dataRegion, &rrow.ownerProj, &rrow.sharedJSON); serr != nil {
+					scanErr = serr
+					return nil
+				}
+				rawRows = append(rawRows, rrow)
+			}
+			if ierr := rows.Err(); ierr != nil {
+				return ierr
+			}
+			return rows.Close()
+		}); err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing deployments", true, nil)
+			return
 		}
-		iterErr := rows.Err()
-		_ = rows.Close()
-		if iterErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating deployments", true, nil)
+		if scanErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning deployment", true, nil)
 			return
 		}
 
@@ -616,11 +643,13 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 	var connRegion string
 	var connOwnerProj sql.NullString
 	var connSharedJSON string
-	err = s.db.QueryRowContext(r.Context(), `
+	err = s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
 		SELECT data_region, owner_project_id, shared_project_ids_json
 		FROM provider_connections
-		WHERE org_id = ? AND id = ?`, orgID, connID,
-	).Scan(&connRegion, &connOwnerProj, &connSharedJSON)
+		WHERE org_id = ? AND id = ?`), orgID, connID,
+		).Scan(&connRegion, &connOwnerProj, &connSharedJSON)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
 		return
@@ -644,7 +673,9 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var modelOrg sql.NullString
-	err = s.db.QueryRowContext(r.Context(), `SELECT org_id FROM logical_models WHERE id = ?`, modelID).Scan(&modelOrg)
+	err = s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`SELECT org_id FROM logical_models WHERE id = ?`), modelID).Scan(&modelOrg)
+	})
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && modelOrg.Valid && modelOrg.String != orgID) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "logical model not found", false, nil)
 		return
@@ -691,19 +722,24 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping deployment creation tx", true, nil)
+		return
+	}
 
-	if _, err := tx.ExecContext(r.Context(), `
+	if _, err := tx.ExecContext(r.Context(), s.rebind(`
 		INSERT INTO model_deployments (
 			id, org_id, connection_id, logical_model_id, upstream_model_name,
 			native_dialect, capability_overrides_json, assurance_level,
 			pricing_nano_usd_json, state, cooldown_until_ms,
 			connect_timeout_ms, first_byte_timeout_ms, idle_chunk_timeout_ms,
 			version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, NULL, '{}', ?, ?, ?, NULL, 5000, ?, ?, 1, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, NULL, '{}', ?, ?, ?, NULL, 5000, ?, ?, 1, ?, ?)`),
 		depID, orgID, connID, modelID, upstreamName, catalog.AssuranceDeclared,
 		string(pricingBytes), state, fbTO, idleTO, now, now,
 	); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		var pgErr *pgconn.PgError
+		if (errors.As(err, &pgErr) && pgErr.Code == "23505") || strings.Contains(strings.ToLower(err.Error()), "unique") {
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "model deployment already exists", false, nil)
 			return
 		}
@@ -728,6 +764,12 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "model_deployment",
+		EntityID:     depID,
+		MutationType: port.MutationUpsert,
+	})
 
 	w.Header().Set("ETag", FormatETag(1))
 	writeJSON(w, http.StatusCreated, modelDeploymentDTO{
@@ -839,12 +881,16 @@ func (s *Server) handleUpdateDeployment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping deployment update tx", true, nil)
+		return
+	}
 
-	res, err := tx.ExecContext(r.Context(), `
+	res, err := tx.ExecContext(r.Context(), s.rebind(`
 		UPDATE model_deployments
 		SET pricing_nano_usd_json = ?, state = ?, first_byte_timeout_ms = ?, idle_chunk_timeout_ms = ?,
 		    version = version + 1, updated_at_ms = ?
-		WHERE org_id = ? AND id = ? AND version = ?`,
+		WHERE org_id = ? AND id = ? AND version = ?`),
 		string(pricingBytes), nextState, nextFB, nextIdle, now, orgID, depID, expectedVer,
 	)
 	if err != nil {
@@ -881,6 +927,12 @@ func (s *Server) handleUpdateDeployment(w http.ResponseWriter, r *http.Request) 
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "model_deployment",
+		EntityID:     depID,
+		MutationType: port.MutationUpsert,
+	})
 
 	cur.State = nextState
 	cur.IdleChunkTimeoutMs = nextIdle
@@ -938,9 +990,13 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping deployment deletion tx", true, nil)
+		return
+	}
 
 	var refCount int
-	if err := tx.QueryRowContext(r.Context(), `SELECT COUNT(1) FROM route_targets WHERE org_id = ? AND deployment_id = ?`, orgID, depID).Scan(&refCount); err != nil {
+	if err := tx.QueryRowContext(r.Context(), s.rebind(`SELECT COUNT(1) FROM route_targets WHERE org_id = ? AND deployment_id = ?`), orgID, depID).Scan(&refCount); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking deployment references", true, nil)
 		return
 	}
@@ -949,7 +1005,7 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	res, err := tx.ExecContext(r.Context(), `DELETE FROM model_deployments WHERE org_id = ? AND id = ? AND version = ?`, orgID, depID, expectedVer)
+	res, err := tx.ExecContext(r.Context(), s.rebind(`DELETE FROM model_deployments WHERE org_id = ? AND id = ? AND version = ?`), orgID, depID, expectedVer)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusConflict, "deployment_referenced_by_routes", "conflict_error", "model deployment cannot be deleted while referenced", false, nil)
 		return
@@ -984,6 +1040,12 @@ func (s *Server) handleDeleteDeployment(w http.ResponseWriter, r *http.Request) 
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "model_deployment",
+		EntityID:     depID,
+		MutationType: port.MutationDelete,
+	})
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -1016,7 +1078,9 @@ func (s *Server) authorizeDeploymentScope(w http.ResponseWriter, r *http.Request
 
 func (s *Server) lookupEnvironmentProject(ctx context.Context, orgID, envID string) (string, bool, error) {
 	var projID string
-	err := s.db.QueryRowContext(ctx, `SELECT project_id FROM environments WHERE org_id = ? AND id = ?`, orgID, envID).Scan(&projID)
+	err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(ctx, s.rebind(`SELECT project_id FROM environments WHERE org_id = ? AND id = ?`), orgID, envID).Scan(&projID)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
@@ -1028,13 +1092,15 @@ func (s *Server) lookupEnvironmentProject(ctx context.Context, orgID, envID stri
 
 func (s *Server) resolveDeploymentEnvID(ctx context.Context, orgID, depID string) string {
 	var envID string
-	err := s.db.QueryRowContext(ctx, `
+	err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(ctx, s.rebind(`
 		SELECT rp.env_id
 		FROM route_targets rt
 		JOIN route_policies rp ON rp.org_id = rt.org_id AND rp.id = rt.route_id
 		WHERE rt.org_id = ? AND rt.deployment_id = ?
-		LIMIT 1`, orgID, depID,
-	).Scan(&envID)
+		LIMIT 1`), orgID, depID,
+		).Scan(&envID)
+	})
 	if err == nil && envID != "" {
 		return envID
 	}
@@ -1048,15 +1114,17 @@ func (s *Server) loadDeploymentDTO(ctx context.Context, orgID, depID string) (mo
 		ownerProj   sql.NullString
 		sharedJSON  string
 	)
-	err := s.db.QueryRowContext(ctx, `
+	err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(ctx, s.rebind(`
 		SELECT md.id, md.logical_model_id, md.connection_id, md.upstream_model_name,
 		       md.pricing_nano_usd_json, md.state, md.idle_chunk_timeout_ms,
 		       md.first_byte_timeout_ms, md.version,
 		       pc.data_region, pc.owner_project_id, pc.shared_project_ids_json
 		FROM model_deployments md
 		JOIN provider_connections pc ON pc.org_id = md.org_id AND pc.id = md.connection_id
-		WHERE md.org_id = ? AND md.id = ?`, orgID, depID,
-	).Scan(&dto.ID, &dto.LogicalModelID, &dto.ConnectionID, &dto.UpstreamModelName, &pricingJSON, &dto.State, &dto.IdleChunkTimeoutMs, &dto.FirstByteTimeoutMs, &dto.Version, &dto.DataRegion, &ownerProj, &sharedJSON)
+		WHERE md.org_id = ? AND md.id = ?`), orgID, depID,
+		).Scan(&dto.ID, &dto.LogicalModelID, &dto.ConnectionID, &dto.UpstreamModelName, &pricingJSON, &dto.State, &dto.IdleChunkTimeoutMs, &dto.FirstByteTimeoutMs, &dto.Version, &dto.DataRegion, &ownerProj, &sharedJSON)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return modelDeploymentDTO{}, ownerProj, "", port.ErrNotFound
 	}
@@ -1083,15 +1151,11 @@ func (s *Server) appendChangelogAndAuditTx(
 	reqID string,
 	nowMs int64,
 ) error {
-	var orgArg any
+	var orgStr string
 	if orgID != nil && *orgID != "" {
-		orgArg = *orgID
+		orgStr = *orgID
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		orgArg, entityKind, entityID, mutationType, boolToInt(emergency), nowMs,
-	); err != nil {
+	if _, err := s.appendChangelogTx(ctx, tx, orgStr, entityKind, entityID, mutationType, emergency, nowMs); err != nil {
 		return err
 	}
 	audID, err := idgen.New(idgen.PrefixAudit)

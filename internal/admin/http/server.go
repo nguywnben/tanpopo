@@ -125,6 +125,7 @@ type ServerConfig struct {
 	MarketplaceCatalog      []MarketplaceCatalogEntry
 	ArchiveResolver         ExtensionArchiveResolver
 	WebhookEnqueue          WebhookEnqueue
+	OnConfigChange          func(context.Context, snapshot.ChangeEvent)
 	LockfilePath            string
 	ConfigPath              string
 	ProbeRateLimitPerMinute int
@@ -225,6 +226,7 @@ func (l *slidingWindowLimiter) Allow(key string, nowMs int64) bool {
 // Server serves /admin/v1/* Control Plane REST endpoints.
 type Server struct {
 	db                     *sql.DB
+	dialect                port.Dialect
 	storage                port.Store
 	bootstrap              *bootstrap.Manager
 	auth                   *auth.LocalService
@@ -244,6 +246,7 @@ type Server struct {
 	marketplace            []MarketplaceCatalogEntry
 	archiveResolver        ExtensionArchiveResolver
 	webhookEnqueue         WebhookEnqueue
+	onConfigChange         func(context.Context, snapshot.ChangeEvent)
 	lockfilePath           string
 	configPath             string
 	probeLimiter           *slidingWindowLimiter
@@ -389,6 +392,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 
 	s := &Server{
 		db:                     db,
+		dialect:                port.DetectDialect(context.Background(), db),
 		storage:                cfg.Store,
 		bootstrap:              cfg.Bootstrap,
 		auth:                   cfg.Auth,
@@ -408,6 +412,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		marketplace:            marketplace,
 		archiveResolver:        cfg.ArchiveResolver,
 		webhookEnqueue:         cfg.WebhookEnqueue,
+		onConfigChange:         cfg.OnConfigChange,
 		lockfilePath:           strings.TrimSpace(cfg.LockfilePath),
 		configPath:             strings.TrimSpace(cfg.ConfigPath),
 		probeLimiter:           newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
@@ -576,6 +581,9 @@ func (s *Server) buildHandler() http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		}
 		r = r.WithContext(contextWithRequestID(r.Context(), reqID))
 
 		defer func() {
@@ -1145,9 +1153,90 @@ func validateEndpointSSRF(ctx context.Context, rawURL string, allowPrivateIP boo
 	return egress.ValidateStaticEndpointURL(ctx, rawURL, allowPrivateIP, resolver, blockedPorts)
 }
 
+type adminDBQuerier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func (s *Server) rebind(query string) string {
+	return port.Rebind(s.dialect, query)
+}
+
+func (s *Server) withOrgTx(ctx context.Context, orgID string, fn func(tx *sql.Tx) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Server) withOrgReadTx(ctx context.Context, orgID string, fn func(q adminDBQuerier) error) error {
+	if s.dialect != port.DialectPostgres {
+		return fn(s.db)
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return err
+	}
+	return fn(tx)
+}
+
+func (s *Server) withOperatorTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Server) withOperatorReadTx(ctx context.Context, fn func(q adminDBQuerier) error) error {
+	if s.dialect != port.DialectPostgres {
+		return fn(s.db)
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return err
+	}
+	return fn(tx)
+}
+
+func (s *Server) appendChangelogTx(ctx context.Context, tx *sql.Tx, orgID, entityKind, entityID, mutationType string, emergency bool, nowMs int64) (int64, error) {
+	return port.AppendConfigChangelogTx(ctx, tx, s.dialect, orgID, entityKind, entityID, mutationType, emergency, nowMs)
+}
+
+func (s *Server) publishChange(ctx context.Context, ev snapshot.ChangeEvent) {
+	if s != nil && s.onConfigChange != nil {
+		s.onConfigChange(ctx, ev)
+	}
+}
+
 func (s *Server) requireActiveOrg(w http.ResponseWriter, r *http.Request, orgID string) bool {
 	var status string
-	err := s.db.QueryRowContext(r.Context(), `SELECT status FROM organizations WHERE id = ?`, orgID).Scan(&status)
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`SELECT status FROM organizations WHERE id = ?`), orgID).Scan(&status)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
 		return false
@@ -1168,13 +1257,15 @@ func (s *Server) requireActiveOrgAndProject(w http.ResponseWriter, r *http.Reque
 		return s.requireActiveOrg(w, r, orgID)
 	}
 	var orgStatus, projStatus string
-	err := s.db.QueryRowContext(r.Context(), `
-		SELECT o.status, p.status
-		FROM projects p
-		JOIN organizations o ON o.id = p.org_id
-		WHERE p.org_id = ? AND p.id = ?`,
-		orgID, projectID,
-	).Scan(&orgStatus, &projStatus)
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
+			SELECT o.status, p.status
+			FROM projects p
+			JOIN organizations o ON o.id = p.org_id
+			WHERE p.org_id = ? AND p.id = ?`),
+			orgID, projectID,
+		).Scan(&orgStatus, &projStatus)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 		return false

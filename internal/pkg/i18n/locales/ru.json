@@ -256,5 +256,20 @@
   "cli.ops.db.short": "Проверка или миграция движка хранения базы данных.",
   "cli.ops.db.migrate.flag.from": "Путь к исходной базе SQLite WAL или sqlite:// DSN",
   "cli.ops.db.migrate.flag.to": "Целевой DSN подключения PostgreSQL 16+",
-  "cli.ops.db.migrate.flag.verify": "Проверять количество строк, суммы micro-USD, JCS-цепочки аудита и конверты Vault перед фиксацией"
+  "cli.ops.db.migrate.flag.verify": "Проверять количество строк, суммы micro-USD, JCS-цепочки аудита и конверты Vault перед фиксацией",
+  "cli.admin.verify_state.short": "Проверить хэш-цепочки аудита, освободить зависшие резервы и пересобрать состояние Valkey",
+  "cli.admin.verify_state.flag.db": "Путь к файлу базы данных SQLite",
+  "cli.admin.verify_state.flag.pg_dsn": "Строка подключения DSN к PostgreSQL 16+",
+  "cli.admin.verify_state.flag.valkey_addrs": "Адреса кластера Valkey через запятую",
+  "cli.admin.verify_state.flag.valkey_username": "Имя пользователя ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_password": "Пароль ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Требовать TLS при подключении к Valkey",
+  "cli.admin.verify_state.flag.check_audit": "Проверить неизменяемые хэш-цепочки аудита для всех организаций",
+  "cli.admin.verify_state.flag.reconcile_orphans": "Вернуть истёкшие резервы бюджета перед пересборкой кэша",
+  "cli.admin.verify_state.flag.rebuild_valkey": "Восстановить активные резервы бюджета в Valkey из SQL/PostgreSQL",
+  "cli.admin.verify_state.err.store_required": "Укажите --db (SQLite) или --pg-dsn (PostgreSQL).",
+  "cli.admin.verify_state.err.valkey_required": "Для пересборки состояния Valkey требуется --valkey-addrs.",
+  "cli.admin.verify_state.err.tampered": "Проверка цепочки аудита не пройдена: обнаружена подмена.",
+  "cli.admin.verify_state.err.failed": "Ошибка проверки рабочего состояния",
+  "cli.admin.verify_state.output": "Проверка состояния {{status}} (движок={{engine}} событий={{events}} зависших={{orphans}} valkey_восстановлено={{restored}})"
 }

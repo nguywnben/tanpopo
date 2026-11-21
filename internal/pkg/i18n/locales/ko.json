@@ -256,5 +256,20 @@
   "cli.ops.db.short": "데이터베이스 스토리지 엔진을 검사하거나 마이그레이션합니다.",
   "cli.ops.db.migrate.flag.from": "원본 SQLite WAL 데이터베이스 경로 또는 sqlite:// DSN",
   "cli.ops.db.migrate.flag.to": "대상 PostgreSQL 16+ 연결 DSN",
-  "cli.ops.db.migrate.flag.verify": "커밋 전에 행 수, micro-USD 합계, JCS 감사 해시 체인 및 Vault 봉투를 검증합니다"
+  "cli.ops.db.migrate.flag.verify": "커밋 전에 행 수, micro-USD 합계, JCS 감사 해시 체인 및 Vault 봉투를 검증합니다",
+  "cli.admin.verify_state.short": "감사 해시 체인 검증, 고아 보류 정리 및 Valkey 클러스터 상태 재구축",
+  "cli.admin.verify_state.flag.db": "SQLite 데이터베이스 파일 경로",
+  "cli.admin.verify_state.flag.pg_dsn": "PostgreSQL 16+ 연결 DSN",
+  "cli.admin.verify_state.flag.valkey_addrs": "쉼표로 구분된 Valkey 클러스터 주소",
+  "cli.admin.verify_state.flag.valkey_username": "Valkey ACL 사용자 이름",
+  "cli.admin.verify_state.flag.valkey_password": "Valkey ACL 비밀번호",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Valkey 연결 시 TLS 필수 적용",
+  "cli.admin.verify_state.flag.check_audit": "모든 테넌트의 불변 감사 해시 체인 검증",
+  "cli.admin.verify_state.flag.reconcile_orphans": "캐시 재구축 전 만료된 예산 예약 보류 회수",
+  "cli.admin.verify_state.flag.rebuild_valkey": "SQL/PostgreSQL 상태에서 Valkey 활성 예산 보류 재구축",
+  "cli.admin.verify_state.err.store_required": "--db (SQLite) 또는 --pg-dsn (PostgreSQL)을 지정하십시오.",
+  "cli.admin.verify_state.err.valkey_required": "Valkey 상태 재구축 시 --valkey-addrs가 필요합니다.",
+  "cli.admin.verify_state.err.tampered": "감사 해시 체인 검증 실패: 변조가 감지되었습니다.",
+  "cli.admin.verify_state.err.failed": "운영 상태 검증 실패",
+  "cli.admin.verify_state.output": "상태 확인 {{status}} (엔진={{engine}} 감사_이벤트={{events}} 고아_회수={{orphans}} Valkey_복원={{restored}})"
 }

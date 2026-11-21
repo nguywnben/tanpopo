@@ -12,6 +12,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/approval"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 type approvalResource struct {
@@ -38,21 +39,32 @@ type approvalResource struct {
 const effectiveApprovalState = `CASE WHEN a.state IN ('PENDING','APPROVED') AND a.expires_at_ms <= ?
 	THEN 'EXPIRED' ELSE a.state END`
 
-const approvalSelect = `SELECT a.id,a.org_id,k.project_id,` + effectiveApprovalState + `,a.params_jcs_sha256,a.payload_preview_json,
+func approvalSelectQuery(d port.Dialect) string {
+	serverExpr := `json_extract(a.target_identifier,'$.server_slug')`
+	toolExpr := `json_extract(a.target_identifier,'$.tool_name')`
+	if d == port.DialectPostgres {
+		serverExpr = `(a.target_identifier::jsonb)->>'server_slug'`
+		toolExpr = `(a.target_identifier::jsonb)->>'tool_name'`
+	}
+	return `SELECT a.id,a.org_id,k.project_id,` + effectiveApprovalState + `,a.params_jcs_sha256,a.payload_preview_json,
 	COALESCE(a.requester_principal_id,k.id),a.decided_by_principal_id,a.created_at_ms,a.expires_at_ms,a.version,
 	(COALESCE(a.requester_principal_id,'')=? OR COALESCE(a.requester_credential_principal_id,'')=? OR COALESCE(k.owner_principal_id,'')=?
 	 OR COALESCE(k.active_key_recipient_principal_id,'')=? OR COALESCE(k.previous_key_recipient_principal_id,'')=?),
 	EXISTS(SELECT 1 FROM mcp_tools t JOIN mcp_servers ms ON ms.org_id=t.org_id AND ms.id=t.mcp_server_id
-	 WHERE t.org_id=a.org_id AND ms.server_slug=json_extract(a.target_identifier,'$.server_slug')
-	 AND t.tool_name=json_extract(a.target_identifier,'$.tool_name') AND t.schema_drift_locked=1)
+	 WHERE t.org_id=a.org_id AND ms.server_slug=` + serverExpr + `
+	 AND t.tool_name=` + toolExpr + ` AND t.schema_drift_locked=` + port.BoolExpr(d, true) + `)
 	FROM approval_requests a JOIN virtual_keys k ON k.org_id=a.org_id AND k.id=a.requester_virtual_key_id
 	WHERE a.org_id=? AND a.action_kind='MCP_DESTRUCTIVE_CALL' AND (a.project_id IS NULL OR a.project_id=k.project_id)`
+}
 
 type governanceRow interface{ Scan(...any) error }
 
 func readApproval(row governanceRow) (approvalResource, error) {
 	var a approvalResource
-	err := row.Scan(&a.ID, &a.OrgID, &a.ProjectID, &a.State, &a.Hash, &a.Target, &a.RequestedBy, &a.DecidedBy, &a.createdMs, &a.expiresMs, &a.Version, &a.selfRequested, &a.SchemaDriftLocked)
+	var selfReq, driftLocked port.FlexBool
+	err := row.Scan(&a.ID, &a.OrgID, &a.ProjectID, &a.State, &a.Hash, &a.Target, &a.RequestedBy, &a.DecidedBy, &a.createdMs, &a.expiresMs, &a.Version, &selfReq, &driftLocked)
+	a.selfRequested = bool(selfReq)
+	a.SchemaDriftLocked = bool(driftLocked)
 	a.ActionKind = "MCP_DESTRUCTIVE_TOOL"
 	a.CreatedAt = formatTimeRFC3339Ms(a.createdMs)
 	a.ExpiresAt = formatTimeRFC3339Ms(a.expiresMs)
@@ -88,34 +100,40 @@ func governancePage[T any](s *Server, w http.ResponseWriter, r *http.Request, re
 		args = append(args, cursor.CreatedMs, cursor.LastID)
 	}
 	query += " ORDER BY " + createdColumn + " DESC," + idColumn + " DESC LIMIT ?"
-	rows, err := s.db.QueryContext(r.Context(), query, append(args, limit+1)...)
-	if err != nil {
-		mcpInternal(w, r, "failed listing "+resource)
+	page := paginatedListEnvelope[T]{Data: []T{}}
+	var encodeFailed bool
+	err := s.withOrgReadTx(r.Context(), org, func(q adminDBQuerier) error {
+		rows, err := q.QueryContext(r.Context(), s.rebind(query), append(args, limit+1)...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			if len(page.Data) == limit {
+				ms, id := position(page.Data[limit-1])
+				token, err := encodePaginationCursor(s.cursorSecret, resource, org, filter, ms, id)
+				if err != nil {
+					encodeFailed = true
+					return err
+				}
+				page.NextCursor = &token
+				page.HasMore = true
+				break
+			}
+			item, err := scan(rows)
+			if err != nil {
+				return err
+			}
+			page.Data = append(page.Data, item)
+		}
+		return rows.Err()
+	})
+	if encodeFailed {
+		mcpInternal(w, r, "failed encoding pagination cursor")
 		return
 	}
-	defer rows.Close()
-	page := paginatedListEnvelope[T]{Data: []T{}}
-	for rows.Next() {
-		if len(page.Data) == limit {
-			ms, id := position(page.Data[limit-1])
-			token, err := encodePaginationCursor(s.cursorSecret, resource, org, filter, ms, id)
-			if err != nil {
-				mcpInternal(w, r, "failed encoding pagination cursor")
-				return
-			}
-			page.NextCursor = &token
-			page.HasMore = true
-			break
-		}
-		item, err := scan(rows)
-		if err != nil {
-			mcpInternal(w, r, "failed reading "+resource)
-			return
-		}
-		page.Data = append(page.Data, item)
-	}
-	if rows.Err() != nil {
-		mcpInternal(w, r, "failed reading "+resource)
+	if err != nil {
+		mcpInternal(w, r, "failed listing "+resource)
 		return
 	}
 	writeJSON(w, 200, page)
@@ -135,7 +153,7 @@ func (s *Server) handleListApprovals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := r.URL.Query().Get("status")
-	query := approvalSelect + scope
+	query := approvalSelectQuery(s.dialect) + scope
 	now := s.nowMs()
 	args := append([]any{now, sc.Actor.PrincipalID, sc.Actor.PrincipalID, sc.Actor.PrincipalID, sc.Actor.PrincipalID, sc.Actor.PrincipalID, org}, params...)
 	switch approval.State(status) {
@@ -200,12 +218,16 @@ func (s *Server) handleDecideApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, org); err != nil {
+		mcpInternal(w, r, "failed setting organization scope")
+		return
+	}
 	actor := sc.Actor.PrincipalID
 	// Serialize the decision with virtual-key rotation before evaluating the
 	// current recipient in approvalSelect. This makes the Four-Eyes check and
 	// rotation observe one transaction order on both SQLite and PostgreSQL.
-	locked, err := tx.ExecContext(ctx, `UPDATE virtual_keys SET id=id
-		WHERE org_id=? AND id=(SELECT requester_virtual_key_id FROM approval_requests WHERE org_id=? AND id=?)`,
+	locked, err := tx.ExecContext(ctx, s.rebind(`UPDATE virtual_keys SET id=id
+		WHERE org_id=? AND id=(SELECT requester_virtual_key_id FROM approval_requests WHERE org_id=? AND id=?)`),
 		org, org, r.PathValue("approvalId"))
 	if err != nil {
 		mcpInternal(w, r, "failed locking approval requester key")
@@ -221,7 +243,7 @@ func (s *Server) handleDecideApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	args := append([]any{s.nowMs(), actor, actor, actor, actor, actor, org, r.PathValue("approvalId")}, params...)
-	a, err := readApproval(tx.QueryRowContext(ctx, approvalSelect+" AND a.id=?"+scope, args...))
+	a, err := readApproval(tx.QueryRowContext(ctx, s.rebind(approvalSelectQuery(s.dialect)+" AND a.id=?"+scope), args...))
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "approval not found", false, nil)
 		return
@@ -260,8 +282,8 @@ func (s *Server) handleDecideApproval(w http.ResponseWriter, r *http.Request) {
 	}
 	// Admins attest to the stored digest. The raw arguments and single-use token
 	// belong to the MCP caller and are never required by this endpoint.
-	res, err := tx.ExecContext(ctx, `UPDATE approval_requests SET state=?,version=version+1,decided_by_principal_id=?,decided_at_ms=?,decision_reason=?
-		WHERE org_id=? AND id=? AND version=? AND state='PENDING' AND params_jcs_sha256=? AND expires_at_ms>?`, next, actor, now, req.Reason, org, a.ID, version, req.Hash, now)
+	res, err := tx.ExecContext(ctx, s.rebind(`UPDATE approval_requests SET state=?,version=version+1,decided_by_principal_id=?,decided_at_ms=?,decision_reason=?
+		WHERE org_id=? AND id=? AND version=? AND state='PENDING' AND params_jcs_sha256=? AND expires_at_ms>?`), next, actor, now, req.Reason, org, a.ID, version, req.Hash, now)
 	if err != nil {
 		mcpInternal(w, r, "failed recording approval decision")
 		return

@@ -62,7 +62,9 @@ func (s *Server) handleCreatePlaygroundSession(w http.ResponseWriter, r *http.Re
 		return
 	}
 	var envProjectID string
-	err := s.db.QueryRowContext(r.Context(), `SELECT project_id FROM environments WHERE org_id=? AND id=?`, orgID, envID).Scan(&envProjectID)
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`SELECT project_id FROM environments WHERE org_id=? AND id=?`), orgID, envID).Scan(&envProjectID)
+	})
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && envProjectID != projectID) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "environment not found in the selected project", false, nil)
 		return

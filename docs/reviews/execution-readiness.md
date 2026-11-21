@@ -1,10 +1,10 @@
 # Final Delivery Readiness Audit (`ASTRA A10` — Gate G4 Stage 2 Handoff Approved) — Tanpopo
 
-> **Independent Governance Verdict Document (ASTRA A10 + M0–M3 execution, `DEC-033 REVOKED_BY_OWNER`)**
-> - **Report ID:** `REV-RDY-01` | **Version:** `2.35.0-dec-085-unit-38-done` | **Audit Date:** `2026-11-20`
+> **Independent Governance Verdict Document (ASTRA A10 + M0–M4 execution, `DEC-033 REVOKED_BY_OWNER`)**
+> - **Report ID:** `REV-RDY-01` | **Version:** `2.37.0-dec-089-unit-40-done` | **Audit Date:** `2026-11-21`
 > - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
-> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0039` DONE; Unit 39 delivered under `DEC-088` via PR #29 with live PG16 `-race`, `FORCE RLS`, `CT-29/30/32`, `FMEA-06`, and strong review `APPROVE`/`PASS`. `DEC-033` remains `REVOKED_BY_OWNER`.)
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` under `DEC-088`** (`39 / 47` DONE · `0 READY` · `0 READY_FOR_REVIEW` · `8 / 47` BLOCKED (`0040`..`0047`)).
+> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0040` DONE; Unit 39 delivered via PR #29 `61c310b5` under `DEC-088`; Unit 40 verified on live PG16 `FORCE RLS` + 3-shard Valkey Cluster `-race` with strong review `APPROVE`/`PASS` under `DEC-089`. `DEC-033` remains `REVOKED_BY_OWNER`.)
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` under `DEC-089`** (`40 / 47` DONE · `0 READY` · `0 READY_FOR_REVIEW` · `7 / 47` BLOCKED (`0041`..`0047`)).
 
 ---
 
@@ -15,9 +15,9 @@ On `2026-11-14`, across two sequential governance rulings (`DEC-009` and `DEC-01
 2. **Approved & Reviewed Milestone `M0` (`TP-IMP-0001`..`0004` = `DONE`, `eb01661`):** Closed specification gaps `GAP-01`..`13`, compiled `proto/tanpopo/extension/v1/runtime.proto` and `openapi/*.yaml`, verified `db/spec-check/sqlite_schema.sql` live on `modernc.org/sqlite` (with static parity checks on `postgres_schema.sql`), and executed isolated offline spikes `SPIKE-01`..`04` in `tools/spikes/` ([`spike-results.md`](../architecture/spike-results.md)).
 3. **Approved Gate G4 Stage 2 (`DEC-010` — `HANDOFF_VERDICT = GO`)** after reconciling `spike-results.md` `UNIT_ID` cross-references, calibrating `PostgreSQL 16` / microbenchmark / local-vs-CI claims strictly to actual evidence, and locking explicit `AC`s for in-flight Wasm cancellation, timeout, tainted-module replacement, pool recovery, and bounded resource consumption into [`TP-IMP-0013.md`](../planning/units/TP-IMP-0013.md).
 
-**Strict Boundaries of This Handoff (`DEC-060`, `DEC-072`):**
-- **Active Sequential Batch:** **GPT-6 Luna** is authorized under `DEC-072` to implement, coordinate independent reviews, merge PRs, and accept Units 36–38 sequentially. Unit 36 is DONE on main; Unit 37 is DONE under `DEC-083`; Unit 38 is READY under `DEC-084`; DoR verifies dependencies `0020`, `0029`, `0030`, `0037` DONE, `GAP-01`/`GAP-07` CLOSED, and `CR-10` approved.
-- **Release Boundary:** Unit 39 and later work remain outside this delegation. No tags or public releases (`GATE-REL-07`).
+**Strict Boundaries of This Handoff (`DEC-060`, `DEC-072`, `DEC-088`):**
+- **Active Sequential Batch:** Under `DEC-088`, **Gemini 4 Hydrogen** executes Units `0039` → `0040` → `0041` → `0042` sequentially via persistent `develop` (`1` PR `develop` → `main` per unit), with independent strong reviews and post-merge `origin/main` CI green before advancing. Unit 39 (`61c310b5`, PR #29) and Unit 40 (`DEC-089`) are complete; Units `0041`..`0042` await sequential DoR.
+- **Release Boundary:** Unit 43 and later work remain outside this delegation. No tags or public releases (`GATE-REL-07`).
 
 ---
 
@@ -32,7 +32,7 @@ On `2026-11-14`, across two sequential governance rulings (`DEC-009` and `DEC-01
 | **Gate G3 (`ADR-0001`..`0006` + `SPIKE-01`..`04`)** | `6` ADRs + `4` Spikes | `ACCEPTED` / `VERIFIED_IN_SPIKE` (`COND-PO-01..05`) | [`docs/architecture/adr/*`](../architecture/adr/README.md), [`spike-results.md`](../architecture/spike-results.md) | **YES** (`Track A & B`) |
 | **Audit Gate A08 (`CR-01`..`10` & `GAP-01`..`13`)** | `10` CRs / `13` Gaps | **`REMEDIATED_IN_M0` (`13 / 13 CLOSED`)** | [`unresolved-gaps.md`](./unresolved-gaps.md), `TP-IMP-0001..0004` | **YES** (`CR-01..10` Approved) |
 | **Gate G4 Stage 1 (`M0`: `TP-IMP-0001`..`0004`)** | `4 / 4` `M0` Units | **`APPROVED & DONE`** | [`implementation-index.md`](../planning/implementation-index.md), `tools/spikes/*` | **YES** (`DEC-009`) |
-| **Gate G4 Stage 2 (`M1+` Handoff; `DEC-060` / `DEC-088`)** | `39 DONE`, `0 READY`, `8 BLOCKED` | **`APPROVED` (`HANDOFF_VERDICT = GO`)** | Unit 38 (`7c5538ff`) + Console v2 (`b6dc1d15`) on `main`; Unit 39 (`DEC-088`) verified on live PG16 `-race` & `Dual-DB` CI | **YES** (`DEC-010`, `DEC-060`, `DEC-072`, `DEC-085`, `DEC-088`) |
+| **Gate G4 Stage 2 (`M1+` Handoff; `DEC-060` / `DEC-089`)** | `40 DONE`, `0 READY`, `7 BLOCKED` | **`APPROVED` (`HANDOFF_VERDICT = GO`)** | Unit 39 (`61c310b5`, PR #29) & Unit 40 (`DEC-089`) verified on live PG16 `FORCE RLS` + Valkey Cluster `-race` & Dual-DB CI | **YES** (`DEC-010`, `DEC-060`, `DEC-072`, `DEC-085`, `DEC-088`) |
 
 ---
 

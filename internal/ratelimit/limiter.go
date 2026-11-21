@@ -58,6 +58,11 @@ type StreamLease struct {
 	release func()
 }
 
+// NewStreamLease wraps a single-use release callback in a StreamLease.
+func NewStreamLease(release func()) *StreamLease {
+	return &StreamLease{release: release}
+}
+
 // Release frees the concurrency slot exactly once (safe across defers, panics, or retries).
 func (l *StreamLease) Release() {
 	if l == nil {

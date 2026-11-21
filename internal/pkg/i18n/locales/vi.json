@@ -256,5 +256,20 @@
   "cli.ops.db.short": "Kiem tra hoac chuyen doi engine luu tru co so du lieu.",
   "cli.ops.db.migrate.flag.from": "Đường dẫn cơ sở dữ liệu SQLite WAL nguồn hoặc sqlite:// DSN",
   "cli.ops.db.migrate.flag.to": "DSN kết nối PostgreSQL 16+ đích",
-  "cli.ops.db.migrate.flag.verify": "Kiểm tra số dòng, tổng micro-USD, chuỗi băm kiểm toán JCS và phong bì Vault trước khi commit"
+  "cli.ops.db.migrate.flag.verify": "Kiểm tra số dòng, tổng micro-USD, chuỗi băm kiểm toán JCS và phong bì Vault trước khi commit",
+  "cli.admin.verify_state.short": "Kiểm tra chuỗi băm kiểm toán, đối soát khóa giữ hết hạn và dựng lại trạng thái cụm Valkey",
+  "cli.admin.verify_state.flag.db": "Đường dẫn đến tệp cơ sở dữ liệu SQLite",
+  "cli.admin.verify_state.flag.pg_dsn": "Chuỗi kết nối PostgreSQL 16+",
+  "cli.admin.verify_state.flag.valkey_addrs": "Danh sách địa chỉ cụm Valkey cách nhau bằng dấu phẩy",
+  "cli.admin.verify_state.flag.valkey_username": "Tên người dùng ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_password": "Mật khẩu ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Bắt buộc dùng TLS khi kết nối tới Valkey",
+  "cli.admin.verify_state.flag.check_audit": "Kiểm tra toàn bộ chuỗi băm kiểm toán bất biến trên mọi tổ chức",
+  "cli.admin.verify_state.flag.reconcile_orphans": "Thu hồi các khoản giữ ngân sách hết hạn trước khi dựng lại bộ nhớ đệm",
+  "cli.admin.verify_state.flag.rebuild_valkey": "Khôi phục các khoản giữ ngân sách đang hoạt động vào Valkey từ SQL/PostgreSQL",
+  "cli.admin.verify_state.err.store_required": "Hãy cung cấp --db (SQLite) hoặc --pg-dsn (PostgreSQL).",
+  "cli.admin.verify_state.err.valkey_required": "Cần cung cấp --valkey-addrs khi dựng lại trạng thái Valkey.",
+  "cli.admin.verify_state.err.tampered": "Kiểm tra chuỗi băm kiểm toán thất bại: phát hiện can thiệp trái phép.",
+  "cli.admin.verify_state.err.failed": "Kiểm tra trạng thái vận hành thất bại",
+  "cli.admin.verify_state.output": "Kiểm tra trạng thái {{status}} (engine={{engine}} sự_kiện_kiểm_toán={{events}} khóa_mồ_côi_thu_hồi={{orphans}} valkey_đã_khôi_phục={{restored}})"
 }

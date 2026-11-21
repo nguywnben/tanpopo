@@ -13,13 +13,16 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	adminhttp "github.com/nguywnben/tanpopo/internal/admin/http"
+	vkcluster "github.com/nguywnben/tanpopo/internal/cluster/valkey"
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	extport "github.com/nguywnben/tanpopo/internal/extension/port"
@@ -34,12 +37,14 @@ import (
 	mcphub "github.com/nguywnben/tanpopo/internal/ingress/mcp/hub"
 	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/provider/catalog"
+	"github.com/nguywnben/tanpopo/internal/ratelimit"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/oauth"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/postgres"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 	telemetry "github.com/nguywnben/tanpopo/internal/telemetry/otel"
@@ -77,7 +82,8 @@ func serve(ctx context.Context, role, listen string) (serveErr error) {
 	if err != nil {
 		return err
 	}
-	handler, closeRuntime, err := buildRuntime(ctx, role, listen)
+	var draining atomic.Bool
+	handler, closeRuntime, err := buildRuntimeInternal(ctx, role, listen, nil, &draining)
 	if err != nil {
 		return err
 	}
@@ -95,6 +101,8 @@ func serve(ctx context.Context, role, listen string) (serveErr error) {
 	go func() { done <- server.Serve(listener) }()
 	select {
 	case <-ctx.Done():
+		// Mark /readyz as 503 immediately on shutdown signal while draining in-flight SSE streams (OPS-AC-06).
+		draining.Store(true)
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
@@ -136,6 +144,15 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 // buildRuntimeWithBeforeSQLiteClose exposes the last quiescent SQLite state to
 // shutdown tests. Production callers use buildRuntime and install no observer.
 func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string, beforeSQLiteClose func(*sql.DB)) (http.Handler, func() error, error) {
+	return buildRuntimeInternal(ctx, role, listen, beforeSQLiteClose, nil)
+}
+
+type runtimeStore interface {
+	port.Store
+	RawDB() *sql.DB
+}
+
+func buildRuntimeInternal(ctx context.Context, role, listen string, beforeSQLiteClose func(*sql.DB), draining *atomic.Bool) (http.Handler, func() error, error) {
 	if role != "all" && role != "data-plane" && role != "control-plane" {
 		return nil, nil, fmt.Errorf("invalid service role %q", role)
 	}
@@ -157,22 +174,32 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 	default:
 		return nil, nil, fmt.Errorf("unsupported TANPOPO_STORAGE_ENGINE %q: expected sqlite or postgres", storageEngine)
 	}
+	var (
+		store         runtimeStore
+		isPostgres    bool
+		dialect       = port.DialectSQLite
+		postShredHook func(context.Context) error
+	)
 	if storageEngine == "postgres" || (storageEngine == "" && pgDSN != "") {
-		pgStore, openErr := postgres.Open(ctx, postgres.Options{
-			DSN:                      pgDSN,
-			SkipMigrate:              true,
-			PartitionLookaheadMonths: -1,
-		})
+		if pgDSN == "" {
+			return nil, nil, errors.New("TANPOPO_PG_DSN is required when TANPOPO_STORAGE_ENGINE=postgres")
+		}
+		pgStore, openErr := postgres.Open(ctx, postgres.Options{DSN: pgDSN})
 		if openErr != nil {
 			return nil, nil, fmt.Errorf("open PostgreSQL store: %w", openErr)
 		}
-		_ = pgStore.Close()
-		return nil, nil, errors.New("tanpopo serve PostgreSQL runtime serving is gated until TP-IMP-0040 cluster cutover completes FORCE RLS across all control/data-plane stores; use SQLite WAL for serving and `tanpopo db migrate-engine` / `tanpopo doctor` to validate PostgreSQL 16+")
-	}
-	dbPath := envOr("TANPOPO_DB_PATH", filepath.Join(dataDir, "tanpopo.db"))
-	store, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath})
-	if err != nil {
-		return nil, nil, fmt.Errorf("open local SQLite store: %w", err)
+		store = pgStore
+		isPostgres = true
+		dialect = port.DialectPostgres
+		postShredHook = pgStore.Ping
+	} else {
+		dbPath := envOr("TANPOPO_DB_PATH", filepath.Join(dataDir, "tanpopo.db"))
+		sqliteStore, openErr := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath})
+		if openErr != nil {
+			return nil, nil, fmt.Errorf("open local SQLite store: %w", openErr)
+		}
+		store = sqliteStore
+		postShredHook = sqliteStore.CheckpointWAL
 	}
 	closeStore := func() { _ = store.Close() }
 	db := store.RawDB()
@@ -188,7 +215,7 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 		return nil, nil, fmt.Errorf("load Master KEK: %w", err)
 	}
 	closeKeys := func() { kek.Close() }
-	vaultStore, err := vault.NewStore(vault.Config{DB: db, KEK: kek, PostShredHook: store.CheckpointWAL})
+	vaultStore, err := vault.NewStore(vault.Config{DB: db, KEK: kek, PostShredHook: postShredHook})
 	if err != nil {
 		closeKeys()
 		closeStore()
@@ -200,17 +227,101 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 		closeStore()
 		return nil, nil, fmt.Errorf("initialize configuration snapshot: %w", err)
 	}
-	runtimeCtx, cancelRuntime := context.WithCancel(ctx)
+
+	var (
+		vkClient       *vkcluster.Client
+		vkRateLimiter  ratelimit.RateLimiterPort
+		vkBudgetCoord  *vkcluster.BudgetCoordinator
+		clusterSync    *snapshot.ClusterSync
+		clusterDone    chan struct{}
+		budgetLoopDone chan struct{}
+	)
+	if rawValkeyAddrs := strings.TrimSpace(os.Getenv("TANPOPO_VALKEY_ADDRS")); rawValkeyAddrs != "" {
+		requireTLS := strings.EqualFold(strings.TrimSpace(os.Getenv("TANPOPO_VALKEY_REQUIRE_TLS")), "1") ||
+			strings.EqualFold(strings.TrimSpace(os.Getenv("TANPOPO_VALKEY_REQUIRE_TLS")), "true")
+		vkClient, err = vkcluster.Dial(vkcluster.Config{
+			Addrs:      strings.Split(rawValkeyAddrs, ","),
+			Username:   strings.TrimSpace(os.Getenv("TANPOPO_VALKEY_USERNAME")),
+			Password:   os.Getenv("TANPOPO_VALKEY_PASSWORD"),
+			RequireTLS: requireTLS,
+		})
+		if err != nil {
+			vaultStore.Close()
+			closeKeys()
+			closeStore()
+			return nil, nil, fmt.Errorf("dial Valkey Cluster: %w", err)
+		}
+		replicas := int64(1)
+		if rawReps := strings.TrimSpace(os.Getenv("TANPOPO_VALKEY_REPLICAS")); rawReps != "" {
+			if parsed, perr := strconv.ParseInt(rawReps, 10, 64); perr == nil && parsed > 0 {
+				replicas = parsed
+			}
+		}
+		vkRateLimiter, err = vkcluster.NewRateLimiter(vkcluster.RateLimiterConfig{
+			Client:                vkClient,
+			EstimatedReplicaCount: replicas,
+		})
+		if err != nil {
+			vkClient.Close()
+			vaultStore.Close()
+			closeKeys()
+			closeStore()
+			return nil, nil, fmt.Errorf("initialize Valkey rate limiter: %w", err)
+		}
+	}
+
+	// Decouple background runtimeCtx from listen ctx so SIGTERM drains active SSE streams cleanly
+	// while /readyz immediately returns 503 via draining.Store(true).
+	runtimeCtx, cancelRuntime := context.WithCancel(context.Background())
 	watcherDone := make(chan struct{})
 	var webhookDone chan struct{}
 	var closeWebhookDispatcher func() error
 	var webhookDispatcher *webhook.Dispatcher
 	var approvalMaintenanceDone chan struct{}
 	var marketplaceDone <-chan struct{}
-	go func() {
-		defer close(watcherDone)
-		snaps.StartWatcher(runtimeCtx, time.Second)
-	}()
+	if isPostgres || vkClient != nil {
+		var pubsubBus snapshot.PubSubBus
+		if vkClient != nil {
+			pubsubBus = vkClient
+		}
+		disableValkeySub := strings.EqualFold(strings.TrimSpace(os.Getenv("TANPOPO_DISABLE_VALKEY_PUBSUB")), "1") ||
+			strings.EqualFold(strings.TrimSpace(os.Getenv("TANPOPO_DISABLE_VALKEY_PUBSUB")), "true")
+		clusterSync, err = snapshot.NewClusterSync(snapshot.ClusterSyncConfig{
+			Manager:             snaps,
+			DB:                  db,
+			PGListenDSN:         pgDSN,
+			Bus:                 pubsubBus,
+			DisableValkeyPubSub: disableValkeySub,
+		})
+		if err != nil {
+			if vkClient != nil {
+				vkClient.Close()
+			}
+			vaultStore.Close()
+			closeKeys()
+			closeStore()
+			cancelRuntime()
+			return nil, nil, fmt.Errorf("initialize cluster snapshot sync: %w", err)
+		}
+		clusterDone = make(chan struct{})
+		go func() {
+			defer close(clusterDone)
+			clusterSync.Start(runtimeCtx)
+		}()
+	} else {
+		go func() {
+			defer close(watcherDone)
+			snaps.StartWatcher(runtimeCtx, time.Second)
+		}()
+	}
+	if clusterSync != nil {
+		close(watcherDone)
+	}
+	publishChangeFn := func(pubCtx context.Context, ev snapshot.ChangeEvent) {
+		if clusterSync != nil {
+			_ = clusterSync.PublishChange(pubCtx, ev)
+		}
+	}
 	var closeDataServer func() error
 	var dataServerReady func(context.Context) error
 	var telemetryPipeline *telemetry.Pipeline
@@ -250,21 +361,30 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 			if approvalMaintenanceDone != nil {
 				<-approvalMaintenanceDone
 			}
+			if budgetLoopDone != nil {
+				<-budgetLoopDone
+			}
+			if clusterDone != nil {
+				<-clusterDone
+			}
 			<-watcherDone
 			recordActiveDBConnections("after snapshot watcher shutdown")
 			if marketplaceDone != nil {
 				<-marketplaceDone
 				recordActiveDBConnections("after marketplace watcher shutdown")
 			}
+			if vkClient != nil {
+				vkClient.Close()
+			}
 			vaultStore.Close()
 			closeKeys()
-			recordActiveDBConnections("before SQLite close")
+			recordActiveDBConnections("before storage close")
 			if beforeSQLiteClose != nil {
 				beforeSQLiteClose(db)
 			}
 			if err := store.Close(); err != nil {
 				if lastActiveDBStage != "" {
-					shutdownErr = errors.Join(shutdownErr, fmt.Errorf("sqlite: last observed %d active connection(s) at %s", lastActiveDBConnections, lastActiveDBStage))
+					shutdownErr = errors.Join(shutdownErr, fmt.Errorf("storage: last observed %d active connection(s) at %s", lastActiveDBConnections, lastActiveDBStage))
 				}
 				shutdownErr = errors.Join(shutdownErr, err)
 			}
@@ -290,9 +410,7 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 	}
 	brokerUnsealCap := vault.MintUnsealCapabilityForBroker()
 	webhookDispatcher, err = webhook.New(webhook.Config{
-		// This binary runtime currently opens SQLite. A PostgreSQL runtime must
-		// inject its dedicated dispatcher pool and opt into role/RLS validation.
-		DB: db, Postgres: false, Resolver: egress.NewStdHostResolver(),
+		DB: db, Postgres: isPostgres, Resolver: egress.NewStdHostResolver(),
 		Unseal: func(ctx context.Context, orgID, credentialID string) ([]byte, func(), error) {
 			secret, unsealErr := vaultStore.UnsealWithCapability(ctx, brokerUnsealCap, orgID, credentialID)
 			if unsealErr != nil {
@@ -320,7 +438,7 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 				if err := json.Unmarshal(payload, &body); err != nil || body.TargetID == "" {
 					return fmt.Errorf("resolve extension kill-switch target")
 				}
-				return recordExtensionWebhookOutbox(ctx, tx, webhookDispatcher, body.TargetID, "kill_switch:"+eventKey, eventType, payload)
+				return recordExtensionWebhookOutbox(ctx, tx, dialect, webhookDispatcher, body.TargetID, "kill_switch:"+eventKey, eventType, payload)
 			}
 			return webhookDispatcher.RecordEventTx(ctx, tx, webhook.Event{
 				ID: webhook.StableEventID("kill_switch:" + eventKey), OrgID: orgID,
@@ -338,18 +456,18 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 		AlertOutbox: func(ctx context.Context, tx *sql.Tx, ev ledger.AlertEvent) error {
 			var scopeType, scopeID string
 			var projectID string
-			if err := tx.QueryRowContext(ctx, `SELECT scope_type,scope_id FROM budget_ledgers WHERE org_id=? AND id=?`, ev.OrgID, ev.LedgerID).Scan(&scopeType, &scopeID); err != nil {
+			if err := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT scope_type,scope_id FROM budget_ledgers WHERE org_id=? AND id=?`), ev.OrgID, ev.LedgerID).Scan(&scopeType, &scopeID); err != nil {
 				return err
 			}
 			switch scopeType {
 			case "PROJECT":
 				projectID = scopeID
 			case "ENV":
-				if err := tx.QueryRowContext(ctx, `SELECT project_id FROM environments WHERE org_id=? AND id=?`, ev.OrgID, scopeID).Scan(&projectID); err != nil {
+				if err := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT project_id FROM environments WHERE org_id=? AND id=?`), ev.OrgID, scopeID).Scan(&projectID); err != nil {
 					return err
 				}
 			case "VIRTUAL_KEY":
-				if err := tx.QueryRowContext(ctx, `SELECT project_id FROM virtual_keys WHERE org_id=? AND id=?`, ev.OrgID, scopeID).Scan(&projectID); err != nil {
+				if err := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT project_id FROM virtual_keys WHERE org_id=? AND id=?`), ev.OrgID, scopeID).Scan(&projectID); err != nil {
 					return err
 				}
 			}
@@ -372,6 +490,29 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 		cleanup()
 		return nil, nil, fmt.Errorf("initialize usage ledger: %w", err)
 	}
+	if vkClient != nil && (role == "all" || role == "data-plane") {
+		nodeID := strings.TrimSpace(os.Getenv("TANPOPO_NODE_ID"))
+		if nodeID == "" {
+			if hn, herr := os.Hostname(); herr == nil && strings.TrimSpace(hn) != "" {
+				nodeID = strings.TrimSpace(hn)
+			}
+		}
+		vkBudgetCoord, err = vkcluster.NewBudgetCoordinator(vkcluster.BudgetCoordinatorConfig{
+			Client: vkClient,
+			DB:     db,
+			Ledger: ledgerService,
+			NodeID: nodeID,
+		})
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize Valkey budget coordinator: %w", err)
+		}
+		budgetLoopDone = make(chan struct{})
+		go func() {
+			defer close(budgetLoopDone)
+			vkBudgetCoord.StartCheckpointLoop(runtimeCtx)
+		}()
+	}
 	webhookDone = make(chan struct{})
 	go func() {
 		defer close(webhookDone)
@@ -393,7 +534,7 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 			if err != nil {
 				return err
 			}
-			return recordExtensionWebhookOutbox(ctx, tx, webhookDispatcher, installationID, "extension.quarantined:"+installationID, "extension.quarantined", payload)
+			return recordExtensionWebhookOutbox(ctx, tx, dialect, webhookDispatcher, installationID, "extension.quarantined:"+installationID, "extension.quarantined", payload)
 		},
 	})
 	if err != nil {
@@ -448,7 +589,8 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		checkCtx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
-		if ctx.Err() != nil || store.Ping(checkCtx) != nil || vaultStore.CheckServingReady(checkCtx) != nil || snaps.CheckServingReady() != nil || (dataServerReady != nil && dataServerReady(checkCtx) != nil) {
+		isDraining := draining != nil && draining.Load()
+		if isDraining || ctx.Err() != nil || store.Ping(checkCtx) != nil || vaultStore.CheckServingReady(checkCtx) != nil || snaps.CheckServingReady() != nil || (clusterSync != nil && clusterSync.CheckServingReady() != nil) || (dataServerReady != nil && dataServerReady(checkCtx) != nil) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "not_ready"})
@@ -469,6 +611,7 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 		}
 		dataServer, err = ingresshttp.NewServer(ingresshttp.ServerConfig{
 			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
+			RateLimiter:  vkRateLimiter,
 			BudgetLedger: ledgerService,
 			Telemetry:    telemetryPipeline,
 		})
@@ -502,7 +645,9 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize local authentication: %w", err)
 		}
-		vkeys, err := vkey.NewService(vkey.ServiceConfig{DB: db, Snapshots: snaps, AuditSink: auditLog})
+		vkeys, err := vkey.NewService(vkey.ServiceConfig{
+			DB: db, Snapshots: snaps, AuditSink: auditLog, OnChange: publishChangeFn,
+		})
 		if err != nil {
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize virtual keys: %w", err)
@@ -519,7 +664,8 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 				_, enqueueErr := webhookDispatcher.Enqueue(ctx, webhook.Event{OrgID: orgID, ProjectID: projectID, Type: eventType, Payload: payload})
 				return enqueueErr
 			},
-			Broker: blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
+			OnConfigChange: publishChangeFn,
+			Broker:         blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
 		})
 		if err != nil {
 			cleanup()
@@ -531,9 +677,9 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 	return mux, cleanup, nil
 }
 
-func recordExtensionWebhookOutbox(ctx context.Context, tx *sql.Tx, dispatcher *webhook.Dispatcher, installationID, eventKey, eventType string, payload []byte) error {
-	rows, err := tx.QueryContext(ctx, `SELECT org_id FROM org_extension_policies WHERE package_id=(SELECT package_id FROM extension_installations WHERE id=?) AND enabled=1
-		UNION SELECT pc.org_id FROM provider_connections pc JOIN provider_adapters pa ON pa.id=pc.adapter_id WHERE pa.installation_id=? ORDER BY 1`, installationID, installationID)
+func recordExtensionWebhookOutbox(ctx context.Context, tx *sql.Tx, dialect port.Dialect, dispatcher *webhook.Dispatcher, installationID, eventKey, eventType string, payload []byte) error {
+	rows, err := tx.QueryContext(ctx, port.Rebind(dialect, `SELECT org_id FROM org_extension_policies WHERE package_id=(SELECT package_id FROM extension_installations WHERE id=?) AND enabled=`+port.BoolExpr(dialect, true)+`
+		UNION SELECT pc.org_id FROM provider_connections pc JOIN provider_adapters pa ON pa.id=pc.adapter_id WHERE pa.installation_id=? ORDER BY 1`), installationID, installationID)
 	if err != nil {
 		return err
 	}

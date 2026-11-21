@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
@@ -375,6 +376,7 @@ type ServiceConfig struct {
 type LifecycleService struct {
 	mu                      sync.Mutex
 	db                      *sql.DB
+	dialect                 port.Dialect
 	audit                   port.AuditSink
 	auditEntryPoint         string
 	pluginsDir              string
@@ -393,6 +395,34 @@ func (s *LifecycleService) ArtifactRoot() string {
 		return ""
 	}
 	return s.pluginsDir
+}
+
+func (s *LifecycleService) rebind(q string) string {
+	return port.Rebind(s.dialect, q)
+}
+
+func (s *LifecycleService) withOperatorReadTx(ctx context.Context, fn func(*sql.Tx) error) error {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return err
+	}
+	return fn(tx)
+}
+
+func (s *LifecycleService) withOrgReadTx(ctx context.Context, orgID string, fn func(*sql.Tx) error) error {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return err
+	}
+	return fn(tx)
 }
 
 // NewLifecycleService constructs a LifecycleService fail-closed on missing DB, Audit, or PluginsDir.
@@ -432,6 +462,7 @@ func NewLifecycleService(cfg ServiceConfig) (*LifecycleService, error) {
 	}
 	return &LifecycleService{
 		db:                      cfg.DB,
+		dialect:                 port.DetectDialect(context.Background(), cfg.DB),
 		audit:                   cfg.Audit,
 		auditEntryPoint:         entryPoint,
 		pluginsDir:              canonPluginsDir,
@@ -569,13 +600,13 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 		reusingPkg        bool
 		resetDowngradeOrg []string
 	)
-	err = tx.QueryRowContext(ctx, `SELECT id FROM extension_packages WHERE canonical_name = ?`, vm.Manifest.Metadata.ID).Scan(&existingPkg)
+	err = tx.QueryRowContext(ctx, s.rebind(`SELECT id FROM extension_packages WHERE canonical_name = ?`), vm.Manifest.Metadata.ID).Scan(&existingPkg)
 	switch {
 	case err == nil:
-		err = tx.QueryRowContext(ctx, `
+		err = tx.QueryRowContext(ctx, s.rebind(`
 			SELECT id, state, version
 			FROM extension_installations
-			WHERE package_id = ?`, existingPkg,
+			WHERE package_id = ?`), existingPkg,
 		).Scan(&reinstallInsID, &reinstallState, &reinstallVer)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -585,7 +616,7 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 		}
 		reusingPkg = true
 		pkgID = existingPkg
-		if perr := checkEnabledOrgPoliciesForPackageTx(ctx, tx, pkgID, prov.OriginTrustTier, prov.EnterpriseSigned); perr != nil {
+		if perr := s.checkEnabledOrgPoliciesForPackageTx(ctx, tx, pkgID, prov.OriginTrustTier, prov.EnterpriseSigned); perr != nil {
 			_ = tx.Rollback()
 			s.emitAudit(ctx, req.TargetOrgID, req.ActorID, req.RequestID, "extension.org_trust_policy_denied", "extension_package", vm.Manifest.Metadata.ID, map[string]any{
 				"origin_trust_tier": prov.OriginTrustTier,
@@ -595,7 +626,7 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 		}
 		if prov.OriginTrustTier == lockfile.TrustTierUnverifiedExternal && !prov.EnterpriseSigned {
 			var rerr error
-			resetDowngradeOrg, rerr = resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx, tx, pkgID, now)
+			resetDowngradeOrg, rerr = s.resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx, tx, pkgID, now)
 			if rerr != nil {
 				return nil, rerr
 			}
@@ -605,9 +636,9 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 	}
 
 	if !reusingPkg {
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, s.rebind(`
 			INSERT INTO extension_packages (id, canonical_name, extension_kind, publisher_id, origin_trust_tier, created_at_ms)
-			VALUES (?, ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?)`),
 			pkgID, vm.Manifest.Metadata.ID, vm.ExtensionKind, vm.PublisherID, prov.OriginTrustTier, now,
 		); err != nil {
 			if isUniqueConstraintErr(err) {
@@ -616,39 +647,37 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 			return nil, fmt.Errorf("installer: insert extension_packages: %w", err)
 		}
 	} else {
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, s.rebind(`
 			UPDATE extension_packages
 			SET extension_kind = ?, publisher_id = ?, origin_trust_tier = ?
-			WHERE id = ?`,
+			WHERE id = ?`),
 			vm.ExtensionKind, vm.PublisherID, prov.OriginTrustTier, pkgID,
 		); err != nil {
 			return nil, fmt.Errorf("installer: update extension_packages for reinstall: %w", err)
 		}
 		if reinstallInsID != "" {
-			if _, err := tx.ExecContext(ctx, `
+			if _, err := tx.ExecContext(ctx, s.rebind(`
 				UPDATE extension_installations
 				SET active_version_id = NULL, previous_pinned_version_id = NULL, candidate_version_id = NULL
-				WHERE id = ?`, reinstallInsID,
+				WHERE id = ?`), reinstallInsID,
 			); err != nil {
 				return nil, err
 			}
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM extension_versions WHERE package_id = ?`, pkgID); err != nil {
+		if _, err := tx.ExecContext(ctx, s.rebind(`DELETE FROM extension_versions WHERE package_id = ?`), pkgID); err != nil {
 			return nil, fmt.Errorf("installer: prune old uninstalled versions: %w", err)
 		}
 	}
 
-	sigVerInt := boolToInt(prov.SignatureVerified)
-	entSigInt := boolToInt(prov.EnterpriseSigned)
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, s.rebind(`
 		INSERT INTO extension_versions (
 			id, package_id, semver, contract_version, core_version_range, execution_tier,
 			bundle_sha256, signature_verified, enterprise_signed, signing_key_fingerprint, enterprise_key_fingerprint,
 			source_uri, manifest_json, sbom_digest, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		verID, pkgID, vm.Manifest.Metadata.Version, vm.Manifest.Compatibility.ContractVersion,
 		vm.Manifest.Compatibility.CoreVersionRange, vm.ExecutionTier, extracted.BundleSHA256,
-		sigVerInt, entSigInt, nullStr(prov.SigningKeyFingerprint), nullStr(prov.EnterpriseKeyFingerprint), canonSourceURI,
+		port.BoolVal(s.dialect, prov.SignatureVerified), port.BoolVal(s.dialect, prov.EnterpriseSigned), nullStr(prov.SigningKeyFingerprint), nullStr(prov.EnterpriseKeyFingerprint), canonSourceURI,
 		string(manifestJSON), nullStr(req.SBOMDigest), now,
 	); err != nil {
 		if isUniqueConstraintErr(err) {
@@ -662,23 +691,23 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 	if reusingPkg && reinstallInsID != "" {
 		insID = reinstallInsID
 		insVersion = reinstallVer + 1
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, s.rebind(`
 			UPDATE extension_installations
 			SET active_version_id = NULL, previous_pinned_version_id = NULL, candidate_version_id = ?,
 			    state = ?, approved_permissions_json = '{}', approved_by_principal_id = NULL,
 			    approved_at_ms = NULL, quarantine_reason = NULL, version = version + 1, updated_at_ms = ?
-			WHERE id = ? AND version = ?`,
+			WHERE id = ? AND version = ?`),
 			verID, StatePendingPermissionApproval, now, insID, reinstallVer,
 		); err != nil {
 			return nil, fmt.Errorf("installer: reset extension_installations for reinstall: %w", err)
 		}
 	} else {
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, s.rebind(`
 			INSERT INTO extension_installations (
 				id, package_id, active_version_id, previous_pinned_version_id, candidate_version_id,
 				state, approved_permissions_json, approved_by_principal_id, approved_at_ms,
 				quarantine_reason, version, created_at_ms, updated_at_ms
-			) VALUES (?, ?, NULL, NULL, ?, ?, '{}', NULL, NULL, NULL, 1, ?, ?)`,
+			) VALUES (?, ?, NULL, NULL, ?, ?, '{}', NULL, NULL, NULL, 1, ?, ?)`),
 			insID, pkgID, verID, StatePendingPermissionApproval, now, now,
 		); err != nil {
 			if isUniqueConstraintErr(err) {
@@ -688,7 +717,7 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 		}
 	}
 
-	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", insID, port.MutationUpsert, false, now); err != nil {
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", insID, port.MutationUpsert, false, now); err != nil {
 		return nil, err
 	}
 	for _, resetOrgID := range resetDowngradeOrg {
@@ -779,11 +808,11 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 		}
 	}()
 
-	if err := ensureGlobalApproverRoleTx(ctx, tx, req.ApproverPrincipalID, req.OrgID); err != nil {
+	if err := s.ensureGlobalApproverRoleTx(ctx, tx, req.ApproverPrincipalID, req.OrgID); err != nil {
 		return nil, err
 	}
 
-	rowData, err := loadInstallationForTx(ctx, tx, req.InstallationID)
+	rowData, err := s.loadInstallationForTx(ctx, tx, req.InstallationID)
 	if err != nil {
 		return nil, err
 	}
@@ -797,11 +826,11 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 		return nil, fmt.Errorf("%w: installation missing candidate_version_id", ErrInvalidStateTransition)
 	}
 
-	candInfo, err := loadVersionInfoTx(ctx, tx, *rowData.candidateVerID)
+	candInfo, err := s.loadVersionInfoTx(ctx, tx, *rowData.candidateVerID)
 	if err != nil {
 		return nil, err
 	}
-	if rerr := checkRevocationsTx(ctx, tx, rowData.canonicalName, candInfo.semver, candInfo.bundleSHA256); rerr != nil {
+	if rerr := s.checkRevocationsTx(ctx, tx, rowData.canonicalName, candInfo.semver, candInfo.bundleSHA256); rerr != nil {
 		_ = tx.Rollback()
 		s.emitAudit(ctx, req.OrgID, req.ApproverPrincipalID, req.RequestID, "extension.activation_blocked_revoked", "extension_installation", req.InstallationID, map[string]any{
 			"canonical_name":    rowData.canonicalName,
@@ -812,7 +841,7 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 	}
 	candTrustTier := deriveTrustTierFromVersion(rowData.canonicalName, candInfo, s.keyring)
 	candEntSigned := deriveEnterpriseSignedFromVersion(candInfo, s.keyring)
-	if perr := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, candTrustTier, candEntSigned); perr != nil {
+	if perr := s.checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, candTrustTier, candEntSigned); perr != nil {
 		_ = tx.Rollback()
 		s.emitAudit(ctx, req.OrgID, req.ApproverPrincipalID, req.RequestID, "extension.org_trust_policy_denied", "extension_installation", req.InstallationID, map[string]any{
 			"canonical_name":    rowData.canonicalName,
@@ -830,12 +859,12 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 		return nil, err
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, s.rebind(`
 		UPDATE extension_installations
 		SET active_version_id = ?, candidate_version_id = NULL, state = ?,
 		    approved_permissions_json = ?, approved_by_principal_id = ?, approved_at_ms = ?,
 		    version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ? AND state = ?`,
+		WHERE id = ? AND version = ? AND state = ?`),
 		*rowData.candidateVerID, targetState, string(permsJSON), req.ApproverPrincipalID, now, now,
 		req.InstallationID, req.ExpectedVersion, StatePendingPermissionApproval,
 	)
@@ -845,11 +874,11 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return nil, port.ErrVersionConflict
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`, candTrustTier, rowData.packageID); err != nil {
+	if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`), candTrustTier, rowData.packageID); err != nil {
 		return nil, fmt.Errorf("installer: sync package origin_trust_tier on approve: %w", err)
 	}
 
-	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", req.InstallationID, port.MutationUpsert, false, now); err != nil {
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", req.InstallationID, port.MutationUpsert, false, now); err != nil {
 		return nil, err
 	}
 	if err := s.preflightLockfile(); err != nil {
@@ -971,11 +1000,11 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 		}
 	}()
 
-	if err := ensureGlobalApproverRoleTx(ctx, tx, req.ActorID, req.OrgID); err != nil {
+	if err := s.ensureGlobalApproverRoleTx(ctx, tx, req.ActorID, req.OrgID); err != nil {
 		return nil, err
 	}
 
-	rowData, err := loadInstallationForTx(ctx, tx, req.InstallationID)
+	rowData, err := s.loadInstallationForTx(ctx, tx, req.InstallationID)
 	if err != nil {
 		return nil, err
 	}
@@ -992,7 +1021,7 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 		return nil, fmt.Errorf("%w: installation missing active_version_id", ErrInvalidStateTransition)
 	}
 
-	oldActiveInfo, err := loadVersionInfoTx(ctx, tx, *rowData.activeVerID)
+	oldActiveInfo, err := s.loadVersionInfoTx(ctx, tx, *rowData.activeVerID)
 	if err != nil {
 		return nil, err
 	}
@@ -1003,7 +1032,7 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 	}
 
 	// Enforce CT-20 across any enabled org_extension_policies so upgrades cannot strip enterprise_signed protection.
-	if err := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, prov.OriginTrustTier, prov.EnterpriseSigned); err != nil {
+	if err := s.checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, prov.OriginTrustTier, prov.EnterpriseSigned); err != nil {
 		return nil, err
 	}
 	oldActiveTrust := deriveTrustTierFromVersion(rowData.canonicalName, oldActiveInfo, s.keyring)
@@ -1012,21 +1041,21 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 	var resetDowngradeOrg []string
 	if prov.OriginTrustTier == lockfile.TrustTierUnverifiedExternal && !prov.EnterpriseSigned && !prevActiveUnsigned {
 		var rerr error
-		resetDowngradeOrg, rerr = resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx, tx, rowData.packageID, now)
+		resetDowngradeOrg, rerr = s.resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx, tx, rowData.packageID, now)
 		if rerr != nil {
 			return nil, rerr
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, s.rebind(`
 		INSERT INTO extension_versions (
 			id, package_id, semver, contract_version, core_version_range, execution_tier,
 			bundle_sha256, signature_verified, enterprise_signed, signing_key_fingerprint, enterprise_key_fingerprint,
 			source_uri, manifest_json, sbom_digest, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		newVerID, rowData.packageID, vm.Manifest.Metadata.Version, vm.Manifest.Compatibility.ContractVersion,
 		vm.Manifest.Compatibility.CoreVersionRange, vm.ExecutionTier, extracted.BundleSHA256,
-		boolToInt(prov.SignatureVerified), boolToInt(prov.EnterpriseSigned), nullStr(prov.SigningKeyFingerprint), nullStr(prov.EnterpriseKeyFingerprint),
+		port.BoolVal(s.dialect, prov.SignatureVerified), port.BoolVal(s.dialect, prov.EnterpriseSigned), nullStr(prov.SigningKeyFingerprint), nullStr(prov.EnterpriseKeyFingerprint),
 		canonSourceURI, string(manifestJSON), nullStr(req.SBOMDigest), now,
 	); err != nil {
 		if isUniqueConstraintErr(err) {
@@ -1041,10 +1070,10 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 			return nil, fmt.Errorf("%w: escalating upgrade requires ENABLED_ACTIVE or explicit staging (got %s)", ErrInvalidStateTransition, rowData.state)
 		}
 		// CT-18: Keep active_version_id UNCHANGED so live traffic continues seamlessly on v_old.
-		res, uerr := tx.ExecContext(ctx, `
+		res, uerr := tx.ExecContext(ctx, s.rebind(`
 			UPDATE extension_installations
 			SET candidate_version_id = ?, state = ?, version = version + 1, updated_at_ms = ?
-			WHERE id = ? AND version = ?`,
+			WHERE id = ? AND version = ?`),
 			newVerID, StateUpdatingPendingReconsent, now, req.InstallationID, req.ExpectedVersion,
 		)
 		if uerr != nil {
@@ -1053,7 +1082,7 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 		if affected, _ := res.RowsAffected(); affected == 0 {
 			return nil, port.ErrVersionConflict
 		}
-		if _, cerr := appendExtensionChangelogTx(ctx, tx, "extension_installation", req.InstallationID, port.MutationUpsert, false, now); cerr != nil {
+		if _, cerr := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", req.InstallationID, port.MutationUpsert, false, now); cerr != nil {
 			return nil, cerr
 		}
 		for _, resetOrgID := range resetDowngradeOrg {
@@ -1094,7 +1123,7 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 	}
 
 	// Non-escalating upgrade (DeltaP == empty): retain previous_pinned_version_id, synchronize normalized approved permissions, and cut over.
-	candInfo, err := loadVersionInfoTx(ctx, tx, newVerID)
+	candInfo, err := s.loadVersionInfoTx(ctx, tx, newVerID)
 	if err != nil {
 		return nil, err
 	}
@@ -1102,11 +1131,11 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 	if err != nil {
 		return nil, err
 	}
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, s.rebind(`
 		UPDATE extension_installations
 		SET previous_pinned_version_id = ?, active_version_id = ?, candidate_version_id = NULL,
 		    state = ?, approved_permissions_json = ?, version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ?`,
+		WHERE id = ? AND version = ?`),
 		*rowData.activeVerID, newVerID, rowData.state, string(permsJSON), now, req.InstallationID, req.ExpectedVersion,
 	)
 	if err != nil {
@@ -1116,10 +1145,10 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 		return nil, port.ErrVersionConflict
 	}
 	// CT-20: Keep extension_packages.origin_trust_tier bound to the newly activated version's verified provenance.
-	if _, err := tx.ExecContext(ctx, `UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`, prov.OriginTrustTier, rowData.packageID); err != nil {
+	if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`), prov.OriginTrustTier, rowData.packageID); err != nil {
 		return nil, fmt.Errorf("installer: sync package origin_trust_tier: %w", err)
 	}
-	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", req.InstallationID, port.MutationUpsert, false, now); err != nil {
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", req.InstallationID, port.MutationUpsert, false, now); err != nil {
 		return nil, err
 	}
 	if err := s.preflightLockfile(); err != nil {
@@ -1206,11 +1235,11 @@ func (s *LifecycleService) RequestActivePermissionReconsent(
 		}
 	}()
 
-	if err := ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+	if err := s.ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
 		return nil, PermissionDelta{}, err
 	}
 
-	rowData, err := loadInstallationForTx(ctx, tx, installationID)
+	rowData, err := s.loadInstallationForTx(ctx, tx, installationID)
 	if err != nil {
 		return nil, PermissionDelta{}, err
 	}
@@ -1224,11 +1253,11 @@ func (s *LifecycleService) RequestActivePermissionReconsent(
 		return nil, PermissionDelta{}, fmt.Errorf("%w: %s -> %s", ErrInvalidStateTransition, rowData.state, StateUpdatingPendingReconsent)
 	}
 
-	activeInfo, err := loadVersionInfoTx(ctx, tx, *rowData.activeVerID)
+	activeInfo, err := s.loadVersionInfoTx(ctx, tx, *rowData.activeVerID)
 	if err != nil {
 		return nil, PermissionDelta{}, err
 	}
-	if rerr := checkRevocationsTx(ctx, tx, rowData.canonicalName, activeInfo.semver, activeInfo.bundleSHA256); rerr != nil {
+	if rerr := s.checkRevocationsTx(ctx, tx, rowData.canonicalName, activeInfo.semver, activeInfo.bundleSHA256); rerr != nil {
 		_ = tx.Rollback()
 		s.emitAudit(ctx, orgID, actorID, requestID, "extension.reconsent_blocked_revoked", "extension_installation", installationID, map[string]any{
 			"canonical_name": rowData.canonicalName,
@@ -1239,7 +1268,7 @@ func (s *LifecycleService) RequestActivePermissionReconsent(
 
 	activeTrustTier := deriveTrustTierFromVersion(rowData.canonicalName, activeInfo, s.keyring)
 	activeEntSigned := deriveEnterpriseSignedFromVersion(activeInfo, s.keyring)
-	if err := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, activeTrustTier, activeEntSigned); err != nil {
+	if err := s.checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, activeTrustTier, activeEntSigned); err != nil {
 		return nil, PermissionDelta{}, err
 	}
 
@@ -1252,10 +1281,10 @@ func (s *LifecycleService) RequestActivePermissionReconsent(
 		return nil, PermissionDelta{}, fmt.Errorf("%w: active version has no unapproved permissions or slots requiring re-consent", ErrInvalidStateTransition)
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, s.rebind(`
 		UPDATE extension_installations
 		SET candidate_version_id = ?, state = ?, version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ? AND state = ?`,
+		WHERE id = ? AND version = ? AND state = ?`),
 		*rowData.activeVerID, StateUpdatingPendingReconsent, now,
 		installationID, expectedVersion, StateEnabledActive,
 	)
@@ -1265,7 +1294,7 @@ func (s *LifecycleService) RequestActivePermissionReconsent(
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return nil, PermissionDelta{}, port.ErrVersionConflict
 	}
-	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, false, now); err != nil {
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, false, now); err != nil {
 		return nil, PermissionDelta{}, err
 	}
 	if _, aerr := s.emitAuditTx(ctx, tx, orgID, actorID, requestID, "extension.active_permission_reconsent_requested", "extension_installation", installationID, map[string]any{
@@ -1312,11 +1341,11 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 		}
 	}()
 
-	if err := ensureGlobalApproverRoleTx(ctx, tx, approverPrincipalID, orgID); err != nil {
+	if err := s.ensureGlobalApproverRoleTx(ctx, tx, approverPrincipalID, orgID); err != nil {
 		return nil, err
 	}
 
-	rowData, err := loadInstallationForTx(ctx, tx, installationID)
+	rowData, err := s.loadInstallationForTx(ctx, tx, installationID)
 	if err != nil {
 		return nil, err
 	}
@@ -1327,15 +1356,15 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 		return nil, fmt.Errorf("%w: installation is not awaiting escalation re-consent (state=%s)", ErrInvalidStateTransition, rowData.state)
 	}
 
-	oldInfo, err := loadVersionInfoTx(ctx, tx, *rowData.activeVerID)
+	oldInfo, err := s.loadVersionInfoTx(ctx, tx, *rowData.activeVerID)
 	if err != nil {
 		return nil, err
 	}
-	candInfo, err := loadVersionInfoTx(ctx, tx, *rowData.candidateVerID)
+	candInfo, err := s.loadVersionInfoTx(ctx, tx, *rowData.candidateVerID)
 	if err != nil {
 		return nil, err
 	}
-	if rerr := checkRevocationsTx(ctx, tx, rowData.canonicalName, candInfo.semver, candInfo.bundleSHA256); rerr != nil {
+	if rerr := s.checkRevocationsTx(ctx, tx, rowData.canonicalName, candInfo.semver, candInfo.bundleSHA256); rerr != nil {
 		_ = tx.Rollback()
 		s.emitAudit(ctx, orgID, approverPrincipalID, requestID, "extension.activation_blocked_revoked", "extension_installation", installationID, map[string]any{
 			"canonical_name":    rowData.canonicalName,
@@ -1346,7 +1375,7 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 	}
 	candTrustTier := deriveTrustTierFromVersion(rowData.canonicalName, candInfo, s.keyring)
 	candEntSigned := deriveEnterpriseSignedFromVersion(candInfo, s.keyring)
-	if err := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, candTrustTier, candEntSigned); err != nil {
+	if err := s.checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, candTrustTier, candEntSigned); err != nil {
 		return nil, err
 	}
 	vm, err := ValidateManifestStruct(candInfo.manifest, s.valPolicy, nil)
@@ -1364,12 +1393,12 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 		prevPinnedForUpdate = rowData.prevPinnedVerID
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, s.rebind(`
 		UPDATE extension_installations
 		SET previous_pinned_version_id = ?, active_version_id = ?, candidate_version_id = NULL,
 		    state = ?, approved_permissions_json = ?, approved_by_principal_id = ?, approved_at_ms = ?,
 		    version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ?`,
+		WHERE id = ? AND version = ?`),
 		nullStrPtr(prevPinnedForUpdate), *rowData.candidateVerID, StateEnabledActive,
 		string(permsJSON), approverPrincipalID, now, now, installationID, expectedVersion,
 	)
@@ -1379,17 +1408,17 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return nil, port.ErrVersionConflict
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`, candTrustTier, rowData.packageID); err != nil {
+	if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`), candTrustTier, rowData.packageID); err != nil {
 		return nil, fmt.Errorf("installer: sync package origin_trust_tier: %w", err)
 	}
-	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, false, now); err != nil {
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, false, now); err != nil {
 		return nil, err
 	}
 	var rollbackPin *lockfile.PinnedRollback
 	if !sameVersionReconsent {
 		rollbackPin = &lockfile.PinnedRollback{Version: oldInfo.semver, ArtifactSHA256: oldInfo.bundleSHA256}
 	} else if rowData.prevPinnedVerID != nil {
-		if prevInfo, perr := loadVersionInfoTx(ctx, tx, *rowData.prevPinnedVerID); perr == nil {
+		if prevInfo, perr := s.loadVersionInfoTx(ctx, tx, *rowData.prevPinnedVerID); perr == nil {
 			rollbackPin = &lockfile.PinnedRollback{Version: prevInfo.semver, ArtifactSHA256: prevInfo.bundleSHA256}
 		} else if !errors.Is(perr, port.ErrNotFound) {
 			return nil, perr
@@ -1443,11 +1472,11 @@ func (s *LifecycleService) RejectEscalatedUpgrade(ctx context.Context, installat
 		}
 	}()
 
-	if err := ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+	if err := s.ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
 		return nil, err
 	}
 
-	rowData, err := loadInstallationForTx(ctx, tx, installationID)
+	rowData, err := s.loadInstallationForTx(ctx, tx, installationID)
 	if err != nil {
 		return nil, err
 	}
@@ -1458,10 +1487,10 @@ func (s *LifecycleService) RejectEscalatedUpgrade(ctx context.Context, installat
 		return nil, fmt.Errorf("%w: expected UPDATING_PENDING_RECONSENT, got %s", ErrInvalidStateTransition, rowData.state)
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, s.rebind(`
 		UPDATE extension_installations
 		SET candidate_version_id = NULL, state = ?, version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ?`,
+		WHERE id = ? AND version = ?`),
 		StateEnabledActive, now, installationID, expectedVersion,
 	)
 	if err != nil {
@@ -1470,7 +1499,7 @@ func (s *LifecycleService) RejectEscalatedUpgrade(ctx context.Context, installat
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return nil, port.ErrVersionConflict
 	}
-	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, false, now); err != nil {
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, false, now); err != nil {
 		return nil, err
 	}
 	if _, aerr := s.emitAuditTx(ctx, tx, orgID, actorID, requestID, "extension.escalated_upgrade_rejected", "extension_installation", installationID, map[string]any{
@@ -1508,11 +1537,11 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 		}
 	}()
 
-	if err := ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+	if err := s.ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
 		return nil, err
 	}
 
-	rowData, err := loadInstallationForTx(ctx, tx, installationID)
+	rowData, err := s.loadInstallationForTx(ctx, tx, installationID)
 	if err != nil {
 		return nil, err
 	}
@@ -1526,17 +1555,17 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 		return nil, ErrNoRollbackTarget
 	}
 
-	targetPrevInfo, err := loadVersionInfoTx(ctx, tx, *rowData.prevPinnedVerID)
+	targetPrevInfo, err := s.loadVersionInfoTx(ctx, tx, *rowData.prevPinnedVerID)
 	if err != nil {
 		return nil, err
 	}
-	curActiveInfo, err := loadVersionInfoTx(ctx, tx, *rowData.activeVerID)
+	curActiveInfo, err := s.loadVersionInfoTx(ctx, tx, *rowData.activeVerID)
 	if err != nil {
 		return nil, err
 	}
 
 	// CR-06: Never allow rollback to re-activate a CRITICAL / CRITICAL_MALICIOUS revoked version.
-	if rerr := checkRevocationsTx(ctx, tx, rowData.canonicalName, targetPrevInfo.semver, targetPrevInfo.bundleSHA256); rerr != nil {
+	if rerr := s.checkRevocationsTx(ctx, tx, rowData.canonicalName, targetPrevInfo.semver, targetPrevInfo.bundleSHA256); rerr != nil {
 		_ = tx.Rollback()
 		s.emitAudit(ctx, orgID, actorID, requestID, "extension.rollback_blocked_revoked", "extension_installation", installationID, map[string]any{
 			"canonical_name": rowData.canonicalName,
@@ -1548,7 +1577,7 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 
 	restoredTrustTier := deriveTrustTierFromVersion(rowData.canonicalName, targetPrevInfo, s.keyring)
 	restoredEntSigned := deriveEnterpriseSignedFromVersion(targetPrevInfo, s.keyring)
-	if err := checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, restoredTrustTier, restoredEntSigned); err != nil {
+	if err := s.checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, restoredTrustTier, restoredEntSigned); err != nil {
 		return nil, err
 	}
 	curActiveTrust := deriveTrustTierFromVersion(rowData.canonicalName, curActiveInfo, s.keyring)
@@ -1557,7 +1586,7 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 	var resetDowngradeOrg []string
 	if restoredTrustTier == lockfile.TrustTierUnverifiedExternal && !restoredEntSigned && !curActiveUnsigned {
 		var rerr error
-		resetDowngradeOrg, rerr = resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx, tx, rowData.packageID, now)
+		resetDowngradeOrg, rerr = s.resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx, tx, rowData.packageID, now)
 		if rerr != nil {
 			return nil, rerr
 		}
@@ -1572,11 +1601,11 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 		return nil, err
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, s.rebind(`
 		UPDATE extension_installations
 		SET active_version_id = ?, previous_pinned_version_id = NULL, candidate_version_id = NULL,
 		    state = ?, approved_permissions_json = ?, version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ?`,
+		WHERE id = ? AND version = ?`),
 		targetPrevInfo.id, StateEnabledActive, string(permsJSON), now, installationID, expectedVersion,
 	)
 	if err != nil {
@@ -1585,10 +1614,10 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return nil, port.ErrVersionConflict
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`, restoredTrustTier, rowData.packageID); err != nil {
+	if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`), restoredTrustTier, rowData.packageID); err != nil {
 		return nil, fmt.Errorf("installer: restore package origin_trust_tier on rollback: %w", err)
 	}
-	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, true, now); err != nil {
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, true, now); err != nil {
 		return nil, err
 	}
 	if err := s.preflightLockfile(); err != nil {
@@ -1667,7 +1696,7 @@ func (s *LifecycleService) quarantineInstallation(ctx context.Context, installat
 		}
 	}()
 
-	rowData, err := loadInstallationForTx(ctx, tx, installationID)
+	rowData, err := s.loadInstallationForTx(ctx, tx, installationID)
 	if err != nil {
 		return err
 	}
@@ -1681,10 +1710,10 @@ func (s *LifecycleService) quarantineInstallation(ctx context.Context, installat
 		return fmt.Errorf("%w: cannot quarantine installation in state %s", ErrInvalidStateTransition, rowData.state)
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, s.rebind(`
 		UPDATE extension_installations
 		SET state = ?, quarantine_reason = ?, version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ?`,
+		WHERE id = ? AND version = ?`),
 		StateQuarantined, reason, now, installationID, rowData.version,
 	)
 	if err != nil {
@@ -1693,7 +1722,7 @@ func (s *LifecycleService) quarantineInstallation(ctx context.Context, installat
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return port.ErrVersionConflict
 	}
-	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationQuarantine, true, now); err != nil {
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationQuarantine, true, now); err != nil {
 		return err
 	}
 	if _, aerr := s.emitAuditTx(ctx, tx, "", actorID, "", "extension.quarantined", "extension_installation", installationID, map[string]any{
@@ -1763,19 +1792,22 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 		}
 	}()
 
-	if err := ensureApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+	if err := s.ensureApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+		return err
+	}
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
 		return err
 	}
 
 	var minTrust string
-	if err := tx.QueryRowContext(ctx, `SELECT min_plugin_trust FROM organizations WHERE id = ?`, orgID).Scan(&minTrust); err != nil {
+	if err := tx.QueryRowContext(ctx, s.rebind(`SELECT min_plugin_trust FROM organizations WHERE id = ?`), orgID).Scan(&minTrust); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return port.ErrNotFound
 		}
 		return err
 	}
 	var canonicalName string
-	if err := tx.QueryRowContext(ctx, `SELECT canonical_name FROM extension_packages WHERE id = ?`, packageID).Scan(&canonicalName); err != nil {
+	if err := tx.QueryRowContext(ctx, s.rebind(`SELECT canonical_name FROM extension_packages WHERE id = ?`), packageID).Scan(&canonicalName); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return port.ErrNotFound
 		}
@@ -1802,7 +1834,7 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 				continue
 			}
 			seenVerIDs[vid] = struct{}{}
-			verInfo, verr := loadVersionInfoTx(ctx, tx, vid)
+			verInfo, verr := s.loadVersionInfoTx(ctx, tx, vid)
 			if verr != nil {
 				return verr
 			}
@@ -1818,10 +1850,10 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 		pinID := strings.TrimSpace(*pinnedInstallationID)
 		pinnedParam = &pinID
 		var actID, candID sql.NullString
-		err := tx.QueryRowContext(ctx, `
+		err := tx.QueryRowContext(ctx, s.rebind(`
 			SELECT ei.active_version_id, ei.candidate_version_id
 			FROM extension_installations ei
-			WHERE ei.id = ? AND ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`,
+			WHERE ei.id = ? AND ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`),
 			pinID, packageID, StateUninstalled, StateRejectedInvalid, StateCancelled,
 		).Scan(&actID, &candID)
 		if err != nil {
@@ -1834,10 +1866,10 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 			return cerr
 		}
 	} else {
-		rows, qerr := tx.QueryContext(ctx, `
+		rows, qerr := tx.QueryContext(ctx, s.rebind(`
 			SELECT ei.active_version_id, ei.candidate_version_id
 			FROM extension_installations ei
-			WHERE ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`,
+			WHERE ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`),
 			packageID, StateUninstalled, StateRejectedInvalid, StateCancelled,
 		)
 		if qerr != nil {
@@ -1892,14 +1924,14 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 		// Only explicit ORG_OWNER enablement under requiresOrgOwner grants org_owner_opt_in; prior non-owner enablements
 		// (e.g., SECURITY_REVIEWER enabling a verified package before key withdrawal) keep org_owner_opt_in = 0.
 		if requiresOrgOwner {
-			if oerr := ensureOrgOwnerRoleTx(ctx, tx, actorID, orgID); oerr != nil {
+			if oerr := s.ensureOrgOwnerRoleTx(ctx, tx, actorID, orgID); oerr != nil {
 				return oerr
 			}
 			orgOwnerOptIn = true
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, s.rebind(`
 		INSERT INTO org_extension_policies (org_id, package_id, enabled, org_owner_opt_in, pinned_installation_id, version, created_at_ms, updated_at_ms)
 		VALUES (?, ?, ?, ?, ?, 1, ?, ?)
 		ON CONFLICT (org_id, package_id) DO UPDATE SET
@@ -1907,8 +1939,8 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 			org_owner_opt_in = excluded.org_owner_opt_in,
 			pinned_installation_id = excluded.pinned_installation_id,
 			version = org_extension_policies.version + 1,
-			updated_at_ms = excluded.updated_at_ms`,
-		orgID, packageID, boolToInt(enabled), boolToInt(orgOwnerOptIn), nullStrPtr(pinnedParam), now, now,
+			updated_at_ms = excluded.updated_at_ms`),
+		orgID, packageID, port.BoolVal(s.dialect, enabled), port.BoolVal(s.dialect, orgOwnerOptIn), nullStrPtr(pinnedParam), now, now,
 	); err != nil {
 		if isUniqueConstraintErr(err) {
 			return fmt.Errorf("%w: org_extension_policy conflict: %v", port.ErrAlreadyExists, err)
@@ -1916,7 +1948,7 @@ func (s *LifecycleService) SetOrgExtensionPolicy(ctx context.Context, orgID, pac
 		return err
 	}
 
-	if _, err := appendExtensionChangelogTx(ctx, tx, "org_extension_policy", orgID+":"+packageID, port.MutationUpsert, false, now); err != nil {
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "org_extension_policy", orgID+":"+packageID, port.MutationUpsert, false, now); err != nil {
 		return err
 	}
 	if _, aerr := s.emitAuditTx(ctx, tx, orgID, actorID, "", "extension.org_policy_updated", "org_extension_policy", packageID, map[string]any{
@@ -1946,11 +1978,11 @@ func (s *LifecycleService) CandidateProvenance(ctx context.Context, installation
 		canonicalName string
 		actID, candID sql.NullString
 	)
-	err = tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, s.rebind(`
 		SELECT ep.canonical_name, ei.active_version_id, ei.candidate_version_id
 		FROM extension_installations ei
 		JOIN extension_packages ep ON ep.id = ei.package_id
-		WHERE ei.id = ?`, installationID,
+		WHERE ei.id = ?`), installationID,
 	).Scan(&canonicalName, &actID, &candID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, port.ErrNotFound
@@ -1966,7 +1998,7 @@ func (s *LifecycleService) CandidateProvenance(ctx context.Context, installation
 	if targetID == "" {
 		return lockfile.TrustTierUnverifiedExternal, false, nil
 	}
-	verInfo, verr := loadVersionInfoTx(ctx, tx, targetID)
+	verInfo, verr := s.loadVersionInfoTx(ctx, tx, targetID)
 	if verr != nil {
 		return "", false, verr
 	}
@@ -1990,7 +2022,7 @@ func (s *LifecycleService) EvaluatePackagePolicyTrust(ctx context.Context, packa
 func (s *LifecycleService) EvaluatePackagePolicyTrustTx(ctx context.Context, tx *sql.Tx, packageID, minTrust string, pinnedInstallationID *string) (bool, error) {
 
 	var canonicalName string
-	if err := tx.QueryRowContext(ctx, `SELECT canonical_name FROM extension_packages WHERE id = ?`, packageID).Scan(&canonicalName); err != nil {
+	if err := tx.QueryRowContext(ctx, s.rebind(`SELECT canonical_name FROM extension_packages WHERE id = ?`), packageID).Scan(&canonicalName); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, port.ErrNotFound
 		}
@@ -2013,7 +2045,7 @@ func (s *LifecycleService) EvaluatePackagePolicyTrustTx(ctx context.Context, tx 
 				continue
 			}
 			seenVerIDs[vid] = struct{}{}
-			verInfo, verr := loadVersionInfoTx(ctx, tx, vid)
+			verInfo, verr := s.loadVersionInfoTx(ctx, tx, vid)
 			if verr != nil {
 				return verr
 			}
@@ -2028,10 +2060,10 @@ func (s *LifecycleService) EvaluatePackagePolicyTrustTx(ctx context.Context, tx 
 	if pinnedInstallationID != nil && strings.TrimSpace(*pinnedInstallationID) != "" {
 		pinID := strings.TrimSpace(*pinnedInstallationID)
 		var actID, candID sql.NullString
-		err := tx.QueryRowContext(ctx, `
+		err := tx.QueryRowContext(ctx, s.rebind(`
 			SELECT ei.active_version_id, ei.candidate_version_id
 			FROM extension_installations ei
-			WHERE ei.id = ? AND ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`,
+			WHERE ei.id = ? AND ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`),
 			pinID, packageID, StateUninstalled, StateRejectedInvalid, StateCancelled,
 		).Scan(&actID, &candID)
 		if err != nil {
@@ -2044,10 +2076,10 @@ func (s *LifecycleService) EvaluatePackagePolicyTrustTx(ctx context.Context, tx 
 			return false, cerr
 		}
 	} else {
-		rows, qerr := tx.QueryContext(ctx, `
+		rows, qerr := tx.QueryContext(ctx, s.rebind(`
 			SELECT ei.active_version_id, ei.candidate_version_id
 			FROM extension_installations ei
-			WHERE ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`,
+			WHERE ei.package_id = ? AND ei.state NOT IN (?, ?, ?)`),
 			packageID, StateUninstalled, StateRejectedInvalid, StateCancelled,
 		)
 		if qerr != nil {
@@ -2114,11 +2146,11 @@ func (s *LifecycleService) UninstallInstallation(ctx context.Context, installati
 		}
 	}()
 
-	if err := ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+	if err := s.ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
 		return err
 	}
 
-	rowData, err := loadInstallationForTx(ctx, tx, installationID)
+	rowData, err := s.loadInstallationForTx(ctx, tx, installationID)
 	if err != nil {
 		return err
 	}
@@ -2130,7 +2162,7 @@ func (s *LifecycleService) UninstallInstallation(ctx context.Context, installati
 	}
 
 	// Refuse uninstall if active provider_connections or enabled org policies depend on this installation.
-	if err := checkNoDependentConnectionsTx(ctx, tx, installationID); err != nil {
+	if err := s.checkNoDependentConnectionsTx(ctx, tx, installationID); err != nil {
 		return err
 	}
 	// Pre-validate lockfile path before committing DB state so malformed/symlinked lockfiles fail before commit.
@@ -2138,7 +2170,7 @@ func (s *LifecycleService) UninstallInstallation(ctx context.Context, installati
 		return err
 	}
 	// Collect version directories to clean up post-commit if caller didn't supply packageDir.
-	verIDsToPrune, perr := listPackageVersionIDsTx(ctx, tx, rowData.packageID)
+	verIDsToPrune, perr := s.listPackageVersionIDsTx(ctx, tx, rowData.packageID)
 	if perr != nil {
 		return perr
 	}
@@ -2149,11 +2181,11 @@ func (s *LifecycleService) UninstallInstallation(ctx context.Context, installati
 		}
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, s.rebind(`
 		UPDATE extension_installations
 		SET active_version_id = NULL, previous_pinned_version_id = NULL, candidate_version_id = NULL,
 		    state = ?, version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ?`,
+		WHERE id = ? AND version = ?`),
 		StateUninstalled, now, installationID, expectedVersion,
 	)
 	if err != nil {
@@ -2162,10 +2194,10 @@ func (s *LifecycleService) UninstallInstallation(ctx context.Context, installati
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		return port.ErrVersionConflict
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`, lockfile.TrustTierUnverifiedExternal, rowData.packageID); err != nil {
+	if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`), lockfile.TrustTierUnverifiedExternal, rowData.packageID); err != nil {
 		return fmt.Errorf("installer: reset package origin_trust_tier on uninstall: %w", err)
 	}
-	if _, err := appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationDelete, false, now); err != nil {
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationDelete, false, now); err != nil {
 		return err
 	}
 	if _, aerr := s.emitAuditTx(ctx, tx, orgID, actorID, "", "extension.uninstalled", "extension_installation", installationID, map[string]any{
@@ -2211,7 +2243,7 @@ func (s *LifecycleService) GetInstallation(ctx context.Context, installationID s
 	if strings.TrimSpace(installationID) == "" {
 		return nil, fmt.Errorf("%w: installation_id required", port.ErrInvalidInput)
 	}
-	row := s.db.QueryRowContext(ctx, `
+	row := s.db.QueryRowContext(ctx, s.rebind(`
 		SELECT ei.id, ei.package_id, ep.canonical_name, ep.origin_trust_tier,
 		       ei.active_version_id, va.semver,
 		       ei.previous_pinned_version_id, ei.candidate_version_id, vc.semver,
@@ -2221,7 +2253,7 @@ func (s *LifecycleService) GetInstallation(ctx context.Context, installationID s
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions va ON va.id = ei.active_version_id
 		LEFT JOIN extension_versions vc ON vc.id = ei.candidate_version_id
-		WHERE ei.id = ?`, installationID)
+		WHERE ei.id = ?`), installationID)
 
 	var (
 		rec         InstallationRecord
@@ -2277,7 +2309,10 @@ func (s *LifecycleService) extractRequestArchive(r io.Reader, path string) (*Ext
 
 func (s *LifecycleService) checkOrgTrustInDB(ctx context.Context, orgID, originTrustTier string, enterpriseSigned bool) error {
 	var minTrust string
-	if err := s.db.QueryRowContext(ctx, `SELECT min_plugin_trust FROM organizations WHERE id = ?`, orgID).Scan(&minTrust); err != nil {
+	err := s.withOrgReadTx(ctx, orgID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, s.rebind(`SELECT min_plugin_trust FROM organizations WHERE id = ?`), orgID).Scan(&minTrust)
+	})
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return port.ErrNotFound
 		}
@@ -2288,12 +2323,12 @@ func (s *LifecycleService) checkOrgTrustInDB(ctx context.Context, orgID, originT
 
 func (s *LifecycleService) checkRevocations(ctx context.Context, pkgSlug, semver, bundleSHA256 string) error {
 	var severity, reason string
-	err := s.db.QueryRowContext(ctx, `
+	err := s.db.QueryRowContext(ctx, s.rebind(`
 		SELECT severity, reason
 		FROM extension_revocations
 		WHERE package_slug = ? AND (version_or_sha256 = ? OR version_or_sha256 = ?)
 		  AND severity IN ('CRITICAL', 'CRITICAL_MALICIOUS')
-		ORDER BY version_serial DESC LIMIT 1`,
+		ORDER BY version_serial DESC LIMIT 1`),
 		pkgSlug, semver, bundleSHA256,
 	).Scan(&severity, &reason)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -2384,7 +2419,7 @@ type installationRowInfo struct {
 	version         int64
 }
 
-func loadInstallationForTx(ctx context.Context, tx *sql.Tx, installationID string) (*installationRowInfo, error) {
+func (s *LifecycleService) loadInstallationForTx(ctx context.Context, tx *sql.Tx, installationID string) (*installationRowInfo, error) {
 	var (
 		info     installationRowInfo
 		actID    sql.NullString
@@ -2393,13 +2428,13 @@ func loadInstallationForTx(ctx context.Context, tx *sql.Tx, installationID strin
 		permsRaw string
 		appBy    sql.NullString
 	)
-	err := tx.QueryRowContext(ctx, `
+	err := tx.QueryRowContext(ctx, s.rebind(`
 		SELECT ei.id, ei.package_id, ep.canonical_name, ep.origin_trust_tier,
 		       ei.active_version_id, ei.previous_pinned_version_id, ei.candidate_version_id,
 		       ei.state, ei.approved_permissions_json, ei.approved_by_principal_id, ei.version
 		FROM extension_installations ei
 		JOIN extension_packages ep ON ep.id = ei.package_id
-		WHERE ei.id = ?`, installationID,
+		WHERE ei.id = ?`), installationID,
 	).Scan(
 		&info.id, &info.packageID, &info.canonicalName, &info.originTrustTier,
 		&actID, &prevID, &candID, &info.state, &permsRaw, &appBy, &info.version,
@@ -2436,29 +2471,29 @@ type versionRowInfo struct {
 	manifest              ExtensionManifest
 }
 
-func loadVersionInfoTx(ctx context.Context, tx *sql.Tx, versionID string) (*versionRowInfo, error) {
+func (s *LifecycleService) loadVersionInfoTx(ctx context.Context, tx *sql.Tx, versionID string) (*versionRowInfo, error) {
 	var (
-		v      versionRowInfo
-		sigInt int
-		entInt int
-		fp     sql.NullString
-		entFP  sql.NullString
-		mJSON  string
+		v       versionRowInfo
+		sigBool port.FlexBool
+		entBool port.FlexBool
+		fp      sql.NullString
+		entFP   sql.NullString
+		mJSON   string
 	)
-	err := tx.QueryRowContext(ctx, `
+	err := tx.QueryRowContext(ctx, s.rebind(`
 		SELECT id, semver, contract_version, execution_tier, bundle_sha256,
 		       signature_verified, enterprise_signed, signing_key_fingerprint, COALESCE(enterprise_key_fingerprint, ''),
 		       source_uri, manifest_json
-		FROM extension_versions WHERE id = ?`, versionID,
-	).Scan(&v.id, &v.semver, &v.contractVersion, &v.executionTier, &v.bundleSHA256, &sigInt, &entInt, &fp, &entFP, &v.sourceURI, &mJSON)
+		FROM extension_versions WHERE id = ?`), versionID,
+	).Scan(&v.id, &v.semver, &v.contractVersion, &v.executionTier, &v.bundleSHA256, &sigBool, &entBool, &fp, &entFP, &v.sourceURI, &mJSON)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, port.ErrNotFound
 		}
 		return nil, err
 	}
-	v.signatureVerified = sigInt == 1
-	v.enterpriseSigned = entInt == 1
+	v.signatureVerified = bool(sigBool)
+	v.enterpriseSigned = bool(entBool)
 	v.fingerprint = fp.String
 	v.enterpriseFingerprint = entFP.String
 	if err := json.Unmarshal([]byte(mJSON), &v.manifest); err != nil {
@@ -2500,14 +2535,14 @@ func (s *LifecycleService) preflightLockfile() error {
 	return nil
 }
 
-func checkRevocationsTx(ctx context.Context, tx *sql.Tx, pkgSlug, semver, bundleSHA256 string) error {
+func (s *LifecycleService) checkRevocationsTx(ctx context.Context, tx *sql.Tx, pkgSlug, semver, bundleSHA256 string) error {
 	var severity, reason string
-	err := tx.QueryRowContext(ctx, `
+	err := tx.QueryRowContext(ctx, s.rebind(`
 		SELECT severity, reason
 		FROM extension_revocations
 		WHERE package_slug = ? AND (version_or_sha256 = ? OR version_or_sha256 = ?)
 		  AND severity IN ('CRITICAL', 'CRITICAL_MALICIOUS')
-		ORDER BY version_serial DESC LIMIT 1`,
+		ORDER BY version_serial DESC LIMIT 1`),
 		pkgSlug, semver, bundleSHA256,
 	).Scan(&severity, &reason)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -2519,7 +2554,36 @@ func checkRevocationsTx(ctx context.Context, tx *sql.Tx, pkgSlug, semver, bundle
 	return fmt.Errorf("%w: severity=%s reason=%s", ErrRevokedExtension, severity, reason)
 }
 
-func checkEnabledOrgPoliciesForPackageTx(ctx context.Context, tx *sql.Tx, packageID, originTrustTier string, enterpriseSigned bool) error {
+func (s *LifecycleService) checkEnabledOrgPoliciesForPackageTx(ctx context.Context, tx *sql.Tx, packageID, originTrustTier string, enterpriseSigned bool) error {
+	if s.dialect == port.DialectPostgres {
+		orgIDs, err := port.ListOrgIDsTx(ctx, tx, s.dialect)
+		if err != nil {
+			return err
+		}
+		for _, oid := range orgIDs {
+			if err := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); err != nil {
+				return err
+			}
+			var minTrust string
+			qerr := tx.QueryRowContext(ctx, s.rebind(`
+				SELECT o.min_plugin_trust
+				FROM org_extension_policies oep
+				JOIN organizations o ON o.id = oep.org_id
+				WHERE oep.package_id = ? AND oep.enabled = TRUE`),
+				packageID,
+			).Scan(&minTrust)
+			if errors.Is(qerr, sql.ErrNoRows) {
+				continue
+			}
+			if qerr != nil {
+				return qerr
+			}
+			if perr := CheckOrgMinTrustPolicy(minTrust, originTrustTier, enterpriseSigned); perr != nil {
+				return perr
+			}
+		}
+		return nil
+	}
 	rows, err := tx.QueryContext(ctx, `
 		SELECT o.min_plugin_trust
 		FROM org_extension_policies oep
@@ -2546,7 +2610,50 @@ func checkEnabledOrgPoliciesForPackageTx(ctx context.Context, tx *sql.Tx, packag
 // resetEnabledOrgPoliciesOnUnsignedTransitionTx invalidates prior org_extension_policies enablements
 // when transitioning a package into unsigned unverified_external trust so non-ORG_OWNER enablements
 // granted under higher trust cannot carry forward without explicit ORG_OWNER opt-in (TP-BR-0202).
-func resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx context.Context, tx *sql.Tx, packageID string, now int64) ([]string, error) {
+func (s *LifecycleService) resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx context.Context, tx *sql.Tx, packageID string, now int64) ([]string, error) {
+	if s.dialect == port.DialectPostgres {
+		allOrgs, err := port.ListOrgIDsTx(ctx, tx, s.dialect)
+		if err != nil {
+			return nil, err
+		}
+		var orgIDs []string
+		for _, oid := range allOrgs {
+			if err := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); err != nil {
+				return nil, err
+			}
+			var wasEnabled port.FlexBool
+			var anyReset port.FlexBool
+			qerr := tx.QueryRowContext(ctx, s.rebind(`
+				SELECT COALESCE(BOOL_OR(enabled), FALSE), COUNT(*) > 0
+				FROM org_extension_policies
+				WHERE package_id = ? AND (enabled = TRUE OR org_owner_opt_in = TRUE)`),
+				packageID,
+			).Scan(&wasEnabled, &anyReset)
+			if qerr != nil {
+				return nil, qerr
+			}
+			if !bool(anyReset) {
+				continue
+			}
+			if _, uerr := tx.ExecContext(ctx, s.rebind(`
+				UPDATE org_extension_policies
+				SET enabled = FALSE, org_owner_opt_in = FALSE, version = version + 1, updated_at_ms = ?
+				WHERE package_id = ? AND (enabled = TRUE OR org_owner_opt_in = TRUE)`),
+				now, packageID,
+			); uerr != nil {
+				return nil, fmt.Errorf("installer: reset org_extension_policies on trust downgrade: %w", uerr)
+			}
+			if bool(wasEnabled) {
+				orgIDs = append(orgIDs, oid)
+			}
+		}
+		for _, oid := range orgIDs {
+			if _, err := s.appendExtensionChangelogTx(ctx, tx, "org_extension_policy", oid+":"+packageID, port.MutationUpsert, false, now); err != nil {
+				return nil, err
+			}
+		}
+		return orgIDs, nil
+	}
 	rows, err := tx.QueryContext(ctx, `
 		SELECT org_id
 		FROM org_extension_policies
@@ -2582,15 +2689,15 @@ func resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx context.Context, tx *sql.
 		return nil, fmt.Errorf("installer: reset org_extension_policies on trust downgrade: %w", err)
 	}
 	for _, oid := range orgIDs {
-		if _, err := appendExtensionChangelogTx(ctx, tx, "org_extension_policy", oid+":"+packageID, port.MutationUpsert, false, now); err != nil {
+		if _, err := s.appendExtensionChangelogTx(ctx, tx, "org_extension_policy", oid+":"+packageID, port.MutationUpsert, false, now); err != nil {
 			return nil, err
 		}
 	}
 	return orgIDs, nil
 }
 
-func listPackageVersionIDsTx(ctx context.Context, tx *sql.Tx, packageID string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM extension_versions WHERE package_id = ?`, packageID)
+func (s *LifecycleService) listPackageVersionIDsTx(ctx context.Context, tx *sql.Tx, packageID string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, s.rebind(`SELECT id FROM extension_versions WHERE package_id = ?`), packageID)
 	if err != nil {
 		return nil, err
 	}
@@ -2648,12 +2755,15 @@ func verifyOwnedPackageDir(pluginsDir, pkgDir string, ownedVersionIDs []string, 
 	return fmt.Errorf("%w: packageDir %q does not belong to installation %q", ErrPathNotConfined, pkgDir, installationID)
 }
 
-func ensureOrgOwnerRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID string) error {
+func (s *LifecycleService) ensureOrgOwnerRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID string) error {
 	if strings.TrimSpace(principalID) == "" || strings.TrimSpace(orgID) == "" {
 		return fmt.Errorf("%w: org_id and principal_id are required for ORG_OWNER opt-in", ErrPermissionDenied)
 	}
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return err
+	}
 	var count int
-	err := tx.QueryRowContext(ctx, `
+	err := tx.QueryRowContext(ctx, s.rebind(`
 		SELECT COUNT(*)
 		FROM role_bindings rb
 		JOIN principals p ON p.id = rb.principal_id
@@ -2662,7 +2772,7 @@ func ensureOrgOwnerRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID st
 		  AND rb.scope_type = 'ORG'
 		  AND rb.scope_id = ?
 		  AND rb.org_id = ?
-		  AND rb.role_name = 'ORG_OWNER'`,
+		  AND rb.role_name = 'ORG_OWNER'`),
 		principalID, orgID, orgID,
 	).Scan(&count)
 	if err != nil {
@@ -2674,9 +2784,12 @@ func ensureOrgOwnerRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID st
 	return nil
 }
 
-func ensureGlobalApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID string) error {
+func (s *LifecycleService) ensureGlobalApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID string) error {
 	if strings.TrimSpace(principalID) == "" {
 		return fmt.Errorf("%w: approver principal_id is required", ErrPermissionDenied)
+	}
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return err
 	}
 	var orgCount int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE')`).Scan(&orgCount); err != nil {
@@ -2686,14 +2799,14 @@ func ensureGlobalApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, or
 	// mutations exclusively to active INSTANCE-scoped OPERATOR principals.
 	if orgCount > 1 || strings.TrimSpace(orgID) == "" {
 		var count int
-		err := tx.QueryRowContext(ctx, `
+		err := tx.QueryRowContext(ctx, s.rebind(`
 			SELECT COUNT(*)
 			FROM role_bindings rb
 			JOIN principals p ON p.id = rb.principal_id
 			WHERE rb.principal_id = ?
 			  AND p.status = 'ACTIVE'
 			  AND rb.scope_type = 'INSTANCE'
-			  AND rb.role_name = 'OPERATOR'`,
+			  AND rb.role_name = 'OPERATOR'`),
 			principalID,
 		).Scan(&count)
 		if err != nil {
@@ -2704,27 +2817,53 @@ func ensureGlobalApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, or
 		}
 		return nil
 	}
-	return ensureApproverRoleTx(ctx, tx, principalID, orgID)
+	return s.ensureApproverRoleTx(ctx, tx, principalID, orgID)
 }
 
-func ensureApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID string) error {
+func (s *LifecycleService) ensureApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID string) error {
 	if strings.TrimSpace(principalID) == "" {
 		return fmt.Errorf("%w: approver principal_id is required", ErrPermissionDenied)
 	}
 	var count int
 	if strings.TrimSpace(orgID) != "" {
-		err := tx.QueryRowContext(ctx, `
+		if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+			return err
+		}
+		err := tx.QueryRowContext(ctx, s.rebind(`
 			SELECT COUNT(*)
 			FROM role_bindings rb
 			JOIN principals p ON p.id = rb.principal_id
 			WHERE rb.principal_id = ?
 			  AND p.status = 'ACTIVE'
-			  AND ((rb.scope_type = 'INSTANCE' AND rb.role_name = 'OPERATOR')
-			       OR (rb.scope_type = 'ORG' AND rb.org_id = ? AND rb.role_name IN ('ORG_OWNER', 'SECURITY_REVIEWER')))`,
+			  AND rb.scope_type = 'ORG'
+			  AND rb.org_id = ?
+			  AND rb.role_name IN ('ORG_OWNER', 'SECURITY_REVIEWER')`),
 			principalID, orgID,
 		).Scan(&count)
 		if err != nil {
 			return err
+		}
+		if count == 0 {
+			if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+				return err
+			}
+			err = tx.QueryRowContext(ctx, s.rebind(`
+				SELECT COUNT(*)
+				FROM role_bindings rb
+				JOIN principals p ON p.id = rb.principal_id
+				WHERE rb.principal_id = ?
+				  AND p.status = 'ACTIVE'
+				  AND rb.scope_type = 'INSTANCE'
+				  AND rb.role_name = 'OPERATOR'`),
+				principalID,
+			).Scan(&count)
+			if err != nil {
+				return err
+			}
+			// Restore org RLS scope so subsequent org-scoped statements in the same tx remain intact.
+			if rlsErr := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); rlsErr != nil {
+				return rlsErr
+			}
 		}
 		if count == 0 {
 			return fmt.Errorf("%w: active principal %q requires INSTANCE OPERATOR or ORG(%s) ORG_OWNER/SECURITY_REVIEWER role", ErrPermissionDenied, principalID, orgID)
@@ -2733,14 +2872,17 @@ func ensureApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID st
 	}
 
 	// Instance-global action (orgID == ""): require active INSTANCE-scoped OPERATOR role (forbid org/project privilege escalation).
-	err := tx.QueryRowContext(ctx, `
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return err
+	}
+	err := tx.QueryRowContext(ctx, s.rebind(`
 		SELECT COUNT(*)
 		FROM role_bindings rb
 		JOIN principals p ON p.id = rb.principal_id
 		WHERE rb.principal_id = ?
 		  AND p.status = 'ACTIVE'
 		  AND rb.scope_type = 'INSTANCE'
-		  AND rb.role_name = 'OPERATOR'`,
+		  AND rb.role_name = 'OPERATOR'`),
 		principalID,
 	).Scan(&count)
 	if err != nil {
@@ -2752,38 +2894,92 @@ func ensureApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID st
 	return nil
 }
 
-func checkNoDependentConnectionsTx(ctx context.Context, tx *sql.Tx, installationID string) error {
+func (s *LifecycleService) checkNoDependentConnectionsTx(ctx context.Context, tx *sql.Tx, installationID string) error {
 	var pinnedEnabled int
-	if err := tx.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM org_extension_policies
-		WHERE pinned_installation_id = ? AND enabled = 1`,
-		installationID,
-	).Scan(&pinnedEnabled); err != nil {
-		return fmt.Errorf("installer: query org_extension_policies dependencies: %w", err)
+	if s.dialect == port.DialectPostgres {
+		orgIDs, err := port.ListOrgIDsTx(ctx, tx, s.dialect)
+		if err != nil {
+			return fmt.Errorf("installer: list orgs for policy dependency check: %w", err)
+		}
+		for _, oid := range orgIDs {
+			if err := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); err != nil {
+				return err
+			}
+			var n int
+			if err := tx.QueryRowContext(ctx, s.rebind(`
+				SELECT COUNT(*) FROM org_extension_policies
+				WHERE pinned_installation_id = ? AND enabled = `+port.BoolExpr(s.dialect, true)),
+				installationID,
+			).Scan(&n); err != nil {
+				return fmt.Errorf("installer: query org_extension_policies dependencies: %w", err)
+			}
+			pinnedEnabled += n
+		}
+	} else {
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM org_extension_policies
+			WHERE pinned_installation_id = ? AND enabled = 1`,
+			installationID,
+		).Scan(&pinnedEnabled); err != nil {
+			return fmt.Errorf("installer: query org_extension_policies dependencies: %w", err)
+		}
 	}
 	if pinnedEnabled > 0 {
 		return fmt.Errorf("%w: %d enabled org_extension_policies pin installation %q", port.ErrResourceInUse, pinnedEnabled, installationID)
 	}
 
 	var tblCount int
-	if err := tx.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM sqlite_master
-		WHERE type = 'table' AND name IN ('provider_connections', 'provider_adapters')`,
-	).Scan(&tblCount); err != nil {
-		return fmt.Errorf("installer: inspect connection tables: %w", err)
+	if s.dialect == port.DialectPostgres {
+		if err := tx.QueryRowContext(ctx, `
+			SELECT CASE
+				WHEN to_regclass('provider_connections') IS NOT NULL
+				 AND to_regclass('provider_adapters') IS NOT NULL
+				THEN 2 ELSE 0
+			END`,
+		).Scan(&tblCount); err != nil {
+			return fmt.Errorf("installer: inspect connection tables: %w", err)
+		}
+	} else {
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM sqlite_master
+			WHERE type = 'table' AND name IN ('provider_connections', 'provider_adapters')`,
+		).Scan(&tblCount); err != nil {
+			return fmt.Errorf("installer: inspect connection tables: %w", err)
+		}
 	}
 	if tblCount < 2 {
 		return nil
 	}
 	var activeDeps int
-	err := tx.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM provider_connections pc
-		JOIN provider_adapters pa ON pa.id = pc.adapter_id
-		WHERE pa.installation_id = ? AND pc.state NOT IN ('REVOKED', 'ARCHIVED')`,
-		installationID,
-	).Scan(&activeDeps)
-	if err != nil {
-		return fmt.Errorf("installer: query provider_connections dependencies: %w", err)
+	if s.dialect == port.DialectPostgres {
+		orgIDs, err := port.ListOrgIDsTx(ctx, tx, s.dialect)
+		if err != nil {
+			return fmt.Errorf("installer: list orgs for connection dependency check: %w", err)
+		}
+		for _, oid := range orgIDs {
+			if err := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); err != nil {
+				return err
+			}
+			var n int
+			if err := tx.QueryRowContext(ctx, s.rebind(`
+				SELECT COUNT(*) FROM provider_connections pc
+				JOIN provider_adapters pa ON pa.id = pc.adapter_id
+				WHERE pa.installation_id = ? AND pc.state NOT IN ('REVOKED', 'ARCHIVED')`),
+				installationID,
+			).Scan(&n); err != nil {
+				return fmt.Errorf("installer: query provider_connections dependencies: %w", err)
+			}
+			activeDeps += n
+		}
+	} else {
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM provider_connections pc
+			JOIN provider_adapters pa ON pa.id = pc.adapter_id
+			WHERE pa.installation_id = ? AND pc.state NOT IN ('REVOKED', 'ARCHIVED')`,
+			installationID,
+		).Scan(&activeDeps); err != nil {
+			return fmt.Errorf("installer: query provider_connections dependencies: %w", err)
+		}
 	}
 	if activeDeps > 0 {
 		return fmt.Errorf("%w: %d active provider_connections depend on installation %q", port.ErrResourceInUse, activeDeps, installationID)
@@ -2791,20 +2987,12 @@ func checkNoDependentConnectionsTx(ctx context.Context, tx *sql.Tx, installation
 	return nil
 }
 
-func appendExtensionChangelogTx(ctx context.Context, tx *sql.Tx, entityKind, entityID, mutationType string, emergency bool, now int64) (int64, error) {
-	emInt := 0
-	if emergency {
-		emInt = 1
-	}
-	res, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (NULL, ?, ?, ?, ?, ?)`,
-		entityKind, entityID, mutationType, emInt, now,
-	)
+func (s *LifecycleService) appendExtensionChangelogTx(ctx context.Context, tx *sql.Tx, entityKind, entityID, mutationType string, emergency bool, now int64) (int64, error) {
+	epoch, err := port.AppendConfigChangelogTx(ctx, tx, s.dialect, "", entityKind, entityID, mutationType, emergency, now)
 	if err != nil {
 		return 0, fmt.Errorf("installer: append config_changelog: %w", err)
 	}
-	return res.LastInsertId()
+	return epoch, nil
 }
 
 func (s *LifecycleService) emitAuditTx(ctx context.Context, tx *sql.Tx, orgID, actorID, reqID, eventType, targetType, targetID string, meta map[string]any, nowMs int64) (bool, error) {
@@ -2839,6 +3027,15 @@ func (s *LifecycleService) emitAuditTx(ctx context.Context, tx *sql.Tx, orgID, a
 	rawMeta, merr := json.Marshal(meta)
 	if merr != nil {
 		return true, merr
+	}
+	if orgPtr != nil {
+		if rlsErr := port.SetOrgRLSTx(ctx, tx, s.dialect, *orgPtr); rlsErr != nil {
+			return true, rlsErr
+		}
+	} else {
+		if rlsErr := port.SetOperatorRLSTx(ctx, tx, s.dialect); rlsErr != nil {
+			return true, rlsErr
+		}
 	}
 	return true, txSink.AppendTx(ctx, tx, port.AuditEvent{
 		ID:           id,
@@ -2900,6 +3097,10 @@ func (s *LifecycleService) emitAudit(ctx context.Context, orgID, actorID, reqID,
 func isUniqueConstraintErr(err error) bool {
 	if err == nil {
 		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return true
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "unique constraint failed") || strings.Contains(msg, "constraint failed: unique")

@@ -77,6 +77,7 @@ type ManagerConfig struct {
 // Manager mints, persists to a 0600 file, verifies, and permanently burns the Bootstrap Token.
 type Manager struct {
 	db        *sql.DB
+	dialect   port.Dialect
 	tokenPath string
 	nowMs     func() int64
 	argon2    auth.Argon2Params
@@ -125,6 +126,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 
 	return &Manager{
 		db:        cfg.DB,
+		dialect:   port.DetectDialect(context.Background(), cfg.DB),
 		tokenPath: absPath,
 		nowMs:     nowFn,
 		argon2:    a2,
@@ -137,7 +139,22 @@ func (m *Manager) IsBootstrapped(ctx context.Context) (bool, error) {
 	if m == nil {
 		return false, fmt.Errorf("%w: nil bootstrap Manager", port.ErrInvalidInput)
 	}
-	return isBootstrappedSQL(ctx, m.db)
+	return isBootstrappedDB(ctx, m.db, m.dialect)
+}
+
+func isBootstrappedDB(ctx context.Context, db *sql.DB, dialect port.Dialect) (bool, error) {
+	if dialect != port.DialectPostgres {
+		return isBootstrappedSQL(ctx, db)
+	}
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOperatorRLSTx(ctx, tx, dialect); err != nil {
+		return false, err
+	}
+	return isBootstrappedSQL(ctx, tx)
 }
 
 func isBootstrappedSQL(ctx context.Context, q interface {
@@ -148,21 +165,29 @@ func isBootstrappedSQL(ctx context.Context, q interface {
 		SELECT 1 FROM role_bindings
 		WHERE role_name IN ('OPERATOR', 'ORG_OWNER')
 		LIMIT 1`).Scan(&exists)
-	if errors.Is(err, sql.ErrNoRows) {
-		var pExists int
-		errP := q.QueryRowContext(ctx, `SELECT 1 FROM principals LIMIT 1`).Scan(&pExists)
-		if errors.Is(errP, sql.ErrNoRows) {
-			return false, nil
-		}
-		if errP != nil {
-			return false, errP
-		}
+	if err == nil {
 		return true, nil
 	}
-	if err != nil {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
-	return true, nil
+	var pExists int
+	errP := q.QueryRowContext(ctx, `SELECT 1 FROM principals LIMIT 1`).Scan(&pExists)
+	if errP == nil {
+		return true, nil
+	}
+	if !errors.Is(errP, sql.ErrNoRows) {
+		return false, errP
+	}
+	var orgExists int
+	errO := q.QueryRowContext(ctx, `SELECT 1 FROM organizations LIMIT 1`).Scan(&orgExists)
+	if errO == nil {
+		return true, nil
+	}
+	if errors.Is(errO, sql.ErrNoRows) {
+		return false, nil
+	}
+	return false, errO
 }
 
 // EnsureToken mints a one-time 0600 Bootstrap Token file when the DB is unbootstrapped.
@@ -175,7 +200,7 @@ func (m *Manager) EnsureToken(ctx context.Context) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	booted, err := isBootstrappedSQL(ctx, m.db)
+	booted, err := isBootstrappedDB(ctx, m.db, m.dialect)
 	if err != nil {
 		return "", err
 	}
@@ -291,7 +316,7 @@ func (m *Manager) validateCompleteLocked(ctx context.Context, req CompleteReques
 		return "", "", "", "", ErrBootstrapAlreadyCompleted
 	}
 
-	booted, err := isBootstrappedSQL(ctx, m.db)
+	booted, err := isBootstrappedDB(ctx, m.db, m.dialect)
 	if err != nil {
 		return "", "", "", "", err
 	}
@@ -411,13 +436,16 @@ func (m *Manager) CompleteWithProvisioner(
 
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
-		if bErr, checkErr := isBootstrappedSQL(ctx, m.db); checkErr == nil && bErr {
+		if bErr, checkErr := isBootstrappedDB(ctx, m.db, m.dialect); checkErr == nil && bErr {
 			m.burnLocked()
 			return nil, ErrBootstrapAlreadyCompleted
 		}
 		return nil, fmt.Errorf("bootstrap: begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOperatorRLSTx(ctx, tx, m.dialect); err != nil {
+		return nil, err
+	}
 
 	// Re-verify inside serialized write transaction to guarantee single-winner atomicity.
 	alreadyBooted, err := isBootstrappedSQL(ctx, tx)
@@ -431,72 +459,75 @@ func (m *Manager) CompleteWithProvisioner(
 
 	mapRaceOrErr := func(execErr error) error {
 		_ = tx.Rollback()
-		if b, checkErr := isBootstrappedSQL(ctx, m.db); checkErr == nil && b {
+		if b, checkErr := isBootstrappedDB(ctx, m.db, m.dialect); checkErr == nil && b {
 			m.burnLocked()
 			return ErrBootstrapAlreadyCompleted
 		}
 		return fmt.Errorf("bootstrap: write tx: %w", execErr)
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(m.dialect, `
 		INSERT INTO organizations (
 			id, slug, display_name, status, default_data_region,
 			min_plugin_trust, require_four_eyes_approval, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, 'ACTIVE', NULL, 'ANY_APPROVED', 0, 1, ?, ?)`,
-		orgID, orgSlug, orgName, now, now,
+		) VALUES (?, ?, ?, 'ACTIVE', NULL, 'ANY_APPROVED', ?, 1, ?, ?)`),
+		orgID, orgSlug, orgName, port.BoolVal(m.dialect, false), now, now,
 	); err != nil {
 		return nil, mapRaceOrErr(err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if err := port.SetOrgRLSTx(ctx, tx, m.dialect, orgID); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, port.Rebind(m.dialect, `
 		INSERT INTO projects (
 			id, org_id, slug, display_name, status, enforced_region, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, 'ACTIVE', NULL, 1, ?, ?)`,
+		) VALUES (?, ?, ?, ?, 'ACTIVE', NULL, 1, ?, ?)`),
 		projID, orgID, projSlug, projName, now, now,
 	); err != nil {
 		return nil, mapRaceOrErr(err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(m.dialect, `
 		INSERT INTO environments (
 			id, org_id, project_id, slug, require_tested_caps, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, 'dev', 0, 1, ?, ?)`,
-		envID, orgID, projID, now, now,
+		) VALUES (?, ?, ?, 'dev', ?, 1, ?, ?)`),
+		envID, orgID, projID, port.BoolVal(m.dialect, false), now, now,
 	); err != nil {
 		return nil, mapRaceOrErr(err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(m.dialect, `
 		INSERT INTO principals (
 			id, org_id, kind, email_or_sub, password_argon2id, oidc_issuer,
 			status, version, last_login_at_ms, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, NULL, 'ACTIVE', 1, NULL, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, NULL, 'ACTIVE', 1, NULL, ?, ?)`),
 		principalID, orgID, auth.PrincipalKindHumanLocal, email, pwHash, now, now,
 	); err != nil {
 		return nil, mapRaceOrErr(err)
 	}
 
-	// Personal Admin mode grants both instance OPERATOR and organization ORG_OWNER bindings (ACT-01).
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(m.dialect, `
 		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
-		VALUES (?, NULL, ?, 'INSTANCE', 'instance', ?, 1, ?)`,
-		rbOpID, principalID, rbac.RoleOperator, now,
-	); err != nil {
-		return nil, mapRaceOrErr(err)
-	}
-
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
-		VALUES (?, ?, ?, 'ORG', ?, ?, 1, ?)`,
+		VALUES (?, ?, ?, 'ORG', ?, ?, 1, ?)`),
 		rbOwnerID, orgID, principalID, orgID, rbac.RoleOrgOwner, now,
 	); err != nil {
 		return nil, mapRaceOrErr(err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'organization', ?, 'UPSERT', 0, ?)`,
-		orgID, orgID, now,
+	if _, err := port.AppendConfigChangelogTx(ctx, tx, m.dialect, orgID, "organization", orgID, port.MutationUpsert, false, now); err != nil {
+		return nil, mapRaceOrErr(err)
+	}
+
+	// Switch to instance-operator scope for org_id=NULL bindings and instance audit events (ACT-01).
+	if err := port.SetOperatorRLSTx(ctx, tx, m.dialect); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, port.Rebind(m.dialect, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES (?, NULL, ?, 'INSTANCE', 'instance', ?, 1, ?)`),
+		rbOpID, principalID, rbac.RoleOperator, now,
 	); err != nil {
 		return nil, mapRaceOrErr(err)
 	}
@@ -518,6 +549,10 @@ func (m *Manager) CompleteWithProvisioner(
 		MetadataJSON: `{"mode":"personal_admin_operator_org_owner"}`,
 	}); aerr != nil {
 		return nil, aerr
+	}
+
+	if err := port.SetOrgRLSTx(ctx, tx, m.dialect, orgID); err != nil {
+		return nil, err
 	}
 
 	result := &CompleteResult{

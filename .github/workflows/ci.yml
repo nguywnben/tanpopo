@@ -273,16 +273,51 @@ jobs:
         run: |
           set -euo pipefail
           ADMIN_DSN="postgres://postgres:tanpopo_pg_admin@127.0.0.1:5432/postgres?sslmode=disable"
+          TEST_ADMIN_DSN="postgres://postgres:tanpopo_pg_admin@127.0.0.1:5432/tanpopo_test?sslmode=disable"
           psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "CREATE ROLE tanpopo_app WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD 'tanpopo_app_secret';"
+          psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "CREATE ROLE tanpopo_webhook_worker NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;"
+          psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "GRANT tanpopo_webhook_worker TO tanpopo_app;"
           psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "CREATE DATABASE tanpopo_test OWNER tanpopo_app;"
+          psql "$TEST_ADMIN_DSN" -v ON_ERROR_STOP=1 -c "GRANT USAGE ON SCHEMA public TO tanpopo_webhook_worker; ALTER DEFAULT PRIVILEGES FOR ROLE tanpopo_app IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tanpopo_webhook_worker;"
 
-      - name: Run Live PostgreSQL 16+ Dual-DB, FORCE RLS, CT-29/30/32 & FMEA-06 Suite (-race)
+      - name: Lint & Render HA Helm Chart (deploy/helm/tanpopo)
+        run: |
+          set -euo pipefail
+          if command -v helm >/dev/null 2>&1; then
+            helm lint deploy/helm/tanpopo
+            helm template tanpopo deploy/helm/tanpopo > /tmp/tanpopo-rendered.yaml
+            test -s /tmp/tanpopo-rendered.yaml
+          else
+            echo "ERROR: helm CLI not available on ubuntu-24.04 runner" >&2
+            exit 1
+          fi
+
+      - name: Provision 3-Shard Valkey Cluster (127.0.0.1:7001-7003)
+        run: |
+          set -euo pipefail
+          for port in 7001 7002 7003; do
+            docker run -d --name "tanpopo-valkey-$port" --network host valkey/valkey:8.0-alpine \
+              valkey-server --port "$port" --cluster-enabled yes --cluster-config-file "nodes-$port.conf" --cluster-node-timeout 2000 --appendonly no --save ""
+          done
+          for i in $(seq 1 30); do
+            if docker exec tanpopo-valkey-7001 valkey-cli -p 7001 ping >/dev/null 2>&1 &&
+               docker exec tanpopo-valkey-7002 valkey-cli -p 7002 ping >/dev/null 2>&1 &&
+               docker exec tanpopo-valkey-7003 valkey-cli -p 7003 ping >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec tanpopo-valkey-7001 valkey-cli --cluster create 127.0.0.1:7001 127.0.0.1:7002 127.0.0.1:7003 --cluster-replicas 0 --cluster-yes
+          docker exec tanpopo-valkey-7001 valkey-cli -p 7001 cluster info
+
+      - name: Run Live PostgreSQL 16+ Dual-DB, FORCE RLS, Valkey Cluster & TP-IMP-0040 AC Suite (-race)
         env:
           TANPOPO_REQUIRE_POSTGRES_TESTS: "1"
           TANPOPO_TEST_PG_DSN: "postgres://tanpopo_app:tanpopo_app_secret@127.0.0.1:5432/tanpopo_test?sslmode=disable"
           TANPOPO_TEST_PG_ADMIN_DSN: "postgres://postgres:tanpopo_pg_admin@127.0.0.1:5432/tanpopo_test?sslmode=disable"
+          TANPOPO_TEST_VALKEY_ADDRS: "127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003"
         run: |
           set -euo pipefail
           go test -v -race -coverprofile=pg-storage.cov ./internal/storage/postgres/...
           go tool cover -func=pg-storage.cov | awk '/^total:/ {pct=$NF; sub(/%/,"",pct); if (pct+0 < 85.0) { printf "postgres storage coverage %.1f%% < 85.0%%\n", pct; exit 1 }}'
-          go test -v -race ./internal/finops/ledger/... ./internal/security/audit/... ./internal/security/vault/... ./internal/ops/migrate/... ./internal/cli/support/... ./internal/cli/ops/...
+          go test -v -race ./internal/finops/ledger/... ./internal/security/audit/... ./internal/security/vault/... ./internal/ops/migrate/... ./internal/ops/upgrade/... ./internal/cli/support/... ./internal/cli/ops/... ./internal/cli/admin/... ./internal/cluster/valkey/... ./internal/config/snapshot/... ./internal/iam/vkey/... ./internal/iam/auth/... ./internal/iam/bootstrap/... ./internal/policy/engine/... ./internal/provider/catalog/... ./internal/admin/http/... ./cmd/tanpopo/...

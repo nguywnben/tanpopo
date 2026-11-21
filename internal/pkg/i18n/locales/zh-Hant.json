@@ -256,5 +256,20 @@
   "cli.ops.db.short": "檢查或遷移資料庫儲存引擎。",
   "cli.ops.db.migrate.flag.from": "來源 SQLite WAL 資料庫路徑或 sqlite:// DSN",
   "cli.ops.db.migrate.flag.to": "目標 PostgreSQL 16+ 連線 DSN",
-  "cli.ops.db.migrate.flag.verify": "提交前驗證行數、micro-USD 總和、JCS 稽核雜湊鏈與 Vault 信封"
+  "cli.ops.db.migrate.flag.verify": "提交前驗證行數、micro-USD 總和、JCS 稽核雜湊鏈與 Vault 信封",
+  "cli.admin.verify_state.short": "驗證稽核雜湊鏈、清理孤兒預算保留並重建 Valkey 叢集狀態",
+  "cli.admin.verify_state.flag.db": "SQLite 資料庫檔案路徑",
+  "cli.admin.verify_state.flag.pg_dsn": "PostgreSQL 16+ 連線 DSN",
+  "cli.admin.verify_state.flag.valkey_addrs": "以逗號分隔的 Valkey 叢集位址",
+  "cli.admin.verify_state.flag.valkey_username": "Valkey ACL 使用者名稱",
+  "cli.admin.verify_state.flag.valkey_password": "Valkey ACL 密碼",
+  "cli.admin.verify_state.flag.valkey_require_tls": "連線至 Valkey 伺服器時強制啟用 TLS",
+  "cli.admin.verify_state.flag.check_audit": "驗證所有租戶的不可變稽核雜湊鏈",
+  "cli.admin.verify_state.flag.reconcile_orphans": "重建快取狀態前先回收已過期的預算保留",
+  "cli.admin.verify_state.flag.rebuild_valkey": "從 SQL/PostgreSQL 狀態重建 Valkey 中的作用中預算保留",
+  "cli.admin.verify_state.err.store_required": "請提供 --db (SQLite) 或 --pg-dsn (PostgreSQL)。",
+  "cli.admin.verify_state.err.valkey_required": "重建 Valkey 狀態時必須提供 --valkey-addrs。",
+  "cli.admin.verify_state.err.tampered": "稽核雜湊鏈驗證失敗：偵測到竄改。",
+  "cli.admin.verify_state.err.failed": "營運狀態驗證失敗",
+  "cli.admin.verify_state.output": "狀態檢查 {{status}} (引擎={{engine}} 稽核事件={{events}} 回收孤兒={{orphans}} 還原Valkey保留={{restored}})"
 }

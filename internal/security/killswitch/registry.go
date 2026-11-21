@@ -254,6 +254,7 @@ type RegistryConfig struct {
 // atomicity, serves O(1)/lock-fast CheckAdmission lookups, and severs active SSE streams in < 1s.
 type Registry struct {
 	db              *sql.DB
+	dialect         port.Dialect
 	audit           port.TxAuditSink
 	nowMs           func() int64
 	streams         *StreamRegistry
@@ -266,7 +267,7 @@ type Registry struct {
 	active      map[string]KillSwitch // keyed by KillSwitch.ID
 }
 
-// NewRegistry initializes a kill-switch Registry and hydrates active switches fail-closed from SQLite.
+// NewRegistry initializes a kill-switch Registry and hydrates active switches fail-closed from SQLite or PostgreSQL.
 func NewRegistry(ctx context.Context, cfg RegistryConfig) (*Registry, error) {
 	if cfg.DB == nil {
 		return nil, fmt.Errorf("%w: non-nil *sql.DB is required", port.ErrInvalidInput)
@@ -288,6 +289,7 @@ func NewRegistry(ctx context.Context, cfg RegistryConfig) (*Registry, error) {
 	}
 	r := &Registry{
 		db:              cfg.DB,
+		dialect:         port.DetectDialect(ctx, cfg.DB),
 		audit:           txAudit,
 		nowMs:           nowFn,
 		streams:         streams,
@@ -344,29 +346,41 @@ func (r *Registry) RefreshFromDB(ctx context.Context) error {
 		}
 	}()
 
-	rows, err := r.db.QueryContext(ctx, `
+	next := make(map[string]KillSwitch)
+	query := fmt.Sprintf(`
 		SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
 		       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
 		       triggered_at_ms, cleared_at_ms
 		FROM emergency_kill_switches
-		WHERE active = 1
-		ORDER BY triggered_at_ms ASC`,
-	)
-	if err != nil {
-		return fmt.Errorf("killswitch: refresh active switches: %w", err)
-	}
-	defer rows.Close()
+		WHERE active = %s
+		ORDER BY triggered_at_ms ASC`, port.BoolExpr(r.dialect, true))
 
-	next := make(map[string]KillSwitch)
-	for rows.Next() {
-		ks, serr := scanKillSwitch(rows)
-		if serr != nil {
-			return serr
+	if r.dialect == port.DialectPostgres {
+		tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return fmt.Errorf("killswitch: begin refresh tx: %w", err)
 		}
-		next[ks.ID] = ks
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("killswitch: iterate active switches: %w", err)
+		defer func() { _ = tx.Rollback() }()
+		orgIDs, err := port.ListOrgIDsTx(ctx, tx, r.dialect)
+		if err != nil {
+			return fmt.Errorf("killswitch: list orgs: %w", err)
+		}
+		// Global instance switches (org_id IS NULL) under operator context.
+		if err := queryKillSwitchesInto(ctx, tx, query, next); err != nil {
+			return err
+		}
+		for _, oid := range orgIDs {
+			if err := port.SetOrgRLSTx(ctx, tx, r.dialect, oid); err != nil {
+				return err
+			}
+			if err := queryKillSwitchesInto(ctx, tx, query, next); err != nil {
+				return err
+			}
+		}
+	} else {
+		if err := queryKillSwitchesInto(ctx, r.db, query, next); err != nil {
+			return err
+		}
 	}
 
 	var toAbort []KillSwitch
@@ -549,21 +563,25 @@ func (r *Registry) TriggerWithSeveredCount(ctx context.Context, p TriggerParams)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := verifyPrincipalAndTargetTx(ctx, tx, orgID, p.Level, targetID, principalID); err != nil {
+	if err := verifyPrincipalAndTargetTx(ctx, tx, r.dialect, orgID, p.Level, targetID, principalID); err != nil {
+		return nil, 0, err
+	}
+
+	if err := setScopeRLSTx(ctx, tx, r.dialect, orgID); err != nil {
 		return nil, 0, err
 	}
 
 	var existingActive int
 	if orgID != "" {
-		err = tx.QueryRowContext(ctx, `
+		err = tx.QueryRowContext(ctx, port.Rebind(r.dialect, fmt.Sprintf(`
 			SELECT COUNT(*) FROM emergency_kill_switches
-			WHERE active = 1 AND level = ? AND target_id = ? AND org_id = ?`,
+			WHERE active = %s AND level = ? AND target_id = ? AND org_id = ?`, port.BoolExpr(r.dialect, true))),
 			string(p.Level), targetID, orgID,
 		).Scan(&existingActive)
 	} else {
-		err = tx.QueryRowContext(ctx, `
+		err = tx.QueryRowContext(ctx, port.Rebind(r.dialect, fmt.Sprintf(`
 			SELECT COUNT(*) FROM emergency_kill_switches
-			WHERE active = 1 AND level = ? AND target_id = ? AND org_id IS NULL`,
+			WHERE active = %s AND level = ? AND target_id = ? AND org_id IS NULL`, port.BoolExpr(r.dialect, true))),
 			string(p.Level), targetID,
 		).Scan(&existingActive)
 	}
@@ -578,18 +596,14 @@ func (r *Registry) TriggerWithSeveredCount(ctx context.Context, p TriggerParams)
 	if orgPtr != nil {
 		orgArg = *orgPtr
 	}
-	abortInt := 0
-	if abortStreams {
-		abortInt = 1
-	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `
 		INSERT INTO emergency_kill_switches (
 			id, org_id, level, target_id, active, abort_active_streams, reason,
 			triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
 			triggered_at_ms, cleared_at_ms
-		) VALUES (?, ?, ?, ?, 1, ?, ?, ?, NULL, NULL, 1, ?, NULL)`,
-		ksID, orgArg, string(p.Level), targetID, abortInt, reason, principalID, now,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 1, ?, NULL)`),
+		ksID, orgArg, string(p.Level), targetID, port.BoolVal(r.dialect, true), port.BoolVal(r.dialect, abortStreams), reason, principalID, now,
 	); err != nil {
 		return nil, 0, fmt.Errorf("killswitch: insert kill switch: %w", err)
 	}
@@ -598,11 +612,7 @@ func (r *Registry) TriggerWithSeveredCount(ctx context.Context, p TriggerParams)
 	if p.Level == LevelExtensionInstallation {
 		mutType = port.MutationQuarantine
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'emergency_kill_switch', ?, ?, 1, ?)`,
-		orgArg, ksID, mutType, now,
-	); err != nil {
+	if _, err := port.AppendConfigChangelogTx(ctx, tx, r.dialect, orgID, "emergency_kill_switch", ksID, mutType, true, now); err != nil {
 		return nil, 0, fmt.Errorf("killswitch: append config_changelog: %w", err)
 	}
 
@@ -681,25 +691,33 @@ func (r *Registry) EnsureActiveAbortBarrier(ctx context.Context, level Level, ta
 	r.syncMu.Lock()
 	defer r.syncMu.Unlock()
 
-	var row *sql.Row
+	var ks KillSwitch
+	var err error
 	if scopeOrg == "" {
-		row = r.db.QueryRowContext(ctx, `
-			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
-			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
-			       triggered_at_ms, cleared_at_ms
-		FROM emergency_kill_switches
-		WHERE org_id IS NULL AND level = ? AND target_id = ? AND active = 1
-		ORDER BY triggered_at_ms DESC LIMIT 1`, string(level), targetID)
+		err = r.withReadScopeTx(ctx, "", func(q sqlQueryer) error {
+			var innerErr error
+			ks, innerErr = scanKillSwitch(q.QueryRowContext(ctx, port.Rebind(r.dialect, `
+				SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
+				       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
+				       triggered_at_ms, cleared_at_ms
+				FROM emergency_kill_switches
+				WHERE org_id IS NULL AND level = ? AND target_id = ? AND active = `+port.BoolExpr(r.dialect, true)+`
+				ORDER BY triggered_at_ms DESC LIMIT 1`), string(level), targetID))
+			return innerErr
+		})
 	} else {
-		row = r.db.QueryRowContext(ctx, `
-			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
-			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
-			       triggered_at_ms, cleared_at_ms
-		FROM emergency_kill_switches
-		WHERE org_id = ? AND level = ? AND target_id = ? AND active = 1
-		ORDER BY triggered_at_ms DESC LIMIT 1`, scopeOrg, string(level), targetID)
+		err = r.withReadScopeTx(ctx, scopeOrg, func(q sqlQueryer) error {
+			var innerErr error
+			ks, innerErr = scanKillSwitch(q.QueryRowContext(ctx, port.Rebind(r.dialect, `
+				SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
+				       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
+				       triggered_at_ms, cleared_at_ms
+				FROM emergency_kill_switches
+				WHERE org_id = ? AND level = ? AND target_id = ? AND active = `+port.BoolExpr(r.dialect, true)+`
+				ORDER BY triggered_at_ms DESC LIMIT 1`), scopeOrg, string(level), targetID))
+			return innerErr
+		})
 	}
-	ks, err := scanKillSwitch(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, port.ErrNotFound
 	}
@@ -758,28 +776,28 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Fail closed BEFORE querying emergency_kill_switches to avoid any cross-tenant existence oracle:
-	// when scopeOrgID == "", caller MUST be an ACTIVE INSTANCE OPERATOR; when scopeOrgID != "",
-	// caller MUST be an ACTIVE INSTANCE OPERATOR or belong to scopeOrgID.
-	if err := verifyPrincipalMembershipForScopeTx(ctx, tx, scopeOrgID, principalID); err != nil {
+	if err := verifyPrincipalMembershipForScopeTx(ctx, tx, r.dialect, scopeOrgID, principalID); err != nil {
+		return nil, err
+	}
+	if err := setScopeRLSTx(ctx, tx, r.dialect, scopeOrgID); err != nil {
 		return nil, err
 	}
 
 	var ks KillSwitch
 	if scopeOrgID != "" {
-		ks, err = scanKillSwitch(tx.QueryRowContext(ctx, `
+		ks, err = scanKillSwitch(tx.QueryRowContext(ctx, port.Rebind(r.dialect, `
 			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
 			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
 			       triggered_at_ms, cleared_at_ms
 			FROM emergency_kill_switches
-			WHERE id = ? AND org_id = ?`, ksID, scopeOrgID))
+			WHERE id = ? AND org_id = ?`), ksID, scopeOrgID))
 	} else {
-		ks, err = scanKillSwitch(tx.QueryRowContext(ctx, `
+		ks, err = scanKillSwitch(tx.QueryRowContext(ctx, port.Rebind(r.dialect, `
 			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
 			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
 			       triggered_at_ms, cleared_at_ms
 			FROM emergency_kill_switches
-			WHERE id = ? AND org_id IS NULL AND level = 'EXTENSION_INSTALLATION'`, ksID))
+			WHERE id = ? AND org_id IS NULL AND level = 'EXTENSION_INSTALLATION'`), ksID))
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, port.ErrNotFound
@@ -789,7 +807,10 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 	}
 
 	// Verify exact RBAC role authorization against the resolved target/level.
-	if err := verifyPrincipalRoleForScopeTx(ctx, tx, scopeOrgID, ks.Level, ks.TargetID, principalID); err != nil {
+	if err := verifyPrincipalRoleForScopeTx(ctx, tx, r.dialect, scopeOrgID, ks.Level, ks.TargetID, principalID); err != nil {
+		return nil, err
+	}
+	if err := setScopeRLSTx(ctx, tx, r.dialect, scopeOrgID); err != nil {
 		return nil, err
 	}
 
@@ -800,10 +821,10 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 		return nil, ErrAlreadyCleared
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, port.Rebind(r.dialect, fmt.Sprintf(`
 		UPDATE emergency_kill_switches
-		SET active = 0, cleared_by_principal_id = ?, clear_reason = ?, cleared_at_ms = ?, version = version + 1
-		WHERE id = ? AND version = ? AND active = 1`,
+		SET active = %s, cleared_by_principal_id = ?, clear_reason = ?, cleared_at_ms = ?, version = version + 1
+		WHERE id = ? AND version = ? AND active = %s`, port.BoolExpr(r.dialect, false), port.BoolExpr(r.dialect, true))),
 		principalID, clearReason, now, ksID, p.ExpectedVersion,
 	)
 	if err != nil {
@@ -813,15 +834,11 @@ func (r *Registry) Clear(ctx context.Context, p ClearParams) (*KillSwitch, error
 		return nil, port.ErrVersionConflict
 	}
 
-	var orgArg any
+	var orgArg string
 	if ks.OrgID != nil {
 		orgArg = *ks.OrgID
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'emergency_kill_switch', ?, ?, 0, ?)`,
-		orgArg, ksID, port.MutationUpsert, now,
-	); err != nil {
+	if _, err := port.AppendConfigChangelogTx(ctx, tx, r.dialect, orgArg, "emergency_kill_switch", ksID, port.MutationUpsert, false, now); err != nil {
 		return nil, fmt.Errorf("killswitch: append config_changelog on clear: %w", err)
 	}
 
@@ -860,12 +877,17 @@ func (r *Registry) Get(ctx context.Context, orgID, killSwitchID string) (*KillSw
 	if trimmedOrg == "" || trimmedKS == "" {
 		return nil, fmt.Errorf("%w: non-empty org_id and kill_switch_id are required", port.ErrInvalidInput)
 	}
-	ks, err := scanKillSwitch(r.db.QueryRowContext(ctx, `
-		SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
-		       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
-		       triggered_at_ms, cleared_at_ms
-		FROM emergency_kill_switches
-		WHERE id = ? AND org_id = ?`, trimmedKS, trimmedOrg))
+	var ks KillSwitch
+	err := r.withReadScopeTx(ctx, trimmedOrg, func(q sqlQueryer) error {
+		var serr error
+		ks, serr = scanKillSwitch(q.QueryRowContext(ctx, port.Rebind(r.dialect, `
+			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
+			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
+			       triggered_at_ms, cleared_at_ms
+			FROM emergency_kill_switches
+			WHERE id = ? AND org_id = ?`), trimmedKS, trimmedOrg))
+		return serr
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, port.ErrNotFound
 	}
@@ -882,12 +904,17 @@ func (r *Registry) GetInstance(ctx context.Context, killSwitchID string) (*KillS
 	if trimmedKS == "" {
 		return nil, fmt.Errorf("%w: kill_switch_id is required", port.ErrInvalidInput)
 	}
-	ks, err := scanKillSwitch(r.db.QueryRowContext(ctx, `
-		SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
-		       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
-		       triggered_at_ms, cleared_at_ms
-		FROM emergency_kill_switches
-		WHERE id = ? AND org_id IS NULL`, trimmedKS))
+	var ks KillSwitch
+	err := r.withReadScopeTx(ctx, "", func(q sqlQueryer) error {
+		var serr error
+		ks, serr = scanKillSwitch(q.QueryRowContext(ctx, port.Rebind(r.dialect, `
+			SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
+			       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
+			       triggered_at_ms, cleared_at_ms
+			FROM emergency_kill_switches
+			WHERE id = ? AND org_id IS NULL`), trimmedKS))
+		return serr
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, port.ErrNotFound
 	}
@@ -907,26 +934,31 @@ func (r *Registry) ListInstance(ctx context.Context, activeOnly bool) ([]KillSwi
 		FROM emergency_kill_switches
 		WHERE org_id IS NULL`
 	if activeOnly {
-		query += ` AND active = 1`
+		query += ` AND active = ` + port.BoolExpr(r.dialect, true)
 	}
 	query += ` ORDER BY triggered_at_ms DESC`
 
-	rows, err := r.db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("killswitch: list instance switches: %w", err)
-	}
-	defer rows.Close()
-
 	var out []KillSwitch
-	for rows.Next() {
-		ks, serr := scanKillSwitch(rows)
-		if serr != nil {
-			return nil, serr
+	err := r.withReadScopeTx(ctx, "", func(q sqlQueryer) error {
+		rows, qerr := q.QueryContext(ctx, query)
+		if qerr != nil {
+			return fmt.Errorf("killswitch: list instance switches: %w", qerr)
 		}
-		out = append(out, ks)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("killswitch: iterate instance switches: %w", err)
+		defer rows.Close()
+		for rows.Next() {
+			ks, serr := scanKillSwitch(rows)
+			if serr != nil {
+				return serr
+			}
+			out = append(out, ks)
+		}
+		if rerr := rows.Err(); rerr != nil {
+			return fmt.Errorf("killswitch: iterate instance switches: %w", rerr)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -969,26 +1001,71 @@ func (r *Registry) ListWithFilter(ctx context.Context, filter ListFilter) ([]Kil
 		}
 	}
 	if filter.ActiveOnly {
-		query += ` AND active = 1`
+		query += ` AND active = ` + port.BoolExpr(r.dialect, true)
 	}
 	query += ` ORDER BY triggered_at_ms DESC`
 
-	rows, err := r.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("killswitch: list switches: %w", err)
+	if r.dialect == port.DialectPostgres && trimmedOrg == "" && filter.AllowInstanceScope {
+		tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return nil, fmt.Errorf("killswitch: begin list tx: %w", err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		orgIDs, err := port.ListOrgIDsTx(ctx, tx, r.dialect)
+		if err != nil {
+			return nil, err
+		}
+		var out []KillSwitch
+		appendRows := func() error {
+			rows, qerr := tx.QueryContext(ctx, port.Rebind(r.dialect, query), args...)
+			if qerr != nil {
+				return fmt.Errorf("killswitch: list switches: %w", qerr)
+			}
+			defer rows.Close()
+			for rows.Next() {
+				ks, serr := scanKillSwitch(rows)
+				if serr != nil {
+					return serr
+				}
+				out = append(out, ks)
+			}
+			return rows.Err()
+		}
+		if err := appendRows(); err != nil {
+			return nil, err
+		}
+		for _, oid := range orgIDs {
+			if err := port.SetOrgRLSTx(ctx, tx, r.dialect, oid); err != nil {
+				return nil, err
+			}
+			if err := appendRows(); err != nil {
+				return nil, err
+			}
+		}
+		return out, nil
 	}
-	defer rows.Close()
 
 	var out []KillSwitch
-	for rows.Next() {
-		ks, serr := scanKillSwitch(rows)
-		if serr != nil {
-			return nil, serr
+	err := r.withReadScopeTx(ctx, trimmedOrg, func(q sqlQueryer) error {
+		rows, qerr := q.QueryContext(ctx, port.Rebind(r.dialect, query), args...)
+		if qerr != nil {
+			return fmt.Errorf("killswitch: list switches: %w", qerr)
 		}
-		out = append(out, ks)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("killswitch: iterate switches: %w", err)
+		defer rows.Close()
+		for rows.Next() {
+			ks, serr := scanKillSwitch(rows)
+			if serr != nil {
+				return serr
+			}
+			out = append(out, ks)
+		}
+		if rerr := rows.Err(); rerr != nil {
+			return fmt.Errorf("killswitch: iterate switches: %w", rerr)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -1029,11 +1106,14 @@ func (r *Registry) emitAuditTx(
 	})
 }
 
-func verifyPrincipalAndTargetTx(ctx context.Context, tx *sql.Tx, orgID string, level Level, targetID, principalID string) error {
-	if err := verifyPrincipalMembershipForScopeTx(ctx, tx, orgID, principalID); err != nil {
+func verifyPrincipalAndTargetTx(ctx context.Context, tx *sql.Tx, d port.Dialect, orgID string, level Level, targetID, principalID string) error {
+	if err := verifyPrincipalMembershipForScopeTx(ctx, tx, d, orgID, principalID); err != nil {
 		return err
 	}
-	if err := verifyPrincipalRoleForScopeTx(ctx, tx, orgID, level, targetID, principalID); err != nil {
+	if err := verifyPrincipalRoleForScopeTx(ctx, tx, d, orgID, level, targetID, principalID); err != nil {
+		return err
+	}
+	if err := setScopeRLSTx(ctx, tx, d, orgID); err != nil {
 		return err
 	}
 
@@ -1041,16 +1121,16 @@ func verifyPrincipalAndTargetTx(ctx context.Context, tx *sql.Tx, orgID string, l
 	var err error
 	switch level {
 	case LevelVirtualKey:
-		err = tx.QueryRowContext(ctx, `SELECT 1 FROM virtual_keys WHERE org_id = ? AND id = ?`, orgID, targetID).Scan(&exists)
+		err = tx.QueryRowContext(ctx, port.Rebind(d, `SELECT 1 FROM virtual_keys WHERE org_id = ? AND id = ?`), orgID, targetID).Scan(&exists)
 	case LevelProviderConnection:
-		err = tx.QueryRowContext(ctx, `SELECT 1 FROM provider_connections WHERE org_id = ? AND id = ?`, orgID, targetID).Scan(&exists)
+		err = tx.QueryRowContext(ctx, port.Rebind(d, `SELECT 1 FROM provider_connections WHERE org_id = ? AND id = ?`), orgID, targetID).Scan(&exists)
 	case LevelExtensionInstallation:
-		err = tx.QueryRowContext(ctx, `SELECT 1 FROM extension_installations WHERE id = ?`, targetID).Scan(&exists)
+		err = tx.QueryRowContext(ctx, port.Rebind(d, `SELECT 1 FROM extension_installations WHERE id = ?`), targetID).Scan(&exists)
 	case LevelProjectOrOrgFreeze:
 		if targetID == orgID {
-			err = tx.QueryRowContext(ctx, `SELECT 1 FROM organizations WHERE id = ?`, orgID).Scan(&exists)
+			err = tx.QueryRowContext(ctx, port.Rebind(d, `SELECT 1 FROM organizations WHERE id = ?`), orgID).Scan(&exists)
 		} else {
-			err = tx.QueryRowContext(ctx, `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, targetID).Scan(&exists)
+			err = tx.QueryRowContext(ctx, port.Rebind(d, `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`), orgID, targetID).Scan(&exists)
 		}
 	default:
 		return fmt.Errorf("%w: unsupported kill-switch level %q", port.ErrInvalidInput, level)
@@ -1064,12 +1144,18 @@ func verifyPrincipalAndTargetTx(ctx context.Context, tx *sql.Tx, orgID string, l
 	return nil
 }
 
-func verifyPrincipalMembershipForScopeTx(ctx context.Context, tx *sql.Tx, orgID, principalID string) error {
+func verifyPrincipalMembershipForScopeTx(ctx context.Context, tx *sql.Tx, d port.Dialect, orgID, principalID string) error {
+	if d == port.DialectPostgres {
+		// Allow reading either instance-scoped operator (org_id IS NULL) or org-scoped principal.
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true), set_config('app.current_org_id', $1, true)`, orgID); err != nil {
+			return fmt.Errorf("killswitch: set membership RLS context: %w", err)
+		}
+	}
 	var (
 		pOrgID sql.NullString
 		status string
 	)
-	err := tx.QueryRowContext(ctx, `SELECT org_id, status FROM principals WHERE id = ?`, principalID).Scan(&pOrgID, &status)
+	err := tx.QueryRowContext(ctx, port.Rebind(d, `SELECT org_id, status FROM principals WHERE id = ?`), principalID).Scan(&pOrgID, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.ErrNotFound
 	}
@@ -1079,7 +1165,7 @@ func verifyPrincipalMembershipForScopeTx(ctx context.Context, tx *sql.Tx, orgID,
 	if status != "ACTIVE" {
 		return fmt.Errorf("%w: principal %q is not ACTIVE (status=%s)", port.ErrInvalidInput, principalID, status)
 	}
-	opCount, err := countInstanceOperatorRoleTx(ctx, tx, principalID)
+	opCount, err := countInstanceOperatorRoleTx(ctx, tx, d, principalID)
 	if err != nil {
 		return err
 	}
@@ -1095,8 +1181,13 @@ func verifyPrincipalMembershipForScopeTx(ctx context.Context, tx *sql.Tx, orgID,
 	return nil
 }
 
-func verifyPrincipalRoleForScopeTx(ctx context.Context, tx *sql.Tx, orgID string, level Level, targetID, principalID string) error {
-	opCount, err := countInstanceOperatorRoleTx(ctx, tx, principalID)
+func verifyPrincipalRoleForScopeTx(ctx context.Context, tx *sql.Tx, d port.Dialect, orgID string, level Level, targetID, principalID string) error {
+	if d == port.DialectPostgres {
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true), set_config('app.current_org_id', $1, true)`, orgID); err != nil {
+			return fmt.Errorf("killswitch: set role RLS context: %w", err)
+		}
+	}
+	opCount, err := countInstanceOperatorRoleTx(ctx, tx, d, principalID)
 	if err != nil {
 		return err
 	}
@@ -1108,13 +1199,13 @@ func verifyPrincipalRoleForScopeTx(ctx context.Context, tx *sql.Tx, orgID string
 	}
 
 	var orgRoleCount int
-	if err := tx.QueryRowContext(ctx, `
+	if err := tx.QueryRowContext(ctx, port.Rebind(d, `
 		SELECT COUNT(*) FROM role_bindings
 		WHERE principal_id = ?
 		  AND org_id = ?
 		  AND scope_type = 'ORG'
 		  AND scope_id = ?
-		  AND role_name IN ('ORG_OWNER', 'SECURITY_REVIEWER')`,
+		  AND role_name IN ('ORG_OWNER', 'SECURITY_REVIEWER')`),
 		principalID, orgID, orgID,
 	).Scan(&orgRoleCount); err != nil {
 		return fmt.Errorf("killswitch: verify org kill-switch role binding: %w", err)
@@ -1127,19 +1218,19 @@ func verifyPrincipalRoleForScopeTx(ctx context.Context, tx *sql.Tx, orgID string
 	var projRoleCount int
 	switch {
 	case level == LevelProjectOrOrgFreeze && targetID != orgID:
-		if err := tx.QueryRowContext(ctx, `
+		if err := tx.QueryRowContext(ctx, port.Rebind(d, `
 			SELECT COUNT(*) FROM role_bindings
 			WHERE principal_id = ?
 			  AND org_id = ?
 			  AND scope_type = 'PROJECT'
 			  AND scope_id = ?
-			  AND role_name = 'TEAM_ADMIN'`,
+			  AND role_name = 'TEAM_ADMIN'`),
 			principalID, orgID, targetID,
 		).Scan(&projRoleCount); err != nil {
 			return fmt.Errorf("killswitch: verify project role binding: %w", err)
 		}
 	case level == LevelVirtualKey:
-		if err := tx.QueryRowContext(ctx, `
+		if err := tx.QueryRowContext(ctx, port.Rebind(d, `
 			SELECT COUNT(*) FROM virtual_keys vk
 			JOIN role_bindings rb
 			  ON rb.org_id = vk.org_id
@@ -1148,7 +1239,7 @@ func verifyPrincipalRoleForScopeTx(ctx context.Context, tx *sql.Tx, orgID string
 			WHERE vk.org_id = ?
 			  AND vk.id = ?
 			  AND rb.principal_id = ?
-			  AND rb.role_name = 'TEAM_ADMIN'`,
+			  AND rb.role_name = 'TEAM_ADMIN'`),
 			orgID, targetID, principalID,
 		).Scan(&projRoleCount); err != nil {
 			return fmt.Errorf("killswitch: verify project virtual key role binding: %w", err)
@@ -1160,16 +1251,65 @@ func verifyPrincipalRoleForScopeTx(ctx context.Context, tx *sql.Tx, orgID string
 	return ErrPermissionDenied
 }
 
-func countInstanceOperatorRoleTx(ctx context.Context, tx *sql.Tx, principalID string) (int, error) {
+func countInstanceOperatorRoleTx(ctx context.Context, tx *sql.Tx, d port.Dialect, principalID string) (int, error) {
 	var opCount int
-	if err := tx.QueryRowContext(ctx, `
+	if err := tx.QueryRowContext(ctx, port.Rebind(d, `
 		SELECT COUNT(*) FROM role_bindings
-		WHERE principal_id = ? AND scope_type = 'INSTANCE' AND role_name = 'OPERATOR'`,
+		WHERE principal_id = ? AND scope_type = 'INSTANCE' AND role_name = 'OPERATOR'`),
 		principalID,
 	).Scan(&opCount); err != nil {
 		return 0, fmt.Errorf("killswitch: verify operator role binding: %w", err)
 	}
 	return opCount, nil
+}
+
+type sqlQueryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func queryKillSwitchesInto(ctx context.Context, q sqlQueryer, query string, into map[string]KillSwitch) error {
+	rows, err := q.QueryContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("killswitch: refresh active switches: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		ks, serr := scanKillSwitch(rows)
+		if serr != nil {
+			return serr
+		}
+		into[ks.ID] = ks
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("killswitch: iterate active switches: %w", err)
+	}
+	return nil
+}
+
+func (r *Registry) withReadScopeTx(ctx context.Context, orgID string, fn func(q sqlQueryer) error) error {
+	if r.dialect != port.DialectPostgres {
+		return fn(r.db)
+	}
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return fmt.Errorf("killswitch: begin read tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := setScopeRLSTx(ctx, tx, r.dialect, orgID); err != nil {
+		return err
+	}
+	return fn(tx)
+}
+
+func setScopeRLSTx(ctx context.Context, tx *sql.Tx, d port.Dialect, orgID string) error {
+	if d != port.DialectPostgres {
+		return nil
+	}
+	if strings.TrimSpace(orgID) == "" {
+		return port.SetOperatorRLSTx(ctx, tx, d)
+	}
+	return port.SetOrgRLSTx(ctx, tx, d, orgID)
 }
 
 func scanKillSwitch(s interface{ Scan(...any) error }) (KillSwitch, error) {
@@ -1178,17 +1318,17 @@ func scanKillSwitch(s interface{ Scan(...any) error }) (KillSwitch, error) {
 		levelStr               string
 		orgNS, clearedBy, crNS sql.NullString
 		clearedAt              sql.NullInt64
-		activeInt, abortInt    int
+		activeBool, abortBool  port.FlexBool
 	)
 	if err := s.Scan(
-		&ks.ID, &orgNS, &levelStr, &ks.TargetID, &activeInt, &abortInt, &ks.Reason,
+		&ks.ID, &orgNS, &levelStr, &ks.TargetID, &activeBool, &abortBool, &ks.Reason,
 		&ks.TriggeredByPrincipalID, &clearedBy, &crNS, &ks.Version, &ks.TriggeredAtMs, &clearedAt,
 	); err != nil {
 		return KillSwitch{}, err
 	}
 	ks.Level = Level(levelStr)
-	ks.Active = activeInt != 0
-	ks.AbortActiveStreams = abortInt != 0
+	ks.Active = bool(activeBool)
+	ks.AbortActiveStreams = bool(abortBool)
 	if orgNS.Valid {
 		v := orgNS.String
 		ks.OrgID = &v

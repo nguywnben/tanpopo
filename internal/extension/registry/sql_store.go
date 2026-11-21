@@ -13,11 +13,14 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 type SQLStore struct {
-	db  *sql.DB
-	now func() time.Time
+	db      *sql.DB
+	dialect port.Dialect
+	now     func() time.Time
 }
 
 var _ IndexStore = (*SQLStore)(nil)
@@ -30,7 +33,11 @@ func NewSQLStore(db *sql.DB, now func() time.Time) (*SQLStore, error) {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	return &SQLStore{db: db, now: now}, nil
+	return &SQLStore{
+		db:      db,
+		dialect: port.DetectDialect(context.Background(), db),
+		now:     now,
+	}, nil
 }
 
 func (s *SQLStore) LastRevocationSerial(ctx context.Context) (int64, error) {
@@ -43,7 +50,7 @@ func (s *SQLStore) LastIndexSerial(ctx context.Context) (int64, error) {
 
 func (s *SQLStore) lastSerial(ctx context.Context, kind FeedKind) (int64, error) {
 	var serial int64
-	err := s.db.QueryRowContext(ctx, `SELECT version_serial FROM marketplace_feed_cursors WHERE feed_kind = ?`, string(kind)).Scan(&serial)
+	err := s.db.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT version_serial FROM marketplace_feed_cursors WHERE feed_kind = ?`), string(kind)).Scan(&serial)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil
 	}
@@ -64,14 +71,15 @@ func (s *SQLStore) ApplyIndexFeed(ctx context.Context, serial int64, expiresAt t
 		return err
 	}
 	defer tx.Rollback()
-	if err := advanceCursor(ctx, tx, FeedIndex, serial, expiresAt, s.now()); err != nil {
+	if err := advanceCursor(ctx, tx, s.dialect, FeedIndex, serial, expiresAt, s.now()); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM marketplace_index_entries`); err != nil {
 		return err
 	}
+	insEntry := port.Rebind(s.dialect, `INSERT INTO marketplace_index_entries (package_slug, version, digest, oci_uri, updated_at_ms) VALUES (?, ?, ?, ?, ?)`)
 	for _, entry := range entries {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO marketplace_index_entries (package_slug, version, digest, oci_uri, updated_at_ms) VALUES (?, ?, ?, ?, ?)`, entry.PackageSlug, entry.Version, entry.Digest, entry.OCIURI, s.now().UnixMilli()); err != nil {
+		if _, err := tx.ExecContext(ctx, insEntry, entry.PackageSlug, entry.Version, entry.Digest, entry.OCIURI, s.now().UnixMilli()); err != nil {
 			return err
 		}
 	}
@@ -80,7 +88,7 @@ func (s *SQLStore) ApplyIndexFeed(ctx context.Context, serial int64, expiresAt t
 
 func (s *SQLStore) CachedIndex(ctx context.Context) ([]IndexEntry, time.Time, error) {
 	var expiresAtMS int64
-	err := s.db.QueryRowContext(ctx, `SELECT feed_expires_at_ms FROM marketplace_feed_cursors WHERE feed_kind = ?`, string(FeedIndex)).Scan(&expiresAtMS)
+	err := s.db.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT feed_expires_at_ms FROM marketplace_feed_cursors WHERE feed_kind = ?`), string(FeedIndex)).Scan(&expiresAtMS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, time.Time{}, nil
 	}
@@ -115,16 +123,28 @@ func (s *SQLStore) ApplyRevocationFeed(ctx context.Context, serial int64, expire
 		return err
 	}
 	defer tx.Rollback()
-	if err := advanceCursor(ctx, tx, FeedRevocation, serial, expiresAt, s.now()); err != nil {
+	if err := advanceCursor(ctx, tx, s.dialect, FeedRevocation, serial, expiresAt, s.now()); err != nil {
 		return err
 	}
+	upsertRev := port.Rebind(s.dialect, `INSERT INTO extension_revocations (id, package_slug, version_or_sha256, severity, version_serial, reason, feed_expires_at_ms, imported_at_ms)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(package_slug, version_or_sha256) DO UPDATE SET severity = excluded.severity, version_serial = excluded.version_serial, reason = excluded.reason, feed_expires_at_ms = excluded.feed_expires_at_ms, imported_at_ms = excluded.imported_at_ms
+			WHERE excluded.version_serial > extension_revocations.version_serial`)
+	findInst := port.Rebind(s.dialect, `SELECT ei.id
+			FROM extension_installations ei
+			JOIN extension_packages ep ON ep.id = ei.package_id
+			JOIN extension_versions ev ON ev.id = ei.active_version_id
+			WHERE ep.canonical_name = ?
+			  AND ei.state NOT IN ('UNINSTALLED', 'QUARANTINED')
+			  AND (ev.semver = ? OR lower(ev.bundle_sha256) = lower(?))`)
+	insAction := port.Rebind(s.dialect, `INSERT INTO extension_revocation_actions (id, installation_id, package_slug, version_or_sha256, severity, reason, created_at_ms)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+				ON CONFLICT(installation_id, package_slug, version_or_sha256) DO UPDATE SET severity = excluded.severity, reason = excluded.reason
+				WHERE extension_revocation_actions.completed_at_ms IS NULL`)
 	for _, entry := range entries {
 		packageSlug := canonicalPackageSlug(entry.PackageSlug)
 		selector := canonicalRevocationSelector(entry.VersionOrSHA256)
-		_, err := tx.ExecContext(ctx, `INSERT INTO extension_revocations (id, package_slug, version_or_sha256, severity, version_serial, reason, feed_expires_at_ms, imported_at_ms)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(package_slug, version_or_sha256) DO UPDATE SET severity = excluded.severity, version_serial = excluded.version_serial, reason = excluded.reason, feed_expires_at_ms = excluded.feed_expires_at_ms, imported_at_ms = excluded.imported_at_ms
-			WHERE excluded.version_serial > extension_revocations.version_serial`,
+		_, err := tx.ExecContext(ctx, upsertRev,
 			revocationID(packageSlug, selector), packageSlug, selector, entry.Severity, serial, entry.Reason, expiresAt.UnixMilli(), s.now().UnixMilli())
 		if err != nil {
 			return err
@@ -132,14 +152,7 @@ func (s *SQLStore) ApplyRevocationFeed(ctx context.Context, serial int64, expire
 		if entry.Severity != "CRITICAL" && entry.Severity != "CRITICAL_MALICIOUS" {
 			continue
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT ei.id
-			FROM extension_installations ei
-			JOIN extension_packages ep ON ep.id = ei.package_id
-			JOIN extension_versions ev ON ev.id = ei.active_version_id
-			WHERE ep.canonical_name = ?
-			  AND ei.state NOT IN ('UNINSTALLED', 'QUARANTINED')
-			  AND (ev.semver = ? OR lower(ev.bundle_sha256) = lower(?))`,
-			packageSlug, selector, selector)
+		rows, err := tx.QueryContext(ctx, findInst, packageSlug, selector, selector)
 		if err != nil {
 			return err
 		}
@@ -158,10 +171,7 @@ func (s *SQLStore) ApplyRevocationFeed(ctx context.Context, serial int64, expire
 		}
 		rows.Close()
 		for _, installationID := range installationIDs {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO extension_revocation_actions (id, installation_id, package_slug, version_or_sha256, severity, reason, created_at_ms)
-				VALUES (?, ?, ?, ?, ?, ?, ?)
-				ON CONFLICT(installation_id, package_slug, version_or_sha256) DO UPDATE SET severity = excluded.severity, reason = excluded.reason
-				WHERE extension_revocation_actions.completed_at_ms IS NULL`,
+			if _, err := tx.ExecContext(ctx, insAction,
 				revocationActionID(installationID, packageSlug, selector), installationID, packageSlug, selector, entry.Severity, entry.Reason, s.now().UnixMilli()); err != nil {
 				return err
 			}
@@ -189,7 +199,7 @@ func (s *SQLStore) PendingRevocationActions(ctx context.Context) ([]RevocationTa
 }
 
 func (s *SQLStore) CompleteRevocationAction(ctx context.Context, actionID string) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE extension_revocation_actions SET completed_at_ms = ? WHERE id = ? AND completed_at_ms IS NULL`, s.now().UnixMilli(), actionID)
+	result, err := s.db.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE extension_revocation_actions SET completed_at_ms = ? WHERE id = ? AND completed_at_ms IS NULL`), s.now().UnixMilli(), actionID)
 	if err != nil {
 		return err
 	}
@@ -197,25 +207,25 @@ func (s *SQLStore) CompleteRevocationAction(ctx context.Context, actionID string
 		return err
 	} else if count == 0 {
 		var exists int
-		if err := s.db.QueryRowContext(ctx, `SELECT 1 FROM extension_revocation_actions WHERE id = ? AND completed_at_ms IS NOT NULL`, actionID).Scan(&exists); err != nil {
+		if err := s.db.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT 1 FROM extension_revocation_actions WHERE id = ? AND completed_at_ms IS NOT NULL`), actionID).Scan(&exists); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func advanceCursor(ctx context.Context, tx *sql.Tx, kind FeedKind, serial int64, expiresAt, now time.Time) error {
+func advanceCursor(ctx context.Context, tx *sql.Tx, dialect port.Dialect, kind FeedKind, serial int64, expiresAt, now time.Time) error {
 	var last int64
-	err := tx.QueryRowContext(ctx, `SELECT version_serial FROM marketplace_feed_cursors WHERE feed_kind = ?`, string(kind)).Scan(&last)
+	err := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT version_serial FROM marketplace_feed_cursors WHERE feed_kind = ?`), string(kind)).Scan(&last)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	if err == nil && serial <= last {
 		return fmt.Errorf("%w: got %d after %d", ErrFeedRollback, serial, last)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO marketplace_feed_cursors (feed_kind, version_serial, feed_expires_at_ms, updated_at_ms) VALUES (?, ?, ?, ?)
+	_, err = tx.ExecContext(ctx, port.Rebind(dialect, `INSERT INTO marketplace_feed_cursors (feed_kind, version_serial, feed_expires_at_ms, updated_at_ms) VALUES (?, ?, ?, ?)
 		ON CONFLICT(feed_kind) DO UPDATE SET version_serial = excluded.version_serial, feed_expires_at_ms = excluded.feed_expires_at_ms, updated_at_ms = excluded.updated_at_ms
-		WHERE excluded.version_serial > marketplace_feed_cursors.version_serial`, string(kind), serial, expiresAt.UnixMilli(), now.UnixMilli())
+		WHERE excluded.version_serial > marketplace_feed_cursors.version_serial`), string(kind), serial, expiresAt.UnixMilli(), now.UnixMilli())
 	return err
 }
 

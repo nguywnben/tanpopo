@@ -173,41 +173,40 @@ func (s *Server) handleListVirtualKeys(w http.ResponseWriter, r *http.Request) {
 	query.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), query.String(), args...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying virtual keys", true, nil)
-		return
-	}
-	defer rows.Close()
-
 	type rowItem struct {
 		dto       virtualKeySummaryDTO
 		createdMs int64
 	}
 	items := make([]rowItem, 0, limit+1)
-	for rows.Next() {
-		var (
-			id, rowOrg, projectID, envID, name, keyPrefix, lastFour, state string
-			ownerID                                                        sql.NullString
-			modelsJSON, mcpJSON                                            string
-			rpmNS, tpmNS, expNS                                            sql.NullInt64
-			maxStreams                                                     int64
-			version, createdMs                                             int64
-		)
-		if scanErr := rows.Scan(
-			&id, &rowOrg, &projectID, &envID, &ownerID, &name,
-			&keyPrefix, &lastFour, &state, &modelsJSON, &mcpJSON,
-			&rpmNS, &tpmNS, &maxStreams, &expNS, &version, &createdMs,
-		); scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning virtual key row", true, nil)
-			return
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		rows, err := q.QueryContext(r.Context(), s.rebind(query.String()), args...)
+		if err != nil {
+			return err
 		}
-		dto := virtualKeySummaryDTO{
-			ID:                   id,
-			Name:                 name,
-			ProjectID:            projectID,
-			EnvID:                envID,
-			KeyPrefix:            keyPrefix,
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				id, rowOrg, projectID, envID, name, keyPrefix, lastFour, state string
+				ownerID                                                        sql.NullString
+				modelsJSON, mcpJSON                                            string
+				rpmNS, tpmNS, expNS                                            sql.NullInt64
+				maxStreams                                                     int64
+				version, createdMs                                             int64
+			)
+			if scanErr := rows.Scan(
+				&id, &rowOrg, &projectID, &envID, &ownerID, &name,
+				&keyPrefix, &lastFour, &state, &modelsJSON, &mcpJSON,
+				&rpmNS, &tpmNS, &maxStreams, &expNS, &version, &createdMs,
+			); scanErr != nil {
+				return scanErr
+			}
+			dto := virtualKeySummaryDTO{
+				ID:                   id,
+				Name:                 name,
+				ProjectID:            projectID,
+				EnvID:                envID,
+				KeyPrefix:            keyPrefix,
 			LastFour:             lastFour,
 			State:                normalizeOpenAPIVKeyState(state),
 			MaxConcurrentStreams: &maxStreams,
@@ -230,18 +229,18 @@ func (s *Server) handleListVirtualKeys(w http.ResponseWriter, r *http.Request) {
 			v := formatTimeRFC3339Ms(expNS.Int64)
 			dto.ExpiresAt = &v
 		}
-		if uerr := json.Unmarshal([]byte(modelsJSON), &dto.AllowedModels); uerr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "corrupt allowed_models_json metadata", true, nil)
-			return
+			if uerr := json.Unmarshal([]byte(modelsJSON), &dto.AllowedModels); uerr != nil {
+				return fmt.Errorf("corrupt allowed_models_json: %w", uerr)
+			}
+			if uerr := json.Unmarshal([]byte(mcpJSON), &dto.AllowedMCPTools); uerr != nil {
+				return fmt.Errorf("corrupt allowed_mcp_tools_json: %w", uerr)
+			}
+			items = append(items, rowItem{dto: dto, createdMs: createdMs})
 		}
-		if uerr := json.Unmarshal([]byte(mcpJSON), &dto.AllowedMCPTools); uerr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "corrupt allowed_mcp_tools_json metadata", true, nil)
-			return
-		}
-		items = append(items, rowItem{dto: dto, createdMs: createdMs})
-	}
-	if err := rows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating virtual keys", true, nil)
+		return rows.Err()
+	})
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying virtual keys", true, nil)
 		return
 	}
 
@@ -339,7 +338,9 @@ func (s *Server) createVirtualKeyCommon(w http.ResponseWriter, r *http.Request, 
 
 	var ownerPrincipalPtr *string
 	var ownerInOrg int
-	if err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM principals WHERE id = ? AND org_id = ?`, sc.Actor.PrincipalID, orgID).Scan(&ownerInOrg); err == nil {
+	if err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`SELECT 1 FROM principals WHERE id = ? AND org_id = ?`), sc.Actor.PrincipalID, orgID).Scan(&ownerInOrg)
+	}); err == nil {
 		id := sc.Actor.PrincipalID
 		ownerPrincipalPtr = &id
 	} else if !errors.Is(err, sql.ErrNoRows) {

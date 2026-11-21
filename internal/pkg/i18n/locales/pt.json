@@ -256,5 +256,20 @@
   "cli.ops.db.short": "Inspecionar ou migrar o mecanismo de armazenamento do banco de dados.",
   "cli.ops.db.migrate.flag.from": "Caminho do banco SQLite WAL de origem ou DSN sqlite://",
   "cli.ops.db.migrate.flag.to": "DSN de conexão PostgreSQL 16+ de destino",
-  "cli.ops.db.migrate.flag.verify": "Verificar contagens de linhas, somas micro-USD, cadeias JCS de auditoria e envelopes Vault antes do commit"
+  "cli.ops.db.migrate.flag.verify": "Verificar contagens de linhas, somas micro-USD, cadeias JCS de auditoria e envelopes Vault antes do commit",
+  "cli.admin.verify_state.short": "Verificar cadeias hash de auditoria, conciliar retenções órfãs e reconstruir estado Valkey",
+  "cli.admin.verify_state.flag.db": "Caminho para o arquivo de banco SQLite",
+  "cli.admin.verify_state.flag.pg_dsn": "DSN de conexão PostgreSQL 16+",
+  "cli.admin.verify_state.flag.valkey_addrs": "Endereços do cluster Valkey separados por vírgula",
+  "cli.admin.verify_state.flag.valkey_username": "Nome de usuário ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_password": "Senha ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Exigir TLS ao conectar ao Valkey",
+  "cli.admin.verify_state.flag.check_audit": "Verificar cadeias hash imutáveis de auditoria em todos os locatários",
+  "cli.admin.verify_state.flag.reconcile_orphans": "Recuperar retenções de orçamento expiradas antes de reconstruir o cache",
+  "cli.admin.verify_state.flag.rebuild_valkey": "Reconstruir retenções ativas no Valkey a partir de SQL/PostgreSQL",
+  "cli.admin.verify_state.err.store_required": "Forneça --db (SQLite) ou --pg-dsn (PostgreSQL).",
+  "cli.admin.verify_state.err.valkey_required": "--valkey-addrs é obrigatório ao reconstruir o estado do Valkey.",
+  "cli.admin.verify_state.err.tampered": "Falha na verificação da cadeia de auditoria: violação detectada.",
+  "cli.admin.verify_state.err.failed": "Falha na verificação do estado operacional",
+  "cli.admin.verify_state.output": "Verificação {{status}} (motor={{engine}} eventos={{events}} órfãos={{orphans}} valkey_restaurados={{restored}})"
 }

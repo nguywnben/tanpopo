@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tanpopo.fullname" . }}-config
+  labels:
+    {{- include "tanpopo.labels" . | nindent 4 }}
+data:
+  TANPOPO_STORAGE_ENGINE: "postgres"
+  TANPOPO_DATA_DIR: "/var/lib/tanpopo"
+  TANPOPO_PLUGINS_DIR: "/var/lib/tanpopo/plugins"
+  TANPOPO_VALKEY_ADDRS: {{ .Values.valkey.addrs | quote }}
+  TANPOPO_VALKEY_USERNAME: {{ .Values.valkey.username | quote }}
+  TANPOPO_VALKEY_REQUIRE_TLS: {{ ternary "true" "false" .Values.valkey.requireTLS | quote }}
+  TANPOPO_VALKEY_REPLICAS: {{ .Values.valkey.replicasHint | quote }}
+  TANPOPO_DRAIN_TIMEOUT: {{ .Values.dataPlane.drainTimeout | quote }}
+  TANPOPO_MASTER_KEY_FILE: {{ printf "/var/run/tanpopo/keys/%s" .Values.masterKey.fileName | quote }}

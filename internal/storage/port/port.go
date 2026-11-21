@@ -12,7 +12,9 @@ package port
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -114,6 +116,160 @@ func Rebind(dialect Dialect, query string) string {
 		}
 	}
 	return b.String()
+}
+
+// FlexBool scans both SQLite INTEGER (0/1) and PostgreSQL BOOLEAN (true/false) columns seamlessly.
+type FlexBool bool
+
+// Scan implements sql.Scanner for cross-engine boolean compatibility.
+func (b *FlexBool) Scan(src any) error {
+	switch v := src.(type) {
+	case nil:
+		*b = false
+		return nil
+	case bool:
+		*b = FlexBool(v)
+		return nil
+	case int64:
+		*b = v != 0
+		return nil
+	case int32:
+		*b = v != 0
+		return nil
+	case int:
+		*b = v != 0
+		return nil
+	case []byte:
+		s := strings.TrimSpace(strings.ToLower(string(v)))
+		*b = s == "1" || s == "t" || s == "true"
+		return nil
+	case string:
+		s := strings.TrimSpace(strings.ToLower(v))
+		*b = s == "1" || s == "t" || s == "true"
+		return nil
+	default:
+		return fmt.Errorf("port: unsupported bool scan type %T", src)
+	}
+}
+
+// BoolVal returns a Go bool on PostgreSQL or int (0/1) on SQLite for parameterized bindings.
+func BoolVal(d Dialect, v bool) any {
+	if d == DialectPostgres {
+		return v
+	}
+	if v {
+		return 1
+	}
+	return 0
+}
+
+// BoolExpr returns a portable SQL boolean literal ("TRUE"/"FALSE" vs "1"/"0").
+func BoolExpr(d Dialect, v bool) string {
+	if d == DialectPostgres {
+		if v {
+			return "TRUE"
+		}
+		return "FALSE"
+	}
+	if v {
+		return "1"
+	}
+	return "0"
+}
+
+// SetOperatorRLSTx activates instance-operator RLS scope on PostgreSQL transactions (no-op on SQLite).
+func SetOperatorRLSTx(ctx context.Context, tx *sql.Tx, d Dialect) error {
+	if d != DialectPostgres {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_org_id', '', true), set_config('app.is_instance_operator', 'true', true)`); err != nil {
+		return fmt.Errorf("port: set operator RLS context: %w", err)
+	}
+	return nil
+}
+
+// SetOrgRLSTx activates strict single-organization FORCE RLS scope on PostgreSQL transactions (no-op on SQLite).
+func SetOrgRLSTx(ctx context.Context, tx *sql.Tx, d Dialect, orgID string) error {
+	if d != DialectPostgres {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'false', true), set_config('app.current_org_id', $1, true)`, orgID); err != nil {
+		return fmt.Errorf("port: set org %q RLS context: %w", orgID, err)
+	}
+	return nil
+}
+
+// ListOrgIDsTx enumerates all organization IDs inside an operator-scoped transaction.
+func ListOrgIDsTx(ctx context.Context, tx *sql.Tx, d Dialect) ([]string, error) {
+	if err := SetOperatorRLSTx(ctx, tx, d); err != nil {
+		return nil, err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM organizations ORDER BY id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("port: list organizations: %w", err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if serr := rows.Scan(&id); serr != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("port: scan organization id: %w", serr)
+		}
+		ids = append(ids, id)
+	}
+	if rerr := rows.Err(); rerr != nil {
+		_ = rows.Close()
+		return nil, fmt.Errorf("port: iterate organizations: %w", rerr)
+	}
+	_ = rows.Close()
+	return ids, nil
+}
+
+// AppendConfigChangelogTx inserts a config_changelog mutation across SQLite and PostgreSQL
+// (emitting PostgreSQL LISTEN/NOTIFY on tanpopo_config_changelog) and returns the committed epoch.
+func AppendConfigChangelogTx(ctx context.Context, tx *sql.Tx, d Dialect, orgID, entityKind, entityID, mutationType string, emergency bool, nowMs int64) (int64, error) {
+	var orgArg any
+	if strings.TrimSpace(orgID) != "" {
+		orgArg = orgID
+	}
+	if d == DialectPostgres {
+		var epoch int64
+		err := tx.QueryRowContext(ctx,
+			`INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES ($1, $2, $3, $4, $5, $6) RETURNING config_epoch`,
+			orgArg, entityKind, entityID, mutationType, emergency, nowMs,
+		).Scan(&epoch)
+		if err != nil {
+			return 0, err
+		}
+		payload, merr := json.Marshal(struct {
+			ConfigEpoch  int64  `json:"config_epoch"`
+			OrgID        string `json:"org_id,omitempty"`
+			EntityKind   string `json:"entity_kind"`
+			EntityID     string `json:"entity_id"`
+			MutationType string `json:"mutation_type"`
+			Emergency    bool   `json:"emergency,omitempty"`
+		}{
+			ConfigEpoch:  epoch,
+			OrgID:        strings.TrimSpace(orgID),
+			EntityKind:   entityKind,
+			EntityID:     entityID,
+			MutationType: mutationType,
+			Emergency:    emergency,
+		})
+		if merr == nil {
+			_, _ = tx.ExecContext(ctx, `SELECT pg_notify('tanpopo_config_changelog', $1)`, string(payload))
+		}
+		return epoch, nil
+	}
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)`,
+		orgArg, entityKind, entityID, mutationType, BoolVal(d, emergency), nowMs,
+	)
+	if err != nil {
+		return 0, err
+	}
+	epoch, _ := res.LastInsertId()
+	return epoch, nil
 }
 
 // Organization lifecycle statuses matching SQLite and PostgreSQL CHECK constraints.

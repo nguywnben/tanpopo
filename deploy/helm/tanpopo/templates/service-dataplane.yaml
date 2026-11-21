@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tanpopo.fullname" . }}-dataplane
+  labels:
+    {{- include "tanpopo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: data-plane
+spec:
+  type: {{ .Values.dataPlane.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.dataPlane.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: {{ include "tanpopo.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: data-plane

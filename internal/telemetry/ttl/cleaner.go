@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 const (
@@ -47,12 +49,13 @@ type PurgeSummary struct {
 
 // Cleaner reaps expired debug_payload_blobs and aged request_traces_meta rows in yielded micro-batches.
 type Cleaner struct {
-	db              *sql.DB
-	sweepInterval   time.Duration
-	traceRetention  time.Duration
-	batchSize       int
-	nowMs           func() int64
-	onError         func(error)
+	db             *sql.DB
+	dialect        port.Dialect
+	sweepInterval  time.Duration
+	traceRetention time.Duration
+	batchSize      int
+	nowMs          func() int64
+	onError        func(error)
 }
 
 // NewCleaner validates configuration and constructs a telemetry TTL Cleaner.
@@ -81,6 +84,7 @@ func NewCleaner(cfg Config) (*Cleaner, error) {
 	}
 	return &Cleaner{
 		db:             cfg.DB,
+		dialect:        port.DetectDialect(context.Background(), cfg.DB),
 		sweepInterval:  interval,
 		traceRetention: time.Duration(retDays) * 24 * time.Hour,
 		batchSize:      batch,
@@ -99,7 +103,12 @@ func (c *Cleaner) PurgeOnce(ctx context.Context) (PurgeSummary, error) {
 		ctx = context.Background()
 	}
 	nowMs := c.nowMs()
+	traceCutoffMs := nowMs - c.traceRetention.Milliseconds()
 	var sum PurgeSummary
+
+	if c.dialect == port.DialectPostgres {
+		return c.purgeOncePostgres(ctx, nowMs, traceCutoffMs)
+	}
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -125,7 +134,6 @@ func (c *Cleaner) PurgeOnce(ctx context.Context) (PurgeSummary, error) {
 		}
 	}
 
-	traceCutoffMs := nowMs - c.traceRetention.Milliseconds()
 	for {
 		if err := ctx.Err(); err != nil {
 			return sum, err
@@ -151,6 +159,87 @@ func (c *Cleaner) PurgeOnce(ctx context.Context) (PurgeSummary, error) {
 	}
 
 	return sum, nil
+}
+
+func (c *Cleaner) purgeOncePostgres(ctx context.Context, nowMs, traceCutoffMs int64) (PurgeSummary, error) {
+	var sum PurgeSummary
+	listTx, err := c.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return sum, fmt.Errorf("ttl: begin list orgs tx: %w", err)
+	}
+	orgIDs, listErr := port.ListOrgIDsTx(ctx, listTx, c.dialect)
+	_ = listTx.Rollback()
+	if listErr != nil {
+		return sum, listErr
+	}
+
+	delBlobsSQL := port.Rebind(c.dialect, `
+		DELETE FROM debug_payload_blobs
+		WHERE (org_id, project_id, request_id) IN (
+			SELECT org_id, project_id, request_id FROM debug_payload_blobs
+			WHERE org_id = ? AND expires_at_ms <= ?
+			LIMIT ?
+		)`)
+	delTracesSQL := port.Rebind(c.dialect, `
+		DELETE FROM request_traces_meta
+		WHERE (org_id, request_id, created_at_ms) IN (
+			SELECT org_id, request_id, created_at_ms FROM request_traces_meta
+			WHERE org_id = ? AND created_at_ms <= ?
+			LIMIT ?
+		)`)
+
+	for _, orgID := range orgIDs {
+		for {
+			if err := ctx.Err(); err != nil {
+				return sum, err
+			}
+			n, err := c.execOrgBatchDelete(ctx, orgID, delBlobsSQL, orgID, nowMs, c.batchSize)
+			if err != nil {
+				return sum, fmt.Errorf("ttl: purge expired debug_payload_blobs: %w", err)
+			}
+			sum.DeletedDebugBlobs += n
+			if n < int64(c.batchSize) {
+				break
+			}
+		}
+		for {
+			if err := ctx.Err(); err != nil {
+				return sum, err
+			}
+			n, err := c.execOrgBatchDelete(ctx, orgID, delTracesSQL, orgID, traceCutoffMs, c.batchSize)
+			if err != nil {
+				return sum, fmt.Errorf("ttl: purge aged request_traces_meta: %w", err)
+			}
+			sum.DeletedTracesMeta += n
+			if n < int64(c.batchSize) {
+				break
+			}
+		}
+	}
+	return sum, nil
+}
+
+func (c *Cleaner) execOrgBatchDelete(ctx context.Context, orgID, query string, args ...any) (int64, error) {
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, c.dialect, orgID); err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // Start launches the background purge loop until ctx is canceled and returns a stop

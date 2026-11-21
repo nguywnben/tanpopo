@@ -256,5 +256,20 @@
   "cli.ops.db.short": "Inspecter ou migrer le moteur de stockage de base de donnees.",
   "cli.ops.db.migrate.flag.from": "Chemin de base SQLite WAL source ou DSN sqlite://",
   "cli.ops.db.migrate.flag.to": "DSN de connexion PostgreSQL 16+ cible",
-  "cli.ops.db.migrate.flag.verify": "Vérifier les comptes de lignes, sommes micro-USD, chaînes JCS d'audit et enveloppes Vault avant validation"
+  "cli.ops.db.migrate.flag.verify": "Vérifier les comptes de lignes, sommes micro-USD, chaînes JCS d'audit et enveloppes Vault avant validation",
+  "cli.admin.verify_state.short": "Vérifier les chaînes d'audit, réconcilier les retenues orphelines et reconstruire l'état Valkey",
+  "cli.admin.verify_state.flag.db": "Chemin du fichier de base SQLite",
+  "cli.admin.verify_state.flag.pg_dsn": "DSN de connexion PostgreSQL 16+",
+  "cli.admin.verify_state.flag.valkey_addrs": "Adresses du cluster Valkey séparées par des virgules",
+  "cli.admin.verify_state.flag.valkey_username": "Nom d'utilisateur ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_password": "Mot de passe ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Exiger TLS lors de la connexion à Valkey",
+  "cli.admin.verify_state.flag.check_audit": "Vérifier les chaînes de hachage d'audit immuables pour tous les locataires",
+  "cli.admin.verify_state.flag.reconcile_orphans": "Libérer les retenues budgétaires expirées avant de reconstruire le cache",
+  "cli.admin.verify_state.flag.rebuild_valkey": "Reconstruire les retenues actives dans Valkey depuis SQL/PostgreSQL",
+  "cli.admin.verify_state.err.store_required": "Fournissez --db (SQLite) ou --pg-dsn (PostgreSQL).",
+  "cli.admin.verify_state.err.valkey_required": "--valkey-addrs est requis pour reconstruire l'état Valkey.",
+  "cli.admin.verify_state.err.tampered": "Échec de la vérification d'audit : falsification détectée.",
+  "cli.admin.verify_state.err.failed": "La vérification de l'état opérationnel a échoué",
+  "cli.admin.verify_state.output": "Vérification {{status}} (moteur={{engine}} événements={{events}} orphelins={{orphans}} valkey_restaurés={{restored}})"
 }

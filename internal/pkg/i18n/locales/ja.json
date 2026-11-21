@@ -256,5 +256,20 @@
   "cli.ops.db.short": "データベースストレージエンジンを検査または移行します。",
   "cli.ops.db.migrate.flag.from": "移行元 SQLite WAL データベースパスまたは sqlite:// DSN",
   "cli.ops.db.migrate.flag.to": "移行先 PostgreSQL 16+ 接続 DSN",
-  "cli.ops.db.migrate.flag.verify": "コミット前に行数、micro-USD 合計、JCS 監査ハッシュチェーン、Vault エンベロープを検証する"
+  "cli.ops.db.migrate.flag.verify": "コミット前に行数、micro-USD 合計、JCS 監査ハッシュチェーン、Vault エンベロープを検証する",
+  "cli.admin.verify_state.short": "監査ハッシュチェーンの検証、孤立保留の回収、Valkey クラスター状態の再構築",
+  "cli.admin.verify_state.flag.db": "SQLite データベースファイルのパス",
+  "cli.admin.verify_state.flag.pg_dsn": "PostgreSQL 16+ 接続 DSN",
+  "cli.admin.verify_state.flag.valkey_addrs": "カンマ区切りの Valkey クラスターアドレス",
+  "cli.admin.verify_state.flag.valkey_username": "Valkey ACL ユーザー名",
+  "cli.admin.verify_state.flag.valkey_password": "Valkey ACL パスワード",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Valkey 接続時に TLS を必須にする",
+  "cli.admin.verify_state.flag.check_audit": "全テナントの不変監査ハッシュチェーンを検証する",
+  "cli.admin.verify_state.flag.reconcile_orphans": "キャッシュ再構築前に期限切れの予算保留を回収する",
+  "cli.admin.verify_state.flag.rebuild_valkey": "SQL/PostgreSQL の状態から Valkey の有効な予算保留を再構築する",
+  "cli.admin.verify_state.err.store_required": "--db (SQLite) または --pg-dsn (PostgreSQL) を指定してください。",
+  "cli.admin.verify_state.err.valkey_required": "Valkey 状態の再構築には --valkey-addrs が必須です。",
+  "cli.admin.verify_state.err.tampered": "監査ハッシュチェーン検証に失敗しました：改ざんが検出されました。",
+  "cli.admin.verify_state.err.failed": "運用状態の検証に失敗しました",
+  "cli.admin.verify_state.output": "状態チェック {{status}} (エンジン={{engine}} 監査イベント={{events}} 回収孤立={{orphans}} 復元Valkey保留={{restored}})"
 }
