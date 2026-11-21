@@ -335,124 +335,6 @@ export function ConsoleShell() {
           </IconButton>
         </div>
 
-        <div className="tp-rail-scope">
-          <Popover
-            isOpen={scopeOpen}
-            onOpenChange={setScopeOpen}
-            placement="below"
-            alignment="start"
-            width={244}
-            padding={0}
-            className="tp-scope-popover"
-            label={t('shell.activeScope')}
-            content={
-              <div className="tp-scope-menu">
-                <div className="tp-scope-menu-section">
-                  <div className="tp-scope-menu-head">
-                    <span>{t('common.project')}</span>
-                    {canManageScope ? (
-                      <button
-                        type="button"
-                        className="tp-rail-scope-add"
-                        aria-label={t('shell.newProject')}
-                        title={t('shell.newProject')}
-                        onClick={() => {
-                          setScopeOpen(false);
-                          openCreateProjectModal();
-                        }}
-                      >
-                        <Plus size={13} strokeWidth={2} aria-hidden="true" />
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="tp-scope-menu-list" role="listbox" aria-label={t('common.project')}>
-                    {projectOptions.map(opt => {
-                      const selected = opt.value === projectId;
-                      return (
-                        <button
-                          key={opt.value || '__no_project__'}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          className="tp-scope-menu-item"
-                          data-selected={selected ? 'true' : 'false'}
-                          onClick={() => setProjectId(opt.value)}
-                        >
-                          <span className="tp-scope-menu-item-label">{opt.label}</span>
-                          {selected ? <Check size={14} strokeWidth={2.2} className="tp-scope-menu-check" aria-hidden="true" /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="tp-scope-menu-divider" role="separator" />
-
-                <div className="tp-scope-menu-section">
-                  <div className="tp-scope-menu-head">
-                    <span>{t('common.envShort')}</span>
-                    {canManageScope && projectId ? (
-                      <button
-                        type="button"
-                        className="tp-rail-scope-add"
-                        aria-label={t('shell.newEnvironment')}
-                        title={t('shell.newEnvironment')}
-                        onClick={() => {
-                          setScopeOpen(false);
-                          openCreateEnvironmentModal();
-                        }}
-                      >
-                        <Plus size={13} strokeWidth={2} aria-hidden="true" />
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="tp-scope-menu-list" role="listbox" aria-label={t('common.envShort')}>
-                    {environmentOptions.map(opt => {
-                      const selected = opt.value === environmentId;
-                      return (
-                        <button
-                          key={opt.value || '__no_env__'}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          className="tp-scope-menu-item"
-                          data-selected={selected ? 'true' : 'false'}
-                          onClick={() => {
-                            setEnvironmentId(opt.value);
-                            setScopeOpen(false);
-                          }}
-                        >
-                          <span className="tp-scope-menu-item-label">{opt.label}</span>
-                          {selected ? <Check size={14} strokeWidth={2.2} className="tp-scope-menu-check" aria-hidden="true" /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            }
-          >
-            {triggerProps => (
-              <button
-                {...triggerProps}
-                type="button"
-                className="tp-scope-switcher"
-                disabled={loading}
-                aria-label={t('shell.activeScope')}
-              >
-                <span className="tp-scope-switcher-badge" aria-hidden="true">
-                  <Layers size={14} strokeWidth={1.8} />
-                </span>
-                <span className="tp-scope-switcher-text">
-                  <span className="tp-scope-switcher-project">{activeProject?.name ?? t('common.noProject')}</span>
-                  <span className="tp-scope-switcher-env">{activeEnvironment?.name ?? t('common.noEnv')}</span>
-                </span>
-                <ChevronsUpDown size={14} strokeWidth={1.8} className="tp-scope-switcher-chevron" aria-hidden="true" />
-              </button>
-            )}
-          </Popover>
-        </div>
-
         <nav className="tp-rail-scroll" aria-label={t('shell.primarySections')}>
 
           {visibleGroups.map(group => (
@@ -523,19 +405,137 @@ export function ConsoleShell() {
             </Link>
           </div>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            className="tp-jump-btn"
-            aria-label={t('shell.jump')}
-            onClick={() => setPaletteOpen(true)}
-          >
-            <Search size={14} aria-hidden="true" />
-            <span className="tp-jump-label">{t('shell.jump')}</span>
-            <span className="tp-desktop-kbd"><Kbd keys="mod+k" /></span>
-          </Button>
+          <div className="tp-topbar-scope-anchor">
+            <Popover
+              isOpen={scopeOpen}
+              onOpenChange={setScopeOpen}
+              placement="below"
+              alignment="start"
+              width={244}
+              padding={0}
+              className="tp-scope-popover"
+              label={t('shell.activeScope')}
+              content={
+                <div className="tp-scope-menu">
+                  <div className="tp-scope-menu-section">
+                    <div className="tp-scope-menu-head">
+                      <span>{t('common.project')}</span>
+                      {canManageScope ? (
+                        <button
+                          type="button"
+                          className="tp-rail-scope-add"
+                          aria-label={t('shell.newProject')}
+                          title={t('shell.newProject')}
+                          onClick={() => {
+                            setScopeOpen(false);
+                            openCreateProjectModal();
+                          }}
+                        >
+                          <Plus size={13} strokeWidth={2} aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="tp-scope-menu-list" role="listbox" aria-label={t('common.project')}>
+                      {projectOptions.map(opt => {
+                        const selected = opt.value === projectId;
+                        return (
+                          <button
+                            key={opt.value || '__no_project__'}
+                            type="button"
+                            role="option"
+                            aria-selected={selected}
+                            className="tp-scope-menu-item"
+                            data-selected={selected ? 'true' : 'false'}
+                            onClick={() => setProjectId(opt.value)}
+                          >
+                            <span className="tp-scope-menu-item-label">{opt.label}</span>
+                            {selected ? <Check size={14} strokeWidth={2.2} className="tp-scope-menu-check" aria-hidden="true" /> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="tp-scope-menu-divider" role="separator" />
+
+                  <div className="tp-scope-menu-section">
+                    <div className="tp-scope-menu-head">
+                      <span>{t('common.envShort')}</span>
+                      {canManageScope && projectId ? (
+                        <button
+                          type="button"
+                          className="tp-rail-scope-add"
+                          aria-label={t('shell.newEnvironment')}
+                          title={t('shell.newEnvironment')}
+                          onClick={() => {
+                            setScopeOpen(false);
+                            openCreateEnvironmentModal();
+                          }}
+                        >
+                          <Plus size={13} strokeWidth={2} aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="tp-scope-menu-list" role="listbox" aria-label={t('common.envShort')}>
+                      {environmentOptions.map(opt => {
+                        const selected = opt.value === environmentId;
+                        return (
+                          <button
+                            key={opt.value || '__no_env__'}
+                            type="button"
+                            role="option"
+                            aria-selected={selected}
+                            className="tp-scope-menu-item"
+                            data-selected={selected ? 'true' : 'false'}
+                            onClick={() => {
+                              setEnvironmentId(opt.value);
+                              setScopeOpen(false);
+                            }}
+                          >
+                            <span className="tp-scope-menu-item-label">{opt.label}</span>
+                            {selected ? <Check size={14} strokeWidth={2.2} className="tp-scope-menu-check" aria-hidden="true" /> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              }
+            >
+              {triggerProps => (
+                <button
+                  {...triggerProps}
+                  type="button"
+                  className="tp-scope-switcher"
+                  disabled={loading}
+                  aria-label={t('shell.activeScope')}
+                  title={`${activeProject?.name ?? t('common.noProject')} / ${activeEnvironment?.name ?? t('common.noEnv')}`}
+                >
+                  <Layers size={14} strokeWidth={1.8} className="tp-scope-switcher-icon" aria-hidden="true" />
+                  <span className="tp-scope-switcher-text">
+                    <span className="tp-scope-switcher-project">{activeProject?.name ?? t('common.noProject')}</span>
+                    <span className="tp-scope-switcher-sep" aria-hidden="true">/</span>
+                    <span className="tp-scope-switcher-env">{activeEnvironment?.name ?? t('common.noEnv')}</span>
+                  </span>
+                  <ChevronsUpDown size={13} strokeWidth={1.8} className="tp-scope-switcher-chevron" aria-hidden="true" />
+                </button>
+              )}
+            </Popover>
+          </div>
 
           <div className="tp-topbar-actions">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="tp-jump-btn"
+              aria-label={t('shell.jump')}
+              onClick={() => setPaletteOpen(true)}
+            >
+              <Search size={14} aria-hidden="true" />
+              <span className="tp-jump-label">{t('shell.jump')}</span>
+              <span className="tp-desktop-kbd"><Kbd keys="mod+k" /></span>
+            </Button>
+
             <div className="tp-topbar-lang">
               <LanguageSelector id="console-language-selector" />
             </div>

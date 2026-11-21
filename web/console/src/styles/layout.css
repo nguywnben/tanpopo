@@ -96,14 +96,12 @@
     gap: var(--space-3);
   }
 
-  .tp-rail-scope {
-    padding: 0.5rem var(--space-2);
-    border-bottom: 1px solid var(--tp-border-subtle);
+  .tp-topbar-scope-anchor {
+    order: 2;
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
     flex-shrink: 0;
-  }
-
-  .tp-rail-scope > :not([popover]) {
-    width: 100%;
   }
 
   .tp-scope-popover {
@@ -112,25 +110,26 @@
   }
 
   .tp-scope-switcher {
-    width: 100%;
-    min-height: 44px;
-    padding: 0.375rem 0.5rem;
-    border: 1px solid transparent;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--tp-border-strong);
     border-radius: var(--tp-radius-md);
-    background: transparent;
+    background: var(--tp-bg-surface);
     color: var(--tp-ink-primary);
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 0.5625rem;
+    justify-content: center;
+    gap: 0.4375rem;
     text-align: left;
     cursor: pointer;
+    flex-shrink: 0;
     transition: background-color 120ms ease, border-color 120ms ease;
   }
 
   .tp-scope-switcher:hover:not(:disabled),
   .tp-scope-switcher[aria-expanded='true'] {
     background: var(--tp-bg-hover);
-    border-color: var(--tp-border-subtle);
   }
 
   .tp-scope-switcher:focus-visible {
@@ -143,48 +142,48 @@
     cursor: not-allowed;
   }
 
-  .tp-scope-switcher-badge {
-    width: 28px;
-    height: 28px;
-    border-radius: var(--tp-radius-sm);
-    background: var(--tp-bg-subtle);
-    border: 1px solid var(--tp-border-subtle);
-    color: var(--tp-ink-secondary);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  .tp-scope-switcher-icon {
+    color: var(--tp-ink-primary);
     flex-shrink: 0;
   }
 
   .tp-scope-switcher-text {
-    flex: 1;
+    display: none;
+    align-items: center;
+    gap: 0.3125rem;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
   }
 
   .tp-scope-switcher-project {
     font-size: 0.8125rem;
     line-height: 1.25;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--tp-ink-primary);
+    max-width: 140px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  .tp-scope-switcher-sep {
+    font-size: 0.75rem;
+    color: var(--tp-ink-disabled);
+    flex-shrink: 0;
+  }
+
   .tp-scope-switcher-env {
-    font-size: 0.71875rem;
+    font-size: 0.78125rem;
     line-height: 1.25;
     font-weight: 500;
     color: var(--tp-ink-secondary);
+    max-width: 84px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .tp-scope-switcher-chevron {
+    display: none;
     color: var(--tp-ink-secondary);
     flex-shrink: 0;
   }
@@ -478,7 +477,6 @@
   }
 
   .tp-jump-btn {
-    order: 2;
     flex-shrink: 0;
   }
 
@@ -505,11 +503,17 @@
     display: none;
   }
 
+  @media (max-width: 819.98px) {
+    .tp-jump-btn {
+      min-width: 28px;
+      padding-inline: 0.375rem;
+    }
+  }
+
   @media (max-width: 639.98px) {
-    .tp-jump-btn,
     .tp-killswitch-btn {
-      min-width: 32px;
-      padding-inline: 0.4375rem;
+      min-width: 28px;
+      padding-inline: 0.375rem;
     }
   }
 
@@ -779,11 +783,29 @@
       display: none;
     }
 
-    .tp-jump-btn {
+    .tp-topbar-scope-anchor {
       margin-right: auto;
+      flex-shrink: 1;
     }
 
-    .tp-jump-label,
+    .tp-scope-switcher {
+      width: auto;
+      max-width: 100%;
+      padding: 0 0.625rem;
+    }
+
+    .tp-scope-switcher-icon {
+      color: var(--tp-ink-secondary);
+    }
+
+    .tp-scope-switcher-text {
+      display: inline-flex;
+    }
+
+    .tp-scope-switcher-chevron {
+      display: inline-flex;
+    }
+
     .tp-killswitch-label {
       display: inline;
     }
@@ -836,6 +858,12 @@
     }
   }
 
+  @media (min-width: 820px) {
+    .tp-jump-label {
+      display: inline;
+    }
+  }
+
   @media (min-width: 1024px) {
     .tp-topbar {
       padding: 0 var(--space-5);
@@ -843,6 +871,14 @@
 
     .tp-topbar-brand-group {
       display: none;
+    }
+
+    .tp-scope-switcher-project {
+      max-width: 220px;
+    }
+
+    .tp-scope-switcher-env {
+      max-width: 120px;
     }
 
     .tp-rail {
