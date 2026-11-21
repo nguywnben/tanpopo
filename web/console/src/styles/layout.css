@@ -175,19 +175,14 @@
     flex-shrink: 0;
   }
 
-  .tp-rail-prefs-icon {
-    color: var(--tp-ink-secondary);
-    flex-shrink: 0;
-  }
-
-  .tp-rail-lang {
+  .tp-rail-prefs .tp-lang-selector {
     flex: 1;
     min-width: 0;
-    width: 100%;
-    max-width: 100%;
+    width: auto;
+    max-width: none;
   }
 
-  .tp-rail-lang [role='combobox'] {
+  .tp-rail-prefs .tp-lang-selector [role='combobox'] {
     width: 100%;
     max-width: 100%;
   }
@@ -302,7 +297,8 @@
     min-width: 0;
   }
 
-  .tp-topbar-lang {
+  .tp-topbar-lang,
+  .tp-topbar-theme {
     display: none;
     align-items: center;
     min-width: 0;
@@ -669,7 +665,8 @@
       gap: var(--space-2);
     }
 
-    .tp-topbar-lang {
+    .tp-topbar-lang,
+    .tp-topbar-theme {
       display: inline-flex;
     }
 

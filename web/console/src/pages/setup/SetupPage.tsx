@@ -219,7 +219,7 @@ export function SetupPage() {
             </div>
             <div className="tp-auth-controls">
               <LanguageSelector id="setup-language-selector" />
-              <IconButton label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')} onClick={toggleTheme}>
+              <IconButton variant="secondary" label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')} onClick={toggleTheme}>
                 {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
               </IconButton>
             </div>

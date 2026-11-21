@@ -5,7 +5,6 @@ import {
   Cpu,
   DollarSign,
   GitBranch,
-  Globe,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -275,8 +274,14 @@ export function ConsoleShell() {
 
         {railOpen ? (
           <div className="tp-rail-prefs">
-            <Globe size={15} strokeWidth={1.8} aria-hidden="true" className="tp-rail-prefs-icon" />
             <LanguageSelector id="drawer-language-selector" className="tp-rail-lang" />
+            <IconButton
+              variant="secondary"
+              label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')}
+              onClick={toggleTheme}
+            >
+              {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
+            </IconButton>
           </div>
         ) : null}
 
@@ -330,9 +335,15 @@ export function ConsoleShell() {
                   <LanguageSelector id="console-language-selector" />
                 </div>
 
-                <IconButton label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')} onClick={toggleTheme}>
-                  {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
-                </IconButton>
+                <div className="tp-topbar-theme">
+                  <IconButton
+                    variant="secondary"
+                    label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')}
+                    onClick={toggleTheme}
+                  >
+                    {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
+                  </IconButton>
+                </div>
               </div>
 
               {canUseEmergency ? (
