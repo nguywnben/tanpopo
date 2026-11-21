@@ -2,10 +2,13 @@ import {lazy, Suspense, useEffect, useMemo, useState, type FormEvent} from 'reac
 import {
   Activity,
   Blocks,
+  Check,
+  ChevronsUpDown,
   Cpu,
   DollarSign,
   GitBranch,
   KeyRound,
+  Layers,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -22,7 +25,7 @@ import {
 } from 'lucide-react';
 import {CommandPalette} from '@astryxdesign/core/CommandPalette';
 import {Kbd} from '@astryxdesign/core/Kbd';
-import {Selector} from '@astryxdesign/core/Selector';
+import {Popover} from '@astryxdesign/core/Popover';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {createStaticSource, type SearchableItem} from '@astryxdesign/core/Typeahead';
 import {createEnvironment, createProject, getAdminSession, listEnvironments, listProjects, logoutAdmin} from '../api/client';
@@ -86,6 +89,7 @@ export function ConsoleShell() {
   const [offline, setOffline] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
+  const [scopeOpen, setScopeOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const [activeSwitches, setActiveSwitches] = useState(0);
@@ -205,16 +209,16 @@ export function ConsoleShell() {
 
   const projectOptions = useMemo(
     () => [
-      {value: '', label: t('common.noProject')},
       ...projects.map(project => ({value: project.id, label: project.name})),
+      {value: '', label: t('common.noProject')},
     ],
     [projects, t],
   );
 
   const environmentOptions = useMemo(
     () => [
-      {value: '', label: t('common.noEnv')},
       ...environments.map(env => ({value: env.id, label: env.name})),
+      {value: '', label: t('common.noEnv')},
     ],
     [environments, t],
   );
@@ -235,6 +239,7 @@ export function ConsoleShell() {
   const canUseEmergency = roles.some(role => emergencyRoles.includes(role));
   const canManageScope = roles.some(role => scopeAdminRoles.includes(role));
   const activeProject = useMemo(() => projects.find(item => item.id === projectId) ?? null, [projects, projectId]);
+  const activeEnvironment = useMemo(() => environments.find(item => item.id === environmentId) ?? null, [environments, environmentId]);
   const securityBadgeCount = pendingApprovals + activeSwitches;
 
   function openCreateProjectModal() {
@@ -330,71 +335,125 @@ export function ConsoleShell() {
           </IconButton>
         </div>
 
+        <div className="tp-rail-scope">
+          <Popover
+            isOpen={scopeOpen}
+            onOpenChange={setScopeOpen}
+            placement="below"
+            alignment="start"
+            width={244}
+            padding={0}
+            className="tp-scope-popover"
+            label={t('shell.activeScope')}
+            content={
+              <div className="tp-scope-menu">
+                <div className="tp-scope-menu-section">
+                  <div className="tp-scope-menu-head">
+                    <span>{t('common.project')}</span>
+                    {canManageScope ? (
+                      <button
+                        type="button"
+                        className="tp-rail-scope-add"
+                        aria-label={t('shell.newProject')}
+                        title={t('shell.newProject')}
+                        onClick={() => {
+                          setScopeOpen(false);
+                          openCreateProjectModal();
+                        }}
+                      >
+                        <Plus size={13} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="tp-scope-menu-list" role="listbox" aria-label={t('common.project')}>
+                    {projectOptions.map(opt => {
+                      const selected = opt.value === projectId;
+                      return (
+                        <button
+                          key={opt.value || '__no_project__'}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          className="tp-scope-menu-item"
+                          data-selected={selected ? 'true' : 'false'}
+                          onClick={() => setProjectId(opt.value)}
+                        >
+                          <span className="tp-scope-menu-item-label">{opt.label}</span>
+                          {selected ? <Check size={14} strokeWidth={2.2} className="tp-scope-menu-check" aria-hidden="true" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="tp-scope-menu-divider" role="separator" />
+
+                <div className="tp-scope-menu-section">
+                  <div className="tp-scope-menu-head">
+                    <span>{t('common.envShort')}</span>
+                    {canManageScope && projectId ? (
+                      <button
+                        type="button"
+                        className="tp-rail-scope-add"
+                        aria-label={t('shell.newEnvironment')}
+                        title={t('shell.newEnvironment')}
+                        onClick={() => {
+                          setScopeOpen(false);
+                          openCreateEnvironmentModal();
+                        }}
+                      >
+                        <Plus size={13} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="tp-scope-menu-list" role="listbox" aria-label={t('common.envShort')}>
+                    {environmentOptions.map(opt => {
+                      const selected = opt.value === environmentId;
+                      return (
+                        <button
+                          key={opt.value || '__no_env__'}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          className="tp-scope-menu-item"
+                          data-selected={selected ? 'true' : 'false'}
+                          onClick={() => {
+                            setEnvironmentId(opt.value);
+                            setScopeOpen(false);
+                          }}
+                        >
+                          <span className="tp-scope-menu-item-label">{opt.label}</span>
+                          {selected ? <Check size={14} strokeWidth={2.2} className="tp-scope-menu-check" aria-hidden="true" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            }
+          >
+            {triggerProps => (
+              <button
+                {...triggerProps}
+                type="button"
+                className="tp-scope-switcher"
+                disabled={loading}
+                aria-label={t('shell.activeScope')}
+              >
+                <span className="tp-scope-switcher-badge" aria-hidden="true">
+                  <Layers size={14} strokeWidth={1.8} />
+                </span>
+                <span className="tp-scope-switcher-text">
+                  <span className="tp-scope-switcher-project">{activeProject?.name ?? t('common.noProject')}</span>
+                  <span className="tp-scope-switcher-env">{activeEnvironment?.name ?? t('common.noEnv')}</span>
+                </span>
+                <ChevronsUpDown size={14} strokeWidth={1.8} className="tp-scope-switcher-chevron" aria-hidden="true" />
+              </button>
+            )}
+          </Popover>
+        </div>
+
         <nav className="tp-rail-scroll" aria-label={t('shell.primarySections')}>
-          <div className="tp-rail-scope" role="group" aria-label={t('shell.activeScope')}>
-            <div className="tp-rail-scope-field">
-              <div className="tp-rail-scope-head">
-                <span className="tp-rail-scope-label" aria-hidden="true">{t('common.project')}</span>
-                {canManageScope ? (
-                  <button
-                    type="button"
-                    className="tp-rail-scope-add"
-                    aria-label={t('shell.newProject')}
-                    title={t('shell.newProject')}
-                    disabled={loading}
-                    onClick={openCreateProjectModal}
-                  >
-                    <Plus size={13} strokeWidth={2} aria-hidden="true" />
-                  </button>
-                ) : null}
-              </div>
-              <Selector
-                id="project-context"
-                label={t('common.project')}
-                isLabelHidden
-                size="sm"
-                variant="input"
-                options={projectOptions}
-                value={projectId}
-                placeholder={t('common.noProject')}
-                isDisabled={loading || projects.length === 0}
-                hasSearch={projects.length > 8}
-                onChange={next => setProjectId(next)}
-                containerClassName="tp-scope-selector"
-              />
-            </div>
-            <div className="tp-rail-scope-field">
-              <div className="tp-rail-scope-head">
-                <span className="tp-rail-scope-label" aria-hidden="true">{t('common.envShort')}</span>
-                {canManageScope && projectId ? (
-                  <button
-                    type="button"
-                    className="tp-rail-scope-add"
-                    aria-label={t('shell.newEnvironment')}
-                    title={t('shell.newEnvironment')}
-                    disabled={loading}
-                    onClick={openCreateEnvironmentModal}
-                  >
-                    <Plus size={13} strokeWidth={2} aria-hidden="true" />
-                  </button>
-                ) : null}
-              </div>
-              <Selector
-                id="environment-context"
-                label={t('common.envShort')}
-                isLabelHidden
-                size="sm"
-                variant="input"
-                options={environmentOptions}
-                value={environmentId}
-                placeholder={t('common.noEnv')}
-                isDisabled={loading || environments.length === 0}
-                hasSearch={environments.length > 8}
-                onChange={next => setEnvironmentId(next)}
-                containerClassName="tp-scope-selector"
-              />
-            </div>
-          </div>
 
           {visibleGroups.map(group => (
             <div key={group.title} className="tp-nav-group">

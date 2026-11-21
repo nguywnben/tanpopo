@@ -356,18 +356,19 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
     });
 
     const {container} = render(wrap(<ConsoleShell />));
-    const envTrigger = await screen.findByRole('combobox', {name: /Env/i});
-    await waitFor(() => expect(envTrigger).toHaveTextContent('Production'));
+    const scopeTrigger = await screen.findByRole('button', {name: /Workspace scope/i});
+    await waitFor(() => expect(scopeTrigger).toHaveTextContent('Default Project'));
+    await waitFor(() => expect(scopeTrigger).toHaveTextContent('Production'));
 
-    fireEvent.click(envTrigger);
+    fireEvent.click(scopeTrigger);
     const noEnvOpt = await screen.findByRole('option', {name: 'No env'});
     fireEvent.click(noEnvOpt);
-    await waitFor(() => expect(envTrigger).toHaveTextContent('No env'));
+    await waitFor(() => expect(scopeTrigger).toHaveTextContent('No env'));
 
-    const projectTrigger = screen.getByRole('combobox', {name: /Project/i});
-    fireEvent.click(projectTrigger);
+    fireEvent.click(scopeTrigger);
     fireEvent.click(await screen.findByRole('option', {name: 'Edge Project'}));
-    await waitFor(() => expect(envTrigger).toHaveTextContent('Canary'));
+    await waitFor(() => expect(scopeTrigger).toHaveTextContent('Edge Project'));
+    await waitFor(() => expect(scopeTrigger).toHaveTextContent('Canary'));
 
     const audit = await axe.run(container);
     expect(audit.violations).toEqual([]);
