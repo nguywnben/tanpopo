@@ -24,9 +24,12 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
 	"github.com/nguywnben/tanpopo/internal/ops/backup"
 	"github.com/nguywnben/tanpopo/internal/ops/gitops"
+	opsmigrate "github.com/nguywnben/tanpopo/internal/ops/migrate"
 	"github.com/nguywnben/tanpopo/internal/ops/upgrade"
 	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
+	storagemigrate "github.com/nguywnben/tanpopo/internal/storage/migrate"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 )
 
@@ -60,7 +63,7 @@ func NewCommands(opts Options) []*cobra.Command {
 	if strings.TrimSpace(opts.LockfilePath) == "" {
 		opts.LockfilePath = filepath.Join(opts.DataRoot, "tanpopo.lock")
 	}
-	return []*cobra.Command{newBackupCommand(opts), newConfigCommand(opts), newUpgradeCommand(opts), newTenantCommand(opts), newVaultCommand(opts)}
+	return []*cobra.Command{newBackupCommand(opts), newConfigCommand(opts), newDBCommand(opts), newUpgradeCommand(opts), newTenantCommand(opts), newVaultCommand(opts)}
 }
 
 func newConfigCommand(opts Options) *cobra.Command {
@@ -512,4 +515,53 @@ func cliError(code int, message string, cause error) error {
 func env(name string) string {
 	value, _ := os.LookupEnv(name)
 	return value
+}
+
+func newDBCommand(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
+	cmd := &cobra.Command{Use: "db", Short: i18n.T(loc, "cli.ops.db.short")}
+	var (
+		fromDSN string
+		toDSN   string
+		verify  bool
+	)
+	migrateCmd := &cobra.Command{
+		Use:   "migrate-engine",
+		Short: i18n.T(loc, "cli.ops.db.migrate.short"),
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if strings.TrimSpace(fromDSN) == "" || strings.TrimSpace(toDSN) == "" {
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.db.migrate.err.required"), nil)
+			}
+			format := outputFormat(opts.OutputFormat)
+			if !validOutputFormat(format) {
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.err.output_format"), nil)
+			}
+			rep, err := opsmigrate.MigrateSQLiteToPostgres(cmd.Context(), opsmigrate.MigrateOptions{
+				FromSQLite: strings.TrimSpace(fromDSN),
+				ToPostgres: strings.TrimSpace(toDSN),
+				Verify:     verify,
+			})
+			if err != nil {
+				switch {
+				case errors.Is(err, port.ErrDirtyMigration):
+					return cliError(storagemigrate.ExitCodeDirtyMigration, i18n.T(loc, "cli.ops.db.migrate.err.dirty"), err)
+				case errors.Is(err, port.ErrPrivilegedRole):
+					return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.ops.db.migrate.err.security"), err)
+				case errors.Is(err, opsmigrate.ErrParityMismatch):
+					return cliError(testharness.ExitContract, i18n.T(loc, "cli.ops.db.migrate.err.parity"), err)
+				case errors.Is(err, port.ErrInvalidInput):
+					return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.db.migrate.err.failed"), err)
+				default:
+					return cliError(testharness.ExitInternal, i18n.T(loc, "cli.ops.db.migrate.err.failed"), err)
+				}
+			}
+			return writeResult(opts.Stdout, format, rep)
+		},
+	}
+	migrateCmd.Flags().StringVar(&fromDSN, "from", "", i18n.T(loc, "cli.ops.db.migrate.flag.from"))
+	migrateCmd.Flags().StringVar(&toDSN, "to", "", i18n.T(loc, "cli.ops.db.migrate.flag.to"))
+	migrateCmd.Flags().BoolVar(&verify, "verify", true, i18n.T(loc, "cli.ops.db.migrate.flag.verify"))
+	cmd.AddCommand(migrateCmd)
+	return cmd
 }

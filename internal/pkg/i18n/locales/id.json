@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "Header Content-Type tidak didukung. Kirim application/json atau multipart/form-data.",
   "api.error.unverified_external_acknowledgement_required": "Konfirmasi risiko keamanan memasang paket eksternal belum terverifikasi untuk melanjutkan.",
   "api.error.vault_unavailable": "Brankas rahasia tidak tersedia di server ini.",
-  "api.error.webhook_subscription_limit": "Anda telah mencapai batas maksimum langganan webhook untuk organisasi ini."
+  "api.error.webhook_subscription_limit": "Anda telah mencapai batas maksimum langganan webhook untuk organisasi ini.",
+  "cli.ops.db.migrate.err.dirty": "Catatan migrasi basis data dalam status dirty.",
+  "cli.ops.db.migrate.err.failed": "Migrasi mesin basis data gagal.",
+  "cli.ops.db.migrate.err.parity": "Verifikasi paritas pasca-migrasi gagal dan di-rollback.",
+  "cli.ops.db.migrate.err.required": "--from dan --to wajib diisi.",
+  "cli.ops.db.migrate.err.security": "Peran PostgreSQL melanggar prinsip least-privilege.",
+  "cli.ops.db.migrate.short": "Migrasikan basis data SQLite WAL ke PostgreSQL 16+.",
+  "cli.ops.db.short": "Periksa atau migrasikan mesin penyimpanan basis data.",
+  "cli.ops.db.migrate.flag.from": "Jalur basis data SQLite WAL sumber atau DSN sqlite://",
+  "cli.ops.db.migrate.flag.to": "DSN koneksi PostgreSQL 16+ tujuan",
+  "cli.ops.db.migrate.flag.verify": "Verifikasi jumlah baris, total mikro-USD, rantai hash audit JCS, dan amplop Vault sebelum commit"
 }

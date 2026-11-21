@@ -40,6 +40,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/oauth"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
+	"github.com/nguywnben/tanpopo/internal/storage/postgres"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 	telemetry "github.com/nguywnben/tanpopo/internal/telemetry/otel"
 	"github.com/nguywnben/tanpopo/internal/webhook"
@@ -148,6 +149,25 @@ func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string,
 	pluginsDir := envOr("TANPOPO_PLUGINS_DIR", filepath.Join(dataDir, "plugins"))
 	if err := os.MkdirAll(pluginsDir, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("create plugins directory: %w", err)
+	}
+	pgDSN := strings.TrimSpace(os.Getenv("TANPOPO_PG_DSN"))
+	storageEngine := strings.ToLower(strings.TrimSpace(os.Getenv("TANPOPO_STORAGE_ENGINE")))
+	switch storageEngine {
+	case "", "sqlite", "postgres":
+	default:
+		return nil, nil, fmt.Errorf("unsupported TANPOPO_STORAGE_ENGINE %q: expected sqlite or postgres", storageEngine)
+	}
+	if storageEngine == "postgres" || (storageEngine == "" && pgDSN != "") {
+		pgStore, openErr := postgres.Open(ctx, postgres.Options{
+			DSN:                      pgDSN,
+			SkipMigrate:              true,
+			PartitionLookaheadMonths: -1,
+		})
+		if openErr != nil {
+			return nil, nil, fmt.Errorf("open PostgreSQL store: %w", openErr)
+		}
+		_ = pgStore.Close()
+		return nil, nil, errors.New("tanpopo serve PostgreSQL runtime serving is gated until TP-IMP-0040 cluster cutover completes FORCE RLS across all control/data-plane stores; use SQLite WAL for serving and `tanpopo db migrate-engine` / `tanpopo doctor` to validate PostgreSQL 16+")
 	}
 	dbPath := envOr("TANPOPO_DB_PATH", filepath.Join(dataDir, "tanpopo.db"))
 	store, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath})

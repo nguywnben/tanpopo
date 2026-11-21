@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/nguywnben/tanpopo/internal/finops/pricing"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	storageport "github.com/nguywnben/tanpopo/internal/storage/port"
@@ -231,9 +233,34 @@ type SettlementResult struct {
 	AlreadySettled   bool
 }
 
-// Service manages atomic two-phase integer micro-USD budget accounting over SQLite/SQL DB.
+type dialectTx struct {
+	tx      *sql.Tx
+	dialect storageport.Dialect
+}
+
+func (d *dialectTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return d.tx.ExecContext(ctx, storageport.Rebind(d.dialect, query), args...)
+}
+
+func (d *dialectTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return d.tx.QueryContext(ctx, storageport.Rebind(d.dialect, query), args...)
+}
+
+func (d *dialectTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return d.tx.QueryRowContext(ctx, storageport.Rebind(d.dialect, query), args...)
+}
+
+func (d *dialectTx) forUpdateClause() string {
+	if d.dialect == storageport.DialectPostgres {
+		return " FOR UPDATE"
+	}
+	return ""
+}
+
+// Service manages atomic two-phase integer micro-USD budget accounting over SQLite/PostgreSQL.
 type Service struct {
 	db          *sql.DB
+	dialect     storageport.Dialect
 	audit       storageport.AuditSink
 	alerts      AlertSink
 	alertOutbox func(context.Context, *sql.Tx, AlertEvent) error
@@ -261,6 +288,7 @@ func NewService(cfg Config) (*Service, error) {
 	}
 	return &Service{
 		db:          cfg.DB,
+		dialect:     storageport.DetectDialect(context.Background(), cfg.DB),
 		audit:       cfg.Audit,
 		alerts:      cfg.Alerts,
 		alertOutbox: cfg.AlertOutbox,
@@ -306,18 +334,15 @@ func (s *Service) UpsertLedger(ctx context.Context, params UpsertLedgerParams) (
 	}
 	threshJSON := string(threshBytes)
 
-	s.txMu.Lock()
-	defer s.txMu.Unlock()
-
 	now := s.nowMs()
 	var out *BudgetLedger
-	err = s.withTx(ctx, func(tx *sql.Tx) error {
+	err = s.withOrgTx(ctx, params.OrgID, func(tx *dialectTx) error {
 		var existingID string
 		var exactMicros, estMicros int64
 		qErr := tx.QueryRowContext(ctx, `
 			SELECT id, settled_exact_micros, settled_estimated_micros
 			FROM budget_ledgers
-			WHERE org_id = ? AND scope_type = ? AND scope_id = ? AND period_kind = ? AND period_start_ms = ?`,
+			WHERE org_id = ? AND scope_type = ? AND scope_id = ? AND period_kind = ? AND period_start_ms = ?`+tx.forUpdateClause(),
 			params.OrgID, params.ScopeType, params.ScopeID, params.PeriodKind, params.PeriodStartMs,
 		).Scan(&existingID, &exactMicros, &estMicros)
 
@@ -382,11 +407,9 @@ func (s *Service) GetLedger(ctx context.Context, orgID, ledgerID string) (*Budge
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(ledgerID) == "" {
 		return nil, ErrInvalidInput
 	}
-	s.txMu.Lock()
-	defer s.txMu.Unlock()
 
 	var out *BudgetLedger
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	err := s.withOrgTx(ctx, orgID, func(tx *dialectTx) error {
 		l, lErr := scanLedgerByIDTx(ctx, tx, orgID, ledgerID)
 		if lErr != nil {
 			return lErr
@@ -402,11 +425,9 @@ func (s *Service) GetReservation(ctx context.Context, orgID, reservationID strin
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(reservationID) == "" {
 		return nil, ErrInvalidInput
 	}
-	s.txMu.Lock()
-	defer s.txMu.Unlock()
 
 	var out *Reservation
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	err := s.withOrgTx(ctx, orgID, func(tx *dialectTx) error {
 		r, rErr := scanReservationByIDTx(ctx, tx, orgID, reservationID)
 		if rErr != nil {
 			return rErr
@@ -434,21 +455,18 @@ func (s *Service) Reserve(ctx context.Context, req ReserveRequest) (*Reservation
 		ttl = s.leaseTTLMs
 	}
 
-	s.txMu.Lock()
-	defer s.txMu.Unlock()
-
 	now := s.nowMs()
 	expiresAt := addInt64Saturating(now, ttl)
 	var out *Reservation
 
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	err := s.withOrgTx(ctx, req.OrgID, func(tx *dialectTx) error {
 		// Check for idempotent duplicate Reserve on same (org_id, request_id).
 		var existingID, existingState, existingProj, existingEnv, existingKey string
 		var existingHold int64
 		dupErr := tx.QueryRowContext(ctx, `
 			SELECT id, state, hold_micros, project_id, env_id, virtual_key_id
 			FROM budget_reservations
-			WHERE org_id = ? AND request_id = ?`,
+			WHERE org_id = ? AND request_id = ?`+tx.forUpdateClause(),
 			req.OrgID, req.RequestID,
 		).Scan(&existingID, &existingState, &existingHold, &existingProj, &existingEnv, &existingKey)
 		if dupErr == nil {
@@ -553,14 +571,11 @@ func (s *Service) DeltaReserve(ctx context.Context, req DeltaReserveRequest) (*R
 		ttl = s.leaseTTLMs
 	}
 
-	s.txMu.Lock()
-	defer s.txMu.Unlock()
-
 	now := s.nowMs()
 	expiresAt := addInt64Saturating(now, ttl)
 	var out *Reservation
 
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	err := s.withOrgTx(ctx, req.OrgID, func(tx *dialectTx) error {
 		cur, err := scanReservationByIDTx(ctx, tx, req.OrgID, req.ReservationID)
 		if err != nil {
 			return err
@@ -655,15 +670,13 @@ func (s *Service) MarkStreaming(ctx context.Context, orgID, reservationID string
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(reservationID) == "" {
 		return ErrInvalidInput
 	}
-	s.txMu.Lock()
-	defer s.txMu.Unlock()
 
 	now := s.nowMs()
 	expiresAt := addInt64Saturating(now, s.leaseTTLMs)
-	return s.withTx(ctx, func(tx *sql.Tx) error {
+	return s.withOrgTx(ctx, orgID, func(tx *dialectTx) error {
 		var curState string
 		err := tx.QueryRowContext(ctx, `
-			SELECT state FROM budget_reservations WHERE org_id = ? AND id = ?`,
+			SELECT state FROM budget_reservations WHERE org_id = ? AND id = ?`+tx.forUpdateClause(),
 			orgID, reservationID,
 		).Scan(&curState)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -696,12 +709,10 @@ func (s *Service) RenewLease(ctx context.Context, orgID, reservationID string) e
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(reservationID) == "" {
 		return ErrInvalidInput
 	}
-	s.txMu.Lock()
-	defer s.txMu.Unlock()
 
 	now := s.nowMs()
 	expiresAt := addInt64Saturating(now, s.leaseTTLMs)
-	return s.withTx(ctx, func(tx *sql.Tx) error {
+	return s.withOrgTx(ctx, orgID, func(tx *dialectTx) error {
 		res, err := tx.ExecContext(ctx, `
 			UPDATE budget_reservations
 			SET lease_expires_at_ms = ?, updated_at_ms = ?
@@ -733,15 +744,13 @@ func (s *Service) Release(ctx context.Context, orgID, reservationID string) (boo
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(reservationID) == "" {
 		return false, ErrInvalidInput
 	}
-	s.txMu.Lock()
-	defer s.txMu.Unlock()
 
 	now := s.nowMs()
 	alreadyReleased := false
-	err := s.withTx(ctx, func(tx *sql.Tx) error {
+	err := s.withOrgTx(ctx, orgID, func(tx *dialectTx) error {
 		var curState string
 		err := tx.QueryRowContext(ctx, `
-			SELECT state FROM budget_reservations WHERE org_id = ? AND id = ?`,
+			SELECT state FROM budget_reservations WHERE org_id = ? AND id = ?`+tx.forUpdateClause(),
 			orgID, reservationID,
 		).Scan(&curState)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -810,24 +819,20 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 		lateSettledAfterReclaim bool
 	)
 
-	err = func() error {
-		s.txMu.Lock()
-		defer s.txMu.Unlock()
+	err = s.withOrgTx(ctx, req.OrgID, func(tx *dialectTx) error {
+		projectID := strings.TrimSpace(req.ProjectID)
+		envID := strings.TrimSpace(req.EnvID)
+		vkeyID := strings.TrimSpace(req.VirtualKeyID)
 
-		return s.withTx(ctx, func(tx *sql.Tx) error {
-			projectID := strings.TrimSpace(req.ProjectID)
-			envID := strings.TrimSpace(req.EnvID)
-			vkeyID := strings.TrimSpace(req.VirtualKeyID)
-
-			if strings.TrimSpace(req.ReservationID) != "" {
-				var curState string
-				var rProj, rEnv, rKey, rReqID string
-				qErr := tx.QueryRowContext(ctx, `
+		if strings.TrimSpace(req.ReservationID) != "" {
+			var curState string
+			var rProj, rEnv, rKey, rReqID string
+			qErr := tx.QueryRowContext(ctx, `
 				SELECT state, project_id, env_id, virtual_key_id, request_id
 				FROM budget_reservations
-				WHERE org_id = ? AND id = ?`,
-					req.OrgID, req.ReservationID,
-				).Scan(&curState, &rProj, &rEnv, &rKey, &rReqID)
+				WHERE org_id = ? AND id = ?`+tx.forUpdateClause(),
+				req.OrgID, req.ReservationID,
+			).Scan(&curState, &rProj, &rEnv, &rKey, &rReqID)
 				if errors.Is(qErr, sql.ErrNoRows) {
 					return ErrNotFound
 				}
@@ -928,6 +933,11 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 				if projectID == "" || envID == "" || vkeyID == "" {
 					return ErrInvalidInput
 				}
+				if tx.dialect == storageport.DialectPostgres {
+					if _, lErr := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('ledger:settle:' || ? || ':' || ?, 0))`, req.OrgID, req.RequestID); lErr != nil {
+						return lErr
+					}
+				}
 				// Idempotency guard when Settle is invoked directly without reservation_id.
 				existing, eErr := findSettlementByRequestIDTx(ctx, tx, req.OrgID, req.RequestID)
 				if eErr == nil {
@@ -1001,7 +1011,7 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 					alertsToEmit[i].SettlementID = setID
 				}
 				if s.alertOutbox != nil && strings.HasPrefix(alertsToEmit[i].Code, "ALT-BUDGET-") {
-					if err := s.alertOutbox(ctx, tx, alertsToEmit[i]); err != nil {
+					if err := s.alertOutbox(ctx, tx.tx, alertsToEmit[i]); err != nil {
 						return fmt.Errorf("ledger: persist budget alert outbox: %w", err)
 					}
 				}
@@ -1024,7 +1034,6 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 			}
 			return nil
 		})
-	}()
 	if err != nil {
 		return nil, err
 	}
@@ -1066,12 +1075,27 @@ func (s *Service) Settle(ctx context.Context, req SettleRequest) (*SettlementRes
 	return out, nil
 }
 
+func (s *Service) withOrgTx(ctx context.Context, orgID string, fn func(tx *dialectTx) error) error {
+	if s.dialect != storageport.DialectPostgres {
+		s.txMu.Lock()
+		defer s.txMu.Unlock()
+	}
+	return s.withTx(ctx, func(rawTx *sql.Tx) error {
+		if s.dialect == storageport.DialectPostgres && orgID != "" {
+			if _, err := rawTx.ExecContext(ctx, `SELECT set_config('app.current_org_id', $1, true)`, orgID); err != nil {
+				return fmt.Errorf("ledger: set app.current_org_id: %w", err)
+			}
+		}
+		return fn(&dialectTx{tx: rawTx, dialect: s.dialect})
+	})
+}
+
 func (s *Service) withTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	const maxBusyRetries = 5
 	for attempt := 0; attempt <= maxBusyRetries; attempt++ {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
-			if isSQLiteBusyErr(err) && attempt < maxBusyRetries {
+			if isRetryableTxErr(err) && attempt < maxBusyRetries {
 				time.Sleep(time.Duration(attempt+1) * 5 * time.Millisecond)
 				continue
 			}
@@ -1079,14 +1103,14 @@ func (s *Service) withTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
 		}
 		if err := fn(tx); err != nil {
 			_ = tx.Rollback()
-			if isSQLiteBusyErr(err) && attempt < maxBusyRetries {
+			if isRetryableTxErr(err) && attempt < maxBusyRetries {
 				time.Sleep(time.Duration(attempt+1) * 5 * time.Millisecond)
 				continue
 			}
 			return err
 		}
 		if err := tx.Commit(); err != nil {
-			if isSQLiteBusyErr(err) && attempt < maxBusyRetries {
+			if isRetryableTxErr(err) && attempt < maxBusyRetries {
 				time.Sleep(time.Duration(attempt+1) * 5 * time.Millisecond)
 				continue
 			}
@@ -1097,9 +1121,15 @@ func (s *Service) withTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	return nil
 }
 
-func isSQLiteBusyErr(err error) bool {
+func isRetryableTxErr(err error) bool {
 	if err == nil {
 		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		if pgErr.Code == "40001" || pgErr.Code == "40P01" {
+			return true
+		}
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "SQLITE_BUSY") || strings.Contains(msg, "database is locked")
@@ -1186,7 +1216,7 @@ func normalizeThresholds(raw []int) []int {
 	return out
 }
 
-func findActiveLedgersTx(ctx context.Context, tx *sql.Tx, orgID, projectID, envID, vkeyID string, nowMs int64) ([]BudgetLedger, error) {
+func findActiveLedgersTx(ctx context.Context, tx *dialectTx, orgID, projectID, envID, vkeyID string, nowMs int64) ([]BudgetLedger, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id, org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms,
 		       hard_limit_micros, reserved_hold_micros, settled_exact_micros, settled_estimated_micros,
@@ -1202,7 +1232,7 @@ func findActiveLedgersTx(ctx context.Context, tx *sql.Tx, orgID, projectID, envI
 		      (scope_type = 'ENV' AND scope_id = ?) OR
 		      (scope_type = 'VIRTUAL_KEY' AND scope_id = ?)
 		  )
-		ORDER BY id ASC`,
+		ORDER BY id ASC`+tx.forUpdateClause(),
 		orgID, nowMs, nowMs, orgID, projectID, envID, vkeyID,
 	)
 	if err != nil {
@@ -1221,14 +1251,14 @@ func findActiveLedgersTx(ctx context.Context, tx *sql.Tx, orgID, projectID, envI
 	return out, rows.Err()
 }
 
-func scanLedgerByIDTx(ctx context.Context, tx *sql.Tx, orgID, ledgerID string) (*BudgetLedger, error) {
+func scanLedgerByIDTx(ctx context.Context, tx *dialectTx, orgID, ledgerID string) (*BudgetLedger, error) {
 	row := tx.QueryRowContext(ctx, `
 		SELECT id, org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms,
 		       hard_limit_micros, reserved_hold_micros, settled_exact_micros, settled_estimated_micros,
 		       negative_carryover_micros, soft_alert_thresholds_pct_json, last_alerted_threshold_pct,
 		       version, created_at_ms, updated_at_ms
 		FROM budget_ledgers
-		WHERE org_id = ? AND id = ?`,
+		WHERE org_id = ? AND id = ?`+tx.forUpdateClause(),
 		orgID, ledgerID,
 	)
 	l, err := scanLedgerRow(row)
@@ -1264,13 +1294,13 @@ func scanLedgerRow(row rowScanner) (BudgetLedger, error) {
 	return l, nil
 }
 
-func scanReservationByIDTx(ctx context.Context, tx *sql.Tx, orgID, reservationID string) (*Reservation, error) {
+func scanReservationByIDTx(ctx context.Context, tx *dialectTx, orgID, reservationID string) (*Reservation, error) {
 	var r Reservation
 	err := tx.QueryRowContext(ctx, `
 		SELECT id, request_id, org_id, project_id, env_id, virtual_key_id,
 		       state, hold_micros, lease_expires_at_ms, created_at_ms, updated_at_ms
 		FROM budget_reservations
-		WHERE org_id = ? AND id = ?`,
+		WHERE org_id = ? AND id = ?`+tx.forUpdateClause(),
 		orgID, reservationID,
 	).Scan(
 		&r.ID, &r.RequestID, &r.OrgID, &r.ProjectID, &r.EnvID, &r.VirtualKeyID,
@@ -1311,7 +1341,7 @@ type linkedHold struct {
 	HeldMicros int64
 }
 
-func loadLinkedHoldsTx(ctx context.Context, tx *sql.Tx, orgID, reservationID string) ([]linkedHold, error) {
+func loadLinkedHoldsTx(ctx context.Context, tx *dialectTx, orgID, reservationID string) ([]linkedHold, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT ledger_id, held_micros
 		FROM budget_reservation_ledgers
@@ -1334,7 +1364,7 @@ func loadLinkedHoldsTx(ctx context.Context, tx *sql.Tx, orgID, reservationID str
 	return out, rows.Err()
 }
 
-func releaseLinkedHoldsTx(ctx context.Context, tx *sql.Tx, orgID, reservationID string, nowMs int64) error {
+func releaseLinkedHoldsTx(ctx context.Context, tx *dialectTx, orgID, reservationID string, nowMs int64) error {
 	links, err := loadLinkedHoldsTx(ctx, tx, orgID, reservationID)
 	if err != nil {
 		return err
@@ -1359,7 +1389,7 @@ func releaseLinkedHoldsTx(ctx context.Context, tx *sql.Tx, orgID, reservationID 
 
 func settleLinkedLedgersTx(
 	ctx context.Context,
-	tx *sql.Tx,
+	tx *dialectTx,
 	orgID, reservationID string,
 	breakdown pricing.CostBreakdown,
 	nowMs int64,
@@ -1382,7 +1412,7 @@ func settleLinkedLedgersTx(
 
 func applyLedgerSettlementTx(
 	ctx context.Context,
-	tx *sql.Tx,
+	tx *dialectTx,
 	orgID, ledgerID string,
 	releaseHeld int64,
 	breakdown pricing.CostBreakdown,
@@ -1453,7 +1483,7 @@ func applyLedgerSettlementTx(
 	return alerts, nil
 }
 
-func findSettlementByReservationTx(ctx context.Context, tx *sql.Tx, orgID, reservationID string) (*SettlementResult, error) {
+func findSettlementByReservationTx(ctx context.Context, tx *dialectTx, orgID, reservationID string) (*SettlementResult, error) {
 	var res SettlementResult
 	var resID sql.NullString
 	err := tx.QueryRowContext(ctx, `
@@ -1479,7 +1509,7 @@ func findSettlementByReservationTx(ctx context.Context, tx *sql.Tx, orgID, reser
 	return &res, nil
 }
 
-func findSettlementByRequestIDTx(ctx context.Context, tx *sql.Tx, orgID, requestID string) (*SettlementResult, error) {
+func findSettlementByRequestIDTx(ctx context.Context, tx *dialectTx, orgID, requestID string) (*SettlementResult, error) {
 	var res SettlementResult
 	var resID sql.NullString
 	err := tx.QueryRowContext(ctx, `

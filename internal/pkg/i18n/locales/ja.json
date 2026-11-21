@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "未対応の Content-Type ヘッダーです。application/json または multipart/form-data を送信してください。",
   "api.error.unverified_external_acknowledgement_required": "未検証外部パッケージのセキュリティリスクを確認・同意してから続行してください。",
   "api.error.vault_unavailable": "このサーバーではシークレットボールトを利用できません。",
-  "api.error.webhook_subscription_limit": "この組織の Webhook 購読上限に達しました。"
+  "api.error.webhook_subscription_limit": "この組織の Webhook 購読上限に達しました。",
+  "cli.ops.db.migrate.err.dirty": "マイグレーション台帳が dirty 状態です。",
+  "cli.ops.db.migrate.err.failed": "データベースエンジンの移行に失敗しました。",
+  "cli.ops.db.migrate.err.parity": "移行後の整合性検証に失敗したためロールバックしました。",
+  "cli.ops.db.migrate.err.required": "--from と --to は必須です。",
+  "cli.ops.db.migrate.err.security": "PostgreSQL ロールが最小権限要件に違反しています。",
+  "cli.ops.db.migrate.short": "SQLite WAL データベースを PostgreSQL 16+ に移行します。",
+  "cli.ops.db.short": "データベースストレージエンジンを検査または移行します。",
+  "cli.ops.db.migrate.flag.from": "移行元 SQLite WAL データベースパスまたは sqlite:// DSN",
+  "cli.ops.db.migrate.flag.to": "移行先 PostgreSQL 16+ 接続 DSN",
+  "cli.ops.db.migrate.flag.verify": "コミット前に行数、micro-USD 合計、JCS 監査ハッシュチェーン、Vault エンベロープを検証する"
 }

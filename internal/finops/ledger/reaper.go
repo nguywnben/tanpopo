@@ -59,18 +59,21 @@ func (r *OrphanReservationReaper) ReapOnce(ctx context.Context) (int, error) {
 	}
 	var reclaimed []expiredRow
 
-	err := func() error {
-		r.svc.txMu.Lock()
-		defer r.svc.txMu.Unlock()
-
-		return r.svc.withTx(ctx, func(tx *sql.Tx) error {
+	reapInOrg := func(orgScope string, maxRows int) error {
+		var orgReclaimed []expiredRow
+		txErr := r.svc.withOrgTx(ctx, orgScope, func(tx *dialectTx) error {
+			orgReclaimed = orgReclaimed[:0]
+			lockClause := ""
+			if tx.dialect == storageport.DialectPostgres {
+				lockClause = " FOR UPDATE SKIP LOCKED"
+			}
 			rows, err := tx.QueryContext(ctx, `
 				SELECT id, org_id, request_id, state, hold_micros
 				FROM budget_reservations
 				WHERE state IN (?, ?) AND lease_expires_at_ms <= ?
 				ORDER BY lease_expires_at_ms ASC, id ASC
-				LIMIT ?`,
-				StateReservedHold, StateStreamingAccruing, now, r.batchMax,
+				LIMIT ?`+lockClause,
+				StateReservedHold, StateStreamingAccruing, now, maxRows,
 			)
 			if err != nil {
 				return err
@@ -107,21 +110,64 @@ func (r *OrphanReservationReaper) ReapOnce(ctx context.Context) (int, error) {
 				if rErr := releaseLinkedHoldsTx(ctx, tx, c.OrgID, c.ID, now); rErr != nil {
 					return rErr
 				}
-				reclaimed = append(reclaimed, c)
+				orgReclaimed = append(orgReclaimed, c)
 			}
 			return nil
 		})
-	}()
-	if err != nil {
-		return 0, err
+		if txErr != nil {
+			return txErr
+		}
+		reclaimed = append(reclaimed, orgReclaimed...)
+		return nil
 	}
 
+	var err error
+	if r.svc.dialect == storageport.DialectPostgres {
+		var orgIDs []string
+		oErr := r.svc.withTx(ctx, func(rawTx *sql.Tx) error {
+			if _, serr := rawTx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true)`); serr != nil {
+				return serr
+			}
+			orgRows, qErr := rawTx.QueryContext(ctx, `SELECT id FROM organizations ORDER BY id ASC`)
+			if qErr != nil {
+				return qErr
+			}
+			for orgRows.Next() {
+				var oid string
+				if sErr := orgRows.Scan(&oid); sErr != nil {
+					_ = orgRows.Close()
+					return sErr
+				}
+				orgIDs = append(orgIDs, oid)
+			}
+			iErr := orgRows.Err()
+			_ = orgRows.Close()
+			return iErr
+		})
+		if oErr != nil {
+			err = oErr
+		} else {
+
+			for _, oid := range orgIDs {
+				remaining := r.batchMax - len(reclaimed)
+				if remaining <= 0 {
+					break
+				}
+				if rErr := reapInOrg(oid, remaining); rErr != nil {
+					err = rErr
+					break
+				}
+			}
+		}
+	} else {
+		err = reapInOrg("", r.batchMax)
+	}
 	if r.svc.audit != nil {
 		for _, c := range reclaimed {
 			meta, _ := json.Marshal(map[string]any{
-				"previous_state": c.PrevState,
+				"previous_state":  c.PrevState,
 				"reclaimed_at_ms": now,
-				"hold_micros":    c.HoldMicros,
+				"hold_micros":     c.HoldMicros,
 			})
 			orgCopy := c.OrgID
 			reqCopy := c.RequestID
@@ -139,6 +185,9 @@ func (r *OrphanReservationReaper) ReapOnce(ctx context.Context) (int, error) {
 				MetadataJSON: string(meta),
 			})
 		}
+	}
+	if err != nil {
+		return len(reclaimed), err
 	}
 	return len(reclaimed), nil
 }

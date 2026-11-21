@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "Cabeçalho Content-Type não suportado. Envie application/json ou multipart/form-data conforme esperado.",
   "api.error.unverified_external_acknowledgement_required": "Reconheça os riscos de segurança de instalar um pacote externo não verificado para continuar.",
   "api.error.vault_unavailable": "O cofre de segredos está indisponível neste servidor.",
-  "api.error.webhook_subscription_limit": "Você atingiu o número máximo de assinaturas de webhook para esta organização."
+  "api.error.webhook_subscription_limit": "Você atingiu o número máximo de assinaturas de webhook para esta organização.",
+  "cli.ops.db.migrate.err.dirty": "Registro de migracao em estado dirty.",
+  "cli.ops.db.migrate.err.failed": "Falha na migracao do mecanismo de banco de dados.",
+  "cli.ops.db.migrate.err.parity": "A verificacao de paridade pos-migracao falhou e foi revertida.",
+  "cli.ops.db.migrate.err.required": "--from e --to sao obrigatorios.",
+  "cli.ops.db.migrate.err.security": "A funcao do PostgreSQL viola o privilegio minimo.",
+  "cli.ops.db.migrate.short": "Migrar um banco de dados SQLite WAL para PostgreSQL 16+.",
+  "cli.ops.db.short": "Inspecionar ou migrar o mecanismo de armazenamento do banco de dados.",
+  "cli.ops.db.migrate.flag.from": "Caminho do banco SQLite WAL de origem ou DSN sqlite://",
+  "cli.ops.db.migrate.flag.to": "DSN de conexão PostgreSQL 16+ de destino",
+  "cli.ops.db.migrate.flag.verify": "Verificar contagens de linhas, somas micro-USD, cadeias JCS de auditoria e envelopes Vault antes do commit"
 }

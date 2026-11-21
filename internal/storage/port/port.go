@@ -13,6 +13,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
+	"strings"
 )
 
 // Canonical storage domain errors (ARCH-DATA-01 / TP-IMP-0007).
@@ -24,7 +26,95 @@ var (
 	ErrInvalidInput      = errors.New("storage: invalid domain input")
 	ErrDirtyMigration    = errors.New("storage: dirty or checksum-tampered migration state")
 	ErrNetworkFilesystem = errors.New("storage: SQLite WAL refuses network filesystems (NFS/SMB/CIFS/UNC)")
+	ErrPrivilegedRole    = errors.New("storage: PostgreSQL role must not have SUPERUSER or BYPASSRLS")
 )
+
+// Dialect identifies the active relational database backend for dual-DB modules.
+type Dialect string
+
+const (
+	DialectSQLite   Dialect = "sqlite"
+	DialectPostgres Dialect = "postgres"
+)
+
+// DetectDialect inspects db with a lightweight engine probe so dual-DB services
+// (audit, finops/ledger, vault, ops) can adapt SQL syntax and locking without
+// importing concrete database driver packages.
+func DetectDialect(ctx context.Context, db *sql.DB) Dialect {
+	if db == nil {
+		return DialectSQLite
+	}
+	var version string
+	if err := db.QueryRowContext(ctx, "SELECT current_setting('server_version_num', true)").Scan(&version); err == nil && version != "" {
+		return DialectPostgres
+	}
+	return DialectSQLite
+}
+
+// Rebind translates positional '?' placeholders into PostgreSQL '$1, $2, ...'
+// placeholders when dialect is DialectPostgres, ignoring string literals and comments.
+func Rebind(dialect Dialect, query string) string {
+	if dialect != DialectPostgres || !strings.ContainsRune(query, '?') {
+		return query
+	}
+	var b strings.Builder
+	b.Grow(len(query) + 16)
+	argNum := 1
+	inSingleQuote := false
+	inLineComment := false
+	inBlockComment := false
+	for i := 0; i < len(query); i++ {
+		ch := query[i]
+		if inLineComment {
+			b.WriteByte(ch)
+			if ch == '\n' {
+				inLineComment = false
+			}
+			continue
+		}
+		if inBlockComment {
+			b.WriteByte(ch)
+			if ch == '*' && i+1 < len(query) && query[i+1] == '/' {
+				b.WriteByte('/')
+				i++
+				inBlockComment = false
+			}
+			continue
+		}
+		if inSingleQuote {
+			b.WriteByte(ch)
+			if ch == '\'' {
+				if i+1 < len(query) && query[i+1] == '\'' {
+					b.WriteByte('\'')
+					i++
+				} else {
+					inSingleQuote = false
+				}
+			}
+			continue
+		}
+		switch {
+		case ch == '\'':
+			inSingleQuote = true
+			b.WriteByte(ch)
+		case ch == '-' && i+1 < len(query) && query[i+1] == '-':
+			inLineComment = true
+			b.WriteString("--")
+			i++
+		case ch == '/' && i+1 < len(query) && query[i+1] == '*':
+			inBlockComment = true
+			b.WriteString("/*")
+			i++
+		case ch == '?':
+			b.WriteByte('$')
+			b.WriteString(strconv.Itoa(argNum))
+			argNum++
+		default:
+			b.WriteByte(ch)
+		}
+	}
+	return b.String()
+}
 
 // Organization lifecycle statuses matching SQLite and PostgreSQL CHECK constraints.
 const (

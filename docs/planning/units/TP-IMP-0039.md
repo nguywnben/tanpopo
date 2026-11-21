@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0039` |
 | **Milestone / Epic** | `M4` (`v0.3 Clustered HA, Enterprise Security & A2A`) · `EP-08` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0007`, `TP-IMP-0021`, `TP-IMP-0023` — `GAP-01, 04, 05`)* |
+| **Status** | **`DONE`** *(Accepted under [`DEC-088`](../../governance/decisions.md); strong-review `APPROVE`/`PASS`; [`tp-imp-0039-execution.md`](../../reviews/tp-imp-0039-execution.md))* |
 | **Size** | `L` (`go.mod`, `internal/storage/postgres/*`, `db/migrations/postgres/*`, `internal/ops/migrate/sqlite_to_pg.go`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Database-engine multi-tenant isolation via `FORCE ROW LEVEL SECURITY`, concurrent HA audit hash-chain serialization & lossless `CT-32` migration)* |
 | **Technical Owner** | `Principal Database & Storage Architect` |

@@ -104,6 +104,132 @@ func VerifyAuditChain(ctx context.Context, db *sql.DB, opts VerifyOptions) (*Ver
 	return report, nil
 }
 
+// VerifyAuditChainTx executes VerifyAuditChain against a caller-managed *sql.Tx
+// (such as an uncommitted PostgreSQL migration transaction), closing cursors
+// cleanly between chains and enforcing FORCE RLS scoping per chain_key.
+func VerifyAuditChainTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, opts VerifyOptions) (*VerifyReport, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("%w: non-nil *sql.Tx is required", port.ErrInvalidInput)
+	}
+	chainKeys, err := resolveChainKeysToVerifyTx(ctx, tx, dialect, opts.ChainKeys)
+	if err != nil {
+		return nil, err
+	}
+	report := &VerifyReport{
+		Valid:  true,
+		Chains: make(map[string]ChainReport, len(chainKeys)),
+	}
+	for _, ck := range chainKeys {
+		if dialect == port.DialectPostgres {
+			if err := setAuditRLSTx(ctx, tx, ck); err != nil {
+				return nil, err
+			}
+		}
+		query := port.Rebind(dialect, `
+			SELECT id, created_at_ms, org_id, chain_key, seq_no,
+			       actor_kind, actor_id, entry_point, event_type, target_type, target_id,
+			       request_id, metadata_json, prev_hash, entry_hash
+			FROM audit_events
+			WHERE chain_key = ?
+			ORDER BY seq_no ASC`)
+		rows, err := tx.QueryContext(ctx, query, ck)
+		if err != nil {
+			return nil, fmt.Errorf("audit: query chain %q: %w", ck, err)
+		}
+		cr, vErr := verifyChainRows(rows, ck, opts.OnTamper)
+		_ = rows.Close()
+		if vErr != nil {
+			return nil, vErr
+		}
+		report.Chains[ck] = cr
+		report.TotalVerified += cr.VerifiedCount
+		if !cr.Valid {
+			report.Valid = false
+			report.Findings = append(report.Findings, cr.Findings...)
+		}
+	}
+	if !report.Valid {
+		return report, fmt.Errorf("%w: %d finding(s) across %d chain(s)", ErrAuditTampered, len(report.Findings), len(chainKeys))
+	}
+	return report, nil
+}
+
+func resolveChainKeysToVerifyTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, requested []string) ([]string, error) {
+	if len(requested) > 0 {
+		seen := make(map[string]bool, len(requested))
+		out := make([]string, 0, len(requested))
+		for _, k := range requested {
+			trimmed := strings.TrimSpace(k)
+			if trimmed != "" && !seen[trimmed] {
+				seen[trimmed] = true
+				out = append(out, trimmed)
+			}
+		}
+		sort.Strings(out)
+		return out, nil
+	}
+	if dialect == port.DialectPostgres {
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true)`); err != nil {
+			return nil, fmt.Errorf("audit: set app.is_instance_operator: %w", err)
+		}
+		orgRows, err := tx.QueryContext(ctx, `SELECT id FROM organizations ORDER BY id ASC`)
+		if err != nil {
+			return nil, fmt.Errorf("audit: list organizations for chain verification: %w", err)
+		}
+		candidates := []string{SystemChainKey}
+		for orgRows.Next() {
+			var orgID string
+			if serr := orgRows.Scan(&orgID); serr != nil {
+				_ = orgRows.Close()
+				return nil, fmt.Errorf("audit: scan org id: %w", serr)
+			}
+			candidates = append(candidates, orgID)
+		}
+		if err := orgRows.Err(); err != nil {
+			_ = orgRows.Close()
+			return nil, fmt.Errorf("audit: iterate organizations: %w", err)
+		}
+		_ = orgRows.Close()
+
+		var keys []string
+		for _, ck := range candidates {
+			if err := setAuditRLSTx(ctx, tx, ck); err != nil {
+				return nil, err
+			}
+			var one int
+			err := tx.QueryRowContext(ctx, `SELECT 1 FROM audit_events WHERE chain_key = $1 LIMIT 1`, ck).Scan(&one)
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("audit: probe chain %q: %w", ck, err)
+			}
+			keys = append(keys, ck)
+		}
+		sort.Strings(keys)
+		return keys, nil
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT chain_key FROM audit_events ORDER BY chain_key ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("audit: list chain keys: %w", err)
+	}
+	var keys []string
+	for rows.Next() {
+		var k string
+		if serr := rows.Scan(&k); serr != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("audit: scan chain key: %w", serr)
+		}
+		keys = append(keys, k)
+	}
+	err = rows.Err()
+	_ = rows.Close()
+	if err != nil {
+		return nil, fmt.Errorf("audit: iterate chain keys: %w", err)
+	}
+	return keys, nil
+}
+
 func resolveChainKeysToVerify(ctx context.Context, db *sql.DB, requested []string) ([]string, error) {
 	if len(requested) > 0 {
 		seen := make(map[string]bool, len(requested))
@@ -117,6 +243,50 @@ func resolveChainKeysToVerify(ctx context.Context, db *sql.DB, requested []strin
 		}
 		sort.Strings(out)
 		return out, nil
+	}
+
+	dialect := port.DetectDialect(ctx, db)
+	if dialect == port.DialectPostgres {
+		orgTx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return nil, fmt.Errorf("audit: begin organization discovery tx: %w", err)
+		}
+		defer func() { _ = orgTx.Rollback() }()
+		if _, err := orgTx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true)`); err != nil {
+			return nil, fmt.Errorf("audit: set app.is_instance_operator: %w", err)
+		}
+		orgRows, err := orgTx.QueryContext(ctx, `SELECT id FROM organizations ORDER BY id ASC`)
+		if err != nil {
+			return nil, fmt.Errorf("audit: list organizations for chain verification: %w", err)
+		}
+		candidates := []string{SystemChainKey}
+		for orgRows.Next() {
+			var orgID string
+			if serr := orgRows.Scan(&orgID); serr != nil {
+				_ = orgRows.Close()
+				return nil, fmt.Errorf("audit: scan org id: %w", serr)
+			}
+			candidates = append(candidates, orgID)
+		}
+		if err := orgRows.Err(); err != nil {
+			_ = orgRows.Close()
+			return nil, fmt.Errorf("audit: iterate organizations: %w", err)
+		}
+		_ = orgRows.Close()
+		_ = orgTx.Rollback()
+
+		var keys []string
+		for _, ck := range candidates {
+			hasEvents, err := chainHasEventsPG(ctx, db, ck)
+			if err != nil {
+				return nil, err
+			}
+			if hasEvents {
+				keys = append(keys, ck)
+			}
+		}
+		sort.Strings(keys)
+		return keys, nil
 	}
 
 	rows, err := db.QueryContext(ctx, `SELECT DISTINCT chain_key FROM audit_events ORDER BY chain_key ASC`)
@@ -139,20 +309,74 @@ func resolveChainKeysToVerify(ctx context.Context, db *sql.DB, requested []strin
 	return keys, nil
 }
 
+func setAuditRLSTx(ctx context.Context, tx *sql.Tx, chainKey string) error {
+	if chainKey == SystemChainKey {
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true)`); err != nil {
+			return fmt.Errorf("audit: set app.is_instance_operator: %w", err)
+		}
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_org_id', $1, true)`, chainKey); err != nil {
+		return fmt.Errorf("audit: set app.current_org_id: %w", err)
+	}
+	return nil
+}
+
+func chainHasEventsPG(ctx context.Context, db *sql.DB, chainKey string) (bool, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return false, fmt.Errorf("audit: begin chain key probe tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := setAuditRLSTx(ctx, tx, chainKey); err != nil {
+		return false, err
+	}
+	var one int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM audit_events WHERE chain_key = $1 LIMIT 1`, chainKey).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("audit: probe chain %q: %w", chainKey, err)
+	}
+	return true, nil
+}
+
 func verifySingleChain(ctx context.Context, db *sql.DB, chainKey string, onTamper func(TamperFinding)) (ChainReport, error) {
-	rows, err := db.QueryContext(ctx, `
+	dialect := port.DetectDialect(ctx, db)
+	var (
+		rows *sql.Rows
+		tx   *sql.Tx
+		err  error
+	)
+	query := port.Rebind(dialect, `
 		SELECT id, created_at_ms, org_id, chain_key, seq_no,
 		       actor_kind, actor_id, entry_point, event_type, target_type, target_id,
 		       request_id, metadata_json, prev_hash, entry_hash
 		FROM audit_events
 		WHERE chain_key = ?
-		ORDER BY seq_no ASC`,
-		chainKey,
-	)
+		ORDER BY seq_no ASC`)
+	if dialect == port.DialectPostgres {
+		tx, err = db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return ChainReport{}, fmt.Errorf("audit: begin verify tx for %q: %w", chainKey, err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		if err := setAuditRLSTx(ctx, tx, chainKey); err != nil {
+			return ChainReport{}, err
+		}
+		rows, err = tx.QueryContext(ctx, query, chainKey)
+	} else {
+		rows, err = db.QueryContext(ctx, query, chainKey)
+	}
 	if err != nil {
 		return ChainReport{}, fmt.Errorf("audit: query chain %q: %w", chainKey, err)
 	}
 	defer rows.Close()
+	return verifyChainRows(rows, chainKey, onTamper)
+}
+
+func verifyChainRows(rows *sql.Rows, chainKey string, onTamper func(TamperFinding)) (ChainReport, error) {
 
 	cr := ChainReport{
 		ChainKey: chainKey,

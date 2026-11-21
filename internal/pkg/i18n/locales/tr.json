@@ -246,5 +246,15 @@
   "api.error.unsupported_media_type": "Desteklenmeyen Content-Type başlığı. Beklendiği gibi application/json veya multipart/form-data gönderin.",
   "api.error.unverified_external_acknowledgement_required": "Devam etmek için doğrulanmamış harici paket yüklemenin güvenlik risklerini kabul edin.",
   "api.error.vault_unavailable": "Bu sunucuda sır kasası kullanılamıyor.",
-  "api.error.webhook_subscription_limit": "Bu kuruluş için maksimum webhook aboneliği sayısına ulaştınız."
+  "api.error.webhook_subscription_limit": "Bu kuruluş için maksimum webhook aboneliği sayısına ulaştınız.",
+  "cli.ops.db.migrate.err.dirty": "Gecis gunlugu kirli (dirty) durumda.",
+  "cli.ops.db.migrate.err.failed": "Veritabani motoru gecisi basarisiz oldu.",
+  "cli.ops.db.migrate.err.parity": "Gecis sonrasi esitlik dogrulamasi basarisiz oldu ve geri alindi.",
+  "cli.ops.db.migrate.err.required": "--from ve --to zorunludur.",
+  "cli.ops.db.migrate.err.security": "PostgreSQL rolu en az yetki ilkesini ihlal ediyor.",
+  "cli.ops.db.migrate.short": "Bir SQLite WAL veritabanini PostgreSQL 16+ surumune gecirin.",
+  "cli.ops.db.short": "Veritabani depolama motorunu inceleyin veya gecirin.",
+  "cli.ops.db.migrate.flag.from": "Kaynak SQLite WAL veritabanı yolu veya sqlite:// DSN",
+  "cli.ops.db.migrate.flag.to": "Hedef PostgreSQL 16+ bağlantı DSN'si",
+  "cli.ops.db.migrate.flag.verify": "Commit öncesinde satır sayılarını, mikro-USD toplamlarını, JCS denetim karma zincirlerini ve Vault zarflarını doğrula"
 }
