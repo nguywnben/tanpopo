@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "Peninjau Keamanan",
   "common.role.FINOPS_VIEWER": "Peninjau FinOps",
   "common.role.DEVELOPER": "Pengembang",
-
   "state.ACTIVE_HEALTHY": "Sehat",
   "state.CIRCUIT_OPEN_UNHEALTHY": "Sirkuit terbuka",
   "state.THROTTLED_COOLDOWN": "Pendinginan",
@@ -106,7 +105,6 @@
   "state.DRAFT": "Draf",
   "state.UNAVAILABLE": "Tidak tersedia",
   "state.UNKNOWN": "Tidak diketahui",
-
   "error.noOpenApiPolicy": "Kebijakan keamanan OpenAPI tidak didefinisikan untuk {{method}} {{path}}.",
   "error.ifMatchRequired": "Header If-Match ETag wajib disertakan untuk operasi Admin API ini.",
   "error.csrfRequired": "Token CSRF diperlukan untuk permintaan pengubah status.",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "Kesalahan antarmuka tak terduga",
   "error.unexpectedUiDesc": "Konsol mengalami kesalahan tak terduga. Muat ulang halaman untuk memulihkan.",
   "error.reloadConsole": "Muat ulang konsol",
-
   "shell.loadingSetup": "Memuat penyiapan…",
   "shell.loadingSignIn": "Memuat halaman masuk…",
   "shell.loadingConsole": "Memuat konsol…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "Lompat cepat",
   "shell.quickJumpEmpty": "Tidak ada bagian yang cocok untuk peran Anda.",
   "shell.roleDenied": "Peran Anda ({{roles}}) tidak memiliki izin untuk mengakses {{section}}.",
-
   "nav.group.monitor": "Pemantauan",
   "nav.group.gateway": "Gateway",
   "nav.group.ecosystem": "Ekosistem",
@@ -170,7 +166,6 @@
   "nav.route.operations": "Operasi",
   "nav.route.setup": "Penyiapan Awal",
   "nav.route.login": "Masuk",
-
   "cmd.overview": "Ringkasan & Status Sistem",
   "cmd.traces": "Jejak Permintaan & Waterfall",
   "cmd.budgets": "Anggaran FinOps & Tahan Aktif",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "Cadangan Terenkripsi",
   "cmd.opsUpgrades": "Pra-pemeriksaan Pembaruan",
   "cmd.opsWebhooks": "Webhook & Pengaturan",
-
   "login.title": "Masuk",
   "login.subtitle": "Gunakan kredensial administrator lokal Anda untuk mengakses control plane.",
   "login.failedTitle": "Gagal masuk",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "Terlalu banyak percobaan masuk. Tunggu sebentar sebelum mencoba lagi.",
   "login.errInvalidCredentials": "Alamat email atau kata sandi tidak valid.",
   "login.errUnreachable": "Tidak dapat menghubungi control plane Tanpopo.",
-
   "setup.title": "Penyiapan instans",
   "setup.subtitle": "Klaim gateway self-hosted ini dan siapkan pemilik awal beserta rute pertama.",
   "setup.stepsLabel": "Langkah penyiapan",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "Permintaan pertama gagal.",
   "setup.firstKey.statusFailed": "Permintaan pertama gagal (HTTP {{status}}). Periksa konfigurasi deployment dan rute.",
   "setup.firstKey.unreported": "tidak dilaporkan",
-
   "overview.title": "Ringkasan",
   "overview.subtitleIdle": "Status gateway langsung dan antrean remediasi.",
   "overview.subtitleUpdated": "Diperbarui {{time}} · {{count}} permintaan tidak terukur",
@@ -325,7 +317,6 @@
   "overview.remediate": "Tangani",
   "overview.severity.PAGE": "DARURAT",
   "overview.severity.TICKET": "TIKET",
-
   "traces.title": "Jejak permintaan",
   "traces.subtitle": "Telemetri eksekusi khusus metadata. Nol byte prompt atau jawaban yang disimpan.",
   "traces.metadataOnly": "Khusus Metadata",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "Direkam pada",
   "traces.executionStages": "Tahap eksekusi",
   "traces.noStages": "Tidak ada rincian tahap yang direkam untuk permintaan ini.",
-
   "finops.title": "FinOps",
   "finops.subtitle": "Buku besar integer mikro-USD dengan pencatatan terpisah untuk eksak, estimasi, tahan aktif, dan tidak terukur.",
   "finops.exportCsv": "Ekspor CSV",
@@ -405,7 +395,6 @@
   "finops.col.exact": "Eksak",
   "finops.col.exactEstReqs": "Perm. Eksak / Est.",
   "finops.col.unmetered": "Tidak terukur",
-
   "providers.title": "Penyedia",
   "providers.subtitle": "Koneksi penyedia upstream, kredensial brankas hanya-tulis, dan adaptor protokol.",
   "providers.sealSecret": "Segel rahasia",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "Hapus kredensial brankas",
   "providers.deleteSecretDesc": "Hapus \"{{name}}\" ({{fingerprint}})? Koneksi yang masih merujuknya akan memblokir penghapusan.",
   "providers.deleteCredential": "Hapus kredensial",
-
   "models.title": "Model & Deployment",
   "models.subtitle": "Deklarasi kapabilitas model logis, tingkat jaminan, dan deployment lingkungan.",
   "models.registerModel": "Daftarkan model",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "Nonaktifkan deployment",
   "models.confirmDeleteDesc": "Hapus \"{{name}}\"? Rute yang menjadikannya target sehat terakhir: {{routes}}.",
   "models.confirmDisableDesc": "Nonaktifkan \"{{name}}\"? Rute yang menjadikannya target sehat terakhir: {{routes}}.",
-
   "routing.title": "Rute & Kebijakan",
   "routing.subtitle": "Perutean kapabilitas deterministik, simulasi dry-run, dan pewarisan kebijakan monotonik.",
   "routing.createRoute": "Buat rute",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "Terverifikasi atau bertanda tangan enterprise",
   "routing.trust.VERIFIED_ONLY": "Khusus terverifikasi",
   "routing.trust.ANY_APPROVED": "Semua yang disetujui",
-
   "extensions.title": "Ekstensi",
   "extensions.subtitle": "Verifikasi terpisah atas asal, tanda tangan penerbit, dan tingkat eksekusi dengan persetujuan izin bertahap.",
   "extensions.stagePackage": "Siapkan paket",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "Diubah",
   "extensions.diff.reduced": "Dikurangi",
   "extensions.diff.quotas": "Mem {{mem}} · Panggilan {{call}} · Potongan {{chunk}}",
-
   "mcp.title": "Pusat MCP",
   "mcp.subtitle": "Registri server MCP Streamable HTTP, penyematan skema RFC 8785 JCS, dan izin alat per Kunci Virtual.",
   "mcp.registerServer": "Daftarkan server",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive (wajib persetujuan HITL)",
   "mcp.justification": "Justifikasi tinjauan (opsional)",
   "mcp.pinSchema": "Sematkan skema",
-
   "playground.title": "Playground",
   "playground.subtitle": "Kunci sesi sementara dengan batas anggaran mikro-USD. Prompt hanya tersimpan di tab browser ini.",
   "playground.restrictedDesc": "Peran Anda tidak dapat membuat sesi Playground.",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "Akses & Kunci",
   "access.subtitle": "Kunci Virtual per lingkungan dan penugasan 6 peran RBAC.",
   "access.issueKey": "Terbitkan kunci",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "Ubah peran untuk {{email}}",
   "access.saveRoles": "Simpan peran",
   "access.selfServiceDisabled": "Pemberian hak istimewa mandiri dinonaktifkan. Anda tidak dapat menambah peran ke akun sendiri.",
-
   "security.title": "Keamanan",
   "security.subtitle": "Persetujuan MCP human-in-the-loop, pemutus darurat 4 tingkat, dan jejak audit JCS permanen.",
   "security.restrictedDesc": "Peran Anda tidak memiliki akses ke pusat keamanan.",
@@ -1014,7 +996,6 @@
   "security.actorId": "ID Aktor",
   "security.eventHash": "Hash SHA-256 peristiwa",
   "security.eventMetadata": "Metadata peristiwa (JSON teks biasa)",
-
   "operations.title": "Operasi",
   "operations.subtitle": "Probe kesiapan, epoch snapshot klaster, cadangan terenkripsi, pembaruan, dan webhook bertanda tangan.",
   "operations.restrictedTitle": "Memerlukan peran Operator",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "Pilih rahasia penandatangan",
   "operations.events": "Peristiwa",
   "operations.selectWebhookEvents": "Pilih peristiwa webhook",
-  "operations.registerWebhook": "Daftarkan webhook"
+  "operations.registerWebhook": "Daftarkan webhook",
+  "cmd.a2a": "Agen A2A & Tugas Aktif",
+  "mcp.tabsLabel": "Bagian hub MCP dan A2A",
+  "mcp.tabMcp": "Server MCP",
+  "mcp.tabA2a": "Agen A2A & Tugas Aktif",
+  "a2a.registerAgent": "Daftarkan agen",
+  "a2a.agentRegistered": "Agen A2A terdaftar dan dipublikasikan ke penemuan.",
+  "a2a.registerFailed": "Tidak dapat mendaftarkan agen A2A.",
+  "a2a.registeredAgents": "Agen A2A terdaftar",
+  "a2a.emptyAgentsTitle": "Belum ada agen A2A terdaftar",
+  "a2a.emptyAgentsDesc": "Daftarkan endpoint AgentCard lingkup proyek dengan batas residensi dan hop delegasi.",
+  "a2a.col.agent": "Agen",
+  "a2a.col.endpoint": "Endpoint",
+  "a2a.col.region": "Wilayah",
+  "a2a.col.maxHops": "Hop maks.",
+  "a2a.activeTasks": "Tugas A2A aktif & terbaru",
+  "a2a.emptyTasksTitle": "Belum ada tugas A2A tercatat",
+  "a2a.emptyTasksDesc": "Tugas agen terdelegasi muncul di sini dengan kedalaman hop, wilayah wajib, dan tahanan sub-anggaran.",
+  "a2a.col.task": "Tugas",
+  "a2a.col.hops": "Hop",
+  "a2a.col.subBudget": "Tahanan sub-anggaran",
+  "a2a.col.settledCost": "Biaya terselesaikan",
+  "a2a.drawerTitle": "Daftarkan agen A2A",
+  "a2a.drawerSubtitle": "Menerapkan validasi egress HTTPS, residensi wilayah, dan kedalaman delegasi maks. <= 5.",
+  "a2a.agentSlug": "Slug agen (opsional)",
+  "a2a.agentSlugPlaceholder": "mis. billing-analyst",
+  "a2a.agentName": "Nama agen",
+  "a2a.agentNamePlaceholder": "mis. Billing Analyst",
+  "a2a.endpointUrl": "URL endpoint agen",
+  "a2a.allowPrivate": "Izinkan endpoint privat atau loopback",
+  "a2a.allowPrivateDesc": "Aktifkan hanya untuk agen A2A internal yang dipercaya secara eksplisit.",
+  "a2a.state.submitted": "Diajukan",
+  "a2a.state.working": "Diproses",
+  "a2a.state.input-required": "Perlu masukan",
+  "a2a.state.completed": "Selesai",
+  "a2a.state.failed": "Gagal",
+  "a2a.state.canceled": "Dibatalkan"
 }

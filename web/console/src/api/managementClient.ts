@@ -106,6 +106,24 @@ export async function revokeMcpToolGrant(grantId: string) {
   if (!result.response.ok) throw apiError(result.response, result.error);
 }
 
+export async function listA2aAgents() {
+  const result = await api.GET('/admin/v1/a2a/agents', {params: {query: {limit: 100}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
+export async function registerA2aAgent(payload: components['schemas']['A2aAgentCreateRequest']) {
+  const result = await api.POST('/admin/v1/a2a/agents', {body: payload});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function listA2aTasks() {
+  const result = await api.GET('/admin/v1/a2a/tasks', {params: {query: {limit: 50}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data.data;
+}
+
 export async function listWebhooks() {
   const result = await api.GET('/admin/v1/webhooks', {params: {query: {limit: 100}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);

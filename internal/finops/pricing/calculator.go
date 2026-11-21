@@ -341,6 +341,7 @@ type UsageInput struct {
 	CacheReadTokens      int64
 	CacheWriteTokens     int64
 	ReasoningTokens      int64
+	DirectMicroUSD       int64
 	Media                MediaUsage
 	UpstreamUsagePresent bool
 	UpstreamAccuracy     string
@@ -355,6 +356,7 @@ func (u UsageInput) Validate() error {
 		u.CacheReadTokens < 0 ||
 		u.CacheWriteTokens < 0 ||
 		u.ReasoningTokens < 0 ||
+		u.DirectMicroUSD < 0 ||
 		u.FallbackTextBytes < 0 ||
 		u.FallbackOutputBytes < 0 {
 		return ErrNegativeValue
@@ -441,6 +443,24 @@ func Calculate(rate RateCard, usage UsageInput) (CostBreakdown, error) {
 	}
 	if err := usage.Validate(); err != nil {
 		return CostBreakdown{}, err
+	}
+	if usage.DirectMicroUSD > 0 {
+		var totalNano int64
+		if usage.DirectMicroUSD > math.MaxInt64/NanoPerMicro {
+			totalNano = math.MaxInt64
+		} else {
+			totalNano = usage.DirectMicroUSD * NanoPerMicro
+		}
+		acc := AccuracyExact
+		if normalized := normalizeAccuracy(usage.UpstreamAccuracy); normalized != "" {
+			acc = normalized
+		}
+		return CostBreakdown{
+			TotalNanoUSD:   totalNano,
+			TotalMicroUSD:  usage.DirectMicroUSD,
+			EffectiveUsage: usage,
+			Accuracy:       acc,
+		}, nil
 	}
 
 	effective, accuracy, unmetered := resolveEffectiveUsageAndAccuracy(rate, usage)

@@ -58,7 +58,7 @@ export function WorkspaceRouter({
       {route.path === '/models' ? <ModelsPage environmentId={environmentId} roles={roles} /> : null}
       {route.path === '/routes' ? <RoutingPage pathname={pathname} projectId={projectId} environmentId={environmentId} roles={roles} /> : null}
       {route.path === '/extensions/installed' ? <ExtensionsPage pathname={pathname} roles={roles} /> : null}
-      {route.path === '/mcp/servers' ? <McpHubPage projectId={projectId} environmentId={environmentId} roles={roles} /> : null}
+      {route.path === '/mcp/servers' ? <McpHubPage pathname={pathname} projectId={projectId} environmentId={environmentId} roles={roles} /> : null}
       {route.path === '/devtools/playground' ? <PlaygroundPage pathname={pathname} projectId={projectId} environmentId={environmentId} roles={roles} /> : null}
       {route.path === '/access/virtual-keys' ? (
         <AccessPage

@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "Security Reviewer",
   "common.role.FINOPS_VIEWER": "FinOps Viewer",
   "common.role.DEVELOPER": "Developer",
-
   "state.ACTIVE_HEALTHY": "Healthy",
   "state.CIRCUIT_OPEN_UNHEALTHY": "Circuit open",
   "state.THROTTLED_COOLDOWN": "Cooldown",
@@ -106,7 +105,6 @@
   "state.DRAFT": "Draft",
   "state.UNAVAILABLE": "Unavailable",
   "state.UNKNOWN": "Unknown",
-
   "error.noOpenApiPolicy": "No OpenAPI security policy is defined for {{method}} {{path}}.",
   "error.ifMatchRequired": "An If-Match ETag is required for this Admin API operation.",
   "error.csrfRequired": "A CSRF token is required for state-changing requests.",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "Unexpected interface error",
   "error.unexpectedUiDesc": "The console encountered an unexpected error. Reload the page to recover.",
   "error.reloadConsole": "Reload console",
-
   "shell.loadingSetup": "Loading setup…",
   "shell.loadingSignIn": "Loading sign-in…",
   "shell.loadingConsole": "Loading console…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "Quick jump",
   "shell.quickJumpEmpty": "No matching sections available for your role.",
   "shell.roleDenied": "Your assigned roles ({{roles}}) do not permit access to {{section}}.",
-
   "nav.group.monitor": "Monitor",
   "nav.group.gateway": "Gateway",
   "nav.group.ecosystem": "Ecosystem",
@@ -170,7 +166,6 @@
   "nav.route.operations": "Operations",
   "nav.route.setup": "First-Run Setup",
   "nav.route.login": "Sign In",
-
   "cmd.overview": "Overview & System Posture",
   "cmd.traces": "Request Traces & Waterfall",
   "cmd.budgets": "FinOps Budgets & Active Holds",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "Encrypted Backups",
   "cmd.opsUpgrades": "Upgrade Preflight",
   "cmd.opsWebhooks": "Webhooks & Settings",
-
   "login.title": "Sign in",
   "login.subtitle": "Use your local administrator credentials to access the control plane.",
   "login.failedTitle": "Sign-in failed",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "Too many sign-in attempts. Wait before trying again.",
   "login.errInvalidCredentials": "The email address or password is not valid.",
   "login.errUnreachable": "Could not reach the Tanpopo control plane.",
-
   "setup.title": "Instance setup",
   "setup.subtitle": "Claim this self-hosted gateway and provision its initial owner and route.",
   "setup.stepsLabel": "Setup steps",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "First request failed.",
   "setup.firstKey.statusFailed": "First request failed ({{status}}). Check the deployment and route configuration.",
   "setup.firstKey.unreported": "unreported",
-
   "overview.title": "Overview",
   "overview.subtitleIdle": "Live gateway posture and remediation queue.",
   "overview.subtitleUpdated": "Updated {{time}} · {{count}} unmetered requests",
@@ -325,7 +317,6 @@
   "overview.remediate": "Remediate",
   "overview.severity.PAGE": "PAGE",
   "overview.severity.TICKET": "TICKET",
-
   "traces.title": "Request traces",
   "traces.subtitle": "Metadata-only execution telemetry. Zero prompt or completion bytes stored.",
   "traces.metadataOnly": "Metadata-Only",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "Recorded at",
   "traces.executionStages": "Execution stages",
   "traces.noStages": "No granular stage breakdown recorded for this request.",
-
   "finops.title": "FinOps",
   "finops.subtitle": "Integer micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.",
   "finops.exportCsv": "Export CSV",
@@ -405,7 +395,6 @@
   "finops.col.exact": "Exact",
   "finops.col.exactEstReqs": "Exact / Est. reqs",
   "finops.col.unmetered": "Unmetered",
-
   "providers.title": "Providers",
   "providers.subtitle": "Upstream provider connections, write-only vault credentials, and protocol adapters.",
   "providers.sealSecret": "Seal secret",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "Delete vault credential",
   "providers.deleteSecretDesc": "Remove \"{{name}}\" ({{fingerprint}})? Connections referencing it will block deletion.",
   "providers.deleteCredential": "Delete credential",
-
   "models.title": "Models & Deployments",
   "models.subtitle": "Logical model capability declarations, assurance tiers, and environment deployments.",
   "models.registerModel": "Register model",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "Disable deployment",
   "models.confirmDeleteDesc": "Delete \"{{name}}\"? Routes where this is the last healthy target: {{routes}}.",
   "models.confirmDisableDesc": "Disable \"{{name}}\"? Routes where this is the last healthy target: {{routes}}.",
-
   "routing.title": "Routes & Policies",
   "routing.subtitle": "Deterministic capability routing, dry-run simulation, and monotonic policy inheritance.",
   "routing.createRoute": "Create route",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "Verified or enterprise signed",
   "routing.trust.VERIFIED_ONLY": "Verified only",
   "routing.trust.ANY_APPROVED": "Any approved",
-
   "extensions.title": "Extensions",
   "extensions.subtitle": "Separate origin, publisher signature, and execution-tier verification with staged permission consent.",
   "extensions.stagePackage": "Stage package",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "Changed",
   "extensions.diff.reduced": "Reduced",
   "extensions.diff.quotas": "Mem {{mem}} · Call {{call}} · Chunk {{chunk}}",
-
   "mcp.title": "MCP Hub",
   "mcp.subtitle": "Streamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.",
   "mcp.registerServer": "Register server",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive (mandatory HITL approval)",
   "mcp.justification": "Review justification (optional)",
   "mcp.pinSchema": "Pin schema",
-
   "playground.title": "Playground",
   "playground.subtitle": "Ephemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.",
   "playground.restrictedDesc": "Your role cannot create Playground sessions.",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "Access & Keys",
   "access.subtitle": "Environment-scoped Virtual Keys and 6-role RBAC principal assignments.",
   "access.issueKey": "Issue key",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "Edit roles for {{email}}",
   "access.saveRoles": "Save roles",
   "access.selfServiceDisabled": "Self-service privilege grants are disabled. You cannot add new roles to your own account.",
-
   "security.title": "Security",
   "security.subtitle": "Human-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.",
   "security.restrictedDesc": "Your role does not have access to the security center.",
@@ -1014,7 +996,6 @@
   "security.actorId": "Actor ID",
   "security.eventHash": "Event SHA-256 hash",
   "security.eventMetadata": "Event metadata (plain text JSON)",
-
   "operations.title": "Operations",
   "operations.subtitle": "Readiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.",
   "operations.restrictedTitle": "Operator role required",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "Select signing secret",
   "operations.events": "Events",
   "operations.selectWebhookEvents": "Select webhook events",
-  "operations.registerWebhook": "Register webhook"
+  "operations.registerWebhook": "Register webhook",
+  "cmd.a2a": "A2A Agents & Active Tasks",
+  "mcp.tabsLabel": "MCP and A2A hub sections",
+  "mcp.tabMcp": "MCP servers",
+  "mcp.tabA2a": "A2A Agents & Active Tasks",
+  "a2a.registerAgent": "Register agent",
+  "a2a.agentRegistered": "A2A agent registered and published to discovery.",
+  "a2a.registerFailed": "Could not register A2A agent.",
+  "a2a.registeredAgents": "Registered A2A agents",
+  "a2a.emptyAgentsTitle": "No A2A agents registered",
+  "a2a.emptyAgentsDesc": "Register a project-scoped AgentCard endpoint with residency and delegation-hop bounds.",
+  "a2a.col.agent": "Agent",
+  "a2a.col.endpoint": "Endpoint",
+  "a2a.col.region": "Region",
+  "a2a.col.maxHops": "Max hops",
+  "a2a.activeTasks": "Active & recent A2A tasks",
+  "a2a.emptyTasksTitle": "No A2A tasks recorded",
+  "a2a.emptyTasksDesc": "Delegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.",
+  "a2a.col.task": "Task",
+  "a2a.col.hops": "Hops",
+  "a2a.col.subBudget": "Sub-budget hold",
+  "a2a.col.settledCost": "Settled cost",
+  "a2a.drawerTitle": "Register A2A agent",
+  "a2a.drawerSubtitle": "Enforces HTTPS egress validation, regional residency pinning, and max delegation depth <= 5.",
+  "a2a.agentSlug": "Agent slug (optional)",
+  "a2a.agentSlugPlaceholder": "e.g. billing-analyst",
+  "a2a.agentName": "Agent name",
+  "a2a.agentNamePlaceholder": "e.g. Billing Analyst",
+  "a2a.endpointUrl": "Agent endpoint URL",
+  "a2a.allowPrivate": "Allow private or loopback endpoint",
+  "a2a.allowPrivateDesc": "Only enable for explicitly trusted internal A2A agents.",
+  "a2a.state.submitted": "Submitted",
+  "a2a.state.working": "Working",
+  "a2a.state.input-required": "Input required",
+  "a2a.state.completed": "Completed",
+  "a2a.state.failed": "Failed",
+  "a2a.state.canceled": "Canceled"
 }

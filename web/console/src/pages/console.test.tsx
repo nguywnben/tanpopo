@@ -1,11 +1,12 @@
 import {cleanup, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import axe from 'axe-core';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {clearCsrfToken} from '../api/client';
+import {clearCsrfToken, rememberCsrfToken} from '../api/client';
 import {RouterProvider} from '../router/RouterContext';
 import {ThemeProvider} from '../styles/theme';
 import {ConsoleShell} from '../shell/ConsoleShell';
 import {LoginPage} from './auth/LoginPage';
+import {McpHubPage} from './mcp/McpHubPage';
 import {buildRateCard, ModelsPage} from './models/ModelsPage';
 import {OverviewPage} from './overview/OverviewPage';
 import {PlaygroundPage} from './playground/PlaygroundPage';
@@ -438,6 +439,97 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
     fireEvent.click(multiTrigger);
     fireEvent.click(await screen.findByRole('option', {name: 'kill_switch.activated'}));
     expect(onMulti).toHaveBeenCalledWith(['budget.threshold_reached', 'kill_switch.activated']);
+
+    const audit = await axe.run(container);
+    expect(audit.violations).toEqual([]);
+  });
+
+  it('renders McpHubPage A2A Agents & Active Tasks tab, registers an agent, and passes axe-core', async () => {
+    const agents: Array<Record<string, unknown>> = [
+      {
+        agent_id: 'agt_billing_01',
+        project_id: 'proj_1',
+        agent_slug: 'billing-analyst',
+        name: 'Billing Analyst',
+        endpoint_url: 'https://billing.example.com/a2a',
+        data_region: 'EU',
+        max_delegation_hops: 3,
+        skills: [{id: 'invoice', name: 'Invoice Triage'}],
+        status: 'ACTIVE',
+        version: 1,
+      },
+    ];
+    const tasks = [
+      {
+        task_id: 'tsk_01abc',
+        target_agent_id: 'agt_billing_01',
+        target_agent_slug: 'billing-analyst',
+        state: 'working',
+        hop_count: 2,
+        trace_root_id: 'tr_root_1',
+        enforced_region: 'EU',
+        sub_budget_hold_micros: 250_000,
+        settled_cost_micros: 0,
+        version: 1,
+        created_at: '2026-11-21T08:00:00Z',
+        updated_at: '2026-11-21T08:00:05Z',
+      },
+    ];
+    let postedBody: Record<string, unknown> | null = null;
+    rememberCsrfToken('csrf-a2a-test');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      const pathname = new URL(url, window.location.origin).pathname;
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (pathname === '/admin/v1/mcp/servers') return jsonResponse({data: [], has_more: false});
+      if (pathname === '/admin/v1/virtual-keys') return jsonResponse({data: [], has_more: false});
+      if (pathname === '/admin/v1/a2a/agents' && method === 'GET') return jsonResponse({data: agents, has_more: false});
+      if (pathname === '/admin/v1/a2a/agents' && method === 'POST') {
+        const rawBody = input instanceof Request ? await input.clone().text() : String(init?.body ?? '{}');
+        postedBody = JSON.parse(rawBody) as Record<string, unknown>;
+        const created = {
+          agent_id: 'agt_sec_02',
+          project_id: postedBody.project_id,
+          agent_slug: postedBody.agent_slug || 'security-reviewer',
+          name: postedBody.name,
+          endpoint_url: postedBody.endpoint_url,
+          data_region: postedBody.data_region,
+          max_delegation_hops: postedBody.max_delegation_hops,
+          skills: [],
+          status: 'ACTIVE',
+          version: 1,
+        };
+        agents.push(created);
+        return jsonResponse(created, 201);
+      }
+      if (pathname === '/admin/v1/a2a/tasks') return jsonResponse({data: tasks, has_more: false});
+      return jsonResponse({}, 404);
+    });
+
+    const {container} = render(wrap(<McpHubPage pathname="/a2a/agents" projectId="proj_1" environmentId="env_1" roles={['ORG_OWNER']} />));
+    await waitFor(() => expect(screen.getAllByText('Billing Analyst').length).toBeGreaterThan(0));
+    expect(screen.getAllByText('tsk_01abc').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('2 / 5').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', {name: /Register agent/i}));
+    fireEvent.change(screen.getByLabelText(/Agent slug/i), {target: {value: 'security-reviewer'}});
+    fireEvent.change(screen.getByLabelText(/Agent name/i), {target: {value: 'Security Reviewer'}});
+    fireEvent.change(screen.getByLabelText(/Agent endpoint URL/i), {target: {value: 'https://sec.example.com/a2a'}});
+
+    const form = document.getElementById('tp-register-a2a-form');
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+
+    await waitFor(() => expect(postedBody).not.toBeNull());
+    expect(postedBody).toMatchObject({
+      project_id: 'proj_1',
+      agent_slug: 'security-reviewer',
+      name: 'Security Reviewer',
+      endpoint_url: 'https://sec.example.com/a2a',
+      data_region: 'US',
+      max_delegation_hops: 5,
+    });
+    await waitFor(() => expect(screen.getAllByText('Security Reviewer').length).toBeGreaterThan(0));
 
     const audit = await axe.run(container);
     expect(audit.violations).toEqual([]);

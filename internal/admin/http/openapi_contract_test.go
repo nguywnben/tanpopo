@@ -439,7 +439,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	ctx := context.Background()
 
 	// Verify all registered v0.2/v0.3 Control Plane routes and 100% OpenAPI conformance.
-	const expectedRoutes = 96
+	const expectedRoutes = 99
 	if got := len(h.srv.Routes()); got != expectedRoutes {
 		t.Fatalf("expected %d registered Control Plane routes, got %d", expectedRoutes, got)
 	}
@@ -753,6 +753,72 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	}
 	assertETag("GET /policies/effective", recEffPol)
 	assertPayloadMatchesSchema(t, doc, "PolicyDocument", recEffPol.Body.Bytes())
+
+	// Group I (A2A): Agent registration, listing & Task list schema checks
+	recA2aAgent := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/a2a/agents", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"project_id":          boot.ProjectID,
+		"agent_slug":          "contract-agent",
+		"name":                "Contract Agent",
+		"description":         "Contract test agent",
+		"endpoint_url":        "https://agent.example.test/a2a",
+		"data_region":         "US",
+		"max_delegation_hops": 3,
+		"skills":              []map[string]any{{"id": "analyze", "name": "Analyze"}},
+	})
+	if recA2aAgent.Code != http.StatusCreated {
+		t.Fatalf("POST /a2a/agents status=%d body=%s", recA2aAgent.Code, recA2aAgent.Body.String())
+	}
+	assertETag("POST /a2a/agents", recA2aAgent)
+	assertPayloadMatchesSchema(t, doc, "A2aAgentResource", recA2aAgent.Body.Bytes())
+	var a2aAgentDTO struct {
+		AgentID string `json:"agent_id"`
+	}
+	mustDecodeJSON(t, recA2aAgent.Body.Bytes(), &a2aAgentDTO)
+
+	recA2aAgentList := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/a2a/agents", ownerCookie, "", "", nil)
+	if recA2aAgentList.Code != http.StatusOK {
+		t.Fatalf("GET /a2a/agents status=%d body=%s", recA2aAgentList.Code, recA2aAgentList.Body.String())
+	}
+	var a2aAgentEnv paginatedListEnvelope[json.RawMessage]
+	mustDecodeJSON(t, recA2aAgentList.Body.Bytes(), &a2aAgentEnv)
+	if len(a2aAgentEnv.Data) == 0 {
+		t.Fatalf("expected non-empty GET /a2a/agents list")
+	}
+	assertPayloadMatchesSchema(t, doc, "A2aAgentResource", a2aAgentEnv.Data[0])
+
+	recA2aVK := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/virtual-keys", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"project_id": boot.ProjectID,
+		"env_id":     boot.EnvID,
+		"name":       "a2a-contract-vk",
+	})
+	if recA2aVK.Code != http.StatusCreated {
+		t.Fatalf("POST /virtual-keys for A2A status=%d body=%s", recA2aVK.Code, recA2aVK.Body.String())
+	}
+	var a2aVK struct {
+		ID string `json:"id"`
+	}
+	mustDecodeJSON(t, recA2aVK.Body.Bytes(), &a2aVK)
+
+	if _, err := h.st.RawDB().ExecContext(ctx, `
+		INSERT INTO a2a_tasks(
+			id, org_id, project_id, env_id, agent_endpoint_id, caller_virtual_key_id,
+			trace_root_id, hop_count, call_chain_ids_json, sub_budget_cap_micros,
+			settled_cost_micros, reservation_id, enforced_region, state, version, created_at_ms, updated_at_ms
+		) VALUES ('tsk_ct_1', ?, ?, ?, ?, ?, 'req_ct_a2a', 1, '["`+a2aAgentDTO.AgentID+`"]', 50000, 12000, 'res_ct_1', 'US', 'WORKING', 1, ?, ?)`,
+		boot.OrgID, boot.ProjectID, boot.EnvID, a2aAgentDTO.AgentID, a2aVK.ID, h.fk.Now().UTC().UnixMilli(), h.fk.Now().UTC().UnixMilli(),
+	); err != nil {
+		t.Fatalf("insert a2a_tasks contract row: %v", err)
+	}
+	recA2aTasks := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/a2a/tasks", ownerCookie, "", "", nil)
+	if recA2aTasks.Code != http.StatusOK {
+		t.Fatalf("GET /a2a/tasks status=%d body=%s", recA2aTasks.Code, recA2aTasks.Body.String())
+	}
+	var a2aTaskEnv paginatedListEnvelope[json.RawMessage]
+	mustDecodeJSON(t, recA2aTasks.Body.Bytes(), &a2aTaskEnv)
+	if len(a2aTaskEnv.Data) == 0 {
+		t.Fatalf("expected non-empty GET /a2a/tasks list")
+	}
+	assertPayloadMatchesSchema(t, doc, "A2aTaskResource", a2aTaskEnv.Data[0])
 
 	// Group J & D & K: Budgets, Usage, Traces, Debug Payload, Overview, Alerts, Audit, Kill-Switch, Blast-Radius
 	now := h.fk.Now().UTC().UnixMilli()

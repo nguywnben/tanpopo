@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/nguywnben/tanpopo/internal/ingress/a2a"
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/hub"
 	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
@@ -16,11 +17,15 @@ import (
 type planeBrokerResolver struct {
 	provider *catalog.Repository
 	mcp      hub.BrokerResolver
+	a2a      a2a.BrokerResolver
 }
 
 func (r planeBrokerResolver) ResolveSlot(ctx context.Context, orgID, connectionID, slot string) (*broker.ResolvedSlot, error) {
 	if strings.HasPrefix(connectionID, "mcp_") {
 		return r.mcp.ResolveSlot(ctx, orgID, connectionID, slot)
+	}
+	if strings.HasPrefix(connectionID, "agt_") {
+		return r.a2a.ResolveSlot(ctx, orgID, connectionID, slot)
 	}
 	return r.provider.ResolveSlot(ctx, orgID, connectionID, slot)
 }
@@ -28,6 +33,9 @@ func (r planeBrokerResolver) ResolveSlot(ctx context.Context, orgID, connectionI
 func (r planeBrokerResolver) ResolveConnectionPolicy(ctx context.Context, orgID, connectionID string) (*egress.Policy, error) {
 	if strings.HasPrefix(connectionID, "mcp_") {
 		return r.mcp.ResolveConnectionPolicy(ctx, orgID, connectionID)
+	}
+	if strings.HasPrefix(connectionID, "agt_") {
+		return r.a2a.ResolveConnectionPolicy(ctx, orgID, connectionID)
 	}
 	return r.provider.ResolveConnectionPolicy(ctx, orgID, connectionID)
 }

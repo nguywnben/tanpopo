@@ -25,10 +25,11 @@ describe('console v2 information architecture & URL compatibility', () => {
     expect(routeForPath('/settings/residency-retention')?.path).toBe('/ops/health');
   });
 
-  it('exposes the Unit 38 MCP Hub route while keeping A2A out of this release wave', () => {
+  it('exposes the Unit 38 MCP Hub and Unit 42 A2A Agents routes', () => {
     const mcp = navigationGroups.flatMap(group => group.routes).find(route => route.path === '/mcp/servers');
     expect(mcp?.enabled).toBe(true);
-    expect(mcp?.aliases).not.toContain('/a2a/agents');
+    expect(mcp?.aliases).toContain('/a2a/agents');
+    expect(routeForPath('/a2a/agents')?.path).toBe('/mcp/servers');
   });
 
   it('uses only the six canonical API roles', () => {

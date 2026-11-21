@@ -868,8 +868,10 @@ CREATE TABLE a2a_tasks (
     hop_count             SMALLINT NOT NULL DEFAULT 1 CHECK (hop_count BETWEEN 1 AND 5),
     call_chain_ids_json   JSONB NOT NULL DEFAULT '[]'::jsonb,
     sub_budget_cap_micros BIGINT NOT NULL CHECK (sub_budget_cap_micros >= 0),
+    settled_cost_micros   BIGINT NOT NULL DEFAULT 0 CHECK (settled_cost_micros >= 0),
     reservation_id        VARCHAR(40),
     enforced_region       VARCHAR(32),
+    artifacts_json        JSONB NOT NULL DEFAULT '[]'::jsonb,
     state                 VARCHAR(24) NOT NULL DEFAULT 'SUBMITTED'
                           CHECK (state IN (
                               'SUBMITTED',

@@ -971,7 +971,7 @@ func (s *Server) transformAndBuildEgress(
 
 	secretRefs := make(map[string]string, len(target.Connection.SecretBindings))
 	for slotName := range target.Connection.SecretBindings {
-		secretRefs[slotName] = slotName
+		secretRefs[slotName] = "slot_ref_" + slotName
 	}
 
 	narrowPolicy := buildHostNarrowPolicy(cachedRT.perms, target.Adapter, target.Connection)

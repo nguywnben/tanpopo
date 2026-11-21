@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "Revisor de seguridad",
   "common.role.FINOPS_VIEWER": "Lector de FinOps",
   "common.role.DEVELOPER": "Desarrollador",
-
   "state.ACTIVE_HEALTHY": "Saludable",
   "state.CIRCUIT_OPEN_UNHEALTHY": "Circuito abierto",
   "state.THROTTLED_COOLDOWN": "Enfriamiento",
@@ -106,7 +105,6 @@
   "state.DRAFT": "Borrador",
   "state.UNAVAILABLE": "No disponible",
   "state.UNKNOWN": "Desconocido",
-
   "error.noOpenApiPolicy": "No existe una política de seguridad OpenAPI definida para {{method}} {{path}}.",
   "error.ifMatchRequired": "Esta operación de la API de administración requiere un encabezado If-Match ETag.",
   "error.csrfRequired": "Se requiere un token CSRF para solicitudes que modifican estado.",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "Error inesperado de interfaz",
   "error.unexpectedUiDesc": "La consola encontró un error inesperado. Recarga la página para recuperarla.",
   "error.reloadConsole": "Recargar consola",
-
   "shell.loadingSetup": "Cargando configuración inicial…",
   "shell.loadingSignIn": "Cargando inicio de sesión…",
   "shell.loadingConsole": "Cargando consola…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "Acceso rápido",
   "shell.quickJumpEmpty": "No hay secciones coincidentes para tu rol.",
   "shell.roleDenied": "Tus roles asignados ({{roles}}) no permiten el acceso a {{section}}.",
-
   "nav.group.monitor": "Monitoreo",
   "nav.group.gateway": "Pasarela",
   "nav.group.ecosystem": "Ecosistema",
@@ -170,7 +166,6 @@
   "nav.route.operations": "Operaciones",
   "nav.route.setup": "Configuración inicial",
   "nav.route.login": "Iniciar sesión",
-
   "cmd.overview": "Resumen y estado del sistema",
   "cmd.traces": "Trazas de solicitudes y cascada",
   "cmd.budgets": "Presupuestos FinOps y retenciones activas",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "Copias de seguridad cifradas",
   "cmd.opsUpgrades": "Comprobación previa de actualización",
   "cmd.opsWebhooks": "Webhooks y ajustes",
-
   "login.title": "Iniciar sesión",
   "login.subtitle": "Usa tus credenciales locales de administrador para acceder al plano de control.",
   "login.failedTitle": "Error al iniciar sesión",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "Demasiados intentos de inicio de sesión. Espera antes de volver a intentarlo.",
   "login.errInvalidCredentials": "El correo electrónico o la contraseña no son válidos.",
   "login.errUnreachable": "No se pudo contactar con el plano de control de Tanpopo.",
-
   "setup.title": "Configuración de la instancia",
   "setup.subtitle": "Reclama esta pasarela autoalojada y aprovisiona el propietario inicial y la primera ruta.",
   "setup.stepsLabel": "Pasos de configuración",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "Falló la primera solicitud.",
   "setup.firstKey.statusFailed": "Falló la primera solicitud (HTTP {{status}}). Revisa el despliegue y la ruta.",
   "setup.firstKey.unreported": "sin informar",
-
   "overview.title": "Resumen",
   "overview.subtitleIdle": "Estado en vivo de la pasarela y cola de mitigación.",
   "overview.subtitleUpdated": "Actualizado {{time}} · {{count}} solicitudes sin medir",
@@ -325,7 +317,6 @@
   "overview.remediate": "Mitigar",
   "overview.severity.PAGE": "CRÍTICA",
   "overview.severity.TICKET": "AVISO",
-
   "traces.title": "Trazas de solicitudes",
   "traces.subtitle": "Telemetría de ejecución solo con metadatos. No se almacenan prompts ni respuestas.",
   "traces.metadataOnly": "Solo metadatos",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "Registrada el",
   "traces.executionStages": "Etapas de ejecución",
   "traces.noStages": "No se registró un desglose detallado de etapas para esta solicitud.",
-
   "finops.title": "FinOps",
   "finops.subtitle": "Libro mayor entero en micro-USD con contabilidad separada para exacto, estimado, retenciones activas y sin medir.",
   "finops.exportCsv": "Exportar CSV",
@@ -405,7 +395,6 @@
   "finops.col.exact": "Exacto",
   "finops.col.exactEstReqs": "Sol. exactas / est.",
   "finops.col.unmetered": "Sin medir",
-
   "providers.title": "Proveedores",
   "providers.subtitle": "Conexiones de proveedores ascendentes, credenciales de bóveda en solo escritura y adaptadores de protocolo.",
   "providers.sealSecret": "Sellar secreto",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "Eliminar credencial de bóveda",
   "providers.deleteSecretDesc": "¿Eliminar «{{name}}» ({{fingerprint}})? Si hay conexiones usándola, se bloqueará la eliminación.",
   "providers.deleteCredential": "Eliminar credencial",
-
   "models.title": "Modelos y despliegues",
   "models.subtitle": "Declaraciones de capacidades de modelos lógicos, niveles de garantía y despliegues por entorno.",
   "models.registerModel": "Registrar modelo",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "Deshabilitar despliegue",
   "models.confirmDeleteDesc": "¿Eliminar «{{name}}»? Rutas donde es el último objetivo saludable: {{routes}}.",
   "models.confirmDisableDesc": "¿Deshabilitar «{{name}}»? Rutas donde es el último objetivo saludable: {{routes}}.",
-
   "routing.title": "Rutas y políticas",
   "routing.subtitle": "Enrutamiento determinista por capacidades, simulación sin efecto y herencia monotónica de políticas.",
   "routing.createRoute": "Crear ruta",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "Verificado o firma empresarial",
   "routing.trust.VERIFIED_ONLY": "Solo verificado",
   "routing.trust.ANY_APPROVED": "Cualquiera aprobado",
-
   "extensions.title": "Extensiones",
   "extensions.subtitle": "Verificación independiente de origen, firma del editor y nivel de ejecución con consentimiento por etapas.",
   "extensions.stagePackage": "Preparar paquete",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "Cambiado",
   "extensions.diff.reduced": "Reducido",
   "extensions.diff.quotas": "Mem {{mem}} · Llamada {{call}} · Fragmento {{chunk}}",
-
   "mcp.title": "Centro MCP",
   "mcp.subtitle": "Registro de servidores MCP Streamable HTTP, fijación de esquemas RFC 8785 JCS y permisos por herramienta.",
   "mcp.registerServer": "Registrar servidor",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive (aprobación HITL obligatoria)",
   "mcp.justification": "Justificación de revisión (opcional)",
   "mcp.pinSchema": "Fijar esquema",
-
   "playground.title": "Playground",
   "playground.subtitle": "Clave de sesión efímera con tope presupuestario en micro-USD. Los prompts permanecen solo en esta pestaña.",
   "playground.restrictedDesc": "Tu rol no puede crear sesiones de Playground.",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (SDK de OpenAI)",
   "playground.snippetTs": "TypeScript (SDK de OpenAI)",
-
   "access.title": "Acceso y claves",
   "access.subtitle": "Claves virtuales por entorno y asignaciones de 6 roles RBAC.",
   "access.issueKey": "Emitir clave",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "Editar roles de {{email}}",
   "access.saveRoles": "Guardar roles",
   "access.selfServiceDisabled": "La autoconcesión de privilegios está deshabilitada. No puedes añadir roles a tu propia cuenta.",
-
   "security.title": "Seguridad",
   "security.subtitle": "Aprobaciones MCP con intervención humana, interruptores de corte de 4 niveles y auditoría JCS inmutable.",
   "security.restrictedDesc": "Tu rol no tiene acceso al centro de seguridad.",
@@ -1014,7 +996,6 @@
   "security.actorId": "ID de actor",
   "security.eventHash": "Hash SHA-256 del evento",
   "security.eventMetadata": "Metadatos del evento (JSON plano)",
-
   "operations.title": "Operaciones",
   "operations.subtitle": "Sondas de disponibilidad, épocas de instantáneas del clúster, copias cifradas, actualizaciones y webhooks firmados.",
   "operations.restrictedTitle": "Se requiere el rol de Operador",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "Seleccionar secreto de firma",
   "operations.events": "Eventos",
   "operations.selectWebhookEvents": "Seleccionar eventos webhook",
-  "operations.registerWebhook": "Registrar webhook"
+  "operations.registerWebhook": "Registrar webhook",
+  "cmd.a2a": "Agentes A2A y tareas activas",
+  "mcp.tabsLabel": "Secciones del centro MCP y A2A",
+  "mcp.tabMcp": "Servidores MCP",
+  "mcp.tabA2a": "Agentes A2A y tareas activas",
+  "a2a.registerAgent": "Registrar agente",
+  "a2a.agentRegistered": "Agente A2A registrado y publicado en descubrimiento.",
+  "a2a.registerFailed": "No se pudo registrar el agente A2A.",
+  "a2a.registeredAgents": "Agentes A2A registrados",
+  "a2a.emptyAgentsTitle": "No hay agentes A2A registrados",
+  "a2a.emptyAgentsDesc": "Registra un endpoint AgentCard con alcance de proyecto, residencia y límite de saltos.",
+  "a2a.col.agent": "Agente",
+  "a2a.col.endpoint": "Endpoint",
+  "a2a.col.region": "Región",
+  "a2a.col.maxHops": "Máx. saltos",
+  "a2a.activeTasks": "Tareas A2A activas y recientes",
+  "a2a.emptyTasksTitle": "No hay tareas A2A registradas",
+  "a2a.emptyTasksDesc": "Las tareas delegadas aparecen aquí con profundidad de saltos, región aplicada y retención de subpresupuesto.",
+  "a2a.col.task": "Tarea",
+  "a2a.col.hops": "Saltos",
+  "a2a.col.subBudget": "Retención de subpresupuesto",
+  "a2a.col.settledCost": "Costo liquidado",
+  "a2a.drawerTitle": "Registrar agente A2A",
+  "a2a.drawerSubtitle": "Exige validación de salida HTTPS, residencia regional y profundidad máxima <= 5.",
+  "a2a.agentSlug": "Slug del agente (opcional)",
+  "a2a.agentSlugPlaceholder": "ej. billing-analyst",
+  "a2a.agentName": "Nombre del agente",
+  "a2a.agentNamePlaceholder": "ej. Billing Analyst",
+  "a2a.endpointUrl": "URL del endpoint del agente",
+  "a2a.allowPrivate": "Permitir endpoint privado o loopback",
+  "a2a.allowPrivateDesc": "Habilitar solo para agentes A2A internos de confianza explícita.",
+  "a2a.state.submitted": "Enviada",
+  "a2a.state.working": "En curso",
+  "a2a.state.input-required": "Entrada requerida",
+  "a2a.state.completed": "Completada",
+  "a2a.state.failed": "Fallida",
+  "a2a.state.canceled": "Cancelada"
 }

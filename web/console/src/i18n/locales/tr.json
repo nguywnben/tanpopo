@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "Güvenlik İnceleyicisi",
   "common.role.FINOPS_VIEWER": "FinOps Görüntüleyici",
   "common.role.DEVELOPER": "Geliştirici",
-
   "state.ACTIVE_HEALTHY": "Sağlıklı",
   "state.CIRCUIT_OPEN_UNHEALTHY": "Devre kesici açık",
   "state.THROTTLED_COOLDOWN": "Bekleme süresinde",
@@ -106,7 +105,6 @@
   "state.DRAFT": "Taslak",
   "state.UNAVAILABLE": "Kullanılamıyor",
   "state.UNKNOWN": "Bilinmiyor",
-
   "error.noOpenApiPolicy": "{{method}} {{path}} için tanımlı bir OpenAPI güvenlik politikası yok.",
   "error.ifMatchRequired": "Bu Admin API işlemi için If-Match ETag başlığı gereklidir.",
   "error.csrfRequired": "Durum değiştiren istekler için CSRF belirteci gereklidir.",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "Beklenmeyen arayüz hatası",
   "error.unexpectedUiDesc": "Konsol beklenmeyen bir hatayla karşılaştı. Kurtarmak için sayfayı yenileyin.",
   "error.reloadConsole": "Konsolu yenile",
-
   "shell.loadingSetup": "Kurulum yükleniyor…",
   "shell.loadingSignIn": "Giriş ekranı yükleniyor…",
   "shell.loadingConsole": "Konsol yükleniyor…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "Hızlı geçiş",
   "shell.quickJumpEmpty": "Rolünüz için eşleşen bölüm bulunamadı.",
   "shell.roleDenied": "Atanan rolleriniz ({{roles}}) {{section}} bölümüne erişime izin vermiyor.",
-
   "nav.group.monitor": "İzleme",
   "nav.group.gateway": "Ağ Geçidi",
   "nav.group.ecosystem": "Ekosistem",
@@ -170,7 +166,6 @@
   "nav.route.operations": "Operasyonlar",
   "nav.route.setup": "İlk Kurulum",
   "nav.route.login": "Giriş Yap",
-
   "cmd.overview": "Genel Bakış ve Sistem Durumu",
   "cmd.traces": "İstek İzleri ve Zaman Çizelgesi",
   "cmd.budgets": "FinOps Bütçeleri ve Etkin Blokeler",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "Şifreli Yedekler",
   "cmd.opsUpgrades": "Yükseltme Ön Kontrolü",
   "cmd.opsWebhooks": "Webhook'lar ve Ayarlar",
-
   "login.title": "Giriş yap",
   "login.subtitle": "Kontrol düzlemine erişmek için yerel yönetici kimlik bilgilerinizi girin.",
   "login.failedTitle": "Giriş başarısız",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "Çok fazla giriş denemesi. Tekrar denemeden önce bekleyin.",
   "login.errInvalidCredentials": "E-posta adresi veya parola geçersiz.",
   "login.errUnreachable": "Tanpopo kontrol düzlemine ulaşılamadı.",
-
   "setup.title": "Kurulum",
   "setup.subtitle": "Bu kendi barındırılan ağ geçidini sahiplenin ve ilk yönetici ile rotayı hazırlayın.",
   "setup.stepsLabel": "Kurulum adımları",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "İlk istek başarısız oldu.",
   "setup.firstKey.statusFailed": "İlk istek başarısız oldu ({{status}}). Dağıtım ve rota ayarlarını kontrol edin.",
   "setup.firstKey.unreported": "bildirilmedi",
-
   "overview.title": "Genel Bakış",
   "overview.subtitleIdle": "Canlı ağ geçidi durumu ve müdahale kuyruğu.",
   "overview.subtitleUpdated": "Güncellendi: {{time}} · {{count}} ölçülmemiş istek",
@@ -325,7 +317,6 @@
   "overview.remediate": "Düzelt",
   "overview.severity.PAGE": "ACİL",
   "overview.severity.TICKET": "KAYIT",
-
   "traces.title": "İstek izleri",
   "traces.subtitle": "Yalnızca meta veri yürütme telemetrisi. İstem veya yanıt içeriği saklanmaz.",
   "traces.metadataOnly": "Yalnızca meta veri",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "Kayıt zamanı",
   "traces.executionStages": "Yürütme aşamaları",
   "traces.noStages": "Bu istek için ayrıntılı aşama kaydı yok.",
-
   "finops.title": "FinOps",
   "finops.subtitle": "Kesin, tahmini, etkin bloke ve ölçülmemiş tutarları ayıran tamsayı micro-USD defteri.",
   "finops.exportCsv": "CSV dışa aktar",
@@ -405,7 +395,6 @@
   "finops.col.exact": "Kesin",
   "finops.col.exactEstReqs": "Kesin / Tah. istek",
   "finops.col.unmetered": "Ölçülmemiş",
-
   "providers.title": "Sağlayıcılar",
   "providers.subtitle": "Upstream sağlayıcı bağlantıları, salt yazılır kasa sırları ve protokol adaptörleri.",
   "providers.sealSecret": "Sır mühürle",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "Kasa kimlik bilgisini sil",
   "providers.deleteSecretDesc": "\"{{name}}\" ({{fingerprint}}) kaldırılsın mı? Buna başvuran bağlantılar silmeyi engeller.",
   "providers.deleteCredential": "Kimlik bilgisini sil",
-
   "models.title": "Modeller ve Dağıtımlar",
   "models.subtitle": "Mantıksal model yetenek bildirimleri, güvence katmanları ve ortam dağıtımları.",
   "models.registerModel": "Model kaydet",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "Dağıtımı devre dışı bırak",
   "models.confirmDeleteDesc": "\"{{name}}\" silinsin mi? Bunun son sağlıklı hedef olduğu rotalar: {{routes}}.",
   "models.confirmDisableDesc": "\"{{name}}\" devre dışı bırakılsın mı? Bunun son sağlıklı hedef olduğu rotalar: {{routes}}.",
-
   "routing.title": "Rotalar ve Politikalar",
   "routing.subtitle": "Deterministik yetenek yönlendirmesi, prova simülasyonu ve yalnızca sıkılaşan politika kalıtımı.",
   "routing.createRoute": "Rota oluştur",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "Doğrulanmış veya kurumsal imzalı",
   "routing.trust.VERIFIED_ONLY": "Yalnızca doğrulanmış",
   "routing.trust.ANY_APPROVED": "Onaylanan herhangi biri",
-
   "extensions.title": "Uzantılar",
   "extensions.subtitle": "Ayrıştırılmış kaynak, yayıncı imzası ve yürütme katmanı doğrulaması ile aşamalı izin onayı.",
   "extensions.stagePackage": "Paket hazırla",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "Değişti",
   "extensions.diff.reduced": "Daraltıldı",
   "extensions.diff.quotas": "Bellek {{mem}} · Çağrı {{call}} · Parça {{chunk}}",
-
   "mcp.title": "MCP Merkezi",
   "mcp.subtitle": "Streamable HTTP MCP sunucu kaydı, RFC 8785 JCS şema sabitleme ve araç bazlı Sanal Anahtar izinleri.",
   "mcp.registerServer": "Sunucu kaydet",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive (zorunlu HITL onayı)",
   "mcp.justification": "İnceleme gerekçesi (isteğe bağlı)",
   "mcp.pinSchema": "Şemayı sabitle",
-
   "playground.title": "Deneme Alanı",
   "playground.subtitle": "micro-USD bütçe tavanlı geçici oturum anahtarı. İstemler yalnızca bu tarayıcı sekmesinde kalır.",
   "playground.restrictedDesc": "Rolünüz Deneme Alanı oturumu oluşturamaz.",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "Erişim ve Anahtarlar",
   "access.subtitle": "Ortam kapsamlı Sanal Anahtarlar ve 6 rollü RBAC yetki atamaları.",
   "access.issueKey": "Anahtar oluştur",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "{{email}} rollerini düzenle",
   "access.saveRoles": "Rolleri kaydet",
   "access.selfServiceDisabled": "Kendi kendine yetki atama kapalıdır. Kendi hesabınıza yeni rol ekleyemezsiniz.",
-
   "security.title": "Güvenlik",
   "security.subtitle": "İnsan onaylı (HITL) MCP talepleri, 4 düzeyli acil kill switch ve değiştirilemez JCS denetim izi.",
   "security.restrictedDesc": "Rolünüz güvenlik merkezine erişemiyor.",
@@ -1014,7 +996,6 @@
   "security.actorId": "Aktör ID",
   "security.eventHash": "Olay SHA-256 özeti",
   "security.eventMetadata": "Olay meta verileri (düz metin JSON)",
-
   "operations.title": "Operasyonlar",
   "operations.subtitle": "Hazırlık yoklamaları, küme anlık görüntü dönemleri, şifreli yedekler, yükseltmeler ve imzalı webhook'lar.",
   "operations.restrictedTitle": "Operatör rolü gereklidir",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "İmzalama sırrı seçin",
   "operations.events": "Olaylar",
   "operations.selectWebhookEvents": "Webhook olaylarını seçin",
-  "operations.registerWebhook": "Webhook kaydet"
+  "operations.registerWebhook": "Webhook kaydet",
+  "cmd.a2a": "A2A Ajanları ve Aktif Görevler",
+  "mcp.tabsLabel": "MCP ve A2A merkezi bölümleri",
+  "mcp.tabMcp": "MCP sunucuları",
+  "mcp.tabA2a": "A2A Ajanları ve Aktif Görevler",
+  "a2a.registerAgent": "Ajan kaydet",
+  "a2a.agentRegistered": "A2A ajanı kaydedildi ve keşif dizinine yayınlandı.",
+  "a2a.registerFailed": "A2A ajanı kaydedilemedi.",
+  "a2a.registeredAgents": "Kayıtlı A2A ajanları",
+  "a2a.emptyAgentsTitle": "Kayıtlı A2A ajanı yok",
+  "a2a.emptyAgentsDesc": "Bölge ve yetki devri sekme sınırlarına sahip proje kapsamlı bir AgentCard uç noktası kaydedin.",
+  "a2a.col.agent": "Ajan",
+  "a2a.col.endpoint": "Uç nokta",
+  "a2a.col.region": "Bölge",
+  "a2a.col.maxHops": "Maks. sekme",
+  "a2a.activeTasks": "Aktif ve son A2A görevleri",
+  "a2a.emptyTasksTitle": "Kaydedilmiş A2A görevi yok",
+  "a2a.emptyTasksDesc": "Devredilen ajan görevleri sekme derinliği, zorunlu bölge ve alt bütçe blokesiyle burada görünür.",
+  "a2a.col.task": "Görev",
+  "a2a.col.hops": "Sekmeler",
+  "a2a.col.subBudget": "Alt bütçe blokesi",
+  "a2a.col.settledCost": "Kesinleşen maliyet",
+  "a2a.drawerTitle": "A2A ajanı kaydet",
+  "a2a.drawerSubtitle": "HTTPS çıkış doğrulamasını, bölgesel veri yerleşimini ve maks. yetki derinliği <= 5 kuralını uygular.",
+  "a2a.agentSlug": "Ajan slug (isteğe bağlı)",
+  "a2a.agentSlugPlaceholder": "ör. billing-analyst",
+  "a2a.agentName": "Ajan adı",
+  "a2a.agentNamePlaceholder": "ör. Billing Analyst",
+  "a2a.endpointUrl": "Ajan uç nokta URL’si",
+  "a2a.allowPrivate": "Özel veya loopback uç noktaya izin ver",
+  "a2a.allowPrivateDesc": "Yalnızca açıkça güvenilen dahili A2A ajanları için etkinleştirin.",
+  "a2a.state.submitted": "Gönderildi",
+  "a2a.state.working": "İşleniyor",
+  "a2a.state.input-required": "Girdi gerekli",
+  "a2a.state.completed": "Tamamlandı",
+  "a2a.state.failed": "Başarısız",
+  "a2a.state.canceled": "İptal edildi"
 }

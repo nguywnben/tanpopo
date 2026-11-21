@@ -3,12 +3,14 @@ module github.com/nguywnben/tanpopo
 go 1.26.0
 
 require (
+	connectrpc.com/connect v1.21.1
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/klauspost/compress v1.20.4
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/common v0.72.0
 	github.com/spf13/cobra v1.9.1
 	github.com/tetratelabs/wazero v1.11.0
+	github.com/valkey-io/valkey-go v1.0.80
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.47.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.69.0
@@ -48,7 +50,6 @@ require (
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
-	github.com/valkey-io/valkey-go v1.0.80 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	golang.org/x/net v0.63.0 // indirect

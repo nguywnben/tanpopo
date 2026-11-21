@@ -296,6 +296,10 @@ export const operationPolicy = {
     "csrf": true,
     "ifMatch": false
   },
+  "GET /admin/v1/a2a/tasks": {
+    "csrf": false,
+    "ifMatch": false
+  },
   "GET /admin/v1/traces": {
     "csrf": false,
     "ifMatch": false

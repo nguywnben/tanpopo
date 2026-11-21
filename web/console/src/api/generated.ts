@@ -993,6 +993,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/a2a/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List active and recent A2A tasks (SCR-10 — v0.3) */
+        get: operations["listAdminA2aTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/traces": {
         parameters: {
             query?: never;
@@ -1981,6 +1998,63 @@ export interface components {
             state: "ACTIVE" | "SCHEMA_DRIFT_LOCKED" | "SUSPENDED" | "DISABLED";
             tool_count: number;
             version: number;
+        };
+        A2aAgentSkill: {
+            id: string;
+            name: string;
+            description?: string;
+        };
+        A2aAgentCreateRequest: {
+            project_id: string;
+            agent_slug?: string;
+            name: string;
+            description?: string;
+            /** Format: uri */
+            endpoint_url: string;
+            /** @default false */
+            allow_private_ip: boolean;
+            allowed_cidrs?: string[];
+            credential_id?: string | null;
+            data_region: components["schemas"]["DataRegion"];
+            /** @default 5 */
+            max_delegation_hops: number;
+            skills?: components["schemas"]["A2aAgentSkill"][];
+            required_models?: string[];
+        };
+        A2aAgentResource: {
+            agent_id: string;
+            project_id: string;
+            agent_slug: string;
+            name: string;
+            description?: string;
+            /** Format: uri */
+            endpoint_url: string;
+            data_region: components["schemas"]["DataRegion"];
+            max_delegation_hops: number;
+            skills: components["schemas"]["A2aAgentSkill"][];
+            required_models?: string[];
+            /** @enum {string} */
+            status: "ACTIVE" | "SUSPENDED" | "DISABLED";
+            version: number;
+        };
+        A2aTaskResource: {
+            task_id: string;
+            target_agent_id: string;
+            target_agent_slug?: string;
+            /** @enum {string} */
+            state: "submitted" | "working" | "input-required" | "completed" | "failed" | "canceled";
+            hop_count: number;
+            trace_root_id?: string;
+            enforced_region?: string;
+            sub_budget_hold_micros: number;
+            settled_cost_micros?: number;
+            version?: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            completed_at?: string;
         };
         TraceSummary: {
             request_id: string;
@@ -4773,7 +4847,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        data: Record<string, never>[];
+                        data: components["schemas"]["A2aAgentResource"][];
                         next_cursor?: string | null;
                         has_more: boolean;
                     };
@@ -4793,24 +4867,46 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    name: string;
-                    /** Format: uri */
-                    endpoint_url: string;
-                    data_region: components["schemas"]["DataRegion"];
-                    /** @default 5 */
-                    max_delegation_hops: number;
-                };
+                "application/json": components["schemas"]["A2aAgentCreateRequest"];
             };
         };
         responses: {
             /** @description A2A AgentEndpoint registered */
             201: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["A2aAgentResource"];
+                };
+            };
+        };
+    };
+    listAdminA2aTasks: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["LimitParam"];
+                /** @description HMAC-signed org_id-bound opaque pagination cursor. */
+                cursor?: components["parameters"]["CursorParam"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated A2A tasks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["A2aTaskResource"][];
+                        next_cursor?: string | null;
+                        has_more: boolean;
+                    };
                 };
             };
         };

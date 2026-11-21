@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "Kiểm duyệt bảo mật",
   "common.role.FINOPS_VIEWER": "Xem FinOps",
   "common.role.DEVELOPER": "Lập trình viên",
-
   "state.ACTIVE_HEALTHY": "Ổn định",
   "state.CIRCUIT_OPEN_UNHEALTHY": "Đã ngắt mạch",
   "state.THROTTLED_COOLDOWN": "Đang tạm nghỉ",
@@ -106,7 +105,6 @@
   "state.DRAFT": "Bản nháp",
   "state.UNAVAILABLE": "Không khả dụng",
   "state.UNKNOWN": "Không xác định",
-
   "error.noOpenApiPolicy": "Chưa khai báo chính sách bảo mật OpenAPI cho {{method}} {{path}}.",
   "error.ifMatchRequired": "Thao tác Admin API này yêu cầu header If-Match ETag.",
   "error.csrfRequired": "Yêu cầu thay đổi trạng thái bắt buộc phải có token CSRF.",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "Lỗi giao diện ngoài dự kiến",
   "error.unexpectedUiDesc": "Console gặp lỗi không mong muốn. Hãy tải lại trang để khôi phục.",
   "error.reloadConsole": "Tải lại Console",
-
   "shell.loadingSetup": "Đang tải trang thiết lập…",
   "shell.loadingSignIn": "Đang tải trang đăng nhập…",
   "shell.loadingConsole": "Đang tải Console…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "Chuyển nhanh",
   "shell.quickJumpEmpty": "Không có mục phù hợp với vai trò hiện tại của bạn.",
   "shell.roleDenied": "Các vai trò được gán ({{roles}}) không có quyền truy cập mục {{section}}.",
-
   "nav.group.monitor": "Giám sát",
   "nav.group.gateway": "Cổng AI",
   "nav.group.ecosystem": "Hệ sinh thái",
@@ -170,7 +166,6 @@
   "nav.route.operations": "Vận hành",
   "nav.route.setup": "Thiết lập ban đầu",
   "nav.route.login": "Đăng nhập",
-
   "cmd.overview": "Tổng quan & Trạng thái hệ thống",
   "cmd.traces": "Dấu vết yêu cầu & Biểu đồ thực thi",
   "cmd.budgets": "Ngân sách FinOps & Tạm giữ hiện tại",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "Sao lưu mã hóa",
   "cmd.opsUpgrades": "Kiểm tra tương thích nâng cấp",
   "cmd.opsWebhooks": "Webhook & Cài đặt",
-
   "login.title": "Đăng nhập",
   "login.subtitle": "Dùng tài khoản quản trị cục bộ để truy cập Control Plane.",
   "login.failedTitle": "Đăng nhập thất bại",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "Thử đăng nhập quá nhiều lần. Hãy chờ một lát rồi thử lại.",
   "login.errInvalidCredentials": "Email hoặc mật khẩu không đúng.",
   "login.errUnreachable": "Không thể kết nối tới Tanpopo Control Plane.",
-
   "setup.title": "Thiết lập hệ thống",
   "setup.subtitle": "Khởi tạo cổng AI tự vận hành với tài khoản chủ sở hữu và tuyến đầu tiên.",
   "setup.stepsLabel": "Các bước thiết lập",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "Yêu cầu đầu tiên thất bại.",
   "setup.firstKey.statusFailed": "Yêu cầu đầu tiên thất bại ({{status}}). Hãy kiểm tra lại bản triển khai và cấu hình tuyến.",
   "setup.firstKey.unreported": "không rõ",
-
   "overview.title": "Tổng quan",
   "overview.subtitleIdle": "Trạng thái cổng AI trực tiếp và hàng đợi xử lý sự cố.",
   "overview.subtitleUpdated": "Cập nhật {{time}} · {{count}} yêu cầu chưa đo lường",
@@ -325,7 +317,6 @@
   "overview.remediate": "Xử lý",
   "overview.severity.PAGE": "KHẨN CẤP",
   "overview.severity.TICKET": "THEO DÕI",
-
   "traces.title": "Dấu vết yêu cầu",
   "traces.subtitle": "Dữ liệu thực thi chỉ gồm siêu dữ liệu. Tuyệt đối không lưu nội dung prompt hay phản hồi.",
   "traces.metadataOnly": "Chỉ siêu dữ liệu",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "Ghi nhận lúc",
   "traces.executionStages": "Các giai đoạn thực thi",
   "traces.noStages": "Yêu cầu này không có chi tiết phân tách giai đoạn.",
-
   "finops.title": "FinOps",
   "finops.subtitle": "Sổ cái số nguyên micro-USD tách biệt chi phí chính xác, ước tính, tạm giữ và chưa đo lường.",
   "finops.exportCsv": "Xuất CSV",
@@ -405,7 +395,6 @@
   "finops.col.exact": "Chính xác",
   "finops.col.exactEstReqs": "YC chính xác / ước tính",
   "finops.col.unmetered": "Chưa đo lường",
-
   "providers.title": "Nhà cung cấp",
   "providers.subtitle": "Kết nối nhà cung cấp upstream, kho bí mật chỉ ghi và bộ chuyển đổi giao thức.",
   "providers.sealSecret": "Niêm phong bí mật",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "Xóa bí mật khỏi kho",
   "providers.deleteSecretDesc": "Xóa \"{{name}}\" ({{fingerprint}})? Các kết nối đang tham chiếu sẽ chặn thao tác xóa.",
   "providers.deleteCredential": "Xóa bí mật",
-
   "models.title": "Mô hình & Bản triển khai",
   "models.subtitle": "Khai báo năng lực mô hình logic, cấp độ đảm bảo và bản triển khai theo môi trường.",
   "models.registerModel": "Đăng ký mô hình",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "Tắt bản triển khai",
   "models.confirmDeleteDesc": "Xóa \"{{name}}\"? Các tuyến mà đây là đích ổn định cuối cùng: {{routes}}.",
   "models.confirmDisableDesc": "Tắt \"{{name}}\"? Các tuyến mà đây là đích ổn định cuối cùng: {{routes}}.",
-
   "routing.title": "Tuyến & Chính sách",
   "routing.subtitle": "Định tuyến xác định theo năng lực, mô phỏng không gửi thật và kế thừa chính sách chỉ siết chặt.",
   "routing.createRoute": "Tạo tuyến",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "Đã xác minh hoặc ký doanh nghiệp",
   "routing.trust.VERIFIED_ONLY": "Chỉ gói đã xác minh",
   "routing.trust.ANY_APPROVED": "Bất kỳ gói đã duyệt",
-
   "extensions.title": "Tiện ích mở rộng",
   "extensions.subtitle": "Tách biệt xác minh nguồn gốc, chữ ký nhà phát hành và cấp thực thi kèm chấp thuận quyền theo bước.",
   "extensions.stagePackage": "Nạp gói chờ duyệt",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "Thay đổi",
   "extensions.diff.reduced": "Thu hẹp",
   "extensions.diff.quotas": "RAM {{mem}} · Lượt gọi {{call}} · Khối {{chunk}}",
-
   "mcp.title": "MCP Hub",
   "mcp.subtitle": "Danh bạ máy chủ MCP Streamable HTTP, ghim lược đồ RFC 8785 JCS và cấp quyền từng công cụ cho Khóa ảo.",
   "mcp.registerServer": "Đăng ký máy chủ",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive (bắt buộc người duyệt HITL)",
   "mcp.justification": "Lý do xét duyệt (tùy chọn)",
   "mcp.pinSchema": "Ghim lược đồ",
-
   "playground.title": "Thử nghiệm",
   "playground.subtitle": "Khóa phiên tạm thời có trần ngân sách micro-USD. Nội dung prompt chỉ lưu trong thẻ trình duyệt này.",
   "playground.restrictedDesc": "Vai trò của bạn không được tạo phiên Thử nghiệm.",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "Truy cập & Khóa",
   "access.subtitle": "Khóa ảo theo môi trường và phân quyền RBAC 6 vai trò.",
   "access.issueKey": "Cấp khóa",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "Chỉnh sửa vai trò cho {{email}}",
   "access.saveRoles": "Lưu vai trò",
   "access.selfServiceDisabled": "Tự cấp quyền đã bị vô hiệu hóa. Bạn không thể tự thêm vai trò mới cho tài khoản của mình.",
-
   "security.title": "Bảo mật",
   "security.subtitle": "Phê duyệt MCP có người kiểm soát (HITL), công tắc ngắt khẩn cấp 4 cấp và chuỗi kiểm toán JCS bất biến.",
   "security.restrictedDesc": "Vai trò của bạn không có quyền truy cập trung tâm bảo mật.",
@@ -1014,7 +996,6 @@
   "security.actorId": "Mã tác nhân",
   "security.eventHash": "Mã băm SHA-256 sự kiện",
   "security.eventMetadata": "Siêu dữ liệu sự kiện (JSON văn bản thuần)",
-
   "operations.title": "Vận hành",
   "operations.subtitle": "Kiểm tra sẵn sàng, epoch bản chụp cụm, sao lưu mã hóa, nâng cấp và webhook có chữ ký.",
   "operations.restrictedTitle": "Yêu cầu vai trò Vận hành viên",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "Chọn bí mật ký số",
   "operations.events": "Sự kiện",
   "operations.selectWebhookEvents": "Chọn sự kiện Webhook",
-  "operations.registerWebhook": "Đăng ký Webhook"
+  "operations.registerWebhook": "Đăng ký Webhook",
+  "cmd.a2a": "Tác tử A2A & Tác vụ đang chạy",
+  "mcp.tabsLabel": "Các mục của trung tâm MCP & A2A",
+  "mcp.tabMcp": "Máy chủ MCP",
+  "mcp.tabA2a": "Tác tử A2A & Tác vụ đang chạy",
+  "a2a.registerAgent": "Đăng ký tác tử",
+  "a2a.agentRegistered": "Đã đăng ký tác tử A2A và công bố khám phá.",
+  "a2a.registerFailed": "Không thể đăng ký tác tử A2A.",
+  "a2a.registeredAgents": "Tác tử A2A đã đăng ký",
+  "a2a.emptyAgentsTitle": "Chưa có tác tử A2A nào được đăng ký",
+  "a2a.emptyAgentsDesc": "Đăng ký endpoint AgentCard theo dự án với ràng buộc vùng dữ liệu và số bước ủy quyền.",
+  "a2a.col.agent": "Tác tử",
+  "a2a.col.endpoint": "Endpoint",
+  "a2a.col.region": "Vùng",
+  "a2a.col.maxHops": "Số bước tối đa",
+  "a2a.activeTasks": "Tác vụ A2A đang chạy & gần đây",
+  "a2a.emptyTasksTitle": "Chưa ghi nhận tác vụ A2A nào",
+  "a2a.emptyTasksDesc": "Các tác vụ được ủy quyền hiển thị tại đây cùng độ sâu bước, vùng áp dụng và mức giữ ngân sách con.",
+  "a2a.col.task": "Tác vụ",
+  "a2a.col.hops": "Bước",
+  "a2a.col.subBudget": "Giữ ngân sách con",
+  "a2a.col.settledCost": "Chi phí đã quyết toán",
+  "a2a.drawerTitle": "Đăng ký tác tử A2A",
+  "a2a.drawerSubtitle": "Áp dụng xác thực egress HTTPS, ghim vùng dữ liệu và độ sâu ủy quyền tối đa <= 5.",
+  "a2a.agentSlug": "Slug tác tử (tùy chọn)",
+  "a2a.agentSlugPlaceholder": "vd. billing-analyst",
+  "a2a.agentName": "Tên tác tử",
+  "a2a.agentNamePlaceholder": "vd. Billing Analyst",
+  "a2a.endpointUrl": "URL endpoint tác tử",
+  "a2a.allowPrivate": "Cho phép endpoint nội bộ hoặc loopback",
+  "a2a.allowPrivateDesc": "Chỉ bật cho các tác tử A2A nội bộ đã được tin cậy rõ ràng.",
+  "a2a.state.submitted": "Đã gửi",
+  "a2a.state.working": "Đang xử lý",
+  "a2a.state.input-required": "Cần nhập liệu",
+  "a2a.state.completed": "Hoàn thành",
+  "a2a.state.failed": "Thất bại",
+  "a2a.state.canceled": "Đã hủy"
 }

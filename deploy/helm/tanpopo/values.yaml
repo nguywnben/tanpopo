@@ -93,3 +93,11 @@ serviceMonitor:
   interval: 15s
   scrapeTimeout: 10s
   labels: {}
+
+runtime:
+  sidecar:
+    enabled: false
+
+a2a:
+  enabled: false
+

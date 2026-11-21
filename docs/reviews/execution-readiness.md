@@ -1,10 +1,10 @@
 # Final Delivery Readiness Audit (`ASTRA A10` — Gate G4 Stage 2 Handoff Approved) — Tanpopo
 
 > **Independent Governance Verdict Document (ASTRA A10 + M0–M4 execution, `DEC-033 REVOKED_BY_OWNER`)**
-> - **Report ID:** `REV-RDY-01` | **Version:** `2.38.0-dec-090-unit-41-done` | **Audit Date:** `2026-11-21`
+> - **Report ID:** `REV-RDY-01` | **Version:** `2.39.0-dec-091-unit-42-done` | **Audit Date:** `2026-11-21`
 > - **Reviewer Role:** Independent Delivery Readiness Reviewer & Principal Architect
-> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0041` DONE; Unit 39 PR #29 `61c310b5`, Unit 40 PR #30 `b5904476`, Unit 41 PR #31 verified on live PG16 `FORCE RLS` + 3-shard Valkey Cluster `-race` with strong review `APPROVE`/`PASS` under `DEC-090`. `DEC-033` remains `REVOKED_BY_OWNER`.)
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED` under `DEC-090`** (`41 / 47` DONE · `0 READY` · `0 READY_FOR_REVIEW` · `6 / 47` BLOCKED (`0042`..`0047`)).
+> - **DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0042` DONE; Unit 39 PR #29 `61c310b5`, Unit 40 PR #30 `b5904476`, Unit 41 PR #31 `e55f246b`, and Unit 42 PR #32 verified on live PG16 `FORCE RLS` `-race` with strong review `APPROVE`/`PASS` under `DEC-091`. `DEC-033` remains `REVOKED_BY_OWNER`.)
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED` under `DEC-091`** (`42 / 47` DONE · `0 READY` · `0 READY_FOR_REVIEW` · `5 / 47` BLOCKED (`0043`..`0047`)).
 
 ---
 
@@ -16,8 +16,8 @@ On `2026-11-14`, across two sequential governance rulings (`DEC-009` and `DEC-01
 3. **Approved Gate G4 Stage 2 (`DEC-010` — `HANDOFF_VERDICT = GO`)** after reconciling `spike-results.md` `UNIT_ID` cross-references, calibrating `PostgreSQL 16` / microbenchmark / local-vs-CI claims strictly to actual evidence, and locking explicit `AC`s for in-flight Wasm cancellation, timeout, tainted-module replacement, pool recovery, and bounded resource consumption into [`TP-IMP-0013.md`](../planning/units/TP-IMP-0013.md).
 
 **Strict Boundaries of This Handoff (`DEC-060`, `DEC-072`, `DEC-088`):**
-- **Active Sequential Batch:** Under `DEC-088`, **Gemini 4 Hydrogen** executes Units `0039` → `0040` → `0041` → `0042` sequentially via persistent `develop` (`1` PR `develop` → `main` per unit), with independent strong reviews and post-merge `origin/main` CI green before advancing. Unit 39 (`61c310b5`, PR #29), Unit 40 (`b5904476`, PR #30), and Unit 41 (PR #31, `DEC-090`) are complete; Unit `0042` awaits sequential DoR after PR #31 post-merge CI.
-- **Release Boundary:** Unit 43 and later work remain outside this delegation. No tags or public releases (`GATE-REL-07`).
+- **Active Sequential Batch:** Under `DEC-088`, **Gemini 4 Hydrogen** executed Units `0039` → `0040` → `0041` → `0042` sequentially via persistent `develop` (`1` PR `develop` → `main` per unit), with independent strong reviews and post-merge `origin/main` CI green before advancing: Unit 39 (`61c310b5`, PR #29), Unit 40 (`b5904476`, PR #30), Unit 41 (`e55f246b`, PR #31, `DEC-090`), and Unit 42 (PR #32, `DEC-091`) are complete.
+- **Release Boundary:** Execution stops at Unit `0042`; Unit 43 and later work remain `BLOCKED`, with no tags or public releases (`GATE-REL-07`).
 
 ---
 

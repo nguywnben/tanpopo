@@ -87,7 +87,7 @@ export const navigationGroups: NavigationGroup[] = [
         icon: 'extensions',
         enabled: true,
       },
-      {path: '/mcp/servers', aliases: ['/mcp/tools'], label: 'MCP Hub', labelKey: 'nav.route.mcp', roles: everyRole, icon: 'mcp', enabled: true},
+      {path: '/mcp/servers', aliases: ['/mcp/tools', '/a2a/agents'], label: 'MCP Hub', labelKey: 'nav.route.mcp', roles: everyRole, icon: 'mcp', enabled: true},
       {
         path: '/devtools/playground',
         aliases: ['/devtools/api-explorer', '/devtools/sdk-snippets', '/devtools/diagnostics'],
@@ -164,6 +164,7 @@ export const quickCommands: QuickCommand[] = [
   {id: 'ext-marketplace', label: 'Extension Marketplace', labelKey: 'cmd.extMarketplace', section: 'Ecosystem', sectionKey: 'nav.group.ecosystem', path: '/extensions/marketplace', roles: everyRole},
   {id: 'ext-lockfile', label: 'Extension Lockfile (tanpopo.lock)', labelKey: 'cmd.extLockfile', section: 'Ecosystem', sectionKey: 'nav.group.ecosystem', path: '/extensions/lockfile', roles: everyRole},
   {id: 'mcp', label: 'MCP Servers & Tool Grants', labelKey: 'cmd.mcp', section: 'Ecosystem', sectionKey: 'nav.group.ecosystem', path: '/mcp/servers', roles: everyRole},
+  {id: 'a2a', label: 'A2A Agents & Active Tasks', labelKey: 'cmd.a2a', section: 'Ecosystem', sectionKey: 'nav.group.ecosystem', path: '/a2a/agents', roles: everyRole},
   {id: 'playground', label: 'Inference Playground', labelKey: 'cmd.playground', section: 'Ecosystem', sectionKey: 'nav.group.ecosystem', path: '/devtools/playground', roles: developerRoles},
   {id: 'sdk-snippets', label: 'SDK Snippets & Quickstart', labelKey: 'cmd.sdkSnippets', section: 'Ecosystem', sectionKey: 'nav.group.ecosystem', path: '/devtools/sdk-snippets', roles: developerRoles},
   {id: 'vkeys', label: 'Virtual Keys', labelKey: 'cmd.vkeys', section: 'Governance', sectionKey: 'nav.group.governance', path: '/access/virtual-keys', roles: everyRole},

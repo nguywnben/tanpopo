@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0042` |
 | **Milestone / Epic** | `M4` (`v0.3 Clustered HA, Enterprise Security & A2A` — **Gate `GATE-M4`**) · `EP-08` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0013`, `TP-IMP-0021`, `TP-IMP-0039` — `GAP-01, 08, 09`)* |
+| **Status** | **`DONE`** *(`DEC-091`; [report](../../reviews/tp-imp-0042-execution.md))* |
 | **Size** | `L` (`go.mod`, `internal/extension/sidecar/*`, `internal/ingress/a2a/*`, `db/migrations/postgres/0002_a2a_sidecar.sql`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Mutual-TLS `mTLS` sidecar process boundary, anti-recursion agent loop cap `hop_count <= 5` & anti-confused-deputy privilege narrowing)* |
 | **Technical Owner** | `Principal Platform & Agent Systems Architect` |

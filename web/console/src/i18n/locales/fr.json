@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "Auditeur sécurité",
   "common.role.FINOPS_VIEWER": "Lecteur FinOps",
   "common.role.DEVELOPER": "Développeur",
-
   "state.ACTIVE_HEALTHY": "Sain",
   "state.CIRCUIT_OPEN_UNHEALTHY": "Circuit ouvert",
   "state.THROTTLED_COOLDOWN": "Refroidissement",
@@ -106,7 +105,6 @@
   "state.DRAFT": "Brouillon",
   "state.UNAVAILABLE": "Indisponible",
   "state.UNKNOWN": "Inconnu",
-
   "error.noOpenApiPolicy": "Aucune politique de sécurité OpenAPI n'est définie pour {{method}} {{path}}.",
   "error.ifMatchRequired": "Un en-tête If-Match ETag est requis pour cette opération de l'API d'administration.",
   "error.csrfRequired": "Un jeton CSRF est requis pour les requêtes modifiant l'état.",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "Erreur d'interface inattendue",
   "error.unexpectedUiDesc": "La console a rencontré une erreur inattendue. Rechargez la page pour rétablir l'affichage.",
   "error.reloadConsole": "Recharger la console",
-
   "shell.loadingSetup": "Chargement de la configuration…",
   "shell.loadingSignIn": "Chargement de la connexion…",
   "shell.loadingConsole": "Chargement de la console…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "Accès rapide",
   "shell.quickJumpEmpty": "Aucune section correspondante pour votre rôle.",
   "shell.roleDenied": "Vos rôles attribués ({{roles}}) n'autorisent pas l'accès à {{section}}.",
-
   "nav.group.monitor": "Supervision",
   "nav.group.gateway": "Passerelle",
   "nav.group.ecosystem": "Écosystème",
@@ -170,7 +166,6 @@
   "nav.route.operations": "Exploitation",
   "nav.route.setup": "Configuration initiale",
   "nav.route.login": "Connexion",
-
   "cmd.overview": "Vue d'ensemble & état du système",
   "cmd.traces": "Traces de requêtes & cascade",
   "cmd.budgets": "Budgets FinOps & retenues actives",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "Sauvegardes chiffrées",
   "cmd.opsUpgrades": "Pré-vérification de mise à niveau",
   "cmd.opsWebhooks": "Webhooks & paramètres",
-
   "login.title": "Connexion",
   "login.subtitle": "Utilisez vos identifiants administrateur locaux pour accéder au plan de contrôle.",
   "login.failedTitle": "Échec de la connexion",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "Trop de tentatives de connexion. Patientez avant de réessayer.",
   "login.errInvalidCredentials": "L'adresse e-mail ou le mot de passe est invalide.",
   "login.errUnreachable": "Impossible de joindre le plan de contrôle Tanpopo.",
-
   "setup.title": "Configuration de l'instance",
   "setup.subtitle": "Prenez possession de cette passerelle auto-hébergée et créez le propriétaire et la première route.",
   "setup.stepsLabel": "Étapes de configuration",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "Échec de la première requête.",
   "setup.firstKey.statusFailed": "Échec de la première requête (HTTP {{status}}). Vérifiez le déploiement et la route.",
   "setup.firstKey.unreported": "non signalé",
-
   "overview.title": "Vue d'ensemble",
   "overview.subtitleIdle": "État en direct de la passerelle et file de remédiation.",
   "overview.subtitleUpdated": "Mis à jour à {{time}} · {{count}} requêtes non mesurées",
@@ -325,7 +317,6 @@
   "overview.remediate": "Remédier",
   "overview.severity.PAGE": "URGENCE",
   "overview.severity.TICKET": "TICKET",
-
   "traces.title": "Traces de requêtes",
   "traces.subtitle": "Télémétrie d'exécution limitée aux métadonnées. Aucun prompt ni réponse stocké.",
   "traces.metadataOnly": "Métadonnées seules",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "Enregistrée le",
   "traces.executionStages": "Étapes d'exécution",
   "traces.noStages": "Aucun détail granulaire d'étapes enregistré pour cette requête.",
-
   "finops.title": "FinOps",
   "finops.subtitle": "Grand livre entier en micro-USD séparant exact, estimé, retenues actives et non mesuré.",
   "finops.exportCsv": "Exporter CSV",
@@ -405,7 +395,6 @@
   "finops.col.exact": "Exact",
   "finops.col.exactEstReqs": "Req. exactes / est.",
   "finops.col.unmetered": "Non mesurées",
-
   "providers.title": "Fournisseurs",
   "providers.subtitle": "Connexions fournisseurs amont, secrets du coffre en écriture seule et adaptateurs de protocole.",
   "providers.sealSecret": "Sceller un secret",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "Supprimer le secret du coffre",
   "providers.deleteSecretDesc": "Retirer « {{name}} » ({{fingerprint}}) ? Les connexions qui l'utilisent bloqueront la suppression.",
   "providers.deleteCredential": "Supprimer le secret",
-
   "models.title": "Modèles & déploiements",
   "models.subtitle": "Déclarations de capacités des modèles logiques, niveaux de garantie et déploiements par environnement.",
   "models.registerModel": "Enregistrer un modèle",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "Désactiver le déploiement",
   "models.confirmDeleteDesc": "Supprimer « {{name}} » ? Routes dont c'est la dernière cible saine : {{routes}}.",
   "models.confirmDisableDesc": "Désactiver « {{name}} » ? Routes dont c'est la dernière cible saine : {{routes}}.",
-
   "routing.title": "Routes & politiques",
   "routing.subtitle": "Routage déterministe par capacités, simulation à blanc et héritage monotone des politiques.",
   "routing.createRoute": "Créer une route",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "Vérifié ou signé entreprise",
   "routing.trust.VERIFIED_ONLY": "Vérifié uniquement",
   "routing.trust.ANY_APPROVED": "Tout paquet approuvé",
-
   "extensions.title": "Extensions",
   "extensions.subtitle": "Vérification distincte de l'origine, de la signature éditeur et du niveau d'exécution avec consentement par étape.",
   "extensions.stagePackage": "Préparer un paquet",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "Modifié",
   "extensions.diff.reduced": "Réduit",
   "extensions.diff.quotas": "Mém. {{mem}} · Appel {{call}} · Segment {{chunk}}",
-
   "mcp.title": "Hub MCP",
   "mcp.subtitle": "Registre de serveurs MCP Streamable HTTP, épinglage de schémas RFC 8785 JCS et autorisations par outil.",
   "mcp.registerServer": "Enregistrer un serveur",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive (validation HITL obligatoire)",
   "mcp.justification": "Justification de revue (facultatif)",
   "mcp.pinSchema": "Épingler le schéma",
-
   "playground.title": "Bac à sable",
   "playground.subtitle": "Clé de session éphémère avec plafond budgétaire en micro-USD. Les prompts restent uniquement dans cet onglet.",
   "playground.restrictedDesc": "Votre rôle ne permet pas de créer des sessions de bac à sable.",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (SDK OpenAI)",
   "playground.snippetTs": "TypeScript (SDK OpenAI)",
-
   "access.title": "Accès & clés",
   "access.subtitle": "Clés virtuelles par environnement et attributions RBAC à 6 rôles.",
   "access.issueKey": "Émettre une clé",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "Modifier les rôles de {{email}}",
   "access.saveRoles": "Enregistrer les rôles",
   "access.selfServiceDisabled": "L'auto-attribution de privilèges est désactivée. Vous ne pouvez pas ajouter de rôles à votre propre compte.",
-
   "security.title": "Sécurité",
   "security.subtitle": "Approbations MCP humaines (HITL), interrupteurs d'arrêt d'urgence à 4 niveaux et piste d'audit JCS immuable.",
   "security.restrictedDesc": "Votre rôle n'a pas accès au centre de sécurité.",
@@ -1014,7 +996,6 @@
   "security.actorId": "ID d'acteur",
   "security.eventHash": "Hash SHA-256 de l'événement",
   "security.eventMetadata": "Métadonnées de l'événement (JSON brut)",
-
   "operations.title": "Exploitation",
   "operations.subtitle": "Sondes de disponibilité, époques d'instantanés du cluster, sauvegardes chiffrées, mises à niveau et webhooks signés.",
   "operations.restrictedTitle": "Rôle Opérateur requis",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "Sélectionner un secret de signature",
   "operations.events": "Événements",
   "operations.selectWebhookEvents": "Sélectionner des événements webhook",
-  "operations.registerWebhook": "Enregistrer le webhook"
+  "operations.registerWebhook": "Enregistrer le webhook",
+  "cmd.a2a": "Agents A2A et tâches actives",
+  "mcp.tabsLabel": "Sections du hub MCP et A2A",
+  "mcp.tabMcp": "Serveurs MCP",
+  "mcp.tabA2a": "Agents A2A et tâches actives",
+  "a2a.registerAgent": "Enregistrer un agent",
+  "a2a.agentRegistered": "Agent A2A enregistré et publié pour la découverte.",
+  "a2a.registerFailed": "Impossible d’enregistrer l’agent A2A.",
+  "a2a.registeredAgents": "Agents A2A enregistrés",
+  "a2a.emptyAgentsTitle": "Aucun agent A2A enregistré",
+  "a2a.emptyAgentsDesc": "Enregistrez un point de terminaison AgentCard avec résidence régionale et limite de sauts.",
+  "a2a.col.agent": "Agent",
+  "a2a.col.endpoint": "Point de terminaison",
+  "a2a.col.region": "Région",
+  "a2a.col.maxHops": "Sauts max.",
+  "a2a.activeTasks": "Tâches A2A actives et récentes",
+  "a2a.emptyTasksTitle": "Aucune tâche A2A enregistrée",
+  "a2a.emptyTasksDesc": "Les tâches déléguées apparaissent ici avec la profondeur de saut, la région imposée et le sous-budget réservé.",
+  "a2a.col.task": "Tâche",
+  "a2a.col.hops": "Sauts",
+  "a2a.col.subBudget": "Réserve de sous-budget",
+  "a2a.col.settledCost": "Coût réglé",
+  "a2a.drawerTitle": "Enregistrer un agent A2A",
+  "a2a.drawerSubtitle": "Applique la validation HTTPS sortante, la résidence régionale et une profondeur de délégation <= 5.",
+  "a2a.agentSlug": "Slug de l’agent (facultatif)",
+  "a2a.agentSlugPlaceholder": "ex. billing-analyst",
+  "a2a.agentName": "Nom de l’agent",
+  "a2a.agentNamePlaceholder": "ex. Billing Analyst",
+  "a2a.endpointUrl": "URL du point de terminaison",
+  "a2a.allowPrivate": "Autoriser un point de terminaison privé ou local",
+  "a2a.allowPrivateDesc": "Activer uniquement pour des agents A2A internes explicitement approuvés.",
+  "a2a.state.submitted": "Soumise",
+  "a2a.state.working": "En cours",
+  "a2a.state.input-required": "Entrée requise",
+  "a2a.state.completed": "Terminée",
+  "a2a.state.failed": "Échouée",
+  "a2a.state.canceled": "Annulée"
 }
