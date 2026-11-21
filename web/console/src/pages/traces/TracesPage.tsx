@@ -128,16 +128,16 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
       </div>
 
       <div className="tp-toolbar">
-        <div className="tp-toolbar-field">
-          <TextField label={t('traces.requestIdLookup')} placeholder="req_…" value={requestId} onChange={event => setRequestId(event.target.value)} />
+        <div className="tp-toolbar-field tp-toolbar-field-wide">
+          <TextField label={t('traces.requestIdLookup')} fieldSize="sm" placeholder="req_…" value={requestId} onChange={event => setRequestId(event.target.value)} />
         </div>
         <div className="tp-toolbar-field">
-          <TextField label={t('traces.modelFilter')} placeholder={t('traces.modelPlaceholder')} value={modelFilter} onChange={event => setModelFilter(event.target.value)} />
+          <TextField label={t('traces.modelFilter')} fieldSize="sm" placeholder={t('traces.modelPlaceholder')} value={modelFilter} onChange={event => setModelFilter(event.target.value)} />
         </div>
         <div className="tp-toolbar-field">
-          <TextField label={t('traces.errorCodeFilter')} placeholder={t('traces.errorCodePlaceholder')} value={errorFilter} onChange={event => setErrorFilter(event.target.value)} />
+          <TextField label={t('traces.errorCodeFilter')} fieldSize="sm" placeholder={t('traces.errorCodePlaceholder')} value={errorFilter} onChange={event => setErrorFilter(event.target.value)} />
         </div>
-        <Button variant="primary" onClick={handleSearch}>
+        <Button variant="primary" size="sm" onClick={handleSearch}>
           <Search size={14} aria-hidden="true" />
           <span>{t('common.search')}</span>
         </Button>
@@ -163,7 +163,7 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
               id: 'request_id',
               header: t('traces.col.requestId'),
               primary: true,
-              width: '24%',
+              width: '23%',
               render: row => (
                 <Button
                   variant="ghost"
@@ -179,11 +179,11 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
                 </Button>
               ),
             },
-            {id: 'route', header: t('traces.col.route'), width: '18%', render: row => <span className="mono">{row.route_slug}</span>},
+            {id: 'route', header: t('traces.col.route'), width: '16%', render: row => <span className="mono">{row.route_slug}</span>},
             {
               id: 'status',
               header: t('traces.col.status'),
-              width: '12%',
+              width: '8%',
               render: row => (
                 <StatusPill
                   tone={row.status_code >= 500 ? 'danger' : row.status_code >= 400 ? 'warn' : 'ok'}
@@ -191,23 +191,23 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
                 />
               ),
             },
-            {id: 'error', header: t('traces.col.error'), width: '14%', render: row => <span className="mono">{row.error_code ?? '—'}</span>},
+            {id: 'error', header: t('traces.col.error'), width: '23%', render: row => <span className="mono">{row.error_code ?? '—'}</span>},
             {
               id: 'accuracy',
               header: t('traces.col.metering'),
-              width: '14%',
+              width: '10%',
               render: row => <StatusPill tone={stateTone(row.usage_accuracy)} label={formatOperationalState(row.usage_accuracy)} />,
             },
             {
               id: 'duration',
               header: t('traces.col.duration'),
-              width: '10%',
+              width: '9%',
               render: row => <span className="num">{t('common.ms', {value: formatNumber(row.duration_ms)})}</span>,
             },
             {
               id: 'created',
               header: t('traces.col.timestamp'),
-              width: '14%',
+              width: '11%',
               hideOnMobile: false,
               render: row => <span className="num tp-muted">{formatTime(row.created_at)}</span>,
             },

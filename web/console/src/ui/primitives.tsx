@@ -189,10 +189,12 @@ export function TextField({
   max,
   step,
   inputMode,
+  fieldSize = 'md',
 }: InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   hint?: string;
   error?: string;
+  fieldSize?: 'sm' | 'md';
 }) {
   const isNumber = type === 'number';
   const mappedType: TextInputType = allowedTextTypes.has(type as TextInputType) ? (type as TextInputType) : 'text';
@@ -227,7 +229,7 @@ export function TextField({
       autoComplete={autoComplete}
       htmlName={name}
       width="100%"
-      size="md"
+      size={fieldSize}
       containerClassName={className || undefined}
       data-min={min}
       data-max={max}
@@ -244,6 +246,7 @@ export function TextAreaField({
   className = '',
   value,
   onChange,
+  onKeyDown,
   placeholder,
   rows,
   required,
@@ -263,6 +266,7 @@ export function TextAreaField({
       label={label}
       value={stringValue}
       onChange={(_, event) => onChange?.(event)}
+      onKeyDown={onKeyDown}
       placeholder={placeholder}
       rows={rows}
       description={hint}

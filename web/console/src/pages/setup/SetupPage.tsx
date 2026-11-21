@@ -214,13 +214,13 @@ export function SetupPage() {
         <div className="tp-setup-rail">
           <div className="tp-auth-head">
             <div className="tp-auth-brand">
-              <TanpopoMark size={24} />
-              <span style={{fontWeight: 700, fontSize: '1rem'}}>Tanpopo</span>
+              <TanpopoMark size={22} />
+              <span style={{fontWeight: 700, fontSize: '0.9375rem', letterSpacing: '-0.02em'}}>Tanpopo</span>
             </div>
             <div className="tp-auth-controls">
               <LanguageSelector id="setup-language-selector" />
               <IconButton label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')} onClick={toggleTheme}>
-                {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+                {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
               </IconButton>
             </div>
           </div>
@@ -255,7 +255,7 @@ export function SetupPage() {
           </p>
         </div>
 
-        <form className="tp-surface tp-surface-pad tp-stack" onSubmit={handleSubmit}>
+        <form className="tp-surface tp-setup-form tp-stack" onSubmit={handleSubmit}>
           {error ? <Banner tone="danger" title={t('setup.cannotContinue')}>{error}</Banner> : null}
 
           {step === 0 ? (

@@ -398,7 +398,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
                 id: 'name',
                 header: t('providers.col.connection'),
                 primary: true,
-                width: '24%',
+                width: '28%',
                 render: row => (
                   <div className="tp-stack-sm">
                     <span style={{fontWeight: 600}}>{row.name}</span>
@@ -406,13 +406,13 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
                   </div>
                 ),
               },
-              {id: 'adapter', header: t('providers.col.adapter'), width: '13%', render: row => <span className="mono">{row.adapter_id}</span>},
+              {id: 'adapter', header: t('providers.col.adapter'), width: '17%', render: row => <span className="mono">{row.adapter_id}</span>},
               {id: 'region', header: t('providers.col.regionBilling'), width: '15%', render: row => <span>{row.data_region} · {t(`common.billingShort.${row.billing_mode}`)}</span>},
-              {id: 'state', header: t('common.state'), width: '14%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
+              {id: 'state', header: t('common.state'), width: '13%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
               {
                 id: 'creds',
                 header: t('providers.col.vaultFingerprints'),
-                width: '22%',
+                width: '19%',
                 render: row => (
                   <span className="mono tp-muted">
                     {Object.entries(row.secret_slot_fingerprints).map(([slot, fp]) => `${slot}: ${fp}`).join(', ') || t('common.noneBound')}
@@ -422,7 +422,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               {
                 id: 'actions',
                 header: t('common.actions'),
-                width: '12%',
+                width: '8%',
                 render: row => {
                   const supportsOAuth = adapters.find(a => a.id === row.adapter_id)?.supported_auth_methods?.includes('oauth2_pkce');
                   if (!canManage) return <span className="tp-muted">{t('common.readOnly')}</span>;
@@ -501,12 +501,13 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       {tab === 'adapters' ? (
         <section className="tp-section">
           <div className="tp-toolbar">
-            <div className="tp-toolbar-field">
-              <TextField label={t('providers.searchAdapters')} type="search" value={adapterQuery} onChange={event => setAdapterQuery(event.target.value)} />
+            <div className="tp-toolbar-field tp-toolbar-field-wide">
+              <TextField label={t('providers.searchAdapters')} fieldSize="sm" type="search" value={adapterQuery} onChange={event => setAdapterQuery(event.target.value)} />
             </div>
             <div className="tp-toolbar-field">
               <SelectField
                 label={t('providers.wireProtocol')}
+                size="sm"
                 value={protocolFilter}
                 onChange={setProtocolFilter}
                 options={[
@@ -521,6 +522,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             <div className="tp-toolbar-field">
               <SelectField
                 label={t('providers.executionTier')}
+                size="sm"
                 value={tierFilter}
                 onChange={setTierFilter}
                 options={[

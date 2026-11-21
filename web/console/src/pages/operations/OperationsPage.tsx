@@ -290,16 +290,17 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
             <h2>{t('operations.preflightHeading')}</h2>
             <p className="tp-muted">{t('operations.preflightDesc')}</p>
             <div className="tp-toolbar">
-              <div className="tp-toolbar-field">
+              <div className="tp-toolbar-field tp-toolbar-field-wide">
                 <TextField
                   label={t('operations.targetCoreVersion')}
+                  fieldSize="sm"
                   placeholder={t('operations.targetVersionPlaceholder')}
                   value={targetVersion}
                   disabled={busy}
                   onChange={event => setTargetVersion(event.target.value)}
                 />
               </div>
-              <Button type="submit" variant="primary" loading={busy} disabled={!targetVersion.trim()}>
+              <Button type="submit" variant="primary" size="sm" loading={busy} disabled={!targetVersion.trim()}>
                 <ShieldCheck size={14} aria-hidden="true" />
                 <span>{t('operations.runPreflight')}</span>
               </Button>

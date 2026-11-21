@@ -311,6 +311,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
             <div className="tp-toolbar-field">
               <SelectField
                 label={t('models.dataRegion')}
+                size="sm"
                 value={regionFilter}
                 onChange={setRegionFilter}
                 options={[
@@ -325,6 +326,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
             <div className="tp-toolbar-field">
               <SelectField
                 label={t('models.healthState')}
+                size="sm"
                 value={healthFilter}
                 onChange={setHealthFilter}
                 options={[
@@ -359,12 +361,12 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                   </div>
                 ),
               },
-              {id: 'conn', header: t('models.col.connection'), width: '18%', render: row => <span className="mono">{row.connection_id}</span>},
-              {id: 'region', header: t('models.col.region'), width: '10%', render: row => <span>{row.data_region}</span>},
+              {id: 'conn', header: t('models.col.connection'), width: '24%', render: row => <span className="mono">{row.connection_id}</span>},
+              {id: 'region', header: t('models.col.region'), width: '9%', render: row => <span>{row.data_region}</span>},
               {
                 id: 'state',
                 header: t('models.col.health'),
-                width: '18%',
+                width: '13%',
                 render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />,
               },
               {
@@ -407,12 +409,13 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       ) : (
         <section className="tp-section">
           <div className="tp-toolbar">
-            <div className="tp-toolbar-field">
-              <TextField label={t('models.searchModels')} type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} />
+            <div className="tp-toolbar-field tp-toolbar-field-wide">
+              <TextField label={t('models.searchModels')} fieldSize="sm" type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} />
             </div>
             <div className="tp-toolbar-field">
               <SelectField
                 label={t('models.assuranceTier')}
+                size="sm"
                 value={assuranceFilter}
                 onChange={setAssuranceFilter}
                 options={[
@@ -426,6 +429,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
             <div className="tp-toolbar-field">
               <SelectField
                 label={t('models.capability')}
+                size="sm"
                 value={capFilter}
                 onChange={setCapFilter}
                 options={[

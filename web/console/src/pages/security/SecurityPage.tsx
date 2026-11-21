@@ -356,15 +356,16 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       {activeTab === 'audit' ? (
         <section className="tp-section">
           <div className="tp-toolbar">
-            <div className="tp-toolbar-field">
+            <div className="tp-toolbar-field tp-toolbar-field-wide">
               <TextField
                 label={t('security.filterAction')}
+                fieldSize="sm"
                 placeholder={t('security.filterActionPlaceholder')}
                 value={actionFilter}
                 onChange={event => setActionFilter(event.target.value)}
               />
             </div>
-            <Button variant="secondary" loading={busy} onClick={() => void handleVerifyChain()}>
+            <Button variant="secondary" size="sm" loading={busy} onClick={() => void handleVerifyChain()}>
               <ShieldCheck size={14} aria-hidden="true" />
               <span>{t('security.verifyHashChain')}</span>
             </Button>

@@ -18,6 +18,7 @@ export function RouteTypeahead({
   customDescription,
   id,
   className = '',
+  size = 'md',
 }: {
   label: string;
   value: string;
@@ -32,6 +33,7 @@ export function RouteTypeahead({
   customDescription?: string;
   id?: string;
   className?: string;
+  size?: 'sm' | 'md';
 }) {
   const {t} = useI18n();
   const resolvedSuggestionDesc = suggestionDescription ?? t('common.configuredRoute');
@@ -130,6 +132,7 @@ export function RouteTypeahead({
       debounceMs={0}
       emptySearchText={t('common.typeAnyRouteSlug')}
       width="100%"
+      size={size}
       containerClassName={className || undefined}
     />
   );

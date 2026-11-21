@@ -44,7 +44,7 @@ const emergencyRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY
 const approvalRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
 
 function NavIcon({icon}: {icon: NavIconKey}) {
-  const props = {size: 16, strokeWidth: 1.85, 'aria-hidden': true as const, style: {flexShrink: 0}};
+  const props = {size: 15, strokeWidth: 1.8, 'aria-hidden': true as const, style: {flexShrink: 0}};
   switch (icon) {
     case 'overview': return <LayoutDashboard {...props} />;
     case 'traces': return <Activity {...props} />;
@@ -238,7 +238,7 @@ export function ConsoleShell() {
       <aside className="tp-rail" data-open={railOpen ? 'true' : 'false'} aria-label={t('shell.navLabel')}>
         <div className="tp-rail-header">
           <Link href="/overview" className="tp-brand">
-            <TanpopoMark size={22} />
+            <TanpopoMark size={20} />
             <span>Tanpopo</span>
           </Link>
           <IconButton label={t('shell.closeNav')} className="tp-mobile-only" onClick={() => setRailOpen(false)}>
@@ -336,37 +336,38 @@ export function ConsoleShell() {
           </div>
 
           <div className="tp-topbar-right">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setPaletteOpen(true)}
-            >
-              <Search size={14} aria-hidden="true" />
-              <span>{t('shell.jump')}</span>
-              <Kbd keys="mod+k" />
-            </Button>
+            <div className="tp-topbar-utility">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setPaletteOpen(true)}
+              >
+                <Search size={14} aria-hidden="true" />
+                <span>{t('shell.jump')}</span>
+                <Kbd keys="mod+k" />
+              </Button>
+
+              <LanguageSelector id="console-language-selector" />
+
+              <IconButton label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')} onClick={toggleTheme}>
+                {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
+              </IconButton>
+            </div>
 
             {canUseEmergency ? (
-              <Button
-                variant={activeSwitches > 0 ? 'danger' : 'secondary'}
-                size="sm"
-                onClick={() => navigate('/security/kill-switches')}
-              >
-                <ShieldAlert
-                  size={14}
-                  aria-hidden="true"
-                  style={activeSwitches === 0 ? {color: 'var(--tp-status-error)'} : undefined}
-                />
-                <span>{t('shell.killSwitch')}</span>
-                {activeSwitches > 0 ? <CountPill count={activeSwitches} /> : null}
-              </Button>
+              <>
+                <span className="tp-topbar-divider" aria-hidden="true" />
+                <Button
+                  variant={activeSwitches > 0 ? 'danger' : 'danger-outline'}
+                  size="sm"
+                  onClick={() => navigate('/security/kill-switches')}
+                >
+                  <ShieldAlert size={14} aria-hidden="true" />
+                  <span>{t('shell.killSwitch')}</span>
+                  {activeSwitches > 0 ? <CountPill count={activeSwitches} /> : null}
+                </Button>
+              </>
             ) : null}
-
-            <LanguageSelector id="console-language-selector" />
-
-            <IconButton label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')} onClick={toggleTheme}>
-              {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
-            </IconButton>
           </div>
         </header>
 

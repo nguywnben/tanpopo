@@ -220,47 +220,54 @@ export function PlaygroundPage({
 
       {activeTab === 'chat' ? (
         <div className="tp-stack">
-          <div className="tp-surface tp-surface-pad tp-stack">
-            <div className="tp-grid-3">
-              <RouteTypeahead
-                label={t('playground.modelLabel')}
-                suggestions={availableRoutes}
-                placeholder={t('playground.modelPlaceholder')}
-                value={model}
-                disabled={busy}
-                onChange={setModel}
-              />
-              <RouteTypeahead
-                label={t('playground.compareLabel')}
-                suggestions={availableRoutes}
-                placeholder={t('playground.comparePlaceholder')}
-                value={compareModel}
-                disabled={busy}
-                onChange={setCompareModel}
-              />
-              {!session ? (
-                <TextField
-                  label={t('playground.budgetCapLabel')}
-                  type="number"
-                  min={1000}
-                  max={5000000}
-                  value={budget}
+          <div className="tp-playground-workspace">
+            <div className="tp-playground-config">
+              <div className="tp-grid-3">
+                <RouteTypeahead
+                  label={t('playground.modelLabel')}
+                  size="sm"
+                  suggestions={availableRoutes}
+                  placeholder={t('playground.modelPlaceholder')}
+                  value={model}
                   disabled={busy}
-                  error={budget < 1000 || budget > 5000000 ? t('playground.budgetCapError') : undefined}
-                  onChange={event => setBudget(Number(event.target.value) || 0)}
+                  onChange={setModel}
                 />
-              ) : null}
+                <RouteTypeahead
+                  label={t('playground.compareLabel')}
+                  size="sm"
+                  suggestions={availableRoutes}
+                  placeholder={t('playground.comparePlaceholder')}
+                  value={compareModel}
+                  disabled={busy}
+                  onChange={setCompareModel}
+                />
+                {!session ? (
+                  <TextField
+                    label={t('playground.budgetCapLabel')}
+                    fieldSize="sm"
+                    type="number"
+                    min={1000}
+                    max={5000000}
+                    value={budget}
+                    disabled={busy}
+                    error={budget < 1000 || budget > 5000000 ? t('playground.budgetCapError') : undefined}
+                    onChange={event => setBudget(Number(event.target.value) || 0)}
+                  />
+                ) : null}
+              </div>
             </div>
 
-            <section className="tp-section" aria-label={t('playground.transcriptAria')}>
+            <section className="tp-playground-transcript" aria-label={t('playground.transcriptAria')}>
               {messages.length === 0 ? (
-                <p className="tp-muted">{t('playground.noTurns')}</p>
+                <div className="tp-playground-empty">
+                  <p className="tp-muted">{t('playground.noTurns')}</p>
+                </div>
               ) : (
-                <ol className="tp-list">
+                <ol className="tp-playground-turns">
                   {messages.map((turn, index) => (
-                    <li key={`${turn.role}-${index}`} className="tp-list-item" style={{flexDirection: 'column', alignItems: 'stretch'}}>
+                    <li key={`${turn.role}-${index}`} className="tp-playground-turn" data-role={turn.role}>
                       <span className="tp-label">{turn.role === 'user' ? t('playground.you') : model || t('playground.assistant')}</span>
-                      <div style={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>
+                      <div className="tp-playground-turn-body">
                         {turn.content || (busy && turn.role === 'assistant' ? t('playground.streaming') : '')}
                       </div>
                     </li>
@@ -270,44 +277,55 @@ export function PlaygroundPage({
             </section>
 
             {comparison ? (
-              <div className="tp-grid-2">
-                <div className="tp-surface tp-surface-pad tp-stack-sm">
-                  <h3>{model}</h3>
-                  <div style={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{comparison.primary}</div>
-                </div>
-                <div className="tp-surface tp-surface-pad tp-stack-sm">
-                  <h3>{compareModel}</h3>
-                  <div style={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{comparison.secondary || t('playground.streamingComparison')}</div>
+              <div className="tp-playground-compare">
+                <div className="tp-grid-2">
+                  <div className="tp-surface tp-surface-pad tp-stack-sm">
+                    <h3>{model}</h3>
+                    <div className="tp-playground-turn-body">{comparison.primary}</div>
+                  </div>
+                  <div className="tp-surface tp-surface-pad tp-stack-sm">
+                    <h3>{compareModel}</h3>
+                    <div className="tp-playground-turn-body">{comparison.secondary || t('playground.streamingComparison')}</div>
+                  </div>
                 </div>
               </div>
             ) : null}
 
-            <TextAreaField
-              id="playground-prompt"
-              label={t('playground.promptLabel')}
-              rows={4}
-              placeholder={t('playground.promptPlaceholder')}
-              value={prompt}
-              disabled={busy}
-              onChange={event => setPrompt(event.target.value)}
-            />
+            <div className="tp-playground-composer">
+              <TextAreaField
+                id="playground-prompt"
+                label={t('playground.promptLabel')}
+                rows={3}
+                placeholder={t('playground.promptPlaceholder')}
+                value={prompt}
+                disabled={busy}
+                onChange={event => setPrompt(event.target.value)}
+                onKeyDown={event => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    void handleSend();
+                  }
+                }}
+              />
 
-            <div className="tp-row">
-              <Button
-                variant="primary"
-                loading={busy}
-                disabled={!environmentId || !model.trim() || !prompt.trim() || (!session && (budget < 1000 || budget > 5000000))}
-                onClick={() => void handleSend()}
-              >
-                <Send size={14} aria-hidden="true" />
-                <span>{busy ? t('playground.streaming') : t('playground.send')}</span>
-              </Button>
-              {busy ? (
-                <Button variant="secondary" onClick={() => abortRef.current?.abort()}>
-                  <Square size={14} aria-hidden="true" />
-                  <span>{t('playground.cancelStream')}</span>
+              <div className="tp-playground-composer-bar">
+                {busy ? (
+                  <Button variant="secondary" size="sm" onClick={() => abortRef.current?.abort()}>
+                    <Square size={14} aria-hidden="true" />
+                    <span>{t('playground.cancelStream')}</span>
+                  </Button>
+                ) : null}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={busy}
+                  disabled={!environmentId || !model.trim() || !prompt.trim() || (!session && (budget < 1000 || budget > 5000000))}
+                  onClick={() => void handleSend()}
+                >
+                  <Send size={14} aria-hidden="true" />
+                  <span>{busy ? t('playground.streaming') : t('playground.send')}</span>
                 </Button>
-              ) : null}
+              </div>
             </div>
           </div>
 

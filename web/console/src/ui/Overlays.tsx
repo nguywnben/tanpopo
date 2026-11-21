@@ -33,7 +33,7 @@ export function Modal({
     <Dialog
       isOpen={open}
       onOpenChange={handleOpenChange}
-      width={size === 'lg' ? 720 : 540}
+      width={size === 'lg' ? 680 : 500}
       maxHeight="85dvh"
       purpose={dismissible ? 'info' : 'required'}
     >
@@ -89,7 +89,7 @@ export function Drawer({
       isOpen={open}
       onOpenChange={handleOpenChange}
       side="end"
-      width={size === 'lg' ? 640 : 480}
+      width={size === 'lg' ? 620 : 460}
       label={title}
       purpose="info"
     >

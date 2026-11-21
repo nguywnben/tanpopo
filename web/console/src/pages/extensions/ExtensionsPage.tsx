@@ -398,12 +398,13 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         <section className="tp-section">
           {offlineCatalog ? <Banner tone="info">{t('extensions.offlineCatalog')}</Banner> : null}
           <div className="tp-toolbar">
-            <div className="tp-toolbar-field">
-              <TextField label={t('extensions.searchCatalog')} type="search" value={query} onChange={event => setQuery(event.target.value)} />
+            <div className="tp-toolbar-field tp-toolbar-field-wide">
+              <TextField label={t('extensions.searchCatalog')} fieldSize="sm" type="search" value={query} onChange={event => setQuery(event.target.value)} />
             </div>
             <div className="tp-toolbar-field">
               <SelectField
                 label={t('extensions.originTrust')}
+                size="sm"
                 value={trustFilter}
                 onChange={setTrustFilter}
                 options={[
@@ -417,6 +418,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
             <div className="tp-toolbar-field">
               <SelectField
                 label={t('extensions.capability')}
+                size="sm"
                 value={capFilter}
                 onChange={setCapFilter}
                 options={[
@@ -428,6 +430,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
             <div className="tp-toolbar-field">
               <SelectField
                 label={t('extensions.publisherSignature')}
+                size="sm"
                 value={sigFilter}
                 onChange={setSigFilter}
                 options={[

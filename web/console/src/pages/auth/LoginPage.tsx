@@ -38,13 +38,13 @@ export function LoginPage() {
       <div className="tp-auth-panel">
         <div className="tp-auth-head">
           <div className="tp-auth-brand">
-            <TanpopoMark size={24} />
-            <span style={{fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.02em'}}>Tanpopo</span>
+            <TanpopoMark size={22} />
+            <span style={{fontWeight: 700, fontSize: '0.9375rem', letterSpacing: '-0.02em'}}>Tanpopo</span>
           </div>
           <div className="tp-auth-controls">
             <LanguageSelector id="login-language-selector" />
             <IconButton label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')} onClick={toggleTheme}>
-              {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+              {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
             </IconButton>
           </div>
         </div>

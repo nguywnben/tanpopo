@@ -670,12 +670,13 @@ export function RoutingPage({
 
                 {canEditPolicy ? (
                   <div className="tp-toolbar">
-                    <div className="tp-toolbar-field">
-                      <TextField label={t('routing.guardrailExtId')} value={hookExtId} disabled={busy} onChange={event => setHookExtId(event.target.value)} />
+                    <div className="tp-toolbar-field tp-toolbar-field-wide">
+                      <TextField label={t('routing.guardrailExtId')} fieldSize="sm" value={hookExtId} disabled={busy} onChange={event => setHookExtId(event.target.value)} />
                     </div>
                     <div className="tp-toolbar-field">
                       <SelectField
                         label={t('routing.failurePosture')}
+                        size="sm"
                         value={hookPosture}
                         disabled={busy}
                         error={hookRelaxesParent ? t('routing.errRelaxGuardrail') : undefined}
@@ -688,6 +689,7 @@ export function RoutingPage({
                     </div>
                     <Button
                       variant="secondary"
+                      size="sm"
                       disabled={busy || !hookExtId.trim() || hookRelaxesParent || (policyDraft.guardrail_hooks ?? []).some(h => h.extension_id === hookExtId.trim())}
                       onClick={() => {
                         setPolicyDraft({
