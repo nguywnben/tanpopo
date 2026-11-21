@@ -247,6 +247,43 @@ export function ConsoleShell() {
         </div>
 
         <nav className="tp-rail-scroll" aria-label={t('shell.primarySections')}>
+          <div className="tp-rail-scope" role="group" aria-label={t('shell.activeScope')}>
+            <div className="tp-rail-scope-field">
+              <span className="tp-rail-scope-label" aria-hidden="true">{t('common.project')}</span>
+              <Selector
+                id="project-context"
+                label={t('common.project')}
+                isLabelHidden
+                size="sm"
+                variant="input"
+                options={projectOptions}
+                value={projectId}
+                placeholder={t('common.noProject')}
+                isDisabled={loading || projects.length === 0}
+                hasSearch={projects.length > 8}
+                onChange={next => setProjectId(next)}
+                containerClassName="tp-scope-selector"
+              />
+            </div>
+            <div className="tp-rail-scope-field">
+              <span className="tp-rail-scope-label" aria-hidden="true">{t('common.envShort')}</span>
+              <Selector
+                id="environment-context"
+                label={t('common.envShort')}
+                isLabelHidden
+                size="sm"
+                variant="input"
+                options={environmentOptions}
+                value={environmentId}
+                placeholder={t('common.noEnv')}
+                isDisabled={loading || environments.length === 0}
+                hasSearch={environments.length > 8}
+                onChange={next => setEnvironmentId(next)}
+                containerClassName="tp-scope-selector"
+              />
+            </div>
+          </div>
+
           {visibleGroups.map(group => (
             <div key={group.title} className="tp-nav-group">
               <div className="tp-nav-group-title">{t(group.titleKey)}</div>
@@ -299,109 +336,66 @@ export function ConsoleShell() {
 
       <div className="tp-main-column">
         <header className="tp-topbar">
-          <div className="tp-topbar-primary">
-            <div className="tp-topbar-brand-group">
-              <IconButton
-                label={t('shell.openNavMenu')}
-                className="tp-mobile-only"
-                aria-expanded={railOpen}
-                onClick={() => setRailOpen(open => !open)}
-              >
-                <Menu size={18} aria-hidden="true" />
-              </IconButton>
+          <div className="tp-topbar-brand-group">
+            <IconButton
+              label={t('shell.openNavMenu')}
+              className="tp-mobile-only"
+              aria-expanded={railOpen}
+              onClick={() => setRailOpen(open => !open)}
+            >
+              <Menu size={18} aria-hidden="true" />
+            </IconButton>
 
-              <Link href="/overview" className="tp-topbar-brand">
-                <TanpopoMark size={18} />
-                <span>Tanpopo</span>
-              </Link>
-            </div>
-
-            <div className="tp-topbar-right">
-              <div className="tp-topbar-utility">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="tp-jump-btn"
-                  aria-label={t('shell.jump')}
-                  onClick={() => setPaletteOpen(true)}
-                >
-                  <Search size={14} aria-hidden="true" />
-                  <span className="tp-jump-label">{t('shell.jump')}</span>
-                  <span className="tp-desktop-kbd"><Kbd keys="mod+k" /></span>
-                </Button>
-
-                <div className="tp-topbar-lang">
-                  <LanguageSelector id="console-language-selector" />
-                </div>
-
-                <div className="tp-topbar-theme">
-                  <IconButton
-                    variant="secondary"
-                    label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')}
-                    onClick={toggleTheme}
-                  >
-                    {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
-                  </IconButton>
-                </div>
-              </div>
-
-              {canUseEmergency ? (
-                <>
-                  <span className="tp-topbar-divider" aria-hidden="true" />
-                  <Button
-                    variant={activeSwitches > 0 ? 'danger' : 'danger-outline'}
-                    size="sm"
-                    className="tp-killswitch-btn"
-                    aria-label={t('shell.killSwitch')}
-                    title={t('shell.killSwitch')}
-                    onClick={() => navigate('/security/kill-switches')}
-                  >
-                    <ShieldAlert size={14} aria-hidden="true" />
-                    <span className="tp-killswitch-label">{t('shell.killSwitch')}</span>
-                    {activeSwitches > 0 ? <CountPill count={activeSwitches} /> : null}
-                  </Button>
-                </>
-              ) : null}
-            </div>
+            <Link href="/overview" className="tp-topbar-brand">
+              <TanpopoMark size={18} />
+              <span>Tanpopo</span>
+            </Link>
           </div>
 
-          <div className="tp-topbar-scope">
-            <div className="tp-scope-group" role="group" aria-label={t('shell.activeScope')}>
-              <div className="tp-scope-field">
-                <span className="tp-scope-label" aria-hidden="true">{t('common.project')}</span>
-                <Selector
-                  id="project-context"
-                  label={t('common.project')}
-                  isLabelHidden
-                  size="sm"
-                  variant="input"
-                  options={projectOptions}
-                  value={projectId}
-                  placeholder={t('common.noProject')}
-                  isDisabled={loading || projects.length === 0}
-                  hasSearch={projects.length > 8}
-                  onChange={next => setProjectId(next)}
-                  containerClassName="tp-scope-selector"
-                />
-              </div>
-              <div className="tp-scope-field">
-                <span className="tp-scope-label" aria-hidden="true">{t('common.envShort')}</span>
-                <Selector
-                  id="environment-context"
-                  label={t('common.envShort')}
-                  isLabelHidden
-                  size="sm"
-                  variant="input"
-                  options={environmentOptions}
-                  value={environmentId}
-                  placeholder={t('common.noEnv')}
-                  isDisabled={loading || environments.length === 0}
-                  hasSearch={environments.length > 8}
-                  onChange={next => setEnvironmentId(next)}
-                  containerClassName="tp-scope-selector"
-                />
-              </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="tp-jump-btn"
+            aria-label={t('shell.jump')}
+            onClick={() => setPaletteOpen(true)}
+          >
+            <Search size={14} aria-hidden="true" />
+            <span className="tp-jump-label">{t('shell.jump')}</span>
+            <span className="tp-desktop-kbd"><Kbd keys="mod+k" /></span>
+          </Button>
+
+          <div className="tp-topbar-actions">
+            <div className="tp-topbar-lang">
+              <LanguageSelector id="console-language-selector" />
             </div>
+
+            <div className="tp-topbar-theme">
+              <IconButton
+                variant="secondary"
+                label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')}
+                onClick={toggleTheme}
+              >
+                {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
+              </IconButton>
+            </div>
+
+            {canUseEmergency ? (
+              <>
+                <span className="tp-topbar-divider" aria-hidden="true" />
+                <Button
+                  variant={activeSwitches > 0 ? 'danger' : 'danger-outline'}
+                  size="sm"
+                  className="tp-killswitch-btn"
+                  aria-label={t('shell.killSwitch')}
+                  title={t('shell.killSwitch')}
+                  onClick={() => navigate('/security/kill-switches')}
+                >
+                  <ShieldAlert size={14} aria-hidden="true" />
+                  <span className="tp-killswitch-label">{t('shell.killSwitch')}</span>
+                  {activeSwitches > 0 ? <CountPill count={activeSwitches} /> : null}
+                </Button>
+              </>
+            ) : null}
           </div>
         </header>
 
