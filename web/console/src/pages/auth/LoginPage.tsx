@@ -1,6 +1,8 @@
 import {useState, type FormEvent} from 'react';
 import {Moon, Sun} from 'lucide-react';
 import {loginAdmin} from '../../api/client';
+import {useI18n} from '../../i18n/I18nProvider';
+import {LanguageSelector} from '../../i18n/LanguageSelector';
 import {Link, useRouter} from '../../router/RouterContext';
 import {useTheme} from '../../styles/theme';
 import {Banner, Button, IconButton, TanpopoMark, TextField} from '../../ui/primitives';
@@ -8,6 +10,7 @@ import {Banner, Button, IconButton, TanpopoMark, TextField} from '../../ui/primi
 export function LoginPage() {
   const {navigate} = useRouter();
   const {theme, toggleTheme} = useTheme();
+  const {t} = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -24,7 +27,7 @@ export function LoginPage() {
       navigate('/overview', {replace: true});
     } catch (cause) {
       setPassword('');
-      setError(formatLoginError(cause));
+      setError(formatLoginError(cause, t));
     } finally {
       setBusy(false);
     }
@@ -34,25 +37,28 @@ export function LoginPage() {
     <main className="tp-auth-page">
       <div className="tp-auth-panel">
         <div className="tp-auth-head">
-          <div className="tp-row">
+          <div className="tp-auth-brand">
             <TanpopoMark size={24} />
             <span style={{fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.02em'}}>Tanpopo</span>
           </div>
-          <IconButton label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>
-            {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
-          </IconButton>
+          <div className="tp-auth-controls">
+            <LanguageSelector id="login-language-selector" />
+            <IconButton label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')} onClick={toggleTheme}>
+              {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+            </IconButton>
+          </div>
         </div>
 
         <div className="tp-stack-sm">
-          <h1>Sign in</h1>
-          <p className="tp-muted">Use your local administrator credentials to access the control plane.</p>
+          <h1>{t('login.title')}</h1>
+          <p className="tp-muted">{t('login.subtitle')}</p>
         </div>
 
-        {error ? <Banner tone="danger" title="Sign-in failed">{error}</Banner> : null}
+        {error ? <Banner tone="danger" title={t('login.failedTitle')}>{error}</Banner> : null}
 
         <form className="tp-stack" onSubmit={handleSubmit}>
           <TextField
-            label="Email address"
+            label={t('login.emailLabel')}
             type="email"
             autoComplete="username"
             required
@@ -61,7 +67,7 @@ export function LoginPage() {
             onChange={event => setEmail(event.target.value)}
           />
           <TextField
-            label="Password"
+            label={t('login.passwordLabel')}
             type="password"
             autoComplete="current-password"
             required
@@ -70,25 +76,25 @@ export function LoginPage() {
             onChange={event => setPassword(event.target.value)}
           />
           <Button type="submit" variant="primary" loading={busy} disabled={!email.trim() || !password}>
-            {busy ? 'Signing in…' : 'Sign in'}
+            {busy ? t('login.submitting') : t('login.submit')}
           </Button>
         </form>
 
         <hr className="tp-divider" />
         <p className="tp-muted">
-          New instance? <Link href="/setup" className="tp-link">Run first-time setup</Link>
+          {t('login.newInstance')} <Link href="/setup" className="tp-link">{t('login.runSetup')}</Link>
         </p>
       </div>
     </main>
   );
 }
 
-function formatLoginError(cause: unknown): string {
+function formatLoginError(cause: unknown, t: (key: string) => string): string {
   if (cause instanceof Error) {
     const code = 'code' in cause && typeof cause.code === 'string' ? cause.code : '';
-    if (code === 'auth_rate_limited') return 'Too many sign-in attempts. Wait before trying again.';
-    if (code === 'invalid_credentials') return 'The email address or password is not valid.';
+    if (code === 'auth_rate_limited') return t('login.errRateLimited');
+    if (code === 'invalid_credentials') return t('login.errInvalidCredentials');
     return cause.message;
   }
-  return 'Could not reach the Tanpopo control plane.';
+  return t('login.errUnreachable');
 }

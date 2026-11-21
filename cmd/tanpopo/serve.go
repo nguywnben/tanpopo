@@ -32,6 +32,7 @@ import (
 	ingresshttp "github.com/nguywnben/tanpopo/internal/ingress/http"
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/approval"
 	mcphub "github.com/nguywnben/tanpopo/internal/ingress/mcp/hub"
+	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
@@ -45,28 +46,28 @@ import (
 	"github.com/nguywnben/tanpopo/internal/webui"
 )
 
-func newServeCommand() *cobra.Command {
+func newServeCommand(loc i18n.Locale) *cobra.Command {
 	role := "all"
 	listen := envOr("TANPOPO_LISTEN_ADDR", "127.0.0.1:8080")
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Run Tanpopo services from the unified binary",
+		Short: i18n.T(loc, "cli.serve.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if role != "all" && role != "data-plane" && role != "control-plane" {
-				return &testharness.ExitError{Code: testharness.ExitValidation, Message: fmt.Sprintf("invalid --role %q; expected all, data-plane, or control-plane", role)}
+				return &testharness.ExitError{Code: testharness.ExitValidation, Message: i18n.T(loc, "cli.serve.err.invalid_role", "role", fmt.Sprintf("%q", role))}
 			}
 			if _, err := drainTimeoutFromEnv(os.LookupEnv); err != nil {
-				return &testharness.ExitError{Code: testharness.ExitValidation, Message: "invalid drain timeout configuration", Cause: err}
+				return &testharness.ExitError{Code: testharness.ExitValidation, Message: i18n.T(loc, "cli.serve.err.invalid_drain"), Cause: err}
 			}
 			if err := serve(cmd.Context(), role, listen); err != nil {
-				return &testharness.ExitError{Code: testharness.ExitInternal, Message: "serve failed", Cause: err}
+				return &testharness.ExitError{Code: testharness.ExitInternal, Message: i18n.T(loc, "cli.serve.err.failed"), Cause: err}
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&role, "role", role, "Service role (all|data-plane|control-plane)")
-	cmd.Flags().StringVar(&listen, "listen", listen, "HTTP listen address (default 127.0.0.1:8080)")
+	cmd.Flags().StringVar(&role, "role", role, i18n.T(loc, "cli.serve.flag.role"))
+	cmd.Flags().StringVar(&listen, "listen", listen, i18n.T(loc, "cli.serve.flag.listen"))
 	return cmd
 }
 

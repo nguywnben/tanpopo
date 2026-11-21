@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
+	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 )
 
 // Options configures CLI output formatting shared with the root `tanpopo` command.
@@ -24,14 +25,23 @@ type Options struct {
 	OutputFormat *string
 	Stdout       io.Writer
 	Stderr       io.Writer
+	Locale       i18n.Locale
+}
+
+func resolveLocale(opts Options) i18n.Locale {
+	if opts.Locale == "" {
+		return i18n.LocaleEn
+	}
+	return opts.Locale
 }
 
 // NewCommand constructs the `tanpopo plugin` Cobra command tree.
 func NewCommand(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	pluginCmd := &cobra.Command{
 		Use:   "plugin",
-		Short: "Extension SDK scaffolder, validator, offline cassette runner & .tpkg packer",
-		Long:  "Scaffold, schema-validate, contract-test offline (CT-01..18), and pack reproducible .tpkg extension packages.",
+		Short: i18n.T(loc, "cli.plugin.short"),
+		Long:  i18n.T(loc, "cli.plugin.long"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
@@ -53,19 +63,20 @@ func outputFormat(opts Options) string {
 	return strings.ToLower(strings.TrimSpace(*opts.OutputFormat))
 }
 
-func validateOutputFormat(fmtName string) error {
+func validateOutputFormat(loc i18n.Locale, fmtName string) error {
 	switch strings.ToLower(strings.TrimSpace(fmtName)) {
 	case "", "table", "json", "yaml":
 		return nil
 	default:
 		return &testharness.ExitError{
 			Code:    testharness.ExitValidation,
-			Message: fmt.Sprintf("unsupported --output format %q (expected table|json|yaml)", fmtName),
+			Message: i18n.T(loc, "cli.err.unsupported_output", "format", fmt.Sprintf("%q", fmtName)),
 		}
 	}
 }
 
 func newInitCmd(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	var (
 		tier      string
 		namespace string
@@ -74,10 +85,10 @@ func newInitCmd(opts Options) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "init <name>",
-		Short: "Scaffold a starter Tier-1 Declarative or Tier-2 Wasm extension project",
+		Short: i18n.T(loc, "cli.plugin.init.short"),
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateOutputFormat(outputFormat(opts)); err != nil {
+			if err := validateOutputFormat(loc, outputFormat(opts)); err != nil {
 				return err
 			}
 			res, err := testharness.ScaffoldExtension(testharness.ScaffoldOptions{
@@ -93,20 +104,21 @@ func newInitCmd(opts Options) *cobra.Command {
 			return renderScaffold(cmd, opts, res)
 		},
 	}
-	cmd.Flags().StringVar(&tier, "tier", "1", "Extension execution tier (1|declarative or 2|wasm)")
-	cmd.Flags().StringVar(&namespace, "namespace", "example", "Package namespace (without @)")
-	cmd.Flags().StringVarP(&dir, "dir", "o", "", "Target directory (defaults to ./<name>)")
-	cmd.Flags().BoolVar(&force, "force", false, "Overwrite non-empty target directory")
+	cmd.Flags().StringVar(&tier, "tier", "1", i18n.T(loc, "cli.plugin.init.flag.tier"))
+	cmd.Flags().StringVar(&namespace, "namespace", "example", i18n.T(loc, "cli.plugin.init.flag.namespace"))
+	cmd.Flags().StringVarP(&dir, "dir", "o", "", i18n.T(loc, "cli.plugin.init.flag.dir"))
+	cmd.Flags().BoolVar(&force, "force", false, i18n.T(loc, "cli.plugin.init.flag.force"))
 	return cmd
 }
 
 func newValidateCmd(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	cmd := &cobra.Command{
 		Use:   "validate [dir]",
-		Short: "Validate manifest.yaml schema, namespaces, egress bounds & runtime artifact",
+		Short: i18n.T(loc, "cli.plugin.validate.short"),
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateOutputFormat(outputFormat(opts)); err != nil {
+			if err := validateOutputFormat(loc, outputFormat(opts)); err != nil {
 				return err
 			}
 			target := "."
@@ -124,13 +136,14 @@ func newValidateCmd(opts Options) *cobra.Command {
 }
 
 func newTestCmd(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	var cassettePath string
 	cmd := &cobra.Command{
 		Use:   "test [dir]",
-		Short: "Execute 100% offline cassette contract tests inside loopback isolation",
+		Short: i18n.T(loc, "cli.plugin.test.short"),
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateOutputFormat(outputFormat(opts)); err != nil {
+			if err := validateOutputFormat(loc, outputFormat(opts)); err != nil {
 				return err
 			}
 			target := "."
@@ -151,18 +164,19 @@ func newTestCmd(opts Options) *cobra.Command {
 			return err
 		},
 	}
-	cmd.Flags().StringVar(&cassettePath, "cassette", "", "Run a single cassette file instead of scanning cassettes/")
+	cmd.Flags().StringVar(&cassettePath, "cassette", "", i18n.T(loc, "cli.plugin.test.flag.cassette"))
 	return cmd
 }
 
 func newPackCmd(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	var outFile string
 	cmd := &cobra.Command{
 		Use:   "pack [dir]",
-		Short: "Validate and build a bit-for-bit reproducible .tpkg archive",
+		Short: i18n.T(loc, "cli.plugin.pack.short"),
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateOutputFormat(outputFormat(opts)); err != nil {
+			if err := validateOutputFormat(loc, outputFormat(opts)); err != nil {
 				return err
 			}
 			target := "."
@@ -180,7 +194,7 @@ func newPackCmd(opts Options) *cobra.Command {
 			return renderPackResult(cmd, opts, res)
 		},
 	}
-	cmd.Flags().StringVarP(&outFile, "out", "o", "", "Output .tpkg file path")
+	cmd.Flags().StringVarP(&outFile, "out", "o", "", i18n.T(loc, "cli.plugin.pack.flag.out"))
 	return cmd
 }
 
@@ -217,12 +231,13 @@ func renderScaffold(cmd *cobra.Command, opts Options, r *testharness.ScaffoldRes
 	if fmtName := outputFormat(opts); fmtName == "json" || fmtName == "yaml" {
 		return renderStructured(w, opts, r)
 	}
-	_, _ = fmt.Fprintf(w, "Initialized %s (%s) in %s (%d files)\n",
-		testharness.SanitizeTerminalText(r.ExtensionID),
-		testharness.SanitizeTerminalText(r.Tier),
-		testharness.SanitizeTerminalText(r.OutputDir),
-		len(r.Files),
-	)
+	loc := resolveLocale(opts)
+	_, _ = fmt.Fprintln(w, i18n.T(loc, "cli.plugin.init.output",
+		"id", testharness.SanitizeTerminalText(r.ExtensionID),
+		"tier", testharness.SanitizeTerminalText(r.Tier),
+		"dir", testharness.SanitizeTerminalText(r.OutputDir),
+		"count", len(r.Files),
+	))
 	return nil
 }
 
@@ -270,8 +285,9 @@ func renderTestReport(cmd *cobra.Command, opts Options, r *testharness.TestRepor
 		}
 		_, _ = fmt.Fprintf(w, "BADGES\t%s\n", strings.Join(parts, " "))
 	}
-	_, _ = fmt.Fprintf(w, "SUMMARY\t%s (%d passed, %d failed, %d ms)\n",
-		r.Status, r.CasesPassed, r.CasesFailed, r.DurationMs)
+	loc := resolveLocale(opts)
+	_, _ = fmt.Fprintf(w, "SUMMARY\t%s\n",
+		i18n.T(loc, "cli.plugin.test.summary", "status", r.Status, "passed", r.CasesPassed, "failed", r.CasesFailed, "duration", r.DurationMs))
 	return nil
 }
 

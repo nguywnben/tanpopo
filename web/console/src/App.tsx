@@ -2,6 +2,7 @@ import {Component, lazy, Suspense, type ReactNode} from 'react';
 import {Banner as AstryxBanner} from '@astryxdesign/core/Banner';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {RouterProvider, useRouter} from './router/RouterContext';
+import {I18nProvider, translateRuntime, useI18n} from './i18n/I18nProvider';
 import {ThemeProvider} from './styles/theme';
 
 const SetupPage = lazy(() => import('./pages/setup/SetupPage').then(mod => ({default: mod.SetupPage})));
@@ -20,16 +21,16 @@ class ConsoleErrorBoundary extends Component<{children: ReactNode}, {hasError: b
       return (
         <main className="tp-auth-page">
           <div className="tp-auth-panel">
-            <h1>Console unavailable</h1>
+            <h1>{translateRuntime('error.consoleUnavailable')}</h1>
             <AstryxBanner
               status="error"
-              title="Unexpected interface error"
-              description="The console encountered an unexpected error. Reload the page to recover."
+              title={translateRuntime('error.unexpectedUiTitle')}
+              description={translateRuntime('error.unexpectedUiDesc')}
               container="card"
               collapsible={false}
               role="alert"
             />
-            <AstryxButton variant="primary" label="Reload console" onClick={() => window.location.reload()} />
+            <AstryxButton variant="primary" label={translateRuntime('error.reloadConsole')} onClick={() => window.location.reload()} />
           </div>
         </main>
       );
@@ -40,34 +41,37 @@ class ConsoleErrorBoundary extends Component<{children: ReactNode}, {hasError: b
 
 export function App() {
   return (
-    <ThemeProvider>
-      <RouterProvider>
-        <ConsoleErrorBoundary>
-          <RootSwitch />
-        </ConsoleErrorBoundary>
-      </RouterProvider>
-    </ThemeProvider>
+    <I18nProvider>
+      <ThemeProvider>
+        <RouterProvider>
+          <ConsoleErrorBoundary>
+            <RootSwitch />
+          </ConsoleErrorBoundary>
+        </RouterProvider>
+      </ThemeProvider>
+    </I18nProvider>
   );
 }
 
 function RootSwitch() {
   const {pathname} = useRouter();
+  const {t} = useI18n();
   if (pathname === '/setup') {
     return (
-      <Suspense fallback={<main className="tp-auth-page"><p className="tp-muted" role="status">Loading setup…</p></main>}>
+      <Suspense fallback={<main className="tp-auth-page"><p className="tp-muted" role="status">{t('shell.loadingSetup')}</p></main>}>
         <SetupPage />
       </Suspense>
     );
   }
   if (pathname === '/login') {
     return (
-      <Suspense fallback={<main className="tp-auth-page"><p className="tp-muted" role="status">Loading sign-in…</p></main>}>
+      <Suspense fallback={<main className="tp-auth-page"><p className="tp-muted" role="status">{t('shell.loadingSignIn')}</p></main>}>
         <LoginPage />
       </Suspense>
     );
   }
   return (
-    <Suspense fallback={<main className="tp-auth-page"><p className="tp-muted" role="status">Loading console…</p></main>}>
+    <Suspense fallback={<main className="tp-auth-page"><p className="tp-muted" role="status">{t('shell.loadingConsole')}</p></main>}>
       <ConsoleShell />
     </Suspense>
   );

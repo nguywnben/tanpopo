@@ -12,6 +12,7 @@ import {
   updateRoute,
 } from '../../api/managementClient';
 import type {components} from '../../api/generated';
+import {useI18n} from '../../i18n/I18nProvider';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
 import {ConfirmDialog, Drawer, Modal} from '../../ui/Overlays';
@@ -61,6 +62,7 @@ export function RoutingPage({
   roles: Role[];
 }) {
   const {navigate} = useRouter();
+  const {t, formatNumber} = useI18n();
   const activeTab = pathname.startsWith('/policies')
     ? 'policies'
     : pathname.startsWith('/routes/explain')
@@ -72,7 +74,6 @@ export function RoutingPage({
   const [models, setModels] = useState<LogicalModel[]>([]);
   const [traces, setTraces] = useState<components['schemas']['TraceSummary'][]>([]);
 
-  // Policies hierarchy
   const [orgPolicy, setOrgPolicy] = useState<Policy | null>(null);
   const [projPolicy, setProjPolicy] = useState<Policy | null>(null);
   const [envPolicy, setEnvPolicy] = useState<Policy | null>(null);
@@ -83,7 +84,6 @@ export function RoutingPage({
   const [hookPosture, setHookPosture] = useState<'FAIL_CLOSED' | 'FAIL_OPEN'>('FAIL_CLOSED');
   const [confirmGuardrailOpen, setConfirmGuardrailOpen] = useState(false);
 
-  // Route editor drawer
   const [routeDrawerOpen, setRouteDrawerOpen] = useState(false);
   const [editingRoute, setEditingRoute] = useState<Route | null>(null);
   const [slug, setSlug] = useState('');
@@ -94,14 +94,12 @@ export function RoutingPage({
   const [selectedDep, setSelectedDep] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Route | null>(null);
 
-  // Explain simulator
   const [explainModel, setExplainModel] = useState('');
   const [explainRegion, setExplainRegion] = useState<DataRegion | ''>('');
   const [explainCaps, setExplainCaps] = useState<string[]>([]);
   const [explainResult, setExplainResult] = useState<components['schemas']['RouteExplainResponse'] | null>(null);
   const [explainBusy, setExplainBusy] = useState(false);
 
-  // OCC conflict modal
   const [conflict, setConflict] = useState<{kind: 'route' | 'policy'; message: string; current: unknown} | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -110,6 +108,11 @@ export function RoutingPage({
   const [notice, setNotice] = useState('');
 
   const canManage = roles.some(role => manageRoles.includes(role));
+  const scopeLabel = useCallback((scope: PolicyScope) => {
+    if (scope === 'ORGANIZATION') return t('common.organization');
+    if (scope === 'PROJECT') return t('common.project');
+    return t('common.environment');
+  }, [t]);
 
   const refresh = useCallback(async () => {
     if (!projectId || !environmentId) {
@@ -143,11 +146,11 @@ export function RoutingPage({
       const activePol = editScope === 'ORGANIZATION' ? orgRes.policy : editScope === 'PROJECT' ? projRes.policy : envRes.policy;
       setPolicyDraft(activePol);
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setLoading(false);
     }
-  }, [projectId, environmentId, editScope]);
+  }, [projectId, environmentId, editScope, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -180,7 +183,7 @@ export function RoutingPage({
     setStrategy(route.strategy);
     setMaxHops(route.max_failover_hops);
     setTimeoutMs(route.request_timeout_ms);
-    setTargets(route.targets.map(t => ({...t})));
+    setTargets(route.targets.map(tg => ({...tg})));
     setSelectedDep('');
     setRouteDrawerOpen(true);
   }
@@ -193,17 +196,17 @@ export function RoutingPage({
       max_failover_hops: maxHops,
       request_timeout_ms: timeoutMs,
       allowed_data_regions: editingRoute?.allowed_data_regions ?? [],
-      targets: targets.map((t, index) => ({...t, priority_order: index + 1})),
+      targets: targets.map((tg, index) => ({...tg, priority_order: index + 1})),
     };
   }
 
-  const totalWeight = targets.reduce((sum, t) => sum + (t.weight ?? 0), 0);
-  const routeHasInvalidRegion = targets.some(t => {
-    const dep = deploymentById.get(t.deployment_id);
+  const totalWeight = targets.reduce((sum, tg) => sum + (tg.weight ?? 0), 0);
+  const routeHasInvalidRegion = targets.some(tg => {
+    const dep = deploymentById.get(tg.deployment_id);
     return !dep || (allowedRegions.length > 0 && !allowedRegions.includes(dep.data_region));
   });
-  const routeMissingToolCalling = targets.some(t => {
-    const dep = deploymentById.get(t.deployment_id);
+  const routeMissingToolCalling = targets.some(tg => {
+    const dep = deploymentById.get(tg.deployment_id);
     return modelById.get(dep?.logical_model_id ?? '')?.capabilities.tool_calling !== true;
   });
 
@@ -217,10 +220,10 @@ export function RoutingPage({
       else await createRoute(routePayload());
       setRouteDrawerOpen(false);
       await refresh();
-      setNotice(editingRoute ? `Updated route "${slug.trim()}".` : `Created route "${slug.trim()}".`);
+      setNotice(editingRoute ? t('routing.routeUpdated', {slug: slug.trim()}) : t('routing.routeCreated', {slug: slug.trim()}));
     } catch (cause) {
-      setError(errText(cause));
-      if (isConflict(cause)) setConflict({kind: 'route', message: errText(cause), current: currentResource(cause)});
+      setError(errText(cause, t));
+      if (isConflict(cause)) setConflict({kind: 'route', message: errText(cause, t), current: currentResource(cause)});
     } finally {
       setBusy(false);
     }
@@ -234,11 +237,11 @@ export function RoutingPage({
       await deleteRoute(deleteTarget);
       setDeleteTarget(null);
       await refresh();
-      setNotice('Route deleted.');
+      setNotice(t('routing.routeDeleted'));
     } catch (cause) {
       setDeleteTarget(null);
-      setError(errText(cause));
-      if (isConflict(cause)) setConflict({kind: 'route', message: errText(cause), current: currentResource(cause)});
+      setError(errText(cause, t));
+      if (isConflict(cause)) setConflict({kind: 'route', message: errText(cause, t), current: currentResource(cause)});
     } finally {
       setBusy(false);
     }
@@ -259,16 +262,15 @@ export function RoutingPage({
         estimated_input_tokens: 512,
         max_output_tokens: 1024,
       });
-      if (!result.dry_run) throw new Error('Route explain did not confirm dry-run mode.');
+      if (!result.dry_run) throw new Error(t('routing.explainNotDryRun'));
       setExplainResult(result);
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setExplainBusy(false);
     }
   }
 
-  // Policy editing helpers
   const selectedPolicy = editScope === 'ORGANIZATION' ? orgPolicy : editScope === 'PROJECT' ? projPolicy : envPolicy;
   const parentPolicy = editScope === 'ENVIRONMENT' ? projPolicy : editScope === 'PROJECT' ? orgPolicy : null;
   const canEditPolicy = Boolean(selectedPolicy && (editScope === 'ORGANIZATION' ? roles.includes('ORG_OWNER') : canManage));
@@ -298,10 +300,10 @@ export function RoutingPage({
     try {
       await updatePolicy(selectedPolicy, etags[editScope], policyDraft);
       await refresh();
-      setNotice(`Saved ${editScope.toLowerCase()} policy.`);
+      setNotice(t('routing.policySaved', {scope: scopeLabel(editScope)}));
     } catch (cause) {
-      setError(errText(cause));
-      if (isConflict(cause)) setConflict({kind: 'policy', message: errText(cause), current: currentResource(cause)});
+      setError(errText(cause, t));
+      if (isConflict(cause)) setConflict({kind: 'policy', message: errText(cause, t), current: currentResource(cause)});
     } finally {
       setBusy(false);
     }
@@ -327,18 +329,18 @@ export function RoutingPage({
 
   const policyRows = envPolicy
     ? [
-        {id: 'regions', rule: 'Allowed data regions', value: (envPolicy.allowed_data_regions ?? []).join(', ') || 'None configured', source: regionSource(orgPolicy, projPolicy, envPolicy)},
-        {id: 'models', rule: 'Allowed models', value: (envPolicy.allowed_models ?? ['*']).join(', ') || 'Deny all', source: modelSource(orgPolicy, projPolicy, envPolicy)},
-        {id: 'trust', rule: 'Minimum plugin trust', value: envPolicy.min_plugin_trust, source: scalarSource(orgPolicy, projPolicy, envPolicy, 'min_plugin_trust')},
-        {id: 'assurance', rule: 'Minimum capability assurance', value: envPolicy.min_capability_assurance, source: scalarSource(orgPolicy, projPolicy, envPolicy, 'min_capability_assurance')},
-        {id: 'rpm', rule: 'RPM ceiling', value: envPolicy.rpm_ceiling ?? 'Unspecified', source: scalarSource(orgPolicy, projPolicy, envPolicy, 'rpm_ceiling')},
-        {id: 'tpm', rule: 'TPM ceiling', value: envPolicy.tpm_ceiling ?? 'Unspecified', source: scalarSource(orgPolicy, projPolicy, envPolicy, 'tpm_ceiling')},
-        {id: 'streams', rule: 'Concurrent streams ceiling', value: envPolicy.max_concurrent_streams ?? 'Unspecified', source: scalarSource(orgPolicy, projPolicy, envPolicy, 'max_concurrent_streams')},
+        {id: 'regions', rule: t('routing.rule.regions'), value: (envPolicy.allowed_data_regions ?? []).join(', ') || t('common.noneConfigured'), source: regionSource(orgPolicy, projPolicy, envPolicy, t, scopeLabel)},
+        {id: 'models', rule: t('routing.rule.models'), value: (envPolicy.allowed_models ?? ['*']).join(', ') || t('routing.rule.denyAll'), source: modelSource(orgPolicy, projPolicy, envPolicy, t, scopeLabel)},
+        {id: 'trust', rule: t('routing.rule.trust'), value: t(`routing.trust.${envPolicy.min_plugin_trust}`), source: scalarSource(orgPolicy, projPolicy, envPolicy, 'min_plugin_trust', t, scopeLabel)},
+        {id: 'assurance', rule: t('routing.rule.assurance'), value: formatOperationalState(envPolicy.min_capability_assurance), source: scalarSource(orgPolicy, projPolicy, envPolicy, 'min_capability_assurance', t, scopeLabel)},
+        {id: 'rpm', rule: t('routing.rule.rpm'), value: envPolicy.rpm_ceiling != null ? formatNumber(envPolicy.rpm_ceiling) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, envPolicy, 'rpm_ceiling', t, scopeLabel)},
+        {id: 'tpm', rule: t('routing.rule.tpm'), value: envPolicy.tpm_ceiling != null ? formatNumber(envPolicy.tpm_ceiling) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, envPolicy, 'tpm_ceiling', t, scopeLabel)},
+        {id: 'streams', rule: t('routing.rule.streams'), value: envPolicy.max_concurrent_streams != null ? formatNumber(envPolicy.max_concurrent_streams) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, envPolicy, 'max_concurrent_streams', t, scopeLabel)},
         {
           id: 'hooks',
-          rule: 'Guardrail hooks',
-          value: (envPolicy.guardrail_hooks ?? []).map(h => `${h.extension_id} (${h.failure_posture})`).join(', ') || 'None attached',
-          source: hookSource(orgPolicy, projPolicy, envPolicy),
+          rule: t('routing.rule.hooks'),
+          value: (envPolicy.guardrail_hooks ?? []).map(h => `${h.extension_id} (${formatOperationalState(h.failure_posture)})`).join(', ') || t('common.noneAttached'),
+          source: hookSource(orgPolicy, projPolicy, envPolicy, t, scopeLabel),
         },
       ]
     : [];
@@ -347,21 +349,21 @@ export function RoutingPage({
     <div className="tp-stack">
       <div className="tp-page-head">
         <div className="tp-page-head-text">
-          <h1>Routes & Policies</h1>
-          <p className="tp-page-subtitle">Deterministic capability routing, dry-run simulation, and monotonic policy inheritance.</p>
+          <h1>{t('routing.title')}</h1>
+          <p className="tp-page-subtitle">{t('routing.subtitle')}</p>
         </div>
         {canManage && activeTab === 'routes' ? (
           <div className="tp-page-actions">
             <Button variant="primary" size="sm" disabled={!environmentId} onClick={openCreateRoute}>
               <Plus size={14} aria-hidden="true" />
-              <span>Create route</span>
+              <span>{t('routing.createRoute')}</span>
             </Button>
           </div>
         ) : null}
       </div>
 
       <Tabs
-        label="Routing and policy views"
+        label={t('routing.tabsLabel')}
         activeId={activeTab}
         onSelect={id => {
           if (id === 'explain') navigate('/routes/explain');
@@ -369,72 +371,72 @@ export function RoutingPage({
           else navigate('/routes');
         }}
         items={[
-          {id: 'routes', label: 'Routes', count: routes.length},
-          {id: 'explain', label: 'Route Explain'},
-          {id: 'policies', label: 'Policies'},
+          {id: 'routes', label: t('routing.tabRoutes'), count: routes.length},
+          {id: 'explain', label: t('routing.tabExplain')},
+          {id: 'policies', label: t('routing.tabPolicies')},
         ]}
       />
 
-      {!environmentId ? <Banner tone="info">Select a project and environment in the top bar to manage routes and policies.</Banner> : null}
+      {!environmentId ? <Banner tone="info">{t('routing.selectScopeBanner')}</Banner> : null}
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {notice ? <Banner tone="ok">{notice}</Banner> : null}
 
       {activeTab === 'routes' ? (
         <section className="tp-section">
           {allowedRegions.length > 0 ? (
-            <p className="tp-muted">Inherited data residency ceiling: <span className="mono">{allowedRegions.join(', ')}</span></p>
+            <p className="tp-muted">{t('routing.residencyCeiling')} <span className="mono">{allowedRegions.join(', ')}</span></p>
           ) : null}
-          <SectionHeader title="Configured routes" count={routes.length} />
+          <SectionHeader title={t('routing.configuredRoutes')} count={routes.length} />
           <DataTable
-            ariaLabel="Configured routes"
+            ariaLabel={t('routing.configuredRoutes')}
             loading={loading}
             rows={routes}
             rowKey={row => row.id}
-            emptyTitle="No routes in this environment"
-            emptyDescription="Create a route to map model slugs to ordered or weighted deployments."
-            emptyAction={canManage && environmentId ? <Button variant="primary" size="sm" onClick={openCreateRoute}>Create route</Button> : undefined}
+            emptyTitle={t('routing.emptyRoutesTitle')}
+            emptyDescription={t('routing.emptyRoutesDesc')}
+            emptyAction={canManage && environmentId ? <Button variant="primary" size="sm" onClick={openCreateRoute}>{t('routing.createRoute')}</Button> : undefined}
             columns={[
-              {id: 'slug', header: 'Route slug', primary: true, width: '20%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.slug}</span>},
-              {id: 'strategy', header: 'Strategy', width: '16%', render: row => <span>{row.strategy.replaceAll('_', ' ')}</span>},
+              {id: 'slug', header: t('routing.col.routeSlug'), primary: true, width: '20%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.slug}</span>},
+              {id: 'strategy', header: t('routing.col.strategy'), width: '16%', render: row => <span>{t(`routing.strategy.${row.strategy}`)}</span>},
               {
                 id: 'fallbacks',
-                header: 'Fallback chain',
+                header: t('routing.col.fallbackChain'),
                 width: '26%',
                 render: row => (
                   <span className="mono">
-                    {row.targets.map(t => {
-                      const name = deploymentById.get(t.deployment_id)?.upstream_model_name ?? t.deployment_id;
-                      return t.weight !== undefined ? `${name} (${t.weight}%)` : name;
+                    {row.targets.map(tg => {
+                      const name = deploymentById.get(tg.deployment_id)?.upstream_model_name ?? tg.deployment_id;
+                      return tg.weight !== undefined ? `${name} (${tg.weight}%)` : name;
                     }).join(' → ')}
                   </span>
                 ),
               },
               {
                 id: 'health',
-                header: 'Target health',
+                header: t('routing.col.targetHealth'),
                 width: '28%',
                 render: row => (
                   <div className="tp-row">
-                    {row.targets.map(t => {
-                      const dep = deploymentById.get(t.deployment_id);
+                    {row.targets.map(tg => {
+                      const dep = deploymentById.get(tg.deployment_id);
                       const label = dep?.state ?? 'UNAVAILABLE';
-                      return <StatusPill key={t.deployment_id} tone={stateTone(label)} label={formatOperationalState(label)} />;
+                      return <StatusPill key={tg.deployment_id} tone={stateTone(label)} label={formatOperationalState(label)} />;
                     })}
                   </div>
                 ),
               },
               {
                 id: 'actions',
-                header: 'Actions',
+                header: t('common.actions'),
                 width: '10%',
                 render: row =>
                   canManage ? (
                     <RowActionsMenu
-                      label={`Actions for ${row.slug}`}
+                      label={t('common.actionsFor', {name: row.slug})}
                       items={[
-                        {id: 'edit', label: 'Edit route', onClick: () => openEditRoute(row)},
+                        {id: 'edit', label: t('routing.action.edit'), onClick: () => openEditRoute(row)},
                         {type: 'divider' as const},
-                        {id: 'delete', label: 'Delete route', variant: 'destructive' as const, onClick: () => setDeleteTarget(row)},
+                        {id: 'delete', label: t('routing.action.delete'), variant: 'destructive' as const, onClick: () => setDeleteTarget(row)},
                       ]}
                     />
                   ) : null,
@@ -447,26 +449,26 @@ export function RoutingPage({
       {activeTab === 'explain' ? (
         <section className="tp-section">
           <div className="tp-surface tp-surface-pad tp-stack">
-            <h2>Dry-run route simulator</h2>
-            <p className="tp-muted">Evaluates live routing rules without upstream egress or budget holds.</p>
+            <h2>{t('routing.explainHeading')}</h2>
+            <p className="tp-muted">{t('routing.explainDesc')}</p>
             <div className="tp-grid-2">
               <RouteTypeahead
-                label="Target model or route slug"
+                label={t('routing.explainTargetLabel')}
                 suggestions={[...routes.map(r => r.slug), ...models.map(m => m.slug)]}
-                placeholder="e.g. gpt-4o-mini or primary-chat"
-                suggestionDescription="Configured route or model"
+                placeholder={t('routing.explainTargetPlaceholder')}
+                suggestionDescription={t('routing.explainSuggestionDesc')}
                 value={explainModel}
                 disabled={explainBusy}
                 onChange={setExplainModel}
               />
               <SelectField
-                label="Data residency"
+                label={t('routing.dataResidency')}
                 value={explainRegion}
                 disabled={explainBusy}
                 onChange={next => setExplainRegion(next as DataRegion | '')}
                 options={[
-                  {value: '', label: 'Choose region'},
-                  ...explainRegionChoices.map(reg => ({value: reg, label: reg})),
+                  {value: '', label: t('routing.chooseRegion')},
+                  ...explainRegionChoices.map(reg => ({value: reg, label: t(`common.region.${reg}`)})),
                 ]}
               />
             </div>
@@ -488,23 +490,23 @@ export function RoutingPage({
                 onClick={() => void runExplain()}
               >
                 <Play size={14} aria-hidden="true" />
-                <span>{explainBusy ? 'Simulating…' : 'Explain route'}</span>
+                <span>{explainBusy ? t('routing.simulating') : t('routing.explainButton')}</span>
               </Button>
             </div>
           </div>
 
           {explainResult ? (
             <div className="tp-surface tp-surface-pad tp-stack" role="status">
-              <SectionHeader title="Dry-run decision" />
+              <SectionHeader title={t('routing.dryRunDecision')} />
               <KeyValueList
                 items={[
-                  {label: 'Dry-run verified', value: <StatusPill tone="ok" label={explainResult.dry_run ? 'DRY RUN' : 'UNKNOWN'} />},
-                  {label: 'Matched route', value: explainResult.route_slug || '—', mono: true},
-                  {label: 'Eligible candidates', value: String(explainResult.selected_candidates_ordered.length), mono: true},
-                  {label: 'Rejected deployments', value: String(explainResult.rejected_deployments.length), mono: true},
+                  {label: t('routing.dryRunVerified'), value: <StatusPill tone="ok" label={explainResult.dry_run ? t('routing.dryRunBadge') : t('common.unknown')} />},
+                  {label: t('routing.matchedRoute'), value: explainResult.route_slug || '—', mono: true},
+                  {label: t('routing.eligibleCandidates'), value: formatNumber(explainResult.selected_candidates_ordered.length), mono: true},
+                  {label: t('routing.rejectedDeployments'), value: formatNumber(explainResult.rejected_deployments.length), mono: true},
                 ]}
               />
-              <CodeBlock title="Detailed explain output" code={JSON.stringify(explainResult, null, 2)} />
+              <CodeBlock title={t('routing.detailedExplainOutput')} code={JSON.stringify(explainResult, null, 2)} />
             </div>
           ) : null}
         </section>
@@ -513,25 +515,25 @@ export function RoutingPage({
       {activeTab === 'policies' && envPolicy && policyDraft ? (
         <div className="tp-stack">
           <section className="tp-section">
-            <SectionHeader title="Effective resolved policy" />
+            <SectionHeader title={t('routing.effectivePolicy')} />
             <DataTable
-              ariaLabel="Effective policy hierarchy"
+              ariaLabel={t('routing.policyHierarchyAria')}
               rows={policyRows}
               rowKey={row => row.id}
               columns={[
-                {id: 'rule', header: 'Constraint', primary: true, width: '30%', render: row => <span style={{fontWeight: 600}}>{row.rule}</span>},
-                {id: 'val', header: 'Effective value', width: '35%', render: row => <span className="mono">{String(row.value)}</span>},
-                {id: 'src', header: 'Provenance', width: '35%', render: row => <span className="tp-muted">{row.source}</span>},
+                {id: 'rule', header: t('routing.col.constraint'), primary: true, width: '30%', render: row => <span style={{fontWeight: 600}}>{row.rule}</span>},
+                {id: 'val', header: t('routing.col.effectiveValue'), width: '35%', render: row => <span className="mono">{String(row.value)}</span>},
+                {id: 'src', header: t('routing.col.provenance'), width: '35%', render: row => <span className="tp-muted">{row.source}</span>},
               ]}
             />
           </section>
 
           <section className="tp-section">
             <SectionHeader
-              title="Edit policy scope"
+              title={t('routing.editPolicyScope')}
               actions={
                 <SelectField
-                  label="Scope to edit"
+                  label={t('routing.scopeToEdit')}
                   value={editScope}
                   width={200}
                   onChange={nextValue => {
@@ -541,9 +543,9 @@ export function RoutingPage({
                     if (nextPol) setPolicyDraft(nextPol);
                   }}
                   options={[
-                    {value: 'ORGANIZATION', label: 'Organization'},
-                    {value: 'PROJECT', label: 'Project'},
-                    {value: 'ENVIRONMENT', label: 'Environment'},
+                    {value: 'ORGANIZATION', label: t('common.organization')},
+                    {value: 'PROJECT', label: t('common.project')},
+                    {value: 'ENVIRONMENT', label: t('common.environment')},
                   ]}
                 />
               }
@@ -551,18 +553,18 @@ export function RoutingPage({
 
             <div className="tp-surface tp-surface-pad tp-stack">
               {!canEditPolicy ? (
-                <Banner tone="info">This scope is read-only for your role. Child policies can only tighten inherited parent bounds.</Banner>
+                <Banner tone="info">{t('routing.scopeReadOnly')}</Banner>
               ) : null}
 
               <div className="tp-stack-sm">
-                <span className="tp-label">Allowed data regions</span>
+                <span className="tp-label">{t('routing.rule.regions')}</span>
                 <div className="tp-row">
                   {parentRegions.map(reg => {
                     const checked = (policyDraft.allowed_data_regions ?? []).includes(reg);
                     return (
                       <CheckboxField
                         key={reg}
-                        label={reg}
+                        label={t(`common.region.${reg}`)}
                         checked={checked}
                         disabled={!canEditPolicy || busy}
                         onChange={nextChecked => {
@@ -577,10 +579,10 @@ export function RoutingPage({
               </div>
 
               <TextField
-                label="Allowed model slugs (comma-separated, * for all)"
+                label={t('routing.allowedModelsInput')}
                 value={(policyDraft.allowed_models ?? ['*']).join(', ')}
                 disabled={!canEditPolicy || busy}
-                error={modelRelaxesParent ? 'Cannot widen inherited parent model allowlist.' : undefined}
+                error={modelRelaxesParent ? t('routing.errWidenModels') : undefined}
                 onChange={event => {
                   const list = event.target.value.split(',').map(v => v.trim()).filter(Boolean);
                   setPolicyDraft({...policyDraft, allowed_models: list});
@@ -589,28 +591,28 @@ export function RoutingPage({
 
               <div className="tp-grid-2">
                 <SelectField
-                  label="Minimum plugin trust"
+                  label={t('routing.rule.trust')}
                   value={policyDraft.min_plugin_trust}
                   disabled={!canEditPolicy || busy}
                   onChange={next => setPolicyDraft({...policyDraft, min_plugin_trust: next as Policy['min_plugin_trust']})}
                   options={trustLevels
                     .filter(level => trustRank[level] >= trustRank[parentTrust])
-                    .map(level => ({value: level, label: level.replaceAll('_', ' ')}))}
+                    .map(level => ({value: level, label: t(`routing.trust.${level}`)}))}
                 />
                 <SelectField
-                  label="Minimum capability assurance"
+                  label={t('routing.rule.assurance')}
                   value={policyDraft.min_capability_assurance}
                   disabled={!canEditPolicy || busy}
                   onChange={next => setPolicyDraft({...policyDraft, min_capability_assurance: next as Policy['min_capability_assurance']})}
                   options={(['VERIFIED', 'TESTED', 'DECLARED'] as const)
                     .filter(level => assuranceRank[level] >= assuranceRank[parentAssurance])
-                    .map(level => ({value: level, label: level}))}
+                    .map(level => ({value: level, label: formatOperationalState(level)}))}
                 />
               </div>
 
               <div className="tp-grid-3">
                 <TextField
-                  label="RPM ceiling"
+                  label={t('routing.rule.rpm')}
                   type="number"
                   min={0}
                   max={parentPolicy?.rpm_ceiling ?? undefined}
@@ -619,7 +621,7 @@ export function RoutingPage({
                   onChange={event => setPolicyDraft({...policyDraft, rpm_ceiling: event.target.value === '' ? null : Number(event.target.value)})}
                 />
                 <TextField
-                  label="TPM ceiling"
+                  label={t('routing.rule.tpm')}
                   type="number"
                   min={0}
                   max={parentPolicy?.tpm_ceiling ?? undefined}
@@ -628,7 +630,7 @@ export function RoutingPage({
                   onChange={event => setPolicyDraft({...policyDraft, tpm_ceiling: event.target.value === '' ? null : Number(event.target.value)})}
                 />
                 <TextField
-                  label="Concurrent streams ceiling"
+                  label={t('routing.rule.streams')}
                   type="number"
                   min={0}
                   max={parentPolicy?.max_concurrent_streams ?? undefined}
@@ -639,7 +641,7 @@ export function RoutingPage({
               </div>
 
               <div className="tp-stack-sm">
-                <h3>Guardrail extensions</h3>
+                <h3>{t('routing.guardrailExtensions')}</h3>
                 {(policyDraft.guardrail_hooks ?? []).length > 0 ? (
                   <ul className="tp-list">
                     {(policyDraft.guardrail_hooks ?? []).map(hook => {
@@ -656,31 +658,31 @@ export function RoutingPage({
                             disabled={!canEditPolicy || busy || lockedByParent}
                             onClick={() => setPolicyDraft({...policyDraft, guardrail_hooks: (policyDraft.guardrail_hooks ?? []).filter(h => h.extension_id !== hook.extension_id)})}
                           >
-                            Remove
+                            {t('common.remove')}
                           </Button>
                         </li>
                       );
                     })}
                   </ul>
                 ) : (
-                  <p className="tp-muted">No guardrail extensions attached at this scope.</p>
+                  <p className="tp-muted">{t('routing.noGuardrails')}</p>
                 )}
 
                 {canEditPolicy ? (
                   <div className="tp-toolbar">
                     <div className="tp-toolbar-field">
-                      <TextField label="Guardrail extension ID" value={hookExtId} disabled={busy} onChange={event => setHookExtId(event.target.value)} />
+                      <TextField label={t('routing.guardrailExtId')} value={hookExtId} disabled={busy} onChange={event => setHookExtId(event.target.value)} />
                     </div>
                     <div className="tp-toolbar-field">
                       <SelectField
-                        label="Failure posture"
+                        label={t('routing.failurePosture')}
                         value={hookPosture}
                         disabled={busy}
-                        error={hookRelaxesParent ? 'Parent guardrail is FAIL_CLOSED and cannot be relaxed.' : undefined}
+                        error={hookRelaxesParent ? t('routing.errRelaxGuardrail') : undefined}
                         onChange={next => setHookPosture(next as 'FAIL_CLOSED' | 'FAIL_OPEN')}
                         options={[
-                          {value: 'FAIL_CLOSED', label: 'FAIL_CLOSED'},
-                          {value: 'FAIL_OPEN', label: 'FAIL_OPEN'},
+                          {value: 'FAIL_CLOSED', label: formatOperationalState('FAIL_CLOSED')},
+                          {value: 'FAIL_OPEN', label: formatOperationalState('FAIL_OPEN')},
                         ]}
                       />
                     </div>
@@ -695,7 +697,7 @@ export function RoutingPage({
                         setHookExtId('');
                       }}
                     >
-                      Attach guardrail
+                      {t('routing.attachGuardrail')}
                     </Button>
                   </div>
                 ) : null}
@@ -707,7 +709,7 @@ export function RoutingPage({
                   disabled={!selectedPolicy || busy || JSON.stringify(selectedPolicy) === JSON.stringify(policyDraft)}
                   onClick={() => selectedPolicy && setPolicyDraft(selectedPolicy)}
                 >
-                  Discard changes
+                  {t('routing.discardChanges')}
                 </Button>
                 <Button
                   variant="primary"
@@ -715,7 +717,7 @@ export function RoutingPage({
                   disabled={!canEditPolicy || modelRelaxesParent || JSON.stringify(selectedPolicy) === JSON.stringify(policyDraft)}
                   onClick={() => void savePolicy()}
                 >
-                  Save policy
+                  {t('routing.savePolicy')}
                 </Button>
               </div>
             </div>
@@ -727,51 +729,51 @@ export function RoutingPage({
         open={routeDrawerOpen}
         onClose={() => setRouteDrawerOpen(false)}
         size="lg"
-        title={editingRoute ? `Edit route ${editingRoute.slug}` : 'Create route'}
-        subtitle="Configure strategy, failover limits, and ordered deployment targets."
+        title={editingRoute ? t('routing.drawerEditTitle', {slug: editingRoute.slug}) : t('routing.createRoute')}
+        subtitle={t('routing.drawerSubtitle')}
         footer={
           <>
-            <Button variant="secondary" disabled={busy} onClick={() => setRouteDrawerOpen(false)}>Cancel</Button>
+            <Button variant="secondary" disabled={busy} onClick={() => setRouteDrawerOpen(false)}>{t('common.cancel')}</Button>
             <Button
               variant="primary"
               loading={busy}
               disabled={!canManage || !slug.trim() || targets.length === 0 || (isWeighted(strategy) && totalWeight !== 100) || routeHasInvalidRegion}
               onClick={() => void saveRoute()}
             >
-              {editingRoute ? 'Save route' : 'Create route'}
+              {editingRoute ? t('routing.saveRoute') : t('routing.createRoute')}
             </Button>
           </>
         }
       >
-        <TextField label="Route slug" value={slug} disabled={busy} onChange={event => setSlug(event.target.value)} />
+        <TextField label={t('routing.col.routeSlug')} value={slug} disabled={busy} onChange={event => setSlug(event.target.value)} />
         <SelectField
-          label="Routing strategy"
+          label={t('routing.routingStrategy')}
           value={strategy}
           disabled={busy}
           onChange={nextValue => {
             const next = nextValue as Strategy;
             setStrategy(next);
-            if (isWeighted(next) && targets.length > 0) setTargets(distributeWeights(targets.map(t => ({...t}))));
+            if (isWeighted(next) && targets.length > 0) setTargets(distributeWeights(targets.map(tg => ({...tg}))));
             if (!isWeighted(next)) setTargets(targets.map(({weight: _w, ...rest}) => rest));
           }}
-          options={strategies.map(item => ({value: item, label: item.replaceAll('_', ' ')}))}
+          options={strategies.map(item => ({value: item, label: t(`routing.strategy.${item}`)}))}
         />
         <div className="tp-grid-2">
-          <TextField label="Max failover hops (1–3)" type="number" min={1} max={3} value={maxHops} disabled={busy} onChange={event => setMaxHops(Number(event.target.value) || 1)} />
-          <TextField label="Request timeout (ms)" type="number" min={500} max={300000} value={timeoutMs} disabled={busy} onChange={event => setTimeoutMs(Number(event.target.value) || 60000)} />
+          <TextField label={t('routing.maxFailoverHops')} type="number" min={1} max={3} value={maxHops} disabled={busy} onChange={event => setMaxHops(Number(event.target.value) || 1)} />
+          <TextField label={t('routing.requestTimeoutMs')} type="number" min={500} max={300000} value={timeoutMs} disabled={busy} onChange={event => setTimeoutMs(Number(event.target.value) || 60000)} />
         </div>
 
         <div className="tp-toolbar">
           <div className="tp-toolbar-field">
             <SelectField
-              label="Add deployment target"
+              label={t('routing.addDeploymentTarget')}
               value={selectedDep}
               disabled={busy}
               onChange={setSelectedDep}
               options={[
-                {value: '', label: 'Select deployment'},
+                {value: '', label: t('routing.selectDeployment')},
                 ...deployments
-                  .filter(d => !targets.some(t => t.deployment_id === d.id))
+                  .filter(d => !targets.some(tg => tg.deployment_id === d.id))
                   .map(d => ({value: d.id, label: `${d.upstream_model_name} (${d.data_region} · ${formatOperationalState(d.state)})`})),
               ]}
             />
@@ -785,7 +787,7 @@ export function RoutingPage({
               setSelectedDep('');
             }}
           >
-            Add target
+            {t('routing.addTarget')}
           </Button>
         </div>
 
@@ -797,13 +799,13 @@ export function RoutingPage({
                 <li key={target.deployment_id} className="tp-list-item">
                   <div className="tp-stack-sm" style={{minWidth: 0, flex: '1 1 160px'}}>
                     <span className="mono" style={{fontWeight: 600}}>#{index + 1} {dep?.upstream_model_name ?? target.deployment_id}</span>
-                    <span className="tp-muted">{dep ? `${dep.data_region} · ${dep.state}` : 'Unavailable deployment'}</span>
+                    <span className="tp-muted">{dep ? `${dep.data_region} · ${formatOperationalState(dep.state)}` : t('routing.unavailableDeployment')}</span>
                   </div>
                   <div className="tp-row">
                     {isWeighted(strategy) ? (
                       <div style={{width: 96}}>
                         <TextField
-                          label={`Weight % for ${target.deployment_id}`}
+                          label={t('routing.weightFor', {id: target.deployment_id})}
                           type="number"
                           min={0}
                           max={100}
@@ -815,18 +817,18 @@ export function RoutingPage({
                         />
                       </div>
                     ) : null}
-                    <Button variant="ghost" size="sm" disabled={index === 0} aria-label={`Move ${target.deployment_id} up`} onClick={() => setTargets(moveItem(targets, index, -1))}>
+                    <Button variant="ghost" size="sm" disabled={index === 0} aria-label={t('routing.moveUp', {id: target.deployment_id})} onClick={() => setTargets(moveItem(targets, index, -1))}>
                       <ArrowUp size={14} aria-hidden="true" />
                     </Button>
-                    <Button variant="ghost" size="sm" disabled={index === targets.length - 1} aria-label={`Move ${target.deployment_id} down`} onClick={() => setTargets(moveItem(targets, index, 1))}>
+                    <Button variant="ghost" size="sm" disabled={index === targets.length - 1} aria-label={t('routing.moveDown', {id: target.deployment_id})} onClick={() => setTargets(moveItem(targets, index, 1))}>
                       <ArrowDown size={14} aria-hidden="true" />
                     </Button>
                     <Button
                       variant="danger-outline"
                       size="sm"
-                      aria-label={`Remove ${target.deployment_id}`}
+                      aria-label={t('routing.removeTarget', {id: target.deployment_id})}
                       onClick={() => {
-                        const rem = targets.filter(t => t.deployment_id !== target.deployment_id);
+                        const rem = targets.filter(tg => tg.deployment_id !== target.deployment_id);
                         setTargets(isWeighted(strategy) && rem.length > 0 ? distributeWeights(rem) : rem);
                       }}
                     >
@@ -838,28 +840,28 @@ export function RoutingPage({
             })}
           </ul>
         ) : (
-          <p className="tp-muted">Add at least one deployment target before saving.</p>
+          <p className="tp-muted">{t('routing.addAtLeastOneTarget')}</p>
         )}
 
         {isWeighted(strategy) && targets.length > 0 && totalWeight !== 100 ? (
-          <Banner tone="danger">Target weights total {totalWeight}%. Weighted strategies require an exact 100% sum.</Banner>
+          <Banner tone="danger">{t('routing.errWeightSum', {total: formatNumber(totalWeight)})}</Banner>
         ) : null}
         {routeHasInvalidRegion ? (
-          <Banner tone="danger">One or more targets are unavailable or violate the inherited data residency policy.</Banner>
+          <Banner tone="danger">{t('routing.errInvalidRegion')}</Banner>
         ) : null}
         {routeMissingToolCalling ? (
-          <Banner tone="warn">At least one fallback target does not declare tool_calling capability.</Banner>
+          <Banner tone="warn">{t('routing.warnToolCalling')}</Banner>
         ) : null}
       </Drawer>
 
       <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
-        title={`Delete route ${deleteTarget?.slug ?? ''}`}
-        description={`Removing this route affects ${trafficByRoute.get(deleteTarget?.slug ?? '') ?? 0} trace-recorded requests in the last hour. Active streams are not terminated.`}
-        confirmLabel="Delete route"
+        title={t('routing.deleteRouteTitle', {slug: deleteTarget?.slug ?? ''})}
+        description={t('routing.deleteRouteDesc', {count: formatNumber(trafficByRoute.get(deleteTarget?.slug ?? '') ?? 0)})}
+        confirmLabel={t('routing.action.delete')}
         requireMatch={deleteTarget?.slug}
-        matchLabel="Type the route slug to confirm"
+        matchLabel={t('routing.deleteRouteMatch')}
         busy={busy}
         onConfirm={() => void confirmDeleteRoute()}
       />
@@ -867,9 +869,9 @@ export function RoutingPage({
       <ConfirmDialog
         open={confirmGuardrailOpen}
         onClose={() => setConfirmGuardrailOpen(false)}
-        title="Confirm blocking guardrail"
-        description="Attaching a FAIL_CLOSED guardrail will reject traffic if that extension is unavailable."
-        confirmLabel="Confirm and save policy"
+        title={t('routing.confirmGuardrailTitle')}
+        description={t('routing.confirmGuardrailDesc')}
+        confirmLabel={t('routing.confirmAndSavePolicy')}
         busy={busy}
         onConfirm={() => {
           setConfirmGuardrailOpen(false);
@@ -881,19 +883,19 @@ export function RoutingPage({
         open={conflict !== null}
         onClose={() => setConflict(null)}
         size="lg"
-        title="Optimistic concurrency conflict (409)"
-        subtitle="Another administrator modified this resource. Your draft is preserved."
+        title={t('routing.occTitle')}
+        subtitle={t('routing.occSubtitle')}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setConflict(null)}>Close</Button>
-            <Button variant="primary" onClick={applyConflictVersion}>Adopt latest version & keep draft</Button>
+            <Button variant="secondary" onClick={() => setConflict(null)}>{t('common.close')}</Button>
+            <Button variant="primary" onClick={applyConflictVersion}>{t('routing.adoptLatest')}</Button>
           </>
         }
       >
         {conflict ? (
           <div className="tp-grid-2">
-            <CodeBlock title="Your draft" code={JSON.stringify(conflict.kind === 'route' ? routePayload() : policyDraft, null, 2)} />
-            <CodeBlock title="Latest server version" code={JSON.stringify(conflict.current ?? {}, null, 2)} />
+            <CodeBlock title={t('routing.yourDraft')} code={JSON.stringify(conflict.kind === 'route' ? routePayload() : policyDraft, null, 2)} />
+            <CodeBlock title={t('routing.latestServer')} code={JSON.stringify(conflict.current ?? {}, null, 2)} />
           </div>
         ) : null}
       </Modal>
@@ -904,7 +906,7 @@ export function RoutingPage({
 function isWeighted(strategy: Strategy) { return strategy === 'WEIGHTED' || strategy === 'WEIGHTED_ROUND_ROBIN'; }
 function isConflict(error: unknown) { return Boolean(error && typeof error === 'object' && 'status' in error && error.status === 409); }
 function currentResource(error: unknown): unknown { return error && typeof error === 'object' && 'currentResource' in error ? error.currentResource : null; }
-function errText(cause: unknown): string { return cause instanceof Error ? cause.message : 'Request failed.'; }
+function errText(cause: unknown, t: (key: string) => string): string { return cause instanceof Error ? cause.message : t('common.requestFailed'); }
 function isSubset(values: string[], allowed: string[]) { return allowed.includes('*') || (!values.includes('*') && values.every(v => allowed.includes(v))); }
 function sameSet(a: string[], b: string[]) { return a.length === b.length && a.every(v => b.includes(v)); }
 function isRestricted(values: string[] | undefined) { return Boolean(values?.length && !values.includes('*')); }
@@ -912,7 +914,7 @@ function isRestricted(values: string[] | undefined) { return Boolean(values?.len
 function distributeWeights(targets: Target[]) {
   const base = Math.floor(100 / targets.length);
   let rem = 100 - base * targets.length;
-  return targets.map(t => ({...t, weight: base + (rem-- > 0 ? 1 : 0)}));
+  return targets.map(tg => ({...tg, weight: base + (rem-- > 0 ? 1 : 0)}));
 }
 
 function moveItem<T>(list: T[], index: number, delta: number): T[] {
@@ -923,27 +925,29 @@ function moveItem<T>(list: T[], index: number, delta: number): T[] {
   return copy;
 }
 
-function regionSource(org: Policy | null, proj: Policy | null, curr: Policy) {
-  if (org && isRestricted(org.allowed_data_regions) && sameSet(org.allowed_data_regions ?? [], curr.allowed_data_regions ?? [])) return 'Organization floor';
-  if (proj && isRestricted(proj.allowed_data_regions) && sameSet(proj.allowed_data_regions ?? [], curr.allowed_data_regions ?? [])) return 'Project floor';
-  return `${curr.scope_tier} policy`;
+type TranslateFn = (key: string, vars?: Record<string, string | number>) => string;
+
+function regionSource(org: Policy | null, proj: Policy | null, curr: Policy, t: TranslateFn, scopeLabel: (s: PolicyScope) => string) {
+  if (org && isRestricted(org.allowed_data_regions) && sameSet(org.allowed_data_regions ?? [], curr.allowed_data_regions ?? [])) return t('routing.source.orgFloor');
+  if (proj && isRestricted(proj.allowed_data_regions) && sameSet(proj.allowed_data_regions ?? [], curr.allowed_data_regions ?? [])) return t('routing.source.projectFloor');
+  return t('routing.source.scopePolicy', {scope: scopeLabel(curr.scope_tier as PolicyScope)});
 }
 
-function modelSource(org: Policy | null, proj: Policy | null, curr: Policy) {
-  if (org && isRestricted(org.allowed_models) && sameSet(org.allowed_models ?? ['*'], curr.allowed_models ?? ['*'])) return 'Organization floor';
-  if (proj && isRestricted(proj.allowed_models) && sameSet(proj.allowed_models ?? ['*'], curr.allowed_models ?? ['*'])) return 'Project floor';
-  return `${curr.scope_tier} policy`;
+function modelSource(org: Policy | null, proj: Policy | null, curr: Policy, t: TranslateFn, scopeLabel: (s: PolicyScope) => string) {
+  if (org && isRestricted(org.allowed_models) && sameSet(org.allowed_models ?? ['*'], curr.allowed_models ?? ['*'])) return t('routing.source.orgFloor');
+  if (proj && isRestricted(proj.allowed_models) && sameSet(proj.allowed_models ?? ['*'], curr.allowed_models ?? ['*'])) return t('routing.source.projectFloor');
+  return t('routing.source.scopePolicy', {scope: scopeLabel(curr.scope_tier as PolicyScope)});
 }
 
-function scalarSource(org: Policy | null, proj: Policy | null, curr: Policy, field: keyof Policy) {
-  if (org && org[field] != null && org[field] === curr[field]) return 'Organization floor';
-  if (proj && proj[field] != null && proj[field] === curr[field]) return 'Project floor';
-  return `${curr.scope_tier} policy`;
+function scalarSource(org: Policy | null, proj: Policy | null, curr: Policy, field: keyof Policy, t: TranslateFn, scopeLabel: (s: PolicyScope) => string) {
+  if (org && org[field] != null && org[field] === curr[field]) return t('routing.source.orgFloor');
+  if (proj && proj[field] != null && proj[field] === curr[field]) return t('routing.source.projectFloor');
+  return t('routing.source.scopePolicy', {scope: scopeLabel(curr.scope_tier as PolicyScope)});
 }
 
-function hookSource(org: Policy | null, proj: Policy | null, curr: Policy) {
+function hookSource(org: Policy | null, proj: Policy | null, curr: Policy, t: TranslateFn, scopeLabel: (s: PolicyScope) => string) {
   const ids = new Set((curr.guardrail_hooks ?? []).map(h => h.extension_id));
-  if ([...ids].some(id => (org?.guardrail_hooks ?? []).some(h => h.extension_id === id))) return 'Organization / inherited';
-  if ([...ids].some(id => (proj?.guardrail_hooks ?? []).some(h => h.extension_id === id))) return 'Project / inherited';
-  return `${curr.scope_tier} policy`;
+  if ([...ids].some(id => (org?.guardrail_hooks ?? []).some(h => h.extension_id === id))) return t('routing.source.orgInherited');
+  if ([...ids].some(id => (proj?.guardrail_hooks ?? []).some(h => h.extension_id === id))) return t('routing.source.projectInherited');
+  return t('routing.source.scopePolicy', {scope: scopeLabel(curr.scope_tier as PolicyScope)});
 }

@@ -1,5 +1,6 @@
 import {useMemo, useRef} from 'react';
 import {Typeahead, TypeaheadItem, type SearchableItem, type SearchSource} from '@astryxdesign/core/Typeahead';
+import {useI18n} from '../i18n/I18nProvider';
 
 type RouteItem = SearchableItem<{custom?: boolean; description?: string}>;
 
@@ -13,8 +14,8 @@ export function RouteTypeahead({
   error,
   disabled = false,
   required = false,
-  suggestionDescription = 'Configured route',
-  customDescription = 'Use custom model or route slug',
+  suggestionDescription,
+  customDescription,
   id,
   className = '',
 }: {
@@ -32,6 +33,9 @@ export function RouteTypeahead({
   id?: string;
   className?: string;
 }) {
+  const {t} = useI18n();
+  const resolvedSuggestionDesc = suggestionDescription ?? t('common.configuredRoute');
+  const resolvedCustomDesc = customDescription ?? t('common.useCustomRouteSlug');
   const draftQueryRef = useRef('');
   const escapedRef = useRef(false);
 
@@ -51,7 +55,7 @@ export function RouteTypeahead({
     const toItem = (slug: string): RouteItem => ({
       id: slug,
       label: slug,
-      auxiliaryData: {description: suggestionDescription},
+      auxiliaryData: {description: resolvedSuggestionDesc},
     });
     return {
       bootstrap: () => uniqueSuggestions.map(toItem),
@@ -65,13 +69,13 @@ export function RouteTypeahead({
           matches.push({
             id: trimmed,
             label: trimmed,
-            auxiliaryData: {custom: true, description: customDescription},
+            auxiliaryData: {custom: true, description: resolvedCustomDesc},
           });
         }
         return matches;
       },
     };
-  }, [customDescription, suggestionDescription, uniqueSuggestions]);
+  }, [resolvedCustomDesc, resolvedSuggestionDesc, uniqueSuggestions]);
 
   const selectedItem = useMemo<RouteItem | null>(() => {
     const trimmed = value.trim();
@@ -124,7 +128,7 @@ export function RouteTypeahead({
       hasClear
       minQueryLength={0}
       debounceMs={0}
-      emptySearchText="Type any model or route slug"
+      emptySearchText={t('common.typeAnyRouteSlug')}
       width="100%"
       containerClassName={className || undefined}
     />

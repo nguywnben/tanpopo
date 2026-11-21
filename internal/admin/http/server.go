@@ -43,6 +43,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
+	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
 	"github.com/nguywnben/tanpopo/internal/provider/catalog"
@@ -758,11 +759,15 @@ func writeErrorEnvelope(w http.ResponseWriter, r *http.Request, status int, code
 		reqID = resolveOrMintRequestID(r.Header.Get(RequestIDHeader))
 		w.Header().Set(RequestIDHeader, reqID)
 	}
+	loc := i18n.ResolveAcceptLanguage(r.Header.Get("Accept-Language"))
+	w.Header().Set("Content-Language", string(loc))
+	w.Header().Add("Vary", "Accept-Language")
+	localizedMessage := i18n.AdminErrorMessage(loc, code, message)
 	writeJSON(w, status, CanonicalErrorEnvelope{
 		Error: CanonicalError{
 			Code:            code,
 			Type:            errType,
-			Message:         message,
+			Message:         localizedMessage,
 			RequestID:       reqID,
 			Retryable:       retryable,
 			CurrentResource: currentResource,

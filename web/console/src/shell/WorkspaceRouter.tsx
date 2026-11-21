@@ -1,5 +1,6 @@
 import {lazy, Suspense} from 'react';
 import type {components} from '../api/generated';
+import {useI18n} from '../i18n/I18nProvider';
 import {Banner} from '../ui/primitives';
 import type {ConsoleRoute, Role} from './routes';
 
@@ -37,17 +38,19 @@ export function WorkspaceRouter({
   environmentId: string;
   session: Session | null;
 }) {
+  const {t} = useI18n();
+  const routeTitle = t(route.labelKey);
   const allowed = route.roles.some(role => roles.includes(role));
   if (!allowed) {
     return (
-      <Banner tone="danger" title="Access restricted">
-        Your assigned roles ({roles.join(', ') || 'none'}) do not permit access to {route.label}.
+      <Banner tone="danger" title={t('common.accessRestricted')}>
+        {t('shell.roleDenied', {roles: roles.map(r => t(`common.role.${r}`)).join(', ') || t('common.none'), section: routeTitle})}
       </Banner>
     );
   }
 
   return (
-    <Suspense fallback={<p className="tp-muted" role="status">Loading {route.label.toLowerCase()}…</p>}>
+    <Suspense fallback={<p className="tp-muted" role="status">{t('shell.loadingPage', {page: routeTitle})}</p>}>
       {route.path === '/overview' ? <OverviewPage /> : null}
       {route.path === '/observability/traces' ? <TracesPage environmentId={environmentId} roles={roles} /> : null}
       {route.path === '/finops/budgets' ? <FinOpsPage pathname={pathname} projectId={projectId} roles={roles} /> : null}

@@ -257,6 +257,17 @@
     max-width: 100%;
   }
 
+  .tp-lang-selector {
+    min-width: 0;
+    width: auto;
+    max-width: min(148px, 42vw);
+  }
+
+  .tp-lang-selector [role='combobox'] {
+    min-width: 96px;
+    max-width: 100%;
+  }
+
   .tp-content {
     flex: 1;
     min-width: 0;
@@ -401,9 +412,33 @@
 
   .tp-auth-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
+  }
+
+  .tp-auth-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .tp-auth-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+  }
+
+  .tp-setup-rail .tp-lang-selector {
+    max-width: 126px;
+  }
+
+  .tp-setup-rail .tp-lang-selector [role='combobox'] {
+    min-width: 84px;
   }
 
   .tp-setup-shell {

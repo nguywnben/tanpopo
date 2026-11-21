@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 )
 
 //go:embed all:dist
@@ -33,8 +35,10 @@ func Handler() http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "same-origin")
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			loc := i18n.ResolveAcceptLanguage(r.Header.Get("Accept-Language"))
 			w.Header().Set("Allow", "GET, HEAD")
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			w.Header().Set("Content-Language", string(loc))
+			http.Error(w, i18n.T(loc, "webui.method_not_allowed"), http.StatusMethodNotAllowed)
 			return
 		}
 		if r.URL.Path == "/v1" || strings.HasPrefix(r.URL.Path, "/v1/") || r.URL.Path == "/admin/v1" || strings.HasPrefix(r.URL.Path, "/admin/v1/") {
@@ -59,7 +63,9 @@ func Handler() http.Handler {
 			name = "index.html"
 			data, readErr = fs.ReadFile(assets, name)
 			if readErr != nil {
-				http.Error(w, "console bundle unavailable", http.StatusInternalServerError)
+				loc := i18n.ResolveAcceptLanguage(r.Header.Get("Accept-Language"))
+				w.Header().Set("Content-Language", string(loc))
+				http.Error(w, i18n.T(loc, "webui.bundle_unavailable"), http.StatusInternalServerError)
 				return
 			}
 		}

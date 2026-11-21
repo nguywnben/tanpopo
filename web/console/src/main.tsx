@@ -8,14 +8,24 @@ import './styles/base.css';
 import './styles/layout.css';
 import './styles/components.css';
 import {App} from './App';
+import {preloadAstryxLocale} from './i18n/astryxLocales';
+import {preloadLocale} from './i18n/catalog';
+import {loadStoredLocalePreference, resolveEffectiveLocale} from './i18n/locales';
 
 const root = document.getElementById('root');
 if (!root) {
   throw new Error('Tanpopo console mount element #root was not found.');
 }
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+const initialLocale = resolveEffectiveLocale(loadStoredLocalePreference());
+document.documentElement.lang = initialLocale;
+
+void Promise.all([preloadLocale(initialLocale), preloadAstryxLocale(initialLocale)])
+  .catch(() => undefined)
+  .finally(() => {
+    createRoot(root).render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+  });

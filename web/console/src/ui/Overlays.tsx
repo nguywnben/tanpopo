@@ -3,6 +3,7 @@ import {AlertDialog} from '@astryxdesign/core/AlertDialog';
 import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
 import {Drawer as AstryxDrawer, DrawerHeader} from '@astryxdesign/core/Drawer';
 import {Layout, LayoutContent, LayoutFooter} from '@astryxdesign/core/Layout';
+import {useI18n} from '../i18n/I18nProvider';
 import {Button, TextField} from './primitives';
 
 export function Modal({
@@ -143,6 +144,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   children?: ReactNode;
 }) {
+  const {t} = useI18n();
   const [typed, setTyped] = useState('');
 
   useEffect(() => {
@@ -158,7 +160,7 @@ export function ConfirmDialog({
         }}
         title={title}
         description={description}
-        cancelLabel="Cancel"
+        cancelLabel={t('common.cancel')}
         actionLabel={confirmLabel}
         actionVariant={confirmVariant === 'danger' ? 'destructive' : 'primary'}
         isActionLoading={busy}
@@ -178,7 +180,7 @@ export function ConfirmDialog({
       title={title}
       footer={
         <>
-          <Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
+          <Button variant="secondary" disabled={busy} onClick={onClose}>{t('common.cancel')}</Button>
           <Button variant={confirmVariant} loading={busy} disabled={!canConfirm} onClick={onConfirm}>
             {confirmLabel}
           </Button>
@@ -189,7 +191,7 @@ export function ConfirmDialog({
       {children}
       {requireMatch ? (
         <TextField
-          label={matchLabel ?? `Type "${requireMatch}" to confirm`}
+          label={matchLabel ?? t('common.typeToConfirm', {value: requireMatch})}
           value={typed}
           disabled={busy}
           onChange={event => setTyped(event.target.value)}

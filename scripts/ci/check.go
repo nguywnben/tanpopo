@@ -1407,14 +1407,17 @@ func checkUILayout(rootDir string) ([]Violation, error) {
 		}
 
 		lines := strings.Split(text, "\n")
+		allowLocalizedText := strings.HasPrefix(rel, "web/console/src/i18n/locales/") ||
+			rel == "web/console/src/i18n/locales.ts" ||
+			rel == "web/console/src/i18n/i18n.test.tsx"
 		for i, line := range lines {
-			if vnDiacriticRe.MatchString(line) {
+			if !allowLocalizedText && vnDiacriticRe.MatchString(line) {
 				violations = append(violations, Violation{
 					Check:   "ui-layout",
 					Rule:    "english-ui-copy",
 					File:    rel,
 					Line:    i + 1,
-					Message: "non-English Vietnamese text found in web/console/src (ISS-008)",
+					Message: "hardcoded Vietnamese text found outside i18n locale catalogs in web/console/src (ISS-008)",
 				})
 			}
 			if externalAssetURLRe.MatchString(line) {
@@ -1442,5 +1445,118 @@ func checkUILayout(rootDir string) ([]Violation, error) {
 		return nil, err
 	}
 
+	i18nViolations := checkI18nCatalogIntegrity(rootDir)
+	violations = append(violations, i18nViolations...)
+
 	return violations, nil
+}
+
+var i18nPlaceholderRe = regexp.MustCompile(`\{\{[a-zA-Z0-9_]+\}\}`)
+
+func checkI18nCatalogIntegrity(rootDir string) []Violation {
+	locales := []string{
+		"zh-Hans", "zh-Hant", "de", "en", "es", "fr", "id", "it",
+		"ja", "ko", "pt", "ru", "th", "tr", "vi",
+	}
+	var violations []Violation
+
+	validateDir := func(relDir string) {
+		enPath := filepath.Join(rootDir, filepath.FromSlash(relDir), "en.json")
+		enRaw, err := os.ReadFile(enPath)
+		if err != nil {
+			violations = append(violations, Violation{
+				Check:   "ui-layout",
+				Rule:    "i18n-catalog-parity",
+				File:    relDir + "/en.json",
+				Message: fmt.Sprintf("missing English source catalog: %v", err),
+			})
+			return
+		}
+		var enMap map[string]string
+		if err := json.Unmarshal(enRaw, &enMap); err != nil {
+			violations = append(violations, Violation{
+				Check:   "ui-layout",
+				Rule:    "i18n-catalog-parity",
+				File:    relDir + "/en.json",
+				Message: fmt.Sprintf("invalid JSON in English source catalog: %v", err),
+			})
+			return
+		}
+
+		for _, loc := range locales {
+			relFile := relDir + "/" + loc + ".json"
+			raw, err := os.ReadFile(filepath.Join(rootDir, filepath.FromSlash(relFile)))
+			if err != nil {
+				violations = append(violations, Violation{
+					Check:   "ui-layout",
+					Rule:    "i18n-catalog-parity",
+					File:    relFile,
+					Message: fmt.Sprintf("missing locale catalog: %v", err),
+				})
+				continue
+			}
+			var locMap map[string]string
+			if err := json.Unmarshal(raw, &locMap); err != nil {
+				violations = append(violations, Violation{
+					Check:   "ui-layout",
+					Rule:    "i18n-catalog-parity",
+					File:    relFile,
+					Message: fmt.Sprintf("invalid JSON in locale catalog: %v", err),
+				})
+				continue
+			}
+			for key, enVal := range enMap {
+				val, ok := locMap[key]
+				if !ok || strings.TrimSpace(val) == "" {
+					violations = append(violations, Violation{
+						Check:   "ui-layout",
+						Rule:    "i18n-catalog-parity",
+						File:    relFile,
+						Message: fmt.Sprintf("missing or empty translation key %q", key),
+					})
+					continue
+				}
+				enPH := i18nPlaceholderRe.FindAllString(enVal, -1)
+				locPH := i18nPlaceholderRe.FindAllString(val, -1)
+				sort.Strings(enPH)
+				sort.Strings(locPH)
+				if strings.Join(enPH, ",") != strings.Join(locPH, ",") {
+					violations = append(violations, Violation{
+						Check:   "ui-layout",
+						Rule:    "i18n-catalog-parity",
+						File:    relFile,
+						Message: fmt.Sprintf("placeholder mismatch for key %q: got %v want %v", key, locPH, enPH),
+					})
+				}
+			}
+			for key := range locMap {
+				if _, ok := enMap[key]; !ok {
+					violations = append(violations, Violation{
+						Check:   "ui-layout",
+						Rule:    "i18n-catalog-parity",
+						File:    relFile,
+						Message: fmt.Sprintf("extra translation key %q not in en.json", key),
+					})
+				}
+			}
+		}
+	}
+
+	validateDir("web/console/src/i18n/locales")
+	validateDir("internal/pkg/i18n/locales")
+
+	for _, loc := range locales {
+		relGuide := "docs/guides/" + loc + "/user-guide.md"
+		raw, err := os.ReadFile(filepath.Join(rootDir, filepath.FromSlash(relGuide)))
+		if err != nil || len(strings.TrimSpace(string(raw))) < 200 {
+			violations = append(violations, Violation{
+				Check:   "ui-layout",
+				Rule:    "i18n-user-guide",
+				File:    relGuide,
+				Message: "missing or incomplete localized user guide",
+			})
+		}
+	}
+
+	return violations
 }

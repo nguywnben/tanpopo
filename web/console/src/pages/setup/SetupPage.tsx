@@ -3,6 +3,8 @@ import {Moon, Sun} from 'lucide-react';
 import {Step, Stepper} from '@astryxdesign/core/Stepper';
 import {completeBootstrap, getBootstrapStatus} from '../../api/client';
 import type {components} from '../../api/generated';
+import {useI18n} from '../../i18n/I18nProvider';
+import {LanguageSelector} from '../../i18n/LanguageSelector';
 import {Link, useRouter} from '../../router/RouterContext';
 import {useTheme} from '../../styles/theme';
 import {Banner, Button, CheckboxField, CodeBlock, IconButton, KeyValueList, SelectField, TanpopoMark, TextField} from '../../ui/primitives';
@@ -13,25 +15,26 @@ type InitialConnection = NonNullable<BootstrapForm['initial_connection']>;
 type DataRegion = components['schemas']['DataRegion'];
 type CreatedSecret = components['schemas']['VirtualKeyCreatedResponse'];
 
-const steps = [
-  {title: 'Owner account', summary: 'Bootstrap token & initial tenant'},
-  {title: 'First connection', summary: 'Optional upstream provider'},
-  {title: 'Key custody', summary: 'Master KEK backup confirmation'},
-  {title: 'Review', summary: 'Initialize instance'},
+const stepKeys = [
+  {titleKey: 'setup.step0.title', summaryKey: 'setup.step0.summary'},
+  {titleKey: 'setup.step1.title', summaryKey: 'setup.step1.summary'},
+  {titleKey: 'setup.step2.title', summaryKey: 'setup.step2.summary'},
+  {titleKey: 'setup.step3.title', summaryKey: 'setup.step3.summary'},
 ];
 
 const providerPresets = [
   {key: 'openai', adapter: 'openai', label: 'OpenAI', billing: 'COMMERCIAL_API' as const, url: 'https://api.openai.com/v1', model: 'gpt-4o-mini'},
   {key: 'anthropic', adapter: 'anthropic', label: 'Anthropic', billing: 'COMMERCIAL_API' as const, url: 'https://api.anthropic.com', model: 'claude-3-5-sonnet-latest'},
   {key: 'gemini', adapter: 'gemini', label: 'Google Gemini', billing: 'COMMERCIAL_API' as const, url: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash'},
-  {key: 'openai-compatible', adapter: 'openai-compatible', label: 'OpenAI-compatible API', billing: 'COMMERCIAL_API' as const, url: 'https://api.example.com/v1', model: 'gpt-4o-mini'},
-  {key: 'vllm', adapter: 'openai-compatible', label: 'Local vLLM', billing: 'SELF_HOSTED_INFRA' as const, url: 'http://127.0.0.1:8000/v1', model: 'llama3.2'},
-  {key: 'ollama', adapter: 'ollama', label: 'Local Ollama', billing: 'SELF_HOSTED_INFRA' as const, url: 'http://127.0.0.1:11434', model: 'llama3.2'},
+  {key: 'openai-compatible', adapter: 'openai-compatible', labelKey: 'setup.preset.openaiCompatible', billing: 'COMMERCIAL_API' as const, url: 'https://api.example.com/v1', model: 'gpt-4o-mini'},
+  {key: 'vllm', adapter: 'openai-compatible', labelKey: 'setup.preset.localVllm', billing: 'SELF_HOSTED_INFRA' as const, url: 'http://127.0.0.1:8000/v1', model: 'llama3.2'},
+  {key: 'ollama', adapter: 'ollama', labelKey: 'setup.preset.localOllama', billing: 'SELF_HOSTED_INFRA' as const, url: 'http://127.0.0.1:11434', model: 'llama3.2'},
 ];
 
 export function SetupPage() {
   const {navigate} = useRouter();
   const {theme, toggleTheme} = useTheme();
+  const {t} = useI18n();
   const [step, setStep] = useState(0);
   const [initialized, setInitialized] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,12 +44,12 @@ export function SetupPage() {
   const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerPassword, setOwnerPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [orgName, setOrgName] = useState('Default Organization');
+  const [orgName, setOrgName] = useState(() => t('setup.defaultOrgName'));
   const [projectName, setProjectName] = useState('default');
 
   const [addConnection, setAddConnection] = useState(true);
   const [providerKey, setProviderKey] = useState('ollama');
-  const [connectionName, setConnectionName] = useState('Primary connection');
+  const [connectionName, setConnectionName] = useState(() => t('setup.defaultConnName'));
   const [endpoint, setEndpoint] = useState('http://127.0.0.1:11434');
   const [modelId, setModelId] = useState('llama3.2');
   const [region, setRegion] = useState<DataRegion>('ON_PREM');
@@ -58,6 +61,7 @@ export function SetupPage() {
   const [result, setResult] = useState<components['schemas']['BootstrapCompleteResponse'] | null>(null);
 
   const preset = useMemo(() => providerPresets.find(item => item.key === providerKey) ?? providerPresets[0], [providerKey]);
+  const presetLabel = (item: (typeof providerPresets)[number]) => (item.labelKey ? t(item.labelKey) : item.label ?? item.key);
   const isLocal = preset.billing === 'SELF_HOSTED_INFRA';
 
   useEffect(() => {
@@ -69,10 +73,10 @@ export function SetupPage() {
         if (status.initialized) navigate('/login', {replace: true});
       })
       .catch(cause => {
-        if (active) setError(formatSetupError(cause));
+        if (active) setError(formatSetupError(cause, t));
       });
     return () => { active = false; };
-  }, [navigate]);
+  }, [navigate, t]);
 
   function choosePreset(key: string) {
     const selected = providerPresets.find(item => item.key === key);
@@ -87,34 +91,34 @@ export function SetupPage() {
 
   function validate(targetStep: number): string {
     if (targetStep === 0) {
-      if (!bootstrapToken.trim()) return 'Enter the one-time bootstrap token printed by the Tanpopo server.';
-      if (!ownerEmail.includes('@')) return 'Enter a valid administrator email address.';
-      if (ownerPassword.length < 12) return 'Use a password with at least 12 characters.';
-      if (ownerPassword !== passwordConfirm) return 'Password confirmation does not match.';
-      if (!orgName.trim() || !projectName.trim()) return 'Organization and project names are required.';
+      if (!bootstrapToken.trim()) return t('setup.val.bootstrapToken');
+      if (!ownerEmail.includes('@')) return t('setup.val.ownerEmail');
+      if (ownerPassword.length < 12) return t('setup.val.passwordLength');
+      if (ownerPassword !== passwordConfirm) return t('setup.val.passwordMismatch');
+      if (!orgName.trim() || !projectName.trim()) return t('setup.val.orgProject');
     }
     if (targetStep === 1 && addConnection) {
       try {
         const parsed = new URL(endpoint);
-        if (!['http:', 'https:'].includes(parsed.protocol)) return 'Provider URL must use HTTP or HTTPS.';
-        if (!isLocal && parsed.protocol !== 'https:') return 'Commercial provider URLs must use HTTPS.';
+        if (!['http:', 'https:'].includes(parsed.protocol)) return t('setup.val.urlProtocol');
+        if (!isLocal && parsed.protocol !== 'https:') return t('setup.val.httpsRequired');
       } catch {
-        return 'Enter a valid provider URL.';
+        return t('setup.val.invalidUrl');
       }
-      if (!connectionName.trim() || !modelId.trim()) return 'Connection name and upstream model name are required.';
+      if (!connectionName.trim() || !modelId.trim()) return t('setup.val.connAndModel');
       const cidrs = allowedCIDRs.split(',').map(v => v.trim()).filter(Boolean);
       if (isLocal && (!allowPrivateIP || cidrs.length === 0)) {
-        return 'Explicitly allow private network access and specify at least one non-wildcard CIDR.';
+        return t('setup.val.privateCidrRequired');
       }
       if (cidrs.some(v => v === '*' || v === '0.0.0.0/0' || v === '::/0')) {
-        return 'Wildcard CIDR ranges (0.0.0.0/0, ::/0, *) are forbidden.';
+        return t('setup.val.wildcardCidr');
       }
       if (!isLocal && !secretValue.trim()) {
-        return 'Enter the provider API key. It is sealed write-only and never retained in the browser.';
+        return t('setup.val.apiKeyRequired');
       }
     }
     if (targetStep === 2 && !acknowledgedCustody) {
-      return 'Confirm custody of the instance master key before initializing.';
+      return t('setup.val.custodyRequired');
     }
     return '';
   }
@@ -126,7 +130,7 @@ export function SetupPage() {
       return;
     }
     setError('');
-    setStep(current => Math.min(current + 1, steps.length - 1));
+    setStep(current => Math.min(current + 1, stepKeys.length - 1));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -173,7 +177,7 @@ export function SetupPage() {
       setResult(response);
       if (!response.initial_virtual_key) navigate('/overview', {replace: true});
     } catch (cause) {
-      setError(formatSetupError(cause));
+      setError(formatSetupError(cause, t));
     } finally {
       setSecretValue('');
       setBusy(false);
@@ -197,7 +201,7 @@ export function SetupPage() {
     return (
       <main className="tp-auth-page">
         <div className="tp-auth-panel">
-          {error ? <Banner tone="danger" title="Setup status unavailable">{error}</Banner> : <p className="tp-muted" role="status">Checking instance initialization…</p>}
+          {error ? <Banner tone="danger" title={t('setup.statusUnavailable')}>{error}</Banner> : <p className="tp-muted" role="status">{t('setup.checkingInit')}</p>}
         </div>
       </main>
     );
@@ -209,22 +213,25 @@ export function SetupPage() {
       <div className="tp-setup-shell">
         <div className="tp-setup-rail">
           <div className="tp-auth-head">
-            <div className="tp-row">
+            <div className="tp-auth-brand">
               <TanpopoMark size={24} />
               <span style={{fontWeight: 700, fontSize: '1rem'}}>Tanpopo</span>
             </div>
-            <IconButton label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>
-              {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
-            </IconButton>
+            <div className="tp-auth-controls">
+              <LanguageSelector id="setup-language-selector" />
+              <IconButton label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')} onClick={toggleTheme}>
+                {theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
+              </IconButton>
+            </div>
           </div>
           <div className="tp-stack-sm">
-            <h1>Instance setup</h1>
-            <p className="tp-muted">Claim this self-hosted gateway and provision its initial owner and route.</p>
+            <h1>{t('setup.title')}</h1>
+            <p className="tp-muted">{t('setup.subtitle')}</p>
           </div>
           <Stepper
             activeStep={step}
             orientation="vertical"
-            label="Setup steps"
+            label={t('setup.stepsLabel')}
             density="compact"
             onStepClick={index => {
               if (index < step) {
@@ -233,37 +240,37 @@ export function SetupPage() {
               }
             }}
           >
-            {steps.map((item, index) => (
+            {stepKeys.map((item, index) => (
               <Step
-                key={item.title}
+                key={item.titleKey}
                 step={index}
-                label={item.title}
-                description={item.summary}
+                label={t(item.titleKey)}
+                description={t(item.summaryKey)}
                 isDisabled={index > step}
               />
             ))}
           </Stepper>
           <p className="tp-muted">
-            Already initialized? <Link href="/login" className="tp-link">Sign in</Link>
+            {t('setup.alreadyInitialized')} <Link href="/login" className="tp-link">{t('login.submit')}</Link>
           </p>
         </div>
 
         <form className="tp-surface tp-surface-pad tp-stack" onSubmit={handleSubmit}>
-          {error ? <Banner tone="danger" title="Cannot continue">{error}</Banner> : null}
+          {error ? <Banner tone="danger" title={t('setup.cannotContinue')}>{error}</Banner> : null}
 
           {step === 0 ? (
             <>
-              <h2>Owner account & initial tenant</h2>
+              <h2>{t('setup.ownerHeading')}</h2>
               <TextField
-                label="Bootstrap token"
+                label={t('setup.bootstrapToken')}
                 type="password"
                 autoComplete="one-time-code"
                 value={bootstrapToken}
-                hint="Printed once on server startup."
+                hint={t('setup.bootstrapTokenHint')}
                 onChange={event => setBootstrapToken(event.target.value)}
               />
               <TextField
-                label="Owner email"
+                label={t('setup.ownerEmail')}
                 type="email"
                 autoComplete="email"
                 value={ownerEmail}
@@ -271,102 +278,100 @@ export function SetupPage() {
               />
               <div className="tp-grid-2">
                 <TextField
-                  label="Owner password"
+                  label={t('setup.ownerPassword')}
                   type="password"
                   autoComplete="new-password"
                   value={ownerPassword}
-                  hint="Minimum 12 characters."
+                  hint={t('setup.ownerPasswordHint')}
                   onChange={event => setOwnerPassword(event.target.value)}
                 />
                 <TextField
-                  label="Confirm password"
+                  label={t('setup.confirmPassword')}
                   type="password"
                   autoComplete="new-password"
                   value={passwordConfirm}
-                  hint="Re-enter your owner password."
+                  hint={t('setup.confirmPasswordHint')}
                   onChange={event => setPasswordConfirm(event.target.value)}
                 />
               </div>
               <div className="tp-grid-2">
-                <TextField label="Organization name" value={orgName} onChange={event => setOrgName(event.target.value)} />
-                <TextField label="First project name" value={projectName} onChange={event => setProjectName(event.target.value)} />
+                <TextField label={t('setup.orgName')} value={orgName} onChange={event => setOrgName(event.target.value)} />
+                <TextField label={t('setup.projectName')} value={projectName} onChange={event => setProjectName(event.target.value)} />
               </div>
             </>
           ) : null}
 
           {step === 1 ? (
             <>
-              <h2>Initial provider connection</h2>
+              <h2>{t('setup.connectionHeading')}</h2>
               <CheckboxField
-                label="Provision a starter connection, deployment, route, and virtual key"
-                description="Creates a working governed route in one atomic transaction."
+                label={t('setup.provisionStarter')}
+                description={t('setup.provisionStarterDesc')}
                 checked={addConnection}
                 onChange={setAddConnection}
               />
               {addConnection ? (
                 <>
                   <SelectField
-                    label="Provider adapter"
+                    label={t('setup.providerAdapter')}
                     value={providerKey}
                     onChange={choosePreset}
-                    options={providerPresets.map(item => ({value: item.key, label: item.label}))}
+                    options={providerPresets.map(item => ({value: item.key, label: presetLabel(item)}))}
                   />
                   <div className="tp-grid-2">
-                    <TextField label="Connection name" value={connectionName} onChange={event => setConnectionName(event.target.value)} />
+                    <TextField label={t('setup.connectionName')} value={connectionName} onChange={event => setConnectionName(event.target.value)} />
                     <SelectField
-                      label="Data region"
+                      label={t('setup.dataRegion')}
                       value={region}
                       onChange={next => setRegion(next as DataRegion)}
                       options={[
-                        {value: 'US', label: 'US'},
-                        {value: 'EU', label: 'EU'},
-                        {value: 'APAC', label: 'APAC'},
-                        {value: 'ON_PREM', label: 'ON_PREM'},
+                        {value: 'US', label: t('common.region.US')},
+                        {value: 'EU', label: t('common.region.EU')},
+                        {value: 'APAC', label: t('common.region.APAC')},
+                        {value: 'ON_PREM', label: t('common.region.ON_PREM')},
                       ]}
                     />
                   </div>
-                  <TextField label="Provider URL" type="url" value={endpoint} onChange={event => setEndpoint(event.target.value)} />
-                  <TextField label="Upstream model name" value={modelId} onChange={event => setModelId(event.target.value)} />
+                  <TextField label={t('setup.providerUrl')} type="url" value={endpoint} onChange={event => setEndpoint(event.target.value)} />
+                  <TextField label={t('setup.upstreamModel')} value={modelId} onChange={event => setModelId(event.target.value)} />
                   {!isLocal ? (
                     <TextField
-                      label="Provider API key"
+                      label={t('setup.providerApiKey')}
                       type="password"
                       autoComplete="new-password"
                       value={secretValue}
-                      hint="Sealed write-only in the vault and never returned."
+                      hint={t('setup.providerApiKeyHint')}
                       onChange={event => setSecretValue(event.target.value)}
                     />
                   ) : (
                     <>
                       <CheckboxField
-                        label="Allow private or loopback upstream for this connection"
-                        description="Cloud metadata endpoints and control-plane ports remain blocked."
+                        label={t('setup.allowPrivateIp')}
+                        description={t('setup.allowPrivateIpDesc')}
                         checked={allowPrivateIP}
                         onChange={setAllowPrivateIP}
                       />
                       <TextField
-                        label="Allowed private CIDRs"
+                        label={t('setup.allowedCidrs')}
                         value={allowedCIDRs}
-                        hint="Comma-separated specific CIDRs (e.g. 127.0.0.1/32). Wildcards are rejected."
+                        hint={t('setup.allowedCidrsHint')}
                         onChange={event => setAllowedCIDRs(event.target.value)}
                       />
                     </>
                   )}
                 </>
               ) : (
-                <p className="tp-muted">Connections can be added later from Providers.</p>
+                <p className="tp-muted">{t('setup.connectionsLater')}</p>
               )}
             </>
           ) : null}
 
           {step === 2 ? (
             <>
-              <h2>Master key custody</h2>
-              <p className="tp-muted">
-                Tanpopo encrypts provider credentials and secrets with the configured instance master key (KEK). Back it up in your approved secret manager—losing it renders encrypted credentials unrecoverable.
-              </p>
+              <h2>{t('setup.custodyHeading')}</h2>
+              <p className="tp-muted">{t('setup.custodyDesc')}</p>
               <CheckboxField
-                label="I have securely backed up the Tanpopo master key"
+                label={t('setup.custodyAck')}
                 checked={acknowledgedCustody}
                 onChange={setAcknowledgedCustody}
               />
@@ -375,14 +380,14 @@ export function SetupPage() {
 
           {step === 3 ? (
             <>
-              <h2>Review and initialize</h2>
+              <h2>{t('setup.reviewHeading')}</h2>
               <KeyValueList
                 items={[
-                  {label: 'Owner email', value: ownerEmail},
-                  {label: 'Organization / Project', value: `${orgName} / ${projectName}`},
+                  {label: t('setup.ownerEmail'), value: ownerEmail},
+                  {label: t('setup.reviewOrgProject'), value: `${orgName} / ${projectName}`},
                   {
-                    label: 'Initial connection',
-                    value: addConnection ? `${preset.label} · ${endpoint} · ${modelId} (${region})` : 'Skipped',
+                    label: t('setup.reviewInitialConn'),
+                    value: addConnection ? `${presetLabel(preset)} · ${endpoint} · ${modelId} (${region})` : t('setup.skipped'),
                   },
                 ]}
               />
@@ -392,14 +397,14 @@ export function SetupPage() {
           <div className="tp-row" style={{justifyContent: 'space-between'}}>
             {step > 0 ? (
               <Button variant="secondary" disabled={busy} onClick={() => { setError(''); setStep(s => Math.max(0, s - 1)); }}>
-                Back
+                {t('common.back')}
               </Button>
             ) : <span />}
-            {step < steps.length - 1 ? (
-              <Button variant="primary" onClick={handleNext}>Continue</Button>
+            {step < stepKeys.length - 1 ? (
+              <Button variant="primary" onClick={handleNext}>{t('common.continue')}</Button>
             ) : (
               <Button type="submit" variant="primary" loading={busy}>
-                {busy ? 'Initializing…' : 'Complete setup'}
+                {busy ? t('setup.initializing') : t('setup.completeSetup')}
               </Button>
             )}
           </div>
@@ -410,6 +415,7 @@ export function SetupPage() {
 }
 
 function FirstKeyDialog({secret, model, onContinue}: {secret: CreatedSecret; model: string; onContinue: () => void}) {
+  const {t, formatNumber} = useI18n();
   const [acknowledged, setAcknowledged] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testError, setTestError] = useState('');
@@ -430,14 +436,14 @@ function FirstKeyDialog({secret, model, onContinue}: {secret: CreatedSecret; mod
       });
       if (!response.ok || !response.body) {
         const body = await response.text();
-        throw new Error(extractStreamError(body, response.status));
+        throw new Error(extractStreamError(body, response.status, t));
       }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
       let text = '';
       let doneSeen = false;
-      const reqId = response.headers.get('x-tanpopo-request-id') ?? 'unreported';
+      const reqId = response.headers.get('x-tanpopo-request-id') ?? t('setup.firstKey.unreported');
       while (true) {
         const chunk = await reader.read();
         if (chunk.done) break;
@@ -459,12 +465,12 @@ function FirstKeyDialog({secret, model, onContinue}: {secret: CreatedSecret; mod
         }
       }
       if (!doneSeen || !text.trim()) {
-        throw new Error('The test stream ended without a complete response.');
+        throw new Error(t('setup.firstKey.incompleteStream'));
       }
       setTestResult({text, requestId: reqId, latencyMs: Math.round(performance.now() - started), verified: true});
     } catch (cause) {
       setTestResult(null);
-      setTestError(cause instanceof Error ? cause.message : 'First request failed.');
+      setTestError(cause instanceof Error ? cause.message : t('setup.firstKey.requestFailed'));
     } finally {
       setTesting(false);
     }
@@ -479,32 +485,35 @@ function FirstKeyDialog({secret, model, onContinue}: {secret: CreatedSecret; mod
       dismissible={false}
       onClose={() => undefined}
       size="lg"
-      title="Store your virtual key & verify first request"
-      subtitle="This plaintext secret is shown once and cannot be retrieved after closing."
+      title={t('setup.firstKey.title')}
+      subtitle={t('setup.firstKey.subtitle')}
       footer={
         <Button variant="primary" disabled={!acknowledged || !testResult?.verified || testing} onClick={onContinue}>
-          Continue to Overview
+          {t('setup.firstKey.continue')}
         </Button>
       }
     >
       <CodeBlock title={`${secret.name} (${secret.key_prefix}…${secret.last_four})`} code={secret.secret_key} />
-      <CodeBlock title="cURL quickstart" code={curlSnippet} />
+      <CodeBlock title={t('setup.firstKey.curlTitle')} code={curlSnippet} />
       <div className="tp-row">
         <Button variant="primary" loading={testing} onClick={() => void runFirstRequest()}>
-          {testing ? 'Sending streaming test…' : 'Send Test Request'}
+          {testing ? t('setup.firstKey.sending') : t('setup.firstKey.sendTest')}
         </Button>
       </div>
-      {testError ? <Banner tone="danger" title="Test request failed">{testError}</Banner> : null}
+      {testError ? <Banner tone="danger" title={t('setup.firstKey.testFailedTitle')}>{testError}</Banner> : null}
       {testResult ? (
-        <Banner tone={testResult.verified ? 'ok' : 'info'} title={testResult.verified ? `Verified in ${testResult.latencyMs} ms` : 'Streaming response…'}>
+        <Banner
+          tone={testResult.verified ? 'ok' : 'info'}
+          title={testResult.verified ? t('setup.firstKey.verifiedIn', {ms: formatNumber(testResult.latencyMs)}) : t('setup.firstKey.streaming')}
+        >
           <div className="tp-stack-sm">
-            <span className="mono">Request ID: {testResult.requestId}</span>
+            <span className="mono">{t('setup.firstKey.requestId', {id: testResult.requestId})}</span>
             <span>{testResult.text}</span>
           </div>
         </Banner>
       ) : null}
       <CheckboxField
-        label="I have securely stored this virtual key"
+        label={t('setup.firstKey.storedAck')}
         checked={acknowledged}
         onChange={setAcknowledged}
       />
@@ -512,23 +521,23 @@ function FirstKeyDialog({secret, model, onContinue}: {secret: CreatedSecret; mod
   );
 }
 
-function extractStreamError(body: string, status: number): string {
+function extractStreamError(body: string, status: number, t: (key: string, vars?: Record<string, string | number>) => string): string {
   try {
     const parsed = JSON.parse(body) as {error?: {message?: string}};
     if (parsed.error?.message) return parsed.error.message;
   } catch {
     // Fallback to HTTP status text.
   }
-  return `First request failed (${status}). Check the deployment and route configuration.`;
+  return t('setup.firstKey.statusFailed', {status});
 }
 
-function formatSetupError(cause: unknown): string {
+function formatSetupError(cause: unknown, t: (key: string) => string): string {
   if (cause instanceof Error) {
     const code = 'code' in cause && typeof cause.code === 'string' ? cause.code : '';
-    if (code === 'bootstrap_already_completed') return 'This instance is already initialized. Sign in instead.';
-    if (code === 'invalid_credentials') return 'The bootstrap token or owner credentials were rejected.';
-    if (code === 'ssrf_blocked_private_ip' || code === 'egress_port_denied') return 'The provider URL is blocked by egress network policy.';
+    if (code === 'bootstrap_already_completed') return t('setup.err.alreadyCompleted');
+    if (code === 'invalid_credentials') return t('setup.err.invalidCredentials');
+    if (code === 'ssrf_blocked_private_ip' || code === 'egress_port_denied') return t('setup.err.egressBlocked');
     return cause.message;
   }
-  return 'Could not reach the Tanpopo server.';
+  return t('setup.err.unreachable');
 }

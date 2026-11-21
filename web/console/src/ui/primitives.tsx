@@ -19,6 +19,8 @@ import {MoreMenu as AstryxMoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {TextArea as AstryxTextArea} from '@astryxdesign/core/TextArea';
 import {TextInput as AstryxTextInput, type TextInputType} from '@astryxdesign/core/TextInput';
+import {formatLocalizedMicroUSD} from '../i18n/catalog';
+import {getActiveLocale, translateRuntime} from '../i18n/I18nProvider';
 export {SelectField, type SelectFieldOption, type SelectOption} from './SelectField';
 
 export type StatusTone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral';
@@ -92,7 +94,7 @@ export function Button({
     typeof children === 'number' ||
     (Array.isArray(children) && Children.toArray(children).every(child => typeof child === 'string' || typeof child === 'number'));
 
-  const textLabel = ariaLabel ?? (extractText(children) || 'Action');
+  const textLabel = ariaLabel ?? (extractText(children) || translateRuntime('common.action'));
 
   return (
     <AstryxButton
@@ -338,7 +340,7 @@ export function Banner({
     tone === 'warn' ? 'warning' :
     tone === 'danger' ? 'error' :
     'info';
-  const resolvedTitle = title ?? (children ?? 'Notice');
+  const resolvedTitle = title ?? (children ?? translateRuntime('common.notice'));
   const resolvedDescription = title ? children : undefined;
   const role = tone === 'danger' || tone === 'warn' ? 'alert' : undefined;
 
@@ -490,41 +492,11 @@ export function stateTone(state: string): StatusTone {
   return 'info';
 }
 
-const operationalStateLabels: Record<string, string> = {
-  ACTIVE_HEALTHY: 'Healthy',
-  CIRCUIT_OPEN_UNHEALTHY: 'Circuit open',
-  THROTTLED_COOLDOWN: 'Cooldown',
-  DRAINING_MAINTENANCE: 'Draining',
-  HALF_OPEN_PROBING: 'Probing',
-  DISABLED: 'Disabled',
-  ENABLED: 'Enabled',
-  PROVISIONED: 'Provisioned',
-  CREATED_ACTIVE: 'Active',
-  ENABLED_ACTIVE: 'Active',
-  ROTATING_GRACE: 'Rotating',
-  REVOKED: 'Revoked',
-  ACTIVE: 'Active',
-  DEGRADED: 'Degraded',
-  EXACT: 'Exact',
-  ESTIMATED: 'Estimated',
-  UNMETERED_FLAGGED: 'Unmetered',
-  VERIFIED: 'Verified',
-  TESTED: 'Tested',
-  DECLARED: 'Declared',
-  OFFICIAL: 'Official',
-  UNVERIFIED_EXTERNAL: 'Unverified',
-  PENDING_APPROVAL: 'Pending approval',
-  DRIFT_LOCKED: 'Drift locked',
-  QUARANTINED: 'Quarantined',
-  FAIL_CLOSED: 'Fail closed',
-  FAIL_OPEN: 'Fail open',
-  OK: 'OK',
-  FAILED: 'Failed',
-};
-
 export function formatOperationalState(raw: string): string {
   const key = raw.toUpperCase();
-  if (key in operationalStateLabels) return operationalStateLabels[key];
+  const stateKey = `state.${key}`;
+  const translated = translateRuntime(stateKey);
+  if (translated !== stateKey) return translated;
   return formatLabel(raw);
 }
 
@@ -533,11 +505,5 @@ export function formatLabel(raw: string): string {
 }
 
 export function formatMicroUSD(value: number): string {
-  if (!Number.isSafeInteger(value)) return 'Unavailable';
-  const amount = BigInt(value);
-  const sign = amount < 0n ? '-' : '';
-  const abs = amount < 0n ? -amount : amount;
-  const whole = abs / 1_000_000n;
-  const fraction = String(abs % 1_000_000n).padStart(6, '0');
-  return `${sign}$${whole.toLocaleString('en-US')}.${fraction}`;
+  return formatLocalizedMicroUSD(getActiveLocale(), value, translateRuntime('common.unavailable'));
 }

@@ -28,6 +28,7 @@ import (
 	clisanitize "github.com/nguywnben/tanpopo/internal/cli/sanitize"
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	opsdoctor "github.com/nguywnben/tanpopo/internal/ops/doctor"
+	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
@@ -45,13 +46,14 @@ type doctorReportDocument struct {
 
 // NewDoctorCommand reports local file diagnostics and loopback-only service probes.
 func NewDoctorCommand(opts Options) *cobra.Command {
+	loc := resolveLocale(opts.Locale)
 	if strings.TrimSpace(opts.RootDir) == "" {
 		opts.RootDir = envOr("TANPOPO_DATA_DIR", "data")
 	}
 	var artifacts []string
 	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Check local Tanpopo files and service health",
+		Short: i18n.T(loc, "cli.support.doctor.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			paths, err := parseDoctorArtifactPaths(artifacts)
@@ -60,7 +62,7 @@ func NewDoctorCommand(opts Options) *cobra.Command {
 			}
 			report, err := collectDoctorReport(cmd.Context(), opts.RootDir, paths)
 			if err != nil {
-				return fmt.Errorf("collect local doctor report: %w", err)
+				return fmt.Errorf("%s: %w", i18n.T(loc, "cli.support.doctor.err.collect"), err)
 			}
 			var outputErr error
 			format := "table"
@@ -74,32 +76,32 @@ func NewDoctorCommand(opts Options) *cobra.Command {
 				outputErr = yaml.NewEncoder(opts.Stdout).Encode(report)
 			case "table", "":
 				w := tabwriter.NewWriter(opts.Stdout, 0, 0, 2, ' ', 0)
-				if _, err := fmt.Fprintln(w, "CHECK	STATUS"); err != nil {
+				if _, err := fmt.Fprintf(w, "%s\t%s\n", i18n.T(loc, "cli.support.doctor.col.check"), i18n.T(loc, "cli.support.doctor.col.status")); err != nil {
 					return err
 				}
 				for _, check := range report.Checks {
-					row := clisanitize.Terminal(check.Name) + "	" + clisanitize.Terminal(check.Status)
+					row := clisanitize.Terminal(check.Name) + "\t" + clisanitize.Terminal(check.Status)
 					if _, err := fmt.Fprintln(w, row); err != nil {
 						return err
 					}
 				}
 				outputErr = w.Flush()
 			default:
-				return errors.New("--output must be table, json, or yaml")
+				return errors.New(i18n.T(loc, "cli.err.output_format"))
 			}
 			if outputErr != nil {
 				return outputErr
 			}
 			for _, check := range report.Checks {
 				if check.Status == strings.ToLower(string(opsdoctor.StatusFail)) {
-					return errors.New("doctor found failing preflight checks")
+					return errors.New(i18n.T(loc, "cli.support.doctor.err.failed"))
 				}
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&opts.RootDir, "root", opts.RootDir, "Tanpopo data/config root")
-	cmd.Flags().StringArrayVar(&artifacts, "artifact", nil, "Pinned extension archive as extension-id=path (repeat for each lock entry)")
+	cmd.Flags().StringVar(&opts.RootDir, "root", opts.RootDir, i18n.T(loc, "cli.support.doctor.flag.root"))
+	cmd.Flags().StringArrayVar(&artifacts, "artifact", nil, i18n.T(loc, "cli.support.doctor.flag.artifact"))
 	return cmd
 }
 

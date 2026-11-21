@@ -11,6 +11,7 @@ import {
   verifyAuditHashChain,
 } from '../../api/managementClient';
 import type {components} from '../../api/generated';
+import {useI18n} from '../../i18n/I18nProvider';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
 import {ConfirmDialog, Drawer} from '../../ui/Overlays';
@@ -40,6 +41,7 @@ const approvalRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
 
 export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]}) {
   const {navigate} = useRouter();
+  const {t, formatNumber, formatDateTime, formatTime} = useI18n();
   const activeTab = pathname.startsWith('/security/audit-log')
     ? 'audit'
     : pathname.startsWith('/security/kill-switches')
@@ -54,7 +56,6 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
   const [verifyBanner, setVerifyBanner] = useState<{ok: boolean; text: string} | null>(null);
   const [inspectedEvent, setInspectedEvent] = useState<AuditEvent | null>(null);
 
-  // Trigger Kill Switch Drawer
   const [triggerOpen, setTriggerOpen] = useState(false);
   const [level, setLevel] = useState<TargetLevel>('PROJECT');
   const [targetId, setTargetId] = useState('');
@@ -64,7 +65,6 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
   const [blastRadius, setBlastRadius] = useState<{organizations: string[]; projects: string[]; virtual_keys: string[]; connections: string[]} | null>(null);
   const [confirmTriggerOpen, setConfirmTriggerOpen] = useState(false);
 
-  // Clear Kill Switch Dialog
   const [clearTarget, setClearTarget] = useState<KillSwitch | null>(null);
   const [clearReason, setClearReason] = useState('');
 
@@ -78,6 +78,12 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
   const authorized = roles.some(r => securityRoles.includes(r));
   const canReviewApprovals = roles.some(r => approvalRoles.includes(r));
   const requiresSlug = level === 'PROJECT';
+
+  const levelLabel = (lvl: string) => {
+    const key = `security.level.${lvl}`;
+    const val = t(key);
+    return val === key ? formatLabel(lvl) : val;
+  };
 
   const refresh = useCallback(async () => {
     if (!authorized) {
@@ -99,11 +105,11 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       setKillSwitches(switches);
       setApprovals(pending);
     } catch (cause) {
-      if (gen === genRef.current) setError(errText(cause));
+      if (gen === genRef.current) setError(errText(cause, t));
     } finally {
       if (gen === genRef.current) setLoading(false);
     }
-  }, [authorized, actionFilter, canReviewApprovals]);
+  }, [authorized, actionFilter, canReviewApprovals, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -117,7 +123,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       setEvents(curr => [...curr, ...page.data]);
       setNextAuditCursor(page.nextCursor);
     } catch (cause) {
-      if (gen === genRef.current) setError(errText(cause));
+      if (gen === genRef.current) setError(errText(cause, t));
     } finally {
       if (gen === genRef.current) setLoadingMore(false);
     }
@@ -130,9 +136,9 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
     try {
       await decideApproval(item, decision, `Reviewed (${decision.toLowerCase()}) in Tanpopo Console.`);
       await refresh();
-      setNotice(`Approval ${decision.toLowerCase()}d and recorded in the immutable audit log.`);
+      setNotice(decision === 'APPROVE' ? t('security.approvalApproved') : t('security.approvalRejected'));
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -145,7 +151,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       setBlastRadius(await getKillSwitchBlastRadius(level as 'PROJECT' | 'VIRTUAL_KEY' | 'EXTENSION' | 'PROVIDER_CONNECTION', targetId.trim()));
     } catch (cause) {
       setBlastRadius(null);
-      setError(`Blast-radius preview unavailable: ${errText(cause)}`);
+      setError(t('security.blastUnavailable', {error: errText(cause, t)}));
     }
   }
 
@@ -169,10 +175,14 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       setBlastRadius(null);
       await refresh();
       setNotice(
-        `Kill switch active at epoch ${result.config_epoch} (${result.affected_entities_count} entities affected, ${result.severed_streams_count} streams severed).`,
+        t('security.killSwitchActivated', {
+          epoch: formatNumber(result.config_epoch),
+          entities: formatNumber(result.affected_entities_count),
+          streams: formatNumber(result.severed_streams_count),
+        }),
       );
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -188,10 +198,10 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       setClearTarget(null);
       setClearReason('');
       await refresh();
-      setNotice('Kill switch cleared and logged.');
+      setNotice(t('security.killSwitchCleared'));
     } catch (cause) {
       setClearTarget(null);
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -205,37 +215,37 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       setVerifyBanner({
         ok: res.intact,
         text: res.intact
-          ? `Cryptographic RFC 8785 JCS chain intact across ${res.checked_events_count} events.`
-          : `Chain verification failed at sequence ${res.first_broken_seq_no ?? 'unknown'}.`,
+          ? t('security.chainIntact', {count: formatNumber(res.checked_events_count)})
+          : t('security.chainBroken', {seq: res.first_broken_seq_no ?? t('common.unknown')}),
       });
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
   }
 
   if (!authorized) {
-    return <Banner tone="danger" title="Access restricted">Your role does not have access to the security center.</Banner>;
+    return <Banner tone="danger" title={t('common.accessRestricted')}>{t('security.restrictedDesc')}</Banner>;
   }
 
   return (
     <div className="tp-stack">
       <div className="tp-page-head">
         <div className="tp-page-head-text">
-          <h1>Security</h1>
-          <p className="tp-page-subtitle">Human-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.</p>
+          <h1>{t('security.title')}</h1>
+          <p className="tp-page-subtitle">{t('security.subtitle')}</p>
         </div>
         <div className="tp-page-actions">
           <Button variant="danger" size="sm" onClick={() => setTriggerOpen(true)}>
             <ShieldAlert size={14} aria-hidden="true" />
-            <span>Trigger kill switch</span>
+            <span>{t('security.triggerKillSwitch')}</span>
           </Button>
         </div>
       </div>
 
       <Tabs
-        label="Security sections"
+        label={t('security.tabsLabel')}
         activeId={activeTab}
         onSelect={id => {
           if (id === 'kill-switches') navigate('/security/kill-switches');
@@ -243,9 +253,9 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
           else navigate('/security/approvals');
         }}
         items={[
-          {id: 'approvals', label: 'Approval Queue', count: approvals.length},
-          {id: 'kill-switches', label: 'Kill Switches', count: killSwitches.length},
-          {id: 'audit', label: 'Audit Log'},
+          {id: 'approvals', label: t('security.tabApprovals'), count: approvals.length},
+          {id: 'kill-switches', label: t('security.tabKillSwitches'), count: killSwitches.length},
+          {id: 'audit', label: t('security.tabAudit')},
         ]}
       />
 
@@ -254,15 +264,15 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
 
       {activeTab === 'approvals' ? (
         <section className="tp-section">
-          <SectionHeader title="Pending MCP approvals" count={approvals.length} />
+          <SectionHeader title={t('security.pendingApprovals')} count={approvals.length} />
           {!canReviewApprovals ? (
-            <Banner tone="info">Only Organization Owners, Team Admins, and Security Reviewers can decide pending approvals.</Banner>
+            <Banner tone="info">{t('security.approvalsRoleHint')}</Banner>
           ) : loading && approvals.length === 0 ? (
-            <p className="tp-muted" role="status">Loading pending approvals…</p>
+            <p className="tp-muted" role="status">{t('security.loadingApprovals')}</p>
           ) : approvals.length === 0 ? (
             <EmptyState
-              title="Approval queue clear"
-              description="Destructive MCP tool invocations requiring human-in-the-loop sign-off appear here."
+              title={t('security.queueClearTitle')}
+              description={t('security.queueClearDesc')}
             />
           ) : (
             <ul className="tp-list">
@@ -272,32 +282,30 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
                     <div className="tp-row">
                       <StatusPill
                         tone={item.schema_drift_locked ? 'danger' : 'warn'}
-                        label={item.schema_drift_locked ? 'Schema drift locked' : formatLabel(item.action_kind)}
+                        label={item.schema_drift_locked ? t('security.schemaDriftLocked') : formatLabel(item.action_kind)}
                       />
                       <span className="mono" style={{fontWeight: 600}}>{item.requested_by}</span>
                     </div>
-                    <span className="tp-muted num">Expires {new Date(item.expires_at).toLocaleString()}</span>
+                    <span className="tp-muted num">{t('security.expiresAt', {time: formatDateTime(item.expires_at)})}</span>
                   </div>
 
                   {item.schema_drift_locked ? (
-                    <Banner tone="danger">
-                      The underlying MCP tool schema drifted. Re-approve the schema in MCP Hub before approving this call.
-                    </Banner>
+                    <Banner tone="danger">{t('security.schemaDriftBanner')}</Banner>
                   ) : null}
 
                   <CodeBlock
-                    title="Escaped canonical argument preview"
-                    code={item.payload_preview_json ?? 'No argument preview stored.'}
+                    title={t('security.argPreviewTitle')}
+                    code={item.payload_preview_json ?? t('security.noArgPreview')}
                   />
 
                   <div className="tp-row" style={{justifyContent: 'space-between'}}>
-                    <span className="mono tp-muted">Binding hash: {item.approval_binding_hash}</span>
+                    <span className="mono tp-muted">{t('security.bindingHash', {hash: item.approval_binding_hash})}</span>
                     <div className="tp-row">
                       <Button variant="danger-outline" size="sm" disabled={busy} onClick={() => void handleApprovalDecision(item, 'REJECT')}>
-                        Reject
+                        {t('security.reject')}
                       </Button>
                       <Button variant="primary" size="sm" disabled={busy || item.schema_drift_locked} onClick={() => void handleApprovalDecision(item, 'APPROVE')}>
-                        Approve
+                        {t('security.approve')}
                       </Button>
                     </div>
                   </div>
@@ -310,25 +318,22 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
 
       {activeTab === 'kill-switches' ? (
         <section className="tp-section">
-          <SectionHeader
-            title="Active kill switches"
-            count={killSwitches.length}
-          />
+          <SectionHeader title={t('security.activeSwitches')} count={killSwitches.length} />
           <DataTable
-            ariaLabel="Active kill switches"
+            ariaLabel={t('security.activeSwitches')}
             loading={loading}
             rows={killSwitches}
             rowKey={row => row.id}
-            emptyTitle="No active kill switches"
-            emptyDescription="All Virtual Keys, Projects, Connections, and Extensions are operating normally."
+            emptyTitle={t('security.emptySwitchesTitle')}
+            emptyDescription={t('security.emptySwitchesDesc')}
             columns={[
-              {id: 'level', header: 'Level', primary: true, width: '18%', render: row => <StatusPill tone="danger" label={formatLabel(row.level)} />},
-              {id: 'target', header: 'Target ID', width: '24%', render: row => <span className="mono">{row.target_id}</span>},
-              {id: 'reason', header: 'Trigger reason', width: '32%', render: row => <span>{row.reason}</span>},
-              {id: 'ver', header: 'Rev', width: '10%', render: row => <span className="mono">v{row.version}</span>},
+              {id: 'level', header: t('security.col.level'), primary: true, width: '18%', render: row => <StatusPill tone="danger" label={levelLabel(row.level)} />},
+              {id: 'target', header: t('security.col.targetId'), width: '24%', render: row => <span className="mono">{row.target_id}</span>},
+              {id: 'reason', header: t('security.col.triggerReason'), width: '32%', render: row => <span>{row.reason}</span>},
+              {id: 'ver', header: t('security.col.rev'), width: '10%', render: row => <span className="mono">v{row.version}</span>},
               {
                 id: 'actions',
-                header: 'Actions',
+                header: t('common.actions'),
                 width: '16%',
                 render: row => (
                   <Button
@@ -339,7 +344,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
                       setClearReason('');
                     }}
                   >
-                    Clear switch
+                    {t('security.clearSwitch')}
                   </Button>
                 ),
               },
@@ -353,39 +358,39 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
           <div className="tp-toolbar">
             <div className="tp-toolbar-field">
               <TextField
-                label="Filter by action"
-                placeholder="e.g. kill_switch.triggered"
+                label={t('security.filterAction')}
+                placeholder={t('security.filterActionPlaceholder')}
                 value={actionFilter}
                 onChange={event => setActionFilter(event.target.value)}
               />
             </div>
             <Button variant="secondary" loading={busy} onClick={() => void handleVerifyChain()}>
               <ShieldCheck size={14} aria-hidden="true" />
-              <span>Verify hash chain</span>
+              <span>{t('security.verifyHashChain')}</span>
             </Button>
           </div>
 
           {verifyBanner ? (
-            <Banner tone={verifyBanner.ok ? 'ok' : 'danger'} title={verifyBanner.ok ? 'Hash chain verified' : 'Hash chain integrity failure'}>
+            <Banner tone={verifyBanner.ok ? 'ok' : 'danger'} title={verifyBanner.ok ? t('security.chainVerifiedTitle') : t('security.chainFailedTitle')}>
               {verifyBanner.text}
             </Banner>
           ) : null}
 
-          <SectionHeader title="Immutable audit events" count={events.length} />
+          <SectionHeader title={t('security.immutableAuditEvents')} count={events.length} />
           <DataTable
-            ariaLabel="Immutable audit records"
+            ariaLabel={t('security.auditAria')}
             loading={loading}
             rows={events}
             rowKey={row => `${row.seq_no}-${row.event_hash}`}
             onRowClick={row => setInspectedEvent(row)}
-            emptyTitle="No audit events match this filter"
+            emptyTitle={t('security.emptyAuditTitle')}
             columns={[
-              {id: 'seq', header: 'Seq', primary: true, width: '7%', render: row => <span className="mono" style={{fontWeight: 600}}>#{row.seq_no}</span>},
-              {id: 'action', header: 'Action', width: '21%', render: row => <span className="mono">{row.action}</span>},
-              {id: 'actor', header: 'Actor', width: '22%', render: row => <span className="mono tp-muted">{row.actor_id}</span>},
+              {id: 'seq', header: t('security.col.seq'), primary: true, width: '7%', render: row => <span className="mono" style={{fontWeight: 600}}>#{row.seq_no}</span>},
+              {id: 'action', header: t('security.col.action'), width: '21%', render: row => <span className="mono">{row.action}</span>},
+              {id: 'actor', header: t('security.col.actor'), width: '22%', render: row => <span className="mono tp-muted">{row.actor_id}</span>},
               {
                 id: 'target',
-                header: 'Target',
+                header: t('security.col.target'),
                 width: '28%',
                 render: row => (
                   <div className="tp-stack-sm">
@@ -394,14 +399,14 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
                   </div>
                 ),
               },
-              {id: 'time', header: 'Time', width: '12%', render: row => <span className="num tp-muted">{new Date(row.created_at).toLocaleTimeString()}</span>},
+              {id: 'time', header: t('security.col.time'), width: '12%', render: row => <span className="num tp-muted">{formatTime(row.created_at)}</span>},
               {
                 id: 'inspect',
-                header: 'Detail',
+                header: t('common.detail'),
                 width: '10%',
                 render: row => (
                   <Button variant="ghost" size="sm" onClick={event => { event.stopPropagation(); setInspectedEvent(row); }}>
-                    Inspect
+                    {t('common.inspect')}
                   </Button>
                 ),
               },
@@ -411,7 +416,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
           {!loading && nextAuditCursor ? (
             <div>
               <Button variant="secondary" size="sm" loading={loadingMore} onClick={() => void loadMoreAudit()}>
-                {loadingMore ? 'Loading more…' : 'Load older audit events'}
+                {loadingMore ? t('security.loadingMore') : t('security.loadOlderAudit')}
               </Button>
             </div>
           ) : null}
@@ -421,39 +426,39 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       <Drawer
         open={triggerOpen}
         onClose={() => setTriggerOpen(false)}
-        title="Trigger emergency kill switch"
-        subtitle="Propagates immediately across snapshots and writes an immutable audit event."
+        title={t('security.triggerDrawerTitle')}
+        subtitle={t('security.triggerDrawerSubtitle')}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setTriggerOpen(false)}>Cancel</Button>
+            <Button variant="secondary" onClick={() => setTriggerOpen(false)}>{t('common.cancel')}</Button>
             <Button
               variant="danger"
               disabled={!targetId.trim() || reason.trim().length < 5 || (requiresSlug && !confirmSlug.trim())}
               onClick={() => setConfirmTriggerOpen(true)}
             >
-              Review & trigger
+              {t('security.reviewAndTrigger')}
             </Button>
           </>
         }
       >
         <SelectField
-          label="Target level"
+          label={t('security.targetLevel')}
           value={level}
           onChange={next => {
             setLevel(next as TargetLevel);
             setBlastRadius(null);
           }}
           options={[
-            {value: 'VIRTUAL_KEY', label: 'Virtual key'},
-            {value: 'PROJECT', label: 'Project'},
-            {value: 'PROVIDER_CONNECTION', label: 'Provider connection'},
-            {value: 'EXTENSION', label: 'Extension'},
+            {value: 'VIRTUAL_KEY', label: t('security.level.VIRTUAL_KEY')},
+            {value: 'PROJECT', label: t('security.level.PROJECT')},
+            {value: 'PROVIDER_CONNECTION', label: t('security.level.PROVIDER_CONNECTION')},
+            {value: 'EXTENSION', label: t('security.level.EXTENSION')},
           ]}
         />
         <div className="tp-toolbar">
           <div className="tp-toolbar-field">
             <TextField
-              label="Target ID"
+              label={t('security.col.targetId')}
               required
               value={targetId}
               onChange={event => {
@@ -463,23 +468,28 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
             />
           </div>
           <Button variant="secondary" disabled={!targetId.trim()} onClick={() => void handlePreviewBlast()}>
-            Preview blast radius
+            {t('security.previewBlast')}
           </Button>
         </div>
 
         {blastRadius ? (
-          <Banner tone="warn" title="Estimated blast radius">
-            {blastRadius.organizations.length} orgs · {blastRadius.projects.length} projects · {blastRadius.virtual_keys.length} virtual keys · {blastRadius.connections.length} connections
+          <Banner tone="warn" title={t('security.blastTitle')}>
+            {t('security.blastSummary', {
+              orgs: formatNumber(blastRadius.organizations.length),
+              projects: formatNumber(blastRadius.projects.length),
+              keys: formatNumber(blastRadius.virtual_keys.length),
+              connections: formatNumber(blastRadius.connections.length),
+            })}
           </Banner>
         ) : null}
 
-        <TextField label="Reason (minimum 5 characters)" required value={reason} onChange={event => setReason(event.target.value)} />
+        <TextField label={t('security.reasonLabel')} required value={reason} onChange={event => setReason(event.target.value)} />
         {requiresSlug ? (
-          <TextField label="Project confirmation slug" required value={confirmSlug} onChange={event => setConfirmSlug(event.target.value)} />
+          <TextField label={t('security.confirmSlugLabel')} required value={confirmSlug} onChange={event => setConfirmSlug(event.target.value)} />
         ) : null}
         <CheckboxField
-          label="Abort active streams immediately"
-          description="Severs live SSE inference and MCP streams using this entity."
+          label={t('security.abortStreams')}
+          description={t('security.abortStreamsDesc')}
           checked={abortStreams}
           onChange={setAbortStreams}
         />
@@ -488,9 +498,12 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       <ConfirmDialog
         open={confirmTriggerOpen}
         onClose={() => setConfirmTriggerOpen(false)}
-        title="Confirm emergency kill switch"
-        description={`Trigger ${level.replaceAll('_', ' ')} kill switch for "${targetId}"? ${abortStreams ? 'Active streams will be terminated.' : 'Active streams will drain.'}`}
-        confirmLabel="Trigger kill switch"
+        title={t('security.confirmTriggerTitle')}
+        description={t(
+          abortStreams ? 'security.confirmTriggerAbortDesc' : 'security.confirmTriggerDrainDesc',
+          {level: levelLabel(level), target: targetId},
+        )}
+        confirmLabel={t('security.triggerKillSwitch')}
         busy={busy}
         onConfirm={() => void handleConfirmTrigger()}
       />
@@ -498,14 +511,14 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       <ConfirmDialog
         open={clearTarget !== null}
         onClose={() => setClearTarget(null)}
-        title="Clear active kill switch"
-        description={`Lift the ${clearTarget?.level ?? ''} kill switch on "${clearTarget?.target_id ?? ''}"?`}
-        confirmLabel="Clear kill switch"
+        title={t('security.clearTitle')}
+        description={t('security.clearDesc', {level: clearTarget ? levelLabel(clearTarget.level) : '', target: clearTarget?.target_id ?? ''})}
+        confirmLabel={t('security.clearBtn')}
         busy={busy || clearReason.trim().length < 5}
         onConfirm={() => void handleConfirmClear()}
       >
         <TextField
-          label="Reason for clearing (minimum 5 characters)"
+          label={t('security.clearReasonLabel')}
           required
           value={clearReason}
           onChange={event => setClearReason(event.target.value)}
@@ -516,20 +529,20 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
         open={inspectedEvent !== null}
         onClose={() => setInspectedEvent(null)}
         size="lg"
-        title={inspectedEvent ? `Audit event #${inspectedEvent.seq_no}` : 'Audit event'}
+        title={inspectedEvent ? t('security.auditEventTitle', {seq: inspectedEvent.seq_no}) : t('security.auditEventDefaultTitle')}
         subtitle={inspectedEvent?.action}
       >
         {inspectedEvent ? (
           <>
             <KeyValueList
               items={[
-                {label: 'Sequence', value: `#${inspectedEvent.seq_no}`, mono: true},
-                {label: 'Timestamp', value: new Date(inspectedEvent.created_at).toLocaleString()},
-                {label: 'Actor ID', value: inspectedEvent.actor_id, mono: true},
-                {label: 'Action', value: inspectedEvent.action, mono: true},
-                {label: 'Target', value: `${inspectedEvent.target_type} / ${inspectedEvent.target_id}`, mono: true},
+                {label: t('security.sequence'), value: `#${inspectedEvent.seq_no}`, mono: true},
+                {label: t('security.timestamp'), value: formatDateTime(inspectedEvent.created_at)},
+                {label: t('security.actorId'), value: inspectedEvent.actor_id, mono: true},
+                {label: t('security.col.action'), value: inspectedEvent.action, mono: true},
+                {label: t('security.col.target'), value: `${inspectedEvent.target_type} / ${inspectedEvent.target_id}`, mono: true},
                 {
-                  label: 'Event SHA-256 hash',
+                  label: t('security.eventHash'),
                   value: (
                     <span className="tp-row">
                       <CheckCircle2 size={14} style={{color: 'var(--status-ok-ink)', flexShrink: 0}} aria-hidden="true" />
@@ -539,7 +552,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
                 },
               ]}
             />
-            <CodeBlock title="Event metadata (plain text JSON)" code={JSON.stringify(inspectedEvent.metadata ?? {}, null, 2)} />
+            <CodeBlock title={t('security.eventMetadata')} code={JSON.stringify(inspectedEvent.metadata ?? {}, null, 2)} />
           </>
         ) : null}
       </Drawer>
@@ -547,4 +560,4 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
   );
 }
 
-function errText(cause: unknown): string { return cause instanceof Error ? cause.message : 'Request failed.'; }
+function errText(cause: unknown, t: (key: string) => string): string { return cause instanceof Error ? cause.message : t('common.requestFailed'); }

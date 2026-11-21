@@ -11,6 +11,7 @@ import {
   updateDeployment,
 } from '../../api/catalogClient';
 import type {components} from '../../api/generated';
+import {translateRuntime, useI18n} from '../../i18n/I18nProvider';
 import {DataTable} from '../../ui/DataTable';
 import {MultiSelectField} from '../../ui/MultiSelectField';
 import {ConfirmDialog, Drawer} from '../../ui/Overlays';
@@ -35,19 +36,19 @@ type Connection = components['schemas']['ProviderConnection'];
 type RateCard = components['schemas']['RateCardNanoUsd'];
 
 const rateFields = [
-  ['input_token_nano_usd', 'Input token (nano-USD)'],
-  ['output_token_nano_usd', 'Output token (nano-USD)'],
-  ['cache_read_token_nano_usd', 'Cache read (nano-USD)'],
-  ['cache_write_token_nano_usd', 'Cache write (nano-USD)'],
-  ['reasoning_token_nano_usd', 'Reasoning token (nano-USD)'],
-  ['image_unit_nano_usd', 'Image unit (nano-USD)'],
-  ['audio_sec_nano_usd', 'Audio second (nano-USD)'],
-  ['document_page_nano_usd', 'Document page (nano-USD)'],
+  'input_token_nano_usd',
+  'output_token_nano_usd',
+  'cache_read_token_nano_usd',
+  'cache_write_token_nano_usd',
+  'reasoning_token_nano_usd',
+  'image_unit_nano_usd',
+  'audio_sec_nano_usd',
+  'document_page_nano_usd',
 ] as const;
 
-type RateField = (typeof rateFields)[number][0];
+type RateField = (typeof rateFields)[number];
 
-const emptyRates = Object.fromEntries(rateFields.map(([key]) => [key, '0'])) as Record<RateField, string>;
+const emptyRates = Object.fromEntries(rateFields.map(key => [key, '0'])) as Record<RateField, string>;
 
 const capabilityNames = [
   'streaming',
@@ -82,6 +83,7 @@ const emptyCapabilities: components['schemas']['CapabilityProfile'] = {
 const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
 
 export function ModelsPage({environmentId, roles}: {environmentId: string; roles: Role[]}) {
+  const {t, formatNumber} = useI18n();
   const [tab, setTab] = useState<'deployments' | 'models'>('deployments');
   const [models, setModels] = useState<LogicalModel[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -91,14 +93,12 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  // Filters
   const [regionFilter, setRegionFilter] = useState('ALL');
   const [healthFilter, setHealthFilter] = useState('ALL');
   const [modelQuery, setModelQuery] = useState('');
   const [assuranceFilter, setAssuranceFilter] = useState('ALL');
   const [capFilter, setCapFilter] = useState('ALL');
 
-  // Register Model Drawer
   const [modelDrawerOpen, setModelDrawerOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [slug, setSlug] = useState('');
@@ -106,7 +106,6 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
   const [maxOutput, setMaxOutput] = useState('8192');
   const [capabilities, setCapabilities] = useState<components['schemas']['CapabilityProfile']>(emptyCapabilities);
 
-  // Register Deployment Drawer
   const [depDrawerOpen, setDepDrawerOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState('');
   const [selectedConnection, setSelectedConnection] = useState('');
@@ -114,7 +113,6 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
   const [rates, setRates] = useState<Record<RateField, string>>(emptyRates);
   const [selfHostedZero, setSelfHostedZero] = useState(false);
 
-  // Action confirmation
   const [pendingAction, setPendingAction] = useState<{deployment: Deployment; action: 'disable' | 'delete'; lastHealthyRoutes: string[]} | null>(null);
 
   const canManage = roles.some(role => manageRoles.includes(role));
@@ -133,11 +131,11 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       setSelectedModel(curr => curr || modelRows[0]?.id || '');
       setSelectedConnection(curr => curr || connRows[0]?.id || '');
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setLoading(false);
     }
-  }, [environmentId]);
+  }, [environmentId, t]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -165,7 +163,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
     setError('');
     setNotice('');
     if (!Number.isInteger(Number(contextWindow)) || Number(contextWindow) < 1 || !Number.isInteger(Number(maxOutput)) || Number(maxOutput) < 1) {
-      setError('Context window and maximum output tokens must be positive integers.');
+      setError(t('models.errPositiveInts'));
       return;
     }
     setBusy(true);
@@ -184,9 +182,9 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       setDisplayName('');
       setSlug('');
       setCapabilities(emptyCapabilities);
-      setNotice(`Registered logical model "${saved.slug}" as DECLARED.`);
+      setNotice(t('models.modelRegistered', {slug: saved.slug}));
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -198,12 +196,12 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
     setNotice('');
     const connection = connections.find(c => c.id === selectedConnection);
     if (!environmentId || !selectedModel || !connection) {
-      setError('Select an active environment, logical model, and provider connection.');
+      setError(t('models.errSelectRequired'));
       return;
     }
     const card = buildRateCard(rates, connection.billing_mode, selfHostedZero);
     if (card.error || !card.rateCard) {
-      setError(card.error ?? 'Invalid rate card.');
+      setError(card.error ?? t('models.errInvalidRateCard'));
       return;
     }
     setBusy(true);
@@ -222,9 +220,9 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       setRates(emptyRates);
       setSelfHostedZero(false);
       await reload();
-      setNotice('Deployment registered in provisioned state.');
+      setNotice(t('models.deploymentRegistered'));
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -240,14 +238,14 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
           ? routeRows
               .filter(
                 route =>
-                  route.targets.some(t => t.deployment_id === deployment.id) &&
-                  !route.targets.some(t => t.deployment_id !== deployment.id && healthyIds.has(t.deployment_id)),
+                  route.targets.some(tg => tg.deployment_id === deployment.id) &&
+                  !route.targets.some(tg => tg.deployment_id !== deployment.id && healthyIds.has(tg.deployment_id)),
               )
               .map(route => route.slug)
           : [];
       setPendingAction({deployment, action, lastHealthyRoutes});
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     }
   }
 
@@ -261,13 +259,13 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       } else {
         await deleteDeployment(pendingAction.deployment.id, `"v${pendingAction.deployment.version}"`);
       }
-      const verb = pendingAction.action === 'disable' ? 'disabled' : 'deleted';
+      const noticeKey = pendingAction.action === 'disable' ? 'models.deploymentDisabled' : 'models.deploymentDeleted';
       setPendingAction(null);
       await reload();
-      setNotice(`Deployment ${verb}.`);
+      setNotice(t(noticeKey));
     } catch (cause) {
       setPendingAction(null);
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -277,30 +275,30 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
     <div className="tp-stack">
       <div className="tp-page-head">
         <div className="tp-page-head-text">
-          <h1>Models & Deployments</h1>
-          <p className="tp-page-subtitle">Logical model capability declarations, assurance tiers, and environment deployments.</p>
+          <h1>{t('models.title')}</h1>
+          <p className="tp-page-subtitle">{t('models.subtitle')}</p>
         </div>
         {canManage ? (
           <div className="tp-page-actions">
             <Button variant="secondary" size="sm" onClick={() => setModelDrawerOpen(true)}>
               <Plus size={14} aria-hidden="true" />
-              <span>Register model</span>
+              <span>{t('models.registerModel')}</span>
             </Button>
             <Button variant="primary" size="sm" onClick={() => setDepDrawerOpen(true)}>
               <Plus size={14} aria-hidden="true" />
-              <span>Add deployment</span>
+              <span>{t('models.addDeployment')}</span>
             </Button>
           </div>
         ) : null}
       </div>
 
       <Tabs
-        label="Model catalog sections"
+        label={t('models.tabsLabel')}
         activeId={tab}
         onSelect={id => setTab(id as 'deployments' | 'models')}
         items={[
-          {id: 'deployments', label: 'Deployments', count: deployments.length},
-          {id: 'models', label: 'Logical Models', count: models.length},
+          {id: 'deployments', label: t('models.tabDeployments'), count: deployments.length},
+          {id: 'models', label: t('models.tabModels'), count: models.length},
         ]}
       />
 
@@ -312,25 +310,25 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
           <div className="tp-toolbar">
             <div className="tp-toolbar-field">
               <SelectField
-                label="Data region"
+                label={t('models.dataRegion')}
                 value={regionFilter}
                 onChange={setRegionFilter}
                 options={[
-                  {value: 'ALL', label: 'All regions'},
-                  {value: 'US', label: 'US'},
-                  {value: 'EU', label: 'EU'},
-                  {value: 'APAC', label: 'APAC'},
-                  {value: 'ON_PREM', label: 'ON_PREM'},
+                  {value: 'ALL', label: t('models.allRegions')},
+                  {value: 'US', label: t('common.region.US')},
+                  {value: 'EU', label: t('common.region.EU')},
+                  {value: 'APAC', label: t('common.region.APAC')},
+                  {value: 'ON_PREM', label: t('common.region.ON_PREM')},
                 ]}
               />
             </div>
             <div className="tp-toolbar-field">
               <SelectField
-                label="Health state"
+                label={t('models.healthState')}
                 value={healthFilter}
                 onChange={setHealthFilter}
                 options={[
-                  {value: 'ALL', label: 'All states'},
+                  {value: 'ALL', label: t('models.allStates')},
                   ...[...new Set(deployments.map(d => d.state))].sort().map(s => ({
                     value: s,
                     label: formatOperationalState(s),
@@ -340,18 +338,18 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
             </div>
           </div>
 
-          <SectionHeader title="Environment deployments" count={visibleDeployments.length} />
+          <SectionHeader title={t('models.envDeployments')} count={visibleDeployments.length} />
           <DataTable
-            ariaLabel="Model deployments"
+            ariaLabel={t('models.deploymentsAria')}
             loading={loading}
             rows={visibleDeployments}
             rowKey={row => row.id}
-            emptyTitle="No deployments found"
-            emptyDescription="Bind a logical model to a provider connection with an integer nano-USD rate card."
+            emptyTitle={t('models.emptyDeploymentsTitle')}
+            emptyDescription={t('models.emptyDeploymentsDesc')}
             columns={[
               {
                 id: 'upstream',
-                header: 'Upstream model',
+                header: t('models.col.upstreamModel'),
                 primary: true,
                 width: '28%',
                 render: row => (
@@ -361,41 +359,41 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                   </div>
                 ),
               },
-              {id: 'conn', header: 'Connection', width: '18%', render: row => <span className="mono">{row.connection_id}</span>},
-              {id: 'region', header: 'Region', width: '10%', render: row => <span>{row.data_region}</span>},
+              {id: 'conn', header: t('models.col.connection'), width: '18%', render: row => <span className="mono">{row.connection_id}</span>},
+              {id: 'region', header: t('models.col.region'), width: '10%', render: row => <span>{row.data_region}</span>},
               {
                 id: 'state',
-                header: 'Health',
+                header: t('models.col.health'),
                 width: '18%',
                 render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />,
               },
               {
                 id: 'rates',
-                header: 'In / Out (nano-USD)',
+                header: t('models.col.rates'),
                 width: '18%',
                 render: row => (
                   <span className="mono">
-                    {row.rate_card.input_token_nano_usd} / {row.rate_card.output_token_nano_usd}
+                    {formatNumber(row.rate_card.input_token_nano_usd)} / {formatNumber(row.rate_card.output_token_nano_usd)}
                   </span>
                 ),
               },
               {
                 id: 'actions',
-                header: 'Actions',
+                header: t('common.actions'),
                 width: '8%',
                 render: row =>
                   canManage ? (
                     <RowActionsMenu
-                      label={`Actions for ${row.upstream_model_name}`}
+                      label={t('common.actionsFor', {name: row.upstream_model_name})}
                       disabled={busy}
                       items={[
                         ...(row.state !== 'DISABLED'
-                          ? [{id: 'disable', label: 'Disable deployment', onClick: () => void openDeploymentAction(row, 'disable')}]
+                          ? [{id: 'disable', label: t('models.action.disable'), onClick: () => void openDeploymentAction(row, 'disable')}]
                           : []),
                         ...(row.state !== 'DISABLED' ? [{type: 'divider' as const}] : []),
                         {
                           id: 'delete',
-                          label: 'Delete deployment',
+                          label: t('models.action.delete'),
                           variant: 'destructive' as const,
                           onClick: () => void openDeploymentAction(row, 'delete'),
                         },
@@ -410,45 +408,45 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
         <section className="tp-section">
           <div className="tp-toolbar">
             <div className="tp-toolbar-field">
-              <TextField label="Search models" type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} />
+              <TextField label={t('models.searchModels')} type="search" value={modelQuery} onChange={event => setModelQuery(event.target.value)} />
             </div>
             <div className="tp-toolbar-field">
               <SelectField
-                label="Assurance tier"
+                label={t('models.assuranceTier')}
                 value={assuranceFilter}
                 onChange={setAssuranceFilter}
                 options={[
-                  {value: 'ALL', label: 'All tiers'},
-                  {value: 'DECLARED', label: 'DECLARED'},
-                  {value: 'TESTED', label: 'TESTED'},
-                  {value: 'VERIFIED', label: 'VERIFIED'},
+                  {value: 'ALL', label: t('models.allTiers')},
+                  {value: 'DECLARED', label: formatOperationalState('DECLARED')},
+                  {value: 'TESTED', label: formatOperationalState('TESTED')},
+                  {value: 'VERIFIED', label: formatOperationalState('VERIFIED')},
                 ]}
               />
             </div>
             <div className="tp-toolbar-field">
               <SelectField
-                label="Capability"
+                label={t('models.capability')}
                 value={capFilter}
                 onChange={setCapFilter}
                 options={[
-                  {value: 'ALL', label: 'All capabilities'},
+                  {value: 'ALL', label: t('models.allCapabilities')},
                   ...capabilityNames.map(cap => ({value: cap, label: cap.replaceAll('_', ' ')})),
                 ]}
               />
             </div>
           </div>
 
-          <SectionHeader title="Logical model registry" count={visibleModels.length} />
+          <SectionHeader title={t('models.registryTitle')} count={visibleModels.length} />
           <DataTable
-            ariaLabel="Logical models"
+            ariaLabel={t('models.modelsAria')}
             loading={loading}
             rows={visibleModels}
             rowKey={row => row.id}
-            emptyTitle="No logical models registered"
+            emptyTitle={t('models.emptyModelsTitle')}
             columns={[
               {
                 id: 'slug',
-                header: 'Model',
+                header: t('models.col.model'),
                 primary: true,
                 width: '24%',
                 render: row => (
@@ -458,24 +456,24 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                   </div>
                 ),
               },
-              {id: 'assurance', header: 'Assurance', width: '14%', render: row => <StatusPill tone={stateTone(row.assurance_tier)} label={formatOperationalState(row.assurance_tier)} />},
+              {id: 'assurance', header: t('models.col.assurance'), width: '14%', render: row => <StatusPill tone={stateTone(row.assurance_tier)} label={formatOperationalState(row.assurance_tier)} />},
               {
                 id: 'limits',
-                header: 'Context / Output',
+                header: t('models.col.contextOutput'),
                 width: '18%',
                 render: row => (
                   <span className="mono">
-                    {row.context_window.toLocaleString('en-US')} / {row.max_output_tokens.toLocaleString('en-US')}
+                    {formatNumber(row.context_window)} / {formatNumber(row.max_output_tokens)}
                   </span>
                 ),
               },
               {
                 id: 'caps',
-                header: 'Declared capabilities',
+                header: t('models.col.capabilities'),
                 width: '44%',
                 render: row => (
                   <span className="tp-muted">
-                    {capabilityNames.filter(key => row.capabilities[key]).map(key => key.replaceAll('_', ' ')).join(', ') || 'None declared'}
+                    {capabilityNames.filter(key => row.capabilities[key]).map(key => key.replaceAll('_', ' ')).join(', ') || t('common.noneDeclared')}
                   </span>
                 ),
               },
@@ -487,19 +485,19 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       <Drawer
         open={modelDrawerOpen}
         onClose={() => setModelDrawerOpen(false)}
-        title="Register logical model"
-        subtitle="New models start as DECLARED until test or verification evidence promotes them."
+        title={t('models.drawerModelTitle')}
+        subtitle={t('models.drawerModelSubtitle')}
       >
         <form className="tp-stack" onSubmit={handleCreateModel}>
-          <TextField label="Display name" required value={displayName} onChange={event => setDisplayName(event.target.value)} />
-          <TextField label="Canonical model slug" required value={slug} onChange={event => setSlug(event.target.value)} />
+          <TextField label={t('models.displayName')} required value={displayName} onChange={event => setDisplayName(event.target.value)} />
+          <TextField label={t('models.canonicalSlug')} required value={slug} onChange={event => setSlug(event.target.value)} />
           <div className="tp-grid-2">
-            <TextField label="Context tokens" inputMode="numeric" required value={contextWindow} onChange={event => setContextWindow(event.target.value)} />
-            <TextField label="Max output tokens" inputMode="numeric" required value={maxOutput} onChange={event => setMaxOutput(event.target.value)} />
+            <TextField label={t('models.contextTokens')} inputMode="numeric" required value={contextWindow} onChange={event => setContextWindow(event.target.value)} />
+            <TextField label={t('models.maxOutputTokens')} inputMode="numeric" required value={maxOutput} onChange={event => setMaxOutput(event.target.value)} />
           </div>
           <MultiSelectField
-            label="Declared capabilities"
-            placeholder="Select model capabilities"
+            label={t('models.col.capabilities')}
+            placeholder={t('models.selectCapabilities')}
             hasSelectAll
             hasClear
             hasSearch
@@ -516,8 +514,8 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
             }}
           />
           <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setModelDrawerOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="primary" loading={busy}>Register model</Button>
+            <Button variant="secondary" onClick={() => setModelDrawerOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" variant="primary" loading={busy}>{t('models.registerModel')}</Button>
           </div>
         </form>
       </Drawer>
@@ -525,30 +523,30 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       <Drawer
         open={depDrawerOpen}
         onClose={() => setDepDrawerOpen(false)}
-        title="Register model deployment"
-        subtitle="All pricing rates use exact non-negative integer nano-USD values."
+        title={t('models.drawerDepTitle')}
+        subtitle={t('models.drawerDepSubtitle')}
       >
         <form className="tp-stack" onSubmit={handleCreateDeployment}>
           <SelectField
-            label="Logical model"
+            label={t('models.logicalModel')}
             value={selectedModel}
-            placeholder="Select logical model"
+            placeholder={t('models.selectLogicalModel')}
             onChange={setSelectedModel}
             options={models.map(item => ({value: item.id, label: item.slug}))}
           />
           <SelectField
-            label="Provider connection"
+            label={t('models.providerConnection')}
             value={selectedConnection}
-            placeholder="Select provider connection"
+            placeholder={t('models.selectConnection')}
             onChange={setSelectedConnection}
             options={connections.map(item => ({value: item.id, label: `${item.name} (${item.billing_mode})`}))}
           />
-          <TextField label="Upstream model name" required value={upstreamName} onChange={event => setUpstreamName(event.target.value)} />
+          <TextField label={t('models.upstreamModelName')} required value={upstreamName} onChange={event => setUpstreamName(event.target.value)} />
           <div className="tp-grid-2">
-            {rateFields.map(([key, label]) => (
+            {rateFields.map(key => (
               <TextField
                 key={key}
-                label={label}
+                label={t(`models.rate.${key}`)}
                 inputMode="numeric"
                 required
                 value={rates[key]}
@@ -557,14 +555,14 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
             ))}
           </div>
           <CheckboxField
-            label="Self-hosted zero-rate deployment"
-            description="Only valid for connections with SELF_HOSTED_INFRA billing mode."
+            label={t('models.selfHostedZero')}
+            description={t('models.selfHostedZeroDesc')}
             checked={selfHostedZero}
             onChange={setSelfHostedZero}
           />
           <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setDepDrawerOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="primary" loading={busy}>Save deployment</Button>
+            <Button variant="secondary" onClick={() => setDepDrawerOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" variant="primary" loading={busy}>{t('models.saveDeployment')}</Button>
           </div>
         </form>
       </Drawer>
@@ -572,9 +570,15 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       <ConfirmDialog
         open={pendingAction !== null}
         onClose={() => setPendingAction(null)}
-        title={`${pendingAction?.action === 'delete' ? 'Delete' : 'Disable'} deployment`}
-        description={`${pendingAction?.action === 'delete' ? 'Delete' : 'Disable'} "${pendingAction?.deployment.upstream_model_name ?? ''}"? Routes where this is the last healthy target: ${pendingAction?.lastHealthyRoutes.join(', ') || 'None'}.`}
-        confirmLabel={pendingAction?.action === 'delete' ? 'Delete deployment' : 'Disable deployment'}
+        title={pendingAction?.action === 'delete' ? t('models.confirmDeleteTitle') : t('models.confirmDisableTitle')}
+        description={t(
+          pendingAction?.action === 'delete' ? 'models.confirmDeleteDesc' : 'models.confirmDisableDesc',
+          {
+            name: pendingAction?.deployment.upstream_model_name ?? '',
+            routes: pendingAction?.lastHealthyRoutes.join(', ') || t('common.none'),
+          },
+        )}
+        confirmLabel={pendingAction?.action === 'delete' ? t('models.action.delete') : t('models.action.disable')}
         busy={busy}
         onConfirm={() => void confirmAction()}
       />
@@ -587,20 +591,20 @@ export function buildRateCard(
   billingMode: Connection['billing_mode'],
   confirmZeroRate: boolean,
 ): {rateCard?: RateCard; error?: string} {
-  const numericRates = Object.fromEntries(rateFields.map(([key]) => [key, Number(rates[key])])) as Record<RateField, number>;
-  if (rateFields.some(([key]) => !Number.isSafeInteger(numericRates[key]) || numericRates[key] < 0)) {
-    return {error: 'All rates must be non-negative safe integer nano-USD values.'};
+  const numericRates = Object.fromEntries(rateFields.map(key => [key, Number(rates[key])])) as Record<RateField, number>;
+  if (rateFields.some(key => !Number.isSafeInteger(numericRates[key]) || numericRates[key] < 0)) {
+    return {error: translateRuntime('models.errRateIntegers')};
   }
   const zeroRate = Object.values(numericRates).every(rate => rate === 0);
   if (zeroRate && billingMode !== 'SELF_HOSTED_INFRA') {
-    return {error: 'Zero rates are available only for self-hosted infrastructure.'};
+    return {error: translateRuntime('models.errZeroRateSelfHosted')};
   }
   if (zeroRate && !confirmZeroRate) {
-    return {error: 'Confirm the self-hosted zero-rate declaration.'};
+    return {error: translateRuntime('models.errZeroRateConfirm')};
   }
   return {rateCard: {...numericRates, self_hosted_zero_rate: zeroRate && confirmZeroRate}};
 }
 
-function errText(cause: unknown): string {
-  return cause instanceof Error ? cause.message : 'Request failed.';
+function errText(cause: unknown, t: (key: string) => string): string {
+  return cause instanceof Error ? cause.message : t('common.requestFailed');
 }

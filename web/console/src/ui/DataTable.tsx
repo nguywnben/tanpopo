@@ -1,5 +1,6 @@
 import type {ReactNode} from 'react';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
+import {useI18n} from '../i18n/I18nProvider';
 import {EmptyState} from './primitives';
 
 export type DataColumn<T> = {
@@ -17,7 +18,7 @@ export function DataTable<T>({
   rowKey,
   columns,
   loading = false,
-  emptyTitle = 'No records',
+  emptyTitle,
   emptyDescription,
   emptyAction,
   onRowClick,
@@ -32,9 +33,12 @@ export function DataTable<T>({
   emptyAction?: ReactNode;
   onRowClick?: (row: T) => void;
 }) {
+  const {t} = useI18n();
+  const resolvedEmptyTitle = emptyTitle ?? t('common.noRecords');
+
   if (loading && rows.length === 0) {
     return (
-      <div className="tp-surface tp-surface-pad tp-stack" role="status" aria-busy="true" aria-label={`Loading ${ariaLabel}`}>
+      <div className="tp-surface tp-surface-pad tp-stack" role="status" aria-busy="true" aria-label={t('common.loadingTarget', {target: ariaLabel})}>
         <Skeleton width="42%" height={18} radius={1} index={0} />
         <Skeleton width="100%" height={16} radius={1} index={1} />
         <Skeleton width="92%" height={16} radius={1} index={2} />
@@ -44,7 +48,7 @@ export function DataTable<T>({
   }
 
   if (rows.length === 0) {
-    return <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />;
+    return <EmptyState title={resolvedEmptyTitle} description={emptyDescription} action={emptyAction} />;
   }
 
   const primaryCol = columns.find(col => col.primary) ?? columns[0];

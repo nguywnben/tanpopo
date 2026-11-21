@@ -22,6 +22,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/security/canary"
 	"github.com/nguywnben/tanpopo/internal/telemetry/privacy"
 	"gopkg.in/yaml.v3"
@@ -42,13 +43,22 @@ type Options struct {
 	Output       string
 	OutputFormat *string
 	Stdout       io.Writer
+	Locale       i18n.Locale
+}
+
+func resolveLocale(loc i18n.Locale) i18n.Locale {
+	if loc == "" {
+		return i18n.LocaleEn
+	}
+	return loc
 }
 
 // NewCommand creates `tanpopo support-bundle -o <archive>`.
 func NewCommand(opts Options) *cobra.Command {
+	loc := resolveLocale(opts.Locale)
 	cmd := &cobra.Command{
 		Use:   "support-bundle",
-		Short: "Create a locally redacted diagnostic archive",
+		Short: i18n.T(loc, "cli.support.bundle.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			format := "table"
@@ -56,7 +66,7 @@ func NewCommand(opts Options) *cobra.Command {
 				format = strings.ToLower(strings.TrimSpace(*opts.OutputFormat))
 			}
 			if format != "json" && format != "yaml" && format != "table" {
-				return errors.New("--output must be table, json, or yaml")
+				return errors.New(i18n.T(loc, "cli.err.output_format"))
 			}
 			if strings.TrimSpace(opts.RootDir) == "" {
 				opts.RootDir = "."
@@ -65,7 +75,7 @@ func NewCommand(opts Options) *cobra.Command {
 				opts.Output = "tanpopo-support.tar.gz"
 			}
 			if err := CreateBundle(cmd.Context(), opts.RootDir, opts.Output); err != nil {
-				return fmt.Errorf("create support bundle: %w", err)
+				return fmt.Errorf("%s: %w", i18n.T(loc, "cli.support.bundle.err.create"), err)
 			}
 			if opts.Stdout != nil {
 				switch format {
@@ -82,14 +92,14 @@ func NewCommand(opts Options) *cobra.Command {
 						return fmt.Errorf("write support bundle result: %w", err)
 					}
 				default:
-					return errors.New("unsupported output format")
+					return errors.New(i18n.T(loc, "cli.err.output_format"))
 				}
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&opts.Output, "archive", "o", opts.Output, "Output .tar.gz archive path")
-	cmd.Flags().StringVar(&opts.RootDir, "root", opts.RootDir, "Tanpopo data/config root")
+	cmd.Flags().StringVarP(&opts.Output, "archive", "o", opts.Output, i18n.T(loc, "cli.support.bundle.flag.archive"))
+	cmd.Flags().StringVar(&opts.RootDir, "root", opts.RootDir, i18n.T(loc, "cli.support.bundle.flag.root"))
 	return cmd
 }
 
