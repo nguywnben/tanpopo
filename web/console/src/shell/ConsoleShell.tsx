@@ -272,20 +272,19 @@ export function ConsoleShell() {
           ))}
         </nav>
 
-        {railOpen ? (
-          <div className="tp-rail-prefs">
-            <LanguageSelector id="drawer-language-selector" className="tp-rail-lang" />
-            <IconButton
-              variant="secondary"
-              label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')}
-              onClick={toggleTheme}
-            >
-              {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
-            </IconButton>
-          </div>
-        ) : null}
-
         <div className="tp-rail-footer">
+          {railOpen ? (
+            <div className="tp-rail-prefs">
+              <LanguageSelector id="drawer-language-selector" className="tp-rail-lang" />
+              <IconButton
+                variant="secondary"
+                label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')}
+                onClick={toggleTheme}
+              >
+                {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
+              </IconButton>
+            </div>
+          ) : null}
           <div className="tp-account-row">
             <div className="tp-account-meta">
               <div className="tp-account-email" aria-label={t('shell.signedInAccount')}>{session?.email ?? t('shell.adminSession')}</div>

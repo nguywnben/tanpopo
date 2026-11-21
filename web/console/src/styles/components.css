@@ -292,7 +292,7 @@
   }
 
   .tp-metric-cell {
-    padding: var(--space-3) var(--space-4);
+    padding: 0.6875rem 0.875rem;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -305,14 +305,14 @@
   }
 
   .tp-metric-label {
-    font-size: 0.75rem;
+    font-size: 0.71875rem;
     line-height: 1.3;
     font-weight: 500;
     color: var(--tp-ink-secondary);
   }
 
   .tp-metric-value {
-    font-size: 1.25rem;
+    font-size: 1.125rem;
     line-height: 1.25;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
@@ -329,7 +329,7 @@
     overflow-wrap: anywhere;
   }
 
-  @media (min-width: 640px) {
+  @media (min-width: 360px) {
     .tp-metric-strip {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -344,6 +344,20 @@
 
     .tp-metric-cell:nth-last-child(-n + 2) {
       border-bottom: 0;
+    }
+  }
+
+  @media (min-width: 640px) {
+    .tp-metric-cell {
+      padding: var(--space-3) var(--space-4);
+    }
+
+    .tp-metric-label {
+      font-size: 0.75rem;
+    }
+
+    .tp-metric-value {
+      font-size: 1.25rem;
     }
   }
 
