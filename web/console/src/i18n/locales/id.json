@@ -32,6 +32,8 @@
   "common.accessRestricted": "Akses dibatasi",
   "common.switchToLightTheme": "Beralih ke tema terang",
   "common.switchToDarkTheme": "Beralih ke tema gelap",
+  "common.showSecret": "Tampilkan nilai",
+  "common.hideSecret": "Sembunyikan nilai",
   "common.noProject": "Tanpa proyek",
   "common.noEnv": "Tanpa lingk.",
   "common.project": "Proyek",

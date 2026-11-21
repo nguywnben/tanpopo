@@ -32,6 +32,8 @@
   "common.accessRestricted": "Доступ ограничен",
   "common.switchToLightTheme": "Переключить на светлую тему",
   "common.switchToDarkTheme": "Переключить на тёмную тему",
+  "common.showSecret": "Показать значение",
+  "common.hideSecret": "Скрыть значение",
   "common.noProject": "Нет проекта",
   "common.noEnv": "Нет среды",
   "common.project": "Проект",

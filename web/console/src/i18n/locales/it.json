@@ -32,6 +32,8 @@
   "common.accessRestricted": "Accesso limitato",
   "common.switchToLightTheme": "Passa al tema chiaro",
   "common.switchToDarkTheme": "Passa al tema scuro",
+  "common.showSecret": "Mostra valore",
+  "common.hideSecret": "Nascondi valore",
   "common.noProject": "Nessun progetto",
   "common.noEnv": "Nessun amb.",
   "common.project": "Progetto",

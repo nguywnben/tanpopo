@@ -32,6 +32,8 @@
   "common.accessRestricted": "Erişim kısıtlı",
   "common.switchToLightTheme": "Açık temaya geç",
   "common.switchToDarkTheme": "Koyu temaya geç",
+  "common.showSecret": "Değeri göster",
+  "common.hideSecret": "Değeri gizle",
   "common.noProject": "Proje yok",
   "common.noEnv": "Ortam yok",
   "common.project": "Proje",

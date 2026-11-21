@@ -32,6 +32,8 @@
   "common.accessRestricted": "접근 제한됨",
   "common.switchToLightTheme": "라이트 테마로 전환",
   "common.switchToDarkTheme": "다크 테마로 전환",
+  "common.showSecret": "값 표시",
+  "common.hideSecret": "값 숨기기",
   "common.noProject": "프로젝트 없음",
   "common.noEnv": "환경 없음",
   "common.project": "프로젝트",

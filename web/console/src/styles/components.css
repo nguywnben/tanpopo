@@ -88,6 +88,80 @@
     max-width: calc(100vw - 16px);
   }
 
+  /* Custom vertical scrollbar across all Astryx selectors, menus, typeaheads, and scroll panes */
+  :is([role='listbox'], [role='menu'], [role='grid'], .tp-rail-scroll, .tp-overlay-body) {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--tp-ink-secondary) 32%, transparent) transparent;
+  }
+
+  @supports selector(::-webkit-scrollbar) {
+    :is([role='listbox'], [role='menu'], [role='grid'], .tp-rail-scroll, .tp-overlay-body) {
+      scrollbar-width: auto;
+      scrollbar-color: auto;
+    }
+
+    :is([role='listbox'], [role='menu'], [role='grid'], .tp-rail-scroll, .tp-overlay-body)::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    :is([role='listbox'], [role='menu'], [role='grid'], .tp-rail-scroll, .tp-overlay-body)::-webkit-scrollbar-track {
+      background: transparent;
+      margin-block: 6px;
+    }
+
+    :is([role='listbox'], [role='menu'], [role='grid'], .tp-rail-scroll, .tp-overlay-body)::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--tp-ink-secondary) 28%, transparent);
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background-clip: content-box;
+    }
+
+    :is([role='listbox'], [role='menu'], [role='grid'], .tp-rail-scroll, .tp-overlay-body)::-webkit-scrollbar-thumb:hover {
+      background: color-mix(in srgb, var(--tp-ink-secondary) 52%, transparent);
+      border: 1px solid transparent;
+      background-clip: content-box;
+    }
+
+    :is([role='listbox'], [role='menu'], [role='grid'], .tp-rail-scroll, .tp-overlay-body)::-webkit-scrollbar-button {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+
+    :is([role='listbox'], [role='menu'], [role='grid'], .tp-rail-scroll, .tp-overlay-body)::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+  }
+
+  /* Masked password / secret field with integrated Astryx unmask toggle */
+  .tp-secret-group {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .tp-secret-input {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .tp-secret-toggle {
+    flex-shrink: 0;
+    min-width: 36px;
+    padding-inline: 0.5625rem;
+    color: var(--tp-ink-secondary);
+  }
+
+  .tp-secret-toggle:hover {
+    color: var(--tp-ink-primary);
+  }
+
+  input[type='password']::-ms-reveal,
+  input[type='password']::-ms-clear {
+    display: none;
+  }
+
   .tp-btn-content {
     display: inline-flex;
     align-items: center;

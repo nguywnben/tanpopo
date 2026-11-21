@@ -32,6 +32,8 @@
   "common.accessRestricted": "存取受限",
   "common.switchToLightTheme": "切換為淺色主題",
   "common.switchToDarkTheme": "切換為深色主題",
+  "common.showSecret": "顯示內容",
+  "common.hideSecret": "隱藏內容",
   "common.noProject": "無專案",
   "common.noEnv": "無環境",
   "common.project": "專案",

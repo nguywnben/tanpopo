@@ -63,9 +63,18 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
     expect(buildRateCard({...zero, input_token_nano_usd: '-5'}, 'COMMERCIAL_API', false).error).toContain('non-negative');
   });
 
-  it('renders Sign In cleanly and passes WCAG 2.2 AA axe-core checks', async () => {
+  it('renders Sign In cleanly with password unmask toggle and passes WCAG 2.2 AA axe-core checks', async () => {
     const {container} = render(wrap(<LoginPage />));
     expect(screen.getByRole('heading', {level: 1, name: 'Sign in'})).toBeInTheDocument();
+    const passwordInput = screen.getByLabelText(/Password/i, {selector: 'input'}) as HTMLInputElement;
+    expect(passwordInput.type).toBe('password');
+    const toggleBtn = screen.getByRole('button', {name: 'Show value'});
+    expect(toggleBtn).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggleBtn);
+    expect(passwordInput.type).toBe('text');
+    expect(screen.getByRole('button', {name: 'Hide value'})).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', {name: 'Hide value'}));
+    expect(passwordInput.type).toBe('password');
     const audit = await axe.run(container);
     expect(audit.violations).toEqual([]);
   });

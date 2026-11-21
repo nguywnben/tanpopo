@@ -32,6 +32,8 @@
   "common.accessRestricted": "Quyền truy cập bị giới hạn",
   "common.switchToLightTheme": "Chuyển sang giao diện sáng",
   "common.switchToDarkTheme": "Chuyển sang giao diện tối",
+  "common.showSecret": "Hiện giá trị",
+  "common.hideSecret": "Ẩn giá trị",
   "common.noProject": "Chưa có dự án",
   "common.noEnv": "Chưa có môi trường",
   "common.project": "Dự án",

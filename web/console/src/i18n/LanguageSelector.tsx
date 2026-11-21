@@ -3,7 +3,7 @@ import {Selector} from '@astryxdesign/core/Selector';
 import {SUPPORTED_LOCALES, isSupportedLocale} from './locales';
 import {useI18n} from './I18nProvider';
 
-export function LanguageSelector({id = 'language-selector'}: {id?: string}) {
+export function LanguageSelector({id = 'language-selector', className = ''}: {id?: string; className?: string}) {
   const {locale, setLocale, t} = useI18n();
 
   const options = useMemo(
@@ -26,7 +26,7 @@ export function LanguageSelector({id = 'language-selector'}: {id?: string}) {
           setLocale(next);
         }
       }}
-      containerClassName="tp-lang-selector"
+      containerClassName={className ? `tp-lang-selector ${className}` : 'tp-lang-selector'}
     />
   );
 }

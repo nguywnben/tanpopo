@@ -1,11 +1,14 @@
 import {
   Children,
   isValidElement,
+  useState,
   type ButtonHTMLAttributes,
+  type ChangeEvent,
   type InputHTMLAttributes,
   type ReactNode,
   type TextareaHTMLAttributes,
 } from 'react';
+import {Eye, EyeOff} from 'lucide-react';
 import {Badge as AstryxBadge} from '@astryxdesign/core/Badge';
 import {Banner as AstryxBanner} from '@astryxdesign/core/Banner';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
@@ -14,13 +17,14 @@ import {CodeBlock as AstryxCodeBlock} from '@astryxdesign/core/CodeBlock';
 import type {DropdownMenuOption} from '@astryxdesign/core/DropdownMenu';
 import {EmptyState as AstryxEmptyState} from '@astryxdesign/core/EmptyState';
 import {IconButton as AstryxIconButton} from '@astryxdesign/core/IconButton';
+import {InputGroup as AstryxInputGroup} from '@astryxdesign/core/InputGroup';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {MoreMenu as AstryxMoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {TextArea as AstryxTextArea} from '@astryxdesign/core/TextArea';
 import {TextInput as AstryxTextInput, type TextInputType} from '@astryxdesign/core/TextInput';
 import {formatLocalizedMicroUSD} from '../i18n/catalog';
-import {getActiveLocale, translateRuntime} from '../i18n/I18nProvider';
+import {getActiveLocale, translateRuntime, useI18n} from '../i18n/I18nProvider';
 export {SelectField, type SelectFieldOption, type SelectOption} from './SelectField';
 
 export type StatusTone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral';
@@ -196,10 +200,80 @@ export function TextField({
   error?: string;
   fieldSize?: 'sm' | 'md';
 }) {
+  const {t} = useI18n();
+  const [revealed, setRevealed] = useState(false);
+  const isPassword = type === 'password';
   const isNumber = type === 'number';
-  const mappedType: TextInputType = allowedTextTypes.has(type as TextInputType) ? (type as TextInputType) : 'text';
+  const mappedType: TextInputType = isPassword
+    ? (revealed ? 'text' : 'password')
+    : allowedTextTypes.has(type as TextInputType)
+      ? (type as TextInputType)
+      : 'text';
   const resolvedInputMode = inputMode ?? (isNumber ? 'decimal' : undefined);
   const stringValue = value === undefined || value === null ? '' : String(value);
+
+  const handleInputChange = (_: string, event: ChangeEvent<HTMLInputElement>) => {
+    if (!onChange) return;
+    if (isNumber && min !== undefined && event.target.value !== '') {
+      const parsed = Number(event.target.value);
+      if (!Number.isNaN(parsed) && typeof min === 'number' && parsed < min) {
+        onChange(event);
+        return;
+      }
+    }
+    onChange(event);
+  };
+
+  if (isPassword) {
+    const toggleLabel = revealed ? t('common.hideSecret') : t('common.showSecret');
+    return (
+      <AstryxInputGroup
+        label={label}
+        description={hint}
+        status={error ? {type: 'error', message: error} : undefined}
+        isRequired={Boolean(required)}
+        isDisabled={Boolean(disabled)}
+        size={fieldSize}
+        className={`tp-secret-group ${className}`.trim()}
+      >
+        <AstryxTextInput
+          id={id}
+          label={label}
+          isLabelHidden
+          type={mappedType}
+          inputMode={resolvedInputMode}
+          value={stringValue}
+          onChange={handleInputChange}
+          placeholder={placeholder}
+          isRequired={Boolean(required)}
+          isDisabled={Boolean(disabled)}
+          isReadOnly={Boolean(readOnly)}
+          hasAutoFocus={Boolean(autoFocus)}
+          autoComplete={autoComplete}
+          htmlName={name}
+          width="100%"
+          size={fieldSize}
+          controlClassName="tp-secret-input"
+        />
+        <AstryxButton
+          type="button"
+          variant="secondary"
+          size={fieldSize}
+          label={toggleLabel}
+          aria-label={toggleLabel}
+          aria-pressed={revealed}
+          tooltip={toggleLabel}
+          isDisabled={Boolean(disabled)}
+          className="tp-secret-toggle"
+          onClick={() => setRevealed(prev => !prev)}
+        >
+          <span className="tp-btn-content">
+            {revealed ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
+          </span>
+        </AstryxButton>
+      </AstryxInputGroup>
+    );
+  }
 
   return (
     <AstryxTextInput
@@ -208,17 +282,7 @@ export function TextField({
       type={mappedType}
       inputMode={resolvedInputMode}
       value={stringValue}
-      onChange={(_, event) => {
-        if (!onChange) return;
-        if (isNumber && min !== undefined && event.target.value !== '') {
-          const parsed = Number(event.target.value);
-          if (!Number.isNaN(parsed) && typeof min === 'number' && parsed < min) {
-            onChange(event);
-            return;
-          }
-        }
-        onChange(event);
-      }}
+      onChange={handleInputChange}
       placeholder={placeholder}
       description={hint}
       status={error ? {type: 'error', message: error} : undefined}

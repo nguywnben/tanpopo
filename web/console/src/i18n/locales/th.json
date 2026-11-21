@@ -32,6 +32,8 @@
   "common.accessRestricted": "จำกัดสิทธิ์การเข้าถึง",
   "common.switchToLightTheme": "สลับเป็นธีมสว่าง",
   "common.switchToDarkTheme": "สลับเป็นธีมมืด",
+  "common.showSecret": "แสดงค่า",
+  "common.hideSecret": "ซ่อนค่า",
   "common.noProject": "ไม่มีโปรเจกต์",
   "common.noEnv": "ไม่มีสภาพแวดล้อม",
   "common.project": "โปรเจกต์",

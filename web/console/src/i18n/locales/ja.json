@@ -32,6 +32,8 @@
   "common.accessRestricted": "アクセス制限",
   "common.switchToLightTheme": "ライトテーマに切り替え",
   "common.switchToDarkTheme": "ダークテーマに切り替え",
+  "common.showSecret": "値を表示",
+  "common.hideSecret": "値を非表示",
   "common.noProject": "プロジェクトなし",
   "common.noEnv": "環境なし",
   "common.project": "プロジェクト",
