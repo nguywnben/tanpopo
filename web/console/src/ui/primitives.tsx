@@ -255,22 +255,17 @@ export function TextField({
           size={fieldSize}
           controlClassName="tp-secret-input"
         />
-        <AstryxButton
+        <button
           type="button"
-          variant="secondary"
-          size={fieldSize}
-          label={toggleLabel}
+          className="tp-secret-eye"
           aria-label={toggleLabel}
           aria-pressed={revealed}
-          tooltip={toggleLabel}
-          isDisabled={Boolean(disabled)}
-          className="tp-secret-toggle"
+          title={toggleLabel}
+          disabled={Boolean(disabled)}
           onClick={() => setRevealed(prev => !prev)}
         >
-          <span className="tp-btn-content">
-            {revealed ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
-          </span>
-        </AstryxButton>
+          {revealed ? <EyeOff size={15} strokeWidth={1.75} aria-hidden="true" /> : <Eye size={15} strokeWidth={1.75} aria-hidden="true" />}
+        </button>
       </AstryxInputGroup>
     );
   }

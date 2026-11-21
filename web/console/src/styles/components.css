@@ -134,27 +134,56 @@
     }
   }
 
-  /* Masked password / secret field with integrated Astryx unmask toggle */
+  /* Masked password / secret field with sleek inset unmask toggle */
   .tp-secret-group {
+    position: relative;
     display: flex;
+    align-items: center;
     width: 100%;
     min-width: 0;
   }
 
-  .tp-secret-input {
+  .tp-secret-group .tp-secret-input {
+    width: 100%;
     flex: 1 1 auto;
     min-width: 0;
+    border-radius: var(--radius-element, 0.625rem);
+    padding-inline-end: 2.25rem;
   }
 
-  .tp-secret-toggle {
-    flex-shrink: 0;
-    min-width: 36px;
-    padding-inline: 0.5625rem;
+  .tp-secret-eye {
+    position: absolute;
+    inset-inline-end: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-inner, 0.375rem);
+    background: transparent;
     color: var(--tp-ink-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: color 120ms ease, background-color 120ms ease;
   }
 
-  .tp-secret-toggle:hover {
+  .tp-secret-eye:hover:not(:disabled) {
     color: var(--tp-ink-primary);
+    background: var(--tp-bg-hover);
+  }
+
+  .tp-secret-eye:focus-visible {
+    outline: 2px solid var(--tp-focus-ring);
+    outline-offset: 1px;
+  }
+
+  .tp-secret-eye:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   input[type='password']::-ms-reveal,
