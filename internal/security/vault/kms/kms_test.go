@@ -9,6 +9,8 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -500,3 +502,275 @@ func TestPerProjectExternalRootKeyDestructionRendersColdBackupUndecryptableAC3(t
 		t.Fatalf("sibling org pB impacted by p1 key destruction: err=%v val=%q", err, string(pBPlain))
 	}
 }
+
+func TestExternalKMSProvidersArchiveProjectKeysRoutingAndErrors(t *testing.T) {
+	ctx := context.Background()
+	mock := newMockExternalKMSServer(t,
+		"arn:aws:kms:us-east-1:111122223333:key/aws-master",
+		"arn:aws:kms:us-east-1:111122223333:key/aws-proj",
+		"projects/tp/locations/global/keyRings/kr/cryptoKeys/gcp-master",
+		"projects/tp/locations/global/keyRings/kr/cryptoKeys/gcp-proj",
+		"transit-master",
+		"transit-proj",
+	)
+	pol := mock.localEgressPolicy()
+
+	// Constructor validation & TLSRootCAs paths.
+	if _, err := (StaticAWSCredentials{}).Credentials(ctx); err == nil {
+		t.Fatal("StaticAWSCredentials empty creds should fail")
+	}
+	if _, err := (StaticBearerToken("")).AccessToken(ctx); err == nil {
+		t.Fatal("StaticBearerToken empty should fail")
+	}
+	if _, err := NewAWSKMSProvider(AWSKMSConfig{}); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("NewAWSKMSProvider missing region: %v", err)
+	}
+	if _, err := NewAWSKMSProvider(AWSKMSConfig{Region: "us-east-1", EndpointURL: "not a url"}); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("NewAWSKMSProvider bad endpoint: %v", err)
+	}
+	if _, err := NewAWSKMSProvider(AWSKMSConfig{Region: "us-east-1"}); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("NewAWSKMSProvider missing key: %v", err)
+	}
+	if _, err := NewAWSKMSProvider(AWSKMSConfig{Region: "us-east-1", ActiveKeyID: "k1"}); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("NewAWSKMSProvider missing creds: %v", err)
+	}
+	if _, err := NewGCPKMSProvider(GCPKMSConfig{}); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("NewGCPKMSProvider missing key: %v", err)
+	}
+	if _, err := NewGCPKMSProvider(GCPKMSConfig{ActiveKeyName: "projects/a/locations/b/keyRings/c/cryptoKeys/d"}); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("NewGCPKMSProvider missing token source: %v", err)
+	}
+	if _, err := NewVaultTransitProvider(VaultTransitConfig{Address: "bad"}); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("NewVaultTransitProvider bad addr: %v", err)
+	}
+	if _, err := NewVaultTransitProvider(VaultTransitConfig{Address: mock.srv.URL}); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("NewVaultTransitProvider missing token: %v", err)
+	}
+	if _, err := NewVaultTransitProvider(VaultTransitConfig{Address: mock.srv.URL, Token: "hvs.x"}); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("NewVaultTransitProvider missing key: %v", err)
+	}
+	if _, err := NewRoutingProvider(nil); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("NewRoutingProvider(nil): %v", err)
+	}
+
+	rootPool := x509.NewCertPool()
+	awsProv, err := NewAWSKMSProvider(AWSKMSConfig{
+		EndpointURL:  mock.srv.URL,
+		Region:       "us-east-1",
+		ActiveKeyID:  "arn:aws:kms:us-east-1:111122223333:key/aws-master",
+		Creds:        StaticAWSCredentials{Creds: AWSCredentials{AccessKeyID: "AKIAEXAMPLE", SecretAccessKey: "secretkeyexample1234", SessionToken: "sess-tok"}},
+		ProjectKeys:  map[string]string{"org1:prj1": "arn:aws:kms:us-east-1:111122223333:key/aws-proj"},
+		EgressPolicy: pol,
+		TLSRootCAs:   &tls.Config{RootCAs: rootPool, MinVersion: tls.VersionTLS13},
+	})
+	if err != nil {
+		t.Fatalf("NewAWSKMSProvider: %v", err)
+	}
+	gcpProv, err := NewGCPKMSProvider(GCPKMSConfig{
+		EndpointURL:   mock.srv.URL,
+		ActiveKeyName: "projects/tp/locations/global/keyRings/kr/cryptoKeys/gcp-master",
+		TokenSource:   StaticBearerToken("gcp-test-token"),
+		ProjectKeys:   map[string]string{"org1:prj1": "projects/tp/locations/global/keyRings/kr/cryptoKeys/gcp-proj"},
+		EgressPolicy:  pol,
+	})
+	if err != nil {
+		t.Fatalf("NewGCPKMSProvider: %v", err)
+	}
+	vaultProv, err := NewVaultTransitProvider(VaultTransitConfig{
+		Address:       mock.srv.URL,
+		Token:         "hvs.test-token",
+		Namespace:     "admin/team",
+		Mount:         "transit",
+		ActiveKeyName: "transit-master",
+		ProjectKeys:   map[string]string{"org1:prj1": "transit-proj"},
+		EgressPolicy:  pol,
+	})
+	if err != nil {
+		t.Fatalf("NewVaultTransitProvider: %v", err)
+	}
+
+	type fullProvider interface {
+		vault.KEKProvider
+		vault.ProjectRootKeyProvider
+		SetProjectKey(orgID, projectID, ref string)
+	}
+
+	dek := sha256.Sum256([]byte("archive-and-project-dek-material"))
+	for _, tc := range []struct {
+		name     string
+		prov     fullProvider
+		projKey  string
+		missingK string
+	}{
+		{"aws", awsProv, "arn:aws:kms:us-east-1:111122223333:key/aws-proj", "arn:aws:kms:us-east-1:111122223333:key/missing"},
+		{"gcp", gcpProv, "projects/tp/locations/global/keyRings/kr/cryptoKeys/gcp-proj", "projects/tp/locations/global/keyRings/kr/cryptoKeys/missing"},
+		{"vault", vaultProv, "transit-proj", "missing-transit-key"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			kid, _ := tc.prov.ActiveKeyID(ctx)
+
+			// Archive key wrap/unwrap + input errors.
+			n, ct, err := tc.prov.WrapArchiveKey(ctx, kid, dek[:])
+			if err != nil {
+				t.Fatalf("WrapArchiveKey: %v", err)
+			}
+			pt, err := tc.prov.UnwrapArchiveKey(ctx, kid, n, ct)
+			if err != nil || string(pt) != string(dek[:]) {
+				t.Fatalf("UnwrapArchiveKey: err=%v match=%v", err, string(pt) == string(dek[:]))
+			}
+			if _, _, err := tc.prov.WrapArchiveKey(ctx, "", dek[:]); !errors.Is(err, vault.ErrInvalidInput) {
+				t.Fatalf("WrapArchiveKey empty key: %v", err)
+			}
+			if _, err := tc.prov.UnwrapArchiveKey(ctx, "", n, ct); !errors.Is(err, vault.ErrDecryptionFailed) {
+				t.Fatalf("UnwrapArchiveKey empty key: %v", err)
+			}
+			if _, _, err := tc.prov.WrapDEK(ctx, "", "org1", 1, dek[:]); !errors.Is(err, vault.ErrInvalidInput) {
+				t.Fatalf("WrapDEK invalid args: %v", err)
+			}
+			if _, err := tc.prov.UnwrapDEK(ctx, "", "org1", 1, n, ct); !errors.Is(err, vault.ErrDecryptionFailed) {
+				t.Fatalf("UnwrapDEK invalid args: %v", err)
+			}
+
+			// Project key binding, lookup, deletion, wrap/unwrap, and cross-project mismatch.
+			uri, ok, err := tc.prov.ProjectKeyURI(ctx, "org1", "prj1")
+			if err != nil || !ok || uri != tc.projKey {
+				t.Fatalf("ProjectKeyURI initial: uri=%q ok=%v err=%v", uri, ok, err)
+			}
+			tc.prov.SetProjectKey("org2", "prj2", tc.projKey)
+			if uri2, ok2, _ := tc.prov.ProjectKeyURI(ctx, "org2", "prj2"); !ok2 || uri2 != tc.projKey {
+				t.Fatalf("SetProjectKey set failed: uri=%q ok=%v", uri2, ok2)
+			}
+			tc.prov.SetProjectKey("org2", "prj2", "")
+			if _, ok2, _ := tc.prov.ProjectKeyURI(ctx, "org2", "prj2"); ok2 {
+				t.Fatal("SetProjectKey empty string should delete key")
+			}
+
+			pblob, err := tc.prov.WrapProjectDEK(ctx, tc.projKey, "org1", "prj1", 2, dek[:])
+			if err != nil {
+				t.Fatalf("WrapProjectDEK: %v", err)
+			}
+			ppt, err := tc.prov.UnwrapProjectDEK(ctx, tc.projKey, "org1", "prj1", 2, pblob)
+			if err != nil || string(ppt) != string(dek[:]) {
+				t.Fatalf("UnwrapProjectDEK: err=%v match=%v", err, string(ppt) == string(dek[:]))
+			}
+			if _, err := tc.prov.UnwrapProjectDEK(ctx, tc.projKey, "org1", "other", 2, pblob); !errors.Is(err, vault.ErrDecryptionFailed) {
+				t.Fatalf("expected ErrDecryptionFailed on cross-project unwrap, got %v", err)
+			}
+			if _, err := tc.prov.WrapProjectDEK(ctx, "", "org1", "prj1", 2, dek[:]); !errors.Is(err, vault.ErrInvalidInput) {
+				t.Fatalf("WrapProjectDEK invalid args: %v", err)
+			}
+			if _, err := tc.prov.UnwrapProjectDEK(ctx, "", "org1", "prj1", 2, pblob); !errors.Is(err, vault.ErrDecryptionFailed) {
+				t.Fatalf("UnwrapProjectDEK invalid args: %v", err)
+			}
+			// Upstream HTTP 404/400 failure propagation.
+			if _, err := tc.prov.WrapProjectDEK(ctx, tc.missingK, "org1", "prj1", 1, dek[:]); err == nil {
+				t.Fatal("expected error wrapping with missing external key")
+			}
+		})
+	}
+
+	// RoutingProvider coverage: primary archive delegation, scheme fallback, default primary fallback, error cases.
+	router, err := NewRoutingProvider(awsProv)
+	if err != nil {
+		t.Fatalf("NewRoutingProvider(awsProv): %v", err)
+	}
+	if err := router.BindProjectKey("", "p1", "ref", vaultProv); !errors.Is(err, vault.ErrInvalidInput) {
+		t.Fatalf("BindProjectKey missing org should fail: %v", err)
+	}
+	n, ct, err := router.WrapArchiveKey(ctx, "arn:aws:kms:us-east-1:111122223333:key/aws-master", dek[:])
+	if err != nil {
+		t.Fatalf("router.WrapArchiveKey: %v", err)
+	}
+	if pt, err := router.UnwrapArchiveKey(ctx, "arn:aws:kms:us-east-1:111122223333:key/aws-master", n, ct); err != nil || string(pt) != string(dek[:]) {
+		t.Fatalf("router.UnwrapArchiveKey: err=%v", err)
+	}
+	if uri, ok, err := router.ProjectKeyURI(ctx, "org1", "prj1"); err != nil || !ok || uri == "" {
+		t.Fatalf("router.ProjectKeyURI primary fallback: uri=%q ok=%v err=%v", uri, ok, err)
+	}
+	// Default primary fallback for WrapProjectDEK / UnwrapProjectDEK when no scheme matches.
+	pblob, err := router.WrapProjectDEK(ctx, "arn:aws:kms:us-east-1:111122223333:key/aws-proj", "org1", "prj1", 3, dek[:])
+	if err != nil {
+		t.Fatalf("router.WrapProjectDEK default fallback: %v", err)
+	}
+	if pt, err := router.UnwrapProjectDEK(ctx, "arn:aws:kms:us-east-1:111122223333:key/aws-proj", "org1", "prj1", 3, pblob); err != nil || string(pt) != string(dek[:]) {
+		t.Fatalf("router.UnwrapProjectDEK default fallback: err=%v", err)
+	}
+	// Register scheme prefix and route dynamically without BindProjectKey.
+	router.RegisterScheme("vault-transit://", vaultProv)
+	vblob, err := router.WrapProjectDEK(ctx, "vault-transit://transit-proj", "org9", "prj9", 1, dek[:])
+	if err != nil {
+		t.Fatalf("router scheme WrapProjectDEK: %v", err)
+	}
+	if pt, err := router.UnwrapProjectDEK(ctx, "vault-transit://transit-proj", "org9", "prj9", 1, vblob); err != nil || string(pt) != string(dek[:]) {
+		t.Fatalf("router scheme UnwrapProjectDEK: err=%v", err)
+	}
+	// Static primary without ProjectRootKeyProvider must fail closed on unknown scheme.
+	raw := sha256.Sum256([]byte("static-primary"))
+	staticKEK, _ := vault.NewStaticKEKProvider("kek_s1", raw[:])
+	staticRouter, _ := NewRoutingProvider(staticKEK)
+	if _, ok, err := staticRouter.ProjectKeyURI(ctx, "orgX", "prjX"); err != nil || ok {
+		t.Fatalf("staticRouter.ProjectKeyURI unexpected: ok=%v err=%v", ok, err)
+	}
+	if _, err := staticRouter.WrapProjectDEK(ctx, "unknown://k", "orgX", "prjX", 1, dek[:]); !errors.Is(err, vault.ErrProjectExternalKeyUnavailable) {
+		t.Fatalf("expected ErrProjectExternalKeyUnavailable, got %v", err)
+	}
+	if _, err := staticRouter.UnwrapProjectDEK(ctx, "unknown://k", "orgX", "prjX", 1, dek[:]); !errors.Is(err, vault.ErrProjectExternalKeyUnavailable) {
+		t.Fatalf("expected ErrProjectExternalKeyUnavailable, got %v", err)
+	}
+
+	// Custom HTTPClient & malformed upstream JSON/base64 response handling across AWS, GCP, and Vault.
+	badMode := "http500"
+	badSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch badMode {
+		case "http500":
+			http.Error(w, "boom", http.StatusInternalServerError)
+		case "badjson":
+			_, _ = io.WriteString(w, "{not-json")
+		case "badb64":
+			_, _ = io.WriteString(w, `{"CiphertextBlob":"!!!","Plaintext":"!!!","ciphertext":"!!!","plaintext":"!!!","data":{"ciphertext":"","plaintext":"!!!"}}`)
+		}
+	}))
+	defer badSrv.Close()
+
+	badAWS, err := NewAWSKMSProvider(AWSKMSConfig{
+		EndpointURL: badSrv.URL,
+		Region:      "us-east-1",
+		ActiveKeyID: "k1",
+		Creds:       StaticAWSCredentials{Creds: AWSCredentials{AccessKeyID: "AKIA1", SecretAccessKey: "SEC1"}},
+		HTTPClient:  badSrv.Client(),
+	})
+	if err != nil {
+		t.Fatalf("NewAWSKMSProvider badSrv: %v", err)
+	}
+	badGCP, err := NewGCPKMSProvider(GCPKMSConfig{
+		EndpointURL:   badSrv.URL,
+		ActiveKeyName: "projects/p/locations/l/keyRings/r/cryptoKeys/k",
+		TokenSource:   StaticBearerToken("tok"),
+		HTTPClient:    badSrv.Client(),
+	})
+	if err != nil {
+		t.Fatalf("NewGCPKMSProvider badSrv: %v", err)
+	}
+	badVault, err := NewVaultTransitProvider(VaultTransitConfig{
+		Address:       badSrv.URL,
+		Token:         "hvs.x",
+		ActiveKeyName: "k",
+		HTTPClient:    badSrv.Client(),
+	})
+	if err != nil {
+		t.Fatalf("NewVaultTransitProvider badSrv: %v", err)
+	}
+
+	for _, mode := range []string{"http500", "badjson", "badb64"} {
+		badMode = mode
+		for _, prov := range []vault.KEKProvider{badAWS, badGCP, badVault} {
+			if _, _, err := prov.WrapDEK(ctx, "k", "org1", 1, dek[:]); err == nil {
+				t.Fatalf("expected WrapDEK error in mode %s", mode)
+			}
+			if _, err := prov.UnwrapDEK(ctx, "k", "org1", 1, make([]byte, vault.NonceSizeBytes), []byte("ct")); err == nil {
+				t.Fatalf("expected UnwrapDEK error in mode %s", mode)
+			}
+		}
+	}
+}
+
