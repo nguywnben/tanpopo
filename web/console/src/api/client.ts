@@ -1,6 +1,7 @@
 import createClient from 'openapi-fetch';
 import type {components, paths} from './generated';
 import {operationPolicy} from './operation-policy.generated';
+import {getActiveLocale, translateRuntime} from '../i18n/I18nProvider';
 
 export const api = createClient<paths>({
   baseUrl: typeof window === 'undefined' ? '' : window.location.origin,
@@ -32,13 +33,26 @@ export function clearCsrfToken() {
 api.use({
   onRequest({request}) {
     const method = request.method.toUpperCase();
-    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return request;
-    const policy = policyFor(request);
-    if (!policy) throw new Error(`No OpenAPI security policy is defined for ${method} ${new URL(request.url).pathname}.`);
     const headers = new Headers(request.headers);
-    if (policy.ifMatch && !headers.has('If-Match')) throw new Error('An If-Match ETag is required for this Admin API operation.');
-    if (!policy.csrf) return request;
-    if (!csrfToken) throw new Error('A CSRF token is required for state-changing requests.');
+    if (!headers.has('Accept-Language')) {
+      headers.set('Accept-Language', getActiveLocale());
+    }
+    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      return new Request(request, {headers});
+    }
+    const policy = policyFor(request);
+    if (!policy) {
+      throw new Error(translateRuntime('error.noOpenApiPolicy', {method, path: new URL(request.url).pathname}));
+    }
+    if (policy.ifMatch && !headers.has('If-Match')) {
+      throw new Error(translateRuntime('error.ifMatchRequired'));
+    }
+    if (!policy.csrf) {
+      return new Request(request, {headers});
+    }
+    if (!csrfToken) {
+      throw new Error(translateRuntime('error.csrfRequired'));
+    }
     headers.set('X-CSRF-Token', csrfToken);
     return new Request(request, {headers});
   },
@@ -48,7 +62,7 @@ export function apiError(response: Response, error: unknown) {
   const detail = error && typeof error === 'object' && 'error' in error
     ? (error as components['schemas']['CanonicalErrorEnvelope']).error
     : undefined;
-  const failure = new Error(detail?.message ?? `Admin API request failed (${response.status}).`);
+  const failure = new Error(detail?.message ?? translateRuntime('common.apiRequestFailed', {status: response.status}));
   Object.assign(failure, {status: response.status, code: detail?.code, currentResource: detail?.current_resource});
   return failure;
 }
@@ -114,6 +128,21 @@ export async function listProjects() {
 
 export async function listEnvironments(projectId: string) {
   const result = await api.GET('/admin/v1/projects/{projectId}/environments', {params: {path: {projectId}}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function createProject(name: string, slug: string) {
+  const result = await api.POST('/admin/v1/projects', {body: {name, slug}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function createEnvironment(projectId: string, name: string, slug: string) {
+  const result = await api.POST('/admin/v1/projects/{projectId}/environments', {
+    params: {path: {projectId}},
+    body: {name, slug},
+  });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;
 }

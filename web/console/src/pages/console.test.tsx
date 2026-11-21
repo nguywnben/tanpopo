@@ -63,9 +63,18 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
     expect(buildRateCard({...zero, input_token_nano_usd: '-5'}, 'COMMERCIAL_API', false).error).toContain('non-negative');
   });
 
-  it('renders Sign In cleanly and passes WCAG 2.2 AA axe-core checks', async () => {
+  it('renders Sign In cleanly with password unmask toggle and passes WCAG 2.2 AA axe-core checks', async () => {
     const {container} = render(wrap(<LoginPage />));
     expect(screen.getByRole('heading', {level: 1, name: 'Sign in'})).toBeInTheDocument();
+    const passwordInput = screen.getByLabelText(/Password/i, {selector: 'input'}) as HTMLInputElement;
+    expect(passwordInput.type).toBe('password');
+    const toggleBtn = screen.getByRole('button', {name: 'Show value'});
+    expect(toggleBtn).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggleBtn);
+    expect(passwordInput.type).toBe('text');
+    expect(screen.getByRole('button', {name: 'Hide value'})).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', {name: 'Hide value'}));
+    expect(passwordInput.type).toBe('password');
     const audit = await axe.run(container);
     expect(audit.violations).toEqual([]);
   });
@@ -347,18 +356,19 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
     });
 
     const {container} = render(wrap(<ConsoleShell />));
-    const envTrigger = await screen.findByRole('combobox', {name: /Env/i});
-    await waitFor(() => expect(envTrigger).toHaveTextContent('Production'));
+    const scopeTrigger = await screen.findByRole('button', {name: /Workspace scope/i});
+    await waitFor(() => expect(scopeTrigger).toHaveTextContent('Default Project'));
+    await waitFor(() => expect(scopeTrigger).toHaveTextContent('Production'));
 
-    fireEvent.click(envTrigger);
+    fireEvent.click(scopeTrigger);
     const noEnvOpt = await screen.findByRole('option', {name: 'No env'});
     fireEvent.click(noEnvOpt);
-    await waitFor(() => expect(envTrigger).toHaveTextContent('No env'));
+    await waitFor(() => expect(scopeTrigger).toHaveTextContent('No env'));
 
-    const projectTrigger = screen.getByRole('combobox', {name: /Project/i});
-    fireEvent.click(projectTrigger);
+    fireEvent.click(scopeTrigger);
     fireEvent.click(await screen.findByRole('option', {name: 'Edge Project'}));
-    await waitFor(() => expect(envTrigger).toHaveTextContent('Canary'));
+    await waitFor(() => expect(scopeTrigger).toHaveTextContent('Edge Project'));
+    await waitFor(() => expect(scopeTrigger).toHaveTextContent('Canary'));
 
     const audit = await axe.run(container);
     expect(audit.violations).toEqual([]);

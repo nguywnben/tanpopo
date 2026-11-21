@@ -4,7 +4,10 @@
 @layer tokens {
   :root,
   [data-astryx-theme='neutral'] {
-    --tp-font-sans: var(--font-family-body, Figtree, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif);
+    /* Shared Astryx typography token override: self-hosted Google Sans (OFL-1.1) + multi-script fallbacks; monospace preserved */
+    --font-family-body: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans', 'Yu Gothic UI', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', 'Thonburi', 'Leelawadee UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-family-heading: var(--font-family-body);
+    --tp-font-sans: var(--font-family-body);
     --tp-font-mono: var(--font-family-code, ui-monospace, 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace);
 
     /* Bright, clean neutral canvas & subtle surface hierarchy (overrides heavy #f1f1f1 wash) */
@@ -85,11 +88,55 @@
     --tp-radius-lg: var(--radius-container, 0.75rem);
     --tp-radius-pill: var(--radius-full, 9999px);
 
-    /* Elevation */
+    /* Elevation & Focus */
     --tp-shadow-overlay: var(--shadow-med, 0 4px 12px rgba(0, 0, 0, 0.12));
+    --tp-focus-ring: light-dark(#18181b, #f4f4f5);
 
-    /* Shell Metrics */
-    --rail-width: 240px;
-    --topbar-height: 52px;
+    /* Shell & Operational Density Metrics (Astryx v0.7.16 + Carbon + WCAG 2.2) */
+    --rail-width: 228px;
+    --topbar-height: 48px;
+    --tp-content-max: 1480px;
+    --tp-nav-item-height: 32px;
+    --tp-table-font-size: 0.8125rem;
+    --tp-table-mono-size: 0.75rem;
+    --tp-table-head-y: 0.4375rem;
+    --tp-table-cell-y: 0.4375rem;
+    --tp-table-cell-x: 0.75rem;
+  }
+
+  /* Script-accurate fallback stacks for CJK & Thai glyphs outside Google Sans */
+  html[lang='zh-Hans'],
+  html[lang='zh-Hans'] [data-astryx-theme='neutral'] {
+    --font-family-body: 'Google Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-family-heading: var(--font-family-body);
+    --tp-font-sans: var(--font-family-body);
+  }
+
+  html[lang='zh-Hant'],
+  html[lang='zh-Hant'] [data-astryx-theme='neutral'] {
+    --font-family-body: 'Google Sans', 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans CJK TC', 'Source Han Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-family-heading: var(--font-family-body);
+    --tp-font-sans: var(--font-family-body);
+  }
+
+  html[lang='ja'],
+  html[lang='ja'] [data-astryx-theme='neutral'] {
+    --font-family-body: 'Google Sans', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', 'Noto Sans CJK JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-family-heading: var(--font-family-body);
+    --tp-font-sans: var(--font-family-body);
+  }
+
+  html[lang='ko'],
+  html[lang='ko'] [data-astryx-theme='neutral'] {
+    --font-family-body: 'Google Sans', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-family-heading: var(--font-family-body);
+    --tp-font-sans: var(--font-family-body);
+  }
+
+  html[lang='th'],
+  html[lang='th'] [data-astryx-theme='neutral'] {
+    --font-family-body: 'Google Sans', 'Thonburi', 'Leelawadee UI', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-family-heading: var(--font-family-body);
+    --tp-font-sans: var(--font-family-body);
   }
 }

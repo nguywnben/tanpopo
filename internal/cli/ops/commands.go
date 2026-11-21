@@ -25,6 +25,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/ops/backup"
 	"github.com/nguywnben/tanpopo/internal/ops/gitops"
 	"github.com/nguywnben/tanpopo/internal/ops/upgrade"
+	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 )
@@ -35,6 +36,14 @@ type Options struct {
 	LockfilePath string
 	OutputFormat *string
 	Stdout       io.Writer
+	Locale       i18n.Locale
+}
+
+func resolveLocale(opts Options) i18n.Locale {
+	if opts.Locale == "" {
+		return i18n.LocaleEn
+	}
+	return opts.Locale
 }
 
 // NewCommands builds the supported local lifecycle command groups.
@@ -55,28 +64,29 @@ func NewCommands(opts Options) []*cobra.Command {
 }
 
 func newConfigCommand(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	var desiredPath, appliedPath, lockPath string
 	var artifacts []string
-	group := &cobra.Command{Use: "config", Short: "Validate and reconcile declarative configuration", RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
+	group := &cobra.Command{Use: "config", Short: i18n.T(loc, "cli.ops.config.short"), RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
 	reconcile := &cobra.Command{
-		Use: "reconcile", Short: "Validate tanpopo.yaml and immutable tanpopo.lock, then apply atomically", Args: cobra.NoArgs,
+		Use: "reconcile", Short: i18n.T(loc, "cli.ops.config.reconcile.short"), Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if strings.TrimSpace(desiredPath) == "" || strings.TrimSpace(appliedPath) == "" || strings.TrimSpace(lockPath) == "" {
-				return cliError(testharness.ExitValidation, "--desired, --applied, and --lockfile are required", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.config.reconcile.err.required"), nil)
 			}
 			format := outputFormat(opts.OutputFormat)
 			if !validOutputFormat(format) {
-				return cliError(testharness.ExitValidation, "--output must be table, json, or yaml", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.err.output_format"), nil)
 			}
 			paths := make(map[string]string, len(artifacts))
 			for _, item := range artifacts {
 				id, path, ok := strings.Cut(item, "=")
 				id, path = strings.TrimSpace(id), strings.TrimSpace(path)
 				if !ok || id == "" || path == "" || strings.Contains(path, "=") {
-					return cliError(testharness.ExitValidation, "--artifact must use extension-id=path", nil)
+					return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.config.reconcile.err.artifact_format"), nil)
 				}
 				if _, duplicate := paths[id]; duplicate {
-					return cliError(testharness.ExitValidation, "--artifact extension IDs must be unique", nil)
+					return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.config.reconcile.err.artifact_dup"), nil)
 				}
 				paths[id] = path
 			}
@@ -84,41 +94,42 @@ func newConfigCommand(opts Options) *cobra.Command {
 				DesiredConfigPath: desiredPath, AppliedConfigPath: appliedPath,
 				LockfilePath: lockPath, ArtifactPaths: paths,
 			}); err != nil {
-				return cliError(testharness.ExitSecurity, "configuration reconciliation failed; applied config and lockfile were left unchanged", err)
+				return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.ops.config.reconcile.err.failed"), err)
 			}
 			return writeResult(opts.Stdout, format, map[string]string{"status": "APPLIED", "config": appliedPath, "lockfile": lockPath})
 		},
 	}
-	reconcile.Flags().StringVar(&desiredPath, "desired", filepath.Join(opts.DataRoot, "tanpopo.yaml"), "Desired declarative configuration")
-	reconcile.Flags().StringVar(&appliedPath, "applied", filepath.Join(opts.DataRoot, "tanpopo.applied.yaml"), "Atomically replaced applied configuration")
-	reconcile.Flags().StringVar(&lockPath, "lockfile", opts.LockfilePath, "Immutable extension lockfile")
-	reconcile.Flags().StringArrayVar(&artifacts, "artifact", nil, "Pinned extension archive as extension-id=path (repeat for each lock entry)")
+	reconcile.Flags().StringVar(&desiredPath, "desired", filepath.Join(opts.DataRoot, "tanpopo.yaml"), i18n.T(loc, "cli.ops.config.reconcile.flag.desired"))
+	reconcile.Flags().StringVar(&appliedPath, "applied", filepath.Join(opts.DataRoot, "tanpopo.applied.yaml"), i18n.T(loc, "cli.ops.config.reconcile.flag.applied"))
+	reconcile.Flags().StringVar(&lockPath, "lockfile", opts.LockfilePath, i18n.T(loc, "cli.ops.config.reconcile.flag.lockfile"))
+	reconcile.Flags().StringArrayVar(&artifacts, "artifact", nil, i18n.T(loc, "cli.ops.config.reconcile.flag.artifact"))
 	group.AddCommand(reconcile)
 	return group
 }
 
 func newVaultCommand(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	var newKeyID, newKeyEnv string
-	group := &cobra.Command{Use: "vault", Short: "Manage local encryption-key lifecycle", RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
+	group := &cobra.Command{Use: "vault", Short: i18n.T(loc, "cli.ops.vault.short"), RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
 	rotate := &cobra.Command{
-		Use: "rotate-kek", Short: "Rewrap organization keys under a new Master KEK", Args: cobra.NoArgs,
+		Use: "rotate-kek", Short: i18n.T(loc, "cli.ops.vault.rotate.short"), Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if strings.TrimSpace(newKeyID) == "" || strings.TrimSpace(newKeyEnv) == "" {
-				return cliError(testharness.ExitValidation, "--new-kek-id and --new-key-env are required", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.vault.rotate.err.required"), nil)
 			}
 			format := outputFormat(opts.OutputFormat)
 			if !validOutputFormat(format) {
-				return cliError(testharness.ExitValidation, "--output must be table, json, or yaml", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.err.output_format"), nil)
 			}
-			summary, err := runKEKRotation(cmd.Context(), opts.DBPath, strings.TrimSpace(newKeyID), strings.TrimSpace(newKeyEnv))
+			summary, err := runKEKRotation(cmd.Context(), opts.DBPath, strings.TrimSpace(newKeyID), strings.TrimSpace(newKeyEnv), loc)
 			if err != nil {
-				return cliError(testharness.ExitSecurity, "Master KEK rotation failed", err)
+				return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.ops.vault.rotate.err.failed"), err)
 			}
 			return writeResult(opts.Stdout, format, summary)
 		},
 	}
-	rotate.Flags().StringVar(&newKeyID, "new-kek-id", "", "Identifier for the new Master KEK")
-	rotate.Flags().StringVar(&newKeyEnv, "new-key-env", "TANPOPO_MASTER_KEY_NEXT", "Environment variable name containing the new 256-bit key")
+	rotate.Flags().StringVar(&newKeyID, "new-kek-id", "", i18n.T(loc, "cli.ops.vault.rotate.flag.new_kek_id"))
+	rotate.Flags().StringVar(&newKeyEnv, "new-key-env", "TANPOPO_MASTER_KEY_NEXT", i18n.T(loc, "cli.ops.vault.rotate.flag.new_key_env"))
 	group.AddCommand(rotate)
 	return group
 }
@@ -132,7 +143,7 @@ type rotationReceipt struct {
 	NextStep         string `json:"next_step" yaml:"next_step"`
 }
 
-func runKEKRotation(ctx context.Context, dbPath, newKeyID, newKeyEnv string) (rotationReceipt, error) {
+func runKEKRotation(ctx context.Context, dbPath, newKeyID, newKeyEnv string, loc i18n.Locale) (rotationReceipt, error) {
 	oldKeyID := strings.TrimSpace(env("TANPOPO_MASTER_KEY_ID"))
 	if oldKeyID == "" {
 		oldKeyID = "kek_v1"
@@ -174,80 +185,81 @@ func runKEKRotation(ctx context.Context, dbPath, newKeyID, newKeyEnv string) (ro
 	return rotationReceipt{
 		Status: "REWRAPPED_PENDING_OPERATOR_CUTOVER", OldKEKID: oldKeyID, NewKEKID: newKeyID,
 		OrgDEKsRewrapped: summary.Rewrapped, ConfigEpoch: summary.ConfigEpoch,
-		NextStep: "Persist TANPOPO_MASTER_KEY_ID and TANPOPO_MASTER_KEY using the new key before restarting; verify all data-plane cache config_epoch values, then retire the old key and purge pre-rotation backups.",
+		NextStep: i18n.T(loc, "cli.ops.vault.rotate.next_step"),
 	}, nil
 }
 
 func newBackupCommand(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	var outputDir, lockfile, configPath, artifactDir, archivePath, destination string
 	var verifySecretsDecrypt bool
-	group := &cobra.Command{Use: "backup", Short: "Create, verify, and restore encrypted database backups", RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
+	group := &cobra.Command{Use: "backup", Short: i18n.T(loc, "cli.ops.backup.short"), RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
 	create := &cobra.Command{
-		Use: "create", Short: "Create a consistent encrypted SQLite backup", Args: cobra.NoArgs,
+		Use: "create", Short: i18n.T(loc, "cli.ops.backup.create.short"), Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if strings.TrimSpace(outputDir) == "" || !validOutputFormat(outputFormat(opts.OutputFormat)) {
-				return cliError(testharness.ExitValidation, "--output-dir and a valid --output format are required", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.backup.create.err.required"), nil)
 			}
 			store, keyVault, closeFn, err := openBackupRuntime(cmd.Context(), opts.DBPath)
 			if err != nil {
-				return cliError(testharness.ExitSecurity, "could not initialize encrypted backup", err)
+				return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.ops.backup.create.err.init"), err)
 			}
 			defer closeFn()
 			receipt, err := backup.CreateSQLite(cmd.Context(), store, keyVault, outputDir, lockfile, configPath, artifactDir, time.Now().UTC().UnixMilli())
 			if err != nil {
-				return cliError(testharness.ExitInternal, "backup creation failed", err)
+				return cliError(testharness.ExitInternal, i18n.T(loc, "cli.ops.backup.create.err.failed"), err)
 			}
 			return writeResult(opts.Stdout, outputFormat(opts.OutputFormat), receipt)
 		},
 	}
-	create.Flags().StringVar(&outputDir, "output-dir", filepath.Join(opts.DataRoot, "backups"), "Directory for the encrypted archive")
-	create.Flags().StringVar(&lockfile, "lockfile", filepath.Join(opts.DataRoot, "tanpopo.lock"), "Immutable extension lockfile to include")
-	create.Flags().StringVar(&configPath, "config", filepath.Join(opts.DataRoot, "tanpopo.yaml"), "Server configuration to include")
-	create.Flags().StringVar(&artifactDir, "artifact-dir", filepath.Join(opts.DataRoot, "plugins"), "Root directory for locked extension artifacts")
+	create.Flags().StringVar(&outputDir, "output-dir", filepath.Join(opts.DataRoot, "backups"), i18n.T(loc, "cli.ops.backup.create.flag.output_dir"))
+	create.Flags().StringVar(&lockfile, "lockfile", filepath.Join(opts.DataRoot, "tanpopo.lock"), i18n.T(loc, "cli.ops.backup.create.flag.lockfile"))
+	create.Flags().StringVar(&configPath, "config", filepath.Join(opts.DataRoot, "tanpopo.yaml"), i18n.T(loc, "cli.ops.backup.create.flag.config"))
+	create.Flags().StringVar(&artifactDir, "artifact-dir", filepath.Join(opts.DataRoot, "plugins"), i18n.T(loc, "cli.ops.backup.create.flag.artifact_dir"))
 
 	verify := &cobra.Command{
-		Use: "verify", Short: "Authenticate and validate an encrypted backup", Args: cobra.NoArgs,
+		Use: "verify", Short: i18n.T(loc, "cli.ops.backup.verify.short"), Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if strings.TrimSpace(archivePath) == "" || !validOutputFormat(outputFormat(opts.OutputFormat)) {
-				return cliError(testharness.ExitValidation, "--archive and a valid --output format are required", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.backup.verify.err.required"), nil)
 			}
 			kek, err := openKEK()
 			if err != nil {
-				return cliError(testharness.ExitSecurity, "could not initialize backup verification", err)
+				return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.ops.backup.verify.err.init"), err)
 			}
 			defer kek.Close()
 			result, err := backup.Verify(cmd.Context(), archivePath, kek)
 			if err != nil {
-				return cliError(testharness.ExitSecurity, "backup verification failed", err)
+				return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.ops.backup.verify.err.failed"), err)
 			}
 			return writeResult(opts.Stdout, outputFormat(opts.OutputFormat), result)
 		},
 	}
-	verify.Flags().StringVar(&archivePath, "archive", "", "Path to the .tpop.enc archive")
+	verify.Flags().StringVar(&archivePath, "archive", "", i18n.T(loc, "cli.ops.backup.verify.flag.archive"))
 
 	restore := &cobra.Command{
-		Use: "restore", Short: "Verify and atomically restore an encrypted backup", Args: cobra.NoArgs,
+		Use: "restore", Short: i18n.T(loc, "cli.ops.backup.restore.short"), Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if strings.TrimSpace(archivePath) == "" || strings.TrimSpace(destination) == "" || !validOutputFormat(outputFormat(opts.OutputFormat)) {
-				return cliError(testharness.ExitValidation, "--archive, --destination, and a valid --output format are required", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.backup.restore.err.required"), nil)
 			}
 			kek, err := openKEK()
 			if err != nil {
-				return cliError(testharness.ExitSecurity, "could not initialize backup restore", err)
+				return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.ops.backup.restore.err.init"), err)
 			}
 			defer kek.Close()
 			receipt, err := backup.RestoreWithOptions(cmd.Context(), archivePath, destination, kek, backup.RestoreOptions{
 				VerifySecretsDecrypt: verifySecretsDecrypt,
 			})
 			if err != nil {
-				return cliError(testharness.ExitSecurity, "backup restore failed", err)
+				return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.ops.backup.restore.err.failed"), err)
 			}
 			return writeResult(opts.Stdout, outputFormat(opts.OutputFormat), receipt)
 		},
 	}
-	restore.Flags().StringVar(&archivePath, "archive", "", "Path to the .tpop.enc archive")
-	restore.Flags().StringVar(&destination, "destination", "", "New directory for verified restored files")
-	restore.Flags().BoolVar(&verifySecretsDecrypt, "verify-secrets-decrypt", false, "Trial-unwrap all organization and project DEK envelopes before publishing the restore")
+	restore.Flags().StringVar(&archivePath, "archive", "", i18n.T(loc, "cli.ops.backup.restore.flag.archive"))
+	restore.Flags().StringVar(&destination, "destination", "", i18n.T(loc, "cli.ops.backup.restore.flag.destination"))
+	restore.Flags().BoolVar(&verifySecretsDecrypt, "verify-secrets-decrypt", false, i18n.T(loc, "cli.ops.backup.restore.flag.verify_secrets"))
 
 	group.AddCommand(create, verify, restore)
 	return group
@@ -294,37 +306,38 @@ func openKEK() (*vault.StaticKEKProvider, error) {
 }
 
 func newUpgradeCommand(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	var targetVersion string
-	group := &cobra.Command{Use: "upgrade", Short: "Inspect safe core upgrade operations", RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
+	group := &cobra.Command{Use: "upgrade", Short: i18n.T(loc, "cli.ops.upgrade.short"), RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
 	preflight := &cobra.Command{
 		Use:   "preflight",
-		Short: "Check installed extensions against a target core version",
+		Short: i18n.T(loc, "cli.ops.upgrade.preflight.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if strings.TrimSpace(targetVersion) == "" {
-				return cliError(testharness.ExitValidation, "--target-version is required", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.upgrade.preflight.err.required"), nil)
 			}
 			if _, err := installer.SemverMatchesRange(targetVersion, ">=0.0.0"); err != nil {
-				return cliError(testharness.ExitValidation, "--target-version must be valid semantic version", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.upgrade.preflight.err.semver"), nil)
 			}
 			format := outputFormat(opts.OutputFormat)
 			if !validOutputFormat(format) {
-				return cliError(testharness.ExitValidation, "--output must be table, json, or yaml", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.err.output_format"), nil)
 			}
 			result, err := runPreflight(cmd.Context(), opts.DBPath, opts.LockfilePath, targetVersion)
 			if err != nil {
-				return cliError(testharness.ExitInternal, "upgrade preflight failed", err)
+				return cliError(testharness.ExitInternal, i18n.T(loc, "cli.ops.upgrade.preflight.err.failed"), err)
 			}
 			if err := writeResult(opts.Stdout, format, result); err != nil {
-				return cliError(testharness.ExitInternal, "could not write preflight report", err)
+				return cliError(testharness.ExitInternal, i18n.T(loc, "cli.ops.upgrade.preflight.err.write"), err)
 			}
 			if !result.Compatible {
-				return cliError(testharness.ExitContract, "upgrade blocked: BLOCKED_INCOMPATIBLE", nil)
+				return cliError(testharness.ExitContract, i18n.T(loc, "cli.ops.upgrade.preflight.err.blocked"), nil)
 			}
 			return nil
 		},
 	}
-	preflight.Flags().StringVar(&targetVersion, "target-version", "", "Target Tanpopo core version")
+	preflight.Flags().StringVar(&targetVersion, "target-version", "", i18n.T(loc, "cli.ops.upgrade.preflight.flag.target"))
 	group.AddCommand(preflight)
 	return group
 }
@@ -388,28 +401,29 @@ func runPreflight(ctx context.Context, dbPath, lockfilePath, targetVersion strin
 }
 
 func newTenantCommand(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	var orgID, projectID, requestID string
 	var generation int64
-	group := &cobra.Command{Use: "tenant", Short: "Manage tenant lifecycle operations", RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
+	group := &cobra.Command{Use: "tenant", Short: i18n.T(loc, "cli.ops.tenant.short"), RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
 	shred := &cobra.Command{
 		Use:   "shred",
-		Short: "Cryptographically erase one project or organization",
+		Short: i18n.T(loc, "cli.ops.tenant.shred.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			orgID = strings.TrimSpace(orgID)
 			projectID = strings.TrimSpace(projectID)
 			format := outputFormat(opts.OutputFormat)
 			if !validOutputFormat(format) {
-				return cliError(testharness.ExitValidation, "--output must be table, json, or yaml", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.err.output_format"), nil)
 			}
 			if orgID == "" || generation < 1 {
-				return cliError(testharness.ExitValidation, "--org is required; specify --project for project scope and a positive --generation", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.ops.tenant.shred.err.required"), nil)
 			}
 			if requestID == "" {
 				requestID = fmt.Sprintf("cli-shred-%d", time.Now().UTC().UnixNano())
 			}
 			if err := runShred(cmd.Context(), opts.DBPath, orgID, projectID, vault.ShredRequest{RequestID: requestID, ExpectedGeneration: generation}); err != nil {
-				return cliError(testharness.ExitInternal, "cryptographic erasure failed", err)
+				return cliError(testharness.ExitInternal, i18n.T(loc, "cli.ops.tenant.shred.err.failed"), err)
 			}
 			return writeResult(opts.Stdout, format, map[string]any{
 				"status": "SHREDDED", "org_id": orgID, "project_id": projectID, "request_id": requestID,
@@ -417,10 +431,10 @@ func newTenantCommand(opts Options) *cobra.Command {
 			})
 		},
 	}
-	shred.Flags().StringVar(&orgID, "org", "", "Organization ID (required for both org and project erasure)")
-	shred.Flags().StringVar(&projectID, "project", "", "Project ID to erase (omit for whole organization)")
-	shred.Flags().Int64Var(&generation, "generation", 0, "Expected DEK generation fence (required)")
-	shred.Flags().StringVar(&requestID, "request-id", "", "Idempotency request ID (generated when omitted)")
+	shred.Flags().StringVar(&orgID, "org", "", i18n.T(loc, "cli.ops.tenant.shred.flag.org"))
+	shred.Flags().StringVar(&projectID, "project", "", i18n.T(loc, "cli.ops.tenant.shred.flag.project"))
+	shred.Flags().Int64Var(&generation, "generation", 0, i18n.T(loc, "cli.ops.tenant.shred.flag.generation"))
+	shred.Flags().StringVar(&requestID, "request-id", "", i18n.T(loc, "cli.ops.tenant.shred.flag.request_id"))
 	group.AddCommand(shred)
 	return group
 }

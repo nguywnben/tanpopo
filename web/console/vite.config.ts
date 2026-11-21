@@ -10,7 +10,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@astryxdesign/theme-neutral/fonts.css': path.join(rootDir, 'assets/fonts/local-figtree-fonts.css'),
+      '@astryxdesign/theme-neutral/fonts.css': path.join(rootDir, 'assets/fonts/local-google-sans-fonts.css'),
     },
   },
   build: {

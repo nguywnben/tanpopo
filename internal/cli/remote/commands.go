@@ -25,6 +25,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/cli/sanitize"
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
+	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 )
 
@@ -37,40 +38,49 @@ type Options struct {
 	Stderr       io.Writer
 	Client       *http.Client
 	LookupEnv    func(string) (string, bool)
+	Locale       i18n.Locale
+}
+
+func resolveLocale(opts Options) i18n.Locale {
+	if opts.Locale == "" {
+		return i18n.LocaleEn
+	}
+	return opts.Locale
 }
 
 type endpoint struct{ use, short, path string }
 
 // NewCommands builds the supported Admin API read command tree.
 func NewCommands(opts Options) []*cobra.Command {
-	config := group("config", "Inspect server configuration")
-	config.AddCommand(getCommand(opts, endpoint{"show", "Show the instance overview", "/admin/v1/overview/summary"}))
+	loc := resolveLocale(opts)
+	config := group("config", i18n.T(loc, "cli.remote.config.short"))
+	config.AddCommand(getCommand(opts, endpoint{"show", i18n.T(loc, "cli.remote.config.show.short"), "/admin/v1/overview/summary"}))
 
-	provider := group("provider", "Inspect provider adapters and connections")
-	provider.AddCommand(getCommand(opts, endpoint{"list", "List provider adapters", "/admin/v1/provider-adapters"}))
-	connections := group("connections", "Provider connection commands")
-	connections.AddCommand(getCommand(opts, endpoint{"list", "List provider connections", "/admin/v1/connections"}))
+	provider := group("provider", i18n.T(loc, "cli.remote.provider.short"))
+	provider.AddCommand(getCommand(opts, endpoint{"list", i18n.T(loc, "cli.remote.provider.list.short"), "/admin/v1/provider-adapters"}))
+	connections := group("connections", i18n.T(loc, "cli.remote.provider.connections.short"))
+	connections.AddCommand(getCommand(opts, endpoint{"list", i18n.T(loc, "cli.remote.provider.connections.list.short"), "/admin/v1/connections"}))
 	provider.AddCommand(connections)
 
-	model := group("model", "Inspect supported and configured models")
-	model.AddCommand(getCommand(opts, endpoint{"list", "List models", "/admin/v1/models"}))
+	model := group("model", i18n.T(loc, "cli.remote.model.short"))
+	model.AddCommand(getCommand(opts, endpoint{"list", i18n.T(loc, "cli.remote.model.list.short"), "/admin/v1/models"}))
 
-	route := group("route", "Inspect and explain routes")
-	route.AddCommand(getCommand(opts, endpoint{"list", "List routes", "/admin/v1/routes"}))
+	route := group("route", i18n.T(loc, "cli.remote.route.short"))
+	route.AddCommand(getCommand(opts, endpoint{"list", i18n.T(loc, "cli.remote.route.list.short"), "/admin/v1/routes"}))
 	route.AddCommand(explainCommand(opts))
 
-	key := group("key", "Inspect virtual keys")
-	key.AddCommand(getCommand(opts, endpoint{"list", "List virtual keys", "/admin/v1/virtual-keys"}))
+	key := group("key", i18n.T(loc, "cli.remote.key.short"))
+	key.AddCommand(getCommand(opts, endpoint{"list", i18n.T(loc, "cli.remote.key.list.short"), "/admin/v1/virtual-keys"}))
 
-	budget := group("budget", "Inspect budgets and usage")
-	budget.AddCommand(getCommand(opts, endpoint{"inspect", "Inspect project budgets", "/admin/v1/budgets"}))
+	budget := group("budget", i18n.T(loc, "cli.remote.budget.short"))
+	budget.AddCommand(getCommand(opts, endpoint{"inspect", i18n.T(loc, "cli.remote.budget.inspect.short"), "/admin/v1/budgets"}))
 
-	audit := group("audit", "Inspect and verify the audit chain")
-	audit.AddCommand(getCommand(opts, endpoint{"list", "List audit events", "/admin/v1/audit-events"}))
-	audit.AddCommand(apiCommand(opts, endpoint{"verify", "Verify the audit chain", "/admin/v1/audit-events/verify"}, http.MethodPost))
+	audit := group("audit", i18n.T(loc, "cli.remote.audit.short"))
+	audit.AddCommand(getCommand(opts, endpoint{"list", i18n.T(loc, "cli.remote.audit.list.short"), "/admin/v1/audit-events"}))
+	audit.AddCommand(apiCommand(opts, endpoint{"verify", i18n.T(loc, "cli.remote.audit.verify.short"), "/admin/v1/audit-events/verify"}, http.MethodPost))
 
-	killswitch := group("killswitch", "Inspect active kill switches")
-	killswitch.AddCommand(getCommand(opts, endpoint{"list", "List active kill switches", "/admin/v1/kill-switches"}))
+	killswitch := group("killswitch", i18n.T(loc, "cli.remote.killswitch.short"))
+	killswitch.AddCommand(getCommand(opts, endpoint{"list", i18n.T(loc, "cli.remote.killswitch.list.short"), "/admin/v1/kill-switches"}))
 	return []*cobra.Command{config, provider, model, route, key, budget, audit, killswitch}
 }
 
@@ -89,52 +99,55 @@ func apiCommand(opts Options, ep endpoint, method string) *cobra.Command {
 }
 
 func explainCommand(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
 	var payload string
 	cmd := &cobra.Command{
 		Use:   "explain",
-		Short: "Explain a route decision from a JSON request payload",
+		Short: i18n.T(loc, "cli.remote.route.explain.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if strings.TrimSpace(payload) == "" {
-				return cliError(testharness.ExitValidation, "--payload is required", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.remote.route.explain.err.required"), nil)
 			}
 			var decoded json.RawMessage
 			if !json.Valid([]byte(payload)) {
-				return cliError(testharness.ExitValidation, "--payload must contain valid JSON", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.remote.route.explain.err.json"), nil)
 			}
 			decoded = json.RawMessage(payload)
-			return runRequest(cmd, opts, endpoint{"explain", "Explain a route decision", "/admin/v1/routes/explain"}, http.MethodPost, decoded)
+			return runRequest(cmd, opts, endpoint{"explain", i18n.T(loc, "cli.remote.route.explain.short"), "/admin/v1/routes/explain"}, http.MethodPost, decoded)
 		},
 	}
-	cmd.Flags().StringVar(&payload, "payload", "", "JSON request payload for route evaluation")
+	cmd.Flags().StringVar(&payload, "payload", "", i18n.T(loc, "cli.remote.route.explain.flag.payload"))
 	return cmd
 }
 
 func runRequest(cmd *cobra.Command, opts Options, ep endpoint, method string, payload []byte) error {
+	loc := resolveLocale(opts)
 	if len(payload) > 1<<20 {
-		return cliError(testharness.ExitValidation, "Admin API request payload exceeds the 1 MiB CLI limit", nil)
+		return cliError(testharness.ExitValidation, i18n.T(loc, "cli.remote.err.payload_size"), nil)
 	}
 	format := strings.ToLower(strings.TrimSpace(outputFormat(opts)))
 	if format != "json" && format != "yaml" && format != "table" {
-		return cliError(testharness.ExitValidation, "--output must be table, json, or yaml", nil)
+		return cliError(testharness.ExitValidation, i18n.T(loc, "cli.err.output_format"), nil)
 	}
 	base, token, org := lookup(opts, "TANPOPO_URL"), lookup(opts, "TANPOPO_ADMIN_TOKEN"), lookup(opts, "TANPOPO_ORG")
 	if token == "" {
-		return cliError(testharness.ExitSecurity, "TANPOPO_ADMIN_TOKEN is required for Admin API access", nil)
+		return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.remote.err.token_required"), nil)
 	}
 	parsed, err := url.Parse(base)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return cliError(testharness.ExitValidation, "TANPOPO_URL must be an http(s) URL without user info, query, or fragment", err)
+		return cliError(testharness.ExitValidation, i18n.T(loc, "cli.remote.err.url_invalid"), err)
 	}
 	if parsed.Scheme == "http" && !isLoopbackHost(parsed.Hostname()) {
-		return cliError(testharness.ExitSecurity, "TANPOPO_URL must use HTTPS except for a local loopback Admin API", nil)
+		return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.remote.err.https_required"), nil)
 	}
 	apiURL := strings.TrimRight(base, "/") + ep.path
 	req, err := http.NewRequestWithContext(cmd.Context(), method, apiURL, bytes.NewReader(payload))
 	if err != nil {
-		return cliError(testharness.ExitValidation, "invalid Admin API request", err)
+		return cliError(testharness.ExitValidation, i18n.T(loc, "cli.remote.err.request_invalid"), err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept-Language", string(loc))
 	if org != "" {
 		req.Header.Set("X-Tanpopo-Org-Id", org)
 	}
@@ -145,30 +158,30 @@ func runRequest(cmd *cobra.Command, opts Options, ep endpoint, method string, pa
 	if client == nil {
 		client, err = adminClient(parsed)
 		if err != nil {
-			return cliError(testharness.ExitValidation, "could not configure guarded Admin API client", err)
+			return cliError(testharness.ExitValidation, i18n.T(loc, "cli.remote.err.client_config"), err)
 		}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return cliError(testharness.ExitNetwork, "Admin API request failed", err)
+		return cliError(testharness.ExitNetwork, i18n.T(loc, "cli.remote.err.request_failed"), err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
-		return cliError(testharness.ExitNetwork, "could not read Admin API response", err)
+		return cliError(testharness.ExitNetwork, i18n.T(loc, "cli.remote.err.read_failed"), err)
 	}
 	if len(body) > maxResponseBytes {
-		return cliError(testharness.ExitContract, "Admin API response exceeds the 4 MiB CLI limit", nil)
+		return cliError(testharness.ExitContract, i18n.T(loc, "cli.remote.err.response_size"), nil)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return statusError(resp.StatusCode)
+		return statusError(loc, resp.StatusCode)
 	}
 	var value any
 	if err := json.Unmarshal(body, &value); err != nil {
-		return cliError(testharness.ExitContract, "Admin API returned invalid JSON", err)
+		return cliError(testharness.ExitContract, i18n.T(loc, "cli.remote.err.invalid_json"), err)
 	}
 	if err := writeValue(opts.Stdout, format, value); err != nil {
-		return cliError(testharness.ExitInternal, "could not format Admin API response", err)
+		return cliError(testharness.ExitInternal, i18n.T(loc, "cli.remote.err.format_failed"), err)
 	}
 	return nil
 }
@@ -314,7 +327,7 @@ func writeTable(out io.Writer, value any) error {
 	return w.Flush()
 }
 
-func statusError(status int) error {
+func statusError(loc i18n.Locale, status int) error {
 	code := testharness.ExitContract
 	if status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusConflict {
 		code = testharness.ExitSecurity
@@ -325,7 +338,7 @@ func statusError(status int) error {
 	if status == http.StatusUnprocessableEntity {
 		code = testharness.ExitContract
 	}
-	return cliError(code, "Admin API returned HTTP "+strconv.Itoa(status), nil)
+	return cliError(code, i18n.T(loc, "cli.remote.err.http_status", "status", strconv.Itoa(status)), nil)
 }
 
 func cliError(code int, message string, cause error) error {

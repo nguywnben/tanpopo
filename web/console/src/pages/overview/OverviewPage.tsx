@@ -1,11 +1,12 @@
-import {useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowRight, RefreshCw} from 'lucide-react';
 import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {getOverviewSummary, listActiveAlerts, listUnhealthyDeployments} from '../../api/client';
 import type {components} from '../../api/generated';
+import {useI18n} from '../../i18n/I18nProvider';
 import {useRouter} from '../../router/RouterContext';
-import {Banner, Button, EmptyState, MetricStrip, SectionHeader, StatusPill, formatMicroUSD, formatOperationalState} from '../../ui/primitives';
+import {Banner, Button, EmptyState, MetricStrip, SectionHeader, StatusPill, formatOperationalState} from '../../ui/primitives';
 
 type WindowRange = components['schemas']['OverviewSummaryResponse']['window'];
 type Summary = components['schemas']['OverviewSummaryResponse'];
@@ -16,6 +17,7 @@ const windows: WindowRange[] = ['1h', '24h', '7d', '30d'];
 
 export function OverviewPage() {
   const {navigate} = useRouter();
+  const {locale, t, formatNumber, formatPercent, formatDateTime, formatTime, formatMicroUSD} = useI18n();
   const [timeWindow, setTimeWindow] = useState<WindowRange>('24h');
   const [summary, setSummary] = useState<Summary | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
@@ -26,7 +28,7 @@ export function OverviewPage() {
   const seenAlertIds = useRef(new Set<string>());
   const loadedOnce = useRef(false);
 
-  async function refresh(windowKey: WindowRange, isBackground = false) {
+  const refresh = useCallback(async (windowKey: WindowRange, isBackground = false) => {
     if (!isBackground) setLoading(true);
     try {
       const [nextSummary, nextAlerts, nextUnhealthy] = await Promise.all([
@@ -36,7 +38,9 @@ export function OverviewPage() {
       ]);
       const arrived = nextAlerts.filter(item => !seenAlertIds.current.has(item.id));
       if (loadedOnce.current && arrived.length > 0) {
-        setAnnouncement(`${arrived.length} new active alert${arrived.length === 1 ? '' : 's'}.`);
+        setAnnouncement(
+          t(arrived.length === 1 ? 'overview.newAlertsOne' : 'overview.newAlertsMany', {count: arrived.length}),
+        );
       }
       seenAlertIds.current = new Set(nextAlerts.map(item => item.id));
       loadedOnce.current = true;
@@ -45,11 +49,11 @@ export function OverviewPage() {
       setUnhealthy(nextUnhealthy);
       setError('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Overview telemetry could not be loaded.');
+      setError(cause instanceof Error ? cause.message : t('overview.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }
+  }, [t]);
 
   useEffect(() => {
     void refresh(timeWindow);
@@ -57,17 +61,17 @@ export function OverviewPage() {
       void refresh(timeWindow, true);
     }, 10000);
     return () => window.clearInterval(interval);
-  }, [timeWindow]);
+  }, [timeWindow, locale, refresh]);
 
   const kpis = summary
     ? [
-        {label: 'Requests', value: summary.total_requests.toLocaleString('en-US'), detail: `Window: ${summary.window}`},
-        {label: 'Error rate', value: `${(summary.error_rate_ratio * 100).toFixed(2)}%`, detail: 'Internal & upstream'},
-        {label: 'p95 proxy overhead', value: `${summary.p95_overhead_ms.toLocaleString('en-US')} ms`, detail: 'Gateway added latency'},
+        {label: t('overview.kpi.requests'), value: formatNumber(summary.total_requests), detail: t('overview.kpi.windowDetail', {window: summary.window})},
+        {label: t('overview.kpi.errorRate'), value: formatPercent(summary.error_rate_ratio, 2), detail: t('overview.kpi.errorRateDetail')},
+        {label: t('overview.kpi.p95Overhead'), value: t('common.ms', {value: formatNumber(summary.p95_overhead_ms)}), detail: t('overview.kpi.p95OverheadDetail')},
         {
-          label: 'Settled spend',
+          label: t('overview.kpi.settledSpend'),
           value: formatMicroUSD(summary.settled_micro_usd),
-          detail: `Active holds: ${formatMicroUSD(summary.active_hold_micros)}`,
+          detail: t('overview.kpi.activeHoldsDetail', {amount: formatMicroUSD(summary.active_hold_micros)}),
         },
       ]
     : [];
@@ -76,18 +80,21 @@ export function OverviewPage() {
     <div className="tp-stack">
       <div className="tp-page-head">
         <div className="tp-page-head-text">
-          <h1>Overview</h1>
+          <h1>{t('overview.title')}</h1>
           <p className="tp-page-subtitle">
             {summary
-              ? `Updated ${new Date(summary.updated_at).toLocaleTimeString()} · ${summary.unmetered_request_count ?? 0} unmetered requests`
-              : 'Live gateway posture and remediation queue.'}
+              ? t('overview.subtitleUpdated', {
+                  time: formatTime(summary.updated_at),
+                  count: formatNumber(summary.unmetered_request_count ?? 0),
+                })
+              : t('overview.subtitleIdle')}
           </p>
         </div>
 
         <div className="tp-page-actions">
           <SegmentedControl
             size="sm"
-            label="Overview time window"
+            label={t('overview.windowLabel')}
             value={timeWindow}
             onChange={next => setTimeWindow(next as WindowRange)}
           >
@@ -97,7 +104,7 @@ export function OverviewPage() {
           </SegmentedControl>
           <Button variant="secondary" size="sm" onClick={() => void refresh(timeWindow)}>
             <RefreshCw size={14} aria-hidden="true" />
-            <span>Refresh</span>
+            <span>{t('common.refresh')}</span>
           </Button>
         </div>
       </div>
@@ -105,12 +112,12 @@ export function OverviewPage() {
       <span className="sr-only" role="status" aria-live="polite">{announcement}</span>
 
       {summary?.sync_lag_warning ? (
-        <Banner tone="warn" title="Telemetry sync delayed">
-          Recent spans were dropped under load. Summary metrics may lag behind live traffic.
+        <Banner tone="warn" title={t('overview.syncLagTitle')}>
+          {t('overview.syncLagDesc')}
         </Banner>
       ) : null}
 
-      {error ? <Banner tone="danger" title="Refresh failed">{error}</Banner> : null}
+      {error ? <Banner tone="danger" title={t('overview.refreshFailedTitle')}>{error}</Banner> : null}
 
       {loading && !summary ? (
         <div className="tp-surface tp-surface-pad tp-stack" role="status" aria-busy="true">
@@ -121,13 +128,13 @@ export function OverviewPage() {
       ) : null}
 
       {unhealthy.length > 0 ? (
-        <section className="tp-section" aria-label="Unhealthy deployments">
+        <section className="tp-section" aria-label={t('overview.unhealthyAria')}>
           <SectionHeader
-            title="Circuit-open deployments"
+            title={t('overview.circuitOpenTitle')}
             count={unhealthy.length}
             actions={
               <Button variant="secondary" size="sm" onClick={() => navigate('/models')}>
-                <span>Inspect deployments</span>
+                <span>{t('overview.inspectDeployments')}</span>
                 <ArrowRight size={14} aria-hidden="true" />
               </Button>
             }
@@ -137,7 +144,7 @@ export function OverviewPage() {
               <li key={dep.id} className="tp-list-item">
                 <div className="tp-stack-sm" style={{minWidth: 0, flex: '1 1 200px'}}>
                   <span className="mono" style={{fontWeight: 600}}>{dep.upstream_model_name}</span>
-                  <span className="tp-muted">Region {dep.data_region} · Connection {dep.connection_id}</span>
+                  <span className="tp-muted">{t('overview.regionConnection', {region: dep.data_region, connection: dep.connection_id})}</span>
                 </div>
                 <StatusPill tone="danger" label={formatOperationalState(dep.state)} />
               </li>
@@ -146,30 +153,32 @@ export function OverviewPage() {
         </section>
       ) : null}
 
-      <section className="tp-section" aria-label="Active alerts">
+      <section className="tp-section" aria-label={t('overview.activeAlertsTitle')}>
         <SectionHeader
-          title="Active alerts"
+          title={t('overview.activeAlertsTitle')}
           count={summary?.active_alerts_count ?? alerts.length}
         />
         {alerts.length === 0 && !loading ? (
           <EmptyState
-            title="All systems nominal"
-            description="No active operational alerts or pending remediation items."
+            title={t('overview.allNominalTitle')}
+            description={t('overview.allNominalDesc')}
           />
         ) : (
           <ul className="tp-list">
             {alerts.map(alert => {
               const target = new URL(alert.remediation_route, window.location.origin);
               const safeInternal = alert.remediation_route.startsWith('/') && target.origin === window.location.origin;
+              const sevKey = `overview.severity.${alert.severity}`;
+              const sevLabel = t(sevKey) === sevKey ? alert.severity : t(sevKey);
               return (
                 <li key={alert.id} className="tp-list-item">
                   <div className="tp-stack-sm" style={{minWidth: 0, flex: '1 1 240px'}}>
                     <div className="tp-row">
-                      <StatusPill tone={alert.severity === 'PAGE' ? 'danger' : 'warn'} label={alert.severity} />
+                      <StatusPill tone={alert.severity === 'PAGE' ? 'danger' : 'warn'} label={sevLabel} />
                       <span style={{fontWeight: 600}}>{alert.summary}</span>
                     </div>
                     <span className="tp-muted mono">
-                      {alert.alert_code} · {new Date(alert.triggered_at).toLocaleString()}
+                      {alert.alert_code} · {formatDateTime(alert.triggered_at)}
                     </span>
                   </div>
                   {safeInternal ? (
@@ -178,7 +187,7 @@ export function OverviewPage() {
                       size="sm"
                       onClick={() => navigate(`${target.pathname}${target.search}${target.hash}`)}
                     >
-                      <span>Remediate</span>
+                      <span>{t('overview.remediate')}</span>
                       <ArrowRight size={14} aria-hidden="true" />
                     </Button>
                   ) : null}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
+	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
@@ -258,7 +259,7 @@ func (s *Server) handleGetOverviewSummary(w http.ResponseWriter, r *http.Request
 		activeHolds += rrow.hold
 	}
 
-	alerts, err := s.collectActiveAlerts(r.Context(), orgID, orgWide, allowedProjSet, nowMs)
+	alerts, err := s.collectActiveAlerts(r.Context(), i18n.ResolveAcceptLanguage(r.Header.Get("Accept-Language")), orgID, orgWide, allowedProjSet, nowMs)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed collecting active alerts", true, nil)
 		return
@@ -310,7 +311,8 @@ func (s *Server) handleListActiveAlerts(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	alerts, err := s.collectActiveAlerts(r.Context(), orgID, orgWide, allowedProjSet, s.nowMs())
+	loc := i18n.ResolveAcceptLanguage(r.Header.Get("Accept-Language"))
+	alerts, err := s.collectActiveAlerts(r.Context(), loc, orgID, orgWide, allowedProjSet, s.nowMs())
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading active alerts", true, nil)
 		return
@@ -348,6 +350,8 @@ func (s *Server) handleListActiveAlerts(w http.ResponseWriter, r *http.Request) 
 		nextCursor = &tok
 	}
 
+	w.Header().Set("Content-Language", string(loc))
+	w.Header().Add("Vary", "Accept-Language")
 	writeJSON(w, http.StatusOK, paginatedListEnvelope[alertItemDTO]{
 		Data:       page,
 		NextCursor: nextCursor,
@@ -355,7 +359,7 @@ func (s *Server) handleListActiveAlerts(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide bool, allowedProjSet map[string]bool, nowMs int64) ([]alertItemDTO, error) {
+func (s *Server) collectActiveAlerts(ctx context.Context, loc i18n.Locale, orgID string, orgWide bool, allowedProjSet map[string]bool, nowMs int64) ([]alertItemDTO, error) {
 	var alerts []alertItemDTO
 
 	// 1. Budget >= 80% alerts (ALT-BUDGET-80)
@@ -403,7 +407,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 				ID:               "alt_budget_" + b.id,
 				AlertCode:        "ALT-BUDGET-80",
 				Severity:         "TICKET",
-				Summary:          fmt.Sprintf("%s budget %s exceeded 80%% utilization", b.scopeType, b.id),
+				Summary:          i18n.AlertSummary(loc, "ALT-BUDGET-80", fmt.Sprintf("%s budget %s exceeded 80%% utilization", b.scopeType, b.id), "scope", b.scopeType, "id", b.id),
 				RemediationRoute: "/budgets",
 				TriggeredAt:      formatTimeRFC3339Ms(b.updMs),
 			})
@@ -446,7 +450,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 				ID:               "alt_unmetered_" + orgID,
 				AlertCode:        "ALT-UNMETERED-SPEND",
 				Severity:         "TICKET",
-				Summary:          fmt.Sprintf("%d unmetered request(s) flagged in the past 24h", unmeteredCnt),
+				Summary:          i18n.AlertSummary(loc, "ALT-UNMETERED-SPEND", fmt.Sprintf("%d unmetered request(s) flagged in the past 24h", unmeteredCnt), "count", unmeteredCnt),
 				RemediationRoute: "/usage",
 				TriggeredAt:      formatTimeRFC3339Ms(trigMs),
 			})
@@ -485,7 +489,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 				ID:               "alt_plugin_" + id,
 				AlertCode:        "ALT-PLUGIN-TRAP",
 				Severity:         "PAGE",
-				Summary:          fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID),
+				Summary:          i18n.AlertSummary(loc, "ALT-PLUGIN-TRAP", fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID), "id", id, "package", pkgID),
 				RemediationRoute: "/extensions",
 				TriggeredAt:      formatTimeRFC3339Ms(updMs),
 			})
@@ -531,7 +535,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 				ID:               "alt_plugin_" + id,
 				AlertCode:        "ALT-PLUGIN-TRAP",
 				Severity:         "PAGE",
-				Summary:          fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID),
+				Summary:          i18n.AlertSummary(loc, "ALT-PLUGIN-TRAP", fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID), "id", id, "package", pkgID),
 				RemediationRoute: "/extensions",
 				TriggeredAt:      formatTimeRFC3339Ms(updMs),
 			})
@@ -571,7 +575,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, orgID string, orgWide 
 				continue
 			}
 		}
-		alerts = append(alerts, alertItemDTO{ID: "alt_oauth_" + credentialID, AlertCode: "ALT-OAUTH-EXPIRY", Severity: "PAGE", Summary: "OAuth connection requires reauthorization", RemediationRoute: "/providers/connections", TriggeredAt: formatTimeRFC3339Ms(updated)})
+		alerts = append(alerts, alertItemDTO{ID: "alt_oauth_" + credentialID, AlertCode: "ALT-OAUTH-EXPIRY", Severity: "PAGE", Summary: i18n.AlertSummary(loc, "ALT-OAUTH-EXPIRY", "OAuth connection requires reauthorization"), RemediationRoute: "/providers/connections", TriggeredAt: formatTimeRFC3339Ms(updated)})
 	}
 	if err := oRows.Err(); err != nil {
 		_ = oRows.Close()

@@ -14,6 +14,7 @@ import {
   upgradeExtension,
 } from '../../api/catalogClient';
 import type {components} from '../../api/generated';
+import {useI18n} from '../../i18n/I18nProvider';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
 import {ConfirmDialog, Drawer, Modal} from '../../ui/Overlays';
@@ -55,6 +56,7 @@ const canApprove = (roles: Role[]) => roles.some(role => ['OPERATOR', 'ORG_OWNER
 
 export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role[]}) {
   const {navigate} = useRouter();
+  const {t} = useI18n();
   const activeTab = pathname.startsWith('/extensions/marketplace')
     ? 'marketplace'
     : pathname.startsWith('/extensions/lockfile')
@@ -70,30 +72,25 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  // Catalog filters
   const [query, setQuery] = useState('');
   const [trustFilter, setTrustFilter] = useState('ALL');
   const [capFilter, setCapFilter] = useState('ALL');
   const [sigFilter, setSigFilter] = useState('ALL');
 
-  // Stage custom package drawer
   const [stageOpen, setStageOpen] = useState(false);
   const [stageUri, setStageUri] = useState('');
   const [stageSha, setStageSha] = useState('');
 
-  // Upgrade drawer
   const [upgradeTarget, setUpgradeTarget] = useState<Installation | null>(null);
   const [upgradeUri, setUpgradeUri] = useState('');
   const [upgradeSha, setUpgradeSha] = useState('');
 
-  // Permission Review Modal
   const [reviewDiff, setReviewDiff] = useState<PermissionDiff | null>(null);
   const [reviewEtag, setReviewEtag] = useState('');
   const [reviewMode, setReviewMode] = useState<'install' | 'upgrade'>('install');
   const [ackUnverified, setAckUnverified] = useState(false);
   const [ackDelta, setAckDelta] = useState(false);
 
-  // Lifecycle Action Modal (rollback / quarantine / uninstall)
   const [actionTarget, setActionTarget] = useState<{row: Installation; kind: 'rollback' | 'quarantine' | 'uninstall'; impact: {projects: string[]; connections: string[]}} | null>(null);
   const [actionReason, setActionReason] = useState('');
 
@@ -109,11 +106,11 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       setCatalog(catRes.data.map(toCatalogEntry).filter((item): item is CatalogEntry => item !== null));
       setOfflineCatalog(catRes.offline_cached);
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -121,9 +118,9 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     if (activeTab === 'lockfile' && !lockfile) {
       getExtensionLockfile()
         .then(value => setLockfile(typeof value === 'string' ? value : JSON.stringify(value, null, 2)))
-        .catch(cause => setError(errText(cause)));
+        .catch(cause => setError(errText(cause, t)));
     }
-  }, [activeTab, lockfile]);
+  }, [activeTab, lockfile, t]);
 
   const visibleCatalog = useMemo(
     () =>
@@ -149,7 +146,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       setAckUnverified(false);
       setAckDelta(false);
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     }
   }
 
@@ -158,7 +155,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     setError('');
     setNotice('');
     if (!/^[a-f0-9]{64}$/.test(stageSha.trim())) {
-      setError('Expected SHA-256 must be a 64-character lowercase hexadecimal digest.');
+      setError(t('extensions.errSha256'));
       return;
     }
     setBusy(true);
@@ -170,7 +167,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       await reload();
       await openReview(staged.installation_id, 'install');
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -180,7 +177,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     setError('');
     setNotice('');
     if (!entry.source_uri || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
-      setError(`${entry.name} is missing a verified source URI or SHA-256 digest.`);
+      setError(t('extensions.errMissingDigest', {name: entry.name}));
       return;
     }
     setBusy(true);
@@ -189,7 +186,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       await reload();
       await openReview(staged.installation_id, 'install');
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -201,7 +198,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     setError('');
     setNotice('');
     if (!/^[a-f0-9]{64}$/.test(upgradeSha.trim())) {
-      setError('Expected SHA-256 must be a 64-character lowercase hexadecimal digest.');
+      setError(t('extensions.errSha256'));
       return;
     }
     setBusy(true);
@@ -217,12 +214,12 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         setReviewMode('upgrade');
         setAckUnverified(false);
         setAckDelta(false);
-        setNotice('Upgrade staged and requires permission re-consent before activation.');
+        setNotice(t('extensions.upgradeNeedsConsent'));
       } else {
-        setNotice(`Upgrade staged (${result.data.state}).`);
+        setNotice(t('extensions.upgradeStaged', {state: formatOperationalState(result.data.state)}));
       }
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -238,9 +235,9 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       const updated = await approveExtension(reviewDiff.installation_id, reviewEtag, enableImmediately, ackUnverified);
       setReviewDiff(null);
       await reload();
-      setNotice(`Permissions approved. Package state: ${updated.state}.`);
+      setNotice(t('extensions.permissionsApproved', {state: formatOperationalState(updated.state)}));
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -255,7 +252,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         const blast = await getExtensionBlastRadius(row.id);
         impact = {projects: blast.projects, connections: blast.connections};
       } catch (cause) {
-        setError(errText(cause));
+        setError(errText(cause, t));
         return;
       }
     }
@@ -273,14 +270,12 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       if (kind === 'uninstall') await uninstallExtension(row.id, `"v${row.version}"`);
       setActionTarget(null);
       await reload();
-      setNotice(
-        kind === 'quarantine'
-          ? `${row.package_id} quarantined and active streams severed.`
-          : `${row.package_id} ${kind} completed.`,
-      );
+      if (kind === 'quarantine') setNotice(t('extensions.quarantinedNotice', {pkg: row.package_id}));
+      else if (kind === 'rollback') setNotice(t('extensions.rollbackCompleted', {pkg: row.package_id}));
+      else setNotice(t('extensions.uninstallCompleted', {pkg: row.package_id}));
     } catch (cause) {
       setActionTarget(null);
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -293,7 +288,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       const value = await getExtensionLockfile();
       setLockfile(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
     } catch (cause) {
-      setError(errText(cause));
+      setError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -309,21 +304,21 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     <div className="tp-stack">
       <div className="tp-page-head">
         <div className="tp-page-head-text">
-          <h1>Extensions</h1>
-          <p className="tp-page-subtitle">Separate origin, publisher signature, and execution-tier verification with staged permission consent.</p>
+          <h1>{t('extensions.title')}</h1>
+          <p className="tp-page-subtitle">{t('extensions.subtitle')}</p>
         </div>
         {operator ? (
           <div className="tp-page-actions">
             <Button variant="primary" size="sm" onClick={() => setStageOpen(true)}>
               <Upload size={14} aria-hidden="true" />
-              <span>Stage package</span>
+              <span>{t('extensions.stagePackage')}</span>
             </Button>
           </div>
         ) : null}
       </div>
 
       <Tabs
-        label="Extension views"
+        label={t('extensions.tabsLabel')}
         activeId={activeTab}
         onSelect={id => {
           if (id === 'marketplace') navigate('/extensions/marketplace');
@@ -331,9 +326,9 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
           else navigate('/extensions/installed');
         }}
         items={[
-          {id: 'installed', label: 'Installed', count: installations.length},
-          {id: 'marketplace', label: 'Marketplace', count: catalog.length},
-          {id: 'lockfile', label: 'Lockfile'},
+          {id: 'installed', label: t('extensions.tabInstalled'), count: installations.length},
+          {id: 'marketplace', label: t('extensions.tabMarketplace'), count: catalog.length},
+          {id: 'lockfile', label: t('extensions.tabLockfile')},
         ]}
       />
 
@@ -342,51 +337,52 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
 
       {activeTab === 'installed' ? (
         <section className="tp-section">
-          <SectionHeader title="Installed packages" count={installations.length} />
+          <SectionHeader title={t('extensions.installedPackages')} count={installations.length} />
           <DataTable
-            ariaLabel="Installed extensions"
+            ariaLabel={t('extensions.installedAria')}
             loading={loading}
             rows={installations}
             rowKey={row => row.id}
-            emptyTitle="No extensions installed"
-            emptyDescription="Stage a package from the Marketplace or supply a digest-pinned source URI."
+            emptyTitle={t('extensions.emptyInstalledTitle')}
+            emptyDescription={t('extensions.emptyInstalledDesc')}
             columns={[
               {
                 id: 'pkg',
-                header: 'Package',
+                header: t('extensions.col.package'),
                 primary: true,
                 width: '22%',
                 render: row => (
                   <div className="tp-stack-sm">
                     <span className="mono" style={{fontWeight: 600}}>{row.package_id}</span>
                     <span className="mono tp-muted">
-                      Active: {row.active_version ?? '—'}{row.candidate_version ? ` → Candidate: ${row.candidate_version}` : ''}
+                      {t('extensions.activeVersion', {version: row.active_version ?? '—'})}
+                      {row.candidate_version ? t('extensions.candidateVersion', {version: row.candidate_version}) : ''}
                     </span>
                   </div>
                 ),
               },
-              {id: 'state', header: 'Lifecycle', width: '16%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
-              {id: 'origin', header: 'Origin', width: '16%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={formatOperationalState(row.origin_trust_tier)} />},
-              {id: 'sig', header: 'Publisher', width: '15%', render: row => <span>{row.enterprise_signed ? 'Enterprise signed' : 'Unsigned'}</span>},
-              {id: 'tier', header: 'Execution tier', width: '19%', render: row => <span className="mono">{row.execution_tier}</span>},
+              {id: 'state', header: t('extensions.col.lifecycle'), width: '16%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
+              {id: 'origin', header: t('extensions.col.origin'), width: '16%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={formatOperationalState(row.origin_trust_tier)} />},
+              {id: 'sig', header: t('extensions.col.publisher'), width: '15%', render: row => <span>{row.enterprise_signed ? t('extensions.enterpriseSigned') : t('extensions.unsigned')}</span>},
+              {id: 'tier', header: t('extensions.col.executionTier'), width: '19%', render: row => <span className="mono">{row.execution_tier}</span>},
               {
                 id: 'actions',
-                header: 'Actions',
+                header: t('common.actions'),
                 width: '12%',
                 render: row => (
                   <RowActionsMenu
-                    label={`Actions for ${row.package_id}`}
+                    label={t('common.actionsFor', {name: row.package_id})}
                     items={[
-                      {id: 'permissions', label: 'Review permissions', onClick: () => void openReview(row.id, 'upgrade')},
+                      {id: 'permissions', label: t('extensions.action.reviewPermissions'), onClick: () => void openReview(row.id, 'upgrade')},
                       ...(operator
                         ? [
-                            {id: 'upgrade', label: 'Upgrade package', onClick: () => { setUpgradeTarget(row); setUpgradeUri(''); setUpgradeSha(''); }},
+                            {id: 'upgrade', label: t('extensions.action.upgrade'), onClick: () => { setUpgradeTarget(row); setUpgradeUri(''); setUpgradeSha(''); }},
                             ...(row.previous_rollback_version
-                              ? [{id: 'rollback', label: 'Rollback version', onClick: () => void prepareLifecycleAction(row, 'rollback')}]
+                              ? [{id: 'rollback', label: t('extensions.action.rollback'), onClick: () => void prepareLifecycleAction(row, 'rollback')}]
                               : []),
                             {type: 'divider' as const},
-                            {id: 'quarantine', label: 'Quarantine package', variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'quarantine')},
-                            {id: 'uninstall', label: 'Uninstall package', variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'uninstall')},
+                            {id: 'quarantine', label: t('extensions.action.quarantine'), variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'quarantine')},
+                            {id: 'uninstall', label: t('extensions.action.uninstall'), variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'uninstall')},
                           ]
                         : []),
                     ]}
@@ -400,59 +396,62 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
 
       {activeTab === 'marketplace' ? (
         <section className="tp-section">
-          {offlineCatalog ? <Banner tone="info">Showing cached offline marketplace catalog.</Banner> : null}
+          {offlineCatalog ? <Banner tone="info">{t('extensions.offlineCatalog')}</Banner> : null}
           <div className="tp-toolbar">
-            <div className="tp-toolbar-field">
-              <TextField label="Search catalog" type="search" value={query} onChange={event => setQuery(event.target.value)} />
+            <div className="tp-toolbar-field tp-toolbar-field-wide">
+              <TextField label={t('extensions.searchCatalog')} fieldSize="sm" type="search" value={query} onChange={event => setQuery(event.target.value)} />
             </div>
             <div className="tp-toolbar-field">
               <SelectField
-                label="Origin trust"
+                label={t('extensions.originTrust')}
+                size="sm"
                 value={trustFilter}
                 onChange={setTrustFilter}
                 options={[
-                  {value: 'ALL', label: 'All origins'},
-                  {value: 'official', label: 'Official'},
-                  {value: 'verified', label: 'Verified'},
-                  {value: 'unverified_external', label: 'Unverified external'},
+                  {value: 'ALL', label: t('extensions.allOrigins')},
+                  {value: 'official', label: t('extensions.origin.official')},
+                  {value: 'verified', label: t('extensions.origin.verified')},
+                  {value: 'unverified_external', label: t('extensions.origin.unverified_external')},
                 ]}
               />
             </div>
             <div className="tp-toolbar-field">
               <SelectField
-                label="Capability"
+                label={t('extensions.capability')}
+                size="sm"
                 value={capFilter}
                 onChange={setCapFilter}
                 options={[
-                  {value: 'ALL', label: 'All capabilities'},
+                  {value: 'ALL', label: t('extensions.allCapabilities')},
                   ...[...new Set(catalog.flatMap(item => item.capabilities))].sort().map(v => ({value: v, label: v})),
                 ]}
               />
             </div>
             <div className="tp-toolbar-field">
               <SelectField
-                label="Publisher signature"
+                label={t('extensions.publisherSignature')}
+                size="sm"
                 value={sigFilter}
                 onChange={setSigFilter}
                 options={[
-                  {value: 'ALL', label: 'All publishers'},
-                  {value: 'SIGNED', label: 'Enterprise signed'},
-                  {value: 'UNSIGNED', label: 'Unsigned'},
+                  {value: 'ALL', label: t('extensions.allPublishers')},
+                  {value: 'SIGNED', label: t('extensions.enterpriseSigned')},
+                  {value: 'UNSIGNED', label: t('extensions.unsigned')},
                 ]}
               />
             </div>
           </div>
 
           <DataTable
-            ariaLabel="Extension marketplace catalog"
+            ariaLabel={t('extensions.catalogAria')}
             loading={loading}
             rows={visibleCatalog}
             rowKey={row => row.id}
-            emptyTitle="No matching marketplace packages"
+            emptyTitle={t('extensions.emptyCatalogTitle')}
             columns={[
               {
                 id: 'name',
-                header: 'Package',
+                header: t('extensions.col.package'),
                 primary: true,
                 width: '26%',
                 render: row => (
@@ -463,13 +462,13 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                   </div>
                 ),
               },
-              {id: 'origin', header: 'Origin', width: '15%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={formatOperationalState(row.origin_trust_tier)} />},
-              {id: 'sig', header: 'Signature', width: '14%', render: row => <span>{row.enterprise_signed ? 'Enterprise signed' : 'None'}</span>},
-              {id: 'tier', header: 'Tier', width: '15%', render: row => <span className="mono">{row.execution_tier}</span>},
-              {id: 'caps', header: 'Capabilities', width: '14%', render: row => <span className="tp-muted">{row.capabilities.join(', ') || '—'}</span>},
+              {id: 'origin', header: t('extensions.col.origin'), width: '15%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={formatOperationalState(row.origin_trust_tier)} />},
+              {id: 'sig', header: t('extensions.col.signature'), width: '14%', render: row => <span>{row.enterprise_signed ? t('extensions.enterpriseSigned') : t('common.none')}</span>},
+              {id: 'tier', header: t('extensions.col.tier'), width: '15%', render: row => <span className="mono">{row.execution_tier}</span>},
+              {id: 'caps', header: t('extensions.col.capabilities'), width: '14%', render: row => <span className="tp-muted">{row.capabilities.join(', ') || '—'}</span>},
               {
                 id: 'actions',
-                header: 'Actions',
+                header: t('common.actions'),
                 width: '16%',
                 render: row =>
                   operator ? (
@@ -479,7 +478,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                       disabled={busy || !row.source_uri || !/^[a-f0-9]{64}$/.test(row.sha256)}
                       onClick={() => void handleStageCatalog(row)}
                     >
-                      Stage for review
+                      {t('extensions.stageForReview')}
                     </Button>
                   ) : null,
               },
@@ -495,43 +494,47 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
             actions={
               <Button variant="secondary" size="sm" loading={busy} onClick={() => void refreshLockfile()}>
                 <Download size={14} aria-hidden="true" />
-                <span>Refresh lockfile</span>
+                <span>{t('extensions.refreshLockfile')}</span>
               </Button>
             }
           />
-          <CodeBlock title="tanpopo.lock" code={lockfile || 'No lockfile content returned.'} />
+          <CodeBlock title="tanpopo.lock" code={lockfile || t('extensions.noLockfile')} />
         </section>
       ) : null}
 
       <Drawer
         open={stageOpen}
         onClose={() => setStageOpen(false)}
-        title="Stage extension package"
-        subtitle="Provide a pinned Git/OCI/archive URI and its exact 64-character SHA-256 digest."
+        title={t('extensions.stageDrawerTitle')}
+        subtitle={t('extensions.stageDrawerSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setStageOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-stage-extension-form" variant="primary" loading={busy}>{t('extensions.stagePackage')}</Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleStageCustom}>
-          <TextField label="Package source URI" required value={stageUri} onChange={event => setStageUri(event.target.value)} />
-          <TextField label="Expected SHA-256" required value={stageSha} onChange={event => setStageSha(event.target.value)} />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setStageOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="primary" loading={busy}>Stage package</Button>
-          </div>
+        <form id="tp-stage-extension-form" className="tp-stack" onSubmit={handleStageCustom}>
+          <TextField label={t('extensions.sourceUri')} required value={stageUri} onChange={event => setStageUri(event.target.value)} />
+          <TextField label={t('extensions.expectedSha256')} required value={stageSha} onChange={event => setStageSha(event.target.value)} />
         </form>
       </Drawer>
 
       <Drawer
         open={upgradeTarget !== null}
         onClose={() => setUpgradeTarget(null)}
-        title={`Stage upgrade for ${upgradeTarget?.package_id ?? ''}`}
-        subtitle="Any permission escalation triggers explicit re-consent."
+        title={t('extensions.upgradeDrawerTitle', {pkg: upgradeTarget?.package_id ?? ''})}
+        subtitle={t('extensions.upgradeDrawerSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setUpgradeTarget(null)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-upgrade-extension-form" variant="primary" loading={busy}>{t('extensions.stageUpgrade')}</Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleUpgrade}>
-          <TextField label="Upgrade source URI" required value={upgradeUri} onChange={event => setUpgradeUri(event.target.value)} />
-          <TextField label="Expected SHA-256" required value={upgradeSha} onChange={event => setUpgradeSha(event.target.value)} />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setUpgradeTarget(null)}>Cancel</Button>
-            <Button type="submit" variant="primary" loading={busy}>Stage upgrade</Button>
-          </div>
+        <form id="tp-upgrade-extension-form" className="tp-stack" onSubmit={handleUpgrade}>
+          <TextField label={t('extensions.upgradeSourceUri')} required value={upgradeUri} onChange={event => setUpgradeUri(event.target.value)} />
+          <TextField label={t('extensions.expectedSha256')} required value={upgradeSha} onChange={event => setUpgradeSha(event.target.value)} />
         </form>
       </Drawer>
 
@@ -539,23 +542,23 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         open={reviewDiff !== null}
         onClose={() => setReviewDiff(null)}
         size="lg"
-        title="Extension permission review"
-        subtitle={reviewDiff ? `${reviewDiff.package_id} · ${reviewDiff.active_version ?? 'new'} → ${reviewDiff.candidate_version}` : undefined}
+        title={t('extensions.reviewModalTitle')}
+        subtitle={reviewDiff ? `${reviewDiff.package_id} · ${reviewDiff.active_version ?? t('extensions.versionNew')} → ${reviewDiff.candidate_version}` : undefined}
         footer={
           approver ? (
             <>
-              <Button variant="secondary" onClick={() => setReviewDiff(null)}>Cancel</Button>
+              <Button variant="secondary" onClick={() => setReviewDiff(null)}>{t('common.cancel')}</Button>
               {reviewMode === 'install' ? (
                 <Button variant="secondary" disabled={busy || reviewBlocked} onClick={() => void handleApproveReview(false)}>
-                  Approve, keep disabled
+                  {t('extensions.approveKeepDisabled')}
                 </Button>
               ) : null}
               <Button variant="primary" loading={busy} disabled={reviewBlocked} onClick={() => void handleApproveReview(true)}>
-                Approve & activate
+                {t('extensions.approveAndActivate')}
               </Button>
             </>
           ) : (
-            <Button variant="secondary" onClick={() => setReviewDiff(null)}>Close</Button>
+            <Button variant="secondary" onClick={() => setReviewDiff(null)}>{t('common.close')}</Button>
           )
         }
       >
@@ -563,9 +566,9 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
           <>
             <KeyValueList
               items={[
-                {label: 'Origin trust', value: <StatusPill tone={stateTone(reviewDiff.origin_trust_tier)} label={formatOperationalState(reviewDiff.origin_trust_tier)} />},
-                {label: 'Publisher signature', value: reviewDiff.enterprise_signed ? 'Enterprise signed' : 'Unsigned'},
-                {label: 'Execution tier', value: reviewDiff.execution_tier, mono: true},
+                {label: t('extensions.originTrust'), value: <StatusPill tone={stateTone(reviewDiff.origin_trust_tier)} label={formatOperationalState(reviewDiff.origin_trust_tier)} />},
+                {label: t('extensions.publisherSignature'), value: reviewDiff.enterprise_signed ? t('extensions.enterpriseSigned') : t('extensions.unsigned')},
+                {label: t('extensions.col.executionTier'), value: reviewDiff.execution_tier, mono: true},
               ]}
             />
 
@@ -573,20 +576,20 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
 
             {reviewDiff.has_escalation ? (
               <CheckboxField
-                label="I reviewed and explicitly consent to these permission escalations and resource limits"
+                label={t('extensions.consentEscalation')}
                 checked={ackDelta}
                 onChange={setAckDelta}
               />
             ) : null}
             {reviewDiff.origin_trust_tier === 'unverified_external' ? (
               <CheckboxField
-                label="I acknowledge this package is from an unverified external publisher"
-                description="Consent does not waive DEC-004 or TP-BR-0301 compliance boundaries."
+                label={t('extensions.consentUnverified')}
+                description={t('extensions.consentUnverifiedDesc')}
                 checked={ackUnverified}
                 onChange={setAckUnverified}
               />
             ) : null}
-            {!approver ? <Banner tone="warn">Your role cannot approve extension permissions.</Banner> : null}
+            {!approver ? <Banner tone="warn">{t('extensions.cannotApprove')}</Banner> : null}
           </>
         ) : null}
       </Modal>
@@ -594,22 +597,28 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       <ConfirmDialog
         open={actionTarget !== null}
         onClose={() => setActionTarget(null)}
-        title={`${actionTarget ? actionTarget.kind[0].toUpperCase() + actionTarget.kind.slice(1) : ''} ${actionTarget?.row.package_id ?? ''}`}
+        title={actionTarget ? t(`extensions.confirmTitle.${actionTarget.kind}`, {pkg: actionTarget.row.package_id}) : ''}
         description={
           actionTarget?.kind === 'quarantine'
-            ? `Disable immediately and sever active streams. Affected projects: ${actionTarget.impact.projects.join(', ') || 'None'}. Affected connections: ${actionTarget.impact.connections.join(', ') || 'None'}.`
+            ? t('extensions.confirmDesc.quarantine', {
+                projects: actionTarget.impact.projects.join(', ') || t('common.none'),
+                connections: actionTarget.impact.connections.join(', ') || t('common.none'),
+              })
             : actionTarget?.kind === 'rollback'
-              ? `Restore previous known-good version ${actionTarget.row.previous_rollback_version ?? ''}. Affected projects: ${actionTarget.impact.projects.join(', ') || 'None'}.`
-              : 'Remove this extension or discard its staged candidate.'
+              ? t('extensions.confirmDesc.rollback', {
+                  version: actionTarget.row.previous_rollback_version ?? '',
+                  projects: actionTarget.impact.projects.join(', ') || t('common.none'),
+                })
+              : t('extensions.confirmDesc.uninstall')
         }
-        confirmLabel={`Confirm ${actionTarget?.kind ?? 'action'}`}
+        confirmLabel={actionTarget ? t(`extensions.confirmBtn.${actionTarget.kind}`) : t('common.action')}
         requireMatch={actionTarget?.kind === 'quarantine' ? actionTarget.row.package_id : undefined}
-        matchLabel="Type the exact package ID to confirm quarantine"
+        matchLabel={t('extensions.matchPackageId')}
         busy={busy || actionReason.trim().length < 5}
         onConfirm={() => void confirmLifecycleAction()}
       >
         <TextField
-          label="Audit reason (minimum 5 characters)"
+          label={t('extensions.auditReason')}
           required
           value={actionReason}
           onChange={event => setActionReason(event.target.value)}
@@ -620,49 +629,50 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
 }
 
 function PermissionDiffView({diff}: {diff: PermissionDiff}) {
+  const {t} = useI18n();
   const active = diff.active_permissions;
   const candidate = diff.candidate_permissions;
   const delta = diff.permission_delta;
-  const rows: Array<{id: string; permission: string; activeVal: string; candidateVal: string; change?: string}> = [
-    ...setDiffRows('Host', active?.allowed_hosts ?? [], candidate.allowed_hosts ?? [], delta.added_hosts ?? []),
-    ...setDiffRows('Secret slot', active?.secret_slots ?? [], candidate.secret_slots ?? [], delta.added_secret_slots ?? []),
-    ...setDiffRows('Hook', active?.hooks ?? [], candidate.hooks ?? [], delta.added_hooks ?? []),
+  const rows: Array<{id: string; permission: string; activeVal: string; candidateVal: string; changeKey?: string}> = [
+    ...setDiffRows('host', t('extensions.diff.host'), active?.allowed_hosts ?? [], candidate.allowed_hosts ?? [], delta.added_hosts ?? []),
+    ...setDiffRows('slot', t('extensions.diff.secretSlot'), active?.secret_slots ?? [], candidate.secret_slots ?? [], delta.added_secret_slots ?? []),
+    ...setDiffRows('hook', t('extensions.diff.hook'), active?.hooks ?? [], candidate.hooks ?? [], delta.added_hooks ?? []),
     {
       id: 'tier',
-      permission: 'Execution tier',
-      activeVal: active?.execution_tier ?? 'None',
+      permission: t('extensions.col.executionTier'),
+      activeVal: active?.execution_tier ?? t('common.none'),
       candidateVal: candidate.execution_tier,
-      change: delta.tier_escalated ? 'Expanded' : active && active.execution_tier !== candidate.execution_tier ? 'Changed' : undefined,
+      changeKey: delta.tier_escalated ? 'extensions.diff.expanded' : active && active.execution_tier !== candidate.execution_tier ? 'extensions.diff.changed' : undefined,
     },
-    boolDiffRow('private-ip', 'Private IP access', active?.allow_private_ip, candidate.allow_private_ip, delta.private_ip_escalated === true, false),
-    boolDiffRow('tls', 'Require TLS', active?.require_tls, candidate.require_tls, delta.tls_downgraded === true, true),
-    boolDiffRow('req-body', 'Inspect request body', active?.inspect_request_body, candidate.inspect_request_body, delta.payload_access_escalated === true && candidate.inspect_request_body === true, false),
-    boolDiffRow('res-body', 'Inspect response body', active?.inspect_response_body, candidate.inspect_response_body, delta.payload_access_escalated === true && candidate.inspect_response_body === true, false),
+    boolDiffRow('private-ip', t('extensions.diff.privateIp'), active?.allow_private_ip, candidate.allow_private_ip, delta.private_ip_escalated === true, false, t),
+    boolDiffRow('tls', t('extensions.diff.requireTls'), active?.require_tls, candidate.require_tls, delta.tls_downgraded === true, true, t),
+    boolDiffRow('req-body', t('extensions.diff.inspectReqBody'), active?.inspect_request_body, candidate.inspect_request_body, delta.payload_access_escalated === true && candidate.inspect_request_body === true, false, t),
+    boolDiffRow('res-body', t('extensions.diff.inspectResBody'), active?.inspect_response_body, candidate.inspect_response_body, delta.payload_access_escalated === true && candidate.inspect_response_body === true, false, t),
     {
       id: 'quotas',
-      permission: 'Resource limits',
-      activeVal: active ? formatQuotas(active) : 'None',
-      candidateVal: formatQuotas(candidate),
-      change: delta.memory_increased || delta.cpu_quota_increased ? 'Expanded' : undefined,
+      permission: t('extensions.diff.resourceLimits'),
+      activeVal: active ? formatQuotas(active, t) : t('common.none'),
+      candidateVal: formatQuotas(candidate, t),
+      changeKey: delta.memory_increased || delta.cpu_quota_increased ? 'extensions.diff.expanded' : undefined,
     },
   ];
 
   return (
     <DataTable
-      ariaLabel="Permission diff"
+      ariaLabel={t('extensions.diffAria')}
       rows={rows}
       rowKey={row => row.id}
       columns={[
-        {id: 'perm', header: 'Permission', primary: true, width: '34%', render: row => <span className="mono">{row.permission}</span>},
-        {id: 'active', header: 'Active', width: '28%', render: row => <span className="mono tp-muted">{row.activeVal}</span>},
+        {id: 'perm', header: t('extensions.diff.permission'), primary: true, width: '34%', render: row => <span className="mono">{row.permission}</span>},
+        {id: 'active', header: t('extensions.diff.active'), width: '28%', render: row => <span className="mono tp-muted">{row.activeVal}</span>},
         {
           id: 'candidate',
-          header: 'Candidate',
+          header: t('extensions.diff.candidate'),
           width: '38%',
           render: row => (
             <div className="tp-row">
               <span className="mono">{row.candidateVal}</span>
-              {row.change ? <StatusPill tone={row.change === 'Removed' ? 'ok' : 'warn'} label={row.change} /> : null}
+              {row.changeKey ? <StatusPill tone={row.changeKey === 'extensions.diff.removed' ? 'ok' : 'warn'} label={t(row.changeKey)} /> : null}
             </div>
           ),
         },
@@ -671,22 +681,30 @@ function PermissionDiffView({diff}: {diff: PermissionDiff}) {
   );
 }
 
-function setDiffRows(label: string, active: string[], candidate: string[], added: string[]) {
+function setDiffRows(prefix: string, label: string, active: string[], candidate: string[], added: string[]) {
   const cur = new Set(active);
   const next = new Set(candidate);
   const add = new Set(added);
   return [...new Set([...active, ...candidate])].sort().map(item => ({
-    id: `${label}-${item}`,
+    id: `${prefix}-${item}`,
     permission: `${label}: ${item}`,
     activeVal: cur.has(item) ? item : '—',
     candidateVal: next.has(item) ? item : '—',
-    change: add.has(item) || (!cur.has(item) && next.has(item)) ? 'Added' : cur.has(item) && !next.has(item) ? 'Removed' : undefined,
+    changeKey: add.has(item) || (!cur.has(item) && next.has(item)) ? 'extensions.diff.added' : cur.has(item) && !next.has(item) ? 'extensions.diff.removed' : undefined,
   }));
 }
 
-function boolDiffRow(id: string, permission: string, active: boolean | undefined, candidate: boolean | undefined, escalated: boolean, reverse: boolean) {
-  const activeVal = active === undefined ? 'None' : active ? 'Enabled' : 'Disabled';
-  const candidateVal = candidate ? 'Enabled' : 'Disabled';
+function boolDiffRow(
+  id: string,
+  permission: string,
+  active: boolean | undefined,
+  candidate: boolean | undefined,
+  escalated: boolean,
+  reverse: boolean,
+  t: (key: string) => string,
+) {
+  const activeVal = active === undefined ? t('common.none') : active ? formatOperationalState('ENABLED') : formatOperationalState('DISABLED');
+  const candidateVal = candidate ? formatOperationalState('ENABLED') : formatOperationalState('DISABLED');
   const changed = active !== undefined && active !== candidate;
   const expanded = active === undefined ? !reverse && candidate === true : reverse ? active === true && candidate === false : active === false && candidate === true;
   return {
@@ -694,13 +712,17 @@ function boolDiffRow(id: string, permission: string, active: boolean | undefined
     permission,
     activeVal,
     candidateVal,
-    change: escalated && expanded ? 'Expanded' : changed ? (expanded ? 'Expanded' : 'Reduced') : undefined,
+    changeKey: escalated && expanded ? 'extensions.diff.expanded' : changed ? (expanded ? 'extensions.diff.expanded' : 'extensions.diff.reduced') : undefined,
   };
 }
 
-function formatQuotas(p: components['schemas']['ExtensionPermissionSet']) {
-  const fmt = (val: number | undefined, unit: string) => (!val ? 'default' : `${val} ${unit}`);
-  return `Mem ${fmt(p.max_memory_mib, 'MiB')} · Call ${fmt(p.max_cpu_ms_per_call, 'ms')} · Chunk ${fmt(p.max_stream_chunk_cpu_ms, 'ms')}`;
+function formatQuotas(p: components['schemas']['ExtensionPermissionSet'], t: (key: string, vars?: Record<string, string | number>) => string) {
+  const fmt = (val: number | undefined, unit: string) => (!val ? t('common.default') : `${val} ${unit}`);
+  return t('extensions.diff.quotas', {
+    mem: fmt(p.max_memory_mib, 'MiB'),
+    call: fmt(p.max_cpu_ms_per_call, 'ms'),
+    chunk: fmt(p.max_stream_chunk_cpu_ms, 'ms'),
+  });
 }
 
 function toCatalogEntry(value: unknown): CatalogEntry | null {
@@ -733,4 +755,4 @@ function toCatalogEntry(value: unknown): CatalogEntry | null {
   };
 }
 
-function errText(cause: unknown): string { return cause instanceof Error ? cause.message : 'Request failed.'; }
+function errText(cause: unknown, t: (key: string) => string): string { return cause instanceof Error ? cause.message : t('common.requestFailed'); }

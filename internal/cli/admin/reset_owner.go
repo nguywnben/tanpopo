@@ -22,6 +22,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
+	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
@@ -29,22 +30,30 @@ import (
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 )
 
-// NewCommand creates local administrative commands. These operations never
-// register an HTTP handler and only open the explicitly supplied local DB file.
+// NewCommand creates local administrative commands using the default English locale.
 func NewCommand(stdout io.Writer, outputFormat ...*string) *cobra.Command {
-	adminCommand := &cobra.Command{Use: "admin", Short: "Local administrative recovery commands", RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
+	return NewCommandWithLocale(stdout, i18n.LocaleEn, outputFormat...)
+}
+
+// NewCommandWithLocale creates local administrative commands localized to loc.
+// These operations never register an HTTP handler and only open the explicitly supplied local DB file.
+func NewCommandWithLocale(stdout io.Writer, loc i18n.Locale, outputFormat ...*string) *cobra.Command {
+	if loc == "" {
+		loc = i18n.LocaleEn
+	}
+	adminCommand := &cobra.Command{Use: "admin", Short: i18n.T(loc, "cli.admin.short"), RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }}
 	var dbPath, ownerEmail string
 	reset := &cobra.Command{
 		Use:   "reset-local-owner",
-		Short: "Reset one local ORG_OWNER password using the local Master KEK file",
+		Short: i18n.T(loc, "cli.admin.reset.short"),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if strings.TrimSpace(dbPath) == "" {
-				return cliError(testharness.ExitValidation, "--db is required", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.admin.reset.err.db_required"), nil)
 			}
 			keyPath := strings.TrimSpace(env("TANPOPO_MASTER_KEY_FILE"))
 			if keyPath == "" || strings.TrimSpace(env("TANPOPO_MASTER_KEY")) != "" {
-				return cliError(testharness.ExitSecurity, "local recovery requires TANPOPO_MASTER_KEY_FILE and does not accept TANPOPO_MASTER_KEY", nil)
+				return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.admin.reset.err.kek_env"), nil)
 			}
 			keyID := strings.TrimSpace(env("TANPOPO_MASTER_KEY_ID"))
 			if keyID == "" {
@@ -52,7 +61,7 @@ func NewCommand(stdout io.Writer, outputFormat ...*string) *cobra.Command {
 			}
 			proof, err := vault.LoadStaticKEKFromFile(keyID, keyPath)
 			if err != nil {
-				return cliError(testharness.ExitSecurity, "could not verify access to the local Master KEK file", err)
+				return cliError(testharness.ExitSecurity, i18n.T(loc, "cli.admin.reset.err.kek_access"), err)
 			}
 			defer proof.Close()
 			format := "table"
@@ -60,11 +69,11 @@ func NewCommand(stdout io.Writer, outputFormat ...*string) *cobra.Command {
 				format = strings.ToLower(strings.TrimSpace(*outputFormat[0]))
 			}
 			if format != "json" && format != "yaml" && format != "table" {
-				return cliError(testharness.ExitValidation, "--output must be table, json, or yaml", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.err.output_format"), nil)
 			}
 			password, err := resetOwner(cmd.Context(), dbPath, strings.TrimSpace(ownerEmail), proof)
 			if err != nil {
-				return cliError(testharness.ExitInternal, "local owner recovery failed", err)
+				return cliError(testharness.ExitInternal, i18n.T(loc, "cli.admin.reset.err.failed"), err)
 			}
 			var writeErr error
 			switch format {
@@ -73,18 +82,18 @@ func NewCommand(stdout io.Writer, outputFormat ...*string) *cobra.Command {
 			case "yaml":
 				writeErr = yaml.NewEncoder(stdout).Encode(map[string]string{"recovery_password": password})
 			case "table", "":
-				_, writeErr = fmt.Fprintf(stdout, "One-time local owner recovery password: %s\n", password)
+				_, writeErr = fmt.Fprintln(stdout, i18n.T(loc, "cli.admin.reset.output", "password", password))
 			default:
-				return cliError(testharness.ExitValidation, "--output must be table, json, or yaml", nil)
+				return cliError(testharness.ExitValidation, i18n.T(loc, "cli.err.output_format"), nil)
 			}
 			if writeErr != nil {
-				return cliError(testharness.ExitInternal, "could not write recovery password", writeErr)
+				return cliError(testharness.ExitInternal, i18n.T(loc, "cli.admin.reset.err.write"), writeErr)
 			}
 			return nil
 		},
 	}
-	reset.Flags().StringVar(&dbPath, "db", "", "Path to the local Tanpopo SQLite database")
-	reset.Flags().StringVar(&ownerEmail, "email", "", "Email of the local ORG_OWNER to recover (required when more than one exists)")
+	reset.Flags().StringVar(&dbPath, "db", "", i18n.T(loc, "cli.admin.reset.flag.db"))
+	reset.Flags().StringVar(&ownerEmail, "email", "", i18n.T(loc, "cli.admin.reset.flag.email"))
 	adminCommand.AddCommand(reset)
 	return adminCommand
 }

@@ -1,11 +1,14 @@
 import {
   Children,
   isValidElement,
+  useState,
   type ButtonHTMLAttributes,
+  type ChangeEvent,
   type InputHTMLAttributes,
   type ReactNode,
   type TextareaHTMLAttributes,
 } from 'react';
+import {Eye, EyeOff} from 'lucide-react';
 import {Badge as AstryxBadge} from '@astryxdesign/core/Badge';
 import {Banner as AstryxBanner} from '@astryxdesign/core/Banner';
 import {Button as AstryxButton} from '@astryxdesign/core/Button';
@@ -14,11 +17,14 @@ import {CodeBlock as AstryxCodeBlock} from '@astryxdesign/core/CodeBlock';
 import type {DropdownMenuOption} from '@astryxdesign/core/DropdownMenu';
 import {EmptyState as AstryxEmptyState} from '@astryxdesign/core/EmptyState';
 import {IconButton as AstryxIconButton} from '@astryxdesign/core/IconButton';
+import {InputGroup as AstryxInputGroup} from '@astryxdesign/core/InputGroup';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {MoreMenu as AstryxMoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {TextArea as AstryxTextArea} from '@astryxdesign/core/TextArea';
 import {TextInput as AstryxTextInput, type TextInputType} from '@astryxdesign/core/TextInput';
+import {formatLocalizedMicroUSD} from '../i18n/catalog';
+import {getActiveLocale, translateRuntime, useI18n} from '../i18n/I18nProvider';
 export {SelectField, type SelectFieldOption, type SelectOption} from './SelectField';
 
 export type StatusTone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral';
@@ -92,7 +98,7 @@ export function Button({
     typeof children === 'number' ||
     (Array.isArray(children) && Children.toArray(children).every(child => typeof child === 'string' || typeof child === 'number'));
 
-  const textLabel = ariaLabel ?? (extractText(children) || 'Action');
+  const textLabel = ariaLabel ?? (extractText(children) || translateRuntime('common.action'));
 
   return (
     <AstryxButton
@@ -118,6 +124,7 @@ export function Button({
 
 export function IconButton({
   label,
+  variant = 'ghost',
   className = '',
   children,
   type = 'button',
@@ -125,14 +132,14 @@ export function IconButton({
   onClick,
   style,
   'aria-expanded': ariaExpanded,
-}: ButtonHTMLAttributes<HTMLButtonElement> & {label: string}) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {label: string; variant?: 'ghost' | 'secondary'}) {
   return (
     <AstryxIconButton
       type={type}
       label={label}
       tooltip={label}
       icon={children}
-      variant="ghost"
+      variant={variant}
       size="sm"
       isDisabled={Boolean(disabled)}
       onClick={onClick}
@@ -187,15 +194,82 @@ export function TextField({
   max,
   step,
   inputMode,
+  fieldSize = 'md',
 }: InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   hint?: string;
   error?: string;
+  fieldSize?: 'sm' | 'md';
 }) {
+  const {t} = useI18n();
+  const [revealed, setRevealed] = useState(false);
+  const isPassword = type === 'password';
   const isNumber = type === 'number';
-  const mappedType: TextInputType = allowedTextTypes.has(type as TextInputType) ? (type as TextInputType) : 'text';
+  const mappedType: TextInputType = isPassword
+    ? (revealed ? 'text' : 'password')
+    : allowedTextTypes.has(type as TextInputType)
+      ? (type as TextInputType)
+      : 'text';
   const resolvedInputMode = inputMode ?? (isNumber ? 'decimal' : undefined);
   const stringValue = value === undefined || value === null ? '' : String(value);
+
+  const handleInputChange = (_: string, event: ChangeEvent<HTMLInputElement>) => {
+    if (!onChange) return;
+    if (isNumber && min !== undefined && event.target.value !== '') {
+      const parsed = Number(event.target.value);
+      if (!Number.isNaN(parsed) && typeof min === 'number' && parsed < min) {
+        onChange(event);
+        return;
+      }
+    }
+    onChange(event);
+  };
+
+  if (isPassword) {
+    const toggleLabel = revealed ? t('common.hideSecret') : t('common.showSecret');
+    return (
+      <AstryxInputGroup
+        label={label}
+        description={hint}
+        status={error ? {type: 'error', message: error} : undefined}
+        isRequired={Boolean(required)}
+        isDisabled={Boolean(disabled)}
+        size={fieldSize}
+        className={`tp-secret-group ${className}`.trim()}
+      >
+        <AstryxTextInput
+          id={id}
+          label={label}
+          isLabelHidden
+          type={mappedType}
+          inputMode={resolvedInputMode}
+          value={stringValue}
+          onChange={handleInputChange}
+          placeholder={placeholder}
+          isRequired={Boolean(required)}
+          isDisabled={Boolean(disabled)}
+          isReadOnly={Boolean(readOnly)}
+          hasAutoFocus={Boolean(autoFocus)}
+          autoComplete={autoComplete}
+          htmlName={name}
+          width="100%"
+          size={fieldSize}
+          controlClassName="tp-secret-input"
+        />
+        <button
+          type="button"
+          className="tp-secret-eye"
+          aria-label={toggleLabel}
+          aria-pressed={revealed}
+          title={toggleLabel}
+          disabled={Boolean(disabled)}
+          onClick={() => setRevealed(prev => !prev)}
+        >
+          {revealed ? <EyeOff size={15} strokeWidth={1.75} aria-hidden="true" /> : <Eye size={15} strokeWidth={1.75} aria-hidden="true" />}
+        </button>
+      </AstryxInputGroup>
+    );
+  }
 
   return (
     <AstryxTextInput
@@ -204,17 +278,7 @@ export function TextField({
       type={mappedType}
       inputMode={resolvedInputMode}
       value={stringValue}
-      onChange={(_, event) => {
-        if (!onChange) return;
-        if (isNumber && min !== undefined && event.target.value !== '') {
-          const parsed = Number(event.target.value);
-          if (!Number.isNaN(parsed) && typeof min === 'number' && parsed < min) {
-            onChange(event);
-            return;
-          }
-        }
-        onChange(event);
-      }}
+      onChange={handleInputChange}
       placeholder={placeholder}
       description={hint}
       status={error ? {type: 'error', message: error} : undefined}
@@ -225,7 +289,7 @@ export function TextField({
       autoComplete={autoComplete}
       htmlName={name}
       width="100%"
-      size="md"
+      size={fieldSize}
       containerClassName={className || undefined}
       data-min={min}
       data-max={max}
@@ -242,6 +306,7 @@ export function TextAreaField({
   className = '',
   value,
   onChange,
+  onKeyDown,
   placeholder,
   rows,
   required,
@@ -261,6 +326,7 @@ export function TextAreaField({
       label={label}
       value={stringValue}
       onChange={(_, event) => onChange?.(event)}
+      onKeyDown={onKeyDown}
       placeholder={placeholder}
       rows={rows}
       description={hint}
@@ -338,7 +404,7 @@ export function Banner({
     tone === 'warn' ? 'warning' :
     tone === 'danger' ? 'error' :
     'info';
-  const resolvedTitle = title ?? (children ?? 'Notice');
+  const resolvedTitle = title ?? (children ?? translateRuntime('common.notice'));
   const resolvedDescription = title ? children : undefined;
   const role = tone === 'danger' || tone === 'warn' ? 'alert' : undefined;
 
@@ -490,41 +556,11 @@ export function stateTone(state: string): StatusTone {
   return 'info';
 }
 
-const operationalStateLabels: Record<string, string> = {
-  ACTIVE_HEALTHY: 'Healthy',
-  CIRCUIT_OPEN_UNHEALTHY: 'Circuit open',
-  THROTTLED_COOLDOWN: 'Cooldown',
-  DRAINING_MAINTENANCE: 'Draining',
-  HALF_OPEN_PROBING: 'Probing',
-  DISABLED: 'Disabled',
-  ENABLED: 'Enabled',
-  PROVISIONED: 'Provisioned',
-  CREATED_ACTIVE: 'Active',
-  ENABLED_ACTIVE: 'Active',
-  ROTATING_GRACE: 'Rotating',
-  REVOKED: 'Revoked',
-  ACTIVE: 'Active',
-  DEGRADED: 'Degraded',
-  EXACT: 'Exact',
-  ESTIMATED: 'Estimated',
-  UNMETERED_FLAGGED: 'Unmetered',
-  VERIFIED: 'Verified',
-  TESTED: 'Tested',
-  DECLARED: 'Declared',
-  OFFICIAL: 'Official',
-  UNVERIFIED_EXTERNAL: 'Unverified',
-  PENDING_APPROVAL: 'Pending approval',
-  DRIFT_LOCKED: 'Drift locked',
-  QUARANTINED: 'Quarantined',
-  FAIL_CLOSED: 'Fail closed',
-  FAIL_OPEN: 'Fail open',
-  OK: 'OK',
-  FAILED: 'Failed',
-};
-
 export function formatOperationalState(raw: string): string {
   const key = raw.toUpperCase();
-  if (key in operationalStateLabels) return operationalStateLabels[key];
+  const stateKey = `state.${key}`;
+  const translated = translateRuntime(stateKey);
+  if (translated !== stateKey) return translated;
   return formatLabel(raw);
 }
 
@@ -533,11 +569,5 @@ export function formatLabel(raw: string): string {
 }
 
 export function formatMicroUSD(value: number): string {
-  if (!Number.isSafeInteger(value)) return 'Unavailable';
-  const amount = BigInt(value);
-  const sign = amount < 0n ? '-' : '';
-  const abs = amount < 0n ? -amount : amount;
-  const whole = abs / 1_000_000n;
-  const fraction = String(abs % 1_000_000n).padStart(6, '0');
-  return `${sign}$${whole.toLocaleString('en-US')}.${fraction}`;
+  return formatLocalizedMicroUSD(getActiveLocale(), value, translateRuntime('common.unavailable'));
 }

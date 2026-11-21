@@ -1,11 +1,11 @@
 import {useEffect, useRef, useState} from 'react';
 import {Send, Square, Trash2} from 'lucide-react';
-import {listRoutesForEnvironment} from '../../api/managementClient';
-import {createPlaygroundSession, getTraceWaterfall} from '../../api/managementClient';
+import {createPlaygroundSession, getTraceWaterfall, listRoutesForEnvironment} from '../../api/managementClient';
 import type {components} from '../../api/generated';
+import {useI18n} from '../../i18n/I18nProvider';
 import {useRouter} from '../../router/RouterContext';
 import {RouteTypeahead} from '../../ui/RouteTypeahead';
-import {Banner, Button, CodeBlock, SectionHeader, StatusPill, Tabs, TextAreaField, TextField, formatMicroUSD, formatOperationalState, stateTone} from '../../ui/primitives';
+import {Banner, Button, CodeBlock, SectionHeader, StatusPill, Tabs, TextAreaField, TextField, formatOperationalState, stateTone} from '../../ui/primitives';
 
 type Role = components['schemas']['RbacRole'];
 type Trace = components['schemas']['TraceSummary'];
@@ -25,6 +25,7 @@ export function PlaygroundPage({
   roles: Role[];
 }) {
   const {navigate} = useRouter();
+  const {t, formatNumber, formatTime, formatMicroUSD} = useI18n();
   const activeTab = pathname.startsWith('/devtools/sdk-snippets') ? 'snippets' : 'chat';
 
   const [availableRoutes, setAvailableRoutes] = useState<string[]>([]);
@@ -79,7 +80,7 @@ export function PlaygroundPage({
       body: JSON.stringify({model: targetModel, messages: history, stream: true}),
     });
     if (!response.ok || !response.body) {
-      throw new Error(`Playground inference failed (${response.status}).`);
+      throw new Error(t('playground.inferenceFailed', {status: response.status}));
     }
     const requestId = response.headers.get('X-Tanpopo-Request-Id')?.trim() ?? '';
     const reader = response.body.getReader();
@@ -158,7 +159,7 @@ export function PlaygroundPage({
       }
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
-        setError(cause instanceof Error ? cause.message : 'Playground request failed.');
+        setError(cause instanceof Error ? cause.message : t('playground.requestFailed'));
       }
     } finally {
       abortRef.current = null;
@@ -167,7 +168,7 @@ export function PlaygroundPage({
   }
 
   if (!authorized) {
-    return <Banner tone="danger" title="Access restricted">Your role cannot create Playground sessions.</Banner>;
+    return <Banner tone="danger" title={t('common.accessRestricted')}>{t('playground.restrictedDesc')}</Banner>;
   }
 
   const origin = typeof window === 'undefined' ? 'http://localhost:8080' : window.location.origin;
@@ -177,13 +178,13 @@ export function PlaygroundPage({
     <div className="tp-stack">
       <div className="tp-page-head">
         <div className="tp-page-head-text">
-          <h1>Playground</h1>
-          <p className="tp-page-subtitle">Ephemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.</p>
+          <h1>{t('playground.title')}</h1>
+          <p className="tp-page-subtitle">{t('playground.subtitle')}</p>
         </div>
         {session ? (
           <div className="tp-page-actions">
             <span className="tp-muted mono">
-              {`Cap ${formatMicroUSD(session.max_budget_micros)} · expires ${new Date(session.expires_at).toLocaleTimeString()}`}
+              {t('playground.sessionCap', {cap: formatMicroUSD(session.max_budget_micros), time: formatTime(session.expires_at)})}
             </span>
             <Button
               variant="secondary"
@@ -193,74 +194,81 @@ export function PlaygroundPage({
                 setSession(null);
                 setMessages([]);
                 setComparison(null);
-                setNotice('Ephemeral session key cleared from this tab. Signing out revokes active Playground keys.');
+                setNotice(t('playground.sessionCleared'));
               }}
             >
               <Trash2 size={14} aria-hidden="true" />
-              <span>End session</span>
+              <span>{t('playground.endSession')}</span>
             </Button>
           </div>
         ) : null}
       </div>
 
       <Tabs
-        label="Developer tools"
+        label={t('playground.tabsLabel')}
         activeId={activeTab}
         onSelect={id => navigate(id === 'snippets' ? '/devtools/sdk-snippets' : '/devtools/playground')}
         items={[
-          {id: 'chat', label: 'Live Playground'},
-          {id: 'snippets', label: 'SDK Snippets'},
+          {id: 'chat', label: t('playground.tabChat')},
+          {id: 'snippets', label: t('playground.tabSnippets')},
         ]}
       />
 
-      {!environmentId ? <Banner tone="info">Select an active environment in the top bar to start a Playground session.</Banner> : null}
+      {!environmentId ? <Banner tone="info">{t('playground.selectEnvBanner')}</Banner> : null}
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {notice ? <Banner tone="ok">{notice}</Banner> : null}
 
       {activeTab === 'chat' ? (
         <div className="tp-stack">
-          <div className="tp-surface tp-surface-pad tp-stack">
-            <div className="tp-grid-3">
-              <RouteTypeahead
-                label="Model or route slug"
-                suggestions={availableRoutes}
-                placeholder="e.g. primary-chat"
-                value={model}
-                disabled={busy}
-                onChange={setModel}
-              />
-              <RouteTypeahead
-                label="Comparison model (optional)"
-                suggestions={availableRoutes}
-                placeholder="Side-by-side compare"
-                value={compareModel}
-                disabled={busy}
-                onChange={setCompareModel}
-              />
-              {!session ? (
-                <TextField
-                  label="Session budget cap (micro-USD)"
-                  type="number"
-                  min={1000}
-                  max={5000000}
-                  value={budget}
+          <div className="tp-playground-workspace">
+            <div className="tp-playground-config">
+              <div className="tp-grid-3">
+                <RouteTypeahead
+                  label={t('playground.modelLabel')}
+                  size="sm"
+                  suggestions={availableRoutes}
+                  placeholder={t('playground.modelPlaceholder')}
+                  value={model}
                   disabled={busy}
-                  error={budget < 1000 || budget > 5000000 ? 'Range: 1,000 to 5,000,000 micro-USD.' : undefined}
-                  onChange={event => setBudget(Number(event.target.value) || 0)}
+                  onChange={setModel}
                 />
-              ) : null}
+                <RouteTypeahead
+                  label={t('playground.compareLabel')}
+                  size="sm"
+                  suggestions={availableRoutes}
+                  placeholder={t('playground.comparePlaceholder')}
+                  value={compareModel}
+                  disabled={busy}
+                  onChange={setCompareModel}
+                />
+                {!session ? (
+                  <TextField
+                    label={t('playground.budgetCapLabel')}
+                    fieldSize="sm"
+                    type="number"
+                    min={1000}
+                    max={5000000}
+                    value={budget}
+                    disabled={busy}
+                    error={budget < 1000 || budget > 5000000 ? t('playground.budgetCapError') : undefined}
+                    onChange={event => setBudget(Number(event.target.value) || 0)}
+                  />
+                ) : null}
+              </div>
             </div>
 
-            <section className="tp-section" aria-label="Conversation transcript">
+            <section className="tp-playground-transcript" aria-label={t('playground.transcriptAria')}>
               {messages.length === 0 ? (
-                <p className="tp-muted">No turns yet. Send a prompt below to mint an ephemeral key and stream from `/v1/chat/completions`.</p>
+                <div className="tp-playground-empty">
+                  <p className="tp-muted">{t('playground.noTurns')}</p>
+                </div>
               ) : (
-                <ol className="tp-list">
+                <ol className="tp-playground-turns">
                   {messages.map((turn, index) => (
-                    <li key={`${turn.role}-${index}`} className="tp-list-item" style={{flexDirection: 'column', alignItems: 'stretch'}}>
-                      <span className="tp-label">{turn.role === 'user' ? 'You' : model || 'Assistant'}</span>
-                      <div style={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>
-                        {turn.content || (busy && turn.role === 'assistant' ? 'Streaming…' : '')}
+                    <li key={`${turn.role}-${index}`} className="tp-playground-turn" data-role={turn.role}>
+                      <span className="tp-label">{turn.role === 'user' ? t('playground.you') : model || t('playground.assistant')}</span>
+                      <div className="tp-playground-turn-body">
+                        {turn.content || (busy && turn.role === 'assistant' ? t('playground.streaming') : '')}
                       </div>
                     </li>
                   ))}
@@ -269,53 +277,64 @@ export function PlaygroundPage({
             </section>
 
             {comparison ? (
-              <div className="tp-grid-2">
-                <div className="tp-surface tp-surface-pad tp-stack-sm">
-                  <h3>{model}</h3>
-                  <div style={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{comparison.primary}</div>
-                </div>
-                <div className="tp-surface tp-surface-pad tp-stack-sm">
-                  <h3>{compareModel}</h3>
-                  <div style={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{comparison.secondary || 'Streaming comparison…'}</div>
+              <div className="tp-playground-compare">
+                <div className="tp-grid-2">
+                  <div className="tp-surface tp-surface-pad tp-stack-sm">
+                    <h3>{model}</h3>
+                    <div className="tp-playground-turn-body">{comparison.primary}</div>
+                  </div>
+                  <div className="tp-surface tp-surface-pad tp-stack-sm">
+                    <h3>{compareModel}</h3>
+                    <div className="tp-playground-turn-body">{comparison.secondary || t('playground.streamingComparison')}</div>
+                  </div>
                 </div>
               </div>
             ) : null}
 
-            <TextAreaField
-              id="playground-prompt"
-              label="Prompt"
-              rows={4}
-              placeholder="Enter a test prompt…"
-              value={prompt}
-              disabled={busy}
-              onChange={event => setPrompt(event.target.value)}
-            />
+            <div className="tp-playground-composer">
+              <TextAreaField
+                id="playground-prompt"
+                label={t('playground.promptLabel')}
+                rows={3}
+                placeholder={t('playground.promptPlaceholder')}
+                value={prompt}
+                disabled={busy}
+                onChange={event => setPrompt(event.target.value)}
+                onKeyDown={event => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    void handleSend();
+                  }
+                }}
+              />
 
-            <div className="tp-row">
-              <Button
-                variant="primary"
-                loading={busy}
-                disabled={!environmentId || !model.trim() || !prompt.trim() || (!session && (budget < 1000 || budget > 5000000))}
-                onClick={() => void handleSend()}
-              >
-                <Send size={14} aria-hidden="true" />
-                <span>{busy ? 'Streaming…' : 'Send'}</span>
-              </Button>
-              {busy ? (
-                <Button variant="secondary" onClick={() => abortRef.current?.abort()}>
-                  <Square size={14} aria-hidden="true" />
-                  <span>Cancel stream</span>
+              <div className="tp-playground-composer-bar">
+                {busy ? (
+                  <Button variant="secondary" size="sm" onClick={() => abortRef.current?.abort()}>
+                    <Square size={14} aria-hidden="true" />
+                    <span>{t('playground.cancelStream')}</span>
+                  </Button>
+                ) : null}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={busy}
+                  disabled={!environmentId || !model.trim() || !prompt.trim() || (!session && (budget < 1000 || budget > 5000000))}
+                  onClick={() => void handleSend()}
+                >
+                  <Send size={14} aria-hidden="true" />
+                  <span>{busy ? t('playground.streaming') : t('playground.send')}</span>
                 </Button>
-              ) : null}
+              </div>
             </div>
           </div>
 
           {primaryReqId || compareReqId ? (
             <section className="tp-section">
-              <SectionHeader title="Execution traces" />
+              <SectionHeader title={t('playground.executionTraces')} />
               <ul className="tp-list">
-                {primaryReqId ? <TraceRow label="Primary" requestId={primaryReqId} trace={primaryTrace} /> : null}
-                {compareReqId ? <TraceRow label="Comparison" requestId={compareReqId} trace={compareTrace} /> : null}
+                {primaryReqId ? <TraceRow label={t('playground.primary')} requestId={primaryReqId} trace={primaryTrace} formatMicroUSD={formatMicroUSD} formatNumber={formatNumber} t={t} /> : null}
+                {compareReqId ? <TraceRow label={t('playground.comparison')} requestId={compareReqId} trace={compareTrace} formatMicroUSD={formatMicroUSD} formatNumber={formatNumber} t={t} /> : null}
               </ul>
             </section>
           ) : null}
@@ -323,15 +342,15 @@ export function PlaygroundPage({
       ) : (
         <div className="tp-stack">
           <CodeBlock
-            title="cURL (/v1/chat/completions)"
+            title={t('playground.snippetCurl')}
             code={`curl ${origin}/v1/chat/completions \\\n  -H "Authorization: Bearer $TANPOPO_VIRTUAL_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${snippetModel}","messages":[{"role":"user","content":"Hello"}],"stream":true}'`}
           />
           <CodeBlock
-            title="Python (OpenAI SDK)"
+            title={t('playground.snippetPython')}
             code={`from openai import OpenAI\n\nclient = OpenAI(base_url="${origin}/v1", api_key=os.environ["TANPOPO_VIRTUAL_KEY"])\nstream = client.chat.completions.create(\n    model="${snippetModel}",\n    messages=[{"role": "user", "content": "Hello"}],\n    stream=True,\n)\nfor chunk in stream:\n    print(chunk.choices[0].delta.content or "", end="")`}
           />
           <CodeBlock
-            title="TypeScript (OpenAI SDK)"
+            title={t('playground.snippetTs')}
             code={`import OpenAI from "openai";\n\nconst client = new OpenAI({ baseURL: "${origin}/v1", apiKey: process.env.TANPOPO_VIRTUAL_KEY });\nconst res = await client.chat.completions.create({\n  model: "${snippetModel}",\n  messages: [{ role: "user", content: "Hello" }],\n  stream: true,\n});`}
           />
         </div>
@@ -340,15 +359,34 @@ export function PlaygroundPage({
   );
 }
 
-function TraceRow({label, requestId, trace}: {label: string; requestId: string; trace: Trace | null}) {
+function TraceRow({
+  label,
+  requestId,
+  trace,
+  formatMicroUSD,
+  formatNumber,
+  t,
+}: {
+  label: string;
+  requestId: string;
+  trace: Trace | null;
+  formatMicroUSD: (v: number) => string;
+  formatNumber: (v: number) => string;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}) {
   return (
     <li className="tp-list-item">
       <div className="tp-stack-sm" style={{minWidth: 0, flex: '1 1 220px'}}>
         <span style={{fontWeight: 600}}>{label} · <span className="mono">{requestId}</span></span>
         <span className="tp-muted mono">
           {trace
-            ? `route ${trace.route_slug} · HTTP ${trace.status_code} · ${formatMicroUSD(trace.total_cost_micros)} · ${trace.duration_ms} ms`
-            : 'Trace metadata pending…'}
+            ? t('playground.traceMeta', {
+                route: trace.route_slug,
+                status: trace.status_code,
+                cost: formatMicroUSD(trace.total_cost_micros),
+                ms: formatNumber(trace.duration_ms),
+              })
+            : t('playground.tracePending')}
         </span>
       </div>
       {trace ? <StatusPill tone={stateTone(trace.usage_accuracy)} label={formatOperationalState(trace.usage_accuracy)} /> : null}
