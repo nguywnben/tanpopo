@@ -289,7 +289,8 @@ func TestTier3SidecarRejectsEscapedUDSSocketPath(t *testing.T) {
 		instID := fmt.Sprintf("inst_t3_uds_%d", i)
 		adpID := fmt.Sprintf("adp_t3_uds_%d", i)
 
-		manifestJSON := `{"apiVersion":"tanpopo.dev/extension/v1alpha1","kind":"ExtensionManifest","metadata":{"id":"@acme/sidecar-uds","version":"1.0.0","publisher":{"id":"acme","displayName":"Acme"}},"runtime":{"tier":"ISOLATED_SIDECAR_T3","entrypoint":"` + tc.entrypoint + `","sha256":"` + strings.Repeat("b", 64) + `"},"permissions":{"executionTier":"ISOLATED_SIDECAR_T3"}}`
+		epJSON, _ := json.Marshal(tc.entrypoint)
+		manifestJSON := `{"apiVersion":"tanpopo.dev/extension/v1alpha1","kind":"ExtensionManifest","metadata":{"id":"@acme/sidecar-uds","version":"1.0.0","publisher":{"id":"acme","displayName":"Acme"}},"runtime":{"tier":"ISOLATED_SIDECAR_T3","entrypoint":` + string(epJSON) + `,"sha256":"` + strings.Repeat("b", 64) + `"},"permissions":{"executionTier":"ISOLATED_SIDECAR_T3"}}`
 		permsRaw, _ := json.Marshal(installer.PermissionSet{
 			ExecutionTier:  installer.ExecutionTierIsolatedSidecarT3,
 			AllowedHosts:   []string{"127.0.0.1"},
