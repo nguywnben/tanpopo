@@ -12,6 +12,9 @@ export type DataColumn<T> = {
   render: (row: T) => ReactNode;
 };
 
+const ACTION_COL_IDS = new Set(['actions', 'inspect', 'action']);
+const PRIORITY_COL_IDS = new Set(['state', 'status', 'health', 'region', 'strategy', 'assurance', 'trust', 'role', 'roles']);
+
 export function DataTable<T>({
   ariaLabel,
   rows,
@@ -52,7 +55,19 @@ export function DataTable<T>({
   }
 
   const primaryCol = columns.find(col => col.primary) ?? columns[0];
-  const secondaryCols = columns.filter(col => col.id !== primaryCol.id && !col.hideOnMobile);
+  const actionsCol = columns.find(col => col.id !== primaryCol.id && ACTION_COL_IDS.has(col.id));
+  const detailCandidates = columns.filter(col => col.id !== primaryCol.id && col.id !== actionsCol?.id);
+
+  // On mobile, show up to 2 highest-signal summary fields immediately (prioritizing operational status/state)
+  // and place all remaining fields inside an expandable Details section so 100% of data stays accessible.
+  const visibleCandidates = detailCandidates.filter(col => !col.hideOnMobile);
+  const prioritized = [
+    ...visibleCandidates.filter(col => PRIORITY_COL_IDS.has(col.id)),
+    ...visibleCandidates.filter(col => !PRIORITY_COL_IDS.has(col.id)),
+  ];
+  const summaryCols = prioritized.slice(0, 2);
+  const summaryIds = new Set(summaryCols.map(col => col.id));
+  const extraCols = detailCandidates.filter(col => !summaryIds.has(col.id));
 
   return (
     <div className="tp-table-wrap">
@@ -85,18 +100,51 @@ export function DataTable<T>({
 
       <div className="tp-table-mobile" aria-label={ariaLabel}>
         {rows.map(row => (
-          <div key={rowKey(row)} className="tp-mobile-row">
+          <div
+            key={rowKey(row)}
+            className="tp-mobile-row"
+            data-interactive={onRowClick ? 'true' : undefined}
+            onClick={
+              onRowClick
+                ? event => {
+                    const target = event.target as HTMLElement | null;
+                    if (target?.closest('button, a, summary, details, input, select, [role="button"], [role="combobox"]')) return;
+                    onRowClick(row);
+                  }
+                : undefined
+            }
+          >
             <div className="tp-mobile-row-top">
-              <div style={{minWidth: 0, flex: '1 1 auto'}}>{primaryCol.render(row)}</div>
+              <div className="tp-mobile-row-primary">{primaryCol.render(row)}</div>
+              {actionsCol ? <div className="tp-mobile-row-actions">{actionsCol.render(row)}</div> : null}
             </div>
-            <div className="tp-mobile-kv-grid">
-              {secondaryCols.map(col => (
-                <div key={col.id} className="tp-mobile-kv">
-                  <span className="tp-mobile-kv-label">{col.header}</span>
-                  <div className="tp-mobile-kv-val">{col.render(row)}</div>
+
+            {summaryCols.length > 0 ? (
+              <div className="tp-mobile-kv-grid">
+                {summaryCols.map(col => (
+                  <div key={col.id} className="tp-mobile-kv">
+                    <span className="tp-mobile-kv-label">{col.header}</span>
+                    <div className="tp-mobile-kv-val">{col.render(row)}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {extraCols.length > 0 ? (
+              <details className="tp-mobile-details">
+                <summary className="tp-mobile-details-summary">
+                  <span>{t('common.detail')} ({extraCols.length})</span>
+                </summary>
+                <div className="tp-mobile-kv-grid tp-mobile-details-body">
+                  {extraCols.map(col => (
+                    <div key={col.id} className="tp-mobile-kv">
+                      <span className="tp-mobile-kv-label">{col.header}</span>
+                      <div className="tp-mobile-kv-val">{col.render(row)}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </details>
+            ) : null}
           </div>
         ))}
       </div>

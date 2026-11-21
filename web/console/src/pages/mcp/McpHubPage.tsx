@@ -293,8 +293,14 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
         onClose={() => setRegisterOpen(false)}
         title={t('mcp.drawerTitle')}
         subtitle={t('mcp.drawerSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRegisterOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-register-mcp-form" variant="primary" loading={busy}>{t('mcp.registerServer')}</Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleRegister}>
+        <form id="tp-register-mcp-form" className="tp-stack" onSubmit={handleRegister}>
           <TextField label={t('mcp.serverSlug')} required placeholder={t('mcp.serverSlugPlaceholder')} value={slug} onChange={event => setSlug(event.target.value)} />
           <TextField label={t('mcp.displayName')} required placeholder={t('mcp.displayNamePlaceholder')} value={name} onChange={event => setName(event.target.value)} />
           <TextField label={t('mcp.endpointUrl')} type="url" required placeholder="https://mcp.example.com/mcp" value={endpoint} onChange={event => setEndpoint(event.target.value)} />
@@ -304,10 +310,6 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
             checked={allowPrivateIp}
             onChange={setAllowPrivateIp}
           />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setRegisterOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy}>{t('mcp.registerServer')}</Button>
-          </div>
         </form>
       </Drawer>
 
@@ -316,9 +318,15 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
         onClose={() => setSchemaModal(null)}
         title={t('mcp.approveModalTitle', {tool: schemaModal?.tool.name ?? ''})}
         subtitle={t('mcp.approveModalSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setSchemaModal(null)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-approve-schema-form" variant="primary" loading={busy}>{t('mcp.pinSchema')}</Button>
+          </>
+        }
       >
         {schemaModal ? (
-          <form className="tp-stack" onSubmit={handleApproveSchema}>
+          <form id="tp-approve-schema-form" className="tp-stack" onSubmit={handleApproveSchema}>
             <div className="tp-stack-sm">
               <span className="tp-label">{t('mcp.observedSha256')}</span>
               <span className="mono">{schemaModal.tool.schema_hash}</span>
@@ -334,10 +342,6 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
               ]}
             />
             <TextField label={t('mcp.justification')} value={justification} onChange={event => setJustification(event.target.value)} />
-            <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-              <Button variant="secondary" onClick={() => setSchemaModal(null)}>{t('common.cancel')}</Button>
-              <Button type="submit" variant="primary" loading={busy}>{t('mcp.pinSchema')}</Button>
-            </div>
           </form>
         ) : null}
       </Modal>

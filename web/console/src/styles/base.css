@@ -11,11 +11,11 @@
   body {
     margin: 0;
     min-height: 100dvh;
+    font-family: var(--tp-font-sans);
     font-size: var(--text-body-size, 0.875rem);
     line-height: var(--text-body-leading, 1.45);
     color: var(--tp-ink-primary);
     background-color: var(--tp-bg-canvas);
-    font-feature-settings: 'cv02', 'cv03', 'cv04';
   }
 
   #root {

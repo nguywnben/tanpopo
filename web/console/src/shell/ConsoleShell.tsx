@@ -340,11 +340,13 @@ export function ConsoleShell() {
               <Button
                 variant="secondary"
                 size="sm"
+                className="tp-jump-btn"
+                aria-label={t('shell.jump')}
                 onClick={() => setPaletteOpen(true)}
               >
                 <Search size={14} aria-hidden="true" />
-                <span>{t('shell.jump')}</span>
-                <Kbd keys="mod+k" />
+                <span className="tp-jump-label">{t('shell.jump')}</span>
+                <span className="tp-desktop-kbd"><Kbd keys="mod+k" /></span>
               </Button>
 
               <LanguageSelector id="console-language-selector" />
@@ -360,6 +362,7 @@ export function ConsoleShell() {
                 <Button
                   variant={activeSwitches > 0 ? 'danger' : 'danger-outline'}
                   size="sm"
+                  className="tp-killswitch-btn"
                   onClick={() => navigate('/security/kill-switches')}
                 >
                   <ShieldAlert size={14} aria-hidden="true" />

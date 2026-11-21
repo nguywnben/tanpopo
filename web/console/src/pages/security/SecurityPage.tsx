@@ -406,7 +406,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
                 header: t('common.detail'),
                 width: '10%',
                 render: row => (
-                  <Button variant="ghost" size="sm" onClick={event => { event.stopPropagation(); setInspectedEvent(row); }}>
+                  <Button variant="ghost" size="sm" className="tp-table-link-btn" onClick={event => { event.stopPropagation(); setInspectedEvent(row); }}>
                     {t('common.inspect')}
                   </Button>
                 ),
@@ -456,8 +456,8 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
             {value: 'EXTENSION', label: t('security.level.EXTENSION')},
           ]}
         />
-        <div className="tp-toolbar">
-          <div className="tp-toolbar-field">
+        <div className="tp-inline-form">
+          <div className="tp-inline-form-field">
             <TextField
               label={t('security.col.targetId')}
               required

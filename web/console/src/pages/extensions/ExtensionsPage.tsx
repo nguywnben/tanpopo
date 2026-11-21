@@ -507,14 +507,16 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         onClose={() => setStageOpen(false)}
         title={t('extensions.stageDrawerTitle')}
         subtitle={t('extensions.stageDrawerSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setStageOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-stage-extension-form" variant="primary" loading={busy}>{t('extensions.stagePackage')}</Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleStageCustom}>
+        <form id="tp-stage-extension-form" className="tp-stack" onSubmit={handleStageCustom}>
           <TextField label={t('extensions.sourceUri')} required value={stageUri} onChange={event => setStageUri(event.target.value)} />
           <TextField label={t('extensions.expectedSha256')} required value={stageSha} onChange={event => setStageSha(event.target.value)} />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setStageOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy}>{t('extensions.stagePackage')}</Button>
-          </div>
         </form>
       </Drawer>
 
@@ -523,14 +525,16 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         onClose={() => setUpgradeTarget(null)}
         title={t('extensions.upgradeDrawerTitle', {pkg: upgradeTarget?.package_id ?? ''})}
         subtitle={t('extensions.upgradeDrawerSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setUpgradeTarget(null)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-upgrade-extension-form" variant="primary" loading={busy}>{t('extensions.stageUpgrade')}</Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleUpgrade}>
+        <form id="tp-upgrade-extension-form" className="tp-stack" onSubmit={handleUpgrade}>
           <TextField label={t('extensions.upgradeSourceUri')} required value={upgradeUri} onChange={event => setUpgradeUri(event.target.value)} />
           <TextField label={t('extensions.expectedSha256')} required value={upgradeSha} onChange={event => setUpgradeSha(event.target.value)} />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setUpgradeTarget(null)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy}>{t('extensions.stageUpgrade')}</Button>
-          </div>
         </form>
       </Drawer>
 

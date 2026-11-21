@@ -289,8 +289,8 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
           <form className="tp-surface tp-surface-pad tp-stack" onSubmit={handlePreflight}>
             <h2>{t('operations.preflightHeading')}</h2>
             <p className="tp-muted">{t('operations.preflightDesc')}</p>
-            <div className="tp-toolbar">
-              <div className="tp-toolbar-field tp-toolbar-field-wide">
+            <div className="tp-inline-form">
+              <div className="tp-inline-form-field" style={{maxWidth: '280px'}}>
                 <TextField
                   label={t('operations.targetCoreVersion')}
                   fieldSize="sm"
@@ -359,8 +359,16 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
         onClose={() => setWebhookOpen(false)}
         title={t('operations.webhookDrawerTitle')}
         subtitle={t('operations.webhookDrawerSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setWebhookOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-register-webhook-form" variant="primary" loading={busy} disabled={!webhookUrl.trim() || !webhookSecretId || webhookEvents.length === 0}>
+              {t('operations.registerWebhook')}
+            </Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleCreateWebhook}>
+        <form id="tp-register-webhook-form" className="tp-stack" onSubmit={handleCreateWebhook}>
           <TextField label={t('operations.httpsReceiverUrl')} type="url" required placeholder="https://hooks.example.com/tanpopo" value={webhookUrl} onChange={event => setWebhookUrl(event.target.value)} />
           <SelectField
             label={t('operations.signingCredential')}
@@ -384,12 +392,6 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
             options={webhookEventOptions.map(ev => ({value: ev, label: ev}))}
             onChange={next => setWebhookEvents(next as WebhookEvent[])}
           />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setWebhookOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy} disabled={!webhookUrl.trim() || !webhookSecretId || webhookEvents.length === 0}>
-              {t('operations.registerWebhook')}
-            </Button>
-          </div>
         </form>
       </Drawer>
     </div>

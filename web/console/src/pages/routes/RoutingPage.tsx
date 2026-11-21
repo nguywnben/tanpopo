@@ -416,11 +416,16 @@ export function RoutingPage({
                 header: t('routing.col.targetHealth'),
                 width: '28%',
                 render: row => (
-                  <div className="tp-row">
-                    {row.targets.map(tg => {
+                  <div className="tp-status-chain">
+                    {row.targets.map((tg, idx) => {
                       const dep = deploymentById.get(tg.deployment_id);
                       const label = dep?.state ?? 'UNAVAILABLE';
-                      return <StatusPill key={tg.deployment_id} tone={stateTone(label)} label={formatOperationalState(label)} />;
+                      return (
+                        <span key={tg.deployment_id} className="tp-status-chain">
+                          {idx > 0 ? <span className="tp-status-sep" aria-hidden="true">·</span> : null}
+                          <StatusPill tone={stateTone(label)} label={formatOperationalState(label)} />
+                        </span>
+                      );
                     })}
                   </div>
                 ),
@@ -472,11 +477,11 @@ export function RoutingPage({
                 ]}
               />
             </div>
-            <div className="tp-row">
+            <div className="tp-checkbox-group">
               {(['tools', 'vision', 'context_tokens'] as const).map(cap => (
                 <CheckboxField
                   key={cap}
-                  label={cap}
+                  label={cap.replaceAll('_', ' ')}
                   checked={explainCaps.includes(cap)}
                   onChange={checked => setExplainCaps(curr => (checked ? [...curr, cap] : curr.filter(item => item !== cap)))}
                 />
@@ -485,6 +490,7 @@ export function RoutingPage({
             <div>
               <Button
                 variant="primary"
+                size="sm"
                 loading={explainBusy}
                 disabled={!environmentId || !explainModel.trim() || !explainRegionAllowed}
                 onClick={() => void runExplain()}
@@ -532,22 +538,27 @@ export function RoutingPage({
             <SectionHeader
               title={t('routing.editPolicyScope')}
               actions={
-                <SelectField
-                  label={t('routing.scopeToEdit')}
-                  value={editScope}
-                  width={200}
-                  onChange={nextValue => {
-                    const next = nextValue as PolicyScope;
-                    setEditScope(next);
-                    const nextPol = next === 'ORGANIZATION' ? orgPolicy : next === 'PROJECT' ? projPolicy : envPolicy;
-                    if (nextPol) setPolicyDraft(nextPol);
-                  }}
-                  options={[
-                    {value: 'ORGANIZATION', label: t('common.organization')},
-                    {value: 'PROJECT', label: t('common.project')},
-                    {value: 'ENVIRONMENT', label: t('common.environment')},
-                  ]}
-                />
+                <div className="tp-scope-field">
+                  <span className="tp-scope-label" aria-hidden="true">{t('routing.scopeToEdit')}</span>
+                  <SelectField
+                    label={t('routing.scopeToEdit')}
+                    isLabelHidden
+                    size="sm"
+                    value={editScope}
+                    width={168}
+                    onChange={nextValue => {
+                      const next = nextValue as PolicyScope;
+                      setEditScope(next);
+                      const nextPol = next === 'ORGANIZATION' ? orgPolicy : next === 'PROJECT' ? projPolicy : envPolicy;
+                      if (nextPol) setPolicyDraft(nextPol);
+                    }}
+                    options={[
+                      {value: 'ORGANIZATION', label: t('common.organization')},
+                      {value: 'PROJECT', label: t('common.project')},
+                      {value: 'ENVIRONMENT', label: t('common.environment')},
+                    ]}
+                  />
+                </div>
               }
             />
 
@@ -558,7 +569,7 @@ export function RoutingPage({
 
               <div className="tp-stack-sm">
                 <span className="tp-label">{t('routing.rule.regions')}</span>
-                <div className="tp-row">
+                <div className="tp-checkbox-group">
                   {parentRegions.map(reg => {
                     const checked = (policyDraft.allowed_data_regions ?? []).includes(reg);
                     return (
@@ -669,11 +680,11 @@ export function RoutingPage({
                 )}
 
                 {canEditPolicy ? (
-                  <div className="tp-toolbar">
-                    <div className="tp-toolbar-field tp-toolbar-field-wide">
+                  <div className="tp-inline-form">
+                    <div className="tp-inline-form-field">
                       <TextField label={t('routing.guardrailExtId')} fieldSize="sm" value={hookExtId} disabled={busy} onChange={event => setHookExtId(event.target.value)} />
                     </div>
-                    <div className="tp-toolbar-field">
+                    <div className="tp-inline-form-field">
                       <SelectField
                         label={t('routing.failurePosture')}
                         size="sm"
@@ -765,8 +776,8 @@ export function RoutingPage({
           <TextField label={t('routing.requestTimeoutMs')} type="number" min={500} max={300000} value={timeoutMs} disabled={busy} onChange={event => setTimeoutMs(Number(event.target.value) || 60000)} />
         </div>
 
-        <div className="tp-toolbar">
-          <div className="tp-toolbar-field">
+        <div className="tp-inline-form">
+          <div className="tp-inline-form-field">
             <SelectField
               label={t('routing.addDeploymentTarget')}
               value={selectedDep}

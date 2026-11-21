@@ -370,8 +370,16 @@ export function AccessPage({
         onClose={() => setIssueOpen(false)}
         title={t('access.issueTitle')}
         subtitle={t('access.issueSubtitle', {env: environmentId || t('common.none')})}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIssueOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-issue-key-form" variant="primary" loading={busy} disabled={!keyName.trim() || allowedModels.length === 0}>
+              {t('access.createKey')}
+            </Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleIssueKey}>
+        <form id="tp-issue-key-form" className="tp-stack" onSubmit={handleIssueKey}>
           <TextField label={t('access.keyName')} required value={keyName} onChange={event => setKeyName(event.target.value)} />
           <div className="tp-stack-sm">
             <CheckboxField label={t('access.allowAllModels')} checked={allowedModels.includes('*')} onChange={checked => setAllowedModels(checked ? ['*'] : [])} />
@@ -393,12 +401,6 @@ export function AccessPage({
             value={allowedMcpToolsText}
             onChange={event => setAllowedMcpToolsText(event.target.value)}
           />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setIssueOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy} disabled={!keyName.trim() || allowedModels.length === 0}>
-              {t('access.createKey')}
-            </Button>
-          </div>
         </form>
       </Drawer>
 
@@ -488,8 +490,16 @@ export function AccessPage({
         open={addMemberOpen}
         onClose={() => setAddMemberOpen(false)}
         title={t('access.addMemberTitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAddMemberOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-add-member-form" variant="primary" loading={busy} disabled={!memberEmail.includes('@') || memberRoles.length === 0}>
+              {t('access.addMember')}
+            </Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleAddMember}>
+        <form id="tp-add-member-form" className="tp-stack" onSubmit={handleAddMember}>
           <TextField label={t('access.memberEmail')} type="email" required value={memberEmail} onChange={event => setMemberEmail(event.target.value)} />
           <MultiSelectField
             label={t('access.assignRoles')}
@@ -499,12 +509,6 @@ export function AccessPage({
             options={allRoles.map(role => ({value: role, label: t(`common.role.${role}`)}))}
             onChange={next => setMemberRoles(next as Role[])}
           />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setAddMemberOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy} disabled={!memberEmail.includes('@') || memberRoles.length === 0}>
-              {t('access.addMember')}
-            </Button>
-          </div>
         </form>
       </Drawer>
 

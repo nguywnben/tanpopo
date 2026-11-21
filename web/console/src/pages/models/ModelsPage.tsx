@@ -353,7 +353,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                 id: 'upstream',
                 header: t('models.col.upstreamModel'),
                 primary: true,
-                width: '28%',
+                width: '27%',
                 render: row => (
                   <div className="tp-stack-sm">
                     <span className="mono" style={{fontWeight: 600}}>{row.upstream_model_name}</span>
@@ -361,7 +361,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                   </div>
                 ),
               },
-              {id: 'conn', header: t('models.col.connection'), width: '24%', render: row => <span className="mono">{row.connection_id}</span>},
+              {id: 'conn', header: t('models.col.connection'), width: '23%', render: row => <span className="mono">{row.connection_id}</span>},
               {id: 'region', header: t('models.col.region'), width: '9%', render: row => <span>{row.data_region}</span>},
               {
                 id: 'state',
@@ -372,7 +372,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
               {
                 id: 'rates',
                 header: t('models.col.rates'),
-                width: '18%',
+                width: '17%',
                 render: row => (
                   <span className="mono">
                     {formatNumber(row.rate_card.input_token_nano_usd)} / {formatNumber(row.rate_card.output_token_nano_usd)}
@@ -382,7 +382,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
               {
                 id: 'actions',
                 header: t('common.actions'),
-                width: '8%',
+                width: '11%',
                 render: row =>
                   canManage ? (
                     <RowActionsMenu
@@ -491,8 +491,14 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
         onClose={() => setModelDrawerOpen(false)}
         title={t('models.drawerModelTitle')}
         subtitle={t('models.drawerModelSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModelDrawerOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-register-model-form" variant="primary" loading={busy}>{t('models.registerModel')}</Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleCreateModel}>
+        <form id="tp-register-model-form" className="tp-stack" onSubmit={handleCreateModel}>
           <TextField label={t('models.displayName')} required value={displayName} onChange={event => setDisplayName(event.target.value)} />
           <TextField label={t('models.canonicalSlug')} required value={slug} onChange={event => setSlug(event.target.value)} />
           <div className="tp-grid-2">
@@ -517,10 +523,6 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
               );
             }}
           />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setModelDrawerOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy}>{t('models.registerModel')}</Button>
-          </div>
         </form>
       </Drawer>
 
@@ -529,8 +531,14 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
         onClose={() => setDepDrawerOpen(false)}
         title={t('models.drawerDepTitle')}
         subtitle={t('models.drawerDepSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDepDrawerOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-add-deployment-form" variant="primary" loading={busy}>{t('models.saveDeployment')}</Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleCreateDeployment}>
+        <form id="tp-add-deployment-form" className="tp-stack" onSubmit={handleCreateDeployment}>
           <SelectField
             label={t('models.logicalModel')}
             value={selectedModel}
@@ -564,10 +572,6 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
             checked={selfHostedZero}
             onChange={setSelfHostedZero}
           />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setDepDrawerOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy}>{t('models.saveDeployment')}</Button>
-          </div>
         </form>
       </Drawer>
 

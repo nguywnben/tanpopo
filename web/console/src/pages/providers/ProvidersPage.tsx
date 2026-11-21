@@ -398,7 +398,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
                 id: 'name',
                 header: t('providers.col.connection'),
                 primary: true,
-                width: '28%',
+                width: '26%',
                 render: row => (
                   <div className="tp-stack-sm">
                     <span style={{fontWeight: 600}}>{row.name}</span>
@@ -412,7 +412,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               {
                 id: 'creds',
                 header: t('providers.col.vaultFingerprints'),
-                width: '19%',
+                width: '18%',
                 render: row => (
                   <span className="mono tp-muted">
                     {Object.entries(row.secret_slot_fingerprints).map(([slot, fp]) => `${slot}: ${fp}`).join(', ') || t('common.noneBound')}
@@ -422,7 +422,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               {
                 id: 'actions',
                 header: t('common.actions'),
-                width: '8%',
+                width: '11%',
                 render: row => {
                   const supportsOAuth = adapters.find(a => a.id === row.adapter_id)?.supported_auth_methods?.includes('oauth2_pkce');
                   if (!canManage) return <span className="tp-muted">{t('common.readOnly')}</span>;
@@ -606,8 +606,14 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
         onClose={() => setCreateOpen(false)}
         title={t('providers.createTitle')}
         subtitle={t('providers.createSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCreateOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-create-connection-form" variant="primary" loading={busy} disabled={!adapterId}>{t('providers.createConnection')}</Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleCreateConnection}>
+        <form id="tp-create-connection-form" className="tp-stack" onSubmit={handleCreateConnection}>
           <TextField label={t('providers.connectionName')} required value={connName} onChange={event => setConnName(event.target.value)} />
           <SelectField
             label={t('providers.providerAdapter')}
@@ -674,10 +680,6 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               onChange={event => setCidrs(event.target.value)}
             />
           ) : null}
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setCreateOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy} disabled={!adapterId}>{t('providers.createConnection')}</Button>
-          </div>
         </form>
       </Drawer>
 
@@ -686,6 +688,12 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
         onClose={() => { setEditing(null); setConflictServer(null); }}
         title={t('providers.editTitle', {name: editing?.name ?? ''})}
         subtitle={t('providers.editSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-edit-connection-form" variant="primary" loading={busy}>{t('common.saveChanges')}</Button>
+          </>
+        }
       >
         {conflictServer ? (
           <Banner tone="warn" title={t('providers.conflictTitle')}>
@@ -697,7 +705,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             </div>
           </Banner>
         ) : null}
-        <form className="tp-stack" onSubmit={handleSaveEdit}>
+        <form id="tp-edit-connection-form" className="tp-stack" onSubmit={handleSaveEdit}>
           <TextField label={t('providers.connectionName')} required value={draftName} onChange={event => setDraftName(event.target.value)} />
           <TextField label={t('providers.endpointUrl')} type="url" required value={draftEndpoint} onChange={event => setDraftEndpoint(event.target.value)} />
           {editingAdapterSlots.map(slot => (
@@ -715,10 +723,6 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               ]}
             />
           ))}
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setEditing(null)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy}>{t('common.saveChanges')}</Button>
-          </div>
         </form>
       </Drawer>
 
@@ -727,8 +731,14 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
         onClose={() => { setSealOpen(false); setSecretValue(''); }}
         title={t('providers.sealModalTitle')}
         subtitle={t('providers.sealModalSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setSealOpen(false); setSecretValue(''); }}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-seal-secret-form" variant="primary" loading={busy}>{t('providers.sealCredential')}</Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleSealSecret}>
+        <form id="tp-seal-secret-form" className="tp-stack" onSubmit={handleSealSecret}>
           <TextField label={t('providers.credentialName')} required value={secretName} onChange={event => setSecretName(event.target.value)} />
           <SelectField
             label={t('providers.secretKind')}
@@ -749,10 +759,6 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             value={secretValue}
             onChange={event => setSecretValue(event.target.value)}
           />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => { setSealOpen(false); setSecretValue(''); }}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy}>{t('providers.sealCredential')}</Button>
-          </div>
         </form>
       </Modal>
 
@@ -761,17 +767,19 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
         onClose={() => setOauthTarget(null)}
         title={t('providers.oauthTitle', {name: oauthTarget?.name ?? ''})}
         subtitle={t('providers.oauthSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setOauthTarget(null)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-oauth-connection-form" variant="primary" loading={busy}>{t('providers.oauthSubmit')}</Button>
+          </>
+        }
       >
-        <form className="tp-stack" onSubmit={handleStartOAuth}>
+        <form id="tp-oauth-connection-form" className="tp-stack" onSubmit={handleStartOAuth}>
           <TextField label={t('providers.oauthAuthEndpoint')} type="url" required value={oauthAuthUrl} onChange={event => setOauthAuthUrl(event.target.value)} />
           <TextField label={t('providers.oauthTokenEndpoint')} type="url" required value={oauthTokenUrl} onChange={event => setOauthTokenUrl(event.target.value)} />
           <TextField label={t('providers.oauthClientId')} required value={oauthClientId} onChange={event => setOauthClientId(event.target.value)} />
           <TextField label={t('providers.oauthScopes')} required placeholder="openid profile api.read" value={oauthScopes} onChange={event => setOauthScopes(event.target.value)} />
           <TextField label={t('providers.oauthResource')} type="url" required value={oauthResource} onChange={event => setOauthResource(event.target.value)} />
-          <div className="tp-row" style={{justifyContent: 'flex-end'}}>
-            <Button variant="secondary" onClick={() => setOauthTarget(null)}>{t('common.cancel')}</Button>
-            <Button type="submit" variant="primary" loading={busy}>{t('providers.oauthSubmit')}</Button>
-          </div>
         </form>
       </Modal>
 
