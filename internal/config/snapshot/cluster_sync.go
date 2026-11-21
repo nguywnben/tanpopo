@@ -427,9 +427,7 @@ func (cs *ClusterSync) handlePayload(ctx context.Context, payload string) {
 	case ev.EntityKind == "organization" && ev.MutationType == port.MutationShred:
 		cs.mgr.Streams().AbortScope(ev.EntityID, "")
 	case ev.EntityKind == "emergency_kill_switch":
-		cs.mgr.killSwitchSyncMu.Lock()
-		cs.mgr.killSwitchSyncDirty = true
-		cs.mgr.killSwitchSyncMu.Unlock()
+		cs.mgr.killSwitchSyncDirty.Store(true)
 	}
 	if cs.onWake != nil {
 		cs.onWake(ev)

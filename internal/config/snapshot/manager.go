@@ -523,7 +523,7 @@ type Manager struct {
 	wakeCh              chan struct{}
 	killSwitchSyncMu    sync.RWMutex
 	killSwitchSync      func(context.Context) error
-	killSwitchSyncDirty bool
+	killSwitchSyncDirty atomic.Bool
 	clusterReadyGate    atomic.Pointer[func() error]
 }
 
@@ -583,7 +583,7 @@ func (m *Manager) RegisterKillSwitchSync(fn func(context.Context) error) {
 	m.refreshMu.Lock()
 	m.killSwitchSyncMu.Lock()
 	m.killSwitchSync = fn
-	m.killSwitchSyncDirty = fn != nil
+	m.killSwitchSyncDirty.Store(fn != nil)
 	m.killSwitchSyncMu.Unlock()
 	m.refreshMu.Unlock()
 	if fn != nil {
@@ -828,7 +828,7 @@ func (m *Manager) Refresh(ctx context.Context) error {
 
 	// Fast-path heartbeat when config_changelog has not advanced since last snapshot build,
 	// unless a local fence requires a newer minEpoch or a pending kill-switch sync retry remains.
-	if cur != nil && targetEpoch == prevEpoch && !m.keyringDirty && !m.killSwitchSyncDirty && !m.hasPendingFenceAheadOfLocked(targetEpoch) {
+	if cur != nil && targetEpoch == prevEpoch && !m.keyringDirty && !m.killSwitchSyncDirty.Load() && !m.hasPendingFenceAheadOfLocked(targetEpoch) {
 		_ = tx.Commit()
 		m.lastPollSuccessMs.Store(m.nowMs())
 		m.setLastErr(nil)
@@ -953,18 +953,19 @@ func (m *Manager) Refresh(ctx context.Context) error {
 	}
 
 	if hasKillSwitchEvent || cur == nil {
-		m.killSwitchSyncDirty = true
+		m.killSwitchSyncDirty.Store(true)
 	}
-	if m.killSwitchSyncDirty {
+	if m.killSwitchSyncDirty.Load() {
 		m.killSwitchSyncMu.RLock()
 		ksSync := m.killSwitchSync
 		m.killSwitchSyncMu.RUnlock()
 		if ksSync != nil {
+			m.killSwitchSyncDirty.Store(false)
 			if err := ksSync(ctx); err != nil {
+				m.killSwitchSyncDirty.Store(true)
 				m.setLastErr(err)
 				return err
 			}
-			m.killSwitchSyncDirty = false
 		}
 	}
 
