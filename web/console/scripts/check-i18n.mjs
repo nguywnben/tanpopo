@@ -26,6 +26,7 @@ const goLocalesDir = join(repoRoot, 'internal', 'pkg', 'i18n', 'locales');
 const guidesDir = join(repoRoot, 'docs', 'guides');
 
 const onlyEn = process.argv.includes('--en-only');
+const webOnly = process.argv.includes('--web-only');
 const targetLocales = onlyEn ? ['en'] : REQUIRED_LOCALES;
 
 const errors = [];
@@ -110,7 +111,9 @@ function checkCatalogSet(label, dir) {
 }
 
 const webEn = checkCatalogSet('web', webLocalesDir);
-checkCatalogSet('go', goLocalesDir);
+if (!webOnly) {
+  checkCatalogSet('go', goLocalesDir);
+}
 
 // Verify all static t('...') / translateRuntime('...') keys used in web/console/src exist in web en.json
 if (webEn) {
@@ -135,14 +138,16 @@ if (webEn) {
 }
 
 // Verify user guides
-for (const loc of targetLocales) {
-  const guidePath = join(guidesDir, loc, 'user-guide.md');
-  if (!existsSync(guidePath)) {
-    errors.push(`[guides] Missing user guide: docs/guides/${loc}/user-guide.md`);
-  } else {
-    const body = readFileSync(guidePath, 'utf8').trim();
-    if (body.length < 400) {
-      errors.push(`[guides] User guide docs/guides/${loc}/user-guide.md is unexpectedly short (${body.length} chars)`);
+if (!webOnly) {
+  for (const loc of targetLocales) {
+    const guidePath = join(guidesDir, loc, 'user-guide.md');
+    if (!existsSync(guidePath)) {
+      errors.push(`[guides] Missing user guide: docs/guides/${loc}/user-guide.md`);
+    } else {
+      const body = readFileSync(guidePath, 'utf8').trim();
+      if (body.length < 400) {
+        errors.push(`[guides] User guide docs/guides/${loc}/user-guide.md is unexpectedly short (${body.length} chars)`);
+      }
     }
   }
 }
@@ -155,4 +160,8 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`i18n check passed (${targetLocales.length} locale(s), web + go catalogs + user guides).`);
+console.log(
+  webOnly
+    ? `i18n check passed (${targetLocales.length} locale(s), web catalogs + source usage).`
+    : `i18n check passed (${targetLocales.length} locale(s), web + go catalogs + user guides).`,
+);
