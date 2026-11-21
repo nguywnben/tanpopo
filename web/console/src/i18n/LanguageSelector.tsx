@@ -3,7 +3,15 @@ import {Selector} from '@astryxdesign/core/Selector';
 import {SUPPORTED_LOCALES, isSupportedLocale} from './locales';
 import {useI18n} from './I18nProvider';
 
-export function LanguageSelector({id = 'language-selector', className = ''}: {id?: string; className?: string}) {
+export function LanguageSelector({
+  id = 'language-selector',
+  className = '',
+  placement = 'below',
+}: {
+  id?: string;
+  className?: string;
+  placement?: 'above' | 'below';
+}) {
   const {locale, setLocale, t} = useI18n();
 
   const options = useMemo(
@@ -18,6 +26,7 @@ export function LanguageSelector({id = 'language-selector', className = ''}: {id
       isLabelHidden
       size="sm"
       variant="input"
+      placement={placement}
       hasSearch={false}
       options={options}
       value={locale}
