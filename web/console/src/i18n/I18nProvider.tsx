@@ -32,13 +32,12 @@ import {
   resolveEffectiveLocale,
   saveLocalePreference,
   type LocaleCode,
-  type LocalePreference,
+  type StoredLocale,
 } from './locales';
 
 export type I18nContextValue = {
-  preference: LocalePreference;
   locale: LocaleCode;
-  setPreference: (next: LocalePreference) => void;
+  setLocale: (next: LocaleCode) => void;
   t: (key: string, vars?: TranslationVars) => string;
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
   formatPercent: (ratio: number, fractionDigits?: number) => string;
@@ -58,9 +57,8 @@ export function translateRuntime(key: string, vars?: TranslationVars): string {
 }
 
 const defaultValue: I18nContextValue = {
-  preference: 'auto',
   locale: 'en',
-  setPreference: () => undefined,
+  setLocale: () => undefined,
   t: (key, vars) => translateWithCatalog(getLoadedCatalog('en'), key, vars),
   formatNumber: (value, options) => formatLocalizedNumber('en', value, options),
   formatPercent: (ratio, digits) => formatLocalizedPercent('en', ratio, digits),
@@ -72,12 +70,12 @@ const defaultValue: I18nContextValue = {
 const I18nContext = createContext<I18nContextValue>(defaultValue);
 
 export function I18nProvider({children}: {children: ReactNode}) {
-  const [preference, setPreferenceState] = useState<LocalePreference>(loadStoredLocalePreference);
+  const [storedLocale, setStoredLocale] = useState<StoredLocale>(loadStoredLocalePreference);
   const [browserLanguages, setBrowserLanguages] = useState<readonly string[] | undefined>(undefined);
 
   const locale = useMemo(
-    () => resolveEffectiveLocale(preference, browserLanguages),
-    [preference, browserLanguages],
+    () => resolveEffectiveLocale(storedLocale, browserLanguages),
+    [storedLocale, browserLanguages],
   );
 
   const [catalog, setCatalog] = useState<MessageCatalog>(() => getLoadedCatalog(locale));
@@ -124,9 +122,9 @@ export function I18nProvider({children}: {children: ReactNode}) {
     };
   }, [locale]);
 
-  const setPreference = useCallback((next: LocalePreference) => {
+  const setLocale = useCallback((next: LocaleCode) => {
     saveLocalePreference(next);
-    setPreferenceState(next);
+    setStoredLocale(next);
   }, []);
 
   const t = useCallback(
@@ -162,9 +160,8 @@ export function I18nProvider({children}: {children: ReactNode}) {
 
   const value = useMemo<I18nContextValue>(
     () => ({
-      preference,
       locale,
-      setPreference,
+      setLocale,
       t,
       formatNumber,
       formatPercent,
@@ -172,7 +169,7 @@ export function I18nProvider({children}: {children: ReactNode}) {
       formatTime,
       formatMicroUSD,
     }),
-    [preference, locale, setPreference, t, formatNumber, formatPercent, formatDateTime, formatTime, formatMicroUSD],
+    [locale, setLocale, t, formatNumber, formatPercent, formatDateTime, formatTime, formatMicroUSD],
   );
 
   return (

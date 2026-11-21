@@ -1,16 +1,13 @@
 import {useMemo} from 'react';
 import {Selector} from '@astryxdesign/core/Selector';
-import {SUPPORTED_LOCALES, isSupportedLocale, type LocalePreference} from './locales';
+import {SUPPORTED_LOCALES, isSupportedLocale} from './locales';
 import {useI18n} from './I18nProvider';
 
 export function LanguageSelector({id = 'language-selector'}: {id?: string}) {
-  const {preference, setPreference, t} = useI18n();
+  const {locale, setLocale, t} = useI18n();
 
   const options = useMemo(
-    () => [
-      {value: 'auto', label: 'Auto'},
-      ...SUPPORTED_LOCALES.map(item => ({value: item.code, label: item.nativeName})),
-    ],
+    () => SUPPORTED_LOCALES.map(item => ({value: item.code, label: item.nativeName})),
     [],
   );
 
@@ -23,10 +20,10 @@ export function LanguageSelector({id = 'language-selector'}: {id?: string}) {
       variant="input"
       hasSearch={false}
       options={options}
-      value={preference}
+      value={locale}
       onChange={next => {
-        if (next === 'auto' || isSupportedLocale(next)) {
-          setPreference(next as LocalePreference);
+        if (isSupportedLocale(next)) {
+          setLocale(next);
         }
       }}
       containerClassName="tp-lang-selector"

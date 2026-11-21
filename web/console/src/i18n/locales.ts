@@ -17,7 +17,7 @@ export const SUPPORTED_LOCALES = [
 ] as const;
 
 export type LocaleCode = (typeof SUPPORTED_LOCALES)[number]['code'];
-export type LocalePreference = 'auto' | LocaleCode;
+export type StoredLocale = LocaleCode | null;
 
 export const LOCALE_STORAGE_KEY = 'tanpopo-console-locale';
 
@@ -94,27 +94,27 @@ export function resolveBrowserLocale(languages?: readonly string[]): LocaleCode 
   return 'en';
 }
 
-export function loadStoredLocalePreference(): LocalePreference {
-  if (typeof window === 'undefined') return 'auto';
+export function loadStoredLocalePreference(): StoredLocale {
+  if (typeof window === 'undefined') return null;
   try {
     const saved = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-    if (saved === 'auto') return 'auto';
+    if (!saved || saved.toLowerCase() === 'auto') return null;
     if (isSupportedLocale(saved)) return saved;
   } catch {
-    return 'auto';
+    return null;
   }
-  return 'auto';
+  return null;
 }
 
-export function saveLocalePreference(preference: LocalePreference) {
+export function saveLocalePreference(locale: LocaleCode) {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(LOCALE_STORAGE_KEY, preference);
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
   } catch {
     // Ignore storage restrictions in private browsing modes.
   }
 }
 
-export function resolveEffectiveLocale(preference: LocalePreference, browserLanguages?: readonly string[]): LocaleCode {
-  return preference === 'auto' ? resolveBrowserLocale(browserLanguages) : preference;
+export function resolveEffectiveLocale(stored: StoredLocale, browserLanguages?: readonly string[]): LocaleCode {
+  return stored ?? resolveBrowserLocale(browserLanguages);
 }

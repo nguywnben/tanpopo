@@ -35,23 +35,16 @@ const EXPECTED_NATIVE_NAMES = [
 ];
 
 function ProbeView() {
-  const {preference, locale, t, setPreference} = useI18n();
+  const {locale, t, setLocale} = useI18n();
   return (
     <div>
-      <span data-testid="pref">{preference}</span>
       <span data-testid="locale">{locale}</span>
       <span data-testid="revoke">{t('access.action.revoke')}</span>
       <span data-testid="alerts">{t('overview.activeAlertsTitle')}</span>
       <span data-testid="circuit">{t('state.CIRCUIT_OPEN_UNHEALTHY')}</span>
       <LanguageSelector />
-      <button type="button" onClick={() => setPreference('vi')}>
-        pick-vi
-      </button>
-      <button type="button" onClick={() => setPreference('zh-Hant')}>
-        pick-zh-hant
-      </button>
-      <button type="button" onClick={() => setPreference('auto')}>
-        pick-auto
+      <button type="button" onClick={() => setLocale('ja')}>
+        pick-ja
       </button>
     </div>
   );
@@ -65,6 +58,17 @@ function renderWithProviders() {
       </I18nProvider>
     </ThemeProvider>,
   );
+}
+
+function mockBrowserLanguages(languages: readonly string[]) {
+  Object.defineProperty(navigator, 'languages', {
+    configurable: true,
+    value: languages,
+  });
+  Object.defineProperty(navigator, 'language', {
+    configurable: true,
+    value: languages[0] ?? '',
+  });
 }
 
 describe('i18n locale resolution & LanguageSelector', () => {
@@ -105,69 +109,73 @@ describe('i18n locale resolution & LanguageSelector', () => {
 
     expect(resolveBrowserLocale(['sv-SE', 'zh-TW', 'en-US'])).toBe('zh-Hant');
     expect(resolveBrowserLocale(['nl-NL', 'zh-CN', 'ja-JP'])).toBe('zh-Hans');
+    expect(resolveBrowserLocale(['vi-VN', 'en-US'])).toBe('vi');
     expect(resolveBrowserLocale(['sv-SE', 'nb-NO'])).toBe('en');
   });
 
-  it('defaults to Auto, resolves browser preference, persists manual choice, and restores Auto', async () => {
-    Object.defineProperty(navigator, 'languages', {
-      configurable: true,
-      value: ['fr-FR', 'en-US'],
-    });
-    Object.defineProperty(navigator, 'language', {
-      configurable: true,
-      value: 'fr-FR',
-    });
+  it('auto-detects browser language without writing storage, handles legacy auto, and persists manual selection', async () => {
+    mockBrowserLanguages(['vi-VN', 'en-US']);
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, 'auto');
 
-    await preloadLocale('fr');
+    // Legacy "auto" is treated as no manual selection.
+    expect(loadStoredLocalePreference()).toBeNull();
+
+    await preloadLocale('vi');
     const {unmount} = renderWithProviders();
 
-    expect(screen.getByTestId('pref')).toHaveTextContent('auto');
-    expect(screen.getByTestId('locale')).toHaveTextContent('fr');
-    expect(document.documentElement.lang).toBe('fr');
-    expect(getActiveLocale()).toBe('fr');
-
-    fireEvent.click(screen.getByText('pick-vi'));
     await waitFor(() => {
       expect(screen.getByTestId('locale')).toHaveTextContent('vi');
       expect(screen.getByTestId('revoke')).toHaveTextContent('Thu hồi khóa');
       expect(screen.getByTestId('alerts')).toHaveTextContent('Cảnh báo hiện tại');
       expect(screen.getByTestId('circuit')).toHaveTextContent('Đã ngắt mạch');
     });
-    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('vi');
-    expect(loadStoredLocalePreference()).toBe('vi');
+    expect(document.documentElement.lang).toBe('vi');
+    expect(getActiveLocale()).toBe('vi');
 
-    unmount();
-
-    // Simulate reload: persisted preference remains vi.
-    renderWithProviders();
-    await waitFor(() => {
-      expect(screen.getByTestId('pref')).toHaveTextContent('vi');
-      expect(screen.getByTestId('locale')).toHaveTextContent('vi');
-    });
-
-    // Return to Auto -> resolves back to browser preference (fr).
-    fireEvent.click(screen.getByText('pick-auto'));
-    await waitFor(() => {
-      expect(screen.getByTestId('pref')).toHaveTextContent('auto');
-      expect(screen.getByTestId('locale')).toHaveTextContent('fr');
-    });
-    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('auto');
-  });
-
-  it('renders Astryx Selector with Auto first followed by all 15 native names in order', async () => {
-    Object.defineProperty(navigator, 'languages', {
-      configurable: true,
-      value: ['en-US'],
-    });
-    renderWithProviders();
-
-    const trigger = screen.getByRole('combobox', {name: /Language/i});
+    // Selector trigger shows active native name and marks it selected in menu without Auto.
+    const trigger = screen.getByRole('combobox', {name: /Ngôn ngữ/i});
+    expect(trigger).toHaveTextContent('Tiếng Việt');
     fireEvent.click(trigger);
 
     const options = await screen.findAllByRole('option');
-    const texts = options.map(opt => opt.textContent?.trim() ?? '');
-    expect(texts[0]).toBe('Auto');
-    expect(texts.slice(1)).toEqual(EXPECTED_NATIVE_NAMES);
+    expect(options.map(opt => opt.textContent?.trim() ?? '')).toEqual(EXPECTED_NATIVE_NAMES);
+    const selectedOption = options.find(opt => opt.getAttribute('aria-selected') === 'true');
+    expect(selectedOption?.textContent?.trim()).toBe('Tiếng Việt');
+
+    // Selecting manually persists to localStorage and survives reload.
+    fireEvent.click(screen.getByText('pick-ja'));
+    await waitFor(() => {
+      expect(screen.getByTestId('locale')).toHaveTextContent('ja');
+      expect(screen.getByRole('combobox')).toHaveTextContent('日本語');
+    });
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('ja');
+    expect(loadStoredLocalePreference()).toBe('ja');
+
+    unmount();
+
+    renderWithProviders();
+    await waitFor(() => {
+      expect(screen.getByTestId('locale')).toHaveTextContent('ja');
+      expect(screen.getByRole('combobox')).toHaveTextContent('日本語');
+    });
+  });
+
+  it('falls back to English when browser has only unsupported languages and does not write localStorage', async () => {
+    mockBrowserLanguages(['sv-SE', 'nb-NO']);
+    renderWithProviders();
+
+    expect(screen.getByTestId('locale')).toHaveTextContent('en');
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBeNull();
+
+    const trigger = screen.getByRole('combobox', {name: /Language/i});
+    expect(trigger).toHaveTextContent('English');
+    fireEvent.click(trigger);
+
+    const options = await screen.findAllByRole('option');
+    expect(options).toHaveLength(15);
+    expect(options.map(opt => opt.textContent?.trim() ?? '')).toEqual(EXPECTED_NATIVE_NAMES);
+    const selectedOption = options.find(opt => opt.getAttribute('aria-selected') === 'true');
+    expect(selectedOption?.textContent?.trim()).toBe('English');
   });
 
   it('formats exact integer micro-USD amounts without float drift across locales', () => {
