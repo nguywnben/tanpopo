@@ -468,8 +468,8 @@ func TestPostgresClusterConcurrentMigrationsFMEA06(t *testing.T) {
 	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE dirty = FALSE`).Scan(&migCount); err != nil {
 		t.Fatalf("count schema_migrations: %v", err)
 	}
-	if migCount != 1 {
-		t.Fatalf("schema_migrations count = %d, want 1", migCount)
+	if migCount != 2 {
+		t.Fatalf("schema_migrations count = %d, want 2", migCount)
 	}
 }
 

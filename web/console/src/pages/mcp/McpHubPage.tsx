@@ -3,8 +3,11 @@ import {Plus, RefreshCw, ShieldCheck} from 'lucide-react';
 import {
   approveMcpToolSchema,
   createMcpToolGrant,
+  listA2aAgents,
+  listA2aTasks,
   listMcpServers,
   listVirtualKeys,
+  registerA2aAgent,
   registerMcpServer,
   syncMcpServerTools,
 } from '../../api/managementClient';
@@ -12,19 +15,63 @@ import type {components} from '../../api/generated';
 import {useI18n} from '../../i18n/I18nProvider';
 import {DataTable} from '../../ui/DataTable';
 import {Drawer, Modal} from '../../ui/Overlays';
-import {Banner, Button, CheckboxField, SectionHeader, SelectField, StatusPill, TextField, formatOperationalState, stateTone} from '../../ui/primitives';
+import {
+  Banner,
+  Button,
+  CheckboxField,
+  SectionHeader,
+  SelectField,
+  StatusPill,
+  Tabs,
+  TextField,
+  formatMicroUSD,
+  formatOperationalState,
+  stateTone,
+  type StatusTone,
+} from '../../ui/primitives';
 
 type Role = components['schemas']['RbacRole'];
 type McpServer = components['schemas']['McpServerResource'];
+type A2aAgent = components['schemas']['A2aAgentResource'];
+type A2aTask = components['schemas']['A2aTaskResource'];
+type DataRegion = components['schemas']['DataRegion'];
 type VirtualKey = components['schemas']['VirtualKeySummary'];
 type SyncedTool = {id: string; name: string; schema_hash: string; drift_locked: boolean; version: number};
 
 const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
 const approveSchemaRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
 
-export function McpHubPage({projectId, environmentId, roles}: {projectId: string; environmentId: string; roles: Role[]}) {
+function a2aTaskTone(state: A2aTask['state']): StatusTone {
+  switch (state) {
+    case 'completed':
+      return 'ok';
+    case 'input-required':
+      return 'warn';
+    case 'failed':
+      return 'danger';
+    case 'canceled':
+      return 'neutral';
+    default:
+      return 'info';
+  }
+}
+
+export function McpHubPage({
+  pathname = '/mcp/servers',
+  projectId,
+  environmentId,
+  roles,
+}: {
+  pathname?: string;
+  projectId: string;
+  environmentId: string;
+  roles: Role[];
+}) {
   const {t, formatNumber} = useI18n();
+  const [tab, setTab] = useState<'mcp' | 'a2a'>(pathname.startsWith('/a2a') ? 'a2a' : 'mcp');
   const [servers, setServers] = useState<McpServer[]>([]);
+  const [a2aAgents, setA2aAgents] = useState<A2aAgent[]>([]);
+  const [a2aTasks, setA2aTasks] = useState<A2aTask[]>([]);
   const [keys, setKeys] = useState<VirtualKey[]>([]);
   const [toolsByServer, setToolsByServer] = useState<Record<string, SyncedTool[]>>({});
   const [selectedKeys, setSelectedKeys] = useState<Record<string, string>>({});
@@ -34,6 +81,14 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
   const [name, setName] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [allowPrivateIp, setAllowPrivateIp] = useState(false);
+
+  const [a2aRegisterOpen, setA2aRegisterOpen] = useState(false);
+  const [agentSlug, setAgentSlug] = useState('');
+  const [agentName, setAgentName] = useState('');
+  const [agentEndpoint, setAgentEndpoint] = useState('');
+  const [agentRegion, setAgentRegion] = useState<DataRegion>('US');
+  const [agentMaxHops, setAgentMaxHops] = useState('5');
+  const [agentAllowPrivateIp, setAgentAllowPrivateIp] = useState(false);
 
   const [schemaModal, setSchemaModal] = useState<{server: McpServer; tool: SyncedTool} | null>(null);
   const [riskTier, setRiskTier] = useState<'read_only' | 'mutating' | 'destructive'>('read_only');
@@ -47,14 +102,22 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
   const canManage = roles.some(role => manageRoles.includes(role));
   const canApproveSchema = roles.some(role => approveSchemaRoles.includes(role));
 
+  useEffect(() => {
+    setTab(pathname.startsWith('/a2a') ? 'a2a' : 'mcp');
+  }, [pathname]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [serverRows, keyRows] = await Promise.all([
+      const [serverRows, agentRows, taskRows, keyRows] = await Promise.all([
         listMcpServers(),
+        listA2aAgents(),
+        listA2aTasks(),
         projectId && environmentId ? listVirtualKeys(projectId, environmentId) : Promise.resolve([]),
       ]);
       setServers(serverRows);
+      setA2aAgents(agentRows);
+      setA2aTasks(taskRows);
       setKeys(keyRows);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('mcp.loadFailed'));
@@ -150,6 +213,39 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
     }
   }
 
+  async function handleRegisterA2a(event: FormEvent) {
+    event.preventDefault();
+    if (!projectId || !agentName.trim() || !agentEndpoint.trim()) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const parsedHops = Math.min(5, Math.max(1, Number.parseInt(agentMaxHops, 10) || 5));
+      await registerA2aAgent({
+        project_id: projectId,
+        agent_slug: agentSlug.trim() || undefined,
+        name: agentName.trim(),
+        endpoint_url: agentEndpoint.trim(),
+        data_region: agentRegion,
+        max_delegation_hops: parsedHops,
+        allow_private_ip: agentAllowPrivateIp,
+      });
+      setA2aRegisterOpen(false);
+      setAgentSlug('');
+      setAgentName('');
+      setAgentEndpoint('');
+      setAgentRegion('US');
+      setAgentMaxHops('5');
+      setAgentAllowPrivateIp(false);
+      await refresh();
+      setNotice(t('a2a.agentRegistered'));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('a2a.registerFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="tp-stack">
       <div className="tp-page-head">
@@ -159,17 +255,34 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
         </div>
         {canManage ? (
           <div className="tp-page-actions">
-            <Button variant="primary" size="sm" disabled={!projectId} onClick={() => setRegisterOpen(true)}>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!projectId}
+              onClick={() => (tab === 'mcp' ? setRegisterOpen(true) : setA2aRegisterOpen(true))}
+            >
               <Plus size={14} aria-hidden="true" />
-              <span>{t('mcp.registerServer')}</span>
+              <span>{tab === 'mcp' ? t('mcp.registerServer') : t('a2a.registerAgent')}</span>
             </Button>
           </div>
         ) : null}
       </div>
 
+      <Tabs
+        label={t('mcp.tabsLabel')}
+        activeId={tab}
+        onSelect={next => setTab(next as 'mcp' | 'a2a')}
+        items={[
+          {id: 'mcp', label: t('mcp.tabMcp'), count: servers.length},
+          {id: 'a2a', label: t('mcp.tabA2a'), count: a2aAgents.length + a2aTasks.length},
+        ]}
+      />
+
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {notice ? <Banner tone="ok">{notice}</Banner> : null}
 
+      {tab === 'mcp' ? (
+        <>
       <section className="tp-section">
         <SectionHeader title={t('mcp.registeredServers')} count={servers.length} />
         <DataTable
@@ -287,6 +400,72 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
           </section>
         );
       })}
+        </>
+      ) : (
+        <>
+          <section className="tp-section">
+            <SectionHeader title={t('a2a.registeredAgents')} count={a2aAgents.length} />
+            <DataTable
+              ariaLabel={t('a2a.registeredAgents')}
+              loading={loading}
+              rows={a2aAgents}
+              rowKey={row => row.agent_id}
+              emptyTitle={t('a2a.emptyAgentsTitle')}
+              emptyDescription={t('a2a.emptyAgentsDesc')}
+              emptyAction={canManage && projectId ? <Button variant="primary" size="sm" onClick={() => setA2aRegisterOpen(true)}>{t('a2a.registerAgent')}</Button> : undefined}
+              columns={[
+                {
+                  id: 'name',
+                  header: t('a2a.col.agent'),
+                  primary: true,
+                  width: '26%',
+                  render: row => (
+                    <div className="tp-stack-sm">
+                      <span style={{fontWeight: 600}}>{row.name}</span>
+                      <span className="mono tp-muted">{row.agent_slug}</span>
+                    </div>
+                  ),
+                },
+                {id: 'endpoint', header: t('a2a.col.endpoint'), width: '32%', render: row => <span className="mono">{row.endpoint_url}</span>},
+                {id: 'region', header: t('a2a.col.region'), width: '12%', render: row => <span className="mono">{row.data_region}</span>},
+                {id: 'hops', header: t('a2a.col.maxHops'), width: '14%', render: row => <span className="num mono">{formatNumber(row.max_delegation_hops)}</span>},
+                {id: 'status', header: t('common.state'), width: '16%', render: row => <StatusPill tone={stateTone(row.status)} label={formatOperationalState(row.status)} />},
+              ]}
+            />
+          </section>
+
+          <section className="tp-section">
+            <SectionHeader title={t('a2a.activeTasks')} count={a2aTasks.length} />
+            <DataTable
+              ariaLabel={t('a2a.activeTasks')}
+              loading={loading}
+              rows={a2aTasks}
+              rowKey={row => row.task_id}
+              emptyTitle={t('a2a.emptyTasksTitle')}
+              emptyDescription={t('a2a.emptyTasksDesc')}
+              columns={[
+                {
+                  id: 'task',
+                  header: t('a2a.col.task'),
+                  primary: true,
+                  width: '28%',
+                  render: row => (
+                    <div className="tp-stack-sm">
+                      <span className="mono" style={{fontWeight: 600}}>{row.task_id}</span>
+                      <span className="mono tp-muted">{row.target_agent_slug || row.target_agent_id}</span>
+                    </div>
+                  ),
+                },
+                {id: 'state', header: t('common.state'), width: '16%', render: row => <StatusPill tone={a2aTaskTone(row.state)} label={t(`a2a.state.${row.state}`)} />},
+                {id: 'hops', header: t('a2a.col.hops'), width: '12%', render: row => <span className="num mono">{formatNumber(row.hop_count)} / 5</span>},
+                {id: 'region', header: t('a2a.col.region'), width: '12%', render: row => <span className="mono">{row.enforced_region || '—'}</span>},
+                {id: 'hold', header: t('a2a.col.subBudget'), width: '16%', render: row => <span className="num mono">{formatMicroUSD(row.sub_budget_hold_micros)}</span>},
+                {id: 'settled', header: t('a2a.col.settledCost'), width: '16%', render: row => <span className="num mono">{formatMicroUSD(row.settled_cost_micros ?? 0)}</span>},
+              ]}
+            />
+          </section>
+        </>
+      )}
 
       <Drawer
         open={registerOpen}
@@ -309,6 +488,54 @@ export function McpHubPage({projectId, environmentId, roles}: {projectId: string
             description={t('mcp.allowPrivateDesc')}
             checked={allowPrivateIp}
             onChange={setAllowPrivateIp}
+          />
+        </form>
+      </Drawer>
+
+      <Drawer
+        open={a2aRegisterOpen}
+        onClose={() => setA2aRegisterOpen(false)}
+        title={t('a2a.drawerTitle')}
+        subtitle={t('a2a.drawerSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setA2aRegisterOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-register-a2a-form" variant="primary" loading={busy}>{t('a2a.registerAgent')}</Button>
+          </>
+        }
+      >
+        <form id="tp-register-a2a-form" className="tp-stack" onSubmit={handleRegisterA2a}>
+          <TextField label={t('a2a.agentSlug')} placeholder={t('a2a.agentSlugPlaceholder')} value={agentSlug} onChange={event => setAgentSlug(event.target.value)} />
+          <TextField label={t('a2a.agentName')} required placeholder={t('a2a.agentNamePlaceholder')} value={agentName} onChange={event => setAgentName(event.target.value)} />
+          <TextField label={t('a2a.endpointUrl')} type="url" required placeholder="https://agent.example.com" value={agentEndpoint} onChange={event => setAgentEndpoint(event.target.value)} />
+          <SelectField
+            label={t('a2a.col.region')}
+            value={agentRegion}
+            onChange={next => setAgentRegion(next as DataRegion)}
+            options={[
+              {value: 'US', label: 'US'},
+              {value: 'EU', label: 'EU'},
+              {value: 'APAC', label: 'APAC'},
+              {value: 'ON_PREM', label: 'ON_PREM'},
+            ]}
+          />
+          <SelectField
+            label={t('a2a.col.maxHops')}
+            value={agentMaxHops}
+            onChange={setAgentMaxHops}
+            options={[
+              {value: '1', label: '1'},
+              {value: '2', label: '2'},
+              {value: '3', label: '3'},
+              {value: '4', label: '4'},
+              {value: '5', label: '5'},
+            ]}
+          />
+          <CheckboxField
+            label={t('a2a.allowPrivate')}
+            description={t('a2a.allowPrivateDesc')}
+            checked={agentAllowPrivateIp}
+            onChange={setAgentAllowPrivateIp}
           />
         </form>
       </Drawer>

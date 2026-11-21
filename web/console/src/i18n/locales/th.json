@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "ผู้ตรวจสอบความปลอดภัย",
   "common.role.FINOPS_VIEWER": "ผู้ดูข้อมูล FinOps",
   "common.role.DEVELOPER": "นักพัฒนา",
-
   "state.ACTIVE_HEALTHY": "ปกติ",
   "state.CIRCUIT_OPEN_UNHEALTHY": "ตัดวงจรชั่วคราว",
   "state.THROTTLED_COOLDOWN": "พักรอจำกัดอัตรา",
@@ -106,7 +105,6 @@
   "state.DRAFT": "ฉบับร่าง",
   "state.UNAVAILABLE": "ไม่พร้อมใช้งาน",
   "state.UNKNOWN": "ไม่ทราบ",
-
   "error.noOpenApiPolicy": "ไม่ได้กำหนดนโยบายความปลอดภัย OpenAPI สำหรับ {{method}} {{path}}",
   "error.ifMatchRequired": "การดำเนินการ Admin API นี้ต้องใช้ส่วนหัว If-Match ETag",
   "error.csrfRequired": "คำขอที่เปลี่ยนแปลงสถานะต้องมีโทเค็น CSRF",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "เกิดข้อผิดพลาดที่ไม่คาดคิดในส่วนติดต่อผู้ใช้",
   "error.unexpectedUiDesc": "คอนโซลพบข้อผิดพลาดที่ไม่คาดคิด กรุณาโหลดหน้านี้ใหม่เพื่อกู้คืน",
   "error.reloadConsole": "โหลดคอนโซลใหม่",
-
   "shell.loadingSetup": "กำลังโหลดหน้าตั้งค่า…",
   "shell.loadingSignIn": "กำลังโหลดหน้าเข้าสู่ระบบ…",
   "shell.loadingConsole": "กำลังโหลดคอนโซล…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "ไปอย่างรวดเร็ว",
   "shell.quickJumpEmpty": "ไม่มีส่วนที่ตรงกันสำหรับบทบาทของคุณ",
   "shell.roleDenied": "บทบาทที่ได้รับมอบหมาย ({{roles}}) ไม่มีสิทธิ์เข้าถึง {{section}}",
-
   "nav.group.monitor": "การเฝ้าระวัง",
   "nav.group.gateway": "เกตเวย์",
   "nav.group.ecosystem": "ระบบนิเวศ",
@@ -170,7 +166,6 @@
   "nav.route.operations": "การปฏิบัติการ",
   "nav.route.setup": "การตั้งค่าเริ่มต้น",
   "nav.route.login": "เข้าสู่ระบบ",
-
   "cmd.overview": "ภาพรวมและสถานะระบบ",
   "cmd.traces": "รอยติดตามคำขอและไทม์ไลน์",
   "cmd.budgets": "งบประมาณ FinOps และยอดกันวงเงิน",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "การสำรองข้อมูลแบบเข้ารหัส",
   "cmd.opsUpgrades": "การตรวจสอบก่อนอัปเกรด",
   "cmd.opsWebhooks": "Webhook และการตั้งค่า",
-
   "login.title": "เข้าสู่ระบบ",
   "login.subtitle": "ใช้ข้อมูลรับรองผู้ดูแลระบบในเครื่องเพื่อเข้าถึง Control Plane",
   "login.failedTitle": "เข้าสู่ระบบไม่สำเร็จ",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "พยายามเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่",
   "login.errInvalidCredentials": "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
   "login.errUnreachable": "ไม่สามารถเชื่อมต่อกับ Tanpopo Control Plane ได้",
-
   "setup.title": "ตั้งค่าอินสแตนซ์",
   "setup.subtitle": "กำหนดเจ้าของเกตเวย์แบบโฮสต์เองนี้พร้อมตั้งค่าบัญชีผู้ดูแลและเส้นทางแรก",
   "setup.stepsLabel": "ขั้นตอนการตั้งค่า",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "คำขอแรกล้มเหลว",
   "setup.firstKey.statusFailed": "คำขอแรกล้มเหลว ({{status}}) กรุณาตรวจสอบการดีพลอยและการตั้งค่าเส้นทาง",
   "setup.firstKey.unreported": "ไม่มีรายงาน",
-
   "overview.title": "ภาพรวม",
   "overview.subtitleIdle": "สถานะเกตเวย์แบบเรียลไทม์และคิวการแก้ไขปัญหา",
   "overview.subtitleUpdated": "อัปเดต {{time}} · คำขอที่ไม่ได้วัดค่า {{count}} รายการ",
@@ -325,7 +317,6 @@
   "overview.remediate": "แก้ไข",
   "overview.severity.PAGE": "ด่วนมาก",
   "overview.severity.TICKET": "ตั๋วงาน",
-
   "traces.title": "รอยติดตามคำขอ",
   "traces.subtitle": "เทเลเมทรีการทำงานเฉพาะเมตาดาตา ไม่จัดเก็บเนื้อหาพรอมต์หรือคำตอบ",
   "traces.metadataOnly": "เฉพาะเมตาดาตา",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "บันทึกเมื่อ",
   "traces.executionStages": "ขั้นตอนการทำงาน",
   "traces.noStages": "ไม่มีการบันทึกรายละเอียดขั้นตอนย่อยสำหรับคำขอนี้",
-
   "finops.title": "FinOps",
   "finops.subtitle": "บัญชีแยกประเภทหน่วย micro-USD จำนวนเต็ม แยกยอดแม่นยำ ประมาณการ กันวงเงิน และไม่ได้วัดค่า",
   "finops.exportCsv": "ส่งออก CSV",
@@ -405,7 +395,6 @@
   "finops.col.exact": "แม่นยำ",
   "finops.col.exactEstReqs": "คำขอแม่นยำ / ประมาณการ",
   "finops.col.unmetered": "ไม่ได้วัดค่า",
-
   "providers.title": "ผู้ให้บริการ",
   "providers.subtitle": "การเชื่อมต่อผู้ให้บริการต้นทาง ความลับตู้นิรภัยแบบเขียนอย่างเดียว และตัวแปลงโปรโตคอล",
   "providers.sealSecret": "ผนึกความลับ",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "ลบข้อมูลรับรองในตู้นิรภัย",
   "providers.deleteSecretDesc": "นำ \"{{name}}\" ({{fingerprint}}) ออกหรือไม่? การเชื่อมต่อที่อ้างอิงอยู่จะบล็อกการลบ",
   "providers.deleteCredential": "ลบข้อมูลรับรอง",
-
   "models.title": "โมเดลและการดีพลอย",
   "models.subtitle": "การประกาศความสามารถของโมเดลเชิงตรรกะ ระดับการรับรอง และการดีพลอยตามสภาพแวดล้อม",
   "models.registerModel": "ลงทะเบียนโมเดล",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "ปิดใช้งานการดีพลอย",
   "models.confirmDeleteDesc": "ลบ \"{{name}}\" หรือไม่? เส้นทางที่การดีพลอยนี้เป็นปลายทางปกติสุดท้าย: {{routes}}",
   "models.confirmDisableDesc": "ปิดใช้งาน \"{{name}}\" หรือไม่? เส้นทางที่การดีพลอยนี้เป็นปลายทางปกติสุดท้าย: {{routes}}",
-
   "routing.title": "เส้นทางและนโยบาย",
   "routing.subtitle": "การกำหนดเส้นทางตามความสามารถอย่างแน่นอน การจำลองแบบ dry-run และการสืบทอดนโยบายแบบเข้มงวดขึ้นเท่านั้น",
   "routing.createRoute": "สร้างเส้นทาง",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "ยืนยันแล้วหรือลงนามระดับองค์กร",
   "routing.trust.VERIFIED_ONLY": "เฉพาะที่ยืนยันแล้ว",
   "routing.trust.ANY_APPROVED": "ทั้งหมดที่อนุมัติแล้ว",
-
   "extensions.title": "ส่วนขยาย",
   "extensions.subtitle": "ตรวจสอบแหล่งที่มา ลายเซ็นผู้เผยแพร่ และระดับการทำงานแยกกัน พร้อมการยินยอมสิทธิ์เป็นขั้นตอน",
   "extensions.stagePackage": "เตรียมแพ็กเกจ",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "เปลี่ยนแปลง",
   "extensions.diff.reduced": "ลดลง",
   "extensions.diff.quotas": "หน่วยความจำ {{mem}} · การเรียก {{call}} · ชิ้นข้อมูล {{chunk}}",
-
   "mcp.title": "MCP Hub",
   "mcp.subtitle": "ทะเบียนเซิร์ฟเวอร์ MCP แบบ Streamable HTTP การตรึงสคีมา RFC 8785 JCS และสิทธิ์คีย์เสมือนรายเครื่องมือ",
   "mcp.registerServer": "ลงทะเบียนเซิร์ฟเวอร์",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive (ต้องอนุมัติ HITL ทุกครั้ง)",
   "mcp.justification": "เหตุผลการตรวจสอบ (ไม่บังคับ)",
   "mcp.pinSchema": "ตรึงสคีมา",
-
   "playground.title": "สนามทดสอบ",
   "playground.subtitle": "คีย์เซสชันชั่วคราวพร้อมวงเงินสูงสุดหน่วย micro-USD พรอมต์จะอยู่เฉพาะในแท็บเบราว์เซอร์นี้เท่านั้น",
   "playground.restrictedDesc": "บทบาทของคุณไม่สามารถสร้างเซสชันสนามทดสอบได้",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "การเข้าถึงและคีย์",
   "access.subtitle": "คีย์เสมือนตามสภาพแวดล้อมและการกำหนดสิทธิ์ RBAC 6 บทบาท",
   "access.issueKey": "ออกคีย์",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "แก้ไขบทบาทสำหรับ {{email}}",
   "access.saveRoles": "บันทึกบทบาท",
   "access.selfServiceDisabled": "ปิดการมอบสิทธิ์ให้ตนเองไว้ คุณไม่สามารถเพิ่มบทบาทใหม่ให้บัญชีของตนเองได้",
-
   "security.title": "ความปลอดภัย",
   "security.subtitle": "การอนุมัติ MCP โดยมนุษย์ (HITL), Kill Switch ฉุกเฉิน 4 ระดับ และบันทึกตรวจสอบ JCS ที่แก้ไขไม่ได้",
   "security.restrictedDesc": "บทบาทของคุณไม่มีสิทธิ์เข้าถึงศูนย์ความปลอดภัย",
@@ -1014,7 +996,6 @@
   "security.actorId": "รหัสผู้ดำเนินการ",
   "security.eventHash": "แฮช SHA-256 ของเหตุการณ์",
   "security.eventMetadata": "เมตาดาตาเหตุการณ์ (JSON ข้อความธรรมดา)",
-
   "operations.title": "การปฏิบัติการ",
   "operations.subtitle": "การตรวจความพร้อม เอพ็อกสแนปช็อตคลัสเตอร์ การสำรองข้อมูลเข้ารหัส การอัปเกรด และ Webhook ที่ลงนาม",
   "operations.restrictedTitle": "ต้องใช้บทบาทผู้ปฏิบัติการ",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "เลือกความลับการลงนาม",
   "operations.events": "เหตุการณ์",
   "operations.selectWebhookEvents": "เลือกเหตุการณ์ Webhook",
-  "operations.registerWebhook": "ลงทะเบียน Webhook"
+  "operations.registerWebhook": "ลงทะเบียน Webhook",
+  "cmd.a2a": "เอเจนต์ A2A และงานที่ทำงานอยู่",
+  "mcp.tabsLabel": "ส่วนของศูนย์กลาง MCP และ A2A",
+  "mcp.tabMcp": "เซิร์ฟเวอร์ MCP",
+  "mcp.tabA2a": "เอเจนต์ A2A และงานที่ทำงานอยู่",
+  "a2a.registerAgent": "ลงทะเบียนเอเจนต์",
+  "a2a.agentRegistered": "ลงทะเบียนเอเจนต์ A2A และเผยแพร่สำหรับการค้นหาแล้ว",
+  "a2a.registerFailed": "ไม่สามารถลงทะเบียนเอเจนต์ A2A ได้",
+  "a2a.registeredAgents": "เอเจนต์ A2A ที่ลงทะเบียน",
+  "a2a.emptyAgentsTitle": "ยังไม่มีเอเจนต์ A2A ที่ลงทะเบียน",
+  "a2a.emptyAgentsDesc": "ลงทะเบียนปลายทาง AgentCard ระดับโปรเจกต์พร้อมข้อจำกัดภูมิภาคและจำนวนฮอปการส่งต่อ",
+  "a2a.col.agent": "เอเจนต์",
+  "a2a.col.endpoint": "ปลายทาง",
+  "a2a.col.region": "ภูมิภาค",
+  "a2a.col.maxHops": "ฮอปสูงสุด",
+  "a2a.activeTasks": "งาน A2A ที่ทำงานอยู่และล่าสุด",
+  "a2a.emptyTasksTitle": "ยังไม่มีบันทึกงาน A2A",
+  "a2a.emptyTasksDesc": "งานเอเจนต์ที่ส่งต่อจะแสดงที่นี่พร้อมความลึกของฮอป ภูมิภาคที่บังคับใช้ และวงเงินย่อยที่กันไว้",
+  "a2a.col.task": "งาน",
+  "a2a.col.hops": "ฮอป",
+  "a2a.col.subBudget": "วงเงินย่อยที่กันไว้",
+  "a2a.col.settledCost": "ค่าใช้จ่ายที่ชำระแล้ว",
+  "a2a.drawerTitle": "ลงทะเบียนเอเจนต์ A2A",
+  "a2a.drawerSubtitle": "บังคับใช้การตรวจสอบ HTTPS ขาออก ถิ่นที่อยู่ข้อมูลระดับภูมิภาค และความลึกการส่งต่อ <= 5",
+  "a2a.agentSlug": "สลักเอเจนต์ (ไม่บังคับ)",
+  "a2a.agentSlugPlaceholder": "เช่น billing-analyst",
+  "a2a.agentName": "ชื่อเอเจนต์",
+  "a2a.agentNamePlaceholder": "เช่น Billing Analyst",
+  "a2a.endpointUrl": "URL ปลายทางเอเจนต์",
+  "a2a.allowPrivate": "อนุญาตปลายทางส่วนตัวหรือ loopback",
+  "a2a.allowPrivateDesc": "เปิดใช้งานเฉพาะสำหรับเอเจนต์ A2A ภายในที่เชื่อถือได้อย่างชัดเจนเท่านั้น",
+  "a2a.state.submitted": "ส่งแล้ว",
+  "a2a.state.working": "กำลังดำเนินการ",
+  "a2a.state.input-required": "รอข้อมูลนำเข้า",
+  "a2a.state.completed": "เสร็จสิ้น",
+  "a2a.state.failed": "ล้มเหลว",
+  "a2a.state.canceled": "ยกเลิกแล้ว"
 }

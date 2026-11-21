@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -27,11 +28,13 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	extport "github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/registry"
+	"github.com/nguywnben/tanpopo/internal/extension/sidecar"
 	"github.com/nguywnben/tanpopo/internal/extension/testharness"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
+	"github.com/nguywnben/tanpopo/internal/ingress/a2a"
 	"github.com/nguywnben/tanpopo/internal/ingress/cache"
 	ingresshttp "github.com/nguywnben/tanpopo/internal/ingress/http"
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/approval"
@@ -548,7 +551,7 @@ func buildRuntimeInternal(ctx context.Context, role, listen string, beforeSQLite
 		return nil, nil, fmt.Errorf("initialize marketplace registry store: %w", err)
 	}
 	marketplaceDone = startMarketplaceRuntime(runtimeCtx, registryStore, installerService, snaps, auditLog)
-	brokerResolver := planeBrokerResolver{provider: catalogRepo, mcp: mcphub.BrokerResolver{DB: db}}
+	brokerResolver := planeBrokerResolver{provider: catalogRepo, mcp: mcphub.BrokerResolver{DB: db}, a2a: a2a.BrokerResolver{DB: db}}
 	blindBroker, err := broker.NewBlindBroker(broker.Config{
 		Resolver: brokerResolver, PolicyResolver: brokerResolver, Vault: vaultStore,
 		UnsealCap: brokerUnsealCap, Audit: auditLog, OAuthTokens: oauthService,
@@ -556,6 +559,23 @@ func buildRuntimeInternal(ctx context.Context, role, listen string, beforeSQLite
 	if err != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("initialize credential broker: %w", err)
+	}
+	a2aEnabled := strings.EqualFold(strings.TrimSpace(os.Getenv("TANPOPO_A2A_ENABLED")), "true")
+	sidecarEnabled := strings.EqualFold(strings.TrimSpace(os.Getenv("TANPOPO_RUNTIME_SIDECAR_ENABLED")), "true")
+	sidecarSocketDir := strings.TrimSpace(os.Getenv("TANPOPO_SIDECAR_SOCKET_DIR"))
+	var sidecarFactory func(context.Context, *snapshot.ProviderAdapterView, installer.PermissionSet) (extport.ProviderRuntime, io.Closer, error)
+	if sidecarEnabled {
+		sidecarCA, caErr := sidecar.NewEphemeralCA(sidecar.DefaultCACertTTL, nil)
+		if caErr != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize sidecar ephemeral CA: %w", caErr)
+		}
+		sidecarClientCert, certErr := sidecar.NewRotatingCertSource(sidecarCA, "spiffe://"+sidecar.SPIFFETenantDomain+"/core/gateway", false, sidecar.DefaultLeafCertTTL)
+		if certErr != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize sidecar client certificate: %w", certErr)
+		}
+		sidecarFactory = newProductionSidecarFactory(sidecarSocketDir, sidecarCA, sidecarClientCert, auditLog)
 	}
 	mux := http.NewServeMux()
 	if role == "all" || role == "data-plane" {
@@ -581,6 +601,23 @@ func buildRuntimeInternal(ctx context.Context, role, listen string, beforeSQLite
 			mcpServer.RunApprovalMaintenance(runtimeCtx)
 		}()
 		mux.Handle("/mcp", mcpServer)
+
+		a2aCoordinator, a2aErr := a2a.NewTaskCoordinator(a2a.CoordinatorConfig{
+			Enabled:    a2aEnabled,
+			DB:         db,
+			Snapshots:  snaps,
+			Broker:     blindBroker,
+			Ledger:     ledgerService,
+			Audit:      auditLog,
+			KillSwitch: killSwitch,
+		})
+		if a2aErr != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize A2A Task Coordinator: %w", a2aErr)
+		}
+		a2aHandler := a2aCoordinator.Handler()
+		mux.Handle("/a2a/", a2aHandler)
+		mux.Handle("/.well-known/agent.json", a2aHandler)
 	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -617,10 +654,13 @@ func buildRuntimeInternal(ctx context.Context, role, listen string, beforeSQLite
 		}
 		dataServer, err = ingresshttp.NewServer(ingresshttp.ServerConfig{
 			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
-			RateLimiter:   vkRateLimiter,
-			BudgetLedger:  ledgerService,
-			Telemetry:     telemetryPipeline,
-			ResponseCache: responseCache,
+			RateLimiter:           vkRateLimiter,
+			BudgetLedger:          ledgerService,
+			Telemetry:             telemetryPipeline,
+			ResponseCache:         responseCache,
+			SidecarEnabled:        sidecarEnabled,
+			SidecarSocketDir:      sidecarSocketDir,
+			SidecarRuntimeFactory: sidecarFactory,
 		})
 		if err != nil {
 			cleanup()
@@ -746,6 +786,58 @@ func allowedOrigins(addr string) []string {
 	}
 	host = strings.Trim(host, "[]")
 	return []string{"http://" + net.JoinHostPort(host, port)}
+}
+
+func newProductionSidecarFactory(
+	socketDir string,
+	ca *sidecar.EphemeralCA,
+	clientCert *sidecar.RotatingCertSource,
+	auditLog port.AuditSink,
+) func(context.Context, *snapshot.ProviderAdapterView, installer.PermissionSet) (extport.ProviderRuntime, io.Closer, error) {
+	return func(_ context.Context, adp *snapshot.ProviderAdapterView, _ installer.PermissionSet) (extport.ProviderRuntime, io.Closer, error) {
+		if adp == nil {
+			return nil, nil, fmt.Errorf("%w: adapter snapshot view missing", extport.ErrInvalidSpec)
+		}
+		var manifest installer.ExtensionManifest
+		if err := json.Unmarshal([]byte(adp.ManifestJSON), &manifest); err != nil {
+			return nil, nil, fmt.Errorf("%w: parse sidecar manifest_json: %v", extport.ErrInvalidSpec, err)
+		}
+		if manifest.Runtime == nil || strings.TrimSpace(manifest.Runtime.Entrypoint) == "" {
+			return nil, nil, fmt.Errorf("%w: missing sidecar runtime.entrypoint", extport.ErrInvalidSpec)
+		}
+		ep := strings.TrimSpace(manifest.Runtime.Entrypoint)
+		scCfg := sidecar.Config{
+			Enabled:        true,
+			InstallationID: adp.InstallationID,
+			AuditSink:      auditLog,
+		}
+		switch {
+		case strings.HasPrefix(ep, "unix://"):
+			confined, cerr := sidecar.ConfineSocketPath(socketDir, strings.TrimPrefix(ep, "unix://"))
+			if cerr != nil {
+				return nil, nil, fmt.Errorf("%w: %v", extport.ErrInvalidSpec, cerr)
+			}
+			scCfg.UDSPath = confined
+		case strings.HasPrefix(ep, "https://"):
+			scCfg.EndpointURL = ep
+			scCfg.CA = ca
+			scCfg.ClientCertSource = clientCert
+			scCfg.ExpectedServerSPIFFE = "spiffe://" + sidecar.SPIFFETenantDomain + "/ext/" + adp.InstallationID
+		case !strings.ContainsAny(ep, `/\`) && !strings.Contains(ep, ".."):
+			confined, cerr := sidecar.ConfineSocketPath(socketDir, filepath.Join(socketDir, ep+".sock"))
+			if cerr != nil {
+				return nil, nil, fmt.Errorf("%w: %v", extport.ErrInvalidSpec, cerr)
+			}
+			scCfg.UDSPath = confined
+		default:
+			return nil, nil, fmt.Errorf("%w: invalid sidecar endpoint %q", extport.ErrInvalidSpec, ep)
+		}
+		sc, serr := sidecar.NewClient(scCfg)
+		if serr != nil {
+			return nil, nil, serr
+		}
+		return sc, sc, nil
+	}
 }
 
 func envOr(name, fallback string) string {

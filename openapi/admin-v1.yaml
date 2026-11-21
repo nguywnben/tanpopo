@@ -903,6 +903,74 @@ components:
         tool_count: { type: integer }
         version: { type: integer }
 
+    A2aAgentSkill:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+
+    A2aAgentCreateRequest:
+      type: object
+      required: [project_id, name, endpoint_url, data_region, max_delegation_hops]
+      properties:
+        project_id: { type: string }
+        agent_slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        endpoint_url: { type: string, format: uri }
+        allow_private_ip: { type: boolean, default: false }
+        allowed_cidrs: { type: array, items: { type: string } }
+        credential_id: { type: ["string", "null"] }
+        data_region: { $ref: "#/components/schemas/DataRegion" }
+        max_delegation_hops: { type: integer, minimum: 1, maximum: 5, default: 5 }
+        skills:
+          type: array
+          items: { $ref: "#/components/schemas/A2aAgentSkill" }
+        required_models:
+          type: array
+          items: { type: string }
+
+    A2aAgentResource:
+      type: object
+      required: [agent_id, project_id, agent_slug, name, endpoint_url, data_region, max_delegation_hops, skills, status, version]
+      properties:
+        agent_id: { type: string }
+        project_id: { type: string }
+        agent_slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        endpoint_url: { type: string, format: uri }
+        data_region: { $ref: "#/components/schemas/DataRegion" }
+        max_delegation_hops: { type: integer, minimum: 1, maximum: 5 }
+        skills:
+          type: array
+          items: { $ref: "#/components/schemas/A2aAgentSkill" }
+        required_models:
+          type: array
+          items: { type: string }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, DISABLED] }
+        version: { type: integer }
+
+    A2aTaskResource:
+      type: object
+      required: [task_id, target_agent_id, state, hop_count, sub_budget_hold_micros, created_at, updated_at]
+      properties:
+        task_id: { type: string }
+        target_agent_id: { type: string }
+        target_agent_slug: { type: string }
+        state: { type: string, enum: [submitted, working, input-required, completed, failed, canceled] }
+        hop_count: { type: integer, minimum: 1, maximum: 5 }
+        trace_root_id: { type: string }
+        enforced_region: { type: string }
+        sub_budget_hold_micros: { type: integer, minimum: 0 }
+        settled_cost_micros: { type: integer, minimum: 0 }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+
     TraceSummary:
       type: object
       required: [request_id, plane, route_slug, status_code, error_code, usage_accuracy, total_cost_micros, duration_ms, has_debug_payload, created_at]
@@ -3015,7 +3083,9 @@ paths:
                 type: object
                 required: [data, has_more]
                 properties:
-                  data: { type: array, items: { type: object } }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/A2aAgentResource" }
                   next_cursor: { type: ["string", "null"] }
                   has_more: { type: boolean }
     post:
@@ -3028,20 +3098,38 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [name, endpoint_url, data_region, max_delegation_hops]
-              properties:
-                name: { type: string }
-                endpoint_url: { type: string, format: uri }
-                data_region: { $ref: "#/components/schemas/DataRegion" }
-                max_delegation_hops: { type: integer, minimum: 1, maximum: 5, default: 5 }
+            schema: { $ref: "#/components/schemas/A2aAgentCreateRequest" }
       responses:
         "201":
           description: A2A AgentEndpoint registered
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
           content:
             application/json:
-              schema: { type: object }
+              schema: { $ref: "#/components/schemas/A2aAgentResource" }
+
+  /admin/v1/a2a/tasks:
+    get:
+      tags: [MCPAndA2A]
+      operationId: listAdminA2aTasks
+      summary: List active and recent A2A tasks (SCR-10 — v0.3)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/CursorParam"
+      responses:
+        "200":
+          description: Paginated A2A tasks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, has_more]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/A2aTaskResource" }
+                  next_cursor: { type: ["string", "null"] }
+                  has_more: { type: boolean }
 
   # ==================== GROUP J: TRACES, FINOPS BUDGETS, CHARGEBACK & WEBHOOKS (SCR-11, SCR-12) ====================
   /admin/v1/traces:

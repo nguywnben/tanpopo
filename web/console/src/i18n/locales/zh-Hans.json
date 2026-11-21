@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "安全审核员",
   "common.role.FINOPS_VIEWER": "财务只读员",
   "common.role.DEVELOPER": "开发者",
-
   "state.ACTIVE_HEALTHY": "健康",
   "state.CIRCUIT_OPEN_UNHEALTHY": "熔断已打开",
   "state.THROTTLED_COOLDOWN": "冷却中",
@@ -106,7 +105,6 @@
   "state.DRAFT": "草稿",
   "state.UNAVAILABLE": "不可用",
   "state.UNKNOWN": "未知",
-
   "error.noOpenApiPolicy": "未为 {{method}} {{path}} 定义 OpenAPI 安全策略。",
   "error.ifMatchRequired": "此管理 API 操作需要提供 If-Match ETag。",
   "error.csrfRequired": "修改状态的请求需要提供 CSRF 令牌。",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "界面发生意外错误",
   "error.unexpectedUiDesc": "控制台遇到了意外错误，请重新加载页面以恢复。",
   "error.reloadConsole": "重新加载控制台",
-
   "shell.loadingSetup": "正在加载初始化向导…",
   "shell.loadingSignIn": "正在加载登录页面…",
   "shell.loadingConsole": "正在加载控制台…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "快速跳转",
   "shell.quickJumpEmpty": "当前角色没有匹配的模块。",
   "shell.roleDenied": "您当前分配的角色（{{roles}}）无权访问“{{section}}”。",
-
   "nav.group.monitor": "监控",
   "nav.group.gateway": "网关",
   "nav.group.ecosystem": "生态",
@@ -170,7 +166,6 @@
   "nav.route.operations": "运维管理",
   "nav.route.setup": "首次初始化",
   "nav.route.login": "登录",
-
   "cmd.overview": "概览与系统态势",
   "cmd.traces": "请求追踪与耗时瀑布图",
   "cmd.budgets": "财务预算与活动预占",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "加密备份",
   "cmd.opsUpgrades": "升级预检",
   "cmd.opsWebhooks": "Webhook 与设置",
-
   "login.title": "登录",
   "login.subtitle": "使用本地管理员凭据访问控制平面。",
   "login.failedTitle": "登录失败",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "登录尝试过于频繁，请稍后再试。",
   "login.errInvalidCredentials": "电子邮箱或密码无效。",
   "login.errUnreachable": "无法连接到 Tanpopo 控制平面。",
-
   "setup.title": "实例初始化",
   "setup.subtitle": "认领此自托管网关，并配置初始所有者与默认路由。",
   "setup.stepsLabel": "初始化步骤",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "首条测试请求失败。",
   "setup.firstKey.statusFailed": "首条请求失败（HTTP {{status}}）。请检查部署与路由配置。",
   "setup.firstKey.unreported": "未上报",
-
   "overview.title": "概览",
   "overview.subtitleIdle": "网关实时运行态势与待处置告警队列。",
   "overview.subtitleUpdated": "更新于 {{time}} · {{count}} 条未计量请求",
@@ -325,7 +317,6 @@
   "overview.remediate": "立即处置",
   "overview.severity.PAGE": "紧急传呼",
   "overview.severity.TICKET": "工单",
-
   "traces.title": "请求追踪",
   "traces.subtitle": "仅记录元数据的执行遥测，不存储任何提示词或补全内容。",
   "traces.metadataOnly": "仅元数据",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "记录时间",
   "traces.executionStages": "执行阶段",
   "traces.noStages": "此请求未记录细粒度阶段拆分。",
-
   "finops.title": "财务运维",
   "finops.subtitle": "整数微美元账本，分别核算精确费用、估算费用、活动预占与未计量请求。",
   "finops.exportCsv": "导出 CSV",
@@ -405,7 +395,6 @@
   "finops.col.exact": "精确",
   "finops.col.exactEstReqs": "精确 / 估算请求数",
   "finops.col.unmetered": "未计量",
-
   "providers.title": "提供商",
   "providers.subtitle": "管理上游提供商连接、只写密钥库凭据和协议适配器。",
   "providers.sealSecret": "封存凭据",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "删除密钥库凭据",
   "providers.deleteSecretDesc": "确定移除“{{name}}”（{{fingerprint}}）？若仍有连接引用此凭据，删除将被阻止。",
   "providers.deleteCredential": "删除凭据",
-
   "models.title": "模型与部署",
   "models.subtitle": "逻辑模型能力声明、验证等级与环境级模型部署。",
   "models.registerModel": "注册模型",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "停用部署",
   "models.confirmDeleteDesc": "确定删除“{{name}}”？将其作为唯一健康目标的路由：{{routes}}。",
   "models.confirmDisableDesc": "确定停用“{{name}}”？将其作为唯一健康目标的路由：{{routes}}。",
-
   "routing.title": "路由与策略",
   "routing.subtitle": "确定性能力路由、路由预演模拟以及单调收紧的分层策略继承。",
   "routing.createRoute": "创建路由",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "已验证或企业签名",
   "routing.trust.VERIFIED_ONLY": "仅已验证",
   "routing.trust.ANY_APPROVED": "任意已批准",
-
   "extensions.title": "扩展",
   "extensions.subtitle": "独立校验来源、发布者签名与执行层级，并在激活前进行分阶段权限授权。",
   "extensions.stagePackage": "暂存扩展包",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "变更",
   "extensions.diff.reduced": "缩减",
   "extensions.diff.quotas": "内存 {{mem}} · 单次调用 {{call}} · 流式分片 {{chunk}}",
-
   "mcp.title": "MCP 中心",
   "mcp.subtitle": "Streamable HTTP MCP 服务器注册表、RFC 8785 JCS Schema 固定及按工具粒度的虚拟密钥授权。",
   "mcp.registerServer": "注册服务器",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive（高危操作，强制人工审批）",
   "mcp.justification": "审查说明（可选）",
   "mcp.pinSchema": "固定 Schema",
-
   "playground.title": "调试台",
   "playground.subtitle": "使用带微美元预算硬上限的临时会话密钥进行测试，提示词仅保留在当前浏览器标签页中。",
   "playground.restrictedDesc": "您的角色无权创建调试台会话。",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "访问与密钥",
   "access.subtitle": "环境级虚拟密钥管理与 6 角色 RBAC 成员权限分配。",
   "access.issueKey": "签发密钥",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "编辑 {{email}} 的角色",
   "access.saveRoles": "保存角色",
   "access.selfServiceDisabled": "已禁用自助提权，您无法为自己的账号添加新角色。",
-
   "security.title": "安全中心",
   "security.subtitle": "人工介入 (HITL) MCP 审批、4 级紧急熔断开关以及不可变 JCS 审计链。",
   "security.restrictedDesc": "您的角色无权访问安全中心。",
@@ -1014,7 +996,6 @@
   "security.actorId": "操作者 ID",
   "security.eventHash": "事件 SHA-256 哈希",
   "security.eventMetadata": "事件元数据（纯文本 JSON）",
-
   "operations.title": "运维管理",
   "operations.subtitle": "就绪探针、集群快照纪元、加密备份、版本升级与签名 Webhook。",
   "operations.restrictedTitle": "需要运维人员角色",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "选择签名密钥",
   "operations.events": "订阅事件",
   "operations.selectWebhookEvents": "选择 Webhook 事件",
-  "operations.registerWebhook": "注册 Webhook"
+  "operations.registerWebhook": "注册 Webhook",
+  "cmd.a2a": "A2A 代理与活跃任务",
+  "mcp.tabsLabel": "MCP 与 A2A 中心分区",
+  "mcp.tabMcp": "MCP 服务器",
+  "mcp.tabA2a": "A2A 代理与活跃任务",
+  "a2a.registerAgent": "注册代理",
+  "a2a.agentRegistered": "已注册 A2A 代理并发布至服务发现。",
+  "a2a.registerFailed": "无法注册 A2A 代理。",
+  "a2a.registeredAgents": "已注册 A2A 代理",
+  "a2a.emptyAgentsTitle": "尚未注册 A2A 代理",
+  "a2a.emptyAgentsDesc": "注册带数据驻留区域与最大委托跳数限制的项目级 AgentCard 端点。",
+  "a2a.col.agent": "代理",
+  "a2a.col.endpoint": "端点",
+  "a2a.col.region": "区域",
+  "a2a.col.maxHops": "最大跳数",
+  "a2a.activeTasks": "活跃与近期 A2A 任务",
+  "a2a.emptyTasksTitle": "暂无 A2A 任务记录",
+  "a2a.emptyTasksDesc": "委托执行的代理任务将在此显示跳数深度、强制区域与子预算预留。",
+  "a2a.col.task": "任务",
+  "a2a.col.hops": "跳数",
+  "a2a.col.subBudget": "子预算预留",
+  "a2a.col.settledCost": "已结算费用",
+  "a2a.drawerTitle": "注册 A2A 代理",
+  "a2a.drawerSubtitle": "强制执行 HTTPS 出站校验、区域驻留锁定与最大委托深度 <= 5。",
+  "a2a.agentSlug": "代理标识 (可选)",
+  "a2a.agentSlugPlaceholder": "例如 billing-analyst",
+  "a2a.agentName": "代理名称",
+  "a2a.agentNamePlaceholder": "例如 Billing Analyst",
+  "a2a.endpointUrl": "代理端点 URL",
+  "a2a.allowPrivate": "允许私网或环回端点",
+  "a2a.allowPrivateDesc": "仅对明确受信任的内部 A2A 代理启用。",
+  "a2a.state.submitted": "已提交",
+  "a2a.state.working": "执行中",
+  "a2a.state.input-required": "需要输入",
+  "a2a.state.completed": "已完成",
+  "a2a.state.failed": "失败",
+  "a2a.state.canceled": "已取消"
 }

@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "보안 검토자",
   "common.role.FINOPS_VIEWER": "FinOps 열람자",
   "common.role.DEVELOPER": "개발자",
-
   "state.ACTIVE_HEALTHY": "정상",
   "state.CIRCUIT_OPEN_UNHEALTHY": "서킷 차단됨",
   "state.THROTTLED_COOLDOWN": "쿨다운",
@@ -106,7 +105,6 @@
   "state.DRAFT": "초안",
   "state.UNAVAILABLE": "사용 불가",
   "state.UNKNOWN": "알 수 없음",
-
   "error.noOpenApiPolicy": "{{method}} {{path}}에 대한 OpenAPI 보안 정책이 정의되지 않았습니다.",
   "error.ifMatchRequired": "이 Admin API 작업에는 If-Match ETag 헤더가 필요합니다.",
   "error.csrfRequired": "상태를 변경하는 요청에는 CSRF 토큰이 필요합니다.",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "예기치 않은 인터페이스 오류",
   "error.unexpectedUiDesc": "콘솔에서 예기치 않은 오류가 발생했습니다. 페이지를 새로고침하여 복구하세요.",
   "error.reloadConsole": "콘솔 새로고침",
-
   "shell.loadingSetup": "초기 설정 불러오는 중…",
   "shell.loadingSignIn": "로그인 불러오는 중…",
   "shell.loadingConsole": "콘솔 불러오는 중…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "빠른 이동",
   "shell.quickJumpEmpty": "현재 역할로 접근 가능한 섹션이 없습니다.",
   "shell.roleDenied": "할당된 역할({{roles}})에는 {{section}} 접근 권한이 없습니다.",
-
   "nav.group.monitor": "모니터링",
   "nav.group.gateway": "게이트웨이",
   "nav.group.ecosystem": "에코시스템",
@@ -170,7 +166,6 @@
   "nav.route.operations": "운영",
   "nav.route.setup": "초기 설정",
   "nav.route.login": "로그인",
-
   "cmd.overview": "개요 및 시스템 현황",
   "cmd.traces": "요청 트레이스 및 워터폴",
   "cmd.budgets": "FinOps 예산 및 활성 보류",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "암호화 백업",
   "cmd.opsUpgrades": "업그레이드 사전 점검",
   "cmd.opsWebhooks": "웹훅 및 설정",
-
   "login.title": "로그인",
   "login.subtitle": "로컬 관리자 자격 증명으로 컨트롤 플레인에 접속하세요.",
   "login.failedTitle": "로그인 실패",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.",
   "login.errInvalidCredentials": "이메일 주소 또는 비밀번호가 올바르지 않습니다.",
   "login.errUnreachable": "Tanpopo 컨트롤 플레인에 연결할 수 없습니다.",
-
   "setup.title": "인스턴스 설정",
   "setup.subtitle": "셀프 호스팅 게이트웨이를 초기화하고 소유자 계정과 첫 라우트를 구성합니다.",
   "setup.stepsLabel": "설정 단계",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "첫 요청에 실패했습니다.",
   "setup.firstKey.statusFailed": "첫 요청에 실패했습니다({{status}}). 배포 및 라우트 구성을 확인하세요.",
   "setup.firstKey.unreported": "보고되지 않음",
-
   "overview.title": "개요",
   "overview.subtitleIdle": "실시간 게이트웨이 상태 및 조치 대기열.",
   "overview.subtitleUpdated": "{{time}} 업데이트 · 미계량 요청 {{count}}건",
@@ -325,7 +317,6 @@
   "overview.remediate": "조치하기",
   "overview.severity.PAGE": "긴급",
   "overview.severity.TICKET": "티켓",
-
   "traces.title": "요청 트레이스",
   "traces.subtitle": "메타데이터 전용 실행 텔레메트리. 프롬프트나 응답 본문은 저장하지 않습니다.",
   "traces.metadataOnly": "메타데이터 전용",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "기록 시각",
   "traces.executionStages": "실행 단계",
   "traces.noStages": "이 요청에 기록된 세부 단계 내역이 없습니다.",
-
   "finops.title": "FinOps",
   "finops.subtitle": "정확·추정·활성 보류·미계량을 구분 집계하는 정수 micro-USD 원장.",
   "finops.exportCsv": "CSV 내보내기",
@@ -405,7 +395,6 @@
   "finops.col.exact": "정확",
   "finops.col.exactEstReqs": "정확 / 추정 요청",
   "finops.col.unmetered": "미계량",
-
   "providers.title": "프로바이더",
   "providers.subtitle": "업스트림 프로바이더 연결, 쓰기 전용 볼트 자격 증명 및 프로토콜 어댑터.",
   "providers.sealSecret": "시크릿 봉인",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "볼트 자격 증명 삭제",
   "providers.deleteSecretDesc": "\"{{name}}\"({{fingerprint}})을(를) 제거하시겠습니까? 이 시크릿을 참조하는 연결이 있으면 삭제가 차단됩니다.",
   "providers.deleteCredential": "자격 증명 삭제",
-
   "models.title": "모델 및 배포",
   "models.subtitle": "논리 모델 기능 선언, 보증 티어 및 환경별 배포.",
   "models.registerModel": "모델 등록",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "배포 비활성화",
   "models.confirmDeleteDesc": "\"{{name}}\"을(를) 삭제하시겠습니까? 이 배포가 마지막 정상 대상인 라우트: {{routes}}.",
   "models.confirmDisableDesc": "\"{{name}}\"을(를) 비활성화하시겠습니까? 이 배포가 마지막 정상 대상인 라우트: {{routes}}.",
-
   "routing.title": "라우트 및 정책",
   "routing.subtitle": "결정적 기능 라우팅, 드라이런 시뮬레이션 및 단조 강화 정책 상속.",
   "routing.createRoute": "라우트 생성",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "검증됨 또는 엔터프라이즈 서명",
   "routing.trust.VERIFIED_ONLY": "검증됨 전용",
   "routing.trust.ANY_APPROVED": "승인된 모든 패키지",
-
   "extensions.title": "확장 기능",
   "extensions.subtitle": "출처·게시자 서명·실행 티어를 분리 검증하고 단계적 권한 동의를 적용합니다.",
   "extensions.stagePackage": "패키지 스테이징",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "변경됨",
   "extensions.diff.reduced": "축소됨",
   "extensions.diff.quotas": "메모리 {{mem}} · 호출 {{call}} · 청크 {{chunk}}",
-
   "mcp.title": "MCP 허브",
   "mcp.subtitle": "Streamable HTTP MCP 서버 레지스트리, RFC 8785 JCS 스키마 고정 및 도구별 가상 키 권한.",
   "mcp.registerServer": "서버 등록",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive(필수 HITL 승인)",
   "mcp.justification": "검토 사유(선택)",
   "mcp.pinSchema": "스키마 고정",
-
   "playground.title": "플레이그라운드",
   "playground.subtitle": "micro-USD 하드 예산 상한이 적용된 임시 세션 키. 프롬프트는 현재 브라우저 탭에만 남습니다.",
   "playground.restrictedDesc": "현재 역할에서는 플레이그라운드 세션을 생성할 수 없습니다.",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "접근 및 키",
   "access.subtitle": "환경 단위 가상 키 및 6개 역할 기반 RBAC 권한 관리.",
   "access.issueKey": "키 발급",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "{{email}} 역할 편집",
   "access.saveRoles": "역할 저장",
   "access.selfServiceDisabled": "셀프 서비스 권한 부여는 비활성화되어 있습니다. 본인 계정에 새 역할을 추가할 수 없습니다.",
-
   "security.title": "보안",
   "security.subtitle": "HITL MCP 승인, 4단계 긴급 킬 스위치 및 불변 JCS 감사 로그.",
   "security.restrictedDesc": "현재 역할에서는 보안 센터에 접근할 수 없습니다.",
@@ -1014,7 +996,6 @@
   "security.actorId": "수행자 ID",
   "security.eventHash": "이벤트 SHA-256 해시",
   "security.eventMetadata": "이벤트 메타데이터(일반 텍스트 JSON)",
-
   "operations.title": "운영",
   "operations.subtitle": "준비 상태 프로브, 클러스터 스냅샷 에포크, 암호화 백업, 업그레이드 및 서명된 웹훅.",
   "operations.restrictedTitle": "운영자 역할 필요",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "서명 시크릿 선택",
   "operations.events": "이벤트",
   "operations.selectWebhookEvents": "웹훅 이벤트 선택",
-  "operations.registerWebhook": "웹훅 등록"
+  "operations.registerWebhook": "웹훅 등록",
+  "cmd.a2a": "A2A 에이전트 및 활성 작업",
+  "mcp.tabsLabel": "MCP 및 A2A 허브 섹션",
+  "mcp.tabMcp": "MCP 서버",
+  "mcp.tabA2a": "A2A 에이전트 및 활성 작업",
+  "a2a.registerAgent": "에이전트 등록",
+  "a2a.agentRegistered": "A2A 에이전트가 등록되어 검색 목록에 게시되었습니다.",
+  "a2a.registerFailed": "A2A 에이전트를 등록할 수 없습니다.",
+  "a2a.registeredAgents": "등록된 A2A 에이전트",
+  "a2a.emptyAgentsTitle": "등록된 A2A 에이전트 없음",
+  "a2a.emptyAgentsDesc": "리전 제한 및 위임 홉 한도가 있는 프로젝트 범위 AgentCard 엔드포인트를 등록하세요.",
+  "a2a.col.agent": "에이전트",
+  "a2a.col.endpoint": "엔드포인트",
+  "a2a.col.region": "리전",
+  "a2a.col.maxHops": "최대 홉",
+  "a2a.activeTasks": "활성 및 최근 A2A 작업",
+  "a2a.emptyTasksTitle": "기록된 A2A 작업 없음",
+  "a2a.emptyTasksDesc": "위임된 에이전트 작업의 홉 깊이, 적용 리전 및 하위 예산 보류가 여기에 표시됩니다.",
+  "a2a.col.task": "작업",
+  "a2a.col.hops": "홉",
+  "a2a.col.subBudget": "하위 예산 보류",
+  "a2a.col.settledCost": "정산 비용",
+  "a2a.drawerTitle": "A2A 에이전트 등록",
+  "a2a.drawerSubtitle": "HTTPS 아웃바운드 검증, 리전 고정 및 최대 위임 깊이 <= 5를 적용합니다.",
+  "a2a.agentSlug": "에이전트 슬러그 (선택 사항)",
+  "a2a.agentSlugPlaceholder": "예: billing-analyst",
+  "a2a.agentName": "에이전트 이름",
+  "a2a.agentNamePlaceholder": "예: Billing Analyst",
+  "a2a.endpointUrl": "에이전트 엔드포인트 URL",
+  "a2a.allowPrivate": "프라이빗 또는 루프백 엔드포인트 허용",
+  "a2a.allowPrivateDesc": "명시적으로 신뢰할 수 있는 내부 A2A 에이전트에만 활성화하세요.",
+  "a2a.state.submitted": "제출됨",
+  "a2a.state.working": "작업 중",
+  "a2a.state.input-required": "입력 필요",
+  "a2a.state.completed": "완료됨",
+  "a2a.state.failed": "실패",
+  "a2a.state.canceled": "취소됨"
 }

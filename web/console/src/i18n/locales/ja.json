@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "セキュリティ監査者",
   "common.role.FINOPS_VIEWER": "FinOps 閲覧者",
   "common.role.DEVELOPER": "開発者",
-
   "state.ACTIVE_HEALTHY": "正常",
   "state.CIRCUIT_OPEN_UNHEALTHY": "サーキットオープン",
   "state.THROTTLED_COOLDOWN": "クールダウン",
@@ -106,7 +105,6 @@
   "state.DRAFT": "下書き",
   "state.UNAVAILABLE": "利用不可",
   "state.UNKNOWN": "不明",
-
   "error.noOpenApiPolicy": "{{method}} {{path}} の OpenAPI セキュリティポリシーが定義されていません。",
   "error.ifMatchRequired": "この管理 API 操作には If-Match ETag が必要です。",
   "error.csrfRequired": "状態を変更するリクエストには CSRF トークンが必要です。",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "予期しない画面エラー",
   "error.unexpectedUiDesc": "コンソールで予期しないエラーが発生しました。ページを再読み込みしてください。",
   "error.reloadConsole": "コンソールを再読み込み",
-
   "shell.loadingSetup": "初期設定を読み込み中…",
   "shell.loadingSignIn": "サインイン画面を読み込み中…",
   "shell.loadingConsole": "コンソールを読み込み中…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "クイック移動",
   "shell.quickJumpEmpty": "現在のロールで利用できる一致項目がありません。",
   "shell.roleDenied": "割り当てられたロール（{{roles}}）には「{{section}}」へのアクセス権限がありません。",
-
   "nav.group.monitor": "監視",
   "nav.group.gateway": "ゲートウェイ",
   "nav.group.ecosystem": "エコシステム",
@@ -170,7 +166,6 @@
   "nav.route.operations": "運用",
   "nav.route.setup": "初期セットアップ",
   "nav.route.login": "サインイン",
-
   "cmd.overview": "概要とシステム状態",
   "cmd.traces": "リクエストトレースとウォーターフォール",
   "cmd.budgets": "FinOps 予算とアクティブ保留",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "暗号化バックアップ",
   "cmd.opsUpgrades": "アップグレード事前確認",
   "cmd.opsWebhooks": "Webhook と設定",
-
   "login.title": "サインイン",
   "login.subtitle": "ローカル管理者資格情報でコントロールプレーンにアクセスします。",
   "login.failedTitle": "サインインに失敗しました",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "サインイン試行回数が多すぎます。しばらく待ってから再試行してください。",
   "login.errInvalidCredentials": "メールアドレスまたはパスワードが正しくありません。",
   "login.errUnreachable": "Tanpopo コントロールプレーンに接続できませんでした。",
-
   "setup.title": "インスタンスのセットアップ",
   "setup.subtitle": "このセルフホストゲートウェイを初期化し、初期オーナーとルートを構成します。",
   "setup.stepsLabel": "セットアップ手順",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "初回リクエストに失敗しました。",
   "setup.firstKey.statusFailed": "初回リクエストに失敗しました（HTTP {{status}}）。デプロイとルート設定を確認してください。",
   "setup.firstKey.unreported": "未通知",
-
   "overview.title": "概要",
   "overview.subtitleIdle": "ゲートウェイの稼働状況と対処キュー。",
   "overview.subtitleUpdated": "更新: {{time}} · 未計測リクエスト {{count}} 件",
@@ -325,7 +317,6 @@
   "overview.remediate": "対処する",
   "overview.severity.PAGE": "緊急",
   "overview.severity.TICKET": "チケット",
-
   "traces.title": "リクエストトレース",
   "traces.subtitle": "メタデータのみの実行テレメトリ。プロンプトや応答本文は一切保存しません。",
   "traces.metadataOnly": "メタデータのみ",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "記録日時",
   "traces.executionStages": "実行ステージ",
   "traces.noStages": "このリクエストの詳細ステージ内訳は記録されていません。",
-
   "finops.title": "FinOps",
   "finops.subtitle": "厳密・推定・アクティブ保留・未計測を分離管理する整数マイクロ USD 台帳。",
   "finops.exportCsv": "CSV エクスポート",
@@ -405,7 +395,6 @@
   "finops.col.exact": "厳密",
   "finops.col.exactEstReqs": "厳密 / 推定件数",
   "finops.col.unmetered": "未計測",
-
   "providers.title": "プロバイダー",
   "providers.subtitle": "アップストリーム接続、書き込み専用ボールト認証情報、プロトコルアダプターを管理します。",
   "providers.sealSecret": "認証情報を封印",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "ボールト認証情報を削除",
   "providers.deleteSecretDesc": "「{{name}}」（{{fingerprint}}）を削除しますか？参照中の接続がある場合は削除できません。",
   "providers.deleteCredential": "認証情報を削除",
-
   "models.title": "モデルとデプロイ",
   "models.subtitle": "論理モデルの機能宣言、保証ティア、環境ごとのデプロイを管理します。",
   "models.registerModel": "モデルを登録",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "デプロイを無効化",
   "models.confirmDeleteDesc": "「{{name}}」を削除しますか？これが最後の正常ターゲットになっているルート: {{routes}}。",
   "models.confirmDisableDesc": "「{{name}}」を無効化しますか？これが最後の正常ターゲットになっているルート: {{routes}}。",
-
   "routing.title": "ルートとポリシー",
   "routing.subtitle": "決定的な機能ルーティング、ドライラン検証、単調強化型の階層ポリシー継承。",
   "routing.createRoute": "ルートを作成",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "検証済みまたは企業署名",
   "routing.trust.VERIFIED_ONLY": "検証済みのみ",
   "routing.trust.ANY_APPROVED": "承認済みすべて",
-
   "extensions.title": "拡張機能",
   "extensions.subtitle": "配布元・発行者署名・実行ティアを分離検証し、段階的な権限同意で安全に有効化します。",
   "extensions.stagePackage": "パッケージをステージ",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "変更",
   "extensions.diff.reduced": "縮小",
   "extensions.diff.quotas": "メモリ {{mem}} · 呼出 {{call}} · チャンク {{chunk}}",
-
   "mcp.title": "MCP ハブ",
   "mcp.subtitle": "Streamable HTTP MCP サーバー登録、RFC 8785 JCS スキーマ固定、仮想キーごとのツール許可を管理します。",
   "mcp.registerServer": "サーバーを登録",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive（HITL 承認必須）",
   "mcp.justification": "承認理由（任意）",
   "mcp.pinSchema": "スキーマを固定",
-
   "playground.title": "プレイグラウンド",
   "playground.subtitle": "マイクロ USD 上限付きの一時セッションキーで試せます。プロンプトはこのタブ内のみに保持されます。",
   "playground.restrictedDesc": "現在のロールではプレイグラウンドセッションを作成できません。",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "アクセスとキー",
   "access.subtitle": "環境スコープの仮想キーと 6 ロール RBAC 権限割り当てを管理します。",
   "access.issueKey": "キーを発行",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "{{email}} のロールを編集",
   "access.saveRoles": "ロールを保存",
   "access.selfServiceDisabled": "自己権限付与は無効です。自身のアカウントに新しいロールは追加できません。",
-
   "security.title": "セキュリティ",
   "security.subtitle": "人手承認（HITL）MCP キュー、4 段階の緊急停止スイッチ、改ざん不可の JCS 監査ログ。",
   "security.restrictedDesc": "現在のロールにはセキュリティセンターへのアクセス権限がありません。",
@@ -1014,7 +996,6 @@
   "security.actorId": "実行者 ID",
   "security.eventHash": "イベント SHA-256 ハッシュ",
   "security.eventMetadata": "イベントメタデータ（プレーン JSON）",
-
   "operations.title": "運用",
   "operations.subtitle": "レディネスプローブ、クラスタースナップショット、暗号化バックアップ、アップグレード、署名付き Webhook。",
   "operations.restrictedTitle": "オペレーター権限が必要です",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "署名シークレットを選択",
   "operations.events": "イベント",
   "operations.selectWebhookEvents": "Webhook イベントを選択",
-  "operations.registerWebhook": "Webhook を登録"
+  "operations.registerWebhook": "Webhook を登録",
+  "cmd.a2a": "A2A エージェントと実行中タスク",
+  "mcp.tabsLabel": "MCP・A2A ハブのセクション",
+  "mcp.tabMcp": "MCP サーバー",
+  "mcp.tabA2a": "A2A エージェントと実行中タスク",
+  "a2a.registerAgent": "エージェントを登録",
+  "a2a.agentRegistered": "A2A エージェントを登録し、ディスカバリに公開しました。",
+  "a2a.registerFailed": "A2A エージェントを登録できませんでした。",
+  "a2a.registeredAgents": "登録済み A2A エージェント",
+  "a2a.emptyAgentsTitle": "登録済みの A2A エージェントはありません",
+  "a2a.emptyAgentsDesc": "データ所在地と委任ホップ上限を設定したプロジェクト単位の AgentCard エンドポイントを登録します。",
+  "a2a.col.agent": "エージェント",
+  "a2a.col.endpoint": "エンドポイント",
+  "a2a.col.region": "リージョン",
+  "a2a.col.maxHops": "最大ホップ数",
+  "a2a.activeTasks": "実行中・最近の A2A タスク",
+  "a2a.emptyTasksTitle": "記録された A2A タスクはありません",
+  "a2a.emptyTasksDesc": "委任されたエージェントタスクのホップ深度、適用リージョン、サブ予算保留がここに表示されます。",
+  "a2a.col.task": "タスク",
+  "a2a.col.hops": "ホップ数",
+  "a2a.col.subBudget": "サブ予算保留",
+  "a2a.col.settledCost": "確定コスト",
+  "a2a.drawerTitle": "A2A エージェントを登録",
+  "a2a.drawerSubtitle": "HTTPS エグレス検証、リージョン固定、最大委任深度 <= 5 を強制します。",
+  "a2a.agentSlug": "エージェントスラッグ (任意)",
+  "a2a.agentSlugPlaceholder": "例: billing-analyst",
+  "a2a.agentName": "エージェント名",
+  "a2a.agentNamePlaceholder": "例: Billing Analyst",
+  "a2a.endpointUrl": "エージェントエンドポイント URL",
+  "a2a.allowPrivate": "プライベートまたはループバックエンドポイントを許可",
+  "a2a.allowPrivateDesc": "明示的に信頼された内部 A2A エージェントにのみ有効化してください。",
+  "a2a.state.submitted": "送信済み",
+  "a2a.state.working": "処理中",
+  "a2a.state.input-required": "入力待ち",
+  "a2a.state.completed": "完了",
+  "a2a.state.failed": "失敗",
+  "a2a.state.canceled": "キャンセル済み"
 }

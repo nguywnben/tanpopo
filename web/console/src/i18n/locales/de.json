@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "Sicherheitsprüfer",
   "common.role.FINOPS_VIEWER": "FinOps-Leser",
   "common.role.DEVELOPER": "Entwickler",
-
   "state.ACTIVE_HEALTHY": "Gesund",
   "state.CIRCUIT_OPEN_UNHEALTHY": "Trennschalter offen",
   "state.THROTTLED_COOLDOWN": "Abkühlung",
@@ -106,7 +105,6 @@
   "state.DRAFT": "Entwurf",
   "state.UNAVAILABLE": "Nicht verfügbar",
   "state.UNKNOWN": "Unbekannt",
-
   "error.noOpenApiPolicy": "Für {{method}} {{path}} ist keine OpenAPI-Sicherheitsrichtlinie definiert.",
   "error.ifMatchRequired": "Für diese Admin-API-Operation ist ein If-Match-ETag erforderlich.",
   "error.csrfRequired": "Für zustandsändernde Anfragen ist ein CSRF-Token erforderlich.",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "Unerwarteter Oberflächenfehler",
   "error.unexpectedUiDesc": "In der Konsole ist ein unerwarteter Fehler aufgetreten. Laden Sie die Seite neu.",
   "error.reloadConsole": "Konsole neu laden",
-
   "shell.loadingSetup": "Einrichtung wird geladen…",
   "shell.loadingSignIn": "Anmeldung wird geladen…",
   "shell.loadingConsole": "Konsole wird geladen…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "Schnellzugriff",
   "shell.quickJumpEmpty": "Keine passenden Bereiche für Ihre Rolle verfügbar.",
   "shell.roleDenied": "Ihre zugewiesenen Rollen ({{roles}}) erlauben keinen Zugriff auf {{section}}.",
-
   "nav.group.monitor": "Monitoring",
   "nav.group.gateway": "Gateway",
   "nav.group.ecosystem": "Ökosystem",
@@ -170,7 +166,6 @@
   "nav.route.operations": "Betrieb",
   "nav.route.setup": "Ersteinrichtung",
   "nav.route.login": "Anmelden",
-
   "cmd.overview": "Übersicht & Systemstatus",
   "cmd.traces": "Anfrage-Traces & Wasserfall",
   "cmd.budgets": "FinOps-Budgets & aktive Reservierungen",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "Verschlüsselte Backups",
   "cmd.opsUpgrades": "Upgrade-Vorprüfung",
   "cmd.opsWebhooks": "Webhooks & Einstellungen",
-
   "login.title": "Anmelden",
   "login.subtitle": "Melden Sie sich mit Ihren lokalen Administrator-Zugangsdaten an.",
   "login.failedTitle": "Anmeldung fehlgeschlagen",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "Zu viele Anmeldeversuche. Bitte warten Sie einen Moment.",
   "login.errInvalidCredentials": "Die E-Mail-Adresse oder das Passwort ist ungültig.",
   "login.errUnreachable": "Die Tanpopo-Steuerebene konnte nicht erreicht werden.",
-
   "setup.title": "Instanzeinrichtung",
   "setup.subtitle": "Übernehmen Sie dieses selbst gehostete Gateway und richten Sie Eigentümer und Start-Route ein.",
   "setup.stepsLabel": "Einrichtungsschritte",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "Erste Testanfrage fehlgeschlagen.",
   "setup.firstKey.statusFailed": "Erste Anfrage fehlgeschlagen (HTTP {{status}}). Prüfen Sie Bereitstellung und Routenkonfiguration.",
   "setup.firstKey.unreported": "nicht gemeldet",
-
   "overview.title": "Übersicht",
   "overview.subtitleIdle": "Aktueller Gateway-Status und offene Maßnahmen.",
   "overview.subtitleUpdated": "Aktualisiert {{time}} · {{count}} ungemessene Anfragen",
@@ -325,7 +317,6 @@
   "overview.remediate": "Beheben",
   "overview.severity.PAGE": "DRINGEND",
   "overview.severity.TICKET": "TICKET",
-
   "traces.title": "Anfrage-Traces",
   "traces.subtitle": "Reine Metadaten-Telemetrie. Es werden keine Prompts oder Antworten gespeichert.",
   "traces.metadataOnly": "Nur Metadaten",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "Aufgezeichnet am",
   "traces.executionStages": "Ausführungsphasen",
   "traces.noStages": "Für diese Anfrage wurden keine detaillierten Phasen aufgezeichnet.",
-
   "finops.title": "FinOps",
   "finops.subtitle": "Ganzzahliges Mikro-USD-Ledger mit getrennter Erfassung für exakt, geschätzt, Reservierungen und ungemessen.",
   "finops.exportCsv": "CSV exportieren",
@@ -405,7 +395,6 @@
   "finops.col.exact": "Exakt",
   "finops.col.exactEstReqs": "Exakt / Gesch. Anfr.",
   "finops.col.unmetered": "Ungemessen",
-
   "providers.title": "Anbieter",
   "providers.subtitle": "Upstream-Anbieterverbindungen, Write-only-Tresor-Geheimnisse und Protokolladapter.",
   "providers.sealSecret": "Geheimnis versiegeln",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "Tresor-Geheimnis löschen",
   "providers.deleteSecretDesc": "„{{name}}“ ({{fingerprint}}) entfernen? Verbindungen mit Verweis darauf blockieren das Löschen.",
   "providers.deleteCredential": "Geheimnis löschen",
-
   "models.title": "Modelle & Bereitstellungen",
   "models.subtitle": "Fähigkeitsdeklarationen logischer Modelle, Sicherheitsstufen und Umgebungsbereitstellungen.",
   "models.registerModel": "Modell registrieren",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "Bereitstellung deaktivieren",
   "models.confirmDeleteDesc": "„{{name}}“ löschen? Routen, bei denen dies das letzte gesunde Ziel ist: {{routes}}.",
   "models.confirmDisableDesc": "„{{name}}“ deaktivieren? Routen, bei denen dies das letzte gesunde Ziel ist: {{routes}}.",
-
   "routing.title": "Routen & Richtlinien",
   "routing.subtitle": "Deterministisches Fähigkeits-Routing, Dry-Run-Simulation und monotone Richtlinienvererbung.",
   "routing.createRoute": "Route erstellen",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "Verifiziert oder Enterprise-signiert",
   "routing.trust.VERIFIED_ONLY": "Nur verifiziert",
   "routing.trust.ANY_APPROVED": "Alle genehmigten",
-
   "extensions.title": "Erweiterungen",
   "extensions.subtitle": "Getrennte Prüfung von Herkunft, Herausgebersignatur und Ausführungsstufe mit gestufter Rechtefreigabe.",
   "extensions.stagePackage": "Paket vormerken",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "Geändert",
   "extensions.diff.reduced": "Reduziert",
   "extensions.diff.quotas": "RAM {{mem}} · Aufruf {{call}} · Chunk {{chunk}}",
-
   "mcp.title": "MCP-Hub",
   "mcp.subtitle": "Streamable-HTTP-MCP-Serverregister, RFC-8785-JCS-Schema-Pinning und Tool-Freigaben pro virtuellem Schlüssel.",
   "mcp.registerServer": "Server registrieren",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive (verpflichtende HITL-Freigabe)",
   "mcp.justification": "Begründung der Prüfung (optional)",
   "mcp.pinSchema": "Schema fixieren",
-
   "playground.title": "Playground",
   "playground.subtitle": "Kurzlebiger Sitzungsschlüssel mit hartem Mikro-USD-Budgetlimit. Prompts bleiben ausschließlich in diesem Tab.",
   "playground.restrictedDesc": "Ihre Rolle darf keine Playground-Sitzungen erstellen.",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "Zugriff & Schlüssel",
   "access.subtitle": "Umgebungsbezogene virtuelle Schlüssel und 6-Rollen-RBAC-Zuweisungen.",
   "access.issueKey": "Schlüssel ausstellen",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "Rollen für {{email}} bearbeiten",
   "access.saveRoles": "Rollen speichern",
   "access.selfServiceDisabled": "Selbstbedienungs-Rechtevergabe ist deaktiviert. Sie können Ihrem eigenen Konto keine neuen Rollen hinzufügen.",
-
   "security.title": "Sicherheit",
   "security.subtitle": "Human-in-the-Loop-MCP-Genehmigungen, 4-stufige Not-Aus-Schalter und unveränderliches JCS-Audit-Protokoll.",
   "security.restrictedDesc": "Ihre Rolle hat keinen Zugriff auf das Sicherheitszentrum.",
@@ -1014,7 +996,6 @@
   "security.actorId": "Akteur-ID",
   "security.eventHash": "SHA-256-Hash des Ereignisses",
   "security.eventMetadata": "Ereignis-Metadaten (Klartext-JSON)",
-
   "operations.title": "Betrieb",
   "operations.subtitle": "Bereitschaftsprüfungen, Cluster-Snapshot-Epochen, verschlüsselte Backups, Upgrades und signierte Webhooks.",
   "operations.restrictedTitle": "Betreiberrolle erforderlich",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "Signatur-Geheimnis wählen",
   "operations.events": "Ereignisse",
   "operations.selectWebhookEvents": "Webhook-Ereignisse wählen",
-  "operations.registerWebhook": "Webhook registrieren"
+  "operations.registerWebhook": "Webhook registrieren",
+  "cmd.a2a": "A2A-Agenten & aktive Aufgaben",
+  "mcp.tabsLabel": "Bereiche des MCP- und A2A-Hubs",
+  "mcp.tabMcp": "MCP-Server",
+  "mcp.tabA2a": "A2A-Agenten & aktive Aufgaben",
+  "a2a.registerAgent": "Agent registrieren",
+  "a2a.agentRegistered": "A2A-Agent registriert und für Discovery veröffentlicht.",
+  "a2a.registerFailed": "A2A-Agent konnte nicht registriert werden.",
+  "a2a.registeredAgents": "Registrierte A2A-Agenten",
+  "a2a.emptyAgentsTitle": "Keine A2A-Agenten registriert",
+  "a2a.emptyAgentsDesc": "Registrieren Sie einen projektbezogenen AgentCard-Endpunkt mit Regionsbindung und Hop-Limit.",
+  "a2a.col.agent": "Agent",
+  "a2a.col.endpoint": "Endpunkt",
+  "a2a.col.region": "Region",
+  "a2a.col.maxHops": "Max. Hops",
+  "a2a.activeTasks": "Aktive & kürzliche A2A-Aufgaben",
+  "a2a.emptyTasksTitle": "Keine A2A-Aufgaben erfasst",
+  "a2a.emptyTasksDesc": "Delegierte Agenten-Aufgaben erscheinen hier mit Hop-Tiefe, erzwungener Region und Sub-Budget-Sperre.",
+  "a2a.col.task": "Aufgabe",
+  "a2a.col.hops": "Hops",
+  "a2a.col.subBudget": "Sub-Budget-Reservierung",
+  "a2a.col.settledCost": "Abgerechnete Kosten",
+  "a2a.drawerTitle": "A2A-Agent registrieren",
+  "a2a.drawerSubtitle": "Erzwingt HTTPS-Egress-Prüfung, Datenresidenz-Bindung und max. Delegationstiefe <= 5.",
+  "a2a.agentSlug": "Agent-Slug (optional)",
+  "a2a.agentSlugPlaceholder": "z. B. billing-analyst",
+  "a2a.agentName": "Agentenname",
+  "a2a.agentNamePlaceholder": "z. B. Billing Analyst",
+  "a2a.endpointUrl": "Endpunkt-URL des Agenten",
+  "a2a.allowPrivate": "Privaten oder Loopback-Endpunkt erlauben",
+  "a2a.allowPrivateDesc": "Nur für ausdrücklich vertrauenswürdige interne A2A-Agenten aktivieren.",
+  "a2a.state.submitted": "Eingereicht",
+  "a2a.state.working": "In Bearbeitung",
+  "a2a.state.input-required": "Eingabe erforderlich",
+  "a2a.state.completed": "Abgeschlossen",
+  "a2a.state.failed": "Fehlgeschlagen",
+  "a2a.state.canceled": "Abgebrochen"
 }

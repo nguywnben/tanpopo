@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "資安審核員",
   "common.role.FINOPS_VIEWER": "財務檢視員",
   "common.role.DEVELOPER": "開發者",
-
   "state.ACTIVE_HEALTHY": "健康",
   "state.CIRCUIT_OPEN_UNHEALTHY": "斷路器已開啟",
   "state.THROTTLED_COOLDOWN": "冷卻中",
@@ -106,7 +105,6 @@
   "state.DRAFT": "草稿",
   "state.UNAVAILABLE": "無法使用",
   "state.UNKNOWN": "未知",
-
   "error.noOpenApiPolicy": "未為 {{method}} {{path}} 定義 OpenAPI 安全原則。",
   "error.ifMatchRequired": "此管理 API 操作需要提供 If-Match ETag。",
   "error.csrfRequired": "變更狀態的請求需要提供 CSRF 權杖。",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "介面發生非預期錯誤",
   "error.unexpectedUiDesc": "主控台遇到非預期錯誤，請重新載入頁面以恢復。",
   "error.reloadConsole": "重新載入主控台",
-
   "shell.loadingSetup": "正在載入初始設定精靈…",
   "shell.loadingSignIn": "正在載入登入頁面…",
   "shell.loadingConsole": "正在載入主控台…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "快速跳轉",
   "shell.quickJumpEmpty": "您的角色沒有符合的可用區塊。",
   "shell.roleDenied": "您目前指派的角色（{{roles}}）無權存取「{{section}}」。",
-
   "nav.group.monitor": "監控",
   "nav.group.gateway": "閘道",
   "nav.group.ecosystem": "生態系",
@@ -170,7 +166,6 @@
   "nav.route.operations": "維運管理",
   "nav.route.setup": "初次設定",
   "nav.route.login": "登入",
-
   "cmd.overview": "總覽與系統態勢",
   "cmd.traces": "請求追蹤與耗時瀑布圖",
   "cmd.budgets": "財務預算與作用中預扣",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "加密備份",
   "cmd.opsUpgrades": "升級前置檢查",
   "cmd.opsWebhooks": "Webhook 與設定",
-
   "login.title": "登入",
   "login.subtitle": "使用本機管理員憑證存取控制平面。",
   "login.failedTitle": "登入失敗",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "登入嘗試次數過多，請稍後再試。",
   "login.errInvalidCredentials": "電子郵件或密碼無效。",
   "login.errUnreachable": "無法連線至 Tanpopo 控制平面。",
-
   "setup.title": "執行個體設定",
   "setup.subtitle": "認領此自架閘道並佈建初始擁有者與預設路由。",
   "setup.stepsLabel": "設定步驟",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "首筆測試請求失敗。",
   "setup.firstKey.statusFailed": "首筆請求失敗（HTTP {{status}}）。請檢查部署與路由設定。",
   "setup.firstKey.unreported": "未回報",
-
   "overview.title": "總覽",
   "overview.subtitleIdle": "即時閘道運作態勢與待處理警示佇列。",
   "overview.subtitleUpdated": "更新於 {{time}} · {{count}} 筆未計量請求",
@@ -325,7 +317,6 @@
   "overview.remediate": "前往處置",
   "overview.severity.PAGE": "緊急呼叫",
   "overview.severity.TICKET": "工單",
-
   "traces.title": "請求追蹤",
   "traces.subtitle": "僅保留中繼資料的執行遙測，不儲存任何提示詞或補全內容。",
   "traces.metadataOnly": "僅中繼資料",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "紀錄時間",
   "traces.executionStages": "執行階段",
   "traces.noStages": "此請求未紀錄細部階段拆解。",
-
   "finops.title": "財務維運",
   "finops.subtitle": "整數微美元帳本，分別核算精確費用、估算費用、作用中預扣與未計量請求。",
   "finops.exportCsv": "匯出 CSV",
@@ -405,7 +395,6 @@
   "finops.col.exact": "精確",
   "finops.col.exactEstReqs": "精確 / 估算請求數",
   "finops.col.unmetered": "未計量",
-
   "providers.title": "供應商",
   "providers.subtitle": "管理上游供應商連線、唯寫保險庫密鑰與協定配接器。",
   "providers.sealSecret": "封存密鑰",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "刪除保險庫密鑰",
   "providers.deleteSecretDesc": "確定要移除「{{name}}」（{{fingerprint}}）嗎？若仍有連線引用此密鑰，刪除將被阻擋。",
   "providers.deleteCredential": "刪除密鑰",
-
   "models.title": "模型與部署",
   "models.subtitle": "邏輯模型能力宣告、保證層級與環境模型部署。",
   "models.registerModel": "註冊模型",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "停用部署",
   "models.confirmDeleteDesc": "確定刪除「{{name}}」？將此部署視為唯一健康目標的路由：{{routes}}。",
   "models.confirmDisableDesc": "確定停用「{{name}}」？將此部署視為唯一健康目標的路由：{{routes}}。",
-
   "routing.title": "路由與原則",
   "routing.subtitle": "決定性能力路由、路由預演模擬與單調收緊的階層式原則繼承。",
   "routing.createRoute": "建立路由",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "已驗證或企業簽章",
   "routing.trust.VERIFIED_ONLY": "僅限已驗證",
   "routing.trust.ANY_APPROVED": "任何已核准",
-
   "extensions.title": "擴充套件",
   "extensions.subtitle": "分離驗證來源、發佈者簽章與執行層級，並於啟用前進行分階段權限同意。",
   "extensions.stagePackage": "暫存套件",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "變更",
   "extensions.diff.reduced": "縮減",
   "extensions.diff.quotas": "記憶體 {{mem}} · 單次呼叫 {{call}} · 串流區塊 {{chunk}}",
-
   "mcp.title": "MCP 中樞",
   "mcp.subtitle": "Streamable HTTP MCP 伺服器登錄、RFC 8785 JCS Schema 固定與工具層級虛擬金鑰授權。",
   "mcp.registerServer": "註冊伺服器",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive（高風險操作，強制人工核准）",
   "mcp.justification": "審核說明（選填）",
   "mcp.pinSchema": "固定 Schema",
-
   "playground.title": "測試環境",
   "playground.subtitle": "使用具備微美元預算硬性上限的暫時性工作階段金鑰，提示詞僅保留於此瀏覽器分頁。",
   "playground.restrictedDesc": "您的角色無權建立測試環境工作階段。",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "存取與金鑰",
   "access.subtitle": "環境層級虛擬金鑰管理與 6 角色 RBAC 成員權限指派。",
   "access.issueKey": "核發金鑰",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "編輯 {{email}} 的角色",
   "access.saveRoles": "儲存角色",
   "access.selfServiceDisabled": "已停用自助提權，您無法為自身帳號新增角色。",
-
   "security.title": "資安中心",
   "security.subtitle": "人工介入 (HITL) MCP 核准、4 層級緊急切斷開關與不可變 JCS 稽核軌跡。",
   "security.restrictedDesc": "您的角色無權存取資安中心。",
@@ -1014,7 +996,6 @@
   "security.actorId": "執行者 ID",
   "security.eventHash": "事件 SHA-256 雜湊",
   "security.eventMetadata": "事件中繼資料（純文字 JSON）",
-
   "operations.title": "維運管理",
   "operations.subtitle": "就緒探測、叢集快照紀元、加密備份、升級前置檢查與簽章 Webhook。",
   "operations.restrictedTitle": "需要維運人員角色",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "選擇簽章密鑰",
   "operations.events": "訂閱事件",
   "operations.selectWebhookEvents": "選擇 Webhook 事件",
-  "operations.registerWebhook": "註冊 Webhook"
+  "operations.registerWebhook": "註冊 Webhook",
+  "cmd.a2a": "A2A 代理與活躍任務",
+  "mcp.tabsLabel": "MCP 與 A2A 中心分區",
+  "mcp.tabMcp": "MCP 伺服器",
+  "mcp.tabA2a": "A2A 代理與活躍任務",
+  "a2a.registerAgent": "註冊代理",
+  "a2a.agentRegistered": "已註冊 A2A 代理並發佈至服務探索。",
+  "a2a.registerFailed": "無法註冊 A2A 代理。",
+  "a2a.registeredAgents": "已註冊 A2A 代理",
+  "a2a.emptyAgentsTitle": "尚未註冊 A2A 代理",
+  "a2a.emptyAgentsDesc": "註冊具資料落地區域與最大委託跳數上限的專案級 AgentCard 端點。",
+  "a2a.col.agent": "代理",
+  "a2a.col.endpoint": "端點",
+  "a2a.col.region": "區域",
+  "a2a.col.maxHops": "最大跳數",
+  "a2a.activeTasks": "活躍與近期 A2A 任務",
+  "a2a.emptyTasksTitle": "尚無 A2A 任務記錄",
+  "a2a.emptyTasksDesc": "委託執行的代理任務會在此顯示跳數深度、強制區域與子預算保留。",
+  "a2a.col.task": "任務",
+  "a2a.col.hops": "跳數",
+  "a2a.col.subBudget": "子預算保留",
+  "a2a.col.settledCost": "已結算費用",
+  "a2a.drawerTitle": "註冊 A2A 代理",
+  "a2a.drawerSubtitle": "強制執行 HTTPS 出站驗證、區域落地鎖定與最大委託深度 <= 5。",
+  "a2a.agentSlug": "代理識別碼 (選填)",
+  "a2a.agentSlugPlaceholder": "例如 billing-analyst",
+  "a2a.agentName": "代理名稱",
+  "a2a.agentNamePlaceholder": "例如 Billing Analyst",
+  "a2a.endpointUrl": "代理端點 URL",
+  "a2a.allowPrivate": "允許私有或迴環端點",
+  "a2a.allowPrivateDesc": "僅針對明確受信任的內部 A2A 代理啟用。",
+  "a2a.state.submitted": "已提交",
+  "a2a.state.working": "執行中",
+  "a2a.state.input-required": "需要輸入",
+  "a2a.state.completed": "已完成",
+  "a2a.state.failed": "失敗",
+  "a2a.state.canceled": "已取消"
 }

@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "Revisore sicurezza",
   "common.role.FINOPS_VIEWER": "Lettore FinOps",
   "common.role.DEVELOPER": "Sviluppatore",
-
   "state.ACTIVE_HEALTHY": "Integro",
   "state.CIRCUIT_OPEN_UNHEALTHY": "Circuito aperto",
   "state.THROTTLED_COOLDOWN": "Raffreddamento",
@@ -106,7 +105,6 @@
   "state.DRAFT": "Bozza",
   "state.UNAVAILABLE": "Non disponibile",
   "state.UNKNOWN": "Sconosciuto",
-
   "error.noOpenApiPolicy": "Nessuna policy di sicurezza OpenAPI definita per {{method}} {{path}}.",
   "error.ifMatchRequired": "Questa operazione Admin API richiede un'intestazione If-Match ETag.",
   "error.csrfRequired": "È necessario un token CSRF per le richieste che modificano lo stato.",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "Errore imprevisto dell'interfaccia",
   "error.unexpectedUiDesc": "La console ha riscontrato un errore imprevisto. Ricarica la pagina per ripristinare.",
   "error.reloadConsole": "Ricarica console",
-
   "shell.loadingSetup": "Caricamento configurazione…",
   "shell.loadingSignIn": "Caricamento accesso…",
   "shell.loadingConsole": "Caricamento console…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "Accesso rapido",
   "shell.quickJumpEmpty": "Nessuna sezione corrispondente disponibile per il tuo ruolo.",
   "shell.roleDenied": "I ruoli assegnati ({{roles}}) non consentono l'accesso a {{section}}.",
-
   "nav.group.monitor": "Monitoraggio",
   "nav.group.gateway": "Gateway",
   "nav.group.ecosystem": "Ecosistema",
@@ -170,7 +166,6 @@
   "nav.route.operations": "Operazioni",
   "nav.route.setup": "Configurazione iniziale",
   "nav.route.login": "Accedi",
-
   "cmd.overview": "Panoramica e stato del sistema",
   "cmd.traces": "Tracce richieste e cascata",
   "cmd.budgets": "Budget FinOps e riserve attive",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "Backup crittografati",
   "cmd.opsUpgrades": "Pre-verifica aggiornamento",
   "cmd.opsWebhooks": "Webhook e impostazioni",
-
   "login.title": "Accedi",
   "login.subtitle": "Usa le credenziali locali di amministratore per accedere al control plane.",
   "login.failedTitle": "Accesso non riuscito",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "Troppi tentativi di accesso. Attendi prima di riprovare.",
   "login.errInvalidCredentials": "Indirizzo email o password non validi.",
   "login.errUnreachable": "Impossibile contattare il control plane Tanpopo.",
-
   "setup.title": "Configurazione istanza",
   "setup.subtitle": "Rivendica questo gateway self-hosted e configura il proprietario iniziale e la prima rotta.",
   "setup.stepsLabel": "Passaggi di configurazione",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "Prima richiesta non riuscita.",
   "setup.firstKey.statusFailed": "Prima richiesta non riuscita (HTTP {{status}}). Controlla deployment e rotta.",
   "setup.firstKey.unreported": "non segnalato",
-
   "overview.title": "Panoramica",
   "overview.subtitleIdle": "Stato live del gateway e coda di rimedio.",
   "overview.subtitleUpdated": "Aggiornato {{time}} · {{count}} richieste non misurate",
@@ -325,7 +317,6 @@
   "overview.remediate": "Risolvi",
   "overview.severity.PAGE": "CRITICO",
   "overview.severity.TICKET": "TICKET",
-
   "traces.title": "Tracce richieste",
   "traces.subtitle": "Telemetria di esecuzione solo metadati. Nessun byte di prompt o risposta memorizzato.",
   "traces.metadataOnly": "Solo metadati",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "Registrata il",
   "traces.executionStages": "Fasi di esecuzione",
   "traces.noStages": "Nessun dettaglio di fase registrato per questa richiesta.",
-
   "finops.title": "FinOps",
   "finops.subtitle": "Registro intero in micro-USD con contabilità separata per esatto, stimato, riserve attive e non misurato.",
   "finops.exportCsv": "Esporta CSV",
@@ -405,7 +395,6 @@
   "finops.col.exact": "Esatto",
   "finops.col.exactEstReqs": "Rich. esatte / stim.",
   "finops.col.unmetered": "Non misurate",
-
   "providers.title": "Provider",
   "providers.subtitle": "Connessioni provider upstream, credenziali vault in sola scrittura e adattatori di protocollo.",
   "providers.sealSecret": "Sigilla segreto",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "Elimina credenziale vault",
   "providers.deleteSecretDesc": "Rimuovere «{{name}}» ({{fingerprint}})? Le connessioni che la usano bloccheranno l'eliminazione.",
   "providers.deleteCredential": "Elimina credenziale",
-
   "models.title": "Modelli e deployment",
   "models.subtitle": "Dichiarazioni di capacità dei modelli logici, livelli di garanzia e deployment per ambiente.",
   "models.registerModel": "Registra modello",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "Disabilita deployment",
   "models.confirmDeleteDesc": "Eliminare «{{name}}»? Rotte in cui è l'ultimo target integro: {{routes}}.",
   "models.confirmDisableDesc": "Disabilitare «{{name}}»? Rotte in cui è l'ultimo target integro: {{routes}}.",
-
   "routing.title": "Rotte e policy",
   "routing.subtitle": "Routing deterministico per capacità, simulazione dry-run ed ereditarietà monotonica delle policy.",
   "routing.createRoute": "Crea rotta",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "Verificati o firmati enterprise",
   "routing.trust.VERIFIED_ONLY": "Solo verificati",
   "routing.trust.ANY_APPROVED": "Qualsiasi approvato",
-
   "extensions.title": "Estensioni",
   "extensions.subtitle": "Verifica separata di origine, firma editore e livello di esecuzione con consenso permessi a fasi.",
   "extensions.stagePackage": "Prepara pacchetto",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "Modificato",
   "extensions.diff.reduced": "Ridotto",
   "extensions.diff.quotas": "Mem {{mem}} · Chiamata {{call}} · Chunk {{chunk}}",
-
   "mcp.title": "Hub MCP",
   "mcp.subtitle": "Registro server MCP Streamable HTTP, pinning schema RFC 8785 JCS e permessi per chiave virtuale.",
   "mcp.registerServer": "Registra server",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive (approvazione HITL obbligatoria)",
   "mcp.justification": "Motivazione revisione (opzionale)",
   "mcp.pinSchema": "Fissa schema",
-
   "playground.title": "Playground",
   "playground.subtitle": "Chiave di sessione effimera con limite rigido in micro-USD. I prompt restano solo in questa scheda.",
   "playground.restrictedDesc": "Il tuo ruolo non può creare sessioni Playground.",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (SDK OpenAI)",
   "playground.snippetTs": "TypeScript (SDK OpenAI)",
-
   "access.title": "Accesso e chiavi",
   "access.subtitle": "Chiavi virtuali per ambiente e assegnazioni RBAC a 6 ruoli.",
   "access.issueKey": "Emetti chiave",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "Modifica ruoli per {{email}}",
   "access.saveRoles": "Salva ruoli",
   "access.selfServiceDisabled": "L'assegnazione autonoma di privilegi è disabilitata. Non puoi aggiungere ruoli al tuo account.",
-
   "security.title": "Sicurezza",
   "security.subtitle": "Approvazioni MCP con supervisione umana, interruttori d'emergenza a 4 livelli e audit JCS immutabile.",
   "security.restrictedDesc": "Il tuo ruolo non ha accesso al centro sicurezza.",
@@ -1014,7 +996,6 @@
   "security.actorId": "ID attore",
   "security.eventHash": "Hash SHA-256 evento",
   "security.eventMetadata": "Metadati evento (JSON semplice)",
-
   "operations.title": "Operazioni",
   "operations.subtitle": "Probe di prontezza, epoche snapshot del cluster, backup crittografati, aggiornamenti e webhook firmati.",
   "operations.restrictedTitle": "Ruolo Operatore richiesto",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "Seleziona segreto di firma",
   "operations.events": "Eventi",
   "operations.selectWebhookEvents": "Seleziona eventi webhook",
-  "operations.registerWebhook": "Registra webhook"
+  "operations.registerWebhook": "Registra webhook",
+  "cmd.a2a": "Agenti A2A e attività attive",
+  "mcp.tabsLabel": "Sezioni hub MCP e A2A",
+  "mcp.tabMcp": "Server MCP",
+  "mcp.tabA2a": "Agenti A2A e attività attive",
+  "a2a.registerAgent": "Registra agente",
+  "a2a.agentRegistered": "Agente A2A registrato e pubblicato per il rilevamento.",
+  "a2a.registerFailed": "Impossibile registrare l’agente A2A.",
+  "a2a.registeredAgents": "Agenti A2A registrati",
+  "a2a.emptyAgentsTitle": "Nessun agente A2A registrato",
+  "a2a.emptyAgentsDesc": "Registra un endpoint AgentCard di progetto con vincoli di residenza e limiti di hop.",
+  "a2a.col.agent": "Agente",
+  "a2a.col.endpoint": "Endpoint",
+  "a2a.col.region": "Regione",
+  "a2a.col.maxHops": "Hop max.",
+  "a2a.activeTasks": "Attività A2A attive e recenti",
+  "a2a.emptyTasksTitle": "Nessuna attività A2A registrata",
+  "a2a.emptyTasksDesc": "Le attività delegate compaiono qui con profondità hop, regione applicata e blocco sotto-budget.",
+  "a2a.col.task": "Attività",
+  "a2a.col.hops": "Hop",
+  "a2a.col.subBudget": "Blocco sotto-budget",
+  "a2a.col.settledCost": "Costo liquidato",
+  "a2a.drawerTitle": "Registra agente A2A",
+  "a2a.drawerSubtitle": "Applica convalida HTTPS in uscita, residenza regionale e profondità di delega max. <= 5.",
+  "a2a.agentSlug": "Slug agente (opzionale)",
+  "a2a.agentSlugPlaceholder": "es. billing-analyst",
+  "a2a.agentName": "Nome agente",
+  "a2a.agentNamePlaceholder": "es. Billing Analyst",
+  "a2a.endpointUrl": "URL endpoint agente",
+  "a2a.allowPrivate": "Consenti endpoint privato o loopback",
+  "a2a.allowPrivateDesc": "Abilita solo per agenti A2A interni esplicitamente attendibili.",
+  "a2a.state.submitted": "Inviata",
+  "a2a.state.working": "In elaborazione",
+  "a2a.state.input-required": "Input richiesto",
+  "a2a.state.completed": "Completata",
+  "a2a.state.failed": "Fallita",
+  "a2a.state.canceled": "Annullata"
 }

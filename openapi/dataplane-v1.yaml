@@ -710,6 +710,7 @@ components:
       required: [target_agent_id, input_parts]
       properties:
         target_agent_id: { type: string }
+        parent_task_id: { type: string }
         sub_budget_hold_micros:
           type: integer
           minimum: 0
@@ -726,6 +727,7 @@ components:
           type: array
           minItems: 1
           items: { type: object }
+        dispatch_async: { type: boolean }
 
     A2aTask:
       type: object
@@ -733,17 +735,27 @@ components:
       properties:
         task_id: { type: string }
         target_agent_id: { type: string }
+        target_agent_slug: { type: string }
         state:
           type: string
           description: Dedicated SM-09 A2A Task Lifecycle states (CR-08).
           enum: [submitted, working, input-required, completed, failed, canceled]
         hop_count: { type: integer, minimum: 1, maximum: 5 }
+        call_chain_ids:
+          type: array
+          items: { type: string }
+        trace_root_id: { type: string }
+        enforced_region: { type: string }
         sub_budget_hold_micros: { type: integer, minimum: 0 }
+        reservation_id: { type: string }
+        settled_cost_micros: { type: integer, minimum: 0 }
         artifacts:
           type: array
           items: { type: object }
+        version: { type: integer }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
 
     ProbeStatusResponse:
       type: object
@@ -1228,6 +1240,34 @@ paths:
       responses:
         "204":
           description: Session terminated cleanly
+
+  /.well-known/agent.json:
+    get:
+      tags: [A2APlane]
+      operationId: getWellKnownA2aAgentDirectory
+      summary: Scope-filtered A2A well-known AgentCard directory (v0.3)
+      parameters:
+        - $ref: "#/components/parameters/DataRegionHeader"
+      responses:
+        "200":
+          description: Authorized A2A AgentCard directory for caller scope and residency
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, description, agents]
+                properties:
+                  name: { type: string }
+                  description: { type: string }
+                  agents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/A2aAgentCard"
+        "403":
+          description: scope_or_plane_denied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
 
   /a2a/agents:
     get:

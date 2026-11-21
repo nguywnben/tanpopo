@@ -48,6 +48,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/declarative"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/extension/port"
+	"github.com/nguywnben/tanpopo/internal/extension/sidecar"
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/ingress/blob"
@@ -110,6 +111,9 @@ type ServerConfig struct {
 	NativeUsageObserver      func(native.UsageRecord)
 	Telemetry                *otel.Pipeline
 	ResponseCache            *cache.ExactCache
+	SidecarEnabled           bool
+	SidecarSocketDir         string
+	SidecarRuntimeFactory    func(ctx context.Context, adp *snapshot.ProviderAdapterView, perms installer.PermissionSet) (port.ProviderRuntime, io.Closer, error)
 }
 
 // UsageRecord captures normalized usage telemetry from Data Plane inference endpoints.
@@ -134,6 +138,7 @@ type cachedAdapterEntry struct {
 	installationID string
 	rt             port.ProviderRuntime
 	wasmRT         *wasm.Runtime
+	sidecarCloser  io.Closer
 	tier           string
 	perms          installer.PermissionSet
 	compiledAt     int64
@@ -149,12 +154,19 @@ func (e *cachedAdapterEntry) retain() {
 }
 
 func (e *cachedAdapterEntry) closeRuntime(ctx context.Context) error {
-	if e == nil || e.wasmRT == nil {
+	if e == nil {
 		return nil
 	}
 	var err error
 	e.closeOnce.Do(func() {
-		err = e.wasmRT.Close(ctx)
+		if e.wasmRT != nil {
+			err = e.wasmRT.Close(ctx)
+		}
+		if e.sidecarCloser != nil {
+			if cerr := e.sidecarCloser.Close(); cerr != nil && err == nil {
+				err = cerr
+			}
+		}
 	})
 	return err
 }
@@ -193,6 +205,9 @@ type Server struct {
 	nativeHandler           *native.Handler
 	telemetry               *otel.Pipeline
 	responseCache           *cache.ExactCache
+	sidecarEnabled          bool
+	sidecarSocketDir        string
+	sidecarFactory          func(ctx context.Context, adp *snapshot.ProviderAdapterView, perms installer.PermissionSet) (port.ProviderRuntime, io.Closer, error)
 
 	wasmCache wazero.CompilationCache
 
@@ -332,6 +347,9 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		usageObserver:           cfg.UsageObserver,
 		telemetry:               cfg.Telemetry,
 		responseCache:           cfg.ResponseCache,
+		sidecarEnabled:          cfg.SidecarEnabled,
+		sidecarSocketDir:        strings.TrimSpace(cfg.SidecarSocketDir),
+		sidecarFactory:          cfg.SidecarRuntimeFactory,
 		wasmCache:               wazero.NewCompilationCache(),
 		runtimes:                make(map[runtimeCacheKey]*cachedAdapterEntry),
 		mux:                     http.NewServeMux(),
@@ -1018,6 +1036,75 @@ func (s *Server) loadAdapterRuntimeUncached(ctx context.Context, adp *snapshot.P
 			installationID: adp.InstallationID,
 			rt:             wasmRT,
 			wasmRT:         wasmRT,
+			tier:           tier,
+			perms:          perms,
+			compiledAt:     s.nowMs(),
+		}, nil
+
+	case installer.ExecutionTierIsolatedSidecarT3:
+		if !s.sidecarEnabled {
+			return nil, sidecar.ErrSidecarDisabled
+		}
+		if versionDir != "" && hasDBManifest {
+			diskManifest, derr := decodeBoundedManifestYAML(manifestBytes)
+			if derr != nil {
+				return nil, derr
+			}
+			if perr := verifyManifestParity(diskManifest, dbManifest); perr != nil {
+				return nil, perr
+			}
+		}
+		var (
+			rt     port.ProviderRuntime
+			closer io.Closer
+		)
+		if s.sidecarFactory != nil {
+			rt, closer, err = s.sidecarFactory(ctx, adp, perms)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			manifest, derr := decodeBoundedManifestYAML(manifestBytes)
+			if derr != nil {
+				return nil, derr
+			}
+			if manifest.Runtime == nil || strings.TrimSpace(manifest.Runtime.Entrypoint) == "" {
+				return nil, fmt.Errorf("%w: missing sidecar runtime.entrypoint", port.ErrInvalidSpec)
+			}
+			ep := strings.TrimSpace(manifest.Runtime.Entrypoint)
+			scCfg := sidecar.Config{
+				Enabled:        true,
+				InstallationID: adp.InstallationID,
+				AuditSink:      s.audit,
+			}
+			if strings.HasPrefix(ep, "unix://") {
+				confinedSock, cerr := sidecar.ConfineSocketPath(s.sidecarSocketDir, strings.TrimPrefix(ep, "unix://"))
+				if cerr != nil {
+					return nil, fmt.Errorf("%w: %v", port.ErrInvalidSpec, cerr)
+				}
+				scCfg.UDSPath = confinedSock
+			} else if strings.HasPrefix(ep, "https://") {
+				return nil, fmt.Errorf("%w: mTLS TCP sidecar requires SidecarRuntimeFactory", port.ErrExecutionFault)
+			} else if !strings.ContainsAny(ep, `/\`) && !strings.Contains(ep, "..") {
+				confinedSock, cerr := sidecar.ConfineSocketPath(s.sidecarSocketDir, filepath.Join(s.sidecarSocketDir, ep+".sock"))
+				if cerr != nil {
+					return nil, fmt.Errorf("%w: %v", port.ErrInvalidSpec, cerr)
+				}
+				scCfg.UDSPath = confinedSock
+			} else {
+				return nil, fmt.Errorf("%w: invalid sidecar endpoint %q", port.ErrInvalidSpec, ep)
+			}
+			sc, serr := sidecar.NewClient(scCfg)
+			if serr != nil {
+				return nil, serr
+			}
+			rt = sc
+			closer = sc
+		}
+		return &cachedAdapterEntry{
+			installationID: adp.InstallationID,
+			rt:             rt,
+			sidecarCloser:  closer,
 			tier:           tier,
 			perms:          perms,
 			compiledAt:     s.nowMs(),

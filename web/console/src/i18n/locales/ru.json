@@ -67,7 +67,6 @@
   "common.role.SECURITY_REVIEWER": "Аудитор безоп.",
   "common.role.FINOPS_VIEWER": "Наблюдатель FinOps",
   "common.role.DEVELOPER": "Разработчик",
-
   "state.ACTIVE_HEALTHY": "Исправен",
   "state.CIRCUIT_OPEN_UNHEALTHY": "Разрыв цепи",
   "state.THROTTLED_COOLDOWN": "Пауза лимита",
@@ -106,7 +105,6 @@
   "state.DRAFT": "Черновик",
   "state.UNAVAILABLE": "Недоступен",
   "state.UNKNOWN": "Неизвестно",
-
   "error.noOpenApiPolicy": "Для {{method}} {{path}} не определена политика безопасности OpenAPI.",
   "error.ifMatchRequired": "Для этой операции Admin API требуется заголовок If-Match ETag.",
   "error.csrfRequired": "Для запросов, изменяющих состояние, требуется токен CSRF.",
@@ -114,7 +112,6 @@
   "error.unexpectedUiTitle": "Непредвиденная ошибка интерфейса",
   "error.unexpectedUiDesc": "В консоли произошла непредвиденная ошибка. Перезагрузите страницу для восстановления.",
   "error.reloadConsole": "Перезагрузить консоль",
-
   "shell.loadingSetup": "Загрузка настройки…",
   "shell.loadingSignIn": "Загрузка входа…",
   "shell.loadingConsole": "Загрузка консоли…",
@@ -151,7 +148,6 @@
   "shell.quickJump": "Быстрый переход",
   "shell.quickJumpEmpty": "Нет доступных разделов для вашей роли.",
   "shell.roleDenied": "Ваши роли ({{roles}}) не дают доступа к разделу {{section}}.",
-
   "nav.group.monitor": "Мониторинг",
   "nav.group.gateway": "Шлюз",
   "nav.group.ecosystem": "Экосистема",
@@ -170,7 +166,6 @@
   "nav.route.operations": "Операции",
   "nav.route.setup": "Первичная настройка",
   "nav.route.login": "Вход",
-
   "cmd.overview": "Обзор и состояние системы",
   "cmd.traces": "Трассы запросов и таймлайн",
   "cmd.budgets": "Бюджеты FinOps и активные резервы",
@@ -196,7 +191,6 @@
   "cmd.opsBackups": "Шифрованные резервные копии",
   "cmd.opsUpgrades": "Проверка перед обновлением",
   "cmd.opsWebhooks": "Вебхуки и настройки",
-
   "login.title": "Вход",
   "login.subtitle": "Используйте учётные данные локального администратора для доступа к панели управления.",
   "login.failedTitle": "Ошибка входа",
@@ -209,7 +203,6 @@
   "login.errRateLimited": "Слишком много попыток входа. Подождите и попробуйте снова.",
   "login.errInvalidCredentials": "Неверный адрес электронной почты или пароль.",
   "login.errUnreachable": "Не удалось подключиться к панели управления Tanpopo.",
-
   "setup.title": "Настройка экземпляра",
   "setup.subtitle": "Инициализируйте локальный шлюз и создайте владельца и первый маршрут.",
   "setup.stepsLabel": "Шаги настройки",
@@ -296,7 +289,6 @@
   "setup.firstKey.requestFailed": "Первый запрос завершился ошибкой.",
   "setup.firstKey.statusFailed": "Первый запрос завершился ошибкой ({{status}}). Проверьте развёртывание и маршрут.",
   "setup.firstKey.unreported": "не указано",
-
   "overview.title": "Обзор",
   "overview.subtitleIdle": "Текущее состояние шлюза и очередь действий.",
   "overview.subtitleUpdated": "Обновлено {{time}} · {{count}} неучтённых запросов",
@@ -325,7 +317,6 @@
   "overview.remediate": "Устранить",
   "overview.severity.PAGE": "СРОЧНО",
   "overview.severity.TICKET": "ЗАДАЧА",
-
   "traces.title": "Трассы запросов",
   "traces.subtitle": "Телеметрия выполнения только по метаданным. Текст промптов и ответов не сохраняется.",
   "traces.metadataOnly": "Только метаданные",
@@ -360,7 +351,6 @@
   "traces.recordedAt": "Записано",
   "traces.executionStages": "Этапы выполнения",
   "traces.noStages": "Подробная разбивка по этапам для этого запроса отсутствует.",
-
   "finops.title": "FinOps",
   "finops.subtitle": "Целочисленный учёт в micro-USD с разделением на точные, оценочные, зарезервированные и неучтённые суммы.",
   "finops.exportCsv": "Экспорт CSV",
@@ -405,7 +395,6 @@
   "finops.col.exact": "Точно",
   "finops.col.exactEstReqs": "Точные / оцен. запросы",
   "finops.col.unmetered": "Без учёта",
-
   "providers.title": "Провайдеры",
   "providers.subtitle": "Подключения к upstream-провайдерам, секреты хранилища только на запись и адаптеры протоколов.",
   "providers.sealSecret": "Запечатать секрет",
@@ -504,7 +493,6 @@
   "providers.deleteSecretTitle": "Удалить секрет из хранилища",
   "providers.deleteSecretDesc": "Удалить \"{{name}}\" ({{fingerprint}})? Подключения, использующие его, заблокируют удаление.",
   "providers.deleteCredential": "Удалить секрет",
-
   "models.title": "Модели и развёртывания",
   "models.subtitle": "Декларации возможностей логических моделей, уровни подтверждения и развёртывания по средам.",
   "models.registerModel": "Регистрация модели",
@@ -578,7 +566,6 @@
   "models.confirmDisableTitle": "Отключить развёртывание",
   "models.confirmDeleteDesc": "Удалить \"{{name}}\"? Маршруты, где это последняя исправная цель: {{routes}}.",
   "models.confirmDisableDesc": "Отключить \"{{name}}\"? Маршруты, где это последняя исправная цель: {{routes}}.",
-
   "routing.title": "Маршруты и политики",
   "routing.subtitle": "Детерминированная маршрутизация по возможностям, пробный расчёт и монотонное наследование политик.",
   "routing.createRoute": "Создать маршрут",
@@ -688,7 +675,6 @@
   "routing.trust.VERIFIED_OR_ENTERPRISE_SIGNED": "Проверенные или корпоративные",
   "routing.trust.VERIFIED_ONLY": "Только проверенные",
   "routing.trust.ANY_APPROVED": "Любые одобренные",
-
   "extensions.title": "Расширения",
   "extensions.subtitle": "Раздельная проверка источника, подписи издателя и уровня исполнения с поэтапным согласием на права.",
   "extensions.stagePackage": "Подготовить пакет",
@@ -786,7 +772,6 @@
   "extensions.diff.changed": "Изменено",
   "extensions.diff.reduced": "Снижено",
   "extensions.diff.quotas": "Память {{mem}} · Вызов {{call}} · Фрагмент {{chunk}}",
-
   "mcp.title": "MCP-хаб",
   "mcp.subtitle": "Реестр серверов MCP Streamable HTTP, фиксация схем RFC 8785 JCS и права виртуальных ключей по инструментам.",
   "mcp.registerServer": "Добавить сервер",
@@ -836,7 +821,6 @@
   "mcp.risk.destructive": "destructive (обязательное одобрение HITL)",
   "mcp.justification": "Обоснование проверки (необязательно)",
   "mcp.pinSchema": "Зафиксировать схему",
-
   "playground.title": "Песочница",
   "playground.subtitle": "Временный ключ сессии с жёстким лимитом в micro-USD. Промпты хранятся только в этой вкладке браузера.",
   "playground.restrictedDesc": "Ваша роль не позволяет создавать сессии песочницы.",
@@ -873,7 +857,6 @@
   "playground.snippetCurl": "cURL (/v1/chat/completions)",
   "playground.snippetPython": "Python (OpenAI SDK)",
   "playground.snippetTs": "TypeScript (OpenAI SDK)",
-
   "access.title": "Доступ и ключи",
   "access.subtitle": "Виртуальные ключи на уровне среды и 6-ролевая модель доступа RBAC.",
   "access.issueKey": "Выпустить ключ",
@@ -933,7 +916,6 @@
   "access.editRolesTitle": "Редактировать роли для {{email}}",
   "access.saveRoles": "Сохранить роли",
   "access.selfServiceDisabled": "Самостоятельное назначение ролей отключено. Вы не можете добавить роли собственной учётной записи.",
-
   "security.title": "Безопасность",
   "security.subtitle": "Одобрения MCP с участием человека (HITL), 4-уровневый Kill Switch и неизменяемый аудит JCS.",
   "security.restrictedDesc": "Ваша роль не имеет доступа к центру безопасности.",
@@ -1014,7 +996,6 @@
   "security.actorId": "ID инициатора",
   "security.eventHash": "SHA-256 хэш события",
   "security.eventMetadata": "Метаданные события (JSON)",
-
   "operations.title": "Операции",
   "operations.subtitle": "Проверки готовности, эпохи снимков кластера, шифрованные бэкапы, обновления и подписанные вебхуки.",
   "operations.restrictedTitle": "Требуется роль оператора",
@@ -1081,5 +1062,41 @@
   "operations.selectSigningSecret": "Выберите секрет подписи",
   "operations.events": "События",
   "operations.selectWebhookEvents": "Выберите события вебхука",
-  "operations.registerWebhook": "Зарегистрировать вебхук"
+  "operations.registerWebhook": "Зарегистрировать вебхук",
+  "cmd.a2a": "Агенты A2A и активные задачи",
+  "mcp.tabsLabel": "Разделы центра MCP и A2A",
+  "mcp.tabMcp": "Серверы MCP",
+  "mcp.tabA2a": "Агенты A2A и активные задачи",
+  "a2a.registerAgent": "Зарегистрировать агента",
+  "a2a.agentRegistered": "Агент A2A зарегистрирован и опубликован для обнаружения.",
+  "a2a.registerFailed": "Не удалось зарегистрировать агента A2A.",
+  "a2a.registeredAgents": "Зарегистрированные агенты A2A",
+  "a2a.emptyAgentsTitle": "Нет зарегистрированных агентов A2A",
+  "a2a.emptyAgentsDesc": "Зарегистрируйте конечную точку AgentCard уровня проекта с привязкой к региону и лимитом переходов.",
+  "a2a.col.agent": "Агент",
+  "a2a.col.endpoint": "Конечная точка",
+  "a2a.col.region": "Регион",
+  "a2a.col.maxHops": "Макс. переходов",
+  "a2a.activeTasks": "Активные и недавние задачи A2A",
+  "a2a.emptyTasksTitle": "Задачи A2A не зафиксированы",
+  "a2a.emptyTasksDesc": "Делегированные задачи отображаются здесь с глубиной переходов, применённым регионом и удержанием суббюджета.",
+  "a2a.col.task": "Задача",
+  "a2a.col.hops": "Переходы",
+  "a2a.col.subBudget": "Резерв суббюджета",
+  "a2a.col.settledCost": "Итоговая стоимость",
+  "a2a.drawerTitle": "Регистрация агента A2A",
+  "a2a.drawerSubtitle": "Применяет проверку исходящего HTTPS, региональную локализацию и макс. глубину делегирования <= 5.",
+  "a2a.agentSlug": "Идентификатор агента (необязательно)",
+  "a2a.agentSlugPlaceholder": "напр. billing-analyst",
+  "a2a.agentName": "Имя агента",
+  "a2a.agentNamePlaceholder": "напр. Billing Analyst",
+  "a2a.endpointUrl": "URL конечной точки агента",
+  "a2a.allowPrivate": "Разрешить частный или loopback-адрес",
+  "a2a.allowPrivateDesc": "Включайте только для явно доверенных внутренних агентов A2A.",
+  "a2a.state.submitted": "Отправлена",
+  "a2a.state.working": "Выполняется",
+  "a2a.state.input-required": "Требуется ввод",
+  "a2a.state.completed": "Завершена",
+  "a2a.state.failed": "Ошибка",
+  "a2a.state.canceled": "Отменена"
 }
