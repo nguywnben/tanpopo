@@ -393,9 +393,11 @@ func TestAllAdminRoutesHaveExplicitPermission(t *testing.T) {
 	h := newAdminTestHarness(t)
 
 	allowedPublic := map[string]bool{
-		"GET /admin/v1/bootstrap/status":    true,
-		"POST /admin/v1/bootstrap/complete": true,
-		"POST /admin/v1/auth/login":         true,
+		"GET /admin/v1/bootstrap/status":     true,
+		"POST /admin/v1/bootstrap/complete":  true,
+		"POST /admin/v1/auth/login":          true,
+		"GET /admin/v1/auth/oidc/start":      true,
+		"GET /admin/v1/auth/oidc/callback":   true,
 	}
 
 	routes := h.srv.Routes()

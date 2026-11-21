@@ -165,23 +165,25 @@ func validateShredRequest(req ShredRequest) error {
 
 // Config configures the envelope encryption Vault Store.
 type Config struct {
-	DB            *sql.DB
-	KEK           KEKProvider
-	CacheTTL      time.Duration
-	NowMs         func() int64
-	PostShredHook func(ctx context.Context) error
+	DB                  *sql.DB
+	KEK                 KEKProvider
+	ProjectRootProvider ProjectRootKeyProvider
+	CacheTTL            time.Duration
+	NowMs               func() int64
+	PostShredHook       func(ctx context.Context) error
 }
 
 // Store implements three-tier AES-256-GCM envelope encryption, write-only metadata APIs,
 // online KEK re-wrapping, and Project/Org Crypto-Shredding.
 type Store struct {
-	db        *sql.DB
-	dialect   port.Dialect
-	kek       KEKProvider
-	cache     *dekCache
-	nowMs     func() int64
-	postShred func(ctx context.Context) error
-	shredSem  chan struct{}
+	db                  *sql.DB
+	dialect             port.Dialect
+	kek                 KEKProvider
+	projectRootProvider ProjectRootKeyProvider
+	cache               *dekCache
+	nowMs               func() int64
+	postShred           func(ctx context.Context) error
+	shredSem            chan struct{}
 }
 
 // CheckServingReady confirms that the vault still has an active Master KEK.
@@ -265,14 +267,19 @@ func NewStore(cfg Config) (*Store, error) {
 	if nowFn == nil {
 		nowFn = func() int64 { return time.Now().UTC().UnixMilli() }
 	}
+	projRoot := cfg.ProjectRootProvider
+	if projRoot == nil {
+		projRoot, _ = cfg.KEK.(ProjectRootKeyProvider)
+	}
 	return &Store{
-		db:        cfg.DB,
-		dialect:   port.DetectDialect(context.Background(), cfg.DB),
-		kek:       cfg.KEK,
-		cache:     cache,
-		nowMs:     nowFn,
-		postShred: cfg.PostShredHook,
-		shredSem:  make(chan struct{}, 1),
+		db:                  cfg.DB,
+		dialect:             port.DetectDialect(context.Background(), cfg.DB),
+		kek:                 cfg.KEK,
+		projectRootProvider: projRoot,
+		cache:               cache,
+		nowMs:               nowFn,
+		postShred:           cfg.PostShredHook,
+		shredSem:            make(chan struct{}, 1),
 	}, nil
 }
 
@@ -1760,12 +1767,7 @@ func (s *Store) ensureProjectDEKTx(ctx context.Context, tx *sql.Tx, orgID, proje
 		if derr != nil {
 			return 0, 0, nil, derr
 		}
-		aad, aerr := projectDEKWrapAAD(orgID, projectID, orgDEKVer, 1)
-		if aerr != nil {
-			clear(freshPDEK)
-			return 0, 0, nil, aerr
-		}
-		wrapNonce, wrapCT, werr := sealAESGCM(orgDEK, aad, freshPDEK)
+		wrapNonce, wrapCT, werr := s.wrapProjectDEK(ctx, orgID, projectID, orgDEKVer, orgDEK, 1, freshPDEK)
 		if werr != nil {
 			clear(freshPDEK)
 			return 0, 0, nil, werr
@@ -1821,16 +1823,8 @@ func (s *Store) ensureProjectDEKTx(ctx context.Context, tx *sql.Tx, orgID, proje
 		clear(cp)
 	}
 
-	aad, err := projectDEKWrapAAD(orgID, projectID, rowOrgDEKVer, projDEKVer)
+	unwrapped, err := s.unwrapPersistedProjectDEK(ctx, orgID, projectID, rowOrgDEKVer, orgDEK, projDEKVer, nonce, wrapped)
 	if err != nil {
-		return 0, 0, nil, err
-	}
-	unwrapped, err := openAESGCM(orgDEK, aad, nonce, wrapped)
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	if err := validate256BitKey(unwrapped); err != nil {
-		clear(unwrapped)
 		return 0, 0, nil, err
 	}
 	if stage != nil {
@@ -1934,26 +1928,191 @@ func (s *Store) loadProjectDEKWithExec(ctx context.Context, q sqlQueryRowExecuto
 		clear(cp)
 	}
 
-	_, orgDEK, err := s.loadOrgDEKWithExec(ctx, q, dialect, orgID)
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	defer clear(orgDEK)
+	var unwrapped []byte
+	if isExternalProjectDEKEnvelope(wrapped) {
+		var uerr error
+		unwrapped, uerr = s.unwrapPersistedProjectDEK(ctx, orgID, projectID, rowOrgDEKVer, nil, projDEKVer, nonce, wrapped)
+		if uerr != nil {
+			return 0, 0, nil, uerr
+		}
+	} else {
+		_, orgDEK, err := s.loadOrgDEKWithExec(ctx, q, dialect, orgID)
+		if err != nil {
+			return 0, 0, nil, err
+		}
+		defer clear(orgDEK)
 
-	aad, err := projectDEKWrapAAD(orgID, projectID, rowOrgDEKVer, projDEKVer)
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	unwrapped, err := openAESGCM(orgDEK, aad, nonce, wrapped)
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	if err := validate256BitKey(unwrapped); err != nil {
-		clear(unwrapped)
-		return 0, 0, nil, err
+		var uerr error
+		unwrapped, uerr = s.unwrapPersistedProjectDEK(ctx, orgID, projectID, rowOrgDEKVer, orgDEK, projDEKVer, nonce, wrapped)
+		if uerr != nil {
+			return 0, 0, nil, uerr
+		}
 	}
 	s.cache.putProjectDEKIfGen(orgID, projectID, rowOrgDEKVer, projDEKVer, projKeyGen, unwrapped, now, gen)
 	return rowOrgDEKVer, projDEKVer, unwrapped, nil
+}
+
+func (s *Store) wrapProjectDEK(ctx context.Context, orgID, projectID string, orgDEKVer int64, orgDEK []byte, projDEKVer int64, plaintextDEK []byte) ([]byte, []byte, error) {
+	if s.projectRootProvider != nil {
+		keyRef, enabled, err := s.projectRootProvider.ProjectKeyURI(ctx, orgID, projectID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if enabled {
+			wrappedBlob, werr := s.projectRootProvider.WrapProjectDEK(ctx, keyRef, orgID, projectID, projDEKVer, plaintextDEK)
+			if werr != nil {
+				return nil, nil, werr
+			}
+			envBytes, eerr := encodeExternalProjectDEKEnvelope(keyRef, wrappedBlob)
+			if eerr != nil {
+				return nil, nil, eerr
+			}
+			nonce, nerr := generateRandomNonce()
+			if nerr != nil {
+				return nil, nil, nerr
+			}
+			return nonce, envBytes, nil
+		}
+	}
+	aad, err := projectDEKWrapAAD(orgID, projectID, orgDEKVer, projDEKVer)
+	if err != nil {
+		return nil, nil, err
+	}
+	return sealAESGCM(orgDEK, aad, plaintextDEK)
+}
+
+func (s *Store) unwrapPersistedProjectDEK(ctx context.Context, orgID, projectID string, orgDEKVer int64, orgDEK []byte, projDEKVer int64, nonce, wrapped []byte) ([]byte, error) {
+	if isExternalProjectDEKEnvelope(wrapped) {
+		if s.projectRootProvider == nil {
+			s.cache.evictProject(orgID, projectID)
+			return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, ErrProjectExternalKeyUnavailable)
+		}
+		keyRef, blob, err := decodeExternalProjectDEKEnvelope(wrapped)
+		if err != nil {
+			s.cache.evictProject(orgID, projectID)
+			return nil, err
+		}
+		pt, uerr := s.projectRootProvider.UnwrapProjectDEK(ctx, keyRef, orgID, projectID, projDEKVer, blob)
+		if uerr != nil {
+			s.cache.evictProject(orgID, projectID)
+			return nil, fmt.Errorf("%w: %w: %v", ErrDecryptionFailed, ErrProjectExternalKeyUnavailable, uerr)
+		}
+		if verr := validate256BitKey(pt); verr != nil {
+			clear(pt)
+			s.cache.evictProject(orgID, projectID)
+			return nil, verr
+		}
+		return pt, nil
+	}
+	aad, err := projectDEKWrapAAD(orgID, projectID, orgDEKVer, projDEKVer)
+	if err != nil {
+		return nil, err
+	}
+	unwrapped, err := openAESGCM(orgDEK, aad, nonce, wrapped)
+	if err != nil {
+		return nil, err
+	}
+	if err := validate256BitKey(unwrapped); err != nil {
+		clear(unwrapped)
+		return nil, err
+	}
+	return unwrapped, nil
+}
+
+// EvictProjectDEKCache zeroes and removes the cached in-memory DEK for a single project.
+func (s *Store) EvictProjectDEKCache(orgID, projectID string) {
+	if s != nil && s.cache != nil {
+		s.cache.evictProject(orgID, projectID)
+	}
+}
+
+// BindProjectExternalRootKey re-wraps a project's DEK directly under a dedicated external
+// KMS/Vault root key (kmsKeyRef) without affecting sibling projects or rotating global Master KEK.
+func (s *Store) BindProjectExternalRootKey(ctx context.Context, orgID, projectID, kmsKeyRef string) (*ProjectKeyMetadata, error) {
+	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(projectID) == "" || strings.TrimSpace(kmsKeyRef) == "" {
+		return nil, fmt.Errorf("%w: org_id, project_id, and kms_key_ref required", ErrInvalidInput)
+	}
+	if s.projectRootProvider == nil {
+		return nil, fmt.Errorf("%w: project root key provider is not configured", ErrProjectExternalKeyUnavailable)
+	}
+	now := s.nowMs()
+	d := s.effectiveDialect(ctx)
+
+	tx1, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vault: begin BindProjectExternalRootKey ensure tx: %w", err)
+	}
+	committed1 := false
+	defer func() {
+		if !committed1 {
+			_ = tx1.Rollback()
+		}
+	}()
+	if err := s.setOrgRLSTx(ctx, tx1, orgID); err != nil {
+		return nil, err
+	}
+	var stage dekCacheStage
+	defer stage.clear()
+	_, curVer, pdek, err := s.ensureProjectDEKTx(ctx, tx1, orgID, projectID, now, &stage)
+	if err != nil {
+		return nil, err
+	}
+	pdekCopy := append([]byte(nil), pdek...)
+	clear(pdek)
+	defer clear(pdekCopy)
+	if err := tx1.Commit(); err != nil {
+		return nil, fmt.Errorf("vault: commit BindProjectExternalRootKey ensure tx: %w", err)
+	}
+	committed1 = true
+
+	nextVer := curVer + 1
+	wrappedBlob, err := s.projectRootProvider.WrapProjectDEK(ctx, kmsKeyRef, orgID, projectID, nextVer, pdekCopy)
+	if err != nil {
+		return nil, err
+	}
+	envBytes, err := encodeExternalProjectDEKEnvelope(kmsKeyRef, wrappedBlob)
+	if err != nil {
+		return nil, err
+	}
+	nonce, err := generateRandomNonce()
+	if err != nil {
+		return nil, err
+	}
+
+	tx2, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vault: begin BindProjectExternalRootKey update tx: %w", err)
+	}
+	committed2 := false
+	defer func() {
+		if !committed2 {
+			_ = tx2.Rollback()
+		}
+	}()
+	if err := s.setOrgRLSTx(ctx, tx2, orgID); err != nil {
+		return nil, err
+	}
+	res, err := tx2.ExecContext(ctx, port.Rebind(d, `
+		UPDATE project_encryption_keys
+		SET nonce = ?, wrapped_project_dek = ?, dek_version = ?, rotated_at_ms = ?
+		WHERE org_id = ? AND project_id = ? AND dek_version = ?`),
+		nonce, envBytes, nextVer, s.nowMs(), orgID, projectID, curVer,
+	)
+	if err != nil {
+		return nil, mapVaultSQLiteError(err, false)
+	}
+	if aff, _ := res.RowsAffected(); aff == 0 {
+		return nil, port.ErrVersionConflict
+	}
+	if _, cerr := appendVaultChangelogTx(ctx, tx2, d, orgID, "project_encryption_key", projectID, port.MutationKeyRotate, false, s.nowMs()); cerr != nil {
+		return nil, cerr
+	}
+	if err := tx2.Commit(); err != nil {
+		return nil, fmt.Errorf("vault: commit BindProjectExternalRootKey: %w", err)
+	}
+	committed2 = true
+	s.cache.evictProject(orgID, projectID)
+	return s.GetProjectKeyMetadata(ctx, orgID, projectID)
 }
 
 func checkGenerationNotSupersededTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, scopeKey string, expectedGen int64, requestID string) error {

@@ -2,10 +2,10 @@
 
 > **MANDATORY COLD-START ENTRYPOINT FOR EVERY NEW EXECUTION SESSION (`ZERO PRIOR CHAT MEMORY REQUIRED`)**
 > - **Baseline ID:** `EXEC-BL-001-APPROVED`
-> **Version:** `2.56.0-dec-089-0040-done` | **Last Updated:** `2026-11-21` | **Accepted Implementation Baseline:** `b6dc1d15d48890ad1b4b5f259b16e0fc7b9cd8bf` (PR #28 Console v2 Astryx Neutral & 15-lang i18n; Unit 39 PR #29 `61c310b5` under `DEC-088`; Unit 40 PR under `DEC-089`)
-> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0040` DONE; `0041`..`0047` BLOCKED pending sequential DoR under `DEC-088` for `0041`..`0042`). Live PG16 (`FORCE RLS` / `NOBYPASSRLS`) + 3-shard Valkey Cluster `-race`, `FMEA-07`, `DR-02`, `OPS-AC-06`, HA Helm, and `pg16_rls_e2e_test` verified with `code-reviewer` (`APPROVE`) and `security-auditor` (`PASS`).
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** through `DEC-089` (`40 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `7 BLOCKED`; `DEC-033` remains revoked).
-> - **CURRENT UNIT STATE (`UNIT_STATES`):** `40 / 47` DONE (`0001`..`0040`), `0 / 47` READY, `0 READY_FOR_REVIEW`, `7 / 47` BLOCKED (`0041`..`0047`).
+> **Version:** `2.57.0-dec-090-0041-done` | **Last Updated:** `2026-11-21` | **Accepted Implementation Baseline:** `b6dc1d15d48890ad1b4b5f259b16e0fc7b9cd8bf` (PR #28 Console v2 Astryx Neutral & 15-lang i18n; Unit 39 PR #29 `61c310b5` under `DEC-088`; Unit 40 PR #30 `b5904476` under `DEC-089`; Unit 41 PR #31 under `DEC-090`)
+> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0041` DONE; `0042`..`0047` BLOCKED pending sequential DoR under `DEC-088` for `0042`). Live PG16 (`FORCE RLS` / `NOBYPASSRLS`) + 3-shard Valkey Cluster `-race`, Enterprise OIDC SSO, Four-Eyes Dual Control, Cloud KMS/Vault Transit `TPKMSv1`, Workload Identity, and Opt-In Response Cache verified with `code-reviewer` (`APPROVE`) and `security-auditor` (`PASS`).
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** through `DEC-090` (`41 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `6 BLOCKED`; `DEC-033` remains revoked).
+> - **CURRENT UNIT STATE (`UNIT_STATES`):** `41 / 47` DONE (`0001`..`0041`), `0 / 47` READY, `0 READY_FOR_REVIEW`, `6 / 47` BLOCKED (`0042`..`0047`).
 
 ---
 

@@ -20,18 +20,21 @@ import (
 )
 
 type policyDocumentDTO struct {
-	ID                     string                       `json:"id"`
-	ScopeTier              string                       `json:"scope_tier"`
-	ScopeID                string                       `json:"scope_id"`
-	AllowedDataRegions     []string                     `json:"allowed_data_regions"`
-	AllowedModels          *[]string                    `json:"allowed_models,omitempty"`
-	MinPluginTrust         string                       `json:"min_plugin_trust"`
-	MinCapabilityAssurance string                       `json:"min_capability_assurance"`
-	RPMCeiling             *int64                       `json:"rpm_ceiling,omitempty"`
-	TPMCeiling             *int64                       `json:"tpm_ceiling,omitempty"`
-	MaxConcurrentStreams   *int64                       `json:"max_concurrent_streams,omitempty"`
-	GuardrailHooks         []snapshot.GuardrailHookSpec `json:"guardrail_hooks,omitempty"`
-	Version                int64                        `json:"version"`
+	ID                         string                       `json:"id"`
+	ScopeTier                  string                       `json:"scope_tier"`
+	ScopeID                    string                       `json:"scope_id"`
+	AllowedDataRegions         []string                     `json:"allowed_data_regions"`
+	AllowedModels              *[]string                    `json:"allowed_models,omitempty"`
+	MinPluginTrust             string                       `json:"min_plugin_trust"`
+	MinCapabilityAssurance     string                       `json:"min_capability_assurance"`
+	RPMCeiling                 *int64                       `json:"rpm_ceiling,omitempty"`
+	TPMCeiling                 *int64                       `json:"tpm_ceiling,omitempty"`
+	MaxConcurrentStreams       *int64                       `json:"max_concurrent_streams,omitempty"`
+	ResponseCacheEnabled       *bool                        `json:"response_cache_enabled,omitempty"`
+	ResponseCacheTTLSeconds    *int64                       `json:"response_cache_ttl_seconds,omitempty"`
+	ResponseCacheMaxEntryBytes *int64                       `json:"response_cache_max_entry_bytes,omitempty"`
+	GuardrailHooks             []snapshot.GuardrailHookSpec `json:"guardrail_hooks,omitempty"`
+	Version                    int64                        `json:"version"`
 }
 
 func (s *Server) handleGetEffectivePolicy(w http.ResponseWriter, r *http.Request) {
@@ -700,6 +703,9 @@ func inferPolicyTypeFromDTO(dto *policyDocumentDTO) string {
 	if dto.RPMCeiling != nil || dto.TPMCeiling != nil || dto.MaxConcurrentStreams != nil {
 		return snapshot.PolicyTypeRateLimit
 	}
+	if dto.ResponseCacheEnabled != nil || dto.ResponseCacheTTLSeconds != nil || dto.ResponseCacheMaxEntryBytes != nil {
+		return snapshot.PolicyTypeResponseCache
+	}
 	return snapshot.PolicyTypeModelAllowlist
 }
 
@@ -742,6 +748,15 @@ func encodePolicyRulesFromDTO(dto *policyDocumentDTO) (string, error) {
 	if dto.MaxConcurrentStreams != nil {
 		payload["max_concurrent_streams"] = *dto.MaxConcurrentStreams
 	}
+	if dto.ResponseCacheEnabled != nil {
+		payload["response_cache_enabled"] = *dto.ResponseCacheEnabled
+	}
+	if dto.ResponseCacheTTLSeconds != nil {
+		payload["response_cache_ttl_seconds"] = *dto.ResponseCacheTTLSeconds
+	}
+	if dto.ResponseCacheMaxEntryBytes != nil {
+		payload["response_cache_max_entry_bytes"] = *dto.ResponseCacheMaxEntryBytes
+	}
 	if len(dto.GuardrailHooks) > 0 {
 		payload["guardrail_hooks"] = dto.GuardrailHooks
 	}
@@ -775,19 +790,27 @@ func effectivePolicyToDTO(id, scopeTier, scopeID string, eff policyengine.Effect
 	if version < 1 {
 		version = 1
 	}
+	var cacheEnabledPtr *bool
+	if eff.HasResponseCache {
+		b := eff.ResponseCacheEnabled
+		cacheEnabledPtr = &b
+	}
 	return policyDocumentDTO{
-		ID:                     id,
-		ScopeTier:              scopeTier,
-		ScopeID:                scopeID,
-		AllowedDataRegions:     regions,
-		AllowedModels:          effectiveModelAllowlist(eff),
-		MinPluginTrust:         minTrust,
-		MinCapabilityAssurance: minAssurance,
-		RPMCeiling:             eff.RPMLimit,
-		TPMCeiling:             eff.TPMLimit,
-		MaxConcurrentStreams:   eff.MaxConcurrentStreams,
-		GuardrailHooks:         hooks,
-		Version:                version,
+		ID:                         id,
+		ScopeTier:                  scopeTier,
+		ScopeID:                    scopeID,
+		AllowedDataRegions:         regions,
+		AllowedModels:              effectiveModelAllowlist(eff),
+		MinPluginTrust:             minTrust,
+		MinCapabilityAssurance:     minAssurance,
+		RPMCeiling:                 eff.RPMLimit,
+		TPMCeiling:                 eff.TPMLimit,
+		MaxConcurrentStreams:       eff.MaxConcurrentStreams,
+		ResponseCacheEnabled:       cacheEnabledPtr,
+		ResponseCacheTTLSeconds:    eff.ResponseCacheTTLSeconds,
+		ResponseCacheMaxEntryBytes: eff.ResponseCacheMaxEntryBytes,
+		GuardrailHooks:             hooks,
+		Version:                    version,
 	}
 }
 
@@ -825,18 +848,26 @@ func policyRecordToDTO(rec *policyengine.PolicyRecord) policyDocumentDTO {
 	if hooks == nil {
 		hooks = []snapshot.GuardrailHookSpec{}
 	}
+	var cacheEnabledPtr *bool
+	if r.HasResponseCache {
+		b := r.ResponseCacheEnabled
+		cacheEnabledPtr = &b
+	}
 	return policyDocumentDTO{
-		ID:                     rec.ID,
-		ScopeTier:              mapPolicyScopeDBToTier(rec.ScopeType),
-		ScopeID:                rec.ScopeID,
-		AllowedDataRegions:     regions,
-		AllowedModels:          recordModelAllowlist(r),
-		MinPluginTrust:         minTrust,
-		MinCapabilityAssurance: minAssurance,
-		RPMCeiling:             r.RPMLimit,
-		TPMCeiling:             r.TPMLimit,
-		MaxConcurrentStreams:   r.MaxConcurrentStreams,
-		GuardrailHooks:         hooks,
-		Version:                rec.Version,
+		ID:                         rec.ID,
+		ScopeTier:                  mapPolicyScopeDBToTier(rec.ScopeType),
+		ScopeID:                    rec.ScopeID,
+		AllowedDataRegions:         regions,
+		AllowedModels:              recordModelAllowlist(r),
+		MinPluginTrust:             minTrust,
+		MinCapabilityAssurance:     minAssurance,
+		RPMCeiling:                 r.RPMLimit,
+		TPMCeiling:                 r.TPMLimit,
+		MaxConcurrentStreams:       r.MaxConcurrentStreams,
+		ResponseCacheEnabled:       cacheEnabledPtr,
+		ResponseCacheTTLSeconds:    r.ResponseCacheTTLSeconds,
+		ResponseCacheMaxEntryBytes: r.ResponseCacheMaxEntryBytes,
+		GuardrailHooks:             hooks,
+		Version:                    rec.Version,
 	}
 }

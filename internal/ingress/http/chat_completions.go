@@ -25,8 +25,10 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/wasm"
 	"github.com/nguywnben/tanpopo/internal/ingress/blob"
+	"github.com/nguywnben/tanpopo/internal/ingress/cache"
 	"github.com/nguywnben/tanpopo/internal/ingress/idempotency"
 	"github.com/nguywnben/tanpopo/internal/ingress/sse"
+	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
 	"github.com/nguywnben/tanpopo/internal/routing/breaker"
 	"github.com/nguywnben/tanpopo/internal/routing/failover"
 	"github.com/nguywnben/tanpopo/internal/routing/resolver"
@@ -256,7 +258,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	defer budgetSess.releaseIfUnsettled()
 
 	s.executeRoutedPreStreamFailover(w, r.Context(), streamCtx, meta.RequestID, modelSlug, candidates, func(hopCtx context.Context, _ int, cand *resolver.RankedTarget) failover.AttemptResult {
-		return s.executeChatCompletionHop(w, r.Context(), hopCtx, meta, match.Key, cand.Target, rawBody, reqEnvelope, modelSlug, idemClaim, admLease, budgetSess)
+		return s.executeChatCompletionHop(w, r.Context(), hopCtx, meta, r.Header, preAdm.effPolicy, match.Key, cand.Target, rawBody, reqEnvelope, modelSlug, idemClaim, admLease, budgetSess)
 	})
 }
 
@@ -265,6 +267,8 @@ func (s *Server) executeChatCompletionHop(
 	clientCtx context.Context,
 	hopCtx context.Context,
 	meta ingressContext,
+	reqHeaders http.Header,
+	effPolicy policyengine.EffectivePolicy,
 	key *snapshot.VirtualKeyView,
 	target *snapshot.ResolvedTarget,
 	rawBody []byte,
@@ -280,6 +284,35 @@ func (s *Server) executeChatCompletionHop(
 	if abortRes, ok := budgetSess.ensureHoldForTarget(hopCtx, w, target); !ok {
 		return abortRes
 	}
+
+	// Evaluate opt-in Response Cache BEFORE upstream egress / WASM transformation on deterministic sync requests.
+	var cacheEligibility cache.EligibilityResult
+	if !reqEnvelope.Stream && s.responseCache != nil && key != nil && target != nil && target.Deployment != nil {
+		el, elErr := s.responseCache.EvaluateEligibility(reqHeaders, effPolicy, cache.KeyInput{
+			OrgID:             key.OrgID,
+			ProjectID:         key.ProjectID,
+			EnvID:             key.EnvID,
+			PolicyRevision:    cache.ComputePolicyRevision(effPolicy),
+			ModelDeploymentID: target.Deployment.ID,
+			RequestBody:       rawBody,
+		})
+		if elErr == nil {
+			cacheEligibility = el
+			if el.Eligible {
+				if cachedBody, hitErr := s.responseCache.Lookup(hopCtx, key.OrgID, key.ProjectID, key.EnvID, el.CacheKeySHA256); hitErr == nil && len(cachedBody) > 0 {
+					budgetSess.releaseIfUnsettled()
+					w.Header().Set("X-Tanpopo-Cache", "HIT")
+					writeSettledJSONResponse(w, hopCtx, meta.RequestID, nil, cachedBody, idemClaim)
+					return failover.AttemptResult{
+						Succeeded:  true,
+						Outcome:    breaker.OutcomeSuccess,
+						HTTPStatus: http.StatusOK,
+					}
+				}
+			}
+		}
+	}
+
 	cachedRT, rtErr := s.getOrLoadAdapterRuntime(hopCtx, target)
 	if rtErr != nil {
 		if errors.Is(rtErr, context.Canceled) {
@@ -331,7 +364,7 @@ func (s *Server) executeChatCompletionHop(
 	if reqEnvelope.Stream {
 		return s.executeStreamingChatCompletionAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, !reqEnvelope.CallerRequestedUsage, admLease, budgetSess)
 	}
-	return s.executeSyncChatCompletionAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, target, modelSlug, idemClaim, admLease, budgetSess)
+	return s.executeSyncChatCompletionAttempt(w, clientCtx, hopCtx, meta.RequestID, cachedRT.rt, egressReq, constraint, key, target, modelSlug, idemClaim, admLease, budgetSess, cacheEligibility)
 }
 
 func (s *Server) executeSyncChatCompletionAttempt(
@@ -342,11 +375,13 @@ func (s *Server) executeSyncChatCompletionAttempt(
 	rt port.ProviderRuntime,
 	egressReq broker.EgressRequest,
 	constraint broker.HostEgressConstraint,
+	key *snapshot.VirtualKeyView,
 	target *snapshot.ResolvedTarget,
 	requestedModel string,
 	idemClaim *idempotency.Claim,
 	admLease *admissionLease,
 	budgetSess *requestBudgetSession,
+	cacheEligibility cache.EligibilityResult,
 ) failover.AttemptResult {
 	upResp, err := s.executeBrokerSync(ctx, egressReq, constraint, target, requestedModel)
 	if err != nil {
@@ -407,6 +442,14 @@ func (s *Server) executeSyncChatCompletionAttempt(
 			Stream:    false,
 			Usage:     headerUsage,
 		})
+	}
+	if s.responseCache != nil {
+		if cacheEligibility.Eligible && key != nil && target != nil && target.Deployment != nil && cache.IsCacheableResponse(http.StatusOK, finalBody, cacheEligibility.MaxEntryBytes) {
+			_ = s.responseCache.Store(ctx, key.OrgID, key.ProjectID, key.EnvID, target.Deployment.ID, cacheEligibility.CacheKeySHA256, finalBody, cacheEligibility.TTLSeconds)
+			w.Header().Set("X-Tanpopo-Cache", "MISS")
+		} else {
+			w.Header().Set("X-Tanpopo-Cache", "BYPASS")
+		}
 	}
 	writeSettledJSONResponse(w, ctx, reqID, headerUsage, finalBody, idemClaim)
 	return failover.AttemptResult{

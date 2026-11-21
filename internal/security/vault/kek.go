@@ -18,6 +18,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -38,6 +39,8 @@ const (
 	KeySizeBytes = 32
 	// NonceSizeBytes is the required AES-256-GCM nonce length (12 bytes / 96 bits).
 	NonceSizeBytes = 12
+
+	tpkmsEnvelopePrefix = "TPKMSv1\x00"
 )
 
 var (
@@ -47,6 +50,8 @@ var (
 	ErrInsecureKeyfilePermissions = errors.New("vault: master key file must be a regular non-symlink file with 0400/0600 permissions")
 	// ErrKEKNotFound indicates a requested KEK identifier is not loaded in the provider.
 	ErrKEKNotFound = errors.New("vault: master key ID not found")
+	// ErrProjectExternalKeyUnavailable indicates a project's dedicated external KMS/Vault root key is unavailable or destroyed.
+	ErrProjectExternalKeyUnavailable = errors.New("vault: dedicated external project root key unavailable")
 )
 
 // KEKProvider abstracts root key wrapping/unwrapping for static keys and future KMS/Vault adapters.
@@ -56,6 +61,14 @@ type KEKProvider interface {
 	UnwrapDEK(ctx context.Context, kekKeyID, orgID string, dekVersion int64, nonce, ciphertext []byte) ([]byte, error)
 	WrapArchiveKey(ctx context.Context, kekKeyID string, plaintextKey []byte) (nonce, ciphertext []byte, err error)
 	UnwrapArchiveKey(ctx context.Context, kekKeyID string, nonce, ciphertext []byte) ([]byte, error)
+}
+
+// ProjectRootKeyProvider optionally wraps and unwraps Project DEKs directly under
+// dedicated per-project external KMS / Vault Transit root keys (DEC-017 / CR-12).
+type ProjectRootKeyProvider interface {
+	ProjectKeyURI(ctx context.Context, orgID, projectID string) (keyRef string, enabled bool, err error)
+	WrapProjectDEK(ctx context.Context, kmsKeyRef, orgID, projectID string, dekVersion int64, plaintextDEK []byte) (wrappedBlob []byte, err error)
+	UnwrapProjectDEK(ctx context.Context, kmsKeyRef, orgID, projectID string, dekVersion int64, wrappedBlob []byte) ([]byte, error)
 }
 
 // StaticKEKProvider manages one active and zero or more staged/previous 256-bit Master KEKs in memory.
@@ -434,3 +447,56 @@ func openAESGCM(key, aad, nonce, ciphertext []byte) ([]byte, error) {
 	}
 	return pt, nil
 }
+
+type externalProjectDEKEnvelope struct {
+	KeyRef string `json:"k"`
+	Blob   []byte `json:"b"`
+}
+
+func isExternalProjectDEKEnvelope(wrapped []byte) bool {
+	return bytes.HasPrefix(wrapped, []byte(tpkmsEnvelopePrefix))
+}
+
+func encodeExternalProjectDEKEnvelope(keyRef string, blob []byte) ([]byte, error) {
+	if strings.TrimSpace(keyRef) == "" || len(blob) == 0 {
+		return nil, fmt.Errorf("%w: non-empty keyRef and wrapped blob required", ErrInvalidInput)
+	}
+	payload, err := json.Marshal(externalProjectDEKEnvelope{
+		KeyRef: strings.TrimSpace(keyRef),
+		Blob:   append([]byte(nil), blob...),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("vault: marshal external project DEK envelope: %w", err)
+	}
+	out := make([]byte, 0, len(tpkmsEnvelopePrefix)+len(payload))
+	out = append(out, tpkmsEnvelopePrefix...)
+	out = append(out, payload...)
+	return out, nil
+}
+
+func decodeExternalProjectDEKEnvelope(wrapped []byte) (keyRef string, blob []byte, err error) {
+	if !isExternalProjectDEKEnvelope(wrapped) {
+		return "", nil, fmt.Errorf("%w: missing external project DEK envelope prefix", ErrDecryptionFailed)
+	}
+	var env externalProjectDEKEnvelope
+	if uerr := json.Unmarshal(wrapped[len(tpkmsEnvelopePrefix):], &env); uerr != nil {
+		return "", nil, fmt.Errorf("%w: invalid external project DEK envelope: %v", ErrDecryptionFailed, uerr)
+	}
+	if strings.TrimSpace(env.KeyRef) == "" || len(env.Blob) == 0 {
+		return "", nil, fmt.Errorf("%w: incomplete external project DEK envelope", ErrDecryptionFailed)
+	}
+	return env.KeyRef, env.Blob, nil
+}
+
+func generateRandomNonce() ([]byte, error) {
+	nonce := make([]byte, NonceSizeBytes)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, fmt.Errorf("vault: generate nonce: %w", err)
+	}
+	var zero [NonceSizeBytes]byte
+	if subtle.ConstantTimeCompare(nonce, zero[:]) == 1 {
+		return nil, errors.New("vault: degenerate zero nonce generated")
+	}
+	return nonce, nil
+}
+

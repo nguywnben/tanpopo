@@ -20,6 +20,10 @@ export const operationPolicy = {
     "csrf": false,
     "ifMatch": false
   },
+  "POST /admin/v1/auth/oidc/refresh": {
+    "csrf": true,
+    "ifMatch": false
+  },
   "GET /admin/v1/auth/session": {
     "csrf": false,
     "ifMatch": false
@@ -333,6 +337,18 @@ export const operationPolicy = {
     "ifMatch": false
   },
   "POST /admin/v1/approvals/{approvalId}/decide": {
+    "csrf": true,
+    "ifMatch": true
+  },
+  "GET /admin/v1/change-requests": {
+    "csrf": false,
+    "ifMatch": false
+  },
+  "POST /admin/v1/change-requests": {
+    "csrf": true,
+    "ifMatch": false
+  },
+  "POST /admin/v1/change-requests/{requestId}/decide": {
     "csrf": true,
     "ifMatch": true
   },

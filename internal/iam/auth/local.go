@@ -242,12 +242,22 @@ type ServiceConfig struct {
 	AllowedOrigins          []string
 }
 
+// ExternalSessionParams specifies validated external federated principal details for session minting.
+type ExternalSessionParams struct {
+	PrincipalID     string
+	Email           string
+	OrgID           *string
+	CredentialPlane string
+	AuditEventType  string
+}
+
 type storedSession struct {
 	digest           [32]byte
 	principalID      string
 	principalVersion int64
 	email            string
 	orgID            *string
+	credentialPlane  string
 	roles            []string
 	bindings         []rbac.RoleBinding
 	csrfToken        string
@@ -912,6 +922,105 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 	// Never clear ipKey on single-account success so valid low-priv logins cannot reset IP throttling.
 	s.clearFailures([]string{acctIPKey, globalAcctKey})
 
+	return s.mintSessionForPrincipal(ctx, matched.id, matched.version, normEmail, matched.orgID, rbac.CredentialPlaneAdminSession, roles, bindings, "auth.login_succeeded", now)
+}
+
+// IssueExternalSession mints a bounded Admin session cookie and CSRF token for an already
+// authenticated and verified federated principal (for example, OIDC HUMAN_OIDC SSO).
+func (s *LocalService) IssueExternalSession(ctx context.Context, params ExternalSessionParams) (*SessionInfo, *http.Cookie, error) {
+	pid := strings.TrimSpace(params.PrincipalID)
+	if pid == "" {
+		return nil, nil, fmt.Errorf("%w: principal_id required", port.ErrInvalidInput)
+	}
+	var dbStatus string
+	var dbVersion int64
+	var dbEmail string
+	statusQuery := port.Rebind(s.dialect, `SELECT status, version, email_or_sub FROM principals WHERE id = ?`)
+	var scanErr error
+	if s.dialect != port.DialectPostgres {
+		scanErr = s.db.QueryRowContext(ctx, statusQuery, pid).Scan(&dbStatus, &dbVersion, &dbEmail)
+	} else {
+		tx, txErr := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if txErr != nil {
+			scanErr = txErr
+		} else {
+			if params.OrgID != nil && strings.TrimSpace(*params.OrgID) != "" {
+				scanErr = port.SetOrgRLSTx(ctx, tx, s.dialect, strings.TrimSpace(*params.OrgID))
+			} else {
+				scanErr = port.SetOperatorRLSTx(ctx, tx, s.dialect)
+			}
+			if scanErr == nil {
+				scanErr = tx.QueryRowContext(ctx, statusQuery, pid).Scan(&dbStatus, &dbVersion, &dbEmail)
+			}
+			_ = tx.Rollback()
+		}
+	}
+	if scanErr != nil {
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			return nil, nil, ErrUnauthenticated
+		}
+		return nil, nil, scanErr
+	}
+	if dbStatus != PrincipalStatusActive {
+		return nil, nil, ErrPrincipalInactive
+	}
+	var orgCopy *string
+	if params.OrgID != nil && strings.TrimSpace(*params.OrgID) != "" {
+		v := strings.TrimSpace(*params.OrgID)
+		orgCopy = &v
+	}
+	bindings, roles, err := s.loadBindings(ctx, pid, orgCopy)
+	if err != nil {
+		return nil, nil, err
+	}
+	now := s.nowMs()
+	updTx, txErr := s.db.BeginTx(ctx, nil)
+	if txErr != nil {
+		return nil, nil, txErr
+	}
+	if orgCopy != nil {
+		txErr = port.SetOrgRLSTx(ctx, updTx, s.dialect, *orgCopy)
+	} else {
+		txErr = port.SetOperatorRLSTx(ctx, updTx, s.dialect)
+	}
+	if txErr == nil {
+		_, txErr = updTx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE principals SET last_login_at_ms = ? WHERE id = ?`), now, pid)
+	}
+	if txErr == nil {
+		txErr = updTx.Commit()
+	} else {
+		_ = updTx.Rollback()
+	}
+	if txErr != nil {
+		return nil, nil, txErr
+	}
+	plane := strings.TrimSpace(params.CredentialPlane)
+	if plane == "" {
+		plane = rbac.CredentialPlaneAdminOIDC
+	}
+	email := strings.TrimSpace(params.Email)
+	if email == "" {
+		email = dbEmail
+	}
+	evType := strings.TrimSpace(params.AuditEventType)
+	if evType == "" {
+		evType = "auth.oidc_login_succeeded"
+	}
+	return s.mintSessionForPrincipal(ctx, pid, dbVersion, email, orgCopy, plane, roles, bindings, evType, now)
+}
+
+func (s *LocalService) mintSessionForPrincipal(
+	ctx context.Context,
+	principalID string,
+	principalVersion int64,
+	normEmail string,
+	orgID *string,
+	credentialPlane string,
+	roles []string,
+	bindings []rbac.RoleBinding,
+	auditEventType string,
+	now int64,
+) (*SessionInfo, *http.Cookie, error) {
 	sessionToken, err := randomURLToken(32)
 	if err != nil {
 		return nil, nil, err
@@ -924,12 +1033,19 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 	expiresAtMs := now + s.sessionTTL.Milliseconds()
 	digest := sha256.Sum256([]byte(sessionToken))
 
+	var orgCopy *string
+	if orgID != nil {
+		v := *orgID
+		orgCopy = &v
+	}
+
 	stored := &storedSession{
 		digest:           digest,
-		principalID:      matched.id,
-		principalVersion: matched.version,
+		principalID:      principalID,
+		principalVersion: principalVersion,
 		email:            normEmail,
-		orgID:            matched.orgID,
+		orgID:            orgCopy,
+		credentialPlane:  credentialPlane,
 		roles:            roles,
 		bindings:         bindings,
 		csrfToken:        csrfToken,
@@ -949,7 +1065,7 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 		var oldestKey [32]byte
 		var oldestExp int64
 		for k, v := range s.sessions {
-			if v.principalID != matched.id {
+			if v.principalID != principalID {
 				continue
 			}
 			principalCount++
@@ -986,7 +1102,7 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 	s.sessions[digest] = stored
 	s.sessMu.Unlock()
 
-	s.emitAudit(ctx, matched.orgID, "PRINCIPAL", matched.id, "auth.login_succeeded", "principal", matched.id, `{}`)
+	s.emitAudit(ctx, orgCopy, "PRINCIPAL", principalID, auditEventType, "principal", principalID, `{}`)
 
 	cookie := &http.Cookie{
 		Name:     SessionCookieName,
@@ -999,9 +1115,9 @@ func (s *LocalService) LoginForOrg(ctx context.Context, clientIP, orgID, email, 
 	}
 
 	info := &SessionInfo{
-		PrincipalID: matched.id,
+		PrincipalID: principalID,
 		Email:       normEmail,
-		OrgID:       matched.orgID,
+		OrgID:       orgCopy,
 		Roles:       append([]string(nil), roles...),
 		Bindings:    append([]rbac.RoleBinding(nil), bindings...),
 		CSRFToken:   csrfToken,
@@ -1046,6 +1162,10 @@ func (s *LocalService) AuthenticateAdminHTTPRequest(r *http.Request) (*rbac.Acto
 	}
 	csrfToken := sess.csrfToken
 	expiresAtMs := sess.expiresAtMs
+	credPlane := sess.credentialPlane
+	if credPlane == "" {
+		credPlane = rbac.CredentialPlaneAdminSession
+	}
 	s.sessMu.RUnlock()
 
 	if now >= expiresAtMs {
@@ -1120,7 +1240,7 @@ func (s *LocalService) AuthenticateAdminHTTPRequest(r *http.Request) (*rbac.Acto
 	actor := &rbac.Actor{
 		PrincipalID:     principalID,
 		SessionOrgID:    orgCopy,
-		CredentialPlane: rbac.CredentialPlaneAdminSession,
+		CredentialPlane: credPlane,
 		Bindings:        liveBindings,
 	}
 	info := &SessionInfo{

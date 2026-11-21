@@ -4,7 +4,10 @@
 package http
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
+	"github.com/nguywnben/tanpopo/internal/iam/oidc"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
@@ -315,3 +319,142 @@ func nonEmptyRoleSlice(roles []string) []string {
 	copy(out, roles)
 	return out
 }
+
+func oidcRequestIsHTTPS(r *http.Request) bool {
+	return r != nil && (r.TLS != nil || strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https"))
+}
+
+func oidcStateCookieName(r *http.Request) string {
+	if oidcRequestIsHTTPS(r) {
+		return "__Host-tanpopo_oidc_state"
+	}
+	return "tanpopo_oidc_state"
+}
+
+func (s *Server) computeOIDCStateCookieMAC(state string) string {
+	mac := hmac.New(sha256.New, s.cursorSecret)
+	_, _ = mac.Write([]byte("tanpopo-oidc-state\x00" + state))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func (s *Server) handleAuthOIDCStart(w http.ResponseWriter, r *http.Request) {
+	if s.oidc == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "oidc_not_configured", "api_error", "enterprise OIDC SSO is not configured", true, nil)
+		return
+	}
+	authURL, stateVal, err := s.oidc.StartAuth(r.Context())
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "oidc_start_failed", "upstream_error", "failed initializing OIDC login flow", true, nil)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     oidcStateCookieName(r),
+		Value:    s.computeOIDCStateCookieMAC(stateVal),
+		Path:     "/admin/v1/auth/oidc/callback",
+		HttpOnly: true,
+		Secure:   oidcRequestIsHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   600,
+	})
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+func (s *Server) handleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) {
+	if s.oidc == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "oidc_not_configured", "api_error", "enterprise OIDC SSO is not configured", true, nil)
+		return
+	}
+	code := strings.TrimSpace(r.URL.Query().Get("code"))
+	state := strings.TrimSpace(r.URL.Query().Get("state"))
+	cookieName := oidcStateCookieName(r)
+	stateCookie, cerr := r.Cookie(cookieName)
+	http.SetCookie(w, &http.Cookie{
+		Name:     cookieName,
+		Value:    "",
+		Path:     "/admin/v1/auth/oidc/callback",
+		HttpOnly: true,
+		Secure:   oidcRequestIsHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+	if cerr != nil || state == "" {
+		writeErrorEnvelope(w, r, http.StatusUnauthorized, "invalid_oidc_token", "authentication_error", "missing or invalid OIDC login state cookie", false, nil)
+		return
+	}
+	expectedMAC := s.computeOIDCStateCookieMAC(state)
+	if !hmac.Equal([]byte(strings.TrimSpace(stateCookie.Value)), []byte(expectedMAC)) {
+		writeErrorEnvelope(w, r, http.StatusUnauthorized, "invalid_oidc_token", "authentication_error", "OIDC login state binding mismatch", false, nil)
+		return
+	}
+	res, err := s.oidc.HandleCallback(r.Context(), code, state)
+	if err != nil {
+		switch {
+		case errors.Is(err, oidc.ErrInvalidOIDCToken), errors.Is(err, oidc.ErrInvalidOIDCState):
+			writeErrorEnvelope(w, r, http.StatusUnauthorized, "invalid_oidc_token", "authentication_error", "invalid or untrusted OIDC identity token", false, nil)
+		case errors.Is(err, oidc.ErrGroupMappingDenied):
+			writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "OIDC identity has no mapped organization role", false, nil)
+		case errors.Is(err, auth.ErrPrincipalInactive):
+			writeErrorEnvelope(w, r, http.StatusForbidden, "principal_inactive", "permission_error", "OIDC principal is suspended or disabled", false, nil)
+		default:
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "oidc_callback_failed", "upstream_error", "failed completing OIDC SSO login", true, nil)
+		}
+		return
+	}
+	http.SetCookie(w, res.Cookie)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Location", "/overview")
+	w.WriteHeader(http.StatusFound)
+}
+
+func (s *Server) handleAuthOIDCRefresh(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionSessionSelf, rbac.TargetScope{OrgID: sc.OrgID}) {
+		return
+	}
+	if sc.Actor.CredentialPlane != rbac.CredentialPlaneAdminOIDC {
+		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "OIDC session refresh requires an OIDC-authenticated session", false, nil)
+		return
+	}
+	if s.oidc == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "oidc_not_configured", "api_error", "enterprise OIDC SSO is not configured", true, nil)
+		return
+	}
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	if strings.TrimSpace(req.RefreshToken) == "" {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "refresh_token is required", false, nil)
+		return
+	}
+	res, err := s.oidc.RefreshSession(r.Context(), sc.Actor.PrincipalID, req.RefreshToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, oidc.ErrInvalidOIDCToken):
+			writeErrorEnvelope(w, r, http.StatusUnauthorized, "invalid_oidc_token", "authentication_error", "invalid or expired OIDC token", false, nil)
+		case errors.Is(err, oidc.ErrGroupMappingDenied):
+			writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "OIDC identity has no mapped organization role", false, nil)
+		case errors.Is(err, auth.ErrPrincipalInactive):
+			writeErrorEnvelope(w, r, http.StatusForbidden, "principal_inactive", "permission_error", "OIDC principal is suspended or disabled", false, nil)
+		default:
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "oidc_refresh_failed", "upstream_error", "failed refreshing OIDC session", true, nil)
+		}
+		return
+	}
+	http.SetCookie(w, res.Cookie)
+	writeJSON(w, http.StatusOK, adminSessionResponse{
+		PrincipalID: res.Session.PrincipalID,
+		Email:       res.Session.Email,
+		OrgID:       res.Session.OrgID,
+		Roles:       nonEmptyRoleSlice(res.Session.Roles),
+		CSRFToken:   res.Session.CSRFToken,
+		ExpiresAt:   formatTimeRFC3339Ms(res.Session.ExpiresAtMs),
+	})
+}
+

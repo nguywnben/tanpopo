@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0041` |
 | **Milestone / Epic** | `M4` (`v0.3 Clustered HA, Enterprise Security & A2A`) · `EP-08` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0034`, `TP-IMP-0039` — `GAP-01, 09`)* |
+| **Status** | **`DONE`** *(`DEC-090`; Dependencies `TP-IMP-0034`, `0039` `DONE`; [execution report](../../reviews/tp-imp-0041-execution.md))* |
 | **Size** | `L` (`go.mod`, `internal/iam/oidc/*`, `internal/security/foureyes/*`, `internal/security/vault/kms/*`, `internal/ingress/cache/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(`OIDC JWT/JWKS` verification, `Four-Eyes` dual-control approvals, external KMS integration & strict cross-tenant `Response Cache` isolation `FMEA-03`)* |
 | **Technical Owner** | `Principal Enterprise Security Architect` |

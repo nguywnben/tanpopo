@@ -32,6 +32,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
+	"github.com/nguywnben/tanpopo/internal/ingress/cache"
 	ingresshttp "github.com/nguywnben/tanpopo/internal/ingress/http"
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/approval"
 	mcphub "github.com/nguywnben/tanpopo/internal/ingress/mcp/hub"
@@ -609,11 +610,17 @@ func buildRuntimeInternal(ctx context.Context, role, listen string, beforeSQLite
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize telemetry pipeline: %w", err)
 		}
+		responseCache, err := cache.NewExactCache(cache.Config{DB: db, Vault: vaultStore})
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("initialize response cache: %w", err)
+		}
 		dataServer, err = ingresshttp.NewServer(ingresshttp.ServerConfig{
 			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
-			RateLimiter:  vkRateLimiter,
-			BudgetLedger: ledgerService,
-			Telemetry:    telemetryPipeline,
+			RateLimiter:   vkRateLimiter,
+			BudgetLedger:  ledgerService,
+			Telemetry:     telemetryPipeline,
+			ResponseCache: responseCache,
 		})
 		if err != nil {
 			cleanup()

@@ -20,6 +20,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/security/audit"
+	"github.com/nguywnben/tanpopo/internal/security/foureyes"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
@@ -1156,26 +1157,47 @@ func (s *Server) handleClearKillSwitch(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "kill switch version changed; reload before clearing", false, map[string]any{"current_version": ks.Version})
 		return
 	}
-	if ks.Level == killswitch.LevelExtensionInstallation {
-		installation, _, loadErr := s.loadExtensionInstallationDTO(r.Context(), ks.TargetID)
-		if errors.Is(loadErr, port.ErrNotFound) {
-			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
-			return
+	if status, code, msg := s.verifyKillSwitchClearBarrier(r.Context(), ks); status != 0 {
+		cat := "upstream_error"
+		retryable := status >= 500
+		if status == http.StatusNotFound {
+			cat = "not_found_error"
 		}
-		if loadErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading extension installation before clearing quarantine barrier", true, nil)
-			return
-		}
-		if installation.State == installer.StateQuarantined && s.snapshots != nil {
-			if err := s.snapshots.Refresh(r.Context()); err != nil {
-				writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "quarantine_snapshot_refresh_failed", "upstream_error", "serving snapshot could not confirm quarantine; emergency barrier remains active", true, nil)
-				return
-			}
-		}
+		writeErrorEnvelope(w, r, status, code, cat, msg, retryable, nil)
+		return
 	}
 	var orgPtr *string
 	if !instanceOnly {
 		orgPtr = &orgID
+	}
+	if orgPtr != nil && s.fourEyes != nil {
+		needFE, feErr := s.fourEyes.RequiresFourEyes(r.Context(), orgPtr)
+		if feErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking four-eyes policy", true, nil)
+			return
+		}
+		if needFE {
+			payloadBytes, _ := json.Marshal(map[string]any{
+				"expected_version": req.ExpectedVersion,
+				"clear_reason":     req.ClearReason,
+			})
+			cr, crErr := s.fourEyes.Initiate(r.Context(), foureyes.InitiateParams{
+				OrgID:                orgPtr,
+				ActionType:           foureyes.ActionKillSwitchClear,
+				TargetType:           "kill_switch",
+				TargetID:             id,
+				PayloadJSON:          payloadBytes,
+				InitiatorPrincipalID: sc.Actor.PrincipalID,
+				RequestID:            ptrOrNil(requestIDFromContext(r.Context())),
+			})
+			if crErr != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initiating four-eyes kill-switch clear request", true, nil)
+				return
+			}
+			w.Header().Set("ETag", FormatETag(cr.Version))
+			writeJSON(w, http.StatusAccepted, cr)
+			return
+		}
 	}
 	cleared, err := s.killSwitch.Clear(r.Context(), killswitch.ClearParams{
 		OrgID: orgPtr, KillSwitchID: id, ExpectedVersion: req.ExpectedVersion,
@@ -1201,6 +1223,25 @@ func (s *Server) handleClearKillSwitch(w http.ResponseWriter, r *http.Request) {
 		_ = s.snapshots.Refresh(r.Context())
 	}
 	writeJSON(w, http.StatusOK, cleared)
+}
+
+func (s *Server) verifyKillSwitchClearBarrier(ctx context.Context, ks *killswitch.KillSwitch) (int, string, string) {
+	if ks == nil || ks.Level != killswitch.LevelExtensionInstallation {
+		return 0, "", ""
+	}
+	installation, _, loadErr := s.loadExtensionInstallationDTO(ctx, ks.TargetID)
+	if errors.Is(loadErr, port.ErrNotFound) {
+		return http.StatusNotFound, "resource_not_found", "extension installation not found"
+	}
+	if loadErr != nil {
+		return http.StatusInternalServerError, "internal_error", "failed loading extension installation before clearing quarantine barrier"
+	}
+	if installation.State == installer.StateQuarantined && s.snapshots != nil {
+		if err := s.snapshots.Refresh(ctx); err != nil {
+			return http.StatusServiceUnavailable, "quarantine_snapshot_refresh_failed", "serving snapshot could not confirm quarantine; emergency barrier remains active"
+		}
+	}
+	return 0, "", ""
 }
 
 func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) {
