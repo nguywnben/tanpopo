@@ -365,7 +365,7 @@ export function ConsoleShell() {
         <div className="tp-rail-footer">
           {railOpen ? (
             <div className="tp-rail-prefs">
-              <LanguageSelector id="drawer-language-selector" className="tp-rail-lang" placement="above" />
+              <LanguageSelector id="drawer-language-selector" className="tp-rail-lang" />
               <IconButton
                 variant="secondary"
                 label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')}
