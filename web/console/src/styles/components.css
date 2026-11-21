@@ -192,10 +192,12 @@
   }
 
   .tp-btn-content {
-    display: inline-flex;
+    display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.375rem;
     min-width: 0;
+    line-height: 1.25;
   }
 
   /* Compact Typographic Status & Severity Labels (no dots, borders, fills, or rounded frames) */
@@ -830,7 +832,6 @@
 
   /* Coarse touch pointer accommodations (WCAG 2.2 touch comfort without shrinking desktop) */
   @media (pointer: coarse) {
-    .tp-topbar button,
     .tp-toolbar button,
     .tp-page-actions button,
     .tp-table-mobile button {

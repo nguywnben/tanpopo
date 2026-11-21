@@ -110,8 +110,8 @@
   }
 
   .tp-scope-switcher {
-    width: 28px;
-    height: 28px;
+    width: var(--tp-topbar-ctrl, 28px);
+    height: var(--tp-topbar-ctrl, 28px);
     padding: 0;
     border: 1px solid var(--tp-border-strong);
     border-radius: var(--tp-radius-md);
@@ -440,6 +440,7 @@
   }
 
   .tp-topbar {
+    --tp-topbar-ctrl: 28px;
     position: sticky;
     top: 0;
     z-index: 30;
@@ -465,6 +466,14 @@
     flex-shrink: 0;
   }
 
+  .tp-topbar-brand-group button,
+  .tp-topbar-theme button {
+    width: var(--tp-topbar-ctrl);
+    height: var(--tp-topbar-ctrl);
+    min-width: var(--tp-topbar-ctrl);
+    min-height: var(--tp-topbar-ctrl);
+  }
+
   .tp-topbar-brand {
     display: inline-flex;
     align-items: center;
@@ -476,8 +485,11 @@
     white-space: nowrap;
   }
 
-  .tp-jump-btn {
+  .tp-jump-btn,
+  .tp-killswitch-btn {
     flex-shrink: 0;
+    height: var(--tp-topbar-ctrl);
+    min-height: var(--tp-topbar-ctrl);
   }
 
   .tp-topbar-actions {
@@ -505,15 +517,21 @@
 
   @media (max-width: 819.98px) {
     .tp-jump-btn {
-      min-width: 28px;
-      padding-inline: 0.375rem;
+      width: var(--tp-topbar-ctrl);
+      min-width: var(--tp-topbar-ctrl);
+      padding: 0;
     }
   }
 
   @media (max-width: 639.98px) {
     .tp-killswitch-btn {
-      min-width: 28px;
+      min-width: var(--tp-topbar-ctrl);
       padding-inline: 0.375rem;
+    }
+
+    .tp-killswitch-btn:not(:has(.astryx-badge)) {
+      width: var(--tp-topbar-ctrl);
+      padding: 0;
     }
   }
 
@@ -938,6 +956,15 @@
   }
 
   @media (pointer: coarse) {
+    .tp-topbar {
+      --tp-topbar-ctrl: 32px;
+    }
+
+    .tp-rail-scope-add {
+      width: 28px;
+      height: 28px;
+    }
+
     .tp-nav-link {
       min-height: 40px;
       padding-block: 0.5rem;
