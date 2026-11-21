@@ -4,6 +4,7 @@
 package http
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -125,31 +126,74 @@ func (s *Server) revokeEphemeralPlaygroundKeys(r *http.Request, principalID stri
 	}
 	ctx := r.Context()
 	now := s.nowMs()
+	tExpr := port.BoolExpr(s.dialect, true)
 
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, org_id FROM virtual_keys
-		WHERE owner_principal_id = ? AND is_ephemeral_playground = 1
-		  AND state IN ('CREATED_ACTIVE', 'ROTATING_DUAL_VALID', 'QUOTA_PAUSED', 'SUSPENDED')`,
-		principalID,
-	)
-	if err != nil {
-		return err
-	}
 	type keyRef struct{ id, orgID string }
 	var keys []keyRef
-	for rows.Next() {
-		var k keyRef
-		if scanErr := rows.Scan(&k.id, &k.orgID); scanErr != nil {
-			_ = rows.Close()
-			return scanErr
+
+	if s.dialect == port.DialectPostgres {
+		if err := s.withOperatorTx(ctx, func(tx *sql.Tx) error {
+			orgIDs, err := port.ListOrgIDsTx(ctx, tx, s.dialect)
+			if err != nil {
+				return err
+			}
+			findQ := s.rebind(`
+				SELECT id FROM virtual_keys
+				WHERE org_id = ? AND owner_principal_id = ? AND is_ephemeral_playground = ` + tExpr + `
+				  AND state IN ('CREATED_ACTIVE', 'ROTATING_DUAL_VALID', 'QUOTA_PAUSED', 'SUSPENDED')`)
+			for _, oid := range orgIDs {
+				if err := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); err != nil {
+					return err
+				}
+				rows, err := tx.QueryContext(ctx, findQ, oid, principalID)
+				if err != nil {
+					return err
+				}
+				for rows.Next() {
+					var id string
+					if serr := rows.Scan(&id); serr != nil {
+						_ = rows.Close()
+						return serr
+					}
+					keys = append(keys, keyRef{id: id, orgID: oid})
+				}
+				rerr := rows.Err()
+				_ = rows.Close()
+				if rerr != nil {
+					return rerr
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
-		keys = append(keys, k)
+	} else {
+		if err := s.withOperatorReadTx(ctx, func(q adminDBQuerier) error {
+			rows, qerr := q.QueryContext(ctx, s.rebind(`
+			SELECT id, org_id FROM virtual_keys
+			WHERE owner_principal_id = ? AND is_ephemeral_playground = `+port.BoolExpr(s.dialect, true)+`
+			  AND state IN ('CREATED_ACTIVE', 'ROTATING_DUAL_VALID', 'QUOTA_PAUSED', 'SUSPENDED')`),
+				principalID,
+			)
+			if qerr != nil {
+				return qerr
+			}
+			defer func() { _ = rows.Close() }()
+			for rows.Next() {
+				var k keyRef
+				if scanErr := rows.Scan(&k.id, &k.orgID); scanErr != nil {
+					return scanErr
+				}
+				keys = append(keys, k)
+			}
+			if rowsErr := rows.Err(); rowsErr != nil {
+				return rowsErr
+			}
+			return rows.Close()
+		}); err != nil {
+			return err
+		}
 	}
-	if rowsErr := rows.Err(); rowsErr != nil {
-		_ = rows.Close()
-		return rowsErr
-	}
-	_ = rows.Close()
 	if len(keys) == 0 {
 		return nil
 	}
@@ -162,25 +206,23 @@ func (s *Server) revokeEphemeralPlaygroundKeys(r *http.Request, principalID stri
 
 	var committedEpoch int64
 	reqIDPtr := ptrOrNil(requestIDFromContext(ctx))
+	updQ := s.rebind(`
+		UPDATE virtual_keys
+		SET state = 'REVOKED', previous_key_hash = NULL, grace_expires_at_ms = NULL,
+		    revoked_at_ms = ?, revocation_mode = 'STANDARD', version = version + 1, updated_at_ms = ?
+		WHERE org_id = ? AND id = ? AND is_ephemeral_playground = ` + tExpr)
 	for _, k := range keys {
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE virtual_keys
-			SET state = 'REVOKED', previous_key_hash = NULL, grace_expires_at_ms = NULL,
-			    revoked_at_ms = ?, revocation_mode = 'STANDARD', version = version + 1, updated_at_ms = ?
-			WHERE org_id = ? AND id = ? AND is_ephemeral_playground = 1`,
-			now, now, k.orgID, k.id,
-		); err != nil {
+		if err := port.SetOrgRLSTx(ctx, tx, s.dialect, k.orgID); err != nil {
 			return err
 		}
-		resEpoch, err := tx.ExecContext(ctx, `
-			INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-			VALUES (?, 'virtual_key', ?, ?, 0, ?)`,
-			k.orgID, k.id, port.MutationRevoke, now,
-		)
+		if _, err := tx.ExecContext(ctx, updQ, now, now, k.orgID, k.id); err != nil {
+			return err
+		}
+		epoch, err := s.appendChangelogTx(ctx, tx, k.orgID, "virtual_key", k.id, port.MutationRevoke, false, now)
 		if err != nil {
 			return err
 		}
-		if epoch, epochErr := resEpoch.LastInsertId(); epochErr == nil && epoch > committedEpoch {
+		if epoch > committedEpoch {
 			committedEpoch = epoch
 		}
 		audID, audErr := idgen.New(idgen.PrefixAudit)

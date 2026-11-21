@@ -135,10 +135,19 @@ func (r vaultOCIRegistryCredentialResolver) CredentialsForRegistry(ctx context.C
 	if r.db == nil || r.vault == nil || strings.TrimSpace(orgID) == "" || strings.TrimSpace(registryHost) == "" {
 		return nil, errors.New("organization-scoped registry credential lookup is unavailable")
 	}
-	rows, err := r.db.QueryContext(ctx, `
+	dialect := port.DetectDialect(ctx, r.db)
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("begin registry credential tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, dialect, orgID); err != nil {
+		return nil, fmt.Errorf("scope registry credential tx: %w", err)
+	}
+	rows, err := tx.QueryContext(ctx, port.Rebind(dialect, `
 		SELECT id FROM secret_credentials
 		WHERE org_id = ? AND owner_project_id IS NULL AND secret_kind = ? AND bound_audience = ?
-		ORDER BY id LIMIT 2`, orgID, vault.SecretKindOCIRegistryAuth, registryHost)
+		ORDER BY id LIMIT 2`), orgID, vault.SecretKindOCIRegistryAuth, registryHost)
 	if err != nil {
 		return nil, fmt.Errorf("query organization registry credentials: %w", err)
 	}
@@ -158,6 +167,8 @@ func (r vaultOCIRegistryCredentialResolver) CredentialsForRegistry(ctx context.C
 	if rows.Next() {
 		return nil, errors.New("multiple organization registry credentials match the same registry authority")
 	}
+	_ = rows.Close()
+	_ = tx.Rollback()
 	secret, err := r.vault.UnsealWithCapability(ctx, r.cap, orgID, secretID)
 	if err != nil {
 		return nil, fmt.Errorf("unseal organization registry credentials: %w", err)

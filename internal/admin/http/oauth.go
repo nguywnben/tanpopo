@@ -45,7 +45,9 @@ func (s *Server) handleStartConnectionOAuth(w http.ResponseWriter, r *http.Reque
 	}
 	connID := strings.TrimSpace(r.PathValue("connectionId"))
 	var projectID sql.NullString
-	err := s.db.QueryRowContext(r.Context(), `SELECT owner_project_id FROM provider_connections WHERE org_id=? AND id=?`, orgID, connID).Scan(&projectID)
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`SELECT owner_project_id FROM provider_connections WHERE org_id=? AND id=?`), orgID, connID).Scan(&projectID)
+	})
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "connection not found", false, nil)
 		return
@@ -54,7 +56,7 @@ func (s *Server) handleStartConnectionOAuth(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var req oauthStartRequest
-	if !decodePublicJSON(w, r, &req) {
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
 	}
 	result, err := s.oauth.Start(r.Context(), oauth.StartInput{OrgID: orgID, PrincipalID: sc.Actor.PrincipalID, BrowserSessionHash: browserSessionHash, ConnectionID: connID, Flow: req.Flow, AuthorizationEndpoint: req.AuthorizationEndpoint, TokenEndpoint: req.TokenEndpoint, DeviceAuthorizationURL: req.DeviceAuthorizationEndpoint, ClientID: req.ClientID, Scopes: req.Scopes, Resource: req.Resource})
@@ -89,7 +91,9 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var projectID sql.NullString
-	err := s.db.QueryRowContext(r.Context(), `SELECT project_id FROM oauth_authorization_sessions WHERE org_id=? AND principal_id=? AND state=? AND grant_type='AUTHORIZATION_CODE_PKCE' AND session_status='PENDING' AND expires_at_ms>?`, orgID, sc.Actor.PrincipalID, state, s.nowMs()).Scan(&projectID)
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`SELECT project_id FROM oauth_authorization_sessions WHERE org_id=? AND principal_id=? AND state=? AND grant_type='AUTHORIZATION_CODE_PKCE' AND session_status='PENDING' AND expires_at_ms>?`), orgID, sc.Actor.PrincipalID, state, s.nowMs()).Scan(&projectID)
+	})
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_oauth_state", "invalid_request_error", "OAuth authorization state is invalid or expired", false, nil)
 		return
@@ -125,11 +129,13 @@ func (s *Server) handleOAuthDevicePoll(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		State string `json:"state"`
 	}
-	if !decodePublicJSON(w, r, &req) {
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return
 	}
 	var projectID sql.NullString
-	err := s.db.QueryRowContext(r.Context(), `SELECT project_id FROM oauth_authorization_sessions WHERE org_id=? AND principal_id=? AND state=? AND grant_type='DEVICE_CODE' AND session_status='PENDING' AND expires_at_ms>?`, orgID, sc.Actor.PrincipalID, req.State, s.nowMs()).Scan(&projectID)
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`SELECT project_id FROM oauth_authorization_sessions WHERE org_id=? AND principal_id=? AND state=? AND grant_type='DEVICE_CODE' AND session_status='PENDING' AND expires_at_ms>?`), orgID, sc.Actor.PrincipalID, req.State, s.nowMs()).Scan(&projectID)
+	})
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_oauth_state", "invalid_request_error", "OAuth authorization state is invalid or expired", false, nil)
 		return

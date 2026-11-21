@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0040` |
 | **Milestone / Epic** | `M4` (`v0.3 Clustered HA, Enterprise Security & A2A`) · `EP-08` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0033`, `TP-IMP-0039` — `GAP-01, 06`)* |
+| **Status** | **`DONE`** *(`DEC-089`; Dependencies `TP-IMP-0003`, `0033`, `0039` `DONE`; [execution report](../../reviews/tp-imp-0040-execution.md))* |
 | **Size** | `L` (`go.mod`, `internal/cluster/valkey/*`, `internal/config/snapshot/cluster_sync.go`, `internal/cli/admin/verify_state.go`, `deploy/helm/tanpopo/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Zero `CROSSSLOT` errors on sharded clusters, `< 5s` cluster-wide revocation propagation & `> 10s` partitioned-node fail-closed circuit breaking `FMEA-07`)* |
 | **Technical Owner** | `Principal Distributed Systems / SRE Architect` |

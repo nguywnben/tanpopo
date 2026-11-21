@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
@@ -127,48 +129,54 @@ func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 	q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing secrets", true, nil)
-		return
-	}
-	defer rows.Close()
-
 	type rowItem struct {
 		dto       secretMetadataDTO
 		createdMs int64
 	}
 	items := make([]rowItem, 0, limit+1)
-	for rows.Next() {
-		var (
-			id, name, kind, fp string
-			projNS             sql.NullString
-			ver, createdMs     int64
-		)
-		if scanErr := rows.Scan(&id, &projNS, &name, &kind, &fp, &ver, &createdMs); scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning secret metadata", true, nil)
-			return
+	var scanFailed bool
+	err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		rows, qerr := dbq.QueryContext(r.Context(), s.rebind(q.String()), args...)
+		if qerr != nil {
+			return qerr
 		}
-		var projPtr *string
-		if projNS.Valid {
-			v := projNS.String
-			projPtr = &v
+		defer rows.Close()
+		for rows.Next() {
+			var (
+				id, name, kind, fp string
+				projNS             sql.NullString
+				ver, createdMs     int64
+			)
+			if scanErr := rows.Scan(&id, &projNS, &name, &kind, &fp, &ver, &createdMs); scanErr != nil {
+				scanFailed = true
+				return scanErr
+			}
+			var projPtr *string
+			if projNS.Valid {
+				v := projNS.String
+				projPtr = &v
+			}
+			items = append(items, rowItem{
+				dto: secretMetadataDTO{
+					CredentialID:        id,
+					ProjectID:           projPtr,
+					Name:                name,
+					SecretKind:          kind,
+					TrailingFingerprint: formatTrailingFingerprint(fp),
+					Version:             ver,
+					CreatedAt:           formatTimeRFC3339Ms(createdMs),
+				},
+				createdMs: createdMs,
+			})
 		}
-		items = append(items, rowItem{
-			dto: secretMetadataDTO{
-				CredentialID:        id,
-				ProjectID:           projPtr,
-				Name:                name,
-				SecretKind:          kind,
-				TrailingFingerprint: formatTrailingFingerprint(fp),
-				Version:             ver,
-				CreatedAt:           formatTimeRFC3339Ms(createdMs),
-			},
-			createdMs: createdMs,
-		})
+		return rows.Err()
+	})
+	if scanFailed {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning secret metadata", true, nil)
+		return
 	}
-	if err := rows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating secret metadata", true, nil)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing secrets", true, nil)
 		return
 	}
 
@@ -374,17 +382,21 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping secret delete tx", true, nil)
+		return
+	}
 
 	var bindingCount, connCount int
-	if err := tx.QueryRowContext(r.Context(), `
-		SELECT COUNT(1) FROM connection_secret_bindings WHERE org_id = ? AND credential_id = ?`,
+	if err := tx.QueryRowContext(r.Context(), s.rebind(`
+		SELECT COUNT(1) FROM connection_secret_bindings WHERE org_id = ? AND credential_id = ?`),
 		orgID, credID,
 	).Scan(&bindingCount); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking credential slot bindings", true, nil)
 		return
 	}
-	if err := tx.QueryRowContext(r.Context(), `
-		SELECT COUNT(1) FROM provider_connections WHERE org_id = ? AND credential_id = ?`,
+	if err := tx.QueryRowContext(r.Context(), s.rebind(`
+		SELECT COUNT(1) FROM provider_connections WHERE org_id = ? AND credential_id = ?`),
 		orgID, credID,
 	).Scan(&connCount); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking provider connection references", true, nil)
@@ -395,12 +407,13 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := tx.ExecContext(r.Context(), `
-		DELETE FROM secret_credentials WHERE org_id = ? AND id = ? AND version = ?`,
+	res, err := tx.ExecContext(r.Context(), s.rebind(`
+		DELETE FROM secret_credentials WHERE org_id = ? AND id = ? AND version = ?`),
 		orgID, credID, expectedVer,
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
+		var pgErr *pgconn.PgError
+		if (errors.As(err, &pgErr) && pgErr.Code == "23503") || strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
 			writeErrorEnvelope(w, r, http.StatusConflict, "credential_in_use", "conflict_error", "credential is still referenced by another resource", false, cur)
 			return
 		}
@@ -423,11 +436,8 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := tx.ExecContext(r.Context(), `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'secret_credential', ?, ?, 0, ?)`,
-		orgID, credID, port.MutationDelete, now,
-	); err != nil {
+	epoch, err := s.appendChangelogTx(r.Context(), tx, orgID, "secret_credential", credID, port.MutationDelete, false, now)
+	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording changelog", true, nil)
 		return
 	}
@@ -466,6 +476,13 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		ConfigEpoch:  epoch,
+		OrgID:        orgID,
+		EntityKind:   "secret_credential",
+		EntityID:     credID,
+		MutationType: port.MutationDelete,
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -476,12 +493,14 @@ func (s *Server) loadSecretMetadataDTO(r *http.Request, orgID, credID string) (s
 		fp        string
 		createdMs int64
 	)
-	err := s.db.QueryRowContext(r.Context(), `
-		SELECT id, owner_project_id, name, secret_kind, key_fingerprint, version, created_at_ms
-		FROM secret_credentials
-		WHERE org_id = ? AND id = ?`,
-		orgID, credID,
-	).Scan(&dto.CredentialID, &projNS, &dto.Name, &dto.SecretKind, &fp, &dto.Version, &createdMs)
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
+			SELECT id, owner_project_id, name, secret_kind, key_fingerprint, version, created_at_ms
+			FROM secret_credentials
+			WHERE org_id = ? AND id = ?`),
+			orgID, credID,
+		).Scan(&dto.CredentialID, &projNS, &dto.Name, &dto.SecretKind, &fp, &dto.Version, &createdMs)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return secretMetadataDTO{}, false, nil
 	}

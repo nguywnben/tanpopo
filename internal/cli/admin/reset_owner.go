@@ -95,6 +95,7 @@ func NewCommandWithLocale(stdout io.Writer, loc i18n.Locale, outputFormat ...*st
 	reset.Flags().StringVar(&dbPath, "db", "", i18n.T(loc, "cli.admin.reset.flag.db"))
 	reset.Flags().StringVar(&ownerEmail, "email", "", i18n.T(loc, "cli.admin.reset.flag.email"))
 	adminCommand.AddCommand(reset)
+	adminCommand.AddCommand(newVerifyStateCommand(stdout, loc, outputFormat...))
 	return adminCommand
 }
 

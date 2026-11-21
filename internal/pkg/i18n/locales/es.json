@@ -256,5 +256,20 @@
   "cli.ops.db.short": "Inspeccionar o migrar el motor de almacenamiento de base de datos.",
   "cli.ops.db.migrate.flag.from": "Ruta de base de datos SQLite WAL de origen o DSN sqlite://",
   "cli.ops.db.migrate.flag.to": "DSN de conexión PostgreSQL 16+ de destino",
-  "cli.ops.db.migrate.flag.verify": "Verificar conteos de filas, sumas micro-USD, cadenas JCS de auditoría y sobres Vault antes del commit"
+  "cli.ops.db.migrate.flag.verify": "Verificar conteos de filas, sumas micro-USD, cadenas JCS de auditoría y sobres Vault antes del commit",
+  "cli.admin.verify_state.short": "Verificar cadenas de hash de auditoría, conciliar reservas huérfanas y reconstruir el estado de Valkey",
+  "cli.admin.verify_state.flag.db": "Ruta al archivo de base de datos SQLite",
+  "cli.admin.verify_state.flag.pg_dsn": "DSN de conexión PostgreSQL 16+",
+  "cli.admin.verify_state.flag.valkey_addrs": "Direcciones del clúster Valkey separadas por comas",
+  "cli.admin.verify_state.flag.valkey_username": "Nombre de usuario ACL de Valkey",
+  "cli.admin.verify_state.flag.valkey_password": "Contraseña ACL de Valkey",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Exigir TLS al conectarse a Valkey",
+  "cli.admin.verify_state.flag.check_audit": "Verificar cadenas de hash de auditoría inmutables en todos los inquilinos",
+  "cli.admin.verify_state.flag.reconcile_orphans": "Reclamar reservas de presupuesto expiradas antes de reconstruir la caché",
+  "cli.admin.verify_state.flag.rebuild_valkey": "Reconstruir reservas activas en Valkey desde SQL/PostgreSQL",
+  "cli.admin.verify_state.err.store_required": "Proporcione --db (SQLite) o --pg-dsn (PostgreSQL).",
+  "cli.admin.verify_state.err.valkey_required": "Se requiere --valkey-addrs para reconstruir el estado de Valkey.",
+  "cli.admin.verify_state.err.tampered": "Falló la verificación de la cadena de auditoría: se detectó alteración.",
+  "cli.admin.verify_state.err.failed": "Falló la verificación del estado operativo",
+  "cli.admin.verify_state.output": "Comprobación {{status}} (motor={{engine}} eventos={{events}} huérfanas={{orphans}} valkey_restauradas={{restored}})"
 }

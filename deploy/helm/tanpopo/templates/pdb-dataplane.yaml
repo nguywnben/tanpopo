@@ -1,0 +1,16 @@
+{{- if .Values.dataPlane.pdb.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "tanpopo.fullname" . }}-dataplane
+  labels:
+    {{- include "tanpopo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: data-plane
+spec:
+  minAvailable: {{ .Values.dataPlane.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "tanpopo.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: data-plane
+{{- end -}}

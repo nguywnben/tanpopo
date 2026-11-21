@@ -256,5 +256,20 @@
   "cli.ops.db.short": "检查或迁移数据库存储引擎。",
   "cli.ops.db.migrate.flag.from": "源 SQLite WAL 数据库路径或 sqlite:// DSN",
   "cli.ops.db.migrate.flag.to": "目标 PostgreSQL 16+ 连接 DSN",
-  "cli.ops.db.migrate.flag.verify": "提交前校验行数、micro-USD 总和、JCS 审计哈希链与 Vault 信封"
+  "cli.ops.db.migrate.flag.verify": "提交前校验行数、micro-USD 总和、JCS 审计哈希链与 Vault 信封",
+  "cli.admin.verify_state.short": "校验审计哈希链、清理孤儿预算锁定并重建 Valkey 集群状态",
+  "cli.admin.verify_state.flag.db": "SQLite 数据库文件路径",
+  "cli.admin.verify_state.flag.pg_dsn": "PostgreSQL 16+ 连接 DSN",
+  "cli.admin.verify_state.flag.valkey_addrs": "以逗号分隔的 Valkey 集群地址",
+  "cli.admin.verify_state.flag.valkey_username": "Valkey ACL 用户名",
+  "cli.admin.verify_state.flag.valkey_password": "Valkey ACL 密码",
+  "cli.admin.verify_state.flag.valkey_require_tls": "连接 Valkey 时强制启用 TLS",
+  "cli.admin.verify_state.flag.check_audit": "校验所有租户的不可变审计哈希链",
+  "cli.admin.verify_state.flag.reconcile_orphans": "重建缓存状态前先回收已过期的预算锁定",
+  "cli.admin.verify_state.flag.rebuild_valkey": "从 SQL/PostgreSQL 状态重建 Valkey 中的活动预算锁定",
+  "cli.admin.verify_state.err.store_required": "请提供 --db (SQLite) 或 --pg-dsn (PostgreSQL)。",
+  "cli.admin.verify_state.err.valkey_required": "重建 Valkey 状态时必须提供 --valkey-addrs。",
+  "cli.admin.verify_state.err.tampered": "审计哈希链校验失败：检测到篡改。",
+  "cli.admin.verify_state.err.failed": "运行状态校验失败",
+  "cli.admin.verify_state.output": "状态检查 {{status}} (引擎={{engine}} 审计事件={{events}} 回收孤儿={{orphans}} 恢复Valkey锁定={{restored}})"
 }

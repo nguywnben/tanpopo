@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
@@ -126,54 +127,59 @@ func (s *Server) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 	q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing routes", true, nil)
-		return
-	}
-	defer rows.Close()
-
 	type rteRow struct {
 		dto       routeResourceDTO
 		createdMs int64
 	}
 	var items []rteRow
-	for rows.Next() {
-		var (
-			id, projID, envID, slug, strategy string
-			maxHops, reqTimeoutMs             int
-			reqRegion                         sql.NullString
-			ver, createdMs, updatedMs         int64
-		)
-		if scanErr := rows.Scan(&id, &projID, &envID, &slug, &strategy, &maxHops, &reqTimeoutMs, &reqRegion, &ver, &createdMs, &updatedMs); scanErr != nil {
-			_ = rows.Close()
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning route", true, nil)
-			return
+	var scanErr error
+	if err := s.withOrgReadTx(r.Context(), orgID, func(qdb adminDBQuerier) error {
+		rows, qerr := qdb.QueryContext(r.Context(), s.rebind(q.String()), args...)
+		if qerr != nil {
+			return qerr
 		}
-		_ = projID
-		regions := []string{}
-		if reqRegion.Valid && reqRegion.String != "" {
-			regions = []string{reqRegion.String}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var (
+				id, projID, envID, slug, strategy string
+				maxHops, reqTimeoutMs             int
+				reqRegion                         sql.NullString
+				ver, createdMs, updatedMs         int64
+			)
+			if serr := rows.Scan(&id, &projID, &envID, &slug, &strategy, &maxHops, &reqTimeoutMs, &reqRegion, &ver, &createdMs, &updatedMs); serr != nil {
+				scanErr = serr
+				return nil
+			}
+			_ = projID
+			regions := []string{}
+			if reqRegion.Valid && reqRegion.String != "" {
+				regions = []string{reqRegion.String}
+			}
+			items = append(items, rteRow{
+				dto: routeResourceDTO{
+					ID:                 id,
+					Slug:               slug,
+					EnvID:              envID,
+					Strategy:           mapRouteStrategyOpenAPI(strategy),
+					AllowedDataRegions: regions,
+					MaxFailoverHops:    maxHops,
+					RequestTimeoutMs:   reqTimeoutMs,
+					Version:            ver,
+					UpdatedAt:          formatTimeRFC3339Ms(updatedMs),
+				},
+				createdMs: createdMs,
+			})
 		}
-		items = append(items, rteRow{
-			dto: routeResourceDTO{
-				ID:                 id,
-				Slug:               slug,
-				EnvID:              envID,
-				Strategy:           mapRouteStrategyOpenAPI(strategy),
-				AllowedDataRegions: regions,
-				MaxFailoverHops:    maxHops,
-				RequestTimeoutMs:   reqTimeoutMs,
-				Version:            ver,
-				UpdatedAt:          formatTimeRFC3339Ms(updatedMs),
-			},
-			createdMs: createdMs,
-		})
+		if ierr := rows.Err(); ierr != nil {
+			return ierr
+		}
+		return rows.Close()
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing routes", true, nil)
+		return
 	}
-	iterErr := rows.Err()
-	_ = rows.Close()
-	if iterErr != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating routes", true, nil)
+	if scanErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning route", true, nil)
 		return
 	}
 	for i := range items {
@@ -243,20 +249,25 @@ func (s *Server) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping route tx", true, nil)
+		return
+	}
 
 	var reqRegArg any
 	if norm.RequiredRegion != "" {
 		reqRegArg = norm.RequiredRegion
 	}
-	if _, err := tx.ExecContext(r.Context(), `
+	if _, err := tx.ExecContext(r.Context(), s.rebind(`
 		INSERT INTO route_policies (
 			id, org_id, project_id, env_id, route_slug, strategy,
 			max_failover_hops, request_timeout_ms, required_region, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
 		routeID, orgID, norm.ProjectID, norm.EnvID, norm.Slug, norm.Strategy,
 		norm.MaxFailoverHops, norm.RequestTimeoutMs, reqRegArg, now, now,
 	); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		var pgErr *pgconn.PgError
+		if (errors.As(err, &pgErr) && pgErr.Code == "23505") || strings.Contains(strings.ToLower(err.Error()), "unique") {
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "route slug already exists in environment", false, nil)
 			return
 		}
@@ -265,9 +276,9 @@ func (s *Server) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, tgt := range norm.Targets {
-		if _, err := tx.ExecContext(r.Context(), `
+		if _, err := tx.ExecContext(r.Context(), s.rebind(`
 			INSERT INTO route_targets (org_id, route_id, deployment_id, priority_order, weight)
-			VALUES (?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?)`),
 			orgID, routeID, tgt.DeploymentID, tgt.PriorityOrder, tgt.Weight,
 		); err != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed persisting route targets", true, nil)
@@ -290,6 +301,12 @@ func (s *Server) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "route_policy",
+		EntityID:     routeID,
+		MutationType: port.MutationUpsert,
+	})
 
 	regions := []string{}
 	if norm.RequiredRegion != "" {
@@ -366,20 +383,25 @@ func (s *Server) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping route update tx", true, nil)
+		return
+	}
 
 	var reqRegArg any
 	if norm.RequiredRegion != "" {
 		reqRegArg = norm.RequiredRegion
 	}
-	res, err := tx.ExecContext(r.Context(), `
+	res, err := tx.ExecContext(r.Context(), s.rebind(`
 		UPDATE route_policies
 		SET route_slug = ?, strategy = ?, max_failover_hops = ?, request_timeout_ms = ?, required_region = ?,
 		    version = version + 1, updated_at_ms = ?
-		WHERE org_id = ? AND id = ? AND version = ?`,
+		WHERE org_id = ? AND id = ? AND version = ?`),
 		norm.Slug, norm.Strategy, norm.MaxFailoverHops, norm.RequestTimeoutMs, reqRegArg, now, orgID, routeID, expectedVer,
 	)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		var pgErr *pgconn.PgError
+		if (errors.As(err, &pgErr) && pgErr.Code == "23505") || strings.Contains(strings.ToLower(err.Error()), "unique") {
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "route slug already exists in environment", false, nil)
 			return
 		}
@@ -401,14 +423,14 @@ func (s *Server) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := tx.ExecContext(r.Context(), `DELETE FROM route_targets WHERE org_id = ? AND route_id = ?`, orgID, routeID); err != nil {
+	if _, err := tx.ExecContext(r.Context(), s.rebind(`DELETE FROM route_targets WHERE org_id = ? AND route_id = ?`), orgID, routeID); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed replacing route targets", true, nil)
 		return
 	}
 	for _, tgt := range norm.Targets {
-		if _, err := tx.ExecContext(r.Context(), `
+		if _, err := tx.ExecContext(r.Context(), s.rebind(`
 			INSERT INTO route_targets (org_id, route_id, deployment_id, priority_order, weight)
-			VALUES (?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?)`),
 			orgID, routeID, tgt.DeploymentID, tgt.PriorityOrder, tgt.Weight,
 		); err != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed persisting route targets", true, nil)
@@ -431,6 +453,12 @@ func (s *Server) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "route_policy",
+		EntityID:     routeID,
+		MutationType: port.MutationUpsert,
+	})
 
 	regions := []string{}
 	if norm.RequiredRegion != "" {
@@ -502,12 +530,16 @@ func (s *Server) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping route delete tx", true, nil)
+		return
+	}
 
-	if _, err := tx.ExecContext(r.Context(), `DELETE FROM route_targets WHERE org_id = ? AND route_id = ?`, orgID, routeID); err != nil {
+	if _, err := tx.ExecContext(r.Context(), s.rebind(`DELETE FROM route_targets WHERE org_id = ? AND route_id = ?`), orgID, routeID); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed deleting route targets", true, nil)
 		return
 	}
-	res, err := tx.ExecContext(r.Context(), `DELETE FROM route_policies WHERE org_id = ? AND id = ? AND version = ?`, orgID, routeID, expectedVer)
+	res, err := tx.ExecContext(r.Context(), s.rebind(`DELETE FROM route_policies WHERE org_id = ? AND id = ? AND version = ?`), orgID, routeID, expectedVer)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed deleting route", true, nil)
 		return
@@ -541,6 +573,12 @@ func (s *Server) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "route_policy",
+		EntityID:     routeID,
+		MutationType: port.MutationDelete,
+	})
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -769,12 +807,14 @@ func (s *Server) validateRouteUpsert(w http.ResponseWriter, r *http.Request, sc 
 			connSharedJSON string
 			depPricingJSON string
 		)
-		qerr := s.db.QueryRowContext(r.Context(), `
-			SELECT pc.data_region, pc.owner_project_id, pc.shared_project_ids_json, md.pricing_nano_usd_json
-			FROM model_deployments md
-			JOIN provider_connections pc ON pc.org_id = md.org_id AND pc.id = md.connection_id
-			WHERE md.org_id = ? AND md.id = ?`, orgID, depID,
-		).Scan(&depRegion, &connOwnerProj, &connSharedJSON, &depPricingJSON)
+		qerr := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+			return dbq.QueryRowContext(r.Context(), s.rebind(`
+				SELECT pc.data_region, pc.owner_project_id, pc.shared_project_ids_json, md.pricing_nano_usd_json
+				FROM model_deployments md
+				JOIN provider_connections pc ON pc.org_id = md.org_id AND pc.id = md.connection_id
+				WHERE md.org_id = ? AND md.id = ?`), orgID, depID,
+			).Scan(&depRegion, &connOwnerProj, &connSharedJSON, &depPricingJSON)
+		})
 		if errors.Is(qerr, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "target deployment not found", false, nil)
 			return nil, false
@@ -828,25 +868,31 @@ func (s *Server) validateRouteUpsert(w http.ResponseWriter, r *http.Request, sc 
 }
 
 func (s *Server) loadRouteTargets(ctx context.Context, orgID, routeID string) ([]routeTargetDTO, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT deployment_id, priority_order, weight
-		FROM route_targets
-		WHERE org_id = ? AND route_id = ?
-		ORDER BY priority_order ASC, deployment_id ASC`, orgID, routeID,
-	)
+	targets := make([]routeTargetDTO, 0)
+	err := s.withOrgReadTx(ctx, orgID, func(dbq adminDBQuerier) error {
+		rows, err := dbq.QueryContext(ctx, s.rebind(`
+			SELECT deployment_id, priority_order, weight
+			FROM route_targets
+			WHERE org_id = ? AND route_id = ?
+			ORDER BY priority_order ASC, deployment_id ASC`), orgID, routeID,
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var t routeTargetDTO
+			if scanErr := rows.Scan(&t.DeploymentID, &t.PriorityOrder, &t.Weight); scanErr != nil {
+				return scanErr
+			}
+			targets = append(targets, t)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	targets := make([]routeTargetDTO, 0)
-	for rows.Next() {
-		var t routeTargetDTO
-		if scanErr := rows.Scan(&t.DeploymentID, &t.PriorityOrder, &t.Weight); scanErr != nil {
-			return nil, scanErr
-		}
-		targets = append(targets, t)
-	}
-	return targets, rows.Err()
+	return targets, nil
 }
 
 func (s *Server) loadRouteResourceDTO(ctx context.Context, orgID, routeID string) (routeResourceDTO, string, error) {
@@ -856,12 +902,14 @@ func (s *Server) loadRouteResourceDTO(ctx context.Context, orgID, routeID string
 		reqRegion sql.NullString
 		updatedMs int64
 	)
-	err := s.db.QueryRowContext(ctx, `
-		SELECT id, project_id, env_id, route_slug, strategy, max_failover_hops,
-		       request_timeout_ms, required_region, version, updated_at_ms
-		FROM route_policies
-		WHERE org_id = ? AND id = ?`, orgID, routeID,
-	).Scan(&dto.ID, &projID, &dto.EnvID, &dto.Slug, &dto.Strategy, &dto.MaxFailoverHops, &dto.RequestTimeoutMs, &reqRegion, &dto.Version, &updatedMs)
+	err := s.withOrgReadTx(ctx, orgID, func(dbq adminDBQuerier) error {
+		return dbq.QueryRowContext(ctx, s.rebind(`
+			SELECT id, project_id, env_id, route_slug, strategy, max_failover_hops,
+			       request_timeout_ms, required_region, version, updated_at_ms
+			FROM route_policies
+			WHERE org_id = ? AND id = ?`), orgID, routeID,
+		).Scan(&dto.ID, &projID, &dto.EnvID, &dto.Slug, &dto.Strategy, &dto.MaxFailoverHops, &dto.RequestTimeoutMs, &reqRegion, &dto.Version, &updatedMs)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return routeResourceDTO{}, "", port.ErrNotFound
 	}

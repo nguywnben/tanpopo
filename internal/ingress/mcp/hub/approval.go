@@ -6,7 +6,9 @@ package hub
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -120,14 +122,26 @@ func (s *Server) checkApproval(ctx context.Context, sc scope, rpcID json.RawMess
 	// Consume selects by nonce. Bind this status-tool ID to that same immutable
 	// nonce first, even if two requests were created for identical arguments.
 	digest := sha256.Sum256([]byte(token))
-	var matches bool
-	err = s.cfg.DB.QueryRowContext(ctx, `SELECT pre_approval_token_hash=? FROM approval_requests
-        WHERE id=? AND org_id=? AND requester_virtual_key_id=?`, digest[:], args.ID, sc.OrgID, sc.KeyID).Scan(&matches)
+	d := port.DetectDialect(ctx, s.cfg.DB)
+	tx, err := s.cfg.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		reply := rpcFailure(rpcID, -32603, "Internal error", nil)
 		return toolCallParams{}, &reply
 	}
-	if !matches {
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, d, sc.OrgID); err != nil {
+		reply := rpcFailure(rpcID, -32603, "Internal error", nil)
+		return toolCallParams{}, &reply
+	}
+	var storedHash []byte
+	err = tx.QueryRowContext(ctx, port.Rebind(d, `SELECT pre_approval_token_hash FROM approval_requests
+        WHERE id=? AND org_id=? AND requester_virtual_key_id=?`), args.ID, sc.OrgID, sc.KeyID).Scan(&storedHash)
+	_ = tx.Rollback()
+	if err != nil {
+		reply := rpcFailure(rpcID, -32603, "Internal error", nil)
+		return toolCallParams{}, &reply
+	}
+	if len(storedHash) == 0 || !hmac.Equal(storedHash, digest[:]) {
 		reply := approvalError(rpcID, &approval.Error{Code: approval.CodeInvalidToken})
 		return toolCallParams{}, &reply
 	}
@@ -144,8 +158,17 @@ func (s *Server) approvalResult(ctx context.Context, rpcID json.RawMessage, requ
 	message := "Approval request is " + state + "."
 	if request.State == approval.StatePending {
 		state = "APPROVAL_PENDING"
+		d := port.DetectDialect(ctx, s.cfg.DB)
+		tx, err := s.cfg.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return rpcFailure(rpcID, -32603, "Internal error", nil)
+		}
+		defer func() { _ = tx.Rollback() }()
+		if err := port.SetOrgRLSTx(ctx, tx, d, request.Binding.OrgID); err != nil {
+			return rpcFailure(rpcID, -32603, "Internal error", nil)
+		}
 		var hash string
-		if err := s.cfg.DB.QueryRowContext(ctx, `SELECT params_jcs_sha256 FROM approval_requests WHERE id=? AND org_id=? AND requester_virtual_key_id=?`,
+		if err := tx.QueryRowContext(ctx, port.Rebind(d, `SELECT params_jcs_sha256 FROM approval_requests WHERE id=? AND org_id=? AND requester_virtual_key_id=?`),
 			request.ID, request.Binding.OrgID, request.Binding.VirtualKeyID).Scan(&hash); err != nil {
 			return rpcFailure(rpcID, -32603, "Internal error", nil)
 		}

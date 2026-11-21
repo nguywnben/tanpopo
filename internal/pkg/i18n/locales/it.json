@@ -256,5 +256,20 @@
   "cli.ops.db.short": "Ispeziona o migra il motore di archiviazione del database.",
   "cli.ops.db.migrate.flag.from": "Percorso del database SQLite WAL sorgente o DSN sqlite://",
   "cli.ops.db.migrate.flag.to": "DSN di connessione PostgreSQL 16+ di destinazione",
-  "cli.ops.db.migrate.flag.verify": "Verifica conteggi righe, somme micro-USD, catene JCS di audit e buste Vault prima del commit"
+  "cli.ops.db.migrate.flag.verify": "Verifica conteggi righe, somme micro-USD, catene JCS di audit e buste Vault prima del commit",
+  "cli.admin.verify_state.short": "Verifica catene hash di audit, concilia blocchi orfani e ricostruisci lo stato Valkey",
+  "cli.admin.verify_state.flag.db": "Percorso del file database SQLite",
+  "cli.admin.verify_state.flag.pg_dsn": "DSN di connessione PostgreSQL 16+",
+  "cli.admin.verify_state.flag.valkey_addrs": "Indirizzi del cluster Valkey separati da virgole",
+  "cli.admin.verify_state.flag.valkey_username": "Nome utente ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_password": "Password ACL Valkey",
+  "cli.admin.verify_state.flag.valkey_require_tls": "Richiedi TLS per la connessione a Valkey",
+  "cli.admin.verify_state.flag.check_audit": "Verifica le catene hash di audit immutabili per tutti i tenant",
+  "cli.admin.verify_state.flag.reconcile_orphans": "Recupera i blocchi di budget scaduti prima di ricostruire la cache",
+  "cli.admin.verify_state.flag.rebuild_valkey": "Ricostruisci i blocchi di budget attivi in Valkey da SQL/PostgreSQL",
+  "cli.admin.verify_state.err.store_required": "Specificare --db (SQLite) o --pg-dsn (PostgreSQL).",
+  "cli.admin.verify_state.err.valkey_required": "--valkey-addrs è obbligatorio per ricostruire lo stato Valkey.",
+  "cli.admin.verify_state.err.tampered": "Verifica catena hash di audit fallita: rilevata manomissione.",
+  "cli.admin.verify_state.err.failed": "Verifica dello stato operativo fallita",
+  "cli.admin.verify_state.output": "Controllo stato {{status}} (motore={{engine}} eventi={{events}} orfani={{orphans}} valkey_ripristinati={{restored}})"
 }

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/security/trust"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 // ProviderConnection SM-02 state constants mirrored in snapshot views (no Tier-5 import).
@@ -632,8 +633,8 @@ func modelAllowlistPermitsSnapshot(allowedModels []string, modelSlug string) boo
 	return false
 }
 
-func loadProviderCatalogSQL(ctx context.Context, tx *sql.Tx, keyring trust.TrustedKeyring) (*ProviderCatalogView, error) {
-	view := &ProviderCatalogView{
+func newProviderCatalogView() *ProviderCatalogView {
+	return &ProviderCatalogView{
 		adaptersByID:         make(map[string]*ProviderAdapterView),
 		connectionsByID:      make(map[string]*ProviderConnectionView),
 		logicalModelsByID:    make(map[string]*LogicalModelView),
@@ -641,23 +642,33 @@ func loadProviderCatalogSQL(ctx context.Context, tx *sql.Tx, keyring trust.Trust
 		deploymentsByID:      make(map[string]*ModelDeploymentView),
 		deploymentsByOrgSlug: make(map[LogicalModelKey][]*ModelDeploymentView),
 	}
+}
 
+func loadProviderCatalogSQL(ctx context.Context, tx *sql.Tx, keyring trust.TrustedKeyring) (*ProviderCatalogView, error) {
+	view := newProviderCatalogView()
 	if err := loadAdaptersSQL(ctx, tx, view); err != nil {
 		return nil, err
 	}
-	if err := loadConnectionsSQL(ctx, tx, view, keyring); err != nil {
-		return nil, err
-	}
-	if err := loadConnectionBindingsSQL(ctx, tx, view); err != nil {
-		return nil, err
-	}
-	if err := loadLogicalModelsSQL(ctx, tx, view); err != nil {
-		return nil, err
-	}
-	if err := loadModelDeploymentsSQL(ctx, tx, view); err != nil {
+	if err := loadProviderCatalogScopedSQL(ctx, tx, port.DialectSQLite, view, keyring); err != nil {
 		return nil, err
 	}
 	return view, nil
+}
+
+func loadProviderCatalogScopedSQL(ctx context.Context, tx *sql.Tx, d port.Dialect, view *ProviderCatalogView, keyring trust.TrustedKeyring) error {
+	if err := loadConnectionsSQL(ctx, tx, d, view, keyring); err != nil {
+		return err
+	}
+	if err := loadConnectionBindingsSQL(ctx, tx, view); err != nil {
+		return err
+	}
+	if err := loadLogicalModelsSQL(ctx, tx, view); err != nil {
+		return err
+	}
+	if err := loadModelDeploymentsSQL(ctx, tx, view); err != nil {
+		return err
+	}
+	return nil
 }
 
 func loadAdaptersSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView) error {
@@ -747,8 +758,9 @@ func populateNativeCapLists(a *ProviderAdapterView) error {
 	return nil
 }
 
-func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView, keyring trust.TrustedKeyring) error {
-	rows, err := tx.QueryContext(ctx, `
+func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, d port.Dialect, view *ProviderCatalogView, keyring trust.TrustedKeyring) error {
+	falseExpr := sqlBoolExpr(d, false)
+	query := fmt.Sprintf(`
 		SELECT pc.id, pc.org_id, pc.owner_project_id, pc.adapter_id, pc.credential_id, pc.name,
 		       pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.data_region,
 		       pc.billing_mode, pc.auth_mode, pc.state, pc.shared_project_ids_json, pc.config_json,
@@ -756,13 +768,13 @@ func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogVi
 		       COALESCE(o.min_plugin_trust, ''),
 		       COALESCE(ei.state, ''),
 		       COALESCE(ep.canonical_name, ''),
-		       COALESCE(ev.signature_verified, 0),
+		       COALESCE(ev.signature_verified, %s),
 		       COALESCE(ev.signing_key_fingerprint, ''),
-		       COALESCE(ev.enterprise_signed, 0),
+		       COALESCE(ev.enterprise_signed, %s),
 		       COALESCE(ev.enterprise_key_fingerprint, ''),
 		       ev.id,
 		       oep.enabled,
-		       COALESCE(oep.org_owner_opt_in, 0)
+		       COALESCE(oep.org_owner_opt_in, %s)
 		FROM provider_connections pc
 		LEFT JOIN organizations o ON o.id = pc.org_id
 		LEFT JOIN provider_adapters pa ON pa.id = pc.adapter_id
@@ -770,7 +782,8 @@ func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogVi
 		LEFT JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
 		LEFT JOIN org_extension_policies oep ON oep.org_id = pc.org_id AND oep.package_id = ep.id
-	`)
+	`, falseExpr, falseExpr, falseExpr)
+	rows, err := tx.QueryContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("snapshot: query provider_connections: %w", err)
 	}
@@ -781,19 +794,19 @@ func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogVi
 			c                ProviderConnectionView
 			ownerProj        sql.NullString
 			credID           sql.NullString
-			allowPriv        int
+			allowPriv        flexBool
 			cidrsJSON        string
 			sharedJSON       string
 			minPluginTrust   string
 			installState     string
 			canonicalName    string
-			sigVerified      int
+			sigVerified      flexBool
 			fingerprint      string
-			entSigned        int
+			entSigned        flexBool
 			entFingerprint   string
 			activeVerID      sql.NullString
-			orgPolicyEnabled sql.NullInt64
-			orgOwnerOptIn    int
+			orgPolicyEnabled flexNullIntBool
+			orgOwnerOptIn    flexBool
 		)
 		if err := rows.Scan(
 			&c.ID, &c.OrgID, &ownerProj, &c.AdapterID, &credID, &c.Name,
@@ -809,12 +822,12 @@ func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogVi
 			MinPluginTrust:           minPluginTrust,
 			CanonicalName:            canonicalName,
 			ActiveVersionID:          activeVerID.String,
-			SignatureVerified:        sigVerified != 0,
+			SignatureVerified:        bool(sigVerified),
 			SigningKeyFingerprint:    fingerprint,
-			EnterpriseSigned:         entSigned != 0,
+			EnterpriseSigned:         bool(entSigned),
 			EnterpriseKeyFingerprint: entFingerprint,
-			OrgPolicyEnabled:         orgPolicyEnabled,
-			OrgOwnerOptIn:            orgOwnerOptIn != 0,
+			OrgPolicyEnabled:         orgPolicyEnabled.NullInt64,
+			OrgOwnerOptIn:            bool(orgOwnerOptIn),
 		})
 		c.AdapterInstallUsable = trust.IsUsableExtensionState(installState)
 		c.DerivedPublicTrust = verdict.DerivedPublicTrust
@@ -833,7 +846,7 @@ func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogVi
 		if adp, ok := view.adaptersByID[c.AdapterID]; ok {
 			c.AdapterSlug = adp.AdapterSlug
 		}
-		c.AllowPrivateIP = allowPriv != 0
+		c.AllowPrivateIP = bool(allowPriv)
 		if c.AllowedCIDRs, err = parseJSONStringSliceStrict(cidrsJSON); err != nil {
 			return fmt.Errorf("snapshot: decode connection %q allowed_cidrs_json: %w", c.ID, err)
 		}

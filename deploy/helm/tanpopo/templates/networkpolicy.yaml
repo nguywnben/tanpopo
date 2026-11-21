@@ -1,0 +1,39 @@
+{{- if .Values.networkPolicy.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tanpopo.fullname" . }}-default-deny-restricted
+  labels:
+    {{- include "tanpopo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "tanpopo.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.controlPlane.port }}
+        - protocol: TCP
+          port: {{ .Values.dataPlane.port }}
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.postgresPort }}
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.valkeyPort }}
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.valkeyClusterBusPort }}
+    {{- if .Values.networkPolicy.allowPublicEgressHTTPS }}
+    - ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+{{- end -}}

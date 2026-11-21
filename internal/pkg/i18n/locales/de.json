@@ -256,5 +256,20 @@
   "cli.ops.db.short": "Datenbank-Speicher-Engine pruefen oder migrieren.",
   "cli.ops.db.migrate.flag.from": "Quellpfad der SQLite-WAL-Datenbank oder sqlite://-DSN",
   "cli.ops.db.migrate.flag.to": "Ziel-PostgreSQL-16+-Verbindungs-DSN",
-  "cli.ops.db.migrate.flag.verify": "Zeilenzahlen, Mikro-USD-Summen, JCS-Audit-Hash-Ketten und Vault-Umschläge vor dem Commit prüfen"
+  "cli.ops.db.migrate.flag.verify": "Zeilenzahlen, Mikro-USD-Summen, JCS-Audit-Hash-Ketten und Vault-Umschläge vor dem Commit prüfen",
+  "cli.admin.verify_state.short": "Audit-Hashketten prüfen, verwaiste Reservierungen bereinigen und Valkey-Cluster-Status neu aufbauen",
+  "cli.admin.verify_state.flag.db": "Pfad zur SQLite-Datenbankdatei",
+  "cli.admin.verify_state.flag.pg_dsn": "PostgreSQL 16+ Verbindungs-DSN",
+  "cli.admin.verify_state.flag.valkey_addrs": "Kommagetrennte Valkey-Cluster-Adressen",
+  "cli.admin.verify_state.flag.valkey_username": "Valkey-ACL-Benutzername",
+  "cli.admin.verify_state.flag.valkey_password": "Valkey-ACL-Passwort",
+  "cli.admin.verify_state.flag.valkey_require_tls": "TLS für Valkey-Verbindungen erzwingen",
+  "cli.admin.verify_state.flag.check_audit": "Unveränderliche Audit-Hashketten über alle Mandanten prüfen",
+  "cli.admin.verify_state.flag.reconcile_orphans": "Abgelaufene Budget-Reservierungen vor dem Neuaufbau freigeben",
+  "cli.admin.verify_state.flag.rebuild_valkey": "Aktive Budget-Reservierungen in Valkey aus SQL/PostgreSQL wiederherstellen",
+  "cli.admin.verify_state.err.store_required": "Geben Sie --db (SQLite) oder --pg-dsn (PostgreSQL) an.",
+  "cli.admin.verify_state.err.valkey_required": "Für den Valkey-Neuaufbau ist --valkey-addrs erforderlich.",
+  "cli.admin.verify_state.err.tampered": "Prüfung der Audit-Hashkette fehlgeschlagen: Manipulation erkannt.",
+  "cli.admin.verify_state.err.failed": "Prüfung des Betriebszustands fehlgeschlagen",
+  "cli.admin.verify_state.output": "Statusprüfung {{status}} (Engine={{engine}} Audit_Ereignisse={{events}} Bereinigte_Reservierungen={{orphans}} Valkey_Wiederhergestellt={{restored}})"
 }

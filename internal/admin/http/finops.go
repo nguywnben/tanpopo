@@ -17,6 +17,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
@@ -67,7 +69,9 @@ func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
 	projFilter := strings.TrimSpace(r.URL.Query().Get("project_id"))
 	if projFilter != "" {
 		var exists int
-		err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, projFilter).Scan(&exists)
+		err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(r.Context(), s.rebind(`SELECT 1 FROM projects WHERE org_id = ? AND id = ?`), orgID, projFilter).Scan(&exists)
+		})
 		if errors.Is(err, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 			return
@@ -143,12 +147,6 @@ func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
 		q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
 		args = append(args, batchLimit)
 
-		rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-		if err != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing budgets", true, nil)
-			return
-		}
-
 		type rawBudgetRow struct {
 			id           string
 			scopeType    string
@@ -164,23 +162,35 @@ func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
 			createdMs    int64
 		}
 		rawRows := make([]rawBudgetRow, 0, batchLimit)
-		for rows.Next() {
-			var rrow rawBudgetRow
-			if scanErr := rows.Scan(
-				&rrow.id, &rrow.scopeType, &rrow.scopeID, &rrow.periodKind, &rrow.hardLimit,
-				&rrow.reservedHold, &rrow.exactMicros, &rrow.estMicros, &rrow.carryover,
-				&rrow.threshJSON, &rrow.ver, &rrow.createdMs,
-			); scanErr != nil {
-				_ = rows.Close()
-				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning budget ledger", true, nil)
-				return
+		var scanErr error
+		if err := s.withOrgReadTx(r.Context(), orgID, func(qdb adminDBQuerier) error {
+			rows, qerr := qdb.QueryContext(r.Context(), s.rebind(q.String()), args...)
+			if qerr != nil {
+				return qerr
 			}
-			rawRows = append(rawRows, rrow)
+			defer func() { _ = rows.Close() }()
+			for rows.Next() {
+				var rrow rawBudgetRow
+				if serr := rows.Scan(
+					&rrow.id, &rrow.scopeType, &rrow.scopeID, &rrow.periodKind, &rrow.hardLimit,
+					&rrow.reservedHold, &rrow.exactMicros, &rrow.estMicros, &rrow.carryover,
+					&rrow.threshJSON, &rrow.ver, &rrow.createdMs,
+				); serr != nil {
+					scanErr = serr
+					return nil
+				}
+				rawRows = append(rawRows, rrow)
+			}
+			if ierr := rows.Err(); ierr != nil {
+				return ierr
+			}
+			return rows.Close()
+		}); err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing budgets", true, nil)
+			return
 		}
-		iterErr := rows.Err()
-		_ = rows.Close()
-		if iterErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating budgets", true, nil)
+		if scanErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning budget ledger", true, nil)
 			return
 		}
 
@@ -277,11 +287,13 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 	// Cross-tenant existence check (AUTH-15): foreign-org rows follow create/auth path and return uniform 404 after RBAC + validation.
 	var rowOrgID, scopeType, scopeID, existingPeriodKind string
 	var existingPeriodStart, existingPeriodEnd int64
-	err := s.db.QueryRowContext(r.Context(), `
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
 		SELECT org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms
 		FROM budget_ledgers
-		WHERE id = ?`, budgetID,
-	).Scan(&rowOrgID, &scopeType, &scopeID, &existingPeriodKind, &existingPeriodStart, &existingPeriodEnd)
+		WHERE id = ?`), budgetID,
+		).Scan(&rowOrgID, &scopeType, &scopeID, &existingPeriodKind, &existingPeriodStart, &existingPeriodEnd)
+	})
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed looking up budget ledger", true, nil)
 		return
@@ -368,15 +380,24 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer func() { _ = tx.Rollback() }()
-		if _, insErr := tx.ExecContext(r.Context(), `
+		if rlsErr := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); rlsErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping budget creation tx", true, nil)
+			return
+		}
+		if _, insErr := tx.ExecContext(r.Context(), s.rebind(`
 			INSERT INTO budget_ledgers (
 				id, org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms,
 				hard_limit_micros, soft_alert_thresholds_pct_json, version, created_at_ms, updated_at_ms
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
 			budgetID, orgID, dbScope, targetScopeID, period, pStart, pEnd,
 			*req.HardLimitMicros, string(threshJSONBytes), now, now,
 		); insErr != nil {
-			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "budget ledger conflict", false, nil)
+			var pgErr *pgconn.PgError
+			if (errors.As(insErr, &pgErr) && pgErr.Code == "23505") || strings.Contains(strings.ToLower(insErr.Error()), "unique") {
+				writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "budget ledger conflict", false, nil)
+				return
+			}
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating budget ledger", true, nil)
 			return
 		}
 		if audErr := s.appendChangelogAndAuditTx(r.Context(), tx, &orgID, "budget_ledger", budgetID, port.MutationUpsert, false, sc.Actor.PrincipalID, "budget.created", map[string]any{
@@ -392,6 +413,15 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing budget ledger", true, nil)
 			return
 		}
+		if s.snapshots != nil {
+			_ = s.snapshots.Refresh(r.Context())
+		}
+		s.publishChange(r.Context(), snapshot.ChangeEvent{
+			OrgID:        orgID,
+			EntityKind:   "budget_ledger",
+			EntityID:     budgetID,
+			MutationType: port.MutationUpsert,
+		})
 		createdDTO, err := s.loadBudgetResourceDTO(r.Context(), orgID, budgetID)
 		if err != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading budget ledger", true, nil)
@@ -480,8 +510,12 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if rlsErr := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); rlsErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping budget update tx", true, nil)
+		return
+	}
 
-	res, err := tx.ExecContext(r.Context(), `
+	res, err := tx.ExecContext(r.Context(), s.rebind(`
 		UPDATE budget_ledgers
 		SET period_kind = ?,
 		    period_start_ms = ?,
@@ -492,12 +526,13 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		    last_alerted_threshold_pct = CASE WHEN ? < last_alerted_threshold_pct THEN ? ELSE last_alerted_threshold_pct END,
 		    version = version + 1,
 		    updated_at_ms = ?
-		WHERE org_id = ? AND id = ? AND version = ?`,
+		WHERE org_id = ? AND id = ? AND version = ?`),
 		period, nextPeriodStart, nextPeriodEnd, *req.HardLimitMicros, newCarryover, string(threshJSONBytes),
 		newUtilPct, newUtilPct, now, orgID, budgetID, expectedVer,
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		var pgErr *pgconn.PgError
+		if (errors.As(err, &pgErr) && pgErr.Code == "23505") || strings.Contains(strings.ToLower(err.Error()), "unique") {
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "budget ledger already exists for scope and period window", false, nil)
 			return
 		}
@@ -530,6 +565,15 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing budget update", true, nil)
 		return
 	}
+	if s.snapshots != nil {
+		_ = s.snapshots.Refresh(r.Context())
+	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "budget_ledger",
+		EntityID:     budgetID,
+		MutationType: port.MutationUpsert,
+	})
 
 	updatedDTO, err := s.loadBudgetResourceDTO(r.Context(), orgID, budgetID)
 	if err != nil {
@@ -770,21 +814,28 @@ func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionCo
 		GROUP BY %s
 		ORDER BY grp_key ASC`, selectExpr, joinSQL, strings.Join(conds, " AND "), groupByExpr)
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
+	out := make([]usageChargebackRowDTO, 0)
+	if err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		rows, qerr := q.QueryContext(ctx, s.rebind(query), args...)
+		if qerr != nil {
+			return qerr
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var r usageChargebackRowDTO
+			if scanErr := rows.Scan(&r.GroupKey, &r.ExactMicroUSD, &r.EstimatedMicroUSD, &r.ExactRequestCount, &r.EstimatedRequestCount, &r.UnmeteredRequestCount); scanErr != nil {
+				return scanErr
+			}
+			out = append(out, r)
+		}
+		if ierr := rows.Err(); ierr != nil {
+			return ierr
+		}
+		return rows.Close()
+	}); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	out := make([]usageChargebackRowDTO, 0)
-	for rows.Next() {
-		var r usageChargebackRowDTO
-		if scanErr := rows.Scan(&r.GroupKey, &r.ExactMicroUSD, &r.EstimatedMicroUSD, &r.ExactRequestCount, &r.EstimatedRequestCount, &r.UnmeteredRequestCount); scanErr != nil {
-			return nil, scanErr
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Server) resolveBudgetScopeProjectID(ctx context.Context, orgID, scopeType, scopeID string) string {
@@ -798,7 +849,9 @@ func (s *Server) resolveBudgetScopeProjectID(ctx context.Context, orgID, scopeTy
 		}
 	case ledger.ScopeVirtualKey:
 		var pid string
-		_ = s.db.QueryRowContext(ctx, `SELECT project_id FROM virtual_keys WHERE org_id = ? AND id = ?`, orgID, scopeID).Scan(&pid)
+		_ = s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(ctx, s.rebind(`SELECT project_id FROM virtual_keys WHERE org_id = ? AND id = ?`), orgID, scopeID).Scan(&pid)
+		})
 		return pid
 	}
 	return ""
@@ -808,14 +861,18 @@ func (s *Server) verifyBudgetTargetExists(ctx context.Context, orgID, scopeType,
 	switch scopeType {
 	case ledger.ScopeOrg:
 		var exists int
-		err := s.db.QueryRowContext(ctx, `SELECT 1 FROM organizations WHERE id = ?`, orgID).Scan(&exists)
+		err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(ctx, s.rebind(`SELECT 1 FROM organizations WHERE id = ?`), orgID).Scan(&exists)
+		})
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", false, nil
 		}
 		return "", err == nil, err
 	case ledger.ScopeProject:
 		var exists int
-		err := s.db.QueryRowContext(ctx, `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, scopeID).Scan(&exists)
+		err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(ctx, s.rebind(`SELECT 1 FROM projects WHERE org_id = ? AND id = ?`), orgID, scopeID).Scan(&exists)
+		})
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", false, nil
 		}
@@ -824,7 +881,9 @@ func (s *Server) verifyBudgetTargetExists(ctx context.Context, orgID, scopeType,
 		return s.lookupEnvironmentProject(ctx, orgID, scopeID)
 	case ledger.ScopeVirtualKey:
 		var pid string
-		err := s.db.QueryRowContext(ctx, `SELECT project_id FROM virtual_keys WHERE org_id = ? AND id = ?`, orgID, scopeID).Scan(&pid)
+		err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(ctx, s.rebind(`SELECT project_id FROM virtual_keys WHERE org_id = ? AND id = ?`), orgID, scopeID).Scan(&pid)
+		})
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", false, nil
 		}
@@ -836,16 +895,20 @@ func (s *Server) verifyBudgetTargetExists(ctx context.Context, orgID, scopeType,
 
 func (s *Server) countScopeUnmeteredRequests(ctx context.Context, orgID, scopeType, scopeID string) int64 {
 	var cnt int64
-	switch scopeType {
-	case ledger.ScopeOrg:
-		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`, orgID).Scan(&cnt)
-	case ledger.ScopeProject:
-		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND project_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`, orgID, scopeID).Scan(&cnt)
-	case ledger.ScopeEnv:
-		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND env_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`, orgID, scopeID).Scan(&cnt)
-	case ledger.ScopeVirtualKey:
-		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND virtual_key_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`, orgID, scopeID).Scan(&cnt)
-	}
+	_ = s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		switch scopeType {
+		case ledger.ScopeOrg:
+			return q.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`), orgID).Scan(&cnt)
+		case ledger.ScopeProject:
+			return q.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND project_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`), orgID, scopeID).Scan(&cnt)
+		case ledger.ScopeEnv:
+			return q.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND env_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`), orgID, scopeID).Scan(&cnt)
+		case ledger.ScopeVirtualKey:
+			return q.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM usage_settlements WHERE org_id = ? AND virtual_key_id = ? AND usage_accuracy = 'UNMETERED_FLAGGED'`), orgID, scopeID).Scan(&cnt)
+		default:
+			return nil
+		}
+	})
 	return cnt
 }
 
@@ -855,13 +918,15 @@ func (s *Server) loadBudgetResourceDTO(ctx context.Context, orgID, budgetID stri
 		hardLimit, reservedHold, exactMicros, estMicros int64
 		carryover, ver                                  int64
 	)
-	err := s.db.QueryRowContext(ctx, `
+	err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(ctx, s.rebind(`
 		SELECT id, scope_type, scope_id, period_kind, hard_limit_micros,
 		       reserved_hold_micros, settled_exact_micros, settled_estimated_micros,
 		       negative_carryover_micros, soft_alert_thresholds_pct_json, version
 		FROM budget_ledgers
-		WHERE org_id = ? AND id = ?`, orgID, budgetID,
-	).Scan(&id, &scopeType, &scopeID, &periodKind, &hardLimit, &reservedHold, &exactMicros, &estMicros, &carryover, &threshJSON, &ver)
+		WHERE org_id = ? AND id = ?`), orgID, budgetID,
+		).Scan(&id, &scopeType, &scopeID, &periodKind, &hardLimit, &reservedHold, &exactMicros, &estMicros, &carryover, &threshJSON, &ver)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return budgetResourceDTO{}, port.ErrNotFound
 	}

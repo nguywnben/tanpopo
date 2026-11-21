@@ -2,10 +2,10 @@
 
 > **MANDATORY COLD-START ENTRYPOINT FOR EVERY NEW EXECUTION SESSION (`ZERO PRIOR CHAT MEMORY REQUIRED`)**
 > - **Baseline ID:** `EXEC-BL-001-APPROVED`
-> **Version:** `2.55.0-dec-088-0039-done` | **Last Updated:** `2026-11-21` | **Accepted Implementation Baseline:** `b6dc1d15d48890ad1b4b5f259b16e0fc7b9cd8bf` (PR #28 Console v2 Astryx Neutral & 15-lang i18n; Unit 39 delivered via PR #29 under `DEC-088`)
-> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0039` DONE; `0040`..`0047` BLOCKED pending sequential DoR under `DEC-088` for `0040`..`0042`). Live PG16 `-race`, `FORCE RLS`, `CT-29/30/32`, `FMEA-06`, `85.2%` `storage/postgres` coverage, and `migrate-engine` verified with `code-reviewer` (`APPROVE`) and `security-auditor` (`PASS`).
-> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** through `DEC-088` (`39 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `8 BLOCKED`; `DEC-033` remains revoked).
-> - **CURRENT UNIT STATE (`UNIT_STATES`):** `39 / 47` DONE (`0001`..`0039`), `0 / 47` READY, `0 READY_FOR_REVIEW`, `8 / 47` BLOCKED (`0040`..`0047`).
+> **Version:** `2.56.0-dec-089-0040-done` | **Last Updated:** `2026-11-21` | **Accepted Implementation Baseline:** `b6dc1d15d48890ad1b4b5f259b16e0fc7b9cd8bf` (PR #28 Console v2 Astryx Neutral & 15-lang i18n; Unit 39 PR #29 `61c310b5` under `DEC-088`; Unit 40 PR under `DEC-089`)
+> - **CURRENT DELIVERY HANDOFF VERDICT (`HANDOFF_VERDICT`):** **`GO`** (`TP-IMP-0001`..`0040` DONE; `0041`..`0047` BLOCKED pending sequential DoR under `DEC-088` for `0041`..`0042`). Live PG16 (`FORCE RLS` / `NOBYPASSRLS`) + 3-shard Valkey Cluster `-race`, `FMEA-07`, `DR-02`, `OPS-AC-06`, HA Helm, and `pg16_rls_e2e_test` verified with `code-reviewer` (`APPROVE`) and `security-auditor` (`PASS`).
+> - **CURRENT `GATE G4` STATUS:** **`APPROVED`** through `DEC-089` (`40 DONE`, `0 READY`, `0 READY_FOR_REVIEW`, `7 BLOCKED`; `DEC-033` remains revoked).
+> - **CURRENT UNIT STATE (`UNIT_STATES`):** `40 / 47` DONE (`0001`..`0040`), `0 / 47` READY, `0 READY_FOR_REVIEW`, `7 / 47` BLOCKED (`0041`..`0047`).
 
 ---
 
@@ -129,7 +129,7 @@ During unit execution, resolve questions using this strict hierarchy (and if a g
 | **Wave 2.2 (`M2` — `DEC-041` / `DEC-058` / `DEC-059`)** | `TP-IMP-0021`..`0030` | Sequential UI batch complete; all ten units DONE on main with CI and accepted governance records. |
 | **Wave 2.3 (`DEC-060`)** | `TP-IMP-0031` → `0032` → `0033` → `0034` → `0035` | Sequential GPT-6 Luna batch via persistent `develop`; per-unit PR, required review tier, four green checks, merge, and post-merge main verification. Complete: Units 31–35 DONE; Unit 35 acceptance record is on main `0a264c40` with post-merge CI `44468902234` and artifact/attestation `44468902362` green. |
 | **Wave 3.1 (`DEC-072`)** | `TP-IMP-0036` → `0037` → `0038` | Sequential GPT-6 Luna batch via persistent `develop`; per-unit PR, required review tier, four green checks, merge, and post-merge main verification. Unit 36 is DONE under `DEC-074` on main `a3a0ef1` with green CI `44494912921`; Unit 37 is DONE under `DEC-083`; acceptance governance is at main `d7999240`, with CI `44678817933` green. Unit 38 is DONE under `DEC-085` on main `7c5538ff`, with Console v2 Astryx Neutral + 15-lang i18n merged under `DEC-087` at `b6dc1d15` (PR #28). |
-| **Wave 4.1 (`DEC-088`)** | `TP-IMP-0039` → `0040` → `0041` → `0042` | Sequential **Gemini 4 Hydrogen** batch via persistent `develop`; per-unit PR (`develop` → `main`), `REQUIRES_STRONG_REVIEW` (`code-reviewer` + `security-auditor`), all required checks green, ruleset merge, and post-merge `origin/main` CI verification before advancing. **`0039` = `DONE` (`DEC-088`)** with live PG16 `-race` (`85.2%` `storage/postgres` coverage) + `check.go --all` + strong review (`code-reviewer` `APPROVE`, `security-auditor` `PASS`). Units `0040`..`0042` execute sequentially only after each predecessor's post-merge `origin/main` CI passes; stop at `0042` (`GATE-REL-07`). |
+| **Wave 4.1 (`DEC-088` / `DEC-089`)** | `TP-IMP-0039` → `0040` → `0041` → `0042` | Sequential **Gemini 4 Hydrogen** batch via persistent `develop`; per-unit PR (`develop` → `main`), `REQUIRES_STRONG_REVIEW` (`code-reviewer` + `security-auditor`), all required checks green, and post-merge `origin/main` CI verification before advancing. **`0039` = `DONE` (`DEC-088`, PR #29 `61c310b5`)** · **`0040` = `DONE` (`DEC-089`)** with live PG16 (`FORCE RLS` / `NOBYPASSRLS`) + 3-shard Valkey Cluster `-race`, `FMEA-07`, `DR-02`, `OPS-AC-06`, HA Helm, `pg16_rls_e2e_test`, `check.go --all`, and strong reviews (`code-reviewer` `APPROVE`, `security-auditor` `PASS`). Units `0041`..`0042` execute sequentially only after Unit 40 post-merge `origin/main` CI passes; stop at `0042` (`GATE-REL-07`). |
 
 ---
 

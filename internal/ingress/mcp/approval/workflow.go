@@ -150,6 +150,7 @@ type Config struct {
 // Store persists approval state in the existing approval_requests table.
 type Store struct {
 	db                   *sql.DB
+	dialect              port.Dialect
 	audit                port.TxAuditSink
 	now                  func() time.Time
 	pollInterval         time.Duration
@@ -159,7 +160,7 @@ type Store struct {
 	retention            time.Duration
 }
 
-// NewStore constructs a fail-closed SQLite-backed approval store.
+// NewStore constructs a fail-closed dual-DB-backed approval store.
 func NewStore(cfg Config) (*Store, error) {
 	if cfg.DB == nil || cfg.Audit == nil {
 		return nil, &Error{Code: CodeInvalidInput}
@@ -182,7 +183,7 @@ func NewStore(cfg Config) (*Store, error) {
 	if cfg.Retention <= 0 {
 		cfg.Retention = 30 * 24 * time.Hour
 	}
-	return &Store{db: cfg.DB, audit: cfg.Audit, now: cfg.Now, pollInterval: cfg.PollInterval, recordPendingEventTx: cfg.RecordPendingEventTx,
+	return &Store{db: cfg.DB, dialect: port.DetectDialect(context.Background(), cfg.DB), audit: cfg.Audit, now: cfg.Now, pollInterval: cfg.PollInterval, recordPendingEventTx: cfg.RecordPendingEventTx,
 		maxPendingPerOrg: cfg.MaxPendingPerOrg, maxPendingPerKey: cfg.MaxPendingPerKey, retention: cfg.Retention}, nil
 }
 
@@ -231,9 +232,12 @@ func (s *Store) Create(ctx context.Context, binding Binding, requesterPrincipalI
 		return out, &Error{Code: CodeStorage, Cause: err}
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, binding.OrgID); err != nil {
+		return out, &Error{Code: CodeStorage, Cause: err}
+	}
 	// Lock the organization row before count-and-insert admission. This makes
 	// per-organization and per-key capacity checks serializable across callers.
-	lock, err := tx.ExecContext(ctx, `UPDATE organizations SET id=id WHERE id=?`, binding.OrgID)
+	lock, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE organizations SET id=id WHERE id=?`), binding.OrgID)
 	if err != nil {
 		return out, &Error{Code: CodeStorage, Cause: err}
 	}
@@ -242,30 +246,30 @@ func (s *Store) Create(ctx context.Context, binding Binding, requesterPrincipalI
 		return out, &Error{Code: CodeStorage, Cause: err}
 	}
 	cutoff := now.Add(-s.retention).UnixMilli()
-	if _, err := tx.ExecContext(ctx, `UPDATE approval_requests SET payload_preview_json='{}', pre_approval_token_hash=NULL
-		WHERE org_id=? AND expires_at_ms<? AND payload_preview_json<>'{}'`, binding.OrgID, now.UnixMilli()); err != nil {
+	if _, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE approval_requests SET payload_preview_json='{}', pre_approval_token_hash=NULL
+		WHERE org_id=? AND expires_at_ms<? AND payload_preview_json<>'{}'`), binding.OrgID, now.UnixMilli()); err != nil {
 		return out, &Error{Code: CodeStorage, Cause: err}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM approval_requests WHERE org_id=? AND expires_at_ms<?`, binding.OrgID, cutoff); err != nil {
+	if _, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `DELETE FROM approval_requests WHERE org_id=? AND expires_at_ms<?`), binding.OrgID, cutoff); err != nil {
 		return out, &Error{Code: CodeStorage, Cause: err}
 	}
 	var pendingOrg, pendingKey int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM approval_requests WHERE org_id=? AND state IN ('PENDING','APPROVED') AND expires_at_ms>?`, binding.OrgID, now.UnixMilli()).Scan(&pendingOrg); err != nil {
+	if err := tx.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT COUNT(*) FROM approval_requests WHERE org_id=? AND state IN ('PENDING','APPROVED') AND expires_at_ms>?`), binding.OrgID, now.UnixMilli()).Scan(&pendingOrg); err != nil {
 		return out, &Error{Code: CodeStorage, Cause: err}
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM approval_requests WHERE org_id=? AND requester_virtual_key_id=? AND state IN ('PENDING','APPROVED') AND expires_at_ms>?`, binding.OrgID, binding.VirtualKeyID, now.UnixMilli()).Scan(&pendingKey); err != nil {
+	if err := tx.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT COUNT(*) FROM approval_requests WHERE org_id=? AND requester_virtual_key_id=? AND state IN ('PENDING','APPROVED') AND expires_at_ms>?`), binding.OrgID, binding.VirtualKeyID, now.UnixMilli()).Scan(&pendingKey); err != nil {
 		return out, &Error{Code: CodeStorage, Cause: err}
 	}
 	if pendingOrg >= s.maxPendingPerOrg || pendingKey >= s.maxPendingPerKey {
 		return out, &Error{Code: CodeCapacity}
 	}
-	_, err = tx.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, port.Rebind(s.dialect, `
 		INSERT INTO approval_requests (
 			id, org_id, project_id, action_kind, requester_virtual_key_id, requester_principal_id, requester_credential_principal_id,
 			 approved_mcp_server_id, approved_mcp_tool_id, approved_schema_sha256,
 			 target_identifier, payload_preview_json, params_jcs_sha256, state, pre_approval_token_hash,
 			version, expires_at_ms, created_at_ms
-		) VALUES (?, ?, ?, 'MCP_DESTRUCTIVE_CALL', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, 1, ?, ?)`,
+		) VALUES (?, ?, ?, 'MCP_DESTRUCTIVE_CALL', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, 1, ?, ?)`),
 		id, binding.OrgID, nullableString(binding.ProjectID), binding.VirtualKeyID, nullableString(requesterPrincipalID), nullableString(binding.CredentialPrincipalID),
 		nullableString(binding.ServerID), nullableString(binding.ToolID), nullableString(binding.ApprovedSchemaHash), target, string(preview),
 		tupleHash, tokenHash[:], expiresAt.UnixMilli(), now.UnixMilli())
@@ -297,12 +301,44 @@ func (s *Store) CleanupExpired(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `UPDATE approval_requests SET payload_preview_json='{}', pre_approval_token_hash=NULL
-		WHERE expires_at_ms<? AND (payload_preview_json<>'{}' OR pre_approval_token_hash IS NOT NULL)`, now.UnixMilli()); err != nil {
+	cutoff := now.Add(-s.retention).UnixMilli()
+	if s.dialect != port.DialectPostgres {
+		if _, err := tx.ExecContext(ctx, `UPDATE approval_requests SET payload_preview_json='{}', pre_approval_token_hash=NULL
+			WHERE expires_at_ms<? AND (payload_preview_json<>'{}' OR pre_approval_token_hash IS NOT NULL)`, now.UnixMilli()); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM approval_requests WHERE expires_at_ms<?`, cutoff); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+
+	orgIDs, err := port.ListOrgIDsTx(ctx, tx, s.dialect)
+	if err != nil {
 		return err
 	}
-	cutoff := now.Add(-s.retention).UnixMilli()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM approval_requests WHERE expires_at_ms<?`, cutoff); err != nil {
+	redactOrgSQL := port.Rebind(s.dialect, `UPDATE approval_requests SET payload_preview_json='{}', pre_approval_token_hash=NULL
+		WHERE org_id=? AND expires_at_ms<? AND (payload_preview_json<>'{}' OR pre_approval_token_hash IS NOT NULL)`)
+	delOrgSQL := port.Rebind(s.dialect, `DELETE FROM approval_requests WHERE org_id=? AND expires_at_ms<?`)
+	for _, oid := range orgIDs {
+		if err := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, redactOrgSQL, oid, now.UnixMilli()); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, delOrgSQL, oid, cutoff); err != nil {
+			return err
+		}
+	}
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE approval_requests SET payload_preview_json='{}', pre_approval_token_hash=NULL
+		WHERE org_id IS NULL AND expires_at_ms<? AND (payload_preview_json<>'{}' OR pre_approval_token_hash IS NOT NULL)`), now.UnixMilli()); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `DELETE FROM approval_requests WHERE org_id IS NULL AND expires_at_ms<?`), cutoff); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -346,9 +382,12 @@ func (s *Store) Decide(ctx context.Context, requestID string, expected Binding, 
 		return Request{}, &Error{Code: CodeStorage, Cause: err}
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, expected.OrgID); err != nil {
+		return Request{}, &Error{Code: CodeStorage, Cause: err}
+	}
 	var orgID, keyID, target, paramsHash, state, requester sql.NullString
 	var version, expiresAt, createdAt int64
-	if err := tx.QueryRowContext(ctx, `SELECT org_id, requester_virtual_key_id, target_identifier, params_jcs_sha256, state, version, expires_at_ms, created_at_ms, requester_principal_id FROM approval_requests WHERE id = ?`, requestID).
+	if err := tx.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT org_id, requester_virtual_key_id, target_identifier, params_jcs_sha256, state, version, expires_at_ms, created_at_ms, requester_principal_id FROM approval_requests WHERE id = ?`), requestID).
 		Scan(&orgID, &keyID, &target, &paramsHash, &state, &version, &expiresAt, &createdAt, &requester); err != nil {
 		return Request{}, mapReadError(err)
 	}
@@ -365,7 +404,7 @@ func (s *Store) Decide(ctx context.Context, requestID string, expected Binding, 
 		return Request{}, &Error{Code: CodeInvalidState}
 	}
 	if expiresAt <= now {
-		result, err := tx.ExecContext(ctx, `UPDATE approval_requests SET state='EXPIRED', version=version+1 WHERE id=? AND state='PENDING' AND version=? AND expires_at_ms<=?`, requestID, expectedVersion, now)
+		result, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE approval_requests SET state='EXPIRED', version=version+1 WHERE id=? AND state='PENDING' AND version=? AND expires_at_ms<=?`), requestID, expectedVersion, now)
 		if err != nil {
 			return Request{}, &Error{Code: CodeStorage, Cause: err}
 		}
@@ -387,7 +426,7 @@ func (s *Store) Decide(ctx context.Context, requestID string, expected Binding, 
 	if decision == DecisionReject {
 		next = StateRejected
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE approval_requests SET state=?, decided_by_principal_id=?, decision_reason=?, decided_at_ms=?, version=version+1 WHERE id=? AND state='PENDING' AND version=? AND expires_at_ms>?`, next, actorPrincipalID, reason, now, requestID, expectedVersion, now)
+	result, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE approval_requests SET state=?, decided_by_principal_id=?, decision_reason=?, decided_at_ms=?, version=version+1 WHERE id=? AND state='PENDING' AND version=? AND expires_at_ms>?`), next, actorPrincipalID, reason, now, requestID, expectedVersion, now)
 	if err != nil {
 		return Request{}, &Error{Code: CodeStorage, Cause: err}
 	}
@@ -423,12 +462,15 @@ func (s *Store) Consume(ctx context.Context, token string, binding Binding) (Req
 		return Request{}, &Error{Code: CodeStorage, Cause: err}
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, binding.OrgID); err != nil {
+		return Request{}, &Error{Code: CodeStorage, Cause: err}
+	}
 	var id, orgID, keyID, storedTarget, storedHash, state string
 	var serverID, toolID, schemaHash sql.NullString
 	var version, expiresAt, createdAt int64
 	var requester, decidedBy, reason sql.NullString
 	var decidedAt, consumedAt sql.NullInt64
-	err = tx.QueryRowContext(ctx, `SELECT id, org_id, requester_virtual_key_id, target_identifier, params_jcs_sha256, state, version, expires_at_ms, created_at_ms, requester_principal_id, decided_by_principal_id, decision_reason, decided_at_ms, consumed_at_ms, approved_mcp_server_id, approved_mcp_tool_id, approved_schema_sha256 FROM approval_requests WHERE pre_approval_token_hash=?`, tokenHash[:]).
+	err = tx.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT id, org_id, requester_virtual_key_id, target_identifier, params_jcs_sha256, state, version, expires_at_ms, created_at_ms, requester_principal_id, decided_by_principal_id, decision_reason, decided_at_ms, consumed_at_ms, approved_mcp_server_id, approved_mcp_tool_id, approved_schema_sha256 FROM approval_requests WHERE pre_approval_token_hash=?`), tokenHash[:]).
 		Scan(&id, &orgID, &keyID, &storedTarget, &storedHash, &state, &version, &expiresAt, &createdAt, &requester, &decidedBy, &reason, &decidedAt, &consumedAt, &serverID, &toolID, &schemaHash)
 	if err != nil {
 		return Request{}, mapReadError(err)
@@ -436,7 +478,9 @@ func (s *Store) Consume(ctx context.Context, token string, binding Binding) (Req
 	if orgID != binding.OrgID || keyID != binding.VirtualKeyID || storedTarget != target || !equalHexHash(storedHash, tupleHash) {
 		return Request{}, &Error{Code: CodeParameterHashMismatch}
 	}
-	if serverID.Valid && serverID.String != binding.ServerID || toolID.Valid && toolID.String != binding.ToolID || schemaHash.Valid && schemaHash.String != binding.ApprovedSchemaHash {
+	if (binding.ServerID != "" && (!serverID.Valid || serverID.String != binding.ServerID)) ||
+		(binding.ToolID != "" && (!toolID.Valid || toolID.String != binding.ToolID)) ||
+		(binding.ApprovedSchemaHash != "" && (!schemaHash.Valid || schemaHash.String != binding.ApprovedSchemaHash)) {
 		return Request{}, &Error{Code: CodeParameterHashMismatch}
 	}
 	if state != string(StateApproved) && state != string(StatePending) && state != string(StateExpired) {
@@ -447,7 +491,7 @@ func (s *Store) Consume(ctx context.Context, token string, binding Binding) (Req
 	}
 	if expiresAt <= now {
 		if state == string(StatePending) || state == string(StateApproved) {
-			result, err := tx.ExecContext(ctx, `UPDATE approval_requests SET state='EXPIRED', version=version+1 WHERE id=? AND state=? AND version=? AND expires_at_ms<=?`, id, state, version, now)
+			result, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE approval_requests SET state='EXPIRED', version=version+1 WHERE id=? AND state=? AND version=? AND expires_at_ms<=?`), id, state, version, now)
 			if err != nil {
 				return Request{}, &Error{Code: CodeStorage, Cause: err}
 			}
@@ -466,7 +510,7 @@ func (s *Store) Consume(ctx context.Context, token string, binding Binding) (Req
 	if state != string(StateApproved) {
 		return Request{}, &Error{Code: CodeInvalidState}
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE approval_requests SET state='CONSUMED', consumed_at_ms=?, version=version+1 WHERE id=? AND state='APPROVED' AND version=? AND expires_at_ms>? AND pre_approval_token_hash=?`, now, id, version, now, tokenHash[:])
+	result, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE approval_requests SET state='CONSUMED', consumed_at_ms=?, version=version+1 WHERE id=? AND state='APPROVED' AND version=? AND expires_at_ms>? AND pre_approval_token_hash=?`), now, id, version, now, tokenHash[:])
 	if err != nil {
 		return Request{}, &Error{Code: CodeStorage, Cause: err}
 	}
@@ -510,7 +554,15 @@ func (s *Store) Lookup(ctx context.Context, orgID, virtualKeyID, requestID strin
 	if strings.TrimSpace(orgID) == "" || strings.TrimSpace(virtualKeyID) == "" || strings.TrimSpace(requestID) == "" {
 		return Request{}, &Error{Code: CodeInvalidInput}
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE approval_requests SET state='EXPIRED', version=version+1 WHERE id=? AND org_id=? AND requester_virtual_key_id=? AND state IN ('PENDING','APPROVED') AND expires_at_ms<=?`, requestID, orgID, virtualKeyID, s.now().UTC().UnixMilli()); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Request{}, &Error{Code: CodeStorage, Cause: err}
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+		return Request{}, &Error{Code: CodeStorage, Cause: err}
+	}
+	if _, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `UPDATE approval_requests SET state='EXPIRED', version=version+1 WHERE id=? AND org_id=? AND requester_virtual_key_id=? AND state IN ('PENDING','APPROVED') AND expires_at_ms<=?`), requestID, orgID, virtualKeyID, s.now().UTC().UnixMilli()); err != nil {
 		return Request{}, &Error{Code: CodeStorage, Cause: err}
 	}
 	var out Request
@@ -520,10 +572,13 @@ func (s *Store) Lookup(ctx context.Context, orgID, virtualKeyID, requestID strin
 	var decidedAt, consumedAt sql.NullInt64
 	var decidedBy, reason sql.NullString
 	var serverID, toolID, schemaHash sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT id, target_identifier, state, version, expires_at_ms, created_at_ms, decided_at_ms, consumed_at_ms, decided_by_principal_id, decision_reason, approved_mcp_server_id, approved_mcp_tool_id, approved_schema_sha256 FROM approval_requests WHERE id=? AND org_id=? AND requester_virtual_key_id=?`, requestID, orgID, virtualKeyID).
+	err = tx.QueryRowContext(ctx, port.Rebind(s.dialect, `SELECT id, target_identifier, state, version, expires_at_ms, created_at_ms, decided_at_ms, consumed_at_ms, decided_by_principal_id, decision_reason, approved_mcp_server_id, approved_mcp_tool_id, approved_schema_sha256 FROM approval_requests WHERE id=? AND org_id=? AND requester_virtual_key_id=?`), requestID, orgID, virtualKeyID).
 		Scan(&out.ID, &target, &state, &version, &expiresAt, &createdAt, &decidedAt, &consumedAt, &decidedBy, &reason, &serverID, &toolID, &schemaHash)
 	if err != nil {
 		return Request{}, mapReadError(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Request{}, &Error{Code: CodeStorage, Cause: err}
 	}
 	var targetInfo struct {
 		ServerSlug string `json:"server_slug"`

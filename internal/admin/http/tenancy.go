@@ -118,43 +118,50 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 	q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing organizations", true, nil)
-		return
-	}
-	defer rows.Close()
-
 	type orgRow struct {
 		dto       organizationDTO
 		createdMs int64
 	}
 	var items []orgRow
-	for rows.Next() {
-		var (
-			id, slug, name, trust string
-			fourEyes              int
-			ver, createdMs        int64
-		)
-		if scanErr := rows.Scan(&id, &slug, &name, &trust, &fourEyes, &ver, &createdMs); scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning organization", true, nil)
-			return
+	runQuery := func(dbq adminDBQuerier) error {
+		rows, err := dbq.QueryContext(r.Context(), s.rebind(q.String()), args...)
+		if err != nil {
+			return err
 		}
-		items = append(items, orgRow{
-			dto: organizationDTO{
-				ID:              id,
-				Slug:            slug,
-				Name:            name,
-				MinPluginTrust:  trust,
-				FourEyesEnabled: fourEyes == 1,
-				Version:         ver,
-				CreatedAt:       formatTimeRFC3339Ms(createdMs),
-			},
-			createdMs: createdMs,
-		})
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				id, slug, name, trust string
+				fourEyes              port.FlexBool
+				ver, createdMs        int64
+			)
+			if scanErr := rows.Scan(&id, &slug, &name, &trust, &fourEyes, &ver, &createdMs); scanErr != nil {
+				return scanErr
+			}
+			items = append(items, orgRow{
+				dto: organizationDTO{
+					ID:              id,
+					Slug:            slug,
+					Name:            name,
+					MinPluginTrust:  trust,
+					FourEyesEnabled: bool(fourEyes),
+					Version:         ver,
+					CreatedAt:       formatTimeRFC3339Ms(createdMs),
+				},
+				createdMs: createdMs,
+			})
+		}
+		return rows.Err()
 	}
-	if err := rows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating organizations", true, nil)
+	var err error
+	if sc.IsOperator {
+		err = s.withOperatorReadTx(r.Context(), runQuery)
+	} else {
+		err = s.withOrgReadTx(r.Context(), targetOrg, runQuery)
+	}
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing organizations", true, nil)
 		return
 	}
 
@@ -300,10 +307,14 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer func() { _ = tx1.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx1, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initializing teardown RLS context", true, nil)
+		return
+	}
 
-	resFence, err := tx1.ExecContext(r.Context(), `
+	resFence, err := tx1.ExecContext(r.Context(), s.rebind(`
 		UPDATE organizations SET status = 'DELETING', version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ?`,
+		WHERE id = ? AND version = ?`),
 		now, orgID, expectedVer,
 	)
 	if err != nil {
@@ -324,9 +335,9 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 	}
 	fencedVer := expectedVer + 1
 
-	kRows, kerr := tx1.QueryContext(r.Context(), `
+	kRows, kerr := tx1.QueryContext(r.Context(), s.rebind(`
 		SELECT id FROM virtual_keys
-		WHERE org_id = ? AND state NOT IN ('REVOKED', 'EXPIRED', 'PURGED_METADATA_RETAINED')`,
+		WHERE org_id = ? AND state NOT IN ('REVOKED', 'EXPIRED', 'PURGED_METADATA_RETAINED')`),
 		orgID,
 	)
 	if kerr != nil {
@@ -350,7 +361,7 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 	_ = kRows.Close()
 	revokedKeysCount = len(activeKeyIDs)
 
-	pRows, perr := tx1.QueryContext(r.Context(), `SELECT id FROM principals WHERE org_id = ?`, orgID)
+	pRows, perr := tx1.QueryContext(r.Context(), s.rebind(`SELECT id FROM principals WHERE org_id = ?`), orgID)
 	if perr != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed enumerating organization principals", true, nil)
 		return
@@ -371,7 +382,7 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 	}
 	_ = pRows.Close()
 
-	if err := cleanupOrgRestrictedFKsTx(r.Context(), tx1, orgID); err != nil {
+	if err := cleanupOrgRestrictedFKsTx(r.Context(), tx1, s.dialect, orgID); err != nil {
 		_ = tx1.Rollback()
 		if errors.Is(err, port.ErrResourceInUse) {
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_in_use", "conflict_error", "organization cannot be deleted while its principals are referenced by global kill switches or change requests", false, nil)
@@ -417,13 +428,17 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer func() { _ = tx2.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx2, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initializing organization delete RLS context", true, nil)
+		return
+	}
 
-	if _, err := tx2.ExecContext(r.Context(), `DELETE FROM emergency_kill_switches WHERE org_id = ?`, orgID); err != nil {
+	if _, err := tx2.ExecContext(r.Context(), s.rebind(`DELETE FROM emergency_kill_switches WHERE org_id = ?`), orgID); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed clearing organization kill switches", true, nil)
 		return
 	}
 
-	resDel, err := tx2.ExecContext(r.Context(), `DELETE FROM organizations WHERE id = ? AND version = ?`, orgID, fencedVer)
+	resDel, err := tx2.ExecContext(r.Context(), s.rebind(`DELETE FROM organizations WHERE id = ? AND version = ?`), orgID, fencedVer)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed deleting organization", true, nil)
 		return
@@ -433,16 +448,11 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	resEpoch, err := tx2.ExecContext(r.Context(), `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'organization', ?, 'SHRED', 1, ?)`,
-		orgID, orgID, now,
-	)
+	shredEpoch, err := s.appendChangelogTx(r.Context(), tx2, orgID, "organization", orgID, "SHRED", true, now)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording shred changelog", true, nil)
 		return
 	}
-	shredEpoch, _ := resEpoch.LastInsertId()
 
 	audID, err := idgen.New(idgen.PrefixAudit)
 	if err != nil {
@@ -566,39 +576,40 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	q.WriteString(` ORDER BY created_at_ms DESC, id DESC LIMIT ?`)
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing projects", true, nil)
-		return
-	}
-	defer rows.Close()
-
 	type projRow struct {
 		dto       projectDTO
 		createdMs int64
 	}
 	var items []projRow
-	for rows.Next() {
-		var id, pOrg, slug, name string
-		var ver, createdMs int64
-		if scanErr := rows.Scan(&id, &pOrg, &slug, &name, &ver, &createdMs); scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning project", true, nil)
-			return
+	err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+		rows, err := dbq.QueryContext(r.Context(), s.rebind(q.String()), args...)
+		if err != nil {
+			return err
 		}
-		items = append(items, projRow{
-			dto: projectDTO{
-				ID:        id,
-				OrgID:     pOrg,
-				Slug:      slug,
-				Name:      name,
-				Version:   ver,
-				CreatedAt: formatTimeRFC3339Ms(createdMs),
-			},
-			createdMs: createdMs,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating projects", true, nil)
+		defer rows.Close()
+
+		for rows.Next() {
+			var id, pOrg, slug, name string
+			var ver, createdMs int64
+			if scanErr := rows.Scan(&id, &pOrg, &slug, &name, &ver, &createdMs); scanErr != nil {
+				return scanErr
+			}
+			items = append(items, projRow{
+				dto: projectDTO{
+					ID:        id,
+					OrgID:     pOrg,
+					Slug:      slug,
+					Name:      name,
+					Version:   ver,
+					CreatedAt: formatTimeRFC3339Ms(createdMs),
+				},
+				createdMs: createdMs,
+			})
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing projects", true, nil)
 		return
 	}
 
@@ -751,10 +762,14 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx1.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx1, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initializing project teardown RLS context", true, nil)
+		return
+	}
 
-	resFence, err := tx1.ExecContext(r.Context(), `
+	resFence, err := tx1.ExecContext(r.Context(), s.rebind(`
 		UPDATE projects SET status = 'DELETING', version = version + 1, updated_at_ms = ?
-		WHERE org_id = ? AND id = ? AND version = ?`,
+		WHERE org_id = ? AND id = ? AND version = ?`),
 		now, orgID, projectID, expectedVer,
 	)
 	if err != nil {
@@ -776,9 +791,9 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	fencedVer := expectedVer + 1
 
 	projectKSTargets = append(projectKSTargets, projectID)
-	kRows, kerr := tx1.QueryContext(r.Context(), `
+	kRows, kerr := tx1.QueryContext(r.Context(), s.rebind(`
 		SELECT id, state FROM virtual_keys
-		WHERE org_id = ? AND project_id = ?`,
+		WHERE org_id = ? AND project_id = ?`),
 		orgID, projectID,
 	)
 	if kerr != nil {
@@ -805,9 +820,9 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	_ = kRows.Close()
 	revokedKeysCount = len(activeKeyIDs)
 
-	cRows, cerr := tx1.QueryContext(r.Context(), `
+	cRows, cerr := tx1.QueryContext(r.Context(), s.rebind(`
 		SELECT id FROM provider_connections
-		WHERE org_id = ? AND owner_project_id = ?`,
+		WHERE org_id = ? AND owner_project_id = ?`),
 		orgID, projectID,
 	)
 	if cerr != nil {
@@ -830,7 +845,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = cRows.Close()
 
-	if err := cleanupProjectRestrictedFKsTx(r.Context(), tx1, orgID, projectID); err != nil {
+	if err := cleanupProjectRestrictedFKsTx(r.Context(), tx1, s.dialect, orgID, projectID); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed tearing down project dependencies", true, nil)
 		return
 	}
@@ -871,6 +886,10 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx2.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx2, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initializing project delete RLS context", true, nil)
+		return
+	}
 
 	if len(projectKSTargets) > 0 {
 		placeholders := make([]string, len(projectKSTargets))
@@ -880,9 +899,9 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			placeholders[i] = "?"
 			args = append(args, tid)
 		}
-		if _, err := tx2.ExecContext(r.Context(), `
+		if _, err := tx2.ExecContext(r.Context(), s.rebind(`
 			DELETE FROM emergency_kill_switches
-			WHERE org_id = ? AND target_id IN (`+strings.Join(placeholders, ",")+`)`,
+			WHERE org_id = ? AND target_id IN (`+strings.Join(placeholders, ",")+`)`),
 			args...,
 		); err != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed clearing project kill switches", true, nil)
@@ -890,7 +909,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resDel, err := tx2.ExecContext(r.Context(), `DELETE FROM projects WHERE org_id = ? AND id = ? AND version = ?`, orgID, projectID, fencedVer)
+	resDel, err := tx2.ExecContext(r.Context(), s.rebind(`DELETE FROM projects WHERE org_id = ? AND id = ? AND version = ?`), orgID, projectID, fencedVer)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed deleting project", true, nil)
 		return
@@ -900,16 +919,11 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resEpoch, err := tx2.ExecContext(r.Context(), `
-		INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms)
-		VALUES (?, 'project', ?, 'SHRED', 1, ?)`,
-		orgID, projectID, now,
-	)
+	shredEpoch, err := s.appendChangelogTx(r.Context(), tx2, orgID, "project", projectID, "SHRED", true, now)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording shred changelog", true, nil)
 		return
 	}
-	shredEpoch, _ := resEpoch.LastInsertId()
 
 	audID, err := idgen.New(idgen.PrefixAudit)
 	if err != nil {
@@ -1001,7 +1015,14 @@ func toProjectDTO(prj *port.Project) projectDTO {
 	}
 }
 
-func tableExistsTx(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
+func tableExistsTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, name string) (bool, error) {
+	if dialect == port.DialectPostgres {
+		var exists bool
+		if err := tx.QueryRowContext(ctx, `SELECT to_regclass($1) IS NOT NULL`, name).Scan(&exists); err != nil {
+			return false, err
+		}
+		return exists, nil
+	}
 	var cnt int
 	err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&cnt)
 	if err != nil {
@@ -1010,40 +1031,136 @@ func tableExistsTx(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
 	return cnt > 0, nil
 }
 
-func cleanupOrgRestrictedFKsTx(ctx context.Context, tx *sql.Tx, orgID string) error {
-	var externalKSCount int
-	if err := tx.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM emergency_kill_switches
-		WHERE (org_id IS NULL OR org_id != ?)
-		  AND (
-		    triggered_by_principal_id IN (SELECT id FROM principals WHERE org_id = ?)
-		    OR cleared_by_principal_id IN (SELECT id FROM principals WHERE org_id = ?)
-		  )`,
-		orgID, orgID, orgID,
-	).Scan(&externalKSCount); err != nil {
-		return err
-	}
-	if externalKSCount > 0 {
-		return fmt.Errorf("%w: principals of organization %s are referenced by global or external kill switches", port.ErrResourceInUse, orgID)
-	}
-
-	if hasACR, err := tableExistsTx(ctx, tx, "admin_change_requests"); err != nil {
-		return err
-	} else if hasACR {
-		var externalACRCount int
-		if err := tx.QueryRowContext(ctx, `
-			SELECT COUNT(*) FROM admin_change_requests
-			WHERE (org_id IS NULL OR org_id != ?)
-			  AND (
-			    initiator_principal_id IN (SELECT id FROM principals WHERE org_id = ?)
-			    OR approver_principal_id IN (SELECT id FROM principals WHERE org_id = ?)
-			  )`,
-			orgID, orgID, orgID,
-		).Scan(&externalACRCount); err != nil {
+func cleanupOrgRestrictedFKsTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, orgID string) error {
+	if dialect == port.DialectPostgres {
+		if err := port.SetOrgRLSTx(ctx, tx, dialect, orgID); err != nil {
 			return err
 		}
-		if externalACRCount > 0 {
-			return fmt.Errorf("%w: principals of organization %s are referenced by global or external change requests", port.ErrResourceInUse, orgID)
+		pRows, err := tx.QueryContext(ctx, port.Rebind(dialect, `SELECT id FROM principals WHERE org_id = ?`), orgID)
+		if err != nil {
+			return err
+		}
+		var pids []string
+		for pRows.Next() {
+			var pid string
+			if serr := pRows.Scan(&pid); serr != nil {
+				_ = pRows.Close()
+				return serr
+			}
+			pids = append(pids, pid)
+		}
+		rerr := pRows.Err()
+		_ = pRows.Close()
+		if rerr != nil {
+			return rerr
+		}
+
+		if len(pids) > 0 {
+			orgIDs, err := port.ListOrgIDsTx(ctx, tx, dialect)
+			if err != nil {
+				return err
+			}
+			hasACR, err := tableExistsTx(ctx, tx, dialect, "admin_change_requests")
+			if err != nil {
+				return err
+			}
+			ph := make([]string, len(pids))
+			for i := range pids {
+				ph[i] = "?"
+			}
+			inClause := strings.Join(ph, ",")
+			checkKS := port.Rebind(dialect, `SELECT COUNT(*) FROM emergency_kill_switches WHERE (triggered_by_principal_id IN (`+inClause+`) OR cleared_by_principal_id IN (`+inClause+`))`)
+			checkACR := port.Rebind(dialect, `SELECT COUNT(*) FROM admin_change_requests WHERE (initiator_principal_id IN (`+inClause+`) OR approver_principal_id IN (`+inClause+`))`)
+			checkArgs := make([]any, 0, len(pids)*2)
+			for _, pid := range pids {
+				checkArgs = append(checkArgs, pid)
+			}
+			for _, pid := range pids {
+				checkArgs = append(checkArgs, pid)
+			}
+
+			// Check global (org_id IS NULL) references via operator scope.
+			if err := port.SetOperatorRLSTx(ctx, tx, dialect); err != nil {
+				return err
+			}
+			var cnt int
+			if err := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT COUNT(*) FROM emergency_kill_switches WHERE org_id IS NULL AND (triggered_by_principal_id IN (`+inClause+`) OR cleared_by_principal_id IN (`+inClause+`))`), checkArgs...).Scan(&cnt); err != nil {
+				return err
+			}
+			if cnt > 0 {
+				return fmt.Errorf("%w: principals of organization %s are referenced by global or external kill switches", port.ErrResourceInUse, orgID)
+			}
+			if hasACR {
+				if err := tx.QueryRowContext(ctx, port.Rebind(dialect, `SELECT COUNT(*) FROM admin_change_requests WHERE org_id IS NULL AND (initiator_principal_id IN (`+inClause+`) OR approver_principal_id IN (`+inClause+`))`), checkArgs...).Scan(&cnt); err != nil {
+					return err
+				}
+				if cnt > 0 {
+					return fmt.Errorf("%w: principals of organization %s are referenced by global or external change requests", port.ErrResourceInUse, orgID)
+				}
+			}
+
+			// Check external org references across all other orgs.
+			for _, oid := range orgIDs {
+				if oid == orgID {
+					continue
+				}
+				if err := port.SetOrgRLSTx(ctx, tx, dialect, oid); err != nil {
+					return err
+				}
+				if err := tx.QueryRowContext(ctx, checkKS, checkArgs...).Scan(&cnt); err != nil {
+					return err
+				}
+				if cnt > 0 {
+					return fmt.Errorf("%w: principals of organization %s are referenced by global or external kill switches", port.ErrResourceInUse, orgID)
+				}
+				if hasACR {
+					if err := tx.QueryRowContext(ctx, checkACR, checkArgs...).Scan(&cnt); err != nil {
+						return err
+					}
+					if cnt > 0 {
+						return fmt.Errorf("%w: principals of organization %s are referenced by global or external change requests", port.ErrResourceInUse, orgID)
+					}
+				}
+			}
+		}
+		if err := port.SetOrgRLSTx(ctx, tx, dialect, orgID); err != nil {
+			return err
+		}
+	} else {
+		var externalKSCount int
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM emergency_kill_switches
+			WHERE (org_id IS NULL OR org_id != ?)
+			  AND (
+			    triggered_by_principal_id IN (SELECT id FROM principals WHERE org_id = ?)
+			    OR cleared_by_principal_id IN (SELECT id FROM principals WHERE org_id = ?)
+			  )`,
+			orgID, orgID, orgID,
+		).Scan(&externalKSCount); err != nil {
+			return err
+		}
+		if externalKSCount > 0 {
+			return fmt.Errorf("%w: principals of organization %s are referenced by global or external kill switches", port.ErrResourceInUse, orgID)
+		}
+
+		if hasACR, err := tableExistsTx(ctx, tx, dialect, "admin_change_requests"); err != nil {
+			return err
+		} else if hasACR {
+			var externalACRCount int
+			if err := tx.QueryRowContext(ctx, `
+				SELECT COUNT(*) FROM admin_change_requests
+				WHERE (org_id IS NULL OR org_id != ?)
+				  AND (
+				    initiator_principal_id IN (SELECT id FROM principals WHERE org_id = ?)
+				    OR approver_principal_id IN (SELECT id FROM principals WHERE org_id = ?)
+				  )`,
+				orgID, orgID, orgID,
+			).Scan(&externalACRCount); err != nil {
+				return err
+			}
+			if externalACRCount > 0 {
+				return fmt.Errorf("%w: principals of organization %s are referenced by global or external change requests", port.ErrResourceInUse, orgID)
+			}
 		}
 	}
 
@@ -1089,14 +1206,14 @@ func cleanupOrgRestrictedFKsTx(ctx context.Context, tx *sql.Tx, orgID string) er
 		},
 	}
 	for _, st := range optionalSteps {
-		exists, err := tableExistsTx(ctx, tx, st.table)
+		exists, err := tableExistsTx(ctx, tx, dialect, st.table)
 		if err != nil {
 			return err
 		}
 		if !exists {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, st.query, st.args...); err != nil {
+		if _, err := tx.ExecContext(ctx, port.Rebind(dialect, st.query), st.args...); err != nil {
 			return err
 		}
 	}
@@ -1131,14 +1248,14 @@ func cleanupOrgRestrictedFKsTx(ctx context.Context, tx *sql.Tx, orgID string) er
 		},
 	}
 	for _, st := range steps {
-		if _, err := tx.ExecContext(ctx, st.query, st.args...); err != nil {
+		if _, err := tx.ExecContext(ctx, port.Rebind(dialect, st.query), st.args...); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func cleanupProjectRestrictedFKsTx(ctx context.Context, tx *sql.Tx, orgID, projectID string) error {
+func cleanupProjectRestrictedFKsTx(ctx context.Context, tx *sql.Tx, dialect port.Dialect, orgID, projectID string) error {
 	optionalSteps := []struct {
 		table string
 		query string
@@ -1176,14 +1293,14 @@ func cleanupProjectRestrictedFKsTx(ctx context.Context, tx *sql.Tx, orgID, proje
 		},
 	}
 	for _, st := range optionalSteps {
-		exists, err := tableExistsTx(ctx, tx, st.table)
+		exists, err := tableExistsTx(ctx, tx, dialect, st.table)
 		if err != nil {
 			return err
 		}
 		if !exists {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, st.query, st.args...); err != nil {
+		if _, err := tx.ExecContext(ctx, port.Rebind(dialect, st.query), st.args...); err != nil {
 			return err
 		}
 	}
@@ -1222,7 +1339,7 @@ func cleanupProjectRestrictedFKsTx(ctx context.Context, tx *sql.Tx, orgID, proje
 		},
 	}
 	for _, st := range steps {
-		if _, err := tx.ExecContext(ctx, st.query, st.args...); err != nil {
+		if _, err := tx.ExecContext(ctx, port.Rebind(dialect, st.query), st.args...); err != nil {
 			return err
 		}
 	}

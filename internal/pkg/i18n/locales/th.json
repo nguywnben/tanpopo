@@ -256,5 +256,20 @@
   "cli.ops.db.short": "ตรวจสอบหรือย้ายเอนจินจัดเก็บฐานข้อมูล",
   "cli.ops.db.migrate.flag.from": "เส้นทางฐานข้อมูล SQLite WAL ต้นทางหรือ sqlite:// DSN",
   "cli.ops.db.migrate.flag.to": "DSN การเชื่อมต่อ PostgreSQL 16+ ปลายทาง",
-  "cli.ops.db.migrate.flag.verify": "ตรวจสอบจำนวนแถว ผลรวม micro-USD ห่วงโซ่แฮช JCS และซอง Vault ก่อน commit"
+  "cli.ops.db.migrate.flag.verify": "ตรวจสอบจำนวนแถว ผลรวม micro-USD ห่วงโซ่แฮช JCS และซอง Vault ก่อน commit",
+  "cli.admin.verify_state.short": "ตรวจสอบห่วงโซ่แฮชการตรวจสอบ เคลียร์ยอดกันวงเงินค้าง และสร้างสถานะคลัสเตอร์ Valkey ใหม่",
+  "cli.admin.verify_state.flag.db": "เส้นทางไปยังไฟล์ฐานข้อมูล SQLite",
+  "cli.admin.verify_state.flag.pg_dsn": "สตริงเชื่อมต่อ PostgreSQL 16+",
+  "cli.admin.verify_state.flag.valkey_addrs": "รายการที่อยู่คลัสเตอร์ Valkey คั่นด้วยจุลภาค",
+  "cli.admin.verify_state.flag.valkey_username": "ชื่อผู้ใช้ ACL ของ Valkey",
+  "cli.admin.verify_state.flag.valkey_password": "รหัสผ่าน ACL ของ Valkey",
+  "cli.admin.verify_state.flag.valkey_require_tls": "บังคับใช้ TLS เมื่อเชื่อมต่อกับ Valkey",
+  "cli.admin.verify_state.flag.check_audit": "ตรวจสอบห่วงโซ่แฮชการตรวจสอบที่ไม่เปลี่ยนแปลงของทุกองค์กร",
+  "cli.admin.verify_state.flag.reconcile_orphans": "เรียกคืนยอดกันวงเงินที่หมดอายุก่อนสร้างแคชใหม่",
+  "cli.admin.verify_state.flag.rebuild_valkey": "สร้างยอดกันวงเงินที่ใช้งานอยู่ใน Valkey ใหม่จาก SQL/PostgreSQL",
+  "cli.admin.verify_state.err.store_required": "ระบุ --db (SQLite) หรือ --pg-dsn (PostgreSQL)",
+  "cli.admin.verify_state.err.valkey_required": "จำเป็นต้องระบุ --valkey-addrs เมื่อสร้างสถานะ Valkey ใหม่",
+  "cli.admin.verify_state.err.tampered": "การตรวจสอบห่วงโซ่แฮชล้มเหลว: ตรวจพบการปลอมแปลง",
+  "cli.admin.verify_state.err.failed": "การตรวจสอบสถานะการทำงานล้มเหลว",
+  "cli.admin.verify_state.output": "ผลการตรวจสอบสถานะ {{status}} (ระบบ={{engine}} เหตุการณ์={{events}} ยอดค้าง={{orphans}} กู้คืนValkey={{restored}})"
 }

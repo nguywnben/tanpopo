@@ -1,0 +1,13 @@
+apiVersion: v2
+name: tanpopo
+description: High-availability Helm chart for Tanpopo split Control Plane and Data Plane clusters (PostgreSQL 16+ & Valkey Cluster).
+type: application
+version: 0.40.0
+appVersion: "0.40.0"
+home: https://github.com/nguywnben/tanpopo
+keywords:
+  - ai-gateway
+  - mcp
+  - high-availability
+  - postgresql
+  - valkey

@@ -130,7 +130,14 @@ func loadRoutesSQL(ctx context.Context, tx *sql.Tx) *RouteCatalogView {
 		byID:  make(map[string]*RoutePolicyView),
 		byKey: make(map[RouteLookupKey]*RoutePolicyView),
 	}
+	loadRoutesIntoSQL(ctx, tx, cat)
+	return cat
+}
 
+func loadRoutesIntoSQL(ctx context.Context, tx *sql.Tx, cat *RouteCatalogView) {
+	if cat.corruptErr != nil {
+		return
+	}
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id, org_id, project_id, env_id, route_slug, strategy,
 		       max_failover_hops, required_region, version, created_at_ms, updated_at_ms
@@ -139,9 +146,10 @@ func loadRoutesSQL(ctx context.Context, tx *sql.Tx) *RouteCatalogView {
 	`)
 	if err != nil {
 		cat.corruptErr = fmt.Errorf("query route_policies: %w", err)
-		return cat
+		return
 	}
 
+	var added []*RoutePolicyView
 	for rows.Next() {
 		var (
 			r      RoutePolicyView
@@ -153,7 +161,7 @@ func loadRoutesSQL(ctx context.Context, tx *sql.Tx) *RouteCatalogView {
 		); scanErr != nil {
 			rows.Close()
 			cat.corruptErr = fmt.Errorf("scan route_policy row: %w", scanErr)
-			return cat
+			return
 		}
 		if reqReg.Valid {
 			norm := strings.ToUpper(strings.TrimSpace(reqReg.String))
@@ -164,7 +172,7 @@ func loadRoutesSQL(ctx context.Context, tx *sql.Tx) *RouteCatalogView {
 		if r.MaxFailoverHops < 0 || r.MaxFailoverHops > 5 {
 			rows.Close()
 			cat.corruptErr = fmt.Errorf("route_policy %q invalid max_failover_hops %d", r.ID, r.MaxFailoverHops)
-			return cat
+			return
 		}
 		r.Strategy = strings.ToUpper(strings.TrimSpace(r.Strategy))
 		switch r.Strategy {
@@ -176,7 +184,7 @@ func loadRoutesSQL(ctx context.Context, tx *sql.Tx) *RouteCatalogView {
 		default:
 			rows.Close()
 			cat.corruptErr = fmt.Errorf("route_policy %q unsupported strategy %q", r.ID, r.Strategy)
-			return cat
+			return
 		}
 
 		cat.byID[r.ID] = &r
@@ -185,11 +193,12 @@ func loadRoutesSQL(ctx context.Context, tx *sql.Tx) *RouteCatalogView {
 			EnvID:     r.EnvID,
 			RouteSlug: r.RouteSlug,
 		}] = &r
+		added = append(added, &r)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		cat.corruptErr = fmt.Errorf("iterate route_policies: %w", err)
-		return cat
+		return
 	}
 	rows.Close()
 
@@ -200,7 +209,7 @@ func loadRoutesSQL(ctx context.Context, tx *sql.Tx) *RouteCatalogView {
 	`)
 	if err != nil {
 		cat.corruptErr = fmt.Errorf("query route_targets: %w", err)
-		return cat
+		return
 	}
 	defer tRows.Close()
 
@@ -210,25 +219,25 @@ func loadRoutesSQL(ctx context.Context, tx *sql.Tx) *RouteCatalogView {
 			&tgt.OrgID, &tgt.RouteID, &tgt.DeploymentID, &tgt.PriorityOrder, &tgt.Weight,
 		); scanErr != nil {
 			cat.corruptErr = fmt.Errorf("scan route_target row: %w", scanErr)
-			return cat
+			return
 		}
 		if tgt.Weight < 0 {
 			cat.corruptErr = fmt.Errorf("route_target (%s,%s) negative weight %d", tgt.RouteID, tgt.DeploymentID, tgt.Weight)
-			return cat
+			return
 		}
 		parent, ok := cat.byID[tgt.RouteID]
 		if !ok || parent.OrgID != tgt.OrgID {
 			cat.corruptErr = fmt.Errorf("route_target (%s,%s) references unknown or cross-org route %q", tgt.OrgID, tgt.DeploymentID, tgt.RouteID)
-			return cat
+			return
 		}
 		parent.Targets = append(parent.Targets, tgt)
 	}
 	if err := tRows.Err(); err != nil {
 		cat.corruptErr = fmt.Errorf("iterate route_targets: %w", err)
-		return cat
+		return
 	}
 
-	for _, r := range cat.byID {
+	for _, r := range added {
 		if len(r.Targets) > 1 {
 			sort.Slice(r.Targets, func(i, j int) bool {
 				if r.Targets[i].PriorityOrder != r.Targets[j].PriorityOrder {
@@ -238,5 +247,4 @@ func loadRoutesSQL(ctx context.Context, tx *sql.Tx) *RouteCatalogView {
 			})
 		}
 	}
-	return cat
 }

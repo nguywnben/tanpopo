@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
@@ -267,7 +268,7 @@ func (s *Server) handleListExtensionInstallations(w http.ResponseWriter, r *http
 		       va.semver, vc.semver, vp.semver,
 		       COALESCE(va.contract_version, vc.contract_version, '1.0'),
 		       COALESCE(va.execution_tier, vc.execution_tier, 'DECLARATIVE_T1'),
-		       COALESCE(va.enterprise_signed, vc.enterprise_signed, 0)
+		       COALESCE(va.enterprise_signed, vc.enterprise_signed, ` + port.BoolExpr(s.dialect, false) + `)
 		FROM extension_installations ei
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions va ON va.id = ei.active_version_id
@@ -281,7 +282,7 @@ func (s *Server) handleListExtensionInstallations(w http.ResponseWriter, r *http
 	q.WriteString(` ORDER BY ei.created_at_ms DESC, ei.id DESC LIMIT ?`)
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
+	rows, err := s.db.QueryContext(r.Context(), s.rebind(q.String()), args...)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing extension installations", true, nil)
 		return
@@ -298,9 +299,9 @@ func (s *Server) handleListExtensionInstallations(w http.ResponseWriter, r *http
 			id, pkgID, trust, state, contractVer, execTier string
 			ver, createdMs                                 int64
 			actVer, candVer, prevVer                       sql.NullString
-			entInt                                         int
+			entBool                                        port.FlexBool
 		)
-		if scanErr := rows.Scan(&id, &pkgID, &trust, &state, &ver, &createdMs, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entInt); scanErr != nil {
+		if scanErr := rows.Scan(&id, &pkgID, &trust, &state, &ver, &createdMs, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entBool); scanErr != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning installation", true, nil)
 			return
 		}
@@ -314,7 +315,7 @@ func (s *Server) handleListExtensionInstallations(w http.ResponseWriter, r *http
 				ContractVersion:         contractVer,
 				State:                   mapExtensionStateOpenAPI(state),
 				OriginTrustTier:         trust,
-				EnterpriseSigned:        entInt == 1,
+				EnterpriseSigned:        bool(entBool),
 				ExecutionTier:           mapExecutionTierOpenAPI(execTier),
 				Version:                 ver,
 			},
@@ -984,11 +985,15 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping org extension policy tx", true, nil)
+		return
+	}
 
-	res, err := tx.ExecContext(r.Context(), `
+	res, err := tx.ExecContext(r.Context(), s.rebind(`
 		UPDATE organizations
 		SET min_plugin_trust = ?, version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ?`,
+		WHERE id = ? AND version = ?`),
 		minTrust, now, orgID, expectedVer,
 	)
 	if err != nil {
@@ -1017,7 +1022,7 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 			return
 		}
 		var canonicalName string
-		qerr := tx.QueryRowContext(r.Context(), `SELECT canonical_name FROM extension_packages WHERE id = ?`, pkgID).Scan(&canonicalName)
+		qerr := tx.QueryRowContext(r.Context(), s.rebind(`SELECT canonical_name FROM extension_packages WHERE id = ?`), pkgID).Scan(&canonicalName)
 		if errors.Is(qerr, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension package not found", false, nil)
 			return
@@ -1032,10 +1037,10 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 		if pol.PinnedInstallationID != nil && strings.TrimSpace(*pol.PinnedInstallationID) != "" {
 			pinID := strings.TrimSpace(*pol.PinnedInstallationID)
 			var pinExists int
-			perr := tx.QueryRowContext(r.Context(), `
+			perr := tx.QueryRowContext(r.Context(), s.rebind(`
 				SELECT 1
 				FROM extension_installations
-				WHERE id = ? AND package_id = ? AND state NOT IN ('UNINSTALLED', 'CANCELLED', 'REJECTED_INVALID')`,
+				WHERE id = ? AND package_id = ? AND state NOT IN ('UNINSTALLED', 'CANCELLED', 'REJECTED_INVALID')`),
 				pinID, pkgID,
 			).Scan(&pinExists)
 			if errors.Is(perr, sql.ErrNoRows) {
@@ -1075,8 +1080,8 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 			}
 		}
 
-		optIn := boolToInt(pol.Enabled && requiresOrgOwner)
-		if _, err := tx.ExecContext(r.Context(), `
+		optIn := port.BoolVal(s.dialect, pol.Enabled && requiresOrgOwner)
+		if _, err := tx.ExecContext(r.Context(), s.rebind(`
 			INSERT INTO org_extension_policies (org_id, package_id, enabled, org_owner_opt_in, pinned_installation_id, version, created_at_ms, updated_at_ms)
 			VALUES (?, ?, ?, ?, ?, 1, ?, ?)
 			ON CONFLICT (org_id, package_id) DO UPDATE SET
@@ -1084,8 +1089,8 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 				org_owner_opt_in = excluded.org_owner_opt_in,
 				pinned_installation_id = excluded.pinned_installation_id,
 				version = org_extension_policies.version + 1,
-				updated_at_ms = excluded.updated_at_ms`,
-			orgID, pkgID, boolToInt(pol.Enabled), optIn, pinnedArg, now, now,
+				updated_at_ms = excluded.updated_at_ms`),
+			orgID, pkgID, port.BoolVal(s.dialect, pol.Enabled), optIn, pinnedArg, now, now,
 		); err != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed persisting org extension policy", true, nil)
 			return
@@ -1106,6 +1111,12 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
 	}
+	s.publishChange(r.Context(), snapshot.ChangeEvent{
+		OrgID:        orgID,
+		EntityKind:   "org_extension_policy",
+		EntityID:     orgID,
+		MutationType: port.MutationUpsert,
+	})
 
 	updatedOrg, err := s.storage.Tenancy().GetOrganization(r.Context(), orgID)
 	if err != nil {
@@ -1124,7 +1135,9 @@ func (s *Server) ensureGlobalExtensionOperatorIfMultiTenant(w http.ResponseWrite
 		return true
 	}
 	var orgCount int
-	if err := s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE')`).Scan(&orgCount); err != nil {
+	if err := s.withOperatorReadTx(r.Context(), func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE')`).Scan(&orgCount)
+	}); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking active tenant count", true, nil)
 		return false
 	}
@@ -1142,10 +1155,19 @@ func (s *Server) cancelPendingInstallationTx(ctx context.Context, insID string, 
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	res, err := tx.ExecContext(ctx, `
+	if orgID != "" {
+		if err := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); err != nil {
+			return err
+		}
+	} else {
+		if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+			return err
+		}
+	}
+	res, err := tx.ExecContext(ctx, s.rebind(`
 		UPDATE extension_installations
 		SET candidate_version_id = NULL, state = 'CANCELLED', version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND version = ? AND state = 'PENDING_PERMISSION_APPROVAL'`,
+		WHERE id = ? AND version = ? AND state = 'PENDING_PERMISSION_APPROVAL'`),
 		now, insID, expectedVer,
 	)
 	if err != nil {
@@ -1164,20 +1186,24 @@ func (s *Server) cancelPendingInstallationTx(ctx context.Context, insID string, 
 
 func (s *Server) isFourEyesSelfApproval(ctx context.Context, _ string, insID, actorID string) (bool, error) {
 	var fourEyesOrgs int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE') AND require_four_eyes_approval = 1`).Scan(&fourEyesOrgs); err != nil {
+	if err := s.withOperatorReadTx(ctx, func(q adminDBQuerier) error {
+		return q.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE') AND require_four_eyes_approval = `+port.BoolExpr(s.dialect, true)).Scan(&fourEyesOrgs)
+	}); err != nil {
 		return true, err
 	}
 	if fourEyesOrgs == 0 {
 		return false, nil
 	}
 	var stagerID string
-	err := s.db.QueryRowContext(ctx, `
+	err := s.withOperatorReadTx(ctx, func(q adminDBQuerier) error {
+		return q.QueryRowContext(ctx, s.rebind(`
 		SELECT actor_id
 		FROM audit_events
 		WHERE target_type = 'extension_installation' AND target_id = ?
 		  AND event_type IN ('extension.staged_pending_approval', 'extension.upgrade_pending_reconsent')
-		ORDER BY created_at_ms DESC, rowid DESC LIMIT 1`, insID,
-	).Scan(&stagerID)
+		ORDER BY created_at_ms DESC, seq_no DESC LIMIT 1`), insID,
+		).Scan(&stagerID)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -1205,21 +1231,21 @@ func (s *Server) loadExtensionInstallationDTO(ctx context.Context, insID string)
 		id, pkgID, trust, state, contractVer, execTier string
 		ver                                            int64
 		actVer, candVer, prevVer                       sql.NullString
-		entInt                                         int
+		entBool                                        port.FlexBool
 	)
-	err := s.db.QueryRowContext(ctx, `
+	err := s.db.QueryRowContext(ctx, s.rebind(`
 		SELECT ei.id, ei.package_id, ep.origin_trust_tier, ei.state, ei.version,
 		       va.semver, vc.semver, vp.semver,
 		       COALESCE(va.contract_version, vc.contract_version, '1.0'),
 		       COALESCE(va.execution_tier, vc.execution_tier, 'DECLARATIVE_T1'),
-		       COALESCE(va.enterprise_signed, vc.enterprise_signed, 0)
+		       COALESCE(va.enterprise_signed, vc.enterprise_signed, `+port.BoolExpr(s.dialect, false)+`)
 		FROM extension_installations ei
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions va ON va.id = ei.active_version_id
 		LEFT JOIN extension_versions vc ON vc.id = ei.candidate_version_id
 		LEFT JOIN extension_versions vp ON vp.id = ei.previous_pinned_version_id
-		WHERE ei.id = ?`, insID,
-	).Scan(&id, &pkgID, &trust, &state, &ver, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entInt)
+		WHERE ei.id = ?`), insID,
+	).Scan(&id, &pkgID, &trust, &state, &ver, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entBool)
 	if errors.Is(err, sql.ErrNoRows) {
 		return extensionInstallationDTO{}, "", port.ErrNotFound
 	}
@@ -1235,7 +1261,7 @@ func (s *Server) loadExtensionInstallationDTO(ctx context.Context, insID string)
 		ContractVersion:         contractVer,
 		State:                   mapExtensionStateOpenAPI(state),
 		OriginTrustTier:         trust,
-		EnterpriseSigned:        entInt == 1,
+		EnterpriseSigned:        bool(entBool),
 		ExecutionTier:           mapExecutionTierOpenAPI(execTier),
 		Version:                 ver,
 	}, state, nil
@@ -1252,19 +1278,19 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 		actSemver, candSemver     sql.NullString
 		candManifest, actManifest sql.NullString
 		candExec, actExec         sql.NullString
-		candEnt, actEnt           int
+		candEnt, actEnt           port.FlexBool
 		ver                       int64
 	)
-	err := s.db.QueryRowContext(ctx, `
+	err := s.db.QueryRowContext(ctx, s.rebind(`
 		SELECT ei.package_id, ep.origin_trust_tier, ei.approved_permissions_json, ei.version,
 		       va.semver, vc.semver, va.manifest_json, vc.manifest_json,
 		       va.execution_tier, vc.execution_tier,
-		       COALESCE(va.enterprise_signed, 0), COALESCE(vc.enterprise_signed, 0)
+		       COALESCE(va.enterprise_signed, `+port.BoolExpr(s.dialect, false)+`), COALESCE(vc.enterprise_signed, `+port.BoolExpr(s.dialect, false)+`)
 		FROM extension_installations ei
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions va ON va.id = ei.active_version_id
 		LEFT JOIN extension_versions vc ON vc.id = ei.candidate_version_id
-		WHERE ei.id = ?`, insID,
+		WHERE ei.id = ?`), insID,
 	).Scan(&pkgID, &trust, &approvedRaw, &ver, &actSemver, &candSemver, &actManifest, &candManifest, &actExec, &candExec, &actEnt, &candEnt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return extensionPermissionDiffDTO{}, 0, port.ErrNotFound
@@ -1281,12 +1307,12 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 	targetManifest := candManifest
 	targetSemver := candSemver
 	targetExec := candExec
-	targetEnt := candEnt == 1
+	targetEnt := bool(candEnt)
 	if !targetManifest.Valid || strings.TrimSpace(targetManifest.String) == "" {
 		targetManifest = actManifest
 		targetSemver = actSemver
 		targetExec = actExec
-		targetEnt = actEnt == 1
+		targetEnt = bool(actEnt)
 	}
 
 	var extManifest installer.ExtensionManifest

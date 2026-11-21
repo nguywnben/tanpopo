@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 var errToolNotFound = errors.New("MCP tool not found or not granted")
@@ -49,17 +51,28 @@ type toolRecord struct {
 	SideEffectClass string
 }
 
-type catalog struct{ db *sql.DB }
+type catalog struct {
+	db      *sql.DB
+	dialect port.Dialect
+}
 
 func newCatalog(db *sql.DB) (*catalog, error) {
 	if db == nil {
 		return nil, errors.New("MCP catalog requires a database")
 	}
-	return &catalog{db: db}, nil
+	return &catalog{db: db, dialect: port.DetectDialect(context.Background(), db)}, nil
 }
 
 func (c *catalog) listGrantedTools(ctx context.Context, sc scope) ([]toolRecord, error) {
-	rows, err := c.db.QueryContext(ctx, `
+	tx, err := c.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("begin MCP catalog read tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, c.dialect, sc.OrgID); err != nil {
+		return nil, fmt.Errorf("scope MCP catalog read tx: %w", err)
+	}
+	rows, err := tx.QueryContext(ctx, port.Rebind(c.dialect, `
 		SELECT t.id, s.id, s.org_id, s.project_id, s.server_slug, s.transport_kind,
 		       s.endpoint_url, s.allow_private_ip, s.allowed_cidrs_json,
 		       COALESCE(s.credential_id, ''), s.pinning_mode, s.status,
@@ -75,7 +88,7 @@ func (c *catalog) listGrantedTools(ctx context.Context, sc scope) ([]toolRecord,
 		        AND (g.virtual_key_id IS NULL OR g.virtual_key_id = ?)
 		  )
 		  AND s.status = 'ACTIVE'
-		ORDER BY s.server_slug, t.tool_name`,
+		ORDER BY s.server_slug, t.tool_name`),
 		sc.OrgID, sc.ProjectID, sc.ProjectID, sc.EnvID, sc.KeyID)
 	if err != nil {
 		return nil, fmt.Errorf("list MCP catalog: %w", err)
@@ -85,7 +98,7 @@ func (c *catalog) listGrantedTools(ctx context.Context, sc scope) ([]toolRecord,
 	var out []toolRecord
 	for rows.Next() {
 		var t toolRecord
-		var allowPrivate, drift int
+		var allowPrivate, drift port.FlexBool
 		var cidrs string
 		var schemaJSON []byte
 		if err := rows.Scan(&t.ID, &t.Server.ID, &t.Server.OrgID, &t.Server.ProjectID,
@@ -96,11 +109,11 @@ func (c *catalog) listGrantedTools(ctx context.Context, sc scope) ([]toolRecord,
 			return nil, fmt.Errorf("scan MCP catalog: %w", err)
 		}
 		t.Schema = append(t.Schema[:0], schemaJSON...)
-		t.Server.AllowPrivateIP = allowPrivate != 0
+		t.Server.AllowPrivateIP = bool(allowPrivate)
 		if err := json.Unmarshal([]byte(cidrs), &t.Server.AllowedCIDRs); err != nil {
 			return nil, errors.New("invalid MCP egress policy")
 		}
-		t.DriftLocked = drift != 0
+		t.DriftLocked = bool(drift)
 		name, err := toolName(t.Server.Slug, t.Name)
 		if err != nil {
 			return nil, err
@@ -117,11 +130,19 @@ func (c *catalog) listGrantedTools(ctx context.Context, sc scope) ([]toolRecord,
 }
 
 func (c *catalog) getGrantedTool(ctx context.Context, sc scope, serverSlug, name string) (toolRecord, error) {
+	tx, err := c.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return toolRecord{}, fmt.Errorf("begin MCP tool read tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, c.dialect, sc.OrgID); err != nil {
+		return toolRecord{}, fmt.Errorf("scope MCP tool read tx: %w", err)
+	}
 	var t toolRecord
-	var allowPrivate, drift int
+	var allowPrivate, drift port.FlexBool
 	var cidrs string
 	var schemaJSON []byte
-	err := c.db.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, port.Rebind(c.dialect, `
 		SELECT t.id, s.id, s.org_id, s.project_id, s.server_slug, s.transport_kind,
 		       s.endpoint_url, s.allow_private_ip, s.allowed_cidrs_json,
 		       COALESCE(s.credential_id, ''), s.pinning_mode, s.status,
@@ -133,7 +154,7 @@ func (c *catalog) getGrantedTool(ctx context.Context, sc scope, serverSlug, name
 		WHERE t.org_id = ? AND s.project_id = ? AND g.project_id = ? AND g.env_id = ?
 		  AND (g.virtual_key_id IS NULL OR g.virtual_key_id = ?)
 		  AND s.server_slug = ? AND t.tool_name = ? AND s.status = 'ACTIVE'
-		LIMIT 1`, sc.OrgID, sc.ProjectID, sc.ProjectID, sc.EnvID, sc.KeyID, serverSlug, name).Scan(
+		LIMIT 1`), sc.OrgID, sc.ProjectID, sc.ProjectID, sc.EnvID, sc.KeyID, serverSlug, name).Scan(
 		&t.ID, &t.Server.ID, &t.Server.OrgID, &t.Server.ProjectID,
 		&t.Server.Slug, &t.Server.Transport, &t.Server.Endpoint, &allowPrivate,
 		&cidrs, &t.Server.CredentialID, &t.Server.PinningMode, &t.Server.Status,
@@ -145,11 +166,11 @@ func (c *catalog) getGrantedTool(ctx context.Context, sc scope, serverSlug, name
 		return toolRecord{}, fmt.Errorf("load MCP tool: %w", err)
 	}
 	t.Schema = append(t.Schema[:0], schemaJSON...)
-	t.Server.AllowPrivateIP = allowPrivate != 0
+	t.Server.AllowPrivateIP = bool(allowPrivate)
 	if err := json.Unmarshal([]byte(cidrs), &t.Server.AllowedCIDRs); err != nil {
 		return toolRecord{}, errors.New("invalid MCP egress policy")
 	}
-	t.DriftLocked = drift != 0
+	t.DriftLocked = bool(drift)
 	namespaced, err := toolName(serverSlug, name)
 	if err != nil {
 		return toolRecord{}, errToolNotFound
@@ -161,15 +182,23 @@ func (c *catalog) getGrantedTool(ctx context.Context, sc scope, serverSlug, name
 }
 
 func (c *catalog) lockSchemaDrift(ctx context.Context, t toolRecord, observed string) error {
-	_, err := c.db.ExecContext(ctx, `
-		UPDATE mcp_tools
-		SET observed_schema_sha256 = ?, schema_drift_locked = 1, version = version + 1,
-		    updated_at_ms = CAST(strftime('%s','now') AS INTEGER) * 1000
-		WHERE org_id = ? AND id = ?`, observed, t.Server.OrgID, t.ID)
+	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("begin MCP schema drift tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, c.dialect, t.Server.OrgID); err != nil {
+		return fmt.Errorf("scope MCP schema drift tx: %w", err)
+	}
+	nowMs := time.Now().UTC().UnixMilli()
+	if _, err := tx.ExecContext(ctx, port.Rebind(c.dialect, `
+		UPDATE mcp_tools
+		SET observed_schema_sha256 = ?, schema_drift_locked = `+port.BoolExpr(c.dialect, true)+`, version = version + 1,
+		    updated_at_ms = ?
+		WHERE org_id = ? AND id = ?`), observed, nowMs, t.Server.OrgID, t.ID); err != nil {
 		return fmt.Errorf("lock MCP schema drift: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (s serverRecord) egressPolicy() (*egress.Policy, error) {

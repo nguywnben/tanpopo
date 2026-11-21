@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nguywnben/tanpopo/internal/iam/auth"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
@@ -84,39 +85,47 @@ func (s *Server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 	q.WriteString(` ORDER BY p.created_at_ms DESC, p.id DESC LIMIT ?`)
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), q.String(), args...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing members", true, nil)
-		return
-	}
-	defer rows.Close()
-
 	type memberRow struct {
 		dto       memberSummaryDTO
 		createdMs int64
 	}
 	var items []memberRow
-	for rows.Next() {
-		var id, email, kind string
-		var ver, createdMs int64
-		if scanErr := rows.Scan(&id, &email, &kind, &ver, &createdMs); scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning member", true, nil)
-			return
+	var scanErr error
+	if err := s.withOrgReadTx(r.Context(), orgID, func(qdb adminDBQuerier) error {
+		rows, qerr := qdb.QueryContext(r.Context(), s.rebind(q.String()), args...)
+		if qerr != nil {
+			return qerr
 		}
-		items = append(items, memberRow{
-			dto: memberSummaryDTO{
-				ID:        id,
-				Email:     email,
-				Kind:      toOpenAPIMemberKind(kind),
-				Roles:     []string{},
-				Version:   ver,
-				CreatedAt: formatTimeRFC3339Ms(createdMs),
-			},
-			createdMs: createdMs,
-		})
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id, email, kind string
+			var ver, createdMs int64
+			if serr := rows.Scan(&id, &email, &kind, &ver, &createdMs); serr != nil {
+				scanErr = serr
+				return nil
+			}
+			items = append(items, memberRow{
+				dto: memberSummaryDTO{
+					ID:        id,
+					Email:     email,
+					Kind:      toOpenAPIMemberKind(kind),
+					Roles:     []string{},
+					Version:   ver,
+					CreatedAt: formatTimeRFC3339Ms(createdMs),
+				},
+				createdMs: createdMs,
+			})
+		}
+		if ierr := rows.Err(); ierr != nil {
+			return ierr
+		}
+		return rows.Close()
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing members", true, nil)
+		return
 	}
-	if err := rows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating members", true, nil)
+	if scanErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning member", true, nil)
 		return
 	}
 
@@ -207,7 +216,9 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, pid := range projIDs {
 			var pExists int
-			err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, pid).Scan(&pExists)
+			err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+				return q.QueryRowContext(r.Context(), s.rebind(`SELECT 1 FROM projects WHERE org_id = ? AND id = ?`), orgID, pid).Scan(&pExists)
+			})
 			if errors.Is(err, sql.ErrNoRows) {
 				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 				return
@@ -249,15 +260,20 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping member creation tx", true, nil)
+		return
+	}
 
-	if _, err := tx.ExecContext(r.Context(), `
+	if _, err := tx.ExecContext(r.Context(), s.rebind(`
 		INSERT INTO principals (
 			id, org_id, kind, email_or_sub, password_argon2id, oidc_issuer,
 			status, version, last_login_at_ms, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, NULL, NULL, 'ACTIVE', 1, NULL, ?, ?)`,
+		) VALUES (?, ?, ?, ?, NULL, NULL, 'ACTIVE', 1, NULL, ?, ?)`),
 		prcID, orgID, dbKind, email, now, now,
 	); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+		var pgErr *pgconn.PgError
+		if (errors.As(err, &pgErr) && pgErr.Code == "23505") || strings.Contains(strings.ToLower(err.Error()), "unique") {
 			writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "member with email already exists in organization", false, nil)
 			return
 		}
@@ -265,7 +281,7 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := insertRoleBindingsTx(r.Context(), tx, orgID, prcID, roles, projIDsForResp, now); err != nil {
+	if err := s.insertRoleBindingsTx(r.Context(), tx, orgID, prcID, roles, projIDsForResp, now); err != nil {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
 		return
 	}
@@ -348,11 +364,13 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		version     int64
 		createdMs   int64
 	)
-	err := s.db.QueryRowContext(r.Context(), `
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
 		SELECT email_or_sub, kind, version, created_at_ms
-		FROM principals WHERE id = ? AND org_id = ?`,
-		memberID, orgID,
-	).Scan(&email, &kind, &version, &createdMs)
+		FROM principals WHERE id = ? AND org_id = ?`),
+			memberID, orgID,
+		).Scan(&email, &kind, &version, &createdMs)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "member not found", false, nil)
 		return
@@ -415,7 +433,9 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		}
 		for _, pid := range projIDs {
 			var pExists int
-			pErr := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM projects WHERE org_id = ? AND id = ?`, orgID, pid).Scan(&pExists)
+			pErr := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+				return q.QueryRowContext(r.Context(), s.rebind(`SELECT 1 FROM projects WHERE org_id = ? AND id = ?`), orgID, pid).Scan(&pExists)
+			})
 			if errors.Is(pErr, sql.ErrNoRows) {
 				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 				return
@@ -456,19 +476,23 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping role update tx", true, nil)
+		return
+	}
 
-	if _, err := tx.ExecContext(r.Context(), `DELETE FROM role_bindings WHERE principal_id = ? AND org_id = ?`, memberID, orgID); err != nil {
+	if _, err := tx.ExecContext(r.Context(), s.rebind(`DELETE FROM role_bindings WHERE principal_id = ? AND org_id = ?`), memberID, orgID); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed clearing previous bindings", true, nil)
 		return
 	}
-	if err := insertRoleBindingsTx(r.Context(), tx, orgID, memberID, nextRoles, projIDsForResp, now); err != nil {
+	if err := s.insertRoleBindingsTx(r.Context(), tx, orgID, memberID, nextRoles, projIDsForResp, now); err != nil {
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
 		return
 	}
 
-	res, err := tx.ExecContext(r.Context(), `
+	res, err := tx.ExecContext(r.Context(), s.rebind(`
 		UPDATE principals SET version = version + 1, updated_at_ms = ?
-		WHERE id = ? AND org_id = ? AND version = ?`,
+		WHERE id = ? AND org_id = ? AND version = ?`),
 		now, memberID, orgID, expectedVer,
 	)
 	if err != nil {
@@ -479,11 +503,13 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		_ = tx.Rollback()
 		var freshEmail, freshKind string
 		var freshVer, freshCreatedMs int64
-		rerr := s.db.QueryRowContext(r.Context(), `
+		rerr := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(r.Context(), s.rebind(`
 			SELECT email_or_sub, kind, version, created_at_ms
-			FROM principals WHERE id = ? AND org_id = ?`,
-			memberID, orgID,
-		).Scan(&freshEmail, &freshKind, &freshVer, &freshCreatedMs)
+			FROM principals WHERE id = ? AND org_id = ?`),
+				memberID, orgID,
+			).Scan(&freshEmail, &freshKind, &freshVer, &freshCreatedMs)
+		})
 		if errors.Is(rerr, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "member not found", false, nil)
 			return
@@ -579,84 +605,99 @@ func (s *Server) loadMemberBindingDetailsBatch(ctx context.Context, orgID string
 		placeholders[i] = "?"
 		args = append(args, pid)
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	if err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		rows, qerr := q.QueryContext(ctx, s.rebind(`
 		SELECT principal_id, role_name, scope_type, scope_id
 		FROM role_bindings
 		WHERE org_id = ? AND principal_id IN (`+strings.Join(placeholders, ",")+`)
-		ORDER BY created_at_ms ASC, id ASC`,
-		args...,
-	)
-	if err != nil {
+		ORDER BY created_at_ms ASC, id ASC`),
+			args...,
+		)
+		if qerr != nil {
+			return qerr
+		}
+		defer func() { _ = rows.Close() }()
+
+		seenRoles := make(map[string]map[string]struct{}, len(principalIDs))
+		seenProjs := make(map[string]map[string]struct{}, len(principalIDs))
+		for rows.Next() {
+			var pid, roleName, scopeType, scopeID string
+			if scanErr := rows.Scan(&pid, &roleName, &scopeType, &scopeID); scanErr != nil {
+				return scanErr
+			}
+			cur := out[pid]
+			if cur.roles == nil {
+				cur.roles = []string{}
+			}
+			if seenRoles[pid] == nil {
+				seenRoles[pid] = make(map[string]struct{})
+			}
+			if _, ok := seenRoles[pid][roleName]; !ok {
+				seenRoles[pid][roleName] = struct{}{}
+				cur.roles = append(cur.roles, roleName)
+			}
+			if scopeType == rbac.ScopeProject && scopeID != "" {
+				if seenProjs[pid] == nil {
+					seenProjs[pid] = make(map[string]struct{})
+				}
+				if _, ok := seenProjs[pid][scopeID]; !ok {
+					seenProjs[pid][scopeID] = struct{}{}
+					cur.projs = append(cur.projs, scopeID)
+				}
+			}
+			out[pid] = cur
+		}
+		if ierr := rows.Err(); ierr != nil {
+			return ierr
+		}
+		return rows.Close()
+	}); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	seenRoles := make(map[string]map[string]struct{}, len(principalIDs))
-	seenProjs := make(map[string]map[string]struct{}, len(principalIDs))
-	for rows.Next() {
-		var pid, roleName, scopeType, scopeID string
-		if scanErr := rows.Scan(&pid, &roleName, &scopeType, &scopeID); scanErr != nil {
-			return nil, scanErr
-		}
-		cur := out[pid]
-		if cur.roles == nil {
-			cur.roles = []string{}
-		}
-		if seenRoles[pid] == nil {
-			seenRoles[pid] = make(map[string]struct{})
-		}
-		if _, ok := seenRoles[pid][roleName]; !ok {
-			seenRoles[pid][roleName] = struct{}{}
-			cur.roles = append(cur.roles, roleName)
-		}
-		if scopeType == rbac.ScopeProject && scopeID != "" {
-			if seenProjs[pid] == nil {
-				seenProjs[pid] = make(map[string]struct{})
-			}
-			if _, ok := seenProjs[pid][scopeID]; !ok {
-				seenProjs[pid][scopeID] = struct{}{}
-				cur.projs = append(cur.projs, scopeID)
-			}
-		}
-		out[pid] = cur
-	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Server) loadMemberBindingDetails(ctx context.Context, orgID, principalID string) ([]string, []string, []memberBindingRow, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT role_name, scope_type, scope_id
-		FROM role_bindings WHERE org_id = ? AND principal_id = ? ORDER BY created_at_ms ASC, id ASC`,
-		orgID, principalID,
-	)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	defer rows.Close()
-
 	seenRoles := make(map[string]struct{})
 	seenProjs := make(map[string]struct{})
 	roles := []string{}
 	var projs []string
 	var bindings []memberBindingRow
-	for rows.Next() {
-		var row memberBindingRow
-		if scanErr := rows.Scan(&row.RoleName, &row.ScopeType, &row.ScopeID); scanErr != nil {
-			return nil, nil, nil, scanErr
+	if err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		rows, qerr := q.QueryContext(ctx, s.rebind(`
+		SELECT role_name, scope_type, scope_id
+		FROM role_bindings WHERE org_id = ? AND principal_id = ? ORDER BY created_at_ms ASC, id ASC`),
+			orgID, principalID,
+		)
+		if qerr != nil {
+			return qerr
 		}
-		bindings = append(bindings, row)
-		if _, ok := seenRoles[row.RoleName]; !ok {
-			seenRoles[row.RoleName] = struct{}{}
-			roles = append(roles, row.RoleName)
-		}
-		if row.ScopeType == rbac.ScopeProject && row.ScopeID != "" {
-			if _, ok := seenProjs[row.ScopeID]; !ok {
-				seenProjs[row.ScopeID] = struct{}{}
-				projs = append(projs, row.ScopeID)
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var row memberBindingRow
+			if scanErr := rows.Scan(&row.RoleName, &row.ScopeType, &row.ScopeID); scanErr != nil {
+				return scanErr
+			}
+			bindings = append(bindings, row)
+			if _, ok := seenRoles[row.RoleName]; !ok {
+				seenRoles[row.RoleName] = struct{}{}
+				roles = append(roles, row.RoleName)
+			}
+			if row.ScopeType == rbac.ScopeProject && row.ScopeID != "" {
+				if _, ok := seenProjs[row.ScopeID]; !ok {
+					seenProjs[row.ScopeID] = struct{}{}
+					projs = append(projs, row.ScopeID)
+				}
 			}
 		}
+		if ierr := rows.Err(); ierr != nil {
+			return ierr
+		}
+		return rows.Close()
+	}); err != nil {
+		return nil, nil, nil, err
 	}
-	return roles, projs, bindings, rows.Err()
+	return roles, projs, bindings, nil
 }
 
 func normalizeAndCheckGrantRoles(sc *authSessionContext, orgID string, rawRoles []string, projIDs []string) ([]string, []string, error) {
@@ -702,7 +743,7 @@ func normalizeAndCheckGrantRoles(sc *authSessionContext, orgID string, rawRoles 
 	return out, boundProjIDs, nil
 }
 
-func insertRoleBindingsTx(ctx context.Context, tx *sql.Tx, orgID, principalID string, roles, projIDs []string, now int64) error {
+func (s *Server) insertRoleBindingsTx(ctx context.Context, tx *sql.Tx, orgID, principalID string, roles, projIDs []string, now int64) error {
 	for _, role := range roles {
 		switch role {
 		case rbac.RoleOrgOwner, rbac.RoleSecurityReviewer, rbac.RoleFinOpsViewer:
@@ -710,9 +751,9 @@ func insertRoleBindingsTx(ctx context.Context, tx *sql.Tx, orgID, principalID st
 			if err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `
+			if _, err := tx.ExecContext(ctx, s.rebind(`
 				INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
-				VALUES (?, ?, ?, 'ORG', ?, ?, 1, ?)`,
+				VALUES (?, ?, ?, 'ORG', ?, ?, 1, ?)`),
 				rbID, orgID, principalID, orgID, role, now,
 			); err != nil {
 				return err
@@ -724,9 +765,9 @@ func insertRoleBindingsTx(ctx context.Context, tx *sql.Tx, orgID, principalID st
 					if err != nil {
 						return err
 					}
-					if _, err := tx.ExecContext(ctx, `
+					if _, err := tx.ExecContext(ctx, s.rebind(`
 						INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
-						VALUES (?, ?, ?, 'PROJECT', ?, ?, 1, ?)`,
+						VALUES (?, ?, ?, 'PROJECT', ?, ?, 1, ?)`),
 						rbID, orgID, principalID, pid, role, now,
 					); err != nil {
 						return err
@@ -737,9 +778,9 @@ func insertRoleBindingsTx(ctx context.Context, tx *sql.Tx, orgID, principalID st
 				if err != nil {
 					return err
 				}
-				if _, err := tx.ExecContext(ctx, `
+				if _, err := tx.ExecContext(ctx, s.rebind(`
 					INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
-					VALUES (?, ?, ?, 'ORG', ?, ?, 1, ?)`,
+					VALUES (?, ?, ?, 'ORG', ?, ?, 1, ?)`),
 					rbID, orgID, principalID, orgID, role, now,
 				); err != nil {
 					return err

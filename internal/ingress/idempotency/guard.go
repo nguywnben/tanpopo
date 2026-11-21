@@ -19,6 +19,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 const (
@@ -94,6 +96,7 @@ type Config struct {
 // Guard provides atomic Idempotency-Key claiming, replay, and cleanup.
 type Guard struct {
 	db                 *sql.DB
+	dialect            port.Dialect
 	ttlMs              int64
 	nowMs              func() int64
 	maxEntries         int
@@ -149,8 +152,13 @@ func NewGuard(cfg Config) *Guard {
 	if maxBodyBytes <= 0 {
 		maxBodyBytes = DefaultMaxRecordBodyBytes
 	}
+	var dialect port.Dialect
+	if cfg.DB != nil {
+		dialect = port.DetectDialect(context.Background(), cfg.DB)
+	}
 	return &Guard{
 		db:                 cfg.DB,
+		dialect:            dialect,
 		ttlMs:              ttl.Milliseconds(),
 		nowMs:              nowFn,
 		maxEntries:         maxEntries,
@@ -313,30 +321,48 @@ func (g *Guard) beginSQL(ctx context.Context, scope ScopeKey, payloadSHA256 stri
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, g.dialect, scope.OrgID); err != nil {
+		return nil, err
+	}
 
 	pruneCaughtUp := false
 	lastPrune := g.lastSQLPruneMs.Load()
 	if lastPrune == 0 || now-lastPrune >= sqlitePruneIntervalMs || now < lastPrune {
-		pruneRes, err := tx.ExecContext(ctx, `
-			DELETE FROM idempotency_records
-			WHERE rowid IN (
-				SELECT rowid FROM idempotency_records
-				WHERE expires_at_ms <= ?
-				LIMIT ?
-			)
-		`, now, sqlitePruneBatchLimit)
-		if err != nil {
-			return nil, err
+		var (
+			pruneRes sql.Result
+			perr     error
+		)
+		if g.dialect == port.DialectPostgres {
+			pruneRes, perr = tx.ExecContext(ctx, port.Rebind(g.dialect, `
+				DELETE FROM idempotency_records
+				WHERE org_id = ? AND ctid IN (
+					SELECT ctid FROM idempotency_records
+					WHERE org_id = ? AND expires_at_ms <= ?
+					LIMIT ?
+				)
+			`), scope.OrgID, scope.OrgID, now, sqlitePruneBatchLimit)
+		} else {
+			pruneRes, perr = tx.ExecContext(ctx, `
+				DELETE FROM idempotency_records
+				WHERE rowid IN (
+					SELECT rowid FROM idempotency_records
+					WHERE expires_at_ms <= ?
+					LIMIT ?
+				)
+			`, now, sqlitePruneBatchLimit)
+		}
+		if perr != nil {
+			return nil, perr
 		}
 		if deleted, _ := pruneRes.RowsAffected(); deleted < sqlitePruneBatchLimit {
 			pruneCaughtUp = true
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, port.Rebind(g.dialect, `
 		DELETE FROM idempotency_records
 		WHERE org_id = ? AND project_id = ? AND virtual_key_id = ? AND idempotency_key = ? AND expires_at_ms <= ?
-	`, scope.OrgID, scope.ProjectID, scope.VirtualKeyID, scope.IdempotencyKey, now); err != nil {
+	`), scope.OrgID, scope.ProjectID, scope.VirtualKeyID, scope.IdempotencyKey, now); err != nil {
 		return nil, err
 	}
 
@@ -347,11 +373,11 @@ func (g *Guard) beginSQL(ctx context.Context, scope ScopeKey, payloadSHA256 stri
 		hdrsNull    sql.NullString
 		bodyBytes   []byte
 	)
-	row := tx.QueryRowContext(ctx, `
+	row := tx.QueryRowContext(ctx, port.Rebind(g.dialect, `
 		SELECT payload_sha256, state, http_status, response_headers_json, response_body_bytes
 		FROM idempotency_records
 		WHERE org_id = ? AND project_id = ? AND virtual_key_id = ? AND idempotency_key = ?
-	`, scope.OrgID, scope.ProjectID, scope.VirtualKeyID, scope.IdempotencyKey)
+	`), scope.OrgID, scope.ProjectID, scope.VirtualKeyID, scope.IdempotencyKey)
 	scanErr := row.Scan(&existingSHA, &state, &statusNull, &hdrsNull, &bodyBytes)
 	switch {
 	case scanErr == nil:
@@ -389,13 +415,13 @@ func (g *Guard) beginSQL(ctx context.Context, scope ScopeKey, payloadSHA256 stri
 		return nil, scanErr
 	}
 
-	res, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, port.Rebind(g.dialect, `
 		INSERT INTO idempotency_records (
 			org_id, project_id, virtual_key_id, idempotency_key,
 			payload_sha256, state, created_at_ms, expires_at_ms
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(org_id, project_id, virtual_key_id, idempotency_key) DO NOTHING
-	`, scope.OrgID, scope.ProjectID, scope.VirtualKeyID, scope.IdempotencyKey, payloadSHA256, stateInFlight, now, now+g.ttlMs)
+	`), scope.OrgID, scope.ProjectID, scope.VirtualKeyID, scope.IdempotencyKey, payloadSHA256, stateInFlight, now, now+g.ttlMs)
 	if err != nil {
 		return nil, err
 	}
@@ -420,6 +446,29 @@ func (g *Guard) beginSQL(ctx context.Context, scope ScopeKey, payloadSHA256 stri
 	}, nil
 }
 
+func (g *Guard) execOrgScoped(ctx context.Context, orgID, query string, args ...any) (sql.Result, error) {
+	q := port.Rebind(g.dialect, query)
+	if g.dialect != port.DialectPostgres {
+		return g.db.ExecContext(ctx, q, args...)
+	}
+	tx, err := g.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, g.dialect, orgID); err != nil {
+		return nil, err
+	}
+	res, err := tx.ExecContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 // Complete persists the settled response so subsequent matching retries replay cleanly.
 // Responses larger than MaxRecordBodyBytes release the IN_FLIGHT claim without caching.
 func (c *Claim) Complete(ctx context.Context, statusCode int, headers map[string]string, body []byte) error {
@@ -435,11 +484,10 @@ func (c *Claim) Complete(ctx context.Context, statusCode int, headers map[string
 	g := c.guard
 	if len(body) > g.maxRecordBodyBytes || int64(len(body)) > g.maxTotalBytes {
 		if g.db != nil {
-			_, err := g.db.ExecContext(ctx, `
+			if _, err := g.execOrgScoped(ctx, c.scope.OrgID, `
 				DELETE FROM idempotency_records
 				WHERE org_id = ? AND project_id = ? AND virtual_key_id = ? AND idempotency_key = ? AND payload_sha256 = ? AND state = ?
-			`, c.scope.OrgID, c.scope.ProjectID, c.scope.VirtualKeyID, c.scope.IdempotencyKey, c.payloadSHA256, stateInFlight)
-			if err != nil {
+			`, c.scope.OrgID, c.scope.ProjectID, c.scope.VirtualKeyID, c.scope.IdempotencyKey, c.payloadSHA256, stateInFlight); err != nil {
 				return err
 			}
 		} else {
@@ -462,7 +510,7 @@ func (c *Claim) Complete(ctx context.Context, statusCode int, headers map[string
 		if err != nil {
 			return err
 		}
-		res, err := g.db.ExecContext(ctx, `
+		res, err := g.execOrgScoped(ctx, c.scope.OrgID, `
 			UPDATE idempotency_records
 			SET state = ?, http_status = ?, response_headers_json = ?, response_body_bytes = ?, expires_at_ms = ?
 			WHERE org_id = ? AND project_id = ? AND virtual_key_id = ? AND idempotency_key = ? AND payload_sha256 = ? AND state = ?
@@ -517,7 +565,7 @@ func (c *Claim) Abort(ctx context.Context) {
 		if ctx == nil || ctx.Err() != nil {
 			ctx = context.Background()
 		}
-		_, _ = g.db.ExecContext(ctx, `
+		_, _ = g.execOrgScoped(ctx, c.scope.OrgID, `
 			DELETE FROM idempotency_records
 			WHERE org_id = ? AND project_id = ? AND virtual_key_id = ? AND idempotency_key = ? AND payload_sha256 = ? AND state = ?
 		`, c.scope.OrgID, c.scope.ProjectID, c.scope.VirtualKeyID, c.scope.IdempotencyKey, c.payloadSHA256, stateInFlight)

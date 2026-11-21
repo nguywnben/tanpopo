@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 // PolicyScopeType constants matching policies.scope_type CHECK constraint.
@@ -384,37 +386,45 @@ func loadPoliciesSQL(ctx context.Context, tx *sql.Tx) *PolicyCatalogView {
 	cat := &PolicyCatalogView{
 		byScope: make(map[PolicyScopeKey][]*PolicyRecordView),
 	}
+	loadPoliciesIntoSQL(ctx, tx, port.DialectSQLite, cat)
+	return cat
+}
 
-	rows, err := tx.QueryContext(ctx, `
+func loadPoliciesIntoSQL(ctx context.Context, tx *sql.Tx, d port.Dialect, cat *PolicyCatalogView) {
+	if cat.corruptErr != nil {
+		return
+	}
+	query := fmt.Sprintf(`
 		SELECT id, org_id, scope_type, scope_id, policy_type,
 		       failure_mode, rules_json, enabled, version, created_at_ms, updated_at_ms
 		FROM policies
-		WHERE enabled = 1
+		WHERE enabled = %s
 		ORDER BY created_at_ms ASC, id ASC
-	`)
+	`, sqlBoolExpr(d, true))
+	rows, err := tx.QueryContext(ctx, query)
 	if err != nil {
 		cat.corruptErr = fmt.Errorf("query policies: %w", err)
-		return cat
+		return
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var (
-			p          PolicyRecordView
-			enabledInt int64
+			p           PolicyRecordView
+			enabledBool flexBool
 		)
 		if scanErr := rows.Scan(
 			&p.ID, &p.OrgID, &p.ScopeType, &p.ScopeID, &p.PolicyType,
-			&p.FailureMode, &p.RulesJSON, &enabledInt, &p.Version, &p.CreatedAtMs, &p.UpdatedAtMs,
+			&p.FailureMode, &p.RulesJSON, &enabledBool, &p.Version, &p.CreatedAtMs, &p.UpdatedAtMs,
 		); scanErr != nil {
 			cat.corruptErr = fmt.Errorf("scan policy row: %w", scanErr)
-			return cat
+			return
 		}
-		p.Enabled = enabledInt != 0
+		p.Enabled = bool(enabledBool)
 		parsed, parseErr := ParsePolicyRulesJSONStrict(p.RulesJSON)
 		if parseErr != nil {
 			cat.corruptErr = fmt.Errorf("parse policy %q rules_json: %w", p.ID, parseErr)
-			return cat
+			return
 		}
 		p.ParsedRules = parsed
 
@@ -427,7 +437,6 @@ func loadPoliciesSQL(ctx context.Context, tx *sql.Tx) *PolicyCatalogView {
 	}
 	if err := rows.Err(); err != nil {
 		cat.corruptErr = fmt.Errorf("iterate policies: %w", err)
-		return cat
+		return
 	}
-	return cat
 }

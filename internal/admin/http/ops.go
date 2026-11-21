@@ -148,33 +148,35 @@ func (s *Server) handleGetOverviewSummary(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	traceRows, err := s.db.QueryContext(r.Context(), `
-		SELECT http_status, proxy_overhead_us
-		FROM request_traces_meta
-		WHERE `+strings.Join(traceConds, " AND "), traceArgs...)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying overview trace metrics", true, nil)
-		return
-	}
-	defer traceRows.Close()
-
 	var totalReqs, errReqs int64
 	var overheads []int64
-	for traceRows.Next() {
-		var status int
-		var overUs int64
-		if scanErr := traceRows.Scan(&status, &overUs); scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning trace metrics", true, nil)
-			return
+	if err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		traceRows, qerr := q.QueryContext(r.Context(), s.rebind(`
+		SELECT http_status, proxy_overhead_us
+		FROM request_traces_meta
+		WHERE `+strings.Join(traceConds, " AND ")), traceArgs...)
+		if qerr != nil {
+			return qerr
 		}
-		totalReqs++
-		if status >= 400 {
-			errReqs++
+		defer func() { _ = traceRows.Close() }()
+		for traceRows.Next() {
+			var status int
+			var overUs int64
+			if scanErr := traceRows.Scan(&status, &overUs); scanErr != nil {
+				return scanErr
+			}
+			totalReqs++
+			if status >= 400 {
+				errReqs++
+			}
+			overheads = append(overheads, overUs)
 		}
-		overheads = append(overheads, overUs)
-	}
-	if err := traceRows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating trace metrics", true, nil)
+		if ierr := traceRows.Err(); ierr != nil {
+			return ierr
+		}
+		return traceRows.Close()
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying overview trace metrics", true, nil)
 		return
 	}
 
@@ -207,40 +209,43 @@ func (s *Server) handleGetOverviewSummary(w http.ResponseWriter, r *http.Request
 	}
 
 	var settledMicros, unmeteredCount int64
-	if err := s.db.QueryRowContext(r.Context(), `
+	if err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
 		SELECT COALESCE(SUM(total_cost_micros), 0),
 		       COALESCE(SUM(CASE WHEN usage_accuracy = 'UNMETERED_FLAGGED' THEN 1 ELSE 0 END), 0)
 		FROM usage_settlements
-		WHERE `+strings.Join(settleConds, " AND "), settleArgs...,
-	).Scan(&settledMicros, &unmeteredCount); err != nil {
+		WHERE `+strings.Join(settleConds, " AND ")), settleArgs...,
+		).Scan(&settledMicros, &unmeteredCount)
+	}); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying overview financial metrics", true, nil)
 		return
 	}
 
-	holdRows, err := s.db.QueryContext(r.Context(), `SELECT scope_type, scope_id, reserved_hold_micros FROM budget_ledgers WHERE org_id = ?`, orgID)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying active holds", true, nil)
-		return
-	}
 	type rawHoldRow struct {
 		scopeType string
 		scopeID   string
 		hold      int64
 	}
 	var rawHolds []rawHoldRow
-	for holdRows.Next() {
-		var rrow rawHoldRow
-		if scanErr := holdRows.Scan(&rrow.scopeType, &rrow.scopeID, &rrow.hold); scanErr != nil {
-			_ = holdRows.Close()
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning active holds", true, nil)
-			return
+	if err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		holdRows, qerr := q.QueryContext(r.Context(), s.rebind(`SELECT scope_type, scope_id, reserved_hold_micros FROM budget_ledgers WHERE org_id = ?`), orgID)
+		if qerr != nil {
+			return qerr
 		}
-		rawHolds = append(rawHolds, rrow)
-	}
-	holdErr := holdRows.Err()
-	_ = holdRows.Close()
-	if holdErr != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating active holds", true, nil)
+		defer func() { _ = holdRows.Close() }()
+		for holdRows.Next() {
+			var rrow rawHoldRow
+			if scanErr := holdRows.Scan(&rrow.scopeType, &rrow.scopeID, &rrow.hold); scanErr != nil {
+				return scanErr
+			}
+			rawHolds = append(rawHolds, rrow)
+		}
+		if ierr := holdRows.Err(); ierr != nil {
+			return ierr
+		}
+		return holdRows.Close()
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying active holds", true, nil)
 		return
 	}
 
@@ -371,29 +376,32 @@ func (s *Server) collectActiveAlerts(ctx context.Context, loc i18n.Locale, orgID
 		usedM     int64
 		updMs     int64
 	}
-	bRows, err := s.db.QueryContext(ctx, `
+	var scannedBudgets []budgetAlertRow
+	if err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		bRows, qerr := q.QueryContext(ctx, s.rebind(`
 		SELECT id, scope_type, scope_id, hard_limit_micros,
 		       settled_exact_micros + settled_estimated_micros + reserved_hold_micros,
 		       updated_at_ms
 		FROM budget_ledgers
-		WHERE org_id = ? AND hard_limit_micros > 0`, orgID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	var scannedBudgets []budgetAlertRow
-	for bRows.Next() {
-		var item budgetAlertRow
-		if scanErr := bRows.Scan(&item.id, &item.scopeType, &item.scopeID, &item.limitM, &item.usedM, &item.updMs); scanErr != nil {
-			_ = bRows.Close()
-			return nil, scanErr
+		WHERE org_id = ? AND hard_limit_micros > 0`), orgID,
+		)
+		if qerr != nil {
+			return qerr
 		}
-		scannedBudgets = append(scannedBudgets, item)
-	}
-	bIterErr := bRows.Err()
-	_ = bRows.Close()
-	if bIterErr != nil {
-		return nil, bIterErr
+		defer func() { _ = bRows.Close() }()
+		for bRows.Next() {
+			var item budgetAlertRow
+			if scanErr := bRows.Scan(&item.id, &item.scopeType, &item.scopeID, &item.limitM, &item.usedM, &item.updMs); scanErr != nil {
+				return scanErr
+			}
+			scannedBudgets = append(scannedBudgets, item)
+		}
+		if ierr := bRows.Err(); ierr != nil {
+			return ierr
+		}
+		return bRows.Close()
+	}); err != nil {
+		return nil, err
 	}
 	for _, b := range scannedBudgets {
 		if !orgWide {
@@ -433,11 +441,13 @@ func (s *Server) collectActiveAlerts(ctx context.Context, loc i18n.Locale, orgID
 		}
 		var unmeteredCnt int64
 		var unmeteredLatestMs sql.NullInt64
-		uErr := s.db.QueryRowContext(ctx, `
+		uErr := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(ctx, s.rebind(`
 			SELECT COUNT(*), MAX(settled_at_ms)
 			FROM usage_settlements
-			WHERE `+strings.Join(uConds, " AND "), uArgs...,
-		).Scan(&unmeteredCnt, &unmeteredLatestMs)
+			WHERE `+strings.Join(uConds, " AND ")), uArgs...,
+			).Scan(&unmeteredCnt, &unmeteredLatestMs)
+		})
 		if uErr != nil {
 			return nil, uErr
 		}
@@ -459,129 +469,136 @@ func (s *Server) collectActiveAlerts(ctx context.Context, loc i18n.Locale, orgID
 
 	// 3. Quarantined plugin alert (ALT-PLUGIN-TRAP) scoped to tenant/project connections & policies.
 	if orgWide {
-		qRows, qErr := s.db.QueryContext(ctx, `
+		if err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+			qRows, qErr := q.QueryContext(ctx, s.rebind(`
 			SELECT ei.id, ei.package_id, ei.updated_at_ms
 			FROM extension_installations ei
 			WHERE ei.state = 'QUARANTINED'
 			  AND (
 			    EXISTS (
 			      SELECT 1 FROM org_extension_policies oep
-			      WHERE oep.org_id = ? AND oep.package_id = ei.package_id AND oep.enabled = 1
+			      WHERE oep.org_id = ? AND oep.package_id = ei.package_id AND oep.enabled = `+port.BoolExpr(s.dialect, true)+`
 			    )
 			    OR EXISTS (
 			      SELECT 1 FROM provider_connections pc
 			      JOIN provider_adapters pa ON pa.id = pc.adapter_id
 			      WHERE pc.org_id = ? AND pa.installation_id = ei.id
 			    )
-			  )`, orgID, orgID,
-		)
-		if qErr != nil {
-			return nil, qErr
-		}
-		for qRows.Next() {
-			var id, pkgID string
-			var updMs int64
-			if scanErr := qRows.Scan(&id, &pkgID, &updMs); scanErr != nil {
-				_ = qRows.Close()
-				return nil, scanErr
+			  )`), orgID, orgID,
+			)
+			if qErr != nil {
+				return qErr
 			}
-			alerts = append(alerts, alertItemDTO{
-				ID:               "alt_plugin_" + id,
-				AlertCode:        "ALT-PLUGIN-TRAP",
-				Severity:         "PAGE",
-				Summary:          i18n.AlertSummary(loc, "ALT-PLUGIN-TRAP", fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID), "id", id, "package", pkgID),
-				RemediationRoute: "/extensions",
-				TriggeredAt:      formatTimeRFC3339Ms(updMs),
-			})
-		}
-		iterErr := qRows.Err()
-		_ = qRows.Close()
-		if iterErr != nil {
-			return nil, iterErr
+			defer func() { _ = qRows.Close() }()
+			for qRows.Next() {
+				var id, pkgID string
+				var updMs int64
+				if scanErr := qRows.Scan(&id, &pkgID, &updMs); scanErr != nil {
+					return scanErr
+				}
+				alerts = append(alerts, alertItemDTO{
+					ID:               "alt_plugin_" + id,
+					AlertCode:        "ALT-PLUGIN-TRAP",
+					Severity:         "PAGE",
+					Summary:          i18n.AlertSummary(loc, "ALT-PLUGIN-TRAP", fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID), "id", id, "package", pkgID),
+					RemediationRoute: "/extensions",
+					TriggeredAt:      formatTimeRFC3339Ms(updMs),
+				})
+			}
+			if ierr := qRows.Err(); ierr != nil {
+				return ierr
+			}
+			return qRows.Close()
+		}); err != nil {
+			return nil, err
 		}
 	} else if len(allowedProjSet) > 0 {
-		qRows, qErr := s.db.QueryContext(ctx, `
+		if err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+			qRows, qErr := q.QueryContext(ctx, s.rebind(`
 			SELECT ei.id, ei.package_id, ei.updated_at_ms, pc.owner_project_id, pc.shared_project_ids_json
 			FROM extension_installations ei
 			JOIN provider_adapters pa ON pa.installation_id = ei.id
 			JOIN provider_connections pc ON pc.adapter_id = pa.id
-			WHERE ei.state = 'QUARANTINED' AND pc.org_id = ?`, orgID,
-		)
-		if qErr != nil {
-			return nil, qErr
-		}
-		seenExt := make(map[string]bool)
-		for qRows.Next() {
-			var id, pkgID, sharedJSON string
-			var updMs int64
-			var ownerProj sql.NullString
-			if scanErr := qRows.Scan(&id, &pkgID, &updMs, &ownerProj, &sharedJSON); scanErr != nil {
-				_ = qRows.Close()
-				return nil, scanErr
+			WHERE ei.state = 'QUARANTINED' AND pc.org_id = ?`), orgID,
+			)
+			if qErr != nil {
+				return qErr
 			}
-			if seenExt[id] {
-				continue
+			defer func() { _ = qRows.Close() }()
+			seenExt := make(map[string]bool)
+			for qRows.Next() {
+				var id, pkgID, sharedJSON string
+				var updMs int64
+				var ownerProj sql.NullString
+				if scanErr := qRows.Scan(&id, &pkgID, &updMs, &ownerProj, &sharedJSON); scanErr != nil {
+					return scanErr
+				}
+				if seenExt[id] {
+					continue
+				}
+				vis, visErr := connectionVisibleToAnyProject(ownerProj, sharedJSON, allowedProjSet)
+				if visErr != nil {
+					return visErr
+				}
+				if !vis {
+					continue
+				}
+				seenExt[id] = true
+				alerts = append(alerts, alertItemDTO{
+					ID:               "alt_plugin_" + id,
+					AlertCode:        "ALT-PLUGIN-TRAP",
+					Severity:         "PAGE",
+					Summary:          i18n.AlertSummary(loc, "ALT-PLUGIN-TRAP", fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID), "id", id, "package", pkgID),
+					RemediationRoute: "/extensions",
+					TriggeredAt:      formatTimeRFC3339Ms(updMs),
+				})
 			}
-			vis, visErr := connectionVisibleToAnyProject(ownerProj, sharedJSON, allowedProjSet)
-			if visErr != nil {
-				_ = qRows.Close()
-				return nil, visErr
+			if ierr := qRows.Err(); ierr != nil {
+				return ierr
 			}
-			if !vis {
-				continue
-			}
-			seenExt[id] = true
-			alerts = append(alerts, alertItemDTO{
-				ID:               "alt_plugin_" + id,
-				AlertCode:        "ALT-PLUGIN-TRAP",
-				Severity:         "PAGE",
-				Summary:          i18n.AlertSummary(loc, "ALT-PLUGIN-TRAP", fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID), "id", id, "package", pkgID),
-				RemediationRoute: "/extensions",
-				TriggeredAt:      formatTimeRFC3339Ms(updMs),
-			})
-		}
-		iterErr := qRows.Err()
-		_ = qRows.Close()
-		if iterErr != nil {
-			return nil, iterErr
+			return qRows.Close()
+		}); err != nil {
+			return nil, err
 		}
 	}
 
 	// 4. OAuth credentials requiring reauthorization (ALT-OAUTH-EXPIRY / INC-05).
-	oRows, oErr := s.db.QueryContext(ctx, `
+	if err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		oRows, oErr := q.QueryContext(ctx, s.rebind(`
 		SELECT ots.credential_id, pc.id, pc.owner_project_id, pc.shared_project_ids_json, ots.updated_at_ms
 		FROM oauth_token_states ots
 		JOIN connection_secret_bindings b ON b.org_id=ots.org_id AND b.credential_id=ots.credential_id AND b.slot_name='oauth_access_token'
 		JOIN provider_connections pc ON pc.org_id=b.org_id AND pc.id=b.connection_id
-		WHERE ots.org_id=? AND ots.state='AUTH_EXPIRED_REAUTH_REQUIRED'`, orgID)
-	if oErr != nil {
-		return nil, oErr
-	}
-	for oRows.Next() {
-		var credentialID, connectionID, sharedJSON string
-		var ownerProject sql.NullString
-		var updated int64
-		if scanErr := oRows.Scan(&credentialID, &connectionID, &ownerProject, &sharedJSON, &updated); scanErr != nil {
-			_ = oRows.Close()
-			return nil, scanErr
+		WHERE ots.org_id=? AND ots.state='AUTH_EXPIRED_REAUTH_REQUIRED'`), orgID)
+		if oErr != nil {
+			return oErr
 		}
-		if !orgWide {
-			visible, visErr := connectionVisibleToAnyProject(ownerProject, sharedJSON, allowedProjSet)
-			if visErr != nil {
-				_ = oRows.Close()
-				return nil, visErr
+		defer func() { _ = oRows.Close() }()
+		for oRows.Next() {
+			var credentialID, connectionID, sharedJSON string
+			var ownerProject sql.NullString
+			var updated int64
+			if scanErr := oRows.Scan(&credentialID, &connectionID, &ownerProject, &sharedJSON, &updated); scanErr != nil {
+				return scanErr
 			}
-			if !visible {
-				continue
+			if !orgWide {
+				visible, visErr := connectionVisibleToAnyProject(ownerProject, sharedJSON, allowedProjSet)
+				if visErr != nil {
+					return visErr
+				}
+				if !visible {
+					continue
+				}
 			}
+			alerts = append(alerts, alertItemDTO{ID: "alt_oauth_" + credentialID, AlertCode: "ALT-OAUTH-EXPIRY", Severity: "PAGE", Summary: i18n.AlertSummary(loc, "ALT-OAUTH-EXPIRY", "OAuth connection requires reauthorization"), RemediationRoute: "/providers/connections", TriggeredAt: formatTimeRFC3339Ms(updated)})
 		}
-		alerts = append(alerts, alertItemDTO{ID: "alt_oauth_" + credentialID, AlertCode: "ALT-OAUTH-EXPIRY", Severity: "PAGE", Summary: i18n.AlertSummary(loc, "ALT-OAUTH-EXPIRY", "OAuth connection requires reauthorization"), RemediationRoute: "/providers/connections", TriggeredAt: formatTimeRFC3339Ms(updated)})
-	}
-	if err := oRows.Err(); err != nil {
-		_ = oRows.Close()
+		if ierr := oRows.Err(); ierr != nil {
+			return ierr
+		}
+		return oRows.Close()
+	}); err != nil {
 		return nil, err
 	}
-	_ = oRows.Close()
 
 	sort.Slice(alerts, func(i, j int) bool {
 		return alerts[i].ID < alerts[j].ID
@@ -684,48 +701,57 @@ func (s *Server) handleListAuditEvents(w http.ResponseWriter, r *http.Request) {
 		LIMIT ?`
 	args = append(args, limit+1)
 
-	rows, err := s.db.QueryContext(r.Context(), query, args...)
+	var items []auditEventResourceDTO
+	queryFn := func(q adminDBQuerier) error {
+		rows, qerr := q.QueryContext(r.Context(), s.rebind(query), args...)
+		if qerr != nil {
+			return qerr
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var (
+				id, part, actorID, action, targetType, targetID, metaJSON, prevHash, entryHash string
+				evOrg                                                                          sql.NullString
+				seqNo, createdMs                                                               int64
+			)
+			if scanErr := rows.Scan(&id, &evOrg, &part, &seqNo, &actorID, &action, &targetType, &targetID, &metaJSON, &prevHash, &entryHash, &createdMs); scanErr != nil {
+				return scanErr
+			}
+			var metaMap map[string]any
+			if strings.TrimSpace(metaJSON) != "" {
+				_ = json.Unmarshal([]byte(metaJSON), &metaMap)
+			}
+			if metaMap == nil {
+				metaMap = map[string]any{}
+			}
+			items = append(items, auditEventResourceDTO{
+				ID:             id,
+				OrgID:          sqlNullStrPtr(evOrg),
+				ChainPartition: part,
+				SeqNo:          seqNo,
+				ActorID:        actorID,
+				Action:         action,
+				TargetType:     targetType,
+				TargetID:       targetID,
+				Metadata:       metaMap,
+				PrevHash:       prevHash,
+				EventHash:      entryHash,
+				CreatedAt:      formatTimeRFC3339Ms(createdMs),
+			})
+		}
+		if ierr := rows.Err(); ierr != nil {
+			return ierr
+		}
+		return rows.Close()
+	}
+	var err error
+	if chainKey == audit.SystemChainKey || orgID == "" {
+		err = s.withOperatorReadTx(r.Context(), queryFn)
+	} else {
+		err = s.withOrgReadTx(r.Context(), orgID, queryFn)
+	}
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed querying audit events", true, nil)
-		return
-	}
-	defer rows.Close()
-
-	var items []auditEventResourceDTO
-	for rows.Next() {
-		var (
-			id, part, actorID, action, targetType, targetID, metaJSON, prevHash, entryHash string
-			evOrg                                                                          sql.NullString
-			seqNo, createdMs                                                               int64
-		)
-		if scanErr := rows.Scan(&id, &evOrg, &part, &seqNo, &actorID, &action, &targetType, &targetID, &metaJSON, &prevHash, &entryHash, &createdMs); scanErr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning audit event", true, nil)
-			return
-		}
-		var metaMap map[string]any
-		if strings.TrimSpace(metaJSON) != "" {
-			_ = json.Unmarshal([]byte(metaJSON), &metaMap)
-		}
-		if metaMap == nil {
-			metaMap = map[string]any{}
-		}
-		items = append(items, auditEventResourceDTO{
-			ID:             id,
-			OrgID:          sqlNullStrPtr(evOrg),
-			ChainPartition: part,
-			SeqNo:          seqNo,
-			ActorID:        actorID,
-			Action:         action,
-			TargetType:     targetType,
-			TargetID:       targetID,
-			Metadata:       metaMap,
-			PrevHash:       prevHash,
-			EventHash:      entryHash,
-			CreatedAt:      formatTimeRFC3339Ms(createdMs),
-		})
-	}
-	if err := rows.Err(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating audit events", true, nil)
 		return
 	}
 
@@ -766,14 +792,22 @@ func (s *Server) handleVerifyAuditHashChain(w http.ResponseWriter, r *http.Reque
 	}
 
 	keys := []string{chainKey}
-	report, err := audit.VerifyAuditChain(r.Context(), s.db, audit.VerifyOptions{ChainKeys: keys})
+	tx, err := s.db.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting audit verify tx", true, nil)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	report, err := audit.VerifyAuditChainTx(r.Context(), tx, s.dialect, audit.VerifyOptions{ChainKeys: keys})
 	if err != nil && !errors.Is(err, audit.ErrAuditTampered) {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed verifying audit hash chain", true, nil)
 		return
 	}
 
 	var totalCount int
-	_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM audit_events WHERE chain_key = ?`, chainKey).Scan(&totalCount)
+	_ = tx.QueryRowContext(r.Context(), s.rebind(`SELECT COUNT(*) FROM audit_events WHERE chain_key = ?`), chainKey).Scan(&totalCount)
+	_ = tx.Commit()
 
 	if report == nil {
 		writeJSON(w, http.StatusOK, verifyAuditResponseDTO{
@@ -842,7 +876,9 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 	switch level {
 	case killswitch.LevelVirtualKey:
 		var rowOrg, pid string
-		err := s.db.QueryRowContext(r.Context(), `SELECT org_id, project_id FROM virtual_keys WHERE id = ?`, targetID).Scan(&rowOrg, &pid)
+		err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(r.Context(), s.rebind(`SELECT org_id, project_id FROM virtual_keys WHERE id = ?`), targetID).Scan(&rowOrg, &pid)
+		})
 		if errors.Is(err, sql.ErrNoRows) || (err == nil && rowOrg != orgID) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
 			return
@@ -855,7 +891,9 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 	case killswitch.LevelProviderConnection:
 		var rowOrg string
 		var ownerProj sql.NullString
-		err := s.db.QueryRowContext(r.Context(), `SELECT org_id, owner_project_id FROM provider_connections WHERE id = ?`, targetID).Scan(&rowOrg, &ownerProj)
+		err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(r.Context(), s.rebind(`SELECT org_id, owner_project_id FROM provider_connections WHERE id = ?`), targetID).Scan(&rowOrg, &ownerProj)
+		})
 		if errors.Is(err, sql.ErrNoRows) || (err == nil && rowOrg != orgID) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
 			return
@@ -870,7 +908,9 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 	case killswitch.LevelProjectOrOrgFreeze:
 		if targetID != orgID {
 			var rowOrg, slug string
-			err := s.db.QueryRowContext(r.Context(), `SELECT org_id, slug FROM projects WHERE id = ?`, targetID).Scan(&rowOrg, &slug)
+			err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+				return q.QueryRowContext(r.Context(), s.rebind(`SELECT org_id, slug FROM projects WHERE id = ?`), targetID).Scan(&rowOrg, &slug)
+			})
 			if errors.Is(err, sql.ErrNoRows) || (err == nil && rowOrg != orgID) {
 				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 				return
@@ -883,7 +923,9 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 			scopeProj = targetID
 		} else {
 			var orgSlug string
-			err := s.db.QueryRowContext(r.Context(), `SELECT slug FROM organizations WHERE id = ? AND status NOT IN ('DELETING', 'PENDING_ERASURE')`, orgID).Scan(&orgSlug)
+			err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+				return q.QueryRowContext(r.Context(), s.rebind(`SELECT slug FROM organizations WHERE id = ? AND status NOT IN ('DELETING', 'PENDING_ERASURE')`), orgID).Scan(&orgSlug)
+			})
 			if errors.Is(err, sql.ErrNoRows) {
 				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
 				return
@@ -902,7 +944,7 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		var exists int
-		err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM extension_installations WHERE id = ?`, targetID).Scan(&exists)
+		err := s.db.QueryRowContext(r.Context(), s.rebind(`SELECT 1 FROM extension_installations WHERE id = ?`), targetID).Scan(&exists)
 		if errors.Is(err, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
 			return
@@ -975,7 +1017,14 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if configEpoch == 0 {
-		_ = s.db.QueryRowContext(r.Context(), `SELECT COALESCE(MAX(seq_no), 1) FROM config_changelog`).Scan(&configEpoch)
+		qFn := func(q adminDBQuerier) error {
+			return q.QueryRowContext(r.Context(), `SELECT COALESCE(MAX(config_epoch), 1) FROM config_changelog`).Scan(&configEpoch)
+		}
+		if orgID == "" || ksOrg == nil {
+			_ = s.withOperatorReadTx(r.Context(), qFn)
+		} else {
+			_ = s.withOrgReadTx(r.Context(), orgID, qFn)
+		}
 	}
 
 	affectedCount := s.countKillSwitchAffectedEntities(r.Context(), orgID, ksOrg == nil, level, targetID)
@@ -1193,10 +1242,14 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 	case "PROVIDER_CONNECTION":
 		var rowOrg string
 		var ownerProj sql.NullString
-		err := s.db.QueryRowContext(r.Context(), `SELECT org_id, owner_project_id FROM provider_connections WHERE id = ? AND org_id = ?`, targetID, orgID).Scan(&rowOrg, &ownerProj)
+		err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(r.Context(), s.rebind(`SELECT org_id, owner_project_id FROM provider_connections WHERE id = ? AND org_id = ?`), targetID, orgID).Scan(&rowOrg, &ownerProj)
+		})
 		if errors.Is(err, sql.ErrNoRows) {
 			var traceProjID string
-			traceErr := s.db.QueryRowContext(r.Context(), `SELECT project_id FROM request_traces_meta WHERE org_id = ? AND connection_id = ? LIMIT 1`, orgID, targetID).Scan(&traceProjID)
+			traceErr := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+				return q.QueryRowContext(r.Context(), s.rebind(`SELECT project_id FROM request_traces_meta WHERE org_id = ? AND connection_id = ? LIMIT 1`), orgID, targetID).Scan(&traceProjID)
+			})
 			if errors.Is(traceErr, sql.ErrNoRows) {
 				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
 				return
@@ -1217,7 +1270,9 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 		}
 	case "PROJECT":
 		var rowOrg string
-		err := s.db.QueryRowContext(r.Context(), `SELECT org_id FROM projects WHERE id = ? AND status NOT IN ('DELETING', 'PENDING_ERASURE')`, targetID).Scan(&rowOrg)
+		err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(r.Context(), s.rebind(`SELECT org_id FROM projects WHERE id = ? AND status NOT IN ('DELETING', 'PENDING_ERASURE')`), targetID).Scan(&rowOrg)
+		})
 		if errors.Is(err, sql.ErrNoRows) || (err == nil && rowOrg != orgID) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
 			return
@@ -1232,7 +1287,9 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 		}
 	case "VIRTUAL_KEY":
 		var rowOrg string
-		err := s.db.QueryRowContext(r.Context(), `SELECT org_id, project_id FROM virtual_keys WHERE id = ?`, targetID).Scan(&rowOrg, &targetProjectID)
+		err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(r.Context(), s.rebind(`SELECT org_id, project_id FROM virtual_keys WHERE id = ?`), targetID).Scan(&rowOrg, &targetProjectID)
+		})
 		if errors.Is(err, sql.ErrNoRows) || (err == nil && rowOrg != orgID) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
 			return
@@ -1355,35 +1412,42 @@ func (s *Server) countKillSwitchAffectedEntities(ctx context.Context, orgID stri
 	case killswitch.LevelVirtualKey:
 		return 1
 	case killswitch.LevelProviderConnection:
-		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM model_deployments WHERE org_id = ? AND connection_id = ?`, orgID, targetID).Scan(&cnt)
+		_ = s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM model_deployments WHERE org_id = ? AND connection_id = ?`), orgID, targetID).Scan(&cnt)
+		})
 		if cnt < 1 {
 			return 1
 		}
 		return cnt
 	case killswitch.LevelExtensionInstallation:
 		if instanceWide {
-			_ = s.db.QueryRowContext(ctx, `
+			_ = s.withOperatorReadTx(ctx, func(q adminDBQuerier) error {
+				return q.QueryRowContext(ctx, s.rebind(`
 				SELECT COUNT(*)
 				FROM provider_connections pc
 				JOIN provider_adapters pa ON pa.id = pc.adapter_id
-				WHERE pa.installation_id = ?`, targetID).Scan(&cnt)
+				WHERE pa.installation_id = ?`), targetID).Scan(&cnt)
+			})
 		} else {
-			_ = s.db.QueryRowContext(ctx, `
+			_ = s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+				return q.QueryRowContext(ctx, s.rebind(`
 				SELECT COUNT(*)
 				FROM provider_connections pc
 				JOIN provider_adapters pa ON pa.id = pc.adapter_id
-				WHERE pa.installation_id = ? AND pc.org_id = ?`, targetID, orgID).Scan(&cnt)
+				WHERE pa.installation_id = ? AND pc.org_id = ?`), targetID, orgID).Scan(&cnt)
+			})
 		}
 		if cnt < 1 {
 			return 1
 		}
 		return cnt
 	case killswitch.LevelProjectOrOrgFreeze:
-		if targetID == orgID {
-			_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM virtual_keys WHERE org_id = ? AND state IN ('CREATED_ACTIVE', 'ROTATING_DUAL_VALID')`, orgID).Scan(&cnt)
-		} else {
-			_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM virtual_keys WHERE org_id = ? AND project_id = ? AND state IN ('CREATED_ACTIVE', 'ROTATING_DUAL_VALID')`, orgID, targetID).Scan(&cnt)
-		}
+		_ = s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+			if targetID == orgID {
+				return q.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM virtual_keys WHERE org_id = ? AND state IN ('CREATED_ACTIVE', 'ROTATING_DUAL_VALID')`), orgID).Scan(&cnt)
+			}
+			return q.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM virtual_keys WHERE org_id = ? AND project_id = ? AND state IN ('CREATED_ACTIVE', 'ROTATING_DUAL_VALID')`), orgID, targetID).Scan(&cnt)
+		})
 		if cnt < 1 {
 			return 1
 		}

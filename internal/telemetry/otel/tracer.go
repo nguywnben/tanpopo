@@ -33,6 +33,7 @@ import (
 
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/telemetry/privacy"
 )
 
@@ -697,9 +698,10 @@ type Pipeline struct {
 	TracerProvider *sdktrace.TracerProvider
 	Tracer         trace.Tracer
 
-	db    *sql.DB
-	vault *vault.Store
-	nowMs func() int64
+	db      *sql.DB
+	dialect port.Dialect
+	vault   *vault.Store
+	nowMs   func() int64
 
 	sessMu   sync.RWMutex
 	sessions map[string]DebugCaptureSession // key: session ID
@@ -809,6 +811,10 @@ func NewPipeline(cfg PipelineConfig) (*Pipeline, error) {
 		maxPersistBytes = DefaultMaxPersistQueueBytes
 	}
 
+	var dialect port.Dialect
+	if cfg.DB != nil {
+		dialect = port.DetectDialect(context.Background(), cfg.DB)
+	}
 	p := &Pipeline{
 		Metrics:         metrics,
 		Redactor:        redactor,
@@ -817,6 +823,7 @@ func NewPipeline(cfg PipelineConfig) (*Pipeline, error) {
 		TracerProvider:  tp,
 		Tracer:          tp.Tracer("github.com/nguywnben/tanpopo/dataplane"),
 		db:              cfg.DB,
+		dialect:         dialect,
 		vault:           cfg.Vault,
 		nowMs:           nowMs,
 		sessions:        make(map[string]DebugCaptureSession),
@@ -1344,7 +1351,8 @@ func (p *Pipeline) writeRequestTrace(ctx context.Context, rec RequestTraceRecord
 		errCode = errCode[:64]
 	}
 
-	_, err = p.db.ExecContext(ctx, `
+	normOrg := truncateStr(rec.OrgID, 40)
+	err = p.execOrgScoped(ctx, normOrg, `
 		INSERT INTO request_traces_meta (
 			request_id, created_at_ms, started_at_ms, org_id, project_id, env_id, virtual_key_id,
 			entry_point, otel_trace_id, route_slug, selected_deployment_id, connection_id,
@@ -1355,7 +1363,7 @@ func (p *Pipeline) writeRequestTrace(ctx context.Context, rec RequestTraceRecord
 		truncateStr(rec.RequestID, 40),
 		now,
 		started,
-		truncateStr(rec.OrgID, 40),
+		normOrg,
 		truncateStr(rec.ProjectID, 40),
 		truncateStr(rec.EnvID, 40),
 		nullIfEmpty(truncateStr(rec.VirtualKeyID, 40)),
@@ -1425,7 +1433,7 @@ func (p *Pipeline) writeDebugBlobIfAuthorized(ctx context.Context, orgID, projec
 		return false, fmt.Errorf("telemetry: encrypted debug payload blob exceeds 256 KiB limit")
 	}
 
-	_, err = p.db.ExecContext(ctx, `
+	err = p.execOrgScoped(ctx, normOrgID, `
 		INSERT INTO debug_payload_blobs (
 			request_id, org_id, project_id, aead_alg, nonce, encrypted_payload_aead, created_at_ms, expires_at_ms
 		) VALUES (?, ?, ?, 'AES-256-GCM', ?, ?, ?, ?)
@@ -1442,6 +1450,26 @@ func (p *Pipeline) writeDebugBlobIfAuthorized(ctx context.Context, orgID, projec
 		return false, fmt.Errorf("telemetry: insert debug_payload_blobs: %w", err)
 	}
 	return true, nil
+}
+
+func (p *Pipeline) execOrgScoped(ctx context.Context, orgID, query string, args ...any) error {
+	q := port.Rebind(p.dialect, query)
+	if p.dialect != port.DialectPostgres {
+		_, err := p.db.ExecContext(ctx, q, args...)
+		return err
+	}
+	tx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, p.dialect, orgID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func normalizeTraceEntryPoint(ep string) string {

@@ -19,6 +19,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 type webhookResource struct {
@@ -35,10 +36,12 @@ type webhookResource struct {
 func readWebhook(row governanceRow) (webhookResource, error) {
 	var item webhookResource
 	var rawURL, events string
-	err := row.Scan(&item.ID, &item.OrgID, &item.ProjectID, &rawURL, &events, &item.Enabled, &item.Version, &item.CreatedMs)
+	var enabled port.FlexBool
+	err := row.Scan(&item.ID, &item.OrgID, &item.ProjectID, &rawURL, &events, &enabled, &item.Version, &item.CreatedMs)
 	if err != nil {
 		return item, err
 	}
+	item.Enabled = bool(enabled)
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return item, err
@@ -154,8 +157,12 @@ func (s *Server) handleCreateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+	if err := port.SetOrgRLSTx(ctx, tx, s.dialect, org); err != nil {
+		mcpInternal(w, r, "failed setting organization scope")
+		return
+	}
 	var subscriptions int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM webhook_subscriptions WHERE org_id=? AND enabled=1`, org).Scan(&subscriptions); err != nil {
+	if err := tx.QueryRowContext(ctx, s.rebind(`SELECT COUNT(*) FROM webhook_subscriptions WHERE org_id=? AND enabled=`+port.BoolExpr(s.dialect, true)), org).Scan(&subscriptions); err != nil {
 		mcpInternal(w, r, "failed checking webhook quota")
 		return
 	}
@@ -165,8 +172,15 @@ func (s *Server) handleCreateWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var audience *string
-	err = tx.QueryRowContext(ctx, `SELECT bound_audience FROM secret_credentials
-		WHERE org_id=? AND id=? AND secret_kind=? AND owner_project_id IS ?`, org, req.CredentialID, vault.SecretKindWebhookHMAC, nullableString(req.ProjectID)).Scan(&audience)
+	credQuery := `SELECT bound_audience FROM secret_credentials WHERE org_id=? AND id=? AND secret_kind=?`
+	credArgs := []any{org, req.CredentialID, vault.SecretKindWebhookHMAC}
+	if strings.TrimSpace(req.ProjectID) == "" {
+		credQuery += ` AND owner_project_id IS NULL`
+	} else {
+		credQuery += ` AND owner_project_id = ?`
+		credArgs = append(credArgs, req.ProjectID)
+	}
+	err = tx.QueryRowContext(ctx, s.rebind(credQuery), credArgs...).Scan(&audience)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, 404, "resource_not_found", "not_found_error", "signing credential unavailable in this scope", false, nil)
 		return
@@ -199,8 +213,8 @@ func (s *Server) handleCreateWebhook(w http.ResponseWriter, r *http.Request) {
 		mcpInternal(w, r, "failed encoding subscription events")
 		return
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO webhook_subscriptions(id,org_id,project_id,name,target_url,target_url_credential_id,signing_secret_credential_id,event_types_json,created_at_ms,updated_at_ms)
-		VALUES(?,?,?,?,?,?,?,?,?,?)`, id, org, nullableString(req.ProjectID), id, targetURL.Scheme+"://"+targetURL.Host, targetSecret.ID, req.CredentialID, string(events), now, now)
+	_, err = tx.ExecContext(ctx, s.rebind(`INSERT INTO webhook_subscriptions(id,org_id,project_id,name,target_url,target_url_credential_id,signing_secret_credential_id,event_types_json,created_at_ms,updated_at_ms)
+		VALUES(?,?,?,?,?,?,?,?,?,?)`), id, org, nullableString(req.ProjectID), id, targetURL.Scheme+"://"+targetURL.Host, targetSecret.ID, req.CredentialID, string(events), now, now)
 	if err != nil {
 		mcpInternal(w, r, "failed saving webhook registration")
 		return

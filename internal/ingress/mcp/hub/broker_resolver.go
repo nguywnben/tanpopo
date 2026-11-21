@@ -47,12 +47,21 @@ func (r BrokerResolver) ResolveSlot(ctx context.Context, orgID, serverID, slotNa
 	if err != nil || parsed.Host == "" {
 		return nil, port.ErrInvalidInput
 	}
+	d := port.DetectDialect(ctx, r.DB)
+	tx, err := r.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("begin MCP credential read tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, d, orgID); err != nil {
+		return nil, fmt.Errorf("scope MCP credential read tx: %w", err)
+	}
 	var audience sql.NullString
 	var credentialOwner sql.NullString
 	var kind string
-	err = r.DB.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, port.Rebind(d, `
 		SELECT bound_audience, owner_project_id, secret_kind
-		FROM secret_credentials WHERE org_id = ? AND id = ?`, orgID, server.CredentialID).
+		FROM secret_credentials WHERE org_id = ? AND id = ?`), orgID, server.CredentialID).
 		Scan(&audience, &credentialOwner, &kind)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, port.ErrNotFound
@@ -78,14 +87,23 @@ func (r BrokerResolver) ResolveSlot(ctx context.Context, orgID, serverID, slotNa
 }
 
 func (r BrokerResolver) load(ctx context.Context, orgID, serverID string) (serverRecord, error) {
+	d := port.DetectDialect(ctx, r.DB)
+	tx, err := r.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return serverRecord{}, fmt.Errorf("begin MCP server read tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, d, orgID); err != nil {
+		return serverRecord{}, fmt.Errorf("scope MCP server read tx: %w", err)
+	}
 	var s serverRecord
-	var allowPrivate int
+	var allowPrivate port.FlexBool
 	var cidrs string
-	err := r.DB.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, port.Rebind(d, `
 		SELECT id, org_id, project_id, server_slug, transport_kind, endpoint_url,
 		       allow_private_ip, allowed_cidrs_json, COALESCE(credential_id, ''),
 		       pinning_mode, status
-		FROM mcp_servers WHERE org_id = ? AND id = ?`, orgID, serverID).Scan(
+		FROM mcp_servers WHERE org_id = ? AND id = ?`), orgID, serverID).Scan(
 		&s.ID, &s.OrgID, &s.ProjectID, &s.Slug, &s.Transport, &s.Endpoint,
 		&allowPrivate, &cidrs, &s.CredentialID, &s.PinningMode, &s.Status)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -97,7 +115,7 @@ func (r BrokerResolver) load(ctx context.Context, orgID, serverID string) (serve
 	if s.Status != "ACTIVE" || s.Transport != "STREAMABLE_HTTP" {
 		return serverRecord{}, port.ErrNotFound
 	}
-	s.AllowPrivateIP = allowPrivate != 0
+	s.AllowPrivateIP = bool(allowPrivate)
 	if err := json.Unmarshal([]byte(cidrs), &s.AllowedCIDRs); err != nil {
 		return serverRecord{}, port.ErrInvalidInput
 	}

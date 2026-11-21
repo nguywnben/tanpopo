@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
@@ -146,6 +148,7 @@ type Config struct {
 // secret bindings, SM-02 health transitions, and BlindBroker policy/slot lookup.
 type Repository struct {
 	db        *sql.DB
+	dialect   port.Dialect
 	nowMs     func() int64
 	snapshots *snapshot.Manager
 	snapSync  SnapshotRefresher
@@ -178,6 +181,7 @@ func NewRepository(cfg Config) (*Repository, error) {
 	}
 	return &Repository{
 		db:        cfg.DB,
+		dialect:   port.DetectDialect(context.Background(), cfg.DB),
 		nowMs:     nowFn,
 		snapshots: cfg.Snapshots,
 		snapSync:  syncer,
@@ -380,8 +384,8 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 	}
 	now := r.nowMs()
 
-	if err := r.withTx(ctx, func(tx *sql.Tx) error {
-		gov, err := loadAdapterExtensionGovernance(ctx, tx, params.InstallationID)
+	if err := r.withOperatorTx(ctx, func(tx *sql.Tx) error {
+		gov, err := r.loadAdapterExtensionGovernance(ctx, tx, params.InstallationID)
 		if err != nil {
 			return err
 		}
@@ -396,7 +400,7 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 		}
 		if params.ExpectedActiveVersionID != "" {
 			var manifestJSON string
-			if err := tx.QueryRowContext(ctx, `SELECT manifest_json FROM extension_versions WHERE id = ? AND package_id = (SELECT package_id FROM extension_installations WHERE id = ?)`, gov.ActiveVersionID, params.InstallationID).Scan(&manifestJSON); err != nil {
+			if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT manifest_json FROM extension_versions WHERE id = ? AND package_id = (SELECT package_id FROM extension_installations WHERE id = ?)`), gov.ActiveVersionID, params.InstallationID).Scan(&manifestJSON); err != nil {
 				return mapDBError(err)
 			}
 			var manifest installer.ExtensionManifest
@@ -432,18 +436,18 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 				return fmt.Errorf("%w: adapter allowed_host %q exceeds SM-01 approved networkEgress.allowedHosts", port.ErrInvalidInput, reqHost)
 			}
 		}
-		_, err = tx.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, port.Rebind(r.dialect, `
 			INSERT INTO provider_adapters (
 				id, installation_id, adapter_slug, native_prefix,
 				supported_dialects_json, allowed_hosts_json, version, created_at_ms
-			) VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, 1, ?)`),
 			id, params.InstallationID, strings.TrimSpace(params.AdapterSlug), nullStrPtr(params.NativePrefix),
 			dialectsJSON, hostsJSON, now,
 		)
 		if err != nil {
 			return mapWriteDBError(err)
 		}
-		if err := appendChangelogTx(ctx, tx, nil, "provider_adapter", id, port.MutationUpsert, false, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, nil, "provider_adapter", id, port.MutationUpsert, false, now); err != nil {
 			return err
 		}
 		return r.emitAuditTx(ctx, tx, nil, "provider_adapter.created", "provider_adapter", id, map[string]any{
@@ -480,10 +484,10 @@ func (r *Repository) GetProviderAdapter(ctx context.Context, id string) (*Provid
 		dialectsJSON string
 		hostsJSON    string
 	)
-	err := r.db.QueryRowContext(ctx, `
+	err := r.db.QueryRowContext(ctx, port.Rebind(r.dialect, `
 		SELECT id, installation_id, adapter_slug, native_prefix,
 		       supported_dialects_json, allowed_hosts_json, version, created_at_ms
-		FROM provider_adapters WHERE id = ?`, id,
+		FROM provider_adapters WHERE id = ?`), id,
 	).Scan(
 		&out.ID, &out.InstallationID, &out.AdapterSlug, &nativePrefix,
 		&dialectsJSON, &hostsJSON, &out.Version, &out.CreatedAtMs,
@@ -513,15 +517,36 @@ func (r *Repository) GetProviderAdapter(ctx context.Context, id string) (*Provid
 // when referenced by any ProviderConnection (NEG-3).
 func (r *Repository) DeleteProviderAdapter(ctx context.Context, id string) error {
 	now := r.nowMs()
-	if err := r.withTx(ctx, func(tx *sql.Tx) error {
+	if err := r.withOperatorTx(ctx, func(tx *sql.Tx) error {
 		var inUse int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM provider_connections WHERE adapter_id = ?`, id).Scan(&inUse); err != nil {
-			return mapDBError(err)
+		if r.dialect == port.DialectPostgres {
+			orgIDs, lerr := port.ListOrgIDsTx(ctx, tx, r.dialect)
+			if lerr != nil {
+				return lerr
+			}
+			connCountSQL := port.Rebind(r.dialect, `SELECT COUNT(1) FROM provider_connections WHERE adapter_id = ?`)
+			for _, oid := range orgIDs {
+				if err := port.SetOrgRLSTx(ctx, tx, r.dialect, oid); err != nil {
+					return err
+				}
+				var cnt int
+				if err := tx.QueryRowContext(ctx, connCountSQL, id).Scan(&cnt); err != nil {
+					return mapDBError(err)
+				}
+				inUse += cnt
+			}
+			if err := port.SetOperatorRLSTx(ctx, tx, r.dialect); err != nil {
+				return err
+			}
+		} else {
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM provider_connections WHERE adapter_id = ?`, id).Scan(&inUse); err != nil {
+				return mapDBError(err)
+			}
 		}
 		if inUse > 0 {
 			return fmt.Errorf("%w: provider_adapter %q is referenced by %d provider_connections", port.ErrResourceInUse, id, inUse)
 		}
-		res, err := tx.ExecContext(ctx, `DELETE FROM provider_adapters WHERE id = ?`, id)
+		res, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `DELETE FROM provider_adapters WHERE id = ?`), id)
 		if err != nil {
 			return mapDeleteDBError(err)
 		}
@@ -532,7 +557,7 @@ func (r *Repository) DeleteProviderAdapter(ctx context.Context, id string) error
 		if rows == 0 {
 			return fmt.Errorf("%w: provider_adapter %q", port.ErrNotFound, id)
 		}
-		if err := appendChangelogTx(ctx, tx, nil, "provider_adapter", id, port.MutationDelete, false, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, nil, "provider_adapter", id, port.MutationDelete, false, now); err != nil {
 			return err
 		}
 		return r.emitAuditTx(ctx, tx, nil, "provider_adapter.deleted", "provider_adapter", id, nil, now)
@@ -664,8 +689,8 @@ func (r *Repository) CreateProviderConnection(ctx context.Context, params Create
 	}
 
 	now := r.nowMs()
-	if err := r.withTx(ctx, func(tx *sql.Tx) error {
-		adapterHosts, gov, err := loadConnectionExtensionGovernanceByAdapter(ctx, tx, params.OrgID, params.AdapterID)
+	if err := r.withOrgTx(ctx, params.OrgID, func(tx *sql.Tx) error {
+		adapterHosts, gov, err := r.loadConnectionExtensionGovernanceByAdapter(ctx, tx, params.OrgID, params.AdapterID)
 		if err != nil {
 			return err
 		}
@@ -687,56 +712,53 @@ func (r *Repository) CreateProviderConnection(ctx context.Context, params Create
 		}
 
 		if ownerProjPtr != nil {
-			if err := ensureProjectOwnedByOrgTx(ctx, tx, params.OrgID, *ownerProjPtr); err != nil {
+			if err := r.ensureProjectOwnedByOrgTx(ctx, tx, params.OrgID, *ownerProjPtr); err != nil {
 				return err
 			}
 		}
 		for _, spID := range sharedProjects {
-			if err := ensureProjectOwnedByOrgTx(ctx, tx, params.OrgID, spID); err != nil {
+			if err := r.ensureProjectOwnedByOrgTx(ctx, tx, params.OrgID, spID); err != nil {
 				return err
 			}
 		}
 		if credIDPtr != nil {
-			if err := ensureSecretCompatibleWithConnectionTx(ctx, tx, params.OrgID, ownerProjPtr, sharedProjects, *credIDPtr); err != nil {
+			if err := r.ensureSecretCompatibleWithConnectionTx(ctx, tx, params.OrgID, ownerProjPtr, sharedProjects, *credIDPtr); err != nil {
 				return err
 			}
 		}
 		for _, b := range bindings {
-			if err := ensureSecretCompatibleWithConnectionTx(ctx, tx, params.OrgID, ownerProjPtr, sharedProjects, b.CredentialID); err != nil {
+			if err := r.ensureSecretCompatibleWithConnectionTx(ctx, tx, params.OrgID, ownerProjPtr, sharedProjects, b.CredentialID); err != nil {
 				return err
 			}
 		}
 
-		allowPrivInt := 0
-		if params.AllowPrivateIP {
-			allowPrivInt = 1
-		}
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `
 			INSERT INTO provider_connections (
 				id, org_id, owner_project_id, adapter_id, credential_id, name,
 				endpoint_base_url, allow_private_ip, allowed_cidrs_json, data_region,
 				billing_mode, auth_mode, state, shared_project_ids_json, config_json,
 				version, created_at_ms, updated_at_ms
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
 			id, params.OrgID, nullStrPtr(ownerProjPtr), params.AdapterID, nullStrPtr(credIDPtr),
-			strings.TrimSpace(params.Name), strings.TrimSpace(params.EndpointBaseURL), allowPrivInt, cidrsJSON,
+			strings.TrimSpace(params.Name), strings.TrimSpace(params.EndpointBaseURL), port.BoolVal(r.dialect, params.AllowPrivateIP), cidrsJSON,
 			strings.TrimSpace(params.DataRegion), params.BillingMode, authMode, ConnStateDraft, sharedJSON, cfgJSON,
 			now, now,
 		); err != nil {
 			return mapWriteDBError(err)
 		}
 
-		for _, b := range bindings {
-			if _, err := tx.ExecContext(ctx, `
+		insBinding := port.Rebind(r.dialect, `
 				INSERT INTO connection_secret_bindings (
 					org_id, connection_id, slot_name, credential_id, inject_mode, created_at_ms
-				) VALUES (?, ?, ?, ?, ?, ?)`,
+				) VALUES (?, ?, ?, ?, ?, ?)`)
+		for _, b := range bindings {
+			if _, err := tx.ExecContext(ctx, insBinding,
 				params.OrgID, id, b.SlotName, b.CredentialID, b.InjectMode, now,
 			); err != nil {
 				return mapWriteDBError(err)
 			}
 		}
-		if err := appendChangelogTx(ctx, tx, &params.OrgID, "provider_connection", id, port.MutationUpsert, false, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, &params.OrgID, "provider_connection", id, port.MutationUpsert, false, now); err != nil {
 			return err
 		}
 		return r.emitAuditTx(ctx, tx, &params.OrgID, "provider_connection.created", "provider_connection", id, map[string]any{
@@ -761,28 +783,55 @@ func (r *Repository) GetProviderConnection(ctx context.Context, orgID, connectio
 		out        ProviderConnection
 		ownerProj  sql.NullString
 		credID     sql.NullString
-		allowPriv  int
+		allowPriv  port.FlexBool
 		cidrsJSON  string
 		sharedJSON string
 	)
-	err := r.db.QueryRowContext(ctx, `
-		SELECT id, org_id, owner_project_id, adapter_id, credential_id, name,
-		       endpoint_base_url, allow_private_ip, allowed_cidrs_json, data_region,
-		       billing_mode, auth_mode, state, shared_project_ids_json, config_json,
-		       version, created_at_ms, updated_at_ms
-		FROM provider_connections
-		WHERE org_id = ? AND id = ?`, orgID, connectionID,
-	).Scan(
-		&out.ID, &out.OrgID, &ownerProj, &out.AdapterID, &credID, &out.Name,
-		&out.EndpointBaseURL, &allowPriv, &cidrsJSON, &out.DataRegion,
-		&out.BillingMode, &out.AuthMode, &out.State, &sharedJSON, &out.ConfigJSON,
-		&out.Version, &out.CreatedAtMs, &out.UpdatedAtMs,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
-	}
-	if err != nil {
-		return nil, mapDBError(err)
+	if err := r.withOrgReadTx(ctx, orgID, func(q dbQuerier) error {
+		err := q.QueryRowContext(ctx, port.Rebind(r.dialect, `
+			SELECT id, org_id, owner_project_id, adapter_id, credential_id, name,
+			       endpoint_base_url, allow_private_ip, allowed_cidrs_json, data_region,
+			       billing_mode, auth_mode, state, shared_project_ids_json, config_json,
+			       version, created_at_ms, updated_at_ms
+			FROM provider_connections
+			WHERE org_id = ? AND id = ?`), orgID, connectionID,
+		).Scan(
+			&out.ID, &out.OrgID, &ownerProj, &out.AdapterID, &credID, &out.Name,
+			&out.EndpointBaseURL, &allowPriv, &cidrsJSON, &out.DataRegion,
+			&out.BillingMode, &out.AuthMode, &out.State, &sharedJSON, &out.ConfigJSON,
+			&out.Version, &out.CreatedAtMs, &out.UpdatedAtMs,
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
+		}
+		if err != nil {
+			return mapDBError(err)
+		}
+
+		rows, err := q.QueryContext(ctx, port.Rebind(r.dialect, `
+			SELECT org_id, connection_id, slot_name, credential_id, inject_mode, created_at_ms
+			FROM connection_secret_bindings
+			WHERE org_id = ? AND connection_id = ?
+			ORDER BY slot_name ASC`), orgID, connectionID)
+		if err != nil {
+			return mapDBError(err)
+		}
+		for rows.Next() {
+			var b ConnectionSecretBinding
+			if serr := rows.Scan(&b.OrgID, &b.ConnectionID, &b.SlotName, &b.CredentialID, &b.InjectMode, &b.CreatedAtMs); serr != nil {
+				_ = rows.Close()
+				return mapDBError(serr)
+			}
+			out.SecretBindings = append(out.SecretBindings, b)
+		}
+		rerr := rows.Err()
+		_ = rows.Close()
+		if rerr != nil {
+			return mapDBError(rerr)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	if ownerProj.Valid {
 		v := ownerProj.String
@@ -792,7 +841,8 @@ func (r *Repository) GetProviderConnection(ctx context.Context, orgID, connectio
 		v := credID.String
 		out.CredentialID = &v
 	}
-	out.AllowPrivateIP = allowPriv != 0
+	out.AllowPrivateIP = bool(allowPriv)
+	var err error
 	out.AllowedCIDRs, err = decodeStringSliceStrict(cidrsJSON, "allowed_cidrs_json")
 	if err != nil {
 		return nil, err
@@ -800,26 +850,6 @@ func (r *Repository) GetProviderConnection(ctx context.Context, orgID, connectio
 	out.SharedProjectIDs, err = decodeStringSliceStrict(sharedJSON, "shared_project_ids_json")
 	if err != nil {
 		return nil, err
-	}
-
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT org_id, connection_id, slot_name, credential_id, inject_mode, created_at_ms
-		FROM connection_secret_bindings
-		WHERE org_id = ? AND connection_id = ?
-		ORDER BY slot_name ASC`, orgID, connectionID)
-	if err != nil {
-		return nil, mapDBError(err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var b ConnectionSecretBinding
-		if err := rows.Scan(&b.OrgID, &b.ConnectionID, &b.SlotName, &b.CredentialID, &b.InjectMode, &b.CreatedAtMs); err != nil {
-			return nil, mapDBError(err)
-		}
-		out.SecretBindings = append(out.SecretBindings, b)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, mapDBError(err)
 	}
 	return &out, nil
 }
@@ -833,25 +863,25 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 	}
 
 	now := r.nowMs()
-	if err := r.withTx(ctx, func(tx *sql.Tx) error {
+	if err := r.withOrgTx(ctx, params.OrgID, func(tx *sql.Tx) error {
 		var (
 			ownerProj      sql.NullString
 			adapterID      string
 			curCredID      sql.NullString
 			curName        string
 			curEndpoint    string
-			curAllowPriv   int
+			curAllowPriv   port.FlexBool
 			curCIDRsJSON   string
 			curAuthMode    string
 			curState       string
 			sharedProjJSON string
 			curVersion     int64
 		)
-		err := tx.QueryRowContext(ctx, `
+		err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `
 			SELECT owner_project_id, adapter_id, credential_id, name, endpoint_base_url,
 			       allow_private_ip, allowed_cidrs_json, auth_mode, state, shared_project_ids_json, version
 			FROM provider_connections
-			WHERE org_id = ? AND id = ?`,
+			WHERE org_id = ? AND id = ?`),
 			params.OrgID, params.ConnectionID,
 		).Scan(
 			&ownerProj, &adapterID, &curCredID, &curName, &curEndpoint,
@@ -894,7 +924,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			return fmt.Errorf("%w: invalid endpoint_base_url %q", port.ErrInvalidInput, nextEndpoint)
 		}
 
-		nextAllowPriv := curAllowPriv != 0
+		nextAllowPriv := bool(curAllowPriv)
 		if params.AllowPrivateIP != nil {
 			nextAllowPriv = *params.AllowPrivateIP
 		}
@@ -969,7 +999,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 		if params.ReplaceBindings || params.MergeBindings {
 			requestedBindings := params.SecretBindings
 			if params.MergeBindings {
-				rows, err := tx.QueryContext(ctx, `SELECT slot_name, credential_id, inject_mode FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ?`, params.OrgID, params.ConnectionID)
+				rows, err := tx.QueryContext(ctx, port.Rebind(r.dialect, `SELECT slot_name, credential_id, inject_mode FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ?`), params.OrgID, params.ConnectionID)
 				if err != nil {
 					return mapDBError(err)
 				}
@@ -1035,11 +1065,11 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			}
 			bindingsToValidate = normalizedBindings
 		} else {
-			rows, qerr := tx.QueryContext(ctx, `
+			rows, qerr := tx.QueryContext(ctx, port.Rebind(r.dialect, `
 				SELECT slot_name, credential_id, inject_mode
 				FROM connection_secret_bindings
 				WHERE org_id = ? AND connection_id = ?
-				ORDER BY slot_name ASC`, params.OrgID, params.ConnectionID)
+				ORDER BY slot_name ASC`), params.OrgID, params.ConnectionID)
 			if qerr != nil {
 				return mapDBError(qerr)
 			}
@@ -1080,7 +1110,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 		}
 
 		if mutatingNetworkOrSecrets || nextState == ConnStateActive {
-			adapterHosts, gov, err := loadConnectionExtensionGovernanceByAdapter(ctx, tx, params.OrgID, adapterID)
+			adapterHosts, gov, err := r.loadConnectionExtensionGovernanceByAdapter(ctx, tx, params.OrgID, adapterID)
 			if err != nil {
 				return err
 			}
@@ -1104,24 +1134,25 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 				if err := slotPermittedByApproved(b.SlotName, b.InjectMode, approved, port.ErrInvalidInput); err != nil {
 					return err
 				}
-				if err := ensureSecretCompatibleWithConnectionTx(ctx, tx, params.OrgID, ownerProjPtr, sharedProjects, b.CredentialID); err != nil {
+				if err := r.ensureSecretCompatibleWithConnectionTx(ctx, tx, params.OrgID, ownerProjPtr, sharedProjects, b.CredentialID); err != nil {
 					return err
 				}
 			}
 		}
 
 		if params.ReplaceBindings || params.MergeBindings {
-			if _, err := tx.ExecContext(ctx, `
-				DELETE FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ?`,
+			if _, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `
+				DELETE FROM connection_secret_bindings WHERE org_id = ? AND connection_id = ?`),
 				params.OrgID, params.ConnectionID,
 			); err != nil {
 				return mapDeleteDBError(err)
 			}
-			for _, b := range normalizedBindings {
-				if _, err := tx.ExecContext(ctx, `
+			insBinding := port.Rebind(r.dialect, `
 					INSERT INTO connection_secret_bindings (
 						org_id, connection_id, slot_name, credential_id, inject_mode, created_at_ms
-					) VALUES (?, ?, ?, ?, ?, ?)`,
+					) VALUES (?, ?, ?, ?, ?, ?)`)
+			for _, b := range normalizedBindings {
+				if _, err := tx.ExecContext(ctx, insBinding,
 					params.OrgID, params.ConnectionID, b.SlotName, b.CredentialID, b.InjectMode, now,
 				); err != nil {
 					return mapWriteDBError(err)
@@ -1129,16 +1160,12 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 			}
 		}
 
-		allowPrivInt := 0
-		if nextAllowPriv {
-			allowPrivInt = 1
-		}
-		res, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `
 			UPDATE provider_connections
 			SET name = ?, endpoint_base_url = ?, allow_private_ip = ?, allowed_cidrs_json = ?,
 			    credential_id = ?, auth_mode = ?, state = ?, version = version + 1, updated_at_ms = ?
-			WHERE org_id = ? AND id = ? AND version = ?`,
-			nextName, nextEndpoint, allowPrivInt, cidrsJSON,
+			WHERE org_id = ? AND id = ? AND version = ?`),
+			nextName, nextEndpoint, port.BoolVal(r.dialect, nextAllowPriv), cidrsJSON,
 			nullStrPtr(nextPrimaryCred), nextAuthMode, nextState, now,
 			params.OrgID, params.ConnectionID, params.ExpectedVersion,
 		)
@@ -1154,7 +1181,7 @@ func (r *Repository) UpdateProviderConnection(ctx context.Context, params Update
 		}
 
 		emergency := params.Emergency || nextState == ConnStateSuspendedAdmin || nextState == ConnStateRevoked
-		if err := appendChangelogTx(ctx, tx, &params.OrgID, "provider_connection", params.ConnectionID, port.MutationUpsert, emergency, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, &params.OrgID, "provider_connection", params.ConnectionID, port.MutationUpsert, emergency, now); err != nil {
 			return err
 		}
 
@@ -1244,9 +1271,9 @@ func (r *Repository) DeleteProviderConnection(ctx context.Context, orgID, connec
 		return fmt.Errorf("%w: org_id, connection_id, and expected_version >= 1 are required", port.ErrInvalidInput)
 	}
 	now := r.nowMs()
-	if err := r.withTx(ctx, func(tx *sql.Tx) error {
+	if err := r.withOrgTx(ctx, orgID, func(tx *sql.Tx) error {
 		var currentVersion int64
-		if err := tx.QueryRowContext(ctx, `SELECT version FROM provider_connections WHERE org_id = ? AND id = ?`, orgID, connectionID).Scan(&currentVersion); err != nil {
+		if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT version FROM provider_connections WHERE org_id = ? AND id = ?`), orgID, connectionID).Scan(&currentVersion); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
 			}
@@ -1256,13 +1283,13 @@ func (r *Repository) DeleteProviderConnection(ctx context.Context, orgID, connec
 			return port.ErrVersionConflict
 		}
 		var inUse int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM model_deployments WHERE org_id = ? AND connection_id = ?`, orgID, connectionID).Scan(&inUse); err != nil {
+		if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT COUNT(1) FROM model_deployments WHERE org_id = ? AND connection_id = ?`), orgID, connectionID).Scan(&inUse); err != nil {
 			return mapDBError(err)
 		}
 		if inUse > 0 {
 			return fmt.Errorf("%w: provider_connection %q is referenced by %d model_deployments", port.ErrResourceInUse, connectionID, inUse)
 		}
-		res, err := tx.ExecContext(ctx, `DELETE FROM provider_connections WHERE org_id = ? AND id = ? AND version = ?`, orgID, connectionID, expectedVersion)
+		res, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `DELETE FROM provider_connections WHERE org_id = ? AND id = ? AND version = ?`), orgID, connectionID, expectedVersion)
 		if err != nil {
 			return mapDeleteDBError(err)
 		}
@@ -1273,7 +1300,7 @@ func (r *Repository) DeleteProviderConnection(ctx context.Context, orgID, connec
 		if rows == 0 {
 			return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
 		}
-		if err := appendChangelogTx(ctx, tx, &orgID, "provider_connection", connectionID, port.MutationDelete, false, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, &orgID, "provider_connection", connectionID, port.MutationDelete, false, now); err != nil {
 			return err
 		}
 		return r.emitAuditTx(ctx, tx, &orgID, "provider_connection.deleted", "provider_connection", connectionID, nil, now)
@@ -1307,25 +1334,32 @@ func (r *Repository) CreateLogicalModel(ctx context.Context, params CreateLogica
 
 	if err := r.withTx(ctx, func(tx *sql.Tx) error {
 		if params.OrgID != nil {
+			if err := port.SetOrgRLSTx(ctx, tx, r.dialect, *params.OrgID); err != nil {
+				return err
+			}
 			var orgStatus string
-			if err := tx.QueryRowContext(ctx, `SELECT status FROM organizations WHERE id = ?`, *params.OrgID).Scan(&orgStatus); err != nil {
+			if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT status FROM organizations WHERE id = ?`), *params.OrgID).Scan(&orgStatus); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return fmt.Errorf("%w: organization %q not found", port.ErrNotFound, *params.OrgID)
 				}
 				return mapDBError(err)
 			}
+		} else {
+			if err := port.SetOperatorRLSTx(ctx, tx, r.dialect); err != nil {
+				return err
+			}
 		}
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `
 			INSERT INTO logical_models (
 				id, org_id, canonical_slug, modality_kind, context_window,
 				max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms
-			) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
 			id, nullStrPtr(params.OrgID), strings.TrimSpace(params.CanonicalSlug), params.ModalityKind,
 			params.ContextWindow, params.MaxOutputTokens, capsJSON, now, now,
 		); err != nil {
 			return mapDBError(err)
 		}
-		if err := appendChangelogTx(ctx, tx, params.OrgID, "logical_model", id, port.MutationUpsert, false, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, params.OrgID, "logical_model", id, port.MutationUpsert, false, now); err != nil {
 			return err
 		}
 		return r.emitAuditTx(ctx, tx, params.OrgID, "logical_model.created", "logical_model", id, map[string]any{
@@ -1357,22 +1391,41 @@ func (r *Repository) GetLogicalModel(ctx context.Context, orgID *string, id stri
 		args     []any
 	)
 	if orgID != nil && strings.TrimSpace(*orgID) != "" {
-		query = `
+		query = port.Rebind(r.dialect, `
 		SELECT id, org_id, canonical_slug, modality_kind, context_window,
 		       max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms
-		FROM logical_models WHERE id = ? AND (org_id = ? OR org_id IS NULL)`
+		FROM logical_models WHERE id = ? AND (org_id = ? OR org_id IS NULL)`)
 		args = []any{id, strings.TrimSpace(*orgID)}
 	} else {
-		query = `
+		query = port.Rebind(r.dialect, `
 		SELECT id, org_id, canonical_slug, modality_kind, context_window,
 		       max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms
-		FROM logical_models WHERE id = ? AND org_id IS NULL`
+		FROM logical_models WHERE id = ? AND org_id IS NULL`)
 		args = []any{id}
 	}
-	err := r.db.QueryRowContext(ctx, query, args...).Scan(
-		&out.ID, &rowOrgID, &out.CanonicalSlug, &out.ModalityKind, &out.ContextWindow,
-		&out.MaxOutputTokens, &capsJSON, &out.Version, &out.CreatedAtMs, &out.UpdatedAtMs,
-	)
+	readRow := func(q rowQuerier) error {
+		return q.QueryRowContext(ctx, query, args...).Scan(
+			&out.ID, &rowOrgID, &out.CanonicalSlug, &out.ModalityKind, &out.ContextWindow,
+			&out.MaxOutputTokens, &capsJSON, &out.Version, &out.CreatedAtMs, &out.UpdatedAtMs,
+		)
+	}
+	var err error
+	if orgID != nil && strings.TrimSpace(*orgID) != "" {
+		err = r.withOrgReadTx(ctx, strings.TrimSpace(*orgID), func(q dbQuerier) error { return readRow(q) })
+	} else if r.dialect == port.DialectPostgres {
+		tx, txErr := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if txErr != nil {
+			return nil, mapDBError(txErr)
+		}
+		if rerr := port.SetOperatorRLSTx(ctx, tx, r.dialect); rerr != nil {
+			_ = tx.Rollback()
+			return nil, rerr
+		}
+		err = readRow(tx)
+		_ = tx.Rollback()
+	} else {
+		err = readRow(r.db)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: logical_model %q", port.ErrNotFound, id)
 	}
@@ -1404,15 +1457,25 @@ func (r *Repository) DeleteLogicalModel(ctx context.Context, orgID *string, id s
 	}
 	now := r.nowMs()
 	if err := r.withTx(ctx, func(tx *sql.Tx) error {
+		setScope := func() error {
+			if scopedOrgID != nil {
+				return port.SetOrgRLSTx(ctx, tx, r.dialect, *scopedOrgID)
+			}
+			return port.SetOperatorRLSTx(ctx, tx, r.dialect)
+		}
+		if err := setScope(); err != nil {
+			return err
+		}
+
 		var (
 			ownerCheckQuery string
 			ownerCheckArgs  []any
 		)
 		if scopedOrgID != nil {
-			ownerCheckQuery = `SELECT COUNT(1) FROM logical_models WHERE id = ? AND org_id = ?`
+			ownerCheckQuery = port.Rebind(r.dialect, `SELECT COUNT(1) FROM logical_models WHERE id = ? AND org_id = ?`)
 			ownerCheckArgs = []any{id, *scopedOrgID}
 		} else {
-			ownerCheckQuery = `SELECT COUNT(1) FROM logical_models WHERE id = ? AND org_id IS NULL`
+			ownerCheckQuery = port.Rebind(r.dialect, `SELECT COUNT(1) FROM logical_models WHERE id = ? AND org_id IS NULL`)
 			ownerCheckArgs = []any{id}
 		}
 		var exists int
@@ -1424,8 +1487,29 @@ func (r *Repository) DeleteLogicalModel(ctx context.Context, orgID *string, id s
 		}
 
 		var inUse int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM model_deployments WHERE logical_model_id = ?`, id).Scan(&inUse); err != nil {
-			return mapDBError(err)
+		if r.dialect == port.DialectPostgres && scopedOrgID == nil {
+			orgIDs, lerr := port.ListOrgIDsTx(ctx, tx, r.dialect)
+			if lerr != nil {
+				return lerr
+			}
+			depCountSQL := port.Rebind(r.dialect, `SELECT COUNT(1) FROM model_deployments WHERE logical_model_id = ?`)
+			for _, oid := range orgIDs {
+				if err := port.SetOrgRLSTx(ctx, tx, r.dialect, oid); err != nil {
+					return err
+				}
+				var cnt int
+				if err := tx.QueryRowContext(ctx, depCountSQL, id).Scan(&cnt); err != nil {
+					return mapDBError(err)
+				}
+				inUse += cnt
+			}
+			if err := setScope(); err != nil {
+				return err
+			}
+		} else {
+			if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT COUNT(1) FROM model_deployments WHERE logical_model_id = ?`), id).Scan(&inUse); err != nil {
+				return mapDBError(err)
+			}
 		}
 		if inUse > 0 {
 			return fmt.Errorf("%w: logical_model %q is referenced by %d model_deployments", port.ErrResourceInUse, id, inUse)
@@ -1436,9 +1520,9 @@ func (r *Repository) DeleteLogicalModel(ctx context.Context, orgID *string, id s
 			err error
 		)
 		if scopedOrgID != nil {
-			res, err = tx.ExecContext(ctx, `DELETE FROM logical_models WHERE id = ? AND org_id = ?`, id, *scopedOrgID)
+			res, err = tx.ExecContext(ctx, port.Rebind(r.dialect, `DELETE FROM logical_models WHERE id = ? AND org_id = ?`), id, *scopedOrgID)
 		} else {
-			res, err = tx.ExecContext(ctx, `DELETE FROM logical_models WHERE id = ? AND org_id IS NULL`, id)
+			res, err = tx.ExecContext(ctx, port.Rebind(r.dialect, `DELETE FROM logical_models WHERE id = ? AND org_id IS NULL`), id)
 		}
 		if err != nil {
 			return mapDeleteDBError(err)
@@ -1450,7 +1534,7 @@ func (r *Repository) DeleteLogicalModel(ctx context.Context, orgID *string, id s
 		if rows == 0 {
 			return fmt.Errorf("%w: logical_model %q", port.ErrNotFound, id)
 		}
-		if err := appendChangelogTx(ctx, tx, scopedOrgID, "logical_model", id, port.MutationDelete, false, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, scopedOrgID, "logical_model", id, port.MutationDelete, false, now); err != nil {
 			return err
 		}
 		return r.emitAuditTx(ctx, tx, scopedOrgID, "logical_model.deleted", "logical_model", id, nil, now)
@@ -1508,16 +1592,16 @@ func (r *Repository) CreateModelDeployment(ctx context.Context, params CreateMod
 	}
 	now := r.nowMs()
 
-	if err := r.withTx(ctx, func(tx *sql.Tx) error {
+	if err := r.withOrgTx(ctx, params.OrgID, func(tx *sql.Tx) error {
 		var connOrg string
-		if err := tx.QueryRowContext(ctx, `SELECT org_id FROM provider_connections WHERE org_id = ? AND id = ?`, params.OrgID, params.ConnectionID).Scan(&connOrg); err != nil {
+		if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT org_id FROM provider_connections WHERE org_id = ? AND id = ?`), params.OrgID, params.ConnectionID).Scan(&connOrg); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return fmt.Errorf("%w: provider_connection %q not found in org %q", port.ErrNotFound, params.ConnectionID, params.OrgID)
 			}
 			return mapDBError(err)
 		}
 		var modelOrg sql.NullString
-		if err := tx.QueryRowContext(ctx, `SELECT org_id FROM logical_models WHERE id = ?`, params.LogicalModelID).Scan(&modelOrg); err != nil {
+		if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT org_id FROM logical_models WHERE id = ?`), params.LogicalModelID).Scan(&modelOrg); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return fmt.Errorf("%w: logical_model %q not found", port.ErrNotFound, params.LogicalModelID)
 			}
@@ -1527,21 +1611,21 @@ func (r *Repository) CreateModelDeployment(ctx context.Context, params CreateMod
 			return fmt.Errorf("%w: logical_model %q belongs to another organization", port.ErrNotFound, params.LogicalModelID)
 		}
 
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `
 			INSERT INTO model_deployments (
 				id, org_id, connection_id, logical_model_id, upstream_model_name,
 				native_dialect, capability_overrides_json, assurance_level,
 				pricing_nano_usd_json, state, cooldown_until_ms,
 				connect_timeout_ms, first_byte_timeout_ms, idle_chunk_timeout_ms,
 				version, created_at_ms, updated_at_ms
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 1, ?, ?)`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 1, ?, ?)`),
 			id, params.OrgID, params.ConnectionID, params.LogicalModelID, strings.TrimSpace(params.UpstreamModelName),
 			nullStrPtr(params.NativeDialect), capsJSON, assurance,
 			string(pricingBytes), state, connTO, fbTO, idleTO, now, now,
 		); err != nil {
 			return mapWriteDBError(err)
 		}
-		if err := appendChangelogTx(ctx, tx, &params.OrgID, "model_deployment", id, port.MutationUpsert, false, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, &params.OrgID, "model_deployment", id, port.MutationUpsert, false, now); err != nil {
 			return err
 		}
 		return r.emitAuditTx(ctx, tx, &params.OrgID, "model_deployment.created", "model_deployment", id, map[string]any{
@@ -1570,7 +1654,16 @@ const modelDeploymentSelectSQL = `
 
 // GetModelDeployment fetches a tenant-isolated ModelDeployment by (orgID, deploymentID).
 func (r *Repository) GetModelDeployment(ctx context.Context, orgID, deploymentID string) (*ModelDeployment, error) {
-	return scanModelDeployment(r.db.QueryRowContext(ctx, modelDeploymentSelectSQL, orgID, deploymentID), deploymentID)
+	var out *ModelDeployment
+	err := r.withOrgReadTx(ctx, orgID, func(q dbQuerier) error {
+		d, err := scanModelDeployment(q.QueryRowContext(ctx, port.Rebind(r.dialect, modelDeploymentSelectSQL), orgID, deploymentID), deploymentID)
+		if err != nil {
+			return err
+		}
+		out = d
+		return nil
+	})
+	return out, err
 }
 
 // UpdateModelDeployment updates mutable deployment attributes (AssuranceLevel, CapabilityOverrides,
@@ -1591,7 +1684,7 @@ func (r *Repository) UpdateModelDeployment(ctx context.Context, orgID, deploymen
 		return nil, fmt.Errorf("%w: expected_version >= 1 required", port.ErrInvalidInput)
 	}
 	now := r.nowMs()
-	if err := r.withTx(ctx, func(tx *sql.Tx) error {
+	if err := r.withOrgTx(ctx, orgID, func(tx *sql.Tx) error {
 		cur, err := r.getDeploymentTx(ctx, tx, orgID, deploymentID)
 		if err != nil {
 			return err
@@ -1643,11 +1736,11 @@ func (r *Repository) UpdateModelDeployment(ctx context.Context, orgID, deploymen
 			cooldownArg = *cooldown
 		}
 
-		res, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `
 			UPDATE model_deployments
 			SET assurance_level = ?, capability_overrides_json = ?, pricing_nano_usd_json = ?,
 			    state = ?, cooldown_until_ms = ?, version = version + 1, updated_at_ms = ?
-			WHERE org_id = ? AND id = ? AND version = ?`,
+			WHERE org_id = ? AND id = ? AND version = ?`),
 			assurance, capsJSON, string(pricingBytes), state, cooldownArg, now,
 			orgID, deploymentID, params.ExpectedVersion,
 		)
@@ -1661,7 +1754,7 @@ func (r *Repository) UpdateModelDeployment(ctx context.Context, orgID, deploymen
 		if rows == 0 {
 			return fmt.Errorf("%w: concurrent update on model_deployment %q", port.ErrVersionConflict, deploymentID)
 		}
-		if err := appendChangelogTx(ctx, tx, &orgID, "model_deployment", deploymentID, port.MutationUpsert, false, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, &orgID, "model_deployment", deploymentID, port.MutationUpsert, false, now); err != nil {
 			return err
 		}
 		return r.emitAuditTx(ctx, tx, &orgID, "model_deployment.updated", "model_deployment", deploymentID, map[string]any{
@@ -1678,7 +1771,7 @@ func (r *Repository) UpdateModelDeployment(ctx context.Context, orgID, deploymen
 }
 
 func (r *Repository) getDeploymentTx(ctx context.Context, tx *sql.Tx, orgID, deploymentID string) (*ModelDeployment, error) {
-	return scanModelDeployment(tx.QueryRowContext(ctx, modelDeploymentSelectSQL, orgID, deploymentID), deploymentID)
+	return scanModelDeployment(tx.QueryRowContext(ctx, port.Rebind(r.dialect, modelDeploymentSelectSQL), orgID, deploymentID), deploymentID)
 }
 
 func scanModelDeployment(row interface{ Scan(dest ...any) error }, deploymentID string) (*ModelDeployment, error) {
@@ -1754,8 +1847,8 @@ func decodePricingNanoUSDStrict(raw string) (snapshot.PricingNanoUSD, error) {
 // DeleteModelDeployment deletes a ModelDeployment within orgID.
 func (r *Repository) DeleteModelDeployment(ctx context.Context, orgID, deploymentID string) error {
 	now := r.nowMs()
-	if err := r.withTx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `DELETE FROM model_deployments WHERE org_id = ? AND id = ?`, orgID, deploymentID)
+	if err := r.withOrgTx(ctx, orgID, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `DELETE FROM model_deployments WHERE org_id = ? AND id = ?`), orgID, deploymentID)
 		if err != nil {
 			return mapDeleteDBError(err)
 		}
@@ -1766,7 +1859,7 @@ func (r *Repository) DeleteModelDeployment(ctx context.Context, orgID, deploymen
 		if rows == 0 {
 			return fmt.Errorf("%w: model_deployment %q", port.ErrNotFound, deploymentID)
 		}
-		if err := appendChangelogTx(ctx, tx, &orgID, "model_deployment", deploymentID, port.MutationDelete, false, now); err != nil {
+		if err := r.appendChangelogTx(ctx, tx, &orgID, "model_deployment", deploymentID, port.MutationDelete, false, now); err != nil {
 			return err
 		}
 		return r.emitAuditTx(ctx, tx, &orgID, "model_deployment.deleted", "model_deployment", deploymentID, nil, now)
@@ -1785,7 +1878,7 @@ func (r *Repository) ResolveConnectionPolicy(ctx context.Context, orgID, connect
 	}
 	var (
 		endpointStr      string
-		allowPriv        int
+		allowPriv        port.FlexBool
 		cidrsJSON        string
 		state            string
 		connOwnerProj    sql.NullString
@@ -1793,35 +1886,43 @@ func (r *Repository) ResolveConnectionPolicy(ctx context.Context, orgID, connect
 		adapterHostsJSON string
 		gov              extensionGovernanceState
 		activeVerID      sql.NullString
-		entSigned        int
-		orgOwnerOptIn    int
+		sigVerified      port.FlexBool
+		entSigned        port.FlexBool
+		orgOwnerOptIn    port.FlexBool
 	)
-	err := r.db.QueryRowContext(ctx, `
-		SELECT pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.state,
-		       pc.owner_project_id, pc.shared_project_ids_json,
-		       pa.allowed_hosts_json, ei.state, ev.id, ei.approved_permissions_json,
-		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0), COALESCE(ev.enterprise_key_fingerprint, ''),
-		       o.min_plugin_trust, oep.enabled, COALESCE(oep.org_owner_opt_in, 0)
-		FROM provider_connections pc
-		JOIN organizations o ON o.id = pc.org_id
-		JOIN provider_adapters pa ON pa.id = pc.adapter_id
-		JOIN extension_installations ei ON ei.id = pa.installation_id
-		JOIN extension_packages ep ON ep.id = ei.package_id
-		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
-		LEFT JOIN org_extension_policies oep ON oep.org_id = pc.org_id AND oep.package_id = ei.package_id
-		WHERE pc.org_id = ? AND pc.id = ?`, orgID, connectionID,
-	).Scan(
-		&endpointStr, &allowPriv, &cidrsJSON, &state,
-		&connOwnerProj, &sharedProjJSON,
-		&adapterHostsJSON, &gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
-		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
-		&gov.MinPluginTrust, &gov.OrgPolicyEnabled, &orgOwnerOptIn,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
-	}
-	if err != nil {
-		return nil, mapDBError(err)
+	tExpr := port.BoolExpr(r.dialect, true)
+	fExpr := port.BoolExpr(r.dialect, false)
+	if err := r.withOrgReadTx(ctx, orgID, func(q dbQuerier) error {
+		err := q.QueryRowContext(ctx, port.Rebind(r.dialect, `
+			SELECT pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.state,
+			       pc.owner_project_id, pc.shared_project_ids_json,
+			       pa.allowed_hosts_json, ei.state, ev.id, ei.approved_permissions_json,
+			       ep.canonical_name, COALESCE(ev.signature_verified, `+fExpr+`), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, `+fExpr+`), COALESCE(ev.enterprise_key_fingerprint, ''),
+			       o.min_plugin_trust, CASE WHEN oep.enabled IS NULL THEN NULL WHEN oep.enabled = `+tExpr+` THEN 1 ELSE 0 END, COALESCE(oep.org_owner_opt_in, `+fExpr+`)
+			FROM provider_connections pc
+			JOIN organizations o ON o.id = pc.org_id
+			JOIN provider_adapters pa ON pa.id = pc.adapter_id
+			JOIN extension_installations ei ON ei.id = pa.installation_id
+			JOIN extension_packages ep ON ep.id = ei.package_id
+			LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
+			LEFT JOIN org_extension_policies oep ON oep.org_id = pc.org_id AND oep.package_id = ei.package_id
+			WHERE pc.org_id = ? AND pc.id = ?`), orgID, connectionID,
+		).Scan(
+			&endpointStr, &allowPriv, &cidrsJSON, &state,
+			&connOwnerProj, &sharedProjJSON,
+			&adapterHostsJSON, &gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
+			&gov.CanonicalName, &sigVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
+			&gov.MinPluginTrust, &gov.OrgPolicyEnabled, &orgOwnerOptIn,
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
+		}
+		if err != nil {
+			return mapDBError(err)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	sharedProjects, err := decodeStringSliceStrict(sharedProjJSON, "shared_project_ids_json")
 	if err != nil {
@@ -1830,8 +1931,11 @@ func (r *Repository) ResolveConnectionPolicy(ctx context.Context, orgID, connect
 	if activeVerID.Valid {
 		gov.ActiveVersionID = activeVerID.String
 	}
-	gov.EnterpriseSigned = entSigned != 0
-	gov.OrgOwnerOptIn = orgOwnerOptIn != 0
+	if bool(sigVerified) {
+		gov.SignatureVerified = 1
+	}
+	gov.EnterpriseSigned = bool(entSigned)
+	gov.OrgOwnerOptIn = bool(orgOwnerOptIn)
 	gov.HasChildProjectScope = connOwnerProj.Valid || len(sharedProjects) > 0
 	if err := r.validateOrgAndActiveExtensionTrust(&gov, true, ErrConnectionNotReady); err != nil {
 		return nil, err
@@ -1848,7 +1952,7 @@ func (r *Repository) ResolveConnectionPolicy(ctx context.Context, orgID, connect
 	if err != nil {
 		return nil, err
 	}
-	return buildAuthoritativeEgressPolicy(endpointStr, allowPriv != 0, allowedCIDRs, adapterHosts, approved, state)
+	return buildAuthoritativeEgressPolicy(endpointStr, bool(allowPriv), allowedCIDRs, adapterHosts, approved, state)
 }
 
 // ResolveSlot implements broker.CredentialBindingResolver fail-closed without ever reading
@@ -1860,7 +1964,7 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 	}
 	var (
 		endpointStr       string
-		allowPriv         int
+		allowPriv         port.FlexBool
 		cidrsJSON         string
 		state             string
 		primaryCredID     sql.NullString
@@ -1869,91 +1973,105 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 		adapterHostsJSON  string
 		gov               extensionGovernanceState
 		activeVerID       sql.NullString
-		entSigned         int
-		orgOwnerOptIn     int
+		sigVerified       port.FlexBool
+		entSigned         port.FlexBool
+		orgOwnerOptIn     port.FlexBool
 		slotCredID        sql.NullString
 		slotInjectMode    sql.NullString
 		primaryHasBinding bool
 	)
-	err := r.db.QueryRowContext(ctx, `
-		SELECT pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.state, pc.credential_id,
-		       pc.owner_project_id, pc.shared_project_ids_json, pa.allowed_hosts_json,
-		       ei.state, ev.id, ei.approved_permissions_json,
-		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0), COALESCE(ev.enterprise_key_fingerprint, ''),
-		       o.min_plugin_trust, oep.enabled, COALESCE(oep.org_owner_opt_in, 0), csb.credential_id, csb.inject_mode,
-		       EXISTS (SELECT 1 FROM connection_secret_bindings b
-		               WHERE b.org_id = pc.org_id AND b.connection_id = pc.id
-		                 AND b.credential_id = pc.credential_id)
-		FROM provider_connections pc
-		JOIN organizations o ON o.id = pc.org_id
-		JOIN provider_adapters pa ON pa.id = pc.adapter_id
-		JOIN extension_installations ei ON ei.id = pa.installation_id
-		JOIN extension_packages ep ON ep.id = ei.package_id
-		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
-		LEFT JOIN org_extension_policies oep ON oep.org_id = pc.org_id AND oep.package_id = ei.package_id
-		LEFT JOIN connection_secret_bindings csb
-		       ON csb.org_id = pc.org_id AND csb.connection_id = pc.id AND csb.slot_name = ?
-		WHERE pc.org_id = ? AND pc.id = ?`,
-		slotName, orgID, connectionID,
-	).Scan(
-		&endpointStr, &allowPriv, &cidrsJSON, &state, &primaryCredID,
-		&connOwnerProj, &sharedProjJSON, &adapterHostsJSON,
-		&gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
-		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
-		&gov.MinPluginTrust, &gov.OrgPolicyEnabled, &orgOwnerOptIn, &slotCredID, &slotInjectMode, &primaryHasBinding,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
-	}
-	if err != nil {
-		return nil, mapDBError(err)
-	}
-	sharedProjects, err := decodeStringSliceStrict(sharedProjJSON, "shared_project_ids_json")
-	if err != nil {
-		return nil, err
-	}
-	if activeVerID.Valid {
-		gov.ActiveVersionID = activeVerID.String
-	}
-	gov.EnterpriseSigned = entSigned != 0
-	gov.OrgOwnerOptIn = orgOwnerOptIn != 0
-	gov.HasChildProjectScope = connOwnerProj.Valid || len(sharedProjects) > 0
-	if err := r.validateOrgAndActiveExtensionTrust(&gov, true, ErrConnectionNotReady); err != nil {
-		return nil, err
-	}
-	approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrConnectionNotReady, err)
-	}
-
-	credID := ""
-	injectMode := InjectModeHostBlind
-	if slotCredID.Valid && slotCredID.String != "" {
-		credID = slotCredID.String
-		if slotInjectMode.Valid && slotInjectMode.String != "" {
-			injectMode = slotInjectMode.String
-		}
-	} else if slotName == "api_key" && primaryCredID.Valid && primaryCredID.String != "" && !primaryHasBinding {
-		credID = primaryCredID.String
-	} else {
-		return nil, fmt.Errorf("%w: secret slot %q not bound on connection %q", port.ErrNotFound, slotName, connectionID)
-	}
-	if err := slotPermittedByApproved(slotName, injectMode, approved, ErrConnectionNotReady); err != nil {
-		return nil, err
-	}
-
 	var (
 		boundAudience   sql.NullString
 		secretOwnerProj sql.NullString
+		sharedProjects  []string
+		credID          string
+		injectMode      = InjectModeHostBlind
+		approved        installer.PermissionSet
 	)
-	if err := r.db.QueryRowContext(ctx, `
-		SELECT bound_audience, owner_project_id FROM secret_credentials WHERE org_id = ? AND id = ?`,
-		orgID, credID,
-	).Scan(&boundAudience, &secretOwnerProj); err != nil {
+	tExpr := port.BoolExpr(r.dialect, true)
+	fExpr := port.BoolExpr(r.dialect, false)
+	if err := r.withOrgReadTx(ctx, orgID, func(q dbQuerier) error {
+		err := q.QueryRowContext(ctx, port.Rebind(r.dialect, `
+			SELECT pc.endpoint_base_url, pc.allow_private_ip, pc.allowed_cidrs_json, pc.state, pc.credential_id,
+			       pc.owner_project_id, pc.shared_project_ids_json, pa.allowed_hosts_json,
+			       ei.state, ev.id, ei.approved_permissions_json,
+			       ep.canonical_name, COALESCE(ev.signature_verified, `+fExpr+`), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, `+fExpr+`), COALESCE(ev.enterprise_key_fingerprint, ''),
+			       o.min_plugin_trust, CASE WHEN oep.enabled IS NULL THEN NULL WHEN oep.enabled = `+tExpr+` THEN 1 ELSE 0 END, COALESCE(oep.org_owner_opt_in, `+fExpr+`), csb.credential_id, csb.inject_mode,
+			       EXISTS (SELECT 1 FROM connection_secret_bindings b
+			               WHERE b.org_id = pc.org_id AND b.connection_id = pc.id
+			                 AND b.credential_id = pc.credential_id)
+			FROM provider_connections pc
+			JOIN organizations o ON o.id = pc.org_id
+			JOIN provider_adapters pa ON pa.id = pc.adapter_id
+			JOIN extension_installations ei ON ei.id = pa.installation_id
+			JOIN extension_packages ep ON ep.id = ei.package_id
+			LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
+			LEFT JOIN org_extension_policies oep ON oep.org_id = pc.org_id AND oep.package_id = ei.package_id
+			LEFT JOIN connection_secret_bindings csb
+			       ON csb.org_id = pc.org_id AND csb.connection_id = pc.id AND csb.slot_name = ?
+			WHERE pc.org_id = ? AND pc.id = ?`),
+			slotName, orgID, connectionID,
+		).Scan(
+			&endpointStr, &allowPriv, &cidrsJSON, &state, &primaryCredID,
+			&connOwnerProj, &sharedProjJSON, &adapterHostsJSON,
+			&gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
+			&gov.CanonicalName, &sigVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
+			&gov.MinPluginTrust, &gov.OrgPolicyEnabled, &orgOwnerOptIn, &slotCredID, &slotInjectMode, &primaryHasBinding,
+		)
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: bound secret_credential %q not found", port.ErrNotFound, credID)
+			return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
 		}
-		return nil, mapDBError(err)
+		if err != nil {
+			return mapDBError(err)
+		}
+		var err2 error
+		sharedProjects, err2 = decodeStringSliceStrict(sharedProjJSON, "shared_project_ids_json")
+		if err2 != nil {
+			return err2
+		}
+		if activeVerID.Valid {
+			gov.ActiveVersionID = activeVerID.String
+		}
+		if bool(sigVerified) {
+			gov.SignatureVerified = 1
+		}
+		gov.EnterpriseSigned = bool(entSigned)
+		gov.OrgOwnerOptIn = bool(orgOwnerOptIn)
+		gov.HasChildProjectScope = connOwnerProj.Valid || len(sharedProjects) > 0
+		if err := r.validateOrgAndActiveExtensionTrust(&gov, true, ErrConnectionNotReady); err != nil {
+			return err
+		}
+		approved, err2 = decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
+		if err2 != nil {
+			return fmt.Errorf("%w: %w", ErrConnectionNotReady, err2)
+		}
+
+		if slotCredID.Valid && slotCredID.String != "" {
+			credID = slotCredID.String
+			if slotInjectMode.Valid && slotInjectMode.String != "" {
+				injectMode = slotInjectMode.String
+			}
+		} else if slotName == "api_key" && primaryCredID.Valid && primaryCredID.String != "" && !primaryHasBinding {
+			credID = primaryCredID.String
+		} else {
+			return fmt.Errorf("%w: secret slot %q not bound on connection %q", port.ErrNotFound, slotName, connectionID)
+		}
+		if err := slotPermittedByApproved(slotName, injectMode, approved, ErrConnectionNotReady); err != nil {
+			return err
+		}
+
+		if err := q.QueryRowContext(ctx, port.Rebind(r.dialect, `
+			SELECT bound_audience, owner_project_id FROM secret_credentials WHERE org_id = ? AND id = ?`),
+			orgID, credID,
+		).Scan(&boundAudience, &secretOwnerProj); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: bound secret_credential %q not found", port.ErrNotFound, credID)
+			}
+			return mapDBError(err)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	if secretOwnerProj.Valid {
 		if !connOwnerProj.Valid || connOwnerProj.String != secretOwnerProj.String || len(sharedProjects) > 0 {
@@ -1970,7 +2088,7 @@ func (r *Repository) ResolveSlot(ctx context.Context, orgID, connectionID, slotN
 	if err != nil {
 		return nil, err
 	}
-	policy, err := buildAuthoritativeEgressPolicy(endpointStr, allowPriv != 0, allowedCIDRs, adapterHosts, approved, state)
+	policy, err := buildAuthoritativeEgressPolicy(endpointStr, bool(allowPriv), allowedCIDRs, adapterHosts, approved, state)
 	if err != nil {
 		return nil, err
 	}
@@ -2069,6 +2187,39 @@ func (r *Repository) withTx(ctx context.Context, fn func(tx *sql.Tx) error) erro
 	return nil
 }
 
+func (r *Repository) withOrgTx(ctx context.Context, orgID string, fn func(tx *sql.Tx) error) error {
+	return r.withTx(ctx, func(tx *sql.Tx) error {
+		if err := port.SetOrgRLSTx(ctx, tx, r.dialect, orgID); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
+
+func (r *Repository) withOrgReadTx(ctx context.Context, orgID string, fn func(q dbQuerier) error) error {
+	if r.dialect != port.DialectPostgres {
+		return fn(r.db)
+	}
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return fmt.Errorf("catalog: begin readonly tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, r.dialect, orgID); err != nil {
+		return err
+	}
+	return fn(tx)
+}
+
+func (r *Repository) withOperatorTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	return r.withTx(ctx, func(tx *sql.Tx) error {
+		if err := port.SetOperatorRLSTx(ctx, tx, r.dialect); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
+
 // SyncSnapshots triggers an immediate synchronous serving snapshot refresh.
 func (r *Repository) SyncSnapshots(ctx context.Context) error {
 	return r.syncSnapshot(ctx)
@@ -2084,19 +2235,12 @@ func (r *Repository) syncSnapshot(ctx context.Context) error {
 	return nil
 }
 
-func appendChangelogTx(ctx context.Context, tx *sql.Tx, orgID *string, entityKind, entityID, mutationType string, emergency bool, now int64) error {
-	emInt := 0
-	if emergency {
-		emInt = 1
+func (r *Repository) appendChangelogTx(ctx context.Context, tx *sql.Tx, orgID *string, entityKind, entityID, mutationType string, emergency bool, now int64) error {
+	orgStr := ""
+	if orgID != nil {
+		orgStr = *orgID
 	}
-	var orgArg any
-	if orgID != nil && *orgID != "" {
-		orgArg = *orgID
-	}
-	_, err := tx.ExecContext(ctx,
-		`INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)`,
-		orgArg, entityKind, entityID, mutationType, emInt, now,
-	)
+	_, err := port.AppendConfigChangelogTx(ctx, tx, r.dialect, orgStr, entityKind, entityID, mutationType, emergency, now)
 	return mapDBError(err)
 }
 
@@ -2141,9 +2285,9 @@ func (r *Repository) emitAuditTx(
 	})
 }
 
-func ensureProjectOwnedByOrgTx(ctx context.Context, tx *sql.Tx, orgID, projectID string) error {
+func (r *Repository) ensureProjectOwnedByOrgTx(ctx context.Context, tx *sql.Tx, orgID, projectID string) error {
 	var exists int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM projects WHERE org_id = ? AND id = ?`, orgID, projectID).Scan(&exists); err != nil {
+	if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT COUNT(1) FROM projects WHERE org_id = ? AND id = ?`), orgID, projectID).Scan(&exists); err != nil {
 		return mapDBError(err)
 	}
 	if exists == 0 {
@@ -2152,13 +2296,13 @@ func ensureProjectOwnedByOrgTx(ctx context.Context, tx *sql.Tx, orgID, projectID
 	return nil
 }
 
-func ensureSecretCompatibleWithConnectionTx(
+func (r *Repository) ensureSecretCompatibleWithConnectionTx(
 	ctx context.Context, tx rowQuerier, orgID string,
 	connOwnerProjectID *string, connSharedProjectIDs []string, secretID string,
 ) error {
 	var secretOwnerProj sql.NullString
 	err := tx.QueryRowContext(ctx,
-		`SELECT owner_project_id FROM secret_credentials WHERE org_id = ? AND id = ?`,
+		port.Rebind(r.dialect, `SELECT owner_project_id FROM secret_credentials WHERE org_id = ? AND id = ?`),
 		orgID, secretID,
 	).Scan(&secretOwnerProj)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -2215,22 +2359,24 @@ type extensionGovernanceState struct {
 	HasChildProjectScope     bool
 }
 
-func loadAdapterExtensionGovernance(ctx context.Context, q rowQuerier, installationID string) (*extensionGovernanceState, error) {
+func (r *Repository) loadAdapterExtensionGovernance(ctx context.Context, q rowQuerier, installationID string) (*extensionGovernanceState, error) {
 	var (
 		gov         extensionGovernanceState
 		activeVerID sql.NullString
-		entSigned   int
+		sigVerified port.FlexBool
+		entSigned   port.FlexBool
 	)
-	err := q.QueryRowContext(ctx, `
+	fExpr := port.BoolExpr(r.dialect, false)
+	err := q.QueryRowContext(ctx, port.Rebind(r.dialect, `
 		SELECT ei.state, ev.id, ei.approved_permissions_json,
-		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0), COALESCE(ev.enterprise_key_fingerprint, '')
+		       ep.canonical_name, COALESCE(ev.signature_verified, `+fExpr+`), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, `+fExpr+`), COALESCE(ev.enterprise_key_fingerprint, '')
 		FROM extension_installations ei
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
-		WHERE ei.id = ?`, installationID,
+		WHERE ei.id = ?`), installationID,
 	).Scan(
 		&gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
-		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
+		&gov.CanonicalName, &sigVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w: extension installation %q not found", port.ErrNotFound, installationID)
@@ -2241,37 +2387,43 @@ func loadAdapterExtensionGovernance(ctx context.Context, q rowQuerier, installat
 	if activeVerID.Valid {
 		gov.ActiveVersionID = activeVerID.String
 	}
-	gov.EnterpriseSigned = entSigned != 0
+	if bool(sigVerified) {
+		gov.SignatureVerified = 1
+	}
+	gov.EnterpriseSigned = bool(entSigned)
 	return &gov, nil
 }
 
-func loadConnectionExtensionGovernanceByAdapter(ctx context.Context, q rowQuerier, orgID, adapterID string) ([]string, *extensionGovernanceState, error) {
+func (r *Repository) loadConnectionExtensionGovernanceByAdapter(ctx context.Context, q rowQuerier, orgID, adapterID string) ([]string, *extensionGovernanceState, error) {
 	var (
 		gov              extensionGovernanceState
 		activeVerID      sql.NullString
-		entSigned        int
-		orgOwnerOptIn    int
+		sigVerified      port.FlexBool
+		entSigned        port.FlexBool
+		orgOwnerOptIn    port.FlexBool
 		adapterHostsJSON string
 	)
-	if err := q.QueryRowContext(ctx, `SELECT min_plugin_trust FROM organizations WHERE id = ?`, orgID).Scan(&gov.MinPluginTrust); err != nil {
+	if err := q.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT min_plugin_trust FROM organizations WHERE id = ?`), orgID).Scan(&gov.MinPluginTrust); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil, fmt.Errorf("%w: organization %q not found", port.ErrNotFound, orgID)
 		}
 		return nil, nil, mapDBError(err)
 	}
-	err := q.QueryRowContext(ctx, `
+	tExpr := port.BoolExpr(r.dialect, true)
+	fExpr := port.BoolExpr(r.dialect, false)
+	err := q.QueryRowContext(ctx, port.Rebind(r.dialect, `
 		SELECT pa.allowed_hosts_json, ei.state, ev.id, ei.approved_permissions_json,
-		       ep.canonical_name, COALESCE(ev.signature_verified, 0), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, 0), COALESCE(ev.enterprise_key_fingerprint, ''),
-		       oep.enabled, COALESCE(oep.org_owner_opt_in, 0)
+		       ep.canonical_name, COALESCE(ev.signature_verified, `+fExpr+`), COALESCE(ev.signing_key_fingerprint, ''), COALESCE(ev.enterprise_signed, `+fExpr+`), COALESCE(ev.enterprise_key_fingerprint, ''),
+		       CASE WHEN oep.enabled IS NULL THEN NULL WHEN oep.enabled = `+tExpr+` THEN 1 ELSE 0 END, COALESCE(oep.org_owner_opt_in, `+fExpr+`)
 		FROM provider_adapters pa
 		JOIN extension_installations ei ON ei.id = pa.installation_id
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id AND ev.package_id = ei.package_id
 		LEFT JOIN org_extension_policies oep ON oep.org_id = ? AND oep.package_id = ei.package_id
-		WHERE pa.id = ?`, orgID, adapterID,
+		WHERE pa.id = ?`), orgID, adapterID,
 	).Scan(
 		&adapterHostsJSON, &gov.InstallState, &activeVerID, &gov.ApprovedPermissionsJSON,
-		&gov.CanonicalName, &gov.SignatureVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
+		&gov.CanonicalName, &sigVerified, &gov.Fingerprint, &entSigned, &gov.EnterpriseKeyFingerprint,
 		&gov.OrgPolicyEnabled, &orgOwnerOptIn,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -2287,8 +2439,11 @@ func loadConnectionExtensionGovernanceByAdapter(ctx context.Context, q rowQuerie
 	if activeVerID.Valid {
 		gov.ActiveVersionID = activeVerID.String
 	}
-	gov.EnterpriseSigned = entSigned != 0
-	gov.OrgOwnerOptIn = orgOwnerOptIn != 0
+	if bool(sigVerified) {
+		gov.SignatureVerified = 1
+	}
+	gov.EnterpriseSigned = bool(entSigned)
+	gov.OrgOwnerOptIn = bool(orgOwnerOptIn)
 	return adapterHosts, &gov, nil
 }
 
@@ -2321,15 +2476,15 @@ func (r *Repository) ensureConnectionAuthorized(ctx context.Context, q dbQuerier
 	var (
 		adapterID      string
 		endpointStr    string
-		allowPriv      int
+		allowPriv      port.FlexBool
 		ownerProj      sql.NullString
 		sharedProjJSON string
 		primaryCredID  sql.NullString
 	)
-	err := q.QueryRowContext(ctx, `
+	err := q.QueryRowContext(ctx, port.Rebind(r.dialect, `
 		SELECT adapter_id, endpoint_base_url, allow_private_ip, owner_project_id, shared_project_ids_json, credential_id
 		FROM provider_connections
-		WHERE org_id = ? AND id = ?`, orgID, connectionID,
+		WHERE org_id = ? AND id = ?`), orgID, connectionID,
 	).Scan(&adapterID, &endpointStr, &allowPriv, &ownerProj, &sharedProjJSON, &primaryCredID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("%w: provider_connection %q", port.ErrNotFound, connectionID)
@@ -2345,7 +2500,7 @@ func (r *Repository) ensureConnectionAuthorized(ctx context.Context, q dbQuerier
 	if perr != nil || parsedEndpoint.Hostname() == "" {
 		return fmt.Errorf("%w: invalid endpoint_base_url %q", wrapSentinel, endpointStr)
 	}
-	adapterHosts, gov, err := loadConnectionExtensionGovernanceByAdapter(ctx, q, orgID, adapterID)
+	adapterHosts, gov, err := r.loadConnectionExtensionGovernanceByAdapter(ctx, q, orgID, adapterID)
 	if err != nil {
 		return err
 	}
@@ -2357,14 +2512,14 @@ func (r *Repository) ensureConnectionAuthorized(ctx context.Context, q dbQuerier
 	if err != nil {
 		return fmt.Errorf("%w: %w", wrapSentinel, err)
 	}
-	if err := validateEndpointAndPermissions(parsedEndpoint, allowPriv != 0, adapterHosts, approved, wrapSentinel); err != nil {
+	if err := validateEndpointAndPermissions(parsedEndpoint, bool(allowPriv), adapterHosts, approved, wrapSentinel); err != nil {
 		return err
 	}
 
-	rows, err := q.QueryContext(ctx, `
+	rows, err := q.QueryContext(ctx, port.Rebind(r.dialect, `
 		SELECT slot_name, credential_id, inject_mode
 		FROM connection_secret_bindings
-		WHERE org_id = ? AND connection_id = ?`, orgID, connectionID,
+		WHERE org_id = ? AND connection_id = ?`), orgID, connectionID,
 	)
 	if err != nil {
 		return mapDBError(err)
@@ -2404,7 +2559,7 @@ func (r *Repository) ensureConnectionAuthorized(ctx context.Context, q dbQuerier
 		if err := slotPermittedByApproved(b.SlotName, b.InjectMode, approved, wrapSentinel); err != nil {
 			return err
 		}
-		if err := ensureSecretCompatibleWithConnectionTx(ctx, q, orgID, ownerProjPtr, sharedProjects, b.CredentialID); err != nil {
+		if err := r.ensureSecretCompatibleWithConnectionTx(ctx, q, orgID, ownerProjPtr, sharedProjects, b.CredentialID); err != nil {
 			return fmt.Errorf("%w: %w", wrapSentinel, err)
 		}
 	}
@@ -2757,6 +2912,25 @@ func mapDeleteDBError(err error) error {
 func mapDBErrorWithMode(err error, onDelete bool) error {
 	if err == nil {
 		return nil
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23505":
+			return fmt.Errorf("%w: %v", port.ErrAlreadyExists, err)
+		case "23503":
+			if onDelete {
+				return fmt.Errorf("%w: %v", port.ErrResourceInUse, err)
+			}
+			return fmt.Errorf("%w: referenced foreign key missing (%v)", port.ErrNotFound, err)
+		case "23514":
+			if strings.Contains(pgErr.ConstraintName, "billing_mode") || strings.Contains(pgErr.Message, "billing_mode") {
+				return fmt.Errorf("%w: %v", ErrInvalidBillingMode, err)
+			}
+			return fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
+		case "22001", "23502", "42501":
+			return fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
+		}
 	}
 	msg := err.Error()
 	switch {
