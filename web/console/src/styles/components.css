@@ -832,9 +832,9 @@
 
   /* Coarse touch pointer accommodations (WCAG 2.2 touch comfort without shrinking desktop) */
   @media (pointer: coarse) {
-    .tp-toolbar button,
-    .tp-page-actions button,
-    .tp-table-mobile button {
+    .tp-toolbar .astryx-button,
+    .tp-page-actions .astryx-button,
+    .tp-table-mobile .astryx-button {
       min-height: 36px;
     }
   }

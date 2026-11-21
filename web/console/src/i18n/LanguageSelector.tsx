@@ -52,6 +52,7 @@ export function LanguageSelector({id = 'language-selector', className = ''}: {id
       const listboxHeight = listbox.offsetHeight;
       if (!selected || listboxHeight <= 0) return;
 
+      const prevScrollTop = listbox.scrollTop;
       const itemTop = getLayoutTop(selected) - getLayoutTop(listbox);
       const itemBottom = itemTop + selected.offsetHeight;
       const bottomPad = parseFloat(getComputedStyle(listbox).paddingBottom) || 0;
@@ -63,11 +64,19 @@ export function LanguageSelector({id = 'language-selector', className = ''}: {id
         listbox.scrollTop = Math.max(0, itemTop - topPad);
       }
 
+      if (listbox.scrollTop === prevScrollTop) return;
+
       const anchorRect = anchor.getBoundingClientRect();
       const itemCenter = itemTop - listbox.scrollTop + selected.offsetHeight / 2;
       const anchorCenter = anchorRect.top + anchorRect.height / 2;
       const desiredTop = anchorCenter - itemCenter - 1;
-      const maxTop = Math.max(0, window.innerHeight - listboxHeight);
+      const layerStyle = getComputedStyle(popover);
+      const blockEndGutter = Math.max(
+        8,
+        parseFloat(layerStyle.marginBlockStart) || 0,
+        parseFloat(layerStyle.marginBlockEnd) || 0,
+      );
+      const maxTop = Math.max(0, window.innerHeight - listboxHeight - blockEndGutter);
       const clampedTop = Math.min(Math.max(desiredTop, 0), maxTop);
       const offset = Math.max(0, anchorRect.bottom - clampedTop);
       const room = window.innerHeight - listboxHeight - anchorRect.bottom;

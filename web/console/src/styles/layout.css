@@ -372,20 +372,22 @@
   .tp-rail-prefs {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--space-2);
     width: 100%;
     min-width: 0;
   }
 
   .tp-rail-prefs .tp-lang-selector {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     width: auto;
-    max-width: none;
+    max-width: calc(100% - 40px);
   }
 
   .tp-rail-prefs .tp-lang-selector [role='combobox'] {
-    width: 100%;
+    min-width: 0;
+    width: auto;
     max-width: 100%;
   }
 
@@ -478,6 +480,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4375rem;
+    min-height: var(--tp-topbar-ctrl, 28px);
     font-size: 0.875rem;
     font-weight: 600;
     letter-spacing: -0.02em;
@@ -556,11 +559,12 @@
   .tp-lang-selector {
     min-width: 0;
     width: auto;
-    max-width: min(140px, 42vw);
+    max-width: min(136px, 42vw);
   }
 
   .tp-lang-selector [role='combobox'] {
-    min-width: 82px;
+    min-width: 0;
+    width: auto;
     max-width: 100%;
   }
 
@@ -607,6 +611,16 @@
     align-items: center;
     gap: var(--space-2);
     max-width: 100%;
+  }
+
+  @media (max-width: 479.98px) {
+    .tp-page-actions:has(> button:nth-child(2)) {
+      width: 100%;
+    }
+
+    .tp-page-actions:has(> button:nth-child(2)) > button {
+      flex: 1 1 auto;
+    }
   }
 
   /* Flat Operational Sections (no nested cards) */
@@ -761,7 +775,7 @@
   }
 
   .tp-setup-rail .tp-lang-selector [role='combobox'] {
-    min-width: 82px;
+    min-width: 0;
   }
 
   .tp-setup-shell {
@@ -842,11 +856,11 @@
     }
 
     .tp-lang-selector {
-      max-width: 148px;
+      max-width: 136px;
     }
 
     .tp-lang-selector [role='combobox'] {
-      min-width: 92px;
+      min-width: 0;
     }
 
     .tp-content {
@@ -958,6 +972,10 @@
   @media (pointer: coarse) {
     .tp-topbar {
       --tp-topbar-ctrl: 32px;
+    }
+
+    .tp-topbar-lang div:has(> [role='combobox']) {
+      min-height: var(--tp-topbar-ctrl);
     }
 
     .tp-rail-scope-add {
