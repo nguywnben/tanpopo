@@ -23,27 +23,6 @@ type dialectExec struct {
 	dialect port.Dialect
 }
 
-type dialectTx struct {
-	tx      *sql.Tx
-	dialect port.Dialect
-}
-
-func wrapTx(tx *sql.Tx, dialect port.Dialect) *dialectTx {
-	return &dialectTx{tx: tx, dialect: dialect}
-}
-
-func (d *dialectTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return d.tx.ExecContext(ctx, port.Rebind(d.dialect, query), args...)
-}
-
-func (d *dialectTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	return d.tx.QueryContext(ctx, port.Rebind(d.dialect, query), args...)
-}
-
-func (d *dialectTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	return d.tx.QueryRowContext(ctx, port.Rebind(d.dialect, query), args...)
-}
-
 func (s *Store) effectiveDialect(ctx context.Context) port.Dialect {
 	if s != nil && s.dialect != "" {
 		return s.dialect

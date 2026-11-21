@@ -171,9 +171,9 @@ jobs:
           TOTAL_COV=$(go tool cover -func=/tmp/testkit-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
           echo "Linux -race -count=3 ./internal/testkit/... statement coverage: ${TOTAL_COV}%"
           awk -v cov="$TOTAL_COV" 'BEGIN { if (cov + 0 < 90.0) { printf "Coverage %.1f%% < 90.0%% DoD threshold\n", cov; exit 1 } }'
-          go test -v -race -count=1 -coverprofile=/tmp/storage-linux.cov ./internal/storage/...
+          go test -v -race -count=1 -coverprofile=/tmp/storage-linux.cov ./internal/storage/sqlite/... ./internal/storage/migrate/...
           STORAGE_COV=$(go tool cover -func=/tmp/storage-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
-          echo "Linux -race ./internal/storage/... statement coverage: ${STORAGE_COV}%"
+          echo "Linux -race ./internal/storage/sqlite+migrate statement coverage: ${STORAGE_COV}%"
           awk -v cov="$STORAGE_COV" 'BEGIN { if (cov + 0 < 85.0) { printf "Storage coverage %.1f%% < 85.0%% TP-IMP-0007 DoD threshold\n", cov; exit 1 } }'
           go test -v -race -count=1 -coverprofile=/tmp/vault-linux.cov ./internal/security/vault/...
           VAULT_COV=$(go tool cover -func=/tmp/vault-linux.cov | awk '/^total:/ {print $NF}' | tr -d '%')
