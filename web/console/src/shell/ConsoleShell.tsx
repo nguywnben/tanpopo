@@ -1,4 +1,4 @@
-import {lazy, Suspense, useEffect, useMemo, useState} from 'react';
+import {lazy, Suspense, useEffect, useMemo, useState, type FormEvent} from 'react';
 import {
   Activity,
   Blocks,
@@ -11,6 +11,7 @@ import {
   Menu,
   Moon,
   Network,
+  Plus,
   Search,
   Server,
   ShieldAlert,
@@ -24,14 +25,15 @@ import {Kbd} from '@astryxdesign/core/Kbd';
 import {Selector} from '@astryxdesign/core/Selector';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {createStaticSource, type SearchableItem} from '@astryxdesign/core/Typeahead';
-import {getAdminSession, listEnvironments, listProjects, logoutAdmin} from '../api/client';
+import {createEnvironment, createProject, getAdminSession, listEnvironments, listProjects, logoutAdmin} from '../api/client';
 import {listKillSwitches, listPendingApprovals} from '../api/managementClient';
 import type {components} from '../api/generated';
 import {Link, useRouter} from '../router/RouterContext';
 import {useI18n} from '../i18n/I18nProvider';
 import {LanguageSelector} from '../i18n/LanguageSelector';
 import {useTheme} from '../styles/theme';
-import {Banner, Button, CountPill, IconButton, TanpopoMark} from '../ui/primitives';
+import {Modal} from '../ui/Overlays';
+import {Banner, Button, CountPill, IconButton, TanpopoMark, TextField} from '../ui/primitives';
 import {canAccessRoute, navigationGroups, quickCommands, routeForPath, type ConsoleRoute, type NavIconKey, type Role} from './routes';
 
 const WorkspaceRouter = lazy(() => import('./WorkspaceRouter').then(mod => ({default: mod.WorkspaceRouter})));
@@ -42,6 +44,16 @@ type Environment = components['schemas']['Environment'];
 
 const emergencyRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
 const approvalRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
+const scopeAdminRoles: Role[] = ['OPERATOR', 'ORG_OWNER'];
+
+function toSlug(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+}
 
 function NavIcon({icon}: {icon: NavIconKey}) {
   const props = {size: 15, strokeWidth: 1.8, 'aria-hidden': true as const, style: {flexShrink: 0}};
@@ -78,6 +90,19 @@ export function ConsoleShell() {
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const [activeSwitches, setActiveSwitches] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
+
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectSlug, setNewProjectSlug] = useState('');
+  const [projectSlugTouched, setProjectSlugTouched] = useState(false);
+
+  const [createEnvOpen, setCreateEnvOpen] = useState(false);
+  const [newEnvName, setNewEnvName] = useState('');
+  const [newEnvSlug, setNewEnvSlug] = useState('');
+  const [envSlugTouched, setEnvSlugTouched] = useState(false);
+
+  const [scopeBusy, setScopeBusy] = useState(false);
+  const [scopeError, setScopeError] = useState('');
 
   const route: ConsoleRoute = useMemo(() => routeForPath(pathname) ?? routeForPath('/overview')!, [pathname]);
 
@@ -208,7 +233,66 @@ export function ConsoleShell() {
   }, [roles, t]);
 
   const canUseEmergency = roles.some(role => emergencyRoles.includes(role));
+  const canManageScope = roles.some(role => scopeAdminRoles.includes(role));
+  const activeProject = useMemo(() => projects.find(item => item.id === projectId) ?? null, [projects, projectId]);
   const securityBadgeCount = pendingApprovals + activeSwitches;
+
+  function openCreateProjectModal() {
+    setNewProjectName('');
+    setNewProjectSlug('');
+    setProjectSlugTouched(false);
+    setScopeError('');
+    setCreateProjectOpen(true);
+  }
+
+  function openCreateEnvironmentModal() {
+    if (!projectId) return;
+    setNewEnvName('');
+    setNewEnvSlug('');
+    setEnvSlugTouched(false);
+    setScopeError('');
+    setCreateEnvOpen(true);
+  }
+
+  async function handleCreateProject(event: FormEvent) {
+    event.preventDefault();
+    const name = newProjectName.trim();
+    const slug = (newProjectSlug.trim() || toSlug(name));
+    if (!name || !slug || scopeBusy) return;
+    setScopeBusy(true);
+    setScopeError('');
+    try {
+      const created = await createProject(name, slug);
+      const updated = await listProjects();
+      setProjects(updated.data);
+      setProjectId(created.id);
+      setCreateProjectOpen(false);
+    } catch (cause) {
+      setScopeError(cause instanceof Error ? cause.message : t('common.requestFailed'));
+    } finally {
+      setScopeBusy(false);
+    }
+  }
+
+  async function handleCreateEnvironment(event: FormEvent) {
+    event.preventDefault();
+    const name = newEnvName.trim();
+    const slug = (newEnvSlug.trim() || toSlug(name));
+    if (!projectId || !name || !slug || scopeBusy) return;
+    setScopeBusy(true);
+    setScopeError('');
+    try {
+      const created = await createEnvironment(projectId, name, slug);
+      const updated = await listEnvironments(projectId);
+      setEnvironments(updated.data);
+      setEnvironmentId(created.id);
+      setCreateEnvOpen(false);
+    } catch (cause) {
+      setScopeError(cause instanceof Error ? cause.message : t('common.requestFailed'));
+    } finally {
+      setScopeBusy(false);
+    }
+  }
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -249,7 +333,21 @@ export function ConsoleShell() {
         <nav className="tp-rail-scroll" aria-label={t('shell.primarySections')}>
           <div className="tp-rail-scope" role="group" aria-label={t('shell.activeScope')}>
             <div className="tp-rail-scope-field">
-              <span className="tp-rail-scope-label" aria-hidden="true">{t('common.project')}</span>
+              <div className="tp-rail-scope-head">
+                <span className="tp-rail-scope-label" aria-hidden="true">{t('common.project')}</span>
+                {canManageScope ? (
+                  <button
+                    type="button"
+                    className="tp-rail-scope-add"
+                    aria-label={t('shell.newProject')}
+                    title={t('shell.newProject')}
+                    disabled={loading}
+                    onClick={openCreateProjectModal}
+                  >
+                    <Plus size={13} strokeWidth={2} aria-hidden="true" />
+                  </button>
+                ) : null}
+              </div>
               <Selector
                 id="project-context"
                 label={t('common.project')}
@@ -266,7 +364,21 @@ export function ConsoleShell() {
               />
             </div>
             <div className="tp-rail-scope-field">
-              <span className="tp-rail-scope-label" aria-hidden="true">{t('common.envShort')}</span>
+              <div className="tp-rail-scope-head">
+                <span className="tp-rail-scope-label" aria-hidden="true">{t('common.envShort')}</span>
+                {canManageScope && projectId ? (
+                  <button
+                    type="button"
+                    className="tp-rail-scope-add"
+                    aria-label={t('shell.newEnvironment')}
+                    title={t('shell.newEnvironment')}
+                    disabled={loading}
+                    onClick={openCreateEnvironmentModal}
+                  >
+                    <Plus size={13} strokeWidth={2} aria-hidden="true" />
+                  </button>
+                ) : null}
+              </div>
               <Selector
                 id="environment-context"
                 label={t('common.envShort')}
@@ -444,6 +556,104 @@ export function ConsoleShell() {
           if (path) navigate(path);
         }}
       />
+
+      <Modal
+        open={createProjectOpen}
+        title={t('shell.newProject')}
+        subtitle={t('shell.newProjectDesc')}
+        onClose={() => { if (!scopeBusy) setCreateProjectOpen(false); }}
+        footer={
+          <>
+            <Button variant="secondary" disabled={scopeBusy} onClick={() => setCreateProjectOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="submit"
+              form="tp-create-project-form"
+              variant="primary"
+              loading={scopeBusy}
+              disabled={!newProjectName.trim() || !(newProjectSlug.trim() || toSlug(newProjectName))}
+            >
+              {t('shell.createProject')}
+            </Button>
+          </>
+        }
+      >
+        <form id="tp-create-project-form" className="tp-stack" onSubmit={handleCreateProject}>
+          {scopeError ? <Banner tone="danger">{scopeError}</Banner> : null}
+          <TextField
+            label={t('shell.projectName')}
+            required
+            autoFocus
+            value={newProjectName}
+            placeholder="customer-support"
+            onChange={event => {
+              const next = event.target.value;
+              setNewProjectName(next);
+              if (!projectSlugTouched) setNewProjectSlug(toSlug(next));
+            }}
+          />
+          <TextField
+            label={t('shell.projectSlug')}
+            required
+            value={newProjectSlug}
+            placeholder="customer-support"
+            onChange={event => {
+              setProjectSlugTouched(true);
+              setNewProjectSlug(event.target.value);
+            }}
+          />
+        </form>
+      </Modal>
+
+      <Modal
+        open={createEnvOpen}
+        title={t('shell.newEnvironment')}
+        subtitle={t('shell.newEnvironmentDesc', {project: activeProject?.name ?? ''})}
+        onClose={() => { if (!scopeBusy) setCreateEnvOpen(false); }}
+        footer={
+          <>
+            <Button variant="secondary" disabled={scopeBusy} onClick={() => setCreateEnvOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="submit"
+              form="tp-create-env-form"
+              variant="primary"
+              loading={scopeBusy}
+              disabled={!newEnvName.trim() || !(newEnvSlug.trim() || toSlug(newEnvName))}
+            >
+              {t('shell.createEnvironment')}
+            </Button>
+          </>
+        }
+      >
+        <form id="tp-create-env-form" className="tp-stack" onSubmit={handleCreateEnvironment}>
+          {scopeError ? <Banner tone="danger">{scopeError}</Banner> : null}
+          <TextField
+            label={t('shell.environmentName')}
+            required
+            autoFocus
+            value={newEnvName}
+            placeholder="Production"
+            onChange={event => {
+              const next = event.target.value;
+              setNewEnvName(next);
+              if (!envSlugTouched) setNewEnvSlug(toSlug(next));
+            }}
+          />
+          <TextField
+            label={t('shell.environmentSlug')}
+            required
+            value={newEnvSlug}
+            placeholder="prod"
+            onChange={event => {
+              setEnvSlugTouched(true);
+              setNewEnvSlug(event.target.value);
+            }}
+          />
+        </form>
+      </Modal>
     </div>
   );
 }

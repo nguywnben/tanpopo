@@ -112,6 +112,14 @@
     min-width: 0;
   }
 
+  .tp-rail-scope-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
   .tp-rail-scope-label {
     padding-inline: 0.125rem;
     font-size: 0.6875rem;
@@ -119,6 +127,32 @@
     font-weight: 500;
     letter-spacing: 0.01em;
     color: var(--tp-ink-secondary);
+  }
+
+  .tp-rail-scope-add {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--tp-radius-sm);
+    background: transparent;
+    color: var(--tp-ink-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  .tp-rail-scope-add:hover:not(:disabled) {
+    background: var(--tp-bg-hover);
+    color: var(--tp-ink-primary);
+  }
+
+  .tp-rail-scope-add:focus-visible {
+    outline: 2px solid var(--tp-focus-ring);
+    outline-offset: 1px;
   }
 
   .tp-scope-selector {

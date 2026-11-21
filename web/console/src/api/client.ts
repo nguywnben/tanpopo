@@ -131,3 +131,18 @@ export async function listEnvironments(projectId: string) {
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;
 }
+
+export async function createProject(name: string, slug: string) {
+  const result = await api.POST('/admin/v1/projects', {body: {name, slug}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function createEnvironment(projectId: string, name: string, slug: string) {
+  const result = await api.POST('/admin/v1/projects/{projectId}/environments', {
+    params: {path: {projectId}},
+    body: {name, slug},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
