@@ -48,7 +48,8 @@ import {useI18n} from '../i18n/I18nProvider';
 import {LanguageSelector} from '../i18n/LanguageSelector';
 import {useTheme} from '../styles/theme';
 import {Modal} from '../ui/Overlays';
-import {Banner, Button, CountPill, IconButton, TanpopoMark, TextField} from '../ui/primitives';
+import {Banner, Button, CountPill, IconButton, TextField} from '../ui/primitives';
+import {TanpopoBrand} from '../ui/TanpopoBrand';
 import {OrgSwitcher} from './OrgSwitcher';
 import {canAccessRoute, navigationGroups, quickCommands, routeForPath, type ConsoleRoute, type NavIconKey, type Role} from './routes';
 
@@ -437,10 +438,7 @@ export function ConsoleShell() {
 
       <aside className="tp-rail" data-open={railOpen ? 'true' : 'false'} aria-label={t('shell.navLabel')}>
         <div className="tp-rail-header">
-          <Link href="/overview" className="tp-brand">
-            <TanpopoMark size={20} />
-            <span>Tanpopo</span>
-          </Link>
+          <TanpopoBrand href="/overview" />
           <IconButton label={t('shell.closeNav')} className="tp-mobile-only" onClick={() => setRailOpen(false)}>
             <X size={16} aria-hidden="true" />
           </IconButton>
@@ -510,10 +508,7 @@ export function ConsoleShell() {
               <Menu size={18} aria-hidden="true" />
             </IconButton>
 
-            <Link href="/overview" className="tp-topbar-brand">
-              <TanpopoMark size={18} />
-              <span>Tanpopo</span>
-            </Link>
+            <TanpopoBrand href="/overview" className="tp-topbar-brand" />
           </div>
 
           <div className="tp-topbar-scope-anchor">

@@ -3,7 +3,7 @@
 - **Unit ID:** `TP-IMP-0047` (`M5` / `EP-09` · **`REQUIRES_STRONG_REVIEW`**)
 - **Model:** **Gemini 4 Hydrogen**
 - **Decision:** `DEC-096` & `DEC-097` *(delegated under `DEC-092` M5 sequential authorization — stopping strictly at `GATE-REL-07` with zero tags/releases)*
-- **Branch / PR:** `develop` → `main` *(Initial M5 PR [#39](https://github.com/nguywnben/tanpopo/pull/39) merged at `main` SHA [`543e40ac`](https://github.com/nguywnben/tanpopo/commit/543e40ac33dbaaa83a75ae822dc507095a25e4f7), CI [`45011516212`](https://github.com/nguywnben/tanpopo/actions/runs/45011516212) & [`45011516326`](https://github.com/nguywnben/tanpopo/actions/runs/45011516326) `SUCCESS`; follow-up closure PR `develop -> main` pending merge)*
+- **Branch / PR:** `develop` → `main` *(Initial M5 PR [#39](https://github.com/nguywnben/tanpopo/pull/39) merged at `main` SHA [`543e40ac`](https://github.com/nguywnben/tanpopo/commit/543e40ac33dbaaa83a75ae822dc507095a25e4f7), CI [`45011516212`](https://github.com/nguywnben/tanpopo/actions/runs/45011516212) & [`45011516326`](https://github.com/nguywnben/tanpopo/actions/runs/45011516326) `SUCCESS`; follow-up closure PR [#40](https://github.com/nguywnben/tanpopo/pull/40) merged at `main` SHA [`e115ae4a`](https://github.com/nguywnben/tanpopo/commit/e115ae4ae2da4199c1fb9e24f087977ce8269a11), CI [`45037833002`](https://github.com/nguywnben/tanpopo/actions/runs/45037833002) & [`45037833008`](https://github.com/nguywnben/tanpopo/actions/runs/45037833008) `SUCCESS`)*
 - **Verdict:** **`READY_FOR_GATE_REL_07`** *(All engineering deliverables, follow-up UI/i18n/E2E/SQLite/Docker HA closures, independent strong reviews, and `< 60s` canary drills verified; **`GATE-REL-07` human Product Owner launch sign-off remains `BLOCKED` fail-closed**)*
 
 ---

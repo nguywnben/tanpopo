@@ -49,6 +49,7 @@ out/
 *.pfx
 *.tpop.enc
 *.tpbundle
+.tanpopo-master-kek
 
 # Environment files
 .env

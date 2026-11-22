@@ -1,0 +1,19 @@
+name: Feature Request
+description: Propose an enhancement, adapter, extension hook, or operational workflow
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What operational need or workflow gap does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the expected CLI, API, or Console experience and any compatibility considerations.
+    validations:
+      required: true

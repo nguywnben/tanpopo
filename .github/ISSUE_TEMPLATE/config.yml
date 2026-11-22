@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability (Private)
+    url: https://github.com/nguywnben/tanpopo/security/advisories/new
+    about: Report security vulnerabilities privately per SECURITY.md — do not open public issues for security flaws.
+  - name: Documentation & Guides
+    url: https://github.com/nguywnben/tanpopo/blob/main/docs/README.md
+    about: Check the quickstart, operations guides, and troubleshooting runbooks first.
