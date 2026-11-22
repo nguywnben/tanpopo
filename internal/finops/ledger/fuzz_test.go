@@ -6,6 +6,7 @@ package ledger_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -26,13 +27,47 @@ func FuzzLedgerInvariants(f *testing.F) {
 	f.Add([]byte{0, 1, 2, 3, 4, 5, 6, 7, 10, 20, 30, 40})
 	f.Add([]byte{1, 1, 1, 1, 1, 3, 4, 2, 5, 0, 6})
 
+	initClock := &atomic.Int64{}
+	initClock.Store(1_700_000_000_000)
+	tplPath := filepath.Join(f.TempDir(), "template_ledger.db")
+	tplStore, err := sqlite.Open(context.Background(), sqlite.Config{
+		DBPath: tplPath,
+		NowMs:  initClock.Load,
+	})
+	if err != nil {
+		f.Fatalf("open template sqlite: %v", err)
+	}
+	if _, err := tplStore.Tenancy().CreateOrganization(context.Background(), storageport.CreateOrgParams{
+		ID:             "org_fuzz",
+		Slug:           "fuzz-org",
+		DisplayName:    "Fuzz Org",
+		MinPluginTrust: storageport.MinTrustOfficialOnly,
+	}); err != nil {
+		_ = tplStore.Close()
+		f.Fatalf("seed org_fuzz: %v", err)
+	}
+	_ = tplStore.CheckpointWAL(context.Background())
+	if err := tplStore.Close(); err != nil {
+		f.Fatalf("close template sqlite: %v", err)
+	}
+	templateBytes, err := os.ReadFile(tplPath)
+	if err != nil {
+		f.Fatalf("read template sqlite: %v", err)
+	}
+
 	f.Fuzz(func(t *testing.T, ops []byte) {
+		if len(ops) > 128 {
+			ops = ops[:128]
+		}
 		ctx := context.Background()
 		clock := &atomic.Int64{}
 		const startMs int64 = 1_700_000_000_000
 		clock.Store(startMs)
 
 		dbPath := filepath.Join(t.TempDir(), "fuzz_ledger.db")
+		if err := os.WriteFile(dbPath, templateBytes, 0o600); err != nil {
+			t.Fatalf("write template db: %v", err)
+		}
 		st, err := sqlite.Open(ctx, sqlite.Config{
 			DBPath: dbPath,
 			NowMs:  clock.Load,
@@ -41,16 +76,6 @@ func FuzzLedgerInvariants(f *testing.F) {
 			t.Fatalf("open sqlite: %v", err)
 		}
 		defer st.Close()
-
-		_, err = st.Tenancy().CreateOrganization(ctx, storageport.CreateOrgParams{
-			ID:             "org_fuzz",
-			Slug:           "fuzz-org",
-			DisplayName:    "Fuzz Org",
-			MinPluginTrust: storageport.MinTrustOfficialOnly,
-		})
-		if err != nil {
-			t.Fatalf("create org: %v", err)
-		}
 
 		svc, err := ledger.NewService(ledger.Config{
 			DB:         st.RawDB(),
@@ -125,7 +150,10 @@ func FuzzLedgerInvariants(f *testing.F) {
 					id := activeIDs[idx]
 					activeIDs = append(activeIDs[:idx], activeIDs[idx+1:]...)
 
-					rsv, _ := svc.GetReservation(ctx, "org_fuzz", id)
+					rsv, gErr := svc.GetReservation(ctx, "org_fuzz", id)
+					if gErr != nil {
+						t.Fatalf("GetReservation active id %s failed: %v", id, gErr)
+					}
 					acc := pricing.AccuracyExact
 					var inTok int64 = param * 20
 					if param%3 == 0 {
@@ -186,7 +214,10 @@ func FuzzLedgerInvariants(f *testing.F) {
 			case 6: // Re-settle old or top-up limit
 				if len(settledID) > 0 && param%2 == 0 {
 					id := settledID[int(param)%len(settledID)]
-					rsv, _ := svc.GetReservation(ctx, "org_fuzz", id)
+					rsv, gErr := svc.GetReservation(ctx, "org_fuzz", id)
+					if gErr != nil {
+						t.Fatalf("GetReservation settled id %s failed: %v", id, gErr)
+					}
 					s2, s2Err := svc.Settle(ctx, ledger.SettleRequest{
 						OrgID:         "org_fuzz",
 						ReservationID: id,

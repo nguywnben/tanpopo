@@ -45,7 +45,7 @@ func Handler() http.Handler {
 			return
 		}
 		cleaned := path.Clean("/" + r.URL.Path)
-		if isReservedBackendPrefix(cleaned) {
+		if isReservedBackendRequest(cleaned, r) {
 			http.NotFound(w, r)
 			return
 		}
@@ -134,8 +134,18 @@ func BundleFS() fs.FS {
 	return root
 }
 
-func isReservedBackendPrefix(p string) bool {
-	for _, prefix := range []string{"/v1", "/admin/v1", "/native", "/mcp", "/a2a", "/.well-known"} {
+func isReservedBackendRequest(p string, r *http.Request) bool {
+	// MCP Streamable HTTP transport lives strictly at /mcp; Console SPA uses /mcp/servers and /mcp/tools.
+	if p == "/mcp" {
+		return true
+	}
+	// Console SPA renders /a2a/agents on browser HTML navigation without API Authorization header.
+	if p == "/a2a/agents" && r != nil && (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
+		strings.TrimSpace(r.Header.Get("Authorization")) == "" &&
+		strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html") {
+		return false
+	}
+	for _, prefix := range []string{"/v1", "/admin/v1", "/native", "/a2a", "/.well-known"} {
 		if p == prefix || strings.HasPrefix(p, prefix+"/") {
 			return true
 		}

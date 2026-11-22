@@ -31,6 +31,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -142,6 +143,7 @@ type ServerConfig struct {
 	BlockedAdminPorts       []int
 	OfflineMode             bool
 	MultiOrgDisabled        bool
+	TrustedProxyCIDRs       []string
 	Version                 string
 }
 
@@ -267,6 +269,7 @@ type Server struct {
 	blockedPorts           map[int]bool
 	offlineMode            bool
 	multiOrgDisabled       bool
+	trustedProxyCIDRs      []netip.Prefix
 	version                string
 	quarantineMu           sync.Mutex
 
@@ -411,6 +414,11 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		}
 	}
 
+	trustedProxies, tpErr := parseTrustedProxyCIDRs(cfg.TrustedProxyCIDRs)
+	if tpErr != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidServerConfig, tpErr)
+	}
+
 	s := &Server{
 		db:                     db,
 		dialect:                port.DetectDialect(context.Background(), db),
@@ -449,6 +457,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		blockedPorts:           blockedPorts,
 		offlineMode:            cfg.OfflineMode,
 		multiOrgDisabled:       cfg.MultiOrgDisabled,
+		trustedProxyCIDRs:      trustedProxies,
 		version:                version,
 	}
 
@@ -1377,4 +1386,64 @@ func (s *Server) requireActiveOrgAndProject(w http.ResponseWriter, r *http.Reque
 		return false
 	}
 	return true
+}
+
+func parseTrustedProxyCIDRs(raw []string) ([]netip.Prefix, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	out := make([]netip.Prefix, 0, len(raw))
+	for _, entry := range raw {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if pfx, err := netip.ParsePrefix(entry); err == nil {
+			out = append(out, pfx.Masked())
+			continue
+		}
+		if addr, err := netip.ParseAddr(entry); err == nil {
+			addr = addr.Unmap()
+			out = append(out, netip.PrefixFrom(addr, addr.BitLen()))
+			continue
+		}
+		return nil, fmt.Errorf("invalid trusted proxy CIDR/IP %q", entry)
+	}
+	return out, nil
+}
+
+func (s *Server) isTrustedProxy(remoteAddr string) bool {
+	if s == nil || len(s.trustedProxyCIDRs) == 0 {
+		return false
+	}
+	host := strings.TrimSpace(remoteAddr)
+	if h, _, err := netSplitHostPortSafe(host); err == nil && h != "" {
+		host = h
+	}
+	addr, err := netip.ParseAddr(strings.Trim(host, "[]"))
+	if err != nil {
+		return false
+	}
+	addr = addr.Unmap()
+	for _, pfx := range s.trustedProxyCIDRs {
+		if pfx.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+func netSplitHostPortSafe(hostPort string) (string, string, error) {
+	if idx := strings.LastIndex(hostPort, ":"); idx > 0 {
+		if strings.HasPrefix(hostPort, "[") {
+			if closeIdx := strings.Index(hostPort, "]"); closeIdx > 0 && idx > closeIdx {
+				return hostPort[1:closeIdx], hostPort[idx+1:], nil
+			}
+			return "", "", fmt.Errorf("invalid bracketed addr")
+		}
+		if strings.Count(hostPort, ":") == 1 {
+			return hostPort[:idx], hostPort[idx+1:], nil
+		}
+	}
+	return "", "", fmt.Errorf("no port")
 }

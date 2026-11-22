@@ -585,4 +585,53 @@ func TestTrapReasonSnapshotAgeAndSessionRevoke(t *testing.T) {
 	}
 }
 
+func TestBatchRequestTracePersistence(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t)
+	})
 
+	ctx := context.Background()
+	st, err := sqlite.Open(ctx, sqlite.Config{
+		DBPath: filepath.Join(t.TempDir(), "otel_batch.db"),
+	})
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	pipe, err := otel.NewPipeline(otel.PipelineConfig{
+		DB:                   st.RawDB(),
+		MaxPersistQueueBytes: 8 * 1024 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("NewPipeline: %v", err)
+	}
+	defer func() { _ = pipe.Shutdown(context.Background()) }()
+
+	const total = 150
+	for i := 0; i < total; i++ {
+		org := "org_batch_a"
+		if i%2 == 1 {
+			org = "org_batch_b"
+		}
+		pipe.EnqueueRequestTrace(otel.RequestTraceRecord{
+			RequestID:       fmt.Sprintf("trc_batch_%03d", i),
+			OrgID:           org,
+			ProjectID:       "prj_batch",
+			EnvID:           "env_batch",
+			EntryPoint:      "unified_http",
+			HTTPStatus:      200,
+			TotalDurationMs: int64(i + 1),
+		})
+	}
+	if err := pipe.ForceFlush(ctx); err != nil {
+		t.Fatalf("ForceFlush: %v", err)
+	}
+	var count int
+	if err := st.RawDB().QueryRowContext(ctx, `SELECT COUNT(*) FROM request_traces_meta WHERE request_id LIKE 'trc_batch_%'`).Scan(&count); err != nil {
+		t.Fatalf("count batched traces: %v", err)
+	}
+	if count != total {
+		t.Fatalf("expected %d persisted traces across batches, got %d", total, count)
+	}
+}

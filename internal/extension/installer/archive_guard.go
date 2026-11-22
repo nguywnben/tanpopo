@@ -114,6 +114,22 @@ func ExtractSafeArchive(r io.Reader, pluginsDir string) (*ExtractedArchive, erro
 		return nil, err
 	}
 
+	// Bound compressed stream to MaxArchiveCompressedBytes + 1 to fail immediately on oversized inputs.
+	// Wrap in bufio.Reader so gzip.NewReader uses our reader directly instead of allocating a hidden internal buffer,
+	// letting us detect any byte immediately following gzip member 1's EOF trailer.
+	archiveHash := sha256.New()
+	limitedCompressed := io.LimitReader(r, MaxArchiveCompressedBytes+1)
+	compCounter := &countingReader{r: io.TeeReader(limitedCompressed, archiveHash)}
+	compBufReader := bufio.NewReader(compCounter)
+
+	gz, err := gzip.NewReader(compBufReader)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid gzip header: %v", ErrInvalidArchive, err)
+	}
+	// Reject concatenated multi-member gzip streams (hidden payload smuggling defense).
+	gz.Multistream(false)
+	defer func() { _ = gz.Close() }()
+
 	stagingDir, err := os.MkdirTemp(canonPluginsDir, "stage-*")
 	if err != nil {
 		return nil, fmt.Errorf("installer: create staging dir: %w", err)
@@ -132,22 +148,6 @@ func ExtractSafeArchive(r io.Reader, pluginsDir string) (*ExtractedArchive, erro
 	if !isStrictlyInside(canonPluginsDir, canonStagingDir) {
 		return nil, fmt.Errorf("%w: staging dir escaped plugins_dir", ErrPathNotConfined)
 	}
-
-	// Bound compressed stream to MaxArchiveCompressedBytes + 1 to fail immediately on oversized inputs.
-	// Wrap in bufio.Reader so gzip.NewReader uses our reader directly instead of allocating a hidden internal buffer,
-	// letting us detect any byte immediately following gzip member 1's EOF trailer.
-	archiveHash := sha256.New()
-	limitedCompressed := io.LimitReader(r, MaxArchiveCompressedBytes+1)
-	compCounter := &countingReader{r: io.TeeReader(limitedCompressed, archiveHash)}
-	compBufReader := bufio.NewReader(compCounter)
-
-	gz, err := gzip.NewReader(compBufReader)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid gzip header: %v", ErrInvalidArchive, err)
-	}
-	// Reject concatenated multi-member gzip streams (hidden payload smuggling defense).
-	gz.Multistream(false)
-	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	seenPaths := make(map[string]bool)

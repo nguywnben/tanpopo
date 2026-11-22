@@ -323,12 +323,18 @@ func nonEmptyRoleSlice(roles []string) []string {
 	return out
 }
 
-func oidcRequestIsHTTPS(r *http.Request) bool {
-	return r != nil && (r.TLS != nil || strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https"))
+func (s *Server) oidcRequestIsHTTPS(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.TLS != nil {
+		return true
+	}
+	return s.isTrustedProxy(r.RemoteAddr) && strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
 }
 
-func oidcStateCookieName(r *http.Request) string {
-	if oidcRequestIsHTTPS(r) {
+func (s *Server) oidcStateCookieName(r *http.Request) string {
+	if s.oidcRequestIsHTTPS(r) {
 		return "__Host-tanpopo_oidc_state"
 	}
 	return "tanpopo_oidc_state"
@@ -350,12 +356,13 @@ func (s *Server) handleAuthOIDCStart(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "oidc_start_failed", "upstream_error", "failed initializing OIDC login flow", true, nil)
 		return
 	}
+	isHTTPS := s.oidcRequestIsHTTPS(r)
 	http.SetCookie(w, &http.Cookie{
-		Name:     oidcStateCookieName(r),
+		Name:     s.oidcStateCookieName(r),
 		Value:    s.computeOIDCStateCookieMAC(stateVal),
 		Path:     "/admin/v1/auth/oidc/callback",
 		HttpOnly: true,
-		Secure:   oidcRequestIsHTTPS(r),
+		Secure:   isHTTPS,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   600,
 	})
@@ -370,14 +377,15 @@ func (s *Server) handleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) 
 	}
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
 	state := strings.TrimSpace(r.URL.Query().Get("state"))
-	cookieName := oidcStateCookieName(r)
+	isHTTPS := s.oidcRequestIsHTTPS(r)
+	cookieName := s.oidcStateCookieName(r)
 	stateCookie, cerr := r.Cookie(cookieName)
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    "",
 		Path:     "/admin/v1/auth/oidc/callback",
 		HttpOnly: true,
-		Secure:   oidcRequestIsHTTPS(r),
+		Secure:   isHTTPS,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})

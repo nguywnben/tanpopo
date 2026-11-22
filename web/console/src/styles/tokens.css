@@ -69,6 +69,7 @@
 
     --tp-status-warn-text: var(--color-text-warning);
     --tp-status-error: var(--color-error);
+    --tp-destructive-bg: light-dark(#dc2626, #b91c1c);
     --tp-status-error-text: var(--color-text-error);
     --tp-status-error-bg: var(--color-error-muted);
     --tp-status-error-border: light-dark(rgba(220, 38, 38, 0.28), rgba(239, 68, 68, 0.42));

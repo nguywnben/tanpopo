@@ -11,7 +11,7 @@
   }
 
   [data-astryx-theme='neutral'] .astryx-button[data-variant='destructive'] {
-    background-color: var(--tp-status-error);
+    background-color: var(--tp-destructive-bg);
     color: #ffffff;
   }
 

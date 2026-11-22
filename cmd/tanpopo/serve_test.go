@@ -808,3 +808,92 @@ func TestServeFailsClosedOnPostgresAndInvalidStorageEngine(t *testing.T) {
 		t.Fatalf("expected fail-closed error when postgres runtime is selected without DSN")
 	}
 }
+
+func TestAllowedOriginsEnvAndLoopbackFallback(t *testing.T) {
+	t.Setenv("TANPOPO_ALLOWED_ORIGINS", "")
+	def := allowedOrigins("127.0.0.1:8080")
+	if len(def) != 2 || def[0] != "http://127.0.0.1:8080" || def[1] != "https://127.0.0.1:8080" {
+		t.Fatalf("unexpected default allowedOrigins: %v", def)
+	}
+	if wild := allowedOrigins("0.0.0.0:8080"); wild != nil {
+		t.Fatalf("expected nil allowedOrigins for unspecified listen addr 0.0.0.0:8080, got %v", wild)
+	}
+	if nonLoop := allowedOrigins("10.0.1.5:8080"); len(nonLoop) != 1 || nonLoop[0] != "https://10.0.1.5:8080" {
+		t.Fatalf("expected https-only origin for non-loopback listen addr, got %v", nonLoop)
+	}
+
+	t.Setenv("TANPOPO_ALLOWED_ORIGINS", " https://Console.Example.COM/ , , *, null, ftp://bad.example, https://user:pass@evil.example, https://evil.example/path, https://127.0.0.1:8443 ")
+	custom := allowedOrigins("127.0.0.1:8080")
+	if len(custom) != 2 || custom[0] != "https://console.example.com" || custom[1] != "https://127.0.0.1:8443" {
+		t.Fatalf("unexpected custom allowedOrigins: %v", custom)
+	}
+
+	t.Setenv("TANPOPO_ALLOWED_ORIGINS", "*,null,invalid-origin")
+	if badOnly := allowedOrigins("127.0.0.1:8080"); len(badOnly) != 0 {
+		t.Fatalf("expected all invalid TANPOPO_ALLOWED_ORIGINS entries to fail closed, got %v", badOnly)
+	}
+}
+
+func TestA2AAndMCPSPADispatch(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("TANPOPO_DATA_DIR", dataDir)
+	t.Setenv("TANPOPO_PLUGINS_DIR", filepath.Join(dataDir, "plugins"))
+	t.Setenv("TANPOPO_DB_PATH", filepath.Join(dataDir, "tanpopo.db"))
+	t.Setenv("TANPOPO_LOCK_FILE", filepath.Join(dataDir, "tanpopo.lock"))
+	t.Setenv("TANPOPO_BOOTSTRAP_TOKEN_FILE", filepath.Join(dataDir, "bootstrap.token"))
+	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("TANPOPO_TEST_HERMETIC", "1")
+	t.Setenv("TANPOPO_A2A_ENABLED", "true")
+
+	handler, closeRuntime, err := buildRuntime(context.Background(), "all", "127.0.0.1:8080")
+	if err != nil {
+		t.Fatalf("buildRuntime: %v", err)
+	}
+	defer func() { _ = closeRuntime() }()
+
+	// Browser navigation to /a2a/agents or /mcp/servers serves Web Console HTML; uncleaned /a2a//agents canonicalizes with 307.
+	for _, route := range []string{"/a2a/agents", "/mcp/servers"} {
+		req := httptest.NewRequest(http.MethodGet, route, nil)
+		req.Header.Set("Accept", "text/html")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || !strings.Contains(strings.ToLower(rec.Header().Get("Content-Type")), "text/html") {
+			t.Fatalf("GET %s text/html expected 200 text/html, got %d type=%q", route, rec.Code, rec.Header().Get("Content-Type"))
+		}
+	}
+	reqUnclean := httptest.NewRequest(http.MethodGet, "/a2a//agents", nil)
+	reqUnclean.Header.Set("Accept", "text/html")
+	recUnclean := httptest.NewRecorder()
+	handler.ServeHTTP(recUnclean, reqUnclean)
+	if recUnclean.Code != http.StatusTemporaryRedirect || recUnclean.Header().Get("Location") != "/a2a/agents" {
+		t.Fatalf("GET /a2a//agents expected 307 -> /a2a/agents, got %d Location=%q", recUnclean.Code, recUnclean.Header().Get("Location"))
+	}
+
+	// API requests with Authorization or X-Tanpopo-Virtual-Key stay on A2A handler (never SPA HTML).
+	reqAPI := httptest.NewRequest(http.MethodGet, "/a2a/agents", nil)
+	reqAPI.Header.Set("Accept", "text/html")
+	reqAPI.Header.Set("Authorization", "Bearer vk_tp_test_00000000000000000000000000000000")
+	recAPI := httptest.NewRecorder()
+	handler.ServeHTTP(recAPI, reqAPI)
+	if strings.Contains(strings.ToLower(recAPI.Header().Get("Content-Type")), "text/html") {
+		t.Fatalf("authenticated A2A API call unexpectedly returned SPA HTML")
+	}
+}
+
+func TestPreStopWaitFromEnv(t *testing.T) {
+	t.Setenv("TANPOPO_PRESTOP_WAIT", "")
+	d, err := preStopWaitFromEnv(os.LookupEnv)
+	if err != nil || d != 0 {
+		t.Fatalf("expected 0s default preStop wait, got %v err=%v", d, err)
+	}
+	t.Setenv("TANPOPO_PRESTOP_WAIT", "750ms")
+	d, err = preStopWaitFromEnv(os.LookupEnv)
+	if err != nil || d != 750*time.Millisecond {
+		t.Fatalf("expected 750ms preStop wait, got %v err=%v", d, err)
+	}
+	t.Setenv("TANPOPO_PRESTOP_WAIT", "45s")
+	if _, err := preStopWaitFromEnv(os.LookupEnv); err == nil {
+		t.Fatal("expected >30s TANPOPO_PRESTOP_WAIT to fail validation")
+	}
+}
+

@@ -23,6 +23,7 @@ import {
   Terminal,
   X,
 } from 'lucide-react';
+import {Button as AstryxButton} from '@astryxdesign/core/Button';
 import {CommandPalette} from '@astryxdesign/core/CommandPalette';
 import {Kbd} from '@astryxdesign/core/Kbd';
 import {Popover} from '@astryxdesign/core/Popover';
@@ -628,7 +629,6 @@ export function ConsoleShell() {
                   type="button"
                   className="tp-scope-switcher"
                   disabled={loading}
-                  aria-label={t('shell.activeScope')}
                   title={
                     showOrgSwitcher && activeOrg
                       ? `${activeOrg.name} / ${activeProject?.name ?? t('common.noProject')} / ${activeEnvironment?.name ?? t('common.noEnv')}`
@@ -640,13 +640,18 @@ export function ConsoleShell() {
                     {showOrgSwitcher && activeOrg ? (
                       <>
                         <span className="tp-scope-switcher-org">{activeOrg.name}</span>
+                        {' '}
                         <span className="tp-scope-switcher-sep" aria-hidden="true">/</span>
+                        {' '}
                       </>
                     ) : null}
                     <span className="tp-scope-switcher-project">{activeProject?.name ?? t('common.noProject')}</span>
+                    {' '}
                     <span className="tp-scope-switcher-sep" aria-hidden="true">/</span>
+                    {' '}
                     <span className="tp-scope-switcher-env">{activeEnvironment?.name ?? t('common.noEnv')}</span>
                   </span>
+                  <span className="sr-only"> ({t('shell.activeScope')})</span>
                   <ChevronsUpDown size={13} strokeWidth={1.8} className="tp-scope-switcher-chevron" aria-hidden="true" />
                 </button>
               )}
@@ -654,17 +659,16 @@ export function ConsoleShell() {
           </div>
 
           <div className="tp-topbar-actions">
-            <Button
+            <AstryxButton
               variant="secondary"
               size="sm"
               className="tp-jump-btn"
-              aria-label={t('shell.jump')}
+              label={t('shell.jump')}
+              icon={<Search size={14} aria-hidden="true" />}
+              endContent={<span className="tp-desktop-kbd" aria-hidden="true"><Kbd keys="mod+k" /></span>}
+              aria-keyshortcuts="Control+K Meta+K"
               onClick={() => setPaletteOpen(true)}
-            >
-              <Search size={14} aria-hidden="true" />
-              <span className="tp-jump-label">{t('shell.jump')}</span>
-              <span className="tp-desktop-kbd"><Kbd keys="mod+k" /></span>
-            </Button>
+            />
 
             <div className="tp-topbar-lang">
               <LanguageSelector id="console-language-selector" />
@@ -683,18 +687,16 @@ export function ConsoleShell() {
             {canUseEmergency ? (
               <>
                 <span className="tp-topbar-divider" aria-hidden="true" />
-                <Button
-                  variant={activeSwitches > 0 ? 'danger' : 'danger-outline'}
+                <AstryxButton
+                  variant={activeSwitches > 0 ? 'destructive' : 'secondary'}
                   size="sm"
-                  className="tp-killswitch-btn"
-                  aria-label={t('shell.killSwitch')}
-                  title={t('shell.killSwitch')}
+                  className={activeSwitches > 0 ? 'tp-killswitch-btn' : 'tp-btn-danger-outline tp-killswitch-btn'}
+                  label={t('shell.killSwitch')}
+                  icon={<ShieldAlert size={14} aria-hidden="true" />}
+                  endContent={activeSwitches > 0 ? <CountPill count={activeSwitches} /> : undefined}
+                  tooltip={t('shell.killSwitch')}
                   onClick={() => navigate('/security/kill-switches')}
-                >
-                  <ShieldAlert size={14} aria-hidden="true" />
-                  <span className="tp-killswitch-label">{t('shell.killSwitch')}</span>
-                  {activeSwitches > 0 ? <CountPill count={activeSwitches} /> : null}
-                </Button>
+                />
               </>
             ) : null}
           </div>

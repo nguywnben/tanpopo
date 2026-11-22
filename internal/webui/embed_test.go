@@ -128,7 +128,7 @@ func TestHandlerDoesNotFallbackForAPIOrMissingAsset(t *testing.T) {
 	for _, p := range []string{
 		"/v1/models", "/admin/v1/setup", "/native/openai/v1/models",
 		"/mcp", "//mcp", "/foo/../mcp", "/x/../native/openai",
-		"/a2a/tasks", "/.well-known/agent.json", "//.well-known/agent.json",
+		"/a2a/agents", "/a2a/tasks", "/.well-known/agent.json", "//.well-known/agent.json",
 		"/assets/missing.js",
 	} {
 		w := httptest.NewRecorder()
@@ -136,6 +136,20 @@ func TestHandlerDoesNotFallbackForAPIOrMissingAsset(t *testing.T) {
 		if w.Code != 404 {
 			t.Errorf("GET %s status=%d, want 404", p, w.Code)
 		}
+	}
+	for _, p := range []string{"/mcp/servers", "/mcp/tools"} {
+		w := httptest.NewRecorder()
+		Handler().ServeHTTP(w, httptest.NewRequest("GET", p, nil))
+		if w.Code != 200 || !strings.Contains(w.Body.String(), "Tanpopo Console") {
+			t.Errorf("GET %s status=%d, want 200 SPA fallback", p, w.Code)
+		}
+	}
+	a2aHTMLReq := httptest.NewRequest("GET", "/a2a/agents", nil)
+	a2aHTMLReq.Header.Set("Accept", "text/html,application/xhtml+xml")
+	w := httptest.NewRecorder()
+	Handler().ServeHTTP(w, a2aHTMLReq)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "Tanpopo Console") {
+		t.Errorf("HTML GET /a2a/agents status=%d, want 200 SPA fallback", w.Code)
 	}
 }
 

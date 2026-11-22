@@ -66,7 +66,7 @@ describe('Multi-Org progressive disclosure & OrganizationsAdminPage', () => {
     });
 
     render(wrap(<ConsoleShell />));
-    const trigger = await screen.findByRole('button', {name: 'Active workspace scope'});
+    const trigger = await screen.findByRole('button', {name: /Active workspace scope/i});
     await waitFor(() => expect(trigger).not.toBeDisabled());
     expect(trigger.textContent).not.toContain('Alpha Org');
     fireEvent.click(trigger);
@@ -128,7 +128,7 @@ describe('Multi-Org progressive disclosure & OrganizationsAdminPage', () => {
 
     const {container} = render(wrap(<ConsoleShell />));
     await screen.findByText('Air-gapped offline mode');
-    const trigger = await screen.findByRole('button', {name: 'Active workspace scope'});
+    const trigger = await screen.findByRole('button', {name: /Active workspace scope/i});
     await waitFor(() => expect(trigger.textContent).toContain('Alpha Org'));
 
     fireEvent.click(trigger);

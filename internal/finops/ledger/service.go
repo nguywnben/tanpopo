@@ -535,21 +535,38 @@ func (s *Service) Reserve(ctx context.Context, req ReserveRequest) (*Reservation
 			return iErr
 		}
 
-		for _, l := range ledgers {
-			if _, jErr := tx.ExecContext(ctx, `
-				INSERT INTO budget_reservation_ledgers (org_id, reservation_id, ledger_id, held_micros)
-				VALUES (?, ?, ?, ?)`,
-				req.OrgID, resID, l.ID, req.HoldMicros,
-			); jErr != nil {
-				return jErr
+		var ledgerIDs []string
+		if len(ledgers) > 0 {
+			ledgerIDs = make([]string, len(ledgers))
+			for i, l := range ledgers {
+				if _, jErr := tx.ExecContext(ctx, `
+					INSERT INTO budget_reservation_ledgers (org_id, reservation_id, ledger_id, held_micros)
+					VALUES (?, ?, ?, ?)`,
+					req.OrgID, resID, l.ID, req.HoldMicros,
+				); jErr != nil {
+					return jErr
+				}
+				ledgerIDs[i] = l.ID
+			}
+			if len(ledgerIDs) > 1 {
+				sort.Strings(ledgerIDs)
 			}
 		}
 
-		loaded, lErr := scanReservationByIDTx(ctx, tx, req.OrgID, resID)
-		if lErr != nil {
-			return lErr
+		out = &Reservation{
+			ID:               resID,
+			RequestID:        req.RequestID,
+			OrgID:            req.OrgID,
+			ProjectID:        req.ProjectID,
+			EnvID:            req.EnvID,
+			VirtualKeyID:     req.VirtualKeyID,
+			State:            StateReservedHold,
+			HoldMicros:       req.HoldMicros,
+			LeaseExpiresAtMs: expiresAt,
+			LedgerIDs:        ledgerIDs,
+			CreatedAtMs:      now,
+			UpdatedAtMs:      now,
 		}
-		out = loaded
 		return nil
 	})
 	if err != nil {

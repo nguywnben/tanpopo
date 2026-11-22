@@ -1722,9 +1722,13 @@ func TestInstallerCT20ResidualUnpinnedPolicyAndNoVersionFallback(t *testing.T) {
 func FuzzArchiveAndManifest(f *testing.F) {
 	f.Add([]byte("not-a-gzip"))
 	f.Add(makeWasmManifestYAML("@acme/seed", "0.1.0", "0.1", ">=0.1.0 <0.3.0", "", []string{"api.example.com"}, []string{"api_key"}, 16))
+	pluginsRoot := f.TempDir()
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _ = ParseAndValidateManifest(data, DefaultValidationPolicy(), nil)
-		_, _ = ExtractSafeArchive(bytes.NewReader(data), t.TempDir())
+		ext, _ := ExtractSafeArchive(bytes.NewReader(data), pluginsRoot)
+		if ext != nil && ext.StagingDir != "" {
+			_ = os.RemoveAll(ext.StagingDir)
+		}
 	})
 }
 
