@@ -1,7 +1,8 @@
 # `TP-IMP-0043` Execution & Verification Report — `k6` Load Suite, Empirical `SLO-01..08` Verification & Timed `FMEA-01..08` / `DR-01..04` Drills
 
 > **Unit:** `TP-IMP-0043` (`M5` / `EP-09` · `STANDARD_REVIEW`)
-> **Branch / Workflow:** `develop` -> PR [#35](https://github.com/nguywnben/tanpopo/pull/35) -> `main` *(post-merge `main` SHA & CI run backfilled upon advancing to `TP-IMP-0044`; accepted under [`DEC-092`](../governance/decisions.md))*
+> **Branch / Workflow:** `develop` -> PR [#35](https://github.com/nguywnben/tanpopo/pull/35) -> `main` (`44689bbc4320398a09f60e03dd28132a9f1e9190`, accepted `2026-11-22` under [`DEC-092`](../governance/decisions.md))
+> **Post-Merge CI:** [`44991547245`](https://github.com/nguywnben/tanpopo/actions/runs/44991547245) (`Stage 0-1` `SUCCESS`) · [`44991547244`](https://github.com/nguywnben/tanpopo/actions/runs/44991547244) (`Release Artifact Dry Run` `SUCCESS`)
 > **Author:** **`Gemini 4 Hydrogen`**
 > **Independent Reviewer (`STANDARD_REVIEW`):**
 > - `code-reviewer` (`bf60bead45843d13feed71429f820fe4`): **`APPROVE`** (Critical: 0, High: 0, Medium: 0, Low: 0 — all initial findings verified resolved)

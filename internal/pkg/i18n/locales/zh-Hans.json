@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "重建 Valkey 状态时必须提供 --valkey-addrs。",
   "cli.admin.verify_state.err.tampered": "审计哈希链校验失败：检测到篡改。",
   "cli.admin.verify_state.err.failed": "运行状态校验失败",
-  "cli.admin.verify_state.output": "状态检查 {{status}} (引擎={{engine}} 审计事件={{events}} 回收孤儿={{orphans}} 恢复Valkey锁定={{restored}})"
+  "cli.admin.verify_state.output": "状态检查 {{status}} (引擎={{engine}} 审计事件={{events}} 回收孤儿={{orphans}} 恢复Valkey锁定={{restored}})",
+  "cli.plugin.migrate_check.short": "检查扩展清单的 N/N-1 契约与 Core 版本兼容性",
+  "cli.plugin.migrate_check.flag.target_core": "要校验兼容性的目标 Tanpopo Core SemVer 版本",
+  "cli.plugin.migrate_check.flag.supported_contracts": "以逗号分隔的支持 contractVersion 窗口（N-1 与 N）"
 }

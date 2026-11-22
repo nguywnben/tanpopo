@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "Valkey 상태 재구축 시 --valkey-addrs가 필요합니다.",
   "cli.admin.verify_state.err.tampered": "감사 해시 체인 검증 실패: 변조가 감지되었습니다.",
   "cli.admin.verify_state.err.failed": "운영 상태 검증 실패",
-  "cli.admin.verify_state.output": "상태 확인 {{status}} (엔진={{engine}} 감사_이벤트={{events}} 고아_회수={{orphans}} Valkey_복원={{restored}})"
+  "cli.admin.verify_state.output": "상태 확인 {{status}} (엔진={{engine}} 감사_이벤트={{events}} 고아_회수={{orphans}} Valkey_복원={{restored}})",
+  "cli.plugin.migrate_check.short": "확장 매니페스트의 N/N-1 계약 및 Core 버전 호환성 검사",
+  "cli.plugin.migrate_check.flag.target_core": "호환성을 검사할 대상 Tanpopo Core SemVer",
+  "cli.plugin.migrate_check.flag.supported_contracts": "쉼표로 구분된 지원 contractVersion 범위 (N-1 및 N)"
 }

@@ -258,14 +258,18 @@ func BuildClientTLSConfig(ca *EphemeralCA, clientSrc *RotatingCertSource, expect
 	}
 	pool := ca.RootPool()
 	return &tls.Config{
-		MinVersion: tls.VersionTLS13,
-		RootCAs:    pool,
-		Time:       ca.now,
+		MinVersion:             tls.VersionTLS13,
+		SessionTicketsDisabled: true,
+		RootCAs:                pool,
+		Time:                   ca.now,
 		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			return clientSrc.Certificate()
 		},
 		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 			return verifyPeerLeafSPIFFE(rawCerts, pool, expectedServerSPIFFE, x509.ExtKeyUsageServerAuth, ca.now())
+		},
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			return verifyConnectionSPIFFE(cs.PeerCertificates, pool, expectedServerSPIFFE, x509.ExtKeyUsageServerAuth, ca.now())
 		},
 	}, nil
 }
@@ -281,17 +285,35 @@ func BuildServerTLSConfig(ca *EphemeralCA, serverSrc *RotatingCertSource, allowe
 	}
 	pool := ca.RootPool()
 	return &tls.Config{
-		MinVersion: tls.VersionTLS13,
-		ClientAuth: tls.RequireAndVerifyClientCert,
-		ClientCAs:  pool,
-		Time:       ca.now,
+		MinVersion:             tls.VersionTLS13,
+		SessionTicketsDisabled: true,
+		ClientAuth:             tls.RequireAndVerifyClientCert,
+		ClientCAs:              pool,
+		Time:                   ca.now,
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 			return serverSrc.Certificate()
 		},
 		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 			return verifyPeerLeafSPIFFE(rawCerts, pool, allowedClientSPIFFE, x509.ExtKeyUsageClientAuth, ca.now())
 		},
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			return verifyConnectionSPIFFE(cs.PeerCertificates, pool, allowedClientSPIFFE, x509.ExtKeyUsageClientAuth, ca.now())
+		},
 	}, nil
+}
+
+func verifyConnectionSPIFFE(certs []*x509.Certificate, roots *x509.CertPool, wantSPIFFE string, eku x509.ExtKeyUsage, at time.Time) error {
+	if len(certs) == 0 {
+		return ErrMTLSRejected
+	}
+	rawCerts := make([][]byte, 0, len(certs))
+	for _, c := range certs {
+		if c == nil {
+			return ErrMTLSRejected
+		}
+		rawCerts = append(rawCerts, c.Raw)
+	}
+	return verifyPeerLeafSPIFFE(rawCerts, roots, wantSPIFFE, eku, at)
 }
 
 func verifyPeerLeafSPIFFE(rawCerts [][]byte, roots *x509.CertPool, wantSPIFFE string, eku x509.ExtKeyUsage, at time.Time) error {

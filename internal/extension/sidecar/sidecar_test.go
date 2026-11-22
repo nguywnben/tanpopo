@@ -325,6 +325,33 @@ func TestMTLSSidecarAuthAndHandshakeRejectionNEG2AndRotationAC1(t *testing.T) {
 		t.Fatalf("NEG-2: unauthorized mTLS handshakes decoded %d RPC frames, want 0", rt.rpcCount.Load()-countBeforeNeg2)
 	}
 
+	// 2e. G123 regression: verify TLS 1.3 session tickets are disabled and consecutive handshakes never resume without SPIFFE SAN verification.
+	cliTLS, err := BuildClientTLSConfig(ca, clientSrc, serverSPIFFE)
+	if err != nil {
+		t.Fatalf("BuildClientTLSConfig: %v", err)
+	}
+	if !serverTLS.SessionTicketsDisabled || !cliTLS.SessionTicketsDisabled {
+		t.Fatal("G123 regression: SessionTicketsDisabled must be true on both sidecar server and client TLS configs")
+	}
+	for i := 0; i < 2; i++ {
+		rawConn, dialErr := (&net.Dialer{Timeout: time.Second, Control: sidecarNetworkControl}).DialContext(ctx, "tcp", rawLn.Addr().String())
+		if dialErr != nil {
+			t.Fatalf("dial %d: %v", i, dialErr)
+		}
+		cfg := cliTLS.Clone()
+		cfg.ServerName = "127.0.0.1"
+		tlsConn := tls.Client(rawConn, cfg)
+		if hsErr := tlsConn.HandshakeContext(ctx); hsErr != nil {
+			_ = rawConn.Close()
+			t.Fatalf("handshake %d: %v", i, hsErr)
+		}
+		if tlsConn.ConnectionState().DidResume {
+			_ = tlsConn.Close()
+			t.Fatalf("G123 regression: handshake %d resumed session instead of full SPIFFE mTLS handshake", i)
+		}
+		_ = tlsConn.Close()
+	}
+
 	// Cross-platform isolated circuit breaker check: crashing sidecar A trips A's circuit without affecting sibling sidecar B.
 	_ = cl.Close()
 	_ = srv.Close()

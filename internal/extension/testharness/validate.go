@@ -104,8 +104,12 @@ func ValidateExtensionDir(ctx context.Context, dir string) (*ValidationReport, *
 		}
 		relEntry := path.Clean(filepath.ToSlash(strings.TrimSpace(vm.Manifest.Runtime.Entrypoint)))
 		entrypointSHA = archiveFiles[relEntry]
-		fullEntry := filepath.Join(absDir, filepath.FromSlash(relEntry))
-		rawWasm, rerr := os.ReadFile(fullEntry)
+		wRoot, wOpenErr := os.OpenRoot(absDir)
+		if wOpenErr != nil {
+			return nil, nil, nil, validationErr("open extension root for wasm entrypoint", wOpenErr)
+		}
+		rawWasm, rerr := wRoot.ReadFile(relEntry)
+		_ = wRoot.Close()
 		if rerr != nil {
 			return nil, nil, nil, validationErr(fmt.Sprintf("read wasm entrypoint %q", relEntry), rerr)
 		}
@@ -201,6 +205,12 @@ func loadExtensionFilesForValidation(dir string) (string, []byte, map[string]str
 		return "", nil, nil, validationErr("resolve extension directory", err)
 	}
 
+	root, rerr := os.OpenRoot(absDir)
+	if rerr != nil {
+		return "", nil, nil, validationErr("open extension root", rerr)
+	}
+	defer func() { _ = root.Close() }()
+
 	manifestPath := filepath.Join(absDir, "manifest.yaml")
 	mInfo, err := os.Lstat(manifestPath)
 	if err != nil {
@@ -209,7 +219,7 @@ func loadExtensionFilesForValidation(dir string) (string, []byte, map[string]str
 	if mInfo.Mode()&os.ModeSymlink != 0 || !mInfo.Mode().IsRegular() {
 		return "", nil, nil, securityErr("manifest.yaml must be a regular file (symlinks prohibited)", nil)
 	}
-	manifestBytes, err := os.ReadFile(manifestPath)
+	manifestBytes, err := root.ReadFile("manifest.yaml")
 	if err != nil {
 		return "", nil, nil, validationErr("read manifest.yaml", err)
 	}
@@ -242,7 +252,7 @@ func loadExtensionFilesForValidation(dir string) (string, []byte, map[string]str
 		if strings.HasSuffix(strings.ToLower(relSlash), ".tpkg") {
 			return nil
 		}
-		raw, rerr := os.ReadFile(path)
+		raw, rerr := root.ReadFile(relSlash)
 		if rerr != nil {
 			return rerr
 		}

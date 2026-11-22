@@ -52,6 +52,7 @@ func NewCommand(opts Options) *cobra.Command {
 		newValidateCmd(opts),
 		newTestCmd(opts),
 		newPackCmd(opts),
+		newMigrateCheckCmd(opts),
 	)
 	return pluginCmd
 }
@@ -198,6 +199,50 @@ func newPackCmd(opts Options) *cobra.Command {
 	return cmd
 }
 
+func newMigrateCheckCmd(opts Options) *cobra.Command {
+	loc := resolveLocale(opts)
+	var (
+		targetCore         string
+		supportedContracts string
+	)
+	cmd := &cobra.Command{
+		Use:   "migrate-check [dir]",
+		Short: i18n.T(loc, "cli.plugin.migrate_check.short"),
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFormat(loc, outputFormat(opts)); err != nil {
+				return err
+			}
+			target := "."
+			if len(args) == 1 {
+				target = args[0]
+			}
+			var supported []string
+			for _, part := range strings.Split(supportedContracts, ",") {
+				if trimmed := strings.TrimSpace(part); trimmed != "" {
+					supported = append(supported, trimmed)
+				}
+			}
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			rep, err := testharness.MigrateCheckExtension(ctx, testharness.MigrateCheckOptions{
+				Dir:                       target,
+				TargetCoreVersion:         targetCore,
+				SupportedContractVersions: supported,
+			})
+			if rep != nil {
+				_ = renderMigrateCheckResult(cmd, opts, rep)
+			}
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&targetCore, "target-core", "", i18n.T(loc, "cli.plugin.migrate_check.flag.target_core"))
+	cmd.Flags().StringVar(&supportedContracts, "supported-contracts", "", i18n.T(loc, "cli.plugin.migrate_check.flag.supported_contracts"))
+	return cmd
+}
+
 func outWriter(cmd *cobra.Command, opts Options) io.Writer {
 	if opts.Stdout != nil {
 		return opts.Stdout
@@ -303,5 +348,23 @@ func renderPackResult(cmd *cobra.Command, opts Options, r *testharness.PackResul
 		r.SizeBytes,
 		r.EntryCount,
 	)
+	return nil
+}
+
+func renderMigrateCheckResult(cmd *cobra.Command, opts Options, r *testharness.MigrateCheckReport) error {
+	w := outWriter(cmd, opts)
+	if fmtName := outputFormat(opts); fmtName == "json" || fmtName == "yaml" {
+		return renderStructured(w, opts, r)
+	}
+	_, _ = fmt.Fprintf(w, "EXTENSION\t%s\nCONTRACT\t%s\nCORE_RANGE\t%s\nTARGET_CORE\t%s\nSTATUS\t%s\n",
+		testharness.SanitizeTerminalText(r.ExtensionID),
+		testharness.SanitizeTerminalText(r.ContractVersion),
+		testharness.SanitizeTerminalText(r.CoreVersionRange),
+		testharness.SanitizeTerminalText(r.TargetCoreVersion),
+		r.Status,
+	)
+	for _, f := range r.Findings {
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", f.Severity, f.Code, testharness.SanitizeTerminalText(f.Message))
+	}
 	return nil
 }

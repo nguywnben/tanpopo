@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "จำเป็นต้องระบุ --valkey-addrs เมื่อสร้างสถานะ Valkey ใหม่",
   "cli.admin.verify_state.err.tampered": "การตรวจสอบห่วงโซ่แฮชล้มเหลว: ตรวจพบการปลอมแปลง",
   "cli.admin.verify_state.err.failed": "การตรวจสอบสถานะการทำงานล้มเหลว",
-  "cli.admin.verify_state.output": "ผลการตรวจสอบสถานะ {{status}} (ระบบ={{engine}} เหตุการณ์={{events}} ยอดค้าง={{orphans}} กู้คืนValkey={{restored}})"
+  "cli.admin.verify_state.output": "ผลการตรวจสอบสถานะ {{status}} (ระบบ={{engine}} เหตุการณ์={{events}} ยอดค้าง={{orphans}} กู้คืนValkey={{restored}})",
+  "cli.plugin.migrate_check.short": "ตรวจสอบความเข้ากันได้ของสัญญา N/N-1 และเวอร์ชัน Core ของส่วนขยาย",
+  "cli.plugin.migrate_check.flag.target_core": "เวอร์ชัน Tanpopo Core เป้าหมายสำหรับตรวจสอบความเข้ากันได้",
+  "cli.plugin.migrate_check.flag.supported_contracts": "ช่วง contractVersion ที่รองรับคั่นด้วยเครื่องหมายจุลภาค (N-1 และ N)"
 }

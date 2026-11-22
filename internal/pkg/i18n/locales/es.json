@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "Se requiere --valkey-addrs para reconstruir el estado de Valkey.",
   "cli.admin.verify_state.err.tampered": "Falló la verificación de la cadena de auditoría: se detectó alteración.",
   "cli.admin.verify_state.err.failed": "Falló la verificación del estado operativo",
-  "cli.admin.verify_state.output": "Comprobación {{status}} (motor={{engine}} eventos={{events}} huérfanas={{orphans}} valkey_restauradas={{restored}})"
+  "cli.admin.verify_state.output": "Comprobación {{status}} (motor={{engine}} eventos={{events}} huérfanas={{orphans}} valkey_restauradas={{restored}})",
+  "cli.plugin.migrate_check.short": "Verificar compatibilidad de contrato N/N-1 y versión Core del manifiesto",
+  "cli.plugin.migrate_check.flag.target_core": "Versión semver objetivo de Tanpopo Core para comprobar compatibilidad",
+  "cli.plugin.migrate_check.flag.supported_contracts": "Ventana de contractVersion soportados separados por comas (N-1 y N)"
 }

@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0044` |
 | **Milestone / Epic** | `M5` (`v1.0 GA Hardening, Docs & Release`) · `EP-09` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0038`, `TP-IMP-0041`, `TP-IMP-0042` — `GAP-01`)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-22` by delegated **Gemini 4 Hydrogen** under [`DEC-093`](../../governance/decisions.md) via `develop` -> `main` PR `#36`; `REQUIRES_STRONG_REVIEW` `APPROVE`/`PASS` across `code-reviewer`, `security-auditor`, and `test-engineer` with explicit `COND-PO-01` limits in [`pentest-v1.0-remediation-report.md`](../../security/pentest-v1.0-remediation-report.md))* |
 | **Size** | `L` (`tests/security/*`, `tests/e2e/*`, `internal/extension/compat/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Adversarial security verification `CT-01..36` + `AUTH-01..16`, `>= 4h` continuous fuzzing & `1.x` backward-compatibility commitment)* |
 | **Technical Owner** | `Principal Security Auditor & QA Lead` |

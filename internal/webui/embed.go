@@ -44,11 +44,12 @@ func Handler() http.Handler {
 			http.Error(w, i18n.T(loc, "webui.method_not_allowed"), http.StatusMethodNotAllowed)
 			return
 		}
-		if r.URL.Path == "/v1" || strings.HasPrefix(r.URL.Path, "/v1/") || r.URL.Path == "/admin/v1" || strings.HasPrefix(r.URL.Path, "/admin/v1/") {
+		cleaned := path.Clean("/" + r.URL.Path)
+		if isReservedBackendPrefix(cleaned) {
 			http.NotFound(w, r)
 			return
 		}
-		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+		name := strings.TrimPrefix(cleaned, "/")
 		if name == "." || name == "" {
 			name = "index.html"
 		}
@@ -131,6 +132,15 @@ func acceptsGzip(values []string) bool {
 func BundleFS() fs.FS {
 	root, _ := fs.Sub(bundle, "dist")
 	return root
+}
+
+func isReservedBackendPrefix(p string) bool {
+	for _, prefix := range []string{"/v1", "/admin/v1", "/native", "/mcp", "/a2a", "/.well-known"} {
+		if p == prefix || strings.HasPrefix(p, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func itoa(n int) string {
