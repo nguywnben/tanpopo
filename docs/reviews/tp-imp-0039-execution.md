@@ -1,11 +1,17 @@
-# TP-IMP-0039 Execution Checkpoint
+# `TP-IMP-0039` Execution & Verification Report — `PostgreSQL 16+` Driver (Monthly Partitioning, `FORCE RLS`), `Dual-DB` Parity & `migrate-engine`
 
-**Status:** **`DONE`** (Strong Review `APPROVE` + `PASS`) under [`DEC-088`](../governance/decisions.md) via `develop` → `main` PR [#29](https://github.com/nguywnben/tanpopo/pull/29).
+> **Unit:** `TP-IMP-0039` (`M4` / `EP-08` · `REQUIRES_STRONG_REVIEW`)
+> **Branch / Workflow:** `develop` -> PR [#29](https://github.com/nguywnben/tanpopo/pull/29) -> `main` (`61c310b59db1e2dc1296b543d0d10a25d150fe3d`, accepted `2026-11-21` under [`DEC-088`](../governance/decisions.md))
+> **Post-Merge CI:** [`44903715757`](https://github.com/nguywnben/tanpopo/actions/runs/44903715757) (`Stage 0-1` `SUCCESS`) · [`44903715776`](https://github.com/nguywnben/tanpopo/actions/runs/44903715776) (`Release Artifact Dry Run` `SUCCESS`)
+> **Author:** `Gemini 4 Hydrogen`
+> **Independent Strong Reviewers:**
+> - `code-reviewer` (`191385d0ba3ad84110a1f9c75ba13c8f`): **`APPROVE`** (Critical: 0, Required Changes: 0, Optional: 0, Nits: 0)
+> - `security-auditor` (`781eb2de4a3369cd5f6df057dabc0da1`): **`PASS`** (Critical: 0, High: 0, Medium: 0, Low: 0)
 
 ## DoR Evidence
 
 - Upstream dependencies `TP-IMP-0003`, `TP-IMP-0007`, `TP-IMP-0021`, and `TP-IMP-0023` are `DONE` on `origin/main` (`b6dc1d15d48890ad1b4b5f259b16e0fc7b9cd8bf`).
-- Active branch is persistent `develop` synced with `origin/develop` and `origin/main`; approved Console v2 Astryx Neutral + 15-language UI baseline (`b6dc1d15`, PR #28) is preserved intact.
+- Active branch is persistent `develop` synced with `origin/develop` and `origin/main`; approved Console v2 Astryx Neutral + 15-language UI baseline (`b6dc1d15`, PR [#28](https://github.com/nguywnben/tanpopo/pull/28)) is preserved intact.
 
 ## Implementation & Security Summary
 

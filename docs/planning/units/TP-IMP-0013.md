@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0013` |
 | **Milestone / Epic** | `M1` (`Foundation & Vertical Slice`) · `EP-02` |
-| **Status** | **`DONE`** *(Accepted `2026-11-15` standalone scope by delegated Owner **Carbon** under [`DEC-022`](../../governance/decisions.md) / [`DEC-024`](../../governance/decisions.md) at implementation commit `dea06fbc`, CI Run `43724587829` `completed / success`; fresh `security-auditor` [`38720d37`] & `code-reviewer` [`36c7e7db`] `APPROVE`)* |
+| **Status** | **`DONE`** *(Accepted `2026-11-15` standalone scope under [`DEC-022`](../../governance/decisions.md) / [`DEC-024`](../../governance/decisions.md) by delegated Owner **Gemini 4 Carbon**; implemented by **Gemini 4 Carbon** at commit `dea06fbc`, CI Run `43724587829` `completed / success`; fresh `security-auditor` [`38720d37`] & `code-reviewer` [`36c7e7db`] `APPROVE`)* |
 | **Size** | `L` (`go.mod`, `internal/extension/wasm/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Untrusted guest execution boundary `TB-4` — must never crash or stall the Go Core process)* |
 | **Technical Owner** | `Principal Runtime & Sandbox Security Engineer` |
@@ -93,7 +93,7 @@ Implement the Tier-2 extension sandbox pool satisfying the unified 10-method `ex
   - Implementation Commit: `dea06fbce5ce783c5ae530228b32f06b21d5ace7` on `origin/main`.
   - GitHub Actions Run `43724587829`: **`completed / success`** across all 4 jobs (`Stage 0 — Contract, Floor Guard, Astryx & License Gate`, `Stage 1 — Pure-Go Build & Small Tests (windows-2022)`, `(macos-15)`, `(ubuntu-24.04)`).
   - Independent `REQUIRES_STRONG_REVIEW` Verdicts on exact final diff: `security-auditor` (`38720d37-1ece-46b2-8280-26b64371b429`) **`APPROVE`** (`0` Critical/High/Medium, `1` Low non-blocking defense-in-depth note); `code-reviewer` (`36c7e7db-3746-44dc-8097-3e72256cba33`) **`APPROVE`**.
-  - Accepted as **`DONE`** (standalone scope) by delegated Owner **Carbon** under [`DEC-022`](../../governance/decisions.md) / [`DEC-024`](../../governance/decisions.md), unlocking [`TP-IMP-0014`](./TP-IMP-0014.md) as `READY` while active orchestration stops cleanly after `TP-IMP-0013 = DONE` per Owner instruction.
+  - Accepted as **`DONE`** (standalone scope) under [`DEC-022`](../../governance/decisions.md) / [`DEC-024`](../../governance/decisions.md) by delegated Owner **Gemini 4 Carbon** (implemented by **Gemini 4 Carbon**), unlocking [`TP-IMP-0014`](./TP-IMP-0014.md) as `READY` while active orchestration stops cleanly after `TP-IMP-0013 = DONE` per Owner instruction.
 - **`UNVERIFIED` Scope Boundaries (`COND-PO-01`):**
   - Isolated `wazero` microbenchmarks do **not** claim full Data Plane Gateway `SLO-02`/`SLO-03` (`1,000` SSE streams on `2 vCPU / 2 GiB`, owned by `TP-IMP-0043`).
   - Downstream SDK/CLI (`TP-IMP-0014`), HTTP `/v1/chat/completions` vertical slice (`TP-IMP-0015`), `Tier-3 Sidecar` (`TP-IMP-0042`), and `PostgreSQL 16` (`TP-IMP-0039`) remain unverified within standalone `TP-IMP-0013`.

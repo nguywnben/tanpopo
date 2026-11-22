@@ -1,7 +1,8 @@
 # `TP-IMP-0042` Execution & Verification Report — Tier-3 Isolated Sidecar (`ConnectRPC` UDS/`mTLS`) & Inter-Agent `A2A` Plane (`SM-09`)
 
 > **Unit:** `TP-IMP-0042` (`M4` / `EP-08` · `REQUIRES_STRONG_REVIEW` · `GATE-M4` Closure)
-> **Branch / Workflow:** `develop` -> PR -> `main` (under `DEC-088` & `DEC-091`)
+> **Branch / Workflow:** `develop` -> PR [#32](https://github.com/nguywnben/tanpopo/pull/32) -> `main` (`25e362fff4e8367f33a4574ecd80992aaefe2d53`, accepted `2026-11-21` under [`DEC-088`](../governance/decisions.md) & [`DEC-091`](../governance/decisions.md))
+> **Post-Merge CI:** [`44942196074`](https://github.com/nguywnben/tanpopo/actions/runs/44942196074) (`Stage 0-1` `SUCCESS`) · [`44942196079`](https://github.com/nguywnben/tanpopo/actions/runs/44942196079) (`Release Artifact Dry Run` `SUCCESS`)
 > **Author:** `Gemini 4 Hydrogen`
 > **Independent Strong Reviewers:**
 > - `code-reviewer` (`1203b35d61d2b79404bede8c662d7c77`): **`APPROVE`** (Critical: 0, Required Changes: 0)
