@@ -29,11 +29,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime/debug"
+	"runtime/metrics"
 	"sort"
 	"strconv"
 	"strings"
@@ -111,6 +114,9 @@ type ServerConfig struct {
 	NativeUsageObserver      func(native.UsageRecord)
 	Telemetry                *otel.Pipeline
 	ResponseCache            *cache.ExactCache
+	MaxNodeConcurrentStreams int64
+	MaxHeapLimitRatio        float64
+	HeapUsageRatioFunc       func() float64
 	SidecarEnabled           bool
 	SidecarSocketDir         string
 	SidecarRuntimeFactory    func(ctx context.Context, adp *snapshot.ProviderAdapterView, perms installer.PermissionSet) (port.ProviderRuntime, io.Closer, error)
@@ -203,11 +209,17 @@ type Server struct {
 	defaultHoldOutputTokens int64
 	usageObserver           func(UsageRecord)
 	nativeHandler           *native.Handler
-	telemetry               *otel.Pipeline
-	responseCache           *cache.ExactCache
-	sidecarEnabled          bool
-	sidecarSocketDir        string
-	sidecarFactory          func(ctx context.Context, adp *snapshot.ProviderAdapterView, perms installer.PermissionSet) (port.ProviderRuntime, io.Closer, error)
+	telemetry                *otel.Pipeline
+	responseCache            *cache.ExactCache
+	maxNodeConcurrentStreams int64
+	maxHeapLimitRatio        float64
+	heapUsageRatioFunc       func() float64
+	activeStreams            atomic.Int64
+	lastMemSampleUnixMs      atomic.Int64
+	cachedHeapRatioBits      atomic.Uint64
+	sidecarEnabled           bool
+	sidecarSocketDir         string
+	sidecarFactory           func(ctx context.Context, adp *snapshot.ProviderAdapterView, perms installer.PermissionSet) (port.ProviderRuntime, io.Closer, error)
 
 	wasmCache wazero.CompilationCache
 
@@ -324,35 +336,42 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		routeRes = resolver.New()
 	}
 
+	heapRatio := cfg.MaxHeapLimitRatio
+	if heapRatio == 0 {
+		heapRatio = 0.85
+	}
 	s := &Server{
-		snapshots:               cfg.Snapshots,
-		broker:                  cfg.Broker,
-		faultGuard:              faultGuard,
-		killSwitch:              cfg.KillSwitch,
-		pluginsDir:              resolvedPluginsDir,
-		audit:                   cfg.Audit,
-		nowMs:                   nowFn,
-		maxReqBodyBytes:         maxBody,
-		wasmPoolSize:            poolSize,
-		firstByteTimeout:        firstByteTimeout,
-		heartbeatInterval:       hbInterval,
-		idempotency:             idemGuard,
-		remoteMediaPolicy:       cfg.RemoteMediaPolicy,
-		policyEval:              policyEval,
-		rateLimiter:             rateLimiter,
-		breaker:                 cb,
-		routeResolver:           routeRes,
-		budgetLedger:            cfg.BudgetLedger,
-		defaultHoldOutputTokens: cfg.DefaultHoldOutputTokens,
-		usageObserver:           cfg.UsageObserver,
-		telemetry:               cfg.Telemetry,
-		responseCache:           cfg.ResponseCache,
-		sidecarEnabled:          cfg.SidecarEnabled,
-		sidecarSocketDir:        strings.TrimSpace(cfg.SidecarSocketDir),
-		sidecarFactory:          cfg.SidecarRuntimeFactory,
-		wasmCache:               wazero.NewCompilationCache(),
-		runtimes:                make(map[runtimeCacheKey]*cachedAdapterEntry),
-		mux:                     http.NewServeMux(),
+		snapshots:                cfg.Snapshots,
+		broker:                   cfg.Broker,
+		faultGuard:               faultGuard,
+		killSwitch:               cfg.KillSwitch,
+		pluginsDir:               resolvedPluginsDir,
+		audit:                    cfg.Audit,
+		nowMs:                    nowFn,
+		maxReqBodyBytes:          maxBody,
+		wasmPoolSize:             poolSize,
+		firstByteTimeout:         firstByteTimeout,
+		heartbeatInterval:        hbInterval,
+		idempotency:              idemGuard,
+		remoteMediaPolicy:        cfg.RemoteMediaPolicy,
+		policyEval:               policyEval,
+		rateLimiter:              rateLimiter,
+		breaker:                  cb,
+		routeResolver:            routeRes,
+		budgetLedger:             cfg.BudgetLedger,
+		defaultHoldOutputTokens:  cfg.DefaultHoldOutputTokens,
+		usageObserver:            cfg.UsageObserver,
+		telemetry:                cfg.Telemetry,
+		responseCache:            cfg.ResponseCache,
+		maxNodeConcurrentStreams: cfg.MaxNodeConcurrentStreams,
+		maxHeapLimitRatio:        heapRatio,
+		heapUsageRatioFunc:       cfg.HeapUsageRatioFunc,
+		sidecarEnabled:           cfg.SidecarEnabled,
+		sidecarSocketDir:         strings.TrimSpace(cfg.SidecarSocketDir),
+		sidecarFactory:           cfg.SidecarRuntimeFactory,
+		wasmCache:                wazero.NewCompilationCache(),
+		runtimes:                 make(map[runtimeCacheKey]*cachedAdapterEntry),
+		mux:                      http.NewServeMux(),
 	}
 	if cfg.Telemetry != nil && cfg.Telemetry.Metrics != nil && cfg.Snapshots != nil {
 		snaps := cfg.Snapshots
@@ -548,6 +567,67 @@ func isNativeRequestPath(r *http.Request) bool {
 	return false
 }
 
+// ActiveStreamCount returns the count of active in-flight SSE streams currently handled by this node.
+func (s *Server) ActiveStreamCount() int64 {
+	if s == nil {
+		return 0
+	}
+	return s.activeStreams.Load()
+}
+
+func (s *Server) currentHeapRatio() float64 {
+	if s.heapUsageRatioFunc != nil {
+		return s.heapUsageRatioFunc()
+	}
+	limit := debug.SetMemoryLimit(-1)
+	if limit <= 0 || limit == math.MaxInt64 {
+		return 0
+	}
+	nowMs := time.Now().UnixMilli()
+	prevMs := s.lastMemSampleUnixMs.Load()
+	if nowMs-prevMs >= 200 && s.lastMemSampleUnixMs.CompareAndSwap(prevMs, nowMs) {
+		samples := []metrics.Sample{
+			{Name: "/memory/classes/heap/objects:bytes"},
+			{Name: "/memory/classes/heap/stacks:bytes"},
+		}
+		metrics.Read(samples)
+		var used uint64
+		for _, sample := range samples {
+			if sample.Value.Kind() == metrics.KindUint64 {
+				used += sample.Value.Uint64()
+			}
+		}
+		ratio := float64(used) / float64(limit)
+		s.cachedHeapRatioBits.Store(math.Float64bits(ratio))
+		return ratio
+	}
+	return math.Float64frombits(s.cachedHeapRatioBits.Load())
+}
+
+func (s *Server) shouldShedOverload() bool {
+	if s == nil {
+		return false
+	}
+	if s.maxNodeConcurrentStreams > 0 {
+		threshold := (s.maxNodeConcurrentStreams*90 + 99) / 100
+		if threshold < 1 {
+			threshold = 1
+		}
+		if s.activeStreams.Load() >= threshold {
+			return true
+		}
+	}
+	if s.maxHeapLimitRatio > 0 && s.currentHeapRatio() >= s.maxHeapLimitRatio {
+		return true
+	}
+	return false
+}
+
+func writeOverloadSheddingError(w http.ResponseWriter, reqID string) {
+	w.Header().Set("Retry-After", "2")
+	writeCanonicalError(w, reqID, http.StatusServiceUnavailable, "gateway_overloaded", "api_error", "Gateway capacity ceiling reached; shedding load to protect active streams.", true)
+}
+
 func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL != nil && r.URL.Path == "/metrics" && s.telemetry != nil && s.telemetry.Metrics != nil && s.telemetry.Metrics.HasScrapeToken() {
@@ -574,6 +654,10 @@ func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 				writeCanonicalError(w, reqID, http.StatusBadRequest, "unsupported_protocol_upgrade", "invalid_request_error", "WebSocket and WebRTC protocol upgrades are not supported on this gateway endpoint.", false)
 				return
 			}
+			if s.shouldShedOverload() {
+				writeOverloadSheddingError(w, reqID)
+				return
+			}
 			if s.nativeHandler == nil {
 				s.handleNotFound(w, rCtx)
 				return
@@ -585,6 +669,10 @@ func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 		if s.telemetry == nil {
 			if isProtocolUpgradeRequest(rCtx) {
 				writeCanonicalError(w, reqID, http.StatusBadRequest, "unsupported_protocol_upgrade", "invalid_request_error", "WebSocket and WebRTC protocol upgrades are not supported on this gateway endpoint.", false)
+				return
+			}
+			if s.shouldShedOverload() {
+				writeOverloadSheddingError(w, reqID)
 				return
 			}
 			next.ServeHTTP(w, rCtx)
@@ -608,6 +696,10 @@ func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 
 		if isProtocolUpgradeRequest(rCtx) {
 			writeCanonicalError(scw, reqID, http.StatusBadRequest, "unsupported_protocol_upgrade", "invalid_request_error", "WebSocket and WebRTC protocol upgrades are not supported on this gateway endpoint.", false)
+			return
+		}
+		if s.shouldShedOverload() {
+			writeOverloadSheddingError(scw, reqID)
 			return
 		}
 		next.ServeHTTP(scw, rCtx)

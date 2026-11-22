@@ -652,15 +652,25 @@ func buildRuntimeInternal(ctx context.Context, role, listen string, beforeSQLite
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize response cache: %w", err)
 		}
+		var maxNodeStreams int64
+		if rawMax := strings.TrimSpace(os.Getenv("TANPOPO_MAX_CONCURRENT_STREAMS")); rawMax != "" {
+			parsedMax, parseErr := strconv.ParseInt(rawMax, 10, 64)
+			if parseErr != nil || parsedMax < 0 {
+				cleanup()
+				return nil, nil, fmt.Errorf("invalid TANPOPO_MAX_CONCURRENT_STREAMS %q", rawMax)
+			}
+			maxNodeStreams = parsedMax
+		}
 		dataServer, err = ingresshttp.NewServer(ingresshttp.ServerConfig{
 			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
-			RateLimiter:           vkRateLimiter,
-			BudgetLedger:          ledgerService,
-			Telemetry:             telemetryPipeline,
-			ResponseCache:         responseCache,
-			SidecarEnabled:        sidecarEnabled,
-			SidecarSocketDir:      sidecarSocketDir,
-			SidecarRuntimeFactory: sidecarFactory,
+			RateLimiter:              vkRateLimiter,
+			BudgetLedger:             ledgerService,
+			Telemetry:                telemetryPipeline,
+			ResponseCache:            responseCache,
+			MaxNodeConcurrentStreams: maxNodeStreams,
+			SidecarEnabled:           sidecarEnabled,
+			SidecarSocketDir:         sidecarSocketDir,
+			SidecarRuntimeFactory:    sidecarFactory,
 		})
 		if err != nil {
 			cleanup()
