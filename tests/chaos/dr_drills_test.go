@@ -45,29 +45,14 @@ import (
 	"github.com/nguywnben/tanpopo/internal/testkit/netguard"
 )
 
-type drBackupKeys struct {
-	key []byte
+type drBackupKeyAdapter struct {
+	*vault.StaticKEKProvider
+	keyID string
 }
 
-func (k drBackupKeys) WrapArchiveKey(_ context.Context, plaintextKey []byte) (string, []byte, []byte, error) {
-	nonce := make([]byte, 12)
-	_, _ = rand.Read(nonce)
-	out := make([]byte, len(plaintextKey))
-	for i := range plaintextKey {
-		out[i] = plaintextKey[i] ^ k.key[i%len(k.key)] ^ nonce[i%len(nonce)]
-	}
-	return "kek-dr-1", nonce, out, nil
-}
-
-func (k drBackupKeys) UnwrapArchiveKey(_ context.Context, keyID string, nonce, ciphertext []byte) ([]byte, error) {
-	if keyID != "kek-dr-1" {
-		return nil, fmt.Errorf("unknown archive kek %q", keyID)
-	}
-	out := make([]byte, len(ciphertext))
-	for i := range ciphertext {
-		out[i] = ciphertext[i] ^ k.key[i%len(k.key)] ^ nonce[i%len(nonce)]
-	}
-	return out, nil
+func (a drBackupKeyAdapter) WrapArchiveKey(ctx context.Context, plaintextKey []byte) (string, []byte, []byte, error) {
+	nonce, ct, err := a.StaticKEKProvider.WrapArchiveKey(ctx, a.keyID, plaintextKey)
+	return a.keyID, nonce, ct, err
 }
 
 // TestDR01StandaloneHostRecoveryTimedUnder15m executes timed DR-01 standalone recovery:
@@ -141,22 +126,31 @@ func TestDR01StandaloneHostRecoveryTimedUnder15m(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	backupKeys := drBackupKeyAdapter{StaticKEKProvider: kek, keyID: "kek-dr01"}
+	probeKey := bytes.Repeat([]byte{0x42}, vault.KeySizeBytes)
+	pKID, pNonce, pCT, err := backupKeys.WrapArchiveKey(ctx, probeKey)
+	if err != nil || len(pCT) != vault.KeySizeBytes+16 {
+		t.Fatalf("backupKeys.WrapArchiveKey contract failed: len=%d err=%v", len(pCT), err)
+	}
+	if unwrapped, err := backupKeys.UnwrapArchiveKey(ctx, pKID, pNonce, pCT); err != nil || !bytes.Equal(unwrapped, probeKey) {
+		t.Fatalf("backupKeys.UnwrapArchiveKey contract failed: err=%v", err)
+	}
+
 	snapPath := filepath.Join(root, "backup-online.db")
 	var archivePath string
-	wrapKey := drBackupKeys{key: []byte("0123456789abcdef0123456789abcdef")}
 	if backup.PlatformSupported() {
 		outDir := filepath.Join(root, "archives")
 		if err := os.MkdirAll(outDir, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		rec, err := backup.CreateSQLite(ctx, st, wrapKey, outDir, lockPath, cfgPath, plugDir, nowMs)
+		rec, err := backup.CreateSQLite(ctx, st, backupKeys, outDir, lockPath, cfgPath, plugDir, nowMs)
 		if err != nil {
 			t.Fatalf("backup.CreateSQLite: %v", err)
 		}
 		archivePath = filepath.Join(outDir, rec.ArchiveFilename)
 	} else {
 		// On Linux hosts with swap active, CreateSQLite fails closed by design; use online VACUUM INTO snapshot for timing continuity while verifying fail-closed PlatformSupported contract.
-		if _, err := backup.CreateSQLite(ctx, st, wrapKey, filepath.Join(root, "blocked"), lockPath, cfgPath, plugDir, nowMs); err == nil {
+		if _, err := backup.CreateSQLite(ctx, st, backupKeys, filepath.Join(root, "blocked"), lockPath, cfgPath, plugDir, nowMs); err == nil {
 			t.Fatalf("expected fail-closed error when backup.PlatformSupported() is false")
 		}
 		if err := st.BackupTo(ctx, snapPath); err != nil {
@@ -174,14 +168,14 @@ func TestDR01StandaloneHostRecoveryTimedUnder15m(t *testing.T) {
 	drillStart := time.Now()
 	restoredDBPath := dbPath
 	if archivePath != "" {
-		if _, err := backup.Verify(ctx, archivePath, wrapKey); err != nil {
+		if _, err := backup.Verify(ctx, archivePath, backupKeys); err != nil {
 			t.Fatalf("backup.Verify: %v", err)
 		}
 		restoreDest := filepath.Join(root, "restored-host")
-		if _, err := backup.RestoreWithOptions(ctx, archivePath, restoreDest, wrapKey, backup.RestoreOptions{VerifySecretsDecrypt: true}); err != nil {
+		if _, err := backup.RestoreWithOptions(ctx, archivePath, restoreDest, backupKeys, backup.RestoreOptions{VerifySecretsDecrypt: true}); err != nil {
 			t.Fatalf("backup.RestoreWithOptions: %v", err)
 		}
-		restoredDBPath = filepath.Join(restoreDest, "tanpopo.db")
+		restoredDBPath = filepath.Join(restoreDest, "database.sqlite")
 	} else {
 		rawSnap, err := os.ReadFile(snapPath)
 		if err != nil {
