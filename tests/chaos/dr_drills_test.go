@@ -127,13 +127,16 @@ func TestDR01StandaloneHostRecoveryTimedUnder15m(t *testing.T) {
 	}
 
 	backupKeys := drBackupKeyAdapter{StaticKEKProvider: kek, keyID: "kek-dr01"}
+	var _ backup.KeyWrapper = backupKeys
+	var _ backup.KeyUnwrapper = kek
+	var _ vault.KEKProvider = kek
 	probeKey := bytes.Repeat([]byte{0x42}, vault.KeySizeBytes)
 	pKID, pNonce, pCT, err := backupKeys.WrapArchiveKey(ctx, probeKey)
 	if err != nil || len(pCT) != vault.KeySizeBytes+16 {
 		t.Fatalf("backupKeys.WrapArchiveKey contract failed: len=%d err=%v", len(pCT), err)
 	}
-	if unwrapped, err := backupKeys.UnwrapArchiveKey(ctx, pKID, pNonce, pCT); err != nil || !bytes.Equal(unwrapped, probeKey) {
-		t.Fatalf("backupKeys.UnwrapArchiveKey contract failed: err=%v", err)
+	if unwrapped, err := kek.UnwrapArchiveKey(ctx, pKID, pNonce, pCT); err != nil || !bytes.Equal(unwrapped, probeKey) {
+		t.Fatalf("kek.UnwrapArchiveKey contract failed: err=%v", err)
 	}
 
 	snapPath := filepath.Join(root, "backup-online.db")
@@ -168,11 +171,11 @@ func TestDR01StandaloneHostRecoveryTimedUnder15m(t *testing.T) {
 	drillStart := time.Now()
 	restoredDBPath := dbPath
 	if archivePath != "" {
-		if _, err := backup.Verify(ctx, archivePath, backupKeys); err != nil {
+		if _, err := backup.Verify(ctx, archivePath, kek); err != nil {
 			t.Fatalf("backup.Verify: %v", err)
 		}
 		restoreDest := filepath.Join(root, "restored-host")
-		if _, err := backup.RestoreWithOptions(ctx, archivePath, restoreDest, backupKeys, backup.RestoreOptions{VerifySecretsDecrypt: true}); err != nil {
+		if _, err := backup.RestoreWithOptions(ctx, archivePath, restoreDest, kek, backup.RestoreOptions{VerifySecretsDecrypt: true}); err != nil {
 			t.Fatalf("backup.RestoreWithOptions: %v", err)
 		}
 		restoredDBPath = filepath.Join(restoreDest, "database.sqlite")
