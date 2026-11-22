@@ -19,6 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	admincli "github.com/nguywnben/tanpopo/internal/cli/admin"
+	bundlecli "github.com/nguywnben/tanpopo/internal/cli/bundle"
 	opscli "github.com/nguywnben/tanpopo/internal/cli/ops"
 	"github.com/nguywnben/tanpopo/internal/cli/plugin"
 	"github.com/nguywnben/tanpopo/internal/cli/remote"
@@ -151,6 +152,15 @@ func runWithContext(ctx context.Context, args []string, stdout, stderr io.Writer
 		versionCmd,
 		newServeCommand(loc),
 		admincli.NewCommandWithLocale(stdout, loc, &outputFmt),
+		bundlecli.NewCommand(bundlecli.Options{
+			OutputFormat:   &outputFmt,
+			Stdout:         stdout,
+			Stderr:         stderr,
+			DataDir:        envOr("TANPOPO_DATA_DIR", "data"),
+			DBPath:         envOr("TANPOPO_DB_PATH", ""),
+			TanpopoVersion: version,
+			Locale:         loc,
+		}),
 		plugin.NewCommand(plugin.Options{
 			OutputFormat: &outputFmt,
 			Stdout:       stdout,

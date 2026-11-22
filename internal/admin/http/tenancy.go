@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
@@ -84,19 +85,111 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 
 	targetOrg := sc.OrgID
 	if !sc.IsOperator {
-		if !s.authorize(w, r, sc, rbac.ActionOrgRead, rbac.TargetScope{OrgID: targetOrg, IsCollectionList: true}) {
+		boundOrgs := collectReadableActorOrgIDs(sc.Actor, sc.OrgID)
+		if len(boundOrgs) == 0 {
+			_ = s.authorize(w, r, sc, rbac.ActionOrgRead, rbac.TargetScope{OrgID: targetOrg, IsCollectionList: true})
 			return
 		}
-	} else {
-		if !s.authorize(w, r, sc, rbac.ActionOrgRead, rbac.TargetScope{IsCollectionList: true}) {
+		if s.multiOrgDisabled && sc.OrgID != "" {
+			boundOrgs = []string{sc.OrgID}
+		}
+		scopeCursorOrg := "multi:" + sc.Actor.PrincipalID
+		if len(boundOrgs) == 1 {
+			scopeCursorOrg = boundOrgs[0]
+		}
+		limit, cur, ok := parsePageParams(w, r, s.cursorSecret, "organizations", scopeCursorOrg, sha256HexString("orgs"))
+		if !ok {
 			return
 		}
+		type orgRow struct {
+			dto       organizationDTO
+			createdMs int64
+		}
+		var allRows []orgRow
+		for _, orgID := range boundOrgs {
+			var q strings.Builder
+			var args []any
+			q.WriteString(`
+				SELECT id, slug, display_name, min_plugin_trust, require_four_eyes_approval, version, created_at_ms
+				FROM organizations
+				WHERE id = ?`)
+			args = append(args, orgID)
+			if cur != nil {
+				q.WriteString(` AND (created_at_ms < ? OR (created_at_ms = ? AND id < ?))`)
+				args = append(args, cur.CreatedMs, cur.CreatedMs, cur.LastID)
+			}
+			err := s.withOrgReadTx(r.Context(), orgID, func(dbq adminDBQuerier) error {
+				rows, qerr := dbq.QueryContext(r.Context(), s.rebind(q.String()), args...)
+				if qerr != nil {
+					return qerr
+				}
+				defer rows.Close()
+				for rows.Next() {
+					var (
+						id, slug, name, trust string
+						fourEyes              port.FlexBool
+						ver, createdMs        int64
+					)
+					if scanErr := rows.Scan(&id, &slug, &name, &trust, &fourEyes, &ver, &createdMs); scanErr != nil {
+						return scanErr
+					}
+					allRows = append(allRows, orgRow{
+						dto: organizationDTO{
+							ID:              id,
+							Slug:            slug,
+							Name:            name,
+							MinPluginTrust:  trust,
+							FourEyesEnabled: bool(fourEyes),
+							Version:         ver,
+							CreatedAt:       formatTimeRFC3339Ms(createdMs),
+						},
+						createdMs: createdMs,
+					})
+				}
+				return rows.Err()
+			})
+			if err != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing organizations", true, nil)
+				return
+			}
+		}
+		sort.Slice(allRows, func(i, j int) bool {
+			if allRows[i].createdMs != allRows[j].createdMs {
+				return allRows[i].createdMs > allRows[j].createdMs
+			}
+			return allRows[i].dto.ID > allRows[j].dto.ID
+		})
+		hasMore := len(allRows) > limit
+		if hasMore {
+			allRows = allRows[:limit]
+		}
+		data := make([]organizationDTO, len(allRows))
+		for i := range allRows {
+			data[i] = allRows[i].dto
+		}
+		var nextCursor *string
+		if hasMore && len(allRows) > 0 {
+			last := allRows[len(allRows)-1]
+			tok, curErr := encodePaginationCursor(s.cursorSecret, "organizations", scopeCursorOrg, sha256HexString("orgs"), last.createdMs, last.dto.ID)
+			if curErr != nil {
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding cursor", true, nil)
+				return
+			}
+			nextCursor = &tok
+		}
+		writeJSON(w, http.StatusOK, paginatedListEnvelope[organizationDTO]{
+			Data:       data,
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+		})
+		return
 	}
 
-	scopeCursorOrg := targetOrg
-	if sc.IsOperator {
-		scopeCursorOrg = "instance"
+	if !s.authorize(w, r, sc, rbac.ActionOrgRead, rbac.TargetScope{IsCollectionList: true}) {
+		return
 	}
+
+	scopeCursorOrg := "instance"
 	limit, cur, ok := parsePageParams(w, r, s.cursorSecret, "organizations", scopeCursorOrg, sha256HexString("orgs"))
 	if !ok {
 		return
@@ -108,10 +201,6 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 		SELECT id, slug, display_name, min_plugin_trust, require_four_eyes_approval, version, created_at_ms
 		FROM organizations
 		WHERE 1=1`)
-	if !sc.IsOperator {
-		q.WriteString(` AND id = ?`)
-		args = append(args, targetOrg)
-	}
 	if cur != nil {
 		q.WriteString(` AND (created_at_ms < ? OR (created_at_ms = ? AND id < ?))`)
 		args = append(args, cur.CreatedMs, cur.CreatedMs, cur.LastID)
@@ -124,7 +213,7 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 		createdMs int64
 	}
 	var items []orgRow
-	runQuery := func(dbq adminDBQuerier) error {
+	err := s.withOperatorReadTx(r.Context(), func(dbq adminDBQuerier) error {
 		rows, err := dbq.QueryContext(r.Context(), s.rebind(q.String()), args...)
 		if err != nil {
 			return err
@@ -154,13 +243,7 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 			})
 		}
 		return rows.Err()
-	}
-	var err error
-	if sc.IsOperator {
-		err = s.withOperatorReadTx(r.Context(), runQuery)
-	} else {
-		err = s.withOrgReadTx(r.Context(), targetOrg, runQuery)
-	}
+	})
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing organizations", true, nil)
 		return
@@ -198,6 +281,10 @@ func (s *Server) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionOrgCreate, rbac.TargetScope{}) {
+		return
+	}
+	if s.multiOrgDisabled {
+		writeErrorEnvelope(w, r, http.StatusForbidden, "multi_org_disabled", "permission_error", "organization creation is disabled when multi-organization mode is off", false, nil)
 		return
 	}
 

@@ -1,7 +1,7 @@
 # `TP-IMP-0044` Execution & Verification Report — Security Audit, `N-1` `migrate-check`, Five-Surface Pen-Test (`GATE-REL-03`), Bounded Fuzzing & Cross-Browser Audit
 
 > **Unit:** `TP-IMP-0044` (`M5` / `EP-09` · **`REQUIRES_STRONG_REVIEW`**)
-> **Branch / Workflow:** `develop` -> PR `#36` *(pending merge to `main`, accepted `2026-11-22` under [`DEC-093`](../governance/decisions.md))*
+> **Branch / Workflow:** `develop` -> PR [#36](https://github.com/nguywnben/tanpopo/pull/36) (`main` merge SHA `1270250f64226646d4fed7f866043eccb4e7cf31`; post-merge CI [`44998949234`](https://github.com/nguywnben/tanpopo/actions/runs/44998949234) [`Stage 0-1`] & [`44998949199`](https://github.com/nguywnben/tanpopo/actions/runs/44998949199) [`Release Dry Run`] `SUCCESS`, accepted `2026-11-22` under [`DEC-093`](../governance/decisions.md))
 > **Author:** **`Gemini 4 Hydrogen`**
 > **Independent Reviews (`REQUIRES_STRONG_REVIEW` + Security & QA Sign-Off):**
 > - `code-reviewer` (`60a73de3090a2091de676628b48a3850`): **`APPROVE`** (Critical: 0, Required: 0, Optional: 0, Nit: 0)

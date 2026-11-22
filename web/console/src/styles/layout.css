@@ -154,12 +154,13 @@
     min-width: 0;
   }
 
+  .tp-scope-switcher-org,
   .tp-scope-switcher-project {
     font-size: 0.8125rem;
     line-height: 1.25;
     font-weight: 500;
     color: var(--tp-ink-primary);
-    max-width: 140px;
+    max-width: 112px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

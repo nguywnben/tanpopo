@@ -23,9 +23,10 @@ import (
 )
 
 type bootstrapStatusResponse struct {
-	Initialized bool   `json:"initialized"`
-	OfflineMode bool   `json:"offline_mode"`
-	Version     string `json:"version,omitempty"`
+	Initialized     bool   `json:"initialized"`
+	OfflineMode     bool   `json:"offline_mode"`
+	MultiOrgEnabled bool   `json:"multi_org_enabled"`
+	Version         string `json:"version,omitempty"`
 }
 
 type bootstrapInitialConnectionReq struct {
@@ -69,9 +70,10 @@ func (s *Server) handleBootstrapStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, bootstrapStatusResponse{
-		Initialized: initialized,
-		OfflineMode: s.offlineMode,
-		Version:     s.version,
+		Initialized:     initialized,
+		OfflineMode:     s.offlineMode,
+		MultiOrgEnabled: !s.multiOrgDisabled,
+		Version:         s.version,
 	})
 }
 

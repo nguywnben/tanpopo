@@ -123,7 +123,7 @@ export const navigationGroups: NavigationGroup[] = [
       },
       {
         path: '/ops/health',
-        aliases: ['/ops/backups', '/ops/upgrades', '/settings/residency-retention'],
+        aliases: ['/ops/backups', '/ops/upgrades', '/ops/organizations', '/settings/residency-retention'],
         label: 'Operations',
         labelKey: 'nav.route.operations',
         roles: operationsRoles,
@@ -175,6 +175,7 @@ export const quickCommands: QuickCommand[] = [
   {id: 'ops-health', label: 'Cluster Health & Readiness', labelKey: 'cmd.opsHealth', section: 'Governance', sectionKey: 'nav.group.governance', path: '/ops/health', roles: operationsRoles},
   {id: 'ops-backups', label: 'Encrypted Backups', labelKey: 'cmd.opsBackups', section: 'Governance', sectionKey: 'nav.group.governance', path: '/ops/backups', roles: operationsRoles},
   {id: 'ops-upgrades', label: 'Upgrade Preflight', labelKey: 'cmd.opsUpgrades', section: 'Governance', sectionKey: 'nav.group.governance', path: '/ops/upgrades', roles: operationsRoles},
+  {id: 'ops-orgs', label: 'Organizations Governance', labelKey: 'cmd.opsOrgs', section: 'Governance', sectionKey: 'nav.group.governance', path: '/ops/organizations', roles: operationsRoles},
   {id: 'ops-webhooks', label: 'Webhooks & Settings', labelKey: 'cmd.opsWebhooks', section: 'Governance', sectionKey: 'nav.group.governance', path: '/settings/residency-retention', roles: operationsRoles},
 ];
 

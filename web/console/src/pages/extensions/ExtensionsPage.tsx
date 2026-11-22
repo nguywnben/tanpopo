@@ -7,9 +7,9 @@ import {
   inspectExtensionPermissions,
   listExtensionInstallations,
   listMarketplaceCatalog,
+  quarantineExtension,
   rollbackExtension,
   stageExtensionInstall,
-  triggerExtensionKillSwitch,
   uninstallExtension,
   upgradeExtension,
 } from '../../api/catalogClient';
@@ -266,7 +266,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     try {
       const {row, kind} = actionTarget;
       if (kind === 'rollback') await rollbackExtension(row.id, `"v${row.version}"`, actionReason.trim());
-      if (kind === 'quarantine') await triggerExtensionKillSwitch(row.id, actionReason.trim(), row.package_id);
+      if (kind === 'quarantine') await quarantineExtension(row.id, `"v${row.version}"`, actionReason.trim());
       if (kind === 'uninstall') await uninstallExtension(row.id, `"v${row.version}"`);
       setActionTarget(null);
       await reload();
