@@ -7,7 +7,8 @@ import {useI18n} from '../../i18n/I18nProvider';
 import {LanguageSelector} from '../../i18n/LanguageSelector';
 import {Link, useRouter} from '../../router/RouterContext';
 import {useTheme} from '../../styles/theme';
-import {Banner, Button, CheckboxField, CodeBlock, IconButton, KeyValueList, SelectField, TanpopoMark, TextField} from '../../ui/primitives';
+import {Banner, Button, CheckboxField, CodeBlock, IconButton, KeyValueList, SelectField, TextField} from '../../ui/primitives';
+import {TanpopoBrand} from '../../ui/TanpopoBrand';
 import {Modal} from '../../ui/Overlays';
 
 type BootstrapForm = components['schemas']['BootstrapCompleteRequest'];
@@ -213,10 +214,7 @@ export function SetupPage() {
       <div className="tp-setup-shell">
         <div className="tp-setup-rail">
           <div className="tp-auth-head">
-            <div className="tp-auth-brand">
-              <TanpopoMark size={22} />
-              <span style={{fontWeight: 700, fontSize: '0.9375rem', letterSpacing: '-0.02em'}}>Tanpopo</span>
-            </div>
+            <TanpopoBrand className="tp-auth-brand" />
             <div className="tp-auth-controls">
               <LanguageSelector id="setup-language-selector" />
               <IconButton variant="secondary" label={theme === 'dark' ? t('common.switchToLightTheme') : t('common.switchToDarkTheme')} onClick={toggleTheme}>

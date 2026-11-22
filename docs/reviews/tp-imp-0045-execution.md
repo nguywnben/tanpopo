@@ -2,7 +2,7 @@
 
 - **Unit ID:** `TP-IMP-0045`
 - **Model:** **Gemini 4 Hydrogen**
-- **Decision:** `DEC-094` *(delegated under `DEC-092` M5 sequential authorization)*
+- **Decision:** `DEC-094` *(initial unit acceptance under `DEC-092` M5 authorization; `13`-locale completion and `astryx doctor` closure later verified under `DEC-097`)*
 - **Branch / PR:** `develop` → `main` *(PR [#37](https://github.com/nguywnben/tanpopo/pull/37), merged `main` SHA [`e7189be8`](https://github.com/nguywnben/tanpopo/commit/e7189be8820a374c0c98c89a94fd4a41186cf0f5); post-merge CI [`45005087526`](https://github.com/nguywnben/tanpopo/actions/runs/45005087526) [`Stage 0-1`] & [`45005087419`](https://github.com/nguywnben/tanpopo/actions/runs/45005087419) [`Release Dry Run`] `SUCCESS`)*
 - **Review Tier:** **`REQUIRES_STRONG_REVIEW`**
 - **Verdict:** **`DONE`** *(with explicit honest limitation notes per `COND-PO-01`)*
@@ -12,7 +12,7 @@
 ## 1. Delivered Architecture & Files
 
 ### Track A — Air-Gap Offline Bundle Toolchain (`internal/cli/bundle/*`, `cmd/tanpopo/*`)
-- **`tanpopo bundle export | verify | import` (`internal/cli/bundle/{bundle,export,verify,import,cmd}.go`, `cmd/tanpopo/main.go`):**
+- **`tanpopo bundle export`, `tanpopo bundle verify`, and `tanpopo bundle import` (`internal/cli/bundle/{bundle,export,verify,import,cmd}.go`, `cmd/tanpopo/main.go`):**
   - `.tpbundle` compressed `.tar.zst` archive format (`github.com/klauspost/compress/zstd`) signed with Ed25519 domain separation (`"tanpopo:airgap-bundle:v1\x00"`), bundling digest-pinned `.tpkg` archives, `tanpopo.lock`, `feeds/index.json`, optional `feeds/revocations.json`, CycloneDX/SPDX SBOMs, and offline deployment artifacts.
   - Zero-network cryptographic verification (`verify.go`) using external pinned trust root (`--public-key`, `TANPOPO_TRUST_ROOT_PUB`, or `/etc/tanpopo/trust-root.pub`), constant-time SHA-256 verification, tar/zstd bomb bounds, `os.OpenRoot` + `os.Lstat` non-symlink confinement, inner `.tpkg` `installer.ExtractSafeArchive` check, and `registry.VerifyFeed` expiry + anti-rollback cursor checks.
   - Atomic rollback-safe import (`import.go`): pre-checks both `regStore.LastIndexSerial` and `regStore.LastRevocationSerial` before touching disk (`CT-31`), stages into sibling temp directories, swaps via two-phase `prepareDirSwap` with LIFO rollback across `destDir`, local/`TANPOPO_BUNDLE_OCI_MIRROR_ROOT` mirror directory, and SQLite feed persistence.
@@ -52,11 +52,11 @@
 | Full Go short suite (`CGO_ENABLED=0`) | **PASS** | `CGO_ENABLED=0 TANPOPO_TEST_HERMETIC=1 go test -short ./...` -> exit `0` |
 | Static / AST / OpenAPI / layout gates | **PASS** | `CGO_ENABLED=0 go run ./scripts/ci/check.go --all && go vet ./...` -> exit `0` |
 | Web Console v2 verification & embed | **PASS** | `cd web/console && npm run typecheck && npm run check:i18n && npm test && npm run build && npm run sync:embed` -> exit `0` (`36/36` Vitest + `axe-core` tests PASS, `15` locales PASS, `Initial JavaScript gzip: 189.41 KB / 250 KB`, synced to `internal/webui/dist/`) |
-| `astryx doctor --built dist` | **PASS** *(reconciled in `TP-IMP-0047`)* | Initial Unit 45 run hit `1` pre-existing `agent-docs` fail (`GEMINI.md`); subsequently resolved cleanly on `develop` (`20 pass, 2 warn [theme-fonts Figtree alias], 0 fail`), `built-astryx-usage: [ok]`, `0` external browser font/network requests in 3-browser Playwright E2E |
+| `astryx doctor --built dist` | **PASS** *(reconciled in `TP-IMP-0047`)* | Initial Unit 45 run hit `1` pre-existing `agent-docs` fail (`GEMINI.md`); subsequently resolved cleanly on `develop` (`20 pass, 2 warn [theme-fonts Figtree alias; self-hosted Google Sans fonts bundled]`, `0 fail`), `built-astryx-usage: [ok]`, `0` external browser font/network requests in 3-browser Playwright E2E |
 | `--network=none` Container Enclave (`valkey/valkey:8-alpine`) | **PASS** | Outbound dial `1.1.1.1:443` blocked (`--network=none`); `bundle verify` exit `0`; tampered bundle `import` exit `22` with `sentinel.txt` intact; `bundle import --mirror-to oci://...` imported `2` artifacts; `serve --offline` `/readyz=200`, `bootstrap/status` (`offline_mode: true`, `multi_org_enabled: true`), `/admin/v1/marketplace/catalog` `200`, org creation & `X-Tanpopo-Org-ID` isolation PASS |
 | Live 3-Browser Playwright Multi-Org & Air-Gap E2E (`web/console/e2e/console_e2e.py`) | **PASS** | Against live `tanpopo serve --offline --multi-org=true` behind ephemeral HTTPS `tlsproxy` (`TANPOPO_ALLOWED_ORIGINS`): non-`127.0.0.1` requests aborted; `Bravo Org` created in UI and switched via `OrgSwitcher`; `scrollWidth <= clientWidth` across `1440`/`768`/`375` px; `/operations` offline banner verified in `vi` & `ja`; `0` external reqs, `0` console/page errors across Chromium (`61` audits), Firefox (`24` audits), and WebKit (`24` audits) |
 
 ### Remaining Honest Dispositions (`COND-PO-01`)
 1. **Non-`en`/`vi` Locale Strings (`CLOSED` in `TP-IMP-0047` follow-up):** All newly added `cli.bundle.*`, `orgs.*`, and Air-Gap CLI/Console entries across all `13` non-`en`/`vi` locales were translated natively with `0` English fallbacks and verified via `npm run check:i18n`, `go test ./internal/pkg/i18n/...`, and live Playwright locale switching (`vi` & `ja`).
 2. **`bundle export` Flag Aliasing:** Because root Cobra binds `--output` globally, `tanpopo bundle export` exposes `--format` for structured output alongside `-o, --output` for the output `.tpbundle` file path.
-3. **`astryx doctor --built dist` Exit Code (`CLOSED` in `TP-IMP-0047` follow-up):** Resolves cleanly with `0 fail` (`2 warn` on offline `Figtree` `theme-fonts` alias; `0` external browser font/network requests in Playwright).
+3. **`astryx doctor --built dist` Exit Code (`CLOSED` in `TP-IMP-0047` follow-up):** Resolves cleanly with `0 fail` (`2 warn` on offline `theme-fonts` Figtree alias with self-hosted Google Sans bundled; `0` external browser font/network requests in Playwright).
