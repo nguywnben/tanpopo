@@ -254,9 +254,19 @@ export function McpHubPage({
           <p className="tp-page-subtitle">{t('mcp.subtitle')}</p>
         </div>
         {canManage ? (
-          <div className="tp-page-actions">
+          <div
+            className={
+              !loading && projectId && ((tab === 'mcp' && servers.length === 0) || (tab === 'a2a' && a2aAgents.length === 0))
+                ? 'tp-page-actions tp-header-cta-desktop'
+                : 'tp-page-actions'
+            }
+          >
             <Button
-              variant="primary"
+              variant={
+                !loading && projectId && ((tab === 'mcp' && servers.length === 0) || (tab === 'a2a' && a2aAgents.length === 0))
+                  ? 'secondary'
+                  : 'primary'
+              }
               size="sm"
               disabled={!projectId}
               onClick={() => (tab === 'mcp' ? setRegisterOpen(true) : setA2aRegisterOpen(true))}
@@ -292,7 +302,14 @@ export function McpHubPage({
           rowKey={row => row.id}
           emptyTitle={t('mcp.emptyServersTitle')}
           emptyDescription={t('mcp.emptyServersDesc')}
-          emptyAction={canManage && projectId ? <Button variant="primary" size="sm" onClick={() => setRegisterOpen(true)}>{t('mcp.registerServer')}</Button> : undefined}
+          emptyAction={
+            canManage && projectId ? (
+              <Button variant="primary" size="md" onClick={() => setRegisterOpen(true)}>
+                <Plus size={14} aria-hidden="true" />
+                <span>{t('mcp.registerServer')}</span>
+              </Button>
+            ) : undefined
+          }
           columns={[
             {
               id: 'name',
@@ -412,7 +429,14 @@ export function McpHubPage({
               rowKey={row => row.agent_id}
               emptyTitle={t('a2a.emptyAgentsTitle')}
               emptyDescription={t('a2a.emptyAgentsDesc')}
-              emptyAction={canManage && projectId ? <Button variant="primary" size="sm" onClick={() => setA2aRegisterOpen(true)}>{t('a2a.registerAgent')}</Button> : undefined}
+              emptyAction={
+                canManage && projectId ? (
+                  <Button variant="primary" size="md" onClick={() => setA2aRegisterOpen(true)}>
+                    <Plus size={14} aria-hidden="true" />
+                    <span>{t('a2a.registerAgent')}</span>
+                  </Button>
+                ) : undefined
+              }
               columns={[
                 {
                   id: 'name',

@@ -353,8 +353,13 @@ export function RoutingPage({
           <p className="tp-page-subtitle">{t('routing.subtitle')}</p>
         </div>
         {canManage && activeTab === 'routes' ? (
-          <div className="tp-page-actions">
-            <Button variant="primary" size="sm" disabled={!environmentId} onClick={openCreateRoute}>
+          <div className={ !loading && routes.length === 0 && environmentId ? 'tp-page-actions tp-header-cta-desktop' : 'tp-page-actions' }>
+            <Button
+              variant={!loading && routes.length === 0 && environmentId ? 'secondary' : 'primary'}
+              size="sm"
+              disabled={!environmentId}
+              onClick={openCreateRoute}
+            >
               <Plus size={14} aria-hidden="true" />
               <span>{t('routing.createRoute')}</span>
             </Button>
@@ -394,7 +399,14 @@ export function RoutingPage({
             rowKey={row => row.id}
             emptyTitle={t('routing.emptyRoutesTitle')}
             emptyDescription={t('routing.emptyRoutesDesc')}
-            emptyAction={canManage && environmentId ? <Button variant="primary" size="sm" onClick={openCreateRoute}>{t('routing.createRoute')}</Button> : undefined}
+            emptyAction={
+              canManage && environmentId ? (
+                <Button variant="primary" size="md" onClick={openCreateRoute}>
+                  <Plus size={14} aria-hidden="true" />
+                  <span>{t('routing.createRoute')}</span>
+                </Button>
+              ) : undefined
+            }
             columns={[
               {id: 'slug', header: t('routing.col.routeSlug'), primary: true, width: '20%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.slug}</span>},
               {id: 'strategy', header: t('routing.col.strategy'), width: '16%', render: row => <span>{t(`routing.strategy.${row.strategy}`)}</span>},

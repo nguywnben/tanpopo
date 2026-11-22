@@ -81,7 +81,7 @@ export function Button({
   style,
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
-  size?: 'sm' | 'md';
+  size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
 }) {
   const astryxVariant =
@@ -125,6 +125,7 @@ export function Button({
 export function IconButton({
   label,
   variant = 'ghost',
+  size = 'sm',
   className = '',
   children,
   type = 'button',
@@ -132,7 +133,11 @@ export function IconButton({
   onClick,
   style,
   'aria-expanded': ariaExpanded,
-}: ButtonHTMLAttributes<HTMLButtonElement> & {label: string; variant?: 'ghost' | 'secondary'}) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  label: string;
+  variant?: 'ghost' | 'secondary';
+  size?: 'sm' | 'md' | 'lg';
+}) {
   return (
     <AstryxIconButton
       type={type}
@@ -140,7 +145,7 @@ export function IconButton({
       tooltip={label}
       icon={children}
       variant={variant}
-      size="sm"
+      size={size}
       isDisabled={Boolean(disabled)}
       onClick={onClick}
       className={className || undefined}

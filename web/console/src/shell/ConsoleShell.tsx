@@ -421,18 +421,17 @@ export function ConsoleShell() {
                     <div className="tp-scope-menu-head">
                       <span>{t('common.project')}</span>
                       {canManageScope ? (
-                        <button
-                          type="button"
-                          className="tp-rail-scope-add"
-                          aria-label={t('shell.newProject')}
-                          title={t('shell.newProject')}
+                        <IconButton
+                          label={t('shell.newProject')}
+                          variant="ghost"
+                          size="sm"
                           onClick={() => {
                             setScopeOpen(false);
                             openCreateProjectModal();
                           }}
                         >
-                          <Plus size={13} strokeWidth={2} aria-hidden="true" />
-                        </button>
+                          <Plus size={14} aria-hidden="true" />
+                        </IconButton>
                       ) : null}
                     </div>
                     <div className="tp-scope-menu-list" role="listbox" aria-label={t('common.project')}>
@@ -462,18 +461,17 @@ export function ConsoleShell() {
                     <div className="tp-scope-menu-head">
                       <span>{t('common.envShort')}</span>
                       {canManageScope && projectId ? (
-                        <button
-                          type="button"
-                          className="tp-rail-scope-add"
-                          aria-label={t('shell.newEnvironment')}
-                          title={t('shell.newEnvironment')}
+                        <IconButton
+                          label={t('shell.newEnvironment')}
+                          variant="ghost"
+                          size="sm"
                           onClick={() => {
                             setScopeOpen(false);
                             openCreateEnvironmentModal();
                           }}
                         >
-                          <Plus size={13} strokeWidth={2} aria-hidden="true" />
-                        </button>
+                          <Plus size={14} aria-hidden="true" />
+                        </IconButton>
                       ) : null}
                     </div>
                     <div className="tp-scope-menu-list" role="listbox" aria-label={t('common.envShort')}>

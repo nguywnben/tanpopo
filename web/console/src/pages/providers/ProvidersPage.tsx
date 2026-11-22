@@ -355,7 +355,12 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               <KeyRound size={14} aria-hidden="true" />
               <span>{t('providers.sealSecret')}</span>
             </Button>
-            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+            <Button
+              variant={tab === 'connections' && !loading && connections.length === 0 ? 'secondary' : 'primary'}
+              size="sm"
+              className={tab === 'connections' && !loading && connections.length === 0 ? 'tp-header-cta-desktop' : undefined}
+              onClick={() => setCreateOpen(true)}
+            >
               <Plus size={14} aria-hidden="true" />
               <span>{t('providers.newConnection')}</span>
             </Button>
@@ -392,7 +397,14 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             rowKey={row => row.id}
             emptyTitle={t('providers.emptyConnectionsTitle')}
             emptyDescription={t('providers.emptyConnectionsDesc')}
-            emptyAction={canManage ? <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>{t('providers.newConnection')}</Button> : undefined}
+            emptyAction={
+              canManage ? (
+                <Button variant="primary" size="md" onClick={() => setCreateOpen(true)}>
+                  <Plus size={14} aria-hidden="true" />
+                  <span>{t('providers.newConnection')}</span>
+                </Button>
+              ) : undefined
+            }
             columns={[
               {
                 id: 'name',

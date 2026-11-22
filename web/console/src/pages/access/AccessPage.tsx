@@ -242,9 +242,14 @@ export function AccessPage({
           <p className="tp-page-subtitle">{t('access.subtitle')}</p>
         </div>
         {canManage ? (
-          <div className="tp-page-actions">
+          <div className={activeTab === 'keys' && !loading && keys.length === 0 && environmentId ? 'tp-page-actions tp-header-cta-desktop' : 'tp-page-actions'}>
             {activeTab === 'keys' ? (
-              <Button variant="primary" size="sm" disabled={!environmentId} onClick={() => setIssueOpen(true)}>
+              <Button
+                variant={!loading && keys.length === 0 && environmentId ? 'secondary' : 'primary'}
+                size="sm"
+                disabled={!environmentId}
+                onClick={() => setIssueOpen(true)}
+              >
                 <Plus size={14} aria-hidden="true" />
                 <span>{t('access.issueKey')}</span>
               </Button>
@@ -282,7 +287,14 @@ export function AccessPage({
             rowKey={row => row.id}
             emptyTitle={t('access.emptyKeysTitle')}
             emptyDescription={t('access.emptyKeysDesc')}
-            emptyAction={canManage && environmentId ? <Button variant="primary" size="sm" onClick={() => setIssueOpen(true)}>{t('access.issueKey')}</Button> : undefined}
+            emptyAction={
+              canManage && environmentId ? (
+                <Button variant="primary" size="md" onClick={() => setIssueOpen(true)}>
+                  <Plus size={14} aria-hidden="true" />
+                  <span>{t('access.issueKey')}</span>
+                </Button>
+              ) : undefined
+            }
             columns={[
               {id: 'name', header: t('common.name'), primary: true, width: '30%', render: row => <span style={{fontWeight: 600}}>{row.name}</span>},
               {id: 'key', header: t('access.col.prefixLast4'), width: '20%', render: row => <span className="mono">{row.key_prefix}…{row.last_four}</span>},
