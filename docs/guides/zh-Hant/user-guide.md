@@ -58,8 +58,8 @@
 | --- | --- |
 | `tanpopo serve` | 啟動 Tanpopo 服務（`--role all`、`control-plane` 或 `data-plane`）。 |
 | `tanpopo doctor` | 檢查本機檔案、資料庫連線與服務健康狀態（支援 `--output json`）。 |
-| `tanpopo support bundle` | 蒐集去識別化診斷封存包（絕不含保險庫明文或提示詞）。 |
-| `tanpopo admin reset-owner` | 使用本機 Master KEK 檔案離線重設組織擁有者密碼。 |
+| `tanpopo support-bundle` | 蒐集去識別化診斷封存包（絕不含保險庫明文或提示詞）。 |
+| `tanpopo admin reset-local-owner` | 使用本機 Master KEK 檔案離線重設組織擁有者密碼。 |
 | `tanpopo backup create / verify / restore` | 建立、驗證與原子還原 `.tpop.enc` 加密備份。 |
 | `tanpopo plugin init / validate / test / pack` | 開發、離線契約測試與封裝可重現 `.tpkg` 擴充套件。 |
 | `tanpopo upgrade preflight` | 升級 Tanpopo Core 前驗證已安裝擴充套件的 ABI 相容性。 |

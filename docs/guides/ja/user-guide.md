@@ -58,8 +58,8 @@
 | --- | --- |
 | `tanpopo serve` | Tanpopo サーバーを起動（`--role all`、`control-plane`、`data-plane`）。 |
 | `tanpopo doctor` | ローカルファイル・DB・サービス健全性を診断（`--output json` 対応）。 |
-| `tanpopo support bundle` | 機密除去済みの診断アーカイブを作成（平文シークレット・プロンプト除外）。 |
-| `tanpopo admin reset-owner` | ローカル組織オーナーのパスワードをオフラインで再設定。 |
+| `tanpopo support-bundle` | 機密除去済みの診断アーカイブを作成（平文シークレット・プロンプト除外）。 |
+| `tanpopo admin reset-local-owner` | ローカル組織オーナーのパスワードをオフラインで再設定。 |
 | `tanpopo backup create / verify / restore` | `.tpop.enc` 暗号化バックアップの作成・検証・復元。 |
 | `tanpopo plugin init / validate / test / pack` | 拡張機能の作成・オフライン契約テスト・`.tpkg` パッケージ作成。 |
 | `tanpopo upgrade preflight` | Tanpopo Core 更新前の ABI 互換性検証。 |

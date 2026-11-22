@@ -8,7 +8,7 @@
 
 1. เริ่มเซิร์ฟเวอร์ Tanpopo:
    ```bash
-   tanpopo serve --role all-in-one --listen 127.0.0.1:8080
+   tanpopo serve --role all --listen 127.0.0.1:8080
    ```
 2. เมื่อรันครั้งแรก Tanpopo จะพิมพ์ **โทเค็นตั้งต้น (bootstrap token)** แบบใช้ครั้งเดียวในล็อกของเซิร์ฟเวอร์
 3. เปิด `http://127.0.0.1:8080/setup` ในเบราว์เซอร์และทำตามวิซาร์ด 4 ขั้นตอน:
@@ -56,11 +56,11 @@
 
 | คำสั่ง | วัตถุประสงค์ |
 | --- | --- |
-| `tanpopo serve` | เริ่มเซิร์ฟเวอร์ Tanpopo (`--role all-in-one`, `control-plane`, `data-plane` หรือ `worker`) |
-| `tanpopo doctor` | ตรวจสอบไบนารี การเชื่อมต่อฐานข้อมูล และสิทธิ์พื้นที่จัดเก็บ (รองรับ `--json`) |
-| `tanpopo support bundle` | รวบรวมไฟล์วินิจฉัยที่ปกปิดข้อมูลลับแล้ว (ไม่รวมความลับหรือพรอมต์) |
-| `tanpopo admin reset-owner` | รีเซ็ตรหัสผ่านเจ้าขององค์กรในเครื่องแบบออฟไลน์ (ต้องระบุ `--yes-i-know-this-resets-owner-password`) |
-| `tanpopo backup create / restore` | สร้างหรือกู้คืนไฟล์สำรองเข้ารหัส `.tpop.enc` |
-| `tanpopo plugin install / upgrade / rollback / quarantine` | จัดการส่วนขยายที่ตรึงค่า digest ผ่านบรรทัดคำสั่ง |
+| `tanpopo serve` | เริ่มเซิร์ฟเวอร์ Tanpopo (`--role all`, `control-plane`, `data-plane`) |
+| `tanpopo doctor` | ตรวจสอบไบนารี การเชื่อมต่อฐานข้อมูล และสิทธิ์พื้นที่จัดเก็บ (รองรับ `--output json`) |
+| `tanpopo support-bundle` | รวบรวมไฟล์วินิจฉัยที่ปกปิดข้อมูลลับแล้ว (ไม่รวมความลับหรือพรอมต์) |
+| `tanpopo admin reset-local-owner` | รีเซ็ตรหัสผ่านเจ้าขององค์กรในเครื่องแบบออฟไลน์ (ต้องระบุ `--db` / `--email`) |
+| `tanpopo backup create / verify / restore` | สร้างหรือกู้คืนไฟล์สำรองเข้ารหัส `.tpop.enc` |
+| `tanpopo bundle export / verify / import` | จัดการส่วนขยายที่ตรึงค่า digest ผ่านบรรทัดคำสั่ง |
 | `tanpopo upgrade preflight` | ตรวจสอบความเข้ากันได้ของ ABI ของส่วนขยายก่อนอัปเกรด Tanpopo Core |
-| `tanpopo keys / routes / audit / kill-switch` | จัดการทรัพยากร Control Plane ระยะไกลผ่าน `/admin/v1` |
+| `tanpopo key / route / audit / killswitch` | จัดการทรัพยากร Control Plane ระยะไกลผ่าน `/admin/v1` |

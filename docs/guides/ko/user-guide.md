@@ -8,7 +8,7 @@
 
 1. Tanpopo 서버를 시작합니다:
    ```bash
-   tanpopo serve --role all-in-one --listen 127.0.0.1:8080
+   tanpopo serve --role all --listen 127.0.0.1:8080
    ```
 2. 최초 실행 시 Tanpopo는 일회용 **부트스트랩 토큰**을 서버 로그에 출력합니다.
 3. 브라우저에서 `http://127.0.0.1:8080/setup`을 열고 4단계 설정 마법사를 완료합니다:
@@ -56,11 +56,11 @@
 
 | 명령 | 용도 |
 | --- | --- |
-| `tanpopo serve` | Tanpopo 서버 실행 (`--role all-in-one`, `control-plane`, `data-plane`, `worker`). |
-| `tanpopo doctor` | 바이너리, 데이터베이스 연결 및 스토리지 권한 점검 (`--json` 지원). |
-| `tanpopo support bundle` | 민감 정보가 제거된 진단 아카이브 수집(볼트 평문 및 프롬프트 제외). |
-| `tanpopo admin reset-owner` | 로컬 조직 소유자 비밀번호 오프라인 재설정 (`--yes-i-know-this-resets-owner-password` 필요). |
-| `tanpopo backup create / restore` | 암호화된 `.tpop.enc` 백업 아카이브 생성 또는 복원. |
-| `tanpopo plugin install / upgrade / rollback / quarantine` | 다이제스트 고정 확장 기능을 CLI에서 관리. |
+| `tanpopo serve` | Tanpopo 서버 실행 (`--role all`, `control-plane`, `data-plane`). |
+| `tanpopo doctor` | 바이너리, 데이터베이스 연결 및 스토리지 권한 점검 (`--output json` 지원). |
+| `tanpopo support-bundle` | 민감 정보가 제거된 진단 아카이브 수집(볼트 평문 및 프롬프트 제외). |
+| `tanpopo admin reset-local-owner` | 로컬 조직 소유자 비밀번호 오프라인 재설정 (`--db` / `--email` 필요). |
+| `tanpopo backup create / verify / restore` | 암호화된 `.tpop.enc` 백업 아카이브 생성 또는 복원. |
+| `tanpopo bundle export / verify / import` | 다이제스트 고정 확장 기능을 CLI에서 관리. |
 | `tanpopo upgrade preflight` | Tanpopo Core 업그레이드 전 설치된 확장 기능의 ABI 호환성 검증. |
-| `tanpopo keys / routes / audit / kill-switch` | `/admin/v1`을 통해 원격 컨트롤 플레인 리소스 운영. |
+| `tanpopo key / route / audit / killswitch` | `/admin/v1`을 통해 원격 컨트롤 플레인 리소스 운영. |

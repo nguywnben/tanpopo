@@ -1,0 +1,40 @@
+Tanpopo
+Copyright 2026 The Tanpopo Authors
+
+This product includes software developed by The Tanpopo Authors
+(https://github.com/nguywnben/tanpopo), licensed under the Apache License,
+Version 2.0 (see LICENSE).
+
+================================================================================
+Third-Party Components & Attributions
+================================================================================
+
+Tanpopo bundles and builds upon open-source software licensed under permissive
+licenses compatible with Apache License, Version 2.0 (zero GPL/AGPL/SSPL runtime
+or build dependencies are included):
+
+1. Go Core & Ecosystem Dependencies (go.mod)
+   - connectrpc.com/connect (Apache-2.0)
+   - github.com/jackc/pgx/v5 (MIT)
+   - github.com/klauspost/compress (BSD-3-Clause / Apache-2.0 / MIT)
+   - github.com/prometheus/client_golang & client_model & common (Apache-2.0)
+   - github.com/spf13/cobra & pflag (Apache-2.0 / BSD-3-Clause)
+   - github.com/tetratelabs/wazero (Apache-2.0)
+   - github.com/valkey-io/valkey-go (Apache-2.0)
+   - go.opentelemetry.io/otel & proto/otlp (Apache-2.0)
+   - go.uber.org/goleak (MIT)
+   - golang.org/x/{crypto,net,sync,sys,text} (BSD-3-Clause)
+   - google.golang.org/protobuf & grpc (BSD-3-Clause / Apache-2.0)
+   - gopkg.in/yaml.v3 (MIT / Apache-2.0)
+   - modernc.org/sqlite & libc (BSD-3-Clause)
+
+2. Web Console Dependencies (web/console/package.json)
+   - React & ReactDOM (MIT)
+   - @astryxdesign/core & @astryxdesign/theme-neutral (Apache-2.0)
+   - lucide-react (ISC)
+   - openapi-fetch (MIT)
+   - @fontsource/figtree (OFL-1.1 — offline-bundled local .woff2 typography)
+
+Full SPDX SBOM manifests (CycloneDX) for distributed binaries and Web Console
+assets are generated reproducibly via scripts/release/verify-artifacts.sh and
+audited by scripts/release/check-sbom-licenses.py.

@@ -8,7 +8,7 @@
 
 1. Inicie o servidor Tanpopo:
    ```bash
-   tanpopo serve --role all-in-one --listen 127.0.0.1:8080
+   tanpopo serve --role all --listen 127.0.0.1:8080
    ```
 2. Na primeira execução, o Tanpopo imprime um **token de bootstrap** de uso único nos logs do servidor.
 3. Abra `http://127.0.0.1:8080/setup` no navegador e conclua o assistente de 4 etapas:
@@ -56,11 +56,11 @@
 
 | Comando | Finalidade |
 | --- | --- |
-| `tanpopo serve` | Iniciar o servidor Tanpopo (`--role all-in-one`, `control-plane`, `data-plane` ou `worker`). |
-| `tanpopo doctor` | Verificar binário, conectividade do banco de dados e permissões de armazenamento (`--json` suportado). |
-| `tanpopo support bundle` | Coletar um pacote de diagnóstico sanitizado (nunca inclui segredos em texto simples nem prompts). |
-| `tanpopo admin reset-owner` | Redefinir offline a senha do proprietário local da organização (exige `--yes-i-know-this-resets-owner-password`). |
-| `tanpopo backup create / restore` | Criar ou restaurar um arquivo de backup criptografado `.tpop.enc`. |
-| `tanpopo plugin install / upgrade / rollback / quarantine` | Gerenciar extensões fixadas por digest pela linha de comando. |
+| `tanpopo serve` | Iniciar o servidor Tanpopo (`--role all`, `control-plane`, `data-plane`). |
+| `tanpopo doctor` | Verificar binário, conectividade do banco de dados e permissões de armazenamento (`--output json` suportado). |
+| `tanpopo support-bundle` | Coletar um pacote de diagnóstico sanitizado (nunca inclui segredos em texto simples nem prompts). |
+| `tanpopo admin reset-local-owner` | Redefinir offline a senha do proprietário local da organização (exige `--db` / `--email`). |
+| `tanpopo backup create / verify / restore` | Criar ou restaurar um arquivo de backup criptografado `.tpop.enc`. |
+| `tanpopo bundle export / verify / import` | Gerenciar extensões fixadas por digest pela linha de comando. |
 | `tanpopo upgrade preflight` | Validar compatibilidade ABI das extensões instaladas antes de atualizar o Tanpopo Core. |
-| `tanpopo keys / routes / audit / kill-switch` | Operar recursos remotos do plano de controle via `/admin/v1`. |
+| `tanpopo key / route / audit / killswitch` | Operar recursos remotos do plano de controle via `/admin/v1`. |

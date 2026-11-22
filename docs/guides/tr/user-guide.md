@@ -8,7 +8,7 @@
 
 1. Tanpopo sunucusunu başlatın:
    ```bash
-   tanpopo serve --role all-in-one --listen 127.0.0.1:8080
+   tanpopo serve --role all --listen 127.0.0.1:8080
    ```
 2. İlk başlatmada Tanpopo, sunucu günlüğüne tek kullanımlık bir **başlatma belirteci (bootstrap token)** yazdırır.
 3. Tarayıcınızda `http://127.0.0.1:8080/setup` adresini açın ve 4 adımlı kurulum sihirbazını tamamlayın:
@@ -56,11 +56,11 @@
 
 | Komut | Amaç |
 | --- | --- |
-| `tanpopo serve` | Tanpopo sunucusunu başlatır (`--role all-in-one`, `control-plane`, `data-plane` veya `worker`). |
-| `tanpopo doctor` | İkili dosyayı, veritabanı bağlantısını ve depolama izinlerini doğrular (`--json` destekli). |
-| `tanpopo support bundle` | Hassas verilerden arındırılmış tanılama arşivi toplar (kasa düz metni veya istem içermez). |
-| `tanpopo admin reset-owner` | Yerel kuruluş sahibinin parolasını çevrimdışı sıfırlar (`--yes-i-know-this-resets-owner-password` gerektirir). |
-| `tanpopo backup create / restore` | Şifreli `.tpop.enc` yedek arşivi oluşturur veya geri yükler. |
-| `tanpopo plugin install / upgrade / rollback / quarantine` | Özetle sabitlenmiş uzantıları komut satırından yönetir. |
+| `tanpopo serve` | Tanpopo sunucusunu başlatır (`--role all`, `control-plane`, `data-plane`). |
+| `tanpopo doctor` | İkili dosyayı, veritabanı bağlantısını ve depolama izinlerini doğrular (`--output json` destekli). |
+| `tanpopo support-bundle` | Hassas verilerden arındırılmış tanılama arşivi toplar (kasa düz metni veya istem içermez). |
+| `tanpopo admin reset-local-owner` | Yerel kuruluş sahibinin parolasını çevrimdışı sıfırlar (`--db` / `--email` gerektirir). |
+| `tanpopo backup create / verify / restore` | Şifreli `.tpop.enc` yedek arşivi oluşturur veya geri yükler. |
+| `tanpopo bundle export / verify / import` | Özetle sabitlenmiş uzantıları komut satırından yönetir. |
 | `tanpopo upgrade preflight` | Tanpopo Core yükseltmesi öncesi yüklü uzantıların ABI uyumluluğunu doğrular. |
-| `tanpopo keys / routes / audit / kill-switch` | `/admin/v1` üzerinden uzak kontrol düzlemi kaynaklarını yönetir. |
+| `tanpopo key / route / audit / killswitch` | `/admin/v1` üzerinden uzak kontrol düzlemi kaynaklarını yönetir. |

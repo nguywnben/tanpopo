@@ -1,8 +1,17 @@
-# Tanpopo User Guides
+# Tanpopo Guides Portal
 
-End-user operational documentation for installing, configuring, and running **Tanpopo** in all 15 supported languages. Internal engineering, architecture, and governance documentation remains in English as the canonical source under [`docs/`](../README.md).
+Start with the persona journey that matches your goal, or read the end-user operational documentation in all 15 supported languages. Internal engineering, architecture, and governance documentation remains in English as the canonical source under [`docs/`](../README.md).
 
-## Available Languages
+## Four-Journey Portal (`TP-IMP-0046`)
+
+| Journey | Audience | Scope |
+| --- | --- | --- |
+| [**1. Quickstart & First Inference**](./quickstart.md) | Developers & Evaluators | `< 3m` standalone binary or Docker Compose boot, `/setup` bootstrap, OpenAI SDK & native `/native/*` inference |
+| [**2. Extension Authoring SDK**](./plugin-authoring-sdk.md) | Plugin Authors | Tier-1 Declarative vs. Tier-2 Wasm sandboxing, offline cassette tests, reproducible `.tpkg`, N/N-1 ABI checks |
+| [**3. Production HA, Backups & Air-Gap**](./production-ha-and-airgap.md) | Platform & SRE Teams | Split planes, PostgreSQL 16+ `FORCE RLS`, Valkey Cluster, `.tpop.enc` recovery, `INC-01..07` runbooks, `--offline` `.tpbundle` |
+| [**4. Security, Vault/KMS & MCP/A2A Governance**](./security-and-mcp-governance.md) | Security & AI Governance | 3-tier Vault/KMS envelope encryption, Four-Eyes approval, `MCP 2025-03-26` JCS pinning & HITL, A2A sidecars |
+
+## Available Languages (Role-Oriented User Guides)
 
 | Language | Locale | Guide |
 | --- | --- | --- |
