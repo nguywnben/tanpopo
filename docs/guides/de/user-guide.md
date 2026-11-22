@@ -58,8 +58,8 @@
 | --- | --- |
 | `tanpopo serve` | Tanpopo-Server starten (`--role all`, `control-plane` oder `data-plane`). |
 | `tanpopo doctor` | Lokale Dateien, Datenbank und Dienstzustand prüfen (`--output json`). |
-| `tanpopo support bundle` | Bereinigtes Diagnosearchiv erstellen (ohne Klartext-Geheimnisse oder Prompts). |
-| `tanpopo admin reset-owner` | Passwort des lokalen Organisationseigentümers offline zurücksetzen. |
+| `tanpopo support-bundle` | Bereinigtes Diagnosearchiv erstellen (ohne Klartext-Geheimnisse oder Prompts). |
+| `tanpopo admin reset-local-owner` | Passwort des lokalen Organisationseigentümers offline zurücksetzen. |
 | `tanpopo backup create / verify / restore` | Verschlüsselte `.tpop.enc`-Backups erstellen, prüfen und wiederherstellen. |
 | `tanpopo plugin init / validate / test / pack` | Erweiterungen entwickeln, offline testen und als `.tpkg` packen. |
 | `tanpopo upgrade preflight` | ABI-Kompatibilität vor Core-Upgrades prüfen. |

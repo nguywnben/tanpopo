@@ -8,7 +8,7 @@
 
 1. Запустите сервер Tanpopo:
    ```bash
-   tanpopo serve --role all-in-one --listen 127.0.0.1:8080
+   tanpopo serve --role all --listen 127.0.0.1:8080
    ```
 2. При первом запуске Tanpopo выведет одноразовый **токен начальной настройки** (bootstrap token) в журнал сервера.
 3. Откройте `http://127.0.0.1:8080/setup` в браузере и пройдите мастер из 4 шагов:
@@ -56,11 +56,11 @@
 
 | Команда | Назначение |
 | --- | --- |
-| `tanpopo serve` | Запуск сервера Tanpopo (`--role all-in-one`, `control-plane`, `data-plane` или `worker`). |
-| `tanpopo doctor` | Проверка бинарного файла, подключения к БД и прав хранилища (поддерживает `--json`). |
-| `tanpopo support bundle` | Сбор очищенного диагностического архива (никогда не включает секреты и промпты). |
-| `tanpopo admin reset-owner` | Офлайн-сброс пароля локального владельца организации (требует `--yes-i-know-this-resets-owner-password`). |
-| `tanpopo backup create / restore` | Создание или восстановление шифрованной резервной копии `.tpop.enc`. |
-| `tanpopo plugin install / upgrade / rollback / quarantine` | Управление расширениями с фиксацией дайджеста из CLI. |
+| `tanpopo serve` | Запуск сервера Tanpopo (`--role all`, `control-plane`, `data-plane`). |
+| `tanpopo doctor` | Проверка бинарного файла, подключения к БД и прав хранилища (поддерживает `--output json`). |
+| `tanpopo support-bundle` | Сбор очищенного диагностического архива (никогда не включает секреты и промпты). |
+| `tanpopo admin reset-local-owner` | Офлайн-сброс пароля локального владельца организации (требует `--db` / `--email`). |
+| `tanpopo backup create / verify / restore` | Создание или восстановление шифрованной резервной копии `.tpop.enc`. |
+| `tanpopo bundle export / verify / import` | Управление расширениями с фиксацией дайджеста из CLI. |
 | `tanpopo upgrade preflight` | Проверка совместимости ABI установленных расширений перед обновлением Tanpopo Core. |
-| `tanpopo keys / routes / audit / kill-switch` | Управление удалёнными ресурсами Control Plane через `/admin/v1`. |
+| `tanpopo key / route / audit / killswitch` | Управление удалёнными ресурсами Control Plane через `/admin/v1`. |

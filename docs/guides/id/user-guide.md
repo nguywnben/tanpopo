@@ -58,8 +58,8 @@
 | --- | --- |
 | `tanpopo serve` | Menjalankan server Tanpopo (`--role all`, `control-plane`, atau `data-plane`). |
 | `tanpopo doctor` | Memeriksa file lokal, database, dan kesehatan layanan (`--output json`). |
-| `tanpopo support bundle` | Membuat arsip diagnostik tersensor (tanpa rahasia atau prompt). |
-| `tanpopo admin reset-owner` | Mengatur ulang kata sandi pemilik lokal secara offline. |
+| `tanpopo support-bundle` | Membuat arsip diagnostik tersensor (tanpa rahasia atau prompt). |
+| `tanpopo admin reset-local-owner` | Mengatur ulang kata sandi pemilik lokal secara offline. |
 | `tanpopo backup create / verify / restore` | Membuat, memverifikasi, dan memulihkan cadangan `.tpop.enc`. |
 | `tanpopo plugin init / validate / test / pack` | Mengembangkan, menguji offline, dan mengemas ekstensi `.tpkg`. |
 | `tanpopo upgrade preflight` | Memvalidasi kompatibilitas ABI sebelum memperbarui Tanpopo Core. |

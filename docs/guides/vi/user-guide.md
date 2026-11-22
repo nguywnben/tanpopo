@@ -8,7 +8,7 @@
 
 1. Khởi chạy máy chủ Tanpopo:
    ```bash
-   tanpopo serve --role all-in-one --listen 127.0.0.1:8080
+   tanpopo serve --role all --listen 127.0.0.1:8080
    ```
 2. Ở lần chạy đầu tiên, Tanpopo in ra một **mã khởi tạo (bootstrap token)** dùng một lần trong nhật ký máy chủ.
 3. Mở `http://127.0.0.1:8080/setup` trên trình duyệt và hoàn tất 4 bước thiết lập:
@@ -56,11 +56,11 @@
 
 | Lệnh | Mục đích |
 | --- | --- |
-| `tanpopo serve` | Khởi chạy máy chủ Tanpopo (`--role all-in-one`, `control-plane`, `data-plane`, hoặc `worker`). |
-| `tanpopo doctor` | Kiểm tra tệp thực thi, kết nối cơ sở dữ liệu và quyền lưu trữ (hỗ trợ `--json`). |
-| `tanpopo support bundle` | Thu thập gói chẩn đoán đã ẩn thông tin nhạy cảm (không bao gồm bí mật kho hay prompt). |
-| `tanpopo admin reset-owner` | Đặt lại ngoại tuyến mật khẩu chủ tổ chức cục bộ (cần cờ `--yes-i-know-this-resets-owner-password`). |
-| `tanpopo backup create / restore` | Tạo hoặc khôi phục tệp sao lưu mã hóa `.tpop.enc`. |
-| `tanpopo plugin install / upgrade / rollback / quarantine` | Quản lý tiện ích đã ghim mã băm từ dòng lệnh. |
+| `tanpopo serve` | Khởi chạy máy chủ Tanpopo (`--role all`, `control-plane`, `data-plane`). |
+| `tanpopo doctor` | Kiểm tra tệp thực thi, kết nối cơ sở dữ liệu và quyền lưu trữ (hỗ trợ `--output json`). |
+| `tanpopo support-bundle` | Thu thập gói chẩn đoán đã ẩn thông tin nhạy cảm (không bao gồm bí mật kho hay prompt). |
+| `tanpopo admin reset-local-owner` | Đặt lại ngoại tuyến mật khẩu chủ tổ chức cục bộ (cần cờ `--db` / `--email`). |
+| `tanpopo backup create / verify / restore` | Tạo hoặc khôi phục tệp sao lưu mã hóa `.tpop.enc`. |
+| `tanpopo bundle export / verify / import` | Quản lý tiện ích đã ghim mã băm từ dòng lệnh. |
 | `tanpopo upgrade preflight` | Xác minh tương thích ABI của tiện ích đã cài trước khi nâng cấp Tanpopo Core. |
-| `tanpopo keys / routes / audit / kill-switch` | Vận hành tài nguyên Control Plane từ xa qua `/admin/v1`. |
+| `tanpopo key / route / audit / killswitch` | Vận hành tài nguyên Control Plane từ xa qua `/admin/v1`. |

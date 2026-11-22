@@ -8,7 +8,7 @@
 
 1. Start the Tanpopo server:
    ```bash
-   tanpopo serve --role all-in-one --listen 127.0.0.1:8080
+   tanpopo serve --role all --listen 127.0.0.1:8080
    ```
 2. On first launch, Tanpopo prints a one-time **bootstrap token** to the server log.
 3. Open `http://127.0.0.1:8080/setup` in your browser and complete the 4-step setup wizard:
@@ -56,11 +56,11 @@
 
 | Command | Purpose |
 | --- | --- |
-| `tanpopo serve` | Start the Tanpopo server (`--role all-in-one`, `control-plane`, `data-plane`, or `worker`). |
-| `tanpopo doctor` | Verify binary, database connectivity, and storage permissions (`--json` supported). |
-| `tanpopo support bundle` | Collect a sanitized diagnostic archive (never includes vault plaintext or prompts). |
-| `tanpopo admin reset-owner` | Reset the local organization owner password offline (requires `--yes-i-know-this-resets-owner-password`). |
-| `tanpopo backup create / restore` | Create or restore an encrypted `.tpop.enc` backup archive. |
-| `tanpopo plugin install / upgrade / rollback / quarantine` | Manage digest-pinned extensions from the command line. |
+| `tanpopo serve` | Start the Tanpopo server (`--role all`, `control-plane`, or `data-plane`; `--offline`, `--multi-org`). |
+| `tanpopo doctor` | Verify binary, database connectivity, and storage permissions (`--output json` supported). |
+| `tanpopo support-bundle` | Collect a locally redacted diagnostic archive (never includes vault plaintext or prompts). |
+| `tanpopo admin reset-local-owner` | Reset one local `ORG_OWNER` password offline using the local Master KEK (`--db`, `--email`). |
+| `tanpopo backup create / verify / restore` | Create, verify, or atomically restore an encrypted `.tpop.enc` backup archive. |
+| `tanpopo bundle export / verify / import` | Package, verify, and atomically import signed air-gap `.tpbundle` archives offline. |
 | `tanpopo upgrade preflight` | Validate installed extension ABI compatibility before upgrading Tanpopo Core. |
-| `tanpopo keys / routes / audit / kill-switch` | Operate remote control-plane resources over `/admin/v1`. |
+| `tanpopo key / route / audit / killswitch` | Inspect keys, routes, RFC 8785 audit chains, and active kill switches. |

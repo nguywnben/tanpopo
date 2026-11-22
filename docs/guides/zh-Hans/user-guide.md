@@ -8,7 +8,7 @@
 
 1. 启动 Tanpopo 服务器：
    ```bash
-   tanpopo serve --role all-in-one --listen 127.0.0.1:8080
+   tanpopo serve --role all --listen 127.0.0.1:8080
    ```
 2. 首次启动时，Tanpopo 会在服务端日志中打印一次性**引导令牌（Bootstrap Token）**。
 3. 在浏览器中打开 `http://127.0.0.1:8080/setup` 并完成 4 步初始化向导：
@@ -58,8 +58,8 @@
 | --- | --- |
 | `tanpopo serve` | 启动 Tanpopo 服务（`--role all`、`control-plane` 或 `data-plane`）。 |
 | `tanpopo doctor` | 检查本地文件、数据库连接与服务健康状态（支持 `--output json`）。 |
-| `tanpopo support bundle` | 收集本地脱敏诊断包（绝不包含密钥库明文或提示词）。 |
-| `tanpopo admin reset-owner` | 使用本地 Master KEK 文件离线重置组织所有者密码。 |
+| `tanpopo support-bundle` | 收集本地脱敏诊断包（绝不包含密钥库明文或提示词）。 |
+| `tanpopo admin reset-local-owner` | 使用本地 Master KEK 文件离线重置组织所有者密码。 |
 | `tanpopo backup create / verify / restore` | 创建、校验与原子恢复 `.tpop.enc` 加密备份。 |
 | `tanpopo plugin init / validate / test / pack` | 开发、离线契约测试与打包可复现的 `.tpkg` 扩展包。 |
 | `tanpopo upgrade preflight` | 升级 Tanpopo Core 前检查已安装扩展的 ABI 兼容性。 |
