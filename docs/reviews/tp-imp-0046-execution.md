@@ -3,7 +3,7 @@
 - **Unit ID:** `TP-IMP-0046`
 - **Model:** **Gemini 4 Hydrogen**
 - **Decision:** `DEC-095` *(delegated under `DEC-092` M5 sequential authorization)*
-- **Branch / PR:** `develop` → `main` *(PR [#38](https://github.com/nguywnben/tanpopo/pull/38), `main` SHA pending merge)*
+- **Branch / PR:** `develop` → `main` *(PR [#38](https://github.com/nguywnben/tanpopo/pull/38), merged `main` SHA [`c8a2ea14`](https://github.com/nguywnben/tanpopo/commit/c8a2ea1433d6c8e0feb5dbef2248db80ac5933d7); post-merge CI [`45008483361`](https://github.com/nguywnben/tanpopo/actions/runs/45008483361) [`Stage 0-2`] & [`45008483379`](https://github.com/nguywnben/tanpopo/actions/runs/45008483379) [`Release Dry Run`] `SUCCESS`)*
 - **Review Tier:** **`STANDARD_REVIEW`**
 - **Verdict:** **`DONE`** *(with explicit honest limitation notes per `COND-PO-01`)*
 

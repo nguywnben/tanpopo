@@ -52,6 +52,9 @@ jobs:
       - name: Verify Documentation, CLI Help, OpenAPI & Runbook Sync (check_drift)
         run: CGO_ENABLED=0 go run ./scripts/docs/check_drift.go --skip-quickstart
 
+      - name: Verify Release Readiness Gates 01..06 & Fail-Closed GATE-REL-07 (dry-run)
+        run: CGO_ENABLED=0 go run ./scripts/release/pre_publish_check.go --mode dry-run
+
       - name: Verify M0 Machine-Readable Contracts (runtime.proto, OpenAPI 3.1, SQLite DDL)
         working-directory: tools/spikes
         run: CGO_ENABLED=0 go test -count=1 -v -run 'Test(ContractProtoCompilesCleanly|OpenAPISpecsParseAndResolveAllInternalRefs|PhysicalSQLiteAndPostgresSchemaParityAndConstraints|HermeticGuardBlocksExternalEgress)' ./...
