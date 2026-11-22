@@ -20,11 +20,16 @@ const PlaygroundPage = lazy(() => import('../pages/playground/PlaygroundPage').t
 const AccessPage = lazy(() => import('../pages/access/AccessPage').then(mod => ({default: mod.AccessPage})));
 const SecurityPage = lazy(() => import('../pages/security/SecurityPage').then(mod => ({default: mod.SecurityPage})));
 const OperationsPage = lazy(() => import('../pages/operations/OperationsPage').then(mod => ({default: mod.OperationsPage})));
+const OrganizationsAdminPage = lazy(() => import('../pages/orgs/OrganizationsAdminPage').then(mod => ({default: mod.OrganizationsAdminPage})));
 
 export function WorkspaceRouter({
   route,
   pathname,
   roles,
+  activeOrgId,
+  multiOrgEnabled,
+  onSelectOrg,
+  onOrganizationsChanged,
   projectId,
   environmentId,
   session,
@@ -32,6 +37,10 @@ export function WorkspaceRouter({
   route: ConsoleRoute;
   pathname: string;
   roles: Role[];
+  activeOrgId: string;
+  multiOrgEnabled: boolean;
+  onSelectOrg: (orgId: string) => void;
+  onOrganizationsChanged: () => void | Promise<void>;
   projects: Project[];
   environments: Environment[];
   projectId: string;
@@ -70,7 +79,17 @@ export function WorkspaceRouter({
         />
       ) : null}
       {route.path === '/security/approvals' ? <SecurityPage pathname={pathname} roles={roles} /> : null}
-      {route.path === '/ops/health' ? <OperationsPage pathname={pathname} projectId={projectId} roles={roles} /> : null}
+      {route.path === '/ops/health' && pathname.startsWith('/ops/organizations') ? (
+        <OrganizationsAdminPage
+          roles={roles}
+          activeOrgId={activeOrgId}
+          multiOrgEnabled={multiOrgEnabled}
+          onSelectOrg={onSelectOrg}
+          onOrganizationsChanged={onOrganizationsChanged}
+        />
+      ) : route.path === '/ops/health' ? (
+        <OperationsPage pathname={pathname} projectId={projectId} roles={roles} />
+      ) : null}
     </Suspense>
   );
 }

@@ -241,6 +241,7 @@ components:
       properties:
         initialized: { type: boolean }
         offline_mode: { type: boolean }
+        multi_org_enabled: { type: boolean }
         version: { type: string }
 
     BootstrapCompleteRequest:
@@ -310,6 +311,7 @@ components:
           items: { $ref: "#/components/schemas/RbacRole" }
         csrf_token: { type: string }
         expires_at: { type: string, format: date-time }
+        multi_org_enabled: { type: boolean }
 
     Organization:
       type: object

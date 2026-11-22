@@ -190,6 +190,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
         onSelect={id => {
           if (id === 'backups') navigate('/ops/backups');
           else if (id === 'upgrades') navigate('/ops/upgrades');
+          else if (id === 'organizations') navigate('/ops/organizations');
           else if (id === 'webhooks') navigate('/settings/residency-retention');
           else navigate('/ops/health');
         }}
@@ -197,6 +198,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
           {id: 'health', label: t('operations.tabHealth')},
           {id: 'backups', label: t('operations.tabBackups'), count: backups.length},
           {id: 'upgrades', label: t('operations.tabUpgrades')},
+          {id: 'organizations', label: t('orgs.tabTitle')},
           {id: 'webhooks', label: t('operations.tabWebhooks'), count: webhooks.length},
         ]}
       />

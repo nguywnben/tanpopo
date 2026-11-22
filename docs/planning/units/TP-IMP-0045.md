@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0045` |
 | **Milestone / Epic** | `M5` (`v1.0 GA Hardening, Docs & Release`) · `EP-09` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0035`, `TP-IMP-0040`, `TP-IMP-0041` — `GAP-01, 12`)* |
+| **Status** | `DONE` *(`DEC-094`, **Gemini 4 Hydrogen**; [execution report](../../reviews/tp-imp-0045-execution.md); strong review `APPROVED` by `code-reviewer` [`033f82b5`] & `security-auditor` [`70d62b77`])* |
 | **Size** | `M` (`internal/cli/bundle/*`, `web/console/src/shell/OrgSwitcher.tsx`, `web/console/src/pages/orgs/*`) |
 | **Review Tier** | **`REQUIRES_STRONG_REVIEW`** *(Offline supply-chain signature verification `CT-31` & Multi-Organization UI context isolation)* |
 | **Technical Owner** | `Staff Enterprise Platform & Frontend Lead` |

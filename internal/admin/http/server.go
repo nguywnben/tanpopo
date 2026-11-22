@@ -141,6 +141,7 @@ type ServerConfig struct {
 	HostResolver            egress.HostResolver
 	BlockedAdminPorts       []int
 	OfflineMode             bool
+	MultiOrgDisabled        bool
 	Version                 string
 }
 
@@ -265,6 +266,7 @@ type Server struct {
 	hostResolver           egress.HostResolver
 	blockedPorts           map[int]bool
 	offlineMode            bool
+	multiOrgDisabled       bool
 	version                string
 	quarantineMu           sync.Mutex
 
@@ -446,6 +448,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		hostResolver:           hostResolver,
 		blockedPorts:           blockedPorts,
 		offlineMode:            cfg.OfflineMode,
+		multiOrgDisabled:       cfg.MultiOrgDisabled,
 		version:                version,
 	}
 
@@ -920,12 +923,78 @@ func actorIsOrgOwnerOrOperator(actor *rbac.Actor, orgID string) bool {
 	return false
 }
 
+func requestedTargetOrgID(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if hOrg := strings.TrimSpace(r.Header.Get("X-Tanpopo-Org-ID")); hOrg != "" {
+		return hOrg
+	}
+	return strings.TrimSpace(r.URL.Query().Get("org_id"))
+}
+
+func actorHasAnyBindingInOrg(actor *rbac.Actor, orgID string) bool {
+	if actorHasOperator(actor) {
+		return true
+	}
+	if actor == nil || orgID == "" {
+		return false
+	}
+	for _, b := range actor.Bindings {
+		if b.RoleName == rbac.RoleOperator {
+			continue
+		}
+		if (b.ScopeType == rbac.ScopeOrg || b.ScopeType == rbac.ScopeProject) && b.OrgID != nil && *b.OrgID == orgID {
+			return true
+		}
+	}
+	return false
+}
+
+func collectReadableActorOrgIDs(actor *rbac.Actor, primaryOrgID string) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	addIfPermitted := func(orgID string) {
+		orgID = strings.TrimSpace(orgID)
+		if orgID == "" {
+			return
+		}
+		if _, exists := seen[orgID]; exists {
+			return
+		}
+		if err := rbac.Authorize(actor, rbac.ActionOrgRead, rbac.TargetScope{OrgID: orgID, IsCollectionList: true}); err == nil {
+			seen[orgID] = struct{}{}
+			out = append(out, orgID)
+		}
+	}
+	if primaryOrgID != "" {
+		addIfPermitted(primaryOrgID)
+	}
+	if actor != nil {
+		for _, b := range actor.Bindings {
+			if b.RoleName == rbac.RoleOperator {
+				continue
+			}
+			if b.OrgID != nil {
+				addIfPermitted(*b.OrgID)
+			}
+		}
+	}
+	return out
+}
+
 func (s *Server) resolveTargetOrgID(w http.ResponseWriter, r *http.Request, sc *authSessionContext) (string, bool) {
 	orgID := sc.OrgID
-	if sc.IsOperator {
-		if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
-			orgID = qOrg
+	if reqOrg := requestedTargetOrgID(r); reqOrg != "" {
+		if !sc.IsOperator && !actorHasAnyBindingInOrg(sc.Actor, reqOrg) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "the requested resource was not found", false, nil)
+			return "", false
 		}
+		if s.multiOrgDisabled && sc.OrgID != "" && reqOrg != sc.OrgID {
+			writeErrorEnvelope(w, r, http.StatusForbidden, "multi_org_disabled", "permission_error", "multi-organization switching is disabled on this cluster", false, nil)
+			return "", false
+		}
+		orgID = reqOrg
 	}
 	if orgID == "" {
 		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "organization scope required", false, nil)
@@ -1054,10 +1123,8 @@ func (s *Server) decodeJSONAndCheckOrgSpoofing(w http.ResponseWriter, r *http.Re
 				}
 				bodyOrg = strings.TrimSpace(bodyOrg)
 				expectedOrg := sc.OrgID
-				if sc.IsOperator {
-					if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
-						expectedOrg = qOrg
-					}
+				if reqOrg := requestedTargetOrgID(r); reqOrg != "" && (sc.IsOperator || actorHasAnyBindingInOrg(sc.Actor, reqOrg)) && (!s.multiOrgDisabled || sc.OrgID == "" || reqOrg == sc.OrgID) {
+					expectedOrg = reqOrg
 				}
 				if bodyOrg != "" && (!sc.IsOperator || expectedOrg != "") && bodyOrg != expectedOrg {
 					s.emitSecurityAudit(r.Context(), sc, "security.org_id_spoofing_blocked", map[string]any{

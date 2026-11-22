@@ -358,3 +358,18 @@ export async function getReadinessProbe() {
   const data = await response.json() as {status?: string; config_epoch?: number; snapshot_age_ms?: number};
   return {ready: response.ok && (data.status === 'ok' || data.status === 'ready'), status: data.status ?? (response.ok ? 'unknown' : `HTTP ${response.status}`), configEpoch: data.config_epoch, snapshotAgeMs: data.snapshot_age_ms};
 }
+
+export async function createOrganization(name: string, slug: string) {
+  const result = await api.POST('/admin/v1/organizations', {body: {name, slug}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function deleteOrganization(org: components['schemas']['Organization'], confirmSlug: string, reason: string) {
+  const result = await api.DELETE('/admin/v1/organizations/{orgId}', {
+    params: {path: {orgId: org.id}, header: {'If-Match': versionTag(org.version)}},
+    body: {confirm_slug: confirmSlug, reason},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}

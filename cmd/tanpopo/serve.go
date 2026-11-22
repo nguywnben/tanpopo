@@ -56,9 +56,18 @@ import (
 	"github.com/nguywnben/tanpopo/internal/webui"
 )
 
+type serveRuntimeConfig struct {
+	OfflineMode         bool
+	MultiOrgDisabled    bool
+	HasOfflineOverride  bool
+	HasMultiOrgOverride bool
+}
+
 func newServeCommand(loc i18n.Locale) *cobra.Command {
 	role := "all"
 	listen := envOr("TANPOPO_LISTEN_ADDR", "127.0.0.1:8080")
+	offlineFlag := false
+	multiOrgFlag := true
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: i18n.T(loc, "cli.serve.short"),
@@ -70,7 +79,13 @@ func newServeCommand(loc i18n.Locale) *cobra.Command {
 			if _, err := drainTimeoutFromEnv(os.LookupEnv); err != nil {
 				return &testharness.ExitError{Code: testharness.ExitValidation, Message: i18n.T(loc, "cli.serve.err.invalid_drain"), Cause: err}
 			}
-			if err := serve(cmd.Context(), role, listen); err != nil {
+			cfg := serveRuntimeConfig{
+				OfflineMode:         offlineFlag,
+				MultiOrgDisabled:    !multiOrgFlag,
+				HasOfflineOverride:  cmd.Flags().Changed("offline"),
+				HasMultiOrgOverride: cmd.Flags().Changed("multi-org"),
+			}
+			if err := serveWithConfig(cmd.Context(), role, listen, cfg); err != nil {
 				return &testharness.ExitError{Code: testharness.ExitInternal, Message: i18n.T(loc, "cli.serve.err.failed"), Cause: err}
 			}
 			return nil
@@ -78,16 +93,22 @@ func newServeCommand(loc i18n.Locale) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&role, "role", role, i18n.T(loc, "cli.serve.flag.role"))
 	cmd.Flags().StringVar(&listen, "listen", listen, i18n.T(loc, "cli.serve.flag.listen"))
+	cmd.Flags().BoolVar(&offlineFlag, "offline", false, i18n.T(loc, "cli.serve.flag.offline"))
+	cmd.Flags().BoolVar(&multiOrgFlag, "multi-org", true, i18n.T(loc, "cli.serve.flag.multi_org"))
 	return cmd
 }
 
-func serve(ctx context.Context, role, listen string) (serveErr error) {
+func serve(ctx context.Context, role, listen string) error {
+	return serveWithConfig(ctx, role, listen, serveRuntimeConfig{})
+}
+
+func serveWithConfig(ctx context.Context, role, listen string, cfg serveRuntimeConfig) (serveErr error) {
 	drainTimeout, err := drainTimeoutFromEnv(os.LookupEnv)
 	if err != nil {
 		return err
 	}
 	var draining atomic.Bool
-	handler, closeRuntime, err := buildRuntimeInternal(ctx, role, listen, nil, &draining)
+	handler, closeRuntime, err := buildRuntimeWithConfig(ctx, role, listen, nil, &draining, cfg)
 	if err != nil {
 		return err
 	}
@@ -148,7 +169,7 @@ func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func(
 // buildRuntimeWithBeforeSQLiteClose exposes the last quiescent SQLite state to
 // shutdown tests. Production callers use buildRuntime and install no observer.
 func buildRuntimeWithBeforeSQLiteClose(ctx context.Context, role, listen string, beforeSQLiteClose func(*sql.DB)) (http.Handler, func() error, error) {
-	return buildRuntimeInternal(ctx, role, listen, beforeSQLiteClose, nil)
+	return buildRuntimeWithConfig(ctx, role, listen, beforeSQLiteClose, nil, serveRuntimeConfig{})
 }
 
 type runtimeStore interface {
@@ -157,6 +178,10 @@ type runtimeStore interface {
 }
 
 func buildRuntimeInternal(ctx context.Context, role, listen string, beforeSQLiteClose func(*sql.DB), draining *atomic.Bool) (http.Handler, func() error, error) {
+	return buildRuntimeWithConfig(ctx, role, listen, beforeSQLiteClose, draining, serveRuntimeConfig{})
+}
+
+func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLiteClose func(*sql.DB), draining *atomic.Bool, runtimeCfg serveRuntimeConfig) (http.Handler, func() error, error) {
 	if role != "all" && role != "data-plane" && role != "control-plane" {
 		return nil, nil, fmt.Errorf("invalid service role %q", role)
 	}
@@ -713,16 +738,35 @@ func buildRuntimeInternal(ctx context.Context, role, listen string, beforeSQLite
 		if dataServer != nil {
 			providerRuntimeFactory = dataServer.AcquireProviderRuntime
 		}
+		offlineMode := parseEnvBool("TANPOPO_OFFLINE_MODE", false)
+		if runtimeCfg.HasOfflineOverride {
+			offlineMode = runtimeCfg.OfflineMode
+		}
+		multiOrgDisabled := false
+		if rawMulti := strings.TrimSpace(os.Getenv("TANPOPO_MULTI_ORG_ENABLED")); rawMulti != "" {
+			multiOrgDisabled = !parseEnvBool("TANPOPO_MULTI_ORG_ENABLED", true)
+		}
+		if runtimeCfg.HasMultiOrgOverride {
+			multiOrgDisabled = runtimeCfg.MultiOrgDisabled
+		}
+		archiveRoot := strings.TrimSpace(os.Getenv(installer.LocalMarketplaceArchiveRootEnv))
+		if archiveRoot == "" && offlineMode {
+			airgapPackages := filepath.Join(dataDir, "airgap", "packages")
+			if fi, statErr := os.Stat(airgapPackages); statErr == nil && fi.IsDir() {
+				archiveRoot = airgapPackages
+			}
+		}
 		adminServer, err := adminhttp.NewServer(adminhttp.ServerConfig{
 			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys, Ledgers: ledgerService,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
-			Installer: installerService, ArchiveResolver: newRuntimeArchiveResolver(os.Getenv(installer.LocalMarketplaceArchiveRootEnv), registryStore, vaultOCIRegistryCredentialResolver{db: db, vault: vaultStore, cap: brokerUnsealCap}),
+			Installer: installerService, ArchiveResolver: newRuntimeArchiveResolver(archiveRoot, offlineMode, registryStore, vaultOCIRegistryCredentialResolver{db: db, vault: vaultStore, cap: brokerUnsealCap}),
 			WebhookEnqueue: func(ctx context.Context, orgID, projectID, eventType string, payload json.RawMessage) error {
 				_, enqueueErr := webhookDispatcher.Enqueue(ctx, webhook.Event{OrgID: orgID, ProjectID: projectID, Type: eventType, Payload: payload})
 				return enqueueErr
 			},
 			OnConfigChange: publishChangeFn,
-			Broker:         blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog, Version: version,
+			Broker:         blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog,
+			OfflineMode: offlineMode, MultiOrgDisabled: multiOrgDisabled, Version: version,
 		})
 		if err != nil {
 			cleanup()
@@ -775,17 +819,32 @@ func newServeArchiveResolver(root string) adminhttp.ExtensionArchiveResolver {
 	}
 }
 
-func newRuntimeArchiveResolver(root string, index registry.IndexStore, credentials registry.RegistryCredentialResolver) adminhttp.ExtensionArchiveResolver {
+func newRuntimeArchiveResolver(root string, offlineMode bool, index registry.IndexStore, credentials registry.RegistryCredentialResolver) adminhttp.ExtensionArchiveResolver {
 	local := newServeArchiveResolver(root)
 	oci := registry.NewOCIArchiveResolver(index, credentials, egress.NewStdHostResolver())
 	return func(ctx context.Context, orgID, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(sourceURI)), "oci://") {
+			if offlineMode {
+				return nil, nil, installer.ErrMarketplaceArchiveResolverUnavailable
+			}
 			return oci.Resolve(ctx, orgID, sourceURI, expectedSHA256)
 		}
 		if local == nil {
 			return nil, nil, installer.ErrMarketplaceArchiveResolverUnavailable
 		}
 		return local(ctx, orgID, sourceURI, expectedSHA256)
+	}
+}
+
+func parseEnvBool(name string, defaultVal bool) bool {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	switch raw {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return defaultVal
 	}
 }
 

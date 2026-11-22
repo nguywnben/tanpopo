@@ -630,7 +630,7 @@ func (s *Server) resolveAuditReadPartition(w http.ResponseWriter, r *http.Reques
 			writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "INSTANCE_OPERATOR role required for system audit partition", false, nil)
 			return "", "", false
 		}
-		if qOrg := strings.TrimSpace(r.URL.Query().Get("org_id")); qOrg != "" {
+		if qOrg := requestedTargetOrgID(r); qOrg != "" {
 			orgID = qOrg
 		} else {
 			orgID = sc.OrgID
@@ -855,9 +855,8 @@ func (s *Server) handleTriggerKillSwitch(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	qOrg := strings.TrimSpace(r.URL.Query().Get("org_id"))
 	var orgID string
-	if level == killswitch.LevelExtensionInstallation && sc.IsOperator && qOrg == "" && sc.OrgID == "" {
+	if level == killswitch.LevelExtensionInstallation && sc.IsOperator {
 		orgID = ""
 	} else {
 		orgID, ok = s.resolveTargetOrgID(w, r, sc)
@@ -1050,7 +1049,7 @@ func (s *Server) handleListKillSwitches(w http.ResponseWriter, r *http.Request) 
 		}
 		activeOnly = parsed
 	}
-	qOrg := strings.TrimSpace(r.URL.Query().Get("org_id"))
+	qOrg := requestedTargetOrgID(r)
 	instanceOnly := sc.IsOperator && qOrg == "" && sc.OrgID == ""
 	if instanceOnly {
 		if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{}) {
@@ -1118,7 +1117,7 @@ func (s *Server) handleClearKillSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := strings.TrimSpace(r.PathValue("switchId"))
-	qOrg := strings.TrimSpace(r.URL.Query().Get("org_id"))
+	qOrg := requestedTargetOrgID(r)
 	instanceOnly := sc.IsOperator && qOrg == "" && sc.OrgID == ""
 	var orgID string
 	var ks *killswitch.KillSwitch
@@ -1137,7 +1136,7 @@ func (s *Server) handleClearKillSwitch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ks, err = s.killSwitch.Get(r.Context(), orgID, id)
-		if errors.Is(err, port.ErrNotFound) && sc.IsOperator && qOrg == "" {
+		if errors.Is(err, port.ErrNotFound) && sc.IsOperator && strings.TrimSpace(r.URL.Query().Get("org_id")) == "" {
 			if !s.authorize(w, r, sc, rbac.ActionKillSwitchTrigger, rbac.TargetScope{}) {
 				return
 			}
@@ -1260,7 +1259,7 @@ func (s *Server) handleQueryBlastRadius(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	qOrg := strings.TrimSpace(r.URL.Query().Get("org_id"))
+	qOrg := requestedTargetOrgID(r)
 	allowInstanceScope := tType == "EXTENSION" && sc.IsOperator && sc.OrgID == "" && qOrg == ""
 	var orgID string
 	if allowInstanceScope {

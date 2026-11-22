@@ -1,4 +1,4 @@
-import {lazy, Suspense, useEffect, useMemo, useState, type FormEvent} from 'react';
+import {lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent} from 'react';
 import {
   Activity,
   Blocks,
@@ -28,7 +28,18 @@ import {Kbd} from '@astryxdesign/core/Kbd';
 import {Popover} from '@astryxdesign/core/Popover';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {createStaticSource, type SearchableItem} from '@astryxdesign/core/Typeahead';
-import {createEnvironment, createProject, getAdminSession, listEnvironments, listProjects, logoutAdmin} from '../api/client';
+import {
+  createEnvironment,
+  createProject,
+  getAdminSession,
+  getBootstrapStatus,
+  listEnvironments,
+  listOrganizations,
+  listProjects,
+  logoutAdmin,
+  purgeOrgScopedClientState,
+  setActiveOrgId,
+} from '../api/client';
 import {listKillSwitches, listPendingApprovals} from '../api/managementClient';
 import type {components} from '../api/generated';
 import {Link, useRouter} from '../router/RouterContext';
@@ -37,11 +48,13 @@ import {LanguageSelector} from '../i18n/LanguageSelector';
 import {useTheme} from '../styles/theme';
 import {Modal} from '../ui/Overlays';
 import {Banner, Button, CountPill, IconButton, TanpopoMark, TextField} from '../ui/primitives';
+import {OrgSwitcher} from './OrgSwitcher';
 import {canAccessRoute, navigationGroups, quickCommands, routeForPath, type ConsoleRoute, type NavIconKey, type Role} from './routes';
 
 const WorkspaceRouter = lazy(() => import('./WorkspaceRouter').then(mod => ({default: mod.WorkspaceRouter})));
 
 type Session = components['schemas']['AdminSessionResponse'];
+type Organization = components['schemas']['Organization'];
 type Project = components['schemas']['Project'];
 type Environment = components['schemas']['Environment'];
 
@@ -81,6 +94,11 @@ export function ConsoleShell() {
   const {theme, toggleTheme} = useTheme();
   const {t} = useI18n();
   const [session, setSession] = useState<Session | null>(null);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [activeOrgId, setActiveOrgIdState] = useState('');
+  const [orgSwitchEpoch, setOrgSwitchEpoch] = useState(0);
+  const orgSwitchSeqRef = useRef(0);
+  const [airgapOffline, setAirgapOffline] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [projectId, setProjectId] = useState('');
@@ -121,10 +139,50 @@ export function ConsoleShell() {
       setLoadError(false);
       try {
         const activeSession = await getAdminSession();
-        const projectPage = await listProjects();
         if (!active) return;
-        const list = projectPage.data;
+        const sessionOrg = activeSession.org_id ?? '';
+        setActiveOrgId(sessionOrg || undefined);
+
+        const [orgsRes, bootstrapRes, initialProjRes] = await Promise.all([
+          listOrganizations().then(
+            value => ({status: 'fulfilled', value}) as const,
+            reason => ({status: 'rejected', reason}) as const,
+          ),
+          getBootstrapStatus().then(
+            value => ({status: 'fulfilled', value}) as const,
+            reason => ({status: 'rejected', reason}) as const,
+          ),
+          sessionOrg
+            ? listProjects().then(
+                value => ({status: 'fulfilled', value}) as const,
+                reason => ({status: 'rejected', reason}) as const,
+              )
+            : Promise.resolve(null),
+        ]);
+        if (!active) return;
+
+        const resolvedOrgs: Organization[] = orgsRes.status === 'fulfilled' ? orgsRes.value : [];
+        const resolvedOrgId = sessionOrg && (resolvedOrgs.length === 0 || resolvedOrgs.some(item => item.id === sessionOrg))
+          ? sessionOrg
+          : resolvedOrgs[0]?.id ?? sessionOrg;
+        setActiveOrgId(resolvedOrgId || undefined);
+
+        let list: Project[] = [];
+        if (resolvedOrgId && resolvedOrgId === sessionOrg && initialProjRes) {
+          if (initialProjRes.status === 'rejected') throw initialProjRes.reason;
+          list = initialProjRes.value.data;
+        } else if (resolvedOrgId) {
+          const loaded = await listProjects();
+          if (!active) return;
+          list = loaded.data;
+        } else if (initialProjRes && initialProjRes.status === 'rejected') {
+          throw initialProjRes.reason;
+        }
+
         setSession(activeSession);
+        setOrganizations(resolvedOrgs);
+        setActiveOrgIdState(resolvedOrgId);
+        setAirgapOffline(bootstrapRes.status === 'fulfilled' && Boolean(bootstrapRes.value.offline_mode));
         setProjects(list);
         setProjectId(list[0]?.id ?? '');
         setEnvironments([]);
@@ -157,6 +215,54 @@ export function ConsoleShell() {
     void loadContext();
     return () => { active = false; };
   }, [navigate]);
+
+  async function refreshOrganizations() {
+    try {
+      const items = await listOrganizations();
+      setOrganizations(items);
+    } catch {
+      // Non-fatal if organization list refresh fails momentarily.
+    }
+  }
+
+  async function handleSelectOrg(nextOrgId: string) {
+    setScopeOpen(false);
+    if (!nextOrgId || nextOrgId === activeOrgId) return;
+    const seq = ++orgSwitchSeqRef.current;
+    purgeOrgScopedClientState();
+    setActiveOrgId(nextOrgId);
+    setActiveOrgIdState(nextOrgId);
+    setProjects([]);
+    setProjectId('');
+    setEnvironments([]);
+    setEnvironmentId('');
+    setOrgSwitchEpoch(epoch => epoch + 1);
+    setLoadError(false);
+    try {
+      const nextProjects = await listProjects();
+      if (orgSwitchSeqRef.current !== seq) return;
+      setProjects(nextProjects.data);
+      setProjectId(nextProjects.data[0]?.id ?? '');
+      const userRoles = session?.roles ?? [];
+      if (userRoles.some(role => emergencyRoles.includes(role))) {
+        const [switchesRes, approvalsRes] = await Promise.allSettled([
+          listKillSwitches(),
+          userRoles.some(role => approvalRoles.includes(role)) ? listPendingApprovals() : Promise.resolve([]),
+        ]);
+        if (orgSwitchSeqRef.current !== seq) return;
+        if (switchesRes.status === 'fulfilled') setActiveSwitches(switchesRes.value.length);
+        if (approvalsRes.status === 'fulfilled') setPendingApprovals(approvalsRes.value.length);
+      }
+    } catch (error) {
+      if (orgSwitchSeqRef.current !== seq) return;
+      if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
+        navigate('/login', {replace: true});
+        return;
+      }
+      setOffline(error instanceof TypeError || !navigator.onLine);
+      setLoadError(true);
+    }
+  }
 
   useEffect(() => {
     if (!projectId) {
@@ -238,6 +344,10 @@ export function ConsoleShell() {
 
   const canUseEmergency = roles.some(role => emergencyRoles.includes(role));
   const canManageScope = roles.some(role => scopeAdminRoles.includes(role));
+  const multiOrgEnabled = session?.multi_org_enabled ?? true;
+  const isOperator = roles.includes('OPERATOR');
+  const showOrgSwitcher = multiOrgEnabled && (organizations.length > 1 || isOperator);
+  const activeOrg = useMemo(() => organizations.find(item => item.id === activeOrgId) ?? organizations[0] ?? null, [organizations, activeOrgId]);
   const activeProject = useMemo(() => projects.find(item => item.id === projectId) ?? null, [projects, projectId]);
   const activeEnvironment = useMemo(() => environments.find(item => item.id === environmentId) ?? null, [environments, environmentId]);
   const securityBadgeCount = pendingApprovals + activeSwitches;
@@ -417,6 +527,18 @@ export function ConsoleShell() {
               label={t('shell.activeScope')}
               content={
                 <div className="tp-scope-menu">
+                  <OrgSwitcher
+                    organizations={organizations}
+                    activeOrgId={activeOrgId}
+                    isOperator={isOperator}
+                    multiOrgEnabled={multiOrgEnabled}
+                    onSelectOrg={id => void handleSelectOrg(id)}
+                    onManageOrgs={() => {
+                      setScopeOpen(false);
+                      navigate('/ops/organizations');
+                    }}
+                  />
+
                   <div className="tp-scope-menu-section">
                     <div className="tp-scope-menu-head">
                       <span>{t('common.project')}</span>
@@ -507,10 +629,20 @@ export function ConsoleShell() {
                   className="tp-scope-switcher"
                   disabled={loading}
                   aria-label={t('shell.activeScope')}
-                  title={`${activeProject?.name ?? t('common.noProject')} / ${activeEnvironment?.name ?? t('common.noEnv')}`}
+                  title={
+                    showOrgSwitcher && activeOrg
+                      ? `${activeOrg.name} / ${activeProject?.name ?? t('common.noProject')} / ${activeEnvironment?.name ?? t('common.noEnv')}`
+                      : `${activeProject?.name ?? t('common.noProject')} / ${activeEnvironment?.name ?? t('common.noEnv')}`
+                  }
                 >
                   <Layers size={14} strokeWidth={1.8} className="tp-scope-switcher-icon" aria-hidden="true" />
                   <span className="tp-scope-switcher-text">
+                    {showOrgSwitcher && activeOrg ? (
+                      <>
+                        <span className="tp-scope-switcher-org">{activeOrg.name}</span>
+                        <span className="tp-scope-switcher-sep" aria-hidden="true">/</span>
+                      </>
+                    ) : null}
                     <span className="tp-scope-switcher-project">{activeProject?.name ?? t('common.noProject')}</span>
                     <span className="tp-scope-switcher-sep" aria-hidden="true">/</span>
                     <span className="tp-scope-switcher-env">{activeEnvironment?.name ?? t('common.noEnv')}</span>
@@ -569,6 +701,12 @@ export function ConsoleShell() {
         </header>
 
         <main id="main-content" className="tp-content" tabIndex={-1}>
+          {airgapOffline ? (
+            <Banner tone="info" title={t('shell.airgapModeTitle')}>
+              {t('shell.airgapModeDesc')}
+            </Banner>
+          ) : null}
+
           {offline ? (
             <Banner tone="warn" title={t('shell.offlineTitle')}>
               {t('shell.offlineDesc')}
@@ -588,9 +726,14 @@ export function ConsoleShell() {
           ) : (
             <Suspense fallback={<p className="tp-muted" role="status">{t('shell.loadingSection')}</p>}>
               <WorkspaceRouter
+                key={`${activeOrgId}:${orgSwitchEpoch}`}
                 route={route}
                 pathname={pathname}
                 roles={roles}
+                activeOrgId={activeOrgId}
+                multiOrgEnabled={multiOrgEnabled}
+                onSelectOrg={id => void handleSelectOrg(id)}
+                onOrganizationsChanged={refreshOrganizations}
                 projects={projects}
                 environments={environments}
                 projectId={projectId}

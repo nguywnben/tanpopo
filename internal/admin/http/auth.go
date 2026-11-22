@@ -29,12 +29,13 @@ type loginRequest struct {
 }
 
 type adminSessionResponse struct {
-	PrincipalID string   `json:"principal_id"`
-	Email       string   `json:"email"`
-	OrgID       *string  `json:"org_id"`
-	Roles       []string `json:"roles"`
-	CSRFToken   string   `json:"csrf_token"`
-	ExpiresAt   string   `json:"expires_at"`
+	PrincipalID     string   `json:"principal_id"`
+	Email           string   `json:"email"`
+	OrgID           *string  `json:"org_id"`
+	Roles           []string `json:"roles"`
+	CSRFToken       string   `json:"csrf_token"`
+	ExpiresAt       string   `json:"expires_at"`
+	MultiOrgEnabled bool     `json:"multi_org_enabled"`
 }
 
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -64,12 +65,13 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(w, cookie)
 	writeJSON(w, http.StatusOK, adminSessionResponse{
-		PrincipalID: info.PrincipalID,
-		Email:       info.Email,
-		OrgID:       info.OrgID,
-		Roles:       nonEmptyRoleSlice(info.Roles),
-		CSRFToken:   info.CSRFToken,
-		ExpiresAt:   formatTimeRFC3339Ms(info.ExpiresAtMs),
+		PrincipalID:     info.PrincipalID,
+		Email:           info.Email,
+		OrgID:           info.OrgID,
+		Roles:           nonEmptyRoleSlice(info.Roles),
+		CSRFToken:       info.CSRFToken,
+		ExpiresAt:       formatTimeRFC3339Ms(info.ExpiresAtMs),
+		MultiOrgEnabled: !s.multiOrgDisabled,
 	})
 }
 
@@ -83,12 +85,13 @@ func (s *Server) handleAuthSession(w http.ResponseWriter, r *http.Request) {
 	}
 	roles := collectUniqueActorRoles(sc.Actor)
 	writeJSON(w, http.StatusOK, adminSessionResponse{
-		PrincipalID: sc.Actor.PrincipalID,
-		Email:       sc.Email,
-		OrgID:       sc.Actor.SessionOrgID,
-		Roles:       roles,
-		CSRFToken:   sc.CSRFToken,
-		ExpiresAt:   formatTimeRFC3339Ms(sc.ExpiresAtMs),
+		PrincipalID:     sc.Actor.PrincipalID,
+		Email:           sc.Email,
+		OrgID:           sc.Actor.SessionOrgID,
+		Roles:           roles,
+		CSRFToken:       sc.CSRFToken,
+		ExpiresAt:       formatTimeRFC3339Ms(sc.ExpiresAtMs),
+		MultiOrgEnabled: !s.multiOrgDisabled,
 	})
 }
 
@@ -449,12 +452,13 @@ func (s *Server) handleAuthOIDCRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, res.Cookie)
 	writeJSON(w, http.StatusOK, adminSessionResponse{
-		PrincipalID: res.Session.PrincipalID,
-		Email:       res.Session.Email,
-		OrgID:       res.Session.OrgID,
-		Roles:       nonEmptyRoleSlice(res.Session.Roles),
-		CSRFToken:   res.Session.CSRFToken,
-		ExpiresAt:   formatTimeRFC3339Ms(res.Session.ExpiresAtMs),
+		PrincipalID:     res.Session.PrincipalID,
+		Email:           res.Session.Email,
+		OrgID:           res.Session.OrgID,
+		Roles:           nonEmptyRoleSlice(res.Session.Roles),
+		MultiOrgEnabled: !s.multiOrgDisabled,
+		CSRFToken:       res.Session.CSRFToken,
+		ExpiresAt:       formatTimeRFC3339Ms(res.Session.ExpiresAtMs),
 	})
 }
 

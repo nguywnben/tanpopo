@@ -10,6 +10,8 @@ export const api = createClient<paths>({
 });
 
 let csrfToken: string | undefined;
+let activeOrgId: string | undefined;
+const cachePurgeListeners = new Set<() => void>();
 
 const operationMatchers = Object.entries(operationPolicy).map(([operation, policy]) => {
   const [method, route] = operation.split(' ', 2);
@@ -28,21 +30,86 @@ export function rememberCsrfToken(token: string) {
 
 export function clearCsrfToken() {
   csrfToken = undefined;
+  activeOrgId = undefined;
+}
+
+export function setActiveOrgId(orgId: string | undefined) {
+  const normalized = orgId?.trim();
+  activeOrgId = normalized ? normalized : undefined;
+}
+
+export function getActiveOrgId(): string | undefined {
+  return activeOrgId;
+}
+
+export function subscribeOrgCachePurge(listener: () => void): () => void {
+  cachePurgeListeners.add(listener);
+  return () => { cachePurgeListeners.delete(listener); };
+}
+
+export function purgeOrgScopedClientState() {
+  for (const clearFn of cachePurgeListeners) {
+    try {
+      clearFn();
+    } catch {
+      // Ignore individual cache listener failures during tenant purge.
+    }
+  }
+  if (typeof window === 'undefined') return;
+  try {
+    const url = new URL(window.location.href);
+    let dirty = false;
+    for (const key of ['org_id', 'project_id', 'env_id', 'request_id']) {
+      if (url.searchParams.has(key)) {
+        url.searchParams.delete(key);
+        dirty = true;
+      }
+    }
+    if (dirty) {
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+  } catch {
+    // Ignore read-only location errors.
+  }
+  for (const storage of [window.sessionStorage, window.localStorage]) {
+    try {
+      const toDelete: string[] = [];
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i);
+        if (key && (key.startsWith('tanpopo.playground') || key.startsWith('tp_playground'))) {
+          toDelete.push(key);
+        }
+      }
+      for (const key of toDelete) storage.removeItem(key);
+    } catch {
+      // Storage may be unavailable in restricted contexts.
+    }
+  }
 }
 
 api.use({
   onRequest({request}) {
     const method = request.method.toUpperCase();
+    const pathname = new URL(request.url).pathname;
     const headers = new Headers(request.headers);
     if (!headers.has('Accept-Language')) {
       headers.set('Accept-Language', getActiveLocale());
+    }
+    if (
+      activeOrgId
+      && !headers.has('X-Tanpopo-Org-ID')
+      && pathname.startsWith('/admin/v1/')
+      && !pathname.startsWith('/admin/v1/auth/login')
+      && !pathname.startsWith('/admin/v1/bootstrap/')
+    ) {
+      headers.set('X-Tanpopo-Org-ID', activeOrgId);
     }
     if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
       return new Request(request, {headers});
     }
     const policy = policyFor(request);
     if (!policy) {
-      throw new Error(translateRuntime('error.noOpenApiPolicy', {method, path: new URL(request.url).pathname}));
+      throw new Error(translateRuntime('error.noOpenApiPolicy', {method, path: pathname}));
     }
     if (policy.ifMatch && !headers.has('If-Match')) {
       throw new Error(translateRuntime('error.ifMatchRequired'));
@@ -97,6 +164,7 @@ export async function loginAdmin(email: string, password: string) {
 export async function logoutAdmin() {
   const result = await api.POST('/admin/v1/auth/logout');
   clearCsrfToken();
+  purgeOrgScopedClientState();
   if (!result.response.ok && result.response.status !== 204 && result.response.status !== 401) {
     throw apiError(result.response, result.error);
   }
@@ -145,4 +213,16 @@ export async function createEnvironment(projectId: string, name: string, slug: s
   });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;
+}
+
+export async function listOrganizations(): Promise<components['schemas']['Organization'][]> {
+  const rows: components['schemas']['Organization'][] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await api.GET('/admin/v1/organizations', {params: {query: {limit: 100, cursor}}});
+    if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+    rows.push(...result.data.data);
+    cursor = result.data.next_cursor ?? undefined;
+  } while (cursor);
+  return rows;
 }

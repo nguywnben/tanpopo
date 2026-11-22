@@ -1500,6 +1500,7 @@ export interface components {
         BootstrapStatusResponse: {
             initialized: boolean;
             offline_mode: boolean;
+            multi_org_enabled?: boolean;
             version?: string;
         };
         BootstrapCompleteRequest: {
@@ -1556,6 +1557,7 @@ export interface components {
             csrf_token: string;
             /** Format: date-time */
             expires_at: string;
+            multi_org_enabled?: boolean;
         };
         Organization: {
             id: string;

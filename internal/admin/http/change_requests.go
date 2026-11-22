@@ -507,7 +507,7 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 }
 
 func (s *Server) resolveChangeRequestScope(w http.ResponseWriter, r *http.Request, sc *authSessionContext) (string, *string, bool) {
-	qOrg := strings.TrimSpace(r.URL.Query().Get("org_id"))
+	qOrg := requestedTargetOrgID(r)
 	if sc.IsOperator && qOrg == "" && sc.OrgID == "" {
 		return "", nil, true
 	}
