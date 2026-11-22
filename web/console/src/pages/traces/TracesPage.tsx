@@ -127,7 +127,13 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
         </div>
       </div>
 
-      <div className="tp-toolbar">
+      <form
+        className="tp-toolbar"
+        onSubmit={event => {
+          event.preventDefault();
+          handleSearch();
+        }}
+      >
         <div className="tp-toolbar-field tp-toolbar-field-wide">
           <TextField label={t('traces.requestIdLookup')} fieldSize="sm" placeholder="req_…" value={requestId} onChange={event => setRequestId(event.target.value)} />
         </div>
@@ -137,11 +143,13 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
         <div className="tp-toolbar-field">
           <TextField label={t('traces.errorCodeFilter')} fieldSize="sm" placeholder={t('traces.errorCodePlaceholder')} value={errorFilter} onChange={event => setErrorFilter(event.target.value)} />
         </div>
-        <Button variant="primary" size="sm" onClick={handleSearch}>
-          <Search size={14} aria-hidden="true" />
-          <span>{t('common.search')}</span>
-        </Button>
-      </div>
+        <div className="tp-toolbar-actions">
+          <Button type="submit" variant="primary" size="sm">
+            <Search size={14} aria-hidden="true" />
+            <span>{t('common.search')}</span>
+          </Button>
+        </div>
+      </form>
 
       {message ? <Banner tone="danger">{message}</Banner> : null}
 

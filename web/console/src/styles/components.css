@@ -830,12 +830,19 @@
     margin: 0;
   }
 
-  /* Coarse touch pointer accommodations (WCAG 2.2 touch comfort without shrinking desktop) */
+  /* Coarse touch pointer accommodations:
+     Astryx Button & IconButton already attach a 44px invisible touch hit band via useTouchHitArea,
+     so avoid inflating inline toolbar/header buttons taller than adjacent sm controls; expand standalone
+     mobile row buttons and password visibility toggle hit area safely. */
   @media (pointer: coarse) {
-    .tp-toolbar .astryx-button,
-    .tp-page-actions .astryx-button,
     .tp-table-mobile .astryx-button {
       min-height: 36px;
+    }
+
+    .tp-secret-eye::after {
+      content: '';
+      position: absolute;
+      inset: -7px;
     }
   }
 }

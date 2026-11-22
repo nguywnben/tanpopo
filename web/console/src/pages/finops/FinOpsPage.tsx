@@ -186,6 +186,7 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
                     <div style={{flex: '1 1 120px', minWidth: 0}}>
                       <TextField
                         label={t('finops.hardLimitFor', {scope: row.scope_tier, id: row.scope_id})}
+                        fieldSize="sm"
                         inputMode="numeric"
                         value={drafts[row.id] ?? String(row.hard_limit_micros)}
                         disabled={!canManage || busy}

@@ -365,10 +365,12 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
                 onChange={event => setActionFilter(event.target.value)}
               />
             </div>
-            <Button variant="secondary" size="sm" loading={busy} onClick={() => void handleVerifyChain()}>
-              <ShieldCheck size={14} aria-hidden="true" />
-              <span>{t('security.verifyHashChain')}</span>
-            </Button>
+            <div className="tp-toolbar-actions">
+              <Button variant="secondary" size="sm" loading={busy} onClick={() => void handleVerifyChain()}>
+                <ShieldCheck size={14} aria-hidden="true" />
+                <span>{t('security.verifyHashChain')}</span>
+              </Button>
+            </div>
           </div>
 
           {verifyBanner ? (
