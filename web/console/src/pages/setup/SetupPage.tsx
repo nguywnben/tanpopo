@@ -245,7 +245,6 @@ export function SetupPage() {
                 key={item.titleKey}
                 step={index}
                 label={t(item.titleKey)}
-                description={t(item.summaryKey)}
                 isDisabled={index > step}
               />
             ))}
@@ -261,6 +260,7 @@ export function SetupPage() {
           {step === 0 ? (
             <>
               <h2>{t('setup.ownerHeading')}</h2>
+              <p className="tp-muted">{t('setup.step0.summary')}</p>
               <TextField
                 label={t('setup.bootstrapToken')}
                 type="password"
@@ -304,6 +304,7 @@ export function SetupPage() {
           {step === 1 ? (
             <>
               <h2>{t('setup.connectionHeading')}</h2>
+              <p className="tp-muted">{t('setup.step1.summary')}</p>
               <CheckboxField
                 label={t('setup.provisionStarter')}
                 description={t('setup.provisionStarterDesc')}
@@ -381,6 +382,7 @@ export function SetupPage() {
           {step === 3 ? (
             <>
               <h2>{t('setup.reviewHeading')}</h2>
+              <p className="tp-muted">{t('setup.step3.summary')}</p>
               <KeyValueList
                 items={[
                   {label: t('setup.ownerEmail'), value: ownerEmail},
@@ -401,9 +403,9 @@ export function SetupPage() {
               </Button>
             ) : <span />}
             {step < stepKeys.length - 1 ? (
-              <Button variant="primary" onClick={handleNext}>{t('common.continue')}</Button>
+              <Button key="continue-step" variant="primary" onClick={handleNext}>{t('common.continue')}</Button>
             ) : (
-              <Button type="submit" variant="primary" loading={busy}>
+              <Button key="complete-setup" type="submit" variant="primary" loading={busy}>
                 {busy ? t('setup.initializing') : t('setup.completeSetup')}
               </Button>
             )}

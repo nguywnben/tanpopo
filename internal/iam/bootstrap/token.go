@@ -210,6 +210,19 @@ func (m *Manager) EnsureToken(ctx context.Context) (string, error) {
 	}
 
 	dir := filepath.Dir(m.tokenPath)
+	if dirInfo, statErr := os.Lstat(dir); statErr == nil {
+		if dirInfo.Mode()&os.ModeSymlink != 0 || !dirInfo.IsDir() {
+			return "", fmt.Errorf("%w: token directory %q is not a real directory", ErrInsecureTokenPermissions, dir)
+		}
+		if runtime.GOOS != "windows" && dirInfo.Mode().Perm()&0o022 != 0 {
+			return "", fmt.Errorf("%w: shared or group/world-writable token directory %q (%o) is unsafe; configure a private 0700 state directory", ErrInsecureTokenPermissions, dir, dirInfo.Mode().Perm())
+		}
+		if err := verifyOwnerMatch(dirInfo); err != nil {
+			return "", err
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return "", fmt.Errorf("bootstrap: stat token directory: %w", statErr)
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("bootstrap: create token directory: %w", err)
 	}
@@ -278,6 +291,9 @@ func (m *Manager) loadExistingTokenLocked() (string, error) {
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return "", ErrInsecureTokenPermissions
+	}
+	if err := verifyOwnerMatch(info); err != nil {
+		return "", err
 	}
 	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 		return "", fmt.Errorf("%w: mode %o exposes token beyond owner", ErrInsecureTokenPermissions, info.Mode().Perm())

@@ -863,34 +863,61 @@ func (p *Pipeline) persistLoop() {
 	}
 }
 
+const maxPersistBatchSize = 64
+
 func (p *Pipeline) drainPersistQueue() {
+	batch := make([]persistTask, 0, maxPersistBatchSize)
+	traces := make([]RequestTraceRecord, 0, maxPersistBatchSize)
 	for {
+		batch = batch[:0]
+		traces = traces[:0]
+
 		p.persistMu.Lock()
 		if len(p.persistQueue) == 0 {
 			p.persistMu.Unlock()
 			return
 		}
-		item := p.persistQueue[0]
-		p.persistQueue[0] = persistTask{}
-		p.persistQueue = p.persistQueue[1:]
-		if len(p.persistQueue) == 0 {
-			p.persistQueue = nil
+		n := len(p.persistQueue)
+		if n > maxPersistBatchSize {
+			n = maxPersistBatchSize
 		}
-		p.persistBytes -= item.bytes
+		for i := 0; i < n; i++ {
+			item := p.persistQueue[i]
+			p.persistQueue[i] = persistTask{}
+			p.persistBytes -= item.bytes
+			batch = append(batch, item)
+		}
+		if n == len(p.persistQueue) {
+			p.persistQueue = nil
+		} else {
+			p.persistQueue = p.persistQueue[n:]
+		}
 		if p.persistBytes < 0 {
 			p.persistBytes = 0
 		}
 		p.persistMu.Unlock()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		if item.trace != nil {
-			_ = p.writeRequestTrace(ctx, *item.trace)
+		for _, item := range batch {
+			if item.trace != nil {
+				traces = append(traces, *item.trace)
+			}
 		}
-		if item.blob != nil {
-			_, _ = p.writeDebugBlobIfAuthorized(ctx, item.blob.orgID, item.blob.projectID, item.blob.virtualKeyID, item.blob.requestID, item.blob.payload, item.blob.preScrubbed)
-			clear(item.blob.payload)
+		if len(traces) > 0 {
+			timeout := 2*time.Second + time.Duration(len(traces))*50*time.Millisecond
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			if err := p.writeRequestTraceBatch(ctx, traces); err != nil && p.Metrics != nil {
+				p.Metrics.RecordDropped("traces", int64(len(traces)))
+			}
+			cancel()
 		}
-		cancel()
+		for _, item := range batch {
+			if item.blob != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				_, _ = p.writeDebugBlobIfAuthorized(ctx, item.blob.orgID, item.blob.projectID, item.blob.virtualKeyID, item.blob.requestID, item.blob.payload, item.blob.preScrubbed)
+				clear(item.blob.payload)
+				cancel()
+			}
+		}
 	}
 }
 
@@ -1287,15 +1314,23 @@ func (p *Pipeline) RecordRequestTrace(ctx context.Context, rec RequestTraceRecor
 	return p.writeRequestTrace(ctx, rec)
 }
 
-func (p *Pipeline) writeRequestTrace(ctx context.Context, rec RequestTraceRecord) error {
-	if p == nil || p.db == nil {
-		return nil
-	}
+const insertRequestTraceMetaSQL = `
+		INSERT INTO request_traces_meta (
+			request_id, created_at_ms, started_at_ms, org_id, project_id, env_id, virtual_key_id,
+			entry_point, otel_trace_id, route_slug, selected_deployment_id, connection_id,
+			extension_installation_id, extension_version_id, failover_attempts, http_status,
+			canonical_error_code, proxy_overhead_us, ttft_ms, total_duration_ms, waterfall_stages_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(org_id, request_id, created_at_ms) DO NOTHING`
+
+type preparedTraceRow struct {
+	normOrg string
+	args    [21]any
+}
+
+func (p *Pipeline) prepareRequestTraceRow(rec RequestTraceRecord) (preparedTraceRow, bool) {
 	if strings.TrimSpace(rec.OrgID) == "" || strings.TrimSpace(rec.RequestID) == "" {
-		return nil
-	}
-	if ctx == nil {
-		ctx = context.Background()
+		return preparedTraceRow{}, false
 	}
 	now := rec.CreatedAtMs
 	if now <= 0 {
@@ -1352,37 +1387,100 @@ func (p *Pipeline) writeRequestTrace(ctx context.Context, rec RequestTraceRecord
 	}
 
 	normOrg := truncateStr(rec.OrgID, 40)
-	err = p.execOrgScoped(ctx, normOrg, `
-		INSERT INTO request_traces_meta (
-			request_id, created_at_ms, started_at_ms, org_id, project_id, env_id, virtual_key_id,
-			entry_point, otel_trace_id, route_slug, selected_deployment_id, connection_id,
-			extension_installation_id, extension_version_id, failover_attempts, http_status,
-			canonical_error_code, proxy_overhead_us, ttft_ms, total_duration_ms, waterfall_stages_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(org_id, request_id, created_at_ms) DO NOTHING`,
-		truncateStr(rec.RequestID, 40),
-		now,
-		started,
-		normOrg,
-		truncateStr(rec.ProjectID, 40),
-		truncateStr(rec.EnvID, 40),
-		nullIfEmpty(truncateStr(rec.VirtualKeyID, 40)),
-		entryPoint,
-		nullIfEmpty(otelTraceID),
-		nullIfEmpty(truncateStr(p.Redactor.SanitizeString(rec.RouteSlug), 128)),
-		nullIfEmpty(truncateStr(rec.SelectedDeploymentID, 40)),
-		nullIfEmpty(truncateStr(rec.ConnectionID, 40)),
-		nullIfEmpty(truncateStr(rec.ExtensionInstallationID, 40)),
-		nullIfEmpty(truncateStr(rec.ExtensionVersionID, 40)),
-		attempts,
-		rec.HTTPStatus,
-		nullIfEmpty(errCode),
-		overheadUs,
-		nullInt64Ptr(rec.TTFTMs),
-		totalMs,
-		string(stagesJSONBytes),
-	)
-	return err
+	return preparedTraceRow{
+		normOrg: normOrg,
+		args: [21]any{
+			truncateStr(rec.RequestID, 40),
+			now,
+			started,
+			normOrg,
+			truncateStr(rec.ProjectID, 40),
+			truncateStr(rec.EnvID, 40),
+			nullIfEmpty(truncateStr(rec.VirtualKeyID, 40)),
+			entryPoint,
+			nullIfEmpty(otelTraceID),
+			nullIfEmpty(truncateStr(p.Redactor.SanitizeString(rec.RouteSlug), 128)),
+			nullIfEmpty(truncateStr(rec.SelectedDeploymentID, 40)),
+			nullIfEmpty(truncateStr(rec.ConnectionID, 40)),
+			nullIfEmpty(truncateStr(rec.ExtensionInstallationID, 40)),
+			nullIfEmpty(truncateStr(rec.ExtensionVersionID, 40)),
+			attempts,
+			rec.HTTPStatus,
+			nullIfEmpty(errCode),
+			overheadUs,
+			nullInt64Ptr(rec.TTFTMs),
+			totalMs,
+			string(stagesJSONBytes),
+		},
+	}, true
+}
+
+func (p *Pipeline) writeRequestTrace(ctx context.Context, rec RequestTraceRecord) error {
+	if p == nil || p.db == nil {
+		return nil
+	}
+	row, ok := p.prepareRequestTraceRow(rec)
+	if !ok {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return p.execOrgScoped(ctx, row.normOrg, insertRequestTraceMetaSQL, row.args[:]...)
+}
+
+func (p *Pipeline) writeRequestTraceBatch(ctx context.Context, recs []RequestTraceRecord) error {
+	if p == nil || p.db == nil || len(recs) == 0 {
+		return nil
+	}
+	if len(recs) == 1 {
+		return p.writeRequestTrace(ctx, recs[0])
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rows := make([]preparedTraceRow, 0, len(recs))
+	for _, rec := range recs {
+		if row, ok := p.prepareRequestTraceRow(rec); ok {
+			rows = append(rows, row)
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	if len(rows) == 1 {
+		return p.execOrgScoped(ctx, rows[0].normOrg, insertRequestTraceMetaSQL, rows[0].args[:]...)
+	}
+
+	tx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	q := port.Rebind(p.dialect, insertRequestTraceMetaSQL)
+	stmt, err := tx.PrepareContext(ctx, q)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = stmt.Close() }()
+
+	lastOrg := ""
+	for i := range rows {
+		if p.dialect == port.DialectPostgres && rows[i].normOrg != lastOrg {
+			if rlsErr := port.SetOrgRLSTx(ctx, tx, p.dialect, rows[i].normOrg); rlsErr != nil {
+				return rlsErr
+			}
+			lastOrg = rows[i].normOrg
+		}
+		if _, execErr := stmt.ExecContext(ctx, rows[i].args[:]...); execErr != nil {
+			return execErr
+		}
+	}
+	if err := stmt.Close(); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // StoreDebugBlobIfAuthorized persists an AEAD Project-DEK-sealed debug payload blob (capped

@@ -261,6 +261,18 @@ func TestTPIMP0041HTTP_OIDCLoginRefreshRevocationAndFourEyesKillSwitchClear(t *t
 		t.Fatalf("expected 401 on missing OIDC login-CSRF cookie, got %d body=%s", recCBNoCookie.Code, recCBNoCookie.Body.String())
 	}
 
+	// 1c. Security hardening: untrusted RemoteAddr with X-Forwarded-Proto: https must NOT emit Secure __Host- cookie.
+	reqSpoofTLS := httptest.NewRequest(http.MethodGet, "/admin/v1/auth/oidc/start", nil)
+	reqSpoofTLS.RemoteAddr = "198.51.100.77:54321"
+	reqSpoofTLS.Header.Set("X-Forwarded-Proto", "https")
+	recSpoofTLS := httptest.NewRecorder()
+	srv.ServeHTTP(recSpoofTLS, reqSpoofTLS)
+	for _, c := range recSpoofTLS.Result().Cookies() {
+		if c.Name == "__Host-tanpopo_oidc_state" || c.Secure {
+			t.Fatalf("untrusted X-Forwarded-Proto unexpectedly set HTTPS/Secure cookie %+v", c)
+		}
+	}
+
 	// 2. OIDC Start -> Valid Callback -> SECURITY_REVIEWER session -> Refresh removes group -> RBAC revoked!
 	recStart := httptest.NewRecorder()
 	srv.ServeHTTP(recStart, httptest.NewRequest(http.MethodGet, "/admin/v1/auth/oidc/start", nil))

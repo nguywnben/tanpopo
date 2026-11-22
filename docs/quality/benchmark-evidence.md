@@ -93,3 +93,24 @@ Verified green under both `CGO_ENABLED=0` (`2.673s` total) and `-race` (`25.309s
 - **`DR-03` (Emergency `Master KEK` online rotation & cache eviction):** **`43.66 ms`** (`CGO_ENABLED=0`) / **`66.4 ms`** (`-race`), epoch `3` active.
 - **`DR-04` (`< 60s` N-1 Expand-Only & extension rollback):** **`4.50 ms`** (`CGO_ENABLED=0`) / **`113.9 ms`** (`-race`).
 - **`OPS-AC-06` (3-node rolling restart):** In-process 3-node graceful drain test completed **`100 / 100`** active SSE streams with **`0`** `502/503` drops; multi-container Docker `k6` simulation reached **`1,406 / 1,410` (`99.71%`)** `[DONE]` with **`4`** pre-connect socket errors in the `40ms` `/readyz` LB polling gap due to absent Kubernetes `preStop` delay.
+
+---
+
+## 5. `TP-IMP-0047` Follow-Up Re-Benchmarks & Multi-Container Docker Compose HA (`2026-11-22`)
+
+After eliminating two redundant post-INSERT `SELECT` queries inside `internal/finops/ledger.Service.Reserve` and batching asynchronous OTel trace persistence in `internal/telemetry/otel.Pipeline.drainPersistQueue` (`maxPersistBatchSize = 64`), plus adding opt-in `TANPOPO_PRESTOP_WAIT` (`cmd/tanpopo/serve.go`) and verifying `docker compose -f deploy/compose/docker-compose.standalone.yml build` (`exit 0`), all workloads were re-measured under `COND-PO-01`:
+
+### 5.1. Standalone SQLite `2 vCPU / 2 GiB` Re-Benchmark (`tanpopo:local` Container)
+| Workload | Empirical Result | Comparison / Verdict |
+|---|---|---|
+| **Cold Start & Memory** | Cold start = **`839 ms`** (`< 3.0s`); Idle RSS = **`75.16 MiB / 2 GiB`** (`< 128 MiB`) | **`PASS`** |
+| **Tier-1 vs Tier-2 Overhead (`declar_vs_wasm.json`)** | `4,486` completed reqs (**`109.48 req/s`**), `0.00%` HTTP errors (`3,933 / 3,933` `200 OK`), `11,118` dropped `k6` iterations.<br/>Tier-1 `p95`: **`3,580.29 ms`** · Tier-2 `p95`: **`3,479.71 ms`** · Post-run RSS = **`86.14 MiB / 2 GiB`**. | **`FAIL` vs `500 RPS` standalone SQLite SLO** *(improved from `103.69 req/s`; SQLite `SetMaxOpenConns(1)` + `DisableKeepAlives: true` still caps 2-vCPU single-host RPS)* |
+| **`1,000` Concurrent SSE (`sse_1000.json`)** | **SSE:** **`2,346 / 2,346` (`100.00%`)** `[DONE]`, `tanpopo_sse_ttfb_ms` `p95 = 10,078.36 ms`, Post-SSE RSS = **`289.3 MiB / 2 GiB`**.<br/>**Simultaneous `+500 RPS` short reqs:** **`530 / 684` (`77.49%`) `200 OK`**, `154` 10s client timeouts, `6,297` dropped iterations. | **`PARTIAL`** *(SSE `100%` `[DONE]` and short-request completions improved from `0/600` to `530/684`, while 154 timeouts remain under 2-vCPU contention)* |
+| **`3x` Overload Shedding (`overload_503.json`)** | **`2,735 / 2,735` (`100.00%`)** checks pass: `195/195` held SSE `[DONE]`, **`4,526`** shed `503 gateway_overloaded` (`tanpopo_shed_503_ms` **`med=1.48 ms`**, `avg=6.13 ms`, **`p95=26.09 ms`**), `101/101` `/healthz 200`, `151/151` recovery `200 OK`, Post-overload RSS = **`32.77 MiB / 2 GiB`**. | **`PASS` (`med=1.48 ms` / recovery) · `PARTIAL` (`p95=26.09 ms > 5 ms` under 2-vCPU burst)** |
+
+### 5.2. Multi-Container Docker Compose HA (`tanpopo-pg16` Non-Superuser `FORCE RLS` + 3-Shard `Valkey` + 2 `tanpopo:local` Replicas + LB Container)
+- **Migration Proof (`tanpopo db migrate-engine --verify=true`):** Migrated seeded SQLite DB into `tanpopo_ha_bench` owned by `NOSUPERUSER NOBYPASSRLS` role `tanpopo_ha_user` (`55` tables, `33,959` rows, `8,490` audit events verified, `1` Vault envelope verified, `"status": "VERIFIED"`).
+- **HA Concurrency & Throughput (`declar_vs_wasm_overhead.js`):** At `50` concurrent curl requests (`concurrency=20`), **`50 / 50` (`100%`)** returned `200 OK`; at `100 RPS` attempted (`RPS_RATE=100, PHASE_SEC=10`) with all `7` processes (`tanpopo-ha-n1`, `tanpopo-ha-n2` [`1 vCPU / 1 GiB` each], `tanpopo-ha-router`, `PG16` [`synchronous_commit=on`, `max_connections=100`], `3` Valkey shards, `FakeLLM`, `k6`) co-located on one **2-vCPU VM**, `k6` achieved **`56.86 req/s`** (`1,167 / 1,646` = `70.89%` `200 OK`, `479` timeouts/errors, `n1 RSS = 59.6 MiB`, `n2 RSS = 62.52 MiB`; `500 RPS` attempted yielded `76.15%` errors on single 2-vCPU VM due to per-TX `fsync` + unbounded PG pool vs `max_connections=100`).
+- **Staggered Docker Compose HA Rolling Restart (`TANPOPO_PRESTOP_WAIT=1s`, `100` Concurrent SSE VUs):** **`574 / 575` (`99.82%`) `[DONE]`** (`1` dropped stream during LB `40ms` `/readyz` poll transition — improved from `4 / 1,410`; labeled **`PARTIAL`** vs strict `0`-drop target in local Compose).
+- **Timed Docker Compose HA `Expand-Only` DB & Rollback (`DR-04`):** **`4,071 ms` (`4.07 s < 60 s` SLA)** with **`20 / 20` (`100%`)** post-rollback `200 OK`.
+- **Scope Boundary (`COND-PO-01`):** Single-VM Docker Compose HA exercises real separate containers, `FORCE RLS`, and Valkey Cluster on shared loopback CPU; **physical multi-host Kubernetes HA networking & `>= 4h` soak remain `UNVERIFIED`**.

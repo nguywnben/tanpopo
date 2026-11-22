@@ -807,7 +807,7 @@ func evaluateGates01To06(rootFS *os.Root, toolchainVer string) ([]GateResult, er
 				for _, requiredMarker := range []string{
 					"GATE-REL-01", "GATE-REL-02", "GATE-REL-03", "GATE-REL-04",
 					"GATE-REL-05", "GATE-REL-06", "GATE-REL-07", "COND-PO-01",
-					"DR-04", "UNVERIFIED", "1.26.11", "label-content-name-mismatch",
+					"DR-04", "UNVERIFIED", "1.26.11", "web/console/e2e/console_e2e.py",
 				} {
 					if !strings.Contains(dossier, requiredMarker) {
 						return nil, fmt.Errorf("docs/releases/v1.0.0-readiness-dossier.md missing required marker %q", requiredMarker)

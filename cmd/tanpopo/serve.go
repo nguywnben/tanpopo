@@ -12,7 +12,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -79,6 +81,9 @@ func newServeCommand(loc i18n.Locale) *cobra.Command {
 			if _, err := drainTimeoutFromEnv(os.LookupEnv); err != nil {
 				return &testharness.ExitError{Code: testharness.ExitValidation, Message: i18n.T(loc, "cli.serve.err.invalid_drain"), Cause: err}
 			}
+			if _, err := preStopWaitFromEnv(os.LookupEnv); err != nil {
+				return &testharness.ExitError{Code: testharness.ExitValidation, Message: i18n.T(loc, "cli.serve.err.invalid_drain"), Cause: err}
+			}
 			cfg := serveRuntimeConfig{
 				OfflineMode:         offlineFlag,
 				MultiOrgDisabled:    !multiOrgFlag,
@@ -107,6 +112,10 @@ func serveWithConfig(ctx context.Context, role, listen string, cfg serveRuntimeC
 	if err != nil {
 		return err
 	}
+	preStopWait, err := preStopWaitFromEnv(os.LookupEnv)
+	if err != nil {
+		return err
+	}
 	var draining atomic.Bool
 	handler, closeRuntime, err := buildRuntimeWithConfig(ctx, role, listen, nil, &draining, cfg)
 	if err != nil {
@@ -128,6 +137,10 @@ func serveWithConfig(ctx context.Context, role, listen string, cfg serveRuntimeC
 	case <-ctx.Done():
 		// Mark /readyz as 503 immediately on shutdown signal while draining in-flight SSE streams (OPS-AC-06).
 		draining.Store(true)
+		if preStopWait > 0 {
+			timer := time.NewTimer(preStopWait)
+			<-timer.C
+		}
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
@@ -149,6 +162,7 @@ func serveWithConfig(ctx context.Context, role, listen string, cfg serveRuntimeC
 
 const defaultDrainTimeout = 90 * time.Second
 const maxDrainTimeout = 300 * time.Second
+const maxPreStopWait = 30 * time.Second
 
 func drainTimeoutFromEnv(lookup func(string) (string, bool)) (time.Duration, error) {
 	raw, ok := lookup("TANPOPO_DRAIN_TIMEOUT")
@@ -160,6 +174,18 @@ func drainTimeoutFromEnv(lookup func(string) (string, bool)) (time.Duration, err
 		return 0, fmt.Errorf("TANPOPO_DRAIN_TIMEOUT must be between 0s and %s", maxDrainTimeout)
 	}
 	return timeout, nil
+}
+
+func preStopWaitFromEnv(lookup func(string) (string, bool)) (time.Duration, error) {
+	raw, ok := lookup("TANPOPO_PRESTOP_WAIT")
+	if !ok || strings.TrimSpace(raw) == "" {
+		return 0, nil
+	}
+	wait, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil || wait < 0 || wait > maxPreStopWait {
+		return 0, fmt.Errorf("TANPOPO_PRESTOP_WAIT must be between 0s and %s", maxPreStopWait)
+	}
+	return wait, nil
 }
 
 func buildRuntime(ctx context.Context, role, listen string) (http.Handler, func() error, error) {
@@ -641,7 +667,23 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 			return nil, nil, fmt.Errorf("initialize A2A Task Coordinator: %w", a2aErr)
 		}
 		a2aHandler := a2aCoordinator.Handler()
-		mux.Handle("/a2a/", a2aHandler)
+		if role != "data-plane" {
+			consoleHandler := webui.Handler()
+			mux.HandleFunc("/a2a/", func(w http.ResponseWriter, r *http.Request) {
+				cleanPath := path.Clean("/" + r.URL.Path)
+				if cleanPath == "/a2a/agents" && (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
+					strings.TrimSpace(r.Header.Get("Authorization")) == "" &&
+					strings.TrimSpace(r.Header.Get("X-Tanpopo-Virtual-Key")) == "" &&
+					strings.TrimSpace(r.Header.Get("x-api-key")) == "" &&
+					strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html") {
+					consoleHandler.ServeHTTP(w, r)
+					return
+				}
+				a2aHandler.ServeHTTP(w, r)
+			})
+		} else {
+			mux.Handle("/a2a/", a2aHandler)
+		}
 		mux.Handle("/.well-known/agent.json", a2aHandler)
 	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -765,8 +807,10 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 				return enqueueErr
 			},
 			OnConfigChange: publishChangeFn,
-			Broker:         blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog,
-			OfflineMode: offlineMode, MultiOrgDisabled: multiOrgDisabled, Version: version,
+			Broker:            blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog,
+			OfflineMode:       offlineMode, MultiOrgDisabled: multiOrgDisabled,
+			TrustedProxyCIDRs: parseEnvCSV("TANPOPO_TRUSTED_PROXY_CIDRS"),
+			Version:           version,
 		})
 		if err != nil {
 			cleanup()
@@ -848,13 +892,78 @@ func parseEnvBool(name string, defaultVal bool) bool {
 	}
 }
 
+func parseEnvCSV(name string) []string {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if item := strings.TrimSpace(part); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func validateOriginEntry(raw string) (string, bool) {
+	trimmed := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if trimmed == "" || trimmed == "*" || strings.EqualFold(trimmed, "null") {
+		return "", false
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return "", false
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if (scheme != "http" && scheme != "https") || u.User != nil || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return "", false
+	}
+	host := u.Hostname()
+	if host == "" || host == "*" || strings.Contains(host, "*") {
+		return "", false
+	}
+	port := u.Port()
+	normHost := strings.ToLower(host)
+	hostPort := normHost
+	if port != "" {
+		hostPort = net.JoinHostPort(normHost, port)
+	} else if strings.Contains(normHost, ":") {
+		hostPort = "[" + normHost + "]"
+	}
+	return scheme + "://" + hostPort, true
+}
+
 func allowedOrigins(addr string) []string {
+	if raw := strings.TrimSpace(os.Getenv("TANPOPO_ALLOWED_ORIGINS")); raw != "" {
+		out := make([]string, 0)
+		for _, part := range strings.Split(raw, ",") {
+			if norm, ok := validateOriginEntry(part); ok {
+				out = append(out, norm)
+			}
+		}
+		return out
+	}
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil || strings.TrimSpace(host) == "" {
 		return nil
 	}
-	host = strings.Trim(host, "[]")
-	return []string{"http://" + net.JoinHostPort(host, port)}
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsUnspecified() {
+			return nil
+		}
+		hostPort := net.JoinHostPort(host, port)
+		if ip.IsLoopback() {
+			return []string{"http://" + hostPort, "https://" + hostPort}
+		}
+		return []string{"https://" + hostPort}
+	}
+	hostPort := net.JoinHostPort(host, port)
+	if strings.EqualFold(host, "localhost") {
+		return []string{"http://" + hostPort, "https://" + hostPort}
+	}
+	return []string{"https://" + hostPort}
 }
 
 func newProductionSidecarFactory(

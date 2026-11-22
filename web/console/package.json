@@ -13,7 +13,8 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "generate:api": "node scripts/generate-api-policy.mjs && openapi-typescript ../../openapi/admin-v1.yaml -o src/api/generated.ts",
     "build": "node scripts/check-i18n.mjs --web-only && npm run generate:api && vite build && node scripts/compress-dist.mjs && node scripts/check-bundle-size.mjs",
-    "sync:embed": "node scripts/sync-embedded-dist.mjs"
+    "sync:embed": "node scripts/sync-embedded-dist.mjs",
+    "test:e2e": "python3 e2e/console_e2e.py"
   },
   "dependencies": {
     "@astryxdesign/core": "0.7.16",
