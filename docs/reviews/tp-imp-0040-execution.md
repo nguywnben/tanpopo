@@ -1,7 +1,8 @@
 # `TP-IMP-0040` Execution & Verification Report — Valkey Cluster Coordination, `< 5s` Revocation, Stale-Node Circuit Breaker, PG16 Runtime Cutover & HA Helm
 
 > **Unit:** `TP-IMP-0040` (`M4` / `EP-08` · `REQUIRES_STRONG_REVIEW`)
-> **Branch / Workflow:** `develop` -> PR -> `main` (under `DEC-088` & `DEC-089`)
+> **Branch / Workflow:** `develop` -> PR [#30](https://github.com/nguywnben/tanpopo/pull/30) -> `main` (`b5904476938e3ae517e895d136b6808a1c68876a`, accepted `2026-11-21` under [`DEC-088`](../governance/decisions.md) & [`DEC-089`](../governance/decisions.md))
+> **Post-Merge CI:** [`44919349208`](https://github.com/nguywnben/tanpopo/actions/runs/44919349208) (`Stage 0-1` `SUCCESS`) · [`44919349221`](https://github.com/nguywnben/tanpopo/actions/runs/44919349221) (`Release Artifact Dry Run` `SUCCESS`)
 > **Author:** `Gemini 4 Hydrogen`
 > **Independent Strong Reviewers:**
 > - `code-reviewer` (`f577a99eec01dfecc74f08cad0c211b1`): **`APPROVE`** (Critical: 0, Required Changes: 0; optional note on PG PK `23505` vs `404` on cross-org guessed `pol_*`/`bdg_*` PUTs)

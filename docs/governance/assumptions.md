@@ -1,8 +1,8 @@
 # Assumptions, Working Hypotheses & Open Repository Issues — Tanpopo
 
 > **Canonical Assumptions & Issues Log — Updated Through Pre-Build Closure & A10 Readiness Audit**
-> - **Last Updated:** `2026-11-20`
-> - **Current Gate Status:** **Gate G1 & G2: `APPROVED`; Gate G3 and Gate G4: `APPROVED_WITH_CONDITIONS` / `APPROVED (HANDOFF: GO)`** under `DEC-009`, `DEC-010`, `DEC-083`, and `DEC-084` | **Audit A08: `REMEDIATED_IN_M0` (`13/13` gaps closed)** ([`unresolved-gaps.md`](../reviews/unresolved-gaps.md)) | **A10 Delivery Handoff: `GO`; Units `0001`..`0037` are DONE, `0038` is READY, and `0039`..`0047` remain blocked** ([`execution-readiness.md`](../reviews/execution-readiness.md), [`owner-approval-sheet.md`](./owner-approval-sheet.md))
+> - **Last Updated:** `2026-11-21`
+> - **Current Gate Status:** **Gate G1 & G2: `APPROVED`; Gate G3 and Gate G4: `APPROVED_WITH_CONDITIONS` / `APPROVED (HANDOFF: GO)`** under `DEC-009`, `DEC-010`, `DEC-088`..`DEC-091` | **Audit A08: `REMEDIATED_IN_M0` (`13/13` gaps closed)** ([`unresolved-gaps.md`](../reviews/unresolved-gaps.md)) | **A10 Delivery Handoff: `GO`; Units `0001`..`0042` (`42 / 47`) are DONE (`DEC-091`), `0 / 47` READY, and `0043`..`0047` (`5 / 47`) remain `BLOCKED`** ([`execution-readiness.md`](../reviews/execution-readiness.md), [`owner-approval-sheet.md`](./owner-approval-sheet.md))
 > - **Purpose:** Maintain a transparent boundary between **unvalidated working hypotheses (`ASSUMED`)** and **verified repository facts (`VERIFIED_IN_REPO` / `CONFIRMED_BY_OWNER`)**, linking every hypothesis to time-boxed PoC protocols (`SPIKE-01`..`04` in [`system-design.md`](../architecture/system-design.md)), ADRs (`ADR-0001`..`0006`), A07 verification suites (`SPEC-SEC-*`, `SPEC-QA-*`), and concrete repository discrepancies (`ISS-001`..`007`).
 
 ---

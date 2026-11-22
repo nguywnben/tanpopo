@@ -1,7 +1,8 @@
 # `TP-IMP-0041` Execution & Verification Report — Enterprise OIDC SSO, Four-Eyes Dual Control, Cloud KMS / Vault Transit, Workload Identity & Opt-In Exact Response Cache
 
 > **Unit:** `TP-IMP-0041` (`M4` / `EP-08` · `REQUIRES_STRONG_REVIEW`)
-> **Branch / Workflow:** `develop` -> PR -> `main` (under `DEC-088` & `DEC-090`)
+> **Branch / Workflow:** `develop` -> PR [#31](https://github.com/nguywnben/tanpopo/pull/31) -> `main` (`e55f246b9997daeaa0db7e866fdada44875be451`, accepted `2026-11-21` under [`DEC-088`](../governance/decisions.md) & [`DEC-090`](../governance/decisions.md))
+> **Post-Merge CI:** [`44930743199`](https://github.com/nguywnben/tanpopo/actions/runs/44930743199) (`Stage 0-1` `SUCCESS`) · [`44930743202`](https://github.com/nguywnben/tanpopo/actions/runs/44930743202) (`Release Artifact Dry Run` `SUCCESS`)
 > **Author:** `Gemini 4 Hydrogen`
 > **Independent Strong Reviewers:**
 > - `code-reviewer` (`b8ea9fb57d9a13f1e95f77da6eb86d26`): **`APPROVE`** (Critical: 0, Required Changes: 0)

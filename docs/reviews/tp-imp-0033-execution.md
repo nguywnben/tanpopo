@@ -3,12 +3,12 @@
 ## Current checkpoint
 
 - Unit: `TP-IMP-0033`
-- Governance state: `READY` under `DEC-062`
-- Implementation branch: persistent `develop`
+- Governance state: **`DONE`** under [`DEC-063`](../governance/decisions.md)
+- Implementation branch: persistent `develop` (PR [#8](https://github.com/nguywnben/tanpopo/pull/8) merged at `7a56b048fcc0dbb245b5a631b438f8635111a443`; gate remediation PR [#9](https://github.com/nguywnben/tanpopo/pull/9) merged at `1c5ee582f704155a82876ee8cd7ea9eed8091134`; post-merge CI [`44406466341`](https://github.com/nguywnben/tanpopo/actions/runs/44406466341) & dry-run provenance [`44406466424`](https://github.com/nguywnben/tanpopo/actions/runs/44406466424) `SUCCESS`)
 - DoR: verified; Unit 32 and all M2 units `0016`..`0032` are DONE on `main` with green acceptance CI.
-- Implementer: **GPT-6 Luna**.
-- Review tier: `REQUIRES_STRONG_REVIEW`; final independent **code-reviewer** and **security-auditor** reviews will be recorded here after implementation stabilizes.
-- No release or tag will be created; artifact workflow is dry-run only under `GATE-REL-07`.
+- Implementer and delegated acceptor: **GPT-6 Luna**.
+- Review tier: `REQUIRES_STRONG_REVIEW`; final independent **Planck**/**Peirce** (**code-reviewer**) `APPROVE` and **Hume**/**Descartes** (**security-auditor**) `PASS` recorded below.
+- No release or tag was created; artifact workflow is dry-run only under `GATE-REL-07`.
 
 ## Scope and evidence
 
