@@ -53,6 +53,7 @@ type RecordedRequest struct {
 type faultSpec struct {
 	raw              string
 	delayFirstByte   time.Duration
+	chunkDelay       time.Duration
 	tcpRSTAfter      int
 	hasTCPRST        bool
 	httpStatus       int
@@ -228,6 +229,10 @@ func parseFaultSpec(raw string) faultSpec {
 		case "delay_first_byte_ms":
 			if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
 				spec.delayFirstByte = time.Duration(ms) * time.Millisecond
+			}
+		case "chunk_delay_ms":
+			if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
+				spec.chunkDelay = time.Duration(ms) * time.Millisecond
 			}
 		case "tcp_rst_after_chunks":
 			if cnt, err := strconv.Atoi(v); err == nil && cnt >= 0 {
@@ -541,6 +546,9 @@ func (s *FakeLLMServer) serveOpenAIChatStream(w http.ResponseWriter, r *http.Req
 			return
 		}
 		sent++
+		if !s.waitChunkDelay(r, reqIdx, sent, fault) {
+			return
+		}
 	}
 
 	if fault.hasTCPRST && sent >= fault.tcpRSTAfter {
@@ -560,6 +568,23 @@ func (s *FakeLLMServer) serveOpenAIChatStream(w http.ResponseWriter, r *http.Req
 		return
 	}
 	s.recordEnd(reqIdx, sent, false, time.Time{})
+}
+
+func (s *FakeLLMServer) waitChunkDelay(r *http.Request, reqIdx, sent int, fault faultSpec) bool {
+	if fault.chunkDelay <= 0 {
+		return true
+	}
+	tm := s.clock.NewTimer(fault.chunkDelay)
+	select {
+	case <-r.Context().Done():
+		tm.Stop()
+		ts := s.clock.Now()
+		s.recordEnd(reqIdx, sent, true, ts)
+		s.notifyDisconnect(ts)
+		return false
+	case <-tm.C():
+		return true
+	}
 }
 
 func (s *FakeLLMServer) serveOpenAIResponsesStream(w http.ResponseWriter, r *http.Request, reqIdx int, model string, fault faultSpec) {
@@ -594,6 +619,9 @@ func (s *FakeLLMServer) serveOpenAIResponsesStream(w http.ResponseWriter, r *htt
 			return
 		}
 		sent++
+		if !s.waitChunkDelay(r, reqIdx, sent, fault) {
+			return
+		}
 	}
 	if fault.hasTCPRST && sent >= fault.tcpRSTAfter {
 		s.hijackAndResetTCP(rc)
@@ -644,6 +672,9 @@ func (s *FakeLLMServer) serveAnthropicStream(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		sent++
+		if !s.waitChunkDelay(r, reqIdx, sent, fault) {
+			return
+		}
 	}
 	if fault.hasTCPRST && sent >= fault.tcpRSTAfter {
 		s.hijackAndResetTCP(rc)
@@ -699,6 +730,9 @@ func (s *FakeLLMServer) serveGeminiStream(w http.ResponseWriter, r *http.Request
 			return
 		}
 		sent++
+		if !s.waitChunkDelay(r, reqIdx, sent, fault) {
+			return
+		}
 	}
 	if fault.hasTCPRST && sent >= fault.tcpRSTAfter {
 		s.hijackAndResetTCP(rc)

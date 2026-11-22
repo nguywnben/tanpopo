@@ -517,6 +517,9 @@ func (s *Server) executeStreamingChatCompletionAttempt(
 		idleChunkTimeout = time.Duration(target.Deployment.IdleChunkTimeoutMs) * time.Millisecond
 	}
 
+	s.activeStreams.Add(1)
+	defer s.activeStreams.Add(-1)
+
 	var onChunkRelayed func(time.Duration)
 	if s.telemetry != nil && s.telemetry.Metrics != nil {
 		s.telemetry.Metrics.AddActiveStream("unified_http", 1)

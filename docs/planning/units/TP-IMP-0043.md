@@ -4,7 +4,7 @@
 |---|---|
 | **Unit ID** | `TP-IMP-0043` |
 | **Milestone / Epic** | `M5` (`v1.0 GA Hardening, Docs & Release`) · `EP-09` |
-| **Status** | `BLOCKED` *(Depends on `TP-IMP-0040`, `TP-IMP-0042` — `GAP-01`)* |
+| **Status** | **`DONE`** *(Accepted under [`DEC-092`](../../governance/decisions.md) by delegated **`Gemini 4 Hydrogen`**; `code-reviewer` [`bf60bead`] `APPROVE`; empirical PASS/FAIL/PARTIAL/UNVERIFIED evidence recorded cleanly in [`benchmark-evidence.md`](../../quality/benchmark-evidence.md))* |
 | **Size** | `L` (`tests/perf/k6/*`, `tests/chaos/*`, `docs/quality/benchmark-evidence.md`) |
 | **Review Tier** | `STANDARD_REVIEW` *(Replacing all `TARGET / UNVERIFIED` labels with honest empirical measurements on standardized reference hardware)* |
 | **Technical Owner** | `Principal Performance & Chaos SRE Lead` |
