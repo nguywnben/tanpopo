@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "Valkey 状態の再構築には --valkey-addrs が必須です。",
   "cli.admin.verify_state.err.tampered": "監査ハッシュチェーン検証に失敗しました：改ざんが検出されました。",
   "cli.admin.verify_state.err.failed": "運用状態の検証に失敗しました",
-  "cli.admin.verify_state.output": "状態チェック {{status}} (エンジン={{engine}} 監査イベント={{events}} 回収孤立={{orphans}} 復元Valkey保留={{restored}})"
+  "cli.admin.verify_state.output": "状態チェック {{status}} (エンジン={{engine}} 監査イベント={{events}} 回収孤立={{orphans}} 復元Valkey保留={{restored}})",
+  "cli.plugin.migrate_check.short": "拡張マニフェストの N/N-1 契約および Core バージョン互換性を検証",
+  "cli.plugin.migrate_check.flag.target_core": "互換性を検証するターゲット Tanpopo Core の SemVer",
+  "cli.plugin.migrate_check.flag.supported_contracts": "サポートされる contractVersion のカンマ区切りリスト (N-1 と N)"
 }

@@ -117,6 +117,12 @@ func PackExtension(ctx context.Context, dir, outPath string) (*PackResult, error
 }
 
 func collectDeterministicEntries(absDir string) ([]packEntry, error) {
+	root, rerr := os.OpenRoot(absDir)
+	if rerr != nil {
+		return nil, validationErr("open extension root", rerr)
+	}
+	defer func() { _ = root.Close() }()
+
 	var out []packEntry
 	err := filepath.WalkDir(absDir, func(path string, d fs.DirEntry, wErr error) error {
 		if wErr != nil {
@@ -145,7 +151,7 @@ func collectDeterministicEntries(absDir string) ([]packEntry, error) {
 		if strings.HasSuffix(strings.ToLower(relSlash), ".tpkg") {
 			return nil
 		}
-		data, rerr := os.ReadFile(path)
+		data, rerr := root.ReadFile(relSlash)
 		if rerr != nil {
 			return rerr
 		}

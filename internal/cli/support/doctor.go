@@ -222,6 +222,10 @@ func collectDoctorReport(ctx context.Context, root string, artifactPaths map[str
 			return opsdoctor.StatusPass
 		},
 		BundleLockfileIntegrity: func(context.Context) opsdoctor.Status {
+			lockInfo, lockErr := os.Lstat(lockPath)
+			if lockErr != nil || !lockInfo.Mode().IsRegular() || lockInfo.Mode()&os.ModeSymlink != 0 {
+				return opsdoctor.StatusFail
+			}
 			data, readErr := os.ReadFile(lockPath)
 			if readErr != nil {
 				return opsdoctor.StatusFail

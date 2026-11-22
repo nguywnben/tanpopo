@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "重建 Valkey 狀態時必須提供 --valkey-addrs。",
   "cli.admin.verify_state.err.tampered": "稽核雜湊鏈驗證失敗：偵測到竄改。",
   "cli.admin.verify_state.err.failed": "營運狀態驗證失敗",
-  "cli.admin.verify_state.output": "狀態檢查 {{status}} (引擎={{engine}} 稽核事件={{events}} 回收孤兒={{orphans}} 還原Valkey保留={{restored}})"
+  "cli.admin.verify_state.output": "狀態檢查 {{status}} (引擎={{engine}} 稽核事件={{events}} 回收孤兒={{orphans}} 還原Valkey保留={{restored}})",
+  "cli.plugin.migrate_check.short": "檢查擴充清單的 N/N-1 契約與 Core 版本相容性",
+  "cli.plugin.migrate_check.flag.target_core": "要驗證相容性的目標 Tanpopo Core SemVer 版本",
+  "cli.plugin.migrate_check.flag.supported_contracts": "以逗號分隔的支援 contractVersion 視窗（N-1 與 N）"
 }

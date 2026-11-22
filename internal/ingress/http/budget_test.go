@@ -839,6 +839,7 @@ func TestTP0021_DuplicateClientRequestIDDoesNotBypassBudget(t *testing.T) {
 			const N = 4
 			statuses := make([]int, N)
 			bodies := make([]string, N)
+			var blockedSeen atomic.Int32
 			var ready sync.WaitGroup
 			ready.Add(N)
 			var wg sync.WaitGroup
@@ -855,10 +856,17 @@ func TestTP0021_DuplicateClientRequestIDDoesNotBypassBudget(t *testing.T) {
 					}, nil)
 					statuses[idx] = resp.StatusCode
 					bodies[idx] = string(body)
+					if resp.StatusCode == http.StatusTooManyRequests {
+						blockedSeen.Add(1)
+					}
 				}()
 			}
-			// Give concurrent Reserve goroutines a brief moment, then release admitted upstream.
-			time.Sleep(80 * time.Millisecond)
+			// Wait deterministically until all N-1 duplicate requests observe the active pre-hold (429)
+			// before releasing the 1 admitted upstream call (eliminating -race scheduler flakiness).
+			deadline := time.Now().Add(10 * time.Second)
+			for blockedSeen.Load() < N-1 && time.Now().Before(deadline) {
+				time.Sleep(5 * time.Millisecond)
+			}
 			close(releaseUpstream)
 			wg.Wait()
 

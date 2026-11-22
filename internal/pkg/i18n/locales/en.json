@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "--valkey-addrs is required when rebuilding Valkey state.",
   "cli.admin.verify_state.err.tampered": "Audit hash chain verification failed: tamper detected.",
   "cli.admin.verify_state.err.failed": "Operational state verification failed",
-  "cli.admin.verify_state.output": "State check {{status}} (engine={{engine}} audit_events={{events}} orphans_reconciled={{orphans}} valkey_holds_restored={{restored}})"
+  "cli.admin.verify_state.output": "State check {{status}} (engine={{engine}} audit_events={{events}} orphans_reconciled={{orphans}} valkey_holds_restored={{restored}})",
+  "cli.plugin.migrate_check.short": "Check extension manifest N/N-1 contract and Core version compatibility",
+  "cli.plugin.migrate_check.flag.target_core": "Target Tanpopo Core semver to validate compatibility against",
+  "cli.plugin.migrate_check.flag.supported_contracts": "Comma-separated supported contractVersion window (N-1 and N)"
 }

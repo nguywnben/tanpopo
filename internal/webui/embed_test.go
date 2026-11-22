@@ -125,11 +125,16 @@ func TestHandlerGzipNegotiationHonorsQualityAndHead(t *testing.T) {
 }
 
 func TestHandlerDoesNotFallbackForAPIOrMissingAsset(t *testing.T) {
-	for _, path := range []string{"/v1/models", "/admin/v1/setup", "/assets/missing.js"} {
+	for _, p := range []string{
+		"/v1/models", "/admin/v1/setup", "/native/openai/v1/models",
+		"/mcp", "//mcp", "/foo/../mcp", "/x/../native/openai",
+		"/a2a/tasks", "/.well-known/agent.json", "//.well-known/agent.json",
+		"/assets/missing.js",
+	} {
 		w := httptest.NewRecorder()
-		Handler().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		Handler().ServeHTTP(w, httptest.NewRequest("GET", p, nil))
 		if w.Code != 404 {
-			t.Errorf("GET %s status=%d, want 404", path, w.Code)
+			t.Errorf("GET %s status=%d, want 404", p, w.Code)
 		}
 	}
 }

@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "Valkey durumunu yeniden oluşturmak için --valkey-addrs gereklidir.",
   "cli.admin.verify_state.err.tampered": "Denetim karma zinciri doğrulaması başarısız oldu: müdahale tespit edildi.",
   "cli.admin.verify_state.err.failed": "Çalışma durumu doğrulaması başarısız oldu",
-  "cli.admin.verify_state.output": "Durum denetimi {{status}} (motor={{engine}} denetim_olayı={{events}} temizlenen={{orphans}} valkey_onarımı={{restored}})"
+  "cli.admin.verify_state.output": "Durum denetimi {{status}} (motor={{engine}} denetim_olayı={{events}} temizlenen={{orphans}} valkey_onarımı={{restored}})",
+  "cli.plugin.migrate_check.short": "Eklenti bildiriminin N/N-1 sözleşme ve Core sürüm uyumluluğunu denetle",
+  "cli.plugin.migrate_check.flag.target_core": "Uyumluluğun doğrulanacağı hedef Tanpopo Core semver sürümü",
+  "cli.plugin.migrate_check.flag.supported_contracts": "Virgülle ayrılmış desteklenen contractVersion penceresi (N-1 ve N)"
 }

@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "Для пересборки состояния Valkey требуется --valkey-addrs.",
   "cli.admin.verify_state.err.tampered": "Проверка цепочки аудита не пройдена: обнаружена подмена.",
   "cli.admin.verify_state.err.failed": "Ошибка проверки рабочего состояния",
-  "cli.admin.verify_state.output": "Проверка состояния {{status}} (движок={{engine}} событий={{events}} зависших={{orphans}} valkey_восстановлено={{restored}})"
+  "cli.admin.verify_state.output": "Проверка состояния {{status}} (движок={{engine}} событий={{events}} зависших={{orphans}} valkey_восстановлено={{restored}})",
+  "cli.plugin.migrate_check.short": "Проверить совместимость контракта N/N-1 и версии Core манифеста",
+  "cli.plugin.migrate_check.flag.target_core": "Целевая версия SemVer Tanpopo Core для проверки совместимости",
+  "cli.plugin.migrate_check.flag.supported_contracts": "Список поддерживаемых contractVersion через запятую (N-1 и N)"
 }

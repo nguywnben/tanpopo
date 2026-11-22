@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "Für den Valkey-Neuaufbau ist --valkey-addrs erforderlich.",
   "cli.admin.verify_state.err.tampered": "Prüfung der Audit-Hashkette fehlgeschlagen: Manipulation erkannt.",
   "cli.admin.verify_state.err.failed": "Prüfung des Betriebszustands fehlgeschlagen",
-  "cli.admin.verify_state.output": "Statusprüfung {{status}} (Engine={{engine}} Audit_Ereignisse={{events}} Bereinigte_Reservierungen={{orphans}} Valkey_Wiederhergestellt={{restored}})"
+  "cli.admin.verify_state.output": "Statusprüfung {{status}} (Engine={{engine}} Audit_Ereignisse={{events}} Bereinigte_Reservierungen={{orphans}} Valkey_Wiederhergestellt={{restored}})",
+  "cli.plugin.migrate_check.short": "N/N-1-Vertrags- und Core-Versionskompatibilität des Erweiterungsmanifests prüfen",
+  "cli.plugin.migrate_check.flag.target_core": "Ziel-Semver des Tanpopo Core für die Kompatibilitätsprüfung",
+  "cli.plugin.migrate_check.flag.supported_contracts": "Kommagetrenntes Fenster unterstützter contractVersion-Werte (N-1 und N)"
 }

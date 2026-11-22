@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "Cần cung cấp --valkey-addrs khi dựng lại trạng thái Valkey.",
   "cli.admin.verify_state.err.tampered": "Kiểm tra chuỗi băm kiểm toán thất bại: phát hiện can thiệp trái phép.",
   "cli.admin.verify_state.err.failed": "Kiểm tra trạng thái vận hành thất bại",
-  "cli.admin.verify_state.output": "Kiểm tra trạng thái {{status}} (engine={{engine}} sự_kiện_kiểm_toán={{events}} khóa_mồ_côi_thu_hồi={{orphans}} valkey_đã_khôi_phục={{restored}})"
+  "cli.admin.verify_state.output": "Kiểm tra trạng thái {{status}} (engine={{engine}} sự_kiện_kiểm_toán={{events}} khóa_mồ_côi_thu_hồi={{orphans}} valkey_đã_khôi_phục={{restored}})",
+  "cli.plugin.migrate_check.short": "Kiểm tra tương thích hợp đồng N/N-1 và phiên bản Core của extension",
+  "cli.plugin.migrate_check.flag.target_core": "Phiên bản Tanpopo Core đích để kiểm tra tương thích",
+  "cli.plugin.migrate_check.flag.supported_contracts": "Danh sách contractVersion được hỗ trợ cách nhau bởi dấu phẩy (N-1 và N)"
 }

@@ -271,5 +271,8 @@
   "cli.admin.verify_state.err.valkey_required": "--valkey-addrs wajib diisi saat membangun ulang status Valkey.",
   "cli.admin.verify_state.err.tampered": "Verifikasi rantai hash audit gagal: manipulasi terdeteksi.",
   "cli.admin.verify_state.err.failed": "Verifikasi status operasional gagal",
-  "cli.admin.verify_state.output": "Pemeriksaan status {{status}} (mesin={{engine}} audit={{events}} yatim={{orphans}} valkey_pulih={{restored}})"
+  "cli.admin.verify_state.output": "Pemeriksaan status {{status}} (mesin={{engine}} audit={{events}} yatim={{orphans}} valkey_pulih={{restored}})",
+  "cli.plugin.migrate_check.short": "Periksa kompatibilitas kontrak N/N-1 dan versi Core pada manifes ekstensi",
+  "cli.plugin.migrate_check.flag.target_core": "Semver Tanpopo Core target untuk validasi kompatibilitas",
+  "cli.plugin.migrate_check.flag.supported_contracts": "Daftar contractVersion yang didukung dipisahkan koma (N-1 dan N)"
 }
