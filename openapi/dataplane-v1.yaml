@@ -729,6 +729,16 @@ components:
           items: { type: object }
         dispatch_async: { type: boolean }
 
+    A2aTaskResumeRequest:
+      type: object
+      additionalProperties: false
+      required: [input_parts]
+      properties:
+        input_parts:
+          type: array
+          minItems: 1
+          items: { type: object }
+
     A2aTask:
       type: object
       required: [task_id, target_agent_id, state, hop_count, created_at]
@@ -740,6 +750,7 @@ components:
           type: string
           description: Dedicated SM-09 A2A Task Lifecycle states (CR-08).
           enum: [submitted, working, input-required, completed, failed, canceled]
+        prompt_message: { type: string }
         hop_count: { type: integer, minimum: 1, maximum: 5 }
         call_chain_ids:
           type: array
@@ -1375,3 +1386,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/A2aTask"
+
+  /a2a/tasks/{taskId}/resume:
+    post:
+      tags: [A2APlane]
+      operationId: resumeA2aTask
+      summary: Provide follow-up input_parts to resume an input-required A2A Task under caller Virtual Key ownership (SM-09)
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/A2aTaskResumeRequest"
+      responses:
+        "200":
+          description: Task resumed and updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/A2aTask"
+        "400":
+          description: invalid_request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "404":
+          description: resource_not_found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: task_not_resumable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }

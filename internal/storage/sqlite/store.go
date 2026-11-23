@@ -41,6 +41,7 @@ type Store struct {
 	db        *sql.DB
 	dbPath    string
 	nowMs     func() int64
+	auditMu   sync.RWMutex
 	auditSink port.AuditSink
 	fsChecker FSChecker
 	closeOnce sync.Once
@@ -377,7 +378,7 @@ func (s *Store) BeginTx(ctx context.Context) (port.Tx, error) {
 		tx:        tx,
 		store:     s,
 		nowMs:     s.nowMs,
-		auditSink: s.auditSink,
+		auditSink: s.getAuditSink(),
 	}, nil
 }
 
@@ -403,8 +404,28 @@ func (s *Store) InTx(ctx context.Context, fn func(tx port.Tx) error) (err error)
 	return nil
 }
 
+// SetAuditSink attaches a fail-closed transactional AuditSink after store creation.
+func (s *Store) SetAuditSink(sink port.AuditSink) error {
+	if sink == nil {
+		return fmt.Errorf("%w: non-nil port.TxAuditSink is required", port.ErrInvalidInput)
+	}
+	if _, ok := sink.(port.TxAuditSink); !ok {
+		return fmt.Errorf("%w: AuditSink must implement port.TxAuditSink", port.ErrInvalidInput)
+	}
+	s.auditMu.Lock()
+	s.auditSink = sink
+	s.auditMu.Unlock()
+	return nil
+}
+
+func (s *Store) getAuditSink() port.AuditSink {
+	s.auditMu.RLock()
+	defer s.auditMu.RUnlock()
+	return s.auditSink
+}
+
 func (s *Store) Tenancy() port.TenancyRepository {
-	return &tenancyRepo{store: s, exec: s.db, nowMs: s.nowMs, auditSink: s.auditSink}
+	return &tenancyRepo{store: s, exec: s.db, nowMs: s.nowMs, auditSink: s.getAuditSink()}
 }
 
 func (s *Store) Changelog() port.ChangelogRepository {
@@ -416,7 +437,7 @@ func (s *Store) Leases() port.LeaseRepository {
 }
 
 func (s *Store) Audit() port.AuditSink {
-	return s.auditSink
+	return s.getAuditSink()
 }
 
 type sqliteTx struct {

@@ -14,6 +14,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -569,6 +570,40 @@ func (m *Manager) CompleteWithProvisioner(
 
 	if err := port.SetOrgRLSTx(ctx, tx, m.dialect, orgID); err != nil {
 		return nil, err
+	}
+
+	orgMeta, _ := json.Marshal(map[string]any{"slug": orgSlug, "bootstrap": true})
+	projMeta, _ := json.Marshal(map[string]any{"slug": projSlug, "bootstrap": true})
+	envMeta, _ := json.Marshal(map[string]any{"slug": "dev", "bootstrap": true})
+	orgEvents := []struct {
+		eventType  string
+		targetType string
+		targetID   string
+		meta       string
+	}{
+		{"organization.created", "organization", orgID, string(orgMeta)},
+		{"project.created", "project", projID, string(projMeta)},
+		{"environment.created", "environment", envID, string(envMeta)},
+	}
+	for _, ev := range orgEvents {
+		evAudID, evIDErr := idgen.New(idgen.PrefixAudit)
+		if evIDErr != nil {
+			return nil, evIDErr
+		}
+		if aerr := m.auditSink.AppendTx(ctx, tx, port.AuditEvent{
+			ID:           evAudID,
+			CreatedAtMs:  now,
+			OrgID:        &orgID,
+			ActorKind:    "PRINCIPAL",
+			ActorID:      principalID,
+			EntryPoint:   port.AuditEntryPointAdminAPI,
+			EventType:    ev.eventType,
+			TargetType:   ev.targetType,
+			TargetID:     ev.targetID,
+			MetadataJSON: ev.meta,
+		}); aerr != nil {
+			return nil, aerr
+		}
 	}
 
 	result := &CompleteResult{

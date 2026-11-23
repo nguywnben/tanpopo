@@ -99,6 +99,9 @@ func newPart2TestHarness(t *testing.T, probeLimitPerMin int) *part2Harness {
 	if err != nil {
 		t.Fatalf("audit.NewLogger: %v", err)
 	}
+	if err := st.SetAuditSink(auditLog); err != nil {
+		t.Fatalf("st.SetAuditSink: %v", err)
+	}
 
 	masterKey := make([]byte, vault.KeySizeBytes)
 	for i := range masterKey {
@@ -1339,11 +1342,12 @@ func TestPart2PoliciesRoutesModelsAndOCC(t *testing.T) {
 	mustDecodeJSON(t, recMod.Body.Bytes(), &mod)
 
 	recDep := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
-		"env_id":              boot.EnvID,
-		"logical_model_id":    mod.ID,
-		"connection_id":       conn.ID,
-		"upstream_model_name": "claude-sonnet-4",
-		"data_region":         "US",
+		"env_id":               boot.EnvID,
+		"logical_model_id":     mod.ID,
+		"connection_id":        conn.ID,
+		"upstream_model_name":  "claude-sonnet-4",
+		"data_region":          "US",
+		"activate_immediately": false,
 		"rate_card": map[string]any{
 			"input_token_nano_usd":  3000,
 			"output_token_nano_usd": 15000,
@@ -2190,12 +2194,13 @@ func TestPart2RouteValidationAndIfMatchOrdering(t *testing.T) {
 	mustDecodeJSON(t, recMod.Body.Bytes(), &mod)
 
 	recDep2 := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
-		"env_id":              env2.ID,
-		"logical_model_id":    mod.ID,
-		"connection_id":       conn2.ID,
-		"upstream_model_name": "gpt-route",
-		"data_region":         "US",
-		"rate_card":           map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
+		"env_id":               env2.ID,
+		"logical_model_id":     mod.ID,
+		"connection_id":        conn2.ID,
+		"upstream_model_name":  "gpt-route",
+		"data_region":          "US",
+		"activate_immediately": false,
+		"rate_card":            map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
 	})
 	if recDep2.Code != http.StatusCreated {
 		t.Fatalf("create dep2: %d %s", recDep2.Code, recDep2.Body.String())
@@ -3013,12 +3018,13 @@ func TestPart2SecurityAndRemediationRegressions(t *testing.T) {
 	}
 
 	recDepA := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
-		"env_id":              boot.EnvID,
-		"logical_model_id":    regMod.ID,
-		"connection_id":       sharedConn.ID,
-		"upstream_model_name": "gpt-a",
-		"data_region":         "US",
-		"rate_card":           map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
+		"env_id":               boot.EnvID,
+		"logical_model_id":     regMod.ID,
+		"connection_id":        sharedConn.ID,
+		"upstream_model_name":  "gpt-a",
+		"data_region":          "US",
+		"activate_immediately": false,
+		"rate_card":            map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
 	})
 	if recDepA.Code != http.StatusCreated {
 		t.Fatalf("create depA: %d %s", recDepA.Code, recDepA.Body.String())
@@ -3027,12 +3033,13 @@ func TestPart2SecurityAndRemediationRegressions(t *testing.T) {
 	mustDecodeJSON(t, recDepA.Body.Bytes(), &depA)
 
 	recDepB := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
-		"env_id":              envB.ID,
-		"logical_model_id":    regMod.ID,
-		"connection_id":       sharedConn.ID,
-		"upstream_model_name": "gpt-b",
-		"data_region":         "US",
-		"rate_card":           map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
+		"env_id":               envB.ID,
+		"logical_model_id":     regMod.ID,
+		"connection_id":        sharedConn.ID,
+		"upstream_model_name":  "gpt-b",
+		"data_region":          "US",
+		"activate_immediately": false,
+		"rate_card":            map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
 	})
 	if recDepB.Code != http.StatusCreated {
 		t.Fatalf("create depB: %d %s", recDepB.Code, recDepB.Body.String())
@@ -3747,6 +3754,7 @@ func TestPart2AuditPaginationSeqNoSkewAndOracleAndZeroWeight(t *testing.T) {
 			"upstream_model_name":   fmt.Sprintf("up-cp9-%d", i),
 			"env_id":                boot.EnvID,
 			"data_region":           "US",
+			"activate_immediately":  false,
 			"rate_card":             map[string]any{"input_token_nano_usd": 100, "output_token_nano_usd": 200},
 			"idle_chunk_timeout_ms": 15000,
 			"first_byte_timeout_ms": 15000,
@@ -4150,11 +4158,12 @@ func TestPart2Checkpoint11ConnectionSnapshotRefreshModelModalityAndDeletingPolic
 	mustDecodeJSON(t, recConn.Body.Bytes(), &conn)
 
 	recDep := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/deployments", ownerCookie, boot.CSRFToken, "", map[string]any{
-		"env_id":              boot.EnvID,
-		"logical_model_id":    mod.ID,
-		"connection_id":       conn.ID,
-		"upstream_model_name": "gpt-4o",
-		"data_region":         "US",
+		"env_id":               boot.EnvID,
+		"logical_model_id":     mod.ID,
+		"connection_id":        conn.ID,
+		"upstream_model_name":  "gpt-4o",
+		"data_region":          "US",
+		"activate_immediately": false,
 		"rate_card": map[string]any{
 			"input_token_nano_usd":  2500,
 			"output_token_nano_usd": 10000,
@@ -4165,12 +4174,15 @@ func TestPart2Checkpoint11ConnectionSnapshotRefreshModelModalityAndDeletingPolic
 	}
 	var dep modelDeploymentDTO
 	mustDecodeJSON(t, recDep.Body.Bytes(), &dep)
+	if dep.State != catalog.DeployStateProvisioned {
+		t.Fatalf("expected PROVISIONED deployment state before verification, got %q", dep.State)
+	}
 
-	recDepPatch := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/deployments/"+dep.ID, ownerCookie, boot.CSRFToken, FormatETag(dep.Version), map[string]any{
+	recDepBlocked := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/deployments/"+dep.ID, ownerCookie, boot.CSRFToken, FormatETag(dep.Version), map[string]any{
 		"state": "ACTIVE_HEALTHY",
 	})
-	if recDepPatch.Code != http.StatusOK {
-		t.Fatalf("PATCH /deployments code=%d body=%s", recDepPatch.Code, recDepPatch.Body.String())
+	if recDepBlocked.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 activating deployment on unverified connection, got %d body=%s", recDepBlocked.Code, recDepBlocked.Body.String())
 	}
 
 	recRoute := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes", ownerCookie, boot.CSRFToken, "", map[string]any{
@@ -4211,6 +4223,13 @@ func TestPart2Checkpoint11ConnectionSnapshotRefreshModelModalityAndDeletingPolic
 	mustDecodeJSON(t, recTest.Body.Bytes(), &testRes)
 	if !testRes.Valid {
 		t.Fatalf("expected valid connection test, got %+v", testRes)
+	}
+
+	recDepPatch := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/deployments/"+dep.ID, ownerCookie, boot.CSRFToken, FormatETag(dep.Version), map[string]any{
+		"state": "ACTIVE_HEALTHY",
+	})
+	if recDepPatch.Code != http.StatusOK {
+		t.Fatalf("PATCH /deployments after connection verification code=%d body=%s", recDepPatch.Code, recDepPatch.Body.String())
 	}
 
 	recExplainActive := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/routes/explain", ownerCookie, boot.CSRFToken, "", map[string]any{

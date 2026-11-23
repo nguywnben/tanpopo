@@ -416,7 +416,15 @@ components:
         tpm_limit: { type: ["integer", "null"], minimum: 1 }
         max_concurrent_streams: { type: ["integer", "null"], minimum: 1 }
         budget_ceiling_micros: { type: ["integer", "null"], minimum: 0 }
+        allowed_planes:
+          type: array
+          items:
+            type: string
+            enum: [PROVIDER, MCP, A2A]
         allowed_models:
+          type: array
+          items: { type: string }
+        allowed_routes:
           type: array
           items: { type: string }
         allowed_mcp_tools:
@@ -442,7 +450,15 @@ components:
         rpm_limit: { type: ["integer", "null"] }
         tpm_limit: { type: ["integer", "null"] }
         max_concurrent_streams: { type: ["integer", "null"] }
+        allowed_planes:
+          type: array
+          items:
+            type: string
+            enum: [PROVIDER, MCP, A2A]
         allowed_models:
+          type: array
+          items: { type: string }
+        allowed_routes:
           type: array
           items: { type: string }
         allowed_mcp_tools:
@@ -652,6 +668,7 @@ components:
         env_id: { type: string }
         logical_model_id: { type: string }
         connection_id: { type: string }
+        connection_state: { type: string }
         upstream_model_name: { type: string }
         data_region: { $ref: "#/components/schemas/DataRegion" }
         state:
@@ -983,6 +1000,7 @@ components:
         target_agent_id: { type: string }
         target_agent_slug: { type: string }
         state: { type: string, enum: [submitted, working, input-required, completed, failed, canceled] }
+        prompt_message: { type: string }
         hop_count: { type: integer, minimum: 1, maximum: 5 }
         trace_root_id: { type: string }
         enforced_region: { type: string }
@@ -992,6 +1010,16 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         completed_at: { type: string, format: date-time }
+
+    A2aTaskResumeRequest:
+      type: object
+      additionalProperties: false
+      required: [input_parts]
+      properties:
+        input_parts:
+          type: array
+          minItems: 1
+          items: { type: object, additionalProperties: true }
 
     TraceSummary:
       type: object
@@ -1675,7 +1703,13 @@ paths:
                 rpm_limit: { type: ["integer", "null"] }
                 tpm_limit: { type: ["integer", "null"] }
                 max_concurrent_streams: { type: ["integer", "null"] }
+                allowed_planes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [PROVIDER, MCP, A2A]
                 allowed_models: { type: array, items: { type: string } }
+                allowed_routes: { type: array, items: { type: string } }
                 allowed_mcp_tools: { type: array, items: { type: string } }
       responses:
         "200":
@@ -3152,6 +3186,62 @@ paths:
                     items: { $ref: "#/components/schemas/A2aTaskResource" }
                   next_cursor: { type: ["string", "null"] }
                   has_more: { type: boolean }
+
+  /admin/v1/a2a/tasks/{taskId}/resume:
+    post:
+      tags: [MCPAndA2A]
+      operationId: resumeAdminA2aTask
+      summary: Resume an input-required A2A Task with follow-up input_parts (SCR-10)
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/A2aTaskResumeRequest"
+      responses:
+        "200":
+          description: Updated A2A task
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/A2aTaskResource" }
+        "409":
+          description: task_not_resumable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/a2a/tasks/{taskId}/cancel:
+    post:
+      tags: [MCPAndA2A]
+      operationId: cancelAdminA2aTask
+      summary: Cancel a non-terminal A2A Task and release held sub-budget (SCR-10)
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "200":
+          description: Updated canceled A2A task
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/A2aTaskResource" }
+        "409":
+          description: invalid_state_transition
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
 
   # ==================== GROUP J: TRACES, FINOPS BUDGETS, CHARGEBACK & WEBHOOKS (SCR-11, SCR-12) ====================
   /admin/v1/traces:

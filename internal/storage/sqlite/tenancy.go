@@ -85,16 +85,33 @@ func emitTenancyAuditTx(
 	if err != nil {
 		return err
 	}
+	actorKind := "SYSTEM"
+	actorID := "tenancy"
+	entryPoint := port.AuditEntryPointAdminAPI
+	var reqID *string
+	if actor, ok := port.AuditActorFromContext(ctx); ok {
+		if strings.TrimSpace(actor.ActorKind) != "" {
+			actorKind = actor.ActorKind
+		}
+		actorID = actor.ActorID
+		if strings.TrimSpace(actor.EntryPoint) != "" {
+			entryPoint = actor.EntryPoint
+		}
+		if trimmedReq := strings.TrimSpace(actor.RequestID); trimmedReq != "" {
+			reqID = &trimmedReq
+		}
+	}
 	return txSink.AppendTx(ctx, sqlTx, port.AuditEvent{
 		ID:           auditID,
 		CreatedAtMs:  now,
 		OrgID:        orgID,
-		ActorKind:    "SYSTEM",
-		ActorID:      "tenancy",
-		EntryPoint:   port.AuditEntryPointAdminAPI,
+		ActorKind:    actorKind,
+		ActorID:      actorID,
+		EntryPoint:   entryPoint,
 		EventType:    eventType,
 		TargetType:   targetType,
 		TargetID:     targetID,
+		RequestID:    reqID,
 		MetadataJSON: string(rawMeta),
 	})
 }

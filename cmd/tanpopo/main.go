@@ -170,22 +170,20 @@ func runWithContext(ctx context.Context, args []string, stdout, stderr io.Writer
 		support.NewCommand(support.Options{RootDir: envOr("TANPOPO_DATA_DIR", "data"), OutputFormat: &outputFmt, Stdout: stdout, Locale: loc}),
 		support.NewDoctorCommand(support.Options{RootDir: envOr("TANPOPO_DATA_DIR", "data"), OutputFormat: &outputFmt, Stdout: stdout, Locale: loc}),
 	)
-	rootCmd.AddCommand(opscli.NewCommands(opscli.Options{
+	addMergedCommands(rootCmd, opscli.NewCommands(opscli.Options{
 		DBPath:       envOr("TANPOPO_DB_PATH", filepath.Join(envOr("TANPOPO_DATA_DIR", "data"), "tanpopo.db")),
 		DataRoot:     envOr("TANPOPO_DATA_DIR", "data"),
 		LockfilePath: envOr("TANPOPO_LOCK_FILE", filepath.Join(envOr("TANPOPO_DATA_DIR", "data"), "tanpopo.lock")),
 		OutputFormat: &outputFmt,
 		Stdout:       stdout,
 		Locale:       loc,
-	})...)
-	for _, command := range remote.NewCommands(remote.Options{
+	}))
+	addMergedCommands(rootCmd, remote.NewCommands(remote.Options{
 		OutputFormat: &outputFmt,
 		Stdout:       stdout,
 		Stderr:       stderr,
 		Locale:       loc,
-	}) {
-		rootCmd.AddCommand(command)
-	}
+	}))
 
 	if err := rootCmd.Execute(); err != nil {
 		_, _ = fmt.Fprintf(stderr, "tanpopo: %s\n", testharness.SanitizeTerminalText(err.Error()))
@@ -205,5 +203,24 @@ func writeVersion(stdout io.Writer, format string, loc i18n.Locale) error {
 		return err
 	default:
 		return &testharness.ExitError{Code: testharness.ExitValidation, Message: i18n.T(loc, "cli.err.output_format")}
+	}
+}
+func addMergedCommands(root *cobra.Command, cmds []*cobra.Command) {
+	byName := make(map[string]*cobra.Command)
+	for _, existing := range root.Commands() {
+		byName[existing.Name()] = existing
+	}
+	for _, c := range cmds {
+		if c == nil {
+			continue
+		}
+		if existing, ok := byName[c.Name()]; ok {
+			for _, sub := range c.Commands() {
+				existing.AddCommand(sub)
+			}
+			continue
+		}
+		byName[c.Name()] = c
+		root.AddCommand(c)
 	}
 }

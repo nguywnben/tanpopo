@@ -57,6 +57,7 @@ type Store struct {
 	pool        *pgxpool.Pool
 	db          *sql.DB
 	nowMs       func() int64
+	auditMu     sync.RWMutex
 	auditSink   port.AuditSink
 	partitions  *PartitionManager
 	maintCancel context.CancelFunc
@@ -170,6 +171,26 @@ func Open(ctx context.Context, opts Options) (*Store, error) {
 		}()
 	}
 	return st, nil
+}
+
+// SetAuditSink attaches a fail-closed transactional AuditSink after store creation.
+func (s *Store) SetAuditSink(sink port.AuditSink) error {
+	if sink == nil {
+		return fmt.Errorf("%w: non-nil port.TxAuditSink is required", port.ErrInvalidInput)
+	}
+	if _, ok := sink.(port.TxAuditSink); !ok {
+		return fmt.Errorf("%w: AuditSink must implement port.TxAuditSink", port.ErrInvalidInput)
+	}
+	s.auditMu.Lock()
+	s.auditSink = sink
+	s.auditMu.Unlock()
+	return nil
+}
+
+func (s *Store) getAuditSink() port.AuditSink {
+	s.auditMu.RLock()
+	defer s.auditMu.RUnlock()
+	return s.auditSink
 }
 
 // RedactDSN strips credential material from URL or keyword/value PostgreSQL DSNs

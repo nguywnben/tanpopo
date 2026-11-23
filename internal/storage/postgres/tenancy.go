@@ -40,7 +40,7 @@ func (s *Store) Leases() port.LeaseRepository {
 
 // Audit returns the Store's AuditSink.
 func (s *Store) Audit() port.AuditSink {
-	return &storeAuditSink{sink: s.auditSink}
+	return &storeAuditSink{sink: s.getAuditSink()}
 }
 
 // BeginTx starts a relational PostgreSQL transaction scoped to port.Tx.
@@ -94,7 +94,7 @@ func (t *pgTx) Leases() port.LeaseRepository {
 	return &leaseRepo{store: t.store, tx: t.tx, exec: t.tx}
 }
 func (t *pgTx) Audit() port.AuditSink {
-	return &txAuditSink{tx: t.tx, sink: t.store.auditSink}
+	return &txAuditSink{tx: t.tx, sink: t.store.getAuditSink()}
 }
 
 type storeAuditSink struct {
@@ -163,16 +163,33 @@ func emitTenancyAuditTx(
 		}
 		metaJSON = string(raw)
 	}
+	actorKind := "SYSTEM"
+	actorID := "storage"
+	entryPoint := port.AuditEntryPointAdminAPI
+	var reqID *string
+	if actor, ok := port.AuditActorFromContext(ctx); ok {
+		if strings.TrimSpace(actor.ActorKind) != "" {
+			actorKind = actor.ActorKind
+		}
+		actorID = actor.ActorID
+		if strings.TrimSpace(actor.EntryPoint) != "" {
+			entryPoint = actor.EntryPoint
+		}
+		if trimmedReq := strings.TrimSpace(actor.RequestID); trimmedReq != "" {
+			reqID = &trimmedReq
+		}
+	}
 	return txSink.AppendTx(ctx, sqlTx, port.AuditEvent{
 		ID:           auditID,
 		CreatedAtMs:  now,
 		OrgID:        orgID,
-		ActorKind:    "SYSTEM",
-		ActorID:      "storage",
-		EntryPoint:   port.AuditEntryPointAdminAPI,
+		ActorKind:    actorKind,
+		ActorID:      actorID,
+		EntryPoint:   entryPoint,
 		EventType:    eventType,
 		TargetType:   targetType,
 		TargetID:     targetID,
+		RequestID:    reqID,
 		MetadataJSON: metaJSON,
 	})
 }
@@ -252,7 +269,7 @@ func (r *tenancyRepo) CreateOrganization(ctx context.Context, params port.Create
 		if err := insertChangelogExec(ctx, exec, &org.ID, "organization", org.ID, port.MutationUpsert, now); err != nil {
 			return err
 		}
-		if err := emitTenancyAuditTx(ctx, exec, r.store.auditSink, &org.ID, "organization.created", "organization", org.ID, map[string]any{"slug": org.Slug}, now); err != nil {
+		if err := emitTenancyAuditTx(ctx, exec, r.store.getAuditSink(), &org.ID, "organization.created", "organization", org.ID, map[string]any{"slug": org.Slug}, now); err != nil {
 			return err
 		}
 		out = org
@@ -419,7 +436,7 @@ func (r *tenancyRepo) UpdateOrganization(ctx context.Context, orgID string, expe
 		if err := insertChangelogExec(ctx, exec, &updated.ID, "organization", updated.ID, port.MutationUpsert, now); err != nil {
 			return err
 		}
-		if err := emitTenancyAuditTx(ctx, exec, r.store.auditSink, &updated.ID, "organization.updated", "organization", updated.ID, map[string]any{"version": updated.Version}, now); err != nil {
+		if err := emitTenancyAuditTx(ctx, exec, r.store.getAuditSink(), &updated.ID, "organization.updated", "organization", updated.ID, map[string]any{"version": updated.Version}, now); err != nil {
 			return err
 		}
 		out = updated
@@ -466,7 +483,7 @@ func (r *tenancyRepo) CreateProject(ctx context.Context, orgID string, params po
 		if err := insertChangelogExec(ctx, exec, &orgID, "project", prj.ID, port.MutationUpsert, now); err != nil {
 			return err
 		}
-		if err := emitTenancyAuditTx(ctx, exec, r.store.auditSink, &orgID, "project.created", "project", prj.ID, map[string]any{"slug": prj.Slug}, now); err != nil {
+		if err := emitTenancyAuditTx(ctx, exec, r.store.getAuditSink(), &orgID, "project.created", "project", prj.ID, map[string]any{"slug": prj.Slug}, now); err != nil {
 			return err
 		}
 		out = prj
@@ -622,7 +639,7 @@ func (r *tenancyRepo) UpdateProject(ctx context.Context, orgID, projectID string
 		if err := insertChangelogExec(ctx, exec, &orgID, "project", updated.ID, port.MutationUpsert, now); err != nil {
 			return err
 		}
-		if err := emitTenancyAuditTx(ctx, exec, r.store.auditSink, &orgID, "project.updated", "project", updated.ID, map[string]any{"version": updated.Version}, now); err != nil {
+		if err := emitTenancyAuditTx(ctx, exec, r.store.getAuditSink(), &orgID, "project.updated", "project", updated.ID, map[string]any{"version": updated.Version}, now); err != nil {
 			return err
 		}
 		out = updated
@@ -656,7 +673,7 @@ func (r *tenancyRepo) DeleteProject(ctx context.Context, orgID, projectID string
 			if err := insertChangelogExec(ctx, exec, &orgID, "project", projectID, port.MutationDelete, now); err != nil {
 				return err
 			}
-			return emitTenancyAuditTx(ctx, exec, r.store.auditSink, &orgID, "project.deleted", "project", projectID, nil, now)
+			return emitTenancyAuditTx(ctx, exec, r.store.getAuditSink(), &orgID, "project.deleted", "project", projectID, nil, now)
 		}
 		var ver int64
 		checkErr := exec.QueryRowContext(ctx, `SELECT version FROM projects WHERE org_id = $1 AND id = $2`, orgID, projectID).Scan(&ver)
@@ -704,7 +721,7 @@ func (r *tenancyRepo) CreateEnvironment(ctx context.Context, orgID, projectID st
 		if err := insertChangelogExec(ctx, exec, &orgID, "environment", env.ID, port.MutationUpsert, now); err != nil {
 			return err
 		}
-		if err := emitTenancyAuditTx(ctx, exec, r.store.auditSink, &orgID, "environment.created", "environment", env.ID, map[string]any{"slug": env.Slug}, now); err != nil {
+		if err := emitTenancyAuditTx(ctx, exec, r.store.getAuditSink(), &orgID, "environment.created", "environment", env.ID, map[string]any{"slug": env.Slug}, now); err != nil {
 			return err
 		}
 		out = env
@@ -826,7 +843,7 @@ func (r *tenancyRepo) UpdateEnvironment(ctx context.Context, orgID, envID string
 		if err := insertChangelogExec(ctx, exec, &orgID, "environment", updated.ID, port.MutationUpsert, now); err != nil {
 			return err
 		}
-		if err := emitTenancyAuditTx(ctx, exec, r.store.auditSink, &orgID, "environment.updated", "environment", updated.ID, map[string]any{"version": updated.Version}, now); err != nil {
+		if err := emitTenancyAuditTx(ctx, exec, r.store.getAuditSink(), &orgID, "environment.updated", "environment", updated.ID, map[string]any{"version": updated.Version}, now); err != nil {
 			return err
 		}
 		out = updated
@@ -860,7 +877,7 @@ func (r *tenancyRepo) DeleteEnvironment(ctx context.Context, orgID, envID string
 			if err := insertChangelogExec(ctx, exec, &orgID, "environment", envID, port.MutationDelete, now); err != nil {
 				return err
 			}
-			return emitTenancyAuditTx(ctx, exec, r.store.auditSink, &orgID, "environment.deleted", "environment", envID, nil, now)
+			return emitTenancyAuditTx(ctx, exec, r.store.getAuditSink(), &orgID, "environment.deleted", "environment", envID, nil, now)
 		}
 		var ver int64
 		checkErr := exec.QueryRowContext(ctx, `SELECT version FROM environments WHERE org_id = $1 AND id = $2`, orgID, envID).Scan(&ver)

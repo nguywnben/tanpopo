@@ -45,6 +45,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/iam/oidc"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
+	"github.com/nguywnben/tanpopo/internal/ingress/a2a"
 	"github.com/nguywnben/tanpopo/internal/pkg/i18n"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	policyengine "github.com/nguywnben/tanpopo/internal/policy/engine"
@@ -125,6 +126,7 @@ type ServerConfig struct {
 	RouteResolver           *resolver.Resolver
 	Broker                  *broker.BlindHostCredentialBroker
 	OAuth                   *oauth.Service
+	A2ACoordinator          *a2a.TaskCoordinator
 	ProviderRuntime         extport.ProviderRuntime
 	ProviderRuntimeFactory  func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	MarketplaceCatalog      []MarketplaceCatalogEntry
@@ -250,6 +252,7 @@ type Server struct {
 	routeResolver          *resolver.Resolver
 	broker                 *broker.BlindHostCredentialBroker
 	oauth                  *oauth.Service
+	a2aCoordinator         *a2a.TaskCoordinator
 	providerRuntime        extport.ProviderRuntime
 	providerRuntimeFactory func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	marketplace            []MarketplaceCatalogEntry
@@ -438,6 +441,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		routeResolver:          routeResolver,
 		broker:                 cfg.Broker,
 		oauth:                  cfg.OAuth,
+		a2aCoordinator:         cfg.A2ACoordinator,
 		providerRuntime:        cfg.ProviderRuntime,
 		providerRuntimeFactory: cfg.ProviderRuntimeFactory,
 		marketplace:            marketplace,
@@ -550,6 +554,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodGet, Path: "/admin/v1/a2a/agents", Action: rbac.ActionMCPRead, Handler: s.handleListA2AAgents},
 		{Method: http.MethodPost, Path: "/admin/v1/a2a/agents", Action: rbac.ActionMCPWrite, Handler: s.handleRegisterA2AAgent},
 		{Method: http.MethodGet, Path: "/admin/v1/a2a/tasks", Action: rbac.ActionMCPRead, Handler: s.handleListA2ATasks},
+		{Method: http.MethodPost, Path: "/admin/v1/a2a/tasks/{taskId}/resume", Action: rbac.ActionMCPWrite, Handler: s.handleResumeA2ATask},
+		{Method: http.MethodPost, Path: "/admin/v1/a2a/tasks/{taskId}/cancel", Action: rbac.ActionMCPWrite, Handler: s.handleCancelA2ATask},
 
 		// Group D: Control Plane Overview & Active Alerts
 		{Method: http.MethodGet, Path: "/admin/v1/overview/summary", Action: rbac.ActionBudgetRead, Handler: s.handleGetOverviewSummary},

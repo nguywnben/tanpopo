@@ -32,7 +32,9 @@ type virtualKeySummaryDTO struct {
 	RPMLimit             *int64   `json:"rpm_limit,omitempty"`
 	TPMLimit             *int64   `json:"tpm_limit,omitempty"`
 	MaxConcurrentStreams *int64   `json:"max_concurrent_streams,omitempty"`
+	AllowedPlanes        []string `json:"allowed_planes,omitempty"`
 	AllowedModels        []string `json:"allowed_models,omitempty"`
+	AllowedRoutes        []string `json:"allowed_routes,omitempty"`
 	AllowedMCPTools      []string `json:"allowed_mcp_tools,omitempty"`
 	Version              int64    `json:"version"`
 	CreatedAt            string   `json:"created_at"`
@@ -52,7 +54,9 @@ type createVirtualKeyRequest struct {
 	TPMLimit             *int64   `json:"tpm_limit"`
 	MaxConcurrentStreams *int64   `json:"max_concurrent_streams"`
 	BudgetCeilingMicros  *int64   `json:"budget_ceiling_micros"`
+	AllowedPlanes        []string `json:"allowed_planes"`
 	AllowedModels        []string `json:"allowed_models"`
+	AllowedRoutes        []string `json:"allowed_routes"`
 	AllowedMCPTools      []string `json:"allowed_mcp_tools"`
 }
 
@@ -82,7 +86,9 @@ type updateVirtualKeyRequest struct {
 	RPMLimit             nullableInt64Field `json:"rpm_limit"`
 	TPMLimit             nullableInt64Field `json:"tpm_limit"`
 	MaxConcurrentStreams *int64           `json:"max_concurrent_streams"`
+	AllowedPlanes        []string         `json:"allowed_planes"`
 	AllowedModels        []string         `json:"allowed_models"`
+	AllowedRoutes        []string         `json:"allowed_routes"`
 	AllowedMCPTools      []string         `json:"allowed_mcp_tools"`
 }
 
@@ -145,7 +151,7 @@ func (s *Server) handleListVirtualKeys(w http.ResponseWriter, r *http.Request) {
 	args := []any{orgID}
 	query.WriteString(`
 		SELECT id, org_id, project_id, env_id, owner_principal_id, name,
-		       key_prefix, last_four, state, allowed_models_json, allowed_mcp_tools_json,
+		       key_prefix, last_four, state, allowed_planes, allowed_models_json, allowed_routes_json, allowed_mcp_tools_json,
 		       rpm_limit, tpm_limit, max_concurrent_streams, expires_at_ms, version, created_at_ms
 		FROM virtual_keys
 		WHERE org_id = ?`)
@@ -189,14 +195,14 @@ func (s *Server) handleListVirtualKeys(w http.ResponseWriter, r *http.Request) {
 			var (
 				id, rowOrg, projectID, envID, name, keyPrefix, lastFour, state string
 				ownerID                                                        sql.NullString
-				modelsJSON, mcpJSON                                            string
+				planesCSV, modelsJSON, routesJSON, mcpJSON                     string
 				rpmNS, tpmNS, expNS                                            sql.NullInt64
 				maxStreams                                                     int64
 				version, createdMs                                             int64
 			)
 			if scanErr := rows.Scan(
 				&id, &rowOrg, &projectID, &envID, &ownerID, &name,
-				&keyPrefix, &lastFour, &state, &modelsJSON, &mcpJSON,
+				&keyPrefix, &lastFour, &state, &planesCSV, &modelsJSON, &routesJSON, &mcpJSON,
 				&rpmNS, &tpmNS, &maxStreams, &expNS, &version, &createdMs,
 			); scanErr != nil {
 				return scanErr
@@ -207,30 +213,37 @@ func (s *Server) handleListVirtualKeys(w http.ResponseWriter, r *http.Request) {
 				ProjectID:            projectID,
 				EnvID:                envID,
 				KeyPrefix:            keyPrefix,
-			LastFour:             lastFour,
-			State:                normalizeOpenAPIVKeyState(state),
-			MaxConcurrentStreams: &maxStreams,
-			Version:              version,
-			CreatedAt:            formatTimeRFC3339Ms(createdMs),
-		}
-		if ownerID.Valid {
-			v := ownerID.String
-			dto.OwnerPrincipalID = &v
-		}
-		if rpmNS.Valid {
-			v := rpmNS.Int64
-			dto.RPMLimit = &v
-		}
-		if tpmNS.Valid {
-			v := tpmNS.Int64
-			dto.TPMLimit = &v
-		}
-		if expNS.Valid {
-			v := formatTimeRFC3339Ms(expNS.Int64)
-			dto.ExpiresAt = &v
-		}
+				LastFour:             lastFour,
+				State:                normalizeOpenAPIVKeyState(state),
+				AllowedPlanes:        splitAllowedPlanes(planesCSV),
+				MaxConcurrentStreams: &maxStreams,
+				Version:              version,
+				CreatedAt:            formatTimeRFC3339Ms(createdMs),
+			}
+			if ownerID.Valid {
+				v := ownerID.String
+				dto.OwnerPrincipalID = &v
+			}
+			if rpmNS.Valid {
+				v := rpmNS.Int64
+				dto.RPMLimit = &v
+			}
+			if tpmNS.Valid {
+				v := tpmNS.Int64
+				dto.TPMLimit = &v
+			}
+			if expNS.Valid {
+				v := formatTimeRFC3339Ms(expNS.Int64)
+				dto.ExpiresAt = &v
+			}
 			if uerr := json.Unmarshal([]byte(modelsJSON), &dto.AllowedModels); uerr != nil {
 				return fmt.Errorf("corrupt allowed_models_json: %w", uerr)
+			}
+			if strings.TrimSpace(routesJSON) == "" {
+				routesJSON = `["*"]`
+			}
+			if uerr := json.Unmarshal([]byte(routesJSON), &dto.AllowedRoutes); uerr != nil {
+				return fmt.Errorf("corrupt allowed_routes_json: %w", uerr)
 			}
 			if uerr := json.Unmarshal([]byte(mcpJSON), &dto.AllowedMCPTools); uerr != nil {
 				return fmt.Errorf("corrupt allowed_mcp_tools_json: %w", uerr)
@@ -363,6 +376,15 @@ func (s *Server) createVirtualKeyCommon(w http.ResponseWriter, r *http.Request, 
 	if req.MaxConcurrentStreams != nil {
 		maxStreams = *req.MaxConcurrentStreams
 	}
+	allowedPlanesCSV := ""
+	if req.AllowedPlanes != nil {
+		var perr error
+		allowedPlanesCSV, perr = normalizePlanesListToCSV(req.AllowedPlanes)
+		if perr != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", perr.Error(), false, nil)
+			return
+		}
+	}
 
 	created, err := s.vkeys.Create(r.Context(), vkey.CreateParams{
 		OrgID:                orgID,
@@ -373,7 +395,9 @@ func (s *Server) createVirtualKeyCommon(w http.ResponseWriter, r *http.Request, 
 		RPMLimit:             req.RPMLimit,
 		TPMLimit:             req.TPMLimit,
 		MaxConcurrentStreams: maxStreams,
+		AllowedPlanes:        allowedPlanesCSV,
 		AllowedModels:        req.AllowedModels,
+		AllowedRoutes:        req.AllowedRoutes,
 		AllowedMCPTools:      req.AllowedMCPTools,
 		ExpiresAtMs:          expMsPtr,
 		ActorID:              sc.Actor.PrincipalID,
@@ -504,12 +528,25 @@ func (s *Server) handleUpdateVirtualKey(w http.ResponseWriter, r *http.Request) 
 	if req.MaxConcurrentStreams != nil {
 		params.MaxConcurrentStreams = req.MaxConcurrentStreams
 	}
+	if req.AllowedPlanes != nil {
+		normCSV, perr := normalizePlanesListToCSV(req.AllowedPlanes)
+		if perr != nil {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", perr.Error(), false, nil)
+			return
+		}
+		params.AllowedPlanes = normCSV
+		params.HasAllowedPlanes = true
+	}
 	if req.AllowedModels != nil {
-		params.AllowedModels = req.AllowedModels
+		params.AllowedModels = trimNonEmptyStrings(req.AllowedModels)
 		params.HasAllowedModels = true
 	}
+	if req.AllowedRoutes != nil {
+		params.AllowedRoutes = trimNonEmptyStrings(req.AllowedRoutes)
+		params.HasAllowedRoutes = true
+	}
 	if req.AllowedMCPTools != nil {
-		params.AllowedMCPTools = req.AllowedMCPTools
+		params.AllowedMCPTools = trimNonEmptyStrings(req.AllowedMCPTools)
 		params.HasAllowedMCPTools = true
 	}
 
@@ -803,7 +840,9 @@ func toVirtualKeySummaryDTO(s *vkey.VirtualKeySummary) virtualKeySummaryDTO {
 		RPMLimit:             s.RPMLimit,
 		TPMLimit:             s.TPMLimit,
 		MaxConcurrentStreams: &maxStreams,
+		AllowedPlanes:        splitAllowedPlanes(s.AllowedPlanes),
 		AllowedModels:        append([]string(nil), s.AllowedModels...),
+		AllowedRoutes:        append([]string(nil), s.AllowedRoutes...),
 		AllowedMCPTools:      append([]string(nil), s.AllowedMCPTools...),
 		Version:              s.Version,
 		CreatedAt:            formatTimeRFC3339Ms(s.CreatedAtMs),
@@ -815,4 +854,53 @@ func toVirtualKeyCreatedDTO(c *vkey.CreatedVirtualKey) virtualKeyCreatedDTO {
 		virtualKeySummaryDTO: toVirtualKeySummaryDTO(&c.Summary),
 		SecretKey:            c.SecretKey,
 	}
+}
+
+func normalizePlanesListToCSV(planes []string) (string, error) {
+	if len(planes) == 0 {
+		return "", fmt.Errorf("%w: allowed_planes must include at least one plane (PROVIDER, MCP, A2A)", port.ErrInvalidInput)
+	}
+	seen := make(map[string]bool, len(planes))
+	out := make([]string, 0, len(planes))
+	for _, raw := range planes {
+		token := strings.ToUpper(strings.TrimSpace(raw))
+		switch token {
+		case "PROVIDER", "MCP", "A2A":
+		default:
+			return "", fmt.Errorf("%w: invalid allowed_planes entry %q", port.ErrInvalidInput, raw)
+		}
+		if !seen[token] {
+			seen[token] = true
+			out = append(out, token)
+		}
+	}
+	return strings.Join(out, ","), nil
+}
+
+func splitAllowedPlanes(csv string) []string {
+	parts := strings.Split(strings.TrimSpace(csv), ",")
+	out := make([]string, 0, len(parts))
+	seen := make(map[string]bool, len(parts))
+	for _, raw := range parts {
+		token := strings.ToUpper(strings.TrimSpace(raw))
+		if token == "" || seen[token] {
+			continue
+		}
+		seen[token] = true
+		out = append(out, token)
+	}
+	if len(out) == 0 {
+		return []string{"PROVIDER"}
+	}
+	return out
+}
+
+func trimNonEmptyStrings(items []string) []string {
+	out := make([]string, 0, len(items))
+	for _, raw := range items {
+		if trimmed := strings.TrimSpace(raw); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

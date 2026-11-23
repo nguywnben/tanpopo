@@ -179,13 +179,16 @@ func (s *Server) handleRegisterMCPServer(w http.ResponseWriter, r *http.Request)
 		writeErrorEnvelope(w, r, 400, "invalid_request", "invalid_request_error", "allowed_cidrs is required when allow_private_ip is true", false, nil)
 		return
 	}
+	normCIDRs := make([]string, 0, len(req.AllowedCIDRs))
 	for _, raw := range req.AllowedCIDRs {
 		pfx, err := netip.ParsePrefix(strings.TrimSpace(raw))
-		if err != nil || pfx.Bits() == 0 {
+		if err != nil || !pfx.IsValid() || pfx.Masked().Bits() == 0 {
 			writeErrorEnvelope(w, r, 400, "invalid_request", "invalid_request_error", "allowed_cidrs must contain valid non-wildcard CIDR prefixes", false, nil)
 			return
 		}
+		normCIDRs = append(normCIDRs, pfx.Masked().String())
 	}
+	req.AllowedCIDRs = normCIDRs
 	if err := validateEndpointSSRF(r.Context(), strings.TrimSpace(req.EndpointURL), req.AllowPrivate, s.hostResolver, s.blockedPorts); err != nil {
 		var egressErr *egress.Error
 		if errors.As(err, &egressErr) && egressErr.HTTPStatus == http.StatusForbidden {

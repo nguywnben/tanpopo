@@ -297,7 +297,13 @@ func (s *Server) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	org, err := s.storage.Tenancy().CreateOrganization(r.Context(), port.CreateOrgParams{
+	auditCtx := port.WithAuditActor(r.Context(), port.AuditActor{
+		ActorKind:  "PRINCIPAL",
+		ActorID:    sc.Actor.PrincipalID,
+		EntryPoint: port.AuditEntryPointAdminAPI,
+		RequestID:  requestIDFromContext(r.Context()),
+	})
+	org, err := s.storage.Tenancy().CreateOrganization(auditCtx, port.CreateOrgParams{
 		Slug:        strings.TrimSpace(req.Slug),
 		DisplayName: strings.TrimSpace(req.Name),
 	})
@@ -792,7 +798,13 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prj, err := s.storage.Tenancy().CreateProject(r.Context(), orgID, port.CreateProjectParams{
+	auditCtx := port.WithAuditActor(r.Context(), port.AuditActor{
+		ActorKind:  "PRINCIPAL",
+		ActorID:    sc.Actor.PrincipalID,
+		EntryPoint: port.AuditEntryPointAdminAPI,
+		RequestID:  requestIDFromContext(r.Context()),
+	})
+	prj, err := s.storage.Tenancy().CreateProject(auditCtx, orgID, port.CreateProjectParams{
 		Slug:        strings.TrimSpace(req.Slug),
 		DisplayName: strings.TrimSpace(req.Name),
 	})
@@ -1615,7 +1627,13 @@ func (s *Server) handleCreateProjectEnvironment(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	env, err := s.storage.Tenancy().CreateEnvironment(r.Context(), orgID, prj.ID, port.CreateEnvironmentParams{
+	auditCtx := port.WithAuditActor(r.Context(), port.AuditActor{
+		ActorKind:  "PRINCIPAL",
+		ActorID:    sc.Actor.PrincipalID,
+		EntryPoint: port.AuditEntryPointAdminAPI,
+		RequestID:  requestIDFromContext(r.Context()),
+	})
+	env, err := s.storage.Tenancy().CreateEnvironment(auditCtx, orgID, prj.ID, port.CreateEnvironmentParams{
 		Slug: slug,
 	})
 	if err != nil {
