@@ -16,14 +16,14 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | FT-06 | Registry, package install, lockfile, contract harness | UNVERIFIED | |
 | FT-07 | MCP discovery, grants, schema pinning, approvals | PARTIAL PASS | CP09 real UI registration rejects wildcard and persists explicit private CIDR; no valid MCP tool sync/grant/invocation fixture yet. |
 | FT-08 | A2A discovery, authorization, delegation, tasks/lifecycle | PARTIAL PASS | CP08 authorized discovery, task submit/input-required/resume/complete/cancel, terminal transition rejection, and same-ID persistence against isolated synthetic endpoint; task draining, budgets, delegation depth, other roles remain UNVERIFIED. |
-| FT-09 | Org/project/environment, six-role RBAC, key lifecycle | PARTIAL PASS | CP06 provisioning audit; CP08 A2A-only/provider-only issuance, authorization, persistence and revocation; rotation, other role/tenant boundaries remain UNVERIFIED. |
+| FT-09 | Org/project/environment, six-role RBAC, key lifecycle | PARTIAL PASS | CP06 provisioning audit; CP08 A2A-only/provider-only issuance, authorization, persistence and revocation; CP14 actual project-scoped Team Admin membership and escalation/cross-project denial. Member list refresh defect DEF-016 remains open; other roles/tenant boundaries remain UNVERIFIED. |
 | FT-10 | Capability routing, health, failover, route explain | PARTIAL PASS | CP11 single-target synthetic route served; CP12 route to unverified connection remained Provisioned and failed closed. Multi-target failover, weights, policy explain, health recovery remain UNVERIFIED. |
 | FT-11 | Runtime policy, rate limit, SSRF/security boundaries | UNVERIFIED | |
 | FT-12 | Audit chain and emergency kill-switch | PARTIAL PASS | CP06 provisioning events had correct actor/scope and audit verification intact across 10 events; CP08 agent/key/task events and chain integrity also checked. Emergency kill-switch, tamper detection, other mutation/error paths remain UNVERIFIED. |
 | FT-13 | Budgets, reservations, settlement and chargeback | PARTIAL PASS | CP05 created first project budget from empty Console state; CP11 settled one exact provider request without any budget ledger and reconciled the FinOps headline, project/model chargeback rows, CSV and JSON exports. Enforcement, estimates, multi-budget scopes and larger reconciliations remain UNVERIFIED. |
 | FT-14 | OTel export, trace privacy and explorer | UNVERIFIED | |
 | FT-15 | Console, CLI, Admin API, Data Plane API | PARTIAL PASS | CP04 built CLI config show/help/reconcile command routing with local synthetic API fixture; real Admin/Data Plane API paths remain UNVERIFIED. |
-| FT-16 | Setup/startup, GitOps, encrypted backup, restore, upgrade | UNVERIFIED | |
+| FT-16 | Setup/startup, GitOps, encrypted backup, restore, upgrade | PARTIAL PASS | CP13 Console SQLite backup, archive authentication, secret-decryption-checked restore, restored server startup and fresh login with persisted model/FinOps state. GitOps, PostgreSQL/cluster restore, upgrade and corrupt archive recovery remain UNVERIFIED. |
 
 **CP00–02 test capability note:** Local Go 1.26.11 linux/amd64 binary is built from the exact baseline. `go test ./...` and `go test -race ./...` both pass all 86 packages after applying environment-specific `GOFLAGS=-buildvcs=false` and `umask 0022`; `go run ./scripts/ci/check.go --all`, `go vet ./...`, `go run ./scripts/docs/check_drift.go`, Console typecheck, all 45 Console tests, and production build pass. These are build/automated quality results, not product-feature PASS results. RC4 DevBox artifact remains UNVERIFIED.
 
@@ -43,10 +43,10 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | SCR-10 | MCP/A2A registry and tasks | PARTIAL PASS | CP08 visually inspected actual agent registration, A2A-only key grants, input-required tasks and completion; CP09 MCP server registration/persistence visually inspected. MCP tool sync/invocation, error recovery and concurrent drain remain UNVERIFIED. |
 | SCR-11 | Request traces | UNVERIFIED | |
 | SCR-12 | FinOps budgets/chargeback | PARTIAL PASS | CP05 visually reviewed empty budgets, create drawer and persisted budget row; CP11 visually reviewed no-budget chargeback headline/table and CSV export success; export contents matched selected Model grouping. Other dimensions and budget enforcement remain UNVERIFIED. |
-| SCR-13 | Keys, projects, members, roles | PARTIAL PASS | CP06 project/environment provisioning; CP08 A2A-only and provider-only key creation, grant visibility and revocation screenshots inspected. Member/role journeys and rotation remain UNVERIFIED. |
+| SCR-13 | Keys, projects, members, roles | PARTIAL PASS | CP06 project/environment provisioning; CP08 scoped key creation, grant visibility and revocation; CP14 Team Admin Add member and scoped grant. Team Admin list refresh is blocked by DEF-016; rotation and other role boundaries remain open. |
 | SCR-14 | Approvals/audit/kill-switch | PARTIAL PASS | CP06 live audit-log screen visually reviewed; project/environment event attribution and chain verification passed. Approvals and kill-switch remain UNVERIFIED. |
 | SCR-15 | Playground/API explorer/diagnostics | UNVERIFIED | |
-| SCR-16 | Operations/backups/upgrades/privacy | PARTIAL PASS | CP07 authenticated WebKit Operations→Webhooks at 375px; responsive drawer visible. Backup, upgrade, health, and privacy flows remain UNVERIFIED. |
+| SCR-16 | Operations/backups/upgrades/privacy | PARTIAL PASS | CP07 authenticated WebKit webhook drawer; CP13 Console backup, receipt, archive verify/restore and restored startup/login. Upgrade, health matrix, privacy and clustered operations remain UNVERIFIED. |
 
 ## Business workflows WF-01..13
 
@@ -70,7 +70,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 
 | Dimension | QA-002 status | Evidence / open coverage |
 | --- | --- | --- |
-| User roles: first-time owner, developer, administrator, Team Admin, security reviewer, operator, FinOps, extension author | PARTIAL PASS | First-time owner setup on 18084 (CP03) and login on 18083 (CP01); remaining roles UNVERIFIED. |
+| User roles: first-time owner, developer, administrator, Team Admin, security reviewer, operator, FinOps, extension author | PARTIAL PASS | First-time owner setup/login; CP14 actual Developer+Team Admin login, successful scoped member create, org-role escalation and cross-project denial. Security Reviewer, FinOps Viewer, non-owner Operator and extension author roles remain UNVERIFIED. |
 | Tenant and resource authorization; default-deny and cross-tenant boundaries | PARTIAL PASS | CP08 provider-only key was denied A2A discovery/task with 403; revoked key received 401. Cross-tenant and all-resource boundaries remain UNVERIFIED. |
 | Provider integrations: Google, Meta, deterministic synthetic provider, adapter failures | PARTIAL PASS | CP10/11 Ollama synthetic success, exact settlement; CP12 isolated HTTP 401 probe and fail-closed route. Google provider remains blocked/UNVERIFIED for Cloud egress vs adapter separation; Meta and more adapters remain open. |
 | Platforms/modes: standalone SQLite, Docker, PostgreSQL/Valkey clustered, restart/upgrade | UNVERIFIED | |
@@ -79,7 +79,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | Themes: light/dark; 15 locales | UNVERIFIED | |
 | Accessibility, keyboard, screen-reader labels, focus/recovery | PARTIAL PASS | CP03 live axe: four setup steps, 0 violations; other screens, keyboard/screen-reader, locales, and browsers UNVERIFIED. |
 | Security: SSRF, secrets, audit integrity, kill-switch, plugin boundaries | UNVERIFIED | |
-| Operational reliability: health, backup/restore, restart persistence, diagnostics | UNVERIFIED | |
+| Operational reliability: health, backup/restore, restart persistence, diagnostics | PARTIAL PASS | CP13 verified SQLite backup, encrypted restore and fresh-process health/readiness/login/persistence. Restart failure, multi-node, PostgreSQL/Valkey and upgrade recovery remain UNVERIFIED. |
 
 ## Update protocol
 

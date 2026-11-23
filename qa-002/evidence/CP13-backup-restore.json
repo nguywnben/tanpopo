@@ -1,0 +1,11 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "console_create": {"result": "success", "archive_filename": "tanpopo-backup-1ba5d9a7c78c7622e9dd41f200467e1a.tpop.enc", "archive_sha256": "f28b1ab85278c8eb49b10578096c22c0f956659d3de7102b40aa765bc4d5e357", "archive_bytes": 43830, "receipt_rows": 1},
+  "archive_location": "/tmp/tanpopo-qa002-aux-data/backups/",
+  "cli_verify": {"exit_status": 0, "file_count": 6, "backup_id": "1ba5d9a7c78c7622e9dd41f200467e1a"},
+  "restore": {"exit_status": 0, "verify_secrets_decrypt": true, "destination": "/tmp/qa002-restored-backup-CP13", "files": ["database.sqlite", "tanpopo.yaml", "tanpopo.lock", "manifest.json", "extensions/exv_01m8504abme008b0tgvdhap2dp/README.md", "extensions/exv_01m8504abme008b0tgvdhap2dp/manifest.yaml"]},
+  "restored_runtime": {"listen": "127.0.0.1:18085", "healthz": 200, "readyz": 200, "fresh_console_login": true, "model_and_deployments_persisted": true, "finops_exact_micro_usd": 6001},
+  "result": "DEF-008 VERIFIED FIXED (scoped)",
+  "limitations": ["SQLite only", "No corrupt/tampered archive negative path", "No clustered/PostgreSQL backup"],
+  "screenshots": ["CP13-backups-current.png", "CP13-backups-after-create.png", "CP13-backup-restored-models.png", "CP13-backup-restored-finops.png"]
+}

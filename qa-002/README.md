@@ -37,3 +37,5 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP10 | Ollama extension permission review, provider defaults, persistence and synthetic live probe | PASS for scoped Ollama lifecycle; other adapters and model/deployment inference remain open |
 | CP11 | Exact no-budget provider settlement, FinOps headline, selected model grouping, CSV/JSON exports | PASS for scoped reconciliation; quota policies and other group dimensions remain open |
 | CP12 | Local 401 provider probe, deployment promotion guard, route health and fail-closed inference | PASS for scoped rejection/readiness path; Google and other failure modes remain open |
+| CP13 | Console encrypted backup, CLI verification, secret-decryption restore, restored startup/login | PASS for SQLite path; cluster and damaged-archive cases remain open |
+| CP14 | Project-scoped Team Admin member creation, list refresh and role-boundary retest | CREATE/BOUNDARY PASS; UI list refresh FAIL (DEF-016), separately recorded |
