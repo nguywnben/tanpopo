@@ -464,6 +464,133 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 	return r.GetProviderAdapter(ctx, id)
 }
 
+// UpsertProviderAdapter idempotently registers or refreshes a provider_adapters row
+// for an active SM-01 extension installation (used during activation, upgrade,
+// rollback, and reinstall so allowed_hosts, dialects, and native_prefix stay current).
+func (r *Repository) UpsertProviderAdapter(ctx context.Context, params CreateProviderAdapterParams) (*ProviderAdapter, error) {
+	if strings.TrimSpace(params.InstallationID) == "" || strings.TrimSpace(params.AdapterSlug) == "" {
+		return nil, fmt.Errorf("%w: installation_id and adapter_slug are required", port.ErrInvalidInput)
+	}
+	if len(params.AllowedHosts) == 0 {
+		return nil, fmt.Errorf("%w: allowed_hosts must not be empty (default-deny CT-14)", port.ErrInvalidInput)
+	}
+	for _, h := range params.AllowedHosts {
+		if err := validateHostEntry(h); err != nil {
+			return nil, err
+		}
+	}
+	dialectsJSON, err := marshalStringSlice(params.SupportedDialects)
+	if err != nil {
+		return nil, err
+	}
+	hostsJSON, err := marshalStringSlice(params.AllowedHosts)
+	if err != nil {
+		return nil, err
+	}
+	now := r.nowMs()
+	slug := strings.TrimSpace(params.AdapterSlug)
+	var targetID string
+
+	if err := r.withOperatorTx(ctx, func(tx *sql.Tx) error {
+		gov, err := r.loadAdapterExtensionGovernance(ctx, tx, params.InstallationID)
+		if err != nil {
+			return err
+		}
+		if !isValidAdapterInstallState(gov.InstallState) {
+			return fmt.Errorf("%w: extension installation %q state %s cannot back an adapter", port.ErrInvalidInput, params.InstallationID, gov.InstallState)
+		}
+		if gov.ActiveVersionID == "" {
+			return fmt.Errorf("%w: extension installation %q has no active SM-01 version", port.ErrInvalidInput, params.InstallationID)
+		}
+		if params.ExpectedActiveVersionID != "" && gov.ActiveVersionID != params.ExpectedActiveVersionID {
+			return port.ErrVersionConflict
+		}
+		if params.ExpectedActiveVersionID != "" {
+			var manifestJSON string
+			if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT manifest_json FROM extension_versions WHERE id = ? AND package_id = (SELECT package_id FROM extension_installations WHERE id = ?)`), gov.ActiveVersionID, params.InstallationID).Scan(&manifestJSON); err != nil {
+				return mapDBError(err)
+			}
+			var manifest installer.ExtensionManifest
+			if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
+				return fmt.Errorf("%w: active provider adapter manifest is invalid", port.ErrInvalidInput)
+			}
+			declared := false
+			for _, capability := range manifest.Capabilities {
+				if capability.Type != "provider_adapter" || capability.AdapterSlug != slug {
+					continue
+				}
+				declaredPrefix := strings.TrimSpace(capability.NativePassthroughPrefix)
+				requestedPrefix := ""
+				if params.NativePrefix != nil {
+					requestedPrefix = strings.TrimSpace(*params.NativePrefix)
+				}
+				if declaredPrefix != requestedPrefix || !sameStrings(capability.SupportedDialects, params.SupportedDialects) {
+					return fmt.Errorf("%w: adapter metadata does not match its active manifest capability", port.ErrInvalidInput)
+				}
+				declared = true
+				break
+			}
+			if !declared {
+				return fmt.Errorf("%w: adapter slug is not declared by the active manifest", port.ErrInvalidInput)
+			}
+		}
+		approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
+		if err != nil {
+			return fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
+		}
+		for _, reqHost := range params.AllowedHosts {
+			if !hostPatternPermittedByApproved(reqHost, approved.AllowedHosts, approved.EndpointHostSuffixes) {
+				return fmt.Errorf("%w: adapter allowed_host %q exceeds SM-01 approved networkEgress.allowedHosts", port.ErrInvalidInput, reqHost)
+			}
+		}
+
+		err = tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT id FROM provider_adapters WHERE installation_id = ? AND adapter_slug = ?`), params.InstallationID, slug).Scan(&targetID)
+		switch {
+		case err == nil:
+			if _, uerr := tx.ExecContext(ctx, port.Rebind(r.dialect, `
+				UPDATE provider_adapters
+				SET native_prefix = ?, supported_dialects_json = ?, allowed_hosts_json = ?, version = version + 1
+				WHERE id = ?`),
+				nullStrPtr(params.NativePrefix), dialectsJSON, hostsJSON, targetID,
+			); uerr != nil {
+				return mapWriteDBError(uerr)
+			}
+		case errors.Is(err, sql.ErrNoRows):
+			id, idErr := resolveID(params.ID, idgen.PrefixAdapter)
+			if idErr != nil {
+				return idErr
+			}
+			targetID = id
+			if _, ierr := tx.ExecContext(ctx, port.Rebind(r.dialect, `
+				INSERT INTO provider_adapters (
+					id, installation_id, adapter_slug, native_prefix,
+					supported_dialects_json, allowed_hosts_json, version, created_at_ms
+				) VALUES (?, ?, ?, ?, ?, ?, 1, ?)`),
+				targetID, params.InstallationID, slug, nullStrPtr(params.NativePrefix),
+				dialectsJSON, hostsJSON, now,
+			); ierr != nil {
+				return mapWriteDBError(ierr)
+			}
+		default:
+			return mapDBError(err)
+		}
+		if err := r.appendChangelogTx(ctx, tx, nil, "provider_adapter", targetID, port.MutationUpsert, false, now); err != nil {
+			return err
+		}
+		return r.emitAuditTx(ctx, tx, nil, "provider_adapter.synced", "provider_adapter", targetID, map[string]any{
+			"adapter_slug":    slug,
+			"installation_id": params.InstallationID,
+		}, now)
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := r.syncSnapshot(ctx); err != nil {
+		return nil, err
+	}
+	return r.GetProviderAdapter(ctx, targetID)
+}
+
 func sameStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -2622,6 +2749,24 @@ func validateEndpointAndPermissions(
 		return fmt.Errorf("%w: allow_private_ip=true denied by SM-01 approved networkEgress.allowPrivateIp=false", wrapSentinel)
 	}
 	return nil
+}
+
+// ValidateEndpointAgainstApprovedPermissions enforces SM-01 manifest egress hosts,
+// TLS requirements, and private-IP permission parity against stored adapter/extension JSON.
+func ValidateEndpointAgainstApprovedPermissions(rawURL string, allowPrivateIP bool, adapterHostsJSON, approvedPermissionsJSON string) error {
+	parsedURL, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsedURL.Hostname() == "" {
+		return fmt.Errorf("%w: invalid endpoint_url %q", port.ErrInvalidInput, rawURL)
+	}
+	adapterHosts, err := decodeStringSliceStrict(adapterHostsJSON, "allowed_hosts_json")
+	if err != nil {
+		return fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
+	}
+	approved, err := decodeApprovedPermissionsStrict(approvedPermissionsJSON)
+	if err != nil {
+		return fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
+	}
+	return validateEndpointAndPermissions(parsedURL, allowPrivateIP, adapterHosts, approved, port.ErrInvalidInput)
 }
 
 func urlHostPermittedByEndpointSuffix(u *url.URL, suffixes []string) bool {

@@ -9,6 +9,8 @@
 **/dist
 !internal/webui/dist
 !internal/webui/dist/**
+!extensions/official/*/dist
+!extensions/official/*/dist/**
 **/*.db
 **/*.db-wal
 **/*.db-shm

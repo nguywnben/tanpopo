@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState, type FormEvent} from 'react';
+import {useEffect, useMemo, useRef, useState, type FormEvent} from 'react';
 import {Moon, Sun} from 'lucide-react';
 import {Step, Stepper} from '@astryxdesign/core/Stepper';
 import {completeBootstrap, getBootstrapStatus} from '../../api/client';
@@ -12,9 +12,20 @@ import {TanpopoBrand} from '../../ui/TanpopoBrand';
 import {Modal} from '../../ui/Overlays';
 
 type BootstrapForm = components['schemas']['BootstrapCompleteRequest'];
+type BootstrapAdapter = components['schemas']['BootstrapAvailableAdapter'];
 type InitialConnection = NonNullable<BootstrapForm['initial_connection']>;
 type DataRegion = components['schemas']['DataRegion'];
 type CreatedSecret = components['schemas']['VirtualKeyCreatedResponse'];
+
+type AdapterPreset = {
+  key: string;
+  adapter: string;
+  label?: string;
+  labelKey?: string;
+  billing: 'COMMERCIAL_API' | 'SELF_HOSTED_INFRA';
+  url: string;
+  model: string;
+};
 
 const stepKeys = [
   {titleKey: 'setup.step0.title', summaryKey: 'setup.step0.summary'},
@@ -23,13 +34,13 @@ const stepKeys = [
   {titleKey: 'setup.step3.title', summaryKey: 'setup.step3.summary'},
 ];
 
-const providerPresets = [
-  {key: 'openai', adapter: 'openai', label: 'OpenAI', billing: 'COMMERCIAL_API' as const, url: 'https://api.openai.com/v1', model: 'gpt-4o-mini'},
-  {key: 'anthropic', adapter: 'anthropic', label: 'Anthropic', billing: 'COMMERCIAL_API' as const, url: 'https://api.anthropic.com', model: 'claude-3-5-sonnet-latest'},
-  {key: 'gemini', adapter: 'gemini', label: 'Google Gemini', billing: 'COMMERCIAL_API' as const, url: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash'},
-  {key: 'openai-compatible', adapter: 'openai-compatible', labelKey: 'setup.preset.openaiCompatible', billing: 'COMMERCIAL_API' as const, url: 'https://api.example.com/v1', model: 'gpt-4o-mini'},
-  {key: 'vllm', adapter: 'openai-compatible', labelKey: 'setup.preset.localVllm', billing: 'SELF_HOSTED_INFRA' as const, url: 'http://127.0.0.1:8000/v1', model: 'llama3.2'},
-  {key: 'ollama', adapter: 'ollama', labelKey: 'setup.preset.localOllama', billing: 'SELF_HOSTED_INFRA' as const, url: 'http://127.0.0.1:11434', model: 'llama3.2'},
+const providerPresets: AdapterPreset[] = [
+  {key: 'openai', adapter: 'openai', label: 'OpenAI', billing: 'COMMERCIAL_API', url: 'https://api.openai.com', model: 'gpt-4o-mini'},
+  {key: 'anthropic', adapter: 'anthropic', label: 'Anthropic', billing: 'COMMERCIAL_API', url: 'https://api.anthropic.com', model: 'claude-3-5-sonnet-latest'},
+  {key: 'gemini', adapter: 'gemini', label: 'Google Gemini', billing: 'COMMERCIAL_API', url: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash'},
+  {key: 'openai-compatible', adapter: 'openai-compatible', labelKey: 'setup.preset.openaiCompatible', billing: 'COMMERCIAL_API', url: 'https://api.example.com', model: 'gpt-4o-mini'},
+  {key: 'vllm', adapter: 'openai-compatible', labelKey: 'setup.preset.localVllm', billing: 'SELF_HOSTED_INFRA', url: 'http://127.0.0.1:8000', model: 'llama3.2'},
+  {key: 'ollama', adapter: 'ollama', labelKey: 'setup.preset.localOllama', billing: 'SELF_HOSTED_INFRA', url: 'http://127.0.0.1:11434', model: 'llama3.2'},
 ];
 
 export function SetupPage() {
@@ -38,6 +49,8 @@ export function SetupPage() {
   const {t} = useI18n();
   const [step, setStep] = useState(0);
   const [initialized, setInitialized] = useState<boolean | null>(null);
+  const [availableAdapters, setAvailableAdapters] = useState<BootstrapAdapter[]>([]);
+  const [marketplaceCount, setMarketplaceCount] = useState<number>(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -48,8 +61,8 @@ export function SetupPage() {
   const [orgName, setOrgName] = useState(() => t('setup.defaultOrgName'));
   const [projectName, setProjectName] = useState('default');
 
-  const [addConnection, setAddConnection] = useState(true);
-  const [providerKey, setProviderKey] = useState('ollama');
+  const [addConnection, setAddConnection] = useState(false);
+  const [providerKey, setProviderKey] = useState('');
   const [connectionName, setConnectionName] = useState(() => t('setup.defaultConnName'));
   const [endpoint, setEndpoint] = useState('http://127.0.0.1:11434');
   const [modelId, setModelId] = useState('llama3.2');
@@ -61,9 +74,47 @@ export function SetupPage() {
   const [acknowledgedCustody, setAcknowledgedCustody] = useState(false);
   const [result, setResult] = useState<components['schemas']['BootstrapCompleteResponse'] | null>(null);
 
-  const preset = useMemo(() => providerPresets.find(item => item.key === providerKey) ?? providerPresets[0], [providerKey]);
-  const presetLabel = (item: (typeof providerPresets)[number]) => (item.labelKey ? t(item.labelKey) : item.label ?? item.key);
-  const isLocal = preset.billing === 'SELF_HOSTED_INFRA';
+  const availablePresets = useMemo<AdapterPreset[]>(() => {
+    if (availableAdapters.length === 0) return [];
+    const bySlug = new Map<string, BootstrapAdapter>();
+    for (const adapter of availableAdapters) {
+      if (!bySlug.has(adapter.adapter_slug)) bySlug.set(adapter.adapter_slug, adapter);
+    }
+    const usedAdapterIds = new Set<string>();
+    const options: AdapterPreset[] = [];
+    for (const item of providerPresets) {
+      const found = bySlug.get(item.adapter);
+      if (!found) continue;
+      usedAdapterIds.add(found.id);
+      options.push({
+        ...item,
+        adapter: found.id,
+      });
+    }
+    for (const adapter of availableAdapters) {
+      if (usedAdapterIds.has(adapter.id)) continue;
+      const isLocalAdapter = adapter.allow_private_ip;
+      options.push({
+        key: adapter.id,
+        adapter: adapter.id,
+        label: adapter.name || adapter.adapter_slug,
+        billing: isLocalAdapter ? 'SELF_HOSTED_INFRA' : 'COMMERCIAL_API',
+        url: isLocalAdapter ? 'http://127.0.0.1:8000' : 'https://api.example.com',
+        model: 'default',
+      });
+    }
+    return options;
+  }, [availableAdapters]);
+
+  const preset = useMemo(
+    () => availablePresets.find(item => item.key === providerKey) ?? availablePresets[0] ?? null,
+    [availablePresets, providerKey],
+  );
+  const presetLabel = (item: AdapterPreset) => (item.labelKey ? t(item.labelKey) : item.label ?? item.key);
+  const isLocal = preset?.billing === 'SELF_HOSTED_INFRA';
+
+  const tRef = useRef(t);
+  tRef.current = t;
 
   useEffect(() => {
     let active = true;
@@ -71,16 +122,42 @@ export function SetupPage() {
       .then(status => {
         if (!active) return;
         setInitialized(status.initialized);
-        if (status.initialized) navigate('/login', {replace: true});
+        if (status.initialized) {
+          navigate('/login', {replace: true});
+          return;
+        }
+        const adapters = Array.isArray(status.available_adapters) ? status.available_adapters : [];
+        const mktCount = typeof status.marketplace_catalog_count === 'number' ? status.marketplace_catalog_count : 0;
+        setAvailableAdapters(adapters);
+        setMarketplaceCount(mktCount);
+        if (adapters.length === 0) {
+          setAddConnection(false);
+          setProviderKey('');
+        } else {
+          setAddConnection(true);
+          const firstMatch = providerPresets.find(p => adapters.some(a => a.adapter_slug === p.adapter));
+          if (firstMatch) {
+            setProviderKey(firstMatch.key);
+            setEndpoint(firstMatch.url);
+            setModelId(firstMatch.model);
+            setRegion(firstMatch.billing === 'SELF_HOSTED_INFRA' ? 'ON_PREM' : 'US');
+          } else {
+            const first = adapters[0];
+            setProviderKey(first.id);
+            setEndpoint(first.allow_private_ip ? 'http://127.0.0.1:8000' : 'https://api.example.com');
+            setModelId('default');
+            setRegion(first.allow_private_ip ? 'ON_PREM' : 'US');
+          }
+        }
       })
       .catch(cause => {
-        if (active) setError(formatSetupError(cause, t));
+        if (active) setError(formatSetupError(cause, tRef.current));
       });
     return () => { active = false; };
-  }, [navigate, t]);
+  }, [navigate]);
 
   function choosePreset(key: string) {
-    const selected = providerPresets.find(item => item.key === key);
+    const selected = availablePresets.find(item => item.key === key);
     if (!selected) return;
     setProviderKey(key);
     setEndpoint(selected.url);
@@ -98,7 +175,7 @@ export function SetupPage() {
       if (ownerPassword !== passwordConfirm) return t('setup.val.passwordMismatch');
       if (!orgName.trim() || !projectName.trim()) return t('setup.val.orgProject');
     }
-    if (targetStep === 1 && addConnection) {
+    if (targetStep === 1 && addConnection && preset) {
       try {
         const parsed = new URL(endpoint);
         if (!['http:', 'https:'].includes(parsed.protocol)) return t('setup.val.urlProtocol');
@@ -148,7 +225,7 @@ export function SetupPage() {
     setBusy(true);
     setError('');
     let initialConnection: InitialConnection | undefined;
-    if (addConnection) {
+    if (addConnection && preset) {
       initialConnection = {
         adapter_id: preset.adapter,
         name: connectionName.trim(),
@@ -303,64 +380,74 @@ export function SetupPage() {
             <>
               <h2>{t('setup.connectionHeading')}</h2>
               <p className="tp-muted">{t('setup.step1.summary')}</p>
-              <CheckboxField
-                label={t('setup.provisionStarter')}
-                description={t('setup.provisionStarterDesc')}
-                checked={addConnection}
-                onChange={setAddConnection}
-              />
-              {addConnection ? (
+              {availablePresets.length === 0 ? (
+                <Banner tone="info" title={t('setup.noAdaptersTitle')}>
+                  {marketplaceCount > 0
+                    ? t('setup.noAdaptersCatalogCount', {count: marketplaceCount})
+                    : t('setup.noAdaptersDesc')}
+                </Banner>
+              ) : (
                 <>
-                  <SelectField
-                    label={t('setup.providerAdapter')}
-                    value={providerKey}
-                    onChange={choosePreset}
-                    options={providerPresets.map(item => ({value: item.key, label: presetLabel(item)}))}
+                  <CheckboxField
+                    label={t('setup.provisionStarter')}
+                    description={t('setup.provisionStarterDesc')}
+                    checked={addConnection}
+                    onChange={setAddConnection}
                   />
-                  <div className="tp-grid-2">
-                    <TextField label={t('setup.connectionName')} value={connectionName} onChange={event => setConnectionName(event.target.value)} />
-                    <SelectField
-                      label={t('setup.dataRegion')}
-                      value={region}
-                      onChange={next => setRegion(next as DataRegion)}
-                      options={[
-                        {value: 'US', label: t('common.region.US')},
-                        {value: 'EU', label: t('common.region.EU')},
-                        {value: 'APAC', label: t('common.region.APAC')},
-                        {value: 'ON_PREM', label: t('common.region.ON_PREM')},
-                      ]}
-                    />
-                  </div>
-                  <TextField label={t('setup.providerUrl')} type="url" value={endpoint} onChange={event => setEndpoint(event.target.value)} />
-                  <TextField label={t('setup.upstreamModel')} value={modelId} onChange={event => setModelId(event.target.value)} />
-                  {!isLocal ? (
-                    <TextField
-                      label={t('setup.providerApiKey')}
-                      type="password"
-                      autoComplete="new-password"
-                      value={secretValue}
-                      hint={t('setup.providerApiKeyHint')}
-                      onChange={event => setSecretValue(event.target.value)}
-                    />
-                  ) : (
+                  {addConnection && preset ? (
                     <>
-                      <CheckboxField
-                        label={t('setup.allowPrivateIp')}
-                        description={t('setup.allowPrivateIpDesc')}
-                        checked={allowPrivateIP}
-                        onChange={setAllowPrivateIP}
+                      <SelectField
+                        label={t('setup.providerAdapter')}
+                        value={providerKey}
+                        onChange={choosePreset}
+                        options={availablePresets.map(item => ({value: item.key, label: presetLabel(item)}))}
                       />
-                      <TextField
-                        label={t('setup.allowedCidrs')}
-                        value={allowedCIDRs}
-                        hint={t('setup.allowedCidrsHint')}
-                        onChange={event => setAllowedCIDRs(event.target.value)}
-                      />
+                      <div className="tp-grid-2">
+                        <TextField label={t('setup.connectionName')} value={connectionName} onChange={event => setConnectionName(event.target.value)} />
+                        <SelectField
+                          label={t('setup.dataRegion')}
+                          value={region}
+                          onChange={next => setRegion(next as DataRegion)}
+                          options={[
+                            {value: 'US', label: t('common.region.US')},
+                            {value: 'EU', label: t('common.region.EU')},
+                            {value: 'APAC', label: t('common.region.APAC')},
+                            {value: 'ON_PREM', label: t('common.region.ON_PREM')},
+                          ]}
+                        />
+                      </div>
+                      <TextField label={t('setup.providerUrl')} type="url" value={endpoint} onChange={event => setEndpoint(event.target.value)} />
+                      <TextField label={t('setup.upstreamModel')} value={modelId} onChange={event => setModelId(event.target.value)} />
+                      {!isLocal ? (
+                        <TextField
+                          label={t('setup.providerApiKey')}
+                          type="password"
+                          autoComplete="new-password"
+                          value={secretValue}
+                          hint={t('setup.providerApiKeyHint')}
+                          onChange={event => setSecretValue(event.target.value)}
+                        />
+                      ) : (
+                        <>
+                          <CheckboxField
+                            label={t('setup.allowPrivateIp')}
+                            description={t('setup.allowPrivateIpDesc')}
+                            checked={allowPrivateIP}
+                            onChange={setAllowPrivateIP}
+                          />
+                          <TextField
+                            label={t('setup.allowedCidrs')}
+                            value={allowedCIDRs}
+                            hint={t('setup.allowedCidrsHint')}
+                            onChange={event => setAllowedCIDRs(event.target.value)}
+                          />
+                        </>
+                      )}
                     </>
+                  ) : (
+                    <p className="tp-muted">{t('setup.connectionsLater')}</p>
                   )}
                 </>
-              ) : (
-                <p className="tp-muted">{t('setup.connectionsLater')}</p>
               )}
             </>
           ) : null}
@@ -387,7 +474,7 @@ export function SetupPage() {
                   {label: t('setup.reviewOrgProject'), value: `${orgName} / ${projectName}`},
                   {
                     label: t('setup.reviewInitialConn'),
-                    value: addConnection ? `${presetLabel(preset)} · ${endpoint} · ${modelId} (${region})` : t('setup.skipped'),
+                    value: addConnection && preset ? `${presetLabel(preset)} · ${endpoint} · ${modelId} (${region})` : t('setup.skipped'),
                   },
                 ]}
               />

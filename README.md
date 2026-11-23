@@ -69,8 +69,10 @@ CGO_ENABLED=0 go build -o ./bin/tanpopo ./cmd/tanpopo
 # 2. Generate a 256-bit (64 hex chars) Master KEK for local use
 export TANPOPO_MASTER_KEY="$(openssl rand -hex 32)"
 
-# 3. Start Tanpopo (prints a one-time bootstrap token on startup)
+# 3. Start Tanpopo (prints the one-time bootstrap token and saves it to data/bootstrap.token)
 ./bin/tanpopo serve --role all --listen 127.0.0.1:8080
+# Inspect the saved token anytime before setup completes:
+cat data/bootstrap.token
 ```
 
 ### Option B: Single Binary — Windows (`PowerShell`)
@@ -89,11 +91,13 @@ $rng.GetBytes($bytes)
 $rng.Dispose()
 $env:TANPOPO_MASTER_KEY = ([System.BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
 
-# 3. Start Tanpopo (prints a one-time bootstrap token on startup)
+# 3. Start Tanpopo (prints the one-time bootstrap token and saves it to data\bootstrap.token)
 .\bin\tanpopo.exe serve --role all --listen 127.0.0.1:8080
+# From another PowerShell window, read the saved token (default location under TANPOPO_DATA_DIR=data):
+Get-Content .\data\bootstrap.token
 ```
 
-Then open **`http://127.0.0.1:8080/setup`** in your browser to create the owner account, configure your first provider, and mint a Virtual Key (`vk_tp_...`).
+Then open **`http://127.0.0.1:8080/setup`** in your browser, paste the token from terminal output or `data/bootstrap.token` (Windows: `data\bootstrap.token`), create the owner account, activate a bundled official adapter under **Extensions → Marketplace**, create and test a connection under **Providers**, and mint a Virtual Key (`vk_tp_...`).
 
 ### Option C: Standalone Docker Compose
 

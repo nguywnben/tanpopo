@@ -220,7 +220,7 @@
   "setup.cannotContinue": "Không thể tiếp tục",
   "setup.ownerHeading": "Tài khoản chủ sở hữu & tổ chức đầu tiên",
   "setup.bootstrapToken": "Mã khởi tạo (Bootstrap token)",
-  "setup.bootstrapTokenHint": "Được in một lần duy nhất khi máy chủ khởi động lần đầu.",
+  "setup.bootstrapTokenHint": "Được in một lần khi khởi động máy chủ và lưu mặc định tại data/bootstrap.token.",
   "setup.ownerEmail": "Email chủ sở hữu",
   "setup.ownerPassword": "Mật khẩu chủ sở hữu",
   "setup.ownerPasswordHint": "Tối thiểu 12 ký tự.",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "Xóa vĩnh viễn khóa DEK của {{name}}, thu hồi toàn bộ bí mật và khóa ảo trong dưới 60 giây.",
   "orgs.shredReasonLabel": "Lý do xóa",
   "orgs.shredReceiptTitle": "Đã hủy mã hóa tổ chức",
-  "orgs.shredReceiptDesc": "Đã hủy DEK {{dek}} và thu hồi {{keys}} khóa ảo."
+  "orgs.shredReceiptDesc": "Đã hủy DEK {{dek}} và thu hồi {{keys}} khóa ảo.",
+  "setup.noAdaptersTitle": "Chưa có bộ chuyển đổi nhà cung cấp nào được kích hoạt",
+  "setup.noAdaptersDesc": "Hoàn tất thiết lập trước, sau đó mở Tiện ích → Kho tiện ích trong Console để kích hoạt bộ chuyển đổi chính thức (hoặc nạp gói qua CLI) trước khi thêm kết nối.",
+  "setup.noAdaptersCatalogCount": "Hoàn tất thiết lập trước, sau đó mở Tiện ích → Kho tiện ích để kích hoạt một trong {{count}} bộ chuyển đổi chính thức tích hợp sẵn (hoặc nạp gói qua CLI) trước khi thêm kết nối.",
+  "providers.emptyAdaptersDesc": "Kích hoạt bộ chuyển đổi chính thức trong Tiện ích → Kho tiện ích hoặc xóa bộ lọc hiện tại.",
+  "providers.openMarketplace": "Mở Kho tiện ích",
+  "providers.noEnabledAdaptersBanner": "Chưa có bộ chuyển đổi nào đang hoạt động. Hãy kích hoạt một bộ chuyển đổi trong Tiện ích → Kho tiện ích trước.",
+  "extensions.activatedGoProviders": "Đã kích hoạt {{pkg}}. Thiết lập kết nối tại Nhà cung cấp → Bộ chuyển đổi.",
+  "extensions.openAdapters": "Xem Bộ chuyển đổi",
+  "models.action.activate": "Kích hoạt triển khai",
+  "models.deploymentActivated": "Đã kích hoạt triển khai ở trạng thái ACTIVE_HEALTHY."
 }

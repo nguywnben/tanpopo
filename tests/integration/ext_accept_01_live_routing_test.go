@@ -302,18 +302,19 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	if denied.Code != http.StatusBadRequest {
 		t.Fatalf("registration must reject a host outside approved extension permissions: got %d: %s", denied.Code, denied.Body)
 	}
-	registered := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/provider-adapters", map[string]any{
+	duplicate := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/provider-adapters", map[string]any{
 		"installation_id": staged.InstallationID, "adapter_slug": "live-routing-adapter",
 		"allowed_hosts": []string{euHost, usHost},
 	}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
-	if registered.Code != http.StatusCreated {
-		t.Fatalf("register approved adapter through Admin API: got %d: %s", registered.Code, registered.Body)
+	if duplicate.Code != http.StatusConflict {
+		t.Fatalf("duplicate registration after auto-register on activation expected 409, got %d: %s", duplicate.Code, duplicate.Body)
 	}
 	var adapters struct {
 		Data []struct {
-			ID        string `json:"id"`
-			Slug      string `json:"slug"`
-			PackageID string `json:"package_id"`
+			ID           string   `json:"id"`
+			Slug         string   `json:"slug"`
+			PackageID    string   `json:"package_id"`
+			AllowedHosts []string `json:"allowed_hosts"`
 		} `json:"data"`
 	}
 	adapterList := liveJSONRequest(t, client, http.MethodGet, baseURL+"/admin/v1/provider-adapters", nil, []*http.Cookie{cookie}, baseURL)
@@ -324,6 +325,13 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 	for _, adapter := range adapters.Data {
 		if adapter.Slug == "live-routing-adapter" && adapter.PackageID == staged.PackageID {
 			adapterID = adapter.ID
+			hostSet := map[string]bool{}
+			for _, h := range adapter.AllowedHosts {
+				hostSet[h] = true
+			}
+			if !hostSet[euHost] || !hostSet[usHost] {
+				t.Fatalf("auto-registered adapter allowed_hosts=%v missing %q/%q", adapter.AllowedHosts, euHost, usHost)
+			}
 			break
 		}
 	}

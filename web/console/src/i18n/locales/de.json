@@ -220,7 +220,7 @@
   "setup.cannotContinue": "Fortfahren nicht möglich",
   "setup.ownerHeading": "Eigentümerkonto & Start-Mandant",
   "setup.bootstrapToken": "Bootstrap-Token",
-  "setup.bootstrapTokenHint": "Wird einmalig beim Serverstart ausgegeben.",
+  "setup.bootstrapTokenHint": "Wird beim Serverstart einmalig ausgegeben und standardmäßig unter data/bootstrap.token gespeichert.",
   "setup.ownerEmail": "Eigentümer-E-Mail",
   "setup.ownerPassword": "Eigentümer-Passwort",
   "setup.ownerPasswordHint": "Mindestens 12 Zeichen.",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "Zerstört unwiderruflich den Organisations-DEK für {{name}}, löscht Geheimnisse und Schlüssel und beendet aktive Sitzungen innerhalb von 60 Sekunden.",
   "orgs.shredReasonLabel": "Begründung für Löschung",
   "orgs.shredReceiptTitle": "Organisation krypto-vernichtet",
-  "orgs.shredReceiptDesc": "DEK {{dek}} zerstört und {{keys}} virtuelle Schlüssel widerrufen."
+  "orgs.shredReceiptDesc": "DEK {{dek}} zerstört und {{keys}} virtuelle Schlüssel widerrufen.",
+  "setup.noAdaptersTitle": "Noch keine Provider-Adapter aktiviert",
+  "setup.noAdaptersDesc": "Schließen Sie zuerst die Einrichtung ab und aktivieren Sie dann unter Erweiterungen → Marktplatz einen offiziellen Adapter (oder stagen Sie ein Paket per CLI), bevor Sie Verbindungen anlegen.",
+  "setup.noAdaptersCatalogCount": "Schließen Sie zuerst die Einrichtung ab und aktivieren Sie unter Erweiterungen → Marktplatz einen der {{count}} integrierten offiziellen Adapter (oder stagen Sie ein Paket per CLI), bevor Sie Verbindungen anlegen.",
+  "providers.emptyAdaptersDesc": "Aktivieren Sie einen offiziellen Adapter unter Erweiterungen → Marktplatz oder setzen Sie die Filter zurück.",
+  "providers.openMarketplace": "Marktplatz öffnen",
+  "providers.noEnabledAdaptersBanner": "Keine aktiven Provider-Adapter gefunden. Aktivieren Sie zuerst einen Adapter unter Erweiterungen → Marktplatz.",
+  "extensions.activatedGoProviders": "{{pkg}} aktiviert. Konfigurieren Sie Upstream-Verbindungen unter Anbieter → Adapter.",
+  "extensions.openAdapters": "Adapter anzeigen",
+  "models.action.activate": "Deployment aktivieren",
+  "models.deploymentActivated": "Deployment als ACTIVE_HEALTHY aktiviert."
 }

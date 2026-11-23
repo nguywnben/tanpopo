@@ -96,6 +96,73 @@ describe('Tanpopo Console v2 core workflows & accessibility', () => {
     expect(audit.violations).toEqual([]);
   });
 
+  it('hides unavailable presets and shows adapter activation guidance in Setup when available_adapters is empty', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/admin/v1/bootstrap/status')) {
+        return jsonResponse({initialized: false, offline_mode: true, marketplace_catalog_count: 8, available_adapters: []});
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const {container} = render(wrap(<SetupPage />));
+    await screen.findByRole('heading', {level: 1, name: 'Instance setup'});
+    const pwInputs = container.querySelectorAll('input[type="password"]');
+    fireEvent.change(pwInputs[0], {target: {value: 'btok_12345678901234567890123456789012'}});
+    fireEvent.change(container.querySelector('input[type="email"]')!, {target: {value: 'owner@example.com'}});
+    fireEvent.change(pwInputs[1], {target: {value: 'StrongPassword!2026'}});
+    fireEvent.change(pwInputs[2], {target: {value: 'StrongPassword!2026'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
+
+    await screen.findByText('No provider adapters enabled yet');
+    expect(screen.queryByRole('checkbox', {name: /Provision a starter connection/i})).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', {name: 'Provider adapter'})).not.toBeInTheDocument();
+    const audit = await axe.run(container);
+    expect(audit.violations).toEqual([]);
+  });
+
+  it('offers only adapters returned in bootstrap status available_adapters', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/admin/v1/bootstrap/status')) {
+        return jsonResponse({
+          initialized: false,
+          offline_mode: true,
+          marketplace_catalog_count: 8,
+          available_adapters: [
+            {
+              id: 'adp_01test',
+              adapter_slug: 'openai-compatible',
+              name: 'OpenAI-Compatible Official Adapter',
+              execution_tier: 'DECLARATIVE_T1',
+              allow_private_ip: true,
+            },
+          ],
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+
+    const {container} = render(wrap(<SetupPage />));
+    await screen.findByRole('heading', {level: 1, name: 'Instance setup'});
+    const pwInputs = container.querySelectorAll('input[type="password"]');
+    fireEvent.change(pwInputs[0], {target: {value: 'btok_12345678901234567890123456789012'}});
+    fireEvent.change(container.querySelector('input[type="email"]')!, {target: {value: 'owner@example.com'}});
+    fireEvent.change(pwInputs[1], {target: {value: 'StrongPassword!2026'}});
+    fireEvent.change(pwInputs[2], {target: {value: 'StrongPassword!2026'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
+
+    await screen.findByRole('heading', {name: 'Initial provider connection'});
+    const adapterCombo = screen.getByRole('combobox', {name: /Provider adapter/i});
+    expect(adapterCombo).toBeInTheDocument();
+    fireEvent.click(adapterCombo);
+    const optionTexts = screen.getAllByRole('option').map(o => o.textContent);
+    expect(optionTexts).toEqual(['OpenAI-compatible API', 'Local vLLM']);
+    fireEvent.click(screen.getByRole('option', {name: 'Local vLLM'}));
+    const audit = await axe.run(container);
+    expect(audit.violations).toEqual([]);
+  });
+
   it('renders Overview metrics and active alerts with zero axe violations', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;

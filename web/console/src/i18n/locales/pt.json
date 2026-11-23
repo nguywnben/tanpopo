@@ -220,7 +220,7 @@
   "setup.cannotContinue": "Não é possível continuar",
   "setup.ownerHeading": "Conta do proprietário e tenant inicial",
   "setup.bootstrapToken": "Token de bootstrap",
-  "setup.bootstrapTokenHint": "Exibido uma única vez na inicialização do servidor.",
+  "setup.bootstrapTokenHint": "Exibido uma vez ao iniciar o servidor e salvo por padrão em data/bootstrap.token.",
   "setup.ownerEmail": "E-mail do proprietário",
   "setup.ownerPassword": "Senha do proprietário",
   "setup.ownerPasswordHint": "Mínimo de 12 caracteres.",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "Destrói irreversivelmente a DEK da organização {{name}}, limpa segredos e chaves e encerra sessões ativas em até 60 segundos.",
   "orgs.shredReasonLabel": "Justificativa da exclusão",
   "orgs.shredReceiptTitle": "Organização destruída criptograficamente",
-  "orgs.shredReceiptDesc": "DEK {{dek}} destruída e {{keys}} chaves virtuais revogadas."
+  "orgs.shredReceiptDesc": "DEK {{dek}} destruída e {{keys}} chaves virtuais revogadas.",
+  "setup.noAdaptersTitle": "Nenhum adaptador de provedor ativado ainda",
+  "setup.noAdaptersDesc": "Conclua a configuração inicial primeiro e depois abra Extensões → Marketplace no Console para ativar um adaptador oficial (ou enviar um pacote via CLI) antes de criar conexões.",
+  "setup.noAdaptersCatalogCount": "Conclua a configuração inicial primeiro e depois abra Extensões → Marketplace para ativar um dos {{count}} adaptadores oficiais integrados (ou enviar um pacote via CLI) antes de criar conexões.",
+  "providers.emptyAdaptersDesc": "Ative um adaptador oficial em Extensões → Marketplace ou limpe o filtro ativo.",
+  "providers.openMarketplace": "Abrir Marketplace",
+  "providers.noEnabledAdaptersBanner": "Nenhum adaptador de provedor ativo encontrado. Ative um adaptador em Extensões → Marketplace primeiro.",
+  "extensions.activatedGoProviders": "{{pkg}} ativado. Configure conexões em Provedores → Adaptadores.",
+  "extensions.openAdapters": "Ver adaptadores",
+  "models.action.activate": "Ativar implantação",
+  "models.deploymentActivated": "Implantação ativada como ACTIVE_HEALTHY."
 }

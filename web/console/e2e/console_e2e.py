@@ -422,16 +422,12 @@ def complete_setup_wizard(page: Page, base_url: str, bootstrap_token: str, owner
     pw_inputs.nth(2).fill(owner_pw)
     form.get_by_role("button", name="Continue").click()
 
-    # Step 1: Audit local starter connection fields (including allow_private_ip), then skip starter connection on fresh DB
+    # Step 1: On a clean database with zero active adapters, verify unavailable presets are hidden and activation guidance renders
     form.get_by_role("heading", name="Initial provider connection").wait_for(state="visible", timeout=5000)
-    form.locator('input[type="url"]').fill(fake_llm_url)
-    allow_priv = form.get_by_role("checkbox", name="Allow private or loopback upstream for this connection")
-    if not allow_priv.is_checked():
-        allow_priv.click()
+    form.get_by_text("No provider adapters enabled yet").wait_for(state="visible", timeout=5000)
+    if form.locator('select, [role="combobox"]').count() != 0:
+        raise AssertionError("Setup Step 1 exposed unavailable adapter choices when available_adapters is empty")
     run_axe_and_layout_audit(page, "/setup (step 1)", "light", "desktop-1440")
-    starter_cb = form.get_by_role("checkbox", name="Provision a starter connection, deployment, route, and virtual key")
-    if starter_cb.is_checked():
-        starter_cb.click()
     form.get_by_role("button", name="Continue").click()
 
     # Step 2: Key custody acknowledgment
@@ -559,6 +555,146 @@ def verify_keyboard_and_multi_org_and_i18n(page: Page, base_url: str) -> dict[st
     page.get_by_text("Air-gapped offline mode").wait_for(state="visible", timeout=5000)
 
     return {"multi_org_created_and_switched": True, "keyboard_command_palette": True, "locales_verified": checked_locales}
+
+
+def _select_combo_option(page: Page, scope_locator: Any, label_pattern: str, option_pattern: str | None = None) -> None:
+    combo = scope_locator.get_by_role("combobox", name=re.compile(label_pattern, re.I)).first
+    combo.click()
+    if option_pattern is not None:
+        page.get_by_role("option", name=re.compile(option_pattern, re.I)).first.click()
+    else:
+        page.locator('[role="option"]').first.click()
+
+
+def verify_clean_onboarding_to_trace(page: Page, https_base: str, http_base: str, fake_base_url: str) -> dict[str, Any]:
+    # 1. Fresh instance: Providers -> Adapters shows helpful empty state + Open Marketplace CTA
+    page.goto(f"{https_base}/providers/adapters", wait_until="networkidle")
+    page.get_by_role("button", name="Open Marketplace").click()
+    page.wait_for_url("**/extensions/marketplace", timeout=10000)
+
+    # 2. Marketplace renders bundled official packages -> Stage & Activate @tanpopo/openai-compatible
+    mkt_row = page.locator("tr", has_text="@tanpopo/openai-compatible").first
+    mkt_row.wait_for(state="visible", timeout=10000)
+    mkt_row.get_by_role("button", name="Stage for review").click()
+    approve_btn = page.get_by_role("button", name="Approve & activate")
+    approve_btn.wait_for(state="visible", timeout=10000)
+    consent_cb = page.get_by_role("checkbox", name=re.compile("explicitly consent", re.I)).first
+    consent_cb.wait_for(state="visible", timeout=5000)
+    if not consent_cb.is_checked():
+        consent_cb.click()
+    approve_btn.click()
+
+    view_adp_btn = page.get_by_role("button", name="View Adapters")
+    view_adp_btn.wait_for(state="visible", timeout=10000)
+    view_adp_btn.click()
+    page.wait_for_url("**/providers/adapters", timeout=10000)
+    page.locator("tr", has_text="OpenAI-Compatible").first.wait_for(state="visible", timeout=10000)
+
+    # 3. Create Provider Connection -> Test Connection (promote SM-02 to ACTIVE)
+    page.goto(f"{https_base}/providers/connections", wait_until="networkidle")
+    page.get_by_role("button", name="New connection").first.click()
+    conn_form = page.locator("#tp-create-connection-form")
+    conn_form.wait_for(state="visible", timeout=10000)
+    conn_form.get_by_label("Connection name").fill("E2E Local Upstream")
+    _select_combo_option(page, conn_form, "Provider adapter", "OpenAI-Compatible")
+    conn_form.get_by_label("Endpoint URL").fill(fake_base_url)
+    _select_combo_option(page, conn_form, "Billing mode", "Self-hosted infra")
+    _select_combo_option(page, conn_form, "Data region", "On-prem")
+    priv_cb = conn_form.get_by_role("checkbox", name=re.compile("Allow private", re.I))
+    if not priv_cb.is_checked():
+        priv_cb.click()
+    conn_form.get_by_label("Allowed CIDRs").fill("127.0.0.1/32")
+    page.get_by_role("button", name="Create connection").click()
+
+    conn_row = page.locator("tr", has_text="E2E Local Upstream").first
+    conn_row.wait_for(state="visible", timeout=10000)
+    conn_row.get_by_role("button", name=re.compile("Actions", re.I)).click()
+    page.get_by_role("menuitem", name="Probe connection").or_(
+        page.get_by_role("button", name="Probe connection")
+    ).or_(page.get_by_text("Probe connection")).first.click()
+    conn_row.get_by_text(re.compile(r"^Active$", re.I)).wait_for(state="visible", timeout=10000)
+
+    # 4. Register Model + Add Deployment
+    page.goto(f"{https_base}/models", wait_until="networkidle")
+    page.get_by_role("button", name="Register model").first.click()
+    mod_form = page.locator("#tp-register-model-form")
+    mod_form.wait_for(state="visible", timeout=10000)
+    mod_form.get_by_label("Display name").fill("Llama 3.2 Local")
+    mod_form.get_by_label("Canonical model slug").fill("llama3.2")
+    page.get_by_role("button", name="Register model").last.click()
+    mod_form.wait_for(state="hidden", timeout=10000)
+
+    page.get_by_role("button", name="Add deployment").first.click()
+    dep_form = page.locator("#tp-add-deployment-form")
+    dep_form.wait_for(state="visible", timeout=10000)
+    _select_combo_option(page, dep_form, "Logical model", "llama3.2")
+    _select_combo_option(page, dep_form, "Provider connection", "E2E Local Upstream")
+    dep_form.get_by_label("Upstream model name").fill("llama3.2")
+    zero_cb = dep_form.get_by_role("checkbox", name=re.compile("Self-hosted zero-rate", re.I))
+    if not zero_cb.is_checked():
+        zero_cb.click()
+    page.get_by_role("button", name="Save deployment").click()
+    dep_form.wait_for(state="hidden", timeout=10000)
+    page.locator("tr", has_text="llama3.2").first.wait_for(state="visible", timeout=10000)
+
+    # 5. Create Route
+    page.goto(f"{https_base}/routes", wait_until="networkidle")
+    page.get_by_role("button", name="Create route").first.click()
+    route_dlg = page.locator('dialog[open], [role="dialog"]').last
+    route_dlg.wait_for(state="visible", timeout=10000)
+    route_dlg.get_by_label("Route slug").fill("llama3.2")
+    _select_combo_option(page, route_dlg, "Add deployment target", "llama3.2")
+    route_dlg.get_by_role("button", name="Add target").click()
+    route_dlg.get_by_role("button", name="Create route").last.click()
+    page.locator("tr", has_text="llama3.2").first.wait_for(state="visible", timeout=10000)
+
+    # 6. Mint Virtual Key
+    page.goto(f"{https_base}/access/virtual-keys", wait_until="networkidle")
+    page.get_by_role("button", name="Issue key").first.click()
+    key_form = page.locator("#tp-issue-key-form")
+    key_form.wait_for(state="visible", timeout=10000)
+    key_form.get_by_label("Key name").fill("e2e-runtime-key")
+    allow_all_cb = key_form.get_by_role("checkbox").first
+    if not allow_all_cb.is_checked():
+        allow_all_cb.click()
+    page.locator('dialog[open]').last.locator('button[type="submit"]').click()
+    secret_el = page.locator("pre, code").filter(has_text=re.compile(r"vk_[A-Za-z0-9_-]{16,}")).first
+    secret_el.wait_for(state="visible", timeout=10000)
+    m = re.search(r"vk_[A-Za-z0-9_-]{16,}", secret_el.inner_text())
+    if not m:
+        raise AssertionError(f"Minted Virtual Key secret missing from modal: {secret_el.inner_text()[:200]!r}")
+    vk_token = m.group(0)
+    page.get_by_role("button", name="I stored it — close & erase").click()
+
+    # 7. Call Data Plane /v1/chat/completions -> 200 OK
+    host_port = http_base.removeprefix("http://")
+    host, port_str = host_port.split(":", 1)
+    conn = http.client.HTTPConnection(host, int(port_str), timeout=10)
+    try:
+        conn.request(
+            "POST",
+            "/v1/chat/completions",
+            body=json.dumps({"model": "llama3.2", "messages": [{"role": "user", "content": "hello"}]}),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {vk_token}"},
+        )
+        resp = conn.getresponse()
+        raw_resp = resp.read().decode("utf-8", errors="replace")
+        if resp.status != 200 or "Tanpopo E2E OK" not in raw_resp:
+            raise AssertionError(f"POST /v1/chat/completions expected 200 Tanpopo E2E OK, got {resp.status}: {raw_resp[:200]}")
+    finally:
+        conn.close()
+
+    # 8. Verify recorded trace appears on Traces screen
+    page.goto(f"{https_base}/observability/traces", wait_until="networkidle")
+    page.locator("tr", has_text="llama3.2").first.wait_for(state="visible", timeout=10000)
+
+    return {
+        "adapter_activated": "@tanpopo/openai-compatible",
+        "connection": "E2E Local Upstream",
+        "route_slug": "llama3.2",
+        "chat_completions_status": 200,
+        "trace_visible": True,
+    }
 
 
 def main() -> int:
@@ -784,6 +920,12 @@ def main() -> int:
                                     cur_page = ctx.new_page()
                                     cur_page.set_viewport_size(vp_size)
                             return cur_page
+
+                        # Full clean onboarding: Marketplace activation -> Adapter -> Connection -> Model/Deploy/Route -> VK -> /v1/chat/completions -> Traces
+                        print("[e2e] chromium phase=clean-onboarding-to-trace", flush=True)
+                        b_summary["clean_onboarding_to_trace"] = verify_clean_onboarding_to_trace(
+                            page, https_base, f"http://127.0.0.1:{http_port}", f"http://127.0.0.1:{fake_port}"
+                        )
 
                         # Multi-Org, Keyboard Palette & Locale Switch (immediately post-login before long sweep)
                         print("[e2e] chromium phase=interactive-multiorg-i18n", flush=True)

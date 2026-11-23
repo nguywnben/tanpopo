@@ -220,7 +220,7 @@
   "setup.cannotContinue": "No se puede continuar",
   "setup.ownerHeading": "Cuenta propietaria e inquilino inicial",
   "setup.bootstrapToken": "Token de arranque",
-  "setup.bootstrapTokenHint": "Se imprime una sola vez al iniciar el servidor.",
+  "setup.bootstrapTokenHint": "Se muestra una vez al iniciar el servidor y se guarda por defecto en data/bootstrap.token.",
   "setup.ownerEmail": "Correo del propietario",
   "setup.ownerPassword": "Contraseña del propietario",
   "setup.ownerPasswordHint": "Mínimo 12 caracteres.",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "Destruye de forma irreversible la DEK de la organización {{name}}, purga secretos y claves y cancela sesiones activas en menos de 60 segundos.",
   "orgs.shredReasonLabel": "Justificación de eliminación",
   "orgs.shredReceiptTitle": "Organización destruida criptográficamente",
-  "orgs.shredReceiptDesc": "DEK {{dek}} destruida y {{keys}} claves virtuales revocadas."
+  "orgs.shredReceiptDesc": "DEK {{dek}} destruida y {{keys}} claves virtuales revocadas.",
+  "setup.noAdaptersTitle": "Aún no hay adaptadores de proveedor activos",
+  "setup.noAdaptersDesc": "Complete primero la configuración inicial y luego abra Extensiones → Marketplace en la consola para activar un adaptador oficial (o cargar un paquete por CLI) antes de añadir conexiones.",
+  "setup.noAdaptersCatalogCount": "Complete primero la configuración inicial y luego abra Extensiones → Marketplace para activar uno de los {{count}} adaptadores oficiales integrados (o cargar un paquete por CLI) antes de añadir conexiones.",
+  "providers.emptyAdaptersDesc": "Active un adaptador oficial en Extensiones → Marketplace o limpie el filtro actual.",
+  "providers.openMarketplace": "Abrir Marketplace",
+  "providers.noEnabledAdaptersBanner": "No hay adaptadores de proveedor activos. Active primero un adaptador en Extensiones → Marketplace.",
+  "extensions.activatedGoProviders": "{{pkg}} activado. Configure conexiones en Proveedores → Adaptadores.",
+  "extensions.openAdapters": "Ver adaptadores",
+  "models.action.activate": "Activar despliegue",
+  "models.deploymentActivated": "Despliegue activado como ACTIVE_HEALTHY."
 }

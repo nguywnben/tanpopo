@@ -111,8 +111,8 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       setConnections(connRows);
       setSecrets(secretRows);
       setAdapters(adapterRows);
-      const firstEnabled = adapterRows.find(item => item.installation_state === 'ENABLED_ACTIVE');
-      setAdapterId(current => current || firstEnabled?.id || '');
+      const enabledAdapters = adapterRows.filter(item => item.installation_state === 'ENABLED_ACTIVE');
+      setAdapterId(current => (enabledAdapters.some(item => item.id === current) ? current : enabledAdapters[0]?.id ?? ''));
     } catch (cause) {
       setError(errText(cause, t));
     } finally {
@@ -194,8 +194,12 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
     setNotice('');
     try {
       const result = await testConnection(connection.id);
-      if (result.valid) setNotice(t('providers.probeSucceeded', {name: connection.name, ms: formatNumber(result.latency_ms)}));
-      else setError(`${connection.name}: ${result.sanitized_message ?? result.failure_code ?? t('providers.probeFailed')}`);
+      if (result.valid) {
+        await reload();
+        setNotice(t('providers.probeSucceeded', {name: connection.name, ms: formatNumber(result.latency_ms)}));
+      } else {
+        setError(`${connection.name}: ${result.sanitized_message ?? result.failure_code ?? t('providers.probeFailed')}`);
+      }
     } catch (cause) {
       setError(errText(cause, t));
     } finally {
@@ -555,6 +559,12 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             rowKey={row => row.id}
             onRowClick={row => void handleInspectAdapter(row)}
             emptyTitle={t('providers.emptyAdaptersTitle')}
+            emptyDescription={t('providers.emptyAdaptersDesc')}
+            emptyAction={
+              <Button variant="primary" size="md" onClick={() => navigate('/extensions/marketplace')}>
+                {t('providers.openMarketplace')}
+              </Button>
+            }
             columns={[
               {
                 id: 'name',
@@ -626,6 +636,18 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
         }
       >
         <form id="tp-create-connection-form" className="tp-stack" onSubmit={handleCreateConnection}>
+          {adapters.filter(a => a.installation_state === 'ENABLED_ACTIVE').length === 0 ? (
+            <Banner
+              tone="warn"
+              action={
+                <Button variant="secondary" size="sm" onClick={() => { setCreateOpen(false); navigate('/extensions/marketplace'); }}>
+                  {t('providers.openMarketplace')}
+                </Button>
+              }
+            >
+              {t('providers.noEnabledAdaptersBanner')}
+            </Banner>
+          ) : null}
           <TextField label={t('providers.connectionName')} required value={connName} onChange={event => setConnName(event.target.value)} />
           <SelectField
             label={t('providers.providerAdapter')}

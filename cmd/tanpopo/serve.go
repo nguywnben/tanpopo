@@ -27,6 +27,7 @@ import (
 	adminhttp "github.com/nguywnben/tanpopo/internal/admin/http"
 	vkcluster "github.com/nguywnben/tanpopo/internal/cluster/valkey"
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
+	"github.com/nguywnben/tanpopo/internal/extension/builtin"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
 	extport "github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/registry"
@@ -49,6 +50,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/oauth"
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/postgres"
@@ -264,19 +266,52 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		return nil, nil, fmt.Errorf("initialize audit logger: %w", err)
 	}
 	var ledgerService *ledger.Service
-	kek, err := vault.LoadStaticKEKFromEnv("kek_v1", os.LookupEnv)
+	activeKEKID := envOr("TANPOPO_MASTER_KEY_ID", "kek_v1")
+	kek, err := vault.LoadStaticKEKFromEnv(activeKEKID, os.LookupEnv)
 	if err != nil {
 		closeStore()
 		return nil, nil, fmt.Errorf("load Master KEK: %w", err)
 	}
 	closeKeys := func() { kek.Close() }
+	for idx, rawPrev := range parseEnvCSV("TANPOPO_MASTER_KEY_PREVIOUS") {
+		prevKey, parseErr := vault.ParseMasterKeyString(rawPrev)
+		if parseErr != nil {
+			closeKeys()
+			closeStore()
+			return nil, nil, fmt.Errorf("parse TANPOPO_MASTER_KEY_PREVIOUS[%d]: %w", idx, parseErr)
+		}
+		regErr := kek.RegisterKey(fmt.Sprintf("kek_prev_%d", idx), prevKey, false)
+		clear(prevKey)
+		if regErr != nil {
+			closeKeys()
+			closeStore()
+			return nil, nil, fmt.Errorf("register previous Master KEK[%d]: %w", idx, regErr)
+		}
+	}
 	vaultStore, err := vault.NewStore(vault.Config{DB: db, KEK: kek, PostShredHook: postShredHook})
 	if err != nil {
 		closeKeys()
 		closeStore()
 		return nil, nil, fmt.Errorf("initialize vault: %w", err)
 	}
-	snaps, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: db})
+	builtinCatalog, err := builtin.NewCatalog()
+	if err != nil {
+		closeKeys()
+		closeStore()
+		return nil, nil, fmt.Errorf("initialize built-in official catalog: %w", err)
+	}
+	_, builtinRootPubs, err := kek.DeriveDomainEd25519PublicKeys(builtin.SigningDomain)
+	if err != nil {
+		closeKeys()
+		closeStore()
+		return nil, nil, fmt.Errorf("derive built-in official root trust keys: %w", err)
+	}
+	trustedKeyring := trust.TrustedKeyring{RootPublicKeys: builtinRootPubs}
+	builtinSigner := func(payload []byte) ([]byte, error) {
+		_, sig, serr := kek.SignDomainEd25519(builtin.SigningDomain, payload)
+		return sig, serr
+	}
+	snaps, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: db, Keyring: trustedKeyring})
 	if err != nil {
 		closeKeys()
 		closeStore()
@@ -446,7 +481,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		})
 		return shutdownErr
 	}
-	catalogRepo, err := catalog.NewRepository(catalog.Config{DB: db, Snapshots: snaps, Audit: auditLog})
+	catalogRepo, err := catalog.NewRepository(catalog.Config{DB: db, Snapshots: snaps, Keyring: trustedKeyring, Audit: auditLog})
 	if err != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("initialize provider catalog: %w", err)
@@ -584,6 +619,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	lockfile := envOr("TANPOPO_LOCK_FILE", filepath.Join(dataDir, "tanpopo.lock"))
 	installerService, err := installer.NewLifecycleService(installer.ServiceConfig{
 		DB: db, Audit: auditLog, AuditEntryPoint: "admin_api", PluginsDir: pluginsDir, LockfilePath: lockfile,
+		Keyring: trustedKeyring,
 		RecordQuarantineEventTx: func(ctx context.Context, tx *sql.Tx, installationID, packageID, state string) error {
 			payload, err := json.Marshal(map[string]any{"installation_id": installationID, "package_id": packageID, "state": state})
 			if err != nil {
@@ -798,17 +834,33 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 				archiveRoot = airgapPackages
 			}
 		}
+		builtinPackages := builtinCatalog.Packages()
+		marketplaceCatalog := make([]adminhttp.MarketplaceCatalogEntry, 0, len(builtinPackages))
+		for _, pkg := range builtinPackages {
+			marketplaceCatalog = append(marketplaceCatalog, adminhttp.MarketplaceCatalogEntry{
+				PackageID:       pkg.PackageID,
+				CanonicalName:   pkg.DisplayName,
+				Version:         pkg.Version,
+				ExecutionTier:   pkg.ExecutionTier,
+				OriginTrustTier: pkg.OriginTier,
+				SourceURI:       pkg.SourceURI,
+				ExpectedSHA256:  pkg.ArchiveSHA256,
+				Summary:         pkg.Summary,
+				Capabilities:    pkg.Capabilities,
+			})
+		}
 		adminServer, err := adminhttp.NewServer(adminhttp.ServerConfig{
 			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys, Ledgers: ledgerService,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
-			Installer: installerService, ArchiveResolver: newRuntimeArchiveResolver(archiveRoot, offlineMode, registryStore, vaultOCIRegistryCredentialResolver{db: db, vault: vaultStore, cap: brokerUnsealCap}),
+			Installer: installerService, MarketplaceCatalog: marketplaceCatalog,
+			ArchiveResolver: newRuntimeArchiveResolverWithBuiltins(archiveRoot, offlineMode, registryStore, vaultOCIRegistryCredentialResolver{db: db, vault: vaultStore, cap: brokerUnsealCap}, builtinCatalog, builtinSigner),
 			WebhookEnqueue: func(ctx context.Context, orgID, projectID, eventType string, payload json.RawMessage) error {
 				_, enqueueErr := webhookDispatcher.Enqueue(ctx, webhook.Event{OrgID: orgID, ProjectID: projectID, Type: eventType, Payload: payload})
 				return enqueueErr
 			},
 			OnConfigChange: publishChangeFn,
-			Broker:            blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog,
-			OfflineMode:       offlineMode, MultiOrgDisabled: multiOrgDisabled,
+			Broker:         blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog,
+			OfflineMode: offlineMode, MultiOrgDisabled: multiOrgDisabled,
 			TrustedProxyCIDRs: parseEnvCSV("TANPOPO_TRUSTED_PROXY_CIDRS"),
 			Version:           version,
 		})
@@ -864,19 +916,30 @@ func newServeArchiveResolver(root string) adminhttp.ExtensionArchiveResolver {
 }
 
 func newRuntimeArchiveResolver(root string, offlineMode bool, index registry.IndexStore, credentials registry.RegistryCredentialResolver) adminhttp.ExtensionArchiveResolver {
+	return newRuntimeArchiveResolverWithBuiltins(root, offlineMode, index, credentials, nil, nil)
+}
+
+func newRuntimeArchiveResolverWithBuiltins(root string, offlineMode bool, index registry.IndexStore, credentials registry.RegistryCredentialResolver, builtinCatalog *builtin.Catalog, builtinSigner builtin.SignerFunc) adminhttp.ExtensionArchiveResolver {
 	local := newServeArchiveResolver(root)
 	oci := registry.NewOCIArchiveResolver(index, credentials, egress.NewStdHostResolver())
 	return func(ctx context.Context, orgID, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(sourceURI)), "oci://") {
+		trimmedURI := strings.TrimSpace(sourceURI)
+		if strings.HasPrefix(strings.ToLower(trimmedURI), builtin.SourceScheme) {
+			if builtinCatalog == nil || builtinSigner == nil {
+				return nil, nil, installer.ErrMarketplaceArchiveResolverUnavailable
+			}
+			return builtinCatalog.ResolveStageRequest(trimmedURI, expectedSHA256, builtinSigner)
+		}
+		if strings.HasPrefix(strings.ToLower(trimmedURI), "oci://") {
 			if offlineMode {
 				return nil, nil, installer.ErrMarketplaceArchiveResolverUnavailable
 			}
-			return oci.Resolve(ctx, orgID, sourceURI, expectedSHA256)
+			return oci.Resolve(ctx, orgID, trimmedURI, expectedSHA256)
 		}
 		if local == nil {
 			return nil, nil, installer.ErrMarketplaceArchiveResolverUnavailable
 		}
-		return local(ctx, orgID, sourceURI, expectedSHA256)
+		return local(ctx, orgID, trimmedURI, expectedSHA256)
 	}
 }
 

@@ -220,7 +220,7 @@
   "setup.cannotContinue": "ไม่สามารถดำเนินการต่อได้",
   "setup.ownerHeading": "บัญชีเจ้าของและผู้เช่าเริ่มต้น",
   "setup.bootstrapToken": "โทเค็นตั้งต้น (Bootstrap token)",
-  "setup.bootstrapTokenHint": "แสดงเพียงครั้งเดียวตอนเริ่มเซิร์ฟเวอร์",
+  "setup.bootstrapTokenHint": "แสดงหนึ่งครั้งเมื่อเริ่มเซิร์ฟเวอร์และบันทึกไว้ตามค่าเริ่มต้นที่ data/bootstrap.token",
   "setup.ownerEmail": "อีเมลเจ้าของ",
   "setup.ownerPassword": "รหัสผ่านเจ้าของ",
   "setup.ownerPasswordHint": "อย่างน้อย 12 ตัวอักษร",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "ทำลายคีย์ DEK ขององค์กร {{name}} อย่างถาวร ล้างข้อมูลลับและคีย์ทั้งหมด และยกเลิกเซสชันที่ใช้งานอยู่ภายใน 60 วินาที",
   "orgs.shredReasonLabel": "เหตุผลในการลบ",
   "orgs.shredReceiptTitle": "ทำลายคีย์เข้ารหัสขององค์กรแล้ว",
-  "orgs.shredReceiptDesc": "ทำลาย DEK {{dek}} และเพิกถอนคีย์เสมือน {{keys}} รายการแล้ว"
+  "orgs.shredReceiptDesc": "ทำลาย DEK {{dek}} และเพิกถอนคีย์เสมือน {{keys}} รายการแล้ว",
+  "setup.noAdaptersTitle": "ยังไม่มีอะแดปเตอร์ผู้ให้บริการที่เปิดใช้งาน",
+  "setup.noAdaptersDesc": "ดำเนินการตั้งค่าเริ่มต้นให้เสร็จก่อน แล้วเปิด ส่วนขยาย → ตลาดส่วนขยาย ในคอนโซลเพื่อเปิดใช้งานอะแดปเตอร์ทางการ (หรือเตรียมแพ็กเกจผ่าน CLI) ก่อนเพิ่มการเชื่อมต่อ",
+  "setup.noAdaptersCatalogCount": "ดำเนินการตั้งค่าเริ่มต้นให้เสร็จก่อน แล้วเปิด ส่วนขยาย → ตลาดส่วนขยาย เพื่อเปิดใช้งานอะแดปเตอร์ทางการที่มาพร้อมระบบ 1 จาก {{count}} รายการ (หรือเตรียมแพ็กเกจผ่าน CLI) ก่อนเพิ่มการเชื่อมต่อ",
+  "providers.emptyAdaptersDesc": "เปิดใช้งานอะแดปเตอร์ทางการใน ส่วนขยาย → ตลาดส่วนขยาย หรือล้างตัวกรองที่เลือกอยู่",
+  "providers.openMarketplace": "เปิดตลาดส่วนขยาย",
+  "providers.noEnabledAdaptersBanner": "ไม่พบอะแดปเตอร์ผู้ให้บริการที่ใช้งานอยู่ กรุณาเปิดใช้งานอะแดปเตอร์ใน ส่วนขยาย → ตลาดส่วนขยาย ก่อน",
+  "extensions.activatedGoProviders": "เปิดใช้งาน {{pkg}} แล้ว สามารถตั้งค่าการเชื่อมต่อได้ที่ ผู้ให้บริการ → อะแดปเตอร์",
+  "extensions.openAdapters": "ดูอะแดปเตอร์",
+  "models.action.activate": "เปิดใช้งานการปรับใช้",
+  "models.deploymentActivated": "เปิดใช้งานการปรับใช้ในสถานะ ACTIVE_HEALTHY แล้ว"
 }

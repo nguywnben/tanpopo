@@ -1497,11 +1497,22 @@ export interface components {
             embeddings: boolean;
             rerank: boolean;
         };
+        BootstrapAvailableAdapter: {
+            id: string;
+            adapter_slug: string;
+            name: string;
+            execution_tier: string;
+            supported_dialects?: string[];
+            allowed_hosts?: string[];
+            allow_private_ip: boolean;
+        };
         BootstrapStatusResponse: {
             initialized: boolean;
             offline_mode: boolean;
             multi_org_enabled?: boolean;
             version?: string;
+            marketplace_catalog_count?: number;
+            available_adapters?: components["schemas"]["BootstrapAvailableAdapter"][];
         };
         BootstrapCompleteRequest: {
             bootstrap_token: string;

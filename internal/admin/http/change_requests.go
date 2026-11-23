@@ -331,9 +331,9 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 			return fmt.Errorf("extension installer unavailable")
 		}
 		var payload struct {
-			ExpectedVersion             int64 `json:"expected_version"`
-			AcknowledgeUnverifiedExternal bool `json:"acknowledge_unverified_external"`
-			EnableImmediately           *bool `json:"enable_immediately"`
+			ExpectedVersion               int64 `json:"expected_version"`
+			AcknowledgeUnverifiedExternal bool  `json:"acknowledge_unverified_external"`
+			EnableImmediately             *bool `json:"enable_immediately"`
 		}
 		if err := json.Unmarshal([]byte(cr.PayloadJCSJSON), &payload); err != nil {
 			return fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
@@ -383,10 +383,11 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 		default:
 			return fmt.Errorf("%w: installation in state %s cannot be approved", foureyes.ErrInvalidStateTransition, curDBState)
 		}
+		syncErr := s.syncExtensionProviderAdapters(ctx, cr.TargetID)
 		if s.snapshots != nil {
 			_ = s.snapshots.Refresh(ctx)
 		}
-		return nil
+		return syncErr
 
 	case foureyes.ActionKillSwitchClear:
 		if s.killSwitch == nil {

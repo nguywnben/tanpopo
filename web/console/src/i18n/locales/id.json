@@ -220,7 +220,7 @@
   "setup.cannotContinue": "Tidak dapat melanjutkan",
   "setup.ownerHeading": "Akun pemilik & tenant awal",
   "setup.bootstrapToken": "Token bootstrap",
-  "setup.bootstrapTokenHint": "Dicetak sekali saat server pertama kali dijalankan.",
+  "setup.bootstrapTokenHint": "Dicetak sekali saat server dimulai dan disimpan secara default di data/bootstrap.token.",
   "setup.ownerEmail": "Email pemilik",
   "setup.ownerPassword": "Kata sandi pemilik",
   "setup.ownerPasswordHint": "Minimal 12 karakter.",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "Menghancurkan DEK organisasi untuk {{name}} secara permanen, membersihkan rahasia dan kunci, serta membatalkan sesi aktif dalam 60 detik.",
   "orgs.shredReasonLabel": "Alasan penghapusan",
   "orgs.shredReceiptTitle": "Organisasi dihancurkan secara kriptografis",
-  "orgs.shredReceiptDesc": "DEK {{dek}} dihancurkan dan {{keys}} kunci virtual dicabut."
+  "orgs.shredReceiptDesc": "DEK {{dek}} dihancurkan dan {{keys}} kunci virtual dicabut.",
+  "setup.noAdaptersTitle": "Belum ada adaptor penyedia yang diaktifkan",
+  "setup.noAdaptersDesc": "Selesaikan penyiapan terlebih dahulu, lalu buka Ekstensi → Marketplace di Konsol untuk mengaktifkan adaptor resmi (atau unggah paket via CLI) sebelum menambah koneksi.",
+  "setup.noAdaptersCatalogCount": "Selesaikan penyiapan terlebih dahulu, lalu buka Ekstensi → Marketplace untuk mengaktifkan salah satu dari {{count}} adaptor resmi bawaan (atau unggah paket via CLI) sebelum menambah koneksi.",
+  "providers.emptyAdaptersDesc": "Aktifkan adaptor resmi di Ekstensi → Marketplace atau hapus filter aktif.",
+  "providers.openMarketplace": "Buka Marketplace",
+  "providers.noEnabledAdaptersBanner": "Tidak ada adaptor penyedia yang aktif. Aktifkan adaptor di Ekstensi → Marketplace terlebih dahulu.",
+  "extensions.activatedGoProviders": "{{pkg}} diaktifkan. Konfigurasikan koneksi di Penyedia → Adaptor.",
+  "extensions.openAdapters": "Lihat Adaptor",
+  "models.action.activate": "Aktifkan deployment",
+  "models.deploymentActivated": "Deployment diaktifkan sebagai ACTIVE_HEALTHY."
 }
