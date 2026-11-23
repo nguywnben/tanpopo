@@ -1,0 +1,19 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "create_member_http_status": 201,
+  "principal": {
+    "id": "prc_01m85ckgwxe00a91ratjp33hda",
+    "email": "qa002-cp30-local-member@example.invalid",
+    "kind": "HUMAN",
+    "roles": ["DEVELOPER"]
+  },
+  "console_notice": "Member added.",
+  "first_login": {
+    "http_status": 401,
+    "error_code": "invalid_credentials",
+    "fresh_browser_context": true,
+    "console_error": "The email address or password is not valid."
+  },
+  "login_screen_recovery_actions": [],
+  "notes": "Login attempt used an arbitrary synthetic test password that was not given to the member and is not stored in this evidence. The screenshot shows only masked characters. The instance had no OIDC provider configured."
+}
