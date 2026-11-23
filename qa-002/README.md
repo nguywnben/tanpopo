@@ -35,3 +35,4 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP08 | Authorized A2A discovery, input-required task API/Console lifecycles, provider-only denial, key revocation | PASS for scoped lifecycle and key scenarios; MCP path, concurrent drain, budgets, and other roles remain open |
 | CP09 | MCP private endpoint CIDR form, wildcard rejection and persistence | PASS for registration form and saved CIDR; actual MCP sync/network gating remain UNVERIFIED |
 | CP10 | Ollama extension permission review, provider defaults, persistence and synthetic live probe | PASS for scoped Ollama lifecycle; other adapters and model/deployment inference remain open |
+| CP11 | Exact no-budget provider settlement, FinOps headline, selected model grouping, CSV/JSON exports | PASS for scoped reconciliation; quota policies and other group dimensions remain open |

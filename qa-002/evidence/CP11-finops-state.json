@@ -1,0 +1,15 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "provider_request": {"method": "POST", "path": "/v1/chat/completions", "status": 200, "upstream": "isolated synthetic Ollama-compatible fixture", "usage": {"prompt_tokens": 13, "completion_tokens": 10, "total_tokens": 23}},
+  "provider_settlement": {"id": "set_01m850p30be00b5qrcbtf6xd8b", "plane": "PROVIDER", "accuracy": "EXACT", "logical_model": "qa002-ollama-model", "billing_mode": "SELF_HOSTED_INFRA", "input_tokens": 13, "output_tokens": 10, "total_cost_micros": 1},
+  "budget_ledgers": 0,
+  "all_settlements_in_test_org": {"exact_total_micros": 6001, "rows": 3},
+  "finops_project_view": {"headline_exact_micros": 6001, "project_row_exact_micros": 6001},
+  "finops_model_view": {"headline_exact_micros": 6001, "rows": [{"group_key": "qa002-local-agent", "exact_micro_usd": 6000, "exact_request_count": 2}, {"group_key": "qa002-ollama-model", "exact_micro_usd": 1, "exact_request_count": 1}]},
+  "exports": [
+    {"format": "csv", "group_by": "model", "status": 200, "content_type": "text/csv; charset=utf-8", "downloaded": true, "content_matches_visible_rows": true, "ui_error": false},
+    {"format": "json", "group_by": "model", "status": 200, "content_type": "application/json; charset=utf-8", "downloaded": true, "content_matches_visible_rows": true, "ui_error": false}
+  ],
+  "historical_defect_results": {"DEF-012": "VERIFIED FIXED (scoped)", "DEF-014": "VERIFIED FIXED (scoped)", "DEF-015": "VERIFIED FIXED (scoped)"},
+  "screenshots": ["CP11-models-empty.png", "CP11-model-create-form.png", "CP11-deployment-create-form.png", "CP11-deployment-persisted.png", "CP11-routes-empty.png", "CP11-route-create-form.png", "CP11-route-persisted.png", "CP11-finops-project-summary.png", "CP11-finops-model-summary.png", "CP11-finops-csv-success.png", "CP11-finops-json-success.png"]
+}

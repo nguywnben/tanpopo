@@ -15,10 +15,10 @@ Baseline: `40bba5b55c2da6fc00b107b315c9b3167fb20169`. The acceptance criteria ar
 | DEF-009 | WebKit 375px webhook drawer observed offscreen (conflicting history) | Moderate | VERIFIED FIXED (scoped) | CP07 authenticated HTTPS WebKit 26.5 @ 375×844: drawer heading/form/footer visible, document width 375, no overflow. HMAC credential missing so registration not tested. Conflicting QA-001 evidence preserved. |
 | DEF-010 | Supported Virtual Key provisioning could not grant A2A | Major | VERIFIED FIXED (scoped) | CP08 UI issued active A2A-only `/a2a/*` key; discovery succeeded, provider-only key remained 403, then revoked key became 401. Other scopes/roles and rotation remain open. |
 | DEF-011 | A2A `input-required` task could not resume | Major | VERIFIED FIXED (scoped) | CP08 three task lifecycles exercised; Console resumed same input-required task ID to completed with settlement. API resume, cancel, terminal transition rejections, and persistence verified. Other task states/roles remain open. |
-| DEF-012 | FinOps headline ignored usage settlement without budget rows | Major | UNVERIFIED | Pending no-budget exact settlement reconciliation |
+| DEF-012 | FinOps headline ignored usage settlement without budget rows | Major | VERIFIED FIXED (scoped) | CP11 exact 1-micro provider settlement, zero budget ledgers; Chargeback KPI and row/export sums matched at 6,001 micros including existing A2A settlements. |
 | DEF-013 | Ollama form defaulted to commercial API/US | Moderate | VERIFIED FIXED (scoped) | CP10 activated bundled adapter through real consent flow; selected Ollama defaults were SELF_HOSTED_INFRA/ON_PREM/private loopback with 127.0.0.1/32; connection persisted those values and a synthetic Ollama live probe succeeded. Other adapters/roles remain open. |
-| DEF-014 | Console CSV export parsed CSV as JSON | Moderate | UNVERIFIED | Pending actual CSV download and valid file inspection |
-| DEF-015 | Exports ignored selected group-by dimension | Moderate | UNVERIFIED | Pending multi-entity grouping and CSV/JSON reconciliation |
+| DEF-014 | Console CSV export parsed CSV as JSON | Moderate | VERIFIED FIXED (scoped) | CP11 real Export CSV produced an actual `text/csv` download, valid header/rows and success notice; no JSON parse error. |
+| DEF-015 | Exports ignored selected group-by dimension | Moderate | VERIFIED FIXED (scoped) | CP11 selected Model; summary and both CSV/JSON export requests used `group_by=model`, and downloaded rows matched visible model groups. Other grouping dimensions remain open. |
 
 ## Retest evidence log
 
@@ -33,6 +33,7 @@ Baseline: `40bba5b55c2da6fc00b107b315c9b3167fb20169`. The acceptance criteria ar
 | CP08 | DEF-005, DEF-010, DEF-011 | A2A registration accepted an explicit loopback CIDR after rejecting wildcard CIDR; least-privilege A2A key successfully performed discovery and three same-ID task lifecycles (input-required→completed, input-required→canceled, and Console resume→completed). Provider-only key was denied; revoked A2A key was denied. Audit and synthetic upstream state corroborate UI/API. See `checkpoints/CP08-a2a-authorized-lifecycle.md`. |
 | CP09 | DEF-005 | MCP registration UI blocked wildcard CIDR without POST; explicit loopback CIDR yielded 201 and persisted in SQLite. Actual tool sync and private endpoint policy enforcement remain UNVERIFIED because the available fixture is A2A, not Streamable HTTP MCP. See `checkpoints/CP09-mcp-private-cidr.md`. |
 | CP10 | DEF-013 | Activated bundled Ollama adapter through reviewed Console permission flow; real provider form defaulted to self-hosted/on-prem and loopback CIDR, persisted matching connection metadata, and passed a live synthetic local probe. Historical commercial/US default did not reproduce. See `checkpoints/CP10-ollama-defaults.md`. |
+| CP11 | DEF-012, DEF-014, DEF-015 | One actual synthetic-provider inference settled exact usage of 1 micro-USD with zero budget ledgers. FinOps headline matched chargeback totals; selected Model grouping was used by summary, CSV and JSON export; actual CSV download parsed correctly and both exports matched visible rows. See `checkpoints/CP11-finops-settlement-and-exports.md`. |
 
 ## Acceptance criteria sources
 
