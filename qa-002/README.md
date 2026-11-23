@@ -27,3 +27,9 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP00 | Exact baseline, artifact inventory, environment/tooling diagnosis | PARTIAL PASS; no published RC4 build/release artifact found; see checkpoint |
 | CP01 | Fresh-install Setup and first authenticated session | PASS for the executed setup/login path; broader persistence, roles, and features remain open |
 | CP02 | Release linker provenance and full Go race suite | Linker settings verified; Hydrogen artifact UNVERIFIED; race suite PASS (86 packages) |
+| CP03 | Complete fresh setup on A2A-enabled runtime; live axe and visual inspection | PASS for scoped Chromium wizard path; DEF-001 verified fixed in tested path; broad coverage continues |
+| CP04 | Built CLI config show/help/reconcile using sanitized local HTTP fixture | PASS for command routing and fail-closed validation; real Tanpopo Admin API interaction remains UNVERIFIED |
+| CP05 | First FinOps project budget from empty state; new-session persistence check | PASS for tested workflow; other scopes and budget policy remain open |
+| CP06 | Bootstrap and standalone provisioning audit events, duplicate rejection, chain verification | PASS for tested creation paths; mutation/error paths remain open |
+| CP07 | Real WebKit 26.5 webhook drawer at 375×844 using local HTTPS | PASS for scoped layout; registration requires a synthetic HMAC secret and remains untested |
+| CP08 | Authorized A2A discovery, input-required task API/Console lifecycles, provider-only denial, key revocation | PASS for scoped lifecycle and key scenarios; MCP path, concurrent drain, budgets, and other roles remain open |

@@ -1,0 +1,32 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "isolated SQLite Tanpopo on 127.0.0.1:18083",
+  "browser": "Chromium, 1440x1000; authenticated synthetic ORG_OWNER",
+  "before": {
+    "ui": "FinOps showed 0 budgets and 'No budgets configured' with a Create budget action.",
+    "screenshot": "CP05-finops-empty.png"
+  },
+  "action": {
+    "opened_drawer": true,
+    "scope": "PROJECT",
+    "scope_id": "prj_01m84wec8pe00af1h015dh5f4c",
+    "period": "MONTHLY",
+    "hard_limit_micros": 2500000,
+    "screenshot": "CP05-finops-create-form.png"
+  },
+  "after_fresh_login_and_reload": {
+    "list_budgets_count": 1,
+    "record": {
+      "id": "bgt_project_prj_01m84wec8pe00af1h015dh5f4c_monthly",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m84wec8pe00af1h015dh5f4c",
+      "hard_limit_micros": 2500000,
+      "period": "MONTHLY",
+      "version": 1
+    },
+    "screenshot": "CP05-finops-current.png"
+  },
+  "browser_page_errors": [],
+  "classification": "DEF-003 original absence of an initial budget creation path did not reproduce. Real Console creation from zero budgets persisted and was visible after a new authenticated browser session.",
+  "limits": ["Project scope only; organization, environment and virtual-key budget scopes remain unverified.", "Budget enforcement, limit edits, warning thresholds, and chargeback reconciliation remain unverified."]
+}

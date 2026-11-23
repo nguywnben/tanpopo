@@ -15,14 +15,14 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | FT-05 | Extension isolation and blind credential broker | UNVERIFIED | |
 | FT-06 | Registry, package install, lockfile, contract harness | UNVERIFIED | |
 | FT-07 | MCP discovery, grants, schema pinning, approvals | UNVERIFIED | |
-| FT-08 | A2A discovery, authorization, delegation, tasks/lifecycle | UNVERIFIED | |
-| FT-09 | Org/project/environment, six-role RBAC, key lifecycle | UNVERIFIED | |
+| FT-08 | A2A discovery, authorization, delegation, tasks/lifecycle | PARTIAL PASS | CP08 authorized discovery, task submit/input-required/resume/complete/cancel, terminal transition rejection, and same-ID persistence against isolated synthetic endpoint; task draining, budgets, delegation depth, other roles remain UNVERIFIED. |
+| FT-09 | Org/project/environment, six-role RBAC, key lifecycle | PARTIAL PASS | CP06 provisioning audit; CP08 A2A-only/provider-only issuance, authorization, persistence and revocation; rotation, other role/tenant boundaries remain UNVERIFIED. |
 | FT-10 | Capability routing, health, failover, route explain | UNVERIFIED | |
 | FT-11 | Runtime policy, rate limit, SSRF/security boundaries | UNVERIFIED | |
-| FT-12 | Audit chain and emergency kill-switch | UNVERIFIED | |
-| FT-13 | Budgets, reservations, settlement and chargeback | UNVERIFIED | |
+| FT-12 | Audit chain and emergency kill-switch | PARTIAL PASS | CP06 provisioning events had correct actor/scope and audit verification intact across 10 events; CP08 agent/key/task events and chain integrity also checked. Emergency kill-switch, tamper detection, other mutation/error paths remain UNVERIFIED. |
+| FT-13 | Budgets, reservations, settlement and chargeback | PARTIAL PASS | CP05 created first project budget from empty Console state and verified persistent record; other scopes, reservation, settlement, and chargeback remain UNVERIFIED. |
 | FT-14 | OTel export, trace privacy and explorer | UNVERIFIED | |
-| FT-15 | Console, CLI, Admin API, Data Plane API | UNVERIFIED | |
+| FT-15 | Console, CLI, Admin API, Data Plane API | PARTIAL PASS | CP04 built CLI config show/help/reconcile command routing with local synthetic API fixture; real Admin/Data Plane API paths remain UNVERIFIED. |
 | FT-16 | Setup/startup, GitOps, encrypted backup, restore, upgrade | UNVERIFIED | |
 
 **CP00–02 test capability note:** Local Go 1.26.11 linux/amd64 binary is built from the exact baseline. `go test ./...` and `go test -race ./...` both pass all 86 packages after applying environment-specific `GOFLAGS=-buildvcs=false` and `umask 0022`; `go run ./scripts/ci/check.go --all`, `go vet ./...`, `go run ./scripts/docs/check_drift.go`, Console typecheck, all 45 Console tests, and production build pass. These are build/automated quality results, not product-feature PASS results. RC4 DevBox artifact remains UNVERIFIED.
@@ -31,7 +31,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 
 | ID | Screen | QA-002 status | Evidence / open coverage |
 | --- | --- | --- | --- |
-| SCR-01 | First-run setup/login | UNVERIFIED | |
+| SCR-01 | First-run setup/login | PARTIAL PASS | CP01 login and CP03 complete bootstrap in separate clean runtimes; other states/locales/browsers remain open. |
 | SCR-02 | Overview/system posture | UNVERIFIED | |
 | SCR-03 | Provider adapters | UNVERIFIED | |
 | SCR-04 | Connections/credentials | UNVERIFIED | |
@@ -40,13 +40,13 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | SCR-07 | Installed plugins/lockfile | UNVERIFIED | |
 | SCR-08 | Capability routes/route explain | UNVERIFIED | |
 | SCR-09 | Policies/guardrails | UNVERIFIED | |
-| SCR-10 | MCP/A2A registry and tasks | UNVERIFIED | |
+| SCR-10 | MCP/A2A registry and tasks | PARTIAL PASS | CP08 visually inspected actual agent registration, A2A-only key grants, input-required tasks and completion; MCP, error recovery and concurrent drain remain UNVERIFIED. |
 | SCR-11 | Request traces | UNVERIFIED | |
-| SCR-12 | FinOps budgets/chargeback | UNVERIFIED | |
-| SCR-13 | Keys, projects, members, roles | UNVERIFIED | |
-| SCR-14 | Approvals/audit/kill-switch | UNVERIFIED | |
+| SCR-12 | FinOps budgets/chargeback | PARTIAL PASS | CP05 visually reviewed empty budgets, create drawer, and persisted budget row; chargeback and export scenarios remain UNVERIFIED. |
+| SCR-13 | Keys, projects, members, roles | PARTIAL PASS | CP06 project/environment provisioning; CP08 A2A-only and provider-only key creation, grant visibility and revocation screenshots inspected. Member/role journeys and rotation remain UNVERIFIED. |
+| SCR-14 | Approvals/audit/kill-switch | PARTIAL PASS | CP06 live audit-log screen visually reviewed; project/environment event attribution and chain verification passed. Approvals and kill-switch remain UNVERIFIED. |
 | SCR-15 | Playground/API explorer/diagnostics | UNVERIFIED | |
-| SCR-16 | Operations/backups/upgrades/privacy | UNVERIFIED | |
+| SCR-16 | Operations/backups/upgrades/privacy | PARTIAL PASS | CP07 authenticated WebKit Operations→Webhooks at 375px; responsive drawer visible. Backup, upgrade, health, and privacy flows remain UNVERIFIED. |
 
 ## Business workflows WF-01..13
 
@@ -59,9 +59,9 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | WF-05 | Key and authorized OAuth connection | UNVERIFIED | |
 | WF-06 | Unified/native API, stream, timeout, retry, cancel | UNVERIFIED | |
 | WF-07 | Capability routing and provider failover | UNVERIFIED | |
-| WF-08 | Quota/budget/chargeback without exact usage | UNVERIFIED | |
+| WF-08 | Quota/budget/chargeback without exact usage | PARTIAL PASS | CP05 first project budget created and persisted; quota consumption and chargeback behavior not yet exercised. |
 | WF-09 | MCP tool invocation, side-effect guard, approval | UNVERIFIED | |
-| WF-10 | Key rotation and emergency revocation | UNVERIFIED | |
+| WF-10 | Key rotation and emergency revocation | PARTIAL PASS | CP08 A2A key revoked via Console; UI reported 0 active streams severed and old credential was denied with 401. Rotation/grace and revocation with an actual concurrent active A2A task remain UNVERIFIED. |
 | WF-11 | Extension update, escalation block, rollback | UNVERIFIED | |
 | WF-12 | Incident detection, containment, recovery | UNVERIFIED | |
 | WF-13 | Data retention, anonymization, deletion | UNVERIFIED | |
@@ -70,14 +70,14 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 
 | Dimension | QA-002 status | Evidence / open coverage |
 | --- | --- | --- |
-| User roles: first-time owner, developer, administrator, Team Admin, security reviewer, operator, FinOps, extension author | UNVERIFIED | |
-| Tenant and resource authorization; default-deny and cross-tenant boundaries | UNVERIFIED | |
+| User roles: first-time owner, developer, administrator, Team Admin, security reviewer, operator, FinOps, extension author | PARTIAL PASS | First-time owner setup on 18084 (CP03) and login on 18083 (CP01); remaining roles UNVERIFIED. |
+| Tenant and resource authorization; default-deny and cross-tenant boundaries | PARTIAL PASS | CP08 provider-only key was denied A2A discovery/task with 403; revoked key received 401. Cross-tenant and all-resource boundaries remain UNVERIFIED. |
 | Provider integrations: Google, Meta, deterministic synthetic provider, adapter failures | UNVERIFIED | |
 | Platforms/modes: standalone SQLite, Docker, PostgreSQL/Valkey clustered, restart/upgrade | UNVERIFIED | |
-| Browsers: Chromium, Firefox, WebKit; real interaction/screenshots | UNVERIFIED | |
-| Responsive: 320/375/768/1024/1440/1920; loading/empty/error/success states | UNVERIFIED | |
+| Browsers: Chromium, Firefox, WebKit; real interaction/screenshots | PARTIAL PASS | CP01–06 real Chromium flows/screenshots; CP07 real WebKit 26.5 at 375px. Firefox workflow still UNVERIFIED. |
+| Responsive: 320/375/768/1024/1440/1920; loading/empty/error/success states | PARTIAL PASS | CP07 WebKit webhook drawer 375×844; CP03/05 Chromium 1440×1000. Other widths and states UNVERIFIED. |
 | Themes: light/dark; 15 locales | UNVERIFIED | |
-| Accessibility, keyboard, screen-reader labels, focus/recovery | UNVERIFIED | |
+| Accessibility, keyboard, screen-reader labels, focus/recovery | PARTIAL PASS | CP03 live axe: four setup steps, 0 violations; other screens, keyboard/screen-reader, locales, and browsers UNVERIFIED. |
 | Security: SSRF, secrets, audit integrity, kill-switch, plugin boundaries | UNVERIFIED | |
 | Operational reliability: health, backup/restore, restart persistence, diagnostics | UNVERIFIED | |
 
