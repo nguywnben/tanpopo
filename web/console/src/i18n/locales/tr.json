@@ -220,7 +220,7 @@
   "setup.cannotContinue": "Devam edilemiyor",
   "setup.ownerHeading": "Sahip hesabı ve ilk kiracı",
   "setup.bootstrapToken": "Başlatma belirteci (Bootstrap token)",
-  "setup.bootstrapTokenHint": "Sunucu ilk açıldığında bir kez yazdırılır.",
+  "setup.bootstrapTokenHint": "Sunucu başlatıldığında bir kez yazdırılır ve varsayılan olarak data/bootstrap.token dosyasına kaydedilir.",
   "setup.ownerEmail": "Sahip e-postası",
   "setup.ownerPassword": "Sahip parolası",
   "setup.ownerPasswordHint": "En az 12 karakter.",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "{{name}} kuruluşunun DEK'ini kalıcı olarak yok eder, gizli verileri ve anahtarları temizler ve etkin oturumları 60 saniye içinde sonlandırır.",
   "orgs.shredReasonLabel": "Silme gerekçesi",
   "orgs.shredReceiptTitle": "Kuruluş kripto imha edildi",
-  "orgs.shredReceiptDesc": "DEK {{dek}} yok edildi ve {{keys}} sanal anahtar iptal edildi."
+  "orgs.shredReceiptDesc": "DEK {{dek}} yok edildi ve {{keys}} sanal anahtar iptal edildi.",
+  "setup.noAdaptersTitle": "Henüz etkinleştirilmiş sağlayıcı bağdaştırıcısı yok",
+  "setup.noAdaptersDesc": "Önce ilk kurulumu tamamlayın, ardından bağlantı eklemeden önce Konsoldaki Eklentiler → Pazar Yeri bölümünden resmi bir bağdaştırıcı etkinleştirin (veya CLI ile paket hazırlayın).",
+  "setup.noAdaptersCatalogCount": "Önce ilk kurulumu tamamlayın, ardından bağlantı eklemeden önce Eklentiler → Pazar Yeri bölümünden yerleşik {{count}} resmi bağdaştırıcıdan birini etkinleştirin (veya CLI ile paket hazırlayın).",
+  "providers.emptyAdaptersDesc": "Eklentiler → Pazar Yeri bölümünden resmi bir bağdaştırıcı etkinleştirin veya etkin filtreyi temizleyin.",
+  "providers.openMarketplace": "Pazar Yerini Aç",
+  "providers.noEnabledAdaptersBanner": "Etkin sağlayıcı bağdaştırıcısı bulunamadı. Önce Eklentiler → Pazar Yeri bölümünden bir bağdaştırıcı etkinleştirin.",
+  "extensions.activatedGoProviders": "{{pkg}} etkinleştirildi. Bağlantıları Sağlayıcılar → Bağdaştırıcılar altından yapılandırın.",
+  "extensions.openAdapters": "Bağdaştırıcıları Gör",
+  "models.action.activate": "Dağıtımı etkinleştir",
+  "models.deploymentActivated": "Dağıtım ACTIVE_HEALTHY olarak etkinleştirildi."
 }

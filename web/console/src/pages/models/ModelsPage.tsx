@@ -206,13 +206,14 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
     }
     setBusy(true);
     try {
+      const shouldActivate = connection.state === 'ACTIVE';
       await createDeployment({
         env_id: environmentId,
         logical_model_id: selectedModel,
         connection_id: selectedConnection,
         upstream_model_name: upstreamName.trim(),
         data_region: connection.data_region,
-        activate_immediately: false,
+        activate_immediately: shouldActivate,
         rate_card: card.rateCard,
       });
       setDepDrawerOpen(false);
@@ -220,7 +221,22 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       setRates(emptyRates);
       setSelfHostedZero(false);
       await reload();
-      setNotice(t('models.deploymentRegistered'));
+      setNotice(shouldActivate ? t('models.deploymentActivated') : t('models.deploymentRegistered'));
+    } catch (cause) {
+      setError(errText(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleActivateDeployment(deployment: Deployment) {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await updateDeployment(deployment.id, `"v${deployment.version}"`, {state: 'ACTIVE_HEALTHY'});
+      await reload();
+      setNotice(t('models.deploymentActivated'));
     } catch (cause) {
       setError(errText(cause, t));
     } finally {
@@ -389,10 +405,13 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                       label={t('common.actionsFor', {name: row.upstream_model_name})}
                       disabled={busy}
                       items={[
+                        ...(row.state === 'PROVISIONED' || row.state === 'DRAINING_MAINTENANCE' || row.state === 'DISABLED'
+                          ? [{id: 'activate', label: t('models.action.activate'), onClick: () => void handleActivateDeployment(row)}]
+                          : []),
                         ...(row.state !== 'DISABLED'
                           ? [{id: 'disable', label: t('models.action.disable'), onClick: () => void openDeploymentAction(row, 'disable')}]
                           : []),
-                        ...(row.state !== 'DISABLED' ? [{type: 'divider' as const}] : []),
+                        {type: 'divider' as const},
                         {
                           id: 'delete',
                           label: t('models.action.delete'),

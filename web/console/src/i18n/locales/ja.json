@@ -220,7 +220,7 @@
   "setup.cannotContinue": "続行できません",
   "setup.ownerHeading": "オーナーアカウントと初期テナント",
   "setup.bootstrapToken": "ブートストラップトークン",
-  "setup.bootstrapTokenHint": "サーバー初回起動時に一度だけ出力されます。",
+  "setup.bootstrapTokenHint": "サーバー初回起動時に一度だけ出力され、既定では data/bootstrap.token に保存されます。",
   "setup.ownerEmail": "オーナーのメールアドレス",
   "setup.ownerPassword": "オーナーパスワード",
   "setup.ownerPasswordHint": "12 文字以上。",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "{{name}} の組織 DEK を不可逆に破棄し、シークレットとキーを消去して、60秒以内にアクティブなセッションを無効化します。",
   "orgs.shredReasonLabel": "削除理由",
   "orgs.shredReceiptTitle": "組織を暗号シュレッドしました",
-  "orgs.shredReceiptDesc": "DEK {{dek}} を破棄し、{{keys}} 件の仮想キーを失効させました。"
+  "orgs.shredReceiptDesc": "DEK {{dek}} を破棄し、{{keys}} 件の仮想キーを失効させました。",
+  "setup.noAdaptersTitle": "有効なプロバイダーアダプターがまだありません",
+  "setup.noAdaptersDesc": "先に初期設定を完了し、コンソールの「拡張機能 → マーケットプレイス」から公式アダプターを有効化（または CLI からパッケージをステージング）してから接続を追加してください。",
+  "setup.noAdaptersCatalogCount": "先に初期設定を完了し、「拡張機能 → マーケットプレイス」から同梱されている {{count}} 件の公式アダプターのいずれかを有効化（または CLI からステージング）してから接続を追加してください。",
+  "providers.emptyAdaptersDesc": "「拡張機能 → マーケットプレイス」で公式アダプターを有効化するか、現在のフィルターを解除してください。",
+  "providers.openMarketplace": "マーケットプレイスを開く",
+  "providers.noEnabledAdaptersBanner": "有効なプロバイダーアダプターがありません。先に「拡張機能 → マーケットプレイス」でアダプターを有効化してください。",
+  "extensions.activatedGoProviders": "{{pkg}} を有効化しました。「プロバイダー → アダプター」から接続を設定できます。",
+  "extensions.openAdapters": "アダプターを表示",
+  "models.action.activate": "デプロイメントを有効化",
+  "models.deploymentActivated": "デプロイメントを ACTIVE_HEALTHY として有効化しました。"
 }

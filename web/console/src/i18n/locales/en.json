@@ -220,7 +220,7 @@
   "setup.cannotContinue": "Cannot continue",
   "setup.ownerHeading": "Owner account & initial tenant",
   "setup.bootstrapToken": "Bootstrap token",
-  "setup.bootstrapTokenHint": "Printed once on server startup.",
+  "setup.bootstrapTokenHint": "Printed once on server startup and saved to data/bootstrap.token by default.",
   "setup.ownerEmail": "Owner email",
   "setup.ownerPassword": "Owner password",
   "setup.ownerPasswordHint": "Minimum 12 characters.",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "Irreversibly destroys the Organization DEK for {{name}}, purges secrets and keys, and cancels active sessions within 60 seconds.",
   "orgs.shredReasonLabel": "Deletion justification",
   "orgs.shredReceiptTitle": "Organization crypto-shredded",
-  "orgs.shredReceiptDesc": "Destroyed DEK {{dek}} and revoked {{keys}} virtual keys."
+  "orgs.shredReceiptDesc": "Destroyed DEK {{dek}} and revoked {{keys}} virtual keys.",
+  "setup.noAdaptersTitle": "No provider adapters enabled yet",
+  "setup.noAdaptersDesc": "Finish setup first, then open Extensions → Marketplace in the Console to activate an official adapter (or stage a package via CLI) before adding connections.",
+  "setup.noAdaptersCatalogCount": "Finish setup first, then open Extensions → Marketplace to activate one of {{count}} bundled official adapters (or stage a package via CLI) before adding connections.",
+  "providers.emptyAdaptersDesc": "Activate an official adapter in Extensions → Marketplace or clear the active filter.",
+  "providers.openMarketplace": "Open Marketplace",
+  "providers.noEnabledAdaptersBanner": "No active provider adapters found. Activate an adapter in Extensions → Marketplace first.",
+  "extensions.activatedGoProviders": "Activated {{pkg}}. Configure upstream connections under Providers → Adapters.",
+  "extensions.openAdapters": "View Adapters",
+  "models.action.activate": "Activate deployment",
+  "models.deploymentActivated": "Deployment activated cleanly as ACTIVE_HEALTHY."
 }

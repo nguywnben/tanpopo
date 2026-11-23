@@ -220,7 +220,7 @@
   "setup.cannotContinue": "无法继续",
   "setup.ownerHeading": "所有者账号与初始租户",
   "setup.bootstrapToken": "引导令牌",
-  "setup.bootstrapTokenHint": "服务器首次启动时输出的一次性令牌。",
+  "setup.bootstrapTokenHint": "在服务器首次启动时输出，并默认保存在 data/bootstrap.token 中。",
   "setup.ownerEmail": "所有者邮箱",
   "setup.ownerPassword": "所有者密码",
   "setup.ownerPasswordHint": "至少 12 个字符。",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "不可逆地销毁 {{name}} 的组织 DEK，清除机密与密钥，并在 60 秒内终止活跃会话。",
   "orgs.shredReasonLabel": "删除原因",
   "orgs.shredReceiptTitle": "组织已加密销毁",
-  "orgs.shredReceiptDesc": "已销毁 DEK {{dek}} 并吊销 {{keys}} 个虚拟密钥。"
+  "orgs.shredReceiptDesc": "已销毁 DEK {{dek}} 并吊销 {{keys}} 个虚拟密钥。",
+  "setup.noAdaptersTitle": "尚未启用任何提供商适配器",
+  "setup.noAdaptersDesc": "请先完成初始化设置，然后在控制台打开「扩展 → 应用市场」启用官方适配器（或通过 CLI 暂存扩展包），之后再添加提供商连接。",
+  "setup.noAdaptersCatalogCount": "请先完成初始化设置，然后在「扩展 → 应用市场」中启用内置 {{count}} 个官方适配器之一（或通过 CLI 暂存扩展包），之后再添加提供商连接。",
+  "providers.emptyAdaptersDesc": "请在「扩展 → 应用市场」中启用官方适配器，或清除当前筛选条件。",
+  "providers.openMarketplace": "打开应用市场",
+  "providers.noEnabledAdaptersBanner": "未找到已启用的提供商适配器。请先前往「扩展 → 应用市场」启用适配器。",
+  "extensions.activatedGoProviders": "已启用 {{pkg}}。请前往「提供商 → 适配器」配置上游连接。",
+  "extensions.openAdapters": "查看适配器",
+  "models.action.activate": "启用部署",
+  "models.deploymentActivated": "已将部署激活为 ACTIVE_HEALTHY 状态。"
 }

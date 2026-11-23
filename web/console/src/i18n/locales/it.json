@@ -220,7 +220,7 @@
   "setup.cannotContinue": "Impossibile continuare",
   "setup.ownerHeading": "Account proprietario e tenant iniziale",
   "setup.bootstrapToken": "Token bootstrap",
-  "setup.bootstrapTokenHint": "Stampato una sola volta all'avvio del server.",
+  "setup.bootstrapTokenHint": "Stampato una volta all’avvio del server e salvato per impostazione predefinita in data/bootstrap.token.",
   "setup.ownerEmail": "Email proprietario",
   "setup.ownerPassword": "Password proprietario",
   "setup.ownerPasswordHint": "Minimo 12 caratteri.",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "Distrugge irreversibilmente la DEK dell'organizzazione {{name}}, elimina segreti e chiavi e annulla le sessioni attive entro 60 secondi.",
   "orgs.shredReasonLabel": "Motivazione dell'eliminazione",
   "orgs.shredReceiptTitle": "Organizzazione distrutta crittograficamente",
-  "orgs.shredReceiptDesc": "DEK {{dek}} distrutta e {{keys}} chiavi virtuali revocate."
+  "orgs.shredReceiptDesc": "DEK {{dek}} distrutta e {{keys}} chiavi virtuali revocate.",
+  "setup.noAdaptersTitle": "Nessun adattatore provider ancora attivo",
+  "setup.noAdaptersDesc": "Completa prima la configurazione, poi apri Estensioni → Marketplace nella Console per attivare un adattatore ufficiale (o caricare un pacchetto via CLI) prima di aggiungere connessioni.",
+  "setup.noAdaptersCatalogCount": "Completa prima la configurazione, poi apri Estensioni → Marketplace per attivare uno dei {{count}} adattatori ufficiali integrati (o caricare un pacchetto via CLI) prima di aggiungere connessioni.",
+  "providers.emptyAdaptersDesc": "Attiva un adattatore ufficiale in Estensioni → Marketplace oppure rimuovi i filtri attivi.",
+  "providers.openMarketplace": "Apri Marketplace",
+  "providers.noEnabledAdaptersBanner": "Nessun adattatore provider attivo trovato. Attiva prima un adattatore in Estensioni → Marketplace.",
+  "extensions.activatedGoProviders": "{{pkg}} attivato. Configura le connessioni in Provider → Adattatori.",
+  "extensions.openAdapters": "Vedi Adattatori",
+  "models.action.activate": "Attiva distribuzione",
+  "models.deploymentActivated": "Distribuzione attivata nello stato ACTIVE_HEALTHY."
 }

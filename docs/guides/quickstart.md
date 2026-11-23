@@ -18,8 +18,14 @@ CGO_ENABLED=0 go build -o ./bin/tanpopo ./cmd/tanpopo
 export TANPOPO_MASTER_KEY="000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 
 # 3. Start Control Plane + Data Plane + Web Console on 127.0.0.1:8080
+#    Prints the one-time bootstrap token and writes it to data/bootstrap.token (Windows: data\bootstrap.token)
 ./bin/tanpopo serve --listen 127.0.0.1:8080 --role all
 ```
+
+By default, Tanpopo stores runtime state under `TANPOPO_DATA_DIR=data` and writes the one-time bootstrap token to `data/bootstrap.token` (`data\bootstrap.token` on Windows PowerShell, overrideable via `TANPOPO_BOOTSTRAP_TOKEN_FILE`):
+
+- **Linux / macOS:** `cat data/bootstrap.token`
+- **Windows PowerShell:** `Get-Content .\data\bootstrap.token`
 
 To verify storage permissions and service readiness before or after boot:
 
@@ -43,11 +49,12 @@ curl -fsS http://127.0.0.1:8080/readyz
 
 ---
 
-## 2. Bootstrap & Issue Your First Virtual Key
+## 2. Bootstrap, Activate an Adapter & Issue Your First Virtual Key
 
-1. Open **`http://127.0.0.1:8080/setup`** in your browser to create the initial `ORG_OWNER` account and complete ownership transfer.
-2. Under **Secrets & Connections**, add a provider connection (e.g., an OpenAI-compatible upstream or the local loopback provider during testing). Tanpopo encrypts provider credentials inside its **3-tier envelope vault** before persisting.
-3. Under **Virtual Keys**, issue an environment-scoped Virtual Key (`vk_tp_...`) and set a soft/hard budget ceiling in integer nano-USD / micro-USD.
+1. Open **`http://127.0.0.1:8080/setup`** in your browser, paste the one-time bootstrap token from terminal output or `data/bootstrap.token` (`data\bootstrap.token` on Windows), and create the initial `ORG_OWNER` account.
+2. Open **Extensions → Marketplace**, choose a bundled official adapter (for example `@tanpopo/openai` or `@tanpopo/openai-compatible`), click **Stage for review**, and click **Approve & activate**. Activated adapters register automatically under **Providers → Adapters**.
+3. Under **Providers**, seal your upstream credential (if required), create a connection using the activated adapter, and run **Test connection** to promote it to `ACTIVE`. Then add a logical model, deployment, and route under **Models** and **Routing**.
+4. Under **Access → Virtual Keys**, issue an environment-scoped Virtual Key (`vk_tp_...`) and set optional soft/hard budget ceilings in integer nano-USD / micro-USD.
    - **Strict Plane Separation (`AUTH-07`):** Virtual Keys (`vk_tp_*`) authenticate Data Plane inference (`/v1/*`, `/native/*`, `/mcp`, `/a2a/*`) and are rejected with `401 invalid_credential_plane` on `/admin/v1/*`.
 
 > **Credential Placeholder Convention:** Examples below use synthetic placeholder tokens (`vk_tp_test_example_...`) that have no access to any real environment.

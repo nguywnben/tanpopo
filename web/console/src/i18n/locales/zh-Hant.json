@@ -220,7 +220,7 @@
   "setup.cannotContinue": "無法繼續",
   "setup.ownerHeading": "擁有者帳號與初始租戶",
   "setup.bootstrapToken": "引導權杖",
-  "setup.bootstrapTokenHint": "伺服器初次啟動時輸出的一次性權杖。",
+  "setup.bootstrapTokenHint": "在伺服器初次啟動時輸出，並預設儲存於 data/bootstrap.token 中。",
   "setup.ownerEmail": "擁有者電子郵件",
   "setup.ownerPassword": "擁有者密碼",
   "setup.ownerPasswordHint": "至少 12 個字元。",
@@ -1128,5 +1128,15 @@
   "orgs.shredDesc": "不可逆地銷毀 {{name}} 的組織 DEK，清除機密與金鑰，並於 60 秒內終止使用中的工作階段。",
   "orgs.shredReasonLabel": "刪除理由",
   "orgs.shredReceiptTitle": "組織已加密銷毀",
-  "orgs.shredReceiptDesc": "已銷毀 DEK {{dek}} 並撤銷 {{keys}} 組虛擬金鑰。"
+  "orgs.shredReceiptDesc": "已銷毀 DEK {{dek}} 並撤銷 {{keys}} 組虛擬金鑰。",
+  "setup.noAdaptersTitle": "尚未啟用任何供應商配接器",
+  "setup.noAdaptersDesc": "請先完成初始化設定，接著在控制台開啟「擴充套件 → 市集」啟用官方配接器（或透過 CLI 暫存套件），再新增供應商連線。",
+  "setup.noAdaptersCatalogCount": "請先完成初始化設定，接著在「擴充套件 → 市集」啟用內建 {{count}} 個官方配接器之一（或透過 CLI 暫存套件），再新增供應商連線。",
+  "providers.emptyAdaptersDesc": "請在「擴充套件 → 市集」啟用官方配接器，或清除目前的篩選條件。",
+  "providers.openMarketplace": "開啟市集",
+  "providers.noEnabledAdaptersBanner": "找不到已啟用的供應商配接器。請先至「擴充套件 → 市集」啟用配接器。",
+  "extensions.activatedGoProviders": "已啟用 {{pkg}}。請前往「供應商 → 配接器」設定上游連線。",
+  "extensions.openAdapters": "檢視配接器",
+  "models.action.activate": "啟用部署",
+  "models.deploymentActivated": "已將部署啟用為 ACTIVE_HEALTHY 狀態。"
 }

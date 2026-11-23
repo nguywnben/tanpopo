@@ -71,6 +71,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [activatedNoticePkg, setActivatedNoticePkg] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
   const [trustFilter, setTrustFilter] = useState('ALL');
@@ -154,6 +155,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     event.preventDefault();
     setError('');
     setNotice('');
+    setActivatedNoticePkg(null);
     if (!/^[a-f0-9]{64}$/.test(stageSha.trim())) {
       setError(t('extensions.errSha256'));
       return;
@@ -176,6 +178,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
   async function handleStageCatalog(entry: CatalogEntry) {
     setError('');
     setNotice('');
+    setActivatedNoticePkg(null);
     if (!entry.source_uri || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
       setError(t('extensions.errMissingDigest', {name: entry.name}));
       return;
@@ -197,6 +200,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     if (!upgradeTarget) return;
     setError('');
     setNotice('');
+    setActivatedNoticePkg(null);
     if (!/^[a-f0-9]{64}$/.test(upgradeSha.trim())) {
       setError(t('extensions.errSha256'));
       return;
@@ -231,11 +235,18 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     if (reviewDiff.has_escalation && !ackDelta) return;
     setBusy(true);
     setError('');
+    setActivatedNoticePkg(null);
+    const pkgId = reviewDiff.package_id;
     try {
       const updated = await approveExtension(reviewDiff.installation_id, reviewEtag, enableImmediately, ackUnverified);
       setReviewDiff(null);
       await reload();
-      setNotice(t('extensions.permissionsApproved', {state: formatOperationalState(updated.state)}));
+      if (enableImmediately && updated.state === 'ENABLED_ACTIVE') {
+        setActivatedNoticePkg(pkgId);
+        setNotice(t('extensions.activatedGoProviders', {pkg: pkgId}));
+      } else {
+        setNotice(t('extensions.permissionsApproved', {state: formatOperationalState(updated.state)}));
+      }
     } catch (cause) {
       setError(errText(cause, t));
     } finally {
@@ -263,6 +274,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     if (!actionTarget || actionReason.trim().length < 5) return;
     setBusy(true);
     setError('');
+    setActivatedNoticePkg(null);
     try {
       const {row, kind} = actionTarget;
       if (kind === 'rollback') await rollbackExtension(row.id, `"v${row.version}"`, actionReason.trim());
@@ -333,7 +345,20 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       />
 
       {error ? <Banner tone="danger">{error}</Banner> : null}
-      {notice ? <Banner tone="ok">{notice}</Banner> : null}
+      {notice ? (
+        <Banner
+          tone="ok"
+          action={
+            activatedNoticePkg ? (
+              <Button variant="secondary" size="sm" onClick={() => navigate('/providers/adapters')}>
+                {t('extensions.openAdapters')}
+              </Button>
+            ) : undefined
+          }
+        >
+          {notice}
+        </Banner>
+      ) : null}
 
       {activeTab === 'installed' ? (
         <section className="tp-section">
