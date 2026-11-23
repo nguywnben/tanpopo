@@ -1,0 +1,28 @@
+{
+  "initialize_status": 200,
+  "session_issued": true,
+  "list_status": 200,
+  "listed_tool_names": [
+    "qa002-cp28-approval-server__record_synthetic_action",
+    "tanpopo__check_approval_and_resume"
+  ],
+  "call_status": 200,
+  "call_result": {
+    "isError": true,
+    "structuredContent": {
+      "approval_request_id": "apr_01m85bg48xe009s19x7vc0yp2p",
+      "approval_binding_hash": "1e8bc3550617b37dd244b83c7b07a2dfc981fdf05cbdfc8c32d1ccc28ea3c66c",
+      "status": "APPROVAL_PENDING",
+      "resume_tool": "tanpopo__check_approval_and_resume",
+      "pre_approval_token_included": false
+    }
+  },
+  "fixture_state": {
+    "mutations": [
+      {
+        "ticket_id": "qa002-cp28-ticket-001",
+        "amount": 37
+      }
+    ]
+  }
+}

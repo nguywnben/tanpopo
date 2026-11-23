@@ -1,0 +1,23 @@
+{
+  "initialize_status": 200,
+  "session_issued": true,
+  "list_status": 200,
+  "listed_tool_names": [
+    "qa002-cp28-approval-server__record_synthetic_action",
+    "tanpopo__check_approval_and_resume"
+  ],
+  "call_status": 200,
+  "call_result": {
+    "isError": true,
+    "structuredContent": {
+      "approval_request_id": "apr_01m85baxyae00ad2vxg9wr9xhe",
+      "approval_binding_hash": "3888838b1cb98db60e9377d3a4eaf950aa28c2ac1c635b04c869f045064692a9",
+      "status": "APPROVAL_PENDING",
+      "resume_tool": "tanpopo__check_approval_and_resume",
+      "pre_approval_token_included": false
+    }
+  },
+  "fixture_state": {
+    "mutations": []
+  }
+}

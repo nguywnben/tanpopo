@@ -1,0 +1,32 @@
+{
+  "rows": [
+    "QA002 CP28 destructive approvalvk_tp_dev_…w7TUMCP*ActiveNov 23, 2026, 11:14:53 PM",
+    "QA002 CP28 destructive approvalvk_tp_dev_…0btsPROVIDER, MCP*RevokedNov 23, 2026, 11:11:20 PM"
+  ],
+  "data": [
+    {
+      "id": "vky_01m85b1r16e00bh7p1wcxhk09c",
+      "state": "CREATED_ACTIVE",
+      "allowed_planes": [
+        "MCP"
+      ],
+      "allowed_mcp_tools": [
+        "qa002-cp28-approval-server__record_synthetic_action"
+      ],
+      "owner_principal_id": "prc_01m853e561e00byye5wtq3s746"
+    },
+    {
+      "id": "vky_01m85av81re00b9vm6pnfkjbga",
+      "state": "REVOKED",
+      "allowed_planes": [
+        "PROVIDER",
+        "MCP"
+      ],
+      "allowed_mcp_tools": [
+        "qa002-cp28-approval-server__record_synthetic_action"
+      ],
+      "owner_principal_id": "prc_01m853e561e00byye5wtq3s746"
+    }
+  ],
+  "secret_material_included": false
+}

@@ -1,0 +1,20 @@
+{
+  "rows": [],
+  "keys": [
+    {
+      "id": "vky_01m85b1r16e00bh7p1wcxhk09c",
+      "state": "REVOKED",
+      "allowed_planes": [
+        "MCP"
+      ]
+    },
+    {
+      "id": "vky_01m85av81re00b9vm6pnfkjbga",
+      "state": "REVOKED",
+      "allowed_planes": [
+        "PROVIDER",
+        "MCP"
+      ]
+    }
+  ]
+}
