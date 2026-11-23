@@ -525,3 +525,29 @@ type TxAuditSink interface {
 	AppendTx(ctx context.Context, tx *sql.Tx, event AuditEvent) error
 }
 
+// AuditActor attributes storage-level mutations initiated by authenticated control-plane callers.
+type AuditActor struct {
+	ActorKind  string
+	ActorID    string
+	EntryPoint string
+	RequestID  string
+}
+
+type auditActorContextKey struct{}
+
+// WithAuditActor attaches caller audit attribution to ctx for downstream storage mutations.
+func WithAuditActor(ctx context.Context, actor AuditActor) context.Context {
+	return context.WithValue(ctx, auditActorContextKey{}, actor)
+}
+
+// AuditActorFromContext extracts caller audit attribution from ctx when present.
+func AuditActorFromContext(ctx context.Context) (AuditActor, bool) {
+	if ctx == nil {
+		return AuditActor{}, false
+	}
+	actor, ok := ctx.Value(auditActorContextKey{}).(AuditActor)
+	if !ok || strings.TrimSpace(actor.ActorID) == "" {
+		return AuditActor{}, false
+	}
+	return actor, true
+}

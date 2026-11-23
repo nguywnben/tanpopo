@@ -15,6 +15,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/ingress/a2a"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 type a2aAgentCreateDTO struct {
@@ -128,13 +129,20 @@ func (s *Server) handleRegisterA2AAgent(w http.ResponseWriter, r *http.Request) 
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_endpoint_url", "invalid_request_error", "https endpoint_url is required unless allow_private_ip is true", false, nil)
 		return
 	}
+	if req.AllowPrivateIP && len(req.AllowedCIDRs) == 0 {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "allowed_cidrs is required when allow_private_ip is true", false, nil)
+		return
+	}
+	normCIDRs := make([]string, 0, len(req.AllowedCIDRs))
 	for _, rawCIDR := range req.AllowedCIDRs {
 		pfx, cerr := netip.ParsePrefix(strings.TrimSpace(rawCIDR))
-		if cerr != nil || pfx.Bits() == 0 {
+		if cerr != nil || !pfx.IsValid() || pfx.Masked().Bits() == 0 {
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "allowed_cidrs must contain valid non-wildcard CIDR prefixes", false, nil)
 			return
 		}
+		normCIDRs = append(normCIDRs, pfx.Masked().String())
 	}
+	req.AllowedCIDRs = normCIDRs
 	if req.CredentialID != nil && strings.TrimSpace(*req.CredentialID) != "" {
 		credID := strings.TrimSpace(*req.CredentialID)
 		var credExists int
@@ -241,4 +249,151 @@ func (s *Server) handleListA2ATasks(w http.ResponseWriter, r *http.Request) {
 		nextCursor = &tok
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": page.Items, "next_cursor": nextCursor, "has_more": page.HasMore})
+}
+
+func (s *Server) getA2ACoordinator() (*a2a.TaskCoordinator, error) {
+	if s.a2aCoordinator != nil {
+		return s.a2aCoordinator, nil
+	}
+	return a2a.NewTaskCoordinator(a2a.CoordinatorConfig{
+		Enabled:    true,
+		DB:         s.db,
+		Snapshots:  s.snapshots,
+		Broker:     s.broker,
+		Ledger:     s.ledgers,
+		Audit:      s.audit,
+		KillSwitch: s.killSwitch,
+		Now:        func() time.Time { return time.UnixMilli(s.nowMs()).UTC() },
+	})
+}
+
+func (s *Server) lookupA2ATaskProject(r *http.Request, orgID, taskID string) (string, bool) {
+	var projID string
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
+			SELECT project_id FROM a2a_tasks WHERE org_id = ? AND id = ?`), orgID, taskID,
+		).Scan(&projID)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false
+	}
+	if err != nil {
+		return "", false
+	}
+	return projID, true
+}
+
+func (s *Server) handleResumeA2ATask(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	taskID := strings.TrimSpace(r.PathValue("taskId"))
+	if taskID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "a2a task not found", false, nil)
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionMCPWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
+	projID, found := s.lookupA2ATaskProject(r, orgID, taskID)
+	if !found {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "a2a task not found", false, nil)
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionMCPWrite, rbac.TargetScope{OrgID: orgID, ProjectID: projID}) {
+		return
+	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, projID) {
+		return
+	}
+
+	var req a2a.ResumeTaskRequest
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	if len(req.InputParts) == 0 {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "input_parts must be a non-empty array", false, nil)
+		return
+	}
+	coord, err := s.getA2ACoordinator()
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initializing A2A coordinator", true, nil)
+		return
+	}
+	view, err := coord.ResumeAdminTask(r.Context(), orgID, projID, taskID, sc.Actor.PrincipalID, req.InputParts)
+	if err != nil {
+		switch {
+		case errors.Is(err, port.ErrNotFound):
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "a2a task not found", false, nil)
+		case errors.Is(err, port.ErrVersionConflict):
+			writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "concurrent A2A task update; retry", false, nil)
+		case errors.Is(err, a2a.ErrInvalidTaskStateMove):
+			writeErrorEnvelope(w, r, http.StatusConflict, "task_not_resumable", "invalid_request_error", err.Error(), false, nil)
+		case errors.Is(err, a2a.ErrPrivilegeOrBudget):
+			writeErrorEnvelope(w, r, http.StatusForbidden, "budget_or_privilege_exceeded", "permission_error", err.Error(), false, nil)
+		default:
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resuming A2A task", true, nil)
+		}
+		return
+	}
+	w.Header().Set("ETag", FormatETag(view.Version))
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (s *Server) handleCancelA2ATask(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	taskID := strings.TrimSpace(r.PathValue("taskId"))
+	if taskID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "a2a task not found", false, nil)
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionMCPWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
+	projID, found := s.lookupA2ATaskProject(r, orgID, taskID)
+	if !found {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "a2a task not found", false, nil)
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionMCPWrite, rbac.TargetScope{OrgID: orgID, ProjectID: projID}) {
+		return
+	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, projID) {
+		return
+	}
+	coord, err := s.getA2ACoordinator()
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initializing A2A coordinator", true, nil)
+		return
+	}
+	view, err := coord.CancelAdminTask(r.Context(), orgID, projID, taskID, sc.Actor.PrincipalID)
+	if err != nil {
+		switch {
+		case errors.Is(err, port.ErrNotFound):
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "a2a task not found", false, nil)
+		case errors.Is(err, port.ErrVersionConflict):
+			writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "concurrent A2A task update; retry", false, nil)
+		case errors.Is(err, a2a.ErrInvalidTaskStateMove):
+			writeErrorEnvelope(w, r, http.StatusConflict, "invalid_state_transition", "invalid_request_error", err.Error(), false, nil)
+		default:
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed canceling A2A task", true, nil)
+		}
+		return
+	}
+	w.Header().Set("ETag", FormatETag(view.Version))
+	writeJSON(w, http.StatusOK, view)
 }

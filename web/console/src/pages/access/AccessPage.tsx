@@ -10,6 +10,7 @@ import {
   revokeVirtualKey,
   rotateVirtualKey,
   updateMemberRoles,
+  updateVirtualKey,
 } from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {useI18n} from '../../i18n/I18nProvider';
@@ -33,23 +34,28 @@ import {
 } from '../../ui/primitives';
 
 type Role = components['schemas']['RbacRole'];
+type Project = components['schemas']['Project'];
 type VirtualKey = components['schemas']['VirtualKeySummary'];
 type Member = components['schemas']['MemberSummary'];
 type CreatedKey = components['schemas']['VirtualKeyCreatedResponse'];
 
 const allRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER', 'FINOPS_VIEWER', 'DEVELOPER'];
+const orgAdminRoles: Role[] = ['OPERATOR', 'ORG_OWNER'];
+const teamAdminGrantableRoles: Role[] = ['TEAM_ADMIN', 'DEVELOPER'];
 const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
 const memberReadRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
 
 export function AccessPage({
   pathname,
   projectId,
+  projects = [],
   environmentId,
   currentPrincipalId,
   roles,
 }: {
   pathname: string;
   projectId: string;
+  projects?: Project[];
   environmentId: string;
   currentPrincipalId: string;
   roles: Role[];
@@ -69,8 +75,13 @@ export function AccessPage({
 
   const [issueOpen, setIssueOpen] = useState(false);
   const [keyName, setKeyName] = useState('');
+  const [allowedPlanes, setAllowedPlanes] = useState<('PROVIDER' | 'MCP' | 'A2A')[]>(['PROVIDER']);
   const [allowedModels, setAllowedModels] = useState<string[]>(['*']);
+  const [allowedRoutesText, setAllowedRoutesText] = useState('*');
   const [allowedMcpToolsText, setAllowedMcpToolsText] = useState('');
+  const [editingKey, setEditingKey] = useState<VirtualKey | null>(null);
+  const [draftPlanes, setDraftPlanes] = useState<('PROVIDER' | 'MCP' | 'A2A')[]>(['PROVIDER']);
+  const [draftRoutesText, setDraftRoutesText] = useState('*');
   const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null);
 
   const [rotateTarget, setRotateTarget] = useState<VirtualKey | null>(null);
@@ -82,9 +93,13 @@ export function AccessPage({
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [memberEmail, setMemberEmail] = useState('');
   const [memberRoles, setMemberRoles] = useState<Role[]>(['DEVELOPER']);
+  const [memberProjectIds, setMemberProjectIds] = useState<string[]>(projectId ? [projectId] : []);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [draftRoles, setDraftRoles] = useState<Role[]>([]);
+  const [draftProjectIds, setDraftProjectIds] = useState<string[]>([]);
 
+  const isOrgAdmin = roles.some(r => orgAdminRoles.includes(r));
+  const grantableMemberRoles = isOrgAdmin ? allRoles : teamAdminGrantableRoles;
   const canManage = roles.some(r => manageRoles.includes(r));
   const canReadMembers = roles.some(r => memberReadRoles.includes(r));
   const canEmergencyRevoke = canManage || roles.includes('SECURITY_REVIEWER');
@@ -132,7 +147,12 @@ export function AccessPage({
 
   async function handleIssueKey(event: FormEvent) {
     event.preventDefault();
-    if (!canManage || !projectId || !environmentId || !keyName.trim() || allowedModels.length === 0) return;
+    if (!canManage || !projectId || !environmentId || !keyName.trim() || allowedPlanes.length === 0 || allowedModels.length === 0) return;
+    const parsedRoutes = [...new Set(allowedRoutesText.split(',').map(v => v.trim()).filter(Boolean))];
+    if (parsedRoutes.length === 0) {
+      setError(t('access.errAllowedRoutesRequired'));
+      return;
+    }
     setBusy(true);
     setError('');
     setNotice('');
@@ -141,12 +161,16 @@ export function AccessPage({
         name: keyName.trim(),
         project_id: projectId,
         env_id: environmentId,
+        allowed_planes: allowedPlanes,
         allowed_models: allowedModels,
+        allowed_routes: parsedRoutes,
         allowed_mcp_tools: [...new Set(allowedMcpToolsText.split(',').map(v => v.trim()).filter(Boolean))],
       });
       setIssueOpen(false);
       setKeyName('');
+      setAllowedPlanes(['PROVIDER']);
       setAllowedModels(['*']);
+      setAllowedRoutesText('*');
       setAllowedMcpToolsText('');
       setCreatedKey(created);
       await refresh();
@@ -193,17 +217,51 @@ export function AccessPage({
     }
   }
 
-  async function handleAddMember(event: FormEvent) {
+  async function handleSaveKeyGrants(event: FormEvent) {
     event.preventDefault();
-    if (!canManage || !memberEmail.includes('@') || memberRoles.length === 0) return;
+    if (!editingKey || draftPlanes.length === 0) return;
+    const parsedRoutes = [...new Set(draftRoutesText.split(',').map(v => v.trim()).filter(Boolean))];
+    if (parsedRoutes.length === 0) {
+      setError(t('access.errAllowedRoutesRequired'));
+      return;
+    }
     setBusy(true);
     setError('');
     setNotice('');
     try {
-      await createMember(memberEmail.trim(), memberRoles);
+      await updateVirtualKey(editingKey, {
+        allowed_planes: draftPlanes,
+        allowed_routes: parsedRoutes,
+      });
+      setEditingKey(null);
+      await refresh();
+      setNotice(t('access.keyUpdated'));
+    } catch (cause) {
+      setError(errText(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAddMember(event: FormEvent) {
+    event.preventDefault();
+    const effectiveProjects = isOrgAdmin
+      ? (memberRoles.some(r => teamAdminGrantableRoles.includes(r)) ? memberProjectIds : [])
+      : (memberProjectIds.length > 0 ? memberProjectIds : projectId ? [projectId] : []);
+    if (!canManage || !memberEmail.includes('@') || memberRoles.length === 0) return;
+    if (!isOrgAdmin && effectiveProjects.length === 0) {
+      setError(t('access.errProjectScopeRequired'));
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await createMember(memberEmail.trim(), memberRoles, effectiveProjects);
       setAddMemberOpen(false);
       setMemberEmail('');
       setMemberRoles(['DEVELOPER']);
+      setMemberProjectIds(projectId ? [projectId] : []);
       await refresh();
       setNotice(t('access.memberAdded'));
     } catch (cause) {
@@ -219,11 +277,18 @@ export function AccessPage({
       setError(t('access.errSelfEscalation'));
       return;
     }
+    const effectiveProjects = isOrgAdmin
+      ? (draftRoles.some(r => teamAdminGrantableRoles.includes(r)) ? draftProjectIds : [])
+      : (draftProjectIds.length > 0 ? draftProjectIds : projectId ? [projectId] : []);
+    if (!isOrgAdmin && effectiveProjects.length === 0) {
+      setError(t('access.errProjectScopeRequired'));
+      return;
+    }
     setBusy(true);
     setError('');
     setNotice('');
     try {
-      await updateMemberRoles(editingMember, draftRoles);
+      await updateMemberRoles(editingMember, draftRoles, effectiveProjects.length > 0 ? effectiveProjects : undefined);
       setEditingMember(null);
       await refresh();
       setNotice(t('access.rolesUpdated'));
@@ -254,7 +319,14 @@ export function AccessPage({
                 <span>{t('access.issueKey')}</span>
               </Button>
             ) : (
-              <Button variant="primary" size="sm" onClick={() => setAddMemberOpen(true)}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setMemberProjectIds(projectId ? [projectId] : []);
+                  setAddMemberOpen(true);
+                }}
+              >
                 <UserPlus size={14} aria-hidden="true" />
                 <span>{t('access.addMember')}</span>
               </Button>
@@ -296,20 +368,44 @@ export function AccessPage({
               ) : undefined
             }
             columns={[
-              {id: 'name', header: t('common.name'), primary: true, width: '30%', render: row => <span style={{fontWeight: 600}}>{row.name}</span>},
-              {id: 'key', header: t('access.col.prefixLast4'), width: '20%', render: row => <span className="mono">{row.key_prefix}…{row.last_four}</span>},
-              {id: 'state', header: t('common.state'), width: '16%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
-              {id: 'created', header: t('common.created'), width: '22%', render: row => <span className="num tp-muted">{formatDateTime(row.created_at)}</span>},
+              {id: 'name', header: t('common.name'), primary: true, width: '24%', render: row => <span style={{fontWeight: 600}}>{row.name}</span>},
+              {id: 'key', header: t('access.col.prefixLast4'), width: '16%', render: row => <span className="mono">{row.key_prefix}…{row.last_four}</span>},
+              {
+                id: 'grants',
+                header: t('access.col.grants'),
+                width: '22%',
+                render: row => (
+                  <div className="tp-stack-sm">
+                    <span className="mono">{(row.allowed_planes && row.allowed_planes.length > 0 ? row.allowed_planes : ['PROVIDER']).join(', ')}</span>
+                    <span className="mono tp-muted">{(row.allowed_routes && row.allowed_routes.length > 0 ? row.allowed_routes : ['*']).join(', ')}</span>
+                  </div>
+                ),
+              },
+              {id: 'state', header: t('common.state'), width: '12%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
+              {id: 'created', header: t('common.created'), width: '16%', render: row => <span className="num tp-muted">{formatDateTime(row.created_at)}</span>},
               {
                 id: 'actions',
                 header: t('common.actions'),
-                width: '12%',
+                width: '10%',
                 render: row =>
                   row.state !== 'REVOKED' && (canManage || canEmergencyRevoke) ? (
                     <RowActionsMenu
                       label={t('common.actionsFor', {name: row.name})}
                       items={[
-                        ...(canManage ? [{id: 'rotate', label: t('access.action.rotate'), onClick: () => setRotateTarget(row)}] : []),
+                        ...(canManage
+                          ? [
+                              {
+                                id: 'editGrants',
+                                label: t('access.action.editGrants'),
+                                onClick: () => {
+                                  setEditingKey(row);
+                                  setDraftPlanes((row.allowed_planes && row.allowed_planes.length > 0 ? row.allowed_planes : ['PROVIDER']) as ('PROVIDER' | 'MCP' | 'A2A')[]);
+                                  setDraftRoutesText((row.allowed_routes && row.allowed_routes.length > 0 ? row.allowed_routes : ['*']).join(', '));
+                                },
+                              },
+                              {id: 'rotate', label: t('access.action.rotate'), onClick: () => setRotateTarget(row)},
+                            ]
+                          : []),
                         ...(canManage ? [{type: 'divider' as const}] : []),
                         {
                           id: 'revoke',
@@ -366,6 +462,7 @@ export function AccessPage({
                       onClick={() => {
                         setEditingMember(row);
                         setDraftRoles([...row.roles]);
+                        setDraftProjectIds(row.project_ids && row.project_ids.length > 0 ? [...row.project_ids] : projectId ? [projectId] : []);
                       }}
                     >
                       {t('access.editRoles')}
@@ -385,7 +482,7 @@ export function AccessPage({
         footer={
           <>
             <Button variant="secondary" onClick={() => setIssueOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" form="tp-issue-key-form" variant="primary" loading={busy} disabled={!keyName.trim() || allowedModels.length === 0}>
+            <Button type="submit" form="tp-issue-key-form" variant="primary" loading={busy} disabled={!keyName.trim() || allowedPlanes.length === 0 || allowedModels.length === 0}>
               {t('access.createKey')}
             </Button>
           </>
@@ -393,6 +490,24 @@ export function AccessPage({
       >
         <form id="tp-issue-key-form" className="tp-stack" onSubmit={handleIssueKey}>
           <TextField label={t('access.keyName')} required value={keyName} onChange={event => setKeyName(event.target.value)} />
+          <MultiSelectField
+            label={t('access.allowedPlanes')}
+            placeholder={t('access.selectPlanes')}
+            value={allowedPlanes}
+            options={[
+              {value: 'PROVIDER', label: 'PROVIDER (/v1/*)'},
+              {value: 'MCP', label: 'MCP (/mcp/*)'},
+              {value: 'A2A', label: 'A2A (/a2a/*)'},
+            ]}
+            onChange={next => setAllowedPlanes(next as ('PROVIDER' | 'MCP' | 'A2A')[])}
+          />
+          <TextField
+            label={t('access.allowedRoutes')}
+            hint={t('access.allowedRoutesHint')}
+            placeholder="*, /a2a/*"
+            value={allowedRoutesText}
+            onChange={event => setAllowedRoutesText(event.target.value)}
+          />
           <div className="tp-stack-sm">
             <CheckboxField label={t('access.allowAllModels')} checked={allowedModels.includes('*')} onChange={checked => setAllowedModels(checked ? ['*'] : [])} />
             {!allowedModels.includes('*') ? (
@@ -415,6 +530,41 @@ export function AccessPage({
           />
         </form>
       </Drawer>
+
+      <Modal
+        open={editingKey !== null}
+        onClose={() => setEditingKey(null)}
+        title={t('access.editGrantsTitle', {name: editingKey?.name ?? ''})}
+        footer={
+          <>
+            <Button variant="secondary" disabled={busy} onClick={() => setEditingKey(null)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-edit-key-grants-form" variant="primary" loading={busy} disabled={draftPlanes.length === 0}>
+              {t('common.saveChanges')}
+            </Button>
+          </>
+        }
+      >
+        <form id="tp-edit-key-grants-form" className="tp-stack" onSubmit={handleSaveKeyGrants}>
+          <MultiSelectField
+            label={t('access.allowedPlanes')}
+            placeholder={t('access.selectPlanes')}
+            value={draftPlanes}
+            options={[
+              {value: 'PROVIDER', label: 'PROVIDER (/v1/*)'},
+              {value: 'MCP', label: 'MCP (/mcp/*)'},
+              {value: 'A2A', label: 'A2A (/a2a/*)'},
+            ]}
+            onChange={next => setDraftPlanes(next as ('PROVIDER' | 'MCP' | 'A2A')[])}
+          />
+          <TextField
+            label={t('access.allowedRoutes')}
+            hint={t('access.allowedRoutesHint')}
+            placeholder="*, /a2a/*"
+            value={draftRoutesText}
+            onChange={event => setDraftRoutesText(event.target.value)}
+          />
+        </form>
+      </Modal>
 
       <Modal
         open={createdKey !== null}
@@ -518,9 +668,18 @@ export function AccessPage({
             placeholder={t('access.selectRoles')}
             hasClear
             value={memberRoles}
-            options={allRoles.map(role => ({value: role, label: t(`common.role.${role}`)}))}
+            options={grantableMemberRoles.map(role => ({value: role, label: t(`common.role.${role}`)}))}
             onChange={next => setMemberRoles(next as Role[])}
           />
+          {projects.length > 0 && (!isOrgAdmin || memberRoles.some(r => teamAdminGrantableRoles.includes(r))) ? (
+            <MultiSelectField
+              label={t('access.memberProjects')}
+              placeholder={t('access.selectMemberProjects')}
+              value={memberProjectIds}
+              options={projects.map(p => ({value: p.id, label: `${p.name} (${p.slug})`}))}
+              onChange={setMemberProjectIds}
+            />
+          ) : null}
         </form>
       </Drawer>
 
@@ -547,13 +706,23 @@ export function AccessPage({
               placeholder={t('access.selectRoles')}
               disabled={busy}
               value={draftRoles}
-              options={allRoles.map(role => ({
+              options={grantableMemberRoles.map(role => ({
                 value: role,
                 label: t(`common.role.${role}`),
                 disabled: editingMember.id === currentPrincipalId && !editingMember.roles.includes(role),
               }))}
               onChange={next => setDraftRoles(next as Role[])}
             />
+            {projects.length > 0 && (!isOrgAdmin || draftRoles.some(r => teamAdminGrantableRoles.includes(r))) ? (
+              <MultiSelectField
+                label={t('access.memberProjects')}
+                placeholder={t('access.selectMemberProjects')}
+                disabled={busy}
+                value={draftProjectIds}
+                options={projects.map(p => ({value: p.id, label: `${p.name} (${p.slug})`}))}
+                onChange={setDraftProjectIds}
+              />
+            ) : null}
           </div>
         ) : null}
       </Modal>

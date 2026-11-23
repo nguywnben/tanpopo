@@ -82,8 +82,12 @@ type UpdateParams struct {
 	TPMLimit             *int64
 	ClearTPMLimit        bool
 	MaxConcurrentStreams *int64
+	AllowedPlanes        string
+	HasAllowedPlanes     bool
 	AllowedModels        []string
 	HasAllowedModels     bool
+	AllowedRoutes        []string
+	HasAllowedRoutes     bool
 	AllowedMCPTools      []string
 	HasAllowedMCPTools   bool
 	ActorID              string
@@ -795,12 +799,31 @@ func (s *Service) Update(ctx context.Context, params UpdateParams) (*VirtualKeyS
 	if params.MaxConcurrentStreams != nil {
 		nextStreams = *params.MaxConcurrentStreams
 	}
+	nextPlanes := cur.AllowedPlanes
+	if params.HasAllowedPlanes {
+		if strings.TrimSpace(params.AllowedPlanes) == "" {
+			return nil, fmt.Errorf("%w: allowed_planes cannot be empty", port.ErrInvalidInput)
+		}
+		normPlanes, perr := normalizeAllowedPlanes(params.AllowedPlanes)
+		if perr != nil {
+			return nil, perr
+		}
+		nextPlanes = normPlanes
+	}
 	nextModels := cur.AllowedModels
 	if params.HasAllowedModels {
 		if len(params.AllowedModels) == 0 {
 			nextModels = []string{}
 		} else {
 			nextModels = append([]string(nil), params.AllowedModels...)
+		}
+	}
+	nextRoutes := cur.AllowedRoutes
+	if params.HasAllowedRoutes {
+		if len(params.AllowedRoutes) == 0 {
+			nextRoutes = []string{}
+		} else {
+			nextRoutes = append([]string(nil), params.AllowedRoutes...)
 		}
 	}
 	nextMCP := cur.AllowedMCPTools
@@ -815,6 +838,10 @@ func (s *Service) Update(ctx context.Context, params UpdateParams) (*VirtualKeyS
 	if err != nil {
 		return nil, err
 	}
+	routesJSON, err := json.Marshal(nextRoutes)
+	if err != nil {
+		return nil, err
+	}
 	mcpJSON, err := json.Marshal(nextMCP)
 	if err != nil {
 		return nil, err
@@ -823,10 +850,10 @@ func (s *Service) Update(ctx context.Context, params UpdateParams) (*VirtualKeyS
 	res, err := tx.ExecContext(ctx, port.Rebind(s.dialect, `
 		UPDATE virtual_keys
 		SET name = ?, rpm_limit = ?, tpm_limit = ?, max_concurrent_streams = ?,
-		    allowed_models_json = ?, allowed_mcp_tools_json = ?, version = version + 1, updated_at_ms = ?
+		    allowed_planes = ?, allowed_models_json = ?, allowed_routes_json = ?, allowed_mcp_tools_json = ?, version = version + 1, updated_at_ms = ?
 		WHERE org_id = ? AND id = ? AND version = ?`),
 		nextName, nullInt64Ptr(nextRPM), nullInt64Ptr(nextTPM), nextStreams,
-		string(modelsJSON), string(mcpJSON), now,
+		nextPlanes, string(modelsJSON), string(routesJSON), string(mcpJSON), now,
 		params.OrgID, params.KeyID, params.ExpectedVersion,
 	)
 	if err != nil {
@@ -864,6 +891,8 @@ func (s *Service) Update(ctx context.Context, params UpdateParams) (*VirtualKeyS
 	if _, aerr := s.emitAuditTx(ctx, tx, params.OrgID, "PRINCIPAL", actor, port.AuditEntryPointAdminAPI, "virtual_key.updated", params.KeyID, map[string]any{
 		"name":                   nextName,
 		"max_concurrent_streams": nextStreams,
+		"allowed_planes":         nextPlanes,
+		"allowed_routes":         nextRoutes,
 	}, now); aerr != nil {
 		return nil, aerr
 	}

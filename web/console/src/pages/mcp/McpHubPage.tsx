@@ -2,6 +2,7 @@ import {useCallback, useEffect, useState, type FormEvent} from 'react';
 import {Plus, RefreshCw, ShieldCheck} from 'lucide-react';
 import {
   approveMcpToolSchema,
+  cancelA2aTask,
   createMcpToolGrant,
   listA2aAgents,
   listA2aTasks,
@@ -9,6 +10,7 @@ import {
   listVirtualKeys,
   registerA2aAgent,
   registerMcpServer,
+  resumeA2aTask,
   syncMcpServerTools,
 } from '../../api/managementClient';
 import type {components} from '../../api/generated';
@@ -81,6 +83,7 @@ export function McpHubPage({
   const [name, setName] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [allowPrivateIp, setAllowPrivateIp] = useState(false);
+  const [allowedCidrs, setAllowedCidrs] = useState('');
 
   const [a2aRegisterOpen, setA2aRegisterOpen] = useState(false);
   const [agentSlug, setAgentSlug] = useState('');
@@ -89,6 +92,10 @@ export function McpHubPage({
   const [agentRegion, setAgentRegion] = useState<DataRegion>('US');
   const [agentMaxHops, setAgentMaxHops] = useState('5');
   const [agentAllowPrivateIp, setAgentAllowPrivateIp] = useState(false);
+  const [agentAllowedCidrs, setAgentAllowedCidrs] = useState('');
+
+  const [resumeTarget, setResumeTarget] = useState<A2aTask | null>(null);
+  const [resumeInputText, setResumeInputText] = useState('');
 
   const [schemaModal, setSchemaModal] = useState<{server: McpServer; tool: SyncedTool} | null>(null);
   const [riskTier, setRiskTier] = useState<'read_only' | 'mutating' | 'destructive'>('read_only');
@@ -135,6 +142,14 @@ export function McpHubPage({
     setError('');
     setNotice('');
     try {
+      const parsedCidrs = allowPrivateIp
+        ? [...new Set(allowedCidrs.split(',').map(v => v.trim()).filter(Boolean))]
+        : [];
+      if (allowPrivateIp && (parsedCidrs.length === 0 || parsedCidrs.some(c => c === '*' || c === '0.0.0.0/0' || c === '::/0'))) {
+        setError(t('providers.errPrivateCidr'));
+        setBusy(false);
+        return;
+      }
       await registerMcpServer({
         project_id: projectId,
         slug: slug.trim(),
@@ -142,12 +157,14 @@ export function McpHubPage({
         transport: 'streamable_http',
         endpoint_url: endpoint.trim(),
         allow_private_ip: allowPrivateIp || undefined,
+        ...(parsedCidrs.length > 0 ? {allowed_cidrs: parsedCidrs} : {}),
       });
       setRegisterOpen(false);
       setSlug('');
       setName('');
       setEndpoint('');
       setAllowPrivateIp(false);
+      setAllowedCidrs('');
       await refresh();
       setNotice(t('mcp.serverRegistered'));
     } catch (cause) {
@@ -221,6 +238,14 @@ export function McpHubPage({
     setNotice('');
     try {
       const parsedHops = Math.min(5, Math.max(1, Number.parseInt(agentMaxHops, 10) || 5));
+      const parsedCidrs = agentAllowPrivateIp
+        ? [...new Set(agentAllowedCidrs.split(',').map(v => v.trim()).filter(Boolean))]
+        : [];
+      if (agentAllowPrivateIp && (parsedCidrs.length === 0 || parsedCidrs.some(c => c === '*' || c === '0.0.0.0/0' || c === '::/0'))) {
+        setError(t('providers.errPrivateCidr'));
+        setBusy(false);
+        return;
+      }
       await registerA2aAgent({
         project_id: projectId,
         agent_slug: agentSlug.trim() || undefined,
@@ -229,6 +254,7 @@ export function McpHubPage({
         data_region: agentRegion,
         max_delegation_hops: parsedHops,
         allow_private_ip: agentAllowPrivateIp,
+        ...(parsedCidrs.length > 0 ? {allowed_cidrs: parsedCidrs} : {}),
       });
       setA2aRegisterOpen(false);
       setAgentSlug('');
@@ -237,10 +263,45 @@ export function McpHubPage({
       setAgentRegion('US');
       setAgentMaxHops('5');
       setAgentAllowPrivateIp(false);
+      setAgentAllowedCidrs('');
       await refresh();
       setNotice(t('a2a.agentRegistered'));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('a2a.registerFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResumeTask(event: FormEvent) {
+    event.preventDefault();
+    if (!resumeTarget || !resumeInputText.trim()) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await resumeA2aTask(resumeTarget.task_id, [{kind: 'text', text: resumeInputText.trim()}]);
+      setResumeTarget(null);
+      setResumeInputText('');
+      await refresh();
+      setNotice(t('a2a.taskResumed'));
+    } catch (cause) {
+      setError(cause instanceof Error && cause.message ? cause.message : t('a2a.taskResumeFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCancelTask(task: A2aTask) {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await cancelA2aTask(task.task_id);
+      await refresh();
+      setNotice(t('a2a.taskCanceled'));
+    } catch (cause) {
+      setError(cause instanceof Error && cause.message ? cause.message : t('a2a.taskCancelFailed'));
     } finally {
       setBusy(false);
     }
@@ -472,19 +533,53 @@ export function McpHubPage({
                   id: 'task',
                   header: t('a2a.col.task'),
                   primary: true,
-                  width: '28%',
+                  width: '26%',
                   render: row => (
                     <div className="tp-stack-sm">
                       <span className="mono" style={{fontWeight: 600}}>{row.task_id}</span>
                       <span className="mono tp-muted">{row.target_agent_slug || row.target_agent_id}</span>
+                      {row.prompt_message ? <span className="tp-muted">{row.prompt_message}</span> : null}
                     </div>
                   ),
                 },
-                {id: 'state', header: t('common.state'), width: '16%', render: row => <StatusPill tone={a2aTaskTone(row.state)} label={t(`a2a.state.${row.state}`)} />},
-                {id: 'hops', header: t('a2a.col.hops'), width: '12%', render: row => <span className="num mono">{formatNumber(row.hop_count)} / 5</span>},
-                {id: 'region', header: t('a2a.col.region'), width: '12%', render: row => <span className="mono">{row.enforced_region || '—'}</span>},
-                {id: 'hold', header: t('a2a.col.subBudget'), width: '16%', render: row => <span className="num mono">{formatMicroUSD(row.sub_budget_hold_micros)}</span>},
-                {id: 'settled', header: t('a2a.col.settledCost'), width: '16%', render: row => <span className="num mono">{formatMicroUSD(row.settled_cost_micros ?? 0)}</span>},
+                {id: 'state', header: t('common.state'), width: '14%', render: row => <StatusPill tone={a2aTaskTone(row.state)} label={t(`a2a.state.${row.state}`)} />},
+                {id: 'hops', header: t('a2a.col.hops'), width: '10%', render: row => <span className="num mono">{formatNumber(row.hop_count)} / 5</span>},
+                {id: 'region', header: t('a2a.col.region'), width: '10%', render: row => <span className="mono">{row.enforced_region || '—'}</span>},
+                {id: 'hold', header: t('a2a.col.subBudget'), width: '14%', render: row => <span className="num mono">{formatMicroUSD(row.sub_budget_hold_micros)}</span>},
+                {id: 'settled', header: t('a2a.col.settledCost'), width: '14%', render: row => <span className="num mono">{formatMicroUSD(row.settled_cost_micros ?? 0)}</span>},
+                {
+                  id: 'actions',
+                  header: t('common.actions'),
+                  width: '12%',
+                  render: row =>
+                    canManage && (row.state === 'input-required' || row.state === 'submitted' || row.state === 'working') ? (
+                      <div className="tp-row">
+                        {row.state === 'input-required' ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => {
+                              setResumeTarget(row);
+                              setResumeInputText('');
+                            }}
+                          >
+                            {t('a2a.resumeTask')}
+                          </Button>
+                        ) : null}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => void handleCancelTask(row)}
+                        >
+                          {t('common.cancel')}
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="tp-muted">—</span>
+                    ),
+                },
               ]}
             />
           </section>
@@ -513,6 +608,15 @@ export function McpHubPage({
             checked={allowPrivateIp}
             onChange={setAllowPrivateIp}
           />
+          {allowPrivateIp ? (
+            <TextField
+              label={t('providers.allowedCidrs')}
+              required
+              placeholder="127.0.0.1/32, 10.20.0.0/24"
+              value={allowedCidrs}
+              onChange={event => setAllowedCidrs(event.target.value)}
+            />
+          ) : null}
         </form>
       </Drawer>
 
@@ -561,8 +665,42 @@ export function McpHubPage({
             checked={agentAllowPrivateIp}
             onChange={setAgentAllowPrivateIp}
           />
+          {agentAllowPrivateIp ? (
+            <TextField
+              label={t('providers.allowedCidrs')}
+              required
+              placeholder="127.0.0.1/32, 10.20.0.0/24"
+              value={agentAllowedCidrs}
+              onChange={event => setAgentAllowedCidrs(event.target.value)}
+            />
+          ) : null}
         </form>
       </Drawer>
+
+      <Modal
+        open={resumeTarget !== null}
+        onClose={() => setResumeTarget(null)}
+        title={t('a2a.resumeModalTitle', {id: resumeTarget?.task_id ?? ''})}
+        subtitle={resumeTarget?.prompt_message || t('a2a.resumeModalSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setResumeTarget(null)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-resume-a2a-form" variant="primary" loading={busy} disabled={!resumeInputText.trim()}>
+              {t('a2a.submitResume')}
+            </Button>
+          </>
+        }
+      >
+        <form id="tp-resume-a2a-form" className="tp-stack" onSubmit={handleResumeTask}>
+          <TextField
+            label={t('a2a.resumeInputLabel')}
+            required
+            placeholder={t('a2a.resumeInputPlaceholder')}
+            value={resumeInputText}
+            onChange={event => setResumeInputText(event.target.value)}
+          />
+        </form>
+      </Modal>
 
       <Modal
         open={schemaModal !== null}

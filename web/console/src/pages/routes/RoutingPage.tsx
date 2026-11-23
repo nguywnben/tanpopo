@@ -431,7 +431,10 @@ export function RoutingPage({
                   <div className="tp-status-chain">
                     {row.targets.map((tg, idx) => {
                       const dep = deploymentById.get(tg.deployment_id);
-                      const label = dep?.state ?? 'UNAVAILABLE';
+                      const label =
+                        dep && dep.state === 'ACTIVE_HEALTHY' && dep.connection_state && dep.connection_state !== 'ACTIVE'
+                          ? dep.connection_state
+                          : (dep?.state ?? 'UNAVAILABLE');
                       return (
                         <span key={tg.deployment_id} className="tp-status-chain">
                           {idx > 0 ? <span className="tp-status-sep" aria-hidden="true">·</span> : null}
@@ -799,7 +802,10 @@ export function RoutingPage({
                 {value: '', label: t('routing.selectDeployment')},
                 ...deployments
                   .filter(d => !targets.some(tg => tg.deployment_id === d.id))
-                  .map(d => ({value: d.id, label: `${d.upstream_model_name} (${d.data_region} · ${formatOperationalState(d.state)})`})),
+                  .map(d => {
+                    const eff = d.state === 'ACTIVE_HEALTHY' && d.connection_state && d.connection_state !== 'ACTIVE' ? d.connection_state : d.state;
+                    return {value: d.id, label: `${d.upstream_model_name} (${d.data_region} · ${formatOperationalState(eff)})`};
+                  }),
               ]}
             />
           </div>
@@ -820,11 +826,14 @@ export function RoutingPage({
           <ul className="tp-list">
             {targets.map((target, index) => {
               const dep = deploymentById.get(target.deployment_id);
+              const effState = dep
+                ? (dep.state === 'ACTIVE_HEALTHY' && dep.connection_state && dep.connection_state !== 'ACTIVE' ? dep.connection_state : dep.state)
+                : '';
               return (
                 <li key={target.deployment_id} className="tp-list-item">
                   <div className="tp-stack-sm" style={{minWidth: 0, flex: '1 1 160px'}}>
                     <span className="mono" style={{fontWeight: 600}}>#{index + 1} {dep?.upstream_model_name ?? target.deployment_id}</span>
-                    <span className="tp-muted">{dep ? `${dep.data_region} · ${formatOperationalState(dep.state)}` : t('routing.unavailableDeployment')}</span>
+                    <span className="tp-muted">{dep ? `${dep.data_region} · ${formatOperationalState(effState)}` : t('routing.unavailableDeployment')}</span>
                   </div>
                   <div className="tp-row">
                     {isWeighted(strategy) ? (

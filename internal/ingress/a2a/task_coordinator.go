@@ -79,31 +79,38 @@ type TaskTransitionRequest struct {
 	InputParts        []map[string]any `json:"input_parts,omitempty"`
 }
 
+// ResumeTaskRequest provides input_parts to resume an input-required A2A task without allowing state or cost forgery.
+type ResumeTaskRequest struct {
+	InputParts []map[string]any `json:"input_parts"`
+}
+
 // TaskView models the OpenAPI A2aTask schema returned by /a2a/tasks* and SSE events.
 type TaskView struct {
-	TaskID             string           `json:"task_id"`
-	TargetAgentID      string           `json:"target_agent_id"`
-	TargetAgentSlug    string           `json:"target_agent_slug,omitempty"`
-	State              string           `json:"state"`
-	HopCount           int              `json:"hop_count"`
-	CallChainIDs       []string         `json:"call_chain_ids,omitempty"`
-	TraceRootID        string           `json:"trace_root_id,omitempty"`
-	EnforcedRegion     string           `json:"enforced_region,omitempty"`
-	SubBudgetHoldMicros int64           `json:"sub_budget_hold_micros"`
-	ReservationID      string           `json:"reservation_id,omitempty"`
-	SettledCostMicros  int64            `json:"settled_cost_micros,omitempty"`
-	Artifacts          []map[string]any `json:"artifacts,omitempty"`
-	Version            int64            `json:"version"`
-	CreatedAt          string           `json:"created_at"`
-	UpdatedAt          string           `json:"updated_at"`
-	CompletedAt        string           `json:"completed_at,omitempty"`
+	TaskID              string           `json:"task_id"`
+	TargetAgentID       string           `json:"target_agent_id"`
+	TargetAgentSlug     string           `json:"target_agent_slug,omitempty"`
+	State               string           `json:"state"`
+	PromptMessage       string           `json:"prompt_message,omitempty"`
+	HopCount            int              `json:"hop_count"`
+	CallChainIDs        []string         `json:"call_chain_ids,omitempty"`
+	TraceRootID         string           `json:"trace_root_id,omitempty"`
+	EnforcedRegion      string           `json:"enforced_region,omitempty"`
+	SubBudgetHoldMicros int64            `json:"sub_budget_hold_micros"`
+	ReservationID       string           `json:"reservation_id,omitempty"`
+	SettledCostMicros   int64            `json:"settled_cost_micros,omitempty"`
+	Artifacts           []map[string]any `json:"artifacts,omitempty"`
+	Version             int64            `json:"version"`
+	CreatedAt           string           `json:"created_at"`
+	UpdatedAt           string           `json:"updated_at"`
+	CompletedAt         string           `json:"completed_at,omitempty"`
 }
 
 // UpstreamTaskResponse captures an agent endpoint's execution verdict and exact micro-USD cost.
 type UpstreamTaskResponse struct {
-	State       string           `json:"state,omitempty"` // working | input-required | completed | failed
-	SpentMicros int64            `json:"spent_micros,omitempty"`
-	Artifacts   []map[string]any `json:"artifacts,omitempty"`
+	State         string           `json:"state,omitempty"` // working | input-required | completed | failed
+	PromptMessage string           `json:"prompt_message,omitempty"`
+	SpentMicros   int64            `json:"spent_micros,omitempty"`
+	Artifacts     []map[string]any `json:"artifacts,omitempty"`
 }
 
 // UpstreamTransport dispatches an attenuated delegation envelope to a registered AgentEndpoint.
@@ -428,6 +435,10 @@ func (c *TaskCoordinator) handleTaskSubroutes(w http.ResponseWriter, r *http.Req
 	defer cleanup()
 	if strings.HasSuffix(suffix, "/cancel") && r.Method == http.MethodPost {
 		taskID := strings.TrimSuffix(suffix, "/cancel")
+		if taskID == "" || strings.Contains(taskID, "/") {
+			writeA2AError(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "A2A task not found.")
+			return
+		}
 		view, err := c.CancelTask(reqCtx, id.Key.OrgID, id.Key.ProjectID, taskID, id.Key.ID)
 		if err != nil {
 			if errors.Is(err, port.ErrNotFound) {
@@ -435,6 +446,44 @@ func (c *TaskCoordinator) handleTaskSubroutes(w http.ResponseWriter, r *http.Req
 				return
 			}
 			writeA2AError(w, r, http.StatusConflict, "invalid_state_transition", "invalid_request_error", err.Error())
+			return
+		}
+		writeA2AJSON(w, http.StatusOK, view)
+		return
+	}
+	if strings.HasSuffix(suffix, "/resume") && r.Method == http.MethodPost {
+		taskID := strings.TrimSuffix(suffix, "/resume")
+		if taskID == "" || strings.Contains(taskID, "/") {
+			writeA2AError(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "A2A task not found.")
+			return
+		}
+		var req ResumeTaskRequest
+		dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			writeA2AError(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "Invalid A2A task resume payload.")
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeA2AError(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "Unexpected trailing JSON data.")
+			return
+		}
+		if len(req.InputParts) == 0 {
+			writeA2AError(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "input_parts must be a non-empty JSON array.")
+			return
+		}
+		view, err := c.ResumeTask(reqCtx, id, taskID, req.InputParts)
+		if err != nil {
+			switch {
+			case errors.Is(err, port.ErrNotFound):
+				writeA2AError(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "A2A task not found.")
+			case errors.Is(err, ErrInvalidTaskStateMove):
+				writeA2AError(w, r, http.StatusConflict, "task_not_resumable", "invalid_request_error", err.Error())
+			case errors.Is(err, ErrPrivilegeOrBudget):
+				writeA2AError(w, r, http.StatusForbidden, "budget_or_privilege_exceeded", "permission_error", err.Error())
+			default:
+				writeA2AError(w, r, http.StatusBadGateway, "upstream_error", "upstream_error", err.Error())
+			}
 			return
 		}
 		writeA2AJSON(w, http.StatusOK, view)
@@ -594,9 +643,12 @@ func (c *TaskCoordinator) CreateTask(ctx context.Context, caller snapshot.KeyMat
 				return TaskView{}, lErr
 			}
 		}
-		parent, err := c.loadTaskTxForUpdate(ctx, tx, caller.Key.OrgID, caller.Key.ProjectID, req.ParentTaskID)
+		parent, parentVKeyID, parentEnvID, _, err := c.loadTaskWithMetaTx(ctx, tx, caller.Key.OrgID, caller.Key.ProjectID, req.ParentTaskID, true)
 		if err != nil {
 			return TaskView{}, err
+		}
+		if parentEnvID != caller.Key.EnvID || (parentVKeyID != "" && parentVKeyID != caller.Key.ID) {
+			return TaskView{}, fmt.Errorf("%w: parent task %s belongs to a different virtual key or environment", ErrPrivilegeOrBudget, req.ParentTaskID)
 		}
 		if isTerminalState(parent.State) {
 			return TaskView{}, fmt.Errorf("%w: parent task %s is terminal (%s)", ErrPrivilegeOrBudget, parent.TaskID, parent.State)
@@ -769,9 +821,10 @@ func (c *TaskCoordinator) CreateTask(ctx context.Context, caller snapshot.KeyMat
 			nextState = StateCompleted
 		}
 		doneView, trErr := c.TransitionTask(ctx, caller.Key.OrgID, caller.Key.ProjectID, taskID, TaskTransitionRequest{
-			State:       nextState,
-			SpentMicros: upResp.SpentMicros,
-			Artifacts:   upResp.Artifacts,
+			State:         nextState,
+			PromptMessage: upResp.PromptMessage,
+			SpentMicros:   upResp.SpentMicros,
+			Artifacts:     upResp.Artifacts,
 		})
 		if trErr != nil {
 			if failedView, fErr := c.TransitionTask(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID, TaskTransitionRequest{State: StateFailed}); fErr == nil {
@@ -974,13 +1027,13 @@ func (c *TaskCoordinator) ListAdminTasksPage(ctx context.Context, orgID string, 
 		}
 		var chain []string
 		_ = json.Unmarshal([]byte(chainJSON), &chain)
-		var artifacts []map[string]any
-		_ = json.Unmarshal([]byte(artifactsJSON), &artifacts)
+		promptMsg, artifacts := splitPromptAndArtifacts(artifactsJSON)
 		v := TaskView{
 			TaskID:              id,
 			TargetAgentID:       agentID,
 			TargetAgentSlug:     agentSlug,
 			State:               dbStateToAPI(dbState),
+			PromptMessage:       promptMsg,
 			HopCount:            hop,
 			CallChainIDs:        chain,
 			TraceRootID:         traceRoot,
@@ -1016,13 +1069,28 @@ func (c *TaskCoordinator) ListAdminTasksPage(ctx context.Context, orgID string, 
 	return page, nil
 }
 
+type taskAuditAttribution struct {
+	actorID    string
+	actorKind  string
+	entryPoint string
+	eventType  string
+}
+
+func defaultDataPlaneTaskAudit() taskAuditAttribution {
+	return taskAuditAttribution{
+		actorKind:  "VIRTUAL_KEY",
+		entryPoint: port.AuditEntryPointDataPlaneGuard,
+		eventType:  "a2a.task.transitioned",
+	}
+}
+
 // TransitionTask advances SM-09 state atomically, persists artifacts & settled_cost_micros,
 // settles/releases FinOps sub-budget holds fail-closed before marking terminal, and broadcasts SSE updates.
 func (c *TaskCoordinator) TransitionTask(ctx context.Context, orgID, projectID, taskID string, req TaskTransitionRequest) (TaskView, error) {
-	return c.transitionTaskInternal(ctx, orgID, projectID, taskID, "", req)
+	return c.transitionTaskInternal(ctx, orgID, projectID, taskID, "", defaultDataPlaneTaskAudit(), req)
 }
 
-func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, projectID, taskID, requiredCallerKeyID string, req TaskTransitionRequest) (TaskView, error) {
+func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, projectID, taskID, requiredCallerKeyID string, auditMeta taskAuditAttribution, req TaskTransitionRequest) (TaskView, error) {
 	targetAPI := normalizeSM09State(req.State)
 	if targetAPI == "" {
 		return TaskView{}, fmt.Errorf("%w: unknown state %q", ErrInvalidTaskStateMove, req.State)
@@ -1045,6 +1113,9 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 			return TaskView{}, err
 		}
 		cur, callerVKeyID, envID, agentSlug, err = c.loadTaskWithMetaTx(ctx, rtx, orgID, projectID, taskID, false)
+		if err == nil && (targetAPI == StateCompleted || targetAPI == StateFailed) {
+			err = c.ensureNoActiveChildrenTx(ctx, rtx, orgID, taskID)
+		}
 		_ = rtx.Rollback()
 		if err != nil {
 			return TaskView{}, err
@@ -1105,10 +1176,15 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 	if len(req.Artifacts) > 0 {
 		mergedArtifacts = append(mergedArtifacts, req.Artifacts...)
 	}
-	if mergedArtifacts == nil {
-		mergedArtifacts = []map[string]any{}
+	nextPrompt := ""
+	if targetAPI == StateInputRequired {
+		nextPrompt = strings.TrimSpace(req.PromptMessage)
+		if nextPrompt == "" {
+			nextPrompt = cur.PromptMessage
+		}
 	}
-	artifactsBytes, err := json.Marshal(mergedArtifacts)
+	toPersist := encodeArtifactsWithPrompt(mergedArtifacts, nextPrompt)
+	artifactsBytes, err := json.Marshal(toPersist)
 	if err != nil {
 		return TaskView{}, err
 	}
@@ -1127,6 +1203,11 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 	if err := port.SetOrgRLSTx(ctx, tx, c.dialect, orgID); err != nil {
 		return TaskView{}, err
 	}
+	if targetAPI == StateCompleted || targetAPI == StateFailed {
+		if err := c.ensureNoActiveChildrenTx(ctx, tx, orgID, taskID); err != nil {
+			return TaskView{}, err
+		}
+	}
 	res, err := tx.ExecContext(ctx, port.Rebind(c.dialect, `
 		UPDATE a2a_tasks
 		SET state = ?, settled_cost_micros = ?, artifacts_json = ?, version = version + 1, updated_at_ms = ?, completed_at_ms = COALESCE(completed_at_ms, ?)
@@ -1139,18 +1220,42 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 	if aff, _ := res.RowsAffected(); aff == 0 {
 		return TaskView{}, port.ErrVersionConflict
 	}
-	_ = c.reg.appendAudit(ctx, tx, orgID, callerVKeyID, "VIRTUAL_KEY", port.AuditEntryPointDataPlaneGuard,
-		"a2a.task.transitioned", "a2a_task", taskID, taskID, map[string]any{
+	if targetAPI == StateCanceled {
+		if err := c.cascadeCancelDescendantsTx(ctx, tx, orgID, taskID, nowMs); err != nil {
+			return TaskView{}, err
+		}
+	}
+	actorID := strings.TrimSpace(auditMeta.actorID)
+	if actorID == "" {
+		actorID = callerVKeyID
+	}
+	actorKind := strings.TrimSpace(auditMeta.actorKind)
+	if actorKind == "" {
+		actorKind = "VIRTUAL_KEY"
+	}
+	entryPoint := auditMeta.entryPoint
+	if entryPoint == "" {
+		entryPoint = port.AuditEntryPointDataPlaneGuard
+	}
+	eventType := strings.TrimSpace(auditMeta.eventType)
+	if eventType == "" {
+		eventType = "a2a.task.transitioned"
+	}
+	if err := c.reg.appendAudit(ctx, tx, orgID, actorID, actorKind, entryPoint,
+		eventType, "a2a_task", taskID, taskID, map[string]any{
 			"from_state":   cur.State,
 			"to_state":     targetAPI,
 			"spent_micros": req.SpentMicros,
-		})
+		}); err != nil {
+		return TaskView{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return TaskView{}, err
 	}
 
 	updated := cur
 	updated.State = targetAPI
+	updated.PromptMessage = nextPrompt
 	updated.Version = cur.Version + 1
 	updated.UpdatedAt = time.UnixMilli(nowMs).UTC().Format(time.RFC3339Nano)
 	if isTerminalState(targetAPI) {
@@ -1173,13 +1278,14 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 		} else if nextState == "" {
 			nextState = StateCompleted
 		}
-		nextView, trErr := c.transitionTaskInternal(ctx, orgID, projectID, taskID, requiredCallerKeyID, TaskTransitionRequest{
-			State:       nextState,
-			SpentMicros: upResp.SpentMicros,
-			Artifacts:   upResp.Artifacts,
+		nextView, trErr := c.transitionTaskInternal(ctx, orgID, projectID, taskID, requiredCallerKeyID, auditMeta, TaskTransitionRequest{
+			State:         nextState,
+			PromptMessage: upResp.PromptMessage,
+			SpentMicros:   upResp.SpentMicros,
+			Artifacts:     upResp.Artifacts,
 		})
 		if trErr != nil {
-			if failedView, fErr := c.transitionTaskInternal(context.WithoutCancel(ctx), orgID, projectID, taskID, requiredCallerKeyID, TaskTransitionRequest{State: StateFailed}); fErr == nil {
+			if failedView, fErr := c.transitionTaskInternal(context.WithoutCancel(ctx), orgID, projectID, taskID, requiredCallerKeyID, auditMeta, TaskTransitionRequest{State: StateFailed}); fErr == nil {
 				updated = failedView
 			}
 			return updated, trErr
@@ -1190,9 +1296,71 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 	return updated, nil
 }
 
+// ResumeTask resumes an input-required task owned by the authenticated Data Plane caller Virtual Key.
+func (c *TaskCoordinator) ResumeTask(ctx context.Context, caller snapshot.KeyMatchResult, taskID string, inputParts []map[string]any) (TaskView, error) {
+	if caller.Key == nil {
+		return TaskView{}, fmt.Errorf("%w: caller virtual key required", ErrPrivilegeOrBudget)
+	}
+	if len(inputParts) == 0 {
+		return TaskView{}, errors.New("a2a: input_parts cannot be empty")
+	}
+	cur, err := c.getTaskForCaller(ctx, caller.Key.OrgID, caller.Key.ProjectID, taskID, caller.Key.ID)
+	if err != nil {
+		return TaskView{}, err
+	}
+	if cur.State != StateInputRequired {
+		return TaskView{}, fmt.Errorf("%w: task in state %s cannot be resumed (expected input-required)", ErrInvalidTaskStateMove, cur.State)
+	}
+	if !routeAllowlistPermitsA2A(caller.Key.AllowedRoutes, "/a2a/tasks/"+taskID+"/resume") {
+		return TaskView{}, fmt.Errorf("%w: virtual key route allowlist does not permit resuming task", ErrPrivilegeOrBudget)
+	}
+	return c.transitionTaskInternal(ctx, caller.Key.OrgID, caller.Key.ProjectID, taskID, caller.Key.ID, taskAuditAttribution{
+		actorID:    caller.Key.ID,
+		actorKind:  "VIRTUAL_KEY",
+		entryPoint: port.AuditEntryPointDataPlaneGuard,
+		eventType:  "a2a.task.transitioned",
+	}, TaskTransitionRequest{
+		State:      StateWorking,
+		InputParts: inputParts,
+	})
+}
+
+// ResumeAdminTask resumes an input-required A2A task from Control Plane Admin API within verified project scope.
+func (c *TaskCoordinator) ResumeAdminTask(ctx context.Context, orgID, projectID, taskID, actorID string, inputParts []map[string]any) (TaskView, error) {
+	if len(inputParts) == 0 {
+		return TaskView{}, errors.New("a2a: input_parts cannot be empty")
+	}
+	cur, err := c.GetTask(ctx, orgID, projectID, taskID)
+	if err != nil {
+		return TaskView{}, err
+	}
+	if cur.State != StateInputRequired {
+		return TaskView{}, fmt.Errorf("%w: task in state %s cannot be resumed (expected input-required)", ErrInvalidTaskStateMove, cur.State)
+	}
+	return c.transitionTaskInternal(ctx, orgID, projectID, taskID, "", taskAuditAttribution{
+		actorID:    actorID,
+		actorKind:  "PRINCIPAL",
+		entryPoint: port.AuditEntryPointAdminAPI,
+		eventType:  "a2a.task.resumed",
+	}, TaskTransitionRequest{
+		State:      StateWorking,
+		InputParts: inputParts,
+	})
+}
+
+// CancelAdminTask cancels a non-terminal A2A task from Control Plane Admin API within verified project scope.
+func (c *TaskCoordinator) CancelAdminTask(ctx context.Context, orgID, projectID, taskID, actorID string) (TaskView, error) {
+	return c.transitionTaskInternal(ctx, orgID, projectID, taskID, "", taskAuditAttribution{
+		actorID:    actorID,
+		actorKind:  "PRINCIPAL",
+		entryPoint: port.AuditEntryPointAdminAPI,
+		eventType:  "a2a.task.canceled_by_admin",
+	}, TaskTransitionRequest{State: StateCanceled})
+}
+
 // CancelTask cancels a non-terminal A2A task owned by callerVKeyID and releases any held sub-budget.
 func (c *TaskCoordinator) CancelTask(ctx context.Context, orgID, projectID, taskID, callerVKeyID string) (TaskView, error) {
-	return c.transitionTaskInternal(ctx, orgID, projectID, taskID, strings.TrimSpace(callerVKeyID), TaskTransitionRequest{State: StateCanceled})
+	return c.transitionTaskInternal(ctx, orgID, projectID, taskID, strings.TrimSpace(callerVKeyID), defaultDataPlaneTaskAudit(), TaskTransitionRequest{State: StateCanceled})
 }
 
 func (c *TaskCoordinator) loadTaskTx(ctx context.Context, tx *sql.Tx, orgID, projectID, taskID string) (TaskView, error) {
@@ -1237,13 +1405,13 @@ func (c *TaskCoordinator) loadTaskWithMetaTx(ctx context.Context, tx *sql.Tx, or
 	}
 	var chain []string
 	_ = json.Unmarshal([]byte(chainJSON), &chain)
-	var artifacts []map[string]any
-	_ = json.Unmarshal([]byte(artifactsJSON), &artifacts)
+	promptMsg, artifacts := splitPromptAndArtifacts(artifactsJSON)
 	v := TaskView{
 		TaskID:              id,
 		TargetAgentID:       agentID,
 		TargetAgentSlug:     agentSlug,
 		State:               dbStateToAPI(dbState),
+		PromptMessage:       promptMsg,
 		HopCount:            hop,
 		CallChainIDs:        chain,
 		TraceRootID:         traceRoot,
@@ -1260,6 +1428,45 @@ func (c *TaskCoordinator) loadTaskWithMetaTx(ctx context.Context, tx *sql.Tx, or
 		v.CompletedAt = time.UnixMilli(completedMs.Int64).UTC().Format(time.RFC3339Nano)
 	}
 	return v, vkeyID, envID, agentSlug, nil
+}
+
+const promptArtifactKey = "__tanpopo_prompt_message"
+
+func encodeArtifactsWithPrompt(artifacts []map[string]any, promptMsg string) []map[string]any {
+	out := make([]map[string]any, 0, len(artifacts)+1)
+	for _, a := range artifacts {
+		if a == nil {
+			continue
+		}
+		if _, isPrompt := a[promptArtifactKey]; isPrompt {
+			continue
+		}
+		out = append(out, a)
+	}
+	if trimmed := strings.TrimSpace(promptMsg); trimmed != "" {
+		out = append(out, map[string]any{promptArtifactKey: trimmed})
+	}
+	return out
+}
+
+func splitPromptAndArtifacts(artifactsJSON string) (string, []map[string]any) {
+	var raw []map[string]any
+	_ = json.Unmarshal([]byte(artifactsJSON), &raw)
+	promptMsg := ""
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		if item == nil {
+			continue
+		}
+		if v, ok := item[promptArtifactKey]; ok {
+			if s, okStr := v.(string); okStr {
+				promptMsg = strings.TrimSpace(s)
+			}
+			continue
+		}
+		out = append(out, item)
+	}
+	return promptMsg, out
 }
 
 func (c *TaskCoordinator) registerSubscriber(taskID string, sub *sseSubscriber) {
@@ -1461,17 +1668,38 @@ func (c *TaskCoordinator) resolveEffectivePolicyConstraints(caller snapshot.KeyM
 }
 
 func extractBearerVirtualKey(r *http.Request) string {
-	for _, hdr := range []string{"X-Tanpopo-Virtual-Key", "x-api-key"} {
-		if v := strings.TrimSpace(r.Header.Get(hdr)); strings.HasPrefix(v, "vk_tp_") {
-			return v
+	var candidates []string
+	for _, hdr := range []string{"X-Tanpopo-Virtual-Key", "X-Api-Key"} {
+		for _, raw := range r.Header.Values(hdr) {
+			v := strings.TrimSpace(raw)
+			if v == "" {
+				continue
+			}
+			if !strings.HasPrefix(v, "vk_tp_") {
+				return ""
+			}
+			candidates = append(candidates, v)
 		}
 	}
-	header := strings.TrimSpace(r.Header.Get("Authorization"))
-	kind, raw, found := strings.Cut(header, " ")
-	if !found || !strings.EqualFold(kind, "Bearer") || raw == "" || strings.ContainsAny(raw, " \t\r\n") {
+	for _, rawAuth := range r.Header.Values("Authorization") {
+		header := strings.TrimSpace(rawAuth)
+		if header == "" {
+			continue
+		}
+		kind, raw, found := strings.Cut(header, " ")
+		if !found || !strings.EqualFold(kind, "Bearer") {
+			return ""
+		}
+		tok := strings.TrimSpace(raw)
+		if tok == "" || strings.ContainsAny(tok, " \t\r\n") {
+			return ""
+		}
+		candidates = append(candidates, tok)
+	}
+	if len(candidates) != 1 {
 		return ""
 	}
-	return strings.TrimSpace(raw)
+	return candidates[0]
 }
 
 func containsPlane(allowed, want string) bool {
@@ -1633,3 +1861,41 @@ func (c *TaskCoordinator) sumCommittedChildSubBudgetsTx(ctx context.Context, tx 
 	return sum, nil
 }
 
+func (c *TaskCoordinator) ensureNoActiveChildrenTx(ctx context.Context, tx *sql.Tx, orgID, parentTaskID string) error {
+	var activeChildren int64
+	if err := tx.QueryRowContext(ctx, port.Rebind(c.dialect, `
+		SELECT COUNT(1)
+		FROM a2a_tasks
+		WHERE org_id = ? AND parent_task_id = ?
+		  AND state NOT IN ('COMPLETED', 'FAILED', 'CANCELED')`),
+		orgID, parentTaskID,
+	).Scan(&activeChildren); err != nil {
+		return err
+	}
+	if activeChildren > 0 {
+		return fmt.Errorf("%w: parent task %s has %d non-terminal child task(s)", ErrInvalidTaskStateMove, parentTaskID, activeChildren)
+	}
+	return nil
+}
+
+func (c *TaskCoordinator) cascadeCancelDescendantsTx(ctx context.Context, tx *sql.Tx, orgID, rootTaskID string, nowMs int64) error {
+	_, err := tx.ExecContext(ctx, port.Rebind(c.dialect, `
+		WITH RECURSIVE tree AS (
+			SELECT id FROM a2a_tasks WHERE org_id = ? AND parent_task_id = ?
+			UNION ALL
+			SELECT t.id FROM a2a_tasks t
+			JOIN tree ON t.parent_task_id = tree.id
+			WHERE t.org_id = ?
+		)
+		UPDATE a2a_tasks
+		SET state = 'CANCELED',
+		    version = version + 1,
+		    updated_at_ms = ?,
+		    completed_at_ms = COALESCE(completed_at_ms, ?)
+		WHERE org_id = ?
+		  AND id IN (SELECT id FROM tree)
+		  AND state NOT IN ('COMPLETED', 'FAILED', 'CANCELED')`),
+		orgID, rootTaskID, orgID, nowMs, nowMs, orgID,
+	)
+	return err
+}

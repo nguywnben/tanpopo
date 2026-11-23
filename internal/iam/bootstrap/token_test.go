@@ -315,8 +315,11 @@ func TestBootstrapReloadValidationAndInsecurePermissions(t *testing.T) {
 	if booted, err := mgr2.IsBootstrapped(ctx); err != nil || !booted {
 		t.Fatalf("expected IsBootstrapped=true after completion, got %v err=%v", booted, err)
 	}
-	if len(sink.events) != 1 || sink.events[0].OrgID != nil || sink.events[0].EventType != "instance.bootstrap_completed" {
-		t.Fatalf("expected SYSTEM bootstrap audit event, got %+v", sink.events)
+	if len(sink.events) != 4 || sink.events[0].OrgID != nil || sink.events[0].EventType != "instance.bootstrap_completed" ||
+		sink.events[1].OrgID == nil || sink.events[1].EventType != "organization.created" ||
+		sink.events[2].OrgID == nil || sink.events[2].EventType != "project.created" ||
+		sink.events[3].OrgID == nil || sink.events[3].EventType != "environment.created" {
+		t.Fatalf("expected SYSTEM bootstrap audit event plus org-chain provisioning events, got %+v", sink.events)
 	}
 
 	// Verify nil-manager guards and short-password rejection on Complete.

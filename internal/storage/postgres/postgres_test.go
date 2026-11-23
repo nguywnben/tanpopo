@@ -803,9 +803,25 @@ func TestPostgresEdgePathsAndCoverage(t *testing.T) {
 		t.Fatalf("Open(non-TxAuditSink) = %v, want ErrInvalidInput", err)
 	}
 
+	if err := st.SetAuditSink(nil); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("SetAuditSink(nil) = %v, want ErrInvalidInput", err)
+	}
+	if err := st.SetAuditSink(&plainAuditSink{}); !errors.Is(err, port.ErrInvalidInput) {
+		t.Fatalf("SetAuditSink(non-TxAuditSink) = %v, want ErrInvalidInput", err)
+	}
+	if err := st.SetAuditSink(sink); err != nil {
+		t.Fatalf("SetAuditSink(sink): %v", err)
+	}
+
 	// Verify auto-generated IDs + invalid caller ID rejection + tenancy audit emission.
 	prevEvents := len(sink.events)
-	autoOrg, err := st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "auto-id-org", DisplayName: "Auto Org"})
+	actorCtx := port.WithAuditActor(ctx, port.AuditActor{
+		ActorKind:  "PRINCIPAL",
+		ActorID:    "usr_pg_cov",
+		EntryPoint: port.AuditEntryPointAdminAPI,
+		RequestID:  "req_pg_cov",
+	})
+	autoOrg, err := st.Tenancy().CreateOrganization(actorCtx, port.CreateOrgParams{Slug: "auto-id-org", DisplayName: "Auto Org"})
 	if err != nil || !strings.HasPrefix(autoOrg.ID, "org_") {
 		t.Fatalf("CreateOrganization auto-ID: %+v err=%v", autoOrg, err)
 	}

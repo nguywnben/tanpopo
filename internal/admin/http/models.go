@@ -94,6 +94,7 @@ type modelDeploymentDTO struct {
 	EnvID              string             `json:"env_id"`
 	LogicalModelID     string             `json:"logical_model_id"`
 	ConnectionID       string             `json:"connection_id"`
+	ConnectionState    string             `json:"connection_state,omitempty"`
 	UpstreamModelName  string             `json:"upstream_model_name"`
 	DataRegion         string             `json:"data_region"`
 	State              string             `json:"state"`
@@ -446,7 +447,7 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		SELECT md.id, md.logical_model_id, md.connection_id, md.upstream_model_name,
 		       md.pricing_nano_usd_json, md.state, md.idle_chunk_timeout_ms,
 		       md.first_byte_timeout_ms, md.version, md.created_at_ms,
-		       pc.data_region, pc.owner_project_id, pc.shared_project_ids_json
+		       pc.data_region, pc.state, pc.owner_project_id, pc.shared_project_ids_json
 		FROM model_deployments md
 		JOIN provider_connections pc ON pc.org_id = md.org_id AND pc.id = md.connection_id
 		WHERE md.org_id = ?`)
@@ -469,6 +470,7 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 			pricingJSON  string
 			state        string
 			dataRegion   string
+			connState    string
 			sharedJSON   string
 			ownerProj    sql.NullString
 			idleTO       int64
@@ -486,7 +488,7 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 			defer func() { _ = rows.Close() }()
 			for rows.Next() {
 				var rrow rawDepRow
-				if serr := rows.Scan(&rrow.id, &rrow.modelID, &rrow.connID, &rrow.upstreamName, &rrow.pricingJSON, &rrow.state, &rrow.idleTO, &rrow.fbTO, &rrow.ver, &rrow.createdMs, &rrow.dataRegion, &rrow.ownerProj, &rrow.sharedJSON); serr != nil {
+				if serr := rows.Scan(&rrow.id, &rrow.modelID, &rrow.connID, &rrow.upstreamName, &rrow.pricingJSON, &rrow.state, &rrow.idleTO, &rrow.fbTO, &rrow.ver, &rrow.createdMs, &rrow.dataRegion, &rrow.connState, &rrow.ownerProj, &rrow.sharedJSON); serr != nil {
 					scanErr = serr
 					return nil
 				}
@@ -546,6 +548,7 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 					EnvID:              envID,
 					LogicalModelID:     rrow.modelID,
 					ConnectionID:       rrow.connID,
+					ConnectionState:    mapConnectionStateOpenAPI(rrow.connState),
 					UpstreamModelName:  rrow.upstreamName,
 					DataRegion:         rrow.dataRegion,
 					State:              rrow.state,
@@ -641,14 +644,15 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var connRegion string
+	var connState string
 	var connOwnerProj sql.NullString
 	var connSharedJSON string
 	err = s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
 		return q.QueryRowContext(r.Context(), s.rebind(`
-		SELECT data_region, owner_project_id, shared_project_ids_json
+		SELECT data_region, state, owner_project_id, shared_project_ids_json
 		FROM provider_connections
 		WHERE org_id = ? AND id = ?`), orgID, connID,
-		).Scan(&connRegion, &connOwnerProj, &connSharedJSON)
+		).Scan(&connRegion, &connState, &connOwnerProj, &connSharedJSON)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider connection not found", false, nil)
@@ -688,6 +692,9 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 	state := catalog.DeployStateActiveHealthy
 	if req.ActivateImmediately != nil && !*req.ActivateImmediately {
 		state = catalog.DeployStateProvisioned
+	} else if connState != catalog.ConnStateActive {
+		writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "connection_not_active", "invalid_request_error", fmt.Sprintf("provider connection %s is %s; verify the connection before activating a deployment or pass activate_immediately=false", connID, mapConnectionStateOpenAPI(connState)), false, nil)
+		return
 	}
 	idleTO := req.IdleChunkTimeoutMs
 	if idleTO == 0 {
@@ -777,6 +784,7 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 		EnvID:              envID,
 		LogicalModelID:     modelID,
 		ConnectionID:       connID,
+		ConnectionState:    mapConnectionStateOpenAPI(connState),
 		UpstreamModelName:  upstreamName,
 		DataRegion:         connRegion,
 		State:              state,
@@ -835,7 +843,13 @@ func (s *Server) handleUpdateDeployment(w http.ResponseWriter, r *http.Request) 
 	if req.State != nil {
 		sVal := strings.ToUpper(strings.TrimSpace(*req.State))
 		switch sVal {
-		case catalog.DeployStateActiveHealthy, catalog.DeployStateDraining, catalog.DeployStateDisabled:
+		case catalog.DeployStateActiveHealthy:
+			if cur.ConnectionState != catalog.ConnStateActive {
+				writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "connection_not_active", "invalid_request_error", fmt.Sprintf("backing provider connection %s is %s; verify the connection before activating deployment", cur.ConnectionID, cur.ConnectionState), false, nil)
+				return
+			}
+			nextState = sVal
+		case catalog.DeployStateDraining, catalog.DeployStateDisabled:
 			nextState = sVal
 		default:
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "state must be ACTIVE_HEALTHY, DRAINING_MAINTENANCE, or DISABLED", false, nil)
@@ -1109,21 +1123,22 @@ func (s *Server) resolveDeploymentEnvID(ctx context.Context, orgID, depID string
 
 func (s *Server) loadDeploymentDTO(ctx context.Context, orgID, depID string) (modelDeploymentDTO, sql.NullString, string, error) {
 	var (
-		dto         modelDeploymentDTO
-		pricingJSON string
-		ownerProj   sql.NullString
-		sharedJSON  string
+		dto          modelDeploymentDTO
+		rawConnState string
+		pricingJSON  string
+		ownerProj    sql.NullString
+		sharedJSON   string
 	)
 	err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
 		return q.QueryRowContext(ctx, s.rebind(`
 		SELECT md.id, md.logical_model_id, md.connection_id, md.upstream_model_name,
 		       md.pricing_nano_usd_json, md.state, md.idle_chunk_timeout_ms,
 		       md.first_byte_timeout_ms, md.version,
-		       pc.data_region, pc.owner_project_id, pc.shared_project_ids_json
+		       pc.data_region, pc.state, pc.owner_project_id, pc.shared_project_ids_json
 		FROM model_deployments md
 		JOIN provider_connections pc ON pc.org_id = md.org_id AND pc.id = md.connection_id
 		WHERE md.org_id = ? AND md.id = ?`), orgID, depID,
-		).Scan(&dto.ID, &dto.LogicalModelID, &dto.ConnectionID, &dto.UpstreamModelName, &pricingJSON, &dto.State, &dto.IdleChunkTimeoutMs, &dto.FirstByteTimeoutMs, &dto.Version, &dto.DataRegion, &ownerProj, &sharedJSON)
+		).Scan(&dto.ID, &dto.LogicalModelID, &dto.ConnectionID, &dto.UpstreamModelName, &pricingJSON, &dto.State, &dto.IdleChunkTimeoutMs, &dto.FirstByteTimeoutMs, &dto.Version, &dto.DataRegion, &rawConnState, &ownerProj, &sharedJSON)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return modelDeploymentDTO{}, ownerProj, "", port.ErrNotFound
@@ -1135,6 +1150,7 @@ func (s *Server) loadDeploymentDTO(ctx context.Context, orgID, depID string) (mo
 	if envID == "" {
 		envID = s.resolveDeploymentEnvID(ctx, orgID, depID)
 	}
+	dto.ConnectionState = mapConnectionStateOpenAPI(rawConnState)
 	dto.EnvID = envID
 	dto.RateCard = rc
 	return dto, ownerProj, sharedJSON, nil

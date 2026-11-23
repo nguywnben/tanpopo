@@ -694,3 +694,314 @@ func TestA2AParentCarvingZeroHoldAndModelDenyFailClosed(t *testing.T) {
 		t.Fatalf("expected terminal parent delegation -> 403, got %d", termResp.StatusCode)
 	}
 }
+
+type stubResumeTransport struct {
+	calls int
+}
+
+func (s *stubResumeTransport) DispatchTask(_ context.Context, _ *a2a.AgentEndpoint, _ a2a.TaskView, inputParts []map[string]any) (a2a.UpstreamTaskResponse, error) {
+	s.calls++
+	if s.calls == 1 {
+		return a2a.UpstreamTaskResponse{
+			State:         a2a.StateInputRequired,
+			PromptMessage: "Provide customer approval ticket",
+		}, nil
+	}
+	return a2a.UpstreamTaskResponse{
+		State:       a2a.StateCompleted,
+		SpentMicros: 42000,
+		Artifacts:   []map[string]any{{"resumed_with": inputParts}},
+	}, nil
+}
+
+func TestDEF011_DataPlaneA2ATaskResumeWorkflow(t *testing.T) {
+	h := newA2AHarness(t, true)
+	tr := &stubResumeTransport{}
+	coord, err := a2a.NewTaskCoordinator(a2a.CoordinatorConfig{
+		Enabled:    true,
+		DB:         h.db,
+		Registry:   h.reg,
+		Snapshots:  h.snapshots,
+		Ledger:     h.ledgerSvc,
+		Transport:  tr,
+		Now:        h.clk.Now,
+	})
+	if err != nil {
+		t.Fatalf("NewTaskCoordinator: %v", err)
+	}
+	srv := httptest.NewServer(coord.Handler())
+	defer srv.Close()
+
+	// Seed provider-only Virtual Key (must be rejected on A2A plane with 403).
+	provOnly, err := h.vkeys.Create(h.ctx, vkey.CreateParams{
+		OrgID:     h.orgID,
+		ProjectID: h.projID,
+		EnvID:     h.envID,
+		Name:      "def011-provider-only",
+	})
+	if err != nil {
+		t.Fatalf("create provider-only key: %v", err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatalf("refresh snapshots: %v", err)
+	}
+
+	agent, err := h.reg.RegisterAgent(h.ctx, a2a.RegisterAgentParams{
+		OrgID: h.orgID, ProjectID: h.projID, AgentSlug: "approval-agent",
+		Name: "Approval Agent", EndpointURL: "https://approval.example.test/a2a",
+		DataRegion: "EU", MaxDelegationHops: 4,
+	})
+	if err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
+
+	doCustom := func(method, path, rawKey string, body any) *http.Response {
+		var buf bytes.Buffer
+		if body != nil {
+			_ = json.NewEncoder(&buf).Encode(body)
+		}
+		req, _ := http.NewRequestWithContext(h.ctx, method, srv.URL+path, &buf)
+		if rawKey != "" {
+			req.Header.Set("Authorization", "Bearer "+rawKey)
+		}
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, derr := srv.Client().Do(req)
+		if derr != nil {
+			t.Fatalf("%s %s: %v", method, path, derr)
+		}
+		return resp
+	}
+
+	// 1. Initial task dispatch stops in input-required with prompt_message.
+	cResp := doCustom(http.MethodPost, "/a2a/tasks", h.vkRaw, a2a.TaskCreateRequest{
+		TargetAgentID:       agent.ID,
+		SubBudgetHoldMicros: 200_000,
+		InputParts:          []map[string]any{{"text": "approve order"}},
+	})
+	if cResp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /a2a/tasks status=%d", cResp.StatusCode)
+	}
+	var paused a2a.TaskView
+	_ = json.NewDecoder(cResp.Body).Decode(&paused)
+	_ = cResp.Body.Close()
+	if paused.State != a2a.StateInputRequired || paused.PromptMessage != "Provide customer approval ticket" {
+		t.Fatalf("expected input-required with prompt_message, got %+v", paused)
+	}
+
+	// 2. Public POST /transition stays 404 (prevents forged state/spend).
+	forged := doCustom(http.MethodPost, "/a2a/tasks/"+paused.TaskID+"/transition", h.vkRaw, map[string]any{"state": "completed", "spent_micros": 0})
+	_ = forged.Body.Close()
+	if forged.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected /transition -> 404, got %d", forged.StatusCode)
+	}
+
+	// 3. Security checks on POST /a2a/tasks/{id}/resume:
+	// - Forged extra field ("state") rejected with 400
+	forgeField := doCustom(http.MethodPost, "/a2a/tasks/"+paused.TaskID+"/resume", h.vkRaw, map[string]any{"input_parts": []map[string]any{{"ok": true}}, "state": "completed"})
+	_ = forgeField.Body.Close()
+	if forgeField.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 on unknown field state forgery, got %d", forgeField.StatusCode)
+	}
+	// - Provider-only key rejected with 403
+	provDenial := doCustom(http.MethodPost, "/a2a/tasks/"+paused.TaskID+"/resume", provOnly.SecretKey, a2a.ResumeTaskRequest{InputParts: []map[string]any{{"ticket": "T-1"}}})
+	_ = provDenial.Body.Close()
+	if provDenial.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 for provider-only key resuming A2A task, got %d", provDenial.StatusCode)
+	}
+	// - Different A2A key in same project fails closed with 404 (owner isolation)
+	otherDenial := doCustom(http.MethodPost, "/a2a/tasks/"+paused.TaskID+"/resume", h.vkMiniRaw, a2a.ResumeTaskRequest{InputParts: []map[string]any{{"ticket": "T-1"}}})
+	_ = otherDenial.Body.Close()
+	if otherDenial.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for cross-key resume attempt, got %d", otherDenial.StatusCode)
+	}
+
+	// 4. Legitimate caller resume completes task atomically, clears prompt_message, and settles ledger.
+	resResp := doCustom(http.MethodPost, "/a2a/tasks/"+paused.TaskID+"/resume", h.vkRaw, a2a.ResumeTaskRequest{
+		InputParts: []map[string]any{{"ticket": "APPROVED-123"}},
+	})
+	if resResp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /a2a/tasks/{id}/resume status=%d", resResp.StatusCode)
+	}
+	var done a2a.TaskView
+	_ = json.NewDecoder(resResp.Body).Decode(&done)
+	_ = resResp.Body.Close()
+	if done.State != a2a.StateCompleted || done.SettledCostMicros != 42000 || done.PromptMessage != "" || len(done.Artifacts) != 1 {
+		t.Fatalf("expected completed task with 42000 cost and 1 artifact, got %+v", done)
+	}
+
+	// 5. Repeat resume on completed task must return 409 task_not_resumable.
+	dupResp := doCustom(http.MethodPost, "/a2a/tasks/"+paused.TaskID+"/resume", h.vkRaw, a2a.ResumeTaskRequest{
+		InputParts: []map[string]any{{"ticket": "AGAIN"}},
+	})
+	_ = dupResp.Body.Close()
+	if dupResp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 repeating resume on terminal task, got %d", dupResp.StatusCode)
+	}
+}
+
+func TestCoordinator_SecurityHardeningRound1(t *testing.T) {
+	h := newA2AHarness(t, true)
+	auditSink := &a2aAuditSink{}
+
+	otherEnv := "env_other_round1"
+	if _, err := h.db.ExecContext(h.ctx, `
+		INSERT INTO environments (id, org_id, project_id, slug, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, ?, 'staging-round1', 1, ?, ?)`,
+		otherEnv, h.orgID, h.projID, h.clk.Now().UnixMilli(), h.clk.Now().UnixMilli(),
+	); err != nil {
+		t.Fatalf("seed other env: %v", err)
+	}
+	otherEnvKey, err := h.vkeys.Create(h.ctx, vkey.CreateParams{
+		OrgID:         h.orgID,
+		ProjectID:     h.projID,
+		EnvID:         otherEnv,
+		Name:          "a2a-other-env",
+		AllowedPlanes: "A2A",
+	})
+	if err != nil {
+		t.Fatalf("create other env vkey: %v", err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatalf("snapshots.Refresh: %v", err)
+	}
+	snap := h.snapshots.Current()
+	if snap == nil {
+		t.Fatalf("snapshots.Current returned nil")
+	}
+	mainCaller, err := snap.AuthenticateKey(h.vkRaw, "", h.clk.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("AuthenticateKey main: %v", err)
+	}
+	otherEnvCaller, err := snap.AuthenticateKey(otherEnvKey.SecretKey, "", h.clk.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("AuthenticateKey otherEnv: %v", err)
+	}
+
+	reg, err := a2a.NewRegistry(a2a.RegistryConfig{
+		DB:           h.db,
+		Audit:        auditSink,
+		HostResolver: hermeticPublicResolver{},
+		Now:          h.clk.Now,
+	})
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	agent, err := reg.RegisterAgent(h.ctx, a2a.RegisterAgentParams{
+		OrgID: h.orgID, ProjectID: h.projID, AgentSlug: "sec-agent",
+		Name: "Security Agent", EndpointURL: "https://sec-agent.example.test/a2a",
+		DataRegion: "EU", MaxDelegationHops: 4,
+	})
+	if err != nil {
+		t.Fatalf("RegisterAgent parent: %v", err)
+	}
+	childAgent, err := reg.RegisterAgent(h.ctx, a2a.RegisterAgentParams{
+		OrgID: h.orgID, ProjectID: h.projID, AgentSlug: "sec-child-agent",
+		Name: "Security Child Agent", EndpointURL: "https://sec-child.example.test/a2a",
+		DataRegion: "EU", MaxDelegationHops: 4,
+	})
+	if err != nil {
+		t.Fatalf("RegisterAgent child: %v", err)
+	}
+	coord, err := a2a.NewTaskCoordinator(a2a.CoordinatorConfig{
+		Enabled:   true,
+		DB:        h.db,
+		Registry:  reg,
+		Snapshots: h.snapshots,
+		Ledger:    h.ledgerSvc,
+		Now:       h.clk.Now,
+	})
+	if err != nil {
+		t.Fatalf("NewTaskCoordinator: %v", err)
+	}
+	srv := httptest.NewServer(coord.Handler())
+	defer srv.Close()
+
+	// 1. Conflicting credential headers must fail closed with 401.
+	reqBody, _ := json.Marshal(a2a.TaskCreateRequest{
+		TargetAgentID:       agent.ID,
+		SubBudgetHoldMicros: 50_000,
+		InputParts:          []map[string]any{{"text": "hi"}},
+	})
+	req, _ := http.NewRequestWithContext(h.ctx, http.MethodPost, srv.URL+"/a2a/tasks", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+h.vkRaw)
+	req.Header.Set("X-Api-Key", h.vkRaw)
+	cResp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("Do conflicting headers: %v", err)
+	}
+	_ = cResp.Body.Close()
+	if cResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on duplicate/conflicting credential headers, got %d", cResp.StatusCode)
+	}
+
+	// 2. Parent + Child task creation and active-child termination ordering.
+	parent, err := coord.CreateTask(h.ctx, mainCaller, a2a.TaskCreateRequest{
+		TargetAgentID:       agent.ID,
+		SubBudgetHoldMicros: 100_000,
+		InputParts:          []map[string]any{{"text": "root"}},
+	}, "", "")
+	if err != nil {
+		t.Fatalf("CreateTask parent: %v", err)
+	}
+	child, err := coord.CreateTask(h.ctx, mainCaller, a2a.TaskCreateRequest{
+		ParentTaskID:        parent.TaskID,
+		TargetAgentID:       childAgent.ID,
+		SubBudgetHoldMicros: 40_000,
+		InputParts:          []map[string]any{{"text": "child-1"}},
+	}, "", "")
+	if err != nil {
+		t.Fatalf("CreateTask child: %v", err)
+	}
+
+	// Cross-env caller spawning under parent must fail with ErrPrivilegeOrBudget.
+	_, err = coord.CreateTask(h.ctx, otherEnvCaller, a2a.TaskCreateRequest{
+		ParentTaskID:        parent.TaskID,
+		TargetAgentID:       childAgent.ID,
+		SubBudgetHoldMicros: 10_000,
+		InputParts:          []map[string]any{{"text": "cross-env"}},
+	}, "", "")
+	if !errors.Is(err, a2a.ErrPrivilegeOrBudget) {
+		t.Fatalf("expected ErrPrivilegeOrBudget for cross-env child spawn, got %v", err)
+	}
+
+	// Completing parent while child is non-terminal must fail with ErrInvalidTaskStateMove
+	// and write zero failure-case audit events.
+	if _, err := coord.TransitionTask(h.ctx, h.orgID, h.projID, parent.TaskID, a2a.TaskTransitionRequest{State: a2a.StateWorking}); err != nil {
+		t.Fatalf("parent -> working: %v", err)
+	}
+	beforeAudit := auditSink.buf.String()
+	_, err = coord.TransitionTask(h.ctx, h.orgID, h.projID, parent.TaskID, a2a.TaskTransitionRequest{
+		State: a2a.StateCompleted,
+	})
+	if !errors.Is(err, a2a.ErrInvalidTaskStateMove) {
+		t.Fatalf("expected ErrInvalidTaskStateMove completing parent while child active, got %v", err)
+	}
+	if auditSink.buf.String() != beforeAudit {
+		t.Fatalf("expected zero audit events emitted on failed transitions, delta=%q", strings.TrimPrefix(auditSink.buf.String(), beforeAudit))
+	}
+
+	// Admin-canceling parent must atomically cascade-cancel active child and emit PRINCIPAL/admin_api attribution.
+	afterFail := auditSink.buf.String()
+	canceledParent, err := coord.CancelAdminTask(h.ctx, h.orgID, h.projID, parent.TaskID, "usr_admin_round1")
+	if err != nil {
+		t.Fatalf("CancelAdminTask cascade: %v", err)
+	}
+	if canceledParent.State != a2a.StateCanceled {
+		t.Fatalf("expected canceled parent, got %+v", canceledParent)
+	}
+	canceledChild, err := coord.GetTask(h.ctx, h.orgID, h.projID, child.TaskID)
+	if err != nil || canceledChild.State != a2a.StateCanceled {
+		t.Fatalf("expected child atomically canceled with parent, err=%v child=%+v", err, canceledChild)
+	}
+	adminDelta := strings.TrimPrefix(auditSink.buf.String(), afterFail)
+	if !strings.Contains(adminDelta, `"EventType":"a2a.task.canceled_by_admin"`) ||
+		!strings.Contains(adminDelta, `"ActorID":"usr_admin_round1"`) ||
+		!strings.Contains(adminDelta, `"ActorKind":"PRINCIPAL"`) ||
+		!strings.Contains(adminDelta, `"EntryPoint":"`+port.AuditEntryPointAdminAPI+`"`) {
+		t.Fatalf("expected atomic PRINCIPAL/%s cancel audit, got %s", port.AuditEntryPointAdminAPI, adminDelta)
+	}
+}
+

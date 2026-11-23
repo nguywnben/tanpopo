@@ -47,7 +47,7 @@ func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Reques
 	storageEngine := "sqlite_wal"
 	var walBytes int64
 	if s.dialect == port.DialectPostgres {
-		storageEngine = "postgresql"
+		storageEngine = "postgres"
 	} else {
 		reporter, ok := s.storage.(sqliteWALReporter)
 		if !ok {
@@ -80,7 +80,7 @@ func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Reques
 			health = "unhealthy"
 		}
 	}
-	backupSupported, backupReason := backupAvailability()
+	backupSupported, backupReason := s.backupAvailability()
 	nodeID := "standalone"
 	if s.dialect == port.DialectPostgres {
 		nodeID = "primary"
@@ -94,11 +94,30 @@ func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-func backupAvailability() (bool, string) {
-	if backup.PlatformSupported() {
-		return true, ""
+func (s *Server) backupAvailability() (bool, string) {
+	if !backup.PlatformSupported() {
+		return false, backup.PlatformSupportUnavailableReason()
 	}
-	return false, backup.PlatformSupportUnavailableReason()
+	if _, ok := s.storage.(sqliteSnapshotter); !ok {
+		return false, "Console snapshot backups currently support SQLite storage only; use PostgreSQL backup tooling for PostgreSQL deployments"
+	}
+	if s.vault == nil {
+		return false, "Encrypted backup requires an initialized KMS/vault"
+	}
+	if strings.TrimSpace(s.lockfilePath) == "" || strings.TrimSpace(s.configPath) == "" || s.installer == nil || strings.TrimSpace(s.installer.ArtifactRoot()) == "" {
+		return false, "backup requires configured tanpopo.lock, tanpopo.yaml, and extension artifact store"
+	}
+	for _, filePath := range []string{s.lockfilePath, s.configPath} {
+		info, err := os.Lstat(filePath)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return false, "backup requires regular non-symlink tanpopo.lock and tanpopo.yaml files on disk"
+		}
+	}
+	artInfo, err := os.Lstat(s.installer.ArtifactRoot())
+	if err != nil || artInfo.Mode()&os.ModeSymlink != 0 || !artInfo.IsDir() {
+		return false, "backup requires a real non-symlink extension plugins directory on disk"
+	}
+	return true, ""
 }
 
 func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +125,7 @@ func (s *Server) handleCreateEncryptedBackup(w http.ResponseWriter, r *http.Requ
 	if !ok || !s.requireInstanceOperator(w, r, sc, rbac.ActionOpsWrite) {
 		return
 	}
-	backupSupported, backupReason := backupAvailability()
+	backupSupported, backupReason := s.backupAvailability()
 	if !backupSupported {
 		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", backupReason, true, nil)
 		return

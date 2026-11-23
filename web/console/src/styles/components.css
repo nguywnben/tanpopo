@@ -753,6 +753,20 @@
     min-width: 0;
   }
 
+  /* Prevent WebKit top-layer <dialog> promotion from freezing @starting-style offscreen (DEF-009) */
+  dialog.astryx-drawer[open] {
+    transform: translateX(0);
+    opacity: 1;
+    transition: none;
+  }
+
+  @starting-style {
+    dialog.astryx-drawer[open] {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
   /* Overlay Dialog / Drawer Body & Footer Layout */
   .tp-overlay-body {
     display: flex;

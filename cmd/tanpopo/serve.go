@@ -29,6 +29,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/extension/builtin"
 	"github.com/nguywnben/tanpopo/internal/extension/installer"
+	lockfilepkg "github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	extport "github.com/nguywnben/tanpopo/internal/extension/port"
 	"github.com/nguywnben/tanpopo/internal/extension/registry"
 	"github.com/nguywnben/tanpopo/internal/extension/sidecar"
@@ -264,6 +265,12 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	if err != nil {
 		closeStore()
 		return nil, nil, fmt.Errorf("initialize audit logger: %w", err)
+	}
+	if sinkSetter, ok := store.(interface{ SetAuditSink(port.AuditSink) error }); ok {
+		if setErr := sinkSetter.SetAuditSink(auditLog); setErr != nil {
+			closeStore()
+			return nil, nil, fmt.Errorf("wire audit sink to store: %w", setErr)
+		}
 	}
 	var ledgerService *ledger.Service
 	activeKEKID := envOr("TANPOPO_MASTER_KEY_ID", "kek_v1")
@@ -665,6 +672,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		sidecarFactory = newProductionSidecarFactory(sidecarSocketDir, sidecarCA, sidecarClientCert, auditLog)
 	}
 	mux := http.NewServeMux()
+	var a2aCoordinator *a2a.TaskCoordinator
 	if role == "all" || role == "data-plane" {
 		mcpServer, serverErr := mcphub.NewServer(mcphub.Config{
 			DB: db, Snapshots: snaps, Broker: blindBroker, Audit: auditLog,
@@ -689,7 +697,8 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		}()
 		mux.Handle("/mcp", mcpServer)
 
-		a2aCoordinator, a2aErr := a2a.NewTaskCoordinator(a2a.CoordinatorConfig{
+		var a2aErr error
+		a2aCoordinator, a2aErr = a2a.NewTaskCoordinator(a2a.CoordinatorConfig{
 			Enabled:    a2aEnabled,
 			DB:         db,
 			Snapshots:  snaps,
@@ -849,17 +858,41 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 				Capabilities:    pkg.Capabilities,
 			})
 		}
+		configFileEnv := strings.TrimSpace(os.Getenv("TANPOPO_CONFIG"))
+		if configFileEnv == "" {
+			configFileEnv = strings.TrimSpace(os.Getenv("TANPOPO_CONFIG_FILE"))
+		}
+		configPath := configFileEnv
+		if configPath == "" {
+			configPath = filepath.Join(dataDir, "tanpopo.yaml")
+		}
+		if !isPostgres {
+			if configFileEnv == "" {
+				if _, lerr := os.Lstat(configPath); os.IsNotExist(lerr) {
+					if f, oerr := os.OpenFile(configPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600); oerr == nil {
+						_, _ = f.WriteString("{}\n")
+						_ = f.Close()
+					}
+				}
+			}
+			if strings.TrimSpace(os.Getenv("TANPOPO_LOCK_FILE")) == "" {
+				if _, lerr := os.Lstat(lockfile); os.IsNotExist(lerr) {
+					_ = lockfilepkg.WriteAtomic(lockfile, lockfilepkg.NewEmpty(time.Now().UTC()))
+				}
+			}
+		}
 		adminServer, err := adminhttp.NewServer(adminhttp.ServerConfig{
 			Store: store, DB: db, Bootstrap: bootstrapManager, Auth: authService, VKeys: vkeys, Ledgers: ledgerService,
 			Vault: vaultStore, Snapshots: snaps, KillSwitch: killSwitch, Catalog: catalogRepo,
 			Installer: installerService, MarketplaceCatalog: marketplaceCatalog,
+			LockfilePath: lockfile, ConfigPath: configPath,
 			ArchiveResolver: newRuntimeArchiveResolverWithBuiltins(archiveRoot, offlineMode, registryStore, vaultOCIRegistryCredentialResolver{db: db, vault: vaultStore, cap: brokerUnsealCap}, builtinCatalog, builtinSigner),
 			WebhookEnqueue: func(ctx context.Context, orgID, projectID, eventType string, payload json.RawMessage) error {
 				_, enqueueErr := webhookDispatcher.Enqueue(ctx, webhook.Event{OrgID: orgID, ProjectID: projectID, Type: eventType, Payload: payload})
 				return enqueueErr
 			},
 			OnConfigChange: publishChangeFn,
-			Broker:         blindBroker, OAuth: oauthService, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog,
+			Broker:         blindBroker, OAuth: oauthService, A2ACoordinator: a2aCoordinator, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog,
 			OfflineMode: offlineMode, MultiOrgDisabled: multiOrgDisabled,
 			TrustedProxyCIDRs: parseEnvCSV("TANPOPO_TRUSTED_PROXY_CIDRS"),
 			Version:           version,

@@ -1,25 +1,53 @@
-import {useCallback, useEffect, useState} from 'react';
-import {Download} from 'lucide-react';
-import {exportUsageChargeback, getUsageChargebackSummary, listBudgets, updateBudget} from '../../api/managementClient';
+import {useCallback, useEffect, useState, type FormEvent} from 'react';
+import {Download, Plus} from 'lucide-react';
+import {
+  createBudget,
+  exportUsageChargeback,
+  getUsageChargebackSummary,
+  listBudgets,
+  listVirtualKeys,
+  updateBudget,
+} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {useI18n} from '../../i18n/I18nProvider';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
+import {Drawer} from '../../ui/Overlays';
 import {Banner, Button, MetricStrip, SectionHeader, SelectField, StatusPill, Tabs, TextField, formatOperationalState} from '../../ui/primitives';
 
 type Budget = components['schemas']['BudgetResource'];
 type Chargeback = components['schemas']['UsageChargebackRow'];
 type Role = components['schemas']['RbacRole'];
+type Project = components['schemas']['Project'];
+type Environment = components['schemas']['Environment'];
+type VirtualKey = components['schemas']['VirtualKeySummary'];
 type GroupBy = 'project' | 'env' | 'key' | 'model';
 
 const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
 
-export function FinOpsPage({pathname, projectId, roles}: {pathname: string; projectId: string; roles: Role[]}) {
+export function FinOpsPage({
+  pathname,
+  activeOrgId = '',
+  projects = [],
+  environments = [],
+  projectId,
+  environmentId = '',
+  roles,
+}: {
+  pathname: string;
+  activeOrgId?: string;
+  projects?: Project[];
+  environments?: Environment[];
+  projectId: string;
+  environmentId?: string;
+  roles: Role[];
+}) {
   const {navigate} = useRouter();
   const {t, formatNumber, formatMicroUSD} = useI18n();
   const activeTab = pathname.startsWith('/finops/chargeback') ? 'chargeback' : 'budgets';
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [rows, setRows] = useState<Chargeback[]>([]);
+  const [keys, setKeys] = useState<VirtualKey[]>([]);
   const [groupBy, setGroupBy] = useState<GroupBy>('project');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -27,14 +55,22 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
+  const [createOpen, setCreateOpen] = useState(false);
+  const [scopeTier, setScopeTier] = useState<Budget['scope_tier']>(projectId ? 'PROJECT' : 'ORGANIZATION');
+  const [scopeId, setScopeId] = useState(projectId || activeOrgId);
+  const [period, setPeriod] = useState<Budget['period']>('MONTHLY');
+  const [hardLimitText, setHardLimitText] = useState('100000000');
+  const [warningsText, setWarningsText] = useState('50, 80, 95');
+
   const canManage = roles.some(role => manageRoles.includes(role));
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError('');
-    const [budgetsRes, chargebackRes] = await Promise.allSettled([
+    const [budgetsRes, chargebackRes, keysRes] = await Promise.allSettled([
       listBudgets(projectId),
       getUsageChargebackSummary(groupBy),
+      projectId && environmentId ? listVirtualKeys(projectId, environmentId) : Promise.resolve([]),
     ]);
     const failures: string[] = [];
     if (budgetsRes.status === 'fulfilled') {
@@ -48,14 +84,68 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
     } else {
       failures.push(t('finops.loadChargebackFailed', {error: errText(chargebackRes.reason, t)}));
     }
+    if (keysRes.status === 'fulfilled') {
+      setKeys(keysRes.value);
+    }
     setError(failures.join(' '));
     setLoading(false);
-  }, [projectId, groupBy, t]);
+  }, [projectId, environmentId, groupBy, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  function openCreateBudget() {
+    const initialTier: Budget['scope_tier'] = projectId ? 'PROJECT' : 'ORGANIZATION';
+    setScopeTier(initialTier);
+    setScopeId(initialTier === 'PROJECT' ? projectId : activeOrgId);
+    setPeriod('MONTHLY');
+    setHardLimitText('100000000');
+    setWarningsText('50, 80, 95');
+    setCreateOpen(true);
+  }
+
+  async function handleCreateBudget(event: FormEvent) {
+    event.preventDefault();
+    const hardLimit = Number.parseInt(hardLimitText.trim(), 10);
+    if (!Number.isSafeInteger(hardLimit) || hardLimit < 0) {
+      setError(t('finops.invalidLimit'));
+      return;
+    }
+    const targetScopeId = scopeId.trim();
+    if (!targetScopeId) {
+      setError(t('finops.scopeIdRequired'));
+      return;
+    }
+    const parsedWarnings = [...new Set(
+      warningsText
+        .split(',')
+        .map(v => Number.parseInt(v.trim(), 10))
+        .filter(n => Number.isSafeInteger(n) && n >= 1 && n <= 100),
+    )];
+    const safeSlug = `bgt_${scopeTier.toLowerCase()}_${targetScopeId.replace(/[^a-zA-Z0-9_-]/g, '_')}_${period.toLowerCase()}`;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await createBudget(safeSlug, {
+        scope_tier: scopeTier,
+        scope_id: targetScopeId,
+        hard_limit_micros: hardLimit,
+        period,
+        soft_warning_percents: parsedWarnings.length > 0 ? parsedWarnings : [50, 80, 95],
+      });
+      setCreateOpen(false);
+      await refresh();
+      setNotice(t('finops.budgetCreated', {scope: scopeTier, id: targetScopeId}));
+    } catch (cause) {
+      setError(errText(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveLimit(budget: Budget) {
-    const nextValue = Number(drafts[budget.id]);
+    const rawLimit = (drafts[budget.id] ?? '').trim();
+    const nextValue = rawLimit === '' ? Number.NaN : Number(rawLimit);
     if (!Number.isSafeInteger(nextValue) || nextValue < 0) {
       setError(t('finops.invalidLimit'));
       return;
@@ -79,11 +169,11 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
     setError('');
     setNotice('');
     try {
-      const blob = await exportUsageChargeback(format);
+      const blob = await exportUsageChargeback(format, groupBy);
       const href = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = href;
-      anchor.download = `tanpopo-chargeback.${format}`;
+      anchor.download = `tanpopo-chargeback-${groupBy}.${format}`;
       anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(href), 1000);
       setNotice(t('finops.exported', {format: format.toUpperCase()}));
@@ -94,10 +184,14 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
     }
   }
 
-  const totalExact = budgets.reduce((sum, item) => sum + item.settled_exact_micros, 0);
-  const totalEstimated = budgets.reduce((sum, item) => sum + item.settled_estimated_micros, 0);
-  const totalHolds = budgets.reduce((sum, item) => sum + item.reserved_hold_micros, 0);
-  const totalUnmetered = budgets.reduce((sum, item) => sum + (item.unmetered_request_count ?? 0), 0);
+  const totalExact = rows.reduce((sum, item) => sum + item.exact_micro_usd, 0);
+  const totalEstimated = rows.reduce((sum, item) => sum + item.estimated_micro_usd, 0);
+  const totalUnmetered = rows.reduce((sum, item) => sum + item.unmetered_request_count, 0);
+  const holdTierPriority: Budget['scope_tier'][] = ['ORGANIZATION', 'PROJECT', 'ENVIRONMENT', 'VIRTUAL_KEY'];
+  const holdTier = holdTierPriority.find(tier => budgets.some(item => item.scope_tier === tier));
+  const totalHolds = holdTier
+    ? budgets.filter(item => item.scope_tier === holdTier).reduce((sum, item) => sum + item.reserved_hold_micros, 0)
+    : 0;
 
   return (
     <div className="tp-stack">
@@ -115,6 +209,12 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
             <Download size={14} aria-hidden="true" />
             <span>{t('finops.exportJson')}</span>
           </Button>
+          {canManage ? (
+            <Button variant="primary" size="sm" disabled={busy} onClick={openCreateBudget}>
+              <Plus size={14} aria-hidden="true" />
+              <span>{t('finops.createBudget')}</span>
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -150,6 +250,14 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
             rowKey={row => row.id}
             emptyTitle={t('finops.emptyBudgetsTitle')}
             emptyDescription={t('finops.emptyBudgetsDesc')}
+            emptyAction={
+              canManage ? (
+                <Button variant="primary" size="md" disabled={busy} onClick={openCreateBudget}>
+                  <Plus size={14} aria-hidden="true" />
+                  <span>{t('finops.createBudget')}</span>
+                </Button>
+              ) : undefined
+            }
             columns={[
               {
                 id: 'scope',
@@ -271,6 +379,96 @@ export function FinOpsPage({pathname, projectId, roles}: {pathname: string; proj
           />
         </section>
       )}
+
+      <Drawer
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title={t('finops.createBudgetTitle')}
+        subtitle={t('finops.createBudgetSubtitle')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCreateOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" form="tp-create-budget-form" variant="primary" loading={busy} disabled={!scopeId.trim()}>
+              {t('finops.createBudget')}
+            </Button>
+          </>
+        }
+      >
+        <form id="tp-create-budget-form" className="tp-stack" onSubmit={handleCreateBudget}>
+          <SelectField
+            label={t('finops.col.scope')}
+            value={scopeTier}
+            onChange={next => {
+              const tier = next as Budget['scope_tier'];
+              setScopeTier(tier);
+              if (tier === 'ORGANIZATION') setScopeId(activeOrgId);
+              else if (tier === 'PROJECT') setScopeId(projectId || projects[0]?.id || '');
+              else if (tier === 'ENVIRONMENT') setScopeId(environmentId || environments[0]?.id || '');
+              else setScopeId(keys[0]?.id || '');
+            }}
+            options={[
+              {value: 'ORGANIZATION', label: t('finops.scope.ORGANIZATION')},
+              {value: 'PROJECT', label: t('finops.scope.PROJECT')},
+              {value: 'ENVIRONMENT', label: t('finops.scope.ENVIRONMENT')},
+              {value: 'VIRTUAL_KEY', label: t('finops.scope.VIRTUAL_KEY')},
+            ]}
+          />
+          {scopeTier === 'PROJECT' && projects.length > 0 ? (
+            <SelectField
+              label={t('finops.scopeTarget')}
+              value={scopeId}
+              onChange={setScopeId}
+              options={projects.map(p => ({value: p.id, label: `${p.name} (${p.slug})`}))}
+            />
+          ) : scopeTier === 'ENVIRONMENT' && environments.length > 0 ? (
+            <SelectField
+              label={t('finops.scopeTarget')}
+              value={scopeId}
+              onChange={setScopeId}
+              options={environments.map(e => ({value: e.id, label: `${e.name} (${e.slug})`}))}
+            />
+          ) : scopeTier === 'VIRTUAL_KEY' && keys.length > 0 ? (
+            <SelectField
+              label={t('finops.scopeTarget')}
+              value={scopeId}
+              onChange={setScopeId}
+              options={keys.map(k => ({value: k.id, label: `${k.name} (${k.key_prefix}…${k.last_four})`}))}
+            />
+          ) : (
+            <TextField
+              label={t('finops.scopeTarget')}
+              required
+              value={scopeId}
+              onChange={event => setScopeId(event.target.value)}
+            />
+          )}
+          <div className="tp-grid-2">
+            <SelectField
+              label={t('finops.col.period')}
+              value={period}
+              onChange={next => setPeriod(next as Budget['period'])}
+              options={[
+                {value: 'MONTHLY', label: 'MONTHLY'},
+                {value: 'DAILY', label: 'DAILY'},
+              ]}
+            />
+            <TextField
+              label={t('finops.col.hardLimit')}
+              type="number"
+              min={0}
+              required
+              value={hardLimitText}
+              onChange={event => setHardLimitText(event.target.value)}
+            />
+          </div>
+          <TextField
+            label={t('finops.warningPercents')}
+            placeholder="50, 80, 95"
+            value={warningsText}
+            onChange={event => setWarningsText(event.target.value)}
+          />
+        </form>
+      </Drawer>
     </div>
   );
 }

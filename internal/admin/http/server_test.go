@@ -83,6 +83,9 @@ func newAdminTestHarness(t *testing.T) *adminTestHarness {
 	if err != nil {
 		t.Fatalf("audit.NewLogger: %v", err)
 	}
+	if err := st.SetAuditSink(auditLog); err != nil {
+		t.Fatalf("st.SetAuditSink: %v", err)
+	}
 
 	// Re-open or wrap with real audit sink for Tenancy operations too.
 	// Note st already exposes st.RawDB(); attach auditLog to services and ServerConfig.

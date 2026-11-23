@@ -1429,6 +1429,12 @@ func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *c
 	}, broker.HostEgressConstraint{NarrowPolicy: narrowPolicy})
 	if err != nil {
 		code, safeMsg := classifySafeProbeError(err)
+		if !isConnectionSSRFOrConfigErr(err) {
+			_, _ = s.catalog.RecordRuntimeHealthOutcome(ctx, orgID, cur.ID, &extport.CanonicalProviderError{
+				CanonicalCode:      code,
+				RetryablePreStream: true,
+			})
+		}
 		return &extport.ValidationVerdict{
 			Valid:            false,
 			FailureCode:      code,
@@ -1452,8 +1458,27 @@ func (s *Server) probeActiveConnection(ctx context.Context, orgID string, cur *c
 	}
 	if verdict.Valid {
 		_, _ = s.catalog.RecordRuntimeHealthOutcome(ctx, orgID, cur.ID, nil)
+	} else {
+		reauth := egressResp.StatusCode == http.StatusUnauthorized ||
+			egressResp.StatusCode == http.StatusForbidden ||
+			strings.Contains(strings.ToLower(verdict.FailureCode), "auth")
+		_, _ = s.catalog.RecordRuntimeHealthOutcome(ctx, orgID, cur.ID, &extport.CanonicalProviderError{
+			CanonicalCode:           verdict.FailureCode,
+			RetryablePreStream:      !reauth,
+			TriggerConnectionReauth: reauth,
+		})
 	}
 	return &verdict, nil
+}
+
+func isConnectionSSRFOrConfigErr(err error) bool {
+	return errors.Is(err, egress.ErrPrivateIPBlocked) ||
+		errors.Is(err, egress.ErrMetadataBlocked) ||
+		errors.Is(err, egress.ErrHostDenied) ||
+		errors.Is(err, egress.ErrPortDenied) ||
+		errors.Is(err, catalog.ErrInvalidStateTransition) ||
+		errors.Is(err, port.ErrInvalidInput) ||
+		errors.Is(err, port.ErrNotFound)
 }
 
 func (s *Server) buildProviderConnectionDTO(ctx context.Context, conn *catalog.ProviderConnection) (providerConnectionDTO, error) {
