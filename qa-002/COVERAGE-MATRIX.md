@@ -78,7 +78,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | Browsers: Chromium, Firefox, WebKit; real interaction/screenshots | PARTIAL PASS | CP01–06 real Chromium flows/screenshots; CP07 real WebKit 26.5 at 375px. Firefox workflow still UNVERIFIED. |
 | Responsive: 320/375/768/1024/1440/1920; loading/empty/error/success states | PARTIAL PASS | CP07 WebKit webhook drawer 375×844; CP03/05 Chromium 1440×1000. Other widths and states UNVERIFIED. |
 | Themes: light/dark; 15 locales | UNVERIFIED | |
-| Accessibility, keyboard, screen-reader labels, focus/recovery | PARTIAL PASS | CP03 live axe: four setup steps, 0 violations; other screens, keyboard/screen-reader, locales, and browsers UNVERIFIED. |
+| Accessibility, keyboard, screen-reader labels, focus/recovery | PARTIAL PASS | CP03 live axe: four Setup steps, 0 violations; CP19 two original Setup accessibility tests pass on the post-engineering baseline. Other screens, keyboard/screen-reader, locales, and browsers remain UNVERIFIED. |
 | Security: SSRF, secrets, audit integrity, kill-switch, plugin boundaries | PARTIAL PASS | CP18 standalone organization create was attributed to the acting principal and its per-tenant JCS chain verified intact; duplicate slug had no second row. SSRF, tamper/fault injection, kill-switch and broader plugin boundaries remain UNVERIFIED. |
 | Operational reliability: health, backup/restore, restart persistence, diagnostics | PARTIAL PASS | CP13 verified SQLite backup, encrypted restore and fresh-process health/readiness/login/persistence. Restart failure, multi-node, PostgreSQL/Valkey and upgrade recovery remain UNVERIFIED. |
 
