@@ -16,7 +16,7 @@ Baseline: `40bba5b55c2da6fc00b107b315c9b3167fb20169`. The acceptance criteria ar
 | DEF-010 | Supported Virtual Key provisioning could not grant A2A | Major | VERIFIED FIXED (scoped) | CP08 UI issued active A2A-only `/a2a/*` key; discovery succeeded, provider-only key remained 403, then revoked key became 401. Other scopes/roles and rotation remain open. |
 | DEF-011 | A2A `input-required` task could not resume | Major | VERIFIED FIXED (scoped) | CP08 three task lifecycles exercised; Console resumed same input-required task ID to completed with settlement. API resume, cancel, terminal transition rejections, and persistence verified. Other task states/roles remain open. |
 | DEF-012 | FinOps headline ignored usage settlement without budget rows | Major | UNVERIFIED | Pending no-budget exact settlement reconciliation |
-| DEF-013 | Ollama form defaulted to commercial API/US | Moderate | UNVERIFIED | Pending adapter-selected default and persisted metadata check |
+| DEF-013 | Ollama form defaulted to commercial API/US | Moderate | VERIFIED FIXED (scoped) | CP10 activated bundled adapter through real consent flow; selected Ollama defaults were SELF_HOSTED_INFRA/ON_PREM/private loopback with 127.0.0.1/32; connection persisted those values and a synthetic Ollama live probe succeeded. Other adapters/roles remain open. |
 | DEF-014 | Console CSV export parsed CSV as JSON | Moderate | UNVERIFIED | Pending actual CSV download and valid file inspection |
 | DEF-015 | Exports ignored selected group-by dimension | Moderate | UNVERIFIED | Pending multi-entity grouping and CSV/JSON reconciliation |
 
@@ -32,6 +32,7 @@ Baseline: `40bba5b55c2da6fc00b107b315c9b3167fb20169`. The acceptance criteria ar
 | CP07 | DEF-009 | Offscreen drawer did not reproduce in authenticated HTTPS WebKit 26.5 at 375px; screenshots visually inspected. Plain-HTTP Secure-cookie behavior was isolated and corrected by HTTPS test proxy. See `checkpoints/CP07-webkit-webhook-mobile.md`. |
 | CP08 | DEF-005, DEF-010, DEF-011 | A2A registration accepted an explicit loopback CIDR after rejecting wildcard CIDR; least-privilege A2A key successfully performed discovery and three same-ID task lifecycles (input-required→completed, input-required→canceled, and Console resume→completed). Provider-only key was denied; revoked A2A key was denied. Audit and synthetic upstream state corroborate UI/API. See `checkpoints/CP08-a2a-authorized-lifecycle.md`. |
 | CP09 | DEF-005 | MCP registration UI blocked wildcard CIDR without POST; explicit loopback CIDR yielded 201 and persisted in SQLite. Actual tool sync and private endpoint policy enforcement remain UNVERIFIED because the available fixture is A2A, not Streamable HTTP MCP. See `checkpoints/CP09-mcp-private-cidr.md`. |
+| CP10 | DEF-013 | Activated bundled Ollama adapter through reviewed Console permission flow; real provider form defaulted to self-hosted/on-prem and loopback CIDR, persisted matching connection metadata, and passed a live synthetic local probe. Historical commercial/US default did not reproduce. See `checkpoints/CP10-ollama-defaults.md`. |
 
 ## Acceptance criteria sources
 

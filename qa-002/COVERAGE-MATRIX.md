@@ -10,7 +10,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | --- | --- | --- | --- |
 | FT-01 | Unified inference, multimodal, streaming, cancellation, errors/recovery | UNVERIFIED | |
 | FT-02 | Native dialect passthrough and lossless fields | UNVERIFIED | |
-| FT-03 | Adapter → connection → model → deployment lifecycle | UNVERIFIED | |
+| FT-03 | Adapter → connection → model → deployment lifecycle | PARTIAL PASS | CP10 activated bundled Ollama through actual permission review; created/persisted self-hosted ON_PREM connection with explicit loopback CIDR and successful synthetic live probe. Model/deployment/inference lifecycle remains UNVERIFIED. |
 | FT-04 | Secret vault, authorized OAuth, federated identity | UNVERIFIED | |
 | FT-05 | Extension isolation and blind credential broker | UNVERIFIED | |
 | FT-06 | Registry, package install, lockfile, contract harness | UNVERIFIED | |
@@ -33,8 +33,8 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | --- | --- | --- | --- |
 | SCR-01 | First-run setup/login | PARTIAL PASS | CP01 login and CP03 complete bootstrap in separate clean runtimes; other states/locales/browsers remain open. |
 | SCR-02 | Overview/system posture | UNVERIFIED | |
-| SCR-03 | Provider adapters | UNVERIFIED | |
-| SCR-04 | Connections/credentials | UNVERIFIED | |
+| SCR-03 | Provider adapters | PARTIAL PASS | CP10 Ollama catalog review and activation; other adapters, upgrade, rollback and permission paths remain UNVERIFIED. |
+| SCR-04 | Connections/credentials | PARTIAL PASS | CP10 Ollama defaults, connection persistence and successful live synthetic probe; secret binding and other auth methods remain UNVERIFIED. |
 | SCR-05 | Models/deployments | UNVERIFIED | |
 | SCR-06 | Extension marketplace | UNVERIFIED | |
 | SCR-07 | Installed plugins/lockfile | UNVERIFIED | |

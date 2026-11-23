@@ -33,3 +33,5 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP06 | Bootstrap and standalone provisioning audit events, duplicate rejection, chain verification | PASS for tested creation paths; mutation/error paths remain open |
 | CP07 | Real WebKit 26.5 webhook drawer at 375×844 using local HTTPS | PASS for scoped layout; registration requires a synthetic HMAC secret and remains untested |
 | CP08 | Authorized A2A discovery, input-required task API/Console lifecycles, provider-only denial, key revocation | PASS for scoped lifecycle and key scenarios; MCP path, concurrent drain, budgets, and other roles remain open |
+| CP09 | MCP private endpoint CIDR form, wildcard rejection and persistence | PASS for registration form and saved CIDR; actual MCP sync/network gating remain UNVERIFIED |
+| CP10 | Ollama extension permission review, provider defaults, persistence and synthetic live probe | PASS for scoped Ollama lifecycle; other adapters and model/deployment inference remain open |
