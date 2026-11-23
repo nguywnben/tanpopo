@@ -10,14 +10,14 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | --- | --- | --- | --- |
 | FT-01 | Unified inference, multimodal, streaming, cancellation, errors/recovery | UNVERIFIED | |
 | FT-02 | Native dialect passthrough and lossless fields | UNVERIFIED | |
-| FT-03 | Adapter → connection → model → deployment lifecycle | PARTIAL PASS | CP10 activated bundled Ollama through actual permission review; created/persisted self-hosted ON_PREM connection with explicit loopback CIDR and successful synthetic live probe. Model/deployment/inference lifecycle remains UNVERIFIED. |
+| FT-03 | Adapter → connection → model → deployment lifecycle | PARTIAL PASS | CP10 healthy Ollama adapter→connection→model→deployment→inference path passed with synthetic fixture; CP12 failed probe remained Unverified, activation was rejected, and dependent route stayed Provisioned/fail-closed. Alternate adapters, auth, upgrade and failover remain UNVERIFIED. |
 | FT-04 | Secret vault, authorized OAuth, federated identity | UNVERIFIED | |
 | FT-05 | Extension isolation and blind credential broker | UNVERIFIED | |
 | FT-06 | Registry, package install, lockfile, contract harness | UNVERIFIED | |
 | FT-07 | MCP discovery, grants, schema pinning, approvals | PARTIAL PASS | CP09 real UI registration rejects wildcard and persists explicit private CIDR; no valid MCP tool sync/grant/invocation fixture yet. |
 | FT-08 | A2A discovery, authorization, delegation, tasks/lifecycle | PARTIAL PASS | CP08 authorized discovery, task submit/input-required/resume/complete/cancel, terminal transition rejection, and same-ID persistence against isolated synthetic endpoint; task draining, budgets, delegation depth, other roles remain UNVERIFIED. |
 | FT-09 | Org/project/environment, six-role RBAC, key lifecycle | PARTIAL PASS | CP06 provisioning audit; CP08 A2A-only/provider-only issuance, authorization, persistence and revocation; rotation, other role/tenant boundaries remain UNVERIFIED. |
-| FT-10 | Capability routing, health, failover, route explain | UNVERIFIED | |
+| FT-10 | Capability routing, health, failover, route explain | PARTIAL PASS | CP11 single-target synthetic route served; CP12 route to unverified connection remained Provisioned and failed closed. Multi-target failover, weights, policy explain, health recovery remain UNVERIFIED. |
 | FT-11 | Runtime policy, rate limit, SSRF/security boundaries | UNVERIFIED | |
 | FT-12 | Audit chain and emergency kill-switch | PARTIAL PASS | CP06 provisioning events had correct actor/scope and audit verification intact across 10 events; CP08 agent/key/task events and chain integrity also checked. Emergency kill-switch, tamper detection, other mutation/error paths remain UNVERIFIED. |
 | FT-13 | Budgets, reservations, settlement and chargeback | PARTIAL PASS | CP05 created first project budget from empty Console state; CP11 settled one exact provider request without any budget ledger and reconciled the FinOps headline, project/model chargeback rows, CSV and JSON exports. Enforcement, estimates, multi-budget scopes and larger reconciliations remain UNVERIFIED. |
@@ -72,7 +72,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | --- | --- | --- |
 | User roles: first-time owner, developer, administrator, Team Admin, security reviewer, operator, FinOps, extension author | PARTIAL PASS | First-time owner setup on 18084 (CP03) and login on 18083 (CP01); remaining roles UNVERIFIED. |
 | Tenant and resource authorization; default-deny and cross-tenant boundaries | PARTIAL PASS | CP08 provider-only key was denied A2A discovery/task with 403; revoked key received 401. Cross-tenant and all-resource boundaries remain UNVERIFIED. |
-| Provider integrations: Google, Meta, deterministic synthetic provider, adapter failures | UNVERIFIED | |
+| Provider integrations: Google, Meta, deterministic synthetic provider, adapter failures | PARTIAL PASS | CP10/11 Ollama synthetic success, exact settlement; CP12 isolated HTTP 401 probe and fail-closed route. Google provider remains blocked/UNVERIFIED for Cloud egress vs adapter separation; Meta and more adapters remain open. |
 | Platforms/modes: standalone SQLite, Docker, PostgreSQL/Valkey clustered, restart/upgrade | UNVERIFIED | |
 | Browsers: Chromium, Firefox, WebKit; real interaction/screenshots | PARTIAL PASS | CP01–06 real Chromium flows/screenshots; CP07 real WebKit 26.5 at 375px. Firefox workflow still UNVERIFIED. |
 | Responsive: 320/375/768/1024/1440/1920; loading/empty/error/success states | PARTIAL PASS | CP07 WebKit webhook drawer 375×844; CP03/05 Chromium 1440×1000. Other widths and states UNVERIFIED. |
