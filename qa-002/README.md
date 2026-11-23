@@ -40,3 +40,4 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP13 | Console encrypted backup, CLI verification, secret-decryption restore, restored startup/login | PASS for SQLite path; cluster and damaged-archive cases remain open |
 | CP14 | Project-scoped Team Admin member creation, list refresh and role-boundary retest | CREATE/BOUNDARY PASS; UI list refresh FAIL (DEF-016), separately recorded |
 | CP15 | Authorized A2A task paused at synthetic endpoint during Console graceful key revocation | Revocation PASS; dispatched task returned 400 `context canceled` and persisted Failed. A2A task drain contract UNVERIFIED; not classified as defect. |
+| CP16 | Project/environment create, project teardown, audit attribution and chain verification | PASS for successful synthetic lifecycle and audit chain; standalone org/fault paths remain open. |
