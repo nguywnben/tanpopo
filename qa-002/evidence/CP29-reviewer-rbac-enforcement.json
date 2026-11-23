@@ -1,0 +1,67 @@
+{
+  "role": [
+    "SECURITY_REVIEWER"
+  ],
+  "create": {
+    "status": 403,
+    "code": "insufficient_role_permission"
+  },
+  "budget_update": {
+    "status": 403,
+    "code": "insufficient_role_permission"
+  },
+  "before": {
+    "key_count": 18,
+    "key_names": [
+      "QA002 CP28 destructive approval",
+      "QA002 CP28 destructive approval",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "QA002 CP24 MCP-only",
+      "QA002 CP24 MCP-only",
+      "QA002 CP24 MCP invocation",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session"
+    ],
+    "budget_count": 14,
+    "budget_id": "bdg_01m85abte9e00aq5fg5ydx9f4t",
+    "budget_version": 3,
+    "budget_limit": 500000
+  },
+  "after": {
+    "key_count": 18,
+    "key_names": [
+      "QA002 CP28 destructive approval",
+      "QA002 CP28 destructive approval",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "QA002 CP24 MCP-only",
+      "QA002 CP24 MCP-only",
+      "QA002 CP24 MCP invocation",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session",
+      "Playground session"
+    ],
+    "budget_count": 14,
+    "budget_id": "bdg_01m85abte9e00aq5fg5ydx9f4t",
+    "budget_version": 3,
+    "budget_limit": 500000
+  }
+}
