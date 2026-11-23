@@ -75,6 +75,34 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
   const [bindings, setBindings] = useState<Record<string, string>>({});
   const [allowPrivateIp, setAllowPrivateIp] = useState(false);
   const [cidrs, setCidrs] = useState('');
+  const [touchedCreateFields, setTouchedCreateFields] = useState<{
+    billingMode?: boolean;
+    region?: boolean;
+    allowPrivateIp?: boolean;
+    cidrs?: boolean;
+  }>({});
+  const touchedCreateRef = {current: touchedCreateFields};
+
+  const applyAdapterDefaults = useCallback(
+    (nextAdapter: Adapter | undefined, touched: typeof touchedCreateFields) => {
+      const isLocalOllama =
+        Boolean(nextAdapter) &&
+        (nextAdapter!.id.toLowerCase().includes('ollama') ||
+          nextAdapter!.name.toLowerCase().includes('ollama'));
+      if (isLocalOllama) {
+        if (!touched.billingMode) setBillingMode('SELF_HOSTED_INFRA');
+        if (!touched.region) setRegion('ON_PREM');
+        if (!touched.allowPrivateIp) setAllowPrivateIp(true);
+        if (!touched.cidrs) setCidrs('127.0.0.1/32');
+      } else {
+        if (!touched.billingMode) setBillingMode('COMMERCIAL_API');
+        if (!touched.region) setRegion('US');
+        if (!touched.allowPrivateIp) setAllowPrivateIp(false);
+        if (!touched.cidrs) setCidrs('');
+      }
+    },
+    [],
+  );
 
   const [editing, setEditing] = useState<Connection | null>(null);
   const [draftName, setDraftName] = useState('');
@@ -112,13 +140,20 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       setSecrets(secretRows);
       setAdapters(adapterRows);
       const enabledAdapters = adapterRows.filter(item => item.installation_state === 'ENABLED_ACTIVE');
-      setAdapterId(current => (enabledAdapters.some(item => item.id === current) ? current : enabledAdapters[0]?.id ?? ''));
+      setAdapterId(current => {
+        const nextId = enabledAdapters.some(item => item.id === current) ? current : enabledAdapters[0]?.id ?? '';
+        const chosen = enabledAdapters.find(item => item.id === nextId);
+        if (nextId !== current) {
+          applyAdapterDefaults(chosen, {});
+        }
+        return nextId;
+      });
     } catch (cause) {
       setError(errText(cause, t));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [applyAdapterDefaults, t]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -195,11 +230,11 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
     try {
       const result = await testConnection(connection.id);
       if (result.valid) {
-        await reload();
         setNotice(t('providers.probeSucceeded', {name: connection.name, ms: formatNumber(result.latency_ms)}));
       } else {
         setError(`${connection.name}: ${result.sanitized_message ?? result.failure_code ?? t('providers.probeFailed')}`);
       }
+      await reload();
     } catch (cause) {
       setError(errText(cause, t));
     } finally {
@@ -596,7 +631,10 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             <Button
               variant="primary"
               onClick={() => {
+                setTouchedCreateFields({});
                 setAdapterId(inspectedAdapter.id);
+                setBindings({});
+                applyAdapterDefaults(inspectedAdapter, {});
                 setInspectedAdapter(null);
                 setTab('connections');
                 setCreateOpen(true);
@@ -656,6 +694,8 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             onChange={next => {
               setAdapterId(next);
               setBindings({});
+              const chosen = adapters.find(item => item.id === next);
+              applyAdapterDefaults(chosen, touchedCreateRef.current);
             }}
             options={adapters
               .filter(a => a.installation_state === 'ENABLED_ACTIVE')
@@ -666,7 +706,10 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             <SelectField
               label={t('providers.billingMode')}
               value={billingMode}
-              onChange={next => setBillingMode(next as typeof billingMode)}
+              onChange={next => {
+                setTouchedCreateFields(prev => ({...prev, billingMode: true}));
+                setBillingMode(next as typeof billingMode);
+              }}
               options={[
                 {value: 'COMMERCIAL_API', label: t('common.billing.COMMERCIAL_API')},
                 {value: 'SELF_HOSTED_INFRA', label: t('common.billing.SELF_HOSTED_INFRA')},
@@ -675,7 +718,10 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             <SelectField
               label={t('providers.dataRegion')}
               value={region}
-              onChange={next => setRegion(next as typeof region)}
+              onChange={next => {
+                setTouchedCreateFields(prev => ({...prev, region: true}));
+                setRegion(next as typeof region);
+              }}
               options={[
                 {value: 'US', label: t('common.region.US')},
                 {value: 'EU', label: t('common.region.EU')},
@@ -703,7 +749,10 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             label={t('providers.allowPrivate')}
             description={t('providers.allowPrivateDesc')}
             checked={allowPrivateIp}
-            onChange={setAllowPrivateIp}
+            onChange={checked => {
+              setTouchedCreateFields(prev => ({...prev, allowPrivateIp: true}));
+              setAllowPrivateIp(checked);
+            }}
           />
           {allowPrivateIp ? (
             <TextField
@@ -711,7 +760,10 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               required
               placeholder="127.0.0.1/32, 10.20.0.0/24"
               value={cidrs}
-              onChange={event => setCidrs(event.target.value)}
+              onChange={event => {
+                setTouchedCreateFields(prev => ({...prev, cidrs: true}));
+                setCidrs(event.target.value);
+              }}
             />
           ) : null}
         </form>

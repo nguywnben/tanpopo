@@ -1010,6 +1010,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/a2a/tasks/{taskId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume an input-required A2A Task with follow-up input_parts (SCR-10) */
+        post: operations["resumeAdminA2aTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/a2a/tasks/{taskId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a non-terminal A2A Task and release held sub-budget (SCR-10) */
+        post: operations["cancelAdminA2aTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/traces": {
         parameters: {
             query?: never;
@@ -1639,7 +1673,9 @@ export interface components {
             tpm_limit?: number | null;
             max_concurrent_streams?: number | null;
             budget_ceiling_micros?: number | null;
+            allowed_planes?: ("PROVIDER" | "MCP" | "A2A")[];
             allowed_models?: string[];
+            allowed_routes?: string[];
             allowed_mcp_tools?: string[];
         };
         /** @description Read-safe metadata projection — NEVER includes secret_key plaintext (UX-GR-01). */
@@ -1659,7 +1695,9 @@ export interface components {
             rpm_limit?: number | null;
             tpm_limit?: number | null;
             max_concurrent_streams?: number | null;
+            allowed_planes?: ("PROVIDER" | "MCP" | "A2A")[];
             allowed_models?: string[];
+            allowed_routes?: string[];
             allowed_mcp_tools?: string[];
             version: number;
             /** Format: date-time */
@@ -1819,6 +1857,7 @@ export interface components {
             env_id: string;
             logical_model_id: string;
             connection_id: string;
+            connection_state?: string;
             upstream_model_name: string;
             data_region: components["schemas"]["DataRegion"];
             /** @enum {string} */
@@ -2056,6 +2095,7 @@ export interface components {
             target_agent_slug?: string;
             /** @enum {string} */
             state: "submitted" | "working" | "input-required" | "completed" | "failed" | "canceled";
+            prompt_message?: string;
             hop_count: number;
             trace_root_id?: string;
             enforced_region?: string;
@@ -2068,6 +2108,11 @@ export interface components {
             updated_at: string;
             /** Format: date-time */
             completed_at?: string;
+        };
+        A2aTaskResumeRequest: {
+            input_parts: {
+                [key: string]: unknown;
+            }[];
         };
         TraceSummary: {
             request_id: string;
@@ -2917,7 +2962,9 @@ export interface operations {
                     rpm_limit?: number | null;
                     tpm_limit?: number | null;
                     max_concurrent_streams?: number | null;
+                    allowed_planes?: ("PROVIDER" | "MCP" | "A2A")[];
                     allowed_models?: string[];
+                    allowed_routes?: string[];
                     allowed_mcp_tools?: string[];
                 };
             };
@@ -4920,6 +4967,80 @@ export interface operations {
                         next_cursor?: string | null;
                         has_more: boolean;
                     };
+                };
+            };
+        };
+    };
+    resumeAdminA2aTask: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["A2aTaskResumeRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated A2A task */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["A2aTaskResource"];
+                };
+            };
+            /** @description task_not_resumable */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    cancelAdminA2aTask: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated canceled A2A task */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["A2aTaskResource"];
+                };
+            };
+            /** @description invalid_state_transition */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
                 };
             };
         };

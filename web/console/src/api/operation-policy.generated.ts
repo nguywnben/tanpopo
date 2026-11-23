@@ -300,6 +300,14 @@ export const operationPolicy = {
     "csrf": false,
     "ifMatch": false
   },
+  "POST /admin/v1/a2a/tasks/{taskId}/resume": {
+    "csrf": true,
+    "ifMatch": false
+  },
+  "POST /admin/v1/a2a/tasks/{taskId}/cancel": {
+    "csrf": true,
+    "ifMatch": false
+  },
   "GET /admin/v1/traces": {
     "csrf": false,
     "ifMatch": false

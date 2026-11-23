@@ -30,6 +30,8 @@ export function WorkspaceRouter({
   multiOrgEnabled,
   onSelectOrg,
   onOrganizationsChanged,
+  projects,
+  environments,
   projectId,
   environmentId,
   session,
@@ -62,7 +64,17 @@ export function WorkspaceRouter({
     <Suspense fallback={<p className="tp-muted" role="status">{t('shell.loadingPage', {page: routeTitle})}</p>}>
       {route.path === '/overview' ? <OverviewPage /> : null}
       {route.path === '/observability/traces' ? <TracesPage environmentId={environmentId} roles={roles} /> : null}
-      {route.path === '/finops/budgets' ? <FinOpsPage pathname={pathname} projectId={projectId} roles={roles} /> : null}
+      {route.path === '/finops/budgets' ? (
+        <FinOpsPage
+          pathname={pathname}
+          activeOrgId={activeOrgId}
+          projects={projects}
+          environments={environments}
+          projectId={projectId}
+          environmentId={environmentId}
+          roles={roles}
+        />
+      ) : null}
       {route.path === '/providers/connections' ? <ProvidersPage pathname={pathname} projectId={projectId} roles={roles} /> : null}
       {route.path === '/models' ? <ModelsPage environmentId={environmentId} roles={roles} /> : null}
       {route.path === '/routes' ? <RoutingPage pathname={pathname} projectId={projectId} environmentId={environmentId} roles={roles} /> : null}
@@ -73,6 +85,7 @@ export function WorkspaceRouter({
         <AccessPage
           pathname={pathname}
           projectId={projectId}
+          projects={projects}
           environmentId={environmentId}
           currentPrincipalId={session?.principal_id ?? ''}
           roles={roles}

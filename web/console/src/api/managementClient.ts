@@ -1,4 +1,4 @@
-import type {components} from './generated';
+import type {components, operations} from './generated';
 import {api, apiError} from './client';
 
 type RouteRequest = components['schemas']['RouteUpsertRequest'];
@@ -62,7 +62,15 @@ export async function listMcpServers() {
   return result.data.data;
 }
 
-export async function registerMcpServer(payload: {project_id: string; slug: string; name: string; transport: 'streamable_http'; endpoint_url: string; allow_private_ip?: boolean}) {
+export async function registerMcpServer(payload: {
+  project_id: string;
+  slug: string;
+  name: string;
+  transport: 'streamable_http';
+  endpoint_url: string;
+  allow_private_ip?: boolean;
+  allowed_cidrs?: string[];
+}) {
   const result = await api.POST('/admin/v1/mcp/servers', {body: payload});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;
@@ -122,6 +130,23 @@ export async function listA2aTasks() {
   const result = await api.GET('/admin/v1/a2a/tasks', {params: {query: {limit: 50}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data.data;
+}
+
+export async function resumeA2aTask(taskId: string, inputParts: Record<string, unknown>[]) {
+  const result = await api.POST('/admin/v1/a2a/tasks/{taskId}/resume', {
+    params: {path: {taskId}},
+    body: {input_parts: inputParts},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function cancelA2aTask(taskId: string) {
+  const result = await api.POST('/admin/v1/a2a/tasks/{taskId}/cancel', {
+    params: {path: {taskId}},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
 }
 
 export async function listWebhooks() {
@@ -194,6 +219,18 @@ export async function createVirtualKey(payload: components['schemas']['VirtualKe
   return result.data;
 }
 
+export async function updateVirtualKey(
+  key: Key,
+  payload: NonNullable<operations['updateVirtualKey']['requestBody']>['content']['application/json'],
+) {
+  const result = await api.PATCH('/admin/v1/virtual-keys/{keyId}', {
+    params: {path: {keyId: key.id}, header: {'If-Match': versionTag(key.version)}},
+    body: payload,
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
 export async function rotateVirtualKey(key: Key, graceWindowSeconds: number) {
   const result = await api.POST('/admin/v1/virtual-keys/{keyId}/rotate', {
     params: {path: {keyId: key.id}, header: {'If-Match': versionTag(key.version)}}, body: {grace_window_seconds: graceWindowSeconds},
@@ -222,15 +259,34 @@ export async function listMembers() {
   return rows;
 }
 
-export async function createMember(email: string, memberRoles: components['schemas']['RbacRole'][]) {
-  const result = await api.POST('/admin/v1/members', {body: {email, kind: 'HUMAN', roles: memberRoles}});
+export async function createMember(
+  email: string,
+  memberRoles: components['schemas']['RbacRole'][],
+  projectIds?: string[],
+) {
+  const result = await api.POST('/admin/v1/members', {
+    body: {
+      email,
+      kind: 'HUMAN',
+      roles: memberRoles,
+      ...(projectIds && projectIds.length > 0 ? {project_ids: projectIds} : {}),
+    },
+  });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;
 }
 
-export async function updateMemberRoles(member: Member, roles: components['schemas']['RbacRole'][]) {
+export async function updateMemberRoles(
+  member: Member,
+  roles: components['schemas']['RbacRole'][],
+  projectIds?: string[],
+) {
   const result = await api.PATCH('/admin/v1/members/{memberId}/roles', {
-    params: {path: {memberId: member.id}, header: {'If-Match': versionTag(member.version)}}, body: {roles},
+    params: {path: {memberId: member.id}, header: {'If-Match': versionTag(member.version)}},
+    body: {
+      roles,
+      ...(projectIds !== undefined ? {project_ids: projectIds} : {}),
+    },
   });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;
@@ -274,6 +330,24 @@ export async function listBudgets(projectId?: string) {
   return result.data.data;
 }
 
+export async function createBudget(
+  budgetId: string,
+  payload: {
+    scope_tier: components['schemas']['BudgetResource']['scope_tier'];
+    scope_id: string;
+    hard_limit_micros: number;
+    period: components['schemas']['BudgetResource']['period'];
+    soft_warning_percents?: number[];
+  },
+) {
+  const result = await api.PUT('/admin/v1/budgets/{budgetId}', {
+    params: {path: {budgetId}, header: {'If-Match': '"v1"'}},
+    body: payload,
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
 export async function updateBudget(budget: components['schemas']['BudgetResource'], hardLimitMicros: number) {
   const result = await api.PUT('/admin/v1/budgets/{budgetId}', {
     params: {path: {budgetId: budget.id}, header: {'If-Match': `"v${budget.version}"`}},
@@ -289,11 +363,17 @@ export async function getUsageChargebackSummary(groupBy: 'project' | 'env' | 'ke
   return result.data.data;
 }
 
-export async function exportUsageChargeback(format: 'csv' | 'json') {
-  const result = await api.GET('/admin/v1/usage/export', {params: {query: {format, group_by: 'project'}}});
+export async function exportUsageChargeback(
+  format: 'csv' | 'json',
+  groupBy: 'project' | 'env' | 'key' | 'model' = 'project',
+) {
+  const result = await api.GET('/admin/v1/usage/export', {
+    params: {query: {format, group_by: groupBy}},
+    parseAs: format === 'csv' ? 'text' : 'json',
+  });
   if (!result.response.ok || result.data === undefined) throw apiError(result.response, result.error);
-  const content = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
-  return new Blob([content], {type: format === 'csv' ? 'text/csv' : 'application/json'});
+  const content = typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2);
+  return new Blob([content], {type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json'});
 }
 
 export async function listAuditEvents(action?: string, cursor?: string, chainPartition?: string) {

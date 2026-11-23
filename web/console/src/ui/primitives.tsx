@@ -552,10 +552,10 @@ export function stateTone(state: string): StatusTone {
   if (['THROTTLED_COOLDOWN', 'DRAINING_MAINTENANCE', 'STAGED', 'PENDING', 'PENDING_APPROVAL', 'ROTATING_GRACE', 'ESTIMATED', 'TESTED', 'UNVERIFIED_EXTERNAL', 'DRIFT_LOCKED', 'DEGRADED'].includes(normalized)) {
     return 'warn';
   }
-  if (['CIRCUIT_OPEN_UNHEALTHY', 'REVOKED', 'QUARANTINED', 'FAILED', 'REJECTED', 'UNMETERED_FLAGGED', 'FAIL_CLOSED'].includes(normalized)) {
+  if (['CIRCUIT_OPEN_UNHEALTHY', 'REVOKED', 'QUARANTINED', 'FAILED', 'REJECTED', 'UNMETERED_FLAGGED', 'FAIL_CLOSED', 'AUTH_EXPIRED_REAUTH_REQUIRED'].includes(normalized)) {
     return 'danger';
   }
-  if (['DISABLED', 'PROVISIONED', 'DECLARED', 'DRAFT', 'INACTIVE'].includes(normalized)) {
+  if (['DISABLED', 'PROVISIONED', 'DECLARED', 'DRAFT', 'INACTIVE', 'CREATED_UNVERIFIED'].includes(normalized)) {
     return 'neutral';
   }
   return 'info';

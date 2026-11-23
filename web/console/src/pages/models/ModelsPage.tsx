@@ -139,12 +139,20 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
 
   useEffect(() => { void reload(); }, [reload]);
 
+  const effectiveDeploymentState = useCallback(
+    (dep: Deployment) => {
+      const connState = dep.connection_state ?? connections.find(c => c.id === dep.connection_id)?.state;
+      return dep.state === 'ACTIVE_HEALTHY' && connState && connState !== 'ACTIVE' ? connState : dep.state;
+    },
+    [connections],
+  );
+
   const visibleDeployments = useMemo(
     () =>
       deployments.filter(
-        item => (regionFilter === 'ALL' || item.data_region === regionFilter) && (healthFilter === 'ALL' || item.state === healthFilter),
+        item => (regionFilter === 'ALL' || item.data_region === regionFilter) && (healthFilter === 'ALL' || effectiveDeploymentState(item) === healthFilter),
       ),
-    [deployments, regionFilter, healthFilter],
+    [deployments, effectiveDeploymentState, regionFilter, healthFilter],
   );
 
   const visibleModels = useMemo(
@@ -347,7 +355,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                 onChange={setHealthFilter}
                 options={[
                   {value: 'ALL', label: t('models.allStates')},
-                  ...[...new Set(deployments.map(d => d.state))].sort().map(s => ({
+                  ...[...new Set(deployments.map(d => effectiveDeploymentState(d)))].sort().map(s => ({
                     value: s,
                     label: formatOperationalState(s),
                   })),
@@ -383,7 +391,12 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                 id: 'state',
                 header: t('models.col.health'),
                 width: '13%',
-                render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />,
+                render: row => {
+                  const connState = row.connection_state ?? connections.find(c => c.id === row.connection_id)?.state;
+                  const effectiveState =
+                    row.state === 'ACTIVE_HEALTHY' && connState && connState !== 'ACTIVE' ? connState : row.state;
+                  return <StatusPill tone={stateTone(effectiveState)} label={formatOperationalState(effectiveState)} />;
+                },
               },
               {
                 id: 'rates',
@@ -399,13 +412,15 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                 id: 'actions',
                 header: t('common.actions'),
                 width: '11%',
-                render: row =>
-                  canManage ? (
+                render: row => {
+                  const connState = row.connection_state ?? connections.find(c => c.id === row.connection_id)?.state;
+                  const connActive = !connState || connState === 'ACTIVE';
+                  return canManage ? (
                     <RowActionsMenu
                       label={t('common.actionsFor', {name: row.upstream_model_name})}
                       disabled={busy}
                       items={[
-                        ...(row.state === 'PROVISIONED' || row.state === 'DRAINING_MAINTENANCE' || row.state === 'DISABLED'
+                        ...((row.state === 'PROVISIONED' || row.state === 'DRAINING_MAINTENANCE' || row.state === 'DISABLED') && connActive
                           ? [{id: 'activate', label: t('models.action.activate'), onClick: () => void handleActivateDeployment(row)}]
                           : []),
                         ...(row.state !== 'DISABLED'
@@ -420,7 +435,8 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                         },
                       ]}
                     />
-                  ) : null,
+                  ) : null;
+                },
               },
             ]}
           />

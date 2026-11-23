@@ -295,14 +295,17 @@ def run_axe_and_layout_audit(page: Page, route_path: str, theme_mode: str, viewp
                     impact: v.impact,
                     help: v.help,
                     targets: v.nodes.slice(0, 3).map(n => n.target.join(' '))
-                }))
+                })),
+                incompleteMismatch: res.incomplete
+                    .filter(i => i.id === 'label-content-name-mismatch')
+                    .map(i => ({id: i.id, help: i.help, targets: i.nodes.slice(0, 3).map(n => n.target.join(' '))}))
             };
         }"""
     )
     blocking = [
         v for v in axe_result["violations"]
         if v.get("impact") in ("critical", "serious") or v.get("id") == "label-content-name-mismatch"
-    ]
+    ] + axe_result["incompleteMismatch"]
     if blocking:
         raise AssertionError(
             f"Accessibility failure at {route_path} ({viewport_label}, {theme_mode}): {json.dumps(blocking, indent=2)}"
@@ -697,6 +700,71 @@ def verify_clean_onboarding_to_trace(page: Page, https_base: str, http_base: str
     }
 
 
+def verify_round1_defects_e2e(page: Page, https_base: str) -> dict[str, Any]:
+    results: dict[str, Any] = {}
+
+    # 1. DEF-003, DEF-012, DEF-014, DEF-015: FinOps create budget & CSV/JSON export with group_by=model
+    page.goto(f"{https_base}/finops/chargeback", wait_until="networkidle")
+    page.get_by_role("combobox", name=re.compile("Group by", re.I)).first.click()
+    page.get_by_role("option", name="Model").first.click()
+    page.wait_for_timeout(300)
+    with page.expect_download(timeout=10000) as csv_dl:
+        page.get_by_role("button", name=re.compile("Export CSV", re.I)).first.click()
+    csv_path = csv_dl.value.path()
+    csv_text = Path(csv_path).read_text(encoding="utf-8") if csv_path else ""
+    if "group_key" not in csv_text:
+        raise AssertionError(f"DEF-014/015: Unexpected FinOps CSV export content: {csv_text!r}")
+
+    with page.expect_download(timeout=10000) as json_dl:
+        page.get_by_role("button", name=re.compile("Export JSON", re.I)).first.click()
+    json_path = json_dl.value.path()
+    json_raw = Path(json_path).read_text(encoding="utf-8") if json_path else "[]"
+    json.loads(json_raw)
+
+    page.get_by_role("button", name=re.compile("Create budget", re.I)).first.click()
+    page.locator("dialog.astryx-drawer[open] button[form='tp-create-budget-form']").first.click()
+    page.wait_for_timeout(300)
+    page.goto(f"{https_base}/finops/budgets", wait_until="networkidle")
+    page.wait_for_selector("text=MONTHLY", timeout=8000)
+    results["finops_ok"] = True
+
+    # 2. DEF-010: Access Virtual Key with A2A plane & /a2a/* route grant
+    page.goto(f"{https_base}/access/virtual-keys", wait_until="networkidle")
+    page.get_by_role("button", name=re.compile("Issue key", re.I)).first.click()
+    issue_dlg = page.locator("dialog.astryx-drawer[open]").last
+    issue_dlg.get_by_label(re.compile("Key name", re.I)).fill("e2e-a2a-key")
+    issue_dlg.get_by_label(re.compile("Allowed planes", re.I)).first.click()
+    page.get_by_role("option", name=re.compile("A2A", re.I)).first.click()
+    page.keyboard.press("Escape")
+    issue_dlg.get_by_label(re.compile("Allowed route patterns", re.I)).fill("/a2a/*")
+    issue_dlg.get_by_role("button", name=re.compile("Create key", re.I)).click()
+    page.get_by_role("button", name=re.compile("I stored it", re.I)).first.click()
+    page.wait_for_selector("text=e2e-a2a-key", timeout=8000)
+    results["vkey_a2a_ok"] = True
+
+    # 3. DEF-008: Encrypted Backup availability matches host volatile-staging security gate
+    page.goto(f"{https_base}/ops/backups", wait_until="networkidle")
+    has_swap = False
+    swaps_path = Path("/proc/swaps")
+    if swaps_path.exists():
+        swap_lines = [ln.strip() for ln in swaps_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        has_swap = len(swap_lines) > 1
+    if not has_swap:
+        if page.locator("text=Encrypted backups unavailable").count() > 0:
+            raise AssertionError("DEF-008: Encrypted backups reported unavailable on swap-free Linux host")
+        page.get_by_role("button", name=re.compile("Create encrypted backup", re.I)).first.click()
+        page.wait_for_selector("text=Encrypted backup created", timeout=10000)
+        results["backup_ok"] = "created"
+    else:
+        page.wait_for_selector("text=Encrypted backups require verified /dev/shm tmpfs staging with swap disabled", timeout=8000)
+        btn = page.get_by_role("button", name=re.compile("Create encrypted backup", re.I)).first
+        if not btn.is_disabled():
+            raise AssertionError("DEF-008: Create backup button must be disabled when swap-free staging is unavailable")
+        results["backup_ok"] = "honest_fail_closed_swap_active"
+
+    return results
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run Tanpopo Web Console Playwright E2E suite")
     parser.add_argument("--binary", default="", help="Path to prebuilt tanpopo binary (defaults to building into temp dir)")
@@ -931,6 +999,10 @@ def main() -> int:
                         print("[e2e] chromium phase=interactive-multiorg-i18n", flush=True)
                         b_summary["interactive"] = verify_keyboard_and_multi_org_and_i18n(page, https_base)
 
+                        # Round 1 DEF workflows (FinOps Create/Export, Virtual Key A2A, Backups)
+                        print("[e2e] chromium phase=round1-defects", flush=True)
+                        b_summary["round1_defects"] = verify_round1_defects_e2e(page, https_base)
+
                         # CWV & real click/keyboard INP on key workspace screens
                         print("[e2e] chromium phase=cwv-inp", flush=True)
                         for attempt in range(3):
@@ -1014,6 +1086,30 @@ def main() -> int:
                         for scr, route_path in [("SCR-02", "/overview"), ("SCR-08", "/routes"), ("SCR-12", "/finops/budgets"), ("SCR-14", "/security/kill-switches"), ("SCR-16", "/ops/organizations")]:
                             page.goto(f"{https_base}{route_path}", wait_until="networkidle")
                             b_summary["audits"].append(run_axe_and_layout_audit(page, f"{scr}:{route_path}", "light", f"{bname}-375"))
+
+                        if bname == "webkit":
+                            page.goto(f"{https_base}/settings/residency-retention", wait_until="networkidle")
+                            page.get_by_role("button", name=re.compile("Add webhook", re.I)).first.click()
+                            page.wait_for_selector("dialog.astryx-drawer[open]", timeout=8000)
+                            drawer_box = page.evaluate(
+                                """() => {
+                                    const dlg = document.querySelector('dialog.astryx-drawer[open]');
+                                    if (!dlg) return null;
+                                    const r = dlg.getBoundingClientRect();
+                                    return {left: r.left, right: r.right, width: r.width, innerWidth: window.innerWidth};
+                                }"""
+                            )
+                            if not drawer_box or drawer_box["left"] < 0 or drawer_box["right"] > 375 or drawer_box["width"] < 200:
+                                raise AssertionError(f"DEF-009: WebKit 375px Drawer positioned outside viewport: {drawer_box}")
+                            url_input = page.locator("dialog.astryx-drawer[open] input[type='url']").first
+                            url_input.fill("https://hooks.example.com/tanpopo-webkit")
+                            if url_input.input_value() != "https://hooks.example.com/tanpopo-webkit":
+                                raise AssertionError("DEF-009: Unable to fill input inside WebKit 375px Drawer")
+                            screenshot_path = os.environ.get("TANPOPO_E2E_WEBKIT_DRAWER_PNG", "").strip()
+                            if screenshot_path:
+                                page.screenshot(path=screenshot_path)
+                            page.locator("dialog.astryx-drawer[open] button:has-text('Cancel')").first.click()
+                            b_summary["webkit_375_drawer"] = drawer_box
 
                     ctx.close()
                     report["browsers"][bname] = b_summary
