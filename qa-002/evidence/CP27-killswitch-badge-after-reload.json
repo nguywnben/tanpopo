@@ -1,0 +1,8 @@
+{
+  "ui": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa002-cp17-owner@example.invalid\nOperator, Org Owner\nQA002 Fresh Google Test\n/\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nActive kill switches\n0\nNo active kill switches\nAll Virtual Keys, Projects, Connections, and Extensions are operating normally.\nNo active kill switches All Virtual Keys, Projects, Connections, and Extensions are operating normally.",
+  "api": {
+    "active": {
+      "data": []
+    }
+  }
+}

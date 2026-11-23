@@ -1,0 +1,56 @@
+{
+  "responses": [
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "body": "{\"data\":[]}\n"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "body": "{\"data\":[]}\n"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "body": "{\"config_epoch\":35,\"severed_streams_count\":0,\"affected_entities_count\":10}\n"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"ksw_01m85a6qq1e00bmqqbmx2pxd12\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"level\":\"PROJECT_OR_ORG_FREEZE\",\"target_id\":\"prj_01m853e561e00byw750arfmw8y\",\"active\":true,\"abort_active_streams\":true,\"reason\":\"CP27 containment and recovery validation\",\"triggered_by_principal_id\":\"prc_01m853e561e00byye5wtq3s746\",\"version\":1,\"triggered_at_ms\":1795474808545}]}\n"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"ksw_01m85a6qq1e00bmqqbmx2pxd12\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"level\":\"PROJECT_OR_ORG_FREEZE\",\"target_id\":\"prj_01m853e561e00byw750arfmw8y\",\"active\":true,\"abort_active_streams\":true,\"reason\":\"CP27 containment and recovery validation\",\"triggered_by_principal_id\":\"prc_01m853e561e00byye5wtq3s746\",\"version\":1,\"triggered_at_ms\":1795474808545}]}\n"
+    }
+  ],
+  "state": {
+    "switches": {
+      "data": [
+        {
+          "id": "ksw_01m85a6qq1e00bmqqbmx2pxd12",
+          "org_id": "org_01m853e561e00byvg158ab8tbz",
+          "level": "PROJECT_OR_ORG_FREEZE",
+          "target_id": "prj_01m853e561e00byw750arfmw8y",
+          "active": true,
+          "abort_active_streams": true,
+          "reason": "CP27 containment and recovery validation",
+          "triggered_by_principal_id": "prc_01m853e561e00byye5wtq3s746",
+          "version": 1,
+          "triggered_at_ms": 1795474808545
+        }
+      ]
+    },
+    "audit": {
+      "error": {
+        "code": "resource_not_found",
+        "type": "not_found_error",
+        "message": "resource not found",
+        "request_id": "req_01m85a6rnde0089h36yev6sbv5",
+        "retryable": false
+      }
+    }
+  }
+}
