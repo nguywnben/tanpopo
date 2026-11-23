@@ -1,0 +1,54 @@
+{
+  "checkpoint": "CP18",
+  "baseline_commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "source_changed": false,
+  "ui_workflow": "Operations > Organizations > Create organization",
+  "created_organization": {
+    "name": "QA002 CP18 Standalone Audit Org",
+    "slug": "qa002-cp18-standalone-audit",
+    "id": "org_01m8541pqse00a0twk7y54zckg",
+    "persisted_in_organization_list": true
+  },
+  "audit_event": {
+    "partition_org_id": "org_01m8541pqse00a0twk7y54zckg",
+    "sequence": 1,
+    "event_type": "organization.created",
+    "actor_kind": "PRINCIPAL",
+    "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+    "target_type": "organization",
+    "target_id": "org_01m8541pqse00a0twk7y54zckg",
+    "entry_point": "admin_api"
+  },
+  "chain_verification": {
+    "http_status": 200,
+    "intact": true,
+    "checked_events_count": 1,
+    "broken_sequence": null
+  },
+  "duplicate_slug": {
+    "http_status": 409,
+    "error_code": "resource_already_exists",
+    "duplicate_row_created": false,
+    "organization_list_count_before_and_after_duplicate": 2
+  },
+  "separate_status_capture": {
+    "created_second_synthetic_org_http_status": 201,
+    "duplicate_http_status": 409,
+    "duplicate_error_code": "resource_already_exists",
+    "organization_list_count_after_second_test_org": 3
+  },
+  "visually_inspected_screenshots": [
+    "CP18-organizations-admin.png",
+    "CP18-organization-create-form.png",
+    "CP18-organization-created.png",
+    "CP18-organization-duplicate-rejected.png",
+    "CP18-standalone-org-audit-filter.png",
+    "CP18-standalone-org-audit-verified.png",
+    "CP18-organization-status-create.png"
+  ],
+  "limitations": [
+    "No storage failure was injected between organization persistence and audit append.",
+    "Organization delete, approval-gated delete, and cross-tenant audit access were not tested.",
+    "The second status-capture organization was not separately switched into or chain-verified; the first standalone organization's audit event and chain were verified in the UI."
+  ]
+}

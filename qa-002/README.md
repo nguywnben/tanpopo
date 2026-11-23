@@ -12,7 +12,7 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [Historical defect retest register](DEFECT-RETEST-REGISTER.md)
 - `evidence/` — sanitized command outcomes, API/state snapshots, and visually reviewed screenshots.
-- `reports/` — phase reports, new defect findings (stable IDs begin at DEF-016), and explicitly unclassified QA observations.
+- `reports/` — phase reports, new defect findings (DEF-016 onward), and explicitly unclassified QA observations.
 
 Each checkpoint records the tested revision/runtime, actions, evidence, and PASS / FAIL / BLOCKED / UNVERIFIED result. A PASS is limited to the exact scenario evidenced. No test or artifact may be called PASS based only on source inspection, HTTP success, or an automated test.
 
@@ -41,3 +41,5 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP14 | Project-scoped Team Admin member creation, list refresh and role-boundary retest | CREATE/BOUNDARY PASS; UI list refresh FAIL (DEF-016), separately recorded |
 | CP15 | Authorized A2A task paused at synthetic endpoint during Console graceful key revocation | Revocation PASS; dispatched task returned 400 `context canceled` and persisted Failed. A2A task drain contract UNVERIFIED; not classified as defect. |
 | CP16 | Project/environment create, project teardown, audit attribution and chain verification | PASS for successful synthetic lifecycle and audit chain; standalone org/fault paths remain open. |
+| CP17 | Fresh isolated bootstrap, separate-session persistence, Google provider boundary and empty-model Playground recovery | Fresh setup/login PASS for scoped path; Google model validation BLOCKED in-app by proxy-only egress; no-provider Playground correctly surfaces HTTP 503. Wider setup/platform and provider coverage remain open. |
+| CP18 | Standalone organization provisioning, duplicate rejection and tenant audit isolation | PASS for new-organization audit attribution and one-event chain verification; duplicate slug rejected with no second organization. Fault injection, delete and cross-tenant access remain open. |
