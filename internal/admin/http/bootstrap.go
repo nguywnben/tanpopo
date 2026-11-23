@@ -17,16 +17,29 @@ import (
 	"github.com/nguywnben/tanpopo/internal/iam/bootstrap"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
+type bootstrapAvailableAdapter struct {
+	ID                string   `json:"id"`
+	AdapterSlug       string   `json:"adapter_slug"`
+	Name              string   `json:"name"`
+	ExecutionTier     string   `json:"execution_tier"`
+	SupportedDialects []string `json:"supported_dialects,omitempty"`
+	AllowedHosts      []string `json:"allowed_hosts,omitempty"`
+	AllowPrivateIP    bool     `json:"allow_private_ip"`
+}
+
 type bootstrapStatusResponse struct {
-	Initialized     bool   `json:"initialized"`
-	OfflineMode     bool   `json:"offline_mode"`
-	MultiOrgEnabled bool   `json:"multi_org_enabled"`
-	Version         string `json:"version,omitempty"`
+	Initialized             bool                        `json:"initialized"`
+	OfflineMode             bool                        `json:"offline_mode"`
+	MultiOrgEnabled         bool                        `json:"multi_org_enabled"`
+	Version                 string                      `json:"version,omitempty"`
+	MarketplaceCatalogCount int                         `json:"marketplace_catalog_count"`
+	AvailableAdapters       []bootstrapAvailableAdapter `json:"available_adapters"`
 }
 
 type bootstrapInitialConnectionReq struct {
@@ -52,15 +65,15 @@ type bootstrapCompleteRequest struct {
 }
 
 type bootstrapCompleteResponse struct {
-	OrgID             string                   `json:"org_id"`
-	ProjectID         string                   `json:"project_id"`
-	EnvID             string                   `json:"env_id"`
-	OwnerPrincipalID  string                   `json:"owner_principal_id"`
-	CSRFToken         string                   `json:"csrf_token"`
-	ConnectionID      string                   `json:"connection_id,omitempty"`
-	DeploymentID      string                   `json:"deployment_id,omitempty"`
-	DefaultRouteID    string                   `json:"default_route_id,omitempty"`
-	InitialVirtualKey *virtualKeyCreatedDTO    `json:"initial_virtual_key,omitempty"`
+	OrgID             string                `json:"org_id"`
+	ProjectID         string                `json:"project_id"`
+	EnvID             string                `json:"env_id"`
+	OwnerPrincipalID  string                `json:"owner_principal_id"`
+	CSRFToken         string                `json:"csrf_token"`
+	ConnectionID      string                `json:"connection_id,omitempty"`
+	DeploymentID      string                `json:"deployment_id,omitempty"`
+	DefaultRouteID    string                `json:"default_route_id,omitempty"`
+	InitialVirtualKey *virtualKeyCreatedDTO `json:"initial_virtual_key,omitempty"`
 }
 
 func (s *Server) handleBootstrapStatus(w http.ResponseWriter, r *http.Request) {
@@ -69,12 +82,105 @@ func (s *Server) handleBootstrapStatus(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking bootstrap status", true, nil)
 		return
 	}
+	availableAdapters := make([]bootstrapAvailableAdapter, 0)
+	if !initialized && s.db != nil {
+		loaded, loadErr := s.listBootstrapAvailableAdapters(r.Context())
+		if loadErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed listing available adapters", true, nil)
+			return
+		}
+		availableAdapters = loaded
+	}
 	writeJSON(w, http.StatusOK, bootstrapStatusResponse{
-		Initialized:     initialized,
-		OfflineMode:     s.offlineMode,
-		MultiOrgEnabled: !s.multiOrgDisabled,
-		Version:         s.version,
+		Initialized:             initialized,
+		OfflineMode:             s.offlineMode,
+		MultiOrgEnabled:         !s.multiOrgDisabled,
+		Version:                 s.version,
+		MarketplaceCatalogCount: len(s.marketplace),
+		AvailableAdapters:       availableAdapters,
 	})
+}
+
+func (s *Server) listBootstrapAvailableAdapters(ctx context.Context) ([]bootstrapAvailableAdapter, error) {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return nil, err
+	}
+
+	rows, err := tx.QueryContext(ctx, s.rebind(`
+		SELECT pa.id, pa.adapter_slug, ep.canonical_name, COALESCE(ev.execution_tier, 'DECLARATIVE_T1'),
+		       pa.supported_dialects_json, pa.allowed_hosts_json, ei.approved_permissions_json
+		FROM provider_adapters pa
+		JOIN extension_installations ei ON ei.id = pa.installation_id
+		JOIN extension_packages ep ON ep.id = ei.package_id
+		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id
+		WHERE ei.state IN ('ENABLED_ACTIVE', 'ROLLED_BACK', 'UPDATING_PENDING_RECONSENT')
+		  AND ei.active_version_id IS NOT NULL
+		ORDER BY pa.adapter_slug ASC, pa.id ASC`))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]bootstrapAvailableAdapter, 0)
+	for rows.Next() {
+		var (
+			id, slug, name, execTier string
+			dialectsJSON, hostsJSON  string
+			permsJSON                string
+		)
+		if scanErr := rows.Scan(&id, &slug, &name, &execTier, &dialectsJSON, &hostsJSON, &permsJSON); scanErr != nil {
+			return nil, scanErr
+		}
+		var dialects, hosts []string
+		_ = json.Unmarshal([]byte(dialectsJSON), &dialects)
+		_ = json.Unmarshal([]byte(hostsJSON), &hosts)
+		var perms struct {
+			AllowPrivateIP bool `json:"allow_private_ip"`
+		}
+		_ = json.Unmarshal([]byte(permsJSON), &perms)
+		out = append(out, bootstrapAvailableAdapter{
+			ID:                id,
+			AdapterSlug:       slug,
+			Name:              name,
+			ExecutionTier:     execTier,
+			SupportedDialects: dialects,
+			AllowedHosts:      hosts,
+			AllowPrivateIP:    perms.AllowPrivateIP,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *Server) resolveBootstrapAvailableAdapterID(ctx context.Context, adapterRef string) (string, string, string, error) {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return "", "", "", err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return "", "", "", err
+	}
+	var adapterID, hostsJSON, approvedPermsJSON string
+	err = tx.QueryRowContext(ctx, s.rebind(`
+		SELECT pa.id, pa.allowed_hosts_json, ei.approved_permissions_json
+		FROM provider_adapters pa
+		JOIN extension_installations ei ON ei.id = pa.installation_id
+		WHERE (pa.id = ? OR pa.adapter_slug = ?)
+		  AND ei.state IN ('ENABLED_ACTIVE', 'ROLLED_BACK', 'UPDATING_PENDING_RECONSENT')
+		  AND ei.active_version_id IS NOT NULL
+		ORDER BY (pa.id = ?) DESC, pa.id ASC
+		LIMIT 1`),
+		adapterRef, adapterRef, adapterRef,
+	).Scan(&adapterID, &hostsJSON, &approvedPermsJSON)
+	return adapterID, hostsJSON, approvedPermsJSON, err
 }
 
 var errBootstrapInitialConnectionFailed = errors.New("initial_connection provisioning failed")
@@ -149,26 +255,31 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		err := s.db.QueryRowContext(r.Context(), s.rebind(`
-			SELECT id FROM provider_adapters WHERE id = ? OR adapter_slug = ? LIMIT 1`),
-			strings.TrimSpace(ic.AdapterID), strings.TrimSpace(ic.AdapterID),
-		).Scan(&resolvedAdapterID)
-		if errors.Is(err, sql.ErrNoRows) {
-			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "unknown_provider_adapter", "invalid_request_error", "initial_connection.adapter_id does not reference an installed provider adapter", false, nil)
+		var (
+			hostsJSON, approvedPermsJSON string
+			adpErr                       error
+		)
+		resolvedAdapterID, hostsJSON, approvedPermsJSON, adpErr = s.resolveBootstrapAvailableAdapterID(r.Context(), strings.TrimSpace(ic.AdapterID))
+		if errors.Is(adpErr, sql.ErrNoRows) {
+			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "unknown_provider_adapter", "invalid_request_error", "initial_connection.adapter_id does not reference an active installed provider adapter", false, nil)
 			return
 		}
-		if err != nil {
+		if adpErr != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating initial_connection adapter", true, nil)
+			return
+		}
+		if permErr := catalog.ValidateEndpointAgainstApprovedPermissions(ic.EndpointURL, ic.AllowPrivateIP, hostsJSON, approvedPermsJSON); permErr != nil {
+			writeErrorEnvelope(w, r, http.StatusUnprocessableEntity, "egress_policy_denied", "invalid_request_error", permErr.Error(), false, nil)
 			return
 		}
 	}
 
 	var (
-		connID      string
-		deployID    string
-		routeID     string
-		createdKey  *vkey.CreatedVirtualKey
-		commitDEKs  []func()
+		connID     string
+		deployID   string
+		routeID    string
+		createdKey *vkey.CreatedVirtualKey
+		commitDEKs []func()
 	)
 	res, err := s.bootstrap.CompleteWithProvisioner(r.Context(), bootstrap.CompleteRequest{
 		BootstrapToken:              req.BootstrapToken,

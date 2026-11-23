@@ -21,6 +21,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/trust"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
@@ -490,8 +491,13 @@ func (s *Server) handleApproveExtensionPermissions(w http.ResponseWriter, r *htt
 		return
 	}
 
+	syncErr := s.syncExtensionProviderAdapters(r.Context(), rec.InstallationID)
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
+	}
+	if syncErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "adapter_registration_failed", "upstream_error", "extension activated cleanly, but failed registering provider adapters", true, nil)
+		return
 	}
 
 	out, _, err := s.loadExtensionInstallationDTO(r.Context(), rec.InstallationID)
@@ -605,8 +611,13 @@ func (s *Server) handleUpgradeExtension(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	syncErr := s.syncExtensionProviderAdapters(r.Context(), insID)
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
+	}
+	if syncErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "adapter_registration_failed", "upstream_error", "extension upgraded cleanly, but failed registering provider adapters", true, nil)
+		return
 	}
 	out, _, err := s.loadExtensionInstallationDTO(r.Context(), insID)
 	if err != nil {
@@ -696,8 +707,13 @@ func (s *Server) handleRollbackExtension(w http.ResponseWriter, r *http.Request)
 		})
 	}
 
+	syncErr := s.syncExtensionProviderAdapters(r.Context(), insID)
 	if s.snapshots != nil {
 		_ = s.snapshots.Refresh(r.Context())
+	}
+	if syncErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "adapter_registration_failed", "upstream_error", "extension rolled back cleanly, but failed syncing provider adapters", true, nil)
+		return
 	}
 	out, _, err := s.loadExtensionInstallationDTO(r.Context(), insID)
 	if err != nil {
@@ -1480,19 +1496,36 @@ func permissionSetFromManifest(manifest installer.ExtensionManifest, executionTi
 		inspectRequest = manifest.Permissions.PayloadAccess.InspectRequestBody
 		inspectResponse = manifest.Permissions.PayloadAccess.InspectResponseBody
 	}
+	var suffixes []string
+	if manifest.Adapter != nil {
+		if rawSuffixes, ok := manifest.Adapter["endpointHostSuffixes"].([]any); ok {
+			for _, item := range rawSuffixes {
+				if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+					suffixes = append(suffixes, strings.TrimSpace(s))
+				}
+			}
+		} else if strSuffixes, ok := manifest.Adapter["endpointHostSuffixes"].([]string); ok {
+			for _, s := range strSuffixes {
+				if strings.TrimSpace(s) != "" {
+					suffixes = append(suffixes, strings.TrimSpace(s))
+				}
+			}
+		}
+	}
 	return installer.NormalizePermissionSet(installer.PermissionSet{
-		AllowedHosts:        manifest.Permissions.NetworkEgress.AllowedHosts,
-		AllowPrivateIP:      manifest.Permissions.NetworkEgress.AllowPrivateIP,
-		RequireTLS:          manifest.Permissions.NetworkEgress.RequireTLS,
-		ExecutionTier:       executionTier,
-		SecretSlots:         slots,
-		SecretBindingModes:  bindingModes,
-		Hooks:               manifest.Permissions.Hooks,
-		MaxMemoryMib:        maxMemory,
-		MaxCpuMsPerCall:     maxCPU,
-		MaxStreamChunkCpuMs: maxChunkCPU,
-		InspectRequestBody:  inspectRequest,
-		InspectResponseBody: inspectResponse,
+		AllowedHosts:         manifest.Permissions.NetworkEgress.AllowedHosts,
+		EndpointHostSuffixes: suffixes,
+		AllowPrivateIP:       manifest.Permissions.NetworkEgress.AllowPrivateIP,
+		RequireTLS:           manifest.Permissions.NetworkEgress.RequireTLS,
+		ExecutionTier:        executionTier,
+		SecretSlots:          slots,
+		SecretBindingModes:   bindingModes,
+		Hooks:                manifest.Permissions.Hooks,
+		MaxMemoryMib:         maxMemory,
+		MaxCpuMsPerCall:      maxCPU,
+		MaxStreamChunkCpuMs:  maxChunkCPU,
+		InspectRequestBody:   inspectRequest,
+		InspectResponseBody:  inspectResponse,
 	})
 }
 
@@ -1525,7 +1558,9 @@ func (s *Server) writeInstallerError(w http.ResponseWriter, r *http.Request, err
 		errors.Is(err, installer.ErrInvalidSignature):
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_extension_package", "extension_error", err.Error(), false, nil)
 	case errors.Is(err, port.ErrNotFound):
-		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension package or installation not found", false, nil)
+	case errors.Is(err, installer.ErrMarketplaceArchiveResolverUnavailable):
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "marketplace_archive_resolver_unavailable", "extension_error", err.Error(), true, nil)
 	case errors.Is(err, port.ErrVersionConflict):
 		ver := int64(1)
 		if ins, ok := currentResource.(extensionInstallationDTO); ok && ins.Version > 0 {
@@ -1585,4 +1620,83 @@ func sqlNullStrPtr(ns sql.NullString) *string {
 	}
 	v := ns.String
 	return &v
+}
+
+func (s *Server) syncExtensionProviderAdapters(ctx context.Context, installationID string) error {
+	if s.catalog == nil || s.db == nil || strings.TrimSpace(installationID) == "" {
+		return nil
+	}
+
+	var (
+		state           string
+		activeVersionID string
+		manifestJSON    string
+	)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	func() {
+		defer func() { _ = tx.Rollback() }()
+		if rerr := port.SetOperatorRLSTx(ctx, tx, s.dialect); rerr != nil {
+			err = rerr
+			return
+		}
+		err = tx.QueryRowContext(ctx, s.rebind(`
+			SELECT ei.state, COALESCE(ei.active_version_id, ''), COALESCE(ev.manifest_json, '')
+			FROM extension_installations ei
+			LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id
+			WHERE ei.id = ?`), installationID,
+		).Scan(&state, &activeVersionID, &manifestJSON)
+		if errors.Is(err, sql.ErrNoRows) {
+			err = nil
+			state = ""
+			return
+		}
+	}()
+	if err != nil {
+		return err
+	}
+	if activeVersionID == "" || strings.TrimSpace(manifestJSON) == "" {
+		return nil
+	}
+	switch state {
+	case installer.StateEnabledActive, installer.StateRolledBack, installer.StateUpdatingPendingReconsent:
+	default:
+		return nil
+	}
+
+	var manifest installer.ExtensionManifest
+	if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
+		return fmt.Errorf("decode extension manifest for adapter sync: %w", err)
+	}
+	allowedHosts := normalizeHostList(manifest.Permissions.NetworkEgress.AllowedHosts)
+	if len(allowedHosts) == 0 {
+		return nil
+	}
+
+	for _, capItem := range manifest.Capabilities {
+		if strings.TrimSpace(capItem.Type) != "provider_adapter" {
+			continue
+		}
+		slug := strings.TrimSpace(capItem.AdapterSlug)
+		if slug == "" {
+			continue
+		}
+		var nativePrefix *string
+		if p := strings.TrimSpace(capItem.NativePassthroughPrefix); p != "" {
+			nativePrefix = &p
+		}
+		if _, cerr := s.catalog.UpsertProviderAdapter(ctx, catalog.CreateProviderAdapterParams{
+			InstallationID:          installationID,
+			ExpectedActiveVersionID: activeVersionID,
+			AdapterSlug:             slug,
+			NativePrefix:            nativePrefix,
+			SupportedDialects:       capItem.SupportedDialects,
+			AllowedHosts:            allowedHosts,
+		}); cerr != nil {
+			return cerr
+		}
+	}
+	return nil
 }

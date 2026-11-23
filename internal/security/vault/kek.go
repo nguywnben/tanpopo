@@ -14,7 +14,10 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ed25519"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
@@ -249,6 +252,93 @@ func (p *StaticKEKProvider) copyKey(keyID string) ([]byte, error) {
 	cp := make([]byte, len(raw))
 	copy(cp, raw)
 	return cp, nil
+}
+
+// DeriveDomainEd25519PublicKeys deterministically derives domain-separated
+// Ed25519 verification keys across all loaded Master KEK revisions so nodes
+// sharing the same Master KEK (and across key rotations) verify built-in
+// platform signatures without persisting static private keys in binaries or Git.
+func (p *StaticKEKProvider) DeriveDomainEd25519PublicKeys(domain string) (string, map[string]ed25519.PublicKey, error) {
+	trimmedDomain := strings.TrimSpace(domain)
+	if trimmedDomain == "" {
+		return "", nil, fmt.Errorf("%w: ed25519 derivation domain must not be empty", ErrInvalidMasterKey)
+	}
+	p.mu.RLock()
+	activeID := p.activeKeyID
+	if activeID == "" || len(p.keys) == 0 {
+		p.mu.RUnlock()
+		return "", nil, ErrInvalidMasterKey
+	}
+	copied := make(map[string][]byte, len(p.keys))
+	for id, raw := range p.keys {
+		cp := make([]byte, len(raw))
+		copy(cp, raw)
+		copied[id] = cp
+	}
+	p.mu.RUnlock()
+	defer func() {
+		for _, cp := range copied {
+			clear(cp)
+		}
+	}()
+
+	pubs := make(map[string]ed25519.PublicKey, len(copied))
+	for id, raw := range copied {
+		priv, err := deriveDomainEd25519PrivateKey(raw, trimmedDomain)
+		if err != nil {
+			return "", nil, err
+		}
+		pub := append(ed25519.PublicKey(nil), priv.Public().(ed25519.PublicKey)...)
+		clear(priv)
+		pubs[domainScopedKeyID(id)] = pub
+	}
+	return domainScopedKeyID(activeID), pubs, nil
+}
+
+// SignDomainEd25519 transiently derives the active Master KEK's domain-separated
+// Ed25519 private key, signs message, and zeroes all key material before return.
+func (p *StaticKEKProvider) SignDomainEd25519(domain string, message []byte) (string, []byte, error) {
+	trimmedDomain := strings.TrimSpace(domain)
+	if trimmedDomain == "" {
+		return "", nil, fmt.Errorf("%w: ed25519 derivation domain must not be empty", ErrInvalidMasterKey)
+	}
+	p.mu.RLock()
+	activeID := p.activeKeyID
+	raw, ok := p.keys[activeID]
+	var rawCopy []byte
+	if ok {
+		rawCopy = make([]byte, len(raw))
+		copy(rawCopy, raw)
+	}
+	p.mu.RUnlock()
+	if activeID == "" || !ok {
+		return "", nil, ErrInvalidMasterKey
+	}
+	defer clear(rawCopy)
+
+	priv, err := deriveDomainEd25519PrivateKey(rawCopy, trimmedDomain)
+	if err != nil {
+		return "", nil, err
+	}
+	defer clear(priv)
+
+	sig := ed25519.Sign(priv, message)
+	return domainScopedKeyID(activeID), sig, nil
+}
+
+func domainScopedKeyID(kekID string) string {
+	return "tanpopo-builtin:" + kekID
+}
+
+func deriveDomainEd25519PrivateKey(rawKEK []byte, domain string) (ed25519.PrivateKey, error) {
+	if err := validate256BitKey(rawKEK); err != nil {
+		return nil, err
+	}
+	mac := hmac.New(sha256.New, rawKEK)
+	_, _ = mac.Write([]byte(domain))
+	seed := mac.Sum(nil)
+	defer clear(seed)
+	return ed25519.NewKeyFromSeed(seed), nil
 }
 
 // ParseMasterKeyString decodes a 256-bit Master KEK from 64 hex characters or base64 encoding.
@@ -499,4 +589,3 @@ func generateRandomNonce() ([]byte, error) {
 	}
 	return nonce, nil
 }
-

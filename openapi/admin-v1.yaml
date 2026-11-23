@@ -235,6 +235,22 @@ components:
         embeddings: { type: boolean }
         rerank: { type: boolean }
 
+    BootstrapAvailableAdapter:
+      type: object
+      required: [id, adapter_slug, name, execution_tier, allow_private_ip]
+      properties:
+        id: { type: string }
+        adapter_slug: { type: string }
+        name: { type: string }
+        execution_tier: { type: string }
+        supported_dialects:
+          type: array
+          items: { type: string }
+        allowed_hosts:
+          type: array
+          items: { type: string }
+        allow_private_ip: { type: boolean }
+
     BootstrapStatusResponse:
       type: object
       required: [initialized, offline_mode]
@@ -243,6 +259,10 @@ components:
         offline_mode: { type: boolean }
         multi_org_enabled: { type: boolean }
         version: { type: string }
+        marketplace_catalog_count: { type: integer }
+        available_adapters:
+          type: array
+          items: { $ref: "#/components/schemas/BootstrapAvailableAdapter" }
 
     BootstrapCompleteRequest:
       type: object

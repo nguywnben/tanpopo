@@ -270,7 +270,7 @@ func (s *Server) handleListProviderAdapters(w http.ResponseWriter, r *http.Reque
 		JOIN extension_installations ei ON ei.id = pa.installation_id
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions ev ON ev.id = COALESCE(ei.active_version_id, ei.candidate_version_id)
-		WHERE 1=1`)
+		WHERE ei.state NOT IN ('UNINSTALLED', 'CANCELLED', 'REJECTED_INVALID')`)
 	if cur != nil {
 		q.WriteString(` AND (pa.created_at_ms < ? OR (pa.created_at_ms = ? AND pa.id < ?))`)
 		args = append(args, cur.CreatedMs, cur.CreatedMs, cur.LastID)
@@ -357,7 +357,8 @@ func (s *Server) handleGetProviderAdapter(w http.ResponseWriter, r *http.Request
 		JOIN extension_installations ei ON ei.id = pa.installation_id
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions ev ON ev.id = COALESCE(ei.active_version_id, ei.candidate_version_id)
-		WHERE pa.id = ?`), adapterID)
+		WHERE pa.id = ?
+		  AND ei.state NOT IN ('UNINSTALLED', 'CANCELLED', 'REJECTED_INVALID')`), adapterID)
 	dto, _, err := scanProviderAdapterSummaryRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "provider adapter not found", false, nil)
@@ -410,13 +411,35 @@ func scanProviderAdapterSummaryRow(row interface{ Scan(...any) error }) (provide
 	if strings.TrimSpace(manifestJSON) != "" && manifestJSON != "{}" {
 		var mf map[string]any
 		if json.Unmarshal([]byte(manifestJSON), &mf) == nil {
-			if rawAuth, ok := mf["supportedAuthMethods"].([]any); ok && len(rawAuth) > 0 {
-				authMethods = make([]string, 0, len(rawAuth))
+			extracted := make([]string, 0)
+			if rawAuth, ok := mf["supportedAuthMethods"].([]any); ok {
 				for _, item := range rawAuth {
 					if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
-						authMethods = append(authMethods, s)
+						extracted = append(extracted, strings.TrimSpace(s))
 					}
 				}
+			}
+			if rawCaps, ok := mf["capabilities"].([]any); ok {
+				seenAuth := make(map[string]bool)
+				for _, capRaw := range rawCaps {
+					capMap, ok := capRaw.(map[string]any)
+					if !ok || capMap["type"] != "provider_adapter" {
+						continue
+					}
+					if methods, ok := capMap["authMethods"].([]any); ok {
+						for _, mRaw := range methods {
+							if mMap, ok := mRaw.(map[string]any); ok {
+								if mid, ok := mMap["id"].(string); ok && strings.TrimSpace(mid) != "" && !seenAuth[mid] {
+									seenAuth[mid] = true
+									extracted = append(extracted, strings.TrimSpace(mid))
+								}
+							}
+						}
+					}
+				}
+			}
+			if len(extracted) > 0 {
+				authMethods = extracted
 			}
 		}
 	}
@@ -1140,7 +1163,10 @@ func (s *Server) handleDeleteConnection(w http.ResponseWriter, r *http.Request) 
 			current, getErr := s.catalog.GetProviderConnection(r.Context(), orgID, connID)
 			if getErr == nil {
 				currentDTO, dtoErr := s.buildProviderConnectionDTO(r.Context(), current)
-				if dtoErr == nil { writeOptimisticConflict(w, r, current.Version, currentDTO); return }
+				if dtoErr == nil {
+					writeOptimisticConflict(w, r, current.Version, currentDTO)
+					return
+				}
 			}
 			writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "provider connection changed; reload before retrying", false, nil)
 		case errors.Is(err, port.ErrResourceInUse):

@@ -11,8 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -180,10 +180,20 @@ func (s *Server) handleRegisterMCPServer(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	for _, raw := range req.AllowedCIDRs {
-		if _, _, err := net.ParseCIDR(raw); err != nil {
-			writeErrorEnvelope(w, r, 400, "invalid_request", "invalid_request_error", "allowed_cidrs contains an invalid CIDR", false, nil)
+		pfx, err := netip.ParsePrefix(strings.TrimSpace(raw))
+		if err != nil || pfx.Bits() == 0 {
+			writeErrorEnvelope(w, r, 400, "invalid_request", "invalid_request_error", "allowed_cidrs must contain valid non-wildcard CIDR prefixes", false, nil)
 			return
 		}
+	}
+	if err := validateEndpointSSRF(r.Context(), strings.TrimSpace(req.EndpointURL), req.AllowPrivate, s.hostResolver, s.blockedPorts); err != nil {
+		var egressErr *egress.Error
+		if errors.As(err, &egressErr) && egressErr.HTTPStatus == http.StatusForbidden {
+			writeErrorEnvelope(w, r, http.StatusForbidden, egressErr.Code, "permission_error", egressErr.Message, false, nil)
+			return
+		}
+		writeErrorEnvelope(w, r, 400, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+		return
 	}
 	credential := ""
 	if req.CredentialID != nil {

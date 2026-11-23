@@ -367,7 +367,7 @@ func seedTestAdapter(t *testing.T, h *adminTestHarness) {
 		INSERT INTO extension_installations (
 			id, package_id, active_version_id, state, approved_permissions_json,
 			approved_by_principal_id, version, created_at_ms, updated_at_ms
-		) VALUES ('ins_openai_spec', 'ext_openai_spec', 'exv_openai_spec', 'ENABLED_ACTIVE', '{}', NULL, 1, ?, ?)`,
+		) VALUES ('ins_openai_spec', 'ext_openai_spec', 'exv_openai_spec', 'ENABLED_ACTIVE', '{"allowed_hosts":["api.openai.com"],"allow_private_ip":false,"require_tls":true}', NULL, 1, ?, ?)`,
 		now, now,
 	)
 	if err != nil {
@@ -393,11 +393,11 @@ func TestAllAdminRoutesHaveExplicitPermission(t *testing.T) {
 	h := newAdminTestHarness(t)
 
 	allowedPublic := map[string]bool{
-		"GET /admin/v1/bootstrap/status":     true,
-		"POST /admin/v1/bootstrap/complete":  true,
-		"POST /admin/v1/auth/login":          true,
-		"GET /admin/v1/auth/oidc/start":      true,
-		"GET /admin/v1/auth/oidc/callback":   true,
+		"GET /admin/v1/bootstrap/status":    true,
+		"POST /admin/v1/bootstrap/complete": true,
+		"POST /admin/v1/auth/login":         true,
+		"GET /admin/v1/auth/oidc/start":     true,
+		"GET /admin/v1/auth/oidc/callback":  true,
 	}
 
 	routes := h.srv.Routes()
