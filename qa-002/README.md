@@ -12,7 +12,7 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [Historical defect retest register](DEFECT-RETEST-REGISTER.md)
 - `evidence/` — sanitized command outcomes, API/state snapshots, and visually reviewed screenshots.
-- `reports/` — phase reports and new defect findings (stable IDs begin at DEF-016).
+- `reports/` — phase reports, new defect findings (stable IDs begin at DEF-016), and explicitly unclassified QA observations.
 
 Each checkpoint records the tested revision/runtime, actions, evidence, and PASS / FAIL / BLOCKED / UNVERIFIED result. A PASS is limited to the exact scenario evidenced. No test or artifact may be called PASS based only on source inspection, HTTP success, or an automated test.
 
@@ -39,3 +39,4 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP12 | Local 401 provider probe, deployment promotion guard, route health and fail-closed inference | PASS for scoped rejection/readiness path; Google and other failure modes remain open |
 | CP13 | Console encrypted backup, CLI verification, secret-decryption restore, restored startup/login | PASS for SQLite path; cluster and damaged-archive cases remain open |
 | CP14 | Project-scoped Team Admin member creation, list refresh and role-boundary retest | CREATE/BOUNDARY PASS; UI list refresh FAIL (DEF-016), separately recorded |
+| CP15 | Authorized A2A task paused at synthetic endpoint during Console graceful key revocation | Revocation PASS; dispatched task returned 400 `context canceled` and persisted Failed. A2A task drain contract UNVERIFIED; not classified as defect. |

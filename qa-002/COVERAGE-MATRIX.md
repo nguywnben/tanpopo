@@ -15,7 +15,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | FT-05 | Extension isolation and blind credential broker | UNVERIFIED | |
 | FT-06 | Registry, package install, lockfile, contract harness | UNVERIFIED | |
 | FT-07 | MCP discovery, grants, schema pinning, approvals | PARTIAL PASS | CP09 real UI registration rejects wildcard and persists explicit private CIDR; no valid MCP tool sync/grant/invocation fixture yet. |
-| FT-08 | A2A discovery, authorization, delegation, tasks/lifecycle | PARTIAL PASS | CP08 authorized discovery, task submit/input-required/resume/complete/cancel, terminal transition rejection, and same-ID persistence against isolated synthetic endpoint; task draining, budgets, delegation depth, other roles remain UNVERIFIED. |
+| FT-08 | A2A discovery, authorization, delegation, tasks/lifecycle | PARTIAL PASS | CP08 authorized discovery, task submit/input-required/resume/complete/cancel, terminal transition rejection, and same-ID persistence against isolated synthetic endpoint. CP15 graceful key revocation during a deliberately paused A2A request caused HTTP 400 `context canceled`, a persisted Failed task, and RELEASED_UNUSED hold; contract does not define this non-stream task interaction. Task drain semantics, budgets, delegation depth, other roles remain UNVERIFIED. |
 | FT-09 | Org/project/environment, six-role RBAC, key lifecycle | PARTIAL PASS | CP06 provisioning audit; CP08 A2A-only/provider-only issuance, authorization, persistence and revocation; CP14 actual project-scoped Team Admin membership and escalation/cross-project denial. Member list refresh defect DEF-016 remains open; other roles/tenant boundaries remain UNVERIFIED. |
 | FT-10 | Capability routing, health, failover, route explain | PARTIAL PASS | CP11 single-target synthetic route served; CP12 route to unverified connection remained Provisioned and failed closed. Multi-target failover, weights, policy explain, health recovery remain UNVERIFIED. |
 | FT-11 | Runtime policy, rate limit, SSRF/security boundaries | UNVERIFIED | |
@@ -40,7 +40,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | SCR-07 | Installed plugins/lockfile | UNVERIFIED | |
 | SCR-08 | Capability routes/route explain | UNVERIFIED | |
 | SCR-09 | Policies/guardrails | UNVERIFIED | |
-| SCR-10 | MCP/A2A registry and tasks | PARTIAL PASS | CP08 visually inspected actual agent registration, A2A-only key grants, input-required tasks and completion; CP09 MCP server registration/persistence visually inspected. MCP tool sync/invocation, error recovery and concurrent drain remain UNVERIFIED. |
+| SCR-10 | MCP/A2A registry and tasks | PARTIAL PASS | CP08 visually inspected actual agent registration, A2A-only key grants, input-required tasks and completion; CP09 MCP server registration/persistence visually inspected. MCP tool sync/invocation and error recovery remain UNVERIFIED. CP15 screenshot shows a Working task at pause and a Failed row after graceful key revocation; whether that violates drain semantics is UNVERIFIED because documented contract covers active streams. |
 | SCR-11 | Request traces | UNVERIFIED | |
 | SCR-12 | FinOps budgets/chargeback | PARTIAL PASS | CP05 visually reviewed empty budgets, create drawer and persisted budget row; CP11 visually reviewed no-budget chargeback headline/table and CSV export success; export contents matched selected Model grouping. Other dimensions and budget enforcement remain UNVERIFIED. |
 | SCR-13 | Keys, projects, members, roles | PARTIAL PASS | CP06 project/environment provisioning; CP08 scoped key creation, grant visibility and revocation; CP14 Team Admin Add member and scoped grant. Team Admin list refresh is blocked by DEF-016; rotation and other role boundaries remain open. |
@@ -61,7 +61,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | WF-07 | Capability routing and provider failover | UNVERIFIED | |
 | WF-08 | Quota/budget/chargeback without exact usage | PARTIAL PASS | CP11 exact settlement/chargeback/export verified with zero budget ledgers, and CP05 created first project budget. Quota consumption, overage, estimated/unmetered settlement and ledger holds remain UNVERIFIED. |
 | WF-09 | MCP tool invocation, side-effect guard, approval | UNVERIFIED | |
-| WF-10 | Key rotation and emergency revocation | PARTIAL PASS | CP08 A2A key revoked via Console; UI reported 0 active streams severed and old credential was denied with 401. Rotation/grace and revocation with an actual concurrent active A2A task remain UNVERIFIED. |
+| WF-10 | Key rotation and emergency revocation | PARTIAL PASS | CP08 A2A key revoked via Console; UI reported 0 active streams severed and old credential was denied with 401. CP15 revoked during a paused A2A dispatch; request returned 400 `context canceled`, task persisted Failed, and hold released. Whether graceful drain covers this non-stream workflow is UNVERIFIED. Rotation/grace and active SSE revocation remain UNVERIFIED. |
 | WF-11 | Extension update, escalation block, rollback | UNVERIFIED | |
 | WF-12 | Incident detection, containment, recovery | UNVERIFIED | |
 | WF-13 | Data retention, anonymization, deletion | UNVERIFIED | |
@@ -70,6 +70,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 
 | Dimension | QA-002 status | Evidence / open coverage |
 | --- | --- | --- |
+| A2A dispatch/revocation contract: admitted task recovery, side effects and reservation settlement | UNVERIFIED | CP15 confirmed admitted task cancellation on graceful key revoke; contract gap prevents a pass/fail classification. |
 | User roles: first-time owner, developer, administrator, Team Admin, security reviewer, operator, FinOps, extension author | PARTIAL PASS | First-time owner setup/login; CP14 actual Developer+Team Admin login, successful scoped member create, org-role escalation and cross-project denial. Security Reviewer, FinOps Viewer, non-owner Operator and extension author roles remain UNVERIFIED. |
 | Tenant and resource authorization; default-deny and cross-tenant boundaries | PARTIAL PASS | CP08 provider-only key was denied A2A discovery/task with 403; revoked key received 401. Cross-tenant and all-resource boundaries remain UNVERIFIED. |
 | Provider integrations: Google, Meta, deterministic synthetic provider, adapter failures | PARTIAL PASS | CP10/11 Ollama synthetic success, exact settlement; CP12 isolated HTTP 401 probe and fail-closed route. Google provider remains blocked/UNVERIFIED for Cloud egress vs adapter separation; Meta and more adapters remain open. |
