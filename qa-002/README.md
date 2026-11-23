@@ -12,6 +12,7 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [Historical defect retest register](DEFECT-RETEST-REGISTER.md)
 - `evidence/` — sanitized command outcomes, API/state snapshots, and visually reviewed screenshots.
+- [QA-OBS-004](reports/QA-OBS-004-mcp-allowlist-failure-diagnostic.md) — unresolved error diagnostic/state semantics observation, not a confirmed defect.
 - `reports/` — phase reports, new defect findings (DEF-016 onward), and explicitly unclassified QA observations.
 
 Each checkpoint records the tested revision/runtime, actions, evidence, and PASS / FAIL / BLOCKED / UNVERIFIED result. A PASS is limited to the exact scenario evidenced. No test or artifact may be called PASS based only on source inspection, HTTP success, or an automated test.
@@ -49,3 +50,4 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP22 | Fresh-runtime provider install → connection → deployment → route → streaming Playground inference and trace correlation | PASS for scoped synthetic provider setup/inference and exact-usage persistence; FAIL DEF-017 because Playground's trace card remains pending on repeated 404s despite a persisted trace. Google and real-provider behavior remain BLOCKED/UNVERIFIED; further product and platform coverage continues. |
 | CP23 | Rerun interrupted full Go race suite using verified Go 1.26.11 | PASS: 86 test-bearing packages, 22 packages without tests, zero failures/race reports; source diff from baseline empty. Automated result does not replace product coverage. |
 | CP24 | Streamable HTTP MCP governance and data-plane lifecycle | PASS for the synthetic read-only flow: registration/discovery, exact-tool key grant, JSON-RPC call, ungranted and cross-plane denial, drift lock/reapproval, and revoked-key 401. Broader MCP risk/role/transport coverage remains open; see checkpoint. |
+| CP25 | MCP explicit CIDR negative test with reachable positive control | PASS for one literal loopback allowlist mismatch: sync failed and instrumented fixture received no request; same endpoint with matching /32 synced successfully. SSRF/address-resolution permutations remain unverified; generic retryable error and Active-state semantics tracked as unresolved QA-OBS-004. |

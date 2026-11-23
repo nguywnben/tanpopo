@@ -1,0 +1,40 @@
+{
+  "api": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/mcp/servers",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"mcp_01m857dpwke009mpecryx6h56f\",\"project_id\":\"prj_01m853e561e00byw750arfmw8y\",\"slug\":\"qa002-cp24-server\",\"name\":\"QA002 CP24 Synthetic MCP\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19109/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":1,\"version\":1},{\"id\":\"mcp_01m858mtkye00basts29jbw0dj\",\"project_id\":\"prj_01m853e561e00byw750arfmw8y\",\"slug\":\"qa002-cp25-allowed-control\",\"name\":\"QA002 CP25 allowed control\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19110/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":0,\"version\":1},{\"id\":\"mcp_01m858k4sce00asqfd1wqphrzd\",\"project_id\":\"prj_01m853e561e00byw750arfmw8y\",\"slug\":\"qa002-cp25-denied\",\"name\":\"QA002 CP25 CIDR mismatch fixture\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19110/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":0,\"version\":1}],\"has_more\":false,\"next_cursor\":null}\n"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/mcp/servers/mcp_01m858mtkye00basts29jbw0dj/sync-tools",
+      "status": 200,
+      "body": "{\"drifted_count\":0,\"synced_count\":1,\"tools\":[{\"id\":\"mcp_01m858n9rae0096ka7eb2v5cdj\",\"name\":\"safe_status\",\"schema_hash\":\"186b7c01359c7117d587d82edb51756e67cfeb05f99006a4b16fb2342d651e97\",\"drift_locked\":true,\"version\":1}]}\n"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/mcp/servers",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"mcp_01m857dpwke009mpecryx6h56f\",\"project_id\":\"prj_01m853e561e00byw750arfmw8y\",\"slug\":\"qa002-cp24-server\",\"name\":\"QA002 CP24 Synthetic MCP\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19109/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":1,\"version\":1},{\"id\":\"mcp_01m858mtkye00basts29jbw0dj\",\"project_id\":\"prj_01m853e561e00byw750arfmw8y\",\"slug\":\"qa002-cp25-allowed-control\",\"name\":\"QA002 CP25 allowed control\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19110/mcp\",\"allow_private_ip\":true,\"state\":\"SCHEMA_DRIFT_LOCKED\",\"tool_count\":1,\"version\":1},{\"id\":\"mcp_01m858k4sce00asqfd1wqphrzd\",\"project_id\":\"prj_01m853e561e00byw750arfmw8y\",\"slug\":\"qa002-cp25-denied\",\"name\":\"QA002 CP25 CIDR mismatch fixture\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19110/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":0,\"version\":1}],\"has_more\":false,\"next_cursor\":null}\n"
+    }
+  ],
+  "body": "ndpoint\tSchema state\tTools\tActions\n\nQA002 CP24 Synthetic MCP\nqa002-cp24-server\n\thttp://127.0.0.1:19109/mcp\tActive\t1\t\nSync tools\n\n\nQA002 CP25 allowed control\nqa002-cp25-allowed-control\n\thttp://127.0.0.1:19110/mcp\tSchema Drift Locked\t1\t\nSync tools\n\n\nQA002 CP25 CIDR mismatch fixture\nqa002-cp25-denied\n\thttp://127.0.0.1:19110/mcp\tActive\t0\t\nSync tools\nQA002 CP25 allowed control tools\n1\nTool\tObserved JCS hash\tSchema review\tGrant to Virtual Key\nqa002-cp25-allowed-control__safe_status\t186b7c01359c7117d587d82edb51756e67cfeb05f99006a4b16fb2342d651e97\t\nDrift locked\nApprove schema\n\t\nVirtual key for safe_status\nSelect key\nGrant\nAll systems nominal No active operational alerts or pending remediation items.",
+  "fixture_state": {
+    "requests": [
+      {
+        "method": "initialize",
+        "path": "/mcp"
+      },
+      {
+        "method": "notifications/initialized",
+        "path": "/mcp"
+      },
+      {
+        "method": "tools/list",
+        "path": "/mcp"
+      }
+    ]
+  },
+  "secret_material_included": false
+}
