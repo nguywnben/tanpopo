@@ -40,6 +40,13 @@ Playground inference review, latency/error inspection, privacy/debug metadata re
 - The displayed link/identifier opens the associated trace and preserves metadata-only privacy guarantees.
 - Repeat for successful non-streaming and streaming requests, provider errors, missing deployments, and parallel comparison requests; ensure each response maps to its own trace.
 
+## Independent recurrence in CP26
+
+On the same exact baseline, a separate later synthetic Playground request using route `qa002-cp22-route-repro` returned HTTP 200 and visibly displayed the successful response, then again remained at `Trace metadata pending…`. The UI polled `req_01m8593ew4e00arp5f6etth064` five times with HTTP 404. Read-only SQLite records the successful trace as `trc_01m8593ew4e00arqm2vrq3f6gx`, status 200, route `qa002-cp22-route-repro`, and deployment `dpl_01m8562ktme0087wb258b43c11`. This reproduces the issue in a separate Playground session during the CP26 budget workflow.
+
+- `../evidence/CP26-playground-budget-result.png` and `.json` — visually inspected independent successful response, pending trace card, and five 404 retries.
+- `../evidence/CP26-budget-state-after-request.json` — persisted successful trace correlation and exact usage in the CP26 follow-on workflow.
+
 ## Evidence
 
 - `../evidence/CP22-playground-stream-result.png` — visually inspected successful response and pending metadata after six seconds.

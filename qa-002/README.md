@@ -13,6 +13,9 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [Historical defect retest register](DEFECT-RETEST-REGISTER.md)
 - `evidence/` — sanitized command outcomes, API/state snapshots, and visually reviewed screenshots.
 - [QA-OBS-004](reports/QA-OBS-004-mcp-allowlist-failure-diagnostic.md) — unresolved error diagnostic/state semantics observation, not a confirmed defect.
+- [QA-OBS-005](reports/QA-OBS-005-budget-backfill-semantics.md) — unresolved activation-window contract for budgets created after spend.
+- [DEF-018](reports/DEF-018-finops-mislabels-playground-lifetime-budget.md) — confirmed lifetime budget period is surfaced as monthly.
+- [DEF-019](reports/DEF-019-playground-hides-budget-rejection-reason.md) — confirmed Playground cap rejection loses its canonical reason.
 - `reports/` — phase reports, new defect findings (DEF-016 onward), and explicitly unclassified QA observations.
 
 Each checkpoint records the tested revision/runtime, actions, evidence, and PASS / FAIL / BLOCKED / UNVERIFIED result. A PASS is limited to the exact scenario evidenced. No test or artifact may be called PASS based only on source inspection, HTTP success, or an automated test.
@@ -51,3 +54,4 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP23 | Rerun interrupted full Go race suite using verified Go 1.26.11 | PASS: 86 test-bearing packages, 22 packages without tests, zero failures/race reports; source diff from baseline empty. Automated result does not replace product coverage. |
 | CP24 | Streamable HTTP MCP governance and data-plane lifecycle | PASS for the synthetic read-only flow: registration/discovery, exact-tool key grant, JSON-RPC call, ungranted and cross-plane denial, drift lock/reapproval, and revoked-key 401. Broader MCP risk/role/transport coverage remains open; see checkpoint. |
 | CP25 | MCP explicit CIDR negative test with reachable positive control | PASS for one literal loopback allowlist mismatch: sync failed and instrumented fixture received no request; same endpoint with matching /32 synced successfully. SSRF/address-resolution permutations remain unverified; generic retryable error and Active-state semantics tracked as unresolved QA-OBS-004. |
+| CP26 | FinOps period fidelity and project-budget inference path | FAIL DEF-018 and DEF-019; DEF-017 independently recurred. Playground lifetime budgets are mislabeled monthly; generic 429 hides project budget reason. Project cap serial exact-boundary rejection and cap-increase recovery passed with persisted holds/settlements; retroactive prior-usage semantics are QA-OBS-005 and unresolved. See [checkpoint](checkpoints/CP26-finops-budget-cross-feature-regression.md). |

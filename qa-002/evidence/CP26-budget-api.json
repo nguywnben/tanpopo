@@ -1,0 +1,46 @@
+{
+  "status": 200,
+  "budgets": [
+    {
+      "id": "bdg_01m856b4yre00a8hx8ch2mkvgt",
+      "scope_tier": "VIRTUAL_KEY",
+      "scope_id": "vky_01m856b4ype0091h727havv8c7",
+      "period": "MONTHLY",
+      "hard_limit_micros": 500000,
+      "version": 3
+    },
+    {
+      "id": "bdg_01m856a0rce00a0dj0thxq7khn",
+      "scope_tier": "VIRTUAL_KEY",
+      "scope_id": "vky_01m856a0rbe00bxmqy8nacn4nf",
+      "period": "MONTHLY",
+      "hard_limit_micros": 500000,
+      "version": 3
+    },
+    {
+      "id": "bdg_01m856843de00873fma9nzt8j4",
+      "scope_tier": "VIRTUAL_KEY",
+      "scope_id": "vky_01m856843ce00a3bd2sz1sps9r",
+      "period": "MONTHLY",
+      "hard_limit_micros": 500000,
+      "version": 3
+    },
+    {
+      "id": "bdg_01m855yr1we008w90wvpkagpg3",
+      "scope_tier": "VIRTUAL_KEY",
+      "scope_id": "vky_01m855yr1te0082arkf0msjcs8",
+      "period": "MONTHLY",
+      "hard_limit_micros": 500000,
+      "version": 1
+    },
+    {
+      "id": "bdg_01m853j3sfe009wxyfgz7kvcf5",
+      "scope_tier": "VIRTUAL_KEY",
+      "scope_id": "vky_01m853j3sde00986ngt0pv1th5",
+      "period": "MONTHLY",
+      "hard_limit_micros": 500000,
+      "version": 1
+    }
+  ],
+  "secret_material_included": false
+}

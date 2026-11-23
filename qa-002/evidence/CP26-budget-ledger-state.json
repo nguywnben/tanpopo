@@ -1,0 +1,76 @@
+{
+  "runtime": "isolated SQLite runtime 127.0.0.1:18086",
+  "rows": [
+    {
+      "id": "bdg_01m856b4yre00a8hx8ch2mkvgt",
+      "org_id": "org_01m853e561e00byvg158ab8tbz",
+      "scope_type": "VIRTUAL_KEY",
+      "scope_id": "vky_01m856b4ype0091h727havv8c7",
+      "period_kind": "TOTAL_LIFETIME",
+      "period_start_ms": 1795470758870,
+      "period_end_ms": 1795471658870,
+      "hard_limit_micros": 500000,
+      "reserved_hold_micros": 0,
+      "settled_exact_micros": 1,
+      "settled_estimated_micros": 0,
+      "version": 3
+    },
+    {
+      "id": "bdg_01m856a0rce00a0dj0thxq7khn",
+      "org_id": "org_01m853e561e00byvg158ab8tbz",
+      "scope_type": "VIRTUAL_KEY",
+      "scope_id": "vky_01m856a0rbe00bxmqy8nacn4nf",
+      "period_kind": "TOTAL_LIFETIME",
+      "period_start_ms": 1795470721803,
+      "period_end_ms": 1795471621803,
+      "hard_limit_micros": 500000,
+      "reserved_hold_micros": 0,
+      "settled_exact_micros": 1,
+      "settled_estimated_micros": 0,
+      "version": 3
+    },
+    {
+      "id": "bdg_01m856843de00873fma9nzt8j4",
+      "org_id": "org_01m853e561e00byvg158ab8tbz",
+      "scope_type": "VIRTUAL_KEY",
+      "scope_id": "vky_01m856843ce00a3bd2sz1sps9r",
+      "period_kind": "TOTAL_LIFETIME",
+      "period_start_ms": 1795470659692,
+      "period_end_ms": 1795471559692,
+      "hard_limit_micros": 500000,
+      "reserved_hold_micros": 0,
+      "settled_exact_micros": 0,
+      "settled_estimated_micros": 0,
+      "version": 3
+    },
+    {
+      "id": "bdg_01m855yr1we008w90wvpkagpg3",
+      "org_id": "org_01m853e561e00byvg158ab8tbz",
+      "scope_type": "VIRTUAL_KEY",
+      "scope_id": "vky_01m855yr1te0082arkf0msjcs8",
+      "period_kind": "TOTAL_LIFETIME",
+      "period_start_ms": 1795470352442,
+      "period_end_ms": 1795471252442,
+      "hard_limit_micros": 500000,
+      "reserved_hold_micros": 0,
+      "settled_exact_micros": 0,
+      "settled_estimated_micros": 0,
+      "version": 1
+    },
+    {
+      "id": "bdg_01m853j3sfe009wxyfgz7kvcf5",
+      "org_id": "org_01m853e561e00byvg158ab8tbz",
+      "scope_type": "VIRTUAL_KEY",
+      "scope_id": "vky_01m853j3sde00986ngt0pv1th5",
+      "period_kind": "TOTAL_LIFETIME",
+      "period_start_ms": 1795467841325,
+      "period_end_ms": 1795468741325,
+      "hard_limit_micros": 500000,
+      "reserved_hold_micros": 0,
+      "settled_exact_micros": 0,
+      "settled_estimated_micros": 0,
+      "version": 1
+    }
+  ],
+  "secret_material_included": false
+}
