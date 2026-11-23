@@ -14,7 +14,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | FT-04 | Secret vault, authorized OAuth, federated identity | UNVERIFIED | |
 | FT-05 | Extension isolation and blind credential broker | UNVERIFIED | |
 | FT-06 | Registry, package install, lockfile, contract harness | UNVERIFIED | |
-| FT-07 | MCP discovery, grants, schema pinning, approvals | UNVERIFIED | |
+| FT-07 | MCP discovery, grants, schema pinning, approvals | PARTIAL PASS | CP09 real UI registration rejects wildcard and persists explicit private CIDR; no valid MCP tool sync/grant/invocation fixture yet. |
 | FT-08 | A2A discovery, authorization, delegation, tasks/lifecycle | PARTIAL PASS | CP08 authorized discovery, task submit/input-required/resume/complete/cancel, terminal transition rejection, and same-ID persistence against isolated synthetic endpoint; task draining, budgets, delegation depth, other roles remain UNVERIFIED. |
 | FT-09 | Org/project/environment, six-role RBAC, key lifecycle | PARTIAL PASS | CP06 provisioning audit; CP08 A2A-only/provider-only issuance, authorization, persistence and revocation; rotation, other role/tenant boundaries remain UNVERIFIED. |
 | FT-10 | Capability routing, health, failover, route explain | UNVERIFIED | |
@@ -40,7 +40,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | SCR-07 | Installed plugins/lockfile | UNVERIFIED | |
 | SCR-08 | Capability routes/route explain | UNVERIFIED | |
 | SCR-09 | Policies/guardrails | UNVERIFIED | |
-| SCR-10 | MCP/A2A registry and tasks | PARTIAL PASS | CP08 visually inspected actual agent registration, A2A-only key grants, input-required tasks and completion; MCP, error recovery and concurrent drain remain UNVERIFIED. |
+| SCR-10 | MCP/A2A registry and tasks | PARTIAL PASS | CP08 visually inspected actual agent registration, A2A-only key grants, input-required tasks and completion; CP09 MCP server registration/persistence visually inspected. MCP tool sync/invocation, error recovery and concurrent drain remain UNVERIFIED. |
 | SCR-11 | Request traces | UNVERIFIED | |
 | SCR-12 | FinOps budgets/chargeback | PARTIAL PASS | CP05 visually reviewed empty budgets, create drawer, and persisted budget row; chargeback and export scenarios remain UNVERIFIED. |
 | SCR-13 | Keys, projects, members, roles | PARTIAL PASS | CP06 project/environment provisioning; CP08 A2A-only and provider-only key creation, grant visibility and revocation screenshots inspected. Member/role journeys and rotation remain UNVERIFIED. |
