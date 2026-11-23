@@ -1,0 +1,30 @@
+{
+  "phase": 11,
+  "date": "2026-11-23",
+  "environment": "Retained isolated SQLite QA instance over HTTPS loopback",
+  "actor_role": "ORG_OWNER",
+  "journey": [
+    {
+      "action": "Create project from the workspace scope switcher",
+      "project_name": "QA Isolation 2026-11-23",
+      "project_slug": "qa-isolation-20261123",
+      "api_status": 201,
+      "follow_up": "Console switched into the new project and showed No env"
+    },
+    {
+      "action": "Create environment from the same project scope",
+      "environment_name": "QA Sandbox",
+      "environment_slug": "qa-sandbox",
+      "api_status": 201,
+      "follow_up": "Console switched into the new environment"
+    }
+  ],
+  "visual_evidence": [
+    "phase11-org-switcher.png",
+    "phase11-new-project-form.png",
+    "phase11-project-created.png",
+    "phase11-environment-created.png"
+  ],
+  "qa_data_retained": true,
+  "notes": "These synthetic project/environment records are isolated QA data in the disposable SQLite database. They generated no provider traffic or spend. This confirms owner provisioning and local scope switching, not cross-organization authorization isolation. The organization's Crypto-shred action was not invoked."
+}

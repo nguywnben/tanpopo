@@ -1,0 +1,694 @@
+{
+  "checkpoint": "4 — 2026-11-23",
+  "baseline": "a771311107c4e4c2c7d9b53a3f5a0926f114b799",
+  "browser": "Chromium (system /usr/bin/chromium)",
+  "journey": {
+    "adapter_activated": "@tanpopo/openai-compatible",
+    "connection": "E2E Local Upstream",
+    "route_slug": "llama3.2",
+    "chat_completions_status": 200,
+    "trace_visible": true
+  },
+  "interactive": {
+    "multi_org_created_and_switched": true,
+    "keyboard_command_palette": true,
+    "locales_verified": {
+      "vi": "Chế độ offline cách ly mạng",
+      "ja": "拡張機能の外部ネットワーク取得は無効化されています"
+    }
+  },
+  "screen_audits": [
+    {
+      "route": "SCR-02:/overview",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Overview",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-11:/observability/traces",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Request traces",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-12:/finops/budgets",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "FinOps",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-12:/finops/chargeback",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "FinOps",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-04:/providers/connections",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Providers",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-03:/providers/adapters",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Providers",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-05:/models",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Models & Deployments",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-08:/routes",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Routes & Policies",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-08:/routes/explain",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Routes & Policies",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-09:/policies",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Routes & Policies",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-07:/extensions/installed",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Extensions",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-06:/extensions/marketplace",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Extensions",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-07:/extensions/lockfile",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Extensions",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-10:/mcp/servers",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "MCP Hub",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-10:/a2a/agents",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "MCP Hub",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-15:/devtools/playground",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Playground",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-15:/devtools/sdk-snippets",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Playground",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-13:/access/virtual-keys",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Access & Keys",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-13:/access/members",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Access & Keys",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-14:/security/approvals",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Security",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-14:/security/kill-switches",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Security",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-14:/security/audit-log",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Security",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-16:/ops/health",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Operations",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-16:/ops/backups",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Operations",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-16:/ops/upgrades",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Operations",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-16:/ops/organizations",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Operations",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-16:/settings/residency-retention",
+      "viewport": "desktop-1440",
+      "theme": "light",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Operations",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-02:/overview",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Overview",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-03:/providers/adapters",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Providers",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-04:/providers/connections",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Providers",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-05:/models",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Models & Deployments",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-06:/extensions/marketplace",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Extensions",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-07:/extensions/installed",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Extensions",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-08:/routes",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Routes & Policies",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-09:/policies",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Routes & Policies",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-10:/mcp/servers",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "MCP Hub",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-11:/observability/traces",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Request traces",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-12:/finops/budgets",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "FinOps",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-13:/access/virtual-keys",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Access & Keys",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-14:/security/approvals",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Security",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-15:/devtools/playground",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Playground",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-16:/ops/health",
+      "viewport": "desktop-1440",
+      "theme": "dark",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "h1": "Operations",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-02:/overview",
+      "viewport": "tablet-768",
+      "theme": "light",
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "h1": "Overview",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-08:/routes",
+      "viewport": "tablet-768",
+      "theme": "light",
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "h1": "Routes & Policies",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-12:/finops/budgets",
+      "viewport": "tablet-768",
+      "theme": "light",
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "h1": "FinOps",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-16:/ops/organizations",
+      "viewport": "tablet-768",
+      "theme": "light",
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "h1": "Operations",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-02:/overview",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Overview",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-03:/providers/adapters",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Providers",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-04:/providers/connections",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Providers",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-05:/models",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Models & Deployments",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-06:/extensions/marketplace",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Extensions",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-07:/extensions/installed",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Extensions",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-08:/routes",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Routes & Policies",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-09:/policies",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Routes & Policies",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-10:/mcp/servers",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "MCP Hub",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-11:/observability/traces",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Request traces",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-12:/finops/budgets",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "FinOps",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-13:/access/virtual-keys",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Access & Keys",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-14:/security/approvals",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Security",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-15:/devtools/playground",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Playground",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    },
+    {
+      "route": "SCR-16:/ops/health",
+      "viewport": "mobile-375",
+      "theme": "light",
+      "scrollWidth": 375,
+      "clientWidth": 375,
+      "h1": "Operations",
+      "axe_all_violations": 0,
+      "axe_blocking": 0
+    }
+  ],
+  "audit_summary": {
+    "routes": 27,
+    "samples": 61,
+    "viewports": {
+      "desktop-1440": 42,
+      "mobile-375": 15,
+      "tablet-768": 4
+    },
+    "themes": {
+      "dark": 15,
+      "light": 46
+    },
+    "axe_reported_violations": 0,
+    "axe_blocking": 0,
+    "horizontal_overflow_samples": 0,
+    "external_requests": 0,
+    "console_errors": 0,
+    "page_errors": 0
+  },
+  "performance_measurements": {
+    "status": "INVALID — do not use for product performance claims",
+    "reason": "The existing harness registers an uninvoked arrow function in add_init_script, leaving PerformanceObserver values at 0; navigation TTFB/FCP were observed but LCP/CLS/INP are not reliable.",
+    "observations": [
+      {
+        "route": "/overview",
+        "ttfb_ms": 4.6,
+        "fcp_ms": 92,
+        "lcp_ms": 0,
+        "cls": 0,
+        "inp_ms": 0
+      },
+      {
+        "route": "/observability/traces",
+        "ttfb_ms": 5.2,
+        "fcp_ms": 88,
+        "lcp_ms": 0,
+        "cls": 0,
+        "inp_ms": 0
+      },
+      {
+        "route": "/routes",
+        "ttfb_ms": 4.8,
+        "fcp_ms": 92,
+        "lcp_ms": 0,
+        "cls": 0,
+        "inp_ms": 0
+      },
+      {
+        "route": "/ops/organizations",
+        "ttfb_ms": 7,
+        "fcp_ms": 84,
+        "lcp_ms": 0,
+        "cls": 0,
+        "inp_ms": 0
+      }
+    ]
+  },
+  "limits": [
+    "Only Chromium launched on this host. Firefox and WebKit binaries downloaded, but launch is blocked by missing host libraries: libgtk-4.so.1, libgraphene-1.0.so.0, libharfbuzz-icu.so.0, libmanette-0.2.so.0, libhyphen.so.0, libGLESv2.so.2.",
+    "The journey used the harness local deterministic fake provider, not Google; the separately captured live Google Tanpopo probe remains upstream_unreachable via guarded proxy-only egress.",
+    "This is partial interaction/state coverage and does not establish exhaustive feature, security, or release readiness."
+  ]
+}

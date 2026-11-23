@@ -1,0 +1,64 @@
+{
+  "chromiumCookies": [],
+  "webkitCookiesBeforeNav": [],
+  "url": "http://127.0.0.1:8083/login",
+  "body": "Tanpopo\nLanguage\nEnglish\nSign in\n\nUse your local administrator credentials to access the control plane.\n\nEmail address\n∙ Required\nPassword\n∙ Required\nPassword\nSign in\n\nNew instance? Run first-time setup",
+  "responses": [
+    {
+      "path": "/settings/residency-retention",
+      "status": 200
+    },
+    {
+      "path": "/theme-init.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/index-BP4LE3f6.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/index-Bbwfs0FN.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/GoogleSans-latin-wght400-700-Dpoi2psf.woff2",
+      "status": 200
+    },
+    {
+      "path": "/assets/ConsoleShell-CvqZFwO3.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/TanpopoBrand-BPYm1zJb.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/Overlays-CfiZGjSd.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/useAttachment-7SSX7nbI.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/presentation-CsLRh1XS.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/bottomSheetEscape-DvsAzWaL.js",
+      "status": 200
+    },
+    {
+      "path": "/assets/linearEasing-Dmv9SBIS.js",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 401
+    },
+    {
+      "path": "/assets/LoginPage-DDtTFpPF.js",
+      "status": 200
+    }
+  ]
+}

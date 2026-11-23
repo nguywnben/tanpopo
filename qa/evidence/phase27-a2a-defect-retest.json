@@ -1,0 +1,115 @@
+{
+  "date": "2026-11-23",
+  "runtime": "8081 via configured HTTPS origin 8444",
+  "browser": "Chromium",
+  "journey": "Owner opens A2A registration and submits isolated loopback URL with private access enabled",
+  "emptyText": "layground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister agent\nMCP servers\nA2A Agents & Active Tasks\nRegistered A2A agents\n0\nNo A2A agents registered\nRegister a project-scoped AgentCard endpoint with residency and delegation-hop bounds.\nRegister agent\nActive & recent A2A tasks\n0\nNo A2A tasks recorded\nDelegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.\nNo A2A agents registered Register a project-scoped AgentCard endpoint with residency and delegation-hop bounds. No A2A tasks recorded Delegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.",
+  "fields": [
+    {
+      "name": "",
+      "type": "text",
+      "placeholder": "e.g. github-ops",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "text",
+      "placeholder": "e.g. GitHub Operations",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "url",
+      "placeholder": "https://mcp.example.com/mcp",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "checkbox",
+      "placeholder": "",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "text",
+      "placeholder": "e.g. billing-analyst",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "text",
+      "placeholder": "e.g. Billing Analyst",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "url",
+      "placeholder": "https://agent.example.com",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "checkbox",
+      "placeholder": "",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "text",
+      "placeholder": "Search…",
+      "aria": "Search commands"
+    },
+    {
+      "name": "",
+      "type": "text",
+      "placeholder": "customer-support",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "text",
+      "placeholder": "customer-support",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "text",
+      "placeholder": "Production",
+      "aria": null
+    },
+    {
+      "name": "",
+      "type": "text",
+      "placeholder": "prod",
+      "aria": null
+    }
+  ],
+  "formText": "\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister agent\nMCP servers\nA2A Agents & Active Tasks\nRegistered A2A agents\n0\nNo A2A agents registered\nRegister a project-scoped AgentCard endpoint with residency and delegation-hop bounds.\nRegister agent\nActive & recent A2A tasks\n0\nNo A2A tasks recorded\nDelegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.\nRegister A2A agent\nEnforces HTTPS egress validation, regional residency pinning, and max delegation depth <= 5.\nAgent slug (optional)\nAgent name\n∙ Required\nAgent endpoint URL\n∙ Required\nRegion\nUS\nMax hops\n5\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal A2A agents.\nCancel\nRegister agent\nNo A2A agents registered Register a project-scoped AgentCard endpoint with residency and delegation-hop bounds. No A2A tasks recorded Delegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.",
+  "cidrFields": 0,
+  "outcomes": [
+    {
+      "path": "/admin/v1/a2a/agents",
+      "status": 200,
+      "method": "GET",
+      "code": null,
+      "message": null
+    },
+    {
+      "path": "/admin/v1/a2a/tasks",
+      "status": 200,
+      "method": "GET",
+      "code": null,
+      "message": null
+    },
+    {
+      "path": "/admin/v1/a2a/agents",
+      "status": 400,
+      "method": "POST",
+      "code": "invalid_request",
+      "message": "a2a: invalid agent configuration: allowed_cidrs is required when allow_private_ip is true"
+    }
+  ],
+  "rejectedText": "ool Virtual Key grants.\n\nRegister agent\nMCP servers\nA2A Agents & Active Tasks\na2a: invalid agent configuration: allowed_cidrs is required when allow_private_ip is true\nRegistered A2A agents\n0\nNo A2A agents registered\nRegister a project-scoped AgentCard endpoint with residency and delegation-hop bounds.\nRegister agent\nActive & recent A2A tasks\n0\nNo A2A tasks recorded\nDelegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.\nRegister A2A agent\nEnforces HTTPS egress validation, regional residency pinning, and max delegation depth <= 5.\nAgent slug (optional)\nAgent name\n∙ Required\nAgent endpoint URL\n∙ Required\nRegion\nUS\nMax hops\n5\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal A2A agents.\nCancel\nRegister agent\nNo A2A agents registered Register a project-scoped AgentCard endpoint with residency and delegation-hop bounds. No A2A tasks recorded Delegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.",
+  "recordCreated": false,
+  "endpointFetched": false
+}

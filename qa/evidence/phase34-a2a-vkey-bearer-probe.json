@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-23",
+  "runtime": "8084 with TANPOPO_A2A_ENABLED=true; isolated active SQLite DB",
+  "browser": "Chromium created the key; isolated no-cookie API context sent data-plane request",
+  "keyName": "qa-cp34-a2a-default-key",
+  "keyCreateStatus": 201,
+  "dataPlane": {
+    "path": "GET /a2a/agents",
+    "unauthenticated": {
+      "status": 401,
+      "code": "invalid_credential_plane",
+      "message": "A2A endpoints require a Data Plane Virtual Key."
+    },
+    "issuedVKey": {
+      "status": 403,
+      "code": "scope_or_plane_denied",
+      "message": "Virtual Key is not permitted on A2A plane.",
+      "dataCount": null
+    }
+  },
+  "revocation": {
+    "status": 200,
+    "state": "REVOKED"
+  },
+  "secretPersisted": false,
+  "notes": "UI and documented virtual-key creation form expose model/MCP controls but no A2A plane or agent grant. Key revoked after probe."
+}

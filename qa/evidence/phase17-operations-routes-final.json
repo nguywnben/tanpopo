@@ -1,0 +1,284 @@
+{
+  "browser": "Chromium Playwright 1.62",
+  "base": "https://127.0.0.1:8444",
+  "results": [
+    {
+      "name": "health",
+      "path": "/ops/health",
+      "title": "Tanpopo Console",
+      "heading": [
+        "Operations"
+      ],
+      "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nReadiness (/readyz)\nReady\nServing traffic\nConfig epoch\n23\nCopy-on-write snapshot\nSnapshot age\n—\nLast config refresh\nStorage engine\nsqlite_wal\nActive persistence backend\nCluster nodes\n1\nNode ID\tConfig epoch\tSnapshot age\tHealth\nstandalone\t23\t0 ms\tOK",
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase17-ops-health.png"
+    },
+    {
+      "name": "upgrades",
+      "path": "/ops/upgrades",
+      "title": "Tanpopo Console",
+      "heading": [
+        "Operations"
+      ],
+      "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nUpgrade compatibility preflight\n\nValidate installed extension ABI compatibility before upgrading Tanpopo Core.\n\nTarget Core version\nRun preflight\nCurrent tanpopo.lock pins\n{\n  \"lockfileVersion\": 1,\n  \"generatedAt\": \"2026-11-23T10:32:10Z\",\n  \"extensions\": {}\n}",
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase17-ops-upgrades.png"
+    },
+    {
+      "name": "webhooks",
+      "path": "/settings/residency-retention",
+      "title": "Tanpopo Console",
+      "heading": [
+        "Operations"
+      ],
+      "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nHMAC-signed webhook subscriptions\n0\nAdd webhook\nNo webhook subscriptions\nRegister a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.\nNo webhook subscriptions Register a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.",
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase17-ops-webhooks.png"
+    },
+    {
+      "name": "audit",
+      "path": "/security/audit-log",
+      "title": "Tanpopo Console",
+      "heading": [
+        "Security"
+      ],
+      "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nImmutable audit events\n100\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#171\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t10:32:08 AM\t\nInspect\n\n#170\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t10:30:21 AM\t\nInspect\n\n#169\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t10:29:18 AM\t\nInspect\n\n#168\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t10:19:49 AM\t\nInspect\n\n#167\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t10:13:25 AM\t\nInspect\n\n#166\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t10:12:33 AM\t\nInspect\n\n#165\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t10:11:45 AM\t\nInspect\n\n#164\tauth.login_succeeded\tprc_01m83xf1x2e00a3pkp05bk26vp\t\nprincipal\nprc_01m83xf1x2e00a3pkp05bk26vp\n\t10:08:18 AM\t\nInspect\n\n#163\tauth.login_succeeded\tprc_01m83xf1x2e00a3pkp05bk26vp\t\nprincipal\nprc_01m83xf1x2e00a3pkp05bk26vp\n\t10:06:12 AM\t\nInspect\n\n#162\tauth.login_succeeded\tprc_01m83xf1x2e00a3pkp05bk26vp\t\nprincipal\nprc_01m83xf1x2e00a3pkp05bk26vp\n\t10:05:12 AM\t\nInspect\n\n#161\tauth.login_succeeded\tprc_01m83xf1x2e00a3pkp05bk26vp\t\nprincipal\nprc_01m83xf1x2e00a3pkp05bk26vp\n\t10:02:17 AM\t\nInspect\n\n#160\tauth.login_succeeded\tprc_01m83xf1x2e00a3pkp05bk26vp\t\nprincipal\nprc_01m83xf1x2e00a3pkp05bk26vp\n\t10:01:26 AM\t\nInspect\n\n#159\tmember.roles_updated\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83xf1x2e00a3pkp05bk26vp\n\t10:00:33 AM\t\nInspect\n\n#158\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t10:00:31 AM\t\nInspect\n\n#157\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t9:59:15 AM\t\nInspect\n\n#156\tmember.created\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83xf1x2e00a3pkp05bk26vp\n\t9:58:15 AM\t\nInspect\n\n#155\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t9:58:13 AM\t\nInspect\n\n#154\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t9:57:18 AM\t\nInspect\n\n#153\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t9:50:28 AM\t\nInspect\n\n#152\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t9:49:25 AM\t\nInspect\n\n#151\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t9:48:44 AM\t\nInspect\n\n#150\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t9:46:33 AM\t\nInspect\n\n#149\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe008wsrq8kx372cg\n\t9:44:46 AM\t\nInspect\n\n#148\tauth.login_succeeded\tprc_01m83pdexwe008wsrq8kx372cg\t\nprincipal\nprc_01m83pdexwe00",
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase17-ops-audit.png"
+    }
+  ],
+  "responses": [
+    {
+      "url": "/admin/v1/auth/login",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "url": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/ops/cluster-status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/secrets",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/extensions/lockfile",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/audit-events",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/webhooks",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/ops/cluster-status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/audit-events",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/webhooks",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/secrets",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/extensions/lockfile",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/ops/cluster-status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/extensions/lockfile",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/webhooks",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/secrets",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/audit-events",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "/admin/v1/audit-events",
+      "status": 200,
+      "method": "GET"
+    }
+  ],
+  "errors": []
+}

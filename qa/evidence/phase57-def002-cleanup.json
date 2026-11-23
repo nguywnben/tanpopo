@@ -1,0 +1,9 @@
+{
+  "api": [
+    {
+      "status": 204,
+      "path": "/admin/v1/connections/con_01m84cfsjce008y8re70wd4cse"
+    }
+  ],
+  "visibleText": "overnance\nAccess & Keys\nSecurity\nOperations\nqa-fresh-cp38@example.invalid\nOperator, Org Owner\nQA Fresh Install CP38\n/\nqa-fresh-project\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nProviders\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n1\nVault Secrets\nAdapters\n1\nConnection deleted.\nConfigured connections\n1\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nqa-cp43-local-ollama\nhttp://127.0.0.1:19089\n\tadp_01m84b4506e00aqjqf4gec2hy0\tON_PREM · Self-hosted\tActive\tNone bound\t"
+}

@@ -1,0 +1,12 @@
+{
+  "adminRevoke": {
+    "status": 200,
+    "state": "REVOKED",
+    "error": null
+  },
+  "dataPlaneAfterRevoke": {
+    "status": 401,
+    "error": "invalid_virtual_key"
+  },
+  "keySecretRemovedAfterRun": true
+}

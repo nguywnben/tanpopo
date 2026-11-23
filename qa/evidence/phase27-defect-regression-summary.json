@@ -1,0 +1,85 @@
+{
+  "date": "2026-11-23",
+  "checkpoint": "CP27",
+  "scope": "Regression retest of nine open defects using isolated runtime, Chromium and WebKit; no Tanpopo implementation changes.",
+  "defects": [
+    {
+      "id": "DEF-001",
+      "status": "Open; not re-tested in a fresh Setup session this phase",
+      "priorFinding": "Two Setup accessibility tests fail because a form control lacks an accessible name."
+    },
+    {
+      "id": "DEF-002",
+      "status": "Open; no fresh live deployment/health retest this phase",
+      "priorFinding": "Provider can display Healthy after owner activation while data-plane route fails closed with 503."
+    },
+    {
+      "id": "DEF-003",
+      "status": "Reproduced",
+      "evidence": [
+        "phase27-finops-defect-retest.json",
+        "phase27-finops-default-org.png"
+      ],
+      "observation": "Default organization scope has zero budgets and no first-budget create action."
+    },
+    {
+      "id": "DEF-004",
+      "status": "Reproduced",
+      "evidence": [
+        "phase27-cli-config-defect-retest.json"
+      ],
+      "observation": "config show prints local reconcile help and does not expose server inspection."
+    },
+    {
+      "id": "DEF-005",
+      "status": "Reproduced on MCP and A2A",
+      "evidence": [
+        "phase27-defect-regression.json",
+        "phase27-mcp-private-form-retest.png",
+        "phase27-mcp-private-rejected.png",
+        "phase27-a2a-defect-retest.json",
+        "phase27-a2a-private-form-retest.png",
+        "phase27-a2a-private-rejected-retest.png"
+      ],
+      "observation": "Both forms omit allowed_cidrs; private loopback submissions return HTTP 400 and create no record."
+    },
+    {
+      "id": "DEF-006",
+      "status": "Reproduced",
+      "evidence": [
+        "phase27-teamadmin-defect-retest.json",
+        "phase27-teamadmin-add-member-form.png",
+        "phase27-teamadmin-add-member-rejected.png"
+      ],
+      "observation": "Team Admin form has no project scope input; submission returns 403 role_escalation_denied; no member created."
+    },
+    {
+      "id": "DEF-007",
+      "status": "Open; existing audit evidence preserved, no new DB audit retest this phase",
+      "priorFinding": "Org/project/environment provisioning mutations lack corresponding audit events; backup history requirements can be affected."
+    },
+    {
+      "id": "DEF-008",
+      "status": "Reproduced",
+      "evidence": [
+        "phase27-defect-regression.json",
+        "phase27-backup-console-retest.png"
+      ],
+      "observation": "Enabled Console backup action returns 503 because required backup config/artifact runtime inputs are unavailable to handler."
+    },
+    {
+      "id": "DEF-009",
+      "status": "Not reproduced in current retest; remains open pending harness parity",
+      "evidence": [
+        "phase27-webkit-webhook-defect-retest.json",
+        "phase27-webkit-webhook-375-retest.png",
+        "phase27-webkit-webhook-opening-0ms.png",
+        "phase27-webkit-webhook-opening-100ms.png",
+        "phase27-webkit-webhook-opening-1000ms.png"
+      ],
+      "observation": "Actual WebKit 26.5 Add webhook interaction showed drawer heading at x=73 within 375px viewport at 0,100,250,500,1000ms. Prior CP18 screenshot shows underlying empty state; discrepancy not yet explained."
+    }
+  ],
+  "gate": "GATE-REL-07 BLOCKED",
+  "coverage": "Regression only. Does not complete broad Alpha/Beta coverage."
+}

@@ -1,0 +1,9 @@
+{
+  "response": {
+    "status": 200,
+    "contentType": "text/csv; charset=utf-8",
+    "body": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count\nqa-fresh-project,1,0,1,0,0\n"
+  },
+  "download": null,
+  "visibleText": ", and unmetered accounting.\n\nExport CSV\nExport JSON\nBudgets & Holds\nChargeback\nUnexpected token 'g', \"group_key,\"... is not valid JSON\nExact settled\n$0.000000\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nChargeback accuracy breakdown\n1\nGroup by\nProject\nProject\tExact\tEstimated\tExact / Est. reqs\tUnmetered\nqa-fresh-project\t\nExact\n$0.000001\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0"
+}

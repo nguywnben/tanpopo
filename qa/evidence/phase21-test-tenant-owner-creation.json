@@ -1,0 +1,12 @@
+{
+  "browser": "Chromium 1.62 authenticated Admin API fetch",
+  "target_scope": "second isolated QA organization",
+  "request": "Create local human principal with ORG_OWNER role for backup recovery verification",
+  "response": {
+    "status": 201,
+    "code": null,
+    "roles": 1,
+    "created": true,
+    "principal_present": false
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "phase": 14,
+  "date": "2026-11-23",
+  "principal": "qa-boundary-probe@example.invalid",
+  "roles": ["DEVELOPER", "TEAM_ADMIN"],
+  "checks": [
+    {
+      "check": "Navigation visibility",
+      "operations_link_count": 0,
+      "security_link_count": 0
+    },
+    {
+      "check": "Direct route /ops/health",
+      "result": "Access restricted",
+      "message": "Your assigned roles (Developer, Team Admin) do not permit access to Operations."
+    },
+    {
+      "check": "GET /admin/v1/organizations",
+      "status": 403,
+      "error_code": "insufficient_role_permission"
+    },
+    {
+      "check": "GET /admin/v1/projects targeting another org",
+      "status": 404,
+      "error_code": "resource_not_found",
+      "evidence_file": "phase13-nonoperator-cross-org-authorization.json"
+    }
+  ],
+  "visual_evidence": ["phase14-team-admin-ops-denial.png", "phase14-team-admin-members.png"],
+  "notes": "Access & Keys was visible, with Add member and Edit roles actions. The project-scoped member workflow failure is recorded separately as DEF-006."
+}

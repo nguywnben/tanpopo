@@ -1,0 +1,10 @@
+{
+  "database_read_only": true,
+  "qa_cp3x_virtual_keys_by_state": {
+    "REVOKED": 6
+  },
+  "secret_temp_files_present": {
+    "/tmp/qa-tanpopo/key-cp36-memory.json": false,
+    "/tmp/qa-tanpopo/key-cp36-rotated.json": false
+  }
+}

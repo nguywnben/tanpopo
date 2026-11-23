@@ -1,0 +1,48 @@
+{
+  "checkpoint": "6 — 2026-11-23",
+  "runtime": "mcr.microsoft.com/playwright:v1.62.0-noble",
+  "image_digest": "sha256:baed2032d533817f3dbe6425de795788430ba345e819a1201337009ba17c9d07",
+  "transport": "HTTPS loopback through the Tanpopo E2E TLS proxy; ignore self-signed cert in disposable browser context",
+  "browser_summaries": {
+    "chromium": {
+      "axe_layout_samples": 61,
+      "unique_routes": 27,
+      "desktop_1440": 42,
+      "tablet_768": 4,
+      "mobile_375": 15,
+      "themes": {
+        "light": 46,
+        "dark": 15
+      },
+      "axe_violations": 0,
+      "overflow": 0,
+      "external_requests": 0,
+      "console_errors": 0,
+      "page_errors": 0
+    },
+    "firefox": {
+      "routes": 27,
+      "axeViolations": 0,
+      "overflow": [],
+      "badH1": [],
+      "externalRequests": 0,
+      "consoleErrors": 0,
+      "pageErrors": 0,
+      "blocking": [],
+      "visual_screenshots": "5 desktop + 5 mobile representative routes; mobile screenshots inspected, mobile axe/layout not run"
+    },
+    "webkit": {
+      "routes": 27,
+      "axeViolations": 0,
+      "overflow": [],
+      "badH1": [],
+      "externalRequests": 0,
+      "consoleErrors": 0,
+      "pageErrors": 0,
+      "blocking": [],
+      "visual_screenshots": "5 desktop + 5 mobile representative routes; mobile screenshots inspected, mobile axe/layout not run"
+    }
+  },
+  "combined_desktop_axe_layout_samples": 115,
+  "interpretation": "Firefox and WebKit completed 27 authenticated route scans each using the same HTTPS origin. Both had zero axe violations, document overflow, missing H1, external runtime requests, console errors, or page exceptions. Representative mobile screenshots were captured and inspected; mobile axe/layout remained Chromium-only."
+}

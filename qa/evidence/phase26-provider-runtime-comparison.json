@@ -1,0 +1,86 @@
+[
+  {
+    "runtime": "active-8080",
+    "loginOk": true,
+    "connectionPresent": true,
+    "stateBeforeProbe": "Created Unverified",
+    "outcome": {
+      "httpStatus": 200,
+      "errorCode": null,
+      "message": null,
+      "keys": [
+        "valid",
+        "latency_ms",
+        "detected_model_ids",
+        "failure_code",
+        "sanitized_message"
+      ],
+      "dataKeys": [],
+      "safeResult": {
+        "valid": false,
+        "failureCode": "upstream_unreachable",
+        "sanitizedMessage": "upstream connection could not be reached",
+        "latencyMs": 2088
+      }
+    },
+    "visibleResult": [
+      "\tadp_01m83qm8pve00a3pjht8vkyew8\tUS · Commercial\tCreated Unverified\tapi_key: ...3ff7\t"
+    ],
+    "screenshot": "/workspace/tanpopo/qa/evidence/phase26-active-8080-provider-probe.png"
+  },
+  {
+    "runtime": "active-8081",
+    "loginOk": true,
+    "connectionPresent": true,
+    "stateBeforeProbe": "Created Unverified",
+    "outcome": {
+      "httpStatus": 503,
+      "errorCode": "probe_runtime_unavailable",
+      "message": "connection validation runtime unavailable",
+      "keys": [
+        "error"
+      ],
+      "dataKeys": [],
+      "safeResult": {
+        "valid": null,
+        "failureCode": null,
+        "sanitizedMessage": null,
+        "latencyMs": null
+      }
+    },
+    "visibleResult": [
+      "connection validation runtime unavailable",
+      "\tadp_01m83qm8pve00a3pjht8vkyew8\tUS · Commercial\tCreated Unverified\tapi_key: ...3ff7\t"
+    ],
+    "screenshot": "/workspace/tanpopo/qa/evidence/phase26-active-8081-provider-probe.png"
+  },
+  {
+    "runtime": "restored-8082",
+    "loginOk": true,
+    "connectionPresent": true,
+    "stateBeforeProbe": "Created Unverified",
+    "outcome": {
+      "httpStatus": 200,
+      "errorCode": null,
+      "message": null,
+      "keys": [
+        "valid",
+        "latency_ms",
+        "detected_model_ids",
+        "failure_code",
+        "sanitized_message"
+      ],
+      "dataKeys": [],
+      "safeResult": {
+        "valid": false,
+        "failureCode": "upstream_unreachable",
+        "sanitizedMessage": "upstream connection could not be reached",
+        "latencyMs": 2105
+      }
+    },
+    "visibleResult": [
+      "\tadp_01m83qm8pve00a3pjht8vkyew8\tUS · Commercial\tCreated Unverified\tapi_key: ...3ff7\t"
+    ],
+    "screenshot": "/workspace/tanpopo/qa/evidence/phase26-restored-8082-provider-probe.png"
+  }
+]

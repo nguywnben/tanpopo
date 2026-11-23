@@ -1,0 +1,12 @@
+{
+  "keyId": "vky_01m84bryjze009yqmgztptnnhj",
+  "keyName": "qa-cp46-first-route-key",
+  "revocationHttp": 200,
+  "state": "see list refresh",
+  "postRevocationBearerStatus": 401,
+  "postRevocationCode": "invalid_virtual_key",
+  "screenshots": [
+    "phase50-key-revoke-confirm.png",
+    "phase50-key-revoked.png"
+  ]
+}

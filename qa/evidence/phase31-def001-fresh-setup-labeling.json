@@ -1,0 +1,82 @@
+{
+  "date": "2026-11-23",
+  "runtime": "fresh disposable Tanpopo instance on 8083",
+  "browser": "Chromium",
+  "visualInspection": "phase31-fresh-setup-step1.png visually shows labels above input controls",
+  "fields": [
+    {
+      "type": "password",
+      "associatedLabelCount": 0,
+      "ariaLabel": null,
+      "ariaLabelledByResolves": true,
+      "id": "_r_2m_"
+    },
+    {
+      "type": "email",
+      "associatedLabelCount": 1,
+      "ariaLabel": null,
+      "ariaLabelledByResolves": false,
+      "id": "_r_2t_"
+    },
+    {
+      "type": "password",
+      "associatedLabelCount": 0,
+      "ariaLabel": null,
+      "ariaLabelledByResolves": true,
+      "id": "_r_38_"
+    },
+    {
+      "type": "password",
+      "associatedLabelCount": 0,
+      "ariaLabel": null,
+      "ariaLabelledByResolves": true,
+      "id": "_r_3j_"
+    },
+    {
+      "type": "text",
+      "associatedLabelCount": 1,
+      "ariaLabel": null,
+      "ariaLabelledByResolves": false,
+      "id": "_r_3q_"
+    },
+    {
+      "type": "text",
+      "associatedLabelCount": 1,
+      "ariaLabel": null,
+      "ariaLabelledByResolves": false,
+      "id": "_r_41_"
+    }
+  ],
+  "getByRoleCounts": {
+    "ownerEmail": 1,
+    "organization": 1,
+    "project": 1
+  },
+  "conclusion": "The original Vitest label-content-name-mismatch is not reproduced by the fresh real-browser check: the accessible aria-label for each progress button contains the visible step wording, and axe reported no WCAG violations. Keep DEF-001 open because the prior two Vitest failures remain unresolved against this browser state.",
+  "stepButtons": [
+    {
+      "visibleText": "Owner account",
+      "ariaLabel": "Go to step 1: Owner account",
+      "role": null,
+      "disabled": false
+    },
+    {
+      "visibleText": "2\nFirst connection",
+      "ariaLabel": "Go to step 2: First connection",
+      "role": null,
+      "disabled": false
+    },
+    {
+      "visibleText": "3\nKey custody",
+      "ariaLabel": "Go to step 3: Key custody",
+      "role": null,
+      "disabled": false
+    },
+    {
+      "visibleText": "4\nReview",
+      "ariaLabel": "Go to step 4: Review",
+      "role": null,
+      "disabled": false
+    }
+  ]
+}

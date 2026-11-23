@@ -1,0 +1,55 @@
+{
+  "archive": {
+    "backup_id": "95e4e4bc99939fffc6df607842b4b262",
+    "archive_filename": "tanpopo-backup-95e4e4bc99939fffc6df607842b4b262.tpop.enc",
+    "sha256_hex": "f1b61fc4621733ae9ed71cf4d20f0a75cf1888735a37c8fd8daca22b0fb39a52",
+    "size_bytes": 86628
+  },
+  "precondition": "Added a QA-only ORG_OWNER principal to qa-boundary-org and authenticated once; this created a valid member.created and auth.login_succeeded audit event. The organization/project/environment provisioning events remain absent (DEF-007).",
+  "cli_backup_create": {
+    "exit_code": 0,
+    "output_dir": "/tmp/qa-tanpopo/recovery-backups"
+  },
+  "cli_backup_verify": {
+    "exit_code": 0,
+    "files": 7,
+    "backup_id": "95e4e4bc99939fffc6df607842b4b262"
+  },
+  "cli_backup_restore": {
+    "exit_code": 0,
+    "destination": "/tmp/qa-tanpopo/restore-phase21",
+    "verify_secrets_decrypt": true,
+    "published_files": [
+      "database.sqlite",
+      "manifest.json",
+      "tanpopo.lock",
+      "tanpopo.yaml",
+      "extensions/exv_01m83ptxrke00a22221y6get84/README.md",
+      "extensions/exv_01m83ptxrke00a22221y6get84/manifest.yaml",
+      "extensions/exv_01m83ptxrke00a22221y6get84/dist/adapter.wasm"
+    ]
+  },
+  "restored_database_read_only_check": {
+    "integrity_check": "ok",
+    "organization_count": 2,
+    "principal_count": 5,
+    "audit_event_count": 195,
+    "qa_boundary_org_events": {
+      "auth.login_succeeded": 1,
+      "member.created": 1
+    }
+  },
+  "restored_runtime_smoke": {
+    "listen_http": "127.0.0.1:8082",
+    "health": "ok",
+    "readiness": "ready",
+    "https_test_front": "https://127.0.0.1:8445",
+    "chromium_login": "HTTP 200",
+    "overview": "HTTP 200",
+    "admin_api_failures": 0,
+    "screenshot": "phase21-restored-runtime-owner.png"
+  },
+  "secret_values_recorded": false,
+  "active_database_overwritten": false,
+  "note": "This successful recovery requires a valid non-empty audit chain per organization. The earlier empty-chain archive verify/restore failure is retained separately as phase16/phase17 evidence; neither run invalidates the other."
+}

@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-23",
+  "browser": "Chromium",
+  "runtime": "8081 configured HTTPS origin 8444",
+  "createStatus": 201,
+  "rotateStatus": 200,
+  "keyVersionAfterRotate": 2,
+  "confirmation": "le RBAC principal assignments.\n\nIssue key\nVirtual Keys\n5\nMembers & Roles\n4\nEnvironment Virtual Keys\n5\nName\tPrefix / Last 4\tState\tCreated\tActions\nqa-cp36-lifecycle\tvk_tp_qa-sandbox_\u20267f2Z\tActive\tNov 23, 2026, 12:39:38 PM\t\n\nqa-cp36-key-rotation\tvk_tp_qa-sandbox_\u2026A70V\tRevoked\tNov 23, 2026, 12:33:03 PM\t\nqa-cp34-a2a-default-key\tvk_tp_qa-sandbox_\u2026qgFK\tRevoked\tNov 23, 2026, 12:28:35 PM\t\nqa-cp33-a2a-default-key\tvk_tp_qa-sandbox_\u202604Hv\tRevoked\tNov 23, 2026, 12:27:51 PM\t\nqa-cp32-a2a-scope-boundary\tvk_tp_qa-sandbox_\u2026B7ZN\tRevoked\tNov 23, 2026, 12:26:02 PM\t\nRotate qa-cp36-lifecycle\nBoth old and new secrets stay valid for a 24-hour grace window. The new plaintext secret will be shown once.\nCancel\nRotate key",
+  "graceWindowSeconds": 86400,
+  "authenticatedDataPlaneProbe": {
+    "path": "GET /v1/models",
+    "duringGrace": {
+      "old": {
+        "status": 200,
+        "code": null,
+        "errorMessage": null,
+        "hasData": true
+      },
+      "new": {
+        "status": 200,
+        "code": null,
+        "errorMessage": null,
+        "hasData": true
+      }
+    },
+    "afterRevoke": {
+      "old": {
+        "status": 401,
+        "code": "invalid_virtual_key",
+        "errorMessage": "Virtual Key is invalid, expired, or revoked.",
+        "hasData": false
+      },
+      "new": {
+        "status": 401,
+        "code": "invalid_virtual_key",
+        "errorMessage": "Virtual Key is invalid, expired, or revoked.",
+        "hasData": false
+      }
+    }
+  },
+  "revocation": {
+    "status": 200,
+    "state": "REVOKED",
+    "error": null
+  },
+  "secretHandling": "Original key held temporarily in a mode-0600 file under /tmp and removed after the test; replacement held only in process memory. Neither plaintext was saved in qa/evidence."
+}

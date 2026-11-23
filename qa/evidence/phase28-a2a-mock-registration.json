@@ -1,0 +1,17 @@
+{
+  "date": "2026-11-23",
+  "runtime": "8081 configured HTTPS origin 8444",
+  "browser": "Chromium",
+  "fixture": "HTTP local deterministic mock bound only to 127.0.0.1:19088",
+  "csrfCookieDetected": false,
+  "projectFound": true,
+  "registration": {
+    "status": 403,
+    "agentReturned": false,
+    "error": "CSRF token or origin validation failed"
+  },
+  "registeredAgentSlug": "qa-cp28-local-mock",
+  "allowedCIDRCount": 1,
+  "bodyText": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister agent\nMCP servers\nA2A Agents & Active Tasks\nRegistered A2A agents\n0\nNo A2A agents registered\nRegister a project-scoped AgentCard endpoint with residency and delegation-hop bounds.\nRegister agent\nActive & recent A2A tasks\n0\nNo A2A tasks recorded\nDelegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.\nNo A2A agents registered Register a project-scoped AgentCard endpoint with residency and delegation-hop bounds. No A2A tasks recorded Delegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.",
+  "sideEffects": "One QA-only A2A agent record may be created if registration succeeds; no task dispatched."
+}

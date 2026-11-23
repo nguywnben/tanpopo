@@ -1,0 +1,60 @@
+system
+Extensions
+MCP Hub
+Playground
+Governance
+Access & Keys
+Security
+Operations
+qa-owner@example.invalid
+Operator, Org Owner
+Default Organization
+/
+QA Isolation 2026-11-23
+/
+qa-sandbox
+(Active workspace scope)
+Jump
+Ctrl
+K
+Language
+English
+Kill Switch
+MCP Hub
+
+Streamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.
+
+Register agent
+MCP servers
+A2A Agents & Active Tasks
+6
+Registered A2A agents
+1
+Agent	Endpoint	Region	Max hops	State
+
+QA CP28 local mock agent
+qa-cp28-local-mock
+	http://127.0.0.1:19088/a2a	US	5	Active
+Active & recent A2A tasks
+5
+Task	State	Hops	Region	Sub-budget hold	Settled cost
+
+tsk_01m84am5v0e00anzwej0dh1rm7
+qa-cp28-local-mock
+	Input required	1 / 5	US	$0.000000	$0.000000
+
+tsk_01m84abvwpe0091ed6d4xgh1s1
+qa-cp28-local-mock
+	Canceled	1 / 5	US	$0.000000	$0.000000
+
+tsk_01m84abvvxe00bzwkjpejcex0v
+qa-cp28-local-mock
+	Completed	1 / 5	US	$0.000000	$0.000000
+
+tsk_01m84aa9afe008005r23nym96c
+qa-cp28-local-mock
+	Canceled	1 / 5	US	$0.000000	$0.000000
+
+tsk_01m84aa99we008v6qjqsa4wm08
+qa-cp28-local-mock
+	Completed	1 / 5	US	$0.000000	$0.000000

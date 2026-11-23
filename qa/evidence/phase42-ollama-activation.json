@@ -1,0 +1,19 @@
+{
+  "consentInputBefore": {
+    "checked": false,
+    "visible": true,
+    "rect": {
+      "x": 396,
+      "y": 824.453125,
+      "width": 20,
+      "height": 20,
+      "top": 824.453125,
+      "right": 416,
+      "bottom": 844.453125,
+      "left": 396
+    },
+    "text": "I reviewed and explicitly consent to these permission escalations and resource limits"
+  },
+  "checkboxChecked": true,
+  "visibleResult": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-fresh-cp38@example.invalid\nOperator, Org Owner\nQA Fresh Install CP38\n/\nqa-fresh-project\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nExtensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n1\nMarketplace\n8\nLockfile\nActivated ext_01m84aevxxe008wkw13556r9c3. Configure upstream connections under Providers → Adapters.\nView Adapters\nInstalled packages\n1\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\next_01m84aevxxe008wkw13556r9c3\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tdeclarative\t"
+}

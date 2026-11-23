@@ -1,0 +1,14 @@
+{
+  "route": "/overview",
+  "viewport": "1440x900",
+  "results": {
+    "ttfb_ms": 14.9,
+    "fcp_ms": 232,
+    "lcp_ms": 512,
+    "cls": 0.0019
+  },
+  "event_timing_entries_over_16ms": 34,
+  "max_event_duration_ms": 56,
+  "interaction": "Command palette open via Ctrl+K, dismiss Escape",
+  "limitations": "single-run observation only; not an INP percentile or performance acceptance test"
+}

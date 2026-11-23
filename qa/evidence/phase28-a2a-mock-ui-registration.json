@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-23",
+  "browser": "Chromium",
+  "runtime": "8081 / configured HTTPS origin 8444",
+  "fixture": "127.0.0.1:19088 deterministic local mock; request interceptor only added explicit 127.0.0.1/32 allowed CIDR to exercise backend registration",
+  "steps": [
+    "real UI opens A2A registration",
+    "owner fills private local mock URL and enables private endpoint",
+    "harness adds narrowly scoped allowed_cidrs omitted by production UI",
+    "submits to isolated test runtime"
+  ],
+  "request": {
+    "injected": true,
+    "originalPayload": {
+      "allowPrivateIP": true,
+      "allowedCIDRsPresent": false,
+      "projectIDPresent": true
+    },
+    "response": {
+      "status": 201,
+      "body": {
+        "agent_id": "agt_01m8456ymwe0099rpv9mr4kk7p",
+        "agent_slug": "qa-cp28-local-mock",
+        "name": "QA CP28 local mock agent",
+        "endpoint_url": "http://127.0.0.1:19088/a2a",
+        "data_region": "US",
+        "max_delegation_hops": 5,
+        "skills": [],
+        "status": "ACTIVE",
+        "project_id": "prj_01m83whxkde0091cx3w8pk6s7d",
+        "version": 1
+      }
+    }
+  },
+  "visibleBody": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister agent\nMCP servers\nA2A Agents & Active Tasks\n1\nA2A agent registered and published to discovery.\nRegistered A2A agents\n1\nAgent\tEndpoint\tRegion\tMax hops\tState\n\nQA CP28 local mock agent\nqa-cp28-local-mock\n\thttp://127.0.0.1:19088/a2a\tUS\t5\tActive\nActive & recent A2A tasks\n0\nNo A2A tasks recorded\nDelegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.\nNo A2A tasks recorded Delegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.",
+  "recordCreated": true,
+  "fixtureContacted": false,
+  "limitations": "No A2A task was dispatched; registration endpoint stores submitted AgentCard metadata and does not verify the mock endpoint in this flow."
+}

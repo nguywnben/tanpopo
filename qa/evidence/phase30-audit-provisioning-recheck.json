@@ -1,0 +1,27 @@
+{
+  "database": "/tmp/qa-tanpopo/data/tanpopo.db",
+  "read_only": true,
+  "organization_provisioning_events": [
+    {
+      "organization_slug": "default-organization",
+      "organization_create_event_count": 0
+    },
+    {
+      "organization_slug": "qa-boundary-org",
+      "organization_create_event_count": 0
+    }
+  ],
+  "qa_project_environment": [
+    {
+      "org_slug": "default-organization",
+      "project_slug": "qa-isolation-20261123",
+      "project_create_event_count": 0,
+      "environments": [
+        {
+          "slug": "qa-sandbox",
+          "environment_create_event_count": 0
+        }
+      ]
+    }
+  ]
+}

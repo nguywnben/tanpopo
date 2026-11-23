@@ -1,0 +1,99 @@
+[
+  {
+    "path": "/admin/v1/extensions/installations",
+    "status": 200,
+    "keys": [
+      "data",
+      "has_more"
+    ],
+    "count": 1,
+    "records": [
+      {
+        "name": null,
+        "state": "ENABLED_ACTIVE",
+        "execution_tier": "sandboxed_wasm",
+        "health": null,
+        "version": 2,
+        "fields": [
+          "active_version",
+          "candidate_version",
+          "contract_version",
+          "enterprise_signed",
+          "execution_tier",
+          "id",
+          "origin_trust_tier",
+          "package_id",
+          "previous_rollback_version",
+          "state",
+          "version"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "/admin/v1/provider-adapters",
+    "status": 200,
+    "keys": [
+      "data",
+      "has_more"
+    ],
+    "count": 1,
+    "records": [
+      {
+        "name": "@tanpopo/gemini",
+        "state": null,
+        "execution_tier": "sandboxed_wasm",
+        "health": null,
+        "version": "0.1.0",
+        "fields": [
+          "allowed_hosts",
+          "enterprise_signed",
+          "execution_tier",
+          "id",
+          "installation_state",
+          "name",
+          "native_passthrough_prefix",
+          "origin_trust_tier",
+          "package_id",
+          "secret_slots",
+          "slug",
+          "supported_auth_methods",
+          "version",
+          "wire_protocol"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "/admin/v1/connections",
+    "status": 200,
+    "keys": [
+      "data",
+      "has_more"
+    ],
+    "count": 1,
+    "records": [
+      {
+        "name": "QA Gemini connection",
+        "state": "CREATED_UNVERIFIED",
+        "execution_tier": null,
+        "health": null,
+        "version": 5,
+        "fields": [
+          "adapter_id",
+          "allow_private_ip",
+          "billing_mode",
+          "created_at",
+          "data_region",
+          "endpoint_url",
+          "id",
+          "name",
+          "project_id",
+          "secret_slot_fingerprints",
+          "state",
+          "version"
+        ]
+      }
+    ]
+  }
+]
