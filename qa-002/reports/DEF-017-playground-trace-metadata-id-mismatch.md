@@ -56,3 +56,7 @@ On the same exact baseline, a separate later synthetic Playground request using 
 - `../evidence/CP22-synthetic-provider-persistence.json` — sanitized SQLite-backed state for the route, deployment, successful request and settlement.
 
 GATE-REL-07 remains **BLOCKED**. QA-002 remains in progress.
+
+## Additional independent retest — CP32 Developer role
+
+On a separate real Developer session, one successful synthetic streamed request again left the Playground card at `Trace metadata pending…`. The visible card used `req_01m85d6pnse00a3hbf35x18wtj`; five metadata lookups using that identifier returned 404, while the persisted list contained `trc_01m85d6pnse00a3jb10ca2padf` with HTTP 200 and exact usage. The synthetic local provider observed exactly one additional call. See `../evidence/CP32-developer-playground-success.png`, `CP32-developer-workflow.json`, and `CP32-developer-persisted-trace.json`.
