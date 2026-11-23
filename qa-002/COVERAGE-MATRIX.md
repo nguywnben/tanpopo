@@ -25,6 +25,8 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | FT-15 | Console, CLI, Admin API, Data Plane API | UNVERIFIED | |
 | FT-16 | Setup/startup, GitOps, encrypted backup, restore, upgrade | UNVERIFIED | |
 
+**CP00–02 test capability note:** Local Go 1.26.11 linux/amd64 binary is built from the exact baseline. `go test ./...` and `go test -race ./...` both pass all 86 packages after applying environment-specific `GOFLAGS=-buildvcs=false` and `umask 0022`; `go run ./scripts/ci/check.go --all`, `go vet ./...`, `go run ./scripts/docs/check_drift.go`, Console typecheck, all 45 Console tests, and production build pass. These are build/automated quality results, not product-feature PASS results. RC4 DevBox artifact remains UNVERIFIED.
+
 ## Canonical screens SCR-01..16
 
 | ID | Screen | QA-002 status | Evidence / open coverage |

@@ -9,6 +9,8 @@
 - Remote `main`, remote `develop`, and remote `HEAD` each resolved to the requested commit at inspection. The historical QA-001 branch remained at `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f`.
 - Repository has no Git tag at this revision and no checked-in RC4 archive/binary. The checked-out source defaults in `cmd/tanpopo/main.go` to version `0.1.0-dev`; an RC4 version must therefore be established by building with the documented CI/release version flags or identifying a separately published RC4 artifact. Do not infer an RC4 release version from the user’s label.
 - The merged engineering commits are `15ade22` (backend/CLI/storage/audit/A2A fixes DEF-002..011) and `e8af25b` (Console/accessibility/WebKit/FinOps fixes DEF-001..015), followed by `e05ed3f` Postgres audit coverage. Build commit and embedded Console assets will be verified after a successful build.
+- **Linker metadata clarification (CP02):** `cmd/tanpopo/main.go` defines source defaults `version=0.1.0-dev`, `commit=none`, `date=unknown`. `.goreleaser.yaml` release build flags inject all three from `{{ .Version }}`, `{{ .Commit }}`, and `{{ .Date }}`. The local source build explicitly injected the verified SHA/date and reported version `0.1.0-dev`; a separate `qa-provenance-probe` build empirically verified all three linker variables can be injected and are reported by `--version --output json`. The source default is not a release defect.
+- **RC4 artifact:** the user says the RC4 artifact is in Hydrogen’s separate DevBox. No Hydrogen/DevBox connector or filesystem is attached to this task; the public GitHub Releases API had zero releases. The RC4 artifact’s binary version/checksum/provenance comparison is **UNVERIFIED**. Continue tests against the exact source commit; do not equate the local probe binary with a published RC4 artifact.
 - Prebuilt embedded Console bundle exists at `internal/webui/dist/` (~4.5 MB). No local RC4 binary or release archive was found in the repository scan. Remote release/artifact inventory remains to be queried.
 
 ## Environment facts and recovery
@@ -21,7 +23,7 @@
 
 ## Remaining CP00 validation
 
-- Build source with Go 1.26.11, report actual binary version/commit/build metadata, and compare to any published RC4 artifact if available.
+- Compare the RC4 artifact against the local build if Hydrogen DevBox becomes accessible; until then, artifact identity is UNVERIFIED.
 - Run the documented Go CI/unit gates and Console typecheck, tests, and build; inspect all failures.
 - Start disposable isolated Tanpopo runtime(s), perform functional readiness and first-run Setup using real browser interactions, and visually inspect screenshots.
 - Verify access to Google and the synthetic/alternate-provider fixture independently without exposing credentials; classify proxy/provider/runtime failures separately.
@@ -29,4 +31,4 @@
 
 ## Current outcome
 
-**PARTIAL / IN PROGRESS.** Revision and initial toolchain facts verified. No RC4 binary was verified, no application startup or end-to-end user journey has passed yet, and no historical defect is yet verified fixed on this revision. GATE-REL-07 remains BLOCKED.
+**PARTIAL / IN PROGRESS.** Revision and local source-build metadata are verified. RC4 DevBox artifact comparison remains UNVERIFIED. The app has started and the CP01 fresh-install/login journey passed. Historical defects still require independent retest. GATE-REL-07 remains BLOCKED.
