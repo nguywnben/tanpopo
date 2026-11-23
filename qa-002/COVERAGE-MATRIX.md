@@ -23,7 +23,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | FT-13 | Budgets, reservations, settlement and chargeback | PARTIAL PASS | CP05 created first project budget from empty Console state; CP11 settled one exact provider request without any budget ledger and reconciled the FinOps headline, project/model chargeback rows, CSV and JSON exports. Enforcement, estimates, multi-budget scopes and larger reconciliations remain UNVERIFIED. |
 | FT-14 | OTel export, trace privacy and explorer | UNVERIFIED | |
 | FT-15 | Console, CLI, Admin API, Data Plane API | PARTIAL PASS | CP04 built CLI config show/help/reconcile command routing with local synthetic API fixture; real Admin/Data Plane API paths remain UNVERIFIED. |
-| FT-16 | Setup/startup, GitOps, encrypted backup, restore, upgrade | PARTIAL PASS | CP13 Console SQLite backup, archive authentication, secret-decryption-checked restore, restored server startup and fresh login with persisted model/FinOps state. GitOps, PostgreSQL/cluster restore, upgrade and corrupt archive recovery remain UNVERIFIED. |
+| FT-16 | Setup/startup, GitOps, encrypted backup, restore, upgrade | PARTIAL PASS | CP13 Console SQLite backup, archive authentication, secret-decryption-checked restore, restored server startup and fresh login with persisted model/FinOps state; CP21 restarted the same fresh SQLite runtime and retained owner/org/project plus the failed-request trace, with `/healthz` and `/readyz` both 200. GitOps, PostgreSQL/cluster restore, upgrade and corrupt archive recovery remain UNVERIFIED. |
 
 **CP00–02 test capability note:** Local Go 1.26.11 linux/amd64 binary is built from the exact baseline. `go test ./...` and `go test -race ./...` both pass all 86 packages after applying environment-specific `GOFLAGS=-buildvcs=false` and `umask 0022`; `go run ./scripts/ci/check.go --all`, `go vet ./...`, `go run ./scripts/docs/check_drift.go`, Console typecheck, all 45 Console tests, and production build pass. These are build/automated quality results, not product-feature PASS results. RC4 DevBox artifact remains UNVERIFIED.
 
@@ -46,7 +46,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | SCR-13 | Keys, projects, members, roles | PARTIAL PASS | CP06 project/environment provisioning; CP08 scoped key creation, grant visibility and revocation; CP14 Team Admin Add member and scoped grant. Team Admin list refresh is blocked by DEF-016; rotation and other role boundaries remain open. |
 | SCR-14 | Approvals/audit/kill-switch | PARTIAL PASS | CP06/16/18 live audit-log screens visually reviewed; create, project crypto-shred and A2A/key event attribution and scoped chain verification passed. CP18 verified new standalone organization partition and rejected duplicate slug. Approvals, kill-switch and fault-injection remain UNVERIFIED. |
 | SCR-15 | Playground/API explorer/diagnostics | PARTIAL PASS | CP17 no-model empty Playground disabled Send until input; synthetic missing-model request surfaced 503 and a trace, with $0 settled spend and no hold. Recovery, successful streaming, cancellation and SDK snippets remain open. |
-| SCR-16 | Operations/backups/upgrades/privacy | PARTIAL PASS | CP07 authenticated WebKit webhook drawer; CP13 Console backup, receipt, archive verify/restore and restored startup/login. Upgrade, health matrix, privacy and clustered operations remain UNVERIFIED. |
+| SCR-16 | Operations/backups/upgrades/privacy | PARTIAL PASS | CP07 authenticated WebKit webhook drawer; CP13 Console backup, receipt, archive verify/restore and restored startup/login; CP21 post-restart health/readiness and retained workspace/trace. Upgrade, full health matrix, privacy and clustered operations remain UNVERIFIED. |
 
 ## Business workflows WF-01..13
 
@@ -80,7 +80,7 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 | Themes: light/dark; 15 locales | UNVERIFIED | |
 | Accessibility, keyboard, screen-reader labels, focus/recovery | PARTIAL PASS | CP03 live axe: four Setup steps, 0 violations; CP19 two original Setup accessibility tests pass on the post-engineering baseline. Other screens, keyboard/screen-reader, locales, and browsers remain UNVERIFIED. |
 | Security: SSRF, secrets, audit integrity, kill-switch, plugin boundaries | PARTIAL PASS | CP18 standalone organization create was attributed to the acting principal and its per-tenant JCS chain verified intact; duplicate slug had no second row. SSRF, tamper/fault injection, kill-switch and broader plugin boundaries remain UNVERIFIED. |
-| Operational reliability: health, backup/restore, restart persistence, diagnostics | PARTIAL PASS | CP13 verified SQLite backup, encrypted restore and fresh-process health/readiness/login/persistence. Restart failure, multi-node, PostgreSQL/Valkey and upgrade recovery remain UNVERIFIED. |
+| Operational reliability: health, backup/restore, restart persistence, diagnostics | PARTIAL PASS | CP13 verified SQLite backup, encrypted restore and fresh-process health/readiness/login/persistence; CP21 terminated and restarted the exact-baseline fresh SQLite server, confirmed `/healthz`/`/readyz` 200, and verified login plus workspace and trace persistence. Restart failure, multi-node, PostgreSQL/Valkey and upgrade recovery remain UNVERIFIED. |
 
 ## Update protocol
 

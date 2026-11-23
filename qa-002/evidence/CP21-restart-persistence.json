@@ -1,0 +1,38 @@
+{
+  "checkpoint": "CP21",
+  "baseline_commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "isolated SQLite, 127.0.0.1:18086",
+  "action": "terminate server, then restart same baseline binary with same data directory and master-key file",
+  "restart": {
+    "old_process_stopped": true,
+    "healthz_http_status": 200,
+    "healthz_body": {"status": "ok"},
+    "readyz_http_status": 200,
+    "readyz_body": {"status": "ready"},
+    "bootstrap_status_http": 200,
+    "initialized": true,
+    "reported_version": "0.1.0-dev"
+  },
+  "version_note": "This runtime used the source-code-default version without release linker injection; this is expected for this test binary and is not classified as a defect.",
+  "post_restart_browser": {
+    "browser": "Chromium",
+    "login": "success",
+    "organization_visible": true,
+    "project_visible": true,
+    "failed_trace_id_persisted": "trc_01m853j3swe00ah0dwr098z919",
+    "trace_error": "no_compliant_deployment_available",
+    "overview_request_count": 1,
+    "overview_error_rate": "100.00%",
+    "settled_spend": "$0.000000",
+    "active_holds": "$0.000000"
+  },
+  "screenshots_visually_inspected": [
+    "CP21-postrestart-overview.png",
+    "CP21-postrestart-traces.png"
+  ],
+  "limitations": [
+    "Single-node SQLite restart only; no crash injection, cluster, PostgreSQL, Valkey, or upgrade path was tested.",
+    "The version value does not verify the RC4 DevBox artifact. That artifact remains UNVERIFIED."
+  ],
+  "source_changed": false
+}
