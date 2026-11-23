@@ -1,0 +1,94 @@
+{
+  "init": {
+    "status": 200,
+    "session_issued": true,
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "capabilities": {
+          "tools": {
+            "listChanged": false
+          }
+        },
+        "protocolVersion": "2025-03-26",
+        "serverInfo": {
+          "name": "tanpopo-mcp-hub",
+          "version": "0.2"
+        }
+      }
+    }
+  },
+  "notification": {
+    "status": 202
+  },
+  "tools_list": {
+    "status": 200,
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "tools": [
+          {
+            "description": "Return a synthetic QA status string.",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "audience": {
+                  "description": "Optional synthetic audience label.",
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            },
+            "name": "qa002-cp24-server__echo_status"
+          }
+        ]
+      }
+    }
+  },
+  "allowed_call": {
+    "status": 200,
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "result": {
+        "content": [
+          {
+            "text": "Synthetic MCP response: QA-002 synthetic MCP invocation",
+            "type": "text"
+          }
+        ],
+        "isError": false
+      }
+    }
+  },
+  "unauthorized_tool": {
+    "status": 200,
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 4,
+      "error": {
+        "code": -32003,
+        "message": "tool_access_denied"
+      }
+    }
+  },
+  "fixture_state": {
+    "schema_mode": 2,
+    "calls": [
+      {
+        "name": "echo_status",
+        "argument_keys": [
+          "message"
+        ]
+      }
+    ]
+  }
+}

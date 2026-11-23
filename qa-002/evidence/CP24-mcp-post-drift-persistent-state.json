@@ -1,0 +1,72 @@
+{
+  "runtime": "isolated SQLite 127.0.0.1:18086",
+  "tool": {
+    "id": "mcp_01m857e95ae008pwkxpymn4hmp",
+    "tool_name": "echo_status",
+    "approved_schema_sha256": "10d22b76c1339087403769dd906c9bd421a6a86584ac69148ccf3958804f224a",
+    "observed_schema_sha256": "10d22b76c1339087403769dd906c9bd421a6a86584ac69148ccf3958804f224a",
+    "schema_drift_locked": 0,
+    "version": 4
+  },
+  "virtual_key": {
+    "id": "vky_01m857sm4ae00bjb8e45zq2tqm",
+    "name": "QA002 CP24 MCP-only",
+    "allowed_planes": "MCP",
+    "allowed_mcp_tools_json": "[\"qa002-cp24-server__echo_status\"]",
+    "state": "REVOKED",
+    "revocation_mode": "STANDARD",
+    "last_four": "EM6n"
+  },
+  "recent_mcp_and_key_audit_events": [
+    {
+      "seq_no": 131,
+      "event_type": "virtual_key.revoked",
+      "target_type": "virtual_key",
+      "target_id": "vky_01m857sm4ae00bjb8e45zq2tqm",
+      "metadata_json": "{\"mode\":\"STANDARD\",\"reason\":\"Graceful drain revocation\"}"
+    },
+    {
+      "seq_no": 128,
+      "event_type": "mcp.tool_schema_approved",
+      "target_type": "mcp_tool",
+      "target_id": "mcp_01m857e95ae008pwkxpymn4hmp",
+      "metadata_json": "{\"justification\":\"QA-only synthetic read-only fixture; no real user data.\",\"risk_tier\":\"read_only\",\"schema_hash\":\"10d22b76c1339087403769dd906c9bd421a6a86584ac69148ccf3958804f224a\"}"
+    },
+    {
+      "seq_no": 126,
+      "event_type": "mcp.tool_schema_drift_detected",
+      "target_type": "mcp_tool",
+      "target_id": "mcp_01m857e95ae008pwkxpymn4hmp",
+      "metadata_json": "{\"approved_schema_hash\":\"e2cdf55fda2ead99af133619f4d70e016630ef2d1f97c85043a52f022d8ac636\",\"observed_schema_hash\":\"10d22b76c1339087403769dd906c9bd421a6a86584ac69148ccf3958804f224a\",\"server_id\":\"mcp_01m857dpwke009mpecryx6h56f\",\"tool_name\":\"echo_status\"}"
+    },
+    {
+      "seq_no": 124,
+      "event_type": "mcp.tool_granted",
+      "target_type": "mcp_tool",
+      "target_id": "mcp_01m857e95ae008pwkxpymn4hmp",
+      "metadata_json": "{\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\",\"grant_id\":\"mcp_01m857y3p7e008gyjhyf7saqnj\",\"virtual_key_id\":\"vky_01m857sm4ae00bjb8e45zq2tqm\"}"
+    },
+    {
+      "seq_no": 115,
+      "event_type": "virtual_key.created",
+      "target_type": "virtual_key",
+      "target_id": "vky_01m857sm4ae00bjb8e45zq2tqm",
+      "metadata_json": "{\"allowed_planes\":\"MCP\",\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\"}"
+    },
+    {
+      "seq_no": 100,
+      "event_type": "mcp.tool_schema_approved",
+      "target_type": "mcp_tool",
+      "target_id": "mcp_01m857e95ae008pwkxpymn4hmp",
+      "metadata_json": "{\"justification\":\"QA-only synthetic read-only fixture; no real user data.\",\"risk_tier\":\"read_only\",\"schema_hash\":\"e2cdf55fda2ead99af133619f4d70e016630ef2d1f97c85043a52f022d8ac636\"}"
+    },
+    {
+      "seq_no": 95,
+      "event_type": "mcp.tool_discovered",
+      "target_type": "mcp_tool",
+      "target_id": "mcp_01m857e95ae008pwkxpymn4hmp",
+      "metadata_json": "{\"approval_required\":true,\"observed_schema_hash\":\"e2cdf55fda2ead99af133619f4d70e016630ef2d1f97c85043a52f022d8ac636\",\"server_id\":\"mcp_01m857dpwke009mpecryx6h56f\",\"tool_name\":\"echo_status\"}"
+    }
+  ],
+  "secret_material_included": false
+}

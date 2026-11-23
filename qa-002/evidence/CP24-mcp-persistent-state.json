@@ -1,0 +1,113 @@
+{
+  "runtime": "isolated SQLite 127.0.0.1:18086",
+  "server": {
+    "id": "mcp_01m857dpwke009mpecryx6h56f",
+    "server_slug": "qa002-cp24-server",
+    "transport_kind": "STREAMABLE_HTTP",
+    "allow_private_ip": 1,
+    "allowed_cidrs_json": "[\"127.0.0.1/32\"]",
+    "status": "ACTIVE"
+  },
+  "tool": {
+    "id": "mcp_01m857e95ae008pwkxpymn4hmp",
+    "mcp_server_id": "mcp_01m857dpwke009mpecryx6h56f",
+    "tool_name": "echo_status",
+    "side_effect_class": "read_only",
+    "approved_schema_sha256": "e2cdf55fda2ead99af133619f4d70e016630ef2d1f97c85043a52f022d8ac636",
+    "observed_schema_sha256": "e2cdf55fda2ead99af133619f4d70e016630ef2d1f97c85043a52f022d8ac636",
+    "schema_drift_locked": 0,
+    "version": 2
+  },
+  "virtual_key": {
+    "id": "vky_01m857sm4ae00bjb8e45zq2tqm",
+    "name": "QA002 CP24 MCP-only",
+    "allowed_planes": "MCP",
+    "allowed_routes_json": "[\"*\"]",
+    "allowed_mcp_tools_json": "[\"qa002-cp24-server__echo_status\"]",
+    "state": "CREATED_ACTIVE",
+    "revocation_mode": null,
+    "last_four": "EM6n"
+  },
+  "tool_grants": [
+    {
+      "id": "mcp_01m857y3p7e008gyjhyf7saqnj",
+      "virtual_key_id": "vky_01m857sm4ae00bjb8e45zq2tqm",
+      "mcp_tool_id": "mcp_01m857e95ae008pwkxpymn4hmp",
+      "granted_by_principal_id": "prc_01m853e561e00byye5wtq3s746",
+      "version": 1
+    }
+  ],
+  "recent_mcp_related_audit_events": [
+    {
+      "seq_no": 124,
+      "actor_kind": "PRINCIPAL",
+      "actor_id": "prc_01m853e561e00byye5wtq3s746",
+      "event_type": "mcp.tool_granted",
+      "target_type": "mcp_tool",
+      "target_id": "mcp_01m857e95ae008pwkxpymn4hmp",
+      "metadata_json": "{\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\",\"grant_id\":\"mcp_01m857y3p7e008gyjhyf7saqnj\",\"virtual_key_id\":\"vky_01m857sm4ae00bjb8e45zq2tqm\"}"
+    },
+    {
+      "seq_no": 100,
+      "actor_kind": "PRINCIPAL",
+      "actor_id": "prc_01m853e561e00byye5wtq3s746",
+      "event_type": "mcp.tool_schema_approved",
+      "target_type": "mcp_tool",
+      "target_id": "mcp_01m857e95ae008pwkxpymn4hmp",
+      "metadata_json": "{\"justification\":\"QA-only synthetic read-only fixture; no real user data.\",\"risk_tier\":\"read_only\",\"schema_hash\":\"e2cdf55fda2ead99af133619f4d70e016630ef2d1f97c85043a52f022d8ac636\"}"
+    },
+    {
+      "seq_no": 95,
+      "actor_kind": "PRINCIPAL",
+      "actor_id": "prc_01m853e561e00byye5wtq3s746",
+      "event_type": "mcp.tool_discovered",
+      "target_type": "mcp_tool",
+      "target_id": "mcp_01m857e95ae008pwkxpymn4hmp",
+      "metadata_json": "{\"approval_required\":true,\"observed_schema_hash\":\"e2cdf55fda2ead99af133619f4d70e016630ef2d1f97c85043a52f022d8ac636\",\"server_id\":\"mcp_01m857dpwke009mpecryx6h56f\",\"tool_name\":\"echo_status\"}"
+    },
+    {
+      "seq_no": 93,
+      "actor_kind": "PRINCIPAL",
+      "actor_id": "prc_01m853e561e00byye5wtq3s746",
+      "event_type": "mcp.server_registered",
+      "target_type": "mcp_server",
+      "target_id": "mcp_01m857dpwke009mpecryx6h56f",
+      "metadata_json": "{}"
+    }
+  ],
+  "recent_request_traces": [
+    {
+      "request_id": "trc_01m856b4yze00960j2ygdcaha2",
+      "entry_point": "unified_http",
+      "http_status": 200,
+      "canonical_error_code": null,
+      "route_slug": "qa002-cp22-streamroute",
+      "selected_deployment_id": "dpl_01m8562ktme0087wb258b43c11"
+    },
+    {
+      "request_id": "trc_01m856a0rje00b375h6f9ycwq3",
+      "entry_point": "unified_http",
+      "http_status": 200,
+      "canonical_error_code": null,
+      "route_slug": "qa002-cp22-streamroute",
+      "selected_deployment_id": "dpl_01m8562ktme0087wb258b43c11"
+    },
+    {
+      "request_id": "trc_01m856843ke009qbt74j28f191",
+      "entry_point": "unified_http",
+      "http_status": 502,
+      "canonical_error_code": "upstream_malformed_response",
+      "route_slug": "qa002-cp22-streamroute",
+      "selected_deployment_id": "dpl_01m8562ktme0087wb258b43c11"
+    },
+    {
+      "request_id": "trc_01m855yr25e00aktd6kanjebg8",
+      "entry_point": "unified_http",
+      "http_status": 400,
+      "canonical_error_code": "capability_not_supported",
+      "route_slug": "/v1/chat/completions",
+      "selected_deployment_id": null
+    }
+  ],
+  "secret_material_included": false
+}
