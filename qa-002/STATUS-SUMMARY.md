@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP59
+**Latest checkpoint:** CP60
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -43,6 +43,7 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - QA-OBS-008: MCP Hub org-wide list shown without project labels; global vs selected-project presentation contract unresolved.
 - QA-OBS-009: manual project/environment selection returns to the runtime-selected default after refresh; workspace persistence contract unresolved.
 - QA-OBS-010: A2A agent registration and A2A-only key provisioning remain available in a runtime whose A2A data-plane handlers return the configured disabled response; control-plane/data-plane availability and UX contract unresolved (CP59).
+- QA-OBS-011: legacy numeric host `127.1` resolves to loopback through system NSS but MCP registration rejects it as a DNS resolution failure; support is undocumented, and the endpoint is not contacted (CP60).
 
 ## Coverage
 
@@ -131,3 +132,11 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage completed:** actual A2A discovery, A2A-only key scope, input-required lifecycle, persisted task identity across navigation/refresh, real UI resume to completion, fixture isolation metadata, and key revocation.
 - **Blocked:** A2A use on the 18445 runtime because its A2A plane is disabled by configuration; config provenance not readable. CP53 webhook delivery still needs Operator access.
 - **Remaining:** full DEF-023 all-screen scope sweep; unresolved DEF-005 DNS-rebinding/transport and alternate-runtime cases; independent retests and all remaining feature/role/platform areas. See CP59 and the matrix.
+
+## CP60 consolidated defect and coverage update
+
+- **Historical DEF-001–015:** no new retests; preserve scoped dispositions. DEF-005 remains PARTIAL.
+- **New findings:** none confirmed. DEF-016–028 remain open. QA-OBS-004 recurred; QA-OBS-011 records unsupported/noncanonical host behavior without security bypass evidence.
+- **Coverage completed:** confirmed DEF-023 source cause and cross-scope API/UI mismatch; renewed visual review of existing CP43 contrasts; explicit-CIDR fail-closed checks for `127.1` and `localhost.` against a metadata-only fixture.
+- **Blocked:** fresh Team Admin access because CP45 intentionally suspended its credential; CP53 webhooks remain blocked on Operator credentials.
+- **Remaining:** full scope-switch matrix on remaining screens/roles; DEF-005 rebinding, multiple answers, HTTPS chains and alternate runtimes; independent historical retests; other platform/integration coverage.

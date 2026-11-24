@@ -1,0 +1,24 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "alternate_numeric_host": {
+    "endpoint": "http://127.1:19183/mcp",
+    "system_resolver_observation": "getent ahostsv4 returned 127.0.0.1",
+    "allowlist": "127.0.0.2/32",
+    "registration": "HTTP 403 ssrf_blocked_private_ip; DNS resolution failed for endpoint host 127.1",
+    "persisted_server": false,
+    "synthetic_fixture_calls": 0,
+    "interpretation": "Fail-closed; runtime's resolver did not accept the shorthand host. No evidence of SSRF bypass. Legacy numeric hostname support is undocumented."
+  },
+  "trailing_dot_localhost": {
+    "endpoint": "http://localhost.:19183/mcp",
+    "system_resolver_observation": "getent ahosts returned ::1 and 127.0.0.1",
+    "allowlist": "127.0.0.2/32",
+    "registration": "HTTP 201; row persisted ACTIVE with zero tools",
+    "sync": "HTTP 502 mcp_sync_failed; generic retryable UI message",
+    "synthetic_fixture_calls_before_after": [3, 3],
+    "persisted_row": "ACTIVE, tool_count 0",
+    "interpretation": "No fixture contact under mismatching explicit CIDR. Fail-closed outcome; generic error repeats QA-OBS-004."
+  },
+  "no_security_boundary_weakening": true,
+  "source_changes": false
+}
