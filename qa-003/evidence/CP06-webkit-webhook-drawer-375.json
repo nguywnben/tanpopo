@@ -1,0 +1,122 @@
+{
+  "viewport": {
+    "width": 375,
+    "height": 844
+  },
+  "document": {
+    "scrollWidth": 375,
+    "scrollHeight": 844
+  },
+  "drawer": {
+    "tag": "DIV",
+    "role": null,
+    "className": "x-default-marker xrhngw9 xjsfl84 x1047aw6 xax9j7h x1vpwbdg x19kr0ht x1vii845 xojybgt xu9n9za xt8hc1d x78zum5 xdt5ytf x12",
+    "x": 57,
+    "y": 0,
+    "width": 318,
+    "height": 843.984375,
+    "right": 375,
+    "bottom": 843.984375,
+    "scrollWidth": 318,
+    "clientWidth": 318
+  },
+  "visibleFormControls": [
+    {
+      "tag": "BUTTON",
+      "role": "tab",
+      "text": "Organizations",
+      "aria": null,
+      "x": 128.125,
+      "y": 157.15625,
+      "width": 129.59375,
+      "height": 32,
+      "right": 257.71875,
+      "bottom": 189.15625
+    },
+    {
+      "tag": "BUTTON",
+      "role": "tab",
+      "text": "Webhooks",
+      "aria": null,
+      "x": 259.71875,
+      "y": 157.15625,
+      "width": 103.71875,
+      "height": 32,
+      "right": 363.4375,
+      "bottom": 189.15625
+    },
+    {
+      "tag": "INPUT",
+      "role": null,
+      "text": "",
+      "aria": null,
+      "x": 82,
+      "y": 150.421875,
+      "width": 268,
+      "height": 24,
+      "right": 350,
+      "bottom": 174.421875
+    },
+    {
+      "tag": "BUTTON",
+      "role": "combobox",
+      "text": "Select signing secret",
+      "aria": null,
+      "x": 86,
+      "y": 288.421875,
+      "width": 236,
+      "height": 20,
+      "right": 322,
+      "bottom": 308.421875
+    },
+    {
+      "tag": "BUTTON",
+      "role": "combobox",
+      "text": "kill_switch.triggered, mcp.approval.pending",
+      "aria": null,
+      "x": 86,
+      "y": 358.421875,
+      "width": 208,
+      "height": 24,
+      "right": 294,
+      "bottom": 382.421875
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "text": "",
+      "aria": "Clear all Events",
+      "x": 302,
+      "y": 360.421875,
+      "width": 20,
+      "height": 20,
+      "right": 322,
+      "bottom": 380.421875
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "text": "Cancel",
+      "aria": null,
+      "x": 115.921875,
+      "y": 795.984375,
+      "width": 77.0625,
+      "height": 32,
+      "right": 192.984375,
+      "bottom": 827.984375
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "text": "Register webhook",
+      "aria": null,
+      "x": 200.984375,
+      "y": 795.984375,
+      "width": 158.015625,
+      "height": 32,
+      "right": 359,
+      "bottom": 827.984375
+    }
+  ],
+  "bodyText": "Operations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nHMAC-signed webhook subscriptions\n0\nAdd webhook\nNo webhook subscriptions\nRegister a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.\nRegister webhook subscription\nFull receiver URLs are sealed in the vault; only the origin is stored in metadata.\nHTTPS receiver URL\n∙ Required\nSigning credential (WEBHOOK_HMAC_SECRET)\nSeal a WEBHOOK_HMAC_SECRET credential in Providers → Vault Secrets first.\nSelect signing secret\nEvents\nkill_switch.triggered, mcp.approval.pending\nCancel\nRegister webhook"
+}

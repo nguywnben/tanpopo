@@ -43,7 +43,7 @@ Status definitions: **PASS** means the named RC5 journey and observable postcond
 | SCR-13 | Keys, projects, members, roles | **PARTIAL** | Synthetic key/project/environment and membership list; one-time member activation worked. Other role assignments, revoke/edit and six-role permission matrix remain open. See [CP02](checkpoints/CP02-crypto-shred-and-restore.md) and [CP03](checkpoints/CP03-membership-scope-and-enrollment.md). |
 | SCR-14 | Approvals/audit/kill-switch | **PARTIAL** | Audit Log and chain verification exercised before and after crypto-shred; approvals and kill-switch remain open. Screenshots in [CP02](checkpoints/CP02-crypto-shred-and-restore.md). |
 | SCR-15 | Playground/API explorer/diagnostics | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |
-| SCR-16 | Operations/backups/upgrades/privacy | **PARTIAL** | Operations Organizations crypto-shred and Webhooks lifecycle UI plus CLI backup create/verify/restore exercised; delivery, upgrades, retention and privacy flows remain open. See [CP02](checkpoints/CP02-crypto-shred-and-restore.md) and [CP05](checkpoints/CP05-webhook-lifecycle.md). |
+| SCR-16 | Operations/backups/upgrades/privacy | **PARTIAL** | Operations Organizations crypto-shred and Webhooks lifecycle UI plus CLI backup create/verify/restore exercised; mobile WebKit drawer layout also checked. Delivery, upgrades, retention and privacy flows remain open. See [CP02](checkpoints/CP02-crypto-shred-and-restore.md), [CP05](checkpoints/CP05-webhook-lifecycle.md), and [CP06](checkpoints/CP06-webkit-mobile-and-browser-runtime.md). |
 ## Business workflows WF-01..13
 
 | ID | Coverage scope | QA-003 RC5 status | Evidence / remaining coverage |
@@ -62,3 +62,12 @@ Status definitions: **PASS** means the named RC5 journey and observable postcond
 | WF-12 | Incident detection, containment, recovery | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |
 | WF-13 | Data retention, anonymization, deletion | **PARTIAL** | One isolated tenant was crypto-shredded; scoped data/DEKs disappeared, tombstone events persisted and verified, and restored service excluded the tenant. Retention/anonymization and multi-tenant cases remain open. See [CP02](checkpoints/CP02-crypto-shred-and-restore.md). |
 | WF-14 | GitOps configuration reconcile and safe abort | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |
+
+## Browser and platform coverage
+
+| Browser/platform | QA-003 RC5 status | Evidence / remaining coverage |
+| --- | --- | --- |
+| Chromium 156 desktop/Linux | **PARTIAL** | Setup, membership, operations, audit and webhook journeys executed at 1440×1000. Other features, viewports and environments remain open. See CP01–CP05. |
+| WebKit 26.5 mobile/Linux, 375×844 | **PARTIAL** | Real authenticated navigation and Webhooks registration drawer inspected; no horizontal overflow. Other WebKit workflows and iOS Safari remain open. See [CP06](checkpoints/CP06-webkit-mobile-and-browser-runtime.md). |
+| Firefox 153/Linux | **BLOCKED** | Launch timed out after container rejected Firefox sandbox namespace write (`/proc/self/uid_map: EROFS`); writable Fontconfig cache also reported. No sandbox override attempted. See [CP06](checkpoints/CP06-webkit-mobile-and-browser-runtime.md). |
+| Windows, macOS/iOS, Android, other desktop browsers | **UNVERIFIED** | No separate platform runtime available in this environment. |
