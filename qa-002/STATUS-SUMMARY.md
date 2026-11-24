@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP96
+**Latest checkpoint:** CP97
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -322,3 +322,15 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** complete independent DEF-001–015 acceptance; DEF-005 residual SSRF checks; DEF-007 fault/erasure cases; open DEF-016–035 regressions; all other feature, browser/platform, role, integration and operational coverage.
 - **Recommended handoffs:** no new engineering handoff; continue DEF-035 with DEF-023/024/029/030 and existing DEF-034/033/005/007 priorities.
 - **Checkpoint:** [CP96](checkpoints/CP96-native-passthrough-ingress-discovery.md); prior [CP95](checkpoints/CP95-console-workspace-scope-and-model-deployment-identity.md). `GATE-REL-07` remains **BLOCKED**.
+
+
+## CP97 consolidated status update
+
+- **Historical DEF-001–015:** CP97 did not retest them. Preserve prior scoped QA-002 results only: DEF-001–004, DEF-006, DEF-008–015 have limited passing paths; DEF-005 remains partial; DEF-007 successful audit paths do not close fault atomicity/populated erasure. No QA-001 PASS is inherited; full acceptance remains incomplete.
+- **Historical open DEF-016–035:** remain open; no defect disposition changed.
+- **New defects:** none. The standalone `doctor` failure rows were caused/inconclusive in the local CLI context and were not classified as product defects; the serving runtime stayed healthy/ready.
+- **Coverage completed:** installed/checksummed Go 1.26.11 to `/tmp`; restored dependencies; built the exact source baseline with explicit release metadata; verified CLI version output; exercised safe GitOps success and malformed-input non-overwrite; exercised localized missing-admin-token behavior; compared doctor status to live `/healthz` and `/readyz`.
+- **Coverage blocked:** remote CLI calls require `TANPOPO_ADMIN_TOKEN`, absent from this Cloud runtime; native passthrough requires an enabled Data Plane address/config; separate RC4 DevBox artifact remains unavailable/unverified.
+- **Coverage remaining:** complete independent DEF-001–015 acceptance; DEF-005 residual SSRF acceptance; DEF-007 populated erasure/failure atomicity; DEF-016–035 regression; remote CLI with a dedicated QA token; non-empty GitOps and interrupted apply recovery; all other feature, role, browser/platform, integration and operational coverage.
+- **Recommended handoffs:** unchanged—DEF-035 with DEF-023/024/029/030, DEF-034, DEF-033, DEF-005 without weakening SSRF, and DEF-007.
+- **Checkpoint:** [CP97](checkpoints/CP97-cli-provenance-gitops-and-doctor.md); prior [CP96](checkpoints/CP96-native-passthrough-ingress-discovery.md). `GATE-REL-07` remains **BLOCKED**.

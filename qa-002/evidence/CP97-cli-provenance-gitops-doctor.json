@@ -1,0 +1,66 @@
+{
+  "source_baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "toolchain": {
+    "version": "go1.26.11 linux/amd64",
+    "official_archive_sha256_verified": true,
+    "dependency_download": "PASS; GOPATH/module/build caches isolated under /tmp",
+    "build_output": "/tmp/qa002-tanpopo-cli",
+    "buildvcs": false,
+    "linker_injected_metadata": {
+      "version": "0.1.0-dev",
+      "commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+      "date": "2026-11-24T10:23:56Z"
+    },
+    "version_command": {
+      "exit_code": 0,
+      "reported": {
+        "version": "0.1.0-dev",
+        "commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+        "built": "2026-11-24T10:23:56Z"
+      }
+    },
+    "external_rc4_artifact_verified": false
+  },
+  "gitops": {
+    "valid_empty_config": {
+      "exit_code": 0,
+      "status": "APPLIED",
+      "destination": "isolated /tmp/qa002-cp97-gitops/applied.yaml"
+    },
+    "malformed_desired_config": {
+      "exit_code": 14,
+      "stdout_empty": true,
+      "prior_applied_sentinel_preserved": true,
+      "runtime_database_or_lockfile_mutated": false
+    }
+  },
+  "remote_cli": {
+    "command": "config show --output=json",
+    "locale": "vi",
+    "admin_token_configured": false,
+    "exit_code": 14,
+    "message_class": "localized missing TANPOPO_ADMIN_TOKEN requirement",
+    "remote_request_sent": false
+  },
+  "doctor": {
+    "command_root": "/tmp/tanpopo-qa002-data",
+    "exit_code": 2,
+    "checks": {
+      "clock-skew": "warn",
+      "ports-available": "fail",
+      "master-kek-ready": "fail",
+      "storage-fs-lock": "pass",
+      "cluster-cache": "skipped",
+      "bundle-lockfile-integrity": "pass",
+      "tls-posture": "warn",
+      "egress-dns-ssrf": "pass"
+    },
+    "classification": "inconclusive local CLI context: ports are occupied by QA services and the CLI shell has no service Master KEK binding; not classified as product defect"
+  },
+  "runtime_health": {
+    "url": "http://127.0.0.1:18084",
+    "healthz": 200,
+    "readyz": 200
+  },
+  "secrets_or_database_contents_included": false
+}
