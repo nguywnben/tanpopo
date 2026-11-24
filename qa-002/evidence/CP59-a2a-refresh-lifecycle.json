@@ -1,0 +1,48 @@
+{
+  "discovery_status": 200,
+  "well_known_status": 200,
+  "agent_name": "tanpopo-a2a-gateway",
+  "created_status": 201,
+  "task_id": "tsk_01m8613gahe00bw74zwmppeq2m",
+  "state": "input-required",
+  "version": 3,
+  "first_get_status": 200,
+  "get_state": "input-required",
+  "hold_micros": 10000,
+  "console": {
+    "beforeStateVisible": true,
+    "taskRowBeforeRefresh": "tsk_01m8613gahe00bw74zwmppeq2m\nqa002-cp59-refresh-agent-r3\nSynthetic agent needs approval input\n\tInput required\t1 / 5\tUS\t$0.010000\t$0.000000\t\nResume\nCancel",
+    "sameTaskAfterNavigation": true,
+    "sameTaskAfterRefresh": true,
+    "resume_status": 200,
+    "resumed_task_id": "tsk_01m8613gahe00bw74zwmppeq2m",
+    "resumed_state": "completed",
+    "resumed_version": 5
+  },
+  "final_status": 200,
+  "final_state": "completed",
+  "final_task_id": "tsk_01m8613gahe00bw74zwmppeq2m",
+  "settled_cost_micros": 3000,
+  "fixture": {
+    "calls": [
+      {
+        "path": "/tasks",
+        "task_id": "tsk_01m8613gahe00bw74zwmppeq2m",
+        "input_part_count": 1,
+        "approval_marker_present": false,
+        "authorization_forwarded": false,
+        "trace_root_present": true,
+        "hop_count": "1"
+      },
+      {
+        "path": "/tasks",
+        "task_id": "tsk_01m8613gahe00bw74zwmppeq2m",
+        "input_part_count": 1,
+        "approval_marker_present": true,
+        "authorization_forwarded": false,
+        "trace_root_present": true,
+        "hop_count": "1"
+      }
+    ]
+  }
+}

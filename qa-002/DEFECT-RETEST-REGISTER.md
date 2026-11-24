@@ -100,3 +100,5 @@ Baseline: `40bba5b55c2da6fc00b107b315c9b3167fb20169`. The acceptance criteria ar
 
 Consult the original detailed register and targeted handoffs: `qa/DEFECT-REGISTER.md`; `qa/engineering-handoffs/DEF-005-private-endpoint-cidr-input.md`; DEF-010 through DEF-015 handoffs. QA-002 retests should use the expected/actual, reproduction, business impact, and acceptance criterion recorded there. For DEF-001 and DEF-009 preserve both sides of historical conflicting evidence. For DEF-010 do not weaken authorization. For DEF-002 isolate local fixture behavior from Google Cloud egress. For DEF-007 verify attribution and atomicity, not just event count. For DEF-008 verify a complete encrypted restore workflow, not merely UI state.
 
+
+| CP59 | DEF-001–015 not retested | No historical defect retested in this phase. CP59 adds fresh A2A lifecycle evidence only; see `checkpoints/CP59-a2a-refresh-persistence-and-runtime-gate.md`. Preserve all prior scoped dispositions, including DEF-005 partial. |
