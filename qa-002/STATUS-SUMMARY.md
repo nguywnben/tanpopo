@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP75
+**Latest checkpoint:** CP77
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -32,10 +32,19 @@
 | DEF-029 | Low | Access & Keys can repopulate prior environment-scoped Virtual Key metadata after a delayed response arrives under No project / No env scope. |
 | DEF-030 | Moderate | Routes & Policies can repopulate prior environment routes after a delayed response under No project / No env or a different selected project/environment; stale Edit/Delete remain available. |
 | DEF-031 | Low | Invalid MCP/A2A CIDR reaches the API, and the 400 validation error is obscured behind the open drawer on WebKit mobile. APIs reject before persistence; no security bypass. |
+| DEF-032 | Low | Distinct same-project provider records can be indistinguishable in Providers table, actions and edit forms when display fields duplicate. CP76 did not probe or mutate either record. |
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
-## Latest phase: CP75
+## Latest phase: CP77
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain scoped results only; CP77 retested none. DEF-005 remains PARTIAL. No QA-001 result is inherited and no broad stability claim is made.
+- **Historical defects failing / unverified:** DEF-016–031 remain as previously recorded; DEF-016–030 remain confirmed open, and DEF-031 remains confirmed. DEF-023 was independently reconfirmed in CP71.
+- **New findings:** DEF-032 Low confirmed in CP76 for indistinguishable duplicate provider records in the observed state. CP77 added QA-OBS-013 for the organization-wide Provider registry without owner-project labels; not classified as a defect or authorization issue because the API permits Org Owner organization-wide listing.
+- **Coverage completed:** CP76 inspected duplicate provider records, menus and edit forms in Chromium. CP77 switched between two project/environment contexts on Providers and compared real UI with sanitized API ownership data; source behavior and screenshots were reviewed.
+- **Coverage blocked / remaining:** A2A runtime 18445 remains disabled by configuration; webhook delivery still needs usable Operator credentials plus a controlled receiver/signing setup; the RC4 artifact remains UNVERIFIED. Continue DEF-001–015 acceptance coverage, DEF-005 DNS/redirect/mapped-address gaps, and remaining roles, browsers, integrations and platforms. CP77’s project-scoped Team Admin provider visibility comparison remains untested.
+- **Recommended handoff:** include DEF-032 with provider connection identity/action safety. Keep QA-OBS-013 contract discovery separate; do not restrict intended Org Owner registry access without evidence.
+- **Checkpoint:** [CP77](checkpoints/CP77-provider-list-workspace-scope-comparison.md), [CP76](checkpoints/CP76-provider-duplicate-connection-management-ambiguity.md), [CP75](checkpoints/CP75-finops-model-export-retest.md).
 
 - **Historical defects verified fixed:** DEF-001–004, DEF-006–009, and DEF-012–015 retain scoped QA-002 PASS results. CP74 independently reconfirmed DEF-009's 375×844 WebKit drawer layout. CP75 independently reconfirmed DEF-014 CSV and DEF-015 selected Model grouping in both export formats. DEF-010 and DEF-011 were independently retested in CP68/69 for A2A-only issuance, plane denial, task discovery/resume/cancel, persistence, settlement, and reservation release. This does not close broader role/platform coverage.
 - **Historical defects failing / unverified:** DEF-005 remains PARTIAL with DNS rebinding, mixed answers, HTTPS/redirect-chain, alternate runtime, and host-contract coverage open. DEF-016–028 remain confirmed open; DEF-026 recurred in CP61. New DEF-029–031 remain confirmed open. DEF-023 was independently reconfirmed in CP71 across organization-only and project/no-environment contexts; the same-session member API returned three records while UI showed zero, and selecting `stage` rendered all three. DEF-016 was independently retested in CP72: scoped Team Admin create persisted with HTTP 201, then unfiltered list refresh returned 403 and showed contradictory success/error notices, while the authorized project-filtered GET returned 200. DEF-002 was independently retested in CP73 with a new local 401 fixture: connection stayed Unverified, deployment Provisioned, promotion returned 422, and the row menu omitted activation. DEF-009 independently passed its 375×844 WebKit layout retest in CP74; webhook registration/delivery remain unverified. No historical defect was newly fixed.
@@ -61,6 +70,7 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - QA-OBS-010: A2A agent registration and A2A-only key provisioning remain available in a runtime whose A2A data-plane handlers return the configured disabled response; control-plane/data-plane availability and UX contract unresolved (CP59).
 - QA-OBS-011: legacy numeric host `127.1` resolves to loopback through system NSS but MCP registration rejects it as a DNS resolution failure; support is undocumented, and the endpoint is not contacted (CP60).
 - QA-OBS-012: one project-switch run displayed `env_id does not belong to supplied project_id` while switching workspace; a request-logged follow-up returned 200 for both old and new scopes and settled with no error. Keep unclassified pending a repeatable capture (CP70).
+- QA-OBS-013: Provider Connections lists organization-wide rows in selected-project context without owner-project labels; the Org Owner API behavior is intentional by authorization design, but presentation contract remains open (CP77).
 
 ## Coverage
 

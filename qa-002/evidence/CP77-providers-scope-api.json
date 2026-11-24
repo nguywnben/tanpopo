@@ -1,0 +1,59 @@
+{
+  "project1": {
+    "scope": "qa-002-a2a-project",
+    "ui": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n5\nVault Secrets\n1\nAdapters\n2\nConfigured connections\n5\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP73 Failing Ollama\nhttp://127.0.0.1:19187\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Failing Ollama 401\nhttp://127.0.0.1:19107\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Ollama Synthetic\nhttp://127.0.0.1:19106\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tActive\tNone bound\t",
+    "responsesAtSnapshot": 1
+  },
+  "project2": {
+    "scope": "QA002 Audit mwto47wa",
+    "ui": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n5\nVault Secrets\n1\nAdapters\n2\nConfigured connections\n5\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP73 Failing Ollama\nhttp://127.0.0.1:19187\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Failing Ollama 401\nhttp://127.0.0.1:19107\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Ollama Synthetic\nhttp://127.0.0.1:19106\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tActive\tNone bound\t",
+    "responsesAtSnapshot": 1
+  },
+  "connectionResponses": [
+    {
+      "status": 200,
+      "url": "/admin/v1/connections?limit=100",
+      "keys": [
+        "data",
+        "has_more"
+      ],
+      "rows": [
+        {
+          "id": "con_01m866netce00a8wcj86nft2xq",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "name": "QA002 CP73 Failing Ollama",
+          "endpoint_url": "http://127.0.0.1:19187",
+          "state": "CREATED_UNVERIFIED"
+        },
+        {
+          "id": "con_01m8530p3we00828f2x8mp6vs2",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "name": "QA002 Google Gemini",
+          "endpoint_url": "https://generativelanguage.googleapis.com",
+          "state": "CREATED_UNVERIFIED"
+        },
+        {
+          "id": "con_01m852zx84e008qspa6bkat3wm",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "name": "QA002 Google Gemini",
+          "endpoint_url": "https://generativelanguage.googleapis.com",
+          "state": "CREATED_UNVERIFIED"
+        },
+        {
+          "id": "con_01m850y4xre00ahbtgj1y47zyp",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "name": "QA002 Failing Ollama 401",
+          "endpoint_url": "http://127.0.0.1:19107",
+          "state": "CREATED_UNVERIFIED"
+        },
+        {
+          "id": "con_01m850bf7je00b98hwrs3dq10r",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "name": "QA002 Ollama Synthetic",
+          "endpoint_url": "http://127.0.0.1:19106",
+          "state": "ACTIVE"
+        }
+      ]
+    }
+  ]
+}

@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP75 (independent FinOps export retest).
+**Latest checkpoint:** CP77 (Provider list workspace-scope comparison).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -20,6 +20,8 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [CP72 — Team Admin member create/list refresh](checkpoints/CP72-team-admin-member-create-refresh-retest.md)
 - [CP73 — Failed provider promotion guard](checkpoints/CP73-provider-auth-failure-promotion-guard.md)
 - [CP74 — WebKit mobile webhook drawer](checkpoints/CP74-webkit-webhook-mobile-drawer-retest.md)
+- [CP77 — Provider list workspace-scope comparison](checkpoints/CP77-provider-list-workspace-scope-comparison.md)
+- [CP76 — Provider duplicate connection ambiguity](checkpoints/CP76-provider-duplicate-connection-management-ambiguity.md)
 - [CP75 — FinOps CSV/JSON exports](checkpoints/CP75-finops-model-export-retest.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [Historical defect retest register](DEFECT-RETEST-REGISTER.md)
@@ -32,6 +34,8 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [DEF-020](reports/DEF-020-killswitch-badge-stays-active-after-clear.md) — confirmed Security shell badges remain stale after switch clear and approval decisions.
 - [DEF-023](reports/DEF-023-org-members-hidden-until-project-selected.md) — confirmed org-only and project/no-environment owner views hide the organization member list.
 - [DEF-024](reports/DEF-024-finops-hides-effective-organization-budget-in-project-scope.md) — confirmed project FinOps view hides a persisted, effective organization ceiling.
+- [DEF-032](reports/DEF-032-provider-connections-indistinguishable-when-duplicate.md) — distinct provider records can be indistinguishable in the UI when duplicate display values exist.
+- [QA-OBS-013](reports/QA-OBS-013-provider-connection-scope-labels.md) — Provider Connections organization-wide listing has unresolved owner-project labeling.
 - [DEF-025](reports/DEF-025-model-deployment-drawer-unavailable-without-environment.md) — confirmed low-severity Models form dead end without an active environment.
 - [DEF-026](reports/DEF-026-mcp-initial-schema-approval-count-message.md) — confirmed MCP sync success copy omits first-review locks while discovered schema remains locked.
 - [QA-OBS-009](reports/QA-OBS-009-workspace-default-after-refresh.md) — workspace selection resets to the runtime-selected default after refresh; persistence contract unresolved.
