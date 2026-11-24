@@ -1,0 +1,34 @@
+{
+  "checkpoint": "CP87",
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "browser": "Chromium",
+  "role": "Organization Owner",
+  "workspace_header": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+  "ui": {
+    "page": "FinOps / Chargeback",
+    "visible_date_range_controls": false,
+    "group_by": "Project",
+    "exact_settled_usd": "0.012001",
+    "estimated_settled_usd": "0",
+    "active_holds_usd": "0",
+    "unmetered_requests": 0,
+    "row": {
+      "project": "QA002 Audit mwto47wa",
+      "exact_micros": 12001,
+      "estimated_micros": 0,
+      "exact_requests": 5,
+      "estimated_requests": 0
+    }
+  },
+  "api": {
+    "route": "GET /admin/v1/usage/summary",
+    "group_by_project": {"status": 200, "rows": 1, "project": "QA002 Audit mwto47wa", "exact_micros": 12001, "exact_requests": 5},
+    "valid_recent_window": {"status": 200, "rows": 0},
+    "malformed_from": {"status": 400, "code": "invalid_request"},
+    "reversed_window": {"status": 400, "code": "invalid_request"},
+    "selected_project_id_filter": {"status": 200, "rows": 1, "same_organization_row_returned": true}
+  },
+  "classification": "QA-OBS-016 UX/business-contract ambiguity; no defect assigned",
+  "mutation_performed": false,
+  "gate": "GATE-REL-07 BLOCKED"
+}

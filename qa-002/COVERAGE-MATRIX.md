@@ -147,4 +147,6 @@ Status definitions: **PASS** = the named user journey and observable postconditi
 
 ## Update protocol
 
-After each phase, update only rows supported by phase evidence. Keep partial results and residual scenarios explicit; a broad row can remain UNVERIFIED while specific subpaths pass or fail. Record every newly discovered defect with the next stable identifier (currently `DEF-035`) in `reports/` and add the same evidence link to a checkpoint. The latest unresolved observation is `QA-OBS-015`.
+After each phase, update only rows supported by phase evidence. Keep partial results and residual scenarios explicit; a broad row can remain UNVERIFIED while specific subpaths pass or fail. Record every newly discovered defect with the next stable identifier (currently `DEF-035`) in `reports/` and add the same evidence link to a checkpoint. The latest unresolved observation is `QA-OBS-016`.
+
+| CP87 | FinOps Chargeback scope and API date windows | PASS for observed organization-wide project grouping/API agreement and valid/invalid window responses; UNVERIFIED whether scope should be labeled or project-filtered and whether UI date filtering is required (QA-OBS-016). No defect assigned. See [CP87](checkpoints/CP87-finops-chargeback-scope-and-date-windows.md). |

@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP85
+**Latest checkpoint:** CP87
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -200,3 +200,15 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Blocked:** none in CP63. Prior Team Admin credential and webhook Operator limitations remain.
 - **Recommended handoff:** fix scope-bound async state across Access & Keys and Routes & Policies, preserving separate acceptance tests for membership visibility and route mutation controls.
 - **Remaining:** cross-environment route races, page-by-page race sweep, role-limited actions, full historical retests, integrations and platform/browser coverage.
+
+
+## CP87 consolidated status update
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006, DEF-008–015 retain only their prior scoped QA-002 results. CP87 did not retest them; independent acceptance coverage remains incomplete overall. DEF-005 remains partial. No QA-001 PASS is inherited.
+- **Historical defects failing / unverified:** DEF-016–034 remain confirmed open, including CP86 DEF-034 and the DEF-020 recurrence. No defect status changed in CP87. All prior defect evidence remains preserved.
+- **New findings:** No new defect. QA-OBS-016 records unclear organization-wide Chargeback scope labeling when the workspace selector shows a project. QA-OBS-015 Cloud direct-egress blocker remains.
+- **Coverage completed:** CP87 real Chromium owner Chargeback view; visual comparison of selected project and organization-wide project grouping; API/UI amount and row agreement; valid recent, malformed and reversed API window handling; selected-project query comparison. Screenshots were visually inspected; no mutation.
+- **Coverage blocked:** direct webhook delivery/HMAC remains blocked by managed Cloud direct DNS/egress; runtime 18445 A2A remains disabled by configuration; RC4 artifact verification remains UNVERIFIED because the artifact is in a separate unavailable DevBox.
+- **Coverage remaining:** independent DEF-001–015 acceptance coverage remains incomplete; DEF-005 DNS rebinding/mixed answers/redirect chains/alternate runtimes; DEF-007 failure atomicity and populated-org erasure; Chargeback roles/pagination/locales/date-filter UI/project-scope contract; all open DEF-016–034 remediation and regression; actual upgrade safe-abort; provider outage/recovery; remaining product, browser, platform, accessibility, integration and operations coverage.
+- **Recommended handoffs:** prioritize DEF-034 subscription revocation; DEF-016/023/029/030 scope/state consistency; DEF-033 budget create/update semantics; DEF-005 SSRF acceptance without weakening controls; DEF-007 audit atomicity/populated erasure. Confirm the Chargeback scope-label contract (QA-OBS-016).
+- **Checkpoint:** [CP87](checkpoints/CP87-finops-chargeback-scope-and-date-windows.md); prior [CP86](checkpoints/CP86-webhook-delivery-and-subscription-lifecycle.md).
