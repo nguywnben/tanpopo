@@ -1,0 +1,25 @@
+{
+  "beforeConsentButtonEnabled": false,
+  "checkboxVisibleAfterScrolling": true,
+  "buttonEnabledAfterConsent": true,
+  "mutationResponses": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/extensions/ins_01m87ttzhne00b8gr5mvk3rgns/approve-permissions",
+      "status": 200,
+      "code": null
+    }
+  ],
+  "postApprovalApi": {
+    "status": 200,
+    "installation": {
+      "id": "ins_01m87ttzhne00b8gr5mvk3rgns",
+      "canonical_name": "@tanpopo/anthropic",
+      "state": "ENABLED_ACTIVE",
+      "origin_trust_tier": "official",
+      "enterprise_signed": false,
+      "active_version": "0.1.0",
+      "candidate_version": null
+    }
+  }
+}

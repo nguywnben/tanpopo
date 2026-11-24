@@ -1,0 +1,48 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": "isolated SQLite clone 127.0.0.1:18116",
+  "uiObservation": {
+    "marketplace": "Origin: Official; Signature: None",
+    "reviewDrawer": "Origin trust: Official; Publisher signature: Unsigned",
+    "approvalCompleted": false
+  },
+  "api": {
+    "catalog": {
+      "status": 200,
+      "canonical_name": "Anthropic Official Adapter",
+      "origin_trust_tier": "official",
+      "enterprise_signed": false,
+      "execution_tier": "sandboxed_wasm"
+    },
+    "installation": {
+      "status": 200,
+      "id": "ins_01m87ttzhne00b8gr5mvk3rgns",
+      "canonical_name": "@tanpopo/anthropic",
+      "state": "PENDING_PERMISSION_APPROVAL",
+      "origin_trust_tier": "official",
+      "enterprise_signed": false,
+      "active_version": null,
+      "candidate_version": "0.1.0"
+    },
+    "permissionDiff": {
+      "status": 200,
+      "origin_trust_tier": "official",
+      "enterprise_signed": false,
+      "execution_tier": "sandboxed_wasm",
+      "added_allowed_hosts": [
+        "api.anthropic.com"
+      ],
+      "added_secret_slots": [
+        "api_key"
+      ]
+    }
+  },
+  "read_only_persistent_version_metadata": {
+    "canonical_name": "@tanpopo/anthropic",
+    "origin_trust_tier": "official",
+    "signature_verified": true,
+    "enterprise_signed": false,
+    "signing_key_fingerprint_present": true,
+    "execution_tier": "WASM_SANDBOX_T2"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "confirmText": " Org Owner\nDefault Organization\n/\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nExtensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\nInstalled packages\n2\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\next_01m87ttzhne00b8e2rcc0f4aj0\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tsandboxed_wasm\t\n\n\next_01m87em5w7e008efqnwz2d6the\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tdeclarative\t\nUninstall ext_01m87ttzhne00b8e2rcc0f4aj0\n\nRemove this extension or discard its staged candidate.\n\nAudit reason (minimum 5 characters)\n∙ Required\nCancel\nConfirm uninstall",
+  "buttonsBefore": [
+    "Default Organization / default / dev (Active workspace scope)",
+    "JumpCtrlK",
+    "",
+    "Kill Switch",
+    "Stage package",
+    "",
+    "",
+    "",
+    "Cancel",
+    "Confirm uninstall"
+  ],
+  "clicked": true,
+  "mutations": [
+    {
+      "method": "DELETE",
+      "path": "/admin/v1/extensions/ins_01m87ttzhne00b8gr5mvk3rgns",
+      "status": 409,
+      "code": "invalid_state_transition"
+    }
+  ],
+  "api": {
+    "status": 200,
+    "anthropicPresent": true,
+    "installations": [
+      {
+        "canonical_name": "@tanpopo/anthropic",
+        "state": "ENABLED_ACTIVE",
+        "active_version": "0.1.0"
+      },
+      {
+        "canonical_name": "@tanpopo/ollama",
+        "state": "ENABLED_ACTIVE",
+        "active_version": "0.1.0"
+      }
+    ]
+  }
+}
