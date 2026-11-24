@@ -1,0 +1,25 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": "isolated SQLite clone 127.0.0.1:18116",
+  "createdByUi": true,
+  "post": {
+    "status": 201,
+    "errorCode": null,
+    "idSuffix": "6tq094ey"
+  },
+  "result": {
+    "status": 200,
+    "present": true,
+    "organization": {
+      "slug": "qa003-operator-cp22",
+      "created_at": "2026-11-24T22:17:44.145Z"
+    }
+  },
+  "persist": {
+    "status": 200,
+    "present": true,
+    "slug": "qa003-operator-cp22"
+  },
+  "uiShowsRow": true,
+  "body": "Operations\n\nProvision isolated tenant organizations and execute irreversible cryptographic erasure.\n\nRefresh\nCreate organization\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\n2\nWebhooks\nCreated organization QA003 Operator CP22 (qa003-operator-cp22).\nTenant organizations\n2\nOrganization\tMin extension trust\tFour-eyes approval\tCreated\tActions\n\nQA003 Operator CP22\nqa003-operator-cp22 · org_01m87t5syhe00bhdsq6tq094ey\n\tAny Approved\tDisabled\tNov 24, 2026, 10:17:44 PM\t\nSwitch\nCrypto-shred\n\n\nDefault Organization\nActive\ndefault-organization · org_01m87axgx7e008eg6c8zvy7h5b\n\tAny Approved\tDisabled\tNov 24, 2026, 5:51:04 PM\t\nSwitch\nCrypto-shred"
+}

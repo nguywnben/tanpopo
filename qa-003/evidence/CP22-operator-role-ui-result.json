@@ -1,0 +1,21 @@
+{
+  "testedRole": "OPERATOR selected in org-scoped Add member form",
+  "apiResponse": {
+    "status": 403,
+    "code": "role_escalation_denied",
+    "message": "rbac: insufficient_role_permission: OPERATOR role cannot be bound inside an organization member"
+  },
+  "before": {
+    "status": 200,
+    "count": 16,
+    "scope": "Operator bootstrap session default organization; unscoped request, not the synthetic tenant"
+  },
+  "after": {
+    "status": 200,
+    "count": 2,
+    "scope": "Synthetic tenant via X-Tanpopo-Org-ID",
+    "canaryPresent": false
+  },
+  "uiMessage": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n2\nOrganization members\n2\nPrincipal\tKind\tAssigned roles\tActions\n\ncp22-operator-org-developer@example.invalid\nPassword set\n\tHUMAN\t\nDeveloper\n\t\n\n\ncp22-operator-org-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n\t\nAdd organization member\nrbac: insufficient_role_permission: OPERATOR role cannot be bound inside an organization member\nMember email\n\u2219 Required\nAssign roles\nOperator\nCancel\nAdd member",
+  "classification": "Confirmed Low-severity Console contract/UX defect: organization-scoped picker offers instance-only OPERATOR; API safely rejects the selection with 403 role_escalation_denied. No member was created and no privilege escalation occurred."
+}

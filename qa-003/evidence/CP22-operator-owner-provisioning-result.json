@@ -1,0 +1,35 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "syntheticOrganization": "qa003-operator-cp22",
+  "operatorInitialMemberState": "zero members",
+  "ownerInviteResponse": {
+    "status": 201,
+    "idSuffix": "",
+    "roles": [
+      "ORG_OWNER"
+    ]
+  },
+  "activationCompleted": true,
+  "newOwnerLoginSucceeded": true,
+  "ownerSession": {
+    "org_id": "org_01m87t5syhe00bhdsq6tq094ey",
+    "roles": [
+      "ORG_OWNER"
+    ]
+  },
+  "overview": "\nKill Switch\nOverview\n\nUpdated 10:20:16 PM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.\nAll systems nominal No active operational alerts or pending re",
+  "memberListApi": {
+    "status": 200,
+    "members": [
+      {
+        "email": "cp22-operator-org-owner@example.invalid",
+        "roles": [
+          "ORG_OWNER"
+        ],
+        "has_password": true,
+        "enrollment_pending": false
+      }
+    ]
+  },
+  "membersUiExcerpt": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n1\nOrganization members\n1\nPrincipal\tKind\tAssigned roles\tActions\n\ncp22-operator-org-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n\t"
+}
