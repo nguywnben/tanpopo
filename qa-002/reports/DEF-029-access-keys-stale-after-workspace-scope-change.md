@@ -20,6 +20,8 @@ A delayed Virtual Key list request for a selected project/environment can comple
 
 8. Independently repeat the delayed-response flow in WebKit at 375×844 (CP64). Before releasing the same kind of environment-scoped HTTP 200 response, the no-scope page showed zero keys; afterward, ten prior environment key rows appeared while the selector remained **No project / No env**. The rows were all revoked in this dataset. The measured document/body width remained 375px. Both screenshots were visually inspected. This confirms the defect is not limited to Chromium or desktop layout.
 
+9. In Chromium, hold the secondary project's environment-key response, then switch to the valid `QA002 CP39 Tenant Project / qa002-cp39-env` context (CP65). Before release, its page showed zero keys. Release the 200 response for `QA002 CP43 Secondary Project / qa002-cp43-env2`; ten old rows then appeared while the tenant project/environment remained selected. Screenshots were visually inspected. A hard refresh returned the workspace selector to the runtime-default secondary project/environment and displayed its ten keys, repeating QA-OBS-009. The refresh changed scope rather than persisting the manually selected project.
+
 The JSON evidence records the exact query IDs, HTTP 200 response, returned key count and sanitized key metadata. The delayed payload contained no secret material; response data is not committed beyond names, environment/project IDs, and operational state.
 
 ## Expected versus actual
@@ -33,7 +35,7 @@ Operators can mistake revoked or active keys from a different environment for ke
 
 ## Facts and root-cause hypothesis
 
-**Facts:** the held request was `GET /admin/v1/virtual-keys?project_id=prj_01m85ry2gme00an7wydh1pd1gc&env_id=env_01m85ry445e009xg6sr14c5q1z&limit=100`, returned HTTP 200 with 10 records, and every record carried those same project/environment IDs. The workspace selector showed `No project / No env` both before and after the held response. Before release the UI count was 0; afterward it was 10 and listed those keys. A later navigation/re-entry cleared the rows.
+**Facts:** the held request was `GET /admin/v1/virtual-keys?project_id=prj_01m85ry2gme00an7wydh1pd1gc&env_id=env_01m85ry445e009xg6sr14c5q1z&limit=100`, returned HTTP 200 with 10 records, and every record carried those same project/environment IDs. CP62/64 show the workspace selector at `No project / No env` both before and after the held response; the UI count changed from 0 to 10. CP65 shows a second reproduction: the selector remained at `QA002 CP39 Tenant Project / qa002-cp39-env` while the 10 old `qa002-cp43-env2` rows appeared. All rows in CP65 were revoked. A later navigation/re-entry cleared the CP62 no-scope rows; a CP65 hard refresh restored the runtime-default project/environment (QA-OBS-009 recurrence).
 
 **Source observation / hypothesis:** `web/console/src/pages/access/AccessPage.tsx` has no scope-generation check or cancellation guard around the async `Promise.allSettled` result writes. A scope change enters the no-scope early return and clears state, but the earlier async call can still run its `setKeys` after resolving. This is strongly supported by the controlled ordering, but is recorded as the likely implementation cause rather than a separate runtime fact.
 
@@ -42,6 +44,7 @@ Operators can mistake revoked or active keys from a different environment for ke
 - Associate each asynchronous Access & Keys load with its captured project/environment scope or request generation; ignore results after the selected scope has changed or the component has unmounted.
 - Switching from an environment to no-project/no-environment keeps environment Virtual Keys empty even if the old response returns later.
 - Switching between environments under delayed/out-of-order responses never displays records from the previous environment in the newly selected one.
+- Switching between projects or environments never displays records returned for a previous scope under the currently selected scope, including when the stale response arrives after the current-scope empty state has rendered.
 - Clearing scope continues to hide/disable environment-only actions, and the loading/empty state matches the selected scope.
 - Add a deterministic regression that holds the old environment response, switches scope, then releases it and verifies no stale rows appear. Preserve existing authorization checks and do not widen key visibility.
 - Retest the related DEF-023 member-list scope behavior independently; one fix must not hide organization-wide membership in valid organization contexts.
@@ -56,6 +59,9 @@ Operators can mistake revoked or active keys from a different environment for ke
 - `../evidence/CP64-webkit-access-race.json` — independent WebKit 375×844 reproduction and layout dimensions.
 - `../evidence/CP64-webkit-access-before-release-375.png` and `../evidence/CP64-webkit-access-after-release-375.png` — visually inspected before/after states; selected no-scope context remains visible in both.
 - [CP64](../checkpoints/CP64-webkit-mobile-access-scope-race.md) — method, visual inspection, and residual coverage.
+- `../evidence/CP65-access-project-switch-race.json` — prior-project query, new selected project/environment, stale rows, and refresh scope reset.
+- `../evidence/CP65-access-env2-loading.png`, `../evidence/CP65-access-project1-before-release.png`, `../evidence/CP65-access-project1-after-release.png`, and `../evidence/CP65-access-project1-after-refresh.png` — real-browser cross-project state, visually inspected before/after screenshots, and refresh state.
+- [CP65](../checkpoints/CP65-access-cross-project-response-race.md) — cross-project reproduction and QA-OBS-009 recurrence.
 - Related finding: [`DEF-023`](DEF-023-org-members-hidden-until-project-selected.md) and [`CP60`](../checkpoints/CP60-workspace-scope-and-private-hostname-boundaries.md).
 
 No product code, database, or server configuration was modified for this test. Browser response delay was injected only in the test client.

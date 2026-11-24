@@ -107,3 +107,5 @@ Consult the original detailed register and targeted handoffs: `qa/DEFECT-REGISTE
 
 | CP63 | DEF-030, DEF-023, DEF-029 | FAIL DEF-030 confirmed with delayed route response. DEF-023/029 were not newly retested; prior status preserved. See `reports/DEF-030-routing-stale-after-workspace-scope-change.md` and `checkpoints/CP63-routing-scope-race-and-stale-actions.md`. |
 | CP64 | DEF-029 | FAIL DEF-029 independently reconfirmed in WebKit 375×844 with a held environment key-list response released after switching to No project / No env. Ten stale rows appeared; screenshots visually inspected; no secret or authorization bypass. See `reports/DEF-029-access-keys-stale-after-workspace-scope-change.md` and `checkpoints/CP64-webkit-mobile-access-scope-race.md`. |
+
+| CP65 | DEF-029, QA-OBS-009 | FAIL DEF-029 expanded: held old-project key response repopulated ten rows after selecting a different project/environment. Hard refresh returned to runtime-default scope, repeating QA-OBS-009. No authorization bypass demonstrated with Org Owner. See `reports/DEF-029-access-keys-stale-after-workspace-scope-change.md` and `checkpoints/CP65-access-cross-project-response-race.md`. |

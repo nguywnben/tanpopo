@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP64 (WebKit mobile Access & Keys scope race).
+**Latest checkpoint:** CP65 (Access & Keys cross-project delayed-response race).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -104,3 +104,4 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP62 | Delayed Access & Keys response after scope switch | FAIL DEF-029: held 200 response showed ten old environment keys under No project / No env; navigation cleared them. See CP62. |
 | CP63 | Delayed Routes & Policies response after scope switch | FAIL DEF-030: three old environment routes reappeared in No project / No env with Edit/Delete and enabled Save; no mutation. See CP63. |
 | CP64 | WebKit mobile Access & Keys scope race | FAIL DEF-029 reconfirmed at 375×844: ten old environment key rows appeared after a held response was released under No project / No env. Screenshots visually inspected; no horizontal overflow. See CP64. |
+| CP65 | Access & Keys cross-project delayed-response race | FAIL DEF-029 expanded: ten secondary-project rows appeared under a different selected project/environment; refresh returned to runtime-default scope (QA-OBS-009). No auth bypass demonstrated. See CP65. |
