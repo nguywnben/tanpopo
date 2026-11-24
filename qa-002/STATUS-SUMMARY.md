@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP91
+**Latest checkpoint:** CP92
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -260,3 +260,15 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** independent DEF-001–015 acceptance; DEF-005 SSRF cases; DEF-007 failure atomicity/populated erasure; trace/overview scope for non-owner roles and scope contract; open DEF-016–034 regression/remediation; remaining features, browsers/platforms, integrations, accessibility and operations.
 - **Recommended handoffs:** unchanged—DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF, and DEF-007. Clarify global-report scope labeling.
 - **Checkpoint:** [CP91](checkpoints/CP91-trace-and-overview-scope-under-project-selection.md); prior [CP90](checkpoints/CP90-vault-secret-metadata.md).
+
+
+## CP92 consolidated status update
+
+- **Historical defects verified fixed:** DEF-001 remains VERIFIED FIXED for scoped scenarios; CP92 independently completed a fresh four-step setup on RC4 and verified accessible names include each visible step label. DEF-002–004 and DEF-006–015 retain their previous scoped passes only.
+- **Historical defects failing / unverified:** DEF-005 remains partial; DEF-016–034 remain open. DEF-002–015 broader roles/platforms/edge cases are not complete; no QA-001 PASS is inherited. Preserve DEF-034 and DEF-020 recurrence.
+- **New findings:** no new defect. A no-adapter fresh install completed when optional connection setup was skipped.
+- **Coverage completed:** separate runtime began `initialized=false`; real Setup UI completed owner/org/default-project bootstrap and custody acknowledgement; new session login and persisted one-owner/one-project evidence verified. Screenshots inspected; temporary key/token/password/database removed.
+- **Coverage blocked:** CP92 itself had no blocker. Direct webhook/HMAC still managed-egress blocked; runtime 18445 A2A disabled by configuration; RC4 artifact verification unverified in separate DevBox; full OTLP collector acceptance awaits endpoint/access.
+- **Coverage remaining:** independent DEF-002–015 residual coverage, DEF-005 SSRF cases, DEF-007 failure atomicity/populated erasure, fresh-instance adapter activation/first inference, open DEF-016–034 regression/remediation, remaining browsers/platforms/roles/integrations/accessibility/operations.
+- **Recommended handoffs:** unchanged—DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF, and DEF-007.
+- **Checkpoint:** [CP92](checkpoints/CP92-fresh-install-and-DEF-001-retest.md); prior [CP91](checkpoints/CP91-trace-and-overview-scope-under-project-selection.md).

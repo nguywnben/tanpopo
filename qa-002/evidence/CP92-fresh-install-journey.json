@@ -1,0 +1,72 @@
+{
+  "runtime": "http://127.0.0.1:18087",
+  "bootstrapBefore": false,
+  "initialAdapterCount": 0,
+  "step0Visible": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and provision its initial owner and route.\n\nOwner account\n2\nFirst connection\n3\nKey custody\n4\nReview\n\nAlready initialized? Sign in\n\nOwner account & initial tenant\n\nBootstrap token & initial tenant\n\nBootstrap token\nPrinted once on server startup and saved to data/bootstrap.token by default.\nBootstrap token\nOwner email\nOwner password\nMinimum 12 characters.\nOwner password\nConfirm password\nRe-enter your owner password.\nConfirm password\nOrganization name\nFirst project name\nContinue",
+  "stepper": [
+    {
+      "text": "English",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Switch to dark theme",
+      "title": ""
+    },
+    {
+      "text": "Owner account",
+      "aria": "Go to step 1: Owner account",
+      "title": ""
+    },
+    {
+      "text": "2\nFirst connection",
+      "aria": "Go to step 2: First connection",
+      "title": ""
+    },
+    {
+      "text": "3\nKey custody",
+      "aria": "Go to step 3: Key custody",
+      "title": ""
+    },
+    {
+      "text": "4\nReview",
+      "aria": "Go to step 4: Review",
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Show value",
+      "title": "Show value"
+    },
+    {
+      "text": "",
+      "aria": "Show value",
+      "title": "Show value"
+    },
+    {
+      "text": "",
+      "aria": "Show value",
+      "title": "Show value"
+    },
+    {
+      "text": "Continue",
+      "aria": null,
+      "title": ""
+    }
+  ],
+  "continueVisibleNameMatched": true,
+  "continueButtonLocatorCount": 1,
+  "step1": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and provision its initial owner and route.\n\nOwner account\ncompleted\nFirst connection\n3\nKey custody\n4\nReview\n\nAlready initialized? Sign in\n\nInitial provider connection\n\nOptional upstream provider\n\nNo provider adapters enabled yet\nFinish setup first, then open Extensions → Marketplace to activate one of 8 bundled official adapters (or stage a package via CLI) before adding connections.\nBack\nContinue",
+  "step2": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and provision its initial owner and route.\n\nOwner account\ncompleted\nFirst connection\ncompleted\nKey custody\n4\nReview\n\nAlready initialized? Sign in\n\nMaster key custody\n\nTanpopo encrypts provider credentials and secrets with the configured instance master key (KEK). Back it up in your approved secret manager—losing it renders encrypted credentials unrecoverable.\n\nI have securely backed up the Tanpopo master key\nBack\nContinue",
+  "step3": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and provision its initial owner and route.\n\nOwner account\ncompleted\nFirst connection\ncompleted\nKey custody\ncompleted\nReview\n\nAlready initialized? Sign in\n\nReview and initialize\n\nInitialize instance\n\nOwner email\nqa-002-cp92-owner@example.invalid\nOrganization / Project\nQA002 CP92 Fresh Install Org / default\nInitial connection\nSkipped\nBack\nComplete setup",
+  "completeButtonVisible": true,
+  "postBootstrap": {
+    "initialized": true,
+    "projectNames": [
+      "default"
+    ]
+  },
+  "overview": "Loading Overview…",
+  "pageErrors": []
+}
