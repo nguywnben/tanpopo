@@ -28,7 +28,7 @@ Status definitions: **PASS** means the named RC5 journey and observable postcond
 
 | ID | Coverage scope | QA-003 RC5 status | Evidence / remaining coverage |
 | --- | --- | --- | --- |
-| SCR-01 | First-run setup/login | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |
+| SCR-01 | First-run setup/login | **PARTIAL** | Fresh-install and login completed in Chromium at 1440×1000; separate context and reload persisted access. Other browsers/viewports and broader auth/recovery remain open. See [CP01](checkpoints/CP01-fresh-install-and-provenance.md). |
 | SCR-02 | Overview/system posture | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |
 | SCR-03 | Provider adapters | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |
 | SCR-04 | Connections/credentials | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |
@@ -48,7 +48,7 @@ Status definitions: **PASS** means the named RC5 journey and observable postcond
 
 | ID | Coverage scope | QA-003 RC5 status | Evidence / remaining coverage |
 | --- | --- | --- | --- |
-| WF-01 | First install/system bootstrap | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |
+| WF-01 | First install/system bootstrap | **PARTIAL** | Fresh SQLite bootstrap and separate owner login/reload passed in Chromium. Provider activation and upgrade path remain open. See [CP01](checkpoints/CP01-fresh-install-and-provenance.md). |
 | WF-02 | Day-one setup wizard | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |
 | WF-03 | Add official provider | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |
 | WF-04 | Install community/external extension | **UNVERIFIED** | Pending independent RC5 execution; historical record: [QA-002 coverage matrix](https://github.com/nguywnben/tanpopo/blob/1052ecb25a51e7ea94045946ede865ee062d4419/qa-002/COVERAGE-MATRIX.md). |

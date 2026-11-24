@@ -11,7 +11,7 @@
 
 ## Current checkpoint
 
-See [CP00 — baseline and environment inventory](checkpoints/CP00-baseline-environment.md). QA-003 independently retests all 39 historical defects; every row currently starts UNVERIFIED. Historical findings and acceptance criteria are referenced without importing prior PASS results.
+See [CP00 — baseline and environment inventory](checkpoints/CP00-baseline-environment.md) and [CP01 — exact-source build and fresh-install journey](checkpoints/CP01-fresh-install-and-provenance.md). QA-003 independently retests all 39 historical defects; every row currently starts UNVERIFIED. Historical findings and acceptance criteria are referenced without importing prior PASS results.
 
 ## Records
 
