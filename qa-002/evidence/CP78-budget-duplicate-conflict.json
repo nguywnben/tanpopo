@@ -1,0 +1,95 @@
+{
+  "project_id": "prj_01m868q2jte00abmhf75asqts3",
+  "budget_id": "bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+  "beforeText": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n1\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nPROJECT\nprj_01m868q2jte00abmhf75asqts3\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m868q2jte00abmhf75asqts3\nSave",
+  "baseline": {
+    "status": 200,
+    "url": "/admin/v1/budgets?project_id=prj_01m868q2jte00abmhf75asqts3&limit=100",
+    "data": [
+      {
+        "id": "bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+        "hard_limit_micros": 3000000,
+        "version": 2,
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m868q2jte00abmhf75asqts3",
+        "period": "MONTHLY"
+      }
+    ]
+  },
+  "duplicate_create_request": {
+    "method": "PUT",
+    "url": "/admin/v1/budgets/bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+    "if_match": "\"v1\"",
+    "payload": {
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m868q2jte00abmhf75asqts3",
+      "hard_limit_micros": 2800000,
+      "period": "MONTHLY",
+      "soft_warning_percents": [
+        50,
+        80,
+        95
+      ]
+    }
+  },
+  "duplicate_create_response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "optimistic_lock_conflict",
+        "type": "conflict_error",
+        "message": "resource version conflict: current revision is v2",
+        "request_id": "req_01m86948wye009n55109dznd6n",
+        "retryable": true,
+        "current_resource": {
+          "id": "bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m868q2jte00abmhf75asqts3",
+          "period": "MONTHLY",
+          "hard_limit_micros": 3000000,
+          "soft_warning_percents": [
+            50,
+            80,
+            95
+          ],
+          "settled_exact_micros": 0,
+          "settled_estimated_micros": 0,
+          "reserved_hold_micros": 0,
+          "negative_carryover_micros": 0,
+          "unmetered_request_count": 0,
+          "version": 2
+        }
+      }
+    }
+  },
+  "errorText": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nresource version conflict: current revision is v2\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n1\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nPROJECT\nprj_01m868q2jte00abmhf75asqts3\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m868q2jte00abmhf75asqts3\nSave\nCreate budget ceiling\nConfigure an integer micro-USD ceiling for an organization, project, environment, or virtual key.\nScope\nProject\nTarget scope ID\nQA002 CP78 Fresh Budget (qa002-cp78-fresh-budget)\nPeriod\nMONTHLY\nHard limit (micro-USD)\n∙ Required\nSoft warning thresholds (%)\nCancel\nCreate budget",
+  "visibleAfterDrawerDismissal": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nresource version conflict: current revision is v2\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n1\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nPROJECT\nprj_01m868q2jte00abmhf75asqts3\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m868q2jte00abmhf75asqts3\nSave",
+  "restored": {
+    "status": 200,
+    "body": {
+      "id": "bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m868q2jte00abmhf75asqts3",
+      "period": "MONTHLY",
+      "hard_limit_micros": 2500000,
+      "soft_warning_percents": [
+        50,
+        80,
+        95
+      ],
+      "settled_exact_micros": 0,
+      "settled_estimated_micros": 0,
+      "reserved_hold_micros": 0,
+      "negative_carryover_micros": 0,
+      "unmetered_request_count": 0,
+      "version": 3
+    },
+    "data": [
+      {
+        "id": "bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+        "hard_limit_micros": 2500000,
+        "version": 3
+      }
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP77
+**Latest checkpoint:** CP78
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -33,18 +33,20 @@
 | DEF-030 | Moderate | Routes & Policies can repopulate prior environment routes after a delayed response under No project / No env or a different selected project/environment; stale Edit/Delete remain available. |
 | DEF-031 | Low | Invalid MCP/A2A CIDR reaches the API, and the 400 validation error is obscured behind the open drawer on WebKit mobile. APIs reject before persistence; no security bypass. |
 | DEF-032 | Low | Distinct same-project provider records can be indistinguishable in Providers table, actions and edit forms when display fields duplicate. CP76 did not probe or mutate either record. |
+| DEF-033 | Moderate | FinOps Create budget can update an existing same-scope ceiling once while reporting Created, then submit fixed revision v1 and fail 409 at v2. CP78 restored the tested cap. |
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
-## Latest phase: CP77
+## Latest phase: CP78
 
-- **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain scoped results only; CP77 retested none. DEF-005 remains PARTIAL. No QA-001 result is inherited and no broad stability claim is made.
-- **Historical defects failing / unverified:** DEF-016–031 remain as previously recorded; DEF-016–030 remain confirmed open, and DEF-031 remains confirmed. DEF-023 was independently reconfirmed in CP71.
-- **New findings:** DEF-032 Low confirmed in CP76 for indistinguishable duplicate provider records in the observed state. CP77 added QA-OBS-013 for the organization-wide Provider registry without owner-project labels; not classified as a defect or authorization issue because the API permits Org Owner organization-wide listing.
-- **Coverage completed:** CP76 inspected duplicate provider records, menus and edit forms in Chromium. CP77 switched between two project/environment contexts on Providers and compared real UI with sanitized API ownership data; source behavior and screenshots were reviewed.
-- **Coverage blocked / remaining:** A2A runtime 18445 remains disabled by configuration; webhook delivery still needs usable Operator credentials plus a controlled receiver/signing setup; the RC4 artifact remains UNVERIFIED. Continue DEF-001–015 acceptance coverage, DEF-005 DNS/redirect/mapped-address gaps, and remaining roles, browsers, integrations and platforms. CP77’s project-scoped Team Admin provider visibility comparison remains untested.
-- **Recommended handoff:** include DEF-032 with provider connection identity/action safety. Keep QA-OBS-013 contract discovery separate; do not restrict intended Org Owner registry access without evidence.
-- **Checkpoint:** [CP77](checkpoints/CP77-provider-list-workspace-scope-comparison.md), [CP76](checkpoints/CP76-provider-duplicate-connection-management-ambiguity.md), [CP75](checkpoints/CP75-finops-model-export-retest.md).
+- **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain scoped results only. CP78 independently retested DEF-003: a fresh project accepted its first monthly project ceiling and the 2,500,000-micro limit survived hard refresh and API read. DEF-005 remains PARTIAL. No QA-001 PASS is inherited and no broad stability claim is made.
+- **Historical defects failing / unverified:** DEF-016–032 remain as previously recorded; DEF-016–032 are confirmed open, with DEF-023 independently reconfirmed in CP71. DEF-031 remains confirmed.
+- **New findings:** DEF-033 Moderate confirmed in CP78: Create budget changed an existing same-scope cap once while saying Created, then repeated submission sent stale `If-Match: v1` and failed 409 at revision 2. Cap was restored and API-verified. QA-OBS-014 records conflicting pre-action FinOps empty/one-row captures with no saved API baseline; not classified as a defect.
+- **Other new finding:** DEF-032 Low from CP76 remains confirmed for indistinguishable duplicate provider rows. QA-OBS-013 from CP77 remains an unresolved org-wide Provider list labeling contract, not an auth defect.
+- **Coverage completed:** CP76 inspected duplicate provider records, menus and edit forms. CP77 compared Provider scope views and API owner-project fields. CP78 exercised real new-project creation, first budget, reload persistence, existing-budget Create collision, 409 error presentation and cap restoration. Screenshots were visually inspected and persistent state compared.
+- **Coverage blocked / remaining:** A2A runtime 18445 remains disabled by configuration; webhook delivery still needs usable Operator credentials plus controlled receiver/signing setup; the RC4 artifact remains UNVERIFIED. Continue independent DEF-001–015 acceptance retests, DEF-005 DNS/redirect/mapped-address gaps, additional budgets/roles, browsers, integrations and platforms. Team Admin provider visibility and QA-OBS-014 request-logged reproduction remain open.
+- **Recommended handoff:** prioritize DEF-033 with DEF-018/019/024 as FinOps correctness and state-feedback work; retain separate checks for exact budget period, canonical rejection reasons, effective inherited ceilings, and duplicate-create/update concurrency. DEF-032 remains a provider identity/action-safety handoff.
+- **Checkpoint:** [CP78](checkpoints/CP78-finops-budget-create-persistence-and-existing-scope-retest.md), [CP77](checkpoints/CP77-provider-list-workspace-scope-comparison.md), [CP76](checkpoints/CP76-provider-duplicate-connection-management-ambiguity.md).
 
 - **Historical defects verified fixed:** DEF-001–004, DEF-006–009, and DEF-012–015 retain scoped QA-002 PASS results. CP74 independently reconfirmed DEF-009's 375×844 WebKit drawer layout. CP75 independently reconfirmed DEF-014 CSV and DEF-015 selected Model grouping in both export formats. DEF-010 and DEF-011 were independently retested in CP68/69 for A2A-only issuance, plane denial, task discovery/resume/cancel, persistence, settlement, and reservation release. This does not close broader role/platform coverage.
 - **Historical defects failing / unverified:** DEF-005 remains PARTIAL with DNS rebinding, mixed answers, HTTPS/redirect-chain, alternate runtime, and host-contract coverage open. DEF-016–028 remain confirmed open; DEF-026 recurred in CP61. New DEF-029–031 remain confirmed open. DEF-023 was independently reconfirmed in CP71 across organization-only and project/no-environment contexts; the same-session member API returned three records while UI showed zero, and selecting `stage` rendered all three. DEF-016 was independently retested in CP72: scoped Team Admin create persisted with HTTP 201, then unfiltered list refresh returned 403 and showed contradictory success/error notices, while the authorized project-filtered GET returned 200. DEF-002 was independently retested in CP73 with a new local 401 fixture: connection stayed Unverified, deployment Provisioned, promotion returned 422, and the row menu omitted activation. DEF-009 independently passed its 375×844 WebKit layout retest in CP74; webhook registration/delivery remain unverified. No historical defect was newly fixed.
@@ -71,6 +73,7 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - QA-OBS-011: legacy numeric host `127.1` resolves to loopback through system NSS but MCP registration rejects it as a DNS resolution failure; support is undocumented, and the endpoint is not contacted (CP60).
 - QA-OBS-012: one project-switch run displayed `env_id does not belong to supplied project_id` while switching workspace; a request-logged follow-up returned 200 for both old and new scopes and settled with no error. Keep unclassified pending a repeatable capture (CP70).
 - QA-OBS-013: Provider Connections lists organization-wide rows in selected-project context without owner-project labels; the Org Owner API behavior is intentional by authorization design, but presentation contract remains open (CP77).
+- QA-OBS-014: repeated A2A-project FinOps captures differed on whether a project budget row existed before the CP78 write; the pre-action API response was not retained, so the cause is unresolved and no defect is assigned.
 
 ## Coverage
 
