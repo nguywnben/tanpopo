@@ -1,0 +1,169 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084",
+  "role": "QA Org Owner + Operator",
+  "mutations": 0,
+  "records": [
+    {
+      "context": "organization-only",
+      "selected_workspace": "QA-002 A2A Org\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+      "fixture_visible": true,
+      "fixture_count_on_page": 1,
+      "visible_server_slugs": [
+        "qa002-cp114-dns-rebind",
+        "qa002-mcp-cidr"
+      ],
+      "ui_excerpt": "Registered MCP servers\n2\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA002 CP114 DNS Rebinding Fixture\nqa002-cp114-dns-rebind\n\thttp://7f000001.7f000002.rbndr.us:19189/mcp\tActive\t0\t\nSync tools\n\n\nQA002 synthetic MCP CIDR\nqa002-mcp-cidr\n\thttp://127.0.0.1:19105/mcp\tActive\t0\t\nSync tools"
+    },
+    {
+      "context": "separate-project-no-env",
+      "selected_workspace": "QA-002 A2A Org\n/\nqa-002-a2a-project\n/\nNo env\n(Active workspace scope)",
+      "fixture_visible": true,
+      "fixture_count_on_page": 1,
+      "visible_server_slugs": [
+        "qa002-cp114-dns-rebind",
+        "qa002-mcp-cidr"
+      ],
+      "ui_excerpt": "Registered MCP servers\n2\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA002 CP114 DNS Rebinding Fixture\nqa002-cp114-dns-rebind\n\thttp://7f000001.7f000002.rbndr.us:19189/mcp\tActive\t0\t\nSync tools\n\n\nQA002 synthetic MCP CIDR\nqa002-mcp-cidr\n\thttp://127.0.0.1:19105/mcp\tActive\t0\t\nSync tools"
+    },
+    {
+      "context": "owning-project-stage",
+      "selected_workspace": "QA-002 A2A Org\n/\nQA002 Audit mwto47wa\n/\nstage\n(Active workspace scope)",
+      "fixture_visible": true,
+      "fixture_count_on_page": 1,
+      "visible_server_slugs": [
+        "qa002-cp114-dns-rebind",
+        "qa002-mcp-cidr"
+      ],
+      "ui_excerpt": "Registered MCP servers\n2\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA002 CP114 DNS Rebinding Fixture\nqa002-cp114-dns-rebind\n\thttp://7f000001.7f000002.rbndr.us:19189/mcp\tActive\t0\t\nSync tools\n\n\nQA002 synthetic MCP CIDR\nqa002-mcp-cidr\n\thttp://127.0.0.1:19105/mcp\tActive\t0\t\nSync tools"
+    }
+  ],
+  "api_responses": [
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/mcp/servers?limit=100",
+      "rows": [
+        {
+          "id": "mcp_01m86vmncke009ywxa5r8djb3y",
+          "slug": "qa002-cp114-dns-rebind",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        },
+        {
+          "id": "mcp_01m84zzq14e00bk2jrzpn6bq23",
+          "slug": "qa002-mcp-cidr",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/mcp/servers?limit=100",
+      "rows": [
+        {
+          "id": "mcp_01m86vmncke009ywxa5r8djb3y",
+          "slug": "qa002-cp114-dns-rebind",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        },
+        {
+          "id": "mcp_01m84zzq14e00bk2jrzpn6bq23",
+          "slug": "qa002-mcp-cidr",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/mcp/servers?limit=100",
+      "rows": [
+        {
+          "id": "mcp_01m86vmncke009ywxa5r8djb3y",
+          "slug": "qa002-cp114-dns-rebind",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        },
+        {
+          "id": "mcp_01m84zzq14e00bk2jrzpn6bq23",
+          "slug": "qa002-mcp-cidr",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/mcp/servers?limit=100",
+      "rows": [
+        {
+          "id": "mcp_01m86vmncke009ywxa5r8djb3y",
+          "slug": "qa002-cp114-dns-rebind",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        },
+        {
+          "id": "mcp_01m84zzq14e00bk2jrzpn6bq23",
+          "slug": "qa002-mcp-cidr",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/mcp/servers?limit=100",
+      "rows": [
+        {
+          "id": "mcp_01m86vmncke009ywxa5r8djb3y",
+          "slug": "qa002-cp114-dns-rebind",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        },
+        {
+          "id": "mcp_01m84zzq14e00bk2jrzpn6bq23",
+          "slug": "qa002-mcp-cidr",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/mcp/servers?limit=100",
+      "rows": [
+        {
+          "id": "mcp_01m86vmncke009ywxa5r8djb3y",
+          "slug": "qa002-cp114-dns-rebind",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        },
+        {
+          "id": "mcp_01m84zzq14e00bk2jrzpn6bq23",
+          "slug": "qa002-mcp-cidr",
+          "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+          "environment_id": null,
+          "status": null
+        }
+      ]
+    }
+  ]
+}

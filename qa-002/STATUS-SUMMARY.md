@@ -1,10 +1,19 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP114
+**Latest checkpoint:** CP115
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP115 — MCP inventory visibility across project scopes
+
+- **Historical defects:** DEF-001–015 retain only scoped QA-002 outcomes; no QA-001 PASS is inherited. DEF-005 remains PARTIAL after CP114's scoped exact-peer DNS rebind test. DEF-007 successful event/chain and populated crypto-shred paths do not close failure atomicity, storage-fault, or independent backup-erasure gaps. DEF-016–038 remain preserved/open with prior dispositions. DEF-039 Low remains confirmed.
+- **New defects:** none. CP115 independently reconfirms QA-OBS-008: an Org Owner's organization-wide MCP list includes rows owned by a different project, while the UI omits each row's project. Owner has cross-project authority, so no authorization defect is inferred. Team Admin behavior remains unverified.
+- **Coverage completed:** real Chromium owner navigation between organization-only and a separate project with no environment; authenticated MCP list responses and project IDs mapped to names; visual inspection of both rows and available actions. No sync/register/edit/delete action or data mutation.
+- **Coverage blocked/remaining:** the organization-wide versus selected-project MCP inventory contract is unresolved. Team Admin cross-project list/action authorization remains unverified. Existing Firefox/WebKit current-image execution blockers and broad product/role/platform gaps remain.
+- **Recommended handoffs:** clarify and document MCP registry scope. If management is organization-wide, expose each server's project in the list and preserve project-aware action authorization. Continue DEF-005, high-impact DEF-038/007, scope defects DEF-023/035/039, and outstanding retests.
+- **Checkpoint:** [CP115](checkpoints/CP115-mcp-workspace-scope-owner.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP114 — DNS rebinding against explicit exact CIDR
 
@@ -203,7 +212,7 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - QA-OBS-005: budget activation/backfill semantics.
 - QA-OBS-006: trace and settlement identifiers differ; correlation contract unresolved.
 - QA-OBS-007: IPv4-mapped private endpoint notation rejected; supported endpoint contract unresolved.
-- QA-OBS-008: MCP Hub org-wide list shown without project labels; global vs selected-project presentation contract unresolved.
+- QA-OBS-008: MCP Hub org-wide list shown without project labels; CP115 confirmed the same project-owned rows and Sync actions remain visible under an unrelated selected project. Global vs selected-project presentation and Team Admin action contract remain unresolved; no Owner bypass inferred.
 - QA-OBS-009: manual project/environment selection returns to the runtime-selected default after refresh; workspace persistence contract unresolved.
 - QA-OBS-010: A2A agent registration and A2A-only key provisioning remain available in a runtime whose A2A data-plane handlers return the configured disabled response; control-plane/data-plane availability and UX contract unresolved (CP59).
 - QA-OBS-011: legacy numeric host `127.1` resolves to loopback through system NSS but MCP registration rejects it as a DNS resolution failure; support is undocumented, and the endpoint is not contacted (CP60).
