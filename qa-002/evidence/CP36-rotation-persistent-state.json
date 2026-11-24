@@ -1,0 +1,12 @@
+{
+  "key": {
+    "id": "vky_01m85emr5ze0092wkwan98tpmb",
+    "state": "REVOKED",
+    "version": 3,
+    "revocation_mode": "STANDARD",
+    "grace_expires_at_ms": null,
+    "revoked_at_ms": 1795479568990,
+    "previous_hash_retained": 0
+  },
+  "exact_settlement_rows": 3
+}

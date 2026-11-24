@@ -1,0 +1,19 @@
+{
+  "mutation": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/virtual-keys/vky_01m85emr5ze0092wkwan98tpmb/revoke",
+      "status": 200
+    }
+  ],
+  "postRevoke": [
+    {
+      "status": 401,
+      "code": "invalid_virtual_key"
+    },
+    {
+      "status": 401,
+      "code": "invalid_virtual_key"
+    }
+  ]
+}
