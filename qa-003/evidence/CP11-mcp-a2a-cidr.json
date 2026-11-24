@@ -1,0 +1,39 @@
+{
+  "beforeMcpCount": 1,
+  "mcpInvalid": "Register MCP server\nOnly Streamable HTTP transport is permitted.\nPrivate upstream access requires explicit non-wildcard CIDRs.\nServer slug\n∙ Required\nDisplay name\n∙ Required\nStreamable HTTP endpoint URL\n∙ Required\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal MCP servers.\nAllowed CIDRs\n∙ Required\nCancel\nRegister server",
+  "mcpAfter": [
+    {
+      "id": "mcp_01m87h630de008vzc8x64ke1gd",
+      "slug": "qa003-ssrf-mcp",
+      "allow_private_ip": true,
+      "state": "ACTIVE"
+    },
+    {
+      "id": "mcp_01m87h6gexe00b5x24vz636pqp",
+      "slug": "qa003-ssrf-mcp2",
+      "allow_private_ip": true,
+      "state": "ACTIVE"
+    }
+  ],
+  "a2aBeforeCount": 0,
+  "a2aInvalid": "Register A2A agent\nEnforces HTTPS egress validation, regional residency pinning, and max delegation depth <= 5.\nPrivate upstream access requires explicit non-wildcard CIDRs.\nAgent slug (optional)\nAgent name\n∙ Required\nAgent endpoint URL\n∙ Required\nRegion\nON_PREM\nMax hops\n5\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal A2A agents.\nAllowed CIDRs\n∙ Required\nCancel\nRegister agent",
+  "a2aAfter": [
+    {
+      "agent_slug": "qa003-ssrf-a2a2",
+      "name": "QA003 SSRF A2A",
+      "data_region": "ON_PREM"
+    }
+  ],
+  "posts": [
+    {
+      "path": "/admin/v1/mcp/servers",
+      "status": 201,
+      "body": "{\"id\":\"mcp_01m87h6gexe00b5x24vz636pqp\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"slug\":\"qa003-ssrf-mcp2\",\"name\":\"QA003 SSRF MCP\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19189/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":0,\"version\":1}\n"
+    },
+    {
+      "path": "/admin/v1/a2a/agents",
+      "status": 201,
+      "body": "{\"agent_id\":\"agt_01m87h6jj8e008khjfbsaj95wx\",\"agent_slug\":\"qa003-ssrf-a2a2\",\"name\":\"QA003 SSRF A2A\",\"endpoint_url\":\"http://127.0.0.1:19189/a2a\",\"data_region\":\"ON_PREM\",\"max_delegation_hops\":5,\"skills\":[],\"status\":\"ACTIVE\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"version\":1}\n"
+    }
+  ]
+}
