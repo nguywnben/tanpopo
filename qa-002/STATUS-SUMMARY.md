@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP87
+**Latest checkpoint:** CP88
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -212,3 +212,15 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** independent DEF-001–015 acceptance coverage remains incomplete; DEF-005 DNS rebinding/mixed answers/redirect chains/alternate runtimes; DEF-007 failure atomicity and populated-org erasure; Chargeback roles/pagination/locales/date-filter UI/project-scope contract; all open DEF-016–034 remediation and regression; actual upgrade safe-abort; provider outage/recovery; remaining product, browser, platform, accessibility, integration and operations coverage.
 - **Recommended handoffs:** prioritize DEF-034 subscription revocation; DEF-016/023/029/030 scope/state consistency; DEF-033 budget create/update semantics; DEF-005 SSRF acceptance without weakening controls; DEF-007 audit atomicity/populated erasure. Confirm the Chargeback scope-label contract (QA-OBS-016).
 - **Checkpoint:** [CP87](checkpoints/CP87-finops-chargeback-scope-and-date-windows.md); prior [CP86](checkpoints/CP86-webhook-delivery-and-subscription-lifecycle.md).
+
+
+## CP88 consolidated status update
+
+- **Historical DEF-001–015:** no new retests in CP88. Prior QA-002 scoped statuses remain, DEF-005 remains partial, and full independent acceptance coverage remains incomplete. No QA-001 PASS is inherited.
+- **Historical defects failing / unverified:** DEF-016–034 remain confirmed open; no status changed. Preserve CP86 DEF-034 and DEF-020 recurrence.
+- **New findings:** no new defect. Team Admin's Security Audit Log request returned 403 and displayed an explicit role-denial message; source RBAC omits audit-read permission for Team Admin while allowing scoped kill-switch/approval actions. Treated as intentional authorization, not a bypass or product defect.
+- **Coverage completed:** CP88 real Chromium Team Admin session, Security route, audit endpoint denial, visible UI state, and no returned protected rows. No mutation.
+- **Coverage blocked:** direct webhook delivery/HMAC by managed Cloud egress; A2A on runtime 18445 by its disabled configuration; RC4 artifact verification UNVERIFIED in the unavailable separate DevBox.
+- **Coverage remaining:** independent DEF-001–015 acceptance coverage remains incomplete; DEF-005 SSRF cases; DEF-007 failure atomicity/populated erasure; open DEF-016–034 remediation and regression; remaining Console roles/scopes, business workflows, cross-feature state, browsers/platforms, integrations, accessibility and operations.
+- **Recommended handoffs:** DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF controls, and DEF-007. No handoff added from CP88.
+- **Checkpoint:** [CP88](checkpoints/CP88-team-admin-security-audit-boundary.md); prior [CP87](checkpoints/CP87-finops-chargeback-scope-and-date-windows.md).
