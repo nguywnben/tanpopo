@@ -202,3 +202,5 @@ After each phase, update only rows supported by phase evidence. Keep partial res
 | CP117 | DEF-005 MCP cross-CIDR HTTP 301/308 redirects | PASS, scoped: allowed `127.0.0.1/32` origin returned 301 and 308 to a live disallowed `127.0.0.2` target; sync returned 502 for both and target logged zero requests. No bypass found; redirect contract/other transports remain unverified. See [CP117](checkpoints/CP117-mcp-redirect-301-308-boundary.md). |
 
 | CP118 | DEF-031 invalid A2A CIDR UX in Chromium mobile | FAIL DEF-031 Low independently reconfirmed: 375×844 Chromium A2A form submitted `/33`; API returned 400, no row persisted, and screenshot showed the error banner hidden behind the drawer. No endpoint contact. See [CP118](checkpoints/CP118-def031-chromium-mobile-a2a.md). |
+
+| CP119 | DEF-031 correction/recovery path | PASS, scoped: after invalid `/33` rejection, corrected the same A2A form to `127.0.0.1/32`; POST 201, success notice, and Active row persisted in a separate browser context. The first error remains hidden (DEF-031 FAIL); no discovery/task action. See [CP119](checkpoints/CP119-def031-cidr-correction-recovery.md). |

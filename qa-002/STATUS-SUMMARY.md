@@ -1,10 +1,19 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP118
+**Latest checkpoint:** CP119
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP119 — A2A CIDR correction and recovery
+
+- **Historical defects:** DEF-001–015 retain scoped QA-002 results only; no QA-001 PASS is inherited. DEF-005 remains PARTIAL; DEF-007 fault atomicity/storage faults/independent erasure proof remain open. DEF-016–030 and DEF-032–039 remain preserved; DEF-031 Low remains confirmed despite this recovery pass.
+- **Existing finding:** DEF-031 initially fails because its mobile error copy is hidden. CP119 PASS is limited to correction and recovery: valid `/32` after `/33` produced 201 and persisted. No new defect ID.
+- **Coverage completed:** same A2A form recovered from `/33` to exact `/32`; actual UI success state and seven-agent list corroborated by authenticated API and a separate mobile browser context. No discovery or task request.
+- **Coverage blocked/remaining:** error visibility/accessibility remains open; MCP form recovery, Firefox/WebKit, keyboard and screen reader behavior remain unverified. Broad full-product coverage remains incomplete.
+- **Recommended handoffs:** add the recovery pass to DEF-031; keep the requirement for visible field-level feedback on failure. Continue DEF-005 residuals and all open defects.
+- **Checkpoint:** [CP119](checkpoints/CP119-def031-cidr-correction-recovery.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP118 — DEF-031 invalid CIDR error in Chromium mobile
 

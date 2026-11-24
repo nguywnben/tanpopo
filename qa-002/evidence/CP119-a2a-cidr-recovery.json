@@ -1,0 +1,34 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084",
+  "browser": "Chromium mobile emulation, 375x844",
+  "principal": "QA Org Owner + Operator",
+  "private_endpoint": "127.0.0.1:19189; no sync or endpoint traffic",
+  "registration_recovery": {
+    "invalid_attempt": {
+      "http_status": 400,
+      "error_code": "invalid_request",
+      "slug_persisted": false,
+      "invalid_value_retained_in_form": true
+    },
+    "corrected_attempt": {
+      "http_status": 201,
+      "slug": "qa002-cp119-cidr-recovery",
+      "name": "QA002 CP119 CIDR Recovery",
+      "agent_id": "agt_01m86x65pne00byjz6vx33qm3a",
+      "project_id": "prj_01m868q2jte00abmhf75asqts3",
+      "state": "ACTIVE",
+      "environment_id": null
+    },
+    "after_success_banner_visible_in_submission_context": true,
+    "error_banner_visible_after_success": false,
+    "fresh_browser_context": {
+      "collection_http_status": 200,
+      "agent_count": 7,
+      "row_visible_in_ui": true,
+      "api_row_persisted": true,
+      "success_banner_ephemeral": true
+    },
+    "no_discovery_or_task_action": true
+  }
+}
