@@ -1,0 +1,37 @@
+{
+  "org_id": "org_01m86p7bkde0080hg96yq33ywf",
+  "project_count": 1,
+  "project": {
+    "id": "prj_01m86phfage00bb5ev9cgkqj8n",
+    "slug": "qa002-cp107-disposable-project"
+  },
+  "environment_count": 1,
+  "environment": {
+    "id": "env_01m86pj8nqe009ap14wpeesfa1",
+    "slug": "stage"
+  },
+  "member_count": 1,
+  "members": [
+    {
+      "id": "prc_01m86pepdme00anhm6zq4rpa89",
+      "email": "qa002-cp107-owner@example.invalid",
+      "roles": [
+        "DEVELOPER",
+        "ORG_OWNER"
+      ]
+    }
+  ],
+  "key_count": 1,
+  "keys": [
+    {
+      "id": "vky_01m86pq15de009mpxzqhkja4w1",
+      "name": "QA002 CP107 populated shred key",
+      "state": "CREATED_ACTIVE",
+      "allowed_planes": [
+        "PROVIDER"
+      ],
+      "env_id": "env_01m86pj8nqe009ap14wpeesfa1",
+      "has_secret_field": false
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "org_id": "org_01m86p7bkde0080hg96yq33ywf",
+  "slug": "qa002-cp107-populated-shred-20261124",
+  "confirmation": {
+    "box_count": 2,
+    "wrong_slug_confirm_disabled": true,
+    "exact_slug_confirm_enabled": true,
+    "dialogText": "Crypto-shred organization\n\nIrreversibly destroys the Organization DEK for QA002 CP107 Populated Shred, purges secrets and keys, and cancels active sessions within 60 seconds.\n\nDeletion justification\nType \"qa002-cp107-populated-shred-20261124\" to confirm\nCancel\nCrypto-shred"
+  },
+  "delete": {
+    "status": 200,
+    "revoked_virtual_keys_count": 1,
+    "receipt_present": true
+  },
+  "row_still_present": 0,
+  "org_collection": {
+    "status": 200,
+    "count": 3,
+    "target_present": false
+  },
+  "audit": {
+    "status": 400,
+    "events": [],
+    "initial_partition_only_query": {
+      "status": 400,
+      "note": "Harness query omitted org_id and was corrected; this was not classified as a product failure."
+    },
+    "corrected_query_evidence": "CP107-populated-shred-audit.json"
+  },
+  "verify": {
+    "status": 400,
+    "error": "invalid_request",
+    "initial_partition_only_query": {
+      "status": 400,
+      "code": "invalid_request",
+      "note": "Harness query omitted org_id and was corrected; this was not classified as a product failure."
+    },
+    "corrected_result": "CP107-populated-shred-audit.json"
+  },
+  "ui_after": "Operations\n\nProvision isolated tenant organizations and execute irreversible cryptographic erasure.\n\nRefresh\nCreate organization\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\n3\nWebhooks\nOrganization crypto-shredded\nDestroyed DEK [redacted receipt]\nTenant organizations\n3\nOrganization\tMin extension trust\tFour-eyes approval\tCreated\tActions\n\nQA002 CP18 Audit Status Org\nqa002-cp18-audit-status \u00b7 org_01m854cds0e009ckxgn6tv7411\n\tAny Approved\tDisabled\tNov 23, 2026, 9:18:23 PM\t\nSwitch\nCrypto-shred\n\n\nQA002 CP18 Standalone Audit Org\nqa002-cp18-standalone-audit \u00b7 org_01m8541pqse00a0twk7y54zckg\n\tAny Approved\tDisabled\tNov 23, 2026, 9:12:32 PM\t\nSwitch\nCrypto-shred\n\n\nQA-002 A2A OrgActive\nqa-002-a2a-org \u00b7 org_01m84xhbtwe009367awjy8edrt\n\tAny Approved\tDisabled\tNov 23, 2026, 7:18:45 PM\t\nSwitch\nCrypto-shred"
+}

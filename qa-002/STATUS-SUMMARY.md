@@ -1,10 +1,20 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP106
+**Latest checkpoint:** CP107
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP107 — Populated organization crypto-shred and DEF-023 retest
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006 and DEF-008–015 retain only their scoped QA-002 outcomes; DEF-005 remains PARTIAL. No QA-001 PASS is inherited.
+- **Historical defects failing/unverified:** DEF-007 gained a populated successful crypto-shred PASS, but failure atomicity, injected storage/audit faults and independent ciphertext/backup erasure proof remain UNVERIFIED. DEF-016–036 remain open; DEF-023 reconfirmed. DEF-037 Low remains confirmed. No other disposition changed.
+- **New defects:** none. The 400 audit response was an invalid initial test query and passed after explicitly setting the tenant/partition.
+- **Coverage completed:** new organization → owner member → project/environment → active scoped key → guarded crypto-shred; one active key revoked, resource reads empty after deletion, six lifecycle events and intact chain. DEF-023 false-empty reproduced and contrasted with environment-selected populated state; screenshots visually inspected.
+- **Coverage blocked / remaining:** failure injection, ciphertext/backup erasure proof, active-session cancellation timing, secret/webhook resources, four-eyes policy, other roles/platforms and broader product surface remain open.
+- **Recommended engineering handoffs:** DEF-023 workspace-scope fix; DEF-007 audit atomicity and verifiable populated erasure; DEF-037 event vocabulary. Preserve SSRF/authorization boundaries.
+- **Checkpoint:** [CP107](checkpoints/CP107-populated-org-crypto-shred-and-scope-consistency.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP106 — Audit Log pagination and event detail
 
@@ -65,7 +75,7 @@
 | --- | --- | --- |
 | Verified fixed for scoped post-baseline scenarios | DEF-001–004, DEF-006, DEF-008–015 | Each passes only the specific QA-002 retest scenarios recorded in [DEFECT-RETEST-REGISTER.md](DEFECT-RETEST-REGISTER.md). This is not a full role/platform regression. |
 | Partial pass; residual security/support coverage open | DEF-005 | Explicit private-IP/CIDR controls passed for executed cases; CP68 completed one enabled-runtime private A2A register/discover/task journey. CP66/67 confirm mobile invalid-CIDR errors hidden behind both drawers while APIs still reject safely. Redirects were not followed; DNS rebinding, mixed answers, alternate runtimes, and IPv4-mapped endpoint support remain unresolved. See QA-OBS-004/007 and CP25/40–42. |
-| Successful audit paths verified; failure atomicity and erasure residuals open | DEF-007 | CP06/16/18/46/79/85 verified successful bootstrap/resource/create/shred events and chain integrity for named paths. Populated-organization erasure and injected audit/storage failures remain UNVERIFIED; do not treat the historical missing-event report as fully closed. |
+| Successful paths include populated organization crypto-shred; fault atomicity and proof residuals open | DEF-007 | CP06/16/18/46/79/85/105/107 verified successful audit/resource/create/shred paths and intact chains. CP107 deleted a populated synthetic organization containing a member, project, environment and active key; one active key was revoked and six events verified intact. Injected failures, audit/storage atomicity and ciphertext/backup erasure proof remain UNVERIFIED; do not treat historical missing-event evidence as erased. |
 
 ## Confirmed open defects
 
@@ -78,7 +88,7 @@
 | DEF-020 | Moderate | Security shell badges remain stale after clearing switches or deciding approvals until reload. |
 | DEF-021 | Moderate | Local HUMAN member creation has no supported enrollment path for first login. |
 | DEF-022 | Moderate | Session UI retains revoked role/navigation/actions until reload after server rejects the session. |
-| DEF-023 | Moderate | Organization member list is falsely empty without both project and environment selected; CP71 and CP80 independently reconfirmed the scoped false-empty state against persisted members. |
+| DEF-023 | Moderate | Organization member list is falsely empty without both project and environment selected; CP71/80/100/101 and CP107 independently reconfirmed UI 0 versus persisted/API member state, including after a successful new-org Add member. |
 | DEF-024 | Moderate | Project FinOps view hides an applicable persisted organization ceiling and displays a false empty state. |
 | DEF-025 | Low | Models enables Add deployment without environment scope; its form cannot select an environment and reports a page-level validation after submission. |
 | DEF-026 | Low | MCP sync banner reports zero schema changes requiring approval while a first-discovered schema is visibly locked pending review. |

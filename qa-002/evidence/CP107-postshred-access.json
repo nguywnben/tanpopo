@@ -1,0 +1,22 @@
+{
+  "deleted_org_header_checks": {
+    "/admin/v1/projects": {
+      "status": 200,
+      "count": 0
+    },
+    "/admin/v1/members": {
+      "status": 200,
+      "count": 0
+    },
+    "/admin/v1/virtual-keys": {
+      "status": 200,
+      "count": 0
+    },
+    "/admin/v1/organizations": {
+      "status": 200,
+      "count": 3,
+      "deleted_target_present": false
+    }
+  },
+  "note": "Read-only authenticated follow-up after crypto-shred; project/member/key query used the deleted org ID as X-Tanpopo-Org-ID."
+}
