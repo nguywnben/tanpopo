@@ -1,0 +1,28 @@
+{
+  "attempted_user_flow": "Issue a PROVIDER-plane virtual key restricted to /native/* in the selected stage environment, then POST a native Ollama chat payload through the exposed QA ingress.",
+  "key_creations": [
+    {"id": "vky_01m86grhjje00b7twn9aka5t2g", "name": "QA002 CP96 Native Passthrough Retest", "issue_status": 201, "allowed_planes": ["PROVIDER"], "allowed_routes": ["/native/*"], "final_state": "REVOKED"},
+    {"id": "vky_01m86gmy2ae009xphsvws4vsra", "name": "QA002 CP96 Ollama native passthrough", "issue_status": 201, "allowed_planes": ["PROVIDER"], "allowed_routes": ["/native/*"], "final_state": "REVOKED"}
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/native/ollama/v1/chat/completions",
+    "payload_marker": "cp96-native-field-7f2c",
+    "http_status": 405,
+    "content_type": "text/plain; charset=utf-8",
+    "response_text": "HTTP method not allowed for this console resource.",
+    "native_provider_dispatch_established": false
+  },
+  "classification": "BLOCKED / UNVERIFIED; the request reached a Console/web UI method fallback rather than an identified native ingress. No product defect assigned because the correct exposed native-ingress address/configuration could not be established.",
+  "cleanup": {
+    "ui_revocation_notice": "Virtual key revoked. 0 active streams severed.",
+    "authenticated_admin_api_state_check": "both temporary QA keys were REVOKED",
+    "credential_handling": "One-time secrets were never written to evidence or printed. The secure temporary key file was removed after the attempt."
+  },
+  "limits": [
+    "No positive native inference or unknown-field-preservation check completed.",
+    "No provider fixture call was confirmed from this attempt.",
+    "No response replay was sent after revocation.",
+    "The screenshots and state evidence do not contain the one-time key secrets."
+  ]
+}

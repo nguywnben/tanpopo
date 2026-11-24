@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP95
+**Latest checkpoint:** CP96
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -310,3 +310,15 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** all incomplete feature, role, platform and integration work; complete independent DEF-001–015 retests; DEF-005 SSRF acceptance without weakening boundaries; DEF-007 fault atomicity/populated erasure; DEF-016–035 remediation regression; page-by-page scope and permission checks; Models action lifecycle and recovery; other browsers/platforms.
 - **Recommended handoffs:** include DEF-035 with scope/state findings DEF-023/024/029/030. Keep DEF-034, DEF-033, DEF-005, and DEF-007 priorities.
 - **Checkpoint:** [CP95](checkpoints/CP95-console-workspace-scope-and-model-deployment-identity.md); prior [CP94](checkpoints/CP94-vietnamese-dark-mobile-console-regression.md). `GATE-REL-07` remains **BLOCKED**.
+
+
+## CP96 consolidated status update
+
+- **Historical DEF-001–015:** CP96 did not retest them. Preserve limited scoped QA-002 outcomes: DEF-001–004, DEF-006, DEF-008–015 have passing paths; DEF-005 remains partial; DEF-007 successful audit paths do not close fault atomicity/populated erasure. No QA-001 PASS is inherited; full independent acceptance remains incomplete.
+- **Historical open DEF-016–035:** remain open; CP96 did not change any defect disposition. DEF-035 is still the newest confirmed defect.
+- **New defects:** none. The native attempt was environment-blocked/inconclusive, not assigned to product.
+- **Coverage completed:** real UI issue and revoke of two PROVIDER keys restricted to `/native/*`; authenticated API confirmed both REVOKED; exposed endpoint attempt returned Console method fallback 405 and did not establish dispatch. Secrets were removed and excluded from evidence.
+- **Coverage blocked:** FT-02 native passthrough positive exchange/fidelity needs the correct enabled QA Data Plane native-ingress address/configuration. No product defect is inferred from a Console fallback.
+- **Coverage remaining:** complete independent DEF-001–015 acceptance; DEF-005 residual SSRF checks; DEF-007 fault/erasure cases; open DEF-016–035 regressions; all other feature, browser/platform, role, integration and operational coverage.
+- **Recommended handoffs:** no new engineering handoff; continue DEF-035 with DEF-023/024/029/030 and existing DEF-034/033/005/007 priorities.
+- **Checkpoint:** [CP96](checkpoints/CP96-native-passthrough-ingress-discovery.md); prior [CP95](checkpoints/CP95-console-workspace-scope-and-model-deployment-identity.md). `GATE-REL-07` remains **BLOCKED**.
