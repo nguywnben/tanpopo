@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP61
+**Latest checkpoint:** CP62
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -29,8 +29,9 @@
 | DEF-026 | Low | MCP sync banner reports zero schema changes requiring approval while a first-discovered schema is visibly locked pending review. |
 | DEF-027 | Moderate | Routes & Policies cannot distinguish same-model deployments with identical region/health labels; provider and deployment identity are hidden from target choices and route summaries. |
 | DEF-028 | Moderate | Route Explain hardcodes `openai_compatible` and rejects healthy Ollama deployments as dialect-mismatched even when the same route completes a real Playground request. |
+| DEF-029 | Low | Access & Keys can repopulate prior environment-scoped Virtual Key metadata after a delayed response arrives under No project / No env scope. |
 
-All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
+All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
 ## Open observations
 
@@ -148,3 +149,13 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage completed:** direct IPv6 literal with mismatching and exact CIDR, fixture zero-contact/positive controls, repeat sync, persistent schema lock, and screenshot inspection.
 - **Blocked:** none specific to CP61; CP53 Operator credential gap remains.
 - **Remaining:** DNS rebinding/mixed-answer races, redirect chains/HTTPS, alternate runtime, direct IPv6 grants/calls, workspace scope coverage, and all other incomplete feature/role/platform cases.
+
+## CP62 consolidated defect and coverage update
+
+- **Historical DEF-001–015:** not retested in CP62; preserve scoped dispositions. DEF-005 remains partial.
+- **New finding:** DEF-029 Low confirmed. Ten old environment keys appeared under No project / No env after a held HTTP 200 response; navigation cleared them. No secret or authorization bypass was observed.
+- **Other open defects:** DEF-016–028 remain open; DEF-023 and DEF-029 are related to AccessPage scope but distinct. DEF-026 and QA-OBS-004 recurred in CP61.
+- **Coverage completed:** forced response-order test for Access & Keys, exact project/env IDs in returned rows, organization-only before/after screenshots, and navigation recovery.
+- **Blocked:** no CP62 blocker. Fresh Team Admin test remains blocked because prior synthetic credential was intentionally suspended; CP53 webhook integration remains blocked on Operator access.
+- **Recommended handoff:** include DEF-029’s stale response guard with DEF-023’s scope-dependent member loading, but retain separate acceptance tests.
+- **Remaining:** scope races on other pages and between environments/projects, limited-role exposure matrix, additional DEF-005 cases, independent historical retests, and all remaining feature/browser/platform coverage.
