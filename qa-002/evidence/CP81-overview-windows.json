@@ -1,0 +1,78 @@
+[
+  {
+    "window": "1h",
+    "ui": "Overview\n\nUpdated 8:19:58 AM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 1h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.",
+    "api": {
+      "status": 200,
+      "body": {
+        "window": "1h",
+        "total_requests": 0,
+        "error_rate_ratio": 0,
+        "p95_overhead_ms": 0,
+        "settled_micro_usd": 0,
+        "active_hold_micros": 0,
+        "unmetered_request_count": 0,
+        "active_alerts_count": 0,
+        "sync_lag_warning": false,
+        "updated_at": "2026-11-24T08:19:58.827Z"
+      }
+    }
+  },
+  {
+    "window": "24h",
+    "ui": "Overview\n\nUpdated 8:19:58 AM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n2\nWindow: 24h\nError rate\n50.00%\nInternal & upstream\np95 proxy overhead\n5.517 ms\nGateway added latency\nSettled spend\n$0.012001\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.",
+    "api": {
+      "status": 200,
+      "body": {
+        "window": "24h",
+        "total_requests": 2,
+        "error_rate_ratio": 0.5,
+        "p95_overhead_ms": 5.517,
+        "settled_micro_usd": 12001,
+        "active_hold_micros": 0,
+        "unmetered_request_count": 0,
+        "active_alerts_count": 0,
+        "sync_lag_warning": false,
+        "updated_at": "2026-11-24T08:19:59.444Z"
+      }
+    }
+  },
+  {
+    "window": "7d",
+    "ui": "Overview\n\nUpdated 8:19:59 AM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n2\nWindow: 7d\nError rate\n50.00%\nInternal & upstream\np95 proxy overhead\n5.517 ms\nGateway added latency\nSettled spend\n$0.012001\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.",
+    "api": {
+      "status": 200,
+      "body": {
+        "window": "7d",
+        "total_requests": 2,
+        "error_rate_ratio": 0.5,
+        "p95_overhead_ms": 5.517,
+        "settled_micro_usd": 12001,
+        "active_hold_micros": 0,
+        "unmetered_request_count": 0,
+        "active_alerts_count": 0,
+        "sync_lag_warning": false,
+        "updated_at": "2026-11-24T08:20:00.037Z"
+      }
+    }
+  },
+  {
+    "window": "30d",
+    "ui": "Overview\n\nUpdated 8:20:00 AM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n2\nWindow: 30d\nError rate\n50.00%\nInternal & upstream\np95 proxy overhead\n5.517 ms\nGateway added latency\nSettled spend\n$0.012001\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.",
+    "api": {
+      "status": 200,
+      "body": {
+        "window": "30d",
+        "total_requests": 2,
+        "error_rate_ratio": 0.5,
+        "p95_overhead_ms": 5.517,
+        "settled_micro_usd": 12001,
+        "active_hold_micros": 0,
+        "unmetered_request_count": 0,
+        "active_alerts_count": 0,
+        "sync_lag_warning": false,
+        "updated_at": "2026-11-24T08:20:00.597Z"
+      }
+    }
+  }
+]

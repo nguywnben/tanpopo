@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP80
+**Latest checkpoint:** CP81
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -37,16 +37,16 @@
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
-## Latest phase: CP80
+## Latest phase: CP81
 
 - **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain only their individually scoped QA-002 results. DEF-005 remains PARTIAL. CP79 adds a successful project-provisioning audit path to DEF-007 but does not prove failure atomicity or close that finding. No QA-001 PASS is inherited.
 - **Historical defects failing / unverified:** DEF-016–033 remain confirmed open as listed above; broader acceptance criteria remain incomplete. CP80 independently reconfirmed DEF-023 in project/no-environment scope; DEF-007 failure injection and organization mutation/delete/storage-fault/cross-tenant paths remain UNVERIFIED.
-- **New findings:** no new defect ID in CP79–80. Confirmed new defects remain DEF-016–033 with severities in the defect table and reports. QA-OBS-001–014 remain preserved; QA-OBS-013/014 are unresolved observations, not confirmed product defects.
-- **Coverage completed:** CP79 real UI/API audit event attribution and chain verification across 315 events. CP80 compared the no-environment Members UI against an authorized same-session API response (four principals), switched to a project/environment context and observed the same four rows, and exercised the Access & Keys tabs using keyboard focus, arrow navigation, Enter and Space. Screenshots were visually inspected.
+- **New findings:** no new defect ID in CP79–81. Confirmed new defects remain DEF-016–033 with severities in the defect table and reports. QA-OBS-001–014 remain preserved; QA-OBS-003 is still an unresolved alert-copy/health-contract observation, not a confirmed defect.
+- **Coverage completed:** CP79 verified project provisioning audit attribution and a 315-event chain. CP80 reproduced the no-environment Members false empty against four API records and passed a scoped keyboard tab interaction slice. CP81 exercised all Overview windows in real Chromium and matched displayed KPIs to authenticated API responses; alert and unhealthy-deployment collections were read successfully and screenshots visually inspected.
 - **Coverage blocked:** A2A runtime 18445 remains disabled by configuration. Webhook delivery requires usable Operator access and a controlled receiver/signing setup. RC4 artifact verification remains UNVERIFIED because the separate DevBox artifact is unavailable in this workspace.
-- **Coverage remaining:** independent end-to-end retesting of DEF-001–015 acceptance criteria; DEF-005 DNS rebinding, mixed answers, redirect-chain and alternate-runtime cases; DEF-007 failure and mutation paths; organization-only member refresh, additional roles; other Console workflows, integrations, browsers, locales, viewports, assistive technology, and operational/platform scenarios. The full matrix keeps specific PASS, FAIL, BLOCKED and UNVERIFIED slices distinct.
+- **Coverage remaining:** independent end-to-end retesting of DEF-001–015 acceptance criteria; DEF-005 DNS rebinding, mixed answers, redirect-chain and alternate-runtime cases; DEF-007 failure and mutation paths; organization-only member refresh and additional roles; controlled provider outage/healthy recovery for QA-OBS-003; other Console workflows, integrations, browsers, locales, viewports, assistive technology, and operational/platform scenarios. The matrix keeps PASS, FAIL, BLOCKED and UNVERIFIED slices distinct.
 - **Recommended handoffs:** continue DEF-023 with an acceptance check for accurate organization collection state in no-environment scope while preserving project-level authorization. Retain existing priorities for DEF-016/029/030 state consistency, DEF-033 budget mutation/revision feedback, DEF-005 security contract, and DEF-007 audit atomicity/attribution.
-- **Checkpoint:** [CP80](checkpoints/CP80-members-scope-and-keyboard-accessibility.md), [CP79](checkpoints/CP79-provisioning-audit-event-and-chain.md), [CP78](checkpoints/CP78-finops-budget-create-persistence-and-existing-scope-retest.md).
+- **Checkpoint:** [CP81](checkpoints/CP81-overview-alert-contract-and-time-windows.md), [CP80](checkpoints/CP80-members-scope-and-keyboard-accessibility.md), [CP79](checkpoints/CP79-provisioning-audit-event-and-chain.md).
 
 ## Open observations
 

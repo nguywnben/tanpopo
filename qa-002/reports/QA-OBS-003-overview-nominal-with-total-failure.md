@@ -43,3 +43,10 @@ At 320×720, CP34 again showed 13 requests, 53.85% internal/upstream error, zero
 ## Recurrence — CP53
 
 The isolated RC4 runtime showed 4 requests in 24 hours, a 25% error rate, zero active alerts, and “All systems nominal” in the Org Owner's visually inspected Overview. See `../evidence/CP53-org-owner-navigation.png` and `../evidence/CP53-webhook-prerequisite.json`. This is a recurrence of the same presentation tension; it does not establish which requests should generate alerts or a new defect.
+
+
+## CP81 documented-contract and window comparison
+
+The real Org Owner Overview was retested in Chromium at 1440×900. Its 24h state showed two requests, 50% internal/upstream error, $0.012001 settled spend and zero alerts; active-alert and unhealthy-deployment API collections were both empty. Selecting 1h, 24h, 7d and 30d produced UI KPI values that matched authenticated `/admin/v1/overview/summary?window=...` responses. At 1h the totals were zero; at 24h/7d/30d they were two requests and 50% errors. Screenshots were visually inspected: `../evidence/CP81-overview-1h-window.png`, `CP81-overview-24h-errors-no-alert.png`, `CP81-overview-7d-window.png`, and `CP81-overview-30d-window.png`; sanitized API/UI comparisons are in `CP81-overview-alert-contract.json` and `CP81-overview-windows.json`.
+
+The reviewed Overview specification explicitly includes request/error metrics and actionable alerts. The UI renders “All systems nominal” inside Active alerts and explains that there are no active operational alerts. The reviewed active-alert collector has no request-error-rate threshold; its alert types cover budget utilization, unmetered spend, quarantined plugins, and OAuth reauthorization. This supports the interpretation that the card describes alert posture, but the meaning and wording of “nominal” alongside errors are not specified. QA-OBS-003 therefore remains unresolved and is not promoted to a defect. This was a two-request accumulated-test sample, not a controlled provider outage or healthy-recovery comparison. See [CP81](../checkpoints/CP81-overview-alert-contract-and-time-windows.md).
