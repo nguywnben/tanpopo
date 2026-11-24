@@ -1,0 +1,32 @@
+{
+  "scope": "QA-002 A2A Org / / / QA002 CP78 Fresh Budget / / / No env / (Active workspace scope)",
+  "displayedRows": 3,
+  "requestUrls": [
+    "/admin/v1/deployments?status=CIRCUIT_OPEN_UNHEALTHY&limit=50",
+    "/admin/v1/deployments?limit=100",
+    "/admin/v1/deployments?env_id=env_01m84ymb8ae00b43av7shak1sf&limit=100"
+  ],
+  "api": {
+    "allStatus": 200,
+    "allRows": [
+      {
+        "id": "dpl_01m866t154e008eyngzznvbdke",
+        "env_id": "env_01m84ymb8ae00b43av7shak1sf",
+        "connection_id": "con_01m866netce00a8wcj86nft2xq"
+      },
+      {
+        "id": "dpl_01m850zp5qe0083acpb9f738e5",
+        "env_id": "env_01m84ymb8ae00b43av7shak1sf",
+        "connection_id": "con_01m850y4xre00ahbtgj1y47zyp"
+      },
+      {
+        "id": "dpl_01m850m3gae00bqjvsdeqtah89",
+        "env_id": "env_01m84ymb8ae00b43av7shak1sf",
+        "connection_id": "con_01m850bf7je00b98hwrs3dq10r"
+      }
+    ],
+    "scopedStatus": 200,
+    "scopedCount": 3
+  },
+  "menuExcerpt": "qa002-cp73-failed-401\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m866netce00a8wcj86nft2xq\tON_PREM\tProvisioned\t0 / 0\t\n\n\nqa002:latest\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m850y4xre00ahbtgj1y47zyp\tON_PREM\tProvisioned\t1,000 / 1,000\t\n\n\nqa002:latest\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m850bf7je00b98hwrs3dq10r\tON_PREM\tHealthy\t1,000 / 1,000\t\nDisable deployment\nDelete deployment\nAll systems nominal No active operational alerts or pending remediation items."
+}

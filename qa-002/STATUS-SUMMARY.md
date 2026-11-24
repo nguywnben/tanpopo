@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP93
+**Latest checkpoint:** CP95
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -9,8 +9,9 @@
 
 | Status | IDs | Notes |
 | --- | --- | --- |
-| Verified fixed for scoped post-baseline scenarios | DEF-001–004, DEF-006–015 | Each passes only the specific QA-002 retest scenarios recorded in [DEFECT-RETEST-REGISTER.md](DEFECT-RETEST-REGISTER.md). This is not a full role/platform regression. |
+| Verified fixed for scoped post-baseline scenarios | DEF-001–004, DEF-006, DEF-008–015 | Each passes only the specific QA-002 retest scenarios recorded in [DEFECT-RETEST-REGISTER.md](DEFECT-RETEST-REGISTER.md). This is not a full role/platform regression. |
 | Partial pass; residual security/support coverage open | DEF-005 | Explicit private-IP/CIDR controls passed for executed cases; CP68 completed one enabled-runtime private A2A register/discover/task journey. CP66/67 confirm mobile invalid-CIDR errors hidden behind both drawers while APIs still reject safely. Redirects were not followed; DNS rebinding, mixed answers, alternate runtimes, and IPv4-mapped endpoint support remain unresolved. See QA-OBS-004/007 and CP25/40–42. |
+| Successful audit paths verified; failure atomicity and erasure residuals open | DEF-007 | CP06/16/18/46/79/85 verified successful bootstrap/resource/create/shred events and chain integrity for named paths. Populated-organization erasure and injected audit/storage failures remain UNVERIFIED; do not treat the historical missing-event report as fully closed. |
 
 ## Confirmed open defects
 
@@ -35,6 +36,7 @@
 | DEF-032 | Low | Distinct same-project provider records can be indistinguishable in Providers table, actions and edit forms when display fields duplicate. CP76 did not probe or mutate either record. |
 | DEF-033 | Moderate | FinOps Create budget can update an existing same-scope ceiling once while reporting Created, then submit fixed revision v1 and fail 409 at v2. CP78 restored the tested cap. |
 | DEF-034 | Moderate | Webhook subscription cannot be disabled or deleted through the Console or Admin API; active external destinations cannot be revoked through a supported product workflow. |
+| DEF-035 | Moderate | Models shows sibling-project environment deployments with Disable/Delete actions while organization-only or an empty project is selected, without identifying deployment ownership. No unauthorized access or mutation was observed. |
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
@@ -284,3 +286,27 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** independent DEF-002–015 residual cases; same-config Google runtime comparison; DEF-005 SSRF cases; DEF-007 failure atomicity/populated erasure; all open DEF-016–034 regressions/remediation; other products, roles, browsers/platforms, integrations, accessibility and operations.
 - **Recommended handoffs:** unchanged—DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF, DEF-007. No engineering handoff for environment-classified Google transport failures.
 - **Checkpoint:** [CP93](checkpoints/CP93-google-provider-probe-runtime-comparison.md); prior [CP92](checkpoints/CP92-fresh-install-and-DEF-001-retest.md).
+
+
+## CP94 consolidated status update
+
+- **Historical defects verified fixed:** no historical defect retested in CP94; preserve the last independently observed scoped outcomes. DEF-001 remains scoped PASS from CP92 only. No QA-001 PASS is inherited.
+- **Historical defects failing / unverified:** DEF-016–034 remain open, including DEF-023 and visually apparent duplicate provider rows DEF-032; DEF-005 remains partial. DEF-002–015 independent acceptance coverage remains incomplete.
+- **New findings:** no new defect. CP94 saw the existing duplicate Google connection cards but did not perform destructive actions or independently verify backend identity ambiguity.
+- **Coverage completed:** real Chromium at 375 × 844; Vietnamese and dark-theme selection; Overview, Providers and FinOps interaction; persistence after reload; width checks; direct visual inspection of current screenshots. Scoped PASS only.
+- **Coverage blocked:** none specific to CP94. Previously recorded egress, A2A runtime, OTel collector and RC4 artifact limitations remain unchanged.
+- **Coverage remaining:** other locales/themes/viewports/browsers and accessible mobile interaction; independent DEF-001–015 acceptance; DEF-005 SSRF acceptance; DEF-007 populated erasure/failure atomicity; all open DEF-016–034 regression; remaining Console, API, CLI, integration, security and operational scenarios.
+- **Recommended handoffs:** continue existing priorities DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF, and DEF-007. No new handoff from CP94.
+- **Checkpoint:** [CP94](checkpoints/CP94-vietnamese-dark-mobile-console-regression.md); prior [CP93](checkpoints/CP93-google-provider-probe-runtime-comparison.md).
+
+
+## CP95 consolidated status update
+
+- **Historical DEF-001–015:** CP95 did not retest these. Preserve prior QA-002 scoped outcomes only: DEF-001–004, DEF-006, and DEF-008–015 have limited passing paths; DEF-005 remains partial; DEF-007’s successful-path audit evidence does not cover populated erasure/failure atomicity. Full independent acceptance remains incomplete. No QA-001 PASS is inherited.
+- **Historical defects verified fixed / failing / unverified:** no prior defect disposition changed. DEF-016–034 remain open, including DEF-023/024/029/030/034. DEF-035 is newly confirmed. All historic evidence and checkpoint uncertainty remain intact.
+- **New finding:** DEF-035 Moderate confirmed. Org-only and empty-project Models views show three deployments owned by another project’s `stage` environment, without scope identity, while exposing Disable/Delete. No mutation or authorization bypass was demonstrated.
+- **Coverage completed:** real Chromium scope selection and SPA navigation across org-only, project-only, and environment contexts; Extensions installed/catalog/lockfile, Models, and Routes & Policies; deployment owner/project mapping via authenticated API; screenshots visually inspected.
+- **Coverage blocked:** no CP95-specific blocker. Cloud direct-egress/webhook delivery, A2A runtime 18445 configuration, OTel collector access, and separate DevBox RC4 artifact verification limitations persist.
+- **Coverage remaining:** all incomplete feature, role, platform and integration work; complete independent DEF-001–015 retests; DEF-005 SSRF acceptance without weakening boundaries; DEF-007 fault atomicity/populated erasure; DEF-016–035 remediation regression; page-by-page scope and permission checks; Models action lifecycle and recovery; other browsers/platforms.
+- **Recommended handoffs:** include DEF-035 with scope/state findings DEF-023/024/029/030. Keep DEF-034, DEF-033, DEF-005, and DEF-007 priorities.
+- **Checkpoint:** [CP95](checkpoints/CP95-console-workspace-scope-and-model-deployment-identity.md); prior [CP94](checkpoints/CP94-vietnamese-dark-mobile-console-regression.md). `GATE-REL-07` remains **BLOCKED**.
