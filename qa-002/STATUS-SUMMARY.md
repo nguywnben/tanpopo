@@ -1,10 +1,19 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP113
+**Latest checkpoint:** CP114
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP114 — DNS rebinding against explicit exact CIDR
+
+- **Historical defects:** DEF-001–015 retain scoped QA-002 results only; no QA-001 PASS is inherited. DEF-005 remains PARTIAL after this scoped DNS test. DEF-007 successful event/chain and populated shred paths still do not close failure atomicity, injected storage faults, or independent backup-erasure proof. DEF-016–038 remain preserved/open with prior dispositions; DEF-039 Low remains confirmed from CP113.
+- **New defects:** none. CP114 did not relax SSRF or authorization behavior and found no bypass.
+- **Coverage completed:** real Chromium/Owner registration and eight UI discovery attempts for a hostname rotating between explicitly allowed `127.0.0.1` and disallowed `127.0.0.2`; one sync returned 200 and seven returned 502. The allowed fixture logged nine protocol requests; the disallowed fixture logged zero. Registration persistence and success/error UI states were visually inspected and corroborated by sanitized DNS/API/fixture records.
+- **Coverage blocked/remaining:** single mixed-answer DNS responses, DNS resolution-to-connect races, redirect status/HTTPS variants, other transports, A2A rebinding, additional runtimes, roles, and broad feature/platform coverage remain unverified. Firefox/WebKit current-image runs remain blocked (CP111).
+- **Recommended handoffs:** none new from CP114. Keep DEF-005 partial and preserve exact peer authorization. Continue DEF-038/007, scope defects DEF-023/035/039, and the rest of the confirmed register.
+- **Checkpoint:** [CP114](checkpoints/CP114-dns-rebinding-exact-cidr.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP113 — Project policy access across workspace scopes
 
