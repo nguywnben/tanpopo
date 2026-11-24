@@ -1,0 +1,92 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084",
+  "principal": "QA Org Owner + Operator",
+  "origin": "http://127.0.0.1:19190/mcp",
+  "target": "http://127.0.0.2:19191/mcp",
+  "allowlist": "127.0.0.1/32",
+  "redirect_statuses": [
+    301,
+    308
+  ],
+  "payloads_retained": false,
+  "tool_calls": 0,
+  "steps": [
+    {
+      "attempt": 1,
+      "redirect_status": 301,
+      "sync_responses": [
+        {
+          "method": "POST",
+          "status": 502,
+          "path": "/admin/v1/mcp/servers/mcp_01m86wrxr0e008qnz1f73kqg4y/sync-tools"
+        }
+      ],
+      "origin_requests_added": 1,
+      "target_requests_added": 0,
+      "row_state": "QA002 CP117 Redirect Status Fixture\nqa002-cp117-redirect-301-308\n\thttp://127.0.0.1:19190/mcp\tActive\t0\t\nSync tools"
+    },
+    {
+      "attempt": 2,
+      "redirect_status": 308,
+      "sync_responses": [
+        {
+          "method": "POST",
+          "status": 502,
+          "path": "/admin/v1/mcp/servers/mcp_01m86wrxr0e008qnz1f73kqg4y/sync-tools"
+        }
+      ],
+      "origin_requests_added": 1,
+      "target_requests_added": 0,
+      "row_state": "QA002 CP117 Redirect Status Fixture\nqa002-cp117-redirect-301-308\n\thttp://127.0.0.1:19190/mcp\tActive\t0\t\nSync tools"
+    }
+  ],
+  "registration_responses": [
+    {
+      "method": "POST",
+      "status": 201,
+      "path": "/admin/v1/mcp/servers"
+    }
+  ],
+  "registration_row_visible": true,
+  "api_responses": [
+    {
+      "method": "GET",
+      "status": 200,
+      "path": "/admin/v1/mcp/servers"
+    },
+    {
+      "method": "POST",
+      "status": 201,
+      "path": "/admin/v1/mcp/servers"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "path": "/admin/v1/mcp/servers"
+    },
+    {
+      "method": "POST",
+      "status": 502,
+      "path": "/admin/v1/mcp/servers/mcp_01m86wrxr0e008qnz1f73kqg4y/sync-tools"
+    },
+    {
+      "method": "POST",
+      "status": 502,
+      "path": "/admin/v1/mcp/servers/mcp_01m86wrxr0e008qnz1f73kqg4y/sync-tools"
+    }
+  ],
+  "origin_events": [
+    {
+      "method": "POST",
+      "path": "/mcp",
+      "status_sent": 301
+    },
+    {
+      "method": "POST",
+      "path": "/mcp",
+      "status_sent": 308
+    }
+  ],
+  "disallowed_target_events": []
+}

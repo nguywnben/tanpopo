@@ -1,10 +1,19 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP116
+**Latest checkpoint:** CP117
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP117 — MCP cross-CIDR redirects (301/308)
+
+- **Historical defects:** DEF-001–015 retain limited scoped QA-002 outcomes only; no QA-001 PASS is inherited. DEF-005 remains PARTIAL despite scoped CP114/116/117 security checks. DEF-007 successful audit paths still do not cover failure atomicity, storage faults, or independent erasure proof. DEF-016–038 remain preserved/open; DEF-039 Low remains confirmed.
+- **New defects:** none. Two live redirect attempts to a disallowed peer failed closed before target contact.
+- **Coverage completed:** real Chromium owner registered an MCP origin at exact allowed `/32`, then actual Sync calls encountered 301 and 308 responses to a live disallowed loopback target. Both returned 502; origin logged one request per attempt; target logged zero. Persisted state and visually inspected screenshots corroborate the result.
+- **Coverage blocked/remaining:** redirect support/per-hop validation contract, HTTPS downgrade and relative/loop redirects, mixed DNS answers, resolver/connection races, A2A redirect cases, other runtimes/transports and full product/role/platform coverage remain open. Firefox/WebKit current-image runs remain blocked (CP111).
+- **Recommended handoffs:** none new. Preserve cross-CIDR fail-closed enforcement and clarify redirect semantics. Continue DEF-005 residuals, DEF-038/007, DEF-023/035/039, and all remaining defect retests.
+- **Checkpoint:** [CP117](checkpoints/CP117-mcp-redirect-301-308-boundary.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP116 — A2A private endpoint without explicit authorization
 
