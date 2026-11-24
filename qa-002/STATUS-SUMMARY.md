@@ -1,10 +1,20 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP108
+**Latest checkpoint:** CP109
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP109 — Extension permission review and staged-candidate cleanup
+
+- **Historical defects verified fixed / scoped:** DEF-001–004, DEF-006, DEF-008–015 retain only their scoped QA-002 outcomes; DEF-005 remains PARTIAL; DEF-007 has successful populated shred paths but fault atomicity and physical/backup erasure proof remain UNVERIFIED. No QA-001 PASS is inherited.
+- **Historical defects failing/unverified:** DEF-016–037 remain preserved/open; DEF-023 was reconfirmed in CP107. DEF-038 High remains confirmed from CP108. No prior status changed.
+- **New defects:** none.
+- **Coverage completed:** real Chromium staged an uninstalled provider adapter, inspected the persisted Pending Permission Approval state and permission delta, confirmed unchecked consent disables activation, and uninstalled the candidate with HTTP 204 and post-refresh count returning to two. Screenshots visually inspected. No credentials, activation or provider call.
+- **Coverage blocked/remaining:** role-separated approval, signing, runtime installation/isolation, secret broker, private egress behavior, upgrade/rollback/quarantine and lockfile/restart behavior remain UNVERIFIED. No private-host permission was approved in this test.
+- **Recommended engineering handoffs:** unchanged; prioritize DEF-038 with DEF-007 and continue DEF-023/024/029/030/035, DEF-034/033/005 and DEF-037.
+- **Checkpoint:** [CP109](checkpoints/CP109-extension-permission-review-and-candidate-cleanup.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP108 — Backup verification after organization crypto-shred
 
