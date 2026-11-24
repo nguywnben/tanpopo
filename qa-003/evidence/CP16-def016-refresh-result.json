@@ -1,0 +1,42 @@
+{
+  "email": "qa003-team-admin-016@example.invalid",
+  "scope": "default\n/\ndev\n(Active workspace scope)",
+  "membersBeforeRefresh": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n4\nOrganization members\n4\nPrincipal\tKind\tAssigned roles\tActions\n\nqa003-team-admin-created-016@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-team-admin-016@example.invalid\nPassword set\n\tHUMAN\t\nDeveloper\nTeam Admin\n\t\n\n\nqa003-enrollment-journey-02@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t",
+  "membersAfterRefresh": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n4\nOrganization members\n4\nPrincipal\tKind\tAssigned roles\tActions\n\nqa003-team-admin-created-016@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-team-admin-016@example.invalid\nPassword set\n\tHUMAN\t\nDeveloper\nTeam Admin\n\t\n\n\nqa003-enrollment-journey-02@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t",
+  "memberListResponses": [
+    {
+      "method": "GET",
+      "url": "/admin/v1/members?project_id=prj_01m87axgx7e008ehq1d016vqwt&limit=100",
+      "status": 200,
+      "emails": [
+        "qa003-team-admin-created-016@example.invalid",
+        "qa003-team-admin-016@example.invalid",
+        "qa003-enrollment-journey-02@example.invalid",
+        "qa003-enrollment-journey@example.invalid"
+      ]
+    },
+    {
+      "method": "GET",
+      "url": "/admin/v1/members?project_id=prj_01m87axgx7e008ehq1d016vqwt&limit=100",
+      "status": 200,
+      "emails": [
+        "qa003-team-admin-created-016@example.invalid",
+        "qa003-team-admin-016@example.invalid",
+        "qa003-enrollment-journey-02@example.invalid",
+        "qa003-enrollment-journey@example.invalid"
+      ]
+    },
+    {
+      "method": "GET",
+      "url": "/admin/v1/members?limit=100",
+      "status": 403,
+      "emails": []
+    }
+  ],
+  "unfilteredAuthorizationControl": {
+    "status": 403,
+    "code": "insufficient_role_permission",
+    "message": "insufficient role permission"
+  },
+  "createdMemberVisibleAfterRefresh": true
+}

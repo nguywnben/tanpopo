@@ -1,0 +1,145 @@
+{
+  "teamAdminCreation": {
+    "status": 201,
+    "principalIdSuffix": "rttwhp79",
+    "inviteTokenLength": 48,
+    "roleFormText": "Add organization member\nMember email\n∙ Required\nAssign roles\nDeveloper, Team Admin\nDeveloper\nOperator\nOrg Owner\nTeam Admin\nSecurity Reviewer\nFinOps Viewer\nScoped projects\ndefault (default)\nCancel\nAdd member\n2 of 6 selected",
+    "activationSucceeded": true
+  },
+  "teamAdminSession": {
+    "scope": "default\n/\ndev\n(Active workspace scope)",
+    "initialListText": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n3\nOrganization members\n3\nPrincipal\tKind\tAssigned roles\tActions\n\nqa003-team-admin-016@example.invalid\nPassword set\n\tHUMAN\t\nDeveloper\nTeam Admin\n\t\n\n\nqa003-enrollment-journey-02@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t",
+    "eventsBeforeAndAfter": [
+      {
+        "method": "GET",
+        "url": "/admin/v1/members?project_id=prj_01m87axgx7e008ehq1d016vqwt&limit=100",
+        "status": 200,
+        "body": "{\"data\":[{\"id\":\"prc_01m87mjpc9e008jwvsrttwhp79\",\"email\":\"qa003-team-admin-016@example.invalid\",\"kind\":\"HUMAN\",\"roles\":[\"DEVELOPER\",\"TEAM_ADMIN\"],\"project_ids\":[\"prj_01m87axgx7e008ehq1d016vqwt\"],\"has_password\":true,\"enrollment_pending\":false,\"version\":2,\"created_at\":\"2026-11-24T20:39:55.017Z\"},{\"id\":\"prc_01m87cvrgje00anfrj73jv5zpq\",\"email\":\"qa003-enrollment-journey-02@example.invalid\",\"kind\":\"HUMAN\",\"roles\":[\"DEVELOPER\"],\"project_ids\":[\"prj_01m87axgx7e008ehq1d016vqwt\"],\"has_password\":false,\"enrollment_pending\":true,\"version\":1,\"created_at\":\"2026-11-24T18:25:03.506Z\"},{\"id\":\"prc_01m87ctbxke008y4vg3v1aew6r\",\"email\":\"qa003-enrollment-journey@example.invalid\",\"kind\":\"HUMAN\",\"roles\":[\"DEVELOPER\"],\"project_ids\":[\"prj_01m87axgx7e008ehq1d016vqwt\"],\"has_password\":false,\"enrollment_pending\":true,\"version\":1,\"created_at\":\"2026-11-24T18:24:17.843Z\"}],\"has_more\":false}\n"
+      },
+      {
+        "method": "GET",
+        "url": "/admin/v1/members?project_id=prj_01m87axgx7e008ehq1d016vqwt&limit=100",
+        "status": 200,
+        "body": "{\"data\":[{\"id\":\"prc_01m87mjpc9e008jwvsrttwhp79\",\"email\":\"qa003-team-admin-016@example.invalid\",\"kind\":\"HUMAN\",\"roles\":[\"DEVELOPER\",\"TEAM_ADMIN\"],\"project_ids\":[\"prj_01m87axgx7e008ehq1d016vqwt\"],\"has_password\":true,\"enrollment_pending\":false,\"version\":2,\"created_at\":\"2026-11-24T20:39:55.017Z\"},{\"id\":\"prc_01m87cvrgje00anfrj73jv5zpq\",\"email\":\"qa003-enrollment-journey-02@example.invalid\",\"kind\":\"HUMAN\",\"roles\":[\"DEVELOPER\"],\"project_ids\":[\"prj_01m87axgx7e008ehq1d016vqwt\"],\"has_password\":false,\"enrollment_pending\":true,\"version\":1,\"created_at\":\"2026-11-24T18:25:03.506Z\"},{\"id\":\"prc_01m87ctbxke008y4vg3v1aew6r\",\"email\":\"qa003-enrollment-journey@example.invalid\",\"kind\":\"HUMAN\",\"roles\":[\"DEVELOPER\"],\"project_ids\":[\"prj_01m87axgx7e008ehq1d016vqwt\"],\"has_password\":false,\"enrollment_pending\":true,\"version\":1,\"created_at\":\"2026-11-24T18:24:17.843Z\"}],\"has_more\":false}\n"
+      },
+      {
+        "method": "POST",
+        "url": "/admin/v1/members",
+        "status": 201,
+        "body": "{\"id\":\"prc_01m87mjvdce00ax1eq8815tf2f\",\"email\":\"qa003-team-admin-created-016@example.invalid\",\"kind\":\"HUMAN\",\"roles\":[\"DEVELOPER\"],\"project_ids\":[\"prj_01m87axgx7e008ehq1d016vqwt\"],\"has_password\":false,\"enrollment_pending\":true,\"version\":1,\"created_at\":\"2026-11-24T20:40:00.172Z\",\"enrollment_token\":\"[REDACTED_INVITE_TOKEN]\",\"enrollment_expires_at\":\"2026-11-25T20:40:00.172Z\"}\n"
+      }
+    ],
+    "projectScopedRead": {
+      "status": 200,
+      "members": [
+        {
+          "email": "qa003-team-admin-016@example.invalid",
+          "roles": [
+            "DEVELOPER",
+            "TEAM_ADMIN"
+          ],
+          "project_ids": [
+            "prj_01m87axgx7e008ehq1d016vqwt"
+          ],
+          "has_password": true,
+          "enrollment_pending": false
+        },
+        {
+          "email": "qa003-enrollment-journey-02@example.invalid",
+          "roles": [
+            "DEVELOPER"
+          ],
+          "project_ids": [
+            "prj_01m87axgx7e008ehq1d016vqwt"
+          ],
+          "has_password": false,
+          "enrollment_pending": true
+        },
+        {
+          "email": "qa003-enrollment-journey@example.invalid",
+          "roles": [
+            "DEVELOPER"
+          ],
+          "project_ids": [
+            "prj_01m87axgx7e008ehq1d016vqwt"
+          ],
+          "has_password": false,
+          "enrollment_pending": true
+        }
+      ]
+    }
+  },
+  "teamAdminAdd": {
+    "email": "qa003-team-admin-created-016@example.invalid",
+    "formText": "Add organization member\nMember email\n∙ Required\nAssign roles\nDeveloper\nScoped projects\ndefault (default)\nCancel\nAdd member",
+    "comboCount": 2,
+    "uiAfterCreate": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n4\nMember added.\nOrganization members\n4\nPrincipal\tKind\tAssigned roles\tActions\n\nqa003-team-admin-created-016@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-team-admin-016@example.invalid\nPassword set\n\tHUMAN\t\nDeveloper\nTeam Admin\n\t\n\n\nqa003-enrollment-journey-02@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\nEnrollment invite ready for qa003-team-admin-created-016@example.invalid\nSave or share this one-time enrollment token now. It cannot be displayed again once closed.\nOne-time enrollment token\n[REDACTED_INVITE_TOKEN]\nActivation link\nhttp://127.0.0.1:18103/login#enroll=[REDACTED_INVITE_TOKEN]\nDone",
+    "unfilteredRead": {
+      "status": 403,
+      "body": "{\"error\":{\"code\":\"insufficient_role_permission\",\"type\":\"permission_error\",\"message\":\"insufficient role permission\",\"request_id\":\"req_01m87mjwnje009n8ad9zmwgg6z\",\"retryable\":false}}\n"
+    },
+    "projectScopedReadAfter": {
+      "status": 200,
+      "members": [
+        {
+          "email": "qa003-team-admin-created-016@example.invalid",
+          "roles": [
+            "DEVELOPER"
+          ],
+          "project_ids": [
+            "prj_01m87axgx7e008ehq1d016vqwt"
+          ],
+          "has_password": false,
+          "enrollment_pending": true
+        },
+        {
+          "email": "qa003-team-admin-016@example.invalid",
+          "roles": [
+            "DEVELOPER",
+            "TEAM_ADMIN"
+          ],
+          "project_ids": [
+            "prj_01m87axgx7e008ehq1d016vqwt"
+          ],
+          "has_password": true,
+          "enrollment_pending": false
+        },
+        {
+          "email": "qa003-enrollment-journey-02@example.invalid",
+          "roles": [
+            "DEVELOPER"
+          ],
+          "project_ids": [
+            "prj_01m87axgx7e008ehq1d016vqwt"
+          ],
+          "has_password": false,
+          "enrollment_pending": true
+        },
+        {
+          "email": "qa003-enrollment-journey@example.invalid",
+          "roles": [
+            "DEVELOPER"
+          ],
+          "project_ids": [
+            "prj_01m87axgx7e008ehq1d016vqwt"
+          ],
+          "has_password": false,
+          "enrollment_pending": true
+        }
+      ]
+    },
+    "memberPostResponses": [
+      {
+        "status": 201,
+        "idSuffix": "rttwhp79",
+        "roles": [
+          "DEVELOPER",
+          "TEAM_ADMIN"
+        ],
+        "projectIds": [
+          "prj_01m87axgx7e008ehq1d016vqwt"
+        ]
+      }
+    ]
+  }
+}
