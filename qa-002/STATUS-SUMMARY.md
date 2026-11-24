@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP90
+**Latest checkpoint:** CP91
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -248,3 +248,15 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** independent DEF-001–015 acceptance; full DEF-005 SSRF coverage; DEF-007 populated erasure/failure atomicity; secret binding/rotation/revocation/OAuth and role coverage; all open DEF-016–034 regression/remediation; all remaining features, browsers/platforms/integrations/accessibility/operations.
 - **Recommended handoffs:** unchanged—DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF, and DEF-007.
 - **Checkpoint:** [CP90](checkpoints/CP90-vault-secret-metadata.md); prior [CP89](checkpoints/CP89-trace-explorer-metadata-privacy.md).
+
+
+## CP91 consolidated status update
+
+- **Historical DEF-001–015:** no new retests in CP91. Preserve scoped prior QA-002 results; DEF-005 remains partial; independent acceptance is incomplete; no QA-001 PASS is inherited.
+- **Historical defects failing / unverified:** DEF-016–034 remain confirmed open; no status changed. Preserve DEF-034 and DEF-020 recurrence.
+- **New findings:** no new defect. QA-OBS-016 expanded: owner org-wide chargeback, Overview and traces display organization-level rows while a project remains selected, with no explicit report-scope label. Values agree and this is consistent with Owner organization authorization.
+- **Coverage completed:** mapped two trace rows to a sibling project environment and reconciled them to the 24-hour Overview total under a selected empty project; real UI screenshots inspected.
+- **Coverage blocked:** direct webhook delivery/HMAC by managed Cloud egress; runtime 18445 A2A by configuration; RC4 artifact unverified in separate DevBox; OTel collector outage acceptance awaits known endpoint/access.
+- **Coverage remaining:** independent DEF-001–015 acceptance; DEF-005 SSRF cases; DEF-007 failure atomicity/populated erasure; trace/overview scope for non-owner roles and scope contract; open DEF-016–034 regression/remediation; remaining features, browsers/platforms, integrations, accessibility and operations.
+- **Recommended handoffs:** unchanged—DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF, and DEF-007. Clarify global-report scope labeling.
+- **Checkpoint:** [CP91](checkpoints/CP91-trace-and-overview-scope-under-project-selection.md); prior [CP90](checkpoints/CP90-vault-secret-metadata.md).

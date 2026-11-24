@@ -156,3 +156,5 @@ After each phase, update only rows supported by phase evidence. Keep partial res
 | CP89 | OTel metadata-only trace list/detail inspection | PARTIAL PASS for observed metadata-only API/UI with two `has_debug_payload=false` rows; full marker/credential search and collector outage/drop-counter behavior UNVERIFIED. No defect or mutation. See [CP89](checkpoints/CP89-trace-explorer-metadata-privacy.md). |
 
 | CP90 | Vault secret metadata exposure check | PASS (narrow) for owner UI/API metadata-only display of one existing QA credential; full secret-path scan, mutation lifecycle, OAuth and role coverage remain UNVERIFIED. Existing secret left untouched. See [CP90](checkpoints/CP90-vault-secret-metadata.md). |
+
+| CP91 | Owner Overview/Traces scope under selected empty project | PASS for organization-wide Overview/Traces API/UI agreement (two requests, one 200/one 503, exact spend reconciled) under Org Owner scope; sibling-project environment rows remain visible. Report scope label contract is unresolved QA-OBS-016, not a defect. See [CP91](checkpoints/CP91-trace-and-overview-scope-under-project-selection.md). |

@@ -33,3 +33,7 @@ When an operator selects one project in the global workspace selector, the organ
 ## Status
 
 Observation only. No data mutation was performed. Organization-wide API behavior and rendered report matched. Project-specific filtering contract and date-range UI support remain **UNVERIFIED**.
+
+## CP91 cross-screen expansion
+
+In a separate real Chromium owner session, the workspace selector was set to `QA002 CP78 Fresh Budget / No env`. The project-environment API confirmed this project had no environments; `QA002 Audit mwto47wa` had `stage`. Both rows returned by `GET /admin/v1/traces?limit=100` referenced the Audit project’s stage environment, and the same two requests matched the 24-hour Overview API/UI totals (two requests, 50% errors, 12,001 exact micros). The organization-wide views agree with each other and the Org Owner’s organization-level authorization, so this is not classified as a defect. The prominent project selector is not accompanied by an explicit organization-wide scope label on Overview or Traces. See `checkpoints/CP91-trace-and-overview-scope-under-project-selection.md` and its sanitized JSON/screenshots.

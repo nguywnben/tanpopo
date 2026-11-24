@@ -1,0 +1,60 @@
+{
+  "role": "Organization Owner",
+  "header": "QA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)\nOrganization\nQA002 CP18 Audit Status Org\nQA002 CP18 Standalone Audit Org\nQA-002 A2A Org\nProject\nQA002 CP78 Fresh Budget\nQA002 Audit mwto47wa\nqa-002-a2a-project\nNo project\nEnv\nNo env\nClose popover\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch",
+  "apiStatuses": {
+    "projects": 200,
+    "environmentsFresh": 200,
+    "environmentsAudit": 200,
+    "traces": 200,
+    "overview": 200
+  },
+  "projects": [
+    {
+      "id": "prj_01m868q2jte00abmhf75asqts3",
+      "name": "QA002 CP78 Fresh Budget"
+    },
+    {
+      "id": "prj_01m84ymb7we009px5hb5pfwsns",
+      "name": "QA002 Audit mwto47wa"
+    },
+    {
+      "id": "prj_01m84xhbtwe00937gta0tjq86f",
+      "name": "qa-002-a2a-project"
+    }
+  ],
+  "environmentsFresh": [],
+  "environmentsAudit": [
+    {
+      "id": "env_01m84ymb8ae00b43av7shak1sf",
+      "name": "stage",
+      "project_id": "prj_01m84ymb7we009px5hb5pfwsns"
+    }
+  ],
+  "traces": [
+    {
+      "status_code": 503,
+      "route_slug": "/v1/chat/completions",
+      "env_id": "env_01m84ymb8ae00b43av7shak1sf",
+      "has_debug_payload": false
+    },
+    {
+      "status_code": 200,
+      "route_slug": "qa002-ollama-route",
+      "env_id": "env_01m84ymb8ae00b43av7shak1sf",
+      "has_debug_payload": false
+    }
+  ],
+  "overview": {
+    "window": "24h",
+    "total_requests": 2,
+    "error_rate_ratio": 0.5,
+    "p95_overhead_ms": 5.517,
+    "settled_micro_usd": 12001,
+    "active_hold_micros": 0,
+    "unmetered_request_count": 0,
+    "active_alerts_count": 0,
+    "sync_lag_warning": false,
+    "updated_at": "2026-11-24T09:28:53.989Z"
+  },
+  "overviewUi": "Overview\n\nUpdated 9:28:52 AM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n2\nWindow: 24h\nError rate\n50.00%\nInternal & upstream\np95 proxy overhead\n5.517 ms\nGateway added latency\nSettled spend\n$0.012001\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items."
+}

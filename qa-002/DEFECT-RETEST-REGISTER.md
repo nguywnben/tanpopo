@@ -151,3 +151,5 @@ Consult the original detailed register and targeted handoffs: `qa/DEFECT-REGISTE
 | CP89 | Trace privacy/metadata inspection (no defect retest) | PARTIAL PASS: two real trace rows and selected detail were metadata-only; API returned `has_debug_payload=false` for both. Full marker/credential log search and OTLP collector outage remain UNVERIFIED. See `checkpoints/CP89-trace-explorer-metadata-privacy.md`. |
 
 | CP90 | Vault secret metadata exposure (no defect retest) | PASS (narrow): owner Console/API returned metadata only for one existing secret; no plaintext field/value observed. Broader privacy, binding, OAuth and role cases remain UNVERIFIED. No mutation. See `checkpoints/CP90-vault-secret-metadata.md`. |
+
+| CP91 | Overview/Traces org scope under selected project (no defect retest) | PASS for organization-wide owner view and API/UI agreement; cross-project environment records visible by design under Org Owner scope. Scope labeling remains QA-OBS-016; no defect assigned. See `checkpoints/CP91-trace-and-overview-scope-under-project-selection.md`. |
