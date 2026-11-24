@@ -1,0 +1,18 @@
+{
+  "browser": "WebKit",
+  "viewport": "375x844",
+  "held_request": {
+    "query": "?project_id=prj_01m85ry2gme00an7wydh1pd1gc&env_id=env_01m85ry445e009xg6sr14c5q1z&limit=100",
+    "status": 200,
+    "key_count": 10
+  },
+  "scope": "No project / No env (Active workspace scope)",
+  "before": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n0\nNo Virtual Keys in this environment\nIssue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic.",
+  "after": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\n10\nMembers & Roles\n2\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n10\nQA002 CP59 A2A authorized input lifecycle\nState\nRevoked\nPrefix / Last 4\nvk_tp_qa002-cp43-env2_…nGUd\nDetail (2)\nQA002 CP59 A2A input lifecycle\nState\nRevoked\nPrefix / Last 4\nvk_tp_qa002-cp43-env2_…U8Rb\nDetail (2)\nQA002 CP57 residency enforcement probe\nState\nRevoked\nPrefix / Last 4\nvk_tp_qa002-cp43-env2_…8FOk\nDetail (2)\nQA002 CP55 RPM recovery probe\nState\nRevoked\nPrefix / Last 4\nvk_tp_qa002-cp43-env2_…gtnG\nDetail (2)\nQA002 CP55 RPM isolated\nState\nRevoked\nPrefix / Last 4\nvk_tp_qa002-cp43-env2_…vasY\nDetail (2)\nQA002 CP55 RPM one request\nState\nRevoked\nPrefix / Last 4\nvk_tp_qa002-cp43-env2_…f4eF\nDetail (2)\nPlayground session\nState\nRevoked\nPrefix / Last 4\nvk_tp_qa002-cp43-env2_…oYAu\nDetail (2)\nPlayground session\nState\nRevoked\nPrefix / Last 4\nvk_tp_qa002-cp43-env2_…HgKr\nDetail (2)\nPlayground session\nState\nRevoked\nPrefix / Last 4\nvk_tp_qa002-cp43-env2_…luNH\nDetail (2)\nPlayground session\nState\nRevoked\nPrefix / Last 4\nvk_tp_qa002-cp43-env2_…xFAL\nDetail (2)",
+  "document_dimensions": {
+    "viewport": 375,
+    "doc": 375,
+    "body": 375
+  },
+  "stale_row_visible": true
+}

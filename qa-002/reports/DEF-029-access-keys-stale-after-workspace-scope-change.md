@@ -18,6 +18,8 @@ A delayed Virtual Key list request for a selected project/environment can comple
 6. Release the original response. The selected workspace remains **No project / No env**, but the page now shows count 10 and all 10 keys from the prior environment. It still displays the banner that a project and environment are required. Capture `CP62-access-keys-org-only-after-response.png`.
 7. Navigate to Overview and back to Access & Keys while retaining the no-project scope. The list clears and remains empty; this is the observed recovery path. See `CP62-access-after-navigation-recovery.png`.
 
+8. Independently repeat the delayed-response flow in WebKit at 375×844 (CP64). Before releasing the same kind of environment-scoped HTTP 200 response, the no-scope page showed zero keys; afterward, ten prior environment key rows appeared while the selector remained **No project / No env**. The rows were all revoked in this dataset. The measured document/body width remained 375px. Both screenshots were visually inspected. This confirms the defect is not limited to Chromium or desktop layout.
+
 The JSON evidence records the exact query IDs, HTTP 200 response, returned key count and sanitized key metadata. The delayed payload contained no secret material; response data is not committed beyond names, environment/project IDs, and operational state.
 
 ## Expected versus actual
@@ -51,6 +53,9 @@ Operators can mistake revoked or active keys from a different environment for ke
 - `../evidence/CP62-access-keys-org-only-before-response.png` — no-scope empty state before delayed result.
 - `../evidence/CP62-access-keys-org-only-after-response.png` — visually inspected stale ten-key list under No project / No env.
 - `../evidence/CP62-access-scope-recovered-empty.png` and `../evidence/CP62-access-after-navigation-recovery.png` — no-scope state and navigation recovery.
+- `../evidence/CP64-webkit-access-race.json` — independent WebKit 375×844 reproduction and layout dimensions.
+- `../evidence/CP64-webkit-access-before-release-375.png` and `../evidence/CP64-webkit-access-after-release-375.png` — visually inspected before/after states; selected no-scope context remains visible in both.
+- [CP64](../checkpoints/CP64-webkit-mobile-access-scope-race.md) — method, visual inspection, and residual coverage.
 - Related finding: [`DEF-023`](DEF-023-org-members-hidden-until-project-selected.md) and [`CP60`](../checkpoints/CP60-workspace-scope-and-private-hostname-boundaries.md).
 
 No product code, database, or server configuration was modified for this test. Browser response delay was injected only in the test client.

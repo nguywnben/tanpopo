@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP63
+**Latest checkpoint:** CP64
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -33,6 +33,16 @@
 | DEF-030 | Moderate | Routes & Policies can repopulate prior environment routes after a delayed response under No project / No env; stale Edit/Delete actions remain available. |
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
+
+## Latest phase: CP64
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain only the previously recorded scoped QA-002 PASS results; they were not retested in CP64. No broader closure is implied.
+- **Historical defects failing / unverified:** DEF-005 remains PARTIAL with SSRF behavior fail-closed for tested cases and significant DNS rebinding, HTTPS/redirect-chain, runtime, and host-contract coverage open. DEF-016–028 remain confirmed open; DEF-026 recurred in CP61. DEF-023 remains confirmed from CP43/CP60, not retested in CP64.
+- **New findings:** DEF-029 Low reconfirmed in an independent WebKit 375×844 real-browser run. A held HTTP 200 response repopulated ten revoked prior-environment key rows under No project / No env. No secret, mutation action, or authorization bypass was observed. DEF-030 Moderate remains confirmed from CP63.
+- **Coverage completed:** visually inspected WebKit before/after screenshots; measured viewport/document/body widths; independently repeated the controlled stale-key response ordering across a second browser engine.
+- **Coverage blocked / remaining:** no CP64 blocker. Firefox app workflow, mobile widths other than 375px, stale loads across environment-to-environment switches, role-limited cross-scope behavior, remaining page races, independent DEF-001–015 retests, integrations, and broad platform coverage remain incomplete. CP53 webhook delivery still requires Operator access; fresh Team Admin testing remains blocked by its suspended synthetic credential.
+- **Recommended handoff:** consolidate DEF-023, DEF-029, and DEF-030 as a workspace-scope state consistency class while retaining separate member-visibility, key-list, and route-action acceptance tests.
+- **Checkpoint:** [CP64](checkpoints/CP64-webkit-mobile-access-scope-race.md); updated detailed finding [DEF-029](reports/DEF-029-access-keys-stale-after-workspace-scope-change.md).
 
 ## Open observations
 
