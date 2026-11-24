@@ -1,10 +1,20 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP107
+**Latest checkpoint:** CP108
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP108 — Backup verification after organization crypto-shred
+
+- **Historical defects verified fixed / still scoped:** DEF-001–004, DEF-006 and DEF-008–015 retain only their scoped QA-002 retests; DEF-005 remains PARTIAL. DEF-007 has a populated successful crypto-shred path, while injected-fault atomicity and physical/backup erasure proof remain UNVERIFIED. No QA-001 PASS is inherited.
+- **Historical defects failing/unverified:** DEF-016–037 remain preserved/open; DEF-023 was reconfirmed in CP107. CP108 adds DEF-038 High. No earlier finding was removed or downgraded.
+- **New defect:** DEF-038 High confirmed. Backup creation succeeds on the actual 18084 data, but verify and restore both reject an intact retained audit partition for a successfully crypto-shredded organization. A separate clean isolated database verified as a scoped positive control. No archive, database, key or token is retained.
+- **Coverage completed:** correct 18084 runtime/data/KEK matching; encrypted backup creation; same-archive verify and restore failure; absent destination after restore failure; CP85 retained-chain reconciliation; source validation-path inspection; separate clean database positive control.
+- **Coverage blocked/remaining:** the defect blocks post-shred backup verification and restore. Corrupt/wrong-key archives, later restore atomicity, pre-shred archive semantics, cluster/PostgreSQL/Valkey, all remaining defect acceptance and broad product/browser/platform coverage remain incomplete. Earlier incorrect DB/key attempts were setup errors and excluded.
+- **Recommended engineering handoffs:** prioritize DEF-038 jointly with DEF-007, preserving authenticated deleted-tenant history and tamper detection. Retain handoffs for DEF-023/024/029/030/035, DEF-034/033/005 and DEF-037.
+- **Checkpoint:** [CP108](checkpoints/CP108-backup-after-organization-crypto-shred.md); [DEF-038](reports/DEF-038-backup-restore-rejects-deleted-organization-audit-partition.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP107 — Populated organization crypto-shred and DEF-023 retest
 
@@ -103,6 +113,7 @@
 | DEF-035 | Moderate | Models shows sibling-project environment deployments with Disable/Delete actions while organization-only or an empty project is selected, without identifying deployment ownership. No unauthorized access or mutation was observed. |
 | DEF-036 | Low | Extensions Marketplace offers Stage for review for an already active Google Gemini package; the 409 duplicate rejection is rendered as raw storage/unique-constraint text with no direct upgrade recovery action. No persistent change. |
 | DEF-037 | Low | Virtual Key issue audit action is documented as `virtual_key.issued`, but actual UI/API events use `virtual_key.created`; exact documented filter returns zero while the event exists under the emitted name. Issue/revoke records and 511-event chain verified. |
+| DEF-038 | High | Backup verify and restore reject valid retained audit history for an organization after successful crypto-shred; see [standalone report](reports/DEF-038-backup-restore-rejects-deleted-organization-audit-partition.md). |
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 

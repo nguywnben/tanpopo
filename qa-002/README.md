@@ -3,11 +3,14 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP107 (Populated organization crypto-shred and DEF-023 retest).
+**Latest checkpoint:** CP108 (Backup verification after organization crypto-shred).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
 ## Current records
+
+- [CP108 — Backup verification after organization crypto-shred](checkpoints/CP108-backup-after-organization-crypto-shred.md)
+- [DEF-038 — Backup verification/restore rejects deleted-organization audit partition](reports/DEF-038-backup-restore-rejects-deleted-organization-audit-partition.md)
 
 - [CP107 — Populated organization crypto-shred and DEF-023](checkpoints/CP107-populated-org-crypto-shred-and-scope-consistency.md)
 - [CP106 — Audit Log pagination and event detail](checkpoints/CP106-audit-log-pagination-and-detail.md)
