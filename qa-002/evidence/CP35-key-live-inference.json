@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "requestId": null,
+  "contentType": "text/event-stream; charset=utf-8",
+  "bodyPrefix": "data: {\"choices\":[{\"delta\":{\"content\":\"Synthetic inference completed.\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-qa002-cp26\",\"model\":\"qa002:latest\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"id\":\"chatcmpl-qa002-cp26\",\"model\":\"qa002:latest\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n",
+  "bodyLength": 354
+}

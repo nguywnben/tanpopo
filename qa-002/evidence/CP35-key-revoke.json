@@ -1,0 +1,10 @@
+{
+  "revokeResponses": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/virtual-keys/vky_01m85e9trde00ab28c9p9a7mqw/revoke",
+      "status": 200
+    }
+  ],
+  "row": "QA002 CP35 live probe revoke\t[redacted prefix]PROVIDER\n*\n\tRevoked\tNov 24, 2026, 12:11:44 AM\t"
+}
