@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP70
+**Latest checkpoint:** CP72
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -23,7 +23,7 @@
 | DEF-020 | Moderate | Security shell badges remain stale after clearing switches or deciding approvals until reload. |
 | DEF-021 | Moderate | Local HUMAN member creation has no supported enrollment path for first login. |
 | DEF-022 | Moderate | Session UI retains revoked role/navigation/actions until reload after server rejects the session. |
-| DEF-023 | Moderate | Organization member list is falsely empty without both project and environment selected; CP43 expanded the repro. |
+| DEF-023 | Moderate | Organization member list is falsely empty without both project and environment selected; CP71 independently reconfirmed with three persisted members and a Team Admin boundary comparison. |
 | DEF-024 | Moderate | Project FinOps view hides an applicable persisted organization ceiling and displays a false empty state. |
 | DEF-025 | Low | Models enables Add deployment without environment scope; its form cannot select an environment and reports a page-level validation after submission. |
 | DEF-026 | Low | MCP sync banner reports zero schema changes requiring approval while a first-discovered schema is visibly locked pending review. |
@@ -35,16 +35,16 @@
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
-## Latest phase: CP70
+## Latest phase: CP72
 
 - **Historical defects verified fixed:** DEF-001–004, DEF-006–009, and DEF-012–015 retain their previously recorded scoped QA-002 PASS results. DEF-010 and DEF-011 were independently retested in CP68/69 for A2A-only issuance, plane denial, task discovery/resume/cancel, persistence, settlement, and reservation release. This does not close broader role/platform coverage.
-- **Historical defects failing / unverified:** DEF-005 remains PARTIAL with SSRF behavior fail-closed for tested cases and significant DNS rebinding, HTTPS/redirect-chain, runtime, and host-contract coverage open. DEF-016–028 remain confirmed open; DEF-026 recurred in CP61. New DEF-029–031 remain confirmed open. DEF-023 remains confirmed from CP43/CP60, not retested in CP70.
-- **New findings:** no new defect in CP70. DEF-031 Low remains confirmed across MCP and A2A mobile forms; API validation stayed fail-closed. DEF-029 remains confirmed and expanded in CP65; DEF-030 was independently expanded in CP70 to a valid project-to-project switch with stale Edit/Delete actions.
-- **Coverage completed:** CP68 A2A private registration/discovery and input-required task resume/settlement; CP69 hard-refreshed input-required task cancellation, verified reservation RELEASED_UNUSED and no fixture follow-up. Both ran on enabled runtime 18084 with least-privilege keys and revocation/replay checks. Visually inspected input-required, completed, and canceled screens. CP66/67 mobile invalid-CIDR form failures remain documented. CP70 visually verified three old routes under the new project selector and opened, but did not invoke, the stale-row action menu.
-- **Coverage blocked / remaining:** 18445 A2A use remains blocked by disabled runtime configuration. The first CP69 attempt failed from a fixture port mismatch; it is preserved as harness evidence and the corrected flow passed. Additional invalid CIDR classes, desktop alert placement, keyboard/screen-reader behavior, DNS rebinding/mixed answers, and other runtime scenarios remain open. Firefox app workflow, additional viewport widths, role-limited scope behavior, page races, independent DEF-001–015 retests, integrations and broad platform coverage remain incomplete. CP53 webhook delivery still requires Operator access; fresh Team Admin testing remains blocked by its suspended synthetic credential.
+- **Historical defects failing / unverified:** DEF-005 remains PARTIAL with DNS rebinding, mixed answers, HTTPS/redirect-chain, alternate runtime, and host-contract coverage open. DEF-016–028 remain confirmed open; DEF-026 recurred in CP61. New DEF-029–031 remain confirmed open. DEF-023 was independently reconfirmed in CP71 across organization-only and project/no-environment contexts; the same-session member API returned three records while UI showed zero, and selecting `stage` rendered all three. DEF-016 was independently retested in CP72: scoped Team Admin create persisted with HTTP 201, then unfiltered list refresh returned 403 and showed contradictory success/error notices. No historical defect was newly fixed.
+- **New findings:** no new defect ID in CP71/72. DEF-031 Low remains confirmed across MCP and A2A mobile forms; API validation stayed fail-closed. DEF-029 remains confirmed and expanded in CP65; DEF-030 was independently expanded in CP70 to a valid project-to-project switch with stale Edit/Delete actions. CP71 observed that the project-scoped Team Admin receives 403 on member listing and its chooser lists only its assigned project/environment; this is a PASS for the tested authorization boundary. CP72 confirms the same role can create its assigned-project member but cannot verify it in the unscoped list. No unauthorized data access or mutation was observed.
+- **Coverage completed:** CP71 tested Members & Roles across organization-only, project/no-environment, and project/environment contexts in real Chromium, compared UI with same-session API state, and visually inspected screenshots. CP72 independently exercised Team Admin member creation, forbidden refresh, and owner-side persistence verification. The created test-only principal remains in the isolated runtime because no delete action/API is documented. CP68/69 A2A task resume/cancel, settlement, and reservation release; CP66/67 mobile CIDR feedback; and CP70 cross-project Routes response remain recorded.
+- **Coverage blocked / remaining:** A2A requests on runtime 18445 remain blocked by disabled runtime configuration. CP53 webhook delivery still needs usable Operator access on that runtime. CP71 did not retest refresh/default scope or other Console screens under those two no-environment states. CP72 did not exercise role updates or cross-project denied create. DNS rebinding/mixed answers, invalid-CIDR variants, keyboard/screen-reader behavior, Firefox, additional viewports, broader page races, independent DEF-001–015 acceptance retests, integrations, and platform coverage remain incomplete.
 - **Recommended handoff:** consolidate DEF-023, DEF-029, and DEF-030 as a workspace-scope state consistency class while retaining separate member-visibility, key-list, and route-action acceptance tests.
 - **Recommended handoff:** include DEF-031 with DEF-005 as a validation UX follow-up while retaining separate SSRF/CIDR enforcement acceptance checks.
-- **Checkpoint:** [CP70](checkpoints/CP70-routes-cross-project-stale-response.md); CP68/69 A2A lifecycle evidence remains recorded. CP66/67 evidence remains linked from [DEF-031](reports/DEF-031-mcp-cidr-validation-error-hidden-by-mobile-drawer.md).
+- **Checkpoint:** [CP72](checkpoints/CP72-team-admin-member-create-refresh-retest.md), [CP71](checkpoints/CP71-members-role-and-workspace-scope-retest.md); CP70 Routes race, CP68/69 A2A lifecycle, and CP66/67 mobile CIDR evidence remain recorded.
 
 ## Open observations
 
