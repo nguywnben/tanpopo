@@ -1,0 +1,41 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084",
+  "principal": "QA Org Owner + Operator",
+  "workspace": "QA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)",
+  "endpoint_class": "synthetic loopback on 127.0.0.1:19189, fixture stopped; no sync or endpoint contact attempted",
+  "allow_private_checkbox_checked": false,
+  "submit_requests": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/a2a/agents"
+    }
+  ],
+  "api_responses": [
+    {
+      "method": "GET",
+      "status": 200,
+      "path": "/admin/v1/a2a/agents?limit=100"
+    },
+    {
+      "method": "POST",
+      "status": 400,
+      "path": "/admin/v1/a2a/agents",
+      "error_code": "invalid_endpoint_url",
+      "message": "https endpoint_url is required unless allow_private_ip is true"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "path": "/admin/v1/a2a/agents?limit=100"
+    }
+  ],
+  "collection_after_submit": {
+    "status": 200,
+    "test_slug_persisted": false,
+    "matching_rows": []
+  },
+  "registration_drawer_visible_error": "https endpoint_url is required unless allow_private_ip is true",
+  "registered_agents_before_count": 6,
+  "registered_agents_after_count": 6
+}

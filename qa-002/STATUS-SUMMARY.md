@@ -1,10 +1,19 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP115
+**Latest checkpoint:** CP116
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP116 — A2A private endpoint without explicit authorization
+
+- **Historical defects:** DEF-001–015 retain scoped QA-002 outcomes only; no QA-001 PASS is inherited. DEF-005 remains PARTIAL; CP114 scoped peer enforcement across rebinding and CP116 A2A default-deny improve evidence but do not close mixed-answer, race, redirect, transport, or runtime gaps. DEF-007 fault atomicity, injected storage failures, and independent erasure proof remain incomplete. DEF-016–038 remain preserved/open; DEF-039 Low remains confirmed.
+- **New defects:** none. A loopback endpoint submitted with the private exception unchecked was rejected before persistence or endpoint contact.
+- **Coverage completed:** real Chromium A2A registration UI with explicit exception unchecked; HTTP 400 `invalid_endpoint_url`; post-submit list confirmed no row; screenshot inspection confirmed UI feedback. CP08/68 remain separate scoped positive controls for explicit allowlisting.
+- **Coverage blocked/remaining:** full DEF-005 remains partial; mixed DNS, resolver/connection races, redirect modes, other transports/runtimes, and broad A2A roles/lifecycles are open. Firefox/WebKit current-image runs remain blocked by CP111; broad product coverage remains incomplete.
+- **Recommended handoffs:** no new handoff. Preserve explicit private-endpoint authorization. Continue DEF-038/007, workspace defects DEF-023/035/039, and remaining historical/new defect retests.
+- **Checkpoint:** [CP116](checkpoints/CP116-a2a-private-endpoint-default-deny.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP115 — MCP inventory visibility across project scopes
 
