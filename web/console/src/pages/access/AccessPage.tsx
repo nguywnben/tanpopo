@@ -1,9 +1,10 @@
-import {useCallback, useEffect, useMemo, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState, type FormEvent} from 'react';
 import {Plus, UserPlus} from 'lucide-react';
 import {listAdminModels, listDeployments} from '../../api/catalogClient';
 import {
   createMember,
   createVirtualKey,
+  issueMemberEnrollmentToken,
   listMembers,
   listRecentTraces,
   listVirtualKeys,
@@ -94,46 +95,62 @@ export function AccessPage({
   const [memberEmail, setMemberEmail] = useState('');
   const [memberRoles, setMemberRoles] = useState<Role[]>(['DEVELOPER']);
   const [memberProjectIds, setMemberProjectIds] = useState<string[]>(projectId ? [projectId] : []);
+  const [memberError, setMemberError] = useState('');
+  const [issuedEnrollment, setIssuedEnrollment] = useState<{email: string; token: string} | null>(null);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [draftRoles, setDraftRoles] = useState<Role[]>([]);
   const [draftProjectIds, setDraftProjectIds] = useState<string[]>([]);
+  const refreshSeqRef = useRef(0);
 
   const isOrgAdmin = roles.some(r => orgAdminRoles.includes(r));
+  const isSecurityReviewer = roles.includes('SECURITY_REVIEWER');
   const grantableMemberRoles = isOrgAdmin ? allRoles : teamAdminGrantableRoles;
   const canManage = roles.some(r => manageRoles.includes(r));
   const canReadMembers = roles.some(r => memberReadRoles.includes(r));
-  const canEmergencyRevoke = canManage || roles.includes('SECURITY_REVIEWER');
+  const canEmergencyRevoke = canManage || isSecurityReviewer;
+  const fallbackProjectId = projects[0]?.id ?? '';
 
   const refresh = useCallback(async () => {
-    if (!projectId || !environmentId) {
+    const seq = ++refreshSeqRef.current;
+    const hasEnvScope = Boolean(projectId && environmentId);
+    const scopedMemberProject = projectId || fallbackProjectId;
+    const memberQueryProject = isOrgAdmin || isSecurityReviewer ? undefined : (scopedMemberProject || undefined);
+    const shouldFetchMembers = canReadMembers && (isOrgAdmin || isSecurityReviewer || Boolean(scopedMemberProject));
+
+    if (!hasEnvScope) {
       setKeys([]);
-      setMembers([]);
       setTraces([]);
-      setLoading(false);
-      return;
+      setAvailableModels([]);
     }
     setLoading(true);
     setError('');
     const [keysRes, membersRes, tracesRes, modelsRes, depsRes] = await Promise.allSettled([
-      listVirtualKeys(projectId, environmentId),
-      canReadMembers ? listMembers() : Promise.resolve([] as Member[]),
-      listRecentTraces(environmentId),
-      listAdminModels(),
-      listDeployments(environmentId),
+      hasEnvScope ? listVirtualKeys(projectId, environmentId) : Promise.resolve([] as VirtualKey[]),
+      shouldFetchMembers ? listMembers(memberQueryProject) : Promise.resolve([] as Member[]),
+      hasEnvScope ? listRecentTraces(environmentId) : Promise.resolve([] as components['schemas']['TraceSummary'][]),
+      hasEnvScope ? listAdminModels() : Promise.resolve([] as components['schemas']['LogicalModel'][]),
+      hasEnvScope ? listDeployments(environmentId) : Promise.resolve([]),
     ]);
+    if (refreshSeqRef.current !== seq) return;
     const failures: string[] = [];
-    if (keysRes.status === 'fulfilled') setKeys(keysRes.value);
-    else failures.push(t('access.loadKeysFailed', {error: errText(keysRes.reason, t)}));
-    if (membersRes.status === 'fulfilled') setMembers(membersRes.value);
-    else if (canReadMembers) failures.push(t('access.loadMembersFailed', {error: errText(membersRes.reason, t)}));
-    if (tracesRes.status === 'fulfilled') setTraces(tracesRes.value);
-    if (modelsRes.status === 'fulfilled' && depsRes.status === 'fulfilled') {
+    if (hasEnvScope) {
+      if (keysRes.status === 'fulfilled') setKeys(keysRes.value);
+      else failures.push(t('access.loadKeysFailed', {error: errText(keysRes.reason, t)}));
+    }
+    if (shouldFetchMembers) {
+      if (membersRes.status === 'fulfilled') setMembers(membersRes.value);
+      else failures.push(t('access.loadMembersFailed', {error: errText(membersRes.reason, t)}));
+    } else {
+      setMembers([]);
+    }
+    if (hasEnvScope && tracesRes.status === 'fulfilled') setTraces(tracesRes.value);
+    if (hasEnvScope && modelsRes.status === 'fulfilled' && depsRes.status === 'fulfilled') {
       const deployedIds = new Set(depsRes.value.map(d => d.logical_model_id));
       setAvailableModels(modelsRes.value.filter(m => deployedIds.has(m.id)));
     }
     setError(failures.join(' '));
     setLoading(false);
-  }, [projectId, environmentId, canReadMembers, t]);
+  }, [projectId, fallbackProjectId, environmentId, canReadMembers, isOrgAdmin, isSecurityReviewer, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -250,20 +267,39 @@ export function AccessPage({
       : (memberProjectIds.length > 0 ? memberProjectIds : projectId ? [projectId] : []);
     if (!canManage || !memberEmail.includes('@') || memberRoles.length === 0) return;
     if (!isOrgAdmin && effectiveProjects.length === 0) {
-      setError(t('access.errProjectScopeRequired'));
+      setMemberError(t('access.errProjectScopeRequired'));
       return;
     }
     setBusy(true);
+    setMemberError('');
     setError('');
     setNotice('');
     try {
-      await createMember(memberEmail.trim(), memberRoles, effectiveProjects);
+      const created = await createMember(memberEmail.trim(), memberRoles, effectiveProjects);
       setAddMemberOpen(false);
       setMemberEmail('');
       setMemberRoles(['DEVELOPER']);
       setMemberProjectIds(projectId ? [projectId] : []);
+      if (created.enrollment_token) {
+        setIssuedEnrollment({email: created.email, token: created.enrollment_token});
+      }
       await refresh();
       setNotice(t('access.memberAdded'));
+    } catch (cause) {
+      setMemberError(errText(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleIssueEnrollment(member: Member) {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const issued = await issueMemberEnrollmentToken(member.id);
+      setIssuedEnrollment({email: member.email, token: issued.enrollment_token});
+      await refresh();
     } catch (cause) {
       setError(errText(cause, t));
     } finally {
@@ -274,17 +310,18 @@ export function AccessPage({
   async function handleSaveMemberRoles() {
     if (!editingMember || draftRoles.length === 0) return;
     if (editingMember.id === currentPrincipalId && draftRoles.some(r => !editingMember.roles.includes(r))) {
-      setError(t('access.errSelfEscalation'));
+      setMemberError(t('access.errSelfEscalation'));
       return;
     }
     const effectiveProjects = isOrgAdmin
       ? (draftRoles.some(r => teamAdminGrantableRoles.includes(r)) ? draftProjectIds : [])
       : (draftProjectIds.length > 0 ? draftProjectIds : projectId ? [projectId] : []);
     if (!isOrgAdmin && effectiveProjects.length === 0) {
-      setError(t('access.errProjectScopeRequired'));
+      setMemberError(t('access.errProjectScopeRequired'));
       return;
     }
     setBusy(true);
+    setMemberError('');
     setError('');
     setNotice('');
     try {
@@ -293,7 +330,7 @@ export function AccessPage({
       await refresh();
       setNotice(t('access.rolesUpdated'));
     } catch (cause) {
-      setError(errText(cause, t));
+      setMemberError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -323,6 +360,7 @@ export function AccessPage({
                 variant="primary"
                 size="sm"
                 onClick={() => {
+                  setMemberError('');
                   setMemberProjectIds(projectId ? [projectId] : []);
                   setAddMemberOpen(true);
                 }}
@@ -345,7 +383,7 @@ export function AccessPage({
         ]}
       />
 
-      {!environmentId ? <Banner tone="info">{t('access.selectScopeBanner')}</Banner> : null}
+      {!environmentId && activeTab === 'keys' ? <Banner tone="info">{t('access.selectScopeBanner')}</Banner> : null}
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {notice ? <Banner tone="ok">{notice}</Banner> : null}
 
@@ -437,7 +475,22 @@ export function AccessPage({
             rowKey={row => row.id}
             emptyTitle={t('access.emptyMembersTitle')}
             columns={[
-              {id: 'email', header: t('access.col.principal'), primary: true, width: '32%', render: row => <span style={{fontWeight: 600}}>{row.email}</span>},
+              {
+                id: 'email',
+                header: t('access.col.principal'),
+                primary: true,
+                width: '32%',
+                render: row => (
+                  <div className="tp-stack-sm">
+                    <span style={{fontWeight: 600}}>{row.email}</span>
+                    {row.enrollment_pending ? (
+                      <StatusPill tone="warn" label={t('access.enrollmentPending')} />
+                    ) : row.has_password ? (
+                      <StatusPill tone="ok" label={t('access.passwordActive')} />
+                    ) : null}
+                  </div>
+                ),
+              },
               {id: 'kind', header: t('common.kind'), width: '14%', render: row => <span className="mono">{row.kind}</span>},
               {
                 id: 'roles',
@@ -455,18 +508,30 @@ export function AccessPage({
                 width: '18%',
                 render: row =>
                   canManage ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => {
-                        setEditingMember(row);
-                        setDraftRoles([...row.roles]);
-                        setDraftProjectIds(row.project_ids && row.project_ids.length > 0 ? [...row.project_ids] : projectId ? [projectId] : []);
-                      }}
-                    >
-                      {t('access.editRoles')}
-                    </Button>
+                    <RowActionsMenu
+                      label={t('access.memberActionsAria', {email: row.email})}
+                      items={[
+                        {
+                          id: 'roles',
+                          label: t('access.editRoles'),
+                          onClick: () => {
+                            setMemberError('');
+                            setEditingMember(row);
+                            setDraftRoles([...row.roles]);
+                            setDraftProjectIds(row.project_ids && row.project_ids.length > 0 ? [...row.project_ids] : projectId ? [projectId] : []);
+                          },
+                        },
+                        ...(row.kind === 'HUMAN'
+                          ? [{
+                              id: 'invite',
+                              label: t('access.issueInviteToken'),
+                              onClick: () => {
+                                void handleIssueEnrollment(row);
+                              },
+                            }]
+                          : []),
+                      ]}
+                    />
                   ) : null,
               },
             ]}
@@ -650,7 +715,10 @@ export function AccessPage({
 
       <Drawer
         open={addMemberOpen}
-        onClose={() => setAddMemberOpen(false)}
+        onClose={() => {
+          setAddMemberOpen(false);
+          setMemberError('');
+        }}
         title={t('access.addMemberTitle')}
         footer={
           <>
@@ -662,6 +730,7 @@ export function AccessPage({
         }
       >
         <form id="tp-add-member-form" className="tp-stack" onSubmit={handleAddMember}>
+          {memberError ? <Banner tone="danger">{memberError}</Banner> : null}
           <TextField label={t('access.memberEmail')} type="email" required value={memberEmail} onChange={event => setMemberEmail(event.target.value)} />
           <MultiSelectField
             label={t('access.assignRoles')}
@@ -685,7 +754,10 @@ export function AccessPage({
 
       <Modal
         open={editingMember !== null}
-        onClose={() => setEditingMember(null)}
+        onClose={() => {
+          setEditingMember(null);
+          setMemberError('');
+        }}
         title={t('access.editRolesTitle', {email: editingMember?.email ?? ''})}
         footer={
           <>
@@ -698,6 +770,7 @@ export function AccessPage({
       >
         {editingMember ? (
           <div className="tp-stack-sm">
+            {memberError ? <Banner tone="danger">{memberError}</Banner> : null}
             {editingMember.id === currentPrincipalId ? (
               <Banner tone="info">{t('access.selfServiceDisabled')}</Banner>
             ) : null}
@@ -723,6 +796,27 @@ export function AccessPage({
                 onChange={setDraftProjectIds}
               />
             ) : null}
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={issuedEnrollment !== null}
+        onClose={() => setIssuedEnrollment(null)}
+        title={t('access.enrollmentIssuedTitle', {email: issuedEnrollment?.email ?? ''})}
+        footer={<Button variant="primary" onClick={() => setIssuedEnrollment(null)}>{t('common.done')}</Button>}
+      >
+        {issuedEnrollment ? (
+          <div className="tp-stack-sm">
+            <Banner tone="warn">{t('access.enrollmentOnceWarning')}</Banner>
+            <CodeBlock
+              title={t('access.enrollmentTokenLabel')}
+              code={issuedEnrollment.token}
+            />
+            <CodeBlock
+              title={t('access.enrollmentUrlLabel')}
+              code={`${typeof window !== 'undefined' ? window.location.origin : ''}/login#enroll=${encodeURIComponent(issuedEnrollment.token)}`}
+            />
           </div>
         ) : null}
       </Modal>

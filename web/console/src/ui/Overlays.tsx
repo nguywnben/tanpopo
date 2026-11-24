@@ -129,6 +129,7 @@ export function ConfirmDialog({
   requireMatch,
   matchLabel,
   busy = false,
+  confirmDisabled = false,
   onConfirm,
   children,
 }: {
@@ -141,6 +142,7 @@ export function ConfirmDialog({
   requireMatch?: string;
   matchLabel?: string;
   busy?: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   children?: ReactNode;
 }) {
@@ -151,7 +153,7 @@ export function ConfirmDialog({
     if (open) setTyped('');
   }, [open]);
 
-  if (!requireMatch && !children) {
+  if (!requireMatch && !children && !confirmDisabled) {
     return (
       <AlertDialog
         isOpen={open}
@@ -170,7 +172,7 @@ export function ConfirmDialog({
     );
   }
 
-  const canConfirm = !busy && (!requireMatch || typed === requireMatch);
+  const canConfirm = !busy && !confirmDisabled && (!requireMatch || typed === requireMatch);
 
   return (
     <Modal

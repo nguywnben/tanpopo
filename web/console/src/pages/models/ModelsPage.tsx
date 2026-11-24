@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState, type FormEvent} from 'react';
 import {Plus} from 'lucide-react';
 import {
   createAdminModel,
@@ -30,6 +30,8 @@ import {
 } from '../../ui/primitives';
 
 type Role = components['schemas']['RbacRole'];
+type Project = components['schemas']['Project'];
+type Environment = components['schemas']['Environment'];
 type LogicalModel = components['schemas']['LogicalModel'];
 type Deployment = components['schemas']['ModelDeployment'];
 type Connection = components['schemas']['ProviderConnection'];
@@ -82,7 +84,19 @@ const emptyCapabilities: components['schemas']['CapabilityProfile'] = {
 
 const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
 
-export function ModelsPage({environmentId, roles}: {environmentId: string; roles: Role[]}) {
+export function ModelsPage({
+  projectId: _projectId = '',
+  projects: _projects = [],
+  environments = [],
+  environmentId,
+  roles,
+}: {
+  projectId?: string;
+  projects?: Project[];
+  environments?: Environment[];
+  environmentId: string;
+  roles: Role[];
+}) {
   const {t, formatNumber} = useI18n();
   const [tab, setTab] = useState<'deployments' | 'models'>('deployments');
   const [models, setModels] = useState<LogicalModel[]>([]);
@@ -100,6 +114,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
   const [capFilter, setCapFilter] = useState('ALL');
 
   const [modelDrawerOpen, setModelDrawerOpen] = useState(false);
+  const [modelFormError, setModelFormError] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [slug, setSlug] = useState('');
   const [contextWindow, setContextWindow] = useState('128000');
@@ -107,6 +122,8 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
   const [capabilities, setCapabilities] = useState<components['schemas']['CapabilityProfile']>(emptyCapabilities);
 
   const [depDrawerOpen, setDepDrawerOpen] = useState(false);
+  const [depFormError, setDepFormError] = useState('');
+  const [deployEnvId, setDeployEnvId] = useState(environmentId || environments[0]?.id || '');
   const [selectedModel, setSelectedModel] = useState('');
   const [selectedConnection, setSelectedConnection] = useState('');
   const [upstreamName, setUpstreamName] = useState('');
@@ -114,26 +131,36 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
   const [selfHostedZero, setSelfHostedZero] = useState(false);
 
   const [pendingAction, setPendingAction] = useState<{deployment: Deployment; action: 'disable' | 'delete'; lastHealthyRoutes: string[]} | null>(null);
+  const reloadSeqRef = useRef(0);
 
   const canManage = roles.some(role => manageRoles.includes(role));
+  const fallbackEnvId = environments[0]?.id ?? '';
+
+  useEffect(() => {
+    setDeployEnvId(environmentId || fallbackEnvId);
+  }, [environmentId, fallbackEnvId]);
 
   const reload = useCallback(async () => {
+    const seq = ++reloadSeqRef.current;
     setLoading(true);
+    setError('');
     try {
       const [modelRows, depRows, connRows] = await Promise.all([
         listAdminModels(),
         listDeployments(environmentId || undefined),
         listConnections(),
       ]);
+      if (reloadSeqRef.current !== seq) return;
       setModels(modelRows);
       setDeployments(depRows);
       setConnections(connRows);
-      setSelectedModel(curr => curr || modelRows[0]?.id || '');
-      setSelectedConnection(curr => curr || connRows[0]?.id || '');
+      setSelectedModel(curr => (curr && modelRows.some(m => m.id === curr) ? curr : modelRows[0]?.id || ''));
+      setSelectedConnection(curr => (curr && connRows.some(c => c.id === curr) ? curr : connRows[0]?.id || ''));
     } catch (cause) {
+      if (reloadSeqRef.current !== seq) return;
       setError(errText(cause, t));
     } finally {
-      setLoading(false);
+      if (reloadSeqRef.current === seq) setLoading(false);
     }
   }, [environmentId, t]);
 
@@ -168,10 +195,11 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
 
   async function handleCreateModel(event: FormEvent) {
     event.preventDefault();
+    setModelFormError('');
     setError('');
     setNotice('');
     if (!Number.isInteger(Number(contextWindow)) || Number(contextWindow) < 1 || !Number.isInteger(Number(maxOutput)) || Number(maxOutput) < 1) {
-      setError(t('models.errPositiveInts'));
+      setModelFormError(t('models.errPositiveInts'));
       return;
     }
     setBusy(true);
@@ -192,7 +220,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       setCapabilities(emptyCapabilities);
       setNotice(t('models.modelRegistered', {slug: saved.slug}));
     } catch (cause) {
-      setError(errText(cause, t));
+      setModelFormError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -200,23 +228,25 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
 
   async function handleCreateDeployment(event: FormEvent) {
     event.preventDefault();
+    setDepFormError('');
     setError('');
     setNotice('');
+    const targetEnvId = (deployEnvId || environmentId).trim();
     const connection = connections.find(c => c.id === selectedConnection);
-    if (!environmentId || !selectedModel || !connection) {
-      setError(t('models.errSelectRequired'));
+    if (!targetEnvId || !selectedModel || !connection) {
+      setDepFormError(t('models.errSelectRequired'));
       return;
     }
     const card = buildRateCard(rates, connection.billing_mode, selfHostedZero);
     if (card.error || !card.rateCard) {
-      setError(card.error ?? t('models.errInvalidRateCard'));
+      setDepFormError(card.error ?? t('models.errInvalidRateCard'));
       return;
     }
     setBusy(true);
     try {
       const shouldActivate = connection.state === 'ACTIVE';
       await createDeployment({
-        env_id: environmentId,
+        env_id: targetEnvId,
         logical_model_id: selectedModel,
         connection_id: selectedConnection,
         upstream_model_name: upstreamName.trim(),
@@ -231,7 +261,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
       await reload();
       setNotice(shouldActivate ? t('models.deploymentActivated') : t('models.deploymentRegistered'));
     } catch (cause) {
-      setError(errText(cause, t));
+      setDepFormError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -304,11 +334,26 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
         </div>
         {canManage ? (
           <div className="tp-page-actions">
-            <Button variant="secondary" size="sm" onClick={() => setModelDrawerOpen(true)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setModelFormError('');
+                setModelDrawerOpen(true);
+              }}
+            >
               <Plus size={14} aria-hidden="true" />
               <span>{t('models.registerModel')}</span>
             </Button>
-            <Button variant="primary" size="sm" onClick={() => setDepDrawerOpen(true)}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setDepFormError('');
+                setDeployEnvId(environmentId || fallbackEnvId);
+                setDepDrawerOpen(true);
+              }}
+            >
               <Plus size={14} aria-hidden="true" />
               <span>{t('models.addDeployment')}</span>
             </Button>
@@ -364,7 +409,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
             </div>
           </div>
 
-          <SectionHeader title={t('models.envDeployments')} count={visibleDeployments.length} />
+          <SectionHeader title={environmentId ? t('models.envDeployments') : t('models.allEnvsDeployments')} count={visibleDeployments.length} />
           <DataTable
             ariaLabel={t('models.deploymentsAria')}
             loading={loading}
@@ -377,7 +422,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                 id: 'upstream',
                 header: t('models.col.upstreamModel'),
                 primary: true,
-                width: '27%',
+                width: '25%',
                 render: row => (
                   <div className="tp-stack-sm">
                     <span className="mono" style={{fontWeight: 600}}>{row.upstream_model_name}</span>
@@ -385,7 +430,25 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
                   </div>
                 ),
               },
-              {id: 'conn', header: t('models.col.connection'), width: '23%', render: row => <span className="mono">{row.connection_id}</span>},
+              ...(!environmentId
+                ? [{
+                    id: 'env',
+                    header: t('common.environment'),
+                    width: '14%',
+                    render: (row: Deployment) => (
+                      <span className="mono">{environments.find(e => e.id === row.env_id)?.name ?? row.env_id}</span>
+                    ),
+                  }]
+                : []),
+              {
+                id: 'conn',
+                header: t('models.col.connection'),
+                width: '21%',
+                render: row => {
+                  const connName = connections.find(c => c.id === row.connection_id)?.name;
+                  return <span className="mono">{connName ?? row.connection_id}</span>;
+                },
+              },
               {id: 'region', header: t('models.col.region'), width: '9%', render: row => <span>{row.data_region}</span>},
               {
                 id: 'state',
@@ -523,7 +586,10 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
 
       <Drawer
         open={modelDrawerOpen}
-        onClose={() => setModelDrawerOpen(false)}
+        onClose={() => {
+          setModelDrawerOpen(false);
+          setModelFormError('');
+        }}
         title={t('models.drawerModelTitle')}
         subtitle={t('models.drawerModelSubtitle')}
         footer={
@@ -534,6 +600,7 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
         }
       >
         <form id="tp-register-model-form" className="tp-stack" onSubmit={handleCreateModel}>
+          {modelFormError ? <Banner tone="danger">{modelFormError}</Banner> : null}
           <TextField label={t('models.displayName')} required value={displayName} onChange={event => setDisplayName(event.target.value)} />
           <TextField label={t('models.canonicalSlug')} required value={slug} onChange={event => setSlug(event.target.value)} />
           <div className="tp-grid-2">
@@ -563,7 +630,10 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
 
       <Drawer
         open={depDrawerOpen}
-        onClose={() => setDepDrawerOpen(false)}
+        onClose={() => {
+          setDepDrawerOpen(false);
+          setDepFormError('');
+        }}
         title={t('models.drawerDepTitle')}
         subtitle={t('models.drawerDepSubtitle')}
         footer={
@@ -574,6 +644,16 @@ export function ModelsPage({environmentId, roles}: {environmentId: string; roles
         }
       >
         <form id="tp-add-deployment-form" className="tp-stack" onSubmit={handleCreateDeployment}>
+          {depFormError ? <Banner tone="danger">{depFormError}</Banner> : null}
+          {!environmentId && environments.length > 0 ? (
+            <SelectField
+              label={t('common.environment')}
+              value={deployEnvId}
+              placeholder={t('models.selectEnvironment')}
+              onChange={setDeployEnvId}
+              options={environments.map(env => ({value: env.id, label: `${env.name} (${env.slug})`}))}
+            />
+          ) : null}
           <SelectField
             label={t('models.logicalModel')}
             value={selectedModel}

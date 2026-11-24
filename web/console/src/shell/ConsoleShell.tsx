@@ -40,8 +40,9 @@ import {
   logoutAdmin,
   purgeOrgScopedClientState,
   setActiveOrgId,
+  subscribeUnauthorized,
 } from '../api/client';
-import {listKillSwitches, listPendingApprovals} from '../api/managementClient';
+import {listKillSwitches, listPendingApprovals, subscribeSecurityStateChanged} from '../api/managementClient';
 import type {components} from '../api/generated';
 import {Link, useRouter} from '../router/RouterContext';
 import {useI18n} from '../i18n/I18nProvider';
@@ -217,6 +218,36 @@ export function ConsoleShell() {
     void loadContext();
     return () => { active = false; };
   }, [navigate]);
+
+  useEffect(() => {
+    const unsubUnauth = subscribeUnauthorized(() => {
+      setSession(null);
+      setOrganizations([]);
+      setActiveOrgIdState('');
+      setProjects([]);
+      setProjectId('');
+      setEnvironments([]);
+      setEnvironmentId('');
+      setPendingApprovals(0);
+      setActiveSwitches(0);
+      navigate('/login?reason=session_expired', {replace: true});
+    });
+    const unsubSec = subscribeSecurityStateChanged(() => {
+      const userRoles = session?.roles ?? [];
+      if (!userRoles.some(role => emergencyRoles.includes(role))) return;
+      void Promise.allSettled([
+        listKillSwitches(),
+        userRoles.some(role => approvalRoles.includes(role)) ? listPendingApprovals() : Promise.resolve([]),
+      ]).then(([switchesRes, approvalsRes]) => {
+        if (switchesRes.status === 'fulfilled') setActiveSwitches(switchesRes.value.length);
+        if (approvalsRes.status === 'fulfilled') setPendingApprovals(approvalsRes.value.length);
+      });
+    });
+    return () => {
+      unsubUnauth();
+      unsubSec();
+    };
+  }, [navigate, session]);
 
   async function refreshOrganizations() {
     try {

@@ -12,6 +12,10 @@ export const operationPolicy = {
     "csrf": false,
     "ifMatch": false
   },
+  "POST /admin/v1/auth/enroll": {
+    "csrf": false,
+    "ifMatch": false
+  },
   "GET /admin/v1/auth/oidc/start": {
     "csrf": false,
     "ifMatch": false
@@ -103,6 +107,10 @@ export const operationPolicy = {
   "PATCH /admin/v1/members/{memberId}/roles": {
     "csrf": true,
     "ifMatch": true
+  },
+  "POST /admin/v1/members/{memberId}/enrollment-token": {
+    "csrf": true,
+    "ifMatch": false
   },
   "GET /admin/v1/overview/summary": {
     "csrf": false,
@@ -343,6 +351,14 @@ export const operationPolicy = {
   "POST /admin/v1/webhooks": {
     "csrf": true,
     "ifMatch": false
+  },
+  "PATCH /admin/v1/webhooks/{subscriptionId}": {
+    "csrf": true,
+    "ifMatch": true
+  },
+  "DELETE /admin/v1/webhooks/{subscriptionId}": {
+    "csrf": true,
+    "ifMatch": true
   },
   "GET /admin/v1/approvals": {
     "csrf": false,

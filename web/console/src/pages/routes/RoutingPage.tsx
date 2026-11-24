@@ -1,6 +1,6 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ArrowDown, ArrowUp, Play, Plus, Trash2} from 'lucide-react';
-import {listAdminModels, listDeployments} from '../../api/catalogClient';
+import {listAdminModels, listConnections, listDeployments} from '../../api/catalogClient';
 import {
   createRoute,
   deleteRoute,
@@ -37,6 +37,7 @@ type Role = components['schemas']['RbacRole'];
 type Route = components['schemas']['RouteResource'];
 type Deployment = components['schemas']['ModelDeployment'];
 type LogicalModel = components['schemas']['LogicalModel'];
+type Connection = components['schemas']['ProviderConnection'];
 type Strategy = components['schemas']['RouteUpsertRequest']['strategy'];
 type Target = components['schemas']['RouteUpsertRequest']['targets'][number];
 type Policy = components['schemas']['PolicyDocument'];
@@ -72,13 +73,14 @@ export function RoutingPage({
   const [routes, setRoutes] = useState<Route[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [models, setModels] = useState<LogicalModel[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [traces, setTraces] = useState<components['schemas']['TraceSummary'][]>([]);
 
   const [orgPolicy, setOrgPolicy] = useState<Policy | null>(null);
   const [projPolicy, setProjPolicy] = useState<Policy | null>(null);
   const [envPolicy, setEnvPolicy] = useState<Policy | null>(null);
   const [etags, setEtags] = useState<Record<PolicyScope, string>>({ORGANIZATION: '', PROJECT: '', ENVIRONMENT: ''});
-  const [editScope, setEditScope] = useState<PolicyScope>('ENVIRONMENT');
+  const [editScope, setEditScope] = useState<PolicyScope>(environmentId ? 'ENVIRONMENT' : projectId ? 'PROJECT' : 'ORGANIZATION');
   const [policyDraft, setPolicyDraft] = useState<Policy | null>(null);
   const [hookExtId, setHookExtId] = useState('');
   const [hookPosture, setHookPosture] = useState<'FAIL_CLOSED' | 'FAIL_OPEN'>('FAIL_CLOSED');
@@ -92,10 +94,12 @@ export function RoutingPage({
   const [timeoutMs, setTimeoutMs] = useState(60000);
   const [targets, setTargets] = useState<Target[]>([]);
   const [selectedDep, setSelectedDep] = useState('');
+  const [routeFormError, setRouteFormError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Route | null>(null);
 
   const [explainModel, setExplainModel] = useState('');
   const [explainRegion, setExplainRegion] = useState<DataRegion | ''>('');
+  const [explainDialect, setExplainDialect] = useState('');
   const [explainCaps, setExplainCaps] = useState<string[]>([]);
   const [explainResult, setExplainResult] = useState<components['schemas']['RouteExplainResponse'] | null>(null);
   const [explainBusy, setExplainBusy] = useState(false);
@@ -106,6 +110,9 @@ export function RoutingPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const refreshSeqRef = useRef(0);
+  const editScopeRef = useRef<PolicyScope>(editScope);
+  editScopeRef.current = editScope;
 
   const canManage = roles.some(role => manageRoles.includes(role));
   const scopeLabel = useCallback((scope: PolicyScope) => {
@@ -115,47 +122,74 @@ export function RoutingPage({
   }, [t]);
 
   const refresh = useCallback(async () => {
-    if (!projectId || !environmentId) {
+    const seq = ++refreshSeqRef.current;
+    const hasEnvScope = Boolean(projectId && environmentId);
+    if (!hasEnvScope) {
       setRoutes([]);
       setDeployments([]);
+      setTraces([]);
       setEnvPolicy(null);
-      setPolicyDraft(null);
-      setLoading(false);
-      return;
+      if (editScopeRef.current === 'ENVIRONMENT') {
+        const fallbackScope: PolicyScope = projectId ? 'PROJECT' : 'ORGANIZATION';
+        editScopeRef.current = fallbackScope;
+        setEditScope(fallbackScope);
+      }
     }
     setLoading(true);
     setError('');
     try {
-      const [routeRows, depRows, modelRows, traceRows, orgRes, projRes, envRes] = await Promise.all([
-        listRoutesForEnvironment(environmentId),
-        listDeployments(environmentId),
+      const [routeRows, depRows, modelRows, connRows, traceRows, orgRes, projRes, envRes] = await Promise.all([
+        hasEnvScope ? listRoutesForEnvironment(environmentId) : Promise.resolve([] as Route[]),
+        hasEnvScope ? listDeployments(environmentId) : Promise.resolve([] as Deployment[]),
         listAdminModels(),
-        listRecentTraces(environmentId),
+        listConnections(),
+        hasEnvScope ? listRecentTraces(environmentId) : Promise.resolve([] as components['schemas']['TraceSummary'][]),
         getEffectivePolicy(),
-        getEffectivePolicy(projectId),
-        getEffectivePolicy(projectId, environmentId),
+        projectId ? getEffectivePolicy(projectId) : Promise.resolve(null),
+        hasEnvScope ? getEffectivePolicy(projectId, environmentId) : Promise.resolve(null),
       ]);
+      if (refreshSeqRef.current !== seq) return;
       setRoutes(routeRows);
       setDeployments(depRows);
       setModels(modelRows);
+      setConnections(connRows);
       setTraces(traceRows);
       setOrgPolicy(orgRes.policy);
-      setProjPolicy(projRes.policy);
-      setEnvPolicy(envRes.policy);
-      setEtags({ORGANIZATION: orgRes.etag, PROJECT: projRes.etag, ENVIRONMENT: envRes.etag});
-      const activePol = editScope === 'ORGANIZATION' ? orgRes.policy : editScope === 'PROJECT' ? projRes.policy : envRes.policy;
+      setProjPolicy(projRes ? projRes.policy : null);
+      setEnvPolicy(envRes ? envRes.policy : null);
+      setEtags({
+        ORGANIZATION: orgRes.etag,
+        PROJECT: projRes ? projRes.etag : '',
+        ENVIRONMENT: envRes ? envRes.etag : '',
+      });
+      const activeScope = editScopeRef.current;
+      const activePol =
+        activeScope === 'ORGANIZATION'
+          ? orgRes.policy
+          : activeScope === 'PROJECT'
+            ? (projRes?.policy ?? orgRes.policy)
+            : (envRes?.policy ?? projRes?.policy ?? orgRes.policy);
       setPolicyDraft(activePol);
     } catch (cause) {
+      if (refreshSeqRef.current !== seq) return;
       setError(errText(cause, t));
     } finally {
-      setLoading(false);
+      if (refreshSeqRef.current === seq) setLoading(false);
     }
-  }, [projectId, environmentId, editScope, t]);
+  }, [projectId, environmentId, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
   const deploymentById = useMemo(() => new Map(deployments.map(d => [d.id, d])), [deployments]);
   const modelById = useMemo(() => new Map(models.map(m => [m.id, m])), [models]);
+  const connectionById = useMemo(() => new Map(connections.map(c => [c.id, c])), [connections]);
+  const formatDeploymentLabel = useCallback(
+    (dep: Deployment) => {
+      const connName = connectionById.get(dep.connection_id)?.name ?? dep.connection_id;
+      return `${connName} / ${dep.upstream_model_name} · ${dep.id.slice(-6)}`;
+    },
+    [connectionById],
+  );
   const trafficByRoute = useMemo(() => {
     const map = new Map<string, number>();
     for (const trace of traces) map.set(trace.route_slug, (map.get(trace.route_slug) ?? 0) + 1);
@@ -174,6 +208,7 @@ export function RoutingPage({
     setTimeoutMs(60000);
     setTargets([]);
     setSelectedDep('');
+    setRouteFormError('');
     setRouteDrawerOpen(true);
   }
 
@@ -185,6 +220,7 @@ export function RoutingPage({
     setTimeoutMs(route.request_timeout_ms);
     setTargets(route.targets.map(tg => ({...tg})));
     setSelectedDep('');
+    setRouteFormError('');
     setRouteDrawerOpen(true);
   }
 
@@ -213,6 +249,7 @@ export function RoutingPage({
   async function saveRoute() {
     if (!canManage || !slug.trim() || targets.length === 0 || (isWeighted(strategy) && totalWeight !== 100) || routeHasInvalidRegion) return;
     setBusy(true);
+    setRouteFormError('');
     setError('');
     setNotice('');
     try {
@@ -222,7 +259,7 @@ export function RoutingPage({
       await refresh();
       setNotice(editingRoute ? t('routing.routeUpdated', {slug: slug.trim()}) : t('routing.routeCreated', {slug: slug.trim()}));
     } catch (cause) {
-      setError(errText(cause, t));
+      setRouteFormError(errText(cause, t));
       if (isConflict(cause)) setConflict({kind: 'route', message: errText(cause, t), current: currentResource(cause)});
     } finally {
       setBusy(false);
@@ -253,15 +290,16 @@ export function RoutingPage({
     setError('');
     setExplainResult(null);
     try {
-      const result = await explainRouteDecision({
+      const payload: components['schemas']['RouteExplainRequest'] = {
         env_id: environmentId,
         target_model: explainModel.trim(),
         data_region: explainRegion as DataRegion,
-        dialect: 'openai_compatible',
         required_capabilities: explainCaps,
         estimated_input_tokens: 512,
         max_output_tokens: 1024,
-      });
+        ...(explainDialect ? {dialect: explainDialect} : {}),
+      };
+      const result = await explainRouteDecision(payload);
       if (!result.dry_run) throw new Error(t('routing.explainNotDryRun'));
       setExplainResult(result);
     } catch (cause) {
@@ -271,6 +309,7 @@ export function RoutingPage({
     }
   }
 
+  const effectiveDisplayPolicy = envPolicy ?? projPolicy ?? orgPolicy;
   const selectedPolicy = editScope === 'ORGANIZATION' ? orgPolicy : editScope === 'PROJECT' ? projPolicy : envPolicy;
   const parentPolicy = editScope === 'ENVIRONMENT' ? projPolicy : editScope === 'PROJECT' ? orgPolicy : null;
   const canEditPolicy = Boolean(selectedPolicy && (editScope === 'ORGANIZATION' ? roles.includes('ORG_OWNER') : canManage));
@@ -327,20 +366,20 @@ export function RoutingPage({
     setConflict(null);
   }
 
-  const policyRows = envPolicy
+  const policyRows = effectiveDisplayPolicy
     ? [
-        {id: 'regions', rule: t('routing.rule.regions'), value: (envPolicy.allowed_data_regions ?? []).join(', ') || t('common.noneConfigured'), source: regionSource(orgPolicy, projPolicy, envPolicy, t, scopeLabel)},
-        {id: 'models', rule: t('routing.rule.models'), value: (envPolicy.allowed_models ?? ['*']).join(', ') || t('routing.rule.denyAll'), source: modelSource(orgPolicy, projPolicy, envPolicy, t, scopeLabel)},
-        {id: 'trust', rule: t('routing.rule.trust'), value: t(`routing.trust.${envPolicy.min_plugin_trust}`), source: scalarSource(orgPolicy, projPolicy, envPolicy, 'min_plugin_trust', t, scopeLabel)},
-        {id: 'assurance', rule: t('routing.rule.assurance'), value: formatOperationalState(envPolicy.min_capability_assurance), source: scalarSource(orgPolicy, projPolicy, envPolicy, 'min_capability_assurance', t, scopeLabel)},
-        {id: 'rpm', rule: t('routing.rule.rpm'), value: envPolicy.rpm_ceiling != null ? formatNumber(envPolicy.rpm_ceiling) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, envPolicy, 'rpm_ceiling', t, scopeLabel)},
-        {id: 'tpm', rule: t('routing.rule.tpm'), value: envPolicy.tpm_ceiling != null ? formatNumber(envPolicy.tpm_ceiling) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, envPolicy, 'tpm_ceiling', t, scopeLabel)},
-        {id: 'streams', rule: t('routing.rule.streams'), value: envPolicy.max_concurrent_streams != null ? formatNumber(envPolicy.max_concurrent_streams) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, envPolicy, 'max_concurrent_streams', t, scopeLabel)},
+        {id: 'regions', rule: t('routing.rule.regions'), value: (effectiveDisplayPolicy.allowed_data_regions ?? []).join(', ') || t('common.noneConfigured'), source: regionSource(orgPolicy, projPolicy, effectiveDisplayPolicy, t, scopeLabel)},
+        {id: 'models', rule: t('routing.rule.models'), value: (effectiveDisplayPolicy.allowed_models ?? ['*']).join(', ') || t('routing.rule.denyAll'), source: modelSource(orgPolicy, projPolicy, effectiveDisplayPolicy, t, scopeLabel)},
+        {id: 'trust', rule: t('routing.rule.trust'), value: t(`routing.trust.${effectiveDisplayPolicy.min_plugin_trust}`), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'min_plugin_trust', t, scopeLabel)},
+        {id: 'assurance', rule: t('routing.rule.assurance'), value: formatOperationalState(effectiveDisplayPolicy.min_capability_assurance), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'min_capability_assurance', t, scopeLabel)},
+        {id: 'rpm', rule: t('routing.rule.rpm'), value: effectiveDisplayPolicy.rpm_ceiling != null ? formatNumber(effectiveDisplayPolicy.rpm_ceiling) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'rpm_ceiling', t, scopeLabel)},
+        {id: 'tpm', rule: t('routing.rule.tpm'), value: effectiveDisplayPolicy.tpm_ceiling != null ? formatNumber(effectiveDisplayPolicy.tpm_ceiling) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'tpm_ceiling', t, scopeLabel)},
+        {id: 'streams', rule: t('routing.rule.streams'), value: effectiveDisplayPolicy.max_concurrent_streams != null ? formatNumber(effectiveDisplayPolicy.max_concurrent_streams) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'max_concurrent_streams', t, scopeLabel)},
         {
           id: 'hooks',
           rule: t('routing.rule.hooks'),
-          value: (envPolicy.guardrail_hooks ?? []).map(h => `${h.extension_id} (${formatOperationalState(h.failure_posture)})`).join(', ') || t('common.noneAttached'),
-          source: hookSource(orgPolicy, projPolicy, envPolicy, t, scopeLabel),
+          value: (effectiveDisplayPolicy.guardrail_hooks ?? []).map(h => `${h.extension_id} (${formatOperationalState(h.failure_posture)})`).join(', ') || t('common.noneAttached'),
+          source: hookSource(orgPolicy, projPolicy, effectiveDisplayPolicy, t, scopeLabel),
         },
       ]
     : [];
@@ -382,7 +421,7 @@ export function RoutingPage({
         ]}
       />
 
-      {!environmentId ? <Banner tone="info">{t('routing.selectScopeBanner')}</Banner> : null}
+      {!environmentId && activeTab !== 'policies' ? <Banner tone="info">{t('routing.selectScopeBanner')}</Banner> : null}
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {notice ? <Banner tone="ok">{notice}</Banner> : null}
 
@@ -417,8 +456,9 @@ export function RoutingPage({
                 render: row => (
                   <span className="mono">
                     {row.targets.map(tg => {
-                      const name = deploymentById.get(tg.deployment_id)?.upstream_model_name ?? tg.deployment_id;
-                      return tg.weight !== undefined ? `${name} (${tg.weight}%)` : name;
+                      const dep = deploymentById.get(tg.deployment_id);
+                      const label = dep ? formatDeploymentLabel(dep) : tg.deployment_id;
+                      return tg.weight !== undefined ? `${label} (${tg.weight}%)` : label;
                     }).join(' → ')}
                   </span>
                 ),
@@ -471,7 +511,7 @@ export function RoutingPage({
           <div className="tp-surface tp-surface-pad tp-stack">
             <h2>{t('routing.explainHeading')}</h2>
             <p className="tp-muted">{t('routing.explainDesc')}</p>
-            <div className="tp-grid-2">
+            <div className="tp-grid-3">
               <RouteTypeahead
                 label={t('routing.explainTargetLabel')}
                 suggestions={[...routes.map(r => r.slug), ...models.map(m => m.slug)]}
@@ -489,6 +529,19 @@ export function RoutingPage({
                 options={[
                   {value: '', label: t('routing.chooseRegion')},
                   ...explainRegionChoices.map(reg => ({value: reg, label: t(`common.region.${reg}`)})),
+                ]}
+              />
+              <SelectField
+                label={t('routing.explainDialect')}
+                value={explainDialect}
+                disabled={explainBusy}
+                onChange={setExplainDialect}
+                options={[
+                  {value: '', label: t('routing.dialectNormalized')},
+                  {value: 'openai_compatible', label: 'openai_compatible'},
+                  {value: 'ollama', label: 'ollama'},
+                  {value: 'anthropic', label: 'anthropic'},
+                  {value: 'google_gemini', label: 'google_gemini'},
                 ]}
               />
             </div>
@@ -533,7 +586,7 @@ export function RoutingPage({
         </section>
       ) : null}
 
-      {activeTab === 'policies' && envPolicy && policyDraft ? (
+      {activeTab === 'policies' && effectiveDisplayPolicy && policyDraft ? (
         <div className="tp-stack">
           <section className="tp-section">
             <SectionHeader title={t('routing.effectivePolicy')} />
@@ -569,8 +622,8 @@ export function RoutingPage({
                     }}
                     options={[
                       {value: 'ORGANIZATION', label: t('common.organization')},
-                      {value: 'PROJECT', label: t('common.project')},
-                      {value: 'ENVIRONMENT', label: t('common.environment')},
+                      {value: 'PROJECT', label: t('common.project'), disabled: !projectId || !projPolicy},
+                      {value: 'ENVIRONMENT', label: t('common.environment'), disabled: !environmentId || !envPolicy},
                     ]}
                   />
                 </div>
@@ -755,7 +808,10 @@ export function RoutingPage({
 
       <Drawer
         open={routeDrawerOpen}
-        onClose={() => setRouteDrawerOpen(false)}
+        onClose={() => {
+          setRouteDrawerOpen(false);
+          setRouteFormError('');
+        }}
         size="lg"
         title={editingRoute ? t('routing.drawerEditTitle', {slug: editingRoute.slug}) : t('routing.createRoute')}
         subtitle={t('routing.drawerSubtitle')}
@@ -773,6 +829,7 @@ export function RoutingPage({
           </>
         }
       >
+        {routeFormError ? <Banner tone="danger">{routeFormError}</Banner> : null}
         <TextField label={t('routing.col.routeSlug')} value={slug} disabled={busy} onChange={event => setSlug(event.target.value)} />
         <SelectField
           label={t('routing.routingStrategy')}
@@ -804,7 +861,7 @@ export function RoutingPage({
                   .filter(d => !targets.some(tg => tg.deployment_id === d.id))
                   .map(d => {
                     const eff = d.state === 'ACTIVE_HEALTHY' && d.connection_state && d.connection_state !== 'ACTIVE' ? d.connection_state : d.state;
-                    return {value: d.id, label: `${d.upstream_model_name} (${d.data_region} · ${formatOperationalState(eff)})`};
+                    return {value: d.id, label: `${formatDeploymentLabel(d)} (${d.data_region} · ${formatOperationalState(eff)})`};
                   }),
               ]}
             />
@@ -832,7 +889,7 @@ export function RoutingPage({
               return (
                 <li key={target.deployment_id} className="tp-list-item">
                   <div className="tp-stack-sm" style={{minWidth: 0, flex: '1 1 160px'}}>
-                    <span className="mono" style={{fontWeight: 600}}>#{index + 1} {dep?.upstream_model_name ?? target.deployment_id}</span>
+                    <span className="mono" style={{fontWeight: 600}}>#{index + 1} {dep ? formatDeploymentLabel(dep) : target.deployment_id}</span>
                     <span className="tp-muted">{dep ? `${dep.data_region} · ${formatOperationalState(effState)}` : t('routing.unavailableDeployment')}</span>
                   </div>
                   <div className="tp-row">

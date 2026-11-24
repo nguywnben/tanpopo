@@ -1,26 +1,29 @@
-import {useCallback, useEffect, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react';
 import {Archive, Plus, RefreshCw, ShieldCheck} from 'lucide-react';
 import {getExtensionLockfile, listSecretMetadata} from '../../api/catalogClient';
 import {
   createEncryptedBackup,
   createWebhook,
+  deleteWebhook,
   getClusterOpsStatus,
   getReadinessProbe,
   listAuditEvents,
   listWebhooks,
   runUpgradePreflight,
+  updateWebhook,
 } from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {useI18n} from '../../i18n/I18nProvider';
 import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
 import {MultiSelectField} from '../../ui/MultiSelectField';
-import {Drawer} from '../../ui/Overlays';
+import {ConfirmDialog, Drawer} from '../../ui/Overlays';
 import {
   Banner,
   Button,
   CodeBlock,
   MetricStrip,
+  RowActionsMenu,
   SectionHeader,
   SelectField,
   StatusPill,
@@ -68,15 +71,19 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
   const [webhookUrl, setWebhookUrl] = useState('');
   const [webhookEvents, setWebhookEvents] = useState<WebhookEvent[]>(['kill_switch.triggered', 'mcp.approval.pending']);
   const [webhookSecretId, setWebhookSecretId] = useState('');
+  const [webhookError, setWebhookError] = useState('');
+  const [deleteWebhookTarget, setDeleteWebhookTarget] = useState<WebhookSub | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const refreshSeqRef = useRef(0);
 
   const authorized = roles.includes('OPERATOR');
 
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeqRef.current;
     if (!authorized) {
       setLoading(false);
       return;
@@ -91,6 +98,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
       listWebhooks(),
       listSecretMetadata(),
     ]);
+    if (seq !== refreshSeqRef.current) return;
     const failures: string[] = [];
     if (readyRes.status === 'fulfilled') setReadiness(readyRes.value);
     else failures.push(t('operations.loadReadinessFailed', {error: errText(readyRes.reason, t)}));
@@ -100,13 +108,15 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
     if (backupRes.status === 'fulfilled') setBackups(backupRes.value.data);
     if (webhookRes.status === 'fulfilled') setWebhooks(webhookRes.value);
     if (secretRes.status === 'fulfilled') {
-      const filtered = secretRes.value.filter(s => s.secret_kind === 'WEBHOOK_HMAC_SECRET');
+      const filtered = secretRes.value.filter(
+        s => s.secret_kind === 'WEBHOOK_HMAC_SECRET' && (s.project_id ?? '') === (projectId || ''),
+      );
       setHmacSecrets(filtered);
-      setWebhookSecretId(curr => curr || filtered[0]?.credential_id || '');
+      setWebhookSecretId(curr => (filtered.some(s => s.credential_id === curr) ? curr : (filtered[0]?.credential_id ?? '')));
     }
     setError(failures.join(' '));
     setLoading(false);
-  }, [authorized, t]);
+  }, [authorized, projectId, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -143,6 +153,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
     event.preventDefault();
     if (!webhookUrl.trim() || !webhookSecretId || webhookEvents.length === 0) return;
     setBusy(true);
+    setWebhookError('');
     setError('');
     setNotice('');
     try {
@@ -157,6 +168,39 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
       await refresh();
       setNotice(t('operations.webhookRegistered'));
     } catch (cause) {
+      setWebhookError(errText(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleToggleWebhook(sub: WebhookSub) {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await updateWebhook(sub, {enabled: !sub.enabled});
+      await refresh();
+      setNotice(sub.enabled ? t('operations.webhookDisabled') : t('operations.webhookEnabled'));
+    } catch (cause) {
+      setError(errText(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteWebhook() {
+    if (!deleteWebhookTarget) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await deleteWebhook(deleteWebhookTarget);
+      setDeleteWebhookTarget(null);
+      await refresh();
+      setNotice(t('operations.webhookDeleted'));
+    } catch (cause) {
+      setDeleteWebhookTarget(null);
       setError(errText(cause, t));
     } finally {
       setBusy(false);
@@ -333,7 +377,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
             title={t('operations.webhooksTitle')}
             count={webhooks.length}
             actions={
-              <Button variant="primary" size="sm" onClick={() => setWebhookOpen(true)}>
+              <Button variant="primary" size="sm" onClick={() => { setWebhookError(''); setWebhookOpen(true); }}>
                 <Plus size={14} aria-hidden="true" />
                 <span>{t('operations.addWebhook')}</span>
               </Button>
@@ -347,10 +391,35 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
             emptyTitle={t('operations.emptyWebhooksTitle')}
             emptyDescription={t('operations.emptyWebhooksDesc')}
             columns={[
-              {id: 'origin', header: t('operations.col.receiverOrigin'), primary: true, width: '32%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.target_origin}</span>},
-              {id: 'events', header: t('operations.col.subscribedEvents'), width: '40%', render: row => <span className="mono tp-muted">{row.events.join(', ')}</span>},
+              {id: 'origin', header: t('operations.col.receiverOrigin'), primary: true, width: '28%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.target_origin}</span>},
+              {id: 'events', header: t('operations.col.subscribedEvents'), width: '34%', render: row => <span className="mono tp-muted">{row.events.join(', ')}</span>},
               {id: 'state', header: t('common.state'), width: '14%', render: row => <StatusPill tone={row.enabled ? 'ok' : 'neutral'} label={row.enabled ? formatOperationalState('ENABLED') : formatOperationalState('DISABLED')} />},
               {id: 'created', header: t('common.created'), width: '14%', render: row => <span className="num tp-muted">{formatDateTime(row.created_at_ms, {dateStyle: 'medium'})}</span>},
+              {
+                id: 'actions',
+                header: t('common.actions'),
+                width: '10%',
+                render: row => (
+                  <RowActionsMenu
+                    label={t('common.actionsFor', {name: row.target_origin})}
+                    disabled={busy}
+                    items={[
+                      {
+                        id: 'toggle',
+                        label: row.enabled ? t('operations.action.disableWebhook') : t('operations.action.enableWebhook'),
+                        onClick: () => void handleToggleWebhook(row),
+                      },
+                      {type: 'divider' as const},
+                      {
+                        id: 'delete',
+                        label: t('operations.action.deleteWebhook'),
+                        variant: 'destructive' as const,
+                        onClick: () => setDeleteWebhookTarget(row),
+                      },
+                    ]}
+                  />
+                ),
+              },
             ]}
           />
         </section>
@@ -358,12 +427,12 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
 
       <Drawer
         open={webhookOpen}
-        onClose={() => setWebhookOpen(false)}
+        onClose={() => { setWebhookOpen(false); setWebhookError(''); }}
         title={t('operations.webhookDrawerTitle')}
         subtitle={t('operations.webhookDrawerSubtitle')}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setWebhookOpen(false)}>{t('common.cancel')}</Button>
+            <Button variant="secondary" onClick={() => { setWebhookOpen(false); setWebhookError(''); }}>{t('common.cancel')}</Button>
             <Button type="submit" form="tp-register-webhook-form" variant="primary" loading={busy} disabled={!webhookUrl.trim() || !webhookSecretId || webhookEvents.length === 0}>
               {t('operations.registerWebhook')}
             </Button>
@@ -371,6 +440,7 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
         }
       >
         <form id="tp-register-webhook-form" className="tp-stack" onSubmit={handleCreateWebhook}>
+          {webhookError ? <Banner tone="danger">{webhookError}</Banner> : null}
           <TextField label={t('operations.httpsReceiverUrl')} type="url" required placeholder="https://hooks.example.com/tanpopo" value={webhookUrl} onChange={event => setWebhookUrl(event.target.value)} />
           <SelectField
             label={t('operations.signingCredential')}
@@ -396,6 +466,16 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
           />
         </form>
       </Drawer>
+
+      <ConfirmDialog
+        open={deleteWebhookTarget !== null}
+        onClose={() => setDeleteWebhookTarget(null)}
+        title={t('operations.deleteWebhookTitle', {origin: deleteWebhookTarget?.target_origin ?? ''})}
+        description={t('operations.deleteWebhookDesc', {events: deleteWebhookTarget?.events.join(', ') ?? ''})}
+        confirmLabel={t('operations.action.deleteWebhook')}
+        busy={busy}
+        onConfirm={() => void handleDeleteWebhook()}
+      />
     </div>
   );
 }

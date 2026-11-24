@@ -517,7 +517,8 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
         title={t('security.clearTitle')}
         description={t('security.clearDesc', {level: clearTarget ? levelLabel(clearTarget.level) : '', target: clearTarget?.target_id ?? ''})}
         confirmLabel={t('security.clearBtn')}
-        busy={busy || clearReason.trim().length < 5}
+        busy={busy}
+        confirmDisabled={clearReason.trim().length < 5}
         onConfirm={() => void handleConfirmClear()}
       >
         <TextField
@@ -548,7 +549,7 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
                   label: t('security.eventHash'),
                   value: (
                     <span className="tp-row">
-                      <CheckCircle2 size={14} style={{color: 'var(--status-ok-ink)', flexShrink: 0}} aria-hidden="true" />
+                      <CheckCircle2 size={14} style={{color: 'var(--color-success)', flexShrink: 0}} aria-hidden="true" />
                       <span className="mono">{inspectedEvent.event_hash}</span>
                     </span>
                   ),

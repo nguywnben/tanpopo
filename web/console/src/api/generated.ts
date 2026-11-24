@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/auth/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Redeem a single-use enrollment token to set local password and establish session (DEF-021) */
+        post: operations["enrollLocalMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/auth/oidc/start": {
         parameters: {
             query?: never;
@@ -364,6 +381,23 @@ export interface paths {
         head?: never;
         /** Update principal RBAC roles with anti-self-escalation check (SCR-13) */
         patch: operations["updateMemberRoles"];
+        trace?: never;
+    };
+    "/admin/v1/members/{memberId}/enrollment-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue or reissue a single-use local enrollment token for a HUMAN member (DEF-021) */
+        post: operations["issueMemberEnrollmentToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/v1/overview/summary": {
@@ -1181,6 +1215,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/webhooks/{subscriptionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke and delete a webhook subscription and cancel pending deliveries (DEF-034) */
+        delete: operations["deleteWebhookSubscription"];
+        options?: never;
+        head?: never;
+        /** Enable, disable, or update events on a webhook subscription (DEF-034) */
+        patch: operations["updateWebhookSubscription"];
+        trace?: never;
+    };
     "/admin/v1/approvals": {
         parameters: {
             query?: never;
@@ -1658,9 +1710,27 @@ export interface components {
             kind: "HUMAN" | "SERVICE_ACCOUNT";
             roles: components["schemas"]["RbacRole"][];
             project_ids?: string[];
+            has_password?: boolean;
+            enrollment_pending?: boolean;
             version: number;
             /** Format: date-time */
             created_at: string;
+        };
+        CreateMemberResponse: components["schemas"]["MemberSummary"] & {
+            enrollment_token?: string | null;
+            /** Format: date-time */
+            enrollment_expires_at?: string | null;
+        };
+        IssueEnrollmentTokenResponse: {
+            member_id: string;
+            enrollment_token: string;
+            /** Format: date-time */
+            enrollment_expires_at: string;
+        };
+        EnrollRequest: {
+            token: string;
+            password: string;
+            org_id?: string;
         };
         VirtualKeyCreateRequest: {
             name: string;
@@ -1956,6 +2026,7 @@ export interface components {
         ExtensionInstallation: {
             id: string;
             package_id: string;
+            canonical_name?: string;
             active_version?: string | null;
             candidate_version?: string | null;
             previous_rollback_version?: string | null;
@@ -1994,8 +2065,8 @@ export interface components {
             env_id: string;
             target_model: string;
             data_region?: components["schemas"]["DataRegion"];
-            /** @default openai_compatible */
-            dialect: string;
+            /** @description Optional native adapter dialect; omit or pass normalized for unified /v1/* routing simulation. */
+            dialect?: string;
             required_capabilities?: string[];
             /** @default 512 */
             estimated_input_tokens: number;
@@ -2145,7 +2216,7 @@ export interface components {
             scope_tier: "ORGANIZATION" | "PROJECT" | "ENVIRONMENT" | "VIRTUAL_KEY";
             scope_id: string;
             /** @enum {string} */
-            period: "DAILY" | "MONTHLY";
+            period: "DAILY" | "MONTHLY" | "TOTAL_LIFETIME";
             hard_limit_micros: number;
             soft_warning_percents?: number[];
             settled_exact_micros: number;
@@ -2399,6 +2470,57 @@ export interface operations {
                 };
             };
             /** @description Invalid credentials */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description 429 auth_rate_limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    enrollLocalMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrollRequest"];
+            };
+        };
+        responses: {
+            /** @description Enrollment succeeded and session established */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSessionResponse"];
+                };
+            };
+            /** @description weak_password */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description invalid_enrollment_token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3086,6 +3208,7 @@ export interface operations {
     listMembers: {
         parameters: {
             query?: {
+                project_id?: components["parameters"]["ProjectIdQueryParam"];
                 limit?: components["parameters"]["LimitParam"];
                 /** @description HMAC-signed org_id-bound opaque pagination cursor. */
                 cursor?: components["parameters"]["CursorParam"];
@@ -3144,7 +3267,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MemberSummary"];
+                    "application/json": components["schemas"]["CreateMemberResponse"];
                 };
             };
             /** @description role_escalation_denied */
@@ -3202,6 +3325,41 @@ export interface operations {
             };
             /** @description optimistic_lock_conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    issueMemberEnrollmentToken: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enrollment token issued (shown once) */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueEnrollmentTokenResponse"];
+                };
+            };
+            /** @description role_escalation_denied */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5138,6 +5296,8 @@ export interface operations {
         parameters: {
             query?: {
                 project_id?: components["parameters"]["ProjectIdQueryParam"];
+                /** @description When true alongside project_id, also returns active ORGANIZATION ceilings enforcing limits on the project. */
+                include_ancestors?: boolean;
                 limit?: components["parameters"]["LimitParam"];
                 /** @description HMAC-signed org_id-bound opaque pagination cursor. */
                 cursor?: components["parameters"]["CursorParam"];
@@ -5185,7 +5345,7 @@ export interface operations {
                     scope_id?: string;
                     hard_limit_micros: number;
                     /** @enum {string} */
-                    period: "DAILY" | "MONTHLY";
+                    period: "DAILY" | "MONTHLY" | "TOTAL_LIFETIME";
                     soft_warning_percents?: number[];
                 };
             };
@@ -5349,6 +5509,134 @@ export interface operations {
             };
             /** @description Project or signing credential unavailable in this scope */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    deleteWebhookSubscription: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Optimistic concurrency revision ETag (e.g., '"v3"'). Stale values return 409 optimistic_lock_conflict. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook subscription deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        deleted: boolean;
+                        id: string;
+                    };
+                };
+            };
+            /** @description Insufficient permission or invalid session CSRF */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description optimistic_lock_conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    updateWebhookSubscription: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Optimistic concurrency revision ETag (e.g., '"v3"'). Stale values return 409 optimistic_lock_conflict. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    enabled?: boolean;
+                    events?: components["schemas"]["WebhookEvents"];
+                };
+            };
+        };
+        responses: {
+            /** @description Webhook subscription updated */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSubscriptionResource"];
+                };
+            };
+            /** @description Invalid payload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Insufficient permission or invalid session CSRF */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description optimistic_lock_conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
