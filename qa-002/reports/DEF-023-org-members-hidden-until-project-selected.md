@@ -12,6 +12,10 @@
 4. Query `GET /admin/v1/members` in the same org-owner session: status 200, exactly one member, the newly added owner. The persisted database row belongs to the test organization and has the expected HUMAN_LOCAL principal and ORG_OWNER binding.
 5. Create a project and environment through the UI/API, select them, then reload Members & Roles. The same screen shows count `1` and the owner row.
 
+## Independent project-without-environment retest — CP110
+
+On 18084, the authorized owner selected project `QA002 CP78 Fresh Budget` but no environment. The real **Add member** form returned 201 for a synthetic Developer and showed “Member added.”; the organization members view continued to show zero. The same-session explicit-organization `GET /admin/v1/members?limit=100` returned five persisted records including the new principal. Switching to `QA002 Audit mwto47wa / stage` changed the UI to five and displayed that same synthetic record. This independently confirms the defect across org-only and project-without-environment states on a second data snapshot while same-tenant API authorization remains intact. See [CP110](../checkpoints/CP110-local-member-enrollment-independent-runtime.md) and [sanitized evidence](../evidence/CP110-local-member-onboarding.json). No cross-tenant request was made.
+
 ## Evidence
 
 - `../evidence/CP39-org-owner-member-created.png` — inspected confirmation after the real UI add-member action.

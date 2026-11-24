@@ -43,6 +43,13 @@ Teams cannot complete the local-only member onboarding journey or have the new D
 - Invalid, expired, replayed, and cross-organization enrollment tokens fail closed and are audit-visible without leaking token material.
 - If only external identities are supported in a mode, require/confirm that identity provider and show the prerequisite before principal creation; preserve `SERVICE_ACCOUNT` behavior separately.
 
+
+## Independent runtime retest — CP110
+
+CP110 repeated the local-only onboarding journey on the separate 18084 runtime and exact frozen baseline. The real Console form again offered only email, role, and scoped project; create returned 201 and “Member added.” with a HUMAN Developer role but no invitation or credential setup. In a fresh unauthenticated browser context the same new principal's local sign-in returned 401 and the login UI had no invite, activation, or password-reset path. The new first-login failure is independently reproducible; the intended local-vs-external identity contract remains uncertain as stated above.
+
+CP110 also confirmed the existing DEF-023 false-empty state: after the successful create, organization-only/project-without-environment UI remained at zero while an explicit-organization members GET returned five; project + `stage` displayed those five persisted records. See [CP110](../checkpoints/CP110-local-member-enrollment-independent-runtime.md) and sanitized visual/request evidence `../evidence/CP110-local-member-onboarding.json` plus its linked screenshots. The test member is synthetic and remains in the isolated 18084 database because neither UI nor documented Admin API exposes a member-delete operation; no direct database edit was used.
+
 ## Evidence
 
 - `../evidence/CP30-member-create-form.png` — actual member drawer with a selected role and no credential/invitation fields.

@@ -1,10 +1,19 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP109
+**Latest checkpoint:** CP110
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP110 — Local HUMAN member enrollment on a second runtime
+
+- **Historical DEF-001–015:** preserve scoped QA-002 outcomes only; DEF-005 remains PARTIAL; DEF-007 gained a CP110 successful member.created event/548-event chain check; this does not close injected-fault atomicity or independent erasure-proof gaps. No QA-001 PASS is inherited.
+- **Existing findings:** DEF-016–038 remain preserved/open. CP110 independently reconfirmed DEF-021 Moderate on 18084, and DEF-023 Moderate through same-tenant UI/API scope comparison. No finding was removed, downgraded, or newly added.
+- **Coverage completed:** real owner created a synthetic HUMAN Developer; create returned 201 and “Member added.”, explicit-organization API read showed the persisted record, clean Chromium login returned 401 with no enrollment/reset action, and changing to project+environment showed five rows. The new `member.created` event appeared at seq 548 and the UI verified all 548 chain events intact. Screenshots visually inspected.
+- **Coverage blocked/remaining:** the supported local-human identity enrollment contract remains unresolved; without an enrollment route, successful new-member login and post-enrollment RBAC cannot be tested. Synthetic account retained because no UI or API member-delete route is documented. All other incomplete product/defect/browser/platform work continues.
+- **Recommended handoffs:** add CP110 evidence to DEF-021; pair its scope comparison with DEF-023. Prioritize DEF-038 alongside DEF-007 and preserve other existing handoffs; do not weaken SSRF or authorization boundaries.
+- **Checkpoint:** [CP110](checkpoints/CP110-local-member-enrollment-independent-runtime.md); [DEF-021](reports/DEF-021-member-added-without-supported-local-enrollment.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP109 — Extension permission review and staged-candidate cleanup
 
