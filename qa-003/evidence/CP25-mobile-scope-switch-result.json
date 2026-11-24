@@ -1,0 +1,30 @@
+{
+  "before": {
+    "label": "default",
+    "scope": "Default Organization / default / dev",
+    "providerCount": 3,
+    "emptyState": false,
+    "visibleSummary": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n3\nVault Secrets\n1\nAdapters\n1\nConfigured connections\n3\nQA003 SSRF redirect boundary (8k78zaaf)\nhttp://127.0.0.1:19189\nRegion / Billing\nON_PREM · Self-hosted\nState\nUnverified\nDetail (2)\nQA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\nRegion / Billing\nON_PREM ·"
+  },
+  "switched": {
+    "label": "operator-created-org",
+    "scope": "QA003 Operator CP22 / No project / No env",
+    "providerCount": 0,
+    "emptyState": true,
+    "visibleSummary": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nConnections\nVault Secrets\nAdapters\n1\nConfigured connections\n0\nNo provider connections\nCreate a connection to bind a protocol adapter and write-only vault secret.\nNew connection"
+  },
+  "afterRefresh": {
+    "label": "after-refresh",
+    "scope": "Default Organization / default / dev",
+    "providerCount": 3,
+    "emptyState": false,
+    "visibleSummary": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n3\nVault Secrets\n1\nAdapters\n1\nConfigured connections\n3\nQA003 SSRF redirect boundary (8k78zaaf)\nhttp://127.0.0.1:19189\nRegion / Billing\nON_PREM · Self-hosted\nState\nUnverified\nDetail (2)\nQA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\nRegion / Billing\nON_PREM ·"
+  },
+  "restored": {
+    "label": "restored-default",
+    "scope": "Default Organization / default / dev",
+    "providerCount": 3,
+    "emptyState": false,
+    "visibleSummary": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n3\nVault Secrets\n1\nAdapters\n1\nConfigured connections\n3\nQA003 SSRF redirect boundary (8k78zaaf)\nhttp://127.0.0.1:19189\nRegion / Billing\nON_PREM · Self-hosted\nState\nUnverified\nDetail (2)\nQA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\nRegion / Billing\nON_PREM ·"
+  }
+}
