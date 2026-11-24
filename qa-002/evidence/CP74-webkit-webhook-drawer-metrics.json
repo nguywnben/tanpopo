@@ -1,0 +1,47 @@
+{
+  "width": 375,
+  "docWidth": 375,
+  "docHeight": 844,
+  "buttons": [
+    {
+      "text": "Cancel",
+      "x": 115.921875,
+      "y": 795.984375,
+      "width": 77.0625,
+      "height": 32,
+      "visible": true
+    },
+    {
+      "text": "Cancel",
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0,
+      "visible": false
+    },
+    {
+      "text": "Create project",
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0,
+      "visible": false
+    },
+    {
+      "text": "Cancel",
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0,
+      "visible": false
+    },
+    {
+      "text": "Create environment",
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0,
+      "visible": false
+    }
+  ]
+}

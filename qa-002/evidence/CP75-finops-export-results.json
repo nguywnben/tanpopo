@@ -1,0 +1,16 @@
+{
+  "requests": [
+    {
+      "url": "http://127.0.0.1:18084/admin/v1/usage/export?format=csv&group_by=model",
+      "method": "GET",
+      "post": null
+    },
+    {
+      "url": "http://127.0.0.1:18084/admin/v1/usage/export?format=json&group_by=model",
+      "method": "GET",
+      "post": null
+    }
+  ],
+  "csv": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count\nqa002-cp59-refresh-agent-r3,3000,0,1,0,0\nqa002-cp68-private-agent,3000,0,1,0,0\nqa002-local-agent,6000,0,2,0,0\nqa002-ollama-model,1,0,1,0,0\n",
+  "json": "[\n  {\n    \"group_key\": \"qa002-cp59-refresh-agent-r3\",\n    \"exact_micro_usd\": 3000,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 1,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  },\n  {\n    \"group_key\": \"qa002-cp68-private-agent\",\n    \"exact_micro_usd\": 3000,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 1,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  },\n  {\n    \"group_key\": \"qa002-local-agent\",\n    \"exact_micro_usd\": 6000,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 2,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  },\n  {\n    \"group_key\": \"qa002-ollama-model\",\n    \"exact_micro_usd\": 1,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 1,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  }\n]"
+}

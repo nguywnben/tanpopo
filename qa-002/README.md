@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP70 (Routes & Policies cross-project stale response).
+**Latest checkpoint:** CP75 (independent FinOps export retest).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -16,6 +16,11 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [CP56 — Hierarchical policy scope and residency inheritance](checkpoints/CP56-policy-scope-inheritance.md)
 - [CP57 — Policy-controlled live inference and recovery](checkpoints/CP57-policy-inference-enforcement.md)
 - [CP58 — Hostname-resolved private IP CIDR enforcement](checkpoints/CP58-hostname-resolved-private-cidr.md)
+- [CP71 — Members & Roles workspace scope and role boundary](checkpoints/CP71-members-role-and-workspace-scope-retest.md)
+- [CP72 — Team Admin member create/list refresh](checkpoints/CP72-team-admin-member-create-refresh-retest.md)
+- [CP73 — Failed provider promotion guard](checkpoints/CP73-provider-auth-failure-promotion-guard.md)
+- [CP74 — WebKit mobile webhook drawer](checkpoints/CP74-webkit-webhook-mobile-drawer-retest.md)
+- [CP75 — FinOps CSV/JSON exports](checkpoints/CP75-finops-model-export-retest.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [Historical defect retest register](DEFECT-RETEST-REGISTER.md)
 - `evidence/` — sanitized command outcomes, API/state snapshots, and visually reviewed screenshots.
