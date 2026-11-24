@@ -28,6 +28,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
 	"github.com/nguywnben/tanpopo/internal/ingress/a2a"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
+	"github.com/nguywnben/tanpopo/internal/security/egress"
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/postgres"
@@ -1002,6 +1003,77 @@ func TestCoordinator_SecurityHardeningRound1(t *testing.T) {
 		!strings.Contains(adminDelta, `"ActorKind":"PRINCIPAL"`) ||
 		!strings.Contains(adminDelta, `"EntryPoint":"`+port.AuditEntryPointAdminAPI+`"`) {
 		t.Fatalf("expected atomic PRINCIPAL/%s cancel audit, got %s", port.AuditEntryPointAdminAPI, adminDelta)
+	}
+}
+
+func TestDEF005_A2ADispatchBlocksUpstreamRedirect(t *testing.T) {
+	h := newA2AHarness(t, true)
+
+	// Start upstream agent server that attempts to redirect to cloud metadata on POST dispatch.
+	var redirHits int
+	redirSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirHits++
+		http.Redirect(w, r, "http://169.254.169.254/latest/meta-data", http.StatusFound)
+	}))
+	defer redirSrv.Close()
+
+	agent, err := h.reg.RegisterAgent(h.ctx, a2a.RegisterAgentParams{
+		OrgID:             h.orgID,
+		ProjectID:         h.projID,
+		AgentSlug:         "redir-agent",
+		Name:              "Redirecting Agent",
+		EndpointURL:       redirSrv.URL + "/a2a",
+		DataRegion:        "EU",
+		MaxDelegationHops: 2,
+		AllowPrivateIP:    true,
+		AllowedCIDRs:      []string{"127.0.0.1/32"},
+	})
+	if err != nil {
+		t.Fatalf("RegisterAgent redir-agent: %v", err)
+	}
+
+	rawMaster := make([]byte, 32)
+	_, _ = rand.Read(rawMaster)
+	kek, err := vault.NewStaticKEKProvider("kek_a2a_redir", rawMaster)
+	if err != nil {
+		t.Fatalf("NewStaticKEKProvider: %v", err)
+	}
+	t.Cleanup(kek.Close)
+	vs, err := vault.NewStore(vault.Config{
+		DB:            h.db,
+		KEK:           kek,
+		NowMs:         func() int64 { return h.clk.Now().UnixMilli() },
+		PostShredHook: func(context.Context) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("vault.NewStore: %v", err)
+	}
+	t.Cleanup(vs.Close)
+
+	a2aResolver := a2a.BrokerResolver{DB: h.db}
+	brk, err := broker.NewBlindBroker(broker.Config{
+		Resolver:       a2aResolver,
+		PolicyResolver: a2aResolver,
+		Vault:          vs,
+		Audit:          &a2aAuditSink{},
+		NowMs:          func() int64 { return h.clk.Now().UnixMilli() },
+	})
+	if err != nil {
+		t.Fatalf("NewBlindBroker: %v", err)
+	}
+
+	transport := &a2a.BrokerUpstreamTransport{Broker: brk}
+	_, derr := transport.DispatchTask(h.ctx, agent, a2a.TaskView{
+		TaskID:              "tsk_def005_redir",
+		TargetAgentID:       agent.ID,
+		HopCount:            1,
+		CallChainIDs:        []string{agent.ID},
+		TraceRootID:         "req_def005_a2a",
+		EnforcedRegion:      "EU",
+		SubBudgetHoldMicros: 1000,
+	}, []map[string]any{{"text": "hi"}})
+	if !errors.Is(derr, egress.ErrRedirectBlocked) {
+		t.Fatalf("expected egress.ErrRedirectBlocked from A2A upstream redirect, got %v (hits=%d)", derr, redirHits)
 	}
 }
 

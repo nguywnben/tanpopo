@@ -53,7 +53,7 @@ Every screen in the catalog below enforces six non-negotiable security, complian
 - **Validations:** Unexpired `Bootstrap Token`; admin password `>= 12` characters; even when `allow_private_ip = true` is checked for `127.0.0.1:11434` or LAN GPU subnets, cloud metadata endpoints (`169.254.169.254`, `fd00:ec2::254`) and Tanpopo's own listener ports (`:8080`, `:9090`) remain unconditionally blocked (`SSRFGuard`).
 - **Errors:** `410 bootstrap_already_completed` once setup is sealed, `401` expired/invalid bootstrap token (displays `tanpopo admin reset-bootstrap-token`; for forgotten local owner credentials post-setup, documents host break-glass `tanpopo admin reset-local-owner` per `CR-09`), `422` upstream probe failure, `429 auth_rate_limited`.
 - **Confirmation:** Mandatory checkbox confirming the show-once `Virtual Key` has been stored before dismissing the key dialog (`UX-GR-01`).
-- **Audit:** `system.bootstrap.claimed`, `iam.owner.created`, `connection.created`, `deployment.created`, `route.created`, `virtual_key.issued`.
+- **Audit:** `system.bootstrap.claimed`, `iam.owner.created`, `connection.created`, `deployment.created`, `route.created`, `virtual_key.created`.
 - **Success Feedback:** Step completion card displaying `request_id`, first-call `TTFT` latency, and primary button entering `/overview`.
 - **Accessibility & Responsive:** Built on `form-wizard-vertical` (guidance rail drops at `1024px–1279px`, stepper pivots horizontally below `768px`); `/login` uses `login-sso` with initial focus on the email field.
 
@@ -205,7 +205,7 @@ Every screen in the catalog below enforces six non-negotiable security, complian
 - **Validations:** Strictly 1 `env_id` per key; plain `SHA-256` key hashing; anti-self-privilege-escalation guard.
 - **Errors:** `403 role_escalation_denied`, `409 optimistic_lock_conflict`.
 - **Confirmation:** Show-once `Dialog` on key creation/rotation (`UX-GR-01`); explicit drain vs. stream-severing `AlertDialog` on revocation (`< 1s` single-node / `< 5s` cluster `TARGET / UNVERIFIED`).
-- **Audit:** `project.created`, `environment.created`, `virtual_key.issued`, `virtual_key.updated`, `virtual_key.rotated`, `virtual_key.revoked`, `iam.member_role_changed`.
+- **Audit:** `project.created`, `environment.created`, `virtual_key.created`, `virtual_key.updated`, `virtual_key.rotated`, `virtual_key.revoked`, `iam.member_role_changed`.
 - **Success Feedback:** `Toast` reporting `severed_streams_count` upon emergency revocation.
 - **Accessibility & Responsive:** Built on `table-page`; `375px` mobile view keeps **`Emergency Revoke`** prominent (`>= 44x44 CSS px`).
 

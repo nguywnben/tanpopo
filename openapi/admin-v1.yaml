@@ -399,8 +399,34 @@ components:
         project_ids:
           type: array
           items: { type: string }
+        has_password: { type: boolean }
+        enrollment_pending: { type: boolean }
         version: { type: integer }
         created_at: { type: string, format: date-time }
+
+    CreateMemberResponse:
+      allOf:
+        - $ref: "#/components/schemas/MemberSummary"
+        - type: object
+          properties:
+            enrollment_token: { type: ["string", "null"] }
+            enrollment_expires_at: { type: ["string", "null"], format: date-time }
+
+    IssueEnrollmentTokenResponse:
+      type: object
+      required: [member_id, enrollment_token, enrollment_expires_at]
+      properties:
+        member_id: { type: string }
+        enrollment_token: { type: string }
+        enrollment_expires_at: { type: string, format: date-time }
+
+    EnrollRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token: { type: string }
+        password: { type: string, minLength: 12 }
+        org_id: { type: string }
 
     VirtualKeyCreateRequest:
       type: object
@@ -808,6 +834,7 @@ components:
       properties:
         id: { type: string }
         package_id: { type: string }
+        canonical_name: { type: string }
         active_version: { type: ["string", "null"] }
         candidate_version: { type: ["string", "null"] }
         previous_rollback_version: { type: ["string", "null"] }
@@ -867,7 +894,7 @@ components:
         env_id: { type: string }
         target_model: { type: string }
         data_region: { $ref: "#/components/schemas/DataRegion" }
-        dialect: { type: string, default: openai_compatible }
+        dialect: { type: string, description: "Optional native adapter dialect; omit or pass normalized for unified /v1/* routing simulation." }
         required_capabilities:
           type: array
           items: { type: string }
@@ -1057,7 +1084,7 @@ components:
         id: { type: string }
         scope_tier: { type: string, enum: [ORGANIZATION, PROJECT, ENVIRONMENT, VIRTUAL_KEY] }
         scope_id: { type: string }
-        period: { type: string, enum: [DAILY, MONTHLY] }
+        period: { type: string, enum: [DAILY, MONTHLY, TOTAL_LIFETIME] }
         hard_limit_micros: { type: integer, minimum: 0 }
         soft_warning_percents:
           type: array
@@ -1272,6 +1299,39 @@ paths:
               schema: { $ref: "#/components/schemas/AdminSessionResponse" }
         "401":
           description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "429":
+          description: 429 auth_rate_limited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/auth/enroll:
+    post:
+      tags: [BootstrapAndAuth]
+      operationId: enrollLocalMember
+      security: []
+      summary: Redeem a single-use enrollment token to set local password and establish session (DEF-021)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnrollRequest" }
+      responses:
+        "200":
+          description: Enrollment succeeded and session established
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSessionResponse" }
+        "400":
+          description: weak_password
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "401":
+          description: invalid_enrollment_token
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
@@ -1807,6 +1867,7 @@ paths:
       operationId: listMembers
       summary: Cursor-paginated list of organization principals and 6-role RBAC bindings (SCR-13)
       parameters:
+        - $ref: "#/components/parameters/ProjectIdQueryParam"
         - $ref: "#/components/parameters/LimitParam"
         - $ref: "#/components/parameters/CursorParam"
       responses:
@@ -1851,7 +1912,7 @@ paths:
             ETag: { $ref: "#/components/headers/ETag" }
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/MemberSummary" }
+              schema: { $ref: "#/components/schemas/CreateMemberResponse" }
         "403":
           description: role_escalation_denied
           content:
@@ -1899,6 +1960,31 @@ paths:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
         "409":
           description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/members/{memberId}/enrollment-token:
+    post:
+      tags: [TenancyAndRBAC]
+      operationId: issueMemberEnrollmentToken
+      summary: Issue or reissue a single-use local enrollment token for a HUMAN member (DEF-021)
+      parameters:
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "201":
+          description: Enrollment token issued (shown once)
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssueEnrollmentTokenResponse" }
+        "403":
+          description: role_escalation_denied
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
@@ -3326,6 +3412,11 @@ paths:
       summary: List hierarchical micro-USD budgets, settled balances, and active pre-request holds (SCR-12)
       parameters:
         - $ref: "#/components/parameters/ProjectIdQueryParam"
+        - name: include_ancestors
+          in: query
+          required: false
+          description: When true alongside project_id, also returns active ORGANIZATION ceilings enforcing limits on the project.
+          schema: { type: boolean }
         - $ref: "#/components/parameters/LimitParam"
         - $ref: "#/components/parameters/CursorParam"
       responses:
@@ -3364,7 +3455,7 @@ paths:
                 scope_tier: { type: string, enum: [ORGANIZATION, PROJECT, ENVIRONMENT, VIRTUAL_KEY] }
                 scope_id: { type: string }
                 hard_limit_micros: { type: integer, minimum: 0 }
-                period: { type: string, enum: [DAILY, MONTHLY] }
+                period: { type: string, enum: [DAILY, MONTHLY, TOTAL_LIFETIME] }
                 soft_warning_percents: { type: array, items: { type: integer } }
       responses:
         "200":
@@ -3500,6 +3591,93 @@ paths:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
         "404":
           description: Project or signing credential unavailable in this scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/webhooks/{subscriptionId}:
+    patch:
+      tags: [TracesAndFinOps]
+      operationId: updateWebhookSubscription
+      summary: Enable, disable, or update events on a webhook subscription (DEF-034)
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                events: { $ref: "#/components/schemas/WebhookEvents" }
+      responses:
+        "200":
+          description: Webhook subscription updated
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookSubscriptionResource" }
+        "400":
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "403":
+          description: Insufficient permission or invalid session CSRF
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+    delete:
+      tags: [TracesAndFinOps]
+      operationId: deleteWebhookSubscription
+      summary: Revoke and delete a webhook subscription and cancel pending deliveries (DEF-034)
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "200":
+          description: Webhook subscription deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted, id]
+                properties:
+                  deleted: { type: boolean }
+                  id: { type: string }
+        "403":
+          description: Insufficient permission or invalid session CSRF
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: optimistic_lock_conflict
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }

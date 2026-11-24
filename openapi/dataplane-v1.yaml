@@ -134,6 +134,10 @@ components:
       description: System-wide unique request correlation ID (req_<26_crockford_base32>).
       schema:
         type: string
+    X-Tanpopo-Trace-Id:
+      description: Authoritative request trace record ID (trc_<26_crockford_base32>) for Admin trace waterfall lookup.
+      schema:
+        type: string
     X-Tanpopo-Usage-Accuracy:
       description: Settlement fidelity tier recorded in the two-phase micro-USD ledger.
       schema:

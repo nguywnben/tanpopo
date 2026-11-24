@@ -67,6 +67,7 @@ func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	projFilter := strings.TrimSpace(r.URL.Query().Get("project_id"))
+	includeAncestors := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("include_ancestors")), "true")
 	if projFilter != "" {
 		var exists int
 		err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
@@ -89,7 +90,11 @@ func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	filterHash := sha256HexString("budgets|" + projFilter)
+	filterKey := "budgets|" + projFilter
+	if includeAncestors {
+		filterKey += "|ancestors"
+	}
+	filterHash := sha256HexString(filterKey)
 	limit, cur, ok := parsePageParams(w, r, s.cursorSecret, "budgets", orgID, filterHash)
 	if !ok {
 		return
@@ -199,10 +204,11 @@ func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
 			batchCreatedMs = rrow.createdMs
 			batchLastID = rrow.id
 			resolvedProj := s.resolveBudgetScopeProjectID(r.Context(), orgID, rrow.scopeType, rrow.scopeID)
-			if projFilter != "" && resolvedProj != projFilter {
+			isOrgAncestor := includeAncestors && rrow.scopeType == ledger.ScopeOrg
+			if projFilter != "" && resolvedProj != projFilter && !isOrgAncestor {
 				continue
 			}
-			if !orgWide && (resolvedProj == "" || !allowedProjects[resolvedProj]) {
+			if !orgWide && !isOrgAncestor && (resolvedProj == "" || !allowedProjects[resolvedProj]) {
 				continue
 			}
 
@@ -353,8 +359,8 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		period := strings.ToUpper(strings.TrimSpace(req.Period))
-		if period != ledger.PeriodDaily && period != ledger.PeriodMonthly {
-			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "period must be DAILY or MONTHLY", false, nil)
+		if period != ledger.PeriodDaily && period != ledger.PeriodMonthly && period != ledger.PeriodTotalLifetime {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "period must be DAILY, MONTHLY, or TOTAL_LIFETIME", false, nil)
 			return
 		}
 		thresholds, okThresh := normalizeAndValidateThresholds(req.SoftWarningPercents)
@@ -463,8 +469,8 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	period := strings.ToUpper(strings.TrimSpace(req.Period))
-	if period != ledger.PeriodDaily && period != ledger.PeriodMonthly {
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "period must be DAILY or MONTHLY", false, nil)
+	if period != ledger.PeriodDaily && period != ledger.PeriodMonthly && period != ledger.PeriodTotalLifetime {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "period must be DAILY, MONTHLY, or TOTAL_LIFETIME", false, nil)
 		return
 	}
 	thresholds, okThresh := normalizeAndValidateThresholds(req.SoftWarningPercents)
@@ -980,10 +986,14 @@ func mapBudgetScopeOpenAPIToDB(tier string) (string, error) {
 }
 
 func mapBudgetPeriodOpenAPI(pk string) string {
-	if pk == ledger.PeriodDaily {
+	switch strings.ToUpper(strings.TrimSpace(pk)) {
+	case ledger.PeriodDaily:
 		return ledger.PeriodDaily
+	case ledger.PeriodTotalLifetime:
+		return ledger.PeriodTotalLifetime
+	default:
+		return ledger.PeriodMonthly
 	}
-	return ledger.PeriodMonthly
 }
 
 func decodeSoftThresholds(raw string) []int {
@@ -1020,6 +1030,9 @@ func computePeriodWindowMs(nowMs int64, period string) (int64, int64) {
 	if period == ledger.PeriodDaily {
 		start := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 		return start.UnixMilli(), start.AddDate(0, 0, 1).UnixMilli()
+	}
+	if period == ledger.PeriodTotalLifetime {
+		return nowMs, nowMs + (3650 * 24 * time.Hour).Milliseconds()
 	}
 	start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
 	return start.UnixMilli(), start.AddDate(0, 1, 0).UnixMilli()

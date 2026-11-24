@@ -649,8 +649,8 @@ func (s *Server) handleExplainRoute(w http.ResponseWriter, r *http.Request) {
 		maxOut = 1024
 	}
 	dialect := strings.TrimSpace(req.Dialect)
-	if dialect == "" {
-		dialect = "openai_compatible"
+	if strings.EqualFold(dialect, "normalized") || strings.EqualFold(dialect, "auto") {
+		dialect = ""
 	}
 
 	res := s.routeResolver.Explain(resolver.ResolveRequest{

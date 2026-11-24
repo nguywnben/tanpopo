@@ -470,6 +470,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodGet, Path: "/admin/v1/bootstrap/status", Public: true, Handler: s.handleBootstrapStatus},
 		{Method: http.MethodPost, Path: "/admin/v1/bootstrap/complete", Public: true, Handler: s.handleBootstrapComplete},
 		{Method: http.MethodPost, Path: "/admin/v1/auth/login", Public: true, Handler: s.handleAuthLogin},
+		{Method: http.MethodPost, Path: "/admin/v1/auth/enroll", Public: true, Handler: s.handleAuthEnroll},
 		{Method: http.MethodGet, Path: "/admin/v1/auth/oidc/start", Public: true, Handler: s.handleAuthOIDCStart},
 		{Method: http.MethodGet, Path: "/admin/v1/auth/oidc/callback", Public: true, Handler: s.handleAuthOIDCCallback},
 		{Method: http.MethodPost, Path: "/admin/v1/auth/oidc/refresh", Action: rbac.ActionSessionSelf, Handler: s.handleAuthOIDCRefresh},
@@ -490,6 +491,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodGet, Path: "/admin/v1/members", Action: rbac.ActionMemberRead, Handler: s.handleListMembers},
 		{Method: http.MethodPost, Path: "/admin/v1/members", Action: rbac.ActionMemberWrite, Handler: s.handleCreateMember},
 		{Method: http.MethodPatch, Path: "/admin/v1/members/{memberId}/roles", Action: rbac.ActionMemberWrite, Handler: s.handleUpdateMemberRoles},
+		{Method: http.MethodPost, Path: "/admin/v1/members/{memberId}/enrollment-token", Action: rbac.ActionMemberWrite, Handler: s.handleIssueMemberEnrollmentToken},
 		{Method: http.MethodGet, Path: "/admin/v1/virtual-keys", Action: rbac.ActionVKeyRead, Handler: s.handleListVirtualKeys},
 		{Method: http.MethodPost, Path: "/admin/v1/virtual-keys", Action: rbac.ActionVKeyCreate, Handler: s.handleCreateVirtualKey},
 		{Method: http.MethodPost, Path: "/admin/v1/projects/{projectId}/virtual-keys", Action: rbac.ActionVKeyCreate, Handler: s.handleCreateProjectVirtualKey},
@@ -572,6 +574,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 
 		{Method: http.MethodGet, Path: "/admin/v1/webhooks", Action: rbac.ActionWebhookRead, Handler: s.handleListWebhooks},
 		{Method: http.MethodPost, Path: "/admin/v1/webhooks", Action: rbac.ActionWebhookWrite, Handler: s.handleCreateWebhook},
+		{Method: http.MethodPatch, Path: "/admin/v1/webhooks/{subscriptionId}", Action: rbac.ActionWebhookWrite, Handler: s.handleUpdateWebhook},
+		{Method: http.MethodDelete, Path: "/admin/v1/webhooks/{subscriptionId}", Action: rbac.ActionWebhookWrite, Handler: s.handleDeleteWebhook},
 
 		// Group K: Approvals, Audit Log, Hash-Chain Verification, Kill Switch & Blast Radius
 		{Method: http.MethodGet, Path: "/admin/v1/approvals", Action: rbac.ActionApprovalRead, Handler: s.handleListApprovals},
@@ -630,7 +634,7 @@ func (s *Server) buildHandler() http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Cache-Control", "no-store")
-		if r.TLS != nil {
+		if s.oidcRequestIsHTTPS(r) {
 			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 		}
 		r = r.WithContext(contextWithRequestID(r.Context(), reqID))

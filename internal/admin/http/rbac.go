@@ -20,13 +20,27 @@ import (
 )
 
 type memberSummaryDTO struct {
-	ID         string   `json:"id"`
-	Email      string   `json:"email"`
-	Kind       string   `json:"kind"`
-	Roles      []string `json:"roles"`
-	ProjectIDs []string `json:"project_ids,omitempty"`
-	Version    int64    `json:"version"`
-	CreatedAt  string   `json:"created_at"`
+	ID                string   `json:"id"`
+	Email             string   `json:"email"`
+	Kind              string   `json:"kind"`
+	Roles             []string `json:"roles"`
+	ProjectIDs        []string `json:"project_ids,omitempty"`
+	HasPassword       bool     `json:"has_password"`
+	EnrollmentPending bool     `json:"enrollment_pending"`
+	Version           int64    `json:"version"`
+	CreatedAt         string   `json:"created_at"`
+}
+
+type createMemberResponse struct {
+	memberSummaryDTO
+	EnrollmentToken     *string `json:"enrollment_token,omitempty"`
+	EnrollmentExpiresAt *string `json:"enrollment_expires_at,omitempty"`
+}
+
+type issueEnrollmentTokenResponse struct {
+	MemberID            string `json:"member_id"`
+	EnrollmentToken     string `json:"enrollment_token"`
+	EnrollmentExpiresAt string `json:"enrollment_expires_at"`
 }
 
 type createMemberRequest struct {
@@ -71,7 +85,7 @@ func (s *Server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 	var q strings.Builder
 	args := []any{orgID}
 	q.WriteString(`
-		SELECT p.id, p.email_or_sub, p.kind, p.version, p.created_at_ms
+		SELECT p.id, p.email_or_sub, p.kind, CASE WHEN p.password_argon2id IS NOT NULL THEN 1 ELSE 0 END, p.version, p.created_at_ms
 		FROM principals p
 		WHERE p.org_id = ?`)
 	if projFilter != "" {
@@ -99,19 +113,24 @@ func (s *Server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var id, email, kind string
+			var hasPW port.FlexBool
 			var ver, createdMs int64
-			if serr := rows.Scan(&id, &email, &kind, &ver, &createdMs); serr != nil {
+			if serr := rows.Scan(&id, &email, &kind, &hasPW, &ver, &createdMs); serr != nil {
 				scanErr = serr
 				return nil
 			}
+			openKind := toOpenAPIMemberKind(kind)
+			hasPassword := bool(hasPW)
 			items = append(items, memberRow{
 				dto: memberSummaryDTO{
-					ID:        id,
-					Email:     email,
-					Kind:      toOpenAPIMemberKind(kind),
-					Roles:     []string{},
-					Version:   ver,
-					CreatedAt: formatTimeRFC3339Ms(createdMs),
+					ID:                id,
+					Email:             email,
+					Kind:              openKind,
+					Roles:             []string{},
+					HasPassword:       hasPassword,
+					EnrollmentPending: openKind == "HUMAN" && !hasPassword,
+					Version:           ver,
+					CreatedAt:         formatTimeRFC3339Ms(createdMs),
 				},
 				createdMs: createdMs,
 			})
@@ -314,19 +333,64 @@ func (s *Server) handleCreateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var enrollToken *string
+	var enrollExpiresAt *string
+	if dbKind == auth.PrincipalKindHumanLocal && s.auth != nil {
+		rawTok, expMs, tokErr := s.auth.CreateEnrollmentTokenTx(r.Context(), tx, orgID, prcID, sc.Actor.PrincipalID, auth.DefaultEnrollmentTTL, now)
+		if tokErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed issuing member enrollment token", true, nil)
+			return
+		}
+		tokAudID, idErr := idgen.New(idgen.PrefixAudit)
+		if idErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed minting enrollment audit id", true, nil)
+			return
+		}
+		expStr := formatTimeRFC3339Ms(expMs)
+		tokMeta, _ := json.Marshal(map[string]any{
+			"email":      email,
+			"expires_at": expStr,
+		})
+		if err := s.txAudit.AppendTx(r.Context(), tx, port.AuditEvent{
+			ID:           tokAudID,
+			CreatedAtMs:  now,
+			OrgID:        &orgID,
+			ActorKind:    "PRINCIPAL",
+			ActorID:      sc.Actor.PrincipalID,
+			EntryPoint:   port.AuditEntryPointAdminAPI,
+			EventType:    "member.enrollment_issued",
+			TargetType:   "principal",
+			TargetID:     prcID,
+			RequestID:    ptrOrNil(requestIDFromContext(r.Context())),
+			MetadataJSON: string(tokMeta),
+		}); err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording enrollment audit event", true, nil)
+			return
+		}
+		enrollToken = &rawTok
+		enrollExpiresAt = &expStr
+	}
+
 	if err := tx.Commit(); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing member", true, nil)
 		return
 	}
 
-	dto := memberSummaryDTO{
-		ID:         prcID,
-		Email:      email,
-		Kind:       toOpenAPIMemberKind(dbKind),
-		Roles:      roles,
-		ProjectIDs: projIDsForResp,
-		Version:    1,
-		CreatedAt:  formatTimeRFC3339Ms(now),
+	openKind := toOpenAPIMemberKind(dbKind)
+	dto := createMemberResponse{
+		memberSummaryDTO: memberSummaryDTO{
+			ID:                prcID,
+			Email:             email,
+			Kind:              openKind,
+			Roles:             roles,
+			ProjectIDs:        projIDsForResp,
+			HasPassword:       false,
+			EnrollmentPending: openKind == "HUMAN",
+			Version:           1,
+			CreatedAt:         formatTimeRFC3339Ms(now),
+		},
+		EnrollmentToken:     enrollToken,
+		EnrollmentExpiresAt: enrollExpiresAt,
 	}
 	w.Header().Set("ETag", FormatETag(1))
 	writeJSON(w, http.StatusCreated, dto)
@@ -361,15 +425,16 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 
 	var (
 		email, kind string
+		hasPW       port.FlexBool
 		version     int64
 		createdMs   int64
 	)
 	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
 		return q.QueryRowContext(r.Context(), s.rebind(`
-		SELECT email_or_sub, kind, version, created_at_ms
+		SELECT email_or_sub, kind, CASE WHEN password_argon2id IS NOT NULL THEN 1 ELSE 0 END, version, created_at_ms
 		FROM principals WHERE id = ? AND org_id = ?`),
 			memberID, orgID,
-		).Scan(&email, &kind, &version, &createdMs)
+		).Scan(&email, &kind, &hasPW, &version, &createdMs)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "member not found", false, nil)
@@ -385,14 +450,18 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading current member roles", true, nil)
 		return
 	}
+	openKind := toOpenAPIMemberKind(kind)
+	hasPassword := bool(hasPW)
 	currentDTO := memberSummaryDTO{
-		ID:         memberID,
-		Email:      email,
-		Kind:       toOpenAPIMemberKind(kind),
-		Roles:      curRoles,
-		ProjectIDs: curProjs,
-		Version:    version,
-		CreatedAt:  formatTimeRFC3339Ms(createdMs),
+		ID:                memberID,
+		Email:             email,
+		Kind:              openKind,
+		Roles:             curRoles,
+		ProjectIDs:        curProjs,
+		HasPassword:       hasPassword,
+		EnrollmentPending: openKind == "HUMAN" && !hasPassword,
+		Version:           version,
+		CreatedAt:         formatTimeRFC3339Ms(createdMs),
 	}
 
 	// Anti-self-escalation: never allow a principal to elevate their own roles or add scopes.
@@ -502,13 +571,14 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		_ = tx.Rollback()
 		var freshEmail, freshKind string
+		var freshHasPW port.FlexBool
 		var freshVer, freshCreatedMs int64
 		rerr := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
 			return q.QueryRowContext(r.Context(), s.rebind(`
-			SELECT email_or_sub, kind, version, created_at_ms
+			SELECT email_or_sub, kind, CASE WHEN password_argon2id IS NOT NULL THEN 1 ELSE 0 END, version, created_at_ms
 			FROM principals WHERE id = ? AND org_id = ?`),
 				memberID, orgID,
-			).Scan(&freshEmail, &freshKind, &freshVer, &freshCreatedMs)
+			).Scan(&freshEmail, &freshKind, &freshHasPW, &freshVer, &freshCreatedMs)
 		})
 		if errors.Is(rerr, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "member not found", false, nil)
@@ -523,14 +593,18 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading member roles after conflict", true, nil)
 			return
 		}
+		freshOpenKind := toOpenAPIMemberKind(freshKind)
+		freshHasPassword := bool(freshHasPW)
 		freshDTO := memberSummaryDTO{
-			ID:         memberID,
-			Email:      freshEmail,
-			Kind:       toOpenAPIMemberKind(freshKind),
-			Roles:      freshRoles,
-			ProjectIDs: freshProjs,
-			Version:    freshVer,
-			CreatedAt:  formatTimeRFC3339Ms(freshCreatedMs),
+			ID:                memberID,
+			Email:             freshEmail,
+			Kind:              freshOpenKind,
+			Roles:             freshRoles,
+			ProjectIDs:        freshProjs,
+			HasPassword:       freshHasPassword,
+			EnrollmentPending: freshOpenKind == "HUMAN" && !freshHasPassword,
+			Version:           freshVer,
+			CreatedAt:         formatTimeRFC3339Ms(freshCreatedMs),
 		}
 		writeOptimisticConflict(w, r, freshVer, freshDTO)
 		return
@@ -567,19 +641,154 @@ func (s *Server) handleUpdateMemberRoles(w http.ResponseWriter, r *http.Request)
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing member role update", true, nil)
 		return
 	}
+	if s.auth != nil {
+		s.auth.RevokePrincipalSessions(memberID)
+	}
 
 	nextVer := expectedVer + 1
 	updated := memberSummaryDTO{
-		ID:         memberID,
-		Email:      email,
-		Kind:       toOpenAPIMemberKind(kind),
-		Roles:      nextRoles,
-		ProjectIDs: projIDsForResp,
-		Version:    nextVer,
-		CreatedAt:  formatTimeRFC3339Ms(createdMs),
+		ID:                memberID,
+		Email:             email,
+		Kind:              openKind,
+		Roles:             nextRoles,
+		ProjectIDs:        projIDsForResp,
+		HasPassword:       hasPassword,
+		EnrollmentPending: openKind == "HUMAN" && !hasPassword,
+		Version:           nextVer,
+		CreatedAt:         formatTimeRFC3339Ms(createdMs),
 	}
 	w.Header().Set("ETag", FormatETag(nextVer))
 	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) handleIssueMemberEnrollmentToken(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	memberID := strings.TrimSpace(r.PathValue("memberId"))
+	if memberID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "member not found", false, nil)
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if rerr := rbac.HasAnyPermissionInOrg(sc.Actor, orgID, rbac.ActionMemberWrite); rerr != nil {
+		s.writeAuthError(w, r, rerr)
+		return
+	}
+
+	var email, kind string
+	var ver int64
+	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
+			SELECT email_or_sub, kind, version FROM principals WHERE id = ? AND org_id = ?`),
+			memberID, orgID,
+		).Scan(&email, &kind, &ver)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "member not found", false, nil)
+		return
+	}
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading member", true, nil)
+		return
+	}
+
+	_, _, curBindings, berr := s.loadMemberBindingDetails(r.Context(), orgID, memberID)
+	if berr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading member bindings", true, nil)
+		return
+	}
+	if !actorIsOrgOwnerOrOperator(sc.Actor, orgID) {
+		if len(curBindings) == 0 {
+			writeErrorEnvelope(w, r, http.StatusForbidden, "role_escalation_denied", "permission_error", "cannot issue enrollment token for unscoped member", false, nil)
+			return
+		}
+		for _, b := range curBindings {
+			if b.ScopeType != rbac.ScopeProject ||
+				b.RoleName == rbac.RoleOrgOwner ||
+				b.RoleName == rbac.RoleSecurityReviewer ||
+				b.RoleName == rbac.RoleFinOpsViewer ||
+				b.RoleName == rbac.RoleOperator {
+				writeErrorEnvelope(w, r, http.StatusForbidden, "role_escalation_denied", "permission_error", "only ORG_OWNER or OPERATOR can issue enrollment tokens for organization-level role holders", false, nil)
+				return
+			}
+			if aErr := rbac.Authorize(sc.Actor, rbac.ActionMemberWrite, rbac.TargetScope{OrgID: orgID, ProjectID: b.ScopeID}); aErr != nil {
+				writeErrorEnvelope(w, r, http.StatusForbidden, "role_escalation_denied", "permission_error", "cannot issue enrollment token outside caller project scope", false, nil)
+				return
+			}
+		}
+	}
+
+	if kind != auth.PrincipalKindHumanLocal {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "enrollment tokens are only supported for local HUMAN members", false, nil)
+		return
+	}
+	if !s.requireActiveOrg(w, r, orgID) {
+		return
+	}
+	if s.auth == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "auth_unavailable", "upstream_error", "local authentication service unavailable", true, nil)
+		return
+	}
+
+	now := s.nowMs()
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting enrollment token tx", true, nil)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(r.Context(), tx, s.dialect, orgID); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping enrollment token tx", true, nil)
+		return
+	}
+
+	rawTok, expMs, tokErr := s.auth.CreateEnrollmentTokenTx(r.Context(), tx, orgID, memberID, sc.Actor.PrincipalID, auth.DefaultEnrollmentTTL, now)
+	if tokErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed issuing enrollment token", true, nil)
+		return
+	}
+	expStr := formatTimeRFC3339Ms(expMs)
+	audID, idErr := idgen.New(idgen.PrefixAudit)
+	if idErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed minting enrollment audit id", true, nil)
+		return
+	}
+	metaJSON, _ := json.Marshal(map[string]any{
+		"email":      email,
+		"expires_at": expStr,
+	})
+	if err := s.txAudit.AppendTx(r.Context(), tx, port.AuditEvent{
+		ID:           audID,
+		CreatedAtMs:  now,
+		OrgID:        &orgID,
+		ActorKind:    "PRINCIPAL",
+		ActorID:      sc.Actor.PrincipalID,
+		EntryPoint:   port.AuditEntryPointAdminAPI,
+		EventType:    "member.enrollment_issued",
+		TargetType:   "principal",
+		TargetID:     memberID,
+		RequestID:    ptrOrNil(requestIDFromContext(r.Context())),
+		MetadataJSON: string(metaJSON),
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording enrollment audit event", true, nil)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing enrollment token", true, nil)
+		return
+	}
+
+	w.Header().Set("ETag", FormatETag(ver))
+	writeJSON(w, http.StatusCreated, issueEnrollmentTokenResponse{
+		MemberID:            memberID,
+		EnrollmentToken:     rawTok,
+		EnrollmentExpiresAt: expStr,
+	})
 }
 
 type memberBindingRow struct {

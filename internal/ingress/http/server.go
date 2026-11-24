@@ -690,6 +690,7 @@ func (s *Server) withIngressEnvelope(next http.Handler) http.Handler {
 			startedAtMs:   s.nowMs(),
 			rootSpan:      rootSpan,
 		}
+		w.Header().Set("X-Tanpopo-Trace-Id", reqTel.traceRecordID)
 		rCtx = rCtx.WithContext(withRequestTelemetry(spanCtx, reqTel))
 		scw := &statusCaptureWriter{ResponseWriter: w}
 		defer reqTel.finish(rCtx.Context(), scw, rCtx)

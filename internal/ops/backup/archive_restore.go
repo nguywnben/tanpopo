@@ -317,26 +317,40 @@ func verifyRestoredAuditChain(ctx context.Context, dbPath string) error {
 	if err := orgRows.Close(); err != nil {
 		return fmt.Errorf("backup: close organization audit query: %w", err)
 	}
-	allowedChains := make(map[string]struct{}, len(orgIDs)+1)
+	activeOrgs := make(map[string]struct{}, len(orgIDs))
 	for _, orgID := range orgIDs {
-		allowedChains[orgID] = struct{}{}
+		activeOrgs[orgID] = struct{}{}
 	}
-	allowedChains[audit.SystemChainKey] = struct{}{}
+	shreddedOrgs, err := loadRestoredShreddedOrgTombstones(ctx, db)
+	if err != nil {
+		return err
+	}
+
 	chainRows, err := db.QueryContext(ctx, `SELECT DISTINCT chain_key FROM audit_events ORDER BY chain_key`)
 	if err != nil {
 		return fmt.Errorf("backup: list audit chain partitions: %w", err)
 	}
 	var chainKeys []string
+	var shreddedChains []string
 	for chainRows.Next() {
 		var chainKey string
 		if err := chainRows.Scan(&chainKey); err != nil {
 			_ = chainRows.Close()
 			return fmt.Errorf("backup: read audit chain partition: %w", err)
 		}
-		if _, ok := allowedChains[chainKey]; !ok {
+		if chainKey == audit.SystemChainKey {
+			chainKeys = append(chainKeys, chainKey)
+			continue
+		}
+		if _, ok := activeOrgs[chainKey]; ok {
+			chainKeys = append(chainKeys, chainKey)
+			continue
+		}
+		if _, ok := shreddedOrgs[chainKey]; !ok {
 			_ = chainRows.Close()
 			return fmt.Errorf("backup: audit chain partition %q does not match any organization or SYSTEM", chainKey)
 		}
+		shreddedChains = append(shreddedChains, chainKey)
 		chainKeys = append(chainKeys, chainKey)
 	}
 	if err := chainRows.Err(); err != nil {
@@ -346,6 +360,12 @@ func verifyRestoredAuditChain(ctx context.Context, dbPath string) error {
 	if err := chainRows.Close(); err != nil {
 		return fmt.Errorf("backup: close audit partition query: %w", err)
 	}
+	for _, shreddedOrgID := range shreddedChains {
+		if err := verifyShreddedOrgPartitionState(ctx, db, shreddedOrgID); err != nil {
+			return err
+		}
+	}
+
 	var report *audit.VerifyReport
 	if len(chainKeys) == 0 {
 		report, err = audit.VerifyAuditChain(ctx, db, audit.VerifyOptions{})
@@ -358,12 +378,84 @@ func verifyRestoredAuditChain(ctx context.Context, dbPath string) error {
 				return fmt.Errorf("backup: initialized organization %q has no verifiable audit history", orgID)
 			}
 		}
+		for _, shreddedOrgID := range shreddedChains {
+			if chain, ok := report.Chains[shreddedOrgID]; !ok || chain.VerifiedCount == 0 || !chain.Valid {
+				return fmt.Errorf("backup: shredded organization %q has invalid or empty audit history", shreddedOrgID)
+			}
+		}
 	}
 	if err != nil {
 		return fmt.Errorf("backup: restored audit chain verification failed: %w", err)
 	}
 	if report == nil || !report.Valid {
 		return errors.New("backup: restored audit chain verification returned an invalid report")
+	}
+	return nil
+}
+
+func loadRestoredShreddedOrgTombstones(ctx context.Context, db *sql.DB) (map[string]struct{}, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT DISTINCT entity_id
+		FROM config_changelog
+		WHERE entity_kind = 'organization'
+		  AND mutation_type = 'SHRED'
+		  AND org_id = entity_id
+		ORDER BY entity_id`)
+	if err != nil {
+		return nil, fmt.Errorf("backup: list organization crypto-shred tombstones: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[string]struct{})
+	for rows.Next() {
+		var orgID string
+		if err := rows.Scan(&orgID); err != nil {
+			return nil, fmt.Errorf("backup: read organization crypto-shred tombstone: %w", err)
+		}
+		if orgID != "" {
+			out[orgID] = struct{}{}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("backup: iterate organization crypto-shred tombstones: %w", err)
+	}
+	return out, nil
+}
+
+func verifyShreddedOrgPartitionState(ctx context.Context, db *sql.DB, orgID string) error {
+	var (
+		eventOrgID sql.NullString
+		eventType  string
+		targetType string
+		targetID   string
+	)
+	err := db.QueryRowContext(ctx, `
+		SELECT org_id, event_type, target_type, target_id
+		FROM audit_events
+		WHERE chain_key = ?
+		ORDER BY seq_no DESC
+		LIMIT 1`, orgID).Scan(&eventOrgID, &eventType, &targetType, &targetID)
+	if errors.Is(err, sql.ErrNoRows) || err != nil ||
+		!eventOrgID.Valid || eventOrgID.String != orgID ||
+		eventType != "organization.crypto_shredded" ||
+		targetType != "organization" ||
+		targetID != orgID {
+		return fmt.Errorf("backup: audit chain partition %q does not match any organization or SYSTEM", orgID)
+	}
+	for _, check := range []struct {
+		name  string
+		query string
+	}{
+		{name: "org_encryption_keys", query: `SELECT COUNT(*) FROM org_encryption_keys WHERE org_id = ?`},
+		{name: "project_encryption_keys", query: `SELECT COUNT(*) FROM project_encryption_keys WHERE org_id = ?`},
+		{name: "secret_credentials", query: `SELECT COUNT(*) FROM secret_credentials WHERE org_id = ?`},
+	} {
+		var cnt int
+		if err := db.QueryRowContext(ctx, check.query, orgID).Scan(&cnt); err != nil {
+			return fmt.Errorf("backup: verify shredded org %q state in %s: %w", orgID, check.name, err)
+		}
+		if cnt != 0 {
+			return fmt.Errorf("backup: shredded organization %q still retains %d rows in %s", orgID, cnt, check.name)
+		}
 	}
 	return nil
 }
