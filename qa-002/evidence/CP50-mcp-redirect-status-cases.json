@@ -1,0 +1,41 @@
+{
+  "checkpoint": "CP50",
+  "baseline_commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "isolated Tanpopo server at 127.0.0.1:18086; local synthetic HTTP origin/target fixtures on 127.0.0.1:19170 and 127.0.0.1:19171",
+  "interaction": "real Chromium owner registered two MCP endpoints in the Console with private access enabled and 127.0.0.1/32 allowlisted, then used each row's Sync tools action",
+  "cases": [
+    {
+      "status_code": 302,
+      "origin": "http://127.0.0.1:19170/redirect/302/mcp",
+      "target": "http://127.0.0.1:19171/mcp",
+      "sync_http_status": 502,
+      "origin_requests": 1,
+      "target_requests": 0,
+      "persisted_tool_count": 0,
+      "ui_message": "upstream MCP tool synchronization failed"
+    },
+    {
+      "status_code": 303,
+      "origin": "http://127.0.0.1:19170/redirect/303/mcp",
+      "target": "http://127.0.0.1:19171/mcp",
+      "sync_http_status": 502,
+      "origin_requests": 1,
+      "target_requests": 0,
+      "persisted_tool_count": 0,
+      "ui_message": "upstream MCP tool synchronization failed"
+    }
+  ],
+  "interpretation": "Both tested redirect statuses failed closed at the origin. No redirect target was contacted and no tool was persisted. CP41's direct-target positive control demonstrated that a directly configured loopback target is reachable; this checkpoint did not follow a redirect, so it does not test per-hop revalidation.",
+  "visual_evidence": [
+    "CP50-redirect-302-form.png",
+    "CP50-redirect-302-sync.png",
+    "CP50-redirect-303-form.png",
+    "CP50-redirect-303-sync.png"
+  ],
+  "limitations": [
+    "Only HTTP 302 and 303 on loopback were tested in this phase.",
+    "No redirects were followed; redirect support semantics remain unresolved.",
+    "HTTPS redirects, redirect chains, 301/307/308 fresh retests, DNS rebinding, mixed DNS answers and alternate runtimes remain open.",
+    "No SSRF or authorization restriction was weakened."
+  ]
+}
