@@ -1,0 +1,55 @@
+{
+  "before": {
+    "status": 200,
+    "data": []
+  },
+  "createResponses": [
+    {
+      "method": "PUT",
+      "status": 200,
+      "body": "{\"id\":\"bgt_project_prj_01m87axgx7e008ehq1d016vqwt_monthly\",\"scope_tier\":\"PROJECT\",\"scope_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"period\":\"MONTHLY\",\"hard_limit_micros\":2500000,\"soft_warning_percents\":[50,80,95],\"settled_exact_micros\":0,\"settled_estimated_micros\":0,\"reserved_hold_micros\":0,\"negative_carryover_micros\":0,\"unmetered_request_count\":0,\"version\":1}\n"
+    }
+  ],
+  "afterCreate": {
+    "status": 200,
+    "data": [
+      {
+        "id": "bgt_project_prj_01m87axgx7e008ehq1d016vqwt_monthly",
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+        "period": "MONTHLY",
+        "limit": 2500000,
+        "version": 1
+      }
+    ]
+  },
+  "duplicateText": "Create budget ceiling\nConfigure an integer micro-USD ceiling for an organization, project, environment, or virtual key.\nA budget already exists for this scope and period. Update the existing limit instead of creating a duplicate.\nScope\nProject\nTarget scope ID\ndefault (default)\nPeriod\nMonthly\nHard limit (micro-USD)\n∙ Required\nSoft warning thresholds (%)\nCancel\nUpdate existing budget",
+  "updateOffer": 1,
+  "afterDuplicate": {
+    "status": 200,
+    "data": [
+      {
+        "id": "bgt_project_prj_01m87axgx7e008ehq1d016vqwt_monthly",
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+        "period": "MONTHLY",
+        "limit": 2500000,
+        "version": 1
+      }
+    ]
+  },
+  "fresh": {
+    "status": 200,
+    "data": [
+      {
+        "id": "bgt_project_prj_01m87axgx7e008ehq1d016vqwt_monthly",
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+        "period": "MONTHLY",
+        "limit": 2500000,
+        "version": 1
+      }
+    ]
+  },
+  "visibleFresh": "und\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa003-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nFinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExact settled\n$0.000000\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n1\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nPROJECT\nprj_01m87axgx7e008ehq1d016vqwt\n\tMonthly\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m87axgx7e008ehq1d016vqwt\nSave"
+}
