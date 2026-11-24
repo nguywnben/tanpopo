@@ -1,0 +1,14 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": "isolated localhost:18111",
+  "operations": [
+    {
+      "organization": "QA003 Multi-shred B",
+      "rowAfterShred": "absent"
+    },
+    {
+      "organization": "QA003 Multi-shred A",
+      "rowAfterShred": "absent"
+    }
+  ]
+}

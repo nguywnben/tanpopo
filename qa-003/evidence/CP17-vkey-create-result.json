@@ -1,0 +1,29 @@
+{
+  "create": {
+    "status": 201,
+    "name": "QA003 multi-shred A key",
+    "state": "CREATED_ACTIVE",
+    "secretLength": 50,
+    "plaintextSaved": false
+  },
+  "freshSessionReadback": {
+    "status": 200,
+    "orgSuffix": "pwmr3jhe",
+    "keys": [
+      {
+        "idSuffix": "nx0vfzha",
+        "name": "QA003 multi-shred A key",
+        "env_id": "env_01m87n9m6ke008y68t0s5yxt3s",
+        "state": "CREATED_ACTIVE",
+        "allowed_planes": [
+          "PROVIDER"
+        ],
+        "allowed_routes": [
+          "/v1/*"
+        ],
+        "version": 1,
+        "secretReturned": false
+      }
+    ]
+  }
+}
