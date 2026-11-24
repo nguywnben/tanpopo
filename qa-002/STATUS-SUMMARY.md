@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP88
+**Latest checkpoint:** CP89
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -224,3 +224,15 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** independent DEF-001–015 acceptance coverage remains incomplete; DEF-005 SSRF cases; DEF-007 failure atomicity/populated erasure; open DEF-016–034 remediation and regression; remaining Console roles/scopes, business workflows, cross-feature state, browsers/platforms, integrations, accessibility and operations.
 - **Recommended handoffs:** DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF controls, and DEF-007. No handoff added from CP88.
 - **Checkpoint:** [CP88](checkpoints/CP88-team-admin-security-audit-boundary.md); prior [CP87](checkpoints/CP87-finops-chargeback-scope-and-date-windows.md).
+
+
+## CP89 consolidated status update
+
+- **Historical DEF-001–015:** no new retests in CP89; scoped prior QA-002 dispositions remain, DEF-005 remains partial, independent acceptance coverage remains incomplete. No QA-001 PASS is inherited.
+- **Historical defects failing / unverified:** DEF-016–034 remain open; no status changed. Preserve DEF-034 and the DEF-020 recurrence.
+- **New findings:** no new defect. Existing trace API/UI inspection showed metadata only for two rows, both with `has_debug_payload=false`; full privacy/export acceptance remains unverified.
+- **Coverage completed:** real Chromium authenticated trace list/detail, API comparison and visual inspection; read-only YAML/listener check. No mutation.
+- **Coverage blocked:** no configured OTLP collector endpoint/access was established and no local 4317/4318 listener or YAML setting was found; process environment read was denied, so collector outage/drop counters were not tested. Direct webhook delivery/HMAC remains managed-egress blocked; A2A on 18445 is config-disabled; RC4 artifact remains unverified in the separate DevBox.
+- **Coverage remaining:** independent DEF-001–015 acceptance coverage; full TP-AC-F0804 marker/credential search and exporter outage/recovery; trace roles/search and other waterfall cases; DEF-005 SSRF cases; DEF-007 failure atomicity/populated erasure; all open DEF-016–034 remediation/regression; remaining product/browser/platform/integration/accessibility/operations coverage.
+- **Recommended handoffs:** unchanged—DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF controls, DEF-007. No new defect handoff.
+- **Checkpoint:** [CP89](checkpoints/CP89-trace-explorer-metadata-privacy.md); prior [CP88](checkpoints/CP88-team-admin-security-audit-boundary.md).
