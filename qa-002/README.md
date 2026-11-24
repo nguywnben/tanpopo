@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP57 (Policy-controlled live inference and recovery).
+**Latest checkpoint:** CP58 (Hostname-resolved private IP CIDR enforcement).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -15,6 +15,7 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [CP55 — Virtual Key RPM enforcement and recovery](checkpoints/CP55-vkey-rpm-enforcement-recovery.md)
 - [CP56 — Hierarchical policy scope and residency inheritance](checkpoints/CP56-policy-scope-inheritance.md)
 - [CP57 — Policy-controlled live inference and recovery](checkpoints/CP57-policy-inference-enforcement.md)
+- [CP58 — Hostname-resolved private IP CIDR enforcement](checkpoints/CP58-hostname-resolved-private-cidr.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [Historical defect retest register](DEFECT-RETEST-REGISTER.md)
 - `evidence/` — sanitized command outcomes, API/state snapshots, and visually reviewed screenshots.
@@ -92,6 +93,7 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP55 | Virtual Key RPM enforcement and recovery | PASS for one environment key: first Data Plane request returned 200, immediate second returned 429 `rate_limit_exceeded` with Retry-After 60 and no provider dispatch, and a later request recovered with 200; temporary key revoked. Cap provisioning in UI remains unverified; no defect classified. See [checkpoint](checkpoints/CP55-vkey-rpm-enforcement-recovery.md). |
 | CP56 | Hierarchical policy scope and residency inheritance | PASS for reversible organization EU restriction: effective organization/project/environment API state narrowed to EU, both child editors exposed only EU, and organization policy was restored to the original four regions. No widening child write or inference was sent. See [checkpoint](checkpoints/CP56-policy-scope-inheritance.md). |
 | CP57 | Policy-controlled live inference and recovery | PASS: synthetic ON_PREM route returned 200; EU-only organization policy caused a pre-egress 503; restoring all four regions returned 200 again. Persisted no-compliant-deployment trace; temporary key revoked. QA-OBS-006 recurred. See [checkpoint](checkpoints/CP57-policy-inference-enforcement.md). |
+| CP58 | Hostname-resolved private IP CIDR enforcement | PASS: `127.0.0.1.nip.io` resolved to loopback; mismatched CIDR sync returned 502 with zero fixture contact, while exact loopback `/32` reached only the synthetic fixture. DEF-026 and QA-OBS-004 recurred; DNS rebinding remains untested. See [checkpoint](checkpoints/CP58-hostname-resolved-private-cidr.md). |
 | CP53 | Public webhook prerequisite and Operator access | BLOCKED for registration/delivery because no usable Operator credential was available. Org Owner correctly lacks Operations navigation. A disposable synthetic receiver was created/deleted (201/204) with no payload sent. QA-OBS-003 recurred. See [checkpoint](checkpoints/CP53-public-webhook-prerequisite-and-operator-access.md). |
 | CP52 | Multi-target priority failover and route selection identity | PASS for one synthetic streaming failover: first provider returned 503, backup returned 200; persisted attempt order matched. FAIL DEF-027: multiple healthy same-model deployments from different connections are indistinguishable in route-target choices and summary. DEF-017 recurred; temporary key revoked. See [checkpoint](checkpoints/CP52-multi-target-failover-and-route-selection.md). |
 | CP51 | Organization budget enforcement and DEF-019 expansion | A synthetic child project/environment route succeeded under the organization ceiling; after temporary cap reduction, Playground returned generic 429 while the persisted trace carried `project_budget_exceeded` and no upstream request was dispatched. Cap restored and both temporary keys revoked. DEF-019 expanded; DEF-024 remains open. See [checkpoint](checkpoints/CP51-org-budget-enforcement-and-defect-019-expansion.md). |
