@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP52 (multi-target failover and route selection identity).
+**Latest checkpoint:** CP53 (webhook prerequisite and Operator access).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -85,6 +85,7 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP43 | Console workspace-scope consistency and FinOps budget visibility | FAIL DEF-023 (expanded) and DEF-024. MCP Hub list scope remains unresolved QA-OBS-008. See [checkpoint](checkpoints/CP43-console-workspace-scope-and-finops.md). |
 | CP44 | Org-only Console screens and Models deployment form | FAIL DEF-025; Add deployment is enabled without environment scope but cannot succeed and has no in-drawer scope selection. No backend mutation. See [checkpoint](checkpoints/CP44-org-only-console-surface-and-model-drawer.md). |
 | CP45 | Project-scoped Team Admin and MCP authorization boundary | PASS for tested role boundary: Team Admin only sees assigned project1 and MCP rows; project2 budget query returned 403. See [checkpoint](checkpoints/CP45-project-scoped-role-and-mcp-boundary.md). |
+| CP53 | Public webhook prerequisite and Operator access | BLOCKED for registration/delivery because no usable Operator credential was available. Org Owner correctly lacks Operations navigation. A disposable synthetic receiver was created/deleted (201/204) with no payload sent. QA-OBS-003 recurred. See [checkpoint](checkpoints/CP53-public-webhook-prerequisite-and-operator-access.md). |
 | CP52 | Multi-target priority failover and route selection identity | PASS for one synthetic streaming failover: first provider returned 503, backup returned 200; persisted attempt order matched. FAIL DEF-027: multiple healthy same-model deployments from different connections are indistinguishable in route-target choices and summary. DEF-017 recurred; temporary key revoked. See [checkpoint](checkpoints/CP52-multi-target-failover-and-route-selection.md). |
 | CP51 | Organization budget enforcement and DEF-019 expansion | A synthetic child project/environment route succeeded under the organization ceiling; after temporary cap reduction, Playground returned generic 429 while the persisted trace carried `project_budget_exceeded` and no upstream request was dispatched. Cap restored and both temporary keys revoked. DEF-019 expanded; DEF-024 remains open. See [checkpoint](checkpoints/CP51-org-budget-enforcement-and-defect-019-expansion.md). |
 | CP46 | Provisioning audit event and chain retest | PASS for CP43 project/environment and CP45 member creates; 55-event JCS chain verified. Failure injection and full organization provisioning coverage remain open. See [checkpoint](checkpoints/CP46-provisioning-audit-fresh-retest.md). |

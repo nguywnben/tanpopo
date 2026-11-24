@@ -38,3 +38,8 @@ Compare an invalid-model request, a provider outage, and a healthy successful re
 On the accumulated QA-002 SQLite runtime, WebKit at 375×844 showed 13 requests and a 53.85% internal/upstream error rate, zero active alerts, and “All systems nominal” with “No active operational alerts or pending remediation items.” This state differs from CP17's single deliberately invalid model request and 100% error rate, but it independently reproduces the KPI/copy tension. See `evidence/CP33-webkit-overview-375.png`, sanitized `evidence/CP33-webkit-mobile.json`, and `checkpoints/CP33-webkit-mobile-console-regression.md`. Because the runtime contains accumulated intentional negative testing and the meaning of this alert copy is still unspecified, classification remains an unresolved observation.
 
 At 320×720, CP34 again showed 13 requests, 53.85% internal/upstream error, zero active alerts and the same nominal wording in a settled Overview screenshot. The screenshot was visually inspected. See `evidence/CP34-webkit-overview-settled-320.png` and `checkpoints/CP34-webkit-320px-narrow-console.md`. This third recurrence does not resolve whether the status wording is intended to describe alert posture only.
+
+
+## Recurrence — CP53
+
+The isolated RC4 runtime showed 4 requests in 24 hours, a 25% error rate, zero active alerts, and “All systems nominal” in the Org Owner's visually inspected Overview. See `../evidence/CP53-org-owner-navigation.png` and `../evidence/CP53-webhook-prerequisite.json`. This is a recurrence of the same presentation tension; it does not establish which requests should generate alerts or a new defect.
