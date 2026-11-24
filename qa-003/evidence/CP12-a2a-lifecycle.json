@@ -1,0 +1,61 @@
+{
+  "orgId": "org_01m87axgx7e008eg6c8zvy7h5b",
+  "projectId": "prj_01m87axgx7e008ehq1d016vqwt",
+  "envId": "env_01m87axgx7e008ejsny065s8qz",
+  "keyStatus": 201,
+  "key": {
+    "id": "vky_01m87hjn7ge008grgr851sg7bz",
+    "name": "QA003 A2A lifecycle synthetic 2",
+    "prefix": "vk_tp_dev_",
+    "last_four": "WImU",
+    "allowed_planes": [
+      "A2A"
+    ]
+  },
+  "agentStatus": 409,
+  "agent": {
+    "agent_id": "agt_01m87hhknhe009qd127wj9y61y",
+    "agent_slug": "qa003-input-required-lifecycle",
+    "name": "QA003 Input Required Lifecycle Agent",
+    "endpoint_url": "http://127.0.0.1:19190/a2a",
+    "data_region": "ON_PREM"
+  },
+  "discoverStatus": 200,
+  "discovered": [
+    {
+      "agent_id": "agt_01m87hhknhe009qd127wj9y61y",
+      "agent_slug": "qa003-input-required-lifecycle",
+      "data_region": "ON_PREM"
+    },
+    {
+      "agent_id": "agt_01m87h6jj8e008khjfbsaj95wx",
+      "agent_slug": "qa003-ssrf-a2a2",
+      "data_region": "ON_PREM"
+    }
+  ],
+  "wrongPlaneStatus": 401,
+  "createStatus": 201,
+  "created": {
+    "task_id": "tsk_01m87hjn8te008v29dr4nfnspm",
+    "target_agent_id": "agt_01m87hhknhe009qd127wj9y61y",
+    "state": "input-required",
+    "prompt_message": "Please confirm the synthetic approval.",
+    "sub_budget_hold_micros": 10000,
+    "reservation_id_present": true
+  },
+  "resumeStatus": 200,
+  "resumed": {
+    "state": "completed",
+    "artifact_count": 1,
+    "settled_cost_micros": 1234,
+    "version": 5
+  },
+  "repeatStatus": 409,
+  "repeatError": "task_not_resumable",
+  "readStatus": 200,
+  "readback": {
+    "state": "completed",
+    "version": 5,
+    "settled_cost_micros": 1234
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "responses": [
+    {
+      "url": "http://127.0.0.1:18107/admin/v1/mcp/servers?limit=100",
+      "method": "GET",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"mcp_01m87hry72e0099df0m8n2c84w\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"slug\":\"qa003-mcp-sync-fixture\",\"name\":\"QA003 MCP Sync Fixture\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19191/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":1,\"version\":1},{\"id\":\"mcp_01m87h630de008vzc8x64ke1gd\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"slug\":\"qa003-ssrf-mcp\",\"name\":\"QA003 SSRF MCP\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19189/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":0,\"version\":1},{\"id\":\"mcp_01m87h6gexe00b5x24vz636pqp\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"slug\":\"qa003-ssrf-mcp2\",\"name\":\"QA003 SSRF MCP\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19189/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":0,\"version\":1}],\"has_more\":false,\"next_cursor\":null}\n"
+    },
+    {
+      "url": "http://127.0.0.1:18107/admin/v1/mcp/servers/mcp_01m87hry72e0099df0m8n2c84w/sync-tools",
+      "method": "POST",
+      "status": 200,
+      "body": "{\"drifted_count\":0,\"synced_count\":1,\"tools\":[{\"id\":\"mcp_01m87hshkte008xahjmfz3g8yg\",\"name\":\"lookup_synthetic_invoice\",\"schema_hash\":\"3bb0b4213246cead6219eafd8ea0eab52442c187f8a14612d3d6adfc5628885f\",\"drift_locked\":false,\"version\":2}]}\n"
+    },
+    {
+      "url": "http://127.0.0.1:18107/admin/v1/mcp/servers?limit=100",
+      "method": "GET",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"mcp_01m87hry72e0099df0m8n2c84w\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"slug\":\"qa003-mcp-sync-fixture\",\"name\":\"QA003 MCP Sync Fixture\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19191/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":1,\"version\":1},{\"id\":\"mcp_01m87h630de008vzc8x64ke1gd\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"slug\":\"qa003-ssrf-mcp\",\"name\":\"QA003 SSRF MCP\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19189/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":0,\"version\":1},{\"id\":\"mcp_01m87h6gexe00b5x24vz636pqp\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"slug\":\"qa003-ssrf-mcp2\",\"name\":\"QA003 SSRF MCP\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19189/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":0,\"version\":1}],\"has_more\":false,\"next_cursor\":null}\n"
+    },
+    {
+      "url": "http://127.0.0.1:18107/admin/v1/mcp/tools/mcp_01m87hshkte008xahjmfz3g8yg/grants",
+      "method": "POST",
+      "status": 201,
+      "body": "{\"id\":\"mcp_01m87hzqjqe00b6hs059cwa1gk\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"env_id\":\"env_01m87axgx7e008ejsny065s8qz\",\"virtual_key_id\":\"vky_01m87htqr8e009y4ghvjj5djh0\",\"version\":1,\"created_at_ms\":1795550076503}\n"
+    }
+  ],
+  "text": "MCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\n3\nA2A Agents & Active Tasks\n6\nGranted qa003-mcp-sync-fixture__lookup_synthetic_invoice to selected Virtual Key.\nRegistered MCP servers\n3\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA003 MCP Sync Fixture\nqa003-mcp-sync-fixture\n\thttp://127.0.0.1:19191/mcp\tActive\t1\t\nSync tools\n\n\nQA003 SSRF MCP\nqa003-ssrf-mcp\n\thttp://127.0.0.1:19189/mcp\tActive\t0\t\nSync tools\n\n\nQA003 SSRF MCP\nqa003-ssrf-mcp2\n\thttp://127.0.0.1:19189/mcp\tActive\t0\t\nSync tools\nQA003 MCP Sync Fixture tools\n1\nTool\tObserved JCS hash\tSchema review\tGrant to Virtual Key\nqa003-mcp-sync-fixture__lookup_synthetic_invoice\t3bb0b4213246cead6219eafd8ea0eab52442c187f8a14612d3d6adfc5628885f\t\nPinned\n\t\nVirtual key for lookup_synthetic_invoice\nQA003 MCP invocation synthetic (…uyHI)\nGrant"
+}

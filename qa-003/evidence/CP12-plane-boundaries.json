@@ -1,0 +1,11 @@
+{
+  "a2aVirtualKeyOnMCP": {
+    "status": 401,
+    "code": "invalid_virtual_key"
+  },
+  "mcpVirtualKeyOnA2A": {
+    "status": 403,
+    "code": "scope_or_plane_denied",
+    "message": "Virtual Key is not permitted on A2A plane."
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "uiProvisionedA2AKey": {
+    "id": "vky_01m87j30b0e0097agwb6fvehyd",
+    "name": "QA003 A2A UI provisioned",
+    "allowed_planes": "PROVIDER,A2A",
+    "allowed_routes_json": "[\"/a2a/*\"]",
+    "state": "CREATED_ACTIVE"
+  },
+  "mcpServer": {
+    "server_slug": "qa003-mcp-sync-fixture",
+    "allowed_cidrs_json": "[\"127.0.0.1/32\"]",
+    "pinning_mode": "STRICT_LOCK"
+  },
+  "a2aAgent": {
+    "agent_slug": "qa003-input-required-lifecycle",
+    "allowed_cidrs_json": "[\"127.0.0.1/32\"]",
+    "data_region": "ON_PREM",
+    "status": "ACTIVE"
+  },
+  "mcpTool": {
+    "tool_name": "lookup_synthetic_invoice",
+    "observed_schema_sha256": "3bb0b4213246cead6219eafd8ea0eab52442c187f8a14612d3d6adfc5628885f",
+    "approved_schema_sha256": "3bb0b4213246cead6219eafd8ea0eab52442c187f8a14612d3d6adfc5628885f",
+    "schema_drift_locked": 0
+  },
+  "mcpGrantCount": 1
+}

@@ -1,0 +1,17 @@
+[
+  {
+    "method": "GET",
+    "path": "/"
+  },
+  {
+    "method": "POST",
+    "path": "/a2a/tasks",
+    "task_id": "tsk_01m87hpcc5e008gc6kxzzg29z3",
+    "inputs": [
+      {
+        "kind": "text",
+        "text": "approve synthetic request CP12"
+      }
+    ]
+  }
+]
