@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP98
+**Latest checkpoint:** CP99
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -37,10 +37,11 @@
 | DEF-033 | Moderate | FinOps Create budget can update an existing same-scope ceiling once while reporting Created, then submit fixed revision v1 and fail 409 at v2. CP78 restored the tested cap. |
 | DEF-034 | Moderate | Webhook subscription cannot be disabled or deleted through the Console or Admin API; active external destinations cannot be revoked through a supported product workflow. |
 | DEF-035 | Moderate | Models shows sibling-project environment deployments with Disable/Delete actions while organization-only or an empty project is selected, without identifying deployment ownership. No unauthorized access or mutation was observed. |
+| DEF-036 | Low | Extensions Marketplace offers Stage for review for an already active Google Gemini package; the 409 duplicate rejection is rendered as raw storage/unique-constraint text with no direct upgrade recovery action. No persistent change. |
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
-## Latest phase: CP86
+## Historical phase: CP86
 
 - **Historical defects verified fixed:** DEF-001–004, DEF-006, DEF-008–015 retain only their scoped QA-002 results; CP82 independently revalidated DEF-014/015 over four groupings. DEF-005 remains partial. No QA-001 PASS is inherited.
 - **Historical defects failing / unverified:** DEF-016–034 remain confirmed open. DEF-023 was reconfirmed in CP80. DEF-007 has a fresh successful empty-organization crypto-shred/audit-chain path, while its failure atomicity and populated-resource acceptance remain unverified. DEF-034 is newly confirmed; actual delivery remains environment-blocked rather than a product defect.
@@ -346,3 +347,14 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** package permission consent and install, lockfile-to-runtime persistence, actual adapter invocation, blind credential broker, live host restrictions, Wasm traps/quotas/quarantine, rollback and platform parity; all earlier unfinished feature/defect coverage remains.
 - **Recommended handoffs:** no new handoff; preserve DEF-035 with DEF-023/024/029/030 and existing DEF-034/033/005/007 priorities.
 - **Checkpoint:** [CP98](checkpoints/CP98-plugin-authoring-offline-cassettes-and-package-integrity.md); prior [CP97](checkpoints/CP97-cli-provenance-gitops-and-doctor.md). `GATE-REL-07` remains **BLOCKED**.
+
+## CP99 consolidated status update
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006, and DEF-008–015 retain only the scoped QA-002 results recorded in the retest register; no QA-001 PASS is inherited. DEF-005 remains PARTIAL. DEF-007 successful audit paths do not close failure atomicity or populated erasure.
+- **Historical defects failing / unverified:** DEF-016–035 remain open; CP99 did not retest them. DEF-023 remains confirmed from earlier scope/API comparisons. No prior disposition was removed or downgraded.
+- **New defects:** DEF-036 Low confirmed: duplicate Marketplace staging for already-active `@tanpopo/gemini` returns 409 with raw storage error; installation list unchanged. No other new defect.
+- **Coverage completed:** real Chromium Installed and Marketplace navigation, catalog visual inspection, duplicate package action, HTTP 409 and before/after persistent installation comparison. Screenshots were visually inspected.
+- **Coverage blocked:** none specific to CP99. Extension permission-consent activation, package runtime isolation, remote CLI token, native ingress, direct webhook delivery and separate RC4 artifact blockers remain documented.
+- **Coverage remaining:** independent DEF-001–015 acceptance remains incomplete overall; DEF-005 residual SSRF scenarios; DEF-007 fault/populated erasure; DEF-016–036 regression; normal install/permission review/independent approval/activation/upgrade/uninstall; runtime plugin isolation/credential broker; remaining roles, product surfaces, browsers, platforms, integrations, and operations.
+- **Recommended engineering handoffs:** add DEF-036 to extension lifecycle handling; preserve DEF-035 with DEF-023/024/029/030, and existing DEF-034, DEF-033, DEF-005 without weakening SSRF, and DEF-007 priorities.
+- **Checkpoint:** [CP99](checkpoints/CP99-marketplace-duplicate-install-review.md); previous [CP98](checkpoints/CP98-plugin-authoring-offline-cassettes-and-package-integrity.md). `GATE-REL-07` remains **BLOCKED**.

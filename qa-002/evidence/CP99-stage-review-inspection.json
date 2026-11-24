@@ -1,0 +1,133 @@
+{
+  "url": "http://127.0.0.1:18084/extensions/marketplace",
+  "dialogs": [],
+  "visibleButtons": [
+    {
+      "i": 0,
+      "text": "",
+      "aria": "Sign out",
+      "disabled": false
+    },
+    {
+      "i": 1,
+      "text": "QA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 2,
+      "text": "Jump\nCtrl\nK",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 3,
+      "text": "English",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 4,
+      "text": "",
+      "aria": "Switch to dark theme",
+      "disabled": false
+    },
+    {
+      "i": 5,
+      "text": "Kill Switch",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 6,
+      "text": "Stage package",
+      "aria": "Stage package",
+      "disabled": false
+    },
+    {
+      "i": 7,
+      "text": "Installed\n2",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 8,
+      "text": "Marketplace\n8",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 9,
+      "text": "Lockfile",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 10,
+      "text": "All origins",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 11,
+      "text": "All capabilities",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 12,
+      "text": "All publishers",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 13,
+      "text": "Stage for review",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 14,
+      "text": "Stage for review",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 15,
+      "text": "Stage for review",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 16,
+      "text": "Stage for review",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 17,
+      "text": "Stage for review",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 18,
+      "text": "Stage for review",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 19,
+      "text": "Stage for review",
+      "aria": null,
+      "disabled": false
+    },
+    {
+      "i": 20,
+      "text": "Stage for review",
+      "aria": null,
+      "disabled": false
+    }
+  ],
+  "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-002-a2a-owner@example.invalid\nOperator, Org Owner\nQA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nExtensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\nstorage: unique constraint conflict: package \"@tanpopo/gemini\" is already registered in state ENABLED_ACTIVE (use StageUpgrade)\nSearch catalog\nOrigin trust\nAll origins\nCapability\nAll capabilities\nPublisher signature\nAll publishers\nPackage\tOrigin\tSignature\tTier\tCapabilities\tActions\n\nAnthropic Official Adapter\n@tanpopo/anthropic · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Anthropic Messages API (/v1/messages, system extraction, tool_use/tool_result, image/PDF blob_ref splicing, stateful SSE normalization, and /native/anthropic/*).\n\tOfficial\tNone\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nAWS Bedrock Official Adapter\n@tanpopo/aws-bedrock · v0.1.0\nTier-2 WebAssembly adapter translating OpenAI chat requests to Amazon Bedrock Converse with host-only AWS SigV4 signing.\n\tOfficial\tNone\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nAzure OpenAI Official Adapter\n@tanpopo/azure-openai · v0.1.0\nOfficial Tanpopo Tier-1 declarative adapter for Azure OpenAI chat completions with deployment routing, api-version pinning, blind api-key injection, OpenAI-compatible SSE, and scoped native passthrough.\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nCohere Rerank Official Adapter\n@tanpopo/cohere-rerank · v0.1.0\nOfficial Tier-1 Cohere v2 rerank adapter with blind API-key injection, exact search-unit reporting, and strict response normalization.\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nGoogle Gemini Official Adapter\n@tanpopo/gemini · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Google Gemini API (contents, systemInstruction, functionDeclarations/functionCall, streamGenerateContent?alt=sse, blind x-goog-api-key header injection without ?key= query params, and /native/gemini/*).\n\tOfficial\tNone\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nOllama Local & Self-Hosted Adapter\n@tanpopo/ollama · v0.1.0\nOfficial Tanpopo Tier-1 declarative adapter for Ollama (defaulting to SELF_HOSTED_INFRA billing mode and NONE | BEARER auth across loopback/LAN egress).\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nOpenAI Official Adapter\n@tanpopo/openai · v0.1.0\nOfficial Tanpopo Tier-1 declarative adapter for OpenAI (/v1/chat/completions, /v1/responses, /v1/embeddings, /native/openai/*) with automatic CR-09 stream_options.include_usage injection.\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nOpenAI-Compatible Gateway & vLLM/TGI Adapter\n@tanpopo/openai-compatible · v0.1.0\nOfficial Tanpopo Tier-1 declarative adapter for vLLM, SGLang, TGI, LM Studio, LiteLLM upstream, and private OpenAI-compatible inference endpoints.\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\nAll systems nominal No active operational alerts or pending remediation items."
+}
