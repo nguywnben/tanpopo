@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP92 (Fresh-install Setup and DEF-001 retest).
+**Latest checkpoint:** CP93 (Google provider probe and runtime evidence reconciliation).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -11,6 +11,7 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 
 - [Consolidated status summary](STATUS-SUMMARY.md)
 
+- [CP93 — Google provider probe and runtime evidence reconciliation](checkpoints/CP93-google-provider-probe-runtime-comparison.md)
 - [CP92 — Fresh-install Setup and DEF-001 retest](checkpoints/CP92-fresh-install-and-DEF-001-retest.md)
 - [CP91 — Trace and Overview scope under project selection](checkpoints/CP91-trace-and-overview-scope-under-project-selection.md)
 - [CP90 — Vault secret metadata and plaintext exposure check](checkpoints/CP90-vault-secret-metadata.md)

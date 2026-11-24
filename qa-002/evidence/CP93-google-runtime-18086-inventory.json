@@ -1,0 +1,9 @@
+{
+  "runtime": "18086",
+  "googleConnectionRows": 0,
+  "connections": [],
+  "probeAttempted": false,
+  "probePath": null,
+  "result": null,
+  "screen": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n1\nVault Secrets\nAdapters\n1\nConfigured connections\n1\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP22 Synthetic Ollama\nhttp://127.0.0.1:19106\n\tadp_01m855gzs5e0094ptxcjk6s3hn\tON_PREM · Self-hosted\tActive\tNone bound\t"
+}

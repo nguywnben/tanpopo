@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP92
+**Latest checkpoint:** CP93
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -272,3 +272,15 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** independent DEF-002–015 residual coverage, DEF-005 SSRF cases, DEF-007 failure atomicity/populated erasure, fresh-instance adapter activation/first inference, open DEF-016–034 regression/remediation, remaining browsers/platforms/roles/integrations/accessibility/operations.
 - **Recommended handoffs:** unchanged—DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF, and DEF-007.
 - **Checkpoint:** [CP92](checkpoints/CP92-fresh-install-and-DEF-001-retest.md); prior [CP91](checkpoints/CP91-trace-and-overview-scope-under-project-selection.md).
+
+
+## CP93 consolidated status update
+
+- **Historical DEF-001–015:** no defect retest in CP93; CP92 retested DEF-001. Other scoped results remain; DEF-005 is partial and independent acceptance remains incomplete. No QA-001 PASS is inherited.
+- **Historical defects failing / unverified:** DEF-016–034 remain open; no status change. Preserve DEF-034 and the DEF-020 recurrence.
+- **New findings:** no product defect. QA-OBS-017 records the distinction between current RC4 `upstream_unreachable` (Cloud direct-egress mismatch supported) and historical listener-specific `probe_runtime_unavailable` (exact cause unresolved). DEF-032 duplicate Google rows remain open.
+- **Coverage completed:** real RC4 Google connection probe on 18084; connection stayed Unverified; 18086 inventory showed no Google connection; historical 3-listener evidence reconciled without inheriting PASS.
+- **Coverage blocked:** a current same-config three-runtime Google comparison lacks configured credential/connection on 18086 and was not established on 18083/18085; actual app-mediated Google inference still awaits guarded direct egress. Direct webhook/HMAC, 18445 A2A configuration, RC4 artifact DevBox and OTLP collector remain blocked/unverified.
+- **Coverage remaining:** independent DEF-002–015 residual cases; same-config Google runtime comparison; DEF-005 SSRF cases; DEF-007 failure atomicity/populated erasure; all open DEF-016–034 regressions/remediation; other products, roles, browsers/platforms, integrations, accessibility and operations.
+- **Recommended handoffs:** unchanged—DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF, DEF-007. No engineering handoff for environment-classified Google transport failures.
+- **Checkpoint:** [CP93](checkpoints/CP93-google-provider-probe-runtime-comparison.md); prior [CP92](checkpoints/CP92-fresh-install-and-DEF-001-retest.md).
