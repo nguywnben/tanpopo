@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP79
+**Latest checkpoint:** CP80
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -23,7 +23,7 @@
 | DEF-020 | Moderate | Security shell badges remain stale after clearing switches or deciding approvals until reload. |
 | DEF-021 | Moderate | Local HUMAN member creation has no supported enrollment path for first login. |
 | DEF-022 | Moderate | Session UI retains revoked role/navigation/actions until reload after server rejects the session. |
-| DEF-023 | Moderate | Organization member list is falsely empty without both project and environment selected; CP71 independently reconfirmed with three persisted members and a Team Admin boundary comparison. |
+| DEF-023 | Moderate | Organization member list is falsely empty without both project and environment selected; CP71 and CP80 independently reconfirmed the scoped false-empty state against persisted members. |
 | DEF-024 | Moderate | Project FinOps view hides an applicable persisted organization ceiling and displays a false empty state. |
 | DEF-025 | Low | Models enables Add deployment without environment scope; its form cannot select an environment and reports a page-level validation after submission. |
 | DEF-026 | Low | MCP sync banner reports zero schema changes requiring approval while a first-discovered schema is visibly locked pending review. |
@@ -37,16 +37,16 @@
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
-## Latest phase: CP79
+## Latest phase: CP80
 
-- **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain only their individually scoped QA-002 results. CP79 adds successful project-provisioning audit evidence to DEF-007; it does not prove failure atomicity or close DEF-007. DEF-005 remains PARTIAL. No QA-001 PASS is inherited.
-- **Historical defects failing / unverified:** DEF-016–033 remain confirmed open as listed above. Their broader acceptance criteria remain incomplete. DEF-007 failure injection, organization mutation/delete, storage-fault, and cross-tenant paths remain UNVERIFIED.
-- **New findings:** no new defect ID in CP79. Confirmed new defects remain DEF-016–033, including CP33's latest DEF-033 Moderate. QA-OBS-001–014 remain preserved; QA-OBS-013/014 are unresolved observations, not confirmed product defects.
-- **Coverage completed:** real Chromium Security → Audit Log filtering found the CP78 `project.created` sequence 300 event and API evidence confirmed owner actor, project target, organization partition, followed by `budget.created` sequence 301. UI and API verification both reported the RFC 8785 JCS chain intact across 315 events. Screenshots were visually inspected.
-- **Coverage blocked:** A2A runtime 18445 remains disabled by configuration. Webhook delivery still requires usable Operator access and a controlled receiver/signing setup. RC4 artifact verification remains UNVERIFIED because the separate DevBox artifact is unavailable in this workspace.
-- **Coverage remaining:** independent end-to-end retesting of DEF-001–015 acceptance criteria; DEF-005 DNS rebinding, mixed answers, redirect-chain and alternate-runtime cases; DEF-007 failure and mutation paths; other screens, workflows, roles, integrations, browsers, locales, viewports, accessibility, and operational/platform scenarios. Existing reports retain each PASS, FAIL, BLOCKED and UNVERIFIED scope.
-- **Recommended handoffs:** retain the current remediation priorities for DEF-016–033, especially DEF-023/029/030 workspace state consistency and DEF-033 budget mutation/revision feedback. Preserve the separate security and contract checks for DEF-005 and the audit atomicity/attribution checks for DEF-007.
-- **Checkpoint:** [CP79](checkpoints/CP79-provisioning-audit-event-and-chain.md), [CP78](checkpoints/CP78-finops-budget-create-persistence-and-existing-scope-retest.md), [CP77](checkpoints/CP77-provider-list-workspace-scope-comparison.md).
+- **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain only their individually scoped QA-002 results. DEF-005 remains PARTIAL. CP79 adds a successful project-provisioning audit path to DEF-007 but does not prove failure atomicity or close that finding. No QA-001 PASS is inherited.
+- **Historical defects failing / unverified:** DEF-016–033 remain confirmed open as listed above; broader acceptance criteria remain incomplete. CP80 independently reconfirmed DEF-023 in project/no-environment scope; DEF-007 failure injection and organization mutation/delete/storage-fault/cross-tenant paths remain UNVERIFIED.
+- **New findings:** no new defect ID in CP79–80. Confirmed new defects remain DEF-016–033 with severities in the defect table and reports. QA-OBS-001–014 remain preserved; QA-OBS-013/014 are unresolved observations, not confirmed product defects.
+- **Coverage completed:** CP79 real UI/API audit event attribution and chain verification across 315 events. CP80 compared the no-environment Members UI against an authorized same-session API response (four principals), switched to a project/environment context and observed the same four rows, and exercised the Access & Keys tabs using keyboard focus, arrow navigation, Enter and Space. Screenshots were visually inspected.
+- **Coverage blocked:** A2A runtime 18445 remains disabled by configuration. Webhook delivery requires usable Operator access and a controlled receiver/signing setup. RC4 artifact verification remains UNVERIFIED because the separate DevBox artifact is unavailable in this workspace.
+- **Coverage remaining:** independent end-to-end retesting of DEF-001–015 acceptance criteria; DEF-005 DNS rebinding, mixed answers, redirect-chain and alternate-runtime cases; DEF-007 failure and mutation paths; organization-only member refresh, additional roles; other Console workflows, integrations, browsers, locales, viewports, assistive technology, and operational/platform scenarios. The full matrix keeps specific PASS, FAIL, BLOCKED and UNVERIFIED slices distinct.
+- **Recommended handoffs:** continue DEF-023 with an acceptance check for accurate organization collection state in no-environment scope while preserving project-level authorization. Retain existing priorities for DEF-016/029/030 state consistency, DEF-033 budget mutation/revision feedback, DEF-005 security contract, and DEF-007 audit atomicity/attribution.
+- **Checkpoint:** [CP80](checkpoints/CP80-members-scope-and-keyboard-accessibility.md), [CP79](checkpoints/CP79-provisioning-audit-event-and-chain.md), [CP78](checkpoints/CP78-finops-budget-create-persistence-and-existing-scope-retest.md).
 
 ## Open observations
 
