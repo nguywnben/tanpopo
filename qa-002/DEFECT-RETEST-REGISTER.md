@@ -149,3 +149,5 @@ Consult the original detailed register and targeted handoffs: `qa/DEFECT-REGISTE
 | CP88 | Team Admin Security Audit Log authorization | PASS for intentional restriction: assigned-project Team Admin audit request returned 403 and UI displayed a clear role-denial state; no protected events exposed. No historical defects retested. See `checkpoints/CP88-team-admin-security-audit-boundary.md`. |
 
 | CP89 | Trace privacy/metadata inspection (no defect retest) | PARTIAL PASS: two real trace rows and selected detail were metadata-only; API returned `has_debug_payload=false` for both. Full marker/credential log search and OTLP collector outage remain UNVERIFIED. See `checkpoints/CP89-trace-explorer-metadata-privacy.md`. |
+
+| CP90 | Vault secret metadata exposure (no defect retest) | PASS (narrow): owner Console/API returned metadata only for one existing secret; no plaintext field/value observed. Broader privacy, binding, OAuth and role cases remain UNVERIFIED. No mutation. See `checkpoints/CP90-vault-secret-metadata.md`. |

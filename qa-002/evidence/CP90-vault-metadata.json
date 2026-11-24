@@ -1,0 +1,23 @@
+{
+  "role": "Organization Owner",
+  "route": "http://127.0.0.1:18084/providers/connections",
+  "visibleText": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n5\nVault Secrets\n1\nAdapters\n2\nWrite-only vault credentials\n1\nSeal secret\nName\tKind\tFingerprint\tCredential ID\tActions\nQA Google AI Studio CP17\tAPI_KEY\t...1d03\tsec_01m852xjpfe00b6dd3aaxs557v\t\nDelete",
+  "api": [
+    {
+      "path": "/admin/v1/secrets",
+      "status": 200,
+      "keys": [
+        "created_at",
+        "credential_id",
+        "name",
+        "project_id",
+        "secret_kind",
+        "trailing_fingerprint",
+        "version"
+      ],
+      "plaintextValueField": false,
+      "credentialPattern": false,
+      "rows": 1
+    }
+  ]
+}

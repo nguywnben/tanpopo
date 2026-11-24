@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP89
+**Latest checkpoint:** CP90
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -236,3 +236,15 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** independent DEF-001–015 acceptance coverage; full TP-AC-F0804 marker/credential search and exporter outage/recovery; trace roles/search and other waterfall cases; DEF-005 SSRF cases; DEF-007 failure atomicity/populated erasure; all open DEF-016–034 remediation/regression; remaining product/browser/platform/integration/accessibility/operations coverage.
 - **Recommended handoffs:** unchanged—DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF controls, DEF-007. No new defect handoff.
 - **Checkpoint:** [CP89](checkpoints/CP89-trace-explorer-metadata-privacy.md); prior [CP88](checkpoints/CP88-team-admin-security-audit-boundary.md).
+
+
+## CP90 consolidated status update
+
+- **Historical DEF-001–015:** CP90 did not retest them. Preserve prior scoped QA-002 results; DEF-005 remains partial and independent acceptance remains incomplete. No QA-001 PASS is inherited.
+- **Historical defects failing / unverified:** DEF-016–034 remain open; no status changed. Preserve CP86 DEF-034 and DEF-020 recurrence.
+- **New findings:** no new defect. A narrow real owner Vault list/API read exposed only metadata for one existing QA credential; no plaintext observed.
+- **Coverage completed:** real Chromium Providers → Vault Secrets and authenticated API field comparison. Existing QA credential left untouched; no mutation.
+- **Coverage blocked:** full secret-privacy scan requires credential-bearing inference plus persistent log/API search; OTel fail-open lacks confirmed collector endpoint/access; direct webhook delivery/HMAC is managed-egress blocked; runtime 18445 A2A is disabled by configuration; RC4 artifact verification remains unverified in separate DevBox.
+- **Coverage remaining:** independent DEF-001–015 acceptance; full DEF-005 SSRF coverage; DEF-007 populated erasure/failure atomicity; secret binding/rotation/revocation/OAuth and role coverage; all open DEF-016–034 regression/remediation; all remaining features, browsers/platforms/integrations/accessibility/operations.
+- **Recommended handoffs:** unchanged—DEF-034, DEF-016/023/029/030, DEF-033, DEF-005 without weakening SSRF, and DEF-007.
+- **Checkpoint:** [CP90](checkpoints/CP90-vault-secret-metadata.md); prior [CP89](checkpoints/CP89-trace-explorer-metadata-privacy.md).
