@@ -1,0 +1,6 @@
+{
+  "viewport": 320,
+  "doc": 320,
+  "body": 320,
+  "text": "Operations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nReadiness (/readyz)\nReady\nServing traffic\nConfig epoch\n46\nCopy-on-write snapshot\nSnapshot age\n—\nLast config refresh\nStorage engine\nsqlite_wal\nActive persistence backend\nCluster nodes\n1\nstandalone\nHealth\nOK\nConfig epoch\n46\nDetail (1)"
+}
