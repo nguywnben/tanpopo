@@ -1,0 +1,32 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "testOrganizationIdSuffix": "r484979d",
+  "createAndShredResponses": [
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 201
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/organizations/org_01m87p2cgbe00a4p22r484979d",
+      "status": 500
+    }
+  ],
+  "organizationVisibleAfterInjectedAuditFailure": true,
+  "screenText": "Operations\n\nProvision isolated tenant organizations and execute irreversible cryptographic erasure.\n\nRefresh\nCreate organization\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\n2\nWebhooks\nfailed recording shred audit event\nTenant organizations\n2\nOrganization\tMin extension trust\tFour-eyes approval\tCreated\tActions\n\nQA003 CP18 shred audit rollback\nqa003-cp18-shred-audit-rollback · org_01m87p2cgbe00a4p22r484979d\n\tAny Approved\tDisabled\tNov 24, 2026, 9:05:57 PM\t\nSwitch\nCrypto-shred\n\n\nDefault Organization\nActive\ndefault-organization · org_01m87axgx7e008eg6c8zvy7h5b\n\tAny Approved\tDisabled\tNov 24, 2026, 5:51:04 PM\t\nSwitch\nCrypto-shred\nCrypto-shred organization\n\nIrreversibly destroys the Organization DEK for QA003 CP18 shred audit rollback, purges secrets and keys, and cancels active sessions within 60 seconds.\n\nDeletion justification\nType \"qa003-cp18-shred-audit-rollback\" to confirm\nCancel\nCrypto-shred"
+}
