@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP103
+**Latest checkpoint:** CP104
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -27,6 +27,17 @@
 - **Coverage blocked / remaining:** DNS rebinding, mixed DNS answers, redirect chains/other statuses, resolver races, additional transports/hosts, A2A alternate-runtime CIDR pair, roles, browsers and platforms remain open. `probe_runtime_unavailable` remains UNVERIFIED on RC4; QA-OBS-017 retains Cloud egress classification.
 - **Recommended engineering handoffs:** preserve explicit CIDR enforcement. QA-OBS-004’s generic failed-sync message may be reviewed for actionable diagnosis without exposing unsafe details. Continue current high-impact defect priorities in the register.
 - **Checkpoint:** [CP103](checkpoints/CP103-alternate-runtime-private-cidr-positive-and-negative-control.md). `GATE-REL-07` remains **BLOCKED**.
+
+
+## Latest phase: CP104 — A2A terminal task transition guards
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006 and DEF-008–015 retain scoped QA-002 results; CP104 expands DEF-011. DEF-005 remains PARTIAL; DEF-007 failure atomicity and populated erasure remain UNVERIFIED. No QA-001 PASS is inherited.
+- **Historical defects failing/unverified:** DEF-016–036 remain open; CP101 most recently reconfirmed DEF-023. No status change to open findings.
+- **New defects:** none. QA-OBS-009 recurred after a full-page route navigation returned to the runtime-default No env project; key issuance was correctly disabled until the authorized project/environment was reselected.
+- **Coverage completed:** fresh A2A-only issuance; input-required task creation and Console resume; terminal duplicate resume/cancel returned 409 with unchanged completed/version/cost state; no extra endpoint side effect; key revoke and replay denial; new owner session confirmed persistence and no terminal controls. Real screenshots were inspected.
+- **Coverage blocked / remaining:** concurrent/in-flight task cancellation and revocation, timeout, endpoint/runtime-failure recovery, multihop, cross-region, non-owner roles, other browsers/platforms, and disabled-runtime UX remain open.
+- **Recommended engineering handoffs:** no new DEF-011 handoff from this phase. Keep terminal guards and A2A-only authorization boundaries intact.
+- **Checkpoint:** [CP104](checkpoints/CP104-a2a-terminal-task-transition-guards.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Historical defects DEF-001–015
 
