@@ -3,12 +3,13 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP105 (Virtual Key audit event-name contract).
+**Latest checkpoint:** CP106 (Audit Log pagination and event detail).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
 ## Current records
 
+- [CP106 — Audit Log pagination and event detail](checkpoints/CP106-audit-log-pagination-and-detail.md)
 - [CP105 — Virtual Key audit event-name contract](checkpoints/CP105-audit-contract-virtual-key-event-name.md)
 - [DEF-037 — Virtual Key issuance audit action mismatch](reports/DEF-037-virtual-key-audit-event-name-contract.md)
 - [CP104 — A2A terminal task transition guards](checkpoints/CP104-a2a-terminal-task-transition-guards.md)

@@ -1,10 +1,20 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP105
+**Latest checkpoint:** CP106
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP106 — Audit Log pagination and event detail
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006 and DEF-008–015 retain only their scoped QA-002 outcomes; DEF-005 remains PARTIAL. No QA-001 PASS is inherited.
+- **Historical defects failing/unverified:** DEF-007 remains partial; successful event presence/chain integrity does not cover failure atomicity, populated erasure, storage faults or cross-tenant isolation. DEF-016–036 remain open. DEF-037 Low remains confirmed from CP105. No defect disposition changed in CP106.
+- **New defects:** none.
+- **Coverage completed:** real Chromium Audit Log pagination loaded 100 older events (continuous 512→313 sequence), and event detail showed actor/target/hash/metadata without the one-time key secret. Screenshots visually inspected.
+- **Coverage blocked / remaining:** combined action-filter/cursor behavior, concurrent inserts during pagination, deep history exhaustion, other roles/tenants/browsers, audit fault injection and populated erasure remain open.
+- **Recommended engineering handoffs:** resolve DEF-037 action vocabulary; continue DEF-007 atomicity/erasure investigation.
+- **Checkpoint:** [CP106](checkpoints/CP106-audit-log-pagination-and-detail.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP105 — Virtual Key audit event-name contract
 
