@@ -1,0 +1,22 @@
+{
+  "commandHelp": {
+    "exit": 0,
+    "containsShow": true,
+    "containsReconcile": true
+  },
+  "configShow": {
+    "exit": 0,
+    "summary": "{\"active_holds_micros\":0,\"estimated_settled_micros\":0,\"exact_settled_micros\":1234,\"total_requests\":7,\"unmetered_requests\":0,\"window\":\"24h\"}\n",
+    "stderr": "",
+    "fixtureRequestPath": "/admin/v1/overview/summary"
+  },
+  "missingConfigReconcile": {
+    "exit": 14,
+    "stdout": "",
+    "stderr": "tanpopo: Configuration reconciliation failed; applied config and lockfile were left unchanged.: gitops: configuration rejected\n",
+    "createdApplied": false,
+    "createdLock": false
+  },
+  "realCredentialsUsed": false,
+  "sourceModified": false
+}
