@@ -6,7 +6,7 @@
 
 ## Summary
 
-When a Playground request is rejected because the project budget is exhausted, the UI shows only `Playground inference failed (429).` The persisted request trace identifies the reason as `project_budget_exceeded`. The local provider fixture records no request for the rejected call. The UI therefore hides the action-relevant distinction between a budget cap, rate limit, credential failure, or other HTTP 429.
+When a Playground request is rejected because a project or organization budget is exhausted, the UI shows only `Playground inference failed (429).` The persisted request trace identifies the reason as `project_budget_exceeded`. The local provider fixture records no request for the rejected call. CP51 extends the same behavior to an organization ceiling enforced for a child project/environment request; the canonical trace code is the common `project_budget_exceeded` contract, not a claim that the project budget itself blocked the request. The UI therefore hides the action-relevant distinction between a budget cap, rate limit, credential failure, or other HTTP 429.
 
 ## Reproduction
 
@@ -14,6 +14,15 @@ When a Playground request is rejected because the project budget is exhausted, t
 2. Submit a second Playground request at the exhausted cap. The UI shows a red banner `Playground inference failed (429).` Screenshot `../evidence/CP26-playground-over-cap-result.png` was visually inspected.
 3. The synthetic provider fixture request count remains unchanged at one for the first two attempts (`../evidence/CP26-playground-over-cap.json`). Read-only SQLite stores the failed request as HTTP 429, `canonical_error_code=project_budget_exceeded`, no selected deployment and no failover attempt (`../evidence/CP26-budget-enforcement-recovery-state.json`).
 4. Raise the cap to 2 micro-USD through FinOps. A new Playground request returns 200, the fixture receives a second request, and the second micro settles. This recovery control shows the route/provider is usable when the budget permits it (`../evidence/CP26-playground-recovery.json`, `CP26-budget-enforcement-recovery-state.json`).
+
+## Additional organization-scope reproduction (CP51)
+
+1. On the isolated RC4 baseline, create a healthy route to a loopback synthetic Ollama-compatible provider in project/environment scope. A successful Playground stream returned 200, reached the fixture once, and settled exactly 2 micro-USD.
+2. In organization scope, temporarily lower the organization hard limit from 1,000,000 to 1 micro-USD after settled spend reached 2 micro-USD.
+3. Send a second request from the same Playground session. The UI again showed `Playground inference failed (429).`; the persisted trace carried `project_budget_exceeded`. The fixture count remained one, proving rejection before dispatch. There were no active holds.
+4. Restore the original organization cap through FinOps and revoke both temporary Playground keys through Access & Keys. The final UI and database states confirmed the cap restored and keys revoked.
+
+The affected workflow is cross-scope budget enforcement → Playground feedback → FinOps recovery. This does not resolve DEF-024: the organization ceiling still is not visible in the project-scoped FinOps view. Evidence is `../evidence/CP51-org-budget-enforcement.json` and visually inspected screenshots `../evidence/CP51-budget-positive-result.png`, `CP51-org-budget-lowered.png`, `CP51-budget-rejected-result.png`, `CP51-org-budget-restored.png`, and `CP51-keys-revoked.png`.
 
 ## Expected versus actual
 
@@ -26,7 +35,7 @@ Developers cannot distinguish a deliberate governance cap from transient throttl
 
 ## Facts and root-cause hypothesis
 
-**Facts:** UI error text is `Playground inference failed (429).`; the request trace is `project_budget_exceeded`, with `selected_deployment_id=null`; the provider fixture count did not increase; raising the project cap restored success.
+**Facts:** project-cap and organization-cap reproductions both display `Playground inference failed (429).`; persisted traces carry the canonical `project_budget_exceeded` reason; no rejected call reached the synthetic fixture. The project-cap retest raised the project cap to recover. CP51 restored the organization ceiling to its original value after the org-scope case.
 
 **Hypothesis:** Playground handles non-2xx responses by preserving only the numeric status and discarding the canonical error envelope. This source-level explanation is a hypothesis; the live UI behavior and saved trace are the defect evidence.
 
