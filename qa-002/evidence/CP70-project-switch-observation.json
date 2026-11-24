@@ -1,0 +1,24 @@
+{
+  "observation_id": "QA-OBS-012",
+  "status": "UNCLASSIFIED; one transient occurrence, not reproduced on follow-up",
+  "first_run": {
+    "selected_scope": "QA002 CP39 Tenant Project / qa002-cp39-env",
+    "visible_page_error": "env_id does not belong to supplied project_id",
+    "route_count_before_old_response_release": 0,
+    "route_count_after_old_response_release": 3,
+    "screenshot_retained": false,
+    "limitation": "The first run screenshot was overwritten during the repeat; the exact page text was captured in run output, but no matching request/response record was retained."
+  },
+  "follow_up": {
+    "evidence_file": "CP70-project-switch-transition.json",
+    "selected_scope": "QA002 CP39 Tenant Project / qa002-cp39-env",
+    "route_requests": [
+      {"query": "?env_id=env_01m85ry445e009xg6sr14c5q1z&limit=100", "status": 200, "count": 3},
+      {"query": "?env_id=env_01m85ry445e009xg6sr14c5q1z&limit=100", "status": 200, "count": 3},
+      {"query": "?env_id=env_01m85fzh24e00bh3g188tyanhn&limit=100", "status": 200, "count": 0}
+    ],
+    "settled_page_error": null,
+    "screenshot": "CP70-project-switch-settled.png"
+  },
+  "classification": "Do not classify as a product defect without a repeatable state transition. Keep separate from confirmed DEF-030 stale-response behavior."
+}

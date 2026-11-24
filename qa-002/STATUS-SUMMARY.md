@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP69
+**Latest checkpoint:** CP70
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -30,21 +30,21 @@
 | DEF-027 | Moderate | Routes & Policies cannot distinguish same-model deployments with identical region/health labels; provider and deployment identity are hidden from target choices and route summaries. |
 | DEF-028 | Moderate | Route Explain hardcodes `openai_compatible` and rejects healthy Ollama deployments as dialect-mismatched even when the same route completes a real Playground request. |
 | DEF-029 | Low | Access & Keys can repopulate prior environment-scoped Virtual Key metadata after a delayed response arrives under No project / No env scope. |
-| DEF-030 | Moderate | Routes & Policies can repopulate prior environment routes after a delayed response under No project / No env; stale Edit/Delete actions remain available. |
+| DEF-030 | Moderate | Routes & Policies can repopulate prior environment routes after a delayed response under No project / No env or a different selected project/environment; stale Edit/Delete remain available. |
 | DEF-031 | Low | Invalid MCP/A2A CIDR reaches the API, and the 400 validation error is obscured behind the open drawer on WebKit mobile. APIs reject before persistence; no security bypass. |
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
-## Latest phase: CP69
+## Latest phase: CP70
 
 - **Historical defects verified fixed:** DEF-001–004, DEF-006–009, and DEF-012–015 retain their previously recorded scoped QA-002 PASS results. DEF-010 and DEF-011 were independently retested in CP68/69 for A2A-only issuance, plane denial, task discovery/resume/cancel, persistence, settlement, and reservation release. This does not close broader role/platform coverage.
-- **Historical defects failing / unverified:** DEF-005 remains PARTIAL with SSRF behavior fail-closed for tested cases and significant DNS rebinding, HTTPS/redirect-chain, runtime, and host-contract coverage open. DEF-016–028 remain confirmed open; DEF-026 recurred in CP61. New DEF-029–031 remain confirmed open. DEF-023 remains confirmed from CP43/CP60, not retested in CP69.
-- **New findings:** no new defect in CP69. DEF-031 Low remains confirmed across MCP and A2A mobile forms; API validation stayed fail-closed. DEF-029 remains confirmed and expanded in CP65; DEF-030 remains confirmed from CP63.
-- **Coverage completed:** CP68 A2A private registration/discovery and input-required task resume/settlement; CP69 hard-refreshed input-required task cancellation, verified reservation RELEASED_UNUSED and no fixture follow-up. Both ran on enabled runtime 18084 with least-privilege keys and revocation/replay checks. Visually inspected input-required, completed, and canceled screens. CP66/67 mobile invalid-CIDR form failures remain documented.
+- **Historical defects failing / unverified:** DEF-005 remains PARTIAL with SSRF behavior fail-closed for tested cases and significant DNS rebinding, HTTPS/redirect-chain, runtime, and host-contract coverage open. DEF-016–028 remain confirmed open; DEF-026 recurred in CP61. New DEF-029–031 remain confirmed open. DEF-023 remains confirmed from CP43/CP60, not retested in CP70.
+- **New findings:** no new defect in CP70. DEF-031 Low remains confirmed across MCP and A2A mobile forms; API validation stayed fail-closed. DEF-029 remains confirmed and expanded in CP65; DEF-030 was independently expanded in CP70 to a valid project-to-project switch with stale Edit/Delete actions.
+- **Coverage completed:** CP68 A2A private registration/discovery and input-required task resume/settlement; CP69 hard-refreshed input-required task cancellation, verified reservation RELEASED_UNUSED and no fixture follow-up. Both ran on enabled runtime 18084 with least-privilege keys and revocation/replay checks. Visually inspected input-required, completed, and canceled screens. CP66/67 mobile invalid-CIDR form failures remain documented. CP70 visually verified three old routes under the new project selector and opened, but did not invoke, the stale-row action menu.
 - **Coverage blocked / remaining:** 18445 A2A use remains blocked by disabled runtime configuration. The first CP69 attempt failed from a fixture port mismatch; it is preserved as harness evidence and the corrected flow passed. Additional invalid CIDR classes, desktop alert placement, keyboard/screen-reader behavior, DNS rebinding/mixed answers, and other runtime scenarios remain open. Firefox app workflow, additional viewport widths, role-limited scope behavior, page races, independent DEF-001–015 retests, integrations and broad platform coverage remain incomplete. CP53 webhook delivery still requires Operator access; fresh Team Admin testing remains blocked by its suspended synthetic credential.
 - **Recommended handoff:** consolidate DEF-023, DEF-029, and DEF-030 as a workspace-scope state consistency class while retaining separate member-visibility, key-list, and route-action acceptance tests.
 - **Recommended handoff:** include DEF-031 with DEF-005 as a validation UX follow-up while retaining separate SSRF/CIDR enforcement acceptance checks.
-- **Checkpoint:** [CP69](checkpoints/CP69-a2a-input-required-cancel-and-reservation-release.md); [CP68](checkpoints/CP68-a2a-private-registration-task-lifecycle.md) records the completed path. CP66/67 evidence remains linked from [DEF-031](reports/DEF-031-mcp-cidr-validation-error-hidden-by-mobile-drawer.md).
+- **Checkpoint:** [CP70](checkpoints/CP70-routes-cross-project-stale-response.md); CP68/69 A2A lifecycle evidence remains recorded. CP66/67 evidence remains linked from [DEF-031](reports/DEF-031-mcp-cidr-validation-error-hidden-by-mobile-drawer.md).
 
 ## Open observations
 
@@ -58,6 +58,7 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - QA-OBS-009: manual project/environment selection returns to the runtime-selected default after refresh; workspace persistence contract unresolved.
 - QA-OBS-010: A2A agent registration and A2A-only key provisioning remain available in a runtime whose A2A data-plane handlers return the configured disabled response; control-plane/data-plane availability and UX contract unresolved (CP59).
 - QA-OBS-011: legacy numeric host `127.1` resolves to loopback through system NSS but MCP registration rejects it as a DNS resolution failure; support is undocumented, and the endpoint is not contacted (CP60).
+- QA-OBS-012: one project-switch run displayed `env_id does not belong to supplied project_id` while switching workspace; a request-logged follow-up returned 200 for both old and new scopes and settled with no error. Keep unclassified pending a repeatable capture (CP70).
 
 ## Coverage
 
