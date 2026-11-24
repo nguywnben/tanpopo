@@ -1,0 +1,27 @@
+{
+  "formInitialPrivateValues": [
+    true
+  ],
+  "formInitialCidr": "127.0.0.1/32",
+  "requests": [
+    {
+      "stage": "request",
+      "origin": null,
+      "referer": "https://127.0.0.1:18110/providers/connections",
+      "cookiePresent": false,
+      "csrfPresent": true
+    },
+    {
+      "stage": "create",
+      "status": 400,
+      "body": "{\"error\":{\"code\":\"disallowed_host\",\"type\":\"invalid_request_error\",\"message\":\"storage: invalid domain input: endpoint host \\\"rebind.qa003.test\\\" denied by adapter allowed_hosts\",\"request_id\":\"req_01m87k3n8pe0098vyemzb3pvdv\",\"retryable\":false}}\n"
+    }
+  ],
+  "created": null,
+  "fixtureBefore": null,
+  "fixtureAfter": null,
+  "dns": {
+    "ip": "127.0.0.1",
+    "queries": 4
+  }
+}
