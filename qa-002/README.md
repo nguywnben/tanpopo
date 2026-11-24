@@ -3,11 +3,13 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP110 (Local HUMAN member enrollment on second runtime).
+**Latest checkpoint:** CP111 (Cross-browser execution environment diagnostics).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
 ## Current records
+
+- [CP111 — Cross-browser execution environment diagnostics](checkpoints/CP111-browser-runtime-availability.md)
 
 - [CP110 — Local member enrollment and DEF-021/023 retest](checkpoints/CP110-local-member-enrollment-independent-runtime.md)
 

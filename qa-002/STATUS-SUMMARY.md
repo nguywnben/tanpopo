@@ -1,10 +1,19 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP110
+**Latest checkpoint:** CP111
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP111 — Cross-browser execution environment diagnostics
+
+- **Historical defects:** no product finding disposition changed; DEF-016–038 remain preserved/open. CP110 remains the latest product defect retest. No QA-001 PASS is inherited.
+- **New defects:** none. Firefox/WebKit launch failures are managed-image blockers, not Tanpopo defects.
+- **Coverage completed:** Chromium remains usable. Firefox 153 was downloaded and its Playwright launch retried; `uid_map: EROFS` and software framebuffer mapping errors persist. WebKit downloaded but lacks GTK4/graphics/input libraries; the approved dependency installer could not switch to root (`su: Authentication failure`). Product `/healthz` on 18084 stayed 200.
+- **Coverage blocked/remaining:** no Firefox or current-image WebKit product flow could run in CP111. Existing scoped WebKit evidence from earlier checkpoints is preserved. Need browser support provisioning; meanwhile continue independent Chromium, API and CLI QA. Cross-browser/platform coverage remains incomplete.
+- **Recommended engineering handoffs:** unchanged; continue DEF-038/007 and open product-defect priorities. Environment owner needs Firefox user-namespace/compositor support and the listed WebKit libraries before these browser phases can resume.
+- **Checkpoint:** [CP111](checkpoints/CP111-browser-runtime-availability.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP110 — Local HUMAN member enrollment on a second runtime
 
