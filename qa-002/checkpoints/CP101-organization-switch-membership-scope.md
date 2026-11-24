@@ -1,8 +1,8 @@
 # CP101 — Organization switching and member-scope consistency
 
-**Baseline:** frozen RC4 `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Runtime:** QA server `18084`  
-**Role/browser:** Org Owner + Operator, real Chromium at 1440 × 1000  
+**Baseline:** frozen RC4 `40bba5b55c2da6fc00b107b315c9b3167fb20169`<br>
+**Runtime:** QA server `18084`<br>
+**Role/browser:** Org Owner + Operator, real Chromium at 1440 × 1000<br>
 **Product implementation:** unchanged
 
 ## Journey and observations

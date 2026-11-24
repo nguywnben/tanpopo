@@ -1,9 +1,21 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP101
+**Latest checkpoint:** CP102
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
+
+
+## Latest phase: CP102 — Google runtime inventory comparison
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006, and DEF-008–015 retain only their scoped QA-002 outcomes; DEF-005 remains partial and DEF-007 has unverified failure atomicity/populated erasure. No QA-001 PASS is inherited.
+- **Historical defects failing/unverified:** DEF-016–036 remain open; CP101 most recently reconfirmed DEF-023. CP102 changed no defect disposition.
+- **New defects:** none.
+- **Coverage completed:** authenticated real-Chromium read-only provider inventory on 18083/18084/18086; actual 18085 retained-credential failure captured; screenshots visually inspected. 18084 alone has Google configured (two duplicate rows); 18083 has no provider setup; 18086 has only synthetic Ollama.
+- **Coverage blocked:** matching Google probe comparison is unavailable because configurations differ and 18085 login is blocked. `upstream_unreachable` remains supported as Cloud direct-egress incompatibility; `probe_runtime_unavailable` remains UNVERIFIED on RC4. Google app inference remains unverified.
+- **Coverage remaining:** restore authorized 18085 access or use a suitable isolated runtime, configure matching Google adapter/connection in the test instances, and exercise an identical probe only where supported egress permits. Continue all other QA in parallel.
+- **Recommended engineering handoffs:** unchanged. Continue DEF-005 without weakening SSRF, and prioritize DEF-023/029/030/035 workspace consistency, DEF-034 revocation, DEF-033 budget semantics, and DEF-007 audit atomicity.
+- **Checkpoint:** [CP102](checkpoints/CP102-google-provider-runtime-inventory.md); evidence links are listed there. `GATE-REL-07` remains **BLOCKED**.
 
 ## Historical defects DEF-001–015
 

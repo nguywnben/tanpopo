@@ -3,12 +3,13 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP101 (Organization switching and member-scope consistency).
+**Latest checkpoint:** CP102 (Google provider runtime inventory comparison).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
 ## Current records
 
+- [CP102 — Google provider runtime inventory comparison](checkpoints/CP102-google-provider-runtime-inventory.md)
 - [CP101 — Organization switching and member-scope consistency](checkpoints/CP101-organization-switch-membership-scope.md)
 - [CP100 — Console workspace scope cross-surface regression](checkpoints/CP100-console-workspace-scope-cross-surface-regression.md)
 - [CP99 — Marketplace duplicate install review](checkpoints/CP99-marketplace-duplicate-install-review.md)

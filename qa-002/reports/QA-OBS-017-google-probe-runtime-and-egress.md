@@ -2,7 +2,7 @@
 
 **Classification:** environment/configuration observation; no product defect assigned.  
 **QA-002 baseline:** frozen RC4 `40bba5b55c2da6fc00b107b315c9b3167fb20169`.  
-**Current browser probes:** Chromium, Org Owner, isolated runtimes 18084 and 18086.
+**Current browser evidence:** Chromium, Org Owner, isolated runtimes 18083–18086. A Google connection probe was previously executed on 18084; CP102 added read-only inventories on 18083, 18084 and 18086 plus a failed retained-credential login on 18085.
 
 ## Current RC4 evidence
 
@@ -15,7 +15,7 @@
 ### Runtime 18086 — no Google connection to test
 
 - A real Owner session showed one configured synthetic Ollama connection and zero Google/Gemini rows. No Google probe was sent; this runtime lacks the needed configured connection and bound Google credential.
-- 18083 and 18085 were not probed for Google in this phase. Their available account/connection/credential state was not established. The live three-runtime comparison is therefore **INCOMPLETE**.
+- CP102 authenticated to 18083 and found zero provider connections, adapters, or installations. It authenticated to 18086 and found only one active synthetic Ollama connection/adapter/installation. On 18085 the retained 18083 Owner credential was rejected by the real login form; no authorized API call was possible. These do not provide comparable Google probe outcomes. The same-configuration multi-runtime comparison remains **INCOMPLETE**.
 
 ## Historical comparison, kept separate from QA-002 results
 
@@ -38,11 +38,12 @@ QA-002 CP17 on RC4 independently reports the app probe `upstream_unreachable` wh
 - `evidence/CP93-google-runtime-18086-inventory.png` — no Google connection in 18086, visually inspected.
 - `evidence/CP93-google-runtime-18086-inventory.json` — sanitized inventory and no-probe status.
 - `evidence/CP93-google-connections-api-sanitized.json` — current connection IDs/state/fingerprint suffixes only; no secret values.
+- CP102 comparison: `checkpoints/CP102-google-provider-runtime-inventory.md`, `evidence/CP102-google-runtime-inventory.json`, and screenshots `CP102-provider-inventory-{18083,18084,18086}.png` plus `CP102-provider-inventory-18085-login-failure.png`; all screenshots were visually inspected.
 - Historical QA-001 references: `qa/evidence/phase26-provider-runtime-comparison.json`, `qa/PRODUCT-COVERAGE-MATRIX.md` CP25/26, and QA-002 `checkpoints/CP17-fresh-setup-google-boundary.md`. QA-001 baseline and interpretation remain preserved separately.
 
 ## Limits / next reproducible work
 
-- A current three-runtime differential requires the same supported Google adapter, authorized test credential, and matching connection configuration in each runtime, especially a repeat of the former 8081 runtime-acquisition case. Those prerequisites were not present/established for 18086/18083/18085 in this phase.
+- A current same-configuration differential requires the same supported Google adapter, authorized test credential, and matching connection configuration in each runtime, especially a repeat of the former 8081 runtime-acquisition case. CP102 established that 18083 lacks provider setup, 18086 lacks Google setup, and 18085 is inaccessible with the retained credential; no same-config probe was run.
 - To resolve the current Cloud block, run the exact RC4 app probe and a minimal Google request in an environment where guarded direct egress is supported, while retaining explicit target validation. Do not route around SSRF checks or infer product failure from the Cloud proxy/direct split.
 
 QA-OBS-017 remains an environment observation. GATE-REL-07 remains BLOCKED.

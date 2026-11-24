@@ -1,0 +1,157 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "method": "read-only real Chromium owner sessions; no connection test or mutation submitted",
+  "runtimes": [
+    {
+      "runtime": 18083,
+      "role": "authorized QA owner",
+      "inventory": {
+        "connections": {
+          "status": 200,
+          "rows": []
+        },
+        "adapters": {
+          "status": 200,
+          "count": 0,
+          "rows": []
+        },
+        "installations": {
+          "status": 200,
+          "count": 0,
+          "rows": []
+        }
+      },
+      "googleRows": 0,
+      "screen": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\nVault Secrets\nAdapters\nConfigured connections\n0\nNo provider connections\nCreate a connection to bind a protocol adapter and write-only vault secret.\nNew connection"
+    },
+    {
+      "runtime": 18084,
+      "role": "authorized QA owner",
+      "inventory": {
+        "connections": {
+          "status": 200,
+          "rows": [
+            {
+              "name": "QA002 CP73 Failing Ollama",
+              "state": "CREATED_UNVERIFIED",
+              "adapter_id": "adp_01m8509e6pe00bkhe4fhsqsmnt",
+              "region": "ON_PREM",
+              "credential_bindings": []
+            },
+            {
+              "name": "QA002 Google Gemini",
+              "state": "CREATED_UNVERIFIED",
+              "adapter_id": "adp_01m852w4yze009v8wf6e76wgty",
+              "region": "US",
+              "credential_bindings": []
+            },
+            {
+              "name": "QA002 Google Gemini",
+              "state": "CREATED_UNVERIFIED",
+              "adapter_id": "adp_01m852w4yze009v8wf6e76wgty",
+              "region": "US",
+              "credential_bindings": []
+            },
+            {
+              "name": "QA002 Failing Ollama 401",
+              "state": "CREATED_UNVERIFIED",
+              "adapter_id": "adp_01m8509e6pe00bkhe4fhsqsmnt",
+              "region": "ON_PREM",
+              "credential_bindings": []
+            },
+            {
+              "name": "QA002 Ollama Synthetic",
+              "state": "ACTIVE",
+              "adapter_id": "adp_01m8509e6pe00bkhe4fhsqsmnt",
+              "region": "ON_PREM",
+              "credential_bindings": []
+            }
+          ]
+        },
+        "adapters": {
+          "status": 200,
+          "count": 2,
+          "rows": [
+            {
+              "name": "@tanpopo/gemini",
+              "id": "adp_01m852w4yze009v8wf6e76wgty"
+            },
+            {
+              "name": "@tanpopo/ollama",
+              "id": "adp_01m8509e6pe00bkhe4fhsqsmnt"
+            }
+          ]
+        },
+        "installations": {
+          "status": 200,
+          "count": 2,
+          "rows": [
+            {
+              "package_id": "ext_01m852r1p3e008acn3fzbd80bw",
+              "state": "ENABLED_ACTIVE",
+              "version": 2,
+              "execution_tier": "sandboxed_wasm"
+            },
+            {
+              "package_id": "ext_01m8504abme008azgwpd4xh459",
+              "state": "ENABLED_ACTIVE",
+              "version": 2,
+              "execution_tier": "declarative"
+            }
+          ]
+        }
+      },
+      "googleRows": 2,
+      "screen": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n5\nVault Secrets\n1\nAdapters\n2\nConfigured connections\n5\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP73 Failing Ollama\nhttp://127.0.0.1:19187\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Failing Ollama 401\nhttp://127.0.0.1:19107\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Ollama Synthetic\nhttp://127.0.0.1:19106\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tActive\tNone bound\t"
+    },
+    {
+      "runtime": 18085,
+      "role": "authorized QA owner",
+      "login_or_ui_error": "TimeoutError",
+      "route": "/login",
+      "screen": "Tanpopo\nLanguage\nEnglish\nSign in\n\nUse your local administrator credentials to access the control plane.\n\nSign-in failed\nThe email address or password is not valid.\nEmail address\n∙ Required\nPassword\n∙ Required\nPassword\nSign in\n\nNew instance? Run first-time setup"
+    },
+    {
+      "runtime": 18086,
+      "role": "authorized QA owner",
+      "inventory": {
+        "connections": {
+          "status": 200,
+          "rows": [
+            {
+              "name": "QA002 CP22 Synthetic Ollama",
+              "state": "ACTIVE",
+              "adapter_id": "adp_01m855gzs5e0094ptxcjk6s3hn",
+              "region": "ON_PREM",
+              "credential_bindings": []
+            }
+          ]
+        },
+        "adapters": {
+          "status": 200,
+          "count": 1,
+          "rows": [
+            {
+              "name": "@tanpopo/ollama",
+              "id": "adp_01m855gzs5e0094ptxcjk6s3hn"
+            }
+          ]
+        },
+        "installations": {
+          "status": 200,
+          "count": 1,
+          "rows": [
+            {
+              "package_id": "ext_01m8555e4se009kted81kw5ye6",
+              "state": "ENABLED_ACTIVE",
+              "version": 2,
+              "execution_tier": "declarative"
+            }
+          ]
+        }
+      },
+      "googleRows": 0,
+      "screen": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n1\nVault Secrets\nAdapters\n1\nConfigured connections\n1\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP22 Synthetic Ollama\nhttp://127.0.0.1:19106\n\tadp_01m855gzs5e0094ptxcjk6s3hn\tON_PREM · Self-hosted\tActive\tNone bound\t"
+    }
+  ]
+}
