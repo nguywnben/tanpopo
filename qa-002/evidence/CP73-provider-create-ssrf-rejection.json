@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/admin/v1/connections",
+    "endpoint_url": "http://127.0.0.1:19187",
+    "allow_private_ip": false
+  },
+  "response": {
+    "status": 400,
+    "error_code": "ssrf_blocked_private_ip",
+    "message": "endpoint_url violates egress SSRF policy"
+  },
+  "follow_up": "No probe was run; the fixture contact path was not exercised."
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "url": "http://127.0.0.1:18084/admin/v1/connections/con_01m866netce00a8wcj86nft2xq/test",
+    "method": "POST",
+    "status": 200,
+    "body": "{\"valid\":false,\"latency_ms\":11,\"detected_model_ids\":[],\"failure_code\":\"auth_failed\",\"sanitized_message\":\"upstream returned HTTP 401\"}\n"
+  }
+]
