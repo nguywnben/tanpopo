@@ -1,0 +1,17 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": "isolated SQLite clone on 127.0.0.1:18115",
+  "receiver_test": "public synthetic HTTP endpoint at httpbin.org/status/503",
+  "configured_curl_path": {
+    "http_status": 503,
+    "exit_code": 0
+  },
+  "direct_tcp_443_from_test_runner": "Network is unreachable",
+  "guarded_product_delivery": {
+    "attempt_count_at_terminal_state": 8,
+    "status": "DEAD_LETTER",
+    "last_http_status": null,
+    "last_error": "transport failure"
+  },
+  "classification": "BLOCKED: the Cloud test runner can reach the endpoint through its configured HTTP proxy, but the product guarded client disables environment proxies and direct egress is unavailable. No upstream HTTP 503 was observed by Tanpopo."
+}
