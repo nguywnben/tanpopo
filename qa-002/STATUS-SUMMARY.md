@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP46
+**Latest checkpoint:** CP47
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -26,8 +26,9 @@
 | DEF-023 | Moderate | Organization member list is falsely empty without both project and environment selected; CP43 expanded the repro. |
 | DEF-024 | Moderate | Project FinOps view hides an applicable persisted organization ceiling and displays a false empty state. |
 | DEF-025 | Low | Models enables Add deployment without environment scope; its form cannot select an environment and reports a page-level validation after submission. |
+| DEF-026 | Low | MCP sync banner reports zero schema changes requiring approval while a first-discovered schema is visibly locked pending review. |
 
-All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/).
+All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
 ## Open observations
 
@@ -41,9 +42,9 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 
 ## Coverage
 
-- **Completed in CP43–45:** real Chromium scope switching across organization-only, project/no-environment, project/environment and a second project; navigation/refresh; visually inspected Access, FinOps, Routes, Traces, Playground, MCP, A2A, Overview, Providers, Models, Extensions and Security states; API/persisted-state comparison for members and budgets; Models no-environment create attempt generated validation but no mutation; a real Team Admin session confirmed project chooser/MCP list filtering and 403 on a different project budget query.
+- **Completed in CP43–47:** real Chromium scope switching across organization-only, project/no-environment, project/environment and a second project; navigation/refresh; visually inspected Access, FinOps, Routes, Traces, Playground, MCP, A2A, Overview, Providers, Models, Extensions and Security states; API/persisted-state comparison for members and budgets; Models no-environment create attempt generated validation but no mutation; real Team Admin sessions confirmed project chooser/MCP filtering and 403 on different-project reads/sync. CP47 owner sync contacted only the allowlisted synthetic fixture, visually exposed the first-schema lock/status mismatch, and owner pin resolved it.
 - **Blocked:** no CP43–45 execution capability blocked. Organization-only policy editing was not attempted because the UI requires project/environment and its intended contract remains unclear. Google adapter/runtime failures and RC4 artifact verification remain as recorded in prior checkpoints.
-- **Remaining:** broader independent retest of DEF-001–025 on additional roles/platforms; full non-owner cross-project authorization; workspace transitions under latency and failure; organization policy contract; multi-project MCP labeling/actions; effective budget display plus isolated spend/enforcement regression; remaining screens, business workflows, browser/platform modes, integrations and operational failures. See [coverage matrix](COVERAGE-MATRIX.md) for detailed PASS/FAIL/BLOCKED/UNVERIFIED entries.
+- **Remaining:** broader independent retest of DEF-001–026 on additional roles/platforms; full non-owner cross-project authorization; workspace transitions under latency and failure; organization policy contract; multi-project MCP labeling/actions and first-discovery/drift counts; effective budget display plus isolated spend/enforcement regression; remaining screens, business workflows, browser/platform modes, integrations and operational failures. See [coverage matrix](COVERAGE-MATRIX.md) for detailed PASS/FAIL/BLOCKED/UNVERIFIED entries.
 
 ## Recommended engineering handoffs
 
@@ -51,5 +52,6 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 2. DEF-016 and DEF-021: agree the member enrollment/list contract and align UI success/error states with supported onboarding.
 3. DEF-005: keep security boundaries fail-closed; engineering should define redirects and supported mapped-address notation before changing behavior. Do not weaken SSRF or authorization.
 4. DEF-022: ensure live session role changes reconcile client state without exposing actions after server invalidation.
+5. DEF-026: align sync result counts/copy with initial schema lock state while retaining the pin-before-use control.
 
 `GATE-REL-07` remains **BLOCKED**. No product implementation was changed, no release was approved, and QA-002 is not complete.
