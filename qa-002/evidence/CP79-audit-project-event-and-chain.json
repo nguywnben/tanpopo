@@ -1,0 +1,89 @@
+{
+  "filteredMain": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nImmutable audit events\n4\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#300\tproject.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nproject\nprj_01m868q2jte00abmhf75asqts3\n\t7:53:21 AM\t\nInspect\n\n#125\tproject.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nproject\nprj_01m852f6aye00a7a72vf4c96hn\n\t8:44:57 PM\t\nInspect\n\n#8\tproject.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nproject\nprj_01m84ymb7we009px5hb5pfwsns\n\t7:37:51 PM\t\nInspect\n\n#2\tproject.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nproject\nprj_01m84xhbtwe00937gta0tjq86f\n\t7:18:45 PM\t\nInspect",
+  "verify": {
+    "status": 200,
+    "body": {
+      "intact": true,
+      "checked_events_count": 315,
+      "first_broken_seq_no": null
+    },
+    "visibleText": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nHash chain verified\nCryptographic RFC 8785 JCS chain intact across 315 events.\nImmutable audit events\n4\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#300\tproject.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nproject\nprj_01m868q2jte00abmhf75asqts3\n\t7:53:21 AM\t\nInspect\n\n#125\tproject.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nproject\nprj_01m852f6aye00a7a72vf4c96hn\n\t8:44:57 PM\t\nInspect\n\n#8\tproject.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nproject\nprj_01m84ymb7we009px5hb5pfwsns\n\t7:37:51 PM\t\nInspect\n\n#2\tproject.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nproject\nprj_01m84xhbtwe00937gta0tjq86f\n\t7:18:45 PM\t\nInspect"
+  },
+  "eventSummary": [
+    {
+      "seq_no": 311,
+      "action": "budget.updated",
+      "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+      "chain_partition": "org_01m84xhbtwe009367awjy8edrt",
+      "prev_hash": "3fc5c89d82e96d118f0dbdfb97da58537a3888e950b6a2dfda8bad657a310eee",
+      "event_hash": "345b60b061a317de3fb63aad75deeaee73789896c3846c1c522ed24873f0d515",
+      "created_at": "2026-11-24T08:00:34.926Z"
+    },
+    {
+      "seq_no": 306,
+      "action": "budget.updated",
+      "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+      "chain_partition": "org_01m84xhbtwe009367awjy8edrt",
+      "prev_hash": "0b65274e80eff17f5890e6b053e34cb1324165c4639daf484114f1df56ac2d36",
+      "event_hash": "8925d3c3ce7e37b2143c9c68b7667546c8c5cdad7022d13c24460acffe48aab7",
+      "created_at": "2026-11-24T07:57:08.241Z"
+    },
+    {
+      "seq_no": 301,
+      "action": "budget.created",
+      "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+      "chain_partition": "org_01m84xhbtwe009367awjy8edrt",
+      "prev_hash": "2c8b42dd339bc9fbbd2e8cc159889ea6d51877371b5e8c236dd930d7a4821c2a",
+      "event_hash": "954412b6576ae33c2415dfb89c45a226a1daab449a4476c827a3db0d2fc8f443",
+      "created_at": "2026-11-24T07:53:23.031Z"
+    },
+    {
+      "seq_no": 300,
+      "action": "project.created",
+      "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+      "target_type": "project",
+      "target_id": "prj_01m868q2jte00abmhf75asqts3",
+      "chain_partition": "org_01m84xhbtwe009367awjy8edrt",
+      "prev_hash": "4fa73137e043cfc006eb9ed3c0c45e41be97e6284e9abf017da84ae676e44a5a",
+      "event_hash": "2c8b42dd339bc9fbbd2e8cc159889ea6d51877371b5e8c236dd930d7a4821c2a",
+      "created_at": "2026-11-24T07:53:21.242Z"
+    },
+    {
+      "seq_no": 300,
+      "action": "project.created",
+      "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+      "target_type": "project",
+      "target_id": "prj_01m868q2jte00abmhf75asqts3",
+      "chain_partition": "org_01m84xhbtwe009367awjy8edrt",
+      "prev_hash": "4fa73137e043cfc006eb9ed3c0c45e41be97e6284e9abf017da84ae676e44a5a",
+      "event_hash": "2c8b42dd339bc9fbbd2e8cc159889ea6d51877371b5e8c236dd930d7a4821c2a",
+      "created_at": "2026-11-24T07:53:21.242Z"
+    }
+  ],
+  "apiCalls": [
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/audit-events?limit=100",
+      "returned": 100
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/audit-events?action=project.created&limit=100",
+      "returned": 4
+    },
+    {
+      "method": "POST",
+      "status": 200,
+      "url": "/admin/v1/audit-events/verify",
+      "returned": 0
+    }
+  ]
+}
