@@ -1,0 +1,10 @@
+{
+  "listStatus": 200,
+  "patchStatus": 422,
+  "patchBody": "{\"error\":{\"code\":\"invalid_state_transition\",\"type\":\"invalid_request_error\",\"message\":\"cannot modify connection in state ARCHIVED\",\"request_id\":\"req_01m87fhkpfe0088k6qr770t9hn\",\"retryable\":false,\"current_resource\":{\"id\":\"con_01m87eqcdke009xw7j0g0485nk\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"name\":\"QA003 RC5 Ollama 401\",\"adapter_id\":\"adp_01m87en7q2e008z362mgp36ra8\",\"billing_mode\":\"SELF_HOSTED_INFRA\",\"endpoint_url\":\"http://127.0.0.1:19187\",\"data_region\":\"ON_PREM\",\"allow_private_ip\":true,\"state\":\"DISABLED\",\"secret_slot_fingerprints\":{},\"version\":6,\"created_at\":\"2026-11-24T18:57:37.203Z\"}}}\n",
+  "versionBefore": 6,
+  "readback": {
+    "state": "DISABLED",
+    "version": 6
+  }
+}
