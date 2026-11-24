@@ -44,3 +44,8 @@ The Members & Roles page appears coupled to the selected-project context or shar
 ## Limits
 
 The paired screenshots/API and disposable SQLite state confirm the no-project discrepancy for this org-only owner. Additional browser, locale, other-role, and concurrent-mutation coverage is open. Cross-tenant project/environment routes were not classified because the exploratory paths returned route-level 404/405; the scoped old-tenant budget update did return 404 and left state unchanged. No implementation diagnosis is asserted.
+
+
+## CP43 independent expansion
+
+Using the same isolated organization owner, CP43 reproduced the false empty organization member list both with no project/environment and with a project selected but no environment. The same-session organization members API continued to return the persisted owner row. Selecting an active project/environment showed the row. See [CP43 checkpoint](../checkpoints/CP43-console-workspace-scope-and-finops.md) and visually reviewed screenshots `../evidence/CP43-org-only-access-members.png` and `../evidence/CP43-project-no-env-members.png`.

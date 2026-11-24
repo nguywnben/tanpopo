@@ -8,6 +8,8 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 
 ## Current records
 
+- [Consolidated status summary](STATUS-SUMMARY.md)
+
 - [Baseline and environment CP00](checkpoints/CP00-baseline.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [Historical defect retest register](DEFECT-RETEST-REGISTER.md)
@@ -18,7 +20,9 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [DEF-018](reports/DEF-018-finops-mislabels-playground-lifetime-budget.md) — confirmed lifetime budget period is surfaced as monthly.
 - [DEF-019](reports/DEF-019-playground-hides-budget-rejection-reason.md) — confirmed Playground cap rejection loses its canonical reason.
 - [DEF-020](reports/DEF-020-killswitch-badge-stays-active-after-clear.md) — confirmed Security shell badges remain stale after switch clear and approval decisions.
-- [DEF-023](reports/DEF-023-org-members-hidden-until-project-selected.md) — confirmed org-only owner sees a false empty organization member list until project/environment selection.
+- [DEF-023](reports/DEF-023-org-members-hidden-until-project-selected.md) — confirmed org-only and project/no-environment owner views hide the organization member list.
+- [DEF-024](reports/DEF-024-finops-hides-effective-organization-budget-in-project-scope.md) — confirmed project FinOps view hides a persisted, effective organization ceiling.
+- [QA-OBS-008](reports/QA-OBS-008-mcp-hub-organization-wide-list-scope-label.md) — MCP Hub organization-wide list has no project labels; intended UI scope is unresolved.
 - `reports/` — phase reports, new defect findings (DEF-016 onward), and explicitly unclassified QA observations.
 
 Each checkpoint records the tested revision/runtime, actions, evidence, and PASS / FAIL / BLOCKED / UNVERIFIED result. A PASS is limited to the exact scenario evidenced. No test or artifact may be called PASS based only on source inspection, HTTP success, or an automated test.
@@ -74,3 +78,4 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP40 | Instance-only Operator and hostname-resolved private MCP CIDR enforcement | PASS for the scoped Operator read and `localhost` CIDR cases: explicit `::1/128` reached the dual-stack fixture; mismatch and v4-only lists blocked before fixture contact. Generic sync error repeats QA-OBS-004. Operator writes, DNS rebinding/redirects and other runtimes remain UNVERIFIED. See [checkpoint](checkpoints/CP40-operator-and-hostname-cidr-boundary.md). |
 | CP41 | MCP redirect SSRF behavior with same-CIDR and cross-CIDR targets | PASS for scoped fail-closed behavior: direct private target succeeded; MCP sync did not follow either 307 redirect and neither target received a request. Redirect-target revalidation and support semantics remain UNVERIFIED. See [checkpoint](checkpoints/CP41-mcp-redirect-ssrf-boundary.md). |
 | CP42 | IPv4-mapped IPv6 private MCP endpoint form | PASS for fail-closed behavior: exact `::ffff:127.0.0.1/128` input returned 403 `egress_private_ip_blocked`, no row persisted, no fixture request. Mapped notation support remains UNVERIFIED (QA-OBS-007). See [checkpoint](checkpoints/CP42-ipv4-mapped-mcp-address.md). |
+| CP43 | Console workspace-scope consistency and FinOps budget visibility | FAIL DEF-023 (expanded) and DEF-024. MCP Hub list scope remains unresolved QA-OBS-008. See [checkpoint](checkpoints/CP43-console-workspace-scope-and-finops.md). |
