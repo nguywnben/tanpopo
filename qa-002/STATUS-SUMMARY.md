@@ -1,10 +1,19 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP112
+**Latest checkpoint:** CP113
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP113 — Project policy access across workspace scopes
+
+- **Historical defects:** DEF-016–038 remain preserved/open; CP113 changes none of their dispositions. DEF-001–015 retain scoped QA-002 results only; DEF-005 remains PARTIAL and DEF-007 fault atomicity/erasure proof remain incomplete. No QA-001 PASS is inherited.
+- **New defect:** DEF-039 Low confirmed: project-only/no-environment Policies UI is blocked by an environment prerequisite although the project effective-policy API returns 200 and Project is a supported edit tier. No write, authorization bypass, or policy relaxation occurred.
+- **Coverage completed:** real Chromium owner journey through organization-only, project-only, and project/environment policy scopes; effective API/UI comparison; Project editor selection; navigation; hard refresh; visually inspected screenshots. Hard refresh returned to runtime-default project/no-env, recurring QA-OBS-009.
+- **Coverage blocked/remaining:** Team Admin project-policy authorization is UNVERIFIED because no usable Team Admin session is available. Firefox/WebKit current-image execution remains blocked (CP111). Full independent DEF-001–015 acceptance remains incomplete; DEF-005 DNS rebinding/mixed answers and other SSRF residuals remain open; DEF-007 failure atomicity and erasure proof remain open; DEF-016–039 retesting and broad feature/platform coverage remain incomplete.
+- **Recommended handoffs:** add DEF-039 to the workspace-scope engineering handoff with DEF-023/024/029/030/035. Prioritize DEF-038/007 for backup integrity, audit atomicity, and verifiable erasure. Preserve SSRF, RBAC, and monotonic policy boundaries.
+- **Checkpoint:** [CP113](checkpoints/CP113-project-policy-scope-and-console-state.md); [DEF-039](reports/DEF-039-project-policy-ui-requires-an-environment.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP112 — Google provider probe and Cloud egress-path retest
 
@@ -151,6 +160,7 @@
 | DEF-036 | Low | Extensions Marketplace offers Stage for review for an already active Google Gemini package; the 409 duplicate rejection is rendered as raw storage/unique-constraint text with no direct upgrade recovery action. No persistent change. |
 | DEF-037 | Low | Virtual Key issue audit action is documented as `virtual_key.issued`, but actual UI/API events use `virtual_key.created`; exact documented filter returns zero while the event exists under the emitted name. Issue/revoke records and 511-event chain verified. |
 | DEF-038 | High | Backup verify and restore reject valid retained audit history for an organization after successful crypto-shred; see [standalone report](reports/DEF-038-backup-restore-rejects-deleted-organization-audit-partition.md). |
+| DEF-039 | Low | Project-only/no-environment Policies UI blocks project policy review/edit despite a successful project effective-policy API response; see [standalone report](reports/DEF-039-project-policy-ui-requires-an-environment.md). |
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 

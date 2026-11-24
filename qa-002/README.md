@@ -3,11 +3,14 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP112 (Google provider and Cloud egress-path retest).
+**Latest checkpoint:** CP113 (project policy scope and Console state).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
 ## Current records
+
+- [CP113 — Project policy access across workspace scopes](checkpoints/CP113-project-policy-scope-and-console-state.md)
+- [DEF-039 — Policies page blocks project policy management without an environment](reports/DEF-039-project-policy-ui-requires-an-environment.md)
 
 - [CP112 — Google provider probe and Cloud egress path](checkpoints/CP112-google-provider-egress-path-retest.md)
 
