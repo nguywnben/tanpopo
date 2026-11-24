@@ -1,0 +1,170 @@
+{
+  "browser": "WebKit",
+  "viewport": "375x844",
+  "overview": {
+    "metrics": {
+      "viewport": 375,
+      "documentWidth": 375,
+      "bodyWidth": 375,
+      "activeElement": "BODY"
+    },
+    "text": "Skip to main content\nTanpopo\nQA002 Fresh Google Test / google-default-test / dev (Active workspace scope)\nJump\nKill Switch\nOverview\n\nUpdated 11:59:41 PM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n13\nWindow: 24h\nError rate\n53.85%\nInternal & upstream\np95 proxy overhead\n7.058 ms\nGateway added latency\nSettled spend\n$0.000006\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.\nAll systems nominal No active operational alerts or pending remediation items."
+  },
+  "nav": {
+    "metrics": {
+      "viewport": 375,
+      "documentWidth": 375,
+      "bodyWidth": 375,
+      "activeElement": "BUTTON"
+    },
+    "text": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nLanguage\nEnglish\nqa002-cp17-owner@example.invalid\nOperator, Org Owner\nTanpopo\nQA002 Fresh Google Test / google-default-test / dev (Active workspace scope)\nJump\nKill Switch\nOverview\n\nUpdated 11:59:41 PM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n13\nWindow: 24h\nError rate\n53.85%\nInternal & upstream\np95 proxy overhead\n7.058 ms\nGateway added latency\nSettled spend\n$0.000006\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.\nAll systems nominal No active operational alerts or pending remediation items."
+  },
+  "keys": {
+    "metrics": {
+      "viewport": 375,
+      "documentWidth": 375,
+      "bodyWidth": 375,
+      "activeElement": "BODY"
+    },
+    "text": "session\nState\nActive\nPrefix / Last 4\nvk_tp_dev_…RMKX\nDetail (2)\nPlayground session\nState\nActive\nPrefix / Last 4\nvk_tp_dev_…Khqb\nDetail (2)\nPlayground session\nState\nActive\nPrefix / Last 4\nvk_tp_dev_…hzLQ\nDetail (2)\nPlayground session\nState\nActive\nPrefix / Last 4\nvk_tp_dev_…ZpUC\nDetail (2)\nQA002 CP24 MCP-only\nState\nRevoked\nPrefix / Last 4\nvk_tp_dev_…EM6n\nDetail (2)\nQA002 CP24 MCP-only\nState\nRevoked\nPrefix / Last 4\nvk_tp_dev_…4Kcv\nDetail (2)\nQA002 CP24 MCP invocation\nState\nRevoked\nPrefix / Last 4\nvk_tp_dev_…6Ybc\nDetail (2)\nPlayground session\nState\nActive\nPrefix / Last 4\nvk_tp_dev_…TT4q\nDetail (2)\nPlayground session\nState\nActive\nPrefix / Last 4\nvk_tp_dev_…Sr8N\nDetail (2)\nPlayground session\nState\nActive\nPrefix / Last 4\nvk_tp_dev_…MDvF\nDetail (2)\nPlayground session\nState\nActive\nPrefix / Last 4\nvk_tp_dev_…A7Rq\nDetail (2)\nPlayground session\nState\nActive\nPrefix / Last 4\nvk_tp_dev_…zegt\nDetail (2)"
+  },
+  "members": {
+    "metrics": {
+      "viewport": 375,
+      "documentWidth": 375,
+      "bodyWidth": 375,
+      "activeElement": "BUTTON"
+    },
+    "text": "Skip to main content\nTanpopo\nQA002 Fresh Google Test / google-default-test / dev (Active workspace scope)\nJump\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\n19\nMembers & Roles\n3\nOrganization members\n3\nqa002-cp30-local-member@example.invalid\nEdit roles\nAssigned roles\nDeveloper\nKind\nHUMAN\nqa002-cp28-reviewer@example.invalid\nEdit roles\nAssigned roles\nDeveloper\nKind\nHUMAN\nqa002-cp17-owner@example.invalid\nEdit roles\nAssigned roles\nOrg Owner\nKind\nHUMAN"
+  },
+  "finops": {
+    "metrics": {
+      "viewport": 375,
+      "documentWidth": 375,
+      "bodyWidth": 375,
+      "activeElement": "BODY"
+    },
+    "text": "ge009qw0j8t7zqwh1\nPeriod\nMONTHLY\nExact settled\n$0.000000\nDetail (3)\nVIRTUAL_KEY\nvky_01m859dm5de0081t83m73q15vx\nPeriod\nMONTHLY\nExact settled\n$0.000001\nDetail (3)\nVIRTUAL_KEY\nvky_01m859cd1we009z2y80rrxm9zj\nPeriod\nMONTHLY\nExact settled\n$0.000000\nDetail (3)\nVIRTUAL_KEY\nvky_01m8593evve008h9qe95cjxmmv\nPeriod\nMONTHLY\nExact settled\n$0.000001\nDetail (3)\nPROJECT\nprj_01m853e561e00byw750arfmw8y\nPeriod\nMONTHLY\nExact settled\n$0.000004\nDetail (3)\nVIRTUAL_KEY\nvky_01m856b4ype0091h727havv8c7\nPeriod\nMONTHLY\nExact settled\n$0.000001\nDetail (3)\nVIRTUAL_KEY\nvky_01m856a0rbe00bxmqy8nacn4nf\nPeriod\nMONTHLY\nExact settled\n$0.000001\nDetail (3)\nVIRTUAL_KEY\nvky_01m856843ce00a3bd2sz1sps9r\nPeriod\nMONTHLY\nExact settled\n$0.000000\nDetail (3)\nVIRTUAL_KEY\nvky_01m855yr1te0082arkf0msjcs8\nPeriod\nMONTHLY\nExact settled\n$0.000000\nDetail (3)\nVIRTUAL_KEY\nvky_01m853j3sde00986ngt0pv1th5\nPeriod\nMONTHLY\nExact settled\n$0.000000\nDetail (3)"
+  },
+  "security": {
+    "metrics": {
+      "viewport": 375,
+      "documentWidth": 375,
+      "bodyWidth": 375,
+      "activeElement": "BODY"
+    },
+    "text": "Skip to main content\nTanpopo\nQA002 Fresh Google Test / google-default-test / dev (Active workspace scope)\nJump\nKill Switch\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nPending MCP approvals\n0\nApproval queue clear\nDestructive MCP tool invocations requiring human-in-the-loop sign-off appear here.\nApproval queue clear Destructive MCP tool invocations requiring human-in-the-loop sign-off appear here."
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/virtual-keys",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/members",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/models",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/budgets",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/usage/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/virtual-keys",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/audit-events",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200
+    }
+  ]
+}

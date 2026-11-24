@@ -32,3 +32,7 @@ The error is a caller-selected nonexistent model, so no alert may be appropriate
 ## Follow-up
 
 Compare an invalid-model request, a provider outage, and a healthy successful request against alert contracts and Overview copy. Decide whether to clarify the label or alert logic only after those comparisons. Do not count this as a confirmed defect or a release pass.
+
+## Independent recurrence — CP33
+
+On the accumulated QA-002 SQLite runtime, WebKit at 375×844 showed 13 requests and a 53.85% internal/upstream error rate, zero active alerts, and “All systems nominal” with “No active operational alerts or pending remediation items.” This state differs from CP17's single deliberately invalid model request and 100% error rate, but it independently reproduces the KPI/copy tension. See `evidence/CP33-webkit-overview-375.png`, sanitized `evidence/CP33-webkit-mobile.json`, and `checkpoints/CP33-webkit-mobile-console-regression.md`. Because the runtime contains accumulated intentional negative testing and the meaning of this alert copy is still unspecified, classification remains an unresolved observation.
