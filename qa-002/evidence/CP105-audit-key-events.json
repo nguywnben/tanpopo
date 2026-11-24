@@ -1,0 +1,43 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": 18084,
+  "key": {
+    "id": "vky_01m86na047e009k3adznza29j7",
+    "name": "QA002 CP104 A2A terminal guard",
+    "final_state": "REVOKED"
+  },
+  "api": {
+    "status": 200,
+    "total": 100,
+    "matches": [
+      {
+        "seq_no": 505,
+        "action": "virtual_key.revoked",
+        "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+        "target_type": "virtual_key",
+        "target_id": "vky_01m86na047e009k3adznza29j7",
+        "chain_partition": "org_01m84xhbtwe009367awjy8edrt",
+        "created_at": "2026-11-24T11:33:28.624Z",
+        "metadata": {
+          "mode": "STANDARD",
+          "reason": "Graceful drain revocation"
+        }
+      },
+      {
+        "seq_no": 499,
+        "action": "virtual_key.created",
+        "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+        "target_type": "virtual_key",
+        "target_id": "vky_01m86na047e009k3adznza29j7",
+        "chain_partition": "org_01m84xhbtwe009367awjy8edrt",
+        "created_at": "2026-11-24T11:33:24.231Z",
+        "metadata": {
+          "allowed_planes": "A2A",
+          "env_id": "env_01m84ymb8ae00b43av7shak1sf"
+        }
+      }
+    ],
+    "latest_seq": 510
+  },
+  "screen": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nImmutable audit events\n100\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#510\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:39:44 AM\t\nInspect\n\n#509\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:37:18 AM\t\nInspect\n\n#508\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:36:48 AM\t\nInspect\n\n#507\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:34:38 AM\t\nInspect\n\n#506\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:34:10 AM\t\nInspect\n\n#505\tvirtual_key.revoked\tprc_01m84xhbtwe00939kr14qg3khv\t\nvirtual_key\nvky_01m86na047e009k3adznza29j7\n\t11:33:28 AM\t\nInspect\n\n#504\ta2a.task.resumed\tprc_01m84xhbtwe00939kr14qg3khv\t\na2a_task\ntsk_01m86na134e008tk710rvda636\n\t11:33:26 AM\t\nInspect\n\n#503\ta2a.task.resumed\tprc_01m84xhbtwe00939kr14qg3khv\t\na2a_task\ntsk_01m86na134e008tk710rvda636\n\t11:33:26 AM\t\nInspect\n\n#502\ta2a.task.transitioned\tvky_01m86na047e009k3adznza29j7\t\na2a_task\ntsk_01m86na134e008tk710rvda636\n\t11:33:25 AM\t\nInspect\n\n#501\ta2a.task.transitioned\tvky_01m86na047e009k3adznza29j7\t\na2a_task\ntsk_01m86na134e008tk710rvda636\n\t11:33:25 AM\t\nInspect\n\n#500\ta2a.task.submitted\tvky_01m86na047e009k3adznza29j7\t\na2a_task\ntsk_01m86na134e008tk710rvda636\n\t11:33:25 AM\t\nInspect\n\n#499\tvirtual_key.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nvirtual_key\nvky_01m86na047e009k3adznza29j7\n\t11:33:24 AM\t\nInspect\n\n#498\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:33:21 AM\t\nInspect\n\n#497\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:32:58 AM\t\nInspect\n\n#496\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:32:08 AM\t\nInspect\n\n#495\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:31:20 AM\t\nInspect\n\n#494\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:30:50 AM\t\nInspect\n\n#493\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:30:20 AM\t\nInspect\n\n#492\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:28:25 AM\t\nInspect\n\n#491\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:28:07 AM\t\nInspect\n\n#490\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:27:54 AM\t\nInspect\n\n#489\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:27:41 AM\t\nInspect\n\n#488\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprin"
+}

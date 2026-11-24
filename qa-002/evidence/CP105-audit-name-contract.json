@@ -1,0 +1,40 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": 18084,
+  "key_id": "vky_01m86na047e009k3adznza29j7",
+  "documented_action": "virtual_key.issued",
+  "actual_action": "virtual_key.created",
+  "expected_filter": {
+    "status": 200,
+    "count": 0,
+    "keyMatches": 0
+  },
+  "actual_filter": {
+    "status": 200,
+    "count": 12,
+    "keyMatches": [
+      {
+        "seq_no": 499,
+        "action": "virtual_key.created",
+        "target_id": "vky_01m86na047e009k3adznza29j7",
+        "chain_partition": "org_01m84xhbtwe009367awjy8edrt"
+      }
+    ]
+  },
+  "ui_actions_seen": [
+    "virtual_key.issued",
+    "virtual_key.issued",
+    "virtual_key.created",
+    "virtual_key.created",
+    null
+  ],
+  "verify": {
+    "status": 200,
+    "intact": true,
+    "checked_events_count": 511,
+    "first_broken_seq_no": null
+  },
+  "expected_screen": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nImmutable audit events\n0\nNo audit events match this filter",
+  "actual_screen": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nImmutable audit events\n12\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#499\tvirtual_key.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nvirtual_key\nvky_01m86na047e009k3adznza29j7\n\t11:33:24 AM\t\nInspect\n\n#451\tvirtual_key.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nvirtual_key\nvky_01m86grhjje00b7twn9aka5t2g\n\t10:13:57 AM\t\nInspect\n\n#444\tvirtual_key.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nvirtual_key\nvky_01m86gmy2ae009xphsvws4vsra\n\t10:11:59 AM\t\nInspect\n\n#217\tvirtual_key.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nvirtual_key\nvky_01m864jnd4e008fycre4dkgcrw\n\t6:41:02 AM\t\nInspect\n\n#212\tvirtual_key.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nvirtual_key\nvky_01m864aej2e0087kjrrp8pg91v\n\t6:36:33 AM\t\nInspect\n\n#203\tvirtual_key.created\tprc_01m84xhbtwe00939kr14qg3khv\t\nvirtual_key\nvky_01m8646gt1e009h7hptzqgthw2\n\t6:34:24 AM\t\nInspect\n\n#",
+  "verify_screen": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nHash chain verified\nCryptographic RFC 8785 JCS chain intact across 511 events.\nImmutable audit events\n100\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#511\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:40:49 AM\t\nInspect\n\n#510\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:39:44 AM\t\nInspect\n\n#509\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:37:18 AM\t\nInspect\n\n#508\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:36:48 AM\t\nInspect\n\n#507\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t11:34:38 AM\t\nInspect\n\n#506\tauth.login_succeeded\tprc_01m84xhbtwe00939"
+}

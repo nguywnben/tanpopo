@@ -1,10 +1,20 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP104
+**Latest checkpoint:** CP105
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP105 — Virtual Key audit event-name contract
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006, and DEF-008–015 retain their limited scoped QA-002 results; CP104 expanded DEF-011. DEF-005 remains PARTIAL. No QA-001 PASS is inherited.
+- **Historical defects failing/unverified:** DEF-007 remains partial: CP105 confirms issue/revoke success events and an intact chain, but event append failure atomicity, populated-organization erasure and storage-fault behavior remain UNVERIFIED. DEF-016–036 remain open; CP105 changes no disposition for them. DEF-023 was independently reproduced in CP101.
+- **New defects:** DEF-037 Low confirmed: published `virtual_key.issued` action mismatches emitted/filterable `virtual_key.created`; exact documented filter returns zero although the event exists under the actual name. No missing record, secret exposure or chain failure was observed.
+- **Coverage completed:** actual Console key issue/revoke events; UI/API exact-action filters; issue metadata and 511-event chain verification; screenshots visually inspected.
+- **Coverage blocked / remaining:** audit failure injection, atomicity, populated erasure, cross-tenant isolation and downstream action-name consumers remain untested. Full role/browser/platform and product coverage remains incomplete.
+- **Recommended engineering handoffs:** resolve DEF-037 canonical event vocabulary; retain DEF-007 append-failure/erasure handoff; continue DEF-005 without weakening SSRF or authorization boundaries.
+- **Checkpoint:** [CP105](checkpoints/CP105-audit-contract-virtual-key-event-name.md); [DEF-037](reports/DEF-037-virtual-key-audit-event-name-contract.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP102 — Google runtime inventory comparison
 
@@ -72,6 +82,7 @@
 | DEF-034 | Moderate | Webhook subscription cannot be disabled or deleted through the Console or Admin API; active external destinations cannot be revoked through a supported product workflow. |
 | DEF-035 | Moderate | Models shows sibling-project environment deployments with Disable/Delete actions while organization-only or an empty project is selected, without identifying deployment ownership. No unauthorized access or mutation was observed. |
 | DEF-036 | Low | Extensions Marketplace offers Stage for review for an already active Google Gemini package; the 409 duplicate rejection is rendered as raw storage/unique-constraint text with no direct upgrade recovery action. No persistent change. |
+| DEF-037 | Low | Virtual Key issue audit action is documented as `virtual_key.issued`, but actual UI/API events use `virtual_key.created`; exact documented filter returns zero while the event exists under the emitted name. Issue/revoke records and 511-event chain verified. |
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
