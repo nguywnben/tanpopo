@@ -10,6 +10,7 @@
 [![CI (Stage 0-2)](https://github.com/nguywnben/tanpopo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nguywnben/tanpopo/actions/workflows/ci.yml)
 [![Release Artifact Dry Run](https://github.com/nguywnben/tanpopo/actions/workflows/release-dry-run.yml/badge.svg?branch=main)](https://github.com/nguywnben/tanpopo/actions/workflows/release-dry-run.yml)
 [![Go Version](https://img.shields.io/badge/Go-1.26.11%2B_(CGO__ENABLED%3D0)-00ADD8.svg)](./go.mod)
+[![M8ven Score](https://m8ven.ai/badge/mcp/nguywnben-tanpopo-4xf4w2?v=aa7f45efff8dc06d26b665eff741f809)](https://m8ven.ai/mcp/nguywnben-tanpopo-4xf4w2?s=readme)
 
 [Quickstart](#quickstart) · [Capabilities](#why-tanpopo) · [Docs by Role](#documentation) · [Benchmarks & Scope](#performance-and-scope) · [Security](./SECURITY.md)
 
