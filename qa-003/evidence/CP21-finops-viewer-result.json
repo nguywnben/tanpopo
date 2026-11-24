@@ -1,0 +1,39 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": "isolated SQLite clone on 127.0.0.1:18116",
+  "role": "FINOPS_VIEWER",
+  "finops_budget_dashboard": {
+    "loaded": true,
+    "budgets_get": 200,
+    "export_csv_control_visible": true,
+    "export_json_control_visible": true,
+    "budget_write_attempt": {
+      "status": 403,
+      "error_code": "insufficient_role_permission"
+    }
+  },
+  "chargeback_exports_on_empty_tenant": {
+    "chargeback_view_loaded": true,
+    "csv_downloaded": true,
+    "csv_header": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count",
+    "csv_data_rows": 0,
+    "json_downloaded": true,
+    "json_bytes": 2,
+    "json_value": {},
+    "usage_state": "No usage recorded"
+  },
+  "restricted_surfaces": {
+    "security_nav_hidden": true,
+    "direct_security_route_displays_access_restricted": true,
+    "access_keys_nav_visible": true,
+    "virtual_key_list_get": 403,
+    "member_list_get": 403,
+    "access_keys_page_displays_permission_error": true,
+    "issue_key_action_visible": false
+  },
+  "invalid_probe_not_used_as_role_evidence": {
+    "manual_usage_summary_get_without_group_by_or_date_filters": 400,
+    "classification": "Invalid query: omitted filters documented by SCR-12. The dashboard itself rendered zero-valued totals; this response is not treated as an authorization failure or product defect."
+  },
+  "classification": "Scoped FinOps Viewer read/export permissions passed; budget writes and member/key reads were denied; Security was access-restricted. Project-scoped role and populated chargeback exports remain open."
+}
