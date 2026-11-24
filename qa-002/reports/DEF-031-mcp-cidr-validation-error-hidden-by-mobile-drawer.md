@@ -18,6 +18,10 @@ At 375×844 in WebKit, both MCP server and A2A agent registration forms accept a
 6. Fetch the server list: the attempted slug is absent. The invalid CIDR is rejected before server registration or endpoint contact.
 7. Repeat in **A2A Agents & Active Tasks → Register agent** with a unique slug and the same invalid CIDR. CP67 confirms the A2A POST also returns 400, the agent list has no new row, and the error text remains obscured behind that drawer.
 
+### Independent Chromium mobile retest — CP118
+
+At 375×844, real Chromium submitted A2A endpoint `http://127.0.0.1:19189` with the private-endpoint option enabled and `127.0.0.1/33` in the **Allowed CIDRs** field. The actual POST returned HTTP 400 `invalid_request` with `allowed_cidrs must contain valid non-wildcard CIDR prefixes`; a follow-up list remained at six agents and the unique slug was absent. No endpoint traffic occurred. The drawer retained the invalid input and remained open. Screenshot inspection confirms the red page-level error banner sits behind the open drawer: only its clipped icon is visible, while its text is obscured. The DOM/API contains the error text, but it is not visually readable. This independently reconfirms the A2A case in Chromium mobile in addition to WebKit CP67; it is not a new defect. See [CP118](../checkpoints/CP118-def031-chromium-mobile-a2a.md), `../evidence/CP118-a2a-mobile-invalid-cidr-form.png`, `../evidence/CP118-a2a-mobile-invalid-cidr-result.png`, and sanitized `../evidence/CP118-a2a-mobile-invalid-cidr.json`.
+
 ## Expected versus actual
 
 - **Expected:** Validate CIDR syntax in the form and show a clear, visible field-level message before submission; if the API rejects a value, display its error above the drawer or within the drawer, keep the user's entries, and identify the offending field.
@@ -52,6 +56,7 @@ Users configuring private MCP or A2A access can be blocked by an invalid prefix 
 - `../evidence/CP67-webkit-a2a-invalid-cidr.json` — A2A payload, API rejection, no-persistence check, and error occlusion.
 - `../evidence/CP67-webkit-a2a-invalid-cidr-result-375.png` — visually inspected A2A mobile state.
 - [CP67](../checkpoints/CP67-webkit-a2a-cidr-error-parity.md) — independent A2A parity retest.
+- [CP118](../checkpoints/CP118-def031-chromium-mobile-a2a.md) — independent Chromium mobile A2A retest; confirms the error text remains behind the drawer after a real API rejection.
 - Related security/control issue: [DEF-005 handoff](../../../tanpopo/qa/engineering-handoffs/DEF-005-private-endpoint-cidr-input.md).
 
 No product code, server configuration, database, or external endpoint was modified or contacted.

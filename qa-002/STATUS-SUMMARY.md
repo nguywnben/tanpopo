@@ -1,10 +1,19 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP117
+**Latest checkpoint:** CP118
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP118 — DEF-031 invalid CIDR error in Chromium mobile
+
+- **Historical defects:** DEF-001–015 retain scoped QA-002 outcomes only; no QA-001 PASS is inherited. DEF-005 remains PARTIAL after CP114/116/117 security checks. DEF-007 audit success paths do not close failure atomicity, storage faults, or independent erasure proof. DEF-016–038 remain preserved/open; DEF-039 Low remains confirmed.
+- **Existing finding:** DEF-031 Low independently reconfirmed in Chromium mobile A2A, extending prior WebKit CP66/67 evidence. No new ID.
+- **Coverage completed:** at 375×844, actual A2A submission of loopback endpoint plus malformed `/33` returned 400 `invalid_request`; collection remained at six agents with no attempted row. Screenshot inspection shows the red validation message behind the drawer, with only a clipped icon visible. No endpoint call.
+- **Coverage blocked/remaining:** MCP mobile parity, correction/retry, keyboard/screen-reader announcement and desktop behavior remain open. Firefox/WebKit current-image runs remain blocked by CP111. Broad full-product and historical retests remain incomplete.
+- **Recommended handoffs:** update DEF-031 handoff with CP118; display validation beside the CIDR field or above the drawer and announce it accessibly, preserving server-side rejection. Continue DEF-005 residuals, DEF-038/007 and all outstanding defects.
+- **Checkpoint:** [CP118](checkpoints/CP118-def031-chromium-mobile-a2a.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP117 — MCP cross-CIDR redirects (301/308)
 

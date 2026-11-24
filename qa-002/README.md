@@ -3,11 +3,13 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP117 (MCP cross-CIDR redirects 301/308).
+**Latest checkpoint:** CP118 (DEF-031 Chromium mobile A2A retest).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
 ## Current records
+
+- [CP118 — DEF-031 Chromium mobile A2A CIDR error](checkpoints/CP118-def031-chromium-mobile-a2a.md)
 
 - [CP117 — MCP cross-CIDR redirects 301/308](checkpoints/CP117-mcp-redirect-301-308-boundary.md)
 
