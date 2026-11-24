@@ -77,6 +77,7 @@ Baseline: `40bba5b55c2da6fc00b107b315c9b3167fb20169`. The acceptance criteria ar
 
 | CP43 | DEF-023 expansion, DEF-024; Console workspace scope | Real Chromium interactions across org-only, project/no-environment, project/environment and two projects; screenshots visually inspected. DEF-023 reproduced in org-only and project/no-environment contexts. Organization budget was persisted through UI but hidden in an empty project view; DEF-024 confirmed. MCP Hub organization-wide list labeling remains QA-OBS-008. No source code changed. See `checkpoints/CP43-console-workspace-scope-and-finops.md`. |
 | CP44 | DEF-025; organization-only screen navigation | Real Chromium visited Overview, Providers, Models, Extensions and Security. Models Add deployment remained enabled with no active environment; its drawer had no scope selector and blocked submit with an external banner. No deployment mutation occurred. See `checkpoints/CP44-org-only-console-surface-and-model-drawer.md`. |
+| CP45 | Project-scoped Team Admin / MCP authorization | Real UI provisioning and login for a Team Admin scoped to project1; project chooser omitted project2, MCP list/API returned only project1 rows, and project2 budget list returned 403. Owner MCP registry remained org-wide. No cross-project access or new defect found; see `checkpoints/CP45-project-scoped-role-and-mcp-boundary.md`. |
 
 ## Acceptance criteria sources
 

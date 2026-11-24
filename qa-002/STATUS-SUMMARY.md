@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP44
+**Latest checkpoint:** CP45
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -41,8 +41,8 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 
 ## Coverage
 
-- **Completed in CP43–44:** real Chromium scope switching across organization-only, project/no-environment, project/environment and a second project; navigation/refresh; visually inspected Access, FinOps, Routes, Traces, Playground, MCP, A2A, Overview, Providers, Models, Extensions and Security states; API/persisted-state comparison for members and budgets; Models no-environment create attempt generated validation but no mutation.
-- **Blocked:** no CP43 execution capability blocked. Organization-only policy editing was not attempted because the UI requires project/environment and its intended contract remains unclear. Google adapter/runtime failures and RC4 artifact verification remain as recorded in prior checkpoints.
+- **Completed in CP43–45:** real Chromium scope switching across organization-only, project/no-environment, project/environment and a second project; navigation/refresh; visually inspected Access, FinOps, Routes, Traces, Playground, MCP, A2A, Overview, Providers, Models, Extensions and Security states; API/persisted-state comparison for members and budgets; Models no-environment create attempt generated validation but no mutation; a real Team Admin session confirmed project chooser/MCP list filtering and 403 on a different project budget query.
+- **Blocked:** no CP43–45 execution capability blocked. Organization-only policy editing was not attempted because the UI requires project/environment and its intended contract remains unclear. Google adapter/runtime failures and RC4 artifact verification remain as recorded in prior checkpoints.
 - **Remaining:** broader independent retest of DEF-001–025 on additional roles/platforms; full non-owner cross-project authorization; workspace transitions under latency and failure; organization policy contract; multi-project MCP labeling/actions; effective budget display plus isolated spend/enforcement regression; remaining screens, business workflows, browser/platform modes, integrations and operational failures. See [coverage matrix](COVERAGE-MATRIX.md) for detailed PASS/FAIL/BLOCKED/UNVERIFIED entries.
 
 ## Recommended engineering handoffs
