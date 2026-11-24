@@ -1,0 +1,81 @@
+{
+  "http_status": 200,
+  "has_more": false,
+  "items": [
+    {
+      "id": "bdg_01m85d6pnhe00a0px208a7x3nj",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m85abte9e00aq5fg5ydx9f4t",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m85a8xmde0097ynhsyeak4be",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m85a7zbqe00a4ffk88vng491",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m859hycpe0096pszrpjat5fx",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m859g6qte00bewcb4vrdbyr6",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m859dm5ke00bcbs8ykc170nf",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m859cd1ze00bkgezea068aw7",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m8593evze0096c0ye4z70p2c",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bgt_project_prj_01m853e561e00byw750arfmw8y_monthly",
+      "scope_tier": "PROJECT",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m856b4yre00a8hx8ch2mkvgt",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m856a0rce00a0dj0thxq7khn",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m856843de00873fma9nzt8j4",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m855yr1we008w90wvpkagpg3",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    },
+    {
+      "id": "bdg_01m853j3sfe009wxyfgz7kvcf5",
+      "scope_tier": "VIRTUAL_KEY",
+      "period": "MONTHLY"
+    }
+  ]
+}
