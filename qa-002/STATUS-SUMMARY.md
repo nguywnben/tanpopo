@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP84
+**Latest checkpoint:** CP85
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -37,7 +37,18 @@
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
-## Latest phase: CP84
+## Latest phase: CP85
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006, DEF-008–015 retain only their scoped QA-002 results; CP82 independently revalidated DEF-014/015 over four groupings. DEF-005 remains partial. No QA-001 PASS is inherited.
+- **Historical defects failing / unverified:** DEF-016–033 remain confirmed open. DEF-023 was reconfirmed in CP80. DEF-007 has a fresh successful empty-organization crypto-shred/audit-chain path, while its failure atomicity and populated-resource acceptance remain unverified.
+- **New findings:** none in CP79–85. Existing confirmed findings DEF-016–033 and QA-OBS-001–014 remain preserved.
+- **Coverage completed:** CP79 project provisioning audit and 315-event chain; CP80 DEF-023 comparison and keyboard tabs; CP81 Overview windows; CP82 CSV/JSON group exports; CP83/84 compatible and blocked-incompatible upgrade preflights; CP85 disposable empty-organization create/shred, exact-slug guard, post-delete collection absence, organization-partition shred event, and intact two-event chain. Browser screenshots were visually inspected.
+- **Coverage blocked:** runtime 18445 A2A remains disabled by configuration; webhook delivery requires usable Operator credentials and controlled receiver/signing setup; RC4 artifact verification remains UNVERIFIED because the artifact is in a separate unavailable DevBox.
+- **Coverage remaining:** independent DEF-001–015 acceptance retests remain incomplete overall; DEF-005 DNS rebinding/mixed answers/redirect-chain/alternate runtimes; DEF-007 failure atomicity, populated organization and storage-fault paths; actual upgrade/ABORTED_SAFE and cross-role denial; provider outage/recovery for QA-OBS-003; FinOps filters/pagination/roles/locales; and remaining product, browser, platform, integration, accessibility, and operations coverage. PASS/FAIL/BLOCKED/UNVERIFIED remain distinct in the matrix.
+- **Recommended handoffs:** keep DEF-016/023/029/030 state behavior coupled with authorization acceptance; prioritize DEF-033 budget create/update semantics, DEF-005 SSRF acceptance without weakening controls, DEF-007 audit atomicity/populated erasure, and actual upgrade safe-abort behavior.
+- **Checkpoint:** [CP85](checkpoints/CP85-operations-org-crypto-shred.md), [CP84](checkpoints/CP84-operations-incompatible-preflight.md), [CP83](checkpoints/CP83-operations-upgrade-preflight.md).
+
+## Historical phase: CP84
 
 - **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain only their individually scoped QA-002 results. CP82 independently retested DEF-014/015 across four supported grouping dimensions. DEF-005 remains PARTIAL. No QA-001 PASS is inherited.
 - **Historical defects failing / unverified:** DEF-016–033 remain confirmed open as listed above; broad acceptance remains incomplete. DEF-023 was independently reconfirmed in CP80. DEF-007 failure injection and organization mutation/delete/storage-fault/cross-tenant paths remain UNVERIFIED.

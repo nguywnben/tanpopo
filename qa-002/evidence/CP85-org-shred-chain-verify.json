@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "body": {
+    "intact": true,
+    "checked_events_count": 2,
+    "first_broken_seq_no": null
+  }
+}

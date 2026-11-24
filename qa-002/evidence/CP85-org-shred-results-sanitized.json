@@ -1,0 +1,335 @@
+{
+  "name": "QA002 CP85 Shred Probe",
+  "slug": "qa002-cp85-shred-probe-20261124",
+  "created": {
+    "status": 201,
+    "id": "org_01m86b839me00bb5zw6w29exhv",
+    "version": 1
+  },
+  "confirmation": {
+    "dialogText": "Crypto-shred organization\n\nIrreversibly destroys the Organization DEK for QA002 CP85 Shred Probe, purges secrets and keys, and cancels active sessions within 60 seconds.\n\nDeletion justification\nType \"qa002-cp85-shred-probe-20261124\" to confirm\nCancel\nCrypto-shred",
+    "textboxCount": 2,
+    "wrongSlugConfirmDisabled": true,
+    "exactSlugConfirmEnabled": true
+  },
+  "delete": {
+    "status": 200,
+    "deletedDekIdentifierReturned": true,
+    "revokedVirtualKeysCount": 0
+  },
+  "uiAfter": "Operations\n\nProvision isolated tenant organizations and execute irreversible cryptographic erasure.\n\nRefresh\nCreate organization\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\n3\nWebhooks\nOrganization crypto-shredded\nDestroyed DEK [redacted opaque identifier] and revoked 0 virtual keys.\nTenant organizations\n3\nOrganization\tMin extension trust\tFour-eyes approval\tCreated\tActions\n\nQA002 CP18 Audit Status Org\nqa002-cp18-audit-status · org_01m854cds0e009ckxgn6tv7411\n\tAny Approved\tDisabled\tNov 23, 2026, 9:18:23 PM\t\nSwitch\nCrypto-shred\n\n\nQA002 CP18 Standalone Audit Org\nqa002-cp18-standalone-audit · org_01m8541pqse00a0twk7y54zckg\n\tAny Approved\tDisabled\tNov 23, 2026, 9:12:32 PM\t\nSwitch\nCrypto-shred\n\n\nQA-002 A2A OrgActive\nqa-002-a2a-org · org_01m84xhbtwe009367awjy8edrt\n\tAny Approved\tDisabled\tNov 23, 2026, 7:18:45 PM\t\nSwitch\nCrypto-shred",
+  "rowStillThere": 0,
+  "organizationCollection": {
+    "status": 200,
+    "total": 3,
+    "targetIdPresent": false,
+    "targetSlugPresent": false
+  },
+  "shredAudit": {
+    "status": 200,
+    "eventCount": 1,
+    "event": "organization.crypto_shredded; see CP85-org-shred-audit-sanitized.json for sanitized details"
+  },
+  "calls": [
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/organizations",
+      "body": {
+        "data": [
+          {
+            "id": "org_01m854cds0e009ckxgn6tv7411",
+            "slug": "qa002-cp18-audit-status",
+            "name": "QA002 CP18 Audit Status Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:18:23.52Z"
+          },
+          {
+            "id": "org_01m8541pqse00a0twk7y54zckg",
+            "slug": "qa002-cp18-standalone-audit",
+            "name": "QA002 CP18 Standalone Audit Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:12:32.249Z"
+          },
+          {
+            "id": "org_01m84xhbtwe009367awjy8edrt",
+            "slug": "qa-002-a2a-org",
+            "name": "QA-002 A2A Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T19:18:45.045Z"
+          }
+        ],
+        "has_more": false
+      }
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/organizations",
+      "body": {
+        "data": [
+          {
+            "id": "org_01m854cds0e009ckxgn6tv7411",
+            "slug": "qa002-cp18-audit-status",
+            "name": "QA002 CP18 Audit Status Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:18:23.52Z"
+          },
+          {
+            "id": "org_01m8541pqse00a0twk7y54zckg",
+            "slug": "qa002-cp18-standalone-audit",
+            "name": "QA002 CP18 Standalone Audit Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:12:32.249Z"
+          },
+          {
+            "id": "org_01m84xhbtwe009367awjy8edrt",
+            "slug": "qa-002-a2a-org",
+            "name": "QA-002 A2A Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T19:18:45.045Z"
+          }
+        ],
+        "has_more": false
+      }
+    },
+    {
+      "method": "POST",
+      "status": 201,
+      "url": "/admin/v1/organizations",
+      "body": {
+        "id": "org_01m86b839me00bb5zw6w29exhv",
+        "slug": "qa002-cp85-shred-probe-20261124",
+        "name": "QA002 CP85 Shred Probe",
+        "min_plugin_trust": "ANY_APPROVED",
+        "four_eyes_enabled": false,
+        "version": 1,
+        "created_at": "2026-11-24T08:37:36.18Z"
+      }
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/organizations",
+      "body": {
+        "data": [
+          {
+            "id": "org_01m86b839me00bb5zw6w29exhv",
+            "slug": "qa002-cp85-shred-probe-20261124",
+            "name": "QA002 CP85 Shred Probe",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-24T08:37:36.18Z"
+          },
+          {
+            "id": "org_01m854cds0e009ckxgn6tv7411",
+            "slug": "qa002-cp18-audit-status",
+            "name": "QA002 CP18 Audit Status Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:18:23.52Z"
+          },
+          {
+            "id": "org_01m8541pqse00a0twk7y54zckg",
+            "slug": "qa002-cp18-standalone-audit",
+            "name": "QA002 CP18 Standalone Audit Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:12:32.249Z"
+          },
+          {
+            "id": "org_01m84xhbtwe009367awjy8edrt",
+            "slug": "qa-002-a2a-org",
+            "name": "QA-002 A2A Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T19:18:45.045Z"
+          }
+        ],
+        "has_more": false
+      }
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/organizations",
+      "body": {
+        "data": [
+          {
+            "id": "org_01m86b839me00bb5zw6w29exhv",
+            "slug": "qa002-cp85-shred-probe-20261124",
+            "name": "QA002 CP85 Shred Probe",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-24T08:37:36.18Z"
+          },
+          {
+            "id": "org_01m854cds0e009ckxgn6tv7411",
+            "slug": "qa002-cp18-audit-status",
+            "name": "QA002 CP18 Audit Status Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:18:23.52Z"
+          },
+          {
+            "id": "org_01m8541pqse00a0twk7y54zckg",
+            "slug": "qa002-cp18-standalone-audit",
+            "name": "QA002 CP18 Standalone Audit Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:12:32.249Z"
+          },
+          {
+            "id": "org_01m84xhbtwe009367awjy8edrt",
+            "slug": "qa-002-a2a-org",
+            "name": "QA-002 A2A Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T19:18:45.045Z"
+          }
+        ],
+        "has_more": false
+      }
+    },
+    {
+      "method": "DELETE",
+      "status": 200,
+      "url": "/admin/v1/organizations/org_01m86b839me00bb5zw6w29exhv",
+      "body": {
+        "revoked_virtual_keys_count": 0,
+        "destroyed_dek_identifier_returned": true
+      }
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/organizations",
+      "body": {
+        "data": [
+          {
+            "id": "org_01m854cds0e009ckxgn6tv7411",
+            "slug": "qa002-cp18-audit-status",
+            "name": "QA002 CP18 Audit Status Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:18:23.52Z"
+          },
+          {
+            "id": "org_01m8541pqse00a0twk7y54zckg",
+            "slug": "qa002-cp18-standalone-audit",
+            "name": "QA002 CP18 Standalone Audit Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:12:32.249Z"
+          },
+          {
+            "id": "org_01m84xhbtwe009367awjy8edrt",
+            "slug": "qa-002-a2a-org",
+            "name": "QA-002 A2A Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T19:18:45.045Z"
+          }
+        ],
+        "has_more": false
+      }
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/organizations",
+      "body": {
+        "data": [
+          {
+            "id": "org_01m854cds0e009ckxgn6tv7411",
+            "slug": "qa002-cp18-audit-status",
+            "name": "QA002 CP18 Audit Status Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:18:23.52Z"
+          },
+          {
+            "id": "org_01m8541pqse00a0twk7y54zckg",
+            "slug": "qa002-cp18-standalone-audit",
+            "name": "QA002 CP18 Standalone Audit Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:12:32.249Z"
+          },
+          {
+            "id": "org_01m84xhbtwe009367awjy8edrt",
+            "slug": "qa-002-a2a-org",
+            "name": "QA-002 A2A Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T19:18:45.045Z"
+          }
+        ],
+        "has_more": false
+      }
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/organizations",
+      "body": {
+        "data": [
+          {
+            "id": "org_01m854cds0e009ckxgn6tv7411",
+            "slug": "qa002-cp18-audit-status",
+            "name": "QA002 CP18 Audit Status Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:18:23.52Z"
+          },
+          {
+            "id": "org_01m8541pqse00a0twk7y54zckg",
+            "slug": "qa002-cp18-standalone-audit",
+            "name": "QA002 CP18 Standalone Audit Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T21:12:32.249Z"
+          },
+          {
+            "id": "org_01m84xhbtwe009367awjy8edrt",
+            "slug": "qa-002-a2a-org",
+            "name": "QA-002 A2A Org",
+            "min_plugin_trust": "ANY_APPROVED",
+            "four_eyes_enabled": false,
+            "version": 1,
+            "created_at": "2026-11-23T19:18:45.045Z"
+          }
+        ],
+        "has_more": false
+      }
+    }
+  ]
+}
