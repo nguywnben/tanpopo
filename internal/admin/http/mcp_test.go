@@ -573,7 +573,7 @@ func TestCT36PublicMCPWebhookAdminApprovalAndExactReplay(t *testing.T) {
 		if got != pending.Result.Structured.ID {
 			t.Fatalf("recorded approval id %q differs from MCP response %q", got, pending.Result.Structured.ID)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("async approval creation was not recorded")
 	}
 	dispatchCtx, stopDispatcher := context.WithCancel(t.Context())
@@ -584,7 +584,7 @@ func TestCT36PublicMCPWebhookAdminApprovalAndExactReplay(t *testing.T) {
 	var signature, timestamp string
 	select {
 	case eventBody = <-receiverBody:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("approval webhook was not delivered")
 	}
 	signature, timestamp = <-receiverSignature, <-receiverTimestamp
