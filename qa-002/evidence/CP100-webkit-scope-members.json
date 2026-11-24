@@ -1,0 +1,51 @@
+{
+  "browser": "WebKit",
+  "viewport": "375x844",
+  "role": "Org Owner + Operator",
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "result": [
+    {
+      "scope": "org",
+      "title": "QA-002 A2A Org / No project / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "empty": true,
+      "dims": {
+        "width": 375,
+        "documentWidth": 375
+      }
+    },
+    {
+      "scope": "proj",
+      "title": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "empty": true,
+      "dims": {
+        "width": 375,
+        "documentWidth": 375
+      }
+    },
+    {
+      "scope": "env",
+      "title": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 4,
+      "empty": false,
+      "dims": {
+        "width": 375,
+        "documentWidth": 375
+      }
+    }
+  ],
+  "errors": []
+}

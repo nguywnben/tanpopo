@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP99
+**Latest checkpoint:** CP100
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -358,3 +358,14 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** independent DEF-001–015 acceptance remains incomplete overall; DEF-005 residual SSRF scenarios; DEF-007 fault/populated erasure; DEF-016–036 regression; normal install/permission review/independent approval/activation/upgrade/uninstall; runtime plugin isolation/credential broker; remaining roles, product surfaces, browsers, platforms, integrations, and operations.
 - **Recommended engineering handoffs:** add DEF-036 to extension lifecycle handling; preserve DEF-035 with DEF-023/024/029/030, and existing DEF-034, DEF-033, DEF-005 without weakening SSRF, and DEF-007 priorities.
 - **Checkpoint:** [CP99](checkpoints/CP99-marketplace-duplicate-install-review.md); previous [CP98](checkpoints/CP98-plugin-authoring-offline-cassettes-and-package-integrity.md). `GATE-REL-07` remains **BLOCKED**.
+
+## CP100 consolidated status update
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006, and DEF-008–015 retain only their scoped QA-002 results; no QA-001 PASS is inherited. DEF-005 remains PARTIAL. DEF-007 successful audit paths do not close failure atomicity or populated erasure.
+- **Historical defects failing / unverified:** DEF-016–036 remain open; CP100 freshly reconfirmed DEF-023 but changed no other disposition. Prior intentional Team Admin/Security 403 boundaries remain separate from the Org Owner false-empty Members defect.
+- **New defects:** none. DEF-032 duplicate Google display rows were visually seen again on Providers but identity was not independently mapped or mutated. QA-OBS-009 recurred: hard refresh reset the selected environment to runtime-default no-environment scope.
+- **Coverage completed:** real Chromium scope switching across org-only, project-only and project/environment on Providers, MCP Hub, Security, Operations, Access Members and Playground; direct API member counts; hard refresh, explicit scope reselection and navigation/re-entry. WebKit at 375 × 844 independently reproduced the same 0/0/4 member UI/API discrepancy across all three scopes with no horizontal overflow; screenshots visually inspected.
+- **Coverage blocked:** fresh Team Admin login was rejected by the live login page, so CP100's broad sweep used only Org Owner + Operator. CP71/CP88 remain the earlier scoped permission evidence; non-owner cross-project coverage is incomplete.
+- **Coverage remaining:** full Console scope sweep, remaining roles and workspace permutations, async/error races, DEF-001–015 acceptance residuals, DEF-005 SSRF cases, DEF-007 fault/populated erase, DEF-016–036 regression, and remaining product, platform, integration, browser, accessibility and operational coverage.
+- **Recommended engineering handoffs:** CP100 evidence strengthens DEF-023’s explicit organization-scope acceptance. Keep its fix coupled to but distinct from DEF-024/029/030/035. Continue DEF-036/034/033, DEF-005 without weakening SSRF, and DEF-007 priorities.
+- **Checkpoint:** [CP100](checkpoints/CP100-console-workspace-scope-cross-surface-regression.md); previous [CP99](checkpoints/CP99-marketplace-duplicate-install-review.md). `GATE-REL-07` remains **BLOCKED**.

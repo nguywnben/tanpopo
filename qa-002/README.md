@@ -3,12 +3,13 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP99 (Marketplace duplicate install review).
+**Latest checkpoint:** CP100 (Console workspace scope cross-surface regression).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
 ## Current records
 
+- [CP100 — Console workspace scope cross-surface regression](checkpoints/CP100-console-workspace-scope-cross-surface-regression.md)
 - [CP99 — Marketplace duplicate install review](checkpoints/CP99-marketplace-duplicate-install-review.md)
 - [DEF-036 — Marketplace duplicate install error](reports/DEF-036-marketplace-duplicate-install-error.md)
 - [CP98 — Plugin authoring and package integrity](checkpoints/CP98-plugin-authoring-offline-cassettes-and-package-integrity.md)
