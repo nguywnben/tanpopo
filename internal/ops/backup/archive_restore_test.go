@@ -145,6 +145,113 @@ func TestRestoreAuditVerificationRejectsUnexpectedChainPartition(t *testing.T) {
 	}
 }
 
+func TestRestoreAuditVerificationAcceptsCryptoShreddedOrgPartitions(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "restore-shredded-audit.sqlite")
+	store, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	activeOrg, err := store.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "active-org", DisplayName: "Active Org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shredOrg1, err := store.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "shred-empty", DisplayName: "Shred Empty"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shredOrg2, err := store.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{Slug: "shred-populated", DisplayName: "Shred Populated"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logger, err := audit.NewLogger(audit.LoggerConfig{DB: store.RawDB()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Seed SYSTEM + active + 2 deleted orgs whose org rows were deleted, SHRED recorded, and terminal organization.crypto_shredded persisted.
+	for _, ev := range []port.AuditEvent{
+		{ActorKind: "SYSTEM", ActorID: "ops", EntryPoint: "cli", EventType: "system.initialized", TargetType: "instance", TargetID: "instance"},
+		{OrgID: &activeOrg.ID, ActorKind: "PRINCIPAL", ActorID: "pri_1", EntryPoint: "admin_api", EventType: "organization.created", TargetType: "organization", TargetID: activeOrg.ID},
+		{OrgID: &shredOrg1.ID, ActorKind: "PRINCIPAL", ActorID: "pri_1", EntryPoint: "admin_api", EventType: "organization.created", TargetType: "organization", TargetID: shredOrg1.ID},
+		{OrgID: &shredOrg1.ID, ActorKind: "PRINCIPAL", ActorID: "pri_1", EntryPoint: "admin_api", EventType: "organization.crypto_shredded", TargetType: "organization", TargetID: shredOrg1.ID},
+		{OrgID: &shredOrg2.ID, ActorKind: "PRINCIPAL", ActorID: "pri_1", EntryPoint: "admin_api", EventType: "organization.created", TargetType: "organization", TargetID: shredOrg2.ID},
+		{OrgID: &shredOrg2.ID, ActorKind: "PRINCIPAL", ActorID: "pri_1", EntryPoint: "admin_api", EventType: "project.created", TargetType: "project", TargetID: "prj_1"},
+		{OrgID: &shredOrg2.ID, ActorKind: "PRINCIPAL", ActorID: "pri_1", EntryPoint: "admin_api", EventType: "organization.crypto_shredded", TargetType: "organization", TargetID: shredOrg2.ID},
+	} {
+		if err := logger.Append(ctx, ev); err != nil {
+			t.Fatalf("append audit event %s: %v", ev.EventType, err)
+		}
+	}
+	for _, shredID := range []string{shredOrg1.ID, shredOrg2.ID} {
+		if _, err := store.RawDB().ExecContext(ctx, `DELETE FROM organizations WHERE id = ?`, shredID); err != nil {
+			t.Fatalf("delete shredded org %s: %v", shredID, err)
+		}
+		if _, err := store.RawDB().ExecContext(ctx, `INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES (?, 'organization', ?, 'SHRED', 1, 1795000000000)`, shredID, shredID); err != nil {
+			t.Fatalf("insert SHRED changelog %s: %v", shredID, err)
+		}
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyRestoredAuditChain(ctx, dbPath); err != nil {
+		t.Fatalf("verifyRestoredAuditChain rejected valid crypto-shredded org partitions: %v", err)
+	}
+
+	// Forged partition with organization.crypto_shredded in audit_events WITHOUT SHRED changelog must fail closed.
+	forgedDBPath := filepath.Join(t.TempDir(), "forged-shred.sqlite")
+	forgedBytes, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(forgedDBPath, forgedBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	forgedStore, err := sqlite.Open(ctx, sqlite.Config{DBPath: forgedDBPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forgedLogger, err := audit.NewLogger(audit.LoggerConfig{DB: forgedStore.RawDB()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forgedOrg := "org_forged_no_tombstone"
+	if err := forgedLogger.Append(ctx, port.AuditEvent{
+		OrgID: &forgedOrg, ActorKind: "SYSTEM", ActorID: "forged", EntryPoint: "cli",
+		EventType: "organization.crypto_shredded", TargetType: "organization", TargetID: forgedOrg,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = forgedStore.Close()
+	if err := verifyRestoredAuditChain(ctx, forgedDBPath); err == nil {
+		t.Fatal("verifyRestoredAuditChain accepted organization.crypto_shredded without config_changelog SHRED tombstone")
+	}
+
+	// Tampered post-shred event appended after organization.crypto_shredded must fail closed.
+	tamperDBPath := filepath.Join(t.TempDir(), "post-shred-append.sqlite")
+	if err := os.WriteFile(tamperDBPath, forgedBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tamperStore, err := sqlite.Open(ctx, sqlite.Config{DBPath: tamperDBPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tamperLogger, err := audit.NewLogger(audit.LoggerConfig{DB: tamperStore.RawDB()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tamperLogger.Append(ctx, port.AuditEvent{
+		OrgID: &shredOrg1.ID, ActorKind: "SYSTEM", ActorID: "tamper", EntryPoint: "cli",
+		EventType: "post_shred.illegal_event", TargetType: "organization", TargetID: shredOrg1.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = tamperStore.Close()
+	if err := verifyRestoredAuditChain(ctx, tamperDBPath); err == nil {
+		t.Fatal("verifyRestoredAuditChain accepted audit event appended after organization.crypto_shredded tombstone")
+	}
+}
+
 func TestRestoreSQLiteIntegrityRejectsForeignKeyViolations(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "foreign-key-check.sqlite")

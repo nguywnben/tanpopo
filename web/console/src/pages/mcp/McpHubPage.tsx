@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react';
 import {Plus, RefreshCw, ShieldCheck} from 'lucide-react';
 import {
   approveMcpToolSchema,
@@ -79,6 +79,7 @@ export function McpHubPage({
   const [selectedKeys, setSelectedKeys] = useState<Record<string, string>>({});
 
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [mcpFormError, setMcpFormError] = useState('');
   const [slug, setSlug] = useState('');
   const [name, setName] = useState('');
   const [endpoint, setEndpoint] = useState('');
@@ -86,6 +87,7 @@ export function McpHubPage({
   const [allowedCidrs, setAllowedCidrs] = useState('');
 
   const [a2aRegisterOpen, setA2aRegisterOpen] = useState(false);
+  const [a2aFormError, setA2aFormError] = useState('');
   const [agentSlug, setAgentSlug] = useState('');
   const [agentName, setAgentName] = useState('');
   const [agentEndpoint, setAgentEndpoint] = useState('');
@@ -105,6 +107,7 @@ export function McpHubPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const refreshSeqRef = useRef(0);
 
   const canManage = roles.some(role => manageRoles.includes(role));
   const canApproveSchema = roles.some(role => approveSchemaRoles.includes(role));
@@ -114,7 +117,12 @@ export function McpHubPage({
   }, [pathname]);
 
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeqRef.current;
+    if (!projectId || !environmentId) {
+      setKeys([]);
+    }
     setLoading(true);
+    setError('');
     try {
       const [serverRows, agentRows, taskRows, keyRows] = await Promise.all([
         listMcpServers(),
@@ -122,14 +130,16 @@ export function McpHubPage({
         listA2aTasks(),
         projectId && environmentId ? listVirtualKeys(projectId, environmentId) : Promise.resolve([]),
       ]);
+      if (refreshSeqRef.current !== seq) return;
       setServers(serverRows);
       setA2aAgents(agentRows);
       setA2aTasks(taskRows);
       setKeys(keyRows);
     } catch (cause) {
+      if (refreshSeqRef.current !== seq) return;
       setError(cause instanceof Error ? cause.message : t('mcp.loadFailed'));
     } finally {
-      setLoading(false);
+      if (refreshSeqRef.current === seq) setLoading(false);
     }
   }, [projectId, environmentId, t]);
 
@@ -138,18 +148,18 @@ export function McpHubPage({
   async function handleRegister(event: FormEvent) {
     event.preventDefault();
     if (!projectId || !slug.trim() || !name.trim() || !endpoint.trim()) return;
-    setBusy(true);
+    setMcpFormError('');
     setError('');
     setNotice('');
+    const parsedCidrs = allowPrivateIp
+      ? [...new Set(allowedCidrs.split(',').map(v => v.trim()).filter(Boolean))]
+      : [];
+    if (allowPrivateIp && (parsedCidrs.length === 0 || parsedCidrs.some(c => !isValidCidr(c)))) {
+      setMcpFormError(t('providers.errPrivateCidr'));
+      return;
+    }
+    setBusy(true);
     try {
-      const parsedCidrs = allowPrivateIp
-        ? [...new Set(allowedCidrs.split(',').map(v => v.trim()).filter(Boolean))]
-        : [];
-      if (allowPrivateIp && (parsedCidrs.length === 0 || parsedCidrs.some(c => c === '*' || c === '0.0.0.0/0' || c === '::/0'))) {
-        setError(t('providers.errPrivateCidr'));
-        setBusy(false);
-        return;
-      }
       await registerMcpServer({
         project_id: projectId,
         slug: slug.trim(),
@@ -168,7 +178,7 @@ export function McpHubPage({
       await refresh();
       setNotice(t('mcp.serverRegistered'));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('mcp.registerFailed'));
+      setMcpFormError(cause instanceof Error ? cause.message : t('mcp.registerFailed'));
     } finally {
       setBusy(false);
     }
@@ -180,8 +190,10 @@ export function McpHubPage({
     setNotice('');
     try {
       const result = await syncMcpServerTools(server.id);
-      setToolsByServer(curr => ({...curr, [server.id]: result.tools as SyncedTool[]}));
-      setNotice(t('mcp.syncResult', {synced: formatNumber(result.synced_count), name: server.name, drifted: formatNumber(result.drifted_count)}));
+      const syncedTools = result.tools as SyncedTool[];
+      const pendingApproval = Math.max(result.drifted_count, syncedTools.filter(tl => tl.drift_locked).length);
+      setToolsByServer(curr => ({...curr, [server.id]: syncedTools}));
+      setNotice(t('mcp.syncResult', {synced: formatNumber(result.synced_count), name: server.name, drifted: formatNumber(pendingApproval)}));
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('mcp.syncFailed'));
@@ -233,19 +245,19 @@ export function McpHubPage({
   async function handleRegisterA2a(event: FormEvent) {
     event.preventDefault();
     if (!projectId || !agentName.trim() || !agentEndpoint.trim()) return;
-    setBusy(true);
+    setA2aFormError('');
     setError('');
     setNotice('');
+    const parsedHops = Math.min(5, Math.max(1, Number.parseInt(agentMaxHops, 10) || 5));
+    const parsedCidrs = agentAllowPrivateIp
+      ? [...new Set(agentAllowedCidrs.split(',').map(v => v.trim()).filter(Boolean))]
+      : [];
+    if (agentAllowPrivateIp && (parsedCidrs.length === 0 || parsedCidrs.some(c => !isValidCidr(c)))) {
+      setA2aFormError(t('providers.errPrivateCidr'));
+      return;
+    }
+    setBusy(true);
     try {
-      const parsedHops = Math.min(5, Math.max(1, Number.parseInt(agentMaxHops, 10) || 5));
-      const parsedCidrs = agentAllowPrivateIp
-        ? [...new Set(agentAllowedCidrs.split(',').map(v => v.trim()).filter(Boolean))]
-        : [];
-      if (agentAllowPrivateIp && (parsedCidrs.length === 0 || parsedCidrs.some(c => c === '*' || c === '0.0.0.0/0' || c === '::/0'))) {
-        setError(t('providers.errPrivateCidr'));
-        setBusy(false);
-        return;
-      }
       await registerA2aAgent({
         project_id: projectId,
         agent_slug: agentSlug.trim() || undefined,
@@ -267,7 +279,7 @@ export function McpHubPage({
       await refresh();
       setNotice(t('a2a.agentRegistered'));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('a2a.registerFailed'));
+      setA2aFormError(cause instanceof Error ? cause.message : t('a2a.registerFailed'));
     } finally {
       setBusy(false);
     }
@@ -330,7 +342,15 @@ export function McpHubPage({
               }
               size="sm"
               disabled={!projectId}
-              onClick={() => (tab === 'mcp' ? setRegisterOpen(true) : setA2aRegisterOpen(true))}
+              onClick={() => {
+                if (tab === 'mcp') {
+                  setMcpFormError('');
+                  setRegisterOpen(true);
+                } else {
+                  setA2aFormError('');
+                  setA2aRegisterOpen(true);
+                }
+              }}
             >
               <Plus size={14} aria-hidden="true" />
               <span>{tab === 'mcp' ? t('mcp.registerServer') : t('a2a.registerAgent')}</span>
@@ -365,7 +385,14 @@ export function McpHubPage({
           emptyDescription={t('mcp.emptyServersDesc')}
           emptyAction={
             canManage && projectId ? (
-              <Button variant="primary" size="md" onClick={() => setRegisterOpen(true)}>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => {
+                  setMcpFormError('');
+                  setRegisterOpen(true);
+                }}
+              >
                 <Plus size={14} aria-hidden="true" />
                 <span>{t('mcp.registerServer')}</span>
               </Button>
@@ -588,7 +615,10 @@ export function McpHubPage({
 
       <Drawer
         open={registerOpen}
-        onClose={() => setRegisterOpen(false)}
+        onClose={() => {
+          setRegisterOpen(false);
+          setMcpFormError('');
+        }}
         title={t('mcp.drawerTitle')}
         subtitle={t('mcp.drawerSubtitle')}
         footer={
@@ -599,6 +629,7 @@ export function McpHubPage({
         }
       >
         <form id="tp-register-mcp-form" className="tp-stack" onSubmit={handleRegister}>
+          {mcpFormError ? <Banner tone="danger">{mcpFormError}</Banner> : null}
           <TextField label={t('mcp.serverSlug')} required placeholder={t('mcp.serverSlugPlaceholder')} value={slug} onChange={event => setSlug(event.target.value)} />
           <TextField label={t('mcp.displayName')} required placeholder={t('mcp.displayNamePlaceholder')} value={name} onChange={event => setName(event.target.value)} />
           <TextField label={t('mcp.endpointUrl')} type="url" required placeholder="https://mcp.example.com/mcp" value={endpoint} onChange={event => setEndpoint(event.target.value)} />
@@ -622,7 +653,10 @@ export function McpHubPage({
 
       <Drawer
         open={a2aRegisterOpen}
-        onClose={() => setA2aRegisterOpen(false)}
+        onClose={() => {
+          setA2aRegisterOpen(false);
+          setA2aFormError('');
+        }}
         title={t('a2a.drawerTitle')}
         subtitle={t('a2a.drawerSubtitle')}
         footer={
@@ -633,6 +667,7 @@ export function McpHubPage({
         }
       >
         <form id="tp-register-a2a-form" className="tp-stack" onSubmit={handleRegisterA2a}>
+          {a2aFormError ? <Banner tone="danger">{a2aFormError}</Banner> : null}
           <TextField label={t('a2a.agentSlug')} placeholder={t('a2a.agentSlugPlaceholder')} value={agentSlug} onChange={event => setAgentSlug(event.target.value)} />
           <TextField label={t('a2a.agentName')} required placeholder={t('a2a.agentNamePlaceholder')} value={agentName} onChange={event => setAgentName(event.target.value)} />
           <TextField label={t('a2a.endpointUrl')} type="url" required placeholder="https://agent.example.com" value={agentEndpoint} onChange={event => setAgentEndpoint(event.target.value)} />
@@ -736,4 +771,29 @@ export function McpHubPage({
       </Modal>
     </div>
   );
+}
+
+function isValidCidr(raw: string): boolean {
+  const trimmed = raw.trim();
+  const slashIdx = trimmed.indexOf('/');
+  if (slashIdx <= 0 || slashIdx !== trimmed.lastIndexOf('/')) return false;
+  const addr = trimmed.slice(0, slashIdx);
+  const prefixStr = trimmed.slice(slashIdx + 1);
+  if (!/^\d+$/.test(prefixStr)) return false;
+  const prefix = Number(prefixStr);
+  if (addr.includes('.')) {
+    const octets = addr.split('.');
+    if (octets.length !== 4 || octets.some(o => !/^\d{1,3}$/.test(o) || Number(o) > 255)) return false;
+    return prefix >= 1 && prefix <= 32;
+  }
+  if (addr.includes(':')) {
+    if (prefix < 1 || prefix > 128) return false;
+    try {
+      const parsed = new URL(`http://[${addr}]/`);
+      return parsed.hostname.startsWith('[');
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }

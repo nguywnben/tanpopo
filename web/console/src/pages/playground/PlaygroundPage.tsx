@@ -39,18 +39,25 @@ export function PlaygroundPage({
   const [compareReqId, setCompareReqId] = useState('');
   const [primaryTrace, setPrimaryTrace] = useState<Trace | null>(null);
   const [compareTrace, setCompareTrace] = useState<Trace | null>(null);
+  const [primaryTraceDone, setPrimaryTraceDone] = useState(false);
+  const [compareTraceDone, setCompareTraceDone] = useState(false);
+  const [budgetExceededHit, setBudgetExceededHit] = useState(false);
   const [session, setSession] = useState<components['schemas']['PlaygroundSessionResponse'] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  const sendSeqRef = useRef(0);
 
   const authorized = roles.some(role => allowedRoles.includes(role));
 
   useEffect(() => {
+    let active = true;
+    setAvailableRoutes([]);
     if (!environmentId) return;
     listRoutesForEnvironment(environmentId)
       .then(rows => {
+        if (!active) return;
         const slugs = rows.map(r => r.slug);
         setAvailableRoutes(slugs);
         setModel(curr => curr || slugs[0] || '');
@@ -58,7 +65,18 @@ export function PlaygroundPage({
       .catch(() => {
         // Manual model entry remains available.
       });
+    return () => { active = false; };
   }, [environmentId]);
+
+  useEffect(() => {
+    setSession(null);
+    setPrimaryReqId('');
+    setCompareReqId('');
+    setPrimaryTrace(null);
+    setCompareTrace(null);
+    setPrimaryTraceDone(false);
+    setCompareTraceDone(false);
+  }, [projectId, environmentId]);
 
   async function streamCompletion(
     ephemeralKey: string,
@@ -79,10 +97,23 @@ export function PlaygroundPage({
       },
       body: JSON.stringify({model: targetModel, messages: history, stream: true}),
     });
+    const traceHeader = response.headers.get('X-Tanpopo-Trace-Id')?.trim() ?? '';
+    const requestHeader = response.headers.get('X-Tanpopo-Request-Id')?.trim() ?? '';
+    const requestId = traceHeader || requestHeader;
     if (!response.ok || !response.body) {
-      throw new Error(t('playground.inferenceFailed', {status: response.status}));
+      let errCode = '';
+      let errMsg = '';
+      try {
+        const parsed = await response.json() as {error?: {code?: string; message?: string}};
+        errCode = parsed.error?.code?.trim() ?? '';
+        errMsg = parsed.error?.message?.trim() ?? '';
+      } catch {
+        // Ignore unparseable error payloads.
+      }
+      const errObj = new Error(formatPlaygroundError(response.status, errCode, errMsg, t));
+      Object.assign(errObj, {code: errCode, status: response.status, requestId});
+      throw errObj;
     }
-    const requestId = response.headers.get('X-Tanpopo-Request-Id')?.trim() ?? '';
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -107,14 +138,18 @@ export function PlaygroundPage({
 
   async function handleSend() {
     if (!projectId || !environmentId || !model.trim() || !prompt.trim() || busy) return;
+    const seq = ++sendSeqRef.current;
     setBusy(true);
     setError('');
     setNotice('');
+    setBudgetExceededHit(false);
     setComparison(null);
     setPrimaryReqId('');
     setCompareReqId('');
     setPrimaryTrace(null);
     setCompareTrace(null);
+    setPrimaryTraceDone(false);
+    setCompareTraceDone(false);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -131,6 +166,7 @@ export function PlaygroundPage({
           ttl_seconds: 900,
           max_budget_micros: budget,
         }));
+      if (sendSeqRef.current !== seq) return;
       setSession(activeSession);
 
       const primary = await streamCompletion(
@@ -140,9 +176,17 @@ export function PlaygroundPage({
         controller.signal,
         text => setMessages([...nextHistory, {role: 'assistant', content: text}]),
       );
+      if (sendSeqRef.current !== seq) return;
       setMessages([...nextHistory, {role: 'assistant', content: primary.text}]);
       setPrimaryReqId(primary.requestId);
-      if (primary.requestId) setPrimaryTrace(await pollTrace(primary.requestId));
+      if (primary.requestId) {
+        const fetched = await pollTrace(primary.requestId);
+        if (sendSeqRef.current !== seq) return;
+        setPrimaryTrace(fetched);
+        setPrimaryTraceDone(true);
+      } else {
+        setPrimaryTraceDone(true);
+      }
 
       if (compareModel.trim() && compareModel.trim() !== model.trim()) {
         setComparison({primary: primary.text, secondary: ''});
@@ -153,17 +197,36 @@ export function PlaygroundPage({
           controller.signal,
           text => setComparison({primary: primary.text, secondary: text}),
         );
+        if (sendSeqRef.current !== seq) return;
         setComparison({primary: primary.text, secondary: secondary.text});
         setCompareReqId(secondary.requestId);
-        if (secondary.requestId) setCompareTrace(await pollTrace(secondary.requestId));
+        if (secondary.requestId) {
+          const fetchedCompare = await pollTrace(secondary.requestId);
+          if (sendSeqRef.current !== seq) return;
+          setCompareTrace(fetchedCompare);
+          setCompareTraceDone(true);
+        } else {
+          setCompareTraceDone(true);
+        }
       }
     } catch (cause) {
+      if (sendSeqRef.current !== seq) return;
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
+        const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
+        const status = cause && typeof cause === 'object' && 'status' in cause ? Number(cause.status) : 0;
+        const reqId = cause && typeof cause === 'object' && 'requestId' in cause ? String(cause.requestId) : '';
+        if (code.includes('budget') || status === 402) setBudgetExceededHit(true);
+        if (reqId) {
+          setPrimaryReqId(prev => prev || reqId);
+          setPrimaryTraceDone(true);
+        }
         setError(cause instanceof Error ? cause.message : t('playground.requestFailed'));
       }
     } finally {
-      abortRef.current = null;
-      setBusy(false);
+      if (sendSeqRef.current === seq) {
+        abortRef.current = null;
+        setBusy(false);
+      }
     }
   }
 
@@ -215,7 +278,20 @@ export function PlaygroundPage({
       />
 
       {!environmentId ? <Banner tone="info">{t('playground.selectEnvBanner')}</Banner> : null}
-      {error ? <Banner tone="danger">{error}</Banner> : null}
+      {error ? (
+        <Banner
+          tone="danger"
+          action={
+            budgetExceededHit ? (
+              <Button variant="secondary" size="sm" onClick={() => navigate('/finops/budgets')}>
+                {t('playground.viewBudgets')}
+              </Button>
+            ) : undefined
+          }
+        >
+          {error}
+        </Banner>
+      ) : null}
       {notice ? <Banner tone="ok">{notice}</Banner> : null}
 
       {activeTab === 'chat' ? (
@@ -333,8 +409,8 @@ export function PlaygroundPage({
             <section className="tp-section">
               <SectionHeader title={t('playground.executionTraces')} />
               <ul className="tp-list">
-                {primaryReqId ? <TraceRow label={t('playground.primary')} requestId={primaryReqId} trace={primaryTrace} formatMicroUSD={formatMicroUSD} formatNumber={formatNumber} t={t} /> : null}
-                {compareReqId ? <TraceRow label={t('playground.comparison')} requestId={compareReqId} trace={compareTrace} formatMicroUSD={formatMicroUSD} formatNumber={formatNumber} t={t} /> : null}
+                {primaryReqId ? <TraceRow label={t('playground.primary')} requestId={primaryReqId} trace={primaryTrace} traceDone={primaryTraceDone} formatMicroUSD={formatMicroUSD} formatNumber={formatNumber} t={t} /> : null}
+                {compareReqId ? <TraceRow label={t('playground.comparison')} requestId={compareReqId} trace={compareTrace} traceDone={compareTraceDone} formatMicroUSD={formatMicroUSD} formatNumber={formatNumber} t={t} /> : null}
               </ul>
             </section>
           ) : null}
@@ -363,6 +439,7 @@ function TraceRow({
   label,
   requestId,
   trace,
+  traceDone,
   formatMicroUSD,
   formatNumber,
   t,
@@ -370,6 +447,7 @@ function TraceRow({
   label: string;
   requestId: string;
   trace: Trace | null;
+  traceDone: boolean;
   formatMicroUSD: (v: number) => string;
   formatNumber: (v: number) => string;
   t: (key: string, vars?: Record<string, string | number>) => string;
@@ -386,12 +464,27 @@ function TraceRow({
                 cost: formatMicroUSD(trace.total_cost_micros),
                 ms: formatNumber(trace.duration_ms),
               })
-            : t('playground.tracePending')}
+            : traceDone
+              ? t('playground.traceUnavailable')
+              : t('playground.tracePending')}
         </span>
       </div>
       {trace ? <StatusPill tone={stateTone(trace.usage_accuracy)} label={formatOperationalState(trace.usage_accuracy)} /> : null}
     </li>
   );
+}
+
+function formatPlaygroundError(
+  status: number,
+  code: string,
+  message: string,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
+  if (code.includes('budget') || status === 402) {
+    return message ? t('playground.errBudgetExceededDetail', {detail: message}) : t('playground.errBudgetExceeded');
+  }
+  if (message) return message;
+  return t('playground.streamError', {status});
 }
 
 async function pollTrace(requestId: string): Promise<Trace | null> {

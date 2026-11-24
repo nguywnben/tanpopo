@@ -353,7 +353,7 @@ func (s *Server) handleBootstrapComplete(w http.ResponseWriter, r *http.Request)
 		resp.InitialVirtualKey = &dto
 	}
 
-	clientIP := extractClientIP(r)
+	clientIP := s.extractClientIP(r)
 	sessInfo, cookie, err := s.auth.LoginForOrg(r.Context(), clientIP, res.OrgID, req.OwnerEmail, req.OwnerPassword)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "bootstrap completed but session creation failed", true, nil)
@@ -597,9 +597,45 @@ func extractClientIP(r *http.Request) string {
 		return "unknown"
 	}
 	if host, _, err := net.SplitHostPort(raw); err == nil && host != "" {
-		return host
+		raw = host
+	}
+	if addr, err := netip.ParseAddr(strings.Trim(raw, "[]")); err == nil {
+		return addr.Unmap().String()
 	}
 	return raw
+}
+
+func (s *Server) extractClientIP(r *http.Request) string {
+	remote := extractClientIP(r)
+	if s == nil || !s.isTrustedProxy(r.RemoteAddr) {
+		return remote
+	}
+	// Walk X-Forwarded-For right-to-left and stop at the first hop outside trustedProxyCIDRs.
+	var hops []string
+	for _, hdr := range r.Header.Values("X-Forwarded-For") {
+		for _, part := range strings.Split(hdr, ",") {
+			if ip := strings.TrimSpace(part); ip != "" {
+				hops = append(hops, ip)
+			}
+		}
+	}
+	for i := len(hops) - 1; i >= 0; i-- {
+		if addr, err := netip.ParseAddr(strings.Trim(hops[i], "[]")); err == nil {
+			norm := addr.Unmap().String()
+			if !s.isTrustedProxy(norm) {
+				return norm
+			}
+		}
+	}
+	if xReal := strings.TrimSpace(r.Header.Get("X-Real-IP")); xReal != "" {
+		if addr, err := netip.ParseAddr(strings.Trim(xReal, "[]")); err == nil {
+			norm := addr.Unmap().String()
+			if !s.isTrustedProxy(norm) {
+				return norm
+			}
+		}
+	}
+	return remote
 }
 
 func boolToInt(b bool) int {

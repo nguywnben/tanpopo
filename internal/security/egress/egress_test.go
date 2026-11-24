@@ -723,3 +723,112 @@ func TestStaticEndpointValidationAndTransitionIPs(t *testing.T) {
 		t.Fatalf("expected public DNS resolution to succeed, got %v", err)
 	}
 }
+
+func TestDEF005_MixedAnswerDNSAndRebindingAndRedirectVariants(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// 1. Mixed-answer DNS (public IP + private loopback) must fail closed even when first answer is public.
+	mixedDNS := &mockResolver{fn: func(_ int64, _ string) ([]netip.Addr, error) {
+		return []netip.Addr{
+			netip.MustParseAddr("93.184.216.34"),
+			netip.MustParseAddr("127.0.0.1"),
+		}, nil
+	}}
+	if err := ValidateStaticEndpointURL(ctx, "https://mixed.example.com/v1", false, mixedDNS, nil); !errors.Is(err, ErrPrivateIPBlocked) {
+		t.Fatalf("expected mixed-answer DNS with private IP to fail with ErrPrivateIPBlocked, got %v", err)
+	}
+	mixedDialClient, err := NewGuardedHTTPClient(ClientConfig{
+		Policy: Policy{
+			AllowedHosts:   []string{"mixed.example.com"},
+			AllowPrivateIP: false,
+			RequireTLS:     true,
+		},
+		Resolver: mixedDNS,
+	})
+	if err != nil {
+		t.Fatalf("NewGuardedHTTPClient mixedDNS: %v", err)
+	}
+	reqMixed, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://mixed.example.com/v1/models", nil)
+	if resp, derr := mixedDialClient.Do(reqMixed); !errors.Is(derr, ErrPrivateIPBlocked) {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		t.Fatalf("expected dial-time mixed-answer DNS block (ErrPrivateIPBlocked), got %v", derr)
+	}
+
+	// 2. DNS rebinding TOCTOU: static pre-check succeeds on 1st call (public IP), connect-time dial flips to IMDS/loopback and fails closed.
+	var rebindCalls atomic.Int32
+	rebindDNS := &mockResolver{fn: func(_ int64, _ string) ([]netip.Addr, error) {
+		if rebindCalls.Add(1) == 1 {
+			return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+		}
+		return []netip.Addr{netip.MustParseAddr("169.254.169.254")}, nil
+	}}
+	if err := ValidateStaticEndpointURL(ctx, "https://rebind.example.com/v1", false, rebindDNS, nil); err != nil {
+		t.Fatalf("expected 1st lookup (public IP) static check to pass, got %v", err)
+	}
+	rebindClient, err := NewGuardedHTTPClient(ClientConfig{
+		Policy: Policy{
+			AllowedHosts:   []string{"rebind.example.com"},
+			AllowPrivateIP: false,
+			RequireTLS:     true,
+		},
+		Resolver: rebindDNS,
+	})
+	if err != nil {
+		t.Fatalf("NewGuardedHTTPClient rebindClient: %v", err)
+	}
+	reqRebind, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://rebind.example.com/v1/models", nil)
+	if resp, derr := rebindClient.Do(reqRebind); !errors.Is(derr, ErrMetadataBlocked) {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		t.Fatalf("expected 2nd lookup (169.254.169.254) TOCTOU block (ErrMetadataBlocked), got %v", derr)
+	}
+
+	// 3. All HTTP redirect statuses (301/302/303/307/308), protocol downgrade, and relative metadata targets must fail closed without following.
+	var redirTargetHits atomic.Int32
+	imdsSink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirTargetHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer imdsSink.Close()
+
+	for _, statusCode := range []int{http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		for _, loc := range []string{
+			imdsSink.URL + "/latest/meta-data",
+			"http://169.254.169.254/latest/meta-data",
+			"/internal/admin",
+		} {
+			redirSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, loc, statusCode)
+			}))
+			u, _ := url.Parse(redirSrv.URL)
+			client, cerr := NewGuardedHTTPClient(ClientConfig{
+				Policy: Policy{
+					AllowedHosts:   []string{u.Host},
+					AllowPrivateIP: true,
+					AllowedCIDRs:   []string{"127.0.0.1/32"},
+				},
+				ControlHook: netguard.Control,
+			})
+			if cerr != nil {
+				redirSrv.Close()
+				t.Fatalf("NewGuardedHTTPClient redirect %d: %v", statusCode, cerr)
+			}
+			rReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, redirSrv.URL+"/start", nil)
+			resp, rerr := client.Do(rReq)
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			redirSrv.Close()
+			if !errors.Is(rerr, ErrRedirectBlocked) {
+				t.Fatalf("status=%d location=%q expected ErrRedirectBlocked, got %v", statusCode, loc, rerr)
+			}
+		}
+	}
+	if redirTargetHits.Load() != 0 {
+		t.Fatalf("expected 0 requests to followed redirect sink, got %d", redirTargetHits.Load())
+	}
+}

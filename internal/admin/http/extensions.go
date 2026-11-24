@@ -75,6 +75,7 @@ type extensionPermissionDiffDTO struct {
 type extensionInstallationDTO struct {
 	ID                      string  `json:"id"`
 	PackageID               string  `json:"package_id"`
+	CanonicalName           string  `json:"canonical_name,omitempty"`
 	ActiveVersion           *string `json:"active_version"`
 	CandidateVersion        *string `json:"candidate_version"`
 	PreviousRollbackVersion *string `json:"previous_rollback_version"`
@@ -265,7 +266,7 @@ func (s *Server) handleListExtensionInstallations(w http.ResponseWriter, r *http
 	var q strings.Builder
 	var args []any
 	q.WriteString(`
-		SELECT ei.id, ei.package_id, ep.origin_trust_tier, ei.state, ei.version, ei.created_at_ms,
+		SELECT ei.id, ei.package_id, ep.canonical_name, ep.origin_trust_tier, ei.state, ei.version, ei.created_at_ms,
 		       va.semver, vc.semver, vp.semver,
 		       COALESCE(va.contract_version, vc.contract_version, '1.0'),
 		       COALESCE(va.execution_tier, vc.execution_tier, 'DECLARATIVE_T1'),
@@ -297,12 +298,12 @@ func (s *Server) handleListExtensionInstallations(w http.ResponseWriter, r *http
 	var items []insRow
 	for rows.Next() {
 		var (
-			id, pkgID, trust, state, contractVer, execTier string
-			ver, createdMs                                 int64
-			actVer, candVer, prevVer                       sql.NullString
-			entBool                                        port.FlexBool
+			id, pkgID, canonicalName, trust, state, contractVer, execTier string
+			ver, createdMs                                                int64
+			actVer, candVer, prevVer                                      sql.NullString
+			entBool                                                       port.FlexBool
 		)
-		if scanErr := rows.Scan(&id, &pkgID, &trust, &state, &ver, &createdMs, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entBool); scanErr != nil {
+		if scanErr := rows.Scan(&id, &pkgID, &canonicalName, &trust, &state, &ver, &createdMs, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entBool); scanErr != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning installation", true, nil)
 			return
 		}
@@ -310,6 +311,7 @@ func (s *Server) handleListExtensionInstallations(w http.ResponseWriter, r *http
 			dto: extensionInstallationDTO{
 				ID:                      id,
 				PackageID:               pkgID,
+				CanonicalName:           canonicalName,
 				ActiveVersion:           sqlNullStrPtr(actVer),
 				CandidateVersion:        sqlNullStrPtr(candVer),
 				PreviousRollbackVersion: sqlNullStrPtr(prevVer),
@@ -1244,13 +1246,13 @@ func actorHasOrgScopedApproverBinding(actor *rbac.Actor, orgID string) bool {
 
 func (s *Server) loadExtensionInstallationDTO(ctx context.Context, insID string) (extensionInstallationDTO, string, error) {
 	var (
-		id, pkgID, trust, state, contractVer, execTier string
-		ver                                            int64
-		actVer, candVer, prevVer                       sql.NullString
-		entBool                                        port.FlexBool
+		id, pkgID, canonicalName, trust, state, contractVer, execTier string
+		ver                                                           int64
+		actVer, candVer, prevVer                                      sql.NullString
+		entBool                                                       port.FlexBool
 	)
 	err := s.db.QueryRowContext(ctx, s.rebind(`
-		SELECT ei.id, ei.package_id, ep.origin_trust_tier, ei.state, ei.version,
+		SELECT ei.id, ei.package_id, ep.canonical_name, ep.origin_trust_tier, ei.state, ei.version,
 		       va.semver, vc.semver, vp.semver,
 		       COALESCE(va.contract_version, vc.contract_version, '1.0'),
 		       COALESCE(va.execution_tier, vc.execution_tier, 'DECLARATIVE_T1'),
@@ -1261,7 +1263,7 @@ func (s *Server) loadExtensionInstallationDTO(ctx context.Context, insID string)
 		LEFT JOIN extension_versions vc ON vc.id = ei.candidate_version_id
 		LEFT JOIN extension_versions vp ON vp.id = ei.previous_pinned_version_id
 		WHERE ei.id = ?`), insID,
-	).Scan(&id, &pkgID, &trust, &state, &ver, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entBool)
+	).Scan(&id, &pkgID, &canonicalName, &trust, &state, &ver, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entBool)
 	if errors.Is(err, sql.ErrNoRows) {
 		return extensionInstallationDTO{}, "", port.ErrNotFound
 	}
@@ -1271,6 +1273,7 @@ func (s *Server) loadExtensionInstallationDTO(ctx context.Context, insID string)
 	return extensionInstallationDTO{
 		ID:                      id,
 		PackageID:               pkgID,
+		CanonicalName:           canonicalName,
 		ActiveVersion:           sqlNullStrPtr(actVer),
 		CandidateVersion:        sqlNullStrPtr(candVer),
 		PreviousRollbackVersion: sqlNullStrPtr(prevVer),

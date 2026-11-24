@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState, type FormEvent} from 'react';
 import {KeyRound, Plus, Trash2} from 'lucide-react';
 import {
   createConnection,
@@ -67,6 +67,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
   const [inspectedAdapter, setInspectedAdapter] = useState<Adapter | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [createFormError, setCreateFormError] = useState('');
   const [connName, setConnName] = useState('');
   const [adapterId, setAdapterId] = useState('');
   const [endpoint, setEndpoint] = useState('');
@@ -105,6 +106,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
   );
 
   const [editing, setEditing] = useState<Connection | null>(null);
+  const [editFormError, setEditFormError] = useState('');
   const [draftName, setDraftName] = useState('');
   const [draftEndpoint, setDraftEndpoint] = useState('');
   const [draftBindings, setDraftBindings] = useState<Record<string, string>>({});
@@ -125,10 +127,12 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
   const [secretKind, setSecretKind] = useState<components['schemas']['SecretCreateRequest']['secret_kind']>('API_KEY');
   const [secretValue, setSecretValue] = useState('');
   const [deleteSecretTarget, setDeleteSecretTarget] = useState<SecretMetadata | null>(null);
+  const reloadSeqRef = useRef(0);
 
   const canManage = roles.some(role => manageRoles.includes(role));
 
   const reload = useCallback(async () => {
+    const seq = ++reloadSeqRef.current;
     setLoading(true);
     try {
       const [connRows, secretRows, adapterRows] = await Promise.all([
@@ -136,6 +140,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
         listSecretMetadata(),
         listProviderAdapters(),
       ]);
+      if (reloadSeqRef.current !== seq) return;
       setConnections(connRows);
       setSecrets(secretRows);
       setAdapters(adapterRows);
@@ -149,9 +154,10 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
         return nextId;
       });
     } catch (cause) {
+      if (reloadSeqRef.current !== seq) return;
       setError(errText(cause, t));
     } finally {
-      setLoading(false);
+      if (reloadSeqRef.current === seq) setLoading(false);
     }
   }, [applyAdapterDefaults, t]);
 
@@ -188,11 +194,12 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
 
   async function handleCreateConnection(event: FormEvent) {
     event.preventDefault();
+    setCreateFormError('');
     setError('');
     setNotice('');
     const allowedCidrs = cidrs.split(',').map(v => v.trim()).filter(Boolean);
-    if (allowPrivateIp && (allowedCidrs.length === 0 || allowedCidrs.some(v => v === '*' || v === '0.0.0.0/0' || v === '::/0'))) {
-      setError(t('providers.errPrivateCidr'));
+    if (allowPrivateIp && (allowedCidrs.length === 0 || allowedCidrs.some(v => !isValidCidr(v)))) {
+      setCreateFormError(t('providers.errPrivateCidr'));
       return;
     }
     setBusy(true);
@@ -217,7 +224,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       await reload();
       setNotice(t('providers.connectionCreated'));
     } catch (cause) {
-      setError(errText(cause, t));
+      setCreateFormError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -246,6 +253,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
     event.preventDefault();
     if (!editing) return;
     setBusy(true);
+    setEditFormError('');
     setError('');
     setConflictServer(null);
     try {
@@ -261,9 +269,9 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       const err = cause as Error & {status?: number; currentResource?: Record<string, unknown>};
       if (err.status === 409) {
         setConflictServer(err.currentResource ?? {});
-        setError(t('providers.conflictMessage'));
+        setEditFormError(t('providers.conflictMessage'));
       } else {
-        setError(errText(cause, t));
+        setEditFormError(errText(cause, t));
       }
     } finally {
       setBusy(false);
@@ -398,7 +406,10 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               variant={tab === 'connections' && !loading && connections.length === 0 ? 'secondary' : 'primary'}
               size="sm"
               className={tab === 'connections' && !loading && connections.length === 0 ? 'tp-header-cta-desktop' : undefined}
-              onClick={() => setCreateOpen(true)}
+              onClick={() => {
+                setCreateFormError('');
+                setCreateOpen(true);
+              }}
             >
               <Plus size={14} aria-hidden="true" />
               <span>{t('providers.newConnection')}</span>
@@ -438,7 +449,14 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             emptyDescription={t('providers.emptyConnectionsDesc')}
             emptyAction={
               canManage ? (
-                <Button variant="primary" size="md" onClick={() => setCreateOpen(true)}>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => {
+                    setCreateFormError('');
+                    setCreateOpen(true);
+                  }}
+                >
                   <Plus size={14} aria-hidden="true" />
                   <span>{t('providers.newConnection')}</span>
                 </Button>
@@ -452,7 +470,9 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
                 width: '26%',
                 render: row => (
                   <div className="tp-stack-sm">
-                    <span style={{fontWeight: 600}}>{row.name}</span>
+                    <span style={{fontWeight: 600}} title={row.id}>
+                      {row.name} <span className="mono tp-muted">({row.id.slice(-8)})</span>
+                    </span>
                     <span className="mono tp-muted">{row.endpoint_url}</span>
                   </div>
                 ),
@@ -479,7 +499,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
                   if (!canManage) return <span className="tp-muted">{t('common.readOnly')}</span>;
                   return (
                     <RowActionsMenu
-                      label={t('common.actionsFor', {name: row.name})}
+                      label={t('common.actionsFor', {name: `${row.name} (${row.id.slice(-8)})`})}
                       disabled={busy}
                       items={[
                         {id: 'probe', label: t('providers.action.probe'), onClick: () => void handleProbe(row)},
@@ -488,6 +508,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
                           id: 'edit',
                           label: t('providers.action.edit'),
                           onClick: () => {
+                            setEditFormError('');
                             setEditing(row);
                             setDraftName(row.name);
                             setDraftEndpoint(row.endpoint_url);
@@ -663,7 +684,10 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
 
       <Drawer
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setCreateFormError('');
+        }}
         title={t('providers.createTitle')}
         subtitle={t('providers.createSubtitle')}
         footer={
@@ -674,6 +698,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
         }
       >
         <form id="tp-create-connection-form" className="tp-stack" onSubmit={handleCreateConnection}>
+          {createFormError ? <Banner tone="danger">{createFormError}</Banner> : null}
           {adapters.filter(a => a.installation_state === 'ENABLED_ACTIVE').length === 0 ? (
             <Banner
               tone="warn"
@@ -771,8 +796,12 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
 
       <Drawer
         open={editing !== null}
-        onClose={() => { setEditing(null); setConflictServer(null); }}
-        title={t('providers.editTitle', {name: editing?.name ?? ''})}
+        onClose={() => {
+          setEditing(null);
+          setEditFormError('');
+          setConflictServer(null);
+        }}
+        title={t('providers.editTitle', {name: editing ? `${editing.name} (${editing.id.slice(-8)})` : ''})}
         subtitle={t('providers.editSubtitle')}
         footer={
           <>
@@ -781,6 +810,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
           </>
         }
       >
+        {editFormError ? <Banner tone="danger">{editFormError}</Banner> : null}
         {conflictServer ? (
           <Banner tone="warn" title={t('providers.conflictTitle')}>
             <div className="tp-stack-sm">
@@ -832,9 +862,9 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             onChange={next => setSecretKind(next as typeof secretKind)}
             options={[
               {value: 'API_KEY', label: t('providers.secretKind.API_KEY')},
-              {value: 'AWS_IAM_CREDENTIALS', label: t('providers.secretKind.AWS_IAM_CREDENTIALS')},
-              {value: 'WEBHOOK_HMAC_SECRET', label: t('providers.secretKind.WEBHOOK_HMAC_SECRET')},
-              {value: 'TLS_CLIENT_CERT', label: t('providers.secretKind.TLS_CLIENT_CERT')},
+              {value: 'AWS_SIGV4_KEY', label: t('providers.secretKind.AWS_IAM_CREDENTIALS')},
+              {value: 'WEBHOOK_SECRET', label: t('providers.secretKind.WEBHOOK_HMAC_SECRET')},
+              {value: 'MTLS_CLIENT_CERT', label: t('providers.secretKind.TLS_CLIENT_CERT')},
             ]}
           />
           <TextField
@@ -873,7 +903,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
         title={t('providers.deleteConnTitle')}
-        description={t('providers.deleteConnDesc', {name: deleteTarget?.name ?? '', routes: deleteImpactRoutes.join(', ') || t('common.none')})}
+        description={t('providers.deleteConnDesc', {name: deleteTarget ? `${deleteTarget.name} (${deleteTarget.id.slice(-8)})` : '', routes: deleteImpactRoutes.join(', ') || t('common.none')})}
         confirmLabel={t('providers.action.delete')}
         busy={busy}
         onConfirm={() => void confirmDeleteConnection()}
@@ -890,6 +920,31 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       />
     </div>
   );
+}
+
+function isValidCidr(raw: string): boolean {
+  const trimmed = raw.trim();
+  const slashIdx = trimmed.indexOf('/');
+  if (slashIdx <= 0 || slashIdx !== trimmed.lastIndexOf('/')) return false;
+  const addr = trimmed.slice(0, slashIdx);
+  const prefixStr = trimmed.slice(slashIdx + 1);
+  if (!/^\d+$/.test(prefixStr)) return false;
+  const prefix = Number(prefixStr);
+  if (addr.includes('.')) {
+    const octets = addr.split('.');
+    if (octets.length !== 4 || octets.some(o => !/^\d{1,3}$/.test(o) || Number(o) > 255)) return false;
+    return prefix >= 1 && prefix <= 32;
+  }
+  if (addr.includes(':')) {
+    if (prefix < 1 || prefix > 128) return false;
+    try {
+      const parsed = new URL(`http://[${addr}]/`);
+      return parsed.hostname.startsWith('[');
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 function selectedBindings(raw: Record<string, string>) {

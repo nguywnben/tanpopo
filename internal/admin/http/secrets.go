@@ -387,7 +387,7 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var bindingCount, connCount int
+	var bindingCount, connCount, webhookCount int
 	if err := tx.QueryRowContext(r.Context(), s.rebind(`
 		SELECT COUNT(1) FROM connection_secret_bindings WHERE org_id = ? AND credential_id = ?`),
 		orgID, credID,
@@ -402,8 +402,15 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking provider connection references", true, nil)
 		return
 	}
-	if bindingCount > 0 || connCount > 0 {
-		writeErrorEnvelope(w, r, http.StatusConflict, "credential_in_use", "conflict_error", fmt.Sprintf("credential %s is still bound to active provider connections", credID), false, cur)
+	if err := tx.QueryRowContext(r.Context(), s.rebind(`
+		SELECT COUNT(1) FROM webhook_subscriptions WHERE org_id = ? AND (signing_secret_credential_id = ? OR target_url_credential_id = ?)`),
+		orgID, credID, credID,
+	).Scan(&webhookCount); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking webhook references", true, nil)
+		return
+	}
+	if bindingCount > 0 || connCount > 0 || webhookCount > 0 {
+		writeErrorEnvelope(w, r, http.StatusConflict, "credential_in_use", "conflict_error", fmt.Sprintf("credential %s is still bound to active connections or webhooks", credID), false, cur)
 		return
 	}
 

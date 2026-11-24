@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState, type FormEvent} from 'react';
 import {Download, Upload} from 'lucide-react';
 import {
   approveExtension,
@@ -62,7 +62,6 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     : pathname.startsWith('/extensions/lockfile')
       ? 'lockfile'
       : 'installed';
-
   const [installations, setInstallations] = useState<Installation[]>([]);
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [offlineCatalog, setOfflineCatalog] = useState(false);
@@ -72,7 +71,6 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [activatedNoticePkg, setActivatedNoticePkg] = useState<string | null>(null);
-
   const [query, setQuery] = useState('');
   const [trustFilter, setTrustFilter] = useState('ALL');
   const [capFilter, setCapFilter] = useState('ALL');
@@ -94,22 +92,34 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
 
   const [actionTarget, setActionTarget] = useState<{row: Installation; kind: 'rollback' | 'quarantine' | 'uninstall'; impact: {projects: string[]; connections: string[]}} | null>(null);
   const [actionReason, setActionReason] = useState('');
+  const reloadSeqRef = useRef(0);
 
   const operator = canOperate(roles);
   const approver = canApprove(roles);
+  const installedByPkg = useMemo(() => {
+    const map = new Map<string, Installation>();
+    for (const item of installations) {
+      map.set(item.package_id, item);
+      if (item.canonical_name) map.set(item.canonical_name, item);
+    }
+    return map;
+  }, [installations]);
 
   const reload = useCallback(async () => {
+    const seq = ++reloadSeqRef.current;
     setLoading(true);
     setError('');
     try {
       const [instRows, catRes] = await Promise.all([listExtensionInstallations(), listMarketplaceCatalog()]);
+      if (reloadSeqRef.current !== seq) return;
       setInstallations(instRows);
       setCatalog(catRes.data.map(toCatalogEntry).filter((item): item is CatalogEntry => item !== null));
       setOfflineCatalog(catRes.offline_cached);
     } catch (cause) {
+      if (reloadSeqRef.current !== seq) return;
       setError(errText(cause, t));
     } finally {
-      setLoading(false);
+      if (reloadSeqRef.current === seq) setLoading(false);
     }
   }, [t]);
 
@@ -169,6 +179,8 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       await reload();
       await openReview(staged.installation_id, 'install');
     } catch (cause) {
+      const status = cause && typeof cause === 'object' && 'status' in cause ? Number(cause.status) : 0;
+      if (status === 409) void reload();
       setError(errText(cause, t));
     } finally {
       setBusy(false);
@@ -179,6 +191,17 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     setError('');
     setNotice('');
     setActivatedNoticePkg(null);
+    const existing = installedByPkg.get(entry.package_id);
+    if (existing) {
+      if (existing.active_version && existing.active_version !== entry.version && entry.source_uri && /^[a-f0-9]{64}$/.test(entry.sha256)) {
+        setUpgradeTarget(existing);
+        setUpgradeUri(entry.source_uri);
+        setUpgradeSha(entry.sha256);
+        return;
+      }
+      await openReview(existing.id, 'upgrade');
+      return;
+    }
     if (!entry.source_uri || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
       setError(t('extensions.errMissingDigest', {name: entry.name}));
       return;
@@ -189,6 +212,8 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       await reload();
       await openReview(staged.installation_id, 'install');
     } catch (cause) {
+      const status = cause && typeof cause === 'object' && 'status' in cause ? Number(cause.status) : 0;
+      if (status === 409) void reload();
       setError(errText(cause, t));
     } finally {
       setBusy(false);
@@ -495,8 +520,38 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                 id: 'actions',
                 header: t('common.actions'),
                 width: '16%',
-                render: row =>
-                  operator ? (
+                render: row => {
+                  const existing = installedByPkg.get(row.package_id);
+                  if (existing) {
+                    if (!existing.active_version) {
+                      return approver ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => void handleStageCatalog(row)}
+                        >
+                          {t('extensions.reviewPermissions')}
+                        </Button>
+                      ) : (
+                        <StatusPill tone={stateTone(existing.state)} label={formatOperationalState(existing.state)} />
+                      );
+                    }
+                    if (existing.active_version !== row.version && operator) {
+                      return (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={busy || !row.source_uri || !/^[a-f0-9]{64}$/.test(row.sha256)}
+                          onClick={() => void handleStageCatalog(row)}
+                        >
+                          {t('extensions.stageUpgrade')}
+                        </Button>
+                      );
+                    }
+                    return <StatusPill tone="ok" label={t('extensions.installedLabel')} />;
+                  }
+                  return operator ? (
                     <Button
                       variant="secondary"
                       size="sm"
@@ -505,7 +560,8 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                     >
                       {t('extensions.stageForReview')}
                     </Button>
-                  ) : null,
+                  ) : null;
+                },
               },
             ]}
           />
@@ -639,7 +695,8 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         confirmLabel={actionTarget ? t(`extensions.confirmBtn.${actionTarget.kind}`) : t('common.action')}
         requireMatch={actionTarget?.kind === 'quarantine' ? actionTarget.row.package_id : undefined}
         matchLabel={t('extensions.matchPackageId')}
-        busy={busy || actionReason.trim().length < 5}
+        busy={busy}
+        confirmDisabled={actionReason.trim().length < 5}
         onConfirm={() => void confirmLifecycleAction()}
       >
         <TextField
@@ -780,4 +837,11 @@ function toCatalogEntry(value: unknown): CatalogEntry | null {
   };
 }
 
-function errText(cause: unknown, t: (key: string) => string): string { return cause instanceof Error ? cause.message : t('common.requestFailed'); }
+function errText(cause: unknown, t: (key: string) => string): string {
+  const status = cause && typeof cause === 'object' && 'status' in cause ? Number(cause.status) : 0;
+  const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
+  if (status === 409 || code.includes('already_installed') || code.includes('already_exists')) {
+    return t('extensions.errAlreadyInstalled');
+  }
+  return cause instanceof Error ? cause.message : t('common.requestFailed');
+}

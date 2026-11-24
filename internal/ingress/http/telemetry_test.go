@@ -495,6 +495,7 @@ func TestGatewayTelemetryOPSAC10ZeroPromptByteAndStages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /v1/chat/completions: %v", err)
 	}
+	unifiedTraceHdr := strings.TrimSpace(resp.Header.Get("X-Tanpopo-Trace-Id"))
 	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -510,6 +511,7 @@ func TestGatewayTelemetryOPSAC10ZeroPromptByteAndStages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /native/openai/v1/chat/completions: %v", err)
 	}
+	nativeTraceHdr := strings.TrimSpace(nResp.Header.Get("X-Tanpopo-Trace-Id"))
 	_, _ = io.Copy(io.Discard, nResp.Body)
 	_ = nResp.Body.Close()
 	if nResp.StatusCode != http.StatusOK {
@@ -525,10 +527,14 @@ func TestGatewayTelemetryOPSAC10ZeroPromptByteAndStages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /v1/chat/completions stream: %v", err)
 	}
+	sseTraceHdr := strings.TrimSpace(sResp.Header.Get("X-Tanpopo-Trace-Id"))
 	_, _ = io.Copy(io.Discard, sResp.Body)
 	_ = sResp.Body.Close()
 	if sResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 OK on SSE stream, got %d", sResp.StatusCode)
+	}
+	if unifiedTraceHdr == "" || nativeTraceHdr == "" || sseTraceHdr == "" {
+		t.Fatalf("expected non-empty X-Tanpopo-Trace-Id headers across unified=%q native=%q sse=%q", unifiedTraceHdr, nativeTraceHdr, sseTraceHdr)
 	}
 
 	if err := th.pipe.ForceFlush(th.ctx); err != nil {
@@ -546,7 +552,7 @@ func TestGatewayTelemetryOPSAC10ZeroPromptByteAndStages(t *testing.T) {
 
 	// Verify request_traces_meta rows exist for both unified_http and native_http and contain 0 sensitive bytes.
 	rows, err := th.store.RawDB().QueryContext(th.ctx, `
-		SELECT entry_point, otel_trace_id, waterfall_stages_json
+		SELECT request_id, entry_point, otel_trace_id, waterfall_stages_json
 		FROM request_traces_meta ORDER BY rowid ASC`)
 	if err != nil {
 		t.Fatal(err)
@@ -555,11 +561,13 @@ func TestGatewayTelemetryOPSAC10ZeroPromptByteAndStages(t *testing.T) {
 
 	var entryPoints []string
 	var sawUnifiedTraceParent bool
+	persistedIDs := map[string]bool{}
 	for rows.Next() {
-		var ep, tid, stagesJSON string
-		if err := rows.Scan(&ep, &tid, &stagesJSON); err != nil {
+		var rowID, ep, tid, stagesJSON string
+		if err := rows.Scan(&rowID, &ep, &tid, &stagesJSON); err != nil {
 			t.Fatal(err)
 		}
+		persistedIDs[rowID] = true
 		entryPoints = append(entryPoints, ep)
 		if ep == "unified_http" && tid == "4bf92f3577b34da6a3ce929d0e0e4736" {
 			sawUnifiedTraceParent = true
@@ -585,6 +593,11 @@ func TestGatewayTelemetryOPSAC10ZeroPromptByteAndStages(t *testing.T) {
 	}
 	if len(entryPoints) != 3 {
 		t.Fatalf("expected 3 request_traces_meta rows (2 unified + 1 native), got %v", entryPoints)
+	}
+	for _, hdrID := range []string{unifiedTraceHdr, nativeTraceHdr, sseTraceHdr} {
+		if !persistedIDs[hdrID] {
+			t.Fatalf("expected X-Tanpopo-Trace-Id %q in persisted request_traces_meta IDs %v", hdrID, persistedIDs)
+		}
 	}
 	if !sawUnifiedTraceParent {
 		t.Fatalf("expected W3C traceparent trace_id preserved on unified_http request")

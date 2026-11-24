@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState, type FormEvent} from 'react';
+import {useCallback, useEffect, useRef, useState, type FormEvent} from 'react';
 import {Download, Plus} from 'lucide-react';
 import {
   createBudget,
@@ -61,17 +61,23 @@ export function FinOpsPage({
   const [period, setPeriod] = useState<Budget['period']>('MONTHLY');
   const [hardLimitText, setHardLimitText] = useState('100000000');
   const [warningsText, setWarningsText] = useState('50, 80, 95');
+  const [budgetFormError, setBudgetFormError] = useState('');
+  const [duplicateExisting, setDuplicateExisting] = useState<Budget | null>(null);
+  const refreshSeqRef = useRef(0);
 
+  const isOrgOwner = roles.includes('ORG_OWNER');
   const canManage = roles.some(role => manageRoles.includes(role));
 
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeqRef.current;
     setLoading(true);
     setError('');
     const [budgetsRes, chargebackRes, keysRes] = await Promise.allSettled([
-      listBudgets(projectId),
+      listBudgets(projectId, Boolean(projectId)),
       getUsageChargebackSummary(groupBy),
       projectId && environmentId ? listVirtualKeys(projectId, environmentId) : Promise.resolve([]),
     ]);
+    if (refreshSeqRef.current !== seq) return;
     const failures: string[] = [];
     if (budgetsRes.status === 'fulfilled') {
       setBudgets(budgetsRes.value);
@@ -100,27 +106,42 @@ export function FinOpsPage({
     setPeriod('MONTHLY');
     setHardLimitText('100000000');
     setWarningsText('50, 80, 95');
+    setBudgetFormError('');
+    setDuplicateExisting(null);
     setCreateOpen(true);
   }
 
   async function handleCreateBudget(event: FormEvent) {
     event.preventDefault();
+    setBudgetFormError('');
+    setDuplicateExisting(null);
     const hardLimit = Number.parseInt(hardLimitText.trim(), 10);
     if (!Number.isSafeInteger(hardLimit) || hardLimit < 0) {
-      setError(t('finops.invalidLimit'));
+      setBudgetFormError(t('finops.invalidLimit'));
       return;
     }
     const targetScopeId = scopeId.trim();
     if (!targetScopeId) {
-      setError(t('finops.scopeIdRequired'));
+      setBudgetFormError(t('finops.scopeIdRequired'));
       return;
     }
-    const parsedWarnings = [...new Set(
-      warningsText
-        .split(',')
-        .map(v => Number.parseInt(v.trim(), 10))
-        .filter(n => Number.isSafeInteger(n) && n >= 1 && n <= 100),
-    )];
+    const existing = budgets.find(
+      b => b.scope_tier === scopeTier && b.scope_id === targetScopeId && b.period === period,
+    );
+    if (existing) {
+      setDuplicateExisting(existing);
+      setBudgetFormError(t('finops.errBudgetExists'));
+      return;
+    }
+    const rawTokens = warningsText
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
+    const parsedWarnings = [...new Set(rawTokens.map(v => Number.parseInt(v, 10)).filter(n => Number.isSafeInteger(n) && n >= 1 && n <= 100))];
+    if (rawTokens.length > 0 && parsedWarnings.length !== rawTokens.length) {
+      setBudgetFormError(t('finops.invalidWarnings'));
+      return;
+    }
     const safeSlug = `bgt_${scopeTier.toLowerCase()}_${targetScopeId.replace(/[^a-zA-Z0-9_-]/g, '_')}_${period.toLowerCase()}`;
     setBusy(true);
     setError('');
@@ -137,7 +158,31 @@ export function FinOpsPage({
       await refresh();
       setNotice(t('finops.budgetCreated', {scope: scopeTier, id: targetScopeId}));
     } catch (cause) {
-      setError(errText(cause, t));
+      setBudgetFormError(errText(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUpdateDuplicateExisting() {
+    if (!duplicateExisting) return;
+    const hardLimit = Number.parseInt(hardLimitText.trim(), 10);
+    if (!Number.isSafeInteger(hardLimit) || hardLimit < 0) {
+      setBudgetFormError(t('finops.invalidLimit'));
+      return;
+    }
+    setBusy(true);
+    setBudgetFormError('');
+    setError('');
+    setNotice('');
+    try {
+      await updateBudget(duplicateExisting, hardLimit);
+      setCreateOpen(false);
+      setDuplicateExisting(null);
+      await refresh();
+      setNotice(t('finops.savedLimit', {scope: duplicateExisting.scope_tier, id: duplicateExisting.scope_id}));
+    } catch (cause) {
+      setBudgetFormError(errText(cause, t));
     } finally {
       setBusy(false);
     }
@@ -268,10 +313,13 @@ export function FinOpsPage({
                   <div className="tp-stack-sm">
                     <span style={{fontWeight: 600}}>{row.scope_tier}</span>
                     <span className="mono tp-muted">{row.scope_id}</span>
+                    {row.scope_tier === 'ORGANIZATION' && projectId && !isOrgOwner ? (
+                      <StatusPill tone="neutral" label={t('finops.inheritedReadOnly')} />
+                    ) : null}
                   </div>
                 ),
               },
-              {id: 'period', header: t('finops.col.period'), width: '10%', render: row => <span>{row.period}</span>},
+              {id: 'period', header: t('finops.col.period'), width: '10%', render: row => <span>{t(`finops.period.${row.period}`)}</span>},
               {id: 'exact', header: t('finops.col.exactSettled'), width: '14%', render: row => <span className="mono">{formatMicroUSD(row.settled_exact_micros)}</span>},
               {id: 'estimated', header: t('finops.col.estimated'), width: '14%', render: row => <span className="mono">{formatMicroUSD(row.settled_estimated_micros)}</span>},
               {
@@ -289,25 +337,28 @@ export function FinOpsPage({
                 id: 'limit',
                 header: t('finops.col.hardLimit'),
                 width: '30%',
-                render: row => (
-                  <div className="tp-row" style={{alignItems: 'flex-end'}}>
-                    <div style={{flex: '1 1 120px', minWidth: 0}}>
-                      <TextField
-                        label={t('finops.hardLimitFor', {scope: row.scope_tier, id: row.scope_id})}
-                        fieldSize="sm"
-                        inputMode="numeric"
-                        value={drafts[row.id] ?? String(row.hard_limit_micros)}
-                        disabled={!canManage || busy}
-                        onChange={event => setDrafts(curr => ({...curr, [row.id]: event.target.value}))}
-                      />
+                render: row => {
+                  const canEditRow = canManage && (row.scope_tier !== 'ORGANIZATION' || isOrgOwner);
+                  return (
+                    <div className="tp-row" style={{alignItems: 'flex-end'}}>
+                      <div style={{flex: '1 1 120px', minWidth: 0}}>
+                        <TextField
+                          label={t('finops.hardLimitFor', {scope: row.scope_tier, id: row.scope_id})}
+                          fieldSize="sm"
+                          inputMode="numeric"
+                          value={drafts[row.id] ?? String(row.hard_limit_micros)}
+                          disabled={!canEditRow || busy}
+                          onChange={event => setDrafts(curr => ({...curr, [row.id]: event.target.value}))}
+                        />
+                      </div>
+                      {canEditRow ? (
+                        <Button variant="secondary" size="sm" disabled={busy} onClick={() => void saveLimit(row)}>
+                          {t('common.save')}
+                        </Button>
+                      ) : null}
                     </div>
-                    {canManage ? (
-                      <Button variant="secondary" size="sm" disabled={busy} onClick={() => void saveLimit(row)}>
-                        {t('common.save')}
-                      </Button>
-                    ) : null}
-                  </div>
-                ),
+                  );
+                },
               },
             ]}
           />
@@ -382,25 +433,38 @@ export function FinOpsPage({
 
       <Drawer
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setBudgetFormError('');
+          setDuplicateExisting(null);
+        }}
         title={t('finops.createBudgetTitle')}
         subtitle={t('finops.createBudgetSubtitle')}
         footer={
           <>
             <Button variant="secondary" onClick={() => setCreateOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" form="tp-create-budget-form" variant="primary" loading={busy} disabled={!scopeId.trim()}>
-              {t('finops.createBudget')}
-            </Button>
+            {duplicateExisting ? (
+              <Button variant="primary" loading={busy} onClick={() => void handleUpdateDuplicateExisting()}>
+                {t('finops.updateExistingBudget')}
+              </Button>
+            ) : (
+              <Button type="submit" form="tp-create-budget-form" variant="primary" loading={busy} disabled={!scopeId.trim()}>
+                {t('finops.createBudget')}
+              </Button>
+            )}
           </>
         }
       >
         <form id="tp-create-budget-form" className="tp-stack" onSubmit={handleCreateBudget}>
+          {budgetFormError ? <Banner tone="danger">{budgetFormError}</Banner> : null}
           <SelectField
             label={t('finops.col.scope')}
             value={scopeTier}
             onChange={next => {
               const tier = next as Budget['scope_tier'];
               setScopeTier(tier);
+              setBudgetFormError('');
+              setDuplicateExisting(null);
               if (tier === 'ORGANIZATION') setScopeId(activeOrgId);
               else if (tier === 'PROJECT') setScopeId(projectId || projects[0]?.id || '');
               else if (tier === 'ENVIRONMENT') setScopeId(environmentId || environments[0]?.id || '');
@@ -417,21 +481,33 @@ export function FinOpsPage({
             <SelectField
               label={t('finops.scopeTarget')}
               value={scopeId}
-              onChange={setScopeId}
+              onChange={next => {
+                setScopeId(next);
+                setBudgetFormError('');
+                setDuplicateExisting(null);
+              }}
               options={projects.map(p => ({value: p.id, label: `${p.name} (${p.slug})`}))}
             />
           ) : scopeTier === 'ENVIRONMENT' && environments.length > 0 ? (
             <SelectField
               label={t('finops.scopeTarget')}
               value={scopeId}
-              onChange={setScopeId}
+              onChange={next => {
+                setScopeId(next);
+                setBudgetFormError('');
+                setDuplicateExisting(null);
+              }}
               options={environments.map(e => ({value: e.id, label: `${e.name} (${e.slug})`}))}
             />
           ) : scopeTier === 'VIRTUAL_KEY' && keys.length > 0 ? (
             <SelectField
               label={t('finops.scopeTarget')}
               value={scopeId}
-              onChange={setScopeId}
+              onChange={next => {
+                setScopeId(next);
+                setBudgetFormError('');
+                setDuplicateExisting(null);
+              }}
               options={keys.map(k => ({value: k.id, label: `${k.name} (${k.key_prefix}…${k.last_four})`}))}
             />
           ) : (
@@ -439,17 +515,26 @@ export function FinOpsPage({
               label={t('finops.scopeTarget')}
               required
               value={scopeId}
-              onChange={event => setScopeId(event.target.value)}
+              onChange={event => {
+                setScopeId(event.target.value);
+                setBudgetFormError('');
+                setDuplicateExisting(null);
+              }}
             />
           )}
           <div className="tp-grid-2">
             <SelectField
               label={t('finops.col.period')}
               value={period}
-              onChange={next => setPeriod(next as Budget['period'])}
+              onChange={next => {
+                setPeriod(next as Budget['period']);
+                setBudgetFormError('');
+                setDuplicateExisting(null);
+              }}
               options={[
-                {value: 'MONTHLY', label: 'MONTHLY'},
-                {value: 'DAILY', label: 'DAILY'},
+                {value: 'MONTHLY', label: t('finops.period.MONTHLY')},
+                {value: 'DAILY', label: t('finops.period.DAILY')},
+                {value: 'TOTAL_LIFETIME', label: t('finops.period.TOTAL_LIFETIME')},
               ]}
             />
             <TextField

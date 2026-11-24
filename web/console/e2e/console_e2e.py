@@ -624,6 +624,9 @@ def verify_clean_onboarding_to_trace(page: Page, https_base: str, http_base: str
     mod_form.wait_for(state="visible", timeout=10000)
     mod_form.get_by_label("Display name").fill("Llama 3.2 Local")
     mod_form.get_by_label("Canonical model slug").fill("llama3.2")
+    mod_form.get_by_label(re.compile("Declared capabilities", re.I)).first.click()
+    page.get_by_role("option", name=re.compile("^streaming$", re.I)).first.click()
+    page.keyboard.press("Escape")
     page.get_by_role("button", name="Register model").last.click()
     mod_form.wait_for(state="hidden", timeout=10000)
 
@@ -761,6 +764,211 @@ def verify_round1_defects_e2e(page: Page, https_base: str) -> dict[str, Any]:
         if not btn.is_disabled():
             raise AssertionError("DEF-008: Create backup button must be disabled when swap-free staging is unavailable")
         results["backup_ok"] = "honest_fail_closed_swap_active"
+
+    return results
+
+
+def verify_round2_defects_e2e(
+    page: Page,
+    https_base: str,
+    browser: Any,
+    external_requests: list[str],
+    page_errors: list[str],
+) -> dict[str, Any]:
+    results: dict[str, Any] = {}
+
+    # Restore primary organization in topbar Scope Switcher (previous test created & switched to Bravo Org)
+    scope_btn = page.locator("button.tp-scope-switcher")
+    if scope_btn.count() > 0 and "Bravo Org" in scope_btn.inner_text():
+        scope_btn.click()
+        opts = page.get_by_role("option")
+        for idx in range(opts.count()):
+            txt = opts.nth(idx).inner_text()
+            if "Bravo Org" not in txt:
+                opts.nth(idx).click()
+                break
+        page.wait_for_function("() => !document.querySelector('button.tp-scope-switcher')?.textContent?.includes('Bravo Org')", timeout=5000)
+
+    # 1. DEF-021, DEF-022, DEF-023: Members load cleanly, enrollment activation logs in, role update revokes session (401 -> session_expired)
+    page.goto(f"{https_base}/access/members", wait_until="networkidle")
+    page.get_by_text("Organization members").first.wait_for(state="visible", timeout=8000)
+    page.get_by_role("button", name=re.compile("Add member", re.I)).first.click()
+    mem_form = page.locator("#tp-add-member-form")
+    mem_form.wait_for(state="visible", timeout=8000)
+    mem_form.get_by_label(re.compile("Member email", re.I)).fill("e2e-enroll@tanpopo.example")
+    # Ensure DEVELOPER role is selected
+    roles_combo = mem_form.get_by_role("combobox", name=re.compile("Assign roles|Select roles", re.I)).first
+    roles_combo.click()
+    dev_opt = page.get_by_role("option", name=re.compile("DEVELOPER", re.I)).first
+    if dev_opt.get_attribute("aria-selected") != "true":
+        dev_opt.click()
+    page.keyboard.press("Escape")
+    page.locator('dialog[open] button[form="tp-add-member-form"]').click()
+
+    enroll_dlg = page.locator('dialog[open], [role="dialog"]').last
+    enroll_dlg.wait_for(state="visible", timeout=8000)
+    dlg_text = enroll_dlg.inner_text()
+    tok_match = re.search(r"tpen_[A-Za-z0-9_-]{12,}", dlg_text)
+    if not tok_match:
+        raise AssertionError(f"DEF-021: one-time enrollment token missing in modal: {dlg_text[:300]!r}")
+    enroll_token = tok_match.group(0)
+    enroll_dlg.get_by_role("button", name=re.compile("^Done$", re.I)).click()
+
+    # Open isolated incognito context for invited member enrollment
+    enroll_console_errs: list[str] = []
+    enroll_ctx = browser.new_context(viewport={"width": 1440, "height": 900}, ignore_https_errors=True, locale="en-US")
+    attach_airgap_and_error_guards(enroll_ctx, external_requests, enroll_console_errs, page_errors)
+    try:
+        enroll_page = enroll_ctx.new_page()
+        enroll_page.goto(f"{https_base}/login?enroll={enroll_token}", wait_until="networkidle")
+        pw_inputs = enroll_page.locator('input[type="password"]')
+        pw_inputs.nth(0).fill("TanpopoEnroll!Strong#2026")
+        pw_inputs.nth(1).fill("TanpopoEnroll!Strong#2026")
+        enroll_page.locator('button[type="submit"]').click()
+        enroll_page.wait_for_url("**/overview", timeout=15000)
+        enroll_page.locator("main#main-content h1").wait_for(state="visible", timeout=15000)
+        results["enrollment_login_ok"] = True
+
+        # Owner updates invited member's roles -> immediately revokes active member session
+        page.goto(f"{https_base}/access/members", wait_until="networkidle")
+        mem_row = page.locator("tr", has_text="e2e-enroll@tanpopo.example").first
+        mem_row.wait_for(state="visible", timeout=8000)
+        mem_row.get_by_text("Password set").first.wait_for(state="visible", timeout=5000)
+        mem_row.get_by_role("button", name=re.compile("Actions for e2e-enroll@tanpopo.example", re.I)).click()
+        page.get_by_role("menuitem", name=re.compile("Edit roles", re.I)).or_(
+            page.get_by_text(re.compile("Edit roles", re.I))
+        ).first.click()
+        page.locator('dialog[open] button:has-text("Save roles")').first.click()
+        page.get_by_text("Member roles updated.").first.wait_for(state="visible", timeout=8000)
+
+        # Revoked member session triggers an in-app API request -> forced 401 redirect to /login?reason=session_expired
+        enroll_page.get_by_role("link", name=re.compile("^Traces$", re.I)).first.click()
+        enroll_page.wait_for_function(
+            "() => window.location.pathname === '/login' && window.location.search.includes('reason=session_expired')",
+            timeout=15000,
+        )
+        enroll_page.get_by_text(re.compile("Session expired", re.I)).first.wait_for(state="visible", timeout=8000)
+        unexpected_enroll_errs = [e for e in enroll_console_errs if "401" not in e and "403" not in e]
+        if unexpected_enroll_errs:
+            raise AssertionError(f"DEF-022: Unexpected console errors during session expiry check: {unexpected_enroll_errs}")
+        results["role_revoke_401_ok"] = True
+    finally:
+        enroll_ctx.close()
+
+    # 2. DEF-034 & DEF-020: Seal signing secret -> Register webhook -> Disable -> Enable -> Delete
+    page.goto(f"{https_base}/providers/connections", wait_until="networkidle")
+    page.get_by_role("tab", name=re.compile("Vault Secrets", re.I)).first.click()
+    page.get_by_role("button", name=re.compile("Seal secret", re.I)).first.click()
+    sec_form = page.locator("#tp-seal-secret-form")
+    sec_form.wait_for(state="visible", timeout=8000)
+    sec_form.get_by_label(re.compile("Credential name", re.I)).fill("e2e-whk-sec")
+    _select_combo_option(page, sec_form, "Secret kind", "Webhook HMAC Secret")
+    sec_form.locator("input[type='password']").first.fill("whsec_e2e_def034_hmac_signing_key")
+    page.locator('dialog[open] button[form="tp-seal-secret-form"]').click()
+    page.locator("tr", has_text="e2e-whk-sec").first.wait_for(state="visible", timeout=8000)
+
+    page.goto(f"{https_base}/settings/residency-retention", wait_until="networkidle")
+    page.get_by_role("button", name=re.compile("Add webhook", re.I)).first.click()
+    whk_form = page.locator("#tp-register-webhook-form")
+    whk_form.wait_for(state="visible", timeout=8000)
+    whk_form.get_by_label(re.compile("HTTPS receiver URL", re.I)).fill("https://93.184.216.34/e2e-def034")
+    _select_combo_option(page, whk_form, "Signing credential", "e2e-whk-sec")
+    page.locator('dialog[open] button[form="tp-register-webhook-form"]').click()
+    whk_row = page.locator("tr", has_text="https://93.184.216.34").first
+    whk_row.wait_for(state="visible", timeout=8000)
+
+    # Disable -> verify Disabled -> Enable -> verify Enabled -> Delete
+    whk_row.get_by_role("button", name=re.compile("Actions", re.I)).click()
+    page.get_by_role("menuitem", name=re.compile("Disable webhook", re.I)).or_(page.get_by_text("Disable webhook")).first.click()
+    whk_row.get_by_text(re.compile(r"^Disabled$", re.I)).wait_for(state="visible", timeout=8000)
+
+    whk_row.get_by_role("button", name=re.compile("Actions", re.I)).click()
+    page.get_by_role("menuitem", name=re.compile("Enable webhook", re.I)).or_(page.get_by_text("Enable webhook")).first.click()
+    whk_row.get_by_text(re.compile(r"^Enabled$", re.I)).wait_for(state="visible", timeout=8000)
+
+    whk_row.get_by_role("button", name=re.compile("Actions", re.I)).click()
+    page.get_by_role("menuitem", name=re.compile("Delete webhook", re.I)).or_(page.get_by_text("Delete webhook")).first.click()
+    del_dlg = page.locator('dialog[open], [role="alertdialog"], [role="dialog"]').last
+    del_dlg.wait_for(state="visible", timeout=5000)
+    del_dlg.get_by_role("button", name=re.compile("Delete webhook", re.I)).click()
+    whk_row.wait_for(state="hidden", timeout=8000)
+    results["webhook_lifecycle_ok"] = True
+
+    # 3. DEF-039 & DEF-028: Policies effective table & Explain omitting forced openai_compatible
+    page.goto(f"{https_base}/policies", wait_until="networkidle")
+    page.get_by_text("Effective resolved policy").first.wait_for(state="visible", timeout=8000)
+    results["policies_visible_ok"] = True
+
+    page.goto(f"{https_base}/routes/explain", wait_until="networkidle")
+    exp_combo = page.get_by_role("combobox", name=re.compile("Target model or route slug", re.I)).first
+    exp_combo.click()
+    exp_combo.fill("llama3.2")
+    exp_combo.press("Tab")
+    _select_combo_option(page, page.locator("main#main-content"), "Data residency", "On-prem")
+    page.get_by_role("button", name=re.compile("Explain route", re.I)).first.click()
+    page.get_by_text("Dry-run verified").first.wait_for(state="visible", timeout=8000)
+    results["explain_ok"] = True
+
+    # 4. DEF-017: Playground correlates response cleanly without stuck Trace pending
+    page.goto(f"{https_base}/devtools/playground", wait_until="networkidle")
+    page.wait_for_function(
+        "() => { const el = document.querySelector('.tp-scope-switcher-env'); return el && el.textContent && !el.textContent.includes('No env'); }",
+        timeout=8000,
+    )
+    pg_model = page.get_by_role("combobox", name=re.compile("Model or route slug", re.I)).first
+    pg_model.locator("xpath=..").click()
+    pg_model.fill("llama3.2")
+    opt = page.get_by_role("option", name=re.compile("llama3\\.2", re.I)).first
+    opt.wait_for(state="visible", timeout=5000)
+    opt.click()
+    page.get_by_label(re.compile("^Prompt$", re.I)).fill("Round 2 DEF-017 trace check")
+    page.get_by_role("button", name=re.compile("^Send$", re.I)).click()
+    try:
+        page.get_by_text("Tanpopo E2E OK").first.wait_for(state="visible", timeout=15000)
+    except Exception as exc:
+        alerts = page.locator('[role="alert"], .astryx-banner').all_inner_texts()
+        raise AssertionError(f"DEF-017: Playground reply missing; alerts={alerts!r}") from exc
+    page.wait_for_function(
+        """() => !document.body.innerText.includes('Trace metadata pending') || document.body.innerText.includes('req_')""",
+        timeout=15000,
+    )
+    results["playground_trace_ok"] = True
+
+    # 5. DEF-036: Marketplace reconciles installed @tanpopo/openai-compatible
+    page.goto(f"{https_base}/extensions/marketplace", wait_until="networkidle")
+    mkt_row = page.locator("tr", has_text="@tanpopo/openai-compatible").first
+    mkt_row.wait_for(state="visible", timeout=8000)
+    if mkt_row.get_by_role("button", name="Stage for review").count() > 0:
+        raise AssertionError("DEF-036: Marketplace still shows Stage for review for already-installed @tanpopo/openai-compatible")
+    mkt_row.get_by_text(re.compile(r"^Installed$", re.I)).wait_for(state="visible", timeout=5000)
+    results["marketplace_reconciled_ok"] = True
+
+    # 6. DEF-031: Mobile 375px Drawer CIDR validation renders inside drawer with 0 overflow
+    page.set_viewport_size({"width": 375, "height": 812})
+    try:
+        page.goto(f"{https_base}/mcp/servers", wait_until="networkidle")
+        page.get_by_role("button", name=re.compile("Register server", re.I)).first.click()
+        mcp_form = page.locator("#tp-register-mcp-form")
+        mcp_form.wait_for(state="visible", timeout=8000)
+        mcp_form.get_by_label(re.compile("Server slug", re.I)).fill("e2e-bad-cidr")
+        mcp_form.get_by_label(re.compile("Display name", re.I)).fill("E2E Bad CIDR")
+        mcp_form.get_by_label(re.compile("Streamable HTTP endpoint URL|Endpoint URL", re.I)).fill("http://127.0.0.1:9000/mcp")
+        priv_cb = mcp_form.locator('input[type="checkbox"]').first
+        if not priv_cb.is_checked():
+            priv_cb.click()
+        mcp_form.get_by_label(re.compile("Allowed CIDRs", re.I)).fill("127.0.0.1/33")
+        page.locator('dialog[open] button[form="tp-register-mcp-form"]').click()
+        page.locator('dialog[open]').get_by_text(re.compile("explicit non-wildcard CIDRs", re.I)).first.wait_for(state="visible", timeout=5000)
+        ovf = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
+        if ovf:
+            raise AssertionError("DEF-031: Mobile 375px MCP drawer caused horizontal overflow")
+        drawer_png = os.environ.get("TANPOPO_E2E_MOBILE_MCP_DRAWER_PNG", "").strip()
+        if drawer_png:
+            page.screenshot(path=drawer_png)
+        page.locator('dialog[open] button:has-text("Cancel")').first.click()
+        results["mobile_cidr_in_drawer_ok"] = True
+    finally:
+        page.set_viewport_size({"width": 1440, "height": 900})
 
     return results
 
@@ -1002,6 +1210,12 @@ def main() -> int:
                         # Round 1 DEF workflows (FinOps Create/Export, Virtual Key A2A, Backups)
                         print("[e2e] chromium phase=round1-defects", flush=True)
                         b_summary["round1_defects"] = verify_round1_defects_e2e(page, https_base)
+
+                        # Round 2 DEF workflows (Enrollment+401, Webhooks, Policies, Explain, Playground Trace, Marketplace, Mobile CIDR)
+                        print("[e2e] chromium phase=round2-defects", flush=True)
+                        b_summary["round2_defects"] = verify_round2_defects_e2e(
+                            page, https_base, browser, report["external_requests"], report["page_errors"]
+                        )
 
                         # CWV & real click/keyboard INP on key workspace screens
                         print("[e2e] chromium phase=cwv-inp", flush=True)

@@ -123,7 +123,40 @@ api.use({
     headers.set('X-CSRF-Token', csrfToken);
     return new Request(request, {headers});
   },
+  onResponse({request, response}) {
+    if (response.status !== 401) return response;
+    const pathname = new URL(request.url).pathname;
+    if (
+      pathname.startsWith('/admin/v1/')
+      && !pathname.startsWith('/admin/v1/auth/login')
+      && !pathname.startsWith('/admin/v1/auth/enroll')
+      && !pathname.startsWith('/admin/v1/auth/oidc/')
+      && !pathname.startsWith('/admin/v1/bootstrap/')
+    ) {
+      clearCsrfToken();
+      purgeOrgScopedClientState();
+      notifyUnauthorized();
+    }
+    return response;
+  },
 });
+
+const unauthorizedListeners = new Set<() => void>();
+
+export function subscribeUnauthorized(listener: () => void): () => void {
+  unauthorizedListeners.add(listener);
+  return () => { unauthorizedListeners.delete(listener); };
+}
+
+function notifyUnauthorized() {
+  for (const listener of unauthorizedListeners) {
+    try {
+      listener();
+    } catch {
+      // Ignore individual subscriber errors during session teardown.
+    }
+  }
+}
 
 export function apiError(response: Response, error: unknown) {
   const detail = error && typeof error === 'object' && 'error' in error
@@ -156,6 +189,19 @@ export async function completeBootstrap(payload: components['schemas']['Bootstra
 
 export async function loginAdmin(email: string, password: string) {
   const result = await api.POST('/admin/v1/auth/login', {body: {email, password}});
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  rememberCsrfToken(result.data.csrf_token);
+  return result.data;
+}
+
+export async function enrollLocalMember(token: string, password: string, orgId?: string) {
+  const result = await api.POST('/admin/v1/auth/enroll', {
+    body: {
+      token,
+      password,
+      ...(orgId ? {org_id: orgId} : {}),
+    },
+  });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   rememberCsrfToken(result.data.csrf_token);
   return result.data;

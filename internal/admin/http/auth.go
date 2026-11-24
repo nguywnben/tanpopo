@@ -44,7 +44,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientIP := extractClientIP(r)
+	clientIP := s.extractClientIP(r)
 	info, cookie, err := s.auth.LoginForOrg(r.Context(), clientIP, req.OrgID, req.Email, req.Password)
 	if err != nil {
 		var rlErr *auth.RateLimitError
@@ -63,6 +63,58 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	http.SetCookie(w, cookie)
+	writeJSON(w, http.StatusOK, adminSessionResponse{
+		PrincipalID:     info.PrincipalID,
+		Email:           info.Email,
+		OrgID:           info.OrgID,
+		Roles:           nonEmptyRoleSlice(info.Roles),
+		CSRFToken:       info.CSRFToken,
+		ExpiresAt:       formatTimeRFC3339Ms(info.ExpiresAtMs),
+		MultiOrgEnabled: !s.multiOrgDisabled,
+	})
+}
+
+type enrollRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+	OrgID    string `json:"org_id,omitempty"`
+}
+
+func (s *Server) handleAuthEnroll(w http.ResponseWriter, r *http.Request) {
+	var req enrollRequest
+	if !decodePublicJSON(w, r, &req) {
+		return
+	}
+	clientIP := s.extractClientIP(r)
+	info, cookie, err := s.auth.EnrollWithToken(
+		r.Context(),
+		clientIP,
+		req.OrgID,
+		req.Token,
+		req.Password,
+		requestIDFromContext(r.Context()),
+	)
+	if err != nil {
+		var rlErr *auth.RateLimitError
+		if errors.As(err, &rlErr) {
+			if rlErr.RetryAfterSeconds > 0 {
+				w.Header().Set("Retry-After", strconv.Itoa(rlErr.RetryAfterSeconds))
+			}
+			writeErrorEnvelope(w, r, http.StatusTooManyRequests, "auth_rate_limited", "rate_limit_error", "too many enrollment attempts", true, nil)
+			return
+		}
+		if errors.Is(err, auth.ErrWeakPassword) {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "weak_password", "invalid_request_error", "password must be at least 12 characters", false, nil)
+			return
+		}
+		if errors.Is(err, auth.ErrPrincipalInactive) {
+			writeErrorEnvelope(w, r, http.StatusForbidden, "principal_inactive", "permission_error", "account is inactive", false, nil)
+			return
+		}
+		writeErrorEnvelope(w, r, http.StatusUnauthorized, "invalid_enrollment_token", "authentication_error", "enrollment token is invalid or expired", false, nil)
+		return
+	}
 	http.SetCookie(w, cookie)
 	writeJSON(w, http.StatusOK, adminSessionResponse{
 		PrincipalID:     info.PrincipalID,
@@ -457,6 +509,9 @@ func (s *Server) handleAuthOIDCRefresh(w http.ResponseWriter, r *http.Request) {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "oidc_refresh_failed", "upstream_error", "failed refreshing OIDC session", true, nil)
 		}
 		return
+	}
+	if prevCookie, err := r.Cookie(auth.SessionCookieName); err == nil && prevCookie.Value != "" && prevCookie.Value != res.Cookie.Value {
+		s.auth.Logout(prevCookie.Value)
 	}
 	http.SetCookie(w, res.Cookie)
 	writeJSON(w, http.StatusOK, adminSessionResponse{

@@ -166,6 +166,42 @@ export async function createWebhook(payload: {
   return result.data;
 }
 
+export async function updateWebhook(
+  subscription: components['schemas']['WebhookSubscriptionResource'],
+  payload: {enabled?: boolean; events?: components['schemas']['WebhookEvents']},
+) {
+  const result = await api.PATCH('/admin/v1/webhooks/{subscriptionId}', {
+    params: {path: {subscriptionId: subscription.id}, header: {'If-Match': versionTag(subscription.version)}},
+    body: payload,
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function deleteWebhook(subscription: components['schemas']['WebhookSubscriptionResource']) {
+  const result = await api.DELETE('/admin/v1/webhooks/{subscriptionId}', {
+    params: {path: {subscriptionId: subscription.id}, header: {'If-Match': versionTag(subscription.version)}},
+  });
+  if (!result.response.ok) throw apiError(result.response, result.error);
+}
+
+const securityStateListeners = new Set<() => void>();
+
+export function subscribeSecurityStateChanged(listener: () => void): () => void {
+  securityStateListeners.add(listener);
+  return () => { securityStateListeners.delete(listener); };
+}
+
+export function notifySecurityStateChanged() {
+  for (const listener of securityStateListeners) {
+    try {
+      listener();
+    } catch {
+      // Ignore individual subscriber errors during badge sync.
+    }
+  }
+}
+
 export async function listPendingApprovals() {
   const result = await api.GET('/admin/v1/approvals', {params: {query: {status: 'PENDING', limit: 100}}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
@@ -178,6 +214,7 @@ export async function decideApproval(item: components['schemas']['ApprovalReques
     body: {decision, expected_binding_hash: item.approval_binding_hash, reason},
   });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  notifySecurityStateChanged();
   return result.data;
 }
 
@@ -247,11 +284,11 @@ export async function revokeVirtualKey(key: Key, mode: 'GRACEFUL_DRAIN' | 'EMERG
   return result.data;
 }
 
-export async function listMembers() {
+export async function listMembers(projectId?: string) {
   const rows: Member[] = [];
   let cursor: string | undefined;
   do {
-    const result = await api.GET('/admin/v1/members', {params: {query: {limit: 100, cursor}}});
+    const result = await api.GET('/admin/v1/members', {params: {query: {project_id: projectId || undefined, limit: 100, cursor}}});
     if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
     rows.push(...result.data.data);
     cursor = result.data.next_cursor ?? undefined;
@@ -271,6 +308,14 @@ export async function createMember(
       roles: memberRoles,
       ...(projectIds && projectIds.length > 0 ? {project_ids: projectIds} : {}),
     },
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function issueMemberEnrollmentToken(memberId: string) {
+  const result = await api.POST('/admin/v1/members/{memberId}/enrollment-token', {
+    params: {path: {memberId}},
   });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;
@@ -324,8 +369,16 @@ export async function getTraceWaterfall(requestId: string) {
   return result.data;
 }
 
-export async function listBudgets(projectId?: string) {
-  const result = await api.GET('/admin/v1/budgets', {params: {query: {project_id: projectId || undefined, limit: 100}}});
+export async function listBudgets(projectId?: string, includeAncestors?: boolean) {
+  const result = await api.GET('/admin/v1/budgets', {
+    params: {
+      query: {
+        project_id: projectId || undefined,
+        include_ancestors: projectId && includeAncestors ? true : undefined,
+        limit: 100,
+      },
+    },
+  });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data.data;
 }
@@ -391,6 +444,7 @@ export async function verifyAuditHashChain() {
 export async function triggerKillSwitch(payload: components['schemas']['KillSwitchTriggerRequest']) {
   const result = await api.POST('/admin/v1/kill-switches', {body: payload});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  notifySecurityStateChanged();
   return result.data;
 }
 
@@ -406,6 +460,7 @@ export async function clearKillSwitch(item: components['schemas']['KillSwitchRes
     body: {expected_version: item.version, clear_reason},
   });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  notifySecurityStateChanged();
   return result.data;
 }
 

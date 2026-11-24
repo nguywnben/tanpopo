@@ -228,15 +228,15 @@ export function OrganizationsAdminPage({
               header: t('orgs.colName'),
               primary: true,
               render: org => (
-                <div className="tp-stack-tight">
-                  <div className="tp-inline">
+                <div className="tp-stack-sm">
+                  <div className="tp-row">
                     <Building2 size={14} aria-hidden="true" />
-                    <span className="tp-table-primary">{org.name}</span>
+                    <span style={{fontWeight: 600}}>{org.name}</span>
                     {org.id === activeOrgId ? (
                       <StatusPill tone="ok" label={t('orgs.activeLabel')} />
                     ) : null}
                   </div>
-                  <span className="tp-mono tp-muted">{org.slug} · {org.id}</span>
+                  <span className="mono tp-muted">{org.slug} · {org.id}</span>
                 </div>
               ),
             },
@@ -259,13 +259,13 @@ export function OrganizationsAdminPage({
               id: 'created',
               header: t('common.created'),
               hideOnMobile: true,
-              render: org => <span className="tp-mono tp-muted">{formatDateTime(org.created_at)}</span>,
+              render: org => <span className="mono tp-muted">{formatDateTime(org.created_at)}</span>,
             },
             {
               id: 'actions',
               header: t('common.actions'),
               render: org => (
-                <div className="tp-inline tp-row-actions">
+                <div className="tp-row">
                   <Button
                     variant="secondary"
                     size="sm"

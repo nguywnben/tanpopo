@@ -239,6 +239,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			startedAtMs:   h.nowMs(),
 			rootSpan:      rootSpan,
 		}
+		w.Header().Set("X-Tanpopo-Trace-Id", reqTel.traceRecordID)
 		scw := &nativeStatusCaptureWriter{ResponseWriter: w}
 		w = scw
 		r = r.WithContext(withNativeTelemetry(spanCtx, reqTel))
