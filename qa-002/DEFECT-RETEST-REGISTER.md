@@ -104,3 +104,5 @@ Consult the original detailed register and targeted handoffs: `qa/DEFECT-REGISTE
 | CP59 | DEF-001–015 not retested | No historical defect retested in this phase. CP59 adds fresh A2A lifecycle evidence only; see `checkpoints/CP59-a2a-refresh-persistence-and-runtime-gate.md`. Preserve all prior scoped dispositions, including DEF-005 partial. |
 
 | CP62 | DEF-029, DEF-023 | FAIL DEF-029 confirmed with controlled delayed response. DEF-023 was not newly retested; CP60 source analysis and CP43 reproduction remain. See `reports/DEF-029-access-keys-stale-after-workspace-scope-change.md` and `checkpoints/CP62-access-keys-scope-race.md`. |
+
+| CP63 | DEF-030, DEF-023, DEF-029 | FAIL DEF-030 confirmed with delayed route response. DEF-023/029 were not newly retested; prior status preserved. See `reports/DEF-030-routing-stale-after-workspace-scope-change.md` and `checkpoints/CP63-routing-scope-race-and-stale-actions.md`. |

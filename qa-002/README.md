@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP62 (Access & Keys workspace-scope response race).
+**Latest checkpoint:** CP63 (Routes & Policies workspace-scope race).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -102,3 +102,4 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP60 | DEF-023 source reconciliation and private hostname aliases | FAIL DEF-023 confirmed in source and prior UI/API evidence; `127.1` and trailing-dot localhost fail closed under explicit mismatched CIDRs. QA-OBS-004 recurred; QA-OBS-011 tracks undocumented shorthand-host support. |
 | CP61 | Direct IPv6 MCP endpoint CIDR controls and first discovery | PASS exact `::1/128` synthetic sync; mismatch `::2/128` failed closed with zero fixture contact. DEF-026 and QA-OBS-004 recurred. |
 | CP62 | Delayed Access & Keys response after scope switch | FAIL DEF-029: held 200 response showed ten old environment keys under No project / No env; navigation cleared them. See CP62. |
+| CP63 | Delayed Routes & Policies response after scope switch | FAIL DEF-030: three old environment routes reappeared in No project / No env with Edit/Delete and enabled Save; no mutation. See CP63. |

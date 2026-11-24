@@ -1,0 +1,16 @@
+{
+  "stale_route_actions": "Edit route\nDelete route",
+  "save_route_enabled_without_scope": true,
+  "held_request": {
+    "path": "/admin/v1/routes",
+    "query": "?env_id=env_01m85ry445e009xg6sr14c5q1z&limit=100",
+    "status": 200
+  },
+  "returned_route_count": 3,
+  "route_slugs": [
+    "qa002-cp52-failover-route",
+    "qa002-cp51-org-budget-stream-route",
+    "qa002-cp51-org-budget-route"
+  ],
+  "scope": "No project\n/\nNo env\n(Active workspace scope)"
+}
