@@ -22,6 +22,7 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [DEF-020](reports/DEF-020-killswitch-badge-stays-active-after-clear.md) — confirmed Security shell badges remain stale after switch clear and approval decisions.
 - [DEF-023](reports/DEF-023-org-members-hidden-until-project-selected.md) — confirmed org-only and project/no-environment owner views hide the organization member list.
 - [DEF-024](reports/DEF-024-finops-hides-effective-organization-budget-in-project-scope.md) — confirmed project FinOps view hides a persisted, effective organization ceiling.
+- [DEF-025](reports/DEF-025-model-deployment-drawer-unavailable-without-environment.md) — confirmed low-severity Models form dead end without an active environment.
 - [QA-OBS-008](reports/QA-OBS-008-mcp-hub-organization-wide-list-scope-label.md) — MCP Hub organization-wide list has no project labels; intended UI scope is unresolved.
 - `reports/` — phase reports, new defect findings (DEF-016 onward), and explicitly unclassified QA observations.
 
@@ -79,3 +80,4 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP41 | MCP redirect SSRF behavior with same-CIDR and cross-CIDR targets | PASS for scoped fail-closed behavior: direct private target succeeded; MCP sync did not follow either 307 redirect and neither target received a request. Redirect-target revalidation and support semantics remain UNVERIFIED. See [checkpoint](checkpoints/CP41-mcp-redirect-ssrf-boundary.md). |
 | CP42 | IPv4-mapped IPv6 private MCP endpoint form | PASS for fail-closed behavior: exact `::ffff:127.0.0.1/128` input returned 403 `egress_private_ip_blocked`, no row persisted, no fixture request. Mapped notation support remains UNVERIFIED (QA-OBS-007). See [checkpoint](checkpoints/CP42-ipv4-mapped-mcp-address.md). |
 | CP43 | Console workspace-scope consistency and FinOps budget visibility | FAIL DEF-023 (expanded) and DEF-024. MCP Hub list scope remains unresolved QA-OBS-008. See [checkpoint](checkpoints/CP43-console-workspace-scope-and-finops.md). |
+| CP44 | Org-only Console screens and Models deployment form | FAIL DEF-025; Add deployment is enabled without environment scope but cannot succeed and has no in-drawer scope selection. No backend mutation. See [checkpoint](checkpoints/CP44-org-only-console-surface-and-model-drawer.md). |

@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP43  
+**Latest checkpoint:** CP44
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -25,6 +25,7 @@
 | DEF-022 | Moderate | Session UI retains revoked role/navigation/actions until reload after server rejects the session. |
 | DEF-023 | Moderate | Organization member list is falsely empty without both project and environment selected; CP43 expanded the repro. |
 | DEF-024 | Moderate | Project FinOps view hides an applicable persisted organization ceiling and displays a false empty state. |
+| DEF-025 | Low | Models enables Add deployment without environment scope; its form cannot select an environment and reports a page-level validation after submission. |
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/).
 
@@ -40,9 +41,9 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 
 ## Coverage
 
-- **Completed in CP43:** real Chromium scope switching across organization-only, project/no-environment, project/environment and a second project; actual navigation/refresh; visually inspected access, FinOps, Routes, Traces, Playground, MCP and A2A states; API/persisted-state comparison for members and budgets.
+- **Completed in CP43–44:** real Chromium scope switching across organization-only, project/no-environment, project/environment and a second project; navigation/refresh; visually inspected Access, FinOps, Routes, Traces, Playground, MCP, A2A, Overview, Providers, Models, Extensions and Security states; API/persisted-state comparison for members and budgets; Models no-environment create attempt generated validation but no mutation.
 - **Blocked:** no CP43 execution capability blocked. Organization-only policy editing was not attempted because the UI requires project/environment and its intended contract remains unclear. Google adapter/runtime failures and RC4 artifact verification remain as recorded in prior checkpoints.
-- **Remaining:** broader independent retest of DEF-001–024 on additional roles/platforms; full non-owner cross-project authorization; workspace transitions under latency and failure; organization policy contract; multi-project MCP labeling/actions; effective budget display plus isolated spend/enforcement regression; remaining screens, business workflows, browser/platform modes, integrations and operational failures. See [coverage matrix](COVERAGE-MATRIX.md) for detailed PASS/FAIL/BLOCKED/UNVERIFIED entries.
+- **Remaining:** broader independent retest of DEF-001–025 on additional roles/platforms; full non-owner cross-project authorization; workspace transitions under latency and failure; organization policy contract; multi-project MCP labeling/actions; effective budget display plus isolated spend/enforcement regression; remaining screens, business workflows, browser/platform modes, integrations and operational failures. See [coverage matrix](COVERAGE-MATRIX.md) for detailed PASS/FAIL/BLOCKED/UNVERIFIED entries.
 
 ## Recommended engineering handoffs
 
