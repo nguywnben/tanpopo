@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP67 (WebKit mobile A2A CIDR error parity).
+**Latest checkpoint:** CP69 (A2A input-required cancellation and reservation release).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -107,3 +107,7 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP65 | Access & Keys cross-project delayed-response race | FAIL DEF-029 expanded: ten secondary-project rows appeared under a different selected project/environment; refresh returned to runtime-default scope (QA-OBS-009). No auth bypass demonstrated. See CP65. |
 | CP66 | WebKit mobile MCP CIDR validation and error feedback | FAIL DEF-031: invalid `/33` was safely rejected with HTTP 400/no persistence, but feedback was obscured behind the open drawer. See CP66. |
 | CP67 | WebKit mobile A2A CIDR validation feedback | FAIL DEF-031 expanded to A2A: invalid `/33` was rejected with HTTP 400/no persistence, but feedback was obscured behind the drawer. See CP67. |
+
+| CP68 | Enabled-runtime A2A private registration, discovery and input-required task lifecycle | PASS for one synthetic A2A-only flow through discovery, same-task refresh, UI resume, settlement and revoked-key denial. Provider-plane request returned 403. See CP68. |
+
+| CP69 | A2A input-required cancellation and held-budget release | PASS for corrected synthetic run: canceled the same task after refresh; database confirmed released reservation and zero settled cost; fixture had no follow-up call. Initial fixture port mismatch recorded as harness error. See CP69. |

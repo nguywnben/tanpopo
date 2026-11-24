@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP67
+**Latest checkpoint:** CP69
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -10,7 +10,7 @@
 | Status | IDs | Notes |
 | --- | --- | --- |
 | Verified fixed for scoped post-baseline scenarios | DEF-001–004, DEF-006–015 | Each passes only the specific QA-002 retest scenarios recorded in [DEFECT-RETEST-REGISTER.md](DEFECT-RETEST-REGISTER.md). This is not a full role/platform regression. |
-| Partial pass; residual security/support coverage open | DEF-005 | Explicit private-IP/CIDR positive/negative controls passed for the executed cases. Redirects were not followed; DNS rebinding, alternate runtimes, and IPv4-mapped endpoint support are not resolved. See QA-OBS-004/007 and CP25/40–42. |
+| Partial pass; residual security/support coverage open | DEF-005 | Explicit private-IP/CIDR controls passed for executed cases; CP68 completed one enabled-runtime private A2A register/discover/task journey. CP66/67 confirm mobile invalid-CIDR errors hidden behind both drawers while APIs still reject safely. Redirects were not followed; DNS rebinding, mixed answers, alternate runtimes, and IPv4-mapped endpoint support remain unresolved. See QA-OBS-004/007 and CP25/40–42. |
 
 ## Confirmed open defects
 
@@ -35,16 +35,16 @@
 
 All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
-## Latest phase: CP67
+## Latest phase: CP69
 
-- **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain only the previously recorded scoped QA-002 PASS results; they were not retested in CP67. No broader closure is implied.
-- **Historical defects failing / unverified:** DEF-005 remains PARTIAL with SSRF behavior fail-closed for tested cases and significant DNS rebinding, HTTPS/redirect-chain, runtime, and host-contract coverage open. DEF-016–028 remain confirmed open; DEF-026 recurred in CP61. DEF-023 remains confirmed from CP43/CP60, not retested in CP64.
-- **New findings:** DEF-031 Low reconfirmed and expanded: both MCP and A2A forms submit invalid `127.0.0.1/33`; each API rejects with 400, but on WebKit mobile the error text is behind the open drawer. No records persist and neither integration endpoint is contacted; enforcement held. DEF-029 remains confirmed and expanded in CP65; DEF-030 remains confirmed from CP63.
-- **Coverage completed:** visually inspected CP66 MCP and CP67 A2A WebKit mobile form/failure screenshots; verified field toggles, request payloads, exact API rejections, no persistence, no integration endpoint contact, DOM hit-test occlusion, and 375px layout.
-- **Coverage blocked / remaining:** additional invalid CIDR classes, desktop alert placement, keyboard/screen-reader behavior, DNS rebinding/mixed answers, and alternate runtime remain open. Firefox app workflow, additional viewport widths, role-limited scope behavior, page races, independent DEF-001–015 retests, integrations and broad platform coverage remain incomplete. CP53 webhook delivery still requires Operator access; fresh Team Admin testing remains blocked by its suspended synthetic credential.
+- **Historical defects verified fixed:** DEF-001–004, DEF-006–009, and DEF-012–015 retain their previously recorded scoped QA-002 PASS results. DEF-010 and DEF-011 were independently retested in CP68/69 for A2A-only issuance, plane denial, task discovery/resume/cancel, persistence, settlement, and reservation release. This does not close broader role/platform coverage.
+- **Historical defects failing / unverified:** DEF-005 remains PARTIAL with SSRF behavior fail-closed for tested cases and significant DNS rebinding, HTTPS/redirect-chain, runtime, and host-contract coverage open. DEF-016–028 remain confirmed open; DEF-026 recurred in CP61. New DEF-029–031 remain confirmed open. DEF-023 remains confirmed from CP43/CP60, not retested in CP69.
+- **New findings:** no new defect in CP69. DEF-031 Low remains confirmed across MCP and A2A mobile forms; API validation stayed fail-closed. DEF-029 remains confirmed and expanded in CP65; DEF-030 remains confirmed from CP63.
+- **Coverage completed:** CP68 A2A private registration/discovery and input-required task resume/settlement; CP69 hard-refreshed input-required task cancellation, verified reservation RELEASED_UNUSED and no fixture follow-up. Both ran on enabled runtime 18084 with least-privilege keys and revocation/replay checks. Visually inspected input-required, completed, and canceled screens. CP66/67 mobile invalid-CIDR form failures remain documented.
+- **Coverage blocked / remaining:** 18445 A2A use remains blocked by disabled runtime configuration. The first CP69 attempt failed from a fixture port mismatch; it is preserved as harness evidence and the corrected flow passed. Additional invalid CIDR classes, desktop alert placement, keyboard/screen-reader behavior, DNS rebinding/mixed answers, and other runtime scenarios remain open. Firefox app workflow, additional viewport widths, role-limited scope behavior, page races, independent DEF-001–015 retests, integrations and broad platform coverage remain incomplete. CP53 webhook delivery still requires Operator access; fresh Team Admin testing remains blocked by its suspended synthetic credential.
 - **Recommended handoff:** consolidate DEF-023, DEF-029, and DEF-030 as a workspace-scope state consistency class while retaining separate member-visibility, key-list, and route-action acceptance tests.
 - **Recommended handoff:** include DEF-031 with DEF-005 as a validation UX follow-up while retaining separate SSRF/CIDR enforcement acceptance checks.
-- **Checkpoint:** [CP67](checkpoints/CP67-webkit-a2a-cidr-error-parity.md); detailed finding [DEF-031](reports/DEF-031-mcp-cidr-validation-error-hidden-by-mobile-drawer.md). CP66 MCP evidence is linked from that report; prior scope-race evidence remains in CP62–65.
+- **Checkpoint:** [CP69](checkpoints/CP69-a2a-input-required-cancel-and-reservation-release.md); [CP68](checkpoints/CP68-a2a-private-registration-task-lifecycle.md) records the completed path. CP66/67 evidence remains linked from [DEF-031](reports/DEF-031-mcp-cidr-validation-error-hidden-by-mobile-drawer.md).
 
 ## Open observations
 

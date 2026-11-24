@@ -1,0 +1,31 @@
+{
+  "source": "read-only SQLite query against isolated runtime 18084 database",
+  "results": [
+    {
+      "label": "failed initial attempt due fixture port mismatch",
+      "task_id": "tsk_01m864m1h6e0092h1jek1ddj5m",
+      "task_state": "FAILED",
+      "sub_budget_cap_micros": 5000,
+      "settled_cost_micros": 0,
+      "reservation": {
+        "id": "rsv_01m864m1h6e0092j03tp6yxa21",
+        "state": "RELEASED_UNUSED",
+        "hold_micros": 5000
+      },
+      "reservation_ledger_rows": 0
+    },
+    {
+      "label": "corrected fixture cancellation flow",
+      "task_id": "tsk_01m864pfmre0080qa9wxgecpd1",
+      "task_state": "CANCELED",
+      "sub_budget_cap_micros": 5000,
+      "settled_cost_micros": 0,
+      "reservation": {
+        "id": "rsv_01m864pfmre0080r83ca6ed0hx",
+        "state": "RELEASED_UNUSED",
+        "hold_micros": 5000
+      },
+      "reservation_ledger_rows": 0
+    }
+  ]
+}
