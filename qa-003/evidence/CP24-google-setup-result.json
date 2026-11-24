@@ -1,0 +1,19 @@
+{
+  "before": {
+    "checked": false,
+    "ariaDisabled": "true"
+  },
+  "after": {
+    "checked": true,
+    "ariaDisabled": null
+  },
+  "approvalStatus": 200,
+  "secretHttpStatus": 201,
+  "secretMetadata": {
+    "id": "sec_01m87wc1qze009yv6gwr5djyx5",
+    "name": "QA003 Google AI Studio CP24",
+    "kind": null,
+    "metadataOnly": true
+  },
+  "visible": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n3\nVault Secrets\n2\nAdapters\n2\nSealed credential \"QA003 Google AI Studio CP24\" (fingerprint ...6b6d). Plaintext cannot be read again.\nWrite-only vault credentials\n2\nSeal secret\nName\tKind\tFingerprint\tCredential ID\tActions\nQA003 Google AI Studio CP24\tAPI_KEY\t...6b6d\tsec_01m87wc1qze009yv6gwr5djyx5\t\nDelete\n\nQA003 synthetic restore credential\tAPI_KEY\t...c577\tsec_01m87byefte008yt0nt50cqj1x\t\nDelete"
+}
