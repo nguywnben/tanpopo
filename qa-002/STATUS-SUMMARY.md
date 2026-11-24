@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP97
+**Latest checkpoint:** CP98
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -334,3 +334,15 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** complete independent DEF-001–015 acceptance; DEF-005 residual SSRF acceptance; DEF-007 populated erasure/failure atomicity; DEF-016–035 regression; remote CLI with a dedicated QA token; non-empty GitOps and interrupted apply recovery; all other feature, role, browser/platform, integration and operational coverage.
 - **Recommended handoffs:** unchanged—DEF-035 with DEF-023/024/029/030, DEF-034, DEF-033, DEF-005 without weakening SSRF, and DEF-007.
 - **Checkpoint:** [CP97](checkpoints/CP97-cli-provenance-gitops-and-doctor.md); prior [CP96](checkpoints/CP96-native-passthrough-ingress-discovery.md). `GATE-REL-07` remains **BLOCKED**.
+
+
+## CP98 consolidated status update
+
+- **Historical DEF-001–015:** CP98 did not retest them. Preserve scoped QA-002 outcomes: DEF-001–004, DEF-006, DEF-008–015 have limited passing paths; DEF-005 remains partial; DEF-007 successful audit paths do not close fault atomicity/populated erasure. Full acceptance remains incomplete; no QA-001 PASS is inherited.
+- **Historical open DEF-016–035:** remain open; no defect disposition changed.
+- **New defects:** none.
+- **Coverage completed:** Tier-1 and Tier-2 scaffolds, validation and four offline cassette cases per tier; repeated byte-identical packages; supported/unsupported contract cases; explicit wildcard egress denial; tampered Wasm digest denial. All generated package fixtures remained in `/tmp`.
+- **Coverage blocked:** no CP98-specific blocker. Runtime extension installation/isolation is not represented by the offline harness. Remote CLI and native ingress blockers from CP96/97 persist.
+- **Coverage remaining:** package permission consent and install, lockfile-to-runtime persistence, actual adapter invocation, blind credential broker, live host restrictions, Wasm traps/quotas/quarantine, rollback and platform parity; all earlier unfinished feature/defect coverage remains.
+- **Recommended handoffs:** no new handoff; preserve DEF-035 with DEF-023/024/029/030 and existing DEF-034/033/005/007 priorities.
+- **Checkpoint:** [CP98](checkpoints/CP98-plugin-authoring-offline-cassettes-and-package-integrity.md); prior [CP97](checkpoints/CP97-cli-provenance-gitops-and-doctor.md). `GATE-REL-07` remains **BLOCKED**.

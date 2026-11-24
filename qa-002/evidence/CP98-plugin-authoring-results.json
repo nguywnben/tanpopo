@@ -1,0 +1,54 @@
+{
+  "source_baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "cli_build": "/tmp/qa002-tanpopo-cli",
+  "test_artifacts_directory": "/tmp/qa002-cp98-*",
+  "tier1": {
+    "extension_id": "@qa002/qa002-offline-provider",
+    "init": "PASS",
+    "validate": "VALID",
+    "offline_cassettes": {
+      "status": "PASSED",
+      "passed": 4,
+      "failed": 0,
+      "case_ids": ["ct07_stream_split_utf8_and_prefix", "ct06_sync_chat_completion", "ct16_error_401_no_secret_echo", "ct09_tool_calls_normalization"]
+    },
+    "pack": {
+      "status": "PACKED",
+      "size_bytes": 2296,
+      "sha256": "ed03df145a74c429b4fe7a6757b2df28af41ef1cd6e086c47788e9a11e10a806",
+      "two_builds_byte_identical": true
+    }
+  },
+  "tier2_wasm": {
+    "extension_id": "@qa002/qa002-wasm-sandbox",
+    "init": "PASS",
+    "validate": "VALID",
+    "entrypoint_sha256": "592e0efce3f3dd7c82ae51c5535618cceead8a4d298e9abd36a4b58e3f993567",
+    "offline_cassettes": {
+      "status": "PASSED",
+      "passed": 4,
+      "failed": 0,
+      "case_ids": ["ct07_stream_split_utf8_and_prefix", "ct06_sync_chat_completion", "ct16_error_401_no_secret_echo", "ct09_tool_calls_normalization"]
+    },
+    "pack": {
+      "status": "PACKED",
+      "size_bytes": 8750,
+      "sha256": "6c34f645937df4391aa5e909142374e59ef6adfb7bd6b1af113b40c9febfe7eb",
+      "two_builds_byte_identical": true
+    }
+  },
+  "compatibility": {
+    "contract_0_1_supported_at_core_0_2_0": {"status": "COMPATIBLE", "exit_code": 0},
+    "contract_0_1_with_only_0_2_supported": {"status": "INCOMPATIBLE", "exit_code": 22, "finding": "CONTRACT_INCOMPATIBLE"}
+  },
+  "security_negative_checks": {
+    "literal_wildcard_allowedHosts": {"status": "REJECTED", "exit_code": 14, "stdout_empty": true, "network_request_sent": false},
+    "changed_wasm_byte_without_manifest_digest_update": {"status": "REJECTED", "exit_code": 22, "stdout_empty": true, "finding": "runtime.entrypoint sha256 mismatch"}
+  },
+  "scope_limits": [
+    "No extension was installed into a Tanpopo runtime.",
+    "No real upstream or credential was used.",
+    "Runtime host isolation, secret injection, trap/quota enforcement and quarantine were not tested.",
+    "No source code or product configuration was changed."
+  ]
+}
