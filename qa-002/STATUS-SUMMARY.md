@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP100
+**Latest checkpoint:** CP101
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -369,3 +369,14 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage remaining:** full Console scope sweep, remaining roles and workspace permutations, async/error races, DEF-001–015 acceptance residuals, DEF-005 SSRF cases, DEF-007 fault/populated erase, DEF-016–036 regression, and remaining product, platform, integration, browser, accessibility and operational coverage.
 - **Recommended engineering handoffs:** CP100 evidence strengthens DEF-023’s explicit organization-scope acceptance. Keep its fix coupled to but distinct from DEF-024/029/030/035. Continue DEF-036/034/033, DEF-005 without weakening SSRF, and DEF-007 priorities.
 - **Checkpoint:** [CP100](checkpoints/CP100-console-workspace-scope-cross-surface-regression.md); previous [CP99](checkpoints/CP99-marketplace-duplicate-install-review.md). `GATE-REL-07` remains **BLOCKED**.
+
+## CP101 consolidated status update
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006, and DEF-008–015 retain only scoped QA-002 results; no QA-001 PASS is inherited. DEF-005 remains PARTIAL. DEF-007 failure atomicity and populated erasure remain UNVERIFIED.
+- **Historical defects failing / unverified:** DEF-016–036 remain open; CP101 independently reconfirmed DEF-023 in a second authorized organization. No other disposition changed.
+- **New defects:** none. No unauthorized access or cross-tenant bypass was demonstrated.
+- **Coverage completed:** real workspace organization switch and organization-only Members & Roles comparison in a second tenant; API returned four members/three projects while UI falsely showed zero; screenshot visually inspected.
+- **Coverage blocked:** none specific to this read-only Org Owner journey. The fresh Team Admin retest remains blocked by rejected retained credentials as recorded in CP100.
+- **Coverage remaining:** second-org project/environment member scope and other roles; full DEF-001–015 acceptance, DEF-005 residual SSRF, DEF-007 failure/populated erasure, DEF-016–036 retesting, and all other untested product, platform, browser, integration, security, accessibility and operations work.
+- **Recommended engineering handoffs:** add the second-organization evidence to DEF-023 acceptance; preserve explicit org-member visibility and Team Admin/tenant authorization boundaries. Continue DEF-036, DEF-035 with DEF-024/029/030, DEF-034, DEF-033, DEF-005 without weakening SSRF, and DEF-007 priorities.
+- **Checkpoint:** [CP101](checkpoints/CP101-organization-switch-membership-scope.md); previous [CP100](checkpoints/CP100-console-workspace-scope-cross-surface-regression.md). `GATE-REL-07` remains **BLOCKED**.
