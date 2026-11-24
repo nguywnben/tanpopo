@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP60
+**Latest checkpoint:** CP61
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -140,3 +140,11 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - **Coverage completed:** confirmed DEF-023 source cause and cross-scope API/UI mismatch; renewed visual review of existing CP43 contrasts; explicit-CIDR fail-closed checks for `127.1` and `localhost.` against a metadata-only fixture.
 - **Blocked:** fresh Team Admin access because CP45 intentionally suspended its credential; CP53 webhooks remain blocked on Operator credentials.
 - **Remaining:** full scope-switch matrix on remaining screens/roles; DEF-005 rebinding, multiple answers, HTTPS chains and alternate runtimes; independent historical retests; other platform/integration coverage.
+
+## CP61 consolidated defect and coverage update
+
+- **Historical DEF-001–015:** not retested; all prior scoped statuses remain. DEF-005 stays PARTIAL.
+- **Open findings:** DEF-016–028 remain open; DEF-026 reproduced again on direct IPv6 loopback. No new defect ID. QA-OBS-004 recurred.
+- **Coverage completed:** direct IPv6 literal with mismatching and exact CIDR, fixture zero-contact/positive controls, repeat sync, persistent schema lock, and screenshot inspection.
+- **Blocked:** none specific to CP61; CP53 Operator credential gap remains.
+- **Remaining:** DNS rebinding/mixed-answer races, redirect chains/HTTPS, alternate runtime, direct IPv6 grants/calls, workspace scope coverage, and all other incomplete feature/role/platform cases.
