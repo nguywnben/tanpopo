@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP65
+**Latest checkpoint:** CP67
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -31,20 +31,20 @@
 | DEF-028 | Moderate | Route Explain hardcodes `openai_compatible` and rejects healthy Ollama deployments as dialect-mismatched even when the same route completes a real Playground request. |
 | DEF-029 | Low | Access & Keys can repopulate prior environment-scoped Virtual Key metadata after a delayed response arrives under No project / No env scope. |
 | DEF-030 | Moderate | Routes & Policies can repopulate prior environment routes after a delayed response under No project / No env; stale Edit/Delete actions remain available. |
-| DEF-031 | Low | Invalid MCP CIDR reaches the API, and the 400 validation error is obscured behind the open drawer on WebKit mobile. API rejects it before persistence; no security bypass. |
+| DEF-031 | Low | Invalid MCP/A2A CIDR reaches the API, and the 400 validation error is obscured behind the open drawer on WebKit mobile. APIs reject before persistence; no security bypass. |
 
-All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns only MCP invalid-CIDR form feedback and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
+All details, reproduction steps, expected behavior, evidence and acceptance criteria are in the linked [defect reports](reports/). DEF-029 is a distinct delayed-response issue from DEF-023’s false empty organization member list. DEF-030 confirms the same general scope-race class in Routes & Policies, where stale routes expose Edit/Delete and enabled Save. DEF-031 concerns invalid-CIDR form feedback in both MCP and A2A and does not weaken or bypass API enforcement. CP47 adds a scoped loopback positive control and confirms Team Admin cross-project sync denial before fixture contact; DEF-026 captures the inconsistent first-review notice.
 
-## Latest phase: CP66
+## Latest phase: CP67
 
-- **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain only the previously recorded scoped QA-002 PASS results; they were not retested in CP66. No broader closure is implied.
+- **Historical defects verified fixed:** DEF-001–004, DEF-006–015 retain only the previously recorded scoped QA-002 PASS results; they were not retested in CP67. No broader closure is implied.
 - **Historical defects failing / unverified:** DEF-005 remains PARTIAL with SSRF behavior fail-closed for tested cases and significant DNS rebinding, HTTPS/redirect-chain, runtime, and host-contract coverage open. DEF-016–028 remain confirmed open; DEF-026 recurred in CP61. DEF-023 remains confirmed from CP43/CP60, not retested in CP64.
-- **New findings:** DEF-031 Low confirmed: invalid `127.0.0.1/33` reaches the MCP API, which correctly rejects it with 400, but on WebKit mobile the error is rendered behind the open drawer. No server row or integration endpoint contact; security enforcement held. DEF-029 remains confirmed and was expanded in CP65; DEF-030 remains confirmed from CP63.
-- **Coverage completed:** visually inspected CP66 WebKit mobile form and failure screenshots; observed private CIDR toggle/field; verified invalid CIDR request payload, exact API rejection, no persistence, no external endpoint contact, DOM hit-test occlusion, and 375px layout without horizontal overflow.
-- **Coverage blocked / remaining:** A2A invalid-CIDR parity, more invalid CIDR classes, desktop alert placement, DNS rebinding/mixed answers, and alternate runtime remain open. Firefox app workflow, additional viewport widths, role-limited scope behavior, page races, independent DEF-001–015 retests, integrations and broad platform coverage remain incomplete. CP53 webhook delivery still requires Operator access; fresh Team Admin testing remains blocked by its suspended synthetic credential.
+- **New findings:** DEF-031 Low reconfirmed and expanded: both MCP and A2A forms submit invalid `127.0.0.1/33`; each API rejects with 400, but on WebKit mobile the error text is behind the open drawer. No records persist and neither integration endpoint is contacted; enforcement held. DEF-029 remains confirmed and expanded in CP65; DEF-030 remains confirmed from CP63.
+- **Coverage completed:** visually inspected CP66 MCP and CP67 A2A WebKit mobile form/failure screenshots; verified field toggles, request payloads, exact API rejections, no persistence, no integration endpoint contact, DOM hit-test occlusion, and 375px layout.
+- **Coverage blocked / remaining:** additional invalid CIDR classes, desktop alert placement, keyboard/screen-reader behavior, DNS rebinding/mixed answers, and alternate runtime remain open. Firefox app workflow, additional viewport widths, role-limited scope behavior, page races, independent DEF-001–015 retests, integrations and broad platform coverage remain incomplete. CP53 webhook delivery still requires Operator access; fresh Team Admin testing remains blocked by its suspended synthetic credential.
 - **Recommended handoff:** consolidate DEF-023, DEF-029, and DEF-030 as a workspace-scope state consistency class while retaining separate member-visibility, key-list, and route-action acceptance tests.
 - **Recommended handoff:** include DEF-031 with DEF-005 as a validation UX follow-up while retaining separate SSRF/CIDR enforcement acceptance checks.
-- **Checkpoint:** [CP66](checkpoints/CP66-webkit-mcp-cidr-form-validation.md); detailed finding [DEF-031](reports/DEF-031-mcp-cidr-validation-error-hidden-by-mobile-drawer.md). Prior scope-race evidence remains in CP62–65.
+- **Checkpoint:** [CP67](checkpoints/CP67-webkit-a2a-cidr-error-parity.md); detailed finding [DEF-031](reports/DEF-031-mcp-cidr-validation-error-hidden-by-mobile-drawer.md). CP66 MCP evidence is linked from that report; prior scope-race evidence remains in CP62–65.
 
 ## Open observations
 

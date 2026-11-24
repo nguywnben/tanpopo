@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP66 (WebKit mobile MCP CIDR validation and error feedback).
+**Latest checkpoint:** CP67 (WebKit mobile A2A CIDR error parity).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -106,3 +106,4 @@ Use disposable local databases and synthetic provider/integration fixtures. The 
 | CP64 | WebKit mobile Access & Keys scope race | FAIL DEF-029 reconfirmed at 375×844: ten old environment key rows appeared after a held response was released under No project / No env. Screenshots visually inspected; no horizontal overflow. See CP64. |
 | CP65 | Access & Keys cross-project delayed-response race | FAIL DEF-029 expanded: ten secondary-project rows appeared under a different selected project/environment; refresh returned to runtime-default scope (QA-OBS-009). No auth bypass demonstrated. See CP65. |
 | CP66 | WebKit mobile MCP CIDR validation and error feedback | FAIL DEF-031: invalid `/33` was safely rejected with HTTP 400/no persistence, but feedback was obscured behind the open drawer. See CP66. |
+| CP67 | WebKit mobile A2A CIDR validation feedback | FAIL DEF-031 expanded to A2A: invalid `/33` was rejected with HTTP 400/no persistence, but feedback was obscured behind the drawer. See CP67. |
