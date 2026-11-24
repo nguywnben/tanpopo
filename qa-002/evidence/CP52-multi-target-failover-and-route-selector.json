@@ -1,0 +1,77 @@
+{
+  "checkpoint": "CP52",
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "environment": "isolated SQLite runtime on 127.0.0.1:18086 behind local HTTPS proxy",
+  "scope": {
+    "project": "QA002 CP43 Secondary Project",
+    "environment": "qa002-cp43-env2"
+  },
+  "route": {
+    "slug": "qa002-cp52-failover-route",
+    "strategy": "PRIORITY_FAILOVER",
+    "target_order": [
+      {
+        "priority": 1,
+        "deployment_id": "dpl_01m85w0efre00b9qsa1dcwkygw",
+        "connection": "QA002 CP51 synthetic Ollama scope",
+        "loopback_fixture_port": 19180,
+        "synthetic_result": "HTTP 503"
+      },
+      {
+        "priority": 2,
+        "deployment_id": "dpl_01m85wtv27e008d3kn52h3evdw",
+        "connection": "QA002 CP52 backup Ollama",
+        "loopback_fixture_port": 19181,
+        "synthetic_result": "HTTP 200 streaming completion"
+      }
+    ]
+  },
+  "playground": {
+    "route": "qa002-cp52-failover-route",
+    "response_status": 200,
+    "displayed_completion": "Backup deployment completed the synthetic request.",
+    "fixture_requests": [
+      {"port": 19180, "path": "/v1/chat/completions", "stream": true, "result": "503"},
+      {"port": 19181, "path": "/v1/chat/completions", "stream": true, "result": "200"}
+    ],
+    "persistent_trace": {
+      "id": "trc_01m85x1kake00bdjt4xt8vxzxn",
+      "http_status": 200,
+      "error_code": null,
+      "failover_attempts": 2,
+      "selected_deployment_id": "dpl_01m85wtv27e008d3kn52h3evdw",
+      "waterfall": [
+        {"stage": "RouteAttempt", "deployment_id": "dpl_01m85w0efre00b9qsa1dcwkygw", "status": "http_503"},
+        {"stage": "RouteAttempt", "deployment_id": "dpl_01m85wtv27e008d3kn52h3evdw", "status": "ok"}
+      ]
+    },
+    "playground_trace_card": "Trace metadata pending… (recurrence of DEF-017)"
+  },
+  "route_selector_observation": {
+    "number_of_distinct_healthy_deployments": 3,
+    "visible_label_for_each": "qa002:latest (ON_PREM · Healthy)",
+    "visible_provider_or_connection_identity": false,
+    "visible_deployment_id": false,
+    "api_route_order_was_persistent_and_distinct": true,
+    "classification": "DEF-027 confirmed UX/configuration defect"
+  },
+  "cleanup": {
+    "playground_ephemeral_key_revoked_in_console": true,
+    "database_state": "REVOKED",
+    "active_inference_streams_severed": 0,
+    "synthetic_prompt_content_recorded": false
+  },
+  "screenshots": [
+    "CP52-backup-connection-form.png",
+    "CP52-backup-connection-created.png",
+    "CP52-backup-connection-probed.png",
+    "CP52-backup-deployment-created.png",
+    "CP52-route-deployment-options.png",
+    "CP52-route-two-targets-selected.png",
+    "CP52-route-failover-created.png",
+    "CP52-playground-failover-before.png",
+    "CP52-playground-failover-result.png",
+    "CP52-key-list-before-revoke.png",
+    "CP52-key-revoked.png"
+  ]
+}
