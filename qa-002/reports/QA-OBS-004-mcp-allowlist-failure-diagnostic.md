@@ -7,6 +7,8 @@
 
 CP40 repeated the user-visible generic 502 for `localhost` with a CIDR that did not match the selected IPv6 peer, or allowed only the unselected IPv4 result. The explicit `::1/128` positive control synchronized successfully. The fixture confirms the blocked cases made no request and successful case used peer `::1`; this supports enforcement but does not expose the exact internal rejection reason. See `checkpoints/CP40-operator-and-hostname-cidr-boundary.md` and `evidence/CP40-operator-and-dns-allowlist.json`.
 
+CP41 also returned the same generic 502 for a 307 redirect and left the configured row Active. A direct request to the redirect target succeeded; neither same-CIDR nor cross-CIDR redirect was followed. This narrows the observation to safe but non-actionable errors on refused syncs. Whether redirects are intentionally unsupported and whether “Active” denotes configured state remain unresolved.
+
 ## Reproduction and facts
 
 1. Register an isolated MCP server at `http://127.0.0.1:19110/mcp`, check “Allow private or loopback endpoint”, and configure `127.0.0.2/32` (the reachable fixture is `127.0.0.1`). Registration returns 201 and the registry displays the server as `Active` with zero tools.
