@@ -1,0 +1,12 @@
+{
+  "organization": {
+    "name": "QA-003 Backup Retest CP02",
+    "slug": "qa003-backup-cp02",
+    "id": "org_01m87b4kx8e00a53dy88sak10c",
+    "version": 1
+  },
+  "uiRowVisible": true,
+  "apiStatus": 200,
+  "apiReadback": true,
+  "bodyText": "Operations\n\nProvision isolated tenant organizations and execute irreversible cryptographic erasure.\n\nRefresh\nCreate organization\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\n2\nWebhooks\nTenant organizations\n2\nOrganization\tMin extension trust\tFour-eyes approval\tCreated\tActions\n\nQA-003 Backup Retest CP02\nqa003-backup-cp02 · org_[redacted]\n\tAny Approved\tDisabled\tNov 24, 2026, 5:54:56 PM\t\nSwitch\nCrypto-shred\n\n\nDefault Organization\nActive\ndefault-organization · org_[redacted]\n\tAny Approved\tDisabled\tNov 24, 2026, 5:51:04 PM\t\nSwitch\nCrypto-shred"
+}

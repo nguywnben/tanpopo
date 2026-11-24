@@ -1,0 +1,16 @@
+{
+  "projectFailure": {
+    "status": 500,
+    "code": "internal_error",
+    "message": "failed creating project",
+    "exists": false
+  },
+  "environmentFailure": {
+    "status": 500,
+    "code": "internal_error",
+    "message": "failed creating environment",
+    "exists": false
+  },
+  "projectCount": 1,
+  "environmentCount": 1
+}

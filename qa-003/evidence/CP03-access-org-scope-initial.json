@@ -1,0 +1,6 @@
+{
+  "url": "http://127.0.0.1:18103/access/virtual-keys",
+  "heading": "Access & Keys",
+  "scope": "Default Organization\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "mainText": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\n1\nEnvironment Virtual Keys\n0\nNo Virtual Keys in this environment\nIssue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic.\nIssue key"
+}

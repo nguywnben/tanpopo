@@ -1,0 +1,25 @@
+{
+  "email": "qa003-enrollment-journey-04@example.invalid",
+  "scope": "Default Organization\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+  "pendingMemberCreated": true,
+  "tokenNeverWrittenToEvidence": true,
+  "activationUrl": "http://127.0.0.1:18103/overview",
+  "activationText": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nqa003-enrollment-journey-04@example.invalid\nDeveloper\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nOverview\n\nUpdated 6:26:15 PM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.\nAll systems nominal No active operational alerts or pending remediation items.",
+  "activated": true,
+  "loginAfterActivation": true,
+  "loginPath": "http://127.0.0.1:18103/overview",
+  "screenshots": [
+    "CP03-member-enrollment-result.png",
+    "CP03-member-login-overview.png"
+  ],
+  "adminReadback": {
+    "status": 200,
+    "total": 6,
+    "memberFound": true,
+    "hasPassword": true,
+    "enrollmentPending": false,
+    "role": [
+      "DEVELOPER"
+    ]
+  }
+}
