@@ -1,10 +1,19 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP111
+**Latest checkpoint:** CP112
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
+
+## Latest phase: CP112 — Google provider probe and Cloud egress-path retest
+
+- **Historical defects:** DEF-016–038 remain preserved/open; no disposition changed. DEF-001–015 retain scoped QA-002 outcomes only; DEF-005 partial, DEF-007 fault atomicity/erasure gaps remain. No QA-001 PASS is inherited.
+- **New defects:** none. `upstream_unreachable` remains QA-OBS-017/environmental; historical `probe_runtime_unavailable` remains UNVERIFIED on RC4.
+- **Coverage completed:** real Chromium probe on the first of two duplicate Google rows returned HTTP 200/`valid=false`/`upstream_unreachable`, 2068 ms and left it Unverified. Forced direct no-proxy request timed out before TCP/TLS; the configured proxy reached the same Google model-list endpoint with an environment-bound QA key (HTTP 200, one model). The frozen Gemini probe source uses that endpoint and host-blind header injection. Screenshot visually inspected. Stored connection key equality to the environment key was not established.
+- **Coverage blocked/remaining:** guarded app-to-Google direct egress remains blocked in this managed Cloud path; no inference sent. Need a runtime with supported direct egress for app probe/inference and a matching-config three-runtime comparison; probe_runtime_unavailable remains untested on RC4. Do not bypass SSRF checks or ambient-proxy restrictions.
+- **Recommended handoffs:** no new product handoff; retain QA-OBS-017 as infrastructure. Continue DEF-038/007 and existing product defects, including DEF-032 duplicate identity.
+- **Checkpoint:** [CP112](checkpoints/CP112-google-provider-egress-path-retest.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Latest phase: CP111 — Cross-browser execution environment diagnostics
 

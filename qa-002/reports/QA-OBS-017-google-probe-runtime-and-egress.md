@@ -47,3 +47,7 @@ QA-002 CP17 on RC4 independently reports the app probe `upstream_unreachable` wh
 - To resolve the current Cloud block, run the exact RC4 app probe and a minimal Google request in an environment where guarded direct egress is supported, while retaining explicit target validation. Do not route around SSRF checks or infer product failure from the Cloud proxy/direct split.
 
 QA-OBS-017 remains an environment observation. GATE-REL-07 remains BLOCKED.
+
+## CP112 retest — proxy path succeeds, broker direct path remains unreachable
+
+CP112 used the actual first visible Google connection action on 18084 and again received HTTP 200 / `valid=false` / `upstream_unreachable` with the same safe message; the row remained Unverified. In the same managed environment, a forced direct request with ambient proxy disabled timed out before TCP/TLS, while the configured-proxy request to the same `GET /v1beta/models?pageSize=1` endpoint returned HTTP 200 using the environment-bound QA Google key. Frozen RC4 Gemini source builds that exact GET and supplies `x-goog-api-key` by host-blind injection. These fresh paired controls strengthen the Cloud direct-egress explanation for `upstream_unreachable`; no product defect is assigned. The secret bound to the Console connection was not compared with the environment key, so that equality remains unknown. No inference or proxy routing through Tanpopo was attempted. See [CP112](../checkpoints/CP112-google-provider-egress-path-retest.md) and sanitized evidence [CP112 egress comparison](../evidence/CP112-google-egress-comparison.json).
