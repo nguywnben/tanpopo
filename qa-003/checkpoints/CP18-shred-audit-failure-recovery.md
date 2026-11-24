@@ -1,6 +1,6 @@
 # CP18 — Tenant crypto-shred after audit-storage failure
 
-**Baseline:** RC5 `3423d4f523ef0ac77469a1201b8b753d1d31c902`  
+**Baseline:** RC5 `3423d4f523ef0ac77469a1201b8b753d1d31c902`
 **Status:** injected SQLite audit failures and recovery tested on isolated clones; QA-003 remains in progress. `GATE-REL-07` remains **BLOCKED**.
 
 ## Reproduction and actual result

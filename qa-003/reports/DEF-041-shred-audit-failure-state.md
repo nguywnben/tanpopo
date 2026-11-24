@@ -1,8 +1,8 @@
 # DEF-041 — Crypto-shred audit failure leaves an unlabeled destructive partial state
 
-**Severity:** Moderate  
-**Status:** Confirmed in an isolated RC5 SQLite fault-injection scenario  
-**Baseline:** `3423d4f523ef0ac77469a1201b8b753d1d31c902`  
+**Severity:** Moderate
+**Status:** Confirmed in an isolated RC5 SQLite fault-injection scenario
+**Baseline:** `3423d4f523ef0ac77469a1201b8b753d1d31c902`
 **Area:** Operations → Organizations, organization/project/key lifecycle, audit and tenant-erasure operations
 
 ## Summary
