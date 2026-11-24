@@ -26,3 +26,7 @@ An operator may retry a deterministic configuration error or investigate endpoin
 ## Follow-up evidence needed
 
 Confirm documented MCP server state semantics and the intended safe diagnostic contract for allowlist denials. If administrators are expected to act on policy rejection, add a localized actionable error class and a visible failed-sync/configuration status; otherwise document why generic `upstream_error` and `Active` are intentional.
+
+## CP103 alternate-runtime positive control
+
+On isolated runtime 18086, the same local MCP fixture and endpoint were registered twice with different explicit allowlists. Sync with `127.0.0.2/32` returned HTTP 502 and the fixture received zero requests. Sync with the matching `127.0.0.1/32` returned HTTP 200, and the fixture recorded `initialize`, `notifications/initialized`, and `tools/list`. This establishes a supported same-runtime positive control and a fail-closed CIDR mismatch. The generic `mcp_sync_failed` message still does not explain that the resolved address was outside the submitted range. See [CP103](../checkpoints/CP103-alternate-runtime-private-cidr-positive-and-negative-control.md).

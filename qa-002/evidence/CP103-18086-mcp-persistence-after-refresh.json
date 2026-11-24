@@ -1,0 +1,41 @@
+{
+  "runtime": 18086,
+  "refresh_route": "/mcp/servers",
+  "api": {
+    "status": 200,
+    "records": [
+      {
+        "slug": "qa002-cp103-cidr-allow",
+        "id": "mcp_01m86mjbsme00av56w1bgp09rb",
+        "allow_private_ip": true,
+        "state": "SCHEMA_DRIFT_LOCKED",
+        "tool_count": 1
+      },
+      {
+        "slug": "qa002-cp103-cidr-deny",
+        "id": "mcp_01m86mfmpse00af9r77ns2w99t",
+        "allow_private_ip": true,
+        "state": "ACTIVE",
+        "tool_count": 0
+      }
+    ]
+  },
+  "fixture": {
+    "request_count": 3,
+    "requests": [
+      {
+        "method": "initialize",
+        "path": "/mcp"
+      },
+      {
+        "method": "notifications/initialized",
+        "path": "/mcp"
+      },
+      {
+        "method": "tools/list",
+        "path": "/mcp"
+      }
+    ]
+  },
+  "ui": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa002-cp17-owner@example.invalid\nOperator, Org Owner\nQA002 Fresh Google Test\n/\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\n6\nA2A Agents & Active Tasks\nRegistered MCP servers\n6\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA002 CP103 alternate runtime CIDR allow\nqa002-cp103-cidr-allow\n\thttp://127.0.0.1:19202/mcp\tSchema Drift Locked\t1\t\nSync tools\n\n\nQA002 CP103 alternate runtime CIDR deny\nqa002-cp103-cidr-deny\n\thttp://127.0.0.1:19202/mcp\tActive\t0\t\nSync tools\n\n\nQA002 CP24 Synthetic MCP\nqa002-cp24-server\n\thttp://127.0.0.1:19109/mcp\tActive\t1\t\nSync tools\n\n\nQA002 CP25 allowed control\nqa002-cp25-allowed-control\n\thttp://127.0.0.1:19110/mcp\tSchema Drift Locked\t1\t\nSync tools\n\n\nQA002 CP25 CIDR mismatch fixture\nqa002-cp25-denied\n\thttp://127.0.0.1:19110/mcp\tActive\t0\t\nSync tools\n\n\nQA002 CP28 Synthetic Approval Server\nqa002-cp28-approval-server\n\thttp://127.0.0.1:19112/mcp\tActive\t1\t\nSync tools"
+}

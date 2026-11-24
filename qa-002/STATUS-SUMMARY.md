@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP102
+**Latest checkpoint:** CP103
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -16,6 +16,17 @@
 - **Coverage remaining:** restore authorized 18085 access or use a suitable isolated runtime, configure matching Google adapter/connection in the test instances, and exercise an identical probe only where supported egress permits. Continue all other QA in parallel.
 - **Recommended engineering handoffs:** unchanged. Continue DEF-005 without weakening SSRF, and prioritize DEF-023/029/030/035 workspace consistency, DEF-034 revocation, DEF-033 budget semantics, and DEF-007 audit atomicity.
 - **Checkpoint:** [CP102](checkpoints/CP102-google-provider-runtime-inventory.md); evidence links are listed there. `GATE-REL-07` remains **BLOCKED**.
+
+
+## Latest phase: CP103 — alternate-runtime private CIDR controls
+
+- **Historical defects verified fixed:** DEF-001–004, DEF-006 and DEF-008–015 remain scoped QA-002 results only; DEF-005 remains PARTIAL, DEF-007 failure atomicity/populated erasure remain UNVERIFIED. No QA-001 PASS is inherited.
+- **Historical defects failing/unverified:** DEF-016–036 remain open; DEF-023 was reconfirmed in CP101. No historical defect status otherwise changed.
+- **New defects:** none.
+- **Coverage completed:** on isolated runtime 18086, actual Chromium registration and synchronization of the same loopback fixture with an out-of-range `/32` and a matching `/32`; the first remained at zero fixture contacts/zero tools, the matching control contacted the fixture and synced one tool. Both records persisted after refresh. Screenshots visually inspected.
+- **Coverage blocked / remaining:** DNS rebinding, mixed DNS answers, redirect chains/other statuses, resolver races, additional transports/hosts, A2A alternate-runtime CIDR pair, roles, browsers and platforms remain open. `probe_runtime_unavailable` remains UNVERIFIED on RC4; QA-OBS-017 retains Cloud egress classification.
+- **Recommended engineering handoffs:** preserve explicit CIDR enforcement. QA-OBS-004’s generic failed-sync message may be reviewed for actionable diagnosis without exposing unsafe details. Continue current high-impact defect priorities in the register.
+- **Checkpoint:** [CP103](checkpoints/CP103-alternate-runtime-private-cidr-positive-and-negative-control.md). `GATE-REL-07` remains **BLOCKED**.
 
 ## Historical defects DEF-001–015
 
