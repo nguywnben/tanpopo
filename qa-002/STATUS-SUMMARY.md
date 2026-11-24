@@ -1,7 +1,7 @@
 # QA-002 consolidated status summary
 
 **Frozen baseline:** `40bba5b55c2da6fc00b107b315c9b3167fb20169`  
-**Latest checkpoint:** CP48
+**Latest checkpoint:** CP49
 **Release gate:** `GATE-REL-07 BLOCKED`  
 **QA state:** In progress; coverage remains incomplete. QA-001 results are not inherited.
 
@@ -39,12 +39,13 @@ All details, reproduction steps, expected behavior, evidence and acceptance crit
 - QA-OBS-006: trace and settlement identifiers differ; correlation contract unresolved.
 - QA-OBS-007: IPv4-mapped private endpoint notation rejected; supported endpoint contract unresolved.
 - QA-OBS-008: MCP Hub org-wide list shown without project labels; global vs selected-project presentation contract unresolved.
+- QA-OBS-009: manual project/environment selection returns to the runtime-selected default after refresh; workspace persistence contract unresolved.
 
 ## Coverage
 
-- **Completed in CP43–48:** real Chromium scope switching across organization-only, project/no-environment, project/environment and a second project; navigation/refresh; visually inspected Access, FinOps, Routes, Traces, Playground, MCP, A2A, Overview, Providers, Models, Extensions and Security states; API/persisted-state comparison for members and budgets; Models no-environment create attempt generated validation but no mutation; real Team Admin sessions confirmed project chooser/MCP filtering and 403 on different-project reads/sync. CP47 owner sync contacted only the allowlisted synthetic fixture, visually exposed the first-schema lock/status mismatch, and owner pin resolved it. CP48 delayed a project1 FinOps budget response during a real workspace switch; skeletons replaced old rows and the selected project rows appeared after settlement.
-- **Blocked:** no CP43–48 execution capability blocked. Organization-only policy editing was not attempted because the UI requires project/environment and its intended contract remains unclear. Google adapter/runtime failures and RC4 artifact verification remain as recorded in prior checkpoints.
-- **Remaining:** broader independent retest of DEF-001–026 on additional roles/platforms; full non-owner cross-project authorization; workspace transitions under latency and failure; organization policy contract; multi-project MCP labeling/actions and first-discovery/drift counts; scope races outside FinOps and failure/refresh recovery; effective budget display plus isolated spend/enforcement regression; remaining screens, business workflows, browser/platform modes, integrations and operational failures. See [coverage matrix](COVERAGE-MATRIX.md) for detailed PASS/FAIL/BLOCKED/UNVERIFIED entries.
+- **Completed in CP43–49:** real Chromium scope switching across organization-only, project/no-environment, project/environment and a second project; navigation/refresh; visually inspected Access, FinOps, Routes, Traces, Playground, MCP, A2A, Overview, Providers, Models, Extensions and Security states; API/persisted-state comparison for members and budgets; Models no-environment create attempt generated validation but no mutation; real Team Admin sessions confirmed project chooser/MCP filtering and 403 on different-project reads/sync. CP47 owner sync contacted only the allowlisted synthetic fixture, visually exposed the first-schema lock/status mismatch, and owner pin resolved it. CP48 delayed a project1 FinOps budget response during a real workspace switch; skeletons replaced old rows and the selected project rows appeared after settlement. CP49 confirmed refresh returns a manually selected project to the fresh-login/runtime default; the affected FinOps rows changed with scope and remained persisted, leaving preference behavior as QA-OBS-009.
+- **Blocked:** no CP43–49 execution capability blocked. Organization-only policy editing was not attempted because the UI requires project/environment and its intended contract remains unclear. Google adapter/runtime failures and RC4 artifact verification remain as recorded in prior checkpoints.
+- **Remaining:** broader independent retest of DEF-001–026 on additional roles/platforms; full non-owner cross-project authorization; workspace transitions under latency and failure; organization policy contract; multi-project MCP labeling/actions and first-discovery/drift counts; scope races outside FinOps and delayed/error refresh recovery; workspace persistence preference contract; effective budget display plus isolated spend/enforcement regression; remaining screens, business workflows, browser/platform modes, integrations and operational failures. See [coverage matrix](COVERAGE-MATRIX.md) for detailed PASS/FAIL/BLOCKED/UNVERIFIED entries.
 
 ## Recommended engineering handoffs
 

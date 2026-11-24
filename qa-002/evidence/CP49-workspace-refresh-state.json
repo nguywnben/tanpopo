@@ -1,0 +1,27 @@
+{
+  "checkpoint": "CP49",
+  "baseline_commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "browser": "Chromium via local HTTPS proxy; 1440x900",
+  "role": "synthetic ORG_OWNER",
+  "screen": "FinOps → Budgets & Holds",
+  "fresh_login_scope": "QA002 CP43 Secondary Project / qa002-cp43-env2",
+  "manual_scope_before_refresh": "QA002 CP39 Tenant Project / qa002-cp39-env",
+  "before_refresh": {
+    "visible_budget_rows": 2,
+    "scopes": ["project1 environment", "project1"],
+    "visual_evidence": "CP49-finops-before-refresh.png"
+  },
+  "after_refresh": {
+    "selected_scope": "QA002 CP43 Secondary Project / qa002-cp43-env2",
+    "visible_budget_rows": 0,
+    "empty_state": "No budgets configured",
+    "visual_evidence": "CP49-finops-after-refresh.png"
+  },
+  "persistence_state": "No budget mutation was performed; only browser scope changed. The persisted project1 rows were visible again before refresh and absent from the project2-scoped view after refresh.",
+  "classification": "QA-OBS-009: observed reload to the runtime/fresh-login default workspace. Whether manual scope should persist across refresh is not specified by the available product contract; not classified as a defect.",
+  "limits": [
+    "One owner account, one browser, one route, and two projects.",
+    "No independent session preference or cross-device contract was found in this test.",
+    "DEF-024 remains confirmed: the organization budget is not shown in this project-scoped FinOps view."
+  ]
+}

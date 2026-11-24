@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP48 (FinOps scope switching under delayed response).
+**Latest checkpoint:** CP49 (workspace default after refresh).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -25,6 +25,7 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [DEF-024](reports/DEF-024-finops-hides-effective-organization-budget-in-project-scope.md) — confirmed project FinOps view hides a persisted, effective organization ceiling.
 - [DEF-025](reports/DEF-025-model-deployment-drawer-unavailable-without-environment.md) — confirmed low-severity Models form dead end without an active environment.
 - [DEF-026](reports/DEF-026-mcp-initial-schema-approval-count-message.md) — confirmed MCP sync success copy omits first-review locks while discovered schema remains locked.
+- [QA-OBS-009](reports/QA-OBS-009-workspace-default-after-refresh.md) — workspace selection resets to the runtime-selected default after refresh; persistence contract unresolved.
 - [QA-OBS-008](reports/QA-OBS-008-mcp-hub-organization-wide-list-scope-label.md) — MCP Hub organization-wide list has no project labels; intended UI scope is unresolved.
 - `reports/` — phase reports, new defect findings (DEF-016 onward), and explicitly unclassified QA observations.
 
