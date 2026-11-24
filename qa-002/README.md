@@ -3,7 +3,7 @@
 **Workspace:** branch `qa/qa-002-regression`, based on `40bba5b55c2da6fc00b107b315c9b3167fb20169` (2026-11-24).
 **Scope:** independent regression; do not modify Tanpopo implementation.
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
-**Latest checkpoint:** CP85 (Operations empty-organization crypto-shred and audit chain).
+**Latest checkpoint:** CP86 (Webhook delivery and subscription lifecycle).
 
 This workspace is separate from QA-001. Historical evidence is reference material only; no QA-001 PASS is inherited. QA-001 remains the immutable record at branch `qa/qa-001-handoff-cp65`, commit `d994f82128f0e78a4e7bb7dd4ecd705cee60d85f` in the sibling checkout `/workspace/tanpopo`.
 
@@ -11,6 +11,7 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 
 - [Consolidated status summary](STATUS-SUMMARY.md)
 
+- [CP86 — Webhook delivery and subscription lifecycle](checkpoints/CP86-webhook-delivery-and-subscription-lifecycle.md)
 - [CP85 — Operations organization crypto-shred](checkpoints/CP85-operations-org-crypto-shred.md)
 
 - [Baseline and environment CP00](checkpoints/CP00-baseline.md)
@@ -49,7 +50,9 @@ This workspace is separate from QA-001. Historical evidence is reference materia
 - [DEF-032](reports/DEF-032-provider-connections-indistinguishable-when-duplicate.md) — distinct provider records can be indistinguishable in the UI when duplicate display values exist.
 - [QA-OBS-013](reports/QA-OBS-013-provider-connection-scope-labels.md) — Provider Connections organization-wide listing has unresolved owner-project labeling.
 - [DEF-033](reports/DEF-033-finops-create-budget-reuses-stale-revision.md) — Create budget can update a matching ceiling once, then fails with a stale revision.
+- [DEF-034](reports/DEF-034-webhook-subscription-cannot-be-revoked.md) — registered webhook subscriptions have no product UI/API revoke path.
 - [QA-OBS-014](reports/QA-OBS-014-finops-empty-state-session-discrepancy.md) — conflicting pre-write FinOps empty/one-row captures lack an API baseline.
+- [QA-OBS-015](reports/QA-OBS-015-cloud-egress-blocks-guarded-webhook-delivery.md) — direct-egress limitation blocks live delivery from the managed Cloud runtime; no product delivery defect inferred.
 - [DEF-025](reports/DEF-025-model-deployment-drawer-unavailable-without-environment.md) — confirmed low-severity Models form dead end without an active environment.
 - [DEF-026](reports/DEF-026-mcp-initial-schema-approval-count-message.md) — confirmed MCP sync success copy omits first-review locks while discovered schema remains locked.
 - [QA-OBS-009](reports/QA-OBS-009-workspace-default-after-refresh.md) — workspace selection resets to the runtime-selected default after refresh; persistence contract unresolved.
