@@ -18,6 +18,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP12 Developer role and catalog consistency](checkpoints/CP12-developer-role-and-catalog-consistency.md)
 - [CP13 Team Admin project boundary](checkpoints/CP13-team-admin-project-boundary.md)
 - [CP14 Security Reviewer audit workflow](checkpoints/CP14-security-reviewer-audit-workflow.md)
+- [CP15 targeted kill-switch lifecycle](checkpoints/CP15-targeted-kill-switch-lifecycle.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)

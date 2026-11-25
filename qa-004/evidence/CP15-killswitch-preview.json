@@ -1,0 +1,6 @@
+{
+  "target_level": "VIRTUAL_KEY",
+  "target_is_test_key": true,
+  "body": "Trigger emergency kill switch\nPropagates immediately across snapshots and writes an immutable audit event.\nTarget level\nVirtual key\nTarget ID\n∙ Required\nPreview blast radius\nEstimated blast radius\n1 orgs · 1 projects · 1 virtual keys · 1 connections\nReason (minimum 5 characters)\n∙ Required\nAbort active streams immediately\nSevers live SSE inference and MCP streams using this entity.\nCancel\nReview & trigger",
+  "requests": []
+}

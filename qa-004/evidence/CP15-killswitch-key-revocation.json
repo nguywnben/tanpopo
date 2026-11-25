@@ -1,0 +1,46 @@
+{
+  "revocationResponses": [
+    {
+      "path": "/admin/v1/virtual-keys/vky_01m89arwbze00bdce6k9f34q2h/revoke",
+      "method": "POST",
+      "status": 200,
+      "state": null,
+      "error": null
+    },
+    {
+      "path": "/admin/v1/virtual-keys/vky_01m89awq1te00938c4ybxn9st9/revoke",
+      "method": "POST",
+      "status": 200,
+      "state": null,
+      "error": null
+    },
+    {
+      "path": "/admin/v1/virtual-keys/vky_01m89b4swce008f60aq9y5dnfx/revoke",
+      "method": "POST",
+      "status": 200,
+      "state": null,
+      "error": null
+    }
+  ],
+  "ownerPersistentReadback": {
+    "status": 200,
+    "keys": [
+      {
+        "name": "QA004 kill-switch unaffected comparison",
+        "state": "REVOKED",
+        "version": 2
+      },
+      {
+        "name": "QA004 kill-switch canary verified",
+        "state": "REVOKED",
+        "version": 2
+      },
+      {
+        "name": "QA004 kill-switch canary",
+        "state": "REVOKED",
+        "version": 2
+      }
+    ]
+  },
+  "allThreeRevoked": true
+}
