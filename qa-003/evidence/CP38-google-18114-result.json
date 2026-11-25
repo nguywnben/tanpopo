@@ -1,0 +1,21 @@
+{
+  "port": 18114,
+  "providerInferenceInvoked": false,
+  "before": "QA003 Google Runtime 18114 (fjbxeta5)\nhttps://generativelanguage.googleapis.com\n\tadp_01m881j963e00bcs2whyh6nye9\tUS \u00b7 Commercial\tUnverified\tapi_key: ...32b3\t",
+  "probe": {
+    "http_status": 200,
+    "valid": false,
+    "failure_code": "upstream_unreachable",
+    "sanitized_message": "upstream connection could not be reached",
+    "latency_ms": 2078
+  },
+  "screen": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n4\nVault Secrets\n2\nAdapters\n2\nQA003 Google Runtime 18114: upstream connection could not be reached\nConfigured connections\n4\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA003 Google Runtime 18114 (fjbxeta5)\nhttps://generativelanguage.googleapis.com\n\tadp_01m881j963e00bcs2whyh6nye9\tUS \u00b7 Commercial\tUnverified\tapi_key: ...32b3\t\n\n\nQA003 SSRF redirect boundary (8k78zaaf)\nhttp://127.0.0.1:19189\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM \u00b7 Self-hosted\tUnverified\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM \u00b7 Self-hosted\tDisabled\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (4hst80xy)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM \u00b7 Self-hosted\tUnverified\tNone bound\t",
+  "cleanupConnection": 204,
+  "secret_row_found": true,
+  "cleanupSecret": 204,
+  "extension": {
+    "approval_status": 200,
+    "installed_state": "Active",
+    "evidence": "CP38-google-18114-installed.png"
+  }
+}

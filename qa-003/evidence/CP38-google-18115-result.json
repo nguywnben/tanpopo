@@ -1,0 +1,40 @@
+{
+  "port": 18115,
+  "providerInferenceInvoked": false,
+  "extension": {
+    "initial": "Google Gemini Official Adapter\n@tanpopo/gemini · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Google Gemini API (contents, systemInstruction, functionDeclarations/functionCall, streamGenerateContent?alt=sse, blind x-goog-api-key header injection without ?key= query params, and /native/gemini/*).\n\tOfficial\tNone\tsandboxed_wasm\tprovider_adapter\t\nStage for review",
+    "stage_status": 202,
+    "approval_status": 200
+  },
+  "secret": {
+    "status": 201,
+    "id": "sec_01m881r4nxe00bwhp7cq3p0zdy",
+    "metadataOnly": true
+  },
+  "connection": {
+    "status": 201,
+    "id": "con_01m881r5s5e008a8qgs2yjmp5z",
+    "state": "CREATED_UNVERIFIED",
+    "adapter_id": "adp_01m881r37de008mdss5xjhq7c7",
+    "billing_mode": "COMMERCIAL_API",
+    "data_region": "US"
+  },
+  "probe": {
+    "status": 200,
+    "valid": false,
+    "failure_code": "upstream_unreachable",
+    "sanitized_message": "upstream connection could not be reached",
+    "latency_ms": 2058,
+    "screen": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n4\nVault Secrets\n2\nAdapters\n2\nQA003 Google Runtime 18115: upstream connection could not be reached\nConfigured connections\n4\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA003 Google Runtime 18115 (s2yjmp5z)\nhttps://generativelanguage.googleapis.com\n\tadp_01m881r37de008mdss5xjhq7c7\tUS · Commercial\tUnverified\tapi_key: ...c998\t\n\n\nQA003 SSRF redirect boundary (8k78zaaf)\nhttp://127.0.0.1:19189\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tDisabled\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (4hst80xy)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t"
+  },
+  "cleanup": [
+    {
+      "resource": "synthetic connection",
+      "status": 204
+    },
+    {
+      "resource": "write-only credential",
+      "status": 204
+    }
+  ]
+}
