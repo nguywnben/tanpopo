@@ -1,0 +1,30 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated RC6 artifact 45581179274 at 127.0.0.1:18132",
+  "actor": "synthetic Org Owner",
+  "environmentDuplicate": {
+    "submittedName": "QA004 CP56 Duplicate Environment",
+    "submittedSlug": "qa004-cp55-staging-west",
+    "postStatus": 409,
+    "error": "resource_already_exists",
+    "message": "environment slug already exists in project",
+    "ui": "Error message displayed in form; entered name and slug remain for correction",
+    "afterFailureReadback": {"status": 200, "records": 1, "matchingSlugRecords": 1}
+  },
+  "projectDuplicate": {
+    "submittedName": "QA004 CP56 Duplicate Project",
+    "submittedSlug": "qa004-cp55-ops-billing",
+    "postStatus": 409,
+    "error": "resource_already_exists",
+    "message": "project slug already exists in organization",
+    "ui": "Error message displayed in form; entered name and slug remain for correction",
+    "afterFailureReadback": {"status": 200, "projects": 3, "matchingSlugRecords": 1}
+  },
+  "auditAfterFailures": {
+    "projectCreatedRows": 3,
+    "environmentCreatedRows": 2,
+    "newPartialCreateEventObserved": false
+  },
+  "visualInspection": "Duplicate environment/project rejection screenshots and post-failure audit filters were visually inspected.",
+  "scope": "This covers duplicate-slug conflicts only. Other failure atomicity, storage failures, concurrent conflict races, and corrected resubmission recovery remain UNVERIFIED."
+}
