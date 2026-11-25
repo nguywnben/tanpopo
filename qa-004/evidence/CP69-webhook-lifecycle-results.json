@@ -1,0 +1,81 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 SQLite runtime at 127.0.0.1:18128",
+  "browser": "Chromium, 1440x1000, real authenticated Console interactions",
+  "product_source_modified": false,
+  "synthetic_scope": {
+    "organization_id": "org_01m8aa1517e008pwvawpzrhepq",
+    "organization_slug": "qa004-cp69-webhook-revocation",
+    "project_id": "prj_01m8aafdwpe009t703y6ebv1hd",
+    "project_slug": "qa004-cp69-webhook-project",
+    "cleanup": "Organization crypto-shredded through Console while inactive; HTTP 200; target absent from organization readback; two other organizations remained."
+  },
+  "write_only_credentials": {
+    "kind": "WEBHOOK_HMAC_SECRET",
+    "synthetic_only": true,
+    "count_created_after_test_harness_retry": 2,
+    "plaintext_captured_or_published": false,
+    "metadata_readback_plaintext_field_present": false,
+    "cleanup_delete_http_statuses": [204, 204],
+    "metadata_count_after_cleanup": 0
+  },
+  "subscription": {
+    "id": "whk_01m8aa850fe00becpjgamdgek3",
+    "receiver_origin_only": "https://example.com",
+    "events": ["kill_switch.triggered", "mcp.approval.pending"],
+    "created_http_status": 201,
+    "lifecycle": [
+      {"action": "disable", "http_method": "PATCH", "http_status": 200, "enabled": false, "version": 2},
+      {"action": "enable", "http_method": "PATCH", "http_status": 200, "enabled": true, "version": 3},
+      {"action": "disable_with_retry_queued", "http_method": "PATCH", "http_status": 200, "enabled": false, "version": 4},
+      {"action": "delete", "http_method": "DELETE", "http_status": 200, "deleted": true, "list_count_after": 0}
+    ],
+    "console_notices": [
+      "Webhook disabled and queued deliveries canceled.",
+      "Delete confirmation states the subscription and queued deliveries will be removed."
+    ]
+  },
+  "pending_delivery_cancellation": {
+    "synthetic_event": "kill_switch.triggered",
+    "trigger_http_status": 200,
+    "delivery_before_disable": {
+      "attempt_count": 4,
+      "status": "RETRY_SCHEDULED",
+      "last_http_status": null,
+      "last_error": "transport failure"
+    },
+    "disable_http_status": 200,
+    "matching_delivery_rows_after_disable": 0,
+    "classification": "PASS (scoped) for canceling this pending retry row on subscription disable"
+  },
+  "delivery_constraints": {
+    "direct_external_tcp_443_probes": "connection refused",
+    "provider_http_response_or_webhook_acknowledgement": "not observed",
+    "classification": "BLOCKED / UNVERIFIED: the real receiver response, signature verification, retry success, 4xx/5xx handling and receiver-side payload were not verified; transport failures are not a product defect without evidence of receiver response behavior"
+  },
+  "disabled_event_suppression": {
+    "second_kill_switch_triggered_while_subscription_disabled": true,
+    "trigger_http_status": 200,
+    "switch_cleared_http_status": 200,
+    "delivery_rows_checked_before_subscription_delete": false,
+    "classification": "UNVERIFIED; no pass inferred"
+  },
+  "audit": {
+    "observed_actions_for_subscription": [
+      "webhook.registered",
+      "webhook.disabled",
+      "webhook.enabled",
+      "webhook.disabled",
+      "webhook.deleted"
+    ],
+    "deleted_subscription_readback_count": 0,
+    "real_console_hash_chain_verify_http_status": 200,
+    "hash_chain_intact": true,
+    "checked_events_count": 13
+  },
+  "defect_disposition": {
+    "historical_DEF_034": "PASS (scoped) on exact RC6: UI disable/re-enable/delete, Admin API state/readback, pending retry cancellation and retained audit events all worked.",
+    "new_defects": [],
+    "note": "Two same-name synthetic HMAC credentials were created during test automation retries; both were deleted. This was test setup duplication, not a product defect."
+  }
+}
