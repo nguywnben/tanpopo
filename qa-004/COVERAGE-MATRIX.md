@@ -41,7 +41,7 @@ Statuses describe QA-004 evidence only. `PARTIAL` means a named slice was exerci
 
 | Status | Count / current interpretation |
 |---|---|
-| PASS | 15 historical defect retests (`DEF-002`, `DEF-003`, `DEF-004`, `DEF-005`, `DEF-006`, `DEF-007`, `DEF-010`, `DEF-011`, `DEF-012`, `DEF-014`, `DEF-015`, `DEF-016`, `DEF-037`, `DEF-046`, `DEF-047`), each scoped to explicitly listed behavior. |
+| PASS | 17 historical defect retests (`DEF-002`, `DEF-003`, `DEF-004`, `DEF-005`, `DEF-006`, `DEF-007`, `DEF-010`, `DEF-011`, `DEF-012`, `DEF-014`, `DEF-015`, `DEF-016`, `DEF-023`, `DEF-029`, `DEF-037`, `DEF-046`, `DEF-047`), each scoped to explicitly listed behavior. |
 | PARTIAL | 3 historical defect retests (`DEF-043`, `DEF-048`, `DEF-049`) with narrow evidence and material criteria still open. |
 | FAIL | 16 confirmed QA-004 defects (DEF-051 through DEF-066); see register. |
 | BLOCKED | Authentic production signing remains a release prerequisite blocker and prevents trusted RC6 Gemini adapter activation/inference in this runtime. Team Admin model creation remains denied by DEF-056; one Org Owner synthetic embeddings path passed in CP40, while broader provider and modality coverage remains PARTIAL/UNVERIFIED. No blocked path is reported as pass. |
