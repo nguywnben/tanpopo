@@ -23,9 +23,10 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP17 localization across the 15 listed languages](checkpoints/CP17-localization-overview-and-persistence.md)
 - [CP18 project-scope isolation and DEF-054 retest](checkpoints/CP18-project-scope-isolation.md)
 - [CP19 environment display-name persistence](checkpoints/CP19-environment-name-persistence.md)
+- [CP20 Access & Keys role boundaries](checkpoints/CP20-access-key-role-boundaries.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
 - [Release signing readiness](RELEASE-SIGNING-READINESS.md)
 
-QA is ongoing. Five confirmed new failures (DEF-051–055) remain open; 37 historical findings are UNVERIFIED, 10 have scoped PASS, and three remain PARTIAL. CP16 added real Chromium 320/390/768-pixel responsive interaction and download evidence; Firefox and WebKit remain blocked by this runner's browser dependencies. CP17 selected each of the 15 listed UI locales and verified Vietnamese navigation and refresh persistence; other screens and localized error states remain unverified. CP18 added a second project-only Developer scope and independent DEF-054 evidence. CP19 confirmed environment display names are lost after creation/readback (DEF-055). No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**
+QA is ongoing. Five confirmed new failures (DEF-051–055) remain open; 37 historical findings are UNVERIFIED, 10 have scoped PASS, and three remain PARTIAL. CP16 added real Chromium 320/390/768-pixel responsive interaction and download evidence; Firefox and WebKit remain blocked by this runner's browser dependencies. CP17 selected each of the 15 listed UI locales and verified Vietnamese navigation and refresh persistence; other screens and localized error states remain unverified. CP18 added a second project-only Developer scope and independent DEF-054 evidence. CP19 confirmed environment display names are lost after creation/readback (DEF-055). CP20 verified scoped VKEY metadata visibility, Developer-denied membership enumeration/revocation, and Owner revocation persistence. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**

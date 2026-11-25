@@ -1,0 +1,15 @@
+{
+  "action": "Owner UI graceful-drain revoke",
+  "target_id": "vky_01m89e1vebe00acy7yga8sqche",
+  "dialog_text": "Revoke CP20 project-scoped metadata check\nRecent trace-derived traffic (last 1h): 0 requests.\nRevocation mode\nGraceful drain (allow active streams to finish)\n\nGraceful drain blocks new requests while letting in-flight streams finish.\n\nCancel\nRevoke (graceful drain)",
+  "ui_tail": "tions\nqa004-testroot-owner@example.invalid\nOperator, Org Owner\nQA004 Test Root Org\n/\nQA-004 Isolated Canary\n/\nqa004-human-label-check\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAir-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\n1\nMembers & Roles\n10\nVirtual key revoked. 0 active streams severed.\nEnvironment Virtual Keys\n1\nName\tPrefix / Last 4\tPlanes / Routes\tState\tCreated\tActions\nCP20 project-scoped metadata check\tvk_tp_qa004-human-labe_…Dqll\t\nPROVIDER\n*\n\tRevoked\tNov 25, 2026, 1:24:20 PM\t",
+  "post_action_api_readback": {
+    "http_status": 200,
+    "found": true,
+    "key_state": "REVOKED",
+    "version": 2,
+    "has_secret": false,
+    "name": "CP20 project-scoped metadata check"
+  },
+  "interpretation": "revocation succeeded and persisted"
+}

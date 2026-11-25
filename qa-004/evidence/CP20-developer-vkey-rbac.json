@@ -1,0 +1,13 @@
+{
+  "developer_revoke_attempt": {
+    "status": 403,
+    "code": "insufficient_role_permission",
+    "message": "insufficient role permission"
+  },
+  "owner_persistent_readback": {
+    "status": 200,
+    "keyState": "CREATED_ACTIVE",
+    "version": 1
+  },
+  "interpretation": "denied; key remained active"
+}
