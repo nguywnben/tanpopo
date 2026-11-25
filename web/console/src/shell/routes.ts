@@ -45,7 +45,7 @@ export const navigationGroups: NavigationGroup[] = [
     titleKey: 'nav.group.monitor',
     routes: [
       {path: '/overview', label: 'Overview', labelKey: 'nav.route.overview', roles: everyRole, icon: 'overview', enabled: true},
-      {path: '/observability/traces', label: 'Traces', labelKey: 'nav.route.traces', roles: traceRoles, icon: 'traces', enabled: true},
+      {path: '/observability/traces', aliases: ['/traces'], label: 'Traces', labelKey: 'nav.route.traces', roles: traceRoles, icon: 'traces', enabled: true},
       {path: '/finops/budgets', aliases: ['/finops/chargeback'], label: 'FinOps', labelKey: 'nav.route.finops', roles: everyRole, icon: 'finops', enabled: true},
     ],
   },

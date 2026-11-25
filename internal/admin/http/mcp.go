@@ -107,9 +107,6 @@ func (s *Server) handleListMCPServers(w http.ResponseWriter, r *http.Request) {
 			}
 			d.Transport = "streamable_http"
 			d.AllowPrivate = bool(priv)
-			if d.State == "ACTIVE" {
-				d.State = "ACTIVE"
-			}
 			items = append(items, d)
 		}
 		return rows.Err()
@@ -142,6 +139,9 @@ func (s *Server) handleRegisterMCPServer(w http.ResponseWriter, r *http.Request)
 		if req.ProjectID == "" {
 			writeErrorEnvelope(w, r, 400, "invalid_request", "invalid_request_error", "project_id is required", false, nil)
 		}
+		return
+	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, req.ProjectID) {
 		return
 	}
 	var exists int
@@ -634,6 +634,9 @@ func (s *Server) handleCreateMCPToolGrant(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if !s.authorize(w, r, sc, rbac.ActionMCPWrite, rbac.TargetScope{OrgID: orgID, ProjectID: projectID}) {
+		return
+	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, projectID) {
 		return
 	}
 	var req struct {

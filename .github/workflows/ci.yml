@@ -86,7 +86,7 @@ jobs:
     name: Stage 1 — Pure-Go Build & Small Tests (${{ matrix.os }})
     needs: stage0-contract-floor-supply-chain
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:

@@ -607,6 +607,8 @@ func testDataPlaneRoleRuntimeChild(t *testing.T, dataDir, parentDir, nonce strin
 	handler = nil
 	closeRuntime = nil
 	runtime.GC()
+	runtime.Gosched()
+	runtime.GC()
 	fmt.Fprintf(os.Stderr, "post-shutdown goroutine functions:\n%s", runtimeGoroutineFunctionNames())
 	if err := os.WriteFile(filepath.Join(parentDir, "shutdown.ready"), []byte(fmt.Sprintf("pid=%d", os.Getpid())), 0o600); err != nil {
 		t.Fatalf("write child shutdown marker: %v", err)

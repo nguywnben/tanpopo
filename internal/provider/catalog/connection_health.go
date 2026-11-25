@@ -22,9 +22,10 @@ import (
 // validSM02Transitions defines canonical ProviderConnection state transitions (SM-02).
 var validSM02Transitions = map[string]map[string]struct{}{
 	ConnStateDraft: {
-		ConnStateValidating: {},
-		ConnStateRevoked:    {},
-		ConnStateArchived:   {},
+		ConnStateValidating:     {},
+		ConnStateSuspendedAdmin: {},
+		ConnStateRevoked:        {},
+		ConnStateArchived:       {},
 	},
 	ConnStateValidating: {
 		ConnStateActive:  {},

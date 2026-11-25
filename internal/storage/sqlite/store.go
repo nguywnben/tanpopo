@@ -246,6 +246,7 @@ func (s *Store) Ping(ctx context.Context) error {
 func (s *Store) Close() error {
 	s.closeOnce.Do(func() {
 		inUse := s.db.Stats().InUse
+		s.db.SetMaxIdleConns(0)
 		s.closeErr = s.db.Close()
 		if inUse != 0 {
 			s.closeErr = errors.Join(s.closeErr, fmt.Errorf("sqlite: close requested with %d active connection(s)", inUse))

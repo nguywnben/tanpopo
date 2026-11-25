@@ -13,6 +13,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 const (
@@ -22,6 +23,7 @@ const (
 	defaultPlaygroundBudget     = int64(500_000)
 	minPlaygroundBudget         = int64(1_000)
 	maxPlaygroundBudget         = int64(5_000_000)
+	maxActivePlaygroundKeys     = 32
 )
 
 type playgroundSessionCreateRequest struct {
@@ -61,6 +63,9 @@ func (s *Server) handleCreatePlaygroundSession(w http.ResponseWriter, r *http.Re
 	if !s.authorize(w, r, sc, rbac.ActionPlaygroundCreate, rbac.TargetScope{OrgID: orgID, ProjectID: projectID}) {
 		return
 	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, projectID) {
+		return
+	}
 	var envProjectID string
 	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
 		return q.QueryRowContext(r.Context(), s.rebind(`SELECT project_id FROM environments WHERE org_id=? AND id=?`), orgID, envID).Scan(&envProjectID)
@@ -96,14 +101,46 @@ func (s *Server) handleCreatePlaygroundSession(w http.ResponseWriter, r *http.Re
 	now := s.nowMs()
 	expiresAtMs := now + ttl*1000
 	ownerID := sc.Actor.PrincipalID
+	var activeCount int
+	if cerr := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
+			SELECT COUNT(*) FROM virtual_keys
+			WHERE org_id = ? AND owner_principal_id = ?
+			  AND is_ephemeral_playground = `+port.BoolExpr(s.dialect, true)+`
+			  AND revoked_at_ms IS NULL AND state = 'CREATED_ACTIVE'
+			  AND (expires_at_ms IS NULL OR expires_at_ms > ?)`),
+			orgID, ownerID, now,
+		).Scan(&activeCount)
+	}); cerr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking active playground sessions", true, nil)
+		return
+	}
+	if activeCount >= maxActivePlaygroundKeys {
+		writeErrorEnvelope(w, r, http.StatusTooManyRequests, "rate_limit_exceeded", "rate_limit_error", "maximum active playground sessions reached for this principal", true, nil)
+		return
+	}
 	created, err := s.vkeys.Create(r.Context(), vkey.CreateParams{
 		OrgID: orgID, ProjectID: projectID, EnvID: envID, OwnerPrincipalID: &ownerID,
 		Name: "Playground session", MaxConcurrentStreams: 4, IsEphemeralPlayground: true,
-		ExpiresAtMs: &expiresAtMs, ActorID: ownerID,
+		AllowedPlanes: "PROVIDER",
+		AllowedRoutes: []string{"/v1/chat/completions"},
+		ExpiresAtMs:   &expiresAtMs, ActorID: ownerID,
 	})
+	snapshotSyncPending := false
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating ephemeral playground key", true, nil)
-		return
+		if errors.Is(err, vkey.ErrSnapshotSyncFailed) && created != nil {
+			snapshotSyncPending = true
+		} else {
+			switch {
+			case errors.Is(err, port.ErrNotFound):
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "environment or project not found", false, nil)
+			case errors.Is(err, port.ErrInvalidInput):
+				writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+			default:
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating ephemeral playground key", true, nil)
+			}
+			return
+		}
 	}
 	if _, err = s.ledgers.UpsertLedger(r.Context(), ledger.UpsertLedgerParams{
 		OrgID: orgID, ScopeType: ledger.ScopeVirtualKey, ScopeID: created.Summary.ID,
@@ -116,6 +153,9 @@ func (s *Server) handleCreatePlaygroundSession(w http.ResponseWriter, r *http.Re
 		})
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed provisioning playground budget ceiling", true, nil)
 		return
+	}
+	if snapshotSyncPending {
+		w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusCreated, playgroundSessionResponse{

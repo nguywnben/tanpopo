@@ -338,16 +338,24 @@ export async function updateMemberRoles(
 }
 
 export async function listRecentTraces(environmentId: string) {
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
   const rows: components['schemas']['TraceSummary'][] = [];
   let cursor: string | undefined;
-  do {
+  for (let page = 0; page < 5; page += 1) {
     const result = await api.GET('/admin/v1/traces', {params: {query: {env_id: environmentId, limit: 100, cursor}}});
     if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
-    rows.push(...result.data.data);
+    let reachedCutoff = false;
+    for (const row of result.data.data) {
+      if (Date.parse(row.created_at) >= oneHourAgo) {
+        rows.push(row);
+      } else {
+        reachedCutoff = true;
+      }
+    }
     cursor = result.data.next_cursor ?? undefined;
-  } while (cursor);
-  const oneHourAgo = Date.now() - 60 * 60 * 1000;
-  return rows.filter(row => Date.parse(row.created_at) >= oneHourAgo);
+    if (!cursor || reachedCutoff) break;
+  }
+  return rows;
 }
 
 export async function listTracePage(environmentId: string, model?: string, cursor?: string) {
@@ -504,6 +512,14 @@ export async function deleteOrganization(org: components['schemas']['Organizatio
   const result = await api.DELETE('/admin/v1/organizations/{orgId}', {
     params: {path: {orgId: org.id}, header: {'If-Match': versionTag(org.version)}},
     body: {confirm_slug: confirmSlug, reason},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
+export async function finalizeOrganizationErasure(orgId: string) {
+  const result = await api.POST('/admin/v1/organizations/{orgId}/finalize-erasure', {
+    params: {path: {orgId}},
   });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
   return result.data;

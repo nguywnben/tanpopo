@@ -82,7 +82,8 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
     allowPrivateIp?: boolean;
     cidrs?: boolean;
   }>({});
-  const touchedCreateRef = {current: touchedCreateFields};
+  const touchedCreateRef = useRef(touchedCreateFields);
+  touchedCreateRef.current = touchedCreateFields;
 
   const applyAdapterDefaults = useCallback(
     (nextAdapter: Adapter | undefined, touched: typeof touchedCreateFields) => {
@@ -103,6 +104,27 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       }
     },
     [],
+  );
+
+  const adapterIdRef = useRef(adapterId);
+  adapterIdRef.current = adapterId;
+
+  const openCreateConnectionDrawer = useCallback(
+    (targetAdapterId?: string) => {
+      const nextId = targetAdapterId ?? adapterIdRef.current;
+      const chosen = adapters.find(item => item.id === nextId);
+      setCreateFormError('');
+      setTouchedCreateFields({});
+      touchedCreateRef.current = {};
+      setBindings({});
+      if (targetAdapterId !== undefined) {
+        setAdapterId(targetAdapterId);
+        adapterIdRef.current = targetAdapterId;
+      }
+      applyAdapterDefaults(chosen, {});
+      setCreateOpen(true);
+    },
+    [adapters, applyAdapterDefaults],
   );
 
   const [editing, setEditing] = useState<Connection | null>(null);
@@ -145,14 +167,13 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       setSecrets(secretRows);
       setAdapters(adapterRows);
       const enabledAdapters = adapterRows.filter(item => item.installation_state === 'ENABLED_ACTIVE');
-      setAdapterId(current => {
-        const nextId = enabledAdapters.some(item => item.id === current) ? current : enabledAdapters[0]?.id ?? '';
-        const chosen = enabledAdapters.find(item => item.id === nextId);
-        if (nextId !== current) {
-          applyAdapterDefaults(chosen, {});
-        }
-        return nextId;
-      });
+      const currentId = adapterIdRef.current;
+      const nextId = enabledAdapters.some(item => item.id === currentId) ? currentId : enabledAdapters[0]?.id ?? '';
+      if (nextId !== currentId) {
+        setAdapterId(nextId);
+        adapterIdRef.current = nextId;
+        applyAdapterDefaults(enabledAdapters.find(item => item.id === nextId), {});
+      }
     } catch (cause) {
       if (reloadSeqRef.current !== seq) return;
       setError(errText(cause, t));
@@ -219,8 +240,9 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       setConnName('');
       setEndpoint('');
       setBindings({});
-      setAllowPrivateIp(false);
-      setCidrs('');
+      setTouchedCreateFields({});
+      touchedCreateRef.current = {};
+      applyAdapterDefaults(adapters.find(item => item.id === adapterId), {});
       await reload();
       setNotice(t('providers.connectionCreated'));
     } catch (cause) {
@@ -406,10 +428,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
               variant={tab === 'connections' && !loading && connections.length === 0 ? 'secondary' : 'primary'}
               size="sm"
               className={tab === 'connections' && !loading && connections.length === 0 ? 'tp-header-cta-desktop' : undefined}
-              onClick={() => {
-                setCreateFormError('');
-                setCreateOpen(true);
-              }}
+              onClick={() => openCreateConnectionDrawer()}
             >
               <Plus size={14} aria-hidden="true" />
               <span>{t('providers.newConnection')}</span>
@@ -440,6 +459,9 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
       {tab === 'connections' ? (
         <section className="tp-section">
           <SectionHeader title={t('providers.configuredConnections')} count={connections.length} />
+          {connections.some(c => c.state === 'DISABLED') ? (
+            <Banner tone="warn">{t('providers.disabledHint')}</Banner>
+          ) : null}
           <DataTable
             ariaLabel={t('providers.connectionsAria')}
             loading={loading}
@@ -452,10 +474,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
                 <Button
                   variant="primary"
                   size="md"
-                  onClick={() => {
-                    setCreateFormError('');
-                    setCreateOpen(true);
-                  }}
+                  onClick={() => openCreateConnectionDrawer()}
                 >
                   <Plus size={14} aria-hidden="true" />
                   <span>{t('providers.newConnection')}</span>
@@ -502,7 +521,11 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
                       label={t('common.actionsFor', {name: `${row.name} (${row.id.slice(-8)})`})}
                       disabled={busy}
                       items={[
-                        {id: 'probe', label: t('providers.action.probe'), onClick: () => void handleProbe(row)},
+                        {
+                          id: 'probe',
+                          label: row.state === 'DISABLED' ? t('providers.action.reactivateAndTest') : t('providers.action.probe'),
+                          onClick: () => void handleProbe(row),
+                        },
                         ...(supportsOAuth ? [{id: 'oauth', label: t('providers.action.oauth'), onClick: () => setOauthTarget(row)}] : []),
                         {
                           id: 'edit',
@@ -652,13 +675,10 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
             <Button
               variant="primary"
               onClick={() => {
-                setTouchedCreateFields({});
-                setAdapterId(inspectedAdapter.id);
-                setBindings({});
-                applyAdapterDefaults(inspectedAdapter, {});
+                const chosenId = inspectedAdapter.id;
                 setInspectedAdapter(null);
                 setTab('connections');
-                setCreateOpen(true);
+                openCreateConnectionDrawer(chosenId);
               }}
             >
               {t('providers.newWithAdapter')}

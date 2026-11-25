@@ -113,11 +113,13 @@ export async function createAdminModel(payload: components['schemas']['LogicalMo
   return result.data;
 }
 
-export async function listDeployments(envId?: string) {
+export async function listDeployments(envId?: string, projectId?: string) {
   const rows: components['schemas']['ModelDeployment'][] = [];
   let cursor: string | undefined;
   do {
-    const result = await api.GET('/admin/v1/deployments', {params: {query: {env_id: envId, limit: 100, cursor}}});
+    const result = await api.GET('/admin/v1/deployments', {
+      params: {query: {env_id: envId || undefined, project_id: projectId || undefined, limit: 100, cursor}},
+    });
     if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
     rows.push(...result.data.data);
     cursor = result.data.next_cursor ?? undefined;

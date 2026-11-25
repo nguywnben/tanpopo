@@ -85,16 +85,18 @@ type SessionMetadata struct {
 
 // MarketplaceCatalogEntry describes an available marketplace extension package for GET /marketplace/catalog.
 type MarketplaceCatalogEntry struct {
-	PackageID        string   `json:"package_id"`
-	CanonicalName    string   `json:"canonical_name"`
-	Version          string   `json:"version"`
-	ExecutionTier    string   `json:"execution_tier"`
-	OriginTrustTier  string   `json:"origin_trust_tier"`
-	EnterpriseSigned bool     `json:"enterprise_signed"`
-	SourceURI        string   `json:"source_uri"`
-	ExpectedSHA256   string   `json:"expected_sha256"`
-	Summary          string   `json:"summary,omitempty"`
-	Capabilities     []string `json:"capabilities,omitempty"`
+	PackageID             string   `json:"package_id"`
+	CanonicalName         string   `json:"canonical_name"`
+	Version               string   `json:"version"`
+	ExecutionTier         string   `json:"execution_tier"`
+	OriginTrustTier       string   `json:"origin_trust_tier"`
+	SignatureVerified     bool     `json:"signature_verified"`
+	EnterpriseSigned      bool     `json:"enterprise_signed"`
+	SigningKeyFingerprint string   `json:"signing_key_fingerprint,omitempty"`
+	SourceURI             string   `json:"source_uri"`
+	ExpectedSHA256        string   `json:"expected_sha256"`
+	Summary               string   `json:"summary,omitempty"`
+	Capabilities          []string `json:"capabilities,omitempty"`
 }
 
 // ExtensionArchiveResolver resolves an organization-scoped staged archive and provenance metadata.
@@ -275,6 +277,7 @@ type Server struct {
 	trustedProxyCIDRs      []netip.Prefix
 	version                string
 	quarantineMu           sync.Mutex
+	orgErasureMu           sync.Mutex
 
 	routes  []routeEntry
 	handler http.Handler
@@ -481,6 +484,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodGet, Path: "/admin/v1/organizations", Action: rbac.ActionOrgRead, Handler: s.handleListOrganizations},
 		{Method: http.MethodPost, Path: "/admin/v1/organizations", Action: rbac.ActionOrgCreate, Handler: s.handleCreateOrganization},
 		{Method: http.MethodDelete, Path: "/admin/v1/organizations/{orgId}", Action: rbac.ActionOrgDelete, Handler: s.handleDeleteOrganization},
+		{Method: http.MethodPost, Path: "/admin/v1/organizations/{orgId}/finalize-erasure", Action: rbac.ActionOrgDelete, Handler: s.handleFinalizeOrganizationErasure},
 		{Method: http.MethodGet, Path: "/admin/v1/projects", Action: rbac.ActionProjectRead, Handler: s.handleListProjects},
 		{Method: http.MethodPost, Path: "/admin/v1/projects", Action: rbac.ActionProjectWrite, Handler: s.handleCreateProject},
 		{Method: http.MethodDelete, Path: "/admin/v1/projects/{projectId}", Action: rbac.ActionProjectWrite, Handler: s.handleDeleteProject},

@@ -379,6 +379,7 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	envFilter := strings.TrimSpace(r.URL.Query().Get("env_id"))
+	projectFilter := strings.TrimSpace(r.URL.Query().Get("project_id"))
 	statusFilter := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("status")))
 	if envFilter != "" {
 		projID, found, err := s.lookupEnvironmentProject(r.Context(), orgID, envFilter)
@@ -390,7 +391,24 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "environment not found", false, nil)
 			return
 		}
+		if projectFilter != "" && projID != projectFilter {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "env_id does not belong to specified project_id", false, nil)
+			return
+		}
 		if !s.authorize(w, r, sc, rbac.ActionModelRead, rbac.TargetScope{OrgID: orgID, ProjectID: projID}) {
+			return
+		}
+	} else if projectFilter != "" {
+		found, err := s.projectExistsInOrg(r.Context(), orgID, projectFilter)
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating project", true, nil)
+			return
+		}
+		if !found {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+			return
+		}
+		if !s.authorize(w, r, sc, rbac.ActionModelRead, rbac.TargetScope{OrgID: orgID, ProjectID: projectFilter}) {
 			return
 		}
 	} else {
@@ -399,7 +417,7 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	filterHash := sha256HexString("deployments|" + envFilter + "|" + statusFilter)
+	filterHash := sha256HexString("deployments|" + projectFilter + "|" + envFilter + "|" + statusFilter)
 	limit, cur, ok := parsePageParams(w, r, s.cursorSecret, "deployments", orgID, filterHash)
 	if !ok {
 		return
@@ -414,7 +432,7 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if !orgWide && envFilter == "" && len(allowedProjects) == 0 {
+	if !orgWide && envFilter == "" && (len(allowedProjects) == 0 || (projectFilter != "" && !allowedProjects[projectFilter])) {
 		writeJSON(w, http.StatusOK, paginatedListEnvelope[modelDeploymentDTO]{
 			Data:    []modelDeploymentDTO{},
 			HasMore: false,
@@ -427,7 +445,7 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		createdMs int64
 	}
 	items := make([]depRow, 0, limit+1)
-	needFilter := envFilter != "" || !orgWide
+	needFilter := envFilter != "" || projectFilter != "" || !orgWide
 	batchLimit := limit + 1
 	if needFilter {
 		batchLimit = limit*2 + 20
@@ -525,17 +543,25 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 			if envID == "" {
 				envID = s.resolveDeploymentEnvID(r.Context(), orgID, rrow.id)
 			}
-			if !orgWide {
+			if !orgWide || projectFilter != "" {
+				var resolvedProjID string
 				if envID != "" {
 					envProjID, found, envErr := s.lookupEnvironmentProject(r.Context(), orgID, envID)
 					if envErr != nil {
 						writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed resolving deployment environment", true, nil)
 						return
 					}
-					if !found || !allowedProjects[envProjID] {
+					if !found {
 						continue
 					}
-				} else if !rrow.ownerProj.Valid || !allowedProjects[rrow.ownerProj.String] {
+					resolvedProjID = envProjID
+				} else if rrow.ownerProj.Valid {
+					resolvedProjID = rrow.ownerProj.String
+				}
+				if !orgWide && (resolvedProjID == "" || !allowedProjects[resolvedProjID]) {
+					continue
+				}
+				if projectFilter != "" && resolvedProjID != projectFilter {
 					continue
 				}
 			}
@@ -1088,6 +1114,20 @@ func (s *Server) authorizeDeploymentScope(w http.ResponseWriter, r *http.Request
 		return "", false
 	}
 	return scopeProj, true
+}
+
+func (s *Server) projectExistsInOrg(ctx context.Context, orgID, projectID string) (bool, error) {
+	var id string
+	err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(ctx, s.rebind(`SELECT id FROM projects WHERE org_id = ? AND id = ?`), orgID, projectID).Scan(&id)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Server) lookupEnvironmentProject(ctx context.Context, orgID, envID string) (string, bool, error) {

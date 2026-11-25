@@ -432,6 +432,10 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	if !cfg.DisableModels {
 		s.mux.HandleFunc("/v1/models", s.handleModels)
 	}
+	if s.nativeHandler != nil {
+		s.mux.Handle("/native", s.nativeHandler)
+		s.mux.Handle("/native/", s.nativeHandler)
+	}
 	if s.telemetry != nil && s.telemetry.Metrics != nil && s.telemetry.Metrics.HasScrapeToken() {
 		s.mux.Handle("/metrics", s.MetricsHandler())
 	}

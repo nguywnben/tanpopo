@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useState, type FormEvent} from 'react';
 import {ArrowRightLeft, Building2, Plus, RefreshCw, Trash2} from 'lucide-react';
 import {listOrganizations} from '../../api/client';
-import {createOrganization, deleteOrganization} from '../../api/managementClient';
+import {createOrganization, deleteOrganization, finalizeOrganizationErasure} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {useI18n} from '../../i18n/I18nProvider';
 import {useRouter} from '../../router/RouterContext';
@@ -128,11 +128,35 @@ export function OrganizationsAdminPage({
       }
       const remaining = await refresh();
       await onOrganizationsChanged();
-      if ('destroyed_dek_id' in res && removedId === activeOrgId && remaining[0]) {
-        onSelectOrg(remaining[0].id);
+      const nextHealthy = remaining.find(item => item.status !== 'DELETING' && item.status !== 'PENDING_ERASURE') ?? remaining[0];
+      if ('destroyed_dek_id' in res && removedId === activeOrgId && nextHealthy) {
+        onSelectOrg(nextHealthy.id);
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('common.requestFailed'));
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRetryFinalize(org: Organization) {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await finalizeOrganizationErasure(org.id);
+      setReceipt(res);
+      const remaining = await refresh();
+      await onOrganizationsChanged();
+      const nextHealthy = remaining.find(item => item.status !== 'DELETING' && item.status !== 'PENDING_ERASURE') ?? remaining[0];
+      if (org.id === activeOrgId && nextHealthy) {
+        onSelectOrg(nextHealthy.id);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('common.requestFailed'));
+      await refresh();
     } finally {
       setBusy(false);
     }
@@ -145,6 +169,8 @@ export function OrganizationsAdminPage({
       </Banner>
     );
   }
+
+  const pendingErasureOrgs = orgs.filter(item => item.status === 'DELETING' || item.status === 'PENDING_ERASURE');
 
   return (
     <div className="tp-stack">
@@ -201,6 +227,12 @@ export function OrganizationsAdminPage({
         </Banner>
       ) : null}
 
+      {pendingErasureOrgs.length > 0 ? (
+        <Banner tone="warn" title={t('orgs.deletingBannerTitle')}>
+          {t('orgs.deletingBannerDesc', {count: String(pendingErasureOrgs.length)})}
+        </Banner>
+      ) : null}
+
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {notice ? <Banner tone="ok">{notice}</Banner> : null}
       {receipt ? (
@@ -227,18 +259,37 @@ export function OrganizationsAdminPage({
               id: 'name',
               header: t('orgs.colName'),
               primary: true,
-              render: org => (
-                <div className="tp-stack-sm">
-                  <div className="tp-row">
-                    <Building2 size={14} aria-hidden="true" />
-                    <span style={{fontWeight: 600}}>{org.name}</span>
-                    {org.id === activeOrgId ? (
-                      <StatusPill tone="ok" label={t('orgs.activeLabel')} />
-                    ) : null}
+              render: org => {
+                const deleting = org.status === 'DELETING' || org.status === 'PENDING_ERASURE';
+                return (
+                  <div className="tp-stack-sm">
+                    <div className="tp-row">
+                      <Building2 size={14} aria-hidden="true" />
+                      <span style={{fontWeight: 600}}>{org.name}</span>
+                      {deleting ? (
+                        <StatusPill tone="danger" label={t('orgs.statusDeleting')} />
+                      ) : org.id === activeOrgId ? (
+                        <StatusPill tone="ok" label={t('orgs.activeLabel')} />
+                      ) : null}
+                    </div>
+                    <span className="mono tp-muted">{org.slug} · {org.id}</span>
                   </div>
-                  <span className="mono tp-muted">{org.slug} · {org.id}</span>
-                </div>
-              ),
+                );
+              },
+            },
+            {
+              id: 'lifecycle',
+              header: t('common.state'),
+              render: org => {
+                const orgStatus = org.status ?? 'ACTIVE';
+                const deleting = orgStatus === 'DELETING' || orgStatus === 'PENDING_ERASURE';
+                return (
+                  <StatusPill
+                    tone={deleting ? 'danger' : stateTone(orgStatus)}
+                    label={deleting ? t('orgs.statusDeleting') : formatOperationalState(orgStatus)}
+                  />
+                );
+              },
             },
             {
               id: 'trust',
@@ -264,31 +315,46 @@ export function OrganizationsAdminPage({
             {
               id: 'actions',
               header: t('common.actions'),
-              render: org => (
-                <div className="tp-row">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={org.id === activeOrgId || !multiOrgEnabled}
-                    onClick={() => onSelectOrg(org.id)}
-                  >
-                    <ArrowRightLeft size={14} aria-hidden="true" />
-                    <span>{t('orgs.switchAction')}</span>
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    disabled={orgs.length <= 1 || busy}
-                    onClick={() => {
-                      setShredReason('');
-                      setDeleteTarget(org);
-                    }}
-                  >
-                    <Trash2 size={14} aria-hidden="true" />
-                    <span>{t('orgs.shredAction')}</span>
-                  </Button>
-                </div>
-              ),
+              render: org => {
+                const deleting = org.status === 'DELETING' || org.status === 'PENDING_ERASURE';
+                return (
+                  <div className="tp-row">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={deleting || org.id === activeOrgId || !multiOrgEnabled}
+                      onClick={() => onSelectOrg(org.id)}
+                    >
+                      <ArrowRightLeft size={14} aria-hidden="true" />
+                      <span>{t('orgs.switchAction')}</span>
+                    </Button>
+                    {deleting ? (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void handleRetryFinalize(org)}
+                      >
+                        <RefreshCw size={14} aria-hidden="true" />
+                        <span>{t('orgs.retryFinalizeAction')}</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        disabled={orgs.length <= 1 || busy}
+                        onClick={() => {
+                          setShredReason('');
+                          setDeleteTarget(org);
+                        }}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                        <span>{t('orgs.shredAction')}</span>
+                      </Button>
+                    )}
+                  </div>
+                );
+              },
             },
           ]}
         />

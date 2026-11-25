@@ -3,6 +3,7 @@ import {EyeOff, Search} from 'lucide-react';
 import {getTraceWaterfall, listTracePage} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {useI18n} from '../../i18n/I18nProvider';
+import {useRouter} from '../../router/RouterContext';
 import {DataTable} from '../../ui/DataTable';
 import {Drawer} from '../../ui/Overlays';
 import {Banner, Button, KeyValueList, SectionHeader, StatusPill, TextField, formatOperationalState, stateTone} from '../../ui/primitives';
@@ -11,9 +12,11 @@ type Trace = components['schemas']['TraceSummary'];
 type Role = components['schemas']['RbacRole'];
 
 export function TracesPage({environmentId, roles}: {environmentId: string; roles: Role[]}) {
+  const {search} = useRouter();
   const {t, formatNumber, formatDateTime, formatTime, formatMicroUSD} = useI18n();
+  const initialReqId = useMemo(() => new URLSearchParams(search).get('request_id')?.trim() ?? '', [search]);
   const [traces, setTraces] = useState<Trace[]>([]);
-  const [requestId, setRequestId] = useState('');
+  const [requestId, setRequestId] = useState(initialReqId);
   const [errorFilter, setErrorFilter] = useState('');
   const [appliedError, setAppliedError] = useState('');
   const [modelFilter, setModelFilter] = useState('');
@@ -27,6 +30,12 @@ export function TracesPage({environmentId, roles}: {environmentId: string; roles
   const detailGen = useRef(0);
 
   const mayReadTraces = !roles.includes('FINOPS_VIEWER') || roles.some(role => role !== 'FINOPS_VIEWER');
+
+  useEffect(() => {
+    if (!mayReadTraces || !initialReqId) return;
+    setRequestId(initialReqId);
+    void inspectById(initialReqId);
+  }, [initialReqId, mayReadTraces]);
 
   useEffect(() => {
     let active = true;

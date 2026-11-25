@@ -25,6 +25,7 @@ type organizationDTO struct {
 	ID              string `json:"id"`
 	Slug            string `json:"slug"`
 	Name            string `json:"name"`
+	Status          string `json:"status"`
 	MinPluginTrust  string `json:"min_plugin_trust"`
 	FourEyesEnabled bool   `json:"four_eyes_enabled"`
 	Version         int64  `json:"version"`
@@ -110,7 +111,7 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 			var q strings.Builder
 			var args []any
 			q.WriteString(`
-				SELECT id, slug, display_name, min_plugin_trust, require_four_eyes_approval, version, created_at_ms
+				SELECT id, slug, display_name, status, min_plugin_trust, require_four_eyes_approval, version, created_at_ms
 				FROM organizations
 				WHERE id = ?`)
 			args = append(args, orgID)
@@ -126,11 +127,11 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 				defer rows.Close()
 				for rows.Next() {
 					var (
-						id, slug, name, trust string
-						fourEyes              port.FlexBool
-						ver, createdMs        int64
+						id, slug, name, status, trust string
+						fourEyes                      port.FlexBool
+						ver, createdMs                int64
 					)
-					if scanErr := rows.Scan(&id, &slug, &name, &trust, &fourEyes, &ver, &createdMs); scanErr != nil {
+					if scanErr := rows.Scan(&id, &slug, &name, &status, &trust, &fourEyes, &ver, &createdMs); scanErr != nil {
 						return scanErr
 					}
 					allRows = append(allRows, orgRow{
@@ -138,6 +139,7 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 							ID:              id,
 							Slug:            slug,
 							Name:            name,
+							Status:          status,
 							MinPluginTrust:  trust,
 							FourEyesEnabled: bool(fourEyes),
 							Version:         ver,
@@ -198,7 +200,7 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 	var q strings.Builder
 	var args []any
 	q.WriteString(`
-		SELECT id, slug, display_name, min_plugin_trust, require_four_eyes_approval, version, created_at_ms
+		SELECT id, slug, display_name, status, min_plugin_trust, require_four_eyes_approval, version, created_at_ms
 		FROM organizations
 		WHERE 1=1`)
 	if cur != nil {
@@ -222,11 +224,11 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 
 		for rows.Next() {
 			var (
-				id, slug, name, trust string
-				fourEyes              port.FlexBool
-				ver, createdMs        int64
+				id, slug, name, status, trust string
+				fourEyes                      port.FlexBool
+				ver, createdMs                int64
 			)
-			if scanErr := rows.Scan(&id, &slug, &name, &trust, &fourEyes, &ver, &createdMs); scanErr != nil {
+			if scanErr := rows.Scan(&id, &slug, &name, &status, &trust, &fourEyes, &ver, &createdMs); scanErr != nil {
 				return scanErr
 			}
 			items = append(items, orgRow{
@@ -234,6 +236,7 @@ func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 					ID:              id,
 					Slug:            slug,
 					Name:            name,
+					Status:          status,
 					MinPluginTrust:  trust,
 					FourEyesEnabled: bool(fourEyes),
 					Version:         ver,
@@ -329,15 +332,7 @@ func (s *Server) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 		_ = s.snapshots.Refresh(r.Context())
 	}
 
-	dto := organizationDTO{
-		ID:              org.ID,
-		Slug:            org.Slug,
-		Name:            org.DisplayName,
-		MinPluginTrust:  org.MinPluginTrust,
-		FourEyesEnabled: org.RequireFourEyesApproval,
-		Version:         org.Version,
-		CreatedAt:       formatTimeRFC3339Ms(org.CreatedAtMs),
-	}
+	dto := toOrganizationDTO(org)
 	w.Header().Set("ETag", FormatETag(org.Version))
 	writeJSON(w, http.StatusCreated, dto)
 }
@@ -387,6 +382,40 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		writeErrorEnvelope(w, r, http.StatusBadRequest, "confirm_slug_mismatch", "invalid_request_error", "confirm_slug must exactly match organization slug", false, nil)
 		return
 	}
+	if isDeletingOrgStatus(org.Status) {
+		receipt, snapPending, status, code, msg, foundReceipt := func() (cryptoShredReceiptDTO, bool, int, string, string, bool) {
+			s.orgErasureMu.Lock()
+			defer s.orgErasureMu.Unlock()
+			latest, lerr := s.storage.Tenancy().GetOrganization(r.Context(), orgID)
+			if errors.Is(lerr, port.ErrNotFound) {
+				if rec, found := s.lookupCompletedOrgShredReceipt(r.Context(), orgID); found {
+					return rec, false, http.StatusOK, "", "", true
+				}
+				return cryptoShredReceiptDTO{}, false, http.StatusNotFound, "resource_not_found", "organization not found", false
+			}
+			if lerr != nil {
+				return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed reading organization", false
+			}
+			rec, sp, st, cd, ms := s.resumeDeletingOrganization(r.Context(), latest, sc.Actor.PrincipalID, requestIDFromContext(r.Context()), req.Reason)
+			return rec, sp, st, cd, ms, st == http.StatusOK
+		}()
+		if foundReceipt && status == http.StatusOK {
+			if snapPending {
+				w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+			}
+			writeJSON(w, http.StatusOK, receipt)
+			return
+		}
+		errType := "upstream_error"
+		retryable := status >= 500
+		if status == http.StatusNotFound {
+			errType = "not_found_error"
+		} else if status == http.StatusConflict {
+			errType = "conflict_error"
+		}
+		writeErrorEnvelope(w, r, status, code, errType, msg, retryable, nil)
+		return
+	}
 	if s.fourEyes != nil {
 		needFE, feErr := s.fourEyes.RequiresFourEyes(r.Context(), &orgID)
 		if feErr != nil && !errors.Is(feErr, port.ErrNotFound) {
@@ -429,6 +458,74 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	receipt, snapPending, status, code, msg, conflictLatest := s.executeOrganizationDeletion(
+		r.Context(), sc, org, expectedVer, requestIDFromContext(r.Context()), req.Reason, "",
+	)
+	if status != http.StatusOK {
+		if status == http.StatusConflict && code == "optimistic_lock_conflict" && conflictLatest != nil {
+			writeOptimisticConflict(w, r, conflictLatest.Version, toOrganizationDTO(conflictLatest))
+			return
+		}
+		errType := "upstream_error"
+		retryable := status >= 500
+		if status == http.StatusNotFound {
+			errType = "not_found_error"
+		} else if status == http.StatusConflict {
+			errType = "conflict_error"
+		}
+		writeErrorEnvelope(w, r, status, code, errType, msg, retryable, nil)
+		return
+	}
+	if snapPending {
+		w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+	}
+	writeJSON(w, http.StatusOK, receipt)
+}
+
+func (s *Server) executeOrganizationDeletion(
+	ctx context.Context,
+	sc *authSessionContext,
+	org *port.Organization,
+	expectedVer int64,
+	requestID string,
+	reason string,
+	shredRequestID string,
+) (cryptoShredReceiptDTO, bool, int, string, string, *port.Organization) {
+	finalizeFn, receipt, immediate, snapPending, status, code, msg, conflictLatest := s.prepareAndShredOrganizationDeletion(
+		ctx, sc, org, expectedVer, requestID, reason, shredRequestID,
+	)
+	if status != http.StatusOK {
+		return receipt, snapPending, status, code, msg, conflictLatest
+	}
+	if immediate {
+		return receipt, snapPending, http.StatusOK, "", "", nil
+	}
+	receipt, snapPending, st, fcode, fmsg := finalizeFn(ctx)
+	return receipt, snapPending, st, fcode, fmsg, nil
+}
+
+type orgDeletionFinalizeFn func(ctx context.Context) (cryptoShredReceiptDTO, bool, int, string, string)
+
+func (s *Server) prepareAndShredOrganizationDeletion(
+	ctx context.Context,
+	sc *authSessionContext,
+	org *port.Organization,
+	expectedVer int64,
+	requestID string,
+	reason string,
+	shredRequestID string,
+) (orgDeletionFinalizeFn, cryptoShredReceiptDTO, bool, bool, int, string, string, *port.Organization) {
+	if org == nil {
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusNotFound, "resource_not_found", "organization not found", nil
+	}
+	orgID := org.ID
+	if isDeletingOrgStatus(org.Status) {
+		s.orgErasureMu.Lock()
+		defer s.orgErasureMu.Unlock()
+		rec, sp, st, cd, ms := s.resumeDeletingOrganization(ctx, org, sc.Actor.PrincipalID, requestID, reason)
+		return nil, rec, st == http.StatusOK, sp, st, cd, ms, nil
+	}
+
 	now := s.nowMs()
 	var revokedKeysCount int
 	var activeKeyIDs []string
@@ -436,227 +533,252 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 
 	// Phase 1 TX: Atomically fence organization version BEFORE destroying any DEK,
 	// collect keys/principals to invalidate, and tear down RESTRICT FKs leaving DEK metadata intact.
-	tx1, err := s.db.BeginTx(r.Context(), nil)
+	tx1, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting teardown fence transaction", true, nil)
-		return
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed starting teardown fence transaction", nil
 	}
 	defer func() { _ = tx1.Rollback() }()
-	if err := port.SetOrgRLSTx(r.Context(), tx1, s.dialect, orgID); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initializing teardown RLS context", true, nil)
-		return
+	if err := port.SetOrgRLSTx(ctx, tx1, s.dialect, orgID); err != nil {
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed initializing teardown RLS context", nil
 	}
 
-	resFence, err := tx1.ExecContext(r.Context(), s.rebind(`
+	resFence, err := tx1.ExecContext(ctx, s.rebind(`
 		UPDATE organizations SET status = 'DELETING', version = version + 1, updated_at_ms = ?
 		WHERE id = ? AND version = ?`),
 		now, orgID, expectedVer,
 	)
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed fencing organization version", true, nil)
-		return
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed fencing organization version", nil
 	}
 	if affected, _ := resFence.RowsAffected(); affected == 0 {
 		_ = tx1.Rollback()
-		if latest, lerr := s.storage.Tenancy().GetOrganization(r.Context(), orgID); lerr == nil {
-			writeOptimisticConflict(w, r, latest.Version, toOrganizationDTO(latest))
-			return
+		if latest, lerr := s.storage.Tenancy().GetOrganization(ctx, orgID); lerr == nil {
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusConflict, "optimistic_lock_conflict", "optimistic lock conflict", latest
 		} else if errors.Is(lerr, port.ErrNotFound) {
-			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
-			return
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusNotFound, "resource_not_found", "organization not found", nil
 		}
-		writeOptimisticConflict(w, r, org.Version, currentDTO)
-		return
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusConflict, "optimistic_lock_conflict", "optimistic lock conflict", org
 	}
 	fencedVer := expectedVer + 1
 
-	kRows, kerr := tx1.QueryContext(r.Context(), s.rebind(`
+	kRows, kerr := tx1.QueryContext(ctx, s.rebind(`
 		SELECT id FROM virtual_keys
 		WHERE org_id = ? AND state NOT IN ('REVOKED', 'EXPIRED', 'PURGED_METADATA_RETAINED')`),
 		orgID,
 	)
 	if kerr != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed enumerating organization virtual keys", true, nil)
-		return
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed enumerating organization virtual keys", nil
 	}
 	for kRows.Next() {
 		var kid string
 		if scanErr := kRows.Scan(&kid); scanErr != nil {
 			_ = kRows.Close()
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning virtual key id", true, nil)
-			return
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed scanning virtual key id", nil
 		}
 		activeKeyIDs = append(activeKeyIDs, kid)
 	}
 	if rowsErr := kRows.Err(); rowsErr != nil {
 		_ = kRows.Close()
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating organization virtual keys", true, nil)
-		return
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed iterating organization virtual keys", nil
 	}
 	_ = kRows.Close()
 	revokedKeysCount = len(activeKeyIDs)
 
-	pRows, perr := tx1.QueryContext(r.Context(), s.rebind(`SELECT id FROM principals WHERE org_id = ?`), orgID)
+	pRows, perr := tx1.QueryContext(ctx, s.rebind(`SELECT id FROM principals WHERE org_id = ?`), orgID)
 	if perr != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed enumerating organization principals", true, nil)
-		return
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed enumerating organization principals", nil
 	}
 	for pRows.Next() {
 		var pid string
 		if scanErr := pRows.Scan(&pid); scanErr != nil {
 			_ = pRows.Close()
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning principal id", true, nil)
-			return
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed scanning principal id", nil
 		}
 		orgPrincipals = append(orgPrincipals, pid)
 	}
 	if rowsErr := pRows.Err(); rowsErr != nil {
 		_ = pRows.Close()
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating organization principals", true, nil)
-		return
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed iterating organization principals", nil
 	}
 	_ = pRows.Close()
 
-	if err := cleanupOrgRestrictedFKsTx(r.Context(), tx1, s.dialect, orgID); err != nil {
+	if err := cleanupOrgRestrictedFKsTx(ctx, tx1, s.dialect, orgID); err != nil {
 		_ = tx1.Rollback()
 		if errors.Is(err, port.ErrResourceInUse) {
-			writeErrorEnvelope(w, r, http.StatusConflict, "resource_in_use", "conflict_error", "organization cannot be deleted while its principals are referenced by global kill switches or change requests", false, nil)
-			return
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusConflict, "resource_in_use", "organization cannot be deleted while its principals are referenced by global kill switches or change requests", nil
 		}
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed tearing down organization resources", true, nil)
-		return
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed tearing down organization resources", nil
 	}
 
 	if err := tx1.Commit(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing organization teardown fence", true, nil)
-		return
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed committing organization teardown fence", nil
+	}
+
+	s.orgErasureMu.Lock()
+	if latestOrg, lerr := s.storage.Tenancy().GetOrganization(ctx, orgID); errors.Is(lerr, port.ErrNotFound) {
+		s.orgErasureMu.Unlock()
+		if receipt, found := s.lookupCompletedOrgShredReceipt(ctx, orgID); found {
+			return nil, receipt, true, false, http.StatusOK, "", "", nil
+		}
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusNotFound, "resource_not_found", "organization not found", nil
+	} else if lerr != nil {
+		s.orgErasureMu.Unlock()
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed reading organization", nil
+	} else if latestOrg.Version != fencedVer {
+		receipt, sp, status, code, msg := s.resumeDeletingOrganization(ctx, latestOrg, sc.Actor.PrincipalID, requestID, reason)
+		s.orgErasureMu.Unlock()
+		return nil, receipt, status == http.StatusOK, sp, status, code, msg, nil
 	}
 
 	// Phase 2: Crypto-shred organization DEK after winning the OCC version fence.
 	destroyedDEK := "none"
 	if s.vault != nil {
-		meta, merr := s.vault.GetOrgKeyMetadata(r.Context(), orgID)
+		meta, merr := s.vault.GetOrgKeyMetadata(ctx, orgID)
 		if merr != nil && !errors.Is(merr, port.ErrNotFound) {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading organization encryption key metadata", true, nil)
-			return
+			s.orgErasureMu.Unlock()
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed reading organization encryption key metadata", nil
 		}
 		if merr == nil && meta != nil {
-			shredReqID := fmt.Sprintf("admin-org-shred-%s-%d", orgID, s.nowMs())
-			if serr := s.vault.ShredOrgDEK(r.Context(), orgID, vault.ShredRequest{
-				RequestID:          shredReqID,
+			reqID := strings.TrimSpace(shredRequestID)
+			if reqID == "" {
+				reqID = fmt.Sprintf("admin-org-shred-%s-%d", orgID, s.nowMs())
+			}
+			if serr := s.vault.ShredOrgDEK(ctx, orgID, vault.ShredRequest{
+				RequestID:          reqID,
 				ExpectedGeneration: meta.KeyGeneration,
 			}); serr != nil {
-				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed crypto-shredding organization DEK", true, nil)
-				return
+				s.orgErasureMu.Unlock()
+				return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed crypto-shredding organization DEK", nil
 			}
 			destroyedDEK = fmt.Sprintf("%s:v%d:g%d", orgID, meta.DEKVersion, meta.KeyGeneration)
 		} else {
 			s.vault.EvictAllDEKs()
 		}
 	}
+	s.orgErasureMu.Unlock()
 
-	// Phase 3 TX: Remove org-scoped kill switches (kept active until crypto-shred succeeds),
-	// delete fenced organization row, emit SHRED changelog, and record audit.
-	tx2, err := s.db.BeginTx(r.Context(), nil)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting organization delete transaction", true, nil)
-		return
-	}
-	defer func() { _ = tx2.Rollback() }()
-	if err := port.SetOrgRLSTx(r.Context(), tx2, s.dialect, orgID); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initializing organization delete RLS context", true, nil)
-		return
-	}
+	orgSlug := org.Slug
+	actorPrincipalID := sc.Actor.PrincipalID
+	finalizeFn := func(fctx context.Context) (cryptoShredReceiptDTO, bool, int, string, string) {
+		s.orgErasureMu.Lock()
+		defer s.orgErasureMu.Unlock()
 
-	if _, err := tx2.ExecContext(r.Context(), s.rebind(`DELETE FROM emergency_kill_switches WHERE org_id = ?`), orgID); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed clearing organization kill switches", true, nil)
-		return
-	}
-
-	resDel, err := tx2.ExecContext(r.Context(), s.rebind(`DELETE FROM organizations WHERE id = ? AND version = ?`), orgID, fencedVer)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed deleting organization", true, nil)
-		return
-	}
-	if affected, _ := resDel.RowsAffected(); affected == 0 {
-		writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "concurrent organization teardown conflict", true, nil)
-		return
-	}
-
-	shredEpoch, err := s.appendChangelogTx(r.Context(), tx2, orgID, "organization", orgID, "SHRED", true, now)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording shred changelog", true, nil)
-		return
-	}
-
-	audID, err := idgen.New(idgen.PrefixAudit)
-	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed minting audit id", true, nil)
-		return
-	}
-	metaJSON, _ := json.Marshal(map[string]any{
-		"confirm_slug":     org.Slug,
-		"reason":           strings.TrimSpace(req.Reason),
-		"destroyed_dek_id": destroyedDEK,
-		"revoked_keys":     revokedKeysCount,
-	})
-	if err := s.txAudit.AppendTx(r.Context(), tx2, port.AuditEvent{
-		ID:           audID,
-		CreatedAtMs:  now,
-		OrgID:        &orgID,
-		ActorKind:    "PRINCIPAL",
-		ActorID:      sc.Actor.PrincipalID,
-		EntryPoint:   port.AuditEntryPointAdminAPI,
-		EventType:    "organization.crypto_shredded",
-		TargetType:   "organization",
-		TargetID:     orgID,
-		RequestID:    ptrOrNil(requestIDFromContext(r.Context())),
-		MetadataJSON: string(metaJSON),
-	}); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording shred audit event", true, nil)
-		return
-	}
-
-	if err := tx2.Commit(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing organization crypto-shred", true, nil)
-		return
-	}
-
-	if s.killSwitch != nil {
-		_ = s.killSwitch.RefreshFromDB(r.Context())
-	}
-
-	if s.snapshots != nil {
-		if s.snapshots.Streams() != nil {
-			s.snapshots.Streams().AbortScope(orgID, "")
+		// Phase 3 TX: Remove org-scoped change requests & kill switches,
+		// delete fenced organization row, emit SHRED changelog, and record audit.
+		tx2, err := s.db.BeginTx(fctx, nil)
+		if err != nil {
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed starting organization delete transaction"
 		}
-		if refErr := s.snapshots.Refresh(r.Context()); refErr != nil {
-			for _, kid := range activeKeyIDs {
-				s.snapshots.FenceKeyRevocation(kid, "EMERGENCY_SECURITY", now, shredEpoch)
+		defer func() { _ = tx2.Rollback() }()
+		if err := port.SetOrgRLSTx(fctx, tx2, s.dialect, orgID); err != nil {
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed initializing organization delete RLS context"
+		}
+
+		if hasACR, acrErr := tableExistsTx(fctx, tx2, s.dialect, "admin_change_requests"); acrErr != nil {
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed checking admin change requests table"
+		} else if hasACR {
+			if _, err := tx2.ExecContext(fctx, s.rebind(`DELETE FROM admin_change_requests WHERE org_id = ?`), orgID); err != nil {
+				return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed clearing organization change requests"
 			}
-			w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
-			s.emitSecurityAudit(r.Context(), sc, "organization.snapshot_sync_pending", map[string]any{
-				"org_id":      orgID,
-				"shred_epoch": shredEpoch,
-				"fenced_keys": len(activeKeyIDs),
-				"error":       refErr.Error(),
-			})
 		}
-	}
-	if s.killSwitch != nil && s.killSwitch.Streams() != nil {
-		s.killSwitch.Streams().AbortMatching(killswitch.LevelProjectOrOrgFreeze, orgID, orgID)
-	}
-	for _, pid := range orgPrincipals {
-		s.auth.RevokePrincipalSessions(pid)
+
+		if _, err := tx2.ExecContext(fctx, s.rebind(`DELETE FROM emergency_kill_switches WHERE org_id = ?`), orgID); err != nil {
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed clearing organization kill switches"
+		}
+
+		resDel, err := tx2.ExecContext(fctx, s.rebind(`DELETE FROM organizations WHERE id = ? AND version = ?`), orgID, fencedVer)
+		if err != nil {
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed deleting organization"
+		}
+		if affected, _ := resDel.RowsAffected(); affected == 0 {
+			_ = tx2.Rollback()
+			if receipt, found := s.lookupCompletedOrgShredReceipt(fctx, orgID); found {
+				return receipt, false, http.StatusOK, "", ""
+			}
+			return cryptoShredReceiptDTO{}, false, http.StatusConflict, "optimistic_lock_conflict", "concurrent organization teardown conflict"
+		}
+
+		shredEpoch, err := s.appendChangelogTx(fctx, tx2, orgID, "organization", orgID, "SHRED", true, now)
+		if err != nil {
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed recording shred changelog"
+		}
+
+		audID, err := idgen.New(idgen.PrefixAudit)
+		if err != nil {
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed minting audit id"
+		}
+		metaJSON, _ := json.Marshal(map[string]any{
+			"confirm_slug":     orgSlug,
+			"reason":           strings.TrimSpace(reason),
+			"destroyed_dek_id": destroyedDEK,
+			"revoked_keys":     revokedKeysCount,
+		})
+		if err := s.txAudit.AppendTx(fctx, tx2, port.AuditEvent{
+			ID:           audID,
+			CreatedAtMs:  now,
+			OrgID:        &orgID,
+			ActorKind:    "PRINCIPAL",
+			ActorID:      actorPrincipalID,
+			EntryPoint:   port.AuditEntryPointAdminAPI,
+			EventType:    "organization.crypto_shredded",
+			TargetType:   "organization",
+			TargetID:     orgID,
+			RequestID:    ptrOrNil(requestID),
+			MetadataJSON: string(metaJSON),
+		}); err != nil {
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed recording shred audit event"
+		}
+
+		if err := tx2.Commit(); err != nil {
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed committing organization crypto-shred"
+		}
+
+		if s.killSwitch != nil {
+			_ = s.killSwitch.RefreshFromDB(fctx)
+		}
+
+		snapPending := false
+		if s.snapshots != nil {
+			if s.snapshots.Streams() != nil {
+				s.snapshots.Streams().AbortScope(orgID, "")
+			}
+			if refErr := s.snapshots.Refresh(fctx); refErr != nil {
+				snapPending = true
+				for _, kid := range activeKeyIDs {
+					s.snapshots.FenceKeyRevocation(kid, "EMERGENCY_SECURITY", now, shredEpoch)
+				}
+				s.emitSecurityAudit(fctx, sc, "organization.snapshot_sync_pending", map[string]any{
+					"org_id":      orgID,
+					"shred_epoch": shredEpoch,
+					"fenced_keys": len(activeKeyIDs),
+					"error":       refErr.Error(),
+				})
+			}
+		}
+		if s.killSwitch != nil && s.killSwitch.Streams() != nil {
+			s.killSwitch.Streams().AbortMatching(killswitch.LevelProjectOrOrgFreeze, orgID, orgID)
+		}
+		for _, pid := range orgPrincipals {
+			s.auth.RevokePrincipalSessions(pid)
+		}
+
+		return cryptoShredReceiptDTO{
+			TargetType:              "ORGANIZATION",
+			TargetID:                orgID,
+			DestroyedDEKID:          destroyedDEK,
+			ShreddedAt:              formatTimeRFC3339Ms(now),
+			RevokedVirtualKeysCount: revokedKeysCount,
+		}, snapPending, http.StatusOK, "", ""
 	}
 
-	writeJSON(w, http.StatusOK, cryptoShredReceiptDTO{
+	preview := cryptoShredReceiptDTO{
 		TargetType:              "ORGANIZATION",
 		TargetID:                orgID,
 		DestroyedDEKID:          destroyedDEK,
 		ShreddedAt:              formatTimeRFC3339Ms(now),
 		RevokedVirtualKeysCount: revokedKeysCount,
-	})
+	}
+	return finalizeFn, preview, false, false, http.StatusOK, "", "", nil
 }
 
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
@@ -931,6 +1053,44 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	receipt, snapPending, status, code, msg, conflictLatest := s.executeProjectDeletion(
+		r.Context(), sc, orgID, prj, expectedVer, requestIDFromContext(r.Context()), req.Reason, "",
+	)
+	if status != http.StatusOK {
+		if status == http.StatusConflict && code == "optimistic_lock_conflict" && conflictLatest != nil {
+			writeOptimisticConflict(w, r, conflictLatest.Version, toProjectDTO(conflictLatest))
+			return
+		}
+		errType := "upstream_error"
+		retryable := status >= 500
+		if status == http.StatusNotFound {
+			errType = "not_found_error"
+		} else if status == http.StatusConflict {
+			errType = "conflict_error"
+		}
+		writeErrorEnvelope(w, r, status, code, errType, msg, retryable, nil)
+		return
+	}
+	if snapPending {
+		w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+	}
+	writeJSON(w, http.StatusOK, receipt)
+}
+
+func (s *Server) executeProjectDeletion(
+	ctx context.Context,
+	sc *authSessionContext,
+	orgID string,
+	prj *port.Project,
+	expectedVer int64,
+	requestID string,
+	reason string,
+	shredRequestID string,
+) (cryptoShredReceiptDTO, bool, int, string, string, *port.Project) {
+	if prj == nil {
+		return cryptoShredReceiptDTO{}, false, http.StatusNotFound, "resource_not_found", "project not found", nil
+	}
+	projectID := prj.ID
 	now := s.nowMs()
 	var revokedKeysCount int
 	var activeKeyIDs []string
@@ -938,56 +1098,48 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 
 	// Phase 1 TX: Atomically fence project version BEFORE destroying any DEK,
 	// collect virtual keys and kill-switch target IDs, and tear down RESTRICT FKs leaving DEK metadata intact.
-	tx1, err := s.db.BeginTx(r.Context(), nil)
+	tx1, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting project teardown fence transaction", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed starting project teardown fence transaction", nil
 	}
 	defer func() { _ = tx1.Rollback() }()
-	if err := port.SetOrgRLSTx(r.Context(), tx1, s.dialect, orgID); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initializing project teardown RLS context", true, nil)
-		return
+	if err := port.SetOrgRLSTx(ctx, tx1, s.dialect, orgID); err != nil {
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed initializing project teardown RLS context", nil
 	}
 
-	resFence, err := tx1.ExecContext(r.Context(), s.rebind(`
+	resFence, err := tx1.ExecContext(ctx, s.rebind(`
 		UPDATE projects SET status = 'DELETING', version = version + 1, updated_at_ms = ?
 		WHERE org_id = ? AND id = ? AND version = ?`),
 		now, orgID, projectID, expectedVer,
 	)
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed fencing project version", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed fencing project version", nil
 	}
 	if affected, _ := resFence.RowsAffected(); affected == 0 {
 		_ = tx1.Rollback()
-		if latest, lerr := s.storage.Tenancy().GetProject(r.Context(), orgID, projectID); lerr == nil {
-			writeOptimisticConflict(w, r, latest.Version, toProjectDTO(latest))
-			return
+		if latest, lerr := s.storage.Tenancy().GetProject(ctx, orgID, projectID); lerr == nil {
+			return cryptoShredReceiptDTO{}, false, http.StatusConflict, "optimistic_lock_conflict", "optimistic lock conflict", latest
 		} else if errors.Is(lerr, port.ErrNotFound) {
-			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
-			return
+			return cryptoShredReceiptDTO{}, false, http.StatusNotFound, "resource_not_found", "project not found", nil
 		}
-		writeOptimisticConflict(w, r, prj.Version, currentDTO)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusConflict, "optimistic_lock_conflict", "optimistic lock conflict", prj
 	}
 	fencedVer := expectedVer + 1
 
 	projectKSTargets = append(projectKSTargets, projectID)
-	kRows, kerr := tx1.QueryContext(r.Context(), s.rebind(`
+	kRows, kerr := tx1.QueryContext(ctx, s.rebind(`
 		SELECT id, state FROM virtual_keys
 		WHERE org_id = ? AND project_id = ?`),
 		orgID, projectID,
 	)
 	if kerr != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed enumerating project virtual keys", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed enumerating project virtual keys", nil
 	}
 	for kRows.Next() {
 		var kid, kstate string
 		if scanErr := kRows.Scan(&kid, &kstate); scanErr != nil {
 			_ = kRows.Close()
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning virtual key id", true, nil)
-			return
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed scanning virtual key id", nil
 		}
 		projectKSTargets = append(projectKSTargets, kid)
 		if kstate != "REVOKED" && kstate != "EXPIRED" && kstate != "PURGED_METADATA_RETAINED" {
@@ -996,63 +1148,58 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if rowsErr := kRows.Err(); rowsErr != nil {
 		_ = kRows.Close()
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating project virtual keys", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed iterating project virtual keys", nil
 	}
 	_ = kRows.Close()
 	revokedKeysCount = len(activeKeyIDs)
 
-	cRows, cerr := tx1.QueryContext(r.Context(), s.rebind(`
+	cRows, cerr := tx1.QueryContext(ctx, s.rebind(`
 		SELECT id FROM provider_connections
 		WHERE org_id = ? AND owner_project_id = ?`),
 		orgID, projectID,
 	)
 	if cerr != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed enumerating project connections", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed enumerating project connections", nil
 	}
 	for cRows.Next() {
 		var cid string
 		if scanErr := cRows.Scan(&cid); scanErr != nil {
 			_ = cRows.Close()
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning connection id", true, nil)
-			return
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed scanning connection id", nil
 		}
 		projectKSTargets = append(projectKSTargets, cid)
 	}
 	if rowsErr := cRows.Err(); rowsErr != nil {
 		_ = cRows.Close()
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed iterating project connections", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed iterating project connections", nil
 	}
 	_ = cRows.Close()
 
-	if err := cleanupProjectRestrictedFKsTx(r.Context(), tx1, s.dialect, orgID, projectID); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed tearing down project dependencies", true, nil)
-		return
+	if err := cleanupProjectRestrictedFKsTx(ctx, tx1, s.dialect, orgID, projectID); err != nil {
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed tearing down project dependencies", nil
 	}
 
 	if err := tx1.Commit(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing project teardown fence", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed committing project teardown fence", nil
 	}
 
 	// Phase 2: Crypto-shred project DEK after winning the OCC version fence.
 	destroyedDEK := "none"
 	if s.vault != nil {
-		meta, merr := s.vault.GetProjectKeyMetadata(r.Context(), orgID, projectID)
+		meta, merr := s.vault.GetProjectKeyMetadata(ctx, orgID, projectID)
 		if merr != nil && !errors.Is(merr, port.ErrNotFound) {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading project encryption key metadata", true, nil)
-			return
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed reading project encryption key metadata", nil
 		}
 		if merr == nil && meta != nil {
-			shredReqID := fmt.Sprintf("admin-proj-shred-%s-%d", projectID, s.nowMs())
-			if serr := s.vault.ShredProjectDEK(r.Context(), orgID, projectID, vault.ShredRequest{
-				RequestID:          shredReqID,
+			reqID := strings.TrimSpace(shredRequestID)
+			if reqID == "" {
+				reqID = fmt.Sprintf("admin-proj-shred-%s-%d", projectID, s.nowMs())
+			}
+			if serr := s.vault.ShredProjectDEK(ctx, orgID, projectID, vault.ShredRequest{
+				RequestID:          reqID,
 				ExpectedGeneration: meta.KeyGeneration,
 			}); serr != nil {
-				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed crypto-shredding project DEK", true, nil)
-				return
+				return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed crypto-shredding project DEK", nil
 			}
 			destroyedDEK = fmt.Sprintf("%s:%s:v%d:g%d", orgID, projectID, meta.DEKVersion, meta.KeyGeneration)
 		} else {
@@ -1062,15 +1209,13 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 
 	// Phase 3 TX: Remove project-scoped kill switches (kept active until crypto-shred succeeds),
 	// delete fenced project row, emit SHRED changelog, and record audit.
-	tx2, err := s.db.BeginTx(r.Context(), nil)
+	tx2, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed starting project delete transaction", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed starting project delete transaction", nil
 	}
 	defer func() { _ = tx2.Rollback() }()
-	if err := port.SetOrgRLSTx(r.Context(), tx2, s.dialect, orgID); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed initializing project delete RLS context", true, nil)
-		return
+	if err := port.SetOrgRLSTx(ctx, tx2, s.dialect, orgID); err != nil {
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed initializing project delete RLS context", nil
 	}
 
 	if len(projectKSTargets) > 0 {
@@ -1081,44 +1226,39 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			placeholders[i] = "?"
 			args = append(args, tid)
 		}
-		if _, err := tx2.ExecContext(r.Context(), s.rebind(`
+		if _, err := tx2.ExecContext(ctx, s.rebind(`
 			DELETE FROM emergency_kill_switches
 			WHERE org_id = ? AND target_id IN (`+strings.Join(placeholders, ",")+`)`),
 			args...,
 		); err != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed clearing project kill switches", true, nil)
-			return
+			return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed clearing project kill switches", nil
 		}
 	}
 
-	resDel, err := tx2.ExecContext(r.Context(), s.rebind(`DELETE FROM projects WHERE org_id = ? AND id = ? AND version = ?`), orgID, projectID, fencedVer)
+	resDel, err := tx2.ExecContext(ctx, s.rebind(`DELETE FROM projects WHERE org_id = ? AND id = ? AND version = ?`), orgID, projectID, fencedVer)
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed deleting project", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed deleting project", nil
 	}
 	if affected, _ := resDel.RowsAffected(); affected == 0 {
-		writeErrorEnvelope(w, r, http.StatusConflict, "optimistic_lock_conflict", "conflict_error", "concurrent project teardown conflict", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusConflict, "optimistic_lock_conflict", "concurrent project teardown conflict", nil
 	}
 
-	shredEpoch, err := s.appendChangelogTx(r.Context(), tx2, orgID, "project", projectID, "SHRED", true, now)
+	shredEpoch, err := s.appendChangelogTx(ctx, tx2, orgID, "project", projectID, "SHRED", true, now)
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording shred changelog", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed recording shred changelog", nil
 	}
 
 	audID, err := idgen.New(idgen.PrefixAudit)
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed minting audit id", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed minting audit id", nil
 	}
 	metaJSON, _ := json.Marshal(map[string]any{
 		"confirm_slug":     prj.Slug,
-		"reason":           strings.TrimSpace(req.Reason),
+		"reason":           strings.TrimSpace(reason),
 		"destroyed_dek_id": destroyedDEK,
 		"revoked_keys":     revokedKeysCount,
 	})
-	if err := s.txAudit.AppendTx(r.Context(), tx2, port.AuditEvent{
+	if err := s.txAudit.AppendTx(ctx, tx2, port.AuditEvent{
 		ID:           audID,
 		CreatedAtMs:  now,
 		OrgID:        &orgID,
@@ -1128,32 +1268,31 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		EventType:    "project.crypto_shredded",
 		TargetType:   "project",
 		TargetID:     projectID,
-		RequestID:    ptrOrNil(requestIDFromContext(r.Context())),
+		RequestID:    ptrOrNil(requestID),
 		MetadataJSON: string(metaJSON),
 	}); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed recording shred audit event", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed recording shred audit event", nil
 	}
 
 	if err := tx2.Commit(); err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed committing project crypto-shred", true, nil)
-		return
+		return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed committing project crypto-shred", nil
 	}
 
 	if s.killSwitch != nil {
-		_ = s.killSwitch.RefreshFromDB(r.Context())
+		_ = s.killSwitch.RefreshFromDB(ctx)
 	}
 
+	snapPending := false
 	if s.snapshots != nil {
 		if s.snapshots.Streams() != nil {
 			s.snapshots.Streams().AbortScope(orgID, projectID)
 		}
-		if refErr := s.snapshots.Refresh(r.Context()); refErr != nil {
+		if refErr := s.snapshots.Refresh(ctx); refErr != nil {
+			snapPending = true
 			for _, kid := range activeKeyIDs {
 				s.snapshots.FenceKeyRevocation(kid, "EMERGENCY_SECURITY", now, shredEpoch)
 			}
-			w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
-			s.emitSecurityAudit(r.Context(), sc, "project.snapshot_sync_pending", map[string]any{
+			s.emitSecurityAudit(ctx, sc, "project.snapshot_sync_pending", map[string]any{
 				"project_id":  projectID,
 				"shred_epoch": shredEpoch,
 				"fenced_keys": len(activeKeyIDs),
@@ -1165,20 +1304,25 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		s.killSwitch.Streams().AbortMatching(killswitch.LevelProjectOrOrgFreeze, orgID, projectID)
 	}
 
-	writeJSON(w, http.StatusOK, cryptoShredReceiptDTO{
+	return cryptoShredReceiptDTO{
 		TargetType:              "PROJECT",
 		TargetID:                projectID,
 		DestroyedDEKID:          destroyedDEK,
 		ShreddedAt:              formatTimeRFC3339Ms(now),
 		RevokedVirtualKeysCount: revokedKeysCount,
-	})
+	}, snapPending, http.StatusOK, "", "", nil
 }
 
 func toOrganizationDTO(org *port.Organization) organizationDTO {
+	status := strings.TrimSpace(org.Status)
+	if status == "" {
+		status = "ACTIVE"
+	}
 	return organizationDTO{
 		ID:              org.ID,
 		Slug:            org.Slug,
 		Name:            org.DisplayName,
+		Status:          status,
 		MinPluginTrust:  org.MinPluginTrust,
 		FourEyesEnabled: org.RequireFourEyesApproval,
 		Version:         org.Version,
@@ -1364,11 +1508,6 @@ func cleanupOrgRestrictedFKsTx(ctx context.Context, tx *sql.Tx, dialect port.Dia
 		{
 			table: "approval_requests",
 			query: `DELETE FROM approval_requests WHERE org_id = ?`,
-			args:  []any{orgID},
-		},
-		{
-			table: "admin_change_requests",
-			query: `DELETE FROM admin_change_requests WHERE org_id = ?`,
 			args:  []any{orgID},
 		},
 		{

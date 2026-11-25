@@ -75,7 +75,7 @@ When an `ORG_OWNER` confirms permanent deletion of a single `Project` or an enti
 2. **Target Phase 2 (`5–15s TARGET / UNVERIFIED` — `Cryptographic DEK Destruction & RAM Eviction`):**
    - *Single-Project Shred:* Deletes the target row in **`project_encryption_keys (org_id, project_id)`** (cascade-deleting live project-owned `secret_credentials`, `debug_payload_blobs`, and `response_cache_entries`) and zeroizes `dek:proj:<org_id>:<project_id>:*` across `BlindBroker` RAM caches on all nodes, while leaving sibling projects and the parent `Organization` `audit_events` hash chain intact.
    - *Full-Organization Shred:* Deletes **`org_encryption_keys`** (cascading all child `project_encryption_keys`), zeroizes `dek:org:<org_id>:*` across all nodes, and purges `tp:v1:{<org_id>}:*` keys in Valkey.
-3. **Target Phase 3 (`15–45s TARGET / UNVERIFIED` — `Relational Purge & Anonymized Receipt`):** Purges mutable `virtual_keys`, `provider_connections`, `route_policies`, `policies`, and `request_traces_meta` for the target scope, recording an anonymized compliance receipt (`tenant.crypto_shredded`, `0` PII).
+3. **Target Phase 3 (`15–45s TARGET / UNVERIFIED` — `Relational Purge & Anonymized Receipt`):** Purges mutable `virtual_keys`, `provider_connections`, `route_policies`, `policies`, and `request_traces_meta` for the target scope, recording an anonymized compliance receipt (`organization.crypto_shredded`, `0` PII). Interrupted `DELETING` organizations remain visible in the tenant directory and resume finalization idempotently on restart, retried `DELETE`, or `POST /admin/v1/organizations/{orgId}/finalize-erasure`.
 
 > [!IMPORTANT]
 > **Product Owner Verification Condition (`COND-PO-02` — Calibrated per `CR-12` Option A [`DEC-017`]):**

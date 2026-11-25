@@ -192,6 +192,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/organizations/{orgId}/finalize-erasure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume and finalize relational cleanup + audit receipt for a DELETING organization after DEK destruction (SCR-16) */
+        post: operations["finalizeOrganizationErasure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/organizations/{orgId}/extension-policies": {
         parameters: {
             query?: never;
@@ -1661,6 +1678,8 @@ export interface components {
             slug: string;
             name: string;
             /** @enum {string} */
+            status: "ACTIVE" | "SUSPENDED" | "DELETING" | "PENDING_ERASURE";
+            /** @enum {string} */
             min_plugin_trust: "OFFICIAL_ONLY" | "VERIFIED_OR_ENTERPRISE_SIGNED" | "VERIFIED_ONLY" | "ANY_APPROVED";
             four_eyes_enabled?: boolean;
             version: number;
@@ -1946,7 +1965,9 @@ export interface components {
             /** @enum {string} */
             execution_tier: "declarative" | "sandboxed_wasm" | "isolated_sidecar";
             origin_trust_tier: components["schemas"]["OriginTrustTier"];
+            signature_verified: boolean;
             enterprise_signed: boolean;
+            signing_key_fingerprint?: string;
             source_uri: string;
             expected_sha256: string;
             summary?: string;
@@ -1969,7 +1990,9 @@ export interface components {
             active_version?: string | null;
             candidate_version: string;
             origin_trust_tier: components["schemas"]["OriginTrustTier"];
+            signature_verified: boolean;
             enterprise_signed: boolean;
+            signing_key_fingerprint?: string;
             /** @enum {string} */
             execution_tier: "declarative" | "sandboxed_wasm" | "isolated_sidecar";
             /** @enum {string|null} */
@@ -2034,7 +2057,9 @@ export interface components {
             /** @enum {string} */
             state: "PENDING_PERMISSION_APPROVAL" | "INSTALLED_DISABLED" | "ENABLED_ACTIVE" | "UPDATING_PENDING_RECONSENT" | "DRAINING" | "QUARANTINED" | "REJECTED_INVALID";
             origin_trust_tier: components["schemas"]["OriginTrustTier"];
+            signature_verified: boolean;
             enterprise_signed: boolean;
+            signing_key_fingerprint?: string;
             /** @enum {string} */
             execution_tier: "declarative" | "sandboxed_wasm" | "isolated_sidecar";
             version: number;
@@ -2758,6 +2783,40 @@ export interface operations {
                 };
             };
             /** @description optimistic_lock_conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    finalizeOrganizationErasure: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pending organization erasure finalized and audited */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CryptoShredReceipt"];
+                };
+            };
+            /** @description invalid_state_transition when organization is not in DELETING or PENDING_ERASURE state */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3993,6 +4052,7 @@ export interface operations {
     listDeployments: {
         parameters: {
             query?: {
+                project_id?: components["parameters"]["ProjectIdQueryParam"];
                 env_id?: components["parameters"]["EnvIdQueryParam"];
                 status?: string;
                 limit?: components["parameters"]["LimitParam"];
@@ -5883,6 +5943,7 @@ export interface operations {
         parameters: {
             query?: {
                 actor?: string;
+                /** @description Exact audit event action filter (canonical values include virtual_key.created, virtual_key.updated, virtual_key.rotated, virtual_key.revoked, organization.crypto_shredded, project.crypto_shredded; note virtual_key.created is canonical rather than virtual_key.issued). */
                 action?: string;
                 chain_partition?: string;
                 limit?: components["parameters"]["LimitParam"];
