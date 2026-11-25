@@ -19,9 +19,10 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP13 Team Admin project boundary](checkpoints/CP13-team-admin-project-boundary.md)
 - [CP14 Security Reviewer audit workflow](checkpoints/CP14-security-reviewer-audit-workflow.md)
 - [CP15 targeted kill-switch lifecycle](checkpoints/CP15-targeted-kill-switch-lifecycle.md)
+- [CP16 responsive Chromium and browser availability](checkpoints/CP16-responsive-browser-coverage.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
 - [Release signing readiness](RELEASE-SIGNING-READINESS.md)
 
-QA is ongoing. Four confirmed new failures (DEF-051–054) remain open; 37 historical findings are UNVERIFIED, 10 have scoped PASS, and three remain PARTIAL. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**
+QA is ongoing. Four confirmed new failures (DEF-051–054) remain open; 37 historical findings are UNVERIFIED, 10 have scoped PASS, and three remain PARTIAL. CP16 added real Chromium 320/390/768-pixel responsive interaction and download evidence; Firefox and WebKit remain blocked by this runner's browser dependencies. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**

@@ -1,0 +1,10 @@
+[
+  {
+    "group_key": "default",
+    "exact_micro_usd": 8,
+    "estimated_micro_usd": 1,
+    "exact_request_count": 8,
+    "estimated_request_count": 1,
+    "unmetered_request_count": 0
+  }
+]

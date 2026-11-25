@@ -1,0 +1,2 @@
+group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count
+default,8,1,8,1,0
