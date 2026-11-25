@@ -1,7 +1,7 @@
 # DEF-047 — Playground session remains visibly active after logout in another tab
 
 **Severity:** Low  
-**Status:** Confirmed on frozen RC5, reproduced in a real two-tab Chromium session  
+**Status:** Confirmed on frozen RC5 in two-tab Chromium and WebKit sessions
 **Baseline:** `3423d4f523ef0ac77469a1201b8b753d1d31c902`  
 **Affected workflow:** Playground session lifecycle across browser tabs; sign-out and immediate inference retry  
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
@@ -14,7 +14,7 @@
 4. Return to the first tab. It still displays the active cap, expiry, **End session** action, old transcript and prior successful trace.
 5. Send a new prompt from the first tab. The Data Plane returns HTTP 401 `invalid_virtual_key`; the UI shows “Virtual Key is invalid, expired, or revoked.” and still shows “Trace not available yet.”
 
-This was repeated in two isolated runs. [Sanitized two-tab record](../evidence/CP49-multitab-logout-result.json) contains only status/error metadata, the synthetic key ID, visible text and no secret. Visually inspected [pre-logout](../evidence/CP49-multitab-before-logout.png) and [first tab after logout and failed Send](../evidence/CP49-first-tab-after-other-tab-logout.png) screenshots show the state transition. The [CP49 checkpoint](../checkpoints/CP49-cross-tab-playground-logout.md) contains the test sequence and scope limits.
+The two-tab flow was executed in Chromium (CP49) and independently in WebKit (CP50). [Sanitized two-tab record](../evidence/CP49-multitab-logout-result.json) contains only status/error metadata, the synthetic key ID, visible text and no secret. Visually inspected [pre-logout](../evidence/CP49-multitab-before-logout.png) and [first tab after logout and failed Send](../evidence/CP49-first-tab-after-other-tab-logout.png) screenshots show the state transition. The [CP49 checkpoint](../checkpoints/CP49-cross-tab-playground-logout.md) and [WebKit retest](../checkpoints/CP50-webkit-cross-tab-playground-logout.md) contains the test sequence and scope limits.
 
 ## Expected versus actual
 
