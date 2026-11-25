@@ -26,7 +26,13 @@ import (
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/schema_pin"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
+)
+
+var (
+	errInvalidCredentialPlane = errors.New("admin session cookies are prohibited on MCP Data Plane routes")
+	errKillSwitchActive       = errors.New("request blocked by active emergency kill switch")
 )
 
 const (
@@ -61,6 +67,7 @@ type Config struct {
 	DB         *sql.DB
 	Snapshots  *snapshot.Manager
 	Broker     *broker.BlindHostCredentialBroker
+	KillSwitch *killswitch.Registry
 	Audit      port.AuditSink
 	Upstream   UpstreamClient
 	Now        func() time.Time
@@ -148,14 +155,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	switch r.Method {
 	case http.MethodPost:
+		w.Header().Set("Cache-Control", "no-store")
 		s.handlePost(w, r)
 	case http.MethodGet:
 		s.handleGet(w, r)
 	case http.MethodDelete:
+		w.Header().Set("Cache-Control", "no-store")
 		s.handleDelete(w, r)
 	default:
+		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Allow", "POST, GET, DELETE")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -181,7 +192,7 @@ func (s *Server) RunApprovalMaintenance(ctx context.Context) {
 func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	identity, err := s.authenticate(r)
 	if err != nil {
-		writeHTTPError(w, http.StatusUnauthorized, "invalid_virtual_key")
+		writeMCPAuthError(w, err)
 		return
 	}
 	mediaType, _, mediaErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
@@ -242,7 +253,39 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx, finish, admitted := s.trackRequest(r.Context(), r.Header.Get(sessionHeader), string(req.ID), identity.scope.KeyID, limit)
 		if admitted {
-			result = s.callTool(ctx, identity, r, req)
+			ksCtx, ksCancel := context.WithCancel(ctx)
+			var ksHandle uint64
+			if s.cfg.KillSwitch != nil {
+				q := killswitch.AdmissionQuery{
+					OrgID:        identity.scope.OrgID,
+					ProjectID:    identity.scope.ProjectID,
+					VirtualKeyID: identity.scope.KeyID,
+				}
+				if _, blocked := s.cfg.KillSwitch.CheckAdmission(q); blocked {
+					ksCancel()
+					finish()
+					writeHTTPError(w, http.StatusServiceUnavailable, "kill_switch_active")
+					return
+				}
+				ksHandle = s.cfg.KillSwitch.RegisterStream(killswitch.StreamRegistration{
+					OrgID:        identity.scope.OrgID,
+					ProjectID:    identity.scope.ProjectID,
+					VirtualKeyID: identity.scope.KeyID,
+					Cancel:       ksCancel,
+				})
+				if _, blocked := s.cfg.KillSwitch.CheckAdmission(q); blocked {
+					s.cfg.KillSwitch.UnregisterStream(ksHandle)
+					ksCancel()
+					finish()
+					writeHTTPError(w, http.StatusServiceUnavailable, "kill_switch_active")
+					return
+				}
+			}
+			result = s.callTool(ksCtx, identity, r, req)
+			if s.cfg.KillSwitch != nil && ksHandle != 0 {
+				s.cfg.KillSwitch.UnregisterStream(ksHandle)
+			}
+			ksCancel()
 			finish()
 		} else {
 			result = rpcFailure(req.ID, -32000, "too_many_concurrent_calls", nil)
@@ -261,7 +304,30 @@ type identity struct {
 	scope scope
 }
 
+func hasMCPAdminSessionCookie(r *http.Request) bool {
+	for _, name := range []string{"__Host-tanpopo_admin_session", "tanpopo_admin_session"} {
+		if c, err := r.Cookie(name); err == nil && strings.TrimSpace(c.Value) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func writeMCPAuthError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, errKillSwitchActive):
+		writeHTTPError(w, http.StatusServiceUnavailable, "kill_switch_active")
+	case errors.Is(err, errInvalidCredentialPlane):
+		writeHTTPError(w, http.StatusUnauthorized, "invalid_credential_plane")
+	default:
+		writeHTTPError(w, http.StatusUnauthorized, "invalid_virtual_key")
+	}
+}
+
 func (s *Server) authenticate(r *http.Request) (identity, error) {
+	if hasMCPAdminSessionCookie(r) {
+		return identity{}, errInvalidCredentialPlane
+	}
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	kind, raw, found := strings.Cut(header, " ")
 	if !found || !strings.EqualFold(kind, "Bearer") || raw == "" || strings.ContainsAny(raw, " \t\r\n") {
@@ -270,6 +336,15 @@ func (s *Server) authenticate(r *http.Request) (identity, error) {
 	match, err := s.cfg.Snapshots.AuthenticateKey(raw, "")
 	if err != nil || match.Key == nil || match.Config == nil || !match.Config.IsOperational() || !containsPlane(match.Key.AllowedPlanes, "MCP") {
 		return identity{}, errors.New("virtual key is not allowed to use the MCP plane")
+	}
+	if s.cfg.KillSwitch != nil {
+		if _, blocked := s.cfg.KillSwitch.CheckAdmission(killswitch.AdmissionQuery{
+			OrgID:        match.Key.OrgID,
+			ProjectID:    match.Key.ProjectID,
+			VirtualKeyID: match.Key.ID,
+		}); blocked {
+			return identity{}, errKillSwitchActive
+		}
 	}
 	allowed := make(map[string]struct{}, len(match.Key.AllowedMCPTools))
 	for _, value := range match.Key.AllowedMCPTools {
@@ -375,7 +450,15 @@ func (s *Server) validateSession(r *http.Request, id identity) error {
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	id, err := s.authenticate(r)
-	if err != nil || s.validateSession(r, id) != nil {
+	if err != nil {
+		if errors.Is(err, errKillSwitchActive) || errors.Is(err, errInvalidCredentialPlane) {
+			writeMCPAuthError(w, err)
+			return
+		}
+		writeHTTPError(w, http.StatusBadRequest, "invalid_session")
+		return
+	}
+	if s.validateSession(r, id) != nil {
 		writeHTTPError(w, http.StatusBadRequest, "invalid_session")
 		return
 	}
@@ -390,11 +473,22 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	if !acceptsMediaType(r.Header.Values("Accept"), "text/event-stream") {
+		w.Header().Set("Cache-Control", "no-store")
 		writeHTTPError(w, http.StatusNotAcceptable, "unsupported_accept")
 		return
 	}
 	id, err := s.authenticate(r)
-	if err != nil || s.validateSession(r, id) != nil {
+	if err != nil {
+		w.Header().Set("Cache-Control", "no-store")
+		if errors.Is(err, errKillSwitchActive) || errors.Is(err, errInvalidCredentialPlane) {
+			writeMCPAuthError(w, err)
+			return
+		}
+		writeHTTPError(w, http.StatusBadRequest, "invalid_session")
+		return
+	}
+	if s.validateSession(r, id) != nil {
+		w.Header().Set("Cache-Control", "no-store")
 		writeHTTPError(w, http.StatusBadRequest, "invalid_session")
 		return
 	}
@@ -403,11 +497,13 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	current, exists := s.sessions[token]
 	if !exists || !current.expiresAt.After(s.cfg.Now()) {
 		s.mu.Unlock()
+		w.Header().Set("Cache-Control", "no-store")
 		writeHTTPError(w, http.StatusBadRequest, "invalid_session")
 		return
 	}
 	if current.streams >= maxSessionSSEStreams || s.activeStreams >= maxSSEStreams {
 		s.mu.Unlock()
+		w.Header().Set("Cache-Control", "no-store")
 		writeHTTPError(w, http.StatusTooManyRequests, "too_many_event_streams")
 		return
 	}
@@ -418,8 +514,30 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	defer s.releaseStream(token)
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		w.Header().Set("Cache-Control", "no-store")
 		writeHTTPError(w, http.StatusInternalServerError, "streaming_unavailable")
 		return
+	}
+	ksCtx, ksCancel := context.WithCancel(r.Context())
+	defer ksCancel()
+	if s.cfg.KillSwitch != nil {
+		q := killswitch.AdmissionQuery{
+			OrgID:        id.scope.OrgID,
+			ProjectID:    id.scope.ProjectID,
+			VirtualKeyID: id.scope.KeyID,
+		}
+		ksHandle := s.cfg.KillSwitch.RegisterStream(killswitch.StreamRegistration{
+			OrgID:        id.scope.OrgID,
+			ProjectID:    id.scope.ProjectID,
+			VirtualKeyID: id.scope.KeyID,
+			Cancel:       ksCancel,
+		})
+		defer s.cfg.KillSwitch.UnregisterStream(ksHandle)
+		if _, blocked := s.cfg.KillSwitch.CheckAdmission(q); blocked {
+			w.Header().Set("Cache-Control", "no-store")
+			writeHTTPError(w, http.StatusServiceUnavailable, "kill_switch_active")
+			return
+		}
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -441,7 +559,7 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 			s.deleteSessionLocked(token, current.done)
 			s.mu.Unlock()
 			return
-		case <-r.Context().Done():
+		case <-ksCtx.Done():
 			return
 		}
 	}

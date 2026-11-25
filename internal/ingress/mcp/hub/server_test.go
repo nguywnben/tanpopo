@@ -25,6 +25,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/ingress/mcp/schema_pin"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 	"github.com/nguywnben/tanpopo/internal/testkit/netguard"
@@ -687,4 +688,111 @@ func (h *hubTestSetup) post(t *testing.T, body, session string) (int, http.Heade
 
 func pad3(i int) string {
 	return fmt.Sprintf("%03d", i)
+}
+
+func TestMCPHubKillSwitchAndAdminCookieIsolation(t *testing.T) {
+	setup := newHubTestSetup(t, 1, false)
+	ctx := context.Background()
+	ks, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{
+		DB:    setup.handler.cfg.DB,
+		Audit: setup.audit,
+	})
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	setup.handler.cfg.KillSwitch = ks
+
+	// 1. AUTH-07: Admin session cookie must be rejected with 401 invalid_credential_plane + hardening headers even when Bearer vk_tp_* is valid.
+	reqCookie := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":"auth07","method":"initialize","params":{"protocolVersion":"2025-03-26"}}`))
+	reqCookie.Header.Set("Authorization", "Bearer "+setup.key)
+	reqCookie.Header.Set("Content-Type", "application/json")
+	reqCookie.Header.Set("Accept", "application/json, text/event-stream")
+	reqCookie.AddCookie(&http.Cookie{Name: "__Host-tanpopo_admin_session", Value: "admin-sess-tok"})
+	recCookie := httptest.NewRecorder()
+	setup.handler.ServeHTTP(recCookie, reqCookie)
+	if recCookie.Code != http.StatusUnauthorized || !strings.Contains(recCookie.Body.String(), "invalid_credential_plane") {
+		t.Fatalf("expected 401 invalid_credential_plane, got %d body=%s", recCookie.Code, recCookie.Body.String())
+	}
+	if recCookie.Header().Get("X-Content-Type-Options") != "nosniff" || recCookie.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("expected nosniff and no-store headers, got %v", recCookie.Header())
+	}
+
+	// 2. Initialize normal MCP session cleanly and open SSE GET stream.
+	code, hdrs, _ := setup.post(t, `{"jsonrpc":"2.0","id":"init-ks","method":"initialize","params":{"protocolVersion":"2025-03-26"}}`, "")
+	if code != http.StatusOK {
+		t.Fatalf("expected 200 initialize, got %d", code)
+	}
+	sessTok := hdrs.Get(sessionHeader)
+	if sessTok == "" {
+		t.Fatalf("expected non-empty Mcp-Session-Id")
+	}
+
+	srv := httptest.NewServer(setup.handler)
+	defer srv.Close()
+	sseReq, err := http.NewRequest(http.MethodGet, srv.URL+"/mcp", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sseReq.Header.Set("Authorization", "Bearer "+setup.key)
+	sseReq.Header.Set("Accept", "text/event-stream")
+	sseReq.Header.Set(sessionHeader, sessTok)
+	sseClient := netguard.NewHTTPClient()
+	sseResp, err := sseClient.Do(sseReq)
+	if err != nil {
+		t.Fatalf("SSE GET /mcp: %v", err)
+	}
+	defer sseResp.Body.Close()
+	if sseResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 SSE stream, got %d", sseResp.StatusCode)
+	}
+
+	sseDone := make(chan struct{})
+	go func() {
+		defer close(sseDone)
+		buf := make([]byte, 256)
+		for {
+			if _, rerr := sseResp.Body.Read(buf); rerr != nil {
+				return
+			}
+		}
+	}()
+
+	// 3. Trigger VIRTUAL_KEY kill switch: must sever active SSE stream and reject POST /mcp with 503 kill_switch_active.
+	if _, err := setup.handler.cfg.DB.ExecContext(ctx, `
+		INSERT INTO principals (id, org_id, kind, email_or_sub, status, version, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'HUMAN_LOCAL', 'ks@example.com', 'ACTIVE', 1, 1700000000000, 1700000000000)
+		ON CONFLICT(id) DO NOTHING`,
+		"usr_test", setup.scope.OrgID,
+	); err != nil {
+		t.Fatalf("seed principal: %v", err)
+	}
+	if _, err := setup.handler.cfg.DB.ExecContext(ctx, `
+		INSERT INTO role_bindings (id, org_id, principal_id, scope_type, scope_id, role_name, version, created_at_ms)
+		VALUES (?, ?, ?, 'ORG', ?, 'ORG_OWNER', 1, 1700000000000)
+		ON CONFLICT(id) DO NOTHING`,
+		"rb_ks_test", setup.scope.OrgID, "usr_test", setup.scope.OrgID,
+	); err != nil {
+		t.Fatalf("seed role_binding: %v", err)
+	}
+	_, _, trigErr := ks.TriggerWithSeveredCount(ctx, killswitch.TriggerParams{
+		OrgID:                  &setup.scope.OrgID,
+		Level:                  killswitch.LevelVirtualKey,
+		TargetID:               setup.scope.KeyID,
+		Reason:                 "compromised MCP virtual key",
+		TriggeredByPrincipalID: "usr_test",
+	})
+	if trigErr != nil {
+		t.Fatalf("TriggerWithSeveredCount: %v", trigErr)
+	}
+
+	select {
+	case <-sseDone:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("expected active MCP SSE stream to be severed upon kill switch trigger")
+	}
+
+	codeBlocked, _, _ := setup.post(t, `{"jsonrpc":"2.0","id":"list-ks","method":"tools/list"}`, sessTok)
+	if codeBlocked != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 kill_switch_active on POST /mcp after kill switch trigger, got %d", codeBlocked)
+	}
 }

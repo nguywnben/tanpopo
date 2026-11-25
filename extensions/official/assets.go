@@ -8,7 +8,7 @@ import (
 	"io/fs"
 )
 
-//go:embed */manifest.yaml */README.md */dist/*.wasm
+//go:embed */manifest.yaml */README.md */dist/*.wasm release-signatures.json
 var officialFS embed.FS
 
 var catalogSlugs = []string{

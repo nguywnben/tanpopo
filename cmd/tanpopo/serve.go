@@ -307,17 +307,19 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		closeStore()
 		return nil, nil, fmt.Errorf("initialize built-in official catalog: %w", err)
 	}
-	_, builtinRootPubs, err := kek.DeriveDomainEd25519PublicKeys(builtin.SigningDomain)
+	releaseRootPubs, err := builtin.LoadReleaseRootPublicKeys(os.LookupEnv, dataDir)
 	if err != nil {
 		closeKeys()
 		closeStore()
-		return nil, nil, fmt.Errorf("derive built-in official root trust keys: %w", err)
+		return nil, nil, fmt.Errorf("load extension release root public keys: %w", err)
 	}
-	trustedKeyring := trust.TrustedKeyring{RootPublicKeys: builtinRootPubs}
-	builtinSigner := func(payload []byte) ([]byte, error) {
-		_, sig, serr := kek.SignDomainEd25519(builtin.SigningDomain, payload)
-		return sig, serr
+	if err := builtinCatalog.LoadOperatorReleaseSignatures(os.LookupEnv, dataDir); err != nil {
+		closeKeys()
+		closeStore()
+		return nil, nil, fmt.Errorf("load extension release signatures: %w", err)
 	}
+	trustedKeyring := trust.TrustedKeyring{RootPublicKeys: releaseRootPubs}
+	var builtinSigner builtin.SignerFunc
 	snaps, err := snapshot.NewManager(ctx, snapshot.ManagerConfig{DB: db, Keyring: trustedKeyring})
 	if err != nil {
 		closeKeys()
@@ -675,7 +677,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	var a2aCoordinator *a2a.TaskCoordinator
 	if role == "all" || role == "data-plane" {
 		mcpServer, serverErr := mcphub.NewServer(mcphub.Config{
-			DB: db, Snapshots: snaps, Broker: blindBroker, Audit: auditLog,
+			DB: db, Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, Audit: auditLog,
 			Upstream: &mcphub.BrokerClient{Broker: blindBroker},
 			RecordApprovalPendingTx: func(ctx context.Context, tx *sql.Tx, requestID string, binding approval.Binding) error {
 				payload, marshalErr := json.Marshal(map[string]string{"approval_request_id": requestID})
@@ -795,6 +797,8 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		}
 		dataServerReady = dataServer.CheckServingReady
 		mux.Handle("/v1/", dataServer)
+		mux.Handle("/native", dataServer)
+		mux.Handle("/native/", dataServer)
 		mux.Handle("/metrics", dataServer.MetricsHandler())
 	}
 	if role == "all" || role == "control-plane" {
@@ -846,16 +850,20 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		builtinPackages := builtinCatalog.Packages()
 		marketplaceCatalog := make([]adminhttp.MarketplaceCatalogEntry, 0, len(builtinPackages))
 		for _, pkg := range builtinPackages {
+			prov := builtinCatalog.EvaluateProvenance(pkg, releaseRootPubs)
 			marketplaceCatalog = append(marketplaceCatalog, adminhttp.MarketplaceCatalogEntry{
-				PackageID:       pkg.PackageID,
-				CanonicalName:   pkg.DisplayName,
-				Version:         pkg.Version,
-				ExecutionTier:   pkg.ExecutionTier,
-				OriginTrustTier: pkg.OriginTier,
-				SourceURI:       pkg.SourceURI,
-				ExpectedSHA256:  pkg.ArchiveSHA256,
-				Summary:         pkg.Summary,
-				Capabilities:    pkg.Capabilities,
+				PackageID:             pkg.PackageID,
+				CanonicalName:         pkg.DisplayName,
+				Version:               pkg.Version,
+				ExecutionTier:         pkg.ExecutionTier,
+				OriginTrustTier:       prov.OriginTrustTier,
+				SignatureVerified:     prov.SignatureVerified,
+				EnterpriseSigned:      false,
+				SigningKeyFingerprint: prov.SigningKeyFingerprint,
+				SourceURI:             pkg.SourceURI,
+				ExpectedSHA256:        pkg.ArchiveSHA256,
+				Summary:               pkg.Summary,
+				Capabilities:          pkg.Capabilities,
 			})
 		}
 		configFileEnv := strings.TrimSpace(os.Getenv("TANPOPO_CONFIG"))
@@ -900,6 +908,9 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		if err != nil {
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize Admin API: %w", err)
+		}
+		if recErr := adminServer.ResumePendingOrgDeletions(ctx); recErr != nil {
+			fmt.Fprintf(os.Stderr, "tanpopo: warning: pending organization erasure recovery incomplete: %v\n", recErr)
 		}
 		mux.Handle("/admin/v1/", adminServer)
 		mux.Handle("/", webui.Handler())
@@ -958,7 +969,7 @@ func newRuntimeArchiveResolverWithBuiltins(root string, offlineMode bool, index 
 	return func(ctx context.Context, orgID, sourceURI, expectedSHA256 string) (*installer.StageInstallRequest, func(), error) {
 		trimmedURI := strings.TrimSpace(sourceURI)
 		if strings.HasPrefix(strings.ToLower(trimmedURI), builtin.SourceScheme) {
-			if builtinCatalog == nil || builtinSigner == nil {
+			if builtinCatalog == nil {
 				return nil, nil, installer.ErrMarketplaceArchiveResolverUnavailable
 			}
 			return builtinCatalog.ResolveStageRequest(trimmedURI, expectedSHA256, builtinSigner)

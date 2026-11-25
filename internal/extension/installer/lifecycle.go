@@ -483,8 +483,21 @@ type StageInstallRequest struct {
 	SBOMDigest    string
 	ActorID       string
 	RequestID     string
+	// TrustedBuiltinArchive is set strictly by internal/extension/builtin.Catalog for
+	// embedded packages compiled into the server binary when no offline release signature
+	// is available; StageFreshInstall still reports signature_verified=false and
+	// origin_trust_tier=unverified_external unless a valid Root signature verifies.
+	TrustedBuiltinArchive bool
 	// Optional TargetOrgID enforces CheckOrgMinTrustPolicy immediately at staging time if supplied (CT-20).
 	TargetOrgID string
+}
+
+// Keyring returns the configured TrustedKeyring used for provenance evaluation.
+func (s *LifecycleService) Keyring() TrustedKeyring {
+	if s == nil {
+		return TrustedKeyring{}
+	}
+	return s.keyring
 }
 
 // StageInstallResult reports the newly staged extension installation parked in PENDING_PERMISSION_APPROVAL.
@@ -530,7 +543,7 @@ func (s *LifecycleService) StageFreshInstall(ctx context.Context, req StageInsta
 		return nil, err
 	}
 
-	prov, err := VerifyProvenance(vm, extracted.BundleSHA256, req.Source.ExpectedSHA256, req.Signature, s.keyring)
+	prov, err := verifyStageProvenance(vm, extracted.BundleSHA256, req.Source.ExpectedSHA256, req.Signature, s.keyring, req.TrustedBuiltinArchive)
 	if err != nil {
 		s.emitAudit(ctx, req.TargetOrgID, req.ActorID, req.RequestID, "extension.provenance_rejected", "extension_package", vm.Manifest.Metadata.ID, map[string]any{
 			"reason": err.Error(),
@@ -911,16 +924,17 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 
 // StageUpgradeRequest initiates an extension upgrade from an active or disabled installation.
 type StageUpgradeRequest struct {
-	InstallationID  string
-	ExpectedVersion int64
-	ArchiveReader   io.Reader
-	ArchivePath     string
-	Source          SourceSpec
-	Signature       ProvenanceSignature
-	SBOMDigest      string
-	ActorID         string
-	OrgID           string
-	RequestID       string
+	InstallationID        string
+	ExpectedVersion       int64
+	ArchiveReader         io.Reader
+	ArchivePath           string
+	Source                SourceSpec
+	Signature             ProvenanceSignature
+	SBOMDigest            string
+	ActorID               string
+	OrgID                 string
+	RequestID             string
+	TrustedBuiltinArchive bool
 }
 
 // StageUpgradeResult reports whether the upgrade cut over directly (DeltaP == 0) or
@@ -959,7 +973,7 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 	if err != nil {
 		return nil, err
 	}
-	prov, err := VerifyProvenance(vm, extracted.BundleSHA256, req.Source.ExpectedSHA256, req.Signature, s.keyring)
+	prov, err := verifyStageProvenance(vm, extracted.BundleSHA256, req.Source.ExpectedSHA256, req.Signature, s.keyring, req.TrustedBuiltinArchive)
 	if err != nil {
 		return nil, err
 	}

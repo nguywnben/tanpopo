@@ -52,11 +52,12 @@ type Package struct {
 
 // Catalog holds all built-in official packages pre-validated and packed once at startup.
 type Catalog struct {
-	ordered []*Package
-	byURI   map[string]*Package
+	ordered     []*Package
+	byURI       map[string]*Package
+	releaseSigs map[string][]byte
 }
 
-// SignerFunc signs a canonical SignatureSigningPayload with the instance root key.
+// SignerFunc signs a canonical SignatureSigningPayload with an external test key.
 type SignerFunc func(payload []byte) ([]byte, error)
 
 // NewCatalog reads extensions/official assets from the binary, validates every
@@ -64,9 +65,14 @@ type SignerFunc func(payload []byte) ([]byte, error)
 func NewCatalog() (*Catalog, error) {
 	fsys := official.FS()
 	slugs := official.CatalogSlugs()
+	relSigs, err := loadEmbeddedReleaseSignatures()
+	if err != nil {
+		return nil, err
+	}
 	cat := &Catalog{
-		ordered: make([]*Package, 0, len(slugs)),
-		byURI:   make(map[string]*Package, len(slugs)),
+		ordered:     make([]*Package, 0, len(slugs)),
+		byURI:       make(map[string]*Package, len(slugs)),
+		releaseSigs: relSigs,
 	}
 	for _, slug := range slugs {
 		pkg, err := buildOfficialPackage(fsys, slug)
@@ -106,8 +112,8 @@ func (c *Catalog) Packages() []Package {
 }
 
 // ResolveStageRequest resolves a tanpopo-builtin://<slug>.tpkg URI, verifies its
-// expected SHA-256 digest when supplied, and attaches an authoritative root signature
-// when signer is provided.
+// expected SHA-256 digest when supplied, and attaches an embedded offline release
+// signature (or explicit test signer) when available without deriving keys from KEK.
 func (c *Catalog) ResolveStageRequest(sourceURI, expectedSHA256 string, signer SignerFunc) (*installer.StageInstallRequest, func(), error) {
 	if c == nil {
 		return nil, nil, ErrPackageNotFound
@@ -137,6 +143,11 @@ func (c *Catalog) ResolveStageRequest(sourceURI, expectedSHA256 string, signer S
 			return nil, nil, fmt.Errorf("builtin: sign package %q: %w", pkg.PackageID, err)
 		}
 		sig.PublisherOrRootSig = rawSig
+	} else {
+		sigKey := strings.ToLower(pkg.PackageID) + "@" + pkg.Version + "#" + strings.ToLower(pkg.ArchiveSHA256)
+		if relSig := c.releaseSigs[sigKey]; len(relSig) > 0 {
+			sig.PublisherOrRootSig = append([]byte(nil), relSig...)
+		}
 	}
 
 	return &installer.StageInstallRequest{
@@ -146,7 +157,8 @@ func (c *Catalog) ResolveStageRequest(sourceURI, expectedSHA256 string, signer S
 			URI:            pkg.SourceURI,
 			ExpectedSHA256: pkg.ArchiveSHA256,
 		},
-		Signature: sig,
+		Signature:             sig,
+		TrustedBuiltinArchive: true,
 	}, nil, nil
 }
 

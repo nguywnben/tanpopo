@@ -335,11 +335,14 @@ components:
 
     Organization:
       type: object
-      required: [id, slug, name, min_plugin_trust, version, created_at]
+      required: [id, slug, name, status, min_plugin_trust, version, created_at]
       properties:
         id: { type: string }
         slug: { type: string }
         name: { type: string }
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, DELETING, PENDING_ERASURE]
         min_plugin_trust:
           type: string
           enum: [OFFICIAL_ONLY, VERIFIED_OR_ENTERPRISE_SIGNED, VERIFIED_ONLY, ANY_APPROVED]
@@ -708,14 +711,16 @@ components:
 
     MarketplaceCatalogEntry:
       type: object
-      required: [package_id, canonical_name, version, execution_tier, origin_trust_tier, enterprise_signed, source_uri, expected_sha256]
+      required: [package_id, canonical_name, version, execution_tier, origin_trust_tier, signature_verified, enterprise_signed, source_uri, expected_sha256]
       properties:
         package_id: { type: string }
         canonical_name: { type: string }
         version: { type: string }
         execution_tier: { type: string, enum: [declarative, sandboxed_wasm, isolated_sidecar] }
         origin_trust_tier: { $ref: "#/components/schemas/OriginTrustTier" }
+        signature_verified: { type: boolean }
         enterprise_signed: { type: boolean }
+        signing_key_fingerprint: { type: string }
         source_uri: { type: string }
         expected_sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
         summary: { type: string }
@@ -743,14 +748,16 @@ components:
 
     ExtensionPermissionDiff:
       type: object
-      required: [installation_id, package_id, candidate_version, origin_trust_tier, enterprise_signed, execution_tier, active_allowed_hosts, candidate_allowed_hosts, added_allowed_hosts, removed_allowed_hosts, secret_slots, active_secret_slots, added_secret_slots, quota_escalated, quotas, candidate_permissions, permission_delta, has_escalation]
+      required: [installation_id, package_id, candidate_version, origin_trust_tier, signature_verified, enterprise_signed, execution_tier, active_allowed_hosts, candidate_allowed_hosts, added_allowed_hosts, removed_allowed_hosts, secret_slots, active_secret_slots, added_secret_slots, quota_escalated, quotas, candidate_permissions, permission_delta, has_escalation]
       properties:
         installation_id: { type: string }
         package_id: { type: string }
         active_version: { type: ["string", "null"] }
         candidate_version: { type: string }
         origin_trust_tier: { $ref: "#/components/schemas/OriginTrustTier" }
+        signature_verified: { type: boolean }
         enterprise_signed: { type: boolean }
+        signing_key_fingerprint: { type: string }
         execution_tier: { type: string, enum: [declarative, sandboxed_wasm, isolated_sidecar] }
         active_execution_tier: { type: [string, "null"], enum: [declarative, sandboxed_wasm, isolated_sidecar, null] }
         active_allowed_hosts:
@@ -830,7 +837,7 @@ components:
 
     ExtensionInstallation:
       type: object
-      required: [id, package_id, state, origin_trust_tier, enterprise_signed, execution_tier, version]
+      required: [id, package_id, state, origin_trust_tier, signature_verified, enterprise_signed, execution_tier, version]
       properties:
         id: { type: string }
         package_id: { type: string }
@@ -850,7 +857,9 @@ components:
             - QUARANTINED
             - REJECTED_INVALID
         origin_trust_tier: { $ref: "#/components/schemas/OriginTrustTier" }
+        signature_verified: { type: boolean }
         enterprise_signed: { type: boolean }
+        signing_key_fingerprint: { type: string }
         execution_tier: { type: string, enum: [declarative, sandboxed_wasm, isolated_sidecar] }
         version: { type: integer }
 
@@ -1498,6 +1507,29 @@ paths:
               schema: { $ref: "#/components/schemas/CryptoShredReceipt" }
         "409":
           description: optimistic_lock_conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
+  /admin/v1/organizations/{orgId}/finalize-erasure:
+    post:
+      tags: [TenancyAndRBAC]
+      operationId: finalizeOrganizationErasure
+      summary: Resume and finalize relational cleanup + audit receipt for a DELETING organization after DEK destruction (SCR-16)
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      responses:
+        "200":
+          description: Pending organization erasure finalized and audited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CryptoShredReceipt" }
+        "409":
+          description: invalid_state_transition when organization is not in DELETING or PENDING_ERASURE state
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
@@ -2432,6 +2464,7 @@ paths:
       operationId: listDeployments
       summary: Cursor-paginated Model Deployments matrix (SCR-02, SCR-05)
       parameters:
+        - $ref: "#/components/parameters/ProjectIdQueryParam"
         - $ref: "#/components/parameters/EnvIdQueryParam"
         - name: status
           in: query
@@ -3872,6 +3905,7 @@ paths:
         - name: action
           in: query
           required: false
+          description: Exact audit event action filter (canonical values include virtual_key.created, virtual_key.updated, virtual_key.rotated, virtual_key.revoked, organization.crypto_shredded, project.crypto_shredded; note virtual_key.created is canonical rather than virtual_key.issued).
           schema: { type: string }
         - name: chain_partition
           in: query

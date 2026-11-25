@@ -1011,9 +1011,7 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 			}
 		case "DISABLED":
 			switch cur.State {
-			case catalog.ConnStateDraft:
-				mapped = catalog.ConnStateArchived
-			case catalog.ConnStateActive, catalog.ConnStateDegraded, catalog.ConnStateAuthExpired:
+			case catalog.ConnStateDraft, catalog.ConnStateActive, catalog.ConnStateDegraded, catalog.ConnStateAuthExpired:
 				mapped = catalog.ConnStateSuspendedAdmin
 			case catalog.ConnStateSuspendedAdmin, catalog.ConnStateRevoked, catalog.ConnStateArchived:
 				mapped = cur.State

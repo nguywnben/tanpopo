@@ -188,6 +188,7 @@ func (s *Server) handleDecideChangeRequest(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	var postApproveFinalize func(context.Context) error
 	updated, err := s.fourEyes.Decide(r.Context(), foureyes.DecideParams{
 		OrgID:               orgPtr,
 		RequestID:           reqID,
@@ -197,7 +198,12 @@ func (s *Server) handleDecideChangeRequest(w http.ResponseWriter, r *http.Reques
 		ExpectedVersion:     expectedVer,
 		CorrelationID:       ptrOrNil(requestIDFromContext(r.Context())),
 	}, func(applyCtx context.Context, cr *foureyes.ChangeRequest) error {
-		return s.applyApprovedChangeRequest(applyCtx, sc, cr)
+		finalizeFn, aerr := s.applyApprovedChangeRequest(applyCtx, sc, cr)
+		if aerr != nil {
+			return aerr
+		}
+		postApproveFinalize = finalizeFn
+		return nil
 	})
 	if err != nil {
 		switch {
@@ -220,6 +226,12 @@ func (s *Server) handleDecideChangeRequest(w http.ResponseWriter, r *http.Reques
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "change_request_apply_failed", "upstream_error", err.Error(), true, nil)
 		}
 		return
+	}
+	if postApproveFinalize != nil {
+		if ferr := postApproveFinalize(r.Context()); ferr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "change_request_apply_failed", "upstream_error", ferr.Error(), true, nil)
+			return
+		}
 	}
 
 	w.Header().Set("ETag", FormatETag(updated.Version))
@@ -323,12 +335,12 @@ func (s *Server) verifyProjectBelongsToOrg(w http.ResponseWriter, r *http.Reques
 	return true
 }
 
-func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSessionContext, cr *foureyes.ChangeRequest) error {
+func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSessionContext, cr *foureyes.ChangeRequest) (func(context.Context) error, error) {
 	reqID := requestIDFromContext(ctx)
 	switch cr.ActionType {
 	case foureyes.ActionExtensionActivateExternal:
 		if s.installer == nil {
-			return fmt.Errorf("extension installer unavailable")
+			return nil, fmt.Errorf("extension installer unavailable")
 		}
 		var payload struct {
 			ExpectedVersion               int64 `json:"expected_version"`
@@ -336,11 +348,11 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 			EnableImmediately             *bool `json:"enable_immediately"`
 		}
 		if err := json.Unmarshal([]byte(cr.PayloadJCSJSON), &payload); err != nil {
-			return fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
+			return nil, fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
 		}
 		curDTO, curDBState, lerr := s.loadExtensionInstallationDTO(ctx, cr.TargetID)
 		if lerr != nil {
-			return lerr
+			return nil, lerr
 		}
 		ver := payload.ExpectedVersion
 		if ver < 1 {
@@ -348,10 +360,10 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 		}
 		candTrust, candEntSigned, provErr := s.installer.CandidateProvenance(ctx, cr.TargetID)
 		if provErr != nil {
-			return provErr
+			return nil, provErr
 		}
 		if candTrust == lockfile.TrustTierUnverifiedExternal && !candEntSigned && !payload.AcknowledgeUnverifiedExternal {
-			return fmt.Errorf("%w: acknowledge_unverified_external=true required for unsigned external extension", port.ErrInvalidInput)
+			return nil, fmt.Errorf("%w: acknowledge_unverified_external=true required for unsigned external extension", port.ErrInvalidInput)
 		}
 		approverOrg := ""
 		if cr.OrgID != nil {
@@ -374,31 +386,31 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 				OrgID:               approverOrg,
 				RequestID:           reqID,
 			}); err != nil {
-				return err
+				return nil, err
 			}
 		case installer.StateUpdatingPendingReconsent:
 			if _, err := s.installer.ApproveEscalatedUpgrade(ctx, cr.TargetID, ver, sc.Actor.PrincipalID, approverOrg, reqID); err != nil {
-				return err
+				return nil, err
 			}
 		default:
-			return fmt.Errorf("%w: installation in state %s cannot be approved", foureyes.ErrInvalidStateTransition, curDBState)
+			return nil, fmt.Errorf("%w: installation in state %s cannot be approved", foureyes.ErrInvalidStateTransition, curDBState)
 		}
 		syncErr := s.syncExtensionProviderAdapters(ctx, cr.TargetID)
 		if s.snapshots != nil {
 			_ = s.snapshots.Refresh(ctx)
 		}
-		return syncErr
+		return nil, syncErr
 
 	case foureyes.ActionKillSwitchClear:
 		if s.killSwitch == nil {
-			return fmt.Errorf("kill-switch registry unavailable")
+			return nil, fmt.Errorf("kill-switch registry unavailable")
 		}
 		var payload struct {
 			ExpectedVersion int64  `json:"expected_version"`
 			ClearReason     string `json:"clear_reason"`
 		}
 		if err := json.Unmarshal([]byte(cr.PayloadJCSJSON), &payload); err != nil {
-			return fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
+			return nil, fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
 		}
 		if strings.TrimSpace(payload.ClearReason) == "" {
 			payload.ClearReason = "four-eyes approved kill-switch clear"
@@ -418,13 +430,13 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 			ks, gerr = s.killSwitch.GetInstance(ctx, cr.TargetID)
 		}
 		if gerr != nil {
-			return gerr
+			return nil, gerr
 		}
 		if status, _, msg := s.verifyKillSwitchClearBarrier(ctx, ks); status != 0 {
 			if status == http.StatusNotFound {
-				return port.ErrNotFound
+				return nil, port.ErrNotFound
 			}
-			return errors.New(msg)
+			return nil, errors.New(msg)
 		}
 		if _, err := s.killSwitch.Clear(ctx, killswitch.ClearParams{
 			OrgID:                cr.OrgID,
@@ -435,16 +447,16 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 			EntryPoint:           port.AuditEntryPointAdminAPI,
 			RequestID:            ptrOrNil(reqID),
 		}); err != nil {
-			return err
+			return nil, err
 		}
 		if s.snapshots != nil {
 			_ = s.snapshots.Refresh(ctx)
 		}
-		return nil
+		return nil, nil
 
 	case foureyes.ActionVaultRotateRootKey:
 		if s.vault == nil {
-			return fmt.Errorf("vault unavailable")
+			return nil, fmt.Errorf("vault unavailable")
 		}
 		var payload struct {
 			KMSKeyRef string `json:"kms_key_ref"`
@@ -452,32 +464,34 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 			NewKEKID  string `json:"new_kek_id"`
 		}
 		if err := json.Unmarshal([]byte(cr.PayloadJCSJSON), &payload); err != nil {
-			return fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
+			return nil, fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
 		}
 		if cr.OrgID != nil && cr.TargetType == "project_encryption_key" && strings.TrimSpace(payload.KMSKeyRef) != "" {
 			if _, err := s.vault.BindProjectExternalRootKey(ctx, *cr.OrgID, cr.TargetID, payload.KMSKeyRef); err != nil {
-				return err
+				return nil, err
 			}
-			return nil
+			return nil, nil
 		}
 		if !sc.IsOperator || cr.OrgID != nil {
-			return fmt.Errorf("%w: instance root key rotation forbidden for org scope", port.ErrInvalidInput)
+			return nil, fmt.Errorf("%w: instance root key rotation forbidden for org scope", port.ErrInvalidInput)
 		}
 		if _, err := s.vault.RewrapAllOrgDEKs(ctx, payload.OldKEKID, payload.NewKEKID); err != nil {
-			return err
+			return nil, err
 		}
-		return nil
+		return nil, nil
 
 	case foureyes.ActionVaultDestroyRootKey:
 		if s.vault == nil {
-			return fmt.Errorf("vault unavailable")
+			return nil, fmt.Errorf("vault unavailable")
 		}
 		var payload struct {
 			ExpectedGeneration int64  `json:"expected_generation"`
 			ShredRequestID     string `json:"shred_request_id"`
+			ConfirmSlug        string `json:"confirm_slug"`
+			Reason             string `json:"reason"`
 		}
 		if err := json.Unmarshal([]byte(cr.PayloadJCSJSON), &payload); err != nil {
-			return fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
+			return nil, fmt.Errorf("%w: %v", port.ErrInvalidInput, err)
 		}
 		if payload.ExpectedGeneration < 1 {
 			payload.ExpectedGeneration = 1
@@ -486,24 +500,89 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 			payload.ShredRequestID = cr.ID
 		}
 		if cr.OrgID != nil && cr.TargetType == "project_encryption_key" {
-			return s.vault.ShredProjectDEK(ctx, *cr.OrgID, cr.TargetID, vault.ShredRequest{
+			if strings.TrimSpace(payload.ConfirmSlug) != "" {
+				prj, perr := s.storage.Tenancy().GetProject(ctx, *cr.OrgID, cr.TargetID)
+				if perr != nil {
+					return nil, perr
+				}
+				if strings.TrimSpace(payload.ConfirmSlug) != prj.Slug {
+					return nil, fmt.Errorf("%w: confirm_slug mismatch", port.ErrInvalidInput)
+				}
+				reason := strings.TrimSpace(payload.Reason)
+				if reason == "" {
+					reason = "four-eyes approved project deletion"
+				}
+				_, _, st, code, msg, _ := s.executeProjectDeletion(ctx, sc, *cr.OrgID, prj, prj.Version, reqID, reason, payload.ShredRequestID)
+				if st != http.StatusOK {
+					switch st {
+					case http.StatusNotFound:
+						return nil, fmt.Errorf("%w: %s", port.ErrNotFound, msg)
+					case http.StatusConflict:
+						return nil, fmt.Errorf("%w: %s", port.ErrVersionConflict, msg)
+					case http.StatusBadRequest:
+						return nil, fmt.Errorf("%w: %s", port.ErrInvalidInput, msg)
+					default:
+						return nil, fmt.Errorf("%s: %s", code, msg)
+					}
+				}
+				return nil, nil
+			}
+			return nil, s.vault.ShredProjectDEK(ctx, *cr.OrgID, cr.TargetID, vault.ShredRequest{
 				RequestID:          payload.ShredRequestID,
 				ExpectedGeneration: payload.ExpectedGeneration,
 			})
 		}
 		if cr.OrgID != nil && cr.TargetID != *cr.OrgID {
-			return fmt.Errorf("%w: cross-organization root key destruction forbidden", port.ErrInvalidInput)
+			return nil, fmt.Errorf("%w: cross-organization root key destruction forbidden", port.ErrInvalidInput)
 		}
 		if cr.OrgID == nil && !sc.IsOperator {
-			return fmt.Errorf("%w: cross-organization root key destruction requires OPERATOR", port.ErrInvalidInput)
+			return nil, fmt.Errorf("%w: cross-organization root key destruction requires OPERATOR", port.ErrInvalidInput)
 		}
-		return s.vault.ShredOrgDEK(ctx, cr.TargetID, vault.ShredRequest{
+		if strings.TrimSpace(payload.ConfirmSlug) != "" {
+			org, oerr := s.storage.Tenancy().GetOrganization(ctx, cr.TargetID)
+			if oerr != nil {
+				return nil, oerr
+			}
+			if strings.TrimSpace(payload.ConfirmSlug) != org.Slug {
+				return nil, fmt.Errorf("%w: confirm_slug mismatch", port.ErrInvalidInput)
+			}
+			reason := strings.TrimSpace(payload.Reason)
+			if reason == "" {
+				reason = "four-eyes approved organization deletion"
+			}
+			finalizeFn, _, immediate, st, code, msg, _ := s.prepareAndShredOrganizationDeletion(
+				ctx, sc, org, org.Version, reqID, reason, payload.ShredRequestID,
+			)
+			if st != http.StatusOK {
+				switch st {
+				case http.StatusNotFound:
+					return nil, fmt.Errorf("%w: %s", port.ErrNotFound, msg)
+				case http.StatusConflict:
+					return nil, fmt.Errorf("%w: %s", port.ErrVersionConflict, msg)
+				case http.StatusBadRequest:
+					return nil, fmt.Errorf("%w: %s", port.ErrInvalidInput, msg)
+				default:
+					return nil, fmt.Errorf("%s: %s", code, msg)
+				}
+			}
+			if immediate || finalizeFn == nil {
+				return nil, nil
+			}
+			return func(fctx context.Context) error {
+				_, _, fst, fcode, fmsg := finalizeFn(fctx)
+				if fst != http.StatusOK {
+					return fmt.Errorf("%s: %s", fcode, fmsg)
+				}
+				return nil
+			}, nil
+		}
+		return nil, s.vault.ShredOrgDEK(ctx, cr.TargetID, vault.ShredRequest{
 			RequestID:          payload.ShredRequestID,
 			ExpectedGeneration: payload.ExpectedGeneration,
 		})
 
 	default:
-		return fmt.Errorf("unsupported action_type %q", cr.ActionType)
+		return nil, fmt.Errorf("unsupported action_type %q", cr.ActionType)
 	}
 }
 

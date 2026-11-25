@@ -53,7 +53,9 @@ type extensionPermissionDiffDTO struct {
 	ActiveVersion         *string                   `json:"active_version"`
 	CandidateVersion      string                    `json:"candidate_version"`
 	OriginTrustTier       string                    `json:"origin_trust_tier"`
+	SignatureVerified     bool                      `json:"signature_verified"`
 	EnterpriseSigned      bool                      `json:"enterprise_signed"`
+	SigningKeyFingerprint string                    `json:"signing_key_fingerprint,omitempty"`
 	ExecutionTier         string                    `json:"execution_tier"`
 	ActiveExecutionTier   *string                   `json:"active_execution_tier"`
 	ActiveAllowedHosts    []string                  `json:"active_allowed_hosts"`
@@ -82,7 +84,9 @@ type extensionInstallationDTO struct {
 	ContractVersion         string  `json:"contract_version"`
 	State                   string  `json:"state"`
 	OriginTrustTier         string  `json:"origin_trust_tier"`
+	SignatureVerified       bool    `json:"signature_verified"`
 	EnterpriseSigned        bool    `json:"enterprise_signed"`
+	SigningKeyFingerprint   string  `json:"signing_key_fingerprint,omitempty"`
 	ExecutionTier           string  `json:"execution_tier"`
 	Version                 int64   `json:"version"`
 }
@@ -270,7 +274,10 @@ func (s *Server) handleListExtensionInstallations(w http.ResponseWriter, r *http
 		       va.semver, vc.semver, vp.semver,
 		       COALESCE(va.contract_version, vc.contract_version, '1.0'),
 		       COALESCE(va.execution_tier, vc.execution_tier, 'DECLARATIVE_T1'),
-		       COALESCE(va.enterprise_signed, vc.enterprise_signed, ` + port.BoolExpr(s.dialect, false) + `)
+		       COALESCE(va.enterprise_signed, vc.enterprise_signed, ` + port.BoolExpr(s.dialect, false) + `),
+		       COALESCE(va.signature_verified, vc.signature_verified, ` + port.BoolExpr(s.dialect, false) + `),
+		       COALESCE(va.signing_key_fingerprint, vc.signing_key_fingerprint, ''),
+		       COALESCE(va.enterprise_key_fingerprint, vc.enterprise_key_fingerprint, '')
 		FROM extension_installations ei
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions va ON va.id = ei.active_version_id
@@ -298,14 +305,24 @@ func (s *Server) handleListExtensionInstallations(w http.ResponseWriter, r *http
 	var items []insRow
 	for rows.Next() {
 		var (
-			id, pkgID, canonicalName, trust, state, contractVer, execTier string
-			ver, createdMs                                                int64
-			actVer, candVer, prevVer                                      sql.NullString
-			entBool                                                       port.FlexBool
+			id, pkgID, canonicalName, trust, state, contractVer, execTier, sigFP, entFP string
+			ver, createdMs                                                              int64
+			actVer, candVer, prevVer                                                    sql.NullString
+			entBool, sigBool                                                            port.FlexBool
 		)
-		if scanErr := rows.Scan(&id, &pkgID, &canonicalName, &trust, &state, &ver, &createdMs, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entBool); scanErr != nil {
+		if scanErr := rows.Scan(&id, &pkgID, &canonicalName, &trust, &state, &ver, &createdMs, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entBool, &sigBool, &sigFP, &entFP); scanErr != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scanning installation", true, nil)
 			return
+		}
+		liveTrust := trust
+		liveSig := bool(sigBool)
+		liveEnt := bool(entBool)
+		liveFP := strings.ToLower(strings.TrimSpace(sigFP))
+		if liveFP == "" && liveEnt {
+			liveFP = strings.ToLower(strings.TrimSpace(entFP))
+		}
+		if s.installer != nil {
+			liveTrust, liveSig, liveEnt, liveFP = installer.ComputeKeyringEffectiveProvenance(canonicalName, bool(sigBool), sigFP, bool(entBool), entFP, s.installer.Keyring())
 		}
 		items = append(items, insRow{
 			dto: extensionInstallationDTO{
@@ -317,8 +334,10 @@ func (s *Server) handleListExtensionInstallations(w http.ResponseWriter, r *http
 				PreviousRollbackVersion: sqlNullStrPtr(prevVer),
 				ContractVersion:         contractVer,
 				State:                   mapExtensionStateOpenAPI(state),
-				OriginTrustTier:         trust,
-				EnterpriseSigned:        bool(entBool),
+				OriginTrustTier:         liveTrust,
+				SignatureVerified:       liveSig,
+				EnterpriseSigned:        liveEnt,
+				SigningKeyFingerprint:   liveFP,
 				ExecutionTier:           mapExecutionTierOpenAPI(execTier),
 				Version:                 ver,
 			},
@@ -585,16 +604,17 @@ func (s *Server) handleUpgradeExtension(w http.ResponseWriter, r *http.Request) 
 		approverOrg = ""
 	}
 	upRes, err := s.installer.StageUpgrade(r.Context(), installer.StageUpgradeRequest{
-		InstallationID:  insID,
-		ExpectedVersion: expectedVer,
-		ArchiveReader:   stageReq.ArchiveReader,
-		ArchivePath:     stageReq.ArchivePath,
-		Source:          stageReq.Source,
-		Signature:       stageReq.Signature,
-		SBOMDigest:      stageReq.SBOMDigest,
-		ActorID:         sc.Actor.PrincipalID,
-		OrgID:           approverOrg,
-		RequestID:       requestIDFromContext(r.Context()),
+		InstallationID:        insID,
+		ExpectedVersion:       expectedVer,
+		ArchiveReader:         stageReq.ArchiveReader,
+		ArchivePath:           stageReq.ArchivePath,
+		Source:                stageReq.Source,
+		Signature:             stageReq.Signature,
+		SBOMDigest:            stageReq.SBOMDigest,
+		ActorID:               sc.Actor.PrincipalID,
+		OrgID:                 approverOrg,
+		RequestID:             requestIDFromContext(r.Context()),
+		TrustedBuiltinArchive: stageReq.TrustedBuiltinArchive,
 	})
 	if err != nil {
 		latest, _, _ := s.loadExtensionInstallationDTO(r.Context(), insID)
@@ -955,7 +975,7 @@ func (s *Server) handlePutOrgExtensionPolicies(w http.ResponseWriter, r *http.Re
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
 		return
 	}
-	if !sc.IsOperator && sc.OrgID != orgID {
+	if !sc.IsOperator && sc.OrgID != orgID && !actorHasAnyBindingInOrg(sc.Actor, orgID) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "organization not found", false, nil)
 		return
 	}
@@ -1246,29 +1266,42 @@ func actorHasOrgScopedApproverBinding(actor *rbac.Actor, orgID string) bool {
 
 func (s *Server) loadExtensionInstallationDTO(ctx context.Context, insID string) (extensionInstallationDTO, string, error) {
 	var (
-		id, pkgID, canonicalName, trust, state, contractVer, execTier string
-		ver                                                           int64
-		actVer, candVer, prevVer                                      sql.NullString
-		entBool                                                       port.FlexBool
+		id, pkgID, canonicalName, trust, state, contractVer, execTier, sigFP, entFP string
+		ver                                                                         int64
+		actVer, candVer, prevVer                                                    sql.NullString
+		entBool, sigBool                                                            port.FlexBool
 	)
 	err := s.db.QueryRowContext(ctx, s.rebind(`
 		SELECT ei.id, ei.package_id, ep.canonical_name, ep.origin_trust_tier, ei.state, ei.version,
 		       va.semver, vc.semver, vp.semver,
 		       COALESCE(va.contract_version, vc.contract_version, '1.0'),
 		       COALESCE(va.execution_tier, vc.execution_tier, 'DECLARATIVE_T1'),
-		       COALESCE(va.enterprise_signed, vc.enterprise_signed, `+port.BoolExpr(s.dialect, false)+`)
+		       COALESCE(va.enterprise_signed, vc.enterprise_signed, `+port.BoolExpr(s.dialect, false)+`),
+		       COALESCE(va.signature_verified, vc.signature_verified, `+port.BoolExpr(s.dialect, false)+`),
+		       COALESCE(va.signing_key_fingerprint, vc.signing_key_fingerprint, ''),
+		       COALESCE(va.enterprise_key_fingerprint, vc.enterprise_key_fingerprint, '')
 		FROM extension_installations ei
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions va ON va.id = ei.active_version_id
 		LEFT JOIN extension_versions vc ON vc.id = ei.candidate_version_id
 		LEFT JOIN extension_versions vp ON vp.id = ei.previous_pinned_version_id
 		WHERE ei.id = ?`), insID,
-	).Scan(&id, &pkgID, &canonicalName, &trust, &state, &ver, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entBool)
+	).Scan(&id, &pkgID, &canonicalName, &trust, &state, &ver, &actVer, &candVer, &prevVer, &contractVer, &execTier, &entBool, &sigBool, &sigFP, &entFP)
 	if errors.Is(err, sql.ErrNoRows) {
 		return extensionInstallationDTO{}, "", port.ErrNotFound
 	}
 	if err != nil {
 		return extensionInstallationDTO{}, "", err
+	}
+	liveTrust := trust
+	liveSig := bool(sigBool)
+	liveEnt := bool(entBool)
+	liveFP := strings.ToLower(strings.TrimSpace(sigFP))
+	if liveFP == "" && liveEnt {
+		liveFP = strings.ToLower(strings.TrimSpace(entFP))
+	}
+	if s.installer != nil {
+		liveTrust, liveSig, liveEnt, liveFP = installer.ComputeKeyringEffectiveProvenance(canonicalName, bool(sigBool), sigFP, bool(entBool), entFP, s.installer.Keyring())
 	}
 	return extensionInstallationDTO{
 		ID:                      id,
@@ -1279,8 +1312,10 @@ func (s *Server) loadExtensionInstallationDTO(ctx context.Context, insID string)
 		PreviousRollbackVersion: sqlNullStrPtr(prevVer),
 		ContractVersion:         contractVer,
 		State:                   mapExtensionStateOpenAPI(state),
-		OriginTrustTier:         trust,
-		EnterpriseSigned:        bool(entBool),
+		OriginTrustTier:         liveTrust,
+		SignatureVerified:       liveSig,
+		EnterpriseSigned:        liveEnt,
+		SigningKeyFingerprint:   liveFP,
 		ExecutionTier:           mapExecutionTierOpenAPI(execTier),
 		Version:                 ver,
 	}, state, nil
@@ -1293,24 +1328,30 @@ func (s *Server) loadExtensionPermissionDiffDTO(ctx context.Context, insID strin
 
 func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, insID string) (extensionPermissionDiffDTO, int64, error) {
 	var (
-		pkgID, trust, approvedRaw string
-		actSemver, candSemver     sql.NullString
-		candManifest, actManifest sql.NullString
-		candExec, actExec         sql.NullString
-		candEnt, actEnt           port.FlexBool
-		ver                       int64
+		pkgID, canonicalName, trust, approvedRaw string
+		actSemver, candSemver                    sql.NullString
+		candManifest, actManifest                sql.NullString
+		candExec, actExec                        sql.NullString
+		candEnt, actEnt                          port.FlexBool
+		candSig, actSig                          port.FlexBool
+		candSigFP, actSigFP                      sql.NullString
+		candEntFP, actEntFP                      sql.NullString
+		ver                                      int64
 	)
 	err := s.db.QueryRowContext(ctx, s.rebind(`
-		SELECT ei.package_id, ep.origin_trust_tier, ei.approved_permissions_json, ei.version,
+		SELECT ei.package_id, ep.canonical_name, ep.origin_trust_tier, ei.approved_permissions_json, ei.version,
 		       va.semver, vc.semver, va.manifest_json, vc.manifest_json,
 		       va.execution_tier, vc.execution_tier,
-		       COALESCE(va.enterprise_signed, `+port.BoolExpr(s.dialect, false)+`), COALESCE(vc.enterprise_signed, `+port.BoolExpr(s.dialect, false)+`)
+		       COALESCE(va.enterprise_signed, `+port.BoolExpr(s.dialect, false)+`), COALESCE(vc.enterprise_signed, `+port.BoolExpr(s.dialect, false)+`),
+		       COALESCE(va.signature_verified, `+port.BoolExpr(s.dialect, false)+`), COALESCE(vc.signature_verified, `+port.BoolExpr(s.dialect, false)+`),
+		       va.signing_key_fingerprint, vc.signing_key_fingerprint,
+		       va.enterprise_key_fingerprint, vc.enterprise_key_fingerprint
 		FROM extension_installations ei
 		JOIN extension_packages ep ON ep.id = ei.package_id
 		LEFT JOIN extension_versions va ON va.id = ei.active_version_id
 		LEFT JOIN extension_versions vc ON vc.id = ei.candidate_version_id
 		WHERE ei.id = ?`), insID,
-	).Scan(&pkgID, &trust, &approvedRaw, &ver, &actSemver, &candSemver, &actManifest, &candManifest, &actExec, &candExec, &actEnt, &candEnt)
+	).Scan(&pkgID, &canonicalName, &trust, &approvedRaw, &ver, &actSemver, &candSemver, &actManifest, &candManifest, &actExec, &candExec, &actEnt, &candEnt, &actSig, &candSig, &actSigFP, &candSigFP, &actEntFP, &candEntFP)
 	if errors.Is(err, sql.ErrNoRows) {
 		return extensionPermissionDiffDTO{}, 0, port.ErrNotFound
 	}
@@ -1327,11 +1368,28 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 	targetSemver := candSemver
 	targetExec := candExec
 	targetEnt := bool(candEnt)
+	targetSig := bool(candSig)
+	targetSigFP := candSigFP.String
+	targetEntFP := candEntFP.String
 	if !targetManifest.Valid || strings.TrimSpace(targetManifest.String) == "" {
 		targetManifest = actManifest
 		targetSemver = actSemver
 		targetExec = actExec
 		targetEnt = bool(actEnt)
+		targetSig = bool(actSig)
+		targetSigFP = actSigFP.String
+		targetEntFP = actEntFP.String
+	}
+
+	liveTrust := trust
+	liveSig := targetSig
+	liveEnt := targetEnt
+	liveFP := strings.ToLower(strings.TrimSpace(targetSigFP))
+	if liveFP == "" && liveEnt {
+		liveFP = strings.ToLower(strings.TrimSpace(targetEntFP))
+	}
+	if s.installer != nil {
+		liveTrust, liveSig, liveEnt, liveFP = installer.ComputeKeyringEffectiveProvenance(canonicalName, targetSig, targetSigFP, targetEnt, targetEntFP, s.installer.Keyring())
 	}
 
 	var extManifest installer.ExtensionManifest
@@ -1408,8 +1466,10 @@ func (s *Server) loadExtensionPermissionDiffWithVersion(ctx context.Context, ins
 		PackageID:             pkgID,
 		ActiveVersion:         sqlNullStrPtr(actSemver),
 		CandidateVersion:      candVerStr,
-		OriginTrustTier:       trust,
-		EnterpriseSigned:      targetEnt,
+		OriginTrustTier:       liveTrust,
+		SignatureVerified:     liveSig,
+		EnterpriseSigned:      liveEnt,
+		SigningKeyFingerprint: liveFP,
 		ExecutionTier:         mapExecutionTierOpenAPI(execTierStr),
 		ActiveExecutionTier:   activeExecutionTier,
 		ActiveAllowedHosts:    appHosts,

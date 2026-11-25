@@ -13,6 +13,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/finops/ledger"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/iam/vkey"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 const (
@@ -22,6 +23,7 @@ const (
 	defaultPlaygroundBudget     = int64(500_000)
 	minPlaygroundBudget         = int64(1_000)
 	maxPlaygroundBudget         = int64(5_000_000)
+	maxActivePlaygroundKeys     = 32
 )
 
 type playgroundSessionCreateRequest struct {
@@ -96,10 +98,30 @@ func (s *Server) handleCreatePlaygroundSession(w http.ResponseWriter, r *http.Re
 	now := s.nowMs()
 	expiresAtMs := now + ttl*1000
 	ownerID := sc.Actor.PrincipalID
+	var activeCount int
+	if cerr := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+		return q.QueryRowContext(r.Context(), s.rebind(`
+			SELECT COUNT(*) FROM virtual_keys
+			WHERE org_id = ? AND owner_principal_id = ?
+			  AND is_ephemeral_playground = `+port.BoolExpr(s.dialect, true)+`
+			  AND revoked_at_ms IS NULL AND state = 'CREATED_ACTIVE'
+			  AND (expires_at_ms IS NULL OR expires_at_ms > ?)`),
+			orgID, ownerID, now,
+		).Scan(&activeCount)
+	}); cerr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking active playground sessions", true, nil)
+		return
+	}
+	if activeCount >= maxActivePlaygroundKeys {
+		writeErrorEnvelope(w, r, http.StatusTooManyRequests, "rate_limit_exceeded", "rate_limit_error", "maximum active playground sessions reached for this principal", true, nil)
+		return
+	}
 	created, err := s.vkeys.Create(r.Context(), vkey.CreateParams{
 		OrgID: orgID, ProjectID: projectID, EnvID: envID, OwnerPrincipalID: &ownerID,
 		Name: "Playground session", MaxConcurrentStreams: 4, IsEphemeralPlayground: true,
-		ExpiresAtMs: &expiresAtMs, ActorID: ownerID,
+		AllowedPlanes: "PROVIDER",
+		AllowedRoutes: []string{"/v1/chat/completions"},
+		ExpiresAtMs:   &expiresAtMs, ActorID: ownerID,
 	})
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating ephemeral playground key", true, nil)

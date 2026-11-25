@@ -6,6 +6,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +18,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nguywnben/tanpopo/internal/extension/builtin"
+	"github.com/nguywnben/tanpopo/internal/extension/installer"
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 )
 
 func TestBuiltinOnboardingCleanRuntime(t *testing.T) {
@@ -114,14 +122,15 @@ func TestBuiltinOnboardingCleanRuntime(t *testing.T) {
 	mustDecodeBody(t, bootResp.Body, &bootBody)
 	cookie := extractSessionCookie(t, bootResp.Cookies())
 
-	// 5. Inspect built-in marketplace catalog, find @tanpopo/openai-compatible, stage & activate.
+	// 5. Inspect built-in marketplace catalog, find @tanpopo/openai-compatible, verify truthful unsigned dev status, stage & activate.
 	catResp := mustDoJSON(t, client, http.MethodGet, srv.URL+"/admin/v1/marketplace/catalog", cookie, "", nil)
 	var catBody struct {
 		Data []struct {
-			PackageID      string `json:"package_id"`
-			OriginTrust    string `json:"origin_trust_tier"`
-			SourceURI      string `json:"source_uri"`
-			ExpectedSHA256 string `json:"expected_sha256"`
+			PackageID         string `json:"package_id"`
+			OriginTrust       string `json:"origin_trust_tier"`
+			SignatureVerified bool   `json:"signature_verified"`
+			SourceURI         string `json:"source_uri"`
+			ExpectedSHA256    string `json:"expected_sha256"`
 		} `json:"data"`
 	}
 	mustDecodeBody(t, catResp.Body, &catBody)
@@ -138,8 +147,8 @@ func TestBuiltinOnboardingCleanRuntime(t *testing.T) {
 		if entry.PackageID == "@tanpopo/openai-compatible" {
 			targetURI = entry.SourceURI
 			targetSHA = entry.ExpectedSHA256
-			if entry.OriginTrust != "official" {
-				t.Fatalf("expected official trust tier for built-in adapter, got %s", entry.OriginTrust)
+			if entry.OriginTrust != "unverified_external" || entry.SignatureVerified {
+				t.Fatalf("expected unsigned dev built-in to report unverified_external & signature_verified=false, got trust=%s verified=%v", entry.OriginTrust, entry.SignatureVerified)
 			}
 		}
 	}
@@ -153,23 +162,34 @@ func TestBuiltinOnboardingCleanRuntime(t *testing.T) {
 	})
 	stageETag := stageResp.Header.Get("ETag")
 	var stageDiff struct {
-		InstallationID  string `json:"installation_id"`
-		OriginTrustTier string `json:"origin_trust_tier"`
+		InstallationID    string `json:"installation_id"`
+		OriginTrustTier   string `json:"origin_trust_tier"`
+		SignatureVerified bool   `json:"signature_verified"`
 	}
 	mustDecodeBody(t, stageResp.Body, &stageDiff)
-	if stageDiff.OriginTrustTier != "official" {
-		t.Fatalf("expected official origin trust tier after signature verification, got %s", stageDiff.OriginTrustTier)
+	if stageDiff.OriginTrustTier != "unverified_external" || stageDiff.SignatureVerified {
+		t.Fatalf("expected unsigned dev stage to report unverified_external & signature_verified=false, got trust=%s verified=%v", stageDiff.OriginTrustTier, stageDiff.SignatureVerified)
 	}
 
-	approveResp := mustDoJSONWithETag(t, client, http.MethodPost, srv.URL+"/admin/v1/extensions/"+stageDiff.InstallationID+"/approve-permissions", cookie, bootBody.CSRFToken, stageETag, map[string]any{
+	// Approving without unverified acknowledgment fails closed!
+	unackResp := mustDoJSONFull(t, client, http.MethodPost, srv.URL+"/admin/v1/extensions/"+stageDiff.InstallationID+"/approve-permissions", cookie, bootBody.CSRFToken, stageETag, map[string]any{
 		"enable_immediately": true,
+	}, http.StatusUnprocessableEntity)
+	_ = unackResp.Body.Close()
+
+	approveResp := mustDoJSONWithETag(t, client, http.MethodPost, srv.URL+"/admin/v1/extensions/"+stageDiff.InstallationID+"/approve-permissions", cookie, bootBody.CSRFToken, stageETag, map[string]any{
+		"enable_immediately":            true,
+		"acknowledge_unverified_external": true,
 	})
 	var approved struct {
-		State string `json:"state"`
+		PackageID         string `json:"package_id"`
+		State             string `json:"state"`
+		OriginTrustTier   string `json:"origin_trust_tier"`
+		SignatureVerified bool   `json:"signature_verified"`
 	}
 	mustDecodeBody(t, approveResp.Body, &approved)
-	if approved.State != "ENABLED_ACTIVE" {
-		t.Fatalf("expected ENABLED_ACTIVE, got %s", approved.State)
+	if approved.State != "ENABLED_ACTIVE" || approved.OriginTrustTier != "unverified_external" || approved.SignatureVerified {
+		t.Fatalf("unexpected unsigned approval state: %+v", approved)
 	}
 
 	// 6. Newly activated adapter is immediately registered in Providers -> Adapters!
@@ -280,7 +300,28 @@ func TestBuiltinOnboardingCleanRuntime(t *testing.T) {
 		t.Fatalf("unexpected virtual key token %q", vk.SecretKey)
 	}
 
-	// 8. Execute OpenAI inference call -> 200 OK -> visible in Traces!
+	// 8. Under TP-BR-0202, unsigned unverified_external extensions are blocked for child projects
+	// until an ORG_OWNER explicitly opts the package into org_extension_policies.
+	blockedResp := mustDoJSONFull(t, client, http.MethodPost, srv.URL+"/v1/chat/completions", "", "", "", map[string]any{
+		"model":    "local-qwen",
+		"messages": []map[string]any{{"role": "user", "content": "ping"}},
+	}, http.StatusServiceUnavailable, "Authorization", "Bearer "+vk.SecretKey)
+	_ = blockedResp.Body.Close()
+
+	// Explicit ORG_OWNER policy opt-in for the unsigned unverified_external package.
+	polResp := mustDoJSONWithETag(t, client, http.MethodPut, srv.URL+"/admin/v1/organizations/"+bootBody.OrgID+"/extension-policies", cookie, bootBody.CSRFToken, `"v1"`, map[string]any{
+		"min_plugin_trust": "ANY_APPROVED",
+		"policies": []map[string]any{
+			{
+				"package_id":             approved.PackageID,
+				"enabled":                true,
+				"pinned_installation_id": stageDiff.InstallationID,
+			},
+		},
+	})
+	_ = polResp.Body.Close()
+
+	// 9. Execute OpenAI inference call -> 200 OK -> visible in Traces!
 	chatResp := mustDoJSON(t, client, http.MethodPost, srv.URL+"/v1/chat/completions", "", "", map[string]any{
 		"model":    "local-qwen",
 		"messages": []map[string]any{{"role": "user", "content": "ping"}},
@@ -315,6 +356,157 @@ func TestBuiltinOnboardingCleanRuntime(t *testing.T) {
 			t.Fatalf("expected recorded trace for local-qwen with status_code=200, got %+v", tracesBody)
 		}
 		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+func TestBuiltinOfficialProvenanceReleaseSignedAcrossDistinctKEKs(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	otherPub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey other: %v", err)
+	}
+	expectedFP := trust.PublicKeyFingerprint(pub)
+
+	cat, err := builtin.NewCatalog()
+	if err != nil {
+		t.Fatalf("NewCatalog: %v", err)
+	}
+	var targetPkg builtin.Package
+	for _, pkg := range cat.Packages() {
+		if pkg.PackageID == "@tanpopo/openai-compatible" {
+			targetPkg = pkg
+			break
+		}
+	}
+	if targetPkg.PackageID == "" {
+		t.Fatalf("missing @tanpopo/openai-compatible built-in package")
+	}
+	sigBytes := ed25519.Sign(priv, installer.SignatureSigningPayload(targetPkg.PackageID, targetPkg.Version, targetPkg.ArchiveSHA256))
+	sigDoc, err := json.Marshal(map[string]any{
+		"signatures": []map[string]string{
+			{
+				"package_id":            targetPkg.PackageID,
+				"version":               targetPkg.Version,
+				"archive_sha256":        targetPkg.ArchiveSHA256,
+				"root_signature_base64": base64.StdEncoding.EncodeToString(sigBytes),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Marshal signatures: %v", err)
+	}
+	sigPath := filepath.Join(t.TempDir(), "release-signatures.json")
+	if err := os.WriteFile(sigPath, sigDoc, 0o600); err != nil {
+		t.Fatalf("WriteFile release-signatures.json: %v", err)
+	}
+
+	bootAndInspect := func(masterKeyHex, rootPubHex string) (string, bool, string, string) {
+		t.Helper()
+		dataDir := t.TempDir()
+		t.Setenv("TANPOPO_DATA_DIR", dataDir)
+		t.Setenv("TANPOPO_MASTER_KEY", masterKeyHex)
+		t.Setenv("TANPOPO_TEST_HERMETIC", "1")
+		t.Setenv("TANPOPO_OFFLINE_MODE", "true")
+		t.Setenv("TANPOPO_RELEASE_ROOT_PUBKEYS", rootPubHex)
+		t.Setenv("TANPOPO_RELEASE_SIGNATURES_PATH", sigPath)
+
+		handler, closeRuntime, err := buildRuntime(context.Background(), "all", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("buildRuntime: %v", err)
+		}
+		defer func() {
+			if cerr := closeRuntime(); cerr != nil {
+				t.Fatalf("closeRuntime: %v", cerr)
+			}
+		}()
+		srv := httptest.NewServer(handler)
+		defer srv.Close()
+		client := srv.Client()
+
+		tokBytes, err := os.ReadFile(filepath.Join(dataDir, "bootstrap.token"))
+		if err != nil {
+			t.Fatalf("read bootstrap.token: %v", err)
+		}
+		bootResp := mustDoJSON(t, client, http.MethodPost, srv.URL+"/admin/v1/bootstrap/complete", "", "", map[string]any{
+			"bootstrap_token":                strings.TrimSpace(string(tokBytes)),
+			"owner_email":                    "owner@example.com",
+			"owner_password":                 "StrongPassword!2026",
+			"org_name":                       "Release Org",
+			"project_name":                   "default",
+			"master_kek_backup_acknowledged": true,
+		})
+		var bootBody struct {
+			CSRFToken string `json:"csrf_token"`
+		}
+		mustDecodeBody(t, bootResp.Body, &bootBody)
+		cookie := extractSessionCookie(t, bootResp.Cookies())
+
+		catResp := mustDoJSON(t, client, http.MethodGet, srv.URL+"/admin/v1/marketplace/catalog", cookie, "", nil)
+		var catBody struct {
+			Data []struct {
+				PackageID             string `json:"package_id"`
+				OriginTrustTier       string `json:"origin_trust_tier"`
+				SignatureVerified     bool   `json:"signature_verified"`
+				SigningKeyFingerprint string `json:"signing_key_fingerprint"`
+				SourceURI             string `json:"source_uri"`
+				ExpectedSHA256        string `json:"expected_sha256"`
+			} `json:"data"`
+		}
+		mustDecodeBody(t, catResp.Body, &catBody)
+		for _, item := range catBody.Data {
+			if item.PackageID == "@tanpopo/openai-compatible" {
+				if !item.SignatureVerified {
+					badStage := mustDoJSONFull(t, client, http.MethodPost, srv.URL+"/admin/v1/extensions/install", cookie, bootBody.CSRFToken, "", map[string]any{
+						"source_uri":      item.SourceURI,
+						"expected_sha256": item.ExpectedSHA256,
+					}, http.StatusBadRequest)
+					_ = badStage.Body.Close()
+					return item.OriginTrustTier, item.SignatureVerified, item.SigningKeyFingerprint, ""
+				}
+				stageResp := mustDoJSON(t, client, http.MethodPost, srv.URL+"/admin/v1/extensions/install", cookie, bootBody.CSRFToken, map[string]any{
+					"source_uri":      item.SourceURI,
+					"expected_sha256": item.ExpectedSHA256,
+				})
+				etag := stageResp.Header.Get("ETag")
+				var diff struct {
+					InstallationID        string `json:"installation_id"`
+					OriginTrustTier       string `json:"origin_trust_tier"`
+					SignatureVerified     bool   `json:"signature_verified"`
+					SigningKeyFingerprint string `json:"signing_key_fingerprint"`
+				}
+				mustDecodeBody(t, stageResp.Body, &diff)
+				if diff.OriginTrustTier != item.OriginTrustTier || diff.SignatureVerified != item.SignatureVerified || diff.SigningKeyFingerprint != item.SigningKeyFingerprint {
+					t.Fatalf("stage diff provenance mismatch vs catalog: catalog=%+v stage=%+v", item, diff)
+				}
+				// Official release-signed package approves cleanly without acknowledge_unverified_external!
+				appResp := mustDoJSONWithETag(t, client, http.MethodPost, srv.URL+"/admin/v1/extensions/"+diff.InstallationID+"/approve-permissions", cookie, bootBody.CSRFToken, etag, map[string]any{
+					"enable_immediately": true,
+				})
+				_ = appResp.Body.Close()
+				return item.OriginTrustTier, item.SignatureVerified, item.SigningKeyFingerprint, diff.InstallationID
+			}
+		}
+		t.Fatalf("@tanpopo/openai-compatible missing from catalog")
+		return "", false, "", ""
+	}
+
+	// Instance A & Instance B have DIFFERENT Master KEKs yet identical official verification!
+	trustA, verA, fpA, _ := bootAndInspect("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20", hex.EncodeToString(pub))
+	trustB, verB, fpB, _ := bootAndInspect("f1f2f3f4f5f6f7f8f9fafbfcfdfeff00112233445566778899aabbccddeeff10", hex.EncodeToString(pub))
+	if trustA != "official" || !verA || fpA != expectedFP {
+		t.Fatalf("Instance A expected official/%v/%s, got %s/%v/%s", true, expectedFP, trustA, verA, fpA)
+	}
+	if trustB != "official" || !verB || fpB != expectedFP {
+		t.Fatalf("Instance B with different KEK expected official/%v/%s, got %s/%v/%s", true, expectedFP, trustB, verB, fpB)
+	}
+
+	// Instance C with wrong public key fails closed to unverified_external / signature_verified=false!
+	trustC, verC, fpC, _ := bootAndInspect("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20", hex.EncodeToString(otherPub))
+	if trustC != "unverified_external" || verC || fpC != "" {
+		t.Fatalf("Instance C with wrong root key expected unverified_external/false/'', got %s/%v/%q", trustC, verC, fpC)
 	}
 }
 

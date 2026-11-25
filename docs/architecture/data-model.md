@@ -346,7 +346,7 @@ Every secondary and partial index in [`sqlite_schema.sql`](../../db/spec-check/s
    - **SQLite:** `RetentionAndErasureWorker` deletes aged `request_traces_meta` and `debug_payload_blobs` in bounded micro-batches interleaved with `50 ms` yields so WAL writers are never stalled.
 4. **Organization & Single-Project Erasure (`< 60s TARGET / UNVERIFIED` — `TP-NFR-0502`, `OPS-AC-09`):**
    - **Single-Project Erasure:** Transitions `projects.status` to `PENDING_ERASURE`, broadcasts an emergency stream-abort and `DEK` cache-eviction event via `config_changelog` / `Valkey Pub/Sub`, and deletes the project's row in `project_encryption_keys (org_id, project_id)` (cascading live `Project`-owned `secret_credentials`, `debug_payload_blobs`, and `response_cache_entries` without affecting sibling projects or breaking the parent organization's `audit_events` hash chain).
-   - **Full Organization Erasure:** Destroys `org_encryption_keys` (and all child `project_encryption_keys`), purges `tp:v1:{<org_id>}:*` keys in Valkey, removes mutable tenant configuration, and records an anonymized `tenant.crypto_shredded` compliance receipt.
+   - **Full Organization Erasure:** Destroys `org_encryption_keys` (and all child `project_encryption_keys`), purges `tp:v1:{<org_id>}:*` keys in Valkey, removes mutable tenant configuration, and records an anonymized `organization.crypto_shredded` compliance receipt (`POST /admin/v1/organizations/{orgId}/finalize-erasure` or startup recovery resumes any `DELETING` organization).
 
 > [!IMPORTANT]
 > **Product Owner Verification Condition (`COND-PO-02` — Calibrated per `CR-12` Option A [`DEC-017`]):**
