@@ -18,6 +18,10 @@ The real Console asks for separate `Environment name` and `Environment slug`. Cr
 
 Evidence: `evidence/CP19-environment-create-form.png`, `evidence/CP19-env-human-name-reproduction.json`, `evidence/CP19-env-human-name-displayed.png`, and `evidence/CP19-environment-picker-slug-options.png`. The real screenshots were visually inspected. A prior independent environment creation in CP18 also read back and displayed its slug; the second case records the exact distinct request, create response, and subsequent list response.
 
+## Independent QA-004 CP55 retest
+
+The same discrepancy was reproduced again on frozen RC6 artifact `45581179274` through a separate real-browser project/environment journey. The Owner submitted `QA004 CP55 Staging West` / `qa004-cp55-staging-west`; POST returned HTTP 201 with both distinct fields, while the subsequent project-scoped GET returned `name` equal to the slug, and the refreshed picker displayed only the slug. Screenshots and sanitized request/readback evidence are in [CP55](../checkpoints/CP55-project-environment-provisioning-and-audit-retest.md). The sibling project created in that journey did preserve its distinct display name and slug through project list readback, isolating the observed loss to environment metadata. This is a repeat confirmation of DEF-055, not a new defect.
+
 ## Facts and root cause
 
 The Create form has separate required name and slug fields in `web/console/src/shell/ConsoleShell.tsx`. The frozen API request type accepts `name`. `handleCreateProjectEnvironment` validates both values and returns the input name in its create response, but passes only `Slug` to storage. `handleListProjectEnvironments` then populates DTO `Name` from `e.Slug`. This explains the observed 201-versus-GET discrepancy; no root-cause speculation is needed for this behavior.
