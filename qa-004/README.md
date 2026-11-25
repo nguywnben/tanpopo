@@ -87,6 +87,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP81 DEF-039 project policy without an environment](checkpoints/CP81-def039-project-policy-no-environment.md)
 - [CP82 A2A active-work cancellation / DEF-069](checkpoints/CP82-a2a-active-work-cancellation.md)
 - [CP83 A2A project-key boundary](checkpoints/CP83-a2a-project-key-boundary.md)
+- [CP84 active provider SSE kill-switch](checkpoints/CP84-live-sse-kill-switch.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -166,3 +167,6 @@ CP82 exercised cancellation during a real synchronous A2A dispatch in exact RC6.
 
 
 CP83 tested a project-scope A2A boundary using the active A2A-only key in `default/dev`. Agent discovery returned only the key project’s agent; a synthetic task targeting a sibling-project agent returned HTTP 404, created no task, and made zero downstream fixture calls. The real Console after-state screenshot was visually inspected. This is one scoped authorization pass; foreign-tenant, other roles, resource read/resume/cancel boundaries, and multi-node behavior remain open. No defect was added. DEF-069 remains the current new Major A2A defect, and **GATE-REL-07 remains BLOCKED.**
+
+
+CP84 exercised an actual active provider SSE stream. A valid route-limited key completed its synthetic positive control; a Security Reviewer then triggered a VKEY switch with active-stream abort enabled while a second stream was live. RC6 reported one severed stream, the fixture observed the downstream disconnect, and the persisted trace showed `mid_stream_abort`. An Org Owner cleared the switch, verified inference recovery, and revoked all temporary keys; the original fixture was restored. Screenshots were visually inspected. This is PASS for one target/runtime/stream slice; MCP, other target levels, distributed behavior and cross-scope permissions remain unverified. No new defect was added. Historical status remains 23 scoped PASS, 6 PARTIAL, 1 FAIL (DEF-025), and 20 UNVERIFIED; DEF-051–069 remain 19 confirmed new failures. QA continues; **GATE-REL-07 remains BLOCKED.**

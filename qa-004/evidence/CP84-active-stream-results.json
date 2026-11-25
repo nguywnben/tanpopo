@@ -1,0 +1,49 @@
+{
+  "reviewer_scope": "default\n/\ndev\n(Active workspace scope)",
+  "preview": "Trigger emergency kill switch\nPropagates immediately across snapshots and writes an immutable audit event.\nTarget level\nVirtual key\nTarget ID\n∙ Required\nPreview blast radius\nEstimated blast radius\n1 orgs · 1 projects · 1 virtual keys · 1 connections\nReason (minimum 5 characters)\n∙ Required\nAbort active streams immediately\nSevers live SSE inference and MCP streams using this entity.\nCancel\nReview & trigger",
+  "first": {
+    "status": 200,
+    "contentType": "text/event-stream; charset=utf-8",
+    "chunks": 1
+  },
+  "trig_status": 200,
+  "trigger": {
+    "config_epoch": 145,
+    "severed_streams_count": 1,
+    "affected_entities_count": 1
+  },
+  "stream": {
+    "status": 200,
+    "contentType": "text/event-stream; charset=utf-8",
+    "chunks": 2,
+    "done": true,
+    "error": null,
+    "body": "data: {\"choices\":[{\"delta\":{\"content\":\"chunk-0 \"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-cancel-qa004\",\"model\":\"qa004-mock\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"chunk-1 \"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-cancel-qa004\",\"model\":\"qa004-mock\",\"object\":\"chat.completion.chunk\"}\n\n"
+  },
+  "fixture": [
+    {
+      "path": "/v1/chat/completions",
+      "model": "qa004-mock",
+      "stream": true,
+      "auth_present": false,
+      "event": "started"
+    },
+    {
+      "path": "/v1/chat/completions",
+      "event": "completed",
+      "chunks_sent": 24
+    },
+    {
+      "path": "/v1/chat/completions",
+      "model": "qa004-mock",
+      "stream": true,
+      "auth_present": false,
+      "event": "started"
+    },
+    {
+      "path": "/v1/chat/completions",
+      "event": "client_disconnected",
+      "chunks_sent": 3
+    }
+  ]
+}
