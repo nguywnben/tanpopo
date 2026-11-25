@@ -1,0 +1,13 @@
+{
+  "status": 201,
+  "task": {
+    "task_id": "tsk_01m898n7gte00b167mt2q9cnbk",
+    "target_agent_id": "agt_01m8987bbqe009959qp1mwgybg",
+    "target_agent_slug": "qa004-a2a-loopback",
+    "state": "input-required",
+    "prompt_message": "Please provide an account period.",
+    "hop_count": 1,
+    "enforced_region": "US",
+    "version": 3
+  }
+}

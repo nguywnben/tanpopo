@@ -12,9 +12,11 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP06 synthetic provider, model, deployment and route setup](checkpoints/CP06-provider-model-route.md)
 - [CP07 native Ollama end-to-end journey](checkpoints/CP07-native-ollama-end-to-end.md)
 - [CP08 budgets, enforcement, and chargeback exports](checkpoints/CP08-finops-budgets-and-exports.md)
+- [CP09 failed provider promotion guard](checkpoints/CP09-provider-failure-promotion-guard.md)
+- [CP10 MCP/A2A controls and resumable task lifecycle](checkpoints/CP10-a2a-mcp-authorized-lifecycle.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
 - [Release signing readiness](RELEASE-SIGNING-READINESS.md)
 
-QA is ongoing. Three confirmed new failures (DEF-051–053) remain open; 42 historical findings are UNVERIFIED, five have scoped PASS, and three remain PARTIAL. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**
+QA is ongoing. Three confirmed new failures (DEF-051–053) remain open; 37 historical findings are UNVERIFIED, 10 have scoped PASS, and three remain PARTIAL. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**

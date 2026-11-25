@@ -1,0 +1,6 @@
+{
+  "task_id": "tsk_01m898n7gte00b167mt2q9cnbk",
+  "row_text": "tsk_01m898n7gte00b167mt2q9cnbk\nqa004-a2a-loopback\n\tCompleted\t1 / 5\tUS\t$0.000000\t$0.000000\t—",
+  "actions": [],
+  "page_text": "rg\n/\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAir-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister agent\nMCP servers\nA2A Agents & Active Tasks\n3\nRegistered A2A agents\n1\nAgent\tEndpoint\tRegion\tMax hops\tState\n\nQA004 Synthetic A2A Agent\nqa004-a2a-loopback\n\thttp://127.0.0.1:18127\tUS\t5\tActive\nActive & recent A2A tasks\n2\nTask\tState\tHops\tRegion\tSub-budget hold\tSettled cost\tActions\n\ntsk_01m898n7gte00b167mt2q9cnbk\nqa004-a2a-loopback\n\tCompleted\t1 / 5\tUS\t$0.000000\t$0.000000\t—\n\ntsk_01m898jwp1e009y0ma0b9h1wj4\nqa004-a2a-loopback\n\tCompleted\t1 / 5\tUS\t$0.000000\t$0.000000\t—\nNo MCP servers registered Register a Streamable HTTP MCP endpoint to discover tools and enforce schema pins."
+}

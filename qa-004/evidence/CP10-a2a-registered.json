@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "agents": [
+    {
+      "project_id": "prj_01m895k8pee008b440xk2ef12p",
+      "agent_slug": "qa004-a2a-loopback",
+      "name": "QA004 Synthetic A2A Agent",
+      "endpoint_url": "http://127.0.0.1:18127",
+      "data_region": "US",
+      "max_delegation_hops": 5,
+      "status": "ACTIVE",
+      "version": 1
+    }
+  ]
+}
