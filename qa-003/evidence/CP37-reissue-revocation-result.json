@@ -1,0 +1,50 @@
+{
+  "email": "qa003-cp37-reissue-1795565913742@example.invalid",
+  "create_status": 201,
+  "pending": {
+    "id": "prc_01m881343ye00ark778sxzktyx",
+    "has_token": true,
+    "expires_at": "2026-11-26T00:18:36.286Z"
+  },
+  "reissue_status": 201,
+  "reissued": {
+    "member_matches": true,
+    "has_token": true,
+    "expires_at": "2026-11-26T00:18:37.794Z"
+  },
+  "old_token_after_reissue": {
+    "status": 401,
+    "error_code": "invalid_enrollment_token",
+    "has_session": false
+  },
+  "weak_password": {
+    "status": 400,
+    "error_code": "weak_password",
+    "has_session": false
+  },
+  "activate": {
+    "status": 200,
+    "error_code": "",
+    "has_session": true
+  },
+  "replay": {
+    "status": 401,
+    "error_code": "invalid_enrollment_token",
+    "has_session": false
+  },
+  "fresh_login": {
+    "path": "/overview",
+    "heading": "Overview"
+  },
+  "member_final": {
+    "found": true,
+    "pending": false,
+    "has_password": true,
+    "roles": [
+      "DEVELOPER"
+    ]
+  },
+  "tokenA": "[omitted]",
+  "tokenB": "[omitted]",
+  "password": "[omitted]"
+}
