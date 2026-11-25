@@ -1,0 +1,28 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "actions": [
+    {
+      "form": "Policies\n\nInherited data residency ceiling: EU, US, APAC, ON_PREM\n\nConfigured routes\n0\nNo routes in this environment\nCreate a route to map model slugs to ordered or weighted deployments.\nCreate route\nCreate route\nConfigure strategy, failover limits, and ordered deployment targets.\nRoute slug\nRouting strategy\nPriority failover\nMax failover hops (1–3)\nRequest timeout (ms)\nAdd deployment target\nSelect deployment\nAdd target\n#1 QA003 RC5 Ollama 401 / qa003-synthetic-unauthorized · 0js4t4\nON_PREM · Provisioned\nAt least one fallback target does not declare tool_calling capability.\nCancel\nCreate route"
+    },
+    {
+      "page": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\n1\nRoute Explain\nPolicies\nCreated route \"qa003-cp45-identity-probe\".\n\nInherited data residency ceiling: EU, US, APAC, ON_PREM\n\nConfigured routes\n1\nRoute slug\tStrategy\tFallback chain\tTarget health\tActions\nqa003-cp45-identity-probe\tPriority failover\tQA003 RC5 Ollama 401 / qa003-synthetic-unauthorized · 0js4t4 (100%)\t\nProvisioned\n\t"
+    }
+  ],
+  "persistence": {
+    "status": 200,
+    "data": [
+      {
+        "id": "rte_01m884wwqve0091nv5ay0jhap1",
+        "slug": "qa003-cp45-identity-probe",
+        "version": 1,
+        "targets": [
+          {
+            "deployment_id": "dpl_01m87fckaye00axyrh360js4t4",
+            "priority_order": 1,
+            "weight": 100
+          }
+        ]
+      }
+    ]
+  }
+}
