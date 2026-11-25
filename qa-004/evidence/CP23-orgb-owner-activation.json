@@ -1,0 +1,6 @@
+{
+  "role": "ORG_OWNER",
+  "organization_slug": "qa004-cross-tenant-boundary",
+  "activation": "One-time invite flow completed; subsequent sign-in succeeded in a separate browser context.",
+  "verification": "Authenticated session reported ORG_OWNER and the created organization ID. Organization list returned only that organization; project list returned zero projects."
+}

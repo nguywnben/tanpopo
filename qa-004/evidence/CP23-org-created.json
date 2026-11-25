@@ -1,0 +1,13 @@
+{
+  "ui_tail": "scope-canary-env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAir-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOperations\n\nProvision isolated tenant organizations and execute irreversible cryptographic erasure.\n\nRefresh\nCreate organization\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\n2\nWebhooks\nCreated organization QA-004 Cross Tenant Boundary (qa004-cross-tenant-boundary).\nTenant organizations\n2\nOrganization\tState\tMin extension trust\tFour-eyes approval\tCreated\tActions\n\nQA-004 Cross Tenant Boundary\nqa004-cross-tenant-boundary · org_01m89ezzx6e0083hrjy2r7s14f\n\tActive\tAny Approved\tDisabled\tNov 25, 2026, 1:40:48 PM\t\nSwitch\nCrypto-shred\n\n\nQA004 Test Root Org\nActive\nqa004-test-root-org · org_01m895k8pee008b3aeaswvpshy\n\tActive\tAny Approved\tDisabled\tNov 25, 2026, 10:56:33 AM\t\nSwitch\nCrypto-shred",
+  "organization_readback": {
+    "status": 200,
+    "count": 2,
+    "organization": {
+      "id": "org_01m89ezzx6e0083hrjy2r7s14f",
+      "slug": "qa004-cross-tenant-boundary",
+      "name": "QA-004 Cross Tenant Boundary",
+      "status": "ACTIVE"
+    }
+  }
+}
