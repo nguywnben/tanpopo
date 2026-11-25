@@ -1,0 +1,24 @@
+{
+  "saved": {
+    "status": 201,
+    "body": {
+      "id": "rte_01m88afmx7e00b95en2w2753ma",
+      "slug": "qa003-cp56-route",
+      "env_id": "env_01m889dz02e00bzn9ddxth5hhn",
+      "strategy": "PRIORITY_FAILOVER",
+      "allowed_data_regions": [],
+      "max_failover_hops": 3,
+      "request_timeout_ms": 60000,
+      "targets": [
+        {
+          "deployment_id": "dpl_01m88acwb1e0092mkgxh7hq69e",
+          "priority_order": 1,
+          "weight": 100
+        }
+      ],
+      "version": 1,
+      "updated_at": "2026-11-25T03:02:43.879Z"
+    }
+  },
+  "screen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\n1\nRoute Explain\nPolicies\nCreated route \"qa003-cp56-route\".\n\nInherited data residency ceiling: EU, US, APAC, ON_PREM\n\nConfigured routes\n1\nRoute slug\tStrategy\tFallback chain\tTarget health\tActions\nqa003-cp56-route\tPriority failover\tQA003 CP55 Ollama defaults / qa003-cp56-local · 7hq69e (100%)\t\nHealthy\n\t"
+}

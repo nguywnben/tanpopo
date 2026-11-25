@@ -1,0 +1,34 @@
+{
+  "posts": [
+    {
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/models",
+      "status": 201
+    }
+  ],
+  "responseBody": {
+    "id": "lmd_01m88abkqee0096xad67rdj042",
+    "slug": "qa003-cp56-local",
+    "display_name": "QA003 CP56 Local Ollama",
+    "capabilities": {
+      "streaming": true,
+      "tool_calling": false,
+      "parallel_tool_calls": false,
+      "strict_json_schema": false,
+      "json_object": false,
+      "vision": false,
+      "audio_input": false,
+      "document_input": false,
+      "reasoning": false,
+      "prompt_caching": false,
+      "embeddings": false,
+      "rerank": false
+    },
+    "assurance_tier": "DECLARED"
+  },
+  "selected_capability_text": "LARED until test or verification evidence promotes them.\nDisplay name\n∙ Required\nCanonical model slug\n∙ Required\nContext tokens\n∙ Required\nMax output tokens\n∙ Required\nDeclared capabilities\nstreaming\nSelect all\nstreaming\ntool calling\nparallel tool calls\nstrict json schema\njson object\nvision\naudio input\ndocument input\nreasoning\nprompt caching\nembeddings\nrerank\nCancel\nRegister model\n1 of 12 selected",
+  "screen": "Models & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\nLogical Models\n1\nRegistered logical model \"qa003-cp56-local\" as DECLARED.\nSearch models\nAssurance tier\nAll tiers\nCapability\nAll capabilities\nLogical model registry\n1\nModel\tAssurance\tContext / Output\tDeclared capabilities\n\nqa003-cp56-local\nQA003 CP56 Local Ollama\n\tDeclared\t8,192 / 1,024\tstreaming"
+}
