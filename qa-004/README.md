@@ -14,6 +14,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP08 budgets, enforcement, and chargeback exports](checkpoints/CP08-finops-budgets-and-exports.md)
 - [CP09 failed provider promotion guard](checkpoints/CP09-provider-failure-promotion-guard.md)
 - [CP10 MCP/A2A controls and resumable task lifecycle](checkpoints/CP10-a2a-mcp-authorized-lifecycle.md)
+- [CP11 FinOps Viewer RBAC](checkpoints/CP11-finops-viewer-rbac.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)

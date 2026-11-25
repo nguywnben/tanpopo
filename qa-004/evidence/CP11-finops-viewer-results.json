@@ -1,0 +1,120 @@
+{
+  "role": "FINOPS_VIEWER",
+  "activated": true,
+  "sessionStatus": 200,
+  "nav": {
+    "finops": true,
+    "providers": true,
+    "security": false,
+    "accessKeys": true
+  },
+  "finopsPageContainsTitle": true,
+  "reads": {
+    "budgetList": {
+      "status": 200,
+      "error": null,
+      "data": [
+        {
+          "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m895k8pee008b440xk2ef12p",
+          "period": "MONTHLY",
+          "hard_limit_micros": 100,
+          "soft_warning_percents": [
+            50,
+            80,
+            95
+          ],
+          "settled_exact_micros": 1,
+          "settled_estimated_micros": 0,
+          "reserved_hold_micros": 0,
+          "negative_carryover_micros": 0,
+          "unmetered_request_count": 0,
+          "version": 5
+        }
+      ]
+    },
+    "usageSummary": {
+      "status": 200,
+      "error": null,
+      "data": [
+        {
+          "group_key": "qa004-mock",
+          "exact_micro_usd": 2,
+          "estimated_micro_usd": 1,
+          "exact_request_count": 2,
+          "estimated_request_count": 1,
+          "unmetered_request_count": 0
+        }
+      ]
+    }
+  },
+  "writes": {
+    "updateExistingBudget": {
+      "status": 403,
+      "error": "insufficient_role_permission",
+      "data": null
+    },
+    "membersList": {
+      "status": 403,
+      "error": "insufficient_role_permission",
+      "data": null
+    }
+  },
+  "securityRouteShowsDenied": true,
+  "securityRouteExcerpt": "Skip to main content\nTanpopo\nMonitor\nOverview\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nGovernance\nAccess & Keys\nqa004-finops-08fb49bc@example.invalid\nFinOps Viewer\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nAir-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nAccess restricted\nYour assigned roles (FinOps Viewer) do not permit access to Security.",
+  "requestStatuses": [
+    {
+      "path": "/admin/v1/members",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/members",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "path": "/admin/v1/members",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/usage/summary",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/budgets",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/budgets",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/usage/summary",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/members",
+      "method": "GET",
+      "status": 403
+    }
+  ],
+  "postDeniedBudgetReadback": {
+    "status": 200,
+    "data": [
+      {
+        "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+        "hard_limit_micros": 100,
+        "version": 5,
+        "settled_exact_micros": 1,
+        "settled_estimated_micros": 0
+      }
+    ]
+  }
+}
