@@ -15,9 +15,10 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP09 failed provider promotion guard](checkpoints/CP09-provider-failure-promotion-guard.md)
 - [CP10 MCP/A2A controls and resumable task lifecycle](checkpoints/CP10-a2a-mcp-authorized-lifecycle.md)
 - [CP11 FinOps Viewer RBAC](checkpoints/CP11-finops-viewer-rbac.md)
+- [CP12 Developer role and catalog consistency](checkpoints/CP12-developer-role-and-catalog-consistency.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
 - [Release signing readiness](RELEASE-SIGNING-READINESS.md)
 
-QA is ongoing. Three confirmed new failures (DEF-051–053) remain open; 37 historical findings are UNVERIFIED, 10 have scoped PASS, and three remain PARTIAL. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**
+QA is ongoing. Four confirmed new failures (DEF-051–054) remain open; 37 historical findings are UNVERIFIED, 10 have scoped PASS, and three remain PARTIAL. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**
