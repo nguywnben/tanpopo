@@ -44,6 +44,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP38 native Ollama Generate dialect](checkpoints/CP38-native-ollama-generate.md)
 - [CP39 Owner model create and display-name persistence](checkpoints/CP39-owner-model-create-and-display-name.md)
 - [CP40 Owner-provisioned embeddings end to end](checkpoints/CP40-owner-embeddings-end-to-end.md)
+- [CP41 extension trust, integrity, and unsigned staging](checkpoints/CP41-extension-trust-integrity-and-unsigned-staging.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)

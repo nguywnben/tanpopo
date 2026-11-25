@@ -13,3 +13,6 @@
 | Namespace spoof denial, tamper rejection, signature mutation rejection | UNVERIFIED | Cryptographic positive path was exercised with a valid isolated test signature; negative namespace/tamper/modified digest cases remain open. |
 
 Production release signing remains blocked pending Product Owner controlled signing infrastructure. QA-only ephemeral key evidence is strictly isolated verifier evidence and is not an authentic Tanpopo signature. No production signing key was accessed or created.
+
+
+CP41 confirmed the current cached catalog shows seven unsigned/unverified built-ins and one test-root-verified Ollama package; the permission review correctly kept the unsigned Anthropic candidate pending and disabled approval until explicit review/acknowledgement. Hash-pin mismatch and package-ID-style built-in URI attempts were rejected without changing installation state. This remains scoped test-key evidence, not production release-signing readiness. See [CP41](checkpoints/CP41-extension-trust-integrity-and-unsigned-staging.md).

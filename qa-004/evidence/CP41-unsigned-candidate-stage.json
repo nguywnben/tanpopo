@@ -1,0 +1,39 @@
+{
+  "text": "1ec9faf)\tdeclarative\tprovider_adapter\tInstalled\n\nOpenAI Official Adapter\n@tanpopo/openai · v0.1.0\nOfficial Tanpopo Tier-1 declarative adapter for OpenAI (/v1/chat/completions, /v1/responses, /v1/embeddings, /native/openai/*) with automatic CR-09 stream_options.include_usage injection.\n\tUnverified\tUnsigned\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nOpenAI-Compatible Gateway & vLLM/TGI Adapter\n@tanpopo/openai-compatible · v0.1.0\nOfficial Tanpopo Tier-1 declarative adapter for vLLM, SGLang, TGI, LM Studio, LiteLLM upstream, and private OpenAI-compatible inference endpoints.\n\tUnverified\tUnsigned\tdeclarative\tprovider_adapter\t\nStage for review\nExtension permission review\next_01m89qpt3qe00avbbvnxk4cf3x · new → 0.1.0\nOrigin trust\nUnverified\nPublisher signature\nUnsigned\nEnterprise signature\nNone\nExecution tier\nsandboxed_wasm\nThis package does not carry a verified offline release signature and runs as unverified_external unless release signing keys are configured.\nPermission\tActive\tCandidate\nHost: api.anthropic.com\t—\t\napi.anthropic.com\nAdded\n\nSecret slot: api_key\t—\t\napi_key\nAdded\n\nHook: guardrail:evaluate_guardrail\t—\t\nguardrail:evaluate_guardrail\nAdded\n\nHook: provider:build_validation_probe\t—\t\nprovider:build_validation_probe\nAdded\n\nHook: provider:extract_usage\t—\t\nprovider:extract_usage\nAdded\n\nHook: provider:inspect_native_request\t—\t\nprovider:inspect_native_request\nAdded\n\nHook: provider:normalize_error\t—\t\nprovider:normalize_error\nAdded\n\nHook: provider:transform_request\t—\t\nprovider:transform_request\nAdded\n\nHook: provider:transform_response\t—\t\nprovider:transform_response\nAdded\n\nHook: provider:transform_stream_chunk\t—\t\nprovider:transform_stream_chunk\nAdded\n\nHook: provider:verify_validation_result\t—\t\nprovider:verify_validation_result\nAdded\n\nExecution tier\tNone\t\nWASM_SANDBOX_T2\nExpanded\n\nPrivate IP access\tNone\t\nDisabled\n\nRequire TLS\tNone\t\nEnabled\n\nInspect request body\tNone\t\nEnabled\nExpanded\n\nInspect response body\tNone\t\nEnabled\nExpanded\n\nResource limits\tNone\t\nMem 16 MiB · Call 50 ms · Chunk 50 ms\nExpanded\nI reviewed and explicitly consent to these permission escalations and resource limits\nI acknowledge this package is from an unverified external publisher\nConsent does not waive DEC-004 or TP-BR-0301 compliance boundaries.\nCancel\nApprove, keep disabled\nApprove & activate",
+  "installations": {
+    "data": [
+      {
+        "id": "ins_01m89qpt3qe00avdrdwr684qj8",
+        "package_id": "ext_01m89qpt3qe00avbbvnxk4cf3x",
+        "canonical_name": "@tanpopo/anthropic",
+        "active_version": null,
+        "candidate_version": "0.1.0",
+        "previous_rollback_version": null,
+        "contract_version": "0.1",
+        "state": "PENDING_PERMISSION_APPROVAL",
+        "origin_trust_tier": "unverified_external",
+        "signature_verified": false,
+        "enterprise_signed": false,
+        "execution_tier": "sandboxed_wasm",
+        "version": 1
+      },
+      {
+        "id": "ins_01m895ph2ge00a3evn7jxp86st",
+        "package_id": "ext_01m895ph2ge00a3cr388bdwbt3",
+        "canonical_name": "@tanpopo/ollama",
+        "active_version": "0.1.0",
+        "candidate_version": null,
+        "previous_rollback_version": null,
+        "contract_version": "0.1",
+        "state": "ENABLED_ACTIVE",
+        "origin_trust_tier": "official",
+        "signature_verified": true,
+        "enterprise_signed": false,
+        "signing_key_fingerprint": "2cfb21ec9faf58dadfc26df341eb1e88f0313983b72641a9808606ab926a5ff4",
+        "execution_tier": "declarative",
+        "version": 2
+      }
+    ],
+    "has_more": false
+  }
+}
