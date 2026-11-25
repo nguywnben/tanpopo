@@ -64,6 +64,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP58 WebKit mobile Console and Firefox blocker](checkpoints/CP58-webkit-mobile-console-and-firefox-blocker.md)
 - [CP59 authorized MCP loopback lifecycle](checkpoints/CP59-mcp-authorized-loopback-lifecycle.md)
 - [CP60 WebKit mobile MCP Console](checkpoints/CP60-webkit-mobile-mcp-console.md)
+- [CP61 Google provider readiness and Gemini signing blocker](checkpoints/CP61-google-adapter-readiness-and-signing-blocker.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
@@ -74,3 +75,5 @@ QA is ongoing. Sixteen confirmed new failures (DEF-051–066) remain open; 32 hi
 CP59 completed one scoped real-browser MCP Streamable HTTP lifecycle using a synthetic loopback endpoint, explicit `127.0.0.1/32` allowance, Owner schema pin, environment-bound MCP-only Virtual Key, exact per-tool grant, authenticated initialize/list/call, provider-plane and ungranted-tool denial, persisted grant/audit readback, and UI revoke with replay rejection. The same real environment create flow reproduced DEF-055. Evidence is in [CP59](checkpoints/CP59-mcp-authorized-loopback-lifecycle.md); broader roles, scopes, public HTTPS, multi-node and A2A coverage remain open. **GATE-REL-07 remains BLOCKED.**
 
 CP60 extended browser coverage to authenticated WebKit at 390×844 on MCP Hub. Tool sync and the expanded tool-card state passed with no horizontal overflow; the first 403 was traced to the local test proxy origin not matching the isolated runtime allowlist, and succeeded after a proxy-only correction. This is not a product defect. Firefox remains blocked before page launch. QA continues; **GATE-REL-07 remains BLOCKED.**
+
+CP61 confirmed the configured Google AI Studio credential and catalog endpoint work through the QA runner HTTPS proxy (HTTP 200; 50 models; no inference spend). The Tanpopo Gemini package remains Unverified/Unsigned; its permission review was inspected, no consent or activation occurred, and the staged candidate was discarded. Actual adapter inference remains BLOCKED by the established authentic release-signing prerequisite. This is not a new defect and does not unblock `GATE-REL-07`.
