@@ -1,0 +1,102 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "infrastructure": {
+    "application": "frozen RC6 at 127.0.0.1:18128",
+    "failing_provider_fixture": "127.0.0.1:18126; local Ollama-compatible synthetic endpoint",
+    "healthy_provider_fixture": "127.0.0.1:18125; local Ollama-compatible synthetic endpoint",
+    "external_provider_calls": 0
+  },
+  "post_activation_failure": {
+    "connection_id": "con_01m897rgv1e00b2n9vf3w7j125",
+    "deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae",
+    "before": {
+      "connection_state": "ACTIVE",
+      "connection_version": 7,
+      "deployment_state": "ACTIVE_HEALTHY",
+      "deployment_connection_state": "ACTIVE",
+      "deployment_version": 2
+    },
+    "provider_probe_ui_result": "synthetic upstream unavailable",
+    "after_probe": {
+      "connection_state": "DEGRADED",
+      "connection_version": 8,
+      "deployment_state": "ACTIVE_HEALTHY",
+      "deployment_connection_state": "DEGRADED",
+      "deployment_version": 2
+    },
+    "cookie_free_inference": {
+      "request": "POST /v1/chat/completions",
+      "http_status": 502,
+      "error": "upstream_unavailable",
+      "retryable": true,
+      "fixture_observed_requests": [
+        {"path": "/v1/chat/completions"}
+      ],
+      "trace_id": "trc_01m89jmk2je009gm7t4wm4hpdh",
+      "trace_error": "upstream_unavailable",
+      "trace_cost_micro_usd": 0,
+      "duration_ms": 7
+    },
+    "classification": "one synthetic upstream fault; circuit threshold behavior not exercised"
+  },
+  "priority_failover": {
+    "route_slug": "qa004-degraded-primary-failover",
+    "strategy": "PRIORITY_FAILOVER",
+    "max_failover_hops": 1,
+    "target_order": [
+      {"deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae", "priority_order": 1, "observed_connection_state": "DEGRADED"},
+      {"deployment_id": "dpl_01m8969kjme00br1mjja9gam7q", "priority_order": 2, "observed_connection_state": "ACTIVE"}
+    ],
+    "cookie_free_inference": {
+      "request": "POST /v1/chat/completions",
+      "http_status": 200,
+      "provider_error_attempts": 1,
+      "healthy_fallback_attempts": 1,
+      "trace_id": "trc_01m89jr4cbe008s9v9jpreg3x8",
+      "selected_deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+      "trace_status": 200,
+      "usage_accuracy": "EXACT",
+      "total_cost_micro_usd": 0,
+      "duration_ms": 10,
+      "screenshot_visually_inspected": "CP31-failover-trace-list.png"
+    }
+  },
+  "route_explain_observation": {
+    "status": 200,
+    "request_dialect": "openai_compatible",
+    "selected_candidate_count": 0,
+    "rejection_code": "DIALECT_MISMATCH",
+    "detail": "Deployment uses native dialect \"\" instead of \"openai_compatible\".",
+    "comparison": "The same deployment received a /v1/chat/completions request and was selected as the primary before its synthetic 503; it was then bypassed in favor of the healthy secondary for the successful route request.",
+    "classification": "UNCLASSIFIED; compare the real Console Normalized and openai_compatible options before assigning a defect ID"
+  },
+  "virtual_key_and_cleanup": {
+    "temporary_keys": [
+      {"name": "QA004 post-activation failure probe", "state": "REVOKED", "version": 2, "post_revoke_replay_status": 401, "error": "invalid_virtual_key", "additional_upstream_requests": 0},
+      {"name": "QA004 degraded primary failover", "state": "REVOKED", "version": 2, "post_revoke_replay_status": 401, "error": "invalid_virtual_key", "additional_upstream_requests": 0}
+    ],
+    "temporary_routes_deleted": true,
+    "remaining_route_slugs": ["qa004-loopback"],
+    "one_time_secret_files_removed": true
+  },
+  "restoration": {
+    "fixture_mode": "success",
+    "provider_probe_ui_result": "probe succeeded in 9 ms",
+    "connection_state": "ACTIVE",
+    "connection_version": 9,
+    "deployment_state": "ACTIVE_HEALTHY",
+    "deployment_connection_state": "ACTIVE",
+    "deployment_version": 2,
+    "remaining_route_slugs": ["qa004-loopback"],
+    "restored_screenshot_visually_inspected": "CP31-provider-restored.png"
+  },
+  "status": "PASS (scoped)",
+  "new_defect_id": null,
+  "remaining_coverage": [
+    "circuit opening after sustained upstream failures",
+    "cooldown and half-open circuit recovery",
+    "Route Explain Console dialect comparison",
+    "stream failover/cancellation and other provider adapters"
+  ],
+  "sanitization": "No credentials, cookies, plaintext Virtual Key, database files, or raw provider logs included."
+}
