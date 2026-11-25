@@ -1,0 +1,66 @@
+{
+  "quarantine_ui": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nExtensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n1\nMarketplace\n8\nLockfile\next_01m895ph2ge00a3cr388bdwbt3 quarantined and active streams severed.\nInstalled packages\n1\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\n@tanpopo/ollama\next_01m895ph2ge00a3cr388bdwbt3\nActive: 0.1.0\n\tQuarantined\tOfficial\tSignature verified (2cfb21ec9faf)\tdeclarative\t",
+  "installations": [
+    {
+      "id": "ins_01m895ph2ge00a3evn7jxp86st",
+      "canonical_name": "@tanpopo/ollama",
+      "state": "QUARANTINED",
+      "version": 3,
+      "signature_verified": true,
+      "origin_trust_tier": "official"
+    }
+  ],
+  "rejected_request": {
+    "status": 503,
+    "error": "no_compliant_deployment_available",
+    "fixture_calls": 0,
+    "trace_header": "req_01m89r17x0e008wstz3ksnmv66"
+  },
+  "recent_traces": [
+    {
+      "request_id": "trc_01m89r17x1e00answng9sm3mx9",
+      "plane": "NATIVE",
+      "status_code": 503,
+      "error_code": "no_compliant_deployment_available",
+      "route_slug": "/native/{dialect}",
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0
+    },
+    {
+      "request_id": "trc_01m89qz1ppe00bcftvt25szdt4",
+      "plane": "NATIVE",
+      "status_code": 200,
+      "error_code": null,
+      "route_slug": "qa004-loopback",
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0
+    },
+    {
+      "request_id": "trc_01m89q0xsge00ac0xbr6md0p0j",
+      "plane": "PROVIDER",
+      "status_code": 200,
+      "error_code": null,
+      "route_slug": "qa004-embedding-vectors",
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0
+    },
+    {
+      "request_id": "trc_01m897e3q4e00awxk54kwsybxn",
+      "plane": "NATIVE",
+      "status_code": 429,
+      "error_code": "project_budget_exceeded",
+      "route_slug": "qa004-loopback",
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0
+    },
+    {
+      "request_id": "trc_01m897atmbe0093dsa7amefgw7",
+      "plane": "NATIVE",
+      "status_code": 200,
+      "error_code": null,
+      "route_slug": "qa004-loopback",
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0
+    }
+  ]
+}
