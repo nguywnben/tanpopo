@@ -37,10 +37,6 @@
     "error_code": "invalid_enrollment_token",
     "has_session": false
   },
-  "first_login": {
-    "url": "/overview",
-    "heading": "Sign in"
-  },
   "final_readback": {
     "found": true,
     "pending": false,
@@ -50,5 +46,18 @@
     ]
   },
   "token": "[omitted]",
-  "password": "[omitted]"
+  "password": "[omitted]",
+  "first_login_redirect": {
+    "path": "/overview"
+  },
+  "early_capture": {
+    "ui_state": "Loading console\u2026",
+    "note": "The initial screenshot was taken before client hydration and was not used as login acceptance evidence."
+  },
+  "first_login_confirmation": {
+    "path": "/overview",
+    "heading": "Overview",
+    "screenshot": "CP37-member-first-login.png",
+    "visually_inspected": true
+  }
 }
