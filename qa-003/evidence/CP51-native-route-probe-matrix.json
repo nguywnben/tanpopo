@@ -1,0 +1,116 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime_role": "all",
+  "credentialed_ollama_reproduction": "CP51-native-ollama-result.json",
+  "unauthenticated_route_reachability_matrix": [
+    {
+      "runtime": 18114,
+      "dialect": "ollama",
+      "method": "POST",
+      "path": "/native/ollama/api/chat",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "allow": "GET, HEAD",
+      "body_prefix": "HTTP method not allowed for this console resource.\n",
+      "tanpopo_request_id": null,
+      "tanpopo_trace_id": null
+    },
+    {
+      "runtime": 18114,
+      "dialect": "anthropic",
+      "method": "POST",
+      "path": "/native/anthropic/v1/messages",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "allow": "GET, HEAD",
+      "body_prefix": "HTTP method not allowed for this console resource.\n",
+      "tanpopo_request_id": null,
+      "tanpopo_trace_id": null
+    },
+    {
+      "runtime": 18114,
+      "dialect": "gemini",
+      "method": "POST",
+      "path": "/native/gemini/v1beta/models/gemini-2.5-pro:generateContent",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "allow": "GET, HEAD",
+      "body_prefix": "HTTP method not allowed for this console resource.\n",
+      "tanpopo_request_id": null,
+      "tanpopo_trace_id": null
+    },
+    {
+      "runtime": 18115,
+      "dialect": "ollama",
+      "method": "POST",
+      "path": "/native/ollama/api/chat",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "allow": "GET, HEAD",
+      "body_prefix": "HTTP method not allowed for this console resource.\n",
+      "tanpopo_request_id": null,
+      "tanpopo_trace_id": null
+    },
+    {
+      "runtime": 18115,
+      "dialect": "anthropic",
+      "method": "POST",
+      "path": "/native/anthropic/v1/messages",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "allow": "GET, HEAD",
+      "body_prefix": "HTTP method not allowed for this console resource.\n",
+      "tanpopo_request_id": null,
+      "tanpopo_trace_id": null
+    },
+    {
+      "runtime": 18115,
+      "dialect": "gemini",
+      "method": "POST",
+      "path": "/native/gemini/v1beta/models/gemini-2.5-pro:generateContent",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "allow": "GET, HEAD",
+      "body_prefix": "HTTP method not allowed for this console resource.\n",
+      "tanpopo_request_id": null,
+      "tanpopo_trace_id": null
+    },
+    {
+      "runtime": 18116,
+      "dialect": "ollama",
+      "method": "POST",
+      "path": "/native/ollama/api/chat",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "allow": "GET, HEAD",
+      "body_prefix": "HTTP method not allowed for this console resource.\n",
+      "tanpopo_request_id": null,
+      "tanpopo_trace_id": null
+    },
+    {
+      "runtime": 18116,
+      "dialect": "anthropic",
+      "method": "POST",
+      "path": "/native/anthropic/v1/messages",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "allow": "GET, HEAD",
+      "body_prefix": "HTTP method not allowed for this console resource.\n",
+      "tanpopo_request_id": null,
+      "tanpopo_trace_id": null
+    },
+    {
+      "runtime": 18116,
+      "dialect": "gemini",
+      "method": "POST",
+      "path": "/native/gemini/v1beta/models/gemini-2.5-pro:generateContent",
+      "status": 405,
+      "content_type": "text/plain; charset=utf-8",
+      "allow": "GET, HEAD",
+      "body_prefix": "HTTP method not allowed for this console resource.\n",
+      "tanpopo_request_id": null,
+      "tanpopo_trace_id": null
+    }
+  ],
+  "interpretation": "The documented native prefixes are handled as a Console resource (405 Allow GET, HEAD), not by the native Data Plane handler; no Tanpopo request or trace ID is emitted. These nine unauthenticated probes only corroborate path routing; the credentialed Ollama reproduction is separate."
+}
