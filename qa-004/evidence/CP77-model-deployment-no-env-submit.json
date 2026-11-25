@@ -1,0 +1,13 @@
+{
+  "scope": "organization-only (No project / No env)",
+  "role": "ORG_OWNER",
+  "submitted_click": true,
+  "server_requests": [],
+  "visible_after_submit": "loyments\nLogical Models\n1\nData region\nAll regions\nHealth state\nAll states\nAll environment deployments\n0\nNo deployments found\nBind a logical model to a provider connection with an integer nano-USD rate card.\nRegister model deployment\nAll pricing rates use exact non-negative integer nano-USD values.\nSelect an active environment, logical model, and provider connection.\nLogical model\nqa004-mock\nProvider connection\nQA004 synthetic Ollama 401 (SELF_HOSTED_INFRA · f3w7j125)\nUpstream model name\n∙ Required\nInput token (nano-USD)\n∙ Required\nOutput token (nano-USD)\n∙ Required\nCache read (nano-USD)\n∙ Required\nCache write (nano-USD)\n∙ Required\nReasoning token (nano-USD)\n∙ Required\nImage unit (nano-USD)\n∙ Required\nAudio second (nano-USD)\n∙ Required\nDocument page (nano-USD)\n∙ Required\nSelf-hosted zero-rate deployment\nOnly valid for connections with SELF_HOSTED_INFRA billing mode.\nCancel\nSave deployment",
+  "invalid_controls": [],
+  "deployment_list": {
+    "status": 200,
+    "count": 2
+  },
+  "classification": "Submitting an otherwise completed zero-rate deployment form while no environment is selected produces no API request; inspect error copy before deciding whether this is DEF-025 or a coverage pass."
+}
