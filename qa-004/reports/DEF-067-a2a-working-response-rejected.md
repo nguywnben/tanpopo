@@ -35,6 +35,7 @@ The deterministic, loopback-only responder is included as [`CP65-a2a-working-fix
 
 - [Sanitized API, persisted state and cleanup results](../evidence/CP65-a2a-lifecycle-results.json)
 - [Visually inspected failed-task inventory](../evidence/CP65-a2a-working-response-failed-task.png)
+- [Task audit sequence and intact chain verification](../evidence/CP66-a2a-audit-events.json)
 - [Submitted task with Cancel action](../evidence/CP65-a2a-submitted-before-cancel.png)
 - [Canceled task and success toast](../evidence/CP65-a2a-submitted-canceled.png)
 
@@ -45,7 +46,7 @@ The repository source identifies the mechanism:
 - `validSM09Transition` for a task already in working accepts input-required, completed, failed, or canceled, but not working again ([`task_coordinator.go`](../../internal/ingress/a2a/task_coordinator.go#L1714)).
 - On response-transition error, the create path attempts a failure transition and returns the original error ([`task_coordinator.go`](../../internal/ingress/a2a/task_coordinator.go#L823)).
 
-This source path matches the observed HTTP error and persisted Failed row. No product implementation was changed.
+This source path matches the observed HTTP error and persisted Failed row. CP66 reconciled the `submitted → working → failed` audit events with the UI/API state and verified the RFC 8785 chain intact across 262 events; audit integrity is not the defect. No product implementation was changed.
 
 ## Independent cancellation coverage
 

@@ -69,6 +69,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP63 organization-only member visibility and DEF-023](checkpoints/CP63-organization-only-members-and-def023.md)
 - [CP64 Access & Keys scope switching and DEF-029](checkpoints/CP64-access-keys-scope-switch-and-def029.md)
 - [CP65 A2A working-response failure and task cancellation](checkpoints/CP65-a2a-working-response-and-cancel-lifecycle.md)
+- [CP66 A2A task audit and chain reconciliation](checkpoints/CP66-a2a-audit-reconciliation.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
@@ -93,3 +94,6 @@ CP64 independently retested DEF-029: the real Access & Keys page showed the pers
 
 
 CP65 expanded A2A lifecycle coverage: a `dispatch_async: true` task was canceled through the real Console and persisted `canceled` v2 with zero hold. It also found DEF-067: a valid synthetic agent `working` response to synchronous task creation returns HTTP 400 and leaves an uncorrelatable Failed task visible in the UI. The upstream `working` state is documented as supported; the fixture was loopback-only and the A2A-only test key was revoked. QA continues; **GATE-REL-07 remains BLOCKED.**
+
+
+CP66 reconciled the CP65 A2A task states with `a2a.task.submitted`, `a2a.task.transitioned`, and `a2a.task.canceled_by_admin` audit records. The real Audit Log filter showed the failed and canceled transitions, and the Console verified an intact RFC 8785 chain across 262 events. No additional audit defect was found. QA continues; **GATE-REL-07 remains BLOCKED.**
