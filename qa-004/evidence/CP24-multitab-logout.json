@@ -1,0 +1,13 @@
+{
+  "first_tab_before": " Only local bundled or imported air-gap artifacts are served.\nPlayground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.001000 · expires 2:02:49 PM\nEnd session\nLive Playground\nSDK Snippets\nModel or route slug\nqa004-loopback\nComparison model (optional)\nYou\nReply with the exact words: logout boundary active.\nqa004-loopback\nHello from synthetic Ollama.\nPrompt\nSend\nExecution traces\nPrimary · trc_01m89fcv1ee008nsz0ehbwqsr8\nroute qa004-loopback · HTTP 200 · $0.000000 · 76 ms\nExact\nInspect trace",
+  "second_tab_before": "Skip to main content\nTanpopo\nAdmin session\nAuthenticating\nNo project\n/\nNo env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish",
+  "second_tab_after_logout": "Tanpopo\nLanguage\nEnglish\nSign in\n\nUse your local administrator credentials to access the control plane.\n\nSign in\nActivate invite\nEmail address\n∙ Required\nPassword\n∙ Required\nPassword\nSign in\n\nNew instance? Run first-time setup",
+  "first_tab_after_logout": "Tanpopo\nLanguage\nEnglish\nSign in\n\nUse your local administrator credentials to access the control plane.\n\nSign in\nActivate invite\nSession ended\nYour session expired or your permissions changed. Sign in again to continue.\nEmail address\n∙ Required\nPassword\n∙ Required\nPassword\nSign in\n\nNew instance? Run first-time setup",
+  "first_tab_send_enabled": false,
+  "admin_session_after_logout": {
+    "status": 401,
+    "authenticated": false,
+    "roles": []
+  },
+  "first_tab_post_logout_send": null
+}
