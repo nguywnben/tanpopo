@@ -2,7 +2,7 @@
 
 **Severity:** Major  
 **Status:** FAIL — reproduced on frozen RC6 in an isolated synthetic provider journey.  
-**Affected workflow:** Ollama native `/api/chat` inference, usage settlement, billing and budgets.
+**Affected workflow:** Ollama native `/api/chat` and `/api/generate` inference, usage settlement, billing and budgets.
 
 ## Reproduction
 
@@ -23,6 +23,10 @@ Actual: the response is HTTP 200 and faithfully preserves the Ollama JSON; its `
 - `../evidence/CP07-native-ollama-settlements.json` — persisted settlement rows (sanitized).
 - `../evidence/CP07-native-traces-after-stream.png` and `../evidence/CP07-native-finops-after-stream.png` — visually inspected real Console views; these also reveal DEF-052.
 - Test fixture request log is held outside the handoff repository; it records `/api/chat` and no upstream authorization value.
+
+## Independent native Generate retest (CP38)
+
+A second authorized cookie-free native dialect journey called `POST /native/ollama/api/generate` on the same frozen RC6 baseline. The fixture returned `prompt_eval_count:6` and `eval_count:3`; Tanpopo preserved both fields in the HTTP 200 Ollama JSON response but marked the response `ESTIMATED`. FinOps shows one estimated request at `$0.000001`. This confirms the defect extends beyond `/api/chat` to `/api/generate`; no new defect ID is assigned. See `../evidence/CP38-native-generate-results.json`, `../evidence/CP38-native-generate-trace.png`, and `../evidence/CP38-native-generate-finops.png`.
 
 ## Business impact
 
