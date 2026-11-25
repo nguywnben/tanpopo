@@ -1,0 +1,12 @@
+{
+  "keyId": "vky_01m894srwhe00bzh5ba54syzzf",
+  "keyVersion": 1,
+  "auditFilterStatus": true,
+  "auditCount": 1,
+  "revokeStatus": 200,
+  "revokedState": null,
+  "postRevocationNative": {
+    "status": 401,
+    "error": "invalid_virtual_key"
+  }
+}

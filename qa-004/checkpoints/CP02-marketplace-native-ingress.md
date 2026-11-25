@@ -1,0 +1,19 @@
+# CP02 — Marketplace provenance and credentialed native ingress
+
+**Baseline:** frozen RC6 `2eb7f6f6e5ba703d44fbd273f0245ba441de74e1`. **Overall:** PARTIAL. No Tanpopo implementation files changed. `GATE-REL-07` remains BLOCKED.
+
+## Unsigned package truth and trust flow
+
+In authenticated Chromium, Extensions → Marketplace showed eight bundled package entries. The visible catalog identified each as `Unverified` origin and `Unsigned` publisher signature; the banner said the offline cache was being shown. The catalog API likewise returned `origin_trust_tier=unverified_external`, `signature_verified=false`, `enterprise_signed=false` for entries. This matches RC6's intentionally empty release signature registry.
+
+Staging the Ollama package through its normal “Stage for review” control returned 202 and produced `PENDING_PERMISSION_APPROVAL`. The real review dialog clearly stated `Origin trust: Unverified`, `Publisher signature: Unsigned`, `Enterprise signature: None`, and warned that no verified offline release signature exists and that the package would run as `unverified_external` unless release keys are configured. It disclosed added hosts, secret slot, hooks, and execution permissions. The explicit consent checkbox was unchecked and approval controls disabled. QA canceled without approving or activating, then discarded the pending candidate through the documented delete path (204); readback showed zero installations. There was no upstream request, secret binding, or trust-policy bypass. Evidence: [Marketplace UI](../evidence/CP02-marketplace-catalog.png), [catalog API](../evidence/CP04-unsigned-catalog-and-stage.json), [review dialog](../evidence/CP04-unsigned-extension-stage.png), and [discard result](../evidence/CP04-stage-discard.json).
+
+This is PARTIAL evidence that RC6 now presents its unsigned status honestly, resolving the specific RC5 label mismatch slice in DEF-043. It does not validate the signature verifier, cross-instance release-root identity, namespace spoof denial, tamper rejection, or all catalog/install views. Production signing remains blocked.
+
+## Credentialed native request
+
+A real Org Owner session issued a PROVIDER-plane Virtual Key (201) for the fresh environment. Sending that key from a browser with the Admin session cookie was rejected with 401 `invalid_credential_plane`; the same bearer key from a cookie-free HTTP client reached the Data Plane on `POST /native/anthropic/v1/messages` and returned structured 503 `no_compliant_deployment_available` for the synthetic model. This is unlike RC5's Console 405 and confirms routing reaches the native handler; no upstream existed, so native forwarding, fidelity, stream, usage, traces, cancellation, budgets, and the supported role matrix remain unverified.
+
+The isolated key was revoked through the documented emergency stream-abort path, returned 200, persisted as `REVOKED` version 2, and subsequent cookie-free native request returned 401 `invalid_virtual_key`. API audit filtering for `virtual_key.created` returned that event; the Security → Audit Log action filter displayed exactly the matching `virtual_key.created` row while the unfiltered screen included `virtual_key.revoked`. The visible Access & Keys table showed the revoked state. Sanitized API evidence: [native request](../evidence/CP02-native-authenticated-probe.json), [audit/revocation](../evidence/CP03-key-audit-revocation.json), [persistent state](../evidence/CP03-key-persistent-state.json). Visually inspected screenshots: [revoked key](../evidence/CP03-vkey-revoked-ui.png), [audit filter](../evidence/CP03-audit-filter-virtual-key-created.png).
+
+The exercised `virtual_key.created` name agrees with current OpenAPI and the current Console filter; QA-004 closes the observed contract discrepancy in DEF-037 for this exact action path. This does not prove all audit producers/filters or roles.
