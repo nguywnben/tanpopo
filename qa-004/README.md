@@ -75,6 +75,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP69 webhook revoke and pending delivery cancellation](checkpoints/CP69-webhook-revocation-and-pending-delivery-cancellation.md)
 - [CP70 DEF-035 deployment workspace-scope retest](checkpoints/CP70-def035-model-deployment-workspace-retest.md)
 - [CP71 DEF-035 project-only / no-environment retest](checkpoints/CP71-def035-project-no-environment-retest.md)
+- [CP72 Team Admin model/deployment boundary](checkpoints/CP72-teamadmin-model-deployment-boundary.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
@@ -117,3 +118,6 @@ CP70 independently retested historical DEF-035 on exact RC6 with real Chromium a
 
 
 CP71 extended the independent DEF-035 retest: in real Chromium, the empty canary project selected with `No env` showed no deployments, and the project-filtered request returned HTTP 200 with zero rows. The screenshot was visually inspected; no deployment mutation was performed. This adds a scoped project-only/no-environment result but leaves DEF-035 PARTIAL because the org-only UI/API contract is unclear and Team Admin, refresh/scope races, ownership labels and action authorization remain UNVERIFIED. See [CP71](checkpoints/CP71-def035-project-no-environment-retest.md). Historical status remains 19 scoped PASS, 4 PARTIAL and 27 UNVERIFIED; DEF-051–068 are 18 confirmed open failures. QA is ongoing; **GATE-REL-07 remains BLOCKED.**
+
+
+CP72 independently checked the Team Admin model/deployment boundary on exact RC6. Its picker listed only its assigned `default` project and `No project`; it saw two deployments in its assigned `default/dev`, while direct sibling-canary deployment and environment reads each returned 403 `insufficient_role_permission`. The real No-project Models page showed zero rows and its screenshot was visually inspected. This is a scoped authorization pass, not full DEF-035 acceptance; org-only contract interpretation, refresh/race conditions and destructive action coverage remain open. Evidence is in [CP72](checkpoints/CP72-teamadmin-model-deployment-boundary.md). Historical status remains 19 scoped PASS, 4 PARTIAL and 27 UNVERIFIED; DEF-051–068 remain 18 confirmed open failures. QA continues; **GATE-REL-07 remains BLOCKED.**
