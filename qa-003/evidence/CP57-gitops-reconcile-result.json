@@ -1,0 +1,53 @@
+{
+  "baseline_commit": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "scope": "exact RC5 CLI config reconcile; synthetic YAML, empty applied-state fixture, lock and package artifact; all under /tmp",
+  "valid_env_reference": {
+    "exit_code": 0,
+    "applied_bytes_match_desired": true,
+    "lock_sha256_unchanged": true,
+    "result_json_parsed": true
+  },
+  "tampered_package_digest": {
+    "exit_code": 14,
+    "rejected": true,
+    "applied_and_lock_unchanged": true
+  },
+  "inline_secret_value": {
+    "exit_code": 14,
+    "rejected": true,
+    "applied_and_lock_unchanged": true,
+    "sentinel_reflected_in_cli_output": false
+  },
+  "synthetic_artifact_sha256": "a255dc1da82f1805958cbda7e2f98113618161c0ece26df2ac60541b29c59499",
+  "raw_cli_error_output_saved": false,
+  "negative_validation_cases": [
+    {
+      "case": "partial_env_reference",
+      "exit_code": 14,
+      "rejected": true,
+      "applied_and_lock_unchanged": true,
+      "sentinel_reflected_in_cli_output": false
+    },
+    {
+      "case": "malformed_env_name",
+      "exit_code": 14,
+      "rejected": true,
+      "applied_and_lock_unchanged": true,
+      "sentinel_reflected_in_cli_output": false
+    },
+    {
+      "case": "duplicate_yaml_key",
+      "exit_code": 14,
+      "rejected": true,
+      "applied_and_lock_unchanged": true,
+      "sentinel_reflected_in_cli_output": false
+    },
+    {
+      "case": "symlinked_desired_input",
+      "exit_code": 14,
+      "rejected": true,
+      "applied_and_lock_unchanged": true,
+      "sentinel_reflected_in_cli_output": false
+    }
+  ]
+}
