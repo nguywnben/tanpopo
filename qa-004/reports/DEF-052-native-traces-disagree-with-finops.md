@@ -1,8 +1,8 @@
-# DEF-052 — Successful native traces report exact zero cost while FinOps records nonzero cost
+# DEF-052 — Request trace accuracy/cost diverges from durable settlement and FinOps
 
-**Severity:** Major  
-**Status:** FAIL — reproduced in the same isolated RC6 synthetic Ollama journey.  
-**Affected workflow:** Native inference observability, support investigation, FinOps reconciliation, audit and chargeback.
+**Severity:** Major
+**Status:** FAIL — reproduced across native success, provider-plane success, and provider-plane partial-stream failure in isolated RC6 synthetic journeys.
+**Affected workflow:** Inference observability, support investigation, partial-stream diagnosis, FinOps reconciliation, audit and chargeback.
 
 ## Reproduction
 
@@ -28,6 +28,11 @@ Actual: both trace records report `usage_accuracy=EXACT` and `total_cost_micros=
 
 A recovered local Ollama connection and newly activated deployment served one cookie-free `/v1/chat/completions` request through a temporary route. The upstream returned exact 7/4 usage; the real Traces UI waterfall displayed `Exact` and `$0.000000`. A separate FinOps `group_by=key` read for the same key reported one exact request and `exact_micro_usd=1`. The trace is request `trc_01m89hpm7ye0081h0g1g1bxnfq`; the real UI trace list and waterfall were visually inspected. This independently reproduces the trace-versus-settlement mismatch on a provider-plane route. See `evidence/CP30-provider-recovery-results.json` and `evidence/CP30-recovery-trace-inspect.png`.
 
+
+### Independent partial-stream failure retest (CP34)
+
+A two-target provider route sent a cookie-free streaming request to a local primary that emitted one SSE content chunk and then closed without usage or `[DONE]`. Tanpopo returned HTTP 200 with the partial chunk followed by a canonical `mid_stream_abort` error event and correctly made zero calls to the healthy secondary. The same request trace `trc_01m89m26w4e009j53p9m01tmav` reports `usage_accuracy=EXACT`, `total_cost_micros=0`; FinOps group-by-key reports 0 exact requests and 1 estimated request at 1 micro-USD. The real Traces and Chargeback screenshots were visually inspected. This broadens DEF-052 to failed partial streams while confirming the durable settlement is estimated. See `evidence/CP34-midstream-abort-results.json`, `evidence/CP34-midstream-trace.png`, and `evidence/CP34-finops-midstream.png`.
+
 ## Business impact
 
 Operators cannot rely on traces to reconcile customer charges or investigate requests. The UI asserts “Exact” for estimated usage, and request-level zero cost cannot be reconciled to successful nonzero settlements and summary totals.
@@ -39,6 +44,6 @@ The trace projection may read a separate/empty usage field, default accuracy to 
 ## Acceptance criteria
 
 - Trace accuracy, effective usage, and cost are sourced from or reconciled with the durable settlement for the same trace/request identifier.
-- Successful nonzero settlements never appear as zero in trace detail; estimated rows remain marked estimated.
+- Nonzero or partial-stream settlements never appear as zero in trace detail; estimated and partial rows remain marked estimated.
 - Traces UI, API, FinOps summary/export, and persisted ledger reconcile per request and in aggregate.
-- Regression covers estimated and exact native requests, streaming, provider-plane requests, failures, retries, and missing settlement rows.
+- Regression covers estimated and exact native requests, streaming success and partial failure, provider-plane requests, errors, retries, and missing settlement rows.
