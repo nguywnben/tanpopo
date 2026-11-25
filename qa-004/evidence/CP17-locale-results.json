@@ -1,0 +1,131 @@
+[
+  {
+    "code": "zh-CN",
+    "label": "中文(简体)",
+    "selector": "中文(简体)",
+    "overviewRendered": true,
+    "visibleText": "离线气隙模式 已禁用对外扩展下载。仅提供本地内置或已导入的气隙制品。 概览 更新于 12:51:25 · 0 条未计量请求 1h 24h 7d 30d 刷新 请求数 13 时间窗口：24h 错误率 7.69% 网关内部与上游错误 p95 代理开销 19.133 毫秒 网关附加延迟 已结算费用 $0.000012 活动预占：$0.000000 当前告警 0 所有系统运行正常 当前没有活动运维告警或待处置项。",
+    "screenshot": "CP17-locale-zh-CN.png"
+  },
+  {
+    "code": "zh-TW",
+    "label": "中文(繁體)",
+    "selector": "中文(繁體)",
+    "overviewRendered": true,
+    "visibleText": "離線氣隙模式 已停用對外擴充下載。僅提供本機內建或已匯入的氣隙封包產物。 總覽 更新於 中午12:51:26 · 0 筆未計量請求 1h 24h 7d 30d 重新整理 請求數 13 時間範圍：24h 錯誤率 7.69% 閘道內部與上游錯誤 p95 代理額外延遲 19.133 毫秒 閘道附加延遲 已結算費用 $0.000012 作用中預扣：$0.000000 目前警示 0 所有系統運作正常 目前沒有作用中維運警示或待處置項目。",
+    "screenshot": "CP17-locale-zh-TW.png"
+  },
+  {
+    "code": "de",
+    "label": "Deutsch",
+    "selector": "Deutsch",
+    "overviewRendered": true,
+    "visibleText": "Offline-Air-Gap-Modus Ausgehende Erweiterungs-Downloads sind deaktiviert. Es werden nur lokal gebündelte oder importierte Air-Gap-Artefakte verwendet. Übersicht Aktualisiert 12:51:26 · 0 ungemessene Anfragen 1h 24h 7d 30d Aktualisieren Anfragen 13 Zeitraum: 24",
+    "screenshot": "CP17-locale-de.png"
+  },
+  {
+    "code": "en",
+    "label": "English",
+    "selector": "English",
+    "overviewRendered": true,
+    "visibleText": "Air-gapped offline mode Outbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served. Overview Updated 12:51:27 PM · 0 unmetered requests 1h 24h 7d 30d Refresh Requests 13 Window: 24h Error rate 7.69% Internal & upstream",
+    "screenshot": "CP17-locale-en.png"
+  },
+  {
+    "code": "es",
+    "label": "Español",
+    "selector": "Español",
+    "overviewRendered": true,
+    "visibleText": "Modo sin conexión air-gap Las descargas salientes de extensiones están deshabilitadas. Solo se sirven artefactos locales empaquetados o importados en modo air-gap. Resumen Actualizado 12:51:27 · 0 solicitudes sin medir 1h 24h 7d 30d Actualizar Solicitudes 13 V",
+    "screenshot": "CP17-locale-es.png"
+  },
+  {
+    "code": "fr",
+    "label": "Français",
+    "selector": "Français",
+    "overviewRendered": true,
+    "visibleText": "Mode hors ligne air-gap Les téléchargements sortants d'extensions sont désactivés. Seuls les artefacts locaux intégrés ou importés en air-gap sont servis. Vue d'ensemble Mis à jour à 12:51:28 · 0 requêtes non mesurées 1h 24h 7d 30d Actualiser Requêtes 13 Fenêt",
+    "screenshot": "CP17-locale-fr.png"
+  },
+  {
+    "code": "id",
+    "label": "Indonesia",
+    "selector": "Indonesia",
+    "overviewRendered": true,
+    "visibleText": "Mode offline air-gap Pengunduhan ekstensi keluar dinonaktifkan. Hanya artefak bawaan lokal atau hasil impor air-gap yang dilayani. Ringkasan Diperbarui 12.51.28 · 0 permintaan tidak terukur 1h 24h 7d 30d Muat ulang Permintaan 13 Rentang: 24h Tingkat error 7,69",
+    "screenshot": "CP17-locale-id.png"
+  },
+  {
+    "code": "it",
+    "label": "Italiano",
+    "selector": "Italiano",
+    "overviewRendered": true,
+    "visibleText": "Modalità offline air-gap I download in uscita delle estensioni sono disabilitati. Vengono serviti solo artefatti locali inclusi o importati in air-gap. Panoramica Aggiornato 12:51:29 · 0 richieste non misurate 1h 24h 7d 30d Aggiorna Richieste 13 Finestra: 24h ",
+    "screenshot": "CP17-locale-it.png"
+  },
+  {
+    "code": "ja",
+    "label": "日本語",
+    "selector": "日本語",
+    "overviewRendered": true,
+    "visibleText": "エアギャップオフラインモード 拡張機能の外部ネットワーク取得は無効化されています。ローカル同梱またはインポート済みのエアギャップアーティファクトのみを使用します。 概要 更新: 12:51:30 · 未計測リクエスト 0 件 1h 24h 7d 30d 更新 リクエスト数 13 期間: 24h エラー率 7.69% 内部およびアップストリーム p95 プロキシ遅延 19.133 ms ゲートウェイ付加レイテンシ 確定コスト $0.000012 アクティブ保留: $0.000000 現在のアラート 0 すべてのシステ",
+    "screenshot": "CP17-locale-ja.png"
+  },
+  {
+    "code": "ko",
+    "label": "한국어",
+    "selector": "한국어",
+    "overviewRendered": true,
+    "visibleText": "에어갭 오프라인 모드 외부 확장 프로그램 다운로드가 비활성화되었습니다. 로컬에 내장되었거나 가져온 에어갭 아티팩트만 제공됩니다. 개요 오후 12:51:30 업데이트 · 미계량 요청 0건 1h 24h 7d 30d 새로고침 요청 수 13 기간: 24h 오류율 7.69% 내부 및 업스트림 p95 프록시 오버헤드 19.133 ms 게이트웨이 추가 지연 정산 비용 $0.000012 활성 보류: $0.000000 활성 알림 0 모든 시스템 정상 활성 운영 알림이나 대기 중",
+    "screenshot": "CP17-locale-ko.png"
+  },
+  {
+    "code": "pt",
+    "label": "Português",
+    "selector": "Português",
+    "overviewRendered": true,
+    "visibleText": "Modo offline air-gap Downloads externos de extensões estão desativados. Apenas artefatos locais empacotados ou importados em air-gap são atendidos. Visão geral Atualizado 12:51:31 · 0 solicitações não medidas 1h 24h 7d 30d Atualizar Solicitações 13 Janela: 24h",
+    "screenshot": "CP17-locale-pt.png"
+  },
+  {
+    "code": "ru",
+    "label": "Русский",
+    "selector": "Русский",
+    "overviewRendered": true,
+    "visibleText": "Автономный режим air-gap Исходящая загрузка расширений отключена. Используются только локально встроенные или импортированные air-gap-артефакты. Обзор Обновлено 12:51:31 · 0 неучтённых запросов 1h 24h 7d 30d Обновить Запросы 13 Окно: 24h Доля ошибок 7,69 % Вну",
+    "screenshot": "CP17-locale-ru.png"
+  },
+  {
+    "code": "th",
+    "label": "ภาษาไทย",
+    "selector": "ภาษาไทย",
+    "overviewRendered": true,
+    "visibleText": "โหมดออฟไลน์ air-gap ปิดการดาวน์โหลดส่วนขยายจากเครือข่ายภายนอก ระบบจะใช้เฉพาะแพ็กเกจภายในหรือไฟล์ air-gap ที่นำเข้าแล้วเท่านั้น ภาพรวม อัปเดต 12:51:32 · คำขอที่ไม่ได้วัดค่า 0 รายการ 1h 24h 7d 30d รีเฟรช คำขอ 13 ช่วงเวลา: 24h อัตราข้อผิดพลาด 7.69% ภายในและต้นทาง",
+    "screenshot": "CP17-locale-th.png"
+  },
+  {
+    "code": "tr",
+    "label": "Türkçe",
+    "selector": "Türkçe",
+    "overviewRendered": true,
+    "visibleText": "Çevrimdışı air-gap modu Dışa dönük uzantı indirmeleri devre dışı. Yalnızca yerel olarak gömülü veya içe aktarılmış air-gap paketleri kullanılır. Genel Bakış Güncellendi: 12:51:32 · 0 ölçülmemiş istek 1h 24h 7d 30d Yenile İstekler 13 Aralık: 24h Hata oranı %7,6",
+    "screenshot": "CP17-locale-tr.png"
+  },
+  {
+    "code": "vi",
+    "label": "Tiếng Việt",
+    "selector": "Tiếng Việt",
+    "overviewRendered": true,
+    "visibleText": "Chế độ offline cách ly mạng Đã tắt tải extension qua mạng ngoài. Chỉ sử dụng các gói nội bộ hoặc gói air-gap đã nhập. Tổng quan Cập nhật 12:51:33 · 0 yêu cầu chưa đo lường 1h 24h 7d 30d Làm mới Yêu cầu 13 Khung: 24h Tỷ lệ lỗi 7,69% Nội bộ & upstream Độ trễ pro",
+    "screenshot": "CP17-locale-vi.png"
+  },
+  {
+    "crossScreen": {
+      "page": "FinOps Chargeback",
+      "beforeReload": "Chế độ offline cách ly mạng Đã tắt tải extension qua mạng ngoài. Chỉ sử dụng các gói nội bộ hoặc gói air-gap đã nhập. FinOps Sổ cái số nguyên micro-USD tách biệt chi phí chính xác, ước tính, tạm giữ và chưa đo lường. Xuất CSV Xuất JSON Ngân sách & Tạm giữ 7 Phân bổ chi phí Đã chốt (chính xác) $0,000011 Theo báo cáo nhà cung cấp Đã chốt (ước tính) $0,000001 Ước lượng token dự phòng Tạm giữ hiện tại $0,000000 Khoản đặt chỗ đang xử lý Yêu cầu chưa đo lường 0 Đánh dấu để đối soát Chi tiết độ chính xác phân bổ chi phí 1 Nhóm theo Dự án Dự án Chính xác Ước tính YC chính xác / ước tính Chưa đo lường default Chính xác $0,000011 Ước tính $0,000001 11 ",
+      "afterReloadLanguage": "Tiếng Việt",
+      "afterReloadText": "Chế độ offline cách ly mạng Đã tắt tải extension qua mạng ngoài. Chỉ sử dụng các gói nội bộ hoặc gói air-gap đã nhập. FinOps Sổ cái số nguyên micro-USD tách biệt chi phí chính xác, ước tính, tạm giữ và chưa đo lường. Xuất CSV Xuất JSON Ngân sách & Tạm giữ 7 Phân bổ chi phí Đã chốt (chính xác) $0,000011 Theo báo cáo nhà cung cấp Đã chốt (ước tính) $0,000001 Ước lượng token dự phòng Tạm giữ hiện tại $0,000000 Khoản đặt chỗ đang xử lý Yêu cầu chưa đo lường 0 Đánh dấu để đối soát Chi tiết độ chính xác phân bổ chi phí 1 Nhóm theo Dự án Dự án Chính xác Ước tính YC chính xác / ước tính Chưa đo lường default Chính xác $0,000011 Ước tính $0,000001 11 ",
+      "persistence": true
+    }
+  }
+]

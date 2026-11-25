@@ -20,9 +20,10 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP14 Security Reviewer audit workflow](checkpoints/CP14-security-reviewer-audit-workflow.md)
 - [CP15 targeted kill-switch lifecycle](checkpoints/CP15-targeted-kill-switch-lifecycle.md)
 - [CP16 responsive Chromium and browser availability](checkpoints/CP16-responsive-browser-coverage.md)
+- [CP17 localization across the 15 listed languages](checkpoints/CP17-localization-overview-and-persistence.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
 - [Release signing readiness](RELEASE-SIGNING-READINESS.md)
 
-QA is ongoing. Four confirmed new failures (DEF-051–054) remain open; 37 historical findings are UNVERIFIED, 10 have scoped PASS, and three remain PARTIAL. CP16 added real Chromium 320/390/768-pixel responsive interaction and download evidence; Firefox and WebKit remain blocked by this runner's browser dependencies. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**
+QA is ongoing. Four confirmed new failures (DEF-051–054) remain open; 37 historical findings are UNVERIFIED, 10 have scoped PASS, and three remain PARTIAL. CP16 added real Chromium 320/390/768-pixel responsive interaction and download evidence; Firefox and WebKit remain blocked by this runner's browser dependencies. CP17 selected each of the 15 listed UI locales and verified Vietnamese navigation and refresh persistence; other screens and localized error states remain unverified. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**
