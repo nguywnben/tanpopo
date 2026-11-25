@@ -25,6 +25,10 @@ In the `default / dev` workspace, a credentialed `TEAM_ADMIN` sees and can submi
 - `evidence/CP35-embeddings-trace.png` and `evidence/CP35-embeddings-finops.png` — actual Traces and loaded FinOps screens, visually inspected.
 - `evidence/CP35-access-key-revoked.png` — Access & Keys shows the temporary test key in `Revoked` state.
 
+## Independent Org Owner comparison
+
+In a separate fresh-install RC6 runtime with a valid `ORG_OWNER` session, the same Models form created an embeddings-capable model with HTTP 201 and persisted its capability. The Team Admin failure is therefore scoped to the documented project role/authorization target, not a general API-wide model-create failure. The Owner database had no provider adapters or connections, so this did not complete embeddings dispatch. See CP39 and `evidence/CP39-owner-model-results.json`.
+
 ## Expected and actual behavior
 
 **Expected:** A project-scoped Team Admin can register a logical model and deployment as SCR-05 specifies; the new model is persisted and available to route configuration. Authorization remains confined to the Team Admin's authorized project/organization.

@@ -1,0 +1,32 @@
+{
+  "runtime": "isolated exact-RC6 fresh-install runtime at 127.0.0.1:18121",
+  "authenticated_roles": ["OPERATOR", "ORG_OWNER"],
+  "register_request": {
+    "display_name": "QA004 Owner Embeddings Catalog",
+    "slug": "qa004-owner-embedding-catalog",
+    "context_window": 128000,
+    "max_output_tokens": 8192,
+    "capabilities": {"embeddings": true}
+  },
+  "create_http_status": 201,
+  "model_id": "lmd_01m89p7txne009dt31cfdvz7t1",
+  "immediate_console_display_name": "QA004 Owner Embeddings Catalog",
+  "persisted_get": {
+    "status": 200,
+    "display_name": "qa004-owner-embedding-catalog",
+    "slug": "qa004-owner-embedding-catalog",
+    "capabilities": {"embeddings": true}
+  },
+  "after_refresh_console_primary_and_secondary_labels": [
+    "qa004-owner-embedding-catalog",
+    "qa004-owner-embedding-catalog"
+  ],
+  "separate_runtime_adapter_count": 0,
+  "separate_runtime_connection_count": 0,
+  "team_admin_comparison": {
+    "runtime": "isolated RC6 Team Admin runtime at 127.0.0.1:18128",
+    "create_http_status": 403,
+    "error_code": "insufficient_role_permission",
+    "defect": "DEF-056"
+  }
+}
