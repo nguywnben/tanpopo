@@ -65,6 +65,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP59 authorized MCP loopback lifecycle](checkpoints/CP59-mcp-authorized-loopback-lifecycle.md)
 - [CP60 WebKit mobile MCP Console](checkpoints/CP60-webkit-mobile-mcp-console.md)
 - [CP61 Google provider readiness and Gemini signing blocker](checkpoints/CP61-google-adapter-readiness-and-signing-blocker.md)
+- [CP62 FinOps project-scope switching, saved budget, and refresh](checkpoints/CP62-finops-project-scope-and-refresh.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
@@ -77,3 +78,6 @@ CP59 completed one scoped real-browser MCP Streamable HTTP lifecycle using a syn
 CP60 extended browser coverage to authenticated WebKit at 390×844 on MCP Hub. Tool sync and the expanded tool-card state passed with no horizontal overflow; the first 403 was traced to the local test proxy origin not matching the isolated runtime allowlist, and succeeded after a proxy-only correction. This is not a product defect. Firefox remains blocked before page launch. QA continues; **GATE-REL-07 remains BLOCKED.**
 
 CP61 confirmed the configured Google AI Studio credential and catalog endpoint work through the QA runner HTTPS proxy (HTTP 200; 50 models; no inference spend). The Tanpopo Gemini package remains Unverified/Unsigned; its permission review was inspected, no consent or activation occurred, and the staged candidate was discarded. Actual adapter inference remains BLOCKED by the established authentic release-signing prerequisite. This is not a new defect and does not unblock `GATE-REL-07`.
+
+
+CP62 used actual Chromium Console interactions to save a 100-micro-USD project limit, verify API persistence, and compare populated CP55 with empty CP57 FinOps scope before and after refresh. Project filtering and record persistence passed in this slice. Refresh returned to the account default CP57; since no contract requires persistence of the last selected scope, this remains an observation and scope-refresh semantics stay unverified. No new defect was assigned. QA continues; **GATE-REL-07 remains BLOCKED.**
