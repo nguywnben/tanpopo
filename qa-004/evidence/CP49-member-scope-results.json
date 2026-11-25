@@ -1,0 +1,52 @@
+{
+  "checkpoint": "CP49",
+  "baseline": {
+    "source_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+    "artifact_run": "45581179274",
+    "executable_sha256": "9a62f8844a85aa1fd3fd9be22365b04e9ce655a470fbe9de670e19678644d34b"
+  },
+  "runtime": {
+    "listen": "127.0.0.1:18132",
+    "isolated_fresh_sqlite": true,
+    "offline": true,
+    "readyz": 200
+  },
+  "fresh_setup": {
+    "chromium_setup_complete": true,
+    "initial_connection": "skipped because no adapters were enabled",
+    "overview_redirect": true,
+    "owner_relogin": "PASS scoped",
+    "active_scope_after_login": "QA-004 Scope Invite Org / qa004-scope-invite-project / dev"
+  },
+  "project_scoped_team_admin_invite": {
+    "synthetic_email_domain": "example.invalid",
+    "ui_project_selected": "qa004-scope-invite-project",
+    "ui_selected_roles": [
+      "Developer",
+      "Team Admin"
+    ],
+    "post_admin_v1_members_status": 201,
+    "ui_row_after_hard_refresh": "Pending activation; Developer and Team Admin",
+    "authenticated_get_admin_v1_members_status": 200,
+    "persisted_roles": [
+      "DEVELOPER",
+      "TEAM_ADMIN"
+    ],
+    "persisted_project_ids": [
+      "prj_01m89zaw43e008zhc0q6yyeshk"
+    ],
+    "invitation_activation": "UNVERIFIED",
+    "one_time_invite_token_retained": false
+  },
+  "historical_defect": {
+    "DEF-006": "PASS (scoped) \u2014 project-scoped Team Admin member invitation submitted and persisted after refresh"
+  },
+  "product_source_modified": false,
+  "release_gate": "BLOCKED",
+  "project_scope_confirmation": {
+    "authenticated_get_admin_v1_projects_status": 200,
+    "project_id_matches_membership_binding": true,
+    "project_id": "prj_01m89zaw43e008zhc0q6yyeshk",
+    "project_slug": "qa004-scope-invite-project"
+  }
+}
