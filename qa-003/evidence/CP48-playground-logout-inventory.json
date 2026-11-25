@@ -1,0 +1,32 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "logout_status": 204,
+  "inventory_status": 200,
+  "scope": "default/dev",
+  "playground_key_count": 14,
+  "state_counts": {"REVOKED": 14},
+  "version_counts": {"2": 14},
+  "keys": [
+    {"id":"vky_01m886r4sce00av1sv0kg3pa9k","state":"REVOKED","version":2},
+    {"id":"vky_01m886nd6ve008fg99t5m2rcm8","state":"REVOKED","version":2},
+    {"id":"vky_01m886mnhke00b88wwy6wmd2xa","state":"REVOKED","version":2},
+    {"id":"vky_01m886hzdke008txg49ng5chtq","state":"REVOKED","version":2},
+    {"id":"vky_01m8863dkae00a7pfx8t1kz20c","state":"REVOKED","version":2},
+    {"id":"vky_01m885s90re00a71md5m3p5q92","state":"REVOKED","version":2},
+    {"id":"vky_01m885rvhee00bbeyqvdw4j2at","state":"REVOKED","version":2},
+    {"id":"vky_01m885rbwbe009ee4k0b03cm1t","state":"REVOKED","version":2},
+    {"id":"vky_01m885q7a4e008tt3w2qxjs4wt","state":"REVOKED","version":2},
+    {"id":"vky_01m880m8ase00ax7t2zk1wag31","state":"REVOKED","version":2},
+    {"id":"vky_01m880k55ne00bydpv6j76y391","state":"REVOKED","version":2},
+    {"id":"vky_01m880hx1ee009fztrm7rh4hee","state":"REVOKED","version":2},
+    {"id":"vky_01m880ayw7e0081g5z7pd4m57a","state":"REVOKED","version":2},
+    {"id":"vky_01m88078qpe008mr1w5wcecma1","state":"REVOKED","version":2}
+  ],
+  "credentials_or_key_material_recorded": false,
+  "visual_evidence": [
+    "CP48-playground-session-active.png",
+    "CP48-playground-session-ended.png",
+    "CP48-after-logout.png",
+    "CP48-key-revoked-after-logout.png"
+  ]
+}

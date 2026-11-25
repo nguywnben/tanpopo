@@ -1,0 +1,21 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "route_slug": "qa003-cp47-stream-route",
+  "creation_status": 201,
+  "session_id": "vky_01m886r4sce00av1sv0kg3pa9k",
+  "secret_found_in_memory": true,
+  "secret_written_to_evidence": false,
+  "ui_after_end": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nLive Playground\nSDK Snippets\nEphemeral session key cleared from this tab. Signing out revokes active Playground keys.\nModel or route slug\nqa003-cp47-stream-route\nComparison model (optional)\nSession budget cap (micro-USD)\n\nNo turns yet. Send a prompt below to mint an ephemeral key and stream from /v1/chat/completions.\n\nPrompt\nSend\nExecution traces\nPrimary · trc_01m886r4sqe008wxh3gcfjcava\nroute qa003-cp47-stream-route · HTTP 200 · $0.000000 · 8 ms\nExact",
+  "key_readback": {
+    "status": 200,
+    "key_found": true,
+    "state": "CREATED_ACTIVE",
+    "version": 1
+  },
+  "post_end_authentication": {
+    "status": 200,
+    "error_code": null,
+    "credentials_omit_matches_playground": true,
+    "request_body_and_header_values_recorded": false
+  }
+}
