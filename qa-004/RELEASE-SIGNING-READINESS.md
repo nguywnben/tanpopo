@@ -9,7 +9,7 @@
 | RC6 CI release dry-run | PASS (workflow execution only) | Run `45581179274` succeeded for exact baseline; this does not itself establish each package signature. |
 | Artifact archive checksums | PASS (5/5) | `CP01-artifact-verification.json`; SHA256SUMS verified. |
 | GitHub artifact attestation API | UNVERIFIED | `gh attestation` is unavailable in the installed CLI; REST lookup by artifact digest returned HTTP 404. Run success is not substituted for cryptographic verification. |
-| Unsigned catalog provenance and trust policy | PARTIAL | Fresh offline authenticated catalog lists eight entries; no package installed or trust decision exercised yet. See CP02. |
-| Namespace spoof denial, tamper rejection, ephemeral test-signature verification | UNVERIFIED | Not yet exercised in QA-004. |
+| Unsigned catalog provenance and trust policy | PARTIAL | Fresh offline authenticated catalog lists eight unsigned entries. An ephemeral QA-only Ed25519 root verified the exact bundled Ollama package in a separate isolated runtime; the UI showed `official`/signature verified, displayed permission changes, required explicit consent and then activated the package. The private test key was never written or committed; test signature does not establish authentic Tanpopo provenance. See CP05. |
+| Namespace spoof denial, tamper rejection, signature mutation rejection | UNVERIFIED | Cryptographic positive path was exercised with a valid isolated test signature; negative namespace/tamper/modified digest cases remain open. |
 
-Production release signing remains blocked pending Product Owner controlled signing infrastructure. Ephemeral keys may be used only for isolated verifier tests and will not be described as authentic Tanpopo signatures.
+Production release signing remains blocked pending Product Owner controlled signing infrastructure. QA-only ephemeral key evidence is strictly isolated verifier evidence and is not an authentic Tanpopo signature. No production signing key was accessed or created.

@@ -1,0 +1,22 @@
+[
+  {
+    "request_id": "trc_01m896ffnre00bkwrq71vgzce1",
+    "plane": "PROVIDER",
+    "logical_model_slug": "qa004-mock",
+    "usage_accuracy": "ESTIMATED",
+    "input_tokens": 45,
+    "output_tokens": 45,
+    "total_cost_micros": 1,
+    "billing_mode": "SELF_HOSTED_INFRA"
+  },
+  {
+    "request_id": "trc_01m896n9hwe00bw17e6q8tdrda",
+    "plane": "PROVIDER",
+    "logical_model_slug": "qa004-mock",
+    "usage_accuracy": "EXACT",
+    "input_tokens": 7,
+    "output_tokens": 4,
+    "total_cost_micros": 1,
+    "billing_mode": "SELF_HOSTED_INFRA"
+  }
+]

@@ -1,0 +1,63 @@
+{
+  "status": 200,
+  "offline_cached": true,
+  "items": [
+    {
+      "package_id": "@tanpopo/anthropic",
+      "version": "0.1.0",
+      "origin_trust_tier": "unverified_external",
+      "signature_verified": false,
+      "enterprise_signed": false
+    },
+    {
+      "package_id": "@tanpopo/aws-bedrock",
+      "version": "0.1.0",
+      "origin_trust_tier": "unverified_external",
+      "signature_verified": false,
+      "enterprise_signed": false
+    },
+    {
+      "package_id": "@tanpopo/azure-openai",
+      "version": "0.1.0",
+      "origin_trust_tier": "unverified_external",
+      "signature_verified": false,
+      "enterprise_signed": false
+    },
+    {
+      "package_id": "@tanpopo/cohere-rerank",
+      "version": "0.1.0",
+      "origin_trust_tier": "unverified_external",
+      "signature_verified": false,
+      "enterprise_signed": false
+    },
+    {
+      "package_id": "@tanpopo/gemini",
+      "version": "0.1.0",
+      "origin_trust_tier": "unverified_external",
+      "signature_verified": false,
+      "enterprise_signed": false
+    },
+    {
+      "package_id": "@tanpopo/ollama",
+      "version": "0.1.0",
+      "origin_trust_tier": "official",
+      "signature_verified": true,
+      "enterprise_signed": false,
+      "signing_key_fingerprint": "2cfb21ec9faf58dadfc26df341eb1e88f0313983b72641a9808606ab926a5ff4"
+    },
+    {
+      "package_id": "@tanpopo/openai",
+      "version": "0.1.0",
+      "origin_trust_tier": "unverified_external",
+      "signature_verified": false,
+      "enterprise_signed": false
+    },
+    {
+      "package_id": "@tanpopo/openai-compatible",
+      "version": "0.1.0",
+      "origin_trust_tier": "unverified_external",
+      "signature_verified": false,
+      "enterprise_signed": false
+    }
+  ]
+}

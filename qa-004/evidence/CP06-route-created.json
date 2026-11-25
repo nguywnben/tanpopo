@@ -1,0 +1,15 @@
+[
+  {
+    "id": "rte_01m896capve00bxj3fmedpv16a",
+    "slug": "qa004-loopback",
+    "strategy": "PRIORITY_FAILOVER",
+    "targets": [
+      {
+        "deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+        "priority_order": 1,
+        "weight": 100
+      }
+    ],
+    "version": 1
+  }
+]

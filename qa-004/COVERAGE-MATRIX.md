@@ -7,16 +7,16 @@ Statuses describe QA-004 evidence only. `PARTIAL` means a named slice was exerci
 | RC6 artifact provenance and startup | PARTIAL | Run 45581179274 matches frozen SHA. Five archive checksums and two CycloneDX SBOM structures inspected; Linux amd64 executable startup/version and local readiness verified. Other OS/architecture execution and GitHub artifact attestation remain unverified. [CP01](checkpoints/CP01-artifact-install-provenance.md) |
 | Fresh install / first owner and tenant | PARTIAL | Real Chromium setup created owner, org, default project and dev environment; setup review showed no route and marked initial connection skipped; completed state reached Overview. Refresh/login persistence and all bootstrap audit details remain to be independently recorded. [CP01](checkpoints/CP01-artifact-install-provenance.md) |
 | Extension marketplace unsigned truth/trust | PARTIAL | Authenticated Extensions UI and catalog displayed offline mode, eight marketplace entries and zero installed packages. Detailed catalog signature/origin fields, install/approval, spoof/tamper and trust enforcement unverified. [CP02](checkpoints/CP02-marketplace-native-ingress.md) |
-| Native Data Plane route and authorization | PARTIAL | A real Console owner issued a PROVIDER-plane Virtual Key (201). A cookie-bearing request was correctly rejected `invalid_credential_plane` (401); cookie-free bearer request reached Data Plane and returned `no_compliant_deployment_available` (503) on exact RC6. Upstream dispatch, fidelity, streaming, accounting, cancellation, role/deployment matrix remain unverified. [CP02](checkpoints/CP02-marketplace-native-ingress.md) |
-| Native dialect coverage (Anthropic, Gemini, Ollama, other declared adapters) | UNVERIFIED | One Anthropic route was tested without a target deployment; successful native request and all supported dialects unverified. |
-| Provider adapters / interoperability / fallback | UNVERIFIED | Fresh runtime is `--offline`, has no installed adapters, connections or deployments. Synthetic local provider and full provider lifecycles not yet exercised. |
-| FinOps settlement, budgets, exports | UNVERIFIED | No inference settlement generated in QA-004. |
+| Native Data Plane route and authorization | PARTIAL | Real PROVIDER-plane key and cookie-free request reached a synthetic Ollama upstream on an isolated test-root runtime; native JSON and SSE success were verified, persistence and revoked-key boundary were exercised. One unauthorized Admin-cookie request was rejected. Other roles, dialects, cancellation, failure/retry, runtime roles and deployment modes remain open. [CP02](checkpoints/CP02-marketplace-native-ingress.md), [CP07](checkpoints/CP07-native-ollama-end-to-end.md) |
+| Native dialect coverage (Anthropic, Gemini, Ollama, other declared adapters) | PARTIAL | Ollama native JSON plus OpenAI-compatible SSE path through the Ollama adapter succeeded with a synthetic endpoint. Ollama native counter extraction failed (DEF-051); other dialects, native streaming variants, multimodal and tool calling remain unverified. |
+| Provider adapters / interoperability / fallback | PARTIAL | Test-only ephemeral Ed25519 root verified and approved the exact bundled Ollama package in a separate runtime; never treated as a production Tanpopo signature. Loopback provider create/probe -> model -> healthy deployment -> route -> inference succeeded. Multi-provider, fallback, retries, timeout, cancellation, embeddings, tool calls and external integrations remain unverified. |
+| FinOps settlement, budgets, exports | FAIL / PARTIAL | Two synthetic native settlements persisted. DEF-051 exact Ollama counters ignored; DEF-052 trace projection disagrees with ledger/FinOps; DEF-053 rate-unit contract mismatch causes underbilling. Budgets, exports, chargeback and broader reconciliation remain unverified. [CP07](checkpoints/CP07-native-ollama-end-to-end.md) |
 | RBAC and tenant/project isolation | UNVERIFIED | Only fresh Org Owner initial session explored. |
 | Audit, crypto-shred, recovery | UNVERIFIED | Fresh bootstrap audit was not yet read back in QA-004; all historical defects reset. |
 | MCP / A2A workflows and SSRF | UNVERIFIED | Not executed in QA-004. |
 | PostgreSQL / Valkey / distributed deployment | UNVERIFIED | No external database/cache services provisioned yet. |
 | OTel / operational reliability / backup restore | UNVERIFIED | Not executed in QA-004. |
-| Console screens / async scope / accessibility | PARTIAL | Fresh Overview and Extensions screens visually inspected in Chromium desktop; remainder of Console and responsive/accessibility coverage open. |
+| Console screens / async scope / accessibility | PARTIAL | Fresh Overview, Extensions, Providers, Models, Routes, Traces, and FinOps screens interacted with in Chromium desktop. Screenshots were visually inspected. Most Console screens, async races, RBAC, responsive, accessibility, localization and browser compatibility remain open. |
 | Localization (15 locales) | UNVERIFIED | English only. |
 | Chromium / Firefox / WebKit / native mobile | PARTIAL | Real Chromium 1440×1000 exercised. Firefox, WebKit, physical mobile and other platforms not yet exercised in QA-004. |
 
@@ -29,8 +29,8 @@ Statuses describe QA-004 evidence only. `PARTIAL` means a named slice was exerci
 |---|---|
 | PASS | 1 historical defect retest (`DEF-037`, scoped current RC6 event name and API/UI filtering). |
 | PARTIAL | 3 historical defect retests (`DEF-043`, `DEF-048`, `DEF-049`) with narrow evidence and material criteria still open. |
-| FAIL | 0 confirmed QA-004 defects to date; this is not evidence of defect absence. |
+| FAIL | 3 confirmed QA-004 defects (DEF-051 through DEF-053); see register. |
 | BLOCKED | 0 product areas classified blocked so far. Authentic production signing is blocked as a release prerequisite, not a substitute test result. |
 | UNVERIFIED | 46 historical defects plus the broad majority of product capabilities. |
 
-The next work prioritizes a complete deterministic provider/native journey, then regression of historical defects and remaining cross-product workflows. No QA-001/002/003 PASS was inherited.
+QA-004 has completed one real-browser, synthetic Ollama provider journey and found three high-impact issues. This is a narrow PARTIAL slice, not product acceptance. The next work prioritizes the unresolved major historical findings and broader independent product workflows. No QA-001/002/003 PASS was inherited.

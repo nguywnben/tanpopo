@@ -1,0 +1,21 @@
+[
+  {
+    "id": "dpl_01m8969kjme00br1mjja9gam7q",
+    "upstream_model_name": "qa004-mock",
+    "state": "ACTIVE_HEALTHY",
+    "data_region": "ON_PREM",
+    "rate_card": {
+      "input_token_nano_usd": 1000,
+      "output_token_nano_usd": 2000,
+      "cache_read_token_nano_usd": 0,
+      "cache_write_token_nano_usd": 0,
+      "reasoning_token_nano_usd": 0,
+      "image_unit_nano_usd": 0,
+      "audio_sec_nano_usd": 0,
+      "document_page_nano_usd": 0,
+      "self_hosted_zero_rate": false
+    },
+    "connection_state": "ACTIVE",
+    "version": 1
+  }
+]
