@@ -1,0 +1,58 @@
+{
+  "role": "SECURITY_REVIEWER",
+  "activated": true,
+  "navSecurity": true,
+  "navMembers": true,
+  "tabs": [
+    "Approval QueueApproval Queue",
+    "Kill SwitchesKill Switches",
+    "Audit LogAudit Log"
+  ],
+  "api": {
+    "/admin/v1/audit-events?limit=20": {
+      "status": 200,
+      "error": null,
+      "rows": 20,
+      "intact": null,
+      "actions": [
+        "auth.login_succeeded",
+        "auth.enrollment_login_succeeded",
+        "member.enrolled",
+        "member.enrollment_issued",
+        "member.created",
+        "virtual_key.created"
+      ]
+    },
+    "/admin/v1/approvals?limit=20": {
+      "status": 200,
+      "error": null,
+      "rows": 0,
+      "intact": null,
+      "actions": []
+    },
+    "/admin/v1/members?limit=20": {
+      "status": 200,
+      "error": null,
+      "rows": 9,
+      "intact": null,
+      "actions": []
+    },
+    "audit_verify_post": {
+      "status": 200,
+      "intact": true,
+      "checked_events_count": 100
+    },
+    "member_list_read": {
+      "status": 200,
+      "rows": 9
+    },
+    "audit_list": {
+      "status": 200,
+      "rows_at_initial_read": 20,
+      "chain_partitioned_events_visible": true
+    }
+  },
+  "screenshots": [
+    "audit"
+  ]
+}
