@@ -1,0 +1,93 @@
+{
+  "initialKeyState": {
+    "state": "CREATED_ACTIVE",
+    "version": 1,
+    "allowed_planes": [
+      "PROVIDER"
+    ]
+  },
+  "allowed": {
+    "status": 200,
+    "request_id": "req_01m89nrbrge008vn4kj5th0mxn",
+    "body": {
+      "object": "list",
+      "data": [
+        {
+          "id": "qa004-mock",
+          "object": "model",
+          "created": 1795604866,
+          "owned_by": "ollama",
+          "context_window": 4096,
+          "max_output_tokens": 512,
+          "assurance_tier": "DECLARED",
+          "capabilities": {
+            "streaming": true,
+            "tool_calling": false,
+            "parallel_tool_calls": false,
+            "strict_json_schema": false,
+            "json_object": false,
+            "vision": false,
+            "audio_input": false,
+            "document_input": false,
+            "reasoning": false,
+            "prompt_caching": false,
+            "embeddings": false,
+            "rerank": false
+          },
+          "x_tanpopo_capabilities": {
+            "modality_kind": "CHAT",
+            "assurance_tier": "DECLARED",
+            "context_window": 4096,
+            "max_output_tokens": 512,
+            "supported": {
+              "streaming": true,
+              "tool_calling": false,
+              "parallel_tool_calls": false,
+              "strict_json_schema": false,
+              "json_object": false,
+              "vision": false,
+              "audio_input": false,
+              "document_input": false,
+              "reasoning": false,
+              "prompt_caching": false,
+              "embeddings": false,
+              "rerank": false
+            }
+          }
+        }
+      ]
+    }
+  },
+  "denied": {
+    "status": 403,
+    "error": "scope_or_plane_denied"
+  },
+  "keyState": {
+    "state": "REVOKED",
+    "version": 2
+  },
+  "postRevokeReplay": {
+    "status": 401,
+    "error": "invalid_virtual_key"
+  },
+  "allowed_request_count": 2,
+  "persisted_traces": [
+    {
+      "request_id": "trc_01m89nrbrge008vpsrm0vh87nb",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "duration_ms": 0
+    },
+    {
+      "request_id": "trc_01m89nq1hfe0096xnqpzhj1s3k",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "duration_ms": 1
+    }
+  ],
+  "finops_rows_for_test_key": []
+}
