@@ -1,0 +1,58 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "role": "ORG_OWNER",
+  "scope": "QA-004 Isolated Canary / No env",
+  "before": {
+    "status": 200,
+    "policy_id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+    "scope_tier": "PROJECT",
+    "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+    "version": 1,
+    "etag": "\"v1\""
+  },
+  "save_enabled_after_field_change": true,
+  "confirmation_state": "",
+  "policy_requests": [
+    {
+      "method": "PUT",
+      "status": 200,
+      "path": "/admin/v1/policies/pol_pafzdvwmbefmm64fx7r1mceqjr"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "path": "/admin/v1/policies/effective"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "path": "/admin/v1/policies/effective"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "path": "/admin/v1/policies/effective"
+    }
+  ],
+  "after_save": {
+    "status": 200,
+    "policy_id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+    "scope_tier": "PROJECT",
+    "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+    "version": 1,
+    "etag": "\"v1\"",
+    "allowed_data_regions": [
+      "APAC",
+      "EU",
+      "ON_PREM",
+      "US"
+    ],
+    "allowed_models": [
+      "qa004-cp81-temporary"
+    ]
+  },
+  "page_after_save": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nRoutes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nSaved Project policy.\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tAPAC, EU, ON_PREM, US\tOrganization floor\nAllowed models\tqa004-cp81-temporary\tProject floor\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tProject policy\nTPM ceiling\tUnspecified\tProject policy\nConcurrent streams ceiling\tUnspecified\tProject policy\nGuardrail hooks\tNone attached\tProject policy\nEdit policy scope\nScope to edit\nScope to edit\nProject\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all)\nMinimum plugin trust\nAny approved\nMinimum capability assurance\nDeclared\nRPM ceiling\nTPM ceiling\nConcurrent streams ceiling\nGuardrail extensions\n\nNo guardrail extensions attached at this scope.\n\nGuardrail extension ID\nFailure posture\nFail closed\nAttach guardrail\nDiscard changes\nSave policy",
+  "restored": null,
+  "mutation_reverted": false,
+  "screenshot": "CP81-policy-noenv-edited.png"
+}

@@ -1,0 +1,123 @@
+{
+  "initial": {
+    "status": 200,
+    "etag": "\"v2\"",
+    "data": {
+      "id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "allowed_data_regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "allowed_models": [
+        "*"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 2
+    }
+  },
+  "write_response": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-store",
+      "content-length": "266",
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Wed, 25 Nov 2026 23:13:56 GMT",
+      "etag": "\"v4\"",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "x-tanpopo-request-id": "req_01m8afsemme00bwc0agnxytgkf"
+    },
+    "body": "{\"id\":\"pol_pafzdvwmbefmm64fx7r1mceqjr\",\"scope_tier\":\"PROJECT\",\"scope_id\":\"prj_01m89cf7vce008saenf6dyw8gk\",\"allowed_data_regions\":[\"APAC\",\"EU\",\"ON_PREM\",\"US\"],\"allowed_models\":[\"*\"],\"min_plugin_trust\":\"ANY_APPROVED\",\"min_capability_assurance\":\"DECLARED\",\"version\":4}\n"
+  },
+  "effective_read_after_100ms": {
+    "status": 200,
+    "etag": "\"v3\"",
+    "data": {
+      "id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "allowed_data_regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "allowed_models": [
+        "qa004-cp81-temporary"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 3
+    }
+  },
+  "effective_read_after_600ms": {
+    "status": 200,
+    "etag": "\"v3\"",
+    "data": {
+      "id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "allowed_data_regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "allowed_models": [
+        "qa004-cp81-temporary"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 3
+    }
+  },
+  "effective_read_after_2100ms": {
+    "status": 200,
+    "etag": "\"v3\"",
+    "data": {
+      "id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "allowed_data_regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "allowed_models": [
+        "qa004-cp81-temporary"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 3
+    }
+  },
+  "restored": {
+    "status": 200,
+    "etag": "\"v4\"",
+    "data": {
+      "id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "allowed_data_regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "allowed_models": [
+        "*"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 4
+    }
+  }
+}
