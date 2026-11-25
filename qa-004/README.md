@@ -78,6 +78,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP72 Team Admin model/deployment boundary](checkpoints/CP72-teamadmin-model-deployment-boundary.md)
 - [CP73 DEF-041 RC6 shred-audit failure and recovery](checkpoints/CP73-def041-rc6-shred-audit-failure-recovery.md)
 - [CP74 DEF-030 delayed route response after workspace switch](checkpoints/CP74-def030-delayed-route-response.md)
+- [CP75 Security Reviewer Operator-only boundary](checkpoints/CP75-security-reviewer-operator-boundary.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
@@ -129,3 +130,6 @@ CP73 independently injected a terminal crypto-shred audit insert failure into a 
 
 
 CP74 independently retested historical DEF-030 on exact RC6 using real Chromium. A held `default/dev` route response with one source row was released after switching to an empty canary environment; the target UI stayed empty and exposed no stale action. This single delayed-response variant did not reproduce, so DEF-030 is **PARTIAL**, not PASS: the historical three-row scenario and refresh/navigation/rapid-switch variants remain unverified. Target screenshots before and after release were visually inspected. Evidence is in [CP74](checkpoints/CP74-def030-delayed-route-response.md). Historical status is now 19 scoped PASS, 6 PARTIAL and 25 UNVERIFIED; DEF-051–068 remain 18 confirmed open failures. QA continues; **GATE-REL-07 remains BLOCKED.**
+
+
+CP75 exercised one Security Reviewer authorization boundary on exact RC6. A real authenticated browser-origin `POST /admin/v1/organizations` with an empty body returned HTTP 403 `insufficient_role_permission`; the organization inventory stayed unchanged at one synthetic tenant. The Security screen screenshot was visually inspected. This is a scoped negative pass only; the six-role action matrix remains largely UNVERIFIED, and no new defect is assigned. Evidence is in [CP75](checkpoints/CP75-security-reviewer-operator-boundary.md). Historical findings remain 19 scoped PASS, 6 PARTIAL and 25 UNVERIFIED; DEF-051–068 remain 18 confirmed failures. QA continues; **GATE-REL-07 remains BLOCKED.**

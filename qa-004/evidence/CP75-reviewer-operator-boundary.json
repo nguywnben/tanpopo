@@ -1,0 +1,27 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "actor_role": [
+    "SECURITY_REVIEWER"
+  ],
+  "session_status": 200,
+  "screen_url": "http://127.0.0.1:18128/security/approvals",
+  "screen_excerpt": "ity\nqa004-reviewer-1589ed90@example.invalid\nSecurity Reviewer\nQA-004 Isolated Canary\n/\nqa004-scope-canary-env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAir-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nPending MCP approvals\n0\nApproval queue clear\nDestructive MCP tool invocations requiring human-in-the-loop sign-off appear here.\nApproval queue clear Destructive MCP tool invocations requiring human-in-the-loop sign-off appear here.",
+  "organization_create_button_visible": false,
+  "negative_mutation": {
+    "method": "POST",
+    "path": "/admin/v1/organizations",
+    "body": "{}",
+    "status": 403,
+    "error_code": "insufficient_role_permission",
+    "error_message": "insufficient role permission",
+    "returned_organization": false
+  },
+  "org_readback": {
+    "status": 200,
+    "count": 1,
+    "slugs": [
+      "qa004-test-root-org"
+    ]
+  },
+  "classification": "The documented OPERATOR-only boundary is enforced before resource creation for this invalid-body negative test; valid payload behavior remains untested."
+}
