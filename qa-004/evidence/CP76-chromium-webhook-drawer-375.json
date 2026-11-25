@@ -1,0 +1,27 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "browser": "Chromium",
+  "viewport": "375x844",
+  "role": "ORG_OWNER",
+  "workflow": "Operations > Webhooks > Add webhook; form not submitted",
+  "geometry": {
+    "viewport": {
+      "width": 375,
+      "height": 844
+    },
+    "documentWidth": 375,
+    "bodyWidth": 375,
+    "heading": {
+      "x": 73,
+      "y": 10,
+      "right": 323,
+      "bottom": 29.59375,
+      "width": 250
+    },
+    "dialogs": []
+  },
+  "formHeadingVisible": true,
+  "visibleText": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nHMAC-signed webhook subscriptions\n0\nAdd webhook\nNo webhook subscriptions\nRegister a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.\nRegister webhook subscription\nFull receiver URLs are sealed in the vault; only the origin is stored in metadata.\nHTTPS receiver URL\n∙ Required\nSigning credential (WEBHOOK_HMAC_SECRET)\nSeal a WEBHOOK_HMAC_SECRET credential in Providers → Vault Secrets first.\nSelect signing secret\nEvents\nkill_switch.triggered, mcp.approval.pending\nCancel\nRegister webhook",
+  "pageErrors": [],
+  "screenshot": "/workspace/tanpopo-qa-004/qa-004/evidence/CP76-chromium-webhook-drawer-375.png"
+}

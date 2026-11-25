@@ -79,6 +79,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP73 DEF-041 RC6 shred-audit failure and recovery](checkpoints/CP73-def041-rc6-shred-audit-failure-recovery.md)
 - [CP74 DEF-030 delayed route response after workspace switch](checkpoints/CP74-def030-delayed-route-response.md)
 - [CP75 Security Reviewer Operator-only boundary](checkpoints/CP75-security-reviewer-operator-boundary.md)
+- [CP76 DEF-009 mobile webhook drawer and WebKit blocker](checkpoints/CP76-def009-mobile-webhook-drawer.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
@@ -133,3 +134,6 @@ CP74 independently retested historical DEF-030 on exact RC6 using real Chromium.
 
 
 CP75 exercised one Security Reviewer authorization boundary on exact RC6. A real authenticated browser-origin `POST /admin/v1/organizations` with an empty body returned HTTP 403 `insufficient_role_permission`; the organization inventory stayed unchanged at one synthetic tenant. The Security screen screenshot was visually inspected. This is a scoped negative pass only; the six-role action matrix remains largely UNVERIFIED, and no new defect is assigned. Evidence is in [CP75](checkpoints/CP75-security-reviewer-operator-boundary.md). Historical findings remain 19 scoped PASS, 6 PARTIAL and 25 UNVERIFIED; DEF-051–068 remain 18 confirmed failures. QA continues; **GATE-REL-07 remains BLOCKED.**
+
+
+CP76 re-opened the exact-RC6 webhook registration form in real Chromium at 375×844. The heading, URL, signing-secret selector, event selector, and footer actions were visible; document/body width remained 375, and the screenshot was visually inspected. DEF-009 remains **UNVERIFIED on RC6** because Playwright WebKit failed before page creation with host `libGLESv2.so.2` missing, despite an available temporary library copy. The reported remote desktop path is not exposed as a control tool in this chat. Historical WebKit fail/pass evidence therefore remains unreconciled. Evidence and required infrastructure are in [CP76](checkpoints/CP76-def009-mobile-webhook-drawer.md). Historical defect counts remain 19 scoped PASS, 6 PARTIAL and 25 UNVERIFIED; DEF-051–068 remain 18 confirmed failures. QA continues; **GATE-REL-07 remains BLOCKED.**
