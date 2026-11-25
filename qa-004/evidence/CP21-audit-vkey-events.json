@@ -1,0 +1,51 @@
+{
+  "test_scope": "Synthetic project/environment-scoped Virtual Key created and revoked through Owner Console UI",
+  "audit_api": {
+    "http_status": 200,
+    "events_returned": 156,
+    "matching_target_events": [
+      {
+        "sequence": 156,
+        "action": "virtual_key.revoked",
+        "target_type": "virtual_key",
+        "target_id": "vky_01m89e1vebe00acy7yga8sqche",
+        "timestamp": "2026-11-25T13:29:57.399Z"
+      },
+      {
+        "sequence": 153,
+        "action": "virtual_key.created",
+        "target_type": "virtual_key",
+        "target_id": "vky_01m89e1vebe00acy7yga8sqche",
+        "timestamp": "2026-11-25T13:24:20.555Z"
+      }
+    ]
+  },
+  "console_action_filter": {
+    "virtual_key.created": 13,
+    "virtual_key.revoked": 4,
+    "exact_target_visible_in_both_filters": true
+  },
+  "revoke_event_inspection": {
+    "sequence": 156,
+    "action": "virtual_key.revoked",
+    "metadata": {
+      "mode": "STANDARD",
+      "reason": "Graceful drain revocation"
+    },
+    "interpretation": "The HTTP handler maps the selected GRACEFUL_DRAIN UI/API mode to internal STANDARD before emitting audit metadata."
+  },
+  "hash_chain_verification": {
+    "console_result": "Cryptographic RFC 8785 JCS chain intact across 156 events",
+    "status": "PASS for this recorded chain verification"
+  },
+  "screenshots_visually_inspected": [
+    "CP21-audit-created-filter.png",
+    "CP21-audit-revoked-filter.png",
+    "CP21-audit-event-inspect.png",
+    "CP21-audit-vkey-verified.png"
+  ],
+  "limitations": [
+    "Only one synthetic key create/revoke lifecycle was checked for exact target linkage.",
+    "Other mutation classes, role attribution, audit failure atomicity, tamper detection, and chain behavior under restart or concurrent writes remain unverified."
+  ]
+}
