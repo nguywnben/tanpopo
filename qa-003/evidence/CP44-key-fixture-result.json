@@ -1,0 +1,106 @@
+{
+  "scope": "Default Organization / default / dev",
+  "before_count": 7,
+  "before": [
+    {
+      "name": "Playground session",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "Playground session",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "Playground session",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "Playground session",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "Playground session",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "CP20 reviewer emergency revoke test",
+      "state": "REVOKED",
+      "version": 2
+    },
+    {
+      "name": "CP20 reviewer revoke canary",
+      "state": "REVOKED",
+      "version": 2
+    }
+  ],
+  "created": [
+    {
+      "status": 201
+    },
+    {
+      "status": 201
+    },
+    {
+      "status": 201
+    }
+  ],
+  "after_count": 10,
+  "after": [
+    {
+      "name": "QA003 CP44 active race fixture 3",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "QA003 CP44 active race fixture 2",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "QA003 CP44 active race fixture 1",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "Playground session",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "Playground session",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "Playground session",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "Playground session",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "Playground session",
+      "state": "CREATED_ACTIVE",
+      "version": 1
+    },
+    {
+      "name": "CP20 reviewer emergency revoke test",
+      "state": "REVOKED",
+      "version": 2
+    },
+    {
+      "name": "CP20 reviewer revoke canary",
+      "state": "REVOKED",
+      "version": 2
+    }
+  ],
+  "secret_values_captured": false
+}
