@@ -1,7 +1,7 @@
 # CP40 — Anonymous Admin and Data Plane boundary probes
 
-**Baseline:** frozen RC5 `3423d4f523ef0ac77469a1201b8b753d1d31c902`  
-**Runtimes:** isolated SQLite `18116` and A2A-enabled SQLite `18107`  
+**Baseline:** frozen RC5 `3423d4f523ef0ac77469a1201b8b753d1d31c902`<br>
+**Runtimes:** isolated SQLite `18116` and A2A-enabled SQLite `18107`<br>
 **Disposition:** all sampled protected reads/calls rejected anonymous access; documented public health probes returned status only. QA-003 remains incomplete; `GATE-REL-07` remains **BLOCKED**.
 
 ## Reproduction and result

@@ -1,7 +1,7 @@
 # CP39 — Authenticated Console navigation in Chromium and WebKit
 
-**Baseline:** frozen RC5 `3423d4f523ef0ac77469a1201b8b753d1d31c902`  
-**Runtime:** isolated SQLite service `18116`; synthetic Org Owner; real Playwright Chromium and WebKit; local HTTPS test shim for the browser session cookie  
+**Baseline:** frozen RC5 `3423d4f523ef0ac77469a1201b8b753d1d31c902`<br>
+**Runtime:** isolated SQLite service `18116`; synthetic Org Owner; real Playwright Chromium and WebKit; local HTTPS test shim for the browser session cookie<br>
 **Disposition:** scoped browser navigation PASS; QA-003 remains incomplete and `GATE-REL-07` remains **BLOCKED**.
 
 ## Journey and observations
