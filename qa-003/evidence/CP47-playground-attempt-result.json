@@ -1,0 +1,114 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "scope": "default/dev",
+  "prompt": "Reply with a brief acknowledgment.",
+  "responses": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m87y8xb6e00btm7gj98bjcc3/environments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m87axgx7e008ehq1d016vqwt/environments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/routes",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/playground/sessions",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "status": 400
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces",
+      "status": 200
+    }
+  ],
+  "page": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 1:55:36 AM\nEnd session\nLive Playground\nSDK Snippets\nDeployment \"dpl_01m885jc6be009ja93p3dk758j\" does not support streaming.\nModel or route slug\nqa003-cp47-ollama-route\nComparison model (optional)\nYou\nReply with a brief acknowledgment.\nqa003-cp47-ollama-route\nPrompt\nSend\nExecution traces\nPrimary · trc_01m885s913e00b4zcprezweby7\nTrace not available yet.",
+  "mockRequests": [],
+  "traces": {
+    "status": 200,
+    "data": [
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "capability_not_supported"
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "capability_not_supported"
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "capability_not_supported"
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "capability_not_supported"
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "no_compliant_deployment_available"
+      }
+    ]
+  }
+}

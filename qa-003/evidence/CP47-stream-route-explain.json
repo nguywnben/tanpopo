@@ -1,0 +1,27 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "route_slug": "qa003-cp47-stream-route",
+  "target_state": "ACTIVE_HEALTHY",
+  "explain": [
+    {
+      "dialect": "Unified normalized (/v1/*)",
+      "status": 200,
+      "dry_run": true,
+      "matched_route": "qa003-cp47-stream-route",
+      "eligible": [
+        "dpl_01m885y1aze008dre5qs0t8jcr"
+      ],
+      "rejected": []
+    },
+    {
+      "dialect": "ollama",
+      "status": 200,
+      "dry_run": true,
+      "matched_route": "qa003-cp47-stream-route",
+      "eligible": [
+        "dpl_01m885y1aze008dre5qs0t8jcr"
+      ],
+      "rejected": []
+    }
+  ]
+}
