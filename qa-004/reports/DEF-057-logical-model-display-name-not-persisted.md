@@ -17,6 +17,10 @@ The logical-model form accepts a human display name distinct from the canonical 
 4. Reload the page and reopen **Logical Models**.
 5. Observe the canonical slug as both the model label and its secondary display name. `GET /admin/v1/models?limit=100` returns `display_name: "qa004-owner-embedding-catalog"` with `capabilities.embeddings: true`.
 
+## Independent retest
+
+CP40 repeated Owner model creation in the configured test-root runtime as part of a real embeddings workflow. The POST returned `QA004 Embedding Vectors`, but authenticated readback again returned `qa004-embedding-vectors` for `display_name`. The model then proceeded through deployment, route and successful inference, so the display-name persistence failure is independent of the model capability and dispatch state. See `evidence/CP40-embedding-model-result.json` and the inspected model create/readback screenshots.
+
 ## Evidence
 
 - `evidence/CP39-owner-model-results.json` — role, HTTP 201 creation, persisted model fields, and after-refresh UI/API values.

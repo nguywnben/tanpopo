@@ -1,0 +1,71 @@
+Skip to main content
+Tanpopo
+Monitor
+Overview
+Traces
+FinOps
+Gateway
+Providers
+Models
+Routes & Policies
+Ecosystem
+Extensions
+MCP Hub
+Playground
+Governance
+Access & Keys
+Security
+Operations
+qa004-testroot-owner@example.invalid
+Operator, Org Owner
+QA004 Test Root Org
+/
+default
+/
+dev
+(Active workspace scope)
+Jump
+Ctrl
+K
+Language
+English
+Kill Switch
+Air-gapped offline mode
+Outbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.
+Access & Keys
+
+Environment-scoped Virtual Keys and 6-role RBAC principal assignments.
+
+Issue key
+Virtual Keys
+4
+Members & Roles
+1
+Environment Virtual Keys
+4
+Name	Prefix / Last 4	Planes / Routes	State	Created	Actions
+QA004 embeddings scoped synthetic	vk_tp_dev_…rav4
+PROVIDER
+/v1/embeddings
+	Active	Nov 25, 2026, 4:00:16 PM
+
+QA004 A2A lifecycle synthetic	vk_tp_dev_…nSyE
+A2A
+/a2a/*
+	Active	Nov 25, 2026, 11:46:03 AM
+
+QA004 A2A authorized synthetic	vk_tp_dev_…1WTj
+PROVIDER, A2A
+/a2a/*
+	Active	Nov 25, 2026, 11:44:43 AM
+
+QA004 native full journey	vk_tp_dev_…tTSd
+PROVIDER
+*
+	Active	Nov 25, 2026, 11:11:43 AM
+Store this Virtual Key now
+Shown once only. After closing, the plaintext key is erased and cannot be recovered.
+QA004 embeddings scoped synthetic (vk_tp_dev_…rav4)
+[REDACTED]
+I stored it — close & erase
+All systems nominal No active operational alerts or pending remediation items.

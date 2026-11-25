@@ -6,7 +6,7 @@
 
 ## Summary
 
-In the `default / dev` workspace, a credentialed `TEAM_ADMIN` sees and can submit the Console's **Register model** form, but `POST /admin/v1/models` returns HTTP 403 `insufficient_role_permission`. The documented SCR-05 contract explicitly grants `TEAM_ADMIN` model and deployment create/edit/delete access. This prevents project Team Admins from registering the model needed to provision an embeddings-capable synthetic deployment and blocks the advertised model-registration workflow.
+In the `default / dev` workspace, a credentialed `TEAM_ADMIN` sees and can submit the Console's **Register model** form, but `POST /admin/v1/models` returns HTTP 403 `insufficient_role_permission`. The documented SCR-05 contract explicitly grants `TEAM_ADMIN` model and deployment create/edit/delete access. This prevents project Team Admins from using the documented model-registration workflow. A separate Org Owner path has since completed synthetic embeddings setup and inference, so the capability itself is not universally blocked; the role-contract mismatch remains.
 
 ## Reproduction
 
@@ -27,7 +27,9 @@ In the `default / dev` workspace, a credentialed `TEAM_ADMIN` sees and can submi
 
 ## Independent Org Owner comparison
 
-In a separate fresh-install RC6 runtime with a valid `ORG_OWNER` session, the same Models form created an embeddings-capable model with HTTP 201 and persisted its capability. The Team Admin failure is therefore scoped to the documented project role/authorization target, not a general API-wide model-create failure. The Owner database had no provider adapters or connections, so this did not complete embeddings dispatch. See CP39 and `evidence/CP39-owner-model-results.json`.
+CP39 showed that an Org Owner in a separate fresh-install RC6 runtime can create an embeddings-capable model (HTTP 201), while its display name is lost on readback (DEF-057). CP40 used the test-root runtime, where an Org Owner created the model and a healthy zero-rate deployment against the isolated synthetic Ollama adapter, configured a route, and completed one cookie-free `/v1/embeddings` request with a path-scoped PROVIDER key. The response and fixture record confirmed a vector and 5 provider-reported prompt tokens; the persisted trace and Chargeback both recorded one Exact zero-cost request. The key was revoked and replay returned 401. See [CP39](../checkpoints/CP39-owner-model-create-and-display-name.md), [CP40](../checkpoints/CP40-owner-embeddings-end-to-end.md), `evidence/CP39-owner-model-results.json`, and the CP40 evidence listed in that checkpoint.
+
+This proves only that an Owner can complete one synthetic embeddings lifecycle in the separate configured test-root runtime. It does not authorize Team Admin writes or satisfy external-provider, batch, failure-state, or production adapter-signing coverage.
 
 ## Expected and actual behavior
 
@@ -39,7 +41,7 @@ In a separate fresh-install RC6 runtime with a valid `ORG_OWNER` session, the sa
 
 - Team Admin model registration and model/deployment administration.
 - Synthetic or customer onboarding when a project administrator must add a model before creating a deployment, route, or key.
-- Embeddings and other modality testing: this QA runtime's existing model is chat-only. Four real `/v1/embeddings` requests correctly failed closed with `400 capability_not_supported` and exact `$0`; the fixture received zero calls. Creating the required embeddings-capable model through the documented Team Admin flow is blocked by this defect.
+- Embeddings and other modality testing: this QA runtime's existing model is chat-only. Four real `/v1/embeddings` requests correctly failed closed with `400 capability_not_supported` and exact `$0`; the fixture received zero calls. The documented Team Admin model-registration step remains blocked by this defect. CP40 demonstrates an Owner-operated synthetic workaround, not equivalent Team Admin access.
 
 ## Facts and root-cause hypothesis
 

@@ -1,0 +1,37 @@
+{
+  "status": 200,
+  "request_id": "req_01m89q0xsee008cz8k18n1z8z3",
+  "content_type": "application/json; charset=utf-8",
+  "body": {
+    "data": [
+      {
+        "embedding": [
+          0.01,
+          0.02,
+          0.03
+        ],
+        "index": 0,
+        "object": "embedding"
+      }
+    ],
+    "model": "qa004-mock",
+    "object": "list",
+    "usage": {
+      "prompt_tokens": 5,
+      "total_tokens": 5
+    }
+  },
+  "fixture_requests": [
+    {
+      "path": "/v1/embeddings",
+      "model": "qa004-mock",
+      "stream": false,
+      "keys": [
+        "input",
+        "model"
+      ],
+      "auth_present": false,
+      "content_type": "application/json"
+    }
+  ]
+}
