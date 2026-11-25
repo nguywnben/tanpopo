@@ -5,6 +5,8 @@
 **Runtime:** isolated `--role all`, SQLite, `127.0.0.1:18118`; synthetic tenant only.
 **Product changes:** none. **GATE-REL-07: BLOCKED.**
 
+The serving process reported frozen commit `3423d4f523ef0ac77469a1201b8b753d1d31c902`, build date `2026-11-25T00:10:06+07:00`, version `0.1.0-dev`. CP54 records binary hashes and independently built metadata. A later attempt to open this database with unrelated `/tmp/qa-tools/tanpopo` (`commit=none`) failed checksum validation before modifying the database; that is not a product result.
+
 ## Question
 
 QA-001 recorded no `organization.created`, `project.created`, or `environment.created` entries in a populated tenant (`qa-fresh-install-cp38`), while QA-003 CP02 observed these events on UI-created tenants and CP04 proved rollback when audit insertion was fault-injected. This checkpoint tests the original first-install bootstrap path again and keeps the old result intact.
